@@ -425,6 +425,28 @@ def test_generate_builders_use_explicit_flags_for_optional_symbol_refs() -> None
     assert "loom_op_attrs(*out_op)[0] = loom_attr_symbol(target);" in builders_c
 
 
+def test_generate_builders_use_explicit_flags_for_optional_operands() -> None:
+    op = Op(
+        "test.optional_operand",
+        group=Dialect("test"),
+        operands=[Operand("extent", INTEGER, optional=True)],
+        format=[OptionalGroup([Ref("extent")], anchor="extent")],
+    )
+
+    ops_h = generate_ops_h("test", 0, [op])
+    builders_c = generate_builders_c("test", [op])
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "LOOM_DEFINE_OPTIONAL_OPERAND(loom_test_optional_operand_extent, 0)" in ops_h
+    assert "LOOM_TEST_OPTIONAL_OPERAND_BUILD_FLAG_HAS_EXTENT = 1u << 0," in ops_h
+    assert "loom_optional loom_value_id_t extent" in ops_h
+    assert "uint16_t operand_count = 0;" in builders_c
+    assert "operand_count = 1;" in builders_c
+    assert "loom_op_operands(*out_op)[0] = extent;" in builders_c
+    assert ".operand_descriptor_count = IREE_ARRAYSIZE(loom_test_optional_operand_operand_desc)," in tables_c
+    assert "LOOM_OPERAND_OPTIONAL" in tables_c
+
+
 def test_generate_builders_use_explicit_flags_for_optional_regions() -> None:
     op = Op(
         "test.optional_region",

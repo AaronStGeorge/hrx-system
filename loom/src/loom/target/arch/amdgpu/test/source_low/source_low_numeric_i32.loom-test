@@ -23,8 +23,8 @@ kernel.def target(@target) @i32_bitwise(%input: buffer, %output: buffer) {
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_bitwise() asm<amdgpu.rdna3.core> {
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %20 = v_mov_b32 0
   %loaded = global_load_b32 %20, %input_view
   %masked = v_and_b32_lit %loaded, 15
@@ -59,8 +59,8 @@ kernel.def target(@target) @i32_shift(%input: buffer, %output: buffer) {
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_shift() asm<amdgpu.rdna3.core> {
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %21 = v_mov_b32 0
   %loaded = global_load_b32 %21, %input_view
   %left = v_lshlrev_b32_lit %loaded, 3
@@ -93,8 +93,8 @@ kernel.def target(@target) @i32_negative_literal(%input: buffer, %output: buffer
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_negative_literal() asm<amdgpu.rdna3.core> {
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %17 = v_mov_b32 0
   %loaded = global_load_b32 %17, %input_view
   %result = v_xor_b32_lit %loaded, 4294967295
@@ -132,8 +132,8 @@ kernel.def target(@target) @i32_scalarized(%input: buffer, %output: buffer) {
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_scalarized() asm<amdgpu.rdna3.core> {
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %27 = v_mov_b32 0
   %loaded = global_load_b128 %27, %input_view
   %lane0 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>

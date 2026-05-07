@@ -257,7 +257,8 @@ static iree_status_t loom_pipeline_alloc_op(
   IREE_RETURN_IF_ERROR(
       loom_pipeline_lookup_op(parser, op_name, token, &kind, &vtable));
   if (parser->error_count > errors_before) return iree_ok_status();
-  if (vtable->fixed_operand_count != 0 || vtable->fixed_result_count != 0) {
+  if (loom_op_vtable_operand_descriptor_count(vtable) != 0 ||
+      vtable->fixed_result_count != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "pipeline op '%.*s' unexpectedly has operands or "
                             "results",

@@ -334,11 +334,21 @@ void loom_verify_op_structure(loom_verify_state_t* state, const loom_op_t* op,
                                   IREE_ARRAYSIZE(params));
     }
   } else {
-    if (op->operand_count != vtable->fixed_operand_count) {
+    const uint8_t operand_descriptor_count =
+        loom_op_vtable_operand_descriptor_count(vtable);
+    if (op->operand_count < vtable->fixed_operand_count) {
       loom_diagnostic_param_t params[] = {
           loom_param_string(op_name),
           loom_param_u32(op->operand_count),
           loom_param_u32(vtable->fixed_operand_count),
+      };
+      loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_001, params,
+                                  IREE_ARRAYSIZE(params));
+    } else if (op->operand_count > operand_descriptor_count) {
+      loom_diagnostic_param_t params[] = {
+          loom_param_string(op_name),
+          loom_param_u32(op->operand_count),
+          loom_param_u32(operand_descriptor_count),
       };
       loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_001, params,
                                   IREE_ARRAYSIZE(params));
@@ -530,8 +540,7 @@ void loom_verify_type_constraints(loom_verify_state_t* state,
   if (vtable->operand_descriptors) {
     bool has_variadic =
         (vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_OPERANDS) != 0;
-    uint8_t descriptor_count =
-        vtable->fixed_operand_count + (has_variadic ? 1 : 0);
+    uint8_t descriptor_count = loom_op_vtable_operand_descriptor_count(vtable);
     for (uint8_t i = 0; i < descriptor_count && i < op->operand_count; ++i) {
       loom_type_constraint_t constraint =
           (loom_type_constraint_t)vtable->operand_descriptors[i]

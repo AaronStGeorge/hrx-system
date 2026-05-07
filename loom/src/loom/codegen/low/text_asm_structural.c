@@ -14,8 +14,8 @@ static const uint8_t kLowAsmResourceIndexName[] =
     LOOM_BSTRING_LITERAL(5, "index");
 static const uint8_t kLowAsmResourceSemanticTypeName[] =
     LOOM_BSTRING_LITERAL(13, "source_type");
-static const uint8_t kLowAsmResourceValidByteCountName[] =
-    LOOM_BSTRING_LITERAL(16, "valid_byte_count");
+static const uint8_t kLowAsmResourceExtentName[] =
+    LOOM_BSTRING_LITERAL(6, "extent");
 static const uint8_t kLowAsmResourceCacheSwizzleStrideName[] =
     LOOM_BSTRING_LITERAL(20, "cache_swizzle_stride");
 static const uint8_t kLowAsmStorageReserveByteLengthName[] =
@@ -33,8 +33,8 @@ static const loom_attr_descriptor_t kLowAsmResourceSemanticTypeAttr = {
     .name = kLowAsmResourceSemanticTypeName,
     .attr_kind = LOOM_ATTR_TYPE,
 };
-static const loom_attr_descriptor_t kLowAsmResourceValidByteCountAttr = {
-    .name = kLowAsmResourceValidByteCountName,
+static const loom_attr_descriptor_t kLowAsmResourceExtentAttr = {
+    .name = kLowAsmResourceExtentName,
     .attr_kind = LOOM_ATTR_I64,
     .flags = LOOM_ATTR_OPTIONAL,
 };
@@ -133,8 +133,8 @@ iree_status_t loom_low_descriptor_text_asm_structural_attr_descriptor(
     *out_descriptor = &kLowAsmResourceSemanticTypeAttr;
     return iree_ok_status();
   }
-  if (iree_string_view_equal(attr_name, IREE_SV("valid_byte_count"))) {
-    *out_descriptor = &kLowAsmResourceValidByteCountAttr;
+  if (iree_string_view_equal(attr_name, IREE_SV("extent"))) {
+    *out_descriptor = &kLowAsmResourceExtentAttr;
     return iree_ok_status();
   }
   if (iree_string_view_equal(attr_name, IREE_SV("cache_swizzle_stride"))) {
@@ -183,19 +183,18 @@ static iree_status_t loom_low_descriptor_text_asm_build_resource(
   }
 
   loom_low_resource_build_flags_t flags = 0;
-  int64_t valid_byte_count = 0;
-  const loom_named_attr_t* valid_byte_count_attr = NULL;
+  int64_t extent = 0;
+  const loom_named_attr_t* extent_attr = NULL;
   IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_lookup_attr(
-      builder->module, attrs, IREE_SV("valid_byte_count"),
-      &valid_byte_count_attr));
-  if (valid_byte_count_attr != NULL) {
-    if (valid_byte_count_attr->value.kind != LOOM_ATTR_I64) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "low asm resource valid_byte_count must be an i64 attr");
+      builder->module, attrs, IREE_SV("extent"), &extent_attr));
+  if (extent_attr != NULL) {
+    if (extent_attr->value.kind != LOOM_ATTR_I64) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low asm resource extent must be an "
+                              "i64 attr");
     }
-    flags |= LOOM_LOW_RESOURCE_BUILD_FLAG_HAS_VALID_BYTE_COUNT;
-    valid_byte_count = valid_byte_count_attr->value.i64;
+    flags |= LOOM_LOW_RESOURCE_BUILD_FLAG_HAS_EXTENT;
+    extent = extent_attr->value.i64;
   }
 
   int64_t cache_swizzle_stride = 0;
@@ -214,8 +213,8 @@ static iree_status_t loom_low_descriptor_text_asm_build_resource(
   }
 
   return loom_low_resource_build(
-      builder, flags, import_kind, index_attr->value.i64,
-      source_type_attr->value.type_id, valid_byte_count, cache_swizzle_stride,
+      builder, flags, import_kind, LOOM_VALUE_ID_INVALID, index_attr->value.i64,
+      source_type_attr->value.type_id, extent, cache_swizzle_stride,
       result_type, location, out_op);
 }
 
@@ -378,9 +377,8 @@ static iree_status_t loom_low_descriptor_text_asm_describe_resource(
       module, op, loom_low_resource_source_type_ATTR_INDEX,
       IREE_SV("source_type"), &kLowAsmResourceSemanticTypeAttr, out_statement));
   IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_set_structural_attr(
-      module, op, loom_low_resource_valid_byte_count_ATTR_INDEX,
-      IREE_SV("valid_byte_count"), &kLowAsmResourceValidByteCountAttr,
-      out_statement));
+      module, op, loom_low_resource_extent_ATTR_INDEX, IREE_SV("extent"),
+      &kLowAsmResourceExtentAttr, out_statement));
   return loom_low_descriptor_text_asm_set_structural_attr(
       module, op, loom_low_resource_cache_swizzle_stride_ATTR_INDEX,
       IREE_SV("cache_swizzle_stride"), &kLowAsmResourceCacheSwizzleStrideAttr,

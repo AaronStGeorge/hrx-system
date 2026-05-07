@@ -274,10 +274,7 @@ iree_string_view_t loom_verify_field_name(const loom_op_vtable_t* vtable,
   uint8_t category = LOOM_FIELD_REF_CATEGORY(field_ref);
   uint8_t index = LOOM_FIELD_REF_INDEX(field_ref);
   if (category == LOOM_FIELD_OPERAND && vtable->operand_descriptors) {
-    bool has_variadic =
-        (vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_OPERANDS) != 0;
-    uint8_t descriptor_count =
-        (uint8_t)(vtable->fixed_operand_count + (has_variadic ? 1 : 0));
+    uint8_t descriptor_count = loom_op_vtable_operand_descriptor_count(vtable);
     if (index < descriptor_count) {
       return loom_bstring_view(vtable->operand_descriptors[index].name);
     }
@@ -329,6 +326,12 @@ iree_string_view_t loom_verify_value_field_name(const loom_op_vtable_t* vtable,
                                                 char* buffer,
                                                 iree_host_size_t buffer_size) {
   if (category == LOOM_FIELD_OPERAND && vtable->operand_descriptors) {
+    uint8_t descriptor_count = loom_op_vtable_operand_descriptor_count(vtable);
+    if (value_index < descriptor_count &&
+        !iree_any_bit_set(vtable->vtable_flags,
+                          LOOM_OP_VTABLE_VARIADIC_OPERANDS)) {
+      return loom_bstring_view(vtable->operand_descriptors[value_index].name);
+    }
     if (value_index < vtable->fixed_operand_count) {
       return loom_bstring_view(vtable->operand_descriptors[value_index].name);
     }

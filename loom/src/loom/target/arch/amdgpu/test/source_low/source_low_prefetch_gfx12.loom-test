@@ -11,9 +11,9 @@ func.def target(@target) @prefetch_static(%input: buffer) {
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @prefetch_static() {
-  %input_view = low.resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 272} : reg<amdgpu.sgpr x2>
+  %input_view = low.resource<hal_binding> {extent = 272, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %4 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %5 = low.op<amdgpu.hal.buffer_descriptor>(%input_view) {cache_swizzle_stride = 0, valid_byte_count = 272} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  %5 = low.op<amdgpu.hal.buffer_descriptor>(%input_view) {cache_swizzle_stride = 0, extent = 272} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
   low.op<amdgpu.s_buffer_prefetch_data>(%5, %4) {count = 1, offset = 32} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>)
   low.return
 }
@@ -37,10 +37,10 @@ kernel.def target(@target) @prefetch_workgroup_id(%input: buffer) {
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @prefetch_workgroup_id() {
   %bounded_gid = low.live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
-  %input_view = low.resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %input_view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %10 = low.const<amdgpu.s_mov_b32> {imm32 = 2} : reg<amdgpu.sgpr>
   %11 = low.op<amdgpu.s_lshl_b32>(%bounded_gid, %10) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
-  %12 = low.op<amdgpu.hal.buffer_descriptor>(%input_view) {cache_swizzle_stride = 0, valid_byte_count = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  %12 = low.op<amdgpu.hal.buffer_descriptor>(%input_view) {cache_swizzle_stride = 0, extent = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
   low.op<amdgpu.s_buffer_prefetch_data>(%12, %11) {count = 1, offset = 0} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>)
   low.return
 }
@@ -69,9 +69,9 @@ kernel.def target(@target) @prefetch_fixed_query_offset(%input: buffer) {
 
 // ----
 low.kernel.def target(@target) workgroup_size(8, 4, 1) @prefetch_fixed_query_offset() {
-  %input_view = low.resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %input_view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %21 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %22 = low.op<amdgpu.hal.buffer_descriptor>(%input_view) {cache_swizzle_stride = 0, valid_byte_count = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
+  %22 = low.op<amdgpu.hal.buffer_descriptor>(%input_view) {cache_swizzle_stride = 0, extent = 256} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>
   low.op<amdgpu.s_buffer_prefetch_data>(%22, %21) {count = 1, offset = 180} : (reg<amdgpu.sgpr x4>, reg<amdgpu.sgpr>)
   low.return
 }

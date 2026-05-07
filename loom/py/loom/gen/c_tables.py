@@ -164,6 +164,7 @@ KEYWORD_MAP: dict[str, str] = {
     "launch": "LOOM_KW_LAUNCH",
     "workgroups": "LOOM_KW_WORKGROUPS",
     "abi_layout": "LOOM_KW_ABI_LAYOUT",
+    "extent": "LOOM_KW_EXTENT",
 }
 
 # Maps Region(..., syntax=...) names to C parser/printer selector IDs. The
@@ -2020,6 +2021,7 @@ def _extract_c_params(op: Op, shared_enums: dict[int, tuple[str, str, EnumDef]])
                                 "kind": "operand",
                                 "c_type": "loom_value_id_t",
                                 "index": desc.index,
+                                "optional": desc.optional,
                                 "may_consume": has_result_type_list,
                             }
                         )
@@ -2345,6 +2347,8 @@ def _optional_param_uses_build_flag(param: dict[str, object]) -> bool:
         return False
     if param["kind"] == "symbol":
         return True
+    if param["kind"] == "operand":
+        return True
     if param["kind"] == "auto_region":
         return True
     if param["kind"] != "attr":
@@ -2393,7 +2397,7 @@ def _build_c_param_list(params: list[dict[str, object]], layout: FieldLayout, pr
         consume = "loom_may_consume " if param.get("may_consume") else ""
         match param["kind"]:
             case "operand":
-                c_params.append(f"{consume}loom_value_id_t {param['name']}")
+                c_params.append(f"{opt}{consume}loom_value_id_t {param['name']}")
             case "successor":
                 c_params.append(f"loom_block_t* {param['name']}")
             case "operand_variadic":
@@ -2616,8 +2620,26 @@ def _generate_builder_implementation(
                 message=f"{op.name} i64 array attribute count exceeds uint16_t range",
             )
 
-    # Compute operand count expression.
-    if variadic_operand_param:
+    optional_operand_params = [param for param in params if param["kind"] == "operand" and param.get("optional")]
+    if optional_operand_params:
+        optional_operand_params.sort(key=lambda param: param["index"])
+        lines.append(f"  uint16_t operand_count = {fixed_operand_count};")
+        previous_optional_flag = ""
+        for param in optional_operand_params:
+            optional_flag = _build_flag_bit_name(prefix, param)
+            if previous_optional_flag:
+                lines.append(f"  if (iree_any_bit_set(build_flags, {optional_flag}) &&")
+                lines.append(f"      !iree_any_bit_set(build_flags, {previous_optional_flag})) {{")
+                lines.append("    return iree_make_status(")
+                lines.append("        IREE_STATUS_INVALID_ARGUMENT,")
+                lines.append(f'        "{op.name} optional operand {param["name"]} requires preceding optional operand");')
+                lines.append("  }")
+            lines.append(f"  if (iree_any_bit_set(build_flags, {optional_flag})) {{")
+            lines.append(f"    operand_count = {param['index'] + 1};")
+            lines.append("  }")
+            previous_optional_flag = optional_flag
+        operand_count_expr = "operand_count"
+    elif variadic_operand_param:
         operand_count_expr = f"{fixed_operand_count} + (uint16_t){variadic_operand_param}_count"
     else:
         operand_count_expr = str(fixed_operand_count)
@@ -2677,7 +2699,16 @@ def _generate_builder_implementation(
     lines.extend(f"  (*out_op)->instance_flags = {param['name']};" for param in params if param["kind"] == "instance_flags")
 
     # Fill in fixed operands.
-    lines.extend(f"  loom_op_operands(*out_op)[{param['index']}] = {param['name']};" for param in params if param["kind"] == "operand")
+    for param in params:
+        if param["kind"] != "operand":
+            continue
+        if param.get("optional"):
+            optional_flag = _build_flag_bit_name(prefix, param)
+            lines.append(f"  if (iree_any_bit_set(build_flags, {optional_flag})) {{")
+            lines.append(f"    loom_op_operands(*out_op)[{param['index']}] = {param['name']};")
+            lines.append("  }")
+        else:
+            lines.append(f"  loom_op_operands(*out_op)[{param['index']}] = {param['name']};")
 
     # Fill in fixed successors.
     lines.extend(f"  loom_op_successors(*out_op)[{param['index']}] = {param['name']};" for param in params if param["kind"] == "successor")
@@ -3156,6 +3187,8 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
             desc = layout.fields[operand.name]
             if operand.variadic:
                 lines.append(f"LOOM_DEFINE_VARIADIC_OPERANDS({prefix}_{operand.name}, {desc.index})")
+            elif operand.optional:
+                lines.append(f"LOOM_DEFINE_OPTIONAL_OPERAND({prefix}_{operand.name}, {desc.index})")
             else:
                 lines.append(f"LOOM_DEFINE_OPERAND({prefix}_{operand.name}, {desc.index})")
 
@@ -3641,6 +3674,12 @@ def generate_tables_c(
         placement_ptr = f"&{prefix}_placement" if has_placement else "NULL"
         attr_desc_ptr = f"{prefix}_attr_desc" if non_flags else "NULL"
         operand_desc_ptr = f"{prefix}_operand_desc" if op.operands or _func_args_are_operands(op) else "NULL"
+        operand_descriptor_count = len(op.operands)
+        if _func_args_are_operands(op) and _explicit_func_args_operand(op) is None:
+            operand_descriptor_count += 1
+        implied_operand_descriptor_count = layout.fixed_operand_count
+        if layout.variadic_operand or _func_args_are_operands(op):
+            implied_operand_descriptor_count += 1
         result_desc_ptr = f"{prefix}_result_desc" if op.results else "NULL"
         region_desc_ptr = f"{prefix}_region_desc" if op.regions else "NULL"
         constraint_ptr = f"{prefix}_constraints" if op.constraints else "NULL"
@@ -3659,6 +3698,8 @@ def generate_tables_c(
 
         append_nonzero("traits", traits)
         append_nonzero("fixed_operand_count", layout.fixed_operand_count)
+        if operand_desc_ptr != "NULL" and operand_descriptor_count != implied_operand_descriptor_count:
+            lines.append(f"    .operand_descriptor_count = IREE_ARRAYSIZE({operand_desc_ptr}),")
         append_nonzero("fixed_result_count", layout.fixed_result_count)
         append_nonzero("vtable_flags", vtable_flags_str)
         if sym_kind != "LOOM_SYMBOL_NONE":

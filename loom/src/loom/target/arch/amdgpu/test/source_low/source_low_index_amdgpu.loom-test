@@ -11,8 +11,8 @@ func.def target(@target) @index_uniform_multiply(%lhs: i32) -> (index) {
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @index_uniform_multiply(%bounded_lhs: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
-  %stride = s_mov_b32 128
-  %product = s_mul_i32 %bounded_lhs, %stride
+  %10 = s_mov_b32 7
+  %product = s_lshl_b32 %bounded_lhs, %10
   return %product
 }
 

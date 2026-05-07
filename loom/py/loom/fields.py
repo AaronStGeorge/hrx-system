@@ -28,6 +28,8 @@ strings. Same logical structure, zero runtime string lookups.
 
 Constraints:
   - At most one variadic operand, and it must be the last operand.
+  - Optional operands form a bounded trailing run and cannot be mixed with a
+    variadic operand.
   - At most one variadic result, and it must be the last result.
   - If multiple variadic operands are ever needed, explicit segment
     sizes will be added (an attribute storing per-segment counts).
@@ -141,9 +143,10 @@ class FieldLayout:
     field name (operands, results, attributes, regions) to a
     FieldDesc describing where to find it in the operation data.
 
-    The fixed_operand_count and fixed_result_count are the number
-    of non-variadic operands/results. If there is a trailing
-    variadic, the variadic field spans from that count to the
+    The fixed_operand_count is the number of required non-variadic operands.
+    Optional operands may follow it as a bounded trailing run. The
+    fixed_result_count is the number of non-variadic results. If there is a
+    trailing variadic field, that field spans from the fixed count to the
     actual operation's operand/result count.
     """
 
@@ -176,7 +179,9 @@ def compute_layout(op_decl: Op) -> FieldLayout:
     variadic_successor: str | None = None
     variadic_region: str | None = None
 
-    # Operands: sequential indices, variadic must be last.
+    # Operands: sequential indices. A declaration may have either a trailing
+    # variadic operand or a bounded run of optional trailing operands.
+    saw_optional_operand = False
     for i, operand in enumerate(op_decl.operands):
         if operand.variadic:
             if variadic_operand is not None:
@@ -190,11 +195,34 @@ def compute_layout(op_decl: Op) -> FieldLayout:
                     f"Op '{op_decl.name}': variadic operand '{operand.name}' "
                     f"must be the last operand."
                 )
+            if operand.optional:
+                raise ValueError(
+                    f"Op '{op_decl.name}': operand '{operand.name}' cannot be "
+                    f"both optional and variadic."
+                )
+            if saw_optional_operand:
+                raise ValueError(
+                    f"Op '{op_decl.name}': variadic operand '{operand.name}' "
+                    f"cannot follow an optional operand."
+                )
             variadic_operand = operand.name
             fields[operand.name] = FieldDesc(FieldKind.OPERAND, i, variadic=True)
         else:
-            fields[operand.name] = FieldDesc(FieldKind.OPERAND, i)
-            fixed_operand_count += 1
+            if operand.optional:
+                saw_optional_operand = True
+                fields[operand.name] = FieldDesc(
+                    FieldKind.OPERAND,
+                    i,
+                    optional=True,
+                )
+            else:
+                if saw_optional_operand:
+                    raise ValueError(
+                        f"Op '{op_decl.name}': required operand "
+                        f"'{operand.name}' cannot follow an optional operand."
+                    )
+                fields[operand.name] = FieldDesc(FieldKind.OPERAND, i)
+                fixed_operand_count += 1
 
     # Results: same pattern.
     for i, result in enumerate(op_decl.results):
@@ -337,6 +365,11 @@ class ResolvedFields:
         """Get the single value ID for a non-variadic operand or result."""
         desc = self._desc(name)
         if desc.kind == FieldKind.OPERAND:
+            if desc.index >= len(self._op.operands):
+                raise IndexError(
+                    f"Operand field '{name}' index {desc.index} is absent "
+                    f"on op '{self._op.name}'."
+                )
             value_id: int = self._op.operands[desc.index]
             return value_id
         if desc.kind == FieldKind.RESULT:
@@ -353,6 +386,13 @@ class ResolvedFields:
             if desc.variadic:
                 ids: list[int] = self._op.operands[desc.index :]
                 return ids
+            if desc.index >= len(self._op.operands):
+                if desc.optional:
+                    return []
+                raise IndexError(
+                    f"Operand field '{name}' index {desc.index} is absent "
+                    f"on op '{self._op.name}'."
+                )
             return [self._op.operands[desc.index]]
         if desc.kind == FieldKind.RESULT:
             if desc.variadic:

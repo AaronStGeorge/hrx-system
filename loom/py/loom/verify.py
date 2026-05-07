@@ -164,11 +164,9 @@ class ModuleVerifier:
     ) -> bool:
         layout = self.registry.layout(op_decl)
         ok = True
-        ok &= self._verify_count(
-            "operand",
+        ok &= self._verify_operand_count(
             len(operation.operands),
-            layout.fixed_operand_count,
-            layout.variadic_operand,
+            layout,
             path,
         )
         ok &= self._verify_count(
@@ -202,6 +200,43 @@ class ModuleVerifier:
             )
             ok = False
         return ok
+
+    def _verify_operand_count(
+        self,
+        actual_count: int,
+        layout: FieldLayout,
+        path: str,
+    ) -> bool:
+        if layout.variadic_operand is not None:
+            if actual_count >= layout.fixed_operand_count:
+                return True
+            self.diagnostics.error(
+                "wrong operand count",
+                source=path,
+                details=(
+                    f"expected at least {layout.fixed_operand_count}, "
+                    f"found {actual_count}",
+                    f"trailing variadic field is '{layout.variadic_operand}'",
+                ),
+            )
+            return False
+
+        max_count = sum(
+            1 for desc in layout.fields.values() if desc.kind == FieldKind.OPERAND
+        )
+        if layout.fixed_operand_count <= actual_count <= max_count:
+            return True
+        expected = (
+            str(max_count)
+            if layout.fixed_operand_count == max_count
+            else f"{layout.fixed_operand_count}..{max_count}"
+        )
+        self.diagnostics.error(
+            "wrong operand count",
+            source=path,
+            details=(f"expected {expected}, found {actual_count}",),
+        )
+        return False
 
     def _verify_count(
         self,

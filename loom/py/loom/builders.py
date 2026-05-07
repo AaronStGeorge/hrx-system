@@ -243,6 +243,7 @@ class OpCallable:
                     )
 
         params_by_name = {param.name: param for param in self._signature.params}
+        optional_operand_tail_closed = False
         for operand in op.operands:
             operand_param = params_by_name.get(operand.name)
             if operand_param is None:
@@ -250,6 +251,16 @@ class OpCallable:
             value = values.get(operand_param.name)
             match operand_param.kind:
                 case BuilderParamKind.OPERAND:
+                    if value is None:
+                        if not operand_param.required:
+                            optional_operand_tail_closed = True
+                            continue
+                    elif optional_operand_tail_closed:
+                        raise ValueError(
+                            f"{op.name}: optional operand '{operand_param.name}' "
+                            "cannot be present after an earlier optional operand "
+                            "was omitted"
+                        )
                     operands.append(cast(ValueRef | int, value))
                 case BuilderParamKind.OPERAND_VARIADIC:
                     operands.extend(value or [])

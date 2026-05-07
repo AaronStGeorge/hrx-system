@@ -4,9 +4,11 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Tests for loom.fields — field layout and resolution."""
+"""Tests for loom.fields -- field layout and resolution."""
 
-import pytest
+import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 from loom.dsl import (
     ANY,
@@ -67,6 +69,17 @@ _tile_4xf32 = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
 _tensor_4xf32 = ShapedType(TypeKind.TENSOR, F32, (StaticDim(4),))
 
 
+@contextmanager
+def _raises(error_type: type[Exception], pattern: str) -> Iterator[None]:
+    try:
+        yield
+    except error_type as exc:
+        if not re.search(pattern, str(exc)):
+            raise AssertionError(f"{exc!s} did not match {pattern!r}") from exc
+    else:
+        raise AssertionError(f"expected {error_type.__name__} matching {pattern!r}")
+
+
 # ============================================================================
 # Layout computation
 # ============================================================================
@@ -110,6 +123,23 @@ class TestComputeLayout:
         assert layout.fields["offsets"].variadic
         assert layout.fixed_operand_count == 1
         assert layout.variadic_operand == "offsets"
+
+    def test_trailing_optional_operand(self) -> None:
+        op = Op(
+            "test.optional_operand",
+            operands=[
+                Operand("source", TILE),
+                Operand("extent", INDEX_CONSTRAINT, optional=True),
+            ],
+            results=[Result("result", TILE)],
+        )
+        layout = compute_layout(op)
+        assert layout.fields["source"].index == 0
+        assert not layout.fields["source"].optional
+        assert layout.fields["extent"].index == 1
+        assert layout.fields["extent"].optional
+        assert layout.fixed_operand_count == 1
+        assert layout.variadic_operand is None
 
     def test_variadic_result(self) -> None:
         op = Op(
@@ -161,7 +191,7 @@ class TestComputeLayout:
         assert layout.variadic_successor == "cases"
 
     def test_non_trailing_variadic_rejected(self) -> None:
-        with pytest.raises(ValueError, match="must be the last operand"):
+        with _raises(ValueError, "must be the last operand"):
             compute_layout(
                 Op(
                     "test.bad",
@@ -174,7 +204,7 @@ class TestComputeLayout:
 
     def test_multiple_variadic_operands_rejected(self) -> None:
         """Two variadics: the first one isn't trailing, so that error fires."""
-        with pytest.raises(ValueError, match="must be the last operand"):
+        with _raises(ValueError, "must be the last operand"):
             compute_layout(
                 Op(
                     "test.bad",
@@ -185,8 +215,48 @@ class TestComputeLayout:
                 )
             )
 
+    def test_required_operand_cannot_follow_optional_operand(self) -> None:
+        with _raises(ValueError, "cannot follow an optional operand"):
+            compute_layout(
+                Op(
+                    "test.bad",
+                    operands=[
+                        Operand("optional_extent", INDEX_CONSTRAINT, optional=True),
+                        Operand("source", TILE),
+                    ],
+                )
+            )
+
+    def test_optional_variadic_operand_rejected(self) -> None:
+        with _raises(ValueError, "cannot be both optional and variadic"):
+            compute_layout(
+                Op(
+                    "test.bad",
+                    operands=[
+                        Operand(
+                            "values",
+                            ANY,
+                            optional=True,
+                            variadic=True,
+                        )
+                    ],
+                )
+            )
+
+    def test_variadic_operand_cannot_follow_optional_operand(self) -> None:
+        with _raises(ValueError, "cannot follow an optional operand"):
+            compute_layout(
+                Op(
+                    "test.bad",
+                    operands=[
+                        Operand("optional_extent", INDEX_CONSTRAINT, optional=True),
+                        Operand("values", ANY, variadic=True),
+                    ],
+                )
+            )
+
     def test_optional_region_cannot_precede_required_region(self) -> None:
-        with pytest.raises(ValueError, match="cannot follow an optional region"):
+        with _raises(ValueError, "cannot follow an optional region"):
             compute_layout(
                 Op(
                     "test.bad",
@@ -198,7 +268,7 @@ class TestComputeLayout:
             )
 
     def test_optional_variadic_region_rejected(self) -> None:
-        with pytest.raises(ValueError, match="cannot be both optional and variadic"):
+        with _raises(ValueError, "cannot be both optional and variadic"):
             compute_layout(
                 Op(
                     "test.bad",
@@ -310,6 +380,42 @@ class TestResolveSingular:
         assert resolved_region is not None
         assert len(resolved_region.blocks) == 1
 
+    def test_optional_operand(self) -> None:
+        module, [source_id, extent_id] = _make_module_with_values(
+            ("source", _tile_4xf32),
+            ("extent", INDEX),
+        )
+        decl = Op(
+            "test.optional_operand",
+            operands=[
+                Operand("source", TILE),
+                Operand("extent", INDEX_CONSTRAINT, optional=True),
+            ],
+            results=[Result("result", TILE)],
+        )
+
+        without_extent = Operation(
+            kind=1,
+            name="test.optional_operand",
+            operands=[source_id],
+            results=[source_id],
+        )
+        fields = resolve_fields(compute_layout(decl), without_extent, module)
+        assert fields.value_id("source") == source_id
+        assert fields.value_ids("extent") == []
+        assert not fields.is_present("extent")
+
+        with_extent = Operation(
+            kind=1,
+            name="test.optional_operand",
+            operands=[source_id, extent_id],
+            results=[source_id],
+        )
+        fields = resolve_fields(compute_layout(decl), with_extent, module)
+        assert fields.value_id("extent") == extent_id
+        assert fields.value_ids("extent") == [extent_id]
+        assert fields.is_present("extent")
+
     def test_successor(self) -> None:
         module = Module(name="test")
         target = Block(label="exit")
@@ -393,7 +499,7 @@ class TestResolveSingular:
         )
         op = Operation(kind=1, name="test.neg", operands=[vid], results=[vid])
         fields = resolve_fields(compute_layout(decl), op, module)
-        with pytest.raises(KeyError, match="Unknown field 'nonexistent'"):
+        with _raises(KeyError, "Unknown field 'nonexistent'"):
             fields.value_id("nonexistent")
 
     def test_wrong_kind_raises(self) -> None:
@@ -401,7 +507,7 @@ class TestResolveSingular:
         decl = Op("test.attrs", attrs=[AttrDef("axis", "i64")])
         op = Operation(kind=1, name="test.attrs", attributes={"axis": 0})
         fields = resolve_fields(compute_layout(decl), op, module)
-        with pytest.raises(TypeError, match="not an operand"):
+        with _raises(TypeError, "not an operand"):
             fields.value_id("axis")
 
 

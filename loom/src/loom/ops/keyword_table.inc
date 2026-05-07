@@ -72,3 +72,4 @@
     [LOOM_KW_LAUNCH] = (const uint8_t*)"\x06" "launch",
     [LOOM_KW_WORKGROUPS] = (const uint8_t*)"\x0a" "workgroups",
     [LOOM_KW_ABI_LAYOUT] = (const uint8_t*)"\x0a" "abi_layout",
+    [LOOM_KW_EXTENT] = (const uint8_t*)"\x06" "extent",

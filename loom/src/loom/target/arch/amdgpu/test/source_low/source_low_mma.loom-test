@@ -94,10 +94,10 @@ kernel.def target(@target) @f16_wmmar3_fragment_memory(%lhs_buffer: buffer, %rhs
 // ----
 low.kernel.def target(@target) workgroup_size(32, 1, 1) @f16_wmmar3_fragment_memory() asm<amdgpu.rdna3.core> {
   %23 = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %lhs_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
+  %lhs_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 512} : reg<amdgpu.sgpr x2>
   %rhs_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %init_view = resource<hal_binding> {index = 2, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
-  %out_view = resource<hal_binding> {index = 3, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
+  %init_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %out_view = resource<hal_binding> {index = 3, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %29 = v_and_b32_lit %23, 15
   %31 = v_lshlrev_b32_lit %29, 5
   %32 = global_load_b32 %31, %lhs_view

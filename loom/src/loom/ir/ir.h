@@ -1192,7 +1192,10 @@ struct loom_op_vtable_t {
   // legality and interfaces come from |symbol_def|, not this wire tag.
   loom_symbol_kind_t symbol_kind;
   uint8_t constraint_count;
-  // 5 bytes padding to align pointers at offset 16.
+  // Number of operand descriptors when it differs from the implied count.
+  // Zero uses fixed_operand_count plus the variadic operand flag.
+  uint8_t operand_descriptor_count;
+  // 4 bytes padding to align pointers at offset 16.
 
   loom_canonicalize_fn_t canonicalize;
   loom_op_infer_facts_fn_t infer_facts;
@@ -1234,6 +1237,16 @@ struct loom_op_vtable_t {
   // Generated structural placement contract for ancestor constraints.
   const loom_op_placement_descriptor_t* placement;
 };
+
+static inline uint8_t loom_op_vtable_operand_descriptor_count(
+    const loom_op_vtable_t* vtable) {
+  if (vtable->operand_descriptor_count != 0) {
+    return vtable->operand_descriptor_count;
+  }
+  const uint8_t variadic_count =
+      (vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_OPERANDS) ? 1 : 0;
+  return (uint8_t)(vtable->fixed_operand_count + variadic_count);
+}
 
 // Returns the full dotted name as a string view (e.g., "test.addi").
 static inline iree_string_view_t loom_op_vtable_name(

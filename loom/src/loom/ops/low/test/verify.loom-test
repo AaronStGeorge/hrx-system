@@ -275,8 +275,27 @@ low.func.def target(@test_target) @slot_roundtrip(%input: reg<test.i32>) -> (reg
 test.target<low_core> @test_target
 
 low.func.def target(@test_target) @resource_negative_extent() -> (reg<test.ptr>) {
-  // ERROR@+1: STRUCTURE/014 {attr_name="valid_byte_count", actual_value="-1", expected_constraint="non-negative byte count"}
-  %binding = low.resource<native_pointer> {index = 0, source_type = buffer, valid_byte_count = -1} : reg<test.ptr>
+  // ERROR@+1: STRUCTURE/014 {attr_name="extent", actual_value="-1", expected_constraint=">= 0"}
+  %binding = low.resource<native_pointer> {index = 0, source_type = buffer, extent = -1} : reg<test.ptr>
+  low.return %binding : reg<test.ptr>
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @resource_dynamic_extent(%extent: reg<test.i32>) -> (reg<test.ptr>) {
+  %binding = low.resource<native_pointer> extent(%extent) {index = 0, source_type = buffer} : reg<test.ptr>
+  low.return %binding : reg<test.ptr>
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @resource_dynamic_static_extent(%extent: reg<test.i32>) -> (reg<test.ptr>) {
+  // ERROR@+1: STRUCTURE/014 {attr_name="extent", actual_value="16", expected_constraint="absent when extent operand is present"}
+  %binding = low.resource<native_pointer> extent(%extent) {index = 0, source_type = buffer, extent = 16} : reg<test.ptr>
   low.return %binding : reg<test.ptr>
 }
 

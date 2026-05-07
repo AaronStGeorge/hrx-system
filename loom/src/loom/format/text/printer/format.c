@@ -626,7 +626,7 @@ iree_status_t loom_print_format_elements(loom_print_context_t* ctx,
         bool present = false;
         switch (anchor_category) {
           case LOOM_ANCHOR_OPERAND:
-            present = op->operand_count > vtable->fixed_operand_count;
+            present = op->operand_count > element->field_index;
             break;
           case LOOM_ANCHOR_ATTR:
             present = loom_print_optional_attr_present(vtable, op,

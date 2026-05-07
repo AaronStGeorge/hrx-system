@@ -24,8 +24,8 @@ kernel.def target(@target) @index_madd_global_b32(%input: buffer, %output: buffe
 // ----
 low.kernel.def target(@target) workgroup_size(4, 4, 1) @index_madd_global_b32() asm<amdgpu.rdna3.core> {
   %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 64} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 64} : reg<amdgpu.sgpr x2>
   %x = v_and_b32_lit %packed_tid, 1023
   %20 = v_lshrrev_b32_lit %packed_tid, 10
   %y = v_and_b32_lit %20, 1023
@@ -61,8 +61,8 @@ kernel.def target(@target) @index_madd_constant_addend_global_b32(%input: buffer
 // ----
 low.kernel.def target(@target) workgroup_size(4, 1, 1) @index_madd_constant_addend_global_b32() asm<amdgpu.rdna3.core> {
   %x = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 64} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 64} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 64} : reg<amdgpu.sgpr x2>
   %20 = v_lshlrev_b32_lit %x, 4
   %loaded = global_load_b32 %20, %input_view {offset = 4}
   global_store_b32 %20, %loaded, %output_view {offset = 4}
@@ -94,7 +94,7 @@ kernel.def target(@target) @workitem_y_lds_uses_explicit_vaddr(%output: buffer) 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 64, 1) @workitem_y_lds_uses_explicit_vaddr() asm<amdgpu.rdna3.core> {
   %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
-  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %15 = v_lshrrev_b32_lit %packed_tid, 10
   %y = v_and_b32_lit %15, 1023
   %18 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
@@ -135,7 +135,7 @@ low.kernel.def target(@target) workgroup_size(8, 4, 1) @dispatch_id_xy_global_b3
   %14 = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
   %15 = live_in<amdgpu.workgroup_id.y> : reg<amdgpu.sgpr>
   %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
-  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 2048} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 2048} : reg<amdgpu.sgpr x2>
   %18 = v_and_b32_lit %packed_tid, 1023
   %19 = v_mov_b32_copy %14
   %20 = v_lshlrev_b32_lit %19, 3

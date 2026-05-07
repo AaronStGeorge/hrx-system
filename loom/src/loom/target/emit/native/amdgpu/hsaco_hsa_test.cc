@@ -861,7 +861,7 @@ iree_status_t EmitWorkitemStoreKernelForAmdgpu(const AmdgpuHsaTarget& target,
       "  %binding = low.resource<hal_binding> {index = 0, "
       "source_type = hal.buffer} : reg<amdgpu.sgpr x2>\n"
       "  %descriptor = low.op<amdgpu.hal.buffer_descriptor>(%binding) "
-      "{cache_swizzle_stride = 0, valid_byte_count = 256} : "
+      "{cache_swizzle_stride = 0, extent = 256} : "
       "(reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr x4>\n"
       "  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : "
       "reg<amdgpu.sgpr>\n"

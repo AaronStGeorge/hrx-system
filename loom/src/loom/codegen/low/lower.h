@@ -155,9 +155,9 @@ typedef struct loom_low_lower_abi_argument_t {
   loom_type_t resource_source_type;
   // Optional low.resource builder flags for resource-specific metadata.
   loom_low_resource_build_flags_t resource_build_flags;
-  // Valid byte extent for byte-addressable resources when the corresponding
+  // Static byte extent for byte-addressable resources when the corresponding
   // builder flag is set.
-  int64_t resource_valid_byte_count;
+  int64_t resource_extent;
   // Resource-level cache swizzle byte stride when the corresponding builder
   // flag is set.
   int64_t resource_cache_swizzle_stride;

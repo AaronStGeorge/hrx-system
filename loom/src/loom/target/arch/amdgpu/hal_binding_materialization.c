@@ -34,12 +34,11 @@ static iree_status_t loom_amdgpu_hal_binding_make_sgpr_type(
   return loom_module_intern_type(module, type, out_type);
 }
 
-static uint32_t loom_amdgpu_hal_binding_descriptor_range_word(
-    int64_t valid_byte_count) {
-  if (valid_byte_count > UINT32_MAX) {
+static uint32_t loom_amdgpu_hal_binding_descriptor_range_word(int64_t extent) {
+  if (extent > UINT32_MAX) {
     return UINT32_MAX;
   }
-  return (uint32_t)valid_byte_count;
+  return (uint32_t)extent;
 }
 
 static iree_string_view_t loom_amdgpu_hal_binding_module_string(
@@ -707,7 +706,8 @@ static iree_status_t
 loom_amdgpu_hal_binding_materialize_buffer_descriptor_pseudo(
     loom_rewriter_t* rewriter, loom_op_t* op,
     const loom_target_bundle_t* target_bundle,
-    const loom_low_descriptor_set_t* descriptor_set, loom_type_t sgpr_type,
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, loom_type_t sgpr_type,
     loom_type_t sgpr_x2_type) {
   const loom_value_id_t value_checkpoint =
       loom_rewriter_value_checkpoint(rewriter);
@@ -719,22 +719,30 @@ loom_amdgpu_hal_binding_materialize_buffer_descriptor_pseudo(
   const int64_t cache_swizzle_stride_attr =
       attrs.entries[LOOM_AMDGPU_HAL_BUFFER_DESCRIPTOR_ATTR_CACHE_SWIZZLE_STRIDE]
           .value.i64;
-  const int64_t valid_byte_count =
-      attrs.entries[LOOM_AMDGPU_HAL_BUFFER_DESCRIPTOR_ATTR_VALID_BYTE_COUNT]
-          .value.i64;
   const uint32_t cache_swizzle_stride = (uint32_t)cache_swizzle_stride_attr;
   const bool has_cache_swizzle = cache_swizzle_stride != 0;
-  const uint32_t range_word =
-      loom_amdgpu_hal_binding_descriptor_range_word(valid_byte_count);
 
   loom_value_id_t pointer = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_binding_build_descriptor_pointer(
       rewriter, has_cache_swizzle, cache_swizzle_stride, descriptor_set,
       operands.values[0], sgpr_type, sgpr_x2_type, op->location, &pointer));
   loom_value_id_t range = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_hal_binding_build_s_mov_b32(
-      rewriter, descriptor_set, range_word, sgpr_type, op->location, &range,
-      NULL));
+  const bool has_dynamic_extent =
+      descriptor ==
+      loom_amdgpu_descriptor_ref_descriptor(
+          descriptor_set,
+          LOOM_AMDGPU_DESCRIPTOR_REF_HAL_BUFFER_DESCRIPTOR_EXTENT);
+  if (has_dynamic_extent) {
+    range = operands.values[1];
+  } else {
+    const int64_t extent =
+        attrs.entries[LOOM_AMDGPU_HAL_BUFFER_DESCRIPTOR_ATTR_EXTENT].value.i64;
+    const uint32_t range_word =
+        loom_amdgpu_hal_binding_descriptor_range_word(extent);
+    IREE_RETURN_IF_ERROR(loom_amdgpu_hal_binding_build_s_mov_b32(
+        rewriter, descriptor_set, range_word, sgpr_type, op->location, &range,
+        NULL));
+  }
   loom_value_id_t flags = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_binding_build_s_mov_b32(
       rewriter, descriptor_set,
@@ -851,16 +859,21 @@ iree_status_t loom_amdgpu_hal_binding_materialize(
         const loom_low_descriptor_t* descriptor =
             loom_amdgpu_hal_binding_resolve_low_op_descriptor(
                 module, descriptor_set, op);
-        if (descriptor == NULL ||
-            descriptor !=
-                loom_amdgpu_descriptor_ref_descriptor(
-                    descriptor_set,
-                    LOOM_AMDGPU_DESCRIPTOR_REF_HAL_BUFFER_DESCRIPTOR)) {
+        const loom_low_descriptor_t* static_descriptor =
+            loom_amdgpu_descriptor_ref_descriptor(
+                descriptor_set,
+                LOOM_AMDGPU_DESCRIPTOR_REF_HAL_BUFFER_DESCRIPTOR);
+        const loom_low_descriptor_t* dynamic_extent_descriptor =
+            loom_amdgpu_descriptor_ref_descriptor(
+                descriptor_set,
+                LOOM_AMDGPU_DESCRIPTOR_REF_HAL_BUFFER_DESCRIPTOR_EXTENT);
+        if (descriptor == NULL || (descriptor != static_descriptor &&
+                                   descriptor != dynamic_extent_descriptor)) {
           op = next_op;
           continue;
         }
         status = loom_amdgpu_hal_binding_materialize_buffer_descriptor_pseudo(
-            &rewriter, op, target_bundle, descriptor_set, sgpr_type,
+            &rewriter, op, target_bundle, descriptor_set, descriptor, sgpr_type,
             sgpr_x2_type);
         if (iree_status_is_ok(status)) {
           ++out_result->materialized_descriptor_count;

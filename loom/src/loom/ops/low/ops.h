@@ -580,24 +580,27 @@ iree_status_t loom_low_cond_br_verify(
 // LOOM_OP_LOW_RESOURCE: Import a function-local target resource into a low register value.
 // %state = low.resource<vm_state> {index = 0, source_type = i64} : reg<vm.i64>
 LOOM_DEFINE_ISA(loom_low_resource_isa, LOOM_OP_LOW_RESOURCE)
+LOOM_DEFINE_OPTIONAL_OPERAND(loom_low_resource_extent_value, 0)
 LOOM_DEFINE_RESULT(loom_low_resource_result, 0)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_resource_import_kind, 0, loom_low_resource_import_kind_t)
 LOOM_DEFINE_ATTR_I64(loom_low_resource_index, 1)
 LOOM_DEFINE_ATTR_TYPE(loom_low_resource_source_type, 2)
-LOOM_DEFINE_ATTR_I64(loom_low_resource_valid_byte_count, 3)
+LOOM_DEFINE_ATTR_I64(loom_low_resource_extent, 3)
 LOOM_DEFINE_ATTR_I64(loom_low_resource_cache_swizzle_stride, 4)
 enum loom_low_resource_build_flag_bits_e {
-  LOOM_LOW_RESOURCE_BUILD_FLAG_HAS_VALID_BYTE_COUNT = 1u << 0,
-  LOOM_LOW_RESOURCE_BUILD_FLAG_HAS_CACHE_SWIZZLE_STRIDE = 1u << 1,
+  LOOM_LOW_RESOURCE_BUILD_FLAG_HAS_EXTENT_VALUE = 1u << 0,
+  LOOM_LOW_RESOURCE_BUILD_FLAG_HAS_EXTENT = 1u << 1,
+  LOOM_LOW_RESOURCE_BUILD_FLAG_HAS_CACHE_SWIZZLE_STRIDE = 1u << 2,
 };
 typedef uint32_t loom_low_resource_build_flags_t;
 iree_status_t loom_low_resource_build(
     loom_builder_t* builder,
     loom_low_resource_build_flags_t build_flags,
     loom_low_resource_import_kind_t import_kind,
+    loom_optional loom_may_consume loom_value_id_t extent_value,
     int64_t index,
     uint32_t source_type,
-    loom_optional int64_t valid_byte_count,
+    loom_optional int64_t extent,
     loom_optional int64_t cache_swizzle_stride,
     loom_type_t result_type,
     loom_location_id_t location,

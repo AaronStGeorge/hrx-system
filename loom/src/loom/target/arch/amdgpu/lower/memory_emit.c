@@ -524,19 +524,23 @@ iree_status_t loom_amdgpu_emit_hal_buffer_descriptor(
     loom_value_id_t low_binding, loom_value_id_t* out_low_descriptor) {
   *out_low_descriptor = LOOM_VALUE_ID_INVALID;
 
-  int64_t valid_byte_count = UINT32_MAX;
+  int64_t extent = UINT32_MAX;
+  loom_value_id_t dynamic_extent = LOOM_VALUE_ID_INVALID;
   int64_t cache_swizzle_stride = 0;
   loom_module_t* module = loom_low_lower_context_module(context);
   const loom_value_t* binding = loom_module_value(module, low_binding);
   const loom_op_t* binding_op = loom_value_def_op(binding);
   if (binding_op != NULL && loom_low_resource_isa(binding_op)) {
-    const loom_attribute_t valid_byte_count_attr = loom_op_attrs(
-        binding_op)[loom_low_resource_valid_byte_count_ATTR_INDEX];
-    if (!loom_attr_is_absent(valid_byte_count_attr)) {
-      const int64_t resource_valid_byte_count =
-          loom_low_resource_valid_byte_count(binding_op);
-      if (resource_valid_byte_count <= UINT32_MAX) {
-        valid_byte_count = resource_valid_byte_count;
+    if (loom_low_resource_extent_value_is_present(binding_op)) {
+      dynamic_extent = loom_low_resource_extent_value(binding_op);
+    } else {
+      const loom_attribute_t extent_attr =
+          loom_op_attrs(binding_op)[loom_low_resource_extent_ATTR_INDEX];
+      if (!loom_attr_is_absent(extent_attr)) {
+        const int64_t resource_extent = loom_low_resource_extent(binding_op);
+        if (resource_extent <= UINT32_MAX) {
+          extent = resource_extent;
+        }
       }
     }
 
@@ -555,14 +559,20 @@ iree_status_t loom_amdgpu_emit_hal_buffer_descriptor(
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_i64_attr(
       context, IREE_SV("cache_swizzle_stride"), cache_swizzle_stride, attrs,
       IREE_ARRAYSIZE(attrs), &attr_count));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_append_i64_attr(
-      context, IREE_SV("valid_byte_count"), valid_byte_count, attrs,
-      IREE_ARRAYSIZE(attrs), &attr_count));
-  const loom_value_id_t operands[] = {low_binding};
+  loom_value_id_t operands[2] = {low_binding, dynamic_extent};
+  uint16_t operand_count = 1;
+  uint16_t descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_HAL_BUFFER_DESCRIPTOR;
+  if (dynamic_extent != LOOM_VALUE_ID_INVALID) {
+    descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_HAL_BUFFER_DESCRIPTOR_EXTENT;
+    operand_count = 2;
+  } else {
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_append_i64_attr(context, IREE_SV("extent"), extent, attrs,
+                                    IREE_ARRAYSIZE(attrs), &attr_count));
+  }
   loom_op_t* low_op = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_HAL_BUFFER_DESCRIPTOR,
-      operands, IREE_ARRAYSIZE(operands),
+      context, source_op, descriptor_ref, operands, operand_count,
       loom_make_named_attr_slice(attrs, attr_count), &descriptor_type, 1,
       &low_op));
   *out_low_descriptor = loom_value_slice_get(loom_low_op_results(low_op), 0);

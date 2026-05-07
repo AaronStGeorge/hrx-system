@@ -286,7 +286,10 @@ def _extract_params(op: Op) -> list[BuilderParam]:  # noqa: C901
                             BuilderParam(
                                 name=name,
                                 kind=BuilderParamKind.OPERAND,
-                                type_hint="ValueRef",
+                                type_hint=(
+                                    "ValueRef | None" if desc.optional else "ValueRef"
+                                ),
+                                required=not desc.optional,
                                 doc=f"Operand: {name}",
                             )
                         )

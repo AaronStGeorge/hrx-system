@@ -3264,7 +3264,8 @@ static iree_status_t loom_bytecode_reader_validate_global_vtable(
         IREE_SV("def_op_table_index_plus1"), op_ref_offset,
         IREE_SV("global symbol defining op must define a GLOBAL symbol"));
   }
-  if (vtable->fixed_operand_count != 0 || vtable->region_count != 0 ||
+  if (loom_op_vtable_operand_descriptor_count(vtable) != 0 ||
+      vtable->region_count != 0 ||
       iree_any_bit_set(
           vtable->vtable_flags,
           LOOM_OP_VTABLE_VARIADIC_OPERANDS | LOOM_OP_VTABLE_VARIADIC_REGIONS)) {
@@ -3294,7 +3295,8 @@ static iree_status_t loom_bytecode_reader_validate_record_vtable(
         IREE_SV("def_op_table_index_plus1"), op_ref_offset,
         IREE_SV("record symbol defining op must define a RECORD symbol"));
   }
-  if (vtable->fixed_operand_count != 0 || vtable->fixed_result_count != 0 ||
+  if (loom_op_vtable_operand_descriptor_count(vtable) != 0 ||
+      vtable->fixed_result_count != 0 ||
       iree_any_bit_set(
           vtable->vtable_flags,
           LOOM_OP_VTABLE_VARIADIC_OPERANDS | LOOM_OP_VTABLE_VARIADIC_RESULTS)) {

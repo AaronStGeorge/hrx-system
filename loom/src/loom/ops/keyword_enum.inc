@@ -72,3 +72,4 @@
   LOOM_KW_LAUNCH = 63,  // "launch"
   LOOM_KW_WORKGROUPS = 64,  // "workgroups"
   LOOM_KW_ABI_LAYOUT = 65,  // "abi_layout"
+  LOOM_KW_EXTENT = 66,  // "extent"

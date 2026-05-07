@@ -782,8 +782,8 @@ _U32_IMMEDIATE = _u32_immediate()
 
 _SOURCE_INLINE_U32_IMMEDIATE = _source_inline_u32_immediate()
 
-_HAL_BUFFER_DESCRIPTOR_VALID_BYTE_COUNT_IMMEDIATE = Immediate(
-    "valid_byte_count",
+_HAL_BUFFER_DESCRIPTOR_EXTENT_IMMEDIATE = Immediate(
+    "extent",
     ImmediateKind.UNSIGNED,
     bit_width=32,
     unsigned_max=(2**32) - 1,
@@ -1253,9 +1253,23 @@ def _hal_buffer_descriptor_pseudos() -> tuple[Descriptor, ...]:
                 _sgpr_operand("binding", units=2),
             ),
             immediates=(
-                _HAL_BUFFER_DESCRIPTOR_VALID_BYTE_COUNT_IMMEDIATE,
                 _HAL_BUFFER_DESCRIPTOR_CACHE_SWIZZLE_STRIDE_IMMEDIATE,
+                _HAL_BUFFER_DESCRIPTOR_EXTENT_IMMEDIATE,
             ),
+            schedule_class=_SCHEDULE_SALU,
+            encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
+            flags=_PSEUDO_DEAD_REMOVABLE_FLAGS,
+        ),
+        Descriptor(
+            key="amdgpu.hal.buffer_descriptor.extent",
+            mnemonic=None,
+            semantic_tag="memory.hal.buffer_descriptor",
+            operands=(
+                _sgpr_result("descriptor", units=4),
+                _sgpr_operand("binding", units=2),
+                _sgpr_operand("extent"),
+            ),
+            immediates=(_HAL_BUFFER_DESCRIPTOR_CACHE_SWIZZLE_STRIDE_IMMEDIATE,),
             schedule_class=_SCHEDULE_SALU,
             encoding_id=LOW_DESCRIPTOR_ENCODING_ID_NONE,
             flags=_PSEUDO_DEAD_REMOVABLE_FLAGS,

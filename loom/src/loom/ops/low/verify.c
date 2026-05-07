@@ -955,14 +955,20 @@ static iree_status_t loom_low_verify_resource_op(
         emitter);
   }
 
-  loom_attribute_t valid_byte_count =
-      loom_op_attrs(op)[loom_low_resource_valid_byte_count_ATTR_INDEX];
-  if (!loom_attr_is_absent(valid_byte_count) &&
-      loom_low_resource_valid_byte_count(op) < 0) {
+  loom_attribute_t extent =
+      loom_op_attrs(op)[loom_low_resource_extent_ATTR_INDEX];
+  if (!loom_attr_is_absent(extent) && loom_low_resource_extent(op) < 0) {
     return loom_low_emit_attr_value_error(
-        op, loom_low_resource_valid_byte_count_ATTR_INDEX,
-        IREE_SV("valid_byte_count"), loom_low_resource_valid_byte_count(op),
-        IREE_SV("non-negative byte count"), emitter);
+        op, loom_low_resource_extent_ATTR_INDEX, IREE_SV("extent"),
+        loom_low_resource_extent(op), IREE_SV(">= 0"), emitter);
+  }
+
+  if (!loom_attr_is_absent(extent) &&
+      loom_low_resource_extent_value_is_present(op)) {
+    return loom_low_emit_attr_value_error(
+        op, loom_low_resource_extent_ATTR_INDEX, IREE_SV("extent"),
+        loom_low_resource_extent(op),
+        IREE_SV("absent when extent operand is present"), emitter);
   }
 
   loom_attribute_t cache_swizzle_stride =

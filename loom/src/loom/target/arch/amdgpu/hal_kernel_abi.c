@@ -946,10 +946,15 @@ loom_amdgpu_hal_kernel_abi_verify_hal_buffer_descriptor_pseudos(
       const loom_low_descriptor_t* descriptor =
           loom_amdgpu_hal_kernel_abi_resolve_low_op_descriptor(
               module, descriptor_set, op);
-      if (descriptor == NULL ||
-          descriptor != loom_amdgpu_descriptor_ref_descriptor(
-                            descriptor_set,
-                            LOOM_AMDGPU_DESCRIPTOR_REF_HAL_BUFFER_DESCRIPTOR)) {
+      const loom_low_descriptor_t* static_descriptor =
+          loom_amdgpu_descriptor_ref_descriptor(
+              descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_HAL_BUFFER_DESCRIPTOR);
+      const loom_low_descriptor_t* dynamic_extent_descriptor =
+          loom_amdgpu_descriptor_ref_descriptor(
+              descriptor_set,
+              LOOM_AMDGPU_DESCRIPTOR_REF_HAL_BUFFER_DESCRIPTOR_EXTENT);
+      if (descriptor == NULL || (descriptor != static_descriptor &&
+                                 descriptor != dynamic_extent_descriptor)) {
         continue;
       }
 

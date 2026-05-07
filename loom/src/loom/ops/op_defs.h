@@ -1370,6 +1370,17 @@ loom_attribute_t loom_memory_access_atomic_scope(loom_memory_access_t access);
     return loom_op_operands(op)[(index)];                        \
   }
 
+// Defines functions that query and read an optional fixed operand by index.
+#define LOOM_DEFINE_OPTIONAL_OPERAND(func_name, index)                \
+  enum { func_name##_OPERAND_INDEX = (index) };                       \
+  static inline bool func_name##_is_present(const loom_op_t* op) {    \
+    return op->operand_count > (index);                               \
+  }                                                                   \
+  static inline loom_value_id_t func_name(const loom_op_t* op) {      \
+    return func_name##_is_present(op) ? loom_op_operands(op)[(index)] \
+                                      : LOOM_VALUE_ID_INVALID;        \
+  }
+
 // Defines a function that reads a fixed result by index.
 #define LOOM_DEFINE_RESULT(func_name, index)                     \
   static inline loom_value_id_t func_name(const loom_op_t* op) { \

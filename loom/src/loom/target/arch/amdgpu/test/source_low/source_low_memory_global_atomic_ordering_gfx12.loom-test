@@ -17,7 +17,7 @@ kernel.def target(@target) @global_atomic_release_reduce_i32(%input: buffer) {
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_release_reduce_i32() {
-  %view = low.resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %12 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
   %13 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
   low.op<amdgpu.global_atomic_add_u32_saddr>(%12, %13, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
@@ -42,7 +42,7 @@ kernel.def target(@target) @global_atomic_acquire_rmw_i32(%input: buffer) {
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_acquire_rmw_i32() {
-  %view = low.resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %13 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
   %14 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
   %old = low.op<amdgpu.global_atomic_add_u32_rtn_saddr>(%13, %14, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
@@ -69,7 +69,7 @@ kernel.def target(@target) @global_atomic_acq_rel_rmw_i32(%input: buffer) {
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_acq_rel_rmw_i32() {
-  %view = low.resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %13 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
   %14 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
   %old = low.op<amdgpu.global_atomic_add_u32_rtn_saddr>(%13, %14, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
@@ -97,7 +97,7 @@ kernel.def target(@target) @global_atomic_acq_rel_cmpxchg_i32(%input: buffer) {
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_acq_rel_cmpxchg_i32() {
-  %view = low.resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %15 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
   %16 = low.const<amdgpu.v_mov_b32> {imm32 = 7} : reg<amdgpu.vgpr>
   %17 = low.const<amdgpu.v_mov_b32> {imm32 = 9} : reg<amdgpu.vgpr>
@@ -126,7 +126,7 @@ kernel.def target(@target) @global_atomic_seq_cst_reduce_i32(%input: buffer) {
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_seq_cst_reduce_i32() {
-  %view = low.resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %12 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
   %13 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
   low.op<amdgpu.global_atomic_add_u32_saddr>(%12, %13, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)

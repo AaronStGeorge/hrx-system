@@ -14,8 +14,8 @@ func.def target(@target) @i32_bitfield_extractu(%input: buffer, %output: buffer)
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @i32_bitfield_extractu() asm<amdgpu.rdna3.core> {
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
   %9 = v_mov_b32 0
   %loaded = global_load_b32 %9, %input_view
   %11 = v_lshrrev_b32_lit %loaded, 4
@@ -39,8 +39,8 @@ func.def target(@target) @i32_bitfield_extracts(%input: buffer, %output: buffer)
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @i32_bitfield_extracts() asm<amdgpu.rdna3.core> {
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
   %9 = v_mov_b32 0
   %loaded = global_load_b32 %9, %input_view
   %11 = v_lshlrev_b32_lit %loaded, 24
@@ -66,9 +66,9 @@ func.def target(@target) @i32_bitfield_insert(%field_buffer: buffer, %base_buffe
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @i32_bitfield_insert() asm<amdgpu.rdna3.core> {
-  %field_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x2>
-  %base_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, valid_byte_count = 4} : reg<amdgpu.sgpr x2>
+  %field_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
+  %base_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
   %13 = v_mov_b32 0
   %field = global_load_b32 %13, %field_view
   %base = global_load_b32 %13, %base_view
@@ -99,8 +99,8 @@ func.def target(@target) @i32_bitfield_b128_shape(%input: buffer, %output: buffe
 
 // ----
 low.func.def target(@target) abi(hal_kernel) @i32_bitfield_b128_shape() asm<amdgpu.rdna3.core> {
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
   %13 = v_mov_b32 0
   %loaded = global_load_b128 %13, %input_view
   %15 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>

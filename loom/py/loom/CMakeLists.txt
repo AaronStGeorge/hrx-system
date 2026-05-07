@@ -47,6 +47,7 @@ iree_py_test(
     "tools/pytest_style_runner.py"
   ARGS
     "loom.diagnostics_test"
+    "loom.fields_test"
     "loom.projected_region_test"
     "loom.verify_test"
   PACKAGE_DIRS

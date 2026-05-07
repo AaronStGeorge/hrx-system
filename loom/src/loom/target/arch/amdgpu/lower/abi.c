@@ -45,8 +45,8 @@ typedef struct loom_amdgpu_buffer_argument_extent_t {
   bool found_view;
   // True when a derived view has no exact static dense byte extent.
   bool found_unbounded_view;
-  // Maximum byte count required by all statically boundable derived views.
-  int64_t valid_byte_count;
+  // Maximum byte extent required by all statically boundable derived views.
+  int64_t extent;
 } loom_amdgpu_buffer_argument_extent_t;
 
 static bool loom_amdgpu_view_static_dense_byte_extent(
@@ -100,7 +100,7 @@ static void loom_amdgpu_buffer_argument_extent_include_view(
   state->found_view = true;
   int64_t base_byte_offset = 0;
   int64_t view_byte_extent = 0;
-  int64_t valid_byte_count = 0;
+  int64_t extent = 0;
   if (!loom_amdgpu_module_value_as_exact_index_constant(
           state->module, loom_buffer_view_byte_offset(buffer_view_op),
           &base_byte_offset) ||
@@ -110,12 +110,11 @@ static void loom_amdgpu_buffer_argument_extent_include_view(
           loom_module_value_type(state->module,
                                  loom_buffer_view_result(buffer_view_op)),
           &view_byte_extent) ||
-      !iree_checked_add_i64(base_byte_offset, view_byte_extent,
-                            &valid_byte_count)) {
+      !iree_checked_add_i64(base_byte_offset, view_byte_extent, &extent)) {
     state->found_unbounded_view = true;
     return;
   }
-  state->valid_byte_count = iree_max(state->valid_byte_count, valid_byte_count);
+  state->extent = iree_max(state->extent, extent);
 }
 
 static void loom_amdgpu_buffer_argument_extent_include_uses(
@@ -140,10 +139,10 @@ static void loom_amdgpu_buffer_argument_extent_include_uses(
   }
 }
 
-static bool loom_amdgpu_source_buffer_argument_valid_byte_count(
+static bool loom_amdgpu_source_buffer_argument_extent(
     loom_low_lower_context_t* context, loom_value_id_t source_argument_id,
-    int64_t* out_valid_byte_count) {
-  *out_valid_byte_count = 0;
+    int64_t* out_extent) {
+  *out_extent = 0;
   const loom_module_t* module = loom_low_lower_context_module(context);
   loom_amdgpu_buffer_argument_extent_t state = {
       .module = module,
@@ -152,7 +151,7 @@ static bool loom_amdgpu_source_buffer_argument_valid_byte_count(
   if (!state.found_view || state.found_unbounded_view) {
     return false;
   }
-  *out_valid_byte_count = state.valid_byte_count;
+  *out_extent = state.extent;
   return true;
 }
 
@@ -174,10 +173,10 @@ iree_status_t loom_amdgpu_map_argument(
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_make_hal_buffer_type(context, &source_type));
     loom_low_resource_build_flags_t resource_build_flags = 0;
-    int64_t resource_valid_byte_count = 0;
-    if (loom_amdgpu_source_buffer_argument_valid_byte_count(
-            context, source_argument_id, &resource_valid_byte_count)) {
-      resource_build_flags |= LOOM_LOW_RESOURCE_BUILD_FLAG_HAS_VALID_BYTE_COUNT;
+    int64_t resource_extent = 0;
+    if (loom_amdgpu_source_buffer_argument_extent(context, source_argument_id,
+                                                  &resource_extent)) {
+      resource_build_flags |= LOOM_LOW_RESOURCE_BUILD_FLAG_HAS_EXTENT;
     }
     *out_argument = (loom_low_lower_abi_argument_t){
         .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_RESOURCE,
@@ -187,7 +186,7 @@ iree_status_t loom_amdgpu_map_argument(
             loom_amdgpu_hal_binding_index(context, source_argument_index),
         .resource_source_type = source_type,
         .resource_build_flags = resource_build_flags,
-        .resource_valid_byte_count = resource_valid_byte_count,
+        .resource_extent = resource_extent,
     };
     return iree_ok_status();
   }

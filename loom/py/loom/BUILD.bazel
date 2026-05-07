@@ -46,12 +46,14 @@ py_test(
     name = "core_test",
     srcs = [
         "diagnostics_test.py",
+        "fields_test.py",
         "projected_region_test.py",
         "verify_test.py",
         "//loom/py/loom/tools:pytest_style_runner.py",
     ],
     args = [
         "loom.diagnostics_test",
+        "loom.fields_test",
         "loom.projected_region_test",
         "loom.verify_test",
     ],

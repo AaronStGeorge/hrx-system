@@ -23,8 +23,8 @@ kernel.def target(@target) @subgroup_broadcast_i32_wave32(%input: buffer, %outpu
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_i32_wave32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %20 = v_lshlrev_b32_lit %tid, 2
   %value = global_load_b32 %20, %input_view
   %23 = v_mov_b32 28
@@ -58,8 +58,8 @@ kernel.def target(@target) @subgroup_broadcast_first_i32_wave32(%input: buffer, 
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_first_i32_wave32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %19 = v_lshlrev_b32_lit %tid, 2
   %value = global_load_b32 %19, %input_view
   %21 = v_readfirstlane_b32 %value
@@ -95,8 +95,8 @@ kernel.def target(@target) @subgroup_shuffle_index_i32_wave32(%input: buffer, %o
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_index_i32_wave32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %22 = v_lshlrev_b32_lit %tid, 2
   %value = global_load_b32 %22, %input_view
   %28 = v_mov_b32 20
@@ -132,8 +132,8 @@ kernel.def target(@target) @subgroup_shuffle_up_i32_wave32(%input: buffer, %outp
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_up_i32_wave32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %22 = v_lshlrev_b32_lit %tid, 2
   %value = global_load_b32 %22, %input_view
   %26 = v_and_b32_lit %tid, 31
@@ -169,21 +169,22 @@ kernel.def target(@target) @subgroup_broadcast_f32_vector_wave32(%input: buffer,
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_f32_vector_wave32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
-  %27 = v_lshlrev_b32_lit %tid, 4
-  %loaded = global_load_b128 %27, %input_view
-  %30 = v_mov_b32 12
-  %31 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %32 = ds_bpermute_b32 %30, %31
-  %33 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %34 = ds_bpermute_b32 %30, %33
-  %35 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %36 = ds_bpermute_b32 %30, %35
-  %37 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %38 = ds_bpermute_b32 %30, %37
-  %broadcast = concat(%32, %34, %36, %38) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128 %27, %broadcast, %output_view
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %linear4 = v_lshlrev_b32_lit %tid, 2
+  %29 = v_lshlrev_b32_lit %linear4, 2
+  %loaded = global_load_b128 %29, %input_view
+  %32 = v_mov_b32 12
+  %33 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %34 = ds_bpermute_b32 %32, %33
+  %35 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %36 = ds_bpermute_b32 %32, %35
+  %37 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %38 = ds_bpermute_b32 %32, %37
+  %39 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %40 = ds_bpermute_b32 %32, %39
+  %broadcast = concat(%34, %36, %38, %40) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  global_store_b128 %29, %broadcast, %output_view
   return
 }
 
@@ -212,24 +213,25 @@ kernel.def target(@target) @subgroup_shuffle_down_f32_vector_wave32(%input: buff
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_down_f32_vector_wave32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
-  %29 = v_lshlrev_b32_lit %tid, 4
-  %loaded = global_load_b128 %29, %input_view
-  %33 = v_and_b32_lit %tid, 31
-  %34 = v_mov_b32 4
-  %35 = v_add_u32 %33, %34
-  %38 = v_lshlrev_b32_lit %35, 2
-  %39 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %40 = ds_bpermute_b32 %38, %39
-  %41 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %42 = ds_bpermute_b32 %38, %41
-  %43 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %44 = ds_bpermute_b32 %38, %43
-  %45 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %46 = ds_bpermute_b32 %38, %45
-  %shuffle = concat(%40, %42, %44, %46) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128 %29, %shuffle, %output_view
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %linear4 = v_lshlrev_b32_lit %tid, 2
+  %31 = v_lshlrev_b32_lit %linear4, 2
+  %loaded = global_load_b128 %31, %input_view
+  %35 = v_and_b32_lit %tid, 31
+  %36 = v_mov_b32 4
+  %37 = v_add_u32 %35, %36
+  %40 = v_lshlrev_b32_lit %37, 2
+  %41 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %42 = ds_bpermute_b32 %40, %41
+  %43 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %44 = ds_bpermute_b32 %40, %43
+  %45 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %46 = ds_bpermute_b32 %40, %45
+  %47 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %48 = ds_bpermute_b32 %40, %47
+  %shuffle = concat(%42, %44, %46, %48) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  global_store_b128 %31, %shuffle, %output_view
   return
 }
 
@@ -258,8 +260,8 @@ kernel.def target(@target) @subgroup_reduce_addi_i32_wave32(%input: buffer, %out
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_reduce_addi_i32_wave32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %19 = v_lshlrev_b32_lit %tid, 2
   %value = global_load_b32 %19, %input_view
   %21 = v_and_b32_lit %tid, 31
@@ -312,8 +314,8 @@ kernel.def target(@target) @subgroup_reduce_minsi_i32_wave32(%input: buffer, %ou
 // ----
 low.kernel.def target(@target) workgroup_size(32, 1, 1) @subgroup_reduce_minsi_i32_wave32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
   %19 = v_lshlrev_b32_lit %tid, 2
   %value = global_load_b32 %19, %input_view
   %21 = v_xor_b32_lit %tid, 16
@@ -365,8 +367,8 @@ kernel.def target(@target) @workgroup_reduce_minsi_single_wave(%input: buffer, %
 // ----
 low.kernel.def target(@target) workgroup_size(32, 1, 1) @workgroup_reduce_minsi_single_wave() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
   %19 = v_lshlrev_b32_lit %tid, 2
   %value = global_load_b32 %19, %input_view
   %21 = v_xor_b32_lit %tid, 16
@@ -418,8 +420,8 @@ kernel.def target(@target) @subgroup_scan_inclusive_addi_i32_wave32(%input: buff
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_scan_inclusive_addi_i32_wave32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %19 = v_lshlrev_b32_lit %tid, 2
   %value = global_load_b32 %19, %input_view
   %21 = v_and_b32_lit %tid, 31
@@ -487,8 +489,8 @@ kernel.def target(@target) @subgroup_scan_exclusive_reverse_addi_i32_wave32(%inp
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_scan_exclusive_reverse_addi_i32_wave32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %19 = v_lshlrev_b32_lit %tid, 2
   %value = global_load_b32 %19, %input_view
   %21 = v_and_b32_lit %tid, 31
@@ -557,7 +559,7 @@ kernel.def target(@target) @subgroup_active_mask_i32_wave32(%output: buffer) {
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_active_mask_i32_wave32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %13 = s_mov_b64_exec_read
   %mask = slice %13[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   %result = v_mov_b32_copy %mask
@@ -593,8 +595,8 @@ kernel.def target(@target) @subgroup_vote_ballot_i32_wave32(%input: buffer, %out
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_vote_ballot_i32_wave32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %21 = v_lshlrev_b32_lit %tid, 2
   %value = global_load_b32 %21, %input_view
   %24 = v_mov_b32 0
@@ -633,9 +635,18 @@ kernel.def target(@target) @subgroup_vote_any_wave32(%input: buffer) {
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_vote_any_wave32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %15 = v_lshlrev_b32_lit %tid, 2
   %value = global_load_b32 %15, %input_view
+  %18 = v_mov_b32 0
+  %predicate = v_cmp_gt_i32 %value, %18
+  %20 = s_mov_b32 0
+  %22 = concat(%20, %20) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %any = s_cmp_lg_u64 %predicate, %22
+  low.cond_br %any, ^then, ^else : reg<amdgpu.scc>
+^then:
+  return
+^else:
   return
 }
 
@@ -667,9 +678,17 @@ kernel.def target(@target) @subgroup_vote_all_wave32(%input: buffer) {
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_vote_all_wave32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %15 = v_lshlrev_b32_lit %tid, 2
   %value = global_load_b32 %15, %input_view
+  %18 = v_mov_b32 0
+  %predicate = v_cmp_gt_i32 %value, %18
+  %20 = s_mov_b64_exec_read
+  %all = s_cmp_eq_u64 %predicate, %20
+  low.cond_br %all, ^then, ^else : reg<amdgpu.scc>
+^then:
+  return
+^else:
   return
 }
 
@@ -742,8 +761,8 @@ kernel.def target(@target) @subgroup_broadcast_i32_wave64(%input: buffer, %outpu
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_i32_wave64() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = low.resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
-  %output_view = low.resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %input_view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %output_view = low.resource<hal_binding> {extent = 256, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %20 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %21 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %22 = low.op<amdgpu.s_mov_b32_m0>(%21) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
@@ -779,8 +798,8 @@ kernel.def target(@target) @subgroup_reduce_addf_f32_wave64(%input: buffer, %out
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_reduce_addf_f32_wave64() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = low.resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
-  %output_view = low.resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %input_view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %output_view = low.resource<hal_binding> {extent = 256, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %19 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %20 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %21 = low.op<amdgpu.s_mov_b32_m0>(%20) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
@@ -840,8 +859,8 @@ kernel.def target(@target) @subgroup_shuffle_xor_i32_wave64(%input: buffer, %out
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_xor_i32_wave64() {
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %input_view = low.resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
-  %output_view = low.resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 256} : reg<amdgpu.sgpr x2>
+  %input_view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
+  %output_view = low.resource<hal_binding> {extent = 256, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %22 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %23 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
   %24 = low.op<amdgpu.s_mov_b32_m0>(%23) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>

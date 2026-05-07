@@ -23,8 +23,8 @@ kernel.def target(@target) @lds_f16x4_b64_roundtrip(%input: buffer, %output: buf
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_f16x4_b64_roundtrip() asm<amdgpu.rdna3.core> {
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 512} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 512} : reg<amdgpu.sgpr x2>
   %23 = storage {byte_alignment = 8, byte_length = 512} : low.storage<workgroup>
   %scratch_view = storage_address %23 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %25 = v_mov_b32 0
@@ -59,8 +59,8 @@ kernel.def target(@target) @lds_f16x8_b128_roundtrip(%input: buffer, %output: bu
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_f16x8_b128_roundtrip() asm<amdgpu.rdna3.core> {
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %23 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
   %scratch_view = storage_address %23 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %25 = v_mov_b32 0
@@ -108,8 +108,8 @@ kernel.def target(@target) @lds_f16x8_b128_extract_scalar_stores(%input: buffer,
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_f16x8_b128_extract_scalar_stores() asm<amdgpu.rdna3.core> {
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 16} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
   %24 = storage {byte_alignment = 16, byte_length = 16} : low.storage<workgroup>
   %scratch_view = storage_address %24 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %26 = v_mov_b32 0
@@ -159,8 +159,8 @@ kernel.def target(@target) @lds_bf16x4_b64_roundtrip(%input: buffer, %output: bu
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_bf16x4_b64_roundtrip() asm<amdgpu.rdna3.core> {
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 512} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 512} : reg<amdgpu.sgpr x2>
   %23 = storage {byte_alignment = 8, byte_length = 512} : low.storage<workgroup>
   %scratch_view = storage_address %23 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %25 = v_mov_b32 0
@@ -195,8 +195,8 @@ kernel.def target(@target) @lds_bf16x8_b128_roundtrip(%input: buffer, %output: b
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_bf16x8_b128_roundtrip() asm<amdgpu.rdna3.core> {
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 1024} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %23 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
   %scratch_view = storage_address %23 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %25 = v_mov_b32 0
@@ -231,8 +231,8 @@ kernel.def target(@target) @lds_f16_scalar_roundtrip(%input: buffer, %output: bu
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_f16_scalar_roundtrip() asm<amdgpu.rdna3.core> {
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
   %20 = storage {byte_alignment = 2, byte_length = 128} : low.storage<workgroup>
   %scratch_view = storage_address %20 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %22 = v_mov_b32 0
@@ -267,8 +267,8 @@ kernel.def target(@target) @lds_bf16_scalar_roundtrip(%input: buffer, %output: b
 
 // ----
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_bf16_scalar_roundtrip() asm<amdgpu.rdna3.core> {
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 128} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
   %20 = storage {byte_alignment = 2, byte_length = 128} : low.storage<workgroup>
   %scratch_view = storage_address %20 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %22 = v_mov_b32 0
@@ -308,8 +308,8 @@ kernel.def target(@target) @lds_f16_strided_scalar_roundtrip(%input: buffer, %ou
 // ----
 low.kernel.def target(@target) workgroup_size(16, 16, 1) @lds_f16_strided_scalar_roundtrip() asm<amdgpu.rdna3.core> {
   %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
-  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 512} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 512} : reg<amdgpu.sgpr x2>
   %row = v_and_b32_lit %packed_tid, 1023
   %30 = v_lshrrev_b32_lit %packed_tid, 10
   %col = v_and_b32_lit %30, 1023

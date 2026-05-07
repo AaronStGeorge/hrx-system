@@ -15,8 +15,8 @@
 typedef enum loom_amdgpu_hal_buffer_descriptor_attr_ordinal_e {
   // Byte stride encoded into the descriptor pointer high word.
   LOOM_AMDGPU_HAL_BUFFER_DESCRIPTOR_ATTR_CACHE_SWIZZLE_STRIDE = 0,
-  // Maximum byte range exposed through the descriptor.
-  LOOM_AMDGPU_HAL_BUFFER_DESCRIPTOR_ATTR_VALID_BYTE_COUNT = 1,
+  // Maximum byte extent exposed through the descriptor.
+  LOOM_AMDGPU_HAL_BUFFER_DESCRIPTOR_ATTR_EXTENT = 1,
 } loom_amdgpu_hal_buffer_descriptor_attr_ordinal_t;
 
 #endif  // LOOM_TARGET_ARCH_AMDGPU_HAL_BINDING_DESCRIPTOR_H_

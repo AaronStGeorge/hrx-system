@@ -1019,15 +1019,23 @@ low_resource = Op(
     group=low_ops,
     phase=OpPhase.EXECUTABLE,
     doc="Import a function-local target resource into a low register value.",
+    operands=[
+        Operand(
+            "extent_value",
+            REGISTER,
+            optional=True,
+            doc="Optional dynamic byte-addressable extent guaranteed valid for the imported resource.",
+        ),
+    ],
     attrs=[
         AttrDef("import_kind", ATTR_TYPE_ENUM, enum_def=LowResourceImportKind),
         AttrDef("index", ATTR_TYPE_I64),
         AttrDef("source_type", ATTR_TYPE_TYPE),
         AttrDef(
-            "valid_byte_count",
+            "extent",
             ATTR_TYPE_I64,
             optional=True,
-            doc="Optional byte-addressable extent guaranteed valid for the imported resource.",
+            doc="Optional static byte-addressable extent guaranteed valid for the imported resource.",
         ),
         AttrDef(
             "cache_swizzle_stride",
@@ -1041,6 +1049,10 @@ low_resource = Op(
     verify="loom_low_resource_verify",
     format=[
         TemplateParam("import_kind"),
+        OptionalGroup(
+            [kw("extent"), GLUE, LPAREN, Ref("extent_value"), GLUE, RPAREN],
+            anchor="extent_value",
+        ),
         AttrDict(),
         COLON,
         ResultType("result"),
@@ -1048,6 +1060,7 @@ low_resource = Op(
     examples=[
         "%state = low.resource<vm_state> {index = 0, source_type = i64} : reg<vm.i64>",
         "%binding = low.resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>",
+        "%dynamic = low.resource<hal_binding> extent(%extent) {index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>",
         "%swizzled = low.resource<hal_binding> {index = 1, source_type = hal.buffer, cache_swizzle_stride = 64} : reg<amdgpu.sgpr x2>",
     ],
 )

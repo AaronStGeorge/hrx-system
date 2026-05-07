@@ -1376,8 +1376,8 @@ static iree_status_t loom_low_lower_emit_argument_resource_import(
   loom_op_t* resource_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_resource_build(
       &context->builder, argument->resource_build_flags,
-      (uint8_t)argument->resource_import_kind, argument->resource_index,
-      source_type_id, argument->resource_valid_byte_count,
+      (uint8_t)argument->resource_import_kind, LOOM_VALUE_ID_INVALID,
+      argument->resource_index, source_type_id, argument->resource_extent,
       argument->resource_cache_swizzle_stride, argument->abi_type,
       context->source_function.op->location, &resource_op));
   return loom_low_lower_bind_value(context, source_arguments[argument_index],
