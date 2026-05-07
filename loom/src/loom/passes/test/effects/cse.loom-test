@@ -292,6 +292,47 @@ low.func.def target(@test_target) @low_constants_cse() -> (reg<test.i32>, reg<te
 
 // ====
 
+// Entry-block constants dominate CFG successor blocks and can be reused there.
+// Constants in sibling blocks remain independent because neither sibling
+// dominates the other.
+// RUN: pass cse
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @low_entry_constants_cse_into_cfg(%cond: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) {
+  %entry_zero = low.const<test.const.i32> {i32_value = 0} : reg<test.i32>
+  low.cond_br %cond, ^then, ^else : reg<test.i32>
+^then:
+  %then_zero = low.const<test.const.i32> {i32_value = 0} : reg<test.i32>
+  %then_sum = low.op<test.add.i32>(%entry_zero, %then_zero) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  low.br ^join(%then_sum: reg<test.i32>, %then_zero: reg<test.i32>)
+^else:
+  %else_seven = low.const<test.const.i32> {i32_value = 7} : reg<test.i32>
+  low.br ^join(%entry_zero: reg<test.i32>, %else_seven: reg<test.i32>)
+^join(%lhs: reg<test.i32>, %rhs: reg<test.i32>):
+  %result = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  low.return %result, %rhs : reg<test.i32>, reg<test.i32>
+}
+
+// ----
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @low_entry_constants_cse_into_cfg(%cond: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) {
+  %entry_zero = low.const<test.const.i32> {i32_value = 0} : reg<test.i32>
+  low.cond_br %cond, ^then, ^else : reg<test.i32>
+^then:
+  %then_sum = low.op<test.add.i32>(%entry_zero, %entry_zero) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  low.br ^join(%then_sum: reg<test.i32>, %entry_zero: reg<test.i32>)
+^else:
+  %else_seven = low.const<test.const.i32> {i32_value = 7} : reg<test.i32>
+  low.br ^join(%entry_zero: reg<test.i32>, %else_seven: reg<test.i32>)
+^join(%lhs: reg<test.i32>, %rhs: reg<test.i32>):
+  %result = low.op<test.add.i32>(%lhs, %rhs) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  low.return %result, %rhs : reg<test.i32>, reg<test.i32>
+}
+
+// ====
+
 // low.copy and low.concat are virtual-register identity constructors. They may
 // look structurally identical, but each instance names distinct storage and
 // must not be folded by value CSE.

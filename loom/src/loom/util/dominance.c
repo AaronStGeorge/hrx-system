@@ -317,9 +317,9 @@ static bool loom_structured_block_dominates(
   return loom_region_const_entry_block(region) == dominator_block;
 }
 
-static bool loom_block_dominates(const loom_dominance_info_t* info,
-                                 const loom_block_t* dominator_block,
-                                 const loom_block_t* dominated_block) {
+bool loom_dominates_block(const loom_dominance_info_t* info,
+                          const loom_block_t* dominator_block,
+                          const loom_block_t* dominated_block) {
   if (!dominator_block || !dominated_block) return false;
   if (dominator_block == dominated_block) return true;
   const loom_region_t* region = dominator_block->parent_region;
@@ -367,7 +367,7 @@ bool loom_dominates_op(const loom_dominance_info_t* info, const loom_op_t* a,
 
   // Same parent op, different blocks: region block dominance.
   if (a->parent_op == b->parent_op && a->parent_op != NULL) {
-    return loom_block_dominates(info, a->parent_block, b->parent_block);
+    return loom_dominates_block(info, a->parent_block, b->parent_block);
   }
 
   // Different nesting depths or different parent ops.
@@ -415,7 +415,7 @@ bool loom_dominates_op(const loom_dominance_info_t* info, const loom_op_t* a,
   // Same parent op at the same depth, different blocks: entry block
   // or CFG block dominance.
   if (a->parent_op == b_at_a_depth->parent_op && a->parent_op != NULL) {
-    return loom_block_dominates(info, a->parent_block,
+    return loom_dominates_block(info, a->parent_block,
                                 b_at_a_depth->parent_block);
   }
 
@@ -439,7 +439,7 @@ bool loom_dominates_value(const loom_dominance_info_t* info,
 
     const loom_op_t* current = use_op;
     while (current) {
-      if (loom_block_dominates(info, def_block, current->parent_block)) {
+      if (loom_dominates_block(info, def_block, current->parent_block)) {
         return true;
       }
       if (!current->parent_op) return false;

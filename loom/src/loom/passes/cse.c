@@ -11,6 +11,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
+#include "loom/util/dominance.h"
 
 //===----------------------------------------------------------------------===//
 // Statistics
@@ -364,77 +365,72 @@ static void loom_cse_stack_push(loom_cse_stack_t* stack, loom_block_t* block,
 // Region child frame pushing
 //===----------------------------------------------------------------------===//
 
-// Counts the total number of blocks across all regions of an op.
-// Used to reserve stack space before pushing child frames.
-static iree_host_size_t loom_cse_total_block_count(const loom_op_t* op) {
-  iree_host_size_t total = 0;
-  loom_region_t** regions = loom_op_regions((loom_op_t*)op);
-  for (uint8_t r = 0; r < op->region_count; ++r) {
-    if (regions[r]) total += regions[r]->block_count;
-  }
-  return total;
-}
-
-// Pushes child frames for all nested regions of an op.
+// Pushes frames for all blocks in a region.
 //
 // For single-block regions (the common case), pushes one frame with
 // a child scope whose parent is |parent_scope|.
 //
-// For structured multi-block regions, uses entry block dominance: block 0
-// dominates all other blocks in structured control flow. The entry
-// block's scope serves as the parent for all sibling blocks:
+// For multi-block regions, uses entry block dominance where it is proven:
 //   - bb0 gets entry_scope (parent = parent_scope).
-//   - bb1..bbN-1 each get a fresh scope (parent = entry_scope).
+//   - dominated sibling blocks each get a fresh scope parented by entry_scope.
 //   - Frames are pushed in reverse order so bb0 is on top (processed
 //     first). When bb0 finishes, entry_scope has its CSE entries.
 //     Subsequent blocks can see them through their parent pointer.
 //
-// CFG regions are intentionally more conservative: each block gets a fresh
-// scope parented by |parent_scope|. CSE within CFG regions can become
-// dominance-aware later, but shared CSE must not infer cross-block visibility
-// from block table order.
+// Blocks that are not dominated by the entry block remain parented by the outer
+// scope. This matters for malformed or unreachable CFG blocks: CSE must not
+// create SSA references that the dominance verifier would reject.
+static iree_status_t loom_cse_push_region_block_frames(
+    loom_cse_stack_t* stack, iree_arena_allocator_t* pass_arena,
+    iree_arena_allocator_t* scope_arena, const loom_dominance_info_t* dominance,
+    loom_region_t* region, loom_cse_scope_t* parent_scope) {
+  if (!region || region->block_count == 0) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_cse_stack_reserve(stack, pass_arena, region->block_count));
+
+  if (region->block_count == 1) {
+    loom_block_t* entry_block = loom_region_entry_block(region);
+    loom_cse_scope_t* child_scope = NULL;
+    IREE_RETURN_IF_ERROR(loom_cse_scope_allocate(scope_arena, parent_scope,
+                                                 entry_block, &child_scope));
+    loom_cse_stack_push(stack, entry_block, child_scope);
+    return iree_ok_status();
+  }
+
+  loom_block_t* entry_block = loom_region_entry_block(region);
+  loom_cse_scope_t* entry_scope = NULL;
+  IREE_RETURN_IF_ERROR(loom_cse_scope_allocate(scope_arena, parent_scope,
+                                               entry_block, &entry_scope));
+  const bool is_cfg =
+      iree_any_bit_set(region->flags, LOOM_REGION_INSTANCE_FLAG_CFG);
+  for (int32_t b = (int32_t)region->block_count - 1; b >= 1; --b) {
+    loom_block_t* block = loom_region_block(region, (uint16_t)b);
+    loom_cse_scope_t* block_parent = entry_scope;
+    if (is_cfg && !loom_dominates_block(dominance, entry_block, block)) {
+      block_parent = parent_scope;
+    }
+    loom_cse_scope_t* sibling_scope = NULL;
+    IREE_RETURN_IF_ERROR(loom_cse_scope_allocate(scope_arena, block_parent,
+                                                 block, &sibling_scope));
+    loom_cse_stack_push(stack, block, sibling_scope);
+  }
+  loom_cse_stack_push(stack, entry_block, entry_scope);
+  return iree_ok_status();
+}
+
+// Pushes child frames for all nested regions of an op.
 static iree_status_t loom_cse_push_region_frames(
     loom_cse_stack_t* stack, iree_arena_allocator_t* pass_arena,
-    iree_arena_allocator_t* scope_arena, const loom_op_t* op,
-    loom_cse_scope_t* parent_scope) {
+    iree_arena_allocator_t* scope_arena, const loom_dominance_info_t* dominance,
+    const loom_op_t* op, loom_cse_scope_t* parent_scope) {
   loom_region_t** regions = loom_op_regions((loom_op_t*)op);
   // Push regions in reverse order so the first region's first block
   // is on top of the stack and processed first.
   for (int32_t r = (int32_t)op->region_count - 1; r >= 0; --r) {
-    loom_region_t* region = regions[r];
-    if (!region || region->block_count == 0) continue;
-    if (region->block_count == 1) {
-      // Common case: single-block region.
-      loom_block_t* entry_block = loom_region_entry_block(region);
-      loom_cse_scope_t* child_scope = NULL;
-      IREE_RETURN_IF_ERROR(loom_cse_scope_allocate(scope_arena, parent_scope,
-                                                   entry_block, &child_scope));
-      loom_cse_stack_push(stack, entry_block, child_scope);
-    } else if (iree_any_bit_set(region->flags, LOOM_REGION_INSTANCE_FLAG_CFG)) {
-      for (int32_t b = (int32_t)region->block_count - 1; b >= 0; --b) {
-        loom_block_t* block = loom_region_block(region, (uint16_t)b);
-        loom_cse_scope_t* block_scope = NULL;
-        IREE_RETURN_IF_ERROR(loom_cse_scope_allocate(scope_arena, parent_scope,
-                                                     block, &block_scope));
-        loom_cse_stack_push(stack, block, block_scope);
-      }
-    } else {
-      // Multi-block region: entry block dominates all siblings.
-      loom_block_t* entry_block = loom_region_entry_block(region);
-      loom_cse_scope_t* entry_scope = NULL;
-      IREE_RETURN_IF_ERROR(loom_cse_scope_allocate(scope_arena, parent_scope,
-                                                   entry_block, &entry_scope));
-      // Push non-entry blocks in reverse order (parent = entry_scope).
-      for (int32_t b = (int32_t)region->block_count - 1; b >= 1; --b) {
-        loom_block_t* block = loom_region_block(region, (uint16_t)b);
-        loom_cse_scope_t* sibling_scope = NULL;
-        IREE_RETURN_IF_ERROR(loom_cse_scope_allocate(scope_arena, entry_scope,
-                                                     block, &sibling_scope));
-        loom_cse_stack_push(stack, block, sibling_scope);
-      }
-      // Push entry block on top — processed first.
-      loom_cse_stack_push(stack, entry_block, entry_scope);
-    }
+    IREE_RETURN_IF_ERROR(loom_cse_push_region_block_frames(
+        stack, pass_arena, scope_arena, dominance, regions[r], parent_scope));
   }
   return iree_ok_status();
 }
@@ -492,9 +488,13 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
                            loom_func_like_t function) {
   if (!loom_func_like_body(function)) return iree_ok_status();
 
+  loom_dominance_info_t dominance = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_dominance_info_initialize(module, pass->arena, &dominance));
+
   // Scope arena: holds all scope structs and hash table arrays.
-  // Reset between top-level blocks to bound peak memory to the
-  // largest single subtree. Shares the pass arena's block pool.
+  // Reset between root regions to bound peak memory to the largest single
+  // function-like region. Shares the pass arena's block pool.
   iree_arena_allocator_t scope_arena;
   iree_arena_initialize(pass->arena->block_pool, &scope_arena);
 
@@ -509,113 +509,96 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
     loom_region_t* region = loom_func_like_region(function, region_index);
     if (!region) continue;
 
-    // Process each top-level block independently.
-    loom_block_t* top_block = NULL;
-    loom_region_for_each_block(region, top_block) {
-      if (!iree_status_is_ok(status)) break;
-      iree_arena_reset(&scope_arena);
+    iree_arena_reset(&scope_arena);
+    stack.count = 0;
+    status = loom_cse_push_region_block_frames(&stack, pass->arena,
+                                               &scope_arena, &dominance, region,
+                                               /*parent_scope=*/NULL);
+    while (iree_status_is_ok(status) && stack.count > 0) {
+      loom_cse_frame_t* frame = &stack.frames[stack.count - 1];
 
-      loom_cse_scope_t* root_scope = NULL;
-      status =
-          loom_cse_scope_allocate(&scope_arena, NULL, top_block, &root_scope);
-      if (!iree_status_is_ok(status)) break;
+      // Block done — pop frame.
+      if (!frame->next_op) {
+        --stack.count;
+        continue;
+      }
 
-      stack.count = 0;
-      loom_cse_stack_push(&stack, top_block, root_scope);
+      loom_op_t* op = frame->next_op;
+      frame->next_op = op->next_op;
+      if (op->flags & LOOM_OP_FLAG_DEAD) continue;
 
-      while (iree_status_is_ok(status) && stack.count > 0) {
-        loom_cse_frame_t* frame = &stack.frames[stack.count - 1];
+      const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+      if (!vtable) {
+        // Unknown op kind — conservatively treat as a write barrier.
+        // The verifier enforces that all ops have vtables, so this
+        // should not occur in valid IR. But if it does, treating the
+        // op as transparent would silently allow CSE across writes.
+        loom_cse_scope_invalidate_reads(frame->scope);
+        continue;
+      }
 
-        // Block done — pop frame.
-        if (!frame->next_op) {
-          --stack.count;
-          continue;
-        }
+      loom_trait_flags_t traits = op->traits;
 
-        loom_op_t* op = frame->next_op;
-        frame->next_op = op->next_op;
-        if (op->flags & LOOM_OP_FLAG_DEAD) continue;
+      // Write barrier: a write or unknown-effect op invalidates all
+      // non-PURE entries up the scope chain. This must happen before
+      // any other checks because result-less writes still invalidate.
+      if (loom_traits_may_write(traits) ||
+          loom_op_regions_have_write_effects(op)) {
+        loom_cse_scope_invalidate_reads(frame->scope);
+      }
 
-        const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
-        if (!vtable) {
-          // Unknown op kind — conservatively treat as a write barrier.
-          // The verifier enforces that all ops have vtables, so this
-          // should not occur in valid IR. But if it does, treating the
-          // op as transparent would silently allow CSE across writes.
-          loom_cse_scope_invalidate_reads(frame->scope);
-          continue;
-        }
+      // Push child frames for nested regions.
+      if (op->region_count > 0) {
+        loom_cse_scope_t* parent_scope =
+            loom_traits_is_isolated(traits) ? NULL : frame->scope;
 
-        loom_trait_flags_t traits = op->traits;
+        status = loom_cse_push_region_frames(&stack, pass->arena, &scope_arena,
+                                             &dominance, op, parent_scope);
+        if (!iree_status_is_ok(status)) break;
+        continue;  // Ops with regions are never CSE candidates.
+      }
 
-        // Write barrier: a write or unknown-effect op invalidates all
-        // non-PURE entries up the scope chain. This must happen before
-        // any other checks because result-less writes still invalidate.
-        if (loom_traits_may_write(traits) ||
-            loom_op_regions_have_write_effects(op)) {
-          loom_cse_scope_invalidate_reads(frame->scope);
-        }
+      // CSE candidate check: must have results, no regions (handled
+      // above), no writes, no unknown effects, and be deterministic.
+      if (op->result_count == 0) {
+        continue;
+      }
+      if (op->tied_result_count != 0) {
+        continue;
+      }
+      if (loom_cse_result_is_consumed(module, op)) {
+        continue;
+      }
+      if (loom_cse_prevents_cse(traits)) {
+        continue;
+      }
 
-        // Push child frames for nested regions.
-        if (op->region_count > 0) {
-          loom_cse_scope_t* parent_scope =
-              loom_traits_is_isolated(traits) ? NULL : frame->scope;
-
-          iree_host_size_t child_block_count = loom_cse_total_block_count(op);
-          status =
-              loom_cse_stack_reserve(&stack, pass->arena, child_block_count);
-          if (!iree_status_is_ok(status)) break;
-          // Re-fetch frame pointer — reserve may have reallocated the array.
-          frame = &stack.frames[stack.count - 1];
-
-          status = loom_cse_push_region_frames(&stack, pass->arena,
-                                               &scope_arena, op, parent_scope);
-          if (!iree_status_is_ok(status)) break;
-          continue;  // Ops with regions are never CSE candidates.
-        }
-
-        // CSE candidate check: must have results, no regions (handled
-        // above), no writes, no unknown effects, and be deterministic.
-        if (op->result_count == 0) {
-          continue;
-        }
-        if (op->tied_result_count != 0) {
-          continue;
-        }
-        if (loom_cse_result_is_consumed(module, op)) {
-          continue;
-        }
-        if (loom_cse_prevents_cse(traits)) {
-          continue;
-        }
-
-        // Look up the scope chain for an equivalent op.
-        uint32_t hash = loom_cse_hash_op(module, op);
-        loom_op_t* existing =
-            loom_cse_scope_lookup(frame->scope, module, op, hash);
-        if (existing) {
-          // Replace all uses and erase.
-          loom_value_id_t* op_results = loom_op_results(op);
-          loom_value_id_t* existing_results = loom_op_results(existing);
-          for (uint16_t r = 0; r < op->result_count; ++r) {
-            if (op_results[r] != LOOM_VALUE_ID_INVALID &&
-                existing_results[r] != LOOM_VALUE_ID_INVALID) {
-              status = loom_value_replace_all_uses_with(module, op_results[r],
-                                                        existing_results[r]);
-              if (!iree_status_is_ok(status)) break;
-            }
+      // Look up the scope chain for an equivalent op.
+      uint32_t hash = loom_cse_hash_op(module, op);
+      loom_op_t* existing =
+          loom_cse_scope_lookup(frame->scope, module, op, hash);
+      if (existing) {
+        // Replace all uses and erase.
+        loom_value_id_t* op_results = loom_op_results(op);
+        loom_value_id_t* existing_results = loom_op_results(existing);
+        for (uint16_t r = 0; r < op->result_count; ++r) {
+          if (op_results[r] != LOOM_VALUE_ID_INVALID &&
+              existing_results[r] != LOOM_VALUE_ID_INVALID) {
+            status = loom_value_replace_all_uses_with(module, op_results[r],
+                                                      existing_results[r]);
+            if (!iree_status_is_ok(status)) break;
           }
-          if (!iree_status_is_ok(status)) break;
-          status = loom_op_erase(module, op);
-          if (!iree_status_is_ok(status)) break;
-          loom_pass_mark_changed(pass);
-          if (pass->statistics) {
-            loom_pass_statistic_add(pass, LOOM_CSE_STAT_EXPRESSIONS_ELIMINATED,
-                                    1);
-          }
-        } else {
-          loom_cse_table_insert(&frame->scope->table, op, hash, traits);
         }
+        if (!iree_status_is_ok(status)) break;
+        status = loom_op_erase(module, op);
+        if (!iree_status_is_ok(status)) break;
+        loom_pass_mark_changed(pass);
+        if (pass->statistics) {
+          loom_pass_statistic_add(pass, LOOM_CSE_STAT_EXPRESSIONS_ELIMINATED,
+                                  1);
+        }
+      } else {
+        loom_cse_table_insert(&frame->scope->table, op, hash, traits);
       }
     }
   }

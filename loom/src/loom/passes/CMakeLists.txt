@@ -134,6 +134,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
     loom::src::loom::pass::types
+    loom::src::loom::util::dominance
   PUBLIC
 )
 

@@ -71,6 +71,13 @@ typedef struct loom_amdgpu_branch_plan_t {
   uint16_t if_else_merge_arg_count;
 } loom_amdgpu_branch_plan_t;
 
+typedef struct loom_amdgpu_zero_placeholder_t {
+  // Low value type represented by value.
+  loom_type_t type;
+  // Reusable zero value for an inactive merge placeholder.
+  loom_value_id_t value;
+} loom_amdgpu_zero_placeholder_t;
+
 static iree_status_t loom_amdgpu_emit_plain_cond_branch(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t low_condition, loom_block_t* low_true_dest,
@@ -1181,16 +1188,38 @@ static iree_status_t loom_amdgpu_emit_no_true_else_entry_block(
   loom_value_id_t* zero_args = NULL;
   iree_status_t status = loom_low_lower_allocate_scratch_array(
       context, arg_count, sizeof(*zero_args), (void**)&zero_args);
+  loom_amdgpu_zero_placeholder_t* placeholders = NULL;
+  if (iree_status_is_ok(status)) {
+    status = loom_low_lower_allocate_scratch_array(
+        context, arg_count, sizeof(*placeholders), (void**)&placeholders);
+  }
+  uint16_t placeholder_count = 0;
   loom_module_t* module = loom_low_lower_context_module(context);
   for (uint16_t i = 0; i < arg_count && iree_status_is_ok(status); ++i) {
+    zero_args[i] = LOOM_VALUE_ID_INVALID;
     // The no-true path reaches this block with EXEC empty. These placeholders
     // only let the shared else dispatcher keep one signature; the final merge
     // selects the else values for every active lane.
     const loom_value_id_t true_arg =
         loom_block_arg_id(plan->else_dispatch_block, i);
-    status = loom_amdgpu_emit_zero_vgpr_value(
-        context, source_op, loom_module_value_type(module, true_arg),
-        &zero_args[i]);
+    const loom_type_t value_type = loom_module_value_type(module, true_arg);
+    for (uint16_t j = 0; j < placeholder_count; ++j) {
+      if (loom_type_equal(placeholders[j].type, value_type)) {
+        zero_args[i] = placeholders[j].value;
+        break;
+      }
+    }
+    if (zero_args[i] != LOOM_VALUE_ID_INVALID) {
+      continue;
+    }
+    status = loom_amdgpu_emit_zero_vgpr_value(context, source_op, value_type,
+                                              &zero_args[i]);
+    if (iree_status_is_ok(status)) {
+      placeholders[placeholder_count++] = (loom_amdgpu_zero_placeholder_t){
+          .type = value_type,
+          .value = zero_args[i],
+      };
+    }
   }
   if (iree_status_is_ok(status)) {
     loom_op_t* branch_op = NULL;

@@ -651,7 +651,7 @@ TEST_F(CSETest, CrossScopeCSEIntoNestedRegion) {
   EXPECT_EQ(count_all_live_ops(body_), 2);
 }
 
-TEST_F(CSETest, NestedCFGRegionDoesNotAssumeEntryScopeDominatesBlocks) {
+TEST_F(CSETest, NestedCFGRegionUsesEntryBlockDominance) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 
   loom_value_id_t arg = LOOM_VALUE_ID_INVALID;
@@ -687,8 +687,9 @@ TEST_F(CSETest, NestedCFGRegionDoesNotAssumeEntryScopeDominatesBlocks) {
 
   int before = count_all_live_ops(body_);
   IREE_ASSERT_OK(run_cse());
-  EXPECT_EQ(count_all_live_ops(body_), before);
-  EXPECT_EQ(loom_test_use_values(use).values[0], exit_value);
+  EXPECT_EQ(count_all_live_ops(body_), before - 1);
+  EXPECT_EQ(loom_test_use_values(use).values[0],
+            loom_test_constant_result(entry_const));
 }
 
 TEST_F(CSETest, IsolatedRegionBlocksCrossScope) {

@@ -103,6 +103,14 @@ const loom_op_t* loom_op_ancestor_at_depth(const loom_op_t* op,
 bool loom_dominates_op(const loom_dominance_info_t* info, const loom_op_t* a,
                        const loom_op_t* b);
 
+// Does block |a| dominate block |b| within their shared region?
+//
+// For CFG regions this uses the cached dominator tree. For structured
+// multi-block regions this follows the region entry-block rule. A block
+// dominates itself. Blocks from different regions never dominate each other.
+bool loom_dominates_block(const loom_dominance_info_t* info,
+                          const loom_block_t* a, const loom_block_t* b);
+
 // Does the value defined by |value_id| dominate op |use_op|?
 //
 // For op results: equivalent to loom_dominates_op(defining_op, use_op).
