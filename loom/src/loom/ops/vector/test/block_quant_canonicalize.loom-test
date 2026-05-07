@@ -224,8 +224,9 @@ func.def @q8_0_vector_decode_expands(%payload: vector<32xi8>, %scale: vector<1xf
   %5 = vector.extract %scale[0] : vector<1xf16> -> f16
   %6 = scalar.extf %5 : f16 to f32
   %7 = vector.splat %6 : vector<32xf32>
-  %8 = vector.sitofp %payload : vector<32xi8> to vector<32xf32>
-  %decoded = vector.mulf %8, %7 : vector<32xf32>
+  %8 = vector.bitunpacks<8> %payload : vector<32xi8> -> vector<32xi32>
+  %9 = vector.sitofp %8 : vector<32xi32> to vector<32xf32>
+  %decoded = vector.mulf %9, %7 : vector<32xf32>
   func.return %decoded : vector<32xf32>
 }
 

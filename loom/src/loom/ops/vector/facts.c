@@ -3055,12 +3055,34 @@ static iree_status_t loom_vector_bitunpack_facts(
   loom_type_t result_type = loom_module_value_type(module, result);
   int32_t storage_width = 0;
   int32_t result_width = 0;
-  iree_host_size_t result_lane_count = 0;
   if (width <= 0 || width > 64 ||
       !loom_vector_integer_element_bitwidth(source_type, &storage_width) ||
       !loom_vector_integer_element_bitwidth(result_type, &result_width) ||
-      result_width < width ||
-      !loom_vector_type_static_lane_count(result_type, &result_lane_count) ||
+      result_width < width) {
+    return loom_vector_make_unknown_facts(result_facts);
+  }
+
+  loom_value_facts_t source_element = {0};
+  uint64_t raw_bits = 0;
+  if (width == storage_width &&
+      loom_vector_facts_query_uniform_element(context, operand_facts[0],
+                                              &source_element) &&
+      loom_vector_facts_query_exact_raw_bits(source_element, storage_width,
+                                             &raw_bits)) {
+    loom_value_facts_t result_element = {0};
+    if (signed_unpack) {
+      result_element =
+          loom_vector_make_signed_raw_bit_facts(raw_bits, (int32_t)width);
+    } else if (!loom_vector_make_unsigned_raw_bit_facts(
+                   raw_bits, (int32_t)width, &result_element)) {
+      return loom_vector_make_unknown_facts(result_facts);
+    }
+    return loom_value_facts_make_uniform_element(context, result_element,
+                                                 &result_facts[0]);
+  }
+
+  iree_host_size_t result_lane_count = 0;
+  if (!loom_vector_type_static_lane_count(result_type, &result_lane_count) ||
       result_lane_count > LOOM_VALUE_FACT_SMALL_STATIC_LANE_LIMIT) {
     return loom_vector_make_unknown_facts(result_facts);
   }

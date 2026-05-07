@@ -1167,10 +1167,21 @@ static iree_status_t loom_vector_canonicalize_dense_q8_0_decode(
                                                &scale_splat_op));
   loom_value_id_t scale_splat = loom_vector_splat_result(scale_splat_op);
 
+  loom_type_t unpacked_type = result_type;
+  unpacked_type.header = loom_type_make_header(
+      loom_type_kind(result_type), LOOM_SCALAR_TYPE_I32,
+      loom_type_rank(result_type), loom_type_flags(result_type));
+
+  loom_op_t* unpacked_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_vector_bitunpacks_build(
+      &rewriter->builder, /*width=*/8, loom_vector_decode_payload(op),
+      unpacked_type, location, &unpacked_op));
+  loom_value_id_t unpacked = loom_vector_bitunpacks_result(unpacked_op);
+
   loom_op_t* converted_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_vector_sitofp_build(
-      &rewriter->builder, loom_vector_decode_payload(op), payload_type,
-      result_type, location, &converted_op));
+  IREE_RETURN_IF_ERROR(loom_vector_sitofp_build(&rewriter->builder, unpacked,
+                                                unpacked_type, result_type,
+                                                location, &converted_op));
   loom_value_id_t converted = loom_vector_sitofp_result(converted_op);
 
   loom_op_t* scaled_op = NULL;

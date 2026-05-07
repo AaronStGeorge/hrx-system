@@ -3427,6 +3427,7 @@ vector_bitunpacku = Op(
         UnpackedPayloadBitCountMatchesStorage("result", "width", "source", "result"),
     ],
     facts="loom_vector_bitunpacku_facts",
+    canonicalize="loom_vector_uniform_result_canonicalize",
     traits=[PURE],
     format=[
         TemplateParam("width"),
@@ -3464,6 +3465,7 @@ vector_bitunpacks = Op(
         UnpackedPayloadBitCountMatchesStorage("result", "width", "source", "result"),
     ],
     facts="loom_vector_bitunpacks_facts",
+    canonicalize="loom_vector_uniform_result_canonicalize",
     traits=[PURE],
     format=[
         TemplateParam("width"),
