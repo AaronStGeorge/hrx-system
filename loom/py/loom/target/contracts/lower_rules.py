@@ -746,6 +746,8 @@ class _LowerRuleSetCompiler:
             GuardKind.VALUE_EXACT_POWER_OF_TWO_I64,
             GuardKind.VALUE_EXACT_F64,
             GuardKind.VALUE_I64_RANGE,
+            GuardKind.VALUE_I64_RANGE_LE,
+            GuardKind.VALUE_I64_RANGE_GE,
             GuardKind.VALUE_F64_EQUALS,
         ):
             self._append_value_fact_guard(source_op, guard)
@@ -875,6 +877,38 @@ class _LowerRuleSetCompiler:
                     ),
                     minimum_i64=guard.minimum,
                     maximum_i64=guard.maximum,
+                )
+            )
+            return
+        if guard.kind in (
+            GuardKind.VALUE_I64_RANGE_LE,
+            GuardKind.VALUE_I64_RANGE_GE,
+        ):
+            if guard.other_field is None:
+                raise ValueError(
+                    f"{source_op.name}: value range relation guard needs another value"
+                )
+            other_value_ref_index = self._append_value_ref(
+                source_op,
+                _value_ref_for_source_field(source_op, guard.other_field),
+            )
+            relation = "le" if guard.kind == GuardKind.VALUE_I64_RANGE_LE else "ge"
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    value_ref_index=value_ref_index,
+                    other_value_ref_index=other_value_ref_index,
+                    diagnostic_index=self._append_diagnostic_ref(
+                        source_op,
+                        _guard_diagnostic(
+                            guard,
+                            _integer_range_relation_diagnostic(
+                                guard.field,
+                                guard.other_field,
+                                relation,
+                            ),
+                        ),
+                    ),
                 )
             )
             return
@@ -1726,6 +1760,19 @@ def _integer_range_diagnostic(
 ) -> DiagnosticRef:
     return _range_constraint_diagnostic(
         "value_fact", field, "i64_range", minimum, maximum
+    )
+
+
+def _integer_range_relation_diagnostic(
+    field: str,
+    other_field: str,
+    relation: str,
+) -> DiagnosticRef:
+    return _relation_constraint_diagnostic(
+        "value_fact",
+        field,
+        other_field,
+        f"i64_range_{relation}",
     )
 
 

@@ -840,6 +840,65 @@ func.def @select_unknown_mask_preserves_lane_meets(%m0: i1, %m1: i1, %m2: i1, %m
 
 // ====
 
+// Unknown uniform masks still preserve the meet of lane-queryable true/false
+// values, including structural vector.iota summaries.
+func.def @select_uniform_unknown_mask_preserves_iota_lane_meets(%mask_value: i1) -> (i64, i64, i64, i64) {
+  %start = scalar.constant 0 : i32
+  %step = scalar.constant 1 : i32
+  %sentinel = scalar.constant 2147483647 : i32
+  %mask = vector.splat %mask_value : vector<4xi1>
+  %indices = vector.iota %start step %step : vector<4xi32>
+  %sentinels = vector.splat %sentinel : vector<4xi32>
+  %selected = vector.select %mask, %indices, %sentinels : vector<4xi32>
+  %first = vector.extract %selected[0] : vector<4xi32> -> i32
+  %last = vector.extract %selected[3] : vector<4xi32> -> i32
+  %first_lo = test.fact_range_lo %first : i32 -> i64
+  %first_hi = test.fact_range_hi %first : i32 -> i64
+  %last_lo = test.fact_range_lo %last : i32 -> i64
+  %last_hi = test.fact_range_hi %last : i32 -> i64
+  func.return %first_lo, %first_hi, %last_lo, %last_hi : i64, i64, i64, i64
+}
+// ----
+func.def @select_uniform_unknown_mask_preserves_iota_lane_meets(%mask_value: i1) -> (i64, i64, i64, i64) {
+  %first_lo = scalar.constant 0 : i64
+  %first_hi = scalar.constant 2147483647 : i64
+  %last_lo = scalar.constant 3 : i64
+  %last_hi = scalar.constant 2147483647 : i64
+  func.return %first_lo, %first_hi, %last_lo, %last_hi : i64, i64, i64, i64
+}
+
+// ====
+
+// Unknown vector comparisons still produce boolean-range mask facts, allowing
+// selects to preserve true/false lane facts.
+func.def @select_cmpf_mask_preserves_iota_lane_meets(%scores: vector<4xf32>, %best: f32) -> (i64, i64, i64, i64) {
+  %start = scalar.constant 0 : i32
+  %step = scalar.constant 1 : i32
+  %sentinel = scalar.constant 2147483647 : i32
+  %best_vector = vector.splat %best : vector<4xf32>
+  %mask = vector.cmpf oeq, %scores, %best_vector : vector<4xf32> -> vector<4xi1>
+  %indices = vector.iota %start step %step : vector<4xi32>
+  %sentinels = vector.splat %sentinel : vector<4xi32>
+  %selected = vector.select %mask, %indices, %sentinels : vector<4xi32>
+  %first = vector.extract %selected[0] : vector<4xi32> -> i32
+  %last = vector.extract %selected[3] : vector<4xi32> -> i32
+  %first_lo = test.fact_range_lo %first : i32 -> i64
+  %first_hi = test.fact_range_hi %first : i32 -> i64
+  %last_lo = test.fact_range_lo %last : i32 -> i64
+  %last_hi = test.fact_range_hi %last : i32 -> i64
+  func.return %first_lo, %first_hi, %last_lo, %last_hi : i64, i64, i64, i64
+}
+// ----
+func.def @select_cmpf_mask_preserves_iota_lane_meets(%scores: vector<4xf32>, %best: f32) -> (i64, i64, i64, i64) {
+  %first_lo = scalar.constant 0 : i64
+  %first_hi = scalar.constant 2147483647 : i64
+  %last_lo = scalar.constant 3 : i64
+  %last_hi = scalar.constant 2147483647 : i64
+  func.return %first_lo, %first_hi, %last_lo, %last_hi : i64, i64, i64, i64
+}
+
+// ====
+
 // Dot products can fold small explicit lane vectors.
 func.def @dotf_small_static_lanes() -> (f32) {
   %a0 = scalar.constant 1.0 : f32

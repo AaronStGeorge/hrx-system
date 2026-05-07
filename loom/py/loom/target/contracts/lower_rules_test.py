@@ -288,6 +288,42 @@ def test_compile_lower_rule_set_compiles_f64_equals_guard() -> None:
     assert compiled.guards[0].u64 == 0x3FF0000000000000
 
 
+def test_compile_lower_rule_set_compiles_value_range_relation_guard() -> None:
+    table = ContractFragment(
+        name="test.value-range-relation",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            DescriptorRule(
+                source_op=scalar_arithmetic.scalar_minsi,
+                descriptor=TEST_LOW_ADD_I32_DESCRIPTOR,
+                guards=(
+                    Guard.value_i64_range_le("lhs", "rhs"),
+                    Guard.value_type("lhs", Scalar("i32")),
+                    Guard.value_type("rhs", Scalar("i32")),
+                    Guard.value_type("result", Scalar("i32")),
+                ),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_ADD_I32_DESCRIPTOR,
+                        operands={
+                            "lhs": ValueRef.operand("lhs"),
+                            "rhs": ValueRef.operand("rhs"),
+                        },
+                        results={"dst": ValueRef.result("result")},
+                    ),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"scalar": ALL_SCALAR_OPS})
+
+    assert compiled.rules[0].guard_count == 4
+    assert compiled.guards[0].kind == GuardKind.VALUE_I64_RANGE_LE
+    assert compiled.guards[0].value_ref_index == 0
+    assert compiled.guards[0].other_value_ref_index == 1
+
+
 def test_compile_lower_rule_set_compiles_value_fact_immediate_emit() -> None:
     table = ContractFragment(
         name="test.value-immediate",

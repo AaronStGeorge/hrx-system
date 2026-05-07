@@ -95,3 +95,42 @@ low.func.def target(@target) abi(hal_kernel) @f32_reduce_add_fastmath() asm<amdg
   global_store_b32 %12, %stored, %output_view
   return
 }
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @i32_reduce_minui_select_sentinel(%values: vector<4xi32>) -> (i32) {
+  %zero = scalar.constant 0 : i32
+  %zeros = vector.splat %zero : vector<4xi32>
+  %is_zero = vector.cmpi eq, %values, %zeros : vector<4xi32> -> vector<4xi1>
+  %start = scalar.constant 0 : i32
+  %step = scalar.constant 1 : i32
+  %indices = vector.iota %start step %step : vector<4xi32>
+  %sentinel = scalar.constant 2147483647 : i32
+  %sentinels = vector.splat %sentinel : vector<4xi32>
+  %selected = vector.select %is_zero, %indices, %sentinels : vector<4xi32>
+  %result = vector.reduce<minui> %selected, %sentinel : vector<4xi32>, i32
+  func.return %result : i32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @i32_reduce_minui_select_sentinel(%values: reg<amdgpu.vgpr x4>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %21 = v_mov_b32 0
+  %26 = slice %values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %28 = v_cmp_eq_i32 %26, %21
+  %29 = slice %values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %31 = v_cmp_eq_i32 %29, %21
+  %32 = slice %values[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %34 = v_cmp_eq_i32 %32, %21
+  %35 = slice %values[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %37 = v_cmp_eq_i32 %35, %21
+  %48 = v_mov_b32 2147483647
+  %55 = v_cndmask_b32_src1_inline %48, %28 {true_value = 0}
+  %58 = v_cndmask_b32_src1_inline %48, %31 {true_value = 1}
+  %61 = v_cndmask_b32_src1_inline %48, %34 {true_value = 2}
+  %64 = v_cndmask_b32_src1_inline %48, %37 {true_value = 3}
+  %68 = v_min_u32 %55, %58
+  %70 = v_min_u32 %68, %61
+  %result = v_min_u32 %70, %64
+  return %result
+}

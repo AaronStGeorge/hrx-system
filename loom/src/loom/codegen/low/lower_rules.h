@@ -394,9 +394,11 @@ typedef enum loom_low_lower_guard_kind_e {
   // All source i64_array attribute elements must fall in
   // [minimum_i64, maximum_i64].
   LOOM_LOW_LOWER_GUARD_ATTR_I64_ARRAY_ELEMENTS_RANGE = 12,
-  // Source value facts must fit in a signed integer with |u64| bits.
+  // Source value facts must prove every non-floating integer element fits in a
+  // signed integer with |u64| bits.
   LOOM_LOW_LOWER_GUARD_VALUE_SIGNED_BIT_COUNT = 13,
-  // Source value facts must fit in an unsigned integer with |u64| bits.
+  // Source value facts must prove every non-floating integer element fits in an
+  // unsigned integer with |u64| bits.
   LOOM_LOW_LOWER_GUARD_VALUE_UNSIGNED_BIT_COUNT = 14,
   // Source value facts must be an exact non-floating integer.
   LOOM_LOW_LOWER_GUARD_VALUE_EXACT_I64 = 15,
@@ -404,8 +406,8 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_VALUE_EXACT_POWER_OF_TWO_I64 = 16,
   // Source value facts must be an exact floating-point value.
   LOOM_LOW_LOWER_GUARD_VALUE_EXACT_F64 = 17,
-  // Source value facts must be a non-floating integer range contained in
-  // [minimum_i64, maximum_i64].
+  // Source value facts must prove every non-floating integer element is
+  // contained in [minimum_i64, maximum_i64].
   LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE = 18,
   // Source operand segment starting at attr_index must contain exactly u64
   // operands.
@@ -415,12 +417,18 @@ typedef enum loom_low_lower_guard_kind_e {
   // Source value facts must prove an exact float equal to the f64 bit-pattern
   // in u64.
   LOOM_LOW_LOWER_GUARD_VALUE_F64_EQUALS = 21,
+  // Source value facts must prove every integer element is <= every integer
+  // element in the other source value facts.
+  LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE_LE = 22,
+  // Source value facts must prove every integer element is >= every integer
+  // element in the other source value facts.
+  LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE_GE = 23,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {
   // Guard operation to evaluate.
   loom_low_lower_guard_kind_t kind;
-  // Source value-ref table index used by VALUE_TYPE guards.
+  // Primary source value-ref table index used by value guards.
   uint16_t value_ref_index;
   // Second source value-ref table index used by pairwise value guards.
   uint16_t other_value_ref_index;
@@ -440,9 +448,9 @@ typedef struct loom_low_lower_guard_t {
   uint16_t register_class_id;
   // Rule-set-local descriptor ref used by DESCRIPTOR_AVAILABLE guards.
   loom_low_lower_descriptor_ref_t descriptor_ref;
-  // Inclusive lower i64 bound for ATTR_I64_RANGE guards.
+  // Inclusive lower i64 bound for ATTR_I64_RANGE and VALUE_I64_RANGE guards.
   int64_t minimum_i64;
-  // Inclusive upper i64 bound for ATTR_I64_RANGE guards.
+  // Inclusive upper i64 bound for ATTR_I64_RANGE and VALUE_I64_RANGE guards.
   int64_t maximum_i64;
 } loom_low_lower_guard_t;
 

@@ -59,6 +59,8 @@ class GuardKind(Enum):
     VALUE_EXACT_POWER_OF_TWO_I64 = "value_exact_power_of_two_i64"
     VALUE_EXACT_F64 = "value_exact_f64"
     VALUE_I64_RANGE = "value_i64_range"
+    VALUE_I64_RANGE_LE = "value_i64_range_le"
+    VALUE_I64_RANGE_GE = "value_i64_range_ge"
     VALUE_F64_EQUALS = "value_f64_equals"
     INSTANCE_FLAGS_HAS_ALL = "instance_flags_has_all"
 
@@ -375,6 +377,36 @@ class Guard:
         )
 
     @classmethod
+    def value_i64_range_le(
+        cls,
+        field: str,
+        other_field: str,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VALUE_I64_RANGE_LE,
+            field=field,
+            other_field=other_field,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
+    def value_i64_range_ge(
+        cls,
+        field: str,
+        other_field: str,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VALUE_I64_RANGE_GE,
+            field=field,
+            other_field=other_field,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
     def value_f64_equals(
         cls,
         field: str,
@@ -518,6 +550,8 @@ class Guard:
             GuardKind.VALUE_EXACT_POWER_OF_TWO_I64,
             GuardKind.VALUE_EXACT_F64,
             GuardKind.VALUE_I64_RANGE,
+            GuardKind.VALUE_I64_RANGE_LE,
+            GuardKind.VALUE_I64_RANGE_GE,
             GuardKind.VALUE_F64_EQUALS,
         ):
             _validate_value_fact_guard(self, source_op, subject)
@@ -552,6 +586,14 @@ def _validate_value_fact_guard(
     subject: str,
 ) -> None:
     _require_value(source_op, guard.field, subject)
+    if guard.kind in (
+        GuardKind.VALUE_I64_RANGE_LE,
+        GuardKind.VALUE_I64_RANGE_GE,
+    ):
+        if guard.other_field is None:
+            raise ValueError(f"{source_op.name}: {subject} needs another value")
+        _require_value(source_op, guard.other_field, subject)
+        return
     if guard.kind in (
         GuardKind.VALUE_SIGNED_BIT_COUNT,
         GuardKind.VALUE_UNSIGNED_BIT_COUNT,

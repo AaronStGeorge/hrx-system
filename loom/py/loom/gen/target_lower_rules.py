@@ -109,6 +109,8 @@ _GUARD_KIND_C_NAMES = {
     GuardKind.VALUE_EXACT_POWER_OF_TWO_I64: "LOOM_LOW_LOWER_GUARD_VALUE_EXACT_POWER_OF_TWO_I64",
     GuardKind.VALUE_EXACT_F64: "LOOM_LOW_LOWER_GUARD_VALUE_EXACT_F64",
     GuardKind.VALUE_I64_RANGE: "LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE",
+    GuardKind.VALUE_I64_RANGE_LE: "LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE_LE",
+    GuardKind.VALUE_I64_RANGE_GE: "LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE_GE",
     GuardKind.VALUE_F64_EQUALS: "LOOM_LOW_LOWER_GUARD_VALUE_F64_EQUALS",
     GuardKind.INSTANCE_FLAGS_HAS_ALL: "LOOM_LOW_LOWER_GUARD_INSTANCE_FLAGS_HAS_ALL",
 }
@@ -643,10 +645,16 @@ def _guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]
         GuardKind.VALUE_EXACT_POWER_OF_TWO_I64,
         GuardKind.VALUE_EXACT_F64,
         GuardKind.VALUE_I64_RANGE,
+        GuardKind.VALUE_I64_RANGE_LE,
+        GuardKind.VALUE_I64_RANGE_GE,
         GuardKind.VALUE_F64_EQUALS,
     ):
         _append_field(fields, "value_ref_index", row.value_ref_index, always=True)
-    if row.kind == GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ:
+    if row.kind in (
+        GuardKind.LOW_VALUE_REGISTER_UNIT_COUNT_EQ,
+        GuardKind.VALUE_I64_RANGE_LE,
+        GuardKind.VALUE_I64_RANGE_GE,
+    ):
         _append_field(
             fields,
             "other_value_ref_index",

@@ -397,6 +397,73 @@ static bool loom_low_lower_rule_integer_immediate_facts(
   return true;
 }
 
+static bool loom_low_lower_rule_integer_element_range_facts(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t value_id, loom_value_facts_t* out_facts) {
+  *out_facts = loom_value_facts_unknown();
+  if (fact_table == NULL) {
+    return false;
+  }
+
+  const loom_type_t type = loom_module_value_type(module, value_id);
+  const loom_value_facts_t facts =
+      loom_value_fact_table_lookup(fact_table, value_id);
+  if (loom_type_is_scalar(type)) {
+    if (loom_scalar_type_is_float(loom_type_element_type(type))) {
+      return false;
+    }
+    *out_facts = facts;
+    return true;
+  }
+  if (!loom_type_is_vector(type) ||
+      loom_scalar_type_is_float(loom_type_element_type(type))) {
+    return false;
+  }
+
+  loom_value_fact_uniform_element_t uniform = {0};
+  if (loom_value_facts_query_uniform_element(&fact_table->context, facts,
+                                             &uniform)) {
+    *out_facts = uniform.element;
+    return true;
+  }
+
+  loom_value_fact_small_static_lanes_t lanes = {0};
+  if (loom_value_facts_query_small_static_lanes(&fact_table->context, facts,
+                                                &lanes)) {
+    if (lanes.count == 0) {
+      return false;
+    }
+    loom_value_facts_t aggregate = lanes.lanes[0];
+    for (iree_host_size_t i = 1; i < lanes.count; ++i) {
+      loom_value_facts_meet(&aggregate, &lanes.lanes[i], &aggregate);
+    }
+    *out_facts = aggregate;
+    return true;
+  }
+
+  loom_value_fact_vector_iota_t iota = {0};
+  uint64_t lane_count = 0;
+  int64_t base = 0;
+  int64_t step = 0;
+  if (loom_value_facts_query_vector_iota(&fact_table->context, facts, &iota) &&
+      loom_type_static_element_count(type, &lane_count) && lane_count > 0 &&
+      loom_value_facts_as_exact_i64(iota.base, &base) &&
+      loom_value_facts_as_exact_i64(iota.step, &step) &&
+      lane_count <= (uint64_t)INT64_MAX) {
+    int64_t final_delta = 0;
+    int64_t final_value = 0;
+    if (!loom_checked_mul_i64((int64_t)(lane_count - 1), step, &final_delta) ||
+        !loom_checked_add_i64(base, final_delta, &final_value)) {
+      return false;
+    }
+    *out_facts = loom_value_facts_make(loom_min_i64(base, final_value),
+                                       loom_max_i64(base, final_value), 1);
+    return true;
+  }
+
+  return false;
+}
+
 static bool loom_low_lower_rule_float_immediate_facts(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     loom_value_id_t value_id, loom_value_facts_t* out_facts) {
@@ -437,7 +504,7 @@ static bool loom_low_lower_rule_value_facts_fit_bit_count(
   const loom_value_id_t value_id =
       loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
   loom_value_facts_t facts = loom_value_facts_unknown();
-  if (!loom_low_lower_rule_integer_immediate_facts(
+  if (!loom_low_lower_rule_integer_element_range_facts(
           match_context->module, match_context->fact_table, value_id, &facts)) {
     return false;
   }
@@ -514,11 +581,55 @@ static bool loom_low_lower_rule_value_facts_i64_range(
   const loom_value_id_t value_id =
       loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
   loom_value_facts_t facts = loom_value_facts_unknown();
-  if (!loom_low_lower_rule_integer_immediate_facts(
+  if (!loom_low_lower_rule_integer_element_range_facts(
           match_context->module, match_context->fact_table, value_id, &facts)) {
     return false;
   }
   return facts.range_lo >= minimum_i64 && facts.range_hi <= maximum_i64;
+}
+
+static bool loom_low_lower_rule_value_facts_i64_range_le(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t value_ref_index, uint16_t other_value_ref_index) {
+  const loom_value_id_t value_id =
+      loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
+  loom_value_facts_t facts = loom_value_facts_unknown();
+  if (!loom_low_lower_rule_integer_element_range_facts(
+          match_context->module, match_context->fact_table, value_id, &facts)) {
+    return false;
+  }
+  const loom_value_id_t other_value_id = loom_low_lower_rule_source_value(
+      rule_set, source_op, other_value_ref_index);
+  loom_value_facts_t other_facts = loom_value_facts_unknown();
+  if (!loom_low_lower_rule_integer_element_range_facts(
+          match_context->module, match_context->fact_table, other_value_id,
+          &other_facts)) {
+    return false;
+  }
+  return facts.range_hi <= other_facts.range_lo;
+}
+
+static bool loom_low_lower_rule_value_facts_i64_range_ge(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t value_ref_index, uint16_t other_value_ref_index) {
+  const loom_value_id_t value_id =
+      loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
+  loom_value_facts_t facts = loom_value_facts_unknown();
+  if (!loom_low_lower_rule_integer_element_range_facts(
+          match_context->module, match_context->fact_table, value_id, &facts)) {
+    return false;
+  }
+  const loom_value_id_t other_value_id = loom_low_lower_rule_source_value(
+      rule_set, source_op, other_value_ref_index);
+  loom_value_facts_t other_facts = loom_value_facts_unknown();
+  if (!loom_low_lower_rule_integer_element_range_facts(
+          match_context->module, match_context->fact_table, other_value_id,
+          &other_facts)) {
+    return false;
+  }
+  return facts.range_lo >= other_facts.range_hi;
 }
 
 static bool loom_low_lower_source_memory_space_matches(
@@ -826,6 +937,16 @@ static iree_status_t loom_low_lower_rule_guard_matches(
       *out_matches = loom_low_lower_rule_value_facts_i64_range(
           match_context, rule_set, source_op, guard->value_ref_index,
           guard->minimum_i64, guard->maximum_i64);
+      return iree_ok_status();
+    case LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE_LE:
+      *out_matches = loom_low_lower_rule_value_facts_i64_range_le(
+          match_context, rule_set, source_op, guard->value_ref_index,
+          guard->other_value_ref_index);
+      return iree_ok_status();
+    case LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE_GE:
+      *out_matches = loom_low_lower_rule_value_facts_i64_range_ge(
+          match_context, rule_set, source_op, guard->value_ref_index,
+          guard->other_value_ref_index);
       return iree_ok_status();
     case LOOM_LOW_LOWER_GUARD_VALUE_F64_EQUALS:
       *out_matches = loom_low_lower_rule_value_facts_f64_equals(

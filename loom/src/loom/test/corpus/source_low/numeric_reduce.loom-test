@@ -39,3 +39,19 @@ func.def @f32_reduce_add_fastmath(%input: buffer, %output: buffer) {
   vector.store %stored, %output_view[0] : vector<1xf32>, view<1xf32, #dense>
   func.return
 }
+
+// ====
+
+func.def @i32_reduce_minui_select_sentinel(%values: vector<4xi32>) -> (i32) {
+  %zero = scalar.constant 0 : i32
+  %zeros = vector.splat %zero : vector<4xi32>
+  %is_zero = vector.cmpi eq, %values, %zeros : vector<4xi32> -> vector<4xi1>
+  %start = scalar.constant 0 : i32
+  %step = scalar.constant 1 : i32
+  %indices = vector.iota %start step %step : vector<4xi32>
+  %sentinel = scalar.constant 2147483647 : i32
+  %sentinels = vector.splat %sentinel : vector<4xi32>
+  %selected = vector.select %is_zero, %indices, %sentinels : vector<4xi32>
+  %result = vector.reduce<minui> %selected, %sentinel : vector<4xi32>, i32
+  func.return %result : i32
+}

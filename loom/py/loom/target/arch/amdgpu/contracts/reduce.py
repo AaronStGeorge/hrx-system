@@ -154,6 +154,42 @@ def _i32_add_zero_rule() -> DescriptorRule:
     )
 
 
+def _i32_signed_extremum_seed_rule(kind: str, descriptor_key: str) -> DescriptorRule:
+    range_guard = (
+        Guard.value_i64_range_le("input", "init")
+        if kind == "minsi"
+        else Guard.value_i64_range_ge("input", "init")
+    )
+    return _vector_reduce_rule(
+        kind=kind,
+        input_type=_VEC_I32,
+        accumulator_type=_I32,
+        descriptor=_descriptor(descriptor_key),
+        accumulator_seed=DescriptorAccumulatorSeed.FIRST_LANE,
+        extra_guards=(range_guard,),
+    )
+
+
+def _i32_unsigned_extremum_seed_rule(kind: str, descriptor_key: str) -> DescriptorRule:
+    range_guard = (
+        Guard.value_i64_range_le("input", "init")
+        if kind == "minui"
+        else Guard.value_i64_range_ge("input", "init")
+    )
+    return _vector_reduce_rule(
+        kind=kind,
+        input_type=_VEC_I32,
+        accumulator_type=_I32,
+        descriptor=_descriptor(descriptor_key),
+        accumulator_seed=DescriptorAccumulatorSeed.FIRST_LANE,
+        extra_guards=(
+            Guard.value_i64_range("input", 0, 0x7FFF_FFFF_FFFF_FFFF),
+            Guard.value_i64_range("init", 0, 0x7FFF_FFFF_FFFF_FFFF),
+            range_guard,
+        ),
+    )
+
+
 def _f32_rule(kind: str, descriptor_key: str) -> DescriptorRule:
     return _vector_reduce_rule(
         kind=kind,
@@ -285,9 +321,13 @@ AMDGPU_REDUCE_CONTRACT_FRAGMENT = ContractFragment(
         _i32_add_zero_rule(),
         _i32_rule("addi", "amdgpu.v_add_u32"),
         _i32_rule("muli", "amdgpu.v_mul_lo_u32"),
+        _i32_signed_extremum_seed_rule("minsi", "amdgpu.v_min_i32"),
         _i32_rule("minsi", "amdgpu.v_min_i32"),
+        _i32_signed_extremum_seed_rule("maxsi", "amdgpu.v_max_i32"),
         _i32_rule("maxsi", "amdgpu.v_max_i32"),
+        _i32_unsigned_extremum_seed_rule("minui", "amdgpu.v_min_u32"),
         _i32_rule("minui", "amdgpu.v_min_u32"),
+        _i32_unsigned_extremum_seed_rule("maxui", "amdgpu.v_max_u32"),
         _i32_rule("maxui", "amdgpu.v_max_u32"),
         _i32_rule("andi", "amdgpu.v_and_b32"),
         _i32_rule("ori", "amdgpu.v_or_b32"),
