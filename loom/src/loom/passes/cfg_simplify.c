@@ -311,6 +311,16 @@ static bool loom_cfg_simplify_operandless_terminal_block(
   return true;
 }
 
+static bool loom_cfg_simplify_can_duplicate_terminal_successor(
+    const loom_cfg_graph_t* graph, uint16_t dest_block_index) {
+  // A shared terminal block is a real reconvergence point even when the
+  // terminator itself is cheap to clone.
+  if (graph->blocks[dest_block_index].predecessor_count > 1) {
+    return false;
+  }
+  return true;
+}
+
 static iree_status_t loom_cfg_simplify_clone_terminal_before_branch(
     loom_cfg_simplify_state_t* state, loom_op_t* branch_op,
     const loom_op_t* terminator) {
@@ -361,6 +371,13 @@ static iree_status_t loom_cfg_simplify_duplicate_terminal_successors(
     const loom_op_t* terminator = NULL;
     if (!loom_cfg_simplify_operandless_terminal_block(state, dest,
                                                       &terminator)) {
+      continue;
+    }
+    const iree_host_size_t dest_block_index =
+        loom_cfg_graph_block_index(graph, dest);
+    if (dest_block_index == IREE_HOST_SIZE_MAX ||
+        !loom_cfg_simplify_can_duplicate_terminal_successor(
+            graph, (uint16_t)dest_block_index)) {
       continue;
     }
 

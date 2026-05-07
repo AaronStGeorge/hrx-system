@@ -220,9 +220,11 @@ func.def @preserves_effectful_alpha_candidate(%cond: i1, %buffer: buffer, %offse
   cfg.cond_br %cond, ^left, ^right : i1
 ^left:
   view.store %value, %view[0] : f32, view<1xf32, %layout>
-  func.return
+  cfg.br ^exit
 ^right:
   view.store %value, %view[0] : f32, view<1xf32, %layout>
+  cfg.br ^exit
+^exit:
   func.return
 }
 
@@ -860,7 +862,7 @@ func.def @preserves_effectful_forward_block(%cond: i1, %buffer: buffer, %offset:
   cfg.cond_br %cond, ^effect, ^exit : i1
 ^effect:
   view.store %value, %view[0] : f32, view<1xf32, %layout>
-  func.return
+  cfg.br ^exit
 ^exit:
   func.return
 }

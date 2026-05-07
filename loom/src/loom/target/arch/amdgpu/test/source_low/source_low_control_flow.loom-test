@@ -88,6 +88,85 @@ low.func.def target(@target) abi(hal_kernel) @divergent_if_else(%values: reg<amd
 
 amdgpu.target<gfx1100> @target
 
+func.def target(@target) @divergent_nested_if_else_stores(%values: vector<2xi32>, %lower: i32, %upper: i32, %output: buffer) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %after_lower = scalar.cmpi sge, %lane, %lower : i32
+  %before_upper = scalar.cmpi slt, %lane, %upper : i32
+  %zero = index.constant 0 : offset
+  %output_view = buffer.view %output[%zero] : buffer -> view<3xi32, #dense>
+  cfg.cond_br %after_lower, ^after, ^before : i1
+^after:
+  cfg.cond_br %before_upper, ^inside, ^outside_high : i1
+^inside:
+  %inside_value = scalar.addi %lane, %upper : i32
+  %inside_stored = vector.from_elements %inside_value : vector<1xi32>
+  vector.store %inside_stored, %output_view[0] : vector<1xi32>, view<3xi32, #dense>
+  cfg.br ^join
+^outside_high:
+  %high_value = scalar.subi %lane, %upper : i32
+  %high_stored = vector.from_elements %high_value : vector<1xi32>
+  vector.store %high_stored, %output_view[1] : vector<1xi32>, view<3xi32, #dense>
+  cfg.br ^join
+^before:
+  %low_value = scalar.subi %lower, %lane : i32
+  %low_stored = vector.from_elements %low_value : vector<1xi32>
+  vector.store %low_stored, %output_view[2] : vector<1xi32>, view<3xi32, #dense>
+  cfg.br ^join
+^join:
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @divergent_nested_if_else_stores(%values: reg<amdgpu.vgpr x2>, %lower: reg<amdgpu.sgpr>, %upper: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 12} : reg<amdgpu.sgpr x2>
+  %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %23 = v_mov_b32_copy %lower
+  %after_lower = v_cmp_ge_i32 %lane, %23
+  %25 = v_mov_b32_copy %upper
+  %before_upper = v_cmp_lt_i32 %lane, %25
+  %27, %28 = s_and_saveexec_b64 %after_lower
+  low.cond_br %28, ^after, ^_bb6 : reg<amdgpu.scc>
+^after:
+  %30, %31 = s_and_saveexec_b64 %before_upper
+  low.cond_br %31, ^inside, ^_bb8 : reg<amdgpu.scc>
+^inside:
+  %33 = v_mov_b32_copy %upper
+  %inside_stored = v_add_u32 %lane, %33
+  %35 = v_mov_b32 0
+  global_store_b32 %35, %inside_stored, %output_view
+  low.br ^_bb8
+^outside_high:
+  %36 = v_mov_b32_copy %upper
+  %high_stored = v_sub_nc_u32 %lane, %36
+  %38 = v_mov_b32 0
+  global_store_b32 %38, %high_stored, %output_view {offset = 4}
+  low.br ^_bb9
+^before:
+  %39 = v_mov_b32_copy %lower
+  %low_stored = v_sub_nc_u32 %39, %lane
+  %41 = v_mov_b32 0
+  global_store_b32 %41, %low_stored, %output_view {offset = 8}
+  low.br ^_bb7
+^join:
+  return
+^_bb6:
+  %29 = s_xor_b64_exec %27
+  low.cond_br %29, ^before, ^_bb7 : reg<amdgpu.scc>
+^_bb7:
+  s_mov_b64_exec %27
+  low.br ^join
+^_bb8:
+  %32 = s_xor_b64_exec %30
+  low.cond_br %32, ^outside_high, ^_bb9 : reg<amdgpu.scc>
+^_bb9:
+  s_mov_b64_exec %30
+  low.br ^_bb6
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
 func.def target(@target) @divergent_if_else_vector_result(%values: vector<2xi32>, %limit: i32, %state: vector<2xi32>) -> (vector<2xi32>) {
   %lane = vector.extract %values[0] : vector<2xi32> -> i32
   %cond = scalar.cmpi slt, %lane, %limit : i32
