@@ -439,6 +439,11 @@ static bool loom_amdgpu_vector_extract_prefers_vgpr(
       module, fact_table, view_regions, loom_vector_extract_source(source_op));
 }
 
+static bool loom_amdgpu_source_value_is_native_i1_mask(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_view_region_table_t* view_regions,
+    loom_value_id_t source_value_id);
+
 static bool loom_amdgpu_source_value_prefers_vgpr(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     const loom_view_region_table_t* view_regions,
@@ -598,7 +603,10 @@ static bool loom_amdgpu_source_value_prefers_vgpr(
     case LOOM_OP_VIEW_ATOMIC_RMW:
       return true;
     case LOOM_OP_SCF_SELECT:
-      return loom_amdgpu_source_value_prefers_vgpr(
+      return loom_amdgpu_source_value_is_native_i1_mask(
+                 module, fact_table, view_regions,
+                 loom_scf_select_condition(defining_op)) ||
+             loom_amdgpu_source_value_prefers_vgpr(
                  module, fact_table, view_regions,
                  loom_scf_select_true_value(defining_op)) ||
              loom_amdgpu_source_value_prefers_vgpr(
