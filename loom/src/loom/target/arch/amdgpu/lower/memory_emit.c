@@ -125,23 +125,8 @@ static iree_status_t loom_amdgpu_emit_memory_packet(
 static bool loom_amdgpu_memory_descriptor_has_implicit_operand(
     loom_low_lower_context_t* context,
     const loom_amdgpu_memory_access_plan_t* plan) {
-  const loom_low_descriptor_t* descriptor = plan->access.descriptor;
-  if (descriptor == NULL) {
-    return false;
-  }
-  const loom_low_descriptor_set_t* descriptor_set =
-      loom_low_lower_context_descriptor_set(context);
-  for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
-    const uint32_t operand_index = descriptor->operand_start + i;
-    if (operand_index >= descriptor_set->operand_count) {
-      return false;
-    }
-    if (iree_any_bit_set(descriptor_set->operands[operand_index].flags,
-                         LOOM_LOW_OPERAND_FLAG_IMPLICIT)) {
-      return true;
-    }
-  }
-  return false;
+  return loom_amdgpu_descriptor_has_implicit_operand(
+      loom_low_lower_context_descriptor_set(context), plan->access.descriptor);
 }
 
 static iree_status_t loom_amdgpu_emit_memory_implicit_m0(

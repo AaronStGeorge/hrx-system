@@ -178,6 +178,8 @@ typedef enum loom_amdgpu_matrix_fragment_layout_kind_e {
   LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_UNKNOWN = 0,
   // RDNA3 WMMAR3 16x16x16 f16 input, f32 accumulator/result layout.
   LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_F32_16X16X16_F16 = 1,
+  // CDNA MFMA 16x16x16 bf16 input, f32 accumulator/result layout.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_CDNA_MFMA_F32_16X16X16_BF16 = 2,
 } loom_amdgpu_matrix_fragment_layout_kind_t;
 
 typedef enum loom_amdgpu_matrix_fragment_map_kind_e {
@@ -189,6 +191,14 @@ typedef enum loom_amdgpu_matrix_fragment_map_kind_e {
   LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_PACKED_REDUCTION = 2,
   // Row is register-interleaved by the lane group; column is lane mod N.
   LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN = 3,
+  // Row is lane mod M; reduction is packed by lane group and register element.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_LANE_GROUP_PACKED_REDUCTION = 4,
+  // Column is lane mod N; reduction is packed by lane group and register
+  // element.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_LANE_GROUP_PACKED_REDUCTION =
+      5,
+  // Row is register-local within a lane group; column is lane mod N.
+  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN = 6,
 } loom_amdgpu_matrix_fragment_map_kind_t;
 
 typedef enum loom_amdgpu_matrix_contract_flag_bits_e {

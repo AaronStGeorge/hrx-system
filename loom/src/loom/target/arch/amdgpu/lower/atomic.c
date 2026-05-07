@@ -432,24 +432,6 @@ static bool loom_amdgpu_atomic_source_plan_proves_workgroup_root(
   return root_op != NULL && loom_buffer_alloca_isa(root_op);
 }
 
-static bool loom_amdgpu_descriptor_has_implicit_resource(
-    const loom_low_descriptor_set_t* descriptor_set,
-    uint32_t descriptor_ordinal) {
-  const loom_low_descriptor_t* descriptor =
-      loom_low_descriptor_set_descriptor_at(descriptor_set, descriptor_ordinal);
-  IREE_ASSERT(descriptor != NULL);
-  const loom_low_operand_t* operands =
-      &descriptor_set->operands[descriptor->operand_start];
-  for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
-    const loom_low_operand_t* operand = &operands[i];
-    if (operand->role == LOOM_LOW_OPERAND_ROLE_RESOURCE &&
-        iree_any_bit_set(operand->flags, LOOM_LOW_OPERAND_FLAG_IMPLICIT)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 static bool loom_amdgpu_atomic_select_descriptor(
     const loom_module_t* module,
     const loom_low_descriptor_set_t* descriptor_set, const loom_op_t* source_op,
@@ -505,10 +487,14 @@ static bool loom_amdgpu_atomic_select_descriptor(
       if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
         continue;
       }
+      const loom_low_descriptor_t* descriptor =
+          loom_low_descriptor_set_descriptor_at(descriptor_set,
+                                                descriptor_ordinal);
+      IREE_ASSERT(descriptor != NULL);
       selection->address_form = candidate->address_form;
       selection->descriptor_ref = candidate->descriptor_ref;
-      if (loom_amdgpu_descriptor_has_implicit_resource(descriptor_set,
-                                                       descriptor_ordinal)) {
+      if (loom_amdgpu_descriptor_has_implicit_resource_operand(descriptor_set,
+                                                               descriptor)) {
         selection->flags |= LOOM_AMDGPU_ATOMIC_PLAN_REQUIRES_M0;
       }
       return true;

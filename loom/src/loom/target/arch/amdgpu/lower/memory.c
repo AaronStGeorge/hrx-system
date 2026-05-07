@@ -1449,24 +1449,6 @@ static bool loom_amdgpu_try_select_ds_addtid_memory_descriptor(
   return true;
 }
 
-static bool loom_amdgpu_descriptor_has_implicit_operand(
-    const loom_low_descriptor_set_t* descriptor_set,
-    uint32_t descriptor_ordinal) {
-  if (descriptor_ordinal >= descriptor_set->descriptor_count) {
-    return false;
-  }
-  const loom_low_descriptor_t* descriptor =
-      &descriptor_set->descriptors[descriptor_ordinal];
-  const loom_low_operand_t* operands =
-      &descriptor_set->operands[descriptor->operand_start];
-  for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
-    if (iree_any_bit_set(operands[i].flags, LOOM_LOW_OPERAND_FLAG_IMPLICIT)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 static bool loom_amdgpu_memory_access_try_select_buffer(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_amdgpu_memory_operation_kind_t kind,

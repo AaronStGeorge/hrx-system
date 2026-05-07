@@ -614,6 +614,112 @@ TEST(MatrixContractTest, MatcherSelectedWmmar3DescriptorCarriesLayoutFacts) {
             LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_F32_16X16X16_F16);
 }
 
+TEST(MatrixContractTest, CdnaMfmaF32Bf16LayoutMapsFragments) {
+  const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
+      FindDescriptor("mfma.f32.16x16x16.bf16.1k");
+  ASSERT_NE(descriptor, nullptr);
+  const loom_amdgpu_matrix_fragment_layout_t* layout =
+      loom_amdgpu_matrix_contract_descriptor_fragment_layout(descriptor);
+  ASSERT_NE(layout, nullptr);
+  EXPECT_EQ(layout->kind,
+            LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_CDNA_MFMA_F32_16X16X16_BF16);
+  EXPECT_EQ(ToString(layout->name), "cdna.mfma.f32.16x16x16.bf16");
+  EXPECT_EQ(descriptor->wave_size_bits, LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY);
+  EXPECT_EQ(layout->wave_size, 64);
+  EXPECT_EQ(layout->tile_shape.result_row_count, 16);
+  EXPECT_EQ(layout->tile_shape.result_column_count, 16);
+  EXPECT_EQ(layout->tile_shape.reduction_count, 16);
+  EXPECT_EQ(descriptor->lhs_payload.register_count, 2);
+  EXPECT_EQ(descriptor->lhs_payload.element_count, 4);
+  EXPECT_EQ(descriptor->rhs_payload.register_count, 2);
+  EXPECT_EQ(descriptor->rhs_payload.element_count, 4);
+  EXPECT_EQ(descriptor->accumulator_payload.register_count, 4);
+  EXPECT_EQ(descriptor->accumulator_payload.element_count, 4);
+  EXPECT_EQ(descriptor->result_payload.register_count, 4);
+  EXPECT_EQ(descriptor->result_payload.element_count, 4);
+
+  constexpr loom_amdgpu_matrix_fragment_coordinate_flags_t kLhsCoordinates =
+      LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_ROW |
+      LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_REDUCTION;
+  constexpr loom_amdgpu_matrix_fragment_coordinate_flags_t kRhsCoordinates =
+      LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_COLUMN |
+      LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_REDUCTION;
+  constexpr loom_amdgpu_matrix_fragment_coordinate_flags_t
+      kAccumulatorCoordinates = LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_ROW |
+                                LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_COLUMN;
+  ExpectFragmentRoleLayout(
+      layout, LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS,
+      LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_LANE_GROUP_PACKED_REDUCTION,
+      2, 2, 16, kLhsCoordinates);
+  ExpectFragmentRoleLayout(
+      layout, LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS,
+      LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_LANE_GROUP_PACKED_REDUCTION,
+      2, 2, 16, kRhsCoordinates);
+  ExpectFragmentRoleLayout(
+      layout, LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR,
+      LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN, 4, 1, 32,
+      kAccumulatorCoordinates);
+  ExpectFragmentRoleLayout(
+      layout, LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT,
+      LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN, 4, 1, 32,
+      kAccumulatorCoordinates);
+
+  ExpectFragmentCoordinate(layout, LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS, 0, 0, 0,
+                           kLhsCoordinates, 0, 0, 0);
+  ExpectFragmentCoordinate(layout, LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS, 15, 1,
+                           1, kLhsCoordinates, 15, 0, 3);
+  ExpectFragmentCoordinate(layout, LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS, 16, 0,
+                           0, kLhsCoordinates, 0, 0, 4);
+  ExpectFragmentCoordinate(layout, LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS, 63, 1,
+                           1, kLhsCoordinates, 15, 0, 15);
+
+  ExpectFragmentCoordinate(layout, LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS, 0, 0, 0,
+                           kRhsCoordinates, 0, 0, 0);
+  ExpectFragmentCoordinate(layout, LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS, 15, 1,
+                           1, kRhsCoordinates, 0, 15, 3);
+  ExpectFragmentCoordinate(layout, LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS, 16, 0,
+                           0, kRhsCoordinates, 0, 0, 4);
+  ExpectFragmentCoordinate(layout, LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS, 63, 1,
+                           1, kRhsCoordinates, 0, 15, 15);
+
+  ExpectFragmentCoordinate(layout, LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR,
+                           0, 0, 0, kAccumulatorCoordinates, 0, 0, 0);
+  ExpectFragmentCoordinate(layout, LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR,
+                           15, 3, 0, kAccumulatorCoordinates, 3, 15, 0);
+  ExpectFragmentCoordinate(layout, LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR,
+                           16, 0, 0, kAccumulatorCoordinates, 4, 0, 0);
+  ExpectFragmentCoordinate(layout, LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT, 63,
+                           3, 0, kAccumulatorCoordinates, 15, 15, 0);
+
+  loom_amdgpu_matrix_fragment_coordinate_t coordinate = {};
+  EXPECT_FALSE(loom_amdgpu_matrix_fragment_coordinate(
+      layout, LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT, 64, 0, 0, &coordinate));
+  EXPECT_FALSE(loom_amdgpu_matrix_fragment_coordinate(
+      layout, LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS, 0, 2, 0, &coordinate));
+}
+
+TEST(MatrixContractTest, MatcherSelectedCdnaMfmaDescriptorCarriesLayoutFacts) {
+  loom_amdgpu_matrix_contract_match_request_t request = MatchRequest(
+      LOOM_AMDGPU_MATRIX_FAMILY_MFMA, 16, 16, 16,
+      LOOM_AMDGPU_MATRIX_NUMERIC_BF16, LOOM_AMDGPU_MATRIX_NUMERIC_BF16,
+      LOOM_AMDGPU_MATRIX_NUMERIC_F32, LOOM_AMDGPU_MATRIX_NUMERIC_F32,
+      LOOM_AMDGPU_MATRIX_SCALE_NONE,
+      LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_BF16_1K, 64, 0, 0);
+  loom_amdgpu_matrix_contract_match_diagnostic_t diagnostic = {};
+  const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
+      loom_amdgpu_matrix_contract_select(&request, &diagnostic);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(descriptor->low_descriptor_ref,
+            LOOM_AMDGPU_DESCRIPTOR_REF_V_MFMA_F32_16X16X16_BF16);
+  EXPECT_EQ(diagnostic.rejection_bits,
+            LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_NONE);
+  const loom_amdgpu_matrix_fragment_layout_t* layout =
+      loom_amdgpu_matrix_contract_descriptor_fragment_layout(descriptor);
+  ASSERT_NE(layout, nullptr);
+  EXPECT_EQ(layout->kind,
+            LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_CDNA_MFMA_F32_16X16X16_BF16);
+}
+
 TEST(MatrixContractTest, MatcherRejectsWrongWmmar3PayloadShape) {
   loom_amdgpu_matrix_contract_match_request_t request = MatchRequest(
       LOOM_AMDGPU_MATRIX_FAMILY_WMMA, 16, 16, 16,
