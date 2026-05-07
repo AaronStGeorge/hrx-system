@@ -31,11 +31,16 @@ from loom.importers.tilelang.converter import ExpressionOptions, TileLangConvert
 from loom.importers.tilelang.coverage import coverage_row
 from loom.importers.tilelang.nodes import dtype, mapping_items, node_kind, node_text
 from loom.importers.tilelang.ops.distribution import (
+    MAX_DISTRIBUTED_UNROLL_LANES,
     emit_distributed_1d,
     materialize_distributed_1d_plan,
     static_index_value,
 )
-from loom.importers.tilelang.ops.topology import integer_value
+from loom.importers.tilelang.ops.topology import (
+    THREAD_AXES,
+    integer_value,
+    map_thread_axis,
+)
 from loom.ir import INDEX, ScalarType, ShapedType, StaticDim, Type, TypeKind
 
 
@@ -180,6 +185,18 @@ def _convert_copy_call(
     ):
         context.record_converted(node_text(expr), "tl.tileop.copy vector")
         return None
+    if _try_emit_distributed_vector_copy(
+        expr,
+        context,
+        converter,
+        source=source,
+        target=target,
+        loop_extents=loop_extents,
+        source_element_type=source_element_type,
+        target_element_type=target_element_type,
+    ):
+        context.record_converted(node_text(expr), "tl.tileop.copy vector")
+        return None
 
     def emit_copy(
         indices: tuple[ValueRef, ...],
@@ -245,6 +262,83 @@ def _convert_copy_call(
         context.mark_pending_workgroup_memory_write()
     context.record_converted(node_text(expr), "tl.tileop.copy")
     return None
+
+
+def _try_emit_distributed_vector_copy(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    *,
+    source: TileLangBufferRegion,
+    target: TileLangBufferRegion,
+    loop_extents: tuple[ValueRef, ...],
+    source_element_type: Type,
+    target_element_type: Type,
+) -> bool:
+    if _region_is_fragment(source) or _region_is_fragment(target):
+        return False
+    if str(source_element_type) != str(target_element_type):
+        return False
+    if not source.index_map.is_identity or not target.index_map.is_identity:
+        return False
+    if len(source.extents) != len(loop_extents) or len(target.extents) != len(
+        loop_extents
+    ):
+        return False
+    if not _region_has_dense_layout(source, context) or not _region_has_dense_layout(
+        target, context
+    ):
+        return False
+    static_extents = _static_extent_values(loop_extents, context)
+    if static_extents is None or not static_extents:
+        return False
+    thread_count = context.static_topology_extent("threadIdx.x")
+    if thread_count is None or thread_count <= 1:
+        return False
+    element_count = _product(static_extents)
+    lane_count = (element_count + thread_count - 1) // thread_count
+    if lane_count <= 1 or lane_count > MAX_DISTRIBUTED_UNROLL_LANES:
+        return False
+    if lane_count * thread_count != element_count:
+        return False
+    trailing_extent = static_extents[-1]
+    if trailing_extent % lane_count != 0:
+        return False
+
+    thread_index = map_thread_axis(
+        axis=THREAD_AXES["threadIdx.x"],
+        sources=(),
+        context=context,
+        converter=converter,
+        name="tx",
+    )
+    if thread_index is None:
+        return False
+    loop_indices = _unflatten_vector_chunk_indices(
+        thread_index,
+        static_extents,
+        lane_count,
+        context,
+    )
+    source_indices = _project_region_indices(source, loop_indices, expr, context)
+    target_indices = _project_region_indices(target, loop_indices, expr, context)
+    if source_indices is None or target_indices is None:
+        return False
+    result_type = context.type_converter.vector_type(source_element_type, lane_count)
+    vector = context.builder.vector.load(
+        view=source.view,
+        indices=list(source_indices),
+        results=[result_type],
+        name=context.fresh_name("copy"),
+    )
+    context.builder.vector.store(
+        value=vector,
+        view=target.view,
+        indices=list(target_indices),
+    )
+    if _region_is_shared(target):
+        context.mark_pending_workgroup_memory_write()
+    return True
 
 
 def _try_emit_fragment_vector_copy(
@@ -1877,6 +1971,16 @@ def _memory_scope_is_shared(memory_scope: str) -> bool:
     return memory_scope.startswith("shared")
 
 
+def _region_has_dense_layout(
+    region: TileLangBufferRegion,
+    context: TileLangConversionContext,
+) -> bool:
+    if context.dense_layout is None:
+        return False
+    view = context.builder.module.values[region.view.id]
+    return view.encoding_binding == context.dense_layout.id
+
+
 def _same_value_sequence(
     lhs: tuple[ValueRef, ...],
     rhs: tuple[ValueRef, ...],
@@ -1939,6 +2043,29 @@ def _unflatten_loop_indices(
         )
     indices[0] = running
     return tuple(index for index in indices if index is not None)
+
+
+def _unflatten_vector_chunk_indices(
+    chunk_index: ValueRef,
+    static_extents: tuple[int, ...],
+    lane_count: int,
+    context: TileLangConversionContext,
+) -> tuple[ValueRef, ...]:
+    chunk_extents = [
+        context.ensure_constant(str(extent), "index", f"c{extent}")
+        for extent in (*static_extents[:-1], static_extents[-1] // lane_count)
+    ]
+    indices = list(_unflatten_loop_indices(chunk_index, tuple(chunk_extents), context))
+    lane_count_value = context.ensure_constant(
+        str(lane_count), "index", f"c{lane_count}"
+    )
+    indices[-1] = context.builder.index.mul(
+        lhs=indices[-1],
+        rhs=lane_count_value,
+        results=[INDEX],
+        name=context.fresh_name("i_offset"),
+    )
+    return tuple(indices)
 
 
 def _is_zero_fill_source(source: object) -> bool:
