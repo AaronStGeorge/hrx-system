@@ -25,6 +25,7 @@
 #include "loom/passes/licm.h"
 #include "loom/passes/linearize_view_accesses.h"
 #include "loom/passes/loop_fusion.h"
+#include "loom/passes/math/legalize.h"
 #include "loom/passes/promote_private_fragments.h"
 #include "loom/passes/refine_boundaries.h"
 #include "loom/passes/scf_to_cfg.h"
@@ -196,6 +197,14 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .key = IREE_SVL("kernel-async-legality"),
         .info = loom_kernel_async_legality_pass_info,
         .function_run = loom_kernel_async_legality_run,
+    },
+    {
+        .key = IREE_SVL("legalize-math"),
+        .info = loom_math_legalize_pass_info,
+        .function_run = loom_math_legalize_run,
+        .create = loom_math_legalize_create,
+        .option_schema = kCanonicalizeOptionSchema,
+        .option_schema_count = IREE_ARRAYSIZE(kCanonicalizeOptionSchema),
     },
     {
         .key = IREE_SVL("licm"),

@@ -193,7 +193,9 @@ static iree_status_t loom_greedy_rewrite_patterns_op(
       (loom_pattern_rewrite_state_t*)user_data;
   for (iree_host_size_t i = 0; i < state->pattern_count; ++i) {
     const loom_pattern_t* pattern = &state->patterns[i];
-    if (pattern->root_kind != op->kind) continue;
+    if (pattern->root_kind != op->kind) {
+      continue;
+    }
     driver->rewriter.flags = 0;
     IREE_RETURN_IF_ERROR(
         pattern->match_and_rewrite(pattern, op, &driver->rewriter));
@@ -209,32 +211,41 @@ static iree_status_t loom_greedy_rewrite_patterns_op(
   return iree_ok_status();
 }
 
+iree_status_t loom_greedy_rewrite_run_patterns(
+    loom_greedy_rewrite_driver_t* driver, loom_func_like_t function,
+    const loom_pattern_t* patterns, iree_host_size_t pattern_count,
+    const loom_greedy_rewrite_options_t* options,
+    loom_greedy_rewrite_result_t* out_result) {
+  if (pattern_count > 0 && !patterns) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "pattern array is required");
+  }
+  loom_pattern_rewrite_state_t state = {
+      .patterns = patterns,
+      .pattern_count = pattern_count,
+  };
+  loom_greedy_rewrite_callbacks_t callbacks = {
+      .user_data = &state,
+      .rewrite_op = loom_greedy_rewrite_patterns_op,
+  };
+  return loom_greedy_rewrite_run_region(
+      driver, function, loom_func_like_body(function), function.op, options,
+      &callbacks, out_result);
+}
+
 iree_status_t loom_greedy_rewrite(iree_arena_allocator_t* arena,
                                   loom_module_t* module,
                                   loom_func_like_t function,
                                   const loom_pattern_t* patterns,
                                   iree_host_size_t pattern_count,
                                   const loom_rewrite_config_t* config) {
-  if (pattern_count > 0 && !patterns) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "pattern array is required");
-  }
   loom_greedy_rewrite_driver_t driver;
   loom_greedy_rewrite_driver_initialize(module, arena, NULL, &driver);
-  loom_pattern_rewrite_state_t state = {
-      .patterns = patterns,
-      .pattern_count = pattern_count,
-  };
   loom_greedy_rewrite_options_t options = {
       .max_iterations = config ? config->max_iterations : 0,
   };
-  loom_greedy_rewrite_callbacks_t callbacks = {
-      .user_data = &state,
-      .rewrite_op = loom_greedy_rewrite_patterns_op,
-  };
-  iree_status_t status = loom_greedy_rewrite_run_region(
-      &driver, function, loom_func_like_body(function), function.op, &options,
-      &callbacks, NULL);
+  iree_status_t status = loom_greedy_rewrite_run_patterns(
+      &driver, function, patterns, pattern_count, &options, NULL);
   loom_greedy_rewrite_driver_deinitialize(&driver);
   return status;
 }

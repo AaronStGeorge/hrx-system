@@ -22,6 +22,7 @@ static const iree_string_view_t kExpectedBuiltinPassKeys[] = {
     IREE_SVL("cse"),
     IREE_SVL("dce"),
     IREE_SVL("kernel-async-legality"),
+    IREE_SVL("legalize-math"),
     IREE_SVL("licm"),
     IREE_SVL("linearize-view-accesses"),
     IREE_SVL("loop-fusion"),

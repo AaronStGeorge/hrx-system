@@ -242,6 +242,7 @@ loom_cc_library(
         "//loom/src/loom/passes:scf_unroll",
         "//loom/src/loom/passes:strip_hints",
         "//loom/src/loom/passes:symbol_dce",
+        "//loom/src/loom/passes/math:legalize",
         "//loom/src/loom/passes/vector:memory_footprint",
         "//loom/src/loom/passes/vector:to_scalar",
     ],

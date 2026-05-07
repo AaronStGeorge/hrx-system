@@ -193,6 +193,15 @@ typedef struct loom_rewrite_config_t {
   uint32_t max_iterations;
 } loom_rewrite_config_t;
 
+// Runs simple pattern application on a function-like body region with an
+// already-initialized greedy driver. This lets pass-specific drivers keep
+// shared value-fact ownership while reusing the common pattern dispatch policy.
+iree_status_t loom_greedy_rewrite_run_patterns(
+    loom_greedy_rewrite_driver_t* driver, loom_func_like_t function,
+    const loom_pattern_t* patterns, iree_host_size_t pattern_count,
+    const loom_greedy_rewrite_options_t* options,
+    loom_greedy_rewrite_result_t* out_result);
+
 // Runs simple pattern application on a function-like body region.
 iree_status_t loom_greedy_rewrite(iree_arena_allocator_t* arena,
                                   loom_module_t* module,
