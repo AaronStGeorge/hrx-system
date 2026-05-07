@@ -11,11 +11,7 @@
 // need revisiting after changes, using LOOM_OP_FLAG_ON_WORKLIST for
 // O(1) dedup.
 //
-// The greedy rewrite driver iterates the worklist, applying patterns
-// or vtable canonicalize functions until fixed point. This drives the
-// canonicalize pass and any pass-specific pattern sets.
-//
-// Usage (canonicalize pass):
+// Usage (custom pass):
 //   loom_rewriter_t rewriter;
 //   loom_rewriter_initialize(&rewriter, module, pass->arena);
 //   loom_rewriter_seed_function(&rewriter, function);
@@ -285,33 +281,6 @@ iree_status_t loom_rewriter_replace_attr_dict(
 // to the worklist since their effective traits may change.
 iree_status_t loom_rewriter_set_instance_flags(loom_rewriter_t* rewriter,
                                                loom_op_t* op, uint8_t flags);
-
-//===----------------------------------------------------------------------===//
-// Greedy rewrite driver
-//===----------------------------------------------------------------------===//
-
-// A rewrite pattern: matches ops of a specific kind and attempts to
-// transform them.
-typedef struct loom_pattern_t loom_pattern_t;
-struct loom_pattern_t {
-  loom_op_kind_t root_kind;  // Op kind this pattern matches.
-  uint16_t benefit;          // Higher = tried first.
-  iree_status_t (*match_and_rewrite)(const loom_pattern_t* pattern,
-                                     loom_op_t* op, loom_rewriter_t* rewriter);
-};
-
-typedef struct loom_rewrite_config_t {
-  uint32_t max_iterations;  // 0 = default (10).
-} loom_rewrite_config_t;
-
-// Runs greedy pattern application on a function. Iterates the worklist
-// until empty or max_iterations reached.
-iree_status_t loom_greedy_rewrite(iree_arena_allocator_t* arena,
-                                  loom_module_t* module,
-                                  loom_func_like_t function,
-                                  const loom_pattern_t* patterns,
-                                  iree_host_size_t pattern_count,
-                                  const loom_rewrite_config_t* config);
 
 #ifdef __cplusplus
 }

@@ -23,6 +23,7 @@
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 #include "loom/pass/value_facts.h"
+#include "loom/rewrite/greedy.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/rewrite/type_propagation.h"
 #include "loom/util/walk.h"
@@ -563,30 +564,6 @@ static iree_status_t loom_canonicalize_try_symbolic_integer_cleanup(
 
   return loom_canonicalize_try_symbolic_integer_cmp(
       rewriter, expression_context, op, out_changed);
-}
-
-//===----------------------------------------------------------------------===//
-// Result Helpers
-//===----------------------------------------------------------------------===//
-
-static void loom_canonicalizer_record_rewriter_flags(
-    loom_canonicalizer_result_t* result, const loom_rewriter_t* rewriter) {
-  if (!result) return;
-  if (iree_any_bit_set(rewriter->flags, LOOM_REWRITER_FLAG_FACTS_CHANGED)) {
-    result->facts_changed = true;
-  }
-  if (iree_any_bit_set(rewriter->flags, LOOM_REWRITER_FLAG_TYPE_CHANGED)) {
-    result->types_changed = true;
-  }
-}
-
-static void loom_canonicalizer_record_rewrite(
-    loom_canonicalizer_result_t* result, const loom_rewriter_t* rewriter,
-    bool count_modified_op) {
-  if (!result) return;
-  result->changed = true;
-  loom_canonicalizer_record_rewriter_flags(result, rewriter);
-  if (count_modified_op) ++result->ops_modified;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1216,7 +1193,7 @@ typedef struct loom_canonicalize_edge_fact_materialization_t {
   // Rewriter used for inserted assumes and region-local operand replacement.
   loom_rewriter_t* rewriter;
   // Result updated when materialization rewrites an edge.
-  loom_canonicalizer_result_t* result;
+  loom_greedy_rewrite_result_t* result;
   // True when at least one branch edge gained materialized facts.
   bool changed;
 } loom_canonicalize_edge_fact_materialization_t;
@@ -1236,15 +1213,15 @@ static iree_status_t loom_canonicalize_materialize_branch_edge_facts_preorder(
   if (!op_changed) return iree_ok_status();
 
   materialization->changed = true;
-  loom_canonicalizer_record_rewrite(materialization->result,
-                                    materialization->rewriter,
-                                    /*count_modified_op=*/true);
+  loom_greedy_rewrite_result_record_change(
+      materialization->result, materialization->rewriter,
+      LOOM_GREEDY_REWRITE_CHANGE_FLAG_COUNT_MODIFIED_OP);
   return iree_ok_status();
 }
 
 static iree_status_t loom_canonicalize_materialize_branch_edge_facts_in_region(
     loom_rewriter_t* rewriter, loom_region_t* region,
-    loom_canonicalizer_result_t* result, bool* out_changed) {
+    loom_greedy_rewrite_result_t* result, bool* out_changed) {
   loom_canonicalize_edge_fact_materialization_t materialization = {
       .rewriter = rewriter,
       .result = result,
@@ -1262,26 +1239,15 @@ static iree_status_t loom_canonicalize_materialize_branch_edge_facts_in_region(
 }
 
 struct loom_canonicalizer_state_t {
-  // Rewriter state for the most recent run. Its fact table remains queryable
-  // until the next run or deinitialize.
-  loom_rewriter_t rewriter;
-
-  // True when rewriter currently owns live worklist bits that must be cleared
-  // before resetting scratch storage.
-  bool rewriter_initialized;
+  // Shared greedy rewrite session used by canonicalize region runs.
+  loom_greedy_rewrite_driver_t rewrite_driver;
 };
 
 static void loom_canonicalizer_reset_run_state(
     loom_canonicalizer_t* canonicalizer) {
-  if (canonicalizer->state && canonicalizer->state->rewriter_initialized) {
-    loom_rewriter_deinitialize(&canonicalizer->state->rewriter);
-    canonicalizer->state->rewriter_initialized = false;
-  }
-  if (canonicalizer->value_facts) {
-    loom_pass_value_fact_owner_invalidate(canonicalizer->value_facts);
-  }
-  canonicalizer->latest_facts = NULL;
-  if (canonicalizer->scratch_arena_initialized) {
+  if (canonicalizer->state) {
+    loom_greedy_rewrite_driver_reset(&canonicalizer->state->rewrite_driver);
+  } else if (canonicalizer->scratch_arena_initialized) {
     iree_arena_reset(&canonicalizer->scratch_arena);
   }
 }
@@ -1313,6 +1279,9 @@ iree_status_t loom_canonicalizer_initialize(
   iree_arena_initialize(parent_arena->block_pool,
                         &out_canonicalizer->scratch_arena);
   out_canonicalizer->scratch_arena_initialized = true;
+  loom_greedy_rewrite_driver_initialize(module,
+                                        &out_canonicalizer->scratch_arena,
+                                        value_facts, &state->rewrite_driver);
   return iree_ok_status();
 }
 
@@ -1327,11 +1296,180 @@ void loom_canonicalizer_deinitialize(loom_canonicalizer_t* canonicalizer) {
 
 const loom_value_fact_table_t* loom_canonicalizer_fact_table(
     const loom_canonicalizer_t* canonicalizer) {
-  if (!canonicalizer || !canonicalizer->state ||
-      !canonicalizer->state->rewriter_initialized) {
+  if (!canonicalizer || !canonicalizer->state) {
     return NULL;
   }
-  return canonicalizer->latest_facts;
+  return loom_greedy_rewrite_driver_fact_table(
+      &canonicalizer->state->rewrite_driver);
+}
+
+typedef struct loom_canonicalize_rewrite_state_t {
+  // Symbolic expression context for exact address/integer cleanup.
+  loom_symbolic_expr_context_t expression_context;
+
+  // Table-driven type propagator for this region run.
+  loom_type_propagator_t* type_propagator;
+
+  // True after expression_context has been initialized.
+  bool expression_context_initialized;
+} loom_canonicalize_rewrite_state_t;
+
+static iree_status_t loom_canonicalize_prepare_region(
+    void* user_data, loom_greedy_rewrite_driver_t* driver,
+    loom_func_like_t function, loom_region_t* region, loom_op_t* parent_op) {
+  loom_canonicalize_rewrite_state_t* state =
+      (loom_canonicalize_rewrite_state_t*)user_data;
+  loom_symbolic_expr_context_initialize(
+      driver->module, driver->rewriter.fact_table, driver->scratch_arena,
+      &state->expression_context);
+  state->expression_context_initialized = true;
+  IREE_RETURN_IF_ERROR(loom_type_propagator_allocate(
+      driver->module, driver->scratch_arena, &state->type_propagator));
+  return loom_type_propagator_prepare_region(state->type_propagator, region,
+                                             parent_op);
+}
+
+static void loom_canonicalize_cleanup_region(
+    void* user_data, loom_greedy_rewrite_driver_t* driver) {
+  loom_canonicalize_rewrite_state_t* state =
+      (loom_canonicalize_rewrite_state_t*)user_data;
+  loom_type_propagator_deinitialize(state->type_propagator);
+  state->type_propagator = NULL;
+  state->expression_context_initialized = false;
+}
+
+static void loom_canonicalize_reset_symbolic_context(
+    void* user_data, loom_greedy_rewrite_driver_t* driver) {
+  loom_canonicalize_rewrite_state_t* state =
+      (loom_canonicalize_rewrite_state_t*)user_data;
+  if (state->expression_context_initialized) {
+    loom_symbolic_expr_context_reset(&state->expression_context);
+  }
+}
+
+static iree_status_t loom_canonicalize_before_worklist(
+    void* user_data, loom_greedy_rewrite_driver_t* driver,
+    loom_region_t* region, loom_greedy_rewrite_result_t* result,
+    bool* out_changed) {
+  driver->rewriter.flags = 0;
+  return loom_canonicalize_materialize_branch_edge_facts_in_region(
+      &driver->rewriter, region, result, out_changed);
+}
+
+static iree_status_t loom_canonicalize_rewrite_op(
+    void* user_data, loom_greedy_rewrite_driver_t* driver, loom_op_t* op,
+    loom_greedy_rewrite_result_t* result, bool* out_changed) {
+  *out_changed = false;
+  loom_canonicalize_rewrite_state_t* state =
+      (loom_canonicalize_rewrite_state_t*)user_data;
+  loom_rewriter_t* rewriter = &driver->rewriter;
+
+  // Mini-DCE: erase trivially dead ops before fold/canonicalize.
+  bool erased = false;
+  rewriter->flags = 0;
+  IREE_RETURN_IF_ERROR(loom_rewriter_erase_if_dead(rewriter, op, &erased));
+  if (erased) {
+    loom_greedy_rewrite_result_record_change(
+        result, rewriter, LOOM_GREEDY_REWRITE_CHANGE_FLAG_NONE);
+    *out_changed = true;
+    return iree_ok_status();
+  }
+
+  // Static empty vectors have a valid empty aggregate value, not poison.
+  // Handle them before poison propagation so zero-lane computations and
+  // zero-footprint memory effects disappear without observing operands.
+  bool empty_elided = false;
+  rewriter->flags = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_canonicalize_try_elide_empty_vector_op(rewriter, op, &empty_elided));
+  if (empty_elided) {
+    loom_greedy_rewrite_result_record_change(
+        result, rewriter, LOOM_GREEDY_REWRITE_CHANGE_FLAG_COUNT_MODIFIED_OP);
+    *out_changed = true;
+    return iree_ok_status();
+  }
+
+  // Poison propagation: pure scalar/vector-result ops with any poison
+  // operand become typed poison values. Boundary diagnostics decide later
+  // whether the remaining poison is observable.
+  bool poison_propagated = false;
+  rewriter->flags = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_canonicalize_try_propagate_poison(rewriter, op, &poison_propagated));
+  if (poison_propagated) {
+    loom_greedy_rewrite_result_record_change(
+        result, rewriter, LOOM_GREEDY_REWRITE_CHANGE_FLAG_COUNT_MODIFIED_OP);
+    *out_changed = true;
+    return iree_ok_status();
+  }
+
+  // Try fold: constant fold via facts and replace with constants.
+  bool folded = false;
+  rewriter->flags = 0;
+  IREE_RETURN_IF_ERROR(loom_rewriter_try_fold(rewriter, op, &folded));
+  if (folded) {
+    loom_greedy_rewrite_result_record_change(
+        result, rewriter, LOOM_GREEDY_REWRITE_CHANGE_FLAG_COUNT_MODIFIED_OP);
+    *out_changed = true;
+    return iree_ok_status();
+  }
+  loom_greedy_rewrite_result_record_rewriter_flags(result, rewriter);
+
+  // Table-driven type propagation: generated equality constraints and
+  // value facts can narrow dynamic shapes, encoding roles, and static
+  // attachments without hand-writing one pattern per op family.
+  bool types_propagated = false;
+  rewriter->flags = 0;
+  IREE_RETURN_IF_ERROR(loom_type_propagator_apply_op(
+      state->type_propagator, rewriter, op, &types_propagated));
+  if (types_propagated) {
+    loom_greedy_rewrite_result_record_change(
+        result, rewriter, LOOM_GREEDY_REWRITE_CHANGE_FLAG_COUNT_MODIFIED_OP);
+    *out_changed = true;
+    return iree_ok_status();
+  }
+
+  // Symbolic address-domain cleanup uses the generic expression analysis
+  // for exact linear cancellation and relation proofs that are awkward as
+  // op-local patterns.
+  bool symbolic_changed = false;
+  rewriter->flags = 0;
+  IREE_RETURN_IF_ERROR(loom_canonicalize_try_symbolic_integer_cleanup(
+      rewriter, &state->expression_context, op, &symbolic_changed));
+  if (symbolic_changed) {
+    loom_greedy_rewrite_result_record_change(
+        result, rewriter, LOOM_GREEDY_REWRITE_CHANGE_FLAG_COUNT_MODIFIED_OP);
+    *out_changed = true;
+    return iree_ok_status();
+  }
+
+  // Structural canonicalization patterns.
+  const loom_op_vtable_t* vtable = loom_op_vtable(driver->module, op);
+  if (!vtable || !vtable->canonicalize) return iree_ok_status();
+
+  rewriter->flags = 0;
+  IREE_RETURN_IF_ERROR(vtable->canonicalize(op, rewriter));
+  if (iree_any_bit_set(rewriter->flags, LOOM_REWRITER_FLAG_CHANGED)) {
+    loom_greedy_rewrite_result_record_change(
+        result, rewriter, LOOM_GREEDY_REWRITE_CHANGE_FLAG_COUNT_MODIFIED_OP);
+    *out_changed = true;
+    return iree_ok_status();
+  }
+  loom_greedy_rewrite_result_record_rewriter_flags(result, rewriter);
+  return iree_ok_status();
+}
+
+static void loom_canonicalizer_import_greedy_result(
+    const loom_greedy_rewrite_result_t* source,
+    loom_canonicalizer_result_t* target) {
+  if (!source || !target) return;
+  *target = (loom_canonicalizer_result_t){
+      .changed = source->changed,
+      .facts_changed = source->facts_changed,
+      .types_changed = source->types_changed,
+      .boundary_maybe_changed = source->boundary_maybe_changed,
+      .ops_modified = source->ops_modified,
+  };
 }
 
 iree_status_t loom_canonicalizer_run_region(
@@ -1340,198 +1478,29 @@ iree_status_t loom_canonicalizer_run_region(
     const loom_canonicalizer_options_t* options,
     loom_canonicalizer_result_t* out_result) {
   if (out_result) memset(out_result, 0, sizeof(*out_result));
-  loom_canonicalizer_reset_run_state(canonicalizer);
-  if (!region) return iree_ok_status();
-
+  loom_canonicalize_rewrite_state_t state = {0};
   uint32_t max_iterations = options && options->max_iterations > 0
                                 ? options->max_iterations
                                 : LOOM_CANONICALIZER_DEFAULT_MAX_ITERATIONS;
-
-  loom_rewriter_t* rewriter = &canonicalizer->state->rewriter;
-  IREE_RETURN_IF_ERROR(loom_rewriter_initialize(rewriter, canonicalizer->module,
-                                                &canonicalizer->scratch_arena));
-  canonicalizer->state->rewriter_initialized = true;
-  rewriter->materialize_constant = loom_constant_build;
-
-  loom_value_fact_table_t* function_facts = NULL;
-  iree_status_t status = loom_pass_value_fact_owner_prepare(
-      canonicalizer->value_facts, canonicalizer->module,
-      loom_pass_value_fact_scope_region(function, region, parent_op),
-      &function_facts);
+  loom_greedy_rewrite_options_t rewrite_options = {
+      .max_iterations = max_iterations,
+      .seed_facts = options ? options->seed_facts : NULL,
+      .materialize_constant = loom_constant_build,
+  };
+  loom_greedy_rewrite_callbacks_t callbacks = {
+      .user_data = &state,
+      .prepare_region = loom_canonicalize_prepare_region,
+      .cleanup_region = loom_canonicalize_cleanup_region,
+      .before_worklist = loom_canonicalize_before_worklist,
+      .rewrite_op = loom_canonicalize_rewrite_op,
+      .changed = loom_canonicalize_reset_symbolic_context,
+  };
+  loom_greedy_rewrite_result_t rewrite_result = {0};
+  iree_status_t status = loom_greedy_rewrite_run_region(
+      &canonicalizer->state->rewrite_driver, function, region, parent_op,
+      &rewrite_options, &callbacks, &rewrite_result);
   if (iree_status_is_ok(status)) {
-    canonicalizer->latest_facts = function_facts;
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_rewriter_enable_region_analysis_with_seed_facts(
-        rewriter, function, region, parent_op, function_facts,
-        options ? options->seed_facts : NULL);
-  }
-  loom_symbolic_expr_context_t expression_context;
-  if (iree_status_is_ok(status)) {
-    loom_symbolic_expr_context_initialize(
-        canonicalizer->module, rewriter->fact_table,
-        &canonicalizer->scratch_arena, &expression_context);
-  }
-  loom_type_propagator_t* type_propagator = NULL;
-  if (iree_status_is_ok(status)) {
-    status = loom_type_propagator_allocate(
-        canonicalizer->module, &canonicalizer->scratch_arena, &type_propagator);
-  }
-  if (iree_status_is_ok(status)) {
-    status =
-        loom_type_propagator_prepare_region(type_propagator, region, parent_op);
-  }
-
-  for (uint32_t iteration = 0;
-       iree_status_is_ok(status) && iteration < max_iterations; ++iteration) {
-    status = loom_rewriter_seed_region(rewriter, region);
-    if (!iree_status_is_ok(status)) break;
-    bool any_changed = false;
-
-    // Branch-edge facts must be made visible before region children fold from
-    // the ambient fact table. Otherwise direct fact consumers can erase
-    // themselves using unrefined facts before their enclosing branch gets a
-    // chance to materialize edge-local assumes.
-    bool edge_facts_materialized = false;
-    rewriter->flags = 0;
-    status = loom_canonicalize_materialize_branch_edge_facts_in_region(
-        rewriter, region, out_result, &edge_facts_materialized);
-    if (!iree_status_is_ok(status)) break;
-    if (edge_facts_materialized) {
-      any_changed = true;
-      loom_symbolic_expr_context_reset(&expression_context);
-    }
-
-    loom_op_t* op = NULL;
-    while ((op = loom_rewriter_pop(rewriter)) != NULL) {
-      // Mini-DCE: erase trivially dead ops before fold/canonicalize.
-      bool erased = false;
-      rewriter->flags = 0;
-      iree_status_t dce_status =
-          loom_rewriter_erase_if_dead(rewriter, op, &erased);
-      if (!iree_status_is_ok(dce_status)) {
-        status = dce_status;
-        break;
-      }
-      if (erased) {
-        any_changed = true;
-        loom_canonicalizer_record_rewrite(out_result, rewriter,
-                                          /*count_modified_op=*/false);
-        loom_symbolic_expr_context_reset(&expression_context);
-        continue;
-      }
-
-      // Static empty vectors have a valid empty aggregate value, not poison.
-      // Handle them before poison propagation so zero-lane computations and
-      // zero-footprint memory effects disappear without observing operands.
-      bool empty_elided = false;
-      rewriter->flags = 0;
-      status = loom_canonicalize_try_elide_empty_vector_op(rewriter, op,
-                                                           &empty_elided);
-      if (!iree_status_is_ok(status)) break;
-      if (empty_elided) {
-        any_changed = true;
-        loom_canonicalizer_record_rewrite(out_result, rewriter,
-                                          /*count_modified_op=*/true);
-        loom_symbolic_expr_context_reset(&expression_context);
-        continue;
-      }
-
-      // Poison propagation: pure scalar/vector-result ops with any poison
-      // operand become typed poison values. Boundary diagnostics decide later
-      // whether the remaining poison is observable.
-      bool poison_propagated = false;
-      rewriter->flags = 0;
-      status = loom_canonicalize_try_propagate_poison(rewriter, op,
-                                                      &poison_propagated);
-      if (!iree_status_is_ok(status)) break;
-      if (poison_propagated) {
-        any_changed = true;
-        loom_canonicalizer_record_rewrite(out_result, rewriter,
-                                          /*count_modified_op=*/true);
-        loom_symbolic_expr_context_reset(&expression_context);
-        continue;
-      }
-
-      // Try fold: constant fold via facts and replace with constants.
-      bool folded = false;
-      rewriter->flags = 0;
-      status = loom_rewriter_try_fold(rewriter, op, &folded);
-      loom_canonicalizer_record_rewriter_flags(out_result, rewriter);
-      if (!iree_status_is_ok(status)) break;
-      if (folded) {
-        any_changed = true;
-        loom_canonicalizer_record_rewrite(out_result, rewriter,
-                                          /*count_modified_op=*/true);
-        loom_symbolic_expr_context_reset(&expression_context);
-        continue;
-      }
-
-      // Table-driven type propagation: generated equality constraints and
-      // value facts can narrow dynamic shapes, encoding roles, and static
-      // attachments without hand-writing one pattern per op family.
-      bool types_propagated = false;
-      rewriter->flags = 0;
-      status = loom_type_propagator_apply_op(type_propagator, rewriter, op,
-                                             &types_propagated);
-      if (!iree_status_is_ok(status)) break;
-      if (types_propagated) {
-        any_changed = true;
-        loom_canonicalizer_record_rewrite(out_result, rewriter,
-                                          /*count_modified_op=*/true);
-        loom_symbolic_expr_context_reset(&expression_context);
-        continue;
-      }
-
-      // Symbolic address-domain cleanup uses the generic expression analysis
-      // for exact linear cancellation and relation proofs that are awkward as
-      // op-local patterns.
-      bool symbolic_changed = false;
-      rewriter->flags = 0;
-      status = loom_canonicalize_try_symbolic_integer_cleanup(
-          rewriter, &expression_context, op, &symbolic_changed);
-      if (!iree_status_is_ok(status)) break;
-      if (symbolic_changed) {
-        any_changed = true;
-        loom_canonicalizer_record_rewrite(out_result, rewriter,
-                                          /*count_modified_op=*/true);
-        loom_symbolic_expr_context_reset(&expression_context);
-        continue;
-      }
-
-      // Structural canonicalization patterns.
-      const loom_op_vtable_t* vtable =
-          loom_op_vtable(canonicalizer->module, op);
-      if (!vtable || !vtable->canonicalize) continue;
-
-      rewriter->flags = 0;
-      status = vtable->canonicalize(op, rewriter);
-      if (!iree_status_is_ok(status)) break;
-      if (rewriter->flags & LOOM_REWRITER_FLAG_CHANGED) {
-        any_changed = true;
-        loom_canonicalizer_record_rewrite(out_result, rewriter,
-                                          /*count_modified_op=*/true);
-        loom_symbolic_expr_context_reset(&expression_context);
-      } else {
-        loom_canonicalizer_record_rewriter_flags(out_result, rewriter);
-      }
-    }
-
-    if (!any_changed) break;
-  }
-
-  if (out_result) {
-    out_result->boundary_maybe_changed = out_result->changed ||
-                                         out_result->facts_changed ||
-                                         out_result->types_changed;
-  }
-  loom_type_propagator_deinitialize(type_propagator);
-  if (!iree_status_is_ok(status)) {
-    loom_rewriter_deinitialize(rewriter);
-    canonicalizer->state->rewriter_initialized = false;
-    loom_pass_value_fact_owner_invalidate(canonicalizer->value_facts);
-    canonicalizer->latest_facts = NULL;
-    iree_arena_reset(&canonicalizer->scratch_arena);
+    loom_canonicalizer_import_greedy_result(&rewrite_result, out_result);
   }
   return status;
 }

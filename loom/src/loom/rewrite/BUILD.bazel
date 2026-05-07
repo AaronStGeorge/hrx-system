@@ -27,6 +27,34 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "greedy",
+    srcs = ["greedy.c"],
+    hdrs = ["greedy.h"],
+    deps = [
+        ":rewriter",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/pass:value_facts",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "greedy_test",
+    srcs = ["greedy_test.cc"],
+    deps = [
+        ":greedy",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/test",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "remap",
     srcs = ["remap.c"],
     hdrs = ["remap.h"],

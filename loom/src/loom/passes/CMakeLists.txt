@@ -70,6 +70,7 @@ loom_cc_library(
     loom::src::loom::pass::registry
     loom::src::loom::pass::types
     loom::src::loom::pass::value_facts
+    loom::src::loom::rewrite::greedy
     loom::src::loom::rewrite::rewriter
     loom::src::loom::rewrite::type_propagation
     loom::src::loom::util::fact_table
@@ -92,7 +93,6 @@ loom_cc_test(
     loom::src::loom::ops::vector
     loom::src::loom::pass::types
     loom::src::loom::pass::value_facts
-    loom::src::loom::rewrite::rewriter
     iree::testing::gtest
     iree::testing::gtest_main
 )

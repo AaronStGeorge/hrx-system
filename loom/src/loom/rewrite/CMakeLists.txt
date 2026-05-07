@@ -29,6 +29,38 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    greedy
+  HDRS
+    "greedy.h"
+  SRCS
+    "greedy.c"
+  DEPS
+    ::rewriter
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::pass::value_facts
+    loom::src::loom::util::fact_table
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    greedy_test
+  SRCS
+    "greedy_test.cc"
+  DEPS
+    ::greedy
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::test
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     remap
   HDRS
     "remap.h"

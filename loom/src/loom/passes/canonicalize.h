@@ -72,9 +72,6 @@ typedef struct loom_canonicalizer_t {
   // symbolic-expression scratch state for the most recent run.
   iree_arena_allocator_t scratch_arena;
 
-  // Borrowed facts from value_facts for the most recent successful run.
-  loom_value_fact_table_t* latest_facts;
-
   // True after scratch_arena has been initialized and before deinitialize.
   bool scratch_arena_initialized;
 
