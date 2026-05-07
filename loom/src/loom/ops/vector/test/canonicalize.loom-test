@@ -81,6 +81,47 @@ func.def @extract_iota_static_lane_to_constant() -> (index, i32) {
 
 // ====
 
+// Dynamic extraction with an exact lane index becomes a static extraction, then
+// folds through from_elements.
+func.def @extract_from_elements_dynamic_exact_lane() -> (i32) {
+  %lane_index = index.constant 1 : index
+  %lane0 = scalar.constant 4 : i32
+  %lane1 = scalar.constant 5 : i32
+  %lanes = vector.from_elements %lane0, %lane1 : vector<2xi32>
+  %r = vector.extract %lanes[%lane_index] : vector<2xi32> -> i32
+  func.return %r : i32
+}
+// ----
+func.def @extract_from_elements_dynamic_exact_lane() -> (i32) {
+  %r = scalar.constant 5 : i32
+  func.return %r : i32
+}
+
+// ====
+
+// Dynamic extraction with an exact lane index also folds through iota's lane
+// formula.
+func.def @extract_iota_dynamic_exact_lane_to_constant() -> (index, i32) {
+  %lane_index = index.constant 2 : index
+  %base = index.constant 5 : index
+  %step = index.constant 2 : index
+  %index_lanes = vector.iota %base step %step : vector<4xindex>
+  %index_lane = vector.extract %index_lanes[%lane_index] : vector<4xindex> -> index
+  %i32_base = scalar.constant 3 : i32
+  %i32_step = scalar.constant 4 : i32
+  %i32_lanes = vector.iota %i32_base step %i32_step : vector<4xi32>
+  %i32_lane = vector.extract %i32_lanes[%lane_index] : vector<4xi32> -> i32
+  func.return %index_lane, %i32_lane : index, i32
+}
+// ----
+func.def @extract_iota_dynamic_exact_lane_to_constant() -> (index, i32) {
+  %index_lane = index.constant 9 : index
+  %i32_lane = scalar.constant 11 : i32
+  func.return %index_lane, %i32_lane : index, i32
+}
+
+// ====
+
 // A zero-lane range mask performs no range tests.
 func.def @empty_mask_range(%lo: index, %hi: index, %step: index) -> (vector<0xi1>) {
   %r = vector.mask.range [%lo to %hi step %step] : index -> vector<0xi1>

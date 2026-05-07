@@ -115,3 +115,36 @@ func.def target(@target) @dynamic_vector_extract_i32(%values: vector<2xi32>, %la
 low.func.def target(@target) abi(hal_kernel) @dynamic_vector_extract_i32(%values: reg<amdgpu.vgpr x2>, %lane_index: reg<amdgpu.sgpr>, %limit: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
   return
 }
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @dynamic_exact_vector_extract_i32(%values: vector<2xi32>) -> (i32) {
+  %lane_index = index.constant 1 : index
+  %lane = vector.extract %values[%lane_index] : vector<2xi32> -> i32
+  func.return %lane : i32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @dynamic_exact_vector_extract_i32(%values: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %lane = slice %values[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  return %lane
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @dynamic_exact_iota_extract_i32() -> (i32) {
+  %lane_index = index.constant 2 : index
+  %start = scalar.constant 3 : i32
+  %step = scalar.constant 4 : i32
+  %lanes = vector.iota %start step %step : vector<4xi32>
+  %lane = vector.extract %lanes[%lane_index] : vector<4xi32> -> i32
+  func.return %lane : i32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @dynamic_exact_iota_extract_i32() -> (reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %lane = s_mov_b32 11
+  return %lane
+}
