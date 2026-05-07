@@ -17,6 +17,7 @@ from loom.importers.core import sanitize_identifier, target_preset_amdgpu_kind
 from loom.importers.tilelang.buffers import (
     TileLangBufferAccess,
     TileLangBufferRegion,
+    add_index,
     map_region_indices,
     resolve_buffer_access,
     resolve_buffer_region,
@@ -197,6 +198,18 @@ def _convert_copy_call(
     ):
         context.record_converted(node_text(expr), "tl.tileop.copy vector")
         return None
+    if _try_emit_distributed_vector_load_copy(
+        expr,
+        context,
+        converter,
+        source=source,
+        target=target,
+        loop_extents=loop_extents,
+        source_element_type=source_element_type,
+        target_element_type=target_element_type,
+    ):
+        context.record_converted(node_text(expr), "tl.tileop.copy vector-load")
+        return None
 
     def emit_copy(
         indices: tuple[ValueRef, ...],
@@ -338,6 +351,94 @@ def _try_emit_distributed_vector_copy(
     )
     if _region_is_shared(target):
         context.mark_pending_workgroup_memory_write()
+    return True
+
+
+def _try_emit_distributed_vector_load_copy(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    *,
+    source: TileLangBufferRegion,
+    target: TileLangBufferRegion,
+    loop_extents: tuple[ValueRef, ...],
+    source_element_type: Type,
+    target_element_type: Type,
+) -> bool:
+    if _region_is_fragment(source) or _region_is_fragment(target):
+        return False
+    if str(source_element_type) != str(target_element_type):
+        return False
+    if not source.index_map.is_identity or not target.index_map.is_identity:
+        return False
+    if _projected_region_rank(source, context) != len(
+        loop_extents
+    ) or _projected_region_rank(target, context) != len(loop_extents):
+        return False
+    if not _region_has_dense_layout(source, context):
+        return False
+    static_extents = _static_extent_values(loop_extents, context)
+    if static_extents is None or not static_extents:
+        return False
+    thread_count = context.static_topology_extent("threadIdx.x")
+    if thread_count is None or thread_count <= 1:
+        return False
+    element_count = _product(static_extents)
+    lane_count = (element_count + thread_count - 1) // thread_count
+    if lane_count <= 1 or lane_count > MAX_DISTRIBUTED_UNROLL_LANES:
+        return False
+    if lane_count * thread_count != element_count:
+        return False
+    trailing_extent = static_extents[-1]
+    if trailing_extent % lane_count != 0:
+        return False
+
+    thread_index = map_thread_axis(
+        axis=THREAD_AXES["threadIdx.x"],
+        sources=(),
+        context=context,
+        converter=converter,
+        name="tx",
+    )
+    if thread_index is None:
+        return False
+    loop_indices = _unflatten_vector_chunk_indices(
+        thread_index,
+        static_extents,
+        lane_count,
+        context,
+    )
+    source_indices = _project_region_indices(source, loop_indices, expr, context)
+    if source_indices is None:
+        return False
+    result_type = context.type_converter.vector_type(source_element_type, lane_count)
+    vector = context.builder.vector.load(
+        view=source.view,
+        indices=list(source_indices),
+        results=[result_type],
+        name=context.fresh_name("copy"),
+    )
+
+    for lane in range(lane_count):
+        lane_indices = _offset_trailing_lane(loop_indices, lane, context)
+        target_indices = cast(
+            tuple[ValueRef, ...],
+            _project_region_indices(target, lane_indices, expr, context),
+        )
+        value = context.builder.vector.extract(
+            source=vector,
+            indices=[lane],
+            results=[source_element_type],
+            name=context.fresh_name("copy"),
+        )
+        _store_tracked_local_value(
+            expr,
+            target.view,
+            target_indices,
+            target.index_map.memory_scope,
+            value,
+            context,
+        )
     return True
 
 
@@ -1607,6 +1708,13 @@ def _squeezed_singleton_extents(
     )
 
 
+def _projected_region_rank(
+    region: TileLangBufferRegion,
+    context: TileLangConversionContext,
+) -> int:
+    return len(_squeezed_singleton_extents(region.extents, context))
+
+
 def _is_static_one_extent(
     extent: ValueRef,
     context: TileLangConversionContext,
@@ -2066,6 +2174,20 @@ def _unflatten_vector_chunk_indices(
         name=context.fresh_name("i_offset"),
     )
     return tuple(indices)
+
+
+def _offset_trailing_lane(
+    indices: tuple[ValueRef, ...],
+    lane: int,
+    context: TileLangConversionContext,
+) -> tuple[ValueRef, ...]:
+    if lane == 0:
+        return indices
+    lane_offset = context.ensure_constant(str(lane), "index", f"c{lane}")
+    return (
+        *indices[:-1],
+        add_index(indices[-1], lane_offset, context),
+    )
 
 
 def _is_zero_fill_source(source: object) -> bool:
