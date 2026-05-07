@@ -116,6 +116,7 @@ class TileLangConversionContext(SourceImportSession):
     address_layout_values: dict[object, ValueRef] = field(default_factory=dict)
     kernel_body_block: object | None = None
     dense_layout: ValueRef | None = None
+    pending_workgroup_memory_write: bool = False
 
     def type(self, value_type: str) -> Type:
         return self.type_converter.map_dtype(value_type)
@@ -519,6 +520,34 @@ class TileLangConversionContext(SourceImportSession):
             and self.builder.ir.insertion_block is self.kernel_body_block
         )
 
+    def mark_pending_workgroup_memory_write(self) -> None:
+        if not self.may_have_multiple_workitems():
+            return
+        self.pending_workgroup_memory_write = True
+
+    def clear_pending_workgroup_memory_write(self) -> None:
+        self.pending_workgroup_memory_write = False
+
+    def flush_pending_workgroup_memory_barrier(self) -> bool:
+        if not self.pending_workgroup_memory_write:
+            return False
+        self.builder.kernel.barrier(
+            memory_space="workgroup",
+            ordering="acq_rel",
+            scope="workgroup",
+        )
+        self.clear_pending_workgroup_memory_write()
+        return True
+
+    def may_have_multiple_workitems(self) -> bool:
+        static_count = 1
+        for axis in ("threadIdx.x", "threadIdx.y", "threadIdx.z"):
+            extent = self.static_topology_extent(axis)
+            if extent is None:
+                return True
+            static_count *= extent
+        return static_count > 1
+
     def fork(self, *, preview_block: object | None = None) -> TileLangConversionContext:
         return TileLangConversionContext(
             builder=self.builder,
@@ -550,7 +579,16 @@ class TileLangConversionContext(SourceImportSession):
             address_layout_values=dict(self.address_layout_values),
             kernel_body_block=self.kernel_body_block,
             dense_layout=self.dense_layout,
+            pending_workgroup_memory_write=self.pending_workgroup_memory_write,
         )
+
+    def merge_child_records(self, child: SourceImportSession) -> None:
+        SourceImportSession.merge_child_records(self, child)
+        if isinstance(child, TileLangConversionContext):
+            self.pending_workgroup_memory_write = (
+                self.pending_workgroup_memory_write
+                or child.pending_workgroup_memory_write
+            )
 
 
 _TRACKED_LOCAL_BUFFER_SCOPES = frozenset(("local", "local.fragment", "local.var"))

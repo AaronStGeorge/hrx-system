@@ -212,6 +212,7 @@ def _build_loom_module(
         kernel_body_block=shell.body_block,
         address_layout_preferences=address_layout_preferences,
     )
+    _map_static_launch_topology(context, launch_topology)
     _capture_block_value_names(context, shell.body_block)
     with shell.builder.insertion_block(shell.body_block):
         mapped_arguments = _map_kernel_arguments(shell, bindings, context, converter)
@@ -280,6 +281,28 @@ def _build_launch_config(
             workgroup_size_y=workgroup_size[1],
             workgroup_size_z=workgroup_size[2],
         )
+
+
+def _map_static_launch_topology(
+    context: TileLangConversionContext,
+    launch_topology: _LaunchTopology,
+) -> None:
+    for source_tag, extent in zip(
+        ("blockIdx.x", "blockIdx.y", "blockIdx.z"),
+        launch_topology.workgroup_count,
+        strict=True,
+    ):
+        static_extent = integer_value(extent)
+        if static_extent is not None:
+            context.map_topology_extent(source_tag, None, static_extent=static_extent)
+    for source_tag, extent in zip(
+        ("threadIdx.x", "threadIdx.y", "threadIdx.z"),
+        launch_topology.workgroup_size,
+        strict=True,
+    ):
+        static_extent = integer_value(extent)
+        if static_extent is not None:
+            context.map_topology_extent(source_tag, None, static_extent=static_extent)
 
 
 def _convert_launch_extent(

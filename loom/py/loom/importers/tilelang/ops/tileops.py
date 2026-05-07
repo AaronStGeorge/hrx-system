@@ -147,6 +147,16 @@ def _convert_copy_call(
             f"call `{op_name}` destination region is not a shaped view",
         )
         return None
+    distribution = _copy_uses_distributed_index_space(
+        source,
+        target,
+        loop_extents,
+        context,
+    )
+    if _region_is_shared(source) and context.flush_pending_workgroup_memory_barrier():
+        context.record_converted(
+            node_text(expr), "kernel.barrier<workgroup> before shared copy"
+        )
     if _try_emit_matrix_fragment_copy(
         expr,
         context,
@@ -222,7 +232,7 @@ def _convert_copy_call(
         loop_extents,
         context,
         emit_copy,
-        distribution=_copy_uses_distributed_index_space(source, target),
+        distribution=distribution,
         converter=converter,
         owner=expr,
         fragment_vector_state=_fragment_vector_loop_state_views(context, target),
@@ -231,6 +241,8 @@ def _convert_copy_call(
             node_text(expr), f"call `{op_name}` region is not mapped"
         )
         return None
+    if distribution and _region_is_shared(target):
+        context.mark_pending_workgroup_memory_write()
     context.record_converted(node_text(expr), "tl.tileop.copy")
     return None
 
@@ -978,6 +990,10 @@ def _convert_gemm_call(
     init = _gemm_init_fragment(expr, context, spec)
     if init is None:
         return None
+    if context.flush_pending_workgroup_memory_barrier():
+        context.record_converted(
+            node_text(expr), "kernel.barrier<workgroup> before shared gemm"
+        )
     lhs_payload_type = context.type_converter.vector_type(spec.lhs_type, 16)
     accumulator_payload_type = context.type_converter.vector_type(
         spec.accumulator_type, 8
@@ -1550,6 +1566,8 @@ def _load_tracked_local_value(
     value = context.mapped_buffer_access(view, indices, memory_scope)
     if value is not None:
         return value
+    if _memory_scope_is_shared(memory_scope):
+        context.flush_pending_workgroup_memory_barrier()
     return context.builder.view.load(
         view=view,
         indices=list(indices),
@@ -1585,6 +1603,8 @@ def _store_tracked_local_value(
         context.map_buffer_access(owner, view, indices, memory_scope, value)
         return
     context.builder.view.store(value=value, view=view, indices=list(indices))
+    if _memory_scope_is_shared(memory_scope):
+        context.mark_pending_workgroup_memory_write()
     context.invalidate_buffer_accesses(view)
     context.map_buffer_access(owner, view, indices, memory_scope, value)
 
@@ -1748,23 +1768,28 @@ def _emit_region_loops(
         emit_body((), context)
         return True
 
-    if (
-        distribution
-        and len(extents) == 1
-        and converter is not None
-        and owner is not None
-        and not state_slots
-    ):
-        extent_integer = static_index_value(extents[0], context)
-        if extent_integer is not None:
+    if distribution and converter is not None and owner is not None and not state_slots:
+        static_extents = _static_extent_values(extents, context)
+        if static_extents is not None:
+            extent_integer = _product(static_extents)
+
+            def emit_flat_body(
+                flat_indices: tuple[ValueRef, ...],
+                body_context: TileLangConversionContext,
+            ) -> None:
+                emit_body(
+                    _unflatten_loop_indices(flat_indices[0], extents, body_context),
+                    body_context,
+                )
+
             return emit_distributed_1d(
                 owner,
                 context,
                 converter,
-                extent=extents[0],
+                extent=extents[0] if len(extents) == 1 else None,
                 extent_integer=extent_integer,
-                index_name="i0",
-                emit_body=emit_body,
+                index_name="i0" if len(extents) == 1 else "i",
+                emit_body=emit_flat_body,
             )
 
     zero = context.ensure_constant("0", "index", "c0")
@@ -1825,8 +1850,19 @@ def _emit_region_loops(
 def _copy_uses_distributed_index_space(
     source: TileLangBufferRegion,
     target: TileLangBufferRegion,
+    loop_extents: tuple[ValueRef, ...],
+    context: TileLangConversionContext,
 ) -> bool:
-    return _region_is_fragment(source) or _region_is_fragment(target)
+    if len(loop_extents) == 1 and (
+        _region_is_fragment(source) or _region_is_fragment(target)
+    ):
+        return True
+    thread_count = context.static_topology_extent("threadIdx.x")
+    return (
+        thread_count is not None
+        and thread_count > 1
+        and (_region_is_shared(source) or _region_is_shared(target))
+    )
 
 
 def _region_is_fragment(region: TileLangBufferRegion) -> bool:
@@ -1834,7 +1870,11 @@ def _region_is_fragment(region: TileLangBufferRegion) -> bool:
 
 
 def _region_is_shared(region: TileLangBufferRegion) -> bool:
-    return region.index_map.memory_scope.startswith("shared")
+    return _memory_scope_is_shared(region.index_map.memory_scope)
+
+
+def _memory_scope_is_shared(memory_scope: str) -> bool:
+    return memory_scope.startswith("shared")
 
 
 def _same_value_sequence(
@@ -1851,6 +1891,13 @@ def _static_extent_tuple(
     extents: tuple[ValueRef, ...],
     context: TileLangConversionContext,
 ) -> tuple[int, ...] | None:
+    return _static_extent_values(extents, context)
+
+
+def _static_extent_values(
+    extents: tuple[ValueRef, ...],
+    context: TileLangConversionContext,
+) -> tuple[int, ...] | None:
     values: list[int] = []
     for extent in extents:
         value = static_index_value(extent, context)
@@ -1858,6 +1905,40 @@ def _static_extent_tuple(
             return None
         values.append(value)
     return tuple(values)
+
+
+def _product(values: tuple[int, ...]) -> int:
+    product = 1
+    for value in values:
+        product *= value
+    return product
+
+
+def _unflatten_loop_indices(
+    flat_index: ValueRef,
+    extents: tuple[ValueRef, ...],
+    context: TileLangConversionContext,
+) -> tuple[ValueRef, ...]:
+    if len(extents) == 1:
+        return (flat_index,)
+    indices: list[ValueRef | None] = [None] * len(extents)
+    running = flat_index
+    for position in range(len(extents) - 1, 0, -1):
+        extent = extents[position]
+        indices[position] = context.builder.index.rem(
+            lhs=running,
+            rhs=extent,
+            results=[INDEX],
+            name=context.fresh_name("i_rem"),
+        )
+        running = context.builder.index.div(
+            lhs=running,
+            rhs=extent,
+            results=[INDEX],
+            name=context.fresh_name("i_div"),
+        )
+    indices[0] = running
+    return tuple(index for index in indices if index is not None)
 
 
 def _is_zero_fill_source(source: object) -> bool:

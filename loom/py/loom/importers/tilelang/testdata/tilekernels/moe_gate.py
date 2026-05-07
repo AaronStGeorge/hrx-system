@@ -202,10 +202,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("topk_gate_kernel") @topk_gate_kerne
     }
     scf.yield %scores_fragment_state_next_3, %idx_reducer_state_next_3 : vector<32xf32>, vector<1xi32>
   }
-  scf.for %i0 = [%c0 to %c2 step %c1] {
-    %copy = view.load %topk_idx_shared[%i0] : view<2xi32, %layout> -> i32
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
+  %i0_active = index.cmp slt, %tx, %c2 : index
+  scf.if %i0_active {
+    %copy = view.load %topk_idx_shared[%tx] : view<2xi32, %layout> -> i32
     %copy_ext = scalar.extsi %copy : i32 to i64
-    view.store %copy_ext, %topk_idx[%bx, %i0] : i64, view<[%num_tokens_idx]x2xi64, %layout>
+    view.store %copy_ext, %topk_idx[%bx, %tx] : i64, view<[%num_tokens_idx]x2xi64, %layout>
   }
   kernel.return
 }

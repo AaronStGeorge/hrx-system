@@ -942,22 +942,98 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_gemm_dense_16x16x16_kernel")
   %c_local = buffer.view %c_local_buffer[%c0_bytes] : buffer -> view<16x16xf32, %layout>
   %c0 = index.constant 0 : index
   %c16 = index.constant 16 : index
+  %c8 = index.constant 8 : index
+  %i_base = index.mul %tx, %c8 : index
+  %i_rem = index.rem %i_base, %c16 : index
+  %i_div = index.div %i_base, %c16 : index
+  %copy = view.load %a[%i_div, %i_rem] : view<16x16xf16, %layout> -> f16
+  view.store %copy, %a_shared[%i_div, %i_rem] : f16, view<16x16xf16, %layout>
   %c1 = index.constant 1 : index
-  scf.for %i0 = [%c0 to %c16 step %c1] {
-    scf.for %i1 = [%c0 to %c16 step %c1] {
-      %copy = view.load %a[%i0, %i1] : view<16x16xf16, %layout> -> f16
-      view.store %copy, %a_shared[%i0, %i1] : f16, view<16x16xf16, %layout>
-    }
-  }
-  scf.for %i0 = [%c0 to %c16 step %c1] {
-    scf.for %i1 = [%c0 to %c16 step %c1] {
-      %copy_2 = view.load %b[%i0, %i1] : view<16x16xf16, %layout> -> f16
-      view.store %copy_2, %b_shared[%i0, %i1] : f16, view<16x16xf16, %b_shared_layout>
-    }
-  }
+  %i = index.add %i_base, %c1 : index
+  %i_rem_2 = index.rem %i, %c16 : index
+  %i_div_2 = index.div %i, %c16 : index
+  %copy_2 = view.load %a[%i_div_2, %i_rem_2] : view<16x16xf16, %layout> -> f16
+  view.store %copy_2, %a_shared[%i_div_2, %i_rem_2] : f16, view<16x16xf16, %layout>
+  %c2 = index.constant 2 : index
+  %i_2 = index.add %i_base, %c2 : index
+  %i_rem_3 = index.rem %i_2, %c16 : index
+  %i_div_3 = index.div %i_2, %c16 : index
+  %copy_3 = view.load %a[%i_div_3, %i_rem_3] : view<16x16xf16, %layout> -> f16
+  view.store %copy_3, %a_shared[%i_div_3, %i_rem_3] : f16, view<16x16xf16, %layout>
+  %c3 = index.constant 3 : index
+  %i_3 = index.add %i_base, %c3 : index
+  %i_rem_4 = index.rem %i_3, %c16 : index
+  %i_div_4 = index.div %i_3, %c16 : index
+  %copy_4 = view.load %a[%i_div_4, %i_rem_4] : view<16x16xf16, %layout> -> f16
+  view.store %copy_4, %a_shared[%i_div_4, %i_rem_4] : f16, view<16x16xf16, %layout>
+  %c4 = index.constant 4 : index
+  %i_4 = index.add %i_base, %c4 : index
+  %i_rem_5 = index.rem %i_4, %c16 : index
+  %i_div_5 = index.div %i_4, %c16 : index
+  %copy_5 = view.load %a[%i_div_5, %i_rem_5] : view<16x16xf16, %layout> -> f16
+  view.store %copy_5, %a_shared[%i_div_5, %i_rem_5] : f16, view<16x16xf16, %layout>
+  %c5 = index.constant 5 : index
+  %i_5 = index.add %i_base, %c5 : index
+  %i_rem_6 = index.rem %i_5, %c16 : index
+  %i_div_6 = index.div %i_5, %c16 : index
+  %copy_6 = view.load %a[%i_div_6, %i_rem_6] : view<16x16xf16, %layout> -> f16
+  view.store %copy_6, %a_shared[%i_div_6, %i_rem_6] : f16, view<16x16xf16, %layout>
+  %c6 = index.constant 6 : index
+  %i_6 = index.add %i_base, %c6 : index
+  %i_rem_7 = index.rem %i_6, %c16 : index
+  %i_div_7 = index.div %i_6, %c16 : index
+  %copy_7 = view.load %a[%i_div_7, %i_rem_7] : view<16x16xf16, %layout> -> f16
+  view.store %copy_7, %a_shared[%i_div_7, %i_rem_7] : f16, view<16x16xf16, %layout>
+  %c7 = index.constant 7 : index
+  %i_7 = index.add %i_base, %c7 : index
+  %i_rem_8 = index.rem %i_7, %c16 : index
+  %i_div_8 = index.div %i_7, %c16 : index
+  %copy_8 = view.load %a[%i_div_8, %i_rem_8] : view<16x16xf16, %layout> -> f16
+  view.store %copy_8, %a_shared[%i_div_8, %i_rem_8] : f16, view<16x16xf16, %layout>
+  %i_base_2 = index.mul %tx, %c8 : index
+  %i_rem_9 = index.rem %i_base_2, %c16 : index
+  %i_div_9 = index.div %i_base_2, %c16 : index
+  %copy_9 = view.load %b[%i_div_9, %i_rem_9] : view<16x16xf16, %layout> -> f16
+  view.store %copy_9, %b_shared[%i_div_9, %i_rem_9] : f16, view<16x16xf16, %b_shared_layout>
+  %i_8 = index.add %i_base_2, %c1 : index
+  %i_rem_10 = index.rem %i_8, %c16 : index
+  %i_div_10 = index.div %i_8, %c16 : index
+  %copy_10 = view.load %b[%i_div_10, %i_rem_10] : view<16x16xf16, %layout> -> f16
+  view.store %copy_10, %b_shared[%i_div_10, %i_rem_10] : f16, view<16x16xf16, %b_shared_layout>
+  %i_9 = index.add %i_base_2, %c2 : index
+  %i_rem_11 = index.rem %i_9, %c16 : index
+  %i_div_11 = index.div %i_9, %c16 : index
+  %copy_11 = view.load %b[%i_div_11, %i_rem_11] : view<16x16xf16, %layout> -> f16
+  view.store %copy_11, %b_shared[%i_div_11, %i_rem_11] : f16, view<16x16xf16, %b_shared_layout>
+  %i_10 = index.add %i_base_2, %c3 : index
+  %i_rem_12 = index.rem %i_10, %c16 : index
+  %i_div_12 = index.div %i_10, %c16 : index
+  %copy_12 = view.load %b[%i_div_12, %i_rem_12] : view<16x16xf16, %layout> -> f16
+  view.store %copy_12, %b_shared[%i_div_12, %i_rem_12] : f16, view<16x16xf16, %b_shared_layout>
+  %i_11 = index.add %i_base_2, %c4 : index
+  %i_rem_13 = index.rem %i_11, %c16 : index
+  %i_div_13 = index.div %i_11, %c16 : index
+  %copy_13 = view.load %b[%i_div_13, %i_rem_13] : view<16x16xf16, %layout> -> f16
+  view.store %copy_13, %b_shared[%i_div_13, %i_rem_13] : f16, view<16x16xf16, %b_shared_layout>
+  %i_12 = index.add %i_base_2, %c5 : index
+  %i_rem_14 = index.rem %i_12, %c16 : index
+  %i_div_14 = index.div %i_12, %c16 : index
+  %copy_14 = view.load %b[%i_div_14, %i_rem_14] : view<16x16xf16, %layout> -> f16
+  view.store %copy_14, %b_shared[%i_div_14, %i_rem_14] : f16, view<16x16xf16, %b_shared_layout>
+  %i_13 = index.add %i_base_2, %c6 : index
+  %i_rem_15 = index.rem %i_13, %c16 : index
+  %i_div_15 = index.div %i_13, %c16 : index
+  %copy_15 = view.load %b[%i_div_15, %i_rem_15] : view<16x16xf16, %layout> -> f16
+  view.store %copy_15, %b_shared[%i_div_15, %i_rem_15] : f16, view<16x16xf16, %b_shared_layout>
+  %i_14 = index.add %i_base_2, %c7 : index
+  %i_rem_16 = index.rem %i_14, %c16 : index
+  %i_div_16 = index.div %i_14, %c16 : index
+  %copy_16 = view.load %b[%i_div_16, %i_rem_16] : view<16x16xf16, %layout> -> f16
+  view.store %copy_16, %b_shared[%i_div_16, %i_rem_16] : f16, view<16x16xf16, %b_shared_layout>
   %const = scalar.constant 0.0 : f32
   %fill = vector.splat %const : vector<8xf32>
   %init = vector.fragment<init> %fill shape [%c16, %c16] : vector<8xf32>
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
   %lhs = vector.fragment.load<lhs> %a_shared[%c0, %c0] shape [%c16, %c16] : view<16x16xf16, %layout> -> vector<16xf16>
   %rhs = vector.fragment.load<rhs> %b_shared[%c0, %c0] shape [%c16, %c16] : view<16x16xf16, %b_shared_layout> -> vector<16xf16>
   %gemm = vector.mma %lhs, %rhs, %init : vector<16xf16>, vector<16xf16>, vector<8xf32>

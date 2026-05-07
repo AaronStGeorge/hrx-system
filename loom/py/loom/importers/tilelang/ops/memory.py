@@ -421,6 +421,8 @@ def convert_buffer_store(
             view=view,
             indices=vector_indices,
         )
+        if _buffer_scope(buffer) in ("shared", "shared.dyn"):
+            context.mark_pending_workgroup_memory_write()
         context.invalidate_buffer_accesses(view)
         context.record_converted(node_text(stmt), "vector.store")
         return
@@ -479,6 +481,8 @@ def convert_buffer_store(
         view=access.view,
         indices=list(access.indices),
     )
+    if access.memory_scope in ("shared", "shared.dyn"):
+        context.mark_pending_workgroup_memory_write()
     context.map_buffer_access(
         stmt,
         access.view,
@@ -533,6 +537,8 @@ def convert_buffer_load(
                 node_text(expr), f"{context.ssa(fragment_result)} = local.fragment"
             )
             return fragment_result
+        if _buffer_scope(buffer) in ("shared", "shared.dyn"):
+            context.flush_pending_workgroup_memory_barrier()
         result = context.builder.vector.load(
             view=view,
             indices=vector_indices,
@@ -593,6 +599,8 @@ def convert_buffer_load(
                 return None
             return index_result
         return mapped_result
+    if access.memory_scope in ("shared", "shared.dyn"):
+        context.flush_pending_workgroup_memory_barrier()
     result = context.builder.view.load(
         view=access.view,
         indices=list(access.indices),

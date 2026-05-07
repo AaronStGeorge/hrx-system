@@ -1278,6 +1278,7 @@ def _convert_storage_sync_call(
         ordering="acq_rel",
         scope="workgroup",
     )
+    context.clear_pending_workgroup_memory_write()
     context.record_converted(node_text(expr), "kernel.barrier<workgroup>")
 
 
