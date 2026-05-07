@@ -633,30 +633,6 @@ static iree_status_t loom_amdgpu_emit_workgroup_id_live_in(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_emit_vgpr_scale_u32(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t value, uint32_t scale, loom_type_t result_type,
-    loom_value_id_t* out_scaled_value) {
-  *out_scaled_value = LOOM_VALUE_ID_INVALID;
-  if (scale == 1) {
-    *out_scaled_value = value;
-    return iree_ok_status();
-  }
-  if (loom_amdgpu_u32_is_power_of_two(scale)) {
-    return loom_amdgpu_emit_vgpr_shift(
-        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
-        loom_amdgpu_u32_log2(scale), value, result_type, out_scaled_value);
-  }
-
-  loom_value_id_t low_scale = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32, scale,
-      result_type, &low_scale));
-  return loom_amdgpu_emit_vgpr_binary(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MUL_LO_U32, value,
-      low_scale, result_type, out_scaled_value);
-}
-
 static iree_status_t loom_amdgpu_emit_vgpr_scaled_add(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t accumulator, loom_value_id_t value, uint32_t scale,
@@ -664,7 +640,8 @@ static iree_status_t loom_amdgpu_emit_vgpr_scaled_add(
   *out_sum = LOOM_VALUE_ID_INVALID;
   loom_value_id_t scaled_value = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_scale_u32(
-      context, source_op, value, scale, result_type, &scaled_value));
+      context, source_op, value, scale, LOOM_AMDGPU_VGPR_SCALE_U32_FLAG_NONE,
+      result_type, &scaled_value));
   return loom_amdgpu_emit_vgpr_binary(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32, accumulator,
       scaled_value, result_type, out_sum);
@@ -707,7 +684,8 @@ static iree_status_t loom_amdgpu_emit_workitem_dispatch_id(
   if (workgroup_size != 1) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_scale_u32(
         context, source_op, low_scaled_workgroup_id, workgroup_size,
-        result_type, &low_scaled_workgroup_id));
+        LOOM_AMDGPU_VGPR_SCALE_U32_FLAG_NONE, result_type,
+        &low_scaled_workgroup_id));
   }
 
   loom_value_id_t low_result = LOOM_VALUE_ID_INVALID;

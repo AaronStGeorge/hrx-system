@@ -14,24 +14,6 @@
 #include "loom/target/arch/amdgpu/lower/memory_internal.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
 
-static iree_status_t loom_amdgpu_emit_vgpr_mul_u32(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_value_id_t low_lhs, loom_value_id_t low_rhs, loom_type_t vgpr_type,
-    loom_value_id_t* out_low_result) {
-  *out_low_result = LOOM_VALUE_ID_INVALID;
-  loom_value_id_t operands[] = {
-      low_lhs,
-      low_rhs,
-  };
-  loom_op_t* low_mul_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MUL_LO_U32, operands,
-      IREE_ARRAYSIZE(operands), loom_make_named_attr_slice(NULL, 0), &vgpr_type,
-      1, &low_mul_op));
-  *out_low_result = loom_value_slice_get(loom_low_op_results(low_mul_op), 0);
-  return iree_ok_status();
-}
-
 iree_status_t loom_amdgpu_emit_memory_vaddr(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_memory_access_t* access, loom_value_id_t low_base_addr,
@@ -63,24 +45,15 @@ iree_status_t loom_amdgpu_emit_memory_vaddr(
       IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_materialize_vgpr_address(
           context, source_op, term->stride_values[stride_ordinal],
           &low_stride));
-      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_mul_u32(
-          context, source_op, low_offset, low_stride, vgpr_type, &low_offset));
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary(
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MUL_LO_U32,
+          low_offset, low_stride, vgpr_type, &low_offset));
     }
     if (term->byte_stride != 1) {
-      const bool use_shift =
-          term->byte_shift != LOOM_AMDGPU_MEMORY_ACCESS_BYTE_SHIFT_NONE;
-      if (use_shift) {
-        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_literal(
-            context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
-            low_offset, term->byte_shift, vgpr_type, &low_offset));
-      } else {
-        loom_value_id_t low_scale = LOOM_VALUE_ID_INVALID;
-        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-            context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32,
-            term->byte_stride, vgpr_type, &low_scale));
-        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_mul_u32(
-            context, source_op, low_offset, low_scale, vgpr_type, &low_offset));
-      }
+      IREE_ASSERT(term->byte_stride >= 0 && term->byte_stride <= UINT32_MAX);
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_scale_u32(
+          context, source_op, low_offset, (uint32_t)term->byte_stride,
+          LOOM_AMDGPU_VGPR_SCALE_U32_FLAG_NONE, vgpr_type, &low_offset));
     }
     if (low_accumulator == LOOM_VALUE_ID_INVALID) {
       low_accumulator = low_offset;

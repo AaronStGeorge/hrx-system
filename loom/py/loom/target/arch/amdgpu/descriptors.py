@@ -1963,6 +1963,24 @@ def _v_mul_lo_u32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_mul_u32_u24_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_binary_u32_overlay(
+        descriptor_key="amdgpu.v_mul_u32_u24",
+        instruction_name="V_MUL_U32_U24",
+        mnemonic="v_mul_u32_u24",
+        semantic_tag="integer.mul.lo.u24.u32",
+    )
+
+
+def _v_mul_u32_u24_literal_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_binary_literal_overlay(
+        descriptor_key="amdgpu.v_mul_u32_u24.lit",
+        instruction_name="V_MUL_U32_U24",
+        mnemonic="v_mul_u32_u24",
+        semantic_tag="integer.mul.lo.u24.u32",
+    )
+
+
 def _v_minmax_i32_overlay(
     *,
     descriptor_key: str,
@@ -6843,6 +6861,8 @@ def _cdna_core_overlays(
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
         _v_mul_lo_u32_overlay(),
+        _v_mul_u32_u24_overlay(),
+        _v_mul_u32_u24_literal_overlay(),
         _v_min_i32_overlay(),
         _v_max_i32_overlay(),
         _v_min_u32_overlay(),
@@ -7112,6 +7132,8 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
         _v_mul_lo_u32_overlay(),
+        _v_mul_u32_u24_overlay(),
+        _v_mul_u32_u24_literal_overlay(),
         _v_min_i32_overlay(),
         _v_max_i32_overlay(),
         _v_min_u32_overlay(),
@@ -7348,6 +7370,8 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
         _v_mul_lo_u32_overlay(),
+        _v_mul_u32_u24_overlay(),
+        _v_mul_u32_u24_literal_overlay(),
         _v_min_i32_overlay(),
         _v_max_i32_overlay(),
         _v_min_u32_overlay(),
@@ -7625,6 +7649,8 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
         _v_mul_lo_u32_overlay(),
+        _v_mul_u32_u24_overlay(),
+        _v_mul_u32_u24_literal_overlay(),
         _v_min_i32_overlay(),
         _v_max_i32_overlay(),
         _v_min_u32_overlay(),
@@ -8628,6 +8654,8 @@ _AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS: dict[
     "amdgpu.v_add_u32.lit": lambda: _v_add_u32_literal_overlay("V_ADD_NC_U32"),
     "amdgpu.v_sub_u32": lambda: _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
     "amdgpu.v_mul_lo_u32": _v_mul_lo_u32_overlay,
+    "amdgpu.v_mul_u32_u24": _v_mul_u32_u24_overlay,
+    "amdgpu.v_mul_u32_u24.lit": _v_mul_u32_u24_literal_overlay,
     "amdgpu.v_min_i32": _v_min_i32_overlay,
     "amdgpu.v_max_i32": _v_max_i32_overlay,
     "amdgpu.v_min_u32": _v_min_u32_overlay,

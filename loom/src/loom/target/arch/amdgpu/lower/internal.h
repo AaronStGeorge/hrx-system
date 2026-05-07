@@ -683,6 +683,21 @@ iree_status_t loom_amdgpu_emit_vgpr_shift(
     loom_amdgpu_descriptor_ref_t literal_descriptor_ref, uint32_t shift,
     loom_value_id_t value, loom_type_t lane_type, loom_value_id_t* out_value);
 
+typedef enum loom_amdgpu_vgpr_scale_u32_flag_bits_e {
+  // No additional facts about the input value are known.
+  LOOM_AMDGPU_VGPR_SCALE_U32_FLAG_NONE = 0u,
+  // The input value is known to be in the unsigned 24-bit range.
+  LOOM_AMDGPU_VGPR_SCALE_U32_FLAG_VALUE_UNSIGNED_24 = 1u << 0,
+} loom_amdgpu_vgpr_scale_u32_flag_bits_t;
+typedef uint32_t loom_amdgpu_vgpr_scale_u32_flags_t;
+
+// Emits |value| scaled by an unsigned 32-bit constant into a one-unit VGPR.
+iree_status_t loom_amdgpu_emit_vgpr_scale_u32(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t value, uint32_t scale,
+    loom_amdgpu_vgpr_scale_u32_flags_t flags, loom_type_t lane_type,
+    loom_value_id_t* out_value);
+
 // Emits a low.slice from a register range.
 iree_status_t loom_amdgpu_emit_low_slice(loom_low_lower_context_t* context,
                                          const loom_op_t* source_op,
