@@ -206,6 +206,55 @@ kernel.def @i32_scalar_arg_index(%input: buffer, %output: buffer, %column_i32: i
 
 // ====
 
+kernel.def @i32_dynamic_view_base(%control: buffer, %output: buffer, %offset_i32: i32) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch {
+  %base0 = index.cast %offset_i32 : i32 to offset
+  %base = index.assume %base0 [range(%base0, 0, 4092), mul(%base0, 4)] : offset
+  %zero = index.constant 0 : offset
+  %control_view = buffer.view %control[%base] : buffer -> view<4xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
+  %loaded = view.load %control_view[2] : view<4xi32, #dense> -> i32
+  view.store %loaded, %output_view[0] : i32, view<1xi32, #dense>
+  kernel.return
+}
+
+// ====
+
+kernel.def @i32_dynamic_view_base_loaded(%control: buffer, %output: buffer) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch {
+  %zero = index.constant 0 : offset
+  %header_view = buffer.view %control[%zero] : buffer -> view<8xi32, #dense>
+  %base_i32 = view.load %header_view[7] : view<8xi32, #dense> -> i32
+  %base = index.cast %base_i32 : i32 to offset
+  %control_view = buffer.view %control[%base] : buffer -> view<4xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
+  %loaded = view.load %control_view[2] : view<4xi32, #dense> -> i32
+  view.store %loaded, %output_view[0] : i32, view<1xi32, #dense>
+  kernel.return
+}
+
+// ====
+
+kernel.def @i32x4_dynamic_view_base_b128(%input: buffer, %output: buffer, %offset_i32: i32) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch {
+  %base0 = index.cast %offset_i32 : i32 to offset
+  %base = index.assume %base0 [range(%base0, 0, 4096), mul(%base0, 16)] : offset
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%base] : buffer -> view<4xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<4xi32, #dense>
+  %loaded = vector.load %input_view[0] : view<4xi32, #dense> -> vector<4xi32>
+  vector.store %loaded, %output_view[0] : vector<4xi32>, view<4xi32, #dense>
+  kernel.return
+}
+
+// ====
+
 kernel.def @f16_view_scalar(%input: buffer, %output: buffer, %column_i32: i32) {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index

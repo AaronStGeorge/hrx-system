@@ -446,6 +446,7 @@ loom_cc_library(
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir
+    loom::src::loom::ir::facts
     loom::src::loom::ops::buffer
     loom::src::loom::ops::cfg
     loom::src::loom::ops::encoding
@@ -490,6 +491,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::ir
     loom::src::loom::ir::facts
+    loom::src::loom::ops::buffer
     loom::src::loom::ops::index
     loom::src::loom::ops::kernel
     loom::src::loom::ops::vector

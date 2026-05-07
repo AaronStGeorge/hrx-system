@@ -84,7 +84,8 @@ typedef struct loom_low_source_memory_access_diagnostic_t {
   loom_low_source_memory_access_rejection_flags_t rejection_bits;
 } loom_low_source_memory_access_diagnostic_t;
 
-#define LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY LOOM_TYPE_MAX_RANK
+#define LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_AXIS_NONE UINT8_MAX
+#define LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY (LOOM_TYPE_MAX_RANK + 1)
 
 typedef struct loom_low_source_memory_dynamic_term_t {
   // Dynamic source SSA value multiplied into this address term.
@@ -97,7 +98,7 @@ typedef struct loom_low_source_memory_dynamic_term_t {
   loom_low_source_memory_dynamic_index_source_t source;
   // Workitem/workgroup dimension when |source| is a coordinate.
   loom_kernel_dimension_t dimension;
-  // View axis represented by |index|.
+  // View axis represented by |index|, or AXIS_NONE for a dynamic view base.
   uint8_t axis;
   // Static byte stride multiplied by |index| and each stride value before
   // adding the term to the address.
@@ -131,7 +132,8 @@ typedef struct loom_low_source_memory_access_plan_t {
   int64_t vector_lane_byte_stride;
   // Total static byte offset selected from the source view access.
   int64_t static_byte_offset;
-  // Dynamic address terms ordered by increasing view axis.
+  // Dynamic address terms. A dynamic view base, when present, precedes terms
+  // ordered by increasing view axis.
   loom_low_source_memory_dynamic_term_t
       dynamic_terms[LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY];
   // Number of populated dynamic address terms.

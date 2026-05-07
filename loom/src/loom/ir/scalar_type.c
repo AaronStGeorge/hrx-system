@@ -46,6 +46,36 @@ int32_t loom_scalar_type_bitwidth(loom_scalar_type_t type) {
   return 0;
 }
 
+bool loom_scalar_type_integer_domain(loom_scalar_type_t type, int64_t* out_lo,
+                                     int64_t* out_hi) {
+  switch (type) {
+    case LOOM_SCALAR_TYPE_INDEX:
+    case LOOM_SCALAR_TYPE_I64:
+      *out_lo = INT64_MIN;
+      *out_hi = INT64_MAX;
+      return true;
+    case LOOM_SCALAR_TYPE_OFFSET:
+      *out_lo = 0;
+      *out_hi = INT64_MAX;
+      return true;
+    case LOOM_SCALAR_TYPE_I1:
+      *out_lo = 0;
+      *out_hi = 1;
+      return true;
+    case LOOM_SCALAR_TYPE_I8:
+    case LOOM_SCALAR_TYPE_I16:
+    case LOOM_SCALAR_TYPE_I32: {
+      const int32_t bitwidth = loom_scalar_type_bitwidth(type);
+      const int64_t positive_extent = INT64_C(1) << (bitwidth - 1);
+      *out_lo = -positive_extent;
+      *out_hi = positive_extent - 1;
+      return true;
+    }
+    default:
+      return false;
+  }
+}
+
 bool loom_scalar_type_parse(iree_string_view_t name,
                             loom_scalar_type_t* out_type) {
   for (int i = 0; i < (int)LOOM_SCALAR_TYPE_COUNT_; ++i) {

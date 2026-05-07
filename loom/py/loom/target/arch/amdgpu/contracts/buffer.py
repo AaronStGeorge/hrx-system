@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from loom.dialect.buffer import ALL_BUFFER_OPS
 from loom.dialect.buffer import defs as buffer
-from loom.error.amdgpu import ERR_AMDGPU_001, ERR_AMDGPU_002
+from loom.error.amdgpu import ERR_AMDGPU_001
 from loom.target.arch.amdgpu.contracts.memory import BYTE_ADDRESSABLE_SCALAR_ELEMENTS
 from loom.target.arch.amdgpu.descriptors import build_amdgpu_contract_descriptor_set
 from loom.target.contracts import (
@@ -39,13 +39,6 @@ _VIEW_TYPE_DIAGNOSTIC = GuardDiagnostic(
     ),
 )
 
-_STATIC_BYTE_OFFSET_DIAGNOSTIC = GuardDiagnostic(
-    ref=target_diagnostic(
-        ERR_AMDGPU_002,
-        string_param("field_name", "byte_offset"),
-    ),
-)
-
 AMDGPU_BUFFER_CONTRACT_DIALECT_OPS = {
     "buffer": ALL_BUFFER_OPS,
 }
@@ -63,16 +56,6 @@ AMDGPU_BUFFER_CONTRACT_FRAGMENT = ContractFragment(
                     "result",
                     View(BYTE_ADDRESSABLE_SCALAR_ELEMENTS),
                     diagnostic=_VIEW_TYPE_DIAGNOSTIC,
-                ),
-                Guard.value_exact_i64(
-                    "byte_offset",
-                    diagnostic=_STATIC_BYTE_OFFSET_DIAGNOSTIC,
-                ),
-                Guard.value_i64_range(
-                    "byte_offset",
-                    0,
-                    0x7FFF_FFFF_FFFF_FFFF,
-                    diagnostic=_STATIC_BYTE_OFFSET_DIAGNOSTIC,
                 ),
             ),
         ),

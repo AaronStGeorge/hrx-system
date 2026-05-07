@@ -204,6 +204,62 @@ func.def @cast_i32_to_index_uses_source_domain(%raw: i32) -> (i64, i64) {
 
 // ====
 
+// Offset arguments use the unsigned address domain.
+func.def @offset_arg_uses_unsigned_domain(%offset: offset) -> (i64, i64, i1) {
+  %lo = test.fact_range_lo %offset : offset -> i64
+  %hi = test.fact_range_hi %offset : offset -> i64
+  %non_negative = test.fact_non_negative %offset : offset -> i1
+  func.return %lo, %hi, %non_negative : i64, i64, i1
+}
+
+// ----
+func.def @offset_arg_uses_unsigned_domain(%offset: offset) -> (i64, i64, i1) {
+  %lo = scalar.constant 0 : i64
+  %hi = scalar.constant 9223372036854775807 : i64
+  %non_negative = scalar.constant true : i1
+  func.return %lo, %hi, %non_negative : i64, i64, i1
+}
+
+// ====
+
+// Casts into offset zero-extend fixed-width integer payloads.
+func.def @cast_i32_to_offset_uses_unsigned_domain(%raw: i32) -> (i64, i64, i1) {
+  %offset = index.cast %raw : i32 to offset
+  %lo = test.fact_range_lo %offset : offset -> i64
+  %hi = test.fact_range_hi %offset : offset -> i64
+  %non_negative = test.fact_non_negative %offset : offset -> i1
+  func.return %lo, %hi, %non_negative : i64, i64, i1
+}
+
+// ----
+func.def @cast_i32_to_offset_uses_unsigned_domain(%raw: i32) -> (i64, i64, i1) {
+  %lo = scalar.constant 0 : i64
+  %hi = scalar.constant 4294967295 : i64
+  %non_negative = scalar.constant true : i1
+  func.return %lo, %hi, %non_negative : i64, i64, i1
+}
+
+// ====
+
+// Exact negative integer payloads become their unsigned bit pattern when cast
+// into offset.
+func.def @cast_negative_i32_to_offset_zero_extends() -> (i64, i64) {
+  %negative_one = scalar.constant -1 : i32
+  %offset = index.cast %negative_one : i32 to offset
+  %lo = test.fact_range_lo %offset : offset -> i64
+  %hi = test.fact_range_hi %offset : offset -> i64
+  func.return %lo, %hi : i64, i64
+}
+
+// ----
+func.def @cast_negative_i32_to_offset_zero_extends() -> (i64, i64) {
+  %lo = scalar.constant 4294967295 : i64
+  %hi = scalar.constant 4294967295 : i64
+  func.return %lo, %hi : i64, i64
+}
+
+// ====
+
 // Dynamic extent facts combine with the fixed-width source domain before the
 // value enters index arithmetic.
 func.def @cast_i32_extent_to_index_uses_extent_domain(%buffer: buffer, %offset: offset, %n: i32, %layout: encoding<layout>) -> (i64, i64, i1) {

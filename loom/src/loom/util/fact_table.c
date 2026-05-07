@@ -1497,6 +1497,19 @@ static iree_status_t loom_value_fact_table_seed_dynamic_extent(
                                                  out_changed);
 }
 
+static iree_status_t loom_value_fact_table_seed_scalar_arg(
+    loom_value_fact_table_t* table, const loom_module_t* module,
+    loom_value_id_t value_id) {
+  loom_type_t type = loom_module_value_type(module, value_id);
+  if (!loom_type_is_scalar(type)) {
+    return iree_ok_status();
+  }
+  return loom_value_fact_table_define(
+      table, value_id,
+      loom_value_fact_table_clamp_scalar_type_domain(
+          module, value_id, loom_value_facts_unknown()));
+}
+
 static iree_status_t loom_value_fact_table_seed_type_extent_facts(
     loom_value_fact_table_t* table, const loom_module_t* module,
     loom_type_t type, const loom_value_id_t* result_ids, uint16_t result_count,
@@ -1628,6 +1641,9 @@ static iree_status_t loom_value_fact_table_seed_block_args(
     } else if (loom_type_is_view(type)) {
       IREE_RETURN_IF_ERROR(
           loom_value_fact_table_seed_view_arg(table, value_id, type));
+    } else {
+      IREE_RETURN_IF_ERROR(
+          loom_value_fact_table_seed_scalar_arg(table, module, value_id));
     }
     IREE_RETURN_IF_ERROR(loom_value_fact_table_seed_type_extent_facts(
         table, module, type, /*result_ids=*/NULL, /*result_count=*/0,

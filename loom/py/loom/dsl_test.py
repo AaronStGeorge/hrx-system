@@ -6,7 +6,9 @@
 
 """Tests for loom.dsl — op declaration DSL."""
 
-import pytest
+import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 
 import loom.ir as ir
 from loom.assembly import (
@@ -148,6 +150,22 @@ from loom.ir import (
     TypeKind,
 )
 
+
+@contextmanager
+def _raises(
+    exception_type: type[BaseException], match: str | None = None
+) -> Iterator[None]:
+    try:
+        yield
+    except exception_type as exc:
+        if match is not None and re.search(match, str(exc)) is None:
+            raise AssertionError(
+                f"exception message {str(exc)!r} did not match {match!r}"
+            ) from exc
+        return
+    raise AssertionError(f"{exception_type.__name__} was not raised")
+
+
 # ============================================================================
 # Test fixtures
 # ============================================================================
@@ -283,7 +301,7 @@ class TestAttrDef:
         assert a.elide_default
 
     def test_elide_default_requires_default(self) -> None:
-        with pytest.raises(ValueError, match="elide_default requires default"):
+        with _raises(ValueError, match="elide_default requires default"):
             AttrDef("offset", "i64", elide_default=True)
 
     def test_enum_attr(self) -> None:
@@ -292,11 +310,11 @@ class TestAttrDef:
         assert a.enum_def.name == "CmpIPredicate"
 
     def test_invalid_attr_type_rejected(self) -> None:
-        with pytest.raises(ValueError, match="invalid attr_type"):
+        with _raises(ValueError, match="invalid attr_type"):
             AttrDef("axis", "i64array")  # Invalid attr_type.
 
     def test_enum_without_enum_def_rejected(self) -> None:
-        with pytest.raises(ValueError, match="requires enum_def"):
+        with _raises(ValueError, match="requires enum_def"):
             AttrDef("pred", "enum")  # Missing enum_def!
 
     def test_all_valid_attr_types(self) -> None:
@@ -320,11 +338,11 @@ class TestEnumDef:
         assert isinstance(e.cases, tuple)
 
     def test_duplicate_keyword_rejected(self) -> None:
-        with pytest.raises(ValueError, match="duplicate keyword 'eq'"):
+        with _raises(ValueError, match="duplicate keyword 'eq'"):
             EnumDef("Bad", [EnumCase("eq", 0), EnumCase("eq", 1)])
 
     def test_duplicate_value_rejected(self) -> None:
-        with pytest.raises(ValueError, match="duplicate value 0"):
+        with _raises(ValueError, match="duplicate value 0"):
             EnumDef("Bad", [EnumCase("a", 0), EnumCase("b", 0)])
 
     def test_external_c_enum_alias_metadata(self) -> None:
@@ -341,7 +359,7 @@ class TestEnumDef:
         assert e.c_include == "loom/shared/mode.h"
 
     def test_external_c_enum_alias_requires_type_and_prefix(self) -> None:
-        with pytest.raises(
+        with _raises(
             ValueError,
             match="c_type and c_const_prefix must be provided together",
         ):
@@ -351,7 +369,7 @@ class TestEnumDef:
                 c_type="loom_shared_mode_t",
             )
 
-        with pytest.raises(ValueError, match="c_include requires c_type"):
+        with _raises(ValueError, match="c_include requires c_type"):
             EnumDef(
                 "Mode",
                 [EnumCase("fast", 0)],
@@ -780,6 +798,18 @@ class TestConstraints:
         )[0]
         assert not constraint.check(
             {
+                "value": 128,
+                "result": FakeValue(ShapedType(TypeKind.VECTOR, I8, (StaticDim(4),))),
+            }
+        )[0]
+        assert not constraint.check(
+            {
+                "value": -129,
+                "result": FakeValue(ShapedType(TypeKind.VECTOR, I8, (StaticDim(4),))),
+            }
+        )[0]
+        assert not constraint.check(
+            {
                 "value": True,
                 "result": FakeValue(ShapedType(TypeKind.VECTOR, I8, (StaticDim(4),))),
             }
@@ -811,6 +841,7 @@ class TestConstraints:
         assert constraint.check({"value": 4, "result": FakeValue(ir.INDEX)})[0]
         assert constraint.check({"value": 4, "result": FakeValue(ir.OFFSET)})[0]
         assert not constraint.check({"value": True, "result": FakeValue(ir.INDEX)})[0]
+        assert not constraint.check({"value": -1, "result": FakeValue(ir.OFFSET)})[0]
 
     def test_literal_matches_element_type(self) -> None:
         class FakeValue:
@@ -832,6 +863,10 @@ class TestConstraints:
                 "result": FakeValue(ShapedType(TypeKind.VECTOR, F32, (StaticDim(4),))),
             }
         )[0]
+        assert constraint.check({"value": 127, "result": FakeValue(I8)})[0]
+        assert not constraint.check({"value": 128, "result": FakeValue(I8)})[0]
+        assert constraint.check({"value": 0, "result": FakeValue(ir.OFFSET)})[0]
+        assert not constraint.check({"value": -1, "result": FakeValue(ir.OFFSET)})[0]
 
     def test_total_bit_count_equal(self) -> None:
         class FakeValue:
@@ -1264,7 +1299,7 @@ class TestDialect:
         assert g.default_category == compute
 
     def test_default_category_must_be_declared(self) -> None:
-        with pytest.raises(
+        with _raises(
             ValueError,
             match=(
                 r"Dialect 'vector': default_category 'compute' "
@@ -1286,11 +1321,11 @@ class TestOpCategory:
         assert category.doc == "Atomic memory ops."
 
     def test_rejects_empty_key(self) -> None:
-        with pytest.raises(ValueError, match="op category key must not be empty"):
+        with _raises(ValueError, match="op category key must not be empty"):
             OpCategory("")
 
     def test_rejects_unstable_key_spelling(self) -> None:
-        with pytest.raises(
+        with _raises(
             ValueError,
             match=(
                 r"op category key 'Memory/Atomic' must contain only lowercase "
@@ -1384,7 +1419,7 @@ class TestOp:
         assert op.effective_category == compute
 
     def test_category_must_be_declared_by_dialect(self) -> None:
-        with pytest.raises(
+        with _raises(
             ValueError,
             match=(
                 r"Op 'vector\.load': category 'memory' is not declared "
@@ -1478,12 +1513,12 @@ class TestOp:
         # This should work:
         Op("test.op", doc="hello")
         # Positional args after name should fail:
-        with pytest.raises(TypeError):
+        with _raises(TypeError):
             Op("test.op", "hello")  # type: ignore[arg-type, misc]
 
     def test_format_field_validation_catches_typo(self) -> None:
         """Format referencing undeclared field is caught at declaration time."""
-        with pytest.raises(ValueError, match="undeclared fields"):
+        with _raises(ValueError, match="undeclared fields"):
             Op(
                 "test.bad",
                 operands=[Operand("input", ANY)],
@@ -1502,7 +1537,7 @@ class TestOp:
 
     def test_format_field_validation_descends_into_clause(self) -> None:
         """Clause payload fields are validated like top-level format fields."""
-        with pytest.raises(ValueError, match="undeclared fields"):
+        with _raises(ValueError, match="undeclared fields"):
             Op(
                 "test.bad",
                 operands=[Operand("input", ANY)],
@@ -1522,7 +1557,7 @@ class TestOp:
 
     def test_format_field_validation_index_list(self) -> None:
         """IndexList fields (both dynamic and static) are validated."""
-        with pytest.raises(ValueError, match="undeclared fields"):
+        with _raises(ValueError, match="undeclared fields"):
             Op(
                 "test.bad",
                 operands=[Operand("source", TILE)],
@@ -1535,9 +1570,7 @@ class TestOp:
 
     def test_region_arg_source_must_be_value_field(self) -> None:
         """Region arg_source must name a variadic value or FuncArgs field."""
-        with pytest.raises(
-            ValueError, match="arg_source references non-value/non-FuncArgs"
-        ):
+        with _raises(ValueError, match="arg_source references non-value/non-FuncArgs"):
             Op(
                 "test.bad",
                 attrs=[AttrDef("types", "string")],
@@ -1547,9 +1580,7 @@ class TestOp:
 
     def test_region_arg_source_validates_without_format(self) -> None:
         """Region arg_source is an op contract, not an assembly-format detail."""
-        with pytest.raises(
-            ValueError, match="arg_source references non-value/non-FuncArgs"
-        ):
+        with _raises(ValueError, match="arg_source references non-value/non-FuncArgs"):
             Op(
                 "test.bad",
                 regions=[RegionDef("body", arg_source="missing")],
@@ -1557,7 +1588,7 @@ class TestOp:
 
     def test_region_arg_source_must_be_variadic(self) -> None:
         """Region arg_source maps one region arg per source value."""
-        with pytest.raises(ValueError, match="must reference a variadic"):
+        with _raises(ValueError, match="must reference a variadic"):
             Op(
                 "test.bad",
                 operands=[Operand("input", INTEGER)],
@@ -1567,7 +1598,7 @@ class TestOp:
 
     def test_nested_scope_rejected(self) -> None:
         """Scope(...) is one-level only; nested Scope is a declaration error."""
-        with pytest.raises(ValueError, match="nested Scope is not supported"):
+        with _raises(ValueError, match="nested Scope is not supported"):
             Op(
                 "test.bad",
                 results=[Result("result", ANY)],
@@ -1600,7 +1631,7 @@ class TestEffects:
         assert not op.is_pure
 
     def test_pure_with_effects_raises(self) -> None:
-        with pytest.raises(ValueError, match="PURE.*effects"):
+        with _raises(ValueError, match="PURE.*effects"):
             Op(
                 "test.bad",
                 operands=[Operand("pool", POOL)],
@@ -1609,7 +1640,7 @@ class TestEffects:
             )
 
     def test_effect_on_nonexistent_operand_raises(self) -> None:
-        with pytest.raises(ValueError, match="not declared"):
+        with _raises(ValueError, match="not declared"):
             Op(
                 "test.bad",
                 operands=[Operand("input", POOL)],
@@ -1617,7 +1648,7 @@ class TestEffects:
             )
 
     def test_effect_on_non_resource_operand_raises(self) -> None:
-        with pytest.raises(ValueError, match="not allowed"):
+        with _raises(ValueError, match="not allowed"):
             Op(
                 "test.bad",
                 operands=[Operand("value", INTEGER)],
@@ -1625,11 +1656,11 @@ class TestEffects:
             )
 
     def test_unknown_effects_with_pure_raises(self) -> None:
-        with pytest.raises(ValueError, match="PURE.*UNKNOWN_EFFECTS"):
+        with _raises(ValueError, match="PURE.*UNKNOWN_EFFECTS"):
             Op("test.bad", traits=[PURE, UNKNOWN_EFFECTS])
 
     def test_unknown_effects_with_explicit_effects_raises(self) -> None:
-        with pytest.raises(ValueError, match="UNKNOWN_EFFECTS.*explicit"):
+        with _raises(ValueError, match="UNKNOWN_EFFECTS.*explicit"):
             Op(
                 "test.bad",
                 operands=[Operand("pool", POOL)],
@@ -1638,7 +1669,7 @@ class TestEffects:
             )
 
     def test_pure_with_non_deterministic_raises(self) -> None:
-        with pytest.raises(ValueError, match="PURE.*NON_DETERMINISTIC"):
+        with _raises(ValueError, match="PURE.*NON_DETERMINISTIC"):
             Op("test.bad", traits=[PURE, NON_DETERMINISTIC])
 
     def test_non_deterministic_not_pure(self) -> None:
@@ -1662,7 +1693,7 @@ class TestEffects:
         assert not op.is_pure
 
     def test_pure_with_unique_identity_raises(self) -> None:
-        with pytest.raises(ValueError, match="PURE.*UNIQUE_IDENTITY"):
+        with _raises(ValueError, match="PURE.*UNIQUE_IDENTITY"):
             Op("test.bad", traits=[PURE, UNIQUE_IDENTITY])
 
     def test_hint_not_pure(self) -> None:
@@ -1670,7 +1701,7 @@ class TestEffects:
         assert not op.is_pure
 
     def test_hint_with_explicit_effects_raises(self) -> None:
-        with pytest.raises(ValueError, match="HINT.*explicit effects"):
+        with _raises(ValueError, match="HINT.*explicit effects"):
             Op(
                 "test.bad",
                 operands=[Operand("pool", POOL)],
@@ -1679,19 +1710,19 @@ class TestEffects:
             )
 
     def test_hint_with_pure_raises(self) -> None:
-        with pytest.raises(ValueError, match="HINT.*PURE"):
+        with _raises(ValueError, match="HINT.*PURE"):
             Op("test.bad", traits=[HINT, PURE])
 
     def test_hint_with_unknown_effects_raises(self) -> None:
-        with pytest.raises(ValueError, match="HINT.*UNKNOWN_EFFECTS"):
+        with _raises(ValueError, match="HINT.*UNKNOWN_EFFECTS"):
             Op("test.bad", traits=[HINT, UNKNOWN_EFFECTS])
 
     def test_hint_with_non_deterministic_raises(self) -> None:
-        with pytest.raises(ValueError, match="HINT.*NON_DETERMINISTIC"):
+        with _raises(ValueError, match="HINT.*NON_DETERMINISTIC"):
             Op("test.bad", traits=[HINT, NON_DETERMINISTIC])
 
     def test_hint_with_convergent_raises(self) -> None:
-        with pytest.raises(ValueError, match="HINT.*CONVERGENT"):
+        with _raises(ValueError, match="HINT.*CONVERGENT"):
             Op("test.bad", traits=[HINT, CONVERGENT])
 
     def test_convergent_can_be_pure(self) -> None:
@@ -1699,27 +1730,27 @@ class TestEffects:
         assert op.is_pure
 
     def test_safe_to_speculate_conflicts_with_hint(self) -> None:
-        with pytest.raises(ValueError, match="SAFE_TO_SPECULATE.*HINT"):
+        with _raises(ValueError, match="SAFE_TO_SPECULATE.*HINT"):
             Op("test.bad", traits=[SAFE_TO_SPECULATE, HINT])
 
     def test_safe_to_speculate_conflicts_with_unknown_effects(self) -> None:
-        with pytest.raises(ValueError, match="SAFE_TO_SPECULATE.*UNKNOWN_EFFECTS"):
+        with _raises(ValueError, match="SAFE_TO_SPECULATE.*UNKNOWN_EFFECTS"):
             Op("test.bad", traits=[SAFE_TO_SPECULATE, UNKNOWN_EFFECTS])
 
     def test_safe_to_speculate_conflicts_with_non_deterministic(self) -> None:
-        with pytest.raises(ValueError, match="SAFE_TO_SPECULATE.*NON_DETERMINISTIC"):
+        with _raises(ValueError, match="SAFE_TO_SPECULATE.*NON_DETERMINISTIC"):
             Op("test.bad", traits=[SAFE_TO_SPECULATE, NON_DETERMINISTIC])
 
     def test_safe_to_speculate_conflicts_with_unique_identity(self) -> None:
-        with pytest.raises(ValueError, match="SAFE_TO_SPECULATE.*UNIQUE_IDENTITY"):
+        with _raises(ValueError, match="SAFE_TO_SPECULATE.*UNIQUE_IDENTITY"):
             Op("test.bad", traits=[SAFE_TO_SPECULATE, UNIQUE_IDENTITY])
 
     def test_safe_to_speculate_conflicts_with_convergent(self) -> None:
-        with pytest.raises(ValueError, match="SAFE_TO_SPECULATE.*CONVERGENT"):
+        with _raises(ValueError, match="SAFE_TO_SPECULATE.*CONVERGENT"):
             Op("test.bad", traits=[SAFE_TO_SPECULATE, CONVERGENT])
 
     def test_safe_to_speculate_with_explicit_effects_raises(self) -> None:
-        with pytest.raises(ValueError, match="SAFE_TO_SPECULATE.*explicit effects"):
+        with _raises(ValueError, match="SAFE_TO_SPECULATE.*explicit effects"):
             Op(
                 "test.bad",
                 operands=[Operand("pool", POOL)],

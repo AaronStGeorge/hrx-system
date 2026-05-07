@@ -343,6 +343,13 @@ static const loom_amdgpu_memory_address_attempt_t
         },
 };
 
+static const loom_amdgpu_memory_address_attempt_t
+    kAmdgpuDescriptorAddressAttempts[] = {
+        {
+            .kind = LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_BUFFER_RESOURCE,
+        },
+};
+
 typedef struct loom_amdgpu_memory_space_descriptor_domain_t {
   // Source memory-space fact matched by this row.
   loom_value_fact_memory_space_t memory_space;
@@ -1449,25 +1456,39 @@ static bool loom_amdgpu_try_select_ds_addtid_memory_descriptor(
   return true;
 }
 
+static bool loom_amdgpu_memory_access_offset_is_aligned(
+    const loom_amdgpu_memory_access_t* access, uint32_t byte_alignment,
+    loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
+  if (byte_alignment == 0) {
+    return false;
+  }
+  if ((access->source.static_byte_offset % (int64_t)byte_alignment) != 0) {
+    diagnostic->rejection_bits |=
+        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_B128_STATIC_ALIGNMENT;
+    return false;
+  }
+  for (uint8_t i = 0; i < access->source.dynamic_term_count; ++i) {
+    const loom_value_facts_t byte_facts =
+        access->source.dynamic_terms[i].byte_facts;
+    if (!loom_value_facts_is_zero(byte_facts) &&
+        !loom_value_facts_divisible_by(byte_facts, byte_alignment)) {
+      diagnostic->rejection_bits |=
+          LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_B128_DYNAMIC_ALIGNMENT;
+      diagnostic->dynamic_term_index = i;
+      return false;
+    }
+  }
+  return true;
+}
+
 static bool loom_amdgpu_memory_access_try_select_buffer(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_amdgpu_memory_operation_kind_t kind,
     loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
   if (access->payload_register_count == 4 &&
-      loom_low_source_memory_access_is_dynamic(&access->source)) {
-    for (uint8_t i = 0; i < access->source.dynamic_term_count; ++i) {
-      if ((access->source.dynamic_terms[i].byte_stride & 15) != 0) {
-        diagnostic->rejection_bits |=
-            LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_B128_DYNAMIC_ALIGNMENT;
-        return false;
-      }
-    }
-  }
-  if (access->payload_register_count == 4 &&
-      (access->source.static_byte_offset & 15) != 0) {
-    diagnostic->rejection_bits |=
-        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_B128_STATIC_ALIGNMENT;
+      !loom_amdgpu_memory_access_offset_is_aligned(
+          access, /*byte_alignment=*/16, diagnostic)) {
     return false;
   }
 
@@ -1836,6 +1857,10 @@ static bool loom_amdgpu_memory_access_select_address_form(
   if (descriptor_domain == LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_LDS) {
     attempts = kAmdgpuLdsAddressAttempts;
     attempt_count = IREE_ARRAYSIZE(kAmdgpuLdsAddressAttempts);
+  } else if (access->source.memory_space ==
+             LOOM_VALUE_FACT_MEMORY_SPACE_DESCRIPTOR) {
+    attempts = kAmdgpuDescriptorAddressAttempts;
+    attempt_count = IREE_ARRAYSIZE(kAmdgpuDescriptorAddressAttempts);
   }
   for (iree_host_size_t i = 0; i < attempt_count; ++i) {
     const loom_amdgpu_memory_address_attempt_result_t result =

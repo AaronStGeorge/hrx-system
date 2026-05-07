@@ -46,6 +46,7 @@ py_test(
     name = "core_test",
     srcs = [
         "diagnostics_test.py",
+        "dsl_test.py",
         "fields_test.py",
         "projected_region_test.py",
         "verify_test.py",
@@ -53,6 +54,7 @@ py_test(
     ],
     args = [
         "loom.diagnostics_test",
+        "loom.dsl_test",
         "loom.fields_test",
         "loom.projected_region_test",
         "loom.verify_test",

@@ -15,6 +15,7 @@
 #include "loom/codegen/low/lower_rules.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
+#include "loom/ir/facts.h"
 #include "loom/ir/module.h"
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/cfg/ops.h"
@@ -424,13 +425,26 @@ static void loom_low_lower_mark_rule_storage_demands(
       loom_low_lower_mark_value_storage_required(context, source_value_id);
     }
   }
-  if (rule->alias_ref_count == 0) {
+  if (rule->alias_ref_count == 0) return;
+
+  // Alias rules can erase projection ops whose operands are still referenced
+  // by facts consumed by later plans, such as dynamic byte offsets used during
+  // source-memory address emission. Exact operands are already captured by the
+  // facts themselves and do not need low SSA storage.
+  const loom_op_t* source_op = selected_plan->source_op;
+  const loom_value_fact_table_t* fact_table = context->lowering.fact_table;
+  if (loom_buffer_view_isa(source_op)) {
+    const loom_value_id_t byte_offset = loom_buffer_view_byte_offset(source_op);
+    int64_t exact_offset = 0;
+    if (fact_table == NULL ||
+        !loom_value_facts_as_exact_i64(
+            loom_value_fact_table_lookup(fact_table, byte_offset),
+            &exact_offset)) {
+      loom_low_lower_mark_value_storage_required(context, byte_offset);
+    }
     return;
   }
-  // Alias rules can erase projection ops whose trailing variadic operands are
-  // still referenced by facts consumed by later plans, such as dynamic subview
-  // offsets used during source-memory address emission.
-  const loom_op_t* source_op = selected_plan->source_op;
+
   const loom_op_vtable_t* vtable = loom_op_vtable(context->module, source_op);
   if (vtable == NULL || !iree_any_bit_set(vtable->vtable_flags,
                                           LOOM_OP_VTABLE_VARIADIC_OPERANDS)) {
@@ -439,6 +453,13 @@ static void loom_low_lower_mark_rule_storage_demands(
   const loom_value_id_t* operands = loom_op_const_operands(source_op);
   for (uint16_t i = vtable->fixed_operand_count; i < source_op->operand_count;
        ++i) {
+    int64_t exact_value = 0;
+    if (fact_table != NULL &&
+        loom_value_facts_as_exact_i64(
+            loom_value_fact_table_lookup(fact_table, operands[i]),
+            &exact_value)) {
+      continue;
+    }
     loom_low_lower_mark_value_storage_required(context, operands[i]);
   }
 }

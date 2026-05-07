@@ -43,6 +43,28 @@ static bool loom_index_cast_scalar_type(const loom_module_t* module,
   return true;
 }
 
+static bool loom_index_cast_to_offset_zero_extends_source(
+    loom_scalar_type_t input_scalar_type, loom_scalar_type_t result_scalar_type,
+    int32_t input_bitwidth) {
+  return result_scalar_type == LOOM_SCALAR_TYPE_OFFSET &&
+         loom_scalar_type_is_integer(input_scalar_type) && input_bitwidth < 63;
+}
+
+static loom_value_facts_t loom_index_cast_zero_extend_to_offset_facts(
+    loom_value_facts_t facts, int32_t input_bitwidth) {
+  const int64_t unsigned_extent = INT64_C(1) << input_bitwidth;
+  const int64_t unsigned_max = unsigned_extent - 1;
+  if (facts.range_lo >= 0) {
+    return loom_value_facts_clamp_domain(facts, 0, unsigned_max);
+  }
+  if (facts.range_hi < 0) {
+    return loom_value_facts_make(
+        facts.range_lo + unsigned_extent, facts.range_hi + unsigned_extent,
+        loom_gcd_i64(facts.known_divisor, unsigned_extent));
+  }
+  return loom_value_facts_make(0, unsigned_max, 1);
+}
+
 iree_status_t loom_index_cast_facts(loom_fact_context_t* context,
                                     const loom_module_t* module,
                                     const loom_op_t* op,
@@ -74,6 +96,13 @@ iree_status_t loom_index_cast_facts(loom_fact_context_t* context,
   int32_t result_bitwidth = loom_scalar_type_bitwidth(result_scalar_type);
   loom_value_facts_t facts =
       loom_value_facts_clamp_domain(operand_facts[0], input_lo, input_hi);
+
+  if (loom_index_cast_to_offset_zero_extends_source(
+          input_scalar_type, result_scalar_type, input_bitwidth)) {
+    result_facts[0] =
+        loom_index_cast_zero_extend_to_offset_facts(facts, input_bitwidth);
+    return iree_ok_status();
+  }
 
   if (input_bitwidth <= result_bitwidth) {
     result_facts[0] =

@@ -12,6 +12,7 @@
 #include "loom/codegen/low/memory_access.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
+#include "loom/ops/buffer/ops.h"
 #include "loom/ops/index/ops.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/vector/ops.h"
@@ -148,6 +149,21 @@ static bool loom_low_source_memory_access_value_as_workgroup_id(
   return true;
 }
 
+static void loom_low_source_memory_access_dynamic_index_source(
+    const loom_module_t* module, loom_value_id_t index,
+    loom_low_source_memory_dynamic_index_source_t* out_source,
+    loom_kernel_dimension_t* out_dimension) {
+  *out_source = LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE;
+  *out_dimension = LOOM_KERNEL_DIMENSION_COUNT_;
+  if (loom_low_source_memory_access_value_as_workitem_id(module, index,
+                                                         out_dimension)) {
+    *out_source = LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID;
+  } else if (loom_low_source_memory_access_value_as_workgroup_id(
+                 module, index, out_dimension)) {
+    *out_source = LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKGROUP_ID;
+  }
+}
+
 static bool loom_low_source_memory_access_collect_dynamic_axes(
     loom_attribute_t static_indices, uint8_t* out_dynamic_axes,
     uint8_t* out_dynamic_axis_count) {
@@ -240,42 +256,6 @@ static void loom_low_source_memory_access_fold_exact_dynamic_indices(
     ++folded_dynamic_axis_count;
   }
   *dynamic_axis_count = folded_dynamic_axis_count;
-}
-
-static bool loom_low_source_memory_access_add_view_base_byte_offset(
-    const loom_value_fact_table_t* fact_table, loom_value_id_t view_value_id,
-    loom_low_source_memory_access_plan_t* plan,
-    loom_low_source_memory_access_diagnostic_t* diagnostic,
-    int64_t* inout_static_byte_offset) {
-  loom_value_fact_view_reference_t view_reference = {0};
-  if (!loom_value_facts_query_view_reference(
-          &fact_table->context,
-          loom_value_fact_table_lookup(fact_table, view_value_id),
-          &view_reference)) {
-    diagnostic->rejection_bits |=
-        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VIEW_SOURCE;
-    return false;
-  }
-
-  int64_t view_base_byte_offset = 0;
-  if (!loom_low_source_memory_access_exact_i64(view_reference.base_byte_offset,
-                                               &view_base_byte_offset)) {
-    diagnostic->rejection_bits |=
-        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VIEW_BASE;
-    return false;
-  }
-  int64_t static_byte_offset = 0;
-  if (!iree_checked_add_i64(*inout_static_byte_offset, view_base_byte_offset,
-                            &static_byte_offset)) {
-    diagnostic->rejection_bits |=
-        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VIEW_BASE_OVERFLOW;
-    return false;
-  }
-  *inout_static_byte_offset = static_byte_offset;
-  plan->memory_space = view_reference.memory_space;
-  plan->root_value_id = view_reference.root_value_id;
-  plan->alias_scope_id = view_reference.alias_scope_id;
-  return true;
 }
 
 static bool loom_low_source_memory_access_vector_lane_count(
@@ -373,6 +353,21 @@ static bool loom_low_source_memory_access_dynamic_axis_byte_stride(
       return false;
   }
   return false;
+}
+
+static bool loom_low_source_memory_access_append_dynamic_term(
+    loom_low_source_memory_access_plan_t* plan,
+    const loom_low_source_memory_dynamic_term_t* term,
+    loom_low_source_memory_access_diagnostic_t* diagnostic) {
+  if (plan->dynamic_term_count >=
+      LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY) {
+    diagnostic->rejection_bits |=
+        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_DYNAMIC_INDEX_COUNT;
+    return false;
+  }
+  plan->dynamic_terms[plan->dynamic_term_count] = *term;
+  ++plan->dynamic_term_count;
+  return true;
 }
 
 static loom_value_facts_t loom_low_source_memory_access_axis_dimension_facts(
@@ -478,6 +473,29 @@ static bool loom_low_source_memory_access_scale_domain_down(
   return true;
 }
 
+static void loom_low_source_memory_dynamic_term_compute_index_byte_facts(
+    const loom_value_fact_table_t* fact_table, loom_value_facts_t index_facts,
+    int64_t byte_stride, const loom_value_id_t* stride_values,
+    uint8_t stride_value_count, loom_value_facts_t* out_facts) {
+  const loom_value_facts_t byte_stride_facts =
+      loom_value_facts_exact_i64(byte_stride);
+  loom_value_facts_muli(&index_facts, &byte_stride_facts, out_facts);
+  for (uint8_t i = 0; i < stride_value_count; ++i) {
+    loom_value_facts_t stride_facts = loom_value_facts_non_negative_extent(
+        loom_value_fact_table_lookup(fact_table, stride_values[i]));
+    loom_value_facts_muli(out_facts, &stride_facts, out_facts);
+  }
+}
+
+static void loom_low_source_memory_dynamic_term_compute_scaled_byte_facts(
+    const loom_value_fact_table_t* fact_table, loom_value_id_t index,
+    int64_t byte_stride, const loom_value_id_t* stride_values,
+    uint8_t stride_value_count, loom_value_facts_t* out_facts) {
+  loom_low_source_memory_dynamic_term_compute_index_byte_facts(
+      fact_table, loom_value_fact_table_lookup(fact_table, index), byte_stride,
+      stride_values, stride_value_count, out_facts);
+}
+
 static void loom_low_source_memory_dynamic_term_compute_byte_facts(
     const loom_value_fact_table_t* fact_table,
     const loom_vector_memory_access_t* vector_access, loom_value_id_t index,
@@ -494,14 +512,9 @@ static void loom_low_source_memory_dynamic_term_compute_byte_facts(
     index_facts = loom_low_source_memory_access_intersect_index_facts(
         index_facts, domain_facts);
   }
-  const loom_value_facts_t byte_stride_facts =
-      loom_value_facts_exact_i64(byte_stride);
-  loom_value_facts_muli(&index_facts, &byte_stride_facts, out_facts);
-  for (uint8_t i = 0; i < stride_value_count; ++i) {
-    loom_value_facts_t stride_facts = loom_value_facts_non_negative_extent(
-        loom_value_fact_table_lookup(fact_table, stride_values[i]));
-    loom_value_facts_muli(out_facts, &stride_facts, out_facts);
-  }
+  loom_low_source_memory_dynamic_term_compute_index_byte_facts(
+      fact_table, index_facts, byte_stride, stride_values, stride_value_count,
+      out_facts);
 }
 
 bool loom_low_source_memory_dynamic_offset_fits_unsigned_bit_count(
@@ -543,8 +556,6 @@ static bool loom_low_source_memory_access_scaled_index_from_value(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     loom_value_id_t value_id, uint32_t recursion_depth,
     loom_low_source_memory_scaled_index_t* out_scaled_index) {
-  value_id =
-      loom_low_source_memory_access_identity_source_value(module, value_id);
   *out_scaled_index = (loom_low_source_memory_scaled_index_t){
       .index = value_id,
       .multiplier = 1,
@@ -726,6 +737,110 @@ static bool loom_low_source_memory_access_scaled_dynamic_index(
   *out_index_offset = scaled_index.offset;
   *out_byte_stride = scaled_byte_stride;
   *out_static_byte_offset = new_static_byte_offset;
+  return true;
+}
+
+static bool loom_low_source_memory_access_view_base_value(
+    const loom_module_t* module, loom_value_id_t view_value_id,
+    loom_value_id_t* out_byte_offset) {
+  *out_byte_offset = LOOM_VALUE_ID_INVALID;
+  while (view_value_id < module->values.count) {
+    const loom_value_t* view_value = loom_module_value(module, view_value_id);
+    if (loom_value_is_block_arg(view_value)) {
+      return false;
+    }
+    const loom_op_t* defining_op = loom_value_def_op(view_value);
+    if (!defining_op) {
+      return false;
+    }
+    if (loom_view_refine_isa(defining_op)) {
+      view_value_id = loom_view_refine_source(defining_op);
+      continue;
+    }
+    if (loom_buffer_view_isa(defining_op)) {
+      *out_byte_offset = loom_buffer_view_byte_offset(defining_op);
+      return true;
+    }
+    return false;
+  }
+  return false;
+}
+
+static bool loom_low_source_memory_access_add_dynamic_view_base_byte_offset(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t view_value_id, loom_low_source_memory_access_plan_t* plan,
+    loom_low_source_memory_access_diagnostic_t* diagnostic,
+    int64_t* inout_static_byte_offset) {
+  loom_value_id_t byte_offset = LOOM_VALUE_ID_INVALID;
+  if (!loom_low_source_memory_access_view_base_value(module, view_value_id,
+                                                     &byte_offset)) {
+    diagnostic->rejection_bits |=
+        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VIEW_BASE;
+    return false;
+  }
+
+  loom_value_id_t dynamic_index = byte_offset;
+  int64_t index_multiplier = 1;
+  int64_t index_offset = 0;
+  int64_t byte_stride = 1;
+  int64_t static_byte_offset = *inout_static_byte_offset;
+  (void)loom_low_source_memory_access_scaled_dynamic_index(
+      module, fact_table, byte_offset, byte_stride, static_byte_offset,
+      &dynamic_index, &index_multiplier, &index_offset, &byte_stride,
+      &static_byte_offset);
+  *inout_static_byte_offset = static_byte_offset;
+
+  loom_low_source_memory_dynamic_term_t term = {
+      .index = dynamic_index,
+      .axis = LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_AXIS_NONE,
+      .byte_stride = byte_stride,
+      .byte_shift = LOOM_LOW_SOURCE_MEMORY_ACCESS_BYTE_SHIFT_NONE,
+  };
+  loom_low_source_memory_access_dynamic_index_source(
+      module, dynamic_index, &term.source, &term.dimension);
+  (void)loom_low_source_memory_access_power_of_two_shift(byte_stride,
+                                                         &term.byte_shift);
+  loom_low_source_memory_dynamic_term_compute_scaled_byte_facts(
+      fact_table, dynamic_index, byte_stride, NULL, 0, &term.byte_facts);
+  return loom_low_source_memory_access_append_dynamic_term(plan, &term,
+                                                           diagnostic);
+}
+
+static bool loom_low_source_memory_access_add_view_base_byte_offset(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t view_value_id, loom_low_source_memory_access_plan_t* plan,
+    loom_low_source_memory_access_diagnostic_t* diagnostic,
+    int64_t* inout_static_byte_offset) {
+  loom_value_fact_view_reference_t view_reference = {0};
+  if (!loom_value_facts_query_view_reference(
+          &fact_table->context,
+          loom_value_fact_table_lookup(fact_table, view_value_id),
+          &view_reference)) {
+    diagnostic->rejection_bits |=
+        LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VIEW_SOURCE;
+    return false;
+  }
+
+  int64_t view_base_byte_offset = 0;
+  if (loom_low_source_memory_access_exact_i64(view_reference.base_byte_offset,
+                                              &view_base_byte_offset)) {
+    int64_t static_byte_offset = 0;
+    if (!iree_checked_add_i64(*inout_static_byte_offset, view_base_byte_offset,
+                              &static_byte_offset)) {
+      diagnostic->rejection_bits |=
+          LOOM_LOW_SOURCE_MEMORY_ACCESS_REJECTION_VIEW_BASE_OVERFLOW;
+      return false;
+    }
+    *inout_static_byte_offset = static_byte_offset;
+  } else if (!loom_low_source_memory_access_add_dynamic_view_base_byte_offset(
+                 module, fact_table, view_value_id, plan, diagnostic,
+                 inout_static_byte_offset)) {
+    return false;
+  }
+
+  plan->memory_space = view_reference.memory_space;
+  plan->root_value_id = view_reference.root_value_id;
+  plan->alias_scope_id = view_reference.alias_scope_id;
   return true;
 }
 
@@ -985,7 +1100,7 @@ static bool loom_low_source_memory_access_plan_from_components(
     return false;
   }
   if (!loom_low_source_memory_access_add_view_base_byte_offset(
-          fact_table, view_value_id, out_plan, out_diagnostic,
+          module, fact_table, view_value_id, out_plan, out_diagnostic,
           &static_byte_offset)) {
     return false;
   }
@@ -1021,20 +1136,6 @@ static bool loom_low_source_memory_access_plan_from_components(
         module, fact_table, dynamic_index, byte_stride, static_byte_offset,
         &dynamic_index, &dynamic_index_multiplier, &dynamic_index_offset,
         &byte_stride, &static_byte_offset);
-    loom_kernel_dimension_t dynamic_index_dimension =
-        LOOM_KERNEL_DIMENSION_COUNT_;
-    loom_low_source_memory_dynamic_index_source_t dynamic_index_source =
-        LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE;
-    if (loom_low_source_memory_access_value_as_workitem_id(
-            module, dynamic_index, &dynamic_index_dimension)) {
-      dynamic_index_source =
-          LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKITEM_ID;
-    } else if (loom_low_source_memory_access_value_as_workgroup_id(
-                   module, dynamic_index, &dynamic_index_dimension)) {
-      dynamic_index_source =
-          LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKGROUP_ID;
-    }
-
     uint32_t byte_shift = LOOM_LOW_SOURCE_MEMORY_ACCESS_BYTE_SHIFT_NONE;
     (void)loom_low_source_memory_access_power_of_two_shift(byte_stride,
                                                            &byte_shift);
@@ -1043,23 +1144,25 @@ static bool loom_low_source_memory_access_plan_from_components(
         fact_table, &vector_access, dynamic_index, dynamic_axis,
         dynamic_index_multiplier, dynamic_index_offset, byte_stride,
         stride_values, stride_value_count, &byte_facts);
-    out_plan->dynamic_terms[i] = (loom_low_source_memory_dynamic_term_t){
+    loom_low_source_memory_dynamic_term_t term = {
         .index = dynamic_index,
-        .source = dynamic_index_source,
-        .dimension = dynamic_index_dimension,
         .axis = dynamic_axis,
         .byte_stride = byte_stride,
         .byte_facts = byte_facts,
         .byte_shift = byte_shift,
         .stride_value_count = stride_value_count,
     };
+    loom_low_source_memory_access_dynamic_index_source(
+        module, dynamic_index, &term.source, &term.dimension);
     for (uint8_t stride_ordinal = 0; stride_ordinal < stride_value_count;
          ++stride_ordinal) {
-      out_plan->dynamic_terms[i].stride_values[stride_ordinal] =
-          stride_values[stride_ordinal];
+      term.stride_values[stride_ordinal] = stride_values[stride_ordinal];
+    }
+    if (!loom_low_source_memory_access_append_dynamic_term(out_plan, &term,
+                                                           out_diagnostic)) {
+      return false;
     }
   }
-  out_plan->dynamic_term_count = dynamic_axis_count;
   out_plan->static_byte_offset = static_byte_offset;
   return true;
 }

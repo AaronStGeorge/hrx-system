@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "loom/error/error_catalog.h"
+#include "loom/ir/scalar_type.h"
 #include "loom/verify/verify_diagnostics.h"
 #include "loom/verify/verify_structure.h"
 
@@ -531,8 +532,26 @@ static void loom_verify_emit_value_field_constraint(
                               error->param_count < 3 ? error->param_count : 3);
 }
 
+static bool loom_verify_attr_literal_fits_scalar_type(
+    loom_attribute_t attr, loom_scalar_type_t scalar_type,
+    int64_t* out_actual_value) {
+  if (attr.kind != LOOM_ATTR_I64) {
+    return true;
+  }
+  int64_t lo = 0;
+  int64_t hi = 0;
+  if (!loom_scalar_type_integer_domain(scalar_type, &lo, &hi)) {
+    return true;
+  }
+  const int64_t value = loom_attr_as_i64(attr);
+  *out_actual_value = value;
+  return value >= lo && value <= hi;
+}
+
 // ATTR_MATCHES_ELEMENT_TYPE: an attribute literal payload kind matches the
-// scalar element type of a value field. Args: (attr field, value field).
+// scalar element type of a value field and, for integer-like payloads, is
+// representable in that element type's value domain. Args: (attr field, value
+// field).
 static void loom_verify_relation_attr_matches_element_type(
     loom_verify_state_t* state, const loom_op_t* op,
     const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
@@ -557,6 +576,14 @@ static void loom_verify_relation_attr_matches_element_type(
   loom_attr_kind_t expected_kind = LOOM_ATTR_ANY;
   if (loom_attr_matches_scalar_type(attr, loom_type_element_type(value_type),
                                     &expected_kind)) {
+    int64_t actual_value = 0;
+    if (loom_verify_attr_literal_fits_scalar_type(
+            attr, loom_type_element_type(value_type), &actual_value)) {
+      return;
+    }
+    loom_verify_emit_i64_attr_constraint(state, op, vtable, attr_ref,
+                                         actual_value,
+                                         IREE_SV("element type domain"));
     return;
   }
   loom_verify_emit_attr_kind_mismatch(

@@ -61,6 +61,12 @@ const char* loom_scalar_type_name(loom_scalar_type_t type);
 // Index and offset return 64.
 int32_t loom_scalar_type_bitwidth(loom_scalar_type_t type);
 
+// Returns the signed i64 value domain used to reason about integer-like scalar
+// values of |type|. Offset is represented as the non-negative address domain
+// because IR integer literals are signed i64 payloads.
+bool loom_scalar_type_integer_domain(loom_scalar_type_t type, int64_t* out_lo,
+                                     int64_t* out_hi);
+
 // Parses a scalar type name. Returns true on success.
 bool loom_scalar_type_parse(iree_string_view_t name,
                             loom_scalar_type_t* out_type);

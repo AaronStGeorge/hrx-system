@@ -40,28 +40,6 @@ ERR_AMDGPU_001 = ErrorDef(
     ),
 )
 
-# ERR_AMDGPU_002: AMDGPU buffer view byte offset is not statically encodable.
-ERR_AMDGPU_002 = ErrorDef(
-    domain=ErrorDomain.AMDGPU,
-    code=2,
-    severity=Severity.ERROR,
-    summary="AMDGPU buffer view byte offset is not statically encodable.",
-    message=(
-        "AMDGPU target '{target_key}' export '{export_name}' config "
-        "'{config_key}' rejected '{op_name}' field '{field_name}' in "
-        "'@{function_name}': byte offset must be an exact non-negative static "
-        "integer"
-    ),
-    params=(
-        *_TARGET_CONTEXT_PARAMS,
-        ErrorParam("field_name", ParamKind.STRING),
-    ),
-    fix_hint=(
-        "Propagate an exact non-negative byte-offset fact before AMDGPU "
-        "target-low lowering"
-    ),
-)
-
 # ERR_AMDGPU_003: AMDGPU processor override is unknown.
 ERR_AMDGPU_003 = ErrorDef(
     domain=ErrorDomain.AMDGPU,
@@ -498,7 +476,6 @@ ERR_AMDGPU_025 = ErrorDef(
 
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
-    ERR_AMDGPU_002,
     ERR_AMDGPU_003,
     ERR_AMDGPU_004,
     ERR_AMDGPU_005,

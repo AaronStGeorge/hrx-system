@@ -1786,7 +1786,7 @@ def PositiveBitWidthAttr(attr: str) -> Constraint:
 
 
 def _attr_matches_scalar_type(value: Any, element_type: Any) -> bool:
-    """Returns true if a Python literal can spell a scalar element payload."""
+    """Returns true if a Python literal can represent a scalar element payload."""
     from loom.ir import ScalarType, ScalarTypeKind
 
     if not isinstance(element_type, ScalarType):
@@ -1802,7 +1802,14 @@ def _attr_matches_scalar_type(value: Any, element_type: Any) -> bool:
         ScalarTypeKind.I32,
         ScalarTypeKind.I64,
     }:
-        return type(value) is int
+        if type(value) is not int:
+            return False
+        if element_kind == ScalarTypeKind.OFFSET:
+            return value >= 0
+        if element_kind in {ScalarTypeKind.INDEX, ScalarTypeKind.I64}:
+            return -(1 << 63) <= value <= (1 << 63) - 1
+        bitwidth = element_type.bitwidth
+        return -(1 << (bitwidth - 1)) <= value <= (1 << (bitwidth - 1)) - 1
     if element_kind in {
         ScalarTypeKind.F8E4M3,
         ScalarTypeKind.F8E5M2,
@@ -1816,7 +1823,7 @@ def _attr_matches_scalar_type(value: Any, element_type: Any) -> bool:
 
 
 def AttrMatchesElementType(attr: str, field: str) -> Constraint:
-    """An attribute literal kind must match a field's scalar element type."""
+    """An attribute literal must fit a field's scalar element type."""
 
     def _validate(values: dict[str, Any]) -> tuple[bool, str]:
         value = values.get(attr)
@@ -1844,7 +1851,7 @@ def AttrMatchesElementType(attr: str, field: str) -> Constraint:
 
 
 def LiteralMatchesElementType(literal: str, field: str) -> Constraint:
-    """A literal payload kind must match a field's scalar element type."""
+    """A literal payload must fit a field's scalar element type."""
 
     def _validate(values: dict[str, Any]) -> tuple[bool, str]:
         value = values.get(literal)

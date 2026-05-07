@@ -105,9 +105,10 @@ class SourceMemoryPlanTest : public ::testing::Test {
 
   loom_value_id_t BuildNoalias(loom_value_id_t buffer) {
     loom_op_t* op = nullptr;
+    const loom_type_t result_type = loom_type_buffer();
     IREE_CHECK_OK(loom_buffer_assume_noalias_build(
-        &builder_, buffer, loom_type_buffer(), LOOM_LOCATION_UNKNOWN, &op));
-    return loom_buffer_assume_noalias_result(op);
+        &builder_, &buffer, 1, &result_type, 1, LOOM_LOCATION_UNKNOWN, &op));
+    return loom_buffer_assume_noalias_results(op).values[0];
   }
 
   loom_op_t* BuildOffsetConstant(int64_t value) {
