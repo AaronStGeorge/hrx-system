@@ -20,6 +20,7 @@
 
 enum {
   LOOM_AMDGPU_FRAGMENT_VIEW_RANK = 2,
+  LOOM_AMDGPU_FRAGMENT_LANE_MODULUS = 16,
 };
 
 typedef struct loom_amdgpu_fragment_memory_environment_t {
@@ -60,6 +61,15 @@ typedef struct loom_amdgpu_fragment_memory_diagnostic_t {
   // Stable constraint key identifying the first failed representation contract.
   iree_string_view_t constraint_key;
 } loom_amdgpu_fragment_memory_diagnostic_t;
+
+typedef struct loom_amdgpu_fragment_lane_ids_t {
+  // Full subgroup lane id.
+  loom_value_id_t lane;
+  // Lane id modulo the fragment row/column tile.
+  loom_value_id_t lane_mod;
+  // Lane id divided by the fragment row/column tile.
+  loom_value_id_t lane_div;
+} loom_amdgpu_fragment_lane_ids_t;
 
 static bool loom_amdgpu_fragment_memory_reject(
     loom_amdgpu_fragment_memory_diagnostic_t* diagnostic,
@@ -701,7 +711,7 @@ static iree_status_t loom_amdgpu_emit_fragment_memory_vaddr(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_matrix_fragment_layout_t* layout,
     const loom_amdgpu_fragment_memory_plan_t* plan, uint16_t register_index,
-    loom_value_id_t low_lane_mod, loom_value_id_t low_lane_div,
+    const loom_amdgpu_fragment_lane_ids_t* lane_ids,
     loom_value_id_t low_resource, loom_type_t vgpr_type,
     loom_value_id_t* out_low_vaddr) {
   *out_low_vaddr = LOOM_VALUE_ID_INVALID;
@@ -738,10 +748,23 @@ static iree_status_t loom_amdgpu_emit_fragment_memory_vaddr(
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fragment_memory_dynamic_origin_terms(
       context, source_op, plan, vgpr_type, &low_accumulator));
 
+  if (lane_mod_stride != 0 && lane_div_stride != 0 &&
+      (uint64_t)lane_mod_stride * LOOM_AMDGPU_FRAGMENT_LANE_MODULUS ==
+          lane_div_stride) {
+    loom_value_id_t low_term = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_scale_u32(
+        context, source_op, lane_ids->lane, lane_mod_stride,
+        LOOM_AMDGPU_VGPR_SCALE_U32_FLAG_VALUE_UNSIGNED_24, vgpr_type,
+        &low_term));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fragment_memory_add_term(
+        context, source_op, low_term, vgpr_type, &low_accumulator));
+    lane_mod_stride = 0;
+    lane_div_stride = 0;
+  }
   if (lane_div_stride != 0) {
     loom_value_id_t low_term = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_scale_u32(
-        context, source_op, low_lane_div, lane_div_stride,
+        context, source_op, lane_ids->lane_div, lane_div_stride,
         LOOM_AMDGPU_VGPR_SCALE_U32_FLAG_VALUE_UNSIGNED_24, vgpr_type,
         &low_term));
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fragment_memory_add_term(
@@ -750,7 +773,7 @@ static iree_status_t loom_amdgpu_emit_fragment_memory_vaddr(
   if (lane_mod_stride != 0) {
     loom_value_id_t low_term = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_scale_u32(
-        context, source_op, low_lane_mod, lane_mod_stride,
+        context, source_op, lane_ids->lane_mod, lane_mod_stride,
         LOOM_AMDGPU_VGPR_SCALE_U32_FLAG_VALUE_UNSIGNED_24, vgpr_type,
         &low_term));
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fragment_memory_add_term(
@@ -829,19 +852,21 @@ static iree_status_t loom_amdgpu_make_fragment_memory_attrs(
 
 static iree_status_t loom_amdgpu_emit_fragment_memory_lane_ids(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_type_t vgpr_type, loom_value_id_t* out_low_lane_mod,
-    loom_value_id_t* out_low_lane_div) {
-  *out_low_lane_mod = LOOM_VALUE_ID_INVALID;
-  *out_low_lane_div = LOOM_VALUE_ID_INVALID;
-  loom_value_id_t low_lane = LOOM_VALUE_ID_INVALID;
+    loom_type_t vgpr_type, loom_amdgpu_fragment_lane_ids_t* out_lane_ids) {
+  *out_lane_ids = (loom_amdgpu_fragment_lane_ids_t){
+      .lane = LOOM_VALUE_ID_INVALID,
+      .lane_mod = LOOM_VALUE_ID_INVALID,
+      .lane_div = LOOM_VALUE_ID_INVALID,
+  };
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_current_subgroup_lane_id(
-      context, source_op, vgpr_type, &low_lane));
+      context, source_op, vgpr_type, &out_lane_ids->lane));
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_literal(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT, low_lane,
-      15, vgpr_type, out_low_lane_mod));
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
+      out_lane_ids->lane, LOOM_AMDGPU_FRAGMENT_LANE_MODULUS - 1, vgpr_type,
+      &out_lane_ids->lane_mod));
   return loom_amdgpu_emit_vgpr_shift(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT, 4,
-      low_lane, vgpr_type, out_low_lane_div);
+      out_lane_ids->lane, vgpr_type, &out_lane_ids->lane_div);
 }
 
 static iree_status_t loom_amdgpu_emit_fragment_load_packet(
@@ -904,10 +929,9 @@ iree_status_t loom_amdgpu_lower_vector_fragment_load(
 
   loom_type_t vgpr_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
-  loom_value_id_t low_lane_mod = LOOM_VALUE_ID_INVALID;
-  loom_value_id_t low_lane_div = LOOM_VALUE_ID_INVALID;
+  loom_amdgpu_fragment_lane_ids_t lane_ids;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fragment_memory_lane_ids(
-      context, source_op, vgpr_type, &low_lane_mod, &low_lane_div));
+      context, source_op, vgpr_type, &lane_ids));
 
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
@@ -917,8 +941,8 @@ iree_status_t loom_amdgpu_lower_vector_fragment_load(
   for (uint16_t i = 0; i < plan->register_count; ++i) {
     loom_value_id_t low_vaddr = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fragment_memory_vaddr(
-        context, source_op, layout, plan, i, low_lane_mod, low_lane_div,
-        low_resource, vgpr_type, &low_vaddr));
+        context, source_op, layout, plan, i, &lane_ids, low_resource, vgpr_type,
+        &low_vaddr));
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fragment_load_packet(
         context, source_op, plan, low_vaddr, low_resource, vgpr_type,
         &low_registers[i]));
@@ -950,10 +974,9 @@ iree_status_t loom_amdgpu_lower_vector_fragment_store(
 
   loom_type_t vgpr_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &vgpr_type));
-  loom_value_id_t low_lane_mod = LOOM_VALUE_ID_INVALID;
-  loom_value_id_t low_lane_div = LOOM_VALUE_ID_INVALID;
+  loom_amdgpu_fragment_lane_ids_t lane_ids;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fragment_memory_lane_ids(
-      context, source_op, vgpr_type, &low_lane_mod, &low_lane_div));
+      context, source_op, vgpr_type, &lane_ids));
 
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
@@ -968,8 +991,8 @@ iree_status_t loom_amdgpu_lower_vector_fragment_store(
         context, source_op, low_payload, i, vgpr_type, &low_payload_register));
     loom_value_id_t low_vaddr = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fragment_memory_vaddr(
-        context, source_op, layout, plan, i, low_lane_mod, low_lane_div,
-        low_resource, vgpr_type, &low_vaddr));
+        context, source_op, layout, plan, i, &lane_ids, low_resource, vgpr_type,
+        &low_vaddr));
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fragment_store_packet(
         context, source_op, plan, low_vaddr, low_payload_register,
         low_resource));
