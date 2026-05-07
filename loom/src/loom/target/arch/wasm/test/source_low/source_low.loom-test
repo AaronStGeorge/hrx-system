@@ -2,7 +2,6 @@
 // RUN: emit source-low output=low
 
 wasm.target<simd128> @target
-
 func.def target(@target) @i32x4_arith(%lhs: vector<4xi32>, %rhs: vector<4xi32>) -> (vector<4xi32>) {
   %sum = vector.addi %lhs, %rhs : vector<4xi32>
   %diff = vector.subi %sum, %rhs : vector<4xi32>
@@ -19,7 +18,6 @@ low.func.def target(@target) abi(wasm_function) @i32x4_arith(%lhs: reg<wasm.v128
 // ====
 
 wasm.target<simd128> @target
-
 func.def target(@target) @f32x4_arith(%lhs: vector<4xf32>, %rhs: vector<4xf32>) -> (vector<4xf32>) {
   %sum = vector.addf %lhs, %rhs : vector<4xf32>
   %product = vector.mulf %sum, %rhs : vector<4xf32>
@@ -36,7 +34,6 @@ low.func.def target(@target) abi(wasm_function) @f32x4_arith(%lhs: reg<wasm.v128
 // ====
 
 wasm.target<simd128> @target
-
 func.def target(@target) @f32x4_lane_extract(%v: vector<4xf32>, %x: f32) -> (f32) {
   %lane = vector.extract %v[2] : vector<4xf32> -> f32
   %sum = scalar.addf %lane, %x : f32
@@ -53,7 +50,6 @@ low.func.def target(@target) abi(wasm_function) @f32x4_lane_extract(%v: reg<wasm
 // ====
 
 wasm.target<simd128> @target
-
 func.def target(@target) @f32x4_lane_edit(%v: vector<4xf32>, %x: f32) -> (vector<4xf32>) {
   %lane = vector.extract %v[1] : vector<4xf32> -> f32
   %sum = scalar.addf %lane, %x : f32
@@ -72,7 +68,6 @@ low.func.def target(@target) abi(wasm_function) @f32x4_lane_edit(%v: reg<wasm.v1
 // ====
 
 wasm.target<simd128> @target
-
 func.def target(@target) @i32x4_splat_add(%value: i32, %rhs: vector<4xi32>) -> (vector<4xi32>) {
   %splat = vector.splat %value : vector<4xi32>
   %sum = vector.addi %splat, %rhs : vector<4xi32>
@@ -89,7 +84,6 @@ low.func.def target(@target) abi(wasm_function) @i32x4_splat_add(%value: reg<was
 // ====
 
 wasm.target<simd128> @target
-
 func.def target(@target) @i32x4_lane_edit(%v: vector<4xi32>, %x: i32) -> (vector<4xi32>) {
   %lane = vector.extract %v[1] : vector<4xi32> -> i32
   %sum = scalar.addi %lane, %x : i32
@@ -108,7 +102,6 @@ low.func.def target(@target) abi(wasm_function) @i32x4_lane_edit(%v: reg<wasm.v1
 // ====
 
 wasm.target<simd128> @target
-
 func.def target(@target) @i32x4_shuffle(%v: vector<4xi32>) -> (vector<4xi32>) {
   %shuffled = vector.shuffle<[3, 2, 1, 0]> %v : vector<4xi32>
   func.return %shuffled : vector<4xi32>
@@ -123,7 +116,6 @@ low.func.def target(@target) abi(wasm_function) @i32x4_shuffle(%v: reg<wasm.v128
 // ====
 
 wasm.target<simd128> @target
-
 func.def target(@target) @i32x4_shuffle_reduce(%v: vector<4xi32>, %init: i32) -> (i32) {
   %reversed = vector.shuffle<[3, 2, 1, 0]> %v : vector<4xi32>
   %sum = vector.reduce<addi> %reversed, %init : vector<4xi32>, i32
@@ -147,7 +139,6 @@ low.func.def target(@target) abi(wasm_function) @i32x4_shuffle_reduce(%v: reg<wa
 // ====
 
 wasm.target<simd128> @target
-
 func.def target(@target) @f32x4_shuffle(%v: vector<4xf32>) -> (vector<4xf32>) {
   %shuffled = vector.shuffle<[3, 1, 2, 0]> %v : vector<4xf32>
   func.return %shuffled : vector<4xf32>
@@ -162,7 +153,6 @@ low.func.def target(@target) abi(wasm_function) @f32x4_shuffle(%v: reg<wasm.v128
 // ====
 
 wasm.target<simd128> @target
-
 func.def target(@target) @f32x4_shuffle_reduce(%v: vector<4xf32>, %init: f32) -> (f32) {
   %shuffled = vector.shuffle<[3, 1, 2, 0]> %v : vector<4xf32>
   %sum = vector.reduce<addf> %shuffled, %init : vector<4xf32>, f32
@@ -186,7 +176,6 @@ low.func.def target(@target) abi(wasm_function) @f32x4_shuffle_reduce(%v: reg<wa
 // ====
 
 wasm.target<simd128> @target
-
 func.def target(@target) @i32x4_select(%lhs: vector<4xi32>, %rhs: vector<4xi32>, %true_value: vector<4xi32>, %false_value: vector<4xi32>) -> (vector<4xi32>) {
   %mask = vector.cmpi slt, %lhs, %rhs : vector<4xi32> -> vector<4xi1>
   %selected = vector.select %mask, %true_value, %false_value : vector<4xi32>
@@ -203,7 +192,6 @@ low.func.def target(@target) abi(wasm_function) @i32x4_select(%lhs: reg<wasm.v12
 // ====
 
 wasm.target<simd128> @target
-
 func.def target(@target) @f32x4_select(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %true_value: vector<4xf32>, %false_value: vector<4xf32>) -> (vector<4xf32>) {
   %mask = vector.cmpf olt, %lhs, %rhs : vector<4xf32> -> vector<4xi1>
   %selected = vector.select %mask, %true_value, %false_value : vector<4xf32>
@@ -220,7 +208,6 @@ low.func.def target(@target) abi(wasm_function) @f32x4_select(%lhs: reg<wasm.v12
 // ====
 
 wasm.target<simd128> @target
-
 func.def target(@target) @i32x4_memory_copy(%input: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<4xi32, #dense>
@@ -240,7 +227,6 @@ low.func.def target(@target) abi(wasm_function) @i32x4_memory_copy(%input_view: 
 // ====
 
 wasm.target<simd128> @target
-
 func.def target(@target) @i32x4_memory_indexed(%input: buffer, %output: buffer, %i: index) {
   %bounded_i = index.assume %i [range(%i, 0, 12)] : index
   %zero = index.constant 0 : offset
@@ -257,9 +243,7 @@ low.func.def target(@target) abi(wasm_function) @i32x4_memory_indexed(%input_vie
   %12 = i32.mul %bounded_i, %11
   %13 = i32.add %input_view, %12
   %loaded = v128.load %13
-  %15 = i32.const 4
-  %16 = i32.mul %bounded_i, %15
-  %17 = i32.add %output_view, %16
+  %17 = i32.add %output_view, %12
   v128.store %17, %loaded
   return
 }
@@ -267,7 +251,6 @@ low.func.def target(@target) abi(wasm_function) @i32x4_memory_indexed(%input_vie
 // ====
 
 wasm.target<simd128> @target
-
 func.def target(@target) @f32x4_memory_copy(%input: buffer, %output: buffer) {
   %zero = index.constant 0 : offset
   %input_view = buffer.view %input[%zero] : buffer -> view<4xf32, #dense>
@@ -287,7 +270,6 @@ low.func.def target(@target) abi(wasm_function) @f32x4_memory_copy(%input_view: 
 // ====
 
 wasm.target<simd128> @target
-
 func.def target(@target) @f32x4_memory_indexed_add(%lhs: buffer, %rhs: buffer, %output: buffer, %i: index) {
   %bounded_i = index.assume %i [range(%i, 0, 12)] : index
   %zero = index.constant 0 : offset
@@ -307,14 +289,10 @@ low.func.def target(@target) abi(wasm_function) @f32x4_memory_indexed_add(%lhs_v
   %17 = i32.mul %bounded_i, %16
   %18 = i32.add %lhs_view, %17
   %lhs_v = v128.load %18
-  %20 = i32.const 4
-  %21 = i32.mul %bounded_i, %20
-  %22 = i32.add %rhs_view, %21
+  %22 = i32.add %rhs_view, %17
   %rhs_v = v128.load %22
   %sum = f32x4.add %lhs_v, %rhs_v
-  %25 = i32.const 4
-  %26 = i32.mul %bounded_i, %25
-  %27 = i32.add %output_view, %26
+  %27 = i32.add %output_view, %17
   v128.store %27, %sum
   return
 }
