@@ -404,6 +404,48 @@ def _address_shift_rules(
     return tuple(rules)
 
 
+def _index_madd_sgpr_rule() -> DescriptorRule:
+    multiply = _descriptor("amdgpu.s_mul_i32")
+    add = _descriptor("amdgpu.s_add_u32")
+    return DescriptorRule(
+        source_op=index.index_madd,
+        descriptor=multiply,
+        guards=(
+            Guard.value_type("a", _INDEX),
+            Guard.value_type("b", _INDEX),
+            Guard.value_type("c", _INDEX),
+            Guard.value_type("result", _INDEX),
+            Guard.value_unsigned_bit_count(
+                "result",
+                32,
+                diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+            ),
+            Guard.low_value_register_class("a", "amdgpu.sgpr"),
+            Guard.low_value_register_class("b", "amdgpu.sgpr"),
+            Guard.low_value_register_class("c", "amdgpu.sgpr"),
+            Guard.low_value_register_class("result", "amdgpu.sgpr"),
+            Guard.descriptor_available(multiply),
+            Guard.descriptor_available(add),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=multiply,
+                operands={"lhs": ValueRef.operand("a"), "rhs": ValueRef.operand("b")},
+                results={"dst": ValueRef.temporary("product")},
+                result_types={"dst": ValueRef.result("result")},
+            ),
+            EmitDescriptorOp(
+                descriptor=add,
+                operands={
+                    "lhs": ValueRef.temporary("product"),
+                    "rhs": ValueRef.operand("c"),
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
 def _rules() -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
     rules.extend(
@@ -524,6 +566,7 @@ def _rules() -> tuple[DescriptorRule, ...]:
             "amdgpu.v_lshrrev_b32.lit",
         )
     )
+    rules.append(_index_madd_sgpr_rule())
     return tuple(rules)
 
 

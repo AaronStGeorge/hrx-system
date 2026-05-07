@@ -19,6 +19,27 @@ low.func.def target(@target) abi(hal_kernel) @index_uniform_multiply(%bounded_lh
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @index_uniform_madd(%row_i32: i32, %column_i32: i32) -> (index) {
+  %row_index = index.cast %row_i32 : i32 to index
+  %column_index = index.cast %column_i32 : i32 to index
+  %row = index.assume %row_index [range(%row_index, 0, 7)] : index
+  %column = index.assume %column_index [range(%column_index, 0, 6)] : index
+  %row_stride = index.constant 7 : index
+  %linear = index.madd %row, %row_stride, %column : index
+  func.return %linear : index
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @index_uniform_madd(%row: reg<amdgpu.sgpr>, %column: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %row_stride = s_mov_b32 7
+  %13 = s_mul_i32 %row, %row_stride
+  %linear = s_add_u32 %13, %column
+  return %linear
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @index_uniform_shift_mask(%value: i32) -> (index, index) {
   %value_index = index.cast %value : i32 to index
   %bounded_value = index.assume %value_index [range(%value_index, 0, 1024)] : index
