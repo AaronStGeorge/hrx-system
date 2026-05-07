@@ -704,6 +704,7 @@ iree_c_embed_data(
     "execution/testdata/gfx11_wmma_lds_roundtrip.loom"
     "execution/testdata/gfx11_wmma_zero.loom"
     "execution/testdata/lds_b128_roundtrip.loom"
+    "execution/testdata/workgroup_reduce_maxnumf.loom"
   C_FILE_OUTPUT
     "execution/amdgpu_hal_testdata.c"
   H_FILE_OUTPUT
@@ -729,6 +730,7 @@ loom_cc_test(
     ::target_record_table
     iree::base
     loom::src::loom::ops::op_registry
+    loom::src::loom::tooling::compile::pipeline
     loom::src::loom::tooling::execution::compile_options
     loom::src::loom::tooling::execution::execution_provider
     loom::src::loom::tooling::execution::hal_candidate

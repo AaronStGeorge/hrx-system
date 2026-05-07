@@ -1203,6 +1203,22 @@ _CONVERGENT_EFFECT = Effect(
     flags=(EffectFlag.ORDERED,),
 )
 
+
+def _ds_crosslane_effects(width_bits: int) -> tuple[Effect, Effect]:
+    # DS cross-lane instructions retire through LGKM even though they do not
+    # access LDS memory. Their SSA results must still wait on the LDS counter.
+    return (
+        Effect(
+            EffectKind.READ,
+            memory_space=MemorySpace.GENERIC,
+            flags=(EffectFlag.DEPENDENCY,),
+            counter_id=_COUNTER_LDS,
+            width_bits=width_bits,
+        ),
+        _CONVERGENT_EFFECT,
+    )
+
+
 _WAIT_EFFECT = Effect(
     EffectKind.COUNTER,
     flags=(EffectFlag.ORDERED, EffectFlag.DEPENDENCY),
@@ -5611,7 +5627,7 @@ def _ds_swizzle_b32_overlay(
         ),
         immediates=(_ds_crosslane_offset_immediate(),),
         fixed_encoding_fields=fixed_encoding_fields,
-        effects=(_CONVERGENT_EFFECT,),
+        effects=_ds_crosslane_effects(32),
     )
 
 
@@ -5640,7 +5656,7 @@ def _ds_permute_b32_overlay(
         ),
         immediates=(_ds_crosslane_offset_immediate(),),
         fixed_encoding_fields=fixed_encoding_fields,
-        effects=(_CONVERGENT_EFFECT,),
+        effects=_ds_crosslane_effects(32),
     )
 
 
