@@ -46,6 +46,90 @@ low.func.def target(@target) abi(hal_kernel) @vector_f32_minnum_maxnum(%lhs: reg
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_f32_clampf_number(%input: f32) -> (f32) {
+  %lower = scalar.constant -1.0 : f32
+  %upper = scalar.constant 1.0 : f32
+  %result = scalar.clampf<number, nnan|nsz> %input, %lower, %upper : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scalar_f32_clampf_number(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %9 = v_max_f32_lit %input, 3212836864
+  %result = v_min_f32_lit %9, 1065353216
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_f32_clampf_number(%input: vector<2xf32>) -> (vector<2xf32>) {
+  %lower = vector.constant -1.0 : vector<2xf32>
+  %upper = vector.constant 1.0 : vector<2xf32>
+  %result = vector.clampf<number, nnan|nsz> %input, %lower, %upper : vector<2xf32>
+  func.return %result : vector<2xf32>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @vector_f32_clampf_number(%input: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %13 = slice %input[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %14 = v_max_f32_lit %13, 3212836864
+  %15 = v_min_f32_lit %14, 1065353216
+  %16 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %17 = v_max_f32_lit %16, 3212836864
+  %18 = v_min_f32_lit %17, 1065353216
+  %result = concat(%15, %18) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_f32_clampf_ordered(%input: f32, %lower: f32, %upper: f32) -> (f32) {
+  %result = scalar.clampf<ordered> %input, %lower, %upper : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scalar_f32_clampf_ordered(%input: reg<amdgpu.vgpr>, %lower: reg<amdgpu.vgpr>, %upper: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %9 = v_cmp_lt_f32 %input, %lower
+  %10 = v_cndmask_b32 %input, %lower, %9
+  %11 = v_cmp_gt_f32 %10, %upper
+  %result = v_cndmask_b32 %10, %upper, %11
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_f32_clampf_ordered(%input: vector<2xf32>, %lower: vector<2xf32>, %upper: vector<2xf32>) -> (vector<2xf32>) {
+  %result = vector.clampf<ordered> %input, %lower, %upper : vector<2xf32>
+  func.return %result : vector<2xf32>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @vector_f32_clampf_ordered(%input: reg<amdgpu.vgpr x2>, %lower: reg<amdgpu.vgpr x2>, %upper: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
+  %9 = slice %input[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %10 = slice %lower[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %11 = slice %upper[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %12 = v_cmp_lt_f32 %9, %10
+  %13 = v_cndmask_b32 %9, %10, %12
+  %14 = v_cmp_gt_f32 %13, %11
+  %15 = v_cndmask_b32 %13, %11, %14
+  %16 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %17 = slice %lower[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %18 = slice %upper[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %19 = v_cmp_lt_f32 %16, %17
+  %20 = v_cndmask_b32 %16, %17, %19
+  %21 = v_cmp_gt_f32 %20, %18
+  %22 = v_cndmask_b32 %20, %18, %21
+  %result = concat(%15, %22) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @index_minmax_sgpr(%lhs0: index, %rhs0: index) -> (index) {
   %lhs = index.assume %lhs0 [range(%lhs0, 0, 1024)] : index
   %rhs = index.assume %rhs0 [range(%rhs0, 0, 1024)] : index

@@ -24,6 +24,16 @@ typedef iree_status_t (*loom_math_legalize_binary_build_fn_t)(
     loom_value_id_t rhs, loom_type_t result_type, loom_location_id_t location,
     loom_op_t** out_op);
 
+typedef iree_status_t (*loom_math_legalize_ternary_build_fn_t)(
+    loom_builder_t* builder, uint8_t instance_flags, loom_value_id_t a,
+    loom_value_id_t b, loom_value_id_t c, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op);
+
+typedef iree_status_t (*loom_math_legalize_clampf_build_fn_t)(
+    loom_builder_t* builder, uint8_t mode, uint8_t instance_flags,
+    loom_value_id_t value, loom_value_id_t lower, loom_value_id_t upper,
+    loom_type_t result_type, loom_location_id_t location, loom_op_t** out_op);
+
 typedef struct loom_math_legalize_lane_builders_t {
   // Builds a uniform scalar or vector constant in the source lane domain.
   loom_math_legalize_constant_build_fn_t constant;
@@ -33,6 +43,10 @@ typedef struct loom_math_legalize_lane_builders_t {
   loom_math_legalize_binary_build_fn_t mulf;
   // Builds a lane-wise division in the source lane domain.
   loom_math_legalize_binary_build_fn_t divf;
+  // Builds a lane-wise fused multiply-add in the source lane domain.
+  loom_math_legalize_ternary_build_fn_t fmaf;
+  // Builds a lane-wise clamp in the source lane domain.
+  loom_math_legalize_clampf_build_fn_t clampf;
   // Builds a lane-wise base-2 exponential in the source lane domain.
   loom_math_legalize_unary_build_fn_t exp2f;
   // Builds a lane-wise base-2 logarithm in the source lane domain.
@@ -43,8 +57,8 @@ typedef struct loom_math_legalize_lane_builders_t {
   loom_math_legalize_unary_build_fn_t logisticf;
 } loom_math_legalize_lane_builders_t;
 
-typedef struct loom_math_legalize_activation_source_t {
-  // Source op operand that feeds the semantic activation.
+typedef struct loom_math_legalize_source_t {
+  // Source op operand that feeds the semantic math op.
   loom_value_id_t input;
   // Source result type preserved by the replacement expression.
   loom_type_t result_type;
@@ -54,13 +68,41 @@ typedef struct loom_math_legalize_activation_source_t {
   loom_location_id_t location;
   // Builder table for the source scalar/vector lane domain.
   const loom_math_legalize_lane_builders_t* lane_builders;
-} loom_math_legalize_activation_source_t;
+} loom_math_legalize_source_t;
+
+static uint8_t loom_math_legalize_clampf_mode(uint8_t fastmath_flags) {
+  const uint8_t number_flags =
+      LOOM_SCALAR_FASTMATHFLAGS_NNAN | LOOM_SCALAR_FASTMATHFLAGS_NSZ;
+  return (fastmath_flags & number_flags) == number_flags
+             ? LOOM_SCALAR_CLAMPF_MODE_NUMBER
+             : LOOM_SCALAR_CLAMPF_MODE_ORDERED;
+}
+
+static iree_status_t loom_math_legalize_scalar_clampf_build(
+    loom_builder_t* builder, uint8_t mode, uint8_t instance_flags,
+    loom_value_id_t value, loom_value_id_t lower, loom_value_id_t upper,
+    loom_type_t result_type, loom_location_id_t location, loom_op_t** out_op) {
+  return loom_scalar_clampf_build(builder, (loom_scalar_clampf_mode_t)mode,
+                                  instance_flags, value, lower, upper,
+                                  result_type, location, out_op);
+}
+
+static iree_status_t loom_math_legalize_vector_clampf_build(
+    loom_builder_t* builder, uint8_t mode, uint8_t instance_flags,
+    loom_value_id_t value, loom_value_id_t lower, loom_value_id_t upper,
+    loom_type_t result_type, loom_location_id_t location, loom_op_t** out_op) {
+  return loom_vector_clampf_build(builder, (loom_vector_clampf_mode_t)mode,
+                                  instance_flags, value, lower, upper,
+                                  result_type, location, out_op);
+}
 
 static const loom_math_legalize_lane_builders_t kScalarLaneBuilders = {
     .constant = loom_scalar_constant_build,
     .addf = loom_scalar_addf_build,
     .mulf = loom_scalar_mulf_build,
     .divf = loom_scalar_divf_build,
+    .fmaf = loom_scalar_fmaf_build,
+    .clampf = loom_math_legalize_scalar_clampf_build,
     .exp2f = loom_scalar_exp2f_build,
     .log2f = loom_scalar_log2f_build,
     .tanhf = loom_scalar_tanhf_build,
@@ -72,16 +114,18 @@ static const loom_math_legalize_lane_builders_t kVectorLaneBuilders = {
     .addf = loom_vector_addf_build,
     .mulf = loom_vector_mulf_build,
     .divf = loom_vector_divf_build,
+    .fmaf = loom_vector_fmaf_build,
+    .clampf = loom_math_legalize_vector_clampf_build,
     .exp2f = loom_vector_exp2f_build,
     .log2f = loom_vector_log2f_build,
     .tanhf = loom_vector_tanhf_build,
     .logisticf = loom_vector_logisticf_build,
 };
 
-static iree_status_t loom_math_legalize_activation_source_initialize(
+static iree_status_t loom_math_legalize_source_initialize(
     const loom_math_legalize_recipe_context_t* context, const loom_op_t* op,
-    loom_math_legalize_activation_source_t* out_source) {
-  *out_source = (loom_math_legalize_activation_source_t){
+    loom_math_legalize_source_t* out_source) {
+  *out_source = (loom_math_legalize_source_t){
       .result_type =
           loom_module_value_type(context->module, loom_op_results(op)[0]),
       .location = op->location,
@@ -90,6 +134,11 @@ static iree_status_t loom_math_legalize_activation_source_initialize(
     case LOOM_OP_SCALAR_EXPF:
       out_source->input = loom_scalar_expf_input(op);
       out_source->fastmath_flags = loom_scalar_expf_fastmath(op);
+      out_source->lane_builders = &kScalarLaneBuilders;
+      return iree_ok_status();
+    case LOOM_OP_SCALAR_ERFF:
+      out_source->input = loom_scalar_erff_input(op);
+      out_source->fastmath_flags = loom_scalar_erff_fastmath(op);
       out_source->lane_builders = &kScalarLaneBuilders;
       return iree_ok_status();
     case LOOM_OP_SCALAR_LOGISTICF:
@@ -115,6 +164,11 @@ static iree_status_t loom_math_legalize_activation_source_initialize(
     case LOOM_OP_VECTOR_EXPF:
       out_source->input = loom_vector_expf_input(op);
       out_source->fastmath_flags = loom_vector_expf_fastmath(op);
+      out_source->lane_builders = &kVectorLaneBuilders;
+      return iree_ok_status();
+    case LOOM_OP_VECTOR_ERFF:
+      out_source->input = loom_vector_erff_input(op);
+      out_source->fastmath_flags = loom_vector_erff_fastmath(op);
       out_source->lane_builders = &kVectorLaneBuilders;
       return iree_ok_status();
     case LOOM_OP_VECTOR_LOGISTICF:
@@ -150,9 +204,8 @@ static double loom_math_legalize_gelu_logistic_scale(const loom_op_t* op) {
 }
 
 static iree_status_t loom_math_legalize_build_constant(
-    loom_builder_t* builder,
-    const loom_math_legalize_activation_source_t* source, double value,
-    loom_value_id_t* out_value) {
+    loom_builder_t* builder, const loom_math_legalize_source_t* source,
+    double value, loom_value_id_t* out_value) {
   loom_op_t* op = NULL;
   IREE_RETURN_IF_ERROR(source->lane_builders->constant(
       builder, loom_attr_f64(value), source->result_type, source->location,
@@ -162,8 +215,7 @@ static iree_status_t loom_math_legalize_build_constant(
 }
 
 static iree_status_t loom_math_legalize_build_unary(
-    loom_builder_t* builder,
-    const loom_math_legalize_activation_source_t* source,
+    loom_builder_t* builder, const loom_math_legalize_source_t* source,
     loom_math_legalize_unary_build_fn_t build, loom_value_id_t input,
     loom_value_id_t* out_value) {
   loom_op_t* op = NULL;
@@ -174,8 +226,7 @@ static iree_status_t loom_math_legalize_build_unary(
 }
 
 static iree_status_t loom_math_legalize_build_binary(
-    loom_builder_t* builder,
-    const loom_math_legalize_activation_source_t* source,
+    loom_builder_t* builder, const loom_math_legalize_source_t* source,
     loom_math_legalize_binary_build_fn_t build, loom_value_id_t lhs,
     loom_value_id_t rhs, loom_value_id_t* out_value) {
   loom_op_t* op = NULL;
@@ -185,9 +236,97 @@ static iree_status_t loom_math_legalize_build_binary(
   return iree_ok_status();
 }
 
+static iree_status_t loom_math_legalize_build_ternary(
+    loom_builder_t* builder, const loom_math_legalize_source_t* source,
+    loom_math_legalize_ternary_build_fn_t build, loom_value_id_t a,
+    loom_value_id_t b, loom_value_id_t c, loom_value_id_t* out_value) {
+  loom_op_t* op = NULL;
+  IREE_RETURN_IF_ERROR(build(builder, source->fastmath_flags, a, b, c,
+                             source->result_type, source->location, &op));
+  *out_value = loom_op_results(op)[0];
+  return iree_ok_status();
+}
+
+static iree_status_t loom_math_legalize_build_polynomial(
+    loom_builder_t* builder, const loom_math_legalize_source_t* source,
+    loom_value_id_t input, const double* coefficients,
+    iree_host_size_t coefficient_count, loom_value_id_t* out_value) {
+  loom_value_id_t accumulator = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_math_legalize_build_constant(
+      builder, source, coefficients[0], &accumulator));
+  for (iree_host_size_t i = 1; i < coefficient_count; ++i) {
+    loom_value_id_t coefficient = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_math_legalize_build_constant(
+        builder, source, coefficients[i], &coefficient));
+    IREE_RETURN_IF_ERROR(loom_math_legalize_build_ternary(
+        builder, source, source->lane_builders->fmaf, accumulator, input,
+        coefficient, &accumulator));
+  }
+  *out_value = accumulator;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_math_legalize_build_clampf(
+    loom_builder_t* builder, const loom_math_legalize_source_t* source,
+    loom_value_id_t value, double lower, double upper,
+    loom_value_id_t* out_value) {
+  loom_value_id_t lower_value = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t upper_value = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_math_legalize_build_constant(builder, source, lower, &lower_value));
+  IREE_RETURN_IF_ERROR(
+      loom_math_legalize_build_constant(builder, source, upper, &upper_value));
+  loom_op_t* op = NULL;
+  IREE_RETURN_IF_ERROR(source->lane_builders->clampf(
+      builder, loom_math_legalize_clampf_mode(source->fastmath_flags),
+      source->fastmath_flags, value, lower_value, upper_value,
+      source->result_type, source->location, &op));
+  *out_value = loom_op_results(op)[0];
+  return iree_ok_status();
+}
+
+static iree_status_t loom_math_legalize_build_erf_rational(
+    loom_builder_t* builder, const loom_math_legalize_source_t* source,
+    loom_value_id_t input, loom_value_id_t* out_value) {
+  static const double kAlphaCoefficients[] = {
+      -2.72614225801306e-10, 2.77068142495902e-08,  -2.10102402082508e-06,
+      -5.69250639462346e-05, -7.34990630326855e-04, -2.95459980854025e-03,
+      -1.60960333262415e-02,
+  };
+  static const double kBetaCoefficients[] = {
+      -1.45660718464996e-05, -2.13374055278905e-04, -1.68282697438203e-03,
+      -7.37332916720468e-03, -1.42647390514189e-02,
+  };
+
+  loom_value_id_t clamped_input = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t input_squared = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t alpha = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t beta = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t numerator = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t quotient = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_math_legalize_build_clampf(
+      builder, source, input, -4.0, 4.0, &clamped_input));
+  IREE_RETURN_IF_ERROR(loom_math_legalize_build_binary(
+      builder, source, source->lane_builders->mulf, clamped_input,
+      clamped_input, &input_squared));
+  IREE_RETURN_IF_ERROR(loom_math_legalize_build_polynomial(
+      builder, source, input_squared, kAlphaCoefficients,
+      IREE_ARRAYSIZE(kAlphaCoefficients), &alpha));
+  IREE_RETURN_IF_ERROR(loom_math_legalize_build_polynomial(
+      builder, source, input_squared, kBetaCoefficients,
+      IREE_ARRAYSIZE(kBetaCoefficients), &beta));
+  IREE_RETURN_IF_ERROR(loom_math_legalize_build_binary(
+      builder, source, source->lane_builders->mulf, clamped_input, alpha,
+      &numerator));
+  IREE_RETURN_IF_ERROR(loom_math_legalize_build_binary(
+      builder, source, source->lane_builders->divf, numerator, beta,
+      &quotient));
+  return loom_math_legalize_build_clampf(builder, source, quotient, -1.0, 1.0,
+                                         out_value);
+}
+
 static iree_status_t loom_math_legalize_build_exp_exp2(
-    loom_builder_t* builder,
-    const loom_math_legalize_activation_source_t* source,
+    loom_builder_t* builder, const loom_math_legalize_source_t* source,
     loom_value_id_t* out_value) {
   loom_value_id_t log2_e = LOOM_VALUE_ID_INVALID;
   loom_value_id_t scaled = LOOM_VALUE_ID_INVALID;
@@ -201,8 +340,7 @@ static iree_status_t loom_math_legalize_build_exp_exp2(
 }
 
 static iree_status_t loom_math_legalize_build_logistic_exp2(
-    loom_builder_t* builder,
-    const loom_math_legalize_activation_source_t* source,
+    loom_builder_t* builder, const loom_math_legalize_source_t* source,
     loom_value_id_t* out_value) {
   loom_value_id_t negative_log2_e = LOOM_VALUE_ID_INVALID;
   loom_value_id_t one = LOOM_VALUE_ID_INVALID;
@@ -227,8 +365,7 @@ static iree_status_t loom_math_legalize_build_logistic_exp2(
 }
 
 static iree_status_t loom_math_legalize_build_silu_logistic(
-    loom_builder_t* builder,
-    const loom_math_legalize_activation_source_t* source,
+    loom_builder_t* builder, const loom_math_legalize_source_t* source,
     loom_value_id_t* out_value) {
   loom_value_id_t logistic = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_math_legalize_build_unary(
@@ -240,8 +377,7 @@ static iree_status_t loom_math_legalize_build_silu_logistic(
 }
 
 static iree_status_t loom_math_legalize_build_softplus_exp2(
-    loom_builder_t* builder,
-    const loom_math_legalize_activation_source_t* source,
+    loom_builder_t* builder, const loom_math_legalize_source_t* source,
     loom_value_id_t* out_value) {
   loom_value_id_t log2_e = LOOM_VALUE_ID_INVALID;
   loom_value_id_t ln2 = LOOM_VALUE_ID_INVALID;
@@ -270,8 +406,7 @@ static iree_status_t loom_math_legalize_build_softplus_exp2(
 }
 
 static iree_status_t loom_math_legalize_build_gelu_tanh(
-    loom_builder_t* builder,
-    const loom_math_legalize_activation_source_t* source,
+    loom_builder_t* builder, const loom_math_legalize_source_t* source,
     loom_value_id_t* out_value) {
   loom_value_id_t half = LOOM_VALUE_ID_INVALID;
   loom_value_id_t one = LOOM_VALUE_ID_INVALID;
@@ -320,10 +455,40 @@ static iree_status_t loom_math_legalize_build_gelu_tanh(
                                          half_input, one_plus_tanh, out_value);
 }
 
-static iree_status_t loom_math_legalize_build_gelu_logistic(
-    loom_builder_t* builder,
-    const loom_math_legalize_activation_source_t* source, const loom_op_t* op,
+static iree_status_t loom_math_legalize_build_gelu_erf(
+    loom_builder_t* builder, const loom_math_legalize_source_t* source,
     loom_value_id_t* out_value) {
+  loom_value_id_t half = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t one = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t inverse_sqrt2 = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t scaled = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t erf = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t one_plus_erf = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t half_input = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_math_legalize_build_constant(builder, source, 0.5, &half));
+  IREE_RETURN_IF_ERROR(
+      loom_math_legalize_build_constant(builder, source, 1.0, &one));
+  IREE_RETURN_IF_ERROR(loom_math_legalize_build_constant(
+      builder, source, 0.70710678118654752440, &inverse_sqrt2));
+  IREE_RETURN_IF_ERROR(loom_math_legalize_build_binary(
+      builder, source, source->lane_builders->mulf, source->input,
+      inverse_sqrt2, &scaled));
+  IREE_RETURN_IF_ERROR(
+      loom_math_legalize_build_erf_rational(builder, source, scaled, &erf));
+  IREE_RETURN_IF_ERROR(loom_math_legalize_build_binary(
+      builder, source, source->lane_builders->addf, one, erf, &one_plus_erf));
+  IREE_RETURN_IF_ERROR(loom_math_legalize_build_binary(
+      builder, source, source->lane_builders->mulf, half, source->input,
+      &half_input));
+  return loom_math_legalize_build_binary(builder, source,
+                                         source->lane_builders->mulf,
+                                         half_input, one_plus_erf, out_value);
+}
+
+static iree_status_t loom_math_legalize_build_gelu_logistic(
+    loom_builder_t* builder, const loom_math_legalize_source_t* source,
+    const loom_op_t* op, loom_value_id_t* out_value) {
   loom_value_id_t scale = LOOM_VALUE_ID_INVALID;
   loom_value_id_t scaled = LOOM_VALUE_ID_INVALID;
   loom_value_id_t logistic = LOOM_VALUE_ID_INVALID;
@@ -343,13 +508,16 @@ static iree_status_t loom_math_legalize_build_recipe(
     const loom_math_legalize_recipe_t* recipe,
     const loom_math_legalize_recipe_context_t* context, loom_op_t* op,
     loom_rewriter_t* rewriter, loom_value_id_t* out_value) {
-  loom_math_legalize_activation_source_t source;
+  loom_math_legalize_source_t source;
   IREE_RETURN_IF_ERROR(
-      loom_math_legalize_activation_source_initialize(context, op, &source));
+      loom_math_legalize_source_initialize(context, op, &source));
   switch (recipe->recipe) {
     case LOOM_TARGET_MATH_RECIPE_EXP_EXP2_F32:
       return loom_math_legalize_build_exp_exp2(&rewriter->builder, &source,
                                                out_value);
+    case LOOM_TARGET_MATH_RECIPE_ERF_RATIONAL_F32:
+      return loom_math_legalize_build_erf_rational(&rewriter->builder, &source,
+                                                   source.input, out_value);
     case LOOM_TARGET_MATH_RECIPE_LOGISTIC_EXP2_F32:
       return loom_math_legalize_build_logistic_exp2(&rewriter->builder, &source,
                                                     out_value);
@@ -362,17 +530,20 @@ static iree_status_t loom_math_legalize_build_recipe(
     case LOOM_TARGET_MATH_RECIPE_GELU_TANH_F32:
       return loom_math_legalize_build_gelu_tanh(&rewriter->builder, &source,
                                                 out_value);
+    case LOOM_TARGET_MATH_RECIPE_GELU_ERF_F32:
+      return loom_math_legalize_build_gelu_erf(&rewriter->builder, &source,
+                                               out_value);
     case LOOM_TARGET_MATH_RECIPE_GELU_LOGISTIC_F32:
       return loom_math_legalize_build_gelu_logistic(&rewriter->builder, &source,
                                                     op, out_value);
     case LOOM_TARGET_MATH_RECIPE_UNKNOWN:
       break;
   }
-  return iree_make_status(IREE_STATUS_INTERNAL,
-                          "unknown math activation recipe %u", recipe->recipe);
+  return iree_make_status(IREE_STATUS_INTERNAL, "unknown math recipe %u",
+                          recipe->recipe);
 }
 
-static iree_status_t loom_math_legalize_rewrite_activation(
+static iree_status_t loom_math_legalize_rewrite_math_op(
     const loom_math_legalize_recipe_t* recipe,
     const loom_math_legalize_recipe_context_t* context, loom_op_t* op,
     loom_rewriter_t* rewriter) {
@@ -388,75 +559,95 @@ static iree_status_t loom_math_legalize_rewrite_activation(
                                                   1);
 }
 
-static const loom_math_legalize_recipe_t kActivationRecipes[] = {
+static const loom_math_legalize_recipe_t kRecipes[] = {
     {
         .recipe = LOOM_TARGET_MATH_RECIPE_EXP_EXP2_F32,
         .root_kind = LOOM_OP_SCALAR_EXPF,
-        .rewrite = loom_math_legalize_rewrite_activation,
+        .rewrite = loom_math_legalize_rewrite_math_op,
     },
     {
         .recipe = LOOM_TARGET_MATH_RECIPE_EXP_EXP2_F32,
         .root_kind = LOOM_OP_VECTOR_EXPF,
-        .rewrite = loom_math_legalize_rewrite_activation,
+        .rewrite = loom_math_legalize_rewrite_math_op,
+    },
+    {
+        .recipe = LOOM_TARGET_MATH_RECIPE_ERF_RATIONAL_F32,
+        .root_kind = LOOM_OP_SCALAR_ERFF,
+        .rewrite = loom_math_legalize_rewrite_math_op,
+    },
+    {
+        .recipe = LOOM_TARGET_MATH_RECIPE_ERF_RATIONAL_F32,
+        .root_kind = LOOM_OP_VECTOR_ERFF,
+        .rewrite = loom_math_legalize_rewrite_math_op,
     },
     {
         .recipe = LOOM_TARGET_MATH_RECIPE_LOGISTIC_EXP2_F32,
         .root_kind = LOOM_OP_SCALAR_LOGISTICF,
-        .rewrite = loom_math_legalize_rewrite_activation,
+        .rewrite = loom_math_legalize_rewrite_math_op,
     },
     {
         .recipe = LOOM_TARGET_MATH_RECIPE_LOGISTIC_EXP2_F32,
         .root_kind = LOOM_OP_VECTOR_LOGISTICF,
-        .rewrite = loom_math_legalize_rewrite_activation,
+        .rewrite = loom_math_legalize_rewrite_math_op,
     },
     {
         .recipe = LOOM_TARGET_MATH_RECIPE_SILU_LOGISTIC_F32,
         .root_kind = LOOM_OP_SCALAR_SILUF,
-        .rewrite = loom_math_legalize_rewrite_activation,
+        .rewrite = loom_math_legalize_rewrite_math_op,
     },
     {
         .recipe = LOOM_TARGET_MATH_RECIPE_SILU_LOGISTIC_F32,
         .root_kind = LOOM_OP_VECTOR_SILUF,
-        .rewrite = loom_math_legalize_rewrite_activation,
+        .rewrite = loom_math_legalize_rewrite_math_op,
     },
     {
         .recipe = LOOM_TARGET_MATH_RECIPE_SOFTPLUS_EXP2_F32,
         .root_kind = LOOM_OP_SCALAR_SOFTPLUSF,
-        .rewrite = loom_math_legalize_rewrite_activation,
+        .rewrite = loom_math_legalize_rewrite_math_op,
     },
     {
         .recipe = LOOM_TARGET_MATH_RECIPE_SOFTPLUS_EXP2_F32,
         .root_kind = LOOM_OP_VECTOR_SOFTPLUSF,
-        .rewrite = loom_math_legalize_rewrite_activation,
+        .rewrite = loom_math_legalize_rewrite_math_op,
     },
     {
         .recipe = LOOM_TARGET_MATH_RECIPE_GELU_TANH_F32,
         .root_kind = LOOM_OP_SCALAR_GELUF,
-        .rewrite = loom_math_legalize_rewrite_activation,
+        .rewrite = loom_math_legalize_rewrite_math_op,
     },
     {
         .recipe = LOOM_TARGET_MATH_RECIPE_GELU_TANH_F32,
         .root_kind = LOOM_OP_VECTOR_GELUF,
-        .rewrite = loom_math_legalize_rewrite_activation,
+        .rewrite = loom_math_legalize_rewrite_math_op,
+    },
+    {
+        .recipe = LOOM_TARGET_MATH_RECIPE_GELU_ERF_F32,
+        .root_kind = LOOM_OP_SCALAR_GELUF,
+        .rewrite = loom_math_legalize_rewrite_math_op,
+    },
+    {
+        .recipe = LOOM_TARGET_MATH_RECIPE_GELU_ERF_F32,
+        .root_kind = LOOM_OP_VECTOR_GELUF,
+        .rewrite = loom_math_legalize_rewrite_math_op,
     },
     {
         .recipe = LOOM_TARGET_MATH_RECIPE_GELU_LOGISTIC_F32,
         .root_kind = LOOM_OP_SCALAR_GELUF,
-        .rewrite = loom_math_legalize_rewrite_activation,
+        .rewrite = loom_math_legalize_rewrite_math_op,
     },
     {
         .recipe = LOOM_TARGET_MATH_RECIPE_GELU_LOGISTIC_F32,
         .root_kind = LOOM_OP_VECTOR_GELUF,
-        .rewrite = loom_math_legalize_rewrite_activation,
+        .rewrite = loom_math_legalize_rewrite_math_op,
     },
 };
 
-iree_status_t loom_math_legalize_collect_activation_recipes(
+iree_status_t loom_math_legalize_collect_elementwise_recipes(
     iree_arena_allocator_t* arena,
     loom_math_legalize_recipe_table_t* out_table) {
   *out_table = (loom_math_legalize_recipe_table_t){
-      .recipes = kActivationRecipes,
-      .recipe_count = IREE_ARRAYSIZE(kActivationRecipes),
+      .recipes = kRecipes,
+      .recipe_count = IREE_ARRAYSIZE(kRecipes),
   };
   return iree_ok_status();
 }

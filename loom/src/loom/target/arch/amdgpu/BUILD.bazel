@@ -641,6 +641,7 @@ loom_cc_library(
     hdrs = [
         "lower.h",
         "lower/internal.h",
+        "lower/mask.h",
         "lower/memory_internal.h",
         "lower/plan.h",
     ],

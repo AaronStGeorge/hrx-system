@@ -63,6 +63,11 @@ static void loom_amdgpu_math_policy_query(
       }
       *out_decision = loom_amdgpu_math_reject(IREE_SV("math.exp.exact_f32"));
       return;
+    case LOOM_TARGET_MATH_OP_ERFF:
+      *out_decision =
+          loom_amdgpu_math_rewrite(LOOM_TARGET_MATH_RECIPE_ERF_RATIONAL_F32,
+                                   IREE_SV("math.recipe.erf_rational_f32"));
+      return;
     case LOOM_TARGET_MATH_OP_GELUF_TANH:
       *out_decision =
           loom_amdgpu_math_rewrite(LOOM_TARGET_MATH_RECIPE_GELU_TANH_F32,
@@ -74,13 +79,9 @@ static void loom_amdgpu_math_policy_query(
                                    IREE_SV("math.recipe.gelu_logistic_f32"));
       return;
     case LOOM_TARGET_MATH_OP_GELUF_ERF:
-      if (loom_amdgpu_math_query_has_afn(query)) {
-        *out_decision =
-            loom_amdgpu_math_rewrite(LOOM_TARGET_MATH_RECIPE_GELU_TANH_F32,
-                                     IREE_SV("math.recipe.gelu_tanh_f32"));
-        return;
-      }
-      *out_decision = loom_amdgpu_math_reject(IREE_SV("math.erf.exact_f32"));
+      *out_decision =
+          loom_amdgpu_math_rewrite(LOOM_TARGET_MATH_RECIPE_GELU_ERF_F32,
+                                   IREE_SV("math.recipe.gelu_erf_f32"));
       return;
     case LOOM_TARGET_MATH_OP_UNKNOWN:
       break;

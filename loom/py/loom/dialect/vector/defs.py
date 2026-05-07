@@ -39,7 +39,7 @@ from loom.assembly import (
 from loom.dialect.atomic import AtomicKind, AtomicOrdering, AtomicScope
 from loom.dialect.cache import CacheScope, CacheTemporal
 from loom.dialect.combining import CombiningKind
-from loom.dialect.scalar import FastMathFlags, GeluVariant, IntOverflowFlags
+from loom.dialect.scalar import ClampFMode, FastMathFlags, GeluVariant, IntOverflowFlags
 from loom.dialect.scalar.comparison import CmpFPredicate, CmpIPredicate
 from loom.dsl import (
     ANY,
@@ -2480,6 +2480,49 @@ vector_maxnumf = _lanewise_binary(
     canonicalize="loom_vector_uniform_result_canonicalize",
 )
 
+vector_clampf = Op(
+    "vector.clampf",
+    group=vector_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Lanewise floating-point clamp with explicit NaN/comparison policy. "
+        "The ordered mode preserves strict compare/select semantics, number "
+        "mode uses minnum/maxnum semantics, and ieee mode propagates NaNs."
+    ),
+    operands=[
+        Operand("value", VECTOR),
+        Operand("lower", VECTOR),
+        Operand("upper", VECTOR),
+    ],
+    results=[Result("result", VECTOR)],
+    attrs=[
+        AttrDef("mode", ATTR_TYPE_ENUM, enum_def=ClampFMode),
+        AttrDef("fastmath", ATTR_TYPE_FLAGS, optional=True, enum_def=FastMathFlags),
+    ],
+    constraints=[
+        HasFloatElement("result"),
+        SameType("value", "lower", "upper", "result"),
+    ],
+    traits=[PURE, ELEMENTWISE],
+    facts="loom_vector_clampf_facts",
+    canonicalize="loom_vector_uniform_result_canonicalize",
+    format=[
+        TemplateParamFlags("mode", "fastmath"),
+        Ref("value"),
+        COMMA,
+        Ref("lower"),
+        COMMA,
+        Ref("upper"),
+        COLON,
+        TypeOf("result"),
+    ],
+    examples=[
+        "%result = vector.clampf<ordered> %value, %lower, %upper : vector<16xf32>",
+        "%result = vector.clampf<number, nnan|nsz> %value, %lower, %upper : vector<16xf32>",
+        "%result = vector.clampf<ieee> %value, %lower, %upper : vector<16xf32>",
+    ],
+)
+
 vector_copysignf = _lanewise_binary(
     "vector.copysignf",
     result_constraint=FLOAT_ELEMENT,
@@ -4003,6 +4046,7 @@ VECTOR_FLOAT_ARITHMETIC_OPS: tuple[Op, ...] = (
     vector_maximumf,
     vector_minnumf,
     vector_maxnumf,
+    vector_clampf,
     vector_copysignf,
     vector_fmaf,
 )

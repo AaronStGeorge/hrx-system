@@ -22,6 +22,7 @@ __all__ = [
     "SCALAR_CONVERSION_CATEGORY",
     "SCALAR_MATH_CATEGORY",
     "SCALAR_OP_CATEGORIES",
+    "ClampFMode",
     "FastMathFlags",
     "GeluVariant",
     "IntOverflowFlags",
@@ -90,6 +91,28 @@ IntOverflowFlags = EnumDef(
         EnumCase("nuw", 2, doc="No unsigned wrap."),
     ],
     doc="Integer overflow behavior flags.",
+)
+
+ClampFMode = EnumDef(
+    "ClampFMode",
+    [
+        EnumCase(
+            "ordered",
+            0,
+            doc="Clamp with ordered comparisons and selects; NaN comparisons are false.",
+        ),
+        EnumCase(
+            "number",
+            1,
+            doc="Clamp as minnum(maxnum(value, lower), upper); NaNs select the numeric peer.",
+        ),
+        EnumCase(
+            "ieee",
+            2,
+            doc="Clamp as minimum(maximum(value, lower), upper); NaNs propagate.",
+        ),
+    ],
+    doc="Floating-point clamp NaN and comparison policy.",
 )
 
 GeluVariant = EnumDef(

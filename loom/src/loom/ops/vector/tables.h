@@ -70,6 +70,7 @@ extern const loom_op_vtable_t loom_vector_minimumf_vtable;
 extern const loom_op_vtable_t loom_vector_maximumf_vtable;
 extern const loom_op_vtable_t loom_vector_minnumf_vtable;
 extern const loom_op_vtable_t loom_vector_maxnumf_vtable;
+extern const loom_op_vtable_t loom_vector_clampf_vtable;
 extern const loom_op_vtable_t loom_vector_copysignf_vtable;
 extern const loom_op_vtable_t loom_vector_fmaf_vtable;
 extern const loom_op_vtable_t loom_vector_addi_vtable;

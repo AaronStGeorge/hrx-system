@@ -18,6 +18,38 @@ func.def @vector_f32_minnum_maxnum(%lhs: vector<2xf32>, %rhs: vector<2xf32>) -> 
 
 // ====
 
+func.def @scalar_f32_clampf_number(%input: f32) -> (f32) {
+  %lower = scalar.constant -1.0 : f32
+  %upper = scalar.constant 1.0 : f32
+  %result = scalar.clampf<number, nnan|nsz> %input, %lower, %upper : f32
+  func.return %result : f32
+}
+
+// ====
+
+func.def @vector_f32_clampf_number(%input: vector<2xf32>) -> (vector<2xf32>) {
+  %lower = vector.constant -1.0 : vector<2xf32>
+  %upper = vector.constant 1.0 : vector<2xf32>
+  %result = vector.clampf<number, nnan|nsz> %input, %lower, %upper : vector<2xf32>
+  func.return %result : vector<2xf32>
+}
+
+// ====
+
+func.def @scalar_f32_clampf_ordered(%input: f32, %lower: f32, %upper: f32) -> (f32) {
+  %result = scalar.clampf<ordered> %input, %lower, %upper : f32
+  func.return %result : f32
+}
+
+// ====
+
+func.def @vector_f32_clampf_ordered(%input: vector<2xf32>, %lower: vector<2xf32>, %upper: vector<2xf32>) -> (vector<2xf32>) {
+  %result = vector.clampf<ordered> %input, %lower, %upper : vector<2xf32>
+  func.return %result : vector<2xf32>
+}
+
+// ====
+
 func.def @index_minmax_sgpr(%lhs0: index, %rhs0: index) -> (index) {
   %lhs = index.assume %lhs0 [range(%lhs0, 0, 1024)] : index
   %rhs = index.assume %rhs0 [range(%rhs0, 0, 1024)] : index

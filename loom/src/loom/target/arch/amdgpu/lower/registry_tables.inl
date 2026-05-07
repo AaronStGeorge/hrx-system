@@ -63,6 +63,10 @@ static const loom_amdgpu_lower_dispatch_row_t
             LOOM_OP_SCALAR_CMPF, loom_amdgpu_vector_compare_plan_t,
             loom_amdgpu_select_scalar_cmpf_dispatch,
             loom_amdgpu_emit_scalar_cmpf_dispatch, NULL),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_SCALAR_CLAMPF)] = LOOM_AMDGPU_DATA_ROW(
+            LOOM_OP_SCALAR_CLAMPF, loom_amdgpu_clampf_plan_t,
+            loom_amdgpu_select_scalar_clampf_dispatch,
+            loom_amdgpu_emit_scalar_clampf_dispatch, NULL),
 };
 
 static const loom_amdgpu_lower_dispatch_row_t
@@ -154,6 +158,10 @@ static const loom_amdgpu_lower_dispatch_row_t
             LOOM_OP_VECTOR_SELECT, loom_amdgpu_vector_select_plan_t,
             loom_amdgpu_select_vector_select_dispatch,
             loom_amdgpu_emit_vector_select_dispatch, NULL),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_CLAMPF)] = LOOM_AMDGPU_DATA_ROW(
+            LOOM_OP_VECTOR_CLAMPF, loom_amdgpu_clampf_plan_t,
+            loom_amdgpu_select_vector_clampf_dispatch,
+            loom_amdgpu_emit_vector_clampf_dispatch, NULL),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_TABLE_LOOKUP)] =
             LOOM_AMDGPU_DATA_ROW(
                 LOOM_OP_VECTOR_TABLE_LOOKUP, loom_amdgpu_table_lookup_plan_t,

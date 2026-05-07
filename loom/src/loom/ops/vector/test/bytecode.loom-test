@@ -53,5 +53,6 @@ func.def @activation_math(%x: vector<8xf32>) -> (vector<8xf32>) {
   %silu = vector.siluf<afn> %logistic : vector<8xf32>
   %softplus = vector.softplusf<afn> %silu : vector<8xf32>
   %gelu = vector.geluf<logistic, afn> %softplus {scale = 1.702} : vector<8xf32>
-  func.return %gelu : vector<8xf32>
+  %clamped = vector.clampf<number, nnan|nsz> %gelu, %logistic, %softplus : vector<8xf32>
+  func.return %clamped : vector<8xf32>
 }

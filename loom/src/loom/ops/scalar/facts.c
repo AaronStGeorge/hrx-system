@@ -116,6 +116,58 @@ static double minimum_f64(double a, double b) {
 static double maximum_f64(double a, double b) {
   return (isnan(a) || isnan(b)) ? NAN : fmax(a, b);
 }
+static double clamp_ordered_f64(double value, double lower, double upper) {
+  double result = value;
+  if (result < lower) {
+    result = lower;
+  }
+  if (result > upper) {
+    result = upper;
+  }
+  return result;
+}
+static double clamp_number_f64(double value, double lower, double upper) {
+  return fmin(fmax(value, lower), upper);
+}
+static double clamp_ieee_f64(double value, double lower, double upper) {
+  return minimum_f64(maximum_f64(value, lower), upper);
+}
+
+static void clampf_facts(loom_scalar_clampf_mode_t mode,
+                         const loom_value_facts_t* value,
+                         const loom_value_facts_t* lower,
+                         const loom_value_facts_t* upper,
+                         loom_value_facts_t* out) {
+  if (!loom_value_facts_is_exact(*value) ||
+      !loom_value_facts_is_float(*value) ||
+      !loom_value_facts_is_exact(*lower) ||
+      !loom_value_facts_is_float(*lower) ||
+      !loom_value_facts_is_exact(*upper) ||
+      !loom_value_facts_is_float(*upper)) {
+    *out = loom_value_facts_unknown();
+    return;
+  }
+  double value_f64 = loom_value_facts_as_f64(*value);
+  double lower_f64 = loom_value_facts_as_f64(*lower);
+  double upper_f64 = loom_value_facts_as_f64(*upper);
+  switch (mode) {
+    case LOOM_SCALAR_CLAMPF_MODE_ORDERED:
+      *out = loom_value_facts_exact_f64(
+          clamp_ordered_f64(value_f64, lower_f64, upper_f64));
+      return;
+    case LOOM_SCALAR_CLAMPF_MODE_NUMBER:
+      *out = loom_value_facts_exact_f64(
+          clamp_number_f64(value_f64, lower_f64, upper_f64));
+      return;
+    case LOOM_SCALAR_CLAMPF_MODE_IEEE:
+      *out = loom_value_facts_exact_f64(
+          clamp_ieee_f64(value_f64, lower_f64, upper_f64));
+      return;
+    case LOOM_SCALAR_CLAMPF_MODE_COUNT_:
+      break;
+  }
+  *out = loom_value_facts_unknown();
+}
 
 //===----------------------------------------------------------------------===//
 // scalar.constant
@@ -181,6 +233,16 @@ FLOAT_BINARY_FACTS(loom_scalar_maximumf_facts, maximum_f64)
 FLOAT_BINARY_FACTS(loom_scalar_minnumf_facts, fmin)
 FLOAT_BINARY_FACTS(loom_scalar_maxnumf_facts, fmax)
 FLOAT_BINARY_FACTS(loom_scalar_copysignf_facts, copysign)
+
+iree_status_t loom_scalar_clampf_facts(loom_fact_context_t* context,
+                                       const loom_module_t* module,
+                                       const loom_op_t* op,
+                                       const loom_value_facts_t* operand_facts,
+                                       loom_value_facts_t* result_facts) {
+  clampf_facts(loom_scalar_clampf_mode(op), &operand_facts[0],
+               &operand_facts[1], &operand_facts[2], &result_facts[0]);
+  return iree_ok_status();
+}
 
 //===----------------------------------------------------------------------===//
 // Math functions

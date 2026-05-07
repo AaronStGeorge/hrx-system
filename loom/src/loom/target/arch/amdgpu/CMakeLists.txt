@@ -474,6 +474,7 @@ loom_cc_library(
   HDRS
     "lower.h"
     "lower/internal.h"
+    "lower/mask.h"
     "lower/memory_internal.h"
     "lower/plan.h"
   TEXTUAL_HDRS

@@ -19,7 +19,7 @@ loom_cc_library(
     "legalize.c"
     "patterns.c"
     "patterns.h"
-    "patterns_activations.c"
+    "patterns_elementwise.c"
   DEPS
     iree::base
     iree::base::internal::arena

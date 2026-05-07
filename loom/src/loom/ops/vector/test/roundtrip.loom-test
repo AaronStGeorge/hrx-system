@@ -45,7 +45,8 @@ func.def @lanewise_float_arithmetic(%a: vector<16xf32>, %b: vector<16xf32>, %c: 
   %maxnum = vector.maxnumf %min, %max : vector<16xf32>
   %signed = vector.copysignf %minnum, %maxnum : vector<16xf32>
   %fma = vector.fmaf %a, %b, %signed : vector<16xf32>
-  test.use %signed, %fma : vector<16xf32>, vector<16xf32>
+  %clamped = vector.clampf<number, nnan|nsz> %fma, %minnum, %maxnum : vector<16xf32>
+  test.use %signed, %fma, %clamped : vector<16xf32>, vector<16xf32>, vector<16xf32>
   func.return
 }
 

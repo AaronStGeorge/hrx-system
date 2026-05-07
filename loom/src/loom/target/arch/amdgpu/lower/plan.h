@@ -175,6 +175,45 @@ typedef struct loom_amdgpu_vector_select_plan_t {
   uint32_t lane_count;
 } loom_amdgpu_vector_select_plan_t;
 
+typedef enum loom_amdgpu_clampf_mode_e {
+  LOOM_AMDGPU_CLAMPF_MODE_NONE = 0,
+  LOOM_AMDGPU_CLAMPF_MODE_ORDERED = 1,
+  LOOM_AMDGPU_CLAMPF_MODE_NUMBER = 2,
+} loom_amdgpu_clampf_mode_t;
+
+typedef struct loom_amdgpu_clampf_plan_t {
+  // Selected clamp semantics with native AMDGPU packet support.
+  loom_amdgpu_clampf_mode_t mode;
+  // Descriptor row selected for the ordered lower-bound comparison.
+  loom_low_lower_resolved_descriptor_t lower_compare_descriptor;
+  // Descriptor row selected for the ordered upper-bound comparison.
+  loom_low_lower_resolved_descriptor_t upper_compare_descriptor;
+  // Descriptor row selected for register-register lane selects.
+  loom_low_lower_resolved_descriptor_t select_register_descriptor;
+  // Optional descriptor row selected when a select true lane is inline.
+  loom_low_lower_resolved_descriptor_t select_src1_inline_descriptor;
+  // Module string ID for the true_value inline-source immediate.
+  loom_string_id_t select_true_value_attr_name_id;
+  // Descriptor row selected for register-register lower-bound maxnum.
+  loom_low_lower_resolved_descriptor_t lower_bound_register_descriptor;
+  // Optional descriptor row selected for literal lower-bound maxnum.
+  loom_low_lower_resolved_descriptor_t lower_bound_literal_descriptor;
+  // Descriptor row selected for register-register upper-bound minnum.
+  loom_low_lower_resolved_descriptor_t upper_bound_register_descriptor;
+  // Optional descriptor row selected for literal upper-bound minnum.
+  loom_low_lower_resolved_descriptor_t upper_bound_literal_descriptor;
+  // Source payload being clamped.
+  loom_value_id_t value;
+  // Source lower bound.
+  loom_value_id_t lower;
+  // Source upper bound.
+  loom_value_id_t upper;
+  // Result value.
+  loom_value_id_t result;
+  // Static number of f32 lanes lowered.
+  uint32_t lane_count;
+} loom_amdgpu_clampf_plan_t;
+
 typedef enum loom_amdgpu_subgroup_payload_kind_e {
   LOOM_AMDGPU_SUBGROUP_PAYLOAD_NONE = 0,
   LOOM_AMDGPU_SUBGROUP_PAYLOAD_I32_SCALAR = 1,

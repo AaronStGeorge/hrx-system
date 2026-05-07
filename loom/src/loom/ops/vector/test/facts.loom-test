@@ -164,6 +164,34 @@ func.def @vector_minnumf_skips_uniform_nan() -> (i1) {
 
 // ====
 
+// Uniform vector clamp facts preserve the same explicit NaN semantics as the
+// scalar op and feed scalar consumers through extraction.
+func.def @vector_clampf_modes_uniform_nan() -> (i1, i1, i1) {
+  %neg = vector.constant -1.0 : vector<4xf32>
+  %nan = vector.logf %neg : vector<4xf32>
+  %zero = vector.constant 0.0 : vector<4xf32>
+  %one = vector.constant 1.0 : vector<4xf32>
+  %ordered = vector.clampf<ordered> %nan, %zero, %one : vector<4xf32>
+  %number = vector.clampf<number> %nan, %zero, %one : vector<4xf32>
+  %ieee = vector.clampf<ieee> %nan, %zero, %one : vector<4xf32>
+  %ordered_lane = vector.extract %ordered[0] : vector<4xf32> -> f32
+  %number_lane = vector.extract %number[1] : vector<4xf32> -> f32
+  %ieee_lane = vector.extract %ieee[2] : vector<4xf32> -> f32
+  %ordered_is_nan = scalar.isnanf %ordered_lane : f32
+  %number_is_nan = scalar.isnanf %number_lane : f32
+  %ieee_is_nan = scalar.isnanf %ieee_lane : f32
+  func.return %ordered_is_nan, %number_is_nan, %ieee_is_nan : i1, i1, i1
+}
+// ----
+func.def @vector_clampf_modes_uniform_nan() -> (i1, i1, i1) {
+  %ordered_is_nan = scalar.constant true : i1
+  %number_is_nan = scalar.constant false : i1
+  %ieee_is_nan = scalar.constant true : i1
+  func.return %ordered_is_nan, %number_is_nan, %ieee_is_nan : i1, i1, i1
+}
+
+// ====
+
 // Identity elements can fold reductions over dynamic extents when the explicit
 // accumulator is itself exact.
 func.def @reduce_dynamic_zero_splat_addi(%n: index) -> (i32) {

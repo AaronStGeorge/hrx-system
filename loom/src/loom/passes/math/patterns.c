@@ -53,14 +53,14 @@ static iree_status_t loom_math_legalize_collect_sources(
 iree_status_t loom_math_legalize_collect_recipes(
     iree_arena_allocator_t* arena,
     loom_math_legalize_recipe_table_t* out_table) {
-  loom_math_legalize_recipe_table_t activation_recipes = {0};
-  IREE_RETURN_IF_ERROR(loom_math_legalize_collect_activation_recipes(
-      arena, &activation_recipes));
+  loom_math_legalize_recipe_table_t elementwise_recipes = {0};
+  IREE_RETURN_IF_ERROR(loom_math_legalize_collect_elementwise_recipes(
+      arena, &elementwise_recipes));
 
   loom_math_legalize_recipe_source_t sources[] = {
       {
-          .recipes = activation_recipes.recipes,
-          .recipe_count = activation_recipes.recipe_count,
+          .recipes = elementwise_recipes.recipes,
+          .recipe_count = elementwise_recipes.recipe_count,
       },
   };
   return loom_math_legalize_collect_sources(arena, sources,

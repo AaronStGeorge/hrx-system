@@ -279,6 +279,12 @@ static bool loom_math_legalize_query_for_op(
           loom_math_legalize_scalar_fastmath_flags(
               loom_scalar_expf_fastmath(op)),
           out_query);
+    case LOOM_OP_SCALAR_ERFF:
+      return loom_math_legalize_scalar_result_query(
+          module, op, LOOM_TARGET_MATH_OP_ERFF,
+          loom_math_legalize_scalar_fastmath_flags(
+              loom_scalar_erff_fastmath(op)),
+          out_query);
     case LOOM_OP_SCALAR_LOGISTICF:
       return loom_math_legalize_scalar_result_query(
           module, op, LOOM_TARGET_MATH_OP_LOGISTICF,
@@ -308,6 +314,12 @@ static bool loom_math_legalize_query_for_op(
           module, op, LOOM_TARGET_MATH_OP_EXPF,
           loom_math_legalize_vector_fastmath_flags(
               loom_vector_expf_fastmath(op)),
+          out_query);
+    case LOOM_OP_VECTOR_ERFF:
+      return loom_math_legalize_vector_result_query(
+          module, op, LOOM_TARGET_MATH_OP_ERFF,
+          loom_math_legalize_vector_fastmath_flags(
+              loom_vector_erff_fastmath(op)),
           out_query);
     case LOOM_OP_VECTOR_LOGISTICF:
       return loom_math_legalize_vector_result_query(

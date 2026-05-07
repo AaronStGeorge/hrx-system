@@ -142,6 +142,20 @@ class VectorFloatArithmeticMixin:
         result_names: Sequence[str] | None = ...,
         location_id: int | None = ...,
     ) -> ValueRef: ...
+    def clampf(
+        self,
+        *,
+        mode: str,
+        fastmath: str = ...,
+        value: ValueRef,
+        lower: ValueRef,
+        upper: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
+    ) -> ValueRef: ...
     def copysignf(
         self,
         *,

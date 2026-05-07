@@ -2,10 +2,11 @@
 
 // Semantic activation ops carry their fastmath flags and GELU variant/scale
 // through bytecode without lowering to formula fragments.
-func.def @activation_math(%x: f32) -> (f32, f32, f32, f32) {
+func.def @activation_math(%x: f32) -> (f32, f32, f32, f32, f32) {
   %logistic = scalar.logisticf<afn> %x : f32
   %silu = scalar.siluf<afn> %x : f32
   %softplus = scalar.softplusf<afn> %x : f32
   %gelu = scalar.geluf<logistic, afn> %x {scale = 1.702} : f32
-  func.return %logistic, %silu, %softplus, %gelu : f32, f32, f32, f32
+  %clamped = scalar.clampf<number, nnan|nsz> %gelu, %logistic, %softplus : f32
+  func.return %logistic, %silu, %softplus, %gelu, %clamped : f32, f32, f32, f32, f32
 }

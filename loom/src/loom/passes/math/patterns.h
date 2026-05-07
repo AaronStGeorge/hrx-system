@@ -60,10 +60,11 @@ iree_status_t loom_math_legalize_collect_recipes(
     iree_arena_allocator_t* arena,
     loom_math_legalize_recipe_table_t* out_table);
 
-// Collects activation-family recipes such as logistic, SiLU, GELU, and
-// softplus. This shard is intentionally separate from the pass wrapper so the
-// recipe set can grow by math family without creating a monolithic pass file.
-iree_status_t loom_math_legalize_collect_activation_recipes(
+// Collects elementwise scalar/vector recipes such as exp, erf, logistic, SiLU,
+// GELU, and softplus. This shard is intentionally separate from the pass
+// wrapper so the recipe set can grow by math family without creating a
+// monolithic pass file.
+iree_status_t loom_math_legalize_collect_elementwise_recipes(
     iree_arena_allocator_t* arena,
     loom_math_legalize_recipe_table_t* out_table);
 

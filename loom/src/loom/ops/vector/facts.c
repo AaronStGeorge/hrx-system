@@ -1373,6 +1373,69 @@ static double loom_vector_maxnum_f64(double lhs, double rhs) {
   return fmax(lhs, rhs);
 }
 
+static double loom_vector_clampf_ordered_f64(double value, double lower,
+                                             double upper) {
+  double result = value;
+  if (result < lower) {
+    result = lower;
+  }
+  if (result > upper) {
+    result = upper;
+  }
+  return result;
+}
+
+static double loom_vector_clampf_number_f64(double value, double lower,
+                                            double upper) {
+  return fmin(fmax(value, lower), upper);
+}
+
+static double loom_vector_clampf_ieee_f64(double value, double lower,
+                                          double upper) {
+  return loom_vector_minimum_f64(loom_vector_maximum_f64(value, lower), upper);
+}
+
+static void loom_vector_clampf_transfer(const loom_value_facts_t* value,
+                                        const loom_value_facts_t* lower,
+                                        const loom_value_facts_t* upper,
+                                        double (*fn)(double, double, double),
+                                        loom_value_facts_t* out) {
+  double value_f64 = 0.0;
+  double lower_f64 = 0.0;
+  double upper_f64 = 0.0;
+  if (!loom_vector_facts_query_exact_f64(*value, &value_f64) ||
+      !loom_vector_facts_query_exact_f64(*lower, &lower_f64) ||
+      !loom_vector_facts_query_exact_f64(*upper, &upper_f64)) {
+    *out = loom_value_facts_unknown();
+    return;
+  }
+  *out = loom_value_facts_exact_f64(fn(value_f64, lower_f64, upper_f64));
+}
+
+static void loom_vector_clampf_ordered_transfer(const loom_value_facts_t* value,
+                                                const loom_value_facts_t* lower,
+                                                const loom_value_facts_t* upper,
+                                                loom_value_facts_t* out) {
+  loom_vector_clampf_transfer(value, lower, upper,
+                              loom_vector_clampf_ordered_f64, out);
+}
+
+static void loom_vector_clampf_number_transfer(const loom_value_facts_t* value,
+                                               const loom_value_facts_t* lower,
+                                               const loom_value_facts_t* upper,
+                                               loom_value_facts_t* out) {
+  loom_vector_clampf_transfer(value, lower, upper,
+                              loom_vector_clampf_number_f64, out);
+}
+
+static void loom_vector_clampf_ieee_transfer(const loom_value_facts_t* value,
+                                             const loom_value_facts_t* lower,
+                                             const loom_value_facts_t* upper,
+                                             loom_value_facts_t* out) {
+  loom_vector_clampf_transfer(value, lower, upper, loom_vector_clampf_ieee_f64,
+                              out);
+}
+
 static void loom_vector_isnanf_transfer(const loom_value_facts_t* input,
                                         loom_value_facts_t* out) {
   double value = 0.0;
@@ -2440,6 +2503,32 @@ LOOM_VECTOR_FLOAT_BINARY_FACTS(loom_vector_minnumf_facts,
 LOOM_VECTOR_FLOAT_BINARY_FACTS(loom_vector_maxnumf_facts,
                                loom_vector_maxnum_f64)
 LOOM_VECTOR_FLOAT_BINARY_FACTS(loom_vector_copysignf_facts, copysign)
+
+iree_status_t loom_vector_clampf_facts(loom_fact_context_t* context,
+                                       const loom_module_t* module,
+                                       const loom_op_t* op,
+                                       const loom_value_facts_t* operand_facts,
+                                       loom_value_facts_t* result_facts) {
+  switch (loom_vector_clampf_mode(op)) {
+    case LOOM_VECTOR_CLAMPF_MODE_ORDERED:
+      return loom_vector_ternary_summary_facts(
+          context, operand_facts, result_facts,
+          loom_vector_clampf_ordered_transfer);
+    case LOOM_VECTOR_CLAMPF_MODE_NUMBER:
+      return loom_vector_ternary_summary_facts(
+          context, operand_facts, result_facts,
+          loom_vector_clampf_number_transfer);
+    case LOOM_VECTOR_CLAMPF_MODE_IEEE:
+      return loom_vector_ternary_summary_facts(
+          context, operand_facts, result_facts,
+          loom_vector_clampf_ieee_transfer);
+    case LOOM_VECTOR_CLAMPF_MODE_COUNT_:
+      break;
+  }
+  result_facts[0] = loom_value_facts_unknown();
+  return iree_ok_status();
+}
+
 LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_addi_facts, loom_value_facts_addi)
 LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_subi_facts, loom_value_facts_subi)
 LOOM_VECTOR_INTEGER_BINARY_FACTS(loom_vector_muli_facts, loom_value_facts_muli)

@@ -1111,6 +1111,17 @@ iree_status_t loom_scalar_copysignf_canonicalize(loom_op_t* op,
   return iree_ok_status();
 }
 
+iree_status_t loom_scalar_clampf_canonicalize(loom_op_t* op,
+                                              loom_rewriter_t* rewriter) {
+  loom_value_facts_t facts =
+      loom_rewriter_value_facts(rewriter, loom_scalar_clampf_result(op));
+  if (loom_value_facts_is_exact(facts) && loom_value_facts_is_float(facts)) {
+    return loom_scalar_replace_single_result_with_f64_constant(
+        op, rewriter, loom_value_facts_as_f64(facts));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_scalar_fmaf_canonicalize(loom_op_t* op,
                                             loom_rewriter_t* rewriter) {
   loom_value_id_t a = loom_scalar_fmaf_a(op);

@@ -127,25 +127,34 @@ func.def @dynamic_2d_splat(%m: index, %n: index, %x: f32) -> (vector<[%m]x[%n]xf
 func.def @static_float_math(%a: vector<2xf32>, %b: vector<2xf32>) -> (vector<2xf32>) {
   %diff = vector.subf %a, %b : vector<2xf32>
   %exp = vector.expf %diff : vector<2xf32>
-  %r = vector.maxnumf %exp, %a : vector<2xf32>
+  %max = vector.maxnumf %exp, %a : vector<2xf32>
+  %lower = vector.constant -1.0 : vector<2xf32>
+  %upper = vector.constant 1.0 : vector<2xf32>
+  %r = vector.clampf<number, nnan|nsz> %max, %lower, %upper : vector<2xf32>
   func.return %r : vector<2xf32>
 }
 
 // ----
 func.def @static_float_math(%a: vector<2xf32>, %b: vector<2xf32>) -> (vector<2xf32>) {
-  %6 = vector.extract %a[0] : vector<2xf32> -> f32
-  %7 = vector.extract %b[0] : vector<2xf32> -> f32
-  %8 = scalar.subf %6, %7 : f32
-  %9 = scalar.expf %8 : f32
-  %10 = vector.extract %a[0] : vector<2xf32> -> f32
-  %11 = scalar.maxnumf %9, %10 : f32
-  %12 = vector.extract %a[1] : vector<2xf32> -> f32
-  %13 = vector.extract %b[1] : vector<2xf32> -> f32
-  %14 = scalar.subf %12, %13 : f32
-  %15 = scalar.expf %14 : f32
-  %16 = vector.extract %a[1] : vector<2xf32> -> f32
-  %17 = scalar.maxnumf %15, %16 : f32
-  %r = vector.from_elements %11, %17 : vector<2xf32>
+  %9 = vector.extract %a[0] : vector<2xf32> -> f32
+  %10 = vector.extract %b[0] : vector<2xf32> -> f32
+  %11 = scalar.subf %9, %10 : f32
+  %12 = scalar.expf %11 : f32
+  %13 = vector.extract %a[0] : vector<2xf32> -> f32
+  %14 = scalar.maxnumf %12, %13 : f32
+  %15 = scalar.constant -1.0 : f32
+  %16 = scalar.constant 1.0 : f32
+  %17 = scalar.clampf<number, nnan|nsz> %14, %15, %16 : f32
+  %18 = vector.extract %a[1] : vector<2xf32> -> f32
+  %19 = vector.extract %b[1] : vector<2xf32> -> f32
+  %20 = scalar.subf %18, %19 : f32
+  %21 = scalar.expf %20 : f32
+  %22 = vector.extract %a[1] : vector<2xf32> -> f32
+  %23 = scalar.maxnumf %21, %22 : f32
+  %24 = scalar.constant -1.0 : f32
+  %25 = scalar.constant 1.0 : f32
+  %26 = scalar.clampf<number, nnan|nsz> %23, %24, %25 : f32
+  %r = vector.from_elements %17, %26 : vector<2xf32>
   func.return %r : vector<2xf32>
 }
 

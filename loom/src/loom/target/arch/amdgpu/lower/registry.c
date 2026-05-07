@@ -32,6 +32,7 @@
 #include "loom/target/arch/amdgpu/contracts/view_lower_rules.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/lower/internal.h"
+#include "loom/target/arch/amdgpu/lower/mask.h"
 
 typedef struct loom_amdgpu_lower_dispatch_row_t
     loom_amdgpu_lower_dispatch_row_t;
@@ -283,6 +284,14 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_scalar_cmpf_dispatch,
                              loom_amdgpu_vector_compare_plan_t,
                              loom_amdgpu_lower_scalar_cmpf)
 
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_scalar_clampf_dispatch,
+                               loom_amdgpu_clampf_plan_t,
+                               loom_amdgpu_select_scalar_clampf_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_scalar_clampf_dispatch,
+                             loom_amdgpu_clampf_plan_t,
+                             loom_amdgpu_lower_clampf)
+
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_fragment_load_dispatch,
                                loom_amdgpu_fragment_memory_plan_t,
                                loom_amdgpu_select_vector_fragment_load_plan)
@@ -315,6 +324,14 @@ LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_scf_select_dispatch,
 LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_scf_select_dispatch,
                              loom_amdgpu_vector_select_plan_t,
                              loom_amdgpu_lower_select)
+
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_clampf_dispatch,
+                               loom_amdgpu_clampf_plan_t,
+                               loom_amdgpu_select_vector_clampf_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_clampf_dispatch,
+                             loom_amdgpu_clampf_plan_t,
+                             loom_amdgpu_lower_clampf)
 
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_table_lookup_dispatch,
                                loom_amdgpu_table_lookup_plan_t,

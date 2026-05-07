@@ -13,10 +13,17 @@ from loom.assembly import (
     COMMA,
     Flags,
     Ref,
+    TemplateParamFlags,
     TypeOf,
 )
-from loom.dialect.scalar import FastMathFlags, IntOverflowFlags, scalar_ops
+from loom.dialect.scalar import (
+    ClampFMode,
+    FastMathFlags,
+    IntOverflowFlags,
+    scalar_ops,
+)
 from loom.dsl import (
+    ATTR_TYPE_ENUM,
     ATTR_TYPE_FLAGS,
     FLOAT,
     IDEMPOTENT,
@@ -389,6 +396,44 @@ scalar_maxnumf = binary_op(
     examples=["%result = scalar.maxnumf %lhs, %rhs : f32"],
 )
 
+scalar_clampf = Op(
+    "scalar.clampf",
+    group=scalar_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc=(
+        "Floating-point clamp with explicit NaN/comparison policy. The ordered mode preserves strict compare/select semantics, number mode uses minnum/maxnum semantics, and ieee mode propagates NaNs."
+    ),
+    operands=[
+        Operand("value", FLOAT),
+        Operand("lower", FLOAT),
+        Operand("upper", FLOAT),
+    ],
+    results=[Result("result", FLOAT)],
+    attrs=[
+        AttrDef("mode", ATTR_TYPE_ENUM, enum_def=ClampFMode),
+        AttrDef("fastmath", ATTR_TYPE_FLAGS, optional=True, enum_def=FastMathFlags),
+    ],
+    constraints=[SameType("value", "lower", "upper", "result")],
+    traits=[PURE],
+    facts="loom_scalar_clampf_facts",
+    canonicalize="loom_scalar_clampf_canonicalize",
+    format=[
+        TemplateParamFlags("mode", "fastmath"),
+        Ref("value"),
+        COMMA,
+        Ref("lower"),
+        COMMA,
+        Ref("upper"),
+        COLON,
+        TypeOf("result"),
+    ],
+    examples=[
+        "%result = scalar.clampf<ordered> %value, %lower, %upper : f32",
+        "%result = scalar.clampf<number, nnan|nsz> %value, %lower, %upper : f32",
+        "%result = scalar.clampf<ieee> %value, %lower, %upper : f32",
+    ],
+)
+
 scalar_copysignf = binary_op(
     "scalar.copysignf",
     group=scalar_ops,
@@ -432,5 +477,6 @@ ALL_ARITHMETIC_OPS: tuple[Op, ...] = (
     scalar_maximumf,
     scalar_minnumf,
     scalar_maxnumf,
+    scalar_clampf,
     scalar_copysignf,
 )

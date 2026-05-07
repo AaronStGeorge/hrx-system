@@ -18,7 +18,7 @@ loom_cc_library(
         "legalize.c",
         "patterns.c",
         "patterns.h",
-        "patterns_activations.c",
+        "patterns_elementwise.c",
     ],
     hdrs = ["legalize.h"],
     deps = [
