@@ -262,7 +262,7 @@ static iree_status_t loom_linearize_view_accesses_materialize_axis_index(
       iree_string_view_t source_name =
           builder->module->strings.entries[source_name_id];
       char name[128] = {0};
-      static const char kBoundedSuffix[] = "Bounded";
+      static const char kBoundedSuffix[] = "_bounded";
       const iree_host_size_t suffix_length = sizeof(kBoundedSuffix) - 1;
       if (source_name.size + suffix_length < sizeof(name)) {
         memcpy(name, source_name.data, source_name.size);

@@ -246,18 +246,18 @@ low.kernel.def target(@target) workgroup_size(16, 16, 1) @lds_f16_strided_scalar
   %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, valid_byte_count = 512} : reg<amdgpu.sgpr x2>
-  %rowBounded = v_and_b32_lit %packed_tid, 1023
+  %row_bounded = v_and_b32_lit %packed_tid, 1023
   %36 = v_lshrrev_b32_lit %packed_tid, 10
-  %colBounded = v_and_b32_lit %36, 1023
+  %col_bounded = v_and_b32_lit %36, 1023
   %39 = storage {byte_alignment = 2, byte_length = 512} : low.storage<workgroup>
   %scratch_view = storage_address %39 : low.storage<workgroup> -> reg<amdgpu.vgpr>
-  %41 = v_lshlrev_b32_lit %rowBounded, 4
-  %linear16 = v_add_u32 %41, %colBounded
+  %41 = v_lshlrev_b32_lit %row_bounded, 4
+  %linear16 = v_add_u32 %41, %col_bounded
   %43 = v_lshlrev_b32_lit %linear16, 1
   %loaded = global_load_short_d16 %43, %input_view
-  %45 = v_lshlrev_b32_lit %rowBounded, 1
+  %45 = v_lshlrev_b32_lit %row_bounded, 1
   %46 = v_add_u32 %scratch_view, %45
-  %47 = v_lshlrev_b32_lit %colBounded, 5
+  %47 = v_lshlrev_b32_lit %col_bounded, 5
   %48 = v_add_u32 %46, %47
   ds_write_b16 %48, %loaded
   %roundtrip = ds_read_u16 %48
