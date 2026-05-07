@@ -15,7 +15,8 @@ kernel.def @f32_arith(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: buffer)
   %sum = vector.addf %lhs, %rhs : vector<1xf32>
   %product = vector.mulf %sum, %rhs : vector<1xf32>
   %negated = vector.negf %product : vector<1xf32>
-  vector.store %negated, %output_view[%tid] : vector<1xf32>, view<64xf32, #dense>
+  %absolute = vector.absf %negated : vector<1xf32>
+  vector.store %absolute, %output_view[%tid] : vector<1xf32>, view<64xf32, #dense>
   kernel.return
 }
 
@@ -82,7 +83,8 @@ kernel.def @f32_scalarized(%lhs_buffer: buffer, %rhs_buffer: buffer, %output: bu
   %lhs2 = vector.extract %lhs[2] : vector<4xf32> -> f32
   %rhs2 = vector.extract %rhs[2] : vector<4xf32> -> f32
   %difference = scalar.subf %lhs2, %rhs2 : f32
-  %lane2 = scalar.negf %difference : f32
+  %negated = scalar.negf %difference : f32
+  %lane2 = scalar.absf %negated : f32
   %lhs3 = vector.extract %lhs[3] : vector<4xf32> -> f32
   %rhs3 = vector.extract %rhs[3] : vector<4xf32> -> f32
   %bias = scalar.constant 0.5 : f32

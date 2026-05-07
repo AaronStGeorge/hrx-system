@@ -17,7 +17,8 @@ kernel.def target(@target) @f32_arith(%lhs_buffer: buffer, %rhs_buffer: buffer, 
   %sum = vector.addf %lhs, %rhs : vector<1xf32>
   %product = vector.mulf %sum, %rhs : vector<1xf32>
   %negated = vector.negf %product : vector<1xf32>
-  vector.store %negated, %output_view[%tid] : vector<1xf32>, view<64xf32, #dense>
+  %absolute = vector.absf %negated : vector<1xf32>
+  vector.store %absolute, %output_view[%tid] : vector<1xf32>, view<64xf32, #dense>
   kernel.return
 }
 
@@ -26,13 +27,14 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_arith() asm<amdgpu.r
   %lhs_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %rhs_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %23 = v_mov_b32 0
-  %lhs = global_load_b32 %23, %lhs_view
-  %rhs = global_load_b32 %23, %rhs_view
+  %24 = v_mov_b32 0
+  %lhs = global_load_b32 %24, %lhs_view
+  %rhs = global_load_b32 %24, %rhs_view
   %sum = v_add_f32 %lhs, %rhs
   %product = v_mul_f32 %sum, %rhs
   %negated = v_xor_b32_lit %product, 2147483648
-  global_store_b32 %23, %negated, %output_view
+  %absolute = v_and_b32_lit %negated, 2147483647
+  global_store_b32 %24, %absolute, %output_view
   return
 }
 
@@ -146,7 +148,8 @@ kernel.def target(@target) @f32_scalarized(%lhs_buffer: buffer, %rhs_buffer: buf
   %lhs2 = vector.extract %lhs[2] : vector<4xf32> -> f32
   %rhs2 = vector.extract %rhs[2] : vector<4xf32> -> f32
   %difference = scalar.subf %lhs2, %rhs2 : f32
-  %lane2 = scalar.negf %difference : f32
+  %negated = scalar.negf %difference : f32
+  %lane2 = scalar.absf %negated : f32
   %lhs3 = vector.extract %lhs[3] : vector<4xf32> -> f32
   %rhs3 = vector.extract %rhs[3] : vector<4xf32> -> f32
   %bias = scalar.constant 0.5 : f32
@@ -161,9 +164,9 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_scalarized() asm<amd
   %lhs_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %rhs_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %38 = v_mov_b32 0
-  %lhs = global_load_b128 %38, %lhs_view
-  %rhs = global_load_b128 %38, %rhs_view
+  %39 = v_mov_b32 0
+  %lhs = global_load_b128 %39, %lhs_view
+  %rhs = global_load_b128 %39, %rhs_view
   %lhs0 = slice %lhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %rhs0 = slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %lane0 = v_add_f32 %lhs0, %rhs0
@@ -173,12 +176,12 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_scalarized() asm<amd
   %lhs2 = slice %lhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %rhs2 = slice %rhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %difference = v_sub_f32 %lhs2, %rhs2
-  %lane2 = v_xor_b32_lit %difference, 2147483648
+  %lane2 = v_and_b32_lit %difference, 2147483647
   %lhs3 = slice %lhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %rhs3 = slice %rhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %bias = v_mov_b32 1056964608
   %lane3 = v_fma_f32 %lhs3, %rhs3, %bias
   %result = concat(%lane0, %lane1, %lane2, %lane3) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128 %38, %result, %output_view
+  global_store_b128 %39, %result, %output_view
   return
 }
