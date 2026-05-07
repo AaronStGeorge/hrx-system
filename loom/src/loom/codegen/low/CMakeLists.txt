@@ -121,6 +121,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::pass::environment
     loom::src::loom::pass::types
+    loom::src::loom::target::math_policy
   PUBLIC
 )
 

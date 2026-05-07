@@ -10,3 +10,11 @@ func.def public @no_math_recipes_yet() -> (index) {
   %result = index.constant 4 : index
   func.return %result : index
 }
+
+// ====
+
+func.def public @targetless_math_policy(%input: f32) -> (f32) {
+  // ERROR@+1: LOWERING/034 {op_name="scalar.logisticf", phase_name="legalize-math", contract_key="<targetless>"}
+  %result = scalar.logisticf %input : f32
+  func.return %result : f32
+}

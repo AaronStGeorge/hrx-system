@@ -9,6 +9,7 @@
 #include "loom/pass/builder.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/lower.h"
+#include "loom/target/arch/amdgpu/math_policy.h"
 #include "loom/target/arch/amdgpu/ops/registry.h"
 #include "loom/target/arch/amdgpu/packet_diagnostics.h"
 #include "loom/target/arch/amdgpu/pass_registry.h"
@@ -77,6 +78,8 @@ const loom_target_provider_t loom_amdgpu_target_provider = {
         loom_amdgpu_low_descriptor_registry_initialize,
     .initialize_low_lower_policy_registry =
         loom_amdgpu_low_lower_policy_registry_initialize,
+    .initialize_math_policy_registry =
+        loom_amdgpu_math_policy_registry_initialize,
     .low_legality_provider_list =
         {
             .count = IREE_ARRAYSIZE(kLoomAmdgpuLowLegalityProviders),

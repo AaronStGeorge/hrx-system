@@ -98,7 +98,7 @@ class LowLowerPassTest : public ::testing::Test {
     loom_low_pass_environment_storage_t low_pass_environment_storage;
     loom_pass_environment_t environment =
         loom_low_pass_environment_storage_initialize(
-            &registry_.registry, policy_registry, nullptr,
+            &registry_.registry, policy_registry, nullptr, nullptr,
             &low_pass_environment_storage);
     loom_pass_t pass = {
         .info = pass_info,

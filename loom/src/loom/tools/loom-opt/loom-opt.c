@@ -688,6 +688,9 @@ static iree_status_t loom_opt_run_passes(
   IREE_RETURN_IF_ERROR(
       loom_target_environment_initialize_low_lower_policy_registry(
           target_environment, &low_lower_policy_registry));
+  loom_target_math_policy_registry_t math_policy_registry = {0};
+  IREE_RETURN_IF_ERROR(loom_target_environment_initialize_math_policy_registry(
+      target_environment, &math_policy_registry));
   const loom_target_low_legality_provider_list_t low_legality_provider_list =
       loom_target_environment_low_legality_provider_list(target_environment);
   loom_low_pass_environment_storage_t low_pass_environment_storage;
@@ -698,7 +701,8 @@ static iree_status_t loom_opt_run_passes(
       .registry = pass_registry,
       .environment = loom_low_pass_environment_storage_initialize(
           &low_registry->registry, &low_lower_policy_registry,
-          &low_legality_provider_list, &low_pass_environment_storage),
+          &low_legality_provider_list, &math_policy_registry,
+          &low_pass_environment_storage),
       .predicate_provider =
           loom_target_pass_predicate_provider(&predicate_storage),
       .block_pool = block_pool,

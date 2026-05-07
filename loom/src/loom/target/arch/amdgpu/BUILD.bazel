@@ -62,6 +62,7 @@ loom_assert_no_dependencies(
         ":hal_binding_materialization",
         ":hal_binding_materialization_pass",
         ":low_registry",
+        ":math_policy",
         ":matrix_contract",
         ":matrix_contract_projection",
         ":occupancy",
@@ -113,12 +114,14 @@ loom_assert_no_dependencies(
         ":low_registry",
         ":matrix_contract",
         ":matrix_contract_projection",
+        ":math_policy",
         ":packet_diagnostics",
         ":provider",
     ],
     targets = [
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:low_legality",
+        "//loom/src/loom/target:math_policy",
         "//loom/src/loom/target:low_packet_diagnostics",
         "//loom/src/loom/target:provider",
         "//loom/src/loom/target:types",
@@ -703,12 +706,24 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "math_policy",
+    srcs = ["math_policy.c"],
+    hdrs = ["math_policy.h"],
+    textual_hdrs = ["math_policy_tables.inl"],
+    deps = [
+        "//loom/src/loom/target:math_policy",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "provider",
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
     deps = [
         ":low_registry",
         ":lower",
+        ":math_policy",
         ":ops",
         ":packet_diagnostics",
         ":pass_registry",
@@ -978,6 +993,7 @@ loom_check_test_suite(
         "test/source_low/source_low_index.loom-test",
         "test/source_low/source_low_index_amdgpu.loom-test",
         "test/source_low/source_low_launch_config.loom-test",
+        "test/source_low/source_low_legalize_math.loom-test",
         "test/source_low/source_low_mask.loom-test",
         "test/source_low/source_low_memory_generic_atomic.loom-test",
         "test/source_low/source_low_memory_generic_atomic_diagnostics.loom-test",

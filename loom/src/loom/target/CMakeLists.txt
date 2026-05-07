@@ -146,6 +146,22 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    math_policy
+  HDRS
+    "math_policy.h"
+  SRCS
+    "math_policy.c"
+  DEPS
+    ::types
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::pass::environment
+    loom::src::loom::pass::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     low_descriptor_registry_manifest
   HDRS
     "low_descriptor_registry_manifest.h"
@@ -253,6 +269,7 @@ loom_cc_library(
     ::low_descriptor_registry
     ::low_legality
     ::low_packet_diagnostics
+    ::math_policy
     iree::base
     loom::src::loom::codegen::low::lower
     loom::src::loom::ir

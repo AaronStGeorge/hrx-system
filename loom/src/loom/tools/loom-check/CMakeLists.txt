@@ -85,6 +85,7 @@ loom_cc_library(
     loom::src::loom::target::low_descriptor_registry_manifest
     loom::src::loom::target::low_legality
     loom::src::loom::target::low_packet_diagnostics
+    loom::src::loom::target::math_policy
     loom::src::loom::target::predicate
     loom::src::loom::target::types
     loom::src::loom::testing::diff
@@ -313,6 +314,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::codegen::low::lower
     loom::src::loom::ir
+    loom::src::loom::target::math_policy
     loom::src::loom::target::provider
   PUBLIC
 )

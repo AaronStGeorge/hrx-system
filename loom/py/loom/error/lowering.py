@@ -246,6 +246,79 @@ ERR_LOWERING_033 = ErrorDef(
     ),
 )
 
+# ERR_LOWERING_034: Math legalization policy is unavailable.
+ERR_LOWERING_034 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=34,
+    severity=Severity.ERROR,
+    summary="Math legalization policy is unavailable.",
+    message=(
+        "{phase_name} requires a target math policy for {contract_key} before "
+        "legalizing {op_name}"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("phase_name", ParamKind.STRING),
+        ErrorParam("contract_key", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Attach a target with a linked math policy or run legalize-math only "
+        "after target selection"
+    ),
+)
+
+# ERR_LOWERING_035: Math legalization recipe is unavailable.
+ERR_LOWERING_035 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=35,
+    severity=Severity.ERROR,
+    summary="Math legalization recipe is unavailable.",
+    message=(
+        "{phase_name} selected recipe {recipe_name} for {op_name} through "
+        "{policy_name}, but no recipe row handles {math_op} in {lane_domain} "
+        "lanes of {element_type} under {constraint_key}"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("phase_name", ParamKind.STRING),
+        ErrorParam("policy_name", ParamKind.STRING),
+        ErrorParam("recipe_name", ParamKind.STRING),
+        ErrorParam("math_op", ParamKind.STRING),
+        ErrorParam("lane_domain", ParamKind.STRING),
+        ErrorParam("element_type", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Link the selected math recipe shard or change the target policy to "
+        "keep or reject the operation"
+    ),
+)
+
+# ERR_LOWERING_036: Math legalization policy rejected an operation.
+ERR_LOWERING_036 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=36,
+    severity=Severity.ERROR,
+    summary="Math legalization policy rejected an operation.",
+    message=(
+        "{phase_name} policy {policy_name} rejected {op_name} for {math_op} "
+        "in {lane_domain} lanes of {element_type} under {constraint_key}"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("phase_name", ParamKind.STRING),
+        ErrorParam("policy_name", ParamKind.STRING),
+        ErrorParam("math_op", ParamKind.STRING),
+        ErrorParam("lane_domain", ParamKind.STRING),
+        ErrorParam("element_type", ParamKind.STRING),
+        ErrorParam("constraint_key", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Select a supported variant, add the required fast-math permission, or "
+        "implement a stricter target recipe for the reported constraint"
+    ),
+)
+
 # ERR_LOWERING_043: Boundary fact refinement did not converge.
 ERR_LOWERING_043 = ErrorDef(
     domain=ErrorDomain.LOWERING,
@@ -278,5 +351,8 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_031,
     ERR_LOWERING_032,
     ERR_LOWERING_033,
+    ERR_LOWERING_034,
+    ERR_LOWERING_035,
+    ERR_LOWERING_036,
     ERR_LOWERING_043,
 )

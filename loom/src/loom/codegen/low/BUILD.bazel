@@ -169,6 +169,7 @@ loom_cc_library(
         ":pass_requirements",
         "//loom/src/loom/pass:environment",
         "//loom/src/loom/pass:types",
+        "//loom/src/loom/target:math_policy",
         "//runtime/src/iree/base",
     ],
 )

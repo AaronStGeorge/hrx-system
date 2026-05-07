@@ -565,6 +565,21 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    math_policy
+  HDRS
+    "math_policy.h"
+  TEXTUAL_HDRS
+    "math_policy_tables.inl"
+  SRCS
+    "math_policy.c"
+  DEPS
+    iree::base
+    loom::src::loom::target::math_policy
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     provider
   HDRS
     "provider.h"
@@ -573,6 +588,7 @@ loom_cc_library(
   DEPS
     ::low_registry
     ::lower
+    ::math_policy
     ::ops
     ::packet_diagnostics
     ::pass_registry
@@ -1125,6 +1141,17 @@ iree_executable_test(
     "source_low_launch_config"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_launch_config.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_legalize_math"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_legalize_math.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

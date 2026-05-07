@@ -18,6 +18,7 @@
 #include "loom/codegen/low/descriptors.h"
 #include "loom/pass/environment.h"
 #include "loom/pass/types.h"
+#include "loom/target/math_policy.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,8 +48,10 @@ typedef struct loom_low_pass_capability_t {
 typedef struct loom_low_pass_environment_storage_t {
   // Low capability entry stored for the borrowed environment view.
   loom_low_pass_capability_t low_capability;
+  // Target math capability entry stored for the borrowed environment view.
+  loom_target_math_pass_capability_t math_capability;
   // Pointer table borrowed by |environment|.
-  const loom_pass_environment_capability_t* capabilities[1];
+  const loom_pass_environment_capability_t* capabilities[2];
   // Pass environment view over |capabilities|.
   loom_pass_environment_t environment;
 } loom_low_pass_environment_storage_t;
@@ -65,6 +68,7 @@ loom_pass_environment_t loom_low_pass_environment_storage_initialize(
     const loom_low_descriptor_registry_t* descriptor_registry,
     const loom_low_lower_policy_registry_t* lower_policy_registry,
     const loom_target_low_legality_provider_list_t* legality_provider_list,
+    const loom_target_math_policy_registry_t* math_policy_registry,
     loom_low_pass_environment_storage_t* out_storage);
 
 // Looks up the low capability from |environment|. Returns NULL when absent.

@@ -8,59 +8,59 @@
 
 #include <string.h>
 
-typedef struct loom_math_legalize_pattern_source_t {
-  // Pattern array provided by one recipe shard.
-  const loom_pattern_t* patterns;
+typedef struct loom_math_legalize_recipe_source_t {
+  // Recipe array provided by one recipe shard.
+  const loom_math_legalize_recipe_t* recipes;
 
-  // Number of entries in patterns.
-  iree_host_size_t pattern_count;
-} loom_math_legalize_pattern_source_t;
+  // Number of entries in recipes.
+  iree_host_size_t recipe_count;
+} loom_math_legalize_recipe_source_t;
 
 static iree_status_t loom_math_legalize_collect_sources(
-    iree_arena_allocator_t* arena, loom_math_legalize_pattern_source_t* sources,
+    iree_arena_allocator_t* arena, loom_math_legalize_recipe_source_t* sources,
     iree_host_size_t source_count,
-    loom_math_legalize_pattern_table_t* out_table) {
-  *out_table = (loom_math_legalize_pattern_table_t){0};
-  iree_host_size_t total_pattern_count = 0;
+    loom_math_legalize_recipe_table_t* out_table) {
+  *out_table = (loom_math_legalize_recipe_table_t){0};
+  iree_host_size_t total_recipe_count = 0;
   for (iree_host_size_t i = 0; i < source_count; ++i) {
-    total_pattern_count += sources[i].pattern_count;
+    total_recipe_count += sources[i].recipe_count;
   }
-  if (total_pattern_count == 0) {
+  if (total_recipe_count == 0) {
     return iree_ok_status();
   }
 
-  loom_pattern_t* patterns = NULL;
+  loom_math_legalize_recipe_t* recipes = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, total_pattern_count, sizeof(*patterns), (void**)&patterns));
+      arena, total_recipe_count, sizeof(*recipes), (void**)&recipes));
 
   iree_host_size_t offset = 0;
   for (iree_host_size_t i = 0; i < source_count; ++i) {
-    if (sources[i].pattern_count == 0) {
+    if (sources[i].recipe_count == 0) {
       continue;
     }
-    memcpy(&patterns[offset], sources[i].patterns,
-           sources[i].pattern_count * sizeof(*patterns));
-    offset += sources[i].pattern_count;
+    memcpy(&recipes[offset], sources[i].recipes,
+           sources[i].recipe_count * sizeof(*recipes));
+    offset += sources[i].recipe_count;
   }
 
-  *out_table = (loom_math_legalize_pattern_table_t){
-      .patterns = patterns,
-      .pattern_count = total_pattern_count,
+  *out_table = (loom_math_legalize_recipe_table_t){
+      .recipes = recipes,
+      .recipe_count = total_recipe_count,
   };
   return iree_ok_status();
 }
 
-iree_status_t loom_math_legalize_collect_patterns(
+iree_status_t loom_math_legalize_collect_recipes(
     iree_arena_allocator_t* arena,
-    loom_math_legalize_pattern_table_t* out_table) {
-  loom_math_legalize_pattern_table_t activation_patterns = {0};
-  IREE_RETURN_IF_ERROR(loom_math_legalize_collect_activation_patterns(
-      arena, &activation_patterns));
+    loom_math_legalize_recipe_table_t* out_table) {
+  loom_math_legalize_recipe_table_t activation_recipes = {0};
+  IREE_RETURN_IF_ERROR(loom_math_legalize_collect_activation_recipes(
+      arena, &activation_recipes));
 
-  loom_math_legalize_pattern_source_t sources[] = {
+  loom_math_legalize_recipe_source_t sources[] = {
       {
-          .patterns = activation_patterns.patterns,
-          .pattern_count = activation_patterns.pattern_count,
+          .recipes = activation_recipes.recipes,
+          .recipe_count = activation_recipes.recipe_count,
       },
   };
   return loom_math_legalize_collect_sources(arena, sources,

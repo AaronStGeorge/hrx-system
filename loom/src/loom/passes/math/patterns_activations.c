@@ -6,9 +6,9 @@
 
 #include "loom/passes/math/patterns.h"
 
-iree_status_t loom_math_legalize_collect_activation_patterns(
+iree_status_t loom_math_legalize_collect_activation_recipes(
     iree_arena_allocator_t* arena,
-    loom_math_legalize_pattern_table_t* out_table) {
-  *out_table = (loom_math_legalize_pattern_table_t){0};
+    loom_math_legalize_recipe_table_t* out_table) {
+  *out_table = (loom_math_legalize_recipe_table_t){0};
   return iree_ok_status();
 }

@@ -23,6 +23,7 @@
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/low_legality.h"
 #include "loom/target/low_packet_diagnostics.h"
+#include "loom/target/math_policy.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,6 +40,10 @@ typedef void (*loom_target_low_descriptor_registry_initializer_t)(
 // Initializes a source-to-target-low lowering policy registry package.
 typedef void (*loom_target_low_lower_policy_registry_initializer_t)(
     loom_low_lower_policy_registry_t* out_registry);
+
+// Initializes a target math legalization policy registry package.
+typedef void (*loom_target_math_policy_registry_initializer_t)(
+    loom_target_math_policy_registry_t* out_registry);
 
 typedef struct loom_builder_t loom_builder_t;
 typedef struct loom_target_environment_t loom_target_environment_t;
@@ -82,6 +87,9 @@ typedef struct loom_target_provider_t {
   // Optional function that initializes source-to-low lowering policies.
   loom_target_low_lower_policy_registry_initializer_t
       initialize_low_lower_policy_registry;
+  // Optional function that initializes target math legalization policies.
+  loom_target_math_policy_registry_initializer_t
+      initialize_math_policy_registry;
   // Optional source legality providers contributed by this target.
   loom_target_low_legality_provider_list_t low_legality_provider_list;
   // Optional low-packet diagnostic providers contributed by this target.
@@ -104,6 +112,7 @@ typedef struct loom_target_provider_set_t {
 enum {
   LOOM_TARGET_PROVIDER_DESCRIPTOR_SET_PROVIDER_CAPACITY = 256,
   LOOM_TARGET_PROVIDER_LOW_LOWER_POLICY_CAPACITY = 128,
+  LOOM_TARGET_PROVIDER_MATH_POLICY_CAPACITY = 128,
   LOOM_TARGET_PROVIDER_LOW_LEGALITY_PROVIDER_CAPACITY = 64,
   LOOM_TARGET_PROVIDER_LOW_PACKET_DIAGNOSTIC_PROVIDER_CAPACITY = 64,
   LOOM_TARGET_PROVIDER_PASS_REGISTRY_CAPACITY = 64,
@@ -123,6 +132,11 @@ struct loom_target_environment_t {
       low_lower_policy_entries[LOOM_TARGET_PROVIDER_LOW_LOWER_POLICY_CAPACITY];
   // Number of entries in |low_lower_policy_entries|.
   iree_host_size_t low_lower_policy_entry_count;
+  // Target math policy table assembled once.
+  loom_target_math_policy_registry_entry_t
+      math_policy_entries[LOOM_TARGET_PROVIDER_MATH_POLICY_CAPACITY];
+  // Number of entries in |math_policy_entries|.
+  iree_host_size_t math_policy_entry_count;
   // Target-low source legality provider table assembled once.
   const loom_target_low_legality_provider_t* low_legality_providers
       [LOOM_TARGET_PROVIDER_LOW_LEGALITY_PROVIDER_CAPACITY];
@@ -171,6 +185,11 @@ iree_status_t loom_target_environment_initialize_low_descriptor_registry(
 iree_status_t loom_target_environment_initialize_low_lower_policy_registry(
     const loom_target_environment_t* environment,
     loom_low_lower_policy_registry_t* out_registry);
+
+// Initializes a composed target math legalization policy registry package.
+iree_status_t loom_target_environment_initialize_math_policy_registry(
+    const loom_target_environment_t* environment,
+    loom_target_math_policy_registry_t* out_registry);
 
 // Returns target-low source legality providers linked into |environment|.
 loom_target_low_legality_provider_list_t

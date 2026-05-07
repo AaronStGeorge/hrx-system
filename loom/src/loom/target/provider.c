@@ -42,6 +42,26 @@ static iree_status_t loom_target_environment_append_low_lower_policy_registry(
   return iree_ok_status();
 }
 
+static iree_status_t loom_target_environment_append_math_policy_registry(
+    loom_target_environment_t* environment,
+    const loom_target_provider_t* provider) {
+  if (provider->initialize_math_policy_registry == NULL) {
+    return iree_ok_status();
+  }
+  loom_target_math_policy_registry_t provider_registry = {0};
+  provider->initialize_math_policy_registry(&provider_registry);
+  if (environment->math_policy_entry_count + provider_registry.entry_count >
+      IREE_ARRAYSIZE(environment->math_policy_entries)) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "target math policy capacity exceeded");
+  }
+  for (iree_host_size_t i = 0; i < provider_registry.entry_count; ++i) {
+    environment->math_policy_entries[environment->math_policy_entry_count++] =
+        provider_registry.entries[i];
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_target_environment_append_low_legality_providers(
     loom_target_environment_t* environment,
     const loom_target_provider_t* provider) {
@@ -106,6 +126,8 @@ iree_status_t loom_target_environment_initialize(
     IREE_RETURN_IF_ERROR(
         loom_target_environment_append_low_lower_policy_registry(
             out_environment, provider));
+    IREE_RETURN_IF_ERROR(loom_target_environment_append_math_policy_registry(
+        out_environment, provider));
     IREE_RETURN_IF_ERROR(loom_target_environment_append_low_legality_providers(
         out_environment, provider));
     IREE_RETURN_IF_ERROR(
@@ -160,6 +182,17 @@ iree_status_t loom_target_environment_initialize_low_lower_policy_registry(
   loom_low_lower_policy_registry_initialize_from_entries(
       out_registry, environment->low_lower_policy_entries,
       environment->low_lower_policy_entry_count);
+  return iree_ok_status();
+}
+
+iree_status_t loom_target_environment_initialize_math_policy_registry(
+    const loom_target_environment_t* environment,
+    loom_target_math_policy_registry_t* out_registry) {
+  IREE_ASSERT_ARGUMENT(environment);
+  IREE_ASSERT_ARGUMENT(out_registry);
+  loom_target_math_policy_registry_initialize_from_entries(
+      out_registry, environment->math_policy_entries,
+      environment->math_policy_entry_count);
   return iree_ok_status();
 }
 

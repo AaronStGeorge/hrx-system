@@ -23,10 +23,19 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
+    loom::src::loom::analysis::symbol_facts
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::ops::func_symbol_facts
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::vector
     loom::src::loom::pass::pipeline
     loom::src::loom::pass::registry
     loom::src::loom::pass::types
     loom::src::loom::rewrite::greedy
+    loom::src::loom::target::function_contract
+    loom::src::loom::target::math_policy
   PUBLIC
 )
 

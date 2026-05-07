@@ -181,6 +181,14 @@ iree_status_t loom_check_environment_initialize_low_lower_policy_registry(
       out_registry);
 }
 
+iree_status_t loom_check_environment_initialize_math_policy_registry(
+    const loom_check_environment_t* environment,
+    loom_target_math_policy_registry_t* out_registry) {
+  *out_registry = (loom_target_math_policy_registry_t){0};
+  return environment->initialize_math_policy_registry.fn(
+      environment->initialize_math_policy_registry.user_data, out_registry);
+}
+
 //===----------------------------------------------------------------------===//
 // Execution
 //===----------------------------------------------------------------------===//
@@ -398,6 +406,16 @@ iree_status_t loom_check_execute_pass(
         low_lower_policy_registry_ref = &low_lower_policy_registry;
       }
     }
+    loom_target_math_policy_registry_t math_policy_registry = {0};
+    const loom_target_math_policy_registry_t* math_policy_registry_ref = NULL;
+    if (iree_status_is_ok(status) && environment &&
+        environment->initialize_math_policy_registry.fn != NULL) {
+      status = loom_check_environment_initialize_math_policy_registry(
+          environment, &math_policy_registry);
+      if (iree_status_is_ok(status)) {
+        math_policy_registry_ref = &math_policy_registry;
+      }
+    }
     loom_low_pass_environment_storage_t low_pass_environment_storage;
     loom_target_pass_predicate_provider_storage_t predicate_storage;
     loom_target_pass_predicate_provider_storage_initialize(block_pool,
@@ -422,7 +440,7 @@ iree_status_t loom_check_execute_pass(
         .environment = loom_low_pass_environment_storage_initialize(
             &low_registry.registry, low_lower_policy_registry_ref,
             environment ? &environment->low_legality_provider_list : NULL,
-            &low_pass_environment_storage),
+            math_policy_registry_ref, &low_pass_environment_storage),
         .predicate_provider =
             loom_target_pass_predicate_provider(&predicate_storage),
         .block_pool = block_pool,

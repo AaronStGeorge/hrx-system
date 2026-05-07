@@ -1,0 +1,26 @@
+// RUN: pass legalize-math
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @missing_logistic_recipe(%input: vector<4xf32>) -> (vector<4xf32>) {
+  // ERROR@+1: LOWERING/035 {op_name="vector.logisticf", phase_name="legalize-math", policy_name="amdgpu-math", recipe_name="logistic-exp2-f32", math_op="logisticf", lane_domain="vector", element_type="f32", constraint_key="math.recipe.logistic_exp2_f32"}
+  %result = vector.logisticf %input : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @rejects_strict_erf_gelu(%input: vector<4xf32>) -> (vector<4xf32>) {
+  // ERROR@+1: LOWERING/036 {op_name="vector.geluf", phase_name="legalize-math", policy_name="amdgpu-math", math_op="geluf.erf", lane_domain="vector", element_type="f32", constraint_key="math.erf.exact_f32"}
+  %result = vector.geluf<erf> %input : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @rejects_non_f32_activation(%input: f64) -> (f64) {
+  // ERROR@+1: LOWERING/036 {op_name="scalar.softplusf", phase_name="legalize-math", policy_name="amdgpu-math", math_op="softplusf", lane_domain="scalar", element_type="f64", constraint_key="math.element.f32"}
+  %result = scalar.softplusf %input : f64
+  func.return %result : f64
+}

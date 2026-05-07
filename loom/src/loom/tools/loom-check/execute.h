@@ -33,6 +33,7 @@
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/low_legality.h"
 #include "loom/target/low_packet_diagnostics.h"
+#include "loom/target/math_policy.h"
 #include "loom/tools/loom-check/check.h"
 #include "loom/tools/loom-check/report.h"
 #include "loom/tools/loom-check/update.h"
@@ -172,6 +173,19 @@ typedef struct loom_check_initialize_low_lower_policy_registry_callback_t {
   void* user_data;
 } loom_check_initialize_low_lower_policy_registry_callback_t;
 
+// Initializes a linked target math legalization policy registry package.
+typedef iree_status_t (*loom_check_initialize_math_policy_registry_fn_t)(
+    void* user_data, loom_target_math_policy_registry_t* out_registry);
+
+// Callback for the math policy registry package used by RUN: pass tests that
+// explicitly execute legalize-math.
+typedef struct loom_check_initialize_math_policy_registry_callback_t {
+  // Function that initializes the selected linked math policy package.
+  loom_check_initialize_math_policy_registry_fn_t fn;
+  // Opaque callback state forwarded to |fn|.
+  void* user_data;
+} loom_check_initialize_math_policy_registry_callback_t;
+
 typedef struct loom_check_environment_t loom_check_environment_t;
 typedef struct loom_check_emit_provider_t loom_check_emit_provider_t;
 typedef struct loom_check_requirement_provider_t
@@ -300,6 +314,9 @@ struct loom_check_environment_t {
   // into descriptor-backed low IR.
   loom_check_initialize_low_lower_policy_registry_callback_t
       initialize_low_lower_policy_registry;
+  // Target math legalization policy callback for math rewrite passes.
+  loom_check_initialize_math_policy_registry_callback_t
+      initialize_math_policy_registry;
   // Optional target-owned pass descriptors linked into this runner.
   const loom_pass_registry_t* pass_registry;
   // Optional target-low source legality providers linked into this runner.
@@ -359,6 +376,12 @@ iree_status_t loom_check_environment_initialize_low_descriptor_registry(
 iree_status_t loom_check_environment_initialize_low_lower_policy_registry(
     const loom_check_environment_t* environment,
     loom_low_lower_policy_registry_t* out_registry);
+
+// Initializes the target math legalization policy registry selected by
+// |environment|.
+iree_status_t loom_check_environment_initialize_math_policy_registry(
+    const loom_check_environment_t* environment,
+    loom_target_math_policy_registry_t* out_registry);
 
 // Executes a single test case: checks declared environment requirements,
 // dispatches to the mode-specific function, then applies XFAIL inversion to

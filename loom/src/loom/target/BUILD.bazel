@@ -129,6 +129,19 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "math_policy",
+    srcs = ["math_policy.c"],
+    hdrs = ["math_policy.h"],
+    deps = [
+        ":types",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/pass:environment",
+        "//loom/src/loom/pass:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "low_descriptor_registry_manifest",
     srcs = ["low_descriptor_registry_manifest.c"],
     hdrs = ["low_descriptor_registry_manifest.h"],
@@ -221,6 +234,7 @@ loom_cc_library(
         ":low_descriptor_registry",
         ":low_legality",
         ":low_packet_diagnostics",
+        ":math_policy",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/ir",
         "//loom/src/loom/pass:environment",

@@ -137,6 +137,9 @@ iree_status_t loom_compile_run_pipeline(
   IREE_RETURN_IF_ERROR(
       loom_target_environment_initialize_low_lower_policy_registry(
           options->target_environment, &low_lower_policy_registry));
+  loom_target_math_policy_registry_t math_policy_registry = {0};
+  IREE_RETURN_IF_ERROR(loom_target_environment_initialize_math_policy_registry(
+      options->target_environment, &math_policy_registry));
   const loom_target_low_legality_provider_list_t low_legality_provider_list =
       loom_target_environment_low_legality_provider_list(
           options->target_environment);
@@ -160,7 +163,7 @@ iree_status_t loom_compile_run_pipeline(
       .environment = loom_low_pass_environment_storage_initialize(
           &options->low_descriptor_registry->registry,
           &low_lower_policy_registry, &low_legality_provider_list,
-          &low_pass_environment_storage),
+          &math_policy_registry, &low_pass_environment_storage),
       .predicate_provider =
           loom_target_pass_predicate_provider(&predicate_storage),
       .block_pool = block_pool,
