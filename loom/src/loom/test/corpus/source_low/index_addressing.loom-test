@@ -41,6 +41,25 @@ kernel.def @index_madd_constant_addend_global_b32(%input: buffer, %output: buffe
 
 // ====
 
+kernel.def @index_shli_global_b32(%input: buffer, %output: buffer) {
+  %c1 = index.constant 1 : index
+  %c4 = index.constant 4 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c4, %c1, %c1) : index
+} launch {
+  %x0 = kernel.workitem.id<x> : index
+  %x = index.assume %x0 [range(%x0, 0, 3)] : index
+  %zero = index.constant 0 : offset
+  %shift = index.constant 2 : index
+  %linear = index.shli %x, %shift : index
+  %input_view = buffer.view %input[%zero] : buffer -> view<16xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<16xi32, #dense>
+  %loaded = vector.load %input_view[%linear] : view<16xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %output_view[%linear] : vector<1xi32>, view<16xi32, #dense>
+  kernel.return
+}
+
+// ====
+
 kernel.def @workitem_y_lds_uses_explicit_vaddr(%output: buffer) {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index

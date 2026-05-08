@@ -72,6 +72,37 @@ low.kernel.def target(@target) workgroup_size(4, 1, 1) @index_madd_constant_adde
 // ====
 
 amdgpu.target<gfx1100> @target
+kernel.def target(@target) @index_shli_global_b32(%input: buffer, %output: buffer) {
+  %c1 = index.constant 1 : index
+  %c4 = index.constant 4 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c4, %c1, %c1) : index
+} launch {
+  %x0 = kernel.workitem.id<x> : index
+  %x = index.assume %x0 [range(%x0, 0, 3)] : index
+  %zero = index.constant 0 : offset
+  %shift = index.constant 2 : index
+  %linear = index.shli %x, %shift : index
+  %input_view = buffer.view %input[%zero] : buffer -> view<16xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<16xi32, #dense>
+  %loaded = vector.load %input_view[%linear] : view<16xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %output_view[%linear] : vector<1xi32>, view<16xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(4, 1, 1) @index_shli_global_b32() asm<amdgpu.rdna3.core> {
+  %x = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 64} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 64} : reg<amdgpu.sgpr x2>
+  %18 = v_lshlrev_b32_lit %x, 4
+  %loaded = global_load_b32 %18, %input_view
+  global_store_b32 %18, %loaded, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 kernel.def target(@target) @workitem_y_lds_uses_explicit_vaddr(%output: buffer) {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index

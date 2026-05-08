@@ -610,6 +610,39 @@ static bool loom_low_source_memory_access_scaled_index_from_value(
     return true;
   }
 
+  if (loom_index_shli_isa(defining_op)) {
+    loom_value_id_t lhs = loom_index_shli_lhs(defining_op);
+    loom_value_id_t rhs = loom_index_shli_rhs(defining_op);
+    int64_t shift_amount = 0;
+    if (!loom_low_source_memory_access_exact_i64(
+            loom_value_fact_table_lookup(fact_table, rhs), &shift_amount) ||
+        shift_amount < 0 || shift_amount > 62) {
+      return true;
+    }
+
+    loom_low_source_memory_scaled_index_t inner_scaled_index = {0};
+    if (!loom_low_source_memory_access_scaled_index_from_value(
+            module, fact_table, lhs, recursion_depth + 1,
+            &inner_scaled_index)) {
+      return false;
+    }
+    const int64_t multiplier = ((int64_t)1) << shift_amount;
+    int64_t scaled_multiplier = 0;
+    int64_t scaled_offset = 0;
+    if (!loom_checked_mul_i64(inner_scaled_index.multiplier, multiplier,
+                              &scaled_multiplier) ||
+        !loom_checked_mul_i64(inner_scaled_index.offset, multiplier,
+                              &scaled_offset)) {
+      return false;
+    }
+    *out_scaled_index = (loom_low_source_memory_scaled_index_t){
+        .index = inner_scaled_index.index,
+        .multiplier = scaled_multiplier,
+        .offset = scaled_offset,
+    };
+    return true;
+  }
+
   if (loom_index_madd_isa(defining_op)) {
     loom_value_id_t a = loom_index_madd_a(defining_op);
     loom_value_id_t b = loom_index_madd_b(defining_op);

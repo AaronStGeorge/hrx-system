@@ -49,16 +49,15 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @i32_readonly_uniform_sm
   %workgroup = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 64} : reg<amdgpu.sgpr x2>
-  %27 = s_mov_b32 1
-  %linear2 = s_lshl_b32 %workgroup, %27
-  %29 = s_mov_b32 2
-  %30 = s_lshl_b32 %linear2, %29
+  %29 = s_mov_b32 3
+  %30 = s_lshl_b32 %workgroup, %29
   %lane = s_load_dword %input_view, %30
   %32 = v_mov_b32_copy %lane
   %33 = v_mov_b32 0
   %34 = s_mov_b32 0
   %35 = concat(%workgroup, %34) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %37 = s_lshl_b64 %35, %29
+  %36 = s_mov_b32 2
+  %37 = s_lshl_b64 %35, %36
   %38 = slice %output_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   %39 = slice %output_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   %40 = slice %37[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
@@ -762,14 +761,13 @@ low.kernel.def target(@target) workgroup_size(16, 1, 1) @rank2_vector_tile_trans
   %90 = slice %75[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %91 = slice %75[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %114 = concat(%76, %80, %84, %88) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %116 = v_lshlrev_b32_lit %59, 2
+  %116 = v_lshlrev_b32_lit %tile_base, 4
   global_store_b128 %116, %114, %output_view
   %121 = concat(%77, %81, %85, %89) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  %124 = v_lshlrev_b32_lit %tile_base, 4
-  global_store_b128 %124, %121, %output_view {offset = 16}
+  global_store_b128 %116, %121, %output_view {offset = 16}
   %129 = concat(%78, %82, %86, %90) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128 %124, %129, %output_view {offset = 32}
+  global_store_b128 %116, %129, %output_view {offset = 32}
   %137 = concat(%79, %83, %87, %91) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128 %124, %137, %output_view {offset = 48}
+  global_store_b128 %116, %137, %output_view {offset = 48}
   return
 }
