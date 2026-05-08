@@ -50,6 +50,14 @@ typedef struct loom_check_template_sync_target_overlay_t {
   iree_string_view_t declaration_prefix;
 } loom_check_template_sync_target_overlay_t;
 
+static bool loom_check_template_sync_target_overlay_has_content(
+    const loom_check_template_sync_target_overlay_t* overlay) {
+  return !iree_string_view_is_empty(
+             iree_string_view_trim(overlay->declaration_prelude)) ||
+         !iree_string_view_is_empty(
+             iree_string_view_trim(overlay->declaration_prefix));
+}
+
 static iree_status_t loom_check_template_sync_copy_string(
     iree_arena_allocator_t* arena, iree_string_view_t source,
     iree_string_view_t* out_string) {
@@ -288,6 +296,23 @@ static iree_status_t loom_check_template_sync_collect_target_overlay(
       return iree_ok_status();
     }
     offset += before.size - remaining.size;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_check_template_sync_collect_default_target_overlay(
+    const loom_check_template_sync_case_t* target_cases,
+    iree_host_size_t target_case_count,
+    loom_check_template_sync_target_overlay_t* out_overlay) {
+  *out_overlay = (loom_check_template_sync_target_overlay_t){0};
+  for (iree_host_size_t i = 0; i < target_case_count; ++i) {
+    loom_check_template_sync_target_overlay_t candidate = {0};
+    IREE_RETURN_IF_ERROR(loom_check_template_sync_collect_target_overlay(
+        target_cases[i].test_case, target_cases[i].key, &candidate));
+    if (loom_check_template_sync_target_overlay_has_content(&candidate)) {
+      *out_overlay = candidate;
+      return iree_ok_status();
+    }
   }
   return iree_ok_status();
 }
@@ -598,14 +623,21 @@ static iree_status_t loom_check_template_sync_collect_annotation_anchors(
 static iree_status_t loom_check_template_sync_append_input_with_annotations(
     iree_string_view_t target_source, const loom_check_case_t* template_case,
     const loom_check_case_t* target_case, iree_string_view_t key,
+    const loom_check_template_sync_target_overlay_t* default_overlay,
     iree_arena_allocator_t* arena, iree_string_builder_t* builder) {
   loom_check_template_sync_annotation_anchor_t* anchors = NULL;
   iree_host_size_t anchor_count = 0;
   IREE_RETURN_IF_ERROR(loom_check_template_sync_collect_annotation_anchors(
       target_source, target_case, arena, &anchors, &anchor_count));
   loom_check_template_sync_target_overlay_t overlay = {0};
-  IREE_RETURN_IF_ERROR(loom_check_template_sync_collect_target_overlay(
-      target_case, key, &overlay));
+  if (target_case) {
+    IREE_RETURN_IF_ERROR(loom_check_template_sync_collect_target_overlay(
+        target_case, key, &overlay));
+  }
+  if (!loom_check_template_sync_target_overlay_has_content(&overlay) &&
+      default_overlay) {
+    overlay = *default_overlay;
+  }
   IREE_RETURN_IF_ERROR(loom_check_template_sync_append_target_overlay_prelude(
       &overlay, builder));
 
@@ -637,6 +669,7 @@ static iree_status_t loom_check_template_sync_append_input_with_annotations(
 static iree_status_t loom_check_template_sync_append_case(
     iree_string_view_t target_source, const loom_check_case_t* template_case,
     const loom_check_case_t* target_case, iree_string_view_t key,
+    const loom_check_template_sync_target_overlay_t* default_overlay,
     bool is_first_case, iree_arena_allocator_t* arena,
     iree_string_builder_t* builder) {
   IREE_RETURN_IF_ERROR(
@@ -648,7 +681,8 @@ static iree_status_t loom_check_template_sync_append_case(
   IREE_RETURN_IF_ERROR(loom_check_template_sync_append_target_directives(
       target_source, target_case, builder));
   IREE_RETURN_IF_ERROR(loom_check_template_sync_append_input_with_annotations(
-      target_source, template_case, target_case, key, arena, builder));
+      target_source, template_case, target_case, key, default_overlay, arena,
+      builder));
   if (target_case && target_case->has_expected_section) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "\n"));
     IREE_RETURN_IF_ERROR(
@@ -711,6 +745,9 @@ iree_status_t loom_check_template_sync_build_source(
       target_file, target_filename, context, block_pool, arena, host_allocator,
       /*allow_empty_cases=*/true, /*reject_case_run_directives=*/true,
       &target_cases, &target_case_count));
+  loom_check_template_sync_target_overlay_t default_overlay = {0};
+  IREE_RETURN_IF_ERROR(loom_check_template_sync_collect_default_target_overlay(
+      target_cases, target_case_count, &default_overlay));
 
   iree_host_size_t preamble_end = target_source.size;
   if (target_file->case_count > 0) {
@@ -732,7 +769,7 @@ iree_status_t loom_check_template_sync_build_source(
     IREE_RETURN_IF_ERROR(loom_check_template_sync_append_case(
         target_source, template_record->test_case,
         target_record ? target_record->test_case : NULL, template_record->key,
-        /*is_first_case=*/i == 0, arena, new_source));
+        &default_overlay, /*is_first_case=*/i == 0, arena, new_source));
   }
 
   iree_string_view_t rebuilt_source = iree_string_builder_view(new_source);

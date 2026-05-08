@@ -1938,7 +1938,7 @@ def _v_add_u32_overlay(instruction_name: str) -> AmdgpuDescriptorOverlay:
         schedule_class=_SCHEDULE_VALU,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
-            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("lhs")),
             AmdgpuOperandOverlay("VSRC1", _vgpr_operand("rhs")),
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
@@ -2036,7 +2036,7 @@ def _v_sub_u32_overlay(instruction_name: str, mnemonic: str) -> AmdgpuDescriptor
         schedule_class=_SCHEDULE_VALU,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
-            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("lhs")),
             AmdgpuOperandOverlay("VSRC1", _vgpr_operand("rhs")),
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
@@ -2574,7 +2574,7 @@ def _v_add_f32_overlay() -> AmdgpuDescriptorOverlay:
         schedule_class=_SCHEDULE_VALU,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
-            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("lhs")),
             AmdgpuOperandOverlay("VSRC1", _vgpr_operand("rhs")),
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
@@ -2600,7 +2600,7 @@ def _v_sub_f32_overlay() -> AmdgpuDescriptorOverlay:
         schedule_class=_SCHEDULE_VALU,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
-            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("lhs")),
             AmdgpuOperandOverlay("VSRC1", _vgpr_operand("rhs")),
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
@@ -2626,7 +2626,7 @@ def _v_mul_f32_overlay() -> AmdgpuDescriptorOverlay:
         schedule_class=_SCHEDULE_VALU,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
-            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("lhs")),
             AmdgpuOperandOverlay("VSRC1", _vgpr_operand("rhs")),
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
@@ -2652,7 +2652,7 @@ def _v_min_f32_overlay() -> AmdgpuDescriptorOverlay:
         schedule_class=_SCHEDULE_VALU,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
-            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("lhs")),
             AmdgpuOperandOverlay("VSRC1", _vgpr_operand("rhs")),
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
@@ -2678,7 +2678,7 @@ def _v_max_f32_overlay() -> AmdgpuDescriptorOverlay:
         schedule_class=_SCHEDULE_VALU,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
-            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("lhs")),
             AmdgpuOperandOverlay("VSRC1", _vgpr_operand("rhs")),
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
@@ -2704,9 +2704,9 @@ def _v_fma_f32_overlay() -> AmdgpuDescriptorOverlay:
         schedule_class=_SCHEDULE_VALU,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
-            AmdgpuOperandOverlay("SRC0", _vgpr_operand("a")),
-            AmdgpuOperandOverlay("SRC1", _vgpr_operand("b")),
-            AmdgpuOperandOverlay("SRC2", _vgpr_operand("c")),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("a")),
+            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("b")),
+            AmdgpuOperandOverlay("SRC2", _sgpr_vgpr_operand("c")),
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )

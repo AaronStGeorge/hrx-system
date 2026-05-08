@@ -306,6 +306,45 @@ TEST_F(TemplateSyncTest, PreservesFuncTargetDeclarationOverlay) {
   EXPECT_NE(result.find("old target evidence\n"), std::string::npos);
 }
 
+TEST_F(TemplateSyncTest, AppliesDefaultOverlayToNewTargetCases) {
+  std::string result;
+  bool changed = false;
+  IREE_ASSERT_OK(Build(
+      "// TEMPLATE: loom/src/loom/test/corpus/source_low/example.loom-test\n"
+      "// RUN: emit source-low output=low\n"
+      "\n"
+      "func.decl @target()\n"
+      "func.def target(@target) @alpha() {\n"
+      "}\n"
+      "\n"
+      "// ----\n"
+      "old target evidence\n"
+      "\n"
+      "// ====\n"
+      "\n"
+      "func.def @beta() {\n"
+      "}\n",
+      "// RUN: roundtrip\n"
+      "\n"
+      "func.def @alpha() {\n"
+      "}\n"
+      "\n"
+      "// ====\n"
+      "\n"
+      "func.def @beta() {\n"
+      "}\n",
+      &result, &changed));
+
+  EXPECT_TRUE(changed);
+  EXPECT_NE(result.find("func.decl @target()\n"
+                        "func.def target(@target) @alpha() {\n"),
+            std::string::npos);
+  EXPECT_NE(result.find("func.decl @target()\n"
+                        "func.def target(@target) @beta() {\n"),
+            std::string::npos);
+  EXPECT_NE(result.find("old target evidence\n"), std::string::npos);
+}
+
 TEST_F(TemplateSyncTest, PreservesAnnotationLineOccurrence) {
   const char* target_source =
       "// TEMPLATE: loom/src/loom/test/corpus/vector/arithmetic.loom-test\n"

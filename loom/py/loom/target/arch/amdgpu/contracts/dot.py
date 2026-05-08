@@ -141,11 +141,6 @@ _DOTF_RESULT_DIAGNOSTIC = GuardDiagnostic(
     subject_name="result",
     constraint_key="amdgpu.dotf.result_type",
 )
-_ACC_VGPR_DIAGNOSTIC = GuardDiagnostic(
-    subject_kind="register-class",
-    subject_name="accumulator",
-    constraint_key="amdgpu.dotf.accumulator_vgpr",
-)
 _RESULT_VGPR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="register-class",
     subject_name="result",
@@ -293,7 +288,6 @@ def _dotf_rule() -> DescriptorRule:
             _unit_count_eq("lhs", "rhs", _DOTF_RHS_DIAGNOSTIC),
             _value_type("init", _F32, _DOTF_ACC_DIAGNOSTIC),
             _value_type("result", _F32, _DOTF_RESULT_DIAGNOSTIC),
-            _vgpr("init", _ACC_VGPR_DIAGNOSTIC),
             _vgpr("result", _RESULT_VGPR_DIAGNOSTIC),
             Guard.descriptor_available(
                 descriptor,
