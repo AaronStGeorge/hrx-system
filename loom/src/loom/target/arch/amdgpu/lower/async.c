@@ -181,7 +181,8 @@ static bool loom_amdgpu_async_gather_select_source(
       .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
   };
   if (!loom_amdgpu_memory_access_select_dynamic_term_kinds(
-          module, &access, &diagnostic->memory_diagnostic)) {
+          module, /*fact_table=*/NULL, /*view_regions=*/NULL, &access,
+          &diagnostic->memory_diagnostic)) {
     diagnostic->rejection_bits |=
         LOOM_AMDGPU_ASYNC_GATHER_REJECTION_SOURCE_ADDRESS;
     return false;

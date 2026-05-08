@@ -90,8 +90,6 @@ typedef uint32_t loom_amdgpu_dynamic_index_source_rule_flags_t;
 
 #define LOOM_AMDGPU_DYNAMIC_INDEX_SOURCE_RULE_REJECT_WORKGROUP_MEMORY \
   ((uint32_t)1u << 0)
-#define LOOM_AMDGPU_DYNAMIC_INDEX_SOURCE_RULE_REQUIRE_VADDR_VALUE \
-  ((uint32_t)1u << 1)
 
 typedef struct loom_amdgpu_dynamic_index_source_rule_t {
   // Source dynamic-index producer matched by this rule.
@@ -121,7 +119,6 @@ static const loom_amdgpu_dynamic_index_source_rule_t
         {
             .source = LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE,
             .dynamic_index_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR,
-            .flags = LOOM_AMDGPU_DYNAMIC_INDEX_SOURCE_RULE_REQUIRE_VADDR_VALUE,
             .rejection_bits =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DYNAMIC_INDEX_SOURCE,
         },
@@ -129,9 +126,6 @@ static const loom_amdgpu_dynamic_index_source_rule_t
 
 static bool loom_amdgpu_memory_dynamic_index_can_materialize_vaddr(
     const loom_module_t* module, loom_value_id_t value_id) {
-  if (loom_amdgpu_module_value_prefers_vgpr(module, value_id)) {
-    return true;
-  }
   if (value_id >= module->values.count) {
     return false;
   }
@@ -141,16 +135,16 @@ static bool loom_amdgpu_memory_dynamic_index_can_materialize_vaddr(
 }
 
 static bool loom_amdgpu_memory_dynamic_index_can_materialize_soffset(
-    const loom_module_t* module, loom_value_id_t value_id) {
-  if (loom_amdgpu_module_value_prefers_vgpr(module, value_id)) {
-    return false;
-  }
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_view_region_table_t* view_regions, loom_value_id_t value_id) {
   if (value_id >= module->values.count) {
     return false;
   }
   const loom_type_t type = loom_module_value_type(module, value_id);
-  return loom_amdgpu_type_is_address_scalar(type) ||
-         loom_amdgpu_type_is_i32(type);
+  return (loom_amdgpu_type_is_address_scalar(type) ||
+          loom_amdgpu_type_is_i32(type)) &&
+         !loom_amdgpu_source_value_prefers_vgpr(module, fact_table,
+                                                view_regions, value_id);
 }
 
 static bool loom_amdgpu_memory_dynamic_term_needs_scaled_materialization(
@@ -161,15 +155,16 @@ static bool loom_amdgpu_memory_dynamic_term_needs_scaled_materialization(
 }
 
 static bool loom_amdgpu_memory_dynamic_term_can_materialize_soffset(
-    const loom_module_t* module,
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_view_region_table_t* view_regions,
     const loom_low_source_memory_dynamic_term_t* term) {
-  if (!loom_amdgpu_memory_dynamic_index_can_materialize_soffset(module,
-                                                                term->index)) {
+  if (!loom_amdgpu_memory_dynamic_index_can_materialize_soffset(
+          module, fact_table, view_regions, term->index)) {
     return false;
   }
   for (uint8_t i = 0; i < term->stride_value_count; ++i) {
     if (!loom_amdgpu_memory_dynamic_index_can_materialize_soffset(
-            module, term->stride_values[i])) {
+            module, fact_table, view_regions, term->stride_values[i])) {
       return false;
     }
   }
@@ -192,8 +187,51 @@ static bool loom_amdgpu_memory_dynamic_term_can_materialize_vaddr(
   return true;
 }
 
+static bool loom_amdgpu_memory_dynamic_term_select_value_kind(
+    bool can_materialize_soffset, bool can_materialize_vaddr,
+    loom_amdgpu_memory_dynamic_index_kind_t* out_dynamic_index_kind) {
+  if (can_materialize_soffset) {
+    *out_dynamic_index_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET;
+    return true;
+  }
+  if (can_materialize_vaddr) {
+    *out_dynamic_index_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR;
+    return true;
+  }
+  return false;
+}
+
+static bool loom_amdgpu_memory_dynamic_term_select_rule_kind(
+    const loom_amdgpu_dynamic_index_source_rule_t* rule,
+    bool needs_scaled_materialization, bool can_materialize_soffset,
+    bool can_materialize_vaddr,
+    loom_amdgpu_memory_dynamic_index_kind_t* out_dynamic_index_kind) {
+  *out_dynamic_index_kind = rule->dynamic_index_kind;
+  if (rule->source == LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE) {
+    return loom_amdgpu_memory_dynamic_term_select_value_kind(
+        can_materialize_soffset, can_materialize_vaddr, out_dynamic_index_kind);
+  }
+  if (!needs_scaled_materialization) {
+    return rule->dynamic_index_kind == LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET
+               ? can_materialize_soffset
+               : can_materialize_vaddr;
+  }
+  if (rule->dynamic_index_kind == LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET &&
+      can_materialize_soffset) {
+    *out_dynamic_index_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET;
+    return true;
+  }
+  if (can_materialize_vaddr) {
+    *out_dynamic_index_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR;
+    return true;
+  }
+  return false;
+}
+
 bool loom_amdgpu_memory_access_select_dynamic_term_kinds(
-    const loom_module_t* module, loom_amdgpu_memory_access_t* access,
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_view_region_table_t* view_regions,
+    loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
   for (uint8_t term_index = 0; term_index < access->source.dynamic_term_count;
        ++term_index) {
@@ -223,33 +261,19 @@ bool loom_amdgpu_memory_access_select_dynamic_term_kinds(
       const bool needs_scaled_materialization =
           loom_amdgpu_memory_dynamic_term_needs_scaled_materialization(term);
       const bool can_materialize_soffset =
-          loom_amdgpu_memory_dynamic_term_can_materialize_soffset(module, term);
+          loom_amdgpu_memory_dynamic_term_can_materialize_soffset(
+              module, fact_table, view_regions, term);
       const bool can_materialize_vaddr =
           loom_amdgpu_memory_dynamic_term_can_materialize_vaddr(module, term);
-      if ((rule->dynamic_index_kind == LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR ||
-           iree_any_bit_set(
-               rule->flags,
-               LOOM_AMDGPU_DYNAMIC_INDEX_SOURCE_RULE_REQUIRE_VADDR_VALUE)) &&
-          !can_materialize_vaddr) {
+      loom_amdgpu_memory_dynamic_index_kind_t dynamic_index_kind =
+          LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_NONE;
+      if (!loom_amdgpu_memory_dynamic_term_select_rule_kind(
+              rule, needs_scaled_materialization, can_materialize_soffset,
+              can_materialize_vaddr, &dynamic_index_kind)) {
         diagnostic->rejection_bits |= rule->rejection_bits;
         return false;
       }
-
-      access->dynamic_term_kinds[term_index] = rule->dynamic_index_kind;
-      if (needs_scaled_materialization) {
-        if (rule->dynamic_index_kind ==
-                LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET &&
-            can_materialize_soffset) {
-          access->dynamic_term_kinds[term_index] =
-              LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET;
-        } else if (can_materialize_vaddr) {
-          access->dynamic_term_kinds[term_index] =
-              LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR;
-        } else {
-          diagnostic->rejection_bits |= rule->rejection_bits;
-          return false;
-        }
-      }
+      access->dynamic_term_kinds[term_index] = dynamic_index_kind;
       selected = true;
       break;
     }
@@ -1534,7 +1558,9 @@ static bool loom_amdgpu_memory_access_uses_only_scalar_address_terms(
 
 static bool
 loom_amdgpu_memory_access_promote_scalar_materializable_terms_to_soffset(
-    const loom_module_t* module, loom_amdgpu_memory_access_t* access) {
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_view_region_table_t* view_regions,
+    loom_amdgpu_memory_access_t* access) {
   for (uint8_t i = 0; i < access->source.dynamic_term_count; ++i) {
     if (access->dynamic_term_kinds[i] ==
         LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET) {
@@ -1545,7 +1571,8 @@ loom_amdgpu_memory_access_promote_scalar_materializable_terms_to_soffset(
       return false;
     }
     if (!loom_amdgpu_memory_dynamic_term_can_materialize_soffset(
-            module, &access->source.dynamic_terms[i])) {
+            module, fact_table, view_regions,
+            &access->source.dynamic_terms[i])) {
       return false;
     }
     access->dynamic_term_kinds[i] = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET;
@@ -1572,6 +1599,7 @@ static bool loom_amdgpu_memory_access_try_select_global_smem(
     const loom_module_t* module,
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_view_region_table_t* view_regions,
+    const loom_value_fact_table_t* fact_table,
     loom_amdgpu_memory_operation_kind_t kind,
     loom_amdgpu_memory_access_t* access) {
   loom_amdgpu_memory_access_t candidate = *access;
@@ -1582,7 +1610,7 @@ static bool loom_amdgpu_memory_access_try_select_global_smem(
       loom_amdgpu_memory_cache_policy_is_present(
           &candidate.source.cache_policy) ||
       !loom_amdgpu_memory_access_promote_scalar_materializable_terms_to_soffset(
-          module, &candidate) ||
+          module, fact_table, view_regions, &candidate) ||
       !loom_amdgpu_memory_access_uses_only_scalar_address_terms(&candidate) ||
       !loom_amdgpu_memory_access_root_is_read_only(&candidate, view_regions)) {
     return false;
@@ -1827,7 +1855,7 @@ loom_amdgpu_memory_address_attempt_apply(
         return LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_NOT_APPLICABLE;
       }
       return loom_amdgpu_memory_access_try_select_global_smem(
-                 module, descriptor_set, view_regions, kind, access)
+                 module, descriptor_set, view_regions, fact_table, kind, access)
                  ? LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_SELECTED
                  : LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_NOT_APPLICABLE;
     case LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_GLOBAL_SADDR:
@@ -1978,8 +2006,8 @@ bool loom_amdgpu_memory_access_select(
     return false;
   }
 
-  if (!loom_amdgpu_memory_access_select_dynamic_term_kinds(module, out_access,
-                                                           out_diagnostic)) {
+  if (!loom_amdgpu_memory_access_select_dynamic_term_kinds(
+          module, fact_table, view_regions, out_access, out_diagnostic)) {
     return false;
   }
   const bool allow_global_smem =

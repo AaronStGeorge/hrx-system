@@ -950,7 +950,8 @@ static bool loom_amdgpu_atomic_select(
       .address_form = out_selection->address_form,
   };
   if (!loom_amdgpu_memory_access_select_dynamic_term_kinds(
-          module, &memory_access, memory_diagnostic)) {
+          module, /*fact_table=*/NULL, /*view_regions=*/NULL, &memory_access,
+          memory_diagnostic)) {
     return false;
   }
   for (iree_host_size_t i = 0; i < LOOM_LOW_SOURCE_MEMORY_DYNAMIC_TERM_CAPACITY;

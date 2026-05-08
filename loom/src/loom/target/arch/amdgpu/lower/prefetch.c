@@ -32,7 +32,9 @@ static bool loom_amdgpu_prefetch_static_offset_split(
 }
 
 static bool loom_amdgpu_prefetch_select_dynamic_index(
-    const loom_module_t* module, loom_amdgpu_prefetch_plan_t* plan) {
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_view_region_table_t* view_regions,
+    loom_amdgpu_prefetch_plan_t* plan) {
   if (!loom_low_source_memory_access_is_dynamic(&plan->source)) {
     return true;
   }
@@ -57,7 +59,8 @@ static bool loom_amdgpu_prefetch_select_dynamic_index(
       plan->dynamic_term_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET;
       return true;
     case LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_VALUE:
-      if (loom_amdgpu_module_value_prefers_vgpr(module, term->index)) {
+      if (loom_amdgpu_source_value_prefers_vgpr(module, fact_table,
+                                                view_regions, term->index)) {
         return false;
       }
       plan->dynamic_term_kind = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET;
@@ -136,17 +139,23 @@ static iree_status_t loom_amdgpu_prefetch_select(
   }
 
   const loom_module_t* module = loom_low_lower_context_module(context);
+  const loom_value_fact_table_t* fact_table =
+      loom_low_lower_context_fact_table(context);
+  const loom_view_region_table_t* view_regions = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_low_lower_context_view_regions(context, &view_regions));
   loom_low_source_memory_access_diagnostic_t unused_diagnostic = {0};
-  if (!loom_low_source_memory_access_plan_build(
-          module, loom_low_lower_context_fact_table(context), source_op,
-          &out_plan->source, &unused_diagnostic)) {
+  if (!loom_low_source_memory_access_plan_build(module, fact_table, source_op,
+                                                &out_plan->source,
+                                                &unused_diagnostic)) {
     return iree_ok_status();
   }
   if (!loom_amdgpu_prefetch_memory_space_is_buffer_backed(
           out_plan->source.memory_space)) {
     return iree_ok_status();
   }
-  if (!loom_amdgpu_prefetch_select_dynamic_index(module, out_plan)) {
+  if (!loom_amdgpu_prefetch_select_dynamic_index(module, fact_table,
+                                                 view_regions, out_plan)) {
     return iree_ok_status();
   }
   if (!loom_amdgpu_prefetch_static_offset_split(&offset_info, out_plan)) {

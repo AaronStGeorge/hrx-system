@@ -173,6 +173,16 @@ iree_status_t loom_amdgpu_low_type_register_class_is(
     loom_low_lower_context_t* context, loom_type_t type, uint16_t reg_class_id,
     bool* out_match);
 
+// Returns true when the source value should prefer a VGPR mapping even if its
+// scalar type could otherwise map to an SGPR. Fact and view-region tables
+// enable placement-sensitive proofs for values such as read-only scalar memory
+// loads; pass NULL for both tables only on callers that intentionally need the
+// conservative module-local answer.
+bool loom_amdgpu_source_value_prefers_vgpr(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_view_region_table_t* view_regions,
+    loom_value_id_t source_value_id);
+
 // Returns true when the module source value should prefer a VGPR mapping even
 // if its scalar type could otherwise map to an SGPR.
 bool loom_amdgpu_module_value_prefers_vgpr(const loom_module_t* module,

@@ -408,7 +408,7 @@ iree_status_t loom_amdgpu_low_type_register_class_is(
   return iree_ok_status();
 }
 
-static bool loom_amdgpu_source_value_prefers_vgpr(
+bool loom_amdgpu_source_value_prefers_vgpr(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     const loom_view_region_table_t* view_regions,
     loom_value_id_t source_value_id);
@@ -507,7 +507,7 @@ static bool loom_amdgpu_source_value_is_native_i1_mask(
     const loom_view_region_table_t* view_regions,
     loom_value_id_t source_value_id);
 
-static bool loom_amdgpu_source_value_prefers_vgpr(
+bool loom_amdgpu_source_value_prefers_vgpr(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     const loom_view_region_table_t* view_regions,
     loom_value_id_t source_value_id) {

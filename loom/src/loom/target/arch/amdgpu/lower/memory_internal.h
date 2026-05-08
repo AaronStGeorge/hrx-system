@@ -137,7 +137,9 @@ bool loom_amdgpu_memory_access_select(
 
 // Selects target operand paths for dynamic source memory address terms.
 bool loom_amdgpu_memory_access_select_dynamic_term_kinds(
-    const loom_module_t* module, loom_amdgpu_memory_access_t* access,
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_view_region_table_t* view_regions,
+    loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic);
 
 // Emits the VGPR address operand for a selected memory access.
