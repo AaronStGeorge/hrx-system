@@ -31,6 +31,11 @@ bool loom_amdgpu_value_can_materialize_as_vgpr_f32(
 bool loom_amdgpu_value_can_materialize_as_vgpr_address(
     loom_low_lower_context_t* context, loom_value_id_t value_id);
 
+// Returns true when a source scalar i1 value can be materialized as an
+// EXEC-width SGPR mask for divergent predicate arithmetic.
+bool loom_amdgpu_value_can_materialize_as_native_i1_mask(
+    loom_low_lower_context_t* context, loom_value_id_t value_id);
+
 // Looks up a lowered i32 value and materializes exact source constants into
 // VGPRs when a vector-style packet cannot consume the existing lowering.
 iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_i32(
@@ -46,6 +51,12 @@ iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_f32(
 // Looks up a lowered address scalar and materializes exact source constants
 // into VGPRs when a vector-style packet cannot consume the existing lowering.
 iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_address(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t source_value, loom_value_id_t* out_low_value);
+
+// Looks up a lowered i1 value and materializes subgroup-uniform SCC predicates
+// as EXEC-width SGPR masks for divergent predicate arithmetic.
+iree_status_t loom_amdgpu_lookup_or_materialize_native_i1_mask(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t source_value, loom_value_id_t* out_low_value);
 

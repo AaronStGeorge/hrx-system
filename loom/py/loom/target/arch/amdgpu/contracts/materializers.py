@@ -28,3 +28,10 @@ ADDRESS_VGPR_MATERIALIZER = ValueMaterializer(
     materialize="loom_amdgpu_lookup_or_materialize_vgpr_address",
     header="loom/target/arch/amdgpu/lower/materializers.h",
 )
+
+I1_NATIVE_MASK_MATERIALIZER = ValueMaterializer(
+    name="i1_native_mask",
+    can_materialize="loom_amdgpu_value_can_materialize_as_native_i1_mask",
+    materialize="loom_amdgpu_lookup_or_materialize_native_i1_mask",
+    header="loom/target/arch/amdgpu/lower/materializers.h",
+)

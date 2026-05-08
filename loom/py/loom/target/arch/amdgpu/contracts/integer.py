@@ -16,6 +16,7 @@ from loom.dialect.scalar import bitwise as scalar_bitwise
 from loom.dsl import Op
 from loom.target.arch.amdgpu.contracts.materializers import (
     ADDRESS_VGPR_MATERIALIZER,
+    I1_NATIVE_MASK_MATERIALIZER,
     I32_VGPR_MATERIALIZER,
 )
 from loom.target.arch.amdgpu.descriptors import build_amdgpu_contract_descriptor_set
@@ -271,7 +272,28 @@ def _i1_sgpr_mask_rule(
     source_op: Op,
     descriptor_key: str,
 ) -> DescriptorRule:
-    return _sgpr_binary_rule(source_op, _I1, _descriptor(descriptor_key))
+    descriptor = _descriptor(descriptor_key)
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            *_typed_binary_guards(_I1),
+            Guard.low_value_register_class("result", "amdgpu.sgpr"),
+            Guard.value_materializable("lhs", I1_NATIVE_MASK_MATERIALIZER.name),
+            Guard.value_materializable("rhs", I1_NATIVE_MASK_MATERIALIZER.name),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={
+                    "lhs": _materialized_operand("lhs", I1_NATIVE_MASK_MATERIALIZER),
+                    "rhs": _materialized_operand("rhs", I1_NATIVE_MASK_MATERIALIZER),
+                },
+                results={"dst": _RESULT},
+            ),
+        ),
+    )
 
 
 def _i32_shift_rules(
@@ -607,6 +629,10 @@ AMDGPU_INTEGER_CONTRACT_DIALECT_OPS = {
 AMDGPU_INTEGER_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.integer",
     descriptor_set=_DESCRIPTOR_SET,
-    materializers=(I32_VGPR_MATERIALIZER, ADDRESS_VGPR_MATERIALIZER),
+    materializers=(
+        I32_VGPR_MATERIALIZER,
+        ADDRESS_VGPR_MATERIALIZER,
+        I1_NATIVE_MASK_MATERIALIZER,
+    ),
     cases=_rules(),
 )
