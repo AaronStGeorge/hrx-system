@@ -25,10 +25,8 @@ static iree_status_t loom_print_predicate_arg(loom_print_context_t* ctx,
                                               uint8_t tag, int64_t value) {
   switch (tag) {
     case LOOM_PRED_ARG_VALUE: {
-      char buffer[LOOM_VALUE_NAME_BUFFER_SIZE];
-      iree_string_view_t name = loom_print_resolve_value_name(
-          ctx->module, (loom_value_id_t)value, buffer, sizeof(buffer));
-      return loom_output_stream_write(ctx->stream, name);
+      return loom_print_value_ref(ctx->stream, ctx->module,
+                                  (loom_value_id_t)value);
     }
     case LOOM_PRED_ARG_CONST:
       return loom_output_stream_write_format(ctx->stream, "%" PRId64, value);

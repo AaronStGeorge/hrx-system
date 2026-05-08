@@ -271,12 +271,9 @@ iree_status_t loom_print_block_label_line_with_options(
         IREE_RETURN_IF_ERROR(
             loom_output_stream_write_cstring(ctx->stream, ", "));
       }
-      char name_buffer[LOOM_VALUE_NAME_BUFFER_SIZE];
       loom_value_id_t arg_id = loom_block_arg_id(block, arg_index);
-      IREE_RETURN_IF_ERROR(loom_output_stream_write(
-          ctx->stream,
-          loom_print_resolve_value_name(ctx->module, arg_id, name_buffer,
-                                        sizeof(name_buffer))));
+      IREE_RETURN_IF_ERROR(
+          loom_print_value_ref(ctx->stream, ctx->module, arg_id));
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, ": "));
       IREE_RETURN_IF_ERROR(
           loom_text_print_type(loom_module_value_type(ctx->module, arg_id),

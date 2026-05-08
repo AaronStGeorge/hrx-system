@@ -14,16 +14,6 @@
 // Generated-format signature payloads
 //===----------------------------------------------------------------------===//
 
-// Emits an SSA value name (%name or %N) through the spacing model.
-static iree_status_t loom_print_value_name(loom_print_context_t* ctx,
-                                           loom_value_id_t value_id) {
-  char buffer[LOOM_VALUE_NAME_BUFFER_SIZE];
-  return loom_print_emit(ctx,
-                         loom_print_resolve_value_name(ctx->module, value_id,
-                                                       buffer, sizeof(buffer)),
-                         false);
-}
-
 // Returns the signature argument IDs for a FuncArgs element. Bodyful func-like
 // ops use the entry block args; bodyless declarations store signature args as
 // op operands.

@@ -16,19 +16,19 @@
 extern "C" {
 #endif
 
-// Stack buffer size for formatting auto-generated value names (%0, %1, ...).
+// Stack buffer size for formatting generated value names (%0, %1$2, ...).
+// Explicit names live in the module string table and are streamed directly so
+// they are not capped by this fallback buffer.
 #define LOOM_VALUE_NAME_BUFFER_SIZE 32
-
-// Resolves an SSA value name into |buffer|, including the leading percent sign.
-iree_string_view_t loom_print_resolve_value_name(const loom_module_t* module,
-                                                 loom_value_id_t value_id,
-                                                 char* buffer,
-                                                 iree_host_size_t buffer_size);
 
 // Prints an SSA value reference without token spacing.
 iree_status_t loom_print_value_ref(loom_output_stream_t* stream,
                                    const loom_module_t* module,
                                    loom_value_id_t value_id);
+
+// Emits an SSA value name through the token spacing model.
+iree_status_t loom_print_value_name(loom_print_context_t* ctx,
+                                    loom_value_id_t value_id);
 
 // Prints a value name and reports its emitted field range.
 iree_status_t loom_print_value_name_with_field(

@@ -193,39 +193,9 @@ static iree_status_t loom_print_string_literal(loom_output_stream_t* stream,
   return loom_output_stream_write_char(stream, '"');
 }
 
-iree_string_view_t loom_print_resolve_value_name(const loom_module_t* module,
-                                                 loom_value_id_t value_id,
-                                                 char* buffer,
-                                                 iree_host_size_t buffer_size) {
-  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
-  if (loom_print_value_has_name(module, value_id, &name_id)) {
-    iree_string_view_t bare_name = module->strings.entries[name_id];
-    const void* scope = loom_print_value_parse_scope(module, value_id);
-    if (!loom_print_value_name_is_duplicated(module, value_id, name_id)) {
-      int length = iree_snprintf(buffer, buffer_size, "%%%.*s",
-                                 (int)bare_name.size, bare_name.data);
-      return iree_make_string_view(buffer, length);
-    }
-
-    for (iree_host_size_t attempt = 0; attempt < 8; ++attempt) {
-      int length = attempt == 0
-                       ? iree_snprintf(buffer, buffer_size, "%%%.*s$%" PRIhsz,
-                                       (int)bare_name.size, bare_name.data,
-                                       (iree_host_size_t)value_id)
-                       : iree_snprintf(buffer, buffer_size,
-                                       "%%%.*s$%" PRIhsz "$%" PRIhsz,
-                                       (int)bare_name.size, bare_name.data,
-                                       (iree_host_size_t)value_id, attempt);
-      if (length <= 1 || (iree_host_size_t)length >= buffer_size) {
-        break;
-      }
-      iree_string_view_t candidate =
-          iree_make_string_view(buffer + 1, (iree_host_size_t)length - 1);
-      if (!loom_print_explicit_value_name_exists(module, scope, candidate)) {
-        return iree_make_string_view(buffer, (iree_host_size_t)length);
-      }
-    }
-  }
+static iree_string_view_t loom_print_resolve_generated_value_name(
+    const loom_module_t* module, loom_value_id_t value_id, char* buffer,
+    iree_host_size_t buffer_size) {
   const void* scope = loom_print_value_parse_scope(module, value_id);
   int length = iree_snprintf(buffer, buffer_size, "%%%" PRIhsz,
                              (iree_host_size_t)value_id);
@@ -250,7 +220,71 @@ iree_string_view_t loom_print_resolve_value_name(const loom_module_t* module,
   }
   length = iree_snprintf(buffer, buffer_size, "%%%" PRIhsz,
                          (iree_host_size_t)value_id);
+  IREE_ASSERT(length > 1 && (iree_host_size_t)length < buffer_size,
+              "generated value names must fit LOOM_VALUE_NAME_BUFFER_SIZE");
   return iree_make_string_view(buffer, length);
+}
+
+static bool loom_print_explicit_value_name_with_suffix_exists(
+    const loom_module_t* module, const void* scope, iree_string_view_t base,
+    iree_string_view_t suffix) {
+  for (iree_host_size_t i = 0; i < module->values.count; ++i) {
+    if (!loom_print_value_is_printable(module, (loom_value_id_t)i)) {
+      continue;
+    }
+    if (loom_print_value_parse_scope(module, (loom_value_id_t)i) != scope) {
+      continue;
+    }
+    loom_string_id_t name_id = module->values.entries[i].name_id;
+    if (name_id == LOOM_STRING_ID_INVALID || name_id >= module->strings.count) {
+      continue;
+    }
+    iree_string_view_t name = module->strings.entries[name_id];
+    if (name.size != base.size + suffix.size) {
+      continue;
+    }
+    if (!iree_string_view_starts_with(name, base)) {
+      continue;
+    }
+    iree_string_view_t name_suffix =
+        iree_string_view_substr(name, base.size, suffix.size);
+    if (iree_string_view_equal(name_suffix, suffix)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static iree_status_t loom_print_duplicate_value_ref(
+    loom_output_stream_t* stream, const loom_module_t* module,
+    loom_value_id_t value_id, iree_string_view_t bare_name) {
+  const void* scope = loom_print_value_parse_scope(module, value_id);
+  for (iree_host_size_t attempt = 0; attempt < 8; ++attempt) {
+    char suffix_buffer[LOOM_VALUE_NAME_BUFFER_SIZE];
+    int suffix_length =
+        attempt == 0 ? iree_snprintf(suffix_buffer, sizeof(suffix_buffer),
+                                     "$%" PRIhsz, (iree_host_size_t)value_id)
+                     : iree_snprintf(suffix_buffer, sizeof(suffix_buffer),
+                                     "$%" PRIhsz "$%" PRIhsz,
+                                     (iree_host_size_t)value_id, attempt);
+    if (suffix_length <= 0 ||
+        (iree_host_size_t)suffix_length >= sizeof(suffix_buffer)) {
+      break;
+    }
+    iree_string_view_t suffix =
+        iree_make_string_view(suffix_buffer, (iree_host_size_t)suffix_length);
+    if (loom_print_explicit_value_name_with_suffix_exists(module, scope,
+                                                          bare_name, suffix)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '%'));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write(stream, bare_name));
+    return loom_output_stream_write(stream, suffix);
+  }
+  char buffer[LOOM_VALUE_NAME_BUFFER_SIZE];
+  return loom_output_stream_write(
+      stream, loom_print_resolve_generated_value_name(module, value_id, buffer,
+                                                      sizeof(buffer)));
 }
 
 iree_status_t loom_print_value_ref(loom_output_stream_t* stream,
@@ -259,21 +293,36 @@ iree_status_t loom_print_value_ref(loom_output_stream_t* stream,
   if (!module || value_id >= module->values.count) {
     return loom_output_stream_write_cstring(stream, "%?");
   }
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  if (loom_print_value_has_name(module, value_id, &name_id)) {
+    iree_string_view_t bare_name = module->strings.entries[name_id];
+    if (!loom_print_value_name_is_duplicated(module, value_id, name_id)) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '%'));
+      return loom_output_stream_write(stream, bare_name);
+    }
+    return loom_print_duplicate_value_ref(stream, module, value_id, bare_name);
+  }
   char buffer[LOOM_VALUE_NAME_BUFFER_SIZE];
   return loom_output_stream_write(
-      stream,
-      loom_print_resolve_value_name(module, value_id, buffer, sizeof(buffer)));
+      stream, loom_print_resolve_generated_value_name(module, value_id, buffer,
+                                                      sizeof(buffer)));
+}
+
+iree_status_t loom_print_value_name(loom_print_context_t* ctx,
+                                    loom_value_id_t value_id) {
+  IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+  IREE_RETURN_IF_ERROR(
+      loom_print_value_ref(ctx->stream, ctx->module, value_id));
+  loom_print_did_write(ctx);
+  return iree_ok_status();
 }
 
 iree_status_t loom_print_value_name_with_field(
     loom_print_context_t* ctx, loom_value_id_t value_id,
     loom_print_field_ref_t field_ref) {
-  char buffer[LOOM_VALUE_NAME_BUFFER_SIZE];
-  iree_string_view_t name = loom_print_resolve_value_name(
-      ctx->module, value_id, buffer, sizeof(buffer));
-  IREE_RETURN_IF_ERROR(loom_print_emit(ctx, name, false));
+  iree_host_size_t start = loom_print_next_token_start_offset(ctx, false, '%');
+  IREE_RETURN_IF_ERROR(loom_print_value_name(ctx, value_id));
   iree_host_size_t end = ctx->stream->offset;
-  iree_host_size_t start = end - name.size;
   loom_print_report_field(ctx, field_ref, start, end);
   return iree_ok_status();
 }
