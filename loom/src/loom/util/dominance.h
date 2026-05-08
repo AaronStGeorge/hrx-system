@@ -111,6 +111,16 @@ bool loom_dominates_op(const loom_dominance_info_t* info, const loom_op_t* a,
 bool loom_dominates_block(const loom_dominance_info_t* info,
                           const loom_block_t* a, const loom_block_t* b);
 
+// Returns the immediate dominator of |block| within its parent region.
+//
+// Returns NULL for region entry blocks, unreachable CFG blocks, malformed CFG
+// dominance caches, blocks outside of any region, and blocks whose dominance is
+// not known. Multi-block regions are treated as CFG-shaped even before cleanup
+// passes stamp the region flag, because successor-bearing blocks are a
+// structural property of the IR rather than a pass-order promise.
+const loom_block_t* loom_dominance_immediate_dominator_block(
+    const loom_dominance_info_t* info, const loom_block_t* block);
+
 // Does the value defined by |value_id| dominate op |use_op|?
 //
 // For op results: equivalent to loom_dominates_op(defining_op, use_op).

@@ -333,6 +333,42 @@ low.func.def target(@test_target) @low_entry_constants_cse_into_cfg(%cond: reg<t
 
 // ====
 
+// Pure low ops in a non-entry CFG block can be reused by blocks dominated by
+// that block. This is ordinary CFG dominance CSE, not speculation.
+// RUN: pass cse
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @low_dominator_block_ops_cse_into_cfg(%cond: reg<test.i32>, %row: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) asm<test.low.core> {
+  low.cond_br %cond, ^then, ^exit : reg<test.i32>
+^then:
+  %row_bytes = test.add.i32 %row, %row
+  low.br ^join(%row_bytes: reg<test.i32>)
+^exit:
+  return %row, %row
+^join(%value: reg<test.i32>):
+  %row_bytes_again = test.add.i32 %row, %row
+  %sum = test.add.i32 %value, %row_bytes_again
+  return %sum, %row_bytes_again
+}
+
+// ----
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @low_dominator_block_ops_cse_into_cfg(%cond: reg<test.i32>, %row: reg<test.i32>) -> (reg<test.i32>, reg<test.i32>) {
+  low.cond_br %cond, ^then, ^exit : reg<test.i32>
+^then:
+  %row_bytes = low.op<test.add.i32>(%row, %row) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  low.br ^join(%row_bytes: reg<test.i32>)
+^exit:
+  low.return %row, %row : reg<test.i32>, reg<test.i32>
+^join(%value: reg<test.i32>):
+  %sum = low.op<test.add.i32>(%value, %row_bytes) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  low.return %sum, %row_bytes : reg<test.i32>, reg<test.i32>
+}
+
+// ====
+
 // low.copy and low.concat are virtual-register identity constructors. They may
 // look structurally identical, but each instance names distinct storage and
 // must not be folded by value CSE.

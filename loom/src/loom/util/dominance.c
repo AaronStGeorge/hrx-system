@@ -254,7 +254,8 @@ static iree_status_t loom_dominance_info_add_cfg_region(
 static iree_status_t loom_dominance_info_build_region(
     loom_dominance_info_t* info, const loom_region_t* region) {
   if (!region) return iree_ok_status();
-  if (iree_any_bit_set(region->flags, LOOM_REGION_INSTANCE_FLAG_CFG)) {
+  if (iree_any_bit_set(region->flags, LOOM_REGION_INSTANCE_FLAG_CFG) ||
+      region->block_count > 1) {
     IREE_RETURN_IF_ERROR(loom_dominance_info_add_cfg_region(info, region));
   }
   loom_block_t* block = NULL;
@@ -306,17 +307,6 @@ static bool loom_cfg_region_block_dominates(
   return current_index == dominator_index;
 }
 
-static bool loom_structured_block_dominates(
-    const loom_block_t* dominator_block, const loom_block_t* dominated_block) {
-  if (!dominator_block || !dominated_block ||
-      dominator_block->parent_region != dominated_block->parent_region) {
-    return false;
-  }
-  const loom_region_t* region = dominator_block->parent_region;
-  if (!region || region->block_count < 2) return false;
-  return loom_region_const_entry_block(region) == dominator_block;
-}
-
 bool loom_dominates_block(const loom_dominance_info_t* info,
                           const loom_block_t* dominator_block,
                           const loom_block_t* dominated_block) {
@@ -324,8 +314,9 @@ bool loom_dominates_block(const loom_dominance_info_t* info,
   if (dominator_block == dominated_block) return true;
   const loom_region_t* region = dominator_block->parent_region;
   if (!region || region != dominated_block->parent_region) return false;
-  if (!iree_any_bit_set(region->flags, LOOM_REGION_INSTANCE_FLAG_CFG)) {
-    return loom_structured_block_dominates(dominator_block, dominated_block);
+  if (!iree_any_bit_set(region->flags, LOOM_REGION_INSTANCE_FLAG_CFG) &&
+      region->block_count <= 1) {
+    return false;
   }
 
   const loom_cfg_dominance_region_t* cache =
@@ -341,6 +332,35 @@ bool loom_dominates_block(const loom_dominance_info_t* info,
   }
   return loom_cfg_region_block_dominates(cache, (uint16_t)dominator_index,
                                          (uint16_t)dominated_index);
+}
+
+const loom_block_t* loom_dominance_immediate_dominator_block(
+    const loom_dominance_info_t* info, const loom_block_t* block) {
+  if (!info || !block) return NULL;
+  const loom_region_t* region = block->parent_region;
+  if (!region) return NULL;
+
+  const loom_block_t* entry_block = loom_region_const_entry_block(region);
+  if (block == entry_block) return NULL;
+
+  if (!iree_any_bit_set(region->flags, LOOM_REGION_INSTANCE_FLAG_CFG) &&
+      region->block_count <= 1) {
+    return NULL;
+  }
+
+  const loom_cfg_dominance_region_t* cache =
+      loom_dominance_lookup_cfg_region(info, region);
+  if (!cache || !cache->available) return NULL;
+  iree_host_size_t block_index =
+      loom_cfg_graph_block_index(&cache->graph, block);
+  if (block_index == IREE_HOST_SIZE_MAX) return NULL;
+  uint16_t immediate_dominator = cache->immediate_dominators[block_index];
+  if (immediate_dominator == LOOM_CFG_DOMINATOR_INVALID ||
+      immediate_dominator == block_index ||
+      immediate_dominator >= cache->graph.block_count) {
+    return NULL;
+  }
+  return cache->graph.blocks[immediate_dominator].block;
 }
 
 static bool loom_op_crosses_isolation_boundary(

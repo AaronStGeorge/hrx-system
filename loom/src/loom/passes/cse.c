@@ -257,10 +257,11 @@ static void loom_cse_table_invalidate_reads(loom_cse_table_t* table) {
 // For isolated-from-above regions, the child scope's parent is NULL —
 // the chain is broken and no outer values are considered.
 //
-// Multi-block regions use entry block dominance: block 0 of a region
-// dominates all other blocks (structured control flow guarantee). The
-// entry block's scope serves as the parent for all sibling blocks,
-// making the entry block's CSE candidates visible to all successors.
+// Multi-block regions use the computed CFG dominator tree even if no cleanup
+// pass has stamped the region flag yet. Every reachable block scope is parented
+// by its immediate dominator scope. That makes producers from any dominating
+// block visible to dominated descendants without speculating work across
+// control-flow predicates.
 //
 // Arena allocation: all scopes and tables are allocated from a
 // dedicated scope arena that is reset between top-level blocks.
@@ -365,21 +366,121 @@ static void loom_cse_stack_push(loom_cse_stack_t* stack, loom_block_t* block,
 // Region child frame pushing
 //===----------------------------------------------------------------------===//
 
+static loom_cse_scope_t* loom_cse_cfg_scope_parent_for_block(
+    const loom_dominance_info_t* dominance, loom_region_t* region,
+    loom_cse_scope_t* parent_scope, loom_cse_scope_t** block_scopes,
+    const loom_block_t* block) {
+  const loom_block_t* immediate_dominator =
+      loom_dominance_immediate_dominator_block(dominance, block);
+  uint16_t immediate_dominator_index = 0;
+  if (!loom_region_try_block_index(region, immediate_dominator,
+                                   &immediate_dominator_index)) {
+    return parent_scope;
+  }
+  return block_scopes[immediate_dominator_index]
+             ? block_scopes[immediate_dominator_index]
+             : parent_scope;
+}
+
+static iree_status_t loom_cse_compute_cfg_block_order(
+    iree_arena_allocator_t* arena, const loom_dominance_info_t* dominance,
+    loom_region_t* region, uint16_t** out_order) {
+  *out_order = NULL;
+  if (region->block_count == 0) return iree_ok_status();
+
+  uint16_t* order = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, region->block_count, sizeof(*order), (void**)&order));
+  bool* scheduled = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      arena, region->block_count, sizeof(*scheduled), (void**)&scheduled));
+  memset(scheduled, 0,
+         (iree_host_size_t)region->block_count * sizeof(*scheduled));
+
+  uint16_t scheduled_count = 0;
+  while (scheduled_count < region->block_count) {
+    bool made_progress = false;
+    for (uint16_t block_index = 0; block_index < region->block_count;
+         ++block_index) {
+      if (scheduled[block_index]) continue;
+
+      const loom_block_t* block = loom_region_const_block(region, block_index);
+      const loom_block_t* immediate_dominator =
+          loom_dominance_immediate_dominator_block(dominance, block);
+      uint16_t immediate_dominator_index = 0;
+      const bool has_same_region_dominator = loom_region_try_block_index(
+          region, immediate_dominator, &immediate_dominator_index);
+      if (has_same_region_dominator && !scheduled[immediate_dominator_index]) {
+        continue;
+      }
+
+      scheduled[block_index] = true;
+      order[scheduled_count++] = block_index;
+      made_progress = true;
+    }
+
+    if (!made_progress) {
+      // Malformed CFG dominance should already be rejected by verification.
+      // Keep CSE conservative by scheduling the remaining blocks in region
+      // order; their scopes fall back to the nearest known parent scope.
+      for (uint16_t block_index = 0; block_index < region->block_count;
+           ++block_index) {
+        if (scheduled[block_index]) continue;
+        scheduled[block_index] = true;
+        order[scheduled_count++] = block_index;
+      }
+    }
+  }
+
+  *out_order = order;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_cse_push_cfg_region_block_frames(
+    loom_cse_stack_t* stack, iree_arena_allocator_t* pass_arena,
+    iree_arena_allocator_t* scope_arena, const loom_dominance_info_t* dominance,
+    loom_region_t* region, loom_cse_scope_t* parent_scope) {
+  IREE_RETURN_IF_ERROR(
+      loom_cse_stack_reserve(stack, pass_arena, region->block_count));
+
+  loom_cse_scope_t** block_scopes = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(scope_arena, region->block_count,
+                                sizeof(*block_scopes), (void**)&block_scopes));
+  memset(block_scopes, 0,
+         (iree_host_size_t)region->block_count * sizeof(*block_scopes));
+
+  for (uint16_t block_index = 0; block_index < region->block_count;
+       ++block_index) {
+    loom_block_t* block = loom_region_block(region, block_index);
+    IREE_RETURN_IF_ERROR(loom_cse_scope_allocate(
+        scope_arena, /*parent=*/NULL, block, &block_scopes[block_index]));
+  }
+  for (uint16_t block_index = 0; block_index < region->block_count;
+       ++block_index) {
+    loom_block_t* block = loom_region_block(region, block_index);
+    block_scopes[block_index]->parent = loom_cse_cfg_scope_parent_for_block(
+        dominance, region, parent_scope, block_scopes, block);
+  }
+
+  uint16_t* order = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_cse_compute_cfg_block_order(pass_arena, dominance, region, &order));
+  for (int32_t i = (int32_t)region->block_count - 1; i >= 0; --i) {
+    uint16_t block_index = order[i];
+    loom_cse_stack_push(stack, loom_region_block(region, block_index),
+                        block_scopes[block_index]);
+  }
+  return iree_ok_status();
+}
+
 // Pushes frames for all blocks in a region.
 //
 // For single-block regions (the common case), pushes one frame with
 // a child scope whose parent is |parent_scope|.
 //
-// For multi-block regions, uses entry block dominance where it is proven:
-//   - bb0 gets entry_scope (parent = parent_scope).
-//   - dominated sibling blocks each get a fresh scope parented by entry_scope.
-//   - Frames are pushed in reverse order so bb0 is on top (processed
-//     first). When bb0 finishes, entry_scope has its CSE entries.
-//     Subsequent blocks can see them through their parent pointer.
-//
-// Blocks that are not dominated by the entry block remain parented by the outer
-// scope. This matters for malformed or unreachable CFG blocks: CSE must not
-// create SSA references that the dominance verifier would reject.
+// For multi-block regions, block scopes follow the computed immediate-dominator
+// tree and frames are processed in dominator-before-dominated order.
 static iree_status_t loom_cse_push_region_block_frames(
     loom_cse_stack_t* stack, iree_arena_allocator_t* pass_arena,
     iree_arena_allocator_t* scope_arena, const loom_dominance_info_t* dominance,
@@ -399,25 +500,8 @@ static iree_status_t loom_cse_push_region_block_frames(
     return iree_ok_status();
   }
 
-  loom_block_t* entry_block = loom_region_entry_block(region);
-  loom_cse_scope_t* entry_scope = NULL;
-  IREE_RETURN_IF_ERROR(loom_cse_scope_allocate(scope_arena, parent_scope,
-                                               entry_block, &entry_scope));
-  const bool is_cfg =
-      iree_any_bit_set(region->flags, LOOM_REGION_INSTANCE_FLAG_CFG);
-  for (int32_t b = (int32_t)region->block_count - 1; b >= 1; --b) {
-    loom_block_t* block = loom_region_block(region, (uint16_t)b);
-    loom_cse_scope_t* block_parent = entry_scope;
-    if (is_cfg && !loom_dominates_block(dominance, entry_block, block)) {
-      block_parent = parent_scope;
-    }
-    loom_cse_scope_t* sibling_scope = NULL;
-    IREE_RETURN_IF_ERROR(loom_cse_scope_allocate(scope_arena, block_parent,
-                                                 block, &sibling_scope));
-    loom_cse_stack_push(stack, block, sibling_scope);
-  }
-  loom_cse_stack_push(stack, entry_block, entry_scope);
-  return iree_ok_status();
+  return loom_cse_push_cfg_region_block_frames(stack, pass_arena, scope_arena,
+                                               dominance, region, parent_scope);
 }
 
 // Pushes child frames for all nested regions of an op.

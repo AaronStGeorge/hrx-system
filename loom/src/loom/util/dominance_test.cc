@@ -512,6 +512,46 @@ TEST_F(DominanceTest, CfgDiamondDominanceUsesPredecessorGraph) {
   EXPECT_FALSE(loom_dominates_op(&dom_info_, then_value, merge_value));
   EXPECT_FALSE(loom_dominates_op(&dom_info_, else_value, merge_value));
   EXPECT_FALSE(loom_dominates_op(&dom_info_, then_value, else_value));
+  EXPECT_EQ(loom_dominance_immediate_dominator_block(&dom_info_, merge_block),
+            entry);
+}
+
+TEST_F(DominanceTest, CfgImmediateDominatorsFollowLinearizedEdges) {
+  body_->flags |= LOOM_REGION_INSTANCE_FLAG_CFG;
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_block_t* entry = loom_region_entry_block(body_);
+  loom_block_t* then_block = append_block();
+  loom_block_t* exit_block = append_block();
+  loom_block_t* join_block = append_block();
+
+  set_block(entry);
+  loom_op_t* entry_value = build_constant(i32, 0);
+  build_conditional_branch(then_block, exit_block);
+
+  set_block(then_block);
+  loom_op_t* then_value = build_constant(i32, 1);
+  build_branch(join_block);
+
+  set_block(exit_block);
+  loom_op_t* exit_value = build_constant(i32, 2);
+
+  set_block(join_block);
+  loom_op_t* join_value = build_constant(i32, 3);
+  body_->flags &= ~LOOM_REGION_INSTANCE_FLAG_CFG;
+  finalize();
+
+  EXPECT_TRUE(loom_dominates_op(&dom_info_, entry_value, then_value));
+  EXPECT_TRUE(loom_dominates_op(&dom_info_, entry_value, exit_value));
+  EXPECT_TRUE(loom_dominates_op(&dom_info_, then_value, join_value));
+  EXPECT_FALSE(loom_dominates_op(&dom_info_, exit_value, join_value));
+  EXPECT_EQ(loom_dominance_immediate_dominator_block(&dom_info_, entry),
+            nullptr);
+  EXPECT_EQ(loom_dominance_immediate_dominator_block(&dom_info_, then_block),
+            entry);
+  EXPECT_EQ(loom_dominance_immediate_dominator_block(&dom_info_, exit_block),
+            entry);
+  EXPECT_EQ(loom_dominance_immediate_dominator_block(&dom_info_, join_block),
+            then_block);
 }
 
 TEST_F(DominanceTest, CfgLoopDominanceUsesFixedPointDominators) {
