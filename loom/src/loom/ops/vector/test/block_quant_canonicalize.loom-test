@@ -211,6 +211,80 @@ func.def @q8_0_two_row_micro_gemv_folds() -> (f32, f32) {
 
 // ====
 
+// Reference Q8_0 x Q8_0 dot keeps both decodes visible and then uses strict
+// floating dot semantics. It shares the same lane values and scale product as
+// the explicit integer-dot contract below so the numeric boundary is obvious.
+func.def @q8_0_decoded_pair_dot_reference_folds() -> (f32) {
+  %schema = encoding.define #ggml_q8_0<block_elems=32, storage_bytes=34> : encoding<schema>
+
+  %lhs0 = scalar.constant -3 : i8
+  %lhs1 = scalar.constant -1 : i8
+  %lhs2 = scalar.constant 2 : i8
+  %lhs3 = scalar.constant 7 : i8
+  %lhs_payload = vector.from_elements %lhs0, %lhs1, %lhs2, %lhs3 : vector<4xi8>
+
+  %rhs0 = scalar.constant 4 : i8
+  %rhs1 = scalar.constant 5 : i8
+  %rhs2 = scalar.constant -2 : i8
+  %rhs3 = scalar.constant 1 : i8
+  %rhs_payload = vector.from_elements %rhs0, %rhs1, %rhs2, %rhs3 : vector<4xi8>
+
+  %lhs_scale = vector.constant 0.5 : vector<1xf16>
+  %rhs_scale = vector.constant -0.25 : vector<1xf16>
+  %lhs = vector.decode %lhs_payload using %schema {scale = %lhs_scale : vector<1xf16>} : vector<4xi8>, encoding<schema> -> vector<4xf32>
+  %rhs = vector.decode %rhs_payload using %schema {scale = %rhs_scale : vector<1xf16>} : vector<4xi8>, encoding<schema> -> vector<4xf32>
+  %zero = scalar.constant 0.0 : f32
+  %dot = vector.dotf %lhs, %rhs, %zero : vector<4xf32>, vector<4xf32>, f32
+  func.return %dot : f32
+}
+// ----
+func.def @q8_0_decoded_pair_dot_reference_folds() -> (f32) {
+  %dot = scalar.constant 1.75 : f32
+  func.return %dot : f32
+}
+
+// ====
+
+// The optimized Q8_0 path is an explicit integer-dot contract with visible
+// scale arithmetic. It is not a generic rewrite from decoded floating dotf:
+// choosing this form means the frontend/importer owns the regrouped integer-dot
+// semantics and the target can select DP4A/VNNI-style instructions directly.
+func.def @q8_0_explicit_scaled_dot4i_contract_folds() -> (f32) {
+  %schema = encoding.define #ggml_q8_0<block_elems=32, storage_bytes=34> : encoding<schema>
+  test.use %schema : encoding<schema>
+
+  %lhs0 = scalar.constant -3 : i8
+  %lhs1 = scalar.constant -1 : i8
+  %lhs2 = scalar.constant 2 : i8
+  %lhs3 = scalar.constant 7 : i8
+  %lhs = vector.from_elements %lhs0, %lhs1, %lhs2, %lhs3 : vector<4xi8>
+
+  %rhs0 = scalar.constant 4 : i8
+  %rhs1 = scalar.constant 5 : i8
+  %rhs2 = scalar.constant -2 : i8
+  %rhs3 = scalar.constant 1 : i8
+  %rhs = vector.from_elements %rhs0, %rhs1, %rhs2, %rhs3 : vector<4xi8>
+
+  %acc = vector.constant 0 : vector<1xi32>
+  %dot = vector.dot4i<s8s8> %lhs, %rhs, %acc : vector<4xi8>, vector<4xi8>, vector<1xi32>
+  %dotf = vector.sitofp %dot : vector<1xi32> to vector<1xf32>
+  %lhs_scale = vector.constant 0.5 : vector<1xf32>
+  %rhs_scale = vector.constant -0.25 : vector<1xf32>
+  %combined_scale = vector.mulf %lhs_scale, %rhs_scale : vector<1xf32>
+  %scaled = vector.mulf %dotf, %combined_scale : vector<1xf32>
+  %result = vector.extract %scaled[0] : vector<1xf32> -> f32
+  func.return %result : f32
+}
+// ----
+func.def @q8_0_explicit_scaled_dot4i_contract_folds() -> (f32) {
+  %schema = encoding.define #ggml_q8_0<block_elems=32, storage_bytes=34> : encoding<schema>
+  test.use %schema : encoding<schema>
+  %result = scalar.constant 1.75 : f32
+  func.return %result : f32
+}
+
+// ====
+
 // Dynamic Q8_0 decode should become ordinary vector IR instead of staying an
 // opaque semantic op. Later target selection can match this visible signed
 // conversion and scale multiply shape.
@@ -228,6 +302,38 @@ func.def @q8_0_vector_decode_expands(%payload: vector<32xi8>, %scale: vector<1xf
   %9 = vector.sitofp %8 : vector<32xi32> to vector<32xf32>
   %decoded = vector.mulf %9, %7 : vector<32xf32>
   func.return %decoded : vector<32xf32>
+}
+
+// ====
+
+// Strict decoded floating dot keeps the lane-ordered vector.dotf contract after
+// decode expansion. A packed integer dot rewrite would be a different numeric
+// contract, so canonicalize must not invent one here.
+func.def @q8_0_decoded_dotf_keeps_strict_float_contract(%lhs_payload: vector<32xi8>, %rhs_payload: vector<32xi8>, %lhs_scale: vector<1xf16>, %rhs_scale: vector<1xf16>) -> (f32) {
+  %schema = encoding.define #ggml_q8_0<block_elems=32, storage_bytes=34> : encoding<schema>
+  %lhs = vector.decode %lhs_payload using %schema {scale = %lhs_scale : vector<1xf16>} : vector<32xi8>, encoding<schema> -> vector<32xf32>
+  %rhs = vector.decode %rhs_payload using %schema {scale = %rhs_scale : vector<1xf16>} : vector<32xi8>, encoding<schema> -> vector<32xf32>
+  %zero = scalar.constant 0.0 : f32
+  %dot = vector.dotf %lhs, %rhs, %zero : vector<32xf32>, vector<32xf32>, f32
+  func.return %dot : f32
+}
+// ----
+func.def @q8_0_decoded_dotf_keeps_strict_float_contract(%lhs_payload: vector<32xi8>, %rhs_payload: vector<32xi8>, %lhs_scale: vector<1xf16>, %rhs_scale: vector<1xf16>) -> (f32) {
+  %16 = vector.extract %lhs_scale[0] : vector<1xf16> -> f16
+  %17 = scalar.extf %16 : f16 to f32
+  %18 = vector.splat %17 : vector<32xf32>
+  %19 = vector.bitunpacks<8> %lhs_payload : vector<32xi8> -> vector<32xi32>
+  %20 = vector.sitofp %19 : vector<32xi32> to vector<32xf32>
+  %lhs = vector.mulf %20, %18 : vector<32xf32>
+  %10 = vector.extract %rhs_scale[0] : vector<1xf16> -> f16
+  %11 = scalar.extf %10 : f16 to f32
+  %12 = vector.splat %11 : vector<32xf32>
+  %13 = vector.bitunpacks<8> %rhs_payload : vector<32xi8> -> vector<32xi32>
+  %14 = vector.sitofp %13 : vector<32xi32> to vector<32xf32>
+  %rhs = vector.mulf %14, %12 : vector<32xf32>
+  %zero = scalar.constant 0.0 : f32
+  %dot = vector.dotf %lhs, %rhs, %zero : vector<32xf32>, vector<32xf32>, f32
+  func.return %dot : f32
 }
 
 // ====
