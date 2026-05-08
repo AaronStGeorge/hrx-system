@@ -309,6 +309,18 @@ static bool loom_math_legalize_query_for_op(
           loom_math_legalize_scalar_fastmath_flags(
               loom_scalar_geluf_fastmath(op)),
           out_query);
+    case LOOM_OP_SCALAR_ADDF:
+      return loom_math_legalize_scalar_result_query(
+          module, op, LOOM_TARGET_MATH_OP_ADDF,
+          loom_math_legalize_scalar_fastmath_flags(
+              loom_scalar_addf_fastmath(op)),
+          out_query);
+    case LOOM_OP_SCALAR_MULF:
+      return loom_math_legalize_scalar_result_query(
+          module, op, LOOM_TARGET_MATH_OP_MULF,
+          loom_math_legalize_scalar_fastmath_flags(
+              loom_scalar_mulf_fastmath(op)),
+          out_query);
     case LOOM_OP_VECTOR_EXPF:
       return loom_math_legalize_vector_result_query(
           module, op, LOOM_TARGET_MATH_OP_EXPF,
@@ -344,6 +356,18 @@ static bool loom_math_legalize_query_for_op(
           module, op, loom_math_legalize_vector_geluf_op(op),
           loom_math_legalize_vector_fastmath_flags(
               loom_vector_geluf_fastmath(op)),
+          out_query);
+    case LOOM_OP_VECTOR_ADDF:
+      return loom_math_legalize_vector_result_query(
+          module, op, LOOM_TARGET_MATH_OP_ADDF,
+          loom_math_legalize_vector_fastmath_flags(
+              loom_vector_addf_fastmath(op)),
+          out_query);
+    case LOOM_OP_VECTOR_MULF:
+      return loom_math_legalize_vector_result_query(
+          module, op, LOOM_TARGET_MATH_OP_MULF,
+          loom_math_legalize_vector_fastmath_flags(
+              loom_vector_mulf_fastmath(op)),
           out_query);
     default:
       return false;

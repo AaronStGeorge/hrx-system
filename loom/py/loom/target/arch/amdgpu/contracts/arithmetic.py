@@ -101,10 +101,12 @@ _VEC_F32 = Vector(
 )
 _I32 = Scalar("i32")
 _F16 = Scalar("f16")
+_BF16 = Scalar("bf16")
 _F32 = Scalar("f32")
 _INDEX = Scalar("index")
 _F32_ABS_MASK = 0x7FFFFFFF
 _F32_SIGN_MASK = 0x80000000
+_BF16_ROUND_BIAS = 0x7FFF
 
 _VEC_I32_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
@@ -125,6 +127,11 @@ _F16_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="f16",
     constraint_key="amdgpu.arithmetic.f16",
+)
+_BF16_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="type",
+    subject_name="bf16",
+    constraint_key="amdgpu.arithmetic.bf16",
 )
 _F32_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
@@ -196,6 +203,8 @@ def _type_diagnostic(type_pattern: TypePattern) -> GuardDiagnostic:
         return _I32_DIAGNOSTIC
     if type_pattern == _F16:
         return _F16_DIAGNOSTIC
+    if type_pattern == _BF16:
+        return _BF16_DIAGNOSTIC
     if type_pattern == _F32:
         return _F32_DIAGNOSTIC
     if type_pattern == _INDEX:
@@ -514,6 +523,90 @@ def _cast_rule(
                 },
                 results={"dst": ValueRef.result("result")},
                 form=_emit_form(result_type),
+            ),
+        ),
+    )
+
+
+def _bf16_extf_rule() -> DescriptorRule:
+    descriptor = _descriptor("amdgpu.v_lshlrev_b32.lit")
+    return DescriptorRule(
+        source_op=scalar_conversion.scalar_extf,
+        descriptor=descriptor,
+        guards=(
+            _value_type("input", _BF16),
+            _value_type("result", _F32),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={"value": ValueRef.operand("input")},
+                results={"dst": ValueRef.result("result")},
+                immediates={"imm32": 16},
+                form=DescriptorEmitForm.OP,
+            ),
+        ),
+    )
+
+
+def _bf16_fptrunc_rule() -> DescriptorRule:
+    shift_down = _descriptor("amdgpu.v_lshrrev_b32.lit")
+    and_bits = _descriptor("amdgpu.v_and_b32.lit")
+    add_literal = _descriptor("amdgpu.v_add_u32.lit")
+    add = _descriptor("amdgpu.v_add_u32")
+    return DescriptorRule(
+        source_op=scalar_conversion.scalar_fptrunc,
+        descriptor=shift_down,
+        guards=(
+            _value_type("input", _F32),
+            _value_type("result", _BF16),
+            Guard.descriptor_available(shift_down),
+            Guard.descriptor_available(and_bits),
+            Guard.descriptor_available(add_literal),
+            Guard.descriptor_available(add),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=shift_down,
+                operands={"value": _f32_vgpr_operand("input")},
+                results={"dst": ValueRef.temporary("upper")},
+                result_types={"dst": ValueRef.result("result")},
+                immediates={"imm32": 16},
+                form=DescriptorEmitForm.OP,
+            ),
+            EmitDescriptorOp(
+                descriptor=and_bits,
+                operands={"rhs": ValueRef.temporary("upper")},
+                results={"dst": ValueRef.temporary("lsb")},
+                result_types={"dst": ValueRef.result("result")},
+                immediates={"imm32": 1},
+                form=DescriptorEmitForm.OP,
+            ),
+            EmitDescriptorOp(
+                descriptor=add_literal,
+                operands={"rhs": ValueRef.temporary("lsb")},
+                results={"dst": ValueRef.temporary("bias")},
+                result_types={"dst": ValueRef.result("result")},
+                immediates={"imm32": _BF16_ROUND_BIAS},
+                form=DescriptorEmitForm.OP,
+            ),
+            EmitDescriptorOp(
+                descriptor=add,
+                operands={
+                    "lhs": _f32_vgpr_operand("input"),
+                    "rhs": ValueRef.temporary("bias"),
+                },
+                results={"dst": ValueRef.temporary("rounded")},
+                result_types={"dst": ValueRef.result("result")},
+                form=DescriptorEmitForm.OP,
+            ),
+            EmitDescriptorOp(
+                descriptor=shift_down,
+                operands={"value": ValueRef.temporary("rounded")},
+                results={"dst": ValueRef.result("result")},
+                immediates={"imm32": 16},
+                form=DescriptorEmitForm.OP,
             ),
         ),
     )
@@ -1149,6 +1242,7 @@ def _rules() -> tuple[ContractCase, ...]:
                 _F32,
                 "amdgpu.v_cvt_f32_f16",
             ),
+            _bf16_extf_rule(),
             _cast_rule(
                 scalar_conversion.scalar_fptrunc,
                 _F32,
@@ -1156,6 +1250,7 @@ def _rules() -> tuple[ContractCase, ...]:
                 "amdgpu.v_cvt_f16_f32",
                 f32_input=True,
             ),
+            _bf16_fptrunc_rule(),
             _cast_rule(
                 scalar_conversion.scalar_sitofp,
                 _I32,

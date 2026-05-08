@@ -14,6 +14,14 @@ static loom_target_math_policy_decision_t loom_amdgpu_math_reject(
   };
 }
 
+static loom_target_math_policy_decision_t loom_amdgpu_math_keep(
+    iree_string_view_t constraint_key) {
+  return (loom_target_math_policy_decision_t){
+      .action = LOOM_TARGET_MATH_POLICY_ACTION_KEEP,
+      .constraint_key = constraint_key,
+  };
+}
+
 static loom_target_math_policy_decision_t loom_amdgpu_math_rewrite(
     loom_target_math_recipe_t recipe, iree_string_view_t constraint_key) {
   return (loom_target_math_policy_decision_t){
@@ -45,6 +53,18 @@ static void loom_amdgpu_math_policy_query(
     const loom_target_math_policy_t* policy,
     const loom_target_math_query_t* query,
     loom_target_math_policy_decision_t* out_decision) {
+  if (query->math_op == LOOM_TARGET_MATH_OP_ADDF ||
+      query->math_op == LOOM_TARGET_MATH_OP_MULF) {
+    if (query->element_type == LOOM_SCALAR_TYPE_BF16) {
+      *out_decision =
+          loom_amdgpu_math_rewrite(LOOM_TARGET_MATH_RECIPE_WIDEN_F32_ROUND_BF16,
+                                   IREE_SV("math.recipe.widen_f32_round_bf16"));
+      return;
+    }
+    *out_decision = loom_amdgpu_math_keep(IREE_SV("math.basic.keep"));
+    return;
+  }
+
   if (query->element_type != LOOM_SCALAR_TYPE_F32) {
     *out_decision = loom_amdgpu_math_reject(IREE_SV("math.element.f32"));
     return;
@@ -97,6 +117,10 @@ static void loom_amdgpu_math_policy_query(
           LOOM_TARGET_MATH_RECIPE_GELU_ERF_F32,
           IREE_SV("math.recipe.gelu_erf_f32"),
           LOOM_TARGET_MATH_FASTMATH_FLAG_ARCP);
+      return;
+    case LOOM_TARGET_MATH_OP_ADDF:
+    case LOOM_TARGET_MATH_OP_MULF:
+      *out_decision = loom_amdgpu_math_keep(IREE_SV("math.op.native_f32"));
       return;
     case LOOM_TARGET_MATH_OP_UNKNOWN:
       break;

@@ -29,12 +29,43 @@ func.def @scalar_extf_f16(%input: f16) -> (f32) {
 
 // ====
 
+func.def @scalar_extf_bf16(%input: bf16) -> (f32) {
+  %converted = scalar.extf %input : bf16 to f32
+  func.return %converted : f32
+}
+
+// ====
+
 func.def @scalar_fptrunc_f32_store(%output: buffer, %input: f32) {
   %base = index.constant 0 : offset
   %output_view = buffer.view %output[%base] : buffer -> view<1xf16, #dense>
   %converted = scalar.fptrunc %input : f32 to f16
   view.store %converted, %output_view[0] : f16, view<1xf16, #dense>
   func.return
+}
+
+// ====
+
+func.def @scalar_fptrunc_bf16_store(%output: buffer, %input: f32) {
+  %base = index.constant 0 : offset
+  %output_view = buffer.view %output[%base] : buffer -> view<1xbf16, #dense>
+  %converted = scalar.fptrunc %input : f32 to bf16
+  view.store %converted, %output_view[0] : bf16, view<1xbf16, #dense>
+  func.return
+}
+
+// ====
+
+func.def @vector_extf_bf16x3(%input: vector<3xbf16>) -> (vector<3xf32>) {
+  %converted = vector.extf %input : vector<3xbf16> to vector<3xf32>
+  func.return %converted : vector<3xf32>
+}
+
+// ====
+
+func.def @vector_fptrunc_bf16x3(%input: vector<3xf32>) -> (vector<3xbf16>) {
+  %converted = vector.fptrunc %input : vector<3xf32> to vector<3xbf16>
+  func.return %converted : vector<3xbf16>
 }
 
 // ====
@@ -65,4 +96,14 @@ kernel.def @scalar_bitcast_direct_i32_arg_f32_store(%output: buffer, %scale_bits
 func.def @vector_uitofp_i32x2(%input: vector<2xi32>) -> (vector<2xf32>) {
   %converted = vector.uitofp %input : vector<2xi32> to vector<2xf32>
   func.return %converted : vector<2xf32>
+}
+
+// ====
+
+func.def @scalar_extsi_i32_store(%output: buffer, %input: i32) {
+  %base = index.constant 0 : offset
+  %output_view = buffer.view %output[%base] : buffer -> view<1xi64, #dense>
+  %converted = scalar.extsi %input : i32 to i64
+  view.store %converted, %output_view[0] : i64, view<1xi64, #dense>
+  func.return
 }

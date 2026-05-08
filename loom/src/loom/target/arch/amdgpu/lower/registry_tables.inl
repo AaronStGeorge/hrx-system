@@ -251,6 +251,12 @@ static const loom_amdgpu_lower_dispatch_row_t
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_INSERT)] = LOOM_AMDGPU_DIRECT_ROW(
             LOOM_OP_VECTOR_INSERT, loom_amdgpu_select_value_dispatch,
             loom_amdgpu_emit_value_dispatch, NULL),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_EXTF)] = LOOM_AMDGPU_DIRECT_ROW(
+            LOOM_OP_VECTOR_EXTF, loom_amdgpu_select_value_dispatch,
+            loom_amdgpu_emit_value_dispatch, NULL),
+        [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_FPTRUNC)] = LOOM_AMDGPU_DIRECT_ROW(
+            LOOM_OP_VECTOR_FPTRUNC, loom_amdgpu_select_value_dispatch,
+            loom_amdgpu_emit_value_dispatch, NULL),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_LOAD)] = LOOM_AMDGPU_DATA_ROW(
             LOOM_OP_VECTOR_LOAD, loom_amdgpu_memory_access_plan_t,
             loom_amdgpu_select_memory_load_dispatch,

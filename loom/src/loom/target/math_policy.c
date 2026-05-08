@@ -78,6 +78,10 @@ iree_string_view_t loom_target_math_op_name(loom_target_math_op_t math_op) {
       return IREE_SV("geluf.tanh");
     case LOOM_TARGET_MATH_OP_GELUF_LOGISTIC:
       return IREE_SV("geluf.logistic");
+    case LOOM_TARGET_MATH_OP_ADDF:
+      return IREE_SV("addf");
+    case LOOM_TARGET_MATH_OP_MULF:
+      return IREE_SV("mulf");
     case LOOM_TARGET_MATH_OP_UNKNOWN:
       return IREE_SV("unknown");
   }
@@ -116,6 +120,8 @@ iree_string_view_t loom_target_math_recipe_name(
       return IREE_SV("erf-rational-f32");
     case LOOM_TARGET_MATH_RECIPE_GELU_ERF_F32:
       return IREE_SV("gelu-erf-f32");
+    case LOOM_TARGET_MATH_RECIPE_WIDEN_F32_ROUND_BF16:
+      return IREE_SV("widen-f32-round-bf16");
     case LOOM_TARGET_MATH_RECIPE_UNKNOWN:
       return IREE_SV("unknown");
   }
