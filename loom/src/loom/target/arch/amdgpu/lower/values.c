@@ -616,10 +616,14 @@ static bool loom_amdgpu_select_vector_extract_plan(
       }
       source_indices[i] = index;
     }
+    const uint32_t source_lane_limit =
+        lane_bit_count == 16 ? lane_count : register_count;
+    const uint32_t result_lane_count =
+        lane_bit_count == 16 ? 1u : result_register_count;
     if (!loom_amdgpu_static_vector_flat_register_from_indices(
             source_type, source_indices, &lane_offset) ||
-        (uint64_t)lane_offset + result_register_count >
-            (uint64_t)register_count) {
+        (uint64_t)lane_offset + result_lane_count >
+            (uint64_t)source_lane_limit) {
       return false;
     }
   }
