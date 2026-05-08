@@ -1500,6 +1500,10 @@ static iree_status_t loom_value_fact_table_seed_dynamic_extent(
 static iree_status_t loom_value_fact_table_seed_scalar_arg(
     loom_value_fact_table_t* table, const loom_module_t* module,
     loom_value_id_t value_id) {
+  if (!loom_value_facts_is_unknown(
+          loom_value_fact_table_lookup(table, value_id))) {
+    return iree_ok_status();
+  }
   loom_type_t type = loom_module_value_type(module, value_id);
   if (!loom_type_is_scalar(type)) {
     return iree_ok_status();

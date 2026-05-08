@@ -81,12 +81,32 @@ func.def @forwards_block_args(%cond: i1, %a: i32, %b: i32) -> (i32) {
 func.def @forwards_block_args(%cond: i1, %a: i32, %b: i32) -> (i32) {
   cfg.cond_br %cond, ^left, ^right : i1
 ^left:
-  cfg.br ^join(%b: i32, %a: i32)
+  cfg.br ^forward(%a: i32, %b: i32)
 ^right:
-  cfg.br ^join(%a: i32, %b: i32)
-^join(%p: i32, %q: i32):
-  %sum = test.addi %p, %q : i32
+  cfg.br ^forward(%b: i32, %a: i32)
+^forward(%x: i32, %y: i32):
+  %sum = test.addi %y, %x : i32
   func.return %sum : i32
+}
+
+// ====
+
+func.def @preserves_prefix_guard_payload_blocks(%has_ref: i1, %after_start: i1, %before_end: i1, %token: i32, %speech: i32, %pad: i32) -> (i32, i32) {
+  cfg.cond_br %has_ref, ^has, ^no_ref : i1
+^has:
+  cfg.cond_br %after_start, ^after, ^after_else : i1
+^after:
+  cfg.cond_br %before_end, ^inside, ^inside_else : i1
+^inside:
+  cfg.br ^join(%speech: i32, %pad: i32)
+^inside_else:
+  cfg.br ^join(%token: i32, %token: i32)
+^after_else:
+  cfg.br ^join(%token: i32, %token: i32)
+^no_ref:
+  cfg.br ^join(%token: i32, %token: i32)
+^join(%positive: i32, %negative: i32):
+  func.return %positive, %negative : i32, i32
 }
 
 // ====
@@ -190,7 +210,11 @@ func.def @merges_alpha_equivalent_blocks_with_args(%choose: i1, %left_pick: i1, 
 ^left_b:
   cfg.br ^left(%b: i32, %a: i32)
 ^right_dispatch:
-  cfg.cond_br %right_pick, ^left_a, ^left_b : i1
+  cfg.cond_br %right_pick, ^right_a, ^right_b : i1
+^right_a:
+  cfg.br ^left(%a: i32, %b: i32)
+^right_b:
+  cfg.br ^left(%b: i32, %a: i32)
 ^left(%x: i32, %y: i32):
   %left_sum = test.addi %x, %y : i32
   %left_result = test.addi %left_sum, %c : i32
@@ -602,13 +626,15 @@ func.def @threads_compare_with_mixed_incoming_block_arg_facts(%guard: i1, %li: i
   cfg.cond_br %guard, ^left, ^right : i1
 ^left:
   %left_cond = index.cmp slt, %li, %ln : index
-  cfg.cond_br %left_cond, ^taken, ^dead : i1
+  cfg.cond_br %left_cond, ^taken, ^exit : i1
 ^right:
   %again = index.cmp slt, %ri, %rn : index
   cfg.cond_br %again, ^taken, ^dead : i1
 ^taken:
   cfg.br ^ret(%a: i32)
 ^dead:
+  cfg.br ^ret(%b: i32)
+^exit:
   cfg.br ^ret(%b: i32)
 ^ret(%result: i32):
   func.return %result : i32

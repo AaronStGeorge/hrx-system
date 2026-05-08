@@ -1690,6 +1690,9 @@ static iree_status_t loom_cfg_simplify_forward_trivial_blocks(
 
     loom_cfg_block_index_span_t predecessors =
         loom_cfg_graph_predecessors(graph, block_index);
+    if (block->arg_count != 0 && predecessors.count > 1) {
+      continue;
+    }
     for (iree_host_size_t i = 0; i < predecessors.count; ++i) {
       const loom_cfg_block_info_t* predecessor_info =
           &graph->blocks[predecessors.values[i]];
@@ -2053,6 +2056,13 @@ static bool loom_cfg_simplify_is_alpha_merge_candidate(
   if (!block || block->op_count == 0 ||
       block->op_count > LOOM_CFG_SIMPLIFY_ALPHA_EQUIV_MAX_OPS ||
       !loom_cfg_simplify_block_values_stay_in_block(state, block)) {
+    return false;
+  }
+  loom_block_t* branch_dest = NULL;
+  loom_value_slice_t branch_args = {0};
+  if (block->first_op == block->last_op &&
+      loom_cfg_simplify_direct_branch(block->first_op, &branch_dest,
+                                      &branch_args)) {
     return false;
   }
   const loom_op_t* op = NULL;
