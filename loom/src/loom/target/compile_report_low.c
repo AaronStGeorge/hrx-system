@@ -114,6 +114,10 @@ static uint64_t loom_target_compile_report_slice_move_unit_count(
 
 static uint64_t loom_target_compile_report_concat_move_unit_count(
     const loom_low_allocation_table_t* allocation, const loom_op_t* op) {
+  if (!loom_low_allocation_concat_requires_packet_materialization(allocation,
+                                                                  op)) {
+    return 0;
+  }
   uint64_t unit_count = 0;
   const loom_low_allocation_assignment_t* result_assignment =
       loom_target_compile_report_map_assignment(allocation,
@@ -194,13 +198,13 @@ static void loom_target_compile_report_record_edge_copy_moves(
           &allocation->assignments[edge_copy->source_assignment_index];
       const loom_low_allocation_assignment_t* destination_assignment =
           &allocation->assignments[edge_copy->destination_assignment_index];
-      IREE_ASSERT_EQ(source_assignment->location_count,
-                     destination_assignment->location_count);
-      for (uint32_t unit_index = 0;
-           unit_index < source_assignment->location_count; ++unit_index) {
+      for (uint32_t unit_index = 0; unit_index < edge_copy->unit_count;
+           ++unit_index) {
         if (!loom_low_allocation_assignment_subranges_match(
-                destination_assignment, unit_index, source_assignment,
-                unit_index, /*unit_count=*/1)) {
+                destination_assignment,
+                edge_copy->destination_unit_offset + unit_index,
+                source_assignment, edge_copy->source_unit_offset + unit_index,
+                /*unit_count=*/1)) {
           ++group_unit_count;
         }
       }

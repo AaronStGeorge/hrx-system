@@ -2381,9 +2381,36 @@ static iree_status_t loom_low_allocation_record_copy_decisions(
   return iree_ok_status();
 }
 
+static const loom_op_t* loom_low_allocation_value_defining_concat(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  const loom_value_t* value = loom_module_value(module, value_id);
+  if (loom_value_is_block_arg(value)) {
+    return NULL;
+  }
+  const loom_op_t* def_op = loom_value_def_op(value);
+  return def_op && loom_low_concat_isa(def_op) ? def_op : NULL;
+}
+
+static iree_status_t loom_low_allocation_count_branch_payload_edge_copies(
+    const loom_module_t* module, loom_value_id_t payload_value_id,
+    iree_host_size_t* inout_copy_count) {
+  iree_host_size_t payload_copy_count = 1;
+  const loom_op_t* concat_op =
+      loom_low_allocation_value_defining_concat(module, payload_value_id);
+  if (concat_op) {
+    payload_copy_count = loom_low_concat_sources(concat_op).count;
+  }
+  if (payload_copy_count > IREE_HOST_SIZE_MAX - *inout_copy_count) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low.br edge-copy count exceeds host size");
+  }
+  *inout_copy_count += payload_copy_count;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_allocation_count_edge_copy_groups(
-    const loom_region_t* body, iree_host_size_t* out_group_count,
-    iree_host_size_t* out_copy_count) {
+    const loom_module_t* module, const loom_region_t* body,
+    iree_host_size_t* out_group_count, iree_host_size_t* out_copy_count) {
   *out_group_count = 0;
   *out_copy_count = 0;
   loom_block_t* block = NULL;
@@ -2397,14 +2424,93 @@ static iree_status_t loom_low_allocation_count_edge_copy_groups(
       if (args.count == 0) {
         continue;
       }
-      if (*out_group_count == IREE_HOST_SIZE_MAX ||
-          args.count > IREE_HOST_SIZE_MAX - *out_copy_count) {
+      if (*out_group_count == IREE_HOST_SIZE_MAX) {
         return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                                 "low.br edge-copy count exceeds host size");
       }
       ++*out_group_count;
-      *out_copy_count += args.count;
+      for (uint16_t i = 0; i < args.count; ++i) {
+        IREE_RETURN_IF_ERROR(
+            loom_low_allocation_count_branch_payload_edge_copies(
+                module, args.values[i], out_copy_count));
+      }
     }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_allocation_record_edge_copy_segment(
+    loom_low_allocation_build_state_t* state, uint16_t payload_index,
+    loom_value_id_t source_value_id, loom_value_id_t destination_value_id,
+    uint32_t source_unit_offset, uint32_t destination_unit_offset,
+    uint32_t unit_count) {
+  uint32_t source_assignment_index = 0;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
+      state, source_value_id, &source_assignment_index));
+  uint32_t destination_assignment_index = 0;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
+      state, destination_value_id, &destination_assignment_index));
+  state->edge_copies[state->edge_copy_count++] =
+      (loom_low_allocation_edge_copy_t){
+          .payload_index = payload_index,
+          .source_value_id = source_value_id,
+          .destination_value_id = destination_value_id,
+          .source_assignment_index = source_assignment_index,
+          .destination_assignment_index = destination_assignment_index,
+          .source_unit_offset = source_unit_offset,
+          .destination_unit_offset = destination_unit_offset,
+          .unit_count = unit_count,
+      };
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_allocation_record_branch_payload_edge_copies(
+    loom_low_allocation_build_state_t* state, uint16_t payload_index,
+    loom_value_id_t payload_value_id, loom_value_id_t destination_value_id) {
+  const loom_op_t* concat_op = loom_low_allocation_value_defining_concat(
+      state->module, payload_value_id);
+  if (!concat_op) {
+    uint32_t source_assignment_index = 0;
+    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
+        state, payload_value_id, &source_assignment_index));
+    const loom_low_allocation_assignment_t* source_assignment =
+        &state->assignments[source_assignment_index];
+    return loom_low_allocation_record_edge_copy_segment(
+        state, payload_index, payload_value_id, destination_value_id,
+        /*source_unit_offset=*/0, /*destination_unit_offset=*/0,
+        source_assignment->location_count);
+  }
+
+  uint32_t destination_assignment_index = 0;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
+      state, destination_value_id, &destination_assignment_index));
+  const loom_low_allocation_assignment_t* destination_assignment =
+      &state->assignments[destination_assignment_index];
+
+  uint32_t destination_unit_offset = 0;
+  loom_value_slice_t sources = loom_low_concat_sources(concat_op);
+  for (uint16_t i = 0; i < sources.count; ++i) {
+    uint32_t source_assignment_index = 0;
+    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
+        state, sources.values[i], &source_assignment_index));
+    const loom_low_allocation_assignment_t* source_assignment =
+        &state->assignments[source_assignment_index];
+    if (source_assignment->location_count >
+        UINT32_MAX - destination_unit_offset) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "low.br edge-copy destination offset exceeds "
+                              "u32 range");
+    }
+    IREE_RETURN_IF_ERROR(loom_low_allocation_record_edge_copy_segment(
+        state, payload_index, sources.values[i], destination_value_id,
+        /*source_unit_offset=*/0, destination_unit_offset,
+        source_assignment->location_count));
+    destination_unit_offset += source_assignment->location_count;
+  }
+  if (destination_unit_offset != destination_assignment->location_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "low.br decomposed low.concat payload does not fill destination");
   }
   return iree_ok_status();
 }
@@ -2674,25 +2780,21 @@ static iree_status_t loom_low_allocation_record_edge_copy_group(
       .source_ordinal = source_ordinal,
       .program_point = program_point,
       .copy_start = (uint32_t)state->edge_copy_count,
-      .copy_count = (uint32_t)args.count,
+      .copy_count = 0,
       .temporary_start = 0,
       .temporary_count = 0,
   };
+  const uint32_t copy_start = (uint32_t)state->edge_copy_count;
   for (uint16_t i = 0; i < dest->arg_count; ++i) {
-    uint32_t source_assignment_index = 0;
-    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
-        state, args.values[i], &source_assignment_index));
-    uint32_t destination_assignment_index = 0;
-    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
-        state, dest->arg_ids[i], &destination_assignment_index));
-    state->edge_copies[state->edge_copy_count++] =
-        (loom_low_allocation_edge_copy_t){
-            .source_value_id = args.values[i],
-            .destination_value_id = dest->arg_ids[i],
-            .source_assignment_index = source_assignment_index,
-            .destination_assignment_index = destination_assignment_index,
-        };
+    IREE_RETURN_IF_ERROR(loom_low_allocation_record_branch_payload_edge_copies(
+        state, i, args.values[i], dest->arg_ids[i]));
   }
+  if (state->edge_copy_count < copy_start ||
+      state->edge_copy_count - copy_start > UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low.br edge-copy group exceeds u32 range");
+  }
+  group->copy_count = (uint32_t)(state->edge_copy_count - copy_start);
   return iree_ok_status();
 }
 
@@ -2701,7 +2803,7 @@ static iree_status_t loom_low_allocation_record_edge_copy_groups(
   iree_host_size_t group_count = 0;
   iree_host_size_t copy_count = 0;
   IREE_RETURN_IF_ERROR(loom_low_allocation_count_edge_copy_groups(
-      state->body, &group_count, &copy_count));
+      state->module, state->body, &group_count, &copy_count));
   if (copy_count == 0) {
     return iree_ok_status();
   }
@@ -2755,14 +2857,21 @@ static iree_status_t loom_low_allocation_edge_copy_unit_locations(
     const loom_low_allocation_edge_copy_t* edge_copy, uint32_t unit_index,
     loom_low_allocation_unit_location_t* out_source,
     loom_low_allocation_unit_location_t* out_destination) {
+  if (unit_index >= edge_copy->unit_count) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "low.br edge-copy unit index exceeds copied segment");
+  }
   const loom_low_allocation_assignment_t* source_assignment =
       loom_low_allocation_edge_copy_source_assignment(state, edge_copy);
   const loom_low_allocation_assignment_t* destination_assignment =
       loom_low_allocation_edge_copy_destination_assignment(state, edge_copy);
   IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_unit_location(
-      source_assignment, unit_index, out_source));
+      source_assignment, edge_copy->source_unit_offset + unit_index,
+      out_source));
   IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_unit_location(
-      destination_assignment, unit_index, out_destination));
+      destination_assignment, edge_copy->destination_unit_offset + unit_index,
+      out_destination));
   return iree_ok_status();
 }
 
@@ -2774,13 +2883,11 @@ static iree_status_t loom_low_allocation_edge_copy_group_unit_count(
   for (uint32_t i = 0; i < group->copy_count; ++i) {
     const loom_low_allocation_edge_copy_t* edge_copy =
         &state->edge_copies[group->copy_start + i];
-    const loom_low_allocation_assignment_t* source_assignment =
-        loom_low_allocation_edge_copy_source_assignment(state, edge_copy);
-    if (source_assignment->location_count > UINT32_MAX - *out_unit_count) {
+    if (edge_copy->unit_count > UINT32_MAX - *out_unit_count) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "low.br edge-copy unit count exceeds u32");
     }
-    *out_unit_count += source_assignment->location_count;
+    *out_unit_count += edge_copy->unit_count;
   }
   return iree_ok_status();
 }
@@ -2795,10 +2902,8 @@ static iree_status_t loom_low_allocation_edge_copy_group_find_destination(
   for (uint32_t i = 0; i < group->copy_count; ++i) {
     const loom_low_allocation_edge_copy_t* edge_copy =
         &state->edge_copies[group->copy_start + i];
-    const loom_low_allocation_assignment_t* source_assignment =
-        loom_low_allocation_edge_copy_source_assignment(state, edge_copy);
-    for (uint32_t unit_index = 0;
-         unit_index < source_assignment->location_count; ++unit_index) {
+    for (uint32_t unit_index = 0; unit_index < edge_copy->unit_count;
+         ++unit_index) {
       loom_low_allocation_unit_location_t source = {0};
       loom_low_allocation_unit_location_t candidate_destination = {0};
       IREE_RETURN_IF_ERROR(loom_low_allocation_edge_copy_unit_locations(
@@ -2863,9 +2968,7 @@ static iree_status_t loom_low_allocation_edge_copy_class_seen_before(
   for (uint32_t copy_index = 0; copy_index <= stop_copy_index; ++copy_index) {
     const loom_low_allocation_edge_copy_t* edge_copy =
         &state->edge_copies[group->copy_start + copy_index];
-    const loom_low_allocation_assignment_t* source_assignment =
-        loom_low_allocation_edge_copy_source_assignment(state, edge_copy);
-    uint32_t unit_limit = source_assignment->location_count;
+    uint32_t unit_limit = edge_copy->unit_count;
     if (copy_index == stop_copy_index) {
       unit_limit = stop_unit_index;
     }
@@ -2896,10 +2999,8 @@ static iree_status_t loom_low_allocation_edge_copy_class_has_cycle(
   for (uint32_t i = 0; i < group->copy_count; ++i) {
     const loom_low_allocation_edge_copy_t* edge_copy =
         &state->edge_copies[group->copy_start + i];
-    const loom_low_allocation_assignment_t* source_assignment =
-        loom_low_allocation_edge_copy_source_assignment(state, edge_copy);
-    for (uint32_t unit_index = 0;
-         unit_index < source_assignment->location_count; ++unit_index) {
+    for (uint32_t unit_index = 0; unit_index < edge_copy->unit_count;
+         ++unit_index) {
       loom_low_allocation_unit_location_t source = {0};
       loom_low_allocation_unit_location_t destination = {0};
       IREE_RETURN_IF_ERROR(loom_low_allocation_edge_copy_unit_locations(
@@ -2926,10 +3027,8 @@ static iree_status_t loom_low_allocation_count_edge_copy_temporaries_for_group(
   for (uint32_t i = 0; i < group->copy_count; ++i) {
     const loom_low_allocation_edge_copy_t* edge_copy =
         &state->edge_copies[group->copy_start + i];
-    const loom_low_allocation_assignment_t* source_assignment =
-        loom_low_allocation_edge_copy_source_assignment(state, edge_copy);
-    for (uint32_t unit_index = 0;
-         unit_index < source_assignment->location_count; ++unit_index) {
+    for (uint32_t unit_index = 0; unit_index < edge_copy->unit_count;
+         ++unit_index) {
       loom_low_allocation_unit_location_t source = {0};
       loom_low_allocation_unit_location_t destination = {0};
       IREE_RETURN_IF_ERROR(loom_low_allocation_edge_copy_unit_locations(
@@ -2997,10 +3096,8 @@ static iree_status_t loom_low_allocation_edge_copy_group_uses_location(
   for (uint32_t i = 0; i < group->copy_count; ++i) {
     const loom_low_allocation_edge_copy_t* edge_copy =
         &state->edge_copies[group->copy_start + i];
-    const loom_low_allocation_assignment_t* source_assignment =
-        loom_low_allocation_edge_copy_source_assignment(state, edge_copy);
-    for (uint32_t unit_index = 0;
-         unit_index < source_assignment->location_count; ++unit_index) {
+    for (uint32_t unit_index = 0; unit_index < edge_copy->unit_count;
+         ++unit_index) {
       loom_low_allocation_unit_location_t source = {0};
       loom_low_allocation_unit_location_t destination = {0};
       IREE_RETURN_IF_ERROR(loom_low_allocation_edge_copy_unit_locations(
@@ -3142,10 +3239,8 @@ static iree_status_t loom_low_allocation_record_edge_copy_temporaries_for_group(
   for (uint32_t i = 0; i < group->copy_count; ++i) {
     const loom_low_allocation_edge_copy_t* edge_copy =
         &state->edge_copies[group->copy_start + i];
-    const loom_low_allocation_assignment_t* source_assignment =
-        loom_low_allocation_edge_copy_source_assignment(state, edge_copy);
-    for (uint32_t unit_index = 0;
-         unit_index < source_assignment->location_count; ++unit_index) {
+    for (uint32_t unit_index = 0; unit_index < edge_copy->unit_count;
+         ++unit_index) {
       loom_low_allocation_unit_location_t source = {0};
       loom_low_allocation_unit_location_t destination = {0};
       IREE_RETURN_IF_ERROR(loom_low_allocation_edge_copy_unit_locations(
@@ -3209,6 +3304,29 @@ static iree_status_t loom_low_allocation_record_edge_copy_temporaries(
             state, &state->edge_copy_groups[i]));
   }
   return iree_ok_status();
+}
+
+static bool
+loom_low_allocation_concat_requires_packet_materialization_in_module(
+    const loom_module_t* module, const loom_op_t* op) {
+  if (!loom_low_concat_isa(op)) {
+    return true;
+  }
+  const loom_value_t* result =
+      loom_module_value(module, loom_low_concat_result(op));
+  const loom_use_t* use = NULL;
+  loom_value_for_each_use(result, use) {
+    if (!loom_low_br_isa(loom_use_user_op(*use))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool loom_low_allocation_concat_requires_packet_materialization(
+    const loom_low_allocation_table_t* table, const loom_op_t* op) {
+  return loom_low_allocation_concat_requires_packet_materialization_in_module(
+      table->module, op);
 }
 
 static bool loom_low_allocation_op_has_packet_moves(const loom_op_t* op) {
@@ -3311,6 +3429,10 @@ static iree_status_t loom_low_allocation_packet_moves_for_concat(
     loom_low_allocation_packet_unit_move_t* moves,
     iree_host_size_t move_capacity, iree_host_size_t* out_move_count) {
   *out_move_count = 0;
+  if (!loom_low_allocation_concat_requires_packet_materialization_in_module(
+          state->module, op)) {
+    return iree_ok_status();
+  }
   const loom_low_allocation_assignment_t* result_assignment = NULL;
   IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_for_value(
       state, loom_low_concat_result(op), &result_assignment));
@@ -4287,12 +4409,51 @@ static iree_status_t loom_low_allocation_verify_edge_copy(
         "allocation edge-copy %zu crosses descriptor register classes",
         edge_copy_index);
   }
-  if (source_assignment->location_count == 0 ||
-      source_assignment->location_count !=
-          destination_assignment->location_count) {
+  if (edge_copy->unit_count == 0) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "allocation edge-copy %zu has an empty unit range",
+                            edge_copy_index);
+  }
+  if (edge_copy->source_unit_offset > source_assignment->location_count ||
+      edge_copy->unit_count >
+          source_assignment->location_count - edge_copy->source_unit_offset) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "allocation edge-copy %zu requires non-empty matching location ranges",
+        "allocation edge-copy %zu source segment is outside its assignment",
+        edge_copy_index);
+  }
+  if (edge_copy->destination_unit_offset >
+          destination_assignment->location_count ||
+      edge_copy->unit_count > destination_assignment->location_count -
+                                  edge_copy->destination_unit_offset) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation edge-copy %zu destination segment is outside its "
+        "assignment",
+        edge_copy_index);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_allocation_verify_edge_copy_matches_payload(
+    const loom_low_allocation_table_t* table,
+    const loom_low_allocation_edge_copy_t* edge_copy,
+    iree_host_size_t edge_copy_index, uint16_t expected_payload_index,
+    loom_value_id_t expected_source_value_id,
+    loom_value_id_t expected_destination_value_id,
+    uint32_t expected_source_unit_offset,
+    uint32_t expected_destination_unit_offset, uint32_t expected_unit_count) {
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_verify_edge_copy(table, edge_copy, edge_copy_index));
+  if (edge_copy->payload_index != expected_payload_index ||
+      edge_copy->source_value_id != expected_source_value_id ||
+      edge_copy->destination_value_id != expected_destination_value_id ||
+      edge_copy->source_unit_offset != expected_source_unit_offset ||
+      edge_copy->destination_unit_offset != expected_destination_unit_offset ||
+      edge_copy->unit_count != expected_unit_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation edge-copy %zu does not match low.br payload segment",
         edge_copy_index);
   }
   return iree_ok_status();
@@ -4347,22 +4508,108 @@ static iree_status_t loom_low_allocation_verify_edge_copy_group(
   }
   loom_value_slice_t args = loom_low_br_args(group->terminator_op);
   const loom_block_t* dest = loom_low_br_dest(group->terminator_op);
-  if (args.count != dest->arg_count || args.count != group->copy_count) {
+  if (args.count != dest->arg_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "allocation edge-copy group %zu does not match low.br edge payload",
         group_index);
   }
-  for (uint16_t i = 0; i < dest->arg_count; ++i) {
-    const loom_low_allocation_edge_copy_t* edge_copy =
-        &table->edge_copies[group->copy_start + i];
-    if (edge_copy->source_value_id != args.values[i] ||
-        edge_copy->destination_value_id != dest->arg_ids[i]) {
+  iree_host_size_t edge_copy_index = group->copy_start;
+  for (uint16_t payload_index = 0; payload_index < dest->arg_count;
+       ++payload_index) {
+    const loom_value_id_t payload_value_id = args.values[payload_index];
+    const loom_value_id_t destination_value_id = dest->arg_ids[payload_index];
+    const loom_op_t* concat_op = loom_low_allocation_value_defining_concat(
+        table->module, payload_value_id);
+    if (!concat_op) {
+      if (edge_copy_index >= group->copy_start + group->copy_count) {
+        return iree_make_status(
+            IREE_STATUS_FAILED_PRECONDITION,
+            "allocation edge-copy group %zu ended before low.br payload %u",
+            group_index, payload_index);
+      }
+      const loom_low_allocation_edge_copy_t* edge_copy =
+          &table->edge_copies[edge_copy_index];
+      uint32_t source_assignment_index = 0;
+      IREE_RETURN_IF_ERROR(loom_low_allocation_map_assignment_index(
+          table, payload_value_id, &source_assignment_index));
+      uint32_t destination_assignment_index = 0;
+      IREE_RETURN_IF_ERROR(loom_low_allocation_map_assignment_index(
+          table, destination_value_id, &destination_assignment_index));
+      const loom_low_allocation_assignment_t* source_assignment =
+          &table->assignments[source_assignment_index];
+      const loom_low_allocation_assignment_t* destination_assignment =
+          &table->assignments[destination_assignment_index];
+      IREE_RETURN_IF_ERROR(loom_low_allocation_verify_edge_copy_matches_payload(
+          table, edge_copy, edge_copy_index, payload_index, payload_value_id,
+          destination_value_id,
+          /*expected_source_unit_offset=*/0,
+          /*expected_destination_unit_offset=*/0,
+          source_assignment->location_count));
+      if (source_assignment->location_count !=
+          destination_assignment->location_count) {
+        return iree_make_status(
+            IREE_STATUS_FAILED_PRECONDITION,
+            "allocation edge-copy group %zu payload %u does not fill its "
+            "destination",
+            group_index, payload_index);
+      }
+      ++edge_copy_index;
+      continue;
+    }
+
+    uint32_t destination_unit_offset = 0;
+    loom_value_slice_t sources = loom_low_concat_sources(concat_op);
+    for (uint16_t source_index = 0; source_index < sources.count;
+         ++source_index) {
+      if (edge_copy_index >= group->copy_start + group->copy_count) {
+        return iree_make_status(
+            IREE_STATUS_FAILED_PRECONDITION,
+            "allocation edge-copy group %zu ended inside low.concat payload "
+            "%u",
+            group_index, payload_index);
+      }
+      const loom_low_allocation_edge_copy_t* edge_copy =
+          &table->edge_copies[edge_copy_index];
+      uint32_t source_assignment_index = 0;
+      IREE_RETURN_IF_ERROR(loom_low_allocation_map_assignment_index(
+          table, sources.values[source_index], &source_assignment_index));
+      const loom_low_allocation_assignment_t* source_assignment =
+          &table->assignments[source_assignment_index];
+      IREE_RETURN_IF_ERROR(loom_low_allocation_verify_edge_copy_matches_payload(
+          table, edge_copy, edge_copy_index, payload_index,
+          sources.values[source_index], destination_value_id,
+          /*expected_source_unit_offset=*/0, destination_unit_offset,
+          source_assignment->location_count));
+      if (source_assignment->location_count >
+          UINT32_MAX - destination_unit_offset) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "allocation edge-copy group %zu destination offset exceeds u32 "
+            "range",
+            group_index);
+      }
+      destination_unit_offset += source_assignment->location_count;
+      ++edge_copy_index;
+    }
+    uint32_t destination_assignment_index = 0;
+    IREE_RETURN_IF_ERROR(loom_low_allocation_map_assignment_index(
+        table, destination_value_id, &destination_assignment_index));
+    const loom_low_allocation_assignment_t* destination_assignment =
+        &table->assignments[destination_assignment_index];
+    if (destination_unit_offset != destination_assignment->location_count) {
       return iree_make_status(
           IREE_STATUS_FAILED_PRECONDITION,
-          "allocation edge-copy group %zu payload %u does not match low.br",
-          group_index, i);
+          "allocation edge-copy group %zu payload %u does not fill its "
+          "destination",
+          group_index, payload_index);
     }
+  }
+  if (edge_copy_index != group->copy_start + group->copy_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation edge-copy group %zu has extra low.br payload segments",
+        group_index);
   }
   return iree_ok_status();
 }
@@ -4521,7 +4768,7 @@ static iree_status_t loom_low_allocation_verify_table_contents(
   iree_host_size_t edge_copy_group_count = 0;
   iree_host_size_t edge_copy_count = 0;
   IREE_RETURN_IF_ERROR(loom_low_allocation_count_edge_copy_groups(
-      body, &edge_copy_group_count, &edge_copy_count));
+      table->module, body, &edge_copy_group_count, &edge_copy_count));
   if (table->edge_copy_group_count != edge_copy_group_count ||
       table->edge_copy_count != edge_copy_count) {
     return iree_make_status(

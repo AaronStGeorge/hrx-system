@@ -225,14 +225,22 @@ typedef struct loom_low_allocation_copy_decision_t {
 // Copy required to materialize one low.br edge payload into a destination block
 // argument location.
 typedef struct loom_low_allocation_edge_copy_t {
-  // SSA value forwarded by the branch edge.
+  // Operand index in the owning low.br payload.
+  uint16_t payload_index;
+  // SSA value providing this copied segment.
   loom_value_id_t source_value_id;
-  // Destination block argument receiving |source_value_id|.
+  // Destination block argument receiving this copied segment.
   loom_value_id_t destination_value_id;
   // Assignment index for |source_value_id|.
   uint32_t source_assignment_index;
   // Assignment index for |destination_value_id|.
   uint32_t destination_assignment_index;
+  // Unit offset inside the source assignment.
+  uint32_t source_unit_offset;
+  // Unit offset inside the destination assignment.
+  uint32_t destination_unit_offset;
+  // Number of assignment units copied by this segment.
+  uint32_t unit_count;
 } loom_low_allocation_edge_copy_t;
 
 // Scratch unit reserved for sequencing cyclic edge-copy moves.
@@ -457,6 +465,12 @@ loom_low_allocation_find_edge_copy_group_by_source_ordinal(
 const loom_low_allocation_packet_move_temporary_group_t*
 loom_low_allocation_find_packet_move_temporary_group_by_source_ordinal(
     const loom_low_allocation_table_t* table, uint32_t source_ordinal);
+
+// Returns true when |op| must materialize its low.concat result as a packet.
+// Branch-edge copies can decompose low.concat payloads directly into block
+// arguments, so branch-only concats do not require packet-local moves.
+bool loom_low_allocation_concat_requires_packet_materialization(
+    const loom_low_allocation_table_t* table, const loom_op_t* op);
 
 // Resolves the descriptor-set register class spelling for |assignment|.
 iree_status_t loom_low_allocation_assignment_register_class_name(

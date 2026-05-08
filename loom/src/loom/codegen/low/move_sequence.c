@@ -204,18 +204,22 @@ iree_status_t loom_low_move_sequence_count_edge_copy_units(
         &allocation->assignments[edge_copy->source_assignment_index];
     const loom_low_allocation_assignment_t* destination_assignment =
         &allocation->assignments[edge_copy->destination_assignment_index];
-    if (source_assignment->location_count !=
-        destination_assignment->location_count) {
+    if (edge_copy->source_unit_offset > source_assignment->location_count ||
+        edge_copy->unit_count >
+            source_assignment->location_count - edge_copy->source_unit_offset ||
+        edge_copy->destination_unit_offset >
+            destination_assignment->location_count ||
+        edge_copy->unit_count > destination_assignment->location_count -
+                                    edge_copy->destination_unit_offset) {
       return iree_make_status(
           IREE_STATUS_FAILED_PRECONDITION,
-          "edge-copy source and destination location counts differ");
+          "edge-copy segment exceeds source or destination assignment");
     }
-    if (source_assignment->location_count >
-        IREE_HOST_SIZE_MAX - *out_move_count) {
+    if (edge_copy->unit_count > IREE_HOST_SIZE_MAX - *out_move_count) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "edge-copy unit move count exceeds host size");
     }
-    *out_move_count += source_assignment->location_count;
+    *out_move_count += edge_copy->unit_count;
   }
   return iree_ok_status();
 }
@@ -241,12 +245,15 @@ iree_status_t loom_low_move_sequence_populate_edge_copy_units(
         &allocation->assignments[edge_copy->source_assignment_index];
     const loom_low_allocation_assignment_t* destination_assignment =
         &allocation->assignments[edge_copy->destination_assignment_index];
-    for (uint32_t unit_index = 0;
-         unit_index < source_assignment->location_count; ++unit_index) {
+    for (uint32_t unit_index = 0; unit_index < edge_copy->unit_count;
+         ++unit_index) {
       IREE_RETURN_IF_ERROR(loom_low_move_location_from_assignment_unit(
-          destination_assignment, unit_index, &moves[move_index].destination));
+          destination_assignment,
+          edge_copy->destination_unit_offset + unit_index,
+          &moves[move_index].destination));
       IREE_RETURN_IF_ERROR(loom_low_move_location_from_assignment_unit(
-          source_assignment, unit_index, &moves[move_index].source));
+          source_assignment, edge_copy->source_unit_offset + unit_index,
+          &moves[move_index].source));
       ++move_index;
     }
   }
@@ -398,6 +405,10 @@ static iree_status_t loom_low_move_sequence_concat_assignments(
   if (!loom_low_concat_isa(op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected low.concat");
+  }
+  if (!loom_low_allocation_concat_requires_packet_materialization(allocation,
+                                                                  op)) {
+    return iree_ok_status();
   }
   *out_result_assignment =
       loom_low_move_sequence_assignment(allocation, loom_low_concat_result(op));
