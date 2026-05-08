@@ -1332,6 +1332,12 @@ bool loom_amdgpu_value_can_materialize_as_vgpr_i32(
       loom_module_value_type(loom_low_lower_context_module(context), value_id));
 }
 
+bool loom_amdgpu_value_can_materialize_as_vgpr_f32(
+    loom_low_lower_context_t* context, loom_value_id_t value_id) {
+  return loom_amdgpu_type_is_f32(
+      loom_module_value_type(loom_low_lower_context_module(context), value_id));
+}
+
 bool loom_amdgpu_value_can_materialize_as_vgpr_address(
     loom_low_lower_context_t* context, loom_value_id_t value_id) {
   return loom_amdgpu_value_is_address_scalar(context, value_id);

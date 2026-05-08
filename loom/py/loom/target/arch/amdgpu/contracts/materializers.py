@@ -15,6 +15,13 @@ I32_VGPR_MATERIALIZER = ValueMaterializer(
     header="loom/target/arch/amdgpu/lower/materializers.h",
 )
 
+F32_VGPR_MATERIALIZER = ValueMaterializer(
+    name="f32_vgpr",
+    can_materialize="loom_amdgpu_value_can_materialize_as_vgpr_f32",
+    materialize="loom_amdgpu_lookup_or_materialize_vgpr_f32",
+    header="loom/target/arch/amdgpu/lower/materializers.h",
+)
+
 ADDRESS_VGPR_MATERIALIZER = ValueMaterializer(
     name="address_vgpr",
     can_materialize="loom_amdgpu_value_can_materialize_as_vgpr_address",

@@ -1108,6 +1108,10 @@ static iree_status_t loom_amdgpu_lookup_atomic_value_as_vgpr(
     return loom_amdgpu_lookup_or_materialize_vgpr_i32(
         context, source_op, source_value, out_low_value);
   }
+  if (loom_amdgpu_type_is_f32(source_type)) {
+    return loom_amdgpu_lookup_or_materialize_vgpr_f32(
+        context, source_op, source_value, out_low_value);
+  }
 
   loom_value_id_t low_value = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(

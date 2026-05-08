@@ -17,7 +17,10 @@ from loom.dialect.scalar import math as scalar_math
 from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector import defs as vector
 from loom.dsl import Op
-from loom.target.arch.amdgpu.contracts.materializers import ADDRESS_VGPR_MATERIALIZER
+from loom.target.arch.amdgpu.contracts.materializers import (
+    ADDRESS_VGPR_MATERIALIZER,
+    F32_VGPR_MATERIALIZER,
+)
 from loom.target.arch.amdgpu.descriptors import build_amdgpu_contract_descriptor_set
 from loom.target.contracts import (
     ContractFragment,
@@ -213,6 +216,10 @@ def _typed_guards(
     return tuple(_value_type(field, type_pattern) for field in fields)
 
 
+def _f32_vgpr_operand(field: str) -> ValueRef:
+    return _materialized_operand(field, F32_VGPR_MATERIALIZER)
+
+
 def _emit_form(type_pattern: TypePattern) -> DescriptorEmitForm:
     if type_pattern.kind == "vector":
         return DescriptorEmitForm.PER_LANE
@@ -228,8 +235,20 @@ def _binary_rule(
     descriptor_rhs: str = "rhs",
     source_lhs: str = "lhs",
     source_rhs: str = "rhs",
+    f32_operands: bool = False,
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
+    operands = (
+        {
+            descriptor_lhs: _f32_vgpr_operand(source_lhs),
+            descriptor_rhs: _f32_vgpr_operand(source_rhs),
+        }
+        if f32_operands
+        else {
+            descriptor_lhs: ValueRef.operand(source_lhs),
+            descriptor_rhs: ValueRef.operand(source_rhs),
+        }
+    )
     return DescriptorRule(
         source_op=source_op,
         descriptor=descriptor,
@@ -240,10 +259,7 @@ def _binary_rule(
         emit=(
             EmitDescriptorOp(
                 descriptor=descriptor,
-                operands={
-                    descriptor_lhs: ValueRef.operand(source_lhs),
-                    descriptor_rhs: ValueRef.operand(source_rhs),
-                },
+                operands=operands,
                 results={"dst": ValueRef.result("result")},
                 form=_emit_form(type_pattern),
             ),
@@ -255,6 +271,8 @@ def _unary_rule(
     source_op: Op,
     type_pattern: TypePattern,
     descriptor_key: str,
+    *,
+    f32_operand: bool = False,
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
     return DescriptorRule(
@@ -267,7 +285,11 @@ def _unary_rule(
         emit=(
             EmitDescriptorOp(
                 descriptor=descriptor,
-                operands={"input": ValueRef.operand("input")},
+                operands={
+                    "input": _f32_vgpr_operand("input")
+                    if f32_operand
+                    else ValueRef.operand("input")
+                },
                 results={"dst": ValueRef.result("result")},
                 form=_emit_form(type_pattern),
             ),
@@ -275,7 +297,12 @@ def _unary_rule(
     )
 
 
-def _f32_neg_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule:
+def _f32_neg_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    *,
+    f32_operand: bool = False,
+) -> DescriptorRule:
     descriptor = _descriptor("amdgpu.v_xor_b32.lit")
     return DescriptorRule(
         source_op=source_op,
@@ -287,7 +314,11 @@ def _f32_neg_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule:
         emit=(
             EmitDescriptorOp(
                 descriptor=descriptor,
-                operands={"rhs": ValueRef.operand("input")},
+                operands={
+                    "rhs": _f32_vgpr_operand("input")
+                    if f32_operand
+                    else ValueRef.operand("input")
+                },
                 results={"dst": ValueRef.result("result")},
                 immediates={"imm32": _F32_SIGN_MASK},
                 form=_emit_form(type_pattern),
@@ -296,7 +327,12 @@ def _f32_neg_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule:
     )
 
 
-def _f32_abs_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule:
+def _f32_abs_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    *,
+    f32_operand: bool = False,
+) -> DescriptorRule:
     descriptor = _descriptor("amdgpu.v_and_b32.lit")
     return DescriptorRule(
         source_op=source_op,
@@ -308,7 +344,11 @@ def _f32_abs_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule:
         emit=(
             EmitDescriptorOp(
                 descriptor=descriptor,
-                operands={"rhs": ValueRef.operand("input")},
+                operands={
+                    "rhs": _f32_vgpr_operand("input")
+                    if f32_operand
+                    else ValueRef.operand("input")
+                },
                 results={"dst": ValueRef.result("result")},
                 immediates={"imm32": _F32_ABS_MASK},
                 form=_emit_form(type_pattern),
@@ -321,6 +361,8 @@ def _ternary_rule(
     source_op: Op,
     type_pattern: TypePattern,
     descriptor_key: str,
+    *,
+    f32_operands: bool = False,
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
     return DescriptorRule(
@@ -334,9 +376,15 @@ def _ternary_rule(
             EmitDescriptorOp(
                 descriptor=descriptor,
                 operands={
-                    "a": ValueRef.operand("a"),
-                    "b": ValueRef.operand("b"),
-                    "c": ValueRef.operand("c"),
+                    "a": _f32_vgpr_operand("a")
+                    if f32_operands
+                    else ValueRef.operand("a"),
+                    "b": _f32_vgpr_operand("b")
+                    if f32_operands
+                    else ValueRef.operand("b"),
+                    "c": _f32_vgpr_operand("c")
+                    if f32_operands
+                    else ValueRef.operand("c"),
                 },
                 results={"dst": ValueRef.result("result")},
                 form=_emit_form(type_pattern),
@@ -345,7 +393,12 @@ def _ternary_rule(
     )
 
 
-def _divf_arcp_one_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule:
+def _divf_arcp_one_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    *,
+    f32_operand: bool = False,
+) -> DescriptorRule:
     reciprocal = _descriptor("amdgpu.v_rcp_f32")
     return DescriptorRule(
         source_op=source_op,
@@ -359,7 +412,11 @@ def _divf_arcp_one_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorR
         emit=(
             EmitDescriptorOp(
                 descriptor=reciprocal,
-                operands={"input": ValueRef.operand("rhs")},
+                operands={
+                    "input": _f32_vgpr_operand("rhs")
+                    if f32_operand
+                    else ValueRef.operand("rhs")
+                },
                 results={"dst": ValueRef.result("result")},
                 form=_emit_form(type_pattern),
             ),
@@ -367,7 +424,12 @@ def _divf_arcp_one_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorR
     )
 
 
-def _divf_arcp_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule:
+def _divf_arcp_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    *,
+    f32_operands: bool = False,
+) -> DescriptorRule:
     reciprocal = _descriptor("amdgpu.v_rcp_f32")
     multiply = _descriptor("amdgpu.v_mul_f32")
     return DescriptorRule(
@@ -382,7 +444,11 @@ def _divf_arcp_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule:
         emit=(
             EmitDescriptorOp(
                 descriptor=reciprocal,
-                operands={"input": ValueRef.operand("rhs")},
+                operands={
+                    "input": _f32_vgpr_operand("rhs")
+                    if f32_operands
+                    else ValueRef.operand("rhs")
+                },
                 results={"dst": ValueRef.temporary("reciprocal")},
                 result_types={"dst": ValueRef.result("result")},
                 form=_emit_form(type_pattern),
@@ -390,7 +456,9 @@ def _divf_arcp_rule(source_op: Op, type_pattern: TypePattern) -> DescriptorRule:
             EmitDescriptorOp(
                 descriptor=multiply,
                 operands={
-                    "lhs": ValueRef.operand("lhs"),
+                    "lhs": _f32_vgpr_operand("lhs")
+                    if f32_operands
+                    else ValueRef.operand("lhs"),
                     "rhs": ValueRef.temporary("reciprocal"),
                 },
                 results={"dst": ValueRef.result("result")},
@@ -405,6 +473,8 @@ def _cast_rule(
     input_type: TypePattern,
     result_type: TypePattern,
     descriptor_key: str,
+    *,
+    f32_input: bool = False,
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
     return DescriptorRule(
@@ -418,7 +488,11 @@ def _cast_rule(
         emit=(
             EmitDescriptorOp(
                 descriptor=descriptor,
-                operands={"input": ValueRef.operand("input")},
+                operands={
+                    "input": _f32_vgpr_operand("input")
+                    if f32_input
+                    else ValueRef.operand("input")
+                },
                 results={"dst": ValueRef.result("result")},
                 form=_emit_form(result_type),
             ),
@@ -472,6 +546,7 @@ def _f32_literal_binary_rule(
     *,
     literal_source: str,
     nonliteral_source: str,
+    f32_operand: bool = False,
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
     return DescriptorRule(
@@ -488,7 +563,11 @@ def _f32_literal_binary_rule(
         emit=(
             EmitDescriptorOp(
                 descriptor=descriptor,
-                operands={"rhs": ValueRef.operand(nonliteral_source)},
+                operands={
+                    "rhs": _f32_vgpr_operand(nonliteral_source)
+                    if f32_operand
+                    else ValueRef.operand(nonliteral_source)
+                },
                 results={"dst": ValueRef.result("result")},
                 immediates={
                     "imm32": ValueProject.f64_as_f32_bits(literal_source),
@@ -870,6 +949,7 @@ def _rules() -> tuple[DescriptorRule, ...]:
                     descriptor_key,
                     literal_source="lhs",
                     nonliteral_source="rhs",
+                    f32_operand=True,
                 ),
                 _f32_literal_binary_rule(
                     source_op,
@@ -877,6 +957,7 @@ def _rules() -> tuple[DescriptorRule, ...]:
                     descriptor_key,
                     literal_source="rhs",
                     nonliteral_source="lhs",
+                    f32_operand=True,
                 ),
             )
         )
@@ -887,6 +968,7 @@ def _rules() -> tuple[DescriptorRule, ...]:
             "amdgpu.v_sub_f32.lit",
             literal_source="lhs",
             nonliteral_source="rhs",
+            f32_operand=True,
         )
     )
     rules.extend(
@@ -907,30 +989,43 @@ def _rules() -> tuple[DescriptorRule, ...]:
                 scalar_arithmetic.scalar_addf,
                 _F32,
                 "amdgpu.v_add_f32",
+                f32_operands=True,
             ),
             _binary_rule(
                 scalar_arithmetic.scalar_subf,
                 _F32,
                 "amdgpu.v_sub_f32",
+                f32_operands=True,
             ),
             _binary_rule(
                 scalar_arithmetic.scalar_mulf,
                 _F32,
                 "amdgpu.v_mul_f32",
+                f32_operands=True,
             ),
-            _f32_neg_rule(scalar_arithmetic.scalar_negf, _F32),
-            _f32_abs_rule(scalar_arithmetic.scalar_absf, _F32),
-            _divf_arcp_one_rule(scalar_arithmetic.scalar_divf, _F32),
-            _divf_arcp_rule(scalar_arithmetic.scalar_divf, _F32),
+            _f32_neg_rule(scalar_arithmetic.scalar_negf, _F32, f32_operand=True),
+            _f32_abs_rule(scalar_arithmetic.scalar_absf, _F32, f32_operand=True),
+            _divf_arcp_one_rule(
+                scalar_arithmetic.scalar_divf,
+                _F32,
+                f32_operand=True,
+            ),
+            _divf_arcp_rule(
+                scalar_arithmetic.scalar_divf,
+                _F32,
+                f32_operands=True,
+            ),
             _binary_rule(
                 scalar_arithmetic.scalar_minnumf,
                 _F32,
                 "amdgpu.v_min_f32",
+                f32_operands=True,
             ),
             _binary_rule(
                 scalar_arithmetic.scalar_maxnumf,
                 _F32,
                 "amdgpu.v_max_f32",
+                f32_operands=True,
             ),
             _binary_rule(
                 scalar_arithmetic.scalar_minsi,
@@ -952,10 +1047,30 @@ def _rules() -> tuple[DescriptorRule, ...]:
                 _I32,
                 "amdgpu.v_max_u32",
             ),
-            _ternary_rule(scalar_math.scalar_fmaf, _F32, "amdgpu.v_fma_f32"),
-            _unary_rule(scalar_math.scalar_exp2f, _F32, "amdgpu.v_exp_f32"),
-            _unary_rule(scalar_math.scalar_sqrtf, _F32, "amdgpu.v_sqrt_f32"),
-            _unary_rule(scalar_math.scalar_rsqrtf, _F32, "amdgpu.v_rsq_f32"),
+            _ternary_rule(
+                scalar_math.scalar_fmaf,
+                _F32,
+                "amdgpu.v_fma_f32",
+                f32_operands=True,
+            ),
+            _unary_rule(
+                scalar_math.scalar_exp2f,
+                _F32,
+                "amdgpu.v_exp_f32",
+                f32_operand=True,
+            ),
+            _unary_rule(
+                scalar_math.scalar_sqrtf,
+                _F32,
+                "amdgpu.v_sqrt_f32",
+                f32_operand=True,
+            ),
+            _unary_rule(
+                scalar_math.scalar_rsqrtf,
+                _F32,
+                "amdgpu.v_rsq_f32",
+                f32_operand=True,
+            ),
             _cast_rule(
                 scalar_conversion.scalar_extf,
                 _F16,
@@ -967,6 +1082,7 @@ def _rules() -> tuple[DescriptorRule, ...]:
                 _F32,
                 _F16,
                 "amdgpu.v_cvt_f16_f32",
+                f32_input=True,
             ),
             _cast_rule(
                 scalar_conversion.scalar_sitofp,
@@ -1045,6 +1161,6 @@ AMDGPU_ARITHMETIC_CONTRACT_FRAGMENT = ContractFragment(
     name="amdgpu.arithmetic",
     descriptor_set=_DESCRIPTOR_SET,
     c_source_includes=("loom/target/arch/amdgpu/lower/kinds.h",),
-    materializers=(ADDRESS_VGPR_MATERIALIZER,),
+    materializers=(ADDRESS_VGPR_MATERIALIZER, F32_VGPR_MATERIALIZER),
     cases=_rules(),
 )
