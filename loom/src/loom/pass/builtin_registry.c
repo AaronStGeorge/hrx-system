@@ -299,6 +299,11 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .option_schema_count = IREE_ARRAYSIZE(kScfUnrollOptionSchema),
     },
     {
+        .key = IREE_SVL("vector-gather-to-scalar"),
+        .info = loom_vector_gather_to_scalar_pass_info,
+        .function_run = loom_vector_gather_to_scalar_run,
+    },
+    {
         .key = IREE_SVL("vector-memory-footprint"),
         .info = loom_vector_memory_footprint_pass_info,
         .function_run = loom_vector_memory_footprint_run,

@@ -97,7 +97,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @i32_workgroup_global_sa
   %24 = v_lshlrev_b32_vop3_imm %workgroup, 6
   %linear64 = v_add_u32 %24, %column
   %26 = v_lshlrev_b32_lit %linear64, 1
-  %loaded = global_load_short_d16 %26, %input_view
+  %loaded = global_load_u16 %26, %input_view
   global_store_short %26, %loaded, %output_view
   return
 }
@@ -704,7 +704,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f16_view_scalar(%column:
   %28 = s_add_u32 %24, %26
   %29 = s_addc_u32 %25, %27
   %30 = concat(%28, %29) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_short_d16 %19, %30
+  %loaded = global_load_u16 %19, %30
   %34 = concat(%column, %20) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
   %36 = s_lshl_b64 %34, %22
   %37 = slice %output_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
@@ -755,7 +755,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @bf16_view_scalar(%column
   %28 = s_add_u32 %24, %26
   %29 = s_addc_u32 %25, %27
   %30 = concat(%28, %29) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_short_d16 %19, %30
+  %loaded = global_load_u16 %19, %30
   %34 = concat(%column, %20) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
   %36 = s_lshl_b64 %34, %22
   %37 = slice %output_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
@@ -876,6 +876,53 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @bf16x4_b64() asm<amdgpu.
   %loaded = global_load_b64 %16, %input_view
   global_store_b64 %16, %loaded, %output_view
   return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @bf16_strided_gather_dot2(%latent: vector<2xbf16>, %weights: buffer, %origin: index, %accumulator: vector<1xf32>) -> (vector<1xf32>) {
+  %base = index.constant 0 : offset
+  %start = index.constant 0 : index
+  %step = index.constant 7 : index
+  %origin_bounded = index.assume %origin [range(%origin, 0, 4088)] : index
+  %weights_view = buffer.view %weights[%base] : buffer -> view<4096xbf16, #dense>
+  %offsets = vector.iota %start step %step : vector<2xindex>
+  %weight = vector.gather %weights_view[%origin_bounded][%offsets] : view<4096xbf16, #dense>, vector<2xindex> -> vector<2xbf16>
+  %dot = vector.dot2f %latent, %weight, %accumulator : vector<2xbf16>, vector<2xbf16>, vector<1xf32>
+  func.return %dot : vector<1xf32>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @bf16_strided_gather_dot2(%latent: reg<amdgpu.vgpr>, %origin_bounded: reg<amdgpu.sgpr>, %accumulator: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %weights_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 8192} : reg<amdgpu.sgpr x2>
+  %29 = v_mov_b32 0
+  %30 = s_mov_b32 0
+  %31 = concat(%origin_bounded, %30) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %32 = s_mov_b32 1
+  %33 = s_lshl_b64 %31, %32
+  %34 = slice %weights_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %35 = slice %weights_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %36 = slice %33[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %37 = slice %33[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %38 = s_add_u32 %34, %36
+  %39 = s_addc_u32 %35, %37
+  %40 = concat(%38, %39) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %41 = global_load_u16 %29, %40
+  %46 = concat(%origin_bounded, %30) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %48 = s_lshl_b64 %46, %32
+  %51 = slice %48[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %52 = slice %48[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %53 = s_add_u32 %34, %51
+  %54 = s_addc_u32 %35, %52
+  %55 = concat(%53, %54) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %56 = global_load_u16 %29, %55 {offset = 14}
+  %57 = v_and_b32_lit %41, 65535
+  %58 = v_and_b32_lit %56, 65535
+  %59 = v_lshlrev_b32_lit %58, 16
+  %weight = v_or_b32 %57, %59
+  %dot = v_dot2_f32_bf16 %latent, %weight, %accumulator
+  return %dot
 }
 
 // ====

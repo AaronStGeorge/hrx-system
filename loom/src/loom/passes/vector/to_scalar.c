@@ -66,6 +66,20 @@ const loom_pass_info_t* loom_vector_reduce_axes_to_scalar_pass_info(void) {
   return &loom_vector_reduce_axes_to_scalar_pass_info_storage;
 }
 
+static const loom_pass_info_t loom_vector_gather_to_scalar_pass_info_storage = {
+    .name = IREE_SVL("vector-gather-to-scalar"),
+    .description =
+        IREE_SVL("Expose vector gather lane memory accesses as scalar "
+                 "view loads."),
+    .kind = LOOM_PASS_FUNCTION,
+    .statistic_defs = kVectorToScalarStatistics,
+    .statistic_count = IREE_ARRAYSIZE(kVectorToScalarStatistics),
+};
+
+const loom_pass_info_t* loom_vector_gather_to_scalar_pass_info(void) {
+  return &loom_vector_gather_to_scalar_pass_info_storage;
+}
+
 iree_status_t loom_vector_to_scalar_static_element_count(
     loom_vector_to_scalar_state_t* state, loom_type_t type,
     uint16_t* out_element_count) {
@@ -646,6 +660,15 @@ static iree_status_t loom_vector_reduce_axes_to_scalar_lower_op(
                                                     &handled);
 }
 
+static iree_status_t loom_vector_gather_to_scalar_lower_op(
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op) {
+  if (!loom_vector_gather_isa(op) && !loom_vector_gather_mask_isa(op)) {
+    return iree_ok_status();
+  }
+  loom_builder_set_before(&rewriter->builder, op);
+  return loom_vector_to_scalar_lower_descriptor_op(pass, rewriter, op);
+}
+
 typedef iree_status_t (*loom_vector_to_scalar_lower_op_fn_t)(
     loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op);
 
@@ -710,4 +733,12 @@ iree_status_t loom_vector_reduce_axes_to_scalar_run(loom_pass_t* pass,
   return loom_vector_to_scalar_run_with_lowerer(
       pass, module, function, loom_vector_reduce_axes_to_scalar_lower_op,
       LOOM_VECTOR_TO_SCALAR_RUN_FLAG_NONE);
+}
+
+iree_status_t loom_vector_gather_to_scalar_run(loom_pass_t* pass,
+                                               loom_module_t* module,
+                                               loom_func_like_t function) {
+  return loom_vector_to_scalar_run_with_lowerer(
+      pass, module, function, loom_vector_gather_to_scalar_lower_op,
+      LOOM_VECTOR_TO_SCALAR_RUN_FLAG_ERASE_DEAD_OPS);
 }

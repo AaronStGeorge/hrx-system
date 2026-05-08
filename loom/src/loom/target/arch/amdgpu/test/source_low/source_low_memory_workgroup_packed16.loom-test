@@ -236,7 +236,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_f16_scalar_roundtrip
   %20 = storage {byte_alignment = 2, byte_length = 128} : low.storage<workgroup>
   %scratch_view = storage_address %20 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %22 = v_mov_b32 0
-  %loaded = global_load_short_d16 %22, %input_view
+  %loaded = global_load_u16 %22, %input_view
   ds_write_b16 %scratch_view, %loaded
   %roundtrip = ds_read_u16 %scratch_view
   global_store_short %22, %roundtrip, %output_view
@@ -272,7 +272,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_bf16_scalar_roundtri
   %20 = storage {byte_alignment = 2, byte_length = 128} : low.storage<workgroup>
   %scratch_view = storage_address %20 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %22 = v_mov_b32 0
-  %loaded = global_load_short_d16 %22, %input_view
+  %loaded = global_load_u16 %22, %input_view
   ds_write_b16 %scratch_view, %loaded
   %roundtrip = ds_read_u16 %scratch_view
   global_store_short %22, %roundtrip, %output_view
@@ -318,7 +318,7 @@ low.kernel.def target(@target) workgroup_size(16, 16, 1) @lds_f16_strided_scalar
   %35 = v_lshlrev_b32_lit %row, 4
   %linear16 = v_add_u32 %35, %col
   %37 = v_lshlrev_b32_lit %linear16, 1
-  %loaded = global_load_short_d16 %37, %input_view
+  %loaded = global_load_u16 %37, %input_view
   %39 = v_lshlrev_b32_lit %row, 1
   %40 = v_add_u32 %scratch_view, %39
   %41 = v_lshlrev_b32_lit %col, 5

@@ -34,6 +34,12 @@ iree_status_t loom_vector_reduce_axes_to_scalar_run(loom_pass_t* pass,
                                                     loom_module_t* module,
                                                     loom_func_like_t function);
 
+const loom_pass_info_t* loom_vector_gather_to_scalar_pass_info(void);
+
+iree_status_t loom_vector_gather_to_scalar_run(loom_pass_t* pass,
+                                               loom_module_t* module,
+                                               loom_func_like_t function);
+
 #ifdef __cplusplus
 }
 #endif
