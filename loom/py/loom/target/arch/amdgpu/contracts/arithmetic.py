@@ -1008,8 +1008,8 @@ def _rules() -> tuple[ContractCase, ...]:
                 vector.vector_mulf,
                 "amdgpu.v_mul_f32",
             ),
-            _f32_neg_rule(vector.vector_negf, _VEC_F32),
-            _f32_abs_rule(vector.vector_absf, _VEC_F32),
+            _f32_neg_rule(vector.vector_negf, _VEC_F32, f32_operand=True),
+            _f32_abs_rule(vector.vector_absf, _VEC_F32, f32_operand=True),
             _divf_arcp_one_rule(vector.vector_divf, _VEC_F32),
             _divf_arcp_rule(vector.vector_divf, _VEC_F32),
             *_commutative_f32_vector_binary_rules(

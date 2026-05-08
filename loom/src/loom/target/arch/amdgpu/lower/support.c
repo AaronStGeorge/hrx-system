@@ -1401,14 +1401,18 @@ bool loom_amdgpu_value_as_address_constant(loom_low_lower_context_t* context,
 
 bool loom_amdgpu_value_can_materialize_as_vgpr_i32(
     loom_low_lower_context_t* context, loom_value_id_t value_id) {
-  return loom_amdgpu_type_is_i32(
-      loom_module_value_type(loom_low_lower_context_module(context), value_id));
+  const loom_type_t type =
+      loom_module_value_type(loom_low_lower_context_module(context), value_id);
+  return loom_amdgpu_type_is_i32(type) ||
+         loom_amdgpu_vector_i32_register_count(type) != 0;
 }
 
 bool loom_amdgpu_value_can_materialize_as_vgpr_f32(
     loom_low_lower_context_t* context, loom_value_id_t value_id) {
-  return loom_amdgpu_type_is_f32(
-      loom_module_value_type(loom_low_lower_context_module(context), value_id));
+  const loom_type_t type =
+      loom_module_value_type(loom_low_lower_context_module(context), value_id);
+  return loom_amdgpu_type_is_f32(type) ||
+         loom_amdgpu_vector_f32_register_count(type) != 0;
 }
 
 bool loom_amdgpu_value_can_materialize_as_vgpr_address(
