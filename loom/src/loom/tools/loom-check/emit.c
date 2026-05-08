@@ -126,6 +126,10 @@ typedef struct loom_check_emit_request_t {
   loom_target_low_packet_diagnostic_flags_t low_packet_diagnostic_flags;
   // True once a low packet diagnostics option has been parsed.
   bool has_low_packet_diagnostics_option;
+  // True when the emit target should run but suppress comparable output.
+  bool suppress_actual_output;
+  // True once an output option has been parsed.
+  bool has_output_option;
   // Source-low text output form.
   loom_check_emit_source_low_output_t source_low_output;
   // True once a source-low output option has been parsed.
@@ -136,6 +140,29 @@ typedef struct loom_check_emit_request_t {
   bool has_source_low_diagnostics_option;
 } loom_check_emit_request_t;
 
+static iree_status_t loom_check_emit_parse_json_output_option(
+    iree_string_view_t target_name, iree_string_view_t value,
+    loom_check_emit_request_t* request) {
+  if (request->has_output_option) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "duplicate %.*s option 'output'",
+                            (int)target_name.size, target_name.data);
+  }
+  if (iree_string_view_equal(value, IREE_SV("json"))) {
+    request->suppress_actual_output = false;
+  } else if (iree_string_view_equal(value, IREE_SV("none"))) {
+    request->suppress_actual_output = true;
+  } else {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "%.*s option 'output' expected 'json' or 'none', "
+                            "got '%.*s'",
+                            (int)target_name.size, target_name.data,
+                            (int)value.size, value.data);
+  }
+  request->has_output_option = true;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_check_emit_parse_low_allocation_option(
     iree_string_view_t token, loom_check_emit_request_t* request) {
   iree_string_view_t name = iree_string_view_empty();
@@ -143,6 +170,10 @@ static iree_status_t loom_check_emit_parse_low_allocation_option(
   iree_string_view_split(token, '=', &name, &value);
   name = iree_string_view_trim(name);
   value = iree_string_view_trim(value);
+  if (iree_string_view_equal(name, IREE_SV("output"))) {
+    return loom_check_emit_parse_json_output_option(
+        IREE_SV("low-allocation-json"), value, request);
+  }
   if (!iree_string_view_equal(name, IREE_SV("diagnostics"))) {
     return loom_check_low_emit_parse_allocation_option(
         token, IREE_SV("low-allocation-json"), request->low_allocation_budgets,
@@ -275,6 +306,10 @@ static iree_status_t loom_check_emit_parse_low_schedule_option(
   iree_string_view_split(token, '=', &name, &value);
   name = iree_string_view_trim(name);
   value = iree_string_view_trim(value);
+  if (iree_string_view_equal(name, IREE_SV("output"))) {
+    return loom_check_emit_parse_json_output_option(
+        IREE_SV("low-schedule-json"), value, request);
+  }
   if (iree_string_view_equal(name, IREE_SV("cliff"))) {
     if (request->low_schedule_pressure_cliff_spec_count >=
         IREE_ARRAYSIZE(request->low_schedule_pressure_cliff_specs)) {
@@ -406,6 +441,10 @@ static iree_status_t loom_check_emit_parse_low_packet_option(
   iree_string_view_split(token, '=', &name, &value);
   name = iree_string_view_trim(name);
   value = iree_string_view_trim(value);
+  if (iree_string_view_equal(name, IREE_SV("output"))) {
+    return loom_check_emit_parse_json_output_option(IREE_SV("low-packet-json"),
+                                                    value, request);
+  }
   if (iree_string_view_equal(name, IREE_SV("strategy"))) {
     if (request->has_low_schedule_strategy_option) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -545,6 +584,8 @@ static iree_status_t loom_check_emit_parse_request(
       .has_low_schedule_strategy_option = false,
       .low_packet_diagnostic_flags = 0,
       .has_low_packet_diagnostics_option = false,
+      .suppress_actual_output = false,
+      .has_output_option = false,
       .source_low_output = LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_MODULE,
       .has_source_low_output_option = false,
   };
@@ -1533,9 +1574,16 @@ iree_status_t loom_check_execute_emit(
             &diagnostic_arena, result);
       }
     }
-    if (iree_status_is_ok(status) &&
-        result->actual_output.size != actual_output_size) {
-      result->has_actual_output = true;
+    if (iree_status_is_ok(status)) {
+      if (request.suppress_actual_output) {
+        result->actual_output.size = actual_output_size;
+        if (result->actual_output.buffer &&
+            result->actual_output.capacity > actual_output_size) {
+          result->actual_output.buffer[actual_output_size] = 0;
+        }
+      } else if (result->actual_output.size != actual_output_size) {
+        result->has_actual_output = true;
+      }
     }
     loom_module_free(module);
     diagnostic_collector.module = NULL;
@@ -1565,7 +1613,12 @@ iree_status_t loom_check_execute_emit(
       iree_arena_deinitialize(&diagnostic_arena);
       return status;
     }
-    status = loom_check_emit_compare_output(test_case, allocator, result);
+    if (request.suppress_actual_output) {
+      result->raw_outcome = LOOM_CHECK_PASS;
+      status = iree_ok_status();
+    } else {
+      status = loom_check_emit_compare_output(test_case, allocator, result);
+    }
     iree_string_builder_deinitialize(&stripped_input);
     iree_arena_deinitialize(&diagnostic_arena);
     return status;

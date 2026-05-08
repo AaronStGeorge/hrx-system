@@ -20,6 +20,7 @@ loom_check_test_suite(
         "cfg_compatibility.loom-test",
         "cfg_simplify.loom-test",
         "cfg_simplify_scf_pipeline.loom-test",
+        "dce.loom-test",
         "kernel_async_legality.loom-test",
         "kernel_resources.loom-test",
         "licm.loom-test",

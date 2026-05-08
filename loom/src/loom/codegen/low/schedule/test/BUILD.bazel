@@ -14,12 +14,6 @@ package(
 
 loom_check_test_suite(
     name = "test",
-    srcs = [
-        "canonicalize.loom-test",
-        "facts.loom-test",
-        "roundtrip.loom-test",
-        "target_verify.loom-test",
-        "verify.loom-test",
-    ],
+    srcs = ["schedule.loom-test"],
     runner = "//loom/src/loom/tools/loom-check:loom-check-test",
 )

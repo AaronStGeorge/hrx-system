@@ -140,7 +140,16 @@ static void loom_check_print_agent_markdown(FILE* stream) {
       "path/to/file.loom-test\n"
       "```\n"
       "\n"
-      "`--update` cannot be used with stdin or verify-mode cases.\n");
+      "`--update` cannot be used with stdin or verify-mode cases.\n"
+      "\n"
+      "### Emit JSON discipline\n"
+      "\n"
+      "Prefer IR output checks for compiler behavior. Use large JSON emit "
+      "goldens\n"
+      "only when the JSON structure is the unit under test; for "
+      "diagnostic-only\n"
+      "emitter checks, pass `output=none` and match `ERROR@`/`REMARK@`\n"
+      "annotations instead.\n");
 }
 
 iree_status_t loom_check_register_production_context(void* user_data,
@@ -201,6 +210,8 @@ int loom_check_main(int argc, char** argv,
       "              "
       "fixed=%value:<physical_register|target_id>:<base>:<count>\n"
       "              allocation anchors.\n"
+      "              low-schedule-json, low-allocation-json, and\n"
+      "              low-packet-json accept output=json|none.\n"
       "              low-schedule-json and low-packet-json accept\n"
       "              strategy=source|pressure|latency-hiding|resource-stall "
       "and\n"

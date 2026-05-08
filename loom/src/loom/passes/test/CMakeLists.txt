@@ -67,6 +67,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "dce"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/dce.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "kernel_async_legality"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/kernel_async_legality.loom-test"

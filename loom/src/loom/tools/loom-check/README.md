@@ -35,3 +35,7 @@ is available from:
 ```bash
 iree-bazel-run //loom/src/loom/tools/loom-check -- --agent_md
 ```
+
+Emit-mode JSON targets should stay small. When a case only needs structured
+diagnostics from the emitter, use `output=none` and check the `ERROR@` or
+`REMARK@` annotations instead of checking in a large JSON blob.
