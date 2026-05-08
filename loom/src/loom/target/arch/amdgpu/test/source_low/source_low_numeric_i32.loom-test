@@ -122,7 +122,10 @@ kernel.def target(@target) @i32_scalarized(%input: buffer, %output: buffer) {
   %shift = scalar.constant 3 : i32
   %left = scalar.shli %masked, %shift : i32
   %logical = scalar.shrui %lane1, %shift : i32
-  %mixed = scalar.xori %left, %logical : i32
+  %tag = scalar.constant 240 : i32
+  %tagged = scalar.ori %left, %tag : i32
+  %invert = scalar.constant -1 : i32
+  %mixed = scalar.xori %tagged, %invert : i32
   %lane2 = vector.extract %loaded[2] : vector<4xi32> -> i32
   %lane3 = vector.extract %loaded[3] : vector<4xi32> -> i32
   %result = vector.from_elements %mixed, %logical, %lane2, %lane3 : vector<4xi32>
@@ -134,18 +137,18 @@ kernel.def target(@target) @i32_scalarized(%input: buffer, %output: buffer) {
 low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_scalarized() asm<amdgpu.rdna3.core> {
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %27 = v_mov_b32 0
-  %loaded = global_load_b128 %27, %input_view
+  %30 = v_mov_b32 0
+  %loaded = global_load_b128 %30, %input_view
   %lane0 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %lane1 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %32 = v_mov_b32 255
-  %masked = v_and_b32 %lane0, %32
+  %masked = v_and_b32_lit %lane0, 255
   %left = v_lshlrev_b32_lit %masked, 3
   %logical = v_lshrrev_b32_lit %lane1, 3
-  %mixed = v_xor_b32 %left, %logical
+  %tagged = v_or_b32_lit %left, 240
+  %mixed = v_xor_b32_lit %tagged, 4294967295
   %lane2 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %lane3 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %result = concat(%mixed, %logical, %lane2, %lane3) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128 %27, %result, %output_view
+  global_store_b128 %30, %result, %output_view
   return
 }

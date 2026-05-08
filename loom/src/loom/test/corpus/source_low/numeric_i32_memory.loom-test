@@ -78,7 +78,10 @@ kernel.def @i32_scalarized(%input: buffer, %output: buffer) {
   %shift = scalar.constant 3 : i32
   %left = scalar.shli %masked, %shift : i32
   %logical = scalar.shrui %lane1, %shift : i32
-  %mixed = scalar.xori %left, %logical : i32
+  %tag = scalar.constant 240 : i32
+  %tagged = scalar.ori %left, %tag : i32
+  %invert = scalar.constant -1 : i32
+  %mixed = scalar.xori %tagged, %invert : i32
   %lane2 = vector.extract %loaded[2] : vector<4xi32> -> i32
   %lane3 = vector.extract %loaded[3] : vector<4xi32> -> i32
   %result = vector.from_elements %mixed, %logical, %lane2, %lane3 : vector<4xi32>

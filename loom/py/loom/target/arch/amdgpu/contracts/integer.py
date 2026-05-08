@@ -61,8 +61,11 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_min_u32",
     "amdgpu.v_max_u32",
     "amdgpu.v_and_b32",
+    "amdgpu.v_and_b32.lit",
     "amdgpu.v_or_b32",
+    "amdgpu.v_or_b32.lit",
     "amdgpu.v_xor_b32",
+    "amdgpu.v_xor_b32.lit",
     "amdgpu.v_lshlrev_b32",
     "amdgpu.v_lshlrev_b32.lit",
     "amdgpu.v_lshlrev_b32.vop3_imm",
@@ -88,6 +91,16 @@ _ADDRESS_U32_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="address-width",
     subject_name="u32",
     constraint_key="amdgpu.address.u32",
+)
+_I32_LITERAL_EXACT_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="literal",
+    subject_name="i32",
+    constraint_key="amdgpu.literal.exact_i64",
+)
+_I32_LITERAL_BITS_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="literal-bits",
+    subject_name="i32",
+    constraint_key="amdgpu.literal.i32_bits",
 )
 _SHIFT_AMOUNT_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="shift-amount",
@@ -259,6 +272,80 @@ def _i32_sgpr_vgpr_rules(
     vgpr_descriptor = _descriptor(vgpr_descriptor_key)
     return (
         _sgpr_binary_rule(source_op, _I32, sgpr_descriptor),
+        _vgpr_binary_rule(
+            source_op,
+            _I32,
+            vgpr_descriptor,
+            I32_VGPR_MATERIALIZER,
+        ),
+    )
+
+
+def _i32_vgpr_literal_binary_rule(
+    source_op: Op,
+    descriptor: Descriptor,
+    *,
+    literal_source: str,
+    nonliteral_source: str,
+) -> DescriptorRule:
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            *_typed_binary_guards(_I32),
+            Guard.low_value_register_class("result", "amdgpu.vgpr"),
+            Guard.value_materializable(nonliteral_source, I32_VGPR_MATERIALIZER.name),
+            Guard.value_exact_i64(
+                literal_source,
+                diagnostic=_I32_LITERAL_EXACT_DIAGNOSTIC,
+            ),
+            Guard.value_signed_bit_count(
+                literal_source,
+                32,
+                diagnostic=_I32_LITERAL_BITS_DIAGNOSTIC,
+            ),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={
+                    "rhs": _materialized_operand(
+                        nonliteral_source,
+                        I32_VGPR_MATERIALIZER,
+                    )
+                },
+                results={"dst": _RESULT},
+                immediates={"imm32": ValueProject.i32_as_u32_bits(literal_source)},
+                form=DescriptorEmitForm.OP,
+            ),
+        ),
+    )
+
+
+def _i32_sgpr_vgpr_literal_rules(
+    source_op: Op,
+    sgpr_descriptor_key: str,
+    vgpr_descriptor_key: str,
+    literal_descriptor_key: str,
+) -> tuple[DescriptorRule, ...]:
+    sgpr_descriptor = _descriptor(sgpr_descriptor_key)
+    vgpr_descriptor = _descriptor(vgpr_descriptor_key)
+    literal_descriptor = _descriptor(literal_descriptor_key)
+    return (
+        _sgpr_binary_rule(source_op, _I32, sgpr_descriptor),
+        _i32_vgpr_literal_binary_rule(
+            source_op,
+            literal_descriptor,
+            literal_source="lhs",
+            nonliteral_source="rhs",
+        ),
+        _i32_vgpr_literal_binary_rule(
+            source_op,
+            literal_descriptor,
+            literal_source="rhs",
+            nonliteral_source="lhs",
+        ),
         _vgpr_binary_rule(
             source_op,
             _I32,
@@ -509,10 +596,11 @@ def _rules() -> tuple[DescriptorRule, ...]:
         )
     )
     rules.extend(
-        _i32_sgpr_vgpr_rules(
+        _i32_sgpr_vgpr_literal_rules(
             scalar_bitwise.scalar_andi,
             "amdgpu.s_and_b32",
             "amdgpu.v_and_b32",
+            "amdgpu.v_and_b32.lit",
         )
     )
     rules.append(
@@ -522,10 +610,11 @@ def _rules() -> tuple[DescriptorRule, ...]:
         )
     )
     rules.extend(
-        _i32_sgpr_vgpr_rules(
+        _i32_sgpr_vgpr_literal_rules(
             scalar_bitwise.scalar_ori,
             "amdgpu.s_or_b32",
             "amdgpu.v_or_b32",
+            "amdgpu.v_or_b32.lit",
         )
     )
     rules.append(
@@ -535,10 +624,11 @@ def _rules() -> tuple[DescriptorRule, ...]:
         )
     )
     rules.extend(
-        _i32_sgpr_vgpr_rules(
+        _i32_sgpr_vgpr_literal_rules(
             scalar_bitwise.scalar_xori,
             "amdgpu.s_xor_b32",
             "amdgpu.v_xor_b32",
+            "amdgpu.v_xor_b32.lit",
         )
     )
     rules.extend(
