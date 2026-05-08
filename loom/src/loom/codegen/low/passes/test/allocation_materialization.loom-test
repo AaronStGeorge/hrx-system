@@ -30,6 +30,44 @@ low.func.def target(@test_target) @spill(%a: reg<test.i32>, %b: reg<test.i32>, %
 
 // ====
 
+// RUN: pass low-materialize-allocation{budgets=test.i32=1}
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @backedge_live_through(%row: reg<test.i32>) -> (reg<test.i32>) asm<test.low.core> {
+  low.br ^late
+^join(%state: reg<test.i32>):
+  %sum = test.add.i32 %row, %state
+  return %sum
+^late:
+  %late_state = test.const.i32 7
+  low.br ^join(%late_state: reg<test.i32>)
+}
+
+// ----
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @backedge_live_through(%row: reg<test.i32>) -> (reg<test.i32>) {
+  %backedge_live_through_spill_storage_0 = low.storage.reserve {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  %backedge_live_through_spill_storage_1 = low.storage.reserve {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  %backedge_live_through_spill_storage_2 = low.storage.reserve {byte_alignment = 4, byte_length = 4} : low.storage<private>
+  low.br ^late
+^join(%state: reg<test.i32>):
+  low.spill %state, %backedge_live_through_spill_storage_0 : reg<test.i32>, low.storage<private>
+  %8 = low.reload %backedge_live_through_spill_storage_0 : low.storage<private> -> reg<test.i32>
+  %sum = low.op<test.add.i32>(%row, %8) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32>
+  low.spill %sum, %backedge_live_through_spill_storage_1 : reg<test.i32>, low.storage<private>
+  %9 = low.reload %backedge_live_through_spill_storage_1 : low.storage<private> -> reg<test.i32>
+  low.return %9 : reg<test.i32>
+^late:
+  %late_state = low.const<test.const.i32> {i32_value = 7} : reg<test.i32>
+  low.spill %late_state, %backedge_live_through_spill_storage_2 : reg<test.i32>, low.storage<private>
+  %10 = low.reload %backedge_live_through_spill_storage_2 : low.storage<private> -> reg<test.i32>
+  low.br ^join(%10: reg<test.i32>)
+}
+
+// ====
+
 // RUN: pass low-materialize-allocation{budgets=test.i32=2,diagnostics=spills}
 
 test.target<low_core> @test_target

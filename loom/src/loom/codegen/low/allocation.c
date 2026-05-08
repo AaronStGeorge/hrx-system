@@ -2686,6 +2686,30 @@ static iree_status_t loom_low_allocation_note_op_unit_uses(
   return loom_low_allocation_note_generic_op_unit_uses(state, op, point);
 }
 
+static iree_status_t loom_low_allocation_note_value_unit_uses_at_point(
+    loom_low_allocation_build_state_t* state, const loom_value_id_t* values,
+    iree_host_size_t value_count, uint32_t point) {
+  for (iree_host_size_t i = 0; i < value_count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_low_allocation_note_value_use_at_point(state, values[i], point));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_allocation_note_block_boundary_unit_uses(
+    loom_low_allocation_build_state_t* state) {
+  for (iree_host_size_t i = 0; i < state->liveness.block_count; ++i) {
+    const loom_liveness_block_info_t* block_info = &state->liveness.blocks[i];
+    IREE_RETURN_IF_ERROR(loom_low_allocation_note_value_unit_uses_at_point(
+        state, block_info->live_in_values, block_info->live_in_count,
+        block_info->start_point));
+    IREE_RETURN_IF_ERROR(loom_low_allocation_note_value_unit_uses_at_point(
+        state, block_info->live_out_values, block_info->live_out_count,
+        block_info->end_point));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_allocation_initialize_unit_liveness(
     loom_low_allocation_build_state_t* state) {
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
@@ -2741,6 +2765,14 @@ static iree_status_t loom_low_allocation_initialize_unit_liveness(
     }
     unit_end_point_start += interval->unit_count;
   }
+
+  // Unit liveness refines the value-granular analysis inside blocks so
+  // operations like low.slice can release dead units independently. CFG
+  // boundaries are still value-granular: every unit of a block live-in/out
+  // value must stay reserved across the boundary until a per-unit dataflow
+  // analysis can prove otherwise.
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_note_block_boundary_unit_uses(state));
 
   loom_block_t* block = NULL;
   loom_region_for_each_block(state->body, block) {
