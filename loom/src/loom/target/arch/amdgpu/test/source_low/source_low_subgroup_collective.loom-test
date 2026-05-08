@@ -171,8 +171,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_f32_
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %linear4 = v_lshlrev_b32_lit %tid, 2
-  %29 = v_lshlrev_b32_lit %linear4, 2
+  %29 = v_lshlrev_b32_lit %tid, 4
   %loaded = global_load_b128 %29, %input_view
   %32 = v_mov_b32 12
   %33 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
@@ -215,8 +214,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_down_f
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %linear4 = v_lshlrev_b32_lit %tid, 2
-  %31 = v_lshlrev_b32_lit %linear4, 2
+  %31 = v_lshlrev_b32_lit %tid, 4
   %loaded = global_load_b128 %31, %input_view
   %35 = v_and_b32_lit %tid, 31
   %36 = v_mov_b32 4
@@ -485,14 +483,14 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_reduce_addf_f
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %linear4 = v_lshlrev_b32_lit %tid, 2
-  %28 = v_lshlrev_b32_lit %linear4, 2
+  %28 = v_lshlrev_b32_lit %tid, 4
   %loaded = global_load_b128 %28, %input_view
   %30 = v_and_b32_lit %tid, 31
   %31 = storage {byte_alignment = 4, byte_length = 1024} : low.storage<workgroup>
   %32 = storage_address %31 : low.storage<workgroup> -> reg<amdgpu.vgpr>
+  %33 = v_lshlrev_b32_lit %tid, 2
   %34 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %35 = v_add_u32 %32, %linear4
+  %35 = v_add_u32 %32, %33
   ds_write_b32 %35, %34
   %36 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %38 = v_add_u32_lit %35, 256
