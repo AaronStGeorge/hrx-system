@@ -515,19 +515,36 @@ bool loom_amdgpu_source_value_prefers_vgpr(
     return false;
   }
 
-  loom_type_t source_type = loom_module_value_type(module, source_value_id);
-  if (loom_amdgpu_type_is_f32(source_type) ||
-      loom_amdgpu_type_is_16bit_float(source_type)) {
-    return true;
-  }
-
   const loom_value_t* value = loom_module_value(module, source_value_id);
   if (loom_value_is_block_arg(value)) {
+    loom_type_t source_type = loom_module_value_type(module, source_value_id);
+    if (loom_amdgpu_type_is_f32(source_type) ||
+        loom_amdgpu_type_is_16bit_float(source_type)) {
+      return true;
+    }
     return loom_amdgpu_type_is_vector_32bit_register_range(source_type);
   }
   const loom_op_t* defining_op = loom_value_def_op(value);
   if (defining_op == NULL) {
+    loom_type_t source_type = loom_module_value_type(module, source_value_id);
+    if (loom_amdgpu_type_is_f32(source_type) ||
+        loom_amdgpu_type_is_16bit_float(source_type)) {
+      return true;
+    }
     return loom_amdgpu_type_is_vector_32bit_register_range(source_type);
+  }
+
+  if (loom_scalar_bitcast_isa(defining_op)) {
+    const loom_value_id_t input_value_id =
+        loom_scalar_bitcast_input(defining_op);
+    return loom_amdgpu_source_value_prefers_vgpr(module, fact_table,
+                                                 view_regions, input_value_id);
+  }
+
+  loom_type_t source_type = loom_module_value_type(module, source_value_id);
+  if (loom_amdgpu_type_is_f32(source_type) ||
+      loom_amdgpu_type_is_16bit_float(source_type)) {
+    return true;
   }
 
   if (loom_traits_are_fact_identity(

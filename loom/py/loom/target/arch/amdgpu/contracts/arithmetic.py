@@ -23,6 +23,7 @@ from loom.target.arch.amdgpu.contracts.materializers import (
 )
 from loom.target.arch.amdgpu.descriptors import build_amdgpu_contract_descriptor_set
 from loom.target.contracts import (
+    ContractCase,
     ContractFragment,
     DescriptorEmitForm,
     DescriptorRule,
@@ -31,6 +32,7 @@ from loom.target.contracts import (
     GuardDiagnostic,
     Scalar,
     TypePattern,
+    ValueAliasRule,
     ValueMaterializer,
     ValueProject,
     ValueRef,
@@ -218,6 +220,21 @@ def _typed_guards(
 
 def _f32_vgpr_operand(field: str) -> ValueRef:
     return _materialized_operand(field, F32_VGPR_MATERIALIZER)
+
+
+def _bitcast_alias_rule(
+    input_type: TypePattern,
+    result_type: TypePattern,
+) -> ValueAliasRule:
+    return ValueAliasRule(
+        source_op=scalar_conversion.scalar_bitcast,
+        source=ValueRef.operand("input"),
+        result=ValueRef.result("result"),
+        guards=(
+            _value_type("input", input_type),
+            _value_type("result", result_type),
+        ),
+    )
 
 
 def _emit_form(type_pattern: TypePattern) -> DescriptorEmitForm:
@@ -809,8 +826,8 @@ def _materialized_operand(field: str, materializer: ValueMaterializer) -> ValueR
     return ValueRef.operand(field, materializer=materializer.name)
 
 
-def _rules() -> tuple[DescriptorRule, ...]:
-    rules: list[DescriptorRule] = []
+def _rules() -> tuple[ContractCase, ...]:
+    rules: list[ContractCase] = []
     for source_op, descriptor_key in (
         (vector.vector_addf, "amdgpu.v_add_f32.lit"),
         (vector.vector_mulf, "amdgpu.v_mul_f32.lit"),
@@ -1096,6 +1113,8 @@ def _rules() -> tuple[DescriptorRule, ...]:
                 _F32,
                 "amdgpu.v_cvt_f32_u32",
             ),
+            _bitcast_alias_rule(_I32, _F32),
+            _bitcast_alias_rule(_F32, _I32),
             _index_madd_power_of_two_rule(
                 scale_source="a",
                 value_source="b",
