@@ -1734,6 +1734,13 @@ static bool loom_amdgpu_memory_access_dynamic_terms_can_flat_address(
   return true;
 }
 
+static void loom_amdgpu_memory_access_route_dynamic_terms_through_flat_vaddr(
+    loom_amdgpu_memory_access_t* access) {
+  for (uint8_t i = 0; i < access->source.dynamic_term_count; ++i) {
+    access->dynamic_term_kinds[i] = LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_VADDR;
+  }
+}
+
 static bool loom_amdgpu_memory_access_try_select_global_flat(
     const loom_module_t* module,
     const loom_low_descriptor_set_t* descriptor_set,
@@ -1765,6 +1772,7 @@ static bool loom_amdgpu_memory_access_try_select_global_flat(
           access, &offset_info, diagnostic)) {
     return false;
   }
+  loom_amdgpu_memory_access_route_dynamic_terms_through_flat_vaddr(access);
   access->address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT;
   access->descriptor = descriptor;
   return true;

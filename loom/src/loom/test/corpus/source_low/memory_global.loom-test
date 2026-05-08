@@ -300,6 +300,32 @@ kernel.def @i32x4_dynamic_view_base_b128(%input: buffer, %output: buffer, %offse
 
 // ====
 
+kernel.def @f32x4_dynamic_view_base_flat(%input: buffer, %output: buffer, %offset_i32: i32) {
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 256 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch {
+  %input_base0 = index.cast %offset_i32 : i32 to offset
+  %input_base = index.assume %input_base0 [range(%input_base0, 0, 2147483647)] : offset
+  %lane0 = kernel.workitem.id<x> : index
+  %lane = index.assume %lane0 [range(%lane0, 0, 255)] : index
+  %channel_vector_width = index.constant 4 : index
+  %channel_base0 = index.mul %lane, %channel_vector_width : index
+  %channel_base = index.assume %channel_base0 [range(%channel_base0, 0, 1020)] : index
+  %tap = index.constant 6 : index
+  %output_base = index.constant 0 : offset
+  %input_global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %output_global = buffer.assume.memory_space %output {memory_space = global} : buffer
+  %input_noalias, %output_noalias = buffer.assume.noalias %input_global, %output_global : buffer, buffer
+  %input_view = buffer.view %input_noalias[%input_base] : buffer -> view<7x1024xf32, #dense>
+  %output_view = buffer.view %output_noalias[%output_base] : buffer -> view<1024xf32, #dense>
+  %loaded = vector.load %input_view[%tap, %channel_base] : view<7x1024xf32, #dense> -> vector<4xf32>
+  vector.store %loaded, %output_view[%channel_base] : vector<4xf32>, view<1024xf32, #dense>
+  kernel.return
+}
+
+// ====
+
 kernel.def @f16_view_scalar(%input: buffer, %output: buffer, %column_i32: i32) {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
