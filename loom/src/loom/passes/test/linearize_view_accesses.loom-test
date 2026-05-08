@@ -118,13 +118,56 @@ func.def @linearize_exact_dynamic_vector_index_to_static(%input: buffer, %zero_b
 
 // ====
 
-func.def @leave_non_contiguous_vector_accesses(%input: buffer, %zero_bytes: offset, %row: index, %column: index) {
+func.def @linearize_dense_rank2_vector_load(%input: buffer, %zero_bytes: offset, %row: index, %column: index) {
   %dense_view = buffer.view %input[%zero_bytes] : buffer -> view<8x16xf32, #dense>
   %strided_layout = encoding.layout.strided [64, 1] : encoding<layout>
   %strided_view = buffer.view %input[%zero_bytes] : buffer -> view<8x16xf32, %strided_layout>
   %rank2 = vector.load %dense_view[%row, %column] : view<8x16xf32, #dense> -> vector<2x4xf32>
   %strided = vector.load %strided_view[%row, %column] : view<8x16xf32, %strided_layout> -> vector<4xf32>
   test.use %rank2, %strided : vector<2x4xf32>, vector<4xf32>
+  func.return
+}
+
+// ----
+func.def @linearize_dense_rank2_vector_load(%input: buffer, %zero_bytes: offset, %row: index, %column: index) {
+  %dense_view = buffer.view %input[%zero_bytes] : buffer -> view<128xf32, #dense>
+  %strided_layout = encoding.layout.strided [64, 1] : encoding<layout>
+  %strided_view = buffer.view %input[%zero_bytes] : buffer -> view<8x16xf32, %strided_layout>
+  %column_bounded = index.assume %column [range(%column, 0, 12)] : index
+  %row_bounded = index.assume %row [range(%row, 0, 6)] : index
+  %stride16 = index.constant 16 : index
+  %linear16$13 = index.madd %row_bounded, %stride16, %column_bounded : index
+  %14 = vector.load %dense_view[%linear16$13] : view<128xf32, #dense> -> vector<4xf32>
+  %linear16$20 = index.add %linear16$13, %stride16 : index
+  %21 = vector.load %dense_view[%linear16$20] : view<128xf32, #dense> -> vector<4xf32>
+  %22 = vector.concat<0> %14, %21 : vector<4xf32>, vector<4xf32> -> vector<8xf32>
+  %rank2 = vector.bitcast %22 : vector<8xf32> to vector<2x4xf32>
+  %strided = vector.load %strided_view[%row, %column] : view<8x16xf32, %strided_layout> -> vector<4xf32>
+  test.use %rank2, %strided : vector<2x4xf32>, vector<4xf32>
+  func.return
+}
+
+// ====
+
+func.def @linearize_dense_rank2_vector_store(%output: buffer, %zero_bytes: offset, %row: index, %column: index, %value: vector<2x4xf32>) {
+  %output_view = buffer.view %output[%zero_bytes] : buffer -> view<8x16xf32, #dense>
+  vector.store %value, %output_view[%row, %column] : vector<2x4xf32>, view<8x16xf32, #dense>
+  func.return
+}
+
+// ----
+func.def @linearize_dense_rank2_vector_store(%output: buffer, %zero_bytes: offset, %row: index, %column: index, %value: vector<2x4xf32>) {
+  %output_view = buffer.view %output[%zero_bytes] : buffer -> view<128xf32, #dense>
+  %7 = vector.bitcast %value : vector<2x4xf32> to vector<8xf32>
+  %8 = vector.slice %7[0] : vector<8xf32> -> vector<4xf32>
+  %column_bounded = index.assume %column [range(%column, 0, 12)] : index
+  %row_bounded = index.assume %row [range(%row, 0, 6)] : index
+  %stride16 = index.constant 16 : index
+  %linear16$12 = index.madd %row_bounded, %stride16, %column_bounded : index
+  vector.store %8, %output_view[%linear16$12] : vector<4xf32>, view<128xf32, #dense>
+  %13 = vector.slice %7[4] : vector<8xf32> -> vector<4xf32>
+  %linear16$19 = index.add %linear16$12, %stride16 : index
+  vector.store %13, %output_view[%linear16$19] : vector<4xf32>, view<128xf32, #dense>
   func.return
 }
 

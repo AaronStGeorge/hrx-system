@@ -712,3 +712,64 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_dynamic_flat_store(%
   low.op<amdgpu.global_store_b32>(%40, %loaded) {offset = 0} : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr>)
   low.return
 }
+
+// ====
+
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @rank2_vector_tile_transpose(%input: buffer, %output: buffer) {
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 16 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch {
+  %base = index.constant 0 : offset
+  %block = kernel.workitem.id<x> : index
+  %tile_width = index.constant 4 : index
+  %tile_base0 = index.mul %block, %tile_width : index
+  %tile_base = index.assume %tile_base0 [range(%tile_base0, 0, 60)] : index
+  %input_view = buffer.view %input[%base] : buffer -> view<4x64xf32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<64x4xf32, #dense>
+  %nct_tile = vector.load %input_view[0, %tile_base] : view<4x64xf32, #dense> -> vector<4x4xf32>
+  %ntc_tile = vector.transpose<[1, 0]> %nct_tile : vector<4x4xf32> -> vector<4x4xf32>
+  vector.store %ntc_tile, %output_view[%tile_base, 0] : vector<4x4xf32>, view<64x4xf32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(16, 1, 1) @rank2_vector_tile_transpose() asm<amdgpu.rdna3.core> {
+  %block = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %tile_base = v_lshlrev_b32_lit %block, 2
+  %59 = v_lshlrev_b32_lit %tile_base, 2
+  %60 = global_load_b128 %59, %input_view
+  %65 = global_load_b128 %59, %input_view {offset = 256}
+  %70 = global_load_b128 %59, %input_view {offset = 512}
+  %75 = global_load_b128 %59, %input_view {offset = 768}
+  %76 = slice %60[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %77 = slice %60[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %78 = slice %60[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %79 = slice %60[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %80 = slice %65[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %81 = slice %65[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %82 = slice %65[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %83 = slice %65[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %84 = slice %70[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %85 = slice %70[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %86 = slice %70[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %87 = slice %70[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %88 = slice %75[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %89 = slice %75[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %90 = slice %75[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %91 = slice %75[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %114 = concat(%76, %80, %84, %88) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %116 = v_lshlrev_b32_lit %59, 2
+  global_store_b128 %116, %114, %output_view
+  %121 = concat(%77, %81, %85, %89) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %124 = v_lshlrev_b32_lit %tile_base, 4
+  global_store_b128 %124, %121, %output_view {offset = 16}
+  %129 = concat(%78, %82, %86, %90) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  global_store_b128 %124, %129, %output_view {offset = 32}
+  %137 = concat(%79, %83, %87, %91) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  global_store_b128 %124, %137, %output_view {offset = 48}
+  return
+}
