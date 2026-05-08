@@ -117,6 +117,51 @@ kernel.def target(@target) @i32_readonly_uniform_smem_scalar_branch(%input: buff
 
 // ====
 
+kernel.def target(@target) @f32_readonly_uniform_smem_vector_math(%control: buffer, %input: buffer, %output: buffer) {
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch {
+  %lane0 = kernel.workitem.id<x> : index
+  %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index
+  %base = index.constant 0 : offset
+  %control_global = buffer.assume.memory_space %control {memory_space = global} : buffer
+  %control_noalias = buffer.assume.noalias %control_global : buffer
+  %input_global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %output_global = buffer.assume.memory_space %output {memory_space = global} : buffer
+  %control_view = buffer.view %control_noalias[%base] : buffer -> view<1xf32, #dense>
+  %input_view = buffer.view %input_global[%base] : buffer -> view<64x4xf32, #dense>
+  %output_view = buffer.view %output_global[%base] : buffer -> view<64x4xf32, #dense>
+  %scale = view.load %control_view[0] : view<1xf32, #dense> -> f32
+  %scale_vector = vector.splat %scale : vector<4xf32>
+  %input_vector = vector.load %input_view[%lane, 0] : view<64x4xf32, #dense> -> vector<4xf32>
+  %scaled = vector.mulf %input_vector, %scale_vector : vector<4xf32>
+  vector.store %scaled, %output_view[%lane, 0] : vector<4xf32>, view<64x4xf32, #dense>
+  kernel.return
+}
+
+// ====
+
+kernel.def target(@target) @i32_readonly_uniform_smem_address(%control: buffer, %output: buffer) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch {
+  %base = index.constant 0 : offset
+  %control_global = buffer.assume.memory_space %control {memory_space = global} : buffer
+  %control_noalias = buffer.assume.noalias %control_global : buffer
+  %output_global = buffer.assume.memory_space %output {memory_space = global} : buffer
+  %control_view = buffer.view %control_noalias[%base] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output_global[%base] : buffer -> view<64xi32, #dense>
+  %column_i32 = view.load %control_view[0] : view<1xi32, #dense> -> i32
+  %column0 = index.cast %column_i32 : i32 to index
+  %column = index.assume %column0 [range(%column0, 0, 63)] : index
+  %zero = scalar.constant 0 : i32
+  view.store %zero, %output_view[%column] : i32, view<64xi32, #dense>
+  kernel.return
+}
+
+// ====
+
 kernel.def @i32_b128(%input: buffer, %output: buffer) {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index

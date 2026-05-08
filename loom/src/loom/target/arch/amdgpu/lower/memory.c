@@ -1983,7 +1983,7 @@ bool loom_amdgpu_memory_access_select(
     return false;
   }
   const bool allow_global_smem =
-      loom_amdgpu_type_is_i32_memory_payload(vector_type);
+      loom_amdgpu_type_is_32bit_memory_payload(vector_type);
 
   loom_amdgpu_memory_descriptor_domain_t descriptor_domain;
   if (!loom_amdgpu_memory_descriptor_domain_from_memory_space(

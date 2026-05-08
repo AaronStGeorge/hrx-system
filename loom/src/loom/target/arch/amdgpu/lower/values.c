@@ -1305,8 +1305,11 @@ static iree_status_t loom_amdgpu_lower_vector_from_elements(
       break;
     case LOOM_SCALAR_TYPE_F32:
       for (uint32_t i = 0; i < plan->element_count; ++i) {
-        IREE_RETURN_IF_ERROR(
-            loom_low_lower_lookup_value(context, plan->elements[i], &lanes[i]));
+        loom_value_id_t low_value = LOOM_VALUE_ID_INVALID;
+        IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+            context, plan->elements[i], &low_value));
+        IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
+            context, source_op, low_value, &lanes[i]));
       }
       break;
     default:
@@ -1335,8 +1338,12 @@ static iree_status_t loom_amdgpu_lookup_vector_insert_value(
     case LOOM_SCALAR_TYPE_I32:
       return loom_amdgpu_lookup_or_materialize_vgpr_i32(context, source_op,
                                                         plan->value, out_value);
-    case LOOM_SCALAR_TYPE_F32:
-      return loom_low_lower_lookup_value(context, plan->value, out_value);
+    case LOOM_SCALAR_TYPE_F32: {
+      IREE_RETURN_IF_ERROR(
+          loom_low_lower_lookup_value(context, plan->value, out_value));
+      return loom_amdgpu_materialize_low_vgpr_b32(context, source_op,
+                                                  *out_value, out_value);
+    }
     default:
       IREE_CHECK_UNREACHABLE();
   }

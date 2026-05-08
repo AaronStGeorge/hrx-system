@@ -104,10 +104,13 @@ static bool loom_amdgpu_type_is_vector_32bit_register_range(loom_type_t type) {
          loom_amdgpu_vector_register_count(type, LOOM_SCALAR_TYPE_F32) != 0;
 }
 
-bool loom_amdgpu_type_is_i32_memory_payload(loom_type_t type) {
-  return loom_amdgpu_type_is_i32(type) ||
+bool loom_amdgpu_type_is_32bit_memory_payload(loom_type_t type) {
+  return loom_amdgpu_type_is_i32(type) || loom_amdgpu_type_is_f32(type) ||
          loom_amdgpu_static_vector_lane_count(
              type, LOOM_SCALAR_TYPE_I32, LOOM_AMDGPU_MAX_MEMORY_32BIT_LANES) !=
+             0 ||
+         loom_amdgpu_static_vector_lane_count(
+             type, LOOM_SCALAR_TYPE_F32, LOOM_AMDGPU_MAX_MEMORY_32BIT_LANES) !=
              0;
 }
 
@@ -462,7 +465,7 @@ static bool loom_amdgpu_source_memory_access_prefers_vgpr(
   if (fact_table == NULL || view_regions == NULL) {
     return true;
   }
-  if (!loom_amdgpu_type_is_i32_memory_payload(source_type)) {
+  if (!loom_amdgpu_type_is_32bit_memory_payload(source_type)) {
     return true;
   }
   loom_low_source_memory_access_plan_t plan = {0};

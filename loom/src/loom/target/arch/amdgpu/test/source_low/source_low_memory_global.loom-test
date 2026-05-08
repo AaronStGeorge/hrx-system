@@ -254,6 +254,90 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @i32_readonly_uniform_sm
 // ====
 
 amdgpu.target<gfx1100> @target
+kernel.def target(@target) @f32_readonly_uniform_smem_vector_math(%control: buffer, %input: buffer, %output: buffer) {
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch {
+  %lane0 = kernel.workitem.id<x> : index
+  %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index
+  %base = index.constant 0 : offset
+  %control_global = buffer.assume.memory_space %control {memory_space = global} : buffer
+  %control_noalias = buffer.assume.noalias %control_global : buffer
+  %input_global = buffer.assume.memory_space %input {memory_space = global} : buffer
+  %output_global = buffer.assume.memory_space %output {memory_space = global} : buffer
+  %control_view = buffer.view %control_noalias[%base] : buffer -> view<1xf32, #dense>
+  %input_view = buffer.view %input_global[%base] : buffer -> view<64x4xf32, #dense>
+  %output_view = buffer.view %output_global[%base] : buffer -> view<64x4xf32, #dense>
+  %scale = view.load %control_view[0] : view<1xf32, #dense> -> f32
+  %scale_vector = vector.splat %scale : vector<4xf32>
+  %input_vector = vector.load %input_view[%lane, 0] : view<64x4xf32, #dense> -> vector<4xf32>
+  %scaled = vector.mulf %input_vector, %scale_vector : vector<4xf32>
+  vector.store %scaled, %output_view[%lane, 0] : vector<4xf32>, view<64x4xf32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @f32_readonly_uniform_smem_vector_math() asm<amdgpu.rdna3.core> {
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %control_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %37 = s_mov_b32 0
+  %38 = s_load_dword %control_view, %37
+  %scale = v_mov_b32_copy %38
+  %42 = v_lshlrev_b32_lit %lane, 4
+  %input_vector = global_load_b128 %42, %input_view
+  %44 = slice %input_vector[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %46 = v_mul_f32 %44, %scale
+  %47 = slice %input_vector[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %49 = v_mul_f32 %47, %scale
+  %50 = slice %input_vector[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %52 = v_mul_f32 %50, %scale
+  %53 = slice %input_vector[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %55 = v_mul_f32 %53, %scale
+  %scaled = concat(%46, %49, %52, %55) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  global_store_b128 %42, %scaled, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @i32_readonly_uniform_smem_address(%control: buffer, %output: buffer) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch {
+  %base = index.constant 0 : offset
+  %control_global = buffer.assume.memory_space %control {memory_space = global} : buffer
+  %control_noalias = buffer.assume.noalias %control_global : buffer
+  %output_global = buffer.assume.memory_space %output {memory_space = global} : buffer
+  %control_view = buffer.view %control_noalias[%base] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output_global[%base] : buffer -> view<64xi32, #dense>
+  %column_i32 = view.load %control_view[0] : view<1xi32, #dense> -> i32
+  %column0 = index.cast %column_i32 : i32 to index
+  %column = index.assume %column0 [range(%column0, 0, 63)] : index
+  %zero = scalar.constant 0 : i32
+  view.store %zero, %output_view[%column] : i32, view<64xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_readonly_uniform_smem_address() asm<amdgpu.rdna3.core> {
+  %control_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %17 = s_mov_b32 0
+  %column = s_load_dword %control_view, %17
+  %20 = v_mov_b32_copy %17
+  %21 = v_mov_b32_copy %column
+  %22 = v_lshlrev_b32_lit %21, 2
+  global_store_b32 %22, %20, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 kernel.def target(@target) @i32_b128(%input: buffer, %output: buffer) {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
