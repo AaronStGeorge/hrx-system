@@ -13,3 +13,33 @@ func.def @f32_cmpf_select(%lhs: vector<1xf32>, %rhs: vector<1xf32>, %true_value:
   %selected = vector.select %mask, %true_value, %false_value : vector<1xf32>
   func.return %selected : vector<1xf32>
 }
+
+// ====
+
+func.def @i32_cmpi_select_zero_inline(%lhs: vector<2xi32>, %rhs: vector<2xi32>, %false_value: vector<2xi32>) -> (vector<2xi32>) {
+  %mask = vector.cmpi slt, %lhs, %rhs : vector<2xi32> -> vector<2xi1>
+  %zero = scalar.constant 0 : i32
+  %true_value = vector.splat %zero : vector<2xi32>
+  %selected = vector.select %mask, %true_value, %false_value : vector<2xi32>
+  func.return %selected : vector<2xi32>
+}
+
+// ====
+
+func.def @i32_cmpi_select_small_inline(%lhs: vector<2xi32>, %rhs: vector<2xi32>, %false_value: vector<2xi32>) -> (vector<2xi32>) {
+  %small = scalar.constant 3 : i32
+  %mask = vector.cmpi slt, %lhs, %rhs : vector<2xi32> -> vector<2xi1>
+  %true_value = vector.splat %small : vector<2xi32>
+  %selected = vector.select %mask, %true_value, %false_value : vector<2xi32>
+  func.return %selected : vector<2xi32>
+}
+
+// ====
+
+func.def @i32_cmpi_select_noninline_constant(%lhs: vector<2xi32>, %rhs: vector<2xi32>, %false_value: vector<2xi32>) -> (vector<2xi32>) {
+  %constant = scalar.constant 65 : i32
+  %mask = vector.cmpi slt, %lhs, %rhs : vector<2xi32> -> vector<2xi1>
+  %true_value = vector.splat %constant : vector<2xi32>
+  %selected = vector.select %mask, %true_value, %false_value : vector<2xi32>
+  func.return %selected : vector<2xi32>
+}
