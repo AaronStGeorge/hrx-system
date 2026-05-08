@@ -60,6 +60,27 @@ kernel.def @index_shli_global_b32(%input: buffer, %output: buffer) {
 
 // ====
 
+kernel.def @index_shli_previous_row_global_b128(%input: buffer, %output: buffer) {
+  %c1 = index.constant 1 : index
+  %c32 = index.constant 32 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
+} launch {
+  %x0 = kernel.workitem.id<x> : index
+  %x = index.assume %x0 [range(%x0, 1, 31)] : index
+  %base_offset = index.constant 0 : offset
+  %one = index.constant 1 : index
+  %previous = index.sub %x, %one : index
+  %shift = index.constant 2 : index
+  %linear = index.shli %previous, %shift : index
+  %input_view = buffer.view %input[%base_offset] : buffer -> view<128xi32, #dense>
+  %output_view = buffer.view %output[%base_offset] : buffer -> view<128xi32, #dense>
+  %loaded = vector.load %input_view[%linear] : view<128xi32, #dense> -> vector<4xi32>
+  vector.store %loaded, %output_view[%linear] : vector<4xi32>, view<128xi32, #dense>
+  kernel.return
+}
+
+// ====
+
 kernel.def @workitem_y_lds_uses_explicit_vaddr(%output: buffer) {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index

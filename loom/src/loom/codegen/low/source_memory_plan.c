@@ -552,6 +552,13 @@ typedef struct loom_low_source_memory_scaled_index_t {
   int64_t offset;
 } loom_low_source_memory_scaled_index_t;
 
+static bool loom_low_source_memory_access_can_extract_static_index_offset(
+    int64_t index_offset) {
+  // Static byte offsets are modeled as non-negative target-friendly addends.
+  // Keep negative terms in SSA so the derived index carries its range facts.
+  return index_offset >= 0;
+}
+
 static bool loom_low_source_memory_access_scaled_index_from_value(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     loom_value_id_t value_id, uint32_t recursion_depth,
@@ -664,6 +671,10 @@ static bool loom_low_source_memory_access_scaled_index_from_value(
             loom_value_fact_table_lookup(fact_table, c), &constant)) {
       return true;
     }
+    if (!loom_low_source_memory_access_can_extract_static_index_offset(
+            constant)) {
+      return true;
+    }
 
     loom_low_source_memory_scaled_index_t inner_scaled_index = {0};
     if (!loom_low_source_memory_access_scaled_index_from_value(
@@ -710,6 +721,10 @@ static bool loom_low_source_memory_access_scaled_index_from_value(
                    loom_value_fact_table_lookup(fact_table, lhs), &constant)) {
       scaled_value = rhs;
     } else {
+      return true;
+    }
+    if (!loom_low_source_memory_access_can_extract_static_index_offset(
+            constant)) {
       return true;
     }
 
@@ -763,6 +778,11 @@ static bool loom_low_source_memory_access_scaled_dynamic_index(
                             &static_offset_delta) ||
       !loom_checked_add_i64(static_byte_offset, static_offset_delta,
                             &new_static_byte_offset)) {
+    return false;
+  }
+  // Leave the original dynamic expression intact if extracting its affine
+  // offset would move a non-negative static byte offset outside that domain.
+  if (static_byte_offset >= 0 && new_static_byte_offset < 0) {
     return false;
   }
   *out_scaled_index = scaled_index.index;
