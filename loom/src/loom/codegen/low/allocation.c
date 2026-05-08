@@ -3591,6 +3591,29 @@ static iree_status_t loom_low_allocation_packet_move_starts_cycle(
                           "packet-local move cycle is malformed");
 }
 
+static iree_status_t loom_low_allocation_packet_move_class_has_cycle(
+    const loom_low_allocation_packet_unit_move_t* moves,
+    iree_host_size_t move_count,
+    const loom_low_allocation_unit_location_t* storage_class,
+    bool* out_has_cycle) {
+  *out_has_cycle = false;
+  for (iree_host_size_t i = 0; i < move_count; ++i) {
+    const loom_low_allocation_packet_unit_move_t* move = &moves[i];
+    if (!loom_low_allocation_unit_storage_classes_equal(storage_class,
+                                                        &move->destination) ||
+        loom_low_allocation_unit_locations_equal(&move->source,
+                                                 &move->destination)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_low_allocation_packet_move_starts_cycle(
+        moves, move_count, &move->destination, &move->source, out_has_cycle));
+    if (*out_has_cycle) {
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
+}
+
 static bool loom_low_allocation_packet_move_class_seen_before(
     const loom_low_allocation_packet_unit_move_t* moves,
     iree_host_size_t stop_move_index,
@@ -3726,8 +3749,8 @@ static iree_status_t loom_low_allocation_record_packet_move_temporaries_for_op(
       continue;
     }
     bool has_cycle = false;
-    IREE_RETURN_IF_ERROR(loom_low_allocation_packet_move_starts_cycle(
-        moves, move_count, &move->destination, &move->source, &has_cycle));
+    IREE_RETURN_IF_ERROR(loom_low_allocation_packet_move_class_has_cycle(
+        moves, move_count, &move->destination, &has_cycle));
     if (!has_cycle) {
       continue;
     }

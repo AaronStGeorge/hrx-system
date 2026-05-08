@@ -697,6 +697,25 @@ low.func.def target(@gfx11_target) @gfx11_overlapping_copy(%source: reg<amdgpu.s
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_concat_late_packet_cycle waits=none strategy=resource-stall fixed=%a:physical_register:2:1 fixed=%b:physical_register:6:1 fixed=%c:physical_register:7:1 fixed=%d:physical_register:5:1 fixed=%packed:physical_register:4:4
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_concat_late_packet_cycle(%resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>, %a: reg<amdgpu.vgpr>, %b: reg<amdgpu.vgpr>, %c: reg<amdgpu.vgpr>, %d: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %packed = concat(%a, %b, %c, %d) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  buffer_store_b128 %packed, %resource, %vaddr, %soffset
+  return
+}
+
+// ----
+  v_mov_b32 v4, v2
+  v_mov_b32 v1, v5
+  v_mov_b32 v5, v6
+  v_mov_b32 v6, v7
+  v_mov_b32 v7, v1
+  buffer_store_b128 v[4:7], v0, s[0:3], s4 offen offset:0
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_concat waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_concat(%r0: reg<amdgpu.sgpr>, %r1: reg<amdgpu.sgpr>, %r2: reg<amdgpu.sgpr>, %r3: reg<amdgpu.sgpr>, %value: reg<amdgpu.vgpr>, %vaddr: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
