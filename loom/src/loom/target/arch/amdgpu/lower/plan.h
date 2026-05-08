@@ -147,14 +147,16 @@ typedef struct loom_amdgpu_vector_extract_plan_t {
   loom_value_id_t source;
   // Optional dynamic source lane index, or invalid for static extraction.
   loom_value_id_t dynamic_index;
-  // Result scalar value receiving one extracted lane.
+  // Result scalar or vector value receiving the extracted payload.
   loom_value_id_t result;
-  // Static logical source lane offset.
+  // Static flattened source lane offset.
   uint32_t lane_offset;
-  // Static logical source lane count.
+  // Static source lane count for dynamic scalar extraction.
   uint32_t lane_count;
   // Number of 32-bit register units occupied by the source payload.
   uint32_t register_count;
+  // Number of 32-bit register units occupied by the result payload.
+  uint32_t result_register_count;
   // Number of payload bits occupied by each logical source lane.
   uint32_t lane_bit_count;
   // True when extraction uses |dynamic_index| instead of |lane_offset|.

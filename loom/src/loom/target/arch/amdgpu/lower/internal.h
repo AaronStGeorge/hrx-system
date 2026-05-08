@@ -70,6 +70,10 @@ uint32_t loom_amdgpu_vector_32bit_lane_count(loom_type_t type);
 // payload.
 uint32_t loom_amdgpu_vector_32bit_register_count(loom_type_t type);
 
+// Returns the row-major flattened register ordinal for static vector indices.
+bool loom_amdgpu_static_vector_flat_register_from_indices(
+    loom_type_t type, const int64_t* indices, uint32_t* out_ordinal);
+
 // Returns the rank-1 i32 lane count for a supported AMDGPU 32-bit vector
 // payload, or zero when the source type is not representable as that payload.
 uint32_t loom_amdgpu_vector_i32_lane_count(loom_type_t type);

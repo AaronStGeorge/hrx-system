@@ -257,24 +257,6 @@ static void loom_amdgpu_static_vector_indices_from_flat_register(
   }
 }
 
-static bool loom_amdgpu_static_vector_flat_register_from_indices(
-    loom_type_t type, const int64_t* indices, uint32_t* out_ordinal) {
-  uint32_t ordinal = 0;
-  const uint8_t rank = loom_type_rank(type);
-  for (uint8_t axis = 0; axis < rank; ++axis) {
-    const int64_t dimension_size = loom_type_dim_static_size_at(type, axis);
-    if (dimension_size < 1 || indices[axis] < 0 ||
-        indices[axis] >= dimension_size ||
-        ordinal >
-            (UINT32_MAX - (uint32_t)indices[axis]) / (uint32_t)dimension_size) {
-      return false;
-    }
-    ordinal = ordinal * (uint32_t)dimension_size + (uint32_t)indices[axis];
-  }
-  *out_ordinal = ordinal;
-  return true;
-}
-
 static bool loom_amdgpu_vector_transpose_plan_from_op(
     const loom_module_t* module, const loom_op_t* source_op,
     loom_amdgpu_vector_transpose_plan_t* out_plan) {

@@ -132,6 +132,24 @@ uint32_t loom_amdgpu_vector_32bit_register_count(loom_type_t type) {
              : loom_amdgpu_vector_register_count(type, LOOM_SCALAR_TYPE_F32);
 }
 
+bool loom_amdgpu_static_vector_flat_register_from_indices(
+    loom_type_t type, const int64_t* indices, uint32_t* out_ordinal) {
+  uint32_t ordinal = 0;
+  const uint8_t rank = loom_type_rank(type);
+  for (uint8_t axis = 0; axis < rank; ++axis) {
+    const int64_t dimension_size = loom_type_dim_static_size_at(type, axis);
+    if (dimension_size < 1 || indices[axis] < 0 ||
+        indices[axis] >= dimension_size ||
+        ordinal >
+            (UINT32_MAX - (uint32_t)indices[axis]) / (uint32_t)dimension_size) {
+      return false;
+    }
+    ordinal = ordinal * (uint32_t)dimension_size + (uint32_t)indices[axis];
+  }
+  *out_ordinal = ordinal;
+  return true;
+}
+
 uint32_t loom_amdgpu_vector_i32_lane_count(loom_type_t type) {
   return loom_amdgpu_vector_lane_count(type, LOOM_SCALAR_TYPE_I32);
 }
