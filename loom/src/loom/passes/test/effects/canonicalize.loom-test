@@ -69,6 +69,23 @@ func.def @dead_read_only_while_dies(%cond: i1, %buffer: buffer, %offset: offset,
 
 // ====
 
+// Direct unused loads are dead in the canonicalizer worklist. Reads constrain
+// ordering while the value is live, but a plain non-volatile load is not an
+// observable effect by itself.
+func.def @dead_read_only_load_dies(%buffer: buffer, %offset: offset) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %view = buffer.view %buffer[%offset] : buffer -> view<1xf32, %layout>
+  %loaded = view.load %view[0] : view<1xf32, %layout> -> f32
+  func.return
+}
+
+// ----
+func.def @dead_read_only_load_dies(%buffer: buffer, %offset: offset) {
+  func.return
+}
+
+// ====
+
 // Function-level canonicalization runs over every root region. Projected
 // regions keep distinct SSA values, but use the same logical signature facts.
 test.split_func @split_func_all_regions_canonicalize(%arg: i32) {

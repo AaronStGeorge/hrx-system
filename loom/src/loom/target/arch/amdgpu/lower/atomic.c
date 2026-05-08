@@ -912,7 +912,7 @@ static bool loom_amdgpu_atomic_select(
       out_selection->address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT;
       if (loom_low_source_memory_access_is_dynamic(&out_selection->source)) {
         loom_amdgpu_memory_access_record_flat_dynamic_address_rejection(
-            &out_selection->source, memory_diagnostic);
+            module, &out_selection->source, memory_diagnostic);
         return false;
       }
       break;

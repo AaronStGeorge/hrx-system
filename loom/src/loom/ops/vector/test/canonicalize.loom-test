@@ -159,6 +159,37 @@ func.def @extract_from_elements_dynamic_operands_to_operand(%base: i32, %next: i
 
 // ====
 
+// A single scalar lane extracted from a vector load can narrow to a scalar
+// view.load. This avoids forcing wide payload lowering for table-style record
+// loads where only one field is used.
+func.def @extract_single_use_load_to_view_load(%input: buffer, %offset: offset) -> (i32) {
+  %view = buffer.view %input[%offset] : buffer -> view<4xi32, #dense>
+  %wide = vector.load %view[0] : view<4xi32, #dense> -> vector<4xi32>
+  %lane2 = vector.extract %wide[2] : vector<4xi32> -> i32
+  func.return %lane2 : i32
+}
+// ----
+func.def @extract_single_use_load_to_view_load(%input: buffer, %offset: offset) -> (i32) {
+  %view = buffer.view %input[%offset] : buffer -> view<4xi32, #dense>
+  %lane2 = view.load %view[2] : view<4xi32, #dense> -> i32
+  func.return %lane2 : i32
+}
+
+// ====
+
+// When multiple scalar lanes are extracted, the wide vector load is still the
+// better canonical form: target lowering can select one coalesced memory op and
+// slice registers instead of scalarizing into several smaller loads.
+func.def @extract_multi_use_load_keeps_wide_load(%input: buffer, %offset: offset) -> (i32, i32) {
+  %view = buffer.view %input[%offset] : buffer -> view<4xi32, #dense>
+  %wide = vector.load %view[0] : view<4xi32, #dense> -> vector<4xi32>
+  %lane1 = vector.extract %wide[1] : vector<4xi32> -> i32
+  %lane2 = vector.extract %wide[2] : vector<4xi32> -> i32
+  func.return %lane1, %lane2 : i32, i32
+}
+
+// ====
+
 // A zero-lane range mask performs no range tests.
 func.def @empty_mask_range(%lo: index, %hi: index, %step: index) -> (vector<0xi1>) {
   %r = vector.mask.range [%lo to %hi step %step] : index -> vector<0xi1>

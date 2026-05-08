@@ -56,6 +56,7 @@ loom_cc_library(
     loom::src::loom::ops::index
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scalar
+    loom::src::loom::ops::view
     loom::src::loom::rewrite::rewriter
     loom::src::loom::rewrite::type_propagation
     loom::src::loom::util::fact_table

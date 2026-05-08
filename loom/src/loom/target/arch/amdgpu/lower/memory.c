@@ -1646,6 +1646,7 @@ static bool loom_amdgpu_memory_access_try_select_global_saddr(
 }
 
 static bool loom_amdgpu_memory_dynamic_term_can_flat_address(
+    const loom_module_t* module,
     const loom_low_source_memory_dynamic_term_t* term) {
   if (loom_value_facts_is_float(term->byte_facts) ||
       term->byte_facts.range_lo < 0 || term->byte_stride <= 0 ||
@@ -1663,10 +1664,20 @@ static bool loom_amdgpu_memory_dynamic_term_can_flat_address(
       term->byte_shift >= 32) {
     return false;
   }
-  return term->byte_facts.range_hi / term->byte_stride <= UINT32_MAX;
+  if (term->byte_facts.range_hi / term->byte_stride <= UINT32_MAX) {
+    return true;
+  }
+  if (term->byte_stride != 1 || term->stride_value_count != 0 ||
+      term->index >= module->values.count) {
+    return false;
+  }
+  const loom_type_t index_type = loom_module_value_type(module, term->index);
+  return loom_type_is_scalar(index_type) &&
+         loom_type_element_type(index_type) == LOOM_SCALAR_TYPE_OFFSET;
 }
 
 void loom_amdgpu_memory_access_record_flat_dynamic_address_rejection(
+    const loom_module_t* module,
     const loom_low_source_memory_access_plan_t* source,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
   diagnostic->rejection_bits |=
@@ -1674,7 +1685,7 @@ void loom_amdgpu_memory_access_record_flat_dynamic_address_rejection(
   diagnostic->dynamic_term_index = 0;
   for (uint8_t i = 0; i < source->dynamic_term_count; ++i) {
     if (!loom_amdgpu_memory_dynamic_term_can_flat_address(
-            &source->dynamic_terms[i])) {
+            module, &source->dynamic_terms[i])) {
       diagnostic->dynamic_term_index = i;
       return;
     }
@@ -1682,13 +1693,13 @@ void loom_amdgpu_memory_access_record_flat_dynamic_address_rejection(
 }
 
 static bool loom_amdgpu_memory_access_dynamic_terms_can_flat_address(
-    const loom_amdgpu_memory_access_t* access,
+    const loom_module_t* module, const loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
   for (uint8_t i = 0; i < access->source.dynamic_term_count; ++i) {
     if (!loom_amdgpu_memory_dynamic_term_can_flat_address(
-            &access->source.dynamic_terms[i])) {
+            module, &access->source.dynamic_terms[i])) {
       loom_amdgpu_memory_access_record_flat_dynamic_address_rejection(
-          &access->source, diagnostic);
+          module, &access->source, diagnostic);
       return false;
     }
   }
@@ -1696,11 +1707,12 @@ static bool loom_amdgpu_memory_access_dynamic_terms_can_flat_address(
 }
 
 static bool loom_amdgpu_memory_access_try_select_global_flat(
+    const loom_module_t* module,
     const loom_low_descriptor_set_t* descriptor_set,
     loom_amdgpu_memory_operation_kind_t kind,
     loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
-  if (!loom_amdgpu_memory_access_dynamic_terms_can_flat_address(access,
+  if (!loom_amdgpu_memory_access_dynamic_terms_can_flat_address(module, access,
                                                                 diagnostic)) {
     return false;
   }
@@ -1835,7 +1847,7 @@ loom_amdgpu_memory_address_attempt_apply(
         return LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_REJECTED;
       }
       return loom_amdgpu_memory_access_try_select_global_flat(
-                 descriptor_set, kind, access, diagnostic)
+                 module, descriptor_set, kind, access, diagnostic)
                  ? LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_SELECTED
                  : LOOM_AMDGPU_MEMORY_ADDRESS_ATTEMPT_NOT_APPLICABLE;
   }

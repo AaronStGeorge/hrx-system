@@ -14,6 +14,7 @@
 #include "loom/ops/vector/encoding_auxiliary.h"
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/ops/view/ops.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/util/fact_table.h"
 
@@ -598,7 +599,9 @@ static iree_status_t loom_vector_canonicalize_extract_from_elements(
     loom_op_t* op, loom_rewriter_t* rewriter, loom_op_t* source_def_op,
     loom_type_t result_type, bool* out_changed) {
   *out_changed = false;
-  if (!loom_type_is_scalar(result_type)) return iree_ok_status();
+  if (!loom_type_is_scalar(result_type)) {
+    return iree_ok_status();
+  }
 
   loom_attribute_t static_indices = loom_vector_extract_static_indices(op);
   if (static_indices.count != 1 || static_indices.i64_array[0] < 0 ||
@@ -675,6 +678,124 @@ static iree_status_t loom_vector_canonicalize_extract_from_iota(
 
   IREE_RETURN_IF_ERROR(
       loom_vector_replace_single_result_with_value(op, rewriter, replacement));
+  *out_changed = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_vector_canonicalize_extract_from_load(
+    loom_op_t* op, loom_rewriter_t* rewriter, loom_op_t* source_def_op,
+    loom_type_t source_type, loom_type_t result_type, bool* out_changed) {
+  *out_changed = false;
+  if (!loom_type_is_scalar(result_type)) return iree_ok_status();
+
+  if (source_def_op->result_count != 1) return iree_ok_status();
+  loom_value_id_t load_result = loom_op_const_results(source_def_op)[0];
+  if (load_result >= rewriter->module->values.count ||
+      !loom_value_has_single_use(
+          loom_module_value(rewriter->module, load_result))) {
+    return iree_ok_status();
+  }
+
+  loom_attribute_t lane_indices = loom_vector_extract_static_indices(op);
+  if (lane_indices.kind != LOOM_ATTR_I64_ARRAY ||
+      lane_indices.count != loom_type_rank(source_type)) {
+    return iree_ok_status();
+  }
+  for (uint16_t i = 0; i < lane_indices.count; ++i) {
+    if (lane_indices.i64_array[i] < 0 ||
+        lane_indices.i64_array[i] == INT64_MIN) {
+      return iree_ok_status();
+    }
+  }
+
+  const loom_value_id_t view = loom_vector_load_view(source_def_op);
+  const loom_type_t view_type = loom_module_value_type(rewriter->module, view);
+  const loom_fact_context_t* fact_context =
+      rewriter->fact_table ? &rewriter->fact_table->context : NULL;
+  loom_vector_memory_access_t access = {0};
+  if (!loom_vector_memory_access_describe(fact_context, rewriter->module,
+                                          view_type, source_type, &access)) {
+    return iree_ok_status();
+  }
+
+  loom_attribute_t load_static_indices =
+      loom_vector_load_static_indices(source_def_op);
+  if (load_static_indices.kind != LOOM_ATTR_I64_ARRAY ||
+      load_static_indices.count != access.view_rank) {
+    return iree_ok_status();
+  }
+
+  loom_value_slice_t load_indices = loom_vector_load_indices(source_def_op);
+  int64_t static_indices[LOOM_TYPE_MAX_RANK] = {0};
+  loom_value_id_t dynamic_indices[LOOM_TYPE_MAX_RANK] = {0};
+  uint16_t dynamic_index_count = 0;
+  uint16_t load_dynamic_index = 0;
+
+  loom_builder_set_before(&rewriter->builder, op);
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  for (uint8_t axis = 0; axis < access.view_rank; ++axis) {
+    int64_t lane_index = 0;
+    if (axis >= access.first_vector_axis) {
+      lane_index = lane_indices.i64_array[axis - access.first_vector_axis];
+    }
+
+    int64_t static_index = load_static_indices.i64_array[axis];
+    if (static_index != INT64_MIN) {
+      int64_t combined_index = 0;
+      if (!iree_checked_add_i64(static_index, lane_index, &combined_index)) {
+        return iree_ok_status();
+      }
+      static_indices[axis] = combined_index;
+      continue;
+    }
+
+    if (load_dynamic_index >= load_indices.count) {
+      return iree_ok_status();
+    }
+    loom_value_id_t dynamic_index = load_indices.values[load_dynamic_index++];
+    if (lane_index != 0) {
+      loom_op_t* lane_op = NULL;
+      IREE_RETURN_IF_ERROR(loom_index_constant_build(
+          &rewriter->builder, loom_attr_i64(lane_index), index_type,
+          op->location, &lane_op));
+      loom_op_t* add_op = NULL;
+      IREE_RETURN_IF_ERROR(
+          loom_index_add_build(&rewriter->builder, dynamic_index,
+                               loom_index_constant_result(lane_op), index_type,
+                               op->location, &add_op));
+      dynamic_index = loom_index_add_result(add_op);
+    }
+    static_indices[axis] = INT64_MIN;
+    dynamic_indices[dynamic_index_count++] = dynamic_index;
+  }
+  if (load_dynamic_index != load_indices.count) {
+    return iree_ok_status();
+  }
+
+  loom_vector_memory_cache_policy_t cache_policy = {0};
+  if (!loom_vector_memory_cache_policy_from_op(rewriter->module, source_def_op,
+                                               &cache_policy)) {
+    return iree_ok_status();
+  }
+  uint32_t build_flags = 0;
+  if (iree_any_bit_set(cache_policy.build_flags,
+                       LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_SCOPE)) {
+    build_flags |= LOOM_VIEW_LOAD_BUILD_FLAG_HAS_CACHE_SCOPE;
+  }
+  if (iree_any_bit_set(cache_policy.build_flags,
+                       LOOM_VECTOR_MEMORY_CACHE_POLICY_BUILD_FLAG_TEMPORAL)) {
+    build_flags |= LOOM_VIEW_LOAD_BUILD_FLAG_HAS_CACHE_TEMPORAL;
+  }
+
+  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
+  loom_op_t* load_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_view_load_build(
+      &rewriter->builder, build_flags, view, dynamic_indices,
+      dynamic_index_count, static_indices, access.view_rank,
+      cache_policy.cache_scope, cache_policy.cache_temporal, result_type,
+      op->location, &load_op));
+  IREE_RETURN_IF_ERROR(loom_vector_replace_single_result_with_new_op(
+      op, rewriter, load_op, value_checkpoint));
   *out_changed = true;
   return iree_ok_status();
 }
@@ -776,6 +897,10 @@ static iree_status_t loom_vector_canonicalize_extract(loom_op_t* op,
   }
   if (loom_vector_iota_isa(source_def_op)) {
     return loom_vector_canonicalize_extract_from_iota(
+        op, rewriter, source_def_op, source_type, result_type, out_changed);
+  }
+  if (loom_vector_load_isa(source_def_op)) {
+    return loom_vector_canonicalize_extract_from_load(
         op, rewriter, source_def_op, source_type, result_type, out_changed);
   }
   return iree_ok_status();

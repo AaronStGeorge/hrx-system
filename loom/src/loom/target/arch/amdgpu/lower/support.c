@@ -111,6 +111,11 @@ bool loom_amdgpu_type_is_i32_memory_payload(loom_type_t type) {
              0;
 }
 
+static bool loom_amdgpu_type_is_offset(loom_type_t type) {
+  return loom_type_is_scalar(type) &&
+         loom_type_element_type(type) == LOOM_SCALAR_TYPE_OFFSET;
+}
+
 uint32_t loom_amdgpu_vector_32bit_lane_count(loom_type_t type) {
   const uint32_t i32_lane_count =
       loom_amdgpu_vector_lane_count(type, LOOM_SCALAR_TYPE_I32);
@@ -911,6 +916,20 @@ static bool loom_amdgpu_value_is_subgroup_lane_mask_result(
          loom_kernel_subgroup_vote_ballot_isa(defining_op);
 }
 
+static bool loom_amdgpu_offset_value_needs_64bit(
+    const loom_value_fact_table_t* fact_table, const loom_module_t* module,
+    loom_value_id_t source_value_id, loom_type_t source_type) {
+  if (!loom_amdgpu_type_is_offset(source_type)) {
+    return false;
+  }
+  if (fact_table == NULL || module == NULL ||
+      source_value_id >= module->values.count) {
+    return true;
+  }
+  return !loom_value_facts_fit_unsigned_bit_count(
+      loom_value_fact_table_lookup(fact_table, source_value_id), 32);
+}
+
 iree_status_t loom_amdgpu_map_type(void* user_data,
                                    loom_low_lower_context_t* context,
                                    const loom_op_t* source_op,
@@ -922,6 +941,9 @@ iree_status_t loom_amdgpu_map_type(void* user_data,
   }
   if (loom_amdgpu_type_is_i32(source_type)) {
     return loom_amdgpu_make_sgpr_type(context, out_low_type);
+  }
+  if (loom_amdgpu_type_is_i64(source_type)) {
+    return loom_amdgpu_make_sgpr_range_type(context, 2, out_low_type);
   }
   if (loom_amdgpu_type_is_address_scalar(source_type)) {
     return loom_amdgpu_make_sgpr_type(context, out_low_type);
@@ -991,11 +1013,29 @@ iree_status_t loom_amdgpu_map_value(void* user_data,
   if (loom_amdgpu_type_is_16bit_float(source_type)) {
     return loom_amdgpu_make_vgpr_type(context, out_low_type);
   }
+  if (loom_amdgpu_type_is_i64(source_type)) {
+    bool prefers_vgpr = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_context_value_prefers_vgpr(
+        context, source_value_id, &prefers_vgpr));
+    if (prefers_vgpr) {
+      return loom_amdgpu_make_vgpr_range_type(context, 2, out_low_type);
+    }
+    return loom_amdgpu_make_sgpr_range_type(context, 2, out_low_type);
+  }
   if (loom_amdgpu_type_is_i32(source_type) ||
       loom_amdgpu_type_is_address_scalar(source_type)) {
     bool prefers_vgpr = false;
     IREE_RETURN_IF_ERROR(loom_amdgpu_context_value_prefers_vgpr(
         context, source_value_id, &prefers_vgpr));
+    if (loom_amdgpu_offset_value_needs_64bit(
+            loom_low_lower_context_fact_table(context),
+            loom_low_lower_context_module(context), source_value_id,
+            source_type)) {
+      if (prefers_vgpr) {
+        return loom_amdgpu_make_vgpr_range_type(context, 2, out_low_type);
+      }
+      return loom_amdgpu_make_sgpr_range_type(context, 2, out_low_type);
+    }
     if (prefers_vgpr) {
       return loom_amdgpu_make_vgpr_type(context, out_low_type);
     }
@@ -1054,11 +1094,30 @@ iree_status_t loom_amdgpu_map_contract_value(
     return loom_amdgpu_map_contract_register(
         environment, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1, out_mapped_value);
   }
+  if (loom_amdgpu_type_is_i64(source_type)) {
+    const bool prefers_vgpr = loom_amdgpu_source_value_prefers_vgpr(
+        environment->module, environment->fact_table, environment->view_regions,
+        source_value_id);
+    return loom_amdgpu_map_contract_register(
+        environment,
+        prefers_vgpr ? LOOM_AMDGPU_REG_CLASS_ID_VGPR
+                     : LOOM_AMDGPU_REG_CLASS_ID_SGPR,
+        2, out_mapped_value);
+  }
   if (loom_amdgpu_type_is_i32(source_type) ||
       loom_amdgpu_type_is_address_scalar(source_type)) {
     const bool prefers_vgpr = loom_amdgpu_source_value_prefers_vgpr(
         environment->module, environment->fact_table, environment->view_regions,
         source_value_id);
+    if (loom_amdgpu_offset_value_needs_64bit(environment->fact_table,
+                                             environment->module,
+                                             source_value_id, source_type)) {
+      return loom_amdgpu_map_contract_register(
+          environment,
+          prefers_vgpr ? LOOM_AMDGPU_REG_CLASS_ID_VGPR
+                       : LOOM_AMDGPU_REG_CLASS_ID_SGPR,
+          2, out_mapped_value);
+    }
     if (prefers_vgpr) {
       return loom_amdgpu_map_contract_register(
           environment, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1, out_mapped_value);

@@ -311,23 +311,9 @@ iree_status_t loom_rewriter_preserve_result_names_on_new_values(
 // Mini-DCE
 //===----------------------------------------------------------------------===//
 
-#define LOOM_REWRITER_RETAINED_TRAITS                          \
-  (LOOM_TRAIT_READS_MEMORY | LOOM_TRAIT_WRITES_MEMORY |        \
-   LOOM_TRAIT_NON_DETERMINISTIC | LOOM_TRAIT_UNKNOWN_EFFECTS | \
-   LOOM_TRAIT_TERMINATOR | LOOM_TRAIT_HINT | LOOM_TRAIT_CONVERGENT)
-
 bool loom_rewriter_is_trivially_dead(const loom_rewriter_t* rewriter,
                                      const loom_op_t* op) {
-  // Terminators, direct effects, convergence, and compiler hints are never
-  // trivially dead. Nested writes and convergent effects also make the parent
-  // observable. Region ops with no retained nested effects can be erased as a
-  // subtree by loom_op_erase.
-  loom_trait_flags_t traits = loom_op_effective_traits(rewriter->module, op);
-  if (traits & LOOM_REWRITER_RETAINED_TRAITS) return false;
-  if (loom_op_regions_have_write_effects(op)) return false;
-  if (loom_op_regions_have_convergent_effects(op)) return false;
-  if (loom_op_regions_have_hints(rewriter->module, op)) return false;
-  return loom_op_results_unused(rewriter->module, op);
+  return loom_op_is_trivially_dead(rewriter->module, op);
 }
 
 iree_status_t loom_rewriter_erase_if_dead(loom_rewriter_t* rewriter,

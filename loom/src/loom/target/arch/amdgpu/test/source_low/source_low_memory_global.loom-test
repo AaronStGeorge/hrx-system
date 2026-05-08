@@ -49,17 +49,16 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @i32_readonly_uniform_sm
   %workgroup = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 64} : reg<amdgpu.sgpr x2>
-  %26 = s_mov_b32 1
-  %linear2 = s_lshl_b32 %workgroup, %26
-  %28 = s_mov_b32 2
-  %29 = s_lshl_b32 %linear2, %28
-  %loaded = s_load_dwordx2 %input_view, %29
-  %lane = slice %loaded[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %27 = s_mov_b32 1
+  %linear2 = s_lshl_b32 %workgroup, %27
+  %29 = s_mov_b32 2
+  %30 = s_lshl_b32 %linear2, %29
+  %lane = s_load_dword %input_view, %30
   %32 = v_mov_b32_copy %lane
   %33 = v_mov_b32 0
   %34 = s_mov_b32 0
   %35 = concat(%workgroup, %34) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %37 = s_lshl_b64 %35, %28
+  %37 = s_lshl_b64 %35, %29
   %38 = slice %output_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   %39 = slice %output_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   %40 = slice %37[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
@@ -238,10 +237,8 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @i32_readonly_uniform_sm
 ^then:
   %26 = v_mov_b32_copy %zero
   %27 = v_mov_b32 0
-  %28 = s_mov_b32 0
-  %29 = concat(%workgroup, %28) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %30 = s_mov_b32 2
-  %31 = s_lshl_b64 %29, %30
+  %29 = concat(%workgroup, %zero) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %31 = s_lshl_b64 %29, %21
   %32 = slice %output_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   %33 = slice %output_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   %34 = slice %31[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>

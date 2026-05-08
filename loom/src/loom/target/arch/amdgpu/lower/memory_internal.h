@@ -212,6 +212,7 @@ iree_string_view_t loom_amdgpu_memory_access_rejection_key(
 
 // Records the first source dynamic term relevant to a flat-address rejection.
 void loom_amdgpu_memory_access_record_flat_dynamic_address_rejection(
+    const loom_module_t* module,
     const loom_low_source_memory_access_plan_t* source,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic);
 
