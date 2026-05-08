@@ -724,6 +724,7 @@ iree_c_embed_data(
     "execution/testdata/model_swiglu_tile4_f32.loom"
     "execution/testdata/scf_if_vector_result.loom"
     "execution/testdata/workgroup_reduce_maxnumf.loom"
+    "execution/testdata/workitem_id_x_256_store.loom"
   C_FILE_OUTPUT
     "execution/amdgpu_hal_testdata.c"
   H_FILE_OUTPUT

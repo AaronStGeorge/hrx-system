@@ -479,40 +479,6 @@ static iree_status_t loom_amdgpu_wait_plan_build_dependency_links(
     }
   }
 
-  bool* read_producer_has_same_block_consumer = NULL;
-  if (schedule->node_count != 0) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        builder->arena, schedule->node_count,
-        sizeof(*read_producer_has_same_block_consumer),
-        (void**)&read_producer_has_same_block_consumer));
-    memset(
-        read_producer_has_same_block_consumer, 0,
-        schedule->node_count * sizeof(*read_producer_has_same_block_consumer));
-  }
-
-  for (uint32_t consumer_node = 0; consumer_node < schedule->node_count;
-       ++consumer_node) {
-    const loom_low_schedule_node_t* node = &schedule->nodes[consumer_node];
-    const loom_value_ordinal_t* operand_ordinals =
-        loom_low_schedule_node_const_operand_ordinals(node);
-    for (uint16_t i = 0; i < node->operand_count; ++i) {
-      const loom_value_ordinal_t operand_ordinal = operand_ordinals[i];
-      if (operand_ordinal >= value_count) {
-        return iree_make_status(
-            IREE_STATUS_OUT_OF_RANGE,
-            "AMDGPU wait dependency operand ordinal exceeds liveness domain");
-      }
-      const uint32_t producer_node = producer_nodes[operand_ordinal];
-      if (producer_node == LOOM_LOW_SCHEDULE_NODE_NONE ||
-          producer_node == consumer_node ||
-          builder->node_states[producer_node].read_counter_mask == 0 ||
-          schedule->nodes[producer_node].block_index != node->block_index) {
-        continue;
-      }
-      read_producer_has_same_block_consumer[producer_node] = true;
-    }
-  }
-
   for (uint32_t consumer_node = 0; consumer_node < schedule->node_count;
        ++consumer_node) {
     const loom_low_schedule_node_t* node = &schedule->nodes[consumer_node];
@@ -533,10 +499,6 @@ static iree_status_t loom_amdgpu_wait_plan_build_dependency_links(
       const uint32_t counter_mask =
           builder->node_states[producer_node].read_counter_mask;
       if (counter_mask == 0) {
-        continue;
-      }
-      if (schedule->nodes[producer_node].block_index != node->block_index &&
-          read_producer_has_same_block_consumer[producer_node]) {
         continue;
       }
       IREE_RETURN_IF_ERROR(loom_amdgpu_wait_plan_append_dependency_link(
@@ -661,18 +623,25 @@ static iree_status_t loom_amdgpu_wait_plan_handle_consumer(
       if ((link->counter_mask & counter_mask) == 0) {
         continue;
       }
-      if (producer_state->produced_counter_epoch[slot] !=
-          builder->counter_epochs[slot]) {
-        continue;
-      }
       const uint32_t producer_block =
           builder->schedule->nodes[link->producer_node].block_index;
       const uint32_t consumer_block =
           builder->schedule->nodes[node_index].block_index;
-      if (producer_block != consumer_block &&
-          (producer_state->drained_after_production_counter_mask &
-           counter_mask) != 0) {
-        continue;
+      if (producer_block == consumer_block) {
+        // Epochs are block-local because outstanding counts reset at block
+        // entry. Within one block, a newer epoch means an earlier wait already
+        // drained the producer.
+        if (producer_state->produced_counter_epoch[slot] !=
+            builder->counter_epochs[slot]) {
+          continue;
+        }
+      } else {
+        // Across block boundaries, the producer is safe only if a wait in its
+        // own block drained it before control could reach the consumer block.
+        if ((producer_state->drained_after_production_counter_mask &
+             counter_mask) != 0) {
+          continue;
+        }
       }
       active_counter_mask |= counter_mask;
       if (active_producers[slot] == LOOM_LOW_SCHEDULE_NODE_NONE) {

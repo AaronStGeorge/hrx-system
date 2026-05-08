@@ -71,8 +71,9 @@ low.func.def target(@gfx11_target) @gfx11_scheduled_liveness_resource(%kernarg: 
   s_mov_b32 s7, 822243328
   v_mov_b32 v1, 1
   s_waitcnt vmcnt(63) lgkmcnt(0)
+  s_and_b32 s1, s1, s3
   s_mov_b32 s4, s0
-  s_and_b32 s5, s1, s3
+  s_mov_b32 s5, s1
   buffer_store_dword v1, v0, s[4:7], s2 offen offset:0
   s_endpgm
 
@@ -106,17 +107,18 @@ low.func.def target(@gfx11_target) @gfx11_concat_source_existing_span(%row: reg<
 
 // ----
   v_mov_b32 v1, 0
-  s_mov_b32 s11, 0
-  s_mov_b32 s10, 2
+  s_mov_b32 s5, 0
+  s_mov_b32 s8, 2
   s_add_u32 s0, s0, s2
   s_add_u32 s0, s0, s4
-  s_mov_b32 s2, s8
-  s_mov_b32 s3, s11
-  s_lshl_b64 s[2:3], s[2:3], s10
-  s_add_u32 s4, s6, s2
-  s_addc_u32 s5, s7, s3
-  s_cmp_lt_i32 s0, s9
-  global_load_b32 v1, v1, s[4:5] offset:0
+  s_mov_b32 s4, s1
+  s_lshl_b64 s[4:5], s[4:5], s8
+  s_add_u32 s1, s6, s4
+  s_addc_u32 s2, s7, s5
+  s_cmp_lt_i32 s0, s3
+  s_mov_b32 s0, s1
+  s_mov_b32 s1, s2
+  global_load_b32 v1, v1, s[0:1] offset:0
   v_cmp_lt_i32 s[0:1], v1, v0
   s_endpgm
 
@@ -184,11 +186,8 @@ low.func.def target(@gfx11_target) @gfx11_branch_arg_cycle(%resource: reg<amdgpu
 }
 
 // ----
-  v_mov_b32 v3, v0
-  v_mov_b32 v0, v1
-  v_mov_b32 v1, v3
 .Lbb1:
-  v_add_u32 v0, v0, v1
+  v_add_u32 v0, v1, v0
   buffer_store_dword v0, v2, s[0:3], s4 offen offset:0
   s_endpgm
 
@@ -203,13 +202,10 @@ low.func.def target(@gfx11_target) @gfx11_loop_arg_cycle(%lhs: reg<amdgpu.vgpr>,
 }
 
 // ----
-  v_mov_b32 v2, v0
-  v_mov_b32 v0, v1
-  v_mov_b32 v1, v2
 .Lbb1:
-  v_mov_b32 v2, v0
-  v_mov_b32 v0, v1
-  v_mov_b32 v1, v2
+  v_mov_b32 v2, v1
+  v_mov_b32 v1, v0
+  v_mov_b32 v0, v2
   s_branch .Lbb1
 
 // ====
@@ -483,12 +479,12 @@ low.func.def target(@gfx11_target) @gfx11_stress_fragment(%s0: reg<amdgpu.sgpr>,
   buffer_load_dword v11, v10, s[4:7], s8 offen offset:4
   buffer_load_b128 v[12:15], v10, s[4:7], s8 offen offset:16
   s_load_dwordx2 s[0:1], s[0:1], s8 offset:16
-  s_buffer_load_dword s9, s[4:7], s8 offset:0
+  s_buffer_load_dword s1, s[4:7], s8 offset:0
   s_add_u32 s2, s2, s3
   v_add_u32 v8, v8, v9
-  s_add_u32 s2, s2, s9
+  s_add_u32 s1, s2, s1
   v_add_u32 v8, v8, v11
-  buffer_store_dword v8, v10, s[4:7], s2 offen offset:8
+  buffer_store_dword v8, v10, s[4:7], s1 offen offset:8
   buffer_store_b128 v[12:15], v10, s[4:7], s0 offen offset:32
   v_wmma_f32_16x16x16_f16 v[0:7], v[16:23], v[24:31], v[0:7]
   buffer_store_b128 v[0:3], v10, s[4:7], s8 offen offset:48
@@ -589,6 +585,40 @@ low.func.def target(@gfx_target) @wait_cross_block(%resource: reg<amdgpu.sgpr x4
 
 // ====
 
+// RUN: emit amdgpu-assembly @wait_branch_arg_after_prior_wait strategy=source
+amdgpu.target<gfx1100> @gfx_target
+low.func.def target(@gfx_target) @wait_branch_arg_after_prior_wait(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>, %value: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %first = buffer_load_dword %resource, %vaddr, %soffset
+  %sum = v_add_u32 %first, %value
+  %loaded = buffer_load_b128 %resource, %vaddr, %soffset {offset = 16}
+  %cond = s_cmp_lt_i32 %lhs, %rhs
+  low.cond_br %cond, ^pass, ^exit : reg<amdgpu.scc>
+^pass:
+  low.br ^store(%loaded : reg<amdgpu.vgpr x4>)
+^store(%payload: reg<amdgpu.vgpr x4>):
+  buffer_store_b128 %payload, %resource, %sum, %soffset {offset = 32}
+  return
+^exit:
+  return
+}
+
+// ----
+  buffer_load_dword v2, v1, s[4:7], s2 offen offset:0
+  s_waitcnt vmcnt(0) lgkmcnt(63)
+  v_add_u32 v0, v2, v0
+  buffer_load_b128 v[4:7], v1, s[4:7], s2 offen offset:16
+  s_cmp_lt_i32 s0, s1
+  s_cbranch_scc0 .Lbb3
+.Lbb1:
+  s_waitcnt vmcnt(0) lgkmcnt(63)
+.Lbb2:
+  buffer_store_b128 v[4:7], v0, s[4:7], s2 offen offset:32
+  s_endpgm
+.Lbb3:
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @wait_fragment
 amdgpu.target<gfx1200> @gfx_target
 low.func.def target(@gfx_target) @wait_fragment(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>) asm<amdgpu.rdna4.core> {
@@ -661,8 +691,8 @@ low.func.def target(@gfx11_target) @gfx11_overlapping_copy(%source: reg<amdgpu.s
   s_mov_b32 s0, s1
   s_mov_b32 s1, s2
   s_mov_b32 s2, s3
-  s_mov_b32 s3, s7
-  buffer_store_dword v0, v1, s[0:3], s4 offen offset:0
+  s_mov_b32 s3, s4
+  buffer_store_dword v0, v1, s[0:3], s5 offen offset:0
   s_endpgm
 
 // ====
