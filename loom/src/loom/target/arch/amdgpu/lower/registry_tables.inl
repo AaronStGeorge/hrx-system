@@ -406,7 +406,8 @@ static const loom_amdgpu_lower_dispatch_row_t
                 loom_amdgpu_low_legality_verify_kernel_workgroup_reduce),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_KERNEL_WORKGROUP_SCAN)] =
             LOOM_AMDGPU_DATA_ROW(
-                LOOM_OP_KERNEL_WORKGROUP_SCAN, loom_amdgpu_subgroup_scan_plan_t,
+                LOOM_OP_KERNEL_WORKGROUP_SCAN,
+                loom_amdgpu_workgroup_scan_plan_t,
                 loom_amdgpu_select_kernel_workgroup_scan_dispatch,
                 loom_amdgpu_emit_kernel_workgroup_scan_dispatch,
                 loom_amdgpu_low_legality_verify_kernel_workgroup_scan),

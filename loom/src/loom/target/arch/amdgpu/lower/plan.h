@@ -443,6 +443,47 @@ typedef struct loom_amdgpu_subgroup_scan_plan_t {
   uint32_t active_lane_count;
 } loom_amdgpu_subgroup_scan_plan_t;
 
+typedef struct loom_amdgpu_workgroup_scan_plan_t {
+  // Descriptor row selected for each native cross-lane read.
+  loom_low_lower_resolved_descriptor_t bpermute_descriptor;
+  // Descriptor row selected for each native lane combine.
+  loom_low_lower_resolved_descriptor_t combine_descriptor;
+  // Descriptor row selected to guard each prefix step.
+  loom_low_lower_resolved_descriptor_t guard_descriptor;
+  // Descriptor row selected to merge guarded prefix-step results.
+  loom_low_lower_resolved_descriptor_t select_descriptor;
+  // Descriptor row selected for first-wave predicates.
+  loom_low_lower_resolved_descriptor_t lane_lt_descriptor;
+  // Descriptor row selected for LDS reads between waves.
+  loom_low_lower_resolved_descriptor_t lds_read_descriptor;
+  // Descriptor row selected for LDS writes between waves.
+  loom_low_lower_resolved_descriptor_t lds_write_descriptor;
+  // Descriptor row selected to synchronize LDS publication.
+  loom_low_lower_resolved_descriptor_t barrier_descriptor;
+  // Descriptor row selected to restrict publication to producer lanes.
+  loom_low_lower_resolved_descriptor_t saveexec_descriptor;
+  // Descriptor row selected to restore EXEC after lane-restricted regions.
+  loom_low_lower_resolved_descriptor_t restore_exec_descriptor;
+  // Source value scanned across workgroup lanes.
+  loom_value_id_t value;
+  // Result value receiving the scanned payload.
+  loom_value_id_t result;
+  // Source/result payload shape selected during planning.
+  loom_amdgpu_subgroup_payload_kind_t payload_kind;
+  // Number of 32-bit registers in the scanned payload.
+  uint32_t register_count;
+  // Combining operation selected by the source op.
+  loom_combining_kind_t kind;
+  // Inclusive or exclusive scan mode selected by the source op.
+  loom_kernel_subgroup_scan_mode_t mode;
+  // Lane order selected by the source op.
+  loom_kernel_subgroup_scan_direction_t direction;
+  // Exact subgroup width selected by the active target bundle.
+  uint32_t wavefront_size;
+  // Exact flattened workgroup size selected by launch configuration.
+  uint32_t flat_workgroup_size;
+} loom_amdgpu_workgroup_scan_plan_t;
+
 typedef struct loom_amdgpu_subgroup_active_mask_plan_t {
   // Descriptor row selected to read the native EXEC lane mask.
   loom_low_lower_resolved_descriptor_t exec_read_descriptor;

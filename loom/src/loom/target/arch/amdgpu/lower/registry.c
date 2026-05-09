@@ -225,11 +225,11 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_kernel_subgroup_scan_dispatch,
 
 LOOM_AMDGPU_DEFINE_DATA_SELECT(
     loom_amdgpu_select_kernel_workgroup_scan_dispatch,
-    loom_amdgpu_subgroup_scan_plan_t,
+    loom_amdgpu_workgroup_scan_plan_t,
     loom_amdgpu_select_kernel_workgroup_scan_plan)
 
 LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_kernel_workgroup_scan_dispatch,
-                             loom_amdgpu_subgroup_scan_plan_t,
+                             loom_amdgpu_workgroup_scan_plan_t,
                              loom_amdgpu_lower_kernel_workgroup_scan)
 
 LOOM_AMDGPU_DEFINE_DATA_SELECT(
