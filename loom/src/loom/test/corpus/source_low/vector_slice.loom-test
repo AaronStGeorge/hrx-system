@@ -49,6 +49,21 @@ func.def @f32x4_insert_static(%values: vector<4xf32>, %value: f32) -> (vector<4x
 
 // ====
 
+func.def @f16x4_insert_static(%values: vector<4xf16>, %value: f16) -> (vector<4xf16>) {
+  %updated = vector.insert %value into %values[1] : f16, vector<4xf16>
+  func.return %updated : vector<4xf16>
+}
+
+// ====
+
+func.def @bf16x8_insert_static_constant(%values: vector<8xbf16>) -> (vector<8xbf16>) {
+  %zero = scalar.constant 0.0 : bf16
+  %updated = vector.insert %zero into %values[5] : bf16, vector<8xbf16>
+  func.return %updated : vector<8xbf16>
+}
+
+// ====
+
 func.def @f32x1_insert_dynamic(%values: vector<1xf32>, %value: f32, %lane: index) -> (vector<1xf32>) {
   %updated = vector.insert %value into %values[%lane] : f32, vector<1xf32>
   func.return %updated : vector<1xf32>
@@ -66,4 +81,11 @@ func.def @f32x4_insert_dynamic(%values: vector<4xf32>, %value: f32, %lane: index
 func.def @i32x4_insert_dynamic(%values: vector<4xi32>, %value: i32, %lane: index) -> (vector<4xi32>) {
   %updated = vector.insert %value into %values[%lane] : i32, vector<4xi32>
   func.return %updated : vector<4xi32>
+}
+
+// ====
+
+func.def @bf16x4_insert_dynamic(%values: vector<4xbf16>, %value: bf16, %lane: index) -> (vector<4xbf16>) {
+  %updated = vector.insert %value into %values[%lane] : bf16, vector<4xbf16>
+  func.return %updated : vector<4xbf16>
 }
