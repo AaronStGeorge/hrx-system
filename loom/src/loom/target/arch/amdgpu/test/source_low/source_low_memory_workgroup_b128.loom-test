@@ -64,9 +64,8 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_b128_large_static_of
   %24 = storage {byte_alignment = 16, byte_length = 4096} : low.storage<workgroup>
   %26 = v_mov_b32 0
   %loaded = global_load_b128 %26, %input_view
-  %28 = v_mov_b32 1024
-  ds_write_b128 %28, %loaded
-  %roundtrip = ds_read_b128 %28
+  ds_write_b128 %26, %loaded {offset = 1024}
+  %roundtrip = ds_read_b128 %26 {offset = 1024}
   global_store_b128 %26, %roundtrip, %output_view
   return
 }

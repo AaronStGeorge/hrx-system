@@ -31,6 +31,7 @@ from loom.target.arch.amdgpu.descriptors import (
     AmdgpuAtomicValueKind,
     AmdgpuMemoryAddressForm,
     _categorize_amdgpu_descriptors,
+    _gfx11_core_overlays,
     _gfx12_core_overlays,
     _gfx1250_core_overlays,
     _validate_address_immediate_units,
@@ -353,3 +354,29 @@ def test_address_immediate_validation_accepts_split_ds16_offset() -> None:
     )
 
     _validate_address_immediate_units(_descriptor_set(descriptor))
+
+
+def test_plain_ds_memory_offsets_use_split_16_bit_byte_immediates() -> None:
+    descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx11_core_overlays()
+    }
+
+    for descriptor_key in (
+        "amdgpu.ds_read_b128",
+        "amdgpu.ds_write_b128",
+        "amdgpu.ds_add_u32",
+        "amdgpu.ds_cmpst_rtn_b32",
+        "amdgpu.ds_read_addtid_b32",
+        "amdgpu.ds_write_addtid_b32",
+    ):
+        descriptor = descriptors[descriptor_key]
+        assert len(descriptor.immediates) == 1
+        immediate = descriptor.immediates[0]
+        assert immediate.field_name == "offset"
+        assert immediate.bit_width == 16
+        assert immediate.encoding_id == _ADDRESS_OFFSET_DS16_ENCODING_ID
+        assert immediate.unsigned_max == 65535
+        assert tuple(
+            (encoding_slice.source_bit_offset, encoding_slice.bit_count)
+            for encoding_slice in immediate.encoding_slices
+        ) == ((0, 8), (8, 8))

@@ -1396,6 +1396,31 @@ def _named_offset_immediate(
     )
 
 
+def _ds_offset_immediate() -> Immediate:
+    return Immediate(
+        "offset",
+        ImmediateKind.UNSIGNED,
+        flags=(ImmediateFlag.DEFAULT_VALUE,),
+        bit_width=16,
+        encoding_id=_ADDRESS_OFFSET_DS16_ENCODING_ID,
+        encoding_slices=(
+            ImmediateEncodingSlice(amdgpu_encoding_field_id("OFFSET0"), 0, 8),
+            ImmediateEncodingSlice(amdgpu_encoding_field_id("OFFSET1"), 8, 8),
+        ),
+        unsigned_max=(2**16) - 1,
+    )
+
+
+def _ds_fixed_fields_without_offset1(
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...],
+) -> tuple[tuple[str, AmdgpuFixedEncodingValue], ...]:
+    return tuple(
+        fixed_field
+        for fixed_field in fixed_encoding_fields
+        if fixed_field[0] != "OFFSET1"
+    )
+
+
 def _signed_offset_immediate(
     bit_width: int,
     *,
@@ -6049,9 +6074,8 @@ def _ds_read_overlay(
         implicit_operands=(
             _ignore_workgroup_memory(width_bits=width_bits, is_input=True),
         ),
-        immediate_fields=("OFFSET0",),
-        immediates=(_offset_immediate(8),),
-        fixed_encoding_fields=fixed_encoding_fields,
+        immediates=(_ds_offset_immediate(),),
+        fixed_encoding_fields=_ds_fixed_fields_without_offset1(fixed_encoding_fields),
         effects=(_workgroup_memory_effect(EffectKind.READ, width_bits),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
@@ -6077,9 +6101,8 @@ def _ds_read_u16_overlay(
             AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
         ),
         implicit_operands=(_ignore_workgroup_memory(width_bits=16, is_input=True),),
-        immediate_fields=("OFFSET0",),
-        immediates=(_offset_immediate(8),),
-        fixed_encoding_fields=fixed_encoding_fields,
+        immediates=(_ds_offset_immediate(),),
+        fixed_encoding_fields=_ds_fixed_fields_without_offset1(fixed_encoding_fields),
         effects=(_workgroup_memory_effect(EffectKind.READ, 16),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
@@ -6110,9 +6133,10 @@ def _ds_load_u16_d16_overlays(
                 AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
             ),
             implicit_operands=(_ignore_workgroup_memory(width_bits=16, is_input=True),),
-            immediate_fields=("OFFSET0",),
-            immediates=(_offset_immediate(8),),
-            fixed_encoding_fields=fixed_encoding_fields,
+            immediates=(_ds_offset_immediate(),),
+            fixed_encoding_fields=_ds_fixed_fields_without_offset1(
+                fixed_encoding_fields
+            ),
             asm_forms=_asm(
                 results=("dst",),
                 operands=("addr",),
@@ -6153,9 +6177,10 @@ def _ds_load_u16_d16_overlays(
                 AmdgpuOperandOverlay("ADDR", _vgpr_operand("addr")),
             ),
             implicit_operands=(_ignore_workgroup_memory(width_bits=16, is_input=True),),
-            immediate_fields=("OFFSET0",),
-            immediates=(_offset_immediate(8),),
-            fixed_encoding_fields=fixed_encoding_fields,
+            immediates=(_ds_offset_immediate(),),
+            fixed_encoding_fields=_ds_fixed_fields_without_offset1(
+                fixed_encoding_fields
+            ),
             asm_forms=_asm(
                 results=("dst",),
                 operands=("src", "addr"),
@@ -6192,9 +6217,8 @@ def _ds_write_b16_overlay(
             ),
         ),
         implicit_operands=(_ignore_workgroup_memory(width_bits=16, is_input=False),),
-        immediate_fields=("OFFSET0",),
-        immediates=(_offset_immediate(8),),
-        fixed_encoding_fields=fixed_encoding_fields,
+        immediates=(_ds_offset_immediate(),),
+        fixed_encoding_fields=_ds_fixed_fields_without_offset1(fixed_encoding_fields),
         effects=(_workgroup_memory_effect(EffectKind.WRITE, 16),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
@@ -6225,9 +6249,8 @@ def _ds_write_overlay(
         implicit_operands=(
             _ignore_workgroup_memory(width_bits=width_bits, is_input=False),
         ),
-        immediate_fields=("OFFSET0",),
-        immediates=(_offset_immediate(8),),
-        fixed_encoding_fields=fixed_encoding_fields,
+        immediates=(_ds_offset_immediate(),),
+        fixed_encoding_fields=_ds_fixed_fields_without_offset1(fixed_encoding_fields),
         effects=(_workgroup_memory_effect(EffectKind.WRITE, width_bits),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
@@ -6360,9 +6383,8 @@ def _ds_atomic_overlay(
                 width_bits=32, is_input=True, data_format_name=data_format_name
             ),
         ),
-        immediate_fields=("OFFSET0",),
-        immediates=(_offset_immediate(8),),
-        fixed_encoding_fields=fixed_encoding_fields,
+        immediates=(_ds_offset_immediate(),),
+        fixed_encoding_fields=_ds_fixed_fields_without_offset1(fixed_encoding_fields),
         effects=(
             _workgroup_memory_effect(EffectKind.READ, 32),
             _workgroup_memory_effect(EffectKind.WRITE, 32),
@@ -6400,9 +6422,8 @@ def _ds_atomic_cmpstore_overlay(
                 width_bits=32, is_input=True, data_format_name="FMT_NUM_B32"
             ),
         ),
-        immediate_fields=("OFFSET0",),
-        immediates=(_offset_immediate(8),),
-        fixed_encoding_fields=fixed_encoding_fields,
+        immediates=(_ds_offset_immediate(),),
+        fixed_encoding_fields=_ds_fixed_fields_without_offset1(fixed_encoding_fields),
         effects=(
             _workgroup_memory_effect(EffectKind.READ, 32),
             _workgroup_memory_effect(EffectKind.WRITE, 32),
@@ -6606,9 +6627,8 @@ def _ds_read_addtid_b32_overlay(
             _ignore_workgroup_memory(width_bits=32, is_input=True),
             _implicit_m0_input(),
         ),
-        immediate_fields=("OFFSET0",),
-        immediates=(_offset_immediate(8),),
-        fixed_encoding_fields=fixed_encoding_fields,
+        immediates=(_ds_offset_immediate(),),
+        fixed_encoding_fields=_ds_fixed_fields_without_offset1(fixed_encoding_fields),
         effects=(_workgroup_memory_effect(EffectKind.READ, 32),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
@@ -6634,27 +6654,15 @@ def _ds_write_addtid_b32_overlay(
             _ignore_workgroup_memory(width_bits=32, is_input=False),
             _implicit_m0_input(),
         ),
-        immediate_fields=("OFFSET0",),
-        immediates=(_offset_immediate(8),),
-        fixed_encoding_fields=fixed_encoding_fields,
+        immediates=(_ds_offset_immediate(),),
+        fixed_encoding_fields=_ds_fixed_fields_without_offset1(fixed_encoding_fields),
         effects=(_workgroup_memory_effect(EffectKind.WRITE, 32),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
 
 
 def _ds_crosslane_offset_immediate() -> Immediate:
-    return Immediate(
-        "offset",
-        ImmediateKind.UNSIGNED,
-        flags=(ImmediateFlag.DEFAULT_VALUE,),
-        bit_width=16,
-        encoding_id=_ADDRESS_OFFSET_DS16_ENCODING_ID,
-        encoding_slices=(
-            ImmediateEncodingSlice(amdgpu_encoding_field_id("OFFSET0"), 0, 8),
-            ImmediateEncodingSlice(amdgpu_encoding_field_id("OFFSET1"), 8, 8),
-        ),
-        unsigned_max=(2**16) - 1,
-    )
+    return _ds_offset_immediate()
 
 
 def _ds_swizzle_b32_overlay(
@@ -6847,16 +6855,6 @@ def _gfx950_ds_transpose_read_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             width_bits=64,
             units=2,
         ),
-    )
-
-
-def _ds_fixed_fields_without_offset1(
-    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...],
-) -> tuple[tuple[str, AmdgpuFixedEncodingValue], ...]:
-    return tuple(
-        fixed_field
-        for fixed_field in fixed_encoding_fields
-        if fixed_field[0] != "OFFSET1"
     )
 
 
