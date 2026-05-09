@@ -867,12 +867,13 @@ low_storage_reserve = Op(
     "low.storage.reserve",
     group=low_ops,
     phase=OpPhase.EXECUTABLE,
-    doc="Reserve function-local byte storage.",
+    doc="Reserve target-low function-local storage and preserve its segment footprint.",
     attrs=[
         AttrDef("byte_length", ATTR_TYPE_I64),
         AttrDef("byte_alignment", ATTR_TYPE_I64),
     ],
     results=[Result("storage", STORAGE, allocates=True)],
+    traits=[UNKNOWN_EFFECTS],
     verify="loom_low_storage_reserve_verify",
     facts="loom_low_storage_reserve_facts",
     format=[

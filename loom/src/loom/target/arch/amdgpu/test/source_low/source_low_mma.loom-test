@@ -183,54 +183,51 @@ low.kernel.def target(@target) workgroup_size(32, 1, 1) @f16_wmmar3_fragment_mem
   %init_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %out_view = resource<hal_binding> {index = 3, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %63 = storage {byte_alignment = 16, byte_length = 512} : low.storage<workgroup>
-  %lhs_scratch_tile = storage_address %63 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %65 = storage {byte_alignment = 16, byte_length = 512} : low.storage<workgroup>
-  %rhs_scratch_tile = storage_address %65 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %68 = v_lshlrev_b32_lit %tid, 4
   %lhs_loaded = global_load_b128 %68, %lhs_buffer_view
   %rhs_loaded = global_load_b128 %68, %rhs_buffer_view
-  %73 = v_add_u32 %lhs_scratch_tile, %68
-  ds_write_b128 %73, %lhs_loaded
-  %75 = v_add_u32 %rhs_scratch_tile, %68
-  ds_write_b128 %75, %rhs_loaded
+  ds_write_b128 %68, %lhs_loaded
+  %74 = v_add_u32_lit %68, 512
+  ds_write_b128 %74, %rhs_loaded
   s_barrier
-  %76 = v_and_b32_lit %tid, 15
-  %78 = v_lshlrev_b32_lit %76, 5
-  %79 = v_add_u32 %78, %lhs_scratch_tile
-  %80 = ds_read_b128 %79
-  %83 = ds_read_b128 %79 {offset = 16}
-  %lhs = concat(%80, %83) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>) -> reg<amdgpu.vgpr x8>
-  %88 = v_add_u32 %78, %rhs_scratch_tile
+  %75 = v_and_b32_lit %tid, 15
+  %77 = v_lshlrev_b32_lit %75, 5
+  %78 = ds_read_b128 %77
+  %80 = ds_read_b128 %77 {offset = 16}
+  %lhs = concat(%78, %80) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>) -> reg<amdgpu.vgpr x8>
+  %85 = v_add_u32_lit %77, 512
+  %86 = ds_read_b128 %85
+  %88 = v_add_u32_lit %77, 528
   %89 = ds_read_b128 %88
-  %92 = ds_read_b128 %88 {offset = 16}
-  %rhs = concat(%89, %92) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>) -> reg<amdgpu.vgpr x8>
-  %96 = v_lshlrev_b32_lit %tid, 2
-  %97 = global_load_b32 %96, %init_view
-  %99 = global_load_b32 %96, %init_view {offset = 128}
-  %101 = global_load_b32 %96, %init_view {offset = 256}
-  %103 = global_load_b32 %96, %init_view {offset = 384}
-  %105 = global_load_b32 %96, %init_view {offset = 512}
-  %107 = global_load_b32 %96, %init_view {offset = 640}
-  %109 = global_load_b32 %96, %init_view {offset = 768}
-  %111 = global_load_b32 %96, %init_view {offset = 896}
-  %init = concat(%97, %99, %101, %103, %105, %107, %109, %111) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x8>
+  %rhs = concat(%86, %89) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>) -> reg<amdgpu.vgpr x8>
+  %93 = v_lshlrev_b32_lit %tid, 2
+  %94 = global_load_b32 %93, %init_view
+  %96 = global_load_b32 %93, %init_view {offset = 128}
+  %98 = global_load_b32 %93, %init_view {offset = 256}
+  %100 = global_load_b32 %93, %init_view {offset = 384}
+  %102 = global_load_b32 %93, %init_view {offset = 512}
+  %104 = global_load_b32 %93, %init_view {offset = 640}
+  %106 = global_load_b32 %93, %init_view {offset = 768}
+  %108 = global_load_b32 %93, %init_view {offset = 896}
+  %init = concat(%94, %96, %98, %100, %102, %104, %106, %108) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x8>
   %result = v_wmma_f32_16x16x16_f16 %lhs, %rhs, %init
-  %116 = slice %result[0] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
-  global_store_b32 %96, %116, %out_view
-  %118 = slice %result[1] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
-  global_store_b32 %96, %118, %out_view {offset = 128}
-  %120 = slice %result[2] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
-  global_store_b32 %96, %120, %out_view {offset = 256}
-  %122 = slice %result[3] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
-  global_store_b32 %96, %122, %out_view {offset = 384}
-  %124 = slice %result[4] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
-  global_store_b32 %96, %124, %out_view {offset = 512}
-  %126 = slice %result[5] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
-  global_store_b32 %96, %126, %out_view {offset = 640}
-  %128 = slice %result[6] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
-  global_store_b32 %96, %128, %out_view {offset = 768}
-  %130 = slice %result[7] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
-  global_store_b32 %96, %130, %out_view {offset = 896}
+  %113 = slice %result[0] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  global_store_b32 %93, %113, %out_view
+  %115 = slice %result[1] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  global_store_b32 %93, %115, %out_view {offset = 128}
+  %117 = slice %result[2] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  global_store_b32 %93, %117, %out_view {offset = 256}
+  %119 = slice %result[3] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  global_store_b32 %93, %119, %out_view {offset = 384}
+  %121 = slice %result[4] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  global_store_b32 %93, %121, %out_view {offset = 512}
+  %123 = slice %result[5] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  global_store_b32 %93, %123, %out_view {offset = 640}
+  %125 = slice %result[6] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  global_store_b32 %93, %125, %out_view {offset = 768}
+  %127 = slice %result[7] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
+  global_store_b32 %93, %127, %out_view {offset = 896}
   return
 }
 

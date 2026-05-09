@@ -644,6 +644,21 @@ static bool loom_amdgpu_fragment_memory_analyze(
     return loom_amdgpu_fragment_memory_reject(
         diagnostic, IREE_SV("fragment_memory.base_offset"));
   }
+  if (view_reference.memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+    uint64_t root_byte_offset = 0;
+    if (!loom_amdgpu_source_lds_layout_lookup_root(
+            environment->fact_table, environment->source_function,
+            view_reference.root_value_id, &root_byte_offset) ||
+        root_byte_offset > INT64_MAX) {
+      return loom_amdgpu_fragment_memory_reject(
+          diagnostic, IREE_SV("fragment_memory.workgroup_root"));
+    }
+    if (!iree_checked_add_i64(base_byte_offset, (int64_t)root_byte_offset,
+                              &base_byte_offset)) {
+      return loom_amdgpu_fragment_memory_reject(
+          diagnostic, IREE_SV("fragment_memory.base_offset"));
+    }
+  }
 
   loom_amdgpu_descriptor_ref_t descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_NONE;
   if (!loom_amdgpu_fragment_memory_descriptor_ref(
@@ -1019,7 +1034,8 @@ static iree_status_t loom_amdgpu_fragment_memory_packet_type(
 
 static void loom_amdgpu_fragment_memory_split_static_offset(
     loom_low_lower_context_t* context,
-    loom_amdgpu_descriptor_ref_t descriptor_ref, uint64_t static_byte_offset,
+    loom_amdgpu_descriptor_ref_t descriptor_ref,
+    loom_value_fact_memory_space_t memory_space, uint64_t static_byte_offset,
     uint64_t* out_vaddr_static_byte_offset, int64_t* out_immediate_offset) {
   *out_vaddr_static_byte_offset = static_byte_offset;
   *out_immediate_offset = 0;
@@ -1027,6 +1043,21 @@ static void loom_amdgpu_fragment_memory_split_static_offset(
   if (!loom_amdgpu_fragment_memory_descriptor_offset_info(
           context, descriptor_ref, &offset_info) ||
       offset_info.unit_byte_count == 0) {
+    return;
+  }
+
+  if (memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+    if ((static_byte_offset % offset_info.unit_byte_count) != 0) {
+      return;
+    }
+    const uint64_t encoded_offset =
+        static_byte_offset / offset_info.unit_byte_count;
+    if (encoded_offset > offset_info.unsigned_max ||
+        encoded_offset > INT64_MAX) {
+      return;
+    }
+    *out_vaddr_static_byte_offset = 0;
+    *out_immediate_offset = (int64_t)encoded_offset;
     return;
   }
 
@@ -1119,14 +1150,9 @@ static iree_status_t loom_amdgpu_emit_fragment_memory_vaddr(
         context, source_op, low_term, vgpr_type, &low_accumulator));
   }
 
-  if (plan->memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fragment_memory_add_term(
-        context, source_op, low_resource, vgpr_type, &low_accumulator));
-  }
-
   loom_amdgpu_fragment_memory_split_static_offset(
-      context, descriptor_ref, static_byte_offset, &static_byte_offset,
-      &out_address->immediate_offset);
+      context, descriptor_ref, plan->memory_space, static_byte_offset,
+      &static_byte_offset, &out_address->immediate_offset);
 
   if (static_byte_offset != 0) {
     if (low_accumulator == LOOM_VALUE_ID_INVALID) {
@@ -1318,8 +1344,10 @@ iree_status_t loom_amdgpu_lower_vector_fragment_load(
       context, source_op, vgpr_type, &lane_ids));
 
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_lookup_value(context, plan->view, &low_resource));
+  if (plan->memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+    IREE_RETURN_IF_ERROR(
+        loom_low_lower_lookup_value(context, plan->view, &low_resource));
+  }
 
   loom_value_id_t low_packets[LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS] = {0};
   uint16_t packet_count = 0;
@@ -1378,8 +1406,10 @@ iree_status_t loom_amdgpu_lower_vector_fragment_store(
       context, source_op, vgpr_type, &lane_ids));
 
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_lookup_value(context, plan->view, &low_resource));
+  if (plan->memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+    IREE_RETURN_IF_ERROR(
+        loom_low_lower_lookup_value(context, plan->view, &low_resource));
+  }
   loom_value_id_t low_payload = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_low_lower_lookup_value(context, plan->payload, &low_payload));

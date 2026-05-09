@@ -241,6 +241,11 @@ static const loom_amdgpu_memory_access_rejection_key_t
         },
         {
             .rejection_bit =
+                LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_STATIC_OFFSET_RANGE,
+            .constraint_key = IREE_SVL("memory_access.static_offset_range"),
+        },
+        {
+            .rejection_bit =
                 LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_B128_DYNAMIC_ALIGNMENT,
             .constraint_key = IREE_SVL("memory_access.b128_dynamic_alignment"),
         },

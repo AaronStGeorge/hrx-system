@@ -955,8 +955,10 @@ static iree_status_t loom_amdgpu_lower_memory_packet_load(
   *out_low_result = LOOM_VALUE_ID_INVALID;
   const loom_amdgpu_memory_access_t* access = &packet->access;
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-      context, loom_amdgpu_memory_load_view(source_op), &low_resource));
+  if (access->source.memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+    IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+        context, loom_amdgpu_memory_load_view(source_op), &low_resource));
+  }
 
   loom_value_id_t low_vaddr = LOOM_VALUE_ID_INVALID;
   if (access->address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO &&
@@ -966,12 +968,8 @@ static iree_status_t loom_amdgpu_lower_memory_packet_load(
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_flat_vaddr(
           context, source_op, access, low_resource, &low_vaddr));
     } else {
-      const loom_value_id_t low_base_addr =
-          access->source.memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP
-              ? low_resource
-              : LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_vaddr(
-          context, source_op, access, low_base_addr, &low_vaddr));
+          context, source_op, access, LOOM_VALUE_ID_INVALID, &low_vaddr));
     }
   }
 
@@ -1128,8 +1126,10 @@ static iree_status_t loom_amdgpu_lower_memory_packet_store(
   IREE_RETURN_IF_ERROR(loom_amdgpu_ensure_memory_store_payload_vgpr(
       context, source_op, access, low_value, &low_value));
   loom_value_id_t low_resource = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-      context, loom_amdgpu_memory_store_view(source_op), &low_resource));
+  if (access->source.memory_space != LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
+    IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+        context, loom_amdgpu_memory_store_view(source_op), &low_resource));
+  }
 
   loom_value_id_t low_vaddr = LOOM_VALUE_ID_INVALID;
   if (access->address_form != LOOM_AMDGPU_MEMORY_ADDRESS_FORM_BUFFER_OFF_ZERO &&
@@ -1139,12 +1139,8 @@ static iree_status_t loom_amdgpu_lower_memory_packet_store(
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_flat_vaddr(
           context, source_op, access, low_resource, &low_vaddr));
     } else {
-      const loom_value_id_t low_base_addr =
-          access->source.memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP
-              ? low_resource
-              : LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_vaddr(
-          context, source_op, access, low_base_addr, &low_vaddr));
+          context, source_op, access, LOOM_VALUE_ID_INVALID, &low_vaddr));
     }
   }
 

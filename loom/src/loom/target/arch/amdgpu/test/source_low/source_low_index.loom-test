@@ -394,12 +394,10 @@ low.kernel.def target(@target) workgroup_size(1, 64, 1) @workitem_y_lds_uses_exp
   %15 = v_lshrrev_b32_lit %packed_tid, 10
   %y = v_and_b32_lit %15, 1023
   %18 = storage {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
-  %scratch_view = storage_address %18 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %value = v_mov_b32 7
   %21 = v_lshlrev_b32_lit %y, 2
-  %22 = v_add_u32 %scratch_view, %21
-  ds_write_b32 %22, %value
-  %loaded = ds_read_b32 %22
+  ds_write_b32 %21, %value
+  %loaded = ds_read_b32 %21
   global_store_b32 %21, %loaded, %output_view
   return
 }
