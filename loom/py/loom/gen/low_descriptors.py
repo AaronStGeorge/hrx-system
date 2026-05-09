@@ -603,7 +603,16 @@ def _descriptor_packet_operand_indices(descriptor: Descriptor) -> tuple[int, ...
     return tuple(i for i, operand in enumerate(descriptor.operands) if _operand_role_is_packet_input(operand.role) and OperandFlag.IMPLICIT not in operand.flags)
 
 
-def _immediate_accepts_i64(immediate: Immediate) -> bool:
+def _immediate_accepts_i64_assignment(immediate: Immediate) -> bool:
+    return immediate.kind in (
+        ImmediateKind.SIGNED,
+        ImmediateKind.UNSIGNED,
+        ImmediateKind.ORDINAL,
+        ImmediateKind.ENUM,
+    )
+
+
+def _immediate_accepts_i64_arithmetic(immediate: Immediate) -> bool:
     return immediate.kind in (
         ImmediateKind.SIGNED,
         ImmediateKind.UNSIGNED,
@@ -680,7 +689,7 @@ def _compile_operand_form(
         replacement_immediate_index = replacement_immediate_indices.get(operand_form.immediate_field, LOW_DESCRIPTOR_SET_ORDINAL_NONE)
         if replacement_immediate_index == LOW_DESCRIPTOR_SET_ORDINAL_NONE:
             raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' has no immediate field '{operand_form.immediate_field}'")
-        if not _immediate_accepts_i64(replacement.immediates[replacement_immediate_index]):
+        if not _immediate_accepts_i64_assignment(replacement.immediates[replacement_immediate_index]):
             raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' immediate field '{operand_form.immediate_field}' cannot hold an i64 value")
         if operand_form.immediate_field in immediate_indices:
             raise ValueError(f"descriptor '{descriptor.key}' operand form replacement immediate '{operand_form.immediate_field}' already exists on the source descriptor")
@@ -699,7 +708,7 @@ def _compile_operand_form(
             raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' has no immediate field '{operand_form.immediate_field}'")
         if descriptor.immediates[source_immediate_index] != replacement.immediates[replacement_immediate_index]:
             raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' immediate field '{operand_form.immediate_field}' has different metadata")
-        if not _immediate_accepts_i64(replacement.immediates[replacement_immediate_index]):
+        if not _immediate_accepts_i64_arithmetic(replacement.immediates[replacement_immediate_index]):
             raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' immediate field '{operand_form.immediate_field}' cannot hold an i64 value")
         expected_replacement_immediates = source_immediates
     else:

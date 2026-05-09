@@ -179,7 +179,21 @@ static iree_status_t loom_low_descriptor_build_tied_results(
   return iree_ok_status();
 }
 
+static bool loom_low_enum_domain_contains_i64(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_enum_domain_t* domain, int64_t value) {
+  for (uint16_t i = 0; i < domain->value_count; ++i) {
+    const loom_low_enum_value_t* enum_value =
+        &descriptor_set->enum_values[domain->value_start + i];
+    if (enum_value->value == value) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool loom_low_immediate_accepts_i64(
+    const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_immediate_t* immediate, int64_t value) {
   switch (immediate->kind) {
     case LOOM_LOW_IMMEDIATE_KIND_SIGNED: {
@@ -191,6 +205,13 @@ static bool loom_low_immediate_accepts_i64(
     case LOOM_LOW_IMMEDIATE_KIND_UNSIGNED:
     case LOOM_LOW_IMMEDIATE_KIND_ORDINAL:
       return value >= 0 && (uint64_t)value <= immediate->unsigned_max;
+    case LOOM_LOW_IMMEDIATE_KIND_ENUM:
+      if (immediate->enum_domain_id >= descriptor_set->enum_domain_count) {
+        return false;
+      }
+      return loom_low_enum_domain_contains_i64(
+          descriptor_set,
+          &descriptor_set->enum_domains[immediate->enum_domain_id], value);
     default:
       return false;
   }
@@ -291,7 +312,8 @@ static iree_status_t loom_low_select_operand_form_build_attrs(
   const loom_low_immediate_t* immediate =
       &descriptor_set->immediates[replacement_descriptor->immediate_start +
                                   form->replacement_immediate_index];
-  if (!loom_low_immediate_accepts_i64(immediate, replacement_value)) {
+  if (!loom_low_immediate_accepts_i64(descriptor_set, immediate,
+                                      replacement_value)) {
     *out_can_rewrite = false;
     return iree_ok_status();
   }

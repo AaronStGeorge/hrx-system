@@ -6,9 +6,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-
-import pytest
 
 from loom.target.arch.amdgpu.descriptors import (
     _ADDRESS_OFFSET_DS16_ENCODING_ID,
@@ -52,6 +51,7 @@ from loom.target.low_descriptors import (
     OperandFlag,
     OperandRole,
     RegClassAlt,
+    RegClassAltFlag,
 )
 
 
@@ -104,6 +104,18 @@ def _descriptor(key: str, semantic_tag: str) -> Descriptor:
     )
 
 
+def _expect_value_error_contains(
+    expected_message: str, thunk: Callable[[], object]
+) -> None:
+    actual_message: str | None = None
+    try:
+        thunk()
+    except ValueError as exc:
+        actual_message = str(exc)
+    assert actual_message is not None, "expected ValueError"
+    assert expected_message in actual_message
+
+
 def test_execution_masked_descriptors_read_exec_state() -> None:
     descriptor = Descriptor(
         key="amdgpu.v_add_u32",
@@ -122,7 +134,9 @@ def test_execution_masked_descriptors_read_exec_state() -> None:
 
     assert exec_operand.field_name == "exec_in"
     assert exec_operand.role is OperandRole.IMPLICIT
-    assert exec_operand.reg_alts == (RegClassAlt(_REG_EXEC),)
+    assert exec_operand.reg_alts == (
+        RegClassAlt(_REG_EXEC, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),
+    )
     assert OperandFlag.IMPLICIT in exec_operand.flags
     assert OperandFlag.STATE_READ in exec_operand.flags
     assert (
@@ -315,6 +329,26 @@ def test_vop2_f32_inline_immediate_uses_enum_domain() -> None:
     assert immediate.enum_domain == "amdgpu.source_inline_f32"
 
 
+def test_vop2_f32_uses_inline_then_literal_operand_forms() -> None:
+    overlays_by_key = {
+        overlay.descriptor_key: overlay for overlay in _gfx12_core_overlays()
+    }
+    for descriptor_key in (
+        "amdgpu.v_add_f32",
+        "amdgpu.v_sub_f32",
+        "amdgpu.v_mul_f32",
+        "amdgpu.v_min_f32",
+        "amdgpu.v_max_f32",
+    ):
+        descriptor = overlays_by_key[descriptor_key]
+        assert tuple(
+            form.replacement_descriptor for form in descriptor.operand_forms
+        ) == (
+            f"{descriptor_key}.src0_inline",
+            f"{descriptor_key}.lit",
+        )
+
+
 def test_address_immediate_validation_rejects_missing_unit_metadata() -> None:
     descriptor = _memory_descriptor(
         immediates=(
@@ -327,8 +361,10 @@ def test_address_immediate_validation_rejects_missing_unit_metadata() -> None:
         )
     )
 
-    with pytest.raises(ValueError, match="no address-unit encoding"):
-        _validate_address_immediate_units(_descriptor_set(descriptor))
+    _expect_value_error_contains(
+        "no address-unit encoding",
+        lambda: _validate_address_immediate_units(_descriptor_set(descriptor)),
+    )
 
 
 def test_address_immediate_validation_rejects_inconsistent_split_units() -> None:
@@ -351,8 +387,10 @@ def test_address_immediate_validation_rejects_inconsistent_split_units() -> None
         )
     )
 
-    with pytest.raises(ValueError, match="inconsistent split address offset units"):
-        _validate_address_immediate_units(_descriptor_set(descriptor))
+    _expect_value_error_contains(
+        "inconsistent split address offset units",
+        lambda: _validate_address_immediate_units(_descriptor_set(descriptor)),
+    )
 
 
 def test_address_immediate_validation_accepts_split_ds16_offset() -> None:

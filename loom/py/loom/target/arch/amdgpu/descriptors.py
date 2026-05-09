@@ -2358,6 +2358,22 @@ def _v_binary_src0_inline_f32_overlay(
     )
 
 
+def _v_binary_f32_operand_forms(
+    descriptor: AmdgpuDescriptorOverlay,
+) -> tuple[OperandForm, ...]:
+    descriptor_key = descriptor.descriptor_key
+    return (
+        _literal_operand_form(
+            replacement_descriptor=f"{descriptor_key}.src0_inline",
+            source_operand="lhs",
+        ),
+        _literal_operand_form(
+            replacement_descriptor=f"{descriptor_key}.lit",
+            source_operand="lhs",
+        ),
+    )
+
+
 def _v_add_u32_literal_overlay(instruction_name: str) -> AmdgpuDescriptorOverlay:
     return _v_binary_literal_overlay(
         descriptor_key="amdgpu.v_add_u32.lit",
@@ -3213,7 +3229,7 @@ def _integer_bitwise_shift_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
 
 
 def _v_add_f32_overlay() -> AmdgpuDescriptorOverlay:
-    return AmdgpuDescriptorOverlay(
+    descriptor = AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_add_f32",
         instruction_name="V_ADD_F32",
         mnemonic="v_add_f32",
@@ -3227,6 +3243,7 @@ def _v_add_f32_overlay() -> AmdgpuDescriptorOverlay:
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
+    return replace(descriptor, operand_forms=_v_binary_f32_operand_forms(descriptor))
 
 
 def _v_add_f32_literal_overlay() -> AmdgpuDescriptorOverlay:
@@ -3248,7 +3265,7 @@ def _v_add_f32_src0_inline_overlay() -> AmdgpuDescriptorOverlay:
 
 
 def _v_sub_f32_overlay() -> AmdgpuDescriptorOverlay:
-    return AmdgpuDescriptorOverlay(
+    descriptor = AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_sub_f32",
         instruction_name="V_SUB_F32",
         mnemonic="v_sub_f32",
@@ -3262,6 +3279,7 @@ def _v_sub_f32_overlay() -> AmdgpuDescriptorOverlay:
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
+    return replace(descriptor, operand_forms=_v_binary_f32_operand_forms(descriptor))
 
 
 def _v_sub_f32_literal_overlay() -> AmdgpuDescriptorOverlay:
@@ -3283,7 +3301,7 @@ def _v_sub_f32_src0_inline_overlay() -> AmdgpuDescriptorOverlay:
 
 
 def _v_mul_f32_overlay() -> AmdgpuDescriptorOverlay:
-    return AmdgpuDescriptorOverlay(
+    descriptor = AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_mul_f32",
         instruction_name="V_MUL_F32",
         mnemonic="v_mul_f32",
@@ -3297,6 +3315,7 @@ def _v_mul_f32_overlay() -> AmdgpuDescriptorOverlay:
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
+    return replace(descriptor, operand_forms=_v_binary_f32_operand_forms(descriptor))
 
 
 def _v_mul_f32_literal_overlay() -> AmdgpuDescriptorOverlay:
@@ -3318,7 +3337,7 @@ def _v_mul_f32_src0_inline_overlay() -> AmdgpuDescriptorOverlay:
 
 
 def _v_min_f32_overlay() -> AmdgpuDescriptorOverlay:
-    return AmdgpuDescriptorOverlay(
+    descriptor = AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_min_f32",
         instruction_name="V_MIN_F32",
         mnemonic="v_min_f32",
@@ -3332,6 +3351,7 @@ def _v_min_f32_overlay() -> AmdgpuDescriptorOverlay:
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
+    return replace(descriptor, operand_forms=_v_binary_f32_operand_forms(descriptor))
 
 
 def _v_min_f32_literal_overlay() -> AmdgpuDescriptorOverlay:
@@ -3353,7 +3373,7 @@ def _v_min_f32_src0_inline_overlay() -> AmdgpuDescriptorOverlay:
 
 
 def _v_max_f32_overlay() -> AmdgpuDescriptorOverlay:
-    return AmdgpuDescriptorOverlay(
+    descriptor = AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_max_f32",
         instruction_name="V_MAX_F32",
         mnemonic="v_max_f32",
@@ -3367,6 +3387,7 @@ def _v_max_f32_overlay() -> AmdgpuDescriptorOverlay:
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
+    return replace(descriptor, operand_forms=_v_binary_f32_operand_forms(descriptor))
 
 
 def _v_max_f32_literal_overlay() -> AmdgpuDescriptorOverlay:
