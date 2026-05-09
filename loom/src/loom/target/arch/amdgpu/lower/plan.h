@@ -439,6 +439,8 @@ typedef struct loom_amdgpu_subgroup_scan_plan_t {
   loom_kernel_subgroup_scan_direction_t direction;
   // Exact subgroup width selected by the active target bundle.
   uint32_t wavefront_size;
+  // Number of low-numbered lanes participating in the emitted scan tree.
+  uint32_t active_lane_count;
 } loom_amdgpu_subgroup_scan_plan_t;
 
 typedef struct loom_amdgpu_subgroup_active_mask_plan_t {

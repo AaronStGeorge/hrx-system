@@ -1059,6 +1059,67 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_scan_exclusive
 
 amdgpu.target<gfx1100> @target
 
+kernel.def target(@target) @workgroup_scan_inclusive_addi_i32_one_wave(%input: buffer, %output: buffer) {
+  %c1 = index.constant 1 : index
+  %c16 = index.constant 16 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c16, %c1, %c1) : index
+} launch {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 15)] : index
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<16xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<16xi32, #dense>
+  %loaded = vector.load %input_view[%tid] : view<16xi32, #dense> -> vector<1xi32>
+  %value = vector.extract %loaded[0] : vector<1xi32> -> i32
+  %prefix = kernel.workgroup.scan<addi> %value {direction = forward, mode = inclusive} : i32
+  %result = vector.from_elements %prefix : vector<1xi32>
+  vector.store %result, %output_view[%tid] : vector<1xi32>, view<16xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(16, 1, 1) @workgroup_scan_inclusive_addi_i32_one_wave() asm<amdgpu.rdna3.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 64} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 64} : reg<amdgpu.sgpr x2>
+  %20 = v_lshlrev_b32_src0_inline %tid, 2
+  %value = global_load_b32 %20, %input_view
+  %22 = v_mov_b32 1
+  %23 = v_sub_nc_u32 %tid, %22
+  %24 = v_cmp_ge_u32 %tid, %22
+  %25 = v_lshlrev_b32_src0_inline %23, 2
+  %26 = v_mov_b32 2
+  %27 = v_sub_nc_u32 %tid, %26
+  %28 = v_cmp_ge_u32 %tid, %26
+  %29 = v_lshlrev_b32_src0_inline %27, 2
+  %30 = v_mov_b32 4
+  %31 = v_sub_nc_u32 %tid, %30
+  %32 = v_cmp_ge_u32 %tid, %30
+  %33 = v_lshlrev_b32_src0_inline %31, 2
+  %34 = v_mov_b32 8
+  %35 = v_sub_nc_u32 %tid, %34
+  %36 = v_cmp_ge_u32 %tid, %34
+  %37 = v_lshlrev_b32_src0_inline %35, 2
+  %38 = ds_bpermute_b32 %25, %value
+  %39 = v_add_u32 %value, %38
+  %40 = v_cndmask_b32 %value, %39, %24
+  %41 = ds_bpermute_b32 %29, %40
+  %42 = v_add_u32 %40, %41
+  %43 = v_cndmask_b32 %40, %42, %28
+  %44 = ds_bpermute_b32 %33, %43
+  %45 = v_add_u32 %43, %44
+  %46 = v_cndmask_b32 %43, %45, %32
+  %47 = ds_bpermute_b32 %37, %46
+  %48 = v_add_u32 %46, %47
+  %result = v_cndmask_b32 %46, %48, %36
+  global_store_b32 %20, %result, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
 kernel.def target(@target) @subgroup_active_mask_i32_wave32(%output: buffer) {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index

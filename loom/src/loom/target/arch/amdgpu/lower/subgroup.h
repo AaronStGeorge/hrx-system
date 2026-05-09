@@ -72,14 +72,31 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_scan_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_scan_plan_t* out_plan, bool* out_selected);
 
+// Selects native AMDGPU cross-lane packets for a source workgroup scan that
+// fits in one hardware wave.
+iree_status_t loom_amdgpu_select_kernel_workgroup_scan_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_subgroup_scan_plan_t* out_plan, bool* out_selected);
+
 // Lowers a source subgroup scan using DS bpermute prefix steps, native VGPR
 // combining packets, and per-step lane-bound masks.
 iree_status_t loom_amdgpu_lower_kernel_subgroup_scan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_scan_plan_t* plan);
 
+// Lowers a source one-wave workgroup scan through the subgroup scan path.
+iree_status_t loom_amdgpu_lower_kernel_workgroup_scan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_subgroup_scan_plan_t* plan);
+
 // Verifies source subgroup scan legality for native AMDGPU lowering.
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_scan(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
+// Verifies source one-wave workgroup scan legality for native AMDGPU lowering.
+iree_status_t loom_amdgpu_low_legality_verify_kernel_workgroup_scan(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
