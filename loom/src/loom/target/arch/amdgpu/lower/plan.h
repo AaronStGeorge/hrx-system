@@ -534,11 +534,20 @@ typedef struct loom_amdgpu_memory_access_t {
   const loom_low_descriptor_t* descriptor;
 } loom_amdgpu_memory_access_t;
 
-typedef struct loom_amdgpu_memory_access_plan_t {
-  // Selected access form shared with legality and diagnostic consumers.
+typedef struct loom_amdgpu_memory_packet_plan_t {
+  // Selected access form for this emitted direct memory packet.
   loom_amdgpu_memory_access_t access;
   // Module string ID for access.descriptor's opcode spelling.
   loom_string_id_t opcode_id;
+  // First 32-bit source register moved by this packet.
+  uint32_t source_register_offset;
+} loom_amdgpu_memory_packet_plan_t;
+
+typedef struct loom_amdgpu_memory_access_plan_t {
+  // Direct memory packets emitted in increasing source-register order.
+  loom_amdgpu_memory_packet_plan_t packets[LOOM_AMDGPU_MAX_MEMORY_PACKET_COUNT];
+  // Number of populated packet plans.
+  uint32_t packet_count;
 } loom_amdgpu_memory_access_plan_t;
 
 typedef struct loom_amdgpu_fragment_origin_plan_t {

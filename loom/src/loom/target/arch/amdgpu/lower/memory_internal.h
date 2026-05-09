@@ -125,13 +125,14 @@ bool loom_amdgpu_source_memory_offset_fits_u32(
     const loom_low_source_memory_access_plan_t* source,
     int64_t static_byte_offset);
 
-// Selects a complete AMDGPU memory access plan from source IR and facts.
-bool loom_amdgpu_memory_access_select(
+// Selects a complete AMDGPU memory packet sequence from source IR and facts.
+bool loom_amdgpu_memory_access_plan_select(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_view_region_table_t* view_regions,
     loom_func_like_t source_function, const loom_op_t* source_op,
-    loom_amdgpu_memory_access_t* out_access,
+    loom_low_source_memory_access_plan_t* out_source,
+    loom_amdgpu_memory_access_plan_t* out_plan,
     loom_low_source_memory_access_diagnostic_t* out_source_diagnostic,
     loom_amdgpu_memory_access_diagnostic_t* out_diagnostic);
 

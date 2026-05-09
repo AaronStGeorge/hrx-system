@@ -21,6 +21,13 @@ extern "C" {
 // one lane per workitem in a wave, so this must cover a full 32-lane fragment.
 #define LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES 32u
 
+// Maximum number of direct memory packets needed to move one scalarized source
+// vector payload.
+#define LOOM_AMDGPU_MAX_MEMORY_PACKET_COUNT    \
+  ((LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES +   \
+    LOOM_AMDGPU_MAX_MEMORY_32BIT_LANES - 1u) / \
+   LOOM_AMDGPU_MAX_MEMORY_32BIT_LANES)
+
 // Maximum number of packed f16/bf16 lanes accepted for packed-half payloads.
 #define LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES \
   (LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES * 2u)
