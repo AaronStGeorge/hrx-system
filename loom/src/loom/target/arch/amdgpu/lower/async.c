@@ -4,12 +4,17 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/target/arch/amdgpu/lower/async.h"
+
 #include <stdint.h>
 
 #include "loom/ir/facts.h"
 #include "loom/ops/kernel/ops.h"
-#include "loom/target/arch/amdgpu/lower/internal.h"
-#include "loom/target/arch/amdgpu/lower/memory_internal.h"
+#include "loom/target/arch/amdgpu/lower/emit.h"
+#include "loom/target/arch/amdgpu/lower/legality.h"
+#include "loom/target/arch/amdgpu/lower/memory.h"
+#include "loom/target/arch/amdgpu/lower/topology.h"
+#include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
 #include "loom/target/arch/amdgpu/wait_packets.h"
 #include "loom/util/fact_table.h"

@@ -13,8 +13,11 @@
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/view/ops.h"
 #include "loom/target/arch/amdgpu/atomic_candidates.h"
-#include "loom/target/arch/amdgpu/lower/internal.h"
-#include "loom/target/arch/amdgpu/lower/memory_internal.h"
+#include "loom/target/arch/amdgpu/lower/constants.h"
+#include "loom/target/arch/amdgpu/lower/emit.h"
+#include "loom/target/arch/amdgpu/lower/legality.h"
+#include "loom/target/arch/amdgpu/lower/memory.h"
+#include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
 

@@ -4,10 +4,13 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/target/arch/amdgpu/lower/control.h"
+
 #include <string.h>
 
 #include "loom/ops/cfg/ops.h"
-#include "loom/target/arch/amdgpu/lower/internal.h"
+#include "loom/target/arch/amdgpu/lower/emit.h"
+#include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
 
 enum {

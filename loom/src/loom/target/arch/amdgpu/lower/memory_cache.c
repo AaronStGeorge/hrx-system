@@ -8,7 +8,7 @@
 
 #include "iree/base/api.h"
 #include "loom/ops/cache.h"
-#include "loom/target/arch/amdgpu/lower/memory_internal.h"
+#include "loom/target/arch/amdgpu/lower/memory.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 
 bool loom_amdgpu_memory_cache_policy_is_present(

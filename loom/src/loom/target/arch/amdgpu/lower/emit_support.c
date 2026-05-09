@@ -8,7 +8,9 @@
 #include <stdint.h>
 
 #include "loom/ir/context.h"
-#include "loom/target/arch/amdgpu/lower/internal.h"
+#include "loom/target/arch/amdgpu/lower/constants.h"
+#include "loom/target/arch/amdgpu/lower/emit.h"
+#include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
 
 iree_status_t loom_amdgpu_intern(loom_low_lower_context_t* context,

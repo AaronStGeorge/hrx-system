@@ -4,11 +4,17 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/target/arch/amdgpu/lower/subgroup.h"
+
 #include <stdint.h>
 
 #include "loom/ir/context.h"
 #include "loom/ops/kernel/ops.h"
-#include "loom/target/arch/amdgpu/lower/internal.h"
+#include "loom/target/arch/amdgpu/lower/constants.h"
+#include "loom/target/arch/amdgpu/lower/emit.h"
+#include "loom/target/arch/amdgpu/lower/legality.h"
+#include "loom/target/arch/amdgpu/lower/topology.h"
+#include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
 
 #define LOOM_AMDGPU_MAX_SUBGROUP_TREE_STEPS 6u

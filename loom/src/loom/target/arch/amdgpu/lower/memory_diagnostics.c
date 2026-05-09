@@ -9,8 +9,8 @@
 #include "loom/codegen/low/source_memory_plan.h"
 #include "loom/ir/context.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
-#include "loom/target/arch/amdgpu/lower/internal.h"
-#include "loom/target/arch/amdgpu/lower/memory_internal.h"
+#include "loom/target/arch/amdgpu/lower/legality.h"
+#include "loom/target/arch/amdgpu/lower/memory.h"
 
 #define LOOM_AMDGPU_LDS_BANK_COUNT 32u
 #define LOOM_AMDGPU_LDS_BANK_WIDTH_BYTES 4u

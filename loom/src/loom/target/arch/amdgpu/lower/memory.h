@@ -4,10 +4,10 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Private AMDGPU vector-memory lowering helpers.
+// AMDGPU vector-memory, atomics, and prefetch lowering helpers.
 
-#ifndef LOOM_TARGET_ARCH_AMDGPU_LOWER_MEMORY_INTERNAL_H_
-#define LOOM_TARGET_ARCH_AMDGPU_LOWER_MEMORY_INTERNAL_H_
+#ifndef LOOM_TARGET_ARCH_AMDGPU_LOWER_MEMORY_H_
+#define LOOM_TARGET_ARCH_AMDGPU_LOWER_MEMORY_H_
 
 #include <stdint.h>
 
@@ -19,8 +19,6 @@
 #include "loom/ir/ir.h"
 #include "loom/target/arch/amdgpu/lower/plan.h"
 #include "loom/target/low_legality.h"
-
-struct iree_string_builder_t;
 
 #ifdef __cplusplus
 extern "C" {
@@ -234,8 +232,61 @@ iree_status_t loom_amdgpu_record_memory_access_diagnostic(
     const loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_operation_kind_t kind);
 
+// Selects an AMDGPU source memory-load packet plan.
+iree_status_t loom_amdgpu_select_memory_load_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_memory_access_plan_t* out_plan, bool* out_selected);
+
+// Selects an AMDGPU source memory-store packet plan.
+iree_status_t loom_amdgpu_select_memory_store_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_memory_access_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source memory-load op to an AMDGPU memory packet.
+iree_status_t loom_amdgpu_lower_memory_load(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_memory_access_plan_t* plan);
+
+// Lowers a source memory-store op to an AMDGPU memory packet.
+iree_status_t loom_amdgpu_lower_memory_store(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_memory_access_plan_t* plan);
+
+// Selects an AMDGPU LDS atomic packet plan.
+iree_status_t loom_amdgpu_select_view_atomic_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_atomic_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source view.atomic.* op to an AMDGPU LDS atomic packet.
+iree_status_t loom_amdgpu_lower_view_atomic(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_atomic_plan_t* plan);
+
+// Selects an AMDGPU scalar-buffer data prefetch plan.
+iree_status_t loom_amdgpu_select_view_prefetch_plan(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_amdgpu_prefetch_plan_t* out_plan, bool* out_selected);
+
+// Lowers a source view.prefetch to an AMDGPU scalar-buffer data prefetch
+// packet.
+iree_status_t loom_amdgpu_lower_view_prefetch(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_prefetch_plan_t* plan);
+
+// Verifies source memory legality for AMDGPU target-low selection.
+iree_status_t loom_amdgpu_low_legality_verify_memory(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
+// Verifies source view atomic legality for AMDGPU target-low selection.
+iree_status_t loom_amdgpu_low_legality_verify_view_atomic(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_ARCH_AMDGPU_LOWER_MEMORY_INTERNAL_H_
+#endif  // LOOM_TARGET_ARCH_AMDGPU_LOWER_MEMORY_H_

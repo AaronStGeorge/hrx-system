@@ -4,10 +4,13 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/target/arch/amdgpu/lower/buffer.h"
+
 #include <stdint.h>
 
 #include "loom/ops/buffer/ops.h"
-#include "loom/target/arch/amdgpu/lower/internal.h"
+#include "loom/target/arch/amdgpu/lower/constants.h"
+#include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/util/fact_table.h"
 
 static bool loom_amdgpu_select_buffer_alloca_plan(

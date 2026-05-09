@@ -4,13 +4,16 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/target/arch/amdgpu/lower/abi.h"
+
 #include <stdint.h>
 
 #include "loom/ir/context.h"
 #include "loom/ops/buffer/ops.h"
 #include "loom/ops/encoding/storage.h"
 #include "loom/ops/kernel/ops.h"
-#include "loom/target/arch/amdgpu/lower/internal.h"
+#include "loom/target/arch/amdgpu/lower/constants.h"
+#include "loom/target/arch/amdgpu/lower/types.h"
 
 static iree_status_t loom_amdgpu_make_hal_buffer_type(
     loom_low_lower_context_t* context, loom_type_t* out_type) {

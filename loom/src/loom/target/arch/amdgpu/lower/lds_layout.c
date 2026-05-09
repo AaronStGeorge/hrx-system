@@ -16,7 +16,8 @@
 #include <stdint.h>
 
 #include "loom/ops/buffer/ops.h"
-#include "loom/target/arch/amdgpu/lower/internal.h"
+#include "loom/target/arch/amdgpu/lower/constants.h"
+#include "loom/target/arch/amdgpu/lower/topology.h"
 #include "loom/util/fact_table.h"
 
 static bool loom_amdgpu_source_lds_layout_checked_align(
