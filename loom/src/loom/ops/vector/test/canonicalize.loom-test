@@ -385,6 +385,24 @@ func.def @subf_zero_identities(%n: index, %x: vector<[%n]xf32>) -> (vector<[%n]x
 
 // ====
 
+// A negated input multiplied by an exact constant keeps the sign on the
+// constant so target lowering does not need a separate negation instruction.
+func.def @mulf_absorbs_negated_input_constant(%x: vector<4xf32>) -> (vector<4xf32>) {
+  %zero = vector.constant 0.0 : vector<4xf32>
+  %neg = vector.subf<nnan|nsz> %zero, %x : vector<4xf32>
+  %scale = vector.constant 1.4426950408889634 : vector<4xf32>
+  %scaled = vector.mulf<nnan|ninf|nsz> %neg, %scale : vector<4xf32>
+  func.return %scaled : vector<4xf32>
+}
+// ----
+func.def @mulf_absorbs_negated_input_constant(%x: vector<4xf32>) -> (vector<4xf32>) {
+  %7 = vector.constant -1.4426950408889634 : vector<4xf32>
+  %scaled = vector.mulf<nnan|ninf|nsz> %x, %7 : vector<4xf32>
+  func.return %scaled : vector<4xf32>
+}
+
+// ====
+
 // A uniform all-true mask selects the true vector as a whole.
 func.def @select_uniform_true(%a: vector<4xi32>, %b: vector<4xi32>) -> (vector<4xi32>) {
   %mask = vector.constant true : vector<4xi1>

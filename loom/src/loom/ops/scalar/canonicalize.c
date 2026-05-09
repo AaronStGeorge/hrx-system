@@ -159,6 +159,29 @@ static iree_status_t loom_scalar_replace_single_result_with_f64_constant(
                                                       replacement);
 }
 
+static iree_status_t loom_scalar_replace_mulf_with_negated_constant(
+    loom_op_t* op, loom_rewriter_t* rewriter, loom_value_id_t input,
+    double constant_value) {
+  loom_builder_set_before(&rewriter->builder, op);
+  loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
+  loom_type_t result_type = loom_scalar_single_result_type(rewriter, op);
+
+  loom_value_id_t negated_constant = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_rewriter_build_constant(
+      rewriter, loom_value_facts_exact_f64(-constant_value), result_type,
+      op->location, &negated_constant));
+
+  loom_op_t* replacement_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scalar_mulf_build(
+      &rewriter->builder, loom_scalar_mulf_fastmath(op), input,
+      negated_constant, result_type, op->location, &replacement_op));
+  loom_value_id_t replacement = loom_scalar_mulf_result(replacement_op);
+  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+      rewriter, op, &replacement, 1, value_checkpoint));
+  return loom_scalar_replace_single_result_with_value(op, rewriter,
+                                                      replacement);
+}
+
 static iree_status_t loom_scalar_materialize_or_reuse_i64_constant(
     loom_op_t* op, loom_rewriter_t* rewriter, loom_value_id_t candidate,
     int64_t value, loom_type_t type, loom_value_id_t* out_value_id) {
@@ -1052,6 +1075,21 @@ iree_status_t loom_scalar_mulf_canonicalize(loom_op_t* op,
   }
   if (loom_scalar_value_facts_are_exact_f64(rewriter, rhs, 1.0)) {
     return loom_scalar_replace_single_result_with_value(op, rewriter, lhs);
+  }
+
+  loom_op_t* lhs_def = loom_scalar_defining_op(rewriter, lhs);
+  double rhs_value = 0.0;
+  if (lhs_def && loom_scalar_negf_isa(lhs_def) &&
+      loom_scalar_query_exact_f64(rewriter, rhs, &rhs_value)) {
+    return loom_scalar_replace_mulf_with_negated_constant(
+        op, rewriter, loom_scalar_negf_input(lhs_def), rhs_value);
+  }
+  loom_op_t* rhs_def = loom_scalar_defining_op(rewriter, rhs);
+  double lhs_value = 0.0;
+  if (rhs_def && loom_scalar_negf_isa(rhs_def) &&
+      loom_scalar_query_exact_f64(rewriter, lhs, &lhs_value)) {
+    return loom_scalar_replace_mulf_with_negated_constant(
+        op, rewriter, loom_scalar_negf_input(rhs_def), lhs_value);
   }
 
   const uint8_t zero_flags = LOOM_SCALAR_FASTMATHFLAGS_NNAN |

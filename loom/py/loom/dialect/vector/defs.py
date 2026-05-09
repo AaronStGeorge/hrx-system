@@ -2392,7 +2392,7 @@ vector_mulf = _lanewise_binary(
     commutative=True,
     flags=_VF,
     facts="loom_vector_mulf_facts",
-    canonicalize="loom_vector_uniform_result_canonicalize",
+    canonicalize="loom_vector_mulf_canonicalize",
 )
 
 vector_divf = _lanewise_binary(
