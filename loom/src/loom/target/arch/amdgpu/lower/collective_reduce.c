@@ -644,6 +644,20 @@ static iree_status_t loom_amdgpu_emit_workgroup_reduce_scratch_address(
       *out_address, static_byte_offset, lane_type, out_address);
 }
 
+static iree_status_t loom_amdgpu_emit_workgroup_reduce_static_scratch_address(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t scratch_base, uint32_t static_byte_offset,
+    loom_type_t lane_type, loom_value_id_t* out_address) {
+  *out_address = LOOM_VALUE_ID_INVALID;
+  if (static_byte_offset == 0) {
+    *out_address = scratch_base;
+    return iree_ok_status();
+  }
+  return loom_amdgpu_emit_vgpr_binary_immediate(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32_LIT,
+      scratch_base, static_byte_offset, lane_type, out_address);
+}
+
 static iree_status_t loom_amdgpu_emit_workgroup_reduce_scratch_write(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_workgroup_reduce_plan_t* plan, loom_value_id_t address,
@@ -904,16 +918,13 @@ iree_status_t loom_amdgpu_lower_kernel_workgroup_reduce(
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_emit_workgroup_reduce_barrier(context, source_op, plan));
 
-    loom_value_id_t zero_byte_offset = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
-        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32, 0, lane_type,
-        &zero_byte_offset));
     for (uint32_t i = 0; i < register_count; ++i) {
       const uint32_t register_byte_offset = i * wave_count * 4u;
       loom_value_id_t address = LOOM_VALUE_ID_INVALID;
-      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workgroup_reduce_scratch_address(
-          context, source_op, scratch_base, zero_byte_offset,
-          register_byte_offset, lane_type, &address));
+      IREE_RETURN_IF_ERROR(
+          loom_amdgpu_emit_workgroup_reduce_static_scratch_address(
+              context, source_op, scratch_base, register_byte_offset, lane_type,
+              &address));
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_workgroup_reduce_scratch_read(
           context, source_op, plan, address, lane_type, &result_registers[i]));
     }

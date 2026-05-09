@@ -623,9 +623,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_reduce_addf_f
   s_mov_b64_exec %63
   s_mov_b64_exec %54
   s_barrier
-  %66 = v_mov_b32 0
-  %67 = v_add_u32 %24, %66
-  %result = ds_read_b32 %67
+  %result = ds_read_b32 %24
   global_store_b32 %20, %result, %output_view
   return
 }
@@ -728,8 +726,7 @@ low.kernel.def target(@target) workgroup_size(448, 1, 1) @workgroup_reduce_addf_
   s_mov_b64_exec %87
   s_mov_b64_exec %54
   s_barrier
-  %91 = v_add_u32 %24, %60
-  %result = ds_read_b32 %91
+  %result = ds_read_b32 %24
   global_store_b32 %20, %result, %output_view
   return
 }
@@ -1040,16 +1037,14 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_reduce_addf_f
   s_mov_b64_exec %126
   s_mov_b64_exec %102
   s_barrier
-  %135 = v_mov_b32 0
-  %136 = v_add_u32 %32, %135
+  %135 = ds_read_b32 %32
+  %136 = v_add_u32_src0_inline %32, 8
   %137 = ds_read_b32 %136
-  %139 = v_add_u32_src0_inline %136, 8
-  %140 = ds_read_b32 %139
-  %142 = v_add_u32_src0_inline %136, 16
-  %143 = ds_read_b32 %142
-  %145 = v_add_u32_src0_inline %136, 24
-  %146 = ds_read_b32 %145
-  %sum = concat(%137, %140, %143, %146) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  %138 = v_add_u32_src0_inline %32, 16
+  %139 = ds_read_b32 %138
+  %140 = v_add_u32_src0_inline %32, 24
+  %141 = ds_read_b32 %140
+  %sum = concat(%135, %137, %139, %141) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
   global_store_b128 %28, %sum, %output_view
   return
 }
