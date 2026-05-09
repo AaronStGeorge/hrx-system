@@ -2141,9 +2141,23 @@ static bool loom_amdgpu_memory_access_make_32bit_chunk_source(
     loom_low_source_memory_access_plan_t* out_source,
     loom_amdgpu_memory_access_diagnostic_t* out_diagnostic) {
   *out_source = *source;
-  out_source->vector_lane_count = source_register_count;
-  const int64_t static_delta =
-      (int64_t)source_register_offset * source->vector_lane_byte_stride;
+  const uint64_t packet_byte_count = (uint64_t)source_register_count * 4u;
+  if (source->element_byte_count == 0 ||
+      packet_byte_count % source->element_byte_count != 0 ||
+      packet_byte_count / source->element_byte_count > UINT32_MAX) {
+    out_diagnostic->rejection_bits |=
+        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_VECTOR_TYPE;
+    return false;
+  }
+  out_source->vector_lane_count =
+      (uint32_t)(packet_byte_count / source->element_byte_count);
+  const uint64_t static_delta_unsigned = (uint64_t)source_register_offset * 4u;
+  if (static_delta_unsigned > INT64_MAX) {
+    out_diagnostic->rejection_bits |=
+        LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DESCRIPTOR_OFFSET_RANGE;
+    return false;
+  }
+  const int64_t static_delta = (int64_t)static_delta_unsigned;
   if (source->static_byte_offset > INT64_MAX - static_delta) {
     out_diagnostic->rejection_bits |=
         LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_DESCRIPTOR_OFFSET_RANGE;
