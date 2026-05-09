@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// AMDGPU lowering for subgroup and workgroup collective source operations.
+// AMDGPU lowering for subgroup collective source operations.
 
 #ifndef LOOM_TARGET_ARCH_AMDGPU_LOWER_SUBGROUP_H_
 #define LOOM_TARGET_ARCH_AMDGPU_LOWER_SUBGROUP_H_
@@ -39,30 +39,14 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_reduce_plan_t* out_plan, bool* out_selected);
 
-// Selects native AMDGPU packets for a source workgroup reduce.
-iree_status_t loom_amdgpu_select_kernel_workgroup_reduce_plan(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_workgroup_reduce_plan_t* out_plan, bool* out_selected);
-
 // Lowers a source subgroup reduce using DS bpermute tree steps and native VGPR
 // combining packets.
 iree_status_t loom_amdgpu_lower_kernel_subgroup_reduce(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_reduce_plan_t* plan);
 
-// Lowers a source workgroup reduce through native subgroup and LDS packets.
-iree_status_t loom_amdgpu_lower_kernel_workgroup_reduce(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_workgroup_reduce_plan_t* plan);
-
 // Verifies source subgroup reduce legality for native AMDGPU lowering.
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_reduce(
-    const loom_target_low_legality_provider_t* provider,
-    loom_target_low_legality_context_t* context, const loom_op_t* op,
-    bool* out_handled);
-
-// Verifies source workgroup reduce legality for native AMDGPU lowering.
-iree_status_t loom_amdgpu_low_legality_verify_kernel_workgroup_reduce(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
@@ -72,31 +56,14 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_scan_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_scan_plan_t* out_plan, bool* out_selected);
 
-// Selects native AMDGPU cross-lane and LDS packets for a source workgroup scan.
-iree_status_t loom_amdgpu_select_kernel_workgroup_scan_plan(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    loom_amdgpu_workgroup_scan_plan_t* out_plan, bool* out_selected);
-
 // Lowers a source subgroup scan using DS bpermute prefix steps, native VGPR
 // combining packets, and per-step lane-bound masks.
 iree_status_t loom_amdgpu_lower_kernel_subgroup_scan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_scan_plan_t* plan);
 
-// Lowers a source workgroup scan through subgroup scans plus LDS cross-wave
-// prefixes when needed.
-iree_status_t loom_amdgpu_lower_kernel_workgroup_scan(
-    loom_low_lower_context_t* context, const loom_op_t* source_op,
-    const loom_amdgpu_workgroup_scan_plan_t* plan);
-
 // Verifies source subgroup scan legality for native AMDGPU lowering.
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_scan(
-    const loom_target_low_legality_provider_t* provider,
-    loom_target_low_legality_context_t* context, const loom_op_t* op,
-    bool* out_handled);
-
-// Verifies source workgroup scan legality for native AMDGPU lowering.
-iree_status_t loom_amdgpu_low_legality_verify_kernel_workgroup_scan(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
@@ -203,13 +170,6 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_broadcast_first(
 // Rejects source subgroup match ops that require explicit target legalization
 // before AMDGPU source-to-low packet selection.
 iree_status_t loom_amdgpu_low_legality_verify_kernel_subgroup_match(
-    const loom_target_low_legality_provider_t* provider,
-    loom_target_low_legality_context_t* context, const loom_op_t* op,
-    bool* out_handled);
-
-// Verifies AMDGPU low legality for collective source ops without selected
-// packet lowering yet.
-iree_status_t loom_amdgpu_low_legality_verify_kernel_collective(
     const loom_target_low_legality_provider_t* provider,
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);

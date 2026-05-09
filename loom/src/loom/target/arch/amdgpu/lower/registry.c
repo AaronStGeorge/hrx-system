@@ -49,6 +49,7 @@
 #include "loom/target/arch/amdgpu/lower/table.h"
 #include "loom/target/arch/amdgpu/lower/types.h"
 #include "loom/target/arch/amdgpu/lower/values.h"
+#include "loom/target/arch/amdgpu/lower/workgroup.h"
 
 typedef struct loom_amdgpu_lower_dispatch_row_t
     loom_amdgpu_lower_dispatch_row_t;

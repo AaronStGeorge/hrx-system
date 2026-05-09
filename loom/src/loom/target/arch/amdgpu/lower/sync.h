@@ -31,6 +31,13 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_barrier(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
 
+// Verifies AMDGPU low legality for collective source ops without selected
+// packet lowering yet.
+iree_status_t loom_amdgpu_low_legality_verify_kernel_collective(
+    const loom_target_low_legality_provider_t* provider,
+    loom_target_low_legality_context_t* context, const loom_op_t* op,
+    bool* out_handled);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
