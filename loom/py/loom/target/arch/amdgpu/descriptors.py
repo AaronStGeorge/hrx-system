@@ -864,6 +864,7 @@ _HAL_BUFFER_DESCRIPTOR_CACHE_SWIZZLE_STRIDE_IMMEDIATE = Immediate(
 _MANUAL_SCALAR_DESCRIPTOR_KEYS = (
     "amdgpu.s_mov_b32",
     "amdgpu.s_mov_b32_m0",
+    "amdgpu.s_mov_b32_m0.imm",
     "amdgpu.s_mov_b64_exec",
     "amdgpu.s_mov_b64_exec_read",
     "amdgpu.s_xor_b64_exec",
@@ -925,6 +926,26 @@ def _manual_scalar_descriptors(
             ),
             asm_forms=_asm(
                 mnemonic="s_mov_b32_m0", results=("dst",), operands=("src",)
+            ),
+            schedule_class=_SCHEDULE_SALU,
+            encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
+            encoding_id=s_mov_b32_opcode,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="amdgpu.s_mov_b32_m0.imm",
+            mnemonic="s_mov_b32",
+            semantic_tag="special.m0.const.u32",
+            operands=(_m0_result(),),
+            immediates=(_U32_IMMEDIATE,),
+            encoding_field_values=(
+                EncodingFieldValue(
+                    amdgpu_encoding_field_id("SDST"),
+                    spec.operand_predefined_value("OPR_SDST_M0", "M0"),
+                ),
+            ),
+            asm_forms=_asm(
+                mnemonic="s_mov_b32_m0_imm", results=("dst",), immediates=("imm32",)
             ),
             schedule_class=_SCHEDULE_SALU,
             encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,

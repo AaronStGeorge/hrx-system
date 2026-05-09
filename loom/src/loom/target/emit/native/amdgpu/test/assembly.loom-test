@@ -473,21 +473,17 @@ low.func.def target(@gfx942_target) @gfx942_global_load_lds(%addr64: reg<amdgpu.
 // RUN: emit amdgpu-assembly @gfx942_m0_state_reuse strategy=resource-stall waits=none
 amdgpu.target<gfx942> @gfx942_target
 low.func.def target(@gfx942_target) @gfx942_m0_state_reuse(%value0: reg<amdgpu.vgpr>, %value1: reg<amdgpu.vgpr>) {
-  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %m0a = low.op<amdgpu.s_mov_b32_m0>(%zero) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  %m0a = low.const<amdgpu.s_mov_b32_m0.imm> {imm32 = 0} : reg<amdgpu.m0>
   low.op<amdgpu.ds_write_addtid_b32>(%value0, %m0a) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
-  %next = low.const<amdgpu.s_mov_b32> {imm32 = 4} : reg<amdgpu.sgpr>
-  %m0b = low.op<amdgpu.s_mov_b32_m0>(%next) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
+  %m0b = low.const<amdgpu.s_mov_b32_m0.imm> {imm32 = 1024} : reg<amdgpu.m0>
   low.op<amdgpu.ds_write_addtid_b32>(%value1, %m0b) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
   low.return
 }
 
 // ----
-  s_mov_b32 s0, 0
-  s_mov_b32_m0 m0, s0
+  s_mov_b32_m0_imm m0, 0
   ds_write_addtid_b32 v0 offset:0
-  s_mov_b32 s0, 4
-  s_mov_b32_m0 m0, s0
+  s_mov_b32_m0_imm m0, 1024
   ds_write_addtid_b32 v1 offset:0
   s_endpgm
 

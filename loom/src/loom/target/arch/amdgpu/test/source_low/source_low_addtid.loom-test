@@ -24,10 +24,9 @@ kernel.def target(@target) @workgroup_memory_workitem_x_b32() {
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_memory_workitem_x_b32() {
   %12 = low.storage.reserve {byte_alignment = 16, byte_length = 256} : low.storage<workgroup>
   %one = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
-  %15 = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
-  %16 = low.op<amdgpu.s_mov_b32_m0>(%15) : (reg<amdgpu.sgpr>) -> reg<amdgpu.m0>
-  low.op<amdgpu.ds_write_addtid_b32>(%one, %16) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
-  %loaded = low.op<amdgpu.ds_read_addtid_b32>(%16) {offset = 0} : (reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
-  low.op<amdgpu.ds_write_addtid_b32>(%loaded, %16) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
+  %15 = low.const<amdgpu.s_mov_b32_m0.imm> {imm32 = 0} : reg<amdgpu.m0>
+  low.op<amdgpu.ds_write_addtid_b32>(%one, %15) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
+  %loaded = low.op<amdgpu.ds_read_addtid_b32>(%15) {offset = 0} : (reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.ds_write_addtid_b32>(%loaded, %15) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.m0>)
   low.return
 }

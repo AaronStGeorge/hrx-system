@@ -388,6 +388,31 @@ static iree_status_t loom_amdgpu_push_encoding_field_value(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_descriptor_single_fixed_encoding_field_u16(
+    const loom_amdgpu_encode_state_t* state,
+    const loom_low_descriptor_t* descriptor, uint16_t* out_value) {
+  *out_value = 0;
+  if (descriptor->encoding_field_value_count != 1) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU native encoding descriptor does not have exactly one fixed "
+        "field");
+  }
+  const loom_low_descriptor_set_t* descriptor_set =
+      state->schedule->target.descriptor_set;
+  const loom_low_encoding_field_value_t* field_value =
+      &descriptor_set
+           ->encoding_field_values[descriptor->encoding_field_value_start];
+  if (field_value->value > UINT16_MAX) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU native encoding fixed field value %" PRIu64
+                            " is not a u16",
+                            field_value->value);
+  }
+  *out_value = (uint16_t)field_value->value;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_descriptor_operand_field_already_encoded(
     const loom_amdgpu_encode_state_t* state,
     const loom_low_packet_view_t* packet, uint16_t operand_index,
@@ -613,11 +638,16 @@ static iree_status_t loom_amdgpu_read_immediate_encoding_field_value(
 
 static iree_status_t loom_amdgpu_encode_sop1_s_mov_b32(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
-  IREE_ASSERT(packet->descriptor == loom_amdgpu_descriptor_ref_descriptor(
-                                        state->schedule->target.descriptor_set,
-                                        LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32));
   uint16_t sdst = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_packet_result_sgpr(state, packet, 0, &sdst));
+  if (packet->descriptor == loom_amdgpu_descriptor_ref_descriptor(
+                                state->schedule->target.descriptor_set,
+                                LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32)) {
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_packet_result_sgpr(state, packet, 0, &sdst));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_descriptor_single_fixed_encoding_field_u16(
+        state, packet->descriptor, &sdst));
+  }
   uint32_t imm32 = 0;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_read_immediate_u32(state, packet, 0, &imm32));
@@ -1071,7 +1101,11 @@ static iree_status_t loom_amdgpu_encode_descriptor_packet(
     case LOOM_AMDGPU_ENCODING_FORMAT_SOP1:
       if (packet->descriptor == loom_amdgpu_descriptor_ref_descriptor(
                                     state->schedule->target.descriptor_set,
-                                    LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32)) {
+                                    LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32) ||
+          packet->descriptor ==
+              loom_amdgpu_descriptor_ref_descriptor(
+                  state->schedule->target.descriptor_set,
+                  LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32_M0_IMM)) {
         return loom_amdgpu_encode_sop1_s_mov_b32(state, packet);
       }
       return loom_amdgpu_encode_generic_descriptor_packet(state, packet);
