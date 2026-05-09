@@ -1,0 +1,18 @@
+// RUN: pass low-select-operand-forms,low-dce
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @wmma_zero_accumulator(%lhs: reg<amdgpu.vgpr x8>, %rhs: reg<amdgpu.vgpr x8>) -> (reg<amdgpu.vgpr x8>) {
+  %z0 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
+  %zero = low.concat(%z0, %z0, %z0, %z0, %z0, %z0, %z0, %z0) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x8>
+  %result = low.op<amdgpu.v_wmma_f32_16x16x16_f16>(%lhs, %rhs, %zero) : (reg<amdgpu.vgpr x8>, reg<amdgpu.vgpr x8>, reg<amdgpu.vgpr x8>) -> %zero as reg<amdgpu.vgpr x8>
+  low.return %result : reg<amdgpu.vgpr x8>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @wmma_zero_accumulator(%lhs: reg<amdgpu.vgpr x8>, %rhs: reg<amdgpu.vgpr x8>) -> (reg<amdgpu.vgpr x8>) {
+  %result = low.op<amdgpu.v_wmma_f32_16x16x16_f16.acc_zero>(%lhs, %rhs) : (reg<amdgpu.vgpr x8>, reg<amdgpu.vgpr x8>) -> reg<amdgpu.vgpr x8>
+  low.return %result : reg<amdgpu.vgpr x8>
+}

@@ -899,6 +899,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "low_operand_forms"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_operand_forms.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "low_packet_diagnostics"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_packet_diagnostics.loom-test"
