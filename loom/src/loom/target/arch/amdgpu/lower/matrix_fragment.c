@@ -1061,16 +1061,30 @@ static void loom_amdgpu_fragment_memory_split_static_offset(
     return;
   }
 
-  const uint64_t maximum_encoded_offset =
-      iree_min(static_byte_offset / offset_info.unit_byte_count,
-               offset_info.unsigned_max);
-  if (maximum_encoded_offset > INT64_MAX) {
+  if (offset_info.unsigned_max == UINT64_MAX) {
+    return;
+  }
+  const uint64_t window_unit_count = offset_info.unsigned_max + 1;
+  if (offset_info.unit_byte_count > UINT64_MAX / window_unit_count) {
+    return;
+  }
+  const uint64_t window_byte_count =
+      window_unit_count * offset_info.unit_byte_count;
+  if (window_byte_count == 0) {
+    return;
+  }
+  const uint64_t window_base =
+      (static_byte_offset / window_byte_count) * window_byte_count;
+  const uint64_t window_offset = static_byte_offset - window_base;
+  const uint64_t encoded_offset = window_offset / offset_info.unit_byte_count;
+  if (encoded_offset > offset_info.unsigned_max || encoded_offset > INT64_MAX) {
     return;
   }
   const uint64_t immediate_byte_offset =
-      maximum_encoded_offset * offset_info.unit_byte_count;
-  *out_vaddr_static_byte_offset = static_byte_offset - immediate_byte_offset;
-  *out_immediate_offset = (int64_t)maximum_encoded_offset;
+      encoded_offset * offset_info.unit_byte_count;
+  *out_vaddr_static_byte_offset =
+      window_base + (window_offset - immediate_byte_offset);
+  *out_immediate_offset = (int64_t)encoded_offset;
 }
 
 static iree_status_t loom_amdgpu_emit_fragment_memory_vaddr(
