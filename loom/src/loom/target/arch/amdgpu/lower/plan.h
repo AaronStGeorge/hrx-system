@@ -337,6 +337,10 @@ typedef struct loom_amdgpu_subgroup_reduce_plan_t {
   loom_low_lower_resolved_descriptor_t bpermute_descriptor;
   // Descriptor row selected for each native lane combine.
   loom_low_lower_resolved_descriptor_t combine_descriptor;
+  // Descriptor row selected to guard inactive source lanes.
+  loom_low_lower_resolved_descriptor_t guard_descriptor;
+  // Descriptor row selected to replace inactive source lanes with identity.
+  loom_low_lower_resolved_descriptor_t select_descriptor;
   // Source value reduced across subgroup lanes.
   loom_value_id_t value;
   // Result value receiving the reduced payload.
@@ -347,6 +351,10 @@ typedef struct loom_amdgpu_subgroup_reduce_plan_t {
   uint32_t register_count;
   // Exact subgroup width selected by the active target bundle.
   uint32_t wavefront_size;
+  // Number of low-numbered lanes participating in the emitted reduce tree.
+  uint32_t active_lane_count;
+  // 32-bit identity element bit pattern used for inactive source lanes.
+  uint32_t identity_bits;
 } loom_amdgpu_subgroup_reduce_plan_t;
 
 typedef struct loom_amdgpu_workgroup_reduce_plan_t {
@@ -354,6 +362,10 @@ typedef struct loom_amdgpu_workgroup_reduce_plan_t {
   loom_low_lower_resolved_descriptor_t bpermute_descriptor;
   // Descriptor row selected for each native lane combine.
   loom_low_lower_resolved_descriptor_t combine_descriptor;
+  // Descriptor row selected to guard inactive source lanes.
+  loom_low_lower_resolved_descriptor_t guard_descriptor;
+  // Descriptor row selected to replace inactive source lanes with identity.
+  loom_low_lower_resolved_descriptor_t select_descriptor;
   // Descriptor row selected for compiler-owned LDS reloads.
   loom_low_lower_resolved_descriptor_t lds_read_descriptor;
   // Descriptor row selected for compiler-owned LDS spills.
@@ -372,6 +384,8 @@ typedef struct loom_amdgpu_workgroup_reduce_plan_t {
   uint32_t wavefront_size;
   // Exact flattened workgroup size selected by launch configuration.
   uint32_t flat_workgroup_size;
+  // 32-bit identity element bit pattern used for inactive source lanes.
+  uint32_t identity_bits;
 } loom_amdgpu_workgroup_reduce_plan_t;
 
 typedef struct loom_amdgpu_subgroup_scan_plan_t {
