@@ -165,8 +165,9 @@ static iree_status_t loom_amdgpu_emit_kernel_barrier_dispatch(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_lower_dispatch_row_t* row, loom_low_lower_plan_t plan) {
   (void)row;
-  (void)plan;
-  return loom_amdgpu_lower_kernel_barrier(context, source_op);
+  return loom_amdgpu_lower_kernel_barrier(
+      context, source_op,
+      (const loom_amdgpu_kernel_barrier_plan_t*)plan.target_data);
 }
 
 LOOM_AMDGPU_DEFINE_DATA_SELECT(

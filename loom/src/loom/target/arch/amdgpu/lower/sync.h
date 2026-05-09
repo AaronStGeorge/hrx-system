@@ -10,20 +10,22 @@
 #define LOOM_TARGET_ARCH_AMDGPU_LOWER_SYNC_H_
 
 #include "loom/codegen/low/lower.h"
+#include "loom/target/arch/amdgpu/lower/plan.h"
 #include "loom/target/low_legality.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// Selects a workgroup barrier packet for a source kernel.barrier op.
+// Selects a target synchronization packet for a source kernel.barrier op.
 iree_status_t loom_amdgpu_select_kernel_barrier_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_low_lower_plan_t* out_plan);
 
-// Lowers a source kernel.barrier to an AMDGPU workgroup barrier packet.
+// Lowers a source kernel.barrier according to |plan|.
 iree_status_t loom_amdgpu_lower_kernel_barrier(
-    loom_low_lower_context_t* context, const loom_op_t* source_op);
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_kernel_barrier_plan_t* plan);
 
 // Verifies source kernel.barrier legality for AMDGPU target-low selection.
 iree_status_t loom_amdgpu_low_legality_verify_kernel_barrier(

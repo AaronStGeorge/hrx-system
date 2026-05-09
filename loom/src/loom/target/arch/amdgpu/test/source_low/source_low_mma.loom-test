@@ -189,7 +189,7 @@ low.kernel.def target(@target) workgroup_size(32, 1, 1) @f16_wmmar3_fragment_mem
   %rhs_loaded = global_load_b128_saddr %68, %rhs_buffer_view
   ds_write_b128 %68, %lhs_loaded
   ds_write_b128 %68, %rhs_loaded {offset = 512}
-  s_barrier
+  s_waitcnt {lgkmcnt = 0}
   %74 = v_and_b32_src0_inline %tid, 15
   %76 = v_lshlrev_b32_src0_inline %74, 5
   %77 = ds_read_b128 %76

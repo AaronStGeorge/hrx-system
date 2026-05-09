@@ -688,6 +688,22 @@ typedef struct loom_amdgpu_explicit_packet_plan_t {
   iree_host_size_t immediate_count;
 } loom_amdgpu_explicit_packet_plan_t;
 
+typedef enum loom_amdgpu_kernel_barrier_lowering_kind_e {
+  // No lowering has been selected.
+  LOOM_AMDGPU_KERNEL_BARRIER_LOWERING_KIND_NONE = 0,
+  // Emit a full workgroup barrier packet.
+  LOOM_AMDGPU_KERNEL_BARRIER_LOWERING_KIND_S_BARRIER = 1,
+  // Emit a wait packet that drains LDS effects for a single-wave workgroup.
+  LOOM_AMDGPU_KERNEL_BARRIER_LOWERING_KIND_LDS_WAIT = 2,
+} loom_amdgpu_kernel_barrier_lowering_kind_t;
+
+typedef struct loom_amdgpu_kernel_barrier_plan_t {
+  // Concrete synchronization packet path selected for kernel.barrier.
+  loom_amdgpu_kernel_barrier_lowering_kind_t kind;
+  // Explicit wait packet selected when |kind| is LDS_WAIT.
+  loom_amdgpu_explicit_packet_plan_t wait;
+} loom_amdgpu_kernel_barrier_plan_t;
+
 #define LOOM_AMDGPU_ATOMIC_WAIT_CAPACITY 2
 #define LOOM_AMDGPU_ATOMIC_CACHE_CONTROL_CAPACITY 2
 

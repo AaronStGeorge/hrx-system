@@ -546,6 +546,7 @@ loom_cc_library(
     ::target_info
     ::target_refs
     ::wait_packets
+    ::wait_plan
     iree::base
     loom::src::loom::analysis::contract_vector
     loom::src::loom::analysis::view_regions
@@ -1629,6 +1630,17 @@ iree_executable_test(
     "source_low_sync"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_sync.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_sync_kernel"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_sync_kernel.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
