@@ -78,6 +78,7 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_lshlrev_b32",
     "amdgpu.v_lshlrev_b32.lit",
     "amdgpu.v_lshlrev_b32.vop3_imm",
+    "amdgpu.v_lshl_add_u32.shift_imm",
     "amdgpu.v_ashrrev_i32",
     "amdgpu.v_ashrrev_i32.lit",
     "amdgpu.v_lshrrev_b32",
@@ -805,6 +806,78 @@ def _index_madd_power_of_two_rule(
     )
 
 
+def _index_madd_power_of_two_lshl_add_rule(
+    *,
+    scale_source: str,
+    value_source: str,
+    preserve_value_register: bool,
+) -> DescriptorRule:
+    descriptor = _descriptor("amdgpu.v_lshl_add_u32.shift_imm")
+    value_guard = (
+        Guard.low_value_register_class(
+            value_source,
+            "amdgpu.sgpr",
+            diagnostic=_ADDRESS_SGPR_DIAGNOSTIC,
+        )
+        if preserve_value_register
+        else Guard.value_materializable(
+            value_source,
+            ADDRESS_VGPR_MATERIALIZER.name,
+            diagnostic=_ADDRESS_VGPR_DIAGNOSTIC,
+        )
+    )
+    value_operand = (
+        ValueRef.operand(value_source)
+        if preserve_value_register
+        else _materialized_operand(value_source, ADDRESS_VGPR_MATERIALIZER)
+    )
+    return DescriptorRule(
+        source_op=index.index_madd,
+        descriptor=descriptor,
+        guards=(
+            *_typed_guards(("a", "b", "c", "result"), _INDEX),
+            Guard.value_unsigned_bit_count(
+                "result",
+                32,
+                diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+            ),
+            Guard.low_value_register_class(
+                "result",
+                "amdgpu.vgpr",
+                diagnostic=_RESULT_VGPR_DIAGNOSTIC,
+            ),
+            Guard.value_exact_power_of_two_i64(
+                scale_source,
+                diagnostic=_ADDRESS_POWER_OF_TWO_DIAGNOSTIC,
+            ),
+            Guard.value_unsigned_bit_count(
+                scale_source,
+                32,
+                diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+            ),
+            value_guard,
+            Guard.value_materializable(
+                "c",
+                ADDRESS_VGPR_MATERIALIZER.name,
+                diagnostic=_ADDRESS_VGPR_DIAGNOSTIC,
+            ),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={
+                    "value": value_operand,
+                    "addend": _materialized_operand("c", ADDRESS_VGPR_MATERIALIZER),
+                },
+                results={"dst": ValueRef.result("result")},
+                immediates={"shift": ValueProject.exact_i64_log2(scale_source)},
+                form=DescriptorEmitForm.OP,
+            ),
+        ),
+    )
+
+
 def _index_madd_literal_rule() -> DescriptorRule:
     multiply = _descriptor("amdgpu.v_mul_lo_u32")
     add = _descriptor("amdgpu.v_add_u32.lit")
@@ -1277,6 +1350,16 @@ def _rules() -> tuple[ContractCase, ...]:
                 literal_addend=True,
                 preserve_value_register=True,
             ),
+            _index_madd_power_of_two_lshl_add_rule(
+                scale_source="a",
+                value_source="b",
+                preserve_value_register=True,
+            ),
+            _index_madd_power_of_two_lshl_add_rule(
+                scale_source="b",
+                value_source="a",
+                preserve_value_register=True,
+            ),
             _index_madd_power_of_two_rule(
                 scale_source="a",
                 value_source="b",
@@ -1299,6 +1382,16 @@ def _rules() -> tuple[ContractCase, ...]:
                 scale_source="b",
                 value_source="a",
                 literal_addend=True,
+                preserve_value_register=False,
+            ),
+            _index_madd_power_of_two_lshl_add_rule(
+                scale_source="a",
+                value_source="b",
+                preserve_value_register=False,
+            ),
+            _index_madd_power_of_two_lshl_add_rule(
+                scale_source="b",
+                value_source="a",
                 preserve_value_register=False,
             ),
             _index_madd_power_of_two_rule(

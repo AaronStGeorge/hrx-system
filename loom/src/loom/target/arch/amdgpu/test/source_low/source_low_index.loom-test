@@ -29,11 +29,10 @@ low.kernel.def target(@target) workgroup_size(4, 4, 1) @index_madd_global_b32() 
   %x = v_and_b32_lit %packed_tid, 1023
   %20 = v_lshrrev_b32_lit %packed_tid, 10
   %y = v_and_b32_lit %20, 1023
-  %22 = v_lshlrev_b32_lit %y, 2
-  %linear = v_add_u32 %22, %x
-  %24 = v_lshlrev_b32_lit %linear, 2
-  %loaded = global_load_b32 %24, %input_view
-  global_store_b32 %24, %loaded, %output_view
+  %linear = v_lshl_add_u32_shift_imm %y, %x, 2
+  %23 = v_lshlrev_b32_lit %linear, 2
+  %loaded = global_load_b32 %23, %input_view
+  global_store_b32 %23, %loaded, %output_view
   return
 }
 
@@ -328,10 +327,9 @@ low.kernel.def target(@target) workgroup_size(8, 4, 1) @dispatch_id_xy_global_b3
   %24 = v_mov_b32_copy %15
   %25 = v_lshlrev_b32_lit %24, 2
   %dispatch_y = v_add_u32 %25, %23
-  %27 = v_lshlrev_b32_lit %dispatch_y, 5
-  %linear = v_add_u32 %27, %dispatch_x
+  %linear = v_lshl_add_u32_shift_imm %dispatch_y, %dispatch_x, 5
   %one = v_mov_b32 1
-  %30 = v_lshlrev_b32_lit %linear, 2
-  global_store_b32 %30, %one, %output_view
+  %29 = v_lshlrev_b32_lit %linear, 2
+  global_store_b32 %29, %one, %output_view
   return
 }
