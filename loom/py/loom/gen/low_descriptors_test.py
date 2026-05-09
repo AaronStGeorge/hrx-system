@@ -36,6 +36,7 @@ from loom.target.low_descriptors import (
     ImmediateKind,
     OperandFlag,
     OperandForm,
+    OperandFormMatch,
     OperandFormMatchKind,
     OperandRole,
 )
@@ -147,9 +148,13 @@ def test_allowlist_closes_over_operand_form_replacements() -> None:
         operand_forms=(
             OperandForm(
                 replacement_descriptor=replacement_descriptor.key,
-                source_operand="rhs",
-                match_kind=OperandFormMatchKind.ALL_EQUAL_I64,
-                match_i64=0,
+                matches=(
+                    OperandFormMatch(
+                        source_operand="rhs",
+                        match_kind=OperandFormMatchKind.ALL_EQUAL_I64,
+                        match_i64=0,
+                    ),
+                ),
             ),
         ),
     )
@@ -169,6 +174,7 @@ def test_allowlist_closes_over_operand_form_replacements() -> None:
         replacement_descriptor.key,
     ]
     assert manifest["table_counts"]["operand_forms"] == 1
+    assert manifest["table_counts"]["operand_form_matches"] == 1
     assert manifest["table_counts"]["operand_form_operand_indices"] == 1
     assert manifest["descriptors"][0]["operand_forms"] == 1
     assert manifest["descriptors"][1]["operand_forms"] == 0

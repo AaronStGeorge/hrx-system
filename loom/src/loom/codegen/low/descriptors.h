@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 21u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 22u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -619,29 +619,39 @@ typedef struct loom_low_descriptor_t {
   uint32_t canonical_asm_form_ordinal;
 } loom_low_descriptor_t;
 
-typedef struct loom_low_operand_form_t {
-  // Descriptor ordinal selected when the source operand predicate matches.
-  uint32_t replacement_descriptor_ordinal;
-  // First source packet-operand index used by the replacement descriptor.
-  uint32_t operand_map_start;
+typedef struct loom_low_operand_form_match_t {
   // Descriptor-local operand index whose value facts select this form.
   uint16_t source_operand_index;
   // Packet operand position corresponding to source_operand_index.
   uint16_t source_packet_operand_index;
+  // Predicate kind used to test the source operand facts.
+  loom_low_operand_form_match_kind_t match_kind;
+  // Predicate integer payload. ALL_EQUAL_I64 compares against this value.
+  int64_t match_i64;
+} loom_low_operand_form_match_t;
+
+typedef struct loom_low_operand_form_t {
+  // Descriptor ordinal selected when every source operand predicate matches.
+  uint32_t replacement_descriptor_ordinal;
+  // First source packet-operand index used by the replacement descriptor.
+  uint32_t operand_map_start;
+  // First predicate row in operand_form_matches.
+  uint32_t match_start;
   // Descriptor-local source immediate field read by immediate_action, or
   // LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE when unused.
   uint16_t source_immediate_index;
   // Descriptor-local replacement immediate populated from the matched operand,
   // or LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE when immediate_action is NONE.
   uint16_t replacement_immediate_index;
+  // Form-local predicate index whose matched value feeds immediate_action, or
+  // LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE when immediate_action is NONE.
+  uint16_t immediate_match_index;
   // Number of packet operand positions in operand_form_operand_indices.
   uint16_t operand_map_count;
   // How matched operand facts update replacement descriptor immediates.
   loom_low_operand_form_immediate_action_t immediate_action;
-  // Predicate kind used to test the source operand facts.
-  loom_low_operand_form_match_kind_t match_kind;
-  // Predicate integer payload. ALL_EQUAL_I64 compares against this value.
-  int64_t match_i64;
+  // Number of predicate rows in operand_form_matches.
+  uint16_t match_count;
 } loom_low_operand_form_t;
 
 typedef struct loom_low_descriptor_ref_t {
@@ -749,6 +759,10 @@ typedef struct loom_low_descriptor_set_t {
   const loom_low_operand_form_t* operand_forms;
   // Number of operand-form rows owned by this set.
   uint32_t operand_form_count;
+  // Dense operand-form predicate rows referenced by operand forms.
+  const loom_low_operand_form_match_t* operand_form_matches;
+  // Number of operand-form predicate rows owned by this set.
+  uint32_t operand_form_match_count;
   // Packed source packet-operand positions referenced by operand forms.
   const uint16_t* operand_form_operand_indices;
   // Number of operand-form operand-index rows owned by this set.

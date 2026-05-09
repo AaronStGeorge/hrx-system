@@ -14,7 +14,7 @@ from pathlib import Path
 
 from loom.stable_id import stable_id_from_string
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 21
+LOW_DESCRIPTOR_SET_ABI_VERSION = 22
 LOW_DESCRIPTOR_ENCODING_ID_NONE = (2**16) - 1
 LOW_DESCRIPTOR_SET_ORDINAL_NONE = (2**16) - 1
 
@@ -316,27 +316,45 @@ class Constraint:
 
 
 @dataclass(frozen=True, slots=True)
-class OperandForm:
-    replacement_descriptor: str
+class OperandFormMatch:
     source_operand: str
     match_kind: OperandFormMatchKind
     match_i64: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class OperandForm:
+    replacement_descriptor: str
+    matches: tuple[OperandFormMatch, ...]
     immediate_action: OperandFormImmediateAction = OperandFormImmediateAction.NONE
     immediate_field: str | None = None
+    immediate_source_operand: str | None = None
 
     def __post_init__(self) -> None:
         _validate_metadata_key("replacement descriptor", self.replacement_descriptor)
+        if not self.matches:
+            raise ValueError("operand form must have at least one match predicate")
+        match_source_operands = {match.source_operand for match in self.matches}
+        if len(match_source_operands) != len(self.matches):
+            raise ValueError("operand form match predicates must use unique operands")
         if self.immediate_field is not None:
             _validate_metadata_key("immediate field", self.immediate_field)
         if self.immediate_action is OperandFormImmediateAction.NONE:
-            if self.immediate_field is not None:
+            if (
+                self.immediate_field is not None
+                or self.immediate_source_operand is not None
+            ):
                 raise ValueError(
                     "operand form without an immediate action must not name "
-                    "an immediate field"
+                    "immediate fields or sources"
                 )
-        elif self.immediate_field is None:
+        elif self.immediate_field is None or self.immediate_source_operand is None:
             raise ValueError(
-                "operand form immediate action must name an immediate field"
+                "operand form immediate action must name an immediate field and source"
+            )
+        elif self.immediate_source_operand not in match_source_operands:
+            raise ValueError(
+                "operand form immediate source must name one matched source operand"
             )
 
 

@@ -56,10 +56,10 @@ typedef struct loom_low_select_operand_forms_state_t {
 
 static bool loom_low_select_operand_form_matches(
     const loom_value_fact_table_t* value_facts, loom_value_id_t value_id,
-    const loom_low_operand_form_t* form, int64_t* out_matched_value) {
+    const loom_low_operand_form_match_t* match, int64_t* out_matched_value) {
   const loom_value_facts_t facts =
       loom_value_fact_table_lookup(value_facts, value_id);
-  switch (form->match_kind) {
+  switch (match->match_kind) {
     case LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_I64: {
       loom_value_facts_t element = loom_value_facts_unknown();
       if (!loom_value_facts_query_all_equal_element(&value_facts->context,
@@ -68,7 +68,7 @@ static bool loom_low_select_operand_form_matches(
       }
       int64_t value = 0;
       if (!loom_value_facts_as_exact_i64(element, &value) ||
-          value != form->match_i64) {
+          value != match->match_i64) {
         return false;
       }
       *out_matched_value = value;
@@ -413,15 +413,29 @@ static iree_status_t loom_low_select_operand_forms_try_rewrite_packet(
     const loom_low_operand_form_t* form =
         &descriptor_set
              ->operand_forms[packet.descriptor->operand_form_start + i];
-    const loom_value_id_t value_id =
-        loom_op_operands(op)[form->source_packet_operand_index];
     int64_t matched_value = 0;
-    if (!loom_low_select_operand_form_matches(state->value_facts, value_id,
-                                              form, &matched_value)) {
-      continue;
+    bool matched = true;
+    for (uint16_t match_index = 0; match_index < form->match_count;
+         ++match_index) {
+      const loom_low_operand_form_match_t* match =
+          &descriptor_set
+               ->operand_form_matches[form->match_start + match_index];
+      const loom_value_id_t value_id =
+          loom_op_operands(op)[match->source_packet_operand_index];
+      int64_t candidate_value = 0;
+      if (!loom_low_select_operand_form_matches(state->value_facts, value_id,
+                                                match, &candidate_value)) {
+        matched = false;
+        break;
+      }
+      if (match_index == form->immediate_match_index) {
+        matched_value = candidate_value;
+      }
     }
-    return loom_low_select_operand_form_rewrite_packet(
-        state, rewriter, op, packet.descriptor, form, matched_value);
+    if (matched) {
+      return loom_low_select_operand_form_rewrite_packet(
+          state, rewriter, op, packet.descriptor, form, matched_value);
+    }
   }
   return iree_ok_status();
 }

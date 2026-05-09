@@ -65,6 +65,7 @@ from loom.target.low_descriptors import (
     OperandFlag,
     OperandForm,
     OperandFormImmediateAction,
+    OperandFormMatch,
     OperandFormMatchKind,
     OperandRole,
     RegClass,
@@ -2027,29 +2028,61 @@ def _literal_operand_form(
 ) -> OperandForm:
     return OperandForm(
         replacement_descriptor=replacement_descriptor,
-        source_operand=source_operand,
-        match_kind=OperandFormMatchKind.ALL_EQUAL_EXACT_I64,
+        matches=(
+            OperandFormMatch(
+                source_operand=source_operand,
+                match_kind=OperandFormMatchKind.ALL_EQUAL_EXACT_I64,
+            ),
+        ),
         immediate_action=OperandFormImmediateAction.SET_MATCHED_I64,
         immediate_field="imm32",
+        immediate_source_operand=source_operand,
     )
 
 
 def _soffset_zero_operand_form(*, replacement_descriptor: str) -> OperandForm:
     return OperandForm(
         replacement_descriptor=replacement_descriptor,
-        source_operand="soffset",
-        match_kind=OperandFormMatchKind.ALL_EQUAL_I64,
-        match_i64=0,
+        matches=(
+            OperandFormMatch(
+                source_operand="soffset",
+                match_kind=OperandFormMatchKind.ALL_EQUAL_I64,
+                match_i64=0,
+            ),
+        ),
     )
 
 
 def _soffset_offset_operand_form(*, replacement_descriptor: str) -> OperandForm:
     return OperandForm(
         replacement_descriptor=replacement_descriptor,
-        source_operand="soffset",
-        match_kind=OperandFormMatchKind.ALL_EQUAL_EXACT_I64,
+        matches=(
+            OperandFormMatch(
+                source_operand="soffset",
+                match_kind=OperandFormMatchKind.ALL_EQUAL_EXACT_I64,
+            ),
+        ),
         immediate_action=OperandFormImmediateAction.ADD_MATCHED_I64,
         immediate_field="offset",
+        immediate_source_operand="soffset",
+    )
+
+
+def _buffer_off_zero_operand_form(*, replacement_descriptor: str) -> OperandForm:
+    return OperandForm(
+        replacement_descriptor=replacement_descriptor,
+        matches=(
+            OperandFormMatch(
+                source_operand="vaddr",
+                match_kind=OperandFormMatchKind.ALL_EQUAL_I64,
+                match_i64=0,
+            ),
+            OperandFormMatch(
+                source_operand="soffset",
+                match_kind=OperandFormMatchKind.ALL_EQUAL_I64,
+                match_i64=0,
+            ),
+        ),
     )
 
 
@@ -3408,7 +3441,15 @@ def _buffer_load_dword_overlay(
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
     cache_fields: tuple[tuple[str, int], ...] = (),
+    off_zero_descriptor_key: str | None = "amdgpu.buffer_load_dword_off_zero",
 ) -> AmdgpuDescriptorOverlay:
+    operand_forms: tuple[OperandForm, ...] = ()
+    if off_zero_descriptor_key is not None:
+        operand_forms = (
+            _buffer_off_zero_operand_form(
+                replacement_descriptor=off_zero_descriptor_key
+            ),
+        )
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.buffer_load_dword",
         instruction_name="BUFFER_LOAD_DWORD",
@@ -3433,6 +3474,7 @@ def _buffer_load_dword_overlay(
         fixed_encoding_fields=(("IDXEN", 0), ("OFFEN", 1)),
         effects=(_GLOBAL_LOAD_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
+        operand_forms=operand_forms,
     )
 
 
@@ -3632,7 +3674,15 @@ def _buffer_store_dword_overlay(
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 12,
     cache_fields: tuple[tuple[str, int], ...] = (),
+    off_zero_descriptor_key: str | None = "amdgpu.buffer_store_dword_off_zero",
 ) -> AmdgpuDescriptorOverlay:
+    operand_forms: tuple[OperandForm, ...] = ()
+    if off_zero_descriptor_key is not None:
+        operand_forms = (
+            _buffer_off_zero_operand_form(
+                replacement_descriptor=off_zero_descriptor_key
+            ),
+        )
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.buffer_store_dword",
         instruction_name="BUFFER_STORE_DWORD",
@@ -3657,6 +3707,7 @@ def _buffer_store_dword_overlay(
         fixed_encoding_fields=(("IDXEN", 0), ("OFFEN", 1)),
         effects=(_GLOBAL_STORE_EFFECT,),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
+        operand_forms=operand_forms,
     )
 
 
@@ -6270,9 +6321,13 @@ def _with_zero_accumulator_form(
             *overlay.operand_forms,
             OperandForm(
                 replacement_descriptor=zero_descriptor_key,
-                source_operand="acc",
-                match_kind=OperandFormMatchKind.ALL_EQUAL_I64,
-                match_i64=0,
+                matches=(
+                    OperandFormMatch(
+                        source_operand="acc",
+                        match_kind=OperandFormMatchKind.ALL_EQUAL_I64,
+                        match_i64=0,
+                    ),
+                ),
             ),
         ),
     )
@@ -7874,6 +7929,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             offset_field_name="IOFFSET",
             offset_bit_width=24,
             cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+            off_zero_descriptor_key=None,
         ),
         _buffer_load_64_overlay(
             encoding_name="ENC_VBUFFER",
@@ -7895,6 +7951,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             offset_field_name="IOFFSET",
             offset_bit_width=24,
             cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+            off_zero_descriptor_key=None,
         ),
         _buffer_store_64_overlay(
             encoding_name="ENC_VBUFFER",
@@ -8161,6 +8218,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             offset_field_name="IOFFSET",
             offset_bit_width=24,
             cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+            off_zero_descriptor_key=None,
         ),
         _buffer_load_64_overlay(
             encoding_name="ENC_VBUFFER",
@@ -8182,6 +8240,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             offset_field_name="IOFFSET",
             offset_bit_width=24,
             cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+            off_zero_descriptor_key=None,
         ),
         _buffer_store_64_overlay(
             encoding_name="ENC_VBUFFER",

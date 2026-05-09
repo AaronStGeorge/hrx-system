@@ -694,6 +694,7 @@ iree_status_t loom_low_descriptor_set_format_manifest_json(
       ",\"enum_domains\":%" PRIu32 ",\"enum_values\":%" PRIu32
       ",\"effects\":%" PRIu32 ",\"constraints\":%" PRIu32
       ",\"reg_classes\":%" PRIu32 ",\"operand_forms\":%" PRIu32
+      ",\"operand_form_matches\":%" PRIu32
       ",\"operand_form_operand_indices\":%" PRIu32
       ",\"reg_class_alts\":%" PRIu32 ",\"schedule_classes\":%" PRIu32
       ",\"issue_uses\":%" PRIu32 ",\"resources\":%" PRIu32
@@ -707,6 +708,7 @@ iree_status_t loom_low_descriptor_set_format_manifest_json(
       descriptor_set->enum_value_count, descriptor_set->effect_count,
       descriptor_set->constraint_count, descriptor_set->reg_class_count,
       descriptor_set->operand_form_count,
+      descriptor_set->operand_form_match_count,
       descriptor_set->operand_form_operand_index_count,
       descriptor_set->reg_class_alt_count, descriptor_set->schedule_class_count,
       descriptor_set->issue_use_count, descriptor_set->resource_count,

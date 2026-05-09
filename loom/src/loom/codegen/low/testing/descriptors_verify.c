@@ -232,6 +232,9 @@ static iree_status_t loom_low_verify_tables_present(
       descriptor_set->operand_forms, descriptor_set->operand_form_count,
       "operand_forms"));
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      descriptor_set->operand_form_matches,
+      descriptor_set->operand_form_match_count, "operand_form_matches"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
       descriptor_set->operand_form_operand_indices,
       descriptor_set->operand_form_operand_index_count,
       "operand_form_operand_indices"));
@@ -653,41 +656,58 @@ static iree_status_t loom_low_verify_descriptor_operand_forms(
                               form->replacement_descriptor_ordinal,
                               descriptor_set->descriptor_count);
     }
-    if (form->source_operand_index >= descriptor->operand_count) {
-      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "low descriptor %" PRIu32 " operand form %" PRIu32
-                              " references source operand %" PRIu16
-                              " but descriptor has only %" PRIu16 " operands",
-                              descriptor_index, form_index,
-                              form->source_operand_index,
-                              descriptor->operand_count);
-    }
-    const loom_low_operand_t* source_operand =
-        &descriptor_set
-             ->operands[descriptor->operand_start + form->source_operand_index];
-    if (!loom_low_operand_role_is_packet_operand(source_operand->role) ||
-        iree_any_bit_set(source_operand->flags,
-                         LOOM_LOW_OPERAND_FLAG_IMPLICIT)) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "low descriptor %" PRIu32 " operand form %" PRIu32
-          " source operand %" PRIu16 " is not an explicit packet operand",
-          descriptor_index, form_index, form->source_operand_index);
-    }
-    if (form->source_packet_operand_index >= source_packet_operand_count) {
-      return iree_make_status(
-          IREE_STATUS_OUT_OF_RANGE,
-          "low descriptor %" PRIu32 " operand form %" PRIu32
-          " references source packet operand %" PRIu16
-          " but descriptor has only %" PRIu16 " packet operands",
-          descriptor_index, form_index, form->source_packet_operand_index,
-          source_packet_operand_count);
-    }
-    if (!loom_low_operand_form_match_kind_is_valid(form->match_kind)) {
+    if (form->match_count == 0) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "low descriptor %" PRIu32 " operand form %" PRIu32
-                              " has unknown match kind %u",
-                              descriptor_index, form_index, form->match_kind);
+                              " has no match predicates",
+                              descriptor_index, form_index);
+    }
+    IREE_RETURN_IF_ERROR(loom_low_verify_span(
+        form->match_start, form->match_count,
+        descriptor_set->operand_form_match_count, "operand_form_matches"));
+    for (uint16_t match_index = 0; match_index < form->match_count;
+         ++match_index) {
+      const loom_low_operand_form_match_t* match =
+          &descriptor_set
+               ->operand_form_matches[form->match_start + match_index];
+      if (match->source_operand_index >= descriptor->operand_count) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "low descriptor %" PRIu32 " operand form %" PRIu32 " match %" PRIu16
+            " references source operand %" PRIu16
+            " but descriptor has only %" PRIu16 " operands",
+            descriptor_index, form_index, match_index,
+            match->source_operand_index, descriptor->operand_count);
+      }
+      const loom_low_operand_t* source_operand =
+          &descriptor_set->operands[descriptor->operand_start +
+                                    match->source_operand_index];
+      if (!loom_low_operand_role_is_packet_operand(source_operand->role) ||
+          iree_any_bit_set(source_operand->flags,
+                           LOOM_LOW_OPERAND_FLAG_IMPLICIT)) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "low descriptor %" PRIu32 " operand form %" PRIu32 " match %" PRIu16
+            " source operand %" PRIu16 " is not an explicit packet operand",
+            descriptor_index, form_index, match_index,
+            match->source_operand_index);
+      }
+      if (match->source_packet_operand_index >= source_packet_operand_count) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "low descriptor %" PRIu32 " operand form %" PRIu32 " match %" PRIu16
+            " references source packet operand %" PRIu16
+            " but descriptor has only %" PRIu16 " packet operands",
+            descriptor_index, form_index, match_index,
+            match->source_packet_operand_index, source_packet_operand_count);
+      }
+      if (!loom_low_operand_form_match_kind_is_valid(match->match_kind)) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "low descriptor %" PRIu32 " operand form %" PRIu32 " match %" PRIu16
+            " has unknown match kind %u",
+            descriptor_index, form_index, match_index, match->match_kind);
+      }
     }
     if (!loom_low_operand_form_immediate_action_is_valid(
             form->immediate_action)) {
@@ -702,6 +722,8 @@ static iree_status_t loom_low_verify_descriptor_operand_forms(
         if (form->source_immediate_index !=
                 LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE ||
             form->replacement_immediate_index !=
+                LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE ||
+            form->immediate_match_index !=
                 LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE) {
           return iree_make_status(
               IREE_STATUS_INVALID_ARGUMENT,
@@ -714,7 +736,8 @@ static iree_status_t loom_low_verify_descriptor_operand_forms(
         if (form->source_immediate_index !=
                 LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE ||
             form->replacement_immediate_index ==
-                LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE) {
+                LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE ||
+            form->immediate_match_index >= form->match_count) {
           return iree_make_status(
               IREE_STATUS_INVALID_ARGUMENT,
               "low descriptor %" PRIu32 " operand form %" PRIu32
@@ -726,7 +749,8 @@ static iree_status_t loom_low_verify_descriptor_operand_forms(
         if (form->source_immediate_index ==
                 LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE ||
             form->replacement_immediate_index ==
-                LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE) {
+                LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE ||
+            form->immediate_match_index >= form->match_count) {
           return iree_make_status(
               IREE_STATUS_INVALID_ARGUMENT,
               "low descriptor %" PRIu32 " operand form %" PRIu32
