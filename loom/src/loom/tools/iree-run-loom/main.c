@@ -50,8 +50,10 @@ IREE_FLAG(int32_t, output_max_element_count, 1024,
           "Maximum number of VM output elements to format.");
 IREE_FLAG(int32_t, entry_point, 0,
           "HAL executable entry point ordinal to dispatch.");
-IREE_FLAG(string, workgroup_count, "1,1,1",
-          "HAL dispatch workgroup count as `x,y,z`.");
+IREE_FLAG(string, workgroup_count, "",
+          "Optional HAL dispatch workgroup count as `x,y,z`. When omitted, a "
+          "static kernel.launch.config workgroup count is used when available, "
+          "otherwise one workgroup is dispatched.");
 IREE_FLAG(string, compile_report, "",
           "Optional compile report output. Use 'summary', 'details', or "
           "empty/'none'.");
@@ -259,9 +261,12 @@ static iree_status_t iree_run_loom_one_shot_options_initialize(
                               (int)FLAG_entry_point);
     }
     out_options->hal_entry_point = (uint32_t)FLAG_entry_point;
-    IREE_RETURN_IF_ERROR(iree_run_loom_parse_workgroup_count(
-        iree_make_cstring_view(FLAG_workgroup_count),
-        out_options->hal_workgroup_count));
+    const iree_string_view_t workgroup_count =
+        iree_make_cstring_view(FLAG_workgroup_count);
+    if (!iree_string_view_is_empty(workgroup_count)) {
+      IREE_RETURN_IF_ERROR(iree_run_loom_parse_workgroup_count(
+          workgroup_count, out_options->hal_workgroup_count));
+    }
     out_options->hal_bindings = (loom_run_one_shot_binding_specs_t){
         .values = iree_run_loom_hal_flags.binding_specs,
         .conventions = iree_run_loom_hal_flags.binding_cconv,
@@ -485,6 +490,13 @@ int iree_run_loom_main(int argc, char** argv,
     parse_options.filename = filename;
     parse_options.source = source;
     status = loom_run_module_parse(&session, &parse_options, &run_module);
+  }
+  if (iree_status_is_ok(status) &&
+      iree_any_bit_set(backend->flags,
+                       LOOM_RUN_EXECUTION_BACKEND_FLAG_HAL_OPTIONS) &&
+      iree_string_view_is_empty(iree_make_cstring_view(FLAG_workgroup_count))) {
+    loom_run_one_shot_options_apply_static_hal_workgroup_count(
+        run_module.module, compile_options.entry_symbol, &one_shot_options);
   }
   if (iree_status_is_ok(status)) {
     compile_options.source_resolver =

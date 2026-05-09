@@ -10,6 +10,7 @@
 #define LOOM_TOOLING_EXECUTION_ONE_SHOT_H_
 
 #include "iree/base/api.h"
+#include "loom/ir/module.h"
 #include "loom/tooling/execution/compile_options.h"
 #include "loom/tooling/execution/session.h"
 
@@ -110,6 +111,14 @@ struct loom_run_one_shot_request_t {
 // Initializes one-shot options to match the existing iree-run-loom defaults.
 void loom_run_one_shot_options_initialize(
     loom_run_one_shot_options_t* out_options);
+
+// Applies the static dispatch workgroup count from a source kernel launch
+// config when |entry_symbol| names a kernel, or when the module has exactly one
+// kernel and |entry_symbol| is empty. Returns false when no unique source
+// kernel with a fully static workgroup count is available.
+bool loom_run_one_shot_options_apply_static_hal_workgroup_count(
+    const loom_module_t* module, iree_string_view_t entry_symbol,
+    loom_run_one_shot_options_t* options);
 
 // Initializes a one-shot result. Must be paired with
 // loom_run_one_shot_result_deinitialize().

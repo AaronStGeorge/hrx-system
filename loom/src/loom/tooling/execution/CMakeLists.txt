@@ -188,6 +188,8 @@ loom_cc_library(
     ::compile_options
     ::session
     iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::kernel
   PUBLIC
 )
 
@@ -273,6 +275,21 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     iree::vm
+)
+
+loom_cc_test(
+  NAME
+    one_shot_test
+  SRCS
+    "one_shot_test.cc"
+  DEPS
+    ::one_shot
+    ::session
+    iree::base
+    loom::src::loom::ops::op_registry
+    loom::src::loom::target::low_descriptor_registry_core_test
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

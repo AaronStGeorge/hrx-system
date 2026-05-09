@@ -160,6 +160,8 @@ loom_cc_library(
     deps = [
         ":compile_options",
         ":session",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/kernel",
         "//runtime/src/iree/base",
     ],
 )
@@ -236,6 +238,20 @@ loom_cc_test(
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
         "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_test(
+    name = "one_shot_test",
+    srcs = ["one_shot_test.cc"],
+    deps = [
+        ":one_shot",
+        ":session",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/target:low_descriptor_registry_core_test",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
