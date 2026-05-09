@@ -43,6 +43,50 @@ kernel.def @index_madd_u24_global_b32(%input: buffer, %output: buffer) {
 
 // ====
 
+kernel.def @index_madd_u24_literal_lhs_global_b32(%input: buffer, %output: buffer) {
+  %c1 = index.constant 1 : index
+  %c4 = index.constant 4 : index
+  %c8 = index.constant 8 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c8, %c4, %c1) : index
+} launch {
+  %x0 = kernel.workitem.id<x> : index
+  %x = index.assume %x0 [range(%x0, 0, 7)] : index
+  %y0 = kernel.workitem.id<y> : index
+  %y = index.assume %y0 [range(%y0, 0, 3)] : index
+  %zero = index.constant 0 : offset
+  %row_stride = index.constant 9 : index
+  %linear = index.madd %row_stride, %y, %x : index
+  %input_view = buffer.view %input[%zero] : buffer -> view<36xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<36xi32, #dense>
+  %loaded = vector.load %input_view[%linear] : view<36xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %output_view[%linear] : vector<1xi32>, view<36xi32, #dense>
+  kernel.return
+}
+
+// ====
+
+kernel.def @index_madd_u24_literal_addend_global_b32(%input: buffer, %output: buffer) {
+  %c1 = index.constant 1 : index
+  %c4 = index.constant 4 : index
+  %c8 = index.constant 8 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c8, %c4, %c1) : index
+} launch {
+  %x0 = kernel.workitem.id<x> : index
+  %x = index.assume %x0 [range(%x0, 0, 7)] : index
+  %y0 = kernel.workitem.id<y> : index
+  %y = index.assume %y0 [range(%y0, 0, 3)] : index
+  %zero = index.constant 0 : offset
+  %column = index.constant 1 : index
+  %linear = index.madd %y, %x, %column : index
+  %input_view = buffer.view %input[%zero] : buffer -> view<36xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<36xi32, #dense>
+  %loaded = vector.load %input_view[%linear] : view<36xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %output_view[%linear] : vector<1xi32>, view<36xi32, #dense>
+  kernel.return
+}
+
+// ====
+
 kernel.def @index_madd_constant_addend_global_b32(%input: buffer, %output: buffer) {
   %c1 = index.constant 1 : index
   %c4 = index.constant 4 : index

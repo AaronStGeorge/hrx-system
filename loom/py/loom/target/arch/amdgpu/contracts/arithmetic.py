@@ -66,6 +66,9 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_sub_u32",
     "amdgpu.v_mul_lo_u32",
     "amdgpu.v_mad_u32_u24",
+    "amdgpu.v_mad_u32_u24.src0_lit",
+    "amdgpu.v_mad_u32_u24.src1_lit",
+    "amdgpu.v_mad_u32_u24.src2_lit",
     "amdgpu.v_min_i32",
     "amdgpu.v_max_i32",
     "amdgpu.v_min_u32",
@@ -1007,6 +1010,113 @@ def _index_madd_u24_mad_rule(
     )
 
 
+def _index_madd_u24_mad_literal_rule(
+    *,
+    literal_source: str,
+    preserved_source: str | None,
+) -> DescriptorRule:
+    descriptor_by_source = {
+        "a": _descriptor("amdgpu.v_mad_u32_u24.src0_lit"),
+        "b": _descriptor("amdgpu.v_mad_u32_u24.src1_lit"),
+        "c": _descriptor("amdgpu.v_mad_u32_u24.src2_lit"),
+    }
+    descriptor = descriptor_by_source[literal_source]
+
+    def multiply_guard(field: str) -> Guard:
+        if literal_source == field:
+            return Guard.value_exact_i64(
+                field,
+                diagnostic=_ADDRESS_EXACT_DIAGNOSTIC,
+            )
+        if preserved_source == field:
+            return Guard.low_value_register_class(
+                field,
+                "amdgpu.sgpr",
+                diagnostic=_ADDRESS_SGPR_DIAGNOSTIC,
+            )
+        return Guard.value_materializable(
+            field,
+            ADDRESS_VGPR_MATERIALIZER.name,
+            diagnostic=_ADDRESS_VGPR_DIAGNOSTIC,
+        )
+
+    def multiply_operand(field: str) -> ValueRef | None:
+        if literal_source == field:
+            return None
+        if preserved_source == field:
+            return ValueRef.operand(field)
+        return _materialized_operand(field, ADDRESS_VGPR_MATERIALIZER)
+
+    def addend_guard() -> Guard:
+        if literal_source == "c":
+            return Guard.value_exact_i64("c", diagnostic=_ADDRESS_EXACT_DIAGNOSTIC)
+        return Guard.value_materializable(
+            "c",
+            ADDRESS_VGPR_MATERIALIZER.name,
+            diagnostic=_ADDRESS_VGPR_DIAGNOSTIC,
+        )
+
+    operands: dict[str, ValueRef] = {}
+    for field in ("a", "b"):
+        operand = multiply_operand(field)
+        if operand is not None:
+            operands[field] = operand
+    if literal_source != "c":
+        operands["addend"] = _materialized_operand("c", ADDRESS_VGPR_MATERIALIZER)
+
+    extra_literal_guards: tuple[Guard, ...] = ()
+    if literal_source == "c":
+        extra_literal_guards = (
+            Guard.value_unsigned_bit_count(
+                "c",
+                32,
+                diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+            ),
+        )
+
+    return DescriptorRule(
+        source_op=index.index_madd,
+        descriptor=descriptor,
+        guards=(
+            *_typed_guards(("a", "b", "c", "result"), _INDEX),
+            Guard.value_unsigned_bit_count(
+                "result",
+                32,
+                diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+            ),
+            Guard.low_value_register_class(
+                "result",
+                "amdgpu.vgpr",
+                diagnostic=_RESULT_VGPR_DIAGNOSTIC,
+            ),
+            Guard.value_unsigned_bit_count(
+                "a",
+                24,
+                diagnostic=_ADDRESS_U24_DIAGNOSTIC,
+            ),
+            Guard.value_unsigned_bit_count(
+                "b",
+                24,
+                diagnostic=_ADDRESS_U24_DIAGNOSTIC,
+            ),
+            multiply_guard("a"),
+            multiply_guard("b"),
+            addend_guard(),
+            *extra_literal_guards,
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands=operands,
+                results={"dst": ValueRef.result("result")},
+                immediates={"imm32": ValueProject.exact_i64(literal_source)},
+                form=DescriptorEmitForm.OP,
+            ),
+        ),
+    )
+
+
 def _index_madd_rule() -> DescriptorRule:
     multiply = _descriptor("amdgpu.v_mul_lo_u32")
     add = _descriptor("amdgpu.v_add_u32")
@@ -1484,6 +1594,34 @@ def _rules() -> tuple[ContractCase, ...]:
                 value_source="a",
                 literal_addend=False,
                 preserve_value_register=False,
+            ),
+            _index_madd_u24_mad_literal_rule(
+                literal_source="b",
+                preserved_source="a",
+            ),
+            _index_madd_u24_mad_literal_rule(
+                literal_source="a",
+                preserved_source="b",
+            ),
+            _index_madd_u24_mad_literal_rule(
+                literal_source="c",
+                preserved_source="a",
+            ),
+            _index_madd_u24_mad_literal_rule(
+                literal_source="c",
+                preserved_source="b",
+            ),
+            _index_madd_u24_mad_literal_rule(
+                literal_source="b",
+                preserved_source=None,
+            ),
+            _index_madd_u24_mad_literal_rule(
+                literal_source="a",
+                preserved_source=None,
+            ),
+            _index_madd_u24_mad_literal_rule(
+                literal_source="c",
+                preserved_source=None,
             ),
             _index_madd_u24_mad_rule(preserved_source="a"),
             _index_madd_u24_mad_rule(preserved_source="b"),

@@ -25,6 +25,7 @@ from loom.target.arch.amdgpu.descriptor_overlay import (
 from loom.target.arch.amdgpu.encoding import (
     AMDGPU_ENCODING_FORMAT_SOP1,
     AMDGPU_ENCODING_FORMAT_SOP2,
+    AMDGPU_ENCODING_FORMAT_VOP3_LITERAL,
     amdgpu_encoding_field_id,
 )
 from loom.target.arch.amdgpu.isa_xml import (
@@ -840,6 +841,10 @@ def _source_inline_u32_immediate(field_name: str = "imm32") -> Immediate:
 _U32_IMMEDIATE = _u32_immediate()
 
 _SOURCE_INLINE_U32_IMMEDIATE = _source_inline_u32_immediate()
+
+_LITERAL_U32_IMMEDIATE = replace(
+    _U32_IMMEDIATE, encoding_field_id=amdgpu_encoding_field_id("LITERAL")
+)
 
 _HAL_BUFFER_DESCRIPTOR_EXTENT_IMMEDIATE = Immediate(
     "extent",
@@ -2364,6 +2369,65 @@ def _v_mad_u32_u24_overlay() -> AmdgpuDescriptorOverlay:
             ),
             AmdgpuOperandOverlay("SRC2", _sgpr_vgpr_operand("addend")),
         ),
+        operand_forms=(
+            _literal_operand_form(
+                replacement_descriptor="amdgpu.v_mad_u32_u24.src0_lit",
+                source_operand="a",
+            ),
+            _literal_operand_form(
+                replacement_descriptor="amdgpu.v_mad_u32_u24.src1_lit",
+                source_operand="b",
+            ),
+            _literal_operand_form(
+                replacement_descriptor="amdgpu.v_mad_u32_u24.src2_lit",
+                source_operand="addend",
+            ),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_mad_u32_u24_literal_overlay(literal_source: str) -> AmdgpuDescriptorOverlay:
+    source_fields = {
+        "src0": ("SRC0", "a", _sgpr_vgpr_operand("a"), _U24_SOURCE_SIZE_REASON),
+        "src1": ("SRC1", "b", _sgpr_vgpr_operand("b"), _U24_SOURCE_SIZE_REASON),
+        "src2": ("SRC2", "addend", _sgpr_vgpr_operand("addend"), None),
+    }
+    literal_field = source_fields[literal_source][0]
+    operands = [AmdgpuOperandOverlay("VDST", _vgpr_result())]
+    asm_operands = []
+    for source_name, (
+        xml_field,
+        field_name,
+        operand,
+        size_reason,
+    ) in source_fields.items():
+        if source_name == literal_source:
+            continue
+        asm_operands.append(field_name)
+        operands.append(
+            AmdgpuOperandOverlay(
+                xml_field,
+                operand,
+                size_exception_reason=size_reason,
+            )
+        )
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=f"amdgpu.v_mad_u32_u24.{literal_source}_lit",
+        instruction_name="V_MAD_U32_U24",
+        mnemonic=f"v_mad_u32_u24_{literal_source}_lit",
+        encoding_name="ENC_VOP3",
+        encoding_format_id=AMDGPU_ENCODING_FORMAT_VOP3_LITERAL,
+        semantic_tag="integer.mad.lo.u24.u32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=tuple(operands),
+        asm_forms=_asm(
+            results=("dst",),
+            operands=tuple(asm_operands),
+            immediates=("imm32",),
+        ),
+        immediates=(_LITERAL_U32_IMMEDIATE,),
+        fixed_encoding_fields=((literal_field, _predefined("SRC_LITERAL", "OPR_SRC")),),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -7712,6 +7776,9 @@ def _cdna_core_overlays(
         _v_mul_u32_u24_overlay(),
         _v_mul_u32_u24_literal_overlay(),
         _v_mad_u32_u24_overlay(),
+        _v_mad_u32_u24_literal_overlay("src0"),
+        _v_mad_u32_u24_literal_overlay("src1"),
+        _v_mad_u32_u24_literal_overlay("src2"),
         _v_min_i32_overlay(),
         _v_max_i32_overlay(),
         _v_min_u32_overlay(),
@@ -8032,6 +8099,9 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_mul_u32_u24_overlay(),
         _v_mul_u32_u24_literal_overlay(),
         _v_mad_u32_u24_overlay(),
+        _v_mad_u32_u24_literal_overlay("src0"),
+        _v_mad_u32_u24_literal_overlay("src1"),
+        _v_mad_u32_u24_literal_overlay("src2"),
         _v_min_i32_overlay(),
         _v_max_i32_overlay(),
         _v_min_u32_overlay(),
@@ -8301,6 +8371,9 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_mul_u32_u24_overlay(),
         _v_mul_u32_u24_literal_overlay(),
         _v_mad_u32_u24_overlay(),
+        _v_mad_u32_u24_literal_overlay("src0"),
+        _v_mad_u32_u24_literal_overlay("src1"),
+        _v_mad_u32_u24_literal_overlay("src2"),
         _v_min_i32_overlay(),
         _v_max_i32_overlay(),
         _v_min_u32_overlay(),
@@ -8597,6 +8670,9 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_mul_u32_u24_overlay(),
         _v_mul_u32_u24_literal_overlay(),
         _v_mad_u32_u24_overlay(),
+        _v_mad_u32_u24_literal_overlay("src0"),
+        _v_mad_u32_u24_literal_overlay("src1"),
+        _v_mad_u32_u24_literal_overlay("src2"),
         _v_min_i32_overlay(),
         _v_max_i32_overlay(),
         _v_min_u32_overlay(),
@@ -9619,6 +9695,9 @@ _AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS: dict[
     "amdgpu.v_mul_u32_u24": _v_mul_u32_u24_overlay,
     "amdgpu.v_mul_u32_u24.lit": _v_mul_u32_u24_literal_overlay,
     "amdgpu.v_mad_u32_u24": _v_mad_u32_u24_overlay,
+    "amdgpu.v_mad_u32_u24.src0_lit": lambda: _v_mad_u32_u24_literal_overlay("src0"),
+    "amdgpu.v_mad_u32_u24.src1_lit": lambda: _v_mad_u32_u24_literal_overlay("src1"),
+    "amdgpu.v_mad_u32_u24.src2_lit": lambda: _v_mad_u32_u24_literal_overlay("src2"),
     "amdgpu.v_min_i32": _v_min_i32_overlay,
     "amdgpu.v_max_i32": _v_max_i32_overlay,
     "amdgpu.v_min_u32": _v_min_u32_overlay,

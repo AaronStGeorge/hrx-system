@@ -67,11 +67,86 @@ low.kernel.def target(@target) workgroup_size(8, 4, 1) @index_madd_u24_global_b3
   %x = v_and_b32_lit %packed_tid, 1023
   %21 = v_lshrrev_b32_lit %packed_tid, 10
   %y = v_and_b32_lit %21, 1023
-  %row_stride = s_mov_b32 9
-  %linear = v_mad_u32_u24 %y, %row_stride, %x
-  %25 = v_lshlrev_b32_lit %linear, 2
-  %loaded = global_load_b32 %25, %input_view
-  global_store_b32 %25, %loaded, %output_view
+  %linear = v_mad_u32_u24_src1_lit %y, %x, 9
+  %24 = v_lshlrev_b32_lit %linear, 2
+  %loaded = global_load_b32 %24, %input_view
+  global_store_b32 %24, %loaded, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @index_madd_u24_literal_lhs_global_b32(%input: buffer, %output: buffer) {
+  %c1 = index.constant 1 : index
+  %c4 = index.constant 4 : index
+  %c8 = index.constant 8 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c8, %c4, %c1) : index
+} launch {
+  %x0 = kernel.workitem.id<x> : index
+  %x = index.assume %x0 [range(%x0, 0, 7)] : index
+  %y0 = kernel.workitem.id<y> : index
+  %y = index.assume %y0 [range(%y0, 0, 3)] : index
+  %zero = index.constant 0 : offset
+  %row_stride = index.constant 9 : index
+  %linear = index.madd %row_stride, %y, %x : index
+  %input_view = buffer.view %input[%zero] : buffer -> view<36xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<36xi32, #dense>
+  %loaded = vector.load %input_view[%linear] : view<36xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %output_view[%linear] : vector<1xi32>, view<36xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(8, 4, 1) @index_madd_u24_literal_lhs_global_b32() asm<amdgpu.rdna3.core> {
+  %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 144} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 144} : reg<amdgpu.sgpr x2>
+  %x = v_and_b32_lit %packed_tid, 1023
+  %21 = v_lshrrev_b32_lit %packed_tid, 10
+  %y = v_and_b32_lit %21, 1023
+  %linear = v_mad_u32_u24_src0_lit %y, %x, 9
+  %24 = v_lshlrev_b32_lit %linear, 2
+  %loaded = global_load_b32 %24, %input_view
+  global_store_b32 %24, %loaded, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+kernel.def target(@target) @index_madd_u24_literal_addend_global_b32(%input: buffer, %output: buffer) {
+  %c1 = index.constant 1 : index
+  %c4 = index.constant 4 : index
+  %c8 = index.constant 8 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c8, %c4, %c1) : index
+} launch {
+  %x0 = kernel.workitem.id<x> : index
+  %x = index.assume %x0 [range(%x0, 0, 7)] : index
+  %y0 = kernel.workitem.id<y> : index
+  %y = index.assume %y0 [range(%y0, 0, 3)] : index
+  %zero = index.constant 0 : offset
+  %column = index.constant 1 : index
+  %linear = index.madd %y, %x, %column : index
+  %input_view = buffer.view %input[%zero] : buffer -> view<36xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<36xi32, #dense>
+  %loaded = vector.load %input_view[%linear] : view<36xi32, #dense> -> vector<1xi32>
+  vector.store %loaded, %output_view[%linear] : vector<1xi32>, view<36xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(8, 4, 1) @index_madd_u24_literal_addend_global_b32() asm<amdgpu.rdna3.core> {
+  %packed_tid = live_in<amdgpu.workitem_id.packed.xy> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 144} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 144} : reg<amdgpu.sgpr x2>
+  %x = v_and_b32_lit %packed_tid, 1023
+  %21 = v_lshrrev_b32_lit %packed_tid, 10
+  %y = v_and_b32_lit %21, 1023
+  %linear = v_mad_u32_u24_src2_lit %y, %x, 1
+  %24 = v_lshlrev_b32_lit %linear, 2
+  %loaded = global_load_b32 %24, %input_view
+  global_store_b32 %24, %loaded, %output_view
   return
 }
 
