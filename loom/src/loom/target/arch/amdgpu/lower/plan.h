@@ -394,6 +394,10 @@ typedef struct loom_amdgpu_workgroup_reduce_plan_t {
   loom_low_lower_resolved_descriptor_t lds_write_descriptor;
   // Descriptor row selected for the LDS synchronization barrier.
   loom_low_lower_resolved_descriptor_t barrier_descriptor;
+  // Descriptor row selected to restrict EXEC to the producer wave.
+  loom_low_lower_resolved_descriptor_t saveexec_descriptor;
+  // Descriptor row selected to restore EXEC after producer-wave publication.
+  loom_low_lower_resolved_descriptor_t restore_exec_descriptor;
   // Source value reduced across workgroup lanes.
   loom_value_id_t value;
   // Result value receiving the reduced payload.
