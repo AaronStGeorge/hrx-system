@@ -154,7 +154,7 @@ def convert_call(
     if op_name in _REINTERPRET_CALLS:
         return _convert_reinterpret_call(expr, context, converter, op_name)
     if op_name in _CALL_EXTERN_CALLS:
-        return _convert_call_extern_call(expr, context, op_name)
+        return _convert_call_extern_call(expr, context, converter, op_name)
     if op_name in _ATOMIC_ADD_CALLS:
         return _convert_atomic_add_call(
             expr,
@@ -895,15 +895,74 @@ def _convert_reinterpret_call(
 def _convert_call_extern_call(
     expr: object,
     context: TileLangConversionContext,
+    converter: TileLangConverter,
     op_name: str,
 ) -> ValueRef | None:
     args = _args(expr)
     callee = _string_value(args[0]) if args else "<missing>"
+    if callee == "__match_any_sync":
+        return _convert_match_any_sync_call_extern(
+            expr,
+            context,
+            converter,
+            op_name,
+            args,
+        )
     context.record_blocked(
         node_text(expr),
         f"call `{op_name}` to extern callee `{callee}` is not imported",
     )
     return None
+
+
+def _convert_match_any_sync_call_extern(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    op_name: str,
+    args: tuple[object, ...],
+) -> ValueRef | None:
+    callee = "__match_any_sync"
+    if len(args) != 3:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` to extern callee `{callee}` expects mask and value",
+        )
+        return None
+    mask = integer_value(args[1])
+    if mask != _FULL_WARP_MASK:
+        context.record_blocked(
+            node_text(expr),
+            (
+                f"call `{op_name}` to extern callee `{callee}` mask must be "
+                "the full warp mask"
+            ),
+        )
+        return None
+    value = converter.convert_expr(args[2], context)
+    if value is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` to extern callee `{callee}` value is not mapped",
+        )
+        return None
+    if _is_vector_type(value.type):
+        context.record_blocked(
+            node_text(expr),
+            (
+                f"call `{op_name}` to extern callee `{callee}` vector values "
+                "are not imported"
+            ),
+        )
+        return None
+    result_type = context.type_converter.map_dtype(dtype(expr))
+    result = context.builder.kernel.subgroup_match_any(
+        value=value,
+        results=[result_type],
+        name=context.fresh_name("match_any"),
+    )
+    _map_call_result(expr, context, result, f"{op_name}:{callee}")
+    return result
 
 
 def _convert_effect_call(

@@ -1048,6 +1048,15 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
         ),
     ),
     OpCoverage(
+        "tl.tileop.cumsum",
+        OpFamily.TILELANG_TILEOP,
+        CoverageState.DEFERRED,
+        (
+            "Tile cumulative-sum import needs explicit subgroup/workgroup prefix "
+            "semantics over the source region before lowering to scan operations."
+        ),
+    ),
+    OpCoverage(
         "tl.tileop.gemm",
         OpFamily.TILELANG_TILEOP,
         CoverageState.SUPPORTED,

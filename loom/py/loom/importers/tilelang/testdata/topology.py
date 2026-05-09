@@ -40,6 +40,66 @@ def _prim_func(
 
 
 # ====
+@tilelang_case(
+    name="call_extern_match_any_sync",
+    category="op",
+    tags=("topology", "subgroup", "call"),
+)
+def call_extern_match_any_sync(tir: Any, tvm: Any) -> TileLangImportInput:
+    value = tir.Var("value", "int32")
+    dst = tir.Var("dst", "handle")
+    dst_buffer = tir.decl_buffer((32,), "uint32", name="dst")
+    thread_index = tvm.te.thread_axis("threadIdx.x")
+    mask = tir.call_extern(
+        "uint32",
+        "__match_any_sync",
+        tir.IntImm("uint32", 0xFFFFFFFF),
+        value,
+    )
+    count = tir.call_intrin("uint32", "tir.popcount", mask)
+    body = tir.AttrStmt(
+        thread_index,
+        "thread_extent",
+        tir.IntImm("int32", 32),
+        tir.BufferStore(dst_buffer, count, [thread_index.var]),
+    )
+    prim_func = _prim_func(
+        tir,
+        name="call_extern_match_any_sync",
+        params=[value, dst],
+        body=body,
+        buffer_map={dst: dst_buffer},
+    )
+    return TileLangImportInput(
+        source=prim_func,
+        target="hip -mcpu=gfx1100",
+        name="call_extern_match_any_sync",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("call_extern_match_any_sync") @call_extern_match_any_sync(%value: i32, %dst: buffer) {
+  %c1 = index.constant 1 : index
+  %c32 = index.constant 32 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c32, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %layout = encoding.layout.dense : encoding<layout>
+  %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<32xi32, %layout>
+  %threadIdx_x = kernel.workitem.id<x> : index
+  %match_any = kernel.subgroup.match.any %value : i32 -> i32
+  %ctpopi = scalar.ctpopi %match_any : i32
+  view.store %ctpopi, %dst_view[%threadIdx_x] : i32, view<32xi32, %layout>
+  kernel.return
+}
+"""
+
+
+# ====
 @tilelang_case(name="launch_thread_attrs", category="op", tags=("topology",))
 def launch_thread_attrs(tir: Any, tvm: Any) -> TileLangImportInput:
     src, dst, src_buffer, dst_buffer = _buffer_pair(tir, shape=(1024,))

@@ -10,6 +10,29 @@ from loom.importers.check.tilelang import TileLangImportInput, tilelang_case
 
 
 # ====
+# ERROR@+1: "call `tl.tileop.cumsum` coverage state is deferred"
+@tilelang_case(
+    name="tileop_cumsum_deferred",
+    category="diagnostic",
+    tags=("tileop", "cumsum"),
+)
+def tileop_cumsum_deferred(tir: Any) -> TileLangImportInput:
+    dst = tir.Var("dst", "handle")
+    dst_buffer = tir.decl_buffer((1,), "int32", name="dst")
+    body = tir.Evaluate(tir.call_intrin("handle", tir.op.Op.get("tl.tileop.cumsum")))
+    prim_func = tir.PrimFunc(
+        [dst],
+        body,
+        buffer_map={dst: dst_buffer},
+    ).with_attr("global_symbol", "tileop_cumsum_deferred")
+    return TileLangImportInput(
+        source=prim_func,
+        target="hip -mcpu=gfx1100",
+        name="tileop_cumsum_deferred",
+    )
+
+
+# ====
 # ERROR@+1: "no registered converter for `StringImm`" "unsupported_marker"
 @tilelang_case(name="unsupported_string_evaluate", category="diagnostic")
 def unsupported_string_evaluate(tir: Any) -> TileLangImportInput:
