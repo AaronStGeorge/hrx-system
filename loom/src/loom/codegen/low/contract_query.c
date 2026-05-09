@@ -205,7 +205,7 @@ iree_status_t loom_low_lower_query_descriptor_matrix_contract(
     }
     case LOOM_TARGET_CONTRACT_DESCRIPTOR_MATRIX_SOURCE_NONE:
     default:
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+      return iree_make_status(IREE_STATUS_INTERNAL,
                               "unknown descriptor-matrix source");
   }
 
@@ -276,7 +276,7 @@ static iree_status_t loom_low_lower_query_target_contract_index(
           const iree_string_view_t key =
               rule_set->descriptor_refs[descriptor_ref].key;
           return iree_make_status(
-              IREE_STATUS_FAILED_PRECONDITION,
+              IREE_STATUS_INTERNAL,
               "generated target-low contract selected missing descriptor "
               "'%.*s'",
               (int)key.size, key.data);

@@ -926,7 +926,7 @@ static iree_status_t loom_amdgpu_emit_exec_restore_block(
     loom_value_id_t saved_exec, loom_block_t* restore_block,
     loom_block_t* restore_dest) {
   if (restore_block->op_count != 0) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+    return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU EXEC restore block was emitted twice");
   }
 
@@ -954,7 +954,7 @@ static iree_status_t loom_amdgpu_emit_exec_restore_branch(
     loom_block_t* restore_dest, const loom_value_id_t* args,
     uint16_t arg_count) {
   if (restore_block->op_count != 0) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+    return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU EXEC restore block was emitted twice");
   }
 
@@ -1111,7 +1111,7 @@ static iree_status_t loom_amdgpu_emit_masked_merge_restore_block(
   IREE_ASSERT(plan->merge_restore_dest != NULL);
   IREE_ASSERT(plan->false_passthrough_terminator != NULL);
   if (plan->merge_restore_block->op_count != 0) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+    return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU EXEC merge restore block was emitted "
                             "twice");
   }
@@ -1166,7 +1166,7 @@ static iree_status_t loom_amdgpu_emit_if_else_merge_restore_block(
   IREE_ASSERT(plan->merge_restore_block != NULL);
   IREE_ASSERT(plan->merge_restore_dest != NULL);
   if (plan->merge_restore_block->op_count != 0) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+    return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU EXEC merge restore block was emitted "
                             "twice");
   }
@@ -1212,7 +1212,7 @@ static iree_status_t loom_amdgpu_emit_no_true_else_entry_block(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t saved_exec, const loom_amdgpu_branch_plan_t* plan) {
   if (plan->no_true_else_entry_block->op_count != 0) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+    return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU no-true else entry block was emitted "
                             "twice");
   }
@@ -1282,7 +1282,7 @@ static iree_status_t loom_amdgpu_emit_else_dispatch_block(
     loom_type_t condition_type, loom_type_t active_type,
     const loom_amdgpu_branch_plan_t* plan) {
   if (plan->else_dispatch_block->op_count != 0) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+    return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU else dispatch block was emitted twice");
   }
 
@@ -1347,7 +1347,7 @@ static iree_status_t loom_amdgpu_emit_exec_mask_cond_branch(
     loom_block_t* low_false_dest, loom_type_t condition_type) {
   loom_low_lower_plan_t branch_plan = loom_low_lower_plan_empty();
   if (!loom_low_lower_lookup_branch_plan(context, source_op, &branch_plan)) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+    return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU divergent branch has no prepared plan");
   }
   const loom_amdgpu_branch_plan_t* plan =
@@ -1355,7 +1355,7 @@ static iree_status_t loom_amdgpu_emit_exec_mask_cond_branch(
   IREE_ASSERT(plan != NULL);
   if (branch_plan.id != LOOM_AMDGPU_BRANCH_PLAN_THEN_MASKED_REGION &&
       branch_plan.id != LOOM_AMDGPU_BRANCH_PLAN_IF_ELSE_DIAMOND) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+    return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU divergent branch plan id is invalid");
   }
 

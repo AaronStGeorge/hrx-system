@@ -234,7 +234,7 @@ iree_status_t loom_amdgpu_low_result_type(loom_low_lower_context_t* context,
   IREE_RETURN_IF_ERROR(loom_low_lower_map_value(context, source_op,
                                                 source_result, out_low_type));
   if (!loom_type_is_register(*out_low_type)) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+    return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU source type did not map to a register");
   }
   return iree_ok_status();
@@ -271,7 +271,7 @@ iree_status_t loom_amdgpu_resolve_descriptor_ref(
       context, descriptor_ref, out_descriptor, &present));
   if (!present) {
     return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
+        IREE_STATUS_INTERNAL,
         "generated AMDGPU lowering policy references missing descriptor ref "
         "%" PRIu16,
         descriptor_ref);
@@ -783,7 +783,7 @@ iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_address(
                                             out_low_value);
     }
     return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
+        IREE_STATUS_INTERNAL,
         "AMDGPU address value cannot materialize as a VGPR operand");
   }
   loom_type_t vgpr_type = loom_type_none();
@@ -816,7 +816,7 @@ iree_status_t loom_amdgpu_lookup_or_materialize_native_i1_mask(
       context, low_type, LOOM_AMDGPU_REG_CLASS_ID_SCC, &is_scc));
   if (!is_scc || loom_type_register_unit_count(low_type) != 1) {
     return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
+        IREE_STATUS_INTERNAL,
         "AMDGPU i1 value cannot materialize as a native mask operand");
   }
 

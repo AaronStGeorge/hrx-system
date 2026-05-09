@@ -373,7 +373,7 @@ iree_status_t loom_amdgpu_make_descriptor_row_implicit_resource_type(
       const uint32_t alt_index = operand->reg_class_alt_start + j;
       if (alt_index >= descriptor_set->reg_class_alt_count) {
         return iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
+            IREE_STATUS_INTERNAL,
             "AMDGPU implicit-resource descriptor has an invalid register-class "
             "alternative span");
       }
@@ -384,7 +384,7 @@ iree_status_t loom_amdgpu_make_descriptor_row_implicit_resource_type(
       }
       if (alt->reg_class_id >= descriptor_set->reg_class_count) {
         return iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
+            IREE_STATUS_INTERNAL,
             "AMDGPU implicit-resource descriptor references an invalid "
             "register class");
       }
@@ -393,7 +393,7 @@ iree_status_t loom_amdgpu_make_descriptor_row_implicit_resource_type(
     }
   }
   return iree_make_status(
-      IREE_STATUS_FAILED_PRECONDITION,
+      IREE_STATUS_INTERNAL,
       "AMDGPU descriptor has no explicit implicit resource operand");
 }
 
@@ -1150,7 +1150,7 @@ static iree_status_t loom_amdgpu_map_contract_register(
     loom_low_lower_rule_mapped_value_t* out_mapped_value) {
   if (descriptor_register_class_id >=
       environment->descriptor_set->reg_class_count) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+    return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU contract register class %" PRIu16
                             " is outside the selected descriptor set",
                             descriptor_register_class_id);

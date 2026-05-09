@@ -33,7 +33,7 @@ static iree_status_t loom_amdgpu_matrix_target_facts_from_environment(
       loom_amdgpu_target_processor_from_ref(environment->module,
                                             environment->target_ref);
   if (processor == NULL) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+    return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU matrix lowering requires an AMDGPU "
                             "processor target record");
   }
@@ -332,7 +332,7 @@ static iree_status_t loom_amdgpu_matrix_format_selector_attr(
   if (!loom_amdgpu_matrix_format_selector_from_encoded_format(format,
                                                               out_value)) {
     return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
+        IREE_STATUS_INTERNAL,
         "selected AMDGPU matrix descriptor requires '%.*s', but the source "
         "matrix contract does not provide a supported matrix format selector",
         (int)field_name.size, field_name.data);
@@ -348,7 +348,7 @@ static iree_status_t loom_amdgpu_matrix_scale_format_selector_attr(
   if (!loom_amdgpu_matrix_scale_format_selector_from_encoded_format(
           format, out_value)) {
     return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
+        IREE_STATUS_INTERNAL,
         "selected AMDGPU matrix descriptor requires '%.*s', but the source "
         "matrix contract does not provide a supported scale format selector",
         (int)field_name.size, field_name.data);
@@ -389,9 +389,8 @@ static iree_status_t loom_amdgpu_descriptor_matrix_attr_value(
     return iree_ok_status();
   }
   return iree_make_status(
-      IREE_STATUS_FAILED_PRECONDITION,
-      "AMDGPU descriptor-matrix lowering cannot materialize immediate "
-      "'%.*s'",
+      IREE_STATUS_INTERNAL,
+      "AMDGPU descriptor-matrix selected immediate '%.*s' is unmapped",
       (int)field_name.size, field_name.data);
 }
 
@@ -479,12 +478,11 @@ iree_status_t loom_amdgpu_descriptor_matrix_attrs(
       context, descriptor->immediate_count, sizeof(*attrs), (void**)&attrs));
   const loom_low_descriptor_set_t* descriptor_set =
       loom_low_lower_context_descriptor_set(context);
+  IREE_ASSERT((uint64_t)descriptor->immediate_start +
+                  (uint64_t)descriptor->immediate_count <=
+              descriptor_set->immediate_count);
   for (uint16_t i = 0; i < descriptor->immediate_count; ++i) {
     const uint32_t immediate_row = descriptor->immediate_start + i;
-    if (immediate_row >= descriptor_set->immediate_count) {
-      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "low descriptor immediate row is out of range");
-    }
     const loom_low_immediate_t* immediate =
         &descriptor_set->immediates[immediate_row];
     const iree_string_view_t field_name = loom_low_descriptor_set_string(
