@@ -615,8 +615,6 @@ typedef struct loom_amdgpu_fragment_memory_plan_t {
   uint16_t elements_per_register;
   // Byte count of one logical fragment element.
   uint16_t element_byte_count;
-  // Descriptor row emitted for each 32-bit fragment packet.
-  loom_amdgpu_descriptor_ref_t descriptor_ref;
 } loom_amdgpu_fragment_memory_plan_t;
 
 #define LOOM_AMDGPU_EXPLICIT_PACKET_IMMEDIATE_CAPACITY 4
