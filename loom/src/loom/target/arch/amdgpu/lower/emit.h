@@ -126,6 +126,12 @@ iree_status_t loom_amdgpu_materialize_low_vgpr_b32(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t low_value, loom_value_id_t* out_low_value);
 
+// Returns |low_value| when it is already a VGPR register range, otherwise
+// emits fresh VGPRs carrying the same 32-bit bit payloads as each SGPR unit.
+iree_status_t loom_amdgpu_materialize_low_vgpr_b32_registers(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t low_value, loom_value_id_t* out_low_value);
+
 // Emits one binary SGPR descriptor op.
 iree_status_t loom_amdgpu_emit_sgpr_binary(
     loom_low_lower_context_t* context, const loom_op_t* source_op,

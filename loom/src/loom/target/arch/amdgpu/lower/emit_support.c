@@ -527,7 +527,7 @@ iree_status_t loom_amdgpu_materialize_low_vgpr_b32(
                                         out_low_value);
 }
 
-static iree_status_t loom_amdgpu_materialize_low_vgpr_b32_registers(
+iree_status_t loom_amdgpu_materialize_low_vgpr_b32_registers(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t low_value, loom_value_id_t* out_low_value) {
   *out_low_value = low_value;
