@@ -660,6 +660,22 @@ def _asm(
     )
 
 
+def _global_vaddr_asm(
+    *,
+    mnemonic: str,
+    results: tuple[str, ...] = (),
+    operands: tuple[str, ...],
+    immediates: tuple[str, ...],
+) -> tuple[AsmForm, ...]:
+    return _asm(
+        mnemonic=f"{mnemonic}_vaddr",
+        results=results,
+        operands=operands,
+        immediates=immediates,
+        named_immediates=True,
+    )
+
+
 def _sgpr_result(field_name: str = "dst", *, units: int = 1) -> Operand:
     return Operand(field_name, OperandRole.RESULT, _SGPR_ALT, unit_count=units)
 
@@ -1511,6 +1527,12 @@ def _cache_immediate(
 
 def _cache_field_names(cache_fields: tuple[tuple[str, int], ...]) -> tuple[str, ...]:
     return tuple(field_name for field_name, _bit_width in cache_fields)
+
+
+def _memory_asm_immediate_names(
+    cache_fields: tuple[tuple[str, int], ...],
+) -> tuple[str, ...]:
+    return ("offset", *(field_name.lower() for field_name, _bit_width in cache_fields))
 
 
 def _cache_immediates(
@@ -4985,7 +5007,14 @@ def _global_load_overlay(
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_global_read_effect(width_bits),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=None if saddr_off is None else (),
+        asm_forms=None
+        if saddr_off is None
+        else _global_vaddr_asm(
+            mnemonic=mnemonic,
+            results=("dst",),
+            operands=("addr",),
+            immediates=_memory_asm_immediate_names(cache_fields),
+        ),
     )
 
 
@@ -5039,7 +5068,14 @@ def _global_load_b16_d16_overlay(
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_global_read_effect(16),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=None if saddr_off is None else (),
+        asm_forms=None
+        if saddr_off is None
+        else _global_vaddr_asm(
+            mnemonic="global_load_short_d16",
+            results=("dst",),
+            operands=("addr",),
+            immediates=_memory_asm_immediate_names(cache_fields),
+        ),
     )
 
 
@@ -5125,7 +5161,13 @@ def _global_store_overlay(
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_global_write_effect(width_bits),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=None if saddr_off is None else (),
+        asm_forms=None
+        if saddr_off is None
+        else _global_vaddr_asm(
+            mnemonic=mnemonic,
+            operands=("addr", "value"),
+            immediates=_memory_asm_immediate_names(cache_fields),
+        ),
     )
 
 
@@ -5179,7 +5221,13 @@ def _global_store_b16_overlay(
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_global_write_effect(16),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=None if saddr_off is None else (),
+        asm_forms=None
+        if saddr_off is None
+        else _global_vaddr_asm(
+            mnemonic="global_store_short",
+            operands=("addr", "value"),
+            immediates=_memory_asm_immediate_names(cache_fields),
+        ),
     )
 
 

@@ -433,3 +433,38 @@ def test_plain_ds_memory_offsets_use_split_16_bit_byte_immediates() -> None:
             (encoding_slice.source_bit_offset, encoding_slice.bit_count)
             for encoding_slice in immediate.encoding_slices
         ) == ((0, 8), (8, 8))
+
+
+def test_global_vaddr_memory_forms_have_unique_low_asm_mnemonics() -> None:
+    descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx11_core_overlays()
+    }
+
+    load_forms = descriptors["amdgpu.global_load_b128"].asm_forms
+    assert load_forms is not None
+    load_form = load_forms[0]
+    assert load_form.mnemonic == "global_load_b128_vaddr"
+    assert load_form.results == ("dst",)
+    assert load_form.operands == ("addr",)
+    assert tuple(immediate.name for immediate in load_form.immediates) == (
+        "offset",
+        "glc",
+        "slc",
+        "dlc",
+    )
+
+    store_forms = descriptors["amdgpu.global_store_b128"].asm_forms
+    assert store_forms is not None
+    store_form = store_forms[0]
+    assert store_form.mnemonic == "global_store_b128_vaddr"
+    assert store_form.results == ()
+    assert store_form.operands == ("addr", "value")
+    assert tuple(immediate.name for immediate in store_form.immediates) == (
+        "offset",
+        "glc",
+        "slc",
+        "dlc",
+    )
+
+    assert descriptors["amdgpu.global_load_b128_saddr"].asm_forms is None
+    assert descriptors["amdgpu.global_store_b128_saddr"].asm_forms is None
