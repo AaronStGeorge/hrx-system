@@ -726,20 +726,26 @@ static iree_status_t loom_amdgpu_append_offset_suffix(
                                            offset);
 }
 
+static bool loom_amdgpu_mubuf_load_uses_off_zero_form(
+    const loom_native_assembly_packet_context_t* context) {
+  const loom_op_t* op = context->packet->node->op;
+  return op->result_count == 1 && op->operand_count == 1;
+}
+
+static bool loom_amdgpu_mubuf_store_uses_off_zero_form(
+    const loom_native_assembly_packet_context_t* context) {
+  const loom_op_t* op = context->packet->node->op;
+  return op->result_count == 0 && op->operand_count == 2;
+}
+
 static iree_status_t loom_amdgpu_append_mubuf_load_packet(
     const loom_native_assembly_packet_context_t* context) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      context->schedule->target.descriptor_set;
-  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, " "));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_result(context, 0));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
-  if (descriptor ==
-      loom_amdgpu_descriptor_ref_descriptor(
-          descriptor_set,
-          LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_DWORD_OFF_ZERO)) {
+  if (loom_amdgpu_mubuf_load_uses_off_zero_form(context)) {
     IREE_RETURN_IF_ERROR(
         iree_string_builder_append_cstring(context->builder, "off"));
     IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
@@ -761,18 +767,12 @@ static iree_status_t loom_amdgpu_append_mubuf_load_packet(
 
 static iree_status_t loom_amdgpu_append_mubuf_store_packet(
     const loom_native_assembly_packet_context_t* context) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      context->schedule->target.descriptor_set;
-  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, " "));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 0));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
-  if (descriptor ==
-      loom_amdgpu_descriptor_ref_descriptor(
-          descriptor_set,
-          LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_STORE_DWORD_OFF_ZERO)) {
+  if (loom_amdgpu_mubuf_store_uses_off_zero_form(context)) {
     IREE_RETURN_IF_ERROR(
         iree_string_builder_append_cstring(context->builder, "off"));
     IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));

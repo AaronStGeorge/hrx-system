@@ -11,6 +11,16 @@ func.def @global_saddr_fallback(%input: buffer, %output: buffer) {
 
 // ====
 
+func.def @descriptor_b128_off_zero(%input: buffer) -> (vector<4xi32>) {
+  %zero = index.constant 0 : offset
+  %input_descriptor = buffer.assume.memory_space %input {memory_space = descriptor} : buffer
+  %input_view = buffer.view %input_descriptor[%zero] : buffer -> view<4xi32, #dense>
+  %loaded = vector.load %input_view[0] : view<4xi32, #dense> -> vector<4xi32>
+  func.return %loaded : vector<4xi32>
+}
+
+// ====
+
 kernel.def target(@target) @i32_readonly_uniform_smem(%input: buffer, %output: buffer) {
   %unit = index.constant 1 : index
   %workgroups = index.constant 16 : index
