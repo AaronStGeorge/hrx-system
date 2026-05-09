@@ -201,20 +201,29 @@ typedef enum loom_low_lower_attr_copy_kind_e {
   // Emits log2 of an exact positive power-of-two integer source value fact as
   // an i64 packet attribute.
   LOOM_LOW_LOWER_ATTR_COPY_VALUE_EXACT_I64_LOG2 = 5,
+  // Emits one less than an exact positive integer source value fact as an i64
+  // packet attribute.
+  LOOM_LOW_LOWER_ATTR_COPY_VALUE_EXACT_I64_MINUS_ONE = 6,
+  // Emits the unsigned 32-bit magic multiplier for an exact divisor source
+  // value fact as an i64 packet attribute.
+  LOOM_LOW_LOWER_ATTR_COPY_VALUE_U32_DIVISOR_MAGIC_MULTIPLIER = 7,
+  // Emits the unsigned 32-bit magic post-shift for an exact divisor source
+  // value fact as an i64 packet attribute.
+  LOOM_LOW_LOWER_ATTR_COPY_VALUE_U32_DIVISOR_MAGIC_SHIFT = 8,
   // Emits an exact signed i32 source value fact as a zero-extended u32 packet
   // attribute bit pattern.
-  LOOM_LOW_LOWER_ATTR_COPY_VALUE_I32_AS_U32_BITS = 6,
+  LOOM_LOW_LOWER_ATTR_COPY_VALUE_I32_AS_U32_BITS = 9,
   // Emits an exact f64 source value fact as a rounded f32 packet attribute bit
   // pattern.
-  LOOM_LOW_LOWER_ATTR_COPY_VALUE_F64_AS_F32_BITS = 7,
+  LOOM_LOW_LOWER_ATTR_COPY_VALUE_F64_AS_F32_BITS = 10,
   // Expands one i64_array lane ordinal into one byte-lane immediate:
   // source_attr[source_element_index] * source_element_count + literal_i64.
-  LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_LANE_BYTE = 8,
+  LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_LANE_BYTE = 11,
   // Emits the selected source-memory static byte offset as an i64 attribute.
-  LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_STATIC_BYTE_OFFSET = 9,
+  LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_STATIC_BYTE_OFFSET = 12,
   // Emits one selected source-memory dynamic term byte stride as an i64
   // attribute.
-  LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE = 10,
+  LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE = 13,
 } loom_low_lower_attr_copy_kind_t;
 
 typedef struct loom_low_lower_attr_copy_t {
@@ -404,25 +413,28 @@ typedef enum loom_low_lower_guard_kind_e {
   LOOM_LOW_LOWER_GUARD_VALUE_EXACT_I64 = 15,
   // Source value facts must be an exact positive power-of-two integer.
   LOOM_LOW_LOWER_GUARD_VALUE_EXACT_POWER_OF_TWO_I64 = 16,
+  // Source value facts must be an exact unsigned 32-bit divisor whose magic
+  // division recipe uses the add adjustment indicated by u64.
+  LOOM_LOW_LOWER_GUARD_VALUE_U32_DIVISOR_MAGIC_IS_ADD = 17,
   // Source value facts must be an exact floating-point value.
-  LOOM_LOW_LOWER_GUARD_VALUE_EXACT_F64 = 17,
+  LOOM_LOW_LOWER_GUARD_VALUE_EXACT_F64 = 18,
   // Source value facts must prove every non-floating integer element is
   // contained in [minimum_i64, maximum_i64].
-  LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE = 18,
+  LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE = 19,
   // Source operand segment starting at attr_index must contain exactly u64
   // operands.
-  LOOM_LOW_LOWER_GUARD_OPERAND_SEGMENT_COUNT_EQ = 19,
+  LOOM_LOW_LOWER_GUARD_OPERAND_SEGMENT_COUNT_EQ = 20,
   // Source op instance flags must contain every bit in u64.
-  LOOM_LOW_LOWER_GUARD_INSTANCE_FLAGS_HAS_ALL = 20,
+  LOOM_LOW_LOWER_GUARD_INSTANCE_FLAGS_HAS_ALL = 21,
   // Source value facts must prove an exact float equal to the f64 bit-pattern
   // in u64.
-  LOOM_LOW_LOWER_GUARD_VALUE_F64_EQUALS = 21,
+  LOOM_LOW_LOWER_GUARD_VALUE_F64_EQUALS = 22,
   // Source value facts must prove every integer element is <= every integer
   // element in the other source value facts.
-  LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE_LE = 22,
+  LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE_LE = 23,
   // Source value facts must prove every integer element is >= every integer
   // element in the other source value facts.
-  LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE_GE = 23,
+  LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE_GE = 24,
 } loom_low_lower_guard_kind_t;
 
 typedef struct loom_low_lower_guard_t {

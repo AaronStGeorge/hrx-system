@@ -35,6 +35,9 @@ class ValueProjectKind(Enum):
 
     EXACT_I64 = "exact_i64"
     EXACT_I64_LOG2 = "exact_i64_log2"
+    EXACT_I64_MINUS_ONE = "exact_i64_minus_one"
+    U32_DIVISOR_MAGIC_MULTIPLIER = "u32_divisor_magic_multiplier"
+    U32_DIVISOR_MAGIC_SHIFT = "u32_divisor_magic_shift"
     I32_AS_U32_BITS = "i32_as_u32_bits"
     F64_AS_F32_BITS = "f64_as_f32_bits"
 
@@ -216,6 +219,36 @@ class ValueProject:
     def exact_i64_log2(cls, source_value: str, *, target_bit_offset: int = 0) -> Self:
         return cls(
             kind=ValueProjectKind.EXACT_I64_LOG2,
+            source_value=source_value,
+            target_bit_offset=target_bit_offset,
+        )
+
+    @classmethod
+    def exact_i64_minus_one(
+        cls, source_value: str, *, target_bit_offset: int = 0
+    ) -> Self:
+        return cls(
+            kind=ValueProjectKind.EXACT_I64_MINUS_ONE,
+            source_value=source_value,
+            target_bit_offset=target_bit_offset,
+        )
+
+    @classmethod
+    def u32_divisor_magic_multiplier(
+        cls, source_value: str, *, target_bit_offset: int = 0
+    ) -> Self:
+        return cls(
+            kind=ValueProjectKind.U32_DIVISOR_MAGIC_MULTIPLIER,
+            source_value=source_value,
+            target_bit_offset=target_bit_offset,
+        )
+
+    @classmethod
+    def u32_divisor_magic_shift(
+        cls, source_value: str, *, target_bit_offset: int = 0
+    ) -> Self:
+        return cls(
+            kind=ValueProjectKind.U32_DIVISOR_MAGIC_SHIFT,
             source_value=source_value,
             target_bit_offset=target_bit_offset,
         )

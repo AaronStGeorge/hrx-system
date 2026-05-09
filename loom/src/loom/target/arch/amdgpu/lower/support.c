@@ -602,6 +602,20 @@ bool loom_amdgpu_source_value_prefers_vgpr(
              loom_amdgpu_source_value_prefers_vgpr(
                  module, fact_table, view_regions,
                  loom_index_mul_rhs(defining_op));
+    case LOOM_OP_INDEX_DIV:
+      return loom_amdgpu_source_value_prefers_vgpr(
+                 module, fact_table, view_regions,
+                 loom_index_div_lhs(defining_op)) ||
+             loom_amdgpu_source_value_prefers_vgpr(
+                 module, fact_table, view_regions,
+                 loom_index_div_rhs(defining_op));
+    case LOOM_OP_INDEX_REM:
+      return loom_amdgpu_source_value_prefers_vgpr(
+                 module, fact_table, view_regions,
+                 loom_index_rem_lhs(defining_op)) ||
+             loom_amdgpu_source_value_prefers_vgpr(
+                 module, fact_table, view_regions,
+                 loom_index_rem_rhs(defining_op));
     case LOOM_OP_INDEX_MIN:
       return loom_amdgpu_source_value_prefers_vgpr(
                  module, fact_table, view_regions,

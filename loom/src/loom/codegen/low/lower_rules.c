@@ -78,6 +78,69 @@ static iree_string_view_t loom_low_lower_rule_export_name(
                                       IREE_SV("<empty>"));
 }
 
+typedef struct loom_low_lower_u32_divisor_magic_info_t {
+  // Multiplication constant consumed by the unsigned quotient recipe.
+  uint32_t multiplier;
+  // Final logical right shift applied after the high-half multiply.
+  uint8_t post_shift;
+  // Whether the quotient recipe needs the unsigned add-adjustment step.
+  bool is_add;
+} loom_low_lower_u32_divisor_magic_info_t;
+
+static loom_low_lower_u32_divisor_magic_info_t
+loom_low_lower_u32_divisor_magic_info(uint32_t divisor) {
+  IREE_ASSERT_GT(divisor, 1u);
+  const uint64_t u32_mask = UINT32_MAX;
+  const uint64_t two31 = ((uint64_t)1) << 31;
+  const uint64_t two31_minus_one = two31 - 1;
+
+  const uint64_t nc = u32_mask - ((u32_mask + 1u - divisor) % divisor);
+  uint32_t p = 31;
+  uint64_t q1 = two31 / nc;
+  uint64_t r1 = two31 % nc;
+  uint64_t q2 = two31_minus_one / divisor;
+  uint64_t r2 = two31_minus_one % divisor;
+  bool is_add = false;
+  for (;;) {
+    ++p;
+    if (r1 >= nc - r1) {
+      q1 = ((q1 << 1) + 1) & u32_mask;
+      r1 = ((r1 << 1) - nc) & u32_mask;
+    } else {
+      q1 = (q1 << 1) & u32_mask;
+      r1 = (r1 << 1) & u32_mask;
+    }
+    if (r2 + 1 >= divisor - r2) {
+      if (q2 >= two31_minus_one) {
+        is_add = true;
+      }
+      q2 = ((q2 << 1) + 1) & u32_mask;
+      r2 = ((r2 << 1) + 1 - divisor) & u32_mask;
+    } else {
+      if (q2 >= two31) {
+        is_add = true;
+      }
+      q2 = (q2 << 1) & u32_mask;
+      r2 = ((r2 << 1) + 1) & u32_mask;
+    }
+    const uint64_t delta = (divisor - 1 - r2) & u32_mask;
+    if (!(p < 64 && (q1 < delta || (q1 == delta && r1 == 0)))) {
+      break;
+    }
+  }
+
+  loom_low_lower_u32_divisor_magic_info_t info = {
+      .multiplier = (uint32_t)((q2 + 1) & u32_mask),
+      .post_shift = (uint8_t)(p - 32),
+      .is_add = is_add,
+  };
+  if (info.is_add) {
+    IREE_ASSERT_GT(info.post_shift, 0);
+    --info.post_shift;
+  }
+  return info;
+}
+
 static iree_string_view_t loom_low_lower_rule_config_key(
     const loom_target_bundle_t* bundle) {
   return loom_low_lower_rule_nonempty(bundle->config->name, IREE_SV("<empty>"));
@@ -545,6 +608,38 @@ static bool loom_low_lower_rule_value_facts_exact_power_of_two_i64(
          loom_is_power_of_two_i64(exact_value);
 }
 
+static bool loom_low_lower_rule_value_facts_u32_divisor_magic_info(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t value_id,
+    loom_low_lower_u32_divisor_magic_info_t* out_info) {
+  *out_info = (loom_low_lower_u32_divisor_magic_info_t){0};
+  loom_value_facts_t facts = loom_value_facts_unknown();
+  if (!loom_low_lower_rule_integer_immediate_facts(module, fact_table, value_id,
+                                                   &facts)) {
+    return false;
+  }
+  int64_t exact_value = 0;
+  if (!loom_value_facts_as_exact_i64(facts, &exact_value) || exact_value < 2 ||
+      exact_value > UINT32_MAX) {
+    return false;
+  }
+  *out_info = loom_low_lower_u32_divisor_magic_info((uint32_t)exact_value);
+  return true;
+}
+
+static bool loom_low_lower_rule_value_facts_u32_divisor_magic_is_add(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t value_ref_index, bool expected_is_add) {
+  const loom_value_id_t value_id =
+      loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
+  loom_low_lower_u32_divisor_magic_info_t info = {0};
+  return loom_low_lower_rule_value_facts_u32_divisor_magic_info(
+             match_context->module, match_context->fact_table, value_id,
+             &info) &&
+         info.is_add == expected_is_add;
+}
+
 static bool loom_low_lower_rule_value_facts_exact_f64(
     const loom_low_lower_rule_match_context_t* match_context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
@@ -928,6 +1023,11 @@ static iree_status_t loom_low_lower_rule_guard_matches(
     case LOOM_LOW_LOWER_GUARD_VALUE_EXACT_POWER_OF_TWO_I64:
       *out_matches = loom_low_lower_rule_value_facts_exact_power_of_two_i64(
           match_context, rule_set, source_op, guard->value_ref_index);
+      return iree_ok_status();
+    case LOOM_LOW_LOWER_GUARD_VALUE_U32_DIVISOR_MAGIC_IS_ADD:
+      *out_matches = loom_low_lower_rule_value_facts_u32_divisor_magic_is_add(
+          match_context, rule_set, source_op, guard->value_ref_index,
+          guard->u64 != 0);
       return iree_ok_status();
     case LOOM_LOW_LOWER_GUARD_VALUE_EXACT_F64:
       *out_matches = loom_low_lower_rule_value_facts_exact_f64(
@@ -1624,6 +1724,63 @@ static iree_status_t loom_low_lower_rule_build_attrs(
                        (uint64_t)INT64_MAX >> attr_copy->target_bit_offset);
         attrs[i].value = loom_attr_i64(
             (int64_t)((uint64_t)log2_value << attr_copy->target_bit_offset));
+        break;
+      }
+      case LOOM_LOW_LOWER_ATTR_COPY_VALUE_EXACT_I64_MINUS_ONE: {
+        const loom_value_id_t source_value_id =
+            loom_low_lower_rule_source_value(rule_set, source_op,
+                                             attr_copy->value_ref_index);
+        const loom_value_fact_table_t* fact_table =
+            loom_low_lower_context_fact_table(context);
+        loom_value_facts_t facts = loom_value_facts_unknown();
+        const bool has_integer_facts =
+            loom_low_lower_rule_integer_immediate_facts(
+                loom_low_lower_context_module(context), fact_table,
+                source_value_id, &facts);
+        IREE_ASSERT(has_integer_facts);
+        int64_t source_value = 0;
+        const bool has_exact_value =
+            loom_value_facts_as_exact_i64(facts, &source_value);
+        IREE_ASSERT(has_exact_value);
+        IREE_ASSERT_GT(source_value, INT64_MIN);
+        const int64_t projected_value = source_value - 1;
+        if (attr_copy->target_bit_offset == 0) {
+          attrs[i].value = loom_attr_i64(projected_value);
+          break;
+        }
+        IREE_ASSERT_GE(projected_value, 0);
+        IREE_ASSERT_LT(attr_copy->target_bit_offset, 63);
+        IREE_ASSERT_LE((uint64_t)projected_value,
+                       (uint64_t)INT64_MAX >> attr_copy->target_bit_offset);
+        attrs[i].value =
+            loom_attr_i64((int64_t)((uint64_t)projected_value
+                                    << attr_copy->target_bit_offset));
+        break;
+      }
+      case LOOM_LOW_LOWER_ATTR_COPY_VALUE_U32_DIVISOR_MAGIC_MULTIPLIER:
+      case LOOM_LOW_LOWER_ATTR_COPY_VALUE_U32_DIVISOR_MAGIC_SHIFT: {
+        const loom_value_id_t source_value_id =
+            loom_low_lower_rule_source_value(rule_set, source_op,
+                                             attr_copy->value_ref_index);
+        loom_low_lower_u32_divisor_magic_info_t info = {0};
+        const bool has_magic_info =
+            loom_low_lower_rule_value_facts_u32_divisor_magic_info(
+                loom_low_lower_context_module(context),
+                loom_low_lower_context_fact_table(context), source_value_id,
+                &info);
+        IREE_ASSERT(has_magic_info);
+        uint64_t projected_value =
+            attr_copy->kind ==
+                    LOOM_LOW_LOWER_ATTR_COPY_VALUE_U32_DIVISOR_MAGIC_MULTIPLIER
+                ? info.multiplier
+                : info.post_shift;
+        if (attr_copy->target_bit_offset != 0) {
+          IREE_ASSERT_LT(attr_copy->target_bit_offset, 63);
+          IREE_ASSERT_LE(projected_value,
+                         (uint64_t)INT64_MAX >> attr_copy->target_bit_offset);
+          projected_value <<= attr_copy->target_bit_offset;
+        }
+        attrs[i].value = loom_attr_i64((int64_t)projected_value);
         break;
       }
       case LOOM_LOW_LOWER_ATTR_COPY_VALUE_I32_AS_U32_BITS: {

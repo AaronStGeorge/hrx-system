@@ -20,11 +20,13 @@ from loom.target.contracts import (
     EmitDescriptorOp,
     Guard,
     Scalar,
+    ValueProject,
     ValueRef,
     Vector,
 )
 from loom.target.test.descriptors import (
     TEST_LOW_ADD_F32_DESCRIPTOR,
+    TEST_LOW_CONST_I32_DESCRIPTOR,
     TEST_LOW_CORE_DESCRIPTOR_SET,
 )
 
@@ -139,3 +141,48 @@ def test_generate_lower_rule_set_emits_balanced_operand_seed() -> None:
     assert "LOOM_LOW_LOWER_EMIT_DESCRIPTOR_OP_ACCUMULATE_LANES" in generated.source
     assert "LOOM_LOW_LOWER_EMIT_FLAG_ACCUMULATE_TREE_BALANCED" in generated.source
     assert "LOOM_LOW_LOWER_EMIT_FLAG_ACCUMULATE_SEED_FIRST_LANE" not in generated.source
+
+
+def test_generate_lower_rule_set_emits_divisor_magic_projection() -> None:
+    table = ContractFragment(
+        name="test.low.divisor_magic",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            DescriptorRule(
+                source_op=scalar_arithmetic.scalar_addi,
+                descriptor=TEST_LOW_CONST_I32_DESCRIPTOR,
+                guards=(
+                    Guard.value_type("lhs", Scalar("i32")),
+                    Guard.value_u32_divisor_magic_is_add("rhs", True),
+                    Guard.value_type("rhs", Scalar("i32")),
+                    Guard.value_type("result", Scalar("i32")),
+                ),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_CONST_I32_DESCRIPTOR,
+                        results={"dst": ValueRef.result("result")},
+                        immediates={"i32_value": ValueProject.u32_divisor_magic_multiplier("rhs")},
+                    ),
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_CONST_I32_DESCRIPTOR,
+                        results={"dst": ValueRef.temporary("shift")},
+                        result_types={"dst": ValueRef.result("result")},
+                        immediates={"i32_value": ValueProject.u32_divisor_magic_shift("rhs")},
+                    ),
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_CONST_I32_DESCRIPTOR,
+                        results={"dst": ValueRef.temporary("mask")},
+                        result_types={"dst": ValueRef.result("result")},
+                        immediates={"i32_value": ValueProject.exact_i64_minus_one("rhs")},
+                    ),
+                ),
+            )
+        ],
+    )
+
+    generated = generate_lower_rule_set(table, dialect_ops={"scalar": ALL_SCALAR_OPS})
+
+    assert "LOOM_LOW_LOWER_GUARD_VALUE_U32_DIVISOR_MAGIC_IS_ADD" in generated.source
+    assert "LOOM_LOW_LOWER_ATTR_COPY_VALUE_U32_DIVISOR_MAGIC_MULTIPLIER" in generated.source
+    assert "LOOM_LOW_LOWER_ATTR_COPY_VALUE_U32_DIVISOR_MAGIC_SHIFT" in generated.source
+    assert "LOOM_LOW_LOWER_ATTR_COPY_VALUE_EXACT_I64_MINUS_ONE" in generated.source

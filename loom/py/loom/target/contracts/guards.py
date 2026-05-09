@@ -57,6 +57,7 @@ class GuardKind(Enum):
     VALUE_UNSIGNED_BIT_COUNT = "value_unsigned_bit_count"
     VALUE_EXACT_I64 = "value_exact_i64"
     VALUE_EXACT_POWER_OF_TWO_I64 = "value_exact_power_of_two_i64"
+    VALUE_U32_DIVISOR_MAGIC_IS_ADD = "value_u32_divisor_magic_is_add"
     VALUE_EXACT_F64 = "value_exact_f64"
     VALUE_I64_RANGE = "value_i64_range"
     VALUE_I64_RANGE_LE = "value_i64_range_le"
@@ -347,6 +348,21 @@ class Guard:
         )
 
     @classmethod
+    def value_u32_divisor_magic_is_add(
+        cls,
+        field: str,
+        is_add: bool,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VALUE_U32_DIVISOR_MAGIC_IS_ADD,
+            field=field,
+            count=1 if is_add else 0,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
     def value_exact_f64(
         cls,
         field: str,
@@ -548,6 +564,7 @@ class Guard:
             GuardKind.VALUE_UNSIGNED_BIT_COUNT,
             GuardKind.VALUE_EXACT_I64,
             GuardKind.VALUE_EXACT_POWER_OF_TWO_I64,
+            GuardKind.VALUE_U32_DIVISOR_MAGIC_IS_ADD,
             GuardKind.VALUE_EXACT_F64,
             GuardKind.VALUE_I64_RANGE,
             GuardKind.VALUE_I64_RANGE_LE,
@@ -600,6 +617,12 @@ def _validate_value_fact_guard(
     ):
         if guard.count is None or guard.count <= 0:
             raise ValueError(f"{source_op.name}: {subject} needs a positive bit count")
+        return
+    if guard.kind == GuardKind.VALUE_U32_DIVISOR_MAGIC_IS_ADD:
+        if guard.count not in (0, 1):
+            raise ValueError(
+                f"{source_op.name}: {subject} needs an expected add indicator"
+            )
         return
     if guard.kind == GuardKind.VALUE_I64_RANGE and (
         guard.minimum is None or guard.maximum is None

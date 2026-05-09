@@ -37,9 +37,11 @@ from loom.target.contracts import (
 from loom.target.low_descriptors import Descriptor
 
 _DESCRIPTOR_KEYS = (
+    "amdgpu.s_mov_b32",
     "amdgpu.s_add_u32",
     "amdgpu.s_sub_u32",
     "amdgpu.s_mul_i32",
+    "amdgpu.s_mul_hi_u32",
     "amdgpu.s_min_i32",
     "amdgpu.s_max_i32",
     "amdgpu.s_min_u32",
@@ -53,9 +55,11 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.s_lshl_b32",
     "amdgpu.s_lshr_b32",
     "amdgpu.s_ashr_i32",
+    "amdgpu.v_mov_b32",
     "amdgpu.v_add_u32",
     "amdgpu.v_sub_u32",
     "amdgpu.v_mul_lo_u32",
+    "amdgpu.v_mul_hi_u32",
     "amdgpu.v_min_i32",
     "amdgpu.v_max_i32",
     "amdgpu.v_min_u32",
@@ -107,10 +111,27 @@ _SHIFT_AMOUNT_DIAGNOSTIC = GuardDiagnostic(
     subject_name="u5",
     constraint_key="amdgpu.shift_amount.u5",
 )
+_POSITIVE_U32_DIVISOR_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="divisor",
+    subject_name="u32",
+    constraint_key="amdgpu.divisor.positive_u32",
+)
+_UINT32_MAX = (2**32) - 1
 
 
 def _descriptor(key: str) -> Descriptor:
     return descriptor_by_key(_DESCRIPTOR_SET, key)
+
+
+def _descriptor_available_guards(*descriptors: Descriptor) -> tuple[Guard, ...]:
+    seen_keys: set[str] = set()
+    guards: list[Guard] = []
+    for descriptor in descriptors:
+        if descriptor.key in seen_keys:
+            continue
+        seen_keys.add(descriptor.key)
+        guards.append(Guard.descriptor_available(descriptor))
+    return tuple(guards)
 
 
 def _typed_binary_guards(
@@ -524,6 +545,554 @@ def _address_shift_rules(
     return tuple(rules)
 
 
+def _index_div_power_of_two_sgpr_rule() -> DescriptorRule:
+    move = _descriptor("amdgpu.s_mov_b32")
+    shift = _descriptor("amdgpu.s_lshr_b32")
+    return DescriptorRule(
+        source_op=index.index_div,
+        descriptor=shift,
+        guards=(
+            *_typed_binary_guards(
+                _INDEX,
+                unsigned_bit_count=32,
+                unsigned_diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+            ),
+            Guard.low_value_register_class("result", "amdgpu.sgpr"),
+            Guard.low_value_register_class("lhs", "amdgpu.sgpr"),
+            Guard.low_value_register_class("rhs", "amdgpu.sgpr"),
+            Guard.value_unsigned_bit_count(
+                "lhs",
+                32,
+                diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+            ),
+            Guard.value_exact_power_of_two_i64(
+                "rhs",
+                diagnostic=_POSITIVE_U32_DIVISOR_DIAGNOSTIC,
+            ),
+            Guard.value_i64_range(
+                "rhs",
+                1,
+                _UINT32_MAX,
+                diagnostic=_POSITIVE_U32_DIVISOR_DIAGNOSTIC,
+            ),
+            Guard.descriptor_available(move),
+            Guard.descriptor_available(shift),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=move,
+                results={"dst": ValueRef.temporary("shift")},
+                result_types={"dst": _RESULT},
+                immediates={"imm32": ValueProject.exact_i64_log2("rhs")},
+            ),
+            EmitDescriptorOp(
+                descriptor=shift,
+                operands={"lhs": _DIRECT_LHS, "rhs": ValueRef.temporary("shift")},
+                results={"dst": _RESULT},
+            ),
+        ),
+    )
+
+
+def _index_div_power_of_two_vgpr_rule() -> DescriptorRule:
+    shift = _descriptor("amdgpu.v_lshrrev_b32.lit")
+    return DescriptorRule(
+        source_op=index.index_div,
+        descriptor=shift,
+        guards=(
+            *_typed_binary_guards(
+                _INDEX,
+                unsigned_bit_count=32,
+                unsigned_diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+            ),
+            Guard.low_value_register_class("result", "amdgpu.vgpr"),
+            Guard.value_materializable("lhs", ADDRESS_VGPR_MATERIALIZER.name),
+            Guard.value_unsigned_bit_count(
+                "lhs",
+                32,
+                diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+            ),
+            Guard.value_exact_power_of_two_i64(
+                "rhs",
+                diagnostic=_POSITIVE_U32_DIVISOR_DIAGNOSTIC,
+            ),
+            Guard.value_i64_range(
+                "rhs",
+                1,
+                _UINT32_MAX,
+                diagnostic=_POSITIVE_U32_DIVISOR_DIAGNOSTIC,
+            ),
+            Guard.descriptor_available(shift),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=shift,
+                operands={
+                    "value": _materialized_operand(
+                        "lhs",
+                        ADDRESS_VGPR_MATERIALIZER,
+                    )
+                },
+                results={"dst": _RESULT},
+                immediates={"imm32": ValueProject.exact_i64_log2("rhs")},
+                form=DescriptorEmitForm.OP,
+            ),
+        ),
+    )
+
+
+def _index_rem_power_of_two_sgpr_rule() -> DescriptorRule:
+    move = _descriptor("amdgpu.s_mov_b32")
+    bitwise_and = _descriptor("amdgpu.s_and_b32")
+    return DescriptorRule(
+        source_op=index.index_rem,
+        descriptor=bitwise_and,
+        guards=(
+            *_typed_binary_guards(
+                _INDEX,
+                unsigned_bit_count=32,
+                unsigned_diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+            ),
+            Guard.low_value_register_class("result", "amdgpu.sgpr"),
+            Guard.low_value_register_class("lhs", "amdgpu.sgpr"),
+            Guard.value_unsigned_bit_count(
+                "lhs",
+                32,
+                diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+            ),
+            Guard.value_exact_power_of_two_i64(
+                "rhs",
+                diagnostic=_POSITIVE_U32_DIVISOR_DIAGNOSTIC,
+            ),
+            Guard.value_i64_range(
+                "rhs",
+                1,
+                _UINT32_MAX,
+                diagnostic=_POSITIVE_U32_DIVISOR_DIAGNOSTIC,
+            ),
+            Guard.descriptor_available(move),
+            Guard.descriptor_available(bitwise_and),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=move,
+                results={"dst": ValueRef.temporary("mask")},
+                result_types={"dst": _RESULT},
+                immediates={"imm32": ValueProject.exact_i64_minus_one("rhs")},
+            ),
+            EmitDescriptorOp(
+                descriptor=bitwise_and,
+                operands={"lhs": _DIRECT_LHS, "rhs": ValueRef.temporary("mask")},
+                results={"dst": _RESULT},
+            ),
+        ),
+    )
+
+
+def _index_rem_power_of_two_vgpr_rule() -> DescriptorRule:
+    bitwise_and = _descriptor("amdgpu.v_and_b32.lit")
+    return DescriptorRule(
+        source_op=index.index_rem,
+        descriptor=bitwise_and,
+        guards=(
+            *_typed_binary_guards(
+                _INDEX,
+                unsigned_bit_count=32,
+                unsigned_diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+            ),
+            Guard.low_value_register_class("result", "amdgpu.vgpr"),
+            Guard.value_materializable("lhs", ADDRESS_VGPR_MATERIALIZER.name),
+            Guard.value_unsigned_bit_count(
+                "lhs",
+                32,
+                diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+            ),
+            Guard.value_exact_power_of_two_i64(
+                "rhs",
+                diagnostic=_POSITIVE_U32_DIVISOR_DIAGNOSTIC,
+            ),
+            Guard.value_i64_range(
+                "rhs",
+                1,
+                _UINT32_MAX,
+                diagnostic=_POSITIVE_U32_DIVISOR_DIAGNOSTIC,
+            ),
+            Guard.descriptor_available(bitwise_and),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=bitwise_and,
+                operands={
+                    "rhs": _materialized_operand(
+                        "lhs",
+                        ADDRESS_VGPR_MATERIALIZER,
+                    )
+                },
+                results={"dst": _RESULT},
+                immediates={"imm32": ValueProject.exact_i64_minus_one("rhs")},
+                form=DescriptorEmitForm.OP,
+            ),
+        ),
+    )
+
+
+def _index_div_magic_guards(
+    *,
+    register_class: str,
+    is_add: bool,
+) -> tuple[Guard, ...]:
+    if register_class == "amdgpu.sgpr":
+        value_guards = (
+            Guard.low_value_register_class("lhs", "amdgpu.sgpr"),
+            Guard.low_value_register_class("rhs", "amdgpu.sgpr"),
+        )
+    else:
+        value_guards = (
+            Guard.value_materializable("lhs", ADDRESS_VGPR_MATERIALIZER.name),
+            Guard.value_materializable("rhs", ADDRESS_VGPR_MATERIALIZER.name),
+        )
+    return (
+        *_typed_binary_guards(
+            _INDEX,
+            unsigned_bit_count=32,
+            unsigned_diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+        ),
+        Guard.low_value_register_class("result", register_class),
+        Guard.value_unsigned_bit_count(
+            "lhs",
+            32,
+            diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+        ),
+        Guard.value_exact_i64("rhs", diagnostic=_POSITIVE_U32_DIVISOR_DIAGNOSTIC),
+        Guard.value_i64_range(
+            "rhs",
+            2,
+            _UINT32_MAX,
+            diagnostic=_POSITIVE_U32_DIVISOR_DIAGNOSTIC,
+        ),
+        Guard.value_u32_divisor_magic_is_add("rhs", is_add),
+        *value_guards,
+    )
+
+
+def _index_div_magic_sgpr_emits(
+    *,
+    is_add: bool,
+    result: ValueRef,
+) -> tuple[EmitDescriptorOp, ...]:
+    move = _descriptor("amdgpu.s_mov_b32")
+    multiply_hi = _descriptor("amdgpu.s_mul_hi_u32")
+    subtract = _descriptor("amdgpu.s_sub_u32")
+    shift = _descriptor("amdgpu.s_lshr_b32")
+    add = _descriptor("amdgpu.s_add_u32")
+    quotient_value = (
+        ValueRef.temporary("adjusted_quotient")
+        if is_add
+        else ValueRef.temporary("quotient")
+    )
+    emits = [
+        EmitDescriptorOp(
+            descriptor=move,
+            results={"dst": ValueRef.temporary("magic")},
+            result_types={"dst": _RESULT},
+            immediates={"imm32": ValueProject.u32_divisor_magic_multiplier("rhs")},
+        ),
+        EmitDescriptorOp(
+            descriptor=multiply_hi,
+            operands={"lhs": _DIRECT_LHS, "rhs": ValueRef.temporary("magic")},
+            results={"dst": ValueRef.temporary("quotient")},
+            result_types={"dst": _RESULT},
+        ),
+    ]
+    if is_add:
+        emits.extend(
+            [
+                EmitDescriptorOp(
+                    descriptor=subtract,
+                    operands={
+                        "lhs": _DIRECT_LHS,
+                        "rhs": ValueRef.temporary("quotient"),
+                    },
+                    results={"dst": ValueRef.temporary("npq")},
+                    result_types={"dst": _RESULT},
+                ),
+                EmitDescriptorOp(
+                    descriptor=move,
+                    results={"dst": ValueRef.temporary("one")},
+                    result_types={"dst": _RESULT},
+                    immediates={"imm32": 1},
+                ),
+                EmitDescriptorOp(
+                    descriptor=shift,
+                    operands={
+                        "lhs": ValueRef.temporary("npq"),
+                        "rhs": ValueRef.temporary("one"),
+                    },
+                    results={"dst": ValueRef.temporary("npq_half")},
+                    result_types={"dst": _RESULT},
+                ),
+                EmitDescriptorOp(
+                    descriptor=add,
+                    operands={
+                        "lhs": ValueRef.temporary("npq_half"),
+                        "rhs": ValueRef.temporary("quotient"),
+                    },
+                    results={"dst": ValueRef.temporary("adjusted_quotient")},
+                    result_types={"dst": _RESULT},
+                ),
+            ]
+        )
+    emits.extend(
+        [
+            EmitDescriptorOp(
+                descriptor=move,
+                results={"dst": ValueRef.temporary("post_shift")},
+                result_types={"dst": _RESULT},
+                immediates={"imm32": ValueProject.u32_divisor_magic_shift("rhs")},
+            ),
+            EmitDescriptorOp(
+                descriptor=shift,
+                operands={
+                    "lhs": quotient_value,
+                    "rhs": ValueRef.temporary("post_shift"),
+                },
+                results={"dst": result},
+                result_types={"dst": _RESULT},
+            ),
+        ]
+    )
+    return tuple(emits)
+
+
+def _index_div_magic_sgpr_descriptors(*, is_add: bool) -> tuple[Descriptor, ...]:
+    move = _descriptor("amdgpu.s_mov_b32")
+    multiply_hi = _descriptor("amdgpu.s_mul_hi_u32")
+    subtract = _descriptor("amdgpu.s_sub_u32")
+    shift = _descriptor("amdgpu.s_lshr_b32")
+    add = _descriptor("amdgpu.s_add_u32")
+    return (
+        (move, multiply_hi, subtract, shift, add)
+        if is_add
+        else (move, multiply_hi, shift)
+    )
+
+
+def _index_div_magic_vgpr_emits(
+    *,
+    is_add: bool,
+    result: ValueRef,
+) -> tuple[EmitDescriptorOp, ...]:
+    move = _descriptor("amdgpu.v_mov_b32")
+    multiply_hi = _descriptor("amdgpu.v_mul_hi_u32")
+    subtract = _descriptor("amdgpu.v_sub_u32")
+    shift = _descriptor("amdgpu.v_lshrrev_b32.lit")
+    add = _descriptor("amdgpu.v_add_u32")
+    quotient_value = (
+        ValueRef.temporary("adjusted_quotient")
+        if is_add
+        else ValueRef.temporary("quotient")
+    )
+    emits = [
+        EmitDescriptorOp(
+            descriptor=move,
+            results={"dst": ValueRef.temporary("magic")},
+            result_types={"dst": _RESULT},
+            immediates={"imm32": ValueProject.u32_divisor_magic_multiplier("rhs")},
+        ),
+        EmitDescriptorOp(
+            descriptor=multiply_hi,
+            operands={
+                "lhs": _materialized_operand("lhs", ADDRESS_VGPR_MATERIALIZER),
+                "rhs": ValueRef.temporary("magic"),
+            },
+            results={"dst": ValueRef.temporary("quotient")},
+            result_types={"dst": _RESULT},
+            form=DescriptorEmitForm.OP,
+        ),
+    ]
+    if is_add:
+        emits.extend(
+            [
+                EmitDescriptorOp(
+                    descriptor=subtract,
+                    operands={
+                        "lhs": _materialized_operand(
+                            "lhs",
+                            ADDRESS_VGPR_MATERIALIZER,
+                        ),
+                        "rhs": ValueRef.temporary("quotient"),
+                    },
+                    results={"dst": ValueRef.temporary("npq")},
+                    result_types={"dst": _RESULT},
+                    form=DescriptorEmitForm.OP,
+                ),
+                EmitDescriptorOp(
+                    descriptor=shift,
+                    operands={"value": ValueRef.temporary("npq")},
+                    results={"dst": ValueRef.temporary("npq_half")},
+                    result_types={"dst": _RESULT},
+                    immediates={"imm32": 1},
+                    form=DescriptorEmitForm.OP,
+                ),
+                EmitDescriptorOp(
+                    descriptor=add,
+                    operands={
+                        "lhs": ValueRef.temporary("npq_half"),
+                        "rhs": ValueRef.temporary("quotient"),
+                    },
+                    results={"dst": ValueRef.temporary("adjusted_quotient")},
+                    result_types={"dst": _RESULT},
+                    form=DescriptorEmitForm.OP,
+                ),
+            ]
+        )
+    emits.append(
+        EmitDescriptorOp(
+            descriptor=shift,
+            operands={"value": quotient_value},
+            results={"dst": result},
+            result_types={"dst": _RESULT},
+            immediates={"imm32": ValueProject.u32_divisor_magic_shift("rhs")},
+            form=DescriptorEmitForm.OP,
+        )
+    )
+    return tuple(emits)
+
+
+def _index_div_magic_vgpr_descriptors(*, is_add: bool) -> tuple[Descriptor, ...]:
+    move = _descriptor("amdgpu.v_mov_b32")
+    multiply_hi = _descriptor("amdgpu.v_mul_hi_u32")
+    subtract = _descriptor("amdgpu.v_sub_u32")
+    shift = _descriptor("amdgpu.v_lshrrev_b32.lit")
+    add = _descriptor("amdgpu.v_add_u32")
+    return (
+        (move, multiply_hi, subtract, shift, add)
+        if is_add
+        else (move, multiply_hi, shift)
+    )
+
+
+def _index_div_magic_sgpr_rule(*, is_add: bool) -> DescriptorRule:
+    multiply_hi = _descriptor("amdgpu.s_mul_hi_u32")
+    return DescriptorRule(
+        source_op=index.index_div,
+        descriptor=multiply_hi,
+        guards=(
+            *_index_div_magic_guards(
+                register_class="amdgpu.sgpr",
+                is_add=is_add,
+            ),
+            *_descriptor_available_guards(
+                *_index_div_magic_sgpr_descriptors(is_add=is_add)
+            ),
+        ),
+        emit=_index_div_magic_sgpr_emits(is_add=is_add, result=_RESULT),
+    )
+
+
+def _index_div_magic_vgpr_rule(*, is_add: bool) -> DescriptorRule:
+    multiply_hi = _descriptor("amdgpu.v_mul_hi_u32")
+    return DescriptorRule(
+        source_op=index.index_div,
+        descriptor=multiply_hi,
+        guards=(
+            *_index_div_magic_guards(
+                register_class="amdgpu.vgpr",
+                is_add=is_add,
+            ),
+            *_descriptor_available_guards(
+                *_index_div_magic_vgpr_descriptors(is_add=is_add)
+            ),
+        ),
+        emit=_index_div_magic_vgpr_emits(is_add=is_add, result=_RESULT),
+    )
+
+
+def _index_rem_magic_sgpr_rule(*, is_add: bool) -> DescriptorRule:
+    multiply_lo = _descriptor("amdgpu.s_mul_i32")
+    subtract = _descriptor("amdgpu.s_sub_u32")
+    return DescriptorRule(
+        source_op=index.index_rem,
+        descriptor=multiply_lo,
+        guards=(
+            *_index_div_magic_guards(
+                register_class="amdgpu.sgpr",
+                is_add=is_add,
+            ),
+            *_descriptor_available_guards(
+                *_index_div_magic_sgpr_descriptors(is_add=is_add),
+                multiply_lo,
+                subtract,
+            ),
+        ),
+        emit=(
+            *_index_div_magic_sgpr_emits(
+                is_add=is_add,
+                result=ValueRef.temporary("quotient_final"),
+            ),
+            EmitDescriptorOp(
+                descriptor=multiply_lo,
+                operands={
+                    "lhs": ValueRef.temporary("quotient_final"),
+                    "rhs": _DIRECT_RHS,
+                },
+                results={"dst": ValueRef.temporary("product")},
+                result_types={"dst": _RESULT},
+            ),
+            EmitDescriptorOp(
+                descriptor=subtract,
+                operands={"lhs": _DIRECT_LHS, "rhs": ValueRef.temporary("product")},
+                results={"dst": _RESULT},
+            ),
+        ),
+    )
+
+
+def _index_rem_magic_vgpr_rule(*, is_add: bool) -> DescriptorRule:
+    multiply_lo = _descriptor("amdgpu.v_mul_lo_u32")
+    subtract = _descriptor("amdgpu.v_sub_u32")
+    return DescriptorRule(
+        source_op=index.index_rem,
+        descriptor=multiply_lo,
+        guards=(
+            *_index_div_magic_guards(
+                register_class="amdgpu.vgpr",
+                is_add=is_add,
+            ),
+            *_descriptor_available_guards(
+                *_index_div_magic_vgpr_descriptors(is_add=is_add),
+                multiply_lo,
+                subtract,
+            ),
+        ),
+        emit=(
+            *_index_div_magic_vgpr_emits(
+                is_add=is_add,
+                result=ValueRef.temporary("quotient_final"),
+            ),
+            EmitDescriptorOp(
+                descriptor=multiply_lo,
+                operands={
+                    "lhs": ValueRef.temporary("quotient_final"),
+                    "rhs": _materialized_operand("rhs", ADDRESS_VGPR_MATERIALIZER),
+                },
+                results={"dst": ValueRef.temporary("product")},
+                result_types={"dst": _RESULT},
+                form=DescriptorEmitForm.OP,
+            ),
+            EmitDescriptorOp(
+                descriptor=subtract,
+                operands={
+                    "lhs": _materialized_operand("lhs", ADDRESS_VGPR_MATERIALIZER),
+                    "rhs": ValueRef.temporary("product"),
+                },
+                results={"dst": _RESULT},
+                form=DescriptorEmitForm.OP,
+            ),
+        ),
+    )
+
+
 def _index_madd_sgpr_rule() -> DescriptorRule:
     multiply = _descriptor("amdgpu.s_mul_i32")
     add = _descriptor("amdgpu.s_add_u32")
@@ -669,6 +1238,23 @@ def _rules() -> tuple[DescriptorRule, ...]:
             "amdgpu.v_mul_lo_u32",
         )
     )
+    rules.extend(
+        (
+            _index_div_power_of_two_sgpr_rule(),
+            _index_div_power_of_two_vgpr_rule(),
+            _index_rem_power_of_two_sgpr_rule(),
+            _index_rem_power_of_two_vgpr_rule(),
+        )
+    )
+    for is_add in (False, True):
+        rules.extend(
+            (
+                _index_div_magic_sgpr_rule(is_add=is_add),
+                _index_div_magic_vgpr_rule(is_add=is_add),
+                _index_rem_magic_sgpr_rule(is_add=is_add),
+                _index_rem_magic_vgpr_rule(is_add=is_add),
+            )
+        )
     rules.extend(
         _address_rules(index.index_min, "amdgpu.s_min_i32", "amdgpu.v_min_i32")
     )

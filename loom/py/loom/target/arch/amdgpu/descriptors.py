@@ -816,6 +816,21 @@ _MANUAL_SCALAR_DESCRIPTOR_KEYS = (
 )
 
 
+def _s_mov_b32_contract_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.s_mov_b32",
+        instruction_name="S_MOV_B32",
+        mnemonic="s_mov_b32",
+        encoding_name="ENC_SOP1",
+        semantic_tag="integer.const.u32",
+        schedule_class=_SCHEDULE_SALU,
+        operands=(AmdgpuOperandOverlay("SDST", _sgpr_result()),),
+        asm_forms=_asm(results=("dst",), immediates=("imm32",)),
+        immediates=(_U32_IMMEDIATE,),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _manual_scalar_descriptors(
     spec: AmdgpuIsaFactSource,
 ) -> tuple[Descriptor, ...]:
@@ -2084,6 +2099,23 @@ def _v_mul_lo_u32_overlay() -> AmdgpuDescriptorOverlay:
         mnemonic="v_mul_lo_u32",
         encoding_name="ENC_VOP3",
         semantic_tag="integer.mul.lo.u32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("lhs")),
+            AmdgpuOperandOverlay("SRC1", _vgpr_operand("rhs")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_mul_hi_u32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_mul_hi_u32",
+        instruction_name="V_MUL_HI_U32",
+        mnemonic="v_mul_hi_u32",
+        encoding_name="ENC_VOP3",
+        semantic_tag="integer.mul.hi.u32",
         schedule_class=_SCHEDULE_VALU,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
@@ -7124,6 +7156,7 @@ def _cdna_core_overlays(
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
         _v_mul_lo_u32_overlay(),
+        _v_mul_hi_u32_overlay(),
         _v_mul_u32_u24_overlay(),
         _v_mul_u32_u24_literal_overlay(),
         _v_min_i32_overlay(),
@@ -7400,6 +7433,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
         _v_mul_lo_u32_overlay(),
+        _v_mul_hi_u32_overlay(),
         _v_mul_u32_u24_overlay(),
         _v_mul_u32_u24_literal_overlay(),
         _v_min_i32_overlay(),
@@ -7643,6 +7677,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
         _v_mul_lo_u32_overlay(),
+        _v_mul_hi_u32_overlay(),
         _v_mul_u32_u24_overlay(),
         _v_mul_u32_u24_literal_overlay(),
         _v_min_i32_overlay(),
@@ -7927,6 +7962,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
         _v_mul_lo_u32_overlay(),
+        _v_mul_hi_u32_overlay(),
         _v_mul_u32_u24_overlay(),
         _v_mul_u32_u24_literal_overlay(),
         _v_min_i32_overlay(),
@@ -8924,6 +8960,7 @@ _AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS: dict[
     str,
     Callable[[], AmdgpuDescriptorOverlay],
 ] = {
+    "amdgpu.s_mov_b32": _s_mov_b32_contract_overlay,
     "amdgpu.s_add_u32": _s_add_u32_overlay,
     "amdgpu.s_sub_u32": _s_sub_u32_overlay,
     "amdgpu.s_mul_i32": _s_mul_i32_overlay,
@@ -8933,10 +8970,12 @@ _AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS: dict[
     "amdgpu.s_min_u32": _s_min_u32_overlay,
     "amdgpu.s_max_u32": _s_max_u32_overlay,
     "amdgpu.s_cselect_b32": _s_cselect_b32_overlay,
+    "amdgpu.v_mov_b32": _v_mov_b32_literal_overlay,
     "amdgpu.v_add_u32": lambda: _v_add_u32_overlay("V_ADD_NC_U32"),
     "amdgpu.v_add_u32.lit": lambda: _v_add_u32_literal_overlay("V_ADD_NC_U32"),
     "amdgpu.v_sub_u32": lambda: _v_sub_u32_overlay("V_SUB_NC_U32", "v_sub_nc_u32"),
     "amdgpu.v_mul_lo_u32": _v_mul_lo_u32_overlay,
+    "amdgpu.v_mul_hi_u32": _v_mul_hi_u32_overlay,
     "amdgpu.v_mul_u32_u24": _v_mul_u32_u24_overlay,
     "amdgpu.v_mul_u32_u24.lit": _v_mul_u32_u24_literal_overlay,
     "amdgpu.v_min_i32": _v_min_i32_overlay,
