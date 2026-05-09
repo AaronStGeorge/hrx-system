@@ -367,6 +367,24 @@ static void loom_low_lower_mark_value_slice_storage_required(
   }
 }
 
+static bool loom_low_lower_cfg_cond_br_exact_bool(
+    const loom_low_lower_context_t* context, const loom_op_t* source_op,
+    bool* out_condition) {
+  if (out_condition != NULL) *out_condition = false;
+  if (!loom_cfg_cond_br_isa(source_op) ||
+      context->lowering.fact_table == NULL) {
+    return false;
+  }
+  const loom_value_facts_t facts = loom_value_fact_table_lookup(
+      context->lowering.fact_table, loom_cfg_cond_br_condition(source_op));
+  bool condition = false;
+  if (!loom_value_facts_as_exact_bool(facts, &condition)) {
+    return false;
+  }
+  if (out_condition != NULL) *out_condition = condition;
+  return true;
+}
+
 static bool loom_low_lower_rule_value_ref_source_value(
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
     uint16_t value_ref_index, loom_value_id_t* out_source_value_id) {
@@ -504,10 +522,14 @@ static void loom_low_lower_mark_structural_storage_demands(
       loom_low_lower_mark_value_slice_storage_required(
           context, loom_cfg_br_args(source_op));
       return;
-    case LOOM_OP_CFG_COND_BR:
+    case LOOM_OP_CFG_COND_BR: {
+      if (loom_low_lower_cfg_cond_br_exact_bool(context, source_op, NULL)) {
+        return;
+      }
       loom_low_lower_mark_value_storage_required(
           context, loom_cfg_cond_br_condition(source_op));
       return;
+    }
     case LOOM_OP_KERNEL_RETURN:
     default:
       return;
@@ -1462,6 +1484,10 @@ static iree_status_t loom_low_lower_prepare_branches(
     if (source_terminator == NULL || source_terminator->successor_count == 0) {
       continue;
     }
+    if (loom_low_lower_cfg_cond_br_exact_bool(context, source_terminator,
+                                              NULL)) {
+      continue;
+    }
     IREE_RETURN_IF_ERROR(context->policy->prepare_branch.fn(
         context->policy->prepare_branch.user_data, context, source_terminator));
     if (loom_low_lower_context_should_stop(context)) {
@@ -1556,6 +1582,14 @@ static iree_status_t loom_low_lower_structural_op(
       loom_block_t* low_false_dest = NULL;
       IREE_RETURN_IF_ERROR(loom_low_lower_lookup_successor_dest(
           context, source_op, 1, &low_false_dest));
+      bool condition = false;
+      if (loom_low_lower_cfg_cond_br_exact_bool(context, source_op,
+                                                &condition)) {
+        loom_block_t* low_dest = condition ? low_true_dest : low_false_dest;
+        loom_op_t* low_br_op = NULL;
+        return loom_low_br_build(&context->builder, low_dest, NULL, 0,
+                                 source_op->location, &low_br_op);
+      }
       loom_value_id_t low_condition = LOOM_VALUE_ID_INVALID;
       IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
           context, loom_cfg_cond_br_condition(source_op), &low_condition));
