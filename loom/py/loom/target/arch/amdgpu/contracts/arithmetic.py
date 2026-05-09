@@ -288,20 +288,18 @@ def _binary_rule(
     source_lhs: str = "lhs",
     source_rhs: str = "rhs",
     f32_operands: bool = False,
+    f32_rhs: bool = False,
     extra_guards: tuple[Guard, ...] = (),
 ) -> DescriptorRule:
     descriptor = _descriptor(descriptor_key)
-    operands = (
-        {
-            descriptor_lhs: _f32_vgpr_operand(source_lhs),
-            descriptor_rhs: _f32_vgpr_operand(source_rhs),
-        }
+    operands = {
+        descriptor_lhs: _f32_vgpr_operand(source_lhs)
         if f32_operands
-        else {
-            descriptor_lhs: ValueRef.operand(source_lhs),
-            descriptor_rhs: ValueRef.operand(source_rhs),
-        }
-    )
+        else ValueRef.operand(source_lhs),
+        descriptor_rhs: _f32_vgpr_operand(source_rhs)
+        if f32_operands or f32_rhs
+        else ValueRef.operand(source_rhs),
+    }
     return DescriptorRule(
         source_op=source_op,
         descriptor=descriptor,
@@ -1270,7 +1268,84 @@ def _commutative_f32_vector_binary_rules(
             source_op,
             _VEC_F32,
             descriptor_key,
-            extra_guards=(_register_class("rhs", "amdgpu.vgpr"),),
+            f32_rhs=True,
+        ),
+    )
+
+
+def _commutative_f32_vector_literal_rules(
+    source_op: Op,
+    descriptor_key: str,
+) -> tuple[DescriptorRule, ...]:
+    rules: list[DescriptorRule] = []
+    inline_descriptor_key = descriptor_key.removesuffix(".lit") + ".src0_inline"
+    for literal_value in _SOURCE_INLINE_F32_VALUES:
+        rules.extend(
+            (
+                _f32_inline_binary_rule(
+                    source_op,
+                    _VEC_F32,
+                    inline_descriptor_key,
+                    literal_source="lhs",
+                    nonliteral_source="rhs",
+                    literal_value=literal_value,
+                    f32_operand=True,
+                ),
+                _f32_inline_binary_rule(
+                    source_op,
+                    _VEC_F32,
+                    inline_descriptor_key,
+                    literal_source="rhs",
+                    nonliteral_source="lhs",
+                    literal_value=literal_value,
+                    f32_operand=True,
+                ),
+            )
+        )
+    rules.extend(
+        (
+            _f32_literal_binary_rule(
+                source_op,
+                _VEC_F32,
+                descriptor_key,
+                literal_source="lhs",
+                nonliteral_source="rhs",
+                f32_operand=True,
+            ),
+            _f32_literal_binary_rule(
+                source_op,
+                _VEC_F32,
+                descriptor_key,
+                literal_source="rhs",
+                nonliteral_source="lhs",
+                f32_operand=True,
+            ),
+        )
+    )
+    return tuple(rules)
+
+
+def _f32_vector_sub_literal_rules() -> tuple[DescriptorRule, ...]:
+    return (
+        *(
+            _f32_inline_binary_rule(
+                vector.vector_subf,
+                _VEC_F32,
+                "amdgpu.v_sub_f32.src0_inline",
+                literal_source="lhs",
+                nonliteral_source="rhs",
+                literal_value=literal_value,
+                f32_operand=True,
+            )
+            for literal_value in _SOURCE_INLINE_F32_VALUES
+        ),
+        _f32_literal_binary_rule(
+            vector.vector_subf,
+            _VEC_F32,
+            "amdgpu.v_sub_f32.lit",
+            literal_source="lhs",
+            nonliteral_source="rhs",
+            f32_operand=True,
         ),
     )
 
@@ -1283,72 +1358,8 @@ def _rules() -> tuple[ContractCase, ...]:
         (vector.vector_minnumf, "amdgpu.v_min_f32.lit"),
         (vector.vector_maxnumf, "amdgpu.v_max_f32.lit"),
     ):
-        inline_descriptor_key = descriptor_key.removesuffix(".lit") + ".src0_inline"
-        for literal_value in _SOURCE_INLINE_F32_VALUES:
-            rules.extend(
-                (
-                    _f32_inline_binary_rule(
-                        source_op,
-                        _VEC_F32,
-                        inline_descriptor_key,
-                        literal_source="lhs",
-                        nonliteral_source="rhs",
-                        literal_value=literal_value,
-                        extra_guards=(_register_class("rhs", "amdgpu.vgpr"),),
-                    ),
-                    _f32_inline_binary_rule(
-                        source_op,
-                        _VEC_F32,
-                        inline_descriptor_key,
-                        literal_source="rhs",
-                        nonliteral_source="lhs",
-                        literal_value=literal_value,
-                        extra_guards=(_register_class("lhs", "amdgpu.vgpr"),),
-                    ),
-                )
-            )
-        rules.extend(
-            (
-                _f32_literal_binary_rule(
-                    source_op,
-                    _VEC_F32,
-                    descriptor_key,
-                    literal_source="lhs",
-                    nonliteral_source="rhs",
-                    extra_guards=(_register_class("rhs", "amdgpu.vgpr"),),
-                ),
-                _f32_literal_binary_rule(
-                    source_op,
-                    _VEC_F32,
-                    descriptor_key,
-                    literal_source="rhs",
-                    nonliteral_source="lhs",
-                    extra_guards=(_register_class("lhs", "amdgpu.vgpr"),),
-                ),
-            )
-        )
-    rules.extend(
-        _f32_inline_binary_rule(
-            vector.vector_subf,
-            _VEC_F32,
-            "amdgpu.v_sub_f32.src0_inline",
-            literal_source="lhs",
-            nonliteral_source="rhs",
-            literal_value=literal_value,
-            extra_guards=(_register_class("rhs", "amdgpu.vgpr"),),
-        )
-        for literal_value in _SOURCE_INLINE_F32_VALUES
-    )
-    rules.append(
-        _f32_literal_binary_rule(
-            vector.vector_subf,
-            _VEC_F32,
-            "amdgpu.v_sub_f32.lit",
-            literal_source="lhs",
-            nonliteral_source="rhs",
-            extra_guards=(_register_class("rhs", "amdgpu.vgpr"),),
-        )
-    )
+        rules.extend(_commutative_f32_vector_literal_rules(source_op, descriptor_key))
+    rules.extend(_f32_vector_sub_literal_rules())
     rules.extend(
         (
             *_commutative_f32_vector_binary_rules(
@@ -1359,7 +1370,7 @@ def _rules() -> tuple[ContractCase, ...]:
                 vector.vector_subf,
                 _VEC_F32,
                 "amdgpu.v_sub_f32",
-                extra_guards=(_register_class("rhs", "amdgpu.vgpr"),),
+                f32_rhs=True,
             ),
             *_commutative_f32_vector_binary_rules(
                 vector.vector_mulf,
