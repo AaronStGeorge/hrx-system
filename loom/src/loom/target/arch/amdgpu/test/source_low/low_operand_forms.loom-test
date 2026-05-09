@@ -56,3 +56,23 @@ low.func.def target(@target) @vop2_literal_shift(%value: reg<amdgpu.vgpr>) -> (r
   %result = low.op<amdgpu.v_lshlrev_b32.lit>(%value) {imm32 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   low.return %result : reg<amdgpu.vgpr>
 }
+
+// ====
+
+// RUN: pass low-select-operand-forms,low-dce
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @s_load_dword_zero_soffset(%base: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr>) {
+  %zero = low.const<amdgpu.s_mov_b32> {imm32 = 0} : reg<amdgpu.sgpr>
+  %result = low.op<amdgpu.s_load_dword>(%base, %zero) {offset = 64} : (reg<amdgpu.sgpr x2>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr>
+  low.return %result : reg<amdgpu.sgpr>
+}
+
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @s_load_dword_zero_soffset(%base: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr>) {
+  %result = low.op<amdgpu.s_load_dword_offset_only>(%base) {offset = 64} : (reg<amdgpu.sgpr x2>) -> reg<amdgpu.sgpr>
+  low.return %result : reg<amdgpu.sgpr>
+}

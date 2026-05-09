@@ -2032,6 +2032,15 @@ def _literal_operand_form(
     )
 
 
+def _soffset_zero_operand_form(*, replacement_descriptor: str) -> OperandForm:
+    return OperandForm(
+        replacement_descriptor=replacement_descriptor,
+        source_operand="soffset",
+        match_kind=OperandFormMatchKind.ALL_EQUAL_I64,
+        match_i64=0,
+    )
+
+
 def _v_binary_literal_overlay(
     *,
     descriptor_key: str,
@@ -3248,12 +3257,19 @@ def _s_load_dwordx2_overlay(
         AmdgpuOperandOverlay("SDATA", _sgpr_result(units=2)),
         AmdgpuOperandOverlay("SBASE", _sgpr_operand("base", units=2)),
     )
+    operand_forms: tuple[OperandForm, ...]
     if fixed_soffset is not None:
         fixed_encoding_fields = (*fixed_encoding_fields, ("SOFFSET", fixed_soffset))
+        operand_forms = ()
     else:
         operands = (
             *operands,
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+        )
+        operand_forms = (
+            _soffset_zero_operand_form(
+                replacement_descriptor="amdgpu.s_load_dwordx2_offset_only"
+            ),
         )
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -3268,6 +3284,7 @@ def _s_load_dwordx2_overlay(
         immediates=(_offset_immediate(offset_bit_width),),
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_GLOBAL_LOAD_B64_EFFECT,),
+        operand_forms=operand_forms,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=() if fixed_soffset is not None else None,
     )
@@ -3285,12 +3302,19 @@ def _s_load_dwordx4_overlay(
         AmdgpuOperandOverlay("SDATA", _sgpr_result(units=4)),
         AmdgpuOperandOverlay("SBASE", _sgpr_operand("base", units=2)),
     )
+    operand_forms: tuple[OperandForm, ...]
     if fixed_soffset is not None:
         fixed_encoding_fields = (*fixed_encoding_fields, ("SOFFSET", fixed_soffset))
+        operand_forms = ()
     else:
         operands = (
             *operands,
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+        )
+        operand_forms = (
+            _soffset_zero_operand_form(
+                replacement_descriptor="amdgpu.s_load_dwordx4_offset_only"
+            ),
         )
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -3305,6 +3329,7 @@ def _s_load_dwordx4_overlay(
         immediates=(_offset_immediate(offset_bit_width),),
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_GLOBAL_LOAD_B128_EFFECT,),
+        operand_forms=operand_forms,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=() if fixed_soffset is not None else None,
     )
@@ -3322,12 +3347,19 @@ def _s_load_dword_overlay(
         AmdgpuOperandOverlay("SDATA", _sgpr_result()),
         AmdgpuOperandOverlay("SBASE", _sgpr_operand("base", units=2)),
     )
+    operand_forms: tuple[OperandForm, ...]
     if fixed_soffset is not None:
         fixed_encoding_fields = (*fixed_encoding_fields, ("SOFFSET", fixed_soffset))
+        operand_forms = ()
     else:
         operands = (
             *operands,
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+        )
+        operand_forms = (
+            _soffset_zero_operand_form(
+                replacement_descriptor="amdgpu.s_load_dword_offset_only"
+            ),
         )
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -3342,6 +3374,7 @@ def _s_load_dword_overlay(
         immediates=(_offset_immediate(offset_bit_width),),
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_GLOBAL_LOAD_EFFECT,),
+        operand_forms=operand_forms,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=() if fixed_soffset is not None else None,
     )
