@@ -78,6 +78,87 @@ TEST_F(ModuleTest, ModuleName) {
   loom_module_free(module);
 }
 
+TEST_F(ModuleTest, ValueNameHelpersSkipAnonymousSource) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_value_id_t source = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(
+      module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &source));
+  loom_value_id_t target = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(
+      module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &target));
+
+  const iree_host_size_t string_count = module->strings.count;
+  IREE_ASSERT_OK(loom_module_copy_value_name(module, source, target));
+  EXPECT_EQ(loom_module_value(module, target)->name_id, LOOM_STRING_ID_INVALID);
+
+  iree_arena_allocator_t scratch_arena;
+  iree_arena_initialize(&block_pool_, &scratch_arena);
+  IREE_ASSERT_OK(loom_module_try_set_derived_value_name(
+      module, source, target, IREE_SV("bounded"), &scratch_arena));
+  iree_arena_deinitialize(&scratch_arena);
+  EXPECT_EQ(loom_module_value(module, target)->name_id, LOOM_STRING_ID_INVALID);
+  EXPECT_EQ(module->strings.count, string_count);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, ValueNameHelpersCopyMoveAndDerive) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+  loom_value_id_t source = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(
+      module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &source));
+  loom_value_id_t copied = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(
+      module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &copied));
+  loom_value_id_t derived = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(
+      module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &derived));
+  loom_value_id_t overwritten = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(
+      module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &overwritten));
+  loom_value_id_t moved = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(
+      module, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), &moved));
+
+  loom_string_id_t source_name = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("head"), &source_name));
+  IREE_ASSERT_OK(loom_module_set_value_name(module, source, source_name));
+
+  IREE_ASSERT_OK(loom_module_copy_value_name(module, source, copied));
+  EXPECT_EQ(loom_module_value(module, copied)->name_id, source_name);
+
+  loom_string_id_t temporary_name = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module, IREE_SV("temporary"), &temporary_name));
+  IREE_ASSERT_OK(
+      loom_module_set_value_name(module, overwritten, temporary_name));
+  IREE_ASSERT_OK(loom_module_overwrite_value_name(module, source, overwritten));
+  EXPECT_EQ(loom_module_value(module, overwritten)->name_id, source_name);
+
+  iree_arena_allocator_t scratch_arena;
+  iree_arena_initialize(&block_pool_, &scratch_arena);
+  IREE_ASSERT_OK(loom_module_try_set_derived_value_name(
+      module, source, derived, IREE_SV("bounded"), &scratch_arena));
+  iree_arena_deinitialize(&scratch_arena);
+  loom_string_id_t derived_name = loom_module_value(module, derived)->name_id;
+  ASSERT_NE(derived_name, LOOM_STRING_ID_INVALID);
+  ASSERT_LT(derived_name, module->strings.count);
+  EXPECT_TRUE(iree_string_view_equal(module->strings.entries[derived_name],
+                                     IREE_SV("head_bounded")));
+
+  IREE_ASSERT_OK(loom_module_move_value_name(module, source, moved));
+  EXPECT_EQ(loom_module_value(module, source)->name_id, LOOM_STRING_ID_INVALID);
+  EXPECT_EQ(loom_module_value(module, moved)->name_id, source_name);
+
+  IREE_ASSERT_OK(loom_module_clear_value_name(module, moved));
+  EXPECT_EQ(loom_module_value(module, moved)->name_id, LOOM_STRING_ID_INVALID);
+  loom_module_free(module);
+}
+
 TEST_F(ModuleTest, BodyBlock) {
   loom_module_t* module = NULL;
   IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,

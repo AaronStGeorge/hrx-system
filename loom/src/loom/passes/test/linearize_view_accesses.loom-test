@@ -12,9 +12,9 @@ func.def @linearize_dense_load(%input: buffer, %zero_bytes: offset, %head: index
   %input_view = buffer.view %input[%zero_bytes] : buffer -> view<512xf16, #dense>
   %head_dim_bounded = index.assume %head_dim [range(%head_dim, 0, 127)] : index
   %head_bounded = index.assume %head [range(%head, 0, 3)] : index
-  %stride128 = index.constant 128 : index
-  %linear128 = index.madd %head_bounded, %stride128, %head_dim_bounded : index
-  %value = view.load %input_view[%linear128] : view<512xf16, #dense> -> f16
+  %8 = index.constant 128 : index
+  %9 = index.madd %head_bounded, %8, %head_dim_bounded : index
+  %value = view.load %input_view[%9] : view<512xf16, #dense> -> f16
   test.use %value : f16
   func.return
 }
@@ -41,15 +41,15 @@ func.def @linearize_dense_store_shares_inner_index(%key_input: buffer, %value_in
   %value_cache = buffer.view %value_output[%zero_bytes] : buffer -> view<16777216xf16, #dense>
   %head_dim_bounded = index.assume %head_dim [range(%head_dim, 0, 127)] : index
   %head_bounded = index.assume %head [range(%head, 0, 3)] : index
-  %stride128 = index.constant 128 : index
-  %linear128 = index.madd %head_bounded, %stride128, %head_dim_bounded : index
-  %key = view.load %key_input_view[%linear128] : view<512xf16, #dense> -> f16
-  %value = view.load %value_input_view[%linear128] : view<512xf16, #dense> -> f16
+  %16 = index.constant 128 : index
+  %17 = index.madd %head_bounded, %16, %head_dim_bounded : index
+  %key = view.load %key_input_view[%17] : view<512xf16, #dense> -> f16
+  %value = view.load %value_input_view[%17] : view<512xf16, #dense> -> f16
   %position_bounded = index.assume %position [range(%position, 0, 32767)] : index
-  %stride512 = index.constant 512 : index
-  %linear512 = index.madd %position_bounded, %stride512, %linear128 : index
-  view.store %key, %key_cache[%linear512] : f16, view<16777216xf16, #dense>
-  view.store %value, %value_cache[%linear512] : f16, view<16777216xf16, #dense>
+  %31 = index.constant 512 : index
+  %32 = index.madd %position_bounded, %31, %17 : index
+  view.store %key, %key_cache[%32] : f16, view<16777216xf16, #dense>
+  view.store %value, %value_cache[%32] : f16, view<16777216xf16, #dense>
   func.return
 }
 
@@ -66,9 +66,9 @@ func.def @preserve_static_indices_and_cache_attrs(%input: buffer, %zero_bytes: o
 func.def @preserve_static_indices_and_cache_attrs(%input: buffer, %zero_bytes: offset, %column: index) {
   %input_view = buffer.view %input[%zero_bytes] : buffer -> view<128xf32, #dense>
   %column_bounded = index.assume %column [range(%column, 0, 15)] : index
-  %offset48 = index.constant 48 : index
-  %linear16 = index.add %column_bounded, %offset48 : index
-  %value = view.load %input_view[%linear16] {cache_scope = device, cache_temporal = non_temporal} : view<128xf32, #dense> -> f32
+  %6 = index.constant 48 : index
+  %7 = index.add %column_bounded, %6 : index
+  %value = view.load %input_view[%7] {cache_scope = device, cache_temporal = non_temporal} : view<128xf32, #dense> -> f32
   test.use %value : f32
   func.return
 }
@@ -91,10 +91,10 @@ func.def @linearize_dense_vector_load_store_with_ssa_layout(%input: buffer, %out
   %output_view = buffer.view %output[%zero_bytes] : buffer -> view<128xf32, %layout>
   %column_bounded = index.assume %column [range(%column, 0, 12)] : index
   %row_bounded = index.assume %row [range(%row, 0, 7)] : index
-  %stride16 = index.constant 16 : index
-  %linear16 = index.madd %row_bounded, %stride16, %column_bounded : index
-  %value = vector.load %input_view[%linear16] {cache_scope = device, cache_temporal = non_temporal} : view<128xf32, %layout> -> vector<4xf32>
-  vector.store %value, %output_view[%linear16] {cache_scope = system, cache_temporal = bypass} : vector<4xf32>, view<128xf32, %layout>
+  %11 = index.constant 16 : index
+  %12 = index.madd %row_bounded, %11, %column_bounded : index
+  %value = vector.load %input_view[%12] {cache_scope = device, cache_temporal = non_temporal} : view<128xf32, %layout> -> vector<4xf32>
+  vector.store %value, %output_view[%12] {cache_scope = system, cache_temporal = bypass} : vector<4xf32>, view<128xf32, %layout>
   func.return
 }
 
@@ -135,11 +135,11 @@ func.def @linearize_dense_rank2_vector_load(%input: buffer, %zero_bytes: offset,
   %strided_view = buffer.view %input[%zero_bytes] : buffer -> view<8x16xf32, %strided_layout>
   %column_bounded = index.assume %column [range(%column, 0, 12)] : index
   %row_bounded = index.assume %row [range(%row, 0, 6)] : index
-  %stride16 = index.constant 16 : index
-  %linear16$13 = index.madd %row_bounded, %stride16, %column_bounded : index
-  %14 = vector.load %dense_view[%linear16$13] : view<128xf32, #dense> -> vector<4xf32>
-  %linear16$20 = index.add %linear16$13, %stride16 : index
-  %21 = vector.load %dense_view[%linear16$20] : view<128xf32, #dense> -> vector<4xf32>
+  %12 = index.constant 16 : index
+  %13 = index.madd %row_bounded, %12, %column_bounded : index
+  %14 = vector.load %dense_view[%13] : view<128xf32, #dense> -> vector<4xf32>
+  %20 = index.add %13, %12 : index
+  %21 = vector.load %dense_view[%20] : view<128xf32, #dense> -> vector<4xf32>
   %22 = vector.concat<0> %14, %21 : vector<4xf32>, vector<4xf32> -> vector<8xf32>
   %rank2 = vector.bitcast %22 : vector<8xf32> to vector<2x4xf32>
   %strided = vector.load %strided_view[%row, %column] : view<8x16xf32, %strided_layout> -> vector<4xf32>
@@ -162,12 +162,12 @@ func.def @linearize_dense_rank2_vector_store(%output: buffer, %zero_bytes: offse
   %8 = vector.slice %7[0] : vector<8xf32> -> vector<4xf32>
   %column_bounded = index.assume %column [range(%column, 0, 12)] : index
   %row_bounded = index.assume %row [range(%row, 0, 6)] : index
-  %stride16 = index.constant 16 : index
-  %linear16$12 = index.madd %row_bounded, %stride16, %column_bounded : index
-  vector.store %8, %output_view[%linear16$12] : vector<4xf32>, view<128xf32, #dense>
+  %11 = index.constant 16 : index
+  %12 = index.madd %row_bounded, %11, %column_bounded : index
+  vector.store %8, %output_view[%12] : vector<4xf32>, view<128xf32, #dense>
   %13 = vector.slice %7[4] : vector<8xf32> -> vector<4xf32>
-  %linear16$19 = index.add %linear16$12, %stride16 : index
-  vector.store %13, %output_view[%linear16$19] : vector<4xf32>, view<128xf32, #dense>
+  %19 = index.add %12, %11 : index
+  vector.store %13, %output_view[%19] : vector<4xf32>, view<128xf32, #dense>
   func.return
 }
 

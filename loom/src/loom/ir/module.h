@@ -92,6 +92,40 @@ iree_status_t loom_module_set_value_name(loom_module_t* module,
                                          loom_value_id_t value_id,
                                          loom_string_id_t name_id);
 
+// Copies the optional SSA display name from |source_value_id| to
+// |target_value_id| when the source is named and the target is still unnamed.
+iree_status_t loom_module_copy_value_name(loom_module_t* module,
+                                          loom_value_id_t source_value_id,
+                                          loom_value_id_t target_value_id);
+
+// Copies the optional SSA display name from |source_value_id| to
+// |target_value_id| even when the target already has a display name.
+iree_status_t loom_module_overwrite_value_name(loom_module_t* module,
+                                               loom_value_id_t source_value_id,
+                                               loom_value_id_t target_value_id);
+
+// Moves the optional SSA display name from |source_value_id| to
+// |target_value_id|, clearing the source. If the source is unnamed this leaves
+// both values unchanged.
+iree_status_t loom_module_move_value_name(loom_module_t* module,
+                                          loom_value_id_t source_value_id,
+                                          loom_value_id_t target_value_id);
+
+// Clears the optional SSA display name on |value_id|.
+iree_status_t loom_module_clear_value_name(loom_module_t* module,
+                                           loom_value_id_t value_id);
+
+// Derives |target_value_id|'s display name from |source_value_id| by appending
+// "_<suffix>" when the source is explicitly named and the target is unnamed.
+// Anonymous source values stay anonymous so compiler-generated IR does not
+// intern names in bulk. |suffix| is a snake_case word without a leading
+// underscore. Temporary concatenation storage comes from |scratch_arena|; the
+// final interned string is owned by |module|.
+iree_status_t loom_module_try_set_derived_value_name(
+    loom_module_t* module, loom_value_id_t source_value_id,
+    loom_value_id_t target_value_id, iree_string_view_t suffix,
+    iree_arena_allocator_t* scratch_arena);
+
 // Removes type-use records carried by |value_id|'s current type while leaving
 // the stored type unchanged. Used when the carrier value is no longer live
 // enough for its type to keep referenced values alive, such as op erasure.

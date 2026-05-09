@@ -565,28 +565,8 @@ static iree_status_t loom_promote_private_fragments_forward_single_store(
 static iree_status_t loom_promote_private_fragments_name_vector_value(
     loom_promote_private_fragments_context_t* context,
     loom_value_id_t private_view, loom_value_id_t vector_value) {
-  const loom_value_t* private_view_value =
-      loom_module_value(context->module, private_view);
-  if (private_view_value->name_id == LOOM_STRING_ID_INVALID) {
-    return iree_ok_status();
-  }
-  iree_string_view_t private_view_name =
-      context->module->strings.entries[private_view_value->name_id];
-  iree_string_view_t suffix = IREE_SV("_vector");
-  char* storage = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate(context->rewriter->arena,
-                                           private_view_name.size + suffix.size,
-                                           (void**)&storage));
-  memcpy(storage, private_view_name.data, private_view_name.size);
-  memcpy(storage + private_view_name.size, suffix.data, suffix.size);
-
-  loom_string_id_t vector_name_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_module_intern_string(
-      context->module,
-      iree_make_string_view(storage, private_view_name.size + suffix.size),
-      &vector_name_id));
-  return loom_module_set_value_name(context->module, vector_value,
-                                    vector_name_id);
+  return loom_rewriter_try_set_derived_value_name(
+      context->rewriter, private_view, vector_value, IREE_SV("vector"));
 }
 
 static iree_status_t loom_promote_private_fragments_promote(

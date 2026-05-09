@@ -495,13 +495,13 @@ static iree_status_t loom_loop_fusion_copy_result_names(
     const loom_loop_fusion_for_info_t* second, loom_op_t* fused_loop) {
   loom_value_slice_t fused_results = loom_scf_for_results(fused_loop);
   for (uint16_t i = 0; i < first->results.count; ++i) {
-    loom_module_value(module, fused_results.values[i])->name_id =
-        loom_module_value(module, first->results.values[i])->name_id;
+    IREE_RETURN_IF_ERROR(loom_module_copy_value_name(
+        module, first->results.values[i], fused_results.values[i]));
   }
   for (uint16_t i = 0; i < second->results.count; ++i) {
-    loom_module_value(module, fused_results.values[first->results.count + i])
-        ->name_id =
-        loom_module_value(module, second->results.values[i])->name_id;
+    IREE_RETURN_IF_ERROR(loom_module_copy_value_name(
+        module, second->results.values[i],
+        fused_results.values[first->results.count + i]));
   }
   return iree_ok_status();
 }
@@ -544,12 +544,12 @@ static iree_status_t loom_loop_fusion_move_body_before_yield(
                                        remap, &options);
 }
 
-static void loom_loop_fusion_clear_result_names(loom_module_t* module,
-                                                loom_op_t* op) {
+static iree_status_t loom_loop_fusion_clear_result_names(loom_module_t* module,
+                                                         loom_op_t* op) {
   loom_value_id_t* results = loom_op_results(op);
   for (uint16_t i = 0; i < op->result_count; ++i) {
     if (results[i] == LOOM_VALUE_ID_INVALID) continue;
-    loom_module_value(module, results[i])->name_id = LOOM_STRING_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_module_clear_value_name(module, results[i]));
   }
 
   loom_region_t** regions = loom_op_regions(op);
@@ -561,19 +561,22 @@ static void loom_loop_fusion_clear_result_names(loom_module_t* module,
     loom_region_for_each_block(region, block) {
       loom_op_t* child_op = NULL;
       loom_block_for_each_op(block, child_op) {
-        loom_loop_fusion_clear_result_names(module, child_op);
+        IREE_RETURN_IF_ERROR(
+            loom_loop_fusion_clear_result_names(module, child_op));
       }
     }
   }
+  return iree_ok_status();
 }
 
-static void loom_loop_fusion_clear_block_result_names(loom_module_t* module,
-                                                      loom_block_t* block) {
+static iree_status_t loom_loop_fusion_clear_block_result_names(
+    loom_module_t* module, loom_block_t* block) {
   loom_op_t* op = NULL;
   loom_block_for_each_op(block, op) {
     if (loom_scf_yield_isa(op)) continue;
-    loom_loop_fusion_clear_result_names(module, op);
+    IREE_RETURN_IF_ERROR(loom_loop_fusion_clear_result_names(module, op));
   }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_loop_fusion_replace_yield_values(
@@ -726,7 +729,10 @@ static iree_status_t loom_loop_fusion_fuse_pair(
     }
   }
   if (iree_status_is_ok(status)) {
-    loom_loop_fusion_clear_block_result_names(context->module, second->block);
+    status = loom_loop_fusion_clear_block_result_names(context->module,
+                                                       second->block);
+  }
+  if (iree_status_is_ok(status)) {
     status = loom_loop_fusion_move_body_before_yield(
         context, second, fused_yield, &second_remap);
   }

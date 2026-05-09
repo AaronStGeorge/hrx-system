@@ -2092,8 +2092,8 @@ static iree_status_t loom_refine_boundaries_clone_function_specialization(
         loom_module_define_value(module, loom_type_none(), &target_results[i]));
     IREE_RETURN_IF_ERROR(
         loom_ir_remap_map_value(&remap, source_results[i], target_results[i]));
-    loom_module_value(module, target_results[i])->name_id =
-        loom_module_value(module, source_results[i])->name_id;
+    IREE_RETURN_IF_ERROR(loom_module_copy_value_name(module, source_results[i],
+                                                     target_results[i]));
   }
 
   if (source_op->tied_result_count > 0) {
@@ -2425,7 +2425,7 @@ static iree_status_t loom_refine_boundaries_preflight_pruned_call(
   return iree_ok_status();
 }
 
-static void loom_refine_boundaries_copy_result_names(
+static iree_status_t loom_refine_boundaries_copy_result_names(
     loom_module_t* module, const loom_op_t* old_op, loom_op_t* new_op,
     const uint16_t* old_to_new_result_indices) {
   const loom_value_id_t* old_results = loom_op_const_results(old_op);
@@ -2439,13 +2439,10 @@ static void loom_refine_boundaries_copy_result_names(
         new_result == LOOM_VALUE_ID_INVALID) {
       continue;
     }
-    loom_string_id_t name_id = loom_module_value(module, old_result)->name_id;
-    if (name_id == LOOM_STRING_ID_INVALID) continue;
-    loom_value_t* new_value = loom_module_value(module, new_result);
-    if (new_value->name_id == LOOM_STRING_ID_INVALID) {
-      new_value->name_id = name_id;
-    }
+    IREE_RETURN_IF_ERROR(
+        loom_module_copy_value_name(module, old_result, new_result));
   }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_refine_boundaries_build_pruned_call(
@@ -2631,8 +2628,8 @@ static iree_status_t loom_refine_boundaries_rewrite_pruned_call(
   IREE_RETURN_IF_ERROR(loom_refine_boundaries_build_pruned_call(
       walk->module, op, call, operands, results, plan, walk->arena,
       &old_to_new_result_indices, &new_op));
-  loom_refine_boundaries_copy_result_names(walk->module, op, new_op,
-                                           old_to_new_result_indices);
+  IREE_RETURN_IF_ERROR(loom_refine_boundaries_copy_result_names(
+      walk->module, op, new_op, old_to_new_result_indices));
 
   const loom_value_id_t* old_results = loom_op_const_results(op);
   const loom_value_id_t* new_results = loom_op_const_results(new_op);

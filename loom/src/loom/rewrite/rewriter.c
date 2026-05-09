@@ -71,6 +71,7 @@ iree_status_t loom_rewriter_initialize(loom_rewriter_t* rewriter,
   memset(rewriter, 0, sizeof(*rewriter));
   rewriter->module = module;
   rewriter->arena = arena;
+  rewriter->name_policy = LOOM_REWRITER_NAME_POLICY_DEFAULT;
 
   // Initialize the builder with the module's arena (new ops live in
   // the module, not the pass scratch arena).
@@ -296,15 +297,48 @@ iree_status_t loom_rewriter_preserve_result_names_on_new_values(
                               "replacement value %%%u out of range",
                               (unsigned)replacement);
     }
-    loom_string_id_t old_name =
-        loom_module_value(rewriter->module, old_result)->name_id;
-    if (old_name == LOOM_STRING_ID_INVALID) continue;
-    loom_value_t* replacement_value =
-        loom_module_value(rewriter->module, replacement);
-    if (replacement_value->name_id != LOOM_STRING_ID_INVALID) continue;
-    replacement_value->name_id = old_name;
+    IREE_RETURN_IF_ERROR(
+        loom_rewriter_copy_value_name(rewriter, old_result, replacement));
   }
   return iree_ok_status();
+}
+
+iree_status_t loom_rewriter_copy_value_name(loom_rewriter_t* rewriter,
+                                            loom_value_id_t source_value,
+                                            loom_value_id_t target_value) {
+  if (!iree_any_bit_set(rewriter->name_policy,
+                        LOOM_REWRITER_NAME_POLICY_PRESERVE_NAMES)) {
+    return iree_ok_status();
+  }
+  return loom_module_copy_value_name(rewriter->module, source_value,
+                                     target_value);
+}
+
+iree_status_t loom_rewriter_move_value_name(loom_rewriter_t* rewriter,
+                                            loom_value_id_t source_value,
+                                            loom_value_id_t target_value) {
+  if (!iree_any_bit_set(rewriter->name_policy,
+                        LOOM_REWRITER_NAME_POLICY_PRESERVE_NAMES)) {
+    return iree_ok_status();
+  }
+  return loom_module_move_value_name(rewriter->module, source_value,
+                                     target_value);
+}
+
+iree_status_t loom_rewriter_clear_value_name(loom_rewriter_t* rewriter,
+                                             loom_value_id_t value) {
+  return loom_module_clear_value_name(rewriter->module, value);
+}
+
+iree_status_t loom_rewriter_try_set_derived_value_name(
+    loom_rewriter_t* rewriter, loom_value_id_t source_value,
+    loom_value_id_t target_value, iree_string_view_t suffix) {
+  if (!iree_any_bit_set(rewriter->name_policy,
+                        LOOM_REWRITER_NAME_POLICY_DERIVE_DEBUG_NAMES)) {
+    return iree_ok_status();
+  }
+  return loom_module_try_set_derived_value_name(
+      rewriter->module, source_value, target_value, suffix, rewriter->arena);
 }
 
 //===----------------------------------------------------------------------===//

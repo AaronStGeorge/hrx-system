@@ -559,13 +559,8 @@ iree_status_t loom_low_lower_lookup_value(loom_low_lower_context_t* context,
 iree_status_t loom_low_lower_copy_value_name(loom_low_lower_context_t* context,
                                              loom_value_id_t source_value_id,
                                              loom_value_id_t low_value_id) {
-  const loom_value_t* source_value =
-      loom_module_value(context->module, source_value_id);
-  if (source_value->name_id == LOOM_STRING_ID_INVALID) {
-    return iree_ok_status();
-  }
-  return loom_module_set_value_name(context->module, low_value_id,
-                                    source_value->name_id);
+  return loom_module_overwrite_value_name(context->module, source_value_id,
+                                          low_value_id);
 }
 
 iree_status_t loom_low_lower_bind_value(loom_low_lower_context_t* context,

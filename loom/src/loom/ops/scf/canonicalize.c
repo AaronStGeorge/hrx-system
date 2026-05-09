@@ -191,20 +191,14 @@ static bool loom_scf_lookup_reachable_column_is_uniform(
   return true;
 }
 
-static void loom_scf_preserve_value_name(loom_module_t* module,
-                                         loom_value_id_t old_value_id,
-                                         loom_value_id_t new_value_id) {
+static iree_status_t loom_scf_preserve_value_name(
+    loom_module_t* module, loom_value_id_t old_value_id,
+    loom_value_id_t new_value_id) {
   if (old_value_id == LOOM_VALUE_ID_INVALID ||
       new_value_id == LOOM_VALUE_ID_INVALID) {
-    return;
+    return iree_ok_status();
   }
-  loom_value_t* old_value = loom_module_value(module, old_value_id);
-  loom_value_t* new_value = loom_module_value(module, new_value_id);
-  if (old_value->name_id == LOOM_STRING_ID_INVALID ||
-      new_value->name_id != LOOM_STRING_ID_INVALID) {
-    return;
-  }
-  new_value->name_id = old_value->name_id;
+  return loom_module_copy_value_name(module, old_value_id, new_value_id);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1531,15 +1525,15 @@ static iree_status_t loom_scf_for_forward_loop_carried_results(
   loom_builder_restore(&rewriter->builder, saved_ip);
 
   loom_block_t* new_block = loom_region_entry_block(new_body);
-  loom_scf_preserve_value_name(rewriter->module,
-                               loom_block_arg_id(old_block, 0),
-                               loom_block_arg_id(new_block, 0));
+  IREE_RETURN_IF_ERROR(loom_scf_preserve_value_name(
+      rewriter->module, loom_block_arg_id(old_block, 0),
+      loom_block_arg_id(new_block, 0)));
   kept_ordinal = 0;
   for (uint16_t i = 0; i < op->result_count; ++i) {
     if (forwarded_results[i]) continue;
-    loom_scf_preserve_value_name(
+    IREE_RETURN_IF_ERROR(loom_scf_preserve_value_name(
         rewriter->module, loom_block_arg_id(old_block, (uint16_t)(1 + i)),
-        loom_block_arg_id(new_block, (uint16_t)(1 + kept_ordinal++)));
+        loom_block_arg_id(new_block, (uint16_t)(1 + kept_ordinal++))));
   }
 
   IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_with(

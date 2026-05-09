@@ -52,6 +52,19 @@ enum loom_rewriter_flag_bits_e {
 };
 typedef uint8_t loom_rewriter_flags_t;
 
+enum loom_rewriter_name_policy_flag_bits_e {
+  // Preserve explicit source/result names across 1:1 rewrites.
+  LOOM_REWRITER_NAME_POLICY_PRESERVE_NAMES = 1u << 0,
+  // Materialize optional derived names such as %index_bounded from already
+  // named source values. Anonymous compiler-generated values stay anonymous.
+  LOOM_REWRITER_NAME_POLICY_DERIVE_DEBUG_NAMES = 1u << 1,
+};
+typedef uint8_t loom_rewriter_name_policy_flags_t;
+
+#define LOOM_REWRITER_NAME_POLICY_DEFAULT     \
+  (LOOM_REWRITER_NAME_POLICY_PRESERVE_NAMES | \
+   LOOM_REWRITER_NAME_POLICY_DERIVE_DEBUG_NAMES)
+
 // Callback to materialize a constant from exact facts into IR.
 // Called by try_fold when all results are exact, and by
 // loom_rewriter_build_constant for pattern use. The implementation
@@ -80,6 +93,9 @@ struct loom_rewriter_t {
   // Mutation tracking. Set by any mutation, cleared by the driver
   // before each pattern invocation.
   loom_rewriter_flags_t flags;
+
+  // Central policy for optional SSA display names created during rewrites.
+  loom_rewriter_name_policy_flags_t name_policy;
 
   // Worklist of ops to revisit. Deduped via LOOM_OP_FLAG_ON_WORKLIST.
   loom_op_t** worklist;
@@ -189,6 +205,29 @@ iree_status_t loom_rewriter_preserve_result_names_on_new_values(
     loom_rewriter_t* rewriter, const loom_op_t* op,
     const loom_value_id_t* replacements, uint16_t count,
     loom_value_id_t value_checkpoint);
+
+// Copies |source_value|'s optional display name to |target_value| when enabled
+// by the rewriter name policy and the target is unnamed.
+iree_status_t loom_rewriter_copy_value_name(loom_rewriter_t* rewriter,
+                                            loom_value_id_t source_value,
+                                            loom_value_id_t target_value);
+
+// Moves |source_value|'s optional display name to |target_value| when enabled
+// by the rewriter name policy and the source is named.
+iree_status_t loom_rewriter_move_value_name(loom_rewriter_t* rewriter,
+                                            loom_value_id_t source_value,
+                                            loom_value_id_t target_value);
+
+// Clears |value|'s optional display name.
+iree_status_t loom_rewriter_clear_value_name(loom_rewriter_t* rewriter,
+                                             loom_value_id_t value);
+
+// Derives |target_value|'s optional display name from |source_value| when
+// enabled by policy. |suffix| is a snake_case word without a leading
+// underscore. If |source_value| is anonymous, no name is created.
+iree_status_t loom_rewriter_try_set_derived_value_name(
+    loom_rewriter_t* rewriter, loom_value_id_t source_value,
+    loom_value_id_t target_value, iree_string_view_t suffix);
 
 // Returns true if the op has no uses, no side effects, and is not a
 // terminator — safe to erase without affecting program semantics.

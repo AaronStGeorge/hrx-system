@@ -183,5 +183,35 @@ TEST_F(GreedyRewriteTest, UnmatchedPatternsLeaveIrUntouched) {
   EXPECT_EQ(loom_attr_as_i64(loom_op_attrs(const_op)[0]), 42);
 }
 
+TEST_F(GreedyRewriteTest, NamePolicyCanDisableOptionalNames) {
+  loom_type_t index_type = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_value_id_t source = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module_, index_type, &source));
+  loom_value_id_t target = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module_, index_type, &target));
+
+  loom_string_id_t source_name = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module_, IREE_SV("head"), &source_name));
+  IREE_ASSERT_OK(loom_module_set_value_name(module_, source, source_name));
+
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_rewriter_t rewriter;
+  IREE_ASSERT_OK(loom_rewriter_initialize(&rewriter, module_, &arena));
+  rewriter.name_policy = 0;
+
+  IREE_ASSERT_OK(loom_rewriter_copy_value_name(&rewriter, source, target));
+  EXPECT_EQ(loom_module_value(module_, target)->name_id,
+            LOOM_STRING_ID_INVALID);
+  IREE_ASSERT_OK(loom_rewriter_try_set_derived_value_name(
+      &rewriter, source, target, IREE_SV("bounded")));
+  EXPECT_EQ(loom_module_value(module_, target)->name_id,
+            LOOM_STRING_ID_INVALID);
+
+  loom_rewriter_deinitialize(&rewriter);
+  iree_arena_deinitialize(&arena);
+}
+
 }  // namespace
 }  // namespace loom

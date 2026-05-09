@@ -278,27 +278,15 @@ static iree_status_t loom_scf_unroll_build_iteration_index(
       op->location, &constant_op));
   *out_index = loom_index_constant_result(constant_op);
 
-  const loom_value_t* source_value =
-      loom_module_value(context->module, induction_variable);
-  if (source_value->name_id != LOOM_STRING_ID_INVALID &&
-      source_value->name_id < context->module->strings.count) {
-    iree_string_view_t source_name =
-        context->module->strings.entries[source_value->name_id];
-    char iteration_name[64];
-    int length =
-        iree_snprintf(iteration_name, sizeof(iteration_name), "%.*s%" PRId64,
-                      (int)source_name.size, source_name.data, iteration_value);
-    if (length > 0 && (iree_host_size_t)length < sizeof(iteration_name)) {
-      loom_string_id_t iteration_name_id = LOOM_STRING_ID_INVALID;
-      IREE_RETURN_IF_ERROR(loom_module_intern_string(
-          context->module,
-          iree_make_string_view(iteration_name, (iree_host_size_t)length),
-          &iteration_name_id));
-      IREE_RETURN_IF_ERROR(loom_module_set_value_name(
-          context->module, *out_index, iteration_name_id));
-    }
+  char suffix[32] = {0};
+  int suffix_length =
+      iree_snprintf(suffix, sizeof(suffix), "%" PRId64, iteration_value);
+  if (suffix_length <= 0 || (iree_host_size_t)suffix_length >= sizeof(suffix)) {
+    return iree_ok_status();
   }
-  return iree_ok_status();
+  return loom_rewriter_try_set_derived_value_name(
+      context->rewriter, induction_variable, *out_index,
+      iree_make_string_view(suffix, (iree_host_size_t)suffix_length));
 }
 
 static iree_status_t loom_scf_unroll_clone_iteration(

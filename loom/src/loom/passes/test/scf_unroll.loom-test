@@ -15,12 +15,12 @@ func.def @static_resultless_loop_unrolls() {
   %start = index.constant 0 : index
   %end = index.constant 3 : index
   %step = index.constant 1 : index
-  %i0 = index.constant 0 : index
-  test.use %i0 : index
-  %i1 = index.constant 1 : index
-  test.use %i1 : index
-  %i2 = index.constant 2 : index
-  test.use %i2 : index
+  %i_0 = index.constant 0 : index
+  test.use %i_0 : index
+  %i_1 = index.constant 1 : index
+  test.use %i_1 : index
+  %i_2 = index.constant 2 : index
+  test.use %i_2 : index
   func.return
 }
 

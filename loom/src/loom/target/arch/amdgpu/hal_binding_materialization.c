@@ -518,13 +518,7 @@ static iree_status_t loom_amdgpu_hal_binding_materialize_resource_pair(
 
 static iree_status_t loom_amdgpu_hal_binding_move_value_name(
     loom_module_t* module, loom_value_id_t source, loom_value_id_t target) {
-  loom_string_id_t name_id = loom_module_value(module, source)->name_id;
-  if (name_id == LOOM_STRING_ID_INVALID) {
-    return iree_ok_status();
-  }
-  IREE_RETURN_IF_ERROR(
-      loom_module_set_value_name(module, source, LOOM_STRING_ID_INVALID));
-  return loom_module_set_value_name(module, target, name_id);
+  return loom_module_move_value_name(module, source, target);
 }
 
 static bool loom_amdgpu_hal_binding_direct_arg_is_used(

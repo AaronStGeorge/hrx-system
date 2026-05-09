@@ -1510,6 +1510,115 @@ iree_status_t loom_module_set_value_name(loom_module_t* module,
   return iree_ok_status();
 }
 
+iree_status_t loom_module_copy_value_name(loom_module_t* module,
+                                          loom_value_id_t source_value_id,
+                                          loom_value_id_t target_value_id) {
+  if (source_value_id >= module->values.count ||
+      target_value_id >= module->values.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "value name copy ids out of range");
+  }
+  const loom_value_t* source_value = loom_module_value(module, source_value_id);
+  if (source_value->name_id == LOOM_STRING_ID_INVALID) {
+    return iree_ok_status();
+  }
+  loom_value_t* target_value = loom_module_value(module, target_value_id);
+  if (target_value->name_id != LOOM_STRING_ID_INVALID) {
+    return iree_ok_status();
+  }
+  return loom_module_set_value_name(module, target_value_id,
+                                    source_value->name_id);
+}
+
+iree_status_t loom_module_overwrite_value_name(
+    loom_module_t* module, loom_value_id_t source_value_id,
+    loom_value_id_t target_value_id) {
+  if (source_value_id >= module->values.count ||
+      target_value_id >= module->values.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "value name overwrite ids out of range");
+  }
+  const loom_value_t* source_value = loom_module_value(module, source_value_id);
+  if (source_value->name_id == LOOM_STRING_ID_INVALID) {
+    return iree_ok_status();
+  }
+  return loom_module_set_value_name(module, target_value_id,
+                                    source_value->name_id);
+}
+
+iree_status_t loom_module_move_value_name(loom_module_t* module,
+                                          loom_value_id_t source_value_id,
+                                          loom_value_id_t target_value_id) {
+  if (source_value_id >= module->values.count ||
+      target_value_id >= module->values.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "value name move ids out of range");
+  }
+  const loom_string_id_t name_id =
+      loom_module_value(module, source_value_id)->name_id;
+  if (name_id == LOOM_STRING_ID_INVALID) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_module_clear_value_name(module, source_value_id));
+  return loom_module_set_value_name(module, target_value_id, name_id);
+}
+
+iree_status_t loom_module_clear_value_name(loom_module_t* module,
+                                           loom_value_id_t value_id) {
+  return loom_module_set_value_name(module, value_id, LOOM_STRING_ID_INVALID);
+}
+
+iree_status_t loom_module_try_set_derived_value_name(
+    loom_module_t* module, loom_value_id_t source_value_id,
+    loom_value_id_t target_value_id, iree_string_view_t suffix,
+    iree_arena_allocator_t* scratch_arena) {
+  if (source_value_id >= module->values.count ||
+      target_value_id >= module->values.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "derived value name ids out of range");
+  }
+  if (iree_string_view_is_empty(suffix)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "derived value name suffix is empty");
+  }
+  const loom_value_t* source_value = loom_module_value(module, source_value_id);
+  if (source_value->name_id == LOOM_STRING_ID_INVALID) {
+    return iree_ok_status();
+  }
+  if (source_value->name_id >= module->strings.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "source value name string id %u out of range "
+                            "(module has %" PRIhsz " strings)",
+                            (unsigned)source_value->name_id,
+                            module->strings.count);
+  }
+  const loom_value_t* target_value = loom_module_value(module, target_value_id);
+  if (target_value->name_id != LOOM_STRING_ID_INVALID) {
+    return iree_ok_status();
+  }
+
+  iree_string_view_t source_name =
+      module->strings.entries[source_value->name_id];
+  iree_host_size_t name_length = 0;
+  if (!iree_host_size_checked_add(source_name.size, 1, &name_length) ||
+      !iree_host_size_checked_add(name_length, suffix.size, &name_length)) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "derived value name length overflow");
+  }
+
+  char* name_storage = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate(scratch_arena, name_length, (void**)&name_storage));
+  memcpy(name_storage, source_name.data, source_name.size);
+  name_storage[source_name.size] = '_';
+  memcpy(name_storage + source_name.size + 1, suffix.data, suffix.size);
+
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_module_intern_string(
+      module, iree_make_string_view(name_storage, name_length), &name_id));
+  return loom_module_set_value_name(module, target_value_id, name_id);
+}
+
 iree_status_t loom_module_refresh_value_type_uses(loom_module_t* module,
                                                   loom_value_id_t value_id) {
   if (value_id >= module->values.count) {

@@ -412,11 +412,8 @@ static iree_status_t loom_amdgpu_append_restore_block_like_dest(
     IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(
         builder, restore_block, loom_module_value_type(module, dest_arg),
         &restore_arg));
-    const loom_value_t* dest_value = loom_module_value(module, dest_arg);
-    if (dest_value->name_id != LOOM_STRING_ID_INVALID) {
-      IREE_RETURN_IF_ERROR(
-          loom_module_set_value_name(module, restore_arg, dest_value->name_id));
-    }
+    IREE_RETURN_IF_ERROR(
+        loom_module_copy_value_name(module, dest_arg, restore_arg));
   }
   *out_restore_block = restore_block;
   return iree_ok_status();
@@ -432,11 +429,8 @@ static iree_status_t loom_amdgpu_append_block_args_like_dest(
     loom_value_id_t block_arg = LOOM_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(
         builder, block, loom_module_value_type(module, dest_arg), &block_arg));
-    const loom_value_t* dest_value = loom_module_value(module, dest_arg);
-    if (dest_value->name_id != LOOM_STRING_ID_INVALID) {
-      IREE_RETURN_IF_ERROR(
-          loom_module_set_value_name(module, block_arg, dest_value->name_id));
-    }
+    IREE_RETURN_IF_ERROR(
+        loom_module_copy_value_name(module, dest_arg, block_arg));
     if (out_arg_ids != NULL) {
       out_arg_ids[i] = block_arg;
     }

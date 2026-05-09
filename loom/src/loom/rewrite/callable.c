@@ -224,10 +224,8 @@ static iree_status_t loom_callable_preserve_call_result_names(
                               "inline replacement value %%%u is out of range",
                               (unsigned)replacement);
     }
-    loom_string_id_t old_name =
-        loom_module_value(rewriter->module, old_result)->name_id;
-    if (old_name == LOOM_STRING_ID_INVALID) continue;
-    loom_module_value(rewriter->module, replacement)->name_id = old_name;
+    IREE_RETURN_IF_ERROR(
+        loom_rewriter_copy_value_name(rewriter, old_result, replacement));
   }
   return iree_ok_status();
 }
@@ -431,10 +429,8 @@ static iree_status_t loom_callable_preserve_consuming_call_result_names(
                               "inline replacement value %%%u is out of range",
                               (unsigned)replacement);
     }
-    loom_string_id_t old_name =
-        loom_module_value(rewriter->module, old_result)->name_id;
-    if (old_name == LOOM_STRING_ID_INVALID) continue;
-    loom_module_value(rewriter->module, replacement)->name_id = old_name;
+    IREE_RETURN_IF_ERROR(
+        loom_rewriter_copy_value_name(rewriter, old_result, replacement));
   }
   return iree_ok_status();
 }

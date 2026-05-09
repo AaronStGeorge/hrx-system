@@ -251,13 +251,13 @@ static iree_status_t loom_branch_fusion_copy_result_names(
     const loom_branch_fusion_info_t* second, loom_op_t* fused_if) {
   loom_value_slice_t fused_results = loom_scf_if_results(fused_if);
   for (uint16_t i = 0; i < first->results.count; ++i) {
-    loom_module_value(module, fused_results.values[i])->name_id =
-        loom_module_value(module, first->results.values[i])->name_id;
+    IREE_RETURN_IF_ERROR(loom_module_copy_value_name(
+        module, first->results.values[i], fused_results.values[i]));
   }
   for (uint16_t i = 0; i < second->results.count; ++i) {
-    loom_module_value(module, fused_results.values[first->results.count + i])
-        ->name_id =
-        loom_module_value(module, second->results.values[i])->name_id;
+    IREE_RETURN_IF_ERROR(loom_module_copy_value_name(
+        module, second->results.values[i],
+        fused_results.values[first->results.count + i]));
   }
   return iree_ok_status();
 }
@@ -327,7 +327,7 @@ static bool loom_branch_fusion_block_prefix_has_result_name(
   return false;
 }
 
-static void loom_branch_fusion_clear_conflicting_result_names(
+static iree_status_t loom_branch_fusion_clear_conflicting_result_names(
     loom_module_t* module, loom_block_t* source_block,
     loom_block_t* target_block, loom_op_t* before_op) {
   loom_op_t* op = NULL;
@@ -344,9 +344,10 @@ static void loom_branch_fusion_clear_conflicting_result_names(
               module, target_block, before_op, value->name_id)) {
         continue;
       }
-      value->name_id = LOOM_STRING_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_module_clear_value_name(module, results[i]));
     }
   }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_branch_fusion_move_body_before_terminator(
@@ -431,9 +432,9 @@ static iree_status_t loom_branch_fusion_fuse_region(
     IREE_RETURN_IF_ERROR(loom_ir_remap_map_value(
         &second_remap, first->results.values[i], first_yield_values[i]));
   }
-  loom_branch_fusion_clear_conflicting_result_names(
+  IREE_RETURN_IF_ERROR(loom_branch_fusion_clear_conflicting_result_names(
       context->module, second->blocks[region_index],
-      fused_terminator->parent_block, fused_terminator);
+      fused_terminator->parent_block, fused_terminator));
   IREE_RETURN_IF_ERROR(loom_branch_fusion_move_body_before_terminator(
       context, second->blocks[region_index], fused_terminator, &second_remap));
 

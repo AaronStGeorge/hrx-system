@@ -316,8 +316,8 @@ low.kernel.def target(@target) workgroup_size(16, 16, 1) @lds_f16_strided_scalar
   %33 = storage {byte_alignment = 2, byte_length = 512} : low.storage<workgroup>
   %scratch_view = storage_address %33 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %35 = v_lshlrev_b32_lit %row, 4
-  %linear16 = v_add_u32 %35, %col
-  %37 = v_lshlrev_b32_lit %linear16, 1
+  %36 = v_add_u32 %35, %col
+  %37 = v_lshlrev_b32_lit %36, 1
   %loaded = global_load_u16 %37, %input_view
   %39 = v_lshlrev_b32_lit %row, 1
   %40 = v_add_u32 %scratch_view, %39

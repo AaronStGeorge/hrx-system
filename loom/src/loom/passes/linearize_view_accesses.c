@@ -6,7 +6,6 @@
 
 #include "loom/passes/linearize_view_accesses.h"
 
-#include <inttypes.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -275,19 +274,13 @@ static bool loom_linearize_view_accesses_read_axis_indices(
 }
 
 static iree_status_t loom_linearize_view_accesses_build_index_constant(
-    loom_builder_t* builder, int64_t value, iree_string_view_t name,
-    loom_location_id_t location, loom_value_id_t* out_index) {
+    loom_builder_t* builder, int64_t value, loom_location_id_t location,
+    loom_value_id_t* out_index) {
   loom_op_t* constant_op = NULL;
   IREE_RETURN_IF_ERROR(loom_index_constant_build(
       builder, loom_attr_i64(value), loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
       location, &constant_op));
   *out_index = loom_index_constant_result(constant_op);
-  if (name.size != 0) {
-    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
-    IREE_RETURN_IF_ERROR(
-        loom_module_intern_string(builder->module, name, &name_id));
-    loom_module_value(builder->module, *out_index)->name_id = name_id;
-  }
   return iree_ok_status();
 }
 
@@ -311,66 +304,12 @@ static loom_value_facts_t loom_linearize_view_accesses_apply_index_range(
   return facts;
 }
 
-static iree_status_t loom_linearize_view_accesses_name_bounded_index(
-    loom_builder_t* builder, loom_value_id_t source_index,
-    loom_value_id_t bounded_index, int64_t extent) {
-  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
-  loom_string_id_t source_name_id =
-      loom_module_value(builder->module, source_index)->name_id;
-  if (source_name_id != LOOM_STRING_ID_INVALID &&
-      source_name_id < builder->module->strings.count) {
-    iree_string_view_t source_name =
-        builder->module->strings.entries[source_name_id];
-    char name[128] = {0};
-    static const char kBoundedSuffix[] = "_bounded";
-    const iree_host_size_t suffix_length = sizeof(kBoundedSuffix) - 1;
-    if (source_name.size + suffix_length < sizeof(name)) {
-      memcpy(name, source_name.data, source_name.size);
-      memcpy(name + source_name.size, kBoundedSuffix, suffix_length);
-      IREE_RETURN_IF_ERROR(loom_module_intern_string(
-          builder->module,
-          iree_make_string_view(name, source_name.size + suffix_length),
-          &name_id));
-    }
-  }
-  if (name_id == LOOM_STRING_ID_INVALID) {
-    char name[32] = {0};
-    iree_snprintf(name, sizeof(name), "axis%" PRIi64, extent);
-    IREE_RETURN_IF_ERROR(loom_module_intern_string(
-        builder->module, iree_make_cstring_view(name), &name_id));
-  }
-  loom_module_value(builder->module, bounded_index)->name_id = name_id;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_linearize_view_accesses_name_linear_index(
-    loom_builder_t* builder, loom_value_id_t linear_index, int64_t stride) {
-  char linear_name[32] = {0};
-  iree_snprintf(linear_name, sizeof(linear_name), "linear%" PRIi64, stride);
-  loom_string_id_t linear_name_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_module_intern_string(
-      builder->module, iree_make_cstring_view(linear_name), &linear_name_id));
-  loom_module_value(builder->module, linear_index)->name_id = linear_name_id;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_linearize_view_accesses_name_assumed_linear_index(
-    loom_builder_t* builder, loom_value_id_t linear_index, int64_t stride) {
-  char linear_name[32] = {0};
-  iree_snprintf(linear_name, sizeof(linear_name), "linear%" PRIi64 "_bounded",
-                stride);
-  loom_string_id_t linear_name_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_module_intern_string(
-      builder->module, iree_make_cstring_view(linear_name), &linear_name_id));
-  loom_module_value(builder->module, linear_index)->name_id = linear_name_id;
-  return iree_ok_status();
-}
-
 static iree_status_t
 loom_linearize_view_accesses_materialize_dynamic_axis_index(
-    loom_builder_t* builder, const loom_value_fact_table_t* fact_table,
+    loom_rewriter_t* rewriter, const loom_value_fact_table_t* fact_table,
     int64_t extent, loom_value_id_t dynamic_index, loom_location_id_t location,
     loom_value_id_t* out_index, loom_value_facts_t* out_facts) {
+  loom_builder_t* builder = &rewriter->builder;
   const int64_t upper_bound = extent - 1;
   loom_value_facts_t input_facts =
       fact_table ? loom_value_fact_table_lookup(fact_table, dynamic_index)
@@ -396,8 +335,8 @@ loom_linearize_view_accesses_materialize_dynamic_axis_index(
                                                &predicate, 1, &result_type, 1,
                                                location, &assume_op));
   *out_index = loom_index_assume_results(assume_op).values[0];
-  return loom_linearize_view_accesses_name_bounded_index(builder, dynamic_index,
-                                                         *out_index, extent);
+  return loom_rewriter_try_set_derived_value_name(
+      rewriter, dynamic_index, *out_index, IREE_SV("bounded"));
 }
 
 static bool loom_linearize_view_accesses_add_static_linear_contribution(
@@ -418,18 +357,16 @@ static bool loom_linearize_view_accesses_add_static_linear_contribution(
 }
 
 static iree_status_t loom_linearize_view_accesses_build_linear_index(
-    loom_builder_t* builder, loom_module_t* module, loom_type_t view_type,
+    loom_rewriter_t* rewriter, loom_module_t* module, loom_type_t view_type,
     loom_attribute_t static_indices, loom_value_slice_t dynamic_indices,
     const loom_value_fact_table_t* fact_table,
     const int64_t* axis_origin_counts, const int64_t* axis_static_offsets,
     loom_location_id_t location, loom_value_id_t* out_linear_index,
-    int64_t* out_static_linear_index, int64_t* out_outer_stride,
-    loom_value_facts_t* out_linear_facts, bool* out_generated_linear_index) {
+    int64_t* out_static_linear_index, loom_value_facts_t* out_linear_facts) {
+  loom_builder_t* builder = &rewriter->builder;
   *out_linear_index = LOOM_VALUE_ID_INVALID;
   *out_static_linear_index = INT64_MIN;
-  *out_outer_stride = 1;
   *out_linear_facts = loom_value_facts_unknown();
-  *out_generated_linear_index = false;
   uint8_t rank = loom_type_rank(view_type);
   if (static_indices.kind != LOOM_ATTR_I64_ARRAY ||
       static_indices.count != rank) {
@@ -512,18 +449,15 @@ static iree_status_t loom_linearize_view_accesses_build_linear_index(
     loom_value_facts_t axis_facts = loom_value_facts_unknown();
     IREE_RETURN_IF_ERROR(
         loom_linearize_view_accesses_materialize_dynamic_axis_index(
-            builder, fact_table, axis_origin_count, dynamic_axis_indices[axis],
+            rewriter, fact_table, axis_origin_count, dynamic_axis_indices[axis],
             location, &axis_index, &axis_facts));
 
     loom_value_facts_t term_facts = axis_facts;
     if (stride != 1) {
       loom_value_facts_t stride_facts = loom_value_facts_exact_i64(stride);
       loom_value_facts_muli(&axis_facts, &stride_facts, &term_facts);
-      char stride_name[32] = {0};
-      iree_snprintf(stride_name, sizeof(stride_name), "stride%" PRIi64, stride);
       IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_index_constant(
-          builder, stride, iree_make_cstring_view(stride_name), location,
-          &stride_index));
+          builder, stride, location, &stride_index));
     }
     loom_value_facts_addi(&linear_facts, &term_facts, &linear_facts);
 
@@ -537,48 +471,35 @@ static iree_status_t loom_linearize_view_accesses_build_linear_index(
           builder, accumulator, axis_index,
           loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), location, &add_op));
       accumulator = loom_index_add_result(add_op);
-      *out_generated_linear_index = true;
     } else if (accumulator == LOOM_VALUE_ID_INVALID) {
       loom_op_t* mul_op = NULL;
       IREE_RETURN_IF_ERROR(loom_index_mul_build(
           builder, axis_index, stride_index,
           loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), location, &mul_op));
       accumulator = loom_index_mul_result(mul_op);
-      *out_generated_linear_index = true;
     } else {
       loom_op_t* madd_op = NULL;
       IREE_RETURN_IF_ERROR(loom_index_madd_build(
           builder, axis_index, stride_index, accumulator,
           loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), location, &madd_op));
       accumulator = loom_index_madd_result(madd_op);
-      *out_generated_linear_index = true;
     }
-    IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_name_linear_index(
-        builder, accumulator, stride));
   }
 
   if (static_offset != 0) {
     if (accumulator == LOOM_VALUE_ID_INVALID) {
       *out_static_linear_index = static_offset;
-      *out_outer_stride = stride;
       *out_linear_facts = linear_facts;
       return iree_ok_status();
     }
     loom_value_id_t offset_value = LOOM_VALUE_ID_INVALID;
-    char offset_name[32] = {0};
-    iree_snprintf(offset_name, sizeof(offset_name), "offset%" PRIi64,
-                  static_offset);
     IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_index_constant(
-        builder, static_offset, iree_make_cstring_view(offset_name), location,
-        &offset_value));
+        builder, static_offset, location, &offset_value));
     loom_op_t* add_op = NULL;
     IREE_RETURN_IF_ERROR(loom_index_add_build(
         builder, accumulator, offset_value,
         loom_type_scalar(LOOM_SCALAR_TYPE_INDEX), location, &add_op));
     accumulator = loom_index_add_result(add_op);
-    *out_generated_linear_index = true;
-    IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_name_linear_index(
-        builder, accumulator, stride));
   } else if (accumulator == LOOM_VALUE_ID_INVALID) {
     *out_static_linear_index = 0;
     *out_linear_facts = linear_facts;
@@ -589,26 +510,21 @@ static iree_status_t loom_linearize_view_accesses_build_linear_index(
   if (accumulator == LOOM_VALUE_ID_INVALID) {
     *out_static_linear_index = static_offset;
   }
-  *out_outer_stride = stride;
   *out_linear_facts = linear_facts;
   return iree_ok_status();
 }
 
 static iree_status_t loom_linearize_view_accesses_assume_linear_index_bounds(
-    loom_builder_t* builder, loom_value_id_t linear_index,
-    loom_value_facts_t linear_facts, int64_t origin_count, int64_t outer_stride,
-    bool generated_linear_index, loom_location_id_t location,
-    loom_value_id_t* out_bounded_index) {
+    loom_rewriter_t* rewriter, loom_value_id_t linear_index,
+    loom_value_facts_t linear_facts, int64_t origin_count,
+    loom_location_id_t location, loom_value_id_t* out_bounded_index) {
   if (loom_linearize_view_accesses_facts_cover_range(linear_facts, 0,
                                                      origin_count - 1)) {
-    if (generated_linear_index) {
-      IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_name_linear_index(
-          builder, linear_index, outer_stride));
-    }
     *out_bounded_index = linear_index;
     return iree_ok_status();
   }
 
+  loom_builder_t* builder = &rewriter->builder;
   loom_predicate_t predicate = {
       .kind = LOOM_PREDICATE_RANGE,
       .arg_count = 3,
@@ -622,8 +538,8 @@ static iree_status_t loom_linearize_view_accesses_assume_linear_index_bounds(
                                                &predicate, 1, &result_type, 1,
                                                location, &assume_op));
   *out_bounded_index = loom_index_assume_results(assume_op).values[0];
-  return loom_linearize_view_accesses_name_assumed_linear_index(
-      builder, *out_bounded_index, outer_stride);
+  return loom_rewriter_try_set_derived_value_name(
+      rewriter, linear_index, *out_bounded_index, IREE_SV("bounded"));
 }
 
 static iree_status_t loom_linearize_view_accesses_get_linear_view(
@@ -656,9 +572,8 @@ static iree_status_t loom_linearize_view_accesses_get_linear_view(
   IREE_RETURN_IF_ERROR(status);
 
   loom_value_id_t linear_view = loom_buffer_view_result(linear_view_op);
-  loom_module_value(context->module, linear_view)->name_id =
-      loom_module_value(context->module, loom_buffer_view_result(view_op))
-          ->name_id;
+  IREE_RETURN_IF_ERROR(loom_rewriter_copy_value_name(
+      context->rewriter, loom_buffer_view_result(view_op), linear_view));
   IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_view_map_push(
       context->pass->arena, context->view_map, view_op, linear_view));
   if (context->pass->statistics) {
@@ -899,21 +814,19 @@ static iree_status_t loom_linearize_view_accesses_build_tile_row_index(
     return iree_ok_status();
   }
 
-  int64_t outer_stride = 1;
   loom_value_facts_t linear_facts = loom_value_facts_unknown();
-  bool generated_linear_index = false;
   IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_linear_index(
-      builder, context->module, view_type, static_indices, dynamic_indices,
-      context->fact_table, axis_origin_counts, axis_static_offsets, location,
-      out_linear_index, out_static_linear_index, &outer_stride, &linear_facts,
-      &generated_linear_index));
+      context->rewriter, context->module, view_type, static_indices,
+      dynamic_indices, context->fact_table, axis_origin_counts,
+      axis_static_offsets, location, out_linear_index, out_static_linear_index,
+      &linear_facts));
   if (*out_linear_index == LOOM_VALUE_ID_INVALID) {
     return iree_ok_status();
   }
   const int64_t origin_count = linear_length - tile->inner_lane_count + 1;
   return loom_linearize_view_accesses_assume_linear_index_bounds(
-      builder, *out_linear_index, linear_facts, origin_count, outer_stride,
-      generated_linear_index, location, out_linear_index);
+      context->rewriter, *out_linear_index, linear_facts, origin_count,
+      location, out_linear_index);
 }
 
 static iree_status_t loom_linearize_view_accesses_rewrite_load(
@@ -934,16 +847,13 @@ static iree_status_t loom_linearize_view_accesses_rewrite_load(
   loom_builder_set_before(builder, load_op);
   loom_value_id_t linear_index = LOOM_VALUE_ID_INVALID;
   int64_t static_linear_index = INT64_MIN;
-  int64_t outer_stride = 1;
   loom_value_facts_t linear_facts = loom_value_facts_unknown();
-  bool generated_linear_index = false;
   IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_linear_index(
-      builder, context->module, view_type,
+      context->rewriter, context->module, view_type,
       loom_view_load_static_indices(load_op), loom_view_load_indices(load_op),
       context->fact_table, /*axis_origin_counts=*/NULL,
       /*axis_static_offsets=*/NULL, load_op->location, &linear_index,
-      &static_linear_index, &outer_stride, &linear_facts,
-      &generated_linear_index));
+      &static_linear_index, &linear_facts));
   if (linear_index == LOOM_VALUE_ID_INVALID &&
       static_linear_index == INT64_MIN) {
     return iree_ok_status();
@@ -951,8 +861,8 @@ static iree_status_t loom_linearize_view_accesses_rewrite_load(
   if (linear_index != LOOM_VALUE_ID_INVALID) {
     IREE_RETURN_IF_ERROR(
         loom_linearize_view_accesses_assume_linear_index_bounds(
-            builder, linear_index, linear_facts, linear_length, outer_stride,
-            generated_linear_index, load_op->location, &linear_index));
+            context->rewriter, linear_index, linear_facts, linear_length,
+            load_op->location, &linear_index));
   }
 
   loom_value_id_t linear_view = LOOM_VALUE_ID_INVALID;
@@ -1019,16 +929,13 @@ static iree_status_t loom_linearize_view_accesses_rewrite_store(
   loom_builder_set_before(builder, store_op);
   loom_value_id_t linear_index = LOOM_VALUE_ID_INVALID;
   int64_t static_linear_index = INT64_MIN;
-  int64_t outer_stride = 1;
   loom_value_facts_t linear_facts = loom_value_facts_unknown();
-  bool generated_linear_index = false;
   IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_linear_index(
-      builder, context->module, view_type,
+      context->rewriter, context->module, view_type,
       loom_view_store_static_indices(store_op),
       loom_view_store_indices(store_op), context->fact_table,
       /*axis_origin_counts=*/NULL, /*axis_static_offsets=*/NULL,
-      store_op->location, &linear_index, &static_linear_index, &outer_stride,
-      &linear_facts, &generated_linear_index));
+      store_op->location, &linear_index, &static_linear_index, &linear_facts));
   if (linear_index == LOOM_VALUE_ID_INVALID &&
       static_linear_index == INT64_MIN) {
     return iree_ok_status();
@@ -1036,8 +943,8 @@ static iree_status_t loom_linearize_view_accesses_rewrite_store(
   if (linear_index != LOOM_VALUE_ID_INVALID) {
     IREE_RETURN_IF_ERROR(
         loom_linearize_view_accesses_assume_linear_index_bounds(
-            builder, linear_index, linear_facts, linear_length, outer_stride,
-            generated_linear_index, store_op->location, &linear_index));
+            context->rewriter, linear_index, linear_facts, linear_length,
+            store_op->location, &linear_index));
   }
 
   loom_value_id_t linear_view = LOOM_VALUE_ID_INVALID;
@@ -1198,16 +1105,13 @@ static iree_status_t loom_linearize_view_accesses_rewrite_vector_load(
                                                          axis_origin_counts);
   loom_value_id_t linear_index = LOOM_VALUE_ID_INVALID;
   int64_t static_linear_index = INT64_MIN;
-  int64_t outer_stride = 1;
   loom_value_facts_t linear_facts = loom_value_facts_unknown();
-  bool generated_linear_index = false;
   IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_linear_index(
-      builder, context->module, view_type,
+      context->rewriter, context->module, view_type,
       loom_vector_load_static_indices(load_op),
       loom_vector_load_indices(load_op), context->fact_table,
       axis_origin_counts, /*axis_static_offsets=*/NULL, load_op->location,
-      &linear_index, &static_linear_index, &outer_stride, &linear_facts,
-      &generated_linear_index));
+      &linear_index, &static_linear_index, &linear_facts));
   if (linear_index == LOOM_VALUE_ID_INVALID &&
       static_linear_index == INT64_MIN) {
     return iree_ok_status();
@@ -1215,8 +1119,8 @@ static iree_status_t loom_linearize_view_accesses_rewrite_vector_load(
   if (linear_index != LOOM_VALUE_ID_INVALID) {
     IREE_RETURN_IF_ERROR(
         loom_linearize_view_accesses_assume_linear_index_bounds(
-            builder, linear_index, linear_facts, origin_count, outer_stride,
-            generated_linear_index, load_op->location, &linear_index));
+            context->rewriter, linear_index, linear_facts, origin_count,
+            load_op->location, &linear_index));
   }
 
   loom_value_id_t linear_view = LOOM_VALUE_ID_INVALID;
@@ -1365,16 +1269,13 @@ static iree_status_t loom_linearize_view_accesses_rewrite_vector_store(
                                                          axis_origin_counts);
   loom_value_id_t linear_index = LOOM_VALUE_ID_INVALID;
   int64_t static_linear_index = INT64_MIN;
-  int64_t outer_stride = 1;
   loom_value_facts_t linear_facts = loom_value_facts_unknown();
-  bool generated_linear_index = false;
   IREE_RETURN_IF_ERROR(loom_linearize_view_accesses_build_linear_index(
-      builder, context->module, view_type,
+      context->rewriter, context->module, view_type,
       loom_vector_store_static_indices(store_op),
       loom_vector_store_indices(store_op), context->fact_table,
       axis_origin_counts, /*axis_static_offsets=*/NULL, store_op->location,
-      &linear_index, &static_linear_index, &outer_stride, &linear_facts,
-      &generated_linear_index));
+      &linear_index, &static_linear_index, &linear_facts));
   if (linear_index == LOOM_VALUE_ID_INVALID &&
       static_linear_index == INT64_MIN) {
     return iree_ok_status();
@@ -1382,8 +1283,8 @@ static iree_status_t loom_linearize_view_accesses_rewrite_vector_store(
   if (linear_index != LOOM_VALUE_ID_INVALID) {
     IREE_RETURN_IF_ERROR(
         loom_linearize_view_accesses_assume_linear_index_bounds(
-            builder, linear_index, linear_facts, origin_count, outer_stride,
-            generated_linear_index, store_op->location, &linear_index));
+            context->rewriter, linear_index, linear_facts, origin_count,
+            store_op->location, &linear_index));
   }
 
   loom_value_id_t linear_view = LOOM_VALUE_ID_INVALID;
