@@ -400,7 +400,8 @@ static iree_status_t loom_vector_try_preserve_accumulator_fragment_facts(
   if (!*out_handled) {
     return iree_ok_status();
   }
-  fragment.role_flags = LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RESULT;
+  fragment.role_flags = LOOM_VECTOR_FRAGMENT_ROLE_FLAG_INIT |
+                        LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RESULT;
   return loom_vector_fragment_fact_make_value_facts(context, fragment,
                                                     &result_facts[0]);
 }
@@ -446,7 +447,7 @@ iree_status_t loom_vector_fragment_facts(
   loom_vector_fragment_fact_t fact;
   loom_vector_fragment_fact_initialize(&fact);
   fact.role_flags =
-      loom_vector_fragment_role_flag(loom_vector_fragment_role(op));
+      loom_vector_fragment_fact_role_flags(loom_vector_fragment_role(op));
   if (fact.role_flags == 0) {
     result_facts[0] = loom_value_facts_unknown();
     return iree_ok_status();
@@ -500,7 +501,7 @@ iree_status_t loom_vector_fragment_load_facts(
   loom_vector_fragment_fact_t fact;
   loom_vector_fragment_fact_initialize(&fact);
   fact.role_flags =
-      loom_vector_fragment_role_flag(loom_vector_fragment_load_role(op));
+      loom_vector_fragment_fact_role_flags(loom_vector_fragment_load_role(op));
   if (fact.role_flags == 0) {
     result_facts[0] = loom_value_facts_unknown();
     return iree_ok_status();
@@ -3946,7 +3947,8 @@ iree_status_t loom_vector_mma_facts(loom_fact_context_t* context,
     result_facts[0] = loom_value_facts_unknown();
     return iree_ok_status();
   }
-  init_fragment.role_flags = LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RESULT;
+  init_fragment.role_flags = LOOM_VECTOR_FRAGMENT_ROLE_FLAG_INIT |
+                             LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RESULT;
   return loom_vector_fragment_fact_make_value_facts(context, init_fragment,
                                                     &result_facts[0]);
 }

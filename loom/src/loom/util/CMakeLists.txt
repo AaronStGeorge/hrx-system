@@ -110,6 +110,7 @@ loom_cc_library(
   SRCS
     "fact_table.c"
   DEPS
+    ::cfg_graph
     ::math
     iree::base
     iree::base::internal::arena

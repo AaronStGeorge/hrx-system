@@ -19,36 +19,54 @@ static iree_status_t loom_verify_op(loom_verify_state_t* state,
 static iree_status_t loom_verify_region(loom_verify_state_t* state,
                                         loom_region_t* region) {
   if (!region) return iree_ok_status();
-  IREE_RETURN_IF_ERROR(loom_verify_push_scope(state));
+  const loom_region_t* saved_region = state->current_region;
+  state->current_region = region;
+  iree_status_t status = loom_verify_push_scope(state);
+  if (!iree_status_is_ok(status)) {
+    state->current_region = saved_region;
+    return status;
+  }
   for (uint16_t b = 0; b < region->block_count; ++b) {
     loom_block_t* block = loom_region_block(region, b);
     // Define block arguments, then validate any SSA encoding
     // references in their types (encoding values must be visible
     // from the enclosing scope).
     for (uint16_t a = 0; a < block->arg_count; ++a) {
-      IREE_RETURN_IF_ERROR(
-          loom_verify_define_value(state, loom_block_arg_id(block, a)));
+      status = loom_verify_define_value(state, loom_block_arg_id(block, a));
+      if (!iree_status_is_ok(status)) {
+        loom_verify_pop_scope(state);
+        state->current_region = saved_region;
+        return status;
+      }
     }
     loom_verify_block_arg_type_well_formedness(state, block);
     iree_status_t diagnostic_status =
         loom_verify_pending_diagnostic_status(state);
     if (!iree_status_is_ok(diagnostic_status)) {
       loom_verify_pop_scope(state);
+      state->current_region = saved_region;
       return diagnostic_status;
     }
     loom_verify_block_arg_encoding_refs(state, block);
     diagnostic_status = loom_verify_pending_diagnostic_status(state);
     if (!iree_status_is_ok(diagnostic_status)) {
       loom_verify_pop_scope(state);
+      state->current_region = saved_region;
       return diagnostic_status;
     }
     loom_op_t* current = NULL;
     loom_block_for_each_op(block, current) {
       if (loom_verify_at_error_limit(state)) break;
-      IREE_RETURN_IF_ERROR(loom_verify_op(state, current));
+      status = loom_verify_op(state, current);
+      if (!iree_status_is_ok(status)) {
+        loom_verify_pop_scope(state);
+        state->current_region = saved_region;
+        return status;
+      }
     }
   }
   loom_verify_pop_scope(state);
+  state->current_region = saved_region;
   return iree_ok_status();
 }
 

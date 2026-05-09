@@ -103,6 +103,12 @@ typedef struct loom_vector_fragment_parameter_view_t {
 loom_vector_fragment_role_flags_t loom_vector_fragment_role_flag(
     loom_vector_role_t role);
 
+// Returns the fact role flags corresponding to |role|. Initial and result
+// accumulators share the same physical fragment interpretation, so fact
+// propagation canonicalizes both roles to the combined accumulator role set.
+loom_vector_fragment_role_flags_t loom_vector_fragment_fact_role_flags(
+    loom_vector_role_t role);
+
 // Initializes |out_fact| to the unknown all-zero fragment fact.
 void loom_vector_fragment_fact_initialize(
     loom_vector_fragment_fact_t* out_fact);

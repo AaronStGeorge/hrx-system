@@ -95,6 +95,9 @@ typedef struct loom_verify_state_t {
   // Reusable per-op scratch for tied-result uniqueness checks.
   loom_verify_tied_table_t tied_table;
 
+  // Region currently being verified while walking nested IR.
+  const loom_region_t* current_region;
+
   // Stack of value IDs defined during the current scoped walk.
   uint32_t* defined_stack;
 

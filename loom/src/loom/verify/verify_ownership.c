@@ -10,7 +10,13 @@
 #include <string.h>
 
 #include "loom/error/error_catalog.h"
+#include "loom/util/cfg_graph.h"
 #include "loom/verify/verify_diagnostics.h"
+
+typedef struct loom_verify_operand_use_t {
+  const loom_op_t* op;
+  uint16_t operand_index;
+} loom_verify_operand_use_t;
 
 static int loom_compare_value_ids(const void* lhs, const void* rhs) {
   loom_value_id_t lhs_id = *(const loom_value_id_t*)lhs;
@@ -170,6 +176,212 @@ static bool loom_verify_tied_table_has_duplicate_operand_value(
           tied_table->operand_value_ids[low + 1] == value_id);
 }
 
+static bool loom_verify_region_is_cfg(const loom_region_t* region) {
+  return region &&
+         iree_any_bit_set(region->flags, LOOM_REGION_INSTANCE_FLAG_CFG);
+}
+
+static bool loom_verify_op_uses_value(const loom_op_t* op,
+                                      loom_value_id_t value_id,
+                                      uint16_t* out_operand_index) {
+  if (!op) return false;
+  const loom_value_id_t* operands = loom_op_const_operands(op);
+  for (uint16_t i = 0; i < op->operand_count; ++i) {
+    if (operands[i] == value_id) {
+      *out_operand_index = i;
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool loom_verify_region_uses_value(const loom_region_t* region,
+                                          loom_value_id_t value_id,
+                                          loom_verify_operand_use_t* out_use);
+
+static bool loom_verify_op_or_nested_region_uses_value(
+    const loom_op_t* op, loom_value_id_t value_id,
+    loom_verify_operand_use_t* out_use) {
+  uint16_t operand_index = 0;
+  if (loom_verify_op_uses_value(op, value_id, &operand_index)) {
+    *out_use = (loom_verify_operand_use_t){
+        .op = op,
+        .operand_index = operand_index,
+    };
+    return true;
+  }
+  loom_region_t* const* regions = loom_op_regions(op);
+  for (uint8_t i = 0; i < op->region_count; ++i) {
+    if (loom_verify_region_uses_value(regions[i], value_id, out_use)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool loom_verify_region_uses_value(const loom_region_t* region,
+                                          loom_value_id_t value_id,
+                                          loom_verify_operand_use_t* out_use) {
+  if (!region) return false;
+  const loom_block_t* block = NULL;
+  loom_region_for_each_block(region, block) {
+    const loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      if (loom_verify_op_or_nested_region_uses_value(op, value_id, out_use)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+static bool loom_verify_block_arg_defines_value(const loom_block_t* block,
+                                                loom_value_id_t value_id) {
+  if (!block) return false;
+  for (uint16_t i = 0; i < block->arg_count; ++i) {
+    if (loom_block_arg_id(block, i) == value_id) return true;
+  }
+  return false;
+}
+
+static bool loom_verify_find_block_use(const loom_block_t* block,
+                                       loom_value_id_t value_id,
+                                       loom_verify_operand_use_t* out_use) {
+  if (!block) return false;
+  const loom_op_t* op = NULL;
+  loom_block_for_each_op(block, op) {
+    if (loom_verify_op_or_nested_region_uses_value(op, value_id, out_use)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool loom_verify_find_same_block_use_after(
+    const loom_op_t* consuming_op, loom_value_id_t value_id,
+    loom_verify_operand_use_t* out_use) {
+  const loom_op_t* op = consuming_op ? consuming_op->next_op : NULL;
+  while (op) {
+    if (loom_verify_op_or_nested_region_uses_value(op, value_id, out_use)) {
+      return true;
+    }
+    op = op->next_op;
+  }
+  return false;
+}
+
+static iree_status_t loom_verify_find_cfg_use_after_consume_from_block(
+    const loom_cfg_graph_t* graph, uint16_t block_index,
+    loom_value_id_t value_id, uint64_t* visited_bits,
+    iree_host_size_t visited_word_count, loom_verify_operand_use_t* out_use,
+    bool* out_found) {
+  *out_found = false;
+  if (!loom_cfg_graph_block_is_reachable(graph, block_index)) {
+    return iree_ok_status();
+  }
+  if (loom_bitset_test(visited_bits, visited_word_count, block_index)) {
+    return iree_ok_status();
+  }
+  loom_bitset_set(visited_bits, visited_word_count, block_index);
+
+  const loom_block_t* block = graph->blocks[block_index].block;
+  if (loom_verify_block_arg_defines_value(block, value_id)) {
+    return iree_ok_status();
+  }
+  if (loom_verify_find_block_use(block, value_id, out_use)) {
+    *out_found = true;
+    return iree_ok_status();
+  }
+
+  loom_cfg_block_index_span_t successors =
+      loom_cfg_graph_successors(graph, block_index);
+  for (iree_host_size_t i = 0; i < successors.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_verify_find_cfg_use_after_consume_from_block(
+        graph, successors.values[i], value_id, visited_bits, visited_word_count,
+        out_use, out_found));
+    if (*out_found) return iree_ok_status();
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_verify_find_cfg_use_after_consume(
+    loom_verify_state_t* state, const loom_op_t* consuming_op,
+    loom_value_id_t value_id, loom_verify_operand_use_t* out_use,
+    bool* out_found) {
+  *out_found = false;
+  if (!consuming_op || !consuming_op->parent_block ||
+      !loom_verify_region_is_cfg(consuming_op->parent_block->parent_region)) {
+    return iree_ok_status();
+  }
+  if (loom_verify_find_same_block_use_after(consuming_op, value_id, out_use)) {
+    *out_found = true;
+    return iree_ok_status();
+  }
+
+  loom_cfg_graph_t graph = {0};
+  IREE_RETURN_IF_ERROR(loom_cfg_graph_build(
+      consuming_op->parent_block->parent_region, &state->arena, &graph));
+  if (graph.malformed) {
+    return iree_ok_status();
+  }
+  iree_host_size_t consuming_block_index =
+      loom_cfg_graph_block_index(&graph, consuming_op->parent_block);
+  if (consuming_block_index == IREE_HOST_SIZE_MAX) {
+    return iree_ok_status();
+  }
+
+  uint64_t* visited_bits = NULL;
+  iree_host_size_t visited_word_count =
+      loom_bitset_word_count(graph.block_count);
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(&state->arena, visited_word_count,
+                                sizeof(*visited_bits), (void**)&visited_bits));
+  memset(visited_bits, 0, visited_word_count * sizeof(*visited_bits));
+
+  loom_cfg_block_index_span_t successors =
+      loom_cfg_graph_successors(&graph, (uint16_t)consuming_block_index);
+  for (iree_host_size_t i = 0; i < successors.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_verify_find_cfg_use_after_consume_from_block(
+        &graph, successors.values[i], value_id, visited_bits,
+        visited_word_count, out_use, out_found));
+    if (*out_found) return iree_ok_status();
+  }
+  return iree_ok_status();
+}
+
+static void loom_verify_emit_consumed_value_use(loom_verify_state_t* state,
+                                                const loom_op_t* use_op,
+                                                uint16_t operand_index,
+                                                loom_value_id_t value_id,
+                                                const loom_op_t* consuming_op) {
+  const loom_op_vtable_t* consuming_vtable =
+      consuming_op ? loom_verify_lookup_vtable(state, consuming_op->kind)
+                   : NULL;
+  iree_string_view_t consuming_op_name =
+      consuming_vtable ? loom_op_vtable_name(consuming_vtable)
+                       : IREE_SV("<unknown op>");
+  iree_string_view_t value_name = loom_verify_value_name(state, value_id);
+  loom_diagnostic_field_ref_t operand_ref =
+      loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND, operand_index);
+  loom_diagnostic_param_t params[] = {
+      loom_param_with_field_ref(loom_param_string(value_name), operand_ref),
+      loom_param_string(consuming_op_name),
+  };
+  loom_diagnostic_related_op_t related_ops[] = {{
+      .label = IREE_SV("consumed here"),
+      .op = consuming_op,
+  }};
+  loom_diagnostic_emission_t emission = {
+      .op = use_op,
+      .error = LOOM_ERR_DOMINANCE_002,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+      .related_ops = related_ops,
+      .related_op_count = IREE_ARRAYSIZE(related_ops),
+  };
+  loom_verify_emit_diagnostic(state, &emission);
+}
+
 void loom_verify_operand_dominance(loom_verify_state_t* state,
                                    const loom_op_t* op,
                                    const loom_op_vtable_t* vtable) {
@@ -203,33 +415,8 @@ void loom_verify_operand_dominance(loom_verify_state_t* state,
     }
     if (loom_bitset_test(state->consumed_bits, state->defined_bits_length,
                          value_id)) {
-      const loom_op_t* consuming_op = state->consuming_ops[value_id];
-      const loom_op_vtable_t* consuming_vtable =
-          consuming_op ? loom_verify_lookup_vtable(state, consuming_op->kind)
-                       : NULL;
-      iree_string_view_t consuming_op_name =
-          consuming_vtable ? loom_op_vtable_name(consuming_vtable)
-                           : IREE_SV("<unknown op>");
-      iree_string_view_t value_name = loom_verify_value_name(state, value_id);
-      loom_diagnostic_field_ref_t operand_ref =
-          loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND, i);
-      loom_diagnostic_param_t params[] = {
-          loom_param_with_field_ref(loom_param_string(value_name), operand_ref),
-          loom_param_string(consuming_op_name),
-      };
-      loom_diagnostic_related_op_t related_ops[] = {{
-          .label = IREE_SV("consumed here"),
-          .op = consuming_op,
-      }};
-      loom_diagnostic_emission_t emission = {
-          .op = op,
-          .error = LOOM_ERR_DOMINANCE_002,
-          .params = params,
-          .param_count = IREE_ARRAYSIZE(params),
-          .related_ops = related_ops,
-          .related_op_count = IREE_ARRAYSIZE(related_ops),
-      };
-      loom_verify_emit_diagnostic(state, &emission);
+      loom_verify_emit_consumed_value_use(state, op, i, value_id,
+                                          state->consuming_ops[value_id]);
     }
   }
 }
@@ -471,7 +658,18 @@ iree_status_t loom_verify_tied_results(loom_verify_state_t* state,
     // Ties on regular body ops consume the operand's storage. Func-like symbol
     // signatures are caller-side ownership contracts, so their entry args are
     // validated as tie targets but not marked consumed at function entry.
-    if (!has_signature_ties) {
+    if (!has_signature_ties &&
+        loom_verify_region_is_cfg(
+            op->parent_block ? op->parent_block->parent_region : NULL)) {
+      loom_verify_operand_use_t use = {0};
+      bool found_use = false;
+      IREE_RETURN_IF_ERROR(loom_verify_find_cfg_use_after_consume(
+          state, op, consumed_id, &use, &found_use));
+      if (found_use) {
+        loom_verify_emit_consumed_value_use(state, use.op, use.operand_index,
+                                            consumed_id, op);
+      }
+    } else if (!has_signature_ties) {
       loom_verify_consume_value(state, consumed_id, op);
     }
   }

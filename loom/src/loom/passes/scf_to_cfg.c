@@ -524,8 +524,12 @@ static iree_status_t loom_scf_to_cfg_define_for_header_args(
       iv_name_id, out_iv_arg));
 
   loom_value_slice_t results = loom_scf_for_results(op);
+  const loom_value_id_t* iter_arg_names = results.values;
+  if (body_source_block->arg_count > 1) {
+    iter_arg_names = body_source_block->arg_ids + 1;
+  }
   return loom_scf_to_cfg_define_remapped_block_args(
-      state, header_block, results.values, results.count, out_iter_args);
+      state, header_block, iter_arg_names, results.count, out_iter_args);
 }
 
 static iree_status_t loom_scf_to_cfg_build_for_iv_assume(
@@ -609,11 +613,21 @@ static iree_status_t loom_scf_to_cfg_lower_for(loom_scf_to_cfg_state_t* state,
   loom_block_t* body_block = NULL;
   IREE_RETURN_IF_ERROR(
       loom_scf_to_cfg_insert_block(state, &insertion, &body_block));
+  loom_block_t* exit_block = NULL;
+  if (op->result_count > 0) {
+    IREE_RETURN_IF_ERROR(
+        loom_scf_to_cfg_insert_block(state, &insertion, &exit_block));
+  }
   loom_block_t* join_block = NULL;
   IREE_RETURN_IF_ERROR(
       loom_scf_to_cfg_insert_block(state, &insertion, &join_block));
   IREE_RETURN_IF_ERROR(
       loom_scf_to_cfg_move_tail_after_op(state, op, join_block));
+
+  loom_value_id_t* join_args = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_define_remapped_block_args(
+      state, join_block, loom_op_const_results(op), op->result_count,
+      &join_args));
 
   loom_value_id_t header_iv = LOOM_VALUE_ID_INVALID;
   loom_value_id_t* header_iter_args = NULL;
@@ -672,10 +686,17 @@ static iree_status_t loom_scf_to_cfg_lower_for(loom_scf_to_cfg_state_t* state,
   if (iree_status_is_ok(status)) {
     status = loom_cfg_cond_br_build(
         &state->rewriter->builder, loom_index_cmp_result(compare_op),
-        body_block, join_block, op->location, &compare_op);
+        body_block, exit_block ? exit_block : join_block, op->location,
+        &compare_op);
   }
   loom_builder_restore(&state->rewriter->builder, header_ip);
   IREE_RETURN_IF_ERROR(status);
+
+  if (exit_block) {
+    IREE_RETURN_IF_ERROR(loom_scf_to_cfg_build_br(
+        state, exit_block, op->parent_op, join_block, header_iter_args,
+        op->result_count, op->location));
+  }
 
   loom_builder_ip_t body_ip =
       loom_scf_to_cfg_set_block_end(state, body_block, op->parent_op);
@@ -699,8 +720,7 @@ static iree_status_t loom_scf_to_cfg_lower_for(loom_scf_to_cfg_state_t* state,
       state, body_block, op->parent_op, header_block, backedge_values,
       (uint16_t)(1 + iter_args.count), yield_op->location));
 
-  IREE_RETURN_IF_ERROR(
-      loom_scf_to_cfg_replace_results(state, op, header_iter_args));
+  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_replace_results(state, op, join_args));
   IREE_RETURN_IF_ERROR(loom_rewriter_erase(state->rewriter, op));
   loom_scf_to_cfg_add_stat(state, LOOM_SCF_TO_CFG_STAT_FORS_LOWERED, 1);
   iree_arena_reset(state->lowering_arena);
@@ -738,15 +758,25 @@ static iree_status_t loom_scf_to_cfg_lower_while(loom_scf_to_cfg_state_t* state,
   loom_block_t* after_block = NULL;
   IREE_RETURN_IF_ERROR(
       loom_scf_to_cfg_insert_block(state, &insertion, &after_block));
+  loom_block_t* exit_block = NULL;
+  if (op->result_count > 0) {
+    IREE_RETURN_IF_ERROR(
+        loom_scf_to_cfg_insert_block(state, &insertion, &exit_block));
+  }
   loom_block_t* join_block = NULL;
   IREE_RETURN_IF_ERROR(
       loom_scf_to_cfg_insert_block(state, &insertion, &join_block));
   IREE_RETURN_IF_ERROR(
       loom_scf_to_cfg_move_tail_after_op(state, op, join_block));
 
+  loom_value_id_t* join_args = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_define_remapped_block_args(
+      state, join_block, loom_op_const_results(op), op->result_count,
+      &join_args));
+
   loom_value_id_t* before_args = NULL;
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_define_remapped_block_args(
-      state, before_block, loom_op_const_results(op), op->result_count,
+      state, before_block, before_source_block->arg_ids, iter_args.count,
       &before_args));
 
   loom_ir_remap_t before_remap = {0};
@@ -797,13 +827,17 @@ static iree_status_t loom_scf_to_cfg_lower_while(loom_scf_to_cfg_state_t* state,
       iter_args.count, op->location));
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_build_cond_br(
       state, before_block, op->parent_op, condition_value, after_block,
-      join_block, condition_op->location));
+      exit_block ? exit_block : join_block, condition_op->location));
+  if (exit_block) {
+    IREE_RETURN_IF_ERROR(loom_scf_to_cfg_build_br(
+        state, exit_block, op->parent_op, join_block, forwarded_values,
+        op->result_count, condition_op->location));
+  }
   IREE_RETURN_IF_ERROR(loom_scf_to_cfg_build_br(
       state, after_block, op->parent_op, before_block, yielded_values,
       yield_op->operand_count, yield_op->location));
 
-  IREE_RETURN_IF_ERROR(
-      loom_scf_to_cfg_replace_results(state, op, forwarded_values));
+  IREE_RETURN_IF_ERROR(loom_scf_to_cfg_replace_results(state, op, join_args));
   IREE_RETURN_IF_ERROR(loom_rewriter_erase(state->rewriter, op));
   loom_scf_to_cfg_add_stat(state, LOOM_SCF_TO_CFG_STAT_WHILES_LOWERED, 1);
   iree_arena_reset(state->lowering_arena);

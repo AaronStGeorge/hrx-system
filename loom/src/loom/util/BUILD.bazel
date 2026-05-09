@@ -95,6 +95,7 @@ loom_cc_library(
     srcs = ["fact_table.c"],
     hdrs = ["fact_table.h"],
     deps = [
+        ":cfg_graph",
         ":math",
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",

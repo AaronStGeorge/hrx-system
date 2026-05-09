@@ -95,14 +95,16 @@ func.def @lowers_counted_for(%n: index, %seed: i32, %x: i32) -> (i32) {
   %start = index.constant 0 : index
   %step = index.constant 1 : index
   cfg.br ^_bb1(%start: index, %seed: i32)
-^_bb1(%i: index, %sum: i32):
-  %12 = index.cmp slt, %i, %n : index
-  cfg.cond_br %12, ^_bb2, ^_bb3 : i1
+^_bb1(%i: index, %acc: i32):
+  %13 = index.cmp slt, %i, %n : index
+  cfg.cond_br %13, ^_bb2, ^_bb3 : i1
 ^_bb2:
-  %next = test.addi %sum, %x : i32
-  %13 = index.add %i, %step : index
-  cfg.br ^_bb1(%13: index, %next: i32)
+  %next = test.addi %acc, %x : i32
+  %14 = index.add %i, %step : index
+  cfg.br ^_bb1(%14: index, %next: i32)
 ^_bb3:
+  cfg.br ^_bb4(%acc: i32)
+^_bb4(%sum: i32):
   func.return %sum : i32
 }
 
@@ -190,14 +192,16 @@ func.def @lowers_while(%cond: i1, %seed: i32, %x: i32) -> (i32) {
 // ----
 func.def @lowers_while(%cond: i1, %seed: i32, %x: i32) -> (i32) {
   cfg.br ^_bb1(%seed: i32)
-^_bb1(%result: i32):
-  %forwarded = test.addi %result, %x : i32
+^_bb1(%before: i32):
+  %forwarded = test.addi %before, %x : i32
   cfg.cond_br %cond, ^_bb2, ^_bb3 : i1
 ^_bb2:
   %next = test.addi %forwarded, %x : i32
   cfg.br ^_bb1(%next: i32)
 ^_bb3:
-  func.return %forwarded : i32
+  cfg.br ^_bb4(%forwarded: i32)
+^_bb4(%result: i32):
+  func.return %result : i32
 }
 
 // ====

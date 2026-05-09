@@ -22,6 +22,18 @@ loom_vector_fragment_role_flags_t loom_vector_fragment_role_flag(
   return 1u << role;
 }
 
+loom_vector_fragment_role_flags_t loom_vector_fragment_fact_role_flags(
+    loom_vector_role_t role) {
+  loom_vector_fragment_role_flags_t role_flag =
+      loom_vector_fragment_role_flag(role);
+  if (role_flag == LOOM_VECTOR_FRAGMENT_ROLE_FLAG_INIT ||
+      role_flag == LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RESULT) {
+    return LOOM_VECTOR_FRAGMENT_ROLE_FLAG_INIT |
+           LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RESULT;
+  }
+  return role_flag;
+}
+
 void loom_vector_fragment_fact_initialize(
     loom_vector_fragment_fact_t* out_fact) {
   memset(out_fact, 0, sizeof(*out_fact));
