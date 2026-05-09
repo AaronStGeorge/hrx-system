@@ -208,11 +208,11 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @index_minmax_vgpr_selec
   %17 = v_mov_b32 31
   %min = v_min_i32 %tid, %17
   %max = v_max_i32 %tid, %17
-  %cond = v_cmp_lt_i32 %tid, %17
+  %cond = v_cmp_lt_i32_src1_inline %tid {rhs = 31}
   %selected = v_cndmask_b32 %max, %min, %cond
   %stored = v_mov_b32 1
-  %25 = v_lshlrev_b32_lit %selected, 2
-  global_store_b32 %25, %stored, %output_view
+  %24 = v_lshlrev_b32_lit %selected, 2
+  global_store_b32 %24, %stored, %output_view
   return
 }
 

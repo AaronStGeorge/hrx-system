@@ -115,11 +115,10 @@ low.func.def target(@target) abi(hal_kernel) @i32_cmpi_select_noninline_constant
   %16 = slice %lhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %17 = slice %rhs[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %18 = v_cmp_lt_i32 %16, %17
-  %20 = v_mov_b32 65
-  %25 = slice %false_value[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %26 = v_cndmask_b32 %25, %20, %15
-  %29 = slice %false_value[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %30 = v_cndmask_b32 %29, %20, %18
-  %selected = concat(%26, %30) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %24 = slice %false_value[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %25 = v_cndmask_b32_src1_lit %24, %15, 65
+  %27 = slice %false_value[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %28 = v_cndmask_b32_src1_lit %27, %18, 65
+  %selected = concat(%25, %28) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %selected
 }

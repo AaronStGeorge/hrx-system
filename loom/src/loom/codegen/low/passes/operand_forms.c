@@ -318,7 +318,9 @@ static iree_status_t loom_low_select_operand_form_build_attrs(
 static iree_status_t loom_low_select_operand_form_rewrite_packet(
     loom_low_select_operand_forms_state_t* state, loom_rewriter_t* rewriter,
     loom_op_t* op, const loom_low_descriptor_t* source_descriptor,
-    const loom_low_operand_form_t* form, int64_t matched_value) {
+    const loom_low_operand_form_t* form, int64_t matched_value,
+    bool* out_rewritten) {
+  *out_rewritten = false;
   const loom_low_descriptor_set_t* descriptor_set =
       state->target->descriptor_set;
   const loom_low_descriptor_t* replacement_descriptor =
@@ -389,6 +391,7 @@ static iree_status_t loom_low_select_operand_form_rewrite_packet(
   IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_and_erase(
       rewriter, op, replacements, replacement_op->result_count));
   state->changed = true;
+  *out_rewritten = true;
   loom_pass_mark_changed(state->pass);
   if (state->pass->statistics) {
     loom_pass_statistic_add(
@@ -433,8 +436,13 @@ static iree_status_t loom_low_select_operand_forms_try_rewrite_packet(
       }
     }
     if (matched) {
-      return loom_low_select_operand_form_rewrite_packet(
-          state, rewriter, op, packet.descriptor, form, matched_value);
+      bool rewrote = false;
+      IREE_RETURN_IF_ERROR(loom_low_select_operand_form_rewrite_packet(
+          state, rewriter, op, packet.descriptor, form, matched_value,
+          &rewrote));
+      if (rewrote) {
+        return iree_ok_status();
+      }
     }
   }
   return iree_ok_status();

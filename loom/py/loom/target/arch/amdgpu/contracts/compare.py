@@ -23,8 +23,10 @@ from loom.target.contracts import (
     DescriptorRule,
     EmitDescriptorOp,
     Guard,
+    GuardDiagnostic,
     Scalar,
     TypePattern,
+    ValueProject,
     ValueRef,
     descriptor_by_key,
 )
@@ -46,7 +48,12 @@ _CMP_I32_CASES = (
 _DESCRIPTOR_KEYS = tuple(
     descriptor_key
     for _, scalar_descriptor_key, mask_descriptor_key in _CMP_I32_CASES
-    for descriptor_key in (scalar_descriptor_key, mask_descriptor_key)
+    for descriptor_key in (
+        scalar_descriptor_key,
+        mask_descriptor_key,
+        f"{mask_descriptor_key}.src0_inline",
+        f"{mask_descriptor_key}.src1_inline",
+    )
 )
 
 _DESCRIPTOR_SET = build_amdgpu_contract_descriptor_set(
@@ -62,6 +69,11 @@ _I32_VGPR_LHS = ValueRef.operand("lhs", materializer=I32_VGPR_MATERIALIZER.name)
 _I32_VGPR_RHS = ValueRef.operand("rhs", materializer=I32_VGPR_MATERIALIZER.name)
 _ADDRESS_VGPR_LHS = ValueRef.operand("lhs", materializer=ADDRESS_VGPR_MATERIALIZER.name)
 _ADDRESS_VGPR_RHS = ValueRef.operand("rhs", materializer=ADDRESS_VGPR_MATERIALIZER.name)
+_SOURCE_INLINE_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="literal",
+    subject_name="source-inline-u32",
+    constraint_key="amdgpu.source_inline_u32",
+)
 
 
 def _descriptor(key: str) -> Descriptor:
@@ -135,6 +147,56 @@ def _mask_rule(
     )
 
 
+def _mask_inline_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    source_refs: dict[str, ValueRef],
+    materializer_name: str,
+    literal_source: str,
+    nonliteral_source: str,
+    predicate: str,
+    descriptor: Descriptor,
+) -> DescriptorRule:
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            Guard.enum_attr_equals("predicate", predicate),
+            Guard.value_type("lhs", type_pattern),
+            Guard.value_type("rhs", type_pattern),
+            Guard.value_type("result", _I1),
+            Guard.low_value_register_class("result", "amdgpu.sgpr"),
+            Guard.value_materializable(
+                nonliteral_source,
+                materializer_name,
+            ),
+            Guard.value_exact_i64(
+                literal_source,
+                diagnostic=_SOURCE_INLINE_DIAGNOSTIC,
+            ),
+            Guard.value_i64_range(
+                literal_source,
+                0,
+                64,
+                diagnostic=_SOURCE_INLINE_DIAGNOSTIC,
+            ),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={
+                    nonliteral_source: source_refs[nonliteral_source],
+                },
+                results={"mask": ValueRef.result("result")},
+                immediates={
+                    literal_source: ValueProject.exact_i64(literal_source),
+                },
+            ),
+        ),
+    )
+
+
 def _typed_rules(
     source_op: Op,
     type_pattern: TypePattern,
@@ -142,9 +204,39 @@ def _typed_rules(
     rhs: ValueRef,
     materializer_name: str,
 ) -> tuple[DescriptorRule, ...]:
+    source_refs = {
+        "lhs": lhs,
+        "rhs": rhs,
+    }
     scalar_rules = tuple(
         _scc_rule(source_op, type_pattern, predicate, _descriptor(descriptor_key))
         for predicate, descriptor_key, _ in _CMP_I32_CASES
+    )
+    inline_rules = tuple(
+        rule
+        for predicate, _, descriptor_key in _CMP_I32_CASES
+        for rule in (
+            _mask_inline_rule(
+                source_op,
+                type_pattern,
+                source_refs,
+                materializer_name,
+                literal_source="lhs",
+                nonliteral_source="rhs",
+                predicate=predicate,
+                descriptor=_descriptor(f"{descriptor_key}.src0_inline"),
+            ),
+            _mask_inline_rule(
+                source_op,
+                type_pattern,
+                source_refs,
+                materializer_name,
+                literal_source="rhs",
+                nonliteral_source="lhs",
+                predicate=predicate,
+                descriptor=_descriptor(f"{descriptor_key}.src1_inline"),
+            ),
+        )
     )
     mask_rules = tuple(
         _mask_rule(
@@ -158,7 +250,7 @@ def _typed_rules(
         )
         for predicate, _, descriptor_key in _CMP_I32_CASES
     )
-    return scalar_rules + mask_rules
+    return scalar_rules + inline_rules + mask_rules
 
 
 def _rules() -> tuple[DescriptorRule, ...]:

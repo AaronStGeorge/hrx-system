@@ -104,6 +104,12 @@ def _descriptor_key(predicate: str, element_type: str) -> str:
     return f"amdgpu.v_cmp_{predicate}_{descriptor_element_type}"
 
 
+def _optional_descriptor_ref_constant_name(key: str, key_set: set[str]) -> str:
+    if key not in key_set:
+        return "LOOM_AMDGPU_DESCRIPTOR_REF_NONE"
+    return _descriptor_ref_constant_name(key)
+
+
 def _predicate_constant(family: _CompareFamily, predicate: str) -> str:
     return f"{family.predicate_c_prefix}_{_c_identifier(predicate)}"
 
@@ -150,6 +156,10 @@ def _emit_header(*, header_path: Path, format_output: bool) -> str:
         "  uint8_t predicate;",
         "  // Dense AMDGPU descriptor ref selected when present in the descriptor set.",
         "  loom_amdgpu_descriptor_ref_t descriptor_ref;",
+        "  // Dense AMDGPU descriptor ref selected when the left-hand source is inline.",
+        "  loom_amdgpu_descriptor_ref_t src0_inline_descriptor_ref;",
+        "  // Dense AMDGPU descriptor ref selected when the right-hand source is inline.",
+        "  loom_amdgpu_descriptor_ref_t src1_inline_descriptor_ref;",
         "} loom_amdgpu_compare_descriptor_candidate_t;",
         "",
         "extern const loom_amdgpu_compare_descriptor_candidate_t",
@@ -171,6 +181,7 @@ def _emit_header(*, header_path: Path, format_output: bool) -> str:
 def _candidate_initializers(
     candidates: Iterable[tuple[_CompareFamily, str, str]],
 ) -> Iterable[str]:
+    descriptor_ref_key_set = set(amdgpu_descriptor_ref_keys())
     for family, predicate, descriptor_key in candidates:
         yield "\n".join(
             [
@@ -178,6 +189,8 @@ def _candidate_initializers(
                 f"        .op_kind = {_op_kind_constant_name(family.source_op_name)},",
                 f"        .predicate = {_predicate_constant(family, predicate)},",
                 f"        .descriptor_ref = {_descriptor_ref_constant_name(descriptor_key)},",
+                f"        .src0_inline_descriptor_ref = {_optional_descriptor_ref_constant_name(f'{descriptor_key}.src0_inline', descriptor_ref_key_set)},",
+                f"        .src1_inline_descriptor_ref = {_optional_descriptor_ref_constant_name(f'{descriptor_key}.src1_inline', descriptor_ref_key_set)},",
                 "    },",
             ]
         )

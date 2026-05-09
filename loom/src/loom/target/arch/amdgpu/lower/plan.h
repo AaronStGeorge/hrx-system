@@ -196,6 +196,10 @@ typedef struct loom_amdgpu_table_lookup_plan_t {
 typedef struct loom_amdgpu_vector_compare_plan_t {
   // Descriptor row selected for the compare predicate.
   loom_low_lower_resolved_descriptor_t descriptor;
+  // Optional descriptor row selected when the left-hand lane is inline.
+  loom_low_lower_resolved_descriptor_t src0_inline_descriptor;
+  // Optional descriptor row selected when the right-hand lane is inline.
+  loom_low_lower_resolved_descriptor_t src1_inline_descriptor;
   // Left-hand payload vector value.
   loom_value_id_t lhs;
   // Right-hand payload vector value.
@@ -220,10 +224,18 @@ typedef struct loom_amdgpu_vector_select_plan_t {
   loom_low_lower_resolved_descriptor_t scc_descriptor;
   // Descriptor row selected for register-register lane selects.
   loom_low_lower_resolved_descriptor_t register_descriptor;
+  // Optional descriptor row selected when the false lane is an inline source.
+  loom_low_lower_resolved_descriptor_t src0_inline_descriptor;
   // Optional descriptor row selected when the true lane is an inline source.
   loom_low_lower_resolved_descriptor_t src1_inline_descriptor;
-  // Module string ID for the true_value inline-source immediate.
-  loom_string_id_t true_value_attr_name_id;
+  // Optional descriptor row selected when the false lane is a literal source.
+  loom_low_lower_resolved_descriptor_t src0_literal_descriptor;
+  // Optional descriptor row selected when the true lane is a literal source.
+  loom_low_lower_resolved_descriptor_t src1_literal_descriptor;
+  // Optional descriptor row selected when false is literal and true is inline.
+  loom_low_lower_resolved_descriptor_t src0_literal_src1_inline_descriptor;
+  // Optional descriptor row selected when true is literal and false is inline.
+  loom_low_lower_resolved_descriptor_t src1_literal_src0_inline_descriptor;
   // Source mask vector selecting true lanes.
   loom_value_id_t condition;
   // Source vector used when the corresponding condition lane is true.
@@ -251,10 +263,20 @@ typedef struct loom_amdgpu_clampf_plan_t {
   loom_low_lower_resolved_descriptor_t upper_compare_descriptor;
   // Descriptor row selected for register-register lane selects.
   loom_low_lower_resolved_descriptor_t select_register_descriptor;
+  // Optional descriptor row selected when a select false lane is inline.
+  loom_low_lower_resolved_descriptor_t select_src0_inline_descriptor;
   // Optional descriptor row selected when a select true lane is inline.
   loom_low_lower_resolved_descriptor_t select_src1_inline_descriptor;
-  // Module string ID for the true_value inline-source immediate.
-  loom_string_id_t select_true_value_attr_name_id;
+  // Optional descriptor row selected when a select false lane is literal.
+  loom_low_lower_resolved_descriptor_t select_src0_literal_descriptor;
+  // Optional descriptor row selected when a select true lane is literal.
+  loom_low_lower_resolved_descriptor_t select_src1_literal_descriptor;
+  // Optional descriptor row selected when false is literal and true is inline.
+  loom_low_lower_resolved_descriptor_t
+      select_src0_literal_src1_inline_descriptor;
+  // Optional descriptor row selected when true is literal and false is inline.
+  loom_low_lower_resolved_descriptor_t
+      select_src1_literal_src0_inline_descriptor;
   // Descriptor row selected for register-register lower-bound maxnum.
   loom_low_lower_resolved_descriptor_t lower_bound_register_descriptor;
   // Optional descriptor row selected for literal lower-bound maxnum.
