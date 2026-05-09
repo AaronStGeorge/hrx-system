@@ -124,9 +124,12 @@ typedef struct loom_low_allocation_assignment_t {
   loom_liveness_value_class_t value_class;
   // Descriptor-set-local register class ID for |value_class|.
   uint16_t descriptor_reg_class_id;
-  // First live program point covered by this assignment.
+  // First storage program point covered by this assignment.
   uint32_t start_point;
-  // One-past-last live program point covered by this assignment.
+  // One-past-last storage program point covered by this assignment.
+  //
+  // This may extend past semantic liveness for target-visible dead definitions:
+  // even an unused result writes its destination register.
   uint32_t end_point;
   // Allocation units required by this interval.
   uint32_t unit_count;

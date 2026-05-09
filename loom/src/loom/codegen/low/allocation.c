@@ -514,6 +514,26 @@ static bool loom_low_allocation_interval_is_allocatable(
          interval->unit_count > 0;
 }
 
+// Allocation intervals describe target-visible storage occupancy. A semantic
+// dead result still writes a physical destination at its definition boundary,
+// so it must occupy storage until the next program boundary.
+static uint32_t loom_low_allocation_interval_storage_end_point(
+    const loom_liveness_interval_t* interval) {
+  if (interval->end_point > interval->start_point) {
+    return interval->end_point;
+  }
+  return interval->start_point == UINT32_MAX ? UINT32_MAX
+                                             : interval->start_point + 1u;
+}
+
+static uint32_t loom_low_allocation_interval_initial_unit_end_point(
+    const loom_liveness_interval_t* interval) {
+  if (interval->end_point == interval->start_point) {
+    return loom_low_allocation_interval_storage_end_point(interval);
+  }
+  return interval->start_point;
+}
+
 static bool loom_low_allocation_mode_can_synthesize(uint8_t allocation_mode) {
   return allocation_mode == 0 || allocation_mode == LOOM_LOW_ALLOCATION_VIRTUAL;
 }
@@ -972,7 +992,7 @@ static bool loom_low_allocation_fixed_value_conflicts(
       .value_class = interval->value_class,
       .descriptor_reg_class_id = reg_class_id,
       .start_point = interval->start_point,
-      .end_point = interval->end_point,
+      .end_point = loom_low_allocation_interval_storage_end_point(interval),
       .unit_count = interval->unit_count,
       .location_kind = location_kind,
       .location_base = location_base,
@@ -1001,7 +1021,8 @@ static bool loom_low_allocation_fixed_value_conflicts(
         .value_class = fixed_value->interval->value_class,
         .descriptor_reg_class_id = fixed_value->descriptor_reg_class_id,
         .start_point = fixed_value->interval->start_point,
-        .end_point = fixed_value->interval->end_point,
+        .end_point = loom_low_allocation_interval_storage_end_point(
+            fixed_value->interval),
         .unit_count = fixed_value->interval->unit_count,
         .location_kind = fixed_value->location_kind,
         .location_base = fixed_value->location_base,
@@ -1014,10 +1035,9 @@ static bool loom_low_allocation_fixed_value_conflicts(
             state->target.descriptor_set, state->unit_end_points,
             state->unit_end_point_count, &fixed_assignment, &candidate) &&
         loom_low_allocation_value_ranges_overlap_in_block(
-            &state->liveness, interval->value_id, interval->start_point,
-            interval->end_point, fixed_value->value_id,
-            fixed_value->interval->start_point,
-            fixed_value->interval->end_point)) {
+            &state->liveness, candidate.value_id, candidate.start_point,
+            candidate.end_point, fixed_assignment.value_id,
+            fixed_assignment.start_point, fixed_assignment.end_point)) {
       return true;
     }
   }
@@ -1059,7 +1079,7 @@ static bool loom_low_allocation_candidate_conflicts(
       .value_class = interval->value_class,
       .descriptor_reg_class_id = reg_class_id,
       .start_point = interval->start_point,
-      .end_point = interval->end_point,
+      .end_point = loom_low_allocation_interval_storage_end_point(interval),
       .unit_count = interval->unit_count,
       .location_kind = location_kind,
       .location_base = location_base,
@@ -1092,8 +1112,8 @@ static bool loom_low_allocation_candidate_conflicts(
       continue;
     }
     if (!loom_low_allocation_value_ranges_overlap_in_block(
-            &state->liveness, interval->value_id, interval->start_point,
-            interval->end_point, existing->value_id, existing->start_point,
+            &state->liveness, candidate.value_id, candidate.start_point,
+            candidate.end_point, existing->value_id, existing->start_point,
             existing->end_point)) {
       continue;
     }
@@ -1588,7 +1608,7 @@ static iree_status_t loom_low_allocation_assign_tied_interval(
       .value_class = interval->value_class,
       .descriptor_reg_class_id = operand_assignment->descriptor_reg_class_id,
       .start_point = interval->start_point,
-      .end_point = interval->end_point,
+      .end_point = loom_low_allocation_interval_storage_end_point(interval),
       .unit_count = interval->unit_count,
       .location_kind = operand_assignment->location_kind,
       .location_base = operand_assignment->location_base,
@@ -1625,7 +1645,7 @@ static iree_status_t loom_low_allocation_assign_fixed_interval(
       .value_class = interval->value_class,
       .descriptor_reg_class_id = fixed_value->descriptor_reg_class_id,
       .start_point = interval->start_point,
-      .end_point = interval->end_point,
+      .end_point = loom_low_allocation_interval_storage_end_point(interval),
       .unit_count = interval->unit_count,
       .location_kind = fixed_value->location_kind,
       .location_base = fixed_value->location_base,
@@ -1670,7 +1690,7 @@ static iree_status_t loom_low_allocation_append_interval_at_location(
       .value_class = interval->value_class,
       .descriptor_reg_class_id = descriptor_reg_class_id,
       .start_point = interval->start_point,
-      .end_point = interval->end_point,
+      .end_point = loom_low_allocation_interval_storage_end_point(interval),
       .unit_count = interval->unit_count,
       .location_kind = location_kind,
       .location_base = location_base,
@@ -2919,7 +2939,7 @@ static iree_status_t loom_low_allocation_initialize_unit_liveness(
     for (uint32_t unit_index = 0; unit_index < interval->unit_count;
          ++unit_index) {
       state->unit_end_points[unit_end_point_start + unit_index] =
-          interval->start_point;
+          loom_low_allocation_interval_initial_unit_end_point(interval);
     }
     unit_end_point_start += interval->unit_count;
   }
@@ -4162,7 +4182,7 @@ static iree_status_t loom_low_allocation_assign_intervals(
         .value_class = interval->value_class,
         .descriptor_reg_class_id = capacity.descriptor_reg_class_id,
         .start_point = interval->start_point,
-        .end_point = interval->end_point,
+        .end_point = loom_low_allocation_interval_storage_end_point(interval),
         .unit_count = interval->unit_count,
         .location_kind = assigned ? capacity.location_kind
                                   : LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT,

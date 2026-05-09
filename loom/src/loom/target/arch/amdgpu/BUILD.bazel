@@ -1015,6 +1015,7 @@ loom_cc_library(
 loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
+        "test/source_low/low_allocation.loom-test",
         "test/source_low/low_descriptor_immediates.loom-test",
         "test/source_low/low_hal_materialization.loom-test",
         "test/source_low/low_hal_structural.loom-test",

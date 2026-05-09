@@ -1,0 +1,11 @@
+// RUN: emit low-allocation-json @dead_sgpr_result_preserves_live_predicate
+
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) @dead_sgpr_result_preserves_live_predicate(%predicate: reg<amdgpu.sgpr x2>, %lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) -> (reg<amdgpu.sgpr x2>) {
+  %dead = low.op<amdgpu.v_cmp_slt_i32>(%lhs, %rhs) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.sgpr x2>
+  low.return %predicate : reg<amdgpu.sgpr x2>
+}
+
+// ----
+{"format":"loom.low.allocation.v0","function":"dead_sgpr_result_preserves_live_predicate","target":"target","descriptor_set":"amdgpu.rdna3.core","allocation_mode":"virtual","assignment_count":4,"remark_count":0,"copy_decision_count":0,"spill_count":0,"spill_plan_count":0,"coalesced_copy_count":0,"materialized_copy_count":0,"assignments":[{"index":0,"value":{"id":1,"name":"lhs","type":"reg<amdgpu.vgpr>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"amdgpu.vgpr"},"start_point":0,"end_point":1,"unit_count":1,"location":{"kind":"physical_register","base":0,"count":1}},{"index":1,"value":{"id":2,"name":"rhs","type":"reg<amdgpu.vgpr>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"amdgpu.vgpr"},"start_point":0,"end_point":1,"unit_count":1,"location":{"kind":"physical_register","base":1,"count":1}},{"index":2,"value":{"id":0,"name":"predicate","type":"reg<amdgpu.sgpr x2>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"amdgpu.sgpr"},"start_point":0,"end_point":2,"unit_count":2,"location":{"kind":"physical_register","base":0,"count":2}},{"index":3,"value":{"id":4,"name":"dead","type":"reg<amdgpu.sgpr x2>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"amdgpu.sgpr"},"start_point":1,"end_point":2,"unit_count":2,"location":{"kind":"physical_register","base":2,"count":2}}],"spill_plans":[],"copy_decisions":[],"remarks":[]}
