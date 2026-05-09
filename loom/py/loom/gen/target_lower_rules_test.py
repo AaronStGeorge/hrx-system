@@ -65,7 +65,7 @@ def test_generate_lower_rule_set_emits_value_ref_for_f64_equals_guard() -> None:
     guard_end = generated.source.index("},", guard_start)
     guard_text = generated.source[guard_start:guard_end]
     assert ".value_ref_index = 1," in guard_text
-    assert ".u64 = 0," in guard_text
+    assert ".u64 = UINT64_C(0)," in guard_text
 
 
 def test_generate_lower_rule_set_emits_balanced_accumulator_flag() -> None:

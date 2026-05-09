@@ -125,6 +125,13 @@ typedef struct loom_amdgpu_encoding_format_layout_t {
   uint32_t identifier_mask_words[LOOM_AMDGPU_ENCODING_MAX_WORD_COUNT];
 } loom_amdgpu_encoding_format_layout_t;
 
+typedef struct loom_amdgpu_encoding_inline_f32_source_t {
+  // IEEE f32 bit pattern accepted by the descriptor immediate.
+  uint32_t bit_pattern;
+  // Target source selector for the inline f32 bit pattern.
+  uint16_t source;
+} loom_amdgpu_encoding_inline_f32_source_t;
+
 typedef struct loom_amdgpu_encoding_table_t {
   // Descriptor-set key this table can encode.
   iree_string_view_t descriptor_set_key;
@@ -140,6 +147,10 @@ typedef struct loom_amdgpu_encoding_table_t {
   uint16_t scalar_inline_u32_zero;
   // Number of contiguous unsigned inline integer scalar source values.
   uint16_t scalar_inline_u32_count;
+  // Sorted inline f32 source-selector rows keyed by bit pattern.
+  const loom_amdgpu_encoding_inline_f32_source_t* inline_f32_sources;
+  // Number of inline f32 source-selector rows.
+  uint16_t inline_f32_source_count;
   // Unified source field value selecting VGPR zero.
   uint16_t vector_source_vgpr0;
   // Number of contiguous VGPR unified-source values.
@@ -193,6 +204,12 @@ bool loom_amdgpu_encoding_field_is_literal(uint16_t field_id);
 // source selector domain.
 bool loom_amdgpu_encoding_inline_u32_source(
     const loom_amdgpu_encoding_table_t* table, uint32_t value,
+    uint16_t* out_source);
+
+// Maps a verified inline f32 bit pattern into the target's scalar/vector source
+// selector domain.
+bool loom_amdgpu_encoding_inline_f32_source(
+    const loom_amdgpu_encoding_table_t* table, uint32_t bit_pattern,
     uint16_t* out_source);
 
 // Returns the generated encoding table for |descriptor_set_ordinal|, or NULL

@@ -237,6 +237,32 @@ bool loom_amdgpu_encoding_inline_u32_source(
   return false;
 }
 
+bool loom_amdgpu_encoding_inline_f32_source(
+    const loom_amdgpu_encoding_table_t* table, uint32_t bit_pattern,
+    uint16_t* out_source) {
+  *out_source = 0;
+  if (table == NULL) {
+    return false;
+  }
+  uint16_t low = 0;
+  uint16_t high = table->inline_f32_source_count;
+  while (low < high) {
+    const uint16_t mid = (uint16_t)(low + (high - low) / 2);
+    const loom_amdgpu_encoding_inline_f32_source_t* source =
+        &table->inline_f32_sources[mid];
+    if (source->bit_pattern == bit_pattern) {
+      *out_source = source->source;
+      return true;
+    }
+    if (source->bit_pattern < bit_pattern) {
+      low = (uint16_t)(mid + 1);
+    } else {
+      high = mid;
+    }
+  }
+  return false;
+}
+
 const loom_amdgpu_encoding_table_t*
 loom_amdgpu_encoding_table_for_descriptor_set_ordinal(
     uint16_t descriptor_set_ordinal) {

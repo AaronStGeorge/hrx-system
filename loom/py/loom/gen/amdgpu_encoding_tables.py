@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import struct
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -74,6 +75,12 @@ class _EncodingTableView:
     descriptor_set_key: str
     table_prefix: str
     table_function: str
+
+
+@dataclass(frozen=True, slots=True)
+class _InlineF32Source:
+    bit_pattern: int
+    source: int
 
 
 def _parse_view_headers(values: Sequence[str]) -> dict[str, Path]:
@@ -397,6 +404,41 @@ def _derive_predefined_linear_range(
     return base_value, count
 
 
+def _f32_bit_pattern(value: float) -> int:
+    return int(struct.unpack("<I", struct.pack("<f", value))[0])
+
+
+def _derive_predefined_f32_sources(
+    spec: AmdgpuIsaFactSource,
+    *,
+    operand_type_name: str,
+) -> tuple[_InlineF32Source, ...]:
+    operand_type = spec.operand_type_map().get(operand_type_name)
+    if operand_type is None:
+        raise ValueError(f"{spec.source_name}: unknown AMDGPU ISA operand type '{operand_type_name}'")
+    sources: list[_InlineF32Source] = []
+    seen_bit_patterns: set[int] = set()
+    for predefined_value in operand_type.predefined_values:
+        if "." not in predefined_value.name:
+            continue
+        try:
+            bit_pattern = _f32_bit_pattern(float(predefined_value.name))
+        except ValueError:
+            continue
+        if bit_pattern in seen_bit_patterns:
+            raise ValueError(f"{spec.source_name}: duplicate OPR_SRC inline f32 bit pattern 0x{bit_pattern:08x}")
+        seen_bit_patterns.add(bit_pattern)
+        sources.append(
+            _InlineF32Source(
+                bit_pattern=bit_pattern,
+                source=predefined_value.value,
+            )
+        )
+    if not sources:
+        raise ValueError(f"{spec.source_name}: no OPR_SRC inline f32 predefined values")
+    return tuple(sorted(sources, key=lambda source: source.bit_pattern))
+
+
 def _emit_word_array(words: tuple[int, ...]) -> str:
     padded_words = words + (0,) * (4 - len(words))
     return "{" + ", ".join(f"UINT32_C(0x{word:08x})" for word in padded_words) + "}"
@@ -415,6 +457,7 @@ def _emit_source(
     source_literal: int,
     scalar_inline_u32_zero: int,
     scalar_inline_u32_count: int,
+    inline_f32_sources: tuple[_InlineF32Source, ...],
     vector_source_vgpr0: int,
     vector_source_vgpr_count: int,
     source_path: Path,
@@ -512,6 +555,22 @@ def _emit_source(
         [
             "};",
             "",
+            f"static const loom_amdgpu_encoding_inline_f32_source_t k{table_prefix}InlineF32Sources[] = {{",
+        ]
+    )
+    for inline_source in inline_f32_sources:
+        lines.extend(
+            [
+                "    {",
+                f"        .bit_pattern = UINT32_C(0x{inline_source.bit_pattern:08x}),",
+                f"        .source = UINT16_C({inline_source.source}),",
+                "    },",
+            ]
+        )
+    lines.extend(
+        [
+            "};",
+            "",
         ]
     )
     if not table_views:
@@ -533,6 +592,8 @@ def _emit_source(
                 f"    .source_literal = {source_literal},",
                 f"    .scalar_inline_u32_zero = {scalar_inline_u32_zero},",
                 f"    .scalar_inline_u32_count = {scalar_inline_u32_count},",
+                f"    .inline_f32_sources = k{table_prefix}InlineF32Sources,",
+                f"    .inline_f32_source_count = IREE_ARRAYSIZE(k{table_prefix}InlineF32Sources),",
                 f"    .vector_source_vgpr0 = {vector_source_vgpr0},",
                 f"    .vector_source_vgpr_count = {vector_source_vgpr_count},",
                 f"    .formats = k{table_prefix}Formats,",
@@ -596,6 +657,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         name_pattern=re.compile(r"([0-9]+)"),
         description="OPR_SSRC inline integer",
     )
+    inline_f32_sources = _derive_predefined_f32_sources(
+        spec,
+        operand_type_name="OPR_SRC",
+    )
     vector_source_vgpr0, vector_source_vgpr_count = _derive_predefined_linear_range(
         spec,
         operand_type_name="OPR_SRC",
@@ -648,6 +713,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             source_literal=source_literal,
             scalar_inline_u32_zero=scalar_inline_u32_zero,
             scalar_inline_u32_count=scalar_inline_u32_count,
+            inline_f32_sources=inline_f32_sources,
             vector_source_vgpr0=vector_source_vgpr0,
             vector_source_vgpr_count=vector_source_vgpr_count,
             source_path=args.source,

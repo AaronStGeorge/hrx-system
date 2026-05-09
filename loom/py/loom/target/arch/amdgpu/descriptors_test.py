@@ -18,6 +18,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _REG_EXEC,
     _SCHEDULE_SALU,
     _SCHEDULE_VALU,
+    _SOURCE_INLINE_F32_ENCODING_ID,
     _SOURCE_INLINE_U32_ENCODING_ID,
     AMDGPU_ATOMIC_DESCRIPTOR_CATEGORY,
     AMDGPU_COMPARE_SELECT_DESCRIPTOR_CATEGORY,
@@ -298,6 +299,20 @@ def test_vop3_shift_immediate_is_constrained_to_inline_source_selector() -> None
     assert immediate.field_name == "imm32"
     assert immediate.encoding_id == _SOURCE_INLINE_U32_ENCODING_ID
     assert immediate.unsigned_max == 64
+
+
+def test_vop2_f32_inline_immediate_uses_enum_domain() -> None:
+    descriptor = next(
+        overlay
+        for overlay in _gfx12_core_overlays()
+        if overlay.descriptor_key == "amdgpu.v_add_f32.src0_inline"
+    )
+    assert len(descriptor.immediates) == 1
+    immediate = descriptor.immediates[0]
+    assert immediate.field_name == "imm32"
+    assert immediate.kind == ImmediateKind.ENUM
+    assert immediate.encoding_id == _SOURCE_INLINE_F32_ENCODING_ID
+    assert immediate.enum_domain == "amdgpu.source_inline_f32"
 
 
 def test_address_immediate_validation_rejects_missing_unit_metadata() -> None:

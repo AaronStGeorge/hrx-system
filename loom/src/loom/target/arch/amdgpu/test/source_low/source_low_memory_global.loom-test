@@ -437,21 +437,21 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @f32x8_split_b128() asm<
   %32 = global_load_b128 %29, %input_view {offset = 16}
   %loaded = concat(%30, %32) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>) -> reg<amdgpu.vgpr x8>
   %34 = slice %loaded[0] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
-  %35 = v_add_f32_lit %34, 1073741824
+  %35 = v_add_f32_src0_inline %34, 1073741824
   %36 = slice %loaded[1] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
-  %37 = v_add_f32_lit %36, 1073741824
+  %37 = v_add_f32_src0_inline %36, 1073741824
   %38 = slice %loaded[2] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
-  %39 = v_add_f32_lit %38, 1073741824
+  %39 = v_add_f32_src0_inline %38, 1073741824
   %40 = slice %loaded[3] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
-  %41 = v_add_f32_lit %40, 1073741824
+  %41 = v_add_f32_src0_inline %40, 1073741824
   %42 = slice %loaded[4] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
-  %43 = v_add_f32_lit %42, 1073741824
+  %43 = v_add_f32_src0_inline %42, 1073741824
   %44 = slice %loaded[5] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
-  %45 = v_add_f32_lit %44, 1073741824
+  %45 = v_add_f32_src0_inline %44, 1073741824
   %46 = slice %loaded[6] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
-  %47 = v_add_f32_lit %46, 1073741824
+  %47 = v_add_f32_src0_inline %46, 1073741824
   %48 = slice %loaded[7] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr>
-  %49 = v_add_f32_lit %48, 1073741824
+  %49 = v_add_f32_src0_inline %48, 1073741824
   %result = concat(%35, %37, %39, %41, %43, %45, %47, %49) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x8>
   %51 = slice %result[0] : reg<amdgpu.vgpr x8> -> reg<amdgpu.vgpr x4>
   global_store_b128 %29, %51, %output_view

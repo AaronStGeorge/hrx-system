@@ -54,4 +54,18 @@ TEST(AmdgpuEncodingTest, Vop2U32VgprUsesLiteralForLargeU32) {
   EXPECT_EQ(packet.bit_count, 64u);
 }
 
+TEST(AmdgpuEncodingTest, InlineF32SourceMapsBitPatternToSourceSelector) {
+  uint16_t source = 0;
+  EXPECT_TRUE(loom_amdgpu_encoding_inline_f32_source(
+      Rdna3EncodingTable(), UINT32_C(0x3f800000), &source));
+  EXPECT_EQ(source, 242u);
+}
+
+TEST(AmdgpuEncodingTest, InlineF32SourceRejectsUnsupportedBitPattern) {
+  uint16_t source = 1;
+  EXPECT_FALSE(loom_amdgpu_encoding_inline_f32_source(
+      Rdna3EncodingTable(), UINT32_C(0x40400000), &source));
+  EXPECT_EQ(source, 0u);
+}
+
 }  // namespace

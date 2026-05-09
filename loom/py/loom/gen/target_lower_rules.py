@@ -531,6 +531,10 @@ def _append_field(
         fields.append(f".{name} = {value_string}")
 
 
+def _u64_c_literal(value: int) -> str:
+    return f"UINT64_C({value})"
+
+
 def _value_ref_row(row: LowerValueRef) -> list[str]:
     fields: list[str] = []
     _append_field(fields, "kind", _VALUE_REF_KIND_C_NAMES[row.kind], always=True)
@@ -701,7 +705,7 @@ def _guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]
         GuardKind.VALUE_F64_EQUALS,
         GuardKind.INSTANCE_FLAGS_HAS_ALL,
     ):
-        _append_field(fields, "u64", row.u64, always=True)
+        _append_field(fields, "u64", _u64_c_literal(row.u64), always=True)
     if row.kind == GuardKind.DESCRIPTOR_AVAILABLE:
         _append_field(
             fields,
@@ -992,7 +996,12 @@ def _diagnostic_param_row(row: LowerDiagnosticParam) -> list[str]:
     if row.kind == DiagnosticParamKind.U32_LITERAL:
         _append_field(fields, "u32_value", row.u32_value, always=True)
     if row.kind == DiagnosticParamKind.U64_LITERAL:
-        _append_field(fields, "u64_value", row.u64_value, always=True)
+        _append_field(
+            fields,
+            "u64_value",
+            _u64_c_literal(row.u64_value),
+            always=True,
+        )
     if row.kind == DiagnosticParamKind.BOOL_LITERAL:
         _append_field(fields, "bool_value", str(row.bool_value).lower(), always=True)
     return fields

@@ -630,6 +630,14 @@ static iree_status_t loom_amdgpu_read_immediate_encoding_field_value(
       *out_value = source;
       return iree_ok_status();
     }
+    case LOOM_AMDGPU_IMMEDIATE_ENCODING_ID_SOURCE_INLINE_F32: {
+      uint16_t source = 0;
+      const bool encoded = loom_amdgpu_encoding_inline_f32_source(
+          state->encoding_table, (uint32_t)unsigned_value, &source);
+      IREE_ASSERT(encoded);
+      *out_value = source;
+      return iree_ok_status();
+    }
     default:
       *out_value = unsigned_value;
       return iree_ok_status();
