@@ -33,6 +33,7 @@ loom_check_test_suite(
         "scf_to_cfg.loom-test",
         "scf_unroll.loom-test",
         "symbol_dce.loom-test",
+        "value_facts.loom-test",
     ],
     runner = "//loom/src/loom/tools/loom-check:loom-check-test",
 )

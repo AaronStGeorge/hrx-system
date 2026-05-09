@@ -1528,6 +1528,20 @@ static iree_status_t loom_value_fact_table_seed_scalar_arg(
           module, value_id, loom_value_facts_unknown()));
 }
 
+static loom_value_facts_t loom_value_fact_table_unknown_for_value(
+    const loom_module_t* module, loom_value_id_t value_id) {
+  loom_value_facts_t facts = loom_value_facts_unknown();
+  if (value_id >= module->values.count) {
+    return facts;
+  }
+  loom_type_t type = loom_module_value_type(module, value_id);
+  if (loom_type_is_scalar(type)) {
+    facts =
+        loom_value_fact_table_clamp_scalar_type_domain(module, value_id, facts);
+  }
+  return facts;
+}
+
 static iree_status_t loom_value_fact_table_seed_type_extent_facts(
     loom_value_fact_table_t* table, const loom_module_t* module,
     loom_type_t type, const loom_value_id_t* result_ids, uint16_t result_count,
@@ -2361,6 +2375,20 @@ iree_status_t loom_value_fact_table_compute_op_and_report(
           results[i] >= module->values.count) {
         continue;
       }
+      // A result with no op-specific inference is still defined. Absence from
+      // the table is reserved for not-yet-computed or unreachable values.
+      loom_value_facts_t unknown_facts =
+          loom_value_fact_table_unknown_for_value(module, results[i]);
+      if (out_changed &&
+          (!loom_value_fact_table_has_entry(table, results[i]) ||
+           !loom_value_fact_table_facts_equal_for_type(
+               module, loom_module_value_type(module, results[i]), table,
+               loom_value_fact_table_lookup(table, results[i]), table,
+               unknown_facts))) {
+        *out_changed = true;
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_value_fact_table_define(table, results[i], unknown_facts));
       IREE_RETURN_IF_ERROR(loom_value_fact_table_seed_type_extent_facts(
           table, module, loom_module_value_type(module, results[i]),
           /*result_ids=*/NULL, /*result_count=*/0, /*result_facts=*/NULL,
