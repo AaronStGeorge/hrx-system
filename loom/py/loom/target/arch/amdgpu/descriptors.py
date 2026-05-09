@@ -3536,6 +3536,40 @@ def _v_cvt_f16_f32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_cvt_pk_u16_u32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_cvt_pk_u16_u32",
+        instruction_name="V_CVT_PK_U16_U32",
+        mnemonic="v_cvt_pk_u16_u32",
+        encoding_name="ENC_VOP3",
+        semantic_tag="convert.pack.u32.u16x2",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("low")),
+            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("high")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_cvt_pk_bf16_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_cvt_pk_bf16_f32",
+        instruction_name="V_CVT_PK_BF16_F32",
+        mnemonic="v_cvt_pk_bf16_f32",
+        encoding_name="ENC_VOP3",
+        semantic_tag="convert.float.f32.bf16x2",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("low")),
+            AmdgpuOperandOverlay("SRC1", _sgpr_vgpr_operand("high")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_cvt_f32_u32_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_cvt_f32_u32",
@@ -8292,6 +8326,7 @@ def _cdna_core_overlays(
     *,
     global_load_lds_variants: tuple[tuple[str, str, int], ...],
     include_v_dot2_f32_bf16: bool,
+    include_v_cvt_pk_bf16_f32: bool,
     include_ds_transpose_reads: bool,
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
@@ -8357,6 +8392,8 @@ def _cdna_core_overlays(
         _v_rcp_f32_overlay(),
         _v_cvt_f32_f16_overlay(),
         _v_cvt_f16_f32_overlay(),
+        _v_cvt_pk_u16_u32_overlay(),
+        *((_v_cvt_pk_bf16_f32_overlay(),) if include_v_cvt_pk_bf16_f32 else ()),
         _v_cvt_f32_i32_overlay(),
         _v_cvt_f32_u32_overlay(),
         *_v_cmp_overlays(),
@@ -8597,6 +8634,7 @@ def _gfx940_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return _cdna_core_overlays(
         global_load_lds_variants=_GLOBAL_LOAD_LDS_DWORD_VARIANTS,
         include_v_dot2_f32_bf16=False,
+        include_v_cvt_pk_bf16_f32=False,
         include_ds_transpose_reads=False,
     )
 
@@ -8605,6 +8643,7 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return _cdna_core_overlays(
         global_load_lds_variants=_GLOBAL_LOAD_LDS_GFX950_VARIANTS,
         include_v_dot2_f32_bf16=True,
+        include_v_cvt_pk_bf16_f32=True,
         include_ds_transpose_reads=True,
     )
 
@@ -8687,6 +8726,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_rcp_f32_overlay(),
         _v_cvt_f32_f16_overlay(),
         _v_cvt_f16_f32_overlay(),
+        _v_cvt_pk_u16_u32_overlay(),
         _v_cvt_f32_i32_overlay(),
         _v_cvt_f32_u32_overlay(),
         *_v_cmp_overlays(),
@@ -8966,6 +9006,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_rcp_f32_overlay(),
         _v_cvt_f32_f16_overlay(),
         _v_cvt_f16_f32_overlay(),
+        _v_cvt_pk_u16_u32_overlay(),
         _v_cvt_f32_i32_overlay(),
         _v_cvt_f32_u32_overlay(),
         *_v_cmp_overlays(),
@@ -9272,6 +9313,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_rcp_f32_overlay(),
         _v_cvt_f32_f16_overlay(),
         _v_cvt_f16_f32_overlay(),
+        _v_cvt_pk_u16_u32_overlay(),
         _v_cvt_f32_i32_overlay(),
         _v_cvt_f32_u32_overlay(),
         *_v_cmp_overlays(),
