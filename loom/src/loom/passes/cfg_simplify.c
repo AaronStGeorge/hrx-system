@@ -1578,6 +1578,68 @@ static bool loom_cfg_simplify_branch_args_match_dest(
   return true;
 }
 
+static iree_status_t loom_cfg_simplify_validate_block_arg_replacements(
+    const loom_cfg_simplify_state_t* state, const loom_block_t* block,
+    loom_op_t* predecessor_br, loom_value_slice_t replacements,
+    bool* out_valid) {
+  *out_valid = false;
+  if (replacements.count != block->arg_count) return iree_ok_status();
+  if (block->arg_count == 0) {
+    *out_valid = true;
+    return iree_ok_status();
+  }
+
+  loom_value_id_t* old_args = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(state->analysis_arena, block->arg_count,
+                                sizeof(*old_args), (void**)&old_args));
+  for (uint16_t i = 0; i < block->arg_count; ++i) {
+    old_args[i] = loom_block_arg_id(block, i);
+  }
+
+  loom_type_value_remap_t remap = {
+      .source_values = old_args,
+      .target_values = replacements.values,
+      .count = block->arg_count,
+  };
+  for (uint16_t i = 0; i < block->arg_count; ++i) {
+    loom_value_id_t old_arg = old_args[i];
+    loom_value_id_t replacement = replacements.values[i];
+    if (old_arg == LOOM_VALUE_ID_INVALID ||
+        replacement == LOOM_VALUE_ID_INVALID ||
+        old_arg >= state->module->values.count ||
+        replacement >= state->module->values.count) {
+      return iree_ok_status();
+    }
+    if (!loom_value_is_available_before_op(state->dominance, replacement,
+                                           predecessor_br) ||
+        !loom_value_type_is_available_before_op(state->dominance, replacement,
+                                                predecessor_br)) {
+      return iree_ok_status();
+    }
+    loom_type_t old_type = loom_module_value_type(state->module, old_arg);
+    loom_type_t replacement_type =
+        loom_module_value_type(state->module, replacement);
+    if (!loom_type_equal_after_value_remap(old_type, replacement_type,
+                                           &remap)) {
+      return iree_ok_status();
+    }
+  }
+
+  *out_valid = true;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_cfg_simplify_replace_block_args(
+    loom_cfg_simplify_state_t* state, loom_block_t* block,
+    loom_value_slice_t replacements) {
+  for (uint16_t i = 0; i < block->arg_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_with(
+        state->rewriter, loom_block_arg_id(block, i), replacements.values[i]));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_cfg_simplify_compose_forward_args(
     const loom_cfg_simplify_state_t* state, const loom_block_t* forward_block,
     loom_op_t* predecessor_br, const loom_block_t* new_dest,
@@ -1636,6 +1698,17 @@ static iree_status_t loom_cfg_simplify_forward_branch_edge(
       &valid_args));
   if (!valid_args) {
     return iree_ok_status();
+  }
+  if (old_dest->arg_count != 0) {
+    loom_value_slice_t replacements = loom_cfg_br_args(predecessor_br);
+    bool valid_replacements = false;
+    IREE_RETURN_IF_ERROR(loom_cfg_simplify_validate_block_arg_replacements(
+        state, old_dest, predecessor_br, replacements, &valid_replacements));
+    if (!valid_replacements) {
+      return iree_ok_status();
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_cfg_simplify_replace_block_args(state, old_dest, replacements));
   }
   IREE_RETURN_IF_ERROR(
       loom_cfg_simplify_replace_br(state, predecessor_br, new_dest,
@@ -1744,68 +1817,6 @@ static bool loom_cfg_simplify_find_fusable_predecessor(
   return true;
 }
 
-static iree_status_t loom_cfg_simplify_validate_fused_block_args(
-    const loom_cfg_simplify_state_t* state, const loom_block_t* block,
-    loom_op_t* predecessor_br, loom_value_slice_t replacements,
-    bool* out_valid) {
-  *out_valid = false;
-  if (replacements.count != block->arg_count) return iree_ok_status();
-  if (block->arg_count == 0) {
-    *out_valid = true;
-    return iree_ok_status();
-  }
-
-  loom_value_id_t* old_args = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate_array(state->analysis_arena, block->arg_count,
-                                sizeof(*old_args), (void**)&old_args));
-  for (uint16_t i = 0; i < block->arg_count; ++i) {
-    old_args[i] = loom_block_arg_id(block, i);
-  }
-
-  loom_type_value_remap_t remap = {
-      .source_values = old_args,
-      .target_values = replacements.values,
-      .count = block->arg_count,
-  };
-  for (uint16_t i = 0; i < block->arg_count; ++i) {
-    loom_value_id_t old_arg = old_args[i];
-    loom_value_id_t replacement = replacements.values[i];
-    if (old_arg == LOOM_VALUE_ID_INVALID ||
-        replacement == LOOM_VALUE_ID_INVALID ||
-        old_arg >= state->module->values.count ||
-        replacement >= state->module->values.count) {
-      return iree_ok_status();
-    }
-    if (!loom_value_is_available_before_op(state->dominance, replacement,
-                                           predecessor_br) ||
-        !loom_value_type_is_available_before_op(state->dominance, replacement,
-                                                predecessor_br)) {
-      return iree_ok_status();
-    }
-    loom_type_t old_type = loom_module_value_type(state->module, old_arg);
-    loom_type_t replacement_type =
-        loom_module_value_type(state->module, replacement);
-    if (!loom_type_equal_after_value_remap(old_type, replacement_type,
-                                           &remap)) {
-      return iree_ok_status();
-    }
-  }
-
-  *out_valid = true;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_cfg_simplify_replace_block_args(
-    loom_cfg_simplify_state_t* state, loom_block_t* block,
-    loom_value_slice_t replacements) {
-  for (uint16_t i = 0; i < block->arg_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_rewriter_replace_all_uses_with(
-        state->rewriter, loom_block_arg_id(block, i), replacements.values[i]));
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_cfg_simplify_move_block_ops_before(
     loom_cfg_simplify_state_t* state, loom_block_t* block,
     loom_op_t* before_op) {
@@ -1853,7 +1864,7 @@ static iree_status_t loom_cfg_simplify_fuse_single_predecessor_blocks(
     }
 
     bool valid_replacements = false;
-    IREE_RETURN_IF_ERROR(loom_cfg_simplify_validate_fused_block_args(
+    IREE_RETURN_IF_ERROR(loom_cfg_simplify_validate_block_arg_replacements(
         state, block, predecessor_br, replacements, &valid_replacements));
     if (!valid_replacements) continue;
 
