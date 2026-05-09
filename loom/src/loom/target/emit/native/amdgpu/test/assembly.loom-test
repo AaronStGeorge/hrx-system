@@ -107,18 +107,15 @@ low.func.def target(@gfx11_target) @gfx11_concat_source_existing_span(%row: reg<
 
 // ----
   v_mov_b32 v1, 0
-  s_mov_b32 s5, 0
-  s_mov_b32 s8, 2
+  s_mov_b32 s9, 0
+  s_mov_b32 s3, 2
   s_add_u32 s0, s0, s2
   s_add_u32 s0, s0, s4
-  s_mov_b32 s4, s1
-  s_lshl_b64 s[4:5], s[4:5], s8
-  s_add_u32 s1, s6, s4
-  s_addc_u32 s2, s7, s5
-  s_cmp_lt_i32 s0, s3
-  s_mov_b32 s0, s1
-  s_mov_b32 s1, s2
-  global_load_b32 v1, v1, s[0:1] offset:0
+  s_lshl_b64 s[2:3], s[8:9], s3
+  s_add_u32 s2, s6, s2
+  s_addc_u32 s3, s7, s3
+  s_cmp_lt_i32 s0, s1
+  global_load_b32 v1, v1, s[2:3] offset:0
   v_cmp_lt_i32 s[0:1], v1, v0
   s_endpgm
 
@@ -749,11 +746,10 @@ low.func.def target(@gfx11_target) @gfx11_overlapping_copy(%source: reg<amdgpu.s
   s_mov_b32 s3, s2
   s_mov_b32 s2, s1
   s_mov_b32 s1, s0
-  s_mov_b32 s0, s1
-  s_mov_b32 s1, s2
-  s_mov_b32 s2, s3
-  s_mov_b32 s3, s4
-  buffer_store_dword v0, v1, s[0:3], s5 offen offset:0
+  s_mov_b32 s4, s1
+  s_mov_b32 s5, s2
+  s_mov_b32 s6, s3
+  buffer_store_dword v0, v1, s[4:7], s8 offen offset:0
   s_endpgm
 
 // ====
