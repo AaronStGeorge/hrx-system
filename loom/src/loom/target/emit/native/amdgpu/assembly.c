@@ -19,12 +19,16 @@
 #include "loom/target/emit/native/amdgpu/storage_layout.h"
 #include "loom/target/emit/native/assembly.h"
 
-typedef struct loom_amdgpu_wait_packet_emit_state_t {
+typedef struct loom_amdgpu_wait_emit_state_t {
   // Wait-packet plan consumed in scheduled insertion order.
   const loom_amdgpu_wait_packet_plan_t* wait_packets;
+  // Wait-state plan consumed in scheduled insertion order.
+  const loom_amdgpu_wait_state_plan_t* wait_states;
   // Next wait-packet row to compare with the current scheduled packet.
-  iree_host_size_t next_packet_index;
-} loom_amdgpu_wait_packet_emit_state_t;
+  iree_host_size_t next_wait_packet_index;
+  // Next wait-state row to compare with the current scheduled packet.
+  iree_host_size_t next_wait_state_index;
+} loom_amdgpu_wait_emit_state_t;
 
 static iree_status_t loom_amdgpu_descriptor_key(
     const loom_native_assembly_packet_context_t* context,
@@ -977,12 +981,15 @@ static bool loom_amdgpu_wait_packet_matches_packet(
 
 static iree_status_t loom_amdgpu_append_wait_packets_before_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
-  loom_amdgpu_wait_packet_emit_state_t* state =
-      (loom_amdgpu_wait_packet_emit_state_t*)user_data;
+  loom_amdgpu_wait_emit_state_t* state =
+      (loom_amdgpu_wait_emit_state_t*)user_data;
+  if (state->wait_packets == NULL) {
+    return iree_ok_status();
+  }
   const loom_low_schedule_node_t* node = context->packet->node;
-  while (state->next_packet_index < state->wait_packets->packet_count) {
+  while (state->next_wait_packet_index < state->wait_packets->packet_count) {
     const loom_amdgpu_wait_packet_t* wait_packet =
-        &state->wait_packets->packets[state->next_packet_index];
+        &state->wait_packets->packets[state->next_wait_packet_index];
     if (loom_amdgpu_wait_packet_is_before_node(wait_packet, node)) {
       return iree_make_status(
           IREE_STATUS_FAILED_PRECONDITION,
@@ -994,9 +1001,74 @@ static iree_status_t loom_amdgpu_append_wait_packets_before_packet(
     }
     IREE_RETURN_IF_ERROR(loom_amdgpu_append_materialized_wait_packet(
         context, wait_packet, state->wait_packets));
-    ++state->next_packet_index;
+    ++state->next_wait_packet_index;
   }
   return iree_ok_status();
+}
+
+static bool loom_amdgpu_wait_state_is_before_node(
+    const loom_amdgpu_wait_state_t* wait_state,
+    const loom_low_schedule_node_t* node) {
+  return wait_state->block_index < node->block_index ||
+         (wait_state->block_index == node->block_index &&
+          wait_state->scheduled_ordinal < node->scheduled_ordinal);
+}
+
+static bool loom_amdgpu_wait_state_matches_packet(
+    const loom_amdgpu_wait_state_t* wait_state,
+    const loom_low_packet_view_t* packet) {
+  const loom_low_schedule_node_t* node = packet->node;
+  return wait_state->block_index == node->block_index &&
+         wait_state->scheduled_ordinal == node->scheduled_ordinal &&
+         wait_state->node_index == packet->node_index;
+}
+
+static iree_status_t loom_amdgpu_append_s_nop_cycles(
+    const loom_native_assembly_packet_context_t* context,
+    uint16_t cycle_count) {
+  while (cycle_count != 0) {
+    const uint16_t chunk = cycle_count > LOOM_AMDGPU_WAIT_STATE_MAX_S_NOP_CYCLES
+                               ? LOOM_AMDGPU_WAIT_STATE_MAX_S_NOP_CYCLES
+                               : cycle_count;
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        context->builder, "  s_nop %" PRIu16 "\n", (uint16_t)(chunk - 1)));
+    cycle_count -= chunk;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_append_wait_states_before_packet(
+    void* user_data, const loom_native_assembly_packet_context_t* context) {
+  loom_amdgpu_wait_emit_state_t* state =
+      (loom_amdgpu_wait_emit_state_t*)user_data;
+  if (state->wait_states == NULL) {
+    return iree_ok_status();
+  }
+  const loom_low_schedule_node_t* node = context->packet->node;
+  while (state->next_wait_state_index < state->wait_states->state_count) {
+    const loom_amdgpu_wait_state_t* wait_state =
+        &state->wait_states->states[state->next_wait_state_index];
+    if (loom_amdgpu_wait_state_is_before_node(wait_state, node)) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "AMDGPU wait-state plan contains an insertion point before the "
+          "current scheduled packet");
+    }
+    if (!loom_amdgpu_wait_state_matches_packet(wait_state, context->packet)) {
+      return iree_ok_status();
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_append_s_nop_cycles(context, wait_state->cycle_count));
+    ++state->next_wait_state_index;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_append_waits_before_packet(
+    void* user_data, const loom_native_assembly_packet_context_t* context) {
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_append_wait_packets_before_packet(user_data, context));
+  return loom_amdgpu_append_wait_states_before_packet(user_data, context);
 }
 
 static iree_status_t loom_amdgpu_copy_mnemonic(
@@ -1547,6 +1619,20 @@ static iree_status_t loom_amdgpu_verify_wait_packet_plan(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_verify_wait_state_plan(
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
+    const loom_amdgpu_wait_state_plan_t* wait_states) {
+  if (wait_states->schedule != schedule ||
+      wait_states->allocation != allocation) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU assembly wait states must be derived from the emitted schedule "
+        "and allocation");
+  }
+  return iree_ok_status();
+}
+
 static const loom_native_assembly_structural_packet_callback_t
     kLoomAmdgpuAssemblyStructuralPacketCallbacks[] = {
         {
@@ -1635,30 +1721,49 @@ iree_status_t loom_amdgpu_emit_assembly_fragment(
                                               builder, scratch_arena);
 }
 
-iree_status_t loom_amdgpu_emit_assembly_fragment_with_wait_packets(
+iree_status_t loom_amdgpu_emit_assembly_fragment_with_options(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
-    const loom_amdgpu_wait_packet_plan_t* wait_packets,
+    const loom_amdgpu_assembly_fragment_options_t* options,
     iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena) {
   IREE_RETURN_IF_ERROR(loom_amdgpu_verify_assembly_target(schedule));
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_verify_wait_packet_plan(schedule, wait_packets));
+  const loom_amdgpu_wait_packet_plan_t* wait_packets =
+      options ? options->wait_packets : NULL;
+  const loom_amdgpu_wait_state_plan_t* wait_states =
+      options ? options->wait_states : NULL;
+  if (wait_packets != NULL) {
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_verify_wait_packet_plan(schedule, wait_packets));
+  }
+  if (wait_states != NULL) {
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_verify_wait_state_plan(schedule, allocation, wait_states));
+  }
 
-  loom_amdgpu_wait_packet_emit_state_t wait_state = {
+  loom_amdgpu_wait_emit_state_t wait_state = {
       .wait_packets = wait_packets,
+      .wait_states = wait_states,
   };
-  const loom_native_assembly_format_options_t options =
+  const loom_native_assembly_format_options_t format_options =
       loom_amdgpu_assembly_options(
           (loom_native_assembly_append_packet_callback_t){
-              .fn = loom_amdgpu_append_wait_packets_before_packet,
+              .fn = loom_amdgpu_append_waits_before_packet,
               .user_data = &wait_state,
           });
   IREE_RETURN_IF_ERROR(loom_native_assembly_format_fragment(
-      schedule, allocation, &options, builder, scratch_arena));
-  if (wait_state.next_packet_index != wait_packets->packet_count) {
+      schedule, allocation, &format_options, builder, scratch_arena));
+  if (wait_packets != NULL &&
+      wait_state.next_wait_packet_index != wait_packets->packet_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU assembly wait packet plan contains an unmatched insertion "
+        "point");
+  }
+  if (wait_states != NULL &&
+      wait_state.next_wait_state_index != wait_states->state_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU assembly wait-state plan contains an unmatched insertion "
         "point");
   }
   return iree_ok_status();

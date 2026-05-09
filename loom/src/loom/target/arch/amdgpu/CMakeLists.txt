@@ -581,6 +581,29 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    wait_states
+  HDRS
+    "wait_states.h"
+  SRCS
+    "wait_states.c"
+  DEPS
+    ::matrix_contract
+    ::target_id
+    ::target_info
+    ::target_refs
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::move_sequence
+    loom::src::loom::codegen::low::packet
+    loom::src::loom::codegen::low::schedule
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     provider
   HDRS
     "provider.h"
@@ -722,6 +745,7 @@ iree_c_embed_data(
     "execution/testdata/gfx11_wmma_zero.loom"
     "execution/testdata/lds_b128_roundtrip.loom"
     "execution/testdata/masked_upsample6_reduce.loom"
+    "execution/testdata/model_dense_projection_tile_bf16.loom"
     "execution/testdata/model_dense_projection_tile_f16.loom"
     "execution/testdata/model_swiglu_tile4_f32.loom"
     "execution/testdata/scf_if_vector_result.loom"
@@ -1588,10 +1612,13 @@ loom_cc_library(
   SRCS
     "wait_plan.c"
   DEPS
+    ::target_refs
     iree::base
     iree::base::internal::arena
+    loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::function
+    loom::src::loom::codegen::low::packet
     loom::src::loom::codegen::low::schedule
     loom::src::loom::ir
     loom::src::loom::ops::low

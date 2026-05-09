@@ -33,6 +33,7 @@ loom_cc_library(
     loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::arch::amdgpu::target_refs
     loom::src::loom::target::arch::amdgpu::wait_packets
+    loom::src::loom::target::arch::amdgpu::wait_states
     loom::src::loom::target::emit::native::assembly
   PUBLIC
 )
@@ -52,6 +53,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::target::arch::amdgpu::wait_packets
     loom::src::loom::target::arch::amdgpu::wait_plan
+    loom::src::loom::target::arch::amdgpu::wait_states
     loom::src::loom::tools::loom-check::execute
   PUBLIC
 )
@@ -143,6 +145,7 @@ loom_cc_library(
     loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::arch::amdgpu::target_refs
     loom::src::loom::target::arch::amdgpu::wait_packets
+    loom::src::loom::target::arch::amdgpu::wait_states
     loom::src::loom::target::emit::native::fragment
   PUBLIC
 )
@@ -207,6 +210,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::schedule
     loom::src::loom::target::arch::amdgpu::hal_kernel_abi
     loom::src::loom::target::arch::amdgpu::wait_packets
+    loom::src::loom::target::arch::amdgpu::wait_states
   PUBLIC
 )
 
@@ -228,6 +232,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::schedule
     loom::src::loom::target::arch::amdgpu::hal_kernel_abi
     loom::src::loom::target::arch::amdgpu::wait_packets
+    loom::src::loom::target::arch::amdgpu::wait_states
   PUBLIC
 )
 
@@ -307,6 +312,7 @@ loom_cc_library(
     loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::arch::amdgpu::wait_packets
     loom::src::loom::target::arch::amdgpu::wait_plan
+    loom::src::loom::target::arch::amdgpu::wait_states
     loom::src::loom::target::compile_report
     loom::src::loom::target::compile_report_low
     loom::src::loom::target::entry_selection

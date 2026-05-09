@@ -554,6 +554,40 @@ low.func.def target(@gfx_target) @gfx11_smem_wait_drains_cross_block_peer(%kerna
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx942_mfma_result_wait_state
+amdgpu.target<gfx942> @gfx942_target
+low.func.def target(@gfx942_target) @gfx942_mfma_result_wait_state(%lhs: reg<amdgpu.vgpr x2>, %rhs: reg<amdgpu.vgpr x2>, %acc: reg<amdgpu.vgpr x4>, %addr: reg<amdgpu.vgpr>, %base: reg<amdgpu.sgpr x2>, %m0: reg<amdgpu.m0>) {
+  %result = low.op<amdgpu.v_mfma_f32_16x16x16_bf16>(%lhs, %rhs, %acc) : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x4>) -> %acc as reg<amdgpu.vgpr x4>
+  %lane = low.slice %result[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  low.op<amdgpu.global_store_b32_saddr>(%addr, %lane, %base, %m0) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.return
+}
+
+// ----
+  v_mfma_f32_16x16x16_bf16 v[4:7], v[0:1], v[2:3], v[4:7]
+  s_nop 6
+  global_store_dword v8, v4, s[0:1] offset:0
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx942_mfma_valu_operand_wait_state
+amdgpu.target<gfx942> @gfx942_target
+low.func.def target(@gfx942_target) @gfx942_mfma_valu_operand_wait_state(%lhs: reg<amdgpu.vgpr x2>, %rhs0: reg<amdgpu.vgpr>, %rhs1: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr x4>) {
+  %rhs0_copy = low.op<amdgpu.v_mov_b32_copy>(%rhs0) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %rhs = low.concat(%rhs0_copy, %rhs1) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %result = low.op<amdgpu.v_mfma_f32_16x16x16_bf16>(%lhs, %rhs, %acc) : (reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x2>, reg<amdgpu.vgpr x4>) -> %acc as reg<amdgpu.vgpr x4>
+  low.return
+}
+
+// ----
+  v_mov_b32_copy v0, v0
+  s_nop 1
+  v_mfma_f32_16x16x16_bf16 v[4:7], v[2:3], v[0:1], v[4:7]
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @wait_fragment
 amdgpu.target<gfx950> @gfx_target
 low.func.def target(@gfx_target) @wait_fragment(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>) asm<amdgpu.cdna4.core> {

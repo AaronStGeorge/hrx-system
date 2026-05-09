@@ -20,6 +20,7 @@
 #include "loom/codegen/low/schedule/types.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 #include "loom/target/arch/amdgpu/wait_packets.h"
+#include "loom/target/arch/amdgpu/wait_states.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,6 +31,9 @@ typedef struct loom_amdgpu_kernel_assembly_options_t {
   const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout;
   // Optional planned wait packets inserted into the native text stream.
   const loom_amdgpu_wait_packet_plan_t* wait_packets;
+  // Optional planned fixed wait-state noops inserted into the native text
+  // stream.
+  const loom_amdgpu_wait_state_plan_t* wait_states;
 } loom_amdgpu_kernel_assembly_options_t;
 
 // Emits complete AMDGPU assembly for one ABI-lowered target-low HAL kernel.
@@ -47,16 +51,6 @@ iree_status_t loom_amdgpu_emit_kernel_assembly_with_options(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
     const loom_amdgpu_kernel_assembly_options_t* options,
-    iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena);
-
-// Emits complete AMDGPU assembly with planned wait packets inserted into the
-// native fragment before the kernel descriptor is appended. |wait_packets| must
-// be derived from |schedule| and remain alive for the duration of emission.
-// |scratch_arena| receives transient ABI layout and metadata adapter storage.
-iree_status_t loom_amdgpu_emit_kernel_assembly_with_wait_packets(
-    const loom_low_schedule_table_t* schedule,
-    const loom_low_allocation_table_t* allocation,
-    const loom_amdgpu_wait_packet_plan_t* wait_packets,
     iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena);
 
 #ifdef __cplusplus

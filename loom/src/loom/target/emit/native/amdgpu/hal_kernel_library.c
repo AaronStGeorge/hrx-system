@@ -28,6 +28,7 @@
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/arch/amdgpu/wait_packets.h"
 #include "loom/target/arch/amdgpu/wait_plan.h"
+#include "loom/target/arch/amdgpu/wait_states.h"
 #include "loom/target/compile_report_low.h"
 #include "loom/target/emit/native/amdgpu/kernel_hsaco.h"
 #include "loom/target/emit/native/amdgpu/preflight.h"
@@ -215,16 +216,20 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_hsaco_contribution(
     loom_amdgpu_kernel_hsaco_contribution_t* out_contribution,
     iree_arena_allocator_t* table_arena) {
   loom_amdgpu_wait_plan_t wait_plan = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_wait_plan_build(&frame->schedule, table_arena, &wait_plan));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_wait_plan_build(
+      &frame->schedule, &frame->allocation, table_arena, &wait_plan));
   loom_amdgpu_wait_packet_plan_t wait_packets = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_wait_packet_plan_build(
       &wait_plan, table_arena, &wait_packets));
+  loom_amdgpu_wait_state_plan_t wait_states = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_wait_state_plan_build(
+      &frame->schedule, &frame->allocation, table_arena, &wait_states));
 
   const loom_amdgpu_kernel_hsaco_options_t hsaco_options = {
       .abi_layout = abi_layout,
       .preflight = preflight,
       .wait_packets = &wait_packets,
+      .wait_states = &wait_states,
   };
   return loom_amdgpu_build_kernel_hsaco_contribution(
       &frame->schedule, &frame->allocation, &hsaco_options, out_contribution,

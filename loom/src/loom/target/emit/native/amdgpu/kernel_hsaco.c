@@ -34,10 +34,15 @@ iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
   iree_const_byte_span_t text = iree_const_byte_span_empty();
   const loom_amdgpu_wait_packet_plan_t* wait_packets =
       options ? options->wait_packets : NULL;
-  if (wait_packets != NULL) {
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_encode_instruction_stream_with_wait_packets(
-            schedule, allocation, wait_packets, &text, scratch_arena));
+  const loom_amdgpu_wait_state_plan_t* wait_states =
+      options ? options->wait_states : NULL;
+  if (wait_packets != NULL || wait_states != NULL) {
+    const loom_amdgpu_encode_instruction_stream_options_t encode_options = {
+        .wait_packets = wait_packets,
+        .wait_states = wait_states,
+    };
+    IREE_RETURN_IF_ERROR(loom_amdgpu_encode_instruction_stream_with_options(
+        schedule, allocation, &encode_options, &text, scratch_arena));
   } else {
     IREE_RETURN_IF_ERROR(loom_amdgpu_encode_instruction_stream(
         schedule, allocation, &text, scratch_arena));
@@ -50,14 +55,17 @@ iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
   };
   const uint64_t wait_packet_count =
       wait_packets ? wait_packets->packet_count : 0;
+  const uint64_t wait_state_instruction_count =
+      loom_amdgpu_wait_state_plan_instruction_count(wait_states);
   *out_contribution = (loom_amdgpu_kernel_hsaco_contribution_t){
       .target = record.target_id,
       .processor = record.processor->processor,
       .kernel = kernel,
       .summary =
           {
-              .instruction_count =
-                  schedule->scheduled_node_count + wait_packet_count,
+              .instruction_count = schedule->scheduled_node_count +
+                                   wait_packet_count +
+                                   wait_state_instruction_count,
               .text_byte_count = text.data_length,
               .text_storage_byte_count = text.data_length,
               .private_segment_fixed_size =

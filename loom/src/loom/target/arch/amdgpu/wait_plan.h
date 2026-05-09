@@ -18,6 +18,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/schedule/types.h"
 
 #ifdef __cplusplus
@@ -80,6 +81,8 @@ typedef enum loom_amdgpu_wait_plan_reason_e {
   LOOM_AMDGPU_WAIT_PLAN_REASON_SSA_USE = 2,
   // A barrier observes memory that may still have outstanding packets.
   LOOM_AMDGPU_WAIT_PLAN_REASON_BARRIER = 3,
+  // A packet reuses physical VGPRs still consumed by an outstanding store.
+  LOOM_AMDGPU_WAIT_PLAN_REASON_STORE_SOURCE_REUSE = 4,
 } loom_amdgpu_wait_plan_reason_t;
 
 // One AMDGPU wait-counter action in scheduled packet order.
@@ -132,12 +135,15 @@ iree_string_view_t loom_amdgpu_wait_plan_action_kind_name(
 iree_string_view_t loom_amdgpu_wait_plan_reason_name(
     loom_amdgpu_wait_plan_reason_t reason);
 
-// Builds an AMDGPU wait-counter plan from a scheduled low function. The caller
-// must keep |schedule| immutable and |arena| alive for as long as |out_plan| is
-// used.
+// Builds an AMDGPU wait-counter plan from a scheduled low function. When
+// |allocation| is provided, the plan also covers post-allocation physical
+// register reuse hazards such as VMEM stores whose VGPR sources have not yet
+// been consumed by the memory pipe. The caller must keep |schedule|,
+// |allocation|, and |arena| immutable/alive for as long as |out_plan| is used.
 iree_status_t loom_amdgpu_wait_plan_build(
-    const loom_low_schedule_table_t* schedule, iree_arena_allocator_t* arena,
-    loom_amdgpu_wait_plan_t* out_plan);
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
+    iree_arena_allocator_t* arena, loom_amdgpu_wait_plan_t* out_plan);
 
 // Appends a compact JSON representation of |plan| to |builder|.
 iree_status_t loom_amdgpu_wait_plan_format_json(

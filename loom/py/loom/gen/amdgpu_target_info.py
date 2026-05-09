@@ -61,6 +61,7 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
 @dataclass(frozen=True, slots=True)
 class _AmdgpuDescriptorSetRow:
     info: AmdgpuDescriptorSetInfo
+    s_nop_opcode: int
     s_endpgm_opcode: int
     s_branch_opcode: int
     s_cbranch_scc0_opcode: int
@@ -190,6 +191,7 @@ def _materialize_descriptor_set_rows(
         rows.append(
             _AmdgpuDescriptorSetRow(
                 info=info,
+                s_nop_opcode=_sopp_opcode(spec, "S_NOP"),
                 s_endpgm_opcode=_sopp_opcode(spec, "S_ENDPGM"),
                 s_branch_opcode=_sopp_opcode(spec, "S_BRANCH"),
                 s_cbranch_scc0_opcode=_sopp_opcode(spec, "S_CBRANCH_SCC0"),
@@ -240,6 +242,8 @@ def _validate_descriptor_sets(descriptor_sets: Sequence[AmdgpuDescriptorSetInfo]
 
 def _validate_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> None:
     for row in rows:
+        if row.s_nop_opcode < 0 or row.s_nop_opcode > 0xFFFF:
+            raise ValueError(f"AMDGPU s_nop opcode for {row.info.key} must fit u16")
         if row.s_endpgm_opcode < 0 or row.s_endpgm_opcode > 0xFFFF:
             raise ValueError(f"AMDGPU s_endpgm opcode for {row.info.key} must fit u16")
         if row.s_branch_opcode < 0 or row.s_branch_opcode > 0xFFFF:
@@ -322,10 +326,11 @@ def _emit_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> list[s
     packet_encoding_width = len("packet_encoding")
     cache_swizzle_width = len("LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_STRIDE14_ENABLE_BIT")
     lines = [
-        "#define LOOM_AMDGPU_DESCRIPTOR_SET_INFO(ordinal_, descriptor_set_key_, s_endpgm_opcode_, s_branch_opcode_, s_cbranch_scc0_opcode_, s_cbranch_scc1_opcode_, supports_descriptor_packet_encoding_, buffer_resource_cache_swizzle_, vector_memory_cache_policy_encoding_) \\",
+        "#define LOOM_AMDGPU_DESCRIPTOR_SET_INFO(ordinal_, descriptor_set_key_, s_nop_opcode_, s_endpgm_opcode_, s_branch_opcode_, s_cbranch_scc0_opcode_, s_cbranch_scc1_opcode_, supports_descriptor_packet_encoding_, buffer_resource_cache_swizzle_, vector_memory_cache_policy_encoding_) \\",
         "  { \\",
         "    .descriptor_set_ordinal = ordinal_, \\",
         "    .descriptor_set_key = IREE_SVL(descriptor_set_key_), \\",
+        "    .s_nop_opcode = UINT16_C(s_nop_opcode_), \\",
         "    .s_endpgm_opcode = UINT16_C(s_endpgm_opcode_), \\",
         "    .s_branch_opcode = UINT16_C(s_branch_opcode_), \\",
         "    .s_cbranch_scc0_opcode = UINT16_C(s_cbranch_scc0_opcode_), \\",
@@ -336,13 +341,14 @@ def _emit_descriptor_set_rows(rows: Sequence[_AmdgpuDescriptorSetRow]) -> list[s
         "  }",
         "",
         "static const loom_amdgpu_descriptor_set_info_t kAmdgpuDescriptorSetInfos[] = {",
-        "  // ordinal         descriptor_set_key     s_endpgm s_branch s_cbranch_scc0 s_cbranch_scc1 packet_encoding cache_swizzle cache_policy",
+        "  // ordinal         descriptor_set_key     s_nop s_endpgm s_branch s_cbranch_scc0 s_cbranch_scc1 packet_encoding cache_swizzle cache_policy",
     ]
     lines.extend(
         (
             "  LOOM_AMDGPU_DESCRIPTOR_SET_INFO("
             f"{_padded_arg(_u16_expr(amdgpu_descriptor_set_ordinal(info.key)), ordinal_width)}"
             f"{_padded_arg(_c_string_arg(info.key), key_width)}"
+            f"{_padded_arg(f'0x{row.s_nop_opcode:03x}', opcode_width)}"
             f"{_padded_arg(f'0x{row.s_endpgm_opcode:03x}', opcode_width)}"
             f"{_padded_arg(f'0x{row.s_branch_opcode:03x}', opcode_width)}"
             f"{_padded_arg(f'0x{row.s_cbranch_scc0_opcode:03x}', opcode_width)}"

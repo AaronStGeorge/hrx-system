@@ -40,6 +40,8 @@ typedef struct loom_amdgpu_encode_state_t {
   iree_host_size_t immediate_name_id_count;
   // Optional planned wait packets consumed in scheduled order.
   const loom_amdgpu_wait_packet_plan_t* wait_packets;
+  // Optional planned wait states consumed in scheduled order.
+  const loom_amdgpu_wait_state_plan_t* wait_states;
   // Arena used for transient encoding scratch and final byte storage.
   iree_arena_allocator_t* arena;
   // Reusable scratch for structural parallel-copy sequencing.
@@ -52,6 +54,8 @@ typedef struct loom_amdgpu_encode_state_t {
   iree_host_size_t length;
   // Next wait-packet row to compare with the current scheduled packet.
   iree_host_size_t next_wait_packet_index;
+  // Next wait-state row to compare with the current scheduled packet.
+  iree_host_size_t next_wait_state_index;
   // Planned byte offset for each scheduled block.
   iree_host_size_t* block_offsets;
 } loom_amdgpu_encode_state_t;
@@ -872,6 +876,19 @@ static iree_status_t loom_amdgpu_encode_sopp_simm16(
   return loom_amdgpu_append_encoding_packet(state, &encoded_packet);
 }
 
+static iree_status_t loom_amdgpu_encode_s_nop_cycles(
+    loom_amdgpu_encode_state_t* state, uint16_t cycle_count) {
+  while (cycle_count != 0) {
+    const uint16_t chunk = cycle_count > LOOM_AMDGPU_WAIT_STATE_MAX_S_NOP_CYCLES
+                               ? LOOM_AMDGPU_WAIT_STATE_MAX_S_NOP_CYCLES
+                               : cycle_count;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_encode_sopp_simm16(
+        state, state->target->s_nop_opcode, (uint16_t)(chunk - 1)));
+    cycle_count -= chunk;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_push_immediate_encoding_field_values(
     loom_amdgpu_encode_state_t* state, const loom_low_immediate_t* immediate,
     uint64_t value, loom_amdgpu_encoding_field_value_t* field_values,
@@ -1462,6 +1479,48 @@ static iree_status_t loom_amdgpu_encode_wait_packets_before_packet(
   return iree_ok_status();
 }
 
+static bool loom_amdgpu_wait_state_is_before_node(
+    const loom_amdgpu_wait_state_t* wait_state,
+    const loom_low_schedule_node_t* node) {
+  return wait_state->block_index < node->block_index ||
+         (wait_state->block_index == node->block_index &&
+          wait_state->scheduled_ordinal < node->scheduled_ordinal);
+}
+
+static bool loom_amdgpu_wait_state_matches_packet(
+    const loom_amdgpu_wait_state_t* wait_state,
+    const loom_low_packet_view_t* packet) {
+  const loom_low_schedule_node_t* node = packet->node;
+  return wait_state->block_index == node->block_index &&
+         wait_state->scheduled_ordinal == node->scheduled_ordinal &&
+         wait_state->node_index == packet->node_index;
+}
+
+static iree_status_t loom_amdgpu_encode_wait_states_before_packet(
+    loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
+  if (state->wait_states == NULL) {
+    return iree_ok_status();
+  }
+  const loom_low_schedule_node_t* node = packet->node;
+  while (state->next_wait_state_index < state->wait_states->state_count) {
+    const loom_amdgpu_wait_state_t* wait_state =
+        &state->wait_states->states[state->next_wait_state_index];
+    if (loom_amdgpu_wait_state_is_before_node(wait_state, node)) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "AMDGPU wait-state plan contains an insertion point before the "
+          "current scheduled packet");
+    }
+    if (!loom_amdgpu_wait_state_matches_packet(wait_state, packet)) {
+      return iree_ok_status();
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_encode_s_nop_cycles(state, wait_state->cycle_count));
+    ++state->next_wait_state_index;
+  }
+  return iree_ok_status();
+}
+
 typedef iree_status_t (*loom_amdgpu_encode_structural_packet_fn_t)(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet);
 
@@ -1491,6 +1550,8 @@ static iree_status_t loom_amdgpu_encode_packet(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_encode_wait_packets_before_packet(state, packet));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_encode_wait_states_before_packet(state, packet));
   if (packet->descriptor != NULL) {
     return loom_amdgpu_encode_descriptor_packet(state, packet);
   }
@@ -1534,6 +1595,20 @@ static iree_status_t loom_amdgpu_verify_wait_packet_plan(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_verify_wait_state_plan(
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
+    const loom_amdgpu_wait_state_plan_t* wait_states) {
+  if (wait_states->schedule != schedule ||
+      wait_states->allocation != allocation) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "AMDGPU native encoding wait states must be derived from the encoded "
+        "schedule and allocation");
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_resolve_immediate_name_ids(
     const loom_low_schedule_table_t* schedule,
     const loom_string_id_t** out_immediate_name_ids,
@@ -1568,6 +1643,7 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_into_state(
     loom_amdgpu_encode_state_t* state) {
   state->length = 0;
   state->next_wait_packet_index = 0;
+  state->next_wait_state_index = 0;
   for (iree_host_size_t block_index = 0;
        block_index < state->schedule->block_count; ++block_index) {
     const loom_low_schedule_block_t* block =
@@ -1592,17 +1668,28 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_into_state(
         "AMDGPU native encoding wait packet plan contains an unmatched "
         "insertion point");
   }
+  if (state->wait_states != NULL &&
+      state->next_wait_state_index != state->wait_states->state_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "AMDGPU native encoding wait-state plan contains an unmatched "
+        "insertion point");
+  }
   return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
-    const loom_amdgpu_wait_packet_plan_t* wait_packets,
+    const loom_amdgpu_encode_instruction_stream_options_t* options,
     iree_const_byte_span_t* out_text, iree_arena_allocator_t* arena) {
   *out_text = iree_const_byte_span_empty();
   IREE_RETURN_IF_ERROR(
       loom_native_fragment_validate_emission_inputs(schedule, allocation));
+  const loom_amdgpu_wait_packet_plan_t* wait_packets =
+      options ? options->wait_packets : NULL;
+  const loom_amdgpu_wait_state_plan_t* wait_states =
+      options ? options->wait_states : NULL;
   const loom_amdgpu_descriptor_set_info_t* target = NULL;
   IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_encoding_target(schedule, &target));
   const loom_amdgpu_encoding_table_t* encoding_table =
@@ -1618,6 +1705,10 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
   if (wait_packets != NULL) {
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_verify_wait_packet_plan(schedule, wait_packets));
+  }
+  if (wait_states != NULL) {
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_verify_wait_state_plan(schedule, allocation, wait_states));
   }
   iree_host_size_t* block_offsets = NULL;
   if (schedule->block_count != 0) {
@@ -1640,6 +1731,7 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
       .immediate_name_ids = immediate_name_ids,
       .immediate_name_id_count = immediate_name_id_count,
       .wait_packets = wait_packets,
+      .wait_states = wait_states,
       .arena = arena,
       .move_scratch = &move_scratch,
       .block_offsets = block_offsets,
@@ -1661,6 +1753,7 @@ static iree_status_t loom_amdgpu_encode_instruction_stream_internal(
       .immediate_name_ids = immediate_name_ids,
       .immediate_name_id_count = immediate_name_id_count,
       .wait_packets = wait_packets,
+      .wait_states = wait_states,
       .arena = arena,
       .move_scratch = &move_scratch,
       .data = data,
@@ -1692,11 +1785,11 @@ iree_status_t loom_amdgpu_encode_instruction_stream(
                                                         NULL, out_text, arena);
 }
 
-iree_status_t loom_amdgpu_encode_instruction_stream_with_wait_packets(
+iree_status_t loom_amdgpu_encode_instruction_stream_with_options(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
-    const loom_amdgpu_wait_packet_plan_t* wait_packets,
+    const loom_amdgpu_encode_instruction_stream_options_t* options,
     iree_const_byte_span_t* out_text, iree_arena_allocator_t* arena) {
   return loom_amdgpu_encode_instruction_stream_internal(
-      schedule, allocation, wait_packets, out_text, arena);
+      schedule, allocation, options, out_text, arena);
 }

@@ -75,6 +75,7 @@ loom_assert_no_dependencies(
         ":target_info",
         ":wait_packets",
         ":wait_plan",
+        ":wait_states",
     ],
 )
 
@@ -88,6 +89,7 @@ loom_assert_no_dependencies(
         ":target_info",
         ":wait_packets",
         ":wait_plan",
+        ":wait_states",
     ],
 )
 
@@ -718,6 +720,26 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "wait_states",
+    srcs = ["wait_states.c"],
+    hdrs = ["wait_states.h"],
+    deps = [
+        ":matrix_contract",
+        ":target_id",
+        ":target_info",
+        ":target_refs",
+        "//loom/src/loom/codegen/low:allocation",
+        "//loom/src/loom/codegen/low:move_sequence",
+        "//loom/src/loom/codegen/low:packet",
+        "//loom/src/loom/codegen/low/schedule",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "provider",
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
@@ -850,6 +872,7 @@ iree_c_embed_data(
         "execution/testdata/gfx11_wmma_zero.loom",
         "execution/testdata/lds_b128_roundtrip.loom",
         "execution/testdata/masked_upsample6_reduce.loom",
+        "execution/testdata/model_dense_projection_tile_bf16.loom",
         "execution/testdata/model_dense_projection_tile_f16.loom",
         "execution/testdata/model_swiglu_tile4_f32.loom",
         "execution/testdata/scf_if_vector_result.loom",
@@ -1079,8 +1102,11 @@ loom_cc_library(
     srcs = ["wait_plan.c"],
     hdrs = ["wait_plan.h"],
     deps = [
+        ":target_refs",
+        "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:function",
+        "//loom/src/loom/codegen/low:packet",
         "//loom/src/loom/codegen/low/schedule",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",

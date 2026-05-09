@@ -753,16 +753,20 @@ class LowKernelEmitter {
         module_, low_function, &frame_options, arena, &frame));
 
     loom_amdgpu_wait_plan_t wait_plan = {};
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_wait_plan_build(&frame.schedule, arena, &wait_plan));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_wait_plan_build(
+        &frame.schedule, &frame.allocation, arena, &wait_plan));
     loom_amdgpu_wait_packet_plan_t wait_packets = {};
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_wait_packet_plan_build(&wait_plan, arena, &wait_packets));
+    loom_amdgpu_wait_state_plan_t wait_states = {};
+    IREE_RETURN_IF_ERROR(loom_amdgpu_wait_state_plan_build(
+        &frame.schedule, &frame.allocation, arena, &wait_states));
 
     StreamPtr stream = CreateStream();
     const loom_amdgpu_kernel_hsaco_options_t hsaco_options = {
         .abi_layout = &materialization.abi_layout,
         .wait_packets = &wait_packets,
+        .wait_states = &wait_states,
     };
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_emit_kernel_hsaco(&frame.schedule, &frame.allocation,

@@ -88,6 +88,8 @@ typedef struct loom_amdgpu_descriptor_set_info_t {
   iree_string_view_t descriptor_set_key;
   // Dense generated descriptor-set ordinal within the AMDGPU target package.
   uint16_t descriptor_set_ordinal;
+  // SOPP opcode used when materializing target wait-state noops.
+  uint16_t s_nop_opcode;
   // SOPP opcode used when lowering structural `low.return` to `s_endpgm`.
   uint16_t s_endpgm_opcode;
   // SOPP opcode used when lowering structural `low.br` to `s_branch`.

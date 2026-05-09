@@ -14,10 +14,20 @@
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/schedule/types.h"
 #include "loom/target/arch/amdgpu/wait_packets.h"
+#include "loom/target/arch/amdgpu/wait_states.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef struct loom_amdgpu_encode_instruction_stream_options_t {
+  // Planned wait packets inserted before their scheduled packet insertion
+  // points.
+  const loom_amdgpu_wait_packet_plan_t* wait_packets;
+  // Planned fixed wait-state noops inserted before their scheduled packet
+  // insertion points.
+  const loom_amdgpu_wait_state_plan_t* wait_states;
+} loom_amdgpu_encode_instruction_stream_options_t;
 
 // Encodes one scheduled and allocated AMDGPU target-low function into an
 // arena-owned instruction byte stream. The returned bytes are only the
@@ -30,13 +40,11 @@ iree_status_t loom_amdgpu_encode_instruction_stream(
     const loom_low_allocation_table_t* allocation,
     iree_const_byte_span_t* out_text, iree_arena_allocator_t* arena);
 
-// Encodes one instruction stream with planned wait packets inserted before
-// their scheduled packet insertion points. |wait_packets| must be derived from
-// |schedule| and remain alive for the duration of emission.
-iree_status_t loom_amdgpu_encode_instruction_stream_with_wait_packets(
+// Encodes one instruction stream with target-owned insertion plans.
+iree_status_t loom_amdgpu_encode_instruction_stream_with_options(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
-    const loom_amdgpu_wait_packet_plan_t* wait_packets,
+    const loom_amdgpu_encode_instruction_stream_options_t* options,
     iree_const_byte_span_t* out_text, iree_arena_allocator_t* arena);
 
 #ifdef __cplusplus
