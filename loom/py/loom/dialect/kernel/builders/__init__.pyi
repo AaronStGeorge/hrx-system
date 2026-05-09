@@ -332,7 +332,7 @@ class KernelBuilder(DialectBuilder):
         result_names: Sequence[str] | None = ...,
         location_id: int | None = ...,
     ) -> ValueRef: ...
-    def scan(
+    def subgroup_scan(
         self,
         *,
         kind: str,
@@ -411,6 +411,19 @@ class KernelBuilder(DialectBuilder):
         *,
         kind: str,
         value: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
+    ) -> ValueRef: ...
+    def workgroup_scan(
+        self,
+        *,
+        kind: str,
+        value: ValueRef,
+        mode: str,
+        direction: str,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
         names: Sequence[str] | None = ...,

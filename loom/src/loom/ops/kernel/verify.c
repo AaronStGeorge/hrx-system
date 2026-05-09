@@ -1008,6 +1008,16 @@ iree_status_t loom_kernel_workgroup_reduce_verify(
       module, emitter, op, value_id, loom_kernel_workgroup_reduce_kind(op));
 }
 
+iree_status_t loom_kernel_workgroup_scan_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  loom_value_id_t value_id = loom_kernel_workgroup_scan_value(op);
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_collective_operand(
+      module, emitter, op, IREE_SV("value"), value_id));
+  return loom_kernel_verify_combining_kind_for_value(
+      module, emitter, op, value_id, loom_kernel_workgroup_scan_kind(op));
+}
+
 iree_status_t loom_kernel_workgroup_vote_count_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter) {

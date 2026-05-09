@@ -185,6 +185,32 @@ KernelScanDirection = EnumDef(
     doc="Subgroup scan lane order.",
 )
 
+KernelWorkgroupScanMode = EnumDef(
+    "KernelWorkgroupScanMode",
+    [
+        EnumCase("inclusive", 0, doc="Include the current invocation value."),
+        EnumCase("exclusive", 1, doc="Exclude the current invocation value."),
+    ],
+    doc="Workgroup scan inclusivity.",
+)
+
+KernelWorkgroupScanDirection = EnumDef(
+    "KernelWorkgroupScanDirection",
+    [
+        EnumCase(
+            "forward",
+            0,
+            doc="Scan from lower workitem ids toward higher workitem ids.",
+        ),
+        EnumCase(
+            "reverse",
+            1,
+            doc="Scan from higher workitem ids toward lower workitem ids.",
+        ),
+    ],
+    doc="Workgroup scan workitem order.",
+)
+
 # ============================================================================
 # Shared format fragments
 # ============================================================================
@@ -938,6 +964,32 @@ kernel_workgroup_reduce = Op(
     examples=["%sum = kernel.workgroup.reduce<addf> %v : f32"],
 )
 
+kernel_workgroup_scan = Op(
+    name="kernel.workgroup.scan",
+    group=kernel_ops,
+    contracts=[ContractFamily.KERNEL_SYNCHRONIZATION],
+    phase=OpPhase.EXECUTABLE,
+    doc="Prefix-scan a scalar or rank-1 vector value across the current workgroup.",
+    operands=[Operand("value", ANY, doc="Per-invocation value to scan.")],
+    results=[Result("result", ANY, doc="Scanned value.")],
+    attrs=[
+        *_collective_combining_attrs(),
+        AttrDef("mode", ATTR_TYPE_ENUM, enum_def=KernelWorkgroupScanMode, doc="Inclusive or exclusive scan."),
+        AttrDef("direction", ATTR_TYPE_ENUM, enum_def=KernelWorkgroupScanDirection, doc="Workitem order to scan."),
+    ],
+    constraints=[SameType("value", "result")],
+    traits=_KERNEL_CONVERGENT_TRAITS,
+    verify="loom_kernel_workgroup_scan_verify",
+    format=[
+        TemplateParam("kind"),
+        Ref("value"),
+        AttrDict(),
+        COLON,
+        TypeOf("value"),
+    ],
+    examples=["%prefix = kernel.workgroup.scan<addf> %v {mode = inclusive, direction = forward} : f32"],
+)
+
 kernel_workgroup_vote_any = Op(
     name="kernel.workgroup.vote.any",
     group=kernel_ops,
@@ -1607,6 +1659,7 @@ ALL_KERNEL_OPS: tuple[Op, ...] = (
     kernel_subgroup_match_any,
     kernel_subgroup_match_all,
     kernel_workgroup_reduce,
+    kernel_workgroup_scan,
     kernel_workgroup_vote_any,
     kernel_workgroup_vote_all,
     kernel_workgroup_vote_count,

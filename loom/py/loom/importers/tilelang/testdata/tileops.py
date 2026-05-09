@@ -661,6 +661,73 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_finalize_reducer_none_kernel
 
 # ====
 @tilelang_case(
+    name="tileop_cumsum_shared_1d",
+    category="op",
+    tags=("tileop", "cumsum", "workgroup"),
+)
+def tileop_cumsum_shared_1d(T: Any) -> TileLangImportInput:
+    @T.prim_func  # type: ignore[untyped-decorator]
+    def tileop_cumsum_shared_1d_kernel(
+        src: T.Tensor[(4,), T.int32],
+        dst: T.Tensor[(4,), T.int32],
+    ) -> None:
+        with T.Kernel(1, threads=4):
+            thread_index = T.get_thread_binding()
+            shared = T.alloc_shared((4,), T.int32)
+            shared[thread_index] = src[thread_index]
+            T.sync_threads()
+            T.cumsum(shared)
+            T.sync_threads()
+            dst[thread_index] = shared[thread_index]
+
+    return TileLangImportInput(
+        source=tileop_cumsum_shared_1d_kernel,
+        target="hip -mcpu=gfx1100",
+        name="tileop_cumsum_shared_1d_kernel",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_cumsum_shared_1d_kernel") @tileop_cumsum_shared_1d_kernel(%src_handle: buffer, %dst_handle: buffer) {
+  %c1 = index.constant 1 : index
+  %c4 = index.constant 4 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c4, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src_handle : buffer
+  %layout = encoding.layout.dense : encoding<layout>
+  %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<4xi32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<4xi32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %thread_index = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %shared_bytes = index.constant 16 : offset
+  %shared_buffer = buffer.alloca %shared_bytes {base_alignment = 4, memory_space = workgroup} : buffer
+  %shared = buffer.view %shared_buffer[%c0_bytes] : buffer -> view<4xi32, %layout>
+  %load = view.load %src[%thread_index] : view<4xi32, %layout> -> i32
+  view.store %load, %shared[%thread_index] : i32, view<4xi32, %layout>
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
+  %c1 = index.constant 1 : index
+  %c0 = index.constant 0 : index
+  %c4 = index.constant 4 : index
+  %cumsum_value = view.load %shared[%thread_index] : view<4xi32, %layout> -> i32
+  %cumsum = kernel.workgroup.scan<addi> %cumsum_value {direction = forward, mode = inclusive} : i32
+  view.store %cumsum, %shared[%thread_index] : i32, view<4xi32, %layout>
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
+  %load_2 = view.load %shared[%thread_index] : view<4xi32, %layout> -> i32
+  view.store %load_2, %dst[%thread_index] : i32, view<4xi32, %layout>
+  kernel.return
+}
+"""
+
+
+# ====
+@tilelang_case(
     name="tileop_finalize_reducer_all",
     category="op",
     tags=("tileop", "finalize_reducer", "workgroup"),

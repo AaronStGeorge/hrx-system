@@ -61,11 +61,12 @@ enum {
   LOOM_OP_KERNEL_SUBGROUP_MATCH_ANY = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 34),
   LOOM_OP_KERNEL_SUBGROUP_MATCH_ALL = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 35),
   LOOM_OP_KERNEL_WORKGROUP_REDUCE = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 36),
-  LOOM_OP_KERNEL_WORKGROUP_VOTE_ANY = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 37),
-  LOOM_OP_KERNEL_WORKGROUP_VOTE_ALL = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 38),
-  LOOM_OP_KERNEL_WORKGROUP_VOTE_COUNT = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 39),
-  LOOM_OP_KERNEL_ASSERT = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 40),
-  LOOM_OP_KERNEL_COUNT_ = 41,
+  LOOM_OP_KERNEL_WORKGROUP_SCAN = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 37),
+  LOOM_OP_KERNEL_WORKGROUP_VOTE_ANY = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 38),
+  LOOM_OP_KERNEL_WORKGROUP_VOTE_ALL = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 39),
+  LOOM_OP_KERNEL_WORKGROUP_VOTE_COUNT = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 40),
+  LOOM_OP_KERNEL_ASSERT = LOOM_OP_KIND(LOOM_DIALECT_KERNEL, 41),
+  LOOM_OP_KERNEL_COUNT_ = 42,
 };
 
 // Required async copy direction.
@@ -105,6 +106,20 @@ typedef enum loom_kernel_subgroup_scan_direction_e {
   LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_REVERSE = 1,
   LOOM_KERNEL_SUBGROUP_SCAN_DIRECTION_COUNT_ = 2,
 } loom_kernel_subgroup_scan_direction_t;
+
+// Workgroup scan inclusivity.
+typedef enum loom_kernel_workgroup_scan_mode_e {
+  LOOM_KERNEL_WORKGROUP_SCAN_MODE_INCLUSIVE = 0,
+  LOOM_KERNEL_WORKGROUP_SCAN_MODE_EXCLUSIVE = 1,
+  LOOM_KERNEL_WORKGROUP_SCAN_MODE_COUNT_ = 2,
+} loom_kernel_workgroup_scan_mode_t;
+
+// Workgroup scan workitem order.
+typedef enum loom_kernel_workgroup_scan_direction_e {
+  LOOM_KERNEL_WORKGROUP_SCAN_DIRECTION_FORWARD = 0,
+  LOOM_KERNEL_WORKGROUP_SCAN_DIRECTION_REVERSE = 1,
+  LOOM_KERNEL_WORKGROUP_SCAN_DIRECTION_COUNT_ = 2,
+} loom_kernel_workgroup_scan_direction_t;
 
 // LOOM_OP_KERNEL_DEF: Dispatchable source-level kernel entry. Kernel entries own launch and export contracts; ordinary func.def bodies remain helper/callable code.
 // kernel.def @entry(%buffer: buffer) {
@@ -800,6 +815,27 @@ iree_status_t loom_kernel_workgroup_reduce_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_kernel_workgroup_reduce_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_KERNEL_WORKGROUP_SCAN: Prefix-scan a scalar or rank-1 vector value across the current workgroup.
+// %prefix = kernel.workgroup.scan<addf> %v {mode = inclusive, direction = forward} : f32
+LOOM_DEFINE_ISA(loom_kernel_workgroup_scan_isa, LOOM_OP_KERNEL_WORKGROUP_SCAN)
+LOOM_DEFINE_OPERAND(loom_kernel_workgroup_scan_value, 0)
+LOOM_DEFINE_RESULT(loom_kernel_workgroup_scan_result, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_workgroup_scan_kind, 0, loom_combining_kind_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_workgroup_scan_mode, 1, loom_kernel_workgroup_scan_mode_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_kernel_workgroup_scan_direction, 2, loom_kernel_workgroup_scan_direction_t)
+iree_status_t loom_kernel_workgroup_scan_build(
+    loom_builder_t* builder,
+    loom_combining_kind_t kind,
+    loom_value_id_t value,
+    loom_kernel_workgroup_scan_mode_t mode,
+    loom_kernel_workgroup_scan_direction_t direction,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_kernel_workgroup_scan_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

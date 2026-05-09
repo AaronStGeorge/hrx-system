@@ -103,6 +103,8 @@ def convert_tileop_call(
         return _convert_fill_call(expr, context, converter, options, op_name)
     if op_name in _REDUCE_CALLS:
         return _convert_reduce_call(expr, context, converter, options, op_name)
+    if op_name in _CUMSUM_CALLS:
+        return _convert_cumsum_call(expr, context, converter, options, op_name)
     if op_name in _FINALIZE_REDUCER_CALLS:
         return _convert_finalize_reducer_call(
             expr, context, converter, options, op_name
@@ -1013,6 +1015,180 @@ def _convert_region_reduce_call(
     return None
 
 
+def _convert_cumsum_call(
+    expr: object,
+    context: TileLangConversionContext,
+    converter: TileLangConverter,
+    options: ExpressionOptions,
+    op_name: str,
+) -> ValueRef | None:
+    if not _require_effect(expr, context, options, op_name):
+        return None
+    args = _args(expr)
+    if len(args) != 4:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` expects source, destination, dim, and reverse",
+        )
+        return None
+    source = _decode_region_arg(
+        args=args,
+        position=0,
+        expr=expr,
+        context=context,
+        converter=converter,
+    )
+    target = _decode_region_arg(
+        args=args,
+        position=1,
+        expr=expr,
+        context=context,
+        converter=converter,
+    )
+    if source is None or target is None:
+        return None
+    dim = integer_value(args[2])
+    if dim is None:
+        context.record_blocked(node_text(expr), f"call `{op_name}` dim is not static")
+        return None
+    reverse = _bool_value(args[3])
+    if reverse is None:
+        context.record_blocked(
+            node_text(expr), f"call `{op_name}` reverse flag is not static"
+        )
+        return None
+    if len(source.extents) != 1 or len(target.extents) != 1 or dim != 0:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` first slice supports rank-1 dim-0 regions",
+        )
+        return None
+    if not _region_is_shared(source) or not _region_is_shared(target):
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` first slice requires shared-memory regions",
+        )
+        return None
+    loop_extents = _copy_loop_extents(source, target, context)
+    if loop_extents is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` source and destination extents differ",
+        )
+        return None
+    static_extents = _static_extent_values(loop_extents, context)
+    if static_extents is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` first slice requires a static region extent",
+        )
+        return None
+    thread_count = context.static_topology_extent("threadIdx.x")
+    if thread_count is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` first slice requires a static threadIdx.x extent",
+        )
+        return None
+    if static_extents != (thread_count,):
+        context.record_blocked(
+            node_text(expr),
+            (
+                f"call `{op_name}` rank-1 extent {static_extents[0]} must match "
+                f"threadIdx.x extent {thread_count}"
+            ),
+        )
+        return None
+    for axis in ("threadIdx.y", "threadIdx.z"):
+        axis_count = context.static_topology_extent(axis)
+        if axis_count != 1:
+            context.record_blocked(
+                node_text(expr),
+                f"call `{op_name}` first slice requires {axis} extent 1",
+            )
+            return None
+    source_element_type = _view_element_type(source.view, context)
+    if source_element_type is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` source region is not a shaped view",
+        )
+        return None
+    target_element_type = _view_element_type(target.view, context)
+    if target_element_type is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` destination region is not a shaped view",
+        )
+        return None
+    if str(source_element_type) != str(target_element_type):
+        context.record_blocked(
+            node_text(expr),
+            (
+                f"call `{op_name}` source and destination element types differ: "
+                f"{source_element_type} vs {target_element_type}"
+            ),
+        )
+        return None
+    combiner = _cumsum_combiner(source_element_type)
+    if combiner is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` is not imported for {source_element_type}",
+        )
+        return None
+    thread_index = map_thread_axis(
+        axis=THREAD_AXES["threadIdx.x"],
+        sources=(),
+        context=context,
+        converter=converter,
+        name="tx",
+    )
+    if thread_index is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` threadIdx.x value is not mapped",
+        )
+        return None
+    source_indices = _region_indices(source, (thread_index,), context)
+    target_indices = _region_indices(target, (thread_index,), context)
+    value = _load_tracked_local_value(
+        view=source.view,
+        indices=source_indices,
+        memory_scope=source.index_map.memory_scope,
+        result_type=source_element_type,
+        context=context,
+        name="cumsum_value",
+    )
+    if value is None:
+        context.record_blocked(
+            node_text(expr),
+            f"call `{op_name}` source value is not mapped",
+        )
+        return None
+    result = context.builder.kernel.workgroup_scan(
+        kind=combiner,
+        value=value,
+        mode="inclusive",
+        direction="reverse" if reverse else "forward",
+        results=[source_element_type],
+        name=context.fresh_name("cumsum"),
+    )
+    _store_tracked_local_value(
+        expr,
+        target.view,
+        target_indices,
+        target.index_map.memory_scope,
+        result,
+        context,
+    )
+    context.record_converted(
+        node_text(expr),
+        f"tl.tileop.cumsum<{'reverse' if reverse else 'forward'}>",
+    )
+    return None
+
+
 def _convert_finalize_reducer_call(
     expr: object,
     context: TileLangConversionContext,
@@ -1721,6 +1897,16 @@ def _is_static_one_extent(
 ) -> bool:
     one = context.constants.get(("index", "1"))
     return one is not None and extent.id == one.id
+
+
+def _bool_value(value: object) -> bool | None:
+    payload = getattr(value, "value", value)
+    if isinstance(payload, bool):
+        return payload
+    integer = integer_value(value)
+    if integer in (0, 1):
+        return bool(integer)
+    return None
 
 
 def _all_zero_indices(
@@ -2505,6 +2691,15 @@ def _build_scalar_combiner(
     )
 
 
+def _cumsum_combiner(element_type: Type) -> str | None:
+    if _is_float_type(element_type):
+        return "addf"
+    bit_width = _integer_bit_width(str(element_type))
+    if bit_width is not None and bit_width > 1:
+        return "addi"
+    return None
+
+
 def _copy_value_cast(
     value: ValueRef,
     source_element_type: Type,
@@ -2884,6 +3079,10 @@ _FILL_CALLS = {
 
 _REDUCE_CALLS = {
     "tl.tileop.reduce",
+}
+
+_CUMSUM_CALLS = {
+    "tl.tileop.cumsum",
 }
 
 _FINALIZE_REDUCER_CALLS = {

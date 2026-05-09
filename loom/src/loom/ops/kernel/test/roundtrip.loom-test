@@ -197,6 +197,7 @@ kernel.def @workgroup_collectives(%value: f32, %predicate: i1) {
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
 } launch {
   %sum = kernel.workgroup.reduce<addf> %value : f32
+  %prefix = kernel.workgroup.scan<addf> %value {direction = forward, mode = inclusive} : f32
   %any = kernel.workgroup.vote.any %predicate : i1
   %all = kernel.workgroup.vote.all %predicate : i1
   %count = kernel.workgroup.vote.count %predicate : i1 -> i32

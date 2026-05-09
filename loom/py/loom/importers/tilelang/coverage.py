@@ -1050,10 +1050,11 @@ TILELANG_OP_COVERAGE: tuple[OpCoverage, ...] = (
     OpCoverage(
         "tl.tileop.cumsum",
         OpFamily.TILELANG_TILEOP,
-        CoverageState.DEFERRED,
+        CoverageState.SUPPORTED,
         (
-            "Tile cumulative-sum import needs explicit subgroup/workgroup prefix "
-            "semantics over the source region before lowering to scan operations."
+            "Rank-1 shared-memory cumulative sum maps to kernel.workgroup.scan; "
+            "higher-rank, non-shared, and non-workgroup-sized regions remain "
+            "diagnostic cases."
         ),
     ),
     OpCoverage(
