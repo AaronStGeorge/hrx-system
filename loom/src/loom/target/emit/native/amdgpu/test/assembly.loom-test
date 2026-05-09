@@ -43,6 +43,19 @@ low.func.def target(@gfx11_target) @gfx11_salu_shift_inline(%value: reg<amdgpu.s
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_salu_add_inline waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_salu_add_inline(%position: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %next = s_add_u32_rhs_inline %position, 3
+  return
+}
+
+// ----
+  s_add_u32_rhs_inline s0, s0, 3
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_storage_address waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_storage_address() asm<amdgpu.rdna3.core> {

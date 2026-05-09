@@ -1744,7 +1744,22 @@ def _s_add_u32_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("SSRC1", _sgpr_operand("rhs")),
         ),
         implicit_operands=(_SCC_CLOBBER_OUTPUT,),
+        operand_forms=(
+            _literal_operand_form(
+                replacement_descriptor="amdgpu.s_add_u32.rhs_inline",
+                source_operand="rhs",
+            ),
+        ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _s_add_u32_rhs_inline_overlay() -> AmdgpuDescriptorOverlay:
+    return _s_binary_u32_rhs_inline_overlay(
+        descriptor_key="amdgpu.s_add_u32.rhs_inline",
+        instruction_name="S_ADD_U32",
+        mnemonic="s_add_u32",
+        semantic_tag="integer.add.u32",
     )
 
 
@@ -1784,7 +1799,22 @@ def _s_sub_u32_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("SSRC1", _sgpr_operand("rhs")),
         ),
         implicit_operands=(_SCC_CLOBBER_OUTPUT,),
+        operand_forms=(
+            _literal_operand_form(
+                replacement_descriptor="amdgpu.s_sub_u32.rhs_inline",
+                source_operand="rhs",
+            ),
+        ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _s_sub_u32_rhs_inline_overlay() -> AmdgpuDescriptorOverlay:
+    return _s_binary_u32_rhs_inline_overlay(
+        descriptor_key="amdgpu.s_sub_u32.rhs_inline",
+        instruction_name="S_SUB_U32",
+        mnemonic="s_sub_u32",
+        semantic_tag="integer.sub.u32",
     )
 
 
@@ -7601,8 +7631,10 @@ def _cdna_core_overlays(
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
+        _s_add_u32_rhs_inline_overlay(),
         _s_addc_u32_overlay(),
         _s_sub_u32_overlay(),
+        _s_sub_u32_rhs_inline_overlay(),
         _s_mul_i32_overlay(),
         _s_mul_hi_u32_overlay(),
         _s_min_i32_overlay(),
@@ -7920,8 +7952,10 @@ def _gfx950_core_overlay_descriptors(
 def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
+        _s_add_u32_rhs_inline_overlay(),
         _s_addc_u32_overlay(),
         _s_sub_u32_overlay(),
+        _s_sub_u32_rhs_inline_overlay(),
         _s_mul_i32_overlay(),
         _s_mul_hi_u32_overlay(),
         _s_min_i32_overlay(),
@@ -8186,8 +8220,10 @@ def _gfx11_core_overlay_descriptors(
 def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
+        _s_add_u32_rhs_inline_overlay(),
         _s_addc_u32_overlay(),
         _s_sub_u32_overlay(),
+        _s_sub_u32_rhs_inline_overlay(),
         _s_mul_i32_overlay(),
         _s_mul_hi_u32_overlay(),
         _s_min_i32_overlay(),
@@ -8479,8 +8515,10 @@ def _gfx12_core_overlay_descriptors(
 def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
+        _s_add_u32_rhs_inline_overlay(),
         _s_addc_u32_overlay(),
         _s_sub_u32_overlay(),
+        _s_sub_u32_rhs_inline_overlay(),
         _s_mul_i32_overlay(),
         _s_mul_hi_u32_overlay(),
         _s_min_i32_overlay(),
