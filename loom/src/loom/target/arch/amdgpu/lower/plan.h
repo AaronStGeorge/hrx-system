@@ -454,6 +454,8 @@ typedef struct loom_amdgpu_workgroup_scan_plan_t {
   loom_low_lower_resolved_descriptor_t select_descriptor;
   // Descriptor row selected for first-wave predicates.
   loom_low_lower_resolved_descriptor_t lane_lt_descriptor;
+  // Descriptor row selected for tail-wave predicates.
+  loom_low_lower_resolved_descriptor_t lane_ge_descriptor;
   // Descriptor row selected for LDS reads between waves.
   loom_low_lower_resolved_descriptor_t lds_read_descriptor;
   // Descriptor row selected for LDS writes between waves.
