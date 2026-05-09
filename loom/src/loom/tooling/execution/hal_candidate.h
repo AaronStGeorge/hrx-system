@@ -42,6 +42,16 @@ iree_status_t loom_run_hal_candidate_compile(
     const loom_run_candidate_compile_options_t* options,
     iree_allocator_t allocator, loom_run_hal_candidate_t* out_candidate);
 
+// Emits |run_module| using the module's target records instead of selecting an
+// active HAL device target. This is the offline artifact path used by
+// compilation tools; run/benchmark tools should use
+// loom_run_hal_candidate_compile so they specialize to the device they will
+// immediately execute on.
+iree_status_t loom_run_hal_candidate_emit_module_target(
+    const loom_run_hal_backend_t* backend, loom_run_module_t* run_module,
+    const loom_run_candidate_compile_options_t* options,
+    iree_allocator_t allocator, loom_run_hal_candidate_t* out_candidate);
+
 // Releases all artifact storage owned by |candidate|.
 void loom_run_hal_candidate_deinitialize(loom_run_hal_candidate_t* candidate);
 

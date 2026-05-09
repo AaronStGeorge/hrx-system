@@ -18,7 +18,6 @@
 #include "loom/tooling/execution/execution_provider.h"
 #include "loom/tooling/execution/hal_backend.h"
 #include "loom/tooling/execution/hal_candidate.h"
-#include "loom/tooling/execution/hal_runtime.h"
 #include "loom/tooling/execution/session.h"
 #include "loom/tooling/io/file.h"
 
@@ -224,15 +223,9 @@ static iree_status_t loom_compile_emit_hal(
         "--output and --emit_target_artifact cannot both write to stdout");
   }
 
-  loom_run_hal_runtime_t runtime = {0};
   loom_run_hal_candidate_t candidate = {0};
-  iree_status_t status =
-      loom_run_hal_runtime_initialize(hal_backend, allocator, &runtime);
-  if (iree_status_is_ok(status)) {
-    status =
-        loom_run_hal_candidate_compile(hal_backend, &runtime, run_module,
-                                       compile_options, allocator, &candidate);
-  }
+  iree_status_t status = loom_run_hal_candidate_emit_module_target(
+      hal_backend, run_module, compile_options, allocator, &candidate);
   if (iree_status_is_ok(status) && candidate.compiled) {
     status = loom_compile_write_bytes(
         output_path, candidate.executable.executable_data, allocator);
@@ -245,7 +238,6 @@ static iree_status_t loom_compile_emit_hal(
     *out_emitted = candidate.compiled;
   }
   loom_run_hal_candidate_deinitialize(&candidate);
-  loom_run_hal_runtime_deinitialize(&runtime);
   return status;
 }
 

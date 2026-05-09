@@ -28,9 +28,11 @@ extern "C" {
 typedef struct loom_run_hal_backend_t loom_run_hal_backend_t;
 typedef struct loom_run_hal_runtime_t loom_run_hal_runtime_t;
 
-// Target selected from the active HAL device for one candidate.
+// Target selected for one HAL candidate.
 typedef struct loom_run_hal_selected_target_t {
-  // Backend-owned target payload. Usually points at static target info.
+  // Backend-owned target payload. Usually points at static target info. NULL
+  // requests that the backend emit from the module's target records without a
+  // runtime processor override.
   const void* data;
   // Target-neutral bundle resolved for the selected backend target.
   const loom_target_bundle_t* target_bundle;
