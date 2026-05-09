@@ -12,8 +12,8 @@
 // known_divisor == 0 (valid facts always have known_divisor >= 1),
 // allowing O(1) initialization via memset(0).
 //
-// Define stores facts for a value ID inside the caller-declared value
-// capacity. Compute runs a forward pass over an explicit region tree, calling
+// Define stores facts for a value ID, growing the dense value-entry array as
+// needed. Compute runs a forward pass over an explicit region tree, calling
 // each op's fact inference function to seed initial facts from constants and op
 // semantics.
 //
@@ -716,12 +716,10 @@ struct loom_value_fact_table_t {
   } scratch;
 };
 
-// Initializes the table with the given arena and exactly pre-allocates
+// Initializes the table with the given arena and pre-allocates
 // |initial_capacity| value entries. All entries are zero-initialized
 // (known_divisor == 0 means undefined). The arena is stored and used for
-// subsequent extension payloads and scratch buffers. Value entries never grow
-// after initialization; callers must declare the direct-address value domain up
-// front.
+// subsequent value-entry growth, extension payloads, and scratch buffers.
 iree_status_t loom_value_fact_table_initialize(
     loom_value_fact_table_t* table, iree_arena_allocator_t* arena,
     iree_host_size_t initial_capacity);
@@ -750,7 +748,7 @@ static inline loom_value_facts_t loom_value_fact_table_lookup(
   return table->entries[value_id];
 }
 
-// Defines (or updates) facts for a value inside the initialized capacity.
+// Defines (or updates) facts for a value, growing the table if needed.
 iree_status_t loom_value_fact_table_define(loom_value_fact_table_t* table,
                                            loom_value_id_t value_id,
                                            loom_value_facts_t facts);

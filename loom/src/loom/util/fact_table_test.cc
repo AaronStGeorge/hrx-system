@@ -267,6 +267,22 @@ TEST_F(FactTableTest, DefineWithinCapacityPreservesExistingEntries) {
   EXPECT_EQ(r100.range_lo, 30);
 }
 
+TEST_F(FactTableTest, DefineBeyondCapacityGrowsAndPreservesEntries) {
+  loom_value_fact_table_t table = {0};
+  IREE_ASSERT_OK(loom_value_fact_table_initialize(&table, &arena_, 2));
+
+  IREE_ASSERT_OK(
+      loom_value_fact_table_define(&table, 0, loom_value_facts_exact_i64(10)));
+  IREE_ASSERT_OK(
+      loom_value_fact_table_define(&table, 7, loom_value_facts_exact_i64(70)));
+
+  EXPECT_GE(table.capacity, (iree_host_size_t)8);
+  EXPECT_EQ(loom_value_fact_table_lookup(&table, 0).range_lo, 10);
+  EXPECT_TRUE(
+      loom_value_facts_is_unknown(loom_value_fact_table_lookup(&table, 6)));
+  EXPECT_EQ(loom_value_fact_table_lookup(&table, 7).range_lo, 70);
+}
+
 //===----------------------------------------------------------------------===//
 // Range facts
 //===----------------------------------------------------------------------===//

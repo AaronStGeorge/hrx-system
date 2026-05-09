@@ -72,15 +72,21 @@ struct loom_value_fact_extension_entry_t {
   } payload;
 };
 
+static iree_status_t loom_value_fact_table_ensure_capacity(
+    loom_value_fact_table_t* table, iree_host_size_t capacity) {
+  if (capacity <= table->capacity) return iree_ok_status();
+  const iree_host_size_t old_capacity = table->capacity;
+  IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+      table->arena, table->capacity, capacity, sizeof(loom_value_facts_t),
+      &table->capacity, (void**)&table->entries));
+  memset(table->entries + old_capacity, 0,
+         (table->capacity - old_capacity) * sizeof(loom_value_facts_t));
+  return iree_ok_status();
+}
+
 static iree_status_t loom_value_fact_table_allocate_initial_capacity(
     loom_value_fact_table_t* table, iree_host_size_t capacity) {
-  if (capacity == 0) return iree_ok_status();
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(table->arena, capacity,
-                                                 sizeof(loom_value_facts_t),
-                                                 (void**)&table->entries));
-  memset(table->entries, 0, capacity * sizeof(loom_value_facts_t));
-  table->capacity = capacity;
-  return iree_ok_status();
+  return loom_value_fact_table_ensure_capacity(table, capacity);
 }
 
 static iree_status_t loom_value_fact_table_append_touched_value(
@@ -1111,8 +1117,9 @@ void loom_value_fact_table_clear_scope(loom_value_fact_table_t* table) {
 iree_status_t loom_value_fact_table_define(loom_value_fact_table_t* table,
                                            loom_value_id_t value_id,
                                            loom_value_facts_t facts) {
-  IREE_ASSERT_LT(value_id, table->capacity);
   IREE_ASSERT_NE(facts.known_divisor, 0);
+  IREE_RETURN_IF_ERROR(loom_value_fact_table_ensure_capacity(
+      table, (iree_host_size_t)value_id + 1));
   if (table->entries[value_id].known_divisor == 0) {
     IREE_RETURN_IF_ERROR(
         loom_value_fact_table_append_touched_value(table, value_id));
