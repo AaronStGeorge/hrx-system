@@ -1077,10 +1077,19 @@ static iree_status_t loom_amdgpu_emit_masked_merge_value(
   loom_type_t lane_type =
       loom_type_register(loom_type_register_class_id(value_type), 1);
   if (lane_count == 1) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
+        context, source_op, low_false_value, &low_false_value));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
+        context, source_op, low_true_value, &low_true_value));
     return loom_amdgpu_emit_masked_merge_lane(
         context, source_op, low_false_value, low_true_value, low_condition,
         lane_type, out_merged_value);
   }
+
+  IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32_registers(
+      context, source_op, low_false_value, &low_false_value));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32_registers(
+      context, source_op, low_true_value, &low_true_value));
 
   loom_value_id_t lanes[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
   for (uint32_t i = 0; i < lane_count; ++i) {
