@@ -30,6 +30,19 @@ low.func.def target(@gfx11_target) @gfx11_sgpr_shift_immediate(%value: reg<amdgp
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_salu_shift_inline waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_salu_shift_inline(%value: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %shifted = s_lshl_b32_rhs_inline %value, 4
+  return
+}
+
+// ----
+  s_lshl_b32_rhs_inline s0, s0, 4
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_storage_address waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_storage_address() asm<amdgpu.rdna3.core> {
