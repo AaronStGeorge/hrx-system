@@ -231,6 +231,33 @@ low.func.def target(@gfx11_target) @gfx11_cond_branch(%lhs: reg<amdgpu.sgpr>, %r
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_scc_selects_with_interleaved_producers waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_scc_selects_with_interleaved_producers(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>, %lower: reg<amdgpu.sgpr>, %upper: reg<amdgpu.sgpr>, %true_value: reg<amdgpu.sgpr>, %false_value: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %below_lower = s_cmp_lt_i32 %lhs, %lower
+  %below_upper = s_cmp_lt_i32 %rhs, %upper
+  %lower_selected = s_cselect_b32 %true_value, %false_value, %below_lower
+  %upper_selected = s_cselect_b32 %true_value, %false_value, %below_upper
+  %packed = v_mov_b32_copy %lower_selected
+  %other_packed = v_mov_b32_copy %upper_selected
+  buffer_store_dword %packed, %resource, %vaddr, %soffset
+  buffer_store_dword %other_packed, %resource, %vaddr, %soffset {offset = 4}
+  return
+}
+
+// ----
+  s_cmp_lt_i32 s0, s1
+  s_cselect_b32 s0, s4, s5
+  s_cmp_lt_i32 s2, s3
+  s_cselect_b32 s1, s4, s5
+  v_mov_b32_copy v1, s0
+  buffer_store_dword v1, v0, s[8:11], s6 offen offset:0
+  v_mov_b32_copy v1, s1
+  buffer_store_dword v1, v0, s[8:11], s6 offen offset:4
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_exec_mask_branch waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_exec_mask_branch(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {

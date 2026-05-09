@@ -36,6 +36,7 @@ loom_cc_library(
         "//loom/src/loom/analysis:motion",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/cfg",
         "//loom/src/loom/pass:types",
         "//loom/src/loom/rewrite:rewriter",
         "//runtime/src/iree/base",

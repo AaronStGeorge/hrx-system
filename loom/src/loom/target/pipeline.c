@@ -99,7 +99,8 @@ static iree_status_t loom_target_pipeline_build_source_normalization(
       loom_target_pipeline_build_run(builder, IREE_SV("scf-to-cfg")));
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_run(builder, IREE_SV("cfg-simplify")));
-  return loom_target_pipeline_build_cleanup(builder);
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_cleanup(builder));
+  return loom_target_pipeline_build_run(builder, IREE_SV("branch-sink"));
 }
 
 static iree_status_t loom_target_pipeline_build_low_preparation(

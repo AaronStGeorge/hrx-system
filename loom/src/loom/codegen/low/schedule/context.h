@@ -58,6 +58,13 @@ typedef struct loom_low_schedule_pressure_cliff_range_t {
   uint32_t count;
 } loom_low_schedule_pressure_cliff_range_t;
 
+typedef struct loom_low_schedule_state_read_record_t {
+  // Node that reads an architectural state register.
+  uint32_t node_index;
+  // Next outstanding read record for the same descriptor register class.
+  uint32_t next_record;
+} loom_low_schedule_state_read_record_t;
+
 enum loom_low_schedule_value_flag_bits_e {
   // Value is live in the current simulated block schedule.
   LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE = 1u << 0,
@@ -132,8 +139,10 @@ typedef struct loom_low_schedule_build_state_t {
   loom_low_schedule_pressure_cliff_range_t* pressure_cliff_ranges;
   // Most recent architectural-state writer node, dense by register class.
   uint32_t* state_last_write_nodes;
-  // Most recent architectural-state reader node, dense by register class.
-  uint32_t* state_last_read_nodes;
+  // Outstanding architectural-state read lists, dense by register class.
+  uint32_t* state_read_heads;
+  // Outstanding state-read records used by state_read_heads.
+  loom_low_schedule_state_read_record_t* state_read_records;
   // Scratch effect-frontier read node indices, reused for each block.
   uint32_t* effect_read_nodes;
   // Scratch effect-frontier read summaries, parallel to effect_read_nodes.
@@ -167,6 +176,10 @@ typedef struct loom_low_schedule_build_state_t {
   iree_host_size_t hazard_state_count;
   // Number of populated resource_summaries entries after compaction.
   iree_host_size_t resource_summary_count;
+  // Number of populated outstanding state-read records.
+  iree_host_size_t state_read_record_count;
+  // Allocated outstanding state-read record capacity.
+  iree_host_size_t state_read_record_capacity;
   // Allocated effect-frontier read scratch capacity.
   iree_host_size_t effect_read_capacity;
   // Number of rows in |memory_access_records|.

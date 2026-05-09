@@ -285,8 +285,8 @@ static iree_status_t loom_low_schedule_initialize_descriptor_tables(
         state->arena, reg_class_count, sizeof(*state->state_last_write_nodes),
         (void**)&state->state_last_write_nodes));
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        state->arena, reg_class_count, sizeof(*state->state_last_read_nodes),
-        (void**)&state->state_last_read_nodes));
+        state->arena, reg_class_count, sizeof(*state->state_read_heads),
+        (void**)&state->state_read_heads));
   }
   IREE_RETURN_IF_ERROR(
       loom_low_schedule_initialize_pressure_cliff_ranges(state));

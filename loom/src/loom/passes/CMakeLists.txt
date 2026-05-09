@@ -40,6 +40,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::analysis::motion
     loom::src::loom::ir
+    loom::src::loom::ops::cfg
     loom::src::loom::ops::op_defs
     loom::src::loom::pass::types
     loom::src::loom::rewrite::rewriter
