@@ -600,6 +600,7 @@ static bool loom_low_operand_form_match_kind_is_valid(
     loom_low_operand_form_match_kind_t kind) {
   switch (kind) {
     case LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_I64:
+    case LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_EXACT_I64:
       return true;
     default:
       return false;
@@ -679,6 +680,18 @@ static iree_status_t loom_low_verify_descriptor_operand_forms(
 
     const loom_low_descriptor_t* replacement =
         &descriptor_set->descriptors[form->replacement_descriptor_ordinal];
+    if (form->replacement_immediate_index !=
+            LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE &&
+        form->replacement_immediate_index >= replacement->immediate_count) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "low descriptor %" PRIu32 " operand form %" PRIu32
+          " references replacement immediate %" PRIu16
+          " but replacement descriptor %" PRIu32 " has only %" PRIu16
+          " immediates",
+          descriptor_index, form_index, form->replacement_immediate_index,
+          form->replacement_descriptor_ordinal, replacement->immediate_count);
+    }
     if (replacement->result_count != descriptor->result_count) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,

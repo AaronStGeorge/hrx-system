@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 20u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 21u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -224,6 +224,9 @@ typedef enum loom_low_operand_form_match_kind_e {
   LOOM_LOW_OPERAND_FORM_MATCH_UNKNOWN = 0,
   // Operand facts prove every scalar element/register unit equals match_i64.
   LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_I64 = 1,
+  // Operand facts prove every scalar element/register unit is the same exact
+  // i64 value. The selected value is carried into the replacement form.
+  LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_EXACT_I64 = 2,
 } loom_low_operand_form_match_kind_t;
 
 typedef enum loom_low_latency_kind_e {
@@ -616,6 +619,10 @@ typedef struct loom_low_operand_form_t {
   uint16_t source_operand_index;
   // Packet operand position corresponding to source_operand_index.
   uint16_t source_packet_operand_index;
+  // Descriptor-local replacement immediate populated from the matched operand,
+  // or LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE when the form only removes an
+  // operand.
+  uint16_t replacement_immediate_index;
   // Number of packet operand positions in operand_form_operand_indices.
   uint16_t operand_map_count;
   // Predicate kind used to test the source operand facts.

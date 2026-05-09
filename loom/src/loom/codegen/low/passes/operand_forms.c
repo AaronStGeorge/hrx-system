@@ -55,7 +55,7 @@ typedef struct loom_low_select_operand_forms_state_t {
 
 static bool loom_low_select_operand_form_matches(
     const loom_value_fact_table_t* value_facts, loom_value_id_t value_id,
-    const loom_low_operand_form_t* form) {
+    const loom_low_operand_form_t* form, int64_t* out_matched_value) {
   const loom_value_facts_t facts =
       loom_value_fact_table_lookup(value_facts, value_id);
   switch (form->match_kind) {
@@ -66,8 +66,20 @@ static bool loom_low_select_operand_form_matches(
         return false;
       }
       int64_t value = 0;
-      return loom_value_facts_as_exact_i64(element, &value) &&
-             value == form->match_i64;
+      if (!loom_value_facts_as_exact_i64(element, &value) ||
+          value != form->match_i64) {
+        return false;
+      }
+      *out_matched_value = value;
+      return true;
+    }
+    case LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_EXACT_I64: {
+      loom_value_facts_t element = loom_value_facts_unknown();
+      if (!loom_value_facts_query_all_equal_element(&value_facts->context,
+                                                    facts, &element)) {
+        return false;
+      }
+      return loom_value_facts_as_exact_i64(element, out_matched_value);
     }
     default:
       return false;
@@ -166,9 +178,64 @@ static iree_status_t loom_low_descriptor_build_tied_results(
   return iree_ok_status();
 }
 
+static bool loom_low_immediate_accepts_i64(
+    const loom_low_immediate_t* immediate, int64_t value) {
+  switch (immediate->kind) {
+    case LOOM_LOW_IMMEDIATE_KIND_SIGNED: {
+      const int64_t signed_max = immediate->unsigned_max > (uint64_t)INT64_MAX
+                                     ? INT64_MAX
+                                     : (int64_t)immediate->unsigned_max;
+      return value >= immediate->signed_min && value <= signed_max;
+    }
+    case LOOM_LOW_IMMEDIATE_KIND_UNSIGNED:
+    case LOOM_LOW_IMMEDIATE_KIND_ORDINAL:
+      return value >= 0 && (uint64_t)value <= immediate->unsigned_max;
+    default:
+      return false;
+  }
+}
+
+static iree_status_t loom_low_select_operand_form_build_attrs(
+    loom_module_t* module, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* replacement_descriptor,
+    const loom_low_operand_form_t* form, int64_t matched_value,
+    loom_named_attr_slice_t source_attrs, loom_named_attr_slice_t* out_attrs,
+    bool* out_can_rewrite) {
+  *out_attrs = source_attrs;
+  *out_can_rewrite = true;
+  if (form->replacement_immediate_index ==
+      LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE) {
+    return iree_ok_status();
+  }
+
+  IREE_ASSERT(form->replacement_immediate_index <
+              replacement_descriptor->immediate_count);
+  const loom_low_immediate_t* immediate =
+      &descriptor_set->immediates[replacement_descriptor->immediate_start +
+                                  form->replacement_immediate_index];
+  if (!loom_low_immediate_accepts_i64(immediate, matched_value)) {
+    *out_can_rewrite = false;
+    return iree_ok_status();
+  }
+
+  iree_string_view_t immediate_name = loom_low_descriptor_set_string(
+      descriptor_set, immediate->field_name_string_offset);
+  loom_string_id_t immediate_name_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_module_intern_string(module, immediate_name, &immediate_name_id));
+  loom_named_attr_update_t update =
+      loom_named_attr_replace(immediate_name_id, loom_attr_i64(matched_value));
+  loom_attribute_t attr = {0};
+  IREE_RETURN_IF_ERROR(loom_module_replace_canonical_attr_dict(
+      module, source_attrs, loom_make_named_attr_update_slice(&update, 1),
+      &attr));
+  *out_attrs = loom_attr_as_dict(attr);
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_select_operand_form_rewrite_packet(
     loom_low_select_operand_forms_state_t* state, loom_rewriter_t* rewriter,
-    loom_op_t* op, const loom_low_operand_form_t* form) {
+    loom_op_t* op, const loom_low_operand_form_t* form, int64_t matched_value) {
   const loom_low_descriptor_set_t* descriptor_set =
       state->target->descriptor_set;
   const loom_low_descriptor_t* replacement_descriptor =
@@ -210,6 +277,15 @@ static iree_status_t loom_low_select_operand_form_rewrite_packet(
       state->pass->arena, descriptor_set, replacement_descriptor, &tied_results,
       &tied_result_count));
 
+  loom_named_attr_slice_t replacement_attrs = {0};
+  bool can_rewrite = false;
+  IREE_RETURN_IF_ERROR(loom_low_select_operand_form_build_attrs(
+      state->module, descriptor_set, replacement_descriptor, form,
+      matched_value, loom_low_op_attrs(op), &replacement_attrs, &can_rewrite));
+  if (!can_rewrite) {
+    return iree_ok_status();
+  }
+
   const loom_value_id_t value_checkpoint =
       loom_rewriter_value_checkpoint(rewriter);
   loom_builder_ip_t saved_ip = loom_builder_save(&rewriter->builder);
@@ -217,7 +293,7 @@ static iree_status_t loom_low_select_operand_form_rewrite_packet(
   loom_op_t* replacement_op = NULL;
   iree_status_t status = loom_low_op_build(
       &rewriter->builder, replacement_key_id, operands, form->operand_map_count,
-      loom_low_op_attrs(op), result_types, op->result_count, tied_results,
+      replacement_attrs, result_types, op->result_count, tied_results,
       tied_result_count, op->location, &replacement_op);
   loom_builder_restore(&rewriter->builder, saved_ip);
   IREE_RETURN_IF_ERROR(status);
@@ -255,12 +331,13 @@ static iree_status_t loom_low_select_operand_forms_try_rewrite_packet(
              ->operand_forms[packet.descriptor->operand_form_start + i];
     const loom_value_id_t value_id =
         loom_op_operands(op)[form->source_packet_operand_index];
+    int64_t matched_value = 0;
     if (!loom_low_select_operand_form_matches(state->value_facts, value_id,
-                                              form)) {
+                                              form, &matched_value)) {
       continue;
     }
     return loom_low_select_operand_form_rewrite_packet(state, rewriter, op,
-                                                       form);
+                                                       form, matched_value);
   }
   return iree_ok_status();
 }

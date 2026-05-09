@@ -14,7 +14,7 @@ from pathlib import Path
 
 from loom.stable_id import stable_id_from_string
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 19
+LOW_DESCRIPTOR_SET_ABI_VERSION = 21
 LOW_DESCRIPTOR_ENCODING_ID_NONE = (2**16) - 1
 LOW_DESCRIPTOR_SET_ORDINAL_NONE = (2**16) - 1
 
@@ -178,6 +178,7 @@ class DescriptorFlag(CEnum):
 
 class OperandFormMatchKind(CEnum):
     ALL_EQUAL_I64 = "LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_I64"
+    ALL_EQUAL_EXACT_I64 = "LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_EXACT_I64"
 
 
 @dataclass(frozen=True, slots=True)
@@ -314,9 +315,12 @@ class OperandForm:
     source_operand: str
     match_kind: OperandFormMatchKind
     match_i64: int = 0
+    replacement_immediate: str | None = None
 
     def __post_init__(self) -> None:
         _validate_metadata_key("replacement descriptor", self.replacement_descriptor)
+        if self.replacement_immediate is not None:
+            _validate_metadata_key("replacement immediate", self.replacement_immediate)
 
 
 @dataclass(frozen=True, slots=True)

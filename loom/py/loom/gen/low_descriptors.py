@@ -195,6 +195,7 @@ class _CompiledOperandForm:
     replacement_descriptor_ordinal: int
     source_operand_index: int
     source_packet_operand_index: int
+    replacement_immediate_index: int
     match_kind: OperandFormMatchKind
     match_i64: int
     operand_map_start: int
@@ -598,7 +599,7 @@ def _compile_operand_form(
     operand_form: OperandForm,
     operand_map_start: int,
 ) -> tuple[_CompiledOperandForm, tuple[int, ...]]:
-    operand_indices, _immediate_indices = _index_descriptor_fields(descriptor)
+    operand_indices, immediate_indices = _index_descriptor_fields(descriptor)
     source_operand_index = operand_indices.get(operand_form.source_operand)
     if source_operand_index is None:
         raise ValueError(f"descriptor '{descriptor.key}' operand form references unknown source operand '{operand_form.source_operand}'")
@@ -614,6 +615,7 @@ def _compile_operand_form(
 
     replacement_ordinal = descriptor_ordinals[operand_form.replacement_descriptor]
     replacement = selected_descriptors[replacement_ordinal]
+    _replacement_operand_indices, replacement_immediate_indices = _index_descriptor_fields(replacement)
     source_result_count = _validate_descriptor_operands(descriptor)
     replacement_result_count = _validate_descriptor_operands(replacement)
     if replacement_result_count != source_result_count:
@@ -625,8 +627,18 @@ def _compile_operand_form(
             raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' result {i} is '{replacement_result}' instead of '{source_result}'")
     source_immediates = tuple(immediate.field_name for immediate in descriptor.immediates)
     replacement_immediates = tuple(immediate.field_name for immediate in replacement.immediates)
-    if replacement_immediates != source_immediates:
-        raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' must have the same immediate fields")
+    replacement_immediate_index = LOW_DESCRIPTOR_SET_ORDINAL_NONE
+    if operand_form.replacement_immediate is None:
+        expected_replacement_immediates = source_immediates
+    else:
+        replacement_immediate_index = replacement_immediate_indices.get(operand_form.replacement_immediate, LOW_DESCRIPTOR_SET_ORDINAL_NONE)
+        if replacement_immediate_index == LOW_DESCRIPTOR_SET_ORDINAL_NONE:
+            raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' has no immediate field '{operand_form.replacement_immediate}'")
+        if operand_form.replacement_immediate in immediate_indices:
+            raise ValueError(f"descriptor '{descriptor.key}' operand form replacement immediate '{operand_form.replacement_immediate}' already exists on the source descriptor")
+        expected_replacement_immediates = tuple((*source_immediates, operand_form.replacement_immediate))
+    if replacement_immediates != expected_replacement_immediates:
+        raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' has immediate fields {replacement_immediates!r}, expected {expected_replacement_immediates!r}")
 
     replacement_packet_indices = _descriptor_packet_operand_indices(replacement)
     source_packet_index_by_field = {descriptor.operands[operand_index].field_name: packet_index for packet_index, operand_index in enumerate(source_packet_indices)}
@@ -645,6 +657,7 @@ def _compile_operand_form(
             replacement_descriptor_ordinal=replacement_ordinal,
             source_operand_index=source_operand_index,
             source_packet_operand_index=source_packet_operand_index,
+            replacement_immediate_index=replacement_immediate_index,
             match_kind=operand_form.match_kind,
             match_i64=operand_form.match_i64,
             operand_map_start=operand_map_start,
@@ -1639,6 +1652,7 @@ def _emit_source_for_views(
                 f".operand_map_start = {operand_form.operand_map_start},",
                 f".source_operand_index = {operand_form.source_operand_index},",
                 f".source_packet_operand_index = {operand_form.source_packet_operand_index},",
+                f".replacement_immediate_index = {operand_form.replacement_immediate_index},",
                 f".operand_map_count = {operand_form.operand_map_count},",
                 f".match_kind = {operand_form.match_kind.c_name},",
                 f".match_i64 = {_i64_literal(operand_form.match_i64)},",

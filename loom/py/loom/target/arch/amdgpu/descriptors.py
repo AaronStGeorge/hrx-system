@@ -2011,7 +2011,24 @@ def _v_add_u32_overlay(instruction_name: str) -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("lhs")),
             AmdgpuOperandOverlay("VSRC1", _vgpr_operand("rhs")),
         ),
+        operand_forms=(
+            _literal_operand_form(
+                replacement_descriptor="amdgpu.v_add_u32.lit",
+                source_operand="lhs",
+            ),
+        ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _literal_operand_form(
+    *, replacement_descriptor: str, source_operand: str
+) -> OperandForm:
+    return OperandForm(
+        replacement_descriptor=replacement_descriptor,
+        source_operand=source_operand,
+        match_kind=OperandFormMatchKind.ALL_EQUAL_EXACT_I64,
+        replacement_immediate="imm32",
     )
 
 
@@ -2121,6 +2138,7 @@ def _v_binary_u32_overlay(
     semantic_tag: str,
     lhs_name: str = "lhs",
     rhs_name: str = "rhs",
+    literal_descriptor_key: str | None = None,
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -2133,6 +2151,14 @@ def _v_binary_u32_overlay(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
             AmdgpuOperandOverlay("SRC0", _vgpr_operand(lhs_name)),
             AmdgpuOperandOverlay("VSRC1", _vgpr_operand(rhs_name)),
+        ),
+        operand_forms=()
+        if literal_descriptor_key is None
+        else (
+            _literal_operand_form(
+                replacement_descriptor=literal_descriptor_key,
+                source_operand=lhs_name,
+            ),
         ),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
@@ -2484,6 +2510,7 @@ def _v_and_b32_overlay() -> AmdgpuDescriptorOverlay:
         instruction_name="V_AND_B32",
         mnemonic="v_and_b32",
         semantic_tag="integer.and.u32",
+        literal_descriptor_key="amdgpu.v_and_b32.lit",
     )
 
 
@@ -2503,6 +2530,7 @@ def _v_or_b32_overlay() -> AmdgpuDescriptorOverlay:
         instruction_name="V_OR_B32",
         mnemonic="v_or_b32",
         semantic_tag="integer.or.u32",
+        literal_descriptor_key="amdgpu.v_or_b32.lit",
     )
 
 
@@ -2522,6 +2550,7 @@ def _v_xor_b32_overlay() -> AmdgpuDescriptorOverlay:
         instruction_name="V_XOR_B32",
         mnemonic="v_xor_b32",
         semantic_tag="integer.xor.u32",
+        literal_descriptor_key="amdgpu.v_xor_b32.lit",
     )
 
 
@@ -2543,6 +2572,7 @@ def _v_lshlrev_b32_overlay() -> AmdgpuDescriptorOverlay:
         semantic_tag="integer.shl.u32",
         lhs_name="shift",
         rhs_name="value",
+        literal_descriptor_key="amdgpu.v_lshlrev_b32.lit",
     )
 
 
@@ -2588,6 +2618,7 @@ def _v_lshrrev_b32_overlay() -> AmdgpuDescriptorOverlay:
         semantic_tag="integer.shr.u32",
         lhs_name="shift",
         rhs_name="value",
+        literal_descriptor_key="amdgpu.v_lshrrev_b32.lit",
     )
 
 
@@ -2609,6 +2640,7 @@ def _v_ashrrev_i32_overlay() -> AmdgpuDescriptorOverlay:
         semantic_tag="integer.shr.i32",
         lhs_name="shift",
         rhs_name="value",
+        literal_descriptor_key="amdgpu.v_ashrrev_i32.lit",
     )
 
 
