@@ -27,10 +27,10 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_b128_roundtrip() asm
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %23 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
   %25 = v_mov_b32 0
-  %loaded = global_load_b128 %25, %input_view
+  %loaded = global_load_b128_saddr %25, %input_view
   ds_write_b128 %25, %loaded
   %roundtrip = ds_read_b128 %25
-  global_store_b128 %25, %roundtrip, %output_view
+  global_store_b128_saddr %25, %roundtrip, %output_view
   return
 }
 
@@ -63,9 +63,9 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_b128_large_static_of
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %24 = storage {byte_alignment = 16, byte_length = 4096} : low.storage<workgroup>
   %26 = v_mov_b32 0
-  %loaded = global_load_b128 %26, %input_view
+  %loaded = global_load_b128_saddr %26, %input_view
   ds_write_b128 %26, %loaded {offset = 1024}
   %roundtrip = ds_read_b128 %26 {offset = 1024}
-  global_store_b128 %26, %roundtrip, %output_view
+  global_store_b128_saddr %26, %roundtrip, %output_view
   return
 }

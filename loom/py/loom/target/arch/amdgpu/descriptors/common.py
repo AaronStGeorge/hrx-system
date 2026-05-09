@@ -677,6 +677,25 @@ def _global_vaddr_asm(
     )
 
 
+def _global_saddr_asm(
+    *,
+    mnemonic: str,
+    results: tuple[str, ...] = (),
+    operands: tuple[str, ...],
+    implicit_m0: bool = False,
+    immediates: tuple[str, ...],
+) -> tuple[AsmForm, ...]:
+    if implicit_m0:
+        operands = (*operands, "m0")
+    return _asm(
+        mnemonic=f"{mnemonic}_saddr",
+        results=results,
+        operands=operands,
+        immediates=immediates,
+        named_immediates=True,
+    )
+
+
 def _literal_operand_form(
     *,
     replacement_descriptor: str,
@@ -2180,6 +2199,7 @@ __all__ = (
     "_global_atomic_effects",
     "_global_read_effect",
     "_global_to_lds_effects",
+    "_global_saddr_asm",
     "_global_vaddr_asm",
     "_global_write_effect",
     "_hal_buffer_descriptor_pseudos",

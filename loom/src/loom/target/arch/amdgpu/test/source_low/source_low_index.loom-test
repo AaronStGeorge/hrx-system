@@ -31,8 +31,8 @@ low.kernel.def target(@target) workgroup_size(4, 4, 1) @index_madd_global_b32() 
   %y = v_and_b32_lit %20, 1023
   %linear = v_lshl_add_u32_shift_imm %y, %x, 2
   %23 = v_lshlrev_b32_src0_inline %linear, 2
-  %loaded = global_load_b32 %23, %input_view
-  global_store_b32 %23, %loaded, %output_view
+  %loaded = global_load_b32_saddr %23, %input_view
+  global_store_b32_saddr %23, %loaded, %output_view
   return
 }
 
@@ -69,8 +69,8 @@ low.kernel.def target(@target) workgroup_size(8, 4, 1) @index_madd_u24_global_b3
   %y = v_and_b32_lit %21, 1023
   %linear = v_mad_u32_u24_src1_lit %y, %x, 9
   %24 = v_lshlrev_b32_src0_inline %linear, 2
-  %loaded = global_load_b32 %24, %input_view
-  global_store_b32 %24, %loaded, %output_view
+  %loaded = global_load_b32_saddr %24, %input_view
+  global_store_b32_saddr %24, %loaded, %output_view
   return
 }
 
@@ -107,8 +107,8 @@ low.kernel.def target(@target) workgroup_size(8, 4, 1) @index_madd_u24_literal_l
   %y = v_and_b32_lit %21, 1023
   %linear = v_mad_u32_u24_src0_lit %y, %x, 9
   %24 = v_lshlrev_b32_src0_inline %linear, 2
-  %loaded = global_load_b32 %24, %input_view
-  global_store_b32 %24, %loaded, %output_view
+  %loaded = global_load_b32_saddr %24, %input_view
+  global_store_b32_saddr %24, %loaded, %output_view
   return
 }
 
@@ -145,8 +145,8 @@ low.kernel.def target(@target) workgroup_size(8, 4, 1) @index_madd_u24_literal_a
   %y = v_and_b32_lit %21, 1023
   %linear = v_mad_u32_u24_src2_lit %y, %x, 1
   %24 = v_lshlrev_b32_src0_inline %linear, 2
-  %loaded = global_load_b32 %24, %input_view
-  global_store_b32 %24, %loaded, %output_view
+  %loaded = global_load_b32_saddr %24, %input_view
+  global_store_b32_saddr %24, %loaded, %output_view
   return
 }
 
@@ -177,8 +177,8 @@ low.kernel.def target(@target) workgroup_size(4, 1, 1) @index_madd_constant_adde
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 64} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 64} : reg<amdgpu.sgpr x2>
   %20 = v_lshlrev_b32_src0_inline %x, 4
-  %loaded = global_load_b32 %20, %input_view {offset = 4}
-  global_store_b32 %20, %loaded, %output_view {offset = 4}
+  %loaded = global_load_b32_saddr %20, %input_view {offset = 4}
+  global_store_b32_saddr %20, %loaded, %output_view {offset = 4}
   return
 }
 
@@ -208,8 +208,8 @@ low.kernel.def target(@target) workgroup_size(4, 1, 1) @index_shli_global_b32() 
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 64} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 64} : reg<amdgpu.sgpr x2>
   %18 = v_lshlrev_b32_src0_inline %x, 4
-  %loaded = global_load_b32 %18, %input_view
-  global_store_b32 %18, %loaded, %output_view
+  %loaded = global_load_b32_saddr %18, %input_view
+  global_store_b32_saddr %18, %loaded, %output_view
   return
 }
 
@@ -243,8 +243,8 @@ low.kernel.def target(@target) workgroup_size(32, 1, 1) @index_shli_previous_row
   %20 = v_mov_b32 1
   %previous = v_sub_nc_u32 %x, %20
   %23 = v_lshlrev_b32_src0_inline %previous, 4
-  %loaded = global_load_b128 %23, %input_view
-  global_store_b128 %23, %loaded, %output_view
+  %loaded = global_load_b128_saddr %23, %input_view
+  global_store_b128_saddr %23, %loaded, %output_view
   return
 }
 
@@ -278,9 +278,9 @@ low.kernel.def target(@target) workgroup_size(32, 1, 1) @index_div_rem_power_of_
   %24 = v_mov_b32 7
   %remainder = v_and_b32 %x, %24
   %26 = v_lshlrev_b32_src0_inline %quotient, 2
-  %loaded = global_load_b32 %26, %input_view
+  %loaded = global_load_b32_saddr %26, %input_view
   %28 = v_lshlrev_b32_src0_inline %remainder, 2
-  global_store_b32 %28, %loaded, %output_view
+  global_store_b32_saddr %28, %loaded, %output_view
   return
 }
 
@@ -317,9 +317,9 @@ low.kernel.def target(@target) workgroup_size(25, 1, 1) @index_div_rem_magic_mul
   %26 = v_mul_lo_u32 %quotient, %25
   %remainder = v_sub_nc_u32 %x, %26
   %28 = v_lshlrev_b32_src0_inline %quotient, 2
-  %loaded = global_load_b32 %28, %input_view
+  %loaded = global_load_b32_saddr %28, %input_view
   %30 = v_lshlrev_b32_src0_inline %remainder, 2
-  global_store_b32 %30, %loaded, %output_view
+  global_store_b32_saddr %30, %loaded, %output_view
   return
 }
 
@@ -359,9 +359,9 @@ low.kernel.def target(@target) workgroup_size(49, 1, 1) @index_div_rem_magic_add
   %32 = v_mul_lo_u32 %quotient, %31
   %remainder = v_sub_nc_u32 %x, %32
   %34 = v_lshlrev_b32_src0_inline %quotient, 2
-  %loaded = global_load_b32 %34, %input_view
+  %loaded = global_load_b32_saddr %34, %input_view
   %36 = v_lshlrev_b32_src0_inline %remainder, 2
-  global_store_b32 %36, %loaded, %output_view
+  global_store_b32_saddr %36, %loaded, %output_view
   return
 }
 
@@ -398,7 +398,7 @@ low.kernel.def target(@target) workgroup_size(1, 64, 1) @workitem_y_lds_uses_exp
   %21 = v_lshlrev_b32_src0_inline %y, 2
   ds_write_b32 %21, %value
   %loaded = ds_read_b32 %21
-  global_store_b32 %21, %loaded, %output_view
+  global_store_b32_saddr %21, %loaded, %output_view
   return
 }
 
@@ -442,6 +442,6 @@ low.kernel.def target(@target) workgroup_size(8, 4, 1) @dispatch_id_xy_global_b3
   %linear = v_lshl_add_u32_shift_imm %dispatch_y, %dispatch_x, 5
   %one = v_mov_b32 1
   %29 = v_lshlrev_b32_src0_inline %linear, 2
-  global_store_b32 %29, %one, %output_view
+  global_store_b32_saddr %29, %one, %output_view
   return
 }

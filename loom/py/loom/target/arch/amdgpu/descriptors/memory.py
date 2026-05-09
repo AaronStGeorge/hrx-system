@@ -935,7 +935,13 @@ def _global_load_overlay(
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_global_read_effect(width_bits),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=None
+        asm_forms=_global_saddr_asm(
+            mnemonic=mnemonic,
+            results=("dst",),
+            operands=("addr", "saddr"),
+            implicit_m0=implicit_m0,
+            immediates=_memory_asm_immediate_names(cache_fields),
+        )
         if saddr_off is None
         else _global_vaddr_asm(
             mnemonic=mnemonic,
@@ -996,7 +1002,13 @@ def _global_load_b16_d16_overlay(
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_global_read_effect(16),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=None
+        asm_forms=_global_saddr_asm(
+            mnemonic="global_load_short_d16",
+            results=("dst",),
+            operands=("addr", "saddr"),
+            implicit_m0=implicit_m0,
+            immediates=_memory_asm_immediate_names(cache_fields),
+        )
         if saddr_off is None
         else _global_vaddr_asm(
             mnemonic="global_load_short_d16",
@@ -1089,7 +1101,12 @@ def _global_store_overlay(
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_global_write_effect(width_bits),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=None
+        asm_forms=_global_saddr_asm(
+            mnemonic=mnemonic,
+            operands=("addr", "value", "saddr"),
+            implicit_m0=implicit_m0,
+            immediates=_memory_asm_immediate_names(cache_fields),
+        )
         if saddr_off is None
         else _global_vaddr_asm(
             mnemonic=mnemonic,
@@ -1149,7 +1166,12 @@ def _global_store_b16_overlay(
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_global_write_effect(16),),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=None
+        asm_forms=_global_saddr_asm(
+            mnemonic="global_store_short",
+            operands=("addr", "value", "saddr"),
+            implicit_m0=implicit_m0,
+            immediates=_memory_asm_immediate_names(cache_fields),
+        )
         if saddr_off is None
         else _global_vaddr_asm(
             mnemonic="global_store_short",

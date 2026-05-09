@@ -17,10 +17,10 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_extractu() asm<amdgpu
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
   %9 = v_mov_b32 0
-  %loaded = global_load_b32 %9, %input_view
+  %loaded = global_load_b32_saddr %9, %input_view
   %11 = v_lshrrev_b32_src0_inline %loaded, 4
   %nibble = v_and_b32_src0_inline %11, 15
-  global_store_b32 %9, %nibble, %output_view
+  global_store_b32_saddr %9, %nibble, %output_view
   return
 }
 
@@ -42,10 +42,10 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_extracts() asm<amdgpu
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
   %9 = v_mov_b32 0
-  %loaded = global_load_b32 %9, %input_view
+  %loaded = global_load_b32_saddr %9, %input_view
   %11 = v_lshlrev_b32_src0_inline %loaded, 24
   %nibble = v_ashrrev_i32_src0_inline %11, 28
-  global_store_b32 %9, %nibble, %output_view
+  global_store_b32_saddr %9, %nibble, %output_view
   return
 }
 
@@ -70,13 +70,13 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_insert() asm<amdgpu.r
   %base_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
   %13 = v_mov_b32 0
-  %field = global_load_b32 %13, %field_view
-  %base = global_load_b32 %13, %base_view
+  %field = global_load_b32_saddr %13, %field_view
+  %base = global_load_b32_saddr %13, %base_view
   %17 = v_and_b32_src0_inline %field, 15
   %18 = v_lshlrev_b32_src0_inline %17, 8
   %19 = v_and_b32_lit %base, 4294963455
   %inserted = v_or_b32 %19, %18
-  global_store_b32 %13, %inserted, %output_view
+  global_store_b32_saddr %13, %inserted, %output_view
   return
 }
 
@@ -102,7 +102,7 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_b128_shape() asm<amdg
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
   %13 = v_mov_b32 0
-  %loaded = global_load_b128 %13, %input_view
+  %loaded = global_load_b128_saddr %13, %input_view
   %15 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %16 = v_and_b32_src0_inline %15, 15
   %17 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
@@ -141,6 +141,6 @@ low.func.def target(@target) abi(hal_kernel) @i32_bitfield_b128_shape() asm<amdg
   %75 = v_sub_nc_u32 %54, %62
   %78 = v_sub_nc_u32 %60, %62
   %result = concat(%69, %72, %75, %78) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128 %13, %result, %output_view
+  global_store_b128_saddr %13, %result, %output_view
   return
 }

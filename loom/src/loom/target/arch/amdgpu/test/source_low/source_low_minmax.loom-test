@@ -212,7 +212,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @index_minmax_vgpr_selec
   %selected = v_cndmask_b32 %max, %min, %cond
   %stored = v_mov_b32 1
   %24 = v_lshlrev_b32_src0_inline %selected, 2
-  global_store_b32 %24, %stored, %output_view
+  global_store_b32_saddr %24, %stored, %output_view
   return
 }
 
@@ -238,7 +238,7 @@ low.func.def target(@target) abi(hal_kernel) @f32_reduce_minnum_maxnum() asm<amd
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 8} : reg<amdgpu.sgpr x2>
   %13 = v_mov_b32 0
-  %loaded = global_load_b128 %13, %input_view
+  %loaded = global_load_b128_saddr %13, %input_view
   %15 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %16 = v_min_f32_lit %15, 1148846080
   %17 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
@@ -252,6 +252,6 @@ low.func.def target(@target) abi(hal_kernel) @f32_reduce_minnum_maxnum() asm<amd
   %29 = v_max_f32 %18, %19
   %max = v_max_f32 %28, %29
   %stored = concat(%min, %max) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  global_store_b64 %13, %stored, %output_view
+  global_store_b64_saddr %13, %stored, %output_view
   return
 }

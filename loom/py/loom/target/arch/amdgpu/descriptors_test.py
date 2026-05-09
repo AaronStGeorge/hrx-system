@@ -33,6 +33,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _categorize_amdgpu_descriptors,
     _gfx11_core_overlays,
     _gfx12_core_overlays,
+    _gfx950_core_overlays,
     _gfx1250_core_overlays,
     _validate_address_immediate_units,
     _with_execution_mask_state_read,
@@ -466,5 +467,60 @@ def test_global_vaddr_memory_forms_have_unique_low_asm_mnemonics() -> None:
         "dlc",
     )
 
-    assert descriptors["amdgpu.global_load_b128_saddr"].asm_forms is None
-    assert descriptors["amdgpu.global_store_b128_saddr"].asm_forms is None
+    saddr_load_forms = descriptors["amdgpu.global_load_b128_saddr"].asm_forms
+    assert saddr_load_forms is not None
+    saddr_load_form = saddr_load_forms[0]
+    assert saddr_load_form.mnemonic == "global_load_b128_saddr"
+    assert saddr_load_form.results == ("dst",)
+    assert saddr_load_form.operands == ("addr", "saddr")
+    assert tuple(immediate.name for immediate in saddr_load_form.immediates) == (
+        "offset",
+        "glc",
+        "slc",
+        "dlc",
+    )
+
+    saddr_store_forms = descriptors["amdgpu.global_store_b128_saddr"].asm_forms
+    assert saddr_store_forms is not None
+    saddr_store_form = saddr_store_forms[0]
+    assert saddr_store_form.mnemonic == "global_store_b128_saddr"
+    assert saddr_store_form.results == ()
+    assert saddr_store_form.operands == ("addr", "value", "saddr")
+    assert tuple(immediate.name for immediate in saddr_store_form.immediates) == (
+        "offset",
+        "glc",
+        "slc",
+        "dlc",
+    )
+
+
+def test_gfx950_global_saddr_memory_asm_forms_include_m0() -> None:
+    descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx950_core_overlays()
+    }
+
+    load_forms = descriptors["amdgpu.global_load_b128_saddr"].asm_forms
+    assert load_forms is not None
+    load_form = load_forms[0]
+    assert load_form.mnemonic == "global_load_dwordx4_saddr"
+    assert load_form.results == ("dst",)
+    assert load_form.operands == ("addr", "saddr", "m0")
+    assert tuple(immediate.name for immediate in load_form.immediates) == (
+        "offset",
+        "nt",
+        "sc0",
+        "sc1",
+    )
+
+    store_forms = descriptors["amdgpu.global_store_b128_saddr"].asm_forms
+    assert store_forms is not None
+    store_form = store_forms[0]
+    assert store_form.mnemonic == "global_store_dwordx4_saddr"
+    assert store_form.results == ()
+    assert store_form.operands == ("addr", "value", "saddr", "m0")
+    assert tuple(immediate.name for immediate in store_form.immediates) == (
+        "offset",
+        "nt",
+        "sc0",
+        "sc1",
+    )

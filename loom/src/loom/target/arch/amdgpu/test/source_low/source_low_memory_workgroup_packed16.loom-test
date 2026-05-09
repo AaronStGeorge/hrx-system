@@ -27,10 +27,10 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_f16x4_b64_roundtrip(
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 512} : reg<amdgpu.sgpr x2>
   %23 = storage {byte_alignment = 8, byte_length = 512} : low.storage<workgroup>
   %25 = v_mov_b32 0
-  %loaded = global_load_b64 %25, %input_view
+  %loaded = global_load_b64_saddr %25, %input_view
   ds_write_b64 %25, %loaded
   %roundtrip = ds_read_b64 %25
-  global_store_b64 %25, %roundtrip, %output_view
+  global_store_b64_saddr %25, %roundtrip, %output_view
   return
 }
 
@@ -62,10 +62,10 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_f16x8_b128_roundtrip
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %23 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
   %25 = v_mov_b32 0
-  %loaded = global_load_b128 %25, %input_view
+  %loaded = global_load_b128_saddr %25, %input_view
   ds_write_b128 %25, %loaded
   %roundtrip = ds_read_b128 %25
-  global_store_b128 %25, %roundtrip, %output_view
+  global_store_b128_saddr %25, %roundtrip, %output_view
   return
 }
 
@@ -110,7 +110,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_f16x8_b128_extract_s
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
   %24 = storage {byte_alignment = 16, byte_length = 16} : low.storage<workgroup>
   %26 = v_mov_b32 0
-  %loaded = global_load_b128 %26, %input_view
+  %loaded = global_load_b128_saddr %26, %input_view
   %lane0 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   ds_write_b16 %26, %lane0
   %lane1 = v_lshrrev_b32_src0_inline %lane0, 16
@@ -128,7 +128,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_f16x8_b128_extract_s
   %lane7 = v_lshrrev_b32_src0_inline %lane6, 16
   ds_write_b16 %26, %lane7 {offset = 14}
   %roundtrip = ds_read_b128 %26
-  global_store_b128 %26, %roundtrip, %output_view
+  global_store_b128_saddr %26, %roundtrip, %output_view
   return
 }
 
@@ -160,10 +160,10 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_bf16x4_b64_roundtrip
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 512} : reg<amdgpu.sgpr x2>
   %23 = storage {byte_alignment = 8, byte_length = 512} : low.storage<workgroup>
   %25 = v_mov_b32 0
-  %loaded = global_load_b64 %25, %input_view
+  %loaded = global_load_b64_saddr %25, %input_view
   ds_write_b64 %25, %loaded
   %roundtrip = ds_read_b64 %25
-  global_store_b64 %25, %roundtrip, %output_view
+  global_store_b64_saddr %25, %roundtrip, %output_view
   return
 }
 
@@ -195,10 +195,10 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_bf16x8_b128_roundtri
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %23 = storage {byte_alignment = 16, byte_length = 1024} : low.storage<workgroup>
   %25 = v_mov_b32 0
-  %loaded = global_load_b128 %25, %input_view
+  %loaded = global_load_b128_saddr %25, %input_view
   ds_write_b128 %25, %loaded
   %roundtrip = ds_read_b128 %25
-  global_store_b128 %25, %roundtrip, %output_view
+  global_store_b128_saddr %25, %roundtrip, %output_view
   return
 }
 
@@ -230,10 +230,10 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_f16_scalar_roundtrip
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
   %20 = storage {byte_alignment = 2, byte_length = 128} : low.storage<workgroup>
   %22 = v_mov_b32 0
-  %loaded = global_load_u16 %22, %input_view
+  %loaded = global_load_u16_saddr %22, %input_view
   ds_write_b16 %22, %loaded
   %roundtrip = ds_read_u16 %22
-  global_store_short %22, %roundtrip, %output_view
+  global_store_short_saddr %22, %roundtrip, %output_view
   return
 }
 
@@ -265,10 +265,10 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_bf16_scalar_roundtri
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
   %20 = storage {byte_alignment = 2, byte_length = 128} : low.storage<workgroup>
   %22 = v_mov_b32 0
-  %loaded = global_load_u16 %22, %input_view
+  %loaded = global_load_u16_saddr %22, %input_view
   ds_write_b16 %22, %loaded
   %roundtrip = ds_read_u16 %22
-  global_store_short %22, %roundtrip, %output_view
+  global_store_short_saddr %22, %roundtrip, %output_view
   return
 }
 
@@ -309,12 +309,12 @@ low.kernel.def target(@target) workgroup_size(16, 16, 1) @lds_f16_strided_scalar
   %33 = storage {byte_alignment = 2, byte_length = 512} : low.storage<workgroup>
   %35 = v_lshl_add_u32_shift_imm %row, %col, 4
   %36 = v_lshlrev_b32_src0_inline %35, 1
-  %loaded = global_load_u16 %36, %input_view
+  %loaded = global_load_u16_saddr %36, %input_view
   %38 = v_lshlrev_b32_src0_inline %row, 1
   %39 = v_lshlrev_b32_src0_inline %col, 5
   %40 = v_add_u32 %38, %39
   ds_write_b16 %40, %loaded
   %roundtrip = ds_read_u16 %40
-  global_store_short %36, %roundtrip, %output_view
+  global_store_short_saddr %36, %roundtrip, %output_view
   return
 }

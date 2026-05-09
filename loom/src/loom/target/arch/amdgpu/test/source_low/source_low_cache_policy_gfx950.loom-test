@@ -17,12 +17,12 @@ kernel.def target(@target) @cache_device_non_temporal_load_store(%input: buffer,
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @cache_device_non_temporal_load_store() {
-  %input_view = low.resource<hal_binding> {extent = 1024, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %output_view = low.resource<hal_binding> {extent = 1024, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
-  %17 = low.const<amdgpu.s_mov_b32_m0.imm> {imm32 = 0} : reg<amdgpu.m0>
-  %loaded = low.op<amdgpu.global_load_b128_saddr>(%16, %input_view, %17) {nt = 1, offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>) -> reg<amdgpu.vgpr x4>
-  low.op<amdgpu.global_store_b128_saddr>(%16, %loaded, %output_view, %17) {nt = 1, offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x4>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
-  low.return
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @cache_device_non_temporal_load_store() asm<amdgpu.cdna4.core> {
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %16 = v_mov_b32 0
+  %17 = s_mov_b32_m0_imm 0
+  %loaded = global_load_dwordx4_saddr %16, %input_view, %17 {nt = 1}
+  global_store_dwordx4_saddr %16, %loaded, %output_view, %17 {nt = 1}
+  return
 }

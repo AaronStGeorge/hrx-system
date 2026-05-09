@@ -26,11 +26,11 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_bitwise() asm<amdgpu
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %20 = v_mov_b32 0
-  %loaded = global_load_b32 %20, %input_view
+  %loaded = global_load_b32_saddr %20, %input_view
   %masked = v_and_b32_lit %loaded, 15
   %with_tag = v_or_b32_lit %masked, 240
   %result = v_xor_b32 %with_tag, %loaded
-  global_store_b32 %20, %result, %output_view
+  global_store_b32_saddr %20, %result, %output_view
   return
 }
 
@@ -62,13 +62,13 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_shift() asm<amdgpu.r
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %21 = v_mov_b32 0
-  %loaded = global_load_b32 %21, %input_view
+  %loaded = global_load_b32_saddr %21, %input_view
   %left = v_lshlrev_b32_lit %loaded, 3
   %logical = v_lshrrev_b32_lit %loaded, 3
   %arithmetic = v_ashrrev_i32_lit %loaded, 3
   %joined = v_or_b32 %left, %logical
   %result = v_xor_b32 %joined, %arithmetic
-  global_store_b32 %21, %result, %output_view
+  global_store_b32_saddr %21, %result, %output_view
   return
 }
 
@@ -96,9 +96,9 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_negative_literal() a
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %17 = v_mov_b32 0
-  %loaded = global_load_b32 %17, %input_view
+  %loaded = global_load_b32_saddr %17, %input_view
   %result = v_xor_b32_lit %loaded, 4294967295
-  global_store_b32 %17, %result, %output_view
+  global_store_b32_saddr %17, %result, %output_view
   return
 }
 
@@ -138,7 +138,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_scalarized() asm<amd
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %30 = v_mov_b32 0
-  %loaded = global_load_b128 %30, %input_view
+  %loaded = global_load_b128_saddr %30, %input_view
   %lane0 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %lane1 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %masked = v_and_b32_lit %lane0, 255
@@ -149,6 +149,6 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @i32_scalarized() asm<amd
   %lane2 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %lane3 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %result = concat(%mixed, %logical, %lane2, %lane3) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128 %30, %result, %output_view
+  global_store_b128_saddr %30, %result, %output_view
   return
 }

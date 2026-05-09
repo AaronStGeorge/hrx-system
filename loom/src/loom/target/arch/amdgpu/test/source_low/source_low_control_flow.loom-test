@@ -144,7 +144,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @cfg_exact_divergent_cond
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
   %value = v_mov_b32 1
   %20 = v_mov_b32 0
-  global_store_b32 %20, %value, %output_view
+  global_store_b32_saddr %20, %value, %output_view
   return
 }
 
@@ -152,7 +152,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @cfg_exact_false_divergen
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
   %value = v_mov_b32 2
   %23 = v_mov_b32 0
-  global_store_b32 %23, %value, %output_view
+  global_store_b32_saddr %23, %value, %output_view
   return
 }
 
@@ -191,17 +191,17 @@ low.func.def target(@target) abi(hal_kernel) @divergent_if_else(%values: reg<amd
   low.cond_br %20, ^then, ^_bb4 : reg<amdgpu.scc>
 ^then:
   %22 = v_mov_b32 0
-  global_store_b32 %22, %then, %output_view
+  global_store_b32_saddr %22, %then, %output_view
   low.br ^_bb4
 ^else:
   %else = v_sub_nc_u32 %17, %then
   %25 = v_mov_b32 0
-  global_store_b32 %25, %else, %output_view
+  global_store_b32_saddr %25, %else, %output_view
   low.br ^_bb5
 ^join:
   %joined = v_mov_b32 1
   %27 = v_mov_b32 0
-  global_store_b32 %27, %joined, %output_view {offset = 4}
+  global_store_b32_saddr %27, %joined, %output_view {offset = 4}
   return
 ^_bb4:
   %21 = s_xor_b64_exec %19
@@ -259,17 +259,17 @@ low.func.def target(@target) abi(hal_kernel) @divergent_nested_if_else_stores(%v
 ^inside:
   %inside_stored = v_add_u32 %lane, %28
   %35 = v_mov_b32 0
-  global_store_b32 %35, %inside_stored, %output_view
+  global_store_b32_saddr %35, %inside_stored, %output_view
   low.br ^_bb7
 ^outside_high:
   %high_stored = v_sub_nc_u32 %lane, %28
   %38 = v_mov_b32 0
-  global_store_b32 %38, %high_stored, %output_view {offset = 4}
+  global_store_b32_saddr %38, %high_stored, %output_view {offset = 4}
   low.br ^_bb8
 ^before:
   %low_stored = v_sub_nc_u32 %23, %lane
   %41 = v_mov_b32 0
-  global_store_b32 %41, %low_stored, %output_view {offset = 8}
+  global_store_b32_saddr %41, %low_stored, %output_view {offset = 8}
   low.br ^_bb6
 ^_bb5:
   %27 = s_xor_b64_exec %25
@@ -717,12 +717,12 @@ low.func.def target(@target) abi(hal_kernel) @divergent_then_only(%values: reg<a
 ^then:
   %stored = v_add_u32 %lane, %15
   %21 = v_mov_b32 0
-  global_store_b32 %21, %stored, %output_view
+  global_store_b32_saddr %21, %stored, %output_view
   low.br ^_bb3
 ^join:
   %joined = v_mov_b32 1
   %23 = v_mov_b32 0
-  global_store_b32 %23, %joined, %output_view {offset = 4}
+  global_store_b32_saddr %23, %joined, %output_view {offset = 4}
   return
 ^_bb3:
   s_mov_b64_exec %17

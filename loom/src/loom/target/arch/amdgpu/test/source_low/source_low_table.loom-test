@@ -29,7 +29,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_table_lookup_i8_code
   %codes_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 8} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 32} : reg<amdgpu.sgpr x2>
   %23 = v_mov_b32 0
-  %codes = global_load_b32 %23, %codes_view
+  %codes = global_load_b32_saddr %23, %codes_view
   %g0 = v_mov_b32 3212836864
   %g1 = v_mov_b32 3204448256
   %g2 = v_mov_b32 1056964608
@@ -69,7 +69,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_table_lookup_i8_code
   %66 = v_cmp_eq_i32 %61, %36
   %67 = v_cndmask_b32 %65, %g3, %66
   %decoded = concat(%43, %51, %59, %67) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128 %23, %decoded, %output_view
+  global_store_b128_saddr %23, %decoded, %output_view
   return
 }
 

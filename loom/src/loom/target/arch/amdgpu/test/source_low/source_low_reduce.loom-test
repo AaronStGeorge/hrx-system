@@ -19,7 +19,7 @@ low.func.def target(@target) abi(hal_kernel) @i32_reduce_add() asm<amdgpu.rdna3.
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
   %12 = v_mov_b32 0
-  %loaded = global_load_b128 %12, %input_view
+  %loaded = global_load_b128_saddr %12, %input_view
   %14 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %15 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %16 = v_add_u32 %14, %15
@@ -27,7 +27,7 @@ low.func.def target(@target) abi(hal_kernel) @i32_reduce_add() asm<amdgpu.rdna3.
   %18 = v_add_u32 %16, %17
   %19 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %stored = v_add_u32 %18, %19
-  global_store_b32 %12, %stored, %output_view
+  global_store_b32_saddr %12, %stored, %output_view
   return
 }
 
@@ -51,7 +51,7 @@ low.func.def target(@target) abi(hal_kernel) @f32_reduce_add() asm<amdgpu.rdna3.
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
   %12 = v_mov_b32 0
-  %loaded = global_load_b128 %12, %input_view
+  %loaded = global_load_b128_saddr %12, %input_view
   %14 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %15 = v_add_f32_lit %14, 0
   %16 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
@@ -60,7 +60,7 @@ low.func.def target(@target) abi(hal_kernel) @f32_reduce_add() asm<amdgpu.rdna3.
   %19 = v_add_f32 %17, %18
   %20 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %stored = v_add_f32 %19, %20
-  global_store_b32 %12, %stored, %output_view
+  global_store_b32_saddr %12, %stored, %output_view
   return
 }
 
@@ -84,7 +84,7 @@ low.func.def target(@target) abi(hal_kernel) @f32_reduce_add_fastmath() asm<amdg
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
   %12 = v_mov_b32 0
-  %loaded = global_load_b128 %12, %input_view
+  %loaded = global_load_b128_saddr %12, %input_view
   %14 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %15 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %16 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
@@ -92,7 +92,7 @@ low.func.def target(@target) abi(hal_kernel) @f32_reduce_add_fastmath() asm<amdg
   %18 = v_add_f32 %14, %15
   %19 = v_add_f32 %16, %17
   %stored = v_add_f32 %18, %19
-  global_store_b32 %12, %stored, %output_view
+  global_store_b32_saddr %12, %stored, %output_view
   return
 }
 

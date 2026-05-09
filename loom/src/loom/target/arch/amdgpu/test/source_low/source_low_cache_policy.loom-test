@@ -21,7 +21,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @cache_system_bypass_load
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %16 = v_mov_b32 0
-  %loaded = global_load_b128 %16, %input_view {scope = 3, th = 3}
-  global_store_b128 %16, %loaded, %output_view {scope = 2, th = 7}
+  %loaded = global_load_b128_saddr %16, %input_view {scope = 3, th = 3}
+  global_store_b128_saddr %16, %loaded, %output_view {scope = 2, th = 7}
   return
 }

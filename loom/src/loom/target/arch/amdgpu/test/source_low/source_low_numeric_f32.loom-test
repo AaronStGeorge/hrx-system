@@ -28,13 +28,13 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_arith() asm<amdgpu.r
   %rhs_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %24 = v_mov_b32 0
-  %lhs = global_load_b32 %24, %lhs_view
-  %rhs = global_load_b32 %24, %rhs_view
+  %lhs = global_load_b32_saddr %24, %lhs_view
+  %rhs = global_load_b32_saddr %24, %rhs_view
   %sum = v_add_f32 %lhs, %rhs
   %product = v_mul_f32 %sum, %rhs
   %negated = v_xor_b32_lit %product, 2147483648
   %absolute = v_and_b32_lit %negated, 2147483647
-  global_store_b32 %24, %absolute, %output_view
+  global_store_b32_saddr %24, %absolute, %output_view
   return
 }
 
@@ -66,12 +66,12 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_fma() asm<amdgpu.rdn
   %rhs_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %23 = v_mov_b32 0
-  %lhs = global_load_b32 %23, %lhs_view
-  %rhs = global_load_b32 %23, %rhs_view
+  %lhs = global_load_b32_saddr %23, %lhs_view
+  %rhs = global_load_b32_saddr %23, %rhs_view
   %bias = v_mov_b32 1056964608
   %fma = v_fma_f32 %lhs, %rhs, %bias
   %result = v_sub_f32 %fma, %bias
-  global_store_b32 %23, %result, %output_view
+  global_store_b32_saddr %23, %result, %output_view
   return
 }
 
@@ -101,8 +101,8 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_arcp_div() asm<amdgp
   %rhs_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %24 = v_mov_b32 0
-  %lhs = global_load_b128 %24, %lhs_view
-  %rhs = global_load_b128 %24, %rhs_view
+  %lhs = global_load_b128_saddr %24, %lhs_view
+  %rhs = global_load_b128_saddr %24, %rhs_view
   %28 = slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %29 = v_rcp_f32 %28
   %30 = slice %rhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
@@ -120,7 +120,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_arcp_div() asm<amdgp
   %46 = slice %lhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %48 = v_mul_f32 %46, %35
   %quotient = concat(%39, %42, %45, %48) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128 %24, %quotient, %output_view
+  global_store_b128_saddr %24, %quotient, %output_view
   return
 }
 
@@ -165,8 +165,8 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_scalarized() asm<amd
   %rhs_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %39 = v_mov_b32 0
-  %lhs = global_load_b128 %39, %lhs_view
-  %rhs = global_load_b128 %39, %rhs_view
+  %lhs = global_load_b128_saddr %39, %lhs_view
+  %rhs = global_load_b128_saddr %39, %rhs_view
   %lhs0 = slice %lhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %rhs0 = slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %lane0 = v_add_f32 %lhs0, %rhs0
@@ -182,7 +182,7 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_scalarized() asm<amd
   %bias = v_mov_b32 1056964608
   %lane3 = v_fma_f32 %lhs3, %rhs3, %bias
   %result = concat(%lane0, %lane1, %lane2, %lane3) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128 %39, %result, %output_view
+  global_store_b128_saddr %39, %result, %output_view
   return
 }
 
@@ -329,6 +329,6 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @f32_direct_arg_scale(%sc
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
   %13 = v_mov_b32_copy %scale
   %14 = v_mov_b32 0
-  global_store_b32 %14, %13, %output_view
+  global_store_b32_saddr %14, %13, %output_view
   return
 }
