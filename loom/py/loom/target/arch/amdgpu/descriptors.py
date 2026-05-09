@@ -376,6 +376,7 @@ _GLOBAL_SADDR_OFFSET_ONLY_SIZE_REASON = (
     "saddr-enabled-global-address-uses-one-offset-vgpr"
 )
 _D16_PARTIAL_REGISTER_SIZE_REASON = "d16-instruction-uses-half-vgpr-lane"
+_U24_SOURCE_SIZE_REASON = "u24-instruction-reads-low-24-bits-of-b32-source"
 
 _SGPR_ALT = (RegClassAlt(_REG_SGPR),)
 _VGPR_ALT = (RegClassAlt(_REG_VGPR),)
@@ -2338,6 +2339,32 @@ def _v_mul_u32_u24_literal_overlay() -> AmdgpuDescriptorOverlay:
         instruction_name="V_MUL_U32_U24",
         mnemonic="v_mul_u32_u24",
         semantic_tag="integer.mul.lo.u24.u32",
+    )
+
+
+def _v_mad_u32_u24_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_mad_u32_u24",
+        instruction_name="V_MAD_U32_U24",
+        mnemonic="v_mad_u32_u24",
+        encoding_name="ENC_VOP3",
+        semantic_tag="integer.mad.lo.u24.u32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay(
+                "SRC0",
+                _sgpr_vgpr_operand("a"),
+                size_exception_reason=_U24_SOURCE_SIZE_REASON,
+            ),
+            AmdgpuOperandOverlay(
+                "SRC1",
+                _sgpr_vgpr_operand("b"),
+                size_exception_reason=_U24_SOURCE_SIZE_REASON,
+            ),
+            AmdgpuOperandOverlay("SRC2", _sgpr_vgpr_operand("addend")),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
 
@@ -7684,6 +7711,7 @@ def _cdna_core_overlays(
         _v_mul_hi_u32_overlay(),
         _v_mul_u32_u24_overlay(),
         _v_mul_u32_u24_literal_overlay(),
+        _v_mad_u32_u24_overlay(),
         _v_min_i32_overlay(),
         _v_max_i32_overlay(),
         _v_min_u32_overlay(),
@@ -8003,6 +8031,7 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_mul_hi_u32_overlay(),
         _v_mul_u32_u24_overlay(),
         _v_mul_u32_u24_literal_overlay(),
+        _v_mad_u32_u24_overlay(),
         _v_min_i32_overlay(),
         _v_max_i32_overlay(),
         _v_min_u32_overlay(),
@@ -8271,6 +8300,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_mul_hi_u32_overlay(),
         _v_mul_u32_u24_overlay(),
         _v_mul_u32_u24_literal_overlay(),
+        _v_mad_u32_u24_overlay(),
         _v_min_i32_overlay(),
         _v_max_i32_overlay(),
         _v_min_u32_overlay(),
@@ -8566,6 +8596,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         _v_mul_hi_u32_overlay(),
         _v_mul_u32_u24_overlay(),
         _v_mul_u32_u24_literal_overlay(),
+        _v_mad_u32_u24_overlay(),
         _v_min_i32_overlay(),
         _v_max_i32_overlay(),
         _v_min_u32_overlay(),
@@ -9587,6 +9618,7 @@ _AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS: dict[
     "amdgpu.v_mul_hi_u32": _v_mul_hi_u32_overlay,
     "amdgpu.v_mul_u32_u24": _v_mul_u32_u24_overlay,
     "amdgpu.v_mul_u32_u24.lit": _v_mul_u32_u24_literal_overlay,
+    "amdgpu.v_mad_u32_u24": _v_mad_u32_u24_overlay,
     "amdgpu.v_min_i32": _v_min_i32_overlay,
     "amdgpu.v_max_i32": _v_max_i32_overlay,
     "amdgpu.v_min_u32": _v_min_u32_overlay,

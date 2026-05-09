@@ -65,6 +65,7 @@ _DESCRIPTOR_KEYS = (
     "amdgpu.v_add_u32.lit",
     "amdgpu.v_sub_u32",
     "amdgpu.v_mul_lo_u32",
+    "amdgpu.v_mad_u32_u24",
     "amdgpu.v_min_i32",
     "amdgpu.v_max_i32",
     "amdgpu.v_min_u32",
@@ -148,6 +149,11 @@ _ADDRESS_U32_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="address-width",
     subject_name="u32",
     constraint_key="amdgpu.address.u32",
+)
+_ADDRESS_U24_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="address-width",
+    subject_name="u24",
+    constraint_key="amdgpu.address.u24",
 )
 _ADDRESS_EXACT_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="address-literal",
@@ -928,6 +934,79 @@ def _index_madd_literal_rule() -> DescriptorRule:
     )
 
 
+def _index_madd_u24_mad_rule(
+    *,
+    preserved_source: str | None,
+) -> DescriptorRule:
+    descriptor = _descriptor("amdgpu.v_mad_u32_u24")
+
+    def multiply_guard(field: str) -> Guard:
+        if preserved_source == field:
+            return Guard.low_value_register_class(
+                field,
+                "amdgpu.sgpr",
+                diagnostic=_ADDRESS_SGPR_DIAGNOSTIC,
+            )
+        return Guard.value_materializable(
+            field,
+            ADDRESS_VGPR_MATERIALIZER.name,
+            diagnostic=_ADDRESS_VGPR_DIAGNOSTIC,
+        )
+
+    def multiply_operand(field: str) -> ValueRef:
+        if preserved_source == field:
+            return ValueRef.operand(field)
+        return _materialized_operand(field, ADDRESS_VGPR_MATERIALIZER)
+
+    return DescriptorRule(
+        source_op=index.index_madd,
+        descriptor=descriptor,
+        guards=(
+            *_typed_guards(("a", "b", "c", "result"), _INDEX),
+            Guard.value_unsigned_bit_count(
+                "result",
+                32,
+                diagnostic=_ADDRESS_U32_DIAGNOSTIC,
+            ),
+            Guard.low_value_register_class(
+                "result",
+                "amdgpu.vgpr",
+                diagnostic=_RESULT_VGPR_DIAGNOSTIC,
+            ),
+            Guard.value_unsigned_bit_count(
+                "a",
+                24,
+                diagnostic=_ADDRESS_U24_DIAGNOSTIC,
+            ),
+            Guard.value_unsigned_bit_count(
+                "b",
+                24,
+                diagnostic=_ADDRESS_U24_DIAGNOSTIC,
+            ),
+            multiply_guard("a"),
+            multiply_guard("b"),
+            Guard.value_materializable(
+                "c",
+                ADDRESS_VGPR_MATERIALIZER.name,
+                diagnostic=_ADDRESS_VGPR_DIAGNOSTIC,
+            ),
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={
+                    "a": multiply_operand("a"),
+                    "b": multiply_operand("b"),
+                    "addend": _materialized_operand("c", ADDRESS_VGPR_MATERIALIZER),
+                },
+                results={"dst": ValueRef.result("result")},
+                form=DescriptorEmitForm.OP,
+            ),
+        ),
+    )
+
+
 def _index_madd_rule() -> DescriptorRule:
     multiply = _descriptor("amdgpu.v_mul_lo_u32")
     add = _descriptor("amdgpu.v_add_u32")
@@ -1406,6 +1485,9 @@ def _rules() -> tuple[ContractCase, ...]:
                 literal_addend=False,
                 preserve_value_register=False,
             ),
+            _index_madd_u24_mad_rule(preserved_source="a"),
+            _index_madd_u24_mad_rule(preserved_source="b"),
+            _index_madd_u24_mad_rule(preserved_source=None),
             _index_madd_literal_rule(),
             _index_madd_rule(),
         )

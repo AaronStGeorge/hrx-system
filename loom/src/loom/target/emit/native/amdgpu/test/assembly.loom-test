@@ -43,6 +43,19 @@ low.func.def target(@gfx11_target) @gfx11_lshl_add_shift_immediate(%value: reg<a
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_mad_u32_u24 waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_mad_u32_u24(%value: reg<amdgpu.sgpr>, %scale: reg<amdgpu.vgpr>, %addend: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %packed = v_mad_u32_u24 %value, %scale, %addend
+  return
+}
+
+// ----
+  v_mad_u32_u24 v0, s0, v0, v1
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_salu_shift_inline waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_salu_shift_inline(%value: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
