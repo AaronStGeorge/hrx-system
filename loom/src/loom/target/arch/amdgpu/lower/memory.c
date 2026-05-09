@@ -1936,9 +1936,11 @@ loom_amdgpu_memory_operation_kind_from_source(
     case LOOM_LOW_SOURCE_MEMORY_OPERATION_ATOMIC_RMW:
     case LOOM_LOW_SOURCE_MEMORY_OPERATION_ATOMIC_CMPXCHG:
     case LOOM_LOW_SOURCE_MEMORY_OPERATION_PREFETCH:
-      IREE_CHECK_UNREACHABLE();
+      IREE_ASSERT_UNREACHABLE("AMDGPU memory lowering selected non-load/store");
+      IREE_BUILTIN_UNREACHABLE();
   }
-  IREE_CHECK_UNREACHABLE();
+  IREE_ASSERT_UNREACHABLE("unknown source memory operation");
+  IREE_BUILTIN_UNREACHABLE();
 }
 
 static loom_type_t loom_amdgpu_memory_access_source_vector_type(

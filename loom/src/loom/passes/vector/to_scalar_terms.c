@@ -177,7 +177,8 @@ iree_status_t loom_vector_to_scalar_build_term_binary(
             loom_max_i64(lhs.static_value, rhs.static_value));
         return iree_ok_status();
       default:
-        IREE_CHECK_UNREACHABLE("unsupported vector-to-scalar index term op");
+        IREE_ASSERT_UNREACHABLE("unsupported vector-to-scalar index term op");
+        IREE_BUILTIN_UNREACHABLE();
     }
   }
 

@@ -460,7 +460,8 @@ static loom_type_t loom_vector_to_scalar_bitcast_integer_type(
     case LOOM_SCALAR_TYPE_F64:
       return loom_type_scalar(LOOM_SCALAR_TYPE_I64);
     default:
-      IREE_CHECK_UNREACHABLE("unknown scalar type");
+      IREE_ASSERT_UNREACHABLE("unknown scalar type");
+      IREE_BUILTIN_UNREACHABLE();
   }
   return loom_type_scalar(LOOM_SCALAR_TYPE_I64);
 }

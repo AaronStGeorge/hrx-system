@@ -805,6 +805,7 @@ iree_status_t loom_amdgpu_low_legality_verify_kernel_async(
     case LOOM_OP_KERNEL_ASYNC_TENSOR_STORE_FROM_LDS:
       return loom_amdgpu_low_legality_reject_async_transfer(context, op);
     default:
-      IREE_CHECK_UNREACHABLE();
+      IREE_ASSERT_UNREACHABLE("AMDGPU async verifier selected unknown op kind");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }

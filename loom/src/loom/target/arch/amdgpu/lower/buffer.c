@@ -88,6 +88,7 @@ iree_status_t loom_amdgpu_lower_buffer_op(loom_low_lower_context_t* context,
           context, source_op,
           (const loom_amdgpu_buffer_alloca_plan_t*)plan.target_data);
     default:
-      IREE_CHECK_UNREACHABLE();
+      IREE_ASSERT_UNREACHABLE("AMDGPU buffer plan selected unknown op kind");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }

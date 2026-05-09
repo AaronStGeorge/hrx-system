@@ -269,8 +269,8 @@ static iree_string_view_t loom_amdgpu_workitem_id_source(
     case LOOM_KERNEL_DIMENSION_Z:
       return IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_Z_SOURCE);
     default:
-      IREE_CHECK_UNREACHABLE();
-      return iree_string_view_empty();
+      IREE_ASSERT_UNREACHABLE("unknown kernel dimension");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -282,8 +282,8 @@ static iree_string_view_t loom_amdgpu_packed_workitem_id_source(
     case 3:
       return IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_WORKITEM_ID_PACKED_XYZ_SOURCE);
     default:
-      IREE_CHECK_UNREACHABLE();
-      return iree_string_view_empty();
+      IREE_ASSERT_UNREACHABLE("packed workitem id requires two or three axes");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -314,8 +314,8 @@ static iree_string_view_t loom_amdgpu_workgroup_id_source(
     case LOOM_KERNEL_DIMENSION_Z:
       return IREE_SV(LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_Z_SOURCE);
     default:
-      IREE_CHECK_UNREACHABLE();
-      return iree_string_view_empty();
+      IREE_ASSERT_UNREACHABLE("unknown kernel dimension");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -1131,7 +1131,8 @@ iree_status_t loom_amdgpu_lower_preamble_op(loom_low_lower_context_t* context,
           context, source_op, loom_kernel_subgroup_lane_id_result(source_op),
           /*is_lane_id=*/true);
     default:
-      IREE_CHECK_UNREACHABLE();
+      IREE_ASSERT_UNREACHABLE("AMDGPU preamble plan selected unknown op kind");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 

@@ -1524,7 +1524,8 @@ static iree_status_t loom_amdgpu_lower_vector_from_elements(
       return loom_amdgpu_lower_vector_from_16bit_elements(context, source_op,
                                                           plan);
     default:
-      IREE_CHECK_UNREACHABLE();
+      IREE_ASSERT_UNREACHABLE("unsupported vector element plan");
+      IREE_BUILTIN_UNREACHABLE();
   }
   if (plan->element_count == 1) {
     return loom_low_lower_bind_value(context, plan->result, lanes[0]);
@@ -1563,7 +1564,8 @@ static iree_status_t loom_amdgpu_lookup_vector_insert_value(
           context, source_op, plan->value, lane_type, out_value);
     }
     default:
-      IREE_CHECK_UNREACHABLE();
+      IREE_ASSERT_UNREACHABLE("unsupported vector insert element plan");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -1916,7 +1918,8 @@ static iree_status_t loom_amdgpu_lower_vector_bf16_conversion(
     case LOOM_AMDGPU_VECTOR_BF16_CONVERSION_KIND_FPTRUNC:
       return loom_amdgpu_lower_vector_bf16_fptrunc(context, source_op, plan);
     default:
-      IREE_CHECK_UNREACHABLE();
+      IREE_ASSERT_UNREACHABLE("unknown BF16 conversion plan");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -2015,6 +2018,7 @@ iree_status_t loom_amdgpu_lower_value_op(loom_low_lower_context_t* context,
           context, source_op,
           (const loom_amdgpu_vector_bf16_conversion_plan_t*)plan.target_data);
     default:
-      IREE_CHECK_UNREACHABLE();
+      IREE_ASSERT_UNREACHABLE("AMDGPU value plan selected unknown op kind");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }

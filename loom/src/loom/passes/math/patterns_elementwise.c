@@ -688,7 +688,8 @@ static iree_status_t loom_math_legalize_build_recipe(
       return loom_math_legalize_build_gelu_logistic(&rewriter->builder, &source,
                                                     op, out_value);
     case LOOM_TARGET_MATH_RECIPE_WIDEN_F32_ROUND_BF16:
-      IREE_CHECK_UNREACHABLE();
+      IREE_ASSERT_UNREACHABLE("recipe is not elementwise math legalization");
+      IREE_BUILTIN_UNREACHABLE();
     case LOOM_TARGET_MATH_RECIPE_UNKNOWN:
       break;
   }

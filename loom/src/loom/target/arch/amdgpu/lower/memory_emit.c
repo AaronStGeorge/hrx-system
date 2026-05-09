@@ -895,7 +895,8 @@ static loom_value_id_t loom_amdgpu_memory_load_view(
     case LOOM_OP_VIEW_LOAD:
       return loom_view_load_view(source_op);
     default:
-      IREE_CHECK_UNREACHABLE();
+      IREE_ASSERT_UNREACHABLE("expected AMDGPU memory load op");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -907,7 +908,8 @@ static loom_value_id_t loom_amdgpu_memory_load_result(
     case LOOM_OP_VIEW_LOAD:
       return loom_view_load_result(source_op);
     default:
-      IREE_CHECK_UNREACHABLE();
+      IREE_ASSERT_UNREACHABLE("expected AMDGPU memory load op");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -919,7 +921,8 @@ static loom_value_id_t loom_amdgpu_memory_store_value(
     case LOOM_OP_VIEW_STORE:
       return loom_view_store_value(source_op);
     default:
-      IREE_CHECK_UNREACHABLE();
+      IREE_ASSERT_UNREACHABLE("expected AMDGPU memory store op");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -931,7 +934,8 @@ static loom_value_id_t loom_amdgpu_memory_store_view(
     case LOOM_OP_VIEW_STORE:
       return loom_view_store_view(source_op);
     default:
-      IREE_CHECK_UNREACHABLE();
+      IREE_ASSERT_UNREACHABLE("expected AMDGPU memory store op");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 

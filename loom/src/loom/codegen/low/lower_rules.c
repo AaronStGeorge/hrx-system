@@ -168,9 +168,11 @@ static loom_value_id_t loom_low_lower_rule_source_value(
       IREE_ASSERT_LT(value_ref->index, source_op->result_count);
       return loom_op_const_results(source_op)[value_ref->index];
     case LOOM_LOW_LOWER_VALUE_REF_TEMPORARY:
-      IREE_CHECK_UNREACHABLE();
+      IREE_ASSERT_UNREACHABLE("temporary value ref has no source value");
+      IREE_BUILTIN_UNREACHABLE();
     default:
-      IREE_CHECK_UNREACHABLE();
+      IREE_ASSERT_UNREACHABLE("unknown generated value ref kind");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -310,7 +312,8 @@ static iree_status_t loom_low_lower_rule_low_value(
       *out_low_value_id = state->temporaries[value_ref->index];
       return iree_ok_status();
     default:
-      IREE_CHECK_UNREACHABLE();
+      IREE_ASSERT_UNREACHABLE("unknown generated value ref kind");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -1057,7 +1060,8 @@ static iree_status_t loom_low_lower_rule_guard_matches(
       *out_matches = iree_all_bits_set(source_op->instance_flags, guard->u64);
       return iree_ok_status();
     default:
-      IREE_CHECK_UNREACHABLE();
+      IREE_ASSERT_UNREACHABLE("unknown generated lower guard kind");
+      IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -1407,7 +1411,8 @@ void loom_low_lower_rule_materialize_diagnostic_params(
         out_params[i] = loom_param_bool(row->bool_value);
         break;
       default:
-        IREE_CHECK_UNREACHABLE();
+        IREE_ASSERT_UNREACHABLE("unknown generated diagnostic param kind");
+        IREE_BUILTIN_UNREACHABLE();
     }
   }
 }
@@ -1557,7 +1562,8 @@ static void loom_low_lower_rule_source_memory_access(
     const loom_low_lower_emit_t* emit,
     loom_low_source_memory_access_plan_t* out_access) {
   if (emit->source_memory_ordinal == 0) {
-    IREE_CHECK_UNREACHABLE();
+    IREE_ASSERT_UNREACHABLE("emitted source memory ordinal must be present");
+    IREE_BUILTIN_UNREACHABLE();
   }
   const uint16_t source_memory_index =
       (uint16_t)(emit->source_memory_ordinal - 1);
@@ -1567,7 +1573,8 @@ static void loom_low_lower_rule_source_memory_access(
       loom_low_lower_rule_match_context_from_lowering(context);
   if (!loom_low_lower_source_memory_matches(&match_context, source_op,
                                             source_memory, out_access)) {
-    IREE_CHECK_UNREACHABLE();
+    IREE_ASSERT_UNREACHABLE("selected source memory must still match");
+    IREE_BUILTIN_UNREACHABLE();
   }
 }
 
@@ -1850,7 +1857,8 @@ static iree_status_t loom_low_lower_rule_build_attrs(
                 .byte_stride);
         break;
       default:
-        IREE_CHECK_UNREACHABLE();
+        IREE_ASSERT_UNREACHABLE("unknown generated attr copy kind");
+        IREE_BUILTIN_UNREACHABLE();
     }
   }
   *out_attrs = loom_make_named_attr_slice(attrs, emit->attr_copy_count);
@@ -1996,7 +2004,8 @@ static iree_status_t loom_low_lower_rule_bind_results(
         break;
       case LOOM_LOW_LOWER_VALUE_REF_OPERAND:
       default:
-        IREE_CHECK_UNREACHABLE();
+        IREE_ASSERT_UNREACHABLE("result binding must target result refs");
+        IREE_BUILTIN_UNREACHABLE();
     }
   }
   return iree_ok_status();
@@ -2486,7 +2495,8 @@ iree_status_t loom_low_lower_rule_set_emit_rule(
         break;
       }
       default:
-        IREE_CHECK_UNREACHABLE();
+        IREE_ASSERT_UNREACHABLE("unknown generated lower emit kind");
+        IREE_BUILTIN_UNREACHABLE();
     }
   }
   IREE_RETURN_IF_ERROR(
