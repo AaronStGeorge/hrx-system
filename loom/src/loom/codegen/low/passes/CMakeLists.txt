@@ -75,6 +75,7 @@ loom_cc_library(
     loom::src::loom::pass::types
     loom::src::loom::pass::value_facts
     loom::src::loom::rewrite::rewriter
+    loom::src::loom::util::math
   PUBLIC
 )
 

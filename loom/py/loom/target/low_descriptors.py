@@ -181,6 +181,12 @@ class OperandFormMatchKind(CEnum):
     ALL_EQUAL_EXACT_I64 = "LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_EXACT_I64"
 
 
+class OperandFormImmediateAction(CEnum):
+    NONE = "LOOM_LOW_OPERAND_FORM_IMMEDIATE_NONE"
+    SET_MATCHED_I64 = "LOOM_LOW_OPERAND_FORM_IMMEDIATE_SET_MATCHED_I64"
+    ADD_MATCHED_I64 = "LOOM_LOW_OPERAND_FORM_IMMEDIATE_ADD_MATCHED_I64"
+
+
 @dataclass(frozen=True, slots=True)
 class DescriptorCategory:
     """Stable category for grouping related descriptors inside a set.
@@ -315,12 +321,23 @@ class OperandForm:
     source_operand: str
     match_kind: OperandFormMatchKind
     match_i64: int = 0
-    replacement_immediate: str | None = None
+    immediate_action: OperandFormImmediateAction = OperandFormImmediateAction.NONE
+    immediate_field: str | None = None
 
     def __post_init__(self) -> None:
         _validate_metadata_key("replacement descriptor", self.replacement_descriptor)
-        if self.replacement_immediate is not None:
-            _validate_metadata_key("replacement immediate", self.replacement_immediate)
+        if self.immediate_field is not None:
+            _validate_metadata_key("immediate field", self.immediate_field)
+        if self.immediate_action is OperandFormImmediateAction.NONE:
+            if self.immediate_field is not None:
+                raise ValueError(
+                    "operand form without an immediate action must not name "
+                    "an immediate field"
+                )
+        elif self.immediate_field is None:
+            raise ValueError(
+                "operand form immediate action must name an immediate field"
+            )
 
 
 @dataclass(frozen=True, slots=True)

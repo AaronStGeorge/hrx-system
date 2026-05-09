@@ -229,6 +229,15 @@ typedef enum loom_low_operand_form_match_kind_e {
   LOOM_LOW_OPERAND_FORM_MATCH_ALL_EQUAL_EXACT_I64 = 2,
 } loom_low_operand_form_match_kind_t;
 
+typedef enum loom_low_operand_form_immediate_action_e {
+  // Operand-form does not rewrite descriptor immediate attributes.
+  LOOM_LOW_OPERAND_FORM_IMMEDIATE_NONE = 0,
+  // Matched operand value becomes a replacement-only immediate field.
+  LOOM_LOW_OPERAND_FORM_IMMEDIATE_SET_MATCHED_I64 = 1,
+  // Matched operand value is added to a source/replacement immediate field.
+  LOOM_LOW_OPERAND_FORM_IMMEDIATE_ADD_MATCHED_I64 = 2,
+} loom_low_operand_form_immediate_action_t;
+
 typedef enum loom_low_latency_kind_e {
   // Unknown or uninitialized latency kind.
   LOOM_LOW_LATENCY_KIND_UNKNOWN = 0,
@@ -619,12 +628,16 @@ typedef struct loom_low_operand_form_t {
   uint16_t source_operand_index;
   // Packet operand position corresponding to source_operand_index.
   uint16_t source_packet_operand_index;
+  // Descriptor-local source immediate field read by immediate_action, or
+  // LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE when unused.
+  uint16_t source_immediate_index;
   // Descriptor-local replacement immediate populated from the matched operand,
-  // or LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE when the form only removes an
-  // operand.
+  // or LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE when immediate_action is NONE.
   uint16_t replacement_immediate_index;
   // Number of packet operand positions in operand_form_operand_indices.
   uint16_t operand_map_count;
+  // How matched operand facts update replacement descriptor immediates.
+  loom_low_operand_form_immediate_action_t immediate_action;
   // Predicate kind used to test the source operand facts.
   loom_low_operand_form_match_kind_t match_kind;
   // Predicate integer payload. ALL_EQUAL_I64 compares against this value.

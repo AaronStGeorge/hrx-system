@@ -607,6 +607,18 @@ static bool loom_low_operand_form_match_kind_is_valid(
   }
 }
 
+static bool loom_low_operand_form_immediate_action_is_valid(
+    loom_low_operand_form_immediate_action_t action) {
+  switch (action) {
+    case LOOM_LOW_OPERAND_FORM_IMMEDIATE_NONE:
+    case LOOM_LOW_OPERAND_FORM_IMMEDIATE_SET_MATCHED_I64:
+    case LOOM_LOW_OPERAND_FORM_IMMEDIATE_ADD_MATCHED_I64:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static uint16_t loom_low_descriptor_packet_operand_count(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor) {
@@ -677,9 +689,67 @@ static iree_status_t loom_low_verify_descriptor_operand_forms(
                               " has unknown match kind %u",
                               descriptor_index, form_index, form->match_kind);
     }
+    if (!loom_low_operand_form_immediate_action_is_valid(
+            form->immediate_action)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "low descriptor %" PRIu32 " operand form %" PRIu32
+                              " has unknown immediate action %u",
+                              descriptor_index, form_index,
+                              form->immediate_action);
+    }
+    switch (form->immediate_action) {
+      case LOOM_LOW_OPERAND_FORM_IMMEDIATE_NONE:
+        if (form->source_immediate_index !=
+                LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE ||
+            form->replacement_immediate_index !=
+                LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "low descriptor %" PRIu32 " operand form %" PRIu32
+              " has immediate indexes without an immediate action",
+              descriptor_index, form_index);
+        }
+        break;
+      case LOOM_LOW_OPERAND_FORM_IMMEDIATE_SET_MATCHED_I64:
+        if (form->source_immediate_index !=
+                LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE ||
+            form->replacement_immediate_index ==
+                LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "low descriptor %" PRIu32 " operand form %" PRIu32
+              " has malformed SET_MATCHED_I64 immediate indexes",
+              descriptor_index, form_index);
+        }
+        break;
+      case LOOM_LOW_OPERAND_FORM_IMMEDIATE_ADD_MATCHED_I64:
+        if (form->source_immediate_index ==
+                LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE ||
+            form->replacement_immediate_index ==
+                LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE) {
+          return iree_make_status(
+              IREE_STATUS_INVALID_ARGUMENT,
+              "low descriptor %" PRIu32 " operand form %" PRIu32
+              " has malformed ADD_MATCHED_I64 immediate indexes",
+              descriptor_index, form_index);
+        }
+        break;
+      default:
+        break;
+    }
 
     const loom_low_descriptor_t* replacement =
         &descriptor_set->descriptors[form->replacement_descriptor_ordinal];
+    if (form->source_immediate_index != LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE &&
+        form->source_immediate_index >= descriptor->immediate_count) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "low descriptor %" PRIu32 " operand form %" PRIu32
+                              " references source immediate %" PRIu16
+                              " but descriptor has only %" PRIu16 " immediates",
+                              descriptor_index, form_index,
+                              form->source_immediate_index,
+                              descriptor->immediate_count);
+    }
     if (form->replacement_immediate_index !=
             LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE &&
         form->replacement_immediate_index >= replacement->immediate_count) {

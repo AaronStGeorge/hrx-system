@@ -64,6 +64,7 @@ from loom.target.low_descriptors import (
     Operand,
     OperandFlag,
     OperandForm,
+    OperandFormImmediateAction,
     OperandFormMatchKind,
     OperandRole,
     RegClass,
@@ -2028,7 +2029,8 @@ def _literal_operand_form(
         replacement_descriptor=replacement_descriptor,
         source_operand=source_operand,
         match_kind=OperandFormMatchKind.ALL_EQUAL_EXACT_I64,
-        replacement_immediate="imm32",
+        immediate_action=OperandFormImmediateAction.SET_MATCHED_I64,
+        immediate_field="imm32",
     )
 
 
@@ -2038,6 +2040,16 @@ def _soffset_zero_operand_form(*, replacement_descriptor: str) -> OperandForm:
         source_operand="soffset",
         match_kind=OperandFormMatchKind.ALL_EQUAL_I64,
         match_i64=0,
+    )
+
+
+def _soffset_offset_operand_form(*, replacement_descriptor: str) -> OperandForm:
+    return OperandForm(
+        replacement_descriptor=replacement_descriptor,
+        source_operand="soffset",
+        match_kind=OperandFormMatchKind.ALL_EQUAL_EXACT_I64,
+        immediate_action=OperandFormImmediateAction.ADD_MATCHED_I64,
+        immediate_field="offset",
     )
 
 
@@ -3270,6 +3282,9 @@ def _s_load_dwordx2_overlay(
             _soffset_zero_operand_form(
                 replacement_descriptor="amdgpu.s_load_dwordx2_offset_only"
             ),
+            _soffset_offset_operand_form(
+                replacement_descriptor="amdgpu.s_load_dwordx2_offset_only"
+            ),
         )
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -3315,6 +3330,9 @@ def _s_load_dwordx4_overlay(
             _soffset_zero_operand_form(
                 replacement_descriptor="amdgpu.s_load_dwordx4_offset_only"
             ),
+            _soffset_offset_operand_form(
+                replacement_descriptor="amdgpu.s_load_dwordx4_offset_only"
+            ),
         )
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -3358,6 +3376,9 @@ def _s_load_dword_overlay(
         )
         operand_forms = (
             _soffset_zero_operand_form(
+                replacement_descriptor="amdgpu.s_load_dword_offset_only"
+            ),
+            _soffset_offset_operand_form(
                 replacement_descriptor="amdgpu.s_load_dword_offset_only"
             ),
         )

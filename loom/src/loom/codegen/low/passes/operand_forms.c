@@ -16,6 +16,7 @@
 #include "loom/ops/op_defs.h"
 #include "loom/pass/value_facts.h"
 #include "loom/rewrite/rewriter.h"
+#include "loom/util/math.h"
 
 enum {
   LOOM_LOW_SELECT_OPERAND_FORMS_STAT_FORMS_SELECTED = 0,
@@ -195,17 +196,94 @@ static bool loom_low_immediate_accepts_i64(
   }
 }
 
+static bool loom_low_immediate_has_default(
+    const loom_low_immediate_t* immediate) {
+  return iree_any_bit_set(immediate->flags,
+                          LOOM_LOW_IMMEDIATE_FLAG_DEFAULT_VALUE);
+}
+
+static const loom_named_attr_t* loom_low_select_operand_form_find_attr(
+    loom_named_attr_slice_t attrs, loom_string_id_t name_id) {
+  for (iree_host_size_t i = 0; i < attrs.count; ++i) {
+    if (attrs.entries[i].name_id == name_id) {
+      return &attrs.entries[i];
+    }
+  }
+  return NULL;
+}
+
+static iree_status_t loom_low_select_operand_form_read_i64_immediate(
+    loom_module_t* module, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint16_t immediate_index,
+    loom_named_attr_slice_t attrs, bool* out_has_value, int64_t* out_value) {
+  *out_has_value = false;
+  *out_value = 0;
+  if (immediate_index == LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE) {
+    return iree_ok_status();
+  }
+
+  IREE_ASSERT(immediate_index < descriptor->immediate_count);
+  const loom_low_immediate_t* immediate =
+      &descriptor_set
+           ->immediates[descriptor->immediate_start + immediate_index];
+  iree_string_view_t immediate_name = loom_low_descriptor_set_string(
+      descriptor_set, immediate->field_name_string_offset);
+  loom_string_id_t immediate_name_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_module_intern_string(module, immediate_name, &immediate_name_id));
+  const loom_named_attr_t* attr =
+      loom_low_select_operand_form_find_attr(attrs, immediate_name_id);
+  if (attr) {
+    if (attr->value.kind != LOOM_ATTR_I64) {
+      return iree_ok_status();
+    }
+    *out_value = loom_attr_as_i64(attr->value);
+    *out_has_value = true;
+    return iree_ok_status();
+  }
+  if (loom_low_immediate_has_default(immediate)) {
+    *out_value = immediate->default_value;
+    *out_has_value = true;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_select_operand_form_build_attrs(
     loom_module_t* module, const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* source_descriptor,
     const loom_low_descriptor_t* replacement_descriptor,
     const loom_low_operand_form_t* form, int64_t matched_value,
     loom_named_attr_slice_t source_attrs, loom_named_attr_slice_t* out_attrs,
     bool* out_can_rewrite) {
   *out_attrs = source_attrs;
   *out_can_rewrite = true;
-  if (form->replacement_immediate_index ==
-      LOOM_LOW_DESCRIPTOR_SET_ORDINAL_NONE) {
-    return iree_ok_status();
+
+  int64_t replacement_value = 0;
+  switch (form->immediate_action) {
+    case LOOM_LOW_OPERAND_FORM_IMMEDIATE_NONE:
+      return iree_ok_status();
+    case LOOM_LOW_OPERAND_FORM_IMMEDIATE_SET_MATCHED_I64:
+      replacement_value = matched_value;
+      break;
+    case LOOM_LOW_OPERAND_FORM_IMMEDIATE_ADD_MATCHED_I64: {
+      bool has_source_value = false;
+      int64_t source_value = 0;
+      IREE_RETURN_IF_ERROR(loom_low_select_operand_form_read_i64_immediate(
+          module, descriptor_set, source_descriptor,
+          form->source_immediate_index, source_attrs, &has_source_value,
+          &source_value));
+      if (!has_source_value ||
+          !loom_checked_add_i64(source_value, matched_value,
+                                &replacement_value)) {
+        *out_can_rewrite = false;
+        return iree_ok_status();
+      }
+      break;
+    }
+    default:
+      return iree_make_status(IREE_STATUS_INTERNAL,
+                              "unknown low operand-form immediate action %u",
+                              (unsigned)form->immediate_action);
   }
 
   IREE_ASSERT(form->replacement_immediate_index <
@@ -213,7 +291,7 @@ static iree_status_t loom_low_select_operand_form_build_attrs(
   const loom_low_immediate_t* immediate =
       &descriptor_set->immediates[replacement_descriptor->immediate_start +
                                   form->replacement_immediate_index];
-  if (!loom_low_immediate_accepts_i64(immediate, matched_value)) {
+  if (!loom_low_immediate_accepts_i64(immediate, replacement_value)) {
     *out_can_rewrite = false;
     return iree_ok_status();
   }
@@ -223,8 +301,12 @@ static iree_status_t loom_low_select_operand_form_build_attrs(
   loom_string_id_t immediate_name_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(
       loom_module_intern_string(module, immediate_name, &immediate_name_id));
+  const bool remove_default = loom_low_immediate_has_default(immediate) &&
+                              replacement_value == immediate->default_value;
   loom_named_attr_update_t update =
-      loom_named_attr_replace(immediate_name_id, loom_attr_i64(matched_value));
+      remove_default ? loom_named_attr_remove(immediate_name_id)
+                     : loom_named_attr_replace(
+                           immediate_name_id, loom_attr_i64(replacement_value));
   loom_attribute_t attr = {0};
   IREE_RETURN_IF_ERROR(loom_module_replace_canonical_attr_dict(
       module, source_attrs, loom_make_named_attr_update_slice(&update, 1),
@@ -235,7 +317,8 @@ static iree_status_t loom_low_select_operand_form_build_attrs(
 
 static iree_status_t loom_low_select_operand_form_rewrite_packet(
     loom_low_select_operand_forms_state_t* state, loom_rewriter_t* rewriter,
-    loom_op_t* op, const loom_low_operand_form_t* form, int64_t matched_value) {
+    loom_op_t* op, const loom_low_descriptor_t* source_descriptor,
+    const loom_low_operand_form_t* form, int64_t matched_value) {
   const loom_low_descriptor_set_t* descriptor_set =
       state->target->descriptor_set;
   const loom_low_descriptor_t* replacement_descriptor =
@@ -280,8 +363,9 @@ static iree_status_t loom_low_select_operand_form_rewrite_packet(
   loom_named_attr_slice_t replacement_attrs = {0};
   bool can_rewrite = false;
   IREE_RETURN_IF_ERROR(loom_low_select_operand_form_build_attrs(
-      state->module, descriptor_set, replacement_descriptor, form,
-      matched_value, loom_low_op_attrs(op), &replacement_attrs, &can_rewrite));
+      state->module, descriptor_set, source_descriptor, replacement_descriptor,
+      form, matched_value, loom_low_op_attrs(op), &replacement_attrs,
+      &can_rewrite));
   if (!can_rewrite) {
     return iree_ok_status();
   }
@@ -336,8 +420,8 @@ static iree_status_t loom_low_select_operand_forms_try_rewrite_packet(
                                               form, &matched_value)) {
       continue;
     }
-    return loom_low_select_operand_form_rewrite_packet(state, rewriter, op,
-                                                       form, matched_value);
+    return loom_low_select_operand_form_rewrite_packet(
+        state, rewriter, op, packet.descriptor, form, matched_value);
   }
   return iree_ok_status();
 }

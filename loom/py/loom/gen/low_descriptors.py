@@ -48,6 +48,7 @@ from loom.target.low_descriptors import (
     Operand,
     OperandFlag,
     OperandForm,
+    OperandFormImmediateAction,
     OperandFormMatchKind,
     OperandRole,
     PressureDelta,
@@ -195,7 +196,9 @@ class _CompiledOperandForm:
     replacement_descriptor_ordinal: int
     source_operand_index: int
     source_packet_operand_index: int
+    source_immediate_index: int
     replacement_immediate_index: int
+    immediate_action: OperandFormImmediateAction
     match_kind: OperandFormMatchKind
     match_i64: int
     operand_map_start: int
@@ -592,6 +595,14 @@ def _descriptor_packet_operand_indices(descriptor: Descriptor) -> tuple[int, ...
     return tuple(i for i, operand in enumerate(descriptor.operands) if _operand_role_is_packet_input(operand.role) and OperandFlag.IMPLICIT not in operand.flags)
 
 
+def _immediate_accepts_i64(immediate: Immediate) -> bool:
+    return immediate.kind in (
+        ImmediateKind.SIGNED,
+        ImmediateKind.UNSIGNED,
+        ImmediateKind.ORDINAL,
+    )
+
+
 def _compile_operand_form(
     descriptor: Descriptor,
     descriptor_ordinals: dict[str, int],
@@ -627,16 +638,40 @@ def _compile_operand_form(
             raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' result {i} is '{replacement_result}' instead of '{source_result}'")
     source_immediates = tuple(immediate.field_name for immediate in descriptor.immediates)
     replacement_immediates = tuple(immediate.field_name for immediate in replacement.immediates)
+    source_immediate_indices = {field_name: i for i, field_name in enumerate(source_immediates)}
     replacement_immediate_index = LOW_DESCRIPTOR_SET_ORDINAL_NONE
-    if operand_form.replacement_immediate is None:
+    source_immediate_index = LOW_DESCRIPTOR_SET_ORDINAL_NONE
+    if operand_form.immediate_action is OperandFormImmediateAction.NONE:
+        if operand_form.immediate_field is not None:
+            raise ValueError(f"descriptor '{descriptor.key}' operand form without an immediate action names immediate field '{operand_form.immediate_field}'")
+        expected_replacement_immediates = source_immediates
+    elif operand_form.immediate_action is OperandFormImmediateAction.SET_MATCHED_I64:
+        if operand_form.immediate_field is None:
+            raise ValueError(f"descriptor '{descriptor.key}' operand form immediate action requires an immediate field")
+        replacement_immediate_index = replacement_immediate_indices.get(operand_form.immediate_field, LOW_DESCRIPTOR_SET_ORDINAL_NONE)
+        if replacement_immediate_index == LOW_DESCRIPTOR_SET_ORDINAL_NONE:
+            raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' has no immediate field '{operand_form.immediate_field}'")
+        if not _immediate_accepts_i64(replacement.immediates[replacement_immediate_index]):
+            raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' immediate field '{operand_form.immediate_field}' cannot hold an i64 value")
+        if operand_form.immediate_field in immediate_indices:
+            raise ValueError(f"descriptor '{descriptor.key}' operand form replacement immediate '{operand_form.immediate_field}' already exists on the source descriptor")
+        expected_replacement_immediates = tuple((*source_immediates, operand_form.immediate_field))
+    elif operand_form.immediate_action is OperandFormImmediateAction.ADD_MATCHED_I64:
+        if operand_form.immediate_field is None:
+            raise ValueError(f"descriptor '{descriptor.key}' operand form immediate action requires an immediate field")
+        source_immediate_index = source_immediate_indices.get(operand_form.immediate_field, LOW_DESCRIPTOR_SET_ORDINAL_NONE)
+        replacement_immediate_index = replacement_immediate_indices.get(operand_form.immediate_field, LOW_DESCRIPTOR_SET_ORDINAL_NONE)
+        if source_immediate_index == LOW_DESCRIPTOR_SET_ORDINAL_NONE:
+            raise ValueError(f"descriptor '{descriptor.key}' operand form source has no immediate field '{operand_form.immediate_field}'")
+        if replacement_immediate_index == LOW_DESCRIPTOR_SET_ORDINAL_NONE:
+            raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' has no immediate field '{operand_form.immediate_field}'")
+        if descriptor.immediates[source_immediate_index] != replacement.immediates[replacement_immediate_index]:
+            raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' immediate field '{operand_form.immediate_field}' has different metadata")
+        if not _immediate_accepts_i64(replacement.immediates[replacement_immediate_index]):
+            raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' immediate field '{operand_form.immediate_field}' cannot hold an i64 value")
         expected_replacement_immediates = source_immediates
     else:
-        replacement_immediate_index = replacement_immediate_indices.get(operand_form.replacement_immediate, LOW_DESCRIPTOR_SET_ORDINAL_NONE)
-        if replacement_immediate_index == LOW_DESCRIPTOR_SET_ORDINAL_NONE:
-            raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' has no immediate field '{operand_form.replacement_immediate}'")
-        if operand_form.replacement_immediate in immediate_indices:
-            raise ValueError(f"descriptor '{descriptor.key}' operand form replacement immediate '{operand_form.replacement_immediate}' already exists on the source descriptor")
-        expected_replacement_immediates = tuple((*source_immediates, operand_form.replacement_immediate))
+        raise ValueError(f"descriptor '{descriptor.key}' operand form has unsupported immediate action {operand_form.immediate_action}")
     if replacement_immediates != expected_replacement_immediates:
         raise ValueError(f"descriptor '{descriptor.key}' operand form replacement '{replacement.key}' has immediate fields {replacement_immediates!r}, expected {expected_replacement_immediates!r}")
 
@@ -657,7 +692,9 @@ def _compile_operand_form(
             replacement_descriptor_ordinal=replacement_ordinal,
             source_operand_index=source_operand_index,
             source_packet_operand_index=source_packet_operand_index,
+            source_immediate_index=source_immediate_index,
             replacement_immediate_index=replacement_immediate_index,
+            immediate_action=operand_form.immediate_action,
             match_kind=operand_form.match_kind,
             match_i64=operand_form.match_i64,
             operand_map_start=operand_map_start,
@@ -1652,8 +1689,10 @@ def _emit_source_for_views(
                 f".operand_map_start = {operand_form.operand_map_start},",
                 f".source_operand_index = {operand_form.source_operand_index},",
                 f".source_packet_operand_index = {operand_form.source_packet_operand_index},",
+                f".source_immediate_index = {operand_form.source_immediate_index},",
                 f".replacement_immediate_index = {operand_form.replacement_immediate_index},",
                 f".operand_map_count = {operand_form.operand_map_count},",
+                f".immediate_action = {operand_form.immediate_action.c_name},",
                 f".match_kind = {operand_form.match_kind.c_name},",
                 f".match_i64 = {_i64_literal(operand_form.match_i64)},",
             ]
