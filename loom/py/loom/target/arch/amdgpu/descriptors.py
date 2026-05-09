@@ -129,6 +129,28 @@ _SCHEDULE_WAIT_STORE = "amdgpu.wait.store"
 _SCHEDULE_WAIT_ALU = "amdgpu.wait.alu"
 _SCHEDULE_WAIT_IDLE = "amdgpu.wait.idle"
 
+# AMDGPU vector, memory, and matrix packets observe EXEC even when the vendor XML
+# does not expose EXEC as an implicit operand. Model that state read in Loom so
+# scheduling cannot move the packet across divergent-control EXEC writes.
+_EXECUTION_MASKED_SCHEDULE_CLASSES = frozenset(
+    (
+        _SCHEDULE_VALU,
+        _SCHEDULE_VMEM_LOAD,
+        _SCHEDULE_VMEM_LOAD_LDS,
+        _SCHEDULE_VMEM_STORE,
+        _SCHEDULE_VMEM_ATOMIC_RETURN,
+        _SCHEDULE_VMEM_ATOMIC_NO_RETURN,
+        _SCHEDULE_LDS_LOAD,
+        _SCHEDULE_LDS_STORE,
+        _SCHEDULE_LDS_ATOMIC,
+        _SCHEDULE_LDS_CROSSLANE,
+        _SCHEDULE_MFMA,
+        _SCHEDULE_WMMA,
+        _SCHEDULE_WMMA_SCALE,
+        _SCHEDULE_SWMMAC,
+    )
+)
+
 AMDGPU_SCALAR_DESCRIPTOR_CATEGORY = DescriptorCategory(
     "scalar",
     doc="Scalar ALU, scalar data movement, and SGPR descriptors.",
@@ -700,6 +722,30 @@ def _exec_state_read(field_name: str = "exec_in") -> Operand:
         _EXEC_ALT,
         flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_READ),
         unit_count=1,
+    )
+
+
+def _is_exec_state_read(operand: Operand) -> bool:
+    return (
+        OperandFlag.STATE_READ in operand.flags
+        and len(operand.reg_alts) == 1
+        and operand.reg_alts[0].reg_class == _REG_EXEC
+    )
+
+
+def _with_execution_mask_state_read(descriptor: Descriptor) -> Descriptor:
+    if descriptor.schedule_class not in _EXECUTION_MASKED_SCHEDULE_CLASSES:
+        return descriptor
+    if any(_is_exec_state_read(operand) for operand in descriptor.operands):
+        return descriptor
+    return replace(descriptor, operands=(*descriptor.operands, _exec_state_read()))
+
+
+def _with_execution_mask_state_reads(
+    descriptors: tuple[Descriptor, ...],
+) -> tuple[Descriptor, ...]:
+    return tuple(
+        _with_execution_mask_state_read(descriptor) for descriptor in descriptors
     )
 
 
@@ -7401,13 +7447,17 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
 def _gfx940_core_overlay_descriptors(
     spec: AmdgpuIsaFactSource,
 ) -> tuple[Descriptor, ...]:
-    return materialize_amdgpu_descriptor_overlays(spec, _gfx940_core_overlays())
+    return _with_execution_mask_state_reads(
+        materialize_amdgpu_descriptor_overlays(spec, _gfx940_core_overlays())
+    )
 
 
 def _gfx950_core_overlay_descriptors(
     spec: AmdgpuIsaFactSource,
 ) -> tuple[Descriptor, ...]:
-    return materialize_amdgpu_descriptor_overlays(spec, _gfx950_core_overlays())
+    return _with_execution_mask_state_reads(
+        materialize_amdgpu_descriptor_overlays(spec, _gfx950_core_overlays())
+    )
 
 
 def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
@@ -7651,7 +7701,9 @@ def _gfx11_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
 def _gfx11_core_overlay_descriptors(
     spec: AmdgpuIsaFactSource,
 ) -> tuple[Descriptor, ...]:
-    return materialize_amdgpu_descriptor_overlays(spec, _gfx11_core_overlays())
+    return _with_execution_mask_state_reads(
+        materialize_amdgpu_descriptor_overlays(spec, _gfx11_core_overlays())
+    )
 
 
 def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
@@ -7936,7 +7988,9 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
 def _gfx12_core_overlay_descriptors(
     spec: AmdgpuIsaFactSource,
 ) -> tuple[Descriptor, ...]:
-    return materialize_amdgpu_descriptor_overlays(spec, _gfx12_core_overlays())
+    return _with_execution_mask_state_reads(
+        materialize_amdgpu_descriptor_overlays(spec, _gfx12_core_overlays())
+    )
 
 
 def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
@@ -8221,7 +8275,9 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
 def _gfx1250_core_overlay_descriptors(
     spec: AmdgpuIsaFactSource,
 ) -> tuple[Descriptor, ...]:
-    return materialize_amdgpu_descriptor_overlays(spec, _gfx1250_core_overlays())
+    return _with_execution_mask_state_reads(
+        materialize_amdgpu_descriptor_overlays(spec, _gfx1250_core_overlays())
+    )
 
 
 _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
@@ -9099,7 +9155,7 @@ def _amdgpu_contract_descriptor_from_overlay(
         for implicit_overlay in overlay.implicit_operands
         if implicit_overlay.descriptor_operand is not None
     )
-    return Descriptor(
+    descriptor = Descriptor(
         key=overlay.descriptor_key,
         mnemonic=overlay.mnemonic or overlay.instruction_name.lower(),
         semantic_tag=overlay.semantic_tag,
@@ -9117,6 +9173,7 @@ def _amdgpu_contract_descriptor_from_overlay(
         schedule_class=overlay.schedule_class,
         flags=overlay.flags,
     )
+    return _with_execution_mask_state_read(descriptor)
 
 
 def _descriptor_has_memory_effect(descriptor: Descriptor) -> bool:

@@ -122,10 +122,10 @@ static iree_status_t loom_amdgpu_emit_memory_packet(
                                                     &plan->access.source);
 }
 
-static bool loom_amdgpu_memory_descriptor_has_implicit_operand(
+static bool loom_amdgpu_memory_descriptor_has_implicit_resource_operand(
     loom_low_lower_context_t* context,
     const loom_amdgpu_memory_access_plan_t* plan) {
-  return loom_amdgpu_descriptor_has_implicit_operand(
+  return loom_amdgpu_descriptor_has_implicit_resource_operand(
       loom_low_lower_context_descriptor_set(context), plan->access.descriptor);
 }
 
@@ -1009,7 +1009,8 @@ iree_status_t loom_amdgpu_lower_memory_load(
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_saddr(
         context, source_op, access, low_resource, &low_saddr));
     loom_value_id_t low_m0 = LOOM_VALUE_ID_INVALID;
-    if (loom_amdgpu_memory_descriptor_has_implicit_operand(context, plan)) {
+    if (loom_amdgpu_memory_descriptor_has_implicit_resource_operand(context,
+                                                                    plan)) {
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_implicit_m0(
           context, source_op, plan, &low_m0));
     }
@@ -1077,7 +1078,8 @@ iree_status_t loom_amdgpu_lower_memory_load(
 
   if (access->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT) {
     loom_value_id_t low_m0 = LOOM_VALUE_ID_INVALID;
-    if (loom_amdgpu_memory_descriptor_has_implicit_operand(context, plan)) {
+    if (loom_amdgpu_memory_descriptor_has_implicit_resource_operand(context,
+                                                                    plan)) {
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_implicit_m0(
           context, source_op, plan, &low_m0));
     }
@@ -1220,7 +1222,8 @@ iree_status_t loom_amdgpu_lower_memory_store(
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_saddr(
         context, source_op, access, low_resource, &low_saddr));
     loom_value_id_t low_m0 = LOOM_VALUE_ID_INVALID;
-    if (loom_amdgpu_memory_descriptor_has_implicit_operand(context, plan)) {
+    if (loom_amdgpu_memory_descriptor_has_implicit_resource_operand(context,
+                                                                    plan)) {
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_implicit_m0(
           context, source_op, plan, &low_m0));
     }
@@ -1241,7 +1244,8 @@ iree_status_t loom_amdgpu_lower_memory_store(
 
   if (access->address_form == LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT) {
     loom_value_id_t low_m0 = LOOM_VALUE_ID_INVALID;
-    if (loom_amdgpu_memory_descriptor_has_implicit_operand(context, plan)) {
+    if (loom_amdgpu_memory_descriptor_has_implicit_resource_operand(context,
+                                                                    plan)) {
       IREE_RETURN_IF_ERROR(loom_amdgpu_emit_memory_implicit_m0(
           context, source_op, plan, &low_m0));
     }

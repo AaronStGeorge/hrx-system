@@ -849,6 +849,7 @@ iree_c_embed_data(
         "execution/testdata/gfx11_wmma_lds_roundtrip.loom",
         "execution/testdata/gfx11_wmma_zero.loom",
         "execution/testdata/lds_b128_roundtrip.loom",
+        "execution/testdata/masked_upsample6_reduce.loom",
         "execution/testdata/model_swiglu_tile4_f32.loom",
         "execution/testdata/scf_if_vector_result.loom",
         "execution/testdata/workgroup_reduce_maxnumf.loom",

@@ -15,6 +15,9 @@ from loom.target.arch.amdgpu.descriptors import (
     _ADDRESS_OFFSET_DWORD_ENCODING_ID,
     _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID,
     _GFX12_TH_ATOMIC_RETURN_VALUE,
+    _REG_EXEC,
+    _SCHEDULE_SALU,
+    _SCHEDULE_VALU,
     _SOURCE_INLINE_U32_ENCODING_ID,
     AMDGPU_ATOMIC_DESCRIPTOR_CATEGORY,
     AMDGPU_COMPARE_SELECT_DESCRIPTOR_CATEGORY,
@@ -31,6 +34,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _gfx12_core_overlays,
     _gfx1250_core_overlays,
     _validate_address_immediate_units,
+    _with_execution_mask_state_read,
     amdgpu_atomic_descriptor_candidates,
     amdgpu_descriptor_category_groups,
 )
@@ -42,6 +46,10 @@ from loom.target.low_descriptors import (
     Immediate,
     ImmediateKind,
     MemorySpace,
+    Operand,
+    OperandFlag,
+    OperandRole,
+    RegClassAlt,
 )
 
 
@@ -92,6 +100,49 @@ def _descriptor(key: str, semantic_tag: str) -> Descriptor:
         operands=(),
         schedule_class="amdgpu.test",
     )
+
+
+def test_execution_masked_descriptors_read_exec_state() -> None:
+    descriptor = Descriptor(
+        key="amdgpu.v_add_u32",
+        mnemonic="v_add_u32",
+        semantic_tag="integer.add.u32",
+        operands=(
+            Operand("dst", OperandRole.RESULT, (RegClassAlt("amdgpu.vgpr"),)),
+            Operand("lhs", OperandRole.OPERAND, (RegClassAlt("amdgpu.vgpr"),)),
+            Operand("rhs", OperandRole.OPERAND, (RegClassAlt("amdgpu.vgpr"),)),
+        ),
+        schedule_class=_SCHEDULE_VALU,
+    )
+
+    masked_descriptor = _with_execution_mask_state_read(descriptor)
+    exec_operand = masked_descriptor.operands[-1]
+
+    assert exec_operand.field_name == "exec_in"
+    assert exec_operand.role is OperandRole.IMPLICIT
+    assert exec_operand.reg_alts == (RegClassAlt(_REG_EXEC),)
+    assert OperandFlag.IMPLICIT in exec_operand.flags
+    assert OperandFlag.STATE_READ in exec_operand.flags
+    assert (
+        _with_execution_mask_state_read(masked_descriptor).operands
+        == masked_descriptor.operands
+    )
+
+
+def test_scalar_descriptors_do_not_get_execution_mask_state_read() -> None:
+    descriptor = Descriptor(
+        key="amdgpu.s_add_u32",
+        mnemonic="s_add_u32",
+        semantic_tag="integer.add.u32",
+        operands=(
+            Operand("dst", OperandRole.RESULT, (RegClassAlt("amdgpu.sgpr"),)),
+            Operand("lhs", OperandRole.OPERAND, (RegClassAlt("amdgpu.sgpr"),)),
+            Operand("rhs", OperandRole.OPERAND, (RegClassAlt("amdgpu.sgpr"),)),
+        ),
+        schedule_class=_SCHEDULE_SALU,
+    )
+
+    assert _with_execution_mask_state_read(descriptor) is descriptor
 
 
 def test_amdgpu_descriptor_categories_are_stable() -> None:

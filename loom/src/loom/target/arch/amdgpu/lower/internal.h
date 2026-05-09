@@ -658,11 +658,6 @@ iree_status_t loom_amdgpu_resolve_descriptor_ref(
     loom_amdgpu_descriptor_ref_t descriptor_ref,
     loom_low_lower_resolved_descriptor_t* out_descriptor);
 
-// Returns true when a descriptor row has any target-owned implicit operand.
-bool loom_amdgpu_descriptor_has_implicit_operand(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_descriptor_t* descriptor);
-
 // Returns true when a descriptor row has an implicit resource operand.
 bool loom_amdgpu_descriptor_has_implicit_resource_operand(
     const loom_low_descriptor_set_t* descriptor_set,

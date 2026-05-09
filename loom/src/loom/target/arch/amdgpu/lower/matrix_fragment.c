@@ -1018,7 +1018,7 @@ static iree_status_t loom_amdgpu_emit_fragment_load_packet(
   IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref(
       context, plan->descriptor_ref, &descriptor));
   loom_value_id_t low_m0 = LOOM_VALUE_ID_INVALID;
-  if (loom_amdgpu_descriptor_has_implicit_operand(
+  if (loom_amdgpu_descriptor_has_implicit_resource_operand(
           loom_low_lower_context_descriptor_set(context),
           descriptor.descriptor)) {
     IREE_RETURN_IF_ERROR(
@@ -1059,7 +1059,7 @@ static iree_status_t loom_amdgpu_emit_fragment_store_packet(
   IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref(
       context, plan->descriptor_ref, &descriptor));
   loom_value_id_t low_m0 = LOOM_VALUE_ID_INVALID;
-  if (loom_amdgpu_descriptor_has_implicit_operand(
+  if (loom_amdgpu_descriptor_has_implicit_resource_operand(
           loom_low_lower_context_descriptor_set(context),
           descriptor.descriptor)) {
     IREE_RETURN_IF_ERROR(
