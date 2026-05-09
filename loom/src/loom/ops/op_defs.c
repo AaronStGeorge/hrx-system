@@ -1995,6 +1995,94 @@ iree_status_t loom_region_remove_blocks(loom_module_t* module,
 // reallocation. Values used more than 8 times get geometric growth.
 #define LOOM_USE_INITIAL_OVERFLOW_CAPACITY 8
 
+static iree_status_t loom_module_note_attribute_type_value_ref(
+    loom_value_id_t value_id, void* user_data) {
+  loom_module_t* module = (loom_module_t*)user_data;
+  if (value_id < module->values.count) {
+    module->values.entries[value_id].flags |= LOOM_VALUE_FLAG_ATTRIBUTE_USES;
+  }
+  return iree_ok_status();
+}
+
+static void loom_module_note_attribute_value_ref(loom_module_t* module,
+                                                 loom_value_id_t value_id) {
+  if (value_id < module->values.count) {
+    module->values.entries[value_id].flags |= LOOM_VALUE_FLAG_ATTRIBUTE_USES;
+  }
+}
+
+static iree_status_t loom_module_note_attribute_value_refs(
+    loom_module_t* module, loom_attribute_t attr, uint8_t dict_depth);
+
+static iree_status_t loom_module_note_type_attribute_value_refs(
+    loom_module_t* module, loom_attribute_t attr) {
+  if (attr.type_id == LOOM_TYPE_ID_INVALID ||
+      attr.type_id >= module->types.count) {
+    return iree_ok_status();
+  }
+  loom_type_t type = module->types.entries[attr.type_id];
+  return loom_type_walk_value_refs(
+      type, loom_module_note_attribute_type_value_ref, module);
+}
+
+static iree_status_t loom_module_note_predicate_attribute_value_refs(
+    loom_module_t* module, loom_attribute_t attr) {
+  if (attr.count == 0 || !attr.predicate_list) {
+    return iree_ok_status();
+  }
+  for (uint16_t predicate_index = 0; predicate_index < attr.count;
+       ++predicate_index) {
+    const loom_predicate_t* predicate = &attr.predicate_list[predicate_index];
+    for (uint8_t argument_index = 0; argument_index < predicate->arg_count;
+         ++argument_index) {
+      if (predicate->arg_tags[argument_index] != LOOM_PRED_ARG_VALUE) {
+        continue;
+      }
+      loom_module_note_attribute_value_ref(
+          module, (loom_value_id_t)predicate->args[argument_index]);
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_module_note_dict_attribute_value_refs(
+    loom_module_t* module, loom_attribute_t attr, uint8_t dict_depth) {
+  if (dict_depth >= LOOM_ATTR_DICT_MAX_NESTING_DEPTH || attr.count == 0 ||
+      !attr.dict_entries) {
+    return iree_ok_status();
+  }
+  for (uint16_t i = 0; i < attr.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_module_note_attribute_value_refs(
+        module, attr.dict_entries[i].value, (uint8_t)(dict_depth + 1)));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_module_note_attribute_value_refs(
+    loom_module_t* module, loom_attribute_t attr, uint8_t dict_depth) {
+  switch ((loom_attr_kind_t)attr.kind) {
+    case LOOM_ATTR_TYPE:
+      return loom_module_note_type_attribute_value_refs(module, attr);
+    case LOOM_ATTR_PREDICATE_LIST:
+      return loom_module_note_predicate_attribute_value_refs(module, attr);
+    case LOOM_ATTR_DICT:
+      return loom_module_note_dict_attribute_value_refs(module, attr,
+                                                        dict_depth);
+    default:
+      return iree_ok_status();
+  }
+}
+
+iree_status_t loom_module_note_op_attribute_value_refs(loom_module_t* module,
+                                                       const loom_op_t* op) {
+  const loom_attribute_t* attrs = loom_op_const_attrs(op);
+  for (uint8_t attr_index = 0; attr_index < op->attribute_count; ++attr_index) {
+    IREE_RETURN_IF_ERROR(loom_module_note_attribute_value_refs(
+        module, attrs[attr_index], /*dict_depth=*/0));
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_value_add_use(loom_module_t* module,
                                  loom_value_id_t value_id, loom_op_t* user_op,
                                  uint16_t operand_index) {
@@ -2162,6 +2250,8 @@ iree_status_t loom_builder_finalize_op(loom_builder_t* builder, loom_op_t* op) {
           loom_module_refresh_value_type_uses(builder->module, results[i]));
     }
   }
+  IREE_RETURN_IF_ERROR(
+      loom_module_note_op_attribute_value_refs(builder->module, op));
   // Successor-bearing ops make their enclosing region unstructured CFG.
   if (op->successor_count > 0 && op->parent_block &&
       op->parent_block->parent_region) {
@@ -2434,6 +2524,9 @@ static iree_status_t loom_op_replace_attr_value_refs(loom_module_t* module,
     }
     loom_trait_flags_t old_traits = op->traits;
     attrs[attr_index] = replacement;
+    loom_module_note_attribute_value_ref(module, new_id);
+    IREE_RETURN_IF_ERROR(loom_module_note_attribute_value_refs(
+        module, replacement, /*dict_depth=*/0));
     loom_op_refresh_effective_traits(module, op);
     loom_module_update_op_direct_effects(op, old_traits, op->traits);
   }
@@ -2471,6 +2564,7 @@ iree_status_t loom_value_replace_all_uses_with(loom_module_t* module,
   if (old_id == new_id) return iree_ok_status();
   loom_value_t* old_value = &module->values.entries[old_id];
   uint32_t old_use_count = old_value->use_count;
+  const bool old_has_attribute_uses = loom_value_has_attribute_uses(old_value);
 
   loom_value_t* new_value = &module->values.entries[new_id];
   IREE_RETURN_IF_ERROR(
@@ -2478,8 +2572,11 @@ iree_status_t loom_value_replace_all_uses_with(loom_module_t* module,
 
   IREE_RETURN_IF_ERROR(
       loom_module_replace_value_type_uses(module, old_id, new_id));
-  IREE_RETURN_IF_ERROR(loom_region_replace_attr_value_refs(module, module->body,
-                                                           old_id, new_id));
+  if (old_has_attribute_uses) {
+    IREE_RETURN_IF_ERROR(loom_region_replace_attr_value_refs(
+        module, module->body, old_id, new_id));
+    new_value->flags |= LOOM_VALUE_FLAG_ATTRIBUTE_USES;
+  }
   if (old_use_count == 0) return iree_ok_status();
 
   // Patch every user op's operand slot.
@@ -2663,6 +2760,8 @@ static iree_status_t loom_region_compute_uses(loom_module_t* module,
       op->parent_op = parent_op;
       op->parent_block = block;
       loom_module_record_op_effects(module, op);
+      IREE_RETURN_IF_ERROR(
+          loom_module_note_op_attribute_value_refs(module, op));
       // Register operand uses.
       loom_value_id_t* operands = loom_op_operands(op);
       for (uint16_t i = 0; i < op->operand_count; ++i) {
@@ -2703,7 +2802,8 @@ iree_status_t loom_module_compute_uses(loom_module_t* module) {
   for (iree_host_size_t i = 0; i < module->values.count; ++i) {
     loom_value_t* value = &module->values.entries[i];
     value->use_count = 0;
-    value->flags &= ~LOOM_VALUE_FLAG_OVERFLOW_USES;
+    value->flags &=
+        ~(LOOM_VALUE_FLAG_OVERFLOW_USES | LOOM_VALUE_FLAG_ATTRIBUTE_USES);
     value->def = loom_value_def_make_none();
     memset(value->inline_uses, 0,
            LOOM_VALUE_INLINE_USE_COUNT * sizeof(loom_use_t));

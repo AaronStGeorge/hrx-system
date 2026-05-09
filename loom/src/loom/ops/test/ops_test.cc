@@ -481,6 +481,13 @@ TEST_F(BuilderTest, ReplaceAllUsesWithUpdatesPredicateAttrs) {
       IREE_ARRAYSIZE(predicates), result_types, IREE_ARRAYSIZE(result_types),
       LOOM_LOCATION_UNKNOWN, &assume_op));
 
+  EXPECT_TRUE(
+      loom_value_has_attribute_uses(loom_module_value(module_, old_id)));
+  EXPECT_TRUE(
+      loom_value_has_attribute_uses(loom_module_value(module_, bound_id)));
+  EXPECT_FALSE(
+      loom_value_has_attribute_uses(loom_module_value(module_, new_id)));
+
   IREE_ASSERT_OK(loom_value_replace_all_uses_with(module_, old_id, new_id));
 
   ASSERT_TRUE(loom_test_assume_isa(assume_op));
@@ -491,6 +498,62 @@ TEST_F(BuilderTest, ReplaceAllUsesWithUpdatesPredicateAttrs) {
   ASSERT_NE(predicate_attr.predicate_list, nullptr);
   EXPECT_EQ(predicate_attr.predicate_list[0].args[0], (int64_t)new_id);
   EXPECT_EQ(predicate_attr.predicate_list[0].args[1], (int64_t)bound_id);
+  EXPECT_TRUE(
+      loom_value_has_attribute_uses(loom_module_value(module_, new_id)));
+}
+
+TEST_F(BuilderTest, ReplaceAllUsesWithUpdatesTypeAttrs) {
+  loom_type_t index = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+  loom_op_t* old_dim_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(1), index,
+                                          LOOM_LOCATION_UNKNOWN, &old_dim_op));
+  loom_value_id_t old_dim = loom_test_constant_result(old_dim_op);
+  loom_op_t* new_dim_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(2), index,
+                                          LOOM_LOCATION_UNKNOWN, &new_dim_op));
+  loom_value_id_t new_dim = loom_test_constant_result(new_dim_op);
+
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_op_t* input_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(0), f32,
+                                          LOOM_LOCATION_UNKNOWN, &input_op));
+  loom_value_id_t input = loom_test_constant_result(input_op);
+
+  loom_type_t vector_type =
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_dynamic(old_dim), 0);
+  loom_type_id_t vector_type_id = LOOM_TYPE_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_type_id(module_, vector_type, &vector_type_id));
+
+  loom_string_id_t type_attr_name = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module_, IREE_SV("shape"), &type_attr_name));
+  loom_named_attr_t entries[] = {
+      {.name_id = type_attr_name, .value = loom_attr_type(vector_type_id)},
+  };
+  loom_op_t* attrs_op = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(
+      &builder_, input,
+      loom_make_named_attr_slice(entries, IREE_ARRAYSIZE(entries)), f32,
+      LOOM_LOCATION_UNKNOWN, &attrs_op));
+
+  EXPECT_TRUE(
+      loom_value_has_attribute_uses(loom_module_value(module_, old_dim)));
+  EXPECT_FALSE(
+      loom_value_has_attribute_uses(loom_module_value(module_, new_dim)));
+
+  IREE_ASSERT_OK(loom_value_replace_all_uses_with(module_, old_dim, new_dim));
+
+  loom_named_attr_slice_t dict = loom_test_attrs_dict(attrs_op);
+  ASSERT_EQ(dict.count, 1u);
+  ASSERT_EQ(dict.entries[0].value.kind, LOOM_ATTR_TYPE);
+  loom_type_t replaced_type =
+      module_->types.entries[dict.entries[0].value.type_id];
+  ASSERT_TRUE(loom_type_dim_is_dynamic_at(replaced_type, 0));
+  EXPECT_EQ(loom_type_dim_value_id_at(replaced_type, 0), new_dim);
+  EXPECT_TRUE(
+      loom_value_has_attribute_uses(loom_module_value(module_, new_dim)));
 }
 
 TEST_F(BuilderTest, EnumAttribute) {

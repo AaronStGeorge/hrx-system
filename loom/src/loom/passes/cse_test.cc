@@ -283,6 +283,71 @@ TEST_F(CSETest, RewriterReplaceAttrDictBuildsFreshCanonicalDict) {
   EXPECT_EQ(loom_attr_as_i64(dict.entries[1].value), 2);
 }
 
+TEST_F(CSETest, RewriterReplaceAttrDictRecordsTypeValueRefs) {
+  loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t index = loom_type_scalar(LOOM_SCALAR_TYPE_INDEX);
+
+  loom_op_t* old_dim_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(1), index,
+                                          LOOM_LOCATION_UNKNOWN, &old_dim_op));
+  loom_value_id_t old_dim = loom_test_constant_result(old_dim_op);
+
+  loom_op_t* new_dim_op = NULL;
+  IREE_ASSERT_OK(loom_test_constant_build(&builder_, loom_attr_i64(2), index,
+                                          LOOM_LOCATION_UNKNOWN, &new_dim_op));
+  loom_value_id_t new_dim = loom_test_constant_result(new_dim_op);
+
+  loom_value_id_t input = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_builder_define_block_arg(
+      &builder_, loom_region_entry_block(body_), f32, &input));
+
+  loom_op_t* attrs_op = NULL;
+  IREE_ASSERT_OK(loom_test_attrs_build(&builder_, input,
+                                       loom_make_named_attr_slice(NULL, 0), f32,
+                                       LOOM_LOCATION_UNKNOWN, &attrs_op));
+
+  loom_type_t vector_type =
+      loom_type_shaped_1d(LOOM_TYPE_VECTOR, LOOM_SCALAR_TYPE_F32,
+                          loom_dim_pack_dynamic(old_dim), 0);
+  loom_type_id_t vector_type_id = LOOM_TYPE_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_type_id(module_, vector_type, &vector_type_id));
+
+  loom_string_id_t shape_id = LOOM_STRING_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_intern_string(module_, IREE_SV("shape"), &shape_id));
+  loom_named_attr_update_t updates[1] = {
+      loom_named_attr_replace(shape_id, loom_attr_type(vector_type_id)),
+  };
+
+  iree_arena_allocator_t pass_arena;
+  iree_arena_initialize(&block_pool_, &pass_arena);
+  loom_rewriter_t rewriter;
+  IREE_ASSERT_OK(loom_rewriter_initialize(&rewriter, module_, &pass_arena));
+  IREE_ASSERT_OK(loom_rewriter_replace_attr_dict(
+      &rewriter, attrs_op, loom_test_attrs_dict_ATTR_INDEX,
+      loom_make_named_attr_update_slice(updates, IREE_ARRAYSIZE(updates))));
+  loom_rewriter_deinitialize(&rewriter);
+  iree_arena_deinitialize(&pass_arena);
+
+  EXPECT_TRUE(
+      loom_value_has_attribute_uses(loom_module_value(module_, old_dim)));
+  EXPECT_FALSE(
+      loom_value_has_attribute_uses(loom_module_value(module_, new_dim)));
+
+  IREE_ASSERT_OK(loom_value_replace_all_uses_with(module_, old_dim, new_dim));
+
+  loom_named_attr_slice_t dict = loom_test_attrs_dict(attrs_op);
+  ASSERT_EQ(dict.count, 1u);
+  ASSERT_EQ(dict.entries[0].value.kind, LOOM_ATTR_TYPE);
+  loom_type_t replaced_type =
+      module_->types.entries[dict.entries[0].value.type_id];
+  ASSERT_TRUE(loom_type_dim_is_dynamic_at(replaced_type, 0));
+  EXPECT_EQ(loom_type_dim_value_id_at(replaced_type, 0), new_dim);
+  EXPECT_TRUE(
+      loom_value_has_attribute_uses(loom_module_value(module_, new_dim)));
+}
+
 TEST_F(CSETest, RewriterSetAttrRejectsMalformedDictAttr) {
   loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
 

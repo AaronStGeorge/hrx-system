@@ -11,6 +11,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/facts.h"
 #include "loom/ir/module.h"
+#include "loom/ops/op_defs.h"
 
 #define LOOM_REWRITER_INITIAL_WORKLIST_CAPACITY 64
 #define LOOM_REWRITER_INITIAL_REGION_STACK_CAPACITY 8
@@ -766,6 +767,8 @@ iree_status_t loom_rewriter_set_attr(loom_rewriter_t* rewriter, loom_op_t* op,
       loom_rewriter_validate_attr_write(rewriter, op, attr_index, value));
   loom_trait_flags_t old_traits = op->traits;
   loom_op_attrs(op)[attr_index] = value;
+  IREE_RETURN_IF_ERROR(
+      loom_module_note_op_attribute_value_refs(rewriter->module, op));
   loom_op_refresh_effective_traits(rewriter->module, op);
   loom_module_update_op_direct_effects(op, old_traits, op->traits);
   IREE_RETURN_IF_ERROR(

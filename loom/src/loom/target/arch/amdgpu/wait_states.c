@@ -124,8 +124,8 @@ static bool loom_amdgpu_wait_state_assignments_match(
 static const loom_low_allocation_assignment_t*
 loom_amdgpu_wait_state_assignment(const loom_low_allocation_table_t* allocation,
                                   loom_value_id_t value_id) {
-  return loom_low_allocation_map_active_value_assignment(allocation, value_id,
-                                                         NULL);
+  return loom_low_allocation_try_map_active_value_assignment(allocation,
+                                                             value_id, NULL);
 }
 
 static iree_status_t loom_amdgpu_wait_state_allocate(
@@ -447,6 +447,9 @@ static iree_status_t loom_amdgpu_wait_state_copy_materializes(
   const loom_low_allocation_assignment_t* result_assignment =
       loom_amdgpu_wait_state_assignment(builder->allocation,
                                         loom_low_copy_result(op));
+  if (source_assignment == NULL || result_assignment == NULL) {
+    return iree_ok_status();
+  }
   if (source_assignment->location_count != result_assignment->location_count) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "AMDGPU low.copy allocation is malformed");

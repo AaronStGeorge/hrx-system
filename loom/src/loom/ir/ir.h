@@ -346,13 +346,19 @@ enum loom_value_flag_bits_e {
   // through overflow_uses pointer instead of inline_uses array.
   // Check: if use_count > LOOM_VALUE_INLINE_USE_COUNT, this must be set.
   LOOM_VALUE_FLAG_OVERFLOW_USES = 1u << 2,
+
+  // This value may be referenced by operation attributes such as predicate
+  // lists or type attributes. Attribute references are not operand uses and are
+  // therefore tracked separately so common SSA-only replacements can avoid a
+  // full module attribute walk.
+  LOOM_VALUE_FLAG_ATTRIBUTE_USES = 1u << 3,
 };
 typedef uint16_t loom_value_flags_t;
 
 // Maximum representable use count. Count and flags share one 32-bit storage
 // unit in loom_value_t so values can track high-fanout uses while preserving
 // the 64-byte value layout and three inline uses.
-#define LOOM_VALUE_USE_COUNT_BITS 29
+#define LOOM_VALUE_USE_COUNT_BITS 28
 #define LOOM_VALUE_MAX_USE_COUNT ((1u << LOOM_VALUE_USE_COUNT_BITS) - 1u)
 
 //===----------------------------------------------------------------------===//
@@ -388,9 +394,9 @@ typedef iree_alignas(64) struct loom_value_t {
   // high-fanout values scale past 64K uses without growing loom_value_t.
   uint32_t use_count : LOOM_VALUE_USE_COUNT_BITS;
 
-  // Bitfield of loom_value_flag_bits_e. Stored in the upper 3 bits of the same
+  // Bitfield of loom_value_flag_bits_e. Stored in the upper 4 bits of the same
   // 32-bit unit as use_count.
-  uint32_t flags : 3;
+  uint32_t flags : 4;
 
   // --- 8 bytes ---
 
@@ -452,6 +458,10 @@ static inline bool loom_value_is_consumed(const loom_value_t* value) {
 
 static inline bool loom_value_has_overflow_uses(const loom_value_t* value) {
   return iree_any_bit_set(value->flags, LOOM_VALUE_FLAG_OVERFLOW_USES);
+}
+
+static inline bool loom_value_has_attribute_uses(const loom_value_t* value) {
+  return iree_any_bit_set(value->flags, LOOM_VALUE_FLAG_ATTRIBUTE_USES);
 }
 
 // Returns a const pointer to the use array (inline or overflow).

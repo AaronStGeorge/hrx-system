@@ -1795,6 +1795,12 @@ iree_status_t loom_value_remove_use(loom_module_t* module,
 // builder: `return loom_builder_finalize_op(builder, *out_op);`
 iree_status_t loom_builder_finalize_op(loom_builder_t* builder, loom_op_t* op);
 
+// Records SSA value references embedded in |op|'s attributes. Attribute
+// references are tracked as a conservative per-value bit so RAUW can avoid
+// scanning operation attributes when replacing ordinary operand-only values.
+iree_status_t loom_module_note_op_attribute_value_refs(loom_module_t* module,
+                                                       const loom_op_t* op);
+
 // Links a symbol-defining op to its symbol table entry using the op's generated
 // symbol definition descriptor. Sets the symbol's defining op, definition
 // descriptor, and legacy bytecode kind. Idempotent.
