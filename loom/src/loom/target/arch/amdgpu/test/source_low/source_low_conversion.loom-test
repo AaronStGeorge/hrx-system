@@ -133,11 +133,11 @@ func.def target(@target) @vector_extf_bf16x3(%input: vector<3xbf16>) -> (vector<
 // ----
 low.func.def target(@target) abi(hal_kernel) @vector_extf_bf16x3(%input: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x3>) asm<amdgpu.rdna3.core> {
   %5 = slice %input[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %6 = v_lshlrev_b32_lit %5, 16
-  %8 = v_lshrrev_b32_lit %5, 16
-  %9 = v_lshlrev_b32_lit %8, 16
+  %6 = v_lshlrev_b32_src0_inline %5, 16
+  %8 = v_lshrrev_b32_src0_inline %5, 16
+  %9 = v_lshlrev_b32_src0_inline %8, 16
   %10 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %11 = v_lshlrev_b32_lit %10, 16
+  %11 = v_lshlrev_b32_src0_inline %10, 16
   %converted = concat(%6, %9, %11) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x3>
   return %converted
 }
@@ -153,25 +153,25 @@ func.def target(@target) @vector_fptrunc_bf16x3(%input: vector<3xf32>) -> (vecto
 // ----
 low.func.def target(@target) abi(hal_kernel) @vector_fptrunc_bf16x3(%input: reg<amdgpu.vgpr x3>) -> (reg<amdgpu.vgpr x2>) asm<amdgpu.rdna3.core> {
   %5 = slice %input[0] : reg<amdgpu.vgpr x3> -> reg<amdgpu.vgpr>
-  %6 = v_lshrrev_b32_lit %5, 16
-  %7 = v_and_b32_lit %6, 1
+  %6 = v_lshrrev_b32_src0_inline %5, 16
+  %7 = v_and_b32_src0_inline %6, 1
   %8 = v_add_u32_lit %7, 32767
   %9 = v_add_u32 %5, %8
-  %10 = v_lshrrev_b32_lit %9, 16
+  %10 = v_lshrrev_b32_src0_inline %9, 16
   %11 = slice %input[1] : reg<amdgpu.vgpr x3> -> reg<amdgpu.vgpr>
-  %12 = v_lshrrev_b32_lit %11, 16
-  %13 = v_and_b32_lit %12, 1
+  %12 = v_lshrrev_b32_src0_inline %11, 16
+  %13 = v_and_b32_src0_inline %12, 1
   %14 = v_add_u32_lit %13, 32767
   %15 = v_add_u32 %11, %14
-  %16 = v_lshrrev_b32_lit %15, 16
-  %17 = v_lshlrev_b32_lit %16, 16
+  %16 = v_lshrrev_b32_src0_inline %15, 16
+  %17 = v_lshlrev_b32_src0_inline %16, 16
   %18 = v_or_b32 %10, %17
   %19 = slice %input[2] : reg<amdgpu.vgpr x3> -> reg<amdgpu.vgpr>
-  %20 = v_lshrrev_b32_lit %19, 16
-  %21 = v_and_b32_lit %20, 1
+  %20 = v_lshrrev_b32_src0_inline %19, 16
+  %21 = v_and_b32_src0_inline %20, 1
   %22 = v_add_u32_lit %21, 32767
   %23 = v_add_u32 %19, %22
-  %24 = v_lshrrev_b32_lit %23, 16
+  %24 = v_lshrrev_b32_src0_inline %23, 16
   %converted = concat(%18, %24) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   return %converted
 }
@@ -248,7 +248,7 @@ func.def target(@target) @scalar_extsi_i32_store(%output: buffer, %input: i32) {
 low.func.def target(@target) abi(hal_kernel) @scalar_extsi_i32_store(%input: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 8} : reg<amdgpu.sgpr x2>
   %7 = v_mov_b32_copy %input
-  %8 = v_ashrrev_i32_lit %7, 31
+  %8 = v_ashrrev_i32_src0_inline %7, 31
   %converted = concat(%7, %8) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   %10 = v_mov_b32 0
   global_store_b64 %10, %converted, %output_view

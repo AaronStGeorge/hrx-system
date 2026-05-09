@@ -362,7 +362,7 @@ low.kernel.def target(@target) workgroup_size(64, 4, 1) @global_dynamic_offset_s
   %base_x = low.const<amdgpu.s_mov_b32> {imm32 = 4294966000} : reg<amdgpu.sgpr>
   %19 = low.const<amdgpu.v_mov_b32> {imm32 = 4294966000} : reg<amdgpu.vgpr>
   %x = low.op<amdgpu.v_add_u32>(%x0, %19) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %21 = low.op<amdgpu.v_lshrrev_b32.lit>(%packed_tid) {imm32 = 10} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %21 = low.op<amdgpu.v_lshrrev_b32.src0_inline>(%packed_tid) {imm32 = 10} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %y0 = low.op<amdgpu.v_and_b32.lit>(%21) {imm32 = 1023} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %base_y = low.const<amdgpu.s_mov_b32> {imm32 = 2000} : reg<amdgpu.sgpr>
   %24 = low.const<amdgpu.v_mov_b32> {imm32 = 2000} : reg<amdgpu.vgpr>

@@ -98,15 +98,15 @@ low.kernel.def target(@target) workgroup_size(32, 1, 1) @f16_wmmar3_fragment_mem
   %rhs_view = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %init_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %out_view = resource<hal_binding> {index = 3, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %29 = v_and_b32_lit %23, 15
-  %31 = v_lshlrev_b32_lit %29, 5
+  %29 = v_and_b32_src0_inline %23, 15
+  %31 = v_lshlrev_b32_src0_inline %29, 5
   %32 = global_load_b128 %31, %lhs_view
   %34 = global_load_b128 %31, %lhs_view {offset = 16}
   %lhs = concat(%32, %34) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>) -> reg<amdgpu.vgpr x8>
   %39 = global_load_b128 %31, %rhs_view
   %41 = global_load_b128 %31, %rhs_view {offset = 16}
   %rhs = concat(%39, %41) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>) -> reg<amdgpu.vgpr x8>
-  %45 = v_lshlrev_b32_lit %23, 2
+  %45 = v_lshlrev_b32_src0_inline %23, 2
   %46 = global_load_b32 %45, %init_view
   %48 = global_load_b32 %45, %init_view {offset = 128}
   %50 = global_load_b32 %45, %init_view {offset = 256}
@@ -184,21 +184,21 @@ low.kernel.def target(@target) workgroup_size(32, 1, 1) @f16_wmmar3_fragment_mem
   %out_view = resource<hal_binding> {index = 3, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %63 = storage {byte_alignment = 16, byte_length = 512} : low.storage<workgroup>
   %65 = storage {byte_alignment = 16, byte_length = 512} : low.storage<workgroup>
-  %68 = v_lshlrev_b32_lit %tid, 4
+  %68 = v_lshlrev_b32_src0_inline %tid, 4
   %lhs_loaded = global_load_b128 %68, %lhs_buffer_view
   %rhs_loaded = global_load_b128 %68, %rhs_buffer_view
   ds_write_b128 %68, %lhs_loaded
   ds_write_b128 %68, %rhs_loaded {offset = 512}
   s_barrier
-  %74 = v_and_b32_lit %tid, 15
-  %76 = v_lshlrev_b32_lit %74, 5
+  %74 = v_and_b32_src0_inline %tid, 15
+  %76 = v_lshlrev_b32_src0_inline %74, 5
   %77 = ds_read_b128 %76
   %79 = ds_read_b128 %76 {offset = 16}
   %lhs = concat(%77, %79) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>) -> reg<amdgpu.vgpr x8>
   %84 = ds_read_b128 %76 {offset = 512}
   %86 = ds_read_b128 %76 {offset = 528}
   %rhs = concat(%84, %86) : (reg<amdgpu.vgpr x4>, reg<amdgpu.vgpr x4>) -> reg<amdgpu.vgpr x8>
-  %90 = v_lshlrev_b32_lit %tid, 2
+  %90 = v_lshlrev_b32_src0_inline %tid, 2
   %91 = global_load_b32 %90, %init_view
   %93 = global_load_b32 %90, %init_view {offset = 128}
   %95 = global_load_b32 %90, %init_view {offset = 256}

@@ -18,9 +18,9 @@ kernel.def target(@target) @subgroup_id_x_wave32(%output: buffer) {
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_id_x_wave32() asm<amdgpu.rdna3.core> {
   %8 = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 8} : reg<amdgpu.sgpr x2>
-  %subgroup_id = v_lshrrev_b32_lit %8, 5
+  %subgroup_id = v_lshrrev_b32_src0_inline %8, 5
   %one = v_mov_b32 1
-  %12 = v_lshlrev_b32_lit %subgroup_id, 2
+  %12 = v_lshlrev_b32_src0_inline %subgroup_id, 2
   global_store_b32 %12, %one, %output_view
   return
 }
@@ -75,17 +75,17 @@ low.kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wav
   %packed_tid = live_in<amdgpu.workitem_id.packed.xyz> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
   %12 = v_and_b32_lit %packed_tid, 1023
-  %13 = v_lshrrev_b32_lit %packed_tid, 10
+  %13 = v_lshrrev_b32_src0_inline %packed_tid, 10
   %14 = v_and_b32_lit %13, 1023
-  %15 = v_lshlrev_b32_lit %14, 3
+  %15 = v_lshlrev_b32_src0_inline %14, 3
   %16 = v_add_u32 %12, %15
-  %17 = v_lshrrev_b32_lit %packed_tid, 20
+  %17 = v_lshrrev_b32_src0_inline %packed_tid, 20
   %18 = v_and_b32_lit %17, 1023
-  %19 = v_lshlrev_b32_lit %18, 5
+  %19 = v_lshlrev_b32_src0_inline %18, 5
   %20 = v_add_u32 %16, %19
-  %lane_id = v_and_b32_lit %20, 31
+  %lane_id = v_and_b32_src0_inline %20, 31
   %one = v_mov_b32 1
-  %23 = v_lshlrev_b32_lit %lane_id, 2
+  %23 = v_lshlrev_b32_src0_inline %lane_id, 2
   global_store_b32 %23, %one, %output_view
   return
 }
@@ -114,17 +114,17 @@ low.kernel.def target(@target) workgroup_size(8, 4, 2) @subgroup_lane_id_xyz_wav
   %packed_tid = live_in<amdgpu.workitem_id.packed.xyz> : reg<amdgpu.vgpr>
   %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
   %12 = v_and_b32_lit %packed_tid, 1023
-  %13 = v_lshrrev_b32_lit %packed_tid, 10
+  %13 = v_lshrrev_b32_src0_inline %packed_tid, 10
   %14 = v_and_b32_lit %13, 1023
-  %15 = v_lshlrev_b32_lit %14, 3
+  %15 = v_lshlrev_b32_src0_inline %14, 3
   %16 = v_add_u32 %12, %15
-  %17 = v_lshrrev_b32_lit %packed_tid, 20
+  %17 = v_lshrrev_b32_src0_inline %packed_tid, 20
   %18 = v_and_b32_lit %17, 1023
-  %19 = v_lshlrev_b32_lit %18, 5
+  %19 = v_lshlrev_b32_src0_inline %18, 5
   %20 = v_add_u32 %16, %19
-  %lane_id = v_and_b32_lit %20, 31
+  %lane_id = v_and_b32_src0_inline %20, 31
   %one = v_mov_b32 1
-  %23 = v_lshlrev_b32_lit %lane_id, 2
+  %23 = v_lshlrev_b32_src0_inline %lane_id, 2
   global_store_b32 %23, %one, %output_view
   return
 }
@@ -150,9 +150,9 @@ kernel.def target(@target) @subgroup_id_x_wave64(%output: buffer) {
 low.kernel.def target(@target) workgroup_size(128, 1, 1) @subgroup_id_x_wave64() {
   %8 = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = low.resource<hal_binding> {extent = 8, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %subgroup_id = low.op<amdgpu.v_lshrrev_b32.lit>(%8) {imm32 = 6} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %subgroup_id = low.op<amdgpu.v_lshrrev_b32.src0_inline>(%8) {imm32 = 6} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %one = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
-  %12 = low.op<amdgpu.v_lshlrev_b32.lit>(%subgroup_id) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %12 = low.op<amdgpu.v_lshlrev_b32.src0_inline>(%subgroup_id) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %13 = low.const<amdgpu.s_mov_b32_m0.imm> {imm32 = 0} : reg<amdgpu.m0>
   low.op<amdgpu.global_store_b32_saddr>(%12, %one, %output_view, %13) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
   low.return
@@ -180,7 +180,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_lane_id_x_wave
   %lane_id = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %output_view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %one = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
-  %11 = low.op<amdgpu.v_lshlrev_b32.lit>(%lane_id) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %11 = low.op<amdgpu.v_lshlrev_b32.src0_inline>(%lane_id) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %12 = low.const<amdgpu.s_mov_b32_m0.imm> {imm32 = 0} : reg<amdgpu.m0>
   low.op<amdgpu.global_store_b32_saddr>(%11, %one, %output_view, %12) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
   low.return

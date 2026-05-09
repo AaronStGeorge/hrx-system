@@ -1291,7 +1291,7 @@ static iree_status_t loom_amdgpu_emit_fragment_memory_vaddr(
           context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_ADD_U32,
           accumulator.value, low_static_offset, sgpr_type, &accumulator.value));
     } else {
-      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_literal(
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
           context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32_LIT,
           accumulator.value, (uint32_t)static_byte_offset, vgpr_type,
           &accumulator.value));
@@ -1364,7 +1364,7 @@ static iree_status_t loom_amdgpu_emit_fragment_memory_lane_ids(
   };
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_current_subgroup_lane_id(
       context, source_op, vgpr_type, &out_lane_ids->lane));
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_literal(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
       out_lane_ids->lane, LOOM_AMDGPU_FRAGMENT_LANE_MODULUS - 1, vgpr_type,
       &out_lane_ids->lane_mod));

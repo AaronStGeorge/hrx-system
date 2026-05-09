@@ -130,7 +130,7 @@ static iree_status_t loom_amdgpu_emit_extractu_lane(
     return iree_ok_status();
   }
 
-  return loom_amdgpu_emit_vgpr_binary_literal(
+  return loom_amdgpu_emit_vgpr_binary_immediate(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT, shifted,
       loom_amdgpu_bitfield_low_mask(plan->width), lane_type, out_lane);
 }
@@ -181,7 +181,7 @@ static iree_status_t loom_amdgpu_emit_insert_lane(
 
   loom_value_id_t field_low_bits = field_lane;
   if (plan->width < 32) {
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_literal(
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
         context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
         field_lane, loom_amdgpu_bitfield_low_mask(plan->width), lane_type,
         &field_low_bits));
@@ -201,7 +201,7 @@ static iree_status_t loom_amdgpu_emit_insert_lane(
   }
 
   loom_value_id_t cleared_base = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_literal(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT, base_lane,
       clear_mask, lane_type, &cleared_base));
   return loom_amdgpu_emit_vgpr_binary(

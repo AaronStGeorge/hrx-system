@@ -1248,7 +1248,7 @@ static iree_status_t loom_amdgpu_lower_vector_iota(
         lanes[i] = low_base;
         continue;
       }
-      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_literal(
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
           context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32_LIT,
           low_base, (uint32_t)(int32_t)lane_offset, lane_type, &lanes[i]));
       continue;
@@ -1457,7 +1457,7 @@ static iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_16bit_float(
       loom_low_lower_lookup_value(context, source_value, out_low_value));
   IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
       context, source_op, *out_low_value, out_low_value));
-  return loom_amdgpu_emit_vgpr_binary_literal(
+  return loom_amdgpu_emit_vgpr_binary_immediate(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
       *out_low_value, UINT32_C(0xFFFF), lane_type, out_low_value);
 }
@@ -1621,7 +1621,7 @@ static iree_status_t loom_amdgpu_replace_16bit_vector_register_lane(
       is_high_lane ? UINT32_C(0x0000FFFF) : UINT32_C(0xFFFF0000);
 
   loom_value_id_t preserved = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_literal(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
       old_register, preserved_mask, register_type, &preserved));
 
@@ -1797,11 +1797,11 @@ static iree_status_t loom_amdgpu_emit_f32_to_bf16_lane(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT, 16,
       source_lane, lane_type, &upper));
   loom_value_id_t lsb = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_literal(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT, upper, 1,
       lane_type, &lsb));
   loom_value_id_t bias = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_literal(
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32_LIT, lsb,
       UINT32_C(0x7FFF), lane_type, &bias));
   loom_value_id_t rounded = LOOM_VALUE_ID_INVALID;

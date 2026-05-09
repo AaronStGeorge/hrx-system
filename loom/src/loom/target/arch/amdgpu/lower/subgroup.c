@@ -1192,7 +1192,7 @@ static iree_status_t loom_amdgpu_emit_subgroup_shuffle_source_byte_offset(
       if (plan->offset == 0) {
         source_lane = lane_id;
       } else {
-        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_literal(
+        IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
             context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_XOR_B32_LIT,
             lane_id, plan->offset, lane_type, &source_lane));
       }
@@ -1285,7 +1285,7 @@ static iree_status_t loom_amdgpu_emit_subgroup_xor_lane(
     *out_source_lane = lane_id;
     return iree_ok_status();
   }
-  return loom_amdgpu_emit_vgpr_binary_literal(
+  return loom_amdgpu_emit_vgpr_binary_immediate(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_XOR_B32_LIT, lane_id,
       offset, lane_type, out_source_lane);
 }
@@ -1418,7 +1418,7 @@ static iree_status_t loom_amdgpu_emit_subgroup_add_lane(
     loom_value_id_t lane_id, uint32_t offset, loom_type_t lane_type,
     loom_value_id_t* out_source_lane) {
   *out_source_lane = LOOM_VALUE_ID_INVALID;
-  return loom_amdgpu_emit_vgpr_binary_literal(
+  return loom_amdgpu_emit_vgpr_binary_immediate(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32_LIT, lane_id,
       offset, lane_type, out_source_lane);
 }
@@ -1623,7 +1623,7 @@ static iree_status_t loom_amdgpu_emit_workgroup_reduce_scratch_address(
   if (static_byte_offset == 0) {
     return iree_ok_status();
   }
-  return loom_amdgpu_emit_vgpr_binary_literal(
+  return loom_amdgpu_emit_vgpr_binary_immediate(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_ADD_U32_LIT,
       *out_address, static_byte_offset, lane_type, out_address);
 }

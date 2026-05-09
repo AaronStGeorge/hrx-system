@@ -25,7 +25,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_i32_
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %21 = v_lshlrev_b32_lit %tid, 2
+  %21 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32 %21, %input_view
   %24 = v_mov_b32 28
   %result = ds_bpermute_b32 %24, %value
@@ -60,7 +60,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_firs
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %20 = v_lshlrev_b32_lit %tid, 2
+  %20 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32 %20, %input_view
   %22 = v_readfirstlane_b32 %value
   %result = v_mov_b32_copy %22
@@ -97,7 +97,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_index_
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %23 = v_lshlrev_b32_lit %tid, 2
+  %23 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32 %23, %input_view
   %29 = v_mov_b32 20
   %result = ds_bpermute_b32 %29, %value
@@ -134,12 +134,12 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_up_i32
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %23 = v_lshlrev_b32_lit %tid, 2
+  %23 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32 %23, %input_view
-  %27 = v_and_b32_lit %tid, 31
+  %27 = v_and_b32_src0_inline %tid, 31
   %28 = v_mov_b32 2
   %29 = v_sub_nc_u32 %27, %28
-  %31 = v_lshlrev_b32_lit %29, 2
+  %31 = v_lshlrev_b32_src0_inline %29, 2
   %result = ds_bpermute_b32 %31, %value
   global_store_b32 %23, %result, %output_view
   return
@@ -171,7 +171,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_f32_
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %29 = v_lshlrev_b32_lit %tid, 4
+  %29 = v_lshlrev_b32_src0_inline %tid, 4
   %loaded = global_load_b128 %29, %input_view
   %32 = v_mov_b32 12
   %33 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
@@ -214,12 +214,12 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_down_f
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %31 = v_lshlrev_b32_lit %tid, 4
+  %31 = v_lshlrev_b32_src0_inline %tid, 4
   %loaded = global_load_b128 %31, %input_view
-  %35 = v_and_b32_lit %tid, 31
+  %35 = v_and_b32_src0_inline %tid, 31
   %36 = v_mov_b32 4
   %37 = v_add_u32 %35, %36
-  %40 = v_lshlrev_b32_lit %37, 2
+  %40 = v_lshlrev_b32_src0_inline %37, 2
   %41 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %42 = ds_bpermute_b32 %40, %41
   %43 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
@@ -260,27 +260,27 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_reduce_addi_i3
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %20 = v_lshlrev_b32_lit %tid, 2
+  %20 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32 %20, %input_view
-  %22 = v_and_b32_lit %tid, 31
-  %23 = v_xor_b32_lit %22, 16
-  %24 = v_lshlrev_b32_lit %23, 2
+  %22 = v_and_b32_src0_inline %tid, 31
+  %23 = v_xor_b32_src0_inline %22, 16
+  %24 = v_lshlrev_b32_src0_inline %23, 2
   %25 = ds_bpermute_b32 %24, %value
   %26 = v_add_u32 %value, %25
-  %27 = v_xor_b32_lit %22, 8
-  %28 = v_lshlrev_b32_lit %27, 2
+  %27 = v_xor_b32_src0_inline %22, 8
+  %28 = v_lshlrev_b32_src0_inline %27, 2
   %29 = ds_bpermute_b32 %28, %26
   %30 = v_add_u32 %26, %29
-  %31 = v_xor_b32_lit %22, 4
-  %32 = v_lshlrev_b32_lit %31, 2
+  %31 = v_xor_b32_src0_inline %22, 4
+  %32 = v_lshlrev_b32_src0_inline %31, 2
   %33 = ds_bpermute_b32 %32, %30
   %34 = v_add_u32 %30, %33
-  %35 = v_xor_b32_lit %22, 2
-  %36 = v_lshlrev_b32_lit %35, 2
+  %35 = v_xor_b32_src0_inline %22, 2
+  %36 = v_lshlrev_b32_src0_inline %35, 2
   %37 = ds_bpermute_b32 %36, %34
   %38 = v_add_u32 %34, %37
-  %39 = v_xor_b32_lit %22, 1
-  %40 = v_lshlrev_b32_lit %39, 2
+  %39 = v_xor_b32_src0_inline %22, 1
+  %40 = v_lshlrev_b32_src0_inline %39, 2
   %41 = ds_bpermute_b32 %40, %38
   %result = v_add_u32 %38, %41
   global_store_b32 %20, %result, %output_view
@@ -314,18 +314,18 @@ low.kernel.def target(@target) workgroup_size(8, 1, 1) @subgroup_reduce_addi_i32
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 32} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 32} : reg<amdgpu.sgpr x2>
-  %20 = v_lshlrev_b32_lit %tid, 2
+  %20 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32 %20, %input_view
-  %22 = v_xor_b32_lit %tid, 4
-  %23 = v_lshlrev_b32_lit %22, 2
+  %22 = v_xor_b32_src0_inline %tid, 4
+  %23 = v_lshlrev_b32_src0_inline %22, 2
   %24 = ds_bpermute_b32 %23, %value
   %25 = v_add_u32 %value, %24
-  %26 = v_xor_b32_lit %tid, 2
-  %27 = v_lshlrev_b32_lit %26, 2
+  %26 = v_xor_b32_src0_inline %tid, 2
+  %27 = v_lshlrev_b32_src0_inline %26, 2
   %28 = ds_bpermute_b32 %27, %25
   %29 = v_add_u32 %25, %28
-  %30 = v_xor_b32_lit %tid, 1
-  %31 = v_lshlrev_b32_lit %30, 2
+  %30 = v_xor_b32_src0_inline %tid, 1
+  %31 = v_lshlrev_b32_src0_inline %30, 2
   %32 = ds_bpermute_b32 %31, %29
   %result = v_add_u32 %29, %32
   global_store_b32 %20, %result, %output_view
@@ -359,26 +359,26 @@ low.kernel.def target(@target) workgroup_size(32, 1, 1) @subgroup_reduce_minsi_i
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
-  %20 = v_lshlrev_b32_lit %tid, 2
+  %20 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32 %20, %input_view
-  %22 = v_xor_b32_lit %tid, 16
-  %23 = v_lshlrev_b32_lit %22, 2
+  %22 = v_xor_b32_src0_inline %tid, 16
+  %23 = v_lshlrev_b32_src0_inline %22, 2
   %24 = ds_bpermute_b32 %23, %value
   %25 = v_min_i32 %value, %24
-  %26 = v_xor_b32_lit %tid, 8
-  %27 = v_lshlrev_b32_lit %26, 2
+  %26 = v_xor_b32_src0_inline %tid, 8
+  %27 = v_lshlrev_b32_src0_inline %26, 2
   %28 = ds_bpermute_b32 %27, %25
   %29 = v_min_i32 %25, %28
-  %30 = v_xor_b32_lit %tid, 4
-  %31 = v_lshlrev_b32_lit %30, 2
+  %30 = v_xor_b32_src0_inline %tid, 4
+  %31 = v_lshlrev_b32_src0_inline %30, 2
   %32 = ds_bpermute_b32 %31, %29
   %33 = v_min_i32 %29, %32
-  %34 = v_xor_b32_lit %tid, 2
-  %35 = v_lshlrev_b32_lit %34, 2
+  %34 = v_xor_b32_src0_inline %tid, 2
+  %35 = v_lshlrev_b32_src0_inline %34, 2
   %36 = ds_bpermute_b32 %35, %33
   %37 = v_min_i32 %33, %36
-  %38 = v_xor_b32_lit %tid, 1
-  %39 = v_lshlrev_b32_lit %38, 2
+  %38 = v_xor_b32_src0_inline %tid, 1
+  %39 = v_lshlrev_b32_src0_inline %38, 2
   %40 = ds_bpermute_b32 %39, %37
   %result = v_min_i32 %37, %40
   global_store_b32 %20, %result, %output_view
@@ -412,26 +412,26 @@ low.kernel.def target(@target) workgroup_size(32, 1, 1) @workgroup_reduce_minsi_
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 128} : reg<amdgpu.sgpr x2>
-  %20 = v_lshlrev_b32_lit %tid, 2
+  %20 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32 %20, %input_view
-  %22 = v_xor_b32_lit %tid, 16
-  %23 = v_lshlrev_b32_lit %22, 2
+  %22 = v_xor_b32_src0_inline %tid, 16
+  %23 = v_lshlrev_b32_src0_inline %22, 2
   %24 = ds_bpermute_b32 %23, %value
   %25 = v_min_i32 %value, %24
-  %26 = v_xor_b32_lit %tid, 8
-  %27 = v_lshlrev_b32_lit %26, 2
+  %26 = v_xor_b32_src0_inline %tid, 8
+  %27 = v_lshlrev_b32_src0_inline %26, 2
   %28 = ds_bpermute_b32 %27, %25
   %29 = v_min_i32 %25, %28
-  %30 = v_xor_b32_lit %tid, 4
-  %31 = v_lshlrev_b32_lit %30, 2
+  %30 = v_xor_b32_src0_inline %tid, 4
+  %31 = v_lshlrev_b32_src0_inline %30, 2
   %32 = ds_bpermute_b32 %31, %29
   %33 = v_min_i32 %29, %32
-  %34 = v_xor_b32_lit %tid, 2
-  %35 = v_lshlrev_b32_lit %34, 2
+  %34 = v_xor_b32_src0_inline %tid, 2
+  %35 = v_lshlrev_b32_src0_inline %34, 2
   %36 = ds_bpermute_b32 %35, %33
   %37 = v_min_i32 %33, %36
-  %38 = v_xor_b32_lit %tid, 1
-  %39 = v_lshlrev_b32_lit %38, 2
+  %38 = v_xor_b32_src0_inline %tid, 1
+  %39 = v_lshlrev_b32_src0_inline %38, 2
   %40 = ds_bpermute_b32 %39, %37
   %result = v_min_i32 %37, %40
   global_store_b32 %20, %result, %output_view
@@ -465,18 +465,18 @@ low.kernel.def target(@target) workgroup_size(8, 1, 1) @workgroup_reduce_addf_su
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 32} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 32} : reg<amdgpu.sgpr x2>
-  %20 = v_lshlrev_b32_lit %tid, 2
+  %20 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32 %20, %input_view
-  %22 = v_xor_b32_lit %tid, 4
-  %23 = v_lshlrev_b32_lit %22, 2
+  %22 = v_xor_b32_src0_inline %tid, 4
+  %23 = v_lshlrev_b32_src0_inline %22, 2
   %24 = ds_bpermute_b32 %23, %value
   %25 = v_add_f32 %value, %24
-  %26 = v_xor_b32_lit %tid, 2
-  %27 = v_lshlrev_b32_lit %26, 2
+  %26 = v_xor_b32_src0_inline %tid, 2
+  %27 = v_lshlrev_b32_src0_inline %26, 2
   %28 = ds_bpermute_b32 %27, %25
   %29 = v_add_f32 %25, %28
-  %30 = v_xor_b32_lit %tid, 1
-  %31 = v_lshlrev_b32_lit %30, 2
+  %30 = v_xor_b32_src0_inline %tid, 1
+  %31 = v_lshlrev_b32_src0_inline %30, 2
   %32 = ds_bpermute_b32 %31, %29
   %result = v_add_f32 %29, %32
   global_store_b32 %20, %result, %output_view
@@ -510,36 +510,36 @@ low.kernel.def target(@target) workgroup_size(24, 1, 1) @workgroup_reduce_addf_s
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 96} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 96} : reg<amdgpu.sgpr x2>
-  %20 = v_lshlrev_b32_lit %tid, 2
+  %20 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32 %20, %input_view
   %22 = v_mov_b32 24
   %23 = v_mov_b32 0
-  %25 = v_add_u32_lit %tid, 16
-  %26 = v_lshlrev_b32_lit %25, 2
+  %25 = v_add_u32_src0_inline %tid, 16
+  %26 = v_lshlrev_b32_src0_inline %25, 2
   %27 = v_cmp_lt_u32 %25, %22
   %28 = ds_bpermute_b32 %26, %value
   %29 = v_cndmask_b32 %23, %28, %27
   %30 = v_add_f32 %value, %29
-  %31 = v_add_u32_lit %tid, 8
-  %32 = v_lshlrev_b32_lit %31, 2
+  %31 = v_add_u32_src0_inline %tid, 8
+  %32 = v_lshlrev_b32_src0_inline %31, 2
   %33 = v_cmp_lt_u32 %31, %22
   %34 = ds_bpermute_b32 %32, %30
   %35 = v_cndmask_b32 %23, %34, %33
   %36 = v_add_f32 %30, %35
-  %37 = v_add_u32_lit %tid, 4
-  %38 = v_lshlrev_b32_lit %37, 2
+  %37 = v_add_u32_src0_inline %tid, 4
+  %38 = v_lshlrev_b32_src0_inline %37, 2
   %39 = v_cmp_lt_u32 %37, %22
   %40 = ds_bpermute_b32 %38, %36
   %41 = v_cndmask_b32 %23, %40, %39
   %42 = v_add_f32 %36, %41
-  %43 = v_add_u32_lit %tid, 2
-  %44 = v_lshlrev_b32_lit %43, 2
+  %43 = v_add_u32_src0_inline %tid, 2
+  %44 = v_lshlrev_b32_src0_inline %43, 2
   %45 = v_cmp_lt_u32 %43, %22
   %46 = ds_bpermute_b32 %44, %42
   %47 = v_cndmask_b32 %23, %46, %45
   %48 = v_add_f32 %42, %47
-  %49 = v_add_u32_lit %tid, 1
-  %50 = v_lshlrev_b32_lit %49, 2
+  %49 = v_add_u32_src0_inline %tid, 1
+  %50 = v_lshlrev_b32_src0_inline %49, 2
   %51 = v_cmp_lt_u32 %49, %22
   %52 = ds_bpermute_b32 %50, %48
   %53 = v_cndmask_b32 %23, %52, %51
@@ -576,38 +576,38 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_reduce_addf_f
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %20 = v_lshlrev_b32_lit %tid, 2
+  %20 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32 %20, %input_view
-  %22 = v_and_b32_lit %tid, 31
+  %22 = v_and_b32_src0_inline %tid, 31
   %23 = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
   %24 = storage_address %23 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %26 = v_add_u32 %24, %20
   ds_write_b32 %26, %value
   s_barrier
-  %27 = v_lshlrev_b32_lit %22, 2
+  %27 = v_lshlrev_b32_src0_inline %22, 2
   %28 = v_add_u32 %24, %27
   %29 = ds_read_b32 %28
   %31 = v_add_u32_lit %28, 128
   %32 = ds_read_b32 %31
   %33 = v_add_f32 %29, %32
-  %34 = v_xor_b32_lit %22, 16
-  %35 = v_lshlrev_b32_lit %34, 2
+  %34 = v_xor_b32_src0_inline %22, 16
+  %35 = v_lshlrev_b32_src0_inline %34, 2
   %36 = ds_bpermute_b32 %35, %33
   %37 = v_add_f32 %33, %36
-  %38 = v_xor_b32_lit %22, 8
-  %39 = v_lshlrev_b32_lit %38, 2
+  %38 = v_xor_b32_src0_inline %22, 8
+  %39 = v_lshlrev_b32_src0_inline %38, 2
   %40 = ds_bpermute_b32 %39, %37
   %41 = v_add_f32 %37, %40
-  %42 = v_xor_b32_lit %22, 4
-  %43 = v_lshlrev_b32_lit %42, 2
+  %42 = v_xor_b32_src0_inline %22, 4
+  %43 = v_lshlrev_b32_src0_inline %42, 2
   %44 = ds_bpermute_b32 %43, %41
   %45 = v_add_f32 %41, %44
-  %46 = v_xor_b32_lit %22, 2
-  %47 = v_lshlrev_b32_lit %46, 2
+  %46 = v_xor_b32_src0_inline %22, 2
+  %47 = v_lshlrev_b32_src0_inline %46, 2
   %48 = ds_bpermute_b32 %47, %45
   %49 = v_add_f32 %45, %48
-  %50 = v_xor_b32_lit %22, 1
-  %51 = v_lshlrev_b32_lit %50, 2
+  %50 = v_xor_b32_src0_inline %22, 1
+  %51 = v_lshlrev_b32_src0_inline %50, 2
   %52 = ds_bpermute_b32 %51, %49
   %result = v_add_f32 %49, %52
   global_store_b32 %20, %result, %output_view
@@ -641,15 +641,15 @@ low.kernel.def target(@target) workgroup_size(48, 1, 1) @workgroup_reduce_addf_f
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 192} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 192} : reg<amdgpu.sgpr x2>
-  %20 = v_lshlrev_b32_lit %tid, 2
+  %20 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32 %20, %input_view
-  %22 = v_and_b32_lit %tid, 31
+  %22 = v_and_b32_src0_inline %tid, 31
   %23 = storage {byte_alignment = 4, byte_length = 192} : low.storage<workgroup>
   %24 = storage_address %23 : low.storage<workgroup> -> reg<amdgpu.vgpr>
   %26 = v_add_u32 %24, %20
   ds_write_b32 %26, %value
   s_barrier
-  %27 = v_lshlrev_b32_lit %22, 2
+  %27 = v_lshlrev_b32_src0_inline %22, 2
   %28 = v_mov_b32 16
   %29 = v_cmp_lt_u32 %22, %28
   %30 = v_mov_b32 0
@@ -661,24 +661,24 @@ low.kernel.def target(@target) workgroup_size(48, 1, 1) @workgroup_reduce_addf_f
   %37 = ds_read_b32 %36
   %38 = v_cndmask_b32 %30, %37, %29
   %39 = v_add_f32 %34, %38
-  %40 = v_xor_b32_lit %22, 16
-  %41 = v_lshlrev_b32_lit %40, 2
+  %40 = v_xor_b32_src0_inline %22, 16
+  %41 = v_lshlrev_b32_src0_inline %40, 2
   %42 = ds_bpermute_b32 %41, %39
   %43 = v_add_f32 %39, %42
-  %44 = v_xor_b32_lit %22, 8
-  %45 = v_lshlrev_b32_lit %44, 2
+  %44 = v_xor_b32_src0_inline %22, 8
+  %45 = v_lshlrev_b32_src0_inline %44, 2
   %46 = ds_bpermute_b32 %45, %43
   %47 = v_add_f32 %43, %46
-  %48 = v_xor_b32_lit %22, 4
-  %49 = v_lshlrev_b32_lit %48, 2
+  %48 = v_xor_b32_src0_inline %22, 4
+  %49 = v_lshlrev_b32_src0_inline %48, 2
   %50 = ds_bpermute_b32 %49, %47
   %51 = v_add_f32 %47, %50
-  %52 = v_xor_b32_lit %22, 2
-  %53 = v_lshlrev_b32_lit %52, 2
+  %52 = v_xor_b32_src0_inline %22, 2
+  %53 = v_lshlrev_b32_src0_inline %52, 2
   %54 = ds_bpermute_b32 %53, %51
   %55 = v_add_f32 %51, %54
-  %56 = v_xor_b32_lit %22, 1
-  %57 = v_lshlrev_b32_lit %56, 2
+  %56 = v_xor_b32_src0_inline %22, 1
+  %57 = v_lshlrev_b32_src0_inline %56, 2
   %58 = ds_bpermute_b32 %57, %55
   %59 = v_add_f32 %55, %58
   %60 = v_mov_b32 32
@@ -717,12 +717,12 @@ low.kernel.def target(@target) workgroup_size(48, 1, 1) @workgroup_reduce_minsi_
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 384} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 384} : reg<amdgpu.sgpr x2>
-  %28 = v_lshlrev_b32_lit %tid, 3
+  %28 = v_lshlrev_b32_src0_inline %tid, 3
   %loaded = global_load_b64 %28, %input_view
-  %30 = v_and_b32_lit %tid, 31
+  %30 = v_and_b32_src0_inline %tid, 31
   %31 = storage {byte_alignment = 4, byte_length = 384} : low.storage<workgroup>
   %32 = storage_address %31 : low.storage<workgroup> -> reg<amdgpu.vgpr>
-  %33 = v_lshlrev_b32_lit %tid, 2
+  %33 = v_lshlrev_b32_src0_inline %tid, 2
   %34 = slice %loaded[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %35 = v_add_u32 %32, %33
   ds_write_b32 %35, %34
@@ -730,7 +730,7 @@ low.kernel.def target(@target) workgroup_size(48, 1, 1) @workgroup_reduce_minsi_
   %38 = v_add_u32_lit %35, 192
   ds_write_b32 %38, %36
   s_barrier
-  %39 = v_lshlrev_b32_lit %30, 2
+  %39 = v_lshlrev_b32_src0_inline %30, 2
   %40 = v_mov_b32 16
   %41 = v_cmp_lt_u32 %30, %40
   %42 = v_mov_b32 0
@@ -749,16 +749,16 @@ low.kernel.def target(@target) workgroup_size(48, 1, 1) @workgroup_reduce_minsi_
   %57 = ds_read_b32 %56
   %58 = v_cndmask_b32 %44, %57, %41
   %59 = v_min_i32 %54, %58
-  %60 = v_xor_b32_lit %30, 16
-  %61 = v_lshlrev_b32_lit %60, 2
-  %62 = v_xor_b32_lit %30, 8
-  %63 = v_lshlrev_b32_lit %62, 2
-  %64 = v_xor_b32_lit %30, 4
-  %65 = v_lshlrev_b32_lit %64, 2
-  %66 = v_xor_b32_lit %30, 2
-  %67 = v_lshlrev_b32_lit %66, 2
-  %68 = v_xor_b32_lit %30, 1
-  %69 = v_lshlrev_b32_lit %68, 2
+  %60 = v_xor_b32_src0_inline %30, 16
+  %61 = v_lshlrev_b32_src0_inline %60, 2
+  %62 = v_xor_b32_src0_inline %30, 8
+  %63 = v_lshlrev_b32_src0_inline %62, 2
+  %64 = v_xor_b32_src0_inline %30, 4
+  %65 = v_lshlrev_b32_src0_inline %64, 2
+  %66 = v_xor_b32_src0_inline %30, 2
+  %67 = v_lshlrev_b32_src0_inline %66, 2
+  %68 = v_xor_b32_src0_inline %30, 1
+  %69 = v_lshlrev_b32_src0_inline %68, 2
   %70 = ds_bpermute_b32 %61, %51
   %71 = v_min_i32 %51, %70
   %72 = ds_bpermute_b32 %63, %71
@@ -818,12 +818,12 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_reduce_addf_f
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
-  %28 = v_lshlrev_b32_lit %tid, 4
+  %28 = v_lshlrev_b32_src0_inline %tid, 4
   %loaded = global_load_b128 %28, %input_view
-  %30 = v_and_b32_lit %tid, 31
+  %30 = v_and_b32_src0_inline %tid, 31
   %31 = storage {byte_alignment = 4, byte_length = 1024} : low.storage<workgroup>
   %32 = storage_address %31 : low.storage<workgroup> -> reg<amdgpu.vgpr>
-  %33 = v_lshlrev_b32_lit %tid, 2
+  %33 = v_lshlrev_b32_src0_inline %tid, 2
   %34 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %35 = v_add_u32 %32, %33
   ds_write_b32 %35, %34
@@ -837,7 +837,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_reduce_addf_f
   %44 = v_add_u32_lit %35, 768
   ds_write_b32 %44, %42
   s_barrier
-  %45 = v_lshlrev_b32_lit %30, 2
+  %45 = v_lshlrev_b32_src0_inline %30, 2
   %46 = v_add_u32 %32, %45
   %47 = ds_read_b32 %46
   %49 = v_add_u32_lit %46, 128
@@ -858,16 +858,16 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_reduce_addf_f
   %70 = v_add_u32_lit %46, 896
   %71 = ds_read_b32 %70
   %72 = v_add_f32 %68, %71
-  %73 = v_xor_b32_lit %30, 16
-  %74 = v_lshlrev_b32_lit %73, 2
-  %75 = v_xor_b32_lit %30, 8
-  %76 = v_lshlrev_b32_lit %75, 2
-  %77 = v_xor_b32_lit %30, 4
-  %78 = v_lshlrev_b32_lit %77, 2
-  %79 = v_xor_b32_lit %30, 2
-  %80 = v_lshlrev_b32_lit %79, 2
-  %81 = v_xor_b32_lit %30, 1
-  %82 = v_lshlrev_b32_lit %81, 2
+  %73 = v_xor_b32_src0_inline %30, 16
+  %74 = v_lshlrev_b32_src0_inline %73, 2
+  %75 = v_xor_b32_src0_inline %30, 8
+  %76 = v_lshlrev_b32_src0_inline %75, 2
+  %77 = v_xor_b32_src0_inline %30, 4
+  %78 = v_lshlrev_b32_src0_inline %77, 2
+  %79 = v_xor_b32_src0_inline %30, 2
+  %80 = v_lshlrev_b32_src0_inline %79, 2
+  %81 = v_xor_b32_src0_inline %30, 1
+  %82 = v_lshlrev_b32_src0_inline %81, 2
   %83 = ds_bpermute_b32 %74, %51
   %84 = v_add_f32 %51, %83
   %85 = ds_bpermute_b32 %76, %84
@@ -940,29 +940,29 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_scan_inclusive
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %20 = v_lshlrev_b32_lit %tid, 2
+  %20 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32 %20, %input_view
-  %22 = v_and_b32_lit %tid, 31
+  %22 = v_and_b32_src0_inline %tid, 31
   %23 = v_mov_b32 1
   %24 = v_sub_nc_u32 %22, %23
   %25 = v_cmp_ge_u32 %22, %23
-  %26 = v_lshlrev_b32_lit %24, 2
+  %26 = v_lshlrev_b32_src0_inline %24, 2
   %27 = v_mov_b32 2
   %28 = v_sub_nc_u32 %22, %27
   %29 = v_cmp_ge_u32 %22, %27
-  %30 = v_lshlrev_b32_lit %28, 2
+  %30 = v_lshlrev_b32_src0_inline %28, 2
   %31 = v_mov_b32 4
   %32 = v_sub_nc_u32 %22, %31
   %33 = v_cmp_ge_u32 %22, %31
-  %34 = v_lshlrev_b32_lit %32, 2
+  %34 = v_lshlrev_b32_src0_inline %32, 2
   %35 = v_mov_b32 8
   %36 = v_sub_nc_u32 %22, %35
   %37 = v_cmp_ge_u32 %22, %35
-  %38 = v_lshlrev_b32_lit %36, 2
+  %38 = v_lshlrev_b32_src0_inline %36, 2
   %39 = v_mov_b32 16
   %40 = v_sub_nc_u32 %22, %39
   %41 = v_cmp_ge_u32 %22, %39
-  %42 = v_lshlrev_b32_lit %40, 2
+  %42 = v_lshlrev_b32_src0_inline %40, 2
   %43 = ds_bpermute_b32 %26, %value
   %44 = v_add_u32 %value, %43
   %45 = v_cndmask_b32 %value, %44, %25
@@ -1009,30 +1009,30 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_scan_exclusive
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %20 = v_lshlrev_b32_lit %tid, 2
+  %20 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32 %20, %input_view
-  %22 = v_and_b32_lit %tid, 31
+  %22 = v_and_b32_src0_inline %tid, 31
   %23 = v_mov_b32 32
   %24 = v_mov_b32 1
   %25 = v_add_u32 %22, %24
   %26 = v_cmp_lt_u32 %25, %23
-  %27 = v_lshlrev_b32_lit %25, 2
+  %27 = v_lshlrev_b32_src0_inline %25, 2
   %28 = v_mov_b32 2
   %29 = v_add_u32 %22, %28
   %30 = v_cmp_lt_u32 %29, %23
-  %31 = v_lshlrev_b32_lit %29, 2
+  %31 = v_lshlrev_b32_src0_inline %29, 2
   %32 = v_mov_b32 4
   %33 = v_add_u32 %22, %32
   %34 = v_cmp_lt_u32 %33, %23
-  %35 = v_lshlrev_b32_lit %33, 2
+  %35 = v_lshlrev_b32_src0_inline %33, 2
   %36 = v_mov_b32 8
   %37 = v_add_u32 %22, %36
   %38 = v_cmp_lt_u32 %37, %23
-  %39 = v_lshlrev_b32_lit %37, 2
+  %39 = v_lshlrev_b32_src0_inline %37, 2
   %40 = v_mov_b32 16
   %41 = v_add_u32 %22, %40
   %42 = v_cmp_lt_u32 %41, %23
-  %43 = v_lshlrev_b32_lit %41, 2
+  %43 = v_lshlrev_b32_src0_inline %41, 2
   %44 = ds_bpermute_b32 %27, %value
   %45 = v_add_u32 %value, %44
   %46 = v_cndmask_b32 %value, %45, %26
@@ -1081,7 +1081,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_active_mask_i3
   %13 = s_mov_b64_exec_read
   %mask = slice %13[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   %result = v_mov_b32_copy %mask
-  %16 = v_lshlrev_b32_lit %tid, 2
+  %16 = v_lshlrev_b32_src0_inline %tid, 2
   global_store_b32 %16, %result, %output_view
   return
 }
@@ -1115,7 +1115,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_vote_ballot_i3
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %22 = v_lshlrev_b32_lit %tid, 2
+  %22 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32 %22, %input_view
   %predicate = v_cmp_gt_i32_src1_inline %value {rhs = 0}
   %mask = slice %predicate[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
@@ -1153,7 +1153,7 @@ kernel.def target(@target) @subgroup_vote_any_wave32(%input: buffer) {
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_vote_any_wave32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %16 = v_lshlrev_b32_lit %tid, 2
+  %16 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32 %16, %input_view
   %predicate = v_cmp_gt_i32_src1_inline %value {rhs = 0}
   %19 = s_mov_b32 0
@@ -1195,7 +1195,7 @@ kernel.def target(@target) @subgroup_vote_all_wave32(%input: buffer) {
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_vote_all_wave32() asm<amdgpu.rdna3.core> {
   %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %16 = v_lshlrev_b32_lit %tid, 2
+  %16 = v_lshlrev_b32_src0_inline %tid, 2
   %value = global_load_b32 %16, %input_view
   %predicate = v_cmp_gt_i32_src1_inline %value {rhs = 0}
   %19 = s_mov_b64_exec_read
@@ -1278,7 +1278,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_i32_
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %output_view = low.resource<hal_binding> {extent = 256, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %21 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %21 = low.op<amdgpu.v_lshlrev_b32.src0_inline>(%tid) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %22 = low.const<amdgpu.s_mov_b32_m0.imm> {imm32 = 0} : reg<amdgpu.m0>
   %value = low.op<amdgpu.global_load_b32_saddr>(%21, %input_view, %22) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
   %25 = low.const<amdgpu.v_mov_b32> {imm32 = 252} : reg<amdgpu.vgpr>
@@ -1314,31 +1314,31 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_reduce_addf_f3
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %output_view = low.resource<hal_binding> {extent = 256, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %20 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %20 = low.op<amdgpu.v_lshlrev_b32.src0_inline>(%tid) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %21 = low.const<amdgpu.s_mov_b32_m0.imm> {imm32 = 0} : reg<amdgpu.m0>
   %value = low.op<amdgpu.global_load_b32_saddr>(%20, %input_view, %21) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
-  %23 = low.op<amdgpu.v_xor_b32.lit>(%tid) {imm32 = 32} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %24 = low.op<amdgpu.v_lshlrev_b32.lit>(%23) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %23 = low.op<amdgpu.v_xor_b32.src0_inline>(%tid) {imm32 = 32} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %24 = low.op<amdgpu.v_lshlrev_b32.src0_inline>(%23) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %25 = low.op<amdgpu.ds_bpermute_b32>(%24, %value) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %26 = low.op<amdgpu.v_add_f32>(%value, %25) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %27 = low.op<amdgpu.v_xor_b32.lit>(%tid) {imm32 = 16} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %28 = low.op<amdgpu.v_lshlrev_b32.lit>(%27) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %27 = low.op<amdgpu.v_xor_b32.src0_inline>(%tid) {imm32 = 16} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %28 = low.op<amdgpu.v_lshlrev_b32.src0_inline>(%27) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %29 = low.op<amdgpu.ds_bpermute_b32>(%28, %26) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %30 = low.op<amdgpu.v_add_f32>(%26, %29) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %31 = low.op<amdgpu.v_xor_b32.lit>(%tid) {imm32 = 8} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %32 = low.op<amdgpu.v_lshlrev_b32.lit>(%31) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %31 = low.op<amdgpu.v_xor_b32.src0_inline>(%tid) {imm32 = 8} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %32 = low.op<amdgpu.v_lshlrev_b32.src0_inline>(%31) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %33 = low.op<amdgpu.ds_bpermute_b32>(%32, %30) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %34 = low.op<amdgpu.v_add_f32>(%30, %33) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %35 = low.op<amdgpu.v_xor_b32.lit>(%tid) {imm32 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %36 = low.op<amdgpu.v_lshlrev_b32.lit>(%35) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %35 = low.op<amdgpu.v_xor_b32.src0_inline>(%tid) {imm32 = 4} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %36 = low.op<amdgpu.v_lshlrev_b32.src0_inline>(%35) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %37 = low.op<amdgpu.ds_bpermute_b32>(%36, %34) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %38 = low.op<amdgpu.v_add_f32>(%34, %37) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %39 = low.op<amdgpu.v_xor_b32.lit>(%tid) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %40 = low.op<amdgpu.v_lshlrev_b32.lit>(%39) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %39 = low.op<amdgpu.v_xor_b32.src0_inline>(%tid) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %40 = low.op<amdgpu.v_lshlrev_b32.src0_inline>(%39) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %41 = low.op<amdgpu.ds_bpermute_b32>(%40, %38) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %42 = low.op<amdgpu.v_add_f32>(%38, %41) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %43 = low.op<amdgpu.v_xor_b32.lit>(%tid) {imm32 = 1} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %44 = low.op<amdgpu.v_lshlrev_b32.lit>(%43) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %43 = low.op<amdgpu.v_xor_b32.src0_inline>(%tid) {imm32 = 1} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %44 = low.op<amdgpu.v_lshlrev_b32.src0_inline>(%43) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %45 = low.op<amdgpu.ds_bpermute_b32>(%44, %42) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %result = low.op<amdgpu.v_add_f32>(%42, %45) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   low.op<amdgpu.global_store_b32_saddr>(%20, %result, %output_view, %21) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
@@ -1374,11 +1374,11 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_xor_i3
   %tid = low.live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
   %input_view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
   %output_view = low.resource<hal_binding> {extent = 256, index = 1, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %23 = low.op<amdgpu.v_lshlrev_b32.lit>(%tid) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %23 = low.op<amdgpu.v_lshlrev_b32.src0_inline>(%tid) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %24 = low.const<amdgpu.s_mov_b32_m0.imm> {imm32 = 0} : reg<amdgpu.m0>
   %value = low.op<amdgpu.global_load_b32_saddr>(%23, %input_view, %24) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>) -> reg<amdgpu.vgpr>
-  %28 = low.op<amdgpu.v_xor_b32.lit>(%tid) {imm32 = 32} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
-  %31 = low.op<amdgpu.v_lshlrev_b32.lit>(%28) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %28 = low.op<amdgpu.v_xor_b32.src0_inline>(%tid) {imm32 = 32} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %31 = low.op<amdgpu.v_lshlrev_b32.src0_inline>(%28) {imm32 = 2} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   %result = low.op<amdgpu.ds_bpermute_b32>(%31, %value) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   low.op<amdgpu.global_store_b32_saddr>(%23, %result, %output_view, %24) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
   low.return

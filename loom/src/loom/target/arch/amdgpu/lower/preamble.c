@@ -403,7 +403,7 @@ static iree_status_t loom_amdgpu_emit_packed_workitem_id_extract(
                               (unsigned)dimension);
   }
 
-  return loom_amdgpu_emit_vgpr_binary_literal(
+  return loom_amdgpu_emit_vgpr_binary_immediate(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT, shifted_id,
       LOOM_AMDGPU_PACKED_WORKITEM_ID_DIMENSION_MASK, vgpr_type,
       out_low_value_id);
@@ -981,7 +981,7 @@ iree_status_t loom_amdgpu_emit_current_subgroup_lane_id(
   if (flat_workgroup_size <= wavefront_size) {
     *out_lane_id = linear_id;
   } else {
-    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_literal(
+    IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
         context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT, linear_id,
         wavefront_size - 1, result_type, out_lane_id));
   }

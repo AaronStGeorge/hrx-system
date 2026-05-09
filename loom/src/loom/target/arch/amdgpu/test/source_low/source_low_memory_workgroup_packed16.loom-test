@@ -113,19 +113,19 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @lds_f16x8_b128_extract_s
   %loaded = global_load_b128 %26, %input_view
   %lane0 = slice %loaded[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   ds_write_b16 %26, %lane0
-  %lane1 = v_lshrrev_b32_lit %lane0, 16
+  %lane1 = v_lshrrev_b32_src0_inline %lane0, 16
   ds_write_b16 %26, %lane1 {offset = 2}
   %lane2 = slice %loaded[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   ds_write_b16 %26, %lane2 {offset = 4}
-  %lane3 = v_lshrrev_b32_lit %lane2, 16
+  %lane3 = v_lshrrev_b32_src0_inline %lane2, 16
   ds_write_b16 %26, %lane3 {offset = 6}
   %lane4 = slice %loaded[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   ds_write_b16 %26, %lane4 {offset = 8}
-  %lane5 = v_lshrrev_b32_lit %lane4, 16
+  %lane5 = v_lshrrev_b32_src0_inline %lane4, 16
   ds_write_b16 %26, %lane5 {offset = 10}
   %lane6 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   ds_write_b16 %26, %lane6 {offset = 12}
-  %lane7 = v_lshrrev_b32_lit %lane6, 16
+  %lane7 = v_lshrrev_b32_src0_inline %lane6, 16
   ds_write_b16 %26, %lane7 {offset = 14}
   %roundtrip = ds_read_b128 %26
   global_store_b128 %26, %roundtrip, %output_view
@@ -304,14 +304,14 @@ low.kernel.def target(@target) workgroup_size(16, 16, 1) @lds_f16_strided_scalar
   %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 512} : reg<amdgpu.sgpr x2>
   %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 512} : reg<amdgpu.sgpr x2>
   %row = v_and_b32_lit %packed_tid, 1023
-  %30 = v_lshrrev_b32_lit %packed_tid, 10
+  %30 = v_lshrrev_b32_src0_inline %packed_tid, 10
   %col = v_and_b32_lit %30, 1023
   %33 = storage {byte_alignment = 2, byte_length = 512} : low.storage<workgroup>
   %35 = v_lshl_add_u32_shift_imm %row, %col, 4
-  %36 = v_lshlrev_b32_lit %35, 1
+  %36 = v_lshlrev_b32_src0_inline %35, 1
   %loaded = global_load_u16 %36, %input_view
-  %38 = v_lshlrev_b32_lit %row, 1
-  %39 = v_lshlrev_b32_lit %col, 5
+  %38 = v_lshlrev_b32_src0_inline %row, 1
+  %39 = v_lshlrev_b32_src0_inline %col, 5
   %40 = v_add_u32 %38, %39
   ds_write_b16 %40, %loaded
   %roundtrip = ds_read_u16 %40

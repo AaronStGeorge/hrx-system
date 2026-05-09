@@ -117,7 +117,7 @@ static iree_status_t loom_amdgpu_table_lookup_extract_i8_index_lane(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT,
       byte_offset * 8u, source_register, lane_type, &shifted));
 
-  return loom_amdgpu_emit_vgpr_binary_literal(
+  return loom_amdgpu_emit_vgpr_binary_immediate(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT, shifted,
       0xFFu, lane_type, out_index_lane);
 }
