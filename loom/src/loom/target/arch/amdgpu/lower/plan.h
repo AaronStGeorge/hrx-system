@@ -21,6 +21,7 @@
 #include "loom/ops/kernel/ops.h"
 #include "loom/target/arch/amdgpu/lower/kinds.h"
 #include "loom/target/arch/amdgpu/matrix_contract.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -94,6 +95,8 @@ typedef struct loom_amdgpu_dotf_plan_t {
   uint32_t lane_count;
   // Selected accumulation topology.
   loom_amdgpu_dotf_accumulation_kind_t accumulation_kind;
+  // Optional tied-accumulator packet used after the accumulator is dot-local.
+  loom_amdgpu_descriptor_ref_t tied_accumulate_descriptor_ref;
 } loom_amdgpu_dotf_plan_t;
 
 typedef struct loom_amdgpu_vector_bitcast_plan_t {

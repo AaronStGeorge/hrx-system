@@ -1554,6 +1554,41 @@ def _v_fma_f32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_fmac_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_fmac_f32",
+        instruction_name="V_FMAC_F32",
+        mnemonic="v_fmac_f32",
+        encoding_name="ENC_VOP2",
+        semantic_tag="float.fmac.f32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay(
+                "VDST",
+                Operand(
+                    "acc",
+                    OperandRole.OPERAND,
+                    _VGPR_ALT,
+                    flags=(OperandFlag.IMPLICIT,),
+                ),
+                role_exception_reason=(
+                    "the encoded destination register is also the tied "
+                    "accumulator input"
+                ),
+            ),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("a")),
+            AmdgpuOperandOverlay("VSRC1", _vgpr_operand("b")),
+        ),
+        constraints=(
+            Constraint(ConstraintKind.TIED, 0, 1),
+            Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
+        ),
+        asm_forms=_asm(results=("dst",), operands=("acc", "a", "b")),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_unary_f32_overlay(
     *,
     descriptor_key: str,
@@ -2269,6 +2304,7 @@ __all__ = (
     "_v_cvt_pk_u16_u32_overlay",
     "_v_exp_f32_overlay",
     "_v_fma_f32_overlay",
+    "_v_fmac_f32_overlay",
     "_v_lshl_add_u32_shift_immediate_overlay",
     "_v_lshlrev_b32_literal_overlay",
     "_v_lshlrev_b32_overlay",
