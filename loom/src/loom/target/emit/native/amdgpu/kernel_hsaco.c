@@ -8,6 +8,7 @@
 
 #include <inttypes.h>
 
+#include "loom/target/arch/amdgpu/packet_plan.h"
 #include "loom/target/emit/native/amdgpu/encoding.h"
 #include "loom/target/emit/native/amdgpu/hsaco.h"
 #include "loom/target/emit/native/amdgpu/kernel_record.h"
@@ -32,14 +33,11 @@ iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
       schedule, allocation, &record_options, &record, scratch_arena));
 
   iree_const_byte_span_t text = iree_const_byte_span_empty();
-  const loom_amdgpu_wait_packet_plan_t* wait_packets =
-      options ? options->wait_packets : NULL;
-  const loom_amdgpu_wait_state_plan_t* wait_states =
-      options ? options->wait_states : NULL;
-  if (wait_packets != NULL || wait_states != NULL) {
+  const loom_amdgpu_packet_plan_t* packet_plan =
+      options ? options->packet_plan : NULL;
+  if (packet_plan != NULL) {
     const loom_amdgpu_encode_instruction_stream_options_t encode_options = {
-        .wait_packets = wait_packets,
-        .wait_states = wait_states,
+        .packet_plan = packet_plan,
     };
     IREE_RETURN_IF_ERROR(loom_amdgpu_encode_instruction_stream_with_options(
         schedule, allocation, &encode_options, &text, scratch_arena));
@@ -53,19 +51,15 @@ iree_status_t loom_amdgpu_build_kernel_hsaco_contribution(
       .descriptor_options = {.flags = record.descriptor_flags},
       .text = text,
   };
-  const uint64_t wait_packet_count =
-      wait_packets ? wait_packets->packet_count : 0;
-  const uint64_t wait_state_instruction_count =
-      loom_amdgpu_wait_state_plan_instruction_count(wait_states);
+  const uint64_t instruction_count =
+      loom_amdgpu_packet_plan_instruction_count(schedule, packet_plan);
   *out_contribution = (loom_amdgpu_kernel_hsaco_contribution_t){
       .target = record.target_id,
       .processor = record.processor->processor,
       .kernel = kernel,
       .summary =
           {
-              .instruction_count = schedule->scheduled_node_count +
-                                   wait_packet_count +
-                                   wait_state_instruction_count,
+              .instruction_count = instruction_count,
               .text_byte_count = text.data_length,
               .text_storage_byte_count = text.data_length,
               .private_segment_fixed_size =

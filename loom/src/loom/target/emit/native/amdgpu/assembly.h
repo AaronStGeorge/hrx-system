@@ -14,20 +14,14 @@
 #include "iree/base/string_builder.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/schedule/types.h"
-#include "loom/target/arch/amdgpu/wait_packets.h"
-#include "loom/target/arch/amdgpu/wait_states.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct loom_amdgpu_assembly_fragment_options_t {
-  // Planned wait packets inserted before their scheduled packet insertion
-  // points.
-  const loom_amdgpu_wait_packet_plan_t* wait_packets;
-  // Planned fixed wait-state noops inserted before their scheduled packet
-  // insertion points.
-  const loom_amdgpu_wait_state_plan_t* wait_states;
+  // Optional target-owned packet plan applied during assembly emission.
+  const struct loom_amdgpu_packet_plan_t* packet_plan;
 } loom_amdgpu_assembly_fragment_options_t;
 
 // Emits an AMDGPU assembly fragment for one scheduled and allocated AMDGPU

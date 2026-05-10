@@ -32,6 +32,20 @@ low.func.def target(@gfx11_target) @gfx11_fmac(%resource: reg<amdgpu.sgpr x4>, %
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_vopd_fmac_pair
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_fmac_pair(%acc0: reg<amdgpu.vgpr>, %lhs0: reg<amdgpu.vgpr>, %rhs0: reg<amdgpu.vgpr>, %acc1: reg<amdgpu.vgpr>, %lhs1: reg<amdgpu.vgpr>, %rhs1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %next0 = v_fmac_f32 %acc0, %lhs0, %rhs0
+  %next1 = v_fmac_f32 %acc1, %lhs1, %rhs1
+  return
+}
+
+// ----
+  v_dual_fmac_f32 v0, v1, v2 :: v_dual_fmac_f32 v3, v4, v5
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_sgpr_shift_immediate waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_sgpr_shift_immediate(%value: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
@@ -179,7 +193,7 @@ low.func.def target(@gfx11_target) @gfx11_concat_source_existing_span(%row: reg<
   %address_lo = s_add_u32 %lookup_lo, %row_bytes_lo
   %address_hi = s_addc_u32 %lookup_hi, %row_bytes_hi
   %address = concat(%address_lo, %address_hi) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
-  %loaded = global_load_b32 %zero_v, %address
+  %loaded = global_load_b32_saddr %zero_v, %address
   %cmp = v_cmp_lt_i32 %loaded, %thread
   %prefix_cmp = s_cmp_lt_i32 %prefix_with_input, %row_limit
   return
@@ -441,8 +455,8 @@ low.func.def target(@gfx11_target) @gfx11_global_pointer(%addr: reg<amdgpu.vgpr 
 // RUN: emit amdgpu-assembly @gfx11_global_saddr waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_global_saddr(%addr: reg<amdgpu.vgpr>, %saddr: reg<amdgpu.sgpr x2>) asm<amdgpu.rdna3.core> {
-  %loaded = global_load_b128 %addr, %saddr {offset = 4}
-  global_store_b128 %addr, %loaded, %saddr {offset = 8}
+  %loaded = global_load_b128_saddr %addr, %saddr {offset = 4}
+  global_store_b128_saddr %addr, %loaded, %saddr {offset = 8}
   return
 }
 
@@ -685,9 +699,9 @@ low.func.def target(@gfx_target) @wait_fragment(%value: reg<amdgpu.vgpr>, %resou
 }
 
 // ----
-  buffer_load_dword v1, v0, s[0:3], s4 offen offset:0
+  buffer_load_dword v0, v1, s[0:3], s4 offen offset:0
   s_waitcnt vmcnt(0) lgkmcnt(15)
-  buffer_store_dword v1, v0, s[0:3], s4 offen offset:4
+  buffer_store_dword v0, v1, s[0:3], s4 offen offset:4
   s_endpgm
 
 // ====
@@ -701,9 +715,9 @@ low.func.def target(@gfx_target) @wait_fragment(%value: reg<amdgpu.vgpr>, %resou
 }
 
 // ----
-  buffer_load_dword v1, v0, s[0:3], s4 offen offset:0
+  buffer_load_dword v0, v1, s[0:3], s4 offen offset:0
   s_waitcnt vmcnt(0) lgkmcnt(63)
-  buffer_store_dword v1, v0, s[0:3], s4 offen offset:4
+  buffer_store_dword v0, v1, s[0:3], s4 offen offset:4
   s_endpgm
 
 // ====
@@ -777,9 +791,9 @@ low.func.def target(@gfx_target) @wait_fragment(%value: reg<amdgpu.vgpr>, %resou
 }
 
 // ----
-  buffer_load_dword v1, v0, s[0:3], s4 offen offset:0
+  buffer_load_dword v0, v1, s[0:3], s4 offen offset:0
   s_wait_loadcnt loadcnt(0)
-  buffer_store_dword v1, v0, s[0:3], s4 offen offset:4
+  buffer_store_dword v0, v1, s[0:3], s4 offen offset:4
   s_endpgm
 
 // ====
@@ -793,9 +807,9 @@ low.func.def target(@gfx_target) @wait_fragment(%value: reg<amdgpu.vgpr>, %resou
 }
 
 // ----
-  buffer_load_dword v1, v0, s[0:3], s4 offen offset:0
+  buffer_load_dword v0, v1, s[0:3], s4 offen offset:0
   s_wait_loadcnt loadcnt(0)
-  buffer_store_dword v1, v0, s[0:3], s4 offen offset:4
+  buffer_store_dword v0, v1, s[0:3], s4 offen offset:4
   s_endpgm
 
 // ====

@@ -33,10 +33,9 @@
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/ops/ops.h"
+#include "loom/target/arch/amdgpu/packet_plan.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/arch/amdgpu/target_records.h"
-#include "loom/target/arch/amdgpu/wait_packets.h"
-#include "loom/target/arch/amdgpu/wait_plan.h"
 #include "loom/target/emit/native/amdgpu/kernel_hsaco.h"
 #include "loom/target/low_descriptor_registry.h"
 
@@ -752,21 +751,14 @@ class LowKernelEmitter {
     IREE_RETURN_IF_ERROR(loom_low_emission_frame_build(
         module_, low_function, &frame_options, arena, &frame));
 
-    loom_amdgpu_wait_plan_t wait_plan = {};
-    IREE_RETURN_IF_ERROR(loom_amdgpu_wait_plan_build(
-        &frame.schedule, &frame.allocation, arena, &wait_plan));
-    loom_amdgpu_wait_packet_plan_t wait_packets = {};
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_wait_packet_plan_build(&wait_plan, arena, &wait_packets));
-    loom_amdgpu_wait_state_plan_t wait_states = {};
-    IREE_RETURN_IF_ERROR(loom_amdgpu_wait_state_plan_build(
-        &frame.schedule, &frame.allocation, arena, &wait_states));
+    loom_amdgpu_packet_plan_t packet_plan = {};
+    IREE_RETURN_IF_ERROR(loom_amdgpu_packet_plan_build(
+        &frame.schedule, &frame.allocation, arena, &packet_plan));
 
     StreamPtr stream = CreateStream();
     const loom_amdgpu_kernel_hsaco_options_t hsaco_options = {
         .abi_layout = &materialization.abi_layout,
-        .wait_packets = &wait_packets,
-        .wait_states = &wait_states,
+        .packet_plan = &packet_plan,
     };
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_emit_kernel_hsaco(&frame.schedule, &frame.allocation,

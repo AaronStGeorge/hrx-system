@@ -9,9 +9,7 @@
 #include "loom/codegen/low/frame.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/arch/amdgpu/wait_packets.h"
-#include "loom/target/arch/amdgpu/wait_plan.h"
-#include "loom/target/arch/amdgpu/wait_states.h"
+#include "loom/target/arch/amdgpu/packet_plan.h"
 #include "loom/target/emit/native/amdgpu/assembly.h"
 #include "loom/tools/loom-check/low_emit.h"
 
@@ -160,18 +158,11 @@ static iree_status_t loom_amdgpu_loom_check_emit_assembly(
         &frame->schedule, &frame->allocation, builder, arena);
   }
 
-  loom_amdgpu_wait_plan_t wait_plan = {0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_wait_plan_build(
-      &frame->schedule, &frame->allocation, arena, &wait_plan));
-  loom_amdgpu_wait_packet_plan_t wait_packets = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_wait_packet_plan_build(&wait_plan, arena, &wait_packets));
-  loom_amdgpu_wait_state_plan_t wait_states = {0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_wait_state_plan_build(
-      &frame->schedule, &frame->allocation, arena, &wait_states));
+  loom_amdgpu_packet_plan_t packet_plan = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_packet_plan_build(
+      &frame->schedule, &frame->allocation, arena, &packet_plan));
   const loom_amdgpu_assembly_fragment_options_t assembly_options = {
-      .wait_packets = &wait_packets,
-      .wait_states = &wait_states,
+      .packet_plan = &packet_plan,
   };
   return loom_amdgpu_emit_assembly_fragment_with_options(
       &frame->schedule, &frame->allocation, &assembly_options, builder, arena);

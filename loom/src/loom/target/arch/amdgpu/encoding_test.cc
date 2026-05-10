@@ -82,7 +82,7 @@ TEST(AmdgpuEncodingTest, PacksVopdxyDualFmacPair) {
   EXPECT_EQ(packet.words[1], UINT32_C(0xff060701));
 }
 
-TEST(AmdgpuEncodingTest, RejectsOddVopdxyYDestination) {
+TEST(AmdgpuEncodingTest, RejectsSameParityVopdxyDestinations) {
   loom_amdgpu_encoding_packet_t packet = {};
   loom_amdgpu_encoding_vopdxy_fields_t fields = {};
   fields.op_x = 0;

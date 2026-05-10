@@ -13,22 +13,25 @@
 #include "loom/codegen/low/packet.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/encoding.h"
+#include "loom/target/arch/amdgpu/packet_plan.h"
 #include "loom/target/arch/amdgpu/register_class.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
 #include "loom/target/emit/native/amdgpu/storage_layout.h"
 #include "loom/target/emit/native/assembly.h"
 
-typedef struct loom_amdgpu_wait_emit_state_t {
+typedef struct loom_amdgpu_assembly_emit_state_t {
   // Wait-packet plan consumed in scheduled insertion order.
   const loom_amdgpu_wait_packet_plan_t* wait_packets;
   // Wait-state plan consumed in scheduled insertion order.
   const loom_amdgpu_wait_state_plan_t* wait_states;
+  // VOPD plan used to replace paired descriptor packets.
+  const loom_amdgpu_vopd_plan_t* vopd_plan;
   // Next wait-packet row to compare with the current scheduled packet.
   iree_host_size_t next_wait_packet_index;
   // Next wait-state row to compare with the current scheduled packet.
   iree_host_size_t next_wait_state_index;
-} loom_amdgpu_wait_emit_state_t;
+} loom_amdgpu_assembly_emit_state_t;
 
 static iree_status_t loom_amdgpu_descriptor_key(
     const loom_native_assembly_packet_context_t* context,
@@ -981,8 +984,8 @@ static bool loom_amdgpu_wait_packet_matches_packet(
 
 static iree_status_t loom_amdgpu_append_wait_packets_before_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
-  loom_amdgpu_wait_emit_state_t* state =
-      (loom_amdgpu_wait_emit_state_t*)user_data;
+  loom_amdgpu_assembly_emit_state_t* state =
+      (loom_amdgpu_assembly_emit_state_t*)user_data;
   if (state->wait_packets == NULL) {
     return iree_ok_status();
   }
@@ -1039,8 +1042,8 @@ static iree_status_t loom_amdgpu_append_s_nop_cycles(
 
 static iree_status_t loom_amdgpu_append_wait_states_before_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
-  loom_amdgpu_wait_emit_state_t* state =
-      (loom_amdgpu_wait_emit_state_t*)user_data;
+  loom_amdgpu_assembly_emit_state_t* state =
+      (loom_amdgpu_assembly_emit_state_t*)user_data;
   if (state->wait_states == NULL) {
     return iree_ok_status();
   }
@@ -1418,6 +1421,41 @@ static iree_status_t loom_amdgpu_append_exec_restore_packet(
   return loom_amdgpu_append_operand(context, 0);
 }
 
+static iree_status_t loom_amdgpu_append_vopd_fmac_component(
+    const loom_native_assembly_packet_context_t* context,
+    const loom_low_packet_view_t* packet) {
+  loom_native_assembly_packet_context_t component_context = *context;
+  component_context.packet = packet;
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, "v_dual_fmac_f32 "));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_result(&component_context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(&component_context, 1));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  return loom_amdgpu_append_operand(&component_context, 2);
+}
+
+static iree_status_t loom_amdgpu_append_vopd_pair_packet(
+    const loom_native_assembly_packet_context_t* context,
+    const loom_amdgpu_vopd_pair_t* pair) {
+  if (pair->reason != LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAC_F32) {
+    iree_string_view_t reason = loom_amdgpu_vopd_pair_reason_name(pair->reason);
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "AMDGPU assembly VOPD pair reason '%.*s' is not "
+                            "supported",
+                            (int)reason.size, reason.data);
+  }
+  loom_low_packet_view_t second = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_low_packet_view_at(context->schedule, context->allocation,
+                              pair->second_packet_index, &second));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_append_vopd_fmac_component(context, context->packet));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, " :: "));
+  return loom_amdgpu_append_vopd_fmac_component(context, &second);
+}
+
 static iree_status_t loom_amdgpu_append_descriptor_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   (void)user_data;
@@ -1489,6 +1527,42 @@ static iree_status_t loom_amdgpu_append_descriptor_packet(
     return loom_amdgpu_append_waitcnt_packet(context);
   }
   return loom_amdgpu_append_canonical_asm_form_packet(context);
+}
+
+static iree_status_t loom_amdgpu_append_vopd_or_descriptor_packet(
+    void* user_data, const loom_native_assembly_packet_context_t* context) {
+  loom_amdgpu_assembly_emit_state_t* state =
+      (loom_amdgpu_assembly_emit_state_t*)user_data;
+  if (state == NULL || state->vopd_plan == NULL) {
+    return loom_amdgpu_append_descriptor_packet(NULL, context);
+  }
+  const loom_amdgpu_vopd_packet_t* vopd_packet =
+      loom_amdgpu_vopd_plan_packet_at(state->vopd_plan,
+                                      context->packet->packet_index);
+  if (vopd_packet == NULL) {
+    return loom_amdgpu_append_descriptor_packet(NULL, context);
+  }
+  if (vopd_packet->pair_index >= state->vopd_plan->pair_count) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU assembly VOPD packet references pair "
+                            "%" PRIu32 " but plan has %" PRIhsz " pair(s)",
+                            vopd_packet->pair_index,
+                            state->vopd_plan->pair_count);
+  }
+  if (vopd_packet->role == LOOM_AMDGPU_VOPD_PACKET_ROLE_SECOND) {
+    return iree_ok_status();
+  }
+  if (vopd_packet->role != LOOM_AMDGPU_VOPD_PACKET_ROLE_FIRST) {
+    iree_string_view_t role =
+        loom_amdgpu_vopd_packet_role_name(vopd_packet->role);
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU assembly VOPD packet has unsupported role "
+                            "'%.*s'",
+                            (int)role.size, role.data);
+  }
+  const loom_amdgpu_vopd_pair_t* pair =
+      &state->vopd_plan->pairs[vopd_packet->pair_index];
+  return loom_amdgpu_append_vopd_pair_packet(context, pair);
 }
 
 static iree_status_t loom_amdgpu_append_return_packet(
@@ -1607,32 +1681,6 @@ static iree_status_t loom_amdgpu_verify_assembly_target(
   return iree_ok_status();
 }
 
-static iree_status_t loom_amdgpu_verify_wait_packet_plan(
-    const loom_low_schedule_table_t* schedule,
-    const loom_amdgpu_wait_packet_plan_t* wait_packets) {
-  if (wait_packets->wait_plan->schedule != schedule) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU assembly wait packets must be derived from the emitted "
-        "schedule");
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_amdgpu_verify_wait_state_plan(
-    const loom_low_schedule_table_t* schedule,
-    const loom_low_allocation_table_t* allocation,
-    const loom_amdgpu_wait_state_plan_t* wait_states) {
-  if (wait_states->schedule != schedule ||
-      wait_states->allocation != allocation) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU assembly wait states must be derived from the emitted schedule "
-        "and allocation");
-  }
-  return iree_ok_status();
-}
-
 static const loom_native_assembly_structural_packet_callback_t
     kLoomAmdgpuAssemblyStructuralPacketCallbacks[] = {
         {
@@ -1694,14 +1742,11 @@ static const loom_native_assembly_structural_packet_callback_t
 };
 
 static loom_native_assembly_format_options_t loom_amdgpu_assembly_options(
-    loom_native_assembly_append_packet_callback_t append_before_packet) {
+    loom_native_assembly_append_packet_callback_t append_before_packet,
+    loom_native_assembly_append_packet_callback_t append_descriptor_packet) {
   return (loom_native_assembly_format_options_t){
       .append_before_packet = append_before_packet,
-      .append_descriptor_packet =
-          {
-              .fn = loom_amdgpu_append_descriptor_packet,
-              .user_data = NULL,
-          },
+      .append_descriptor_packet = append_descriptor_packet,
       .structural_packet_callbacks =
           kLoomAmdgpuAssemblyStructuralPacketCallbacks,
       .structural_packet_callback_count =
@@ -1716,7 +1761,11 @@ iree_status_t loom_amdgpu_emit_assembly_fragment(
   IREE_RETURN_IF_ERROR(loom_amdgpu_verify_assembly_target(schedule));
   const loom_native_assembly_format_options_t options =
       loom_amdgpu_assembly_options(
-          (loom_native_assembly_append_packet_callback_t){0});
+          (loom_native_assembly_append_packet_callback_t){0},
+          (loom_native_assembly_append_packet_callback_t){
+              .fn = loom_amdgpu_append_descriptor_packet,
+              .user_data = NULL,
+          });
   return loom_native_assembly_format_fragment(schedule, allocation, &options,
                                               builder, scratch_arena);
 }
@@ -1727,40 +1776,43 @@ iree_status_t loom_amdgpu_emit_assembly_fragment_with_options(
     const loom_amdgpu_assembly_fragment_options_t* options,
     iree_string_builder_t* builder, iree_arena_allocator_t* scratch_arena) {
   IREE_RETURN_IF_ERROR(loom_amdgpu_verify_assembly_target(schedule));
+  const loom_amdgpu_packet_plan_t* packet_plan =
+      options ? options->packet_plan : NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_packet_plan_verify(schedule, allocation, packet_plan));
   const loom_amdgpu_wait_packet_plan_t* wait_packets =
-      options ? options->wait_packets : NULL;
+      packet_plan ? &packet_plan->wait_packets : NULL;
   const loom_amdgpu_wait_state_plan_t* wait_states =
-      options ? options->wait_states : NULL;
-  if (wait_packets != NULL) {
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_verify_wait_packet_plan(schedule, wait_packets));
-  }
-  if (wait_states != NULL) {
-    IREE_RETURN_IF_ERROR(
-        loom_amdgpu_verify_wait_state_plan(schedule, allocation, wait_states));
-  }
+      packet_plan ? &packet_plan->wait_states : NULL;
+  const loom_amdgpu_vopd_plan_t* vopd_plan =
+      packet_plan ? &packet_plan->vopd_plan : NULL;
 
-  loom_amdgpu_wait_emit_state_t wait_state = {
+  loom_amdgpu_assembly_emit_state_t emit_state = {
       .wait_packets = wait_packets,
       .wait_states = wait_states,
+      .vopd_plan = vopd_plan,
   };
   const loom_native_assembly_format_options_t format_options =
       loom_amdgpu_assembly_options(
           (loom_native_assembly_append_packet_callback_t){
               .fn = loom_amdgpu_append_waits_before_packet,
-              .user_data = &wait_state,
+              .user_data = &emit_state,
+          },
+          (loom_native_assembly_append_packet_callback_t){
+              .fn = loom_amdgpu_append_vopd_or_descriptor_packet,
+              .user_data = &emit_state,
           });
   IREE_RETURN_IF_ERROR(loom_native_assembly_format_fragment(
       schedule, allocation, &format_options, builder, scratch_arena));
   if (wait_packets != NULL &&
-      wait_state.next_wait_packet_index != wait_packets->packet_count) {
+      emit_state.next_wait_packet_index != wait_packets->packet_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU assembly wait packet plan contains an unmatched insertion "
         "point");
   }
   if (wait_states != NULL &&
-      wait_state.next_wait_state_index != wait_states->state_count) {
+      emit_state.next_wait_state_index != wait_states->state_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "AMDGPU assembly wait-state plan contains an unmatched insertion "

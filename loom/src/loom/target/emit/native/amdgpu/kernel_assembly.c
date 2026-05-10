@@ -101,14 +101,11 @@ static iree_status_t loom_amdgpu_kernel_assembly_emit(
       (int)record.symbol.size, record.symbol.data, (int)record.symbol.size,
       record.symbol.data, (int)record.symbol.size, record.symbol.data,
       (int)record.symbol.size, record.symbol.data));
-  const loom_amdgpu_wait_packet_plan_t* wait_packets =
-      options ? options->wait_packets : NULL;
-  const loom_amdgpu_wait_state_plan_t* wait_states =
-      options ? options->wait_states : NULL;
-  if (wait_packets != NULL || wait_states != NULL) {
+  const struct loom_amdgpu_packet_plan_t* packet_plan =
+      options ? options->packet_plan : NULL;
+  if (packet_plan != NULL) {
     const loom_amdgpu_assembly_fragment_options_t assembly_options = {
-        .wait_packets = wait_packets,
-        .wait_states = wait_states,
+        .packet_plan = packet_plan,
     };
     IREE_RETURN_IF_ERROR(loom_amdgpu_emit_assembly_fragment_with_options(
         schedule, allocation, &assembly_options, builder, scratch_arena));

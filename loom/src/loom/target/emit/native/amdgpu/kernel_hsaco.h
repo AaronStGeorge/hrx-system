@@ -19,8 +19,6 @@
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/schedule/types.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
-#include "loom/target/arch/amdgpu/wait_packets.h"
-#include "loom/target/arch/amdgpu/wait_states.h"
 #include "loom/target/emit/native/amdgpu/hsaco.h"
 
 #ifdef __cplusplus
@@ -47,10 +45,8 @@ typedef struct loom_amdgpu_kernel_hsaco_options_t {
   const loom_amdgpu_hal_kernel_abi_layout_t* abi_layout;
   // Optional preflight result captured before HSACO contribution construction.
   const loom_amdgpu_native_preflight_t* preflight;
-  // Planned wait packets inserted into the native text stream.
-  const loom_amdgpu_wait_packet_plan_t* wait_packets;
-  // Planned fixed wait-state noops inserted into the native text stream.
-  const loom_amdgpu_wait_state_plan_t* wait_states;
+  // Optional target-owned packet plan applied during native encoding.
+  const struct loom_amdgpu_packet_plan_t* packet_plan;
   // Optional target-owned emission summary populated after successful emission.
   loom_amdgpu_kernel_hsaco_summary_t* summary;
 } loom_amdgpu_kernel_hsaco_options_t;
@@ -93,7 +89,7 @@ iree_status_t loom_amdgpu_write_kernel_hsaco_contributions(
 //
 // The output stream receives a self-contained ELF code object with metadata,
 // one kernel descriptor, and one encoded text entry. |options| may provide
-// planned wait packets and an optional emission summary. Values must be
+// a packet plan and an optional emission summary. Values must be
 // physically allocated and unspilled.
 iree_status_t loom_amdgpu_emit_kernel_hsaco(
     const loom_low_schedule_table_t* schedule,

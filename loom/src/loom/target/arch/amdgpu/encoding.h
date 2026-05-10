@@ -206,7 +206,7 @@ typedef struct loom_amdgpu_encoding_vopdxy_fields_t {
   uint16_t src0_y;
   // Y-slot VGPR source 1 register.
   uint16_t vsrc1_y;
-  // Y-slot even VGPR destination register.
+  // Y-slot VGPR destination register.
   uint16_t vdst_y;
 } loom_amdgpu_encoding_vopdxy_fields_t;
 

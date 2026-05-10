@@ -13,20 +13,14 @@
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/schedule/types.h"
-#include "loom/target/arch/amdgpu/wait_packets.h"
-#include "loom/target/arch/amdgpu/wait_states.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct loom_amdgpu_encode_instruction_stream_options_t {
-  // Planned wait packets inserted before their scheduled packet insertion
-  // points.
-  const loom_amdgpu_wait_packet_plan_t* wait_packets;
-  // Planned fixed wait-state noops inserted before their scheduled packet
-  // insertion points.
-  const loom_amdgpu_wait_state_plan_t* wait_states;
+  // Optional target-owned packet plan applied during native encoding.
+  const struct loom_amdgpu_packet_plan_t* packet_plan;
 } loom_amdgpu_encode_instruction_stream_options_t;
 
 // Encodes one scheduled and allocated AMDGPU target-low function into an

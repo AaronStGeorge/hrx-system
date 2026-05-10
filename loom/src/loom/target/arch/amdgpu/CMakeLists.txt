@@ -634,6 +634,48 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    vopd_plan
+  HDRS
+    "vopd_plan.h"
+  SRCS
+    "vopd_plan.c"
+  DEPS
+    ::target_info
+    ::target_refs
+    ::wait_packets
+    ::wait_states
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::packet
+    loom::src::loom::codegen::low::schedule
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    packet_plan
+  HDRS
+    "packet_plan.h"
+  SRCS
+    "packet_plan.c"
+  DEPS
+    ::vopd_plan
+    ::wait_packets
+    ::wait_plan
+    ::wait_states
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::packet
+    loom::src::loom::codegen::low::schedule
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     provider
   HDRS
     "provider.h"

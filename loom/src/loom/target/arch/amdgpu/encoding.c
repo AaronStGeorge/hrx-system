@@ -584,10 +584,10 @@ iree_status_t loom_amdgpu_encoding_pack_vopdxy(
       IREE_SV("vsrc1_y"), fields->vsrc1_y, 8));
   IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_verify_vopdxy_field(
       IREE_SV("vdst_y"), fields->vdst_y, 8));
-  if ((fields->vdst_y & 1u) != 0) {
+  if (((fields->vdst_x ^ fields->vdst_y) & 1u) == 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU VOPDXY Y destination register must be "
-                            "even");
+                            "AMDGPU VOPDXY destination registers must have "
+                            "opposite parity");
   }
 
   const uint64_t encoded =
