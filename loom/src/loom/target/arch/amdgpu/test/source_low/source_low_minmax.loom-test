@@ -182,6 +182,30 @@ low.func.def target(@target) abi(hal_kernel) @scf_select_vgpr(%lhs: reg<amdgpu.v
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @scf_select_chained_vgpr_i32(%values: vector<2xi32>, %limit: i32, %fallback: i32) -> (i32) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %is_lane = scalar.cmpi slt, %lane, %limit : i32
+  %selected = scf.select %is_lane, %lane, %fallback : i32
+  %is_selected = scalar.cmpi ne, %selected, %fallback : i32
+  %result = scf.select %is_selected, %selected, %fallback : i32
+  func.return %result : i32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scf_select_chained_vgpr_i32(%values: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>, %fallback: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %lane = slice %values[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %14 = v_mov_b32_copy %limit
+  %is_lane = v_cmp_lt_i32 %lane, %14
+  %16 = v_mov_b32_copy %fallback
+  %selected = v_cndmask_b32 %16, %lane, %is_lane
+  %is_selected = v_cmp_ne_i32 %selected, %16
+  %result = v_cndmask_b32 %16, %selected, %is_selected
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 kernel.def target(@target) @index_minmax_vgpr_select(%output: buffer) {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index

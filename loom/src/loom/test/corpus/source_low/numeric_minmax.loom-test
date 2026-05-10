@@ -77,6 +77,17 @@ func.def @scf_select_vgpr(%lhs: f32, %rhs: f32, %a: f32, %b: f32) -> (f32) {
 
 // ====
 
+func.def @scf_select_chained_vgpr_i32(%values: vector<2xi32>, %limit: i32, %fallback: i32) -> (i32) {
+  %lane = vector.extract %values[0] : vector<2xi32> -> i32
+  %is_lane = scalar.cmpi slt, %lane, %limit : i32
+  %selected = scf.select %is_lane, %lane, %fallback : i32
+  %is_selected = scalar.cmpi ne, %selected, %fallback : i32
+  %result = scf.select %is_selected, %selected, %fallback : i32
+  func.return %result : i32
+}
+
+// ====
+
 kernel.def @index_minmax_vgpr_select(%output: buffer) {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index
