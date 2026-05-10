@@ -46,6 +46,19 @@ static iree_status_t loom_amdgpu_dotf_result_is_one_vgpr(
       context, low_result_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR, out_match);
 }
 
+static iree_status_t loom_amdgpu_dotf_low_value_is_one_vgpr(
+    loom_low_lower_context_t* context, loom_value_id_t value, bool* out_match) {
+  *out_match = false;
+  const loom_type_t type =
+      loom_module_value_type(loom_low_lower_context_module(context), value);
+  if (!loom_type_is_register(type) ||
+      loom_type_register_unit_count(type) != 1) {
+    return iree_ok_status();
+  }
+  return loom_amdgpu_low_type_register_class_is(
+      context, type, LOOM_AMDGPU_REG_CLASS_ID_VGPR, out_match);
+}
+
 iree_status_t loom_amdgpu_select_vector_dotf_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_dotf_plan_t* out_plan, bool* out_selected) {
@@ -197,9 +210,14 @@ static iree_status_t loom_amdgpu_dotf_emit_accumulate(
     loom_value_id_t* out_result) {
   if (accumulator_is_dot_local &&
       plan->tied_accumulate_descriptor_ref != LOOM_AMDGPU_DESCRIPTOR_REF_NONE) {
-    return loom_amdgpu_dotf_emit_fmac(context, source_op,
-                                      plan->tied_accumulate_descriptor_ref, lhs,
-                                      rhs, accumulator, lane_type, out_result);
+    bool rhs_is_one_vgpr = false;
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_dotf_low_value_is_one_vgpr(context, rhs, &rhs_is_one_vgpr));
+    if (rhs_is_one_vgpr) {
+      return loom_amdgpu_dotf_emit_fmac(
+          context, source_op, plan->tied_accumulate_descriptor_ref, lhs, rhs,
+          accumulator, lane_type, out_result);
+    }
   }
   return loom_amdgpu_dotf_emit_fma(context, source_op, lhs, rhs, accumulator,
                                    lane_type, out_result);
