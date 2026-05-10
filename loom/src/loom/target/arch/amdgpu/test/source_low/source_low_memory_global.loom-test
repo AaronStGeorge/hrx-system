@@ -334,6 +334,60 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @i32_readonly_uniform_sm
 // ====
 
 amdgpu.target<gfx1100> @target
+kernel.def target(@target) @i32_readonly_uniform_smem_loop_bound(%control: buffer, %input: buffer, %output: buffer) {
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch {
+  %base = index.constant 0 : offset
+  %start = index.constant 0 : index
+  %step = index.constant 1 : index
+  %zero = scalar.constant 0.0 : f32
+  %control_noalias, %input_noalias, %output_noalias = buffer.assume.noalias %control, %input, %output : buffer, buffer, buffer
+  %control_view = buffer.view %control_noalias[%base] : buffer -> view<1xi32, #dense>
+  %input_view = buffer.view %input_noalias[%base] : buffer -> view<128xf32, #dense>
+  %output_view = buffer.view %output_noalias[%base] : buffer -> view<1xf32, #dense>
+  %limit_i32 = view.load %control_view[0] : view<1xi32, #dense> -> i32
+  %limit0 = index.cast %limit_i32 : i32 to index
+  %limit = index.assume %limit0 [range(%limit0, 0, 128)] : index
+  %sum = scf.for %position = [%start to %limit step %step](%current_sum = %zero : f32) -> (f32) {
+    %loaded = view.load %input_view[%position] : view<128xf32, #dense> -> f32
+    %next_sum = scalar.addf<reassoc|nnan|nsz> %current_sum, %loaded : f32
+    scf.yield %next_sum : f32
+  }
+  view.store %sum, %output_view[0] : f32, view<1xf32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @i32_readonly_uniform_smem_loop_bound() asm<amdgpu.rdna3.core> {
+  %control_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
+  %input_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 512} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
+  %start = s_mov_b32 0
+  %step = s_mov_b32 1
+  %zero = v_mov_b32 0
+  %limit = s_load_dword %control_view, %start
+  low.br ^_bb1(%start: reg<amdgpu.sgpr>, %zero: reg<amdgpu.vgpr>)
+^_bb1(%position: reg<amdgpu.sgpr>, %current_sum: reg<amdgpu.vgpr>):
+  %42 = s_cmp_lt_i32 %position, %limit
+  low.cond_br %42, ^_bb2, ^_bb3 : reg<amdgpu.scc>
+^_bb2:
+  %43 = s_mov_b32 2
+  %44 = s_lshl_b32 %position, %43
+  %loaded = s_load_dword %input_view, %44
+  %46 = v_mov_b32_copy %loaded
+  %next_sum = v_add_f32 %current_sum, %46
+  %48 = s_add_u32 %position, %step
+  low.br ^_bb1(%48: reg<amdgpu.sgpr>, %next_sum: reg<amdgpu.vgpr>)
+^_bb3:
+  global_store_b32_saddr %zero, %current_sum, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 kernel.def target(@target) @f32_readonly_uniform_smem_vector_math(%control: buffer, %input: buffer, %output: buffer) {
   %unit = index.constant 1 : index
   %workgroup_size = index.constant 64 : index
