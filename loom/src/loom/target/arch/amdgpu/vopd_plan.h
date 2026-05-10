@@ -6,11 +6,12 @@
 
 // AMDGPU VOPD packetization over scheduled target-low functions.
 //
-// VOPD is a target-owned post-allocation packetization decision: two adjacent
-// VALU packets in the low schedule may become one native dual-issue packet
-// when their descriptors, physical registers, and insertion points satisfy the
-// architectural constraints. The plan records that final emission decision
-// without changing the target-independent low schedule.
+// VOPD is a target-owned post-allocation packetization decision: two VALU
+// packets that remain adjacent in the emitted native instruction stream may
+// become one native dual-issue packet when their descriptors, physical
+// registers, and insertion points satisfy the architectural constraints. The
+// plan records that final emission decision without changing the
+// target-independent low schedule.
 
 #ifndef LOOM_TARGET_ARCH_AMDGPU_VOPD_PLAN_H_
 #define LOOM_TARGET_ARCH_AMDGPU_VOPD_PLAN_H_
@@ -53,7 +54,7 @@ typedef struct loom_amdgpu_vopd_packet_t {
   uint32_t pair_index;
 } loom_amdgpu_vopd_packet_t;
 
-// One native VOPD packet replacing two adjacent scheduled packets.
+// One native VOPD packet replacing two schedule-visible component packets.
 typedef struct loom_amdgpu_vopd_pair_t {
   // Why this VOPD pair was formed.
   loom_amdgpu_vopd_pair_reason_t reason;

@@ -46,6 +46,31 @@ low.func.def target(@gfx11_target) @gfx11_vopd_fmac_pair(%acc0: reg<amdgpu.vgpr>
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_vopd_fmac_pair_through_slices
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_fmac_pair_through_slices(%acc0: reg<amdgpu.vgpr>, %acc1: reg<amdgpu.vgpr>, %acc2: reg<amdgpu.vgpr>, %acc3: reg<amdgpu.vgpr>, %lhs: reg<amdgpu.vgpr x4>, %rhs: reg<amdgpu.vgpr x4>) asm<amdgpu.rdna3.core> {
+  %lhs0 = slice %lhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %rhs0 = slice %rhs[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %next0 = v_fmac_f32 %acc0, %lhs0, %rhs0
+  %lhs1 = slice %lhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %rhs1 = slice %rhs[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %next1 = v_fmac_f32 %acc1, %lhs1, %rhs1
+  %lhs2 = slice %lhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %rhs2 = slice %rhs[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %next2 = v_fmac_f32 %acc2, %lhs2, %rhs2
+  %lhs3 = slice %lhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %rhs3 = slice %rhs[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %next3 = v_fmac_f32 %acc3, %lhs3, %rhs3
+  return
+}
+
+// ----
+  v_dual_fmac_f32 v0, v4, v8 :: v_dual_fmac_f32 v1, v5, v9
+  v_dual_fmac_f32 v2, v6, v10 :: v_dual_fmac_f32 v3, v7, v11
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-native @gfx11_v_mov_b32_dpp16 waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_v_mov_b32_dpp16(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %value: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {

@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "loom/codegen/low/move_sequence.h"
 #include "loom/codegen/low/packet.h"
 #include "loom/ir/ir.h"
 #include "loom/ops/low/ops.h"
@@ -423,16 +424,92 @@ static iree_status_t loom_amdgpu_vopd_append_pair(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_vopd_packet_is_transparent(
+    const loom_amdgpu_vopd_plan_builder_t* builder,
+    iree_host_size_t packet_index, bool* out_transparent) {
+  *out_transparent = false;
+  if (builder->insertion_blocked_packets[packet_index]) {
+    return iree_ok_status();
+  }
+
+  loom_low_packet_view_t packet = {0};
+  IREE_RETURN_IF_ERROR(loom_low_packet_view_at(
+      builder->schedule, builder->allocation, packet_index, &packet));
+  if (packet.descriptor != NULL) {
+    return iree_ok_status();
+  }
+
+  iree_host_size_t move_count = 0;
+  const loom_op_t* op = packet.node->op;
+  switch (op->kind) {
+    case LOOM_OP_LOW_SLICE: {
+      IREE_RETURN_IF_ERROR(loom_low_move_sequence_count_slice_units(
+          builder->allocation, op, &move_count));
+      break;
+    }
+    case LOOM_OP_LOW_CONCAT: {
+      IREE_RETURN_IF_ERROR(loom_low_move_sequence_count_concat_units(
+          builder->allocation, op, &move_count));
+      break;
+    }
+    default:
+      return iree_ok_status();
+  }
+  *out_transparent = move_count == 0;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_vopd_find_visible_packet(
+    const loom_amdgpu_vopd_plan_builder_t* builder,
+    const loom_low_schedule_block_t* block,
+    iree_host_size_t search_packet_index, iree_host_size_t* out_packet_index,
+    bool* out_found) {
+  *out_packet_index = LOOM_LOW_PACKET_INDEX_NONE;
+  *out_found = false;
+
+  const iree_host_size_t block_end =
+      block->scheduled_node_start + block->scheduled_node_count;
+  for (iree_host_size_t packet_index = search_packet_index;
+       packet_index < block_end; ++packet_index) {
+    bool transparent = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_packet_is_transparent(
+        builder, packet_index, &transparent));
+    if (transparent) {
+      continue;
+    }
+    *out_packet_index = packet_index;
+    *out_found = true;
+    return iree_ok_status();
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_vopd_plan_block(
     loom_amdgpu_vopd_plan_builder_t* builder,
     const loom_low_schedule_block_t* block) {
-  for (uint32_t scheduled_ordinal = 0;
-       scheduled_ordinal + 1 < block->scheduled_node_count;) {
-    const iree_host_size_t first_packet_index =
-        block->scheduled_node_start + scheduled_ordinal;
-    const iree_host_size_t second_packet_index = first_packet_index + 1;
+  const iree_host_size_t block_end =
+      block->scheduled_node_start + block->scheduled_node_count;
+  for (iree_host_size_t search_packet_index = block->scheduled_node_start;
+       search_packet_index < block_end;) {
+    iree_host_size_t first_packet_index = LOOM_LOW_PACKET_INDEX_NONE;
+    bool found_first = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_find_visible_packet(
+        builder, block, search_packet_index, &first_packet_index,
+        &found_first));
+    if (!found_first) {
+      break;
+    }
+
+    iree_host_size_t second_packet_index = LOOM_LOW_PACKET_INDEX_NONE;
+    bool found_second = false;
+    IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_find_visible_packet(
+        builder, block, first_packet_index + 1, &second_packet_index,
+        &found_second));
+    if (!found_second) {
+      break;
+    }
     if (builder->insertion_blocked_packets[second_packet_index]) {
-      ++scheduled_ordinal;
+      search_packet_index = first_packet_index + 1;
       continue;
     }
 
@@ -446,12 +523,12 @@ static iree_status_t loom_amdgpu_vopd_plan_block(
     IREE_RETURN_IF_ERROR(loom_amdgpu_vopd_try_match_fmac_pair(
         builder, &first, &second, &matched));
     if (!matched) {
-      ++scheduled_ordinal;
+      search_packet_index = first_packet_index + 1;
       continue;
     }
     IREE_RETURN_IF_ERROR(
         loom_amdgpu_vopd_append_pair(builder, &first, &second));
-    scheduled_ordinal += 2;
+    search_packet_index = second_packet_index + 1;
   }
   return iree_ok_status();
 }

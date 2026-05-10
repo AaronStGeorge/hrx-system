@@ -9,9 +9,9 @@
 // The low schedule is target-independent and keeps one scheduled node per low
 // packet. AMDGPU still needs target-owned edits before native emission:
 // inserting wait packets, inserting fixed wait-state noops, and replacing
-// adjacent VALU packets with VOPD packets. This plan is the single boundary for
-// those stream edits so native emitters do not grow one option per hardware
-// feature.
+// native-adjacent VALU packets with VOPD packets. This plan is the single
+// boundary for those stream edits so native emitters do not grow one option per
+// hardware feature.
 
 #ifndef LOOM_TARGET_ARCH_AMDGPU_PACKET_PLAN_H_
 #define LOOM_TARGET_ARCH_AMDGPU_PACKET_PLAN_H_
@@ -40,7 +40,7 @@ typedef struct loom_amdgpu_packet_plan_t {
   loom_amdgpu_wait_packet_plan_t wait_packets;
   // Concrete fixed wait states inserted into the native packet stream.
   loom_amdgpu_wait_state_plan_t wait_states;
-  // Concrete VOPD pairings applied to adjacent scheduled packets.
+  // Concrete VOPD pairings applied to native-adjacent scheduled packets.
   loom_amdgpu_vopd_plan_t vopd_plan;
 } loom_amdgpu_packet_plan_t;
 
