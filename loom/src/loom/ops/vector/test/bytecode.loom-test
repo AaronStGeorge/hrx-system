@@ -56,3 +56,11 @@ func.def @activation_math(%x: vector<8xf32>) -> (vector<8xf32>) {
   %clamped = vector.clampf<number, nnan|nsz> %gelu, %logistic, %softplus : vector<8xf32>
   func.return %clamped : vector<8xf32>
 }
+
+// ====
+
+func.def @turn_trig_math(%x: vector<8xf32>) -> (vector<8xf32>, vector<8xf32>) {
+  %sin = vector.sinturnsf<afn> %x : vector<8xf32>
+  %cos = vector.costurnsf<afn> %x : vector<8xf32>
+  func.return %sin, %cos : vector<8xf32>, vector<8xf32>
+}

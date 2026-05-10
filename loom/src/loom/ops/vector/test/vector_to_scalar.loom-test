@@ -186,6 +186,26 @@ func.def @static_activation_math(%a: vector<2xf32>) -> (vector<2xf32>) {
 
 // ====
 
+func.def @static_turn_trig_math(%a: vector<2xf32>) -> (vector<2xf32>) {
+  %sin = vector.sinturnsf<afn> %a : vector<2xf32>
+  %r = vector.costurnsf<afn> %sin : vector<2xf32>
+  func.return %r : vector<2xf32>
+}
+
+// ----
+func.def @static_turn_trig_math(%a: vector<2xf32>) -> (vector<2xf32>) {
+  %4 = vector.extract %a[0] : vector<2xf32> -> f32
+  %5 = scalar.sinturnsf<afn> %4 : f32
+  %6 = scalar.costurnsf<afn> %5 : f32
+  %7 = vector.extract %a[1] : vector<2xf32> -> f32
+  %8 = scalar.sinturnsf<afn> %7 : f32
+  %9 = scalar.costurnsf<afn> %8 : f32
+  %r = vector.from_elements %6, %9 : vector<2xf32>
+  func.return %r : vector<2xf32>
+}
+
+// ====
+
 // Dynamic float/math ops lower to scalar work inside the aggregate loop.
 func.def @dynamic_float_math(%n: index, %a: vector<[%n]xf32>, %b: vector<[%n]xf32>) -> (vector<[%n]xf32>) {
   %quotient = vector.divf %a, %b : vector<[%n]xf32>

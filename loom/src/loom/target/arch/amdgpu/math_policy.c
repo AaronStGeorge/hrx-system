@@ -49,6 +49,21 @@ static bool loom_amdgpu_math_query_has_afn(
                            LOOM_TARGET_MATH_FASTMATH_FLAG_AFN);
 }
 
+static loom_target_math_policy_decision_t loom_amdgpu_math_rewrite_if_afn(
+    const loom_target_math_query_t* query, loom_target_math_recipe_t recipe,
+    iree_string_view_t recipe_key, iree_string_view_t reject_key) {
+  return loom_amdgpu_math_query_has_afn(query)
+             ? loom_amdgpu_math_rewrite(recipe, recipe_key)
+             : loom_amdgpu_math_reject(reject_key);
+}
+
+static loom_target_math_policy_decision_t loom_amdgpu_math_keep_if_afn(
+    const loom_target_math_query_t* query, iree_string_view_t reject_key) {
+  return loom_amdgpu_math_query_has_afn(query)
+             ? loom_amdgpu_math_keep(IREE_SV("math.op.native_f32"))
+             : loom_amdgpu_math_reject(reject_key);
+}
+
 static void loom_amdgpu_math_policy_query(
     const loom_target_math_policy_t* policy,
     const loom_target_math_query_t* query,
@@ -88,13 +103,33 @@ static void loom_amdgpu_math_policy_query(
                                    IREE_SV("math.recipe.softplus_exp2_f32"));
       return;
     case LOOM_TARGET_MATH_OP_EXPF:
-      if (loom_amdgpu_math_query_has_afn(query)) {
-        *out_decision =
-            loom_amdgpu_math_rewrite(LOOM_TARGET_MATH_RECIPE_EXP_EXP2_F32,
-                                     IREE_SV("math.recipe.exp_exp2_f32"));
-        return;
-      }
-      *out_decision = loom_amdgpu_math_reject(IREE_SV("math.exp.exact_f32"));
+      *out_decision = loom_amdgpu_math_rewrite_if_afn(
+          query, LOOM_TARGET_MATH_RECIPE_EXP_EXP2_F32,
+          IREE_SV("math.recipe.exp_exp2_f32"), IREE_SV("math.exp.exact_f32"));
+      return;
+    case LOOM_TARGET_MATH_OP_LOGF:
+      *out_decision = loom_amdgpu_math_rewrite_if_afn(
+          query, LOOM_TARGET_MATH_RECIPE_LOG_LOG2_F32,
+          IREE_SV("math.recipe.log_log2_f32"), IREE_SV("math.log.exact_f32"));
+      return;
+    case LOOM_TARGET_MATH_OP_LOG2F:
+      *out_decision =
+          loom_amdgpu_math_keep_if_afn(query, IREE_SV("math.log2.exact_f32"));
+      return;
+    case LOOM_TARGET_MATH_OP_SINF:
+      *out_decision = loom_amdgpu_math_rewrite_if_afn(
+          query, LOOM_TARGET_MATH_RECIPE_SIN_TURNS_F32,
+          IREE_SV("math.recipe.sin_turns_f32"), IREE_SV("math.trig.exact_f32"));
+      return;
+    case LOOM_TARGET_MATH_OP_COSF:
+      *out_decision = loom_amdgpu_math_rewrite_if_afn(
+          query, LOOM_TARGET_MATH_RECIPE_COS_TURNS_F32,
+          IREE_SV("math.recipe.cos_turns_f32"), IREE_SV("math.trig.exact_f32"));
+      return;
+    case LOOM_TARGET_MATH_OP_SINTURNSF:
+    case LOOM_TARGET_MATH_OP_COSTURNSF:
+      *out_decision = loom_amdgpu_math_keep_if_afn(
+          query, IREE_SV("math.turns_trig.exact_f32"));
       return;
     case LOOM_TARGET_MATH_OP_ERFF:
       *out_decision = loom_amdgpu_math_rewrite_with_recipe_fastmath(

@@ -114,6 +114,8 @@ extern const loom_op_vtable_t loom_vector_rsqrtf_vtable;
 extern const loom_op_vtable_t loom_vector_cbrtf_vtable;
 extern const loom_op_vtable_t loom_vector_sinf_vtable;
 extern const loom_op_vtable_t loom_vector_cosf_vtable;
+extern const loom_op_vtable_t loom_vector_sinturnsf_vtable;
+extern const loom_op_vtable_t loom_vector_costurnsf_vtable;
 extern const loom_op_vtable_t loom_vector_tanf_vtable;
 extern const loom_op_vtable_t loom_vector_asinf_vtable;
 extern const loom_op_vtable_t loom_vector_acosf_vtable;

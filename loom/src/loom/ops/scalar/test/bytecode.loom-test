@@ -10,3 +10,11 @@ func.def @activation_math(%x: f32) -> (f32, f32, f32, f32, f32) {
   %clamped = scalar.clampf<number, nnan|nsz> %gelu, %logistic, %softplus : f32
   func.return %logistic, %silu, %softplus, %gelu, %clamped : f32, f32, f32, f32, f32
 }
+
+// ====
+
+func.def @turn_trig_math(%x: f32) -> (f32, f32) {
+  %sin = scalar.sinturnsf<afn> %x : f32
+  %cos = scalar.costurnsf<afn> %x : f32
+  func.return %sin, %cos : f32, f32
+}

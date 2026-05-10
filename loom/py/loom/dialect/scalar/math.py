@@ -170,6 +170,24 @@ scalar_cosf = unary_op(
     facts="loom_scalar_cosf_facts",
     examples=["%result = scalar.cosf %input : f32"],
 )
+scalar_sinturnsf = unary_op(
+    "scalar.sinturnsf",
+    group=scalar_ops,
+    type_constraint=FLOAT,
+    doc="Sine over turns: sin(2*pi*x), where 1.0 is one full revolution.",
+    flags=_FM,
+    facts="loom_scalar_sinturnsf_facts",
+    examples=["%result = scalar.sinturnsf %input : f32"],
+)
+scalar_costurnsf = unary_op(
+    "scalar.costurnsf",
+    group=scalar_ops,
+    type_constraint=FLOAT,
+    doc="Cosine over turns: cos(2*pi*x), where 1.0 is one full revolution.",
+    flags=_FM,
+    facts="loom_scalar_costurnsf_facts",
+    examples=["%result = scalar.costurnsf %input : f32"],
+)
 scalar_tanf = unary_op(
     "scalar.tanf",
     group=scalar_ops,
@@ -469,6 +487,8 @@ ALL_MATH_OPS: tuple[Op, ...] = (
     scalar_cbrtf,
     scalar_sinf,
     scalar_cosf,
+    scalar_sinturnsf,
+    scalar_costurnsf,
     scalar_tanf,
     scalar_asinf,
     scalar_acosf,

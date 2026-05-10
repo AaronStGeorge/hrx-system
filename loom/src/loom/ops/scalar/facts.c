@@ -93,6 +93,8 @@ static double mul_f64(double a, double b) { return a * b; }
 static double div_f64(double a, double b) { return a / b; }
 static double negate_f64(double a) { return -a; }
 static double rsqrt_f64(double x) { return 1.0 / sqrt(x); }
+static double sinturns_f64(double x) { return sin(6.28318530717958647692 * x); }
+static double costurns_f64(double x) { return cos(6.28318530717958647692 * x); }
 static double roundeven_f64(double x) { return nearbyint(x); }
 static double logistic_f64(double x) { return 1.0 / (1.0 + exp(-x)); }
 static double silu_f64(double x) { return x * logistic_f64(x); }
@@ -261,6 +263,8 @@ FLOAT_UNARY_FACTS(loom_scalar_rsqrtf_facts, rsqrt_f64)
 FLOAT_UNARY_FACTS(loom_scalar_cbrtf_facts, cbrt)
 FLOAT_UNARY_FACTS(loom_scalar_sinf_facts, sin)
 FLOAT_UNARY_FACTS(loom_scalar_cosf_facts, cos)
+FLOAT_UNARY_FACTS(loom_scalar_sinturnsf_facts, sinturns_f64)
+FLOAT_UNARY_FACTS(loom_scalar_costurnsf_facts, costurns_f64)
 FLOAT_UNARY_FACTS(loom_scalar_tanf_facts, tan)
 FLOAT_UNARY_FACTS(loom_scalar_asinf_facts, asin)
 FLOAT_UNARY_FACTS(loom_scalar_acosf_facts, acos)

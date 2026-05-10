@@ -83,8 +83,6 @@ typedef struct loom_math_legalize_state_t {
   loom_func_like_t function;
   // Target math policy registry linked into the current compiler binary.
   const loom_target_math_policy_registry_t* policy_registry;
-  // Recipe rows linked into the pass.
-  loom_math_legalize_recipe_table_t recipe_table;
   // Symbol facts used to resolve function target contracts.
   loom_symbol_fact_table_t symbol_facts;
   // Lazily resolved target policy state for |function|.
@@ -269,109 +267,98 @@ static loom_target_math_op_t loom_math_legalize_vector_geluf_op(
   return LOOM_TARGET_MATH_OP_UNKNOWN;
 }
 
+static loom_target_math_op_t loom_math_legalize_scalar_op_kind(
+    const loom_op_t* op) {
+  switch (op->kind) {
+    case LOOM_OP_SCALAR_EXPF:
+      return LOOM_TARGET_MATH_OP_EXPF;
+    case LOOM_OP_SCALAR_LOGF:
+      return LOOM_TARGET_MATH_OP_LOGF;
+    case LOOM_OP_SCALAR_LOG2F:
+      return LOOM_TARGET_MATH_OP_LOG2F;
+    case LOOM_OP_SCALAR_SINF:
+      return LOOM_TARGET_MATH_OP_SINF;
+    case LOOM_OP_SCALAR_COSF:
+      return LOOM_TARGET_MATH_OP_COSF;
+    case LOOM_OP_SCALAR_SINTURNSF:
+      return LOOM_TARGET_MATH_OP_SINTURNSF;
+    case LOOM_OP_SCALAR_COSTURNSF:
+      return LOOM_TARGET_MATH_OP_COSTURNSF;
+    case LOOM_OP_SCALAR_ERFF:
+      return LOOM_TARGET_MATH_OP_ERFF;
+    case LOOM_OP_SCALAR_LOGISTICF:
+      return LOOM_TARGET_MATH_OP_LOGISTICF;
+    case LOOM_OP_SCALAR_SILUF:
+      return LOOM_TARGET_MATH_OP_SILUF;
+    case LOOM_OP_SCALAR_SOFTPLUSF:
+      return LOOM_TARGET_MATH_OP_SOFTPLUSF;
+    case LOOM_OP_SCALAR_GELUF:
+      return loom_math_legalize_scalar_geluf_op(op);
+    case LOOM_OP_SCALAR_ADDF:
+      return LOOM_TARGET_MATH_OP_ADDF;
+    case LOOM_OP_SCALAR_MULF:
+      return LOOM_TARGET_MATH_OP_MULF;
+    default:
+      return LOOM_TARGET_MATH_OP_UNKNOWN;
+  }
+}
+
+static loom_target_math_op_t loom_math_legalize_vector_op_kind(
+    const loom_op_t* op) {
+  switch (op->kind) {
+    case LOOM_OP_VECTOR_EXPF:
+      return LOOM_TARGET_MATH_OP_EXPF;
+    case LOOM_OP_VECTOR_LOGF:
+      return LOOM_TARGET_MATH_OP_LOGF;
+    case LOOM_OP_VECTOR_LOG2F:
+      return LOOM_TARGET_MATH_OP_LOG2F;
+    case LOOM_OP_VECTOR_SINF:
+      return LOOM_TARGET_MATH_OP_SINF;
+    case LOOM_OP_VECTOR_COSF:
+      return LOOM_TARGET_MATH_OP_COSF;
+    case LOOM_OP_VECTOR_SINTURNSF:
+      return LOOM_TARGET_MATH_OP_SINTURNSF;
+    case LOOM_OP_VECTOR_COSTURNSF:
+      return LOOM_TARGET_MATH_OP_COSTURNSF;
+    case LOOM_OP_VECTOR_ERFF:
+      return LOOM_TARGET_MATH_OP_ERFF;
+    case LOOM_OP_VECTOR_LOGISTICF:
+      return LOOM_TARGET_MATH_OP_LOGISTICF;
+    case LOOM_OP_VECTOR_SILUF:
+      return LOOM_TARGET_MATH_OP_SILUF;
+    case LOOM_OP_VECTOR_SOFTPLUSF:
+      return LOOM_TARGET_MATH_OP_SOFTPLUSF;
+    case LOOM_OP_VECTOR_GELUF:
+      return loom_math_legalize_vector_geluf_op(op);
+    case LOOM_OP_VECTOR_ADDF:
+      return LOOM_TARGET_MATH_OP_ADDF;
+    case LOOM_OP_VECTOR_MULF:
+      return LOOM_TARGET_MATH_OP_MULF;
+    default:
+      return LOOM_TARGET_MATH_OP_UNKNOWN;
+  }
+}
+
 static bool loom_math_legalize_query_for_op(
     const loom_module_t* module, const loom_op_t* op,
     loom_target_math_query_t* out_query) {
-  switch (op->kind) {
-    case LOOM_OP_SCALAR_EXPF:
-      return loom_math_legalize_scalar_result_query(
-          module, op, LOOM_TARGET_MATH_OP_EXPF,
-          loom_math_legalize_scalar_fastmath_flags(
-              loom_scalar_expf_fastmath(op)),
-          out_query);
-    case LOOM_OP_SCALAR_ERFF:
-      return loom_math_legalize_scalar_result_query(
-          module, op, LOOM_TARGET_MATH_OP_ERFF,
-          loom_math_legalize_scalar_fastmath_flags(
-              loom_scalar_erff_fastmath(op)),
-          out_query);
-    case LOOM_OP_SCALAR_LOGISTICF:
-      return loom_math_legalize_scalar_result_query(
-          module, op, LOOM_TARGET_MATH_OP_LOGISTICF,
-          loom_math_legalize_scalar_fastmath_flags(
-              loom_scalar_logisticf_fastmath(op)),
-          out_query);
-    case LOOM_OP_SCALAR_SILUF:
-      return loom_math_legalize_scalar_result_query(
-          module, op, LOOM_TARGET_MATH_OP_SILUF,
-          loom_math_legalize_scalar_fastmath_flags(
-              loom_scalar_siluf_fastmath(op)),
-          out_query);
-    case LOOM_OP_SCALAR_SOFTPLUSF:
-      return loom_math_legalize_scalar_result_query(
-          module, op, LOOM_TARGET_MATH_OP_SOFTPLUSF,
-          loom_math_legalize_scalar_fastmath_flags(
-              loom_scalar_softplusf_fastmath(op)),
-          out_query);
-    case LOOM_OP_SCALAR_GELUF:
-      return loom_math_legalize_scalar_result_query(
-          module, op, loom_math_legalize_scalar_geluf_op(op),
-          loom_math_legalize_scalar_fastmath_flags(
-              loom_scalar_geluf_fastmath(op)),
-          out_query);
-    case LOOM_OP_SCALAR_ADDF:
-      return loom_math_legalize_scalar_result_query(
-          module, op, LOOM_TARGET_MATH_OP_ADDF,
-          loom_math_legalize_scalar_fastmath_flags(
-              loom_scalar_addf_fastmath(op)),
-          out_query);
-    case LOOM_OP_SCALAR_MULF:
-      return loom_math_legalize_scalar_result_query(
-          module, op, LOOM_TARGET_MATH_OP_MULF,
-          loom_math_legalize_scalar_fastmath_flags(
-              loom_scalar_mulf_fastmath(op)),
-          out_query);
-    case LOOM_OP_VECTOR_EXPF:
-      return loom_math_legalize_vector_result_query(
-          module, op, LOOM_TARGET_MATH_OP_EXPF,
-          loom_math_legalize_vector_fastmath_flags(
-              loom_vector_expf_fastmath(op)),
-          out_query);
-    case LOOM_OP_VECTOR_ERFF:
-      return loom_math_legalize_vector_result_query(
-          module, op, LOOM_TARGET_MATH_OP_ERFF,
-          loom_math_legalize_vector_fastmath_flags(
-              loom_vector_erff_fastmath(op)),
-          out_query);
-    case LOOM_OP_VECTOR_LOGISTICF:
-      return loom_math_legalize_vector_result_query(
-          module, op, LOOM_TARGET_MATH_OP_LOGISTICF,
-          loom_math_legalize_vector_fastmath_flags(
-              loom_vector_logisticf_fastmath(op)),
-          out_query);
-    case LOOM_OP_VECTOR_SILUF:
-      return loom_math_legalize_vector_result_query(
-          module, op, LOOM_TARGET_MATH_OP_SILUF,
-          loom_math_legalize_vector_fastmath_flags(
-              loom_vector_siluf_fastmath(op)),
-          out_query);
-    case LOOM_OP_VECTOR_SOFTPLUSF:
-      return loom_math_legalize_vector_result_query(
-          module, op, LOOM_TARGET_MATH_OP_SOFTPLUSF,
-          loom_math_legalize_vector_fastmath_flags(
-              loom_vector_softplusf_fastmath(op)),
-          out_query);
-    case LOOM_OP_VECTOR_GELUF:
-      return loom_math_legalize_vector_result_query(
-          module, op, loom_math_legalize_vector_geluf_op(op),
-          loom_math_legalize_vector_fastmath_flags(
-              loom_vector_geluf_fastmath(op)),
-          out_query);
-    case LOOM_OP_VECTOR_ADDF:
-      return loom_math_legalize_vector_result_query(
-          module, op, LOOM_TARGET_MATH_OP_ADDF,
-          loom_math_legalize_vector_fastmath_flags(
-              loom_vector_addf_fastmath(op)),
-          out_query);
-    case LOOM_OP_VECTOR_MULF:
-      return loom_math_legalize_vector_result_query(
-          module, op, LOOM_TARGET_MATH_OP_MULF,
-          loom_math_legalize_vector_fastmath_flags(
-              loom_vector_mulf_fastmath(op)),
-          out_query);
-    default:
-      return false;
+  loom_target_math_op_t math_op = loom_math_legalize_scalar_op_kind(op);
+  if (math_op != LOOM_TARGET_MATH_OP_UNKNOWN) {
+    return loom_math_legalize_scalar_result_query(
+        module, op, math_op,
+        loom_math_legalize_scalar_fastmath_flags(op->instance_flags),
+        out_query);
   }
+
+  math_op = loom_math_legalize_vector_op_kind(op);
+  if (math_op != LOOM_TARGET_MATH_OP_UNKNOWN) {
+    return loom_math_legalize_vector_result_query(
+        module, op, math_op,
+        loom_math_legalize_vector_fastmath_flags(op->instance_flags),
+        out_query);
+  }
+
+  return false;
 }
 
 static iree_status_t loom_math_legalize_lookup_func_facts(
@@ -448,18 +435,6 @@ static iree_status_t loom_math_legalize_emit_missing_policy(
   };
   return loom_math_legalize_emit(state, op, LOOM_ERR_LOWERING_034, params,
                                  IREE_ARRAYSIZE(params));
-}
-
-static const loom_math_legalize_recipe_t* loom_math_legalize_lookup_recipe(
-    const loom_math_legalize_recipe_table_t* table,
-    loom_target_math_recipe_t recipe, loom_op_kind_t root_kind) {
-  for (iree_host_size_t i = 0; i < table->recipe_count; ++i) {
-    const loom_math_legalize_recipe_t* row = &table->recipes[i];
-    if (row->recipe == recipe && row->root_kind == root_kind) {
-      return row;
-    }
-  }
-  return NULL;
 }
 
 static iree_string_view_t loom_math_legalize_scalar_type_name(
@@ -558,12 +533,6 @@ static iree_status_t loom_math_legalize_rewrite_op(
     return loom_math_legalize_emit_rejected(state, op, &query, &decision);
   }
 
-  const loom_math_legalize_recipe_t* recipe = loom_math_legalize_lookup_recipe(
-      &state->recipe_table, decision.recipe, op->kind);
-  if (recipe == NULL || recipe->rewrite == NULL) {
-    return loom_math_legalize_emit_missing_recipe(state, op, &query, &decision);
-  }
-
   const loom_math_legalize_recipe_context_t context = {
       .pass = state->pass,
       .module = state->module,
@@ -571,8 +540,12 @@ static iree_status_t loom_math_legalize_rewrite_op(
       .decision = decision,
   };
   driver->rewriter.flags = 0;
-  IREE_RETURN_IF_ERROR(
-      recipe->rewrite(recipe, &context, op, &driver->rewriter));
+  bool rewritten = false;
+  IREE_RETURN_IF_ERROR(loom_math_legalize_rewrite_recipe(
+      &context, op, &driver->rewriter, &rewritten));
+  if (!rewritten) {
+    return loom_math_legalize_emit_missing_recipe(state, op, &query, &decision);
+  }
   loom_greedy_rewrite_result_record_rewriter_flags(result, &driver->rewriter);
   if (iree_any_bit_set(driver->rewriter.flags, LOOM_REWRITER_FLAG_CHANGED)) {
     loom_greedy_rewrite_result_record_change(
@@ -588,10 +561,6 @@ iree_status_t loom_math_legalize_run(loom_pass_t* pass, loom_module_t* module,
   const loom_math_legalize_options_t* options =
       (const loom_math_legalize_options_t*)pass->state;
 
-  loom_math_legalize_recipe_table_t recipe_table = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_math_legalize_collect_recipes(pass->instance_arena, &recipe_table));
-
   const loom_target_math_pass_capability_t* math_capability =
       loom_target_math_pass_capability_from_pass(pass);
   const loom_target_math_policy_registry_t* policy_registry =
@@ -601,7 +570,6 @@ iree_status_t loom_math_legalize_run(loom_pass_t* pass, loom_module_t* module,
       .module = module,
       .function = function,
       .policy_registry = policy_registry,
-      .recipe_table = recipe_table,
   };
   loom_symbol_fact_table_initialize(&state.symbol_facts, pass->instance_arena);
 

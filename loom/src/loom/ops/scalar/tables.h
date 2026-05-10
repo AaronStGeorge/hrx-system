@@ -63,6 +63,8 @@ extern const loom_op_vtable_t loom_scalar_rsqrtf_vtable;
 extern const loom_op_vtable_t loom_scalar_cbrtf_vtable;
 extern const loom_op_vtable_t loom_scalar_sinf_vtable;
 extern const loom_op_vtable_t loom_scalar_cosf_vtable;
+extern const loom_op_vtable_t loom_scalar_sinturnsf_vtable;
+extern const loom_op_vtable_t loom_scalar_costurnsf_vtable;
 extern const loom_op_vtable_t loom_scalar_tanf_vtable;
 extern const loom_op_vtable_t loom_scalar_asinf_vtable;
 extern const loom_op_vtable_t loom_scalar_acosf_vtable;

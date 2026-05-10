@@ -433,3 +433,114 @@ low.func.def target(@target) abi(hal_kernel) @vector_bf16_mul_widen_round_source
   %result = low.op<amdgpu.v_cvt_pk_u16_u32>(%30, %35) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
   low.return %result : reg<amdgpu.vgpr>
 }
+
+// ====
+
+// RUN: pass legalize-math,canonicalize,cse,dce
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_log_afn(%input: f32) -> (f32) {
+  %result = scalar.logf<afn> %input : f32
+  func.return %result : f32
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @scalar_log_afn(%input: f32) -> (f32) {
+  %3 = scalar.constant 0.69314718055994529 : f32
+  %4 = scalar.log2f<afn> %input : f32
+  %result = scalar.mulf<afn> %4, %3 : f32
+  func.return %result : f32
+}
+
+// ====
+
+// RUN: pass legalize-math,canonicalize,cse,dce
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_sin_project_turns(%input: vector<4xf32>) -> (vector<4xf32>) {
+  %two_pi = vector.constant 6.283185307179586 : vector<4xf32>
+  %radians = vector.mulf<afn> %input, %two_pi : vector<4xf32>
+  %result = vector.sinf<afn> %radians : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @vector_sin_project_turns(%input: vector<4xf32>) -> (vector<4xf32>) {
+  %result = vector.sinturnsf<afn> %input : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ====
+
+// RUN: pass legalize-math,canonicalize,cse,dce
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @vector_cos_general_turns(%radians: vector<4xf32>) -> (vector<4xf32>) {
+  %result = vector.cosf<afn> %radians : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @vector_cos_general_turns(%radians: vector<4xf32>) -> (vector<4xf32>) {
+  %3 = vector.constant 0.15915494309189535 : vector<4xf32>
+  %4 = vector.mulf<afn> %radians, %3 : vector<4xf32>
+  %result = vector.costurnsf<afn> %4 : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ====
+
+// RUN: pass legalize-math,source-to-low,low-dce
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @scalar_box_muller_native_math(%u1: f32, %u2: f32) -> (f32, f32) {
+  %two_pi = scalar.constant 6.283185307179586 : f32
+  %radius_base = scalar.logf<afn> %u1 : f32
+  %negative_two = scalar.constant -2.0 : f32
+  %radius_squared = scalar.mulf<afn> %negative_two, %radius_base : f32
+  %radius = scalar.sqrtf<afn> %radius_squared : f32
+  %theta = scalar.mulf<afn> %u2, %two_pi : f32
+  %sine = scalar.sinf<afn> %theta : f32
+  %cosine = scalar.cosf<afn> %theta : f32
+  %z0 = scalar.mulf<afn> %radius, %cosine : f32
+  %z1 = scalar.mulf<afn> %radius, %sine : f32
+  func.return %z0, %z1 : f32, f32
+}
+// ----
+amdgpu.target<gfx1100> @target
+
+low.func.def target(@target) abi(hal_kernel) @scalar_box_muller_native_math(%u1: reg<amdgpu.vgpr>, %u2: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) {
+  %23 = low.op<amdgpu.v_log_f32>(%u1) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %radius_base = low.op<amdgpu.v_mul_f32.lit>(%23) {imm32 = 1060205080} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %radius_squared = low.op<amdgpu.v_mul_f32.src0_inline>(%radius_base) {imm32 = 3221225472} : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %radius = low.op<amdgpu.v_sqrt_f32>(%radius_squared) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %sine = low.op<amdgpu.v_sin_f32>(%u2) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %cosine = low.op<amdgpu.v_cos_f32>(%u2) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %z0 = low.op<amdgpu.v_mul_f32>(%radius, %cosine) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %z1 = low.op<amdgpu.v_mul_f32>(%radius, %sine) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %z0, %z1 : reg<amdgpu.vgpr>, reg<amdgpu.vgpr>
+}
+
+// ====
+
+// RUN: pass legalize-math,source-to-low,low-dce
+
+amdgpu.target<gfx942> @target
+func.def target(@target) @cdna3_native_turn_math(%input: f32) -> (f32, f32, f32) {
+  %log = scalar.log2f<afn> %input : f32
+  %sin = scalar.sinturnsf<afn> %input : f32
+  %cos = scalar.costurnsf<afn> %input : f32
+  func.return %log, %sin, %cos : f32, f32, f32
+}
+// ----
+amdgpu.target<gfx942> @target
+
+low.func.def target(@target) abi(hal_kernel) @cdna3_native_turn_math(%input: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) {
+  %log = low.op<amdgpu.v_log_f32>(%input) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %sin = low.op<amdgpu.v_sin_f32>(%input) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %cos = low.op<amdgpu.v_cos_f32>(%input) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.return %log, %sin, %cos : reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>
+}

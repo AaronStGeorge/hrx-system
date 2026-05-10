@@ -43,6 +43,12 @@ typedef enum loom_target_math_op_e {
   LOOM_TARGET_MATH_OP_GELUF_LOGISTIC = 8,
   LOOM_TARGET_MATH_OP_ADDF = 9,
   LOOM_TARGET_MATH_OP_MULF = 10,
+  LOOM_TARGET_MATH_OP_LOGF = 11,
+  LOOM_TARGET_MATH_OP_LOG2F = 12,
+  LOOM_TARGET_MATH_OP_SINF = 13,
+  LOOM_TARGET_MATH_OP_COSF = 14,
+  LOOM_TARGET_MATH_OP_SINTURNSF = 15,
+  LOOM_TARGET_MATH_OP_COSTURNSF = 16,
 } loom_target_math_op_t;
 
 typedef enum loom_target_math_lane_domain_e {
@@ -84,6 +90,9 @@ typedef enum loom_target_math_recipe_e {
   LOOM_TARGET_MATH_RECIPE_ERF_RATIONAL_F32 = 7,
   LOOM_TARGET_MATH_RECIPE_GELU_ERF_F32 = 8,
   LOOM_TARGET_MATH_RECIPE_WIDEN_F32_ROUND_BF16 = 9,
+  LOOM_TARGET_MATH_RECIPE_LOG_LOG2_F32 = 10,
+  LOOM_TARGET_MATH_RECIPE_SIN_TURNS_F32 = 11,
+  LOOM_TARGET_MATH_RECIPE_COS_TURNS_F32 = 12,
 } loom_target_math_recipe_t;
 
 typedef struct loom_target_math_query_t {

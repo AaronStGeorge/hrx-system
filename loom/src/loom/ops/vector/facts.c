@@ -50,6 +50,14 @@ typedef double (*loom_vector_float_binary_transfer_fn_t)(double lhs,
 // Scalar element helpers
 //===----------------------------------------------------------------------===//
 
+static double loom_vector_sinturns_f64(double x) {
+  return sin(6.28318530717958647692 * x);
+}
+
+static double loom_vector_costurns_f64(double x) {
+  return cos(6.28318530717958647692 * x);
+}
+
 static bool loom_vector_facts_query_uniform_element(
     const loom_fact_context_t* context, loom_value_facts_t facts,
     loom_value_facts_t* out_element) {
@@ -2578,6 +2586,10 @@ LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_rsqrtf_facts, loom_vector_rsqrt_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_cbrtf_facts, cbrt)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_sinf_facts, sin)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_cosf_facts, cos)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_sinturnsf_facts,
+                              loom_vector_sinturns_f64)
+LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_costurnsf_facts,
+                              loom_vector_costurns_f64)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_tanf_facts, tan)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_asinf_facts, asin)
 LOOM_VECTOR_FLOAT_UNARY_FACTS(loom_vector_acosf_facts, acos)

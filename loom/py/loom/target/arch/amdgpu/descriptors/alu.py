@@ -1620,6 +1620,42 @@ def _v_exp_f32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_log_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_unary_f32_overlay(
+        descriptor_key="amdgpu.v_log_f32",
+        instruction_name="V_LOG_F32",
+        mnemonic="v_log_f32",
+        semantic_tag="float.log2.f32",
+    )
+
+
+def _v_sin_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_unary_f32_overlay(
+        descriptor_key="amdgpu.v_sin_f32",
+        instruction_name="V_SIN_F32",
+        mnemonic="v_sin_f32",
+        semantic_tag="float.sin_turns.f32",
+    )
+
+
+def _v_cos_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_unary_f32_overlay(
+        descriptor_key="amdgpu.v_cos_f32",
+        instruction_name="V_COS_F32",
+        mnemonic="v_cos_f32",
+        semantic_tag="float.cos_turns.f32",
+    )
+
+
+def _v_native_f32_math_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _v_exp_f32_overlay(),
+        _v_log_f32_overlay(),
+        _v_sin_f32_overlay(),
+        _v_cos_f32_overlay(),
+    )
+
+
 def _v_sqrt_f32_overlay() -> AmdgpuDescriptorOverlay:
     return _v_unary_f32_overlay(
         descriptor_key="amdgpu.v_sqrt_f32",
@@ -2302,6 +2338,7 @@ __all__ = (
     "_v_cvt_f32_u32_overlay",
     "_v_cvt_pk_bf16_f32_overlay",
     "_v_cvt_pk_u16_u32_overlay",
+    "_v_cos_f32_overlay",
     "_v_exp_f32_overlay",
     "_v_fma_f32_overlay",
     "_v_fmac_f32_overlay",
@@ -2315,6 +2352,7 @@ __all__ = (
     "_v_lshrrev_b32_src0_inline_overlay",
     "_v_mad_u32_u24_literal_overlay",
     "_v_mad_u32_u24_overlay",
+    "_v_log_f32_overlay",
     "_v_max_f32_literal_overlay",
     "_v_max_f32_overlay",
     "_v_max_f32_src0_inline_overlay",
@@ -2328,6 +2366,7 @@ __all__ = (
     "_v_minmax_i32_overlay",
     "_v_mov_b32_copy_overlay",
     "_v_mov_b32_literal_overlay",
+    "_v_native_f32_math_overlays",
     "_v_mul_f32_literal_overlay",
     "_v_mul_f32_overlay",
     "_v_mul_f32_src0_inline_overlay",
@@ -2342,6 +2381,7 @@ __all__ = (
     "_v_rcp_f32_overlay",
     "_v_readfirstlane_b32_overlay",
     "_v_rsq_f32_overlay",
+    "_v_sin_f32_overlay",
     "_v_sqrt_f32_overlay",
     "_v_sub_f32_literal_overlay",
     "_v_sub_f32_overlay",

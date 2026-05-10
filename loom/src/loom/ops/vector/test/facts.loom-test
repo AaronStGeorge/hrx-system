@@ -504,6 +504,31 @@ func.def @activation_uniform_exact_zero() -> (f32, f32, f32, f32) {
 
 // ====
 
+// Turn-domain trig facts preserve exact lane values and uniform summaries.
+func.def @turn_trig_uniform_exact_quadrants() -> (f32, f32, f32, f32) {
+  %zero = vector.constant 0.0 : vector<4xf32>
+  %quarter = vector.constant 0.25 : vector<4xf32>
+  %sin_zero = vector.sinturnsf %zero : vector<4xf32>
+  %cos_zero = vector.costurnsf %zero : vector<4xf32>
+  %sin_quarter = vector.sinturnsf %quarter : vector<4xf32>
+  %cos_quarter = vector.costurnsf %quarter : vector<4xf32>
+  %r0 = vector.extract %sin_zero[0] : vector<4xf32> -> f32
+  %r1 = vector.extract %cos_zero[1] : vector<4xf32> -> f32
+  %r2 = vector.extract %sin_quarter[2] : vector<4xf32> -> f32
+  %r3 = vector.extract %cos_quarter[3] : vector<4xf32> -> f32
+  func.return %r0, %r1, %r2, %r3 : f32, f32, f32, f32
+}
+// ----
+func.def @turn_trig_uniform_exact_quadrants() -> (f32, f32, f32, f32) {
+  %r0 = scalar.constant 0.0 : f32
+  %r1 = scalar.constant 1.0 : f32
+  %r2 = scalar.constant 1.0 : f32
+  %r3 = scalar.constant 6.123233995736766e-17 : f32
+  func.return %r0, %r1, %r2, %r3 : f32, f32, f32, f32
+}
+
+// ====
+
 // Bitpack and bitunpack facts follow the same little-endian bitstream order as
 // vector-to-scalar lowering, including fields that share one storage lane.
 func.def @bitpack_bitunpack_q4_round_trip() -> (i8, i8, i8) {
