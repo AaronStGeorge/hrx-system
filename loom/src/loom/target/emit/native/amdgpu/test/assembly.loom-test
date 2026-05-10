@@ -17,6 +17,21 @@ low.func.def target(@gfx11_target) @gfx11_constants(%resource: reg<amdgpu.sgpr x
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_fmac waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_fmac(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr>, %lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %next = v_fmac_f32 %acc, %lhs, %rhs
+  buffer_store_dword %next, %resource, %vaddr, %soffset {offset = 0}
+  return
+}
+
+// ----
+  v_fmac_f32 v0, v1, v2
+  buffer_store_dword v0, v3, s[0:3], s4 offen offset:0
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_sgpr_shift_immediate waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_sgpr_shift_immediate(%value: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
