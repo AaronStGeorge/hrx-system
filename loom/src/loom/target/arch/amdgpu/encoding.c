@@ -165,6 +165,8 @@ iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format) {
       return IREE_SV("vop3");
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3P:
       return IREE_SV("vop3p");
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP3PX2:
+      return IREE_SV("vop3px2");
     case LOOM_AMDGPU_ENCODING_FORMAT_SMEM:
       return IREE_SV("smem");
     case LOOM_AMDGPU_ENCODING_FORMAT_MUBUF:
@@ -219,6 +221,8 @@ bool loom_amdgpu_encoding_field_uses_unified_source(uint16_t field_id) {
     case LOOM_AMDGPU_ENCODING_FIELD_SRC0:
     case LOOM_AMDGPU_ENCODING_FIELD_SRC1:
     case LOOM_AMDGPU_ENCODING_FIELD_SRC2:
+    case LOOM_AMDGPU_ENCODING_FIELD_SCALE_SRC0:
+    case LOOM_AMDGPU_ENCODING_FIELD_SCALE_SRC1:
       return true;
     default:
       return false;

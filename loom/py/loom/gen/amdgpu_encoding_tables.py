@@ -14,7 +14,7 @@ import struct
 import subprocess
 import sys
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 
@@ -68,6 +68,98 @@ class _CompiledFormat:
     field_start: int
     field_count: int
     word_count: int
+
+
+def _bit_range(bit_offset: int, bit_count: int) -> AmdgpuIsaBitRange:
+    return AmdgpuIsaBitRange(order=0, bit_count=bit_count, bit_offset=bit_offset)
+
+
+def _field(name: str, *ranges: AmdgpuIsaBitRange) -> AmdgpuIsaEncodingField:
+    return AmdgpuIsaEncodingField(
+        name=name,
+        is_conditional=False,
+        ranges=ranges,
+    )
+
+
+def _rdna4_vop3p_supplemental_fields() -> tuple[AmdgpuIsaEncodingField, ...]:
+    return (
+        _field("INDEX_KEY_16BIT", _bit_range(11, 1)),
+        _field("MATRIX_A_REUSE", _bit_range(13, 1)),
+        _field("MATRIX_B_REUSE", _bit_range(14, 1)),
+    )
+
+
+def _rdna4_vop3px2_supplemental_encoding() -> AmdgpuIsaEncoding:
+    return AmdgpuIsaEncoding(
+        name="ENC_VOP3PX2",
+        order=0,
+        bit_count=128,
+        identifier_mask=(0xFF << 24) | (0x1FF << 50) | (0xFF << 88),
+        identifier_values=((0xCC << 24) | (0x100 << 50) | (0xCC << 88),),
+        fields=(
+            _field("MATRIX_B_SCALE_FMT", _bit_range(8, 2)),
+            _field("MATRIX_A_SCALE", _bit_range(11, 1)),
+            _field("MATRIX_A_REUSE", _bit_range(13, 1)),
+            _field("MATRIX_B_REUSE", _bit_range(14, 1)),
+            _field("X2ENCODING", _bit_range(16, 8)),
+            _field("SCALE_SRC0", _bit_range(32, 9)),
+            _field("SCALE_SRC1", _bit_range(41, 9)),
+            _field("MATRIX_B_SCALE", _bit_range(59, 1)),
+            _field("MATRIX_A_SCALE_FMT", _bit_range(61, 2)),
+            _field("VDST", _bit_range(64, 8)),
+            _field("MATRIX_A_FMT", _bit_range(75, 3)),
+            _field("MATRIX_B_FMT", _bit_range(123, 2), _bit_range(78, 1)),
+            _field("CLAMP", _bit_range(79, 1)),
+            _field("OP", _bit_range(80, 8)),
+            _field("SRC0", _bit_range(96, 9)),
+            _field("SRC1", _bit_range(105, 9)),
+            _field("SRC2", _bit_range(114, 9)),
+        ),
+    )
+
+
+def _supplemental_fields_by_encoding(
+    target: str,
+) -> dict[str, tuple[AmdgpuIsaEncodingField, ...]]:
+    if target == "rdna4":
+        return {
+            "ENC_VOP3P": _rdna4_vop3p_supplemental_fields(),
+        }
+    return {}
+
+
+def _supplemental_encodings(target: str) -> tuple[AmdgpuIsaEncoding, ...]:
+    if target == "rdna4":
+        return (_rdna4_vop3px2_supplemental_encoding(),)
+    return ()
+
+
+def _supplement_encoding_fields(
+    encoding: AmdgpuIsaEncoding,
+    supplemental_fields: tuple[AmdgpuIsaEncodingField, ...],
+) -> AmdgpuIsaEncoding:
+    if not supplemental_fields:
+        return encoding
+    field_names = {field.name for field in encoding.fields}
+    duplicate_names = sorted(field.name for field in supplemental_fields if field.name in field_names)
+    if duplicate_names:
+        duplicate_text = ", ".join(duplicate_names)
+        raise ValueError(f"AMDGPU encoding '{encoding.name}' supplemental fields collide with XML fields: {duplicate_text}")
+    return replace(encoding, fields=(*encoding.fields, *supplemental_fields))
+
+
+def _with_supplemental_encodings(target: str, encodings: tuple[AmdgpuIsaEncoding, ...]) -> tuple[AmdgpuIsaEncoding, ...]:
+    fields_by_encoding = _supplemental_fields_by_encoding(target)
+    supplemental_encodings = _supplemental_encodings(target)
+    supplemental_names = {encoding.name for encoding in supplemental_encodings}
+    output = []
+    for encoding in encodings:
+        if encoding.name in supplemental_names:
+            raise ValueError(f"AMDGPU encoding target '{target}' XML now defines supplemental encoding '{encoding.name}'")
+        output.append(_supplement_encoding_fields(encoding, fields_by_encoding.get(encoding.name, ())))
+    output.extend(supplemental_encodings)
+    return tuple(output)
 
 
 @dataclass(frozen=True, slots=True)
@@ -446,6 +538,7 @@ def _emit_word_array(words: tuple[int, ...]) -> str:
 
 def _emit_source(
     *,
+    target: str,
     descriptor_set_key: str,
     public_header: str,
     table_prefix: str,
@@ -463,6 +556,7 @@ def _emit_source(
     source_path: Path,
     format_output: bool,
 ) -> str:
+    encodings = _with_supplemental_encodings(target, encodings)
     compiled_formats, compiled_fields, compiled_ranges = _compile_formats(
         encodings,
         _partitioned_fields_by_encoding(encodings, instructions, operand_types),
@@ -702,6 +796,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     args.source.write_text(
         _emit_source(
+            target=args.target,
             descriptor_set_key=args.descriptor_set_key,
             public_header=args.public_header,
             table_prefix=table_prefix,
