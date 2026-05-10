@@ -429,6 +429,8 @@
 //                           tables may opt out for named clauses.
 //   BindingList(field)    Parenthesized named bindings:
 //                           (%elem = %tile : type, ...).
+//                           Also accepts grouped types:
+//                           (%a = %x, %b = %y : type0, type1).
 //                           Always glues to preceding token.
 //   BlockArgs(region)     Region entry block args:
 //                           (%arg: type, ...).
@@ -669,7 +671,9 @@
 //     scf.yield %out_new : tensor<[%M]xf32>
 //   }
 //
-// The iter_args clause is a BindingList: (%name = %init : type, ...).
+// The iter_args clause is a BindingList: (%name = %init : type, ...). The
+// parser also accepts grouped type-list spelling:
+// (%a = %x, %b = %y : type0, type1).
 // The body's entry block receives the IV followed by the iter_arg
 // values. Tied result names refer to the parent-scope init operands
 // (for example %output above), not the region-local iter_arg block args.

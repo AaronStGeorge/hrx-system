@@ -470,7 +470,8 @@ class IndexList:
 class BindingList:
     """Named value bindings with types.
 
-    Prints/parses: (%a = %x : type, %b = %y : type)
+    Prints/parses: (%a = %x : type, %b = %y : type). The text parser also
+    accepts the grouped type-list spelling: (%a = %x, %b = %y : type0, type1).
 
     Each binding maps a new name (block argument in the region body)
     to an existing value (operand) with its type. The `kind` parameter

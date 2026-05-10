@@ -369,6 +369,142 @@ iree_status_t loom_parse_format_result_type_list(
   return status;
 }
 
+typedef struct loom_parsed_binding_t {
+  // Region entry block argument name introduced by this binding.
+  loom_token_t arg_token;
+} loom_parsed_binding_t;
+
+#define LOOM_PARSE_FORMAT_INLINE_BINDINGS 8
+
+typedef struct loom_parsed_binding_list_t {
+  // Parsed bindings in source order.
+  loom_parsed_binding_t* bindings;
+  // Number of parsed bindings.
+  iree_host_size_t count;
+  // Allocated binding capacity.
+  iree_host_size_t capacity;
+  // Inline storage for common small binding lists.
+  loom_parsed_binding_t inline_bindings[LOOM_PARSE_FORMAT_INLINE_BINDINGS];
+} loom_parsed_binding_list_t;
+
+static void loom_parsed_binding_list_initialize(
+    loom_parsed_binding_list_t* list) {
+  list->bindings = list->inline_bindings;
+  list->count = 0;
+  list->capacity = IREE_ARRAYSIZE(list->inline_bindings);
+}
+
+static iree_status_t loom_parsed_binding_list_append(
+    loom_parser_t* parser, loom_parsed_binding_list_t* list,
+    loom_parsed_binding_t binding) {
+  if (list->count >= list->capacity) {
+    iree_host_size_t capacity = list->capacity;
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        &parser->parser_arena, list->count, /*minimum_capacity=*/0,
+        sizeof(*list->bindings), &capacity, (void**)&list->bindings));
+    list->capacity = capacity;
+  }
+  list->bindings[list->count++] = binding;
+  return iree_ok_status();
+}
+
+static loom_type_t loom_parse_format_binding_arg_type(
+    const loom_format_element_t* element, loom_type_t type) {
+  if (element->data != LOOM_BINDING_ELEMENT) {
+    return type;
+  }
+  if (!loom_type_is_shaped(type)) {
+    return type;
+  }
+  return loom_type_scalar(loom_type_element_type(type));
+}
+
+static iree_status_t loom_parse_format_define_binding_arg(
+    loom_parser_t* parser, const loom_format_element_t* element,
+    loom_parsed_binding_t binding, loom_type_t type) {
+  loom_type_t arg_type = loom_parse_format_binding_arg_type(element, type);
+  loom_value_id_t arg_value_id = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_module_define_value(parser->module, arg_type, &arg_value_id));
+  return loom_parser_add_pending_block_arg(parser, arg_value_id,
+                                           binding.arg_token);
+}
+
+static iree_status_t loom_parse_format_binding_entry(
+    loom_parser_t* parser, loom_parsed_op_t* parsed,
+    loom_parsed_binding_t* out_binding) {
+  loom_token_t arg_token = loom_token_none();
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_SSA_VALUE, &arg_token);
+
+  if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_EQUALS)) {
+    loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
+    return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'='"));
+  }
+
+  loom_token_t operand_token = loom_token_none();
+  LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_SSA_VALUE, &operand_token);
+  loom_value_id_t operand_id = LOOM_VALUE_ID_INVALID;
+  LOOM_PARSE_RESOLVE_VALUE(parser, operand_token, &operand_id);
+
+  uint16_t operand_index = parsed->operand_count;
+  IREE_RETURN_IF_ERROR(
+      loom_parsed_op_add_operand(parsed, &parser->parser_arena, operand_id));
+  IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
+      parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND, operand_index,
+      operand_token, operand_token.line, operand_token.end_column));
+
+  *out_binding = (loom_parsed_binding_t){
+      .arg_token = arg_token,
+  };
+  return iree_ok_status();
+}
+
+static iree_status_t loom_parse_format_grouped_binding_types(
+    loom_parser_t* parser, const loom_format_element_t* element,
+    const loom_parsed_binding_list_t* bindings) {
+  for (iree_host_size_t i = 0; i < bindings->count; ++i) {
+    if (i > 0) {
+      LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_COMMA, NULL);
+    }
+    loom_type_t type = {0};
+    IREE_RETURN_IF_ERROR(loom_parse_type(parser, LOOM_TYPE_PARSE_BODY, &type));
+    IREE_RETURN_IF_ERROR(loom_parse_format_define_binding_arg(
+        parser, element, bindings->bindings[i], type));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_parse_format_grouped_binding_list_tail(
+    loom_parser_t* parser, const loom_format_element_t* element,
+    loom_parsed_op_t* parsed, loom_parsed_binding_t first_binding) {
+  loom_parsed_binding_list_t bindings;
+  loom_parsed_binding_list_initialize(&bindings);
+  IREE_RETURN_IF_ERROR(
+      loom_parsed_binding_list_append(parser, &bindings, first_binding));
+
+  while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
+    loom_parsed_binding_t binding;
+    IREE_RETURN_IF_ERROR(
+        loom_parse_format_binding_entry(parser, parsed, &binding));
+    IREE_RETURN_IF_ERROR(
+        loom_parsed_binding_list_append(parser, &bindings, binding));
+
+    if (loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COLON)) {
+      return loom_parse_format_grouped_binding_types(parser, element,
+                                                     &bindings);
+    }
+    if (loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
+      continue;
+    }
+    loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
+    return loom_parser_emit_unexpected_token(parser, peek,
+                                             IREE_SV("':' or ','"));
+  }
+
+  loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
+  return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("':'"));
+}
+
 iree_status_t loom_parse_format_binding_list(
     loom_parser_t* parser, const loom_format_element_t* element,
     loom_parsed_op_t* parsed) {
@@ -385,19 +521,15 @@ iree_status_t loom_parse_format_binding_list(
       }
     }
 
-    loom_token_t arg_token = loom_token_none();
-    LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_SSA_VALUE, &arg_token);
+    loom_parsed_binding_t binding;
+    IREE_RETURN_IF_ERROR(
+        loom_parse_format_binding_entry(parser, parsed, &binding));
 
-    if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_EQUALS)) {
-      loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
-      return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("'='"));
+    if (loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
+      IREE_RETURN_IF_ERROR(loom_parse_format_grouped_binding_list_tail(
+          parser, element, parsed, binding));
+      break;
     }
-
-    loom_token_t op_token = loom_token_none();
-    LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_SSA_VALUE, &op_token);
-    loom_value_id_t operand_id = LOOM_VALUE_ID_INVALID;
-    LOOM_PARSE_RESOLVE_VALUE(parser, op_token, &operand_id);
-
     if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COLON)) {
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
       return loom_parser_emit_unexpected_token(parser, peek, IREE_SV("':'"));
@@ -405,30 +537,8 @@ iree_status_t loom_parse_format_binding_list(
 
     loom_type_t type = {0};
     IREE_RETURN_IF_ERROR(loom_parse_type(parser, LOOM_TYPE_PARSE_BODY, &type));
-
-    uint16_t operand_index = parsed->operand_count;
     IREE_RETURN_IF_ERROR(
-        loom_parsed_op_add_operand(parsed, &parser->parser_arena, operand_id));
-    IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
-        parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND,
-        operand_index, op_token, op_token.line, op_token.end_column));
-
-    loom_type_t arg_type = {0};
-    if (element->data == LOOM_BINDING_ELEMENT) {
-      if (loom_type_is_shaped(type)) {
-        arg_type = loom_type_scalar(loom_type_element_type(type));
-      } else {
-        arg_type = type;
-      }
-    } else {
-      arg_type = type;
-    }
-
-    loom_value_id_t arg_value_id = 0;
-    IREE_RETURN_IF_ERROR(
-        loom_module_define_value(parser->module, arg_type, &arg_value_id));
-    IREE_RETURN_IF_ERROR(
-        loom_parser_add_pending_block_arg(parser, arg_value_id, arg_token));
+        loom_parse_format_define_binding_arg(parser, element, binding, type));
   }
 
   if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_RPAREN)) {

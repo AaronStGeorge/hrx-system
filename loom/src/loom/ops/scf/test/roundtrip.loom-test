@@ -37,6 +37,25 @@ func.def @multi_iter(%lo: index, %hi: index, %step: index, %a: f32, %b: i32) -> 
 
 // ====
 
+// scf.for also accepts grouped iter_arg type lists, then prints the canonical
+// per-binding type form.
+func.def @multi_vector_iter_grouped_types(%lo: index, %hi: index, %step: index, %gate_zero: vector<1xf32>, %up_zero: vector<1xf32>) -> (vector<1xf32>, vector<1xf32>) {
+  %gate, %up = scf.for %hidden = [%lo to %hi step %step](%gate_acc = %gate_zero, %up_acc = %up_zero : vector<1xf32>, vector<1xf32>) -> (vector<1xf32>, vector<1xf32>) {
+    scf.yield %gate_acc, %up_acc : vector<1xf32>, vector<1xf32>
+  }
+  func.return %gate, %up : vector<1xf32>, vector<1xf32>
+}
+
+// ----
+func.def @multi_vector_iter_grouped_types(%lo: index, %hi: index, %step: index, %gate_zero: vector<1xf32>, %up_zero: vector<1xf32>) -> (vector<1xf32>, vector<1xf32>) {
+  %gate, %up = scf.for %hidden = [%lo to %hi step %step](%gate_acc = %gate_zero : vector<1xf32>, %up_acc = %up_zero : vector<1xf32>) -> (vector<1xf32>, vector<1xf32>) {
+    scf.yield %gate_acc, %up_acc : vector<1xf32>, vector<1xf32>
+  }
+  func.return %gate, %up : vector<1xf32>, vector<1xf32>
+}
+
+// ====
+
 // scf.for body containing a non-trivial inner op.
 func.def @loop_body_op(%lo: index, %hi: index, %step: index, %init: f32) -> (f32) {
   %result = scf.for %iv = [%lo to %hi step %step](%acc = %init : f32) -> (f32) {
