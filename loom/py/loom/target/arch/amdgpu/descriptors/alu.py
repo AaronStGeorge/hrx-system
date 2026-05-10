@@ -20,6 +20,29 @@ _DPP_CTRL_IMMEDIATE = Immediate(
     unsigned_max=0x1FF,
 )
 
+_SDWA_DST_UNUSED_IMMEDIATE = Immediate(
+    "dst_unused",
+    ImmediateKind.UNSIGNED,
+    bit_width=2,
+    unsigned_max=2,
+)
+
+_SDWA_SOURCE_SEXT_IMMEDIATE = Immediate(
+    "src0_sext",
+    ImmediateKind.UNSIGNED,
+    bit_width=1,
+    unsigned_max=1,
+)
+
+
+def _sdwa_selector_immediate(field_name: str) -> Immediate:
+    return Immediate(
+        field_name,
+        ImmediateKind.UNSIGNED,
+        bit_width=3,
+        unsigned_max=6,
+    )
+
 
 def _s_add_u32_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
@@ -2323,6 +2346,50 @@ def _v_mov_b32_dpp16_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_mov_b32_sdwa_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_mov_b32_sdwa",
+        instruction_name="V_MOV_B32",
+        mnemonic="v_mov_b32",
+        encoding_name="VOP1_VOP_SDWA",
+        encoding_condition="has_sdwa",
+        semantic_tag="subword.extract.b32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("VSRC0", _vgpr_operand("src")),
+        ),
+        asm_forms=_asm(
+            mnemonic="v_mov_b32_sdwa",
+            results=("dst",),
+            operands=("src",),
+            immediates=("dst_sel", "dst_unused", "src0_sel", "src0_sext"),
+            named_immediates=True,
+        ),
+        immediate_fields=("DST_SEL", "DST_UNUSED", "SRC0_SEL", "SRC0_SEXT"),
+        immediates=(
+            _sdwa_selector_immediate("dst_sel"),
+            _SDWA_DST_UNUSED_IMMEDIATE,
+            _sdwa_selector_immediate("src0_sel"),
+            _SDWA_SOURCE_SEXT_IMMEDIATE,
+        ),
+        fixed_encoding_fields=(
+            ("SRC0", 249),
+            ("CLAMP", 0),
+            ("OMOD", 0),
+            ("S0", 0),
+            ("S1", 0),
+            ("SRC0_ABS", 0),
+            ("SRC0_NEG", 0),
+            ("SRC1_ABS", 0),
+            ("SRC1_NEG", 0),
+            ("SRC1_SEL", 0),
+            ("SRC1_SEXT", 0),
+        ),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 __all__ = (
     "_integer_bitwise_shift_overlays",
     "_s_add_u32_overlay",
@@ -2429,6 +2496,7 @@ __all__ = (
     "_v_mov_b32_dpp_legacy_overlay",
     "_v_mov_b32_dpp_overlay",
     "_v_mov_b32_literal_overlay",
+    "_v_mov_b32_sdwa_overlay",
     "_v_native_f32_math_overlays",
     "_v_mul_f32_literal_overlay",
     "_v_mul_f32_overlay",

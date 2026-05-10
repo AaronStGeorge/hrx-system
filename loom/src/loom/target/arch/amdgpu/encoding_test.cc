@@ -66,6 +66,84 @@ iree_status_t PackVMovB32Dpp(const loom_amdgpu_encoding_table_t* table,
                                    IREE_ARRAYSIZE(field_values), out_packet);
 }
 
+iree_status_t PackVMovB32Sdwa(const loom_amdgpu_encoding_table_t* table,
+                              bool sign_extend,
+                              loom_amdgpu_encoding_packet_t* out_packet) {
+  const loom_amdgpu_encoding_field_value_t field_values[] = {
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_VDST,
+          .value = 1,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRC0,
+          .value = 249,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_VSRC0,
+          .value = 2,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_DST_SEL,
+          .value = 6,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_DST_UNUSED,
+          .value = 0,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRC0_SEL,
+          .value = 1,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRC0_SEXT,
+          .value = sign_extend ? 1u : 0u,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_CLAMP,
+          .value = 0,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_OMOD,
+          .value = 0,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_S0,
+          .value = 0,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_S1,
+          .value = 0,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRC0_ABS,
+          .value = 0,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRC0_NEG,
+          .value = 0,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRC1_ABS,
+          .value = 0,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRC1_NEG,
+          .value = 0,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRC1_SEL,
+          .value = 0,
+      },
+      {
+          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRC1_SEXT,
+          .value = 0,
+      },
+  };
+  return loom_amdgpu_encoding_pack(table, LOOM_AMDGPU_ENCODING_FORMAT_VOP1_SDWA,
+                                   /*opcode=*/1, field_values,
+                                   IREE_ARRAYSIZE(field_values), out_packet);
+}
+
 TEST(AmdgpuEncodingTest, VMovB32UsesInlineSourceForSmallU32) {
   loom_amdgpu_encoding_packet_t packet = {};
   IREE_ASSERT_OK(loom_amdgpu_encoding_pack_v_mov_b32_u32(
@@ -117,6 +195,9 @@ TEST(AmdgpuEncodingTest, NamesDppFormats) {
   EXPECT_TRUE(iree_string_view_equal(
       loom_amdgpu_encoding_format_name(LOOM_AMDGPU_ENCODING_FORMAT_VOP1_DPP16),
       IREE_SV("vop1_dpp16")));
+  EXPECT_TRUE(iree_string_view_equal(
+      loom_amdgpu_encoding_format_name(LOOM_AMDGPU_ENCODING_FORMAT_VOP1_SDWA),
+      IREE_SV("vop1_sdwa")));
 }
 
 TEST(AmdgpuEncodingTest, PacksRdna3VMovB32Dpp16LaneControl) {
@@ -137,6 +218,26 @@ TEST(AmdgpuEncodingTest, PacksCdna4VMovB32DppLaneControl) {
   EXPECT_EQ(packet.bit_count, 64u);
   EXPECT_EQ(packet.words[0], UINT32_C(0x7e0202fa));
   EXPECT_EQ(packet.words[1], UINT32_C(0xff094002));
+}
+
+TEST(AmdgpuEncodingTest, PacksCdna4VMovB32SdwaByteExtract) {
+  loom_amdgpu_encoding_packet_t packet = {};
+  IREE_ASSERT_OK(PackVMovB32Sdwa(Cdna4EncodingTable(),
+                                 /*sign_extend=*/false, &packet));
+  EXPECT_EQ(packet.word_count, 2u);
+  EXPECT_EQ(packet.bit_count, 64u);
+  EXPECT_EQ(packet.words[0], UINT32_C(0x7e0202f9));
+  EXPECT_EQ(packet.words[1], UINT32_C(0x00010602));
+}
+
+TEST(AmdgpuEncodingTest, PacksCdna4VMovB32SdwaSignedByteExtract) {
+  loom_amdgpu_encoding_packet_t packet = {};
+  IREE_ASSERT_OK(PackVMovB32Sdwa(Cdna4EncodingTable(),
+                                 /*sign_extend=*/true, &packet));
+  EXPECT_EQ(packet.word_count, 2u);
+  EXPECT_EQ(packet.bit_count, 64u);
+  EXPECT_EQ(packet.words[0], UINT32_C(0x7e0202f9));
+  EXPECT_EQ(packet.words[1], UINT32_C(0x00090602));
 }
 
 TEST(AmdgpuEncodingTest, PacksVopdxyDualFmacPair) {

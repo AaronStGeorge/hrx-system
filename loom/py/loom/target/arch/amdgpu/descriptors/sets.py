@@ -54,6 +54,7 @@ def _cdna_core_overlays(
         _v_mov_b32_literal_overlay(),
         _v_mov_b32_copy_overlay(),
         _v_mov_b32_dpp_legacy_overlay(),
+        _v_mov_b32_sdwa_overlay(),
         _v_mul_lo_u32_overlay(),
         _v_mul_hi_u32_overlay(),
         _v_mul_u32_u24_overlay(),

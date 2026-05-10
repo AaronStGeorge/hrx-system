@@ -317,15 +317,24 @@ static iree_status_t loom_amdgpu_emit_bitunpacku_lane(
     uint32_t source_bit_offset, loom_type_t lane_type,
     loom_value_id_t* out_lane) {
   *out_lane = LOOM_VALUE_ID_INVALID;
+  if (source_bit_offset == 0 && plan->width == 32) {
+    *out_lane = low_source;
+    return iree_ok_status();
+  }
+
+  bool selected_sdwa = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_try_emit_vgpr_b32_sdwa_extract(
+      context, source_op, low_source, source_bit_offset, plan->width,
+      LOOM_AMDGPU_VGPR_SDWA_EXTRACT_FLAG_NONE, lane_type, out_lane,
+      &selected_sdwa));
+  if (selected_sdwa) {
+    return iree_ok_status();
+  }
 
   loom_value_id_t shifted = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT,
       source_bit_offset, low_source, lane_type, &shifted));
-  if (plan->width == 32) {
-    *out_lane = shifted;
-    return iree_ok_status();
-  }
 
   return loom_amdgpu_emit_vgpr_binary_immediate(
       context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT, shifted,
@@ -340,6 +349,15 @@ static iree_status_t loom_amdgpu_emit_bitunpacks_lane(
   *out_lane = LOOM_VALUE_ID_INVALID;
   if (source_bit_offset == 0 && plan->width == 32) {
     *out_lane = low_source;
+    return iree_ok_status();
+  }
+
+  bool selected_sdwa = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_try_emit_vgpr_b32_sdwa_extract(
+      context, source_op, low_source, source_bit_offset, plan->width,
+      LOOM_AMDGPU_VGPR_SDWA_EXTRACT_FLAG_SIGN_EXTEND, lane_type, out_lane,
+      &selected_sdwa));
+  if (selected_sdwa) {
     return iree_ok_status();
   }
 

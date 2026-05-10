@@ -49,3 +49,12 @@ low.func.def target(@gfx11_target) @dpp_control_out_of_range(%value: reg<amdgpu.
   %shifted = v_mov_b32_dpp16 %value {dpp_ctrl = 512}
   return
 }
+
+// ====
+
+amdgpu.target<gfx950> @gfx950_target
+low.func.def target(@gfx950_target) @sdwa_selector_out_of_range(%value: reg<amdgpu.vgpr>) asm<amdgpu.cdna4.core> {
+  // ERROR@+1: STRUCTURE/014 {attr_name="dst_sel", actual_value="7", expected_constraint="0..6"}
+  %selected = v_mov_b32_sdwa %value {dst_sel = 7, dst_unused = 0, src0_sel = 0, src0_sext = 0}
+  return
+}
