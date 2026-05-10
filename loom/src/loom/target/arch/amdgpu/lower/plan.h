@@ -386,6 +386,8 @@ typedef struct loom_amdgpu_workgroup_reduce_plan_t {
   loom_low_lower_resolved_descriptor_t combine_descriptor;
   // Descriptor row selected to guard inactive source lanes.
   loom_low_lower_resolved_descriptor_t guard_descriptor;
+  // Descriptor row selected to identify the partial tail wave.
+  loom_low_lower_resolved_descriptor_t lane_ge_descriptor;
   // Descriptor row selected to replace inactive source lanes with identity.
   loom_low_lower_resolved_descriptor_t select_descriptor;
   // Descriptor row selected for compiler-owned LDS reloads.
