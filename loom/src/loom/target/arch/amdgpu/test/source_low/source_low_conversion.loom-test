@@ -165,11 +165,10 @@ func.def target(@target) @vector_extf_bf16x3(%input: vector<3xbf16>) -> (vector<
 low.func.def target(@target) abi(hal_kernel) @vector_extf_bf16x3(%input: reg<amdgpu.vgpr x2>) -> (reg<amdgpu.vgpr x3>) asm<amdgpu.rdna3.core> {
   %5 = slice %input[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %6 = v_lshlrev_b32_src0_inline %5, 16
-  %8 = v_lshrrev_b32_src0_inline %5, 16
-  %9 = v_lshlrev_b32_src0_inline %8, 16
-  %10 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
-  %11 = v_lshlrev_b32_src0_inline %10, 16
-  %converted = concat(%6, %9, %11) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x3>
+  %8 = v_and_b32_lit %5, 4294901760
+  %9 = slice %input[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %10 = v_lshlrev_b32_src0_inline %9, 16
+  %converted = concat(%6, %8, %10) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x3>
   return %converted
 }
 

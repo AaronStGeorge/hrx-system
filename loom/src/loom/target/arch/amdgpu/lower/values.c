@@ -1779,13 +1779,14 @@ static iree_status_t loom_amdgpu_extract_16bit_float_lane(
   IREE_RETURN_IF_ERROR(loom_amdgpu_extract_register_unit(
       context, source_op, low_source, source_register_count, register_index,
       source_lane_type, &source_register));
-  loom_value_id_t shifted_low = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHRREV_B32_LIT,
-      register_bit_offset, source_register, result_lane_type, &shifted_low));
-  return loom_amdgpu_emit_vgpr_shift(
-      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT, 16,
-      shifted_low, result_lane_type, out_lane);
+  if (register_bit_offset == 0) {
+    return loom_amdgpu_emit_vgpr_shift(
+        context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT, 16,
+        source_register, result_lane_type, out_lane);
+  }
+  return loom_amdgpu_emit_vgpr_binary_immediate(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
+      source_register, UINT32_C(0xFFFF0000), result_lane_type, out_lane);
 }
 
 static iree_status_t loom_amdgpu_emit_f32_to_bf16_lane(
