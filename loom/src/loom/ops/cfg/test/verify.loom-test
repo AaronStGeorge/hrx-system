@@ -32,7 +32,7 @@ func.def @cfg_successor_arg_type(%arg: f32) {
 // cfg.cond_br currently carries no per-edge payloads.
 func.def @cfg_cond_successor_payload(%condition: i1) {
   // ERROR@+1: STRUCTURE/025 {op_name="cfg.cond_br", successor_index="1", actual_count="0", expected_count="1"}
-  cfg.cond_br %condition, ^then, ^else : i1
+  cfg.cond_br %condition, ^then, ^else
 ^then:
   func.return
 ^else(%value: i32):

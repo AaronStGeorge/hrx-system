@@ -1804,7 +1804,7 @@ kernel.def target(@target) @subgroup_vote_any_wave32(%input: buffer) {
   %threshold = scalar.constant 0 : i32
   %predicate = scalar.cmpi sgt, %value, %threshold : i32
   %any = kernel.subgroup.vote.any %predicate : i1
-  cfg.cond_br %any, ^then, ^else : i1
+  cfg.cond_br %any, ^then, ^else
 ^then:
   kernel.return
 ^else:
@@ -1846,7 +1846,7 @@ kernel.def target(@target) @subgroup_vote_all_wave32(%input: buffer) {
   %threshold = scalar.constant 0 : i32
   %predicate = scalar.cmpi sgt, %value, %threshold : i32
   %all = kernel.subgroup.vote.all %predicate : i1
-  cfg.cond_br %all, ^then, ^else : i1
+  cfg.cond_br %all, ^then, ^else
 ^then:
   kernel.return
 ^else:
@@ -1900,7 +1900,7 @@ kernel.def target(@target) @subgroup_active_mask_trunci_i32_wave64() {
   %mask = scalar.trunci %mask64 : i64 to i32
   %zero = scalar.constant 0 : i32
   %condition = scalar.cmpi ne, %mask, %zero : i32
-  cfg.cond_br %condition, ^then, ^join : i1
+  cfg.cond_br %condition, ^then, ^join
 ^then:
   cfg.br ^join
 ^join:

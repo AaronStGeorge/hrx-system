@@ -4,7 +4,7 @@
 // one incoming edge is unknown, a known incoming edge cannot keep its precision.
 func.def @join_meets_unknown_incoming_edge(%condition: i1, %unknown: index) -> (i64, i64) {
   %known = index.constant 4 : index
-  cfg.cond_br %condition, ^known_edge, ^unknown_edge : i1
+  cfg.cond_br %condition, ^known_edge, ^unknown_edge
 ^known_edge:
   cfg.br ^join(%known: index)
 ^unknown_edge:
@@ -18,7 +18,7 @@ func.def @join_meets_unknown_incoming_edge(%condition: i1, %unknown: index) -> (
 // ----
 func.def @join_meets_unknown_incoming_edge(%condition: i1, %unknown: index) -> (i64, i64) {
   %known = index.constant 4 : index
-  cfg.cond_br %condition, ^known_edge, ^unknown_edge : i1
+  cfg.cond_br %condition, ^known_edge, ^unknown_edge
 ^known_edge:
   cfg.br ^join(%known: index)
 ^unknown_edge:

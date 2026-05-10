@@ -105,6 +105,34 @@ static iree_status_t loom_amdgpu_condition_is_reg_class(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_emit_sgpr_bool_cond_branch(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t low_condition, loom_block_t* low_true_dest,
+    loom_block_t* low_false_dest) {
+  loom_type_t sgpr_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_sgpr_type(context, &sgpr_type));
+  loom_type_t scc_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_scc_type(context, &scc_type));
+
+  loom_value_id_t low_zero = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_const_u32(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32, 0, sgpr_type,
+      &low_zero));
+
+  const loom_value_id_t compare_operands[] = {
+      low_condition,
+      low_zero,
+  };
+  loom_op_t* compare_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_op(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_S_CMP_LG_I32,
+      compare_operands, IREE_ARRAYSIZE(compare_operands),
+      loom_named_attr_slice_empty(), &scc_type, 1, &compare_op));
+  return loom_amdgpu_emit_plain_cond_branch(
+      context, source_op, loom_op_const_results(compare_op)[0], low_true_dest,
+      low_false_dest);
+}
+
 static uint16_t loom_amdgpu_source_region_block_index(
     loom_region_t* source_body, const loom_block_t* block) {
   uint16_t block_index = 0;
@@ -1436,6 +1464,15 @@ iree_status_t loom_amdgpu_emit_cond_branch(void* user_data,
   if (is_scc) {
     return loom_amdgpu_emit_plain_cond_branch(context, source_op, low_condition,
                                               low_true_dest, low_false_dest);
+  }
+
+  bool is_sgpr_bool = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_condition_is_reg_class(
+      context, condition_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, 1,
+      &is_sgpr_bool));
+  if (is_sgpr_bool) {
+    return loom_amdgpu_emit_sgpr_bool_cond_branch(
+        context, source_op, low_condition, low_true_dest, low_false_dest);
   }
 
   bool is_sgpr_mask = false;

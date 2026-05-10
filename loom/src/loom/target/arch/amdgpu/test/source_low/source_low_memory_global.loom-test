@@ -294,7 +294,7 @@ kernel.def target(@target) @i32_readonly_uniform_smem_scalar_branch(%input: buff
   %loaded = view.load %input_view[%workgroup] : view<16xi32, #dense> -> i32
   %zero = scalar.constant 0 : i32
   %negative = scalar.cmpi slt, %loaded, %zero : i32
-  cfg.cond_br %negative, ^then, ^join : i1
+  cfg.cond_br %negative, ^then, ^join
 ^then:
   view.store %zero, %output_view[%workgroup] : i32, view<16xi32, #dense>
   cfg.br ^join

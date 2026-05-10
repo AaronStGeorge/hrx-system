@@ -5,7 +5,7 @@ amdgpu.target<gfx1100> @target
 func.def target(@target) @cfg_branch_condition_sink(%lhs: i32, %rhs: i32, %a: i32, %b: i32) -> (i32) {
   %cond = scalar.cmpi slt, %lhs, %rhs : i32
   %sum = scalar.addi %a, %b : i32
-  cfg.cond_br %cond, ^then, ^else : i1
+  cfg.cond_br %cond, ^then, ^else
 ^then:
   cfg.br ^join(%sum: i32)
 ^else:
@@ -37,9 +37,9 @@ func.def target(@target) @cfg_branch_condition_sink_cross_block(%lhs: i32, %rhs:
   %outer = scalar.cmpi slt, %lhs, %rhs : i32
   %inner = scalar.cmpi slt, %a, %b : i32
   %sum = scalar.addi %a, %b : i32
-  cfg.cond_br %outer, ^then, ^else : i1
+  cfg.cond_br %outer, ^then, ^else
 ^then:
-  cfg.cond_br %inner, ^inside, ^outside : i1
+  cfg.cond_br %inner, ^inside, ^outside
 ^inside:
   cfg.br ^join(%sum: i32)
 ^outside:
@@ -74,9 +74,56 @@ low.func.def target(@target) abi(hal_kernel) @cfg_branch_condition_sink_cross_bl
 
 amdgpu.target<gfx1100> @target
 
+func.def target(@target) @uniform_i1_reused_after_join(%count: i32, %lhs: i32, %rhs: i32) -> (i32) {
+  %zero = scalar.constant 0 : i32
+  %has_count = scalar.cmpi ne, %count, %zero : i32
+  cfg.cond_br %has_count, ^has_values, ^empty
+^has_values:
+  cfg.br ^join(%lhs: i32, %rhs: i32)
+^empty:
+  cfg.br ^join(%zero: i32, %zero: i32)
+^join(%selected_lhs: i32, %selected_rhs: i32):
+  %sum = scalar.addi %selected_lhs, %selected_rhs : i32
+  cfg.cond_br %has_count, ^sum, ^fallback
+^sum:
+  cfg.br ^done(%sum: i32)
+^fallback:
+  cfg.br ^done(%zero: i32)
+^done(%result: i32):
+  func.return %result : i32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @uniform_i1_reused_after_join(%count: reg<amdgpu.sgpr>, %lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>) -> (reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %zero = s_mov_b32 0
+  %18 = s_cmp_lg_i32 %count, %zero
+  %20 = s_mov_b32 1
+  %has_count = s_cselect_b32 %20, %zero, %18
+  %23 = s_cmp_lg_i32 %has_count, %zero
+  low.cond_br %23, ^has_values, ^empty : reg<amdgpu.scc>
+^has_values:
+  low.br ^join(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>)
+^empty:
+  low.br ^join(%zero: reg<amdgpu.sgpr>, %zero: reg<amdgpu.sgpr>)
+^join(%selected_lhs: reg<amdgpu.sgpr>, %selected_rhs: reg<amdgpu.sgpr>):
+  %sum = s_add_u32 %selected_lhs, %selected_rhs
+  %26 = s_cmp_lg_i32 %has_count, %zero
+  low.cond_br %26, ^sum, ^fallback : reg<amdgpu.scc>
+^sum:
+  low.br ^done(%sum: reg<amdgpu.sgpr>)
+^fallback:
+  low.br ^done(%zero: reg<amdgpu.sgpr>)
+^done(%result: reg<amdgpu.sgpr>):
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
 func.def target(@target) @cfg_if_scalar_compare(%lhs: i32, %rhs: i32, %a: i32, %b: i32) -> (i32) {
   %cond = scalar.cmpi slt, %lhs, %rhs : i32
-  cfg.cond_br %cond, ^then, ^else : i1
+  cfg.cond_br %cond, ^then, ^else
 ^then:
   %then = scalar.addi %a, %b : i32
   cfg.br ^join(%then: i32)
@@ -113,7 +160,7 @@ kernel.def target(@target) @cfg_exact_divergent_condition(%output: buffer) {
   %output_view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
   %lane = kernel.workitem.id<x> : index
   %cond = index.cmp eq, %lane, %lane : index
-  cfg.cond_br %cond, ^then, ^else : i1
+  cfg.cond_br %cond, ^then, ^else
 ^then:
   %value = vector.constant 1 : vector<1xi32>
   vector.store %value, %output_view[0] : vector<1xi32>, view<1xi32, #dense>
@@ -130,7 +177,7 @@ kernel.def target(@target) @cfg_exact_false_divergent_condition(%output: buffer)
   %output_view = buffer.view %output[%zero] : buffer -> view<1xi32, #dense>
   %lane = kernel.workitem.id<x> : index
   %cond = index.cmp ne, %lane, %lane : index
-  cfg.cond_br %cond, ^then, ^else : i1
+  cfg.cond_br %cond, ^then, ^else
 ^then:
   kernel.return
 ^else:
@@ -165,7 +212,7 @@ func.def target(@target) @divergent_if_else(%values: vector<2xi32>, %limit: i32,
   %cond = scalar.cmpi slt, %lane, %limit : i32
   %zero = index.constant 0 : offset
   %output_view = buffer.view %output[%zero] : buffer -> view<2xi32, #dense>
-  cfg.cond_br %cond, ^then, ^else : i1
+  cfg.cond_br %cond, ^then, ^else
 ^then:
   %then = vector.from_elements %lane : vector<1xi32>
   vector.store %then, %output_view[0] : vector<1xi32>, view<2xi32, #dense>
@@ -221,9 +268,9 @@ func.def target(@target) @divergent_nested_if_else_stores(%values: vector<2xi32>
   %before_upper = scalar.cmpi slt, %lane, %upper : i32
   %zero = index.constant 0 : offset
   %output_view = buffer.view %output[%zero] : buffer -> view<3xi32, #dense>
-  cfg.cond_br %after_lower, ^after, ^before : i1
+  cfg.cond_br %after_lower, ^after, ^before
 ^after:
-  cfg.cond_br %before_upper, ^inside, ^outside_high : i1
+  cfg.cond_br %before_upper, ^inside, ^outside_high
 ^inside:
   %inside_value = scalar.addi %lane, %upper : i32
   %inside_stored = vector.from_elements %inside_value : vector<1xi32>
@@ -295,7 +342,7 @@ func.def target(@target) @divergent_if_else_tail_argmax_pair(%indices: vector<2x
   %sentinel = scalar.constant -1 : i32
   %fallback_score = scalar.constant -3.402823e38 : f32
   %in_range = scalar.cmpi slt, %lane, %limit : i32
-  cfg.cond_br %in_range, ^then, ^else : i1
+  cfg.cond_br %in_range, ^then, ^else
 ^then:
   cfg.br ^join(%score: f32, %lane: i32)
 ^else:
@@ -346,7 +393,7 @@ amdgpu.target<gfx1100> @target
 func.def target(@target) @divergent_if_else_vector_result(%values: vector<2xi32>, %limit: i32, %state: vector<2xi32>) -> (vector<2xi32>) {
   %lane = vector.extract %values[0] : vector<2xi32> -> i32
   %cond = scalar.cmpi slt, %lane, %limit : i32
-  cfg.cond_br %cond, ^then, ^else : i1
+  cfg.cond_br %cond, ^then, ^else
 ^then:
   %then = vector.insert %lane into %state[0] : i32, vector<2xi32>
   cfg.br ^join(%then: vector<2xi32>)
@@ -405,7 +452,7 @@ amdgpu.target<gfx1100> @target
 func.def target(@target) @divergent_if_else_two_vector_results(%values: vector<2xi32>, %limit: i32, %state: vector<2xi32>) -> (vector<2xi32>, vector<2xi32>) {
   %lane = vector.extract %values[0] : vector<2xi32> -> i32
   %cond = scalar.cmpi slt, %lane, %limit : i32
-  cfg.cond_br %cond, ^then, ^else : i1
+  cfg.cond_br %cond, ^then, ^else
 ^then:
   %then = vector.insert %lane into %state[0] : i32, vector<2xi32>
   cfg.br ^join(%then: vector<2xi32>, %state: vector<2xi32>)
@@ -470,9 +517,9 @@ func.def target(@target) @divergent_nested_if_else_vector_result(%values: vector
   %lane = vector.extract %values[0] : vector<2xi32> -> i32
   %after_lower = scalar.cmpi sge, %lane, %lower : i32
   %before_upper = scalar.cmpi slt, %lane, %upper : i32
-  cfg.cond_br %after_lower, ^after, ^before : i1
+  cfg.cond_br %after_lower, ^after, ^before
 ^after:
-  cfg.cond_br %before_upper, ^inside, ^outside_high : i1
+  cfg.cond_br %before_upper, ^inside, ^outside_high
 ^inside:
   %inside_value = scalar.addi %lane, %upper : i32
   %inside = vector.insert %inside_value into %state[0] : i32, vector<2xi32>
@@ -667,9 +714,9 @@ func.def target(@target) @divergent_nested_shared_fallback_vector_result(%values
   %lane = vector.extract %values[0] : vector<2xi32> -> i32
   %after_lower = scalar.cmpi sge, %lane, %lower : i32
   %before_upper = scalar.cmpi slt, %lane, %upper : i32
-  cfg.cond_br %after_lower, ^after, ^fallback : i1
+  cfg.cond_br %after_lower, ^after, ^fallback
 ^after:
-  cfg.cond_br %before_upper, ^inside, ^fallback : i1
+  cfg.cond_br %before_upper, ^inside, ^fallback
 ^inside:
   %inside_value = scalar.addi %lane, %upper : i32
   %updated = vector.insert %inside_value into %state[0] : i32, vector<2xi32>
@@ -748,7 +795,7 @@ func.def target(@target) @divergent_then_only(%values: vector<2xi32>, %limit: i3
   %cond = scalar.cmpi slt, %lane, %limit : i32
   %zero = index.constant 0 : offset
   %output_view = buffer.view %output[%zero] : buffer -> view<2xi32, #dense>
-  cfg.cond_br %cond, ^then, ^join : i1
+  cfg.cond_br %cond, ^then, ^join
 ^then:
   %biased = scalar.addi %lane, %limit : i32
   %stored = vector.from_elements %biased : vector<1xi32>
@@ -793,13 +840,13 @@ func.def target(@target) @divergent_region_with_uniform_loop(%values: vector<2xi
   %start = scalar.constant 0 : i32
   %step = scalar.constant 1 : i32
   %cond = scalar.cmpi slt, %lane, %limit : i32
-  cfg.cond_br %cond, ^then, ^join : i1
+  cfg.cond_br %cond, ^then, ^join
 ^then:
   cfg.br ^loop(%start: i32)
 ^loop(%i: i32):
   %next = scalar.addi %i, %step : i32
   %again = scalar.cmpi slt, %next, %limit : i32
-  cfg.cond_br %again, ^body, ^join : i1
+  cfg.cond_br %again, ^body, ^join
 ^body:
   cfg.br ^loop(%next: i32)
 ^join:
@@ -839,12 +886,12 @@ func.def target(@target) @divergent_passthrough_else_loop_state(%values: vector<
   %start = scalar.constant 0 : i32
   %stop = scalar.constant 2 : i32
   %step = scalar.constant 1 : i32
-  cfg.cond_br %cond, ^then, ^else : i1
+  cfg.cond_br %cond, ^then, ^else
 ^then:
   cfg.br ^loop(%start: i32, %state: vector<2xi32>)
 ^loop(%i: i32, %iter: vector<2xi32>):
   %again = scalar.cmpi slt, %i, %stop : i32
-  cfg.cond_br %again, ^body, ^then_exit : i1
+  cfg.cond_br %again, ^body, ^then_exit
 ^body:
   %updated = vector.insert %lane into %iter[0] : i32, vector<2xi32>
   %next = scalar.addi %i, %step : i32

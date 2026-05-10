@@ -6,7 +6,7 @@ func.def @cfg_join_unknown_and_zero_is_not_exact_zero(%cond: i1, %input: buffer)
   %zero = scalar.constant 0.0 : f32
   %scale = scalar.constant 2.0 : f32
   %view = buffer.view %input[%base] : buffer -> view<1xf32, #dense>
-  cfg.cond_br %cond, ^load, ^pad : i1
+  cfg.cond_br %cond, ^load, ^pad
 ^load:
   %loaded = view.load %view[%index] : view<1xf32, #dense> -> f32
   cfg.br ^join(%loaded: f32)
@@ -24,7 +24,7 @@ func.def @cfg_join_unknown_and_zero_is_not_exact_zero(%cond: i1, %input: buffer)
   %zero = scalar.constant 0.0 : f32
   %scale = scalar.constant 2.0 : f32
   %view = buffer.view %input[%base] : buffer -> view<1xf32, #dense>
-  cfg.cond_br %cond, ^load, ^pad : i1
+  cfg.cond_br %cond, ^load, ^pad
 ^load:
   %loaded = view.load %view[%index] : view<1xf32, #dense> -> f32
   cfg.br ^join(%loaded: f32)

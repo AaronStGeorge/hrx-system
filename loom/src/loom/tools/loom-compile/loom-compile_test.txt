@@ -11,7 +11,7 @@ ireevm.target<core> @vm_target
 func.def target(@vm_target) @branchy(%lhs: i32, %rhs: i32) -> (i32) {
   %c0 = scalar.constant 0 : i32
   %is_zero = scalar.cmpi eq, %lhs, %c0 : i32
-  cfg.cond_br %is_zero, ^then, ^else : i1
+  cfg.cond_br %is_zero, ^then, ^else
 ^then:
   %sum = scalar.addi %rhs, %rhs : i32
   func.return %sum : i32

@@ -13,7 +13,6 @@ blocks when a selected arm needs values.
 """
 
 from loom.assembly import (
-    COLON,
     COMMA,
     GLUE,
     LPAREN,
@@ -22,7 +21,6 @@ from loom.assembly import (
     OptionalGroup,
     Ref,
     TypedRefs,
-    TypeOf,
 )
 from loom.dsl import (
     ANY,
@@ -92,10 +90,8 @@ cfg_cond_br = Op(
         BlockRef("true_dest"),
         COMMA,
         BlockRef("false_dest"),
-        COLON,
-        TypeOf("condition"),
     ],
-    examples=["cfg.cond_br %condition, ^then, ^else : i1"],
+    examples=["cfg.cond_br %condition, ^then, ^else"],
 )
 
 ALL_CFG_OPS: tuple[Op, ...] = (

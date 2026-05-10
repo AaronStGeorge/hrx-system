@@ -45,7 +45,7 @@ _CMP_I32_CASES = (
     ("uge", "amdgpu.s_cmp_ge_u32", "amdgpu.v_cmp_uge_u32"),
 )
 
-_DESCRIPTOR_KEYS = tuple(
+_COMPARE_DESCRIPTOR_KEYS = tuple(
     descriptor_key
     for _, scalar_descriptor_key, mask_descriptor_key in _CMP_I32_CASES
     for descriptor_key in (
@@ -54,6 +54,11 @@ _DESCRIPTOR_KEYS = tuple(
         f"{mask_descriptor_key}.src0_inline",
         f"{mask_descriptor_key}.src1_inline",
     )
+)
+_DESCRIPTOR_KEYS = (
+    "amdgpu.s_mov_b32",
+    "amdgpu.s_cselect_b32",
+    *_COMPARE_DESCRIPTOR_KEYS,
 )
 
 _DESCRIPTOR_SET = build_amdgpu_contract_descriptor_set(
@@ -107,6 +112,66 @@ def _scc_rule(
                     "rhs": ValueRef.operand("rhs"),
                 },
                 results={"scc": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+def _sgpr_bool_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    predicate: str,
+    compare_descriptor: Descriptor,
+) -> DescriptorRule:
+    move_descriptor = _descriptor("amdgpu.s_mov_b32")
+    select_descriptor = _descriptor("amdgpu.s_cselect_b32")
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=select_descriptor,
+        guards=(
+            Guard.enum_attr_equals("predicate", predicate),
+            Guard.value_type("lhs", type_pattern),
+            Guard.value_type("rhs", type_pattern),
+            Guard.value_type("result", _I1),
+            Guard.low_value_register_class("lhs", "amdgpu.sgpr"),
+            Guard.low_value_register_class("rhs", "amdgpu.sgpr"),
+            Guard.low_value_register_class("result", "amdgpu.sgpr"),
+            Guard.low_value_register_unit_count_eq("result", "lhs"),
+            Guard.low_value_register_unit_count_eq("result", "rhs"),
+            Guard.descriptor_available(compare_descriptor),
+            Guard.descriptor_available(move_descriptor),
+            Guard.descriptor_available(select_descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=compare_descriptor,
+                operands={
+                    "lhs": ValueRef.operand("lhs"),
+                    "rhs": ValueRef.operand("rhs"),
+                },
+                results={"scc": ValueRef.temporary("condition")},
+                result_types={"scc": _I1},
+            ),
+            EmitDescriptorOp(
+                descriptor=move_descriptor,
+                results={"dst": ValueRef.temporary("false_value")},
+                result_types={"dst": _I32},
+                immediates={"imm32": 0},
+            ),
+            EmitDescriptorOp(
+                descriptor=move_descriptor,
+                results={"dst": ValueRef.temporary("true_value")},
+                result_types={"dst": _I32},
+                immediates={"imm32": 1},
+            ),
+            EmitDescriptorOp(
+                descriptor=select_descriptor,
+                operands={
+                    "true_value": ValueRef.temporary("true_value"),
+                    "false_value": ValueRef.temporary("false_value"),
+                    "condition": ValueRef.temporary("condition"),
+                },
+                results={"dst": ValueRef.result("result")},
             ),
         ),
     )
@@ -212,6 +277,15 @@ def _typed_rules(
         _scc_rule(source_op, type_pattern, predicate, _descriptor(descriptor_key))
         for predicate, descriptor_key, _ in _CMP_I32_CASES
     )
+    sgpr_bool_rules = tuple(
+        _sgpr_bool_rule(
+            source_op,
+            type_pattern,
+            predicate,
+            _descriptor(descriptor_key),
+        )
+        for predicate, descriptor_key, _ in _CMP_I32_CASES
+    )
     inline_rules = tuple(
         rule
         for predicate, _, descriptor_key in _CMP_I32_CASES
@@ -250,7 +324,7 @@ def _typed_rules(
         )
         for predicate, _, descriptor_key in _CMP_I32_CASES
     )
-    return scalar_rules + inline_rules + mask_rules
+    return scalar_rules + sgpr_bool_rules + inline_rules + mask_rules
 
 
 def _rules() -> tuple[DescriptorRule, ...]:

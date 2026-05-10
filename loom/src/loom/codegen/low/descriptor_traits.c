@@ -6,6 +6,24 @@
 
 #include "loom/codegen/low/descriptor_traits.h"
 
+static bool loom_low_descriptor_defines_implicit_state_result(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor) {
+  for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
+    const uint32_t operand_index = descriptor->operand_start + i;
+    IREE_ASSERT(operand_index < descriptor_set->operand_count);
+    const loom_low_operand_t* operand =
+        &descriptor_set->operands[operand_index];
+    if (operand->role == LOOM_LOW_OPERAND_ROLE_RESULT &&
+        iree_all_bits_set(operand->flags,
+                          LOOM_LOW_OPERAND_FLAG_IMPLICIT |
+                              LOOM_LOW_OPERAND_FLAG_STATE_WRITE)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 loom_trait_flags_t loom_low_descriptor_effective_traits(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor) {
@@ -42,10 +60,18 @@ loom_trait_flags_t loom_low_descriptor_effective_traits(
                        LOOM_LOW_DESCRIPTOR_FLAG_TERMINATOR)) {
     traits |= LOOM_TRAIT_TERMINATOR;
   }
+  if (loom_low_descriptor_defines_implicit_state_result(descriptor_set,
+                                                        descriptor)) {
+    // Implicit state results define target-owned architectural state outside
+    // ordinary SSA identity. The low scheduler models clobbers, but generic
+    // CSE must not merge distinct definitions of state values such as SCC.
+    traits |= LOOM_TRAIT_NON_DETERMINISTIC;
+  }
   if (iree_any_bit_set(traits, LOOM_TRAIT_UNKNOWN_EFFECTS)) return traits;
 
-  if (!iree_any_bit_set(traits,
-                        LOOM_TRAIT_READS_MEMORY | LOOM_TRAIT_WRITES_MEMORY)) {
+  if (!iree_any_bit_set(traits, LOOM_TRAIT_READS_MEMORY |
+                                    LOOM_TRAIT_WRITES_MEMORY |
+                                    LOOM_TRAIT_NON_DETERMINISTIC)) {
     if (descriptor->effect_count == 0 &&
         iree_any_bit_set(descriptor->flags,
                          LOOM_LOW_DESCRIPTOR_FLAG_SIDE_EFFECTING)) {

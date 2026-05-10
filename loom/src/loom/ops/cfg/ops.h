@@ -41,7 +41,7 @@ iree_status_t loom_cfg_br_verify(
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_CFG_COND_BR: Conditional branch to one of two successor blocks based on an i1 condition.
-// cfg.cond_br %condition, ^then, ^else : i1
+// cfg.cond_br %condition, ^then, ^else
 LOOM_DEFINE_ISA(loom_cfg_cond_br_isa, LOOM_OP_CFG_COND_BR)
 LOOM_DEFINE_OPERAND(loom_cfg_cond_br_condition, 0)
 LOOM_DEFINE_SUCCESSOR(loom_cfg_cond_br_true_dest, 0)

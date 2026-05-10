@@ -116,7 +116,7 @@ func.def target(@target) @index_divergent_shift_mask(%values: vector<2xi32>) {
   %mask = index.constant 7 : index
   %remainder = index.andi %bounded_lane, %mask : index
   %condition = index.cmp slt, %quotient, %remainder : index
-  cfg.cond_br %condition, ^then, ^join : i1
+  cfg.cond_br %condition, ^then, ^join
 ^then:
   cfg.br ^join
 ^join:
@@ -152,7 +152,7 @@ func.def target(@target) @index_cast_compare_divergent(%values: vector<2xi32>, %
   %lane = index.cast %lane_i32 : i32 to index
   %limit_index = index.cast %limit : i32 to index
   %condition = index.cmp slt, %lane, %limit_index : index
-  cfg.cond_br %condition, ^then, ^join : i1
+  cfg.cond_br %condition, ^then, ^join
 ^then:
   cfg.br ^join
 ^join:
@@ -238,7 +238,7 @@ amdgpu.target<gfx1100> @target
 func.def target(@target) @dynamic_vector_extract_i32(%values: vector<2xi32>, %lane_index: index, %limit: i32) {
   %lane = vector.extract %values[%lane_index] : vector<2xi32> -> i32
   %condition = scalar.cmpi slt, %lane, %limit : i32
-  cfg.cond_br %condition, ^then, ^join : i1
+  cfg.cond_br %condition, ^then, ^join
 ^then:
   cfg.br ^join
 ^join:
