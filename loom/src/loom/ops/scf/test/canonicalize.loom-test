@@ -558,6 +558,24 @@ func.def @if_factors_common_side_effecting_tail(%cond: i1, %pool: pool<16>, %a: 
 
 // ====
 
+// Distinct storage roots stay branch-local. Factoring the load would require
+// selecting between views, which loses the single-root memory fact downstream.
+func.def @if_preserves_distinct_storage_tail_roots(%cond: i1, %lhs_buffer: buffer, %rhs_buffer: buffer, %offset: offset) -> (f32) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %lhs_view = buffer.view %lhs_buffer[%offset] : buffer -> view<4xf32, %layout>
+  %rhs_view = buffer.view %rhs_buffer[%offset] : buffer -> view<4xf32, %layout>
+  %result = scf.if %cond -> (f32) {
+    %lhs = view.load %lhs_view[0] : view<4xf32, %layout> -> f32
+    scf.yield %lhs : f32
+  } else {
+    %rhs = view.load %rhs_view[0] : view<4xf32, %layout> -> f32
+    scf.yield %rhs : f32
+  }
+  func.return %result : f32
+}
+
+// ====
+
 // Different tail op kinds do not factor: the conditional still chooses between
 // two distinct computations.
 func.def @if_preserves_different_tail_kinds(%cond: i1, %a: i32, %b: i32) -> (i32) {

@@ -455,6 +455,17 @@ static bool loom_scf_region_branch_tail_op_can_factor(const loom_op_t* op) {
          op->tied_result_count == 0;
 }
 
+static bool loom_scf_type_is_storage_root_or_projection(loom_type_t type) {
+  switch (loom_type_kind(type)) {
+    case LOOM_TYPE_VIEW:
+    case LOOM_TYPE_BUFFER:
+    case LOOM_TYPE_STORAGE:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static iree_status_t loom_scf_region_branch_tail_ops_match(
     loom_rewriter_t* rewriter, const loom_op_t* branch_op,
     const loom_op_t* reference_tail, const loom_op_t* candidate_tail,
@@ -517,6 +528,14 @@ static iree_status_t loom_scf_region_branch_tail_ops_match(
     if (!loom_type_equal(
             reference_type,
             loom_module_value_type(rewriter->module, candidate_operands[i]))) {
+      return iree_ok_status();
+    }
+    // Selecting between distinct storage roots/projections erases the
+    // single-root facts needed by later memory lowering. Keep those accesses
+    // branch-local unless the storage operand is already common to every
+    // branch.
+    if (reference_operands[i] != candidate_operands[i] &&
+        loom_scf_type_is_storage_root_or_projection(reference_type)) {
       return iree_ok_status();
     }
     bool type_available = false;

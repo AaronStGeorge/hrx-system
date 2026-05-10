@@ -1068,3 +1068,91 @@ low.kernel.def target(@target) workgroup_size(1, 1, 1) @workgroup_loop_bound_f32
   global_store_b32_saddr %zero, %current_sum, %64
   return
 }
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @branch_local_buffer_vector_load(%positive: buffer, %negative: buffer, %output: buffer) {
+  %workgroup_count = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%workgroup_count, %workgroup_count, %workgroup_count) workgroup_size(%workgroup_size, %workgroup_count, %workgroup_count) : index
+} launch {
+  %base_offset = index.constant 0 : offset
+  %first_lane = index.constant 0 : index
+  %vector_width = index.constant 4 : index
+  %workitem = kernel.workitem.id<x> : index
+  %lane = index.assume %workitem [range(%workitem, 0, 63)] : index
+  %channel_start0 = index.mul %lane, %vector_width : index
+  %channel_start = index.assume %channel_start0 [range(%channel_start0, 0, 252)] : index
+  %positive_global = buffer.assume.memory_space %positive {memory_space = global} : buffer
+  %negative_global = buffer.assume.memory_space %negative {memory_space = global} : buffer
+  %output_global = buffer.assume.memory_space %output {memory_space = global} : buffer
+  %positive_noalias, %negative_noalias, %output_noalias = buffer.assume.noalias %positive_global, %negative_global, %output_global : buffer, buffer, buffer
+  %positive_view = buffer.view %positive_noalias[%base_offset] : buffer -> view<256xf32, #dense>
+  %negative_view = buffer.view %negative_noalias[%base_offset] : buffer -> view<256xf32, #dense>
+  %output_view = buffer.view %output_noalias[%base_offset] : buffer -> view<256xf32, #dense>
+  %positive_lane = index.cmp eq, %lane, %first_lane : index
+  %values = scf.if %positive_lane -> (vector<4xf32>) {
+    %positive_values = vector.load %positive_view[%channel_start] : view<256xf32, #dense> -> vector<4xf32>
+    scf.yield %positive_values : vector<4xf32>
+  } else {
+    %negative_values = vector.load %negative_view[%channel_start] : view<256xf32, #dense> -> vector<4xf32>
+    scf.yield %negative_values : vector<4xf32>
+  }
+  vector.store %values, %output_view[%channel_start] : vector<4xf32>, view<256xf32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @branch_local_buffer_vector_load() asm<amdgpu.rdna3.core> {
+  %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %positive_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %negative_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %channel_start = v_lshlrev_b32_lit %lane, 2
+  %positive_lane = v_cmp_eq_i32_src1_inline %lane {rhs = 0}
+  %40, %41 = s_and_saveexec_b64 %positive_lane
+  low.cond_br %41, ^_bb1, ^_bb5 : reg<amdgpu.scc>
+^_bb1:
+  %59 = v_lshlrev_b32_src0_inline %channel_start, 2
+  %positive_values = global_load_b128_saddr %59, %positive_view
+  low.br ^_bb4(%positive_values: reg<amdgpu.vgpr x4>)
+^_bb2:
+  %61 = v_lshlrev_b32_src0_inline %channel_start, 2
+  %negative_values = global_load_b128_saddr %61, %negative_view
+  low.br ^_bb7
+^_bb3(%values$31: reg<amdgpu.vgpr x4>):
+  %63 = v_lshlrev_b32_src0_inline %channel_start, 2
+  global_store_b128_saddr %63, %values$31, %output_view
+  return
+^_bb4(%values$32: reg<amdgpu.vgpr x4>):
+  s_mov_b64_exec %40
+  %57 = s_and_b64 %40, %positive_lane
+  %58 = s_xor_b64_exec %57
+  low.cond_br %58, ^_bb2, ^_bb6 : reg<amdgpu.scc>
+^_bb5:
+  s_mov_b64_exec %40
+  %42 = v_mov_b32 0
+  %43 = concat(%42, %42, %42, %42) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  low.br ^_bb4(%43: reg<amdgpu.vgpr x4>)
+^_bb6:
+  s_mov_b64_exec %40
+  low.br ^_bb3(%values$32: reg<amdgpu.vgpr x4>)
+^_bb7:
+  s_mov_b64_exec %40
+  %44 = slice %negative_values[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %45 = slice %values$32[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %46 = v_cndmask_b32 %44, %45, %positive_lane
+  %47 = slice %negative_values[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %48 = slice %values$32[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %49 = v_cndmask_b32 %47, %48, %positive_lane
+  %50 = slice %negative_values[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %51 = slice %values$32[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %52 = v_cndmask_b32 %50, %51, %positive_lane
+  %53 = slice %negative_values[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %54 = slice %values$32[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %55 = v_cndmask_b32 %53, %54, %positive_lane
+  %56 = concat(%46, %49, %52, %55) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  low.br ^_bb3(%56: reg<amdgpu.vgpr x4>)
+}
