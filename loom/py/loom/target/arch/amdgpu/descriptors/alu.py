@@ -1619,6 +1619,31 @@ def _v_fmac_f32_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_fmaak_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_fmaak_f32",
+        instruction_name="V_FMAAK_F32",
+        mnemonic="v_fmaak_f32",
+        encoding_name="VOP2_INST_LITERAL",
+        encoding_condition="default",
+        semantic_tag="float.fmaak.f32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("a")),
+            AmdgpuOperandOverlay("VSRC1", _vgpr_operand("b")),
+        ),
+        asm_forms=_asm(
+            results=("dst",),
+            operands=("a", "b"),
+            immediates=("imm32",),
+        ),
+        immediate_fields=("LITERAL",),
+        immediates=(_LITERAL_U32_IMMEDIATE,),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_unary_f32_overlay(
     *,
     descriptor_key: str,
@@ -2467,6 +2492,7 @@ __all__ = (
     "_v_cvt_pk_u16_u32_overlay",
     "_v_cos_f32_overlay",
     "_v_exp_f32_overlay",
+    "_v_fmaak_f32_overlay",
     "_v_fma_f32_overlay",
     "_v_fmac_f32_overlay",
     "_v_lshl_add_u32_shift_immediate_overlay",

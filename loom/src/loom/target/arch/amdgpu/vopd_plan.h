@@ -30,6 +30,11 @@ extern "C" {
 // Sentinel for scheduled packets that do not belong to a VOPD pair.
 #define LOOM_AMDGPU_VOPD_PAIR_NONE UINT32_MAX
 
+// Component opcode for v_fmac_f32 in a VOPD X/Y slot.
+#define LOOM_AMDGPU_VOPD_OP_FMAC_F32 UINT16_C(0)
+// Component opcode for v_fmaak_f32 in a VOPD X/Y slot.
+#define LOOM_AMDGPU_VOPD_OP_FMAAK_F32 UINT16_C(1)
+
 typedef enum loom_amdgpu_vopd_packet_role_e {
   // Packet is not part of a VOPD pair.
   LOOM_AMDGPU_VOPD_PACKET_ROLE_NONE = 0,
@@ -44,7 +49,17 @@ typedef enum loom_amdgpu_vopd_pair_reason_e {
   LOOM_AMDGPU_VOPD_PAIR_REASON_UNKNOWN = 0,
   // Two independent v_fmac_f32 packets were fused into v_dual_fmac_f32.
   LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAC_F32 = 1,
+  // Two independent v_fmaak_f32 packets were fused into v_dual_fmaak_f32.
+  LOOM_AMDGPU_VOPD_PAIR_REASON_DUAL_FMAAK_F32 = 2,
 } loom_amdgpu_vopd_pair_reason_t;
+
+typedef enum loom_amdgpu_vopd_pair_flag_bits_e {
+  // VOPD pair has no additional payload flags.
+  LOOM_AMDGPU_VOPD_PAIR_FLAG_NONE = 0u,
+  // VOPD pair uses the shared 32-bit literal payload word.
+  LOOM_AMDGPU_VOPD_PAIR_FLAG_LITERAL = 1u << 0,
+} loom_amdgpu_vopd_pair_flag_bits_t;
+typedef uint32_t loom_amdgpu_vopd_pair_flags_t;
 
 // One scheduled packet's membership in a planned VOPD pair.
 typedef struct loom_amdgpu_vopd_packet_t {
@@ -72,6 +87,10 @@ typedef struct loom_amdgpu_vopd_pair_t {
   uint16_t op_x;
   // VOPD operation id encoded in the Y slot.
   uint16_t op_y;
+  // Pair-local payload and encoding flags.
+  loom_amdgpu_vopd_pair_flags_t flags;
+  // Shared literal payload when LOOM_AMDGPU_VOPD_PAIR_FLAG_LITERAL is set.
+  uint32_t literal_u32;
 } loom_amdgpu_vopd_pair_t;
 
 // AMDGPU VOPD packetization table for one scheduled and allocated low function.

@@ -399,6 +399,26 @@ TEST(AmdgpuEncodingTest, PacksVopdxyDualFmacPair) {
   EXPECT_EQ(packet.words[1], UINT32_C(0xff060701));
 }
 
+TEST(AmdgpuEncodingTest, PacksVopdxyLiteralDualFmaakPair) {
+  loom_amdgpu_encoding_packet_t packet = {};
+  loom_amdgpu_encoding_vopdxy_fields_t fields = {};
+  fields.op_x = 1;
+  fields.op_y = 1;
+  fields.src0_x = 0x101;
+  fields.vsrc1_x = 2;
+  fields.vdst_x = 0;
+  fields.src0_y = 0x104;
+  fields.vsrc1_y = 5;
+  fields.vdst_y = 3;
+  IREE_ASSERT_OK(loom_amdgpu_encoding_pack_vopdxy_literal(
+      &fields, UINT32_C(0x3f800000), &packet));
+  EXPECT_EQ(packet.word_count, 3u);
+  EXPECT_EQ(packet.bit_count, 96u);
+  EXPECT_EQ(packet.words[0], UINT32_C(0xc8420501));
+  EXPECT_EQ(packet.words[1], UINT32_C(0x00020b04));
+  EXPECT_EQ(packet.words[2], UINT32_C(0x3f800000));
+}
+
 TEST(AmdgpuEncodingTest, RejectsSameParityVopdxyDestinations) {
   loom_amdgpu_encoding_packet_t packet = {};
   loom_amdgpu_encoding_vopdxy_fields_t fields = {};

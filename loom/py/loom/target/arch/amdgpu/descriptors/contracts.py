@@ -82,6 +82,7 @@ _AMDGPU_CONTRACT_DESCRIPTOR_OVERLAY_BUILDERS: dict[
     "amdgpu.v_max_f32.lit": _v_max_f32_literal_overlay,
     "amdgpu.v_max_f32.src0_inline": _v_max_f32_src0_inline_overlay,
     "amdgpu.v_fma_f32": _v_fma_f32_overlay,
+    "amdgpu.v_fmaak_f32": _v_fmaak_f32_overlay,
     "amdgpu.v_fmac_f32": _v_fmac_f32_overlay,
     "amdgpu.v_exp_f32": _v_exp_f32_overlay,
     "amdgpu.v_log_f32": _v_log_f32_overlay,

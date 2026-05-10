@@ -613,3 +613,13 @@ iree_status_t loom_amdgpu_encoding_pack_vopdxy(
   out_packet->word_count = 2;
   return iree_ok_status();
 }
+
+iree_status_t loom_amdgpu_encoding_pack_vopdxy_literal(
+    const loom_amdgpu_encoding_vopdxy_fields_t* fields, uint32_t literal_u32,
+    loom_amdgpu_encoding_packet_t* out_packet) {
+  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_pack_vopdxy(fields, out_packet));
+  out_packet->words[2] = literal_u32;
+  out_packet->bit_count = 96;
+  out_packet->word_count = 3;
+  return iree_ok_status();
+}

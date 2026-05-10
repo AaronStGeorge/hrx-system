@@ -296,10 +296,14 @@ iree_status_t loom_amdgpu_encoding_pack_vop2_u32_vgpr(
     const loom_amdgpu_encoding_table_t* table, uint16_t opcode, uint16_t vdst,
     uint32_t imm32, uint16_t vsrc1, loom_amdgpu_encoding_packet_t* out_packet);
 
-// Packs a 64-bit VOPDXY packet. This is the base GFX11/GFX12 dual-VALU form
-// and does not encode a literal payload or the wider VOPD3 encoding.
+// Packs a 64-bit VOPDXY packet without a literal payload.
 iree_status_t loom_amdgpu_encoding_pack_vopdxy(
     const loom_amdgpu_encoding_vopdxy_fields_t* fields,
+    loom_amdgpu_encoding_packet_t* out_packet);
+
+// Packs a 96-bit VOPDXY packet with one shared 32-bit literal payload.
+iree_status_t loom_amdgpu_encoding_pack_vopdxy_literal(
+    const loom_amdgpu_encoding_vopdxy_fields_t* fields, uint32_t literal_u32,
     loom_amdgpu_encoding_packet_t* out_packet);
 
 #ifdef __cplusplus

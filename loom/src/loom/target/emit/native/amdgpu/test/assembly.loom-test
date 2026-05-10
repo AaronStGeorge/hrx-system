@@ -46,6 +46,77 @@ low.func.def target(@gfx11_target) @gfx11_vopd_fmac_pair(%acc0: reg<amdgpu.vgpr>
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_vopd_fmaak_pair
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_fmaak_pair(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %lhs0: reg<amdgpu.vgpr>, %rhs0: reg<amdgpu.vgpr>, %lhs1: reg<amdgpu.vgpr>, %rhs1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %next0 = v_fmaak_f32 %lhs0, %rhs0, 1065353216
+  %next1 = v_fmaak_f32 %lhs1, %rhs1, 1065353216
+  buffer_store_dword %next0, %resource, %vaddr, %soffset
+  buffer_store_dword %next1, %resource, %vaddr, %soffset {offset = 4}
+  buffer_store_dword %lhs0, %resource, %vaddr, %soffset {offset = 8}
+  buffer_store_dword %rhs0, %resource, %vaddr, %soffset {offset = 12}
+  buffer_store_dword %lhs1, %resource, %vaddr, %soffset {offset = 16}
+  buffer_store_dword %rhs1, %resource, %vaddr, %soffset {offset = 20}
+  return
+}
+
+// ----
+  v_dual_fmaak_f32 v5, v0, v1, 0x3f800000 :: v_dual_fmaak_f32 v6, v2, v4, 0x3f800000
+  buffer_store_dword v5, v3, s[0:3], s4 offen offset:0
+  buffer_store_dword v6, v3, s[0:3], s4 offen offset:4
+  buffer_store_dword v0, v3, s[0:3], s4 offen offset:8
+  buffer_store_dword v1, v3, s[0:3], s4 offen offset:12
+  buffer_store_dword v2, v3, s[0:3], s4 offen offset:16
+  buffer_store_dword v4, v3, s[0:3], s4 offen offset:20
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-native @gfx11_vopd_fmaak_pair_native
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_fmaak_pair_native(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %lhs0: reg<amdgpu.vgpr>, %rhs0: reg<amdgpu.vgpr>, %lhs1: reg<amdgpu.vgpr>, %rhs1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %next0 = v_fmaak_f32 %lhs0, %rhs0, 1065353216
+  %next1 = v_fmaak_f32 %lhs1, %rhs1, 1065353216
+  buffer_store_dword %next0, %resource, %vaddr, %soffset
+  buffer_store_dword %next1, %resource, %vaddr, %soffset {offset = 4}
+  buffer_store_dword %lhs0, %resource, %vaddr, %soffset {offset = 8}
+  buffer_store_dword %rhs0, %resource, %vaddr, %soffset {offset = 12}
+  buffer_store_dword %lhs1, %resource, %vaddr, %soffset {offset = 16}
+  buffer_store_dword %rhs1, %resource, %vaddr, %soffset {offset = 20}
+  return
+}
+
+// ----
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx11_vopd_fmaak_literal_mismatch
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_vopd_fmaak_literal_mismatch(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %lhs0: reg<amdgpu.vgpr>, %rhs0: reg<amdgpu.vgpr>, %lhs1: reg<amdgpu.vgpr>, %rhs1: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %next0 = v_fmaak_f32 %lhs0, %rhs0, 1065353216
+  %next1 = v_fmaak_f32 %lhs1, %rhs1, 1073741824
+  buffer_store_dword %next0, %resource, %vaddr, %soffset
+  buffer_store_dword %next1, %resource, %vaddr, %soffset {offset = 4}
+  buffer_store_dword %lhs0, %resource, %vaddr, %soffset {offset = 8}
+  buffer_store_dword %rhs0, %resource, %vaddr, %soffset {offset = 12}
+  buffer_store_dword %lhs1, %resource, %vaddr, %soffset {offset = 16}
+  buffer_store_dword %rhs1, %resource, %vaddr, %soffset {offset = 20}
+  return
+}
+
+// ----
+  v_fmaak_f32 v5, v0, v1, 1065353216
+  v_fmaak_f32 v6, v2, v4, 1073741824
+  buffer_store_dword v5, v3, s[0:3], s4 offen offset:0
+  buffer_store_dword v6, v3, s[0:3], s4 offen offset:4
+  buffer_store_dword v0, v3, s[0:3], s4 offen offset:8
+  buffer_store_dword v1, v3, s[0:3], s4 offen offset:12
+  buffer_store_dword v2, v3, s[0:3], s4 offen offset:16
+  buffer_store_dword v4, v3, s[0:3], s4 offen offset:20
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_vopd_fmac_pair_through_slices
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_vopd_fmac_pair_through_slices(%acc0: reg<amdgpu.vgpr>, %acc1: reg<amdgpu.vgpr>, %acc2: reg<amdgpu.vgpr>, %acc3: reg<amdgpu.vgpr>, %lhs: reg<amdgpu.vgpr x4>, %rhs: reg<amdgpu.vgpr x4>) asm<amdgpu.rdna3.core> {
