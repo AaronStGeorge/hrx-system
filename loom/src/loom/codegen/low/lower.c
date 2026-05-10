@@ -1563,8 +1563,8 @@ static iree_status_t loom_low_lower_structural_op(
           context, source_op, 0, &low_dest));
       loom_value_slice_t args = loom_cfg_br_args(source_op);
       loom_value_id_t* low_args = NULL;
-      IREE_RETURN_IF_ERROR(loom_low_lower_remap_values(context, args.values,
-                                                       args.count, &low_args));
+      IREE_RETURN_IF_ERROR(loom_low_lower_remap_successor_args(
+          context, source_op, 0, low_dest, args.values, args.count, &low_args));
       loom_op_t* low_br_op = NULL;
       return loom_low_br_build(&context->builder, low_dest, low_args,
                                args.count, source_op->location, &low_br_op);

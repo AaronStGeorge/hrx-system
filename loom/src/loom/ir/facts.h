@@ -45,9 +45,10 @@ extern "C" {
 // Flags
 //===----------------------------------------------------------------------===//
 
-// Cached predicate flags derived from range and divisor. These are
-// always consistent with the range/divisor fields — constructors
-// compute them, and they are never written independently.
+// Cached predicate flags derived from range, divisor, or target-independent
+// execution distribution. Range flags are always consistent with the scalar
+// range/divisor fields. Distribution flags describe whether all lanes in an
+// invocation group observe the same SSA value.
 enum loom_value_fact_flag_bits_e {
   // The signed range lower bound is >= 0.
   LOOM_VALUE_FACT_NON_NEGATIVE = 1u << 0,
@@ -73,8 +74,17 @@ enum loom_value_fact_flag_bits_e {
   // memcpy), not an integer range. Without EXACT, float facts are
   // unknown (no float range analysis).
   LOOM_VALUE_FACT_FLOAT = 1u << 6,
+  // The value is known to be identical for every active lane observing it.
+  LOOM_VALUE_FACT_UNIFORM = 1u << 7,
+  // The value may differ between active lanes observing it.
+  LOOM_VALUE_FACT_LANE_VARYING = 1u << 8,
+  // The i1 value is a lane mask/predicate rather than a scalar condition code.
+  LOOM_VALUE_FACT_LANE_PREDICATE = 1u << 9,
 };
 typedef uint32_t loom_value_fact_flags_t;
+
+#define LOOM_VALUE_FACT_DISTRIBUTION_MASK \
+  (LOOM_VALUE_FACT_UNIFORM | LOOM_VALUE_FACT_LANE_VARYING)
 
 // Context-local extension payload ID. Zero means the fact has no extension.
 typedef uint32_t loom_value_fact_extension_id_t;
@@ -214,6 +224,38 @@ static inline bool loom_value_facts_is_float(loom_value_facts_t facts) {
   return (facts.flags & LOOM_VALUE_FACT_FLOAT) != 0;
 }
 
+static inline bool loom_value_facts_is_uniform(loom_value_facts_t facts) {
+  return (facts.flags & LOOM_VALUE_FACT_UNIFORM) != 0;
+}
+
+static inline bool loom_value_facts_is_lane_varying(loom_value_facts_t facts) {
+  return (facts.flags & LOOM_VALUE_FACT_LANE_VARYING) != 0;
+}
+
+static inline bool loom_value_facts_is_lane_predicate(
+    loom_value_facts_t facts) {
+  return (facts.flags & LOOM_VALUE_FACT_LANE_PREDICATE) != 0;
+}
+
+static inline void loom_value_facts_mark_uniform(loom_value_facts_t* facts) {
+  facts->flags &=
+      ~(LOOM_VALUE_FACT_DISTRIBUTION_MASK | LOOM_VALUE_FACT_LANE_PREDICATE);
+  facts->flags |= LOOM_VALUE_FACT_UNIFORM;
+}
+
+static inline void loom_value_facts_mark_lane_varying(
+    loom_value_facts_t* facts) {
+  facts->flags &= ~(LOOM_VALUE_FACT_UNIFORM | LOOM_VALUE_FACT_LANE_PREDICATE);
+  facts->flags |= LOOM_VALUE_FACT_LANE_VARYING;
+}
+
+static inline void loom_value_facts_mark_lane_predicate(
+    loom_value_facts_t* facts) {
+  facts->flags &= ~LOOM_VALUE_FACT_UNIFORM;
+  facts->flags |= LOOM_VALUE_FACT_LANE_VARYING |
+                  LOOM_VALUE_FACT_LANE_PREDICATE | LOOM_VALUE_FACT_BOOLEAN;
+}
+
 // Returns true when the integer fact domain proves the value is exactly zero.
 static inline bool loom_value_facts_is_zero(loom_value_facts_t facts) {
   return !loom_value_facts_is_float(facts) && facts.range_lo == 0 &&
@@ -316,6 +358,16 @@ static inline void loom_value_facts_meet(
       a->range_lo < b->range_lo ? a->range_lo : b->range_lo,
       a->range_hi > b->range_hi ? a->range_hi : b->range_hi,
       loom_gcd_i64(a->known_divisor, b->known_divisor));
+  if (loom_value_facts_is_lane_predicate(*a) ||
+      loom_value_facts_is_lane_predicate(*b)) {
+    loom_value_facts_mark_lane_predicate(out);
+  } else if (loom_value_facts_is_lane_varying(*a) ||
+             loom_value_facts_is_lane_varying(*b)) {
+    loom_value_facts_mark_lane_varying(out);
+  } else if (loom_value_facts_is_uniform(*a) &&
+             loom_value_facts_is_uniform(*b)) {
+    loom_value_facts_mark_uniform(out);
+  }
 }
 
 //===----------------------------------------------------------------------===//

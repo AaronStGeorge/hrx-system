@@ -326,6 +326,55 @@ iree_status_t loom_low_lower_lookup_successor_dest(
       context, source_successors[successor_index], out_low_dest);
 }
 
+iree_status_t loom_low_lower_remap_successor_args(
+    loom_low_lower_context_t* context, const loom_op_t* source_terminator,
+    uint8_t successor_index, loom_block_t* low_dest,
+    const loom_value_id_t* source_args, uint16_t source_arg_count,
+    loom_value_id_t** out_low_args) {
+  *out_low_args = NULL;
+  if (source_arg_count == 0) {
+    IREE_ASSERT_EQ(low_dest->arg_count, 0);
+    return iree_ok_status();
+  }
+  IREE_ASSERT_EQ(source_arg_count, low_dest->arg_count);
+
+  loom_value_id_t* low_args = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_lower_allocate_scratch_array(
+      context, source_arg_count, sizeof(*low_args), (void**)&low_args));
+  for (uint16_t i = 0; i < source_arg_count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_low_lower_lookup_value(context, source_args[i], &low_args[i]));
+
+    const loom_type_t required_type =
+        loom_block_arg_type(context->module, low_dest, i);
+    const loom_type_t actual_type =
+        loom_module_value_type(context->module, low_args[i]);
+    if (loom_type_equal(actual_type, required_type)) {
+      continue;
+    }
+
+    if (context->policy->materialize_branch_arg.fn == NULL) {
+      return iree_make_status(
+          IREE_STATUS_INTERNAL,
+          "lowering policy produced a branch payload type mismatch");
+    }
+    IREE_RETURN_IF_ERROR(context->policy->materialize_branch_arg.fn(
+        context->policy->materialize_branch_arg.user_data, context,
+        source_terminator, successor_index, i, source_args[i], low_args[i],
+        required_type, &low_args[i]));
+
+    const loom_type_t materialized_type =
+        loom_module_value_type(context->module, low_args[i]);
+    if (!loom_type_equal(materialized_type, required_type)) {
+      return iree_make_status(
+          IREE_STATUS_INTERNAL,
+          "lowering policy materialized a branch payload with the wrong type");
+    }
+  }
+  *out_low_args = low_args;
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_lower_interpose_successor_dest(
     loom_low_lower_context_t* context, const loom_op_t* source_terminator,
     uint8_t successor_index, loom_block_t* interposed_low_block,

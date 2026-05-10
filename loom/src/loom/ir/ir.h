@@ -779,6 +779,15 @@ enum loom_op_vtable_flag_bits_e {
 };
 typedef uint8_t loom_op_vtable_flags_t;
 
+// Compact control-flow metadata on the op vtable. These flags describe
+// structural successor semantics that are cheaper to store inline than as a
+// pointer-backed interface.
+enum loom_op_control_flow_flag_bits_e {
+  // One operand selects among this op's successor alternatives.
+  LOOM_OP_CONTROL_FLOW_HAS_SUCCESSOR_SELECTOR = 1u << 0,
+};
+typedef uint8_t loom_op_control_flow_flags_t;
+
 // Op-specific verification callback. Called after the standard
 // table-driven checks have established the op's structural invariants.
 typedef iree_status_t (*loom_op_verify_fn_t)(const loom_module_t* module,
@@ -1205,7 +1214,13 @@ struct loom_op_vtable_t {
   // Number of operand descriptors when it differs from the implied count.
   // Zero uses fixed_operand_count plus the variadic operand flag.
   uint8_t operand_descriptor_count;
-  // 4 bytes padding to align pointers at offset 16.
+  // Structural control-flow semantics declared by the op kind.
+  loom_op_control_flow_flags_t control_flow_flags;
+  // Reserved for future compact control-flow metadata. Always zero.
+  uint8_t control_flow_reserved;
+  // Selector operand index for multi-successor terminators. Valid only when
+  // control_flow_flags has LOOM_OP_CONTROL_FLOW_HAS_SUCCESSOR_SELECTOR.
+  uint16_t successor_selector_operand_index;
 
   loom_canonicalize_fn_t canonicalize;
   loom_op_infer_facts_fn_t infer_facts;

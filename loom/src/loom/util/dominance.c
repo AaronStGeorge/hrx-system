@@ -244,7 +244,7 @@ static iree_status_t loom_dominance_info_add_cfg_region(
   memset(cache, 0, sizeof(*cache));
   cache->region = region;
   IREE_RETURN_IF_ERROR(
-      loom_cfg_graph_build(region, info->arena, &cache->graph));
+      loom_cfg_graph_build(info->module, region, info->arena, &cache->graph));
   IREE_RETURN_IF_ERROR(loom_cfg_dominance_compute(cache, info->arena));
   cache->next = info->cfg_regions;
   info->cfg_regions = cache;

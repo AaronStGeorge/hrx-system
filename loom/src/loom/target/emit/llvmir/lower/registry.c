@@ -999,7 +999,8 @@ static iree_status_t loom_llvmir_lowering_cfg_prepare_blocks(
     const loom_op_t* owner_op, iree_arena_allocator_t* arena,
     loom_llvmir_cfg_lowering_t* cfg) {
   memset(cfg, 0, sizeof(*cfg));
-  IREE_RETURN_IF_ERROR(loom_cfg_graph_build(body, arena, &cfg->graph));
+  IREE_RETURN_IF_ERROR(
+      loom_cfg_graph_build(state->source_module, body, arena, &cfg->graph));
   if (cfg->graph.malformed) {
     return loom_llvmir_lowering_unsupported_op(
         state, owner_op,

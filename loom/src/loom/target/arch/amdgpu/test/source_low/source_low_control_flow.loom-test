@@ -336,6 +336,61 @@ low.func.def target(@target) abi(hal_kernel) @divergent_nested_if_else_stores(%v
 
 amdgpu.target<gfx1100> @target
 
+func.def target(@target) @divergent_if_else_exact_constant_pair(%indices: vector<2xi32>, %limit: i32) -> (index, i32) {
+  %lane = vector.extract %indices[0] : vector<2xi32> -> i32
+  %in_range = scalar.cmpi slt, %lane, %limit : i32
+  %then_index = index.constant 151643 : index
+  %then_token = scalar.constant 151643 : i32
+  %else_index = index.constant 151652 : index
+  %else_token = scalar.constant 151653 : i32
+  cfg.cond_br %in_range, ^then, ^else
+^then:
+  cfg.br ^join(%then_index: index, %then_token: i32)
+^else:
+  cfg.br ^join(%else_index: index, %else_token: i32)
+^join(%selected_index: index, %selected_token: i32):
+  func.return %selected_index, %selected_token : index, i32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @divergent_if_else_exact_constant_pair(%indices: reg<amdgpu.vgpr x2>, %limit: reg<amdgpu.sgpr>) -> (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %lane = slice %indices[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
+  %then_index = v_mov_b32 151643
+  %else_index = v_mov_b32 151652
+  %else_token = v_mov_b32 151653
+  %27 = v_mov_b32_copy %limit
+  %in_range = v_cmp_lt_i32 %lane, %27
+  %29, %30 = s_and_saveexec_b64 %in_range
+  low.cond_br %30, ^then, ^_bb5 : reg<amdgpu.scc>
+^then:
+  low.br ^_bb4(%then_index: reg<amdgpu.vgpr>, %then_index: reg<amdgpu.vgpr>)
+^else:
+  low.br ^_bb7
+^join(%selected_index$16: reg<amdgpu.vgpr>, %selected_token$17: reg<amdgpu.vgpr>):
+  return %selected_index$16, %selected_token$17
+^_bb4(%selected_index$18: reg<amdgpu.vgpr>, %selected_token$19: reg<amdgpu.vgpr>):
+  s_mov_b64_exec %29
+  %34 = s_and_b64 %29, %in_range
+  %35 = s_xor_b64_exec %34
+  low.cond_br %35, ^else, ^_bb6 : reg<amdgpu.scc>
+^_bb5:
+  s_mov_b64_exec %29
+  %31 = v_mov_b32 0
+  low.br ^_bb4(%31: reg<amdgpu.vgpr>, %31: reg<amdgpu.vgpr>)
+^_bb6:
+  s_mov_b64_exec %29
+  low.br ^join(%selected_index$18: reg<amdgpu.vgpr>, %selected_token$19: reg<amdgpu.vgpr>)
+^_bb7:
+  s_mov_b64_exec %29
+  %32 = v_cndmask_b32 %else_index, %selected_index$18, %in_range
+  %33 = v_cndmask_b32 %else_token, %selected_token$19, %in_range
+  low.br ^join(%32: reg<amdgpu.vgpr>, %33: reg<amdgpu.vgpr>)
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
 func.def target(@target) @divergent_if_else_tail_argmax_pair(%indices: vector<2xi32>, %scores: vector<2xf32>, %limit: i32) -> (f32, i32) {
   %lane = vector.extract %indices[0] : vector<2xi32> -> i32
   %score = vector.extract %scores[0] : vector<2xf32> -> f32

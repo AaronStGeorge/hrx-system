@@ -38,6 +38,7 @@ loom_value_facts_t loom_value_facts_exact_i64(int64_t value) {
   facts.range_hi = value;
   facts.known_divisor = loom_value_facts_exact_i64_divisor(value);
   facts.flags = loom_value_facts_compute_flags(value, value);
+  loom_value_facts_mark_uniform(&facts);
   return facts;
 }
 
@@ -47,6 +48,7 @@ loom_value_facts_t loom_value_facts_exact_f64(double value) {
   facts.range_hi = facts.range_lo;
   facts.known_divisor = 1;
   facts.flags = LOOM_VALUE_FACT_EXACT | LOOM_VALUE_FACT_FLOAT;
+  loom_value_facts_mark_uniform(&facts);
   return facts;
 }
 
@@ -85,6 +87,9 @@ loom_value_facts_t loom_value_facts_clamp_domain(loom_value_facts_t facts,
       range_hi > 0) {
     result.flags |= LOOM_VALUE_FACT_POWER_OF_TWO;
   }
+  result.flags |=
+      facts.flags & (LOOM_VALUE_FACT_UNIFORM | LOOM_VALUE_FACT_LANE_VARYING |
+                     LOOM_VALUE_FACT_LANE_PREDICATE);
   result.extension_id = facts.extension_id;
   return result;
 }
@@ -97,7 +102,9 @@ void loom_value_facts_recompute_flags(loom_value_facts_t* facts) {
   // Preserve flags that come from external sources (predicates, not
   // range analysis).
   uint32_t preserved =
-      facts->flags & (LOOM_VALUE_FACT_POWER_OF_TWO | LOOM_VALUE_FACT_FLOAT);
+      facts->flags & (LOOM_VALUE_FACT_POWER_OF_TWO | LOOM_VALUE_FACT_FLOAT |
+                      LOOM_VALUE_FACT_UNIFORM | LOOM_VALUE_FACT_LANE_VARYING |
+                      LOOM_VALUE_FACT_LANE_PREDICATE);
   facts->flags =
       loom_value_facts_compute_flags(facts->range_lo, facts->range_hi) |
       preserved;
@@ -756,10 +763,19 @@ static bool loom_value_facts_type_dim(loom_type_t type, uint8_t index,
 loom_value_facts_t loom_value_facts_non_negative_extent(
     loom_value_facts_t facts) {
   if (loom_value_facts_is_float(facts) || facts.range_hi < 0) {
-    return loom_value_facts_make(0, INT64_MAX, 1);
+    loom_value_facts_t result = loom_value_facts_make(0, INT64_MAX, 1);
+    result.flags |=
+        facts.flags & (LOOM_VALUE_FACT_UNIFORM | LOOM_VALUE_FACT_LANE_VARYING |
+                       LOOM_VALUE_FACT_LANE_PREDICATE);
+    return result;
   }
   int64_t lo = loom_max_i64(facts.range_lo, 0);
-  return loom_value_facts_make(lo, facts.range_hi, facts.known_divisor);
+  loom_value_facts_t result =
+      loom_value_facts_make(lo, facts.range_hi, facts.known_divisor);
+  result.flags |=
+      facts.flags & (LOOM_VALUE_FACT_UNIFORM | LOOM_VALUE_FACT_LANE_VARYING |
+                     LOOM_VALUE_FACT_LANE_PREDICATE);
+  return result;
 }
 
 static void loom_value_facts_clamp_non_negative(loom_value_facts_t* facts) {

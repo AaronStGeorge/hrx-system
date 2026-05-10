@@ -3256,6 +3256,8 @@ class Op:
     results: List of Result descriptors.
     attrs: List of AttrDef descriptors.
     successors: List of Successor descriptors.
+    successor_selector: Operand name whose value selects between successors,
+        or None for unconditional/non-selected successor edges.
     regions: List of RegionDef descriptors.
     constraints: List of Constraint instances.
     traits: List of Trait instances.
@@ -3277,6 +3279,7 @@ class Op:
     results: tuple[Result | TiedResult, ...] = ()
     attrs: tuple[AttrDef, ...] = ()
     successors: tuple[Successor, ...] = ()
+    successor_selector: str | None = None
     regions: tuple[RegionDef, ...] = ()
     constraints: tuple[Constraint, ...] = ()
     traits: tuple[Trait, ...] = ()
@@ -3309,6 +3312,7 @@ class Op:
         results: list[Result | TiedResult] | tuple[Result | TiedResult, ...] = (),
         attrs: list[AttrDef] | tuple[AttrDef, ...] = (),
         successors: list[Successor] | tuple[Successor, ...] = (),
+        successor_selector: str | None = None,
         regions: list[RegionDef] | tuple[RegionDef, ...] = (),
         constraints: list[Constraint] | tuple[Constraint, ...] = (),
         traits: list[Trait] | tuple[Trait, ...] = (),
@@ -3342,6 +3346,7 @@ class Op:
         object.__setattr__(self, "results", frozen_results)
         object.__setattr__(self, "attrs", frozen_attrs)
         object.__setattr__(self, "successors", frozen_successors)
+        object.__setattr__(self, "successor_selector", successor_selector)
         object.__setattr__(self, "regions", frozen_regions)
         object.__setattr__(self, "constraints", tuple(constraints))
         object.__setattr__(self, "traits", tuple(traits))
@@ -3388,6 +3393,29 @@ class Op:
                 raise ValueError(
                     f"Op '{name}': symbol_def field '{symbol_def.field}' "
                     "must be a symbol attr"
+                )
+        if successor_selector is not None:
+            if len(frozen_successors) < 2:
+                raise ValueError(
+                    f"Op '{name}': successor_selector requires at least two successors"
+                )
+            selector_operand = next(
+                (
+                    operand
+                    for operand in frozen_operands
+                    if operand.name == successor_selector
+                ),
+                None,
+            )
+            if selector_operand is None:
+                raise ValueError(
+                    f"Op '{name}': successor_selector field "
+                    f"'{successor_selector}' does not name an operand"
+                )
+            if selector_operand.variadic:
+                raise ValueError(
+                    f"Op '{name}': successor_selector field "
+                    f"'{successor_selector}' must not be variadic"
                 )
         # Validate memory effect declarations.
         if frozen_effects:

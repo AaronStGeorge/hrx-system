@@ -201,6 +201,23 @@ typedef struct loom_low_lower_prepare_branch_callback_t {
   void* user_data;
 } loom_low_lower_prepare_branch_callback_t;
 
+typedef iree_status_t (*loom_low_lower_materialize_branch_arg_fn_t)(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_terminator, uint8_t successor_index,
+    uint16_t arg_index, loom_value_id_t source_value_id,
+    loom_value_id_t low_value_id, loom_type_t required_low_type,
+    loom_value_id_t* out_low_value_id);
+
+typedef struct loom_low_lower_materialize_branch_arg_callback_t {
+  // Optional callback invoked when a structural branch payload's already
+  // lowered value does not match the destination block argument type. Targets
+  // use this to materialize edge-local register-class copies without changing
+  // the source value's canonical low mapping.
+  loom_low_lower_materialize_branch_arg_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_materialize_branch_arg_callback_t;
+
 typedef iree_status_t (*loom_low_lower_emit_cond_branch_fn_t)(
     void* user_data, loom_low_lower_context_t* context,
     const loom_op_t* source_op, loom_value_id_t low_condition,
@@ -371,6 +388,9 @@ typedef struct loom_low_lower_policy_t {
   loom_low_lower_emit_preamble_callback_t emit_preamble;
   // Optionally plans target-specific branch expansion after low blocks exist.
   loom_low_lower_prepare_branch_callback_t prepare_branch;
+  // Optionally materializes branch payloads to the exact destination block
+  // argument type after the canonical low value has been looked up.
+  loom_low_lower_materialize_branch_arg_callback_t materialize_branch_arg;
   // Optionally emits conditional branches that need target-specific structural
   // control packets instead of plain low.cond_br.
   loom_low_lower_emit_cond_branch_callback_t emit_cond_branch;
@@ -594,6 +614,17 @@ iree_status_t loom_low_lower_append_low_block(loom_low_lower_context_t* context,
 iree_status_t loom_low_lower_lookup_successor_dest(
     loom_low_lower_context_t* context, const loom_op_t* source_terminator,
     uint8_t successor_index, loom_block_t** out_low_dest);
+
+// Maps one source successor payload to low values accepted by |low_dest|.
+//
+// This accounts for target interpositions and edge-local register-class
+// materialization. Structural branch lowering should use this instead of raw
+// loom_low_lower_lookup_value loops when forwarding block arguments.
+iree_status_t loom_low_lower_remap_successor_args(
+    loom_low_lower_context_t* context, const loom_op_t* source_terminator,
+    uint8_t successor_index, loom_block_t* low_dest,
+    const loom_value_id_t* source_args, uint16_t source_arg_count,
+    loom_value_id_t** out_low_args);
 
 // Interposes a low-only destination block on one source successor edge.
 //

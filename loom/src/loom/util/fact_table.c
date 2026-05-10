@@ -1267,6 +1267,20 @@ iree_status_t loom_value_fact_table_clone_fact(
   return iree_ok_status();
 }
 
+static bool loom_value_fact_type_is_i1(loom_type_t type) {
+  return loom_type_is_scalar(type) &&
+         loom_type_element_type(type) == LOOM_SCALAR_TYPE_I1;
+}
+
+static void loom_value_fact_mark_lane_distribution_for_type(
+    loom_type_t type, loom_value_facts_t* facts) {
+  if (loom_value_fact_type_is_i1(type)) {
+    loom_value_facts_mark_lane_predicate(facts);
+  } else {
+    loom_value_facts_mark_lane_varying(facts);
+  }
+}
+
 iree_status_t loom_value_fact_table_clone_fact_for_type(
     loom_value_fact_table_t* target, const loom_value_fact_table_t* source,
     const loom_module_t* module, loom_type_t type, loom_value_facts_t facts,
@@ -1304,6 +1318,13 @@ iree_status_t loom_value_fact_table_meet_for_type(
   if (loom_value_facts_is_float(lhs_scalar) ||
       loom_value_facts_is_float(rhs_scalar)) {
     *out_facts = loom_value_facts_unknown();
+    if (loom_value_facts_is_lane_varying(lhs_scalar) ||
+        loom_value_facts_is_lane_varying(rhs_scalar)) {
+      loom_value_fact_mark_lane_distribution_for_type(type, out_facts);
+    } else if (loom_value_facts_is_uniform(lhs_scalar) &&
+               loom_value_facts_is_uniform(rhs_scalar)) {
+      loom_value_facts_mark_uniform(out_facts);
+    }
   } else {
     loom_value_facts_meet(&lhs_scalar, &rhs_scalar, out_facts);
   }
@@ -1343,6 +1364,13 @@ iree_status_t loom_value_fact_table_widen_for_type(
   }
 
   *out_facts = loom_value_facts_unknown();
+  if (loom_value_facts_is_lane_varying(previous) ||
+      loom_value_facts_is_lane_varying(next)) {
+    loom_value_fact_mark_lane_distribution_for_type(type, out_facts);
+  } else if (loom_value_facts_is_uniform(previous) &&
+             loom_value_facts_is_uniform(next)) {
+    loom_value_facts_mark_uniform(out_facts);
+  }
   const loom_value_fact_domain_t* domain =
       loom_value_fact_domain_for_type(target, module, type);
   if (domain && domain->widen_extension) {
@@ -1557,6 +1585,42 @@ static iree_status_t loom_value_fact_table_seed_type_extent_facts(
   return iree_ok_status();
 }
 
+static void loom_value_fact_table_apply_operand_distribution(
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts, loom_value_id_t result_id,
+    loom_value_facts_t* result_facts) {
+  if (result_id == LOOM_VALUE_ID_INVALID || result_id >= module->values.count) {
+    return;
+  }
+  if (loom_value_facts_is_exact(*result_facts)) {
+    loom_value_facts_mark_uniform(result_facts);
+    return;
+  }
+  if (op->operand_count == 0) {
+    return;
+  }
+
+  bool all_operands_uniform = true;
+  bool any_operand_lane_varying = false;
+  for (uint16_t i = 0; i < op->operand_count; ++i) {
+    const loom_value_facts_t facts = operand_facts[i];
+    if (loom_value_facts_is_lane_varying(facts) ||
+        loom_value_facts_is_lane_predicate(facts)) {
+      any_operand_lane_varying = true;
+    }
+    if (!loom_value_facts_is_uniform(facts)) {
+      all_operands_uniform = false;
+    }
+  }
+
+  if (any_operand_lane_varying) {
+    loom_value_fact_mark_lane_distribution_for_type(
+        loom_module_value_type(module, result_id), result_facts);
+  } else if (all_operands_uniform) {
+    loom_value_facts_mark_uniform(result_facts);
+  }
+}
+
 static int64_t loom_value_fact_loop_iv_base_divisor(loom_value_facts_t facts) {
   if (!loom_value_facts_is_exact(facts) || facts.range_lo == INT64_MIN) {
     return facts.known_divisor;
@@ -1767,6 +1831,76 @@ static iree_status_t loom_value_fact_table_join_cfg_block_arg_incoming(
   return iree_ok_status();
 }
 
+static bool loom_value_fact_table_selector_is_lane_varying(
+    const loom_value_fact_table_t* table, loom_value_id_t selector_value_id) {
+  if (selector_value_id == LOOM_VALUE_ID_INVALID ||
+      !loom_value_fact_table_has_entry(table, selector_value_id)) {
+    return false;
+  }
+  const loom_value_facts_t selector_facts =
+      loom_value_fact_table_lookup(table, selector_value_id);
+  return loom_value_facts_is_lane_varying(selector_facts) ||
+         loom_value_facts_is_lane_predicate(selector_facts);
+}
+
+static bool loom_value_fact_table_block_has_payload_edge_to_target(
+    const loom_cfg_graph_t* graph, uint16_t source_block_index,
+    const loom_block_t* target_block, uint16_t arg_index) {
+  loom_cfg_edge_index_span_t successor_edges =
+      loom_cfg_graph_successor_edges(graph, source_block_index);
+  for (iree_host_size_t i = 0; i < successor_edges.count; ++i) {
+    const loom_cfg_edge_info_t* edge =
+        loom_cfg_graph_edge(graph, successor_edges.values[i]);
+    if (edge == NULL) continue;
+    const loom_value_id_t* edge_args = NULL;
+    uint16_t edge_arg_count = 0;
+    if (loom_value_fact_table_branch_payload_for_successor(
+            edge->terminator, target_block, &edge_args, &edge_arg_count) &&
+        arg_index < edge_arg_count) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool loom_value_fact_table_edge_is_selected_by_lane_varying_control(
+    const loom_value_fact_table_t* table, const loom_cfg_graph_t* graph,
+    const loom_cfg_edge_info_t* incoming_edge, const loom_block_t* target_block,
+    uint16_t arg_index) {
+  if (incoming_edge == NULL) return false;
+
+  loom_cfg_edge_index_span_t arm_predecessor_edges =
+      loom_cfg_graph_predecessor_edges(graph,
+                                       incoming_edge->source_block_index);
+  for (iree_host_size_t i = 0; i < arm_predecessor_edges.count; ++i) {
+    const loom_cfg_edge_info_t* guard_edge =
+        loom_cfg_graph_edge(graph, arm_predecessor_edges.values[i]);
+    if (guard_edge == NULL || !loom_value_fact_table_selector_is_lane_varying(
+                                  table, guard_edge->selector_value_id)) {
+      continue;
+    }
+
+    loom_cfg_edge_index_span_t guard_successor_edges =
+        loom_cfg_graph_successor_edges(graph, guard_edge->source_block_index);
+    for (iree_host_size_t j = 0; j < guard_successor_edges.count; ++j) {
+      const loom_cfg_edge_info_t* sibling_edge =
+          loom_cfg_graph_edge(graph, guard_successor_edges.values[j]);
+      if (sibling_edge == NULL ||
+          sibling_edge->terminator != guard_edge->terminator ||
+          sibling_edge->target_block_index ==
+              incoming_edge->source_block_index) {
+        continue;
+      }
+      if (loom_value_fact_table_block_has_payload_edge_to_target(
+              graph, sibling_edge->target_block_index, target_block,
+              arg_index)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 static iree_status_t loom_value_fact_table_compute_cfg_block_arg(
     loom_value_fact_table_t* table, const loom_module_t* module,
     const loom_cfg_graph_t* graph, uint16_t block_index, uint16_t arg_index,
@@ -1782,11 +1916,17 @@ static iree_status_t loom_value_fact_table_compute_cfg_block_arg(
   loom_type_t type = loom_module_value_type(module, arg_id);
 
   bool has_facts = false;
+  bool selected_by_lane_varying_control = false;
+  bool all_source_values_match = true;
+  loom_value_id_t first_source_value = LOOM_VALUE_ID_INVALID;
   loom_value_facts_t incoming_facts = loom_value_facts_unknown();
-  loom_cfg_block_index_span_t predecessors =
-      loom_cfg_graph_predecessors(graph, block_index);
-  for (iree_host_size_t i = 0; i < predecessors.count; ++i) {
-    uint16_t predecessor_index = predecessors.values[i];
+  loom_cfg_edge_index_span_t predecessor_edges =
+      loom_cfg_graph_predecessor_edges(graph, block_index);
+  for (iree_host_size_t i = 0; i < predecessor_edges.count; ++i) {
+    const loom_cfg_edge_info_t* predecessor_edge =
+        loom_cfg_graph_edge(graph, predecessor_edges.values[i]);
+    if (predecessor_edge == NULL) continue;
+    uint16_t predecessor_index = predecessor_edge->source_block_index;
     if (!loom_cfg_graph_block_is_reachable(graph, predecessor_index)) {
       continue;
     }
@@ -1800,9 +1940,18 @@ static iree_status_t loom_value_fact_table_compute_cfg_block_arg(
         arg_index >= edge_arg_count) {
       continue;
     }
+    const loom_value_id_t source_value = edge_args[arg_index];
+    if (first_source_value == LOOM_VALUE_ID_INVALID) {
+      first_source_value = source_value;
+    } else if (source_value != first_source_value) {
+      all_source_values_match = false;
+    }
+    selected_by_lane_varying_control =
+        selected_by_lane_varying_control ||
+        loom_value_fact_table_edge_is_selected_by_lane_varying_control(
+            table, graph, predecessor_edge, block, arg_index);
     IREE_RETURN_IF_ERROR(loom_value_fact_table_join_cfg_block_arg_incoming(
-        table, module, type, edge_args[arg_index], &has_facts,
-        &incoming_facts));
+        table, module, type, source_value, &has_facts, &incoming_facts));
   }
   if (!has_facts) {
     return iree_ok_status();
@@ -1815,6 +1964,10 @@ static iree_status_t loom_value_fact_table_compute_cfg_block_arg(
     IREE_RETURN_IF_ERROR(loom_value_fact_table_widen_for_type(
         table, module, type, table, current_facts, table, incoming_facts,
         iteration, &facts));
+  }
+  if (selected_by_lane_varying_control && !all_source_values_match &&
+      !loom_value_facts_is_exact(facts)) {
+    loom_value_fact_mark_lane_distribution_for_type(type, &facts);
   }
   return loom_value_fact_table_define_block_arg_facts(table, module, arg_id,
                                                       facts, out_changed);
@@ -1886,7 +2039,7 @@ static iree_status_t loom_value_fact_table_compute_cfg_region_tree(
     loom_region_t* region, loom_op_t* parent_op) {
   loom_cfg_graph_t graph = {0};
   IREE_RETURN_IF_ERROR(
-      loom_cfg_graph_build(region, table->transient_arena, &graph));
+      loom_cfg_graph_build(module, region, table->transient_arena, &graph));
 
   if (region->block_count == 0) {
     return iree_ok_status();
@@ -2417,6 +2570,11 @@ iree_status_t loom_value_fact_table_compute_op_and_report(
                                            operand_facts, result_facts));
 
   const loom_value_id_t* results = loom_op_const_results(op);
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    loom_value_fact_table_apply_operand_distribution(
+        module, op, operand_facts, results[i], &result_facts[i]);
+  }
+
   for (uint16_t i = 0; i < op->result_count; ++i) {
     if (results[i] == LOOM_VALUE_ID_INVALID ||
         results[i] >= module->values.count) {

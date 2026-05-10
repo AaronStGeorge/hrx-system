@@ -1160,7 +1160,7 @@ iree_status_t loom_liveness_analyze_local_value_domain(
   bool is_cfg = iree_any_bit_set(region->flags, LOOM_REGION_INSTANCE_FLAG_CFG);
   loom_cfg_graph_t graph = {0};
   if (iree_status_is_ok(status) && is_cfg) {
-    status = loom_cfg_graph_build(region, arena, &graph);
+    status = loom_cfg_graph_build(module, region, arena, &graph);
   }
   if (iree_status_is_ok(status) && is_cfg) {
     if (graph.malformed) {

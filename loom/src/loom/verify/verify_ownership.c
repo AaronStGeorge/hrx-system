@@ -320,7 +320,8 @@ static iree_status_t loom_verify_find_cfg_use_after_consume(
 
   loom_cfg_graph_t graph = {0};
   IREE_RETURN_IF_ERROR(loom_cfg_graph_build(
-      consuming_op->parent_block->parent_region, &state->arena, &graph));
+      state->module, consuming_op->parent_block->parent_region, &state->arena,
+      &graph));
   if (graph.malformed) {
     return iree_ok_status();
   }

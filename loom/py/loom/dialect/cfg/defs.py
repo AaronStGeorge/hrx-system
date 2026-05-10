@@ -82,6 +82,7 @@ cfg_cond_br = Op(
         Successor("true_dest", doc="Destination block when the condition is true."),
         Successor("false_dest", doc="Destination block when the condition is false."),
     ],
+    successor_selector="condition",
     traits=[TERMINATOR],
     verify="loom_cfg_cond_br_verify",
     format=[

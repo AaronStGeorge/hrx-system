@@ -717,6 +717,18 @@ def _resolve_operand_index(op: Op, operand_name: str | None, interface_name: str
     raise ValueError(f"{interface_name} on {op.name!r}: operand {operand_name!r} not found. Available: {[o.name for o in op.operands]}")
 
 
+def _resolve_successor_selector_operand_index(op: Op) -> int | None:
+    """Resolves the op-level successor selector operand index, if present."""
+    if op.successor_selector is None:
+        return None
+    index = _resolve_operand_index(op, op.successor_selector, "successor_selector")
+    if index > 0xFFFF:
+        raise ValueError(f"Op '{op.name}': successor_selector operand index {index} exceeds uint16_t range")
+    if len(op.successors) < 2:
+        raise ValueError(f"Op '{op.name}': successor_selector requires at least two successors")
+    return index
+
+
 def _resolve_result_index(op: Op, result_name: str | None, interface_name: str = "interface") -> int:
     """Resolves a result name to its index in the op's result list.
 
@@ -3677,6 +3689,7 @@ def generate_tables_c(
         operand_descriptor_count = len(op.operands)
         if _func_args_are_operands(op) and _explicit_func_args_operand(op) is None:
             operand_descriptor_count += 1
+        successor_selector_operand_index = _resolve_successor_selector_operand_index(op)
         implied_operand_descriptor_count = layout.fixed_operand_count
         if layout.variadic_operand or _func_args_are_operands(op):
             implied_operand_descriptor_count += 1
@@ -3702,6 +3715,9 @@ def generate_tables_c(
             lines.append(f"    .operand_descriptor_count = IREE_ARRAYSIZE({operand_desc_ptr}),")
         append_nonzero("fixed_result_count", layout.fixed_result_count)
         append_nonzero("vtable_flags", vtable_flags_str)
+        if successor_selector_operand_index is not None:
+            lines.append("    .control_flow_flags = LOOM_OP_CONTROL_FLOW_HAS_SUCCESSOR_SELECTOR,")
+            lines.append(f"    .successor_selector_operand_index = {successor_selector_operand_index},")
         if sym_kind != "LOOM_SYMBOL_NONE":
             lines.append(f"    .symbol_kind = {sym_kind},")
         append_nonnull("canonicalize", canon)

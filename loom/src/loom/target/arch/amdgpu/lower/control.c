@@ -105,6 +105,54 @@ static iree_status_t loom_amdgpu_condition_is_reg_class(
   return iree_ok_status();
 }
 
+iree_status_t loom_amdgpu_materialize_branch_arg(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_terminator, uint8_t successor_index,
+    uint16_t arg_index, loom_value_id_t source_value_id,
+    loom_value_id_t low_value_id, loom_type_t required_low_type,
+    loom_value_id_t* out_low_value_id) {
+  *out_low_value_id = low_value_id;
+  bool requires_vgpr = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
+      context, required_low_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
+      &requires_vgpr));
+  if (requires_vgpr) {
+    const loom_type_t source_type = loom_module_value_type(
+        loom_low_lower_context_module(context), source_value_id);
+    if (loom_amdgpu_type_is_address_scalar(source_type)) {
+      return loom_amdgpu_lookup_or_materialize_vgpr_address(
+          context, source_terminator, source_value_id, out_low_value_id);
+    }
+    if (loom_amdgpu_type_is_i32(source_type) ||
+        loom_amdgpu_vector_i32_register_count(source_type) != 0) {
+      return loom_amdgpu_lookup_or_materialize_vgpr_i32(
+          context, source_terminator, source_value_id, out_low_value_id);
+    }
+    if (loom_amdgpu_type_is_f32(source_type) ||
+        loom_amdgpu_vector_f32_register_count(source_type) != 0) {
+      return loom_amdgpu_lookup_or_materialize_vgpr_f32(
+          context, source_terminator, source_value_id, out_low_value_id);
+    }
+    return loom_amdgpu_materialize_low_vgpr_b32_registers(
+        context, source_terminator, low_value_id, out_low_value_id);
+  }
+
+  bool requires_sgpr = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
+      context, required_low_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR,
+      &requires_sgpr));
+  if (requires_sgpr && loom_type_register_unit_count(required_low_type) == 2 &&
+      loom_amdgpu_type_is_i1(loom_module_value_type(
+          loom_low_lower_context_module(context), source_value_id))) {
+    return loom_amdgpu_lookup_or_materialize_native_i1_mask(
+        context, source_terminator, source_value_id, out_low_value_id);
+  }
+
+  return iree_make_status(
+      IREE_STATUS_INTERNAL,
+      "AMDGPU branch argument materializer selected for an unsupported type");
+}
+
 static iree_status_t loom_amdgpu_emit_sgpr_bool_cond_branch(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t low_condition, loom_block_t* low_true_dest,
@@ -1010,14 +1058,9 @@ static iree_status_t loom_amdgpu_emit_exec_restore_passthrough_block(
   IREE_ASSERT(loom_cfg_br_isa(passthrough_terminator));
   loom_value_slice_t args = loom_cfg_br_args(passthrough_terminator);
   loom_value_id_t* low_args = NULL;
-  if (args.count != 0) {
-    IREE_RETURN_IF_ERROR(loom_low_lower_allocate_scratch_array(
-        context, args.count, sizeof(*low_args), (void**)&low_args));
-  }
-  for (uint16_t i = 0; i < args.count; ++i) {
-    IREE_RETURN_IF_ERROR(
-        loom_low_lower_lookup_value(context, args.values[i], &low_args[i]));
-  }
+  IREE_RETURN_IF_ERROR(loom_low_lower_remap_successor_args(
+      context, passthrough_terminator, 0, restore_dest, args.values, args.count,
+      &low_args));
   return loom_amdgpu_emit_exec_restore_branch(context, source_op, saved_exec,
                                               restore_block, restore_dest,
                                               low_args, args.count);

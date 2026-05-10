@@ -2629,8 +2629,8 @@ static iree_status_t loom_cfg_simplify_process_cfg_region(
     loom_cfg_simplify_state_t* state, loom_region_t* region,
     bool* out_changed) {
   loom_cfg_graph_t graph = {0};
-  IREE_RETURN_IF_ERROR(
-      loom_cfg_graph_build(region, state->analysis_arena, &graph));
+  IREE_RETURN_IF_ERROR(loom_cfg_graph_build(state->module, region,
+                                            state->analysis_arena, &graph));
   IREE_RETURN_IF_ERROR(
       loom_cfg_simplify_remove_unreachable_blocks(state, &graph, out_changed));
   if (*out_changed) return iree_ok_status();

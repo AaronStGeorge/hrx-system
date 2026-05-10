@@ -386,9 +386,13 @@ static iree_status_t loom_amdgpu_select_index_constant_plan(
       !loom_amdgpu_attr_is_u32_address_immediate(value)) {
     return iree_ok_status();
   }
+  const loom_amdgpu_descriptor_ref_t descriptor_ref =
+      loom_amdgpu_value_prefers_vgpr(context, result)
+          ? LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32
+          : LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32;
   return loom_amdgpu_select_u32_bit_pattern_constant_plan(
-      context, (uint32_t)value.i64, result,
-      LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B32, out_plan, out_selected);
+      context, (uint32_t)value.i64, result, descriptor_ref, out_plan,
+      out_selected);
 }
 
 static iree_status_t loom_amdgpu_select_scalar_constant_plan(

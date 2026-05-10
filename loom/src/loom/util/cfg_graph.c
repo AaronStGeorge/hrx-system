@@ -8,6 +8,8 @@
 
 #include <string.h>
 
+#include "loom/ir/context.h"
+
 static iree_status_t loom_cfg_graph_count_edges(const loom_region_t* region,
                                                 loom_cfg_graph_t* graph) {
   for (uint16_t block_index = 0; block_index < region->block_count;
@@ -53,12 +55,21 @@ static iree_status_t loom_cfg_graph_assign_edge_storage(
   *out_successor_write_positions = NULL;
   *out_predecessor_write_positions = NULL;
   if (graph->edge_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(arena, graph->edge_count,
+                                                   sizeof(*graph->edges),
+                                                   (void**)&graph->edges));
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         arena, graph->edge_count, sizeof(*graph->successor_indices),
         (void**)&graph->successor_indices));
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        arena, graph->edge_count, sizeof(*graph->successor_edge_indices),
+        (void**)&graph->successor_edge_indices));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         arena, graph->edge_count, sizeof(*graph->predecessor_indices),
         (void**)&graph->predecessor_indices));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        arena, graph->edge_count, sizeof(*graph->predecessor_edge_indices),
+        (void**)&graph->predecessor_edge_indices));
   }
 
   if (graph->block_count > 0) {
@@ -76,7 +87,9 @@ static iree_status_t loom_cfg_graph_assign_edge_storage(
        ++block_index) {
     loom_cfg_block_info_t* block_info = &graph->blocks[block_index];
     block_info->successor_start = successor_start;
+    block_info->successor_edge_start = successor_start;
     block_info->predecessor_start = predecessor_start;
+    block_info->predecessor_edge_start = predecessor_start;
     (*out_successor_write_positions)[block_index] = successor_start;
     (*out_predecessor_write_positions)[block_index] = predecessor_start;
     successor_start += block_info->successor_count;
@@ -85,10 +98,28 @@ static iree_status_t loom_cfg_graph_assign_edge_storage(
   return iree_ok_status();
 }
 
+static loom_value_id_t loom_cfg_graph_selector_value(
+    const loom_module_t* module, const loom_op_t* terminator,
+    bool* inout_malformed) {
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, terminator);
+  if (!vtable ||
+      !iree_any_bit_set(vtable->control_flow_flags,
+                        LOOM_OP_CONTROL_FLOW_HAS_SUCCESSOR_SELECTOR)) {
+    return LOOM_VALUE_ID_INVALID;
+  }
+  uint16_t selector_index = vtable->successor_selector_operand_index;
+  if (selector_index >= terminator->operand_count) {
+    *inout_malformed = true;
+    return LOOM_VALUE_ID_INVALID;
+  }
+  return loom_op_const_operands(terminator)[selector_index];
+}
+
 static void loom_cfg_graph_write_edges(
-    const loom_region_t* region, loom_cfg_graph_t* graph,
-    iree_host_size_t* successor_write_positions,
+    const loom_module_t* module, const loom_region_t* region,
+    loom_cfg_graph_t* graph, iree_host_size_t* successor_write_positions,
     iree_host_size_t* predecessor_write_positions) {
+  loom_cfg_edge_index_t edge_index = 0;
   for (uint16_t block_index = 0; block_index < region->block_count;
        ++block_index) {
     const loom_block_t* block = loom_region_const_block(region, block_index);
@@ -105,10 +136,25 @@ static void loom_cfg_graph_write_edges(
                                            &target_index)) {
             continue;
           }
-          graph->successor_indices[successor_write_positions[block_index]++] =
-              target_index;
-          graph->predecessor_indices
-              [predecessor_write_positions[target_index]++] = block_index;
+          bool edge_malformed = false;
+          graph->edges[edge_index] = (loom_cfg_edge_info_t){
+              .terminator = op,
+              .source_block_index = block_index,
+              .target_block_index = target_index,
+              .successor_index = i,
+              .selector_value_id =
+                  loom_cfg_graph_selector_value(module, op, &edge_malformed),
+          };
+          graph->malformed = graph->malformed || edge_malformed;
+          iree_host_size_t successor_position =
+              successor_write_positions[block_index]++;
+          graph->successor_indices[successor_position] = target_index;
+          graph->successor_edge_indices[successor_position] = edge_index;
+          iree_host_size_t predecessor_position =
+              predecessor_write_positions[target_index]++;
+          graph->predecessor_indices[predecessor_position] = block_index;
+          graph->predecessor_edge_indices[predecessor_position] = edge_index;
+          ++edge_index;
         }
       }
       op = op->next_op;
@@ -140,15 +186,17 @@ static iree_status_t loom_cfg_graph_mark_reachable(
   return iree_ok_status();
 }
 
-iree_status_t loom_cfg_graph_build(const loom_region_t* region,
+iree_status_t loom_cfg_graph_build(const loom_module_t* module,
+                                   const loom_region_t* region,
                                    iree_arena_allocator_t* arena,
                                    loom_cfg_graph_t* out_graph) {
-  if (!region || !arena || !out_graph) {
+  if (!module || !region || !arena || !out_graph) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "CFG graph build requires a region, arena, and output graph");
+        "CFG graph build requires a module, region, arena, and output graph");
   }
   memset(out_graph, 0, sizeof(*out_graph));
+  out_graph->module = module;
   out_graph->region = region;
   out_graph->block_count = region->block_count;
 
@@ -177,7 +225,8 @@ iree_status_t loom_cfg_graph_build(const loom_region_t* region,
   IREE_RETURN_IF_ERROR(loom_cfg_graph_assign_edge_storage(
       arena, out_graph, &successor_write_positions,
       &predecessor_write_positions));
-  loom_cfg_graph_write_edges(region, out_graph, successor_write_positions,
+  loom_cfg_graph_write_edges(module, region, out_graph,
+                             successor_write_positions,
                              predecessor_write_positions);
   return loom_cfg_graph_mark_reachable(arena, out_graph);
 }
@@ -211,6 +260,22 @@ loom_cfg_block_index_span_t loom_cfg_graph_successors(
   };
 }
 
+loom_cfg_edge_index_span_t loom_cfg_graph_successor_edges(
+    const loom_cfg_graph_t* graph, uint16_t block_index) {
+  if (!graph || block_index >= graph->block_count) {
+    return (loom_cfg_edge_index_span_t){0};
+  }
+  const loom_cfg_block_info_t* block_info = &graph->blocks[block_index];
+  if (block_info->successor_count == 0) {
+    return (loom_cfg_edge_index_span_t){0};
+  }
+  return (loom_cfg_edge_index_span_t){
+      .values =
+          graph->successor_edge_indices + block_info->successor_edge_start,
+      .count = block_info->successor_count,
+  };
+}
+
 loom_cfg_block_index_span_t loom_cfg_graph_predecessors(
     const loom_cfg_graph_t* graph, uint16_t block_index) {
   if (!graph || block_index >= graph->block_count) {
@@ -224,6 +289,28 @@ loom_cfg_block_index_span_t loom_cfg_graph_predecessors(
       .values = graph->predecessor_indices + block_info->predecessor_start,
       .count = block_info->predecessor_count,
   };
+}
+
+loom_cfg_edge_index_span_t loom_cfg_graph_predecessor_edges(
+    const loom_cfg_graph_t* graph, uint16_t block_index) {
+  if (!graph || block_index >= graph->block_count) {
+    return (loom_cfg_edge_index_span_t){0};
+  }
+  const loom_cfg_block_info_t* block_info = &graph->blocks[block_index];
+  if (block_info->predecessor_count == 0) {
+    return (loom_cfg_edge_index_span_t){0};
+  }
+  return (loom_cfg_edge_index_span_t){
+      .values =
+          graph->predecessor_edge_indices + block_info->predecessor_edge_start,
+      .count = block_info->predecessor_count,
+  };
+}
+
+const loom_cfg_edge_info_t* loom_cfg_graph_edge(
+    const loom_cfg_graph_t* graph, loom_cfg_edge_index_t edge_index) {
+  return graph && edge_index < graph->edge_count ? &graph->edges[edge_index]
+                                                 : NULL;
 }
 
 bool loom_cfg_graph_block_is_reachable(const loom_cfg_graph_t* graph,
