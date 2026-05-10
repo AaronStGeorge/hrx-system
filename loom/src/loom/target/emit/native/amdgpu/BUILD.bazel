@@ -141,6 +141,7 @@ loom_cc_library(
     hdrs = ["check/loom_check.h"],
     deps = [
         ":assembly",
+        ":encoding",
         "//loom/src/loom/codegen/low:frame",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",

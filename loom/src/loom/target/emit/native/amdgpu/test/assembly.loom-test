@@ -46,6 +46,18 @@ low.func.def target(@gfx11_target) @gfx11_vopd_fmac_pair(%acc0: reg<amdgpu.vgpr>
 
 // ====
 
+// RUN: emit amdgpu-native @gfx11_v_mov_b32_dpp16 waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_v_mov_b32_dpp16(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %value: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %shifted = v_mov_b32_dpp16 %value {dpp_ctrl = 177}
+  buffer_store_dword %shifted, %resource, %vaddr, %soffset {offset = 0}
+  return
+}
+
+// ----
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_sgpr_shift_immediate waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_sgpr_shift_immediate(%value: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {

@@ -1271,6 +1271,8 @@ static iree_status_t loom_amdgpu_encode_descriptor_packet(
     case LOOM_AMDGPU_ENCODING_FORMAT_VDS:
     case LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP1:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP1_DPP:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP1_DPP16:
       return loom_amdgpu_encode_generic_descriptor_packet(state, packet);
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP1_LITERAL:
       if (packet->descriptor == loom_amdgpu_descriptor_ref_descriptor(

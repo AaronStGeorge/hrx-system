@@ -46,6 +46,7 @@ loom_cc_library(
     "check/loom_check.c"
   DEPS
     ::assembly
+    ::encoding
     iree::base
     loom::src::loom::codegen::low::frame
     loom::src::loom::ir

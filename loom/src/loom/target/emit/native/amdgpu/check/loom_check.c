@@ -11,6 +11,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/packet_plan.h"
 #include "loom/target/emit/native/amdgpu/assembly.h"
+#include "loom/target/emit/native/amdgpu/encoding.h"
 #include "loom/tools/loom-check/low_emit.h"
 
 typedef enum loom_amdgpu_loom_check_wait_mode_e {
@@ -25,7 +26,7 @@ typedef struct loom_amdgpu_loom_check_emit_options_t {
   loom_low_schedule_strategy_t schedule_strategy;
   // True once a strategy option has been parsed.
   bool has_schedule_strategy_option;
-  // Wait-packet materialization mode for the emitted assembly.
+  // Wait-packet materialization mode for the emitted fragment.
   loom_amdgpu_loom_check_wait_mode_t wait_mode;
   // True once a waits option has been parsed.
   bool has_wait_mode_option;
@@ -46,7 +47,8 @@ static bool loom_amdgpu_loom_check_emit_provider_matches(
     iree_string_view_t target_name) {
   (void)provider;
   return iree_string_view_equal(target_name, IREE_SV("amdgpu-assembly")) ||
-         iree_string_view_equal(target_name, IREE_SV("amdgpu-asm"));
+         iree_string_view_equal(target_name, IREE_SV("amdgpu-asm")) ||
+         iree_string_view_equal(target_name, IREE_SV("amdgpu-native"));
 }
 
 static iree_status_t loom_amdgpu_loom_check_parse_key_value_option(
@@ -168,6 +170,26 @@ static iree_status_t loom_amdgpu_loom_check_emit_assembly(
       &frame->schedule, &frame->allocation, &assembly_options, builder, arena);
 }
 
+static iree_status_t loom_amdgpu_loom_check_emit_native(
+    const loom_low_emission_frame_t* frame,
+    const loom_amdgpu_loom_check_emit_options_t* options,
+    iree_arena_allocator_t* arena) {
+  iree_const_byte_span_t text = iree_const_byte_span_empty();
+  if (options->wait_mode == LOOM_AMDGPU_LOOM_CHECK_WAIT_MODE_NONE) {
+    return loom_amdgpu_encode_instruction_stream(
+        &frame->schedule, &frame->allocation, &text, arena);
+  }
+
+  loom_amdgpu_packet_plan_t packet_plan = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_packet_plan_build(
+      &frame->schedule, &frame->allocation, arena, &packet_plan));
+  const loom_amdgpu_encode_instruction_stream_options_t encoding_options = {
+      .packet_plan = &packet_plan,
+  };
+  return loom_amdgpu_encode_instruction_stream_with_options(
+      &frame->schedule, &frame->allocation, &encoding_options, &text, arena);
+}
+
 static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
     const loom_check_emit_provider_t* provider,
     const loom_check_emit_provider_request_t* request) {
@@ -181,6 +203,10 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
       options.allocation_budgets, options.allocation_budget_count,
       options.allocation_fixed_value_specs,
       options.allocation_fixed_value_spec_count, &frame));
+  if (iree_string_view_equal(request->target_name, IREE_SV("amdgpu-native"))) {
+    return loom_amdgpu_loom_check_emit_native(&frame, &options,
+                                              request->case_arena);
+  }
   return loom_amdgpu_loom_check_emit_assembly(
       &frame, &options, &request->result->actual_output, request->case_arena);
 }
@@ -189,8 +215,8 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_append_names(
     const loom_check_emit_provider_t* provider,
     iree_string_builder_t* builder) {
   (void)provider;
-  return iree_string_builder_append_cstring(builder,
-                                            "amdgpu-assembly, amdgpu-asm");
+  return iree_string_builder_append_cstring(
+      builder, "amdgpu-assembly, amdgpu-asm, amdgpu-native");
 }
 
 const loom_check_emit_provider_t loom_amdgpu_native_loom_check_emit_provider = {
