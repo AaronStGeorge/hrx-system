@@ -819,6 +819,8 @@ iree_c_embed_data(
     "execution/testdata/gfx11_wmma_zero.loom"
     "execution/testdata/lds_b128_roundtrip.loom"
     "execution/testdata/masked_upsample6_reduce.loom"
+    "execution/testdata/model_attention_score_dot2_bf16_fptrunc.loom"
+    "execution/testdata/model_attention_score_scalar_bf16_fptrunc.loom"
     "execution/testdata/model_dense_projection_block_f16.loom"
     "execution/testdata/model_dense_projection_tile_bf16.loom"
     "execution/testdata/model_dense_projection_tile_f16.loom"
