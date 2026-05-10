@@ -16,6 +16,21 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
   constexpr uint32_t kSourceAssignmentIndex = 0;
   constexpr uint32_t kResultAssignmentIndex = 1;
   constexpr uint32_t kEdgeCopyCount = 1;
+  static const uint8_t kDescriptorStringTable[] =
+      "\x11"
+      "register.copy.b32";
+  const loom_low_descriptor_t copy_descriptor = {
+      .semantic_tag_string_offset = 0,
+  };
+  const loom_low_descriptor_set_t descriptor_set = {
+      .string_table =
+          {
+              .data = kDescriptorStringTable,
+              .data_length = sizeof(kDescriptorStringTable) - 1,
+          },
+      .descriptors = &copy_descriptor,
+      .descriptor_count = 1,
+  };
   loom_target_compile_report_pressure_row_t pressure_rows[1] = {};
   loom_target_compile_report_spill_row_t spill_rows[1] = {};
   loom_low_schedule_node_t schedule_nodes[13] = {};
@@ -38,6 +53,8 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
               .capacity = IREE_ARRAYSIZE(value_ordinals),
           },
   };
+  module_values[4].type = loom_type_register(LOOM_STRING_ID_INVALID, 1);
+  module_values[5].type = loom_type_register(LOOM_STRING_ID_INVALID, 2);
   const loom_target_compile_report_row_storage_t row_storage = {
       .pressure_rows = pressure_rows,
       .pressure_row_capacity = IREE_ARRAYSIZE(pressure_rows),
@@ -147,9 +164,30 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
           .reload_count = 4,
       },
   };
+  const loom_op_t copy_op = {
+      .kind = LOOM_OP_KIND_UNKNOWN,
+      .operand_count = 1,
+      .result_count = 1,
+  };
+  schedule_nodes[0] = (loom_low_schedule_node_t){
+      .op = &copy_op,
+      .kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR,
+      .descriptor = &copy_descriptor,
+      .operand_count = 1,
+      .result_count = 1,
+      .value_ordinals =
+          {
+              .inline_value_ordinals = {0, 1},
+          },
+  };
   const loom_low_emission_frame_t frame = {
       .schedule =
           {
+              .module = &module,
+              .target =
+                  {
+                      .descriptor_set = &descriptor_set,
+                  },
               .nodes = schedule_nodes,
               .node_count = 13,
               .dependency_count = 6,
@@ -218,6 +256,18 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
       report.move_causes[LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_BRANCH_EDGE]
           .unit_count,
       1u);
+  EXPECT_EQ(
+      report
+          .move_causes
+              [LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_OPERAND_BANK_MATERIALIZATION]
+          .packet_count,
+      1u);
+  EXPECT_EQ(
+      report
+          .move_causes
+              [LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_OPERAND_BANK_MATERIALIZATION]
+          .unit_count,
+      2u);
   EXPECT_EQ(report.pressure_row_total_count, 2u);
   EXPECT_EQ(report.pressure_row_count, 1u);
   EXPECT_EQ(report.pressure_rows[0].peak_live_units, 7u);

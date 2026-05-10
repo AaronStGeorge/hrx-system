@@ -87,6 +87,8 @@ static const loom_target_compile_report_move_cause_descriptor_t
          IREE_SVL("low_concat")},
         {LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_BRANCH_EDGE,
          IREE_SVL("branch_edge")},
+        {LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_OPERAND_BANK_MATERIALIZATION,
+         IREE_SVL("operand_bank_materialization")},
         {LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_OPERAND_CONSTRAINT_REPAIR,
          IREE_SVL("operand_constraint_repair")},
         {LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_ABI_COPY, IREE_SVL("abi_copy")},

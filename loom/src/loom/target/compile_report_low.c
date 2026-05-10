@@ -11,6 +11,17 @@
 #include "loom/ir/types.h"
 #include "loom/ops/low/ops.h"
 
+static bool loom_target_compile_report_descriptor_semantic_tag_is(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, iree_string_view_t tag) {
+  if (descriptor_set == NULL || descriptor == NULL) {
+    return false;
+  }
+  const iree_string_view_t semantic_tag = loom_low_descriptor_set_string(
+      descriptor_set, descriptor->semantic_tag_string_offset);
+  return iree_string_view_equal(semantic_tag, tag);
+}
+
 static iree_string_view_t loom_target_compile_report_module_string(
     const loom_module_t* module, loom_string_id_t string_id,
     iree_string_view_t fallback) {
@@ -72,6 +83,23 @@ static uint64_t loom_target_compile_report_value_register_unit_count(
   }
   const loom_type_t type = loom_module_value_type(module, value_id);
   return loom_type_is_register(type) ? loom_type_register_unit_count(type) : 0;
+}
+
+static uint64_t loom_target_compile_report_result_register_unit_count(
+    const loom_module_t* module, const loom_liveness_analysis_t* liveness,
+    const loom_low_schedule_node_t* node) {
+  uint64_t unit_count = 0;
+  const loom_value_ordinal_t* result_ordinals =
+      loom_low_schedule_node_const_result_ordinals(node);
+  for (uint16_t i = 0; i < node->result_count; ++i) {
+    const loom_value_ordinal_t result_ordinal = result_ordinals[i];
+    IREE_ASSERT(result_ordinal < liveness->value_count,
+                "verified schedule node result ordinal must fit liveness "
+                "value domain");
+    unit_count += loom_target_compile_report_value_register_unit_count(
+        module, liveness->value_ids[result_ordinal]);
+  }
+  return unit_count;
 }
 
 static const loom_low_allocation_assignment_t*
@@ -219,6 +247,33 @@ static void loom_target_compile_report_record_edge_copy_moves(
       unit_count);
 }
 
+static void
+loom_target_compile_report_record_operand_bank_materialization_moves(
+    loom_target_compile_report_t* report,
+    const loom_low_emission_frame_t* frame) {
+  uint64_t packet_count = 0;
+  uint64_t unit_count = 0;
+  const loom_module_t* module = frame->schedule.module;
+  const loom_liveness_analysis_t* liveness = &frame->allocation.liveness;
+  const loom_low_descriptor_set_t* descriptor_set =
+      frame->schedule.target.descriptor_set;
+  for (iree_host_size_t i = 0; i < frame->schedule.node_count; ++i) {
+    const loom_low_schedule_node_t* node = &frame->schedule.nodes[i];
+    if (node->kind != LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR ||
+        !loom_target_compile_report_descriptor_semantic_tag_is(
+            descriptor_set, node->descriptor, IREE_SV("register.copy.b32"))) {
+      continue;
+    }
+    ++packet_count;
+    unit_count += loom_target_compile_report_result_register_unit_count(
+        module, liveness, node);
+  }
+  loom_target_compile_report_record_move_cause_if_nonzero(
+      report,
+      LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_OPERAND_BANK_MATERIALIZATION,
+      packet_count, unit_count);
+}
+
 static void loom_target_compile_report_record_structural_packet_moves(
     loom_target_compile_report_t* report,
     const loom_low_emission_frame_t* frame) {
@@ -272,6 +327,8 @@ static void loom_target_compile_report_record_move_causes(
     const loom_low_emission_frame_t* frame) {
   loom_target_compile_report_record_low_copy_moves(report, &frame->allocation);
   loom_target_compile_report_record_edge_copy_moves(report, &frame->allocation);
+  loom_target_compile_report_record_operand_bank_materialization_moves(report,
+                                                                       frame);
   loom_target_compile_report_record_structural_packet_moves(report, frame);
 }
 

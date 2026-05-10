@@ -195,6 +195,11 @@ _ADDRESS_VGPR_DIAGNOSTIC = GuardDiagnostic(
     subject_name="address-vgpr",
     constraint_key="amdgpu.address.vgpr_materializer",
 )
+_F32_VGPR_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="materializer",
+    subject_name="f32-vgpr",
+    constraint_key="amdgpu.arithmetic.f32_vgpr_materializer",
+)
 _ADDRESS_SGPR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="register-class",
     subject_name="sgpr",
@@ -1254,14 +1259,15 @@ def _register_class(field: str, register_class: str) -> Guard:
     return Guard.low_value_register_class(field, register_class)
 
 
-def _commutative_f32_vector_binary_rules(
+def _commutative_f32_binary_rules(
     source_op: Op,
+    type_pattern: TypePattern,
     descriptor_key: str,
 ) -> tuple[DescriptorRule, DescriptorRule]:
     return (
         _binary_rule(
             source_op,
-            _VEC_F32,
+            type_pattern,
             descriptor_key,
             descriptor_lhs="lhs",
             descriptor_rhs="rhs",
@@ -1274,11 +1280,85 @@ def _commutative_f32_vector_binary_rules(
         ),
         _binary_rule(
             source_op,
-            _VEC_F32,
+            type_pattern,
             descriptor_key,
             f32_rhs=True,
         ),
     )
+
+
+def _f32_fma_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    *,
+    a_register_class: str,
+    b_register_class: str,
+    c_register_class: str,
+    materialize_c: bool,
+) -> DescriptorRule:
+    descriptor = _descriptor("amdgpu.v_fma_f32")
+    materializer_guards: tuple[Guard, ...] = ()
+    c_operand = ValueRef.operand("c")
+    if materialize_c:
+        materializer_guards = (
+            Guard.value_materializable(
+                "c",
+                F32_VGPR_MATERIALIZER.name,
+                diagnostic=_F32_VGPR_DIAGNOSTIC,
+            ),
+        )
+        c_operand = _f32_vgpr_operand("c")
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            *_typed_guards(("a", "b", "c", "result"), type_pattern),
+            _register_class("a", a_register_class),
+            _register_class("b", b_register_class),
+            _register_class("c", c_register_class),
+            *materializer_guards,
+            Guard.descriptor_available(descriptor),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={
+                    "a": ValueRef.operand("a"),
+                    "b": ValueRef.operand("b"),
+                    "c": c_operand,
+                },
+                results={"dst": ValueRef.result("result")},
+                form=_emit_form(type_pattern),
+            ),
+        ),
+    )
+
+
+def _f32_fma_rules(
+    source_op: Op,
+    type_pattern: TypePattern,
+) -> tuple[DescriptorRule, ...]:
+    rules: list[DescriptorRule] = []
+    register_classes = ("amdgpu.sgpr", "amdgpu.vgpr")
+    for a_register_class in register_classes:
+        for b_register_class in register_classes:
+            for c_register_class in register_classes:
+                all_sources_sgpr = (
+                    a_register_class == "amdgpu.sgpr"
+                    and b_register_class == "amdgpu.sgpr"
+                    and c_register_class == "amdgpu.sgpr"
+                )
+                rules.append(
+                    _f32_fma_rule(
+                        source_op,
+                        type_pattern,
+                        a_register_class=a_register_class,
+                        b_register_class=b_register_class,
+                        c_register_class=c_register_class,
+                        materialize_c=all_sources_sgpr,
+                    )
+                )
+    return tuple(rules)
 
 
 def _commutative_f32_vector_literal_rules(
@@ -1370,8 +1450,9 @@ def _rules() -> tuple[ContractCase, ...]:
     rules.extend(_f32_vector_sub_literal_rules())
     rules.extend(
         (
-            *_commutative_f32_vector_binary_rules(
+            *_commutative_f32_binary_rules(
                 vector.vector_addf,
+                _VEC_F32,
                 "amdgpu.v_add_f32",
             ),
             _binary_rule(
@@ -1380,23 +1461,26 @@ def _rules() -> tuple[ContractCase, ...]:
                 "amdgpu.v_sub_f32",
                 f32_rhs=True,
             ),
-            *_commutative_f32_vector_binary_rules(
+            *_commutative_f32_binary_rules(
                 vector.vector_mulf,
+                _VEC_F32,
                 "amdgpu.v_mul_f32",
             ),
             _f32_neg_rule(vector.vector_negf, _VEC_F32, f32_operand=True),
             _f32_abs_rule(vector.vector_absf, _VEC_F32, f32_operand=True),
             _divf_arcp_one_rule(vector.vector_divf, _VEC_F32),
             _divf_arcp_rule(vector.vector_divf, _VEC_F32),
-            *_commutative_f32_vector_binary_rules(
+            *_commutative_f32_binary_rules(
                 vector.vector_minnumf,
+                _VEC_F32,
                 "amdgpu.v_min_f32",
             ),
-            *_commutative_f32_vector_binary_rules(
+            *_commutative_f32_binary_rules(
                 vector.vector_maxnumf,
+                _VEC_F32,
                 "amdgpu.v_max_f32",
             ),
-            _ternary_rule(vector.vector_fmaf, _VEC_F32, "amdgpu.v_fma_f32"),
+            *_f32_fma_rules(vector.vector_fmaf, _VEC_F32),
             _unary_rule(vector.vector_exp2f, _VEC_F32, "amdgpu.v_exp_f32"),
             _unary_rule(vector.vector_sqrtf, _VEC_F32, "amdgpu.v_sqrt_f32"),
             _unary_rule(vector.vector_rsqrtf, _VEC_F32, "amdgpu.v_rsq_f32"),
@@ -1562,47 +1646,35 @@ def _rules() -> tuple[ContractCase, ...]:
                 _VEC_F32,
                 "amdgpu.v_cvt_f32_u32",
             ),
-            _binary_rule(
+            *_commutative_f32_binary_rules(
                 scalar_arithmetic.scalar_addf,
                 _F32,
                 "amdgpu.v_add_f32",
-                f32_operands=True,
             ),
             _binary_rule(
                 scalar_arithmetic.scalar_subf,
                 _F32,
                 "amdgpu.v_sub_f32",
-                f32_operands=True,
+                f32_rhs=True,
             ),
-            _binary_rule(
+            *_commutative_f32_binary_rules(
                 scalar_arithmetic.scalar_mulf,
                 _F32,
                 "amdgpu.v_mul_f32",
-                f32_operands=True,
             ),
             _f32_neg_rule(scalar_arithmetic.scalar_negf, _F32, f32_operand=True),
             _f32_abs_rule(scalar_arithmetic.scalar_absf, _F32, f32_operand=True),
-            _divf_arcp_one_rule(
-                scalar_arithmetic.scalar_divf,
-                _F32,
-                f32_operand=True,
-            ),
-            _divf_arcp_rule(
-                scalar_arithmetic.scalar_divf,
-                _F32,
-                f32_operands=True,
-            ),
-            _binary_rule(
+            _divf_arcp_one_rule(scalar_arithmetic.scalar_divf, _F32),
+            _divf_arcp_rule(scalar_arithmetic.scalar_divf, _F32),
+            *_commutative_f32_binary_rules(
                 scalar_arithmetic.scalar_minnumf,
                 _F32,
                 "amdgpu.v_min_f32",
-                f32_operands=True,
             ),
-            _binary_rule(
+            *_commutative_f32_binary_rules(
                 scalar_arithmetic.scalar_maxnumf,
                 _F32,
                 "amdgpu.v_max_f32",
-                f32_operands=True,
             ),
             _binary_rule(
                 scalar_arithmetic.scalar_minsi,
@@ -1624,30 +1696,10 @@ def _rules() -> tuple[ContractCase, ...]:
                 _I32,
                 "amdgpu.v_max_u32",
             ),
-            _ternary_rule(
-                scalar_math.scalar_fmaf,
-                _F32,
-                "amdgpu.v_fma_f32",
-                f32_operands=True,
-            ),
-            _unary_rule(
-                scalar_math.scalar_exp2f,
-                _F32,
-                "amdgpu.v_exp_f32",
-                f32_operand=True,
-            ),
-            _unary_rule(
-                scalar_math.scalar_sqrtf,
-                _F32,
-                "amdgpu.v_sqrt_f32",
-                f32_operand=True,
-            ),
-            _unary_rule(
-                scalar_math.scalar_rsqrtf,
-                _F32,
-                "amdgpu.v_rsq_f32",
-                f32_operand=True,
-            ),
+            *_f32_fma_rules(scalar_math.scalar_fmaf, _F32),
+            _unary_rule(scalar_math.scalar_exp2f, _F32, "amdgpu.v_exp_f32"),
+            _unary_rule(scalar_math.scalar_sqrtf, _F32, "amdgpu.v_sqrt_f32"),
+            _unary_rule(scalar_math.scalar_rsqrtf, _F32, "amdgpu.v_rsq_f32"),
             _cast_rule(
                 scalar_conversion.scalar_extf,
                 _F16,

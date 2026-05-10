@@ -311,6 +311,119 @@ low.func.def target(@target) abi(hal_kernel) @f32_uniform_vector_binary() -> (re
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @f32_uniform_scalar_binary(%lhs_buffer: buffer, %rhs_buffer: buffer) -> (f32) {
+  %base = index.constant 0 : offset
+  %lhs_global = buffer.assume.memory_space %lhs_buffer {memory_space = global} : buffer
+  %rhs_global = buffer.assume.memory_space %rhs_buffer {memory_space = global} : buffer
+  %lhs_noalias, %rhs_noalias = buffer.assume.noalias %lhs_global, %rhs_global : buffer, buffer
+  %lhs_view = buffer.view %lhs_noalias[%base] : buffer -> view<1xf32, #dense>
+  %rhs_view = buffer.view %rhs_noalias[%base] : buffer -> view<1xf32, #dense>
+  %lhs = view.load %lhs_view[0] : view<1xf32, #dense> -> f32
+  %rhs = view.load %rhs_view[0] : view<1xf32, #dense> -> f32
+  %sum = scalar.addf %lhs, %rhs : f32
+  func.return %sum : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @f32_uniform_scalar_binary() -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %lhs_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
+  %rhs_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
+  %16 = s_mov_b32 0
+  %lhs = s_load_dword %lhs_view, %16
+  %rhs = s_load_dword %rhs_view, %16
+  %20 = v_mov_b32_copy %rhs
+  %sum = v_add_f32 %lhs, %20
+  return %sum
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @f32_uniform_scalar_fma(%a_buffer: buffer, %b_buffer: buffer, %c_buffer: buffer) -> (f32) {
+  %base = index.constant 0 : offset
+  %a_global = buffer.assume.memory_space %a_buffer {memory_space = global} : buffer
+  %b_global = buffer.assume.memory_space %b_buffer {memory_space = global} : buffer
+  %c_global = buffer.assume.memory_space %c_buffer {memory_space = global} : buffer
+  %a_noalias, %b_noalias, %c_noalias = buffer.assume.noalias %a_global, %b_global, %c_global : buffer, buffer, buffer
+  %a_view = buffer.view %a_noalias[%base] : buffer -> view<1xf32, #dense>
+  %b_view = buffer.view %b_noalias[%base] : buffer -> view<1xf32, #dense>
+  %c_view = buffer.view %c_noalias[%base] : buffer -> view<1xf32, #dense>
+  %a = view.load %a_view[0] : view<1xf32, #dense> -> f32
+  %b = view.load %b_view[0] : view<1xf32, #dense> -> f32
+  %c = view.load %c_view[0] : view<1xf32, #dense> -> f32
+  %result = scalar.fmaf %a, %b, %c : f32
+  func.return %result : f32
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @f32_uniform_scalar_fma() -> (reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %a_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
+  %b_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
+  %c_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 4} : reg<amdgpu.sgpr x2>
+  %22 = s_mov_b32 0
+  %a = s_load_dword %a_view, %22
+  %b = s_load_dword %b_view, %22
+  %c = s_load_dword %c_view, %22
+  %28 = v_mov_b32_copy %c
+  %result = v_fma_f32 %a, %b, %28
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+func.def target(@target) @f32_uniform_vector_fma(%a_buffer: buffer, %b_buffer: buffer, %c_buffer: buffer) -> (vector<4xf32>) {
+  %base = index.constant 0 : offset
+  %a_global = buffer.assume.memory_space %a_buffer {memory_space = global} : buffer
+  %b_global = buffer.assume.memory_space %b_buffer {memory_space = global} : buffer
+  %c_global = buffer.assume.memory_space %c_buffer {memory_space = global} : buffer
+  %a_noalias, %b_noalias, %c_noalias = buffer.assume.noalias %a_global, %b_global, %c_global : buffer, buffer, buffer
+  %a_view = buffer.view %a_noalias[%base] : buffer -> view<4xf32, #dense>
+  %b_view = buffer.view %b_noalias[%base] : buffer -> view<4xf32, #dense>
+  %c_view = buffer.view %c_noalias[%base] : buffer -> view<4xf32, #dense>
+  %a = vector.load %a_view[0] : view<4xf32, #dense> -> vector<4xf32>
+  %b = vector.load %b_view[0] : view<4xf32, #dense> -> vector<4xf32>
+  %c = vector.load %c_view[0] : view<4xf32, #dense> -> vector<4xf32>
+  %result = vector.fmaf %a, %b, %c : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @f32_uniform_vector_fma() -> (reg<amdgpu.vgpr x4>) asm<amdgpu.rdna3.core> {
+  %a_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
+  %b_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
+  %c_view = resource<hal_binding> {index = 2, source_type = hal.buffer, extent = 16} : reg<amdgpu.sgpr x2>
+  %22 = s_mov_b32 0
+  %a = s_load_dwordx4 %a_view, %22
+  %b = s_load_dwordx4 %b_view, %22
+  %c = s_load_dwordx4 %c_view, %22
+  %28 = slice %c[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %29 = v_mov_b32_copy %28
+  %30 = slice %c[1] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %31 = v_mov_b32_copy %30
+  %32 = slice %c[2] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %33 = v_mov_b32_copy %32
+  %34 = slice %c[3] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %35 = v_mov_b32_copy %34
+  %37 = slice %a[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %38 = slice %b[0] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %40 = v_fma_f32 %37, %38, %29
+  %41 = slice %a[1] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %42 = slice %b[1] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %44 = v_fma_f32 %41, %42, %31
+  %45 = slice %a[2] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %46 = slice %b[2] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %48 = v_fma_f32 %45, %46, %33
+  %49 = slice %a[3] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %50 = slice %b[3] : reg<amdgpu.sgpr x4> -> reg<amdgpu.sgpr>
+  %52 = v_fma_f32 %49, %50, %35
+  %result = concat(%40, %44, %48, %52) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  return %result
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 kernel.def target(@target) @f32_direct_arg_scale(%output: buffer, %scale: f32) {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index

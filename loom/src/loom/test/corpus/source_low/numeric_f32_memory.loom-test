@@ -132,6 +132,57 @@ func.def @f32_uniform_vector_binary(%lhs_buffer: buffer, %rhs_buffer: buffer) ->
 
 // ====
 
+func.def @f32_uniform_scalar_binary(%lhs_buffer: buffer, %rhs_buffer: buffer) -> (f32) {
+  %base = index.constant 0 : offset
+  %lhs_global = buffer.assume.memory_space %lhs_buffer {memory_space = global} : buffer
+  %rhs_global = buffer.assume.memory_space %rhs_buffer {memory_space = global} : buffer
+  %lhs_noalias, %rhs_noalias = buffer.assume.noalias %lhs_global, %rhs_global : buffer, buffer
+  %lhs_view = buffer.view %lhs_noalias[%base] : buffer -> view<1xf32, #dense>
+  %rhs_view = buffer.view %rhs_noalias[%base] : buffer -> view<1xf32, #dense>
+  %lhs = view.load %lhs_view[0] : view<1xf32, #dense> -> f32
+  %rhs = view.load %rhs_view[0] : view<1xf32, #dense> -> f32
+  %sum = scalar.addf %lhs, %rhs : f32
+  func.return %sum : f32
+}
+
+// ====
+
+func.def @f32_uniform_scalar_fma(%a_buffer: buffer, %b_buffer: buffer, %c_buffer: buffer) -> (f32) {
+  %base = index.constant 0 : offset
+  %a_global = buffer.assume.memory_space %a_buffer {memory_space = global} : buffer
+  %b_global = buffer.assume.memory_space %b_buffer {memory_space = global} : buffer
+  %c_global = buffer.assume.memory_space %c_buffer {memory_space = global} : buffer
+  %a_noalias, %b_noalias, %c_noalias = buffer.assume.noalias %a_global, %b_global, %c_global : buffer, buffer, buffer
+  %a_view = buffer.view %a_noalias[%base] : buffer -> view<1xf32, #dense>
+  %b_view = buffer.view %b_noalias[%base] : buffer -> view<1xf32, #dense>
+  %c_view = buffer.view %c_noalias[%base] : buffer -> view<1xf32, #dense>
+  %a = view.load %a_view[0] : view<1xf32, #dense> -> f32
+  %b = view.load %b_view[0] : view<1xf32, #dense> -> f32
+  %c = view.load %c_view[0] : view<1xf32, #dense> -> f32
+  %result = scalar.fmaf %a, %b, %c : f32
+  func.return %result : f32
+}
+
+// ====
+
+func.def @f32_uniform_vector_fma(%a_buffer: buffer, %b_buffer: buffer, %c_buffer: buffer) -> (vector<4xf32>) {
+  %base = index.constant 0 : offset
+  %a_global = buffer.assume.memory_space %a_buffer {memory_space = global} : buffer
+  %b_global = buffer.assume.memory_space %b_buffer {memory_space = global} : buffer
+  %c_global = buffer.assume.memory_space %c_buffer {memory_space = global} : buffer
+  %a_noalias, %b_noalias, %c_noalias = buffer.assume.noalias %a_global, %b_global, %c_global : buffer, buffer, buffer
+  %a_view = buffer.view %a_noalias[%base] : buffer -> view<4xf32, #dense>
+  %b_view = buffer.view %b_noalias[%base] : buffer -> view<4xf32, #dense>
+  %c_view = buffer.view %c_noalias[%base] : buffer -> view<4xf32, #dense>
+  %a = vector.load %a_view[0] : view<4xf32, #dense> -> vector<4xf32>
+  %b = vector.load %b_view[0] : view<4xf32, #dense> -> vector<4xf32>
+  %c = vector.load %c_view[0] : view<4xf32, #dense> -> vector<4xf32>
+  %result = vector.fmaf %a, %b, %c : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ====
+
 kernel.def @f32_direct_arg_scale(%output: buffer, %scale: f32) {
   %c1 = index.constant 1 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index

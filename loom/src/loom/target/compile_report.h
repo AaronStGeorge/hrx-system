@@ -64,6 +64,8 @@ typedef enum loom_target_compile_report_move_cause_e {
   LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_LOW_CONCAT,
   // A control-flow edge payload must be emitted as moves.
   LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_BRANCH_EDGE,
+  // A descriptor packet materialized an operand into a required register bank.
+  LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_OPERAND_BANK_MATERIALIZATION,
   // A tied, destructive, or fixed operand constraint required repair moves.
   LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_OPERAND_CONSTRAINT_REPAIR,
   // ABI lowering inserted entry, exit, or call-boundary copies.
