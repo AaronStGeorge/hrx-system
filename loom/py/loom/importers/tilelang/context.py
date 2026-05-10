@@ -87,6 +87,7 @@ class TileLangConversionContext(SourceImportSession):
 
     type_converter: TileLangTypeConverter = field(default_factory=TileLangTypeConverter)
     target_preset: str = "tilelang.generic"
+    float_fastmath_flags: str | None = None
     index_values: dict[object, ValueRef] = field(default_factory=dict)
     semantic_values: dict[tuple[object, ...], ValueRef] = field(default_factory=dict)
     semantic_value_types: dict[tuple[object, ...], str] = field(default_factory=dict)
@@ -181,6 +182,11 @@ class TileLangConversionContext(SourceImportSession):
             view_type.encoding, DynamicEncoding
         ):
             view_value.encoding_binding = self.address_layout_for_buffer(buffer).id
+
+    def float_operation_kwargs(self) -> dict[str, str]:
+        if self.float_fastmath_flags is None:
+            return {}
+        return {"fastmath": self.float_fastmath_flags}
 
     def build_constant(self, value: Any, value_type: str, name: str) -> ValueRef:
         result_type = self.type_converter.map_dtype(
@@ -560,6 +566,7 @@ class TileLangConversionContext(SourceImportSession):
             names=self.names,
             type_converter=self.type_converter,
             target_preset=self.target_preset,
+            float_fastmath_flags=self.float_fastmath_flags,
             index_values=dict(self.index_values),
             semantic_values=dict(self.semantic_values),
             semantic_value_types=dict(self.semantic_value_types),

@@ -873,13 +873,29 @@ def _convert_reduce_call(
     if init is None:
         return None
     source = _build_vector_reduce_input(source, reduce_spec, element_type, context)
-    result = context.builder.vector.reduce(
-        kind=reduce_spec.combiner,
-        input=source,
-        init=init,
-        results=[element_type],
-        name=context.fresh_name("reduce"),
+    reduce_name = context.fresh_name("reduce")
+    reduce_fastmath = _additive_reduce_fastmath_flags(
+        reduce_spec,
+        element_type,
+        context,
     )
+    if reduce_fastmath is None:
+        result = context.builder.vector.reduce(
+            kind=reduce_spec.combiner,
+            input=source,
+            init=init,
+            results=[element_type],
+            name=reduce_name,
+        )
+    else:
+        result = context.builder.vector.reduce(
+            kind=reduce_spec.combiner,
+            fastmath=reduce_fastmath,
+            input=source,
+            init=init,
+            results=[element_type],
+            name=reduce_name,
+        )
     _store_tracked_local_value(
         expr,
         target.view,
@@ -2680,6 +2696,22 @@ def _build_scalar_combiner(
     context: TileLangConversionContext,
 ) -> ValueRef:
     builder = getattr(context.builder.scalar, kind)
+    fastmath = (
+        context.float_fastmath_flags
+        if kind == "addf" and _is_float_type(element_type)
+        else None
+    )
+    if fastmath is not None:
+        return cast(
+            ValueRef,
+            builder(
+                fastmath=fastmath,
+                lhs=lhs,
+                rhs=rhs,
+                results=[element_type],
+                name=context.fresh_name(kind),
+            ),
+        )
     return cast(
         ValueRef,
         builder(
@@ -2689,6 +2721,16 @@ def _build_scalar_combiner(
             name=context.fresh_name(kind),
         ),
     )
+
+
+def _additive_reduce_fastmath_flags(
+    reduce_spec: TileReduceSpec,
+    element_type: Type,
+    context: TileLangConversionContext,
+) -> str | None:
+    if reduce_spec.combiner != "addf" or not _is_float_type(element_type):
+        return None
+    return context.float_fastmath_flags
 
 
 def _cumsum_combiner(element_type: Type) -> str | None:

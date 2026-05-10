@@ -298,6 +298,81 @@ kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_kernel") @tileop_
 
 # ====
 @tilelang_case(
+    name="tileop_reduce_sum_fastmath_1d",
+    category="op",
+    tags=("tileop", "reduce", "fastmath"),
+)
+def tileop_reduce_sum_fastmath_1d(tilelang: Any, T: Any) -> TileLangImportInput:
+    @tilelang.jit(  # type: ignore[untyped-decorator]
+        pass_configs={
+            tilelang.PassConfigKey.TL_DISABLE_WARP_SPECIALIZED: True,
+            tilelang.PassConfigKey.TL_ENABLE_FAST_MATH: True,
+        },
+    )
+    def get_kernel() -> Any:
+        @T.prim_func  # type: ignore[untyped-decorator]
+        def tileop_reduce_sum_fastmath_kernel(
+            src: T.Tensor[(4,), T.float32],
+            dst: T.Tensor[(1,), T.float32],
+        ) -> None:
+            with T.Kernel(1, threads=1):
+                local = T.alloc_fragment((4,), T.float32)
+                out = T.alloc_fragment((1,), T.float32)
+                T.copy(src, local)
+                T.reduce_sum(local, out, dim=0)
+                T.copy(out, dst)
+
+        return tileop_reduce_sum_fastmath_kernel
+
+    return TileLangImportInput(
+        source=get_kernel,
+        target="hip -mcpu=gfx1100",
+        name="tileop_reduce_sum_fastmath_kernel",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("tileop_reduce_sum_fastmath_kernel") @tileop_reduce_sum_fastmath_kernel(%src_handle: buffer, %dst_handle: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src_handle : buffer
+  %layout = encoding.layout.dense : encoding<layout>
+  %src = buffer.view %src_noalias[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst_handle : buffer
+  %dst = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %bx = kernel.workgroup.id<x> : index
+  %tx = kernel.workitem.id<x> : index
+  %ty = kernel.workitem.id<y> : index
+  %tz = kernel.workitem.id<z> : index
+  %local_bytes = index.constant 16 : offset
+  %local_buffer = buffer.alloca %local_bytes {base_alignment = 4, memory_space = private} : buffer
+  %local = buffer.view %local_buffer[%c0_bytes] : buffer -> view<4xf32, %layout>
+  %f32_zero = scalar.constant 0.0 : f32
+  %local_state = vector.splat %f32_zero : vector<4xf32>
+  %out_bytes = index.constant 4 : offset
+  %out_buffer = buffer.alloca %out_bytes {base_alignment = 4, memory_space = private} : buffer
+  %out = buffer.view %out_buffer[%c0_bytes] : buffer -> view<1xf32, %layout>
+  %out_state = vector.splat %f32_zero : vector<1xf32>
+  %c0 = index.constant 0 : index
+  %c4 = index.constant 4 : index
+  %copy = vector.load %src[%c0] : view<4xf32, %layout> -> vector<4xf32>
+  %reduce = vector.reduce<addf, reassoc|nnan|ninf|nsz|arcp|contract|afn> %copy, %f32_zero : vector<4xf32>, f32
+  %store = vector.insert %reduce into %out_state[%c0] : f32, vector<1xf32>
+  %c1 = index.constant 1 : index
+  %copy_2 = vector.extract %store[%c0] : vector<1xf32> -> f32
+  view.store %copy_2, %dst[%c0] : f32, view<1xf32, %layout>
+  kernel.return
+}
+"""
+
+
+# ====
+@tilelang_case(
     name="tileop_reduce_abssum_1d",
     category="op",
     tags=("tileop", "reduce"),

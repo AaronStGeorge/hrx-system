@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,6 +34,7 @@ from loom.importers.tilelang.converter import TileLangConverter
 from loom.importers.tilelang.defaults import build_default_registry
 from loom.importers.tilelang.model import (
     TileLangBinding,
+    TileLangImportInput,
     TileLangKernelFacts,
     normalize_tilelang_input,
     resolve_tilelang_input,
@@ -55,6 +56,10 @@ from loom.ir import (
     rebuild_value_metadata,
 )
 from loom.verify import verify_module
+
+_TILELANG_FASTMATH_FLAGS = "reassoc|nnan|ninf|nsz|arcp|contract|afn"
+_TILELANG_FASTMATH_PASS_CONFIG_KEY = "tl.enable_fast_math"
+_TILELANG_FASTMATH_COMPILE_FLAG = "--use_fast_math"
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +93,7 @@ def import_tilelang(
     )
     function_name = _function_name(prim_func, options.kernel or normalized.name)
     target_preset = options.target_preset or normalized.target or "tilelang.generic"
+    float_fastmath_flags = _float_fastmath_flags(normalized, prim_func)
     type_converter = TileLangTypeConverter()
     bindings = extract_bindings(prim_func, type_converter)
     launch_topology = _launch_topology(prim_func)
@@ -100,6 +106,7 @@ def import_tilelang(
         launch_topology=launch_topology,
         diagnostics=diagnostics,
         type_converter=type_converter,
+        float_fastmath_flags=float_fastmath_flags,
     )
     diagnostics.raise_if_errors()
     if options.verify_structure:
@@ -162,6 +169,71 @@ def _function_name(prim_func: object, requested_name: str | None) -> str:
     return sanitize_symbol(source_name(prim_func, fallback="main"), fallback="kernel")
 
 
+def _float_fastmath_flags(
+    source: TileLangImportInput,
+    prim_func: object,
+) -> str | None:
+    source_attrs = attrs(prim_func)
+    if (
+        _pass_config_enabled(
+            getattr(source.source, "pass_configs", None),
+            _TILELANG_FASTMATH_PASS_CONFIG_KEY,
+        )
+        or _pass_config_enabled(
+            source.metadata.get("tilelang_pass_configs"),
+            _TILELANG_FASTMATH_PASS_CONFIG_KEY,
+        )
+        or _pass_config_enabled(
+            source_attrs.get("tilelang_pass_configs"),
+            _TILELANG_FASTMATH_PASS_CONFIG_KEY,
+        )
+    ):
+        return _TILELANG_FASTMATH_FLAGS
+    if _compile_flag_enabled(
+        source.metadata.get("tilelang_compile_flags"),
+        _TILELANG_FASTMATH_COMPILE_FLAG,
+    ) or _compile_flag_enabled(
+        source_attrs.get("tilelang_compile_flags"),
+        _TILELANG_FASTMATH_COMPILE_FLAG,
+    ):
+        return _TILELANG_FASTMATH_FLAGS
+    return None
+
+
+def _pass_config_enabled(configs: object, key: str) -> bool:
+    for config_key, value in mapping_items(configs):
+        if _pass_config_key_text(config_key) == key and _truthy_config_value(value):
+            return True
+    return False
+
+
+def _pass_config_key_text(key: object) -> str:
+    return str(getattr(key, "value", key))
+
+
+def _truthy_config_value(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value != 0
+    text = str(value).strip().lower()
+    if text in ("true", "1", "yes", "on"):
+        return True
+    if text in ("false", "0", "no", "off", "none", ""):
+        return False
+    return bool(value)
+
+
+def _compile_flag_enabled(flags: object, flag: str) -> bool:
+    if flags is None:
+        return False
+    if isinstance(flags, str):
+        return flag in flags.split()
+    if isinstance(flags, Mapping) or not isinstance(flags, Iterable):
+        return False
+    return any(str(item) == flag for item in flags)
+
+
 def _build_loom_module(
     prim_func: object,
     bindings: tuple[TileLangBinding, ...],
@@ -171,6 +243,7 @@ def _build_loom_module(
     launch_topology: _LaunchTopology,
     diagnostics: DiagnosticEngine,
     type_converter: TileLangTypeConverter,
+    float_fastmath_flags: str | None,
 ) -> tuple[Module, ImportBodyReport, Counter[str]]:
     shell = create_kernel_module(
         KernelModuleSpec(
@@ -211,6 +284,7 @@ def _build_loom_module(
         target_preset=target_preset,
         kernel_body_block=shell.body_block,
         address_layout_preferences=address_layout_preferences,
+        float_fastmath_flags=float_fastmath_flags,
     )
     _map_static_launch_topology(context, launch_topology)
     _capture_block_value_names(context, shell.body_block)

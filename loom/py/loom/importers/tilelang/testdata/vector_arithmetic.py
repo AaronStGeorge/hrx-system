@@ -69,6 +69,58 @@ kernel.def target(@hip_mcpu_gfx1100) export("vector_add_store") @vector_add_stor
 
 
 # ====
+@tilelang_case(name="vector_add_fastmath_store", category="op", tags=("vector",))
+def vector_add_fastmath_store(tir: Any) -> TileLangImportInput:
+    src, dst, src_buffer, dst_buffer = _buffer_pair(tir)
+    ramp = _ramp4(tir)
+    body = tir.BufferStore(
+        dst_buffer,
+        tir.BufferLoad(src_buffer, [ramp])
+        + tir.Broadcast(tir.FloatImm("float32", 2.0), 4),
+        [ramp],
+    )
+    prim_func = (
+        tir.PrimFunc(
+            [src, dst],
+            body,
+            buffer_map={src: src_buffer, dst: dst_buffer},
+        )
+        .with_attr("global_symbol", "vector_add_fastmath_store")
+        .with_attr("tilelang_pass_configs", {"tl.enable_fast_math": True})
+    )
+    return TileLangImportInput(
+        source=prim_func,
+        target="hip -mcpu=gfx1100",
+        name="vector_add_fastmath_store",
+    )
+
+
+# ----
+r"""
+amdgpu.target<gfx1100> @hip_mcpu_gfx1100
+
+kernel.def target(@hip_mcpu_gfx1100) export("vector_add_fastmath_store") @vector_add_fastmath_store(%src: buffer, %dst: buffer) {
+  %c1 = index.constant 1 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c1, %c1, %c1) : index
+} launch {
+  %c0_bytes = index.constant 0 : offset
+  %src_noalias = buffer.assume.noalias %src : buffer
+  %layout = encoding.layout.dense : encoding<layout>
+  %src_view = buffer.view %src_noalias[%c0_bytes] : buffer -> view<16xf32, %layout>
+  %dst_noalias = buffer.assume.noalias %dst : buffer
+  %dst_view = buffer.view %dst_noalias[%c0_bytes] : buffer -> view<16xf32, %layout>
+  %c0 = index.constant 0 : index
+  %load = vector.load %src_view[%c0] : view<16xf32, %layout> -> vector<4xf32>
+  %const = scalar.constant 2.0 : f32
+  %splat = vector.splat %const : vector<4xf32>
+  %addf = vector.addf<reassoc|nnan|ninf|nsz|arcp|contract|afn> %load, %splat : vector<4xf32>
+  vector.store %addf, %dst_view[%c0] : vector<4xf32>, view<16xf32, %layout>
+  kernel.return
+}
+"""
+
+
+# ====
 @tilelang_case(name="vector_select_store", category="op", tags=("vector",))
 def vector_select_store(tir: Any) -> TileLangImportInput:
     src, dst, src_buffer, dst_buffer = _buffer_pair(tir)

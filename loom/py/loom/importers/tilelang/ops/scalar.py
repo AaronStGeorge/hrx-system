@@ -304,6 +304,9 @@ def convert_binary_expr(
         context.record_blocked(node_text(expr), f"no scalar builder for {kind}")
         return None
     builder = getattr(context.builder.scalar, scalar_builder_name)
+    builder_kwargs = (
+        context.float_operation_kwargs() if str(result_type).startswith("f") else {}
+    )
     result = cast(
         ValueRef,
         builder(
@@ -311,6 +314,7 @@ def convert_binary_expr(
             rhs=rhs,
             results=[result_type],
             name=context.fresh_name(scalar_builder_name),
+            **builder_kwargs,
         ),
     )
     context.map_value(expr, result, str(result_type))
@@ -474,6 +478,11 @@ def _convert_vector_binary_expr(
         context.record_blocked(node_text(expr), f"no vector builder for {kind}")
         return None
     builder = getattr(context.builder.vector, builder_name)
+    builder_kwargs = (
+        context.float_operation_kwargs()
+        if _is_float_type(str(vector_type.element_type))
+        else {}
+    )
     result = cast(
         ValueRef,
         builder(
@@ -481,6 +490,7 @@ def _convert_vector_binary_expr(
             rhs=rhs,
             results=[vector_type],
             name=context.fresh_name(builder_name),
+            **builder_kwargs,
         ),
     )
     context.map_value(expr, result, str(vector_type))
