@@ -283,6 +283,29 @@ func.def @empty_dotf(%lhs: vector<0xf32>, %rhs: vector<0xf32>, %init: f32) -> (f
 
 // ====
 
+// Contracted product reductions are the source spelling of a dot contraction.
+func.def @contracted_product_reduce_to_dotf(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %init: f32) -> (f32) {
+  %product = vector.mulf<reassoc|nnan|ninf|nsz|contract> %lhs, %rhs : vector<4xf32>
+  %r = vector.reduce<addf, reassoc|nnan|ninf|nsz|contract> %product, %init : vector<4xf32>, f32
+  func.return %r : f32
+}
+// ----
+func.def @contracted_product_reduce_to_dotf(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %init: f32) -> (f32) {
+  %r = vector.dotf<reassoc|nnan|ninf|nsz|contract> %lhs, %rhs, %init : vector<4xf32>, vector<4xf32>, f32
+  func.return %r : f32
+}
+
+// ====
+
+// Exact product reductions keep their separately rounded product and add ops.
+func.def @exact_product_reduce_stays_separate(%lhs: vector<4xf32>, %rhs: vector<4xf32>, %init: f32) -> (f32) {
+  %product = vector.mulf %lhs, %rhs : vector<4xf32>
+  %r = vector.reduce<addf> %product, %init : vector<4xf32>, f32
+  func.return %r : f32
+}
+
+// ====
+
 // Extracting a scalar from a statically empty axis observes an impossible lane,
 // but a dead observation folds away before it reaches a poison boundary.
 func.def @extract_from_empty_axis(%v: vector<0xf32>) {

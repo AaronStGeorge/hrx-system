@@ -50,7 +50,12 @@ typedef struct loom_vector_to_scalar_accumulator_state_t {
   loom_value_id_t init;
   loom_op_kind_t scalar_kind;
   uint8_t instance_flags;
+  loom_value_id_t fused_product_lhs;
+  loom_value_id_t fused_product_rhs;
+  uint8_t product_flags;
+  uint8_t fmaf_flags;
   bool use_fmaf;
+  bool use_product_fmaf_forest;
 } loom_vector_to_scalar_accumulator_state_t;
 
 static iree_status_t loom_vector_to_scalar_build_accumulator_lane(
@@ -65,7 +70,7 @@ static iree_status_t loom_vector_to_scalar_build_accumulator_lane(
     IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
         &state->lane_state, state->rhs, indices, &rhs_lane));
     return loom_vector_to_scalar_build_generic_lane_op(
-        &state->lane_state, LOOM_OP_SCALAR_FMAF, 0,
+        &state->lane_state, LOOM_OP_SCALAR_FMAF, state->instance_flags,
         (loom_value_id_t[]){lhs_lane, rhs_lane, accumulator}, 3, NULL, 0,
         state->lane_state.result_scalar_type, out_next);
   }
@@ -79,7 +84,7 @@ static bool loom_vector_to_scalar_accumulator_can_reassociate(
     const loom_vector_to_scalar_accumulator_state_t* state) {
   return !state->use_fmaf &&
          iree_any_bit_set(state->instance_flags,
-                          LOOM_VECTOR_FLOATREDUCTIONFLAGS_REASSOC);
+                          LOOM_SCALAR_FASTMATHFLAGS_REASSOC);
 }
 
 static iree_status_t loom_vector_to_scalar_combine_accumulator_terms(
@@ -91,10 +96,133 @@ static iree_status_t loom_vector_to_scalar_combine_accumulator_terms(
       state->lane_state.result_scalar_type, out_result);
 }
 
+static iree_status_t loom_vector_to_scalar_product_terms_from_ordinal(
+    loom_vector_to_scalar_accumulator_state_t* state, uint16_t ordinal,
+    int64_t* indices, loom_value_id_t* out_lhs, loom_value_id_t* out_rhs) {
+  loom_vector_to_scalar_indices_from_ordinal(state->lane_state.vector_type,
+                                             ordinal, indices);
+  loom_vector_to_scalar_index_list_t index_list = {
+      .static_indices = indices,
+      .rank = loom_type_rank(state->lane_state.vector_type),
+  };
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+      &state->lane_state, state->fused_product_lhs, index_list, out_lhs));
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_lane(
+      &state->lane_state, state->fused_product_rhs, index_list, out_rhs));
+  if (state->lane_state.pass->statistics) {
+    loom_pass_statistic_add(state->lane_state.pass,
+                            LOOM_VECTOR_TO_SCALAR_STAT_LANES_MATERIALIZED, 1);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_vector_to_scalar_build_product_seed(
+    loom_vector_to_scalar_accumulator_state_t* state, uint16_t ordinal,
+    int64_t* indices, loom_value_id_t* out_product) {
+  loom_value_id_t lhs = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t rhs = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_product_terms_from_ordinal(
+      state, ordinal, indices, &lhs, &rhs));
+  return loom_vector_to_scalar_build_generic_lane_op(
+      &state->lane_state, LOOM_OP_SCALAR_MULF, state->product_flags,
+      (loom_value_id_t[]){lhs, rhs}, 2, NULL, 0,
+      state->lane_state.result_scalar_type, out_product);
+}
+
+static iree_status_t loom_vector_to_scalar_build_product_fmaf(
+    loom_vector_to_scalar_accumulator_state_t* state, uint16_t ordinal,
+    int64_t* indices, loom_value_id_t accumulator,
+    loom_value_id_t* out_result) {
+  loom_value_id_t lhs = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t rhs = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_product_terms_from_ordinal(
+      state, ordinal, indices, &lhs, &rhs));
+  return loom_vector_to_scalar_build_generic_lane_op(
+      &state->lane_state, LOOM_OP_SCALAR_FMAF, state->fmaf_flags,
+      (loom_value_id_t[]){lhs, rhs, accumulator}, 3, NULL, 0,
+      state->lane_state.result_scalar_type, out_result);
+}
+
+static iree_status_t loom_vector_to_scalar_combine_accumulator_term_tree(
+    loom_vector_to_scalar_accumulator_state_t* state,
+    const loom_value_id_t* terms, uint16_t begin_ordinal, uint16_t end_ordinal,
+    loom_value_id_t* out_result) {
+  if (end_ordinal <= begin_ordinal) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "invalid empty accumulator term range");
+  }
+  if (end_ordinal - begin_ordinal == 1) {
+    *out_result = terms[begin_ordinal];
+    return iree_ok_status();
+  }
+
+  uint16_t middle_ordinal =
+      (uint16_t)(begin_ordinal + (end_ordinal - begin_ordinal) / 2);
+  loom_value_id_t lhs = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_combine_accumulator_term_tree(
+      state, terms, begin_ordinal, middle_ordinal, &lhs));
+  loom_value_id_t rhs = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_combine_accumulator_term_tree(
+      state, terms, middle_ordinal, end_ordinal, &rhs));
+  return loom_vector_to_scalar_combine_accumulator_terms(state, lhs, rhs,
+                                                         out_result);
+}
+
+static iree_status_t loom_vector_to_scalar_lower_static_product_fmaf_forest(
+    loom_vector_to_scalar_accumulator_state_t* state,
+    loom_value_id_t* out_replacement) {
+  uint16_t element_count = 0;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_static_element_count(
+      &state->lane_state, state->lane_state.vector_type, &element_count));
+  if (loom_pass_has_error_diagnostics(state->lane_state.pass)) {
+    return iree_ok_status();
+  }
+  if (element_count == 0) {
+    *out_replacement = state->init;
+    return iree_ok_status();
+  }
+
+  uint8_t rank = loom_type_rank(state->lane_state.vector_type);
+  int64_t* indices = NULL;
+  if (rank > 0) {
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate_array(state->lane_state.rewriter->arena, rank,
+                                  sizeof(int64_t), (void**)&indices));
+  }
+
+  uint16_t accumulator_count = element_count < 4 ? element_count : 4;
+  loom_value_id_t* accumulators = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      state->lane_state.rewriter->arena, accumulator_count,
+      sizeof(loom_value_id_t), (void**)&accumulators));
+
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_product_fmaf(
+      state, 0, indices, state->init, &accumulators[0]));
+  for (uint16_t accumulator = 1; accumulator < accumulator_count;
+       ++accumulator) {
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_product_seed(
+        state, accumulator, indices, &accumulators[accumulator]));
+  }
+
+  for (uint16_t ordinal = accumulator_count; ordinal < element_count;
+       ++ordinal) {
+    uint16_t accumulator = (uint16_t)(ordinal % accumulator_count);
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_product_fmaf(
+        state, ordinal, indices, accumulators[accumulator],
+        &accumulators[accumulator]));
+  }
+
+  return loom_vector_to_scalar_combine_accumulator_term_tree(
+      state, accumulators, 0, accumulator_count, out_replacement);
+}
+
 static iree_status_t loom_vector_to_scalar_build_static_reduction_tree(
     loom_vector_to_scalar_accumulator_state_t* state, uint16_t begin_ordinal,
     uint16_t end_ordinal, int64_t* indices, loom_value_id_t* out_result) {
-  IREE_ASSERT_GT(end_ordinal, begin_ordinal);
+  if (end_ordinal <= begin_ordinal) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "invalid empty reduction term range");
+  }
   if (end_ordinal - begin_ordinal == 1) {
     loom_vector_to_scalar_indices_from_ordinal(state->lane_state.vector_type,
                                                begin_ordinal, indices);
@@ -156,6 +284,10 @@ loom_vector_to_scalar_lower_static_reassociated_accumulator(
 static iree_status_t loom_vector_to_scalar_lower_static_accumulator(
     loom_vector_to_scalar_accumulator_state_t* state,
     loom_value_id_t* out_replacement) {
+  if (state->use_product_fmaf_forest) {
+    return loom_vector_to_scalar_lower_static_product_fmaf_forest(
+        state, out_replacement);
+  }
   if (loom_vector_to_scalar_accumulator_can_reassociate(state)) {
     return loom_vector_to_scalar_lower_static_reassociated_accumulator(
         state, out_replacement);
@@ -276,9 +408,51 @@ static iree_status_t loom_vector_to_scalar_lower_accumulator(
                                                          out_replacement);
 }
 
+static bool loom_vector_to_scalar_try_configure_product_fmaf_forest(
+    loom_vector_to_scalar_state_t* state, loom_combining_kind_t reduce_kind,
+    uint8_t reduce_flags,
+    loom_vector_to_scalar_accumulator_state_t* accumulator_state) {
+  if (reduce_kind != LOOM_COMBINING_KIND_ADDF) {
+    return false;
+  }
+  if (!iree_all_bits_set(
+          reduce_flags,
+          LOOM_VECTOR_FASTMATHFLAGS_REASSOC | LOOM_VECTOR_FASTMATHFLAGS_NNAN |
+              LOOM_VECTOR_FASTMATHFLAGS_NINF | LOOM_VECTOR_FASTMATHFLAGS_NSZ |
+              LOOM_VECTOR_FASTMATHFLAGS_CONTRACT)) {
+    return false;
+  }
+  if (loom_type_element_type(state->vector_type) != LOOM_SCALAR_TYPE_F32) {
+    return false;
+  }
+
+  loom_value_id_t input = loom_vector_reduce_input(state->op);
+  loom_op_t* input_op =
+      loom_vector_to_scalar_value_def_op(state->rewriter->module, input);
+  if (!input_op || !loom_vector_mulf_isa(input_op)) {
+    return false;
+  }
+
+  uint8_t product_flags = loom_vector_mulf_fastmath(input_op);
+  if (!iree_any_bit_set(product_flags, LOOM_VECTOR_FASTMATHFLAGS_CONTRACT)) {
+    return false;
+  }
+
+  accumulator_state->fused_product_lhs = loom_vector_mulf_lhs(input_op);
+  accumulator_state->fused_product_rhs = loom_vector_mulf_rhs(input_op);
+  accumulator_state->product_flags =
+      loom_vector_to_scalar_project_instance_flags(
+          LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FAST_MATH, product_flags);
+  accumulator_state->fmaf_flags =
+      accumulator_state->product_flags & accumulator_state->instance_flags;
+  accumulator_state->use_product_fmaf_forest = true;
+  return true;
+}
+
 iree_status_t loom_vector_to_scalar_lower_reduce(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement) {
   loom_combining_kind_t reduce_kind = loom_vector_reduce_kind(state->op);
+  uint8_t reduce_flags = loom_vector_reduce_fastmath(state->op);
   loom_op_kind_t scalar_kind =
       loom_vector_to_scalar_reduce_scalar_kind(reduce_kind);
   loom_vector_to_scalar_accumulator_state_t accumulator_state = {
@@ -289,10 +463,12 @@ iree_status_t loom_vector_to_scalar_lower_reduce(
       .instance_flags =
           loom_combining_kind_accepts_float(reduce_kind)
               ? loom_vector_to_scalar_project_instance_flags(
-                    LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FLOAT_REDUCTION,
+                    LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FAST_MATH,
                     state->op->instance_flags)
               : 0,
   };
+  loom_vector_to_scalar_try_configure_product_fmaf_forest(
+      state, reduce_kind, reduce_flags, &accumulator_state);
   return loom_vector_to_scalar_lower_accumulator(&accumulator_state,
                                                  out_replacement);
 }
@@ -443,7 +619,7 @@ static iree_status_t loom_vector_to_scalar_reduce_axes_axis(
 static bool loom_vector_to_scalar_reduce_axes_can_reassociate(
     const loom_vector_to_scalar_reduce_axes_state_t* state) {
   return iree_any_bit_set(state->instance_flags,
-                          LOOM_VECTOR_FLOATREDUCTIONFLAGS_REASSOC);
+                          LOOM_SCALAR_FASTMATHFLAGS_REASSOC);
 }
 
 static bool loom_vector_to_scalar_reduce_axes_static_element_count(
@@ -484,7 +660,10 @@ loom_vector_to_scalar_reduce_axes_build_static_reduction_tree(
     loom_vector_to_scalar_index_list_t result_indices, uint16_t begin_ordinal,
     uint16_t end_ordinal, loom_vector_to_scalar_index_term_t* reduced_terms,
     loom_value_id_t* out_result) {
-  IREE_ASSERT_GT(end_ordinal, begin_ordinal);
+  if (end_ordinal <= begin_ordinal) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "invalid empty reduce-axes term range");
+  }
   if (end_ordinal - begin_ordinal == 1) {
     loom_vector_to_scalar_reduce_axes_terms_from_ordinal(state, begin_ordinal,
                                                          reduced_terms);
@@ -697,7 +876,7 @@ iree_status_t loom_vector_to_scalar_lower_reduce_axes(
       .instance_flags =
           loom_combining_kind_accepts_float(reduce_kind)
               ? loom_vector_to_scalar_project_instance_flags(
-                    LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FLOAT_REDUCTION,
+                    LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FAST_MATH,
                     state->op->instance_flags)
               : 0,
   };
@@ -721,6 +900,9 @@ iree_status_t loom_vector_to_scalar_lower_dotf(
       .input = loom_vector_dotf_lhs(state->op),
       .rhs = loom_vector_dotf_rhs(state->op),
       .init = loom_vector_dotf_init(state->op),
+      .instance_flags = loom_vector_to_scalar_project_instance_flags(
+          LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FAST_MATH,
+          state->op->instance_flags),
       .use_fmaf = true,
   };
   return loom_vector_to_scalar_lower_accumulator(&accumulator_state,

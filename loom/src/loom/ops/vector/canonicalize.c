@@ -1424,8 +1424,35 @@ iree_status_t loom_vector_reduce_canonicalize(loom_op_t* op,
   loom_value_id_t input = loom_vector_reduce_input(op);
   loom_value_id_t init = loom_vector_reduce_init(op);
   loom_type_t input_type = loom_module_value_type(rewriter->module, input);
-  int64_t identity = 0;
   loom_combining_kind_t kind = loom_vector_reduce_kind(op);
+
+  if (kind == LOOM_COMBINING_KIND_ADDF &&
+      loom_type_element_type(input_type) == LOOM_SCALAR_TYPE_F32 &&
+      iree_any_bit_set(loom_vector_reduce_fastmath(op),
+                       LOOM_VECTOR_FASTMATHFLAGS_CONTRACT)) {
+    loom_op_t* product_op = NULL;
+    if (loom_vector_value_def_op(rewriter, input, &product_op) &&
+        loom_vector_mulf_isa(product_op) &&
+        iree_any_bit_set(loom_vector_mulf_fastmath(product_op),
+                         LOOM_VECTOR_FASTMATHFLAGS_CONTRACT)) {
+      uint8_t dot_flags = loom_vector_reduce_fastmath(op) &
+                          loom_vector_mulf_fastmath(product_op);
+      loom_builder_set_before(&rewriter->builder, op);
+      loom_value_id_t value_checkpoint =
+          loom_rewriter_value_checkpoint(rewriter);
+      loom_op_t* dot_op = NULL;
+      IREE_RETURN_IF_ERROR(loom_vector_dotf_build(
+          &rewriter->builder, dot_flags, loom_vector_mulf_lhs(product_op),
+          loom_vector_mulf_rhs(product_op), init,
+          loom_module_value_type(rewriter->module,
+                                 loom_vector_reduce_result(op)),
+          op->location, &dot_op));
+      return loom_vector_replace_single_result_with_new_op(op, rewriter, dot_op,
+                                                           value_checkpoint);
+    }
+  }
+
+  int64_t identity = 0;
   if (!loom_vector_reduce_integer_identity(kind, input_type, &identity)) {
     return iree_ok_status();
   }

@@ -998,6 +998,35 @@ static void loom_low_lower_record_report_row(
   }
 }
 
+static iree_status_t loom_low_lower_try_select_op_callback(
+    loom_low_lower_context_t* context,
+    loom_low_lower_select_op_callback_t callback, const loom_op_t* source_op,
+    bool* out_selected) {
+  *out_selected = false;
+  if (callback.fn == NULL) {
+    return iree_ok_status();
+  }
+
+  loom_low_lower_plan_t plan = loom_low_lower_plan_empty();
+  IREE_RETURN_IF_ERROR(
+      callback.fn(callback.user_data, context, source_op, &plan));
+  if (loom_low_lower_plan_is_empty(plan)) {
+    return iree_ok_status();
+  }
+  loom_low_lower_record_selected_plan(
+      context, (loom_low_lower_selected_plan_t){
+                   .source_op = source_op,
+                   .kind = LOOM_LOW_LOWER_SELECTED_PLAN_CALLBACK,
+                   .rule_set_index = UINT16_MAX,
+                   .rule_index = UINT16_MAX,
+                   .rule_set = NULL,
+                   .rule = NULL,
+                   .plan = plan,
+               });
+  *out_selected = true;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
                                             const loom_op_t* source_op) {
   if (source_op->region_count != 0) {
@@ -1012,6 +1041,13 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
     return iree_ok_status();
   }
   if (loom_low_lower_op_is_source_metadata(source_op->kind)) {
+    return iree_ok_status();
+  }
+
+  bool selected_callback = false;
+  IREE_RETURN_IF_ERROR(loom_low_lower_try_select_op_callback(
+      context, context->policy->preselect_op, source_op, &selected_callback));
+  if (selected_callback) {
     return iree_ok_status();
   }
 
@@ -1031,23 +1067,10 @@ static iree_status_t loom_low_lower_plan_op(loom_low_lower_context_t* context,
     }
   }
 
-  if (context->policy->select_op.fn != NULL) {
-    loom_low_lower_plan_t plan = loom_low_lower_plan_empty();
-    IREE_RETURN_IF_ERROR(context->policy->select_op.fn(
-        context->policy->select_op.user_data, context, source_op, &plan));
-    if (!loom_low_lower_plan_is_empty(plan)) {
-      loom_low_lower_record_selected_plan(
-          context, (loom_low_lower_selected_plan_t){
-                       .source_op = source_op,
-                       .kind = LOOM_LOW_LOWER_SELECTED_PLAN_CALLBACK,
-                       .rule_set_index = UINT16_MAX,
-                       .rule_index = UINT16_MAX,
-                       .rule_set = NULL,
-                       .rule = NULL,
-                       .plan = plan,
-                   });
-      return iree_ok_status();
-    }
+  IREE_RETURN_IF_ERROR(loom_low_lower_try_select_op_callback(
+      context, context->policy->select_op, source_op, &selected_callback));
+  if (selected_callback) {
+    return iree_ok_status();
   }
 
   if (failed_rule_set != NULL) {

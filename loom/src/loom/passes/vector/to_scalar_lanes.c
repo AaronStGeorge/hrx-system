@@ -44,8 +44,6 @@ uint8_t loom_vector_to_scalar_project_instance_flags(
       return instance_flags;
     case LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FAST_MATH:
       return instance_flags;
-    case LOOM_VECTOR_TO_SCALAR_INSTANCE_FLAG_MODE_FLOAT_REDUCTION:
-      return instance_flags;
   }
   return 0;
 }

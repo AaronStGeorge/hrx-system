@@ -76,6 +76,26 @@ typedef struct loom_amdgpu_bitunpack_plan_t {
   bool is_signed;
 } loom_amdgpu_bitunpack_plan_t;
 
+typedef enum loom_amdgpu_dotf_accumulation_kind_e {
+  LOOM_AMDGPU_DOTF_ACCUMULATION_STRICT_CHAIN = 0,
+  LOOM_AMDGPU_DOTF_ACCUMULATION_RELAXED_FOREST = 1,
+} loom_amdgpu_dotf_accumulation_kind_t;
+
+typedef struct loom_amdgpu_dotf_plan_t {
+  // Left-hand source vector value.
+  loom_value_id_t lhs;
+  // Right-hand source vector value.
+  loom_value_id_t rhs;
+  // Scalar accumulator seed value.
+  loom_value_id_t init;
+  // Scalar dot-product result value.
+  loom_value_id_t result;
+  // Static number of f32 vector lanes.
+  uint32_t lane_count;
+  // Selected accumulation topology.
+  loom_amdgpu_dotf_accumulation_kind_t accumulation_kind;
+} loom_amdgpu_dotf_plan_t;
+
 typedef struct loom_amdgpu_vector_bitcast_plan_t {
   // Source vector value being reinterpreted.
   loom_value_id_t source;

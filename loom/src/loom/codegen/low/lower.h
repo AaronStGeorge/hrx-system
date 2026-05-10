@@ -406,6 +406,10 @@ typedef struct loom_low_lower_policy_t {
   // Optional target-owned descriptor-matrix projection used by generated
   // descriptor-matrix contract cases.
   loom_low_lower_descriptor_matrix_t descriptor_matrix;
+  // Optional target-owned selector that runs before generated table rules for
+  // source ops whose legality is described by contract fragments but whose
+  // emission needs target-owned planning.
+  loom_low_lower_select_op_callback_t preselect_op;
   // Optional target-owned selector used before a target has table rules.
   loom_low_lower_select_op_callback_t select_op;
   // Optional target-owned emitter for plans selected by |select_op|.

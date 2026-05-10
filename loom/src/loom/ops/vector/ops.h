@@ -187,12 +187,6 @@ enum {
 #define LOOM_VECTOR_INTOVERFLOWFLAGS_NSW ((uint8_t)1)
 #define LOOM_VECTOR_INTOVERFLOWFLAGS_NUW ((uint8_t)2)
 
-// Floating-point reduction relaxations and value-domain assumptions.
-#define LOOM_VECTOR_FLOATREDUCTIONFLAGS_REASSOC ((uint8_t)1)
-#define LOOM_VECTOR_FLOATREDUCTIONFLAGS_NNAN ((uint8_t)2)
-#define LOOM_VECTOR_FLOATREDUCTIONFLAGS_NINF ((uint8_t)4)
-#define LOOM_VECTOR_FLOATREDUCTIONFLAGS_NSZ ((uint8_t)8)
-
 typedef enum loom_vector_role_e {
   LOOM_VECTOR_ROLE_LHS = 0,
   LOOM_VECTOR_ROLE_RHS = 1,
@@ -2983,15 +2977,17 @@ iree_status_t loom_vector_bitunpacks_facts(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
-// LOOM_OP_VECTOR_DOTF: Compute a same-element floating-point dot product with an explicit scalar accumulator. Semantics are equivalent to accumulating scalar.fmaf(lhs_lane, rhs_lane, acc) over lanes in logical lane order; use vector.mulf followed by vector.reduce<addf> when separately rounded products and additions are required. The source vectors must have the same shape and element type, and the init/result scalar type matches that element type. Zero-lane inputs return init.
+// LOOM_OP_VECTOR_DOTF: Compute a same-element floating-point dot product with an explicit scalar accumulator. Semantics are equivalent to accumulating scalar.fmaf(lhs_lane, rhs_lane, acc) over lanes in logical lane order; use vector.mulf followed by vector.reduce<addf> when separately rounded products and additions are required. The source vectors must have the same shape and element type, and the init/result scalar type matches that element type. Zero-lane inputs return init. Optional fastmath flags carry the same floating-point permissions as scalar arithmetic, including reassociation of the fused dot terms.
 // %r = vector.dotf %lhs, %rhs, %acc : vector<16xf32>, vector<16xf32>, f32
 LOOM_DEFINE_ISA(loom_vector_dotf_isa, LOOM_OP_VECTOR_DOTF)
 LOOM_DEFINE_OPERAND(loom_vector_dotf_lhs, 0)
 LOOM_DEFINE_OPERAND(loom_vector_dotf_rhs, 1)
 LOOM_DEFINE_OPERAND(loom_vector_dotf_init, 2)
 LOOM_DEFINE_RESULT(loom_vector_dotf_result, 0)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_vector_dotf_fastmath)
 iree_status_t loom_vector_dotf_build(
     loom_builder_t* builder,
+    uint8_t instance_flags,
     loom_value_id_t lhs,
     loom_value_id_t rhs,
     loom_value_id_t init,
@@ -3115,7 +3111,7 @@ iree_status_t loom_vector_mma_facts(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 
-// LOOM_OP_VECTOR_REDUCE: Reduce all lanes of a vector into a scalar accumulator/result using the template combining kind. The init operand and result have the same scalar type, and the combining kind must be valid for the input element type. Optional fastmath flags constrain floating-point reassociation and lane value domains for optimization and lowering.
+// LOOM_OP_VECTOR_REDUCE: Reduce all lanes of a vector into a scalar accumulator/result using the template combining kind. The init operand and result have the same scalar type, and the combining kind must be valid for the input element type. Optional fastmath flags carry the same floating-point permissions as scalar arithmetic; contraction may fuse producer products into FMA accumulation when the producer permits it too.
 // %sum = vector.reduce<addf> %v, %zero : vector<16xf32>, f32
 LOOM_DEFINE_ISA(loom_vector_reduce_isa, LOOM_OP_VECTOR_REDUCE)
 LOOM_DEFINE_OPERAND(loom_vector_reduce_input, 0)
@@ -3142,7 +3138,7 @@ iree_status_t loom_vector_reduce_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 
-// LOOM_OP_VECTOR_REDUCE_AXES: Reduce the explicit source axes of a vector while preserving the remaining axes in their original order. The init operand and result have the same type: scalar when every source axis is reduced, or a vector whose shape is the source shape with the reduced axes removed. Optional fastmath flags constrain floating-point reassociation and lane value domains for optimization and lowering.
+// LOOM_OP_VECTOR_REDUCE_AXES: Reduce the explicit source axes of a vector while preserving the remaining axes in their original order. The init operand and result have the same type: scalar when every source axis is reduced, or a vector whose shape is the source shape with the reduced axes removed. Optional fastmath flags carry the same floating-point permissions as scalar arithmetic.
 // %cols = vector.reduce.axes<addf> %src, %init axes [0] : vector<4x8xf32>, vector<8xf32>
 LOOM_DEFINE_ISA(loom_vector_reduce_axes_isa, LOOM_OP_VECTOR_REDUCE_AXES)
 LOOM_DEFINE_OPERAND(loom_vector_reduce_axes_input, 0)

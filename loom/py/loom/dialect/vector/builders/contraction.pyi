@@ -15,6 +15,7 @@ class VectorContractionMixin:
     def dotf(
         self,
         *,
+        fastmath: str = ...,
         lhs: ValueRef,
         rhs: ValueRef,
         init: ValueRef,

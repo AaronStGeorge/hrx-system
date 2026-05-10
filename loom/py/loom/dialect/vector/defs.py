@@ -249,17 +249,6 @@ FloatDot4F8Kind = EnumDef(
     doc="Format variants for packed four-lane fp8/bf8 dot products accumulated into f32 lanes.",
 )
 
-FloatReductionFlags = EnumDef(
-    "FloatReductionFlags",
-    [
-        EnumCase("reassoc", 1, doc="Allow reassociation of reduction terms."),
-        EnumCase("nnan", 2, doc="Assume no NaNs."),
-        EnumCase("ninf", 4, doc="Assume no infinities."),
-        EnumCase("nsz", 8, doc="Assume no signed zeros."),
-    ],
-    doc="Floating-point reduction relaxations and value-domain assumptions.",
-)
-
 QuantizeNaN = EnumDef(
     "QuantizeNaN",
     [
@@ -3606,7 +3595,9 @@ vector_dotf = Op(
         "use vector.mulf followed by vector.reduce<addf> when separately "
         "rounded products and additions are required. The source vectors must "
         "have the same shape and element type, and the init/result scalar type "
-        "matches that element type. Zero-lane inputs return init."
+        "matches that element type. Zero-lane inputs return init. Optional "
+        "fastmath flags carry the same floating-point permissions as scalar "
+        "arithmetic, including reassociation of the fused dot terms."
     ),
     operands=[
         Operand("lhs", VECTOR, doc="Floating-point source lanes."),
@@ -3614,6 +3605,14 @@ vector_dotf = Op(
         Operand("init", SCALAR, doc="Scalar accumulator seed."),
     ],
     results=[Result("result", SCALAR, doc="Scalar dot-product accumulator result.")],
+    attrs=[
+        AttrDef(
+            "fastmath",
+            ATTR_TYPE_FLAGS,
+            optional=True,
+            enum_def=FastMathFlags,
+        ),
+    ],
     constraints=[
         HasFloatElement("lhs"),
         SameShape("lhs", "rhs"),
@@ -3623,6 +3622,7 @@ vector_dotf = Op(
     facts="loom_vector_dotf_facts",
     traits=[PURE],
     format=[
+        Flags("fastmath"),
         Ref("lhs"),
         COMMA,
         Ref("rhs"),
@@ -3637,6 +3637,7 @@ vector_dotf = Op(
     ],
     examples=[
         "%r = vector.dotf %lhs, %rhs, %acc : vector<16xf32>, vector<16xf32>, f32",
+        "%r = vector.dotf<reassoc|contract> %lhs, %rhs, %acc : vector<16xf32>, vector<16xf32>, f32",
     ],
 )
 
@@ -3880,8 +3881,9 @@ vector_reduce = Op(
         "Reduce all lanes of a vector into a scalar accumulator/result using "
         "the template combining kind. The init operand and result have the "
         "same scalar type, and the combining kind must be valid for the input "
-        "element type. Optional fastmath flags constrain floating-point "
-        "reassociation and lane value domains for optimization and lowering."
+        "element type. Optional fastmath flags carry the same floating-point "
+        "permissions as scalar arithmetic; contraction may fuse producer "
+        "products into FMA accumulation when the producer permits it too."
     ),
     operands=[
         Operand("input", VECTOR),
@@ -3894,7 +3896,7 @@ vector_reduce = Op(
             "fastmath",
             ATTR_TYPE_FLAGS,
             optional=True,
-            enum_def=FloatReductionFlags,
+            enum_def=FastMathFlags,
         ),
     ],
     constraints=[
@@ -3927,8 +3929,8 @@ vector_reduce_axes = Op(
         "remaining axes in their original order. The init operand and result "
         "have the same type: scalar when every source axis is reduced, or a "
         "vector whose shape is the source shape with the reduced axes removed. "
-        "Optional fastmath flags constrain floating-point reassociation and "
-        "lane value domains for optimization and lowering."
+        "Optional fastmath flags carry the same floating-point permissions as "
+        "scalar arithmetic."
     ),
     operands=[
         Operand("input", VECTOR),
@@ -3941,7 +3943,7 @@ vector_reduce_axes = Op(
             "fastmath",
             ATTR_TYPE_FLAGS,
             optional=True,
-            enum_def=FloatReductionFlags,
+            enum_def=FastMathFlags,
         ),
         AttrDef("axes", ATTR_TYPE_I64_ARRAY),
     ],

@@ -37,6 +37,7 @@
 #include "loom/target/arch/amdgpu/lower/bitpack.h"
 #include "loom/target/arch/amdgpu/lower/buffer.h"
 #include "loom/target/arch/amdgpu/lower/control.h"
+#include "loom/target/arch/amdgpu/lower/dot.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"
 #include "loom/target/arch/amdgpu/lower/mask.h"
 #include "loom/target/arch/amdgpu/lower/matrix.h"
@@ -311,6 +312,14 @@ LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_scalar_cmpf_dispatch,
                              loom_amdgpu_vector_compare_plan_t,
                              loom_amdgpu_lower_scalar_cmpf)
 
+LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_vector_dotf_dispatch,
+                               loom_amdgpu_dotf_plan_t,
+                               loom_amdgpu_select_vector_dotf_plan)
+
+LOOM_AMDGPU_DEFINE_DATA_EMIT(loom_amdgpu_emit_vector_dotf_dispatch,
+                             loom_amdgpu_dotf_plan_t,
+                             loom_amdgpu_lower_vector_dotf)
+
 LOOM_AMDGPU_DEFINE_DATA_SELECT(loom_amdgpu_select_scalar_clampf_dispatch,
                                loom_amdgpu_clampf_plan_t,
                                loom_amdgpu_select_scalar_clampf_plan)
@@ -567,6 +576,18 @@ static iree_status_t loom_amdgpu_select_op(void* user_data,
   return loom_amdgpu_select_plan_id(context, source_op, out_plan);
 }
 
+static iree_status_t loom_amdgpu_preselect_op(void* user_data,
+                                              loom_low_lower_context_t* context,
+                                              const loom_op_t* source_op,
+                                              loom_low_lower_plan_t* out_plan) {
+  (void)user_data;
+  *out_plan = loom_low_lower_plan_empty();
+  if (!loom_vector_dotf_isa(source_op)) {
+    return iree_ok_status();
+  }
+  return loom_amdgpu_select_plan_id(context, source_op, out_plan);
+}
+
 static iree_status_t loom_amdgpu_emit_op(void* user_data,
                                          loom_low_lower_context_t* context,
                                          const loom_op_t* source_op,
@@ -661,6 +682,7 @@ static const loom_low_lower_policy_t kAmdgpuLowLowerPolicy = {
             .attrs = loom_amdgpu_descriptor_matrix_attrs,
             .user_data = NULL,
         },
+    .preselect_op = {.fn = loom_amdgpu_preselect_op, .user_data = NULL},
     .select_op = {.fn = loom_amdgpu_select_op, .user_data = NULL},
     .emit_op = {.fn = loom_amdgpu_emit_op, .user_data = NULL},
 };
