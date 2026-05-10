@@ -8,6 +8,7 @@
 
 #include "loom/ir/module.h"
 #include "loom/ops/combining.h"
+#include "loom/ops/scalar/combining.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
@@ -16,31 +17,13 @@
 // Reduction lowering
 //===----------------------------------------------------------------------===//
 
-static const loom_op_kind_t kVectorToScalarReduceScalarOps[] = {
-    [LOOM_COMBINING_KIND_ADDI] = LOOM_OP_SCALAR_ADDI,
-    [LOOM_COMBINING_KIND_ADDF] = LOOM_OP_SCALAR_ADDF,
-    [LOOM_COMBINING_KIND_MULI] = LOOM_OP_SCALAR_MULI,
-    [LOOM_COMBINING_KIND_MULF] = LOOM_OP_SCALAR_MULF,
-    [LOOM_COMBINING_KIND_MINSI] = LOOM_OP_SCALAR_MINSI,
-    [LOOM_COMBINING_KIND_MAXSI] = LOOM_OP_SCALAR_MAXSI,
-    [LOOM_COMBINING_KIND_MINUI] = LOOM_OP_SCALAR_MINUI,
-    [LOOM_COMBINING_KIND_MAXUI] = LOOM_OP_SCALAR_MAXUI,
-    [LOOM_COMBINING_KIND_ANDI] = LOOM_OP_SCALAR_ANDI,
-    [LOOM_COMBINING_KIND_ORI] = LOOM_OP_SCALAR_ORI,
-    [LOOM_COMBINING_KIND_XORI] = LOOM_OP_SCALAR_XORI,
-    [LOOM_COMBINING_KIND_MINIMUMF] = LOOM_OP_SCALAR_MINIMUMF,
-    [LOOM_COMBINING_KIND_MAXIMUMF] = LOOM_OP_SCALAR_MAXIMUMF,
-    [LOOM_COMBINING_KIND_MINNUMF] = LOOM_OP_SCALAR_MINNUMF,
-    [LOOM_COMBINING_KIND_MAXNUMF] = LOOM_OP_SCALAR_MAXNUMF,
-};
-static_assert(IREE_ARRAYSIZE(kVectorToScalarReduceScalarOps) ==
-                  LOOM_COMBINING_KIND_COUNT_,
-              "vector-to-scalar reduction op table must match the combining "
-              "kind enum");
-
-static loom_op_kind_t loom_vector_to_scalar_reduce_scalar_kind(
-    loom_combining_kind_t reduce_kind) {
-  return kVectorToScalarReduceScalarOps[reduce_kind];
+static iree_status_t loom_vector_to_scalar_get_reduce_scalar_kind(
+    loom_combining_kind_t reduce_kind, loom_op_kind_t* out_scalar_kind) {
+  if (!loom_scalar_combining_kind_op(reduce_kind, out_scalar_kind)) {
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "unsupported vector reduce combining kind");
+  }
+  return iree_ok_status();
 }
 
 typedef struct loom_vector_to_scalar_accumulator_state_t {
@@ -453,8 +436,9 @@ iree_status_t loom_vector_to_scalar_lower_reduce(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement) {
   loom_combining_kind_t reduce_kind = loom_vector_reduce_kind(state->op);
   uint8_t reduce_flags = loom_vector_reduce_fastmath(state->op);
-  loom_op_kind_t scalar_kind =
-      loom_vector_to_scalar_reduce_scalar_kind(reduce_kind);
+  loom_op_kind_t scalar_kind = LOOM_OP_KIND_UNKNOWN;
+  IREE_RETURN_IF_ERROR(
+      loom_vector_to_scalar_get_reduce_scalar_kind(reduce_kind, &scalar_kind));
   loom_vector_to_scalar_accumulator_state_t accumulator_state = {
       .lane_state = *state,
       .input = loom_vector_reduce_input(state->op),
@@ -859,8 +843,9 @@ static iree_status_t loom_vector_to_scalar_reduce_axes_dynamic_result(
 iree_status_t loom_vector_to_scalar_lower_reduce_axes(
     loom_vector_to_scalar_state_t* state, loom_value_id_t* out_replacement) {
   loom_combining_kind_t reduce_kind = loom_vector_reduce_axes_kind(state->op);
-  loom_op_kind_t scalar_kind =
-      loom_vector_to_scalar_reduce_scalar_kind(reduce_kind);
+  loom_op_kind_t scalar_kind = LOOM_OP_KIND_UNKNOWN;
+  IREE_RETURN_IF_ERROR(
+      loom_vector_to_scalar_get_reduce_scalar_kind(reduce_kind, &scalar_kind));
 
   loom_type_t result_type = loom_module_value_type(
       state->rewriter->module, loom_vector_reduce_axes_result(state->op));

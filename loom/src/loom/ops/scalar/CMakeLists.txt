@@ -14,11 +14,13 @@ loom_cc_library(
   NAME
     scalar
   HDRS
+    "combining.h"
     "compare.h"
     "ops.h"
   SRCS
     "builders.c"
     "canonicalize.c"
+    "combining.c"
     "compare.c"
     "facts.c"
     "tables.c"
@@ -35,6 +37,7 @@ loom_cc_library(
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ir::facts
+    loom::src::loom::ops::combining
     loom::src::loom::ops::op_defs
     loom::src::loom::rewrite::rewriter
     loom::src::loom::util::math
