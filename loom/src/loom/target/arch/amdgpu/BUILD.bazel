@@ -287,6 +287,7 @@ loom_cc_test(
     srcs = ["encoding_test.cc"],
     deps = [
         ":encoding",
+        ":rdna3_encoding_tables",
         ":target_info",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

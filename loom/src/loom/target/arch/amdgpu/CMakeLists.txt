@@ -94,6 +94,7 @@ loom_cc_test(
     "encoding_test.cc"
   DEPS
     ::encoding
+    ::rdna3_encoding_tables
     ::target_info
     iree::testing::gtest
     iree::testing::gtest_main

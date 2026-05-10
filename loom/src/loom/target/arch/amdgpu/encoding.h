@@ -72,6 +72,10 @@ typedef enum loom_amdgpu_encoding_format_e {
   LOOM_AMDGPU_ENCODING_FORMAT_VOP1 = 30,
   // Vector one-source 32-bit instruction format with mandatory literal.
   LOOM_AMDGPU_ENCODING_FORMAT_VOP1_LITERAL = 42,
+  // Vector one-source 32-bit instruction format with legacy DPP lane control.
+  LOOM_AMDGPU_ENCODING_FORMAT_VOP1_DPP = 43,
+  // Vector one-source 32-bit instruction format with DPP16 lane control.
+  LOOM_AMDGPU_ENCODING_FORMAT_VOP1_DPP16 = 44,
   // CDNA MFMA packed vector three-source instruction format.
   LOOM_AMDGPU_ENCODING_FORMAT_VOP3P_MFMA = 53,
   // Vector three-source 64-bit instruction format with mandatory literal.

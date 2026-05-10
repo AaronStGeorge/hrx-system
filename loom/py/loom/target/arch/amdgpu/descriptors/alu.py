@@ -13,6 +13,13 @@ from __future__ import annotations
 
 from .common import *
 
+_DPP_CTRL_IMMEDIATE = Immediate(
+    "dpp_ctrl",
+    ImmediateKind.UNSIGNED,
+    bit_width=9,
+    unsigned_max=0x1FF,
+)
+
 
 def _s_add_u32_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
@@ -2263,6 +2270,59 @@ def _v_mov_b32_copy_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_mov_b32_dpp_overlay(
+    *,
+    descriptor_key: str,
+    encoding_name: str,
+    encoding_condition: str,
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name="V_MOV_B32",
+        mnemonic="v_mov_b32",
+        encoding_name=encoding_name,
+        encoding_condition=encoding_condition,
+        semantic_tag="lane.dpp.b32",
+        schedule_class=_SCHEDULE_VALU,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result()),
+            AmdgpuOperandOverlay("VSRC0", _vgpr_operand("src")),
+        ),
+        asm_forms=_asm(
+            mnemonic=descriptor_key.removeprefix("amdgpu."),
+            results=("dst",),
+            operands=("src",),
+            immediates=("dpp_ctrl",),
+            named_immediates=True,
+        ),
+        immediate_fields=("DPP_CTRL",),
+        immediates=(_DPP_CTRL_IMMEDIATE,),
+        fixed_encoding_fields=(
+            ("SRC0", 250),
+            ("ROW_MASK", 0xF),
+            ("BANK_MASK", 0xF),
+            ("BOUND_CTRL", 1),
+        ),
+        effects=(_CONVERGENT_EFFECT,),
+    )
+
+
+def _v_mov_b32_dpp_legacy_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_mov_b32_dpp_overlay(
+        descriptor_key="amdgpu.v_mov_b32_dpp",
+        encoding_name="VOP1_VOP_DPP",
+        encoding_condition="has_dpp",
+    )
+
+
+def _v_mov_b32_dpp16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_mov_b32_dpp_overlay(
+        descriptor_key="amdgpu.v_mov_b32_dpp16",
+        encoding_name="VOP1_VOP_DPP16",
+        encoding_condition="has_dpp16",
+    )
+
+
 __all__ = (
     "_integer_bitwise_shift_overlays",
     "_s_add_u32_overlay",
@@ -2365,6 +2425,9 @@ __all__ = (
     "_v_min_u32_overlay",
     "_v_minmax_i32_overlay",
     "_v_mov_b32_copy_overlay",
+    "_v_mov_b32_dpp16_overlay",
+    "_v_mov_b32_dpp_legacy_overlay",
+    "_v_mov_b32_dpp_overlay",
     "_v_mov_b32_literal_overlay",
     "_v_native_f32_math_overlays",
     "_v_mul_f32_literal_overlay",

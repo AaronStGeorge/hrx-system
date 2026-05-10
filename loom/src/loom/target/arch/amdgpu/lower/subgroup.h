@@ -39,8 +39,8 @@ iree_status_t loom_amdgpu_select_kernel_subgroup_reduce_plan(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_amdgpu_subgroup_reduce_plan_t* out_plan, bool* out_selected);
 
-// Lowers a source subgroup reduce using DS bpermute tree steps and native VGPR
-// combining packets.
+// Lowers a source subgroup reduce using selected cross-lane tree steps and
+// native VGPR combining packets.
 iree_status_t loom_amdgpu_lower_kernel_subgroup_reduce(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_subgroup_reduce_plan_t* plan);

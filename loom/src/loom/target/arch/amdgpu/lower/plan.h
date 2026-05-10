@@ -377,9 +377,18 @@ typedef struct loom_amdgpu_subgroup_shuffle_plan_t {
   uint32_t width;
 } loom_amdgpu_subgroup_shuffle_plan_t;
 
+typedef enum loom_amdgpu_subgroup_reduce_crosslane_kind_e {
+  // Use DS bpermute for every subgroup tree exchange.
+  LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_BPERMUTE = 0,
+  // Use DPP row moves within 16-lane rows and DS bpermute between rows.
+  LOOM_AMDGPU_SUBGROUP_REDUCE_CROSSLANE_DPP_ROW_BPERMUTE = 1,
+} loom_amdgpu_subgroup_reduce_crosslane_kind_t;
+
 typedef struct loom_amdgpu_subgroup_reduce_plan_t {
   // Descriptor row selected for each native cross-lane read.
   loom_low_lower_resolved_descriptor_t bpermute_descriptor;
+  // Descriptor row selected for all-lane DPP row moves.
+  loom_low_lower_resolved_descriptor_t dpp_descriptor;
   // Descriptor row selected for each native lane combine.
   loom_low_lower_resolved_descriptor_t combine_descriptor;
   // Descriptor row selected to guard inactive source lanes.
@@ -400,11 +409,15 @@ typedef struct loom_amdgpu_subgroup_reduce_plan_t {
   uint32_t active_lane_count;
   // 32-bit identity element bit pattern used for inactive source lanes.
   uint32_t identity_bits;
+  // Cross-lane exchange strategy selected for the subgroup tree.
+  loom_amdgpu_subgroup_reduce_crosslane_kind_t crosslane_kind;
 } loom_amdgpu_subgroup_reduce_plan_t;
 
 typedef struct loom_amdgpu_workgroup_reduce_plan_t {
   // Descriptor row selected for each native cross-lane read.
   loom_low_lower_resolved_descriptor_t bpermute_descriptor;
+  // Descriptor row selected for all-lane DPP row moves.
+  loom_low_lower_resolved_descriptor_t dpp_descriptor;
   // Descriptor row selected for each native lane combine.
   loom_low_lower_resolved_descriptor_t combine_descriptor;
   // Descriptor row selected to guard inactive source lanes.
@@ -437,6 +450,8 @@ typedef struct loom_amdgpu_workgroup_reduce_plan_t {
   uint32_t flat_workgroup_size;
   // 32-bit identity element bit pattern used for inactive source lanes.
   uint32_t identity_bits;
+  // Cross-lane exchange strategy selected for full-wave subgroup trees.
+  loom_amdgpu_subgroup_reduce_crosslane_kind_t crosslane_kind;
 } loom_amdgpu_workgroup_reduce_plan_t;
 
 typedef struct loom_amdgpu_subgroup_scan_plan_t {
