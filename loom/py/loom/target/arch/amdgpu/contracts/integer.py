@@ -38,6 +38,8 @@ from loom.target.low_descriptors import Descriptor
 
 _DESCRIPTOR_KEYS = (
     "amdgpu.s_mov_b32",
+    "amdgpu.s_cselect_b32",
+    "amdgpu.s_cmp_lg_i32",
     "amdgpu.s_add_u32",
     "amdgpu.s_sub_u32",
     "amdgpu.s_mul_i32",
@@ -399,6 +401,78 @@ def _i1_sgpr_mask_rule(
                     "rhs": _materialized_operand("rhs", I1_NATIVE_MASK_MATERIALIZER),
                 },
                 results={"dst": _RESULT},
+            ),
+        ),
+    )
+
+
+def _i1_scc_rule(
+    source_op: Op,
+    descriptor_key: str,
+) -> DescriptorRule:
+    move = _descriptor("amdgpu.s_mov_b32")
+    select = _descriptor("amdgpu.s_cselect_b32")
+    bitwise = _descriptor(descriptor_key)
+    compare = _descriptor("amdgpu.s_cmp_lg_i32")
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=bitwise,
+        guards=(
+            *_typed_binary_guards(_I1),
+            Guard.low_value_register_class("lhs", "amdgpu.scc"),
+            Guard.low_value_register_class("rhs", "amdgpu.scc"),
+            Guard.low_value_register_class("result", "amdgpu.scc"),
+            *_descriptor_available_guards(move, select, bitwise, compare),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=move,
+                results={"dst": ValueRef.temporary("zero")},
+                result_types={"dst": _I32},
+                immediates={"imm32": 0},
+            ),
+            EmitDescriptorOp(
+                descriptor=move,
+                results={"dst": ValueRef.temporary("one")},
+                result_types={"dst": _I32},
+                immediates={"imm32": 1},
+            ),
+            EmitDescriptorOp(
+                descriptor=select,
+                operands={
+                    "true_value": ValueRef.temporary("one"),
+                    "false_value": ValueRef.temporary("zero"),
+                    "condition": ValueRef.operand("lhs"),
+                },
+                results={"dst": ValueRef.temporary("lhs_i32")},
+                result_types={"dst": _I32},
+            ),
+            EmitDescriptorOp(
+                descriptor=select,
+                operands={
+                    "true_value": ValueRef.temporary("one"),
+                    "false_value": ValueRef.temporary("zero"),
+                    "condition": ValueRef.operand("rhs"),
+                },
+                results={"dst": ValueRef.temporary("rhs_i32")},
+                result_types={"dst": _I32},
+            ),
+            EmitDescriptorOp(
+                descriptor=bitwise,
+                operands={
+                    "lhs": ValueRef.temporary("lhs_i32"),
+                    "rhs": ValueRef.temporary("rhs_i32"),
+                },
+                results={"dst": ValueRef.temporary("result_i32")},
+                result_types={"dst": _I32},
+            ),
+            EmitDescriptorOp(
+                descriptor=compare,
+                operands={
+                    "lhs": ValueRef.temporary("result_i32"),
+                    "rhs": ValueRef.temporary("zero"),
+                },
+                results={"scc": ValueRef.result("result")},
             ),
         ),
     )
@@ -1159,6 +1233,12 @@ def _rules() -> tuple[DescriptorRule, ...]:
         )
     )
     rules.append(
+        _i1_scc_rule(
+            scalar_bitwise.scalar_andi,
+            "amdgpu.s_and_b32",
+        )
+    )
+    rules.append(
         _i1_sgpr_mask_rule(
             scalar_bitwise.scalar_andi,
             "amdgpu.s_and_b64",
@@ -1173,6 +1253,12 @@ def _rules() -> tuple[DescriptorRule, ...]:
         )
     )
     rules.append(
+        _i1_scc_rule(
+            scalar_bitwise.scalar_ori,
+            "amdgpu.s_or_b32",
+        )
+    )
+    rules.append(
         _i1_sgpr_mask_rule(
             scalar_bitwise.scalar_ori,
             "amdgpu.s_or_b64",
@@ -1184,6 +1270,12 @@ def _rules() -> tuple[DescriptorRule, ...]:
             "amdgpu.s_or_b32",
             "amdgpu.v_or_b32",
             "amdgpu.v_or_b32.lit",
+        )
+    )
+    rules.append(
+        _i1_scc_rule(
+            scalar_bitwise.scalar_xori,
+            "amdgpu.s_xor_b32",
         )
     )
     rules.append(
