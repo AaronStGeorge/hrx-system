@@ -844,11 +844,10 @@ static iree_string_view_t loom_verify_type_well_formed_detail(
   return iree_string_view_empty();
 }
 
-static void loom_verify_type_well_formed(
+static void loom_verify_emit_type_well_formed_diagnostic(
     loom_verify_state_t* state, const loom_op_t* op, loom_type_t type,
-    iree_string_view_t field_name, loom_diagnostic_field_ref_t field_ref) {
-  iree_string_view_t detail = loom_verify_type_well_formed_detail(type);
-  if (iree_string_view_is_empty(detail)) return;
+    iree_string_view_t field_name, loom_diagnostic_field_ref_t field_ref,
+    iree_string_view_t detail) {
   loom_diagnostic_param_t params[] = {
       loom_param_with_field_ref(loom_param_string(field_name), field_ref),
       loom_param_type(type),
@@ -860,32 +859,33 @@ static void loom_verify_type_well_formed(
 
 static void loom_verify_value_type_well_formed(
     loom_verify_state_t* state, const loom_op_t* op, loom_value_id_t value_id,
-    iree_string_view_t field_name, loom_diagnostic_field_ref_t field_ref) {
+    const loom_op_vtable_t* vtable, uint8_t category, uint16_t value_index,
+    loom_diagnostic_field_ref_t field_ref) {
   if (value_id == LOOM_VALUE_ID_INVALID) return;
   if (value_id >= state->module->values.count) return;
-  loom_verify_type_well_formed(state, op,
-                               loom_module_value_type(state->module, value_id),
-                               field_name, field_ref);
+  loom_type_t type = loom_module_value_type(state->module, value_id);
+  iree_string_view_t detail = loom_verify_type_well_formed_detail(type);
+  if (iree_string_view_is_empty(detail)) return;
+  char name_buffer[64];
+  iree_string_view_t field_name = loom_verify_value_field_name(
+      vtable, category, value_index, name_buffer, sizeof(name_buffer));
+  loom_verify_emit_type_well_formed_diagnostic(state, op, type, field_name,
+                                               field_ref, detail);
 }
 
 void loom_verify_op_type_well_formedness(loom_verify_state_t* state,
                                          const loom_op_t* op,
                                          const loom_op_vtable_t* vtable) {
-  char name_buffer[64];
   const loom_value_id_t* operands = loom_op_const_operands(op);
   for (uint16_t i = 0; i < op->operand_count; ++i) {
-    iree_string_view_t name = loom_verify_value_field_name(
-        vtable, LOOM_FIELD_OPERAND, i, name_buffer, sizeof(name_buffer));
     loom_verify_value_type_well_formed(
-        state, op, operands[i], name,
+        state, op, operands[i], vtable, LOOM_FIELD_OPERAND, i,
         loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND, i));
   }
   const loom_value_id_t* results = loom_op_const_results(op);
   for (uint16_t i = 0; i < op->result_count; ++i) {
-    iree_string_view_t name = loom_verify_value_field_name(
-        vtable, LOOM_FIELD_RESULT, i, name_buffer, sizeof(name_buffer));
     loom_verify_value_type_well_formed(
-        state, op, results[i], name,
+        state, op, results[i], vtable, LOOM_FIELD_RESULT, i,
         loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT, i));
   }
 }
@@ -894,10 +894,16 @@ void loom_verify_block_arg_type_well_formedness(loom_verify_state_t* state,
                                                 const loom_block_t* block) {
   char name_buffer[32];
   for (uint16_t a = 0; a < block->arg_count; ++a) {
+    loom_value_id_t arg_id = loom_block_arg_id(block, a);
+    if (arg_id == LOOM_VALUE_ID_INVALID) continue;
+    if (arg_id >= state->module->values.count) continue;
+    loom_type_t type = loom_module_value_type(state->module, arg_id);
+    iree_string_view_t detail = loom_verify_type_well_formed_detail(type);
+    if (iree_string_view_is_empty(detail)) continue;
     iree_snprintf(name_buffer, sizeof(name_buffer), "block arg %u", a);
-    loom_verify_value_type_well_formed(state, NULL, loom_block_arg_id(block, a),
-                                       iree_make_cstring_view(name_buffer),
-                                       loom_diagnostic_field_ref_none());
+    loom_verify_emit_type_well_formed_diagnostic(
+        state, NULL, type, iree_make_cstring_view(name_buffer),
+        loom_diagnostic_field_ref_none(), detail);
   }
 }
 
@@ -993,12 +999,13 @@ static void loom_verify_encoding_ref(
 // Checks SSA encoding references in all operand and result types of an op.
 void loom_verify_encoding_refs(loom_verify_state_t* state, const loom_op_t* op,
                                const loom_op_vtable_t* vtable) {
-  char name_buffer[64];
   const loom_value_id_t* operands = loom_op_const_operands(op);
   for (uint16_t i = 0; i < op->operand_count; ++i) {
     if (operands[i] == LOOM_VALUE_ID_INVALID) continue;
     if (operands[i] >= state->module->values.count) continue;
     loom_type_t type = loom_module_value_type(state->module, operands[i]);
+    if (!loom_type_has_ssa_encoding(type)) continue;
+    char name_buffer[64];
     iree_string_view_t name = loom_verify_value_field_name(
         vtable, LOOM_FIELD_OPERAND, i, name_buffer, sizeof(name_buffer));
     loom_verify_encoding_ref(
@@ -1012,6 +1019,8 @@ void loom_verify_encoding_refs(loom_verify_state_t* state, const loom_op_t* op,
     if (results[i] == LOOM_VALUE_ID_INVALID) continue;
     if (results[i] >= state->module->values.count) continue;
     loom_type_t type = loom_module_value_type(state->module, results[i]);
+    if (!loom_type_has_ssa_encoding(type)) continue;
+    char name_buffer[64];
     iree_string_view_t name = loom_verify_value_field_name(
         vtable, LOOM_FIELD_RESULT, i, name_buffer, sizeof(name_buffer));
     loom_verify_encoding_ref(
@@ -1034,6 +1043,7 @@ void loom_verify_block_arg_encoding_refs(loom_verify_state_t* state,
     if (arg_id == LOOM_VALUE_ID_INVALID) continue;
     if (arg_id >= state->module->values.count) continue;
     loom_type_t type = loom_module_value_type(state->module, arg_id);
+    if (!loom_type_has_ssa_encoding(type)) continue;
     iree_snprintf(name_buffer, sizeof(name_buffer), "block arg %u", a);
     loom_verify_encoding_ref(state, NULL, NULL, type,
                              iree_make_cstring_view(name_buffer),

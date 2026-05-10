@@ -400,15 +400,15 @@ static void loom_verify_relation_region_args_satisfy(
   if (!region || region->block_count == 0) return;
   loom_block_t* entry = loom_region_entry_block(region);
 
-  char region_name_buffer[32];
-  iree_string_view_t region_name = loom_verify_field_name(
-      vtable, region_ref, region_name_buffer, sizeof(region_name_buffer));
   for (uint16_t i = 0; i < entry->arg_count; ++i) {
     loom_type_t argument_type =
         loom_verify_value_type(state, loom_block_arg_id(entry, i));
     if (loom_type_satisfies_constraint(argument_type, expected)) continue;
 
+    char region_name_buffer[32];
     char argument_name_buffer[64];
+    iree_string_view_t region_name = loom_verify_field_name(
+        vtable, region_ref, region_name_buffer, sizeof(region_name_buffer));
     iree_snprintf(argument_name_buffer, sizeof(argument_name_buffer),
                   "%.*s.args[%u]", (int)region_name.size, region_name.data, i);
     const loom_error_def_t* error =
