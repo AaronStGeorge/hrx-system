@@ -24,7 +24,7 @@ func.def @for_iv_static_bounds() -> (i64, i64, i64) {
   %zero = scalar.constant 0 : i64
   %iv_lo, %iv_hi, %iv_div = scf.for %iv = [%lo to %hi step %step](%carry_lo = %zero : i64, %carry_hi = %zero : i64, %carry_div = %zero : i64) -> (i64, i64, i64) {
     %fact_lo = scalar.constant 4 : i64
-    %fact_hi = scalar.constant 11 : i64
+    %fact_hi = scalar.constant 10 : i64
     %fact_div = scalar.constant 2 : i64
     scf.yield %fact_lo, %fact_hi, %fact_div : i64, i64, i64
   }
@@ -60,12 +60,45 @@ func.def @for_iv_assumed_upper_bound(%n: index) -> (i64, i64, i64, i1) {
   %false = scalar.constant false : i1
   %iv_lo, %iv_hi, %iv_div, %iv_non_negative = scf.for %iv = [%lo to %n2 step %step](%carry_lo = %zero : i64, %carry_hi = %zero : i64, %carry_div = %zero : i64, %carry_non_negative = %false : i1) -> (i64, i64, i64, i1) {
     %fact_lo = scalar.constant 0 : i64
-    %fact_hi = scalar.constant 63 : i64
+    %fact_hi = scalar.constant 60 : i64
     %fact_div = scalar.constant 4 : i64
     %fact_non_negative = scalar.constant true : i1
     scf.yield %fact_lo, %fact_hi, %fact_div, %fact_non_negative : i64, i64, i64, i1
   }
   func.return %iv_lo, %iv_hi, %iv_div, %iv_non_negative : i64, i64, i64, i1
+}
+
+// ====
+
+// Projection-style dot loops use a two-element vector footprint at every
+// stepped IV. The IV high fact is the last reachable origin, not upper - 1.
+func.def @for_iv_projection_pair_origins() -> (i64, i64, i64) {
+  %start = index.constant 0 : index
+  %limit = index.constant 3584 : index
+  %step = index.constant 2 : index
+  %zero = scalar.constant 0 : i64
+  %iv_lo, %iv_hi, %iv_div = scf.for %origin = [%start to %limit step %step](%carry_lo = %zero : i64, %carry_hi = %zero : i64, %carry_div = %zero : i64) -> (i64, i64, i64) {
+    %fact_lo = test.fact_range_lo %origin : index -> i64
+    %fact_hi = test.fact_range_hi %origin : index -> i64
+    %fact_div = test.fact_divisor %origin : index -> i64
+    scf.yield %fact_lo, %fact_hi, %fact_div : i64, i64, i64
+  }
+  func.return %iv_lo, %iv_hi, %iv_div : i64, i64, i64
+}
+
+// ----
+func.def @for_iv_projection_pair_origins() -> (i64, i64, i64) {
+  %start = index.constant 0 : index
+  %limit = index.constant 3584 : index
+  %step = index.constant 2 : index
+  %zero = scalar.constant 0 : i64
+  %iv_lo, %iv_hi, %iv_div = scf.for %origin = [%start to %limit step %step](%carry_lo = %zero : i64, %carry_hi = %zero : i64, %carry_div = %zero : i64) -> (i64, i64, i64) {
+    %fact_lo = scalar.constant 0 : i64
+    %fact_hi = scalar.constant 3582 : i64
+    %fact_div = scalar.constant 2 : i64
+    scf.yield %fact_lo, %fact_hi, %fact_div : i64, i64, i64
+  }
+  func.return %iv_lo, %iv_hi, %iv_div : i64, i64, i64
 }
 
 // ====

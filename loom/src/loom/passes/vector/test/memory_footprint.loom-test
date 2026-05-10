@@ -49,6 +49,20 @@ func.def @dynamic_unproven_tail(%buffer: buffer, %base: offset, %n: index, %iv: 
 
 // ====
 
+func.def @counted_loop_iv_proves_pair_load_extent(%buffer: buffer, %base: offset) {
+  %layout = encoding.layout.dense : encoding<layout>
+  %start = index.constant 0 : index
+  %limit = index.constant 3584 : index
+  %step = index.constant 2 : index
+  %view = buffer.view %buffer[%base] : buffer -> view<3584xbf16, %layout>
+  scf.for %origin = [%start to %limit step %step] {
+    %loaded = vector.load %view[%origin] : view<3584xbf16, %layout> -> vector<2xbf16>
+  }
+  func.return
+}
+
+// ====
+
 func.def @dynamic_unit_axis_proven_by_assume_relation(%buffer: buffer, %base: offset, %row: index, %n: index) {
   %layout = encoding.layout.dense : encoding<layout>
   %view = buffer.view %buffer[%base] : buffer -> view<[%n]x4xf32, %layout>
