@@ -65,6 +65,15 @@ static bool loom_amdgpu_memory_access_include_lds_root_byte_offset(
 static bool loom_amdgpu_memory_access_register_footprint(
     loom_type_t vector_type, loom_amdgpu_memory_access_t* access,
     loom_amdgpu_memory_access_diagnostic_t* diagnostic) {
+  if (loom_amdgpu_static_vector_lane_count(vector_type, LOOM_SCALAR_TYPE_I8,
+                                           1) == 1) {
+    access->payload_register_class =
+        LOOM_AMDGPU_MEMORY_PAYLOAD_REGISTER_CLASS_VGPR;
+    access->payload_register_count = 1;
+    access->packet_byte_count = 1;
+    return true;
+  }
+
   uint32_t register_count = loom_amdgpu_vector_32bit_lane_count(vector_type);
   if (register_count != 0) {
     access->payload_register_class =
@@ -479,6 +488,22 @@ static const loom_amdgpu_memory_descriptor_candidate_t
         {
             .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
             .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
+            .packet_byte_count = 1,
+            .payload_register_count = 1,
+            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_LOAD_I8,
+        },
+        {
+            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
+            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
+            .packet_byte_count = 1,
+            .payload_register_count = 1,
+            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_STORE_B8,
+        },
+        {
+            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_BUFFER_RESOURCE,
+            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_DEFAULT,
             .packet_byte_count = 2,
             .payload_register_count = 1,
             .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
@@ -695,6 +720,22 @@ static const loom_amdgpu_memory_descriptor_candidate_t
         {
             .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR,
             .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
+            .packet_byte_count = 1,
+            .payload_register_count = 1,
+            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_I8_SADDR,
+        },
+        {
+            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR,
+            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
+            .packet_byte_count = 1,
+            .payload_register_count = 1,
+            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B8_SADDR,
+        },
+        {
+            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_SADDR,
+            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR,
             .packet_byte_count = 2,
             .payload_register_count = 1,
             .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
@@ -756,6 +797,22 @@ static const loom_amdgpu_memory_descriptor_candidate_t
             .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
             .descriptor_ref =
                 LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B128_SADDR,
+        },
+        {
+            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT,
+            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT,
+            .packet_byte_count = 1,
+            .payload_register_count = 1,
+            .kind = LOOM_AMDGPU_MEMORY_OPERATION_LOAD,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_I8,
+        },
+        {
+            .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT,
+            .address_form = LOOM_AMDGPU_MEMORY_ADDRESS_FORM_FLAT,
+            .packet_byte_count = 1,
+            .payload_register_count = 1,
+            .kind = LOOM_AMDGPU_MEMORY_OPERATION_STORE,
+            .descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_STORE_B8,
         },
         {
             .domain = LOOM_AMDGPU_MEMORY_DESCRIPTOR_DOMAIN_GLOBAL_FLAT,

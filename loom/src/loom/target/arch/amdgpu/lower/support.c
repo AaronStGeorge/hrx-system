@@ -36,6 +36,11 @@ bool loom_amdgpu_type_is_i64(loom_type_t type) {
          loom_type_element_type(type) == LOOM_SCALAR_TYPE_I64;
 }
 
+bool loom_amdgpu_type_is_i8(loom_type_t type) {
+  return loom_type_is_scalar(type) &&
+         loom_type_element_type(type) == LOOM_SCALAR_TYPE_I8;
+}
+
 bool loom_amdgpu_type_is_i1(loom_type_t type) {
   return loom_type_is_scalar(type) &&
          loom_type_element_type(type) == LOOM_SCALAR_TYPE_I1;
@@ -1339,6 +1344,9 @@ iree_status_t loom_amdgpu_map_type(void* user_data,
   if (loom_amdgpu_type_is_i32(source_type)) {
     return loom_amdgpu_make_sgpr_type(context, out_low_type);
   }
+  if (loom_amdgpu_type_is_i8(source_type)) {
+    return loom_amdgpu_make_vgpr_type(context, out_low_type);
+  }
   if (loom_amdgpu_type_is_i64(source_type)) {
     return loom_amdgpu_make_sgpr_range_type(context, 2, out_low_type);
   }
@@ -1418,6 +1426,9 @@ iree_status_t loom_amdgpu_map_value(void* user_data,
     return loom_amdgpu_make_sgpr_type(context, out_low_type);
   }
   if (loom_amdgpu_type_is_16bit_float(source_type)) {
+    return loom_amdgpu_make_vgpr_type(context, out_low_type);
+  }
+  if (loom_amdgpu_type_is_i8(source_type)) {
     return loom_amdgpu_make_vgpr_type(context, out_low_type);
   }
   if (loom_amdgpu_type_is_i64(source_type)) {
@@ -1522,6 +1533,10 @@ iree_status_t loom_amdgpu_map_contract_value(
         1, out_mapped_value);
   }
   if (loom_amdgpu_type_is_16bit_float(source_type)) {
+    return loom_amdgpu_map_contract_register(
+        environment, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1, out_mapped_value);
+  }
+  if (loom_amdgpu_type_is_i8(source_type)) {
     return loom_amdgpu_map_contract_register(
         environment, LOOM_AMDGPU_REG_CLASS_ID_VGPR, 1, out_mapped_value);
   }

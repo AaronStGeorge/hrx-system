@@ -31,6 +31,9 @@ bool loom_amdgpu_type_is_i32(loom_type_t type);
 // Returns true when the source type is a scalar i64.
 bool loom_amdgpu_type_is_i64(loom_type_t type);
 
+// Returns true when the source type is a scalar i8.
+bool loom_amdgpu_type_is_i8(loom_type_t type);
+
 // Returns true when the source type is a scalar i1.
 bool loom_amdgpu_type_is_i1(loom_type_t type);
 

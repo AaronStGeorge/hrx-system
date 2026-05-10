@@ -109,6 +109,7 @@ _VEC_F32 = Vector(
     minimum_lanes=1,
     maximum_lanes="LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES",
 )
+_I8 = Scalar("i8")
 _I32 = Scalar("i32")
 _F16 = Scalar("f16")
 _BF16 = Scalar("bf16")
@@ -143,6 +144,11 @@ _I32_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
     subject_name="i32",
     constraint_key="amdgpu.arithmetic.i32",
+)
+_I8_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="type",
+    subject_name="i8",
+    constraint_key="amdgpu.arithmetic.i8",
 )
 _F16_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="type",
@@ -227,6 +233,8 @@ def _type_diagnostic(type_pattern: TypePattern) -> GuardDiagnostic:
         return _VEC_F32_DIAGNOSTIC
     if type_pattern == _I32:
         return _I32_DIAGNOSTIC
+    if type_pattern == _I8:
+        return _I8_DIAGNOSTIC
     if type_pattern == _F16:
         return _F16_DIAGNOSTIC
     if type_pattern == _BF16:
@@ -1658,6 +1666,12 @@ def _rules() -> tuple[ContractCase, ...]:
             _cast_rule(
                 scalar_conversion.scalar_sitofp,
                 _I32,
+                _F32,
+                "amdgpu.v_cvt_f32_i32",
+            ),
+            _cast_rule(
+                scalar_conversion.scalar_sitofp,
+                _I8,
                 _F32,
                 "amdgpu.v_cvt_f32_i32",
             ),

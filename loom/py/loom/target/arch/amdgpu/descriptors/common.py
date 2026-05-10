@@ -1352,6 +1352,13 @@ _GLOBAL_LOAD_B16_EFFECT = Effect(
     width_bits=16,
 )
 
+_GLOBAL_LOAD_B8_EFFECT = Effect(
+    EffectKind.READ,
+    memory_space=MemorySpace.GLOBAL,
+    flags=(EffectFlag.DEPENDENCY,),
+    width_bits=8,
+)
+
 _GLOBAL_LOAD_B64_EFFECT = Effect(
     EffectKind.READ,
     memory_space=MemorySpace.GLOBAL,
@@ -1378,6 +1385,13 @@ _GLOBAL_STORE_B16_EFFECT = Effect(
     memory_space=MemorySpace.GLOBAL,
     flags=(EffectFlag.DEPENDENCY,),
     width_bits=16,
+)
+
+_GLOBAL_STORE_B8_EFFECT = Effect(
+    EffectKind.WRITE,
+    memory_space=MemorySpace.GLOBAL,
+    flags=(EffectFlag.DEPENDENCY,),
+    width_bits=8,
 )
 
 _GLOBAL_STORE_B64_EFFECT = Effect(
@@ -1684,6 +1698,24 @@ _IGNORE_GLOBAL_READ_MEMORY_B16 = AmdgpuImplicitOperandOverlay(
     ignore_reason="modeled-by-global-read-effect",
 )
 
+_IGNORE_GLOBAL_READ_MEMORY_B8 = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_GPUMEM",
+    data_format_name="FMT_NUM_B8",
+    size_bits=8,
+    is_input=True,
+    is_output=False,
+    ignore_reason="modeled-by-global-read-effect",
+)
+
+_IGNORE_GLOBAL_READ_MEMORY_I8 = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_GPUMEM",
+    data_format_name="FMT_NUM_I8",
+    size_bits=8,
+    is_input=True,
+    is_output=False,
+    ignore_reason="modeled-by-global-read-effect",
+)
+
 _IGNORE_GLOBAL_READ_MEMORY_U16 = AmdgpuImplicitOperandOverlay(
     operand_type="OPR_GPUMEM",
     data_format_name="FMT_NUM_U16",
@@ -1729,6 +1761,15 @@ _IGNORE_GLOBAL_WRITE_MEMORY_B16 = AmdgpuImplicitOperandOverlay(
     ignore_reason="modeled-by-global-write-effect",
 )
 
+_IGNORE_GLOBAL_WRITE_MEMORY_B8 = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_GPUMEM",
+    data_format_name="FMT_NUM_B8",
+    size_bits=8,
+    is_input=False,
+    is_output=True,
+    ignore_reason="modeled-by-global-write-effect",
+)
+
 _IGNORE_GLOBAL_WRITE_MEMORY_B64 = AmdgpuImplicitOperandOverlay(
     operand_type="OPR_GPUMEM",
     data_format_name="FMT_NUM_B64",
@@ -1767,6 +1808,8 @@ def _ignore_workgroup_memory(
 
 def _ignore_global_read_memory(width_bits: int) -> AmdgpuImplicitOperandOverlay:
     match width_bits:
+        case 8:
+            return _IGNORE_GLOBAL_READ_MEMORY_B8
         case 16:
             return _IGNORE_GLOBAL_READ_MEMORY_B16
         case 32:
@@ -1781,6 +1824,8 @@ def _ignore_global_read_memory(width_bits: int) -> AmdgpuImplicitOperandOverlay:
 
 def _ignore_global_write_memory(width_bits: int) -> AmdgpuImplicitOperandOverlay:
     match width_bits:
+        case 8:
+            return _IGNORE_GLOBAL_WRITE_MEMORY_B8
         case 16:
             return _IGNORE_GLOBAL_WRITE_MEMORY_B16
         case 32:
@@ -1795,6 +1840,8 @@ def _ignore_global_write_memory(width_bits: int) -> AmdgpuImplicitOperandOverlay
 
 def _global_read_effect(width_bits: int) -> Effect:
     match width_bits:
+        case 8:
+            return _GLOBAL_LOAD_B8_EFFECT
         case 16:
             return _GLOBAL_LOAD_B16_EFFECT
         case 32:
@@ -1809,6 +1856,8 @@ def _global_read_effect(width_bits: int) -> Effect:
 
 def _global_write_effect(width_bits: int) -> Effect:
     match width_bits:
+        case 8:
+            return _GLOBAL_STORE_B8_EFFECT
         case 16:
             return _GLOBAL_STORE_B16_EFFECT
         case 32:
@@ -2045,6 +2094,7 @@ __all__ = (
     "_GLOBAL_GFX950_SADDR_OFF",
     "_GLOBAL_LOAD_B128_EFFECT",
     "_GLOBAL_LOAD_B16_EFFECT",
+    "_GLOBAL_LOAD_B8_EFFECT",
     "_GLOBAL_LOAD_B64_EFFECT",
     "_GLOBAL_LOAD_EFFECT",
     "_GLOBAL_PREFETCH_EFFECT",
@@ -2052,6 +2102,7 @@ __all__ = (
     "_GLOBAL_SADDR_OFFSET_ONLY_SIZE_REASON",
     "_GLOBAL_STORE_B128_EFFECT",
     "_GLOBAL_STORE_B16_EFFECT",
+    "_GLOBAL_STORE_B8_EFFECT",
     "_GLOBAL_STORE_B64_EFFECT",
     "_GLOBAL_STORE_EFFECT",
     "_HAL_BUFFER_DESCRIPTOR_CACHE_SWIZZLE_STRIDE_IMMEDIATE",
@@ -2061,11 +2112,14 @@ __all__ = (
     "_IGNORE_GLOBAL_READ_MEMORY",
     "_IGNORE_GLOBAL_READ_MEMORY_B128",
     "_IGNORE_GLOBAL_READ_MEMORY_B16",
+    "_IGNORE_GLOBAL_READ_MEMORY_B8",
     "_IGNORE_GLOBAL_READ_MEMORY_B64",
+    "_IGNORE_GLOBAL_READ_MEMORY_I8",
     "_IGNORE_GLOBAL_READ_MEMORY_U16",
     "_IGNORE_GLOBAL_WRITE_MEMORY",
     "_IGNORE_GLOBAL_WRITE_MEMORY_B128",
     "_IGNORE_GLOBAL_WRITE_MEMORY_B16",
+    "_IGNORE_GLOBAL_WRITE_MEMORY_B8",
     "_IGNORE_GLOBAL_WRITE_MEMORY_B64",
     "_INDEX_KEY_16_IMMEDIATE",
     "_INSTRUCTION_PREFETCH_EFFECT",
