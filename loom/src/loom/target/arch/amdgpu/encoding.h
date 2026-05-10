@@ -80,6 +80,10 @@ typedef enum loom_amdgpu_encoding_format_e {
   LOOM_AMDGPU_ENCODING_FORMAT_VOP3_SDST = 57,
   // VOP3 scalar-destination form with a mandatory literal payload.
   LOOM_AMDGPU_ENCODING_FORMAT_VOP3_SDST_LITERAL = 58,
+  // Wave32 dual-VALU packet format without a literal payload.
+  LOOM_AMDGPU_ENCODING_FORMAT_VOPDXY = 67,
+  // Wave32 dual-VALU packet format with a shared literal payload.
+  LOOM_AMDGPU_ENCODING_FORMAT_VOPDXY_LITERAL = 68,
 } loom_amdgpu_encoding_format_t;
 
 typedef struct loom_amdgpu_encoding_bit_range_t {
@@ -187,6 +191,25 @@ typedef struct loom_amdgpu_encoding_packet_t {
   uint16_t word_count;
 } loom_amdgpu_encoding_packet_t;
 
+typedef struct loom_amdgpu_encoding_vopdxy_fields_t {
+  // X-slot VOPD operation id.
+  uint16_t op_x;
+  // Y-slot VOPD operation id.
+  uint16_t op_y;
+  // X-slot unified SRC0 selector.
+  uint16_t src0_x;
+  // X-slot VGPR source 1 register.
+  uint16_t vsrc1_x;
+  // X-slot VGPR destination register.
+  uint16_t vdst_x;
+  // Y-slot unified SRC0 selector.
+  uint16_t src0_y;
+  // Y-slot VGPR source 1 register.
+  uint16_t vsrc1_y;
+  // Y-slot even VGPR destination register.
+  uint16_t vdst_y;
+} loom_amdgpu_encoding_vopdxy_fields_t;
+
 // Returns a short stable diagnostic name for |encoding_format|.
 iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format);
 
@@ -264,6 +287,12 @@ iree_status_t loom_amdgpu_encoding_pack_v_mov_b32_u32(
 iree_status_t loom_amdgpu_encoding_pack_vop2_u32_vgpr(
     const loom_amdgpu_encoding_table_t* table, uint16_t opcode, uint16_t vdst,
     uint32_t imm32, uint16_t vsrc1, loom_amdgpu_encoding_packet_t* out_packet);
+
+// Packs a 64-bit VOPDXY packet. This is the base GFX11/GFX12 dual-VALU form
+// and does not encode a literal payload or the wider VOPD3 encoding.
+iree_status_t loom_amdgpu_encoding_pack_vopdxy(
+    const loom_amdgpu_encoding_vopdxy_fields_t* fields,
+    loom_amdgpu_encoding_packet_t* out_packet);
 
 #ifdef __cplusplus
 }  // extern "C"

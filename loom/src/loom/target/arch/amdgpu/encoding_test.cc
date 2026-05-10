@@ -54,6 +54,64 @@ TEST(AmdgpuEncodingTest, Vop2U32VgprUsesLiteralForLargeU32) {
   EXPECT_EQ(packet.bit_count, 64u);
 }
 
+TEST(AmdgpuEncodingTest, NamesVopdFormats) {
+  EXPECT_TRUE(iree_string_view_equal(
+      loom_amdgpu_encoding_format_name(LOOM_AMDGPU_ENCODING_FORMAT_VOPDXY),
+      IREE_SV("vopdxy")));
+  EXPECT_TRUE(
+      iree_string_view_equal(loom_amdgpu_encoding_format_name(
+                                 LOOM_AMDGPU_ENCODING_FORMAT_VOPDXY_LITERAL),
+                             IREE_SV("vopdxy_literal")));
+}
+
+TEST(AmdgpuEncodingTest, PacksVopdxyDualFmacPair) {
+  loom_amdgpu_encoding_packet_t packet = {};
+  loom_amdgpu_encoding_vopdxy_fields_t fields = {};
+  fields.op_x = 0;
+  fields.op_y = 0;
+  fields.src0_x = 0x104;
+  fields.vsrc1_x = 2;
+  fields.vdst_x = 255;
+  fields.src0_y = 0x101;
+  fields.vsrc1_y = 3;
+  fields.vdst_y = 6;
+  IREE_ASSERT_OK(loom_amdgpu_encoding_pack_vopdxy(&fields, &packet));
+  EXPECT_EQ(packet.word_count, 2u);
+  EXPECT_EQ(packet.bit_count, 64u);
+  EXPECT_EQ(packet.words[0], UINT32_C(0xc8000504));
+  EXPECT_EQ(packet.words[1], UINT32_C(0xff060701));
+}
+
+TEST(AmdgpuEncodingTest, RejectsOddVopdxyYDestination) {
+  loom_amdgpu_encoding_packet_t packet = {};
+  loom_amdgpu_encoding_vopdxy_fields_t fields = {};
+  fields.op_x = 0;
+  fields.op_y = 0;
+  fields.src0_x = 0x104;
+  fields.vsrc1_x = 2;
+  fields.vdst_x = 255;
+  fields.src0_y = 0x101;
+  fields.vsrc1_y = 3;
+  fields.vdst_y = 7;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_amdgpu_encoding_pack_vopdxy(&fields, &packet));
+}
+
+TEST(AmdgpuEncodingTest, RejectsOutOfRangeVopdxyOp) {
+  loom_amdgpu_encoding_packet_t packet = {};
+  loom_amdgpu_encoding_vopdxy_fields_t fields = {};
+  fields.op_x = 16;
+  fields.op_y = 0;
+  fields.src0_x = 0x104;
+  fields.vsrc1_x = 2;
+  fields.vdst_x = 255;
+  fields.src0_y = 0x101;
+  fields.vsrc1_y = 3;
+  fields.vdst_y = 6;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        loom_amdgpu_encoding_pack_vopdxy(&fields, &packet));
+}
+
 TEST(AmdgpuEncodingTest, InlineF32SourceMapsBitPatternToSourceSelector) {
   uint16_t source = 0;
   EXPECT_TRUE(loom_amdgpu_encoding_inline_f32_source(

@@ -199,6 +199,10 @@ iree_string_view_t loom_amdgpu_encoding_format_name(uint16_t encoding_format) {
       return IREE_SV("vop3_sdst");
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP3_SDST_LITERAL:
       return IREE_SV("vop3_sdst_literal");
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOPDXY:
+      return IREE_SV("vopdxy");
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOPDXY_LITERAL:
+      return IREE_SV("vopdxy_literal");
     default:
       return IREE_SV("unknown");
   }
@@ -542,4 +546,60 @@ iree_status_t loom_amdgpu_encoding_pack_vop2_u32_vgpr(
   return loom_amdgpu_encoding_pack(
       table, LOOM_AMDGPU_ENCODING_FORMAT_VOP2_LITERAL, opcode, field_values,
       IREE_ARRAYSIZE(field_values), out_packet);
+}
+
+static iree_status_t loom_amdgpu_encoding_verify_vopdxy_field(
+    iree_string_view_t name, uint16_t value, uint16_t bit_count) {
+  if ((value >> bit_count) != 0) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU VOPDXY field %.*s value %" PRIu16
+                            " does not fit %" PRIu16 " bits",
+                            (int)name.size, name.data, value, bit_count);
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_amdgpu_encoding_pack_vopdxy(
+    const loom_amdgpu_encoding_vopdxy_fields_t* fields,
+    loom_amdgpu_encoding_packet_t* out_packet) {
+  if (fields == NULL || out_packet == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU VOPDXY encoding requires fields and an "
+                            "output packet");
+  }
+  *out_packet = (loom_amdgpu_encoding_packet_t){0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_verify_vopdxy_field(
+      IREE_SV("op_x"), fields->op_x, 4));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_verify_vopdxy_field(
+      IREE_SV("op_y"), fields->op_y, 5));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_verify_vopdxy_field(
+      IREE_SV("src0_x"), fields->src0_x, 9));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_verify_vopdxy_field(
+      IREE_SV("vsrc1_x"), fields->vsrc1_x, 8));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_verify_vopdxy_field(
+      IREE_SV("vdst_x"), fields->vdst_x, 8));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_verify_vopdxy_field(
+      IREE_SV("src0_y"), fields->src0_y, 9));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_verify_vopdxy_field(
+      IREE_SV("vsrc1_y"), fields->vsrc1_y, 8));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_encoding_verify_vopdxy_field(
+      IREE_SV("vdst_y"), fields->vdst_y, 8));
+  if ((fields->vdst_y & 1u) != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU VOPDXY Y destination register must be "
+                            "even");
+  }
+
+  const uint64_t encoded =
+      ((uint64_t)fields->src0_x << 0) | ((uint64_t)fields->vsrc1_x << 9) |
+      ((uint64_t)fields->op_y << 17) | ((uint64_t)fields->op_x << 22) |
+      (UINT64_C(0x32) << 26) | ((uint64_t)fields->src0_y << 32) |
+      ((uint64_t)fields->vsrc1_y << 41) |
+      ((uint64_t)(fields->vdst_y >> 1) << 49) |
+      ((uint64_t)fields->vdst_x << 56);
+  out_packet->words[0] = (uint32_t)encoded;
+  out_packet->words[1] = (uint32_t)(encoded >> 32);
+  out_packet->bit_count = 64;
+  out_packet->word_count = 2;
+  return iree_ok_status();
 }
