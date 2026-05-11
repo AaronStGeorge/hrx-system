@@ -947,6 +947,8 @@ iree_c_embed_data(
         "execution/testdata/model_attention_score_dot2_bf16_fptrunc.loom",
         "execution/testdata/model_attention_score_scalar_bf16_fptrunc.loom",
         "execution/testdata/model_dense_projection_block_f16.loom",
+        "execution/testdata/model_dense_projection_partial_m2_f32_to_bf16_mfma_k32.loom",
+        "execution/testdata/model_dense_projection_partial_m2_f32_to_bf16_wmma_k32.loom",
         "execution/testdata/model_dense_projection_tile_bf16.loom",
         "execution/testdata/model_dense_projection_tile_bf16_k32.loom",
         "execution/testdata/model_dense_projection_tile_bf16_wmma_k32.loom",
