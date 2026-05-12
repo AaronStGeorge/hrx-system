@@ -1,0 +1,189 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""Baseline x86-64 scalar/control descriptor rows."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from loom.target.low_descriptors import (
+    Descriptor,
+    DescriptorFlag,
+    DescriptorSet,
+    IssueUse,
+    LatencyKind,
+    ModelQuality,
+    RegClass,
+    RegClassFlag,
+    Resource,
+    ResourceKind,
+    ScheduleClass,
+    ScheduleClassFlag,
+    SpillSlotSpace,
+)
+
+from .common import (
+    _CONTROL_EFFECT,
+    _GPR_DESTRUCTIVE_LHS_CONSTRAINTS,
+    _IMM64_IMMEDIATE,
+    _REG_GPR32,
+    _REG_GPR64,
+    _RESOURCE_CONTROL,
+    _RESOURCE_SCALAR,
+    _SCHEDULE_CONTROL,
+    _SCHEDULE_SCALAR,
+    _TARGET_BLOCK_IMMEDIATE,
+    _asm,
+    _gpr32_operand,
+    _gpr32_result,
+    _gpr64_operand,
+    _gpr64_result,
+)
+
+X86_SCALAR_PREFIX_DESCRIPTORS = (
+    Descriptor(
+        key="x86.scalar.add.gpr32",
+        mnemonic="add",
+        semantic_tag="integer.add.i32",
+        operands=(
+            _gpr32_result(),
+            _gpr32_operand("lhs"),
+            _gpr32_operand("rhs"),
+        ),
+        constraints=_GPR_DESTRUCTIVE_LHS_CONSTRAINTS,
+        asm_forms=_asm(
+            mnemonic="add.gpr32",
+            results=("dst",),
+            operands=("lhs", "rhs"),
+        ),
+        schedule_class=_SCHEDULE_SCALAR,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    ),
+)
+
+X86_SCALAR_SUFFIX_DESCRIPTORS = (
+    Descriptor(
+        key="x86.scalar.mov.gpr64",
+        mnemonic="mov",
+        semantic_tag="integer.move.i64",
+        operands=(_gpr64_result(), _gpr64_operand("src")),
+        asm_forms=_asm(results=("dst",), operands=("src",)),
+        schedule_class=_SCHEDULE_SCALAR,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    ),
+    Descriptor(
+        key="x86.scalar.movimm.gpr64",
+        mnemonic="mov",
+        semantic_tag="integer.const.i64",
+        operands=(_gpr64_result(),),
+        immediates=(_IMM64_IMMEDIATE,),
+        asm_forms=_asm(
+            mnemonic="mov.imm64",
+            results=("dst",),
+            immediates=("imm64",),
+        ),
+        schedule_class=_SCHEDULE_SCALAR,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    ),
+    Descriptor(
+        key="x86.scalar.lea.add.gpr64",
+        mnemonic="lea",
+        semantic_tag="integer.add.i64",
+        operands=(
+            _gpr64_result(),
+            _gpr64_operand("lhs"),
+            _gpr64_operand("rhs"),
+        ),
+        asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+        schedule_class=_SCHEDULE_SCALAR,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    ),
+    Descriptor(
+        key="x86.scalar.imul.gpr64",
+        mnemonic="imul",
+        semantic_tag="integer.mul.i64",
+        operands=(
+            _gpr64_result(),
+            _gpr64_operand("lhs"),
+            _gpr64_operand("rhs"),
+        ),
+        constraints=_GPR_DESTRUCTIVE_LHS_CONSTRAINTS,
+        asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+        schedule_class=_SCHEDULE_SCALAR,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    ),
+    Descriptor(
+        key="x86.scalar.jmp",
+        mnemonic="jmp",
+        semantic_tag="control.branch",
+        operands=(),
+        immediates=(_TARGET_BLOCK_IMMEDIATE,),
+        asm_forms=_asm(immediates=("target_block",)),
+        effects=(_CONTROL_EFFECT,),
+        schedule_class=_SCHEDULE_CONTROL,
+        flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
+    ),
+)
+
+X86_SCALAR_DESCRIPTORS = (
+    *X86_SCALAR_PREFIX_DESCRIPTORS,
+    *X86_SCALAR_SUFFIX_DESCRIPTORS,
+)
+
+X86_SCALAR_DESCRIPTOR_SET = DescriptorSet(
+    key="x86.scalar.core",
+    target_key="x86",
+    feature_key="x86.scalar.v1",
+    c_header_path=Path("loom/src/loom/target/arch/x86/scalar_descriptors.h"),
+    c_source_path=Path("loom/src/loom/target/arch/x86/scalar_descriptors.c"),
+    header_guard="LOOM_TARGET_ARCH_X86_SCALAR_DESCRIPTORS_H_",
+    public_header="loom/target/arch/x86/scalar_descriptors.h",
+    function_name="loom_x86_scalar_core_descriptor_set",
+    c_table_prefix="X86ScalarCore",
+    c_enum_prefix="X86_SCALAR_CORE",
+    generator_version=1,
+    reg_classes=(
+        RegClass(
+            _REG_GPR32,
+            32,
+            SpillSlotSpace.STACK,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=16,
+            alias_set_id=1,
+        ),
+        RegClass(
+            _REG_GPR64,
+            64,
+            SpillSlotSpace.STACK,
+            flags=(RegClassFlag.PHYSICAL,),
+            physical_count=16,
+            alias_set_id=1,
+        ),
+    ),
+    resources=(
+        Resource(_RESOURCE_SCALAR, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),
+        Resource(_RESOURCE_CONTROL, capacity_per_cycle=1, kind=ResourceKind.CONTROL),
+    ),
+    schedule_classes=(
+        ScheduleClass(
+            _SCHEDULE_SCALAR,
+            latency_kind=LatencyKind.ESTIMATE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_SCALAR, cycles=1, units=1),),
+            model_quality=ModelQuality.ESTIMATED,
+        ),
+        ScheduleClass(
+            _SCHEDULE_CONTROL,
+            latency_kind=LatencyKind.EXACT,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.EXACT,
+        ),
+    ),
+    descriptors=X86_SCALAR_DESCRIPTORS,
+)

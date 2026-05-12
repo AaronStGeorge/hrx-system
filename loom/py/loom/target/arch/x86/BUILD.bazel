@@ -39,7 +39,12 @@ py_library(
     name = "descriptors",
     srcs = [
         "__init__.py",
-        "descriptors.py",
+        "descriptors/__init__.py",
+        "descriptors/avx512.py",
+        "descriptors/common.py",
+        "descriptors/composite.py",
+        "descriptors/packed_dot.py",
+        "descriptors/scalar.py",
         "packed_dot_data.py",
     ],
     deps = [
