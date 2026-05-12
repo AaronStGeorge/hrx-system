@@ -32,6 +32,31 @@ low.func.def target(@x86_target) @x86_fragment(%input: reg<x86.gpr64>, %output: 
 
 // ====
 
+x86.target<scalar> @x86_target
+
+low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %index: reg<x86.gpr64>, %rhs: reg<x86.gpr64>) asm<x86.scalar.core> {
+  %base_disp = lea.disp %base {disp32 = 24}
+  %base_neg = lea.disp %base {disp32 = -8}
+  %scaled1 = lea.add_scale %base_disp, %index {disp32 = 0, scale = 1}
+  %scaled2 = lea.add_scale %base_neg, %index {disp32 = 8, scale = 2}
+  %scaled4 = lea.add_scale %base, %index {disp32 = -16, scale = 4}
+  %scaled8 = lea.scale %index {disp32 = 32, scale = 8}
+  %sum = lea %scaled8, %rhs
+  return
+}
+
+// ----
+  lea rbx, [rax + 24]
+  lea rsp, [rax - 8]
+  lea rbx, [rbx + rcx]
+  lea rbx, [rsp + rcx * 2 + 8]
+  lea rax, [rax + rcx * 4 - 16]
+  lea rax, [rcx * 8 + 32]
+  lea rax, [rax + rdx]
+  ret
+
+// ====
+
 x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>, %base: reg<x86.gpr64>) asm<x86.avx512.core> {

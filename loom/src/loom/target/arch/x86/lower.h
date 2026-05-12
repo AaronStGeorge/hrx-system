@@ -27,6 +27,13 @@ extern "C" {
 // disp32 memory packets.
 const loom_low_lower_policy_t* loom_x86_avx512_low_lower_policy(void);
 
+// Returns the baseline x86 scalar register lowering policy.
+//
+// The policy maps object-function buffer arguments and address-domain scalar
+// values to GPR64 registers, maps i32 scalar values to GPR32 registers, and
+// lowers ordinary integer/address operations through scalar descriptor rules.
+const loom_low_lower_policy_t* loom_x86_scalar_low_lower_policy(void);
+
 // Returns the x86 packed-dot register lowering policy.
 //
 // The policy maps supported static dot vectors to XMM/YMM/ZMM registers and

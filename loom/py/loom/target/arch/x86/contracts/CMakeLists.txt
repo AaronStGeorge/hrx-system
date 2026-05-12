@@ -17,6 +17,7 @@ iree_py_library(
     "__init__.py"
     "avx512.py"
     "packed_dot.py"
+    "scalar.py"
   DEPS
     iree::runtime::py::loom::core
     iree::runtime::py::loom::dialect::buffer::buffer

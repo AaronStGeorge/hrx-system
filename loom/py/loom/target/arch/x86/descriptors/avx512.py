@@ -49,6 +49,7 @@ from .common import (
     _RESOURCE_SCALAR,
     _RESOURCE_STORE,
     _RESOURCE_VECTOR,
+    _SCHEDULE_ADDRESS,
     _SCHEDULE_CONTROL,
     _SCHEDULE_MASK,
     _SCHEDULE_MEMORY_LOAD_XMM,
@@ -279,6 +280,13 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_kind=LatencyKind.ESTIMATE,
             latency_cycles=1,
             issue_uses=(IssueUse(_RESOURCE_MASK, cycles=1, units=1),),
+            model_quality=ModelQuality.ESTIMATED,
+        ),
+        ScheduleClass(
+            _SCHEDULE_ADDRESS,
+            latency_kind=LatencyKind.ESTIMATE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_ADDRESS, cycles=1, units=1),),
             model_quality=ModelQuality.ESTIMATED,
         ),
         ScheduleClass(

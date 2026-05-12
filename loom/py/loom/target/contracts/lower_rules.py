@@ -78,6 +78,7 @@ class LowerAttrCopyKind(Enum):
     I64_ARRAY_PACK_ELEMENTS = "i64_array_pack_elements"
     I64_LITERAL = "i64_literal"
     VALUE_EXACT_I64 = "value_exact_i64"
+    VALUE_EXACT_I64_NEGATE = "value_exact_i64_negate"
     VALUE_EXACT_I64_LOG2 = "value_exact_i64_log2"
     VALUE_EXACT_I64_MINUS_ONE = "value_exact_i64_minus_one"
     VALUE_U32_DIVISOR_MAGIC_MULTIPLIER = "value_u32_divisor_magic_multiplier"
@@ -1321,6 +1322,8 @@ class _LowerRuleSetCompiler:
     ) -> LowerAttrCopy:
         if project.kind == ValueProjectKind.EXACT_I64:
             kind = LowerAttrCopyKind.VALUE_EXACT_I64
+        elif project.kind == ValueProjectKind.EXACT_I64_NEGATE:
+            kind = LowerAttrCopyKind.VALUE_EXACT_I64_NEGATE
         elif project.kind == ValueProjectKind.EXACT_I64_LOG2:
             kind = LowerAttrCopyKind.VALUE_EXACT_I64_LOG2
         elif project.kind == ValueProjectKind.EXACT_I64_MINUS_ONE:

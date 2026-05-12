@@ -38,6 +38,7 @@ X86TargetKind = EnumDef(
             3,
             doc="x86-64 AVX-512 target row with packed-dot features.",
         ),
+        EnumCase("scalar", 4, doc="Baseline x86-64 scalar target row."),
     ],
     doc="x86 target row selected by x86.target.",
 )
@@ -72,6 +73,7 @@ x86_target = Op(
         AttrDict(),
     ],
     examples=[
+        "x86.target<scalar> @host",
         "x86.target<avx512> @host",
         "x86.target<packed_dot> @host",
     ],

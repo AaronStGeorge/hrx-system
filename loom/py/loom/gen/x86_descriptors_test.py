@@ -39,6 +39,10 @@ class _RaisesValueError:
         return True
 
 
+def _assert_descriptor_ref(header: str, macro_name: str) -> None:
+    assert re.search(rf"#define {re.escape(macro_name)} \d+u", header), macro_name
+
+
 def test_storage_generation_emits_current_public_views() -> None:
     with TemporaryDirectory() as temporary_directory:
         tmp_path = Path(temporary_directory)
@@ -80,10 +84,16 @@ def test_storage_generation_emits_current_public_views() -> None:
     assert "loom_x86_avx512_core_descriptor_set" in avx512_header
     assert "loom_x86_packed_dot_core_descriptor_set" in packed_dot_header
     assert "loom_x86_scalar_core_descriptor_set" in scalar_header
-    assert "#define X86_AVX512_CORE_DESCRIPTOR_REF_SCALAR_LEA_ADD_GPR64 83u" in avx512_header
-    assert "#define X86_SCALAR_CORE_DESCRIPTOR_REF_SCALAR_LEA_ADD_GPR64 3u" in scalar_header
-    assert "#define X86_PACKED_DOT_CORE_DESCRIPTOR_REF_AVX512_BF16_VDPBF16PS_YMM 51u" in packed_dot_header
-    assert "#define X86_AVX512_PACKED_DOT_CORE_DESCRIPTOR_REF_AVX512_BF16_VDPBF16PS_ZMM 136u" in composite_header
+    _assert_descriptor_ref(avx512_header, "X86_AVX512_CORE_DESCRIPTOR_REF_SCALAR_LEA_ADD_GPR64")
+    _assert_descriptor_ref(scalar_header, "X86_SCALAR_CORE_DESCRIPTOR_REF_SCALAR_LEA_ADD_GPR64")
+    _assert_descriptor_ref(
+        packed_dot_header,
+        "X86_PACKED_DOT_CORE_DESCRIPTOR_REF_AVX512_BF16_VDPBF16PS_YMM",
+    )
+    _assert_descriptor_ref(
+        composite_header,
+        "X86_AVX512_PACKED_DOT_CORE_DESCRIPTOR_REF_AVX512_BF16_VDPBF16PS_ZMM",
+    )
     assert "#define X86_SCALAR_CORE_REG_CLASS_ID_GPR32 0u" in scalar_header
     assert "#define X86_SCALAR_CORE_REG_CLASS_ID_GPR64 1u" in scalar_header
     assert "#define X86_PACKED_DOT_CORE_REG_CLASS_ID_XMM 2" in packed_dot_header

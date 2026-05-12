@@ -176,6 +176,8 @@ loom_cc_library(
     loom::src::loom::target::arch::x86::contracts::avx512_lower_rules
     loom::src::loom::target::arch::x86::contracts::packed_dot
     loom::src::loom::target::arch::x86::contracts::packed_dot_lower_rules
+    loom::src::loom::target::arch::x86::contracts::scalar
+    loom::src::loom::target::arch::x86::contracts::scalar_lower_rules
   PUBLIC
 )
 
@@ -254,6 +256,17 @@ iree_executable_test(
     "source_low_packed_dot"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_packed_dot.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_scalar_addressing"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_addressing.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

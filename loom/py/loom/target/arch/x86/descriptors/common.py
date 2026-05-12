@@ -64,6 +64,7 @@ _RESOURCE_ADDRESS = "x86.address"
 _RESOURCE_CONTROL = "x86.control"
 
 _SCHEDULE_SCALAR = "x86.scalar"
+_SCHEDULE_ADDRESS = "x86.address"
 _SCHEDULE_VECTOR_I32_XMM = "x86.vector.i32.128"
 _SCHEDULE_VECTOR_I32_ZMM = "x86.vector.i32.512"
 _SCHEDULE_VECTOR_F32_XMM = "x86.vector.f32.128"
@@ -311,6 +312,7 @@ _ADDRESS_SCALE_IMMEDIATE = Immediate(
     ImmediateKind.ENUM,
     enum_domain=_ADDRESS_SCALE_ENUM,
     bit_width=8,
+    unsigned_max=8,
 )
 
 _TARGET_BLOCK_IMMEDIATE = Immediate(

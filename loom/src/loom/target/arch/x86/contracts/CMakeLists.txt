@@ -12,6 +12,31 @@ iree_add_all_subdirs()
 
 loom_target_table_cc_library(
   NAME
+    scalar
+  GENERATOR
+    iree::runtime::py::loom::gen::x86_contract_fragment
+  ARGS
+    "--contract-fragment=x86.scalar"
+  DEPS
+    loom::src::loom::target::contract
+)
+
+loom_target_table_cc_library(
+  NAME
+    scalar_lower_rules
+  GENERATOR
+    iree::runtime::py::loom::gen::x86_lower_rule_shard
+  ARGS
+    "--contract-fragment=x86.scalar"
+  DEPS
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::ops::buffer
+    loom::src::loom::ops::index
+    loom::src::loom::ops::scalar
+)
+
+loom_target_table_cc_library(
+  NAME
     avx512
   GENERATOR
     iree::runtime::py::loom::gen::x86_contract_fragment

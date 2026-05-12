@@ -11,15 +11,14 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 
 from loom.dialect.buffer import ALL_BUFFER_OPS
-from loom.dialect.buffer import defs as buffer
 from loom.dialect.index import ALL_INDEX_OPS
-from loom.dialect.index import defs as index
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import arithmetic as scalar_arithmetic
 from loom.dialect.scalar import math as scalar_math
 from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector import defs as vector
 from loom.dsl import Op
+from loom.target.arch.x86.contracts.scalar import x86_scalar_core_cases
 from loom.target.arch.x86.descriptors import X86_AVX512_CORE_DESCRIPTOR_SET
 from loom.target.contracts import (
     AttrProject,
@@ -37,7 +36,6 @@ from loom.target.contracts import (
     SourceMemoryProject,
     SourceMemoryRootKind,
     TypePattern,
-    ValueAliasRule,
     ValueRef,
     Vector,
     descriptor_by_key,
@@ -50,8 +48,6 @@ from loom.target.low_descriptors import Descriptor
 
 _I32 = Scalar("i32")
 _F32 = Scalar("f32")
-_INDEX = Scalar("index")
-_OFFSET = Scalar("offset")
 _V4I1 = Vector("i1", lanes=4)
 _V4I32 = Vector("i32", lanes=4)
 _V4F32 = Vector("f32", lanes=4)
@@ -142,27 +138,6 @@ def _fma_rule(
                     "rhs": ValueRef.operand("b"),
                 },
                 results={"dst": ValueRef.result("result")},
-            ),
-        ),
-    )
-
-
-def _const_i64_rule(result_type: TypePattern) -> DescriptorRule:
-    descriptor = _descriptor("x86.scalar.movimm.gpr64")
-    return DescriptorRule(
-        source_op=index.index_constant,
-        descriptor=descriptor,
-        guards=(
-            Guard.attr_kind("value", "i64"),
-            Guard.value_type("result", result_type),
-            Guard.i64_range("value", -(2**63) + 1, (2**63) - 1),
-        ),
-        emit=(
-            EmitDescriptorOp(
-                descriptor=descriptor,
-                results={"dst": ValueRef.result("result")},
-                immediates={"imm64": AttrProject.direct("value")},
-                form=DescriptorEmitForm.CONST,
             ),
         ),
     )
@@ -355,14 +330,6 @@ def _shuffle_rule(
                 },
             ),
         ),
-    )
-
-
-def _buffer_view_rule() -> ValueAliasRule:
-    return ValueAliasRule(
-        source_op=buffer.buffer_view,
-        source=ValueRef.operand("buffer"),
-        result=ValueRef.result("result"),
     )
 
 
@@ -661,8 +628,7 @@ def _reduce_f32x16_rule() -> DescriptorRule:
 
 def _cases() -> Sequence[ContractCase]:
     return (
-        _buffer_view_rule(),
-        _binary_rule(scalar_arithmetic.scalar_addi, _I32, "x86.scalar.add.gpr32"),
+        *x86_scalar_core_cases(_descriptor),
         _binary_rule(scalar_arithmetic.scalar_addf, _F32, "x86.avx512.vaddss.xmm"),
         _binary_rule(scalar_arithmetic.scalar_subf, _F32, "x86.avx512.vsubss.xmm"),
         _binary_rule(scalar_arithmetic.scalar_mulf, _F32, "x86.avx512.vmulss.xmm"),
@@ -785,12 +751,6 @@ def _cases() -> Sequence[ContractCase]:
         _binary_rule(vector.vector_shli, _V16I32, "x86.avx512.vpsllvd.zmm"),
         _binary_rule(vector.vector_shrsi, _V16I32, "x86.avx512.vpsravd.zmm"),
         _binary_rule(vector.vector_shrui, _V16I32, "x86.avx512.vpsrlvd.zmm"),
-        _const_i64_rule(_INDEX),
-        _const_i64_rule(_OFFSET),
-        _binary_rule(index.index_add, _INDEX, "x86.scalar.lea.add.gpr64"),
-        _binary_rule(index.index_add, _OFFSET, "x86.scalar.lea.add.gpr64"),
-        _binary_rule(index.index_mul, _INDEX, "x86.scalar.imul.gpr64"),
-        _index_madd_rule(),
         *_memory_rules(),
         *reduction_descriptor_rules(
             vector.vector_reduce,
@@ -807,35 +767,6 @@ def _cases() -> Sequence[ContractCase]:
         ),
         _reduce_f32x4_rule(),
         _reduce_f32x16_rule(),
-    )
-
-
-def _index_madd_rule() -> DescriptorRule:
-    multiply = _descriptor("x86.scalar.imul.gpr64")
-    add = _descriptor("x86.scalar.lea.add.gpr64")
-    return DescriptorRule(
-        source_op=index.index_madd,
-        descriptor=add,
-        guards=_typed_guards(("a", "b", "c", "result"), _INDEX),
-        emit=(
-            _op_emit(
-                descriptor=multiply,
-                operands={
-                    "lhs": ValueRef.operand("a"),
-                    "rhs": ValueRef.operand("b"),
-                },
-                results={"dst": ValueRef.temporary("product")},
-                result_types={"dst": _INDEX},
-            ),
-            _op_emit(
-                descriptor=add,
-                operands={
-                    "lhs": ValueRef.temporary("product"),
-                    "rhs": ValueRef.operand("c"),
-                },
-                results={"dst": ValueRef.result("result")},
-            ),
-        ),
     )
 
 

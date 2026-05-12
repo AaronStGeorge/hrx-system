@@ -17,6 +17,7 @@ py_library(
         "__init__.py",
         "avx512.py",
         "packed_dot.py",
+        "scalar.py",
     ],
     deps = [
         "//loom/py/loom:core",

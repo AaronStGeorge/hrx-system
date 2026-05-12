@@ -34,6 +34,7 @@ class ValueProjectKind(Enum):
     """Projection from source value facts to descriptor immediates."""
 
     EXACT_I64 = "exact_i64"
+    EXACT_I64_NEGATE = "exact_i64_negate"
     EXACT_I64_LOG2 = "exact_i64_log2"
     EXACT_I64_MINUS_ONE = "exact_i64_minus_one"
     U32_DIVISOR_MAGIC_MULTIPLIER = "u32_divisor_magic_multiplier"
@@ -211,6 +212,14 @@ class ValueProject:
     def exact_i64(cls, source_value: str, *, target_bit_offset: int = 0) -> Self:
         return cls(
             kind=ValueProjectKind.EXACT_I64,
+            source_value=source_value,
+            target_bit_offset=target_bit_offset,
+        )
+
+    @classmethod
+    def exact_i64_negate(cls, source_value: str, *, target_bit_offset: int = 0) -> Self:
+        return cls(
+            kind=ValueProjectKind.EXACT_I64_NEGATE,
             source_value=source_value,
             target_bit_offset=target_bit_offset,
         )
