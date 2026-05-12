@@ -274,6 +274,7 @@ loom_cc_library(
     ::target_binding
     iree::base
     iree::base::internal::arena
+    loom::src::loom::analysis::consumption
     loom::src::loom::analysis::liveness
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs

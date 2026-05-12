@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "loom/analysis/consumption.h"
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/register_class_map.h"
@@ -64,6 +65,11 @@ typedef struct loom_low_allocation_build_state_t {
   loom_liveness_analysis_t liveness;
   // Function-local placement relations over |liveness|.
   loom_low_placement_table_t placement;
+  // CFG graph for |body|, initialized on demand for path-sensitive ownership
+  // queries.
+  loom_cfg_graph_t cfg_graph;
+  // True once |cfg_graph| has been initialized.
+  bool cfg_graph_initialized;
   // Active function-local value domain shared with liveness/allocation.
   const loom_local_value_domain_t* value_domain;
   // Unit end-point starts indexed by liveness local value ordinal. Values
@@ -1664,6 +1670,100 @@ loom_low_allocation_first_placement_relation(
   return NULL;
 }
 
+static bool loom_low_allocation_region_is_cfg(const loom_region_t* region) {
+  return region &&
+         iree_any_bit_set(region->flags, LOOM_REGION_INSTANCE_FLAG_CFG);
+}
+
+static iree_status_t loom_low_allocation_body_cfg_graph(
+    loom_low_allocation_build_state_t* state,
+    const loom_cfg_graph_t** out_graph) {
+  *out_graph = NULL;
+  if (!loom_low_allocation_region_is_cfg(state->body)) {
+    return iree_ok_status();
+  }
+  if (!state->cfg_graph_initialized) {
+    IREE_RETURN_IF_ERROR(loom_cfg_graph_build(state->module, state->body,
+                                              state->arena, &state->cfg_graph));
+    state->cfg_graph_initialized = true;
+  }
+  if (state->cfg_graph.malformed) {
+    return iree_ok_status();
+  }
+  *out_graph = &state->cfg_graph;
+  return iree_ok_status();
+}
+
+static bool loom_low_allocation_copy_source_for_value(
+    const loom_module_t* module, loom_value_id_t value_id,
+    loom_value_id_t* out_source_id) {
+  *out_source_id = LOOM_VALUE_ID_INVALID;
+  if (value_id == LOOM_VALUE_ID_INVALID || value_id >= module->values.count) {
+    return false;
+  }
+  const loom_value_t* value = loom_module_value(module, value_id);
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  if (!loom_low_copy_isa(defining_op)) {
+    return false;
+  }
+  *out_source_id = loom_low_copy_source(defining_op);
+  return true;
+}
+
+static iree_status_t loom_low_allocation_copy_source_used_after_tied_consume(
+    loom_low_allocation_build_state_t* state,
+    const loom_low_placement_relation_t* tied_relation,
+    loom_value_id_t tied_operand_id, loom_value_id_t* out_copy_source_id,
+    bool* out_used_after) {
+  *out_copy_source_id = LOOM_VALUE_ID_INVALID;
+  *out_used_after = false;
+  if (!loom_low_allocation_copy_source_for_value(state->module, tied_operand_id,
+                                                 out_copy_source_id)) {
+    return iree_ok_status();
+  }
+
+  const loom_cfg_graph_t* graph = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_body_cfg_graph(state, &graph));
+  loom_consumption_use_t use = {0};
+  return loom_consumption_find_use_after(state->module, graph,
+                                         tied_relation->op, *out_copy_source_id,
+                                         state->arena, &use, out_used_after);
+}
+
+static iree_status_t
+loom_low_allocation_copy_relation_requires_materialized_storage(
+    loom_low_allocation_build_state_t* state,
+    const loom_low_placement_relation_t* copy_relation,
+    bool* out_requires_materialized_storage) {
+  *out_requires_materialized_storage = false;
+  const loom_value_id_t copy_result_id = loom_low_placement_value_id(
+      &state->placement, copy_relation->result_ordinal);
+  const loom_low_placement_relation_range_t tied_range =
+      loom_low_placement_relation_range_for_source_value_ordinal(
+          &state->placement, copy_relation->result_ordinal);
+  for (uint32_t i = 0; i < tied_range.count; ++i) {
+    const uint32_t relation_index =
+        state->placement
+            .relation_indices_by_source_ordinal[tied_range.start + i];
+    const loom_low_placement_relation_t* tied_relation =
+        &state->placement.relations[relation_index];
+    if (tied_relation->cause != LOOM_LOW_PLACEMENT_CAUSE_TIED_RESULT) {
+      continue;
+    }
+    loom_value_id_t copy_source_id = LOOM_VALUE_ID_INVALID;
+    bool used_after = false;
+    IREE_RETURN_IF_ERROR(
+        loom_low_allocation_copy_source_used_after_tied_consume(
+            state, tied_relation, copy_result_id, &copy_source_id,
+            &used_after));
+    if (used_after) {
+      *out_requires_materialized_storage = true;
+      return iree_ok_status();
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_allocation_initialize_active_unit_index(
     loom_low_allocation_build_state_t* state, iree_host_size_t assignment_count,
     iree_host_size_t unit_capacity) {
@@ -1944,11 +2044,22 @@ static iree_status_t loom_low_allocation_assign_tied_interval(
         IREE_STATUS_FAILED_PRECONDITION,
         "low tied result does not match operand allocation class");
   }
+  loom_value_id_t ignored_value_ids[2] = {tied_operand_id,
+                                          LOOM_VALUE_ID_INVALID};
+  uint16_t ignored_value_count = 1;
+  loom_value_id_t copy_source_id = LOOM_VALUE_ID_INVALID;
+  bool copy_source_used_after = false;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_copy_source_used_after_tied_consume(
+      state, relation, tied_operand_id, &copy_source_id,
+      &copy_source_used_after));
+  if (copy_source_id != LOOM_VALUE_ID_INVALID && !copy_source_used_after) {
+    ignored_value_ids[ignored_value_count++] = copy_source_id;
+  }
   if (loom_low_allocation_candidate_conflicts(
           state, interval, operand_assignment->descriptor_reg_class_id,
           operand_assignment->location_kind, operand_assignment->location_base,
-          operand_assignment->location_count, &tied_operand_id,
-          /*ignored_value_count=*/1)) {
+          operand_assignment->location_count, ignored_value_ids,
+          ignored_value_count)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "low tied result cannot share the operand location without "
@@ -2806,7 +2917,21 @@ static iree_status_t loom_low_allocation_assign_structural_interval(
     const loom_low_placement_relation_t* relation =
         &state->placement.relations[range.start + i];
     switch (relation->cause) {
-      case LOOM_LOW_PLACEMENT_CAUSE_LOW_COPY:
+      case LOOM_LOW_PLACEMENT_CAUSE_LOW_COPY: {
+        bool requires_materialized_storage = false;
+        IREE_RETURN_IF_ERROR(
+            loom_low_allocation_copy_relation_requires_materialized_storage(
+                state, relation, &requires_materialized_storage));
+        if (requires_materialized_storage) {
+          break;
+        }
+        IREE_RETURN_IF_ERROR(loom_low_allocation_assign_relation_interval(
+            state, interval, relation, out_assigned));
+        if (*out_assigned) {
+          return iree_ok_status();
+        }
+        break;
+      }
       case LOOM_LOW_PLACEMENT_CAUSE_LOW_SLICE: {
         IREE_RETURN_IF_ERROR(loom_low_allocation_assign_relation_interval(
             state, interval, relation, out_assigned));

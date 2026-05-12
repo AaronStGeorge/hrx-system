@@ -69,6 +69,18 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "consumption",
+    srcs = ["consumption.c"],
+    hdrs = ["consumption.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/util:cfg_graph",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "kernel_async_legality",
     srcs = ["kernel_async_legality.c"],
     hdrs = ["kernel_async_legality.h"],

@@ -31,6 +31,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     iree::base::internal::unicode
+    loom::src::loom::analysis::consumption
     loom::src::loom::error::diagnostic
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
@@ -39,7 +40,6 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::special_values
-    loom::src::loom::util::cfg_graph
   PUBLIC
 )
 

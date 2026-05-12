@@ -76,6 +76,21 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    consumption
+  HDRS
+    "consumption.h"
+  SRCS
+    "consumption.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::util::cfg_graph
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     kernel_async_legality
   HDRS
     "kernel_async_legality.h"
