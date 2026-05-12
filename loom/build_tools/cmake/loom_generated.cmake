@@ -10,6 +10,64 @@
 # Loom packages keep source-of-truth tables in Python and generate compact C
 # data into the build tree.
 
+function(loom_generated_textual_header)
+  cmake_parse_arguments(
+    _RULE
+    ""
+    "NAME;GENERATOR;OUTPUT;OUTPUT_FLAG;COMMENT"
+    "ARGS;INPUTS"
+    ${ARGN}
+  )
+
+  if(NOT _RULE_NAME)
+    message(FATAL_ERROR "loom_generated_textual_header requires NAME")
+  endif()
+  if(NOT _RULE_GENERATOR)
+    message(FATAL_ERROR "loom_generated_textual_header requires GENERATOR")
+  endif()
+  if(NOT _RULE_OUTPUT)
+    message(FATAL_ERROR "loom_generated_textual_header requires OUTPUT")
+  endif()
+  if(NOT _RULE_OUTPUT_FLAG)
+    message(FATAL_ERROR "loom_generated_textual_header requires OUTPUT_FLAG")
+  endif()
+
+  set(_OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/${_RULE_OUTPUT}")
+  if(NOT _RULE_COMMENT)
+    set(_RULE_COMMENT "Generating ${_RULE_NAME}")
+  endif()
+
+  iree_py_library_main(_GENERATOR "${_RULE_GENERATOR}")
+  iree_py_library_collect_sources(_GENERATOR_INPUTS "${_RULE_GENERATOR}")
+
+  add_custom_command(
+    OUTPUT
+      "${_OUTPUT}"
+    COMMAND
+      "${Python3_EXECUTABLE}"
+      "${_GENERATOR}"
+      ${_RULE_ARGS}
+      "${_RULE_OUTPUT_FLAG}=${_OUTPUT}"
+    DEPENDS
+      ${_GENERATOR_INPUTS}
+      ${_RULE_INPUTS}
+    COMMENT
+      "${_RULE_COMMENT}"
+    VERBATIM
+  )
+  set_source_files_properties(
+    "${_RULE_OUTPUT}"
+    "${_OUTPUT}"
+    PROPERTIES GENERATED TRUE
+  )
+
+  iree_package_name(_PACKAGE_NAME)
+  add_custom_target("${_PACKAGE_NAME}_${_RULE_NAME}"
+    DEPENDS
+      "${_OUTPUT}"
+  )
+endfunction()
+
 function(loom_generated_cc_library)
   cmake_parse_arguments(
     _RULE

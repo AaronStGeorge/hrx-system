@@ -20,9 +20,9 @@ from loom.target.arch.x86.packed_dot_data import (
     FEATURE_AVX_VNNI_INT16,
 )
 from loom.target.arch.x86.target_info import (
-    X86_DEBUG_LLVM_FEATURES_AVX512_PACKED_DOT,
     X86_DESCRIPTOR_SET_INFOS,
     X86_ISA_TIER_SCALAR,
+    X86_NATIVE_TARGET_SELECTOR_PROFILE_KEYS,
     X86_REG_CLASS_GPR32,
     X86_REG_CLASS_GPR64,
     X86_REG_CLASS_K,
@@ -35,7 +35,6 @@ from loom.target.arch.x86.target_info import (
     sorted_descriptor_set_infos,
     sorted_target_profile_infos,
     validate_x86_target_info_tables,
-    x86_debug_llvm_target_feature_string,
     x86_descriptor_set_info_by_generator_target,
     x86_descriptor_set_ordinal,
     x86_descriptor_set_storage_info_by_generator_target,
@@ -136,7 +135,6 @@ def test_target_profile_lookup_records_current_feature_projection() -> None:
     profile = x86_target_profile_info_by_key("x86.avx512_packed_dot")
     assert profile.descriptor_set_key == "x86.avx512_packed_dot.core"
     assert profile.native_bundle_key == "x86-avx512-packed-dot"
-    assert profile.debug_llvm_profile_key == "x86_64-avx512-packed-dot-object"
     assert profile.register_classes == (
         X86_REG_CLASS_GPR32,
         X86_REG_CLASS_GPR64,
@@ -145,13 +143,6 @@ def test_target_profile_lookup_records_current_feature_projection() -> None:
         X86_REG_CLASS_ZMM,
         X86_REG_CLASS_K,
     )
-    assert (
-        profile.debug_llvm_target_features == X86_DEBUG_LLVM_FEATURES_AVX512_PACKED_DOT
-    )
-    assert x86_debug_llvm_target_feature_string(profile) == (
-        "+avx512f,+avx512bw,+avx512dq,+avx512vl,+fma,"
-        "+avx512bf16,+avx512vnni,+avxvnni,+avxvnniint8"
-    )
 
 
 def test_target_profile_lookup_records_planned_scalar_and_packed_dot_rows() -> None:
@@ -159,7 +150,7 @@ def test_target_profile_lookup_records_planned_scalar_and_packed_dot_rows() -> N
     assert scalar.descriptor_set_key == "x86.scalar.core"
     assert scalar.register_classes == (X86_REG_CLASS_GPR32, X86_REG_CLASS_GPR64)
     assert scalar.contract_feature_bits == 0
-    assert scalar.debug_llvm_target_features == ()
+    assert scalar.native_bundle_key == "x86-scalar"
 
     simd128 = x86_target_profile_info_by_key("x86.simd128")
     assert simd128.descriptor_set_key == "x86.simd128.core"
@@ -197,6 +188,22 @@ def test_target_profile_lookup_records_planned_scalar_and_packed_dot_rows() -> N
 def test_target_profiles_are_profile_key_sorted() -> None:
     profile_keys = [info.profile_key for info in sorted_target_profile_infos()]
     assert profile_keys == sorted(profile_keys)
+
+
+def test_native_selector_profiles_are_backed_by_native_bundles() -> None:
+    bundle_keys = [
+        x86_target_profile_info_by_key(profile_key).native_bundle_key
+        for profile_key in X86_NATIVE_TARGET_SELECTOR_PROFILE_KEYS
+        if profile_key is not None
+    ]
+    assert bundle_keys == [
+        "x86-avx512",
+        "x86-packed-dot",
+        "x86-avx512-packed-dot",
+        "x86-scalar",
+        "x86-simd128",
+        "x86-avx2",
+    ]
 
 
 def test_descriptor_generator_target_lookup_rejects_unknown_target() -> None:

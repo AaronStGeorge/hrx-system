@@ -13,21 +13,6 @@
   IREE_SVL(                                         \
       "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:" \
       "64-i128:128-f80:128-n8:16:32:64-S128")
-#define LOOM_LLVMIR_X86_64_AVX512_FEATURES \
-  IREE_SVL("+avx512f,+avx512bw,+avx512dq,+avx512vl,+fma")
-#define LOOM_LLVMIR_X86_64_PACKED_DOT_FEATURES \
-  IREE_SVL("+avx512bf16,+avx512vl,+avxvnni,+avxvnniint8")
-#define LOOM_LLVMIR_X86_64_AVX512_PACKED_DOT_FEATURES \
-  IREE_SVL(                                           \
-      "+avx512f,+avx512bw,+avx512dq,+avx512vl,+fma,"  \
-      "+avx512bf16,+avx512vnni,+avxvnni,+avxvnniint8")
-#define LOOM_LLVMIR_X86_64_AVX512_CONTRACT_SET IREE_SV("x86.avx512.core")
-#define LOOM_LLVMIR_X86_64_PACKED_DOT_LOW_CONTRACT_SET \
-  IREE_SV("x86.packed_dot.core")
-#define LOOM_LLVMIR_X86_64_AVX512_PACKED_DOT_LOW_CONTRACT_SET \
-  IREE_SV("x86.avx512_packed_dot.core")
-#define LOOM_LLVMIR_X86_64_PACKED_DOT_CONTRACT_SET \
-  IREE_SVL("x86.packed_dot.avx512bf16-avx512vl-avxvnni-avxvnniint8")
 
 static const loom_llvmir_target_env_t kX86_64UnknownLinuxGnuTargetEnv = {
     .name = LOOM_LLVMIR_X86_64_TARGET_TRIPLE,
@@ -92,119 +77,103 @@ static const loom_target_export_plan_t kX86_64ObjectExportPlan = {
     .linkage = LOOM_TARGET_LINKAGE_DSO_LOCAL,
 };
 
-static const loom_target_config_t kX86_64ObjectConfig = {
-    .name = IREE_SVL("default"),
-};
-
-static const loom_target_config_t kX86_64PackedDotObjectConfig = {
-    .name = IREE_SVL("packed-dot"),
-    .contract_set_key = LOOM_LLVMIR_X86_64_PACKED_DOT_CONTRACT_SET,
-    .contract_feature_bits =
-        LOOM_X86_FEATURE_AVX512_BF16 | LOOM_X86_FEATURE_AVX512_VL |
-        LOOM_X86_FEATURE_AVX_VNNI | LOOM_X86_FEATURE_AVX_VNNI_INT8,
-};
+#define LOOM_LLVMIR_X86_TARGET_FIXTURE(symbol_suffix, descriptor_set_key, \
+                                       feature_bits)                      \
+  static const loom_target_config_t kX86##symbol_suffix##ObjectConfig = { \
+      .name = IREE_SVL(descriptor_set_key),                               \
+      .contract_set_key = IREE_SVL(descriptor_set_key),                   \
+      .contract_feature_bits = feature_bits,                              \
+  };
+#include "loom/target/emit/llvmir/x86/target_profiles.inl"
+#undef LOOM_LLVMIR_X86_TARGET_FIXTURE
 
 static const loom_target_bundle_t kX86_64ObjectBundle = {
     .name = IREE_SVL("x86_64-object"),
     .snapshot = &kX86_64ObjectSnapshot,
     .export_plan = &kX86_64ObjectExportPlan,
-    .config = &kX86_64ObjectConfig,
+    .config = &kX86ScalarObjectConfig,
 };
 
 static const loom_target_bundle_t kX86_64PackedDotObjectBundle = {
     .name = IREE_SVL("x86_64-packed-dot-object"),
     .snapshot = &kX86_64PackedDotObjectSnapshot,
     .export_plan = &kX86_64ObjectExportPlan,
-    .config = &kX86_64PackedDotObjectConfig,
+    .config = &kX86PackedDotObjectConfig,
 };
 
 // These built-in profiles are fixture/default provider conveniences. Production
 // lowering should prefer derived profiles from the generic target bundles
 // above.
-static const loom_llvmir_target_profile_t kX86_64ObjectProfile = {
-    .name = IREE_SVL("x86_64-object"),
-    .target_env = &kX86_64UnknownLinuxGnuTargetEnv,
-    .kind = LOOM_LLVMIR_TARGET_PROFILE_HOST_OBJECT,
-    .exported_linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL,
-    .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT,
-};
-
-static const loom_llvmir_target_profile_t kX86_64Avx512ObjectProfile = {
-    .name = IREE_SVL("x86_64-avx512-object"),
-    .target_env = &kX86_64UnknownLinuxGnuTargetEnv,
-    .kind = LOOM_LLVMIR_TARGET_PROFILE_HOST_OBJECT,
-    .target_features = LOOM_LLVMIR_X86_64_AVX512_FEATURES,
-    .exported_linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL,
-    .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT,
-};
-
-static const loom_llvmir_target_profile_t kX86_64PackedDotObjectProfile = {
-    .name = IREE_SVL("x86_64-packed-dot-object"),
-    .target_env = &kX86_64UnknownLinuxGnuTargetEnv,
-    .kind = LOOM_LLVMIR_TARGET_PROFILE_HOST_OBJECT,
-    .target_features = LOOM_LLVMIR_X86_64_PACKED_DOT_FEATURES,
-    .exported_linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL,
-    .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT,
-    .x86_packed_dot_feature_bits =
-        LOOM_X86_FEATURE_AVX512_BF16 | LOOM_X86_FEATURE_AVX512_VL |
-        LOOM_X86_FEATURE_AVX_VNNI | LOOM_X86_FEATURE_AVX_VNNI_INT8,
-};
-
-static const loom_llvmir_target_profile_t kX86_64Avx512PackedDotObjectProfile =
-    {
-        .name = IREE_SVL("x86_64-avx512-packed-dot-object"),
-        .target_env = &kX86_64UnknownLinuxGnuTargetEnv,
-        .kind = LOOM_LLVMIR_TARGET_PROFILE_HOST_OBJECT,
-        .target_features = LOOM_LLVMIR_X86_64_AVX512_PACKED_DOT_FEATURES,
-        .exported_linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL,
-        .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT,
-        .x86_packed_dot_feature_bits =
-            LOOM_X86_FEATURE_AVX512_VNNI | LOOM_X86_FEATURE_AVX512_BF16 |
-            LOOM_X86_FEATURE_AVX512_VL | LOOM_X86_FEATURE_AVX_VNNI |
-            LOOM_X86_FEATURE_AVX_VNNI_INT8,
-};
+#define LOOM_LLVMIR_X86_TARGET_PROFILE(                                        \
+    symbol_suffix, profile_descriptor_set_key, profile_debug_key,              \
+    profile_target_features, profile_feature_bits)                             \
+  static const loom_llvmir_target_profile_t                                    \
+      kX86##symbol_suffix##ObjectProfile = {                                   \
+          .name = IREE_SVL(profile_debug_key),                                 \
+          .target_env = &kX86_64UnknownLinuxGnuTargetEnv,                      \
+          .kind = LOOM_LLVMIR_TARGET_PROFILE_HOST_OBJECT,                      \
+          .target_features = IREE_SVL(profile_target_features),                \
+          .exported_linkage = LOOM_LLVMIR_LINKAGE_DSO_LOCAL,                   \
+          .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT, \
+          .x86_packed_dot_feature_bits = profile_feature_bits,                 \
+  };
+#include "loom/target/emit/llvmir/x86/target_profiles.inl"
+#undef LOOM_LLVMIR_X86_TARGET_PROFILE
 
 static const loom_llvmir_target_profile_t* const kX86TargetProfiles[] = {
-    &kX86_64ObjectProfile,
-    &kX86_64Avx512ObjectProfile,
-    &kX86_64PackedDotObjectProfile,
-    &kX86_64Avx512PackedDotObjectProfile,
+#define LOOM_LLVMIR_X86_TARGET_PROFILE(                           \
+    symbol_suffix, profile_descriptor_set_key, profile_debug_key, \
+    profile_target_features, profile_feature_bits)                \
+  &kX86##symbol_suffix##ObjectProfile,
+#include "loom/target/emit/llvmir/x86/target_profiles.inl"
+#undef LOOM_LLVMIR_X86_TARGET_PROFILE
 };
+
+static bool loom_llvmir_x86_profile_by_name(
+    iree_string_view_t profile_name,
+    const loom_llvmir_target_profile_t** out_profile) {
+  *out_profile = NULL;
+#define LOOM_LLVMIR_X86_TARGET_PROFILE(                                   \
+    symbol_suffix, profile_descriptor_set_key, profile_debug_key,         \
+    profile_target_features, profile_feature_bits)                        \
+  if (iree_string_view_equal(profile_name, IREE_SV(profile_debug_key))) { \
+    *out_profile = &kX86##symbol_suffix##ObjectProfile;                   \
+    return true;                                                          \
+  }
+#include "loom/target/emit/llvmir/x86/target_profiles.inl"
+#undef LOOM_LLVMIR_X86_TARGET_PROFILE
+  return false;
+}
+
+static bool loom_llvmir_x86_profile_by_descriptor_set_key(
+    iree_string_view_t requested_descriptor_set_key,
+    const loom_llvmir_target_profile_t** out_profile) {
+  *out_profile = NULL;
+#define LOOM_LLVMIR_X86_TARGET_PROFILE(                              \
+    symbol_suffix, profile_descriptor_set_key, profile_debug_key,    \
+    profile_target_features, profile_feature_bits)                   \
+  if (iree_string_view_equal(requested_descriptor_set_key,           \
+                             IREE_SV(profile_descriptor_set_key))) { \
+    *out_profile = &kX86##symbol_suffix##ObjectProfile;              \
+    return true;                                                     \
+  }
+#include "loom/target/emit/llvmir/x86/target_profiles.inl"
+#undef LOOM_LLVMIR_X86_TARGET_PROFILE
+  return false;
+}
 
 static bool loom_llvmir_x86_project_bundle(
     const loom_target_bundle_t* bundle,
     const loom_llvmir_target_profile_t** out_profile) {
   *out_profile = NULL;
-  if (iree_string_view_equal(bundle->name, kX86_64ObjectProfile.name)) {
-    *out_profile = &kX86_64ObjectProfile;
-    return true;
-  }
-  if (iree_string_view_equal(bundle->name,
-                             kX86_64PackedDotObjectProfile.name)) {
-    *out_profile = &kX86_64PackedDotObjectProfile;
+  if (loom_llvmir_x86_profile_by_name(bundle->name, out_profile)) {
     return true;
   }
   if (bundle->export_plan->abi_kind != LOOM_TARGET_ABI_OBJECT_FUNCTION) {
     return false;
   }
-  const iree_string_view_t contract_set_key = bundle->config->contract_set_key;
-  if (iree_string_view_equal(contract_set_key,
-                             LOOM_LLVMIR_X86_64_AVX512_CONTRACT_SET)) {
-    *out_profile = &kX86_64Avx512ObjectProfile;
-    return true;
-  }
-  if (iree_string_view_equal(contract_set_key,
-                             LOOM_LLVMIR_X86_64_PACKED_DOT_LOW_CONTRACT_SET)) {
-    *out_profile = &kX86_64PackedDotObjectProfile;
-    return true;
-  }
-  if (iree_string_view_equal(
-          contract_set_key,
-          LOOM_LLVMIR_X86_64_AVX512_PACKED_DOT_LOW_CONTRACT_SET)) {
-    *out_profile = &kX86_64Avx512PackedDotObjectProfile;
-    return true;
-  }
-  return false;
+  return loom_llvmir_x86_profile_by_descriptor_set_key(
+      bundle->config->contract_set_key, out_profile);
 }
 
 static const loom_llvmir_target_profile_provider_t kX86TargetProfileProvider = {
@@ -231,12 +200,12 @@ const loom_llvmir_target_env_t* loom_llvmir_target_env_x86_64_unknown_linux_gnu(
 
 const loom_llvmir_target_profile_t* loom_llvmir_target_profile_x86_64_object(
     void) {
-  return &kX86_64ObjectProfile;
+  return &kX86ScalarObjectProfile;
 }
 
 const loom_llvmir_target_profile_t*
 loom_llvmir_target_profile_x86_64_packed_dot_object(void) {
-  return &kX86_64PackedDotObjectProfile;
+  return &kX86PackedDotObjectProfile;
 }
 
 const loom_llvmir_target_profile_provider_t*
@@ -246,6 +215,6 @@ loom_llvmir_x86_target_profile_provider(void) {
 
 iree_status_t loom_llvmir_target_profile_initialize_x86_64_object(
     loom_llvmir_target_profile_t* out_profile) {
-  *out_profile = kX86_64ObjectProfile;
+  *out_profile = kX86ScalarObjectProfile;
   return iree_ok_status();
 }

@@ -13,6 +13,7 @@ Usage:
     python3 loom/py/loom/gen/run.py c_tables
     python3 loom/py/loom/gen/run.py low_descriptors
     python3 loom/py/loom/gen/run.py textmate
+    python3 loom/py/loom/gen/run.py x86_target_profiles --check
 """
 
 from __future__ import annotations
@@ -30,9 +31,15 @@ GENERATORS = {
     "low_descriptors": "loom.gen.low_descriptors",
     "package_inits": "loom.gen.package_inits",
     "textmate": "loom.gen.textmate",
+    "x86_target_profiles": "loom.gen.x86_target_profiles",
 }
 
-ARGUMENT_GENERATORS: set[str] = {"builders_pyi", "c_errors", "package_inits"}
+ARGUMENT_GENERATORS: set[str] = {
+    "builders_pyi",
+    "c_errors",
+    "package_inits",
+    "x86_target_profiles",
+}
 
 
 def _usage() -> str:

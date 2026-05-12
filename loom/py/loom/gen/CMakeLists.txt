@@ -225,6 +225,19 @@ iree_py_library(
     iree::runtime::py::loom::target::arch::x86::target_info
 )
 
+iree_py_library(
+  NAME
+    x86_target_profiles
+  MAIN
+    "x86_target_profiles.py"
+  SRCS
+    "x86_target_profiles.py"
+  DEPS
+    iree::runtime::py::loom::gen::generated_file
+    iree::runtime::py::loom::target::arch::x86::target_info
+    iree::runtime::py::loom::target::emit::llvmir::x86::target_info
+)
+
 iree_py_test(
   NAME
     x86_descriptors_test

@@ -6,10 +6,10 @@
 
 """x86 target profile and descriptor-set row data.
 
-This module owns the Python input rows that future generators will consume for
-x86 descriptor views and native target records. LLVMIR is a debug/inspection
-projection of the same native profile facts, so LLVM feature strings live here
-only as explicitly named debug metadata rather than as the target contract.
+This module owns the Python input rows that generators consume for x86
+descriptor views and native target records. LLVMIR is a debug/inspection
+projection and keeps its feature-string metadata under target/emit/llvmir so
+native x86 binaries do not carry LLVMIR-only names or feature strings.
 """
 
 from __future__ import annotations
@@ -50,33 +50,6 @@ X86_FEATURE_PROFILE_AVX_VNNI_INT8 = "avx_vnni_int8"
 X86_FEATURE_PROFILE_AVX_VNNI_INT16 = "avx_vnni_int16"
 X86_FEATURE_PROFILE_AVX10_2 = "avx10_2"
 
-X86_DEBUG_LLVM_FEATURES_SIMD128 = ("+sse2",)
-X86_DEBUG_LLVM_FEATURES_AVX2 = ("+avx", "+avx2", "+fma")
-X86_DEBUG_LLVM_FEATURES_AVX512 = (
-    "+avx512f",
-    "+avx512bw",
-    "+avx512dq",
-    "+avx512vl",
-    "+fma",
-)
-X86_DEBUG_LLVM_FEATURES_PACKED_DOT = (
-    "+avx512bf16",
-    "+avx512vl",
-    "+avxvnni",
-    "+avxvnniint8",
-)
-X86_DEBUG_LLVM_FEATURES_AVX512_PACKED_DOT = (
-    "+avx512f",
-    "+avx512bw",
-    "+avx512dq",
-    "+avx512vl",
-    "+fma",
-    "+avx512bf16",
-    "+avx512vnni",
-    "+avxvnni",
-    "+avxvnniint8",
-)
-
 
 @dataclass(frozen=True, slots=True)
 class X86DescriptorSetInfo:
@@ -96,8 +69,6 @@ class X86TargetProfileInfo:
     descriptor_set_key: str
     register_classes: tuple[str, ...]
     contract_feature_bits: int = 0
-    debug_llvm_target_features: tuple[str, ...] = ()
-    debug_llvm_profile_key: str | None = None
     native_bundle_key: str | None = None
 
 
@@ -232,13 +203,13 @@ X86_TARGET_PROFILE_INFOS: tuple[X86TargetProfileInfo, ...] = (
         descriptor_generator_target="scalar",
         descriptor_set_key="x86.scalar.core",
         register_classes=_with_base_registers(),
+        native_bundle_key="x86-scalar",
     ),
     X86TargetProfileInfo(
         profile_key="x86.simd128",
         descriptor_generator_target="simd128",
         descriptor_set_key="x86.simd128.core",
         register_classes=_with_base_registers(X86_REG_CLASS_XMM),
-        debug_llvm_target_features=X86_DEBUG_LLVM_FEATURES_SIMD128,
         native_bundle_key="x86-simd128",
     ),
     X86TargetProfileInfo(
@@ -246,7 +217,6 @@ X86_TARGET_PROFILE_INFOS: tuple[X86TargetProfileInfo, ...] = (
         descriptor_generator_target="avx2",
         descriptor_set_key="x86.avx2.core",
         register_classes=_with_base_registers(X86_REG_CLASS_XMM, X86_REG_CLASS_YMM),
-        debug_llvm_target_features=X86_DEBUG_LLVM_FEATURES_AVX2,
         native_bundle_key="x86-avx2",
     ),
     X86TargetProfileInfo(
@@ -259,8 +229,6 @@ X86_TARGET_PROFILE_INFOS: tuple[X86TargetProfileInfo, ...] = (
             X86_REG_CLASS_ZMM,
             X86_REG_CLASS_K,
         ),
-        debug_llvm_target_features=X86_DEBUG_LLVM_FEATURES_AVX512,
-        debug_llvm_profile_key="x86_64-avx512-object",
         native_bundle_key="x86-avx512",
     ),
     X86TargetProfileInfo(
@@ -274,8 +242,6 @@ X86_TARGET_PROFILE_INFOS: tuple[X86TargetProfileInfo, ...] = (
             | FEATURE_AVX_VNNI
             | FEATURE_AVX_VNNI_INT8
         ),
-        debug_llvm_target_features=X86_DEBUG_LLVM_FEATURES_PACKED_DOT,
-        debug_llvm_profile_key="x86_64-packed-dot-object",
         native_bundle_key="x86-packed-dot",
     ),
     X86TargetProfileInfo(
@@ -295,8 +261,6 @@ X86_TARGET_PROFILE_INFOS: tuple[X86TargetProfileInfo, ...] = (
             | FEATURE_AVX_VNNI
             | FEATURE_AVX_VNNI_INT8
         ),
-        debug_llvm_target_features=X86_DEBUG_LLVM_FEATURES_AVX512_PACKED_DOT,
-        debug_llvm_profile_key="x86_64-avx512-packed-dot-object",
         native_bundle_key="x86-avx512-packed-dot",
     ),
     X86TargetProfileInfo(
@@ -305,12 +269,6 @@ X86_TARGET_PROFILE_INFOS: tuple[X86TargetProfileInfo, ...] = (
         descriptor_set_key="x86.avx512_vnni.core",
         register_classes=(X86_REG_CLASS_XMM, X86_REG_CLASS_YMM, X86_REG_CLASS_ZMM),
         contract_feature_bits=FEATURE_AVX512_VNNI | FEATURE_AVX512_VL,
-        debug_llvm_target_features=(
-            "+avx512f",
-            "+avx512bw",
-            "+avx512vl",
-            "+avx512vnni",
-        ),
     ),
     X86TargetProfileInfo(
         profile_key="x86.avx512_bf16",
@@ -318,7 +276,6 @@ X86_TARGET_PROFILE_INFOS: tuple[X86TargetProfileInfo, ...] = (
         descriptor_set_key="x86.avx512_bf16.core",
         register_classes=(X86_REG_CLASS_XMM, X86_REG_CLASS_YMM, X86_REG_CLASS_ZMM),
         contract_feature_bits=FEATURE_AVX512_BF16 | FEATURE_AVX512_VL,
-        debug_llvm_target_features=("+avx512bf16", "+avx512vl"),
     ),
     X86TargetProfileInfo(
         profile_key="x86.avx_vnni",
@@ -326,7 +283,6 @@ X86_TARGET_PROFILE_INFOS: tuple[X86TargetProfileInfo, ...] = (
         descriptor_set_key="x86.avx_vnni.core",
         register_classes=(X86_REG_CLASS_XMM, X86_REG_CLASS_YMM),
         contract_feature_bits=FEATURE_AVX_VNNI,
-        debug_llvm_target_features=("+avxvnni",),
     ),
     X86TargetProfileInfo(
         profile_key="x86.avx_vnni_int8",
@@ -334,7 +290,6 @@ X86_TARGET_PROFILE_INFOS: tuple[X86TargetProfileInfo, ...] = (
         descriptor_set_key="x86.avx_vnni_int8.core",
         register_classes=(X86_REG_CLASS_XMM, X86_REG_CLASS_YMM),
         contract_feature_bits=FEATURE_AVX_VNNI_INT8,
-        debug_llvm_target_features=("+avxvnniint8",),
     ),
     X86TargetProfileInfo(
         profile_key="x86.avx_vnni_int16",
@@ -342,7 +297,6 @@ X86_TARGET_PROFILE_INFOS: tuple[X86TargetProfileInfo, ...] = (
         descriptor_set_key="x86.avx_vnni_int16.core",
         register_classes=(X86_REG_CLASS_XMM, X86_REG_CLASS_YMM),
         contract_feature_bits=FEATURE_AVX_VNNI_INT16,
-        debug_llvm_target_features=("+avxvnniint16",),
     ),
     X86TargetProfileInfo(
         profile_key="x86.avx10_2",
@@ -350,8 +304,17 @@ X86_TARGET_PROFILE_INFOS: tuple[X86TargetProfileInfo, ...] = (
         descriptor_set_key="x86.avx10_2.core",
         register_classes=(X86_REG_CLASS_XMM, X86_REG_CLASS_YMM, X86_REG_CLASS_ZMM),
         contract_feature_bits=FEATURE_AVX10_2,
-        debug_llvm_target_features=("+avx10.2",),
     ),
+)
+
+X86_NATIVE_TARGET_SELECTOR_PROFILE_KEYS: tuple[str | None, ...] = (
+    None,
+    "x86.avx512",
+    "x86.packed_dot",
+    "x86.avx512_packed_dot",
+    "x86.scalar",
+    "x86.simd128",
+    "x86.avx2",
 )
 
 
@@ -373,6 +336,14 @@ def validate_x86_target_info_tables(
     )
     _validate_unique((info.key for info in descriptor_sets), "descriptor set key")
     _validate_unique((info.profile_key for info in target_profiles), "profile key")
+    _validate_unique(
+        (
+            info.native_bundle_key
+            for info in target_profiles
+            if info.native_bundle_key is not None
+        ),
+        "native bundle key",
+    )
 
     descriptor_sets_by_generator_target = {
         info.generator_target: info for info in descriptor_sets
@@ -422,6 +393,20 @@ def validate_x86_target_info_tables(
             raise ValueError(
                 f"x86 profile '{profile_info.profile_key}' references unknown "
                 f"descriptor set '{profile_info.descriptor_set_key}'"
+            )
+
+    target_profiles_by_key = {info.profile_key: info for info in target_profiles}
+    for profile_key in X86_NATIVE_TARGET_SELECTOR_PROFILE_KEYS:
+        if profile_key is None:
+            continue
+        selector_profile_info = target_profiles_by_key.get(profile_key)
+        if selector_profile_info is None:
+            raise ValueError(
+                f"x86 native selector references unknown profile '{profile_key}'"
+            )
+        if selector_profile_info.native_bundle_key is None:
+            raise ValueError(
+                f"x86 native selector profile '{profile_key}' has no native bundle key"
             )
 
 
@@ -499,10 +484,6 @@ def x86_target_profile_info_by_key(profile_key: str) -> X86TargetProfileInfo:
         if info.profile_key == profile_key:
             return info
     raise ValueError(f"unknown x86 target profile '{profile_key}'")
-
-
-def x86_debug_llvm_target_feature_string(info: X86TargetProfileInfo) -> str:
-    return ",".join(info.debug_llvm_target_features)
 
 
 validate_x86_target_info_tables()

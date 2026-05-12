@@ -20,11 +20,26 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_generated_textual_header(
+  NAME
+    target_profiles_gen
+  GENERATOR
+    iree::runtime::py::loom::gen::x86_target_profiles
+  OUTPUT
+    "target_profiles.inl"
+  OUTPUT_FLAG
+    "--native-output"
+  COMMENT
+    "Generating x86 native target profiles"
+)
+
 loom_cc_library(
   NAME
     target_records
   HDRS
     "target_records.h"
+  TEXTUAL_HDRS
+    "target_profiles.inl"
   SRCS
     "target_records.c"
   DEPS
@@ -32,6 +47,12 @@ loom_cc_library(
     iree::base
     loom::src::loom::target::types
   PUBLIC
+)
+
+iree_package_name(_PACKAGE_NAME)
+add_dependencies(
+  "${_PACKAGE_NAME}_target_records.objects"
+  "${_PACKAGE_NAME}_target_profiles_gen"
 )
 
 loom_cc_library(

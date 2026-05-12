@@ -23,11 +23,26 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_generated_textual_header(
+  NAME
+    target_profiles_gen
+  GENERATOR
+    iree::runtime::py::loom::gen::x86_target_profiles
+  OUTPUT
+    "target_profiles.inl"
+  OUTPUT_FLAG
+    "--llvmir-output"
+  COMMENT
+    "Generating LLVMIR x86 target profiles"
+)
+
 loom_cc_library(
   NAME
     target_env
   HDRS
     "target_env.h"
+  TEXTUAL_HDRS
+    "target_profiles.inl"
   SRCS
     "target_env.c"
   DEPS
@@ -36,6 +51,12 @@ loom_cc_library(
     loom::src::loom::target::emit::llvmir::target_presets
     loom::src::loom::target::types
   PUBLIC
+)
+
+iree_package_name(_PACKAGE_NAME)
+add_dependencies(
+  "${_PACKAGE_NAME}_target_env.objects"
+  "${_PACKAGE_NAME}_target_profiles_gen"
 )
 
 loom_cc_library(

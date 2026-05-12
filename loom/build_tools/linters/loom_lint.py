@@ -79,6 +79,16 @@ def main() -> int:
         cwd=REPO_ROOT,
     )
     ok &= _run(
+        "x86 target profiles",
+        [
+            sys.executable,
+            "loom/py/loom/gen/run.py",
+            "x86_target_profiles",
+            "--check",
+        ],
+        cwd=REPO_ROOT,
+    )
+    ok &= _run(
         "textmate",
         [sys.executable, "loom/py/loom/gen/run.py", "textmate"],
         cwd=REPO_ROOT,

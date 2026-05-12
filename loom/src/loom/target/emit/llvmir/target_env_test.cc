@@ -191,7 +191,7 @@ TEST(LlvmIrTargetEnvTest, X86ObjectProfileHasGenericTargetBundle) {
   EXPECT_EQ(bundle->export_plan->abi_kind, LOOM_TARGET_ABI_OBJECT_FUNCTION);
   EXPECT_EQ(bundle->export_plan->linkage, LOOM_TARGET_LINKAGE_DSO_LOCAL);
   ASSERT_NE(bundle->config, nullptr);
-  EXPECT_TRUE(iree_string_view_is_empty(bundle->config->contract_set_key));
+  EXPECT_EQ(ToString(bundle->config->contract_set_key), "x86.scalar.core");
 }
 
 TEST(LlvmIrTargetEnvTest, X86PackedDotProfileHasGenericTargetBundle) {
@@ -206,8 +206,7 @@ TEST(LlvmIrTargetEnvTest, X86PackedDotProfileHasGenericTargetBundle) {
   EXPECT_EQ(bundle->export_plan->abi_kind, LOOM_TARGET_ABI_OBJECT_FUNCTION);
   EXPECT_EQ(bundle->export_plan->linkage, LOOM_TARGET_LINKAGE_DSO_LOCAL);
   ASSERT_NE(bundle->config, nullptr);
-  EXPECT_EQ(ToString(bundle->config->contract_set_key),
-            "x86.packed_dot.avx512bf16-avx512vl-avxvnni-avxvnniint8");
+  EXPECT_EQ(ToString(bundle->config->contract_set_key), "x86.packed_dot.core");
   EXPECT_NE(
       ToString(bundle->config->contract_set_key),
       ToString(
@@ -334,8 +333,47 @@ TEST(LlvmIrTargetEnvTest, LooksUpRegisteredProfilesByName) {
   EXPECT_EQ(profile, loom_llvmir_target_profile_x86_64_object());
 
   profile = nullptr;
+  ASSERT_TRUE(LookupRegisteredProfile(IREE_SV("x86_64-avx2-object"), &profile));
+  ASSERT_NE(profile, nullptr);
+  EXPECT_EQ(ToString(profile->target_features), "+avx,+avx2,+fma");
+
+  profile = nullptr;
   ASSERT_TRUE(LookupRegisteredProfile(IREE_SV("amdgpu-hal"), &profile));
   EXPECT_EQ(profile, loom_llvmir_target_profile_amdgpu_hal());
+}
+
+TEST(LlvmIrTargetEnvTest, ProjectsX86ProfileByDescriptorSetKey) {
+  static const loom_target_snapshot_t kSnapshot = {
+      .name = IREE_SVL("native-x86-debug"),
+      .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE,
+      .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF,
+      .default_pointer_bitwidth = 64,
+      .index_bitwidth = 64,
+      .offset_bitwidth = 64,
+  };
+  static const loom_target_export_plan_t kExportPlan = {
+      .name = IREE_SVL("native-x86-debug"),
+      .abi_kind = LOOM_TARGET_ABI_OBJECT_FUNCTION,
+      .linkage = LOOM_TARGET_LINKAGE_DSO_LOCAL,
+  };
+  static const loom_target_config_t kConfig = {
+      .name = IREE_SVL("x86.avx2.core"),
+      .contract_set_key = IREE_SVL("x86.avx2.core"),
+  };
+  static const loom_target_bundle_t kBundle = {
+      .name = IREE_SVL("x86-avx2"),
+      .snapshot = &kSnapshot,
+      .export_plan = &kExportPlan,
+      .config = &kConfig,
+  };
+
+  const loom_llvmir_target_profile_provider_t* provider =
+      loom_llvmir_x86_target_profile_provider();
+  const loom_llvmir_target_profile_t* profile = nullptr;
+  ASSERT_TRUE(provider->project_bundle(&kBundle, &profile));
+  ASSERT_NE(profile, nullptr);
+  EXPECT_EQ(ToString(profile->name), "x86_64-avx2-object");
+  EXPECT_EQ(ToString(profile->target_features), "+avx,+avx2,+fma");
 }
 
 TEST(LlvmIrTargetEnvTest, RejectsUnknownRegisteredProfileName) {

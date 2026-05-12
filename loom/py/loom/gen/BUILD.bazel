@@ -221,6 +221,17 @@ py_binary(
     ],
 )
 
+py_binary(
+    name = "x86_target_profiles",
+    srcs = ["x86_target_profiles.py"],
+    main = "x86_target_profiles.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target/arch/x86:target_info",
+        "//loom/py/loom/target/emit/llvmir/x86:target_info",
+    ],
+)
+
 py_test(
     name = "x86_descriptors_test",
     srcs = [
