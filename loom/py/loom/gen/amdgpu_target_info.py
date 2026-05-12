@@ -36,6 +36,8 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE,
     AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9,
     AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11,
+    AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12,
+    AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125,
     AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
     AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A,
     AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX908,
@@ -107,6 +109,10 @@ def _kernel_descriptor_profile_expr(profile: str) -> str:
         return "LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9"
     if profile == AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11:
         return "LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11"
+    if profile == AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12:
+        return "LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12"
+    if profile == AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125:
+        return "LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125"
     raise ValueError(f"unknown AMDGPU kernel descriptor profile '{profile}'")
 
 
@@ -377,7 +383,7 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
     register_granule_width = 1
     bool_width = len("false")
     lines = [
-        "#define LOOM_AMDGPU_PROCESSOR_INFO(processor_, descriptor_set_key_, descriptor_set_ordinal_, elf_machine_flags_, elf_feature_flags_, default_wavefront_size_, kernel_descriptor_profile_, matrix_feature_profile_, vgpr_granule_wave32_, vgpr_granule_wave64_, has_flat_scratch_, uses_gfx10_sgpr_, has_dx10_ieee_, has_packed_tid_) \\",
+        "#define LOOM_AMDGPU_PROCESSOR_INFO(processor_, descriptor_set_key_, descriptor_set_ordinal_, elf_machine_flags_, elf_feature_flags_, default_wavefront_size_, kernel_descriptor_profile_, matrix_feature_profile_, vgpr_granule_wave32_, vgpr_granule_wave64_, has_flat_scratch_, uses_gfx10_sgpr_, has_accum_offset_, has_dx10_ieee_, has_packed_tid_) \\",
         "  { \\",
         "    .processor = IREE_SVL(processor_), \\",
         "    .descriptor_set_key = IREE_SVL(descriptor_set_key_), \\",
@@ -391,12 +397,13 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
         "    .kernel_descriptor_vgpr_encoding_granule_wave64 = vgpr_granule_wave64_, \\",
         "    .kernel_descriptor_has_architected_flat_scratch = has_flat_scratch_, \\",
         "    .kernel_descriptor_uses_gfx10_sgpr_encoding = uses_gfx10_sgpr_, \\",
+        "    .kernel_descriptor_has_accum_offset = has_accum_offset_, \\",
         "    .kernel_descriptor_has_dx10_clamp_and_ieee_mode = has_dx10_ieee_, \\",
         "    .kernel_descriptor_has_packed_workitem_id = has_packed_tid_, \\",
         "  }",
         "",
         "static const loom_amdgpu_processor_info_t kAmdgpuProcessorInfos[] = {",
-        "  // processor descriptor_set_key    ordinal         mach  feat wave kernel_profile                             matrix_profile                             vgpr32 vgpr64 flat_scratch gfx10_sgpr dx10_ieee packed_tid",
+        "  // processor descriptor_set_key    ordinal         mach  feat wave kernel_profile                              matrix_profile                             vgpr32 vgpr64 flat_scratch gfx10_sgpr accum_offset dx10_ieee packed_tid",
     ]
     lines.extend(
         (
@@ -413,6 +420,7 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
             f"{_padded_arg(str(info.kernel_descriptor_vgpr_encoding_granule_wave64), register_granule_width)}"
             f"{_padded_arg(_bool_literal(info.kernel_descriptor_has_architected_flat_scratch), bool_width)}"
             f"{_padded_arg(_bool_literal(info.kernel_descriptor_uses_gfx10_sgpr_encoding), bool_width)}"
+            f"{_padded_arg(_bool_literal(info.kernel_descriptor_has_accum_offset), bool_width)}"
             f"{_padded_arg(_bool_literal(info.kernel_descriptor_has_dx10_clamp_and_ieee_mode), bool_width)}"
             f"{_bool_literal(info.kernel_descriptor_has_packed_workitem_id)}),"
         )

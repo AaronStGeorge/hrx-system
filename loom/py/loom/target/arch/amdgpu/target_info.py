@@ -22,6 +22,8 @@ AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE = (2**16) - 1
 AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE = "none"
 AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9 = "gfx9"
 AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11 = "gfx11"
+AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12 = "gfx12"
+AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125 = "gfx125"
 
 AMDGPU_MATRIX_FEATURE_PROFILE_NONE = "none"
 AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX908 = "mfma_gfx908"
@@ -76,6 +78,7 @@ class AmdgpuProcessorInfo:
     kernel_descriptor_vgpr_encoding_granule_wave64: int = 0
     kernel_descriptor_has_architected_flat_scratch: bool = False
     kernel_descriptor_uses_gfx10_sgpr_encoding: bool = False
+    kernel_descriptor_has_accum_offset: bool = False
     kernel_descriptor_has_dx10_clamp_and_ieee_mode: bool = False
     kernel_descriptor_has_packed_workitem_id: bool = False
 
@@ -119,6 +122,7 @@ def processor_info(
     kernel_descriptor_vgpr_encoding_granule_wave64: int = 0,
     kernel_descriptor_has_architected_flat_scratch: bool = False,
     kernel_descriptor_uses_gfx10_sgpr_encoding: bool = False,
+    kernel_descriptor_has_accum_offset: bool = False,
     kernel_descriptor_has_dx10_clamp_and_ieee_mode: bool = False,
     kernel_descriptor_has_packed_workitem_id: bool = False,
 ) -> AmdgpuProcessorInfo:
@@ -134,6 +138,7 @@ def processor_info(
         kernel_descriptor_vgpr_encoding_granule_wave64=kernel_descriptor_vgpr_encoding_granule_wave64,
         kernel_descriptor_has_architected_flat_scratch=kernel_descriptor_has_architected_flat_scratch,
         kernel_descriptor_uses_gfx10_sgpr_encoding=kernel_descriptor_uses_gfx10_sgpr_encoding,
+        kernel_descriptor_has_accum_offset=kernel_descriptor_has_accum_offset,
         kernel_descriptor_has_dx10_clamp_and_ieee_mode=kernel_descriptor_has_dx10_clamp_and_ieee_mode,
         kernel_descriptor_has_packed_workitem_id=kernel_descriptor_has_packed_workitem_id,
     )
@@ -255,6 +260,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         kernel_descriptor_vgpr_encoding_granule_wave32=8,
         kernel_descriptor_vgpr_encoding_granule_wave64=8,
         kernel_descriptor_has_architected_flat_scratch=True,
+        kernel_descriptor_has_accum_offset=True,
         kernel_descriptor_has_dx10_clamp_and_ieee_mode=True,
         kernel_descriptor_has_packed_workitem_id=True,
     ),
@@ -263,7 +269,13 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         0x04F,
         descriptor_set_key="amdgpu.cdna4.core",
         elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4,
+        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950,
+        kernel_descriptor_vgpr_encoding_granule_wave32=8,
+        kernel_descriptor_vgpr_encoding_granule_wave64=8,
+        kernel_descriptor_has_architected_flat_scratch=True,
+        kernel_descriptor_has_accum_offset=True,
+        kernel_descriptor_has_dx10_clamp_and_ieee_mode=True,
         kernel_descriptor_has_packed_workitem_id=True,
     ),
     processor_info(
@@ -313,7 +325,12 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         descriptor_set_key="amdgpu.rdna4.core",
         elf_machine_flags=0x048,
         default_wavefront_size=32,
+        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
+        kernel_descriptor_vgpr_encoding_granule_wave32=8,
+        kernel_descriptor_vgpr_encoding_granule_wave64=4,
+        kernel_descriptor_has_architected_flat_scratch=True,
+        kernel_descriptor_uses_gfx10_sgpr_encoding=True,
         kernel_descriptor_has_packed_workitem_id=True,
     ),
     processor_info(
@@ -321,7 +338,12 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         descriptor_set_key="amdgpu.rdna4.core",
         elf_machine_flags=0x04E,
         default_wavefront_size=32,
+        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
+        kernel_descriptor_vgpr_encoding_granule_wave32=8,
+        kernel_descriptor_vgpr_encoding_granule_wave64=4,
+        kernel_descriptor_has_architected_flat_scratch=True,
+        kernel_descriptor_uses_gfx10_sgpr_encoding=True,
         kernel_descriptor_has_packed_workitem_id=True,
     ),
     processor_info(
@@ -330,7 +352,12 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         elf_machine_flags=0x049,
         elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4,
         default_wavefront_size=32,
+        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
+        kernel_descriptor_vgpr_encoding_granule_wave32=16,
+        kernel_descriptor_vgpr_encoding_granule_wave64=8,
+        kernel_descriptor_has_architected_flat_scratch=True,
+        kernel_descriptor_uses_gfx10_sgpr_encoding=True,
         kernel_descriptor_has_packed_workitem_id=True,
     ),
     processor_info(
@@ -339,7 +366,12 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         elf_machine_flags=0x05A,
         elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4,
         default_wavefront_size=32,
+        kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250,
+        kernel_descriptor_vgpr_encoding_granule_wave32=16,
+        kernel_descriptor_vgpr_encoding_granule_wave64=8,
+        kernel_descriptor_has_architected_flat_scratch=True,
+        kernel_descriptor_uses_gfx10_sgpr_encoding=True,
         kernel_descriptor_has_packed_workitem_id=True,
     ),
     processor_info(

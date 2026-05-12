@@ -44,6 +44,10 @@ typedef enum loom_amdgpu_kernel_descriptor_profile_e {
   LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9 = 1,
   // GFX11 AMDHSA code-object v5 kernel descriptor packing.
   LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11 = 2,
+  // GFX12 AMDHSA code-object v5 kernel descriptor packing.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12 = 3,
+  // GFX125x AMDHSA code-object v5 kernel descriptor packing.
+  LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125 = 4,
 } loom_amdgpu_kernel_descriptor_profile_t;
 
 typedef enum loom_amdgpu_matrix_feature_profile_e {
@@ -132,6 +136,8 @@ typedef struct loom_amdgpu_processor_info_t {
   bool kernel_descriptor_has_architected_flat_scratch;
   // True when the target uses the GFX10+ SGPR resource encoding rule.
   bool kernel_descriptor_uses_gfx10_sgpr_encoding;
+  // True when COMPUTE_PGM_RSRC3.ACCUM_OFFSET is required.
+  bool kernel_descriptor_has_accum_offset;
   // True when DX10 clamp and IEEE mode defaults are supported.
   bool kernel_descriptor_has_dx10_clamp_and_ieee_mode;
   // True when workitem IDs are packed into v0 instead of separate VGPRs.

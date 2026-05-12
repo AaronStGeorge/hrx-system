@@ -25,6 +25,9 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx11Processor) {
   EXPECT_EQ(processor->kernel_descriptor_profile,
             LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11);
   EXPECT_TRUE(processor->kernel_descriptor_has_architected_flat_scratch);
+  EXPECT_TRUE(processor->kernel_descriptor_uses_gfx10_sgpr_encoding);
+  EXPECT_FALSE(processor->kernel_descriptor_has_accum_offset);
+  EXPECT_TRUE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
   EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
 }
 
@@ -84,6 +87,75 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx942Processor) {
   EXPECT_EQ(processor->kernel_descriptor_vgpr_encoding_granule_wave32, 8u);
   EXPECT_EQ(processor->kernel_descriptor_vgpr_encoding_granule_wave64, 8u);
   EXPECT_TRUE(processor->kernel_descriptor_has_architected_flat_scratch);
+  EXPECT_FALSE(processor->kernel_descriptor_uses_gfx10_sgpr_encoding);
+  EXPECT_TRUE(processor->kernel_descriptor_has_accum_offset);
+  EXPECT_TRUE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
+  EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
+}
+
+TEST(AmdgpuTargetInfoTest, LooksUpGfx950Processor) {
+  const loom_amdgpu_processor_info_t* processor = nullptr;
+  IREE_ASSERT_OK(
+      loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx950"), &processor));
+  ASSERT_NE(processor, nullptr);
+  EXPECT_TRUE(iree_string_view_equal(processor->descriptor_set_key,
+                                     IREE_SV("amdgpu.cdna4.core")));
+  EXPECT_EQ(processor->descriptor_set_ordinal,
+            LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA4);
+  EXPECT_EQ(processor->kernel_descriptor_profile,
+            LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9);
+  EXPECT_EQ(processor->matrix_feature_profile,
+            LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950);
+  EXPECT_EQ(processor->kernel_descriptor_vgpr_encoding_granule_wave32, 8u);
+  EXPECT_EQ(processor->kernel_descriptor_vgpr_encoding_granule_wave64, 8u);
+  EXPECT_TRUE(processor->kernel_descriptor_has_architected_flat_scratch);
+  EXPECT_FALSE(processor->kernel_descriptor_uses_gfx10_sgpr_encoding);
+  EXPECT_TRUE(processor->kernel_descriptor_has_accum_offset);
+  EXPECT_TRUE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
+  EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
+}
+
+TEST(AmdgpuTargetInfoTest, LooksUpGfx1200Processor) {
+  const loom_amdgpu_processor_info_t* processor = nullptr;
+  IREE_ASSERT_OK(
+      loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx1200"), &processor));
+  ASSERT_NE(processor, nullptr);
+  EXPECT_TRUE(iree_string_view_equal(processor->descriptor_set_key,
+                                     IREE_SV("amdgpu.rdna4.core")));
+  EXPECT_EQ(processor->descriptor_set_ordinal,
+            LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4);
+  EXPECT_EQ(processor->kernel_descriptor_profile,
+            LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12);
+  EXPECT_EQ(processor->matrix_feature_profile,
+            LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12);
+  EXPECT_EQ(processor->kernel_descriptor_vgpr_encoding_granule_wave32, 8u);
+  EXPECT_EQ(processor->kernel_descriptor_vgpr_encoding_granule_wave64, 4u);
+  EXPECT_TRUE(processor->kernel_descriptor_has_architected_flat_scratch);
+  EXPECT_TRUE(processor->kernel_descriptor_uses_gfx10_sgpr_encoding);
+  EXPECT_FALSE(processor->kernel_descriptor_has_accum_offset);
+  EXPECT_FALSE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
+  EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
+}
+
+TEST(AmdgpuTargetInfoTest, LooksUpGfx1250Processor) {
+  const loom_amdgpu_processor_info_t* processor = nullptr;
+  IREE_ASSERT_OK(
+      loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx1250"), &processor));
+  ASSERT_NE(processor, nullptr);
+  EXPECT_TRUE(iree_string_view_equal(processor->descriptor_set_key,
+                                     IREE_SV("amdgpu.rdna4.gfx125x.core")));
+  EXPECT_EQ(processor->descriptor_set_ordinal,
+            LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4_GFX125X);
+  EXPECT_EQ(processor->kernel_descriptor_profile,
+            LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125);
+  EXPECT_EQ(processor->matrix_feature_profile,
+            LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250);
+  EXPECT_EQ(processor->kernel_descriptor_vgpr_encoding_granule_wave32, 16u);
+  EXPECT_EQ(processor->kernel_descriptor_vgpr_encoding_granule_wave64, 8u);
+  EXPECT_TRUE(processor->kernel_descriptor_has_architected_flat_scratch);
+  EXPECT_TRUE(processor->kernel_descriptor_uses_gfx10_sgpr_encoding);
+  EXPECT_FALSE(processor->kernel_descriptor_has_accum_offset);
+  EXPECT_FALSE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
   EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
 }
 
