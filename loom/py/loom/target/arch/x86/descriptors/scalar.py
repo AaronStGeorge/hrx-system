@@ -34,6 +34,7 @@ from .common import (
     _CONTROL_EFFECT,
     _DISP32_IMMEDIATE,
     _GPR_DESTRUCTIVE_LHS_CONSTRAINTS,
+    _IMM32_IMMEDIATE,
     _IMM64_IMMEDIATE,
     _REG_GPR32,
     _REG_GPR64,
@@ -43,6 +44,7 @@ from .common import (
     _SCHEDULE_ADDRESS,
     _SCHEDULE_CONTROL,
     _SCHEDULE_SCALAR,
+    _SHIFT32_IMMEDIATE,
     _TARGET_BLOCK_IMMEDIATE,
     _asm,
     _gpr32_operand,
@@ -51,11 +53,17 @@ from .common import (
     _gpr64_result,
 )
 
-X86_SCALAR_PREFIX_DESCRIPTORS = (
-    Descriptor(
-        key="x86.scalar.add.gpr32",
-        mnemonic="add",
-        semantic_tag="integer.add.i32",
+
+def _gpr32_destructive_binary_descriptor(
+    *,
+    key: str,
+    mnemonic: str,
+    semantic_tag: str,
+) -> Descriptor:
+    return Descriptor(
+        key=key,
+        mnemonic=mnemonic,
+        semantic_tag=semantic_tag,
         operands=(
             _gpr32_result(),
             _gpr32_operand("lhs"),
@@ -63,48 +71,102 @@ X86_SCALAR_PREFIX_DESCRIPTORS = (
         ),
         constraints=_GPR_DESTRUCTIVE_LHS_CONSTRAINTS,
         asm_forms=_asm(
-            mnemonic="add.gpr32",
+            mnemonic=f"{mnemonic}.gpr32",
             results=("dst",),
             operands=("lhs", "rhs"),
         ),
         schedule_class=_SCHEDULE_SCALAR,
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _gpr32_destructive_shift_descriptor(
+    *,
+    key: str,
+    mnemonic: str,
+    semantic_tag: str,
+) -> Descriptor:
+    return Descriptor(
+        key=key,
+        mnemonic=mnemonic,
+        semantic_tag=semantic_tag,
+        operands=(
+            _gpr32_result(),
+            _gpr32_operand("lhs"),
+        ),
+        immediates=(_SHIFT32_IMMEDIATE,),
+        constraints=_GPR_DESTRUCTIVE_LHS_CONSTRAINTS,
+        asm_forms=_asm(
+            mnemonic=f"{mnemonic}.imm.gpr32",
+            results=("dst",),
+            operands=("lhs",),
+            immediates=("shift",),
+            named_immediates=True,
+        ),
+        schedule_class=_SCHEDULE_SCALAR,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+X86_SCALAR_PREFIX_DESCRIPTORS = (
+    _gpr32_destructive_binary_descriptor(
+        key="x86.scalar.add.gpr32",
+        mnemonic="add",
+        semantic_tag="integer.add.i32",
     ),
 )
 
 X86_SCALAR_SUFFIX_DESCRIPTORS = (
-    Descriptor(
+    _gpr32_destructive_binary_descriptor(
         key="x86.scalar.sub.gpr32",
         mnemonic="sub",
         semantic_tag="integer.sub.i32",
-        operands=(
-            _gpr32_result(),
-            _gpr32_operand("lhs"),
-            _gpr32_operand("rhs"),
-        ),
-        constraints=_GPR_DESTRUCTIVE_LHS_CONSTRAINTS,
-        asm_forms=_asm(
-            mnemonic="sub.gpr32",
-            results=("dst",),
-            operands=("lhs", "rhs"),
-        ),
-        schedule_class=_SCHEDULE_SCALAR,
-        flags=(DescriptorFlag.DEAD_REMOVABLE,),
     ),
-    Descriptor(
+    _gpr32_destructive_binary_descriptor(
         key="x86.scalar.imul.gpr32",
         mnemonic="imul",
         semantic_tag="integer.mul.i32",
-        operands=(
-            _gpr32_result(),
-            _gpr32_operand("lhs"),
-            _gpr32_operand("rhs"),
-        ),
-        constraints=_GPR_DESTRUCTIVE_LHS_CONSTRAINTS,
+    ),
+    _gpr32_destructive_binary_descriptor(
+        key="x86.scalar.and.gpr32",
+        mnemonic="and",
+        semantic_tag="integer.and.i32",
+    ),
+    _gpr32_destructive_binary_descriptor(
+        key="x86.scalar.or.gpr32",
+        mnemonic="or",
+        semantic_tag="integer.or.i32",
+    ),
+    _gpr32_destructive_binary_descriptor(
+        key="x86.scalar.xor.gpr32",
+        mnemonic="xor",
+        semantic_tag="integer.xor.i32",
+    ),
+    _gpr32_destructive_shift_descriptor(
+        key="x86.scalar.shl.imm.gpr32",
+        mnemonic="shl",
+        semantic_tag="integer.shl.i32",
+    ),
+    _gpr32_destructive_shift_descriptor(
+        key="x86.scalar.sar.imm.gpr32",
+        mnemonic="sar",
+        semantic_tag="integer.shrs.i32",
+    ),
+    _gpr32_destructive_shift_descriptor(
+        key="x86.scalar.shr.imm.gpr32",
+        mnemonic="shr",
+        semantic_tag="integer.shru.i32",
+    ),
+    Descriptor(
+        key="x86.scalar.movimm.gpr32",
+        mnemonic="mov",
+        semantic_tag="integer.const.i32",
+        operands=(_gpr32_result(),),
+        immediates=(_IMM32_IMMEDIATE,),
         asm_forms=_asm(
-            mnemonic="imul.gpr32",
+            mnemonic="mov.imm32",
             results=("dst",),
-            operands=("lhs", "rhs"),
+            immediates=("imm32",),
         ),
         schedule_class=_SCHEDULE_SCALAR,
         flags=(DescriptorFlag.DEAD_REMOVABLE,),

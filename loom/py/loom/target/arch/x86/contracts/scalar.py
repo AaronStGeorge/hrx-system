@@ -16,6 +16,8 @@ from loom.dialect.index import ALL_INDEX_OPS
 from loom.dialect.index import defs as index
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import arithmetic as scalar_arithmetic
+from loom.dialect.scalar import bitwise as scalar_bitwise
+from loom.dialect.scalar import conversion as scalar_conversion
 from loom.dsl import Op
 from loom.target.arch.x86.descriptors import X86_SCALAR_DESCRIPTOR_SET
 from loom.target.contracts import (
@@ -40,6 +42,8 @@ _I32 = Scalar("i32")
 _INDEX = Scalar("index")
 _OFFSET = Scalar("offset")
 
+_I32_MIN = -(2**31)
+_I32_MAX = (2**31) - 1
 _DISP32_MIN = -(2**31)
 _DISP32_MAX = (2**31) - 1
 
@@ -160,6 +164,55 @@ def _const_i64_rule(
                 results={"dst": ValueRef.result("result")},
                 immediates={"imm64": AttrProject.direct("value")},
                 form=DescriptorEmitForm.CONST,
+            ),
+        ),
+    )
+
+
+def _const_i32_rule(
+    result_type: TypePattern,
+    descriptor_lookup: _DescriptorLookup,
+) -> DescriptorRule:
+    descriptor = descriptor_lookup("x86.scalar.movimm.gpr32")
+    return DescriptorRule(
+        source_op=scalar_conversion.scalar_constant,
+        descriptor=descriptor,
+        guards=(
+            Guard.attr_kind("value", "i64"),
+            Guard.value_type("result", result_type),
+            Guard.i64_range("value", _I32_MIN, _I32_MAX),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                results={"dst": ValueRef.result("result")},
+                immediates={"imm32": AttrProject.direct("value")},
+                form=DescriptorEmitForm.CONST,
+            ),
+        ),
+    )
+
+
+def _shift_i32_imm_rule(
+    source_op: Op,
+    descriptor_key: str,
+    descriptor_lookup: _DescriptorLookup,
+) -> DescriptorRule:
+    descriptor = descriptor_lookup(descriptor_key)
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            *_typed_guards(("lhs", "rhs", "result"), _I32),
+            Guard.value_exact_i64("rhs"),
+            Guard.value_i64_range("rhs", 0, 31),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands={"lhs": ValueRef.operand("lhs")},
+                results={"dst": ValueRef.result("result")},
+                immediates={"shift": ValueProject.exact_i64("rhs")},
             ),
         ),
     )
@@ -474,6 +527,40 @@ def x86_scalar_core_cases(
             "x86.scalar.imul.gpr32",
             descriptor_lookup,
         ),
+        _binary_rule(
+            scalar_bitwise.scalar_andi,
+            _I32,
+            "x86.scalar.and.gpr32",
+            descriptor_lookup,
+        ),
+        _binary_rule(
+            scalar_bitwise.scalar_ori,
+            _I32,
+            "x86.scalar.or.gpr32",
+            descriptor_lookup,
+        ),
+        _binary_rule(
+            scalar_bitwise.scalar_xori,
+            _I32,
+            "x86.scalar.xor.gpr32",
+            descriptor_lookup,
+        ),
+        _shift_i32_imm_rule(
+            scalar_bitwise.scalar_shli,
+            "x86.scalar.shl.imm.gpr32",
+            descriptor_lookup,
+        ),
+        _shift_i32_imm_rule(
+            scalar_bitwise.scalar_shrsi,
+            "x86.scalar.sar.imm.gpr32",
+            descriptor_lookup,
+        ),
+        _shift_i32_imm_rule(
+            scalar_bitwise.scalar_shrui,
+            "x86.scalar.shr.imm.gpr32",
+            descriptor_lookup,
+        ),
+        _const_i32_rule(_I32, descriptor_lookup),
         _const_i64_rule(_INDEX, descriptor_lookup),
         _const_i64_rule(_OFFSET, descriptor_lookup),
         _add_disp_rule(

@@ -74,6 +74,37 @@ low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.gpr32>, %rhs: reg<x
 
 // ====
 
+x86.target<scalar> @x86_target
+
+low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.gpr32>, %rhs: reg<x86.gpr32>) asm<x86.scalar.core> {
+  %mask = mov.imm32 255
+  %masked = and.gpr32 %lhs, %mask
+  %tag = mov.imm32 240
+  %tagged = or.gpr32 %masked, %tag
+  %invert = mov.imm32 -1
+  %inverted = xor.gpr32 %tagged, %invert
+  %mixed = xor.gpr32 %inverted, %rhs
+  %left = shl.imm.gpr32 %mixed {shift = 3}
+  %arithmetic = sar.imm.gpr32 %left {shift = 1}
+  %result = shr.imm.gpr32 %arithmetic {shift = 2}
+  return
+}
+
+// ----
+  mov edx, 255
+  and eax, edx
+  mov edx, 240
+  or eax, edx
+  mov edx, -1
+  xor eax, edx
+  xor eax, ecx
+  shl eax, 3
+  sar eax, 1
+  shr eax, 2
+  ret
+
+// ====
+
 x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>, %base: reg<x86.gpr64>) asm<x86.avx512.core> {

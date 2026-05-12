@@ -276,12 +276,27 @@ _DISP32_IMMEDIATE = Immediate(
     unsigned_max=(2**31) - 1,
 )
 
+_IMM32_IMMEDIATE = Immediate(
+    "imm32",
+    ImmediateKind.SIGNED,
+    bit_width=32,
+    signed_min=-(2**31),
+    unsigned_max=(2**31) - 1,
+)
+
 _IMM64_IMMEDIATE = Immediate(
     "imm64",
     ImmediateKind.SIGNED,
     bit_width=64,
     signed_min=-(2**63) + 1,
     unsigned_max=(2**63) - 1,
+)
+
+_SHIFT32_IMMEDIATE = Immediate(
+    "shift",
+    ImmediateKind.UNSIGNED,
+    bit_width=8,
+    unsigned_max=31,
 )
 
 _LANE_I32X4_IMMEDIATE = Immediate(

@@ -464,8 +464,10 @@ static iree_status_t loom_x86_append_asm_form_immediates(
   return iree_ok_status();
 }
 
-static iree_status_t loom_x86_append_canonical_asm_form_packet(
-    const loom_native_assembly_packet_context_t* context) {
+static iree_status_t loom_x86_canonical_asm_form(
+    const loom_native_assembly_packet_context_t* context,
+    const loom_low_asm_form_t** out_form) {
+  *out_form = NULL;
   const loom_low_descriptor_set_t* descriptor_set =
       context->schedule->target.descriptor_set;
   const loom_low_descriptor_t* descriptor = context->packet->descriptor;
@@ -485,6 +487,15 @@ static iree_status_t loom_x86_append_canonical_asm_form_packet(
         IREE_STATUS_OUT_OF_RANGE,
         "x86 assembly canonical asm form is outside the descriptor set");
   }
+  *out_form = form;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_x86_append_canonical_asm_form_packet(
+    const loom_native_assembly_packet_context_t* context) {
+  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
+  const loom_low_asm_form_t* form = NULL;
+  IREE_RETURN_IF_ERROR(loom_x86_canonical_asm_form(context, &form));
   IREE_RETURN_IF_ERROR(loom_x86_append_mnemonic(context));
   bool in_list = false;
   IREE_RETURN_IF_ERROR(loom_x86_append_asm_form_values(
@@ -493,6 +504,39 @@ static iree_status_t loom_x86_append_canonical_asm_form_packet(
   IREE_RETURN_IF_ERROR(loom_x86_append_asm_form_values(
       context, descriptor, form->operand_index_start, form->operand_index_count,
       /*is_result=*/false, &in_list));
+  return loom_x86_append_asm_form_immediates(context, descriptor, form,
+                                             &in_list);
+}
+
+static iree_status_t loom_x86_append_tied_unary_packet(
+    const loom_native_assembly_packet_context_t* context) {
+  const loom_op_t* op = context->packet->node->op;
+  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
+  const loom_low_allocation_assignment_t* result_assignment =
+      loom_x86_map_assignment(context, loom_op_const_results(op)[0]);
+  const loom_low_allocation_assignment_t* source_assignment =
+      loom_x86_map_assignment(context, loom_op_const_operands(op)[0]);
+  if (!loom_x86_assignments_match(result_assignment, source_assignment)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "x86 tied unary result must share the source physical register");
+  }
+  const loom_low_asm_form_t* form = NULL;
+  IREE_RETURN_IF_ERROR(loom_x86_canonical_asm_form(context, &form));
+  if (form->result_operand_index_count != 1 || form->operand_index_count != 1) {
+    iree_string_view_t key = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_x86_descriptor_key(context, &key));
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "x86 tied unary descriptor '%.*s' has an "
+                            "unsupported asm form",
+                            (int)key.size, key.data);
+  }
+
+  IREE_RETURN_IF_ERROR(loom_x86_append_mnemonic(context));
+  bool in_list = false;
+  IREE_RETURN_IF_ERROR(loom_x86_append_asm_form_values(
+      context, descriptor, form->result_operand_index_start,
+      form->result_operand_index_count, /*is_result=*/true, &in_list));
   return loom_x86_append_asm_form_immediates(context, descriptor, form,
                                              &in_list);
 }
@@ -682,6 +726,35 @@ static iree_status_t loom_x86_descriptor_uses_tied_binary_form(
       descriptor_set, descriptor, LOOM_LOW_CONSTRAINT_KIND_DESTRUCTIVE,
       result_operand_index, lhs_operand_index, &is_destructive));
   *out_uses_tied_binary_form = is_destructive;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_x86_descriptor_uses_tied_unary_form(
+    const loom_native_assembly_packet_context_t* context,
+    bool* out_uses_tied_unary_form) {
+  *out_uses_tied_unary_form = false;
+  const loom_op_t* op = context->packet->node->op;
+  const loom_low_descriptor_t* descriptor = context->packet->descriptor;
+  const loom_low_descriptor_set_t* descriptor_set =
+      context->schedule->target.descriptor_set;
+  if (descriptor->result_count != 1 || descriptor->operand_count != 2 ||
+      op->result_count != 1 || op->operand_count != 1) {
+    return iree_ok_status();
+  }
+  const uint16_t result_operand_index = 0;
+  const uint16_t source_operand_index = descriptor->result_count;
+  bool is_tied = false;
+  IREE_RETURN_IF_ERROR(loom_x86_descriptor_has_constraint(
+      descriptor_set, descriptor, LOOM_LOW_CONSTRAINT_KIND_TIED,
+      result_operand_index, source_operand_index, &is_tied));
+  if (!is_tied) {
+    return iree_ok_status();
+  }
+  bool is_destructive = false;
+  IREE_RETURN_IF_ERROR(loom_x86_descriptor_has_constraint(
+      descriptor_set, descriptor, LOOM_LOW_CONSTRAINT_KIND_DESTRUCTIVE,
+      result_operand_index, source_operand_index, &is_destructive));
+  *out_uses_tied_unary_form = is_destructive;
   return iree_ok_status();
 }
 
@@ -959,6 +1032,12 @@ static iree_status_t loom_x86_append_descriptor_packet(
   }
   if (has_write_effect) {
     return loom_x86_append_store_packet(context);
+  }
+  bool uses_tied_unary_form = false;
+  IREE_RETURN_IF_ERROR(
+      loom_x86_descriptor_uses_tied_unary_form(context, &uses_tied_unary_form));
+  if (uses_tied_unary_form) {
+    return loom_x86_append_tied_unary_packet(context);
   }
   bool uses_tied_binary_form = false;
   IREE_RETURN_IF_ERROR(loom_x86_descriptor_uses_tied_binary_form(
