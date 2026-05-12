@@ -161,7 +161,8 @@ static const loom_amdgpu_lower_dispatch_row_t
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_SELECT)] = LOOM_AMDGPU_DATA_ROW(
             LOOM_OP_VECTOR_SELECT, loom_amdgpu_vector_select_plan_t,
             loom_amdgpu_select_vector_select_dispatch,
-            loom_amdgpu_emit_vector_select_dispatch, NULL),
+            loom_amdgpu_emit_vector_select_dispatch,
+            loom_amdgpu_low_legality_verify_vector_select),
         [LOOM_AMDGPU_OP_INDEX(LOOM_OP_VECTOR_CLAMPF)] = LOOM_AMDGPU_DATA_ROW(
             LOOM_OP_VECTOR_CLAMPF, loom_amdgpu_clampf_plan_t,
             loom_amdgpu_select_vector_clampf_dispatch,

@@ -500,18 +500,18 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @f32_readonly_uniform_sm
   %37 = s_mov_b32 0
   %scale = s_load_dword %control_view, %37
   %39 = v_mov_b32_copy %scale
-  %45 = v_lshlrev_b32_src0_inline %lane, 4
-  %input_vector = global_load_b128_saddr %45, %input_view
-  %47 = slice %input_vector[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %42 = v_lshlrev_b32_src0_inline %lane, 4
+  %input_vector = global_load_b128_saddr %42, %input_view
+  %44 = slice %input_vector[0] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %46 = v_mul_f32 %44, %39
+  %47 = slice %input_vector[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %49 = v_mul_f32 %47, %39
-  %50 = slice %input_vector[1] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %50 = slice %input_vector[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %52 = v_mul_f32 %50, %39
-  %53 = slice %input_vector[2] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
+  %53 = slice %input_vector[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %55 = v_mul_f32 %53, %39
-  %56 = slice %input_vector[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
-  %58 = v_mul_f32 %56, %39
-  %scaled = concat(%49, %52, %55, %58) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128_saddr %45, %scaled, %output_view
+  %scaled = concat(%46, %49, %52, %55) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
+  global_store_b128_saddr %42, %scaled, %output_view
   return
 }
 

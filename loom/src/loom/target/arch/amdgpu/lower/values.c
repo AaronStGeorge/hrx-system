@@ -52,10 +52,16 @@ typedef struct loom_amdgpu_vector_iota_plan_t {
 typedef struct loom_amdgpu_vector_from_elements_plan_t {
   // Result vector assembled from the selected source elements.
   loom_value_id_t result;
+  // Physical storage selected for the result vector.
+  loom_amdgpu_vector_storage_kind_t storage_kind;
   // Static source element count.
   uint32_t element_count;
   // Static result register count after source elements are packed.
   uint32_t register_count;
+  // Static 32-bit register count occupied by one source element.
+  uint32_t element_register_count;
+  // Static payload bit count occupied by one source element.
+  uint32_t element_bit_count;
   // Source and result scalar element type.
   loom_scalar_type_t element_type;
   // Source scalar values in result lane order.
@@ -685,46 +691,25 @@ static bool loom_amdgpu_select_vector_from_elements_plan(
   const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_value_slice_t elements =
       loom_vector_from_elements_elements(source_op);
-  if (elements.count == 0 ||
-      elements.count > LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES) {
+  if (elements.count == 0) {
     return false;
   }
   const loom_value_id_t result = loom_vector_from_elements_result(source_op);
   const loom_type_t result_type = loom_module_value_type(module, result);
-  const loom_scalar_type_t element_type = loom_type_element_type(result_type);
-
-  uint32_t register_count =
-      loom_amdgpu_vector_32bit_register_count(result_type);
-  if (register_count != 0) {
-    if (elements.count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES ||
-        register_count != elements.count ||
-        (element_type != LOOM_SCALAR_TYPE_I32 &&
-         element_type != LOOM_SCALAR_TYPE_F32)) {
-      return false;
-    }
-  } else {
-    uint32_t payload_bit_count = 0;
-    if (!loom_amdgpu_type_packed_16bit_float_storage(
-            result_type, &payload_bit_count, &register_count) ||
-        payload_bit_count != elements.count * 16u) {
-      return false;
-    }
-  }
-
-  if (element_type != LOOM_SCALAR_TYPE_I32 &&
-      element_type != LOOM_SCALAR_TYPE_F32 &&
-      element_type != LOOM_SCALAR_TYPE_F16 &&
-      element_type != LOOM_SCALAR_TYPE_BF16) {
+  loom_amdgpu_vector_storage_t storage = {0};
+  if (!loom_amdgpu_type_vector_storage(result_type, &storage) ||
+      elements.count != storage.element_count ||
+      elements.count > IREE_ARRAYSIZE(out_plan->elements)) {
     return false;
   }
   for (uint32_t i = 0; i < elements.count; ++i) {
     const loom_value_id_t element = elements.values[i];
     const loom_type_t source_type = loom_module_value_type(module, element);
     if (!loom_type_is_scalar(source_type) ||
-        loom_type_element_type(source_type) != element_type) {
+        loom_type_element_type(source_type) != storage.element_type) {
       return false;
     }
-    if (element_type == LOOM_SCALAR_TYPE_I32 &&
+    if (storage.element_type == LOOM_SCALAR_TYPE_I32 &&
         !loom_amdgpu_value_can_materialize_as_vgpr_i32(context, element)) {
       return false;
     }
@@ -732,8 +717,11 @@ static bool loom_amdgpu_select_vector_from_elements_plan(
   }
   out_plan->result = result;
   out_plan->element_count = elements.count;
-  out_plan->register_count = register_count;
-  out_plan->element_type = element_type;
+  out_plan->storage_kind = storage.kind;
+  out_plan->register_count = storage.register_count;
+  out_plan->element_register_count = storage.element_register_count;
+  out_plan->element_bit_count = storage.element_bit_count;
+  out_plan->element_type = storage.element_type;
   return true;
 }
 
@@ -744,33 +732,31 @@ static bool loom_amdgpu_select_vector_splat_plan(
   const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_value_id_t result = loom_vector_splat_result(source_op);
   const loom_type_t result_type = loom_module_value_type(module, result);
-  const uint32_t element_count =
-      loom_amdgpu_vector_32bit_register_count(result_type);
-  if (element_count == 0 ||
-      element_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
-    return false;
-  }
-  const loom_scalar_type_t element_type = loom_type_element_type(result_type);
-  if (element_type != LOOM_SCALAR_TYPE_I32 &&
-      element_type != LOOM_SCALAR_TYPE_F32) {
+  loom_amdgpu_vector_storage_t storage = {0};
+  if (!loom_amdgpu_type_vector_storage(result_type, &storage) ||
+      storage.element_count > IREE_ARRAYSIZE(out_plan->elements)) {
     return false;
   }
   const loom_value_id_t scalar = loom_vector_splat_scalar(source_op);
   const loom_type_t scalar_type = loom_module_value_type(module, scalar);
   if (!loom_type_is_scalar(scalar_type) ||
-      loom_type_element_type(scalar_type) != element_type) {
+      loom_type_element_type(scalar_type) != storage.element_type) {
     return false;
   }
-  if (element_type == LOOM_SCALAR_TYPE_I32 &&
+  if (storage.element_type == LOOM_SCALAR_TYPE_I32 &&
       !loom_amdgpu_value_can_materialize_as_vgpr_i32(context, scalar)) {
     return false;
   }
-  for (uint32_t i = 0; i < element_count; ++i) {
+  for (uint32_t i = 0; i < storage.element_count; ++i) {
     out_plan->elements[i] = scalar;
   }
   out_plan->result = result;
-  out_plan->element_count = element_count;
-  out_plan->element_type = element_type;
+  out_plan->storage_kind = storage.kind;
+  out_plan->element_count = storage.element_count;
+  out_plan->register_count = storage.register_count;
+  out_plan->element_register_count = storage.element_register_count;
+  out_plan->element_bit_count = storage.element_bit_count;
+  out_plan->element_type = storage.element_type;
   return true;
 }
 
@@ -1508,36 +1494,55 @@ static iree_status_t loom_amdgpu_lower_vector_from_16bit_elements(
                                    loom_low_concat_result(concat_op));
 }
 
-static iree_status_t loom_amdgpu_lower_vector_from_elements(
+static iree_status_t loom_amdgpu_lower_vector_from_packed_integer_elements(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_from_elements_plan_t* plan) {
-  loom_value_id_t lanes[LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES];
-  switch (plan->element_type) {
-    case LOOM_SCALAR_TYPE_I32:
-      for (uint32_t i = 0; i < plan->element_count; ++i) {
-        IREE_RETURN_IF_ERROR(loom_amdgpu_lookup_or_materialize_vgpr_i32(
-            context, source_op, plan->elements[i], &lanes[i]));
+  const uint32_t element_bit_count = plan->element_bit_count;
+  IREE_ASSERT_TRUE(element_bit_count == 8 || element_bit_count == 16);
+  const uint32_t element_mask = (UINT32_C(1) << element_bit_count) - 1u;
+  const uint32_t elements_per_register = 32u / element_bit_count;
+
+  loom_type_t lane_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_make_vgpr_type(context, &lane_type));
+  loom_value_id_t registers[LOOM_AMDGPU_MAX_PACKED_32BIT_REGISTERS];
+  for (uint32_t register_index = 0; register_index < plan->register_count;
+       ++register_index) {
+    loom_value_id_t packed = LOOM_VALUE_ID_INVALID;
+    const uint32_t lane_base = register_index * elements_per_register;
+    for (uint32_t lane_index = 0; lane_index < elements_per_register;
+         ++lane_index) {
+      const uint32_t element_index = lane_base + lane_index;
+      if (element_index >= plan->element_count) {
+        break;
       }
-      break;
-    case LOOM_SCALAR_TYPE_F32:
-      for (uint32_t i = 0; i < plan->element_count; ++i) {
-        loom_value_id_t low_value = LOOM_VALUE_ID_INVALID;
-        IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
-            context, plan->elements[i], &low_value));
-        IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
-            context, source_op, low_value, &lanes[i]));
+
+      loom_value_id_t low_element = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+          context, plan->elements[element_index], &low_element));
+      IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
+          context, source_op, low_element, &low_element));
+
+      loom_value_id_t low_bits = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary_immediate(
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_AND_B32_LIT,
+          low_element, element_mask, lane_type, &low_bits));
+      loom_value_id_t shifted = LOOM_VALUE_ID_INVALID;
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT,
+          lane_index * element_bit_count, low_bits, lane_type, &shifted));
+      if (packed == LOOM_VALUE_ID_INVALID) {
+        packed = shifted;
+        continue;
       }
-      break;
-    case LOOM_SCALAR_TYPE_F16:
-    case LOOM_SCALAR_TYPE_BF16:
-      return loom_amdgpu_lower_vector_from_16bit_elements(context, source_op,
-                                                          plan);
-    default:
-      IREE_ASSERT_UNREACHABLE("unsupported vector element plan");
-      IREE_BUILTIN_UNREACHABLE();
+      IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_binary(
+          context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_OR_B32, packed,
+          shifted, lane_type, &packed));
+    }
+    registers[register_index] = packed;
   }
-  if (plan->element_count == 1) {
-    return loom_low_lower_bind_value(context, plan->result, lanes[0]);
+
+  if (plan->register_count == 1) {
+    return loom_low_lower_bind_value(context, plan->result, registers[0]);
   }
 
   loom_type_t result_type = loom_type_none();
@@ -1545,10 +1550,72 @@ static iree_status_t loom_amdgpu_lower_vector_from_elements(
                                                    plan->result, &result_type));
   loom_op_t* concat_op = NULL;
   IREE_RETURN_IF_ERROR(loom_low_concat_build(
-      loom_low_lower_context_builder(context), lanes, plan->element_count,
+      loom_low_lower_context_builder(context), registers, plan->register_count,
       result_type, source_op->location, &concat_op));
   return loom_low_lower_bind_value(context, plan->result,
                                    loom_low_concat_result(concat_op));
+}
+
+static iree_status_t loom_amdgpu_lower_vector_from_register_elements(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_from_elements_plan_t* plan) {
+  loom_value_id_t elements[LOOM_AMDGPU_MAX_PACKED_16BIT_FLOAT_LANES];
+  for (uint32_t i = 0; i < plan->element_count; ++i) {
+    bool reused = false;
+    for (uint32_t j = 0; j < i; ++j) {
+      if (plan->elements[j] == plan->elements[i]) {
+        elements[i] = elements[j];
+        reused = true;
+        break;
+      }
+    }
+    if (reused) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_low_lower_lookup_value(context, plan->elements[i], &elements[i]));
+    if (plan->storage_kind == LOOM_AMDGPU_VECTOR_STORAGE_KIND_I1_MASK) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32_registers(
+        context, source_op, elements[i], &elements[i]));
+  }
+
+  if (plan->element_count == 1) {
+    return loom_low_lower_bind_value(context, plan->result, elements[0]);
+  }
+
+  loom_type_t result_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op,
+                                                   plan->result, &result_type));
+  loom_op_t* concat_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_concat_build(
+      loom_low_lower_context_builder(context), elements, plan->element_count,
+      result_type, source_op->location, &concat_op));
+  return loom_low_lower_bind_value(context, plan->result,
+                                   loom_low_concat_result(concat_op));
+}
+
+static iree_status_t loom_amdgpu_lower_vector_from_elements(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_vector_from_elements_plan_t* plan) {
+  switch (plan->storage_kind) {
+    case LOOM_AMDGPU_VECTOR_STORAGE_KIND_FULL_32BIT:
+    case LOOM_AMDGPU_VECTOR_STORAGE_KIND_FULL_64BIT:
+    case LOOM_AMDGPU_VECTOR_STORAGE_KIND_I1_MASK:
+      return loom_amdgpu_lower_vector_from_register_elements(context, source_op,
+                                                             plan);
+    case LOOM_AMDGPU_VECTOR_STORAGE_KIND_PACKED_16BIT_FLOAT:
+      return loom_amdgpu_lower_vector_from_16bit_elements(context, source_op,
+                                                          plan);
+    case LOOM_AMDGPU_VECTOR_STORAGE_KIND_PACKED_INTEGER:
+      return loom_amdgpu_lower_vector_from_packed_integer_elements(
+          context, source_op, plan);
+    case LOOM_AMDGPU_VECTOR_STORAGE_KIND_NONE:
+    default:
+      IREE_ASSERT_UNREACHABLE("unsupported vector element plan");
+      IREE_BUILTIN_UNREACHABLE();
+  }
 }
 
 static iree_status_t loom_amdgpu_lookup_vector_insert_value(

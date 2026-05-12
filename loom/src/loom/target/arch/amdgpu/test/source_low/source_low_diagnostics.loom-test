@@ -564,3 +564,13 @@ kernel.def target(@target) @fragment_target_layout_rejected(%lhs_buffer: buffer)
   %lhs = vector.fragment.load<lhs> %lhs_view[0, 0] shape [%m, %k] : view<16x16xf32, #dense> -> vector<1xf32>
   kernel.return
 }
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @packed_select_requires_uniform_mask(%mask: vector<4xi1>, %true_value: vector<4xbf16>, %false_value: vector<4xbf16>) -> (vector<4xbf16>) {
+  // ERROR@+1: AMDGPU/023 {constraint_key="select.packed_mask_uniform"}
+  %selected = vector.select %mask, %true_value, %false_value : vector<4xbf16>
+  func.return %selected : vector<4xbf16>
+}

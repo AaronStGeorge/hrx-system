@@ -28,6 +28,9 @@ extern "C" {
 // Returns true when the source type is a scalar i32.
 bool loom_amdgpu_type_is_i32(loom_type_t type);
 
+// Returns true when the source type is a scalar i16.
+bool loom_amdgpu_type_is_i16(loom_type_t type);
+
 // Returns true when the source type is a scalar i64.
 bool loom_amdgpu_type_is_i64(loom_type_t type);
 
@@ -44,8 +47,40 @@ bool loom_amdgpu_type_is_address_scalar(loom_type_t type);
 // Returns true when the source type is a scalar f32.
 bool loom_amdgpu_type_is_f32(loom_type_t type);
 
+// Returns true when the source type is a scalar f64.
+bool loom_amdgpu_type_is_f64(loom_type_t type);
+
 // Returns true when the source type is a scalar f16 or bf16.
 bool loom_amdgpu_type_is_16bit_float(loom_type_t type);
+
+typedef enum loom_amdgpu_vector_storage_kind_e {
+  LOOM_AMDGPU_VECTOR_STORAGE_KIND_NONE = 0,
+  LOOM_AMDGPU_VECTOR_STORAGE_KIND_FULL_32BIT = 1,
+  LOOM_AMDGPU_VECTOR_STORAGE_KIND_FULL_64BIT = 2,
+  LOOM_AMDGPU_VECTOR_STORAGE_KIND_I1_MASK = 3,
+  LOOM_AMDGPU_VECTOR_STORAGE_KIND_PACKED_16BIT_FLOAT = 4,
+  LOOM_AMDGPU_VECTOR_STORAGE_KIND_PACKED_INTEGER = 5,
+} loom_amdgpu_vector_storage_kind_t;
+
+typedef struct loom_amdgpu_vector_storage_t {
+  // Physical storage shape selected for the source vector type.
+  loom_amdgpu_vector_storage_kind_t kind;
+  // Source IR scalar element type.
+  loom_scalar_type_t element_type;
+  // Number of source IR logical lanes.
+  uint32_t element_count;
+  // Number of 32-bit low register units occupied by the storage.
+  uint32_t register_count;
+  // Number of 32-bit low register units occupied by one logical lane.
+  uint32_t element_register_count;
+  // Number of payload bits occupied by one logical lane.
+  uint32_t element_bit_count;
+} loom_amdgpu_vector_storage_t;
+
+// Returns true when the source type maps to one of AMDGPU's supported static
+// vector storage classes.
+bool loom_amdgpu_type_vector_storage(loom_type_t type,
+                                     loom_amdgpu_vector_storage_t* out_storage);
 
 // Returns a static rank-1 vector lane count for the requested element type, or
 // zero when the type is not a supported static rank-1 vector.

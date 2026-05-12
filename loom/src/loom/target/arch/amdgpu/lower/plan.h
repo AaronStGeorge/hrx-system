@@ -259,7 +259,7 @@ typedef struct loom_amdgpu_vector_select_plan_t {
   loom_low_lower_resolved_descriptor_t src0_literal_src1_inline_descriptor;
   // Optional descriptor row selected when true is literal and false is inline.
   loom_low_lower_resolved_descriptor_t src1_literal_src0_inline_descriptor;
-  // Source mask vector selecting true lanes.
+  // Source condition selecting true lanes.
   loom_value_id_t condition;
   // Source vector used when the corresponding condition lane is true.
   loom_value_id_t true_value;
@@ -267,8 +267,12 @@ typedef struct loom_amdgpu_vector_select_plan_t {
   loom_value_id_t false_value;
   // Result vector value.
   loom_value_id_t result;
-  // Static number of selected 32-bit lanes.
+  // Static number of selected 32-bit register units.
   uint32_t lane_count;
+  // Number of selected register units controlled by one vector mask lane.
+  uint32_t registers_per_condition_lane;
+  // True when cndmask literal/inline operand forms can be selected per lane.
+  bool allow_lane_immediates;
 } loom_amdgpu_vector_select_plan_t;
 
 typedef enum loom_amdgpu_clampf_mode_e {
