@@ -1734,6 +1734,7 @@ iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
   }
   const uint32_t workgroup_id_base =
       kernarg_ptr != LOOM_VALUE_ID_INVALID ? 2u : 0u;
+  uint32_t workgroup_id_sgpr = workgroup_id_base;
   for (uint32_t i = 0;
        i < LOOM_AMDGPU_HAL_KERNEL_ABI_COORDINATE_DIMENSION_COUNT; ++i) {
     if (workgroup_ids[i] == LOOM_VALUE_ID_INVALID) {
@@ -1743,7 +1744,7 @@ iree_status_t loom_amdgpu_hal_kernel_abi_fixed_values_from_low(
         (loom_low_allocation_fixed_value_t){
             .value_id = workgroup_ids[i],
             .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
-            .location_base = workgroup_id_base + i,
+            .location_base = workgroup_id_sgpr++,
             .location_count = 1,
         };
   }

@@ -53,14 +53,16 @@ extern "C" {
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_X_SOURCE_ID \
   UINT64_C(0x64E1C4EA699CDCC3)
 
-// Stable low.live_in source spelling for workgroup_id.y after workgroup_id.x.
+// Stable low.live_in source spelling for workgroup_id.y after enabled lower
+// workgroup-id dimensions.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_Y_SOURCE "amdgpu.workgroup_id.y"
 
 // Stable low.live_in source ID for workgroup_id.y.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_Y_SOURCE_ID \
   UINT64_C(0x64E1C3EA699CDB10)
 
-// Stable low.live_in source spelling for workgroup_id.z after workgroup_id.x/y.
+// Stable low.live_in source spelling for workgroup_id.z after enabled lower
+// workgroup-id dimensions.
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_WORKGROUP_ID_Z_SOURCE "amdgpu.workgroup_id.z"
 
 // Stable low.live_in source ID for workgroup_id.z.
