@@ -33,43 +33,70 @@ static bool loom_availability_op_is_nested_under(const loom_op_t* root,
   return false;
 }
 
-static bool loom_availability_region_contains_block(
+static bool loom_availability_value_id_is_valid(const loom_module_t* module,
+                                                loom_value_id_t value_id) {
+  return module && value_id != LOOM_VALUE_ID_INVALID &&
+         value_id < module->values.count;
+}
+
+static bool loom_availability_query_is_valid(
+    const loom_availability_analysis_t* analysis, const loom_op_t* before_op) {
+  return analysis && analysis->module && before_op;
+}
+
+static const loom_op_t* loom_availability_region_owner_op(
+    const loom_region_t* region) {
+  if (!region) {
+    return NULL;
+  }
+  const loom_block_t* block = NULL;
+  loom_region_for_each_block(region, block) {
+    const loom_op_t* first_op = block->first_op;
+    if (first_op) {
+      return first_op->parent_op;
+    }
+  }
+  return NULL;
+}
+
+static bool loom_availability_region_contains_block_slow(
     const loom_region_t* region, const loom_block_t* target) {
-  if (!region || !target) return false;
+  if (!region || !target) {
+    return false;
+  }
   for (uint16_t block_index = 0; block_index < region->block_count;
        ++block_index) {
     const loom_block_t* block = loom_region_const_block(region, block_index);
-    if (block == target) return true;
-
-    const loom_op_t* op = block->first_op;
-    while (op) {
+    if (block == target) {
+      return true;
+    }
+    const loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
       loom_region_t** regions = loom_op_regions(op);
       for (uint8_t i = 0; i < op->region_count; ++i) {
-        if (loom_availability_region_contains_block(regions[i], target)) {
+        if (loom_availability_region_contains_block_slow(regions[i], target)) {
           return true;
         }
       }
-      op = op->next_op;
     }
   }
   return false;
 }
 
-static const loom_op_t* loom_availability_block_owner_op(
-    const loom_block_t* block) {
-  if (!block || !block->first_op) return NULL;
-  return block->first_op->parent_op;
-}
-
 static bool loom_availability_block_is_nested_under(const loom_op_t* root,
                                                     const loom_block_t* block) {
-  if (!root || !block) return false;
-  const loom_op_t* owner_op = loom_availability_block_owner_op(block);
-  if (owner_op) return loom_availability_op_is_nested_under(root, owner_op);
+  if (!root || !block) {
+    return false;
+  }
+  const loom_op_t* owner_op =
+      loom_availability_region_owner_op(block->parent_region);
+  if (owner_op) {
+    return loom_availability_op_is_nested_under(root, owner_op);
+  }
 
   loom_region_t** regions = loom_op_regions(root);
   for (uint8_t i = 0; i < root->region_count; ++i) {
-    if (loom_availability_region_contains_block(regions[i], block)) {
+    if (loom_availability_region_contains_block_slow(regions[i], block)) {
       return true;
     }
   }
@@ -79,8 +106,8 @@ static bool loom_availability_block_is_nested_under(const loom_op_t* root,
 static bool loom_availability_value_moves_with_subtree(
     const loom_module_t* module, const loom_op_t* moving_root_op,
     loom_value_id_t value_id) {
-  if (!moving_root_op || value_id == LOOM_VALUE_ID_INVALID ||
-      value_id >= module->values.count) {
+  if (!moving_root_op ||
+      !loom_availability_value_id_is_valid(module, value_id)) {
     return false;
   }
   const loom_value_t* value = loom_module_value(module, value_id);
@@ -96,7 +123,9 @@ bool loom_availability_value_is_available_before_op(
     const loom_availability_analysis_t* analysis,
     const loom_op_t* moving_root_op, const loom_op_t* before_op,
     loom_value_id_t value_id) {
-  if (!analysis || !analysis->module || !before_op) return false;
+  if (!loom_availability_query_is_valid(analysis, before_op)) {
+    return false;
+  }
   if (loom_availability_value_moves_with_subtree(analysis->module,
                                                  moving_root_op, value_id)) {
     return true;
@@ -136,7 +165,9 @@ iree_status_t loom_availability_type_is_available_before_op(
     const loom_op_t* moving_root_op, const loom_op_t* before_op,
     loom_type_t type, bool* out_available) {
   *out_available = false;
-  if (!analysis || !analysis->module || !before_op) return iree_ok_status();
+  if (!loom_availability_query_is_valid(analysis, before_op)) {
+    return iree_ok_status();
+  }
   loom_availability_type_ref_query_t query = {
       .analysis = analysis,
       .moving_root_op = moving_root_op,
@@ -154,8 +185,8 @@ iree_status_t loom_availability_value_type_is_available_before_op(
     const loom_op_t* moving_root_op, const loom_op_t* before_op,
     loom_value_id_t value_id, bool* out_available) {
   *out_available = false;
-  if (!analysis || !analysis->module || value_id == LOOM_VALUE_ID_INVALID ||
-      value_id >= analysis->module->values.count) {
+  if (!analysis ||
+      !loom_availability_value_id_is_valid(analysis->module, value_id)) {
     return iree_ok_status();
   }
   return loom_availability_type_is_available_before_op(
@@ -173,11 +204,13 @@ static bool loom_availability_predicate_is_available_before_op(
     const loom_predicate_t* predicate) {
   for (uint8_t i = 0; i < IREE_ARRAYSIZE(predicate->arg_tags); ++i) {
     if (predicate->arg_tags[i] != LOOM_PRED_ARG_VALUE) continue;
-    if (predicate->args[i] < 0 ||
-        (uint64_t)predicate->args[i] >= analysis->module->values.count ||
-        !loom_availability_value_is_available_before_op(
-            analysis, moving_root_op, before_op,
-            (loom_value_id_t)predicate->args[i])) {
+    if (predicate->args[i] < 0) return false;
+    loom_value_id_t value_id = (loom_value_id_t)predicate->args[i];
+    if (!loom_availability_value_id_is_valid(analysis->module, value_id)) {
+      return false;
+    }
+    if (!loom_availability_value_is_available_before_op(
+            analysis, moving_root_op, before_op, value_id)) {
       return false;
     }
   }
@@ -189,7 +222,7 @@ static iree_status_t loom_availability_attr_is_available_before_op_impl(
     const loom_op_t* moving_root_op, const loom_op_t* before_op,
     const loom_attribute_t* attr, uint8_t depth, bool* out_available) {
   *out_available = false;
-  if (!analysis || !analysis->module || !before_op || !attr) {
+  if (!loom_availability_query_is_valid(analysis, before_op) || !attr) {
     return iree_ok_status();
   }
   if (depth > LOOM_ATTR_DICT_MAX_NESTING_DEPTH) return iree_ok_status();
@@ -267,7 +300,7 @@ iree_status_t loom_availability_op_attrs_are_available_before_op(
     const loom_op_t* moving_root_op, const loom_op_t* before_op,
     const loom_op_t* op, bool* out_available) {
   *out_available = false;
-  if (!analysis || !analysis->module || !before_op || !op) {
+  if (!loom_availability_query_is_valid(analysis, before_op) || !op) {
     return iree_ok_status();
   }
   const loom_attribute_t* attrs = loom_op_const_attrs(op);
@@ -289,7 +322,7 @@ iree_status_t loom_availability_op_captures_are_available_before_op(
     const loom_op_t* moving_root_op, const loom_op_t* before_op,
     const loom_op_t* op, bool* out_available) {
   *out_available = false;
-  if (!analysis || !analysis->module || !before_op || !op) {
+  if (!loom_availability_query_is_valid(analysis, before_op) || !op) {
     return iree_ok_status();
   }
 
@@ -317,7 +350,7 @@ iree_status_t loom_availability_block_arg_types_are_available_before_op(
     const loom_op_t* moving_root_op, const loom_op_t* before_op,
     const loom_block_t* block, bool* out_available) {
   *out_available = false;
-  if (!analysis || !analysis->module || !before_op || !block) {
+  if (!loom_availability_query_is_valid(analysis, before_op) || !block) {
     return iree_ok_status();
   }
   for (uint16_t i = 0; i < block->arg_count; ++i) {

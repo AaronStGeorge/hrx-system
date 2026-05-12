@@ -585,18 +585,49 @@ static bool loom_ir_move_should_omit_op(const loom_module_t* module,
   return vtable && iree_any_bit_set(vtable->traits, LOOM_TRAIT_TERMINATOR);
 }
 
-static bool loom_ir_move_region_contains_block(const loom_region_t* region,
-                                               const loom_block_t* target) {
-  if (!region || !target) return false;
+static bool loom_ir_move_value_id_is_valid(const loom_module_t* module,
+                                           loom_value_id_t value_id) {
+  return module && value_id != LOOM_VALUE_ID_INVALID &&
+         value_id < module->values.count;
+}
+
+static bool loom_ir_move_source_value_id_is_valid(const loom_ir_remap_t* remap,
+                                                  loom_value_id_t value_id) {
+  return remap &&
+         loom_ir_move_value_id_is_valid(remap->source_module, value_id);
+}
+
+static const loom_op_t* loom_ir_move_region_owner_op(
+    const loom_region_t* region) {
+  if (!region) {
+    return NULL;
+  }
+  const loom_block_t* block = NULL;
+  loom_region_for_each_block(region, block) {
+    const loom_op_t* first_op = block->first_op;
+    if (first_op) {
+      return first_op->parent_op;
+    }
+  }
+  return NULL;
+}
+
+static bool loom_ir_move_region_contains_block_slow(
+    const loom_region_t* region, const loom_block_t* target) {
+  if (!region || !target) {
+    return false;
+  }
   for (uint16_t block_index = 0; block_index < region->block_count;
        ++block_index) {
     const loom_block_t* block = loom_region_const_block(region, block_index);
-    if (block == target) return true;
+    if (block == target) {
+      return true;
+    }
     const loom_op_t* op = NULL;
     loom_block_for_each_op(block, op) {
       loom_region_t** regions = loom_op_regions(op);
       for (uint8_t i = 0; i < op->region_count; ++i) {
-        if (loom_ir_move_region_contains_block(regions[i], target)) {
+        if (loom_ir_move_region_contains_block_slow(regions[i], target)) {
           return true;
         }
       }
@@ -607,10 +638,26 @@ static bool loom_ir_move_region_contains_block(const loom_region_t* region,
 
 static bool loom_ir_move_block_is_nested_under_op(const loom_op_t* root,
                                                   const loom_block_t* block) {
-  if (!root || !block) return false;
+  if (!root || !block) {
+    return false;
+  }
+  const loom_op_t* owner_op =
+      loom_ir_move_region_owner_op(block->parent_region);
+  if (owner_op) {
+    for (const loom_op_t* current = owner_op; current;
+         current = current->parent_op) {
+      if (current == root) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   loom_region_t** regions = loom_op_regions(root);
   for (uint8_t i = 0; i < root->region_count; ++i) {
-    if (loom_ir_move_region_contains_block(regions[i], block)) return true;
+    if (loom_ir_move_region_contains_block_slow(regions[i], block)) {
+      return true;
+    }
   }
   return false;
 }
@@ -633,7 +680,9 @@ static bool loom_ir_move_block_arg_is_inside_moved_op(
     if (loom_ir_move_should_omit_op(module, root_op, omit_terminators)) {
       continue;
     }
-    if (loom_ir_move_block_is_nested_under_op(root_op, block)) return true;
+    if (loom_ir_move_block_is_nested_under_op(root_op, block)) {
+      return true;
+    }
   }
   return false;
 }
@@ -641,7 +690,7 @@ static bool loom_ir_move_block_arg_is_inside_moved_op(
 static bool loom_ir_move_value_moves_with_block(
     const loom_module_t* module, const loom_block_t* source_block,
     bool omit_terminators, loom_value_id_t value_id) {
-  if (value_id == LOOM_VALUE_ID_INVALID || value_id >= module->values.count) {
+  if (!loom_ir_move_value_id_is_valid(module, value_id)) {
     return false;
   }
   const loom_value_t* value = loom_module_value(module, value_id);
@@ -731,14 +780,14 @@ static iree_status_t loom_ir_move_predicate_list_is_available(
     const loom_predicate_t* predicate = &attr.predicate_list[i];
     for (uint8_t j = 0; j < IREE_ARRAYSIZE(predicate->arg_tags); ++j) {
       if (predicate->arg_tags[j] != LOOM_PRED_ARG_VALUE) continue;
-      if (predicate->args[j] < 0 ||
-          (uint64_t)predicate->args[j] >=
-              query->remap->source_module->values.count) {
+      if (predicate->args[j] < 0) return iree_ok_status();
+      loom_value_id_t value_id = (loom_value_id_t)predicate->args[j];
+      if (!loom_ir_move_source_value_id_is_valid(query->remap, value_id)) {
         return iree_ok_status();
       }
       bool available = false;
       IREE_RETURN_IF_ERROR(loom_ir_move_remapped_value_is_available(
-          query, (loom_value_id_t)predicate->args[j], &available));
+          query, value_id, &available));
       if (!available) return iree_ok_status();
     }
   }
@@ -750,8 +799,9 @@ static iree_status_t loom_ir_move_attr_is_available(
     const loom_ir_move_availability_t* query, const loom_attribute_t* attr,
     uint8_t depth, bool* out_available) {
   *out_available = false;
-  if (depth > LOOM_ATTR_DICT_MAX_NESTING_DEPTH || !attr)
+  if (depth > LOOM_ATTR_DICT_MAX_NESTING_DEPTH || !attr) {
     return iree_ok_status();
+  }
   switch ((loom_attr_kind_t)attr->kind) {
     case LOOM_ATTR_ABSENT:
     case LOOM_ATTR_I64:
@@ -811,7 +861,7 @@ static iree_status_t loom_ir_move_block_arg_types_are_available(
   *out_available = false;
   for (uint16_t i = 0; i < block->arg_count; ++i) {
     loom_value_id_t arg_id = loom_block_arg_id(block, i);
-    if (arg_id >= query->remap->source_module->values.count) {
+    if (!loom_ir_move_source_value_id_is_valid(query->remap, arg_id)) {
       return iree_ok_status();
     }
     IREE_RETURN_IF_ERROR(loom_ir_move_remapped_type_is_available(
@@ -838,8 +888,7 @@ static iree_status_t loom_ir_move_op_captures_are_available(
   const loom_value_id_t* results = loom_op_const_results(op);
   for (uint16_t i = 0; i < op->result_count; ++i) {
     loom_value_id_t result = results[i];
-    if (result == LOOM_VALUE_ID_INVALID ||
-        result >= query->remap->source_module->values.count) {
+    if (!loom_ir_move_source_value_id_is_valid(query->remap, result)) {
       return iree_ok_status();
     }
     IREE_RETURN_IF_ERROR(loom_ir_move_remapped_type_is_available(
