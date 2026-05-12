@@ -17,6 +17,7 @@ from loom.dialect.scalar import arithmetic as scalar_arithmetic
 from loom.dialect.scalar import math as scalar_math
 from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector import defs as vector
+from loom.dialect.view import ALL_VIEW_OPS
 from loom.dsl import Op
 from loom.target.arch.x86.contracts.scalar import x86_scalar_core_cases
 from loom.target.arch.x86.descriptors import X86_AVX512_CORE_DESCRIPTOR_SET
@@ -775,6 +776,7 @@ X86_AVX512_CONTRACT_DIALECT_OPS = {
     "index": ALL_INDEX_OPS,
     "scalar": ALL_SCALAR_OPS,
     "vector": ALL_VECTOR_OPS,
+    "view": ALL_VIEW_OPS,
 }
 
 X86_AVX512_CONTRACT_FRAGMENT = ContractFragment(

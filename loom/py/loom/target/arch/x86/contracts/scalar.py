@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 
 from loom.dialect.buffer import ALL_BUFFER_OPS
 from loom.dialect.buffer import defs as buffer
@@ -18,6 +18,8 @@ from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import arithmetic as scalar_arithmetic
 from loom.dialect.scalar import bitwise as scalar_bitwise
 from loom.dialect.scalar import conversion as scalar_conversion
+from loom.dialect.view import ALL_VIEW_OPS
+from loom.dialect.view import defs as view
 from loom.dsl import Op
 from loom.target.arch.x86.descriptors import X86_SCALAR_DESCRIPTOR_SET
 from loom.target.contracts import (
@@ -30,6 +32,11 @@ from loom.target.contracts import (
     Guard,
     GuardDiagnostic,
     Scalar,
+    SourceMemoryConstraint,
+    SourceMemoryDynamicIndexSource,
+    SourceMemoryOperation,
+    SourceMemoryProject,
+    SourceMemoryRootKind,
     TypePattern,
     ValueAliasRule,
     ValueProject,
@@ -53,6 +60,11 @@ _ADDRESS_FORM_DIAGNOSTIC = GuardDiagnostic(
     subject_name="x86-scalar",
     constraint_key="x86.scalar.address_form",
 )
+_SOURCE_MEMORY_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="source-memory",
+    subject_name="x86-scalar",
+    constraint_key="x86.scalar.source_memory",
+)
 
 _DescriptorLookup = Callable[[str], Descriptor]
 
@@ -67,7 +79,9 @@ def _op_emit(
     operands: dict[str, ValueRef] | None = None,
     results: dict[str, ValueRef] | None = None,
     result_types: dict[str, TypePattern] | None = None,
-    immediates: dict[str, AttrProject | ValueProject | int] | None = None,
+    immediates: Mapping[str, AttrProject | SourceMemoryProject | ValueProject | int]
+    | None = None,
+    source_memory: SourceMemoryConstraint | None = None,
 ) -> EmitDescriptorOp:
     return EmitDescriptorOp(
         descriptor=descriptor,
@@ -75,6 +89,7 @@ def _op_emit(
         results={} if results is None else results,
         result_types=result_types,
         immediates={} if immediates is None else immediates,
+        source_memory=source_memory,
         form=DescriptorEmitForm.OP,
     )
 
@@ -220,6 +235,143 @@ def _shift_i32_imm_rule(
             ),
         ),
     )
+
+
+def _source_memory_constraint(
+    operation: SourceMemoryOperation,
+    *,
+    dynamic: bool,
+) -> SourceMemoryConstraint:
+    return SourceMemoryConstraint(
+        operation=operation,
+        root_kind=SourceMemoryRootKind.BLOCK_ARGUMENT,
+        memory_spaces=("unknown", "generic", "global"),
+        element_byte_count=4,
+        vector_lane_count=1,
+        vector_lane_byte_stride=4,
+        static_byte_offset_minimum=_DISP32_MIN,
+        static_byte_offset_maximum=_DISP32_MAX,
+        dynamic_term_count=1 if dynamic else 0,
+        dynamic_index_source=(
+            SourceMemoryDynamicIndexSource.VALUE
+            if dynamic
+            else SourceMemoryDynamicIndexSource.NONE
+        ),
+        dynamic_byte_stride=4 if dynamic else 0,
+        diagnostic=_SOURCE_MEMORY_DIAGNOSTIC,
+    )
+
+
+def _memory_immediates(
+    dynamic: bool,
+) -> dict[str, SourceMemoryProject | int]:
+    immediates: dict[str, SourceMemoryProject | int] = {
+        "disp32": SourceMemoryProject.static_byte_offset()
+    }
+    if dynamic:
+        immediates["scale"] = SourceMemoryProject.dynamic_byte_stride()
+    return immediates
+
+
+def _view_load_rule(
+    result_type: TypePattern,
+    *,
+    dynamic: bool,
+    descriptor_key: str,
+    descriptor_lookup: _DescriptorLookup,
+) -> DescriptorRule:
+    descriptor = descriptor_lookup(descriptor_key)
+    operands = {"base": ValueRef.operand("view")}
+    if dynamic:
+        operands["index"] = ValueRef.operand("indices")
+    return DescriptorRule(
+        source_op=view.view_load,
+        descriptor=descriptor,
+        guards=(
+            Guard.operand_segment_count("indices", 1 if dynamic else 0),
+            Guard.value_type("result", result_type),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands=operands,
+                results={"dst": ValueRef.result("result")},
+                immediates=_memory_immediates(dynamic),
+                source_memory=_source_memory_constraint(
+                    SourceMemoryOperation.LOAD,
+                    dynamic=dynamic,
+                ),
+            ),
+        ),
+    )
+
+
+def _view_store_rule(
+    value_type: TypePattern,
+    *,
+    dynamic: bool,
+    descriptor_key: str,
+    descriptor_lookup: _DescriptorLookup,
+) -> DescriptorRule:
+    descriptor = descriptor_lookup(descriptor_key)
+    operands = {
+        "value": ValueRef.operand("value"),
+        "base": ValueRef.operand("view"),
+    }
+    if dynamic:
+        operands["index"] = ValueRef.operand("indices")
+    return DescriptorRule(
+        source_op=view.view_store,
+        descriptor=descriptor,
+        guards=(
+            Guard.operand_segment_count("indices", 1 if dynamic else 0),
+            Guard.value_type("value", value_type),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands=operands,
+                immediates=_memory_immediates(dynamic),
+                source_memory=_source_memory_constraint(
+                    SourceMemoryOperation.STORE,
+                    dynamic=dynamic,
+                ),
+            ),
+        ),
+    )
+
+
+def _memory_descriptor_key(
+    operation: str,
+    *,
+    dynamic: bool,
+) -> str:
+    indexed = ".indexed" if dynamic else ""
+    return f"x86.scalar.mov.{operation}{indexed}.gpr32"
+
+
+def _memory_rules(
+    descriptor_lookup: _DescriptorLookup,
+) -> tuple[DescriptorRule, ...]:
+    rules: list[DescriptorRule] = []
+    for dynamic in (False, True):
+        rules.append(
+            _view_load_rule(
+                _I32,
+                dynamic=dynamic,
+                descriptor_key=_memory_descriptor_key("load", dynamic=dynamic),
+                descriptor_lookup=descriptor_lookup,
+            )
+        )
+        rules.append(
+            _view_store_rule(
+                _I32,
+                dynamic=dynamic,
+                descriptor_key=_memory_descriptor_key("store", dynamic=dynamic),
+                descriptor_lookup=descriptor_lookup,
+            )
+        )
+    return tuple(rules)
 
 
 def _buffer_view_rule() -> ValueAliasRule:
@@ -623,6 +775,7 @@ def x86_scalar_core_cases(
             index.index_mul, _INDEX, "x86.scalar.imul.gpr64", descriptor_lookup
         ),
         *_madd_address_rules(descriptor_lookup),
+        *_memory_rules(descriptor_lookup),
     )
 
 
@@ -630,6 +783,7 @@ X86_SCALAR_CONTRACT_DIALECT_OPS = {
     "buffer": ALL_BUFFER_OPS,
     "index": ALL_INDEX_OPS,
     "scalar": ALL_SCALAR_OPS,
+    "view": ALL_VIEW_OPS,
 }
 
 X86_SCALAR_CONTRACT_FRAGMENT = ContractFragment(

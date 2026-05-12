@@ -33,6 +33,7 @@ loom_target_table_cc_library(
     loom::src::loom::ops::buffer
     loom::src::loom::ops::index
     loom::src::loom::ops::scalar
+    loom::src::loom::ops::view
 )
 
 loom_target_table_cc_library(
@@ -59,6 +60,7 @@ loom_target_table_cc_library(
     loom::src::loom::ops::index
     loom::src::loom::ops::scalar
     loom::src::loom::ops::vector
+    loom::src::loom::ops::view
 )
 
 loom_target_table_cc_library(
