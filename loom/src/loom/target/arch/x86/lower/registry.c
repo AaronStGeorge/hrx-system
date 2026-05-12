@@ -102,7 +102,6 @@ static iree_status_t loom_x86_map_avx512_type(void* user_data,
                                               const loom_op_t* source_op,
                                               loom_type_t source_type,
                                               loom_type_t* out_low_type) {
-  (void)user_data;
   if (loom_x86_type_is_address_gpr64(source_type)) {
     return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_GPR64,
                                        out_low_type);

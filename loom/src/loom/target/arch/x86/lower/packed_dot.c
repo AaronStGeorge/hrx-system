@@ -57,7 +57,6 @@ iree_status_t loom_x86_map_packed_dot_type(void* user_data,
                                            const loom_op_t* source_op,
                                            loom_type_t source_type,
                                            loom_type_t* out_low_type) {
-  (void)user_data;
   uint32_t vector_bit_width = 0;
   if (loom_x86_packed_dot_type_static_vector_bit_width(source_type,
                                                        &vector_bit_width)) {
