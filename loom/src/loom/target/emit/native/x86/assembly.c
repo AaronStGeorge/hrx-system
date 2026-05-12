@@ -1093,20 +1093,31 @@ static iree_status_t loom_x86_append_cond_branch_packet(
   loom_x86_register_class_t register_class_kind = 0;
   IREE_RETURN_IF_ERROR(loom_x86_register_class_kind(
       context, condition_assignment, &register_class_kind));
-  if (register_class_kind != LOOM_X86_REGISTER_CLASS_K) {
+  if (register_class_kind == LOOM_X86_REGISTER_CLASS_K) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, "kortestq "));
+    IREE_RETURN_IF_ERROR(
+        loom_x86_append_assignment(context, condition_assignment));
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, ", "));
+    IREE_RETURN_IF_ERROR(
+        loom_x86_append_assignment(context, condition_assignment));
+  } else if (register_class_kind == LOOM_X86_REGISTER_CLASS_GPR32 ||
+             register_class_kind == LOOM_X86_REGISTER_CLASS_GPR64) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, "test "));
+    IREE_RETURN_IF_ERROR(
+        loom_x86_append_assignment(context, condition_assignment));
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, ", "));
+    IREE_RETURN_IF_ERROR(
+        loom_x86_append_assignment(context, condition_assignment));
+  } else {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
-        "x86 assembly conditional branch requires a mask register predicate");
+        "x86 assembly conditional branch requires a mask or GPR predicate");
   }
 
-  IREE_RETURN_IF_ERROR(
-      iree_string_builder_append_cstring(context->builder, "kortestq "));
-  IREE_RETURN_IF_ERROR(
-      loom_x86_append_assignment(context, condition_assignment));
-  IREE_RETURN_IF_ERROR(
-      iree_string_builder_append_cstring(context->builder, ", "));
-  IREE_RETURN_IF_ERROR(
-      loom_x86_append_assignment(context, condition_assignment));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(context->builder, "\n  jnz "));
   IREE_RETURN_IF_ERROR(loom_native_assembly_append_block_label(

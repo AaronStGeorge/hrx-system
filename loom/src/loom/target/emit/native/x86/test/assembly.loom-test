@@ -105,6 +105,27 @@ low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.gpr32>, %rhs: reg<x
 
 // ====
 
+x86.target<scalar> @x86_target
+
+low.func.def target(@x86_target) @x86_fragment(%condition: reg<x86.gpr32>) asm<x86.scalar.core> {
+  low.cond_br %condition, ^then, ^else : reg<x86.gpr32>
+^then:
+  return
+^else:
+  return
+}
+
+// ----
+  test eax, eax
+  jnz .Lbb1
+  jmp .Lbb2
+.Lbb1:
+  ret
+.Lbb2:
+  ret
+
+// ====
+
 x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>, %base: reg<x86.gpr64>) asm<x86.avx512.core> {

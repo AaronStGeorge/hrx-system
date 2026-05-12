@@ -38,6 +38,7 @@ from loom.target.contracts import (
 )
 from loom.target.low_descriptors import Descriptor
 
+_I1 = Scalar("i1")
 _I32 = Scalar("i32")
 _INDEX = Scalar("index")
 _OFFSET = Scalar("offset")
@@ -172,6 +173,9 @@ def _const_i64_rule(
 def _const_i32_rule(
     result_type: TypePattern,
     descriptor_lookup: _DescriptorLookup,
+    *,
+    minimum: int = _I32_MIN,
+    maximum: int = _I32_MAX,
 ) -> DescriptorRule:
     descriptor = descriptor_lookup("x86.scalar.movimm.gpr32")
     return DescriptorRule(
@@ -180,7 +184,7 @@ def _const_i32_rule(
         guards=(
             Guard.attr_kind("value", "i64"),
             Guard.value_type("result", result_type),
-            Guard.i64_range("value", _I32_MIN, _I32_MAX),
+            Guard.i64_range("value", minimum, maximum),
         ),
         emit=(
             EmitDescriptorOp(
@@ -545,6 +549,24 @@ def x86_scalar_core_cases(
             "x86.scalar.xor.gpr32",
             descriptor_lookup,
         ),
+        _binary_rule(
+            scalar_bitwise.scalar_andi,
+            _I1,
+            "x86.scalar.and.gpr32",
+            descriptor_lookup,
+        ),
+        _binary_rule(
+            scalar_bitwise.scalar_ori,
+            _I1,
+            "x86.scalar.or.gpr32",
+            descriptor_lookup,
+        ),
+        _binary_rule(
+            scalar_bitwise.scalar_xori,
+            _I1,
+            "x86.scalar.xor.gpr32",
+            descriptor_lookup,
+        ),
         _shift_i32_imm_rule(
             scalar_bitwise.scalar_shli,
             "x86.scalar.shl.imm.gpr32",
@@ -561,6 +583,7 @@ def x86_scalar_core_cases(
             descriptor_lookup,
         ),
         _const_i32_rule(_I32, descriptor_lookup),
+        _const_i32_rule(_I1, descriptor_lookup, minimum=0, maximum=1),
         _const_i64_rule(_INDEX, descriptor_lookup),
         _const_i64_rule(_OFFSET, descriptor_lookup),
         _add_disp_rule(

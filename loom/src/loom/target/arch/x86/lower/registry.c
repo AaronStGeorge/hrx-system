@@ -58,6 +58,11 @@ static bool loom_x86_type_is_vector_4xi1(loom_type_t type) {
          loom_type_dim_static_size_at(type, 0) == 4;
 }
 
+static bool loom_x86_type_is_scalar_i1(loom_type_t type) {
+  return loom_type_is_scalar(type) &&
+         loom_type_element_type(type) == LOOM_SCALAR_TYPE_I1;
+}
+
 static bool loom_x86_type_is_scalar_i32(loom_type_t type) {
   return loom_type_is_scalar(type) &&
          loom_type_element_type(type) == LOOM_SCALAR_TYPE_I32;
@@ -137,9 +142,12 @@ static iree_status_t loom_x86_map_scalar_type(void* user_data,
                                               const loom_op_t* source_op,
                                               loom_type_t source_type,
                                               loom_type_t* out_low_type) {
-  (void)user_data;
   if (loom_x86_type_is_address_gpr64(source_type)) {
     return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_GPR64,
+                                       out_low_type);
+  }
+  if (loom_x86_type_is_scalar_i1(source_type)) {
+    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_GPR32,
                                        out_low_type);
   }
   if (loom_x86_type_is_scalar_i32(source_type)) {
