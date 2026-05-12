@@ -17,6 +17,7 @@ from loom.dialect.index import defs as index
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import arithmetic as scalar_arithmetic
 from loom.dialect.scalar import bitwise as scalar_bitwise
+from loom.dialect.scalar import comparison as scalar_comparison
 from loom.dialect.scalar import conversion as scalar_conversion
 from loom.dialect.view import ALL_VIEW_OPS
 from loom.dialect.view import defs as view
@@ -232,6 +233,32 @@ def _shift_i32_imm_rule(
                 operands={"lhs": ValueRef.operand("lhs")},
                 results={"dst": ValueRef.result("result")},
                 immediates={"shift": ValueProject.exact_i64("rhs")},
+            ),
+        ),
+    )
+
+
+def _cmpi_i32_rule(
+    predicate: str,
+    descriptor_lookup: _DescriptorLookup,
+) -> DescriptorRule:
+    descriptor = descriptor_lookup(f"x86.scalar.cmp.{predicate}.gpr32")
+    return DescriptorRule(
+        source_op=scalar_comparison.scalar_cmpi,
+        descriptor=descriptor,
+        guards=(
+            Guard.enum_attr_equals("predicate", predicate),
+            *_typed_guards(("lhs", "rhs"), _I32),
+            Guard.value_type("result", _I1),
+        ),
+        emit=(
+            _op_emit(
+                descriptor=descriptor,
+                operands={
+                    "lhs": ValueRef.operand("lhs"),
+                    "rhs": ValueRef.operand("rhs"),
+                },
+                results={"dst": ValueRef.result("result")},
             ),
         ),
     )
@@ -733,6 +760,21 @@ def x86_scalar_core_cases(
             scalar_bitwise.scalar_shrui,
             "x86.scalar.shr.imm.gpr32",
             descriptor_lookup,
+        ),
+        *(
+            _cmpi_i32_rule(predicate, descriptor_lookup)
+            for predicate in (
+                "eq",
+                "ne",
+                "slt",
+                "sle",
+                "sgt",
+                "sge",
+                "ult",
+                "ule",
+                "ugt",
+                "uge",
+            )
         ),
         _const_i32_rule(_I32, descriptor_lookup),
         _const_i32_rule(_I1, descriptor_lookup, minimum=0, maximum=1),

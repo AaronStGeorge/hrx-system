@@ -297,6 +297,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "source_low_scalar_compare"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_compare.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "source_low_scalar_control"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_scalar_control.loom-test"

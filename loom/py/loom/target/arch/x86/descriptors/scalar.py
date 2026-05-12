@@ -115,6 +115,31 @@ def _gpr32_destructive_shift_descriptor(
     )
 
 
+def _gpr32_compare_descriptor(
+    *,
+    predicate: str,
+    setcc: str,
+    semantic_tag: str,
+) -> Descriptor:
+    return Descriptor(
+        key=f"x86.scalar.cmp.{predicate}.gpr32",
+        mnemonic=f"cmp.{setcc}",
+        semantic_tag=semantic_tag,
+        operands=(
+            _gpr32_result(),
+            _gpr32_operand("lhs"),
+            _gpr32_operand("rhs"),
+        ),
+        asm_forms=_asm(
+            mnemonic=f"cmp.{predicate}.gpr32",
+            results=("dst",),
+            operands=("lhs", "rhs"),
+        ),
+        schedule_class=_SCHEDULE_SCALAR,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 X86_SCALAR_PREFIX_DESCRIPTORS = (
     _gpr32_destructive_binary_descriptor(
         key="x86.scalar.add.gpr32",
@@ -163,6 +188,56 @@ X86_SCALAR_SUFFIX_DESCRIPTORS = (
         key="x86.scalar.shr.imm.gpr32",
         mnemonic="shr",
         semantic_tag="integer.shru.i32",
+    ),
+    _gpr32_compare_descriptor(
+        predicate="eq",
+        setcc="sete",
+        semantic_tag="integer.cmp.eq.i32",
+    ),
+    _gpr32_compare_descriptor(
+        predicate="ne",
+        setcc="setne",
+        semantic_tag="integer.cmp.ne.i32",
+    ),
+    _gpr32_compare_descriptor(
+        predicate="slt",
+        setcc="setl",
+        semantic_tag="integer.cmp.slt.i32",
+    ),
+    _gpr32_compare_descriptor(
+        predicate="sle",
+        setcc="setle",
+        semantic_tag="integer.cmp.sle.i32",
+    ),
+    _gpr32_compare_descriptor(
+        predicate="sgt",
+        setcc="setg",
+        semantic_tag="integer.cmp.sgt.i32",
+    ),
+    _gpr32_compare_descriptor(
+        predicate="sge",
+        setcc="setge",
+        semantic_tag="integer.cmp.sge.i32",
+    ),
+    _gpr32_compare_descriptor(
+        predicate="ult",
+        setcc="setb",
+        semantic_tag="integer.cmp.ult.i32",
+    ),
+    _gpr32_compare_descriptor(
+        predicate="ule",
+        setcc="setbe",
+        semantic_tag="integer.cmp.ule.i32",
+    ),
+    _gpr32_compare_descriptor(
+        predicate="ugt",
+        setcc="seta",
+        semantic_tag="integer.cmp.ugt.i32",
+    ),
+    _gpr32_compare_descriptor(
+        predicate="uge",
+        setcc="setae",
+        semantic_tag="integer.cmp.uge.i32",
     ),
     Descriptor(
         key="x86.scalar.movimm.gpr32",
