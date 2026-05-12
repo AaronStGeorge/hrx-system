@@ -3664,6 +3664,9 @@ static iree_status_t loom_low_allocation_edge_copy_class_seen_before(
       loom_low_allocation_unit_location_t destination = {0};
       IREE_RETURN_IF_ERROR(loom_low_allocation_edge_copy_unit_locations(
           state, edge_copy, unit_index, &source, &destination));
+      if (loom_low_allocation_unit_locations_equal(&source, &destination)) {
+        continue;
+      }
       if (loom_low_allocation_unit_storage_classes_equal(storage_class,
                                                          &destination)) {
         *out_seen = true;
@@ -4306,6 +4309,10 @@ static bool loom_low_allocation_packet_move_class_seen_before(
     iree_host_size_t stop_move_index,
     const loom_low_allocation_unit_location_t* storage_class) {
   for (iree_host_size_t i = 0; i < stop_move_index; ++i) {
+    if (loom_low_allocation_unit_locations_equal(&moves[i].source,
+                                                 &moves[i].destination)) {
+      continue;
+    }
     if (loom_low_allocation_unit_storage_classes_equal(storage_class,
                                                        &moves[i].destination)) {
       return true;
