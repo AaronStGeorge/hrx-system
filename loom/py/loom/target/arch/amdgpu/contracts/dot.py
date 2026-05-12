@@ -28,7 +28,9 @@ from loom.target.contracts import (
 from loom.target.low_descriptors import Descriptor
 
 _DESCRIPTOR_KEYS = (
+    "amdgpu.v_and_b32.lit",
     "amdgpu.v_fma_f32",
+    "amdgpu.v_lshlrev_b32.lit",
     "amdgpu.v_mul_f32",
     "amdgpu.v_dot2_f32_f16",
     "amdgpu.v_dot2_f32_bf16",
@@ -79,6 +81,7 @@ _VEC_BF16_PACKED = Vector(
 )
 
 _VGPR = "amdgpu.vgpr"
+_BF16_HIGH_MASK = 0xFFFF0000
 
 _KIND_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="kind",
@@ -109,6 +112,11 @@ _DOT2F_BF16_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="descriptor",
     subject_name="amdgpu.v_dot2_f32_bf16",
     constraint_key="amdgpu.dot2f.bf16_descriptor",
+)
+_DOT2F_BF16_FALLBACK_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
+    subject_kind="descriptor",
+    subject_name="amdgpu.bf16_dot2f_fallback",
+    constraint_key="amdgpu.dot2f.bf16_fallback_descriptors",
 )
 _DOT4F8_DESCRIPTOR_DIAGNOSTIC = GuardDiagnostic(
     subject_kind="descriptor",
@@ -398,6 +406,106 @@ def _dot2f_rule(
     )
 
 
+def _dot2f_bf16_fallback_rule() -> DescriptorRule:
+    fma = _descriptor("amdgpu.v_fma_f32")
+    shift_up = _descriptor("amdgpu.v_lshlrev_b32.lit")
+    high_bits = _descriptor("amdgpu.v_and_b32.lit")
+    return DescriptorRule(
+        source_op=vector.vector_dot2f,
+        descriptor=fma,
+        guards=(
+            _value_type("lhs", _VEC_BF16_PACKED, _DOT2F_BF16_LHS_DIAGNOSTIC),
+            Guard.value_static_dim0_multiple(
+                "lhs",
+                2,
+                diagnostic=_DOT2F_BF16_LHS_DIAGNOSTIC,
+            ),
+            _value_type("rhs", _VEC_BF16_PACKED, _DOT2F_BF16_RHS_DIAGNOSTIC),
+            Guard.value_static_dim0_multiple(
+                "rhs",
+                2,
+                diagnostic=_DOT2F_BF16_RHS_DIAGNOSTIC,
+            ),
+            _unit_count_eq("lhs", "rhs", _DOT2F_BF16_RHS_DIAGNOSTIC),
+            _value_type("acc", _VEC_F32, _DOT2F_ACC_DIAGNOSTIC),
+            _unit_count_eq("lhs", "acc", _DOT2F_ACC_DIAGNOSTIC),
+            _value_type("result", _VEC_F32, _DOT2F_RESULT_DIAGNOSTIC),
+            _unit_count_eq("lhs", "result", _DOT2F_RESULT_DIAGNOSTIC),
+            _vgpr("lhs", _LHS_VGPR_DIAGNOSTIC),
+            _vgpr("rhs", _RHS_VGPR_DIAGNOSTIC),
+            _vgpr("acc", _PACKED_ACC_VGPR_DIAGNOSTIC),
+            _vgpr("result", _PACKED_RESULT_VGPR_DIAGNOSTIC),
+            Guard.descriptor_available(
+                fma,
+                diagnostic=_DOT2F_BF16_FALLBACK_DESCRIPTOR_DIAGNOSTIC,
+            ),
+            Guard.descriptor_available(
+                shift_up,
+                diagnostic=_DOT2F_BF16_FALLBACK_DESCRIPTOR_DIAGNOSTIC,
+            ),
+            Guard.descriptor_available(
+                high_bits,
+                diagnostic=_DOT2F_BF16_FALLBACK_DESCRIPTOR_DIAGNOSTIC,
+            ),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=shift_up,
+                operands={"value": ValueRef.operand("lhs")},
+                results={"dst": ValueRef.temporary("lhs_low")},
+                result_types={"dst": ValueRef.result("result")},
+                immediates={"imm32": 16},
+                form=DescriptorEmitForm.PER_LANE,
+            ),
+            EmitDescriptorOp(
+                descriptor=shift_up,
+                operands={"value": ValueRef.operand("rhs")},
+                results={"dst": ValueRef.temporary("rhs_low")},
+                result_types={"dst": ValueRef.result("result")},
+                immediates={"imm32": 16},
+                form=DescriptorEmitForm.PER_LANE,
+            ),
+            EmitDescriptorOp(
+                descriptor=high_bits,
+                operands={"rhs": ValueRef.operand("lhs")},
+                results={"dst": ValueRef.temporary("lhs_high")},
+                result_types={"dst": ValueRef.result("result")},
+                immediates={"imm32": _BF16_HIGH_MASK},
+                form=DescriptorEmitForm.PER_LANE,
+            ),
+            EmitDescriptorOp(
+                descriptor=high_bits,
+                operands={"rhs": ValueRef.operand("rhs")},
+                results={"dst": ValueRef.temporary("rhs_high")},
+                result_types={"dst": ValueRef.result("result")},
+                immediates={"imm32": _BF16_HIGH_MASK},
+                form=DescriptorEmitForm.PER_LANE,
+            ),
+            EmitDescriptorOp(
+                descriptor=fma,
+                operands={
+                    "a": ValueRef.temporary("lhs_low"),
+                    "b": ValueRef.temporary("rhs_low"),
+                    "c": ValueRef.operand("acc"),
+                },
+                results={"dst": ValueRef.temporary("partial")},
+                result_types={"dst": ValueRef.result("result")},
+                form=DescriptorEmitForm.PER_LANE,
+            ),
+            EmitDescriptorOp(
+                descriptor=fma,
+                operands={
+                    "a": ValueRef.temporary("lhs_high"),
+                    "b": ValueRef.temporary("rhs_high"),
+                    "c": ValueRef.temporary("partial"),
+                },
+                results={"dst": ValueRef.result("result")},
+                form=DescriptorEmitForm.PER_LANE,
+            ),
+        ),
+    )
+
+
 def _dot4i_rule(
     kind: str,
     descriptor_key: str,
@@ -542,6 +650,7 @@ AMDGPU_DOT_CONTRACT_FRAGMENT = ContractFragment(
             descriptor_key="amdgpu.v_dot2_f32_bf16",
             descriptor_diagnostic=_DOT2F_BF16_DESCRIPTOR_DIAGNOSTIC,
         ),
+        _dot2f_bf16_fallback_rule(),
         _dot4i_rule("s8s8", "amdgpu.v_dot4_i32_i8"),
         _dot4i_rule("u8u8", "amdgpu.v_dot4_u32_u8"),
         _dot4i_rule(
