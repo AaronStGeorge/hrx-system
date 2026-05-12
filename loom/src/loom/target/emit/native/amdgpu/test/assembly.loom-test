@@ -575,6 +575,19 @@ low.func.def target(@gfx11_target) @gfx11_global_saddr(%addr: reg<amdgpu.vgpr>, 
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_ds_read_dead_result_early_clobber waits=none fixed=%addr:physical_register:0:1
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_ds_read_dead_result_early_clobber(%addr: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %loaded = ds_read_b32 %addr
+  return
+}
+
+// ----
+  ds_read_b32 v1, v0 offset:0
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_ds_load_u16_d16_pair waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_ds_load_u16_d16_pair(%addr: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
@@ -1015,6 +1028,26 @@ low.func.def target(@gfx11_target) @gfx11_concat_packet_cycle_after_initial_noop
   v_mov_b32 v2, v3
   v_mov_b32 v3, v5
   buffer_store_b128 v[0:3], v4, s[0:3], s4 offen offset:0
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx11_convergent_exec_state_fence strategy=resource-stall
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_convergent_exec_state_fence(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %addr: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
+  %early = v_add_f32 %lhs, %rhs
+  %also_early = v_add_f32 %early, %rhs
+  %permuted = ds_bpermute_b32 %addr, %early
+  %sum = v_add_f32 %permuted, %also_early
+  return
+}
+
+// ----
+  v_add_f32 v0, v0, v1
+  v_add_f32 v1, v0, v1
+  ds_bpermute_b32 v0, v2, v0 offset:0
+  s_waitcnt vmcnt(63) lgkmcnt(0)
+  v_add_f32 v0, v0, v1
   s_endpgm
 
 // ====

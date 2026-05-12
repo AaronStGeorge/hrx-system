@@ -83,6 +83,9 @@ typedef enum loom_amdgpu_wait_plan_reason_e {
   LOOM_AMDGPU_WAIT_PLAN_REASON_BARRIER = 3,
   // A packet reuses physical VGPRs still consumed by an outstanding store.
   LOOM_AMDGPU_WAIT_PLAN_REASON_STORE_SOURCE_REUSE = 4,
+  // A packet overwrites physical registers that still receive an outstanding
+  // memory-read result.
+  LOOM_AMDGPU_WAIT_PLAN_REASON_READ_RESULT_REUSE = 5,
 } loom_amdgpu_wait_plan_reason_t;
 
 // One AMDGPU wait-counter action in scheduled packet order.
@@ -137,8 +140,9 @@ iree_string_view_t loom_amdgpu_wait_plan_reason_name(
 
 // Builds an AMDGPU wait-counter plan from a scheduled low function. When
 // |allocation| is provided, the plan also covers post-allocation physical
-// register reuse hazards such as VMEM stores whose VGPR sources have not yet
-// been consumed by the memory pipe. The caller must keep |schedule|,
+// register reuse hazards such as outstanding memory reads whose destination
+// registers have not yet been written and VMEM stores whose VGPR sources have
+// not yet been consumed by the memory pipe. The caller must keep |schedule|,
 // |allocation|, and |arena| immutable/alive for as long as |out_plan| is used.
 iree_status_t loom_amdgpu_wait_plan_build(
     const loom_low_schedule_table_t* schedule,

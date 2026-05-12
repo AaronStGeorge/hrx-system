@@ -441,6 +441,24 @@ static iree_status_t loom_low_schedule_note_state_write(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_schedule_note_state_fence(
+    loom_low_schedule_build_state_t* state, uint32_t node_index,
+    uint16_t reg_class_id) {
+  if (!loom_low_schedule_reg_class_is_state(state, reg_class_id)) {
+    return iree_ok_status();
+  }
+  const uint32_t last_write = state->state_last_write_nodes[reg_class_id];
+  if (last_write != LOOM_LOW_SCHEDULE_NODE_NONE) {
+    IREE_RETURN_IF_ERROR(loom_low_schedule_add_dependency(
+        state, last_write, node_index, LOOM_LOW_SCHEDULE_DEPENDENCY_STATE,
+        UINT32_MAX));
+  }
+  IREE_RETURN_IF_ERROR(loom_low_schedule_add_state_read_dependencies(
+      state, node_index, reg_class_id));
+  state->state_last_write_nodes[reg_class_id] = node_index;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_schedule_note_explicit_state_value_read(
     loom_low_schedule_build_state_t* state, uint32_t node_index,
     loom_value_ordinal_t value_ordinal, uint16_t reg_class_id) {
@@ -470,6 +488,39 @@ static iree_status_t loom_low_schedule_note_state_value_read(
       state, node_index, value_ordinal, reg_class_id);
 }
 
+static bool loom_low_schedule_effect_is_ordered(
+    const loom_low_effect_t* effect) {
+  if (iree_any_bit_set(effect->flags, LOOM_LOW_EFFECT_FLAG_ORDERED)) {
+    return true;
+  }
+  switch (effect->kind) {
+    case LOOM_LOW_EFFECT_KIND_READ:
+    case LOOM_LOW_EFFECT_KIND_WRITE:
+      return false;
+    case LOOM_LOW_EFFECT_KIND_UNKNOWN:
+    case LOOM_LOW_EFFECT_KIND_CALL:
+    case LOOM_LOW_EFFECT_KIND_BARRIER:
+    case LOOM_LOW_EFFECT_KIND_COUNTER:
+    case LOOM_LOW_EFFECT_KIND_CONVERGENT:
+    case LOOM_LOW_EFFECT_KIND_CONTROL:
+    default:
+      return true;
+  }
+}
+
+static bool loom_low_schedule_descriptor_has_ordered_effect(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor) {
+  for (uint16_t i = 0; i < descriptor->effect_count; ++i) {
+    const loom_low_effect_t* effect =
+        &descriptor_set->effects[descriptor->effect_start + i];
+    if (loom_low_schedule_effect_is_ordered(effect)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool loom_low_schedule_descriptor_state_read_has_explicit_value(
     const loom_low_schedule_node_t* node,
     const loom_low_descriptor_t* descriptor,
@@ -489,6 +540,9 @@ static iree_status_t loom_low_schedule_note_descriptor_state_accesses(
   }
   const loom_low_descriptor_set_t* descriptor_set =
       state->target.descriptor_set;
+  const bool has_ordered_effect =
+      loom_low_schedule_descriptor_has_ordered_effect(descriptor_set,
+                                                      descriptor);
   for (uint16_t i = 0; i < descriptor->operand_count; ++i) {
     const uint32_t operand_row = descriptor->operand_start + i;
     const loom_low_operand_t* operand = &descriptor_set->operands[operand_row];
@@ -506,6 +560,10 @@ static iree_status_t loom_low_schedule_note_descriptor_state_accesses(
               &state->nodes[node_index], descriptor, i)) {
         IREE_RETURN_IF_ERROR(
             loom_low_schedule_note_state_read(state, node_index, reg_class_id));
+      }
+      if (has_ordered_effect) {
+        IREE_RETURN_IF_ERROR(loom_low_schedule_note_state_fence(
+            state, node_index, reg_class_id));
       }
     }
     if (iree_any_bit_set(state_flags, LOOM_LOW_OPERAND_FLAG_STATE_WRITE)) {
@@ -748,26 +806,6 @@ static iree_status_t loom_low_schedule_effect_frontier_note_ordered(
   }
   loom_low_schedule_effect_frontier_reset(frontier, node_index);
   return iree_ok_status();
-}
-
-static bool loom_low_schedule_effect_is_ordered(
-    const loom_low_effect_t* effect) {
-  if (iree_any_bit_set(effect->flags, LOOM_LOW_EFFECT_FLAG_ORDERED)) {
-    return true;
-  }
-  switch (effect->kind) {
-    case LOOM_LOW_EFFECT_KIND_READ:
-    case LOOM_LOW_EFFECT_KIND_WRITE:
-      return false;
-    case LOOM_LOW_EFFECT_KIND_UNKNOWN:
-    case LOOM_LOW_EFFECT_KIND_CALL:
-    case LOOM_LOW_EFFECT_KIND_BARRIER:
-    case LOOM_LOW_EFFECT_KIND_COUNTER:
-    case LOOM_LOW_EFFECT_KIND_CONVERGENT:
-    case LOOM_LOW_EFFECT_KIND_CONTROL:
-    default:
-      return true;
-  }
 }
 
 static uint16_t loom_low_schedule_descriptor_dependency_memory_effect_count(

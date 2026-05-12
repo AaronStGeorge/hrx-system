@@ -296,15 +296,20 @@ static uint32_t loom_low_allocation_assignment_unit_end_point(
   return unit_end_points[(iree_host_size_t)unit_index];
 }
 
-static bool loom_low_allocation_assignment_units_live_overlap(
+static uint32_t loom_low_allocation_assignment_max_unit_end_point(
     const uint32_t* unit_end_points, iree_host_size_t unit_end_point_count,
-    const loom_low_allocation_assignment_t* lhs, uint32_t lhs_unit_offset,
-    const loom_low_allocation_assignment_t* rhs, uint32_t rhs_unit_offset) {
-  const uint32_t lhs_end_point = loom_low_allocation_assignment_unit_end_point(
-      unit_end_points, unit_end_point_count, lhs, lhs_unit_offset);
-  const uint32_t rhs_end_point = loom_low_allocation_assignment_unit_end_point(
-      unit_end_points, unit_end_point_count, rhs, rhs_unit_offset);
-  return lhs->start_point < rhs_end_point && rhs->start_point < lhs_end_point;
+    const loom_low_allocation_assignment_t* assignment) {
+  uint32_t end_point = assignment->end_point;
+  for (uint32_t unit_offset = 0; unit_offset < assignment->unit_count;
+       ++unit_offset) {
+    const uint32_t unit_end_point =
+        loom_low_allocation_assignment_unit_end_point(
+            unit_end_points, unit_end_point_count, assignment, unit_offset);
+    if (end_point < unit_end_point) {
+      end_point = unit_end_point;
+    }
+  }
+  return end_point;
 }
 
 static bool loom_low_allocation_value_list_contains(
@@ -502,9 +507,10 @@ static bool loom_low_allocation_copy_kind_is_known(
   }
 }
 
-static bool loom_low_allocation_assignments_have_live_location_overlap(
+static bool loom_low_allocation_assignments_have_conflicting_live_location(
     const loom_low_descriptor_set_t* descriptor_set,
-    const uint32_t* unit_end_points, iree_host_size_t unit_end_point_count,
+    const loom_liveness_analysis_t* liveness, const uint32_t* unit_end_points,
+    iree_host_size_t unit_end_point_count,
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs) {
   if ((lhs->location_kind != LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER &&
@@ -529,9 +535,19 @@ static bool loom_low_allocation_assignments_have_live_location_overlap(
   for (uint64_t location = overlap_begin; location < overlap_end; ++location) {
     const uint32_t lhs_unit_offset = (uint32_t)(location - lhs->location_base);
     const uint32_t rhs_unit_offset = (uint32_t)(location - rhs->location_base);
-    if (loom_low_allocation_assignment_units_live_overlap(
-            unit_end_points, unit_end_point_count, lhs, lhs_unit_offset, rhs,
-            rhs_unit_offset)) {
+    const uint32_t lhs_unit_end_point =
+        loom_low_allocation_assignment_unit_end_point(
+            unit_end_points, unit_end_point_count, lhs, lhs_unit_offset);
+    const uint32_t rhs_unit_end_point =
+        loom_low_allocation_assignment_unit_end_point(
+            unit_end_points, unit_end_point_count, rhs, rhs_unit_offset);
+    if (lhs->start_point >= rhs_unit_end_point ||
+        rhs->start_point >= lhs_unit_end_point) {
+      continue;
+    }
+    if (loom_low_allocation_value_ranges_overlap_in_block(
+            liveness, lhs->value_id, lhs->start_point, lhs_unit_end_point,
+            rhs->value_id, rhs->start_point, rhs_unit_end_point)) {
       return true;
     }
   }
@@ -1081,13 +1097,10 @@ static bool loom_low_allocation_fixed_value_conflicts(
             loom_low_allocation_unit_end_point_start_for_value(
                 state, fixed_value->value_id),
     };
-    if (loom_low_allocation_assignments_have_live_location_overlap(
-            state->target.descriptor_set, state->unit_end_points,
-            state->unit_end_point_count, &fixed_assignment, &candidate) &&
-        loom_low_allocation_value_ranges_overlap_in_block(
-            &state->liveness, candidate.value_id, candidate.start_point,
-            candidate.end_point, fixed_assignment.value_id,
-            fixed_assignment.start_point, fixed_assignment.end_point)) {
+    if (loom_low_allocation_assignments_have_conflicting_live_location(
+            state->target.descriptor_set, &state->liveness,
+            state->unit_end_points, state->unit_end_point_count,
+            &fixed_assignment, &candidate)) {
       return true;
     }
   }
@@ -1189,20 +1202,9 @@ static bool loom_low_allocation_active_assignment_conflicts(
   if (existing->location_kind != candidate->location_kind) {
     return false;
   }
-  if (!loom_low_allocation_reg_classes_share_storage(
-          state->target.descriptor_set, existing->descriptor_reg_class_id,
-          candidate->descriptor_reg_class_id)) {
-    return false;
-  }
-  if (!loom_low_allocation_assignments_have_live_location_overlap(
-          state->target.descriptor_set, state->unit_end_points,
-          state->unit_end_point_count, existing, candidate)) {
-    return false;
-  }
-  return loom_low_allocation_value_ranges_overlap_in_block(
-      &state->liveness, candidate->value_id, candidate->start_point,
-      candidate->end_point, existing->value_id, existing->start_point,
-      existing->end_point);
+  return loom_low_allocation_assignments_have_conflicting_live_location(
+      state->target.descriptor_set, &state->liveness, state->unit_end_points,
+      state->unit_end_point_count, existing, candidate);
 }
 
 static bool loom_low_allocation_active_scan_conflicts(
@@ -2001,6 +2003,10 @@ static iree_status_t loom_low_allocation_append_assignment(
   stored_assignment.unit_end_point_start =
       loom_low_allocation_unit_end_point_start_for_value_ordinal(state,
                                                                  value_ordinal);
+  stored_assignment.end_point =
+      loom_low_allocation_assignment_max_unit_end_point(
+          state->unit_end_points, state->unit_end_point_count,
+          &stored_assignment);
   state->assignments[state->assignment_count++] = stored_assignment;
   state->assignment_indices_by_value_ordinal[value_ordinal] = assignment_index;
   loom_low_allocation_record_assignment_location_end(state, &stored_assignment);
@@ -3305,6 +3311,98 @@ static iree_status_t loom_low_allocation_note_generic_op_unit_uses(
   return iree_ok_status();
 }
 
+static bool loom_low_allocation_descriptor_operand_is_explicit_packet_value(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor,
+    uint16_t descriptor_operand_index) {
+  IREE_ASSERT_LT(descriptor_operand_index, descriptor->operand_count);
+  const loom_low_operand_t* descriptor_operand =
+      &descriptor_set
+           ->operands[descriptor->operand_start + descriptor_operand_index];
+  return loom_low_operand_role_is_packet_operand(descriptor_operand->role) &&
+         !iree_any_bit_set(descriptor_operand->flags,
+                           LOOM_LOW_OPERAND_FLAG_IMPLICIT);
+}
+
+static uint16_t loom_low_allocation_descriptor_packet_operand_index(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor,
+    uint16_t descriptor_operand_index) {
+  uint16_t packet_operand_index = 0;
+  for (uint16_t i = descriptor->result_count; i < descriptor_operand_index;
+       ++i) {
+    if (loom_low_allocation_descriptor_operand_is_explicit_packet_value(
+            descriptor_set, descriptor, i)) {
+      ++packet_operand_index;
+    }
+  }
+  return packet_operand_index;
+}
+
+static iree_status_t loom_low_allocation_note_early_clobber_operand_uses(
+    loom_low_allocation_build_state_t* state, const loom_op_t* op,
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor,
+    uint16_t early_clobber_result_index, uint32_t clobber_point) {
+  const loom_value_id_t* operands = loom_op_const_operands(op);
+  for (uint16_t i = descriptor->result_count; i < descriptor->operand_count;
+       ++i) {
+    if (!loom_low_allocation_descriptor_operand_is_explicit_packet_value(
+            descriptor_set, descriptor, i) ||
+        loom_low_descriptor_operands_are_tied(descriptor_set, descriptor,
+                                              early_clobber_result_index, i)) {
+      continue;
+    }
+    const uint16_t operand_index =
+        loom_low_allocation_descriptor_packet_operand_index(descriptor_set,
+                                                            descriptor, i);
+    if (operand_index >= op->operand_count) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "low allocation early-clobber operand index exceeds packet operand "
+          "count");
+    }
+    IREE_RETURN_IF_ERROR(loom_low_allocation_note_value_use_at_point(
+        state, operands[operand_index], clobber_point));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_allocation_note_descriptor_unit_uses(
+    loom_low_allocation_build_state_t* state, const loom_op_t* op,
+    uint32_t point) {
+  if (!loom_low_op_isa(op) && !loom_low_const_isa(op)) {
+    return iree_ok_status();
+  }
+  if (point >= UINT32_MAX - 1u) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "low allocation descriptor operation point exceeds u32 range");
+  }
+  const uint32_t clobber_point = point + 1u;
+  loom_low_resolved_descriptor_packet_t packet = {0};
+  IREE_RETURN_IF_ERROR(loom_low_resolve_descriptor_packet(
+      state->module, &state->target, op, &packet));
+  if (packet.descriptor == NULL) {
+    return iree_ok_status();
+  }
+
+  const loom_low_descriptor_set_t* descriptor_set =
+      state->target.descriptor_set;
+  const loom_low_descriptor_t* descriptor = packet.descriptor;
+  for (uint16_t i = 0; i < descriptor->constraint_count; ++i) {
+    const loom_low_constraint_t* constraint =
+        &descriptor_set->constraints[descriptor->constraint_start + i];
+    if (constraint->kind != LOOM_LOW_CONSTRAINT_KIND_EARLY_CLOBBER) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_low_allocation_note_early_clobber_operand_uses(
+        state, op, descriptor_set, descriptor, constraint->lhs_operand_index,
+        clobber_point));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_allocation_note_slice_unit_uses(
     loom_low_allocation_build_state_t* state, const loom_op_t* op,
     uint32_t point) {
@@ -3338,7 +3436,9 @@ static iree_status_t loom_low_allocation_note_op_unit_uses(
   if (loom_low_slice_isa(op)) {
     return loom_low_allocation_note_slice_unit_uses(state, op, point);
   }
-  return loom_low_allocation_note_generic_op_unit_uses(state, op, point);
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_note_generic_op_unit_uses(state, op, point));
+  return loom_low_allocation_note_descriptor_unit_uses(state, op, point);
 }
 
 static iree_status_t loom_low_allocation_note_value_unit_uses_at_point(
@@ -4703,11 +4803,13 @@ static iree_status_t loom_low_allocation_assign_intervals(
 
 static bool loom_low_allocation_assignment_pair_conflicts(
     const loom_low_descriptor_set_t* descriptor_set,
-    const uint32_t* unit_end_points, iree_host_size_t unit_end_point_count,
+    const loom_liveness_analysis_t* liveness, const uint32_t* unit_end_points,
+    iree_host_size_t unit_end_point_count,
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs) {
-  return loom_low_allocation_assignments_have_live_location_overlap(
-      descriptor_set, unit_end_points, unit_end_point_count, lhs, rhs);
+  return loom_low_allocation_assignments_have_conflicting_live_location(
+      descriptor_set, liveness, unit_end_points, unit_end_point_count, lhs,
+      rhs);
 }
 
 static iree_status_t loom_low_allocation_map_assignment_index(
@@ -5452,13 +5554,8 @@ static iree_status_t loom_low_allocation_verify_table_contents(
     for (iree_host_size_t j = i + 1; j < table->assignment_count; ++j) {
       const loom_low_allocation_assignment_t* rhs = &table->assignments[j];
       if (!loom_low_allocation_assignment_pair_conflicts(
-              table->target.descriptor_set, table->unit_end_points,
-              table->unit_end_point_count, lhs, rhs)) {
-        continue;
-      }
-      if (!loom_low_allocation_value_ranges_overlap_in_block(
-              &table->liveness, lhs->value_id, lhs->start_point, lhs->end_point,
-              rhs->value_id, rhs->start_point, rhs->end_point)) {
+              table->target.descriptor_set, &table->liveness,
+              table->unit_end_points, table->unit_end_point_count, lhs, rhs)) {
         continue;
       }
       bool pair_are_placement_aliases = false;

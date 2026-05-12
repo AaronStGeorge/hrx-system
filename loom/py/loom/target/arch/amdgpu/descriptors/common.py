@@ -1501,6 +1501,9 @@ _ALU_WAIT_EFFECT = Effect(
 )
 
 
+_EARLY_CLOBBER_RESULT_CONSTRAINTS = (Constraint(ConstraintKind.EARLY_CLOBBER, 0),)
+
+
 def _destructive_accumulator_constraints(
     accumulator_operand_index: int,
 ) -> tuple[Constraint, ...]:
@@ -2256,6 +2259,7 @@ __all__ = (
     "_ds_crosslane_effects",
     "_ds_fixed_fields_without_offset1",
     "_ds_offset_immediate",
+    "_EARLY_CLOBBER_RESULT_CONSTRAINTS",
     "_destructive_accumulator_constraints",
     "_exec_clobber",
     "_exec_state_read",
