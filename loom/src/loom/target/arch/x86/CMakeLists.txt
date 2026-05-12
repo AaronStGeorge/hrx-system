@@ -83,6 +83,28 @@ loom_low_descriptor_cc_library(
 
 loom_low_descriptor_cc_library(
   NAME
+    simd128_descriptors
+  DEPS
+    ::avx512_packed_dot_descriptors
+    loom::src::loom::codegen::low::descriptors
+  IDS_DEPS
+    loom::src::loom::codegen::low::descriptors
+  HEADER_ONLY
+)
+
+loom_low_descriptor_cc_library(
+  NAME
+    avx2_descriptors
+  DEPS
+    ::avx512_packed_dot_descriptors
+    loom::src::loom::codegen::low::descriptors
+  IDS_DEPS
+    loom::src::loom::codegen::low::descriptors
+  HEADER_ONLY
+)
+
+loom_low_descriptor_cc_library(
+  NAME
     avx512_descriptors
   DEPS
     ::avx512_packed_dot_descriptors
@@ -110,10 +132,14 @@ loom_low_descriptor_cc_library(
     iree::runtime::py::loom::gen::x86_low_descriptor_shard
   GENERATED_HDR_FLAGS
     "--view-header=scalar"
+    "--view-header=simd128"
+    "--view-header=avx2"
     "--view-header=avx512"
     "--view-header=packed_dot"
   GENERATED_HDRS
     "scalar_descriptors.h"
+    "simd128_descriptors.h"
+    "avx2_descriptors.h"
     "avx512_descriptors.h"
     "packed_dot_descriptors.h"
   ARGS
@@ -130,10 +156,12 @@ loom_cc_library(
   SRCS
     "low_registry.c"
   DEPS
+    ::avx2_descriptors
     ::avx512_descriptors
     ::avx512_packed_dot_descriptors
     ::packed_dot_descriptors
     ::scalar_descriptors
+    ::simd128_descriptors
     ::target_records
     iree::base
     loom::src::loom::codegen::low::descriptors
@@ -187,11 +215,13 @@ loom_cc_test(
   SRCS
     "register_classes_test.cc"
   DEPS
+    ::avx2_descriptors
     ::avx512_descriptors
     ::avx512_packed_dot_descriptors
     ::packed_dot_descriptors
     ::register_classes
     ::scalar_descriptors
+    ::simd128_descriptors
     loom::src::loom::codegen::low::descriptors
     iree::testing::gtest
     iree::testing::gtest_main

@@ -117,19 +117,24 @@ X86_DESCRIPTOR_SET_INFOS: tuple[X86DescriptorSetInfo, ...] = (
         key="x86.simd128.core",
         isa_tier=X86_ISA_TIER_SIMD128,
         register_classes=_with_base_registers(X86_REG_CLASS_XMM),
+        storage_generator_target="avx512_packed_dot",
     ),
     X86DescriptorSetInfo(
         generator_target="avx2",
         key="x86.avx2.core",
         isa_tier=X86_ISA_TIER_AVX2,
         register_classes=_with_base_registers(X86_REG_CLASS_XMM, X86_REG_CLASS_YMM),
+        storage_generator_target="avx512_packed_dot",
     ),
     X86DescriptorSetInfo(
         generator_target="avx512",
         key="x86.avx512.core",
         isa_tier=X86_ISA_TIER_AVX512,
         register_classes=_with_base_registers(
-            X86_REG_CLASS_XMM, X86_REG_CLASS_ZMM, X86_REG_CLASS_K
+            X86_REG_CLASS_XMM,
+            X86_REG_CLASS_YMM,
+            X86_REG_CLASS_ZMM,
+            X86_REG_CLASS_K,
         ),
         storage_generator_target="avx512_packed_dot",
     ),
@@ -214,6 +219,7 @@ X86_TARGET_PROFILE_INFOS: tuple[X86TargetProfileInfo, ...] = (
         descriptor_set_key="x86.simd128.core",
         register_classes=_with_base_registers(X86_REG_CLASS_XMM),
         debug_llvm_target_features=X86_DEBUG_LLVM_FEATURES_SIMD128,
+        native_bundle_key="x86-simd128",
     ),
     X86TargetProfileInfo(
         profile_key="x86.avx2",
@@ -221,13 +227,17 @@ X86_TARGET_PROFILE_INFOS: tuple[X86TargetProfileInfo, ...] = (
         descriptor_set_key="x86.avx2.core",
         register_classes=_with_base_registers(X86_REG_CLASS_XMM, X86_REG_CLASS_YMM),
         debug_llvm_target_features=X86_DEBUG_LLVM_FEATURES_AVX2,
+        native_bundle_key="x86-avx2",
     ),
     X86TargetProfileInfo(
         profile_key="x86.avx512",
         descriptor_generator_target="avx512",
         descriptor_set_key="x86.avx512.core",
         register_classes=_with_base_registers(
-            X86_REG_CLASS_XMM, X86_REG_CLASS_ZMM, X86_REG_CLASS_K
+            X86_REG_CLASS_XMM,
+            X86_REG_CLASS_YMM,
+            X86_REG_CLASS_ZMM,
+            X86_REG_CLASS_K,
         ),
         debug_llvm_target_features=X86_DEBUG_LLVM_FEATURES_AVX512,
         debug_llvm_profile_key="x86_64-avx512-object",

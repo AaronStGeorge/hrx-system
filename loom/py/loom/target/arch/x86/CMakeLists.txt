@@ -38,11 +38,13 @@ iree_py_library(
   SRCS
     "__init__.py"
     "descriptors/__init__.py"
+    "descriptors/avx2.py"
     "descriptors/avx512.py"
     "descriptors/common.py"
     "descriptors/composite.py"
     "descriptors/packed_dot.py"
     "descriptors/scalar.py"
+    "descriptors/simd128.py"
     "packed_dot_data.py"
   DEPS
     iree::runtime::py::loom::target::arch::x86::target_info

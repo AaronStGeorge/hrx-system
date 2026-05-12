@@ -43,6 +43,10 @@ def _assert_descriptor_ref(header: str, macro_name: str) -> None:
     assert re.search(rf"#define {re.escape(macro_name)} \d+u", header), macro_name
 
 
+def _assert_reg_class_id(header: str, macro_name: str) -> None:
+    assert re.search(rf"#define {re.escape(macro_name)} \d+u", header), macro_name
+
+
 def test_storage_generation_emits_current_public_views() -> None:
     with TemporaryDirectory() as temporary_directory:
         tmp_path = Path(temporary_directory)
@@ -53,8 +57,10 @@ def test_storage_generation_emits_current_public_views() -> None:
                     f"--header={tmp_path / 'avx512_packed_dot_descriptors.h'}",
                     f"--source={tmp_path / 'avx512_packed_dot_descriptors.c'}",
                     f"--view-header=avx512={tmp_path / 'avx512_descriptors.h'}",
+                    f"--view-header=avx2={tmp_path / 'avx2_descriptors.h'}",
                     f"--view-header=packed_dot={tmp_path / 'packed_dot_descriptors.h'}",
                     f"--view-header=scalar={tmp_path / 'scalar_descriptors.h'}",
+                    f"--view-header=simd128={tmp_path / 'simd128_descriptors.h'}",
                 ]
             )
             == 0
@@ -63,13 +69,17 @@ def test_storage_generation_emits_current_public_views() -> None:
         source = (tmp_path / "avx512_packed_dot_descriptors.c").read_text(encoding="utf-8")
         composite_header = (tmp_path / "avx512_packed_dot_descriptors.h").read_text(encoding="utf-8")
         avx512_header = (tmp_path / "avx512_descriptors.h").read_text(encoding="utf-8")
+        avx2_header = (tmp_path / "avx2_descriptors.h").read_text(encoding="utf-8")
         packed_dot_header = (tmp_path / "packed_dot_descriptors.h").read_text(encoding="utf-8")
         scalar_header = (tmp_path / "scalar_descriptors.h").read_text(encoding="utf-8")
+        simd128_header = (tmp_path / "simd128_descriptors.h").read_text(encoding="utf-8")
 
     assert "loom_x86_avx512_core_descriptor_set" in source
+    assert "loom_x86_avx2_core_descriptor_set" in source
     assert "loom_x86_packed_dot_core_descriptor_set" in source
     assert "loom_x86_avx512_packed_dot_core_descriptor_set" in source
     assert "loom_x86_scalar_core_descriptor_set" in source
+    assert "loom_x86_simd128_core_descriptor_set" in source
     assert "static const loom_low_operand_t kX86Avx512PackedDotCoreStorageOperands[]" in source
     assert "static const loom_low_operand_t kX86Avx512CoreOperands[]" not in source
     assert "static const loom_low_operand_t kX86PackedDotCoreOperands[]" not in source
@@ -82,9 +92,12 @@ def test_storage_generation_emits_current_public_views() -> None:
     assert ".descriptor_refs = kX86PackedDotCoreDescriptorRefs," in source
     assert ".descriptor_refs = kX86ScalarCoreDescriptorRefs," in source
     assert "loom_x86_avx512_core_descriptor_set" in avx512_header
+    assert "loom_x86_avx2_core_descriptor_set" in avx2_header
     assert "loom_x86_packed_dot_core_descriptor_set" in packed_dot_header
     assert "loom_x86_scalar_core_descriptor_set" in scalar_header
-    _assert_descriptor_ref(avx512_header, "X86_AVX512_CORE_DESCRIPTOR_REF_SCALAR_LEA_ADD_GPR64")
+    assert "loom_x86_simd128_core_descriptor_set" in simd128_header
+    _assert_descriptor_ref(avx512_header, "X86_AVX512_CORE_DESCRIPTOR_REF_AVX2_VADDPS_XMM")
+    _assert_descriptor_ref(avx2_header, "X86_AVX2_CORE_DESCRIPTOR_REF_AVX2_VADDPS_XMM")
     _assert_descriptor_ref(scalar_header, "X86_SCALAR_CORE_DESCRIPTOR_REF_SCALAR_LEA_ADD_GPR64")
     _assert_descriptor_ref(
         packed_dot_header,
@@ -94,11 +107,13 @@ def test_storage_generation_emits_current_public_views() -> None:
         composite_header,
         "X86_AVX512_PACKED_DOT_CORE_DESCRIPTOR_REF_AVX512_BF16_VDPBF16PS_ZMM",
     )
-    assert "#define X86_SCALAR_CORE_REG_CLASS_ID_GPR32 0u" in scalar_header
-    assert "#define X86_SCALAR_CORE_REG_CLASS_ID_GPR64 1u" in scalar_header
-    assert "#define X86_PACKED_DOT_CORE_REG_CLASS_ID_XMM 2" in packed_dot_header
-    assert "#define X86_PACKED_DOT_CORE_REG_CLASS_ID_YMM 5" in packed_dot_header
-    assert "#define X86_PACKED_DOT_CORE_REG_CLASS_ID_ZMM 3" in packed_dot_header
+    _assert_reg_class_id(scalar_header, "X86_SCALAR_CORE_REG_CLASS_ID_GPR32")
+    _assert_reg_class_id(scalar_header, "X86_SCALAR_CORE_REG_CLASS_ID_GPR64")
+    _assert_reg_class_id(simd128_header, "X86_SIMD128_CORE_REG_CLASS_ID_XMM")
+    _assert_reg_class_id(avx2_header, "X86_AVX2_CORE_REG_CLASS_ID_YMM")
+    _assert_reg_class_id(packed_dot_header, "X86_PACKED_DOT_CORE_REG_CLASS_ID_XMM")
+    _assert_reg_class_id(packed_dot_header, "X86_PACKED_DOT_CORE_REG_CLASS_ID_YMM")
+    _assert_reg_class_id(packed_dot_header, "X86_PACKED_DOT_CORE_REG_CLASS_ID_ZMM")
 
 
 def test_view_target_generation_rejects_direct_source_output() -> None:

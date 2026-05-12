@@ -448,7 +448,8 @@ def _memory_descriptor_key(
     register_suffix: str,
 ) -> str:
     indexed = ".indexed" if dynamic else ""
-    return f"x86.avx512.vmovdqu32.{operation}{indexed}.{register_suffix}"
+    descriptor_tier = "avx2" if register_suffix == "xmm" else "avx512"
+    return f"x86.{descriptor_tier}.vmovdqu32.{operation}{indexed}.{register_suffix}"
 
 
 def _memory_rules() -> tuple[DescriptorRule, ...]:
@@ -492,9 +493,9 @@ def _f32x4_reduce_emit_chain(
     *,
     temporary_prefix: str = "",
 ) -> tuple[EmitDescriptorOp, ...]:
-    shuffle = _descriptor("x86.avx512.vpermilps.xmm")
-    addps = _descriptor("x86.avx512.vaddps.xmm")
-    addss = _descriptor("x86.avx512.vaddss.xmm")
+    shuffle = _descriptor("x86.avx2.vpermilps.xmm")
+    addps = _descriptor("x86.avx2.vaddps.xmm")
+    addss = _descriptor("x86.avx2.vaddss.xmm")
 
     def temp(name: str) -> ValueRef:
         return ValueRef.temporary(f"{temporary_prefix}{name}")
@@ -539,9 +540,9 @@ def _f32x4_reduce_emit_chain(
 
 
 def _reduce_f32x4_rule() -> DescriptorRule:
-    addss = _descriptor("x86.avx512.vaddss.xmm")
-    vpermilps = _descriptor("x86.avx512.vpermilps.xmm")
-    vaddps = _descriptor("x86.avx512.vaddps.xmm")
+    addss = _descriptor("x86.avx2.vaddss.xmm")
+    vpermilps = _descriptor("x86.avx2.vpermilps.xmm")
+    vaddps = _descriptor("x86.avx2.vaddps.xmm")
     return DescriptorRule(
         source_op=vector.vector_reduce,
         descriptor=addss,
@@ -560,9 +561,9 @@ def _reduce_f32x4_rule() -> DescriptorRule:
 
 def _reduce_f32x16_rule() -> DescriptorRule:
     extract = _descriptor("x86.avx512.vextractf32x4.xmm.zmm")
-    addps = _descriptor("x86.avx512.vaddps.xmm")
-    addss = _descriptor("x86.avx512.vaddss.xmm")
-    vpermilps = _descriptor("x86.avx512.vpermilps.xmm")
+    addps = _descriptor("x86.avx2.vaddps.xmm")
+    addss = _descriptor("x86.avx2.vaddss.xmm")
+    vpermilps = _descriptor("x86.avx2.vpermilps.xmm")
 
     extract_emits = tuple(
         _op_emit(
@@ -630,20 +631,20 @@ def _reduce_f32x16_rule() -> DescriptorRule:
 def _cases() -> Sequence[ContractCase]:
     return (
         *x86_scalar_core_cases(_descriptor),
-        _binary_rule(scalar_arithmetic.scalar_addf, _F32, "x86.avx512.vaddss.xmm"),
-        _binary_rule(scalar_arithmetic.scalar_subf, _F32, "x86.avx512.vsubss.xmm"),
-        _binary_rule(scalar_arithmetic.scalar_mulf, _F32, "x86.avx512.vmulss.xmm"),
-        _fma_rule(scalar_math.scalar_fmaf, _F32, "x86.avx512.vfmadd231ss.xmm"),
+        _binary_rule(scalar_arithmetic.scalar_addf, _F32, "x86.avx2.vaddss.xmm"),
+        _binary_rule(scalar_arithmetic.scalar_subf, _F32, "x86.avx2.vsubss.xmm"),
+        _binary_rule(scalar_arithmetic.scalar_mulf, _F32, "x86.avx2.vmulss.xmm"),
+        _fma_rule(scalar_math.scalar_fmaf, _F32, "x86.avx2.vfmadd231ss.xmm"),
         _splat_rule(_I32, _V16I32, "x86.avx512.vpbroadcastd.zmm"),
-        _splat_rule(_I32, _V4I32, "x86.avx512.vpbroadcastd.xmm"),
+        _splat_rule(_I32, _V4I32, "x86.avx2.vpbroadcastd.xmm"),
         _splat_rule(_F32, _V16F32, "x86.avx512.vbroadcastss.zmm"),
-        _splat_rule(_F32, _V4F32, "x86.avx512.vbroadcastss.xmm"),
-        _extract_rule(_V4I32, _I32, "x86.avx512.vpextrd.gpr32.xmm"),
-        _extract_rule(_V4F32, _F32, "x86.avx512.vpermilps.xmm"),
-        _insert_rule(_I32, _V4I32, "x86.avx512.vpinsrd.xmm"),
-        _insert_rule(_F32, _V4F32, "x86.avx512.vinsertps.xmm"),
-        _shuffle_rule(_V4I32, "x86.avx512.vpshufd.xmm"),
-        _shuffle_rule(_V4F32, "x86.avx512.vpermilps.xmm"),
+        _splat_rule(_F32, _V4F32, "x86.avx2.vbroadcastss.xmm"),
+        _extract_rule(_V4I32, _I32, "x86.avx2.vpextrd.gpr32.xmm"),
+        _extract_rule(_V4F32, _F32, "x86.avx2.vpermilps.xmm"),
+        _insert_rule(_I32, _V4I32, "x86.avx2.vpinsrd.xmm"),
+        _insert_rule(_F32, _V4F32, "x86.avx2.vinsertps.xmm"),
+        _shuffle_rule(_V4I32, "x86.avx2.vpshufd.xmm"),
+        _shuffle_rule(_V4F32, "x86.avx2.vpermilps.xmm"),
         _select_rule(_V16I1, _V16I32, "x86.avx512.vpblendmd.zmm"),
         _select_rule(_V16I1, _V16F32, "x86.avx512.vblendmps.zmm"),
         _select_rule(_V4I1, _V4I32, "x86.avx512.vpblendmd.xmm"),
@@ -727,18 +728,18 @@ def _cases() -> Sequence[ContractCase]:
             vector.vector_cmpf, "olt", _V4F32, _V4I1, "x86.avx512.vcmpps.olt.xmm"
         ),
         _binary_rule(vector.vector_addf, _V16F32, "x86.avx512.vaddps.zmm"),
-        _binary_rule(vector.vector_addf, _V4F32, "x86.avx512.vaddps.xmm"),
+        _binary_rule(vector.vector_addf, _V4F32, "x86.avx2.vaddps.xmm"),
         _binary_rule(vector.vector_subf, _V16F32, "x86.avx512.vsubps.zmm"),
-        _binary_rule(vector.vector_subf, _V4F32, "x86.avx512.vsubps.xmm"),
+        _binary_rule(vector.vector_subf, _V4F32, "x86.avx2.vsubps.xmm"),
         _binary_rule(vector.vector_mulf, _V16F32, "x86.avx512.vmulps.zmm"),
-        _binary_rule(vector.vector_mulf, _V4F32, "x86.avx512.vmulps.xmm"),
+        _binary_rule(vector.vector_mulf, _V4F32, "x86.avx2.vmulps.xmm"),
         _fma_rule(vector.vector_fmaf, _V16F32, "x86.avx512.vfmadd231ps.zmm"),
         _binary_rule(vector.vector_addi, _V16I32, "x86.avx512.vpaddd.zmm"),
-        _binary_rule(vector.vector_addi, _V4I32, "x86.avx512.vpaddd.xmm"),
+        _binary_rule(vector.vector_addi, _V4I32, "x86.avx2.vpaddd.xmm"),
         _binary_rule(vector.vector_subi, _V16I32, "x86.avx512.vpsubd.zmm"),
-        _binary_rule(vector.vector_subi, _V4I32, "x86.avx512.vpsubd.xmm"),
+        _binary_rule(vector.vector_subi, _V4I32, "x86.avx2.vpsubd.xmm"),
         _binary_rule(vector.vector_muli, _V16I32, "x86.avx512.vpmulld.zmm"),
-        _binary_rule(vector.vector_muli, _V4I32, "x86.avx512.vpmulld.xmm"),
+        _binary_rule(vector.vector_muli, _V4I32, "x86.avx2.vpmulld.xmm"),
         _binary_rule(vector.vector_minsi, _V16I32, "x86.avx512.vpminsd.zmm"),
         _binary_rule(vector.vector_maxsi, _V16I32, "x86.avx512.vpmaxsd.zmm"),
         _binary_rule(vector.vector_minui, _V16I32, "x86.avx512.vpminud.zmm"),
@@ -760,7 +761,7 @@ def _cases() -> Sequence[ContractCase]:
                     kind="addi",
                     input_type=_V4I32,
                     accumulator_type=_I32,
-                    extract_descriptor=_descriptor("x86.avx512.vpextrd.gpr32.xmm"),
+                    extract_descriptor=_descriptor("x86.avx2.vpextrd.gpr32.xmm"),
                     combine_descriptor=_descriptor("x86.scalar.add.gpr32"),
                 ),
             ),

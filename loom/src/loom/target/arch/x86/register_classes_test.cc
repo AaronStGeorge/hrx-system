@@ -10,10 +10,12 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/target/arch/x86/avx2_descriptors.h"
 #include "loom/target/arch/x86/avx512_descriptors.h"
 #include "loom/target/arch/x86/avx512_packed_dot_descriptors.h"
 #include "loom/target/arch/x86/packed_dot_descriptors.h"
 #include "loom/target/arch/x86/scalar_descriptors.h"
+#include "loom/target/arch/x86/simd128_descriptors.h"
 
 namespace loom {
 namespace {
@@ -47,16 +49,28 @@ void ExpectDescriptorClass(const loom_low_descriptor_set_t* descriptor_set,
 TEST(X86RegisterClassesTest, SharedScalarClassesAcrossViews) {
   const loom_low_descriptor_set_t* scalar_descriptor_set =
       loom_x86_scalar_core_descriptor_set();
+  const loom_low_descriptor_set_t* simd128_descriptor_set =
+      loom_x86_simd128_core_descriptor_set();
+  const loom_low_descriptor_set_t* avx2_descriptor_set =
+      loom_x86_avx2_core_descriptor_set();
   const loom_low_descriptor_set_t* avx512_descriptor_set =
       loom_x86_avx512_core_descriptor_set();
 
   ExpectDescriptorClass(scalar_descriptor_set, LOOM_X86_REGISTER_CLASS_GPR32);
   ExpectDescriptorClass(scalar_descriptor_set, LOOM_X86_REGISTER_CLASS_GPR64);
+  ExpectDescriptorClass(simd128_descriptor_set, LOOM_X86_REGISTER_CLASS_GPR32);
+  ExpectDescriptorClass(simd128_descriptor_set, LOOM_X86_REGISTER_CLASS_GPR64);
+  ExpectDescriptorClass(avx2_descriptor_set, LOOM_X86_REGISTER_CLASS_GPR32);
+  ExpectDescriptorClass(avx2_descriptor_set, LOOM_X86_REGISTER_CLASS_GPR64);
   ExpectDescriptorClass(avx512_descriptor_set, LOOM_X86_REGISTER_CLASS_GPR32);
   ExpectDescriptorClass(avx512_descriptor_set, LOOM_X86_REGISTER_CLASS_GPR64);
 }
 
 TEST(X86RegisterClassesTest, VectorClassesAcrossProfileViews) {
+  const loom_low_descriptor_set_t* simd128_descriptor_set =
+      loom_x86_simd128_core_descriptor_set();
+  const loom_low_descriptor_set_t* avx2_descriptor_set =
+      loom_x86_avx2_core_descriptor_set();
   const loom_low_descriptor_set_t* avx512_descriptor_set =
       loom_x86_avx512_core_descriptor_set();
   const loom_low_descriptor_set_t* packed_dot_descriptor_set =
@@ -64,7 +78,13 @@ TEST(X86RegisterClassesTest, VectorClassesAcrossProfileViews) {
   const loom_low_descriptor_set_t* avx512_packed_dot_descriptor_set =
       loom_x86_avx512_packed_dot_core_descriptor_set();
 
+  ExpectDescriptorClass(simd128_descriptor_set, LOOM_X86_REGISTER_CLASS_XMM);
+
+  ExpectDescriptorClass(avx2_descriptor_set, LOOM_X86_REGISTER_CLASS_XMM);
+  ExpectDescriptorClass(avx2_descriptor_set, LOOM_X86_REGISTER_CLASS_YMM);
+
   ExpectDescriptorClass(avx512_descriptor_set, LOOM_X86_REGISTER_CLASS_XMM);
+  ExpectDescriptorClass(avx512_descriptor_set, LOOM_X86_REGISTER_CLASS_YMM);
   ExpectDescriptorClass(avx512_descriptor_set, LOOM_X86_REGISTER_CLASS_ZMM);
   ExpectDescriptorClass(avx512_descriptor_set, LOOM_X86_REGISTER_CLASS_K);
 

@@ -30,7 +30,9 @@ typedef enum loom_x86_target_kind_e {
   LOOM_X86_TARGET_KIND_PACKED_DOT = 2,
   LOOM_X86_TARGET_KIND_AVX512_PACKED_DOT = 3,
   LOOM_X86_TARGET_KIND_SCALAR = 4,
-  LOOM_X86_TARGET_KIND_COUNT_ = 5,
+  LOOM_X86_TARGET_KIND_SIMD128 = 5,
+  LOOM_X86_TARGET_KIND_AVX2 = 6,
+  LOOM_X86_TARGET_KIND_COUNT_ = 7,
 } loom_x86_target_kind_t;
 
 // LOOM_OP_X86_TARGET: x86 target-family record. The selector chooses an authored CPU row; optional attrs structurally override common target fields.

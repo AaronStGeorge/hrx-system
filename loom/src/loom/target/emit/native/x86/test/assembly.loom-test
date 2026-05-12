@@ -501,9 +501,9 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x8
 
 // ====
 
-x86.target<avx512> @x86_target
+x86.target<avx2> @x86_target
 
-low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x86.xmm>, %init: reg<x86.gpr32>) asm<x86.avx512.core> {
+low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x86.xmm>, %init: reg<x86.gpr32>) asm<x86.avx2.core> {
   %reversed = vpshufd.xmm %v, 27
   %lane0 = vpextrd.xmm %reversed, 0
   %init_copy = copy %init : reg<x86.gpr32> -> reg<x86.gpr32>
@@ -595,9 +595,9 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %v: reg<x8
 
 // ====
 
-x86.target<avx512> @x86_target
+x86.target<avx2> @x86_target
 
-low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<x86.xmm>, %rhs: reg<x86.xmm>, %bias: reg<x86.xmm>) asm<x86.avx512.core> {
+low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<x86.xmm>, %rhs: reg<x86.xmm>, %bias: reg<x86.xmm>) asm<x86.avx2.core> {
   %sum = vaddss.xmm %lhs, %rhs
   %difference = vsubss.xmm %sum, %bias
   %product = vmulss.xmm %difference, %rhs
