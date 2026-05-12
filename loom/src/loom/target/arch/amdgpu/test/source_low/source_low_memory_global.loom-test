@@ -928,9 +928,10 @@ low.kernel.def target(@target) workgroup_size(256, 1, 1) @f32x4_dynamic_view_bas
   %57 = v_lshlrev_b32_src0_inline %channel_base, 2
   %58 = v_lshrrev_b32_src0_inline %channel_base, 30
   %61, %62 = v_add_co_u32 %54, %57
-  %63, %64 = v_add_co_ci_u32 %55, %58, %62
-  %65 = concat(%61, %63) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %loaded = global_load_b128_vaddr %65
+  %63 = v_mov_b32_copy %55
+  %64, %65 = v_add_co_ci_u32 %63, %58, %62
+  %66 = concat(%61, %64) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %loaded = global_load_b128_vaddr %66
   global_store_b128_saddr %57, %loaded, %output_view
   return
 }

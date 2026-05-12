@@ -847,7 +847,8 @@ amdgpu.target<gfx942> @gfx942_target
 low.func.def target(@gfx942_target) @gfx942_valu_sgpr_read_wait_state(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %base_lo: reg<amdgpu.sgpr>, %base_hi: reg<amdgpu.sgpr>, %offset_lo: reg<amdgpu.vgpr>, %offset_hi: reg<amdgpu.vgpr>) asm<amdgpu.cdna3.core> {
   %sum_lo, %carry = v_add_co_u32 %base_lo, %offset_lo
   %sum_hi_base = s_add_u32 %base_hi, %base_hi
-  %sum_hi, %unused_carry = v_addc_co_u32 %sum_hi_base, %offset_hi, %carry
+  %sum_hi_base_vgpr = v_mov_b32_copy %sum_hi_base
+  %sum_hi, %unused_carry = v_addc_co_u32 %sum_hi_base_vgpr, %offset_hi, %carry
   buffer_store_dword %sum_hi, %resource, %vaddr, %base_lo
   return
 }
@@ -855,8 +856,8 @@ low.func.def target(@gfx942_target) @gfx942_valu_sgpr_read_wait_state(%resource:
 // ----
   v_add_co_u32 v0, s[2:3], s1, v0
   s_add_u32 s0, s0, s0
-  s_nop 0
-  v_addc_co_u32 v0, s[2:3], s0, v1, s[2:3]
+  v_mov_b32_copy v0, s0
+  v_addc_co_u32 v0, s[2:3], v0, v1, s[2:3]
   buffer_store_dword v0, v2, s[4:7], s1 offen offset:0
   s_endpgm
 
@@ -868,7 +869,8 @@ low.func.def target(@gfx942_target) @gfx942_state_read_precedes_ssa_consumers(%r
   %scalar_lo = s_add_u32 %base_lo, %static_lo
   %scalar_hi = s_addc_u32 %base_hi, %static_hi
   %sum_lo, %carry = v_add_co_u32 %scalar_lo, %offset_lo
-  %sum_hi, %unused_carry = v_addc_co_u32 %scalar_hi, %offset_hi, %carry
+  %scalar_hi_vgpr = v_mov_b32_copy %scalar_hi
+  %sum_hi, %unused_carry = v_addc_co_u32 %scalar_hi_vgpr, %offset_hi, %carry
   %kept_static_hi = s_add_u32 %static_hi, %base_lo
   buffer_store_dword %sum_hi, %resource, %vaddr, %kept_static_hi
   return
@@ -879,8 +881,9 @@ low.func.def target(@gfx942_target) @gfx942_state_read_precedes_ssa_consumers(%r
   s_addc_u32 s1, s1, s3
   s_add_u32 s2, s3, s2
   v_add_co_u32 v0, s[8:9], s0, v0
-  s_nop 1
-  v_addc_co_u32 v0, s[0:1], s1, v1, s[8:9]
+  v_mov_b32_copy v0, s1
+  s_nop 0
+  v_addc_co_u32 v0, s[0:1], v0, v1, s[8:9]
   buffer_store_dword v0, v2, s[4:7], s2 offen offset:0
   s_endpgm
 
@@ -891,7 +894,8 @@ amdgpu.target<gfx950> @gfx950_target
 low.func.def target(@gfx950_target) @gfx950_valu_sgpr_read_wait_state(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %base_lo: reg<amdgpu.sgpr>, %base_hi: reg<amdgpu.sgpr>, %offset_lo: reg<amdgpu.vgpr>, %offset_hi: reg<amdgpu.vgpr>) asm<amdgpu.cdna4.core> {
   %sum_lo, %carry = v_add_co_u32 %base_lo, %offset_lo
   %sum_hi_base = s_add_u32 %base_hi, %base_hi
-  %sum_hi, %unused_carry = v_addc_co_u32 %sum_hi_base, %offset_hi, %carry
+  %sum_hi_base_vgpr = v_mov_b32_copy %sum_hi_base
+  %sum_hi, %unused_carry = v_addc_co_u32 %sum_hi_base_vgpr, %offset_hi, %carry
   buffer_store_dword %sum_hi, %resource, %vaddr, %base_lo
   return
 }
@@ -899,8 +903,8 @@ low.func.def target(@gfx950_target) @gfx950_valu_sgpr_read_wait_state(%resource:
 // ----
   v_add_co_u32 v0, s[2:3], s1, v0
   s_add_u32 s0, s0, s0
-  s_nop 0
-  v_addc_co_u32 v0, s[2:3], s0, v1, s[2:3]
+  v_mov_b32_copy v0, s0
+  v_addc_co_u32 v0, s[2:3], v0, v1, s[2:3]
   buffer_store_dword v0, v2, s[4:7], s1 offen offset:0
   s_endpgm
 

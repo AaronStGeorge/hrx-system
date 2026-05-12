@@ -381,12 +381,13 @@ low.kernel.def target(@target) workgroup_size(64, 4, 1) @global_dynamic_offset_s
   %37 = slice %35[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   %38 = slice %35[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
   %39, %40 = v_add_co_u32 %37, %x0
-  %41, %42 = v_add_co_ci_u32 %38, %36, %40
-  %43 = v_mov_b32 0
-  %44, %45 = v_add_co_u32 %39, %y0
-  %46, %47 = v_add_co_ci_u32 %41, %43, %45
-  %48 = concat(%44, %46) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %loaded = global_load_b32_vaddr %48
+  %41 = v_mov_b32_copy %38
+  %42, %43 = v_add_co_ci_u32 %41, %36, %40
+  %44 = v_mov_b32 0
+  %45, %46 = v_add_co_u32 %39, %y0
+  %47, %48 = v_add_co_ci_u32 %42, %44, %46
+  %49 = concat(%45, %47) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %loaded = global_load_b32_vaddr %49
   return
 }
 

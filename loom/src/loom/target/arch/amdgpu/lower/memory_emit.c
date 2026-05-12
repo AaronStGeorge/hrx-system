@@ -679,6 +679,10 @@ static iree_status_t loom_amdgpu_emit_memory_flat_add_term(
   const loom_value_id_t low_carry =
       loom_value_slice_get(loom_low_op_results(low_add_lo_op), 1);
 
+  IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
+      context, source_op, *inout_low_vaddr_hi, inout_low_vaddr_hi));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
+      context, source_op, low_term_hi, &low_term_hi));
   loom_value_id_t add_hi_operands[] = {
       *inout_low_vaddr_hi,
       low_term_hi,
