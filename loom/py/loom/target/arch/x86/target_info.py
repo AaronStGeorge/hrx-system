@@ -110,6 +110,7 @@ X86_DESCRIPTOR_SET_INFOS: tuple[X86DescriptorSetInfo, ...] = (
         key="x86.scalar.core",
         isa_tier=X86_ISA_TIER_SCALAR,
         register_classes=_with_base_registers(),
+        storage_generator_target="avx512_packed_dot",
     ),
     X86DescriptorSetInfo(
         generator_target="simd128",

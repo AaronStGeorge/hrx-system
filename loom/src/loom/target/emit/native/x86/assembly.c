@@ -14,6 +14,7 @@
 #include "loom/target/arch/x86/avx512_descriptors.h"
 #include "loom/target/arch/x86/avx512_packed_dot_descriptors.h"
 #include "loom/target/arch/x86/packed_dot_descriptors.h"
+#include "loom/target/arch/x86/scalar_descriptors.h"
 #include "loom/target/emit/native/assembly.h"
 
 static const char* const kX86Gpr64Names[] = {
@@ -27,9 +28,10 @@ static const char* const kX86Gpr32Names[] = {
 };
 
 typedef enum loom_x86_descriptor_set_kind_e {
-  LOOM_X86_DESCRIPTOR_SET_AVX512_CORE = 0,
-  LOOM_X86_DESCRIPTOR_SET_PACKED_DOT_CORE = 1,
-  LOOM_X86_DESCRIPTOR_SET_AVX512_PACKED_DOT_CORE = 2,
+  LOOM_X86_DESCRIPTOR_SET_SCALAR_CORE = 0,
+  LOOM_X86_DESCRIPTOR_SET_AVX512_CORE = 1,
+  LOOM_X86_DESCRIPTOR_SET_PACKED_DOT_CORE = 2,
+  LOOM_X86_DESCRIPTOR_SET_AVX512_PACKED_DOT_CORE = 3,
 } loom_x86_descriptor_set_kind_t;
 
 typedef enum loom_x86_register_class_kind_e {
@@ -49,6 +51,11 @@ typedef struct loom_x86_assembly_state_t {
 static iree_status_t loom_x86_resolve_descriptor_set_kind(
     const loom_low_schedule_table_t* schedule,
     loom_x86_descriptor_set_kind_t* out_kind) {
+  if (iree_string_view_equal(schedule->target.descriptor_set_key,
+                             IREE_SV("x86.scalar.core"))) {
+    *out_kind = LOOM_X86_DESCRIPTOR_SET_SCALAR_CORE;
+    return iree_ok_status();
+  }
   if (iree_string_view_equal(schedule->target.descriptor_set_key,
                              IREE_SV("x86.avx512.core"))) {
     *out_kind = LOOM_X86_DESCRIPTOR_SET_AVX512_CORE;
@@ -109,6 +116,18 @@ static iree_status_t loom_x86_register_class_kind(
     const loom_low_allocation_assignment_t* assignment,
     loom_x86_register_class_kind_t* out_kind) {
   switch (state->descriptor_set_kind) {
+    case LOOM_X86_DESCRIPTOR_SET_SCALAR_CORE:
+      switch (assignment->descriptor_reg_class_id) {
+        case X86_SCALAR_CORE_REG_CLASS_ID_GPR32:
+          *out_kind = LOOM_X86_REGISTER_CLASS_GPR32;
+          return iree_ok_status();
+        case X86_SCALAR_CORE_REG_CLASS_ID_GPR64:
+          *out_kind = LOOM_X86_REGISTER_CLASS_GPR64;
+          return iree_ok_status();
+        default:
+          break;
+      }
+      break;
     case LOOM_X86_DESCRIPTOR_SET_AVX512_CORE:
       switch (assignment->descriptor_reg_class_id) {
         case X86_AVX512_CORE_REG_CLASS_ID_GPR32:
@@ -1005,15 +1024,21 @@ static iree_status_t loom_x86_append_descriptor_packet(
   const uint32_t descriptor_ref =
       loom_low_descriptor_set_descriptor_ordinal(descriptor_set, descriptor);
   switch (state->descriptor_set_kind) {
+    case LOOM_X86_DESCRIPTOR_SET_SCALAR_CORE:
+      if (descriptor_ref ==
+          X86_SCALAR_CORE_DESCRIPTOR_REF_SCALAR_LEA_ADD_GPR64) {
+        return loom_x86_append_lea_add_packet(state, context);
+      }
+      break;
     case LOOM_X86_DESCRIPTOR_SET_AVX512_CORE:
       if (descriptor_ref ==
-          X86_AVX512_CORE_DESCRIPTOR_REF_AVX512_LEA_ADD_GPR64) {
+          X86_AVX512_CORE_DESCRIPTOR_REF_SCALAR_LEA_ADD_GPR64) {
         return loom_x86_append_lea_add_packet(state, context);
       }
       break;
     case LOOM_X86_DESCRIPTOR_SET_AVX512_PACKED_DOT_CORE:
       if (descriptor_ref ==
-          X86_AVX512_PACKED_DOT_CORE_DESCRIPTOR_REF_AVX512_LEA_ADD_GPR64) {
+          X86_AVX512_PACKED_DOT_CORE_DESCRIPTOR_REF_SCALAR_LEA_ADD_GPR64) {
         return loom_x86_append_lea_add_packet(state, context);
       }
       break;

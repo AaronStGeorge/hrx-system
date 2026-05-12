@@ -90,6 +90,7 @@ def test_descriptor_storage_target_lookup_classifies_current_views() -> None:
         "avx_vnni_int16",
         "avx_vnni_int8",
         "packed_dot",
+        "scalar",
     ]
 
 

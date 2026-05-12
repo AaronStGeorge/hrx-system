@@ -45,6 +45,7 @@ loom_assert_no_dependencies(
         ":packed_dot_descriptors",
         ":packed_dot_vector",
         ":provider",
+        ":scalar_descriptors",
         ":target_records",
         "//loom/src/loom/target/arch/x86/contracts:avx512_lower_rules",
         "//loom/src/loom/target/arch/x86/contracts:packed_dot_lower_rules",
@@ -63,6 +64,7 @@ loom_assert_no_dependencies(
         ":packed_dot_contract_projection",
         ":packed_dot_descriptors",
         ":provider",
+        ":scalar_descriptors",
         ":target_records",
     ],
     targets = [
@@ -149,6 +151,16 @@ loom_cc_library(
 )
 
 loom_low_descriptor_cc_library(
+    name = "scalar_descriptors",
+    header_only = True,
+    ids_deps = ["//loom/src/loom/codegen/low:descriptors"],
+    deps = [
+        ":avx512_packed_dot_descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
+    ],
+)
+
+loom_low_descriptor_cc_library(
     name = "avx512_descriptors",
     header_only = True,
     ids_deps = ["//loom/src/loom/codegen/low:descriptors"],
@@ -172,10 +184,12 @@ loom_low_descriptor_cc_library(
     name = "avx512_packed_dot_descriptors",
     args = ["--target=avx512_packed_dot"],
     generated_hdr_flags = [
+        "--view-header=scalar",
         "--view-header=avx512",
         "--view-header=packed_dot",
     ],
     generated_hdrs = [
+        "scalar_descriptors.h",
         "avx512_descriptors.h",
         "packed_dot_descriptors.h",
     ],
@@ -191,6 +205,7 @@ loom_cc_library(
         ":avx512_descriptors",
         ":avx512_packed_dot_descriptors",
         ":packed_dot_descriptors",
+        ":scalar_descriptors",
         ":target_records",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/target:low_descriptor_registry",

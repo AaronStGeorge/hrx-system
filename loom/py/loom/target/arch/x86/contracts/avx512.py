@@ -148,7 +148,7 @@ def _fma_rule(
 
 
 def _const_i64_rule(result_type: TypePattern) -> DescriptorRule:
-    descriptor = _descriptor("x86.avx512.movimm.gpr64")
+    descriptor = _descriptor("x86.scalar.movimm.gpr64")
     return DescriptorRule(
         source_op=index.index_constant,
         descriptor=descriptor,
@@ -662,7 +662,7 @@ def _reduce_f32x16_rule() -> DescriptorRule:
 def _cases() -> Sequence[ContractCase]:
     return (
         _buffer_view_rule(),
-        _binary_rule(scalar_arithmetic.scalar_addi, _I32, "x86.avx512.add.gpr32"),
+        _binary_rule(scalar_arithmetic.scalar_addi, _I32, "x86.scalar.add.gpr32"),
         _binary_rule(scalar_arithmetic.scalar_addf, _F32, "x86.avx512.vaddss.xmm"),
         _binary_rule(scalar_arithmetic.scalar_subf, _F32, "x86.avx512.vsubss.xmm"),
         _binary_rule(scalar_arithmetic.scalar_mulf, _F32, "x86.avx512.vmulss.xmm"),
@@ -787,9 +787,9 @@ def _cases() -> Sequence[ContractCase]:
         _binary_rule(vector.vector_shrui, _V16I32, "x86.avx512.vpsrlvd.zmm"),
         _const_i64_rule(_INDEX),
         _const_i64_rule(_OFFSET),
-        _binary_rule(index.index_add, _INDEX, "x86.avx512.lea.add.gpr64"),
-        _binary_rule(index.index_add, _OFFSET, "x86.avx512.lea.add.gpr64"),
-        _binary_rule(index.index_mul, _INDEX, "x86.avx512.imul.gpr64"),
+        _binary_rule(index.index_add, _INDEX, "x86.scalar.lea.add.gpr64"),
+        _binary_rule(index.index_add, _OFFSET, "x86.scalar.lea.add.gpr64"),
+        _binary_rule(index.index_mul, _INDEX, "x86.scalar.imul.gpr64"),
         _index_madd_rule(),
         *_memory_rules(),
         *reduction_descriptor_rules(
@@ -800,7 +800,7 @@ def _cases() -> Sequence[ContractCase]:
                     input_type=_V4I32,
                     accumulator_type=_I32,
                     extract_descriptor=_descriptor("x86.avx512.vpextrd.gpr32.xmm"),
-                    combine_descriptor=_descriptor("x86.avx512.add.gpr32"),
+                    combine_descriptor=_descriptor("x86.scalar.add.gpr32"),
                 ),
             ),
             lane_count=4,
@@ -811,8 +811,8 @@ def _cases() -> Sequence[ContractCase]:
 
 
 def _index_madd_rule() -> DescriptorRule:
-    multiply = _descriptor("x86.avx512.imul.gpr64")
-    add = _descriptor("x86.avx512.lea.add.gpr64")
+    multiply = _descriptor("x86.scalar.imul.gpr64")
+    add = _descriptor("x86.scalar.lea.add.gpr64")
     return DescriptorRule(
         source_op=index.index_madd,
         descriptor=add,

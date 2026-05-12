@@ -51,6 +51,13 @@ DESCRIPTOR_SET_REGISTRATIONS = (
         generates_checked_in_c=False,
     ),
     DescriptorSetRegistration(
+        key="x86.scalar.core",
+        module_name="loom.target.arch.x86.descriptors",
+        symbol_name="X86_SCALAR_DESCRIPTOR_SET",
+        aliases=("x86_scalar_core",),
+        generates_checked_in_c=False,
+    ),
+    DescriptorSetRegistration(
         key="x86.avx512.core",
         module_name="loom.target.arch.x86.descriptors",
         symbol_name="X86_AVX512_CORE_DESCRIPTOR_SET",

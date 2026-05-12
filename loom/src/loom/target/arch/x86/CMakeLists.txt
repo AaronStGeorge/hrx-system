@@ -72,6 +72,17 @@ loom_cc_library(
 
 loom_low_descriptor_cc_library(
   NAME
+    scalar_descriptors
+  DEPS
+    ::avx512_packed_dot_descriptors
+    loom::src::loom::codegen::low::descriptors
+  IDS_DEPS
+    loom::src::loom::codegen::low::descriptors
+  HEADER_ONLY
+)
+
+loom_low_descriptor_cc_library(
+  NAME
     avx512_descriptors
   DEPS
     ::avx512_packed_dot_descriptors
@@ -98,9 +109,11 @@ loom_low_descriptor_cc_library(
   GENERATOR
     iree::runtime::py::loom::gen::x86_low_descriptor_shard
   GENERATED_HDR_FLAGS
+    "--view-header=scalar"
     "--view-header=avx512"
     "--view-header=packed_dot"
   GENERATED_HDRS
+    "scalar_descriptors.h"
     "avx512_descriptors.h"
     "packed_dot_descriptors.h"
   ARGS
@@ -120,6 +133,7 @@ loom_cc_library(
     ::avx512_descriptors
     ::avx512_packed_dot_descriptors
     ::packed_dot_descriptors
+    ::scalar_descriptors
     ::target_records
     iree::base
     loom::src::loom::codegen::low::descriptors

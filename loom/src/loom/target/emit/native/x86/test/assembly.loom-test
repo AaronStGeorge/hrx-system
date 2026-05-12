@@ -8,8 +8,8 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
   return
 }
 // ----
-  vmovdqu32 zmm1, [rax]
-  vpaddd zmm0, zmm1, zmm0
+  vmovdqu32 zmm0, [rax]
+  vpaddd zmm0, zmm0, zmm1
   vmovdqu32 [rax + 64], zmm0
   ret
 
@@ -223,12 +223,9 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %lhs: reg<
 }
 
 // ----
-  vmovdqa32 zmm2, zmm0
-  vmovdqa32 zmm0, zmm1
-  vmovdqa32 zmm1, zmm2
   jmp .Lbb1
 .Lbb1:
-  vpaddd zmm0, zmm0, zmm1
+  vpaddd zmm0, zmm1, zmm0
   vmovdqu32 [rax + 512], zmm0
   ret
 
@@ -243,14 +240,11 @@ low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.zmm>, %rhs: reg<x86
 }
 
 // ----
-  vmovdqa32 zmm2, zmm0
-  vmovdqa32 zmm0, zmm1
-  vmovdqa32 zmm1, zmm2
   jmp .Lbb1
 .Lbb1:
-  vmovdqa32 zmm2, zmm0
-  vmovdqa32 zmm0, zmm1
-  vmovdqa32 zmm1, zmm2
+  vmovdqa32 zmm2, zmm1
+  vmovdqa32 zmm1, zmm0
+  vmovdqa32 zmm0, zmm2
   jmp .Lbb1
 
 // ====

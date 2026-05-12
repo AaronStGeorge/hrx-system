@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import TypeVar
 
@@ -938,7 +939,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
     ),
     descriptors=(
         Descriptor(
-            key="x86.avx512.add.gpr32",
+            key="x86.scalar.add.gpr32",
             mnemonic="add",
             semantic_tag="integer.add.i32",
             operands=(
@@ -1615,7 +1616,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
-            key="x86.avx512.mov.gpr64",
+            key="x86.scalar.mov.gpr64",
             mnemonic="mov",
             semantic_tag="integer.move.i64",
             operands=(_gpr64_result(), _gpr64_operand("src")),
@@ -1624,7 +1625,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
-            key="x86.avx512.movimm.gpr64",
+            key="x86.scalar.movimm.gpr64",
             mnemonic="mov",
             semantic_tag="integer.const.i64",
             operands=(_gpr64_result(),),
@@ -1638,7 +1639,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
-            key="x86.avx512.lea.add.gpr64",
+            key="x86.scalar.lea.add.gpr64",
             mnemonic="lea",
             semantic_tag="integer.add.i64",
             operands=(
@@ -1651,7 +1652,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
-            key="x86.avx512.imul.gpr64",
+            key="x86.scalar.imul.gpr64",
             mnemonic="imul",
             semantic_tag="integer.mul.i64",
             operands=(
@@ -1665,7 +1666,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
-            key="x86.avx512.jmp",
+            key="x86.scalar.jmp",
             mnemonic="jmp",
             semantic_tag="control.branch",
             operands=(),
@@ -1675,6 +1676,51 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             schedule_class=_SCHEDULE_CONTROL,
             flags=(DescriptorFlag.SIDE_EFFECTING, DescriptorFlag.TERMINATOR),
         ),
+    ),
+)
+
+_X86_SCALAR_DESCRIPTOR_KEYS = frozenset(
+    (
+        "x86.scalar.add.gpr32",
+        "x86.scalar.mov.gpr64",
+        "x86.scalar.movimm.gpr64",
+        "x86.scalar.lea.add.gpr64",
+        "x86.scalar.imul.gpr64",
+        "x86.scalar.jmp",
+    )
+)
+
+X86_SCALAR_DESCRIPTOR_SET = replace(
+    X86_AVX512_CORE_DESCRIPTOR_SET,
+    key="x86.scalar.core",
+    feature_key="x86.scalar.v1",
+    c_header_path=Path("loom/src/loom/target/arch/x86/scalar_descriptors.h"),
+    c_source_path=Path("loom/src/loom/target/arch/x86/scalar_descriptors.c"),
+    header_guard="LOOM_TARGET_ARCH_X86_SCALAR_DESCRIPTORS_H_",
+    public_header="loom/target/arch/x86/scalar_descriptors.h",
+    function_name="loom_x86_scalar_core_descriptor_set",
+    c_table_prefix="X86ScalarCore",
+    c_enum_prefix="X86_SCALAR_CORE",
+    reg_classes=tuple(
+        reg_class
+        for reg_class in X86_AVX512_CORE_DESCRIPTOR_SET.reg_classes
+        if reg_class.name in (_REG_GPR32, _REG_GPR64)
+    ),
+    resources=tuple(
+        resource
+        for resource in X86_AVX512_CORE_DESCRIPTOR_SET.resources
+        if resource.name in (_RESOURCE_SCALAR, _RESOURCE_CONTROL)
+    ),
+    schedule_classes=tuple(
+        schedule_class
+        for schedule_class in X86_AVX512_CORE_DESCRIPTOR_SET.schedule_classes
+        if schedule_class.name in (_SCHEDULE_SCALAR, _SCHEDULE_CONTROL)
+    ),
+    enum_domains=(),
+    descriptors=tuple(
+        descriptor
+        for descriptor in X86_AVX512_CORE_DESCRIPTOR_SET.descriptors
+        if descriptor.key in _X86_SCALAR_DESCRIPTOR_KEYS
     ),
 )
 

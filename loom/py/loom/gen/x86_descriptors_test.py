@@ -50,6 +50,7 @@ def test_storage_generation_emits_current_public_views() -> None:
                     f"--source={tmp_path / 'avx512_packed_dot_descriptors.c'}",
                     f"--view-header=avx512={tmp_path / 'avx512_descriptors.h'}",
                     f"--view-header=packed_dot={tmp_path / 'packed_dot_descriptors.h'}",
+                    f"--view-header=scalar={tmp_path / 'scalar_descriptors.h'}",
                 ]
             )
             == 0
@@ -59,10 +60,12 @@ def test_storage_generation_emits_current_public_views() -> None:
         composite_header = (tmp_path / "avx512_packed_dot_descriptors.h").read_text(encoding="utf-8")
         avx512_header = (tmp_path / "avx512_descriptors.h").read_text(encoding="utf-8")
         packed_dot_header = (tmp_path / "packed_dot_descriptors.h").read_text(encoding="utf-8")
+        scalar_header = (tmp_path / "scalar_descriptors.h").read_text(encoding="utf-8")
 
     assert "loom_x86_avx512_core_descriptor_set" in source
     assert "loom_x86_packed_dot_core_descriptor_set" in source
     assert "loom_x86_avx512_packed_dot_core_descriptor_set" in source
+    assert "loom_x86_scalar_core_descriptor_set" in source
     assert "static const loom_low_operand_t kX86Avx512PackedDotCoreStorageOperands[]" in source
     assert "static const loom_low_operand_t kX86Avx512CoreOperands[]" not in source
     assert "static const loom_low_operand_t kX86PackedDotCoreOperands[]" not in source
@@ -73,11 +76,16 @@ def test_storage_generation_emits_current_public_views() -> None:
     assert ".descriptors = kX86Avx512PackedDotCoreDescriptors," in source
     assert ".descriptor_refs = kX86Avx512CoreDescriptorRefs," in source
     assert ".descriptor_refs = kX86PackedDotCoreDescriptorRefs," in source
+    assert ".descriptor_refs = kX86ScalarCoreDescriptorRefs," in source
     assert "loom_x86_avx512_core_descriptor_set" in avx512_header
     assert "loom_x86_packed_dot_core_descriptor_set" in packed_dot_header
-    assert "#define X86_AVX512_CORE_DESCRIPTOR_REF_AVX512_LEA_ADD_GPR64 83u" in avx512_header
+    assert "loom_x86_scalar_core_descriptor_set" in scalar_header
+    assert "#define X86_AVX512_CORE_DESCRIPTOR_REF_SCALAR_LEA_ADD_GPR64 83u" in avx512_header
+    assert "#define X86_SCALAR_CORE_DESCRIPTOR_REF_SCALAR_LEA_ADD_GPR64 3u" in scalar_header
     assert "#define X86_PACKED_DOT_CORE_DESCRIPTOR_REF_AVX512_BF16_VDPBF16PS_YMM 51u" in packed_dot_header
     assert "#define X86_AVX512_PACKED_DOT_CORE_DESCRIPTOR_REF_AVX512_BF16_VDPBF16PS_ZMM 136u" in composite_header
+    assert "#define X86_SCALAR_CORE_REG_CLASS_ID_GPR32 0u" in scalar_header
+    assert "#define X86_SCALAR_CORE_REG_CLASS_ID_GPR64 1u" in scalar_header
     assert "#define X86_PACKED_DOT_CORE_REG_CLASS_ID_XMM 2" in packed_dot_header
     assert "#define X86_PACKED_DOT_CORE_REG_CLASS_ID_YMM 5" in packed_dot_header
     assert "#define X86_PACKED_DOT_CORE_REG_CLASS_ID_ZMM 3" in packed_dot_header
