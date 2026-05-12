@@ -36,6 +36,7 @@ def _s_buffer_load_dword_overlay(
         immediates=(_offset_immediate(offset_bit_width),),
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_GLOBAL_LOAD_EFFECT,),
+        constraints=_EARLY_CLOBBER_RESULT_CONSTRAINTS,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
 
@@ -66,6 +67,7 @@ def _s_buffer_load_64_overlay(
         immediates=(_offset_immediate(offset_bit_width),),
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_GLOBAL_LOAD_B64_EFFECT,),
+        constraints=_EARLY_CLOBBER_RESULT_CONSTRAINTS,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
 
@@ -113,6 +115,7 @@ def _s_load_dwordx2_overlay(
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_GLOBAL_LOAD_B64_EFFECT,),
         operand_forms=operand_forms,
+        constraints=_EARLY_CLOBBER_RESULT_CONSTRAINTS,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=() if fixed_soffset is not None else None,
     )
@@ -161,6 +164,7 @@ def _s_load_dwordx4_overlay(
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_GLOBAL_LOAD_B128_EFFECT,),
         operand_forms=operand_forms,
+        constraints=_EARLY_CLOBBER_RESULT_CONSTRAINTS,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=() if fixed_soffset is not None else None,
     )
@@ -209,6 +213,7 @@ def _s_load_dword_overlay(
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_GLOBAL_LOAD_EFFECT,),
         operand_forms=operand_forms,
+        constraints=_EARLY_CLOBBER_RESULT_CONSTRAINTS,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=() if fixed_soffset is not None else None,
     )

@@ -40,7 +40,15 @@ from loom.target.arch.amdgpu.descriptors import (
     amdgpu_atomic_descriptor_candidates,
     amdgpu_descriptor_category_groups,
 )
+from loom.target.arch.amdgpu.descriptors.memory import (
+    _s_buffer_load_64_overlay,
+    _s_buffer_load_dword_overlay,
+    _s_load_dword_overlay,
+    _s_load_dwordx2_overlay,
+    _s_load_dwordx4_overlay,
+)
 from loom.target.low_descriptors import (
+    ConstraintKind,
     Descriptor,
     DescriptorSet,
     Effect,
@@ -348,6 +356,22 @@ def test_vop2_f32_uses_inline_then_literal_operand_forms() -> None:
             f"{descriptor_key}.src0_inline",
             f"{descriptor_key}.lit",
         )
+
+
+def test_scalar_memory_loads_early_clobber_results() -> None:
+    for descriptor in (
+        _s_buffer_load_dword_overlay(),
+        _s_buffer_load_64_overlay(),
+        _s_load_dword_overlay(),
+        _s_load_dwordx2_overlay(),
+        _s_load_dwordx4_overlay(),
+    ):
+        assert tuple(constraint.kind for constraint in descriptor.constraints) == (
+            ConstraintKind.EARLY_CLOBBER,
+        )
+        assert tuple(
+            constraint.lhs_operand_index for constraint in descriptor.constraints
+        ) == (0,)
 
 
 def test_address_immediate_validation_rejects_missing_unit_metadata() -> None:
