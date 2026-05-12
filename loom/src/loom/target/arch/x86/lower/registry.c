@@ -8,6 +8,8 @@
 
 #include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
+#include "loom/target/arch/x86/contracts/avx2.h"
+#include "loom/target/arch/x86/contracts/avx2_lower_rules.h"
 #include "loom/target/arch/x86/contracts/avx512.h"
 #include "loom/target/arch/x86/contracts/avx512_lower_rules.h"
 #include "loom/target/arch/x86/contracts/packed_dot.h"
@@ -91,6 +93,58 @@ static bool loom_x86_type_is_address_gpr64(loom_type_t type) {
   }
 }
 
+static bool loom_x86_scalar_register_class_for_source_type(
+    loom_type_t source_type, loom_x86_register_class_t* out_register_class) {
+  if (loom_x86_type_is_address_gpr64(source_type)) {
+    *out_register_class = LOOM_X86_REGISTER_CLASS_GPR64;
+    return true;
+  }
+  if (loom_x86_type_is_scalar_i1(source_type) ||
+      loom_x86_type_is_scalar_i32(source_type)) {
+    *out_register_class = LOOM_X86_REGISTER_CLASS_GPR32;
+    return true;
+  }
+  if (loom_x86_type_is_scalar_i64(source_type)) {
+    *out_register_class = LOOM_X86_REGISTER_CLASS_GPR64;
+    return true;
+  }
+  return false;
+}
+
+static bool loom_x86_avx2_register_class_for_source_type(
+    loom_type_t source_type, loom_x86_register_class_t* out_register_class) {
+  if (loom_x86_scalar_register_class_for_source_type(source_type,
+                                                     out_register_class)) {
+    return true;
+  }
+  if (loom_x86_type_is_scalar_f32(source_type) ||
+      loom_x86_type_is_vector_4xi32(source_type) ||
+      loom_x86_type_is_vector_4xf32(source_type)) {
+    *out_register_class = LOOM_X86_REGISTER_CLASS_XMM;
+    return true;
+  }
+  return false;
+}
+
+static bool loom_x86_avx512_register_class_for_source_type(
+    loom_type_t source_type, loom_x86_register_class_t* out_register_class) {
+  if (loom_x86_avx2_register_class_for_source_type(source_type,
+                                                   out_register_class)) {
+    return true;
+  }
+  if (loom_x86_type_is_vector_4xi1(source_type) ||
+      loom_x86_type_is_vector_16xi1(source_type)) {
+    *out_register_class = LOOM_X86_REGISTER_CLASS_K;
+    return true;
+  }
+  if (loom_x86_type_is_vector_16xi32(source_type) ||
+      loom_x86_type_is_vector_16xf32(source_type)) {
+    *out_register_class = LOOM_X86_REGISTER_CLASS_ZMM;
+    return true;
+  }
+  return false;
+}
+
 iree_status_t loom_x86_make_register_type(
     loom_low_lower_context_t* context, loom_x86_register_class_t register_class,
     loom_type_t* out_type) {
@@ -107,39 +161,24 @@ static iree_status_t loom_x86_map_avx512_type(void* user_data,
                                               const loom_op_t* source_op,
                                               loom_type_t source_type,
                                               loom_type_t* out_low_type) {
-  if (loom_x86_type_is_address_gpr64(source_type)) {
-    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_GPR64,
-                                       out_low_type);
+  loom_x86_register_class_t register_class = 0;
+  if (loom_x86_avx512_register_class_for_source_type(source_type,
+                                                     &register_class)) {
+    return loom_x86_make_register_type(context, register_class, out_low_type);
   }
-  if (loom_x86_type_is_scalar_i32(source_type)) {
-    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_GPR32,
-                                       out_low_type);
-  }
-  if (loom_x86_type_is_scalar_i64(source_type)) {
-    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_GPR64,
-                                       out_low_type);
-  }
-  if (loom_x86_type_is_scalar_f32(source_type)) {
-    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_XMM,
-                                       out_low_type);
-  }
-  if (loom_x86_type_is_vector_4xi32(source_type) ||
-      loom_x86_type_is_vector_4xf32(source_type)) {
-    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_XMM,
-                                       out_low_type);
-  }
-  if (loom_x86_type_is_vector_4xi1(source_type)) {
-    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_K,
-                                       out_low_type);
-  }
-  if (loom_x86_type_is_vector_16xi32(source_type) ||
-      loom_x86_type_is_vector_16xf32(source_type)) {
-    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_ZMM,
-                                       out_low_type);
-  }
-  if (loom_x86_type_is_vector_16xi1(source_type)) {
-    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_K,
-                                       out_low_type);
+  return loom_low_lower_emit_source_type_unsupported(
+      context, source_op, IREE_SV("source"), source_type);
+}
+
+static iree_status_t loom_x86_map_avx2_type(void* user_data,
+                                            loom_low_lower_context_t* context,
+                                            const loom_op_t* source_op,
+                                            loom_type_t source_type,
+                                            loom_type_t* out_low_type) {
+  loom_x86_register_class_t register_class = 0;
+  if (loom_x86_avx2_register_class_for_source_type(source_type,
+                                                   &register_class)) {
+    return loom_x86_make_register_type(context, register_class, out_low_type);
   }
   return loom_low_lower_emit_source_type_unsupported(
       context, source_op, IREE_SV("source"), source_type);
@@ -150,21 +189,10 @@ static iree_status_t loom_x86_map_scalar_type(void* user_data,
                                               const loom_op_t* source_op,
                                               loom_type_t source_type,
                                               loom_type_t* out_low_type) {
-  if (loom_x86_type_is_address_gpr64(source_type)) {
-    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_GPR64,
-                                       out_low_type);
-  }
-  if (loom_x86_type_is_scalar_i1(source_type)) {
-    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_GPR32,
-                                       out_low_type);
-  }
-  if (loom_x86_type_is_scalar_i32(source_type)) {
-    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_GPR32,
-                                       out_low_type);
-  }
-  if (loom_x86_type_is_scalar_i64(source_type)) {
-    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_GPR64,
-                                       out_low_type);
+  loom_x86_register_class_t register_class = 0;
+  if (loom_x86_scalar_register_class_for_source_type(source_type,
+                                                     &register_class)) {
+    return loom_x86_make_register_type(context, register_class, out_low_type);
   }
   return loom_low_lower_emit_source_type_unsupported(
       context, source_op, IREE_SV("source"), source_type);
@@ -228,6 +256,35 @@ static iree_status_t loom_x86_map_avx512_argument(
                                   source_type, &out_argument->abi_type);
 }
 
+static iree_status_t loom_x86_map_avx2_argument(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_function_op, uint16_t source_argument_index,
+    loom_value_id_t source_argument_id,
+    loom_low_lower_abi_argument_t* out_argument) {
+  (void)source_argument_index;
+  const loom_type_t source_type = loom_module_value_type(
+      loom_low_lower_context_module(context), source_argument_id);
+  if (loom_type_is_buffer(source_type)) {
+    loom_type_t address_type = loom_type_none();
+    IREE_RETURN_IF_ERROR(loom_x86_make_register_type(
+        context, LOOM_X86_REGISTER_CLASS_GPR64, &address_type));
+    *out_argument = (loom_low_lower_abi_argument_t){
+        .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT,
+        .abi_type = address_type,
+        .resource_source_type = loom_type_none(),
+    };
+    return iree_ok_status();
+  }
+
+  *out_argument = (loom_low_lower_abi_argument_t){
+      .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT,
+      .abi_type = loom_type_none(),
+      .resource_source_type = loom_type_none(),
+  };
+  return loom_x86_map_avx2_type(user_data, context, source_function_op,
+                                source_type, &out_argument->abi_type);
+}
+
 static iree_status_t loom_x86_map_avx512_packed_dot_type(
     void* user_data, loom_low_lower_context_t* context,
     const loom_op_t* source_op, loom_type_t source_type,
@@ -279,6 +336,10 @@ static const loom_low_lower_rule_set_t* const kX86Avx512RuleSets[] = {
     &loom_x86_avx512_lower_rule_set,
 };
 
+static const loom_low_lower_rule_set_t* const kX86Avx2RuleSets[] = {
+    &loom_x86_avx2_lower_rule_set,
+};
+
 static const loom_low_lower_rule_set_t* const kX86ScalarRuleSets[] = {
     &loom_x86_scalar_lower_rule_set,
 };
@@ -294,6 +355,10 @@ static const loom_low_lower_rule_set_t* const kX86Avx512PackedDotRuleSets[] = {
 
 static const loom_target_contract_binding_t kX86Avx512ContractBindings[] = {
     {&loom_x86_avx512_contract_fragment, 0},
+};
+
+static const loom_target_contract_binding_t kX86Avx2ContractBindings[] = {
+    {&loom_x86_avx2_contract_fragment, 0},
 };
 
 static const loom_target_contract_binding_t kX86ScalarContractBindings[] = {
@@ -322,6 +387,20 @@ static const loom_low_lower_policy_t kX86Avx512LowLowerPolicy = {
         },
     .contract_bindings = kX86Avx512ContractBindings,
     .contract_binding_count = IREE_ARRAYSIZE(kX86Avx512ContractBindings),
+};
+
+static const loom_low_lower_policy_t kX86Avx2LowLowerPolicy = {
+    .name = IREE_SVL("x86-avx2-low-lower"),
+    .error_catalog = &loom_error_catalog_core,
+    .map_type = {.fn = loom_x86_map_avx2_type, .user_data = NULL},
+    .map_argument = {.fn = loom_x86_map_avx2_argument, .user_data = NULL},
+    .rule_sets =
+        {
+            .count = IREE_ARRAYSIZE(kX86Avx2RuleSets),
+            .values = kX86Avx2RuleSets,
+        },
+    .contract_bindings = kX86Avx2ContractBindings,
+    .contract_binding_count = IREE_ARRAYSIZE(kX86Avx2ContractBindings),
 };
 
 static const loom_low_lower_policy_t kX86ScalarLowLowerPolicy = {
@@ -371,6 +450,10 @@ const loom_low_lower_policy_t* loom_x86_avx512_low_lower_policy(void) {
   return &kX86Avx512LowLowerPolicy;
 }
 
+const loom_low_lower_policy_t* loom_x86_avx2_low_lower_policy(void) {
+  return &kX86Avx2LowLowerPolicy;
+}
+
 const loom_low_lower_policy_t* loom_x86_scalar_low_lower_policy(void) {
   return &kX86ScalarLowLowerPolicy;
 }
@@ -385,6 +468,10 @@ void loom_x86_low_lower_policy_registry_initialize(
       {
           .contract_set_key = IREE_SVL("x86.scalar.core"),
           .policy = &kX86ScalarLowLowerPolicy,
+      },
+      {
+          .contract_set_key = IREE_SVL("x86.avx2.core"),
+          .policy = &kX86Avx2LowLowerPolicy,
       },
       {
           .contract_set_key = IREE_SVL("x86.avx512.core"),

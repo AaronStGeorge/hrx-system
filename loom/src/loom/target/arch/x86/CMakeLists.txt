@@ -200,6 +200,8 @@ loom_cc_library(
     loom::src::loom::codegen::low::lower
     loom::src::loom::error::error_defs
     loom::src::loom::ir
+    loom::src::loom::target::arch::x86::contracts::avx2
+    loom::src::loom::target::arch::x86::contracts::avx2_lower_rules
     loom::src::loom::target::arch::x86::contracts::avx512
     loom::src::loom::target::arch::x86::contracts::avx512_lower_rules
     loom::src::loom::target::arch::x86::contracts::packed_dot
@@ -264,6 +266,17 @@ iree_executable_test(
     "source_low"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_avx2"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_avx2.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

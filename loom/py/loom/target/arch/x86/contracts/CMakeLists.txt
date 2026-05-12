@@ -15,6 +15,7 @@ iree_py_library(
     contracts
   SRCS
     "__init__.py"
+    "avx2.py"
     "avx512.py"
     "packed_dot.py"
     "scalar.py"
