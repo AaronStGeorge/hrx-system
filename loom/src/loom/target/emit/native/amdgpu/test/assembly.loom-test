@@ -842,6 +842,53 @@ low.func.def target(@gfx942_target) @gfx942_trans_result_wait_state(%input: reg<
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_trans_result_depctr strategy=source
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_trans_result_depctr(%input: reg<amdgpu.vgpr>, %scale: reg<amdgpu.vgpr>, %addr: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %inv = v_rsq_f32 %input
+  %scaled = v_mul_f32 %inv, %scale
+  buffer_store_dword %scaled, %resource, %addr, %soffset
+  return
+}
+
+// ----
+  v_rsq_f32 v0, v0
+  s_waitcnt_depctr depctr(0)
+  v_mul_f32 v0, v0, v1
+  buffer_store_dword v0, v2, s[0:3], s4 offen offset:0
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx11_trans_result_expired_by_valu_distance strategy=source
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_trans_result_expired_by_valu_distance(%input: reg<amdgpu.vgpr>, %scale: reg<amdgpu.vgpr>, %addr: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>) asm<amdgpu.rdna3.core> {
+  %inv = v_rsq_f32 %input
+  %gap0 = v_add_f32 %scale, %scale
+  %gap1 = v_add_f32 %gap0, %scale
+  %gap2 = v_add_f32 %gap1, %scale
+  %gap3 = v_add_f32 %gap2, %scale
+  %gap4 = v_add_f32 %gap3, %scale
+  %gap5 = v_add_f32 %gap4, %scale
+  %scaled = v_mul_f32 %inv, %gap5
+  buffer_store_dword %scaled, %resource, %addr, %soffset
+  return
+}
+
+// ----
+  v_rsq_f32 v0, v0
+  v_add_f32 v3, v1, v1
+  v_add_f32 v3, v3, v1
+  v_add_f32 v3, v3, v1
+  v_add_f32 v3, v3, v1
+  v_add_f32 v3, v3, v1
+  v_add_f32 v1, v3, v1
+  v_mul_f32 v0, v0, v1
+  buffer_store_dword v0, v2, s[0:3], s4 offen offset:0
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @wait_fragment
 amdgpu.target<gfx950> @gfx_target
 low.func.def target(@gfx_target) @wait_fragment(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>) asm<amdgpu.cdna4.core> {

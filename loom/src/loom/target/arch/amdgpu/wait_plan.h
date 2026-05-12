@@ -86,6 +86,8 @@ typedef enum loom_amdgpu_wait_plan_reason_e {
   // A packet overwrites physical registers that still receive an outstanding
   // memory-read result.
   LOOM_AMDGPU_WAIT_PLAN_REASON_READ_RESULT_REUSE = 5,
+  // An RDNA VALU consumes a nearby TRANS result before va_vdst is drained.
+  LOOM_AMDGPU_WAIT_PLAN_REASON_TRANS_RESULT_USE = 6,
 } loom_amdgpu_wait_plan_reason_t;
 
 // One AMDGPU wait-counter action in scheduled packet order.

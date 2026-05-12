@@ -597,6 +597,19 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    descriptor_semantics
+  HDRS
+    "descriptor_semantics.h"
+  SRCS
+    "descriptor_semantics.c"
+  DEPS
+    iree::base
+    loom::src::loom::codegen::low::descriptors
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     math_policy
   HDRS
     "math_policy.h"
@@ -618,6 +631,7 @@ loom_cc_library(
   SRCS
     "wait_states.c"
   DEPS
+    ::descriptor_semantics
     ::matrix_contract
     ::target_id
     ::target_info
@@ -1755,6 +1769,8 @@ loom_cc_library(
   SRCS
     "wait_plan.c"
   DEPS
+    ::descriptor_semantics
+    ::target_id
     ::target_refs
     iree::base
     iree::base::internal::arena

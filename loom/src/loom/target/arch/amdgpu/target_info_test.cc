@@ -29,6 +29,19 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx11Processor) {
   EXPECT_FALSE(processor->kernel_descriptor_has_accum_offset);
   EXPECT_TRUE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
   EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
+  EXPECT_TRUE(processor->has_valu_trans_use_hazard);
+}
+
+TEST(AmdgpuTargetInfoTest, LooksUpGfx1150Processor) {
+  const loom_amdgpu_processor_info_t* processor = nullptr;
+  IREE_ASSERT_OK(
+      loom_amdgpu_target_info_lookup_processor(IREE_SV("gfx1150"), &processor));
+  ASSERT_NE(processor, nullptr);
+  EXPECT_TRUE(iree_string_view_equal(processor->descriptor_set_key,
+                                     IREE_SV("amdgpu.rdna3.core")));
+  EXPECT_EQ(processor->kernel_descriptor_profile,
+            LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11);
+  EXPECT_FALSE(processor->has_valu_trans_use_hazard);
 }
 
 TEST(AmdgpuTargetInfoTest, IteratesProcessors) {
@@ -91,6 +104,7 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx942Processor) {
   EXPECT_TRUE(processor->kernel_descriptor_has_accum_offset);
   EXPECT_TRUE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
   EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
+  EXPECT_FALSE(processor->has_valu_trans_use_hazard);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpGfx950Processor) {
@@ -113,6 +127,7 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx950Processor) {
   EXPECT_TRUE(processor->kernel_descriptor_has_accum_offset);
   EXPECT_TRUE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
   EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
+  EXPECT_FALSE(processor->has_valu_trans_use_hazard);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpGfx1200Processor) {
@@ -135,6 +150,7 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx1200Processor) {
   EXPECT_FALSE(processor->kernel_descriptor_has_accum_offset);
   EXPECT_FALSE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
   EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
+  EXPECT_FALSE(processor->has_valu_trans_use_hazard);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpGfx1250Processor) {

@@ -383,7 +383,7 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
     register_granule_width = 1
     bool_width = len("false")
     lines = [
-        "#define LOOM_AMDGPU_PROCESSOR_INFO(processor_, descriptor_set_key_, descriptor_set_ordinal_, elf_machine_flags_, elf_feature_flags_, default_wavefront_size_, kernel_descriptor_profile_, matrix_feature_profile_, vgpr_granule_wave32_, vgpr_granule_wave64_, has_flat_scratch_, uses_gfx10_sgpr_, has_accum_offset_, has_dx10_ieee_, has_packed_tid_) \\",
+        "#define LOOM_AMDGPU_PROCESSOR_INFO(processor_, descriptor_set_key_, descriptor_set_ordinal_, elf_machine_flags_, elf_feature_flags_, default_wavefront_size_, kernel_descriptor_profile_, matrix_feature_profile_, vgpr_granule_wave32_, vgpr_granule_wave64_, has_flat_scratch_, uses_gfx10_sgpr_, has_accum_offset_, has_dx10_ieee_, has_packed_tid_, has_valu_trans_use_hazard_) \\",
         "  { \\",
         "    .processor = IREE_SVL(processor_), \\",
         "    .descriptor_set_key = IREE_SVL(descriptor_set_key_), \\",
@@ -400,10 +400,11 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
         "    .kernel_descriptor_has_accum_offset = has_accum_offset_, \\",
         "    .kernel_descriptor_has_dx10_clamp_and_ieee_mode = has_dx10_ieee_, \\",
         "    .kernel_descriptor_has_packed_workitem_id = has_packed_tid_, \\",
+        "    .has_valu_trans_use_hazard = has_valu_trans_use_hazard_, \\",
         "  }",
         "",
         "static const loom_amdgpu_processor_info_t kAmdgpuProcessorInfos[] = {",
-        "  // processor descriptor_set_key    ordinal         mach  feat wave kernel_profile                              matrix_profile                             vgpr32 vgpr64 flat_scratch gfx10_sgpr accum_offset dx10_ieee packed_tid",
+        "  // processor descriptor_set_key    ordinal         mach  feat wave kernel_profile                              matrix_profile                             vgpr32 vgpr64 flat_scratch gfx10_sgpr accum_offset dx10_ieee packed_tid valu_trans_use",
     ]
     lines.extend(
         (
@@ -422,7 +423,8 @@ def _emit_processor_rows(processors: Sequence[AmdgpuProcessorInfo]) -> list[str]
             f"{_padded_arg(_bool_literal(info.kernel_descriptor_uses_gfx10_sgpr_encoding), bool_width)}"
             f"{_padded_arg(_bool_literal(info.kernel_descriptor_has_accum_offset), bool_width)}"
             f"{_padded_arg(_bool_literal(info.kernel_descriptor_has_dx10_clamp_and_ieee_mode), bool_width)}"
-            f"{_bool_literal(info.kernel_descriptor_has_packed_workitem_id)}),"
+            f"{_padded_arg(_bool_literal(info.kernel_descriptor_has_packed_workitem_id), bool_width)}"
+            f"{_bool_literal(info.has_valu_trans_use_hazard)}),"
         )
         for info in processors
     )

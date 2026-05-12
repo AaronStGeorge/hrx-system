@@ -13,6 +13,7 @@
 #include "loom/codegen/low/packet.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/descriptor_semantics.h"
 #include "loom/target/arch/amdgpu/matrix_contract.h"
 #include "loom/target/arch/amdgpu/target_id.h"
 #include "loom/target/arch/amdgpu/target_info.h"
@@ -264,38 +265,11 @@ static bool loom_amdgpu_wait_state_matrix_reads_valu_results(
   }
 }
 
-static bool loom_amdgpu_wait_state_descriptor_uses_resource_kind(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_descriptor_t* descriptor, loom_low_resource_kind_t kind) {
-  if (descriptor->schedule_class_id >= descriptor_set->schedule_class_count) {
-    return false;
-  }
-  const loom_low_schedule_class_t* schedule_class =
-      &descriptor_set->schedule_classes[descriptor->schedule_class_id];
-  const uint32_t end = (uint32_t)schedule_class->issue_use_start +
-                       schedule_class->issue_use_count;
-  if (end > descriptor_set->issue_use_count) {
-    return false;
-  }
-  for (uint16_t i = 0; i < schedule_class->issue_use_count; ++i) {
-    const loom_low_issue_use_t* issue_use =
-        &descriptor_set->issue_uses[schedule_class->issue_use_start + i];
-    if (issue_use->resource_id >= descriptor_set->resource_count) {
-      continue;
-    }
-    if (descriptor_set->resources[issue_use->resource_id].kind == kind) {
-      return true;
-    }
-  }
-  return false;
-}
-
-static bool loom_amdgpu_wait_state_descriptor_writes_valu(
+static bool loom_amdgpu_wait_state_descriptor_uses_vector_alu(
     const loom_amdgpu_wait_state_builder_t* builder,
     const loom_low_descriptor_t* descriptor) {
-  return loom_amdgpu_wait_state_descriptor_uses_resource_kind(
-      builder->schedule->target.descriptor_set, descriptor,
-      LOOM_LOW_RESOURCE_KIND_VECTOR_ALU);
+  return loom_amdgpu_descriptor_uses_vector_alu(
+      builder->schedule->target.descriptor_set, descriptor);
 }
 
 static bool loom_amdgpu_wait_state_processor_has_trans_forwarding_hazard(
@@ -312,37 +286,11 @@ static bool loom_amdgpu_wait_state_processor_has_trans_forwarding_hazard(
   }
 }
 
-static bool loom_amdgpu_wait_state_descriptor_has_semantic_tag(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_descriptor_t* descriptor, iree_string_view_t expected) {
-  if (descriptor_set == NULL || descriptor == NULL ||
-      descriptor->semantic_tag_string_offset == LOOM_LOW_STRING_OFFSET_NONE) {
-    return false;
-  }
-  iree_string_view_t semantic_tag = loom_low_descriptor_set_string(
-      descriptor_set, descriptor->semantic_tag_string_offset);
-  return iree_string_view_equal(semantic_tag, expected);
-}
-
 static bool loom_amdgpu_wait_state_descriptor_is_transcendental(
     const loom_amdgpu_wait_state_builder_t* builder,
     const loom_low_descriptor_t* descriptor) {
-  const loom_low_descriptor_set_t* descriptor_set =
-      builder->schedule->target.descriptor_set;
-  return loom_amdgpu_wait_state_descriptor_has_semantic_tag(
-             descriptor_set, descriptor, IREE_SV("float.exp2.f32")) ||
-         loom_amdgpu_wait_state_descriptor_has_semantic_tag(
-             descriptor_set, descriptor, IREE_SV("float.log2.f32")) ||
-         loom_amdgpu_wait_state_descriptor_has_semantic_tag(
-             descriptor_set, descriptor, IREE_SV("float.sin_turns.f32")) ||
-         loom_amdgpu_wait_state_descriptor_has_semantic_tag(
-             descriptor_set, descriptor, IREE_SV("float.cos_turns.f32")) ||
-         loom_amdgpu_wait_state_descriptor_has_semantic_tag(
-             descriptor_set, descriptor, IREE_SV("float.sqrt.f32")) ||
-         loom_amdgpu_wait_state_descriptor_has_semantic_tag(
-             descriptor_set, descriptor, IREE_SV("float.rsqrt.f32")) ||
-         loom_amdgpu_wait_state_descriptor_has_semantic_tag(
-             descriptor_set, descriptor, IREE_SV("float.reciprocal.f32"));
+  return loom_amdgpu_descriptor_is_transcendental(
+      builder->schedule->target.descriptor_set, descriptor);
 }
 
 static bool loom_amdgpu_wait_state_descriptor_is_trans_forwarding_consumer(
@@ -350,7 +298,8 @@ static bool loom_amdgpu_wait_state_descriptor_is_trans_forwarding_consumer(
     const loom_low_descriptor_t* descriptor) {
   return loom_amdgpu_wait_state_processor_has_trans_forwarding_hazard(
              builder->processor) &&
-         loom_amdgpu_wait_state_descriptor_writes_valu(builder, descriptor) &&
+         loom_amdgpu_wait_state_descriptor_uses_vector_alu(builder,
+                                                           descriptor) &&
          !loom_amdgpu_wait_state_descriptor_is_transcendental(builder,
                                                               descriptor);
 }
@@ -702,7 +651,7 @@ static iree_status_t loom_amdgpu_wait_state_apply_packet(
         builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_MATRIX_RESULT_USE,
         matrix_wait_cycles, instruction_count);
   } else if (packet->descriptor != NULL &&
-             loom_amdgpu_wait_state_descriptor_writes_valu(
+             loom_amdgpu_wait_state_descriptor_uses_vector_alu(
                  builder, packet->descriptor)) {
     loom_amdgpu_wait_state_clear_results(builder, packet->node->op);
     loom_amdgpu_wait_state_record_results(

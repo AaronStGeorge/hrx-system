@@ -81,6 +81,7 @@ class AmdgpuProcessorInfo:
     kernel_descriptor_has_accum_offset: bool = False
     kernel_descriptor_has_dx10_clamp_and_ieee_mode: bool = False
     kernel_descriptor_has_packed_workitem_id: bool = False
+    has_valu_trans_use_hazard: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +126,7 @@ def processor_info(
     kernel_descriptor_has_accum_offset: bool = False,
     kernel_descriptor_has_dx10_clamp_and_ieee_mode: bool = False,
     kernel_descriptor_has_packed_workitem_id: bool = False,
+    has_valu_trans_use_hazard: bool = False,
 ) -> AmdgpuProcessorInfo:
     return AmdgpuProcessorInfo(
         processor=processor,
@@ -141,10 +143,16 @@ def processor_info(
         kernel_descriptor_has_accum_offset=kernel_descriptor_has_accum_offset,
         kernel_descriptor_has_dx10_clamp_and_ieee_mode=kernel_descriptor_has_dx10_clamp_and_ieee_mode,
         kernel_descriptor_has_packed_workitem_id=kernel_descriptor_has_packed_workitem_id,
+        has_valu_trans_use_hazard=has_valu_trans_use_hazard,
     )
 
 
-def rdna3_processor_info(processor: str, elf_machine_flags: int) -> AmdgpuProcessorInfo:
+def rdna3_processor_info(
+    processor: str,
+    elf_machine_flags: int,
+    *,
+    has_valu_trans_use_hazard: bool = False,
+) -> AmdgpuProcessorInfo:
     return AmdgpuProcessorInfo(
         processor=processor,
         descriptor_set_key="amdgpu.rdna3.core",
@@ -159,6 +167,7 @@ def rdna3_processor_info(processor: str, elf_machine_flags: int) -> AmdgpuProces
         kernel_descriptor_uses_gfx10_sgpr_encoding=True,
         kernel_descriptor_has_dx10_clamp_and_ieee_mode=True,
         kernel_descriptor_has_packed_workitem_id=True,
+        has_valu_trans_use_hazard=has_valu_trans_use_hazard,
     )
 
 
@@ -309,10 +318,26 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     processor_info("gfx1034", 0x03E, default_wavefront_size=32),
     processor_info("gfx1035", 0x03D, default_wavefront_size=32),
     processor_info("gfx1036", 0x045, default_wavefront_size=32),
-    rdna3_processor_info(processor="gfx1100", elf_machine_flags=0x041),
-    rdna3_processor_info(processor="gfx1101", elf_machine_flags=0x046),
-    rdna3_processor_info(processor="gfx1102", elf_machine_flags=0x047),
-    rdna3_processor_info(processor="gfx1103", elf_machine_flags=0x044),
+    rdna3_processor_info(
+        processor="gfx1100",
+        elf_machine_flags=0x041,
+        has_valu_trans_use_hazard=True,
+    ),
+    rdna3_processor_info(
+        processor="gfx1101",
+        elf_machine_flags=0x046,
+        has_valu_trans_use_hazard=True,
+    ),
+    rdna3_processor_info(
+        processor="gfx1102",
+        elf_machine_flags=0x047,
+        has_valu_trans_use_hazard=True,
+    ),
+    rdna3_processor_info(
+        processor="gfx1103",
+        elf_machine_flags=0x044,
+        has_valu_trans_use_hazard=True,
+    ),
     rdna3_processor_info(processor="gfx1150", elf_machine_flags=0x043),
     rdna3_processor_info(processor="gfx1151", elf_machine_flags=0x04A),
     rdna3_processor_info(processor="gfx1152", elf_machine_flags=0x055),
@@ -405,6 +430,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         elf_feature_flags=AMDGPU_ELF_FEATURE_GENERIC_VERSION_1_V6,
         default_wavefront_size=32,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11,
+        has_valu_trans_use_hazard=True,
     ),
     processor_info(
         "gfx12-generic",
