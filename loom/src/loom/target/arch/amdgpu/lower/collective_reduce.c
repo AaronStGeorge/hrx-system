@@ -84,8 +84,10 @@ static bool loom_amdgpu_descriptor_set_has_ref(
 
 static bool loom_amdgpu_subgroup_reduce_dpp_row_is_applicable(
     uint32_t wavefront_size, uint32_t active_lane_count) {
-  return active_lane_count == wavefront_size &&
-         wavefront_size > LOOM_AMDGPU_DPP_ROW_LANE_COUNT;
+  // Keep the DPP row strategy on wave32. Wave64 targets use the lane-addressed
+  // bpermute tree so full-wave reductions do not depend on family-specific DPP
+  // row-control behavior.
+  return active_lane_count == wavefront_size && wavefront_size == 32;
 }
 
 static iree_status_t loom_amdgpu_select_subgroup_reduce_crosslane_kind(

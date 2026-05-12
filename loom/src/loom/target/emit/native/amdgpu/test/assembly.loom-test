@@ -824,6 +824,24 @@ low.func.def target(@gfx942_target) @gfx942_mfma_valu_operand_wait_state(%lhs: r
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx942_trans_result_wait_state
+amdgpu.target<gfx942> @gfx942_target
+low.func.def target(@gfx942_target) @gfx942_trans_result_wait_state(%input: reg<amdgpu.vgpr>, %scale: reg<amdgpu.vgpr>, %addr: reg<amdgpu.vgpr>, %base: reg<amdgpu.sgpr x2>, %m0: reg<amdgpu.m0>) {
+  %inv = low.op<amdgpu.v_rsq_f32>(%input) : (reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  %scaled = low.op<amdgpu.v_mul_f32>(%inv, %scale) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>
+  low.op<amdgpu.global_store_b32_saddr>(%addr, %scaled, %base, %m0) {offset = 0} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.return
+}
+
+// ----
+  v_rsq_f32 v0, v0
+  s_nop 0
+  v_mul_f32 v0, v0, v1
+  global_store_dword v2, v0, s[0:1] offset:0
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @wait_fragment
 amdgpu.target<gfx950> @gfx_target
 low.func.def target(@gfx_target) @wait_fragment(%value: reg<amdgpu.vgpr>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>, %vaddr: reg<amdgpu.vgpr>) asm<amdgpu.cdna4.core> {

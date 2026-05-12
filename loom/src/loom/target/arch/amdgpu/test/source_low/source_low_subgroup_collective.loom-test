@@ -1977,22 +1977,30 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_reduce_addf_f3
   %20 = v_lshlrev_b32_src0_inline %tid, 2
   %21 = s_mov_b32_m0_imm 0
   %value = global_load_dword_saddr %20, %input_view, %21
-  %23 = v_mov_b32_dpp %value {dpp_ctrl = 177}
-  %24 = v_add_f32 %value, %23
-  %25 = v_mov_b32_dpp %24 {dpp_ctrl = 78}
-  %26 = v_add_f32 %24, %25
-  %27 = v_mov_b32_dpp %26 {dpp_ctrl = 321}
-  %28 = v_add_f32 %26, %27
-  %29 = v_mov_b32_dpp %28 {dpp_ctrl = 320}
-  %30 = v_add_f32 %28, %29
-  %31 = v_xor_b32_src0_inline %tid, 16
+  %23 = v_xor_b32_src0_inline %tid, 32
+  %24 = v_lshlrev_b32_src0_inline %23, 2
+  %25 = ds_bpermute_b32 %24, %value
+  %26 = v_add_f32 %value, %25
+  %27 = v_xor_b32_src0_inline %tid, 16
+  %28 = v_lshlrev_b32_src0_inline %27, 2
+  %29 = ds_bpermute_b32 %28, %26
+  %30 = v_add_f32 %26, %29
+  %31 = v_xor_b32_src0_inline %tid, 8
   %32 = v_lshlrev_b32_src0_inline %31, 2
   %33 = ds_bpermute_b32 %32, %30
   %34 = v_add_f32 %30, %33
-  %35 = v_xor_b32_src0_inline %tid, 32
+  %35 = v_xor_b32_src0_inline %tid, 4
   %36 = v_lshlrev_b32_src0_inline %35, 2
   %37 = ds_bpermute_b32 %36, %34
-  %result = v_add_f32 %34, %37
+  %38 = v_add_f32 %34, %37
+  %39 = v_xor_b32_src0_inline %tid, 2
+  %40 = v_lshlrev_b32_src0_inline %39, 2
+  %41 = ds_bpermute_b32 %40, %38
+  %42 = v_add_f32 %38, %41
+  %43 = v_xor_b32_src0_inline %tid, 1
+  %44 = v_lshlrev_b32_src0_inline %43, 2
+  %45 = ds_bpermute_b32 %44, %42
+  %result = v_add_f32 %42, %45
   global_store_dword_saddr %20, %result, %output_view, %21
   return
 }
