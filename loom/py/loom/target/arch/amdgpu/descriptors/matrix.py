@@ -38,7 +38,7 @@ def _v_wmma_16x16x16_overlay(
                 "SRC2", _vgpr_const_operand("acc", units=accumulator_units)
             ),
         ),
-        constraints=(Constraint(ConstraintKind.TIED, 0, 3),),
+        constraints=_destructive_accumulator_constraints(3),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -193,7 +193,7 @@ def _v_wmma_i32_16x16x16_overlay(
             AmdgpuOperandOverlay("SRC1", _vgpr_operand("b", units=operand_units)),
             AmdgpuOperandOverlay("SRC2", _vgpr_const_operand("acc", units=8)),
         ),
-        constraints=(Constraint(ConstraintKind.TIED, 0, 3),),
+        constraints=_destructive_accumulator_constraints(3),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -246,6 +246,7 @@ def _v_mfma_f32_16x16x16_f16_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("SRC1", _vgpr_agpr_operand("b", units=2)),
             AmdgpuOperandOverlay("SRC2", _vgpr_agpr_const_operand("acc", units=4)),
         ),
+        constraints=_destructive_accumulator_constraints(3),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -264,6 +265,7 @@ def _v_mfma_f32_16x16x16_bf16_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("SRC1", _vgpr_agpr_operand("b", units=2)),
             AmdgpuOperandOverlay("SRC2", _vgpr_agpr_const_operand("acc", units=4)),
         ),
+        constraints=_destructive_accumulator_constraints(3),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 

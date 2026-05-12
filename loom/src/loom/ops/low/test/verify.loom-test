@@ -256,6 +256,42 @@ low.func.def target(@test_target) @cfg_tied_loop_carried_value(%condition: reg<t
 
 test.target<low_core> @test_target
 
+// A body-local value defined before a tied op is recreated on each dynamic
+// entry to the block. A backedge to the consuming block must not treat the tied
+// operand spelling as a later reuse of the prior iteration's consumed value.
+low.func.def target(@test_target) @cfg_tied_body_local_value(%condition: reg<test.i32>, %seed: reg<test.i32>) -> (reg<test.i32>) {
+  low.br ^loop(%seed: reg<test.i32>)
+^loop(%state: reg<test.i32>):
+  low.cond_br %condition, ^body, ^exit : reg<test.i32>
+^body:
+  %copy = low.copy %state : reg<test.i32> -> reg<test.i32>
+  %next = low.op<test.tied.any>(%copy) : (reg<test.i32>) -> %copy as reg<test.i32>
+  low.br ^loop(%next: reg<test.i32>)
+^exit:
+  low.return %state : reg<test.i32>
+}
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @cfg_tied_outer_value_reused_by_backedge(%condition: reg<test.i32>, %seed: reg<test.i32>) -> (reg<test.i32>) {
+  %copy = low.copy %seed : reg<test.i32> -> reg<test.i32>
+  low.br ^loop(%seed: reg<test.i32>)
+^loop(%state: reg<test.i32>):
+  low.cond_br %condition, ^body, ^exit : reg<test.i32>
+^body:
+  // ERROR@+1: DOMINANCE/002 {value_name="copy"}
+  %next = low.op<test.tied.any>(%copy) : (reg<test.i32>) -> %copy as reg<test.i32>
+  low.br ^loop(%next: reg<test.i32>)
+^exit:
+  low.return %state : reg<test.i32>
+}
+
+// ====
+
+test.target<low_core> @test_target
+
 low.func.def target(@test_target) @cfg_tied_rejects_same_path_reuse(%condition: reg<test.i32>, %seed: reg<test.i32>) -> (reg<test.i32>) {
   low.br ^loop(%seed: reg<test.i32>)
 ^loop(%state: reg<test.i32>):

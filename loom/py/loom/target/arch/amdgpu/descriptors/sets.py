@@ -1849,7 +1849,7 @@ _AMDGPU_RDNA4_GFX125X_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
                 _encoded_operand(_vgpr_operand("b", units=8), "SRC1"),
                 _encoded_operand(_vgpr_const_operand("acc", units=8), "SRC2"),
             ),
-            constraints=(Constraint(ConstraintKind.TIED, 0, 3),),
+            constraints=_destructive_accumulator_constraints(3),
             encoding_field_values=(
                 EncodingFieldValue(amdgpu_encoding_field_id("OPSEL_HI"), 3),
             ),
@@ -1875,7 +1875,7 @@ _AMDGPU_RDNA4_GFX125X_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             encoding_field_values=(
                 EncodingFieldValue(amdgpu_encoding_field_id("X2ENCODING"), 0x35),
             ),
-            constraints=(Constraint(ConstraintKind.TIED, 0, 3),),
+            constraints=_destructive_accumulator_constraints(3),
             asm_forms=_asm(
                 results=("dst",),
                 operands=("a", "b", "acc", "scale_src0", "scale_src1"),
@@ -1916,7 +1916,7 @@ _AMDGPU_RDNA4_GFX125X_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             encoding_field_values=(
                 EncodingFieldValue(amdgpu_encoding_field_id("X2ENCODING"), 0x3A),
             ),
-            constraints=(Constraint(ConstraintKind.TIED, 0, 3),),
+            constraints=_destructive_accumulator_constraints(3),
             asm_forms=_asm(
                 results=("dst",),
                 operands=("a", "b", "acc", "scale_src0", "scale_src1"),

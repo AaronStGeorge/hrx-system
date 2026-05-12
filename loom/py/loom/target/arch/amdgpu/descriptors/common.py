@@ -1500,11 +1500,18 @@ _ALU_WAIT_EFFECT = Effect(
     counter_id=_COUNTER_ALU,
 )
 
-_DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS = (
-    Constraint(ConstraintKind.TIED, 0, 1),
-    Constraint(ConstraintKind.DESTRUCTIVE, 0, 1),
-    Constraint(ConstraintKind.EARLY_CLOBBER, 0),
-)
+
+def _destructive_accumulator_constraints(
+    accumulator_operand_index: int,
+) -> tuple[Constraint, ...]:
+    return (
+        Constraint(ConstraintKind.TIED, 0, accumulator_operand_index),
+        Constraint(ConstraintKind.DESTRUCTIVE, 0, accumulator_operand_index),
+        Constraint(ConstraintKind.EARLY_CLOBBER, 0),
+    )
+
+
+_DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS = _destructive_accumulator_constraints(1)
 _BUFFER_ATOMIC_VDATA_INPUT_REASON = "xml-models-buffer-atomic-vdata-as-output-only"
 _SMFMAC_VDST_ACCUMULATOR_REASON = "xml-models-smfmac-accumulator-as-vdst"
 _DESTRUCTIVE_BUFFER_ATOMIC_CONSTRAINTS = (
@@ -2249,6 +2256,7 @@ __all__ = (
     "_ds_crosslane_effects",
     "_ds_fixed_fields_without_offset1",
     "_ds_offset_immediate",
+    "_destructive_accumulator_constraints",
     "_exec_clobber",
     "_exec_state_read",
     "_f32_bits",

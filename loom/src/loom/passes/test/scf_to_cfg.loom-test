@@ -131,7 +131,7 @@ func.def @preserves_static_for_iv_facts() {
   %6 = index.cmp slt, %4, %limit : index
   cfg.cond_br %6, ^_bb2, ^_bb3
 ^_bb2:
-  %i = index.assume %4 [range(%4, 0, 3), mul(%4, 2)] : index
+  %i = index.assume %4 [range(%4, 0, 2), mul(%4, 2)] : index
   test.use %i : index
   %7 = index.add %i, %step : index
   cfg.br ^_bb1(%7: index)
@@ -168,7 +168,7 @@ kernel.def @preserves_kernel_for_iv_facts() {
   %7 = index.cmp slt, %5, %limit : index
   cfg.cond_br %7, ^_bb2, ^_bb3
 ^_bb2:
-  %i = index.assume %5 [range(%5, 0, 3), mul(%5, 2)] : index
+  %i = index.assume %5 [range(%5, 0, 2), mul(%5, 2)] : index
   test.use %i : index
   %8 = index.add %i, %step : index
   cfg.br ^_bb1(%8: index)

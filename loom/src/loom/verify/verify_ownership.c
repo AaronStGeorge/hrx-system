@@ -270,6 +270,28 @@ static bool loom_verify_find_same_block_use_after(
   return false;
 }
 
+// A CFG backedge to the consuming block executes block arguments and earlier
+// op definitions before it reaches the consuming op again. Those values are
+// fresh dynamic storage for the next block entry, not later uses of the storage
+// consumed by the previous dynamic execution.
+static bool loom_verify_value_is_recreated_before_op_on_reentry(
+    const loom_module_t* module, const loom_block_t* block,
+    const loom_op_t* consuming_op, loom_value_id_t value_id) {
+  if (!block || !consuming_op) {
+    return false;
+  }
+  if (value_id == LOOM_VALUE_ID_INVALID || value_id >= module->values.count) {
+    return false;
+  }
+  const loom_value_t* value = loom_module_value(module, value_id);
+  if (loom_value_is_block_arg(value)) {
+    return loom_value_def_block(value) == block;
+  }
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  return defining_op && defining_op->parent_block == block &&
+         defining_op->block_ordinal < consuming_op->block_ordinal;
+}
+
 static iree_status_t loom_verify_find_cfg_use_after_consume_from_block(
     const loom_cfg_graph_t* graph, uint16_t block_index,
     loom_value_id_t value_id, uint64_t* visited_bits,
@@ -338,6 +360,11 @@ static iree_status_t loom_verify_find_cfg_use_after_consume(
       iree_arena_allocate_array(&state->arena, visited_word_count,
                                 sizeof(*visited_bits), (void**)&visited_bits));
   memset(visited_bits, 0, visited_word_count * sizeof(*visited_bits));
+  if (loom_verify_value_is_recreated_before_op_on_reentry(
+          state->module, consuming_op->parent_block, consuming_op, value_id)) {
+    loom_bitset_set(visited_bits, visited_word_count,
+                    (uint16_t)consuming_block_index);
+  }
 
   loom_cfg_block_index_span_t successors =
       loom_cfg_graph_successors(&graph, (uint16_t)consuming_block_index);
