@@ -29,6 +29,7 @@ loom_cc_library(
     loom::src::loom::target::arch::x86::avx512_descriptors_ids
     loom::src::loom::target::arch::x86::avx512_packed_dot_descriptors_ids
     loom::src::loom::target::arch::x86::packed_dot_descriptors_ids
+    loom::src::loom::target::arch::x86::register_classes
     loom::src::loom::target::arch::x86::scalar_descriptors_ids
     loom::src::loom::target::emit::native::assembly
   PUBLIC

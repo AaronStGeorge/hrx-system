@@ -14,6 +14,7 @@
 #include "loom/target/arch/x86/avx512_descriptors.h"
 #include "loom/target/arch/x86/avx512_packed_dot_descriptors.h"
 #include "loom/target/arch/x86/packed_dot_descriptors.h"
+#include "loom/target/arch/x86/register_classes.h"
 #include "loom/target/arch/x86/scalar_descriptors.h"
 #include "loom/target/emit/native/assembly.h"
 
@@ -33,15 +34,6 @@ typedef enum loom_x86_descriptor_set_kind_e {
   LOOM_X86_DESCRIPTOR_SET_PACKED_DOT_CORE = 2,
   LOOM_X86_DESCRIPTOR_SET_AVX512_PACKED_DOT_CORE = 3,
 } loom_x86_descriptor_set_kind_t;
-
-typedef enum loom_x86_register_class_kind_e {
-  LOOM_X86_REGISTER_CLASS_GPR32 = 0,
-  LOOM_X86_REGISTER_CLASS_GPR64 = 1,
-  LOOM_X86_REGISTER_CLASS_XMM = 2,
-  LOOM_X86_REGISTER_CLASS_YMM = 3,
-  LOOM_X86_REGISTER_CLASS_ZMM = 4,
-  LOOM_X86_REGISTER_CLASS_K = 5,
-} loom_x86_register_class_kind_t;
 
 typedef struct loom_x86_assembly_state_t {
   // Descriptor-set family selected for this fragment.
@@ -111,90 +103,12 @@ static bool loom_x86_assignments_match(
 }
 
 static iree_status_t loom_x86_register_class_kind(
-    const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context,
     const loom_low_allocation_assignment_t* assignment,
-    loom_x86_register_class_kind_t* out_kind) {
-  switch (state->descriptor_set_kind) {
-    case LOOM_X86_DESCRIPTOR_SET_SCALAR_CORE:
-      switch (assignment->descriptor_reg_class_id) {
-        case X86_SCALAR_CORE_REG_CLASS_ID_GPR32:
-          *out_kind = LOOM_X86_REGISTER_CLASS_GPR32;
-          return iree_ok_status();
-        case X86_SCALAR_CORE_REG_CLASS_ID_GPR64:
-          *out_kind = LOOM_X86_REGISTER_CLASS_GPR64;
-          return iree_ok_status();
-        default:
-          break;
-      }
-      break;
-    case LOOM_X86_DESCRIPTOR_SET_AVX512_CORE:
-      switch (assignment->descriptor_reg_class_id) {
-        case X86_AVX512_CORE_REG_CLASS_ID_GPR32:
-          *out_kind = LOOM_X86_REGISTER_CLASS_GPR32;
-          return iree_ok_status();
-        case X86_AVX512_CORE_REG_CLASS_ID_GPR64:
-          *out_kind = LOOM_X86_REGISTER_CLASS_GPR64;
-          return iree_ok_status();
-        case X86_AVX512_CORE_REG_CLASS_ID_XMM:
-          *out_kind = LOOM_X86_REGISTER_CLASS_XMM;
-          return iree_ok_status();
-        case X86_AVX512_CORE_REG_CLASS_ID_ZMM:
-          *out_kind = LOOM_X86_REGISTER_CLASS_ZMM;
-          return iree_ok_status();
-        case X86_AVX512_CORE_REG_CLASS_ID_K:
-          *out_kind = LOOM_X86_REGISTER_CLASS_K;
-          return iree_ok_status();
-        default:
-          break;
-      }
-      break;
-    case LOOM_X86_DESCRIPTOR_SET_PACKED_DOT_CORE:
-      switch (assignment->descriptor_reg_class_id) {
-        case X86_PACKED_DOT_CORE_REG_CLASS_ID_XMM:
-          *out_kind = LOOM_X86_REGISTER_CLASS_XMM;
-          return iree_ok_status();
-        case X86_PACKED_DOT_CORE_REG_CLASS_ID_YMM:
-          *out_kind = LOOM_X86_REGISTER_CLASS_YMM;
-          return iree_ok_status();
-        case X86_PACKED_DOT_CORE_REG_CLASS_ID_ZMM:
-          *out_kind = LOOM_X86_REGISTER_CLASS_ZMM;
-          return iree_ok_status();
-        default:
-          break;
-      }
-      break;
-    case LOOM_X86_DESCRIPTOR_SET_AVX512_PACKED_DOT_CORE:
-      switch (assignment->descriptor_reg_class_id) {
-        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_GPR32:
-          *out_kind = LOOM_X86_REGISTER_CLASS_GPR32;
-          return iree_ok_status();
-        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_GPR64:
-          *out_kind = LOOM_X86_REGISTER_CLASS_GPR64;
-          return iree_ok_status();
-        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_XMM:
-          *out_kind = LOOM_X86_REGISTER_CLASS_XMM;
-          return iree_ok_status();
-        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_YMM:
-          *out_kind = LOOM_X86_REGISTER_CLASS_YMM;
-          return iree_ok_status();
-        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_ZMM:
-          *out_kind = LOOM_X86_REGISTER_CLASS_ZMM;
-          return iree_ok_status();
-        case X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_K:
-          *out_kind = LOOM_X86_REGISTER_CLASS_K;
-          return iree_ok_status();
-        default:
-          break;
-      }
-      break;
-  }
-  iree_string_view_t register_class = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
-      context->allocation, assignment, &register_class));
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "x86 assembly register class '%.*s' is unsupported",
-                          (int)register_class.size, register_class.data);
+    loom_x86_register_class_t* out_kind) {
+  return loom_x86_descriptor_set_logical_register_class(
+      context->schedule->target.descriptor_set,
+      assignment->descriptor_reg_class_id, out_kind);
 }
 
 static iree_status_t loom_x86_append_assignment(
@@ -207,9 +121,10 @@ static iree_status_t loom_x86_append_assignment(
                             " is not supported",
                             assignment->value_id);
   }
-  loom_x86_register_class_kind_t register_class_kind = 0;
-  IREE_RETURN_IF_ERROR(loom_x86_register_class_kind(state, context, assignment,
-                                                    &register_class_kind));
+  (void)state;
+  loom_x86_register_class_t register_class_kind = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_x86_register_class_kind(context, assignment, &register_class_kind));
   if (register_class_kind == LOOM_X86_REGISTER_CLASS_GPR32) {
     if (assignment->location_base >= IREE_ARRAYSIZE(kX86Gpr32Names)) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
@@ -253,9 +168,10 @@ static iree_status_t loom_x86_append_copy_mnemonic(
     const loom_x86_assembly_state_t* state,
     const loom_native_assembly_packet_context_t* context,
     const loom_low_allocation_assignment_t* destination_assignment) {
-  loom_x86_register_class_kind_t register_class_kind = 0;
+  (void)state;
+  loom_x86_register_class_t register_class_kind = 0;
   IREE_RETURN_IF_ERROR(loom_x86_register_class_kind(
-      state, context, destination_assignment, &register_class_kind));
+      context, destination_assignment, &register_class_kind));
   switch (register_class_kind) {
     case LOOM_X86_REGISTER_CLASS_XMM:
     case LOOM_X86_REGISTER_CLASS_YMM:
@@ -1084,9 +1000,9 @@ static iree_status_t loom_x86_append_cond_branch_packet(
   const loom_op_t* op = context->packet->node->op;
   const loom_low_allocation_assignment_t* condition_assignment =
       loom_x86_map_assignment(context, loom_low_cond_br_condition(op));
-  loom_x86_register_class_kind_t register_class_kind = 0;
+  loom_x86_register_class_t register_class_kind = 0;
   IREE_RETURN_IF_ERROR(loom_x86_register_class_kind(
-      state, context, condition_assignment, &register_class_kind));
+      context, condition_assignment, &register_class_kind));
   if (register_class_kind != LOOM_X86_REGISTER_CLASS_K) {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,

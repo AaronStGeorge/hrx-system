@@ -144,6 +144,20 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    register_classes
+  HDRS
+    "register_classes.h"
+  SRCS
+    "register_classes.c"
+  DEPS
+    iree::base
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::register_class_map
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     lower
   HDRS
     "lower.h"
@@ -152,9 +166,7 @@ loom_cc_library(
     "lower/packed_dot.c"
     "lower/registry.c"
   DEPS
-    ::avx512_descriptors_ids
-    ::avx512_packed_dot_descriptors_ids
-    ::packed_dot_descriptors_ids
+    ::register_classes
     iree::base
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::lower
@@ -165,6 +177,22 @@ loom_cc_library(
     loom::src::loom::target::arch::x86::contracts::packed_dot
     loom::src::loom::target::arch::x86::contracts::packed_dot_lower_rules
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    register_classes_test
+  SRCS
+    "register_classes_test.cc"
+  DEPS
+    ::avx512_descriptors
+    ::avx512_packed_dot_descriptors
+    ::packed_dot_descriptors
+    ::register_classes
+    ::scalar_descriptors
+    loom::src::loom::codegen::low::descriptors
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_library(

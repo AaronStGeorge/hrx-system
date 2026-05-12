@@ -8,8 +8,6 @@
 
 #include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
-#include "loom/target/arch/x86/avx512_descriptors.h"
-#include "loom/target/arch/x86/avx512_packed_dot_descriptors.h"
 #include "loom/target/arch/x86/contracts/avx512.h"
 #include "loom/target/arch/x86/contracts/avx512_lower_rules.h"
 #include "loom/target/arch/x86/contracts/packed_dot.h"
@@ -81,52 +79,15 @@ static bool loom_x86_type_is_address_gpr64(loom_type_t type) {
   }
 }
 
-static iree_status_t loom_x86_make_gpr64_register_type(
-    loom_low_lower_context_t* context, loom_type_t* out_type) {
-  return loom_low_lower_make_register_type(
-      context, X86_AVX512_CORE_REG_CLASS_ID_GPR64, 1, out_type);
-}
-
-static iree_status_t loom_x86_make_gpr32_register_type(
-    loom_low_lower_context_t* context, loom_type_t* out_type) {
-  return loom_low_lower_make_register_type(
-      context, X86_AVX512_CORE_REG_CLASS_ID_GPR32, 1, out_type);
-}
-
-iree_status_t loom_x86_make_xmm_register_type(loom_low_lower_context_t* context,
-                                              loom_type_t* out_type) {
-  return loom_low_lower_make_register_type(
-      context, X86_AVX512_CORE_REG_CLASS_ID_XMM, 1, out_type);
-}
-
-iree_status_t loom_x86_make_zmm_register_type(loom_low_lower_context_t* context,
-                                              loom_type_t* out_type) {
-  return loom_low_lower_make_register_type(
-      context, X86_AVX512_CORE_REG_CLASS_ID_ZMM, 1, out_type);
-}
-
-static iree_status_t loom_x86_make_avx512_packed_dot_xmm_register_type(
-    loom_low_lower_context_t* context, loom_type_t* out_type) {
-  return loom_low_lower_make_register_type(
-      context, X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_XMM, 1, out_type);
-}
-
-static iree_status_t loom_x86_make_avx512_packed_dot_ymm_register_type(
-    loom_low_lower_context_t* context, loom_type_t* out_type) {
-  return loom_low_lower_make_register_type(
-      context, X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_YMM, 1, out_type);
-}
-
-static iree_status_t loom_x86_make_avx512_packed_dot_zmm_register_type(
-    loom_low_lower_context_t* context, loom_type_t* out_type) {
-  return loom_low_lower_make_register_type(
-      context, X86_AVX512_PACKED_DOT_CORE_REG_CLASS_ID_ZMM, 1, out_type);
-}
-
-static iree_status_t loom_x86_make_k_register_type(
-    loom_low_lower_context_t* context, loom_type_t* out_type) {
-  return loom_low_lower_make_register_type(
-      context, X86_AVX512_CORE_REG_CLASS_ID_K, 1, out_type);
+iree_status_t loom_x86_make_register_type(
+    loom_low_lower_context_t* context, loom_x86_register_class_t register_class,
+    loom_type_t* out_type) {
+  uint16_t descriptor_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+  IREE_RETURN_IF_ERROR(loom_x86_descriptor_set_register_class_id(
+      loom_low_lower_context_descriptor_set(context), register_class,
+      &descriptor_reg_class_id));
+  return loom_low_lower_make_register_type(context, descriptor_reg_class_id, 1,
+                                           out_type);
 }
 
 static iree_status_t loom_x86_map_avx512_type(void* user_data,
@@ -136,27 +97,34 @@ static iree_status_t loom_x86_map_avx512_type(void* user_data,
                                               loom_type_t* out_low_type) {
   (void)user_data;
   if (loom_x86_type_is_address_gpr64(source_type)) {
-    return loom_x86_make_gpr64_register_type(context, out_low_type);
+    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_GPR64,
+                                       out_low_type);
   }
   if (loom_x86_type_is_scalar_i32(source_type)) {
-    return loom_x86_make_gpr32_register_type(context, out_low_type);
+    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_GPR32,
+                                       out_low_type);
   }
   if (loom_x86_type_is_scalar_f32(source_type)) {
-    return loom_x86_make_xmm_register_type(context, out_low_type);
+    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_XMM,
+                                       out_low_type);
   }
   if (loom_x86_type_is_vector_4xi32(source_type) ||
       loom_x86_type_is_vector_4xf32(source_type)) {
-    return loom_x86_make_xmm_register_type(context, out_low_type);
+    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_XMM,
+                                       out_low_type);
   }
   if (loom_x86_type_is_vector_4xi1(source_type)) {
-    return loom_x86_make_k_register_type(context, out_low_type);
+    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_K,
+                                       out_low_type);
   }
   if (loom_x86_type_is_vector_16xi32(source_type) ||
       loom_x86_type_is_vector_16xf32(source_type)) {
-    return loom_x86_make_zmm_register_type(context, out_low_type);
+    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_ZMM,
+                                       out_low_type);
   }
   if (loom_x86_type_is_vector_16xi1(source_type)) {
-    return loom_x86_make_k_register_type(context, out_low_type);
+    return loom_x86_make_register_type(context, LOOM_X86_REGISTER_CLASS_K,
+                                       out_low_type);
   }
   return loom_low_lower_emit_source_type_unsupported(
       context, source_op, IREE_SV("source"), source_type);
@@ -172,8 +140,8 @@ static iree_status_t loom_x86_map_avx512_argument(
       loom_low_lower_context_module(context), source_argument_id);
   if (loom_type_is_buffer(source_type)) {
     loom_type_t address_type = loom_type_none();
-    IREE_RETURN_IF_ERROR(
-        loom_x86_make_gpr64_register_type(context, &address_type));
+    IREE_RETURN_IF_ERROR(loom_x86_make_register_type(
+        context, LOOM_X86_REGISTER_CLASS_GPR64, &address_type));
     *out_argument = (loom_low_lower_abi_argument_t){
         .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT,
         .abi_type = address_type,
@@ -198,18 +166,10 @@ static iree_status_t loom_x86_map_avx512_packed_dot_type(
   uint32_t vector_bit_width = 0;
   if (loom_x86_packed_dot_type_static_vector_bit_width(source_type,
                                                        &vector_bit_width)) {
-    switch (vector_bit_width) {
-      case 128:
-        return loom_x86_make_avx512_packed_dot_xmm_register_type(context,
-                                                                 out_low_type);
-      case 256:
-        return loom_x86_make_avx512_packed_dot_ymm_register_type(context,
-                                                                 out_low_type);
-      case 512:
-        return loom_x86_make_avx512_packed_dot_zmm_register_type(context,
-                                                                 out_low_type);
-      default:
-        break;
+    loom_x86_register_class_t register_class = 0;
+    if (loom_x86_register_class_for_vector_bit_width(vector_bit_width,
+                                                     &register_class)) {
+      return loom_x86_make_register_type(context, register_class, out_low_type);
     }
   }
   return loom_x86_map_avx512_type(user_data, context, source_op, source_type,
@@ -226,8 +186,8 @@ static iree_status_t loom_x86_map_avx512_packed_dot_argument(
       loom_low_lower_context_module(context), source_argument_id);
   if (loom_type_is_buffer(source_type)) {
     loom_type_t address_type = loom_type_none();
-    IREE_RETURN_IF_ERROR(
-        loom_x86_make_gpr64_register_type(context, &address_type));
+    IREE_RETURN_IF_ERROR(loom_x86_make_register_type(
+        context, LOOM_X86_REGISTER_CLASS_GPR64, &address_type));
     *out_argument = (loom_low_lower_abi_argument_t){
         .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT,
         .abi_type = address_type,

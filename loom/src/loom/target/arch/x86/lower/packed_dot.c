@@ -9,7 +9,6 @@
 #include <stdint.h>
 
 #include "loom/target/arch/x86/lower/internal.h"
-#include "loom/target/arch/x86/packed_dot_descriptors.h"
 
 static bool loom_x86_scalar_type_has_packed_dot_register_width(
     loom_scalar_type_t scalar_type, uint32_t* out_bit_width) {
@@ -62,18 +61,10 @@ iree_status_t loom_x86_map_packed_dot_type(void* user_data,
   uint32_t vector_bit_width = 0;
   if (loom_x86_packed_dot_type_static_vector_bit_width(source_type,
                                                        &vector_bit_width)) {
-    switch (vector_bit_width) {
-      case 128:
-        return loom_low_lower_make_register_type(
-            context, X86_PACKED_DOT_CORE_REG_CLASS_ID_XMM, 1, out_low_type);
-      case 256:
-        return loom_low_lower_make_register_type(
-            context, X86_PACKED_DOT_CORE_REG_CLASS_ID_YMM, 1, out_low_type);
-      case 512:
-        return loom_low_lower_make_register_type(
-            context, X86_PACKED_DOT_CORE_REG_CLASS_ID_ZMM, 1, out_low_type);
-      default:
-        break;
+    loom_x86_register_class_t register_class = 0;
+    if (loom_x86_register_class_for_vector_bit_width(vector_bit_width,
+                                                     &register_class)) {
+      return loom_x86_make_register_type(context, register_class, out_low_type);
     }
   }
   return loom_low_lower_emit_source_type_unsupported(

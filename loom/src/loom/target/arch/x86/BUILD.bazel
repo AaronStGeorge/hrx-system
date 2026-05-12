@@ -45,6 +45,7 @@ loom_assert_no_dependencies(
         ":packed_dot_descriptors",
         ":packed_dot_vector",
         ":provider",
+        ":register_classes",
         ":scalar_descriptors",
         ":target_records",
         "//loom/src/loom/target/arch/x86/contracts:avx512_lower_rules",
@@ -64,6 +65,7 @@ loom_assert_no_dependencies(
         ":packed_dot_contract_projection",
         ":packed_dot_descriptors",
         ":provider",
+        ":register_classes",
         ":scalar_descriptors",
         ":target_records",
     ],
@@ -215,6 +217,17 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "register_classes",
+    srcs = ["register_classes.c"],
+    hdrs = ["register_classes.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:register_class_map",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "lower",
     srcs = [
         "lower/packed_dot.c",
@@ -225,9 +238,7 @@ loom_cc_library(
         "lower/internal.h",
     ],
     deps = [
-        ":avx512_descriptors_ids",
-        ":avx512_packed_dot_descriptors_ids",
-        ":packed_dot_descriptors_ids",
+        ":register_classes",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/error:error_defs",
@@ -237,6 +248,21 @@ loom_cc_library(
         "//loom/src/loom/target/arch/x86/contracts:packed_dot",
         "//loom/src/loom/target/arch/x86/contracts:packed_dot_lower_rules",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "register_classes_test",
+    srcs = ["register_classes_test.cc"],
+    deps = [
+        ":avx512_descriptors",
+        ":avx512_packed_dot_descriptors",
+        ":packed_dot_descriptors",
+        ":register_classes",
+        ":scalar_descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
