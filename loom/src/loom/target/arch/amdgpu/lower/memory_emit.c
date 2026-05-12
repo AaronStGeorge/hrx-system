@@ -914,6 +914,31 @@ static loom_value_id_t loom_amdgpu_memory_load_result(
   }
 }
 
+static iree_status_t loom_amdgpu_memory_load_result_is_vgpr(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    bool* out_is_vgpr) {
+  *out_is_vgpr = false;
+  const loom_value_id_t source_result =
+      loom_amdgpu_memory_load_result(source_op);
+  loom_type_t result_type = loom_type_none();
+  IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(
+      context, source_op, source_result, &result_type));
+  return loom_amdgpu_low_type_register_class_is(
+      context, result_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR, out_is_vgpr);
+}
+
+static iree_status_t loom_amdgpu_materialize_memory_load_packet_for_result(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    bool result_is_vgpr, loom_value_id_t low_packet,
+    loom_value_id_t* out_low_packet) {
+  *out_low_packet = low_packet;
+  if (!result_is_vgpr) {
+    return iree_ok_status();
+  }
+  return loom_amdgpu_materialize_low_vgpr_b32_registers(
+      context, source_op, low_packet, out_low_packet);
+}
+
 static loom_value_id_t loom_amdgpu_memory_store_value(
     const loom_op_t* source_op) {
   switch (source_op->kind) {
@@ -945,6 +970,11 @@ static iree_status_t loom_amdgpu_bind_memory_load_result(
     loom_value_id_t low_result) {
   const loom_value_id_t source_result =
       loom_amdgpu_memory_load_result(source_op);
+  bool result_is_vgpr = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_memory_load_result_is_vgpr(
+      context, source_op, &result_is_vgpr));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_memory_load_packet_for_result(
+      context, source_op, result_is_vgpr, low_result, &low_result));
   return loom_low_lower_bind_value(context, source_result, low_result);
 }
 
@@ -1290,9 +1320,14 @@ iree_status_t loom_amdgpu_lower_memory_load(
   }
 
   loom_value_id_t low_results[LOOM_AMDGPU_MAX_MEMORY_PACKET_COUNT];
+  bool result_is_vgpr = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_memory_load_result_is_vgpr(
+      context, source_op, &result_is_vgpr));
   for (uint32_t i = 0; i < plan->packet_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_lower_memory_packet_load(
         context, source_op, &plan->packets[i], &low_results[i]));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_memory_load_packet_for_result(
+        context, source_op, result_is_vgpr, low_results[i], &low_results[i]));
   }
 
   const loom_value_id_t source_result =
