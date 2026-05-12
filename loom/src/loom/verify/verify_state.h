@@ -8,6 +8,7 @@
 #define LOOM_VERIFY_VERIFY_STATE_H_
 
 #include "iree/base/internal/arena.h"
+#include "loom/analysis/consumption.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/special_values.h"
@@ -97,6 +98,9 @@ typedef struct loom_verify_state_t {
 
   // Region currently being verified while walking nested IR.
   const loom_region_t* current_region;
+
+  // Reusable consumed-value query for current_region.
+  loom_consumption_region_query_t* current_consumption_query;
 
   // Stack of value IDs defined during the current scoped walk.
   uint32_t* defined_stack;

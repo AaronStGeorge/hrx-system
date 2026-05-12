@@ -36,6 +36,60 @@ static bool loom_consumption_region_is_cfg(const loom_region_t* region) {
          iree_any_bit_set(region->flags, LOOM_REGION_INSTANCE_FLAG_CFG);
 }
 
+iree_status_t loom_consumption_region_query_initialize(
+    const loom_module_t* module, const loom_region_t* region,
+    iree_arena_allocator_t* arena, loom_consumption_region_query_t* out_query) {
+  if (!module || !region || !arena || !out_query) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "consumption query requires a module, region, arena, and output query");
+  }
+  memset(out_query, 0, sizeof(*out_query));
+  out_query->module = module;
+  out_query->region = region;
+  out_query->arena = arena;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_consumption_region_query_cfg_graph(
+    loom_consumption_region_query_t* query,
+    const loom_cfg_graph_t** out_graph) {
+  *out_graph = NULL;
+  if (!loom_consumption_region_is_cfg(query->region)) {
+    return iree_ok_status();
+  }
+  if (!query->cfg_graph_ready) {
+    IREE_RETURN_IF_ERROR(loom_cfg_graph_build(query->module, query->region,
+                                              query->arena, &query->cfg_graph));
+    query->cfg_graph_ready = true;
+  }
+  *out_graph = &query->cfg_graph;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_consumption_region_query_prepare_cfg_search(
+    loom_consumption_region_query_t* query, iree_host_size_t block_count,
+    iree_host_size_t* out_visited_word_count) {
+  iree_host_size_t visited_word_count =
+      loom_consumption_bitset_word_count(block_count);
+  if (visited_word_count > query->visited_word_capacity) {
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        query->arena, 0, visited_word_count, sizeof(*query->visited_bits),
+        &query->visited_word_capacity, (void**)&query->visited_bits));
+  }
+  if (block_count > query->block_stack_capacity) {
+    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
+        query->arena, 0, block_count, sizeof(*query->block_stack),
+        &query->block_stack_capacity, (void**)&query->block_stack));
+  }
+  if (visited_word_count > 0) {
+    memset(query->visited_bits, 0,
+           visited_word_count * sizeof(query->visited_bits[0]));
+  }
+  *out_visited_word_count = visited_word_count;
+  return iree_ok_status();
+}
+
 static bool loom_consumption_op_uses_value(const loom_op_t* op,
                                            loom_value_id_t value_id,
                                            uint16_t* out_operand_index) {
@@ -150,49 +204,33 @@ static bool loom_consumption_value_is_recreated_before_op_on_reentry(
          defining_op->block_ordinal < consuming_op->block_ordinal;
 }
 
-static iree_status_t loom_consumption_find_cfg_use_after_from_block(
-    const loom_cfg_graph_t* graph, uint16_t block_index,
-    loom_value_id_t value_id, uint64_t* visited_bits,
-    iree_host_size_t visited_word_count, loom_consumption_use_t* out_use,
-    bool* out_found) {
-  *out_found = false;
+static void loom_consumption_cfg_search_push(
+    const loom_cfg_graph_t* graph, uint16_t block_index, uint64_t* visited_bits,
+    iree_host_size_t visited_word_count, uint16_t* stack,
+    iree_host_size_t* inout_stack_count) {
   if (!loom_cfg_graph_block_is_reachable(graph, block_index)) {
-    return iree_ok_status();
+    return;
   }
   if (loom_consumption_bitset_test(visited_bits, visited_word_count,
                                    block_index)) {
-    return iree_ok_status();
+    return;
   }
   loom_consumption_bitset_set(visited_bits, visited_word_count, block_index);
-
-  const loom_block_t* block = graph->blocks[block_index].block;
-  if (loom_consumption_block_arg_defines_value(block, value_id)) {
-    return iree_ok_status();
-  }
-  if (loom_consumption_find_block_use(block, value_id, out_use)) {
-    *out_found = true;
-    return iree_ok_status();
-  }
-
-  loom_cfg_block_index_span_t successors =
-      loom_cfg_graph_successors(graph, block_index);
-  for (iree_host_size_t i = 0; i < successors.count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_consumption_find_cfg_use_after_from_block(
-        graph, successors.values[i], value_id, visited_bits, visited_word_count,
-        out_use, out_found));
-    if (*out_found) return iree_ok_status();
-  }
-  return iree_ok_status();
+  stack[(*inout_stack_count)++] = block_index;
 }
 
 static iree_status_t loom_consumption_find_cfg_use_after(
-    const loom_module_t* module, const loom_cfg_graph_t* graph,
+    loom_consumption_region_query_t* query, const loom_cfg_graph_t* graph,
     const loom_op_t* consuming_op, loom_value_id_t value_id,
-    iree_arena_allocator_t* scratch_arena, loom_consumption_use_t* out_use,
-    bool* out_found) {
+    loom_consumption_use_t* out_use, bool* out_found) {
   *out_found = false;
   if (!graph || graph->malformed) {
     return iree_ok_status();
+  }
+  if (graph->region != consuming_op->parent_block->parent_region) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "consumption CFG graph must describe the consuming op region");
   }
   iree_host_size_t consuming_block_index =
       loom_cfg_graph_block_index(graph, consuming_op->parent_block);
@@ -200,38 +238,74 @@ static iree_status_t loom_consumption_find_cfg_use_after(
     return iree_ok_status();
   }
 
-  uint64_t* visited_bits = NULL;
-  iree_host_size_t visited_word_count =
-      loom_consumption_bitset_word_count(graph->block_count);
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate_array(scratch_arena, visited_word_count,
-                                sizeof(*visited_bits), (void**)&visited_bits));
-  memset(visited_bits, 0, visited_word_count * sizeof(*visited_bits));
+  iree_host_size_t visited_word_count = 0;
+  IREE_RETURN_IF_ERROR(loom_consumption_region_query_prepare_cfg_search(
+      query, graph->block_count, &visited_word_count));
   if (loom_consumption_value_is_recreated_before_op_on_reentry(
-          module, consuming_op->parent_block, consuming_op, value_id)) {
-    loom_consumption_bitset_set(visited_bits, visited_word_count,
+          query->module, consuming_op->parent_block, consuming_op, value_id)) {
+    loom_consumption_bitset_set(query->visited_bits, visited_word_count,
                                 (uint16_t)consuming_block_index);
   }
 
+  iree_host_size_t stack_count = 0;
   loom_cfg_block_index_span_t successors =
       loom_cfg_graph_successors(graph, (uint16_t)consuming_block_index);
   for (iree_host_size_t i = 0; i < successors.count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_consumption_find_cfg_use_after_from_block(
-        graph, successors.values[i], value_id, visited_bits, visited_word_count,
-        out_use, out_found));
-    if (*out_found) return iree_ok_status();
+    loom_consumption_cfg_search_push(graph, successors.values[i],
+                                     query->visited_bits, visited_word_count,
+                                     query->block_stack, &stack_count);
+  }
+
+  while (stack_count > 0) {
+    uint16_t block_index = query->block_stack[--stack_count];
+    const loom_block_t* block = graph->blocks[block_index].block;
+    if (loom_consumption_block_arg_defines_value(block, value_id)) {
+      continue;
+    }
+    if (loom_consumption_find_block_use(block, value_id, out_use)) {
+      *out_found = true;
+      return iree_ok_status();
+    }
+
+    successors = loom_cfg_graph_successors(graph, block_index);
+    for (iree_host_size_t i = 0; i < successors.count; ++i) {
+      loom_consumption_cfg_search_push(graph, successors.values[i],
+                                       query->visited_bits, visited_word_count,
+                                       query->block_stack, &stack_count);
+    }
   }
   return iree_ok_status();
 }
 
 iree_status_t loom_consumption_find_use_after(
-    const loom_module_t* module, const loom_cfg_graph_t* cfg_graph,
-    const loom_op_t* consuming_op, loom_value_id_t value_id,
-    iree_arena_allocator_t* scratch_arena, loom_consumption_use_t* out_use,
+    loom_consumption_region_query_t* query, const loom_op_t* consuming_op,
+    loom_value_id_t value_id, loom_consumption_use_t* out_use,
     bool* out_found) {
+  if (!out_found) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "consumption query requires an output flag");
+  }
   *out_found = false;
-  if (!module || !consuming_op || !consuming_op->parent_block ||
-      value_id == LOOM_VALUE_ID_INVALID || value_id >= module->values.count) {
+  if (!query || !consuming_op || !out_use) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "consumption query requires query, consuming op, and output use");
+  }
+  if (!query->module || !query->region || !query->arena) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "consumption query is not initialized");
+  }
+  if (!consuming_op->parent_block) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "consuming op must belong to a block");
+  }
+  if (consuming_op->parent_block->parent_region != query->region) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "consumption query must describe the consuming op region");
+  }
+  if (value_id == LOOM_VALUE_ID_INVALID ||
+      value_id >= query->module->values.count) {
     return iree_ok_status();
   }
   if (loom_consumption_find_same_block_use_after(consuming_op, value_id,
@@ -244,16 +318,9 @@ iree_status_t loom_consumption_find_use_after(
   if (!loom_consumption_region_is_cfg(region)) {
     return iree_ok_status();
   }
-  if (cfg_graph) {
-    return loom_consumption_find_cfg_use_after(module, cfg_graph, consuming_op,
-                                               value_id, scratch_arena, out_use,
-                                               out_found);
-  }
-
-  loom_cfg_graph_t graph = {0};
+  const loom_cfg_graph_t* cfg_graph = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_cfg_graph_build(module, region, scratch_arena, &graph));
-  return loom_consumption_find_cfg_use_after(module, &graph, consuming_op,
-                                             value_id, scratch_arena, out_use,
-                                             out_found);
+      loom_consumption_region_query_cfg_graph(query, &cfg_graph));
+  return loom_consumption_find_cfg_use_after(query, cfg_graph, consuming_op,
+                                             value_id, out_use, out_found);
 }

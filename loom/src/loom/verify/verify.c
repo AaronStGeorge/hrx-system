@@ -20,54 +20,58 @@ static iree_status_t loom_verify_region(loom_verify_state_t* state,
                                         loom_region_t* region) {
   if (!region) return iree_ok_status();
   const loom_region_t* saved_region = state->current_region;
+  loom_consumption_region_query_t* saved_consumption_query =
+      state->current_consumption_query;
+  loom_consumption_region_query_t consumption_query;
   state->current_region = region;
-  iree_status_t status = loom_verify_push_scope(state);
+  iree_status_t status = loom_consumption_region_query_initialize(
+      state->module, region, &state->arena, &consumption_query);
   if (!iree_status_is_ok(status)) {
     state->current_region = saved_region;
+    state->current_consumption_query = saved_consumption_query;
     return status;
   }
-  for (uint16_t b = 0; b < region->block_count; ++b) {
+  state->current_consumption_query = &consumption_query;
+
+  bool scope_pushed = false;
+  status = loom_verify_push_scope(state);
+  if (iree_status_is_ok(status)) {
+    scope_pushed = true;
+  }
+
+  for (uint16_t b = 0; iree_status_is_ok(status) && b < region->block_count;
+       ++b) {
     loom_block_t* block = loom_region_block(region, b);
     // Define block arguments, then validate any SSA encoding
     // references in their types (encoding values must be visible
     // from the enclosing scope).
-    for (uint16_t a = 0; a < block->arg_count; ++a) {
+    for (uint16_t a = 0; iree_status_is_ok(status) && a < block->arg_count;
+         ++a) {
       status = loom_verify_define_value(state, loom_block_arg_id(block, a));
-      if (!iree_status_is_ok(status)) {
-        loom_verify_pop_scope(state);
-        state->current_region = saved_region;
-        return status;
-      }
     }
-    loom_verify_block_arg_type_well_formedness(state, block);
-    iree_status_t diagnostic_status =
-        loom_verify_pending_diagnostic_status(state);
-    if (!iree_status_is_ok(diagnostic_status)) {
-      loom_verify_pop_scope(state);
-      state->current_region = saved_region;
-      return diagnostic_status;
+    if (iree_status_is_ok(status)) {
+      loom_verify_block_arg_type_well_formedness(state, block);
+      status = loom_verify_pending_diagnostic_status(state);
     }
-    loom_verify_block_arg_encoding_refs(state, block);
-    diagnostic_status = loom_verify_pending_diagnostic_status(state);
-    if (!iree_status_is_ok(diagnostic_status)) {
-      loom_verify_pop_scope(state);
-      state->current_region = saved_region;
-      return diagnostic_status;
+    if (iree_status_is_ok(status)) {
+      loom_verify_block_arg_encoding_refs(state, block);
+      status = loom_verify_pending_diagnostic_status(state);
     }
     loom_op_t* current = NULL;
     loom_block_for_each_op(block, current) {
-      if (loom_verify_at_error_limit(state)) break;
-      status = loom_verify_op(state, current);
-      if (!iree_status_is_ok(status)) {
-        loom_verify_pop_scope(state);
-        state->current_region = saved_region;
-        return status;
+      if (!iree_status_is_ok(status) || loom_verify_at_error_limit(state)) {
+        break;
       }
+      status = loom_verify_op(state, current);
     }
   }
-  loom_verify_pop_scope(state);
+
+  if (scope_pushed) {
+    loom_verify_pop_scope(state);
+  }
   state->current_region = saved_region;
-  return iree_ok_status();
+  state->current_consumption_query = saved_consumption_query;
+  return status;
 }
 
 static iree_status_t loom_verify_op(loom_verify_state_t* state,

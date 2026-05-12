@@ -65,11 +65,10 @@ typedef struct loom_low_allocation_build_state_t {
   loom_liveness_analysis_t liveness;
   // Function-local placement relations over |liveness|.
   loom_low_placement_table_t placement;
-  // CFG graph for |body|, initialized on demand for path-sensitive ownership
-  // queries.
-  loom_cfg_graph_t cfg_graph;
-  // True once |cfg_graph| has been initialized.
-  bool cfg_graph_initialized;
+  // Reusable consumed-value query for |body|.
+  loom_consumption_region_query_t consumption_query;
+  // True once |consumption_query| has been initialized.
+  bool consumption_query_initialized;
   // Active function-local value domain shared with liveness/allocation.
   const loom_local_value_domain_t* value_domain;
   // Unit end-point starts indexed by liveness local value ordinal. Values
@@ -1672,27 +1671,16 @@ loom_low_allocation_first_placement_relation(
   return NULL;
 }
 
-static bool loom_low_allocation_region_is_cfg(const loom_region_t* region) {
-  return region &&
-         iree_any_bit_set(region->flags, LOOM_REGION_INSTANCE_FLAG_CFG);
-}
-
-static iree_status_t loom_low_allocation_body_cfg_graph(
+static iree_status_t loom_low_allocation_consumption_query(
     loom_low_allocation_build_state_t* state,
-    const loom_cfg_graph_t** out_graph) {
-  *out_graph = NULL;
-  if (!loom_low_allocation_region_is_cfg(state->body)) {
-    return iree_ok_status();
+    loom_consumption_region_query_t** out_query) {
+  *out_query = NULL;
+  if (!state->consumption_query_initialized) {
+    IREE_RETURN_IF_ERROR(loom_consumption_region_query_initialize(
+        state->module, state->body, state->arena, &state->consumption_query));
+    state->consumption_query_initialized = true;
   }
-  if (!state->cfg_graph_initialized) {
-    IREE_RETURN_IF_ERROR(loom_cfg_graph_build(state->module, state->body,
-                                              state->arena, &state->cfg_graph));
-    state->cfg_graph_initialized = true;
-  }
-  if (state->cfg_graph.malformed) {
-    return iree_ok_status();
-  }
-  *out_graph = &state->cfg_graph;
+  *out_query = &state->consumption_query;
   return iree_ok_status();
 }
 
@@ -1724,12 +1712,11 @@ static iree_status_t loom_low_allocation_copy_source_used_after_tied_consume(
     return iree_ok_status();
   }
 
-  const loom_cfg_graph_t* graph = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_allocation_body_cfg_graph(state, &graph));
+  loom_consumption_region_query_t* query = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_consumption_query(state, &query));
   loom_consumption_use_t use = {0};
-  return loom_consumption_find_use_after(state->module, graph,
-                                         tied_relation->op, *out_copy_source_id,
-                                         state->arena, &use, out_used_after);
+  return loom_consumption_find_use_after(
+      query, tied_relation->op, *out_copy_source_id, &use, out_used_after);
 }
 
 static iree_status_t
