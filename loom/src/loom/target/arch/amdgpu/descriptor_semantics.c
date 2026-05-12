@@ -52,6 +52,13 @@ bool loom_amdgpu_descriptor_uses_vector_alu(
       descriptor_set, descriptor, LOOM_LOW_RESOURCE_KIND_VECTOR_ALU);
 }
 
+bool loom_amdgpu_descriptor_uses_scalar_alu(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor) {
+  return loom_amdgpu_descriptor_uses_resource_kind(
+      descriptor_set, descriptor, LOOM_LOW_RESOURCE_KIND_SCALAR_ALU);
+}
+
 bool loom_amdgpu_descriptor_is_transcendental(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor) {

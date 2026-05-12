@@ -30,6 +30,8 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx11Processor) {
   EXPECT_TRUE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
   EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
   EXPECT_TRUE(processor->has_valu_trans_use_hazard);
+  EXPECT_FALSE(processor->has_valu_sgpr_read_wait_states);
+  EXPECT_FALSE(processor->has_valu_sgpr_read_depctr_hazard);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpGfx1150Processor) {
@@ -42,6 +44,8 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx1150Processor) {
   EXPECT_EQ(processor->kernel_descriptor_profile,
             LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11);
   EXPECT_FALSE(processor->has_valu_trans_use_hazard);
+  EXPECT_FALSE(processor->has_valu_sgpr_read_wait_states);
+  EXPECT_FALSE(processor->has_valu_sgpr_read_depctr_hazard);
 }
 
 TEST(AmdgpuTargetInfoTest, IteratesProcessors) {
@@ -105,6 +109,8 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx942Processor) {
   EXPECT_TRUE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
   EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
   EXPECT_FALSE(processor->has_valu_trans_use_hazard);
+  EXPECT_TRUE(processor->has_valu_sgpr_read_wait_states);
+  EXPECT_FALSE(processor->has_valu_sgpr_read_depctr_hazard);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpGfx950Processor) {
@@ -128,6 +134,8 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx950Processor) {
   EXPECT_TRUE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
   EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
   EXPECT_FALSE(processor->has_valu_trans_use_hazard);
+  EXPECT_TRUE(processor->has_valu_sgpr_read_wait_states);
+  EXPECT_FALSE(processor->has_valu_sgpr_read_depctr_hazard);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpGfx1200Processor) {
@@ -151,6 +159,8 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx1200Processor) {
   EXPECT_FALSE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
   EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
   EXPECT_FALSE(processor->has_valu_trans_use_hazard);
+  EXPECT_FALSE(processor->has_valu_sgpr_read_wait_states);
+  EXPECT_TRUE(processor->has_valu_sgpr_read_depctr_hazard);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpGfx1250Processor) {
@@ -173,6 +183,8 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx1250Processor) {
   EXPECT_FALSE(processor->kernel_descriptor_has_accum_offset);
   EXPECT_FALSE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
   EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
+  EXPECT_FALSE(processor->has_valu_sgpr_read_wait_states);
+  EXPECT_FALSE(processor->has_valu_sgpr_read_depctr_hazard);
 }
 
 TEST(AmdgpuTargetInfoTest, MatchesAmdhsaGfx9PlusProcessorElfFlags) {

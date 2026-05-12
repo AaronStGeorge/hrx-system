@@ -82,6 +82,8 @@ class AmdgpuProcessorInfo:
     kernel_descriptor_has_dx10_clamp_and_ieee_mode: bool = False
     kernel_descriptor_has_packed_workitem_id: bool = False
     has_valu_trans_use_hazard: bool = False
+    has_valu_sgpr_read_wait_states: bool = False
+    has_valu_sgpr_read_depctr_hazard: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,7 +129,19 @@ def processor_info(
     kernel_descriptor_has_dx10_clamp_and_ieee_mode: bool = False,
     kernel_descriptor_has_packed_workitem_id: bool = False,
     has_valu_trans_use_hazard: bool = False,
+    has_valu_sgpr_read_wait_states: bool | None = None,
+    has_valu_sgpr_read_depctr_hazard: bool | None = None,
 ) -> AmdgpuProcessorInfo:
+    if has_valu_sgpr_read_wait_states is None:
+        has_valu_sgpr_read_wait_states = matrix_feature_profile in (
+            AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940,
+            AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950,
+        )
+    if has_valu_sgpr_read_depctr_hazard is None:
+        has_valu_sgpr_read_depctr_hazard = (
+            kernel_descriptor_profile == AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12
+            and matrix_feature_profile == AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12
+        )
     return AmdgpuProcessorInfo(
         processor=processor,
         descriptor_set_key=descriptor_set_key,
@@ -144,6 +158,8 @@ def processor_info(
         kernel_descriptor_has_dx10_clamp_and_ieee_mode=kernel_descriptor_has_dx10_clamp_and_ieee_mode,
         kernel_descriptor_has_packed_workitem_id=kernel_descriptor_has_packed_workitem_id,
         has_valu_trans_use_hazard=has_valu_trans_use_hazard,
+        has_valu_sgpr_read_wait_states=has_valu_sgpr_read_wait_states,
+        has_valu_sgpr_read_depctr_hazard=has_valu_sgpr_read_depctr_hazard,
     )
 
 
@@ -438,6 +454,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         elf_feature_flags=AMDGPU_ELF_FEATURE_GENERIC_VERSION_1_V6,
         default_wavefront_size=32,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
+        has_valu_sgpr_read_depctr_hazard=True,
     ),
     processor_info(
         "gfx9-4-generic",

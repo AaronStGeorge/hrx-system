@@ -144,6 +144,10 @@ typedef struct loom_amdgpu_processor_info_t {
   bool kernel_descriptor_has_packed_workitem_id;
   // True when a nearby VALU use of a TRANS result requires va_vdst depctr.
   bool has_valu_trans_use_hazard;
+  // True when a nearby VALU read of an SGPR written by VALU needs fixed waits.
+  bool has_valu_sgpr_read_wait_states;
+  // True when SGPR read hazards are drained with s_wait_alu/depctr packets.
+  bool has_valu_sgpr_read_depctr_hazard;
 } loom_amdgpu_processor_info_t;
 
 typedef struct loom_amdgpu_amdhsa_target_id_t {

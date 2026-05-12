@@ -21,12 +21,18 @@
 
 #define LOOM_AMDGPU_WAIT_STATE_VALU_TO_MATRIX_CYCLES 2u
 #define LOOM_AMDGPU_WAIT_STATE_TRANS_RESULT_USE_CYCLES 1u
-#define LOOM_AMDGPU_WAIT_STATE_REASON_COUNT 4u
+#define LOOM_AMDGPU_WAIT_STATE_VALU_SGPR_READ_CYCLES 2u
+#define LOOM_AMDGPU_WAIT_STATE_REASON_COUNT 5u
 
 typedef enum loom_amdgpu_wait_state_vgpr_flag_bits_e {
   LOOM_AMDGPU_WAIT_STATE_VGPR_FLAG_VALID = 1u << 0,
 } loom_amdgpu_wait_state_vgpr_flag_bits_t;
 typedef uint8_t loom_amdgpu_wait_state_vgpr_flags_t;
+
+typedef enum loom_amdgpu_wait_state_sgpr_flag_bits_e {
+  LOOM_AMDGPU_WAIT_STATE_SGPR_FLAG_VALID = 1u << 0,
+} loom_amdgpu_wait_state_sgpr_flag_bits_t;
+typedef uint8_t loom_amdgpu_wait_state_sgpr_flags_t;
 
 typedef enum loom_amdgpu_wait_state_reason_flag_bits_e {
   LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_MATRIX_RESULT_USE =
@@ -35,6 +41,8 @@ typedef enum loom_amdgpu_wait_state_reason_flag_bits_e {
       1u << LOOM_AMDGPU_WAIT_STATE_REASON_VALU_TO_MATRIX_USE,
   LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_TRANS_RESULT_USE =
       1u << LOOM_AMDGPU_WAIT_STATE_REASON_TRANS_RESULT_USE,
+  LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_VALU_SGPR_READ =
+      1u << LOOM_AMDGPU_WAIT_STATE_REASON_VALU_SGPR_READ,
 } loom_amdgpu_wait_state_reason_flag_bits_t;
 typedef uint32_t loom_amdgpu_wait_state_reason_flags_t;
 
@@ -55,6 +63,11 @@ typedef struct loom_amdgpu_wait_state_vgpr_t {
   // Per-reason outstanding fixed-wait hazard state for this physical VGPR.
   loom_amdgpu_wait_state_hazard_t hazards[LOOM_AMDGPU_WAIT_STATE_REASON_COUNT];
 } loom_amdgpu_wait_state_vgpr_t;
+
+typedef struct loom_amdgpu_wait_state_sgpr_t {
+  // Per-reason outstanding fixed-wait hazard state for this physical SGPR.
+  loom_amdgpu_wait_state_hazard_t hazards[LOOM_AMDGPU_WAIT_STATE_REASON_COUNT];
+} loom_amdgpu_wait_state_sgpr_t;
 
 typedef struct loom_amdgpu_wait_state_match_t {
   // Reason responsible for the largest unsatisfied wait.
@@ -78,6 +91,10 @@ typedef struct loom_amdgpu_wait_state_builder_t {
   loom_amdgpu_wait_state_vgpr_t* vgprs;
   // Number of entries in |vgprs|.
   iree_host_size_t vgpr_count;
+  // Per-physical-SGPR outstanding fixed-wait hazard state.
+  loom_amdgpu_wait_state_sgpr_t* sgprs;
+  // Number of entries in |sgprs|.
+  iree_host_size_t sgpr_count;
   // Output wait-state rows.
   loom_amdgpu_wait_state_t* states;
   // Number of populated output wait-state rows.
@@ -97,6 +114,8 @@ iree_string_view_t loom_amdgpu_wait_state_reason_name(
       return IREE_SV("valu_to_matrix_use");
     case LOOM_AMDGPU_WAIT_STATE_REASON_TRANS_RESULT_USE:
       return IREE_SV("trans_result_use");
+    case LOOM_AMDGPU_WAIT_STATE_REASON_VALU_SGPR_READ:
+      return IREE_SV("valu_sgpr_read");
     case LOOM_AMDGPU_WAIT_STATE_REASON_UNKNOWN:
     default:
       return IREE_SV("unknown");
@@ -112,6 +131,8 @@ static loom_amdgpu_wait_state_reason_flags_t loom_amdgpu_wait_state_reason_flag(
       return LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_VALU_TO_MATRIX_USE;
     case LOOM_AMDGPU_WAIT_STATE_REASON_TRANS_RESULT_USE:
       return LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_TRANS_RESULT_USE;
+    case LOOM_AMDGPU_WAIT_STATE_REASON_VALU_SGPR_READ:
+      return LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_VALU_SGPR_READ;
     case LOOM_AMDGPU_WAIT_STATE_REASON_UNKNOWN:
     default:
       return 0;
@@ -130,6 +151,14 @@ static bool loom_amdgpu_wait_state_assignment_is_physical_vgpr(
          assignment->location_kind ==
              LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER &&
          assignment->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_VGPR;
+}
+
+static bool loom_amdgpu_wait_state_assignment_is_physical_sgpr(
+    const loom_low_allocation_assignment_t* assignment) {
+  return assignment != NULL &&
+         assignment->location_kind ==
+             LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER &&
+         assignment->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_SGPR;
 }
 
 static bool loom_amdgpu_wait_state_assignments_match(
@@ -152,20 +181,27 @@ static iree_status_t loom_amdgpu_wait_state_allocate(
     loom_amdgpu_wait_state_builder_t* builder) {
   const loom_low_allocation_table_t* allocation = builder->allocation;
   iree_host_size_t vgpr_count = 0;
+  iree_host_size_t sgpr_count = 0;
   for (iree_host_size_t i = 0; i < allocation->assignment_count; ++i) {
     const loom_low_allocation_assignment_t* assignment =
         &allocation->assignments[i];
-    if (!loom_amdgpu_wait_state_assignment_is_physical_vgpr(assignment)) {
+    if (!loom_amdgpu_wait_state_assignment_is_physical_vgpr(assignment) &&
+        !loom_amdgpu_wait_state_assignment_is_physical_sgpr(assignment)) {
       continue;
     }
     const uint64_t end =
         (uint64_t)assignment->location_base + assignment->location_count;
     if (end > IREE_HOST_SIZE_MAX) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                              "AMDGPU VGPR range exceeds host size");
+                              "AMDGPU register range exceeds host size");
     }
-    if ((iree_host_size_t)end > vgpr_count) {
+    if (assignment->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_VGPR &&
+        (iree_host_size_t)end > vgpr_count) {
       vgpr_count = (iree_host_size_t)end;
+    }
+    if (assignment->descriptor_reg_class_id == LOOM_AMDGPU_REG_CLASS_ID_SGPR &&
+        (iree_host_size_t)end > sgpr_count) {
+      sgpr_count = (iree_host_size_t)end;
     }
   }
   if (vgpr_count != 0) {
@@ -174,6 +210,13 @@ static iree_status_t loom_amdgpu_wait_state_allocate(
                                                    (void**)&builder->vgprs));
     memset(builder->vgprs, 0, vgpr_count * sizeof(*builder->vgprs));
     builder->vgpr_count = vgpr_count;
+  }
+  if (sgpr_count != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(builder->arena, sgpr_count,
+                                                   sizeof(*builder->sgprs),
+                                                   (void**)&builder->sgprs));
+    memset(builder->sgprs, 0, sgpr_count * sizeof(*builder->sgprs));
+    builder->sgpr_count = sgpr_count;
   }
 
   builder->state_capacity = builder->schedule->scheduled_node_count;
@@ -286,6 +329,11 @@ static bool loom_amdgpu_wait_state_processor_has_trans_forwarding_hazard(
   }
 }
 
+static bool loom_amdgpu_wait_state_processor_has_valu_sgpr_read_hazard(
+    const loom_amdgpu_processor_info_t* processor) {
+  return processor != NULL && processor->has_valu_sgpr_read_wait_states;
+}
+
 static bool loom_amdgpu_wait_state_descriptor_is_transcendental(
     const loom_amdgpu_wait_state_builder_t* builder,
     const loom_low_descriptor_t* descriptor) {
@@ -307,17 +355,28 @@ static bool loom_amdgpu_wait_state_descriptor_is_trans_forwarding_consumer(
 static void loom_amdgpu_wait_state_clear_assignment(
     loom_amdgpu_wait_state_builder_t* builder,
     const loom_low_allocation_assignment_t* assignment) {
-  if (!loom_amdgpu_wait_state_assignment_is_physical_vgpr(assignment)) {
-    return;
-  }
   const uint64_t end =
-      (uint64_t)assignment->location_base + assignment->location_count;
-  if (end > builder->vgpr_count) {
+      assignment == NULL
+          ? 0
+          : (uint64_t)assignment->location_base + assignment->location_count;
+  if (loom_amdgpu_wait_state_assignment_is_physical_vgpr(assignment)) {
+    if (end > builder->vgpr_count) {
+      return;
+    }
+    for (uint32_t i = 0; i < assignment->location_count; ++i) {
+      builder->vgprs[assignment->location_base + i] =
+          (loom_amdgpu_wait_state_vgpr_t){0};
+    }
     return;
   }
-  for (uint32_t i = 0; i < assignment->location_count; ++i) {
-    builder->vgprs[assignment->location_base + i] =
-        (loom_amdgpu_wait_state_vgpr_t){0};
+  if (loom_amdgpu_wait_state_assignment_is_physical_sgpr(assignment)) {
+    if (end > builder->sgpr_count) {
+      return;
+    }
+    for (uint32_t i = 0; i < assignment->location_count; ++i) {
+      builder->sgprs[assignment->location_base + i] =
+          (loom_amdgpu_wait_state_sgpr_t){0};
+    }
   }
 }
 
@@ -342,6 +401,35 @@ static void loom_amdgpu_wait_state_record_assignment(
         &builder->vgprs[assignment->location_base + i].hazards[reason];
     *hazard = (loom_amdgpu_wait_state_hazard_t){
         .flags = LOOM_AMDGPU_WAIT_STATE_VGPR_FLAG_VALID,
+        .reason = reason,
+        .producer_node = producer_node,
+        .producer_end_position = producer_end_position,
+        .required_cycle_count = cycle_count,
+    };
+  }
+}
+
+static void loom_amdgpu_wait_state_record_sgpr_assignment(
+    loom_amdgpu_wait_state_builder_t* builder,
+    const loom_low_allocation_assignment_t* assignment,
+    loom_amdgpu_wait_state_reason_t reason, uint32_t producer_node,
+    uint16_t cycle_count, uint64_t producer_end_position) {
+  if (!loom_amdgpu_wait_state_reason_is_valid(reason)) {
+    return;
+  }
+  if (!loom_amdgpu_wait_state_assignment_is_physical_sgpr(assignment)) {
+    return;
+  }
+  const uint64_t end =
+      (uint64_t)assignment->location_base + assignment->location_count;
+  if (end > builder->sgpr_count) {
+    return;
+  }
+  for (uint32_t i = 0; i < assignment->location_count; ++i) {
+    loom_amdgpu_wait_state_hazard_t* hazard =
+        &builder->sgprs[assignment->location_base + i].hazards[reason];
+    *hazard = (loom_amdgpu_wait_state_hazard_t){
+        .flags = LOOM_AMDGPU_WAIT_STATE_SGPR_FLAG_VALID,
         .reason = reason,
         .producer_node = producer_node,
         .producer_end_position = producer_end_position,
@@ -398,6 +486,54 @@ static void loom_amdgpu_wait_state_match_assignment(
   }
 }
 
+static void loom_amdgpu_wait_state_match_sgpr_assignment(
+    const loom_amdgpu_wait_state_builder_t* builder,
+    const loom_low_allocation_assignment_t* assignment,
+    loom_amdgpu_wait_state_reason_flags_t allowed_reasons,
+    loom_amdgpu_wait_state_match_t* match) {
+  if (!loom_amdgpu_wait_state_assignment_is_physical_sgpr(assignment)) {
+    return;
+  }
+  const uint64_t end =
+      (uint64_t)assignment->location_base + assignment->location_count;
+  if (end > builder->sgpr_count) {
+    return;
+  }
+  for (uint32_t i = 0; i < assignment->location_count; ++i) {
+    const loom_amdgpu_wait_state_sgpr_t* sgpr_state =
+        &builder->sgprs[assignment->location_base + i];
+    for (uint32_t reason = LOOM_AMDGPU_WAIT_STATE_REASON_UNKNOWN + 1;
+         reason < LOOM_AMDGPU_WAIT_STATE_REASON_COUNT; ++reason) {
+      const loom_amdgpu_wait_state_hazard_t* hazard =
+          &sgpr_state->hazards[reason];
+      if (!iree_any_bit_set(hazard->flags,
+                            LOOM_AMDGPU_WAIT_STATE_SGPR_FLAG_VALID)) {
+        continue;
+      }
+      if (!iree_any_bit_set(allowed_reasons, loom_amdgpu_wait_state_reason_flag(
+                                                 hazard->reason))) {
+        continue;
+      }
+      const uint64_t elapsed =
+          builder->current_position >= hazard->producer_end_position
+              ? builder->current_position - hazard->producer_end_position
+              : 0;
+      if (elapsed >= hazard->required_cycle_count) {
+        continue;
+      }
+      const uint16_t remaining =
+          (uint16_t)(hazard->required_cycle_count - elapsed);
+      if (remaining > match->cycle_count) {
+        *match = (loom_amdgpu_wait_state_match_t){
+            .reason = hazard->reason,
+            .producer_node = hazard->producer_node,
+            .cycle_count = remaining,
+        };
+      }
+    }
+  }
+}
+
 static void loom_amdgpu_wait_state_match_value(
     const loom_amdgpu_wait_state_builder_t* builder, loom_value_id_t value_id,
     loom_amdgpu_wait_state_reason_flags_t allowed_reasons,
@@ -406,6 +542,16 @@ static void loom_amdgpu_wait_state_match_value(
       loom_amdgpu_wait_state_assignment(builder->allocation, value_id);
   loom_amdgpu_wait_state_match_assignment(builder, assignment, allowed_reasons,
                                           match);
+}
+
+static void loom_amdgpu_wait_state_match_sgpr_value(
+    const loom_amdgpu_wait_state_builder_t* builder, loom_value_id_t value_id,
+    loom_amdgpu_wait_state_reason_flags_t allowed_reasons,
+    loom_amdgpu_wait_state_match_t* match) {
+  const loom_low_allocation_assignment_t* assignment =
+      loom_amdgpu_wait_state_assignment(builder->allocation, value_id);
+  loom_amdgpu_wait_state_match_sgpr_assignment(builder, assignment,
+                                               allowed_reasons, match);
 }
 
 static iree_status_t loom_amdgpu_wait_state_append(
@@ -444,6 +590,18 @@ static void loom_amdgpu_wait_state_match_descriptor_operands(
   }
 }
 
+static void loom_amdgpu_wait_state_match_descriptor_sgpr_operands(
+    const loom_amdgpu_wait_state_builder_t* builder,
+    const loom_low_packet_view_t* packet,
+    loom_amdgpu_wait_state_reason_flags_t allowed_reasons,
+    loom_amdgpu_wait_state_match_t* match) {
+  const loom_op_t* op = packet->node->op;
+  for (uint16_t i = 0; i < op->operand_count; ++i) {
+    loom_amdgpu_wait_state_match_sgpr_value(
+        builder, loom_op_const_operands(op)[i], allowed_reasons, match);
+  }
+}
+
 static void loom_amdgpu_wait_state_clear_results(
     loom_amdgpu_wait_state_builder_t* builder, const loom_op_t* op) {
   for (uint16_t i = 0; i < op->result_count; ++i) {
@@ -469,6 +627,24 @@ static void loom_amdgpu_wait_state_record_results(
     loom_amdgpu_wait_state_record_assignment(builder, assignment, reason,
                                              packet->node_index, cycle_count,
                                              producer_end_position);
+  }
+}
+
+static void loom_amdgpu_wait_state_record_sgpr_results(
+    loom_amdgpu_wait_state_builder_t* builder,
+    const loom_low_packet_view_t* packet,
+    loom_amdgpu_wait_state_reason_t reason, uint16_t cycle_count,
+    uint64_t instruction_count) {
+  const loom_op_t* op = packet->node->op;
+  const uint64_t producer_end_position =
+      builder->current_position + instruction_count;
+  for (uint16_t i = 0; i < op->result_count; ++i) {
+    const loom_low_allocation_assignment_t* assignment =
+        loom_amdgpu_wait_state_assignment(builder->allocation,
+                                          loom_op_const_results(op)[i]);
+    loom_amdgpu_wait_state_record_sgpr_assignment(
+        builder, assignment, reason, packet->node_index, cycle_count,
+        producer_end_position);
   }
 }
 
@@ -617,6 +793,12 @@ static iree_status_t loom_amdgpu_wait_state_apply_packet(
       packet->descriptor != NULL &&
       loom_amdgpu_wait_state_descriptor_is_trans_forwarding_consumer(
           builder, packet->descriptor);
+  const bool valu_sgpr_read_hazard =
+      packet->descriptor != NULL &&
+      loom_amdgpu_wait_state_processor_has_valu_sgpr_read_hazard(
+          builder->processor) &&
+      loom_amdgpu_wait_state_descriptor_uses_vector_alu(builder,
+                                                        packet->descriptor);
 
   loom_amdgpu_wait_state_match_t match = {0};
   if (matrix_reads_valu) {
@@ -631,6 +813,11 @@ static iree_status_t loom_amdgpu_wait_state_apply_packet(
     }
     loom_amdgpu_wait_state_match_descriptor_operands(builder, packet,
                                                      allowed_reasons, &match);
+    if (valu_sgpr_read_hazard) {
+      loom_amdgpu_wait_state_match_descriptor_sgpr_operands(
+          builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_VALU_SGPR_READ,
+          &match);
+    }
   } else {
     IREE_RETURN_IF_ERROR(loom_amdgpu_wait_state_match_structural_operands(
         builder, packet,
@@ -662,6 +849,11 @@ static iree_status_t loom_amdgpu_wait_state_apply_packet(
           builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_TRANS_RESULT_USE,
           LOOM_AMDGPU_WAIT_STATE_TRANS_RESULT_USE_CYCLES, instruction_count);
     }
+    if (valu_sgpr_read_hazard) {
+      loom_amdgpu_wait_state_record_sgpr_results(
+          builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_VALU_SGPR_READ,
+          LOOM_AMDGPU_WAIT_STATE_VALU_SGPR_READ_CYCLES, instruction_count);
+    }
   } else if (packet->descriptor != NULL) {
     loom_amdgpu_wait_state_clear_results(builder, packet->node->op);
   } else {
@@ -688,6 +880,9 @@ static iree_status_t loom_amdgpu_wait_state_plan_build_with_scratch(
        block_index < builder->schedule->block_count; ++block_index) {
     if (builder->vgpr_count != 0) {
       memset(builder->vgprs, 0, builder->vgpr_count * sizeof(*builder->vgprs));
+    }
+    if (builder->sgpr_count != 0) {
+      memset(builder->sgprs, 0, builder->sgpr_count * sizeof(*builder->sgprs));
     }
     builder->current_position = 0;
     const loom_low_schedule_block_t* block =

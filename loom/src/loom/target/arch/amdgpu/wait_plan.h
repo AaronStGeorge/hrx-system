@@ -88,6 +88,8 @@ typedef enum loom_amdgpu_wait_plan_reason_e {
   LOOM_AMDGPU_WAIT_PLAN_REASON_READ_RESULT_REUSE = 5,
   // An RDNA VALU consumes a nearby TRANS result before va_vdst is drained.
   LOOM_AMDGPU_WAIT_PLAN_REASON_TRANS_RESULT_USE = 6,
+  // A GFX12 ALU packet reads SGPR state with outstanding ALU dependencies.
+  LOOM_AMDGPU_WAIT_PLAN_REASON_VALU_SGPR_READ = 7,
 } loom_amdgpu_wait_plan_reason_t;
 
 // One AMDGPU wait-counter action in scheduled packet order.
