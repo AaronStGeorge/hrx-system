@@ -12,6 +12,17 @@ iree_add_all_subdirs()
 
 iree_py_library(
   NAME
+    target_info
+  SRCS
+    "__init__.py"
+    "packed_dot_data.py"
+    "target_info.py"
+  DEPS
+    iree::runtime::py::loom::target::arch::package
+)
+
+iree_py_library(
+  NAME
     dialect
   SRCS
     "__init__.py"
@@ -29,8 +40,21 @@ iree_py_library(
     "descriptors.py"
     "packed_dot_data.py"
   DEPS
+    iree::runtime::py::loom::target::arch::x86::target_info
     iree::runtime::py::loom::target::low_descriptors
     iree::runtime::py::loom::target::arch::package
+)
+
+iree_py_test(
+  NAME
+    target_info_test
+  SRCS
+    "../../../tools/pytest_style_runner.py"
+  ARGS
+    "loom.target.arch.x86.target_info_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
