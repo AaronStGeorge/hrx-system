@@ -6,9 +6,15 @@
 
 #include "loom/target/arch/x86/low_registry.h"
 
+#include "loom/target/arch/x86/avx10_2_descriptors.h"
 #include "loom/target/arch/x86/avx2_descriptors.h"
+#include "loom/target/arch/x86/avx512_bf16_descriptors.h"
 #include "loom/target/arch/x86/avx512_descriptors.h"
 #include "loom/target/arch/x86/avx512_packed_dot_descriptors.h"
+#include "loom/target/arch/x86/avx512_vnni_descriptors.h"
+#include "loom/target/arch/x86/avx_vnni_descriptors.h"
+#include "loom/target/arch/x86/avx_vnni_int16_descriptors.h"
+#include "loom/target/arch/x86/avx_vnni_int8_descriptors.h"
 #include "loom/target/arch/x86/packed_dot_descriptors.h"
 #include "loom/target/arch/x86/scalar_descriptors.h"
 #include "loom/target/arch/x86/simd128_descriptors.h"
@@ -20,6 +26,12 @@ static const loom_low_descriptor_set_provider_t kLowDescriptorSetProviders[] = {
     loom_x86_avx512_core_descriptor_set,
     loom_x86_packed_dot_core_descriptor_set,
     loom_x86_avx512_packed_dot_core_descriptor_set,
+    loom_x86_avx512_vnni_core_descriptor_set,
+    loom_x86_avx512_bf16_core_descriptor_set,
+    loom_x86_avx_vnni_core_descriptor_set,
+    loom_x86_avx_vnni_int8_core_descriptor_set,
+    loom_x86_avx_vnni_int16_core_descriptor_set,
+    loom_x86_avx10_2_core_descriptor_set,
 };
 
 void loom_x86_low_descriptor_registry_initialize(

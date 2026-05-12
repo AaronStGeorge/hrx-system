@@ -127,6 +127,72 @@ loom_low_descriptor_cc_library(
 
 loom_low_descriptor_cc_library(
   NAME
+    avx512_vnni_descriptors
+  DEPS
+    ::avx512_packed_dot_descriptors
+    loom::src::loom::codegen::low::descriptors
+  IDS_DEPS
+    loom::src::loom::codegen::low::descriptors
+  HEADER_ONLY
+)
+
+loom_low_descriptor_cc_library(
+  NAME
+    avx512_bf16_descriptors
+  DEPS
+    ::avx512_packed_dot_descriptors
+    loom::src::loom::codegen::low::descriptors
+  IDS_DEPS
+    loom::src::loom::codegen::low::descriptors
+  HEADER_ONLY
+)
+
+loom_low_descriptor_cc_library(
+  NAME
+    avx_vnni_descriptors
+  DEPS
+    ::avx512_packed_dot_descriptors
+    loom::src::loom::codegen::low::descriptors
+  IDS_DEPS
+    loom::src::loom::codegen::low::descriptors
+  HEADER_ONLY
+)
+
+loom_low_descriptor_cc_library(
+  NAME
+    avx_vnni_int8_descriptors
+  DEPS
+    ::avx512_packed_dot_descriptors
+    loom::src::loom::codegen::low::descriptors
+  IDS_DEPS
+    loom::src::loom::codegen::low::descriptors
+  HEADER_ONLY
+)
+
+loom_low_descriptor_cc_library(
+  NAME
+    avx_vnni_int16_descriptors
+  DEPS
+    ::avx512_packed_dot_descriptors
+    loom::src::loom::codegen::low::descriptors
+  IDS_DEPS
+    loom::src::loom::codegen::low::descriptors
+  HEADER_ONLY
+)
+
+loom_low_descriptor_cc_library(
+  NAME
+    avx10_2_descriptors
+  DEPS
+    ::avx512_packed_dot_descriptors
+    loom::src::loom::codegen::low::descriptors
+  IDS_DEPS
+    loom::src::loom::codegen::low::descriptors
+  HEADER_ONLY
+)
+
+loom_low_descriptor_cc_library(
+  NAME
     avx512_packed_dot_descriptors
   GENERATOR
     iree::runtime::py::loom::gen::x86_low_descriptor_shard
@@ -136,12 +202,24 @@ loom_low_descriptor_cc_library(
     "--view-header=avx2"
     "--view-header=avx512"
     "--view-header=packed_dot"
+    "--view-header=avx512_vnni"
+    "--view-header=avx512_bf16"
+    "--view-header=avx_vnni"
+    "--view-header=avx_vnni_int8"
+    "--view-header=avx_vnni_int16"
+    "--view-header=avx10_2"
   GENERATED_HDRS
     "scalar_descriptors.h"
     "simd128_descriptors.h"
     "avx2_descriptors.h"
     "avx512_descriptors.h"
     "packed_dot_descriptors.h"
+    "avx512_vnni_descriptors.h"
+    "avx512_bf16_descriptors.h"
+    "avx_vnni_descriptors.h"
+    "avx_vnni_int8_descriptors.h"
+    "avx_vnni_int16_descriptors.h"
+    "avx10_2_descriptors.h"
   ARGS
     "--target=avx512_packed_dot"
   DEPS
@@ -156,9 +234,15 @@ loom_cc_library(
   SRCS
     "low_registry.c"
   DEPS
+    ::avx10_2_descriptors
     ::avx2_descriptors
+    ::avx512_bf16_descriptors
     ::avx512_descriptors
     ::avx512_packed_dot_descriptors
+    ::avx512_vnni_descriptors
+    ::avx_vnni_descriptors
+    ::avx_vnni_int16_descriptors
+    ::avx_vnni_int8_descriptors
     ::packed_dot_descriptors
     ::scalar_descriptors
     ::simd128_descriptors
@@ -217,9 +301,15 @@ loom_cc_test(
   SRCS
     "register_classes_test.cc"
   DEPS
+    ::avx10_2_descriptors
     ::avx2_descriptors
+    ::avx512_bf16_descriptors
     ::avx512_descriptors
     ::avx512_packed_dot_descriptors
+    ::avx512_vnni_descriptors
+    ::avx_vnni_descriptors
+    ::avx_vnni_int16_descriptors
+    ::avx_vnni_int8_descriptors
     ::packed_dot_descriptors
     ::register_classes
     ::scalar_descriptors
@@ -288,6 +378,17 @@ iree_executable_test(
     "source_low_avx512_packed_dot"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_avx512_packed_dot.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_avx_vnni"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_avx_vnni.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

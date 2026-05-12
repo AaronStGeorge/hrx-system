@@ -482,6 +482,30 @@ void loom_x86_low_lower_policy_registry_initialize(
           .policy = &kX86PackedDotLowLowerPolicy,
       },
       {
+          .contract_set_key = IREE_SVL("x86.avx512_vnni.core"),
+          .policy = &kX86PackedDotLowLowerPolicy,
+      },
+      {
+          .contract_set_key = IREE_SVL("x86.avx512_bf16.core"),
+          .policy = &kX86PackedDotLowLowerPolicy,
+      },
+      {
+          .contract_set_key = IREE_SVL("x86.avx_vnni.core"),
+          .policy = &kX86PackedDotLowLowerPolicy,
+      },
+      {
+          .contract_set_key = IREE_SVL("x86.avx_vnni_int8.core"),
+          .policy = &kX86PackedDotLowLowerPolicy,
+      },
+      {
+          .contract_set_key = IREE_SVL("x86.avx_vnni_int16.core"),
+          .policy = &kX86PackedDotLowLowerPolicy,
+      },
+      {
+          .contract_set_key = IREE_SVL("x86.avx10_2.core"),
+          .policy = &kX86PackedDotLowLowerPolicy,
+      },
+      {
           .contract_set_key = IREE_SVL("x86.avx512_packed_dot.core"),
           .policy = &kX86Avx512PackedDotLowLowerPolicy,
       },

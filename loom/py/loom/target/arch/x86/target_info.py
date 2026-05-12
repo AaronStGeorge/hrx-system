@@ -86,6 +86,7 @@ class X86DescriptorSetInfo:
     register_classes: tuple[str, ...]
     storage_generator_target: str | None = None
     feature_profile: str = X86_FEATURE_PROFILE_NONE
+    required_feature_bits: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,6 +145,12 @@ X86_DESCRIPTOR_SET_INFOS: tuple[X86DescriptorSetInfo, ...] = (
         isa_tier=X86_ISA_TIER_PACKED_DOT,
         register_classes=(X86_REG_CLASS_XMM, X86_REG_CLASS_YMM, X86_REG_CLASS_ZMM),
         storage_generator_target="avx512_packed_dot",
+        required_feature_bits=(
+            FEATURE_AVX512_BF16
+            | FEATURE_AVX512_VL
+            | FEATURE_AVX_VNNI
+            | FEATURE_AVX_VNNI_INT8
+        ),
     ),
     X86DescriptorSetInfo(
         generator_target="avx512_packed_dot",
@@ -155,6 +162,13 @@ X86_DESCRIPTOR_SET_INFOS: tuple[X86DescriptorSetInfo, ...] = (
             X86_REG_CLASS_ZMM,
             X86_REG_CLASS_K,
         ),
+        required_feature_bits=(
+            FEATURE_AVX512_VNNI
+            | FEATURE_AVX512_BF16
+            | FEATURE_AVX512_VL
+            | FEATURE_AVX_VNNI
+            | FEATURE_AVX_VNNI_INT8
+        ),
     ),
     X86DescriptorSetInfo(
         generator_target="avx512_vnni",
@@ -163,6 +177,7 @@ X86_DESCRIPTOR_SET_INFOS: tuple[X86DescriptorSetInfo, ...] = (
         register_classes=(X86_REG_CLASS_XMM, X86_REG_CLASS_YMM, X86_REG_CLASS_ZMM),
         storage_generator_target="avx512_packed_dot",
         feature_profile=X86_FEATURE_PROFILE_AVX512_VNNI,
+        required_feature_bits=FEATURE_AVX512_VNNI | FEATURE_AVX512_VL,
     ),
     X86DescriptorSetInfo(
         generator_target="avx512_bf16",
@@ -171,6 +186,7 @@ X86_DESCRIPTOR_SET_INFOS: tuple[X86DescriptorSetInfo, ...] = (
         register_classes=(X86_REG_CLASS_XMM, X86_REG_CLASS_YMM, X86_REG_CLASS_ZMM),
         storage_generator_target="avx512_packed_dot",
         feature_profile=X86_FEATURE_PROFILE_AVX512_BF16,
+        required_feature_bits=FEATURE_AVX512_BF16 | FEATURE_AVX512_VL,
     ),
     X86DescriptorSetInfo(
         generator_target="avx_vnni",
@@ -179,6 +195,7 @@ X86_DESCRIPTOR_SET_INFOS: tuple[X86DescriptorSetInfo, ...] = (
         register_classes=(X86_REG_CLASS_XMM, X86_REG_CLASS_YMM),
         storage_generator_target="avx512_packed_dot",
         feature_profile=X86_FEATURE_PROFILE_AVX_VNNI,
+        required_feature_bits=FEATURE_AVX_VNNI,
     ),
     X86DescriptorSetInfo(
         generator_target="avx_vnni_int8",
@@ -187,6 +204,7 @@ X86_DESCRIPTOR_SET_INFOS: tuple[X86DescriptorSetInfo, ...] = (
         register_classes=(X86_REG_CLASS_XMM, X86_REG_CLASS_YMM),
         storage_generator_target="avx512_packed_dot",
         feature_profile=X86_FEATURE_PROFILE_AVX_VNNI_INT8,
+        required_feature_bits=FEATURE_AVX_VNNI_INT8,
     ),
     X86DescriptorSetInfo(
         generator_target="avx_vnni_int16",
@@ -195,6 +213,7 @@ X86_DESCRIPTOR_SET_INFOS: tuple[X86DescriptorSetInfo, ...] = (
         register_classes=(X86_REG_CLASS_XMM, X86_REG_CLASS_YMM),
         storage_generator_target="avx512_packed_dot",
         feature_profile=X86_FEATURE_PROFILE_AVX_VNNI_INT16,
+        required_feature_bits=FEATURE_AVX_VNNI_INT16,
     ),
     X86DescriptorSetInfo(
         generator_target="avx10_2",
@@ -203,6 +222,7 @@ X86_DESCRIPTOR_SET_INFOS: tuple[X86DescriptorSetInfo, ...] = (
         register_classes=(X86_REG_CLASS_XMM, X86_REG_CLASS_YMM, X86_REG_CLASS_ZMM),
         storage_generator_target="avx512_packed_dot",
         feature_profile=X86_FEATURE_PROFILE_AVX10_2,
+        required_feature_bits=FEATURE_AVX10_2,
     ),
 )
 
@@ -373,6 +393,14 @@ def validate_x86_target_info_tables(
             raise ValueError(
                 f"x86 descriptor generator target '{info.generator_target}' uses "
                 f"view-only target '{storage_info.generator_target}' as storage"
+            )
+        if (
+            info.feature_profile != X86_FEATURE_PROFILE_NONE
+            and info.required_feature_bits == 0
+        ):
+            raise ValueError(
+                f"x86 descriptor generator target '{info.generator_target}' "
+                "names a feature profile without required feature bits"
             )
 
     for profile_info in target_profiles:

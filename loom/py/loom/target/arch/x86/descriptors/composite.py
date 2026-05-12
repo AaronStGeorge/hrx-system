@@ -14,7 +14,7 @@ from loom.target.low_descriptors import Descriptor, DescriptorSet
 
 from .avx512 import X86_AVX512_CORE_DESCRIPTOR_SET
 from .common import _T
-from .packed_dot import X86_PACKED_DOT_DESCRIPTOR_SET
+from .packed_dot import X86_PACKED_DOT_FEATURE_DESCRIPTOR_SETS
 
 _X86_DESCRIPTOR_SET_COMPONENTS = tuple[tuple[DescriptorSet, frozenset[str]], ...]
 
@@ -29,7 +29,10 @@ _X86_AVX512_PACKED_DOT_COMPONENTS: _X86_DESCRIPTOR_SET_COMPONENTS = (
             )
         ),
     ),
-    (X86_PACKED_DOT_DESCRIPTOR_SET, frozenset()),
+    *(
+        (descriptor_set, frozenset())
+        for descriptor_set in X86_PACKED_DOT_FEATURE_DESCRIPTOR_SETS
+    ),
 )
 
 

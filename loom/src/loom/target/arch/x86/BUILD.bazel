@@ -35,9 +35,15 @@ loom_assert_no_dependencies(
         "//loom/src/loom/target/emit/llvmir:llvmir",
     ],
     targets = [
+        ":avx10_2_descriptors",
         ":avx2_descriptors",
         ":avx512_descriptors",
+        ":avx512_bf16_descriptors",
         ":avx512_packed_dot_descriptors",
+        ":avx512_vnni_descriptors",
+        ":avx_vnni_descriptors",
+        ":avx_vnni_int8_descriptors",
+        ":avx_vnni_int16_descriptors",
         ":math_policy",
         ":ops",
         ":low_registry",
@@ -62,9 +68,15 @@ loom_assert_no_dependencies(
 loom_assert_no_dependencies(
     name = "core_target_interfaces_no_x86_target_deps",
     dependencies = [
+        ":avx10_2_descriptors",
         ":avx2_descriptors",
         ":avx512_descriptors",
+        ":avx512_bf16_descriptors",
         ":avx512_packed_dot_descriptors",
+        ":avx512_vnni_descriptors",
+        ":avx_vnni_descriptors",
+        ":avx_vnni_int8_descriptors",
+        ":avx_vnni_int16_descriptors",
         ":feature_bits",
         ":low_registry",
         ":math_policy",
@@ -211,6 +223,66 @@ loom_low_descriptor_cc_library(
 )
 
 loom_low_descriptor_cc_library(
+    name = "avx512_vnni_descriptors",
+    header_only = True,
+    ids_deps = ["//loom/src/loom/codegen/low:descriptors"],
+    deps = [
+        ":avx512_packed_dot_descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
+    ],
+)
+
+loom_low_descriptor_cc_library(
+    name = "avx512_bf16_descriptors",
+    header_only = True,
+    ids_deps = ["//loom/src/loom/codegen/low:descriptors"],
+    deps = [
+        ":avx512_packed_dot_descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
+    ],
+)
+
+loom_low_descriptor_cc_library(
+    name = "avx_vnni_descriptors",
+    header_only = True,
+    ids_deps = ["//loom/src/loom/codegen/low:descriptors"],
+    deps = [
+        ":avx512_packed_dot_descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
+    ],
+)
+
+loom_low_descriptor_cc_library(
+    name = "avx_vnni_int8_descriptors",
+    header_only = True,
+    ids_deps = ["//loom/src/loom/codegen/low:descriptors"],
+    deps = [
+        ":avx512_packed_dot_descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
+    ],
+)
+
+loom_low_descriptor_cc_library(
+    name = "avx_vnni_int16_descriptors",
+    header_only = True,
+    ids_deps = ["//loom/src/loom/codegen/low:descriptors"],
+    deps = [
+        ":avx512_packed_dot_descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
+    ],
+)
+
+loom_low_descriptor_cc_library(
+    name = "avx10_2_descriptors",
+    header_only = True,
+    ids_deps = ["//loom/src/loom/codegen/low:descriptors"],
+    deps = [
+        ":avx512_packed_dot_descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
+    ],
+)
+
+loom_low_descriptor_cc_library(
     name = "avx512_packed_dot_descriptors",
     args = ["--target=avx512_packed_dot"],
     generated_hdr_flags = [
@@ -219,6 +291,12 @@ loom_low_descriptor_cc_library(
         "--view-header=avx2",
         "--view-header=avx512",
         "--view-header=packed_dot",
+        "--view-header=avx512_vnni",
+        "--view-header=avx512_bf16",
+        "--view-header=avx_vnni",
+        "--view-header=avx_vnni_int8",
+        "--view-header=avx_vnni_int16",
+        "--view-header=avx10_2",
     ],
     generated_hdrs = [
         "scalar_descriptors.h",
@@ -226,6 +304,12 @@ loom_low_descriptor_cc_library(
         "avx2_descriptors.h",
         "avx512_descriptors.h",
         "packed_dot_descriptors.h",
+        "avx512_vnni_descriptors.h",
+        "avx512_bf16_descriptors.h",
+        "avx_vnni_descriptors.h",
+        "avx_vnni_int8_descriptors.h",
+        "avx_vnni_int16_descriptors.h",
+        "avx10_2_descriptors.h",
     ],
     generator = "//loom/py/loom/gen:x86_low_descriptor_shard",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
@@ -236,9 +320,15 @@ loom_cc_library(
     srcs = ["low_registry.c"],
     hdrs = ["low_registry.h"],
     deps = [
+        ":avx10_2_descriptors",
         ":avx2_descriptors",
+        ":avx512_bf16_descriptors",
         ":avx512_descriptors",
         ":avx512_packed_dot_descriptors",
+        ":avx512_vnni_descriptors",
+        ":avx_vnni_descriptors",
+        ":avx_vnni_int16_descriptors",
+        ":avx_vnni_int8_descriptors",
         ":packed_dot_descriptors",
         ":scalar_descriptors",
         ":simd128_descriptors",
@@ -293,9 +383,15 @@ loom_cc_test(
     name = "register_classes_test",
     srcs = ["register_classes_test.cc"],
     deps = [
+        ":avx10_2_descriptors",
         ":avx2_descriptors",
+        ":avx512_bf16_descriptors",
         ":avx512_descriptors",
         ":avx512_packed_dot_descriptors",
+        ":avx512_vnni_descriptors",
+        ":avx_vnni_descriptors",
+        ":avx_vnni_int16_descriptors",
+        ":avx_vnni_int8_descriptors",
         ":packed_dot_descriptors",
         ":register_classes",
         ":scalar_descriptors",
@@ -338,6 +434,7 @@ loom_check_test_suite(
         "test/source_low/source_low.loom-test",
         "test/source_low/source_low_avx2.loom-test",
         "test/source_low/source_low_avx512_packed_dot.loom-test",
+        "test/source_low/source_low_avx_vnni.loom-test",
         "test/source_low/source_low_packed_dot.loom-test",
         "test/source_low/source_low_scalar_addressing.loom-test",
         "test/source_low/source_low_scalar_arithmetic.loom-test",

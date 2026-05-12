@@ -11,10 +11,13 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 
 from loom.target.arch.x86.packed_dot_data import (
+    FEATURE_AVX10_2,
     FEATURE_AVX512_BF16,
     FEATURE_AVX512_VL,
+    FEATURE_AVX512_VNNI,
     FEATURE_AVX_VNNI,
     FEATURE_AVX_VNNI_INT8,
+    FEATURE_AVX_VNNI_INT16,
 )
 from loom.target.arch.x86.target_info import (
     X86_DEBUG_LLVM_FEATURES_AVX512_PACKED_DOT,
@@ -94,6 +97,34 @@ def test_descriptor_storage_target_lookup_classifies_current_views() -> None:
         "scalar",
         "simd128",
     ]
+
+
+def test_packed_dot_feature_rows_record_feature_and_width_requirements() -> None:
+    rows_by_target = {
+        info.generator_target: info
+        for info in x86_descriptor_set_view_infos_by_storage_generator_target(
+            "avx512_packed_dot"
+        )
+    }
+
+    assert rows_by_target["avx_vnni"].required_feature_bits == FEATURE_AVX_VNNI
+    assert rows_by_target["avx_vnni"].register_classes == (
+        X86_REG_CLASS_XMM,
+        X86_REG_CLASS_YMM,
+    )
+    assert rows_by_target["avx512_vnni"].required_feature_bits == (
+        FEATURE_AVX512_VNNI | FEATURE_AVX512_VL
+    )
+    assert rows_by_target["avx512_bf16"].required_feature_bits == (
+        FEATURE_AVX512_BF16 | FEATURE_AVX512_VL
+    )
+    assert rows_by_target["avx_vnni_int8"].required_feature_bits == (
+        FEATURE_AVX_VNNI_INT8
+    )
+    assert rows_by_target["avx_vnni_int16"].required_feature_bits == (
+        FEATURE_AVX_VNNI_INT16
+    )
+    assert rows_by_target["avx10_2"].required_feature_bits == FEATURE_AVX10_2
 
 
 def test_descriptor_view_lookup_rejects_view_storage_target() -> None:

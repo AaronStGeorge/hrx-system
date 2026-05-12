@@ -8,9 +8,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
-from loom.target.arch.x86.packed_dot_data import X86_PACKED_DOT_DESCRIPTORS
+from loom.target.arch.x86.packed_dot_data import (
+    FAMILY_AVX10_2,
+    FAMILY_AVX512_BF16,
+    FAMILY_AVX512_VNNI,
+    FAMILY_AVX_VNNI,
+    FAMILY_AVX_VNNI_INT8,
+    FAMILY_AVX_VNNI_INT16,
+    X86_PACKED_DOT_DESCRIPTORS,
+    PackedDotDescriptor,
+)
 from loom.target.low_descriptors import (
     DescriptorSet,
     IssueUse,
@@ -36,82 +46,246 @@ from .common import (
     _vector_lane_units,
 )
 
-X86_PACKED_DOT_DESCRIPTOR_SET = DescriptorSet(
-    key="x86.packed_dot.core",
-    target_key="x86",
-    feature_key="x86.packed_dot.v1",
-    c_header_path=Path("loom/src/loom/target/arch/x86/packed_dot_descriptors.h"),
-    c_source_path=Path("loom/src/loom/target/arch/x86/packed_dot_descriptors.c"),
-    header_guard="LOOM_TARGET_ARCH_X86_PACKED_DOT_DESCRIPTORS_H_",
-    public_header="loom/target/arch/x86/packed_dot_descriptors.h",
-    function_name="loom_x86_packed_dot_core_descriptor_set",
-    c_table_prefix="X86PackedDotCore",
-    c_enum_prefix="X86_PACKED_DOT_CORE",
-    generator_version=1,
-    reg_classes=(
+_PACKED_DOT_SOURCE_DIR = Path("loom/src/loom/target/arch/x86")
+_PACKED_DOT_PUBLIC_HEADER_DIR = "loom/target/arch/x86"
+_PACKED_DOT_VECTOR_WIDTH_TO_REG_CLASS = {
+    128: _REG_XMM,
+    256: _REG_YMM,
+    512: _REG_ZMM,
+}
+_PACKED_DOT_VECTOR_WIDTH_TO_SCHEDULE = {
+    128: _SCHEDULE_VECTOR_DOT_XMM,
+    256: _SCHEDULE_VECTOR_DOT_YMM,
+    512: _SCHEDULE_VECTOR_DOT_ZMM,
+}
+
+
+def _packed_dot_file_name(stem: str, suffix: str) -> Path:
+    return _PACKED_DOT_SOURCE_DIR / f"{stem}_descriptors.{suffix}"
+
+
+def _packed_dot_public_header(stem: str) -> str:
+    return f"{_PACKED_DOT_PUBLIC_HEADER_DIR}/{stem}_descriptors.h"
+
+
+def _packed_dot_header_guard(stem: str) -> str:
+    return f"LOOM_TARGET_ARCH_X86_{stem.upper()}_DESCRIPTORS_H_"
+
+
+def _packed_dot_reg_classes(
+    vector_bit_widths: Sequence[int], *, physical_count: int
+) -> tuple[RegClass, ...]:
+    return tuple(
         RegClass(
-            _REG_XMM,
-            128,
+            _PACKED_DOT_VECTOR_WIDTH_TO_REG_CLASS[vector_bit_width],
+            vector_bit_width,
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
-            physical_count=32,
+            physical_count=physical_count,
             alias_set_id=2,
-        ),
-        RegClass(
-            _REG_YMM,
-            256,
-            SpillSlotSpace.STACK,
-            flags=(RegClassFlag.PHYSICAL,),
-            physical_count=32,
-            alias_set_id=2,
-        ),
-        RegClass(
-            _REG_ZMM,
-            512,
-            SpillSlotSpace.STACK,
-            flags=(RegClassFlag.PHYSICAL,),
-            physical_count=32,
-            alias_set_id=2,
-        ),
-    ),
-    resources=(
+        )
+        for vector_bit_width in vector_bit_widths
+    )
+
+
+def _packed_dot_resources() -> tuple[Resource, ...]:
+    return (
         Resource(
             _RESOURCE_DOT,
             capacity_per_cycle=4,
             kind=ResourceKind.VECTOR_ALU,
             contention_group_id=1,
         ),
-    ),
-    schedule_classes=(
+    )
+
+
+def _packed_dot_schedule_classes(
+    vector_bit_widths: Sequence[int],
+) -> tuple[ScheduleClass, ...]:
+    return tuple(
         ScheduleClass(
-            _SCHEDULE_VECTOR_DOT_XMM,
+            _PACKED_DOT_VECTOR_WIDTH_TO_SCHEDULE[vector_bit_width],
             latency_kind=LatencyKind.ESTIMATE,
             latency_cycles=4,
             issue_uses=(
-                IssueUse(_RESOURCE_DOT, cycles=1, units=_vector_lane_units(128)),
+                IssueUse(
+                    _RESOURCE_DOT,
+                    cycles=1,
+                    units=_vector_lane_units(vector_bit_width),
+                ),
             ),
             model_quality=ModelQuality.ESTIMATED,
+        )
+        for vector_bit_width in vector_bit_widths
+    )
+
+
+def _packed_dot_descriptor_data(
+    families: Sequence[str], vector_bit_widths: Sequence[int]
+) -> tuple[PackedDotDescriptor, ...]:
+    family_set = frozenset(families)
+    vector_bit_width_set = frozenset(vector_bit_widths)
+    descriptor_data = tuple(
+        descriptor
+        for descriptor in X86_PACKED_DOT_DESCRIPTORS
+        if descriptor.family in family_set
+        and descriptor.vector_bit_width in vector_bit_width_set
+    )
+    if not descriptor_data:
+        family_names = ", ".join(sorted(family_set))
+        raise ValueError(f"x86 packed-dot overlay selected no rows for {family_names}")
+    return descriptor_data
+
+
+def _descriptor_set(
+    *,
+    key: str,
+    feature_key: str,
+    stem: str,
+    function_name: str,
+    c_table_prefix: str,
+    c_enum_prefix: str,
+    descriptor_data: Sequence[PackedDotDescriptor],
+    vector_bit_widths: Sequence[int],
+    physical_count: int,
+) -> DescriptorSet:
+    return DescriptorSet(
+        key=key,
+        target_key="x86",
+        feature_key=feature_key,
+        c_header_path=_packed_dot_file_name(stem, "h"),
+        c_source_path=_packed_dot_file_name(stem, "c"),
+        header_guard=_packed_dot_header_guard(stem),
+        public_header=_packed_dot_public_header(stem),
+        function_name=function_name,
+        c_table_prefix=c_table_prefix,
+        c_enum_prefix=c_enum_prefix,
+        generator_version=1,
+        reg_classes=_packed_dot_reg_classes(
+            vector_bit_widths, physical_count=physical_count
         ),
-        ScheduleClass(
-            _SCHEDULE_VECTOR_DOT_YMM,
-            latency_kind=LatencyKind.ESTIMATE,
-            latency_cycles=4,
-            issue_uses=(
-                IssueUse(_RESOURCE_DOT, cycles=1, units=_vector_lane_units(256)),
-            ),
-            model_quality=ModelQuality.ESTIMATED,
+        resources=_packed_dot_resources(),
+        schedule_classes=_packed_dot_schedule_classes(vector_bit_widths),
+        descriptors=tuple(
+            _packed_dot_descriptor(descriptor) for descriptor in descriptor_data
         ),
-        ScheduleClass(
-            _SCHEDULE_VECTOR_DOT_ZMM,
-            latency_kind=LatencyKind.ESTIMATE,
-            latency_cycles=4,
-            issue_uses=(
-                IssueUse(_RESOURCE_DOT, cycles=1, units=_vector_lane_units(512)),
-            ),
-            model_quality=ModelQuality.ESTIMATED,
-        ),
-    ),
-    descriptors=tuple(
-        _packed_dot_descriptor(descriptor) for descriptor in X86_PACKED_DOT_DESCRIPTORS
-    ),
+    )
+
+
+def _overlay_descriptor_set(
+    *,
+    key: str,
+    feature_key: str,
+    stem: str,
+    function_name: str,
+    c_table_prefix: str,
+    c_enum_prefix: str,
+    family: str,
+    vector_bit_widths: Sequence[int],
+    physical_count: int,
+) -> DescriptorSet:
+    return _descriptor_set(
+        key=key,
+        feature_key=feature_key,
+        stem=stem,
+        function_name=function_name,
+        c_table_prefix=c_table_prefix,
+        c_enum_prefix=c_enum_prefix,
+        descriptor_data=_packed_dot_descriptor_data((family,), vector_bit_widths),
+        vector_bit_widths=vector_bit_widths,
+        physical_count=physical_count,
+    )
+
+
+X86_AVX512_VNNI_DESCRIPTOR_SET = _overlay_descriptor_set(
+    key="x86.avx512_vnni.core",
+    feature_key="x86.avx512_vnni.v1",
+    stem="avx512_vnni",
+    function_name="loom_x86_avx512_vnni_core_descriptor_set",
+    c_table_prefix="X86Avx512VnniCore",
+    c_enum_prefix="X86_AVX512_VNNI_CORE",
+    family=FAMILY_AVX512_VNNI,
+    vector_bit_widths=(128, 256, 512),
+    physical_count=32,
+)
+
+X86_AVX512_BF16_DESCRIPTOR_SET = _overlay_descriptor_set(
+    key="x86.avx512_bf16.core",
+    feature_key="x86.avx512_bf16.v1",
+    stem="avx512_bf16",
+    function_name="loom_x86_avx512_bf16_core_descriptor_set",
+    c_table_prefix="X86Avx512Bf16Core",
+    c_enum_prefix="X86_AVX512_BF16_CORE",
+    family=FAMILY_AVX512_BF16,
+    vector_bit_widths=(128, 256, 512),
+    physical_count=32,
+)
+
+X86_AVX_VNNI_DESCRIPTOR_SET = _overlay_descriptor_set(
+    key="x86.avx_vnni.core",
+    feature_key="x86.avx_vnni.v1",
+    stem="avx_vnni",
+    function_name="loom_x86_avx_vnni_core_descriptor_set",
+    c_table_prefix="X86AvxVnniCore",
+    c_enum_prefix="X86_AVX_VNNI_CORE",
+    family=FAMILY_AVX_VNNI,
+    vector_bit_widths=(128, 256),
+    physical_count=16,
+)
+
+X86_AVX_VNNI_INT8_DESCRIPTOR_SET = _overlay_descriptor_set(
+    key="x86.avx_vnni_int8.core",
+    feature_key="x86.avx_vnni_int8.v1",
+    stem="avx_vnni_int8",
+    function_name="loom_x86_avx_vnni_int8_core_descriptor_set",
+    c_table_prefix="X86AvxVnniInt8Core",
+    c_enum_prefix="X86_AVX_VNNI_INT8_CORE",
+    family=FAMILY_AVX_VNNI_INT8,
+    vector_bit_widths=(128, 256),
+    physical_count=16,
+)
+
+X86_AVX_VNNI_INT16_DESCRIPTOR_SET = _overlay_descriptor_set(
+    key="x86.avx_vnni_int16.core",
+    feature_key="x86.avx_vnni_int16.v1",
+    stem="avx_vnni_int16",
+    function_name="loom_x86_avx_vnni_int16_core_descriptor_set",
+    c_table_prefix="X86AvxVnniInt16Core",
+    c_enum_prefix="X86_AVX_VNNI_INT16_CORE",
+    family=FAMILY_AVX_VNNI_INT16,
+    vector_bit_widths=(128, 256),
+    physical_count=16,
+)
+
+X86_AVX10_2_DESCRIPTOR_SET = _overlay_descriptor_set(
+    key="x86.avx10_2.core",
+    feature_key="x86.avx10_2.v1",
+    stem="avx10_2",
+    function_name="loom_x86_avx10_2_core_descriptor_set",
+    c_table_prefix="X86Avx102Core",
+    c_enum_prefix="X86_AVX10_2_CORE",
+    family=FAMILY_AVX10_2,
+    vector_bit_widths=(128, 256, 512),
+    physical_count=32,
+)
+
+X86_PACKED_DOT_FEATURE_DESCRIPTOR_SETS = (
+    X86_AVX512_VNNI_DESCRIPTOR_SET,
+    X86_AVX512_BF16_DESCRIPTOR_SET,
+    X86_AVX_VNNI_DESCRIPTOR_SET,
+    X86_AVX_VNNI_INT8_DESCRIPTOR_SET,
+    X86_AVX_VNNI_INT16_DESCRIPTOR_SET,
+    X86_AVX10_2_DESCRIPTOR_SET,
+)
+
+X86_PACKED_DOT_DESCRIPTOR_SET = _descriptor_set(
+    key="x86.packed_dot.core",
+    feature_key="x86.packed_dot.v1",
+    stem="packed_dot",
+    function_name="loom_x86_packed_dot_core_descriptor_set",
+    c_table_prefix="X86PackedDotCore",
+    c_enum_prefix="X86_PACKED_DOT_CORE",
+    descriptor_data=X86_PACKED_DOT_DESCRIPTORS,
+    vector_bit_widths=(128, 256, 512),
+    physical_count=32,
 )

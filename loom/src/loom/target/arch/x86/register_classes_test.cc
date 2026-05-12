@@ -10,9 +10,15 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/target/arch/x86/avx10_2_descriptors.h"
 #include "loom/target/arch/x86/avx2_descriptors.h"
+#include "loom/target/arch/x86/avx512_bf16_descriptors.h"
 #include "loom/target/arch/x86/avx512_descriptors.h"
 #include "loom/target/arch/x86/avx512_packed_dot_descriptors.h"
+#include "loom/target/arch/x86/avx512_vnni_descriptors.h"
+#include "loom/target/arch/x86/avx_vnni_descriptors.h"
+#include "loom/target/arch/x86/avx_vnni_int16_descriptors.h"
+#include "loom/target/arch/x86/avx_vnni_int8_descriptors.h"
 #include "loom/target/arch/x86/packed_dot_descriptors.h"
 #include "loom/target/arch/x86/scalar_descriptors.h"
 #include "loom/target/arch/x86/simd128_descriptors.h"
@@ -44,6 +50,22 @@ void ExpectDescriptorClass(const loom_low_descriptor_set_t* descriptor_set,
   EXPECT_EQ(ToString(loom_low_descriptor_set_string(
                 descriptor_set, descriptor_reg_class.name_string_offset)),
             ToString(expected_name));
+}
+
+void ExpectDescriptorPresent(const loom_low_descriptor_set_t* descriptor_set,
+                             iree_string_view_t descriptor_key) {
+  EXPECT_NE(
+      loom_low_descriptor_set_lookup_descriptor(descriptor_set, descriptor_key),
+      LOOM_LOW_DESCRIPTOR_ORDINAL_NONE)
+      << ToString(descriptor_key);
+}
+
+void ExpectDescriptorMissing(const loom_low_descriptor_set_t* descriptor_set,
+                             iree_string_view_t descriptor_key) {
+  EXPECT_EQ(
+      loom_low_descriptor_set_lookup_descriptor(descriptor_set, descriptor_key),
+      LOOM_LOW_DESCRIPTOR_ORDINAL_NONE)
+      << ToString(descriptor_key);
 }
 
 TEST(X86RegisterClassesTest, SharedScalarClassesAcrossViews) {
@@ -98,6 +120,62 @@ TEST(X86RegisterClassesTest, VectorClassesAcrossProfileViews) {
                         LOOM_X86_REGISTER_CLASS_YMM);
   ExpectDescriptorClass(avx512_packed_dot_descriptor_set,
                         LOOM_X86_REGISTER_CLASS_ZMM);
+}
+
+TEST(X86RegisterClassesTest,
+     PackedDotFeatureViewsExposeTheirDescriptorFamilies) {
+  const loom_low_descriptor_set_t* avx512_vnni_descriptor_set =
+      loom_x86_avx512_vnni_core_descriptor_set();
+  const loom_low_descriptor_set_t* avx512_bf16_descriptor_set =
+      loom_x86_avx512_bf16_core_descriptor_set();
+  const loom_low_descriptor_set_t* avx_vnni_descriptor_set =
+      loom_x86_avx_vnni_core_descriptor_set();
+  const loom_low_descriptor_set_t* avx_vnni_int8_descriptor_set =
+      loom_x86_avx_vnni_int8_core_descriptor_set();
+  const loom_low_descriptor_set_t* avx_vnni_int16_descriptor_set =
+      loom_x86_avx_vnni_int16_core_descriptor_set();
+  const loom_low_descriptor_set_t* avx10_2_descriptor_set =
+      loom_x86_avx10_2_core_descriptor_set();
+
+  ExpectDescriptorClass(avx512_vnni_descriptor_set,
+                        LOOM_X86_REGISTER_CLASS_XMM);
+  ExpectDescriptorClass(avx512_vnni_descriptor_set,
+                        LOOM_X86_REGISTER_CLASS_YMM);
+  ExpectDescriptorClass(avx512_vnni_descriptor_set,
+                        LOOM_X86_REGISTER_CLASS_ZMM);
+  ExpectDescriptorPresent(avx512_vnni_descriptor_set,
+                          IREE_SV("x86.avx512_vnni.vpdpbusd.zmm"));
+  ExpectDescriptorClass(avx512_bf16_descriptor_set,
+                        LOOM_X86_REGISTER_CLASS_ZMM);
+  ExpectDescriptorPresent(avx512_bf16_descriptor_set,
+                          IREE_SV("x86.avx512_bf16.vdpbf16ps.zmm"));
+
+  ExpectDescriptorClass(avx_vnni_descriptor_set, LOOM_X86_REGISTER_CLASS_XMM);
+  ExpectDescriptorClass(avx_vnni_descriptor_set, LOOM_X86_REGISTER_CLASS_YMM);
+  ExpectDescriptorPresent(avx_vnni_descriptor_set,
+                          IREE_SV("x86.avx_vnni.vpdpbusd.ymm"));
+  ExpectDescriptorMissing(avx_vnni_descriptor_set,
+                          IREE_SV("x86.avx512.vaddps.zmm"));
+  ExpectDescriptorMissing(avx_vnni_descriptor_set,
+                          IREE_SV("x86.avx512_vnni.vpdpbusd.zmm"));
+  ExpectDescriptorMissing(avx_vnni_descriptor_set,
+                          IREE_SV("x86.avx10_2.vpdpbssd.zmm"));
+  ExpectDescriptorClass(avx_vnni_int8_descriptor_set,
+                        LOOM_X86_REGISTER_CLASS_YMM);
+  ExpectDescriptorPresent(avx_vnni_int8_descriptor_set,
+                          IREE_SV("x86.avx_vnni_int8.vpdpbssd.ymm"));
+  ExpectDescriptorMissing(avx_vnni_int8_descriptor_set,
+                          IREE_SV("x86.avx10_2.vpdpbssd.zmm"));
+  ExpectDescriptorClass(avx_vnni_int16_descriptor_set,
+                        LOOM_X86_REGISTER_CLASS_YMM);
+  ExpectDescriptorPresent(avx_vnni_int16_descriptor_set,
+                          IREE_SV("x86.avx_vnni_int16.vpdpwsud.ymm"));
+
+  ExpectDescriptorClass(avx10_2_descriptor_set, LOOM_X86_REGISTER_CLASS_XMM);
+  ExpectDescriptorClass(avx10_2_descriptor_set, LOOM_X86_REGISTER_CLASS_YMM);
+  ExpectDescriptorClass(avx10_2_descriptor_set, LOOM_X86_REGISTER_CLASS_ZMM);
+  ExpectDescriptorPresent(avx10_2_descriptor_set,
+                          IREE_SV("x86.avx10_2.vpdpbssd.zmm"));
 }
 
 TEST(X86RegisterClassesTest, VectorWidthProjection) {
