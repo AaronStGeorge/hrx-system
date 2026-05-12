@@ -15,13 +15,17 @@ loom_cc_library(
     llvmir
   HDRS
     "ops.h"
+    "target_records.h"
   SRCS
     "builders.c"
     "tables.c"
+    "target_records.c"
   DEPS
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
+    loom::src::loom::ops::target
+    loom::src::loom::target::types
   PUBLIC
 )
 

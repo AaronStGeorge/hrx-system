@@ -38,9 +38,18 @@ loom_assert_no_dependencies(
 
 loom_assert_no_dependencies(
     name = "core_target_interfaces_no_llvmir_deps",
-    dependencies = [":llvmir"],
+    dependencies = [
+        ":llvmir",
+        "//loom/src/loom/ops/llvmir",
+    ],
     targets = [
+        "//loom/src/loom/target:artifact_plan",
+        "//loom/src/loom/target:contract",
+        "//loom/src/loom/target:function_contract",
+        "//loom/src/loom/target:launch",
+        "//loom/src/loom/target:low_legality",
         "//loom/src/loom/target:low_descriptor_registry",
+        "//loom/src/loom/target:math_policy",
         "//loom/src/loom/target:types",
     ],
 )
@@ -288,6 +297,7 @@ loom_cc_library(
         "//loom/src/loom/analysis:symbol_facts",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
+        "//loom/src/loom/ops/llvmir",
         "//loom/src/loom/ops/target",
         "//loom/src/loom/target/tool:llvm",
         "//loom/src/loom/tools/loom-check:execute",
@@ -318,6 +328,7 @@ loom_check_test_suite(
         "test/llvmir/memory.loom-test",
         "test/llvmir/packed_dot.loom-test",
         "test/llvmir/scalar_index.loom-test",
+        "test/llvmir/target_projection.loom-test",
         "test/llvmir/toolchain.loom-test",
         "test/llvmir/vector_core.loom-test",
     ],

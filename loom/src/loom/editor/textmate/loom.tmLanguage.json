@@ -161,7 +161,7 @@
         },
         {
           "name": "meta.operation-name.loom",
-          "match": "\\b(llvmir)\\.(inline_asm|intrinsic)\\b",
+          "match": "\\b(llvmir)\\.(inline_asm|intrinsic|target)\\b",
           "captures": {
             "1": {
               "name": "support.namespace.dialect.loom"

@@ -10,6 +10,7 @@
 #include "loom/analysis/symbol_facts.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
+#include "loom/ops/llvmir/ops.h"
 #include "loom/ops/target/facts.h"
 #include "loom/target/emit/llvmir/bitcode_writer.h"
 #include "loom/target/emit/llvmir/legality.h"
@@ -568,6 +569,51 @@ static iree_status_t loom_llvmir_loom_check_resolve_bundle(
       (int)request->target_options.size, request->target_options.data);
 }
 
+static iree_string_view_t loom_llvmir_loom_check_string_attr(
+    const loom_module_t* module, const loom_op_t* op, uint8_t attr_index) {
+  const loom_attribute_t attr = loom_op_attrs(op)[attr_index];
+  if (loom_attr_is_absent(attr)) {
+    return iree_string_view_empty();
+  }
+  const loom_string_id_t string_id = loom_attr_as_string_id(attr);
+  if (string_id == LOOM_STRING_ID_INVALID ||
+      string_id >= module->strings.count) {
+    return iree_string_view_empty();
+  }
+  return module->strings.entries[string_id];
+}
+
+static bool loom_llvmir_loom_check_initialize_projection_profile(
+    const loom_check_emit_provider_request_t* request,
+    const loom_op_t* target_op, const loom_target_bundle_t* target_bundle,
+    loom_llvmir_target_profile_storage_t* out_storage) {
+  if (target_op == NULL || !loom_llvmir_target_isa(target_op)) {
+    return false;
+  }
+
+  const iree_string_view_t profile_name = target_bundle->name;
+  const loom_llvmir_target_env_t target_env = {
+      .name = profile_name,
+      .target_triple = loom_llvmir_loom_check_string_attr(
+          request->module, target_op, loom_llvmir_target_triple_ATTR_INDEX),
+      .data_layout = loom_llvmir_loom_check_string_attr(
+          request->module, target_op,
+          loom_llvmir_target_data_layout_ATTR_INDEX),
+  };
+  const loom_llvmir_target_profile_t projected_profile = {
+      .name = profile_name,
+      .target_env = &target_env,
+      .target_cpu = loom_llvmir_loom_check_string_attr(
+          request->module, target_op, loom_llvmir_target_cpu_ATTR_INDEX),
+      .target_features = loom_llvmir_loom_check_string_attr(
+          request->module, target_op, loom_llvmir_target_features_ATTR_INDEX),
+      .kernel_calling_convention = LOOM_LLVMIR_CALLING_CONVENTION_DEFAULT,
+  };
+  loom_llvmir_target_profile_storage_initialize_from_bundle(
+      target_bundle, &projected_profile, out_storage);
+  return true;
+}
+
 static iree_status_t loom_llvmir_loom_check_emit_provider_execute(
     const loom_check_emit_provider_t* provider,
     const loom_check_emit_provider_request_t* request) {
@@ -588,9 +634,15 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_execute(
   loom_llvmir_target_registry_initialize(&target_registry);
   const loom_llvmir_target_profile_t* projected_profile = NULL;
   const loom_llvmir_target_profile_provider_t* projected_provider = NULL;
-  if (!loom_llvmir_target_registry_project_bundle(
-          &target_registry, target_bundle, &projected_profile,
-          &projected_provider)) {
+  loom_llvmir_target_profile_storage_t profile_storage = {0};
+  bool has_profile_storage =
+      loom_llvmir_loom_check_initialize_projection_profile(
+          request, target_op, target_bundle, &profile_storage);
+  if (has_profile_storage) {
+    projected_profile = &profile_storage.profile;
+  } else if (!loom_llvmir_target_registry_project_bundle(
+                 &target_registry, target_bundle, &projected_profile,
+                 &projected_provider)) {
     return loom_llvmir_loom_check_emit_missing_projection(request, target_op,
                                                           target_bundle);
   }
@@ -613,9 +665,10 @@ static iree_status_t loom_llvmir_loom_check_emit_provider_execute(
         request, target_op, target_bundle, &legality_diagnostic);
   }
 
-  loom_llvmir_target_profile_storage_t profile_storage;
-  loom_llvmir_target_profile_storage_initialize_from_bundle(
-      target_bundle, projected_profile, &profile_storage);
+  if (!has_profile_storage) {
+    loom_llvmir_target_profile_storage_initialize_from_bundle(
+        target_bundle, projected_profile, &profile_storage);
+  }
   const loom_llvmir_target_profile_t* profile = &profile_storage.profile;
 
   loom_llvmir_lowering_provider_list_t lowering_providers;

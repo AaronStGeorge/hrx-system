@@ -9,14 +9,18 @@
 from loom.dialect.llvmir.defs import (
     ALL_LLVMIR_OPS,
     AsmFlags,
+    LlvmirTargetKind,
     llvmir_inline_asm,
     llvmir_intrinsic,
     llvmir_ops,
+    llvmir_target,
 )
 
 __all__ = [
     "llvmir_ops",
     "AsmFlags",
+    "LlvmirTargetKind",
+    "llvmir_target",
     "llvmir_inline_asm",
     "llvmir_intrinsic",
     "ALL_LLVMIR_OPS",

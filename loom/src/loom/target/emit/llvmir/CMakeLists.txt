@@ -239,6 +239,7 @@ loom_cc_library(
     loom::src::loom::analysis::symbol_facts
     loom::src::loom::error::error_defs
     loom::src::loom::ir
+    loom::src::loom::ops::llvmir
     loom::src::loom::ops::target
     loom::src::loom::target::tool::llvm
     loom::src::loom::tools::loom-check::execute
@@ -331,6 +332,17 @@ iree_executable_test(
     "test_llvmir_scalar_index"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/scalar_index.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "test_llvmir_target_projection"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/llvmir/target_projection.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

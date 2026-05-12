@@ -16,17 +16,22 @@ from loom.assembly import (
     LPAREN,
     RPAREN,
     Attr,
+    AttrDict,
     Flags,
     OpRef,
     OptionalGroup,
     Refs,
     ResultTypeList,
+    SymbolRef,
+    TemplateParam,
     TypesOf,
 )
+from loom.dialect.target import target_record_attrs
 from loom.dsl import (
     ANY,
     ATTR_TYPE_FLAGS,
     ATTR_TYPE_STRING,
+    SYMBOL_DEFINE,
     UNKNOWN_EFFECTS,
     AttrDef,
     Dialect,
@@ -34,7 +39,10 @@ from loom.dsl import (
     EnumDef,
     Op,
     Operand,
+    OpPhase,
     Result,
+    SymbolDefinition,
+    TargetLikeInterface,
 )
 
 llvmir_ops = Dialect(
@@ -51,6 +59,71 @@ AsmFlags = EnumDef(
         EnumCase("inteldialect", 4, doc="Inline asm uses Intel assembly syntax."),
     ],
     doc="LLVM inline asm call flags.",
+)
+
+LlvmirTargetKind = EnumDef(
+    "LlvmirTargetKind",
+    [
+        EnumCase("object", 1, doc="Target-neutral LLVM object projection row."),
+    ],
+    doc="LLVMIR projection target row selected by llvmir.target.",
+)
+
+llvmir_target = Op(
+    "llvmir.target",
+    group=llvmir_ops,
+    doc=("LLVMIR target projection record. The selector chooses a target-neutral bundle row while the LLVM-specific attributes own the triple, data layout, CPU, and feature-string vocabulary."),
+    phase=OpPhase.MODULE_METADATA,
+    traits=[SYMBOL_DEFINE],
+    interfaces=[
+        TargetLikeInterface(
+            symbol="symbol",
+            selector="kind",
+            bundle_table="loom_llvmir_projection_target_bundles",
+        )
+    ],
+    symbol_def=SymbolDefinition(
+        field="symbol",
+        name="target",
+        interfaces=["target", "record"],
+        bytecode_kind="LOOM_SYMBOL_RECORD",
+        fact_domain="loom_target_symbol_fact_domain",
+    ),
+    attrs=[
+        *target_record_attrs(LlvmirTargetKind),
+        AttrDef(
+            "triple",
+            ATTR_TYPE_STRING,
+            doc="LLVM target triple emitted into the module and passed to LLVM tools.",
+        ),
+        AttrDef(
+            "data_layout",
+            ATTR_TYPE_STRING,
+            optional=True,
+            doc="LLVM data layout emitted into the module when present.",
+        ),
+        AttrDef(
+            "cpu",
+            ATTR_TYPE_STRING,
+            optional=True,
+            doc="LLVM target CPU passed to LLVM tools when present.",
+        ),
+        AttrDef(
+            "features",
+            ATTR_TYPE_STRING,
+            optional=True,
+            doc="LLVM target feature string passed to LLVM tools when present.",
+        ),
+    ],
+    verify="loom_target_record_verify",
+    format=[
+        TemplateParam("kind"),
+        SymbolRef("symbol"),
+        AttrDict(),
+    ],
+    examples=[
+        'llvmir.target<object> @llvm_host {triple = "x86_64-unknown-linux-gnu"}',
+    ],
 )
 
 llvmir_inline_asm = Op(
@@ -122,6 +195,7 @@ llvmir_intrinsic = Op(
 )
 
 ALL_LLVMIR_OPS = (
+    llvmir_target,
     llvmir_inline_asm,
     llvmir_intrinsic,
 )
