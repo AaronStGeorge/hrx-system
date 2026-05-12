@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TypeVar
 
 from loom.target.arch.x86.packed_dot_data import (
     CONTRACT_FLAG_SATURATING,
@@ -54,6 +55,8 @@ from loom.target.low_descriptors import (
     ScheduleClassFlag,
     SpillSlotSpace,
 )
+
+_T = TypeVar("_T", RegClass, Resource, ScheduleClass, EnumDomain)
 
 _REG_GPR32 = "x86.gpr32"
 _REG_GPR64 = "x86.gpr64"
@@ -1755,22 +1758,52 @@ X86_PACKED_DOT_DESCRIPTOR_SET = DescriptorSet(
     ),
 )
 
-_AVX512_PACKED_DOT_EXCLUDED_CORE_DESCRIPTOR_KEYS = frozenset(
+_X86_DESCRIPTOR_SET_COMPONENTS = tuple[tuple[DescriptorSet, frozenset[str]], ...]
+
+
+_X86_AVX512_PACKED_DOT_COMPONENTS: _X86_DESCRIPTOR_SET_COMPONENTS = (
     (
-        "x86.avx512.vpdpbusd.zmm",
-        "x86.avx512.vdpbf16ps.zmm",
-    )
+        X86_AVX512_CORE_DESCRIPTOR_SET,
+        frozenset(
+            (
+                "x86.avx512.vpdpbusd.zmm",
+                "x86.avx512.vdpbf16ps.zmm",
+            )
+        ),
+    ),
+    (X86_PACKED_DOT_DESCRIPTOR_SET, frozenset()),
 )
 
 
-def _missing_schedule_classes(
-    base: tuple[ScheduleClass, ...],
-    extra: tuple[ScheduleClass, ...],
-) -> tuple[ScheduleClass, ...]:
-    names = {schedule_class.name for schedule_class in base}
-    return tuple(
-        schedule_class for schedule_class in extra if schedule_class.name not in names
-    )
+def _merge_named_items(item_groups: tuple[tuple[_T, ...], ...]) -> tuple[_T, ...]:
+    merged_items: list[_T] = []
+    seen_names: set[str] = set()
+    for items in item_groups:
+        for item in items:
+            if item.name in seen_names:
+                continue
+            merged_items.append(item)
+            seen_names.add(item.name)
+    return tuple(merged_items)
+
+
+def _merge_component_descriptors(
+    components: tuple[tuple[DescriptorSet, frozenset[str]], ...],
+) -> tuple[Descriptor, ...]:
+    descriptors = []
+    seen_keys: set[str] = set()
+    for descriptor_set, excluded_keys in components:
+        for descriptor in descriptor_set.descriptors:
+            if descriptor.key in excluded_keys:
+                continue
+            if descriptor.key in seen_keys:
+                raise ValueError(
+                    "x86 descriptor set component repeats descriptor "
+                    f"'{descriptor.key}'"
+                )
+            descriptors.append(descriptor)
+            seen_keys.add(descriptor.key)
+    return tuple(descriptors)
 
 
 X86_AVX512_PACKED_DOT_DESCRIPTOR_SET = DescriptorSet(
@@ -1785,30 +1818,29 @@ X86_AVX512_PACKED_DOT_DESCRIPTOR_SET = DescriptorSet(
     c_table_prefix="X86Avx512PackedDotCore",
     c_enum_prefix="X86_AVX512_PACKED_DOT_CORE",
     generator_version=1,
-    # Preserve AVX512 core register-class IDs so the shared AVX512 lowerers can
-    # be reused by this composite target; append YMM for packed-dot forms.
-    reg_classes=(
-        *X86_AVX512_CORE_DESCRIPTOR_SET.reg_classes,
-        RegClass(
-            _REG_YMM,
-            256,
-            SpillSlotSpace.STACK,
-            flags=(RegClassFlag.PHYSICAL,),
-            physical_count=32,
-            alias_set_id=2,
-        ),
+    reg_classes=_merge_named_items(
+        tuple(
+            descriptor_set.reg_classes
+            for descriptor_set, _ in _X86_AVX512_PACKED_DOT_COMPONENTS
+        )
     ),
-    resources=X86_AVX512_CORE_DESCRIPTOR_SET.resources,
-    schedule_classes=X86_AVX512_CORE_DESCRIPTOR_SET.schedule_classes
-    + _missing_schedule_classes(
-        X86_AVX512_CORE_DESCRIPTOR_SET.schedule_classes,
-        X86_PACKED_DOT_DESCRIPTOR_SET.schedule_classes,
+    resources=_merge_named_items(
+        tuple(
+            descriptor_set.resources
+            for descriptor_set, _ in _X86_AVX512_PACKED_DOT_COMPONENTS
+        )
     ),
-    enum_domains=X86_AVX512_CORE_DESCRIPTOR_SET.enum_domains,
-    descriptors=tuple(
-        descriptor
-        for descriptor in X86_AVX512_CORE_DESCRIPTOR_SET.descriptors
-        if descriptor.key not in _AVX512_PACKED_DOT_EXCLUDED_CORE_DESCRIPTOR_KEYS
-    )
-    + X86_PACKED_DOT_DESCRIPTOR_SET.descriptors,
+    schedule_classes=_merge_named_items(
+        tuple(
+            descriptor_set.schedule_classes
+            for descriptor_set, _ in _X86_AVX512_PACKED_DOT_COMPONENTS
+        )
+    ),
+    enum_domains=_merge_named_items(
+        tuple(
+            descriptor_set.enum_domains
+            for descriptor_set, _ in _X86_AVX512_PACKED_DOT_COMPONENTS
+        )
+    ),
+    descriptors=_merge_component_descriptors(_X86_AVX512_PACKED_DOT_COMPONENTS),
 )

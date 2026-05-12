@@ -211,12 +211,26 @@ py_binary(
 
 py_binary(
     name = "x86_low_descriptor_shard",
-    srcs = ["low_descriptor_shard.py"],
-    main = "low_descriptor_shard.py",
+    srcs = ["x86_descriptors.py"],
+    main = "x86_descriptors.py",
     deps = [
         ":low_descriptors",
         "//loom/py/loom/target:descriptor_sets",
         "//loom/py/loom/target/arch/x86:descriptors",
+        "//loom/py/loom/target/arch/x86:target_info",
+    ],
+)
+
+py_test(
+    name = "x86_descriptors_test",
+    srcs = [
+        "x86_descriptors_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.gen.x86_descriptors_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":x86_low_descriptor_shard",
     ],
 )
 

@@ -8,6 +8,7 @@
 
 #include "loom/target/arch/x86/low_registry.h"
 #include "loom/target/arch/x86/lower.h"
+#include "loom/target/arch/x86/math_policy.h"
 #include "loom/target/arch/x86/ops/registry.h"
 
 const loom_target_provider_t loom_x86_target_provider = {
@@ -16,6 +17,7 @@ const loom_target_provider_t loom_x86_target_provider = {
         loom_x86_low_descriptor_registry_initialize,
     .initialize_low_lower_policy_registry =
         loom_x86_low_lower_policy_registry_initialize,
+    .initialize_math_policy_registry = loom_x86_math_policy_registry_initialize,
 };
 
 static const loom_target_provider_t* const kLoomX86TargetProviders[] = {

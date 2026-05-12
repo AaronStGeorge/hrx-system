@@ -55,26 +55,41 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    math_policy
+  HDRS
+    "math_policy.h"
+  TEXTUAL_HDRS
+    "math_policy_tables.inl"
+  SRCS
+    "math_policy.c"
+  DEPS
+    iree::base
+    loom::src::loom::target::math_policy
+  PUBLIC
+)
+
 loom_low_descriptor_cc_library(
   NAME
     avx512_descriptors
-  GENERATOR
-    iree::runtime::py::loom::gen::x86_low_descriptor_shard
-  ARGS
-    "--descriptor-set=x86_avx512_core"
   DEPS
+    ::avx512_packed_dot_descriptors
     loom::src::loom::codegen::low::descriptors
+  IDS_DEPS
+    loom::src::loom::codegen::low::descriptors
+  HEADER_ONLY
 )
 
 loom_low_descriptor_cc_library(
   NAME
     packed_dot_descriptors
-  GENERATOR
-    iree::runtime::py::loom::gen::x86_low_descriptor_shard
-  ARGS
-    "--descriptor-set=x86_packed_dot_core"
   DEPS
+    ::avx512_packed_dot_descriptors
     loom::src::loom::codegen::low::descriptors
+  IDS_DEPS
+    loom::src::loom::codegen::low::descriptors
+  HEADER_ONLY
 )
 
 loom_low_descriptor_cc_library(
@@ -82,8 +97,14 @@ loom_low_descriptor_cc_library(
     avx512_packed_dot_descriptors
   GENERATOR
     iree::runtime::py::loom::gen::x86_low_descriptor_shard
+  GENERATED_HDR_FLAGS
+    "--view-header=avx512"
+    "--view-header=packed_dot"
+  GENERATED_HDRS
+    "avx512_descriptors.h"
+    "packed_dot_descriptors.h"
   ARGS
-    "--descriptor-set=x86_avx512_packed_dot_core"
+    "--target=avx512_packed_dot"
   DEPS
     loom::src::loom::codegen::low::descriptors
 )
@@ -142,6 +163,7 @@ loom_cc_library(
   DEPS
     ::low_registry
     ::lower
+    ::math_policy
     ::ops
     iree::base
     loom::src::loom::target::provider

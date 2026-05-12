@@ -215,6 +215,41 @@ def test_shared_source_emits_one_storage_table_with_multiple_views() -> None:
     assert ("const loom_low_descriptor_set_t* loom_test_low_extension_core_descriptor_set(void)") in source
 
 
+def test_shared_source_emits_sibling_view_descriptor_surfaces() -> None:
+    first_view = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=(TEST_LOW_CORE_DESCRIPTOR_SET.descriptors[0],),
+    )
+    sibling_view = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        key="test.low.sibling.core",
+        function_name="loom_test_low_sibling_core_descriptor_set",
+        c_table_prefix="TestLowSiblingCore",
+        c_enum_prefix="TEST_LOW_SIBLING_CORE",
+        descriptors=(TEST_LOW_CORE_DESCRIPTOR_SET.descriptors[1],),
+    )
+    storage_set = replace(
+        TEST_LOW_CORE_DESCRIPTOR_SET,
+        descriptors=TEST_LOW_CORE_DESCRIPTOR_SET.descriptors[:2],
+    )
+
+    source = generate_descriptor_set_shared_source(
+        storage_set,
+        (first_view, sibling_view, storage_set),
+        format_output=False,
+    )
+
+    assert source.count("static const loom_low_operand_t kTestLowCoreOperands[]") == 1
+    assert "static const loom_low_descriptor_t kTestLowSiblingCoreDescriptors[]" in source
+    assert "static const loom_low_asm_form_t kTestLowSiblingCoreAsmForms[]" in source
+    assert ".descriptors = kTestLowSiblingCoreDescriptors," in source
+    assert ".asm_forms = kTestLowSiblingCoreAsmForms," in source
+    assert ".descriptor_refs = kTestLowSiblingCoreDescriptorRefs," in source
+    assert ".descriptor_count = 1," in source
+    assert ".descriptor_ordinal = 0," in source
+    assert "test.mul.i32" not in source
+
+
 def test_generate_test_low_core_descriptor_set() -> None:
     generated = generate_descriptor_set(TEST_LOW_CORE_DESCRIPTOR_SET)
     manifest = json.loads(generated.manifest_json)

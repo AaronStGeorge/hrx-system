@@ -215,13 +215,26 @@ iree_py_library(
   NAME
     x86_low_descriptor_shard
   MAIN
-    "low_descriptor_shard.py"
+    "x86_descriptors.py"
   SRCS
-    "low_descriptor_shard.py"
+    "x86_descriptors.py"
   DEPS
     iree::runtime::py::loom::gen::low_descriptors
     iree::runtime::py::loom::target::descriptor_sets
     iree::runtime::py::loom::target::arch::x86::descriptors
+    iree::runtime::py::loom::target::arch::x86::target_info
+)
+
+iree_py_test(
+  NAME
+    x86_descriptors_test
+  SRCS
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.gen.x86_descriptors_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
 )
 
 iree_py_library(

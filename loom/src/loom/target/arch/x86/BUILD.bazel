@@ -37,6 +37,7 @@ loom_assert_no_dependencies(
     targets = [
         ":avx512_descriptors",
         ":avx512_packed_dot_descriptors",
+        ":math_policy",
         ":ops",
         ":low_registry",
         ":packed_dot_contract",
@@ -57,6 +58,7 @@ loom_assert_no_dependencies(
         ":avx512_packed_dot_descriptors",
         ":feature_bits",
         ":low_registry",
+        ":math_policy",
         ":packed_dot_contract",
         ":packed_dot_contract_projection",
         ":packed_dot_descriptors",
@@ -135,23 +137,48 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "math_policy",
+    srcs = ["math_policy.c"],
+    hdrs = ["math_policy.h"],
+    textual_hdrs = ["math_policy_tables.inl"],
+    deps = [
+        "//loom/src/loom/target:math_policy",
+        "//runtime/src/iree/base",
+    ],
+)
+
 loom_low_descriptor_cc_library(
     name = "avx512_descriptors",
-    args = ["--descriptor-set=x86_avx512_core"],
-    generator = "//loom/py/loom/gen:x86_low_descriptor_shard",
-    deps = ["//loom/src/loom/codegen/low:descriptors"],
+    header_only = True,
+    ids_deps = ["//loom/src/loom/codegen/low:descriptors"],
+    deps = [
+        ":avx512_packed_dot_descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
+    ],
 )
 
 loom_low_descriptor_cc_library(
     name = "packed_dot_descriptors",
-    args = ["--descriptor-set=x86_packed_dot_core"],
-    generator = "//loom/py/loom/gen:x86_low_descriptor_shard",
-    deps = ["//loom/src/loom/codegen/low:descriptors"],
+    header_only = True,
+    ids_deps = ["//loom/src/loom/codegen/low:descriptors"],
+    deps = [
+        ":avx512_packed_dot_descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
+    ],
 )
 
 loom_low_descriptor_cc_library(
     name = "avx512_packed_dot_descriptors",
-    args = ["--descriptor-set=x86_avx512_packed_dot_core"],
+    args = ["--target=avx512_packed_dot"],
+    generated_hdr_flags = [
+        "--view-header=avx512",
+        "--view-header=packed_dot",
+    ],
+    generated_hdrs = [
+        "avx512_descriptors.h",
+        "packed_dot_descriptors.h",
+    ],
     generator = "//loom/py/loom/gen:x86_low_descriptor_shard",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
@@ -205,6 +232,7 @@ loom_cc_library(
     deps = [
         ":low_registry",
         ":lower",
+        ":math_policy",
         ":ops",
         "//loom/src/loom/target:provider",
         "//runtime/src/iree/base",

@@ -168,8 +168,19 @@ class _CompiledDescriptorSet:
 @dataclass(frozen=True, slots=True)
 class _DescriptorSetView:
     spec: DescriptorSet
-    descriptor_count: int
+    descriptor_ordinals: tuple[int, ...]
     descriptor_refs: list[tuple[str, int]]
+    descriptor_rows: list[dict[str, int]]
+    canonical_asm_form_ordinals: list[int | None]
+    asm_forms: list[_CompiledAsmForm]
+    operand_forms: list[_CompiledOperandForm]
+    uses_storage_descriptor_tables: bool
+    uses_storage_asm_form_tables: bool
+    uses_storage_operand_form_tables: bool
+
+    @property
+    def descriptor_count(self) -> int:
+        return len(self.descriptor_ordinals)
 
 
 @dataclass(frozen=True, slots=True)
@@ -833,21 +844,31 @@ def _compile_asm_form(
     )
 
 
-def _compile_asm_forms(string_pool: _StringPool, descriptors: Sequence[Descriptor]) -> list[_CompiledAsmForm]:
+def _compile_asm_forms(
+    string_pool: _StringPool,
+    descriptors: Sequence[Descriptor],
+    *,
+    allow_ambiguous_mnemonics: bool = False,
+) -> list[_CompiledAsmForm]:
     compiled_forms: list[_CompiledAsmForm] = []
     seen_mnemonics: dict[str, str] = {}
     for descriptor_ordinal, descriptor in enumerate(descriptors):
         for form_ordinal, asm_form in enumerate(descriptor.asm_forms):
             compiled_form = _compile_asm_form(string_pool, descriptor, descriptor_ordinal, asm_form, form_ordinal)
             previous_descriptor_key = seen_mnemonics.get(compiled_form.mnemonic)
-            if previous_descriptor_key is not None:
+            if previous_descriptor_key is not None and not allow_ambiguous_mnemonics:
                 raise ValueError(f"asm mnemonic '{compiled_form.mnemonic}' is ambiguous between descriptors '{previous_descriptor_key}' and '{descriptor.key}'")
             seen_mnemonics[compiled_form.mnemonic] = descriptor.key
             compiled_forms.append(compiled_form)
     return sorted(compiled_forms, key=lambda form: form.mnemonic)
 
 
-def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist | None = None) -> _CompiledDescriptorSet:
+def _compile_descriptor_set(
+    spec: DescriptorSet,
+    allowlist: DescriptorAllowlist | None = None,
+    *,
+    allow_ambiguous_asm_mnemonics: bool = False,
+) -> _CompiledDescriptorSet:
     if spec.generator_version == 0:
         raise ValueError(f"descriptor set '{spec.key}' has zero generator version")
     reg_class_inputs = _dedupe_by_name(spec.reg_classes, lambda item: item.name)
@@ -1057,7 +1078,11 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
         for immediate in descriptor.immediates:
             string_pool.intern(f"immediate_{immediate.field_name}", immediate.field_name)
 
-    asm_forms = _compile_asm_forms(string_pool, selected_descriptors)
+    asm_forms = _compile_asm_forms(
+        string_pool,
+        selected_descriptors,
+        allow_ambiguous_mnemonics=allow_ambiguous_asm_mnemonics,
+    )
     canonical_asm_form_ordinals: list[int | None] = [None] * len(selected_descriptors)
     asm_form_counts_by_descriptor = [0] * len(selected_descriptors)
     for asm_form_ordinal, asm_form in enumerate(asm_forms):
@@ -1263,8 +1288,12 @@ def _compile_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist 
     )
 
 
-def _emit_header(compiled: _CompiledDescriptorSet, *, format_output: bool) -> str:
-    spec = compiled.spec
+def _emit_header_for_spec(
+    compiled: _CompiledDescriptorSet,
+    header_spec: DescriptorSet,
+    *,
+    format_output: bool,
+) -> str:
     lines = [
         "// Copyright 2026 The IREE Authors",
         "//",
@@ -1274,23 +1303,30 @@ def _emit_header(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         "",
         *line_comment_header("//", generator="loom.gen.low_descriptors"),
         "",
-        f"#ifndef {spec.header_guard}",
-        f"#define {spec.header_guard}",
+        f"#ifndef {header_spec.header_guard}",
+        f"#define {header_spec.header_guard}",
         "",
         '#include "loom/codegen/low/descriptors.h"',
         "",
     ]
-    lines.extend(_descriptor_ref_define(spec, descriptor.key, i) for i, descriptor in enumerate(compiled.descriptors))
-    lines.append(f"#define {spec.c_enum_prefix}_DESCRIPTOR_SET_ID UINT64_C(0x{descriptor_stable_id(spec.key):016x})")
-    lines.append(f"#define {spec.c_enum_prefix}_DESCRIPTOR_SET_ORDINAL {_u16_literal(spec.descriptor_set_ordinal if spec.descriptor_set_ordinal is not None else LOW_DESCRIPTOR_SET_ORDINAL_NONE)}")
-    if spec.target_key is not None:
-        lines.append(f"#define {spec.c_enum_prefix}_TARGET_ID UINT64_C(0x{descriptor_stable_id(spec.target_key):016x})")
-    if compiled.reg_classes:
+    lines.extend(_descriptor_ref_define(header_spec, descriptor.key, i) for i, descriptor in enumerate(header_spec.descriptors))
+    lines.append(f"#define {header_spec.c_enum_prefix}_DESCRIPTOR_SET_ID UINT64_C(0x{descriptor_stable_id(header_spec.key):016x})")
+    lines.append(
+        f"#define {header_spec.c_enum_prefix}_DESCRIPTOR_SET_ORDINAL {_u16_literal(header_spec.descriptor_set_ordinal if header_spec.descriptor_set_ordinal is not None else LOW_DESCRIPTOR_SET_ORDINAL_NONE)}"
+    )
+    if header_spec.target_key is not None:
+        lines.append(f"#define {header_spec.c_enum_prefix}_TARGET_ID UINT64_C(0x{descriptor_stable_id(header_spec.target_key):016x})")
+    missing_reg_classes = [reg_class.name for reg_class in header_spec.reg_classes if reg_class.name not in compiled.reg_class_ids]
+    if missing_reg_classes:
+        raise ValueError(f"descriptor set header '{header_spec.key}' references reg classes missing from storage set '{compiled.spec.key}': {', '.join(missing_reg_classes)}")
+    header_reg_class_ids = [(reg_class, compiled.reg_class_ids[reg_class.name]) for reg_class in header_spec.reg_classes]
+    if header_reg_class_ids:
         lines.append("")
-        lines.extend(_reg_class_id_define(spec, reg_class.name, i) for i, reg_class in enumerate(compiled.reg_classes))
-    if compiled.register_parts:
+        lines.extend(_reg_class_id_define(header_spec, reg_class.name, reg_class_id) for reg_class, reg_class_id in header_reg_class_ids)
+    header_register_part_ids = [(part, compiled.register_part_ids[part.name]) for part in header_spec.register_parts if part.name in compiled.register_part_ids]
+    if header_register_part_ids:
         lines.append("")
-        lines.extend(_register_part_id_define(spec, part.name, i) for i, part in enumerate(compiled.register_parts))
+        lines.extend(_register_part_id_define(header_spec, part.name, part_id) for part, part_id in header_register_part_ids)
     lines.append("")
     lines.extend(
         [
@@ -1298,19 +1334,27 @@ def _emit_header(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
             'extern "C" {',
             "#endif",
             "",
-            f"const loom_low_descriptor_set_t* {spec.function_name}(void);",
+            f"const loom_low_descriptor_set_t* {header_spec.function_name}(void);",
             "",
             "#ifdef __cplusplus",
             '}  // extern "C"',
             "#endif",
             "",
-            f"#endif  // {spec.header_guard}",
+            f"#endif  // {header_spec.header_guard}",
         ]
     )
     source = "\n".join(lines) + "\n"
     if not format_output:
         return source
-    return _clang_format_source(source, spec.c_header_path)
+    return _clang_format_source(source, header_spec.c_header_path)
+
+
+def _emit_header(compiled: _CompiledDescriptorSet, *, format_output: bool) -> str:
+    return _emit_header_for_spec(
+        compiled,
+        compiled.spec,
+        format_output=format_output,
+    )
 
 
 def _emit_string_table(compiled: _CompiledDescriptorSet, lines: list[str]) -> None:
@@ -1381,28 +1425,179 @@ def _metadata_string_label(storage_spec: DescriptorSet, view_spec: DescriptorSet
     return f"{field_name}_{_c_identifier(view_spec.key)}"
 
 
-def _descriptor_refs_for_prefix(descriptors: Sequence[Descriptor], descriptor_count: int) -> list[tuple[str, int]]:
-    return sorted((descriptor.key, i) for i, descriptor in enumerate(descriptors[:descriptor_count]))
+def _descriptor_refs_for_ordinals(
+    descriptors: Sequence[Descriptor],
+    descriptor_ordinals: Sequence[int],
+) -> list[tuple[str, int]]:
+    return sorted((descriptors[descriptor_ordinal].key, view_ordinal) for view_ordinal, descriptor_ordinal in enumerate(descriptor_ordinals))
+
+
+def _clone_asm_form_for_view(
+    asm_form: _CompiledAsmForm,
+    descriptor_ordinal: int,
+) -> _CompiledAsmForm:
+    return _CompiledAsmForm(
+        descriptor_ordinal=descriptor_ordinal,
+        mnemonic_label=asm_form.mnemonic_label,
+        mnemonic=asm_form.mnemonic,
+        result_indices=asm_form.result_indices,
+        operand_indices=asm_form.operand_indices,
+        immediates=asm_form.immediates,
+        result_index_start=asm_form.result_index_start,
+        operand_index_start=asm_form.operand_index_start,
+        immediate_start=asm_form.immediate_start,
+    )
+
+
+def _clone_operand_form_for_view(
+    operand_form: _CompiledOperandForm,
+    replacement_descriptor_ordinal: int,
+) -> _CompiledOperandForm:
+    return _CompiledOperandForm(
+        replacement_descriptor_ordinal=replacement_descriptor_ordinal,
+        source_immediate_index=operand_form.source_immediate_index,
+        replacement_immediate_index=operand_form.replacement_immediate_index,
+        immediate_match_index=operand_form.immediate_match_index,
+        immediate_action=operand_form.immediate_action,
+        match_start=operand_form.match_start,
+        match_count=operand_form.match_count,
+        operand_map_start=operand_form.operand_map_start,
+        operand_map_count=operand_form.operand_map_count,
+    )
+
+
+def _asm_forms_have_duplicate_mnemonics(
+    asm_forms: Sequence[_CompiledAsmForm],
+) -> bool:
+    seen_mnemonics: set[str] = set()
+    for asm_form in asm_forms:
+        if asm_form.mnemonic in seen_mnemonics:
+            return True
+        seen_mnemonics.add(asm_form.mnemonic)
+    return False
+
+
+def _validate_view_asm_forms_unique(
+    view_spec: DescriptorSet,
+    asm_forms: Sequence[_CompiledAsmForm],
+) -> None:
+    seen_mnemonics: dict[str, int] = {}
+    for asm_form_ordinal, asm_form in enumerate(asm_forms):
+        previous_ordinal = seen_mnemonics.get(asm_form.mnemonic)
+        if previous_ordinal is not None:
+            previous_descriptor = view_spec.descriptors[asm_forms[previous_ordinal].descriptor_ordinal]
+            descriptor = view_spec.descriptors[asm_form.descriptor_ordinal]
+            raise ValueError(f"descriptor set view '{view_spec.key}' has ambiguous asm mnemonic '{asm_form.mnemonic}' between descriptors '{previous_descriptor.key}' and '{descriptor.key}'")
+        seen_mnemonics[asm_form.mnemonic] = asm_form_ordinal
+
+
+def _validate_view_operand_forms_closed(
+    compiled: _CompiledDescriptorSet,
+    view_spec: DescriptorSet,
+    descriptor_ordinals: Sequence[int],
+) -> None:
+    selected_descriptor_ordinals = set(descriptor_ordinals)
+    for storage_descriptor_ordinal in descriptor_ordinals:
+        storage_descriptor = compiled.descriptors[storage_descriptor_ordinal]
+        storage_row = compiled.descriptor_rows[storage_descriptor_ordinal]
+        operand_form_start = storage_row["operand_form_start"]
+        operand_form_count = storage_row["operand_form_count"]
+        for form_ordinal in range(operand_form_count):
+            operand_form = compiled.operand_forms[operand_form_start + form_ordinal]
+            if operand_form.replacement_descriptor_ordinal in selected_descriptor_ordinals:
+                continue
+            replacement = compiled.descriptors[operand_form.replacement_descriptor_ordinal]
+            raise ValueError(f"descriptor set view '{view_spec.key}' selects descriptor '{storage_descriptor.key}' without operand-form replacement descriptor '{replacement.key}'")
 
 
 def _descriptor_set_view_for_spec(
     compiled: _CompiledDescriptorSet,
     view_spec: DescriptorSet,
-    descriptor_count: int,
 ) -> _DescriptorSetView:
-    if descriptor_count <= 0 or descriptor_count > len(compiled.descriptors):
-        raise ValueError(f"descriptor set view '{view_spec.key}' selects invalid descriptor count {descriptor_count} from storage count {len(compiled.descriptors)}")
-    for i, descriptor in enumerate(view_spec.descriptors):
-        if i >= descriptor_count:
-            break
-        if descriptor.key != compiled.descriptors[i].key:
-            raise ValueError(
-                f"descriptor set view '{view_spec.key}' is not a prefix of storage set '{compiled.spec.key}' at descriptor {i}: found '{descriptor.key}', expected '{compiled.descriptors[i].key}'"
+    if not view_spec.descriptors:
+        raise ValueError(f"descriptor set view '{view_spec.key}' selects no descriptors")
+
+    storage_ordinals_by_key = {descriptor.key: i for i, descriptor in enumerate(compiled.descriptors)}
+    descriptor_ordinals = []
+    for descriptor in view_spec.descriptors:
+        descriptor_ordinal = storage_ordinals_by_key.get(descriptor.key)
+        if descriptor_ordinal is None:
+            raise ValueError(f"descriptor set view '{view_spec.key}' selects descriptor '{descriptor.key}' that is not in storage set '{compiled.spec.key}'")
+        descriptor_ordinals.append(descriptor_ordinal)
+    descriptor_ordinal_tuple = tuple(descriptor_ordinals)
+    _validate_view_operand_forms_closed(
+        compiled,
+        view_spec,
+        descriptor_ordinal_tuple,
+    )
+    if descriptor_ordinal_tuple == tuple(range(len(descriptor_ordinal_tuple))) and not _asm_forms_have_duplicate_mnemonics(compiled.asm_forms):
+        descriptor_count = len(descriptor_ordinal_tuple)
+        return _DescriptorSetView(
+            spec=view_spec,
+            descriptor_ordinals=descriptor_ordinal_tuple,
+            descriptor_refs=_descriptor_refs_for_ordinals(
+                compiled.descriptors,
+                descriptor_ordinal_tuple,
+            ),
+            descriptor_rows=compiled.descriptor_rows[:descriptor_count],
+            canonical_asm_form_ordinals=compiled.canonical_asm_form_ordinals[:descriptor_count],
+            asm_forms=compiled.asm_forms,
+            operand_forms=compiled.operand_forms,
+            uses_storage_descriptor_tables=True,
+            uses_storage_asm_form_tables=True,
+            uses_storage_operand_form_tables=True,
+        )
+
+    storage_to_view_ordinals = {descriptor_ordinal: view_ordinal for view_ordinal, descriptor_ordinal in enumerate(descriptor_ordinal_tuple)}
+    asm_form_ordinals_by_storage_ordinal: dict[int, int] = {}
+    asm_forms: list[_CompiledAsmForm] = []
+    for storage_asm_form_ordinal, asm_form in enumerate(compiled.asm_forms):
+        view_descriptor_ordinal = storage_to_view_ordinals.get(asm_form.descriptor_ordinal)
+        if view_descriptor_ordinal is None:
+            continue
+        asm_form_ordinals_by_storage_ordinal[storage_asm_form_ordinal] = len(asm_forms)
+        asm_forms.append(_clone_asm_form_for_view(asm_form, view_descriptor_ordinal))
+    _validate_view_asm_forms_unique(view_spec, asm_forms)
+
+    descriptor_rows = []
+    canonical_asm_form_ordinals: list[int | None] = []
+    operand_forms: list[_CompiledOperandForm] = []
+    for storage_descriptor_ordinal in descriptor_ordinal_tuple:
+        storage_row = compiled.descriptor_rows[storage_descriptor_ordinal]
+        descriptor_row = dict(storage_row)
+        descriptor_row["operand_form_start"] = len(operand_forms)
+        operand_form_start = storage_row["operand_form_start"]
+        operand_form_count = storage_row["operand_form_count"]
+        for form_ordinal in range(operand_form_count):
+            operand_form = compiled.operand_forms[operand_form_start + form_ordinal]
+            operand_forms.append(
+                _clone_operand_form_for_view(
+                    operand_form,
+                    storage_to_view_ordinals[operand_form.replacement_descriptor_ordinal],
+                )
             )
+        descriptor_rows.append(descriptor_row)
+
+        canonical_storage_asm_form_ordinal = compiled.canonical_asm_form_ordinals[storage_descriptor_ordinal]
+        if canonical_storage_asm_form_ordinal is None:
+            canonical_asm_form_ordinals.append(None)
+        else:
+            canonical_asm_form_ordinals.append(asm_form_ordinals_by_storage_ordinal.get(canonical_storage_asm_form_ordinal))
+
     return _DescriptorSetView(
         spec=view_spec,
-        descriptor_count=descriptor_count,
-        descriptor_refs=_descriptor_refs_for_prefix(compiled.descriptors, descriptor_count),
+        descriptor_ordinals=descriptor_ordinal_tuple,
+        descriptor_refs=_descriptor_refs_for_ordinals(
+            compiled.descriptors,
+            descriptor_ordinal_tuple,
+        ),
+        descriptor_rows=descriptor_rows,
+        canonical_asm_form_ordinals=canonical_asm_form_ordinals,
+        asm_forms=asm_forms,
+        operand_forms=operand_forms,
+        uses_storage_descriptor_tables=False,
+        uses_storage_asm_form_tables=False,
+        uses_storage_operand_form_tables=False,
     )
 
 
@@ -1420,6 +1615,83 @@ def _intern_descriptor_set_view_metadata(compiled: _CompiledDescriptorSet, view_
             _metadata_string_label(storage_spec, view_spec, "feature_key"),
             view_spec.feature_key,
         )
+
+
+def _descriptor_row_lines(
+    compiled: _CompiledDescriptorSet,
+    descriptors: Sequence[Descriptor],
+    descriptor_rows: Sequence[dict[str, int]],
+    canonical_asm_form_ordinals: Sequence[int | None],
+) -> list[list[str]]:
+    pool = compiled.string_pool
+    return [
+        [
+            f".key_string_offset = {pool.ref(f'descriptor_{descriptor.key}')},",
+            f".stable_id = {_hex_u64_literal(descriptor_stable_id(descriptor.key))},",
+            f".mnemonic_string_offset = {_optional_string_expr(pool, f'mnemonic_{descriptor.key}' if descriptor.mnemonic is not None else None)},",
+            f".semantic_tag_string_offset = {_optional_string_expr(pool, f'semantic_{descriptor.key}' if descriptor.semantic_tag is not None else None)},",
+            f".feature_mask_word_start = {descriptor_rows[i]['feature_mask_word_start']},",
+            f".feature_mask_word_count = {descriptor_rows[i]['feature_mask_word_count']},",
+            f".encoding_field_value_start = {descriptor_rows[i]['encoding_field_value_start']},",
+            f".encoding_field_value_count = {descriptor_rows[i]['encoding_field_value_count']},",
+            f".encoding_format_id = {descriptor.encoding_format_id},",
+            f".encoding_id = {_encoding_id_expr(descriptor.encoding_id)},",
+            f".operand_start = {descriptor_rows[i]['operand_start']},",
+            f".operand_count = {descriptor_rows[i]['operand_count']},",
+            f".result_count = {descriptor_rows[i]['result_count']},",
+            f".immediate_start = {descriptor_rows[i]['immediate_start']},",
+            f".immediate_count = {descriptor_rows[i]['immediate_count']},",
+            f".effect_start = {descriptor_rows[i]['effect_start']},",
+            f".effect_count = {descriptor_rows[i]['effect_count']},",
+            f".constraint_start = {descriptor_rows[i]['constraint_start']},",
+            f".constraint_count = {descriptor_rows[i]['constraint_count']},",
+            f".operand_form_start = {descriptor_rows[i]['operand_form_start']},",
+            f".operand_form_count = {descriptor_rows[i]['operand_form_count']},",
+            f".schedule_class_id = {compiled.schedule_class_ids[descriptor.schedule_class]},",
+            f".flags = {_flag_expr(descriptor.flags)},",
+            f".canonical_asm_form_ordinal = {_canonical_asm_form_ordinal_expr(canonical_asm_form_ordinals[i])},",
+        ]
+        for i, descriptor in enumerate(descriptors)
+    ]
+
+
+def _operand_form_row_lines(
+    operand_forms: Sequence[_CompiledOperandForm],
+) -> list[list[str]]:
+    return [
+        [
+            f".replacement_descriptor_ordinal = {operand_form.replacement_descriptor_ordinal},",
+            f".operand_map_start = {operand_form.operand_map_start},",
+            f".match_start = {operand_form.match_start},",
+            f".source_immediate_index = {operand_form.source_immediate_index},",
+            f".replacement_immediate_index = {operand_form.replacement_immediate_index},",
+            f".immediate_match_index = {operand_form.immediate_match_index},",
+            f".operand_map_count = {operand_form.operand_map_count},",
+            f".immediate_action = {operand_form.immediate_action.c_name},",
+            f".match_count = {operand_form.match_count},",
+        ]
+        for operand_form in operand_forms
+    ]
+
+
+def _asm_form_row_lines(
+    compiled: _CompiledDescriptorSet,
+    asm_forms: Sequence[_CompiledAsmForm],
+) -> list[list[str]]:
+    pool = compiled.string_pool
+    return [
+        [
+            f".mnemonic_string_offset = {pool.ref(asm_form.mnemonic_label)},",
+            f".descriptor_ordinal = {asm_form.descriptor_ordinal},",
+            f".result_operand_index_start = {asm_form.result_index_start},",
+            f".result_operand_index_count = {len(asm_form.result_indices)},",
+            f".operand_index_start = {asm_form.operand_index_start},",
+            f".operand_index_count = {len(asm_form.operand_indices)},",
+            f".immediate_start = {asm_form.immediate_start},",
+            f".immediate_count = {len(asm_form.immediates)},",
+        ]
+        for asm_form in asm_forms
+    ]
 
 
 def _emit_source_for_views(
@@ -1729,20 +2001,7 @@ def _emit_source_for_views(
         "loom_low_operand_form_t",
         spec.c_table_prefix,
         "OperandForms",
-        [
-            [
-                f".replacement_descriptor_ordinal = {operand_form.replacement_descriptor_ordinal},",
-                f".operand_map_start = {operand_form.operand_map_start},",
-                f".match_start = {operand_form.match_start},",
-                f".source_immediate_index = {operand_form.source_immediate_index},",
-                f".replacement_immediate_index = {operand_form.replacement_immediate_index},",
-                f".immediate_match_index = {operand_form.immediate_match_index},",
-                f".operand_map_count = {operand_form.operand_map_count},",
-                f".immediate_action = {operand_form.immediate_action.c_name},",
-                f".match_count = {operand_form.match_count},",
-            ]
-            for operand_form in compiled.operand_forms
-        ],
+        _operand_form_row_lines(compiled.operand_forms),
     )
     _emit_array(
         lines,
@@ -1769,36 +2028,36 @@ def _emit_source_for_views(
         "loom_low_descriptor_t",
         spec.c_table_prefix,
         "Descriptors",
-        [
-            [
-                f".key_string_offset = {pool.ref(f'descriptor_{descriptor.key}')},",
-                f".stable_id = {_hex_u64_literal(descriptor_stable_id(descriptor.key))},",
-                f".mnemonic_string_offset = {_optional_string_expr(pool, f'mnemonic_{descriptor.key}' if descriptor.mnemonic is not None else None)},",
-                f".semantic_tag_string_offset = {_optional_string_expr(pool, f'semantic_{descriptor.key}' if descriptor.semantic_tag is not None else None)},",
-                f".feature_mask_word_start = {compiled.descriptor_rows[i]['feature_mask_word_start']},",
-                f".feature_mask_word_count = {compiled.descriptor_rows[i]['feature_mask_word_count']},",
-                f".encoding_field_value_start = {compiled.descriptor_rows[i]['encoding_field_value_start']},",
-                f".encoding_field_value_count = {compiled.descriptor_rows[i]['encoding_field_value_count']},",
-                f".encoding_format_id = {descriptor.encoding_format_id},",
-                f".encoding_id = {_encoding_id_expr(descriptor.encoding_id)},",
-                f".operand_start = {compiled.descriptor_rows[i]['operand_start']},",
-                f".operand_count = {compiled.descriptor_rows[i]['operand_count']},",
-                f".result_count = {compiled.descriptor_rows[i]['result_count']},",
-                f".immediate_start = {compiled.descriptor_rows[i]['immediate_start']},",
-                f".immediate_count = {compiled.descriptor_rows[i]['immediate_count']},",
-                f".effect_start = {compiled.descriptor_rows[i]['effect_start']},",
-                f".effect_count = {compiled.descriptor_rows[i]['effect_count']},",
-                f".constraint_start = {compiled.descriptor_rows[i]['constraint_start']},",
-                f".constraint_count = {compiled.descriptor_rows[i]['constraint_count']},",
-                f".operand_form_start = {compiled.descriptor_rows[i]['operand_form_start']},",
-                f".operand_form_count = {compiled.descriptor_rows[i]['operand_form_count']},",
-                f".schedule_class_id = {compiled.schedule_class_ids[descriptor.schedule_class]},",
-                f".flags = {_flag_expr(descriptor.flags)},",
-                f".canonical_asm_form_ordinal = {_canonical_asm_form_ordinal_expr(compiled.canonical_asm_form_ordinals[i])},",
-            ]
-            for i, descriptor in enumerate(compiled.descriptors)
-        ],
+        _descriptor_row_lines(
+            compiled,
+            compiled.descriptors,
+            compiled.descriptor_rows,
+            compiled.canonical_asm_form_ordinals,
+        ),
     )
+    for view in views:
+        if view.uses_storage_descriptor_tables:
+            continue
+        view_descriptors = [compiled.descriptors[descriptor_ordinal] for descriptor_ordinal in view.descriptor_ordinals]
+        _emit_array(
+            lines,
+            "loom_low_descriptor_t",
+            view.spec.c_table_prefix,
+            "Descriptors",
+            _descriptor_row_lines(
+                compiled,
+                view_descriptors,
+                view.descriptor_rows,
+                view.canonical_asm_form_ordinals,
+            ),
+        )
+        _emit_array(
+            lines,
+            "loom_low_operand_form_t",
+            view.spec.c_table_prefix,
+            "OperandForms",
+            _operand_form_row_lines(view.operand_forms),
+        )
     for view in views:
         _emit_array(
             lines,
@@ -1836,20 +2095,18 @@ def _emit_source_for_views(
         "loom_low_asm_form_t",
         spec.c_table_prefix,
         "AsmForms",
-        [
-            [
-                f".mnemonic_string_offset = {pool.ref(asm_form.mnemonic_label)},",
-                f".descriptor_ordinal = {asm_form.descriptor_ordinal},",
-                f".result_operand_index_start = {asm_form.result_index_start},",
-                f".result_operand_index_count = {len(asm_form.result_indices)},",
-                f".operand_index_start = {asm_form.operand_index_start},",
-                f".operand_index_count = {len(asm_form.operand_indices)},",
-                f".immediate_start = {asm_form.immediate_start},",
-                f".immediate_count = {len(asm_form.immediates)},",
-            ]
-            for asm_form in compiled.asm_forms
-        ],
+        _asm_form_row_lines(compiled, compiled.asm_forms),
     )
+    for view in views:
+        if view.uses_storage_asm_form_tables:
+            continue
+        _emit_array(
+            lines,
+            "loom_low_asm_form_t",
+            view.spec.c_table_prefix,
+            "AsmForms",
+            _asm_form_row_lines(compiled, view.asm_forms),
+        )
 
     table_count_fields = {
         "operands": "operand_count",
@@ -1884,6 +2141,9 @@ def _emit_source_for_views(
 
     for view in views:
         view_spec = view.spec
+        descriptor_table_prefix = spec.c_table_prefix if view.uses_storage_descriptor_tables else view_spec.c_table_prefix
+        asm_form_table_prefix = spec.c_table_prefix if view.uses_storage_asm_form_tables else view_spec.c_table_prefix
+        operand_form_table_prefix = spec.c_table_prefix if view.uses_storage_operand_form_tables else view_spec.c_table_prefix
         view_lines = [
             f"static const loom_low_descriptor_set_t k{view_spec.c_table_prefix}Set = {{",
             "    .abi_version = LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION,",
@@ -1899,7 +2159,7 @@ def _emit_source_for_views(
             f"            .data = k{spec.c_table_prefix}StringData,",
             f"            .data_length = sizeof(k{spec.c_table_prefix}StringData) - 1,",
             "        },",
-            f"    .descriptors = k{spec.c_table_prefix}Descriptors,",
+            f"    .descriptors = k{descriptor_table_prefix}Descriptors,",
             f"    .descriptor_count = {view.descriptor_count},",
             f"    .descriptor_refs = k{view_spec.c_table_prefix}DescriptorRefs,",
             f"    .descriptor_ref_count = IREE_ARRAYSIZE(k{view_spec.c_table_prefix}DescriptorRefs),",
@@ -1920,11 +2180,15 @@ def _emit_source_for_views(
         append_optional_table("resources", "Resources", view_lines)
         append_optional_table("hazards", "Hazards", view_lines)
         append_optional_table("pressure_deltas", "PressureDeltas", view_lines)
-        append_optional_table("asm_forms", "AsmForms", view_lines)
-        append_optional_table("asm_operand_indices", "AsmOperandIndices", view_lines)
-        append_optional_table("asm_immediates", "AsmImmediates", view_lines)
+        if view.asm_forms:
+            view_lines.append(f"    .asm_forms = k{asm_form_table_prefix}AsmForms,")
+            view_lines.append(f"    .asm_form_count = IREE_ARRAYSIZE(k{asm_form_table_prefix}AsmForms),")
+            append_optional_table("asm_operand_indices", "AsmOperandIndices", view_lines)
+            append_optional_table("asm_immediates", "AsmImmediates", view_lines)
         append_optional_table("encoding_field_values", "EncodingFieldValues", view_lines)
-        append_optional_table("operand_forms", "OperandForms", view_lines)
+        if view.operand_forms:
+            view_lines.append(f"    .operand_forms = k{operand_form_table_prefix}OperandForms,")
+            view_lines.append(f"    .operand_form_count = IREE_ARRAYSIZE(k{operand_form_table_prefix}OperandForms),")
         append_optional_table(
             "operand_form_matches",
             "OperandFormMatches",
@@ -1957,8 +2221,15 @@ def _emit_source(compiled: _CompiledDescriptorSet, *, format_output: bool) -> st
         views=[
             _DescriptorSetView(
                 spec=compiled.spec,
-                descriptor_count=len(compiled.descriptors),
+                descriptor_ordinals=tuple(range(len(compiled.descriptors))),
                 descriptor_refs=compiled.descriptor_refs,
+                descriptor_rows=compiled.descriptor_rows,
+                canonical_asm_form_ordinals=compiled.canonical_asm_form_ordinals,
+                asm_forms=compiled.asm_forms,
+                operand_forms=compiled.operand_forms,
+                uses_storage_descriptor_tables=True,
+                uses_storage_asm_form_tables=True,
+                uses_storage_operand_form_tables=True,
             )
         ],
         format_output=format_output,
@@ -2087,9 +2358,34 @@ def generate_descriptor_set_shared_source(
     rows unreachable from smaller views.
     """
 
-    compiled = _compile_descriptor_set(storage_spec, allowlist=None)
-    views = tuple(_descriptor_set_view_for_spec(compiled, view_spec, len(view_spec.descriptors)) for view_spec in view_specs)
+    compiled = _compile_descriptor_set(
+        storage_spec,
+        allowlist=None,
+        allow_ambiguous_asm_mnemonics=True,
+    )
+    views = tuple(_descriptor_set_view_for_spec(compiled, view_spec) for view_spec in view_specs)
     return _emit_source_for_views(compiled, views=views, format_output=format_output)
+
+
+def generate_descriptor_set_shared_header(
+    storage_spec: DescriptorSet,
+    view_spec: DescriptorSet,
+    *,
+    format_output: bool = True,
+) -> str:
+    """Generates a public view header for a shared descriptor storage source."""
+
+    compiled = _compile_descriptor_set(
+        storage_spec,
+        allowlist=None,
+        allow_ambiguous_asm_mnemonics=True,
+    )
+    _descriptor_set_view_for_spec(compiled, view_spec)
+    return _emit_header_for_spec(
+        compiled,
+        view_spec,
+        format_output=format_output,
+    )
 
 
 def write_descriptor_set(spec: DescriptorSet, allowlist: DescriptorAllowlist | None = None) -> None:
