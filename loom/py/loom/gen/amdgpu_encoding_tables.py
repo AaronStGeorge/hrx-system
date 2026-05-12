@@ -119,27 +119,6 @@ def _rdna4_vop3px2_supplemental_encoding() -> AmdgpuIsaEncoding:
     )
 
 
-def _cdna_vop3_literal_supplemental_encoding(
-    encodings: tuple[AmdgpuIsaEncoding, ...],
-) -> AmdgpuIsaEncoding:
-    base_encoding = next((encoding for encoding in encodings if encoding.name == "ENC_VOP3"), None)
-    if base_encoding is None:
-        raise ValueError("AMDGPU CDNA encoding XML is missing ENC_VOP3")
-    if base_encoding.bit_count != 64:
-        raise ValueError(f"AMDGPU CDNA ENC_VOP3 has {base_encoding.bit_count} bits, expected 64")
-    return AmdgpuIsaEncoding(
-        name="VOP3_INST_LITERAL",
-        order=base_encoding.order,
-        bit_count=96,
-        identifier_mask=base_encoding.identifier_mask,
-        identifier_values=base_encoding.identifier_values,
-        fields=(
-            *base_encoding.fields,
-            _field("LITERAL", _bit_range(64, 32)),
-        ),
-    )
-
-
 def _supplemental_fields_by_encoding(
     target: str,
 ) -> dict[str, tuple[AmdgpuIsaEncodingField, ...]]:
@@ -152,10 +131,8 @@ def _supplemental_fields_by_encoding(
 
 def _supplemental_encodings(
     target: str,
-    encodings: tuple[AmdgpuIsaEncoding, ...],
+    _encodings: tuple[AmdgpuIsaEncoding, ...],
 ) -> tuple[AmdgpuIsaEncoding, ...]:
-    if target in ("cdna3", "cdna4"):
-        return (_cdna_vop3_literal_supplemental_encoding(encodings),)
     if target == "rdna4":
         return (_rdna4_vop3px2_supplemental_encoding(),)
     return ()

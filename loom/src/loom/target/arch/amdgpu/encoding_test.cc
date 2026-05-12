@@ -294,39 +294,6 @@ TEST(AmdgpuEncodingTest, PacksGfx1250SupplementalSwmmac) {
   EXPECT_EQ(packet.words[1], UINT32_C(0x1c821100));
 }
 
-TEST(AmdgpuEncodingTest, PacksCdna3SupplementalVop3Literal) {
-  const loom_amdgpu_encoding_table_t* table = Cdna3EncodingTable();
-  const loom_amdgpu_encoding_field_value_t field_values[] = {
-      {
-          .field_id = LOOM_AMDGPU_ENCODING_FIELD_VDST,
-          .value = 1,
-      },
-      {
-          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRC0,
-          .value = table->source_literal,
-      },
-      {
-          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRC1,
-          .value = 2,
-      },
-      {
-          .field_id = LOOM_AMDGPU_ENCODING_FIELD_SRC2,
-          .value = 3,
-      },
-      {
-          .field_id = LOOM_AMDGPU_ENCODING_FIELD_LITERAL,
-          .value = UINT32_C(0x3f800000),
-      },
-  };
-  loom_amdgpu_encoding_packet_t packet = {};
-  IREE_ASSERT_OK(loom_amdgpu_encoding_pack(
-      table, LOOM_AMDGPU_ENCODING_FORMAT_VOP3_LITERAL,
-      /*opcode=*/0x40, field_values, IREE_ARRAYSIZE(field_values), &packet));
-  EXPECT_EQ(packet.word_count, 3u);
-  EXPECT_EQ(packet.bit_count, 96u);
-  EXPECT_EQ(packet.words[2], UINT32_C(0x3f800000));
-}
-
 TEST(AmdgpuEncodingTest, PacksGfx1250SupplementalScaledWmma) {
   const loom_amdgpu_encoding_field_value_t field_values[] = {
       {

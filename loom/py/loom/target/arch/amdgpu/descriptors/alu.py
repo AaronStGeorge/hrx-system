@@ -703,7 +703,26 @@ def _v_mul_u32_u24_literal_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
-def _v_mad_u32_u24_overlay() -> AmdgpuDescriptorOverlay:
+def _v_mad_u32_u24_overlay(
+    *,
+    include_literal_forms: bool = True,
+) -> AmdgpuDescriptorOverlay:
+    operand_forms: tuple[OperandForm, ...] = ()
+    if include_literal_forms:
+        operand_forms = (
+            _literal_operand_form(
+                replacement_descriptor="amdgpu.v_mad_u32_u24.src0_lit",
+                source_operand="a",
+            ),
+            _literal_operand_form(
+                replacement_descriptor="amdgpu.v_mad_u32_u24.src1_lit",
+                source_operand="b",
+            ),
+            _literal_operand_form(
+                replacement_descriptor="amdgpu.v_mad_u32_u24.src2_lit",
+                source_operand="addend",
+            ),
+        )
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_mad_u32_u24",
         instruction_name="V_MAD_U32_U24",
@@ -725,20 +744,7 @@ def _v_mad_u32_u24_overlay() -> AmdgpuDescriptorOverlay:
             ),
             AmdgpuOperandOverlay("SRC2", _sgpr_vgpr_operand("addend")),
         ),
-        operand_forms=(
-            _literal_operand_form(
-                replacement_descriptor="amdgpu.v_mad_u32_u24.src0_lit",
-                source_operand="a",
-            ),
-            _literal_operand_form(
-                replacement_descriptor="amdgpu.v_mad_u32_u24.src1_lit",
-                source_operand="b",
-            ),
-            _literal_operand_form(
-                replacement_descriptor="amdgpu.v_mad_u32_u24.src2_lit",
-                source_operand="addend",
-            ),
-        ),
+        operand_forms=operand_forms,
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -2103,7 +2109,35 @@ def _v_cmp_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     )
 
 
-def _v_cndmask_b32_overlay() -> AmdgpuDescriptorOverlay:
+def _v_cndmask_b32_overlay(
+    *,
+    include_literal_forms: bool = True,
+) -> AmdgpuDescriptorOverlay:
+    operand_forms = [
+        _literal_operand_form(
+            replacement_descriptor="amdgpu.v_cndmask_b32.src0_inline",
+            source_operand="false_value",
+            immediate_field="false_value",
+        ),
+        _literal_operand_form(
+            replacement_descriptor="amdgpu.v_cndmask_b32.src1_inline",
+            source_operand="true_value",
+            immediate_field="true_value",
+        ),
+    ]
+    if include_literal_forms:
+        operand_forms.extend(
+            (
+                _literal_operand_form(
+                    replacement_descriptor="amdgpu.v_cndmask_b32.src0_lit",
+                    source_operand="false_value",
+                ),
+                _literal_operand_form(
+                    replacement_descriptor="amdgpu.v_cndmask_b32.src1_lit",
+                    source_operand="true_value",
+                ),
+            )
+        )
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.v_cndmask_b32",
         instruction_name="V_CNDMASK_B32",
@@ -2117,26 +2151,7 @@ def _v_cndmask_b32_overlay() -> AmdgpuDescriptorOverlay:
             AmdgpuOperandOverlay("SRC1", _vgpr_const_operand("true_value")),
             AmdgpuOperandOverlay("SRC2", _sgpr_predicate("mask", units=2)),
         ),
-        operand_forms=(
-            _literal_operand_form(
-                replacement_descriptor="amdgpu.v_cndmask_b32.src0_inline",
-                source_operand="false_value",
-                immediate_field="false_value",
-            ),
-            _literal_operand_form(
-                replacement_descriptor="amdgpu.v_cndmask_b32.src1_inline",
-                source_operand="true_value",
-                immediate_field="true_value",
-            ),
-            _literal_operand_form(
-                replacement_descriptor="amdgpu.v_cndmask_b32.src0_lit",
-                source_operand="false_value",
-            ),
-            _literal_operand_form(
-                replacement_descriptor="amdgpu.v_cndmask_b32.src1_lit",
-                source_operand="true_value",
-            ),
-        ),
+        operand_forms=tuple(operand_forms),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
@@ -2271,11 +2286,19 @@ def _v_cndmask_b32_literal_inline_overlay(
     )
 
 
-def _v_cndmask_b32_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
-    return (
-        _v_cndmask_b32_overlay(),
+def _v_cndmask_b32_overlays(
+    *,
+    include_literal_forms: bool = True,
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    overlays = (
+        _v_cndmask_b32_overlay(include_literal_forms=include_literal_forms),
         _v_cndmask_b32_source_inline_overlay("src0"),
         _v_cndmask_b32_source_inline_overlay("src1"),
+    )
+    if not include_literal_forms:
+        return overlays
+    return (
+        *overlays,
         _v_cndmask_b32_source_literal_overlay("src0"),
         _v_cndmask_b32_source_literal_overlay("src1"),
         _v_cndmask_b32_literal_inline_overlay("src0"),
