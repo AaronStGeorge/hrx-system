@@ -134,3 +134,32 @@ low.func.def target(@target) abi(object_function) @f32x16_index_madd_scaled_bias
   vmovdqu32.store.indexed %loaded, %output_view, %bounded_linear {disp32 = 0, scale = 4}
   return
 }
+
+// ====
+
+x86.target<scalar> @target
+
+func.def target(@target) @i64_index_add_madd_memory(%input: buffer, %output: buffer, %i: index, %j: index, %row: index) {
+  %zero = index.constant 0 : offset
+  %stride = index.constant 4 : index
+  %sum = index.add %i, %j : index
+  %linear = index.madd %row, %stride, %sum : index
+  %bounded_linear = index.assume %linear [range(%linear, 0, 16)] : index
+  %input_view = buffer.view %input[%zero] : buffer -> view<32xi64, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<32xi64, #dense>
+  %loaded = view.load %input_view[%bounded_linear] : view<32xi64, #dense> -> i64
+  %incremented = scalar.addi %loaded, %loaded : i64
+  view.store %incremented, %output_view[%bounded_linear] : i64, view<32xi64, #dense>
+  func.return
+}
+
+// ----
+low.func.def target(@target) abi(object_function) @i64_index_add_madd_memory(%input_view: reg<x86.gpr64>, %output_view: reg<x86.gpr64>, %i: reg<x86.gpr64>, %j: reg<x86.gpr64>, %row: reg<x86.gpr64>) asm<x86.scalar.core> {
+  %sum = lea %i, %j
+  %bounded_linear = lea.add_scale %sum, %row {disp32 = 0, scale = 4}
+  %loaded = mov.load.indexed.gpr64 %input_view, %bounded_linear {disp32 = 0, scale = 8}
+  %22 = copy %loaded : reg<x86.gpr64> -> reg<x86.gpr64>
+  %incremented = add.gpr64 %22, %loaded
+  mov.store.indexed.gpr64 %incremented, %output_view, %bounded_linear {disp32 = 0, scale = 8}
+  return
+}
