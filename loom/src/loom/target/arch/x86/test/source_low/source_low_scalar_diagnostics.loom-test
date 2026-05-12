@@ -1,0 +1,20 @@
+// RUN: emit source-low output=low
+
+x86.target<scalar> @target
+
+func.def target(@target) @scalar_i64_dynamic_shift_rejected(%value: i64, %amount: i64) -> (i64) {
+  // ERROR@+1: TARGET/003
+  %result = scalar.shli %value, %amount : i64
+  func.return %result : i64
+}
+
+// ====
+
+x86.target<scalar> @target
+
+func.def target(@target) @scalar_i64_wide_shift_rejected(%value: i64) -> (i64) {
+  %amount = scalar.constant 64 : i64
+  // ERROR@+1: TARGET/005
+  %result = scalar.shrui %value, %amount : i64
+  func.return %result : i64
+}

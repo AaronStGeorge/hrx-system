@@ -105,7 +105,7 @@ func.def target(@target) @index_madd_dynamic_stride_constant_bias(%row: index, %
 // ----
 low.func.def target(@target) abi(object_function) @index_madd_dynamic_stride_constant_bias(%row: reg<x86.gpr64>, %stride: reg<x86.gpr64>) -> (reg<x86.gpr64>) asm<x86.scalar.core> {
   %8 = copy %row : reg<x86.gpr64> -> reg<x86.gpr64>
-  %9 = imul %8, %stride
+  %9 = imul.gpr64 %8, %stride
   %linear = lea.disp %9 {disp32 = 5}
   return %linear
 }

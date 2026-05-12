@@ -78,9 +78,11 @@ _SCHEDULE_VECTOR_DOT_YMM = "x86.vector.dot.256"
 _SCHEDULE_VECTOR_DOT_ZMM = "x86.vector.dot.512"
 _SCHEDULE_MASK = "x86.mask"
 _SCHEDULE_MEMORY_LOAD_GPR32 = "x86.memory.load.gpr32"
+_SCHEDULE_MEMORY_LOAD_GPR64 = "x86.memory.load.gpr64"
 _SCHEDULE_MEMORY_LOAD_XMM = "x86.memory.load.128"
 _SCHEDULE_MEMORY_LOAD_ZMM = "x86.memory.load"
 _SCHEDULE_MEMORY_STORE_GPR32 = "x86.memory.store.gpr32"
+_SCHEDULE_MEMORY_STORE_GPR64 = "x86.memory.store.gpr64"
 _SCHEDULE_MEMORY_STORE_XMM = "x86.memory.store.128"
 _SCHEDULE_MEMORY_STORE_ZMM = "x86.memory.store"
 _SCHEDULE_CONTROL = "x86.control"
@@ -299,6 +301,13 @@ _SHIFT32_IMMEDIATE = Immediate(
     ImmediateKind.UNSIGNED,
     bit_width=8,
     unsigned_max=31,
+)
+
+_SHIFT64_IMMEDIATE = Immediate(
+    "shift",
+    ImmediateKind.UNSIGNED,
+    bit_width=8,
+    unsigned_max=63,
 )
 
 _LANE_I32X4_IMMEDIATE = Immediate(

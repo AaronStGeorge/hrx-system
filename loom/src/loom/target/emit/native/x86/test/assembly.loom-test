@@ -182,6 +182,69 @@ low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.gpr32>, %rhs: reg<x
 
 // ====
 
+x86.target<scalar> @x86_target
+
+low.func.def target(@x86_target) @x86_fragment(%input: reg<x86.gpr64>, %output: reg<x86.gpr64>, %index: reg<x86.gpr64>, %lhs: reg<x86.gpr64>, %rhs: reg<x86.gpr64>) asm<x86.scalar.core> {
+  %bias = mov.imm64 17
+  %sum = add.gpr64 %lhs, %rhs
+  %difference = sub.gpr64 %sum, %bias
+  %product = imul.gpr64 %difference, %rhs
+  %mask = mov.imm64 255
+  %masked = and.gpr64 %product, %mask
+  %tagged = or.gpr64 %masked, %rhs
+  %mixed = xor.gpr64 %tagged, %rhs
+  %left = shl.imm.gpr64 %mixed {shift = 33}
+  %arithmetic = sar.imm.gpr64 %left {shift = 7}
+  %logical = shr.imm.gpr64 %arithmetic {shift = 9}
+  %static = mov.load.gpr64 %input {disp32 = 8}
+  %loaded = mov.load.indexed.gpr64 %input, %index {disp32 = 16, scale = 8}
+  %store_value = add.gpr64 %logical, %loaded
+  mov.store.gpr64 %store_value, %output {disp32 = 24}
+  mov.store.indexed.gpr64 %static, %output, %index {disp32 = -8, scale = 8}
+  %signed = cmp.slt.gpr64 %store_value, %rhs
+  %unsigned = cmp.uge.gpr64 %store_value, %rhs
+  %condition = xor.gpr32 %signed, %unsigned
+  low.cond_br %condition, ^then, ^else : reg<x86.gpr32>
+^then:
+  return
+^else:
+  return
+}
+
+// ----
+  mov rbp, 17
+  add rax, rsp
+  sub rax, rbp
+  imul rax, rsp
+  mov rbp, 255
+  and rax, rbp
+  or rax, rsp
+  xor rax, rsp
+  shl rax, 33
+  sar rax, 7
+  shr rax, 9
+  mov rbp, [rcx + 8]
+  mov rcx, [rcx + rbx * 8 + 16]
+  add rax, rcx
+  mov [rdx + 24], rax
+  mov [rdx + rbx * 8 - 8], rbp
+  cmp rax, rsp
+  setl cl
+  movzx ecx, cl
+  cmp rax, rsp
+  setae al
+  movzx eax, al
+  xor ecx, eax
+  test ecx, ecx
+  jnz .Lbb1
+  jmp .Lbb2
+.Lbb1:
+  ret
+.Lbb2:
+  ret
+
+// ====
+
 x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>, %base: reg<x86.gpr64>) asm<x86.avx512.core> {
@@ -404,7 +467,7 @@ x86.target<avx512> @x86_target
 low.func.def target(@x86_target) @x86_fragment(%input: reg<x86.gpr64>, %output: reg<x86.gpr64>, %row: reg<x86.gpr64>, %stride: reg<x86.gpr64>, %col: reg<x86.gpr64>) asm<x86.avx512.core> {
   %bias = mov.imm64 256
   %row_copy = copy %row : reg<x86.gpr64> -> reg<x86.gpr64>
-  %linear = imul %row_copy, %stride
+  %linear = imul.gpr64 %row_copy, %stride
   %index = lea %linear, %col
   %biased_index = lea %index, %bias
   %loaded = vmovdqu32.load.indexed %input, %biased_index {disp32 = 0, scale = 4}

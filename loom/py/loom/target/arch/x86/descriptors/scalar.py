@@ -16,9 +16,11 @@ from loom.target.low_descriptors import (
     DescriptorSet,
     EnumDomain,
     EnumValue,
+    Immediate,
     IssueUse,
     LatencyKind,
     ModelQuality,
+    Operand,
     RegClass,
     RegClassFlag,
     Resource,
@@ -46,9 +48,12 @@ from .common import (
     _SCHEDULE_ADDRESS,
     _SCHEDULE_CONTROL,
     _SCHEDULE_MEMORY_LOAD_GPR32,
+    _SCHEDULE_MEMORY_LOAD_GPR64,
     _SCHEDULE_MEMORY_STORE_GPR32,
+    _SCHEDULE_MEMORY_STORE_GPR64,
     _SCHEDULE_SCALAR,
     _SHIFT32_IMMEDIATE,
+    _SHIFT64_IMMEDIATE,
     _TARGET_BLOCK_IMMEDIATE,
     _asm,
     _gpr32_operand,
@@ -67,18 +72,52 @@ def _gpr32_destructive_binary_descriptor(
     mnemonic: str,
     semantic_tag: str,
 ) -> Descriptor:
+    return _gpr_destructive_binary_descriptor(
+        key=key,
+        mnemonic=mnemonic,
+        semantic_tag=semantic_tag,
+        result=_gpr32_result(),
+        lhs=_gpr32_operand("lhs"),
+        rhs=_gpr32_operand("rhs"),
+        asm_suffix="gpr32",
+    )
+
+
+def _gpr64_destructive_binary_descriptor(
+    *,
+    key: str,
+    mnemonic: str,
+    semantic_tag: str,
+) -> Descriptor:
+    return _gpr_destructive_binary_descriptor(
+        key=key,
+        mnemonic=mnemonic,
+        semantic_tag=semantic_tag,
+        result=_gpr64_result(),
+        lhs=_gpr64_operand("lhs"),
+        rhs=_gpr64_operand("rhs"),
+        asm_suffix="gpr64",
+    )
+
+
+def _gpr_destructive_binary_descriptor(
+    *,
+    key: str,
+    mnemonic: str,
+    semantic_tag: str,
+    result: Operand,
+    lhs: Operand,
+    rhs: Operand,
+    asm_suffix: str,
+) -> Descriptor:
     return Descriptor(
         key=key,
         mnemonic=mnemonic,
         semantic_tag=semantic_tag,
-        operands=(
-            _gpr32_result(),
-            _gpr32_operand("lhs"),
-            _gpr32_operand("rhs"),
-        ),
+        operands=(result, lhs, rhs),
         constraints=_GPR_DESTRUCTIVE_LHS_CONSTRAINTS,
         asm_forms=_asm(
-            mnemonic=f"{mnemonic}.gpr32",
+            mnemonic=f"{mnemonic}.{asm_suffix}",
             results=("dst",),
             operands=("lhs", "rhs"),
         ),
@@ -93,18 +132,53 @@ def _gpr32_destructive_shift_descriptor(
     mnemonic: str,
     semantic_tag: str,
 ) -> Descriptor:
+    return _gpr_destructive_shift_descriptor(
+        key=key,
+        mnemonic=mnemonic,
+        semantic_tag=semantic_tag,
+        result=_gpr32_result(),
+        source=_gpr32_operand("lhs"),
+        immediate=_SHIFT32_IMMEDIATE,
+        asm_suffix="gpr32",
+    )
+
+
+def _gpr64_destructive_shift_descriptor(
+    *,
+    key: str,
+    mnemonic: str,
+    semantic_tag: str,
+) -> Descriptor:
+    return _gpr_destructive_shift_descriptor(
+        key=key,
+        mnemonic=mnemonic,
+        semantic_tag=semantic_tag,
+        result=_gpr64_result(),
+        source=_gpr64_operand("lhs"),
+        immediate=_SHIFT64_IMMEDIATE,
+        asm_suffix="gpr64",
+    )
+
+
+def _gpr_destructive_shift_descriptor(
+    *,
+    key: str,
+    mnemonic: str,
+    semantic_tag: str,
+    result: Operand,
+    source: Operand,
+    immediate: Immediate,
+    asm_suffix: str,
+) -> Descriptor:
     return Descriptor(
         key=key,
         mnemonic=mnemonic,
         semantic_tag=semantic_tag,
-        operands=(
-            _gpr32_result(),
-            _gpr32_operand("lhs"),
-        ),
-        immediates=(_SHIFT32_IMMEDIATE,),
+        operands=(result, source),
+        immediates=(immediate,),
         constraints=_GPR_DESTRUCTIVE_LHS_CONSTRAINTS,
         asm_forms=_asm(
-            mnemonic=f"{mnemonic}.imm.gpr32",
+            mnemonic=f"{mnemonic}.imm.{asm_suffix}",
             results=("dst",),
             operands=("lhs",),
             immediates=("shift",),
@@ -121,17 +195,52 @@ def _gpr32_compare_descriptor(
     setcc: str,
     semantic_tag: str,
 ) -> Descriptor:
+    return _gpr_compare_descriptor(
+        predicate=predicate,
+        setcc=setcc,
+        semantic_tag=semantic_tag,
+        lhs=_gpr32_operand("lhs"),
+        rhs=_gpr32_operand("rhs"),
+        asm_suffix="gpr32",
+    )
+
+
+def _gpr64_compare_descriptor(
+    *,
+    predicate: str,
+    setcc: str,
+    semantic_tag: str,
+) -> Descriptor:
+    return _gpr_compare_descriptor(
+        predicate=predicate,
+        setcc=setcc,
+        semantic_tag=semantic_tag,
+        lhs=_gpr64_operand("lhs"),
+        rhs=_gpr64_operand("rhs"),
+        asm_suffix="gpr64",
+    )
+
+
+def _gpr_compare_descriptor(
+    *,
+    predicate: str,
+    setcc: str,
+    semantic_tag: str,
+    lhs: Operand,
+    rhs: Operand,
+    asm_suffix: str,
+) -> Descriptor:
     return Descriptor(
-        key=f"x86.scalar.cmp.{predicate}.gpr32",
+        key=f"x86.scalar.cmp.{predicate}.{asm_suffix}",
         mnemonic=f"cmp.{setcc}",
         semantic_tag=semantic_tag,
         operands=(
             _gpr32_result(),
-            _gpr32_operand("lhs"),
-            _gpr32_operand("rhs"),
+            lhs,
+            rhs,
         ),
         asm_forms=_asm(
-            mnemonic=f"cmp.{predicate}.gpr32",
+            mnemonic=f"cmp.{predicate}.{asm_suffix}",
             results=("dst",),
             operands=("lhs", "rhs"),
         ),
@@ -140,11 +249,30 @@ def _gpr32_compare_descriptor(
     )
 
 
+_CMP_PREDICATE_SETCC = (
+    ("eq", "sete"),
+    ("ne", "setne"),
+    ("slt", "setl"),
+    ("sle", "setle"),
+    ("sgt", "setg"),
+    ("sge", "setge"),
+    ("ult", "setb"),
+    ("ule", "setbe"),
+    ("ugt", "seta"),
+    ("uge", "setae"),
+)
+
+
 X86_SCALAR_PREFIX_DESCRIPTORS = (
     _gpr32_destructive_binary_descriptor(
         key="x86.scalar.add.gpr32",
         mnemonic="add",
         semantic_tag="integer.add.i32",
+    ),
+    _gpr64_destructive_binary_descriptor(
+        key="x86.scalar.add.gpr64",
+        mnemonic="add",
+        semantic_tag="integer.add.i64",
     ),
 )
 
@@ -158,6 +286,16 @@ X86_SCALAR_SUFFIX_DESCRIPTORS = (
         key="x86.scalar.imul.gpr32",
         mnemonic="imul",
         semantic_tag="integer.mul.i32",
+    ),
+    _gpr64_destructive_binary_descriptor(
+        key="x86.scalar.sub.gpr64",
+        mnemonic="sub",
+        semantic_tag="integer.sub.i64",
+    ),
+    _gpr64_destructive_binary_descriptor(
+        key="x86.scalar.imul.gpr64",
+        mnemonic="imul",
+        semantic_tag="integer.mul.i64",
     ),
     _gpr32_destructive_binary_descriptor(
         key="x86.scalar.and.gpr32",
@@ -174,6 +312,21 @@ X86_SCALAR_SUFFIX_DESCRIPTORS = (
         mnemonic="xor",
         semantic_tag="integer.xor.i32",
     ),
+    _gpr64_destructive_binary_descriptor(
+        key="x86.scalar.and.gpr64",
+        mnemonic="and",
+        semantic_tag="integer.and.i64",
+    ),
+    _gpr64_destructive_binary_descriptor(
+        key="x86.scalar.or.gpr64",
+        mnemonic="or",
+        semantic_tag="integer.or.i64",
+    ),
+    _gpr64_destructive_binary_descriptor(
+        key="x86.scalar.xor.gpr64",
+        mnemonic="xor",
+        semantic_tag="integer.xor.i64",
+    ),
     _gpr32_destructive_shift_descriptor(
         key="x86.scalar.shl.imm.gpr32",
         mnemonic="shl",
@@ -189,55 +342,36 @@ X86_SCALAR_SUFFIX_DESCRIPTORS = (
         mnemonic="shr",
         semantic_tag="integer.shru.i32",
     ),
-    _gpr32_compare_descriptor(
-        predicate="eq",
-        setcc="sete",
-        semantic_tag="integer.cmp.eq.i32",
+    _gpr64_destructive_shift_descriptor(
+        key="x86.scalar.shl.imm.gpr64",
+        mnemonic="shl",
+        semantic_tag="integer.shl.i64",
     ),
-    _gpr32_compare_descriptor(
-        predicate="ne",
-        setcc="setne",
-        semantic_tag="integer.cmp.ne.i32",
+    _gpr64_destructive_shift_descriptor(
+        key="x86.scalar.sar.imm.gpr64",
+        mnemonic="sar",
+        semantic_tag="integer.shrs.i64",
     ),
-    _gpr32_compare_descriptor(
-        predicate="slt",
-        setcc="setl",
-        semantic_tag="integer.cmp.slt.i32",
+    _gpr64_destructive_shift_descriptor(
+        key="x86.scalar.shr.imm.gpr64",
+        mnemonic="shr",
+        semantic_tag="integer.shru.i64",
     ),
-    _gpr32_compare_descriptor(
-        predicate="sle",
-        setcc="setle",
-        semantic_tag="integer.cmp.sle.i32",
+    *(
+        _gpr32_compare_descriptor(
+            predicate=predicate,
+            setcc=setcc,
+            semantic_tag=f"integer.cmp.{predicate}.i32",
+        )
+        for predicate, setcc in _CMP_PREDICATE_SETCC
     ),
-    _gpr32_compare_descriptor(
-        predicate="sgt",
-        setcc="setg",
-        semantic_tag="integer.cmp.sgt.i32",
-    ),
-    _gpr32_compare_descriptor(
-        predicate="sge",
-        setcc="setge",
-        semantic_tag="integer.cmp.sge.i32",
-    ),
-    _gpr32_compare_descriptor(
-        predicate="ult",
-        setcc="setb",
-        semantic_tag="integer.cmp.ult.i32",
-    ),
-    _gpr32_compare_descriptor(
-        predicate="ule",
-        setcc="setbe",
-        semantic_tag="integer.cmp.ule.i32",
-    ),
-    _gpr32_compare_descriptor(
-        predicate="ugt",
-        setcc="seta",
-        semantic_tag="integer.cmp.ugt.i32",
-    ),
-    _gpr32_compare_descriptor(
-        predicate="uge",
-        setcc="setae",
-        semantic_tag="integer.cmp.uge.i32",
+    *(
+        _gpr64_compare_descriptor(
+            predicate=predicate,
+            setcc=setcc,
+            semantic_tag=f"integer.cmp.{predicate}.i64",
+        )
+        for predicate, setcc in _CMP_PREDICATE_SETCC
     ),
     Descriptor(
         key="x86.scalar.movimm.gpr32",
@@ -325,6 +459,80 @@ X86_SCALAR_SUFFIX_DESCRIPTORS = (
         ),
         effects=(_store_effect(32),),
         schedule_class=_SCHEDULE_MEMORY_STORE_GPR32,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    ),
+    Descriptor(
+        key="x86.scalar.mov.load.gpr64",
+        mnemonic="mov",
+        semantic_tag="memory.load.i64",
+        operands=(_gpr64_result(), _gpr64_resource("base")),
+        immediates=(_DISP32_IMMEDIATE,),
+        asm_forms=_asm(
+            mnemonic="mov.load.gpr64",
+            results=("dst",),
+            operands=("base",),
+            immediates=("disp32",),
+            named_immediates=True,
+        ),
+        effects=(_load_effect(64),),
+        schedule_class=_SCHEDULE_MEMORY_LOAD_GPR64,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    ),
+    Descriptor(
+        key="x86.scalar.mov.load.indexed.gpr64",
+        mnemonic="mov",
+        semantic_tag="memory.load.indexed.i64",
+        operands=(
+            _gpr64_result(),
+            _gpr64_resource("base"),
+            _gpr64_resource("index"),
+        ),
+        immediates=(_DISP32_IMMEDIATE, _ADDRESS_SCALE_IMMEDIATE),
+        asm_forms=_asm(
+            mnemonic="mov.load.indexed.gpr64",
+            results=("dst",),
+            operands=("base", "index"),
+            immediates=("disp32", "scale"),
+            named_immediates=True,
+        ),
+        effects=(_load_effect(64),),
+        schedule_class=_SCHEDULE_MEMORY_LOAD_GPR64,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    ),
+    Descriptor(
+        key="x86.scalar.mov.store.gpr64",
+        mnemonic="mov",
+        semantic_tag="memory.store.i64",
+        operands=(_gpr64_operand("value"), _gpr64_resource("base")),
+        immediates=(_DISP32_IMMEDIATE,),
+        asm_forms=_asm(
+            mnemonic="mov.store.gpr64",
+            operands=("value", "base"),
+            immediates=("disp32",),
+            named_immediates=True,
+        ),
+        effects=(_store_effect(64),),
+        schedule_class=_SCHEDULE_MEMORY_STORE_GPR64,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    ),
+    Descriptor(
+        key="x86.scalar.mov.store.indexed.gpr64",
+        mnemonic="mov",
+        semantic_tag="memory.store.indexed.i64",
+        operands=(
+            _gpr64_operand("value"),
+            _gpr64_resource("base"),
+            _gpr64_resource("index"),
+        ),
+        immediates=(_DISP32_IMMEDIATE, _ADDRESS_SCALE_IMMEDIATE),
+        asm_forms=_asm(
+            mnemonic="mov.store.indexed.gpr64",
+            operands=("value", "base", "index"),
+            immediates=("disp32", "scale"),
+            named_immediates=True,
+        ),
+        effects=(_store_effect(64),),
+        schedule_class=_SCHEDULE_MEMORY_STORE_GPR64,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     ),
     Descriptor(
@@ -422,20 +630,6 @@ X86_SCALAR_SUFFIX_DESCRIPTORS = (
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     ),
     Descriptor(
-        key="x86.scalar.imul.gpr64",
-        mnemonic="imul",
-        semantic_tag="integer.mul.i64",
-        operands=(
-            _gpr64_result(),
-            _gpr64_operand("lhs"),
-            _gpr64_operand("rhs"),
-        ),
-        constraints=_GPR_DESTRUCTIVE_LHS_CONSTRAINTS,
-        asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
-        schedule_class=_SCHEDULE_SCALAR,
-        flags=(DescriptorFlag.DEAD_REMOVABLE,),
-    ),
-    Descriptor(
         key="x86.scalar.jmp",
         mnemonic="jmp",
         semantic_tag="control.branch",
@@ -519,7 +713,23 @@ X86_SCALAR_DESCRIPTOR_SET = DescriptorSet(
             model_quality=ModelQuality.ESTIMATED,
         ),
         ScheduleClass(
+            _SCHEDULE_MEMORY_LOAD_GPR64,
+            latency_kind=LatencyKind.ESTIMATE,
+            latency_cycles=4,
+            issue_uses=(IssueUse(_RESOURCE_LOAD, cycles=1, units=1),),
+            flags=(ScheduleClassFlag.MAY_LOAD,),
+            model_quality=ModelQuality.ESTIMATED,
+        ),
+        ScheduleClass(
             _SCHEDULE_MEMORY_STORE_GPR32,
+            latency_kind=LatencyKind.ESTIMATE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_STORE, cycles=1, units=1),),
+            flags=(ScheduleClassFlag.MAY_STORE,),
+            model_quality=ModelQuality.ESTIMATED,
+        ),
+        ScheduleClass(
+            _SCHEDULE_MEMORY_STORE_GPR64,
             latency_kind=LatencyKind.ESTIMATE,
             latency_cycles=1,
             issue_uses=(IssueUse(_RESOURCE_STORE, cycles=1, units=1),),
