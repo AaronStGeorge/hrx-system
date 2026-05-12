@@ -31,7 +31,7 @@ loom_target_table_cc_library(
   DEPS
     loom::src::loom::codegen::low::lower
     loom::src::loom::ops::scalar
-    loom::src::loom::target::emit::ireevm::descriptors_ids
+    loom::src::loom::target::arch::ireevm::descriptors_ids
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

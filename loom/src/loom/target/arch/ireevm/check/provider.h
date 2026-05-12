@@ -6,8 +6,8 @@
 
 // loom-check provider for IREE VM target-low tests.
 
-#ifndef LOOM_TARGET_EMIT_IREEVM_CHECK_PROVIDER_H_
-#define LOOM_TARGET_EMIT_IREEVM_CHECK_PROVIDER_H_
+#ifndef LOOM_TARGET_ARCH_IREEVM_CHECK_PROVIDER_H_
+#define LOOM_TARGET_ARCH_IREEVM_CHECK_PROVIDER_H_
 
 #include "loom/tools/loom-check/provider.h"
 
@@ -22,4 +22,4 @@ extern const loom_check_provider_t loom_ireevm_check_provider;
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_EMIT_IREEVM_CHECK_PROVIDER_H_
+#endif  // LOOM_TARGET_ARCH_IREEVM_CHECK_PROVIDER_H_

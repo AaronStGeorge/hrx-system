@@ -27,7 +27,7 @@ loom_assert_no_dependencies(
         "//loom/src/loom/target/arch/amdgpu:matrix_contract",
         "//loom/src/loom/target/arch/wasm:descriptors",
         "//loom/src/loom/target/arch/x86:packed_dot_contract",
-        "//loom/src/loom/target/emit/ireevm:descriptors",
+        "//loom/src/loom/target/arch/ireevm:descriptors",
         "//loom/src/loom/target/emit/llvmir:llvmir",
     ],
     targets = [

@@ -12,9 +12,9 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
+#include "loom/target/arch/ireevm/provider.h"
 #include "loom/target/compile_report_low.h"
 #include "loom/target/emit/ireevm/function_bytecode.h"
-#include "loom/target/emit/ireevm/provider.h"
 #include "loom/target/entry_selection.h"
 #include "loom/target/provider.h"
 

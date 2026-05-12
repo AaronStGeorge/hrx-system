@@ -398,7 +398,7 @@ if("ireevm" IN_LIST IREE_LOOM_CHECK_PROVIDERS)
   _loom_check_enable_provider(
     ${_LOOM_CHECK_TARGET}
     LOOM_CHECK_HAVE_IREEVM
-    loom::src::loom::target::emit::ireevm::check_provider
+    loom::src::loom::target::arch::ireevm::check_provider
   )
 endif()
 

@@ -165,6 +165,8 @@ KEYWORD_MAP: dict[str, str] = {
     "workgroups": "LOOM_KW_WORKGROUPS",
     "abi_layout": "LOOM_KW_ABI_LAYOUT",
     "extent": "LOOM_KW_EXTENT",
+    "module": "LOOM_KW_MODULE",
+    "symbol": "LOOM_KW_SYMBOL",
 }
 
 # Maps Region(..., syntax=...) names to C parser/printer selector IDs. The
@@ -4596,9 +4598,9 @@ def main() -> None:
     from loom.dialect.vector import ALL_VECTOR_OPS, VECTOR_OP_CATEGORY_GROUPS, vector_ops
     from loom.dialect.view import ALL_VIEW_OPS, view_ops
     from loom.target.arch.amdgpu.dialect import ALL_AMDGPU_OPS, amdgpu_ops
+    from loom.target.arch.ireevm.dialect import ALL_IREEVM_OPS, ireevm_ops
     from loom.target.arch.wasm.dialect import ALL_WASM_OPS, wasm_ops
     from loom.target.arch.x86.dialect import ALL_X86_OPS, x86_ops
-    from loom.target.emit.ireevm.dialect import ALL_IREEVM_OPS, ireevm_ops
 
     dialects = [
         (test_ops, list(ALL_TEST_OPS), None),

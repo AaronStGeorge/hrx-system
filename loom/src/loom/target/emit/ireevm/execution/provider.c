@@ -6,8 +6,8 @@
 
 #include "loom/target/emit/ireevm/execution/provider.h"
 
+#include "loom/target/arch/ireevm/provider.h"
 #include "loom/target/emit/ireevm/execution/backend.h"
-#include "loom/target/emit/ireevm/provider.h"
 
 static const loom_run_execution_backend_t* const
     kLoomIreeVmExecutionBackends[] = {

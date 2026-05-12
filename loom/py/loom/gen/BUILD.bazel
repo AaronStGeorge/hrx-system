@@ -161,7 +161,7 @@ py_binary(
     deps = [
         ":low_descriptors",
         "//loom/py/loom/target:descriptor_sets",
-        "//loom/py/loom/target/emit/ireevm:descriptors",
+        "//loom/py/loom/target/arch/ireevm:descriptors",
     ],
 )
 

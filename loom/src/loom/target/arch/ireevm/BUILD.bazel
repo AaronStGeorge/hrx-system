@@ -8,7 +8,6 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_assert_no_dependencies",
     "loom_cc_library",
-    "loom_cc_test",
     "loom_low_descriptor_cc_library",
 )
 load(
@@ -27,11 +26,11 @@ package(
 #===------------------------------------------------------------------------===#
 
 loom_assert_no_dependencies(
-    name = "wasm_target_no_other_target_deps",
+    name = "ireevm_target_no_other_target_deps",
     dependencies = [
         "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+        "//loom/src/loom/target/arch/wasm:descriptors",
         "//loom/src/loom/target/arch/x86:packed_dot_contract",
-        "//loom/src/loom/target/arch/ireevm:descriptors",
         "//loom/src/loom/target/emit/llvmir:llvmir",
     ],
     targets = [
@@ -44,10 +43,11 @@ loom_assert_no_dependencies(
 )
 
 loom_assert_no_dependencies(
-    name = "core_target_interfaces_no_wasm_target_deps",
+    name = "core_target_interfaces_no_ireevm_target_deps",
     dependencies = [
         ":descriptors",
         ":low_registry",
+        ":ops",
         ":provider",
         ":target_records",
     ],
@@ -59,13 +59,12 @@ loom_assert_no_dependencies(
 )
 
 loom_assert_no_dependencies(
-    name = "core_tools_no_wasm_target_provider_deps",
+    name = "core_tools_no_ireevm_target_provider_deps",
     dependencies = [
         ":low_registry",
         ":provider",
     ],
     targets = [
-        "//loom/src/loom/tools/iree-run-loom:main",
         "//loom/src/loom/tools/loom-check:execute",
         "//loom/src/loom/tools/loom-check:loom-check-test",
         "//loom/src/loom/tools/loom-check:main",
@@ -74,13 +73,13 @@ loom_assert_no_dependencies(
 )
 
 #===------------------------------------------------------------------------===#
-# Wasm low descriptors
+# IREE VM low descriptors
 #===------------------------------------------------------------------------===#
 
 loom_low_descriptor_cc_library(
     name = "descriptors",
-    args = ["--descriptor-set=wasm_core_simd128"],
-    generator = "//loom/py/loom/gen:wasm_low_descriptor_shard",
+    args = ["--descriptor-set=ireevm_core"],
+    generator = "//loom/py/loom/gen:ireevm_low_descriptor_shard",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
@@ -100,6 +99,7 @@ loom_cc_library(
         "ops/builders.c",
         "ops/registry.c",
         "ops/tables.c",
+        "ops/verify.c",
     ],
     hdrs = [
         "ops/ops.h",
@@ -107,8 +107,11 @@ loom_cc_library(
     ],
     deps = [
         ":target_records",
+        "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
+        "//loom/src/loom/ops:func_symbol_facts",
+        "//loom/src/loom/ops:function_contract_verify",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/target",
         "//loom/src/loom/target:types",
@@ -138,7 +141,7 @@ loom_cc_library(
         ":low_registry",
         ":ops",
         "//loom/src/loom/target:provider",
-        "//loom/src/loom/target/emit/wasm:lower",
+        "//loom/src/loom/target/emit/ireevm:lower",
         "//runtime/src/iree/base",
     ],
 )
@@ -154,27 +157,14 @@ loom_cc_library(
     ],
 )
 
-loom_cc_test(
-    name = "register_class_map_test",
-    srcs = ["register_class_map_test.cc"],
-    deps = [
-        ":descriptors",
-        "//loom/src/loom/codegen/low:register_class_map",
-        "//loom/src/loom/ir",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
 loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
+        "test/import_decl.loom-test",
+        "test/import_decl_diagnostics.loom-test",
+        "test/source_low/pass_source_low.loom-test",
         "test/source_low/source_low.loom-test",
         "test/source_low/source_low_diagnostics.loom-test",
-    ],
-    data = [
-        "//loom/src/loom/test/corpus/source_low:vector_v4.loom-test",
     ],
     test_name_prefix_to_strip = "test/source_low/",
 )

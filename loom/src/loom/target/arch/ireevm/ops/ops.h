@@ -21,7 +21,8 @@ extern "C" {
 
 enum {
   LOOM_OP_IREEVM_TARGET = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 0),
-  LOOM_OP_IREEVM_COUNT_ = 1,
+  LOOM_OP_IREEVM_IMPORT_DECL = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 1),
+  LOOM_OP_IREEVM_COUNT_ = 2,
 };
 
 // IREE VM target row selected by ireevm.target.
@@ -29,6 +30,27 @@ typedef enum loom_ireevm_target_kind_e {
   LOOM_IREEVM_TARGET_KIND_CORE = 1,
   LOOM_IREEVM_TARGET_KIND_COUNT_ = 2,
 } loom_ireevm_target_kind_t;
+
+// Function visibility. Absent (0) means private (module-internal).
+typedef enum loom_ireevm_import_decl_visibility_e {
+  LOOM_IREEVM_IMPORT_DECL_VISIBILITY_PUBLIC = 1,
+  LOOM_IREEVM_IMPORT_DECL_VISIBILITY_COUNT_ = 2,
+} loom_ireevm_import_decl_visibility_t;
+
+// Function calling convention. Absent (0) means host.
+typedef enum loom_ireevm_import_decl_cc_e {
+  LOOM_IREEVM_IMPORT_DECL_CC_HOST = 1,
+  LOOM_IREEVM_IMPORT_DECL_CC_DEVICE = 2,
+  LOOM_IREEVM_IMPORT_DECL_CC_INITIALIZER = 3,
+  LOOM_IREEVM_IMPORT_DECL_CC_DEINITIALIZER = 4,
+  LOOM_IREEVM_IMPORT_DECL_CC_COUNT_ = 5,
+} loom_ireevm_import_decl_cc_t;
+
+// Function purity. Absent (0) means unspecified (conservative).
+typedef enum loom_ireevm_import_decl_purity_e {
+  LOOM_IREEVM_IMPORT_DECL_PURITY_PURE = 1,
+  LOOM_IREEVM_IMPORT_DECL_PURITY_COUNT_ = 2,
+} loom_ireevm_import_decl_purity_t;
 
 // LOOM_OP_IREEVM_TARGET: IREE VM target-family record. The selector chooses a VM emission row; optional attrs structurally override authored common target fields.
 // ireevm.target<core> @vm
@@ -127,6 +149,46 @@ iree_status_t loom_ireevm_target_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_target_record_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_IREEVM_IMPORT_DECL: IREE VM imported function declaration. Callable by name via func.call and lowered to a VM module import during target materialization.
+// ireevm.import.decl module("hal") symbol("buffer.length") @hal_buffer_length(%buffer: i32) -> (i64)
+LOOM_DEFINE_ISA(loom_ireevm_import_decl_isa, LOOM_OP_IREEVM_IMPORT_DECL)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_ireevm_import_decl_args, 0)
+LOOM_DEFINE_VARIADIC_RESULTS(loom_ireevm_import_decl_results, 0)
+LOOM_DEFINE_ATTR_SYMBOL(loom_ireevm_import_decl_callee, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_ireevm_import_decl_visibility, 1, loom_ireevm_import_decl_visibility_t)
+LOOM_DEFINE_ATTR_STRING(loom_ireevm_import_decl_import_module, 2)
+LOOM_DEFINE_ATTR_STRING(loom_ireevm_import_decl_import_symbol, 3)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_ireevm_import_decl_cc, 4, loom_ireevm_import_decl_cc_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_ireevm_import_decl_purity, 5, loom_ireevm_import_decl_purity_t)
+enum loom_ireevm_import_decl_build_flag_bits_e {
+  LOOM_IREEVM_IMPORT_DECL_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
+  LOOM_IREEVM_IMPORT_DECL_BUILD_FLAG_HAS_CC = 1u << 1,
+  LOOM_IREEVM_IMPORT_DECL_BUILD_FLAG_HAS_PURITY = 1u << 2,
+};
+typedef uint32_t loom_ireevm_import_decl_build_flags_t;
+iree_status_t loom_ireevm_import_decl_build(
+    loom_builder_t* builder,
+    loom_ireevm_import_decl_build_flags_t build_flags,
+    loom_optional uint8_t visibility,
+    loom_string_id_t import_module,
+    loom_string_id_t import_symbol,
+    loom_optional uint8_t cc,
+    loom_optional uint8_t purity,
+    loom_symbol_ref_t callee,
+    const loom_type_t* arg_types,
+    iree_host_size_t arg_types_count,
+    const loom_type_t* result_types,
+    iree_host_size_t result_count,
+    const loom_tied_result_t* tied_results,
+    iree_host_size_t tied_result_count,
+    loom_optional const loom_predicate_t* predicates,
+    iree_host_size_t predicates_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_ireevm_import_decl_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

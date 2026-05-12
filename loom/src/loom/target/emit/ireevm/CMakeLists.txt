@@ -10,68 +10,6 @@
 
 iree_add_all_subdirs()
 
-loom_low_descriptor_cc_library(
-  NAME
-    descriptors
-  GENERATOR
-    iree::runtime::py::loom::gen::ireevm_low_descriptor_shard
-  ARGS
-    "--descriptor-set=ireevm_core"
-  DEPS
-    loom::src::loom::codegen::low::descriptors
-)
-
-loom_cc_library(
-  NAME
-    target_records
-  HDRS
-    "target_records.h"
-  SRCS
-    "target_records.c"
-  DEPS
-    iree::base
-    loom::src::loom::target::types
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    ops
-  HDRS
-    "ops/ops.h"
-    "ops/registry.h"
-  SRCS
-    "ops/builders.c"
-    "ops/registry.c"
-    "ops/tables.c"
-  DEPS
-    ::target_records
-    iree::base
-    loom::src::loom::error::error_defs
-    loom::src::loom::ir
-    loom::src::loom::ops::op_defs
-    loom::src::loom::ops::target
-    loom::src::loom::target::types
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    low_registry
-  HDRS
-    "low_registry.h"
-  SRCS
-    "low_registry.c"
-  DEPS
-    ::descriptors
-    ::target_records
-    iree::base
-    loom::src::loom::codegen::low::descriptors
-    loom::src::loom::target::low_descriptor_registry
-    loom::src::loom::target::types
-  PUBLIC
-)
-
 loom_cc_library(
   NAME
     function_bytecode
@@ -80,7 +18,6 @@ loom_cc_library(
   SRCS
     "function_bytecode.c"
   DEPS
-    ::descriptors
     iree::base
     loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::descriptors
@@ -88,6 +25,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::schedule
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::target::arch::ireevm::descriptors
   PUBLIC
 )
 
@@ -117,7 +55,6 @@ loom_cc_library(
   DEPS
     ::function_bytecode
     ::module_archive
-    ::provider
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::frame
@@ -128,6 +65,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::target
+    loom::src::loom::target::arch::ireevm::provider
     loom::src::loom::target::compile_report
     loom::src::loom::target::compile_report_low
     loom::src::loom::target::entry_selection
@@ -167,39 +105,9 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
+    loom::src::loom::target::arch::ireevm::descriptors_ids
     loom::src::loom::target::emit::ireevm::contracts::core
     loom::src::loom::target::emit::ireevm::contracts::core_lower_rules
-    loom::src::loom::target::emit::ireevm::descriptors_ids
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    provider
-  HDRS
-    "provider.h"
-  SRCS
-    "provider.c"
-  DEPS
-    ::low_registry
-    ::lower
-    ::ops
-    iree::base
-    loom::src::loom::target::provider
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    check_provider
-  HDRS
-    "check/provider.h"
-  SRCS
-    "check/provider.c"
-  DEPS
-    ::provider
-    iree::base
-    loom::src::loom::tools::loom-check::provider
   PUBLIC
 )
 
@@ -212,8 +120,8 @@ loom_cc_library(
     "execution/provider.c"
   DEPS
     ::execution_backend
-    ::provider
     iree::base
+    loom::src::loom::target::arch::ireevm::provider
     loom::src::loom::tooling::execution::execution_provider
   PUBLIC
 )
@@ -242,45 +150,12 @@ loom_cc_test(
     "candidate_test.cc"
   DEPS
     ::candidate
-    ::low_registry
-    ::ops
     iree::base
     loom::src::loom::ops::op_registry
+    loom::src::loom::target::arch::ireevm::low_registry
+    loom::src::loom::target::arch::ireevm::ops
     iree::testing::gtest
     iree::testing::gtest_main
-)
-
-iree_executable_test(
-  NAME
-    "pass_source_low"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/pass_source_low.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "source_low"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "source_low_diagnostics"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_diagnostics.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "loom-check"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

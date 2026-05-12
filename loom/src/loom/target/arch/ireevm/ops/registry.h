@@ -4,8 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#ifndef LOOM_TARGET_EMIT_IREEVM_OPS_REGISTRY_H_
-#define LOOM_TARGET_EMIT_IREEVM_OPS_REGISTRY_H_
+#ifndef LOOM_TARGET_ARCH_IREEVM_OPS_REGISTRY_H_
+#define LOOM_TARGET_ARCH_IREEVM_OPS_REGISTRY_H_
 
 #include "iree/base/api.h"
 #include "loom/ir/context.h"
@@ -21,4 +21,4 @@ iree_status_t loom_ireevm_ops_register_dialect(loom_context_t* context);
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_EMIT_IREEVM_OPS_REGISTRY_H_
+#endif  // LOOM_TARGET_ARCH_IREEVM_OPS_REGISTRY_H_

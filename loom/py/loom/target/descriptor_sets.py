@@ -38,7 +38,7 @@ class DescriptorSetRegistration:
 DESCRIPTOR_SET_REGISTRATIONS = (
     DescriptorSetRegistration(
         key="iree.vm.core",
-        module_name="loom.target.emit.ireevm.descriptors",
+        module_name="loom.target.arch.ireevm.descriptors",
         symbol_name="IREEVM_CORE_DESCRIPTOR_SET",
         aliases=("ireevm_core",),
         generates_checked_in_c=False,

@@ -23,7 +23,7 @@ loom_assert_no_dependencies(
         "//loom/src/loom/target/arch/amdgpu:low_registry",
         "//loom/src/loom/target/arch/wasm:low_registry",
         "//loom/src/loom/target/arch/x86:low_registry",
-        "//loom/src/loom/target/emit/ireevm:low_registry",
+        "//loom/src/loom/target/arch/ireevm:low_registry",
         "//loom/src/loom/target/test:low_registry",
     ],
     targets = [":source_workload_pipeline"],

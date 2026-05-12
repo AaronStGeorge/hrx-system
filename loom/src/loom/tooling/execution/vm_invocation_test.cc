@@ -11,9 +11,9 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/ops/op_registry.h"
+#include "loom/target/arch/ireevm/low_registry.h"
+#include "loom/target/arch/ireevm/ops/registry.h"
 #include "loom/target/emit/ireevm/candidate.h"
-#include "loom/target/emit/ireevm/low_registry.h"
-#include "loom/target/emit/ireevm/ops/registry.h"
 #include "loom/tooling/execution/session.h"
 
 namespace loom {

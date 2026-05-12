@@ -156,7 +156,7 @@ iree_py_library(
   DEPS
     iree::runtime::py::loom::gen::low_descriptors
     iree::runtime::py::loom::target::descriptor_sets
-    iree::runtime::py::loom::target::emit::ireevm::descriptors
+    iree::runtime::py::loom::target::arch::ireevm::descriptors
 )
 
 iree_py_library(

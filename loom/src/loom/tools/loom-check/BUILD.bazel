@@ -83,7 +83,7 @@ _IREEVM_CHECK_COPTS = iree_select({
 
 _IREEVM_CHECK_DEPS = iree_select({
     ":ireevm_provider_enabled": [
-        "//loom/src/loom/target/emit/ireevm:check_provider",
+        "//loom/src/loom/target/arch/ireevm:check_provider",
     ],
     "//conditions:default": [],
 })

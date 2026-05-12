@@ -12,15 +12,26 @@ package(
 )
 
 py_library(
-    name = "contracts",
+    name = "dialect",
     srcs = [
         "__init__.py",
-        "contracts.py",
+        "dialect.py",
     ],
     deps = [
         "//loom/py/loom:core",
-        "//loom/py/loom/dialect/scalar",
-        "//loom/py/loom/target/arch/ireevm:descriptors",
-        "//loom/py/loom/target/contracts",
+        "//loom/py/loom/dialect/func",
+        "//loom/py/loom/dialect/target",
+    ],
+)
+
+py_library(
+    name = "descriptors",
+    srcs = [
+        "__init__.py",
+        "descriptors.py",
+    ],
+    deps = [
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch:package",
     ],
 )

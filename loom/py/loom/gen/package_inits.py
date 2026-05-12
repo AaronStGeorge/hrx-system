@@ -41,6 +41,10 @@ PACKAGE_INITS = (
         "Sharded AMDGPU source-to-low contract fragments.",
     ),
     PackageInit(
+        "loom/py/loom/target/arch/ireevm/__init__.py",
+        "IREE VM target-family descriptor and dialect inputs.",
+    ),
+    PackageInit(
         "loom/py/loom/target/arch/wasm/__init__.py",
         "Wasm target descriptor inputs.",
     ),

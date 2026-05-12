@@ -73,3 +73,5 @@
   LOOM_KW_WORKGROUPS = 64,  // "workgroups"
   LOOM_KW_ABI_LAYOUT = 65,  // "abi_layout"
   LOOM_KW_EXTENT = 66,  // "extent"
+  LOOM_KW_MODULE = 67,  // "module"
+  LOOM_KW_SYMBOL = 68,  // "symbol"

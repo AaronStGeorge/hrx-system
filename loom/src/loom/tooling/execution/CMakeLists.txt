@@ -314,9 +314,9 @@ loom_cc_test(
     ::vm_invocation
     iree::base
     loom::src::loom::ops::op_registry
+    loom::src::loom::target::arch::ireevm::low_registry
+    loom::src::loom::target::arch::ireevm::ops
     loom::src::loom::target::emit::ireevm::candidate
-    loom::src::loom::target::emit::ireevm::low_registry
-    loom::src::loom::target::emit::ireevm::ops
     iree::testing::gtest
     iree::testing::gtest_main
 )

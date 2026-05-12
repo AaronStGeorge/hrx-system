@@ -4,11 +4,11 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/emit/ireevm/provider.h"
+#include "loom/target/arch/ireevm/provider.h"
 
-#include "loom/target/emit/ireevm/low_registry.h"
+#include "loom/target/arch/ireevm/low_registry.h"
+#include "loom/target/arch/ireevm/ops/registry.h"
 #include "loom/target/emit/ireevm/lower.h"
-#include "loom/target/emit/ireevm/ops/registry.h"
 
 const loom_target_provider_t loom_ireevm_target_provider = {
     .register_context = loom_ireevm_ops_register_dialect,

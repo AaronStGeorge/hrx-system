@@ -1,0 +1,9 @@
+// RUN: verify
+
+// ERROR@+1: STRUCTURE/027 {attr_name="import_module", actual_value="", expected_constraint="non-empty import module"}
+ireevm.import.decl module("") symbol("buffer.length") @empty_import_module(%buffer: i32) -> (i64)
+
+// ====
+
+// ERROR@+1: STRUCTURE/027 {attr_name="import_symbol", actual_value="", expected_constraint="non-empty import symbol"}
+ireevm.import.decl module("hal") symbol("") @empty_import_symbol(%buffer: i32) -> (i64)

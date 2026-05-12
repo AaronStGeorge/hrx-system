@@ -13,6 +13,7 @@ from loom.dialect.scalar import arithmetic as scalar_arithmetic
 from loom.dialect.scalar import comparison as scalar_comparison
 from loom.dialect.scalar import conversion as scalar_conversion
 from loom.dsl import Op
+from loom.target.arch.ireevm.descriptors import IREEVM_CORE_DESCRIPTOR_SET
 from loom.target.contracts import (
     AttrProject,
     ContractFragment,
@@ -26,7 +27,6 @@ from loom.target.contracts import (
     ValueRef,
     descriptor_by_key,
 )
-from loom.target.emit.ireevm.descriptors import IREEVM_CORE_DESCRIPTOR_SET
 from loom.target.low_descriptors import Descriptor
 
 _I1 = Scalar("i1")

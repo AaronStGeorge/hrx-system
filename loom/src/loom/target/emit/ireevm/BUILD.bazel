@@ -6,14 +6,12 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
-    "loom_low_descriptor_cc_library",
 )
 load(
-    "//loom/build_tools/bazel:loom_check.bzl",
-    "loom_check_test_suite",
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_assert_no_dependencies",
 )
 
 package(
@@ -27,7 +25,7 @@ package(
 #===------------------------------------------------------------------------===#
 
 loom_assert_no_dependencies(
-    name = "ireevm_target_no_other_target_deps",
+    name = "ireevm_emit_no_other_target_deps",
     dependencies = [
         "//loom/src/loom/target/arch/amdgpu:matrix_contract",
         "//loom/src/loom/target/arch/wasm:descriptors",
@@ -35,51 +33,17 @@ loom_assert_no_dependencies(
         "//loom/src/loom/target/emit/llvmir:llvmir",
     ],
     targets = [
-        ":descriptors",
         ":function_bytecode",
-        ":low_registry",
         ":lower",
         ":module_archive",
         ":archive_emitter",
-        ":ops",
-        ":provider",
-        ":target_records",
     ],
 )
 
 loom_assert_no_dependencies(
     name = "ireevm_lower_no_descriptor_shard_dep",
-    dependencies = [":descriptors"],
+    dependencies = ["//loom/src/loom/target/arch/ireevm:descriptors"],
     targets = [":lower"],
-)
-
-loom_assert_no_dependencies(
-    name = "core_target_interfaces_no_ireevm_target_deps",
-    dependencies = [
-        ":descriptors",
-        ":low_registry",
-        ":ops",
-        ":provider",
-    ],
-    targets = [
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target:low_legality",
-        "//loom/src/loom/target:provider",
-    ],
-)
-
-loom_assert_no_dependencies(
-    name = "core_tools_no_ireevm_target_provider_deps",
-    dependencies = [
-        ":low_registry",
-        ":provider",
-    ],
-    targets = [
-        "//loom/src/loom/tools/loom-check:execute",
-        "//loom/src/loom/tools/loom-check:loom-check-test",
-        "//loom/src/loom/tools/loom-check:main",
-        "//loom/src/loom/tools/loom-check:provider",
-    ],
 )
 
 loom_assert_no_dependencies(
@@ -104,74 +68,21 @@ loom_assert_no_dependencies(
 )
 
 #===------------------------------------------------------------------------===#
-# IREE VM low descriptors
+# IREE VM emission
 #===------------------------------------------------------------------------===#
-
-loom_low_descriptor_cc_library(
-    name = "descriptors",
-    args = ["--descriptor-set=ireevm_core"],
-    generator = "//loom/py/loom/gen:ireevm_low_descriptor_shard",
-    deps = ["//loom/src/loom/codegen/low:descriptors"],
-)
-
-loom_cc_library(
-    name = "target_records",
-    srcs = ["target_records.c"],
-    hdrs = ["target_records.h"],
-    deps = [
-        "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "ops",
-    srcs = [
-        "ops/builders.c",
-        "ops/registry.c",
-        "ops/tables.c",
-    ],
-    hdrs = [
-        "ops/ops.h",
-        "ops/registry.h",
-    ],
-    deps = [
-        ":target_records",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/target",
-        "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "low_registry",
-    srcs = ["low_registry.c"],
-    hdrs = ["low_registry.h"],
-    deps = [
-        ":descriptors",
-        ":target_records",
-        "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-    ],
-)
 
 loom_cc_library(
     name = "function_bytecode",
     srcs = ["function_bytecode.c"],
     hdrs = ["function_bytecode.h"],
     deps = [
-        ":descriptors",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:packet",
         "//loom/src/loom/codegen/low/schedule",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/arch/ireevm:descriptors",
         "//runtime/src/iree/base",
     ],
 )
@@ -196,7 +107,6 @@ loom_cc_library(
     deps = [
         ":function_bytecode",
         ":module_archive",
-        ":provider",
         "//loom/src/loom/codegen/low:frame",
         "//loom/src/loom/codegen/low:verify",
         "//loom/src/loom/error:diagnostic",
@@ -209,6 +119,7 @@ loom_cc_library(
         "//loom/src/loom/target:compile_report_low",
         "//loom/src/loom/target:entry_selection",
         "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/ireevm:provider",
         "//loom/src/loom/verify",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
@@ -239,33 +150,9 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/target/emit/ireevm:descriptors_ids",
+        "//loom/src/loom/target/arch/ireevm:descriptors_ids",
         "//loom/src/loom/target/emit/ireevm/contracts:core",
         "//loom/src/loom/target/emit/ireevm/contracts:core_lower_rules",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "provider",
-    srcs = ["provider.c"],
-    hdrs = ["provider.h"],
-    deps = [
-        ":low_registry",
-        ":lower",
-        ":ops",
-        "//loom/src/loom/target:provider",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "check_provider",
-    srcs = ["check/provider.c"],
-    hdrs = ["check/provider.h"],
-    deps = [
-        ":provider",
-        "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",
     ],
 )
@@ -276,7 +163,7 @@ loom_cc_library(
     hdrs = ["execution/provider.h"],
     deps = [
         ":execution_backend",
-        ":provider",
+        "//loom/src/loom/target/arch/ireevm:provider",
         "//loom/src/loom/tooling/execution:execution_provider",
         "//runtime/src/iree/base",
     ],
@@ -301,21 +188,11 @@ loom_cc_test(
     srcs = ["candidate_test.cc"],
     deps = [
         ":candidate",
-        ":low_registry",
-        ":ops",
         "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/target/arch/ireevm:low_registry",
+        "//loom/src/loom/target/arch/ireevm:ops",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
-)
-
-loom_check_test_suite(
-    name = "loom_check_file_test",
-    srcs = [
-        "test/source_low/pass_source_low.loom-test",
-        "test/source_low/source_low.loom-test",
-        "test/source_low/source_low_diagnostics.loom-test",
-    ],
-    test_name_prefix_to_strip = "test/source_low/",
 )

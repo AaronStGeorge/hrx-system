@@ -4,9 +4,9 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/emit/ireevm/ops/registry.h"
+#include "loom/target/arch/ireevm/ops/registry.h"
 
-#include "loom/target/emit/ireevm/ops/ops.h"
+#include "loom/target/arch/ireevm/ops/ops.h"
 
 iree_status_t loom_ireevm_ops_register_dialect(loom_context_t* context) {
   iree_host_size_t vtable_count = 0;

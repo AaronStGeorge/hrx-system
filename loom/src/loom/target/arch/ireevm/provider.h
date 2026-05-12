@@ -6,8 +6,8 @@
 
 // IREE VM target provider.
 
-#ifndef LOOM_TARGET_EMIT_IREEVM_PROVIDER_H_
-#define LOOM_TARGET_EMIT_IREEVM_PROVIDER_H_
+#ifndef LOOM_TARGET_ARCH_IREEVM_PROVIDER_H_
+#define LOOM_TARGET_ARCH_IREEVM_PROVIDER_H_
 
 #include "loom/target/provider.h"
 
@@ -25,4 +25,4 @@ extern const loom_target_provider_set_t loom_ireevm_target_provider_set;
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_EMIT_IREEVM_PROVIDER_H_
+#endif  // LOOM_TARGET_ARCH_IREEVM_PROVIDER_H_

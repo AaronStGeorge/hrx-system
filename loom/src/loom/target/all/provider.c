@@ -8,9 +8,9 @@
 
 #include "iree/base/threading/call_once.h"
 #include "loom/target/arch/amdgpu/provider.h"
+#include "loom/target/arch/ireevm/provider.h"
 #include "loom/target/arch/wasm/provider.h"
 #include "loom/target/arch/x86/provider.h"
-#include "loom/target/emit/ireevm/provider.h"
 
 static const loom_target_provider_t* const kAllTargetProviders[] = {
     &loom_ireevm_target_provider,

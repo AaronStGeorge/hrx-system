@@ -12,7 +12,7 @@
 #include "loom/codegen/low/packet.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
-#include "loom/target/emit/ireevm/descriptors.h"
+#include "loom/target/arch/ireevm/descriptors.h"
 
 enum {
   // VM bytecode opcodes from

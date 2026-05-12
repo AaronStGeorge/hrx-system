@@ -34,7 +34,7 @@
 #include "loom/target/arch/amdgpu/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_AMDGPU
 #if LOOM_CHECK_HAVE_IREEVM
-#include "loom/target/emit/ireevm/check/provider.h"
+#include "loom/target/arch/ireevm/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_IREEVM
 #if LOOM_CHECK_HAVE_LLVMIR
 #include "loom/target/emit/llvmir/check/provider.h"

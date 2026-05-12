@@ -21,9 +21,9 @@ loom_cc_library(
     iree::base
     iree::base::threading
     loom::src::loom::target::arch::amdgpu::provider
+    loom::src::loom::target::arch::ireevm::provider
     loom::src::loom::target::arch::wasm::provider
     loom::src::loom::target::arch::x86::provider
-    loom::src::loom::target::emit::ireevm::provider
     loom::src::loom::target::provider
   PUBLIC
 )
