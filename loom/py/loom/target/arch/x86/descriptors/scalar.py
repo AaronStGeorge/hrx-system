@@ -74,6 +74,42 @@ X86_SCALAR_PREFIX_DESCRIPTORS = (
 
 X86_SCALAR_SUFFIX_DESCRIPTORS = (
     Descriptor(
+        key="x86.scalar.sub.gpr32",
+        mnemonic="sub",
+        semantic_tag="integer.sub.i32",
+        operands=(
+            _gpr32_result(),
+            _gpr32_operand("lhs"),
+            _gpr32_operand("rhs"),
+        ),
+        constraints=_GPR_DESTRUCTIVE_LHS_CONSTRAINTS,
+        asm_forms=_asm(
+            mnemonic="sub.gpr32",
+            results=("dst",),
+            operands=("lhs", "rhs"),
+        ),
+        schedule_class=_SCHEDULE_SCALAR,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    ),
+    Descriptor(
+        key="x86.scalar.imul.gpr32",
+        mnemonic="imul",
+        semantic_tag="integer.mul.i32",
+        operands=(
+            _gpr32_result(),
+            _gpr32_operand("lhs"),
+            _gpr32_operand("rhs"),
+        ),
+        constraints=_GPR_DESTRUCTIVE_LHS_CONSTRAINTS,
+        asm_forms=_asm(
+            mnemonic="imul.gpr32",
+            results=("dst",),
+            operands=("lhs", "rhs"),
+        ),
+        schedule_class=_SCHEDULE_SCALAR,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    ),
+    Descriptor(
         key="x86.scalar.mov.gpr64",
         mnemonic="mov",
         semantic_tag="integer.move.i64",

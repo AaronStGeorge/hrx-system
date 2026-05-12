@@ -57,6 +57,23 @@ low.func.def target(@x86_target) @x86_fragment(%base: reg<x86.gpr64>, %index: re
 
 // ====
 
+x86.target<scalar> @x86_target
+
+low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.gpr32>, %rhs: reg<x86.gpr32>, %factor: reg<x86.gpr32>) asm<x86.scalar.core> {
+  %sum = add.gpr32 %lhs, %rhs
+  %difference = sub.gpr32 %sum, %factor
+  %result = imul.gpr32 %difference, %rhs
+  return
+}
+
+// ----
+  add eax, edx
+  sub eax, ecx
+  imul eax, edx
+  ret
+
+// ====
+
 x86.target<avx512> @x86_target
 
 low.func.def target(@x86_target) @x86_fragment(%lhs: reg<x86.zmm>, %rhs: reg<x86.zmm>, %base: reg<x86.gpr64>) asm<x86.avx512.core> {

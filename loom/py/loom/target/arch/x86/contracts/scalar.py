@@ -462,6 +462,18 @@ def x86_scalar_core_cases(
             "x86.scalar.add.gpr32",
             descriptor_lookup,
         ),
+        _binary_rule(
+            scalar_arithmetic.scalar_subi,
+            _I32,
+            "x86.scalar.sub.gpr32",
+            descriptor_lookup,
+        ),
+        _binary_rule(
+            scalar_arithmetic.scalar_muli,
+            _I32,
+            "x86.scalar.imul.gpr32",
+            descriptor_lookup,
+        ),
         _const_i64_rule(_INDEX, descriptor_lookup),
         _const_i64_rule(_OFFSET, descriptor_lookup),
         _add_disp_rule(
