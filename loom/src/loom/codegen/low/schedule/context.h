@@ -65,6 +65,13 @@ typedef struct loom_low_schedule_state_read_record_t {
   uint32_t next_record;
 } loom_low_schedule_state_read_record_t;
 
+typedef struct loom_low_schedule_state_chain_read_record_t {
+  // Node that reads an architectural state value produced by the key node.
+  uint32_t reader_node;
+  // Next state-chain read record for the same producer node.
+  uint32_t next_record;
+} loom_low_schedule_state_chain_read_record_t;
+
 enum loom_low_schedule_value_flag_bits_e {
   // Value is live in the current simulated block schedule.
   LOOM_LOW_SCHEDULE_VALUE_FLAG_LIVE = 1u << 0,
@@ -145,6 +152,10 @@ typedef struct loom_low_schedule_build_state_t {
   uint32_t* state_read_heads;
   // Outstanding state-read records used by state_read_heads.
   loom_low_schedule_state_read_record_t* state_read_records;
+  // Source-order state readers keyed by same-block state producer node.
+  uint32_t* state_chain_read_heads;
+  // State-chain read records used by state_chain_read_heads.
+  loom_low_schedule_state_chain_read_record_t* state_chain_read_records;
   // Scratch effect-frontier read node indices, reused for each block.
   uint32_t* effect_read_nodes;
   // Scratch effect-frontier read summaries, parallel to effect_read_nodes.
@@ -184,6 +195,10 @@ typedef struct loom_low_schedule_build_state_t {
   iree_host_size_t state_read_record_count;
   // Allocated outstanding state-read record capacity.
   iree_host_size_t state_read_record_capacity;
+  // Number of populated state-chain read records.
+  iree_host_size_t state_chain_read_record_count;
+  // Allocated state-chain read record capacity.
+  iree_host_size_t state_chain_read_record_capacity;
   // Allocated effect-frontier read scratch capacity.
   iree_host_size_t effect_read_capacity;
   // Number of rows in |memory_access_records|.

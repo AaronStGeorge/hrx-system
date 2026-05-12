@@ -170,6 +170,11 @@ static iree_status_t loom_low_schedule_initialize_storage(
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
         state->arena, node_count, sizeof(*state->scheduled_node_indices),
         (void**)&state->scheduled_node_indices));
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        state->arena, node_count, sizeof(*state->state_chain_read_heads),
+        (void**)&state->state_chain_read_heads));
+    memset(state->state_chain_read_heads, 0xFF,
+           node_count * sizeof(*state->state_chain_read_heads));
     if (state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_PRESSURE ||
         state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_LATENCY_HIDING ||
         state->options->strategy == LOOM_LOW_SCHEDULE_STRATEGY_RESOURCE_STALL) {
