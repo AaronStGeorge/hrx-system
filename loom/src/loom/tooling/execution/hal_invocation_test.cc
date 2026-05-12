@@ -37,6 +37,7 @@ TEST_F(HalInvocationTest, RequestInitializeDefaultsToSingleWorkgroup) {
   EXPECT_EQ(request.options.workgroup_count[0], 1u);
   EXPECT_EQ(request.options.workgroup_count[1], 1u);
   EXPECT_EQ(request.options.workgroup_count[2], 1u);
+  EXPECT_EQ(request.options.constant_count, 0u);
 }
 
 TEST_F(HalInvocationTest, ResultOwnsOutputBuilder) {
@@ -197,6 +198,28 @@ TEST_F(HalInvocationTest, DispatchPlanRejectsMissingPreparedExecutable) {
   loom_run_hal_iteration_t iteration = {};
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
+      loom_run_hal_invocation_dispatch_plan(
+          &runtime, &candidate, &plan, iree_allocator_system(), &iteration));
+
+  loom_run_hal_iteration_deinitialize(&iteration);
+  loom_run_hal_invocation_plan_deinitialize(&plan);
+}
+
+TEST_F(HalInvocationTest, DispatchPlanRejectsTooManyConstantsBeforeDeviceUse) {
+  loom_run_hal_runtime_t runtime = {};
+  loom_run_hal_prepared_candidate_t candidate = {};
+  loom_run_hal_invocation_plan_t plan = {};
+  loom_run_hal_invocation_plan_initialize(&plan);
+  plan.options.constant_count = LOOM_RUN_HAL_MAX_CONSTANT_COUNT + 1;
+
+  const iree_vm_type_def_t value_type =
+      iree_vm_make_value_type_def(IREE_VM_VALUE_TYPE_I32);
+  IREE_ASSERT_OK(iree_vm_list_create(value_type, 0, iree_allocator_system(),
+                                     &plan.bindings));
+
+  loom_run_hal_iteration_t iteration = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_OUT_OF_RANGE,
       loom_run_hal_invocation_dispatch_plan(
           &runtime, &candidate, &plan, iree_allocator_system(), &iteration));
 

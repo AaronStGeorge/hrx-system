@@ -155,6 +155,13 @@ static iree_status_t loom_run_hal_binding_refs_from_list(
   return iree_ok_status();
 }
 
+static iree_const_byte_span_t loom_run_hal_dispatch_constants(
+    const loom_run_hal_invocation_options_t* options) {
+  return iree_make_const_byte_span(
+      (const uint8_t*)options->constants,
+      options->constant_count * sizeof(options->constants[0]));
+}
+
 iree_status_t loom_run_hal_dispatch(
     iree_hal_device_t* device, iree_hal_executable_t* executable,
     iree_vm_list_t* binding_list,
@@ -186,7 +193,8 @@ iree_status_t loom_run_hal_dispatch(
         options->workgroup_count[2]);
     status = iree_hal_command_buffer_dispatch(
         command_buffer, executable, options->entry_point, config,
-        iree_const_byte_span_empty(), bindings, IREE_HAL_DISPATCH_FLAG_NONE);
+        loom_run_hal_dispatch_constants(options), bindings,
+        IREE_HAL_DISPATCH_FLAG_NONE);
   }
   if (iree_status_is_ok(status)) {
     status = iree_hal_command_buffer_end(command_buffer);
@@ -332,6 +340,12 @@ static iree_status_t loom_run_hal_process_invocation_bindings(
 
 static iree_status_t loom_run_hal_invocation_plan_validate(
     const loom_run_hal_invocation_plan_t* plan) {
+  if (plan->options.constant_count > LOOM_RUN_HAL_MAX_CONSTANT_COUNT) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "HAL dispatch constant count %" PRIhsz " exceeds maximum %d",
+        plan->options.constant_count, LOOM_RUN_HAL_MAX_CONSTANT_COUNT);
+  }
   if (plan->bindings == NULL) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "HAL invocation plan requires bindings");
@@ -387,6 +401,12 @@ iree_status_t loom_run_hal_invocation_plan_prepare_from_specs(
       loom_run_hal_binding_specs_validate(bindings, IREE_SV("HAL")));
   IREE_RETURN_IF_ERROR(loom_run_hal_binding_specs_validate(
       expected_bindings, IREE_SV("expected HAL")));
+  if (options->constant_count > LOOM_RUN_HAL_MAX_CONSTANT_COUNT) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "HAL dispatch constant count %" PRIhsz " exceeds maximum %d",
+        options->constant_count, LOOM_RUN_HAL_MAX_CONSTANT_COUNT);
+  }
   if (expected_bindings->count != 0 &&
       expected_bindings->count != bindings->count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

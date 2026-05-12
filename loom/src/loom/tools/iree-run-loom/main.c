@@ -9,6 +9,7 @@
 #include "loom/tools/iree-run-loom/main.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #include "iree/base/api.h"
 #include "iree/base/tooling/flags.h"
@@ -73,11 +74,11 @@ IREE_FLAG(bool, probe_hal, false,
           "Runs the selected backend's target probe, prints the result, and "
           "exits. Not all backends support probing.");
 
-enum {
-  IREE_RUN_LOOM_HAL_MAX_OUTPUT_ELEMENT_COUNT = 1024,
-};
-
 typedef struct iree_run_loom_hal_flag_state_t {
+  // Dispatch constants in HAL ABI order.
+  uint32_t constants[LOOM_RUN_ONE_SHOT_HAL_MAX_CONSTANT_COUNT];
+  // Number of populated entries in |constants|.
+  iree_host_size_t constant_count;
   // Binding specs in HAL binding ordinal order.
   iree_string_view_t binding_specs[LOOM_RUN_ONE_SHOT_HAL_MAX_BINDING_COUNT];
   // Calling-convention character for each binding spec.
@@ -94,6 +95,46 @@ typedef struct iree_run_loom_hal_flag_state_t {
 } iree_run_loom_hal_flag_state_t;
 
 static iree_run_loom_hal_flag_state_t iree_run_loom_hal_flags = {0};
+
+static iree_status_t iree_run_loom_parse_constant_flag(
+    iree_string_view_t flag_name, void* storage, iree_string_view_t value) {
+  (void)flag_name;
+  (void)storage;
+  if (iree_run_loom_hal_flags.constant_count >=
+      LOOM_RUN_ONE_SHOT_HAL_MAX_CONSTANT_COUNT) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "too many HAL dispatch constants; maximum is %d",
+                            LOOM_RUN_ONE_SHOT_HAL_MAX_CONSTANT_COUNT);
+  }
+  uint32_t value_uint32 = 0;
+  if (!iree_string_view_atoi_uint32(value, &value_uint32)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "invalid HAL dispatch constant `%.*s`; expected "
+                            "uint32_t",
+                            (int)value.size, value.data);
+  }
+  iree_run_loom_hal_flags.constants[iree_run_loom_hal_flags.constant_count++] =
+      value_uint32;
+  return iree_ok_status();
+}
+
+static void iree_run_loom_print_constant_flag(iree_string_view_t flag_name,
+                                              void* storage, FILE* file) {
+  (void)storage;
+  if (iree_run_loom_hal_flags.constant_count == 0) {
+    fprintf(file, "# --%.*s=[integer value]\n", (int)flag_name.size,
+            flag_name.data);
+    return;
+  }
+  for (iree_host_size_t i = 0; i < iree_run_loom_hal_flags.constant_count;
+       ++i) {
+    fprintf(file, "--%.*s=%u\n", (int)flag_name.size, flag_name.data,
+            iree_run_loom_hal_flags.constants[i]);
+  }
+}
+IREE_FLAG_CALLBACK(iree_run_loom_parse_constant_flag,
+                   iree_run_loom_print_constant_flag, NULL, constant,
+                   "Appends a uint32_t HAL dispatch constant in ABI order.");
 
 static iree_status_t iree_run_loom_parse_binding_flag(
     iree_string_view_t flag_name, void* storage, iree_string_view_t value) {
@@ -227,15 +268,15 @@ static iree_status_t iree_run_loom_one_shot_options_initialize(
       IREE_SV("emit_target_artifact"), target_artifact_output_path));
   IREE_RETURN_IF_ERROR(iree_run_loom_validate_artifact_output_path(
       IREE_SV("emit_hal_executable"), hal_executable_output_path));
+  if (FLAG_output_max_element_count < 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "--output_max_element_count must be non-negative; got %d",
+        (int)FLAG_output_max_element_count);
+  }
 
   if (iree_any_bit_set(backend->flags,
                        LOOM_RUN_EXECUTION_BACKEND_FLAG_VM_OPTIONS)) {
-    if (FLAG_output_max_element_count < 0) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "--output_max_element_count must be non-negative; got %d",
-          (int)FLAG_output_max_element_count);
-    }
     out_options->vm_function_name = iree_make_cstring_view(FLAG_function);
     out_options->vm_inputs = (loom_run_one_shot_value_specs_t){
         .values = FLAG_input_list().values,
@@ -267,6 +308,10 @@ static iree_status_t iree_run_loom_one_shot_options_initialize(
       IREE_RETURN_IF_ERROR(iree_run_loom_parse_workgroup_count(
           workgroup_count, out_options->hal_workgroup_count));
     }
+    out_options->hal_constant_count = iree_run_loom_hal_flags.constant_count;
+    memcpy(out_options->hal_constants, iree_run_loom_hal_flags.constants,
+           out_options->hal_constant_count *
+               sizeof(out_options->hal_constants[0]));
     out_options->hal_bindings = (loom_run_one_shot_binding_specs_t){
         .values = iree_run_loom_hal_flags.binding_specs,
         .conventions = iree_run_loom_hal_flags.binding_cconv,
@@ -281,7 +326,7 @@ static iree_status_t iree_run_loom_one_shot_options_initialize(
     out_options->hal_executable_output_path = hal_executable_output_path;
     out_options->hal_emit_only = FLAG_emit_only;
     out_options->hal_max_output_element_count =
-        IREE_RUN_LOOM_HAL_MAX_OUTPUT_ELEMENT_COUNT;
+        (iree_host_size_t)FLAG_output_max_element_count;
   } else if (!iree_string_view_is_empty(target_artifact_output_path) ||
              !iree_string_view_is_empty(hal_executable_output_path) ||
              FLAG_emit_only) {

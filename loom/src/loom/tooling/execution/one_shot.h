@@ -22,6 +22,9 @@ typedef struct loom_run_compile_report_capture_t
     loom_run_compile_report_capture_t;
 
 enum {
+  // Maximum number of HAL dispatch constants accepted by the one-shot front
+  // door.
+  LOOM_RUN_ONE_SHOT_HAL_MAX_CONSTANT_COUNT = 64,
   // Maximum number of HAL dispatch bindings accepted by the one-shot front
   // door.
   LOOM_RUN_ONE_SHOT_HAL_MAX_BINDING_COUNT = 64,
@@ -64,6 +67,10 @@ typedef struct loom_run_one_shot_options_t {
   uint32_t hal_entry_point;
   // HAL dispatch workgroup count in x/y/z order.
   uint32_t hal_workgroup_count[3];
+  // HAL dispatch constants in ABI order.
+  uint32_t hal_constants[LOOM_RUN_ONE_SHOT_HAL_MAX_CONSTANT_COUNT];
+  // Number of entries in |hal_constants|.
+  iree_host_size_t hal_constant_count;
   // HAL dispatch binding specs.
   loom_run_one_shot_binding_specs_t hal_bindings;
   // Optional HAL binding specs compared after dispatch.

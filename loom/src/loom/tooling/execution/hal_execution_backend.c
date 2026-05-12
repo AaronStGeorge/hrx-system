@@ -6,6 +6,8 @@
 
 #include "loom/tooling/execution/hal_execution_backend.h"
 
+#include <string.h>
+
 #include "iree/base/alignment.h"
 #include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/execution/hal_candidate.h"
@@ -164,6 +166,20 @@ iree_status_t loom_run_hal_execution_backend_run_one_shot(
         request->options->hal_workgroup_count[1];
     invocation_request.options.workgroup_count[2] =
         request->options->hal_workgroup_count[2];
+    if (request->options->hal_constant_count >
+        IREE_ARRAYSIZE(invocation_request.options.constants)) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "HAL dispatch constant count %" PRIhsz " exceeds maximum %" PRIhsz,
+          request->options->hal_constant_count,
+          IREE_ARRAYSIZE(invocation_request.options.constants));
+    }
+    invocation_request.options.constant_count =
+        request->options->hal_constant_count;
+    memcpy(invocation_request.options.constants,
+           request->options->hal_constants,
+           request->options->hal_constant_count *
+               sizeof(request->options->hal_constants[0]));
     invocation_request.bindings = (loom_run_hal_binding_specs_t){
         .values = request->options->hal_bindings.values,
         .conventions = request->options->hal_bindings.conventions,

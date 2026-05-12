@@ -20,6 +20,8 @@ extern "C" {
 #endif
 
 enum {
+  // Maximum number of HAL dispatch constants accepted by the generic runner.
+  LOOM_RUN_HAL_MAX_CONSTANT_COUNT = 64,
   // Maximum number of HAL dispatch bindings accepted by the generic runner.
   LOOM_RUN_HAL_MAX_BINDING_COUNT = 64,
 };
@@ -29,6 +31,10 @@ typedef struct loom_run_hal_invocation_options_t {
   uint32_t entry_point;
   // Dispatch workgroup count in x, y, z order.
   uint32_t workgroup_count[3];
+  // Dispatch constants in HAL ABI order.
+  uint32_t constants[LOOM_RUN_HAL_MAX_CONSTANT_COUNT];
+  // Number of entries in |constants|.
+  iree_host_size_t constant_count;
 } loom_run_hal_invocation_options_t;
 
 typedef struct loom_run_hal_binding_specs_t {
