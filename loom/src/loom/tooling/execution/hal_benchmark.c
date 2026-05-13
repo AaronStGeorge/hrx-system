@@ -8,7 +8,125 @@
 
 #include <string.h>
 
+#include "iree/hal/utils/profile_file.h"
 #include "iree/hal/utils/statistics_sink.h"
+#include "iree/io/file_handle.h"
+
+typedef struct loom_run_hal_profile_tee_sink_t {
+  // HAL resource header for the sink interface.
+  iree_hal_resource_t resource;
+  // Host allocator used for sink lifetime.
+  iree_allocator_t host_allocator;
+  // First retained sink receiving every profiling callback.
+  iree_hal_profile_sink_t* first_sink;
+  // Second retained sink receiving every profiling callback.
+  iree_hal_profile_sink_t* second_sink;
+} loom_run_hal_profile_tee_sink_t;
+
+static const iree_hal_profile_sink_vtable_t
+    loom_run_hal_profile_tee_sink_vtable;
+
+static loom_run_hal_profile_tee_sink_t* loom_run_hal_profile_tee_sink_cast(
+    iree_hal_profile_sink_t* base_value) {
+  IREE_HAL_ASSERT_TYPE(base_value, &loom_run_hal_profile_tee_sink_vtable);
+  return (loom_run_hal_profile_tee_sink_t*)base_value;
+}
+
+static void loom_run_hal_profile_tee_sink_destroy(
+    iree_hal_profile_sink_t* base_sink) {
+  loom_run_hal_profile_tee_sink_t* sink =
+      loom_run_hal_profile_tee_sink_cast(base_sink);
+  iree_allocator_t host_allocator = sink->host_allocator;
+  iree_hal_profile_sink_release(sink->second_sink);
+  iree_hal_profile_sink_release(sink->first_sink);
+  iree_allocator_free(host_allocator, sink);
+}
+
+static iree_status_t loom_run_hal_profile_tee_sink_begin_session(
+    iree_hal_profile_sink_t* base_sink,
+    const iree_hal_profile_chunk_metadata_t* metadata) {
+  loom_run_hal_profile_tee_sink_t* sink =
+      loom_run_hal_profile_tee_sink_cast(base_sink);
+  iree_status_t status =
+      iree_hal_profile_sink_begin_session(sink->first_sink, metadata);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_profile_sink_begin_session(sink->second_sink, metadata);
+    if (!iree_status_is_ok(status)) {
+      const iree_status_code_t status_code = iree_status_code(status);
+      status = iree_status_join(
+          status, iree_hal_profile_sink_end_session(sink->first_sink, metadata,
+                                                    status_code));
+    }
+  }
+  return status;
+}
+
+static iree_status_t loom_run_hal_profile_tee_sink_write(
+    iree_hal_profile_sink_t* base_sink,
+    const iree_hal_profile_chunk_metadata_t* metadata,
+    iree_host_size_t iovec_count, const iree_const_byte_span_t* iovecs) {
+  loom_run_hal_profile_tee_sink_t* sink =
+      loom_run_hal_profile_tee_sink_cast(base_sink);
+  iree_status_t status = iree_hal_profile_sink_write(sink->first_sink, metadata,
+                                                     iovec_count, iovecs);
+  return iree_status_join(
+      status, iree_hal_profile_sink_write(sink->second_sink, metadata,
+                                          iovec_count, iovecs));
+}
+
+static iree_status_t loom_run_hal_profile_tee_sink_end_session(
+    iree_hal_profile_sink_t* base_sink,
+    const iree_hal_profile_chunk_metadata_t* metadata,
+    iree_status_code_t session_status_code) {
+  loom_run_hal_profile_tee_sink_t* sink =
+      loom_run_hal_profile_tee_sink_cast(base_sink);
+  iree_status_t status = iree_hal_profile_sink_end_session(
+      sink->first_sink, metadata, session_status_code);
+  return iree_status_join(
+      status, iree_hal_profile_sink_end_session(sink->second_sink, metadata,
+                                                session_status_code));
+}
+
+static iree_status_t loom_run_hal_profile_tee_sink_create(
+    iree_hal_profile_sink_t* first_sink, iree_hal_profile_sink_t* second_sink,
+    iree_allocator_t host_allocator, iree_hal_profile_sink_t** out_sink) {
+  IREE_ASSERT_ARGUMENT(first_sink);
+  IREE_ASSERT_ARGUMENT(second_sink);
+  IREE_ASSERT_ARGUMENT(out_sink);
+  *out_sink = NULL;
+
+  loom_run_hal_profile_tee_sink_t* sink = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_allocator_malloc(host_allocator, sizeof(*sink), (void**)&sink));
+  iree_hal_resource_initialize(&loom_run_hal_profile_tee_sink_vtable,
+                               &sink->resource);
+  sink->host_allocator = host_allocator;
+  sink->first_sink = first_sink;
+  iree_hal_profile_sink_retain(sink->first_sink);
+  sink->second_sink = second_sink;
+  iree_hal_profile_sink_retain(sink->second_sink);
+  *out_sink = (iree_hal_profile_sink_t*)sink;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_run_hal_profile_file_sink_create(
+    iree_string_view_t path, iree_allocator_t host_allocator,
+    iree_hal_profile_sink_t** out_sink) {
+  IREE_ASSERT_ARGUMENT(out_sink);
+  *out_sink = NULL;
+
+  iree_io_file_handle_t* file_handle = NULL;
+  iree_status_t status = iree_io_file_handle_create(
+      IREE_IO_FILE_MODE_WRITE | IREE_IO_FILE_MODE_SEQUENTIAL_SCAN |
+          IREE_IO_FILE_MODE_SHARE_READ,
+      path, /*initial_size=*/0, host_allocator, &file_handle);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_profile_file_sink_create(file_handle, host_allocator,
+                                               out_sink);
+  }
+  iree_io_file_handle_release(file_handle);
+  return status;
+}
 
 void loom_run_hal_benchmark_options_initialize(
     loom_run_hal_benchmark_options_t* out_options) {
@@ -85,6 +203,20 @@ static void loom_run_hal_profile_summary_record_error(
     profile->error_message_length = index;
   }
   iree_status_free(status);
+}
+
+static void loom_run_hal_profile_summary_copy_artifact_path(
+    loom_run_hal_profile_summary_t* profile, iree_string_view_t artifact_path) {
+  if (iree_string_view_is_empty(artifact_path)) {
+    return;
+  }
+  profile->has_artifact_path = true;
+  const iree_host_size_t copy_length = iree_min(
+      artifact_path.size,
+      (iree_host_size_t)LOOM_RUN_HAL_PROFILE_ARTIFACT_PATH_CAPACITY - 1);
+  memcpy(profile->artifact_path, artifact_path.data, copy_length);
+  profile->artifact_path[copy_length] = '\0';
+  profile->artifact_path_length = copy_length;
 }
 
 typedef struct loom_run_hal_profile_summary_capture_context_t {
@@ -190,16 +322,42 @@ static iree_status_t loom_run_hal_benchmark_run_profiled_batch(
       .flags = options->profile_flags,
       .data_families = options->profile_data_families,
   };
+  loom_run_hal_profile_summary_copy_artifact_path(
+      out_profile, options->profile_artifact_path);
 
   iree_hal_profile_statistics_sink_t* statistics_sink = NULL;
   iree_status_t status =
       iree_hal_profile_statistics_sink_create(allocator, &statistics_sink);
+  iree_hal_profile_sink_t* file_sink = NULL;
+  iree_hal_profile_sink_t* tee_sink = NULL;
+  iree_hal_profile_sink_t* sink = NULL;
 
+  if (iree_status_is_ok(status) &&
+      !iree_string_view_is_empty(options->profile_artifact_path)) {
+    status = loom_run_hal_profile_file_sink_create(
+        options->profile_artifact_path, allocator, &file_sink);
+  }
+  if (iree_status_is_ok(status)) {
+    sink = iree_hal_profile_statistics_sink_base(statistics_sink);
+    if (file_sink != NULL) {
+      status = loom_run_hal_profile_tee_sink_create(sink, file_sink, allocator,
+                                                    &tee_sink);
+      if (iree_status_is_ok(status)) {
+        sink = tee_sink;
+      }
+    } else if (options->profile_artifact_sink != NULL) {
+      status = loom_run_hal_profile_tee_sink_create(
+          sink, options->profile_artifact_sink, allocator, &tee_sink);
+      if (iree_status_is_ok(status)) {
+        sink = tee_sink;
+      }
+    }
+  }
   if (iree_status_is_ok(status)) {
     iree_hal_device_profiling_options_t profiling_options = {
         .flags = options->profile_flags,
         .data_families = options->profile_data_families,
-        .sink = iree_hal_profile_statistics_sink_base(statistics_sink),
+        .sink = sink,
         .capture_filter = options->profile_capture_filter,
         .counter_set_count = options->profile_counter_set_count,
         .counter_sets = options->profile_counter_sets,
@@ -241,6 +399,8 @@ static iree_status_t loom_run_hal_benchmark_run_profiled_batch(
   if (statistics_sink != NULL) {
     iree_hal_profile_statistics_sink_release(statistics_sink);
   }
+  iree_hal_profile_sink_release(tee_sink);
+  iree_hal_profile_sink_release(file_sink);
   return status;
 }
 
@@ -255,6 +415,8 @@ static iree_status_t loom_run_hal_benchmark_profile_final_batch(
       .flags = options->profile_flags,
       .data_families = options->profile_data_families,
   };
+  loom_run_hal_profile_summary_copy_artifact_path(
+      out_profile, options->profile_artifact_path);
 
   loom_run_hal_dispatch_batch_options_t profile_dispatch_options =
       options->dispatch_batch;
@@ -281,6 +443,14 @@ static iree_status_t loom_run_hal_benchmark_profile_final_batch(
   loom_run_hal_dispatch_batch_deinitialize(&profile_batch);
   return status;
 }
+
+static const iree_hal_profile_sink_vtable_t
+    loom_run_hal_profile_tee_sink_vtable = {
+        .destroy = loom_run_hal_profile_tee_sink_destroy,
+        .begin_session = loom_run_hal_profile_tee_sink_begin_session,
+        .write = loom_run_hal_profile_tee_sink_write,
+        .end_session = loom_run_hal_profile_tee_sink_end_session,
+};
 
 iree_status_t loom_run_hal_benchmark_dispatch_plan(
     const loom_run_hal_runtime_t* runtime,

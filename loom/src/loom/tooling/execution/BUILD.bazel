@@ -126,7 +126,9 @@ loom_cc_library(
         ":hal_runtime",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/utils:profile_file",
         "//runtime/src/iree/hal/utils:statistics_sink",
+        "//runtime/src/iree/io:file_handle",
     ],
 )
 

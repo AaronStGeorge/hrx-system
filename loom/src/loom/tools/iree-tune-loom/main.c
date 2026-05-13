@@ -69,6 +69,59 @@ IREE_FLAG(int32_t, compile_report_row_limit,
           LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT,
           "Maximum pressure, spill, and source-low rows to capture for "
           "--compile_report=details.");
+IREE_FLAG(
+    string, profile_data, "",
+    "HAL profiling data families for the final profiled batch as a "
+    "comma-separated list. Empty uses dispatch-events,executable-metadata. "
+    "Accepted families match --device_profiling_mode: queue-events, "
+    "host-execution, device-queue-events, dispatch-events, memory-events, "
+    "device-metrics, command-region-events, counters, counter-ranges, "
+    "executable-metadata, executable-traces.");
+IREE_FLAG_LIST(
+    string, profile_counter,
+    "Implementation-specific hardware counter name to request during the final "
+    "profiled batch. May be repeated and requires --profile_data to include "
+    "counters or counter-ranges.");
+IREE_FLAG(
+    string, profile_artifacts_dir, "",
+    "Directory receiving raw IREE HAL profile bundles from final profiled "
+    "batches. Setting this implies --profile_final_batch=true unless that flag "
+    "was explicitly set false.");
+
+typedef struct iree_tune_loom_profile_family_name_t {
+  // HAL profiling data-family bit represented by these names.
+  iree_hal_device_profiling_data_families_t bit;
+  // Command-line family name accepted by --profile_data.
+  const char* flag_name;
+  // Stable JSON string used for this family.
+  const char* json_name;
+} iree_tune_loom_profile_family_name_t;
+
+static const iree_tune_loom_profile_family_name_t
+    iree_tune_loom_profile_family_names[] = {
+        {IREE_HAL_DEVICE_PROFILING_DATA_QUEUE_EVENTS, "queue-events",
+         "queue_events"},
+        {IREE_HAL_DEVICE_PROFILING_DATA_HOST_EXECUTION_EVENTS, "host-execution",
+         "host_execution_events"},
+        {IREE_HAL_DEVICE_PROFILING_DATA_DEVICE_QUEUE_EVENTS,
+         "device-queue-events", "device_queue_events"},
+        {IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS, "dispatch-events",
+         "dispatch_events"},
+        {IREE_HAL_DEVICE_PROFILING_DATA_COUNTER_SAMPLES, "counters",
+         "counter_samples"},
+        {IREE_HAL_DEVICE_PROFILING_DATA_EXECUTABLE_METADATA,
+         "executable-metadata", "executable_metadata"},
+        {IREE_HAL_DEVICE_PROFILING_DATA_EXECUTABLE_TRACES, "executable-traces",
+         "executable_traces"},
+        {IREE_HAL_DEVICE_PROFILING_DATA_MEMORY_EVENTS, "memory-events",
+         "memory_events"},
+        {IREE_HAL_DEVICE_PROFILING_DATA_DEVICE_METRICS, "device-metrics",
+         "device_metrics"},
+        {IREE_HAL_DEVICE_PROFILING_DATA_COMMAND_REGION_EVENTS,
+         "command-region-events", "command_region_events"},
+        {IREE_HAL_DEVICE_PROFILING_DATA_COUNTER_RANGES, "counter-ranges",
+         "counter_ranges"},
+};
 
 typedef struct iree_tune_loom_i32_flag_t {
   // Current flag value.
@@ -163,7 +216,10 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "compile diagnostics, or HAL dispatch evidence for kernel tuning. "
           "The tool emits JSONL: every row has `row` and `run_id`; selected "
           "benchmarks also have `candidate_id` so rows can be joined across "
-          "large sweeps.\n"
+          "large sweeps. Use `--profile_final_batch=true` for dispatch "
+          "timing evidence outside the measured window; add "
+          "`--profile_artifacts_dir=DIR` when you need the raw HAL profile "
+          "bundle for counters or traces.\n"
           "\n"
           "Examples:\n"
           "\n"
@@ -260,6 +316,8 @@ typedef struct iree_tune_loom_benchmark_policy_t {
   iree_host_size_t warmup_iterations;
   // Number of measured iterations.
   iree_host_size_t iterations;
+  // Counter-set selection storage referenced by |hal_options|.
+  iree_hal_profile_counter_set_selection_t profile_counter_set;
   // HAL benchmark options for dispatch_complete measurement.
   loom_run_hal_benchmark_options_t hal_options;
 } iree_tune_loom_benchmark_policy_t;
@@ -880,6 +938,62 @@ static iree_status_t iree_tune_loom_duration_ms_to_ns(
   return iree_ok_status();
 }
 
+static iree_status_t iree_tune_loom_parse_profile_data_families(
+    iree_string_view_t value,
+    iree_hal_device_profiling_data_families_t* out_data_families) {
+  *out_data_families = IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS |
+                       IREE_HAL_DEVICE_PROFILING_DATA_EXECUTABLE_METADATA;
+  iree_string_view_t remaining = iree_string_view_trim(value);
+  if (iree_string_view_is_empty(remaining)) {
+    return iree_ok_status();
+  }
+  *out_data_families = IREE_HAL_DEVICE_PROFILING_DATA_NONE;
+  while (!iree_string_view_is_empty(remaining)) {
+    iree_string_view_t family_part = iree_string_view_empty();
+    iree_string_view_split(remaining, ',', &family_part, &remaining);
+    family_part = iree_string_view_trim(family_part);
+    if (iree_string_view_is_empty(family_part)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "--profile_data contains an empty data family");
+    }
+    if (iree_string_view_equal(family_part, IREE_SV("none"))) {
+      if (*out_data_families != IREE_HAL_DEVICE_PROFILING_DATA_NONE ||
+          !iree_string_view_is_empty(iree_string_view_trim(remaining))) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "--profile_data=none cannot be combined with "
+                                "other data families");
+      }
+      return iree_ok_status();
+    }
+    bool matched = false;
+    for (iree_host_size_t i = 0;
+         i < IREE_ARRAYSIZE(iree_tune_loom_profile_family_names); ++i) {
+      const iree_tune_loom_profile_family_name_t* family =
+          &iree_tune_loom_profile_family_names[i];
+      if (iree_string_view_equal(family_part,
+                                 iree_make_cstring_view(family->flag_name)) ||
+          iree_string_view_equal(family_part,
+                                 iree_make_cstring_view(family->json_name))) {
+        *out_data_families |= family->bit;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched &&
+        iree_string_view_equal(family_part, IREE_SV("pmc-ranges"))) {
+      *out_data_families |= IREE_HAL_DEVICE_PROFILING_DATA_COUNTER_RANGES;
+      matched = true;
+    }
+    if (!matched) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unsupported --profile_data family '%.*s'",
+                              (int)family_part.size, family_part.data);
+    }
+    remaining = iree_string_view_trim(remaining);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t iree_tune_loom_policy_from_benchmark(
     const loom_testbench_module_plan_t* module_plan,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
@@ -931,6 +1045,21 @@ static iree_status_t iree_tune_loom_policy_from_benchmark(
                             benchmark_plan->name.data, (int)measure.size,
                             measure.data);
   }
+  const iree_string_view_t profile_data_flag =
+      iree_string_view_trim(iree_make_cstring_view(FLAG_profile_data));
+  const bool profile_data_requested =
+      !iree_string_view_is_empty(profile_data_flag) &&
+      !iree_string_view_equal(profile_data_flag, IREE_SV("none"));
+  const iree_flag_string_list_t profile_counters = FLAG_profile_counter_list();
+  if (measure_kind != IREE_TUNE_LOOM_MEASURE_DISPATCH_COMPLETE &&
+      (strlen(FLAG_profile_artifacts_dir) != 0 || profile_data_requested ||
+       profile_counters.count != 0)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "final-batch profile flags require benchmark `%.*s` "
+        "to use measure = \"dispatch_complete\"",
+        (int)benchmark_plan->name.size, benchmark_plan->name.data);
+  }
 
   *out_policy = (iree_tune_loom_benchmark_policy_t){
       .measure_kind = measure_kind,
@@ -946,6 +1075,8 @@ static iree_status_t iree_tune_loom_policy_from_benchmark(
     int64_t warmup_time_ms = 0;
     int64_t stable_p90_to_p50_ppm = 0;
     bool profile_final_batch = false;
+    const bool profile_artifacts_requested =
+        strlen(FLAG_profile_artifacts_dir) != 0;
     IREE_RETURN_IF_ERROR(iree_tune_loom_read_i64_policy_attr(
         module_plan->module, benchmark_plan->attrs, IREE_SV("batch_size"),
         &FLAG_batch_size, &batch_size));
@@ -966,6 +1097,17 @@ static iree_status_t iree_tune_loom_policy_from_benchmark(
         module_plan->module, benchmark_plan->attrs,
         IREE_SV("profile_final_batch"), &FLAG_profile_final_batch,
         &profile_final_batch));
+    if ((profile_artifacts_requested || profile_data_requested ||
+         profile_counters.count != 0) &&
+        !profile_final_batch) {
+      if (FLAG_profile_final_batch.specified &&
+          !FLAG_profile_final_batch.value) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "--profile_final_batch=false conflicts with "
+                                "requested final-batch profile data");
+      }
+      profile_final_batch = true;
+    }
     if (batch_size <= 0 || (uint64_t)batch_size > IREE_HOST_SIZE_MAX) {
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "benchmark `%.*s` batch_size must be positive; "
@@ -1008,6 +1150,29 @@ static iree_status_t iree_tune_loom_policy_from_benchmark(
         (uint64_t)stable_p90_to_p50_ppm;
     out_policy->hal_options.dispatch_batch.dispatch_count =
         (iree_host_size_t)batch_size;
+    IREE_RETURN_IF_ERROR(iree_tune_loom_parse_profile_data_families(
+        profile_data_flag, &out_policy->hal_options.profile_data_families));
+    const iree_hal_device_profiling_data_families_t counter_data =
+        IREE_HAL_DEVICE_PROFILING_DATA_COUNTER_SAMPLES |
+        IREE_HAL_DEVICE_PROFILING_DATA_COUNTER_RANGES;
+    if (profile_counters.count != 0) {
+      if (!iree_any_bit_set(out_policy->hal_options.profile_data_families,
+                            counter_data)) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "--profile_counter requires --profile_data to include counters or "
+            "counter-ranges");
+      }
+      out_policy->profile_counter_set =
+          (iree_hal_profile_counter_set_selection_t){
+              .name = IREE_SV("iree-tune-loom"),
+              .counter_name_count = profile_counters.count,
+              .counter_names = profile_counters.values,
+          };
+      out_policy->hal_options.profile_counter_set_count = 1;
+      out_policy->hal_options.profile_counter_sets =
+          &out_policy->profile_counter_set;
+    }
     if (profile_final_batch) {
       out_policy->hal_options.flags |=
           LOOM_RUN_HAL_BENCHMARK_FLAG_PROFILE_FINAL_BATCH;
@@ -1495,7 +1660,33 @@ static void iree_tune_loom_benchmark_result_set_compile_rejection(
   }
 }
 
+static iree_status_t iree_tune_loom_append_profile_artifact_path(
+    const iree_tune_loom_run_identity_t* run,
+    const iree_tune_loom_candidate_identity_t* candidate,
+    iree_host_size_t sample_ordinal, iree_string_builder_t* artifact_path) {
+  iree_string_view_t artifacts_dir =
+      iree_string_view_trim(iree_make_cstring_view(FLAG_profile_artifacts_dir));
+  if (iree_string_view_is_empty(artifacts_dir)) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_string(artifact_path, artifacts_dir));
+  if (!iree_string_view_ends_with(artifacts_dir, IREE_SV("/"))) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(artifact_path, "/"));
+  }
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_string(artifact_path, run->run_id));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(artifact_path, "_"));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
+      artifact_path, candidate->candidate_id));
+  return iree_string_builder_append_format(
+      artifact_path, "_sample%" PRIhsz ".irpf", sample_ordinal);
+}
+
 static iree_status_t iree_tune_loom_run_hal_benchmark_sample(
+    const iree_tune_loom_run_identity_t* run,
+    const iree_tune_loom_candidate_identity_t* candidate,
     const loom_testbench_module_plan_t* module_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_tune_loom_benchmark_policy_t* policy,
@@ -1533,9 +1724,22 @@ static iree_status_t iree_tune_loom_run_hal_benchmark_sample(
   iree_vm_list_release(bindings);
   if (iree_status_is_ok(status)) {
     out_result->has_hal_benchmark = true;
-    status = loom_run_hal_benchmark_dispatch_plan(
-        &provider->context->runtime, &provider->prepared_candidate, &plan,
-        &policy->hal_options, allocator, &out_result->hal_benchmark);
+    loom_run_hal_benchmark_options_t hal_options = policy->hal_options;
+    iree_string_builder_t profile_artifact_path;
+    iree_string_builder_initialize(allocator, &profile_artifact_path);
+    status = iree_tune_loom_append_profile_artifact_path(
+        run, candidate, sample_ordinal, &profile_artifact_path);
+    if (iree_status_is_ok(status) &&
+        iree_string_builder_size(&profile_artifact_path) != 0) {
+      hal_options.profile_artifact_path =
+          iree_string_builder_view(&profile_artifact_path);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_run_hal_benchmark_dispatch_plan(
+          &provider->context->runtime, &provider->prepared_candidate, &plan,
+          &hal_options, allocator, &out_result->hal_benchmark);
+    }
+    iree_string_builder_deinitialize(&profile_artifact_path);
   }
   if (iree_status_is_ok(status)) {
     out_result->executed = true;
@@ -1793,40 +1997,20 @@ static const char* iree_tune_loom_profile_statistics_time_domain_name(
 static iree_status_t iree_tune_loom_write_profile_family_names_json(
     iree_hal_device_profiling_data_families_t data_families,
     loom_output_stream_t* stream) {
-  typedef struct iree_tune_loom_profile_family_name_t {
-    // Bit represented by |name|.
-    iree_hal_device_profiling_data_families_t bit;
-    // Stable JSON string used for the bit.
-    const char* name;
-  } iree_tune_loom_profile_family_name_t;
-  static const iree_tune_loom_profile_family_name_t kNames[] = {
-      {IREE_HAL_DEVICE_PROFILING_DATA_QUEUE_EVENTS, "queue_events"},
-      {IREE_HAL_DEVICE_PROFILING_DATA_HOST_EXECUTION_EVENTS,
-       "host_execution_events"},
-      {IREE_HAL_DEVICE_PROFILING_DATA_DEVICE_QUEUE_EVENTS,
-       "device_queue_events"},
-      {IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS, "dispatch_events"},
-      {IREE_HAL_DEVICE_PROFILING_DATA_COUNTER_SAMPLES, "counter_samples"},
-      {IREE_HAL_DEVICE_PROFILING_DATA_EXECUTABLE_METADATA,
-       "executable_metadata"},
-      {IREE_HAL_DEVICE_PROFILING_DATA_EXECUTABLE_TRACES, "executable_traces"},
-      {IREE_HAL_DEVICE_PROFILING_DATA_MEMORY_EVENTS, "memory_events"},
-      {IREE_HAL_DEVICE_PROFILING_DATA_DEVICE_METRICS, "device_metrics"},
-      {IREE_HAL_DEVICE_PROFILING_DATA_COMMAND_REGION_EVENTS,
-       "command_region_events"},
-      {IREE_HAL_DEVICE_PROFILING_DATA_COUNTER_RANGES, "counter_ranges"},
-  };
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
   bool first = true;
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kNames); ++i) {
-    if (!iree_all_bits_set(data_families, kNames[i].bit)) {
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(iree_tune_loom_profile_family_names); ++i) {
+    const iree_tune_loom_profile_family_name_t* family =
+        &iree_tune_loom_profile_family_names[i];
+    if (!iree_all_bits_set(data_families, family->bit)) {
       continue;
     }
     if (!first) {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
     }
     IREE_RETURN_IF_ERROR(
-        loom_json_write_escaped_cstring(stream, kNames[i].name));
+        loom_json_write_escaped_cstring(stream, family->json_name));
     first = false;
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
@@ -1956,6 +2140,13 @@ static iree_status_t iree_tune_loom_write_hal_profile_summary_json(
       loom_output_stream_write_cstring(stream, ",\"data_family_names\":"));
   IREE_RETURN_IF_ERROR(iree_tune_loom_write_profile_family_names_json(
       profile->data_families, stream));
+  if (profile->has_artifact_path) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"artifact_path\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+        stream, iree_make_string_view(profile->artifact_path,
+                                      profile->artifact_path_length)));
+  }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream, ",\"row_count\":%" PRIhsz, profile->row_count));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
@@ -2372,13 +2563,17 @@ static iree_status_t iree_tune_loom_append_plan_row(
         &stream,
         ",\"batch_size\":%s,\"min_time_ms\":%s,\"warmup_time_ms\":%s,"
         "\"max_batches\":%s,\"stable_p90_to_p50_ppm\":%s,"
-        "\"profile_final_batch\":%s",
+        "\"profile_final_batch\":%s,\"profile_data\":%s,"
+        "\"profile_counter\":%s,\"profile_artifacts_dir\":%s",
         FLAG_batch_size.specified ? "true" : "false",
         FLAG_min_time_ms.specified ? "true" : "false",
         FLAG_warmup_time_ms.specified ? "true" : "false",
         FLAG_max_batches.specified ? "true" : "false",
         FLAG_stable_p90_to_p50_ppm.specified ? "true" : "false",
-        FLAG_profile_final_batch.specified ? "true" : "false"));
+        FLAG_profile_final_batch.specified ? "true" : "false",
+        strlen(FLAG_profile_data) != 0 ? "true" : "false",
+        FLAG_profile_counter_list().count != 0 ? "true" : "false",
+        strlen(FLAG_profile_artifacts_dir) != 0 ? "true" : "false"));
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}"));
   if (policy->measure_kind == IREE_TUNE_LOOM_MEASURE_DISPATCH_COMPLETE) {
@@ -2401,6 +2596,25 @@ static iree_status_t iree_tune_loom_append_plan_row(
                           LOOM_RUN_HAL_BENCHMARK_FLAG_PROFILE_FINAL_BATCH)
             ? "true"
             : "false"));
+    if (iree_all_bits_set(policy->hal_options.flags,
+                          LOOM_RUN_HAL_BENCHMARK_FLAG_PROFILE_FINAL_BATCH)) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          &stream, ",\"profile_data_families\":%" PRIu64,
+          policy->hal_options.profile_data_families));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+          &stream, ",\"profile_data_family_names\":"));
+      IREE_RETURN_IF_ERROR(iree_tune_loom_write_profile_family_names_json(
+          policy->hal_options.profile_data_families, &stream));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          &stream, ",\"profile_counter_set_count\":%" PRIhsz,
+          policy->hal_options.profile_counter_set_count));
+      if (strlen(FLAG_profile_artifacts_dir) != 0) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+            &stream, ",\"profile_artifacts_dir\":"));
+        IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
+            &stream, FLAG_profile_artifacts_dir));
+      }
+    }
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}\n"));
   return iree_ok_status();
@@ -2509,6 +2723,9 @@ int iree_tune_loom_main(int argc, char** argv,
       "  iree-tune-loom file.loom --device=amdgpu "
       "--benchmark=@kernel_latency --batch_size=64 "
       "--profile_final_batch=true --output=results.jsonl\n"
+      "  iree-tune-loom file.loom --device=amdgpu "
+      "--benchmark=@kernel_latency --profile_final_batch=true "
+      "--profile_artifacts_dir=.notes/profiles --output=results.jsonl\n"
       "  cat module.loom | iree-tune-loom -\n"
       "  iree-tune-loom --agents_md\n"
       "\n"
@@ -2531,7 +2748,10 @@ int iree_tune_loom_main(int argc, char** argv,
       "only when --profile_final_batch=true or a benchmark attr requests it; "
       "their profile.rows array contains HAL statistics rows such as "
       "dispatch_export, dispatch_command_buffer, and "
-      "dispatch_command_operation when the backend provides them.\n"
+      "dispatch_command_operation when the backend provides them. "
+      "--profile_data selects final-batch HAL profiling families and "
+      "--profile_artifacts_dir writes raw .irpf bundles for heavyweight "
+      "families such as counters and executable traces.\n"
       "\n"
       "jq recipes:\n"
       "  jq 'select(.row==\"run\" or .row==\"summary\")' results.jsonl\n"
@@ -2893,9 +3113,9 @@ int iree_tune_loom_main(int argc, char** argv,
                ++sample_ordinal) {
             iree_tune_loom_benchmark_result_t benchmark_result = {0};
             status = iree_tune_loom_run_hal_benchmark_sample(
-                &module_plan, case_plan, &policy, &hal_provider,
-                &benchmark_materializer, sample_ordinal, allocator,
-                &benchmark_result);
+                &run_identity, &candidate_identity, &module_plan, case_plan,
+                &policy, &hal_provider, &benchmark_materializer, sample_ordinal,
+                allocator, &benchmark_result);
             if (iree_status_is_ok(status)) {
               if (!benchmark_result.executed || !benchmark_result.passed) {
                 ++failed_benchmark_count;

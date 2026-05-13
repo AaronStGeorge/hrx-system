@@ -147,7 +147,9 @@ loom_cc_library(
     ::hal_runtime
     iree::base
     iree::hal
+    iree::hal::utils::profile_file
     iree::hal::utils::statistics_sink
+    iree::io::file_handle
   PUBLIC
 )
 

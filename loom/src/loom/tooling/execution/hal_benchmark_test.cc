@@ -26,9 +26,10 @@ TEST(HalBenchmarkTest, OptionsInitializeForFastDispatchBatchTiming) {
   EXPECT_TRUE(
       iree_all_bits_set(options.dispatch_batch.execute_flags,
                         IREE_HAL_EXECUTE_FLAG_BORROW_BINDING_TABLE_LIFETIME));
-  EXPECT_TRUE(
-      iree_all_bits_set(options.profile_flags,
-                        IREE_HAL_DEVICE_PROFILING_FLAG_LIGHTWEIGHT_STATISTICS));
+  EXPECT_EQ(options.profile_flags, IREE_HAL_DEVICE_PROFILING_FLAG_NONE);
+  EXPECT_EQ(options.profile_data_families,
+            IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS |
+                IREE_HAL_DEVICE_PROFILING_DATA_EXECUTABLE_METADATA);
 }
 
 TEST(HalBenchmarkTest, DispatchPlanRejectsMismatchedBatchSizesBeforeDeviceUse) {

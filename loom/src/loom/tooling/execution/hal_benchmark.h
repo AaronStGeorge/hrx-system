@@ -11,6 +11,7 @@
 
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
+#include "iree/hal/profile_sink.h"
 #include "iree/hal/utils/statistics_sink.h"
 #include "loom/tooling/execution/benchmark.h"
 #include "loom/tooling/execution/hal_invocation.h"
@@ -29,6 +30,7 @@ enum loom_run_hal_benchmark_flag_bits_e {
 
 #define LOOM_RUN_HAL_PROFILE_SUMMARY_MAX_ROWS 32
 #define LOOM_RUN_HAL_PROFILE_EXPORT_NAME_CAPACITY 128
+#define LOOM_RUN_HAL_PROFILE_ARTIFACT_PATH_CAPACITY 512
 
 typedef struct loom_run_hal_profile_row_summary_t {
   // Kind of aggregate statistic represented by this row.
@@ -92,10 +94,16 @@ typedef struct loom_run_hal_profile_summary_t {
   bool requested;
   // True when the final profiled batch completed and emitted through the sink.
   bool executed;
+  // True when |artifact_path| names a raw HAL profile bundle.
+  bool has_artifact_path;
   // True when profiling was requested but failed before producing evidence.
   bool has_error;
   // Terminal status code from the profiling failure.
   iree_status_code_t error_code;
+  // Length of |artifact_path| when a raw profile bundle was requested.
+  iree_host_size_t artifact_path_length;
+  // Path to the raw HAL profile bundle, truncated when necessary.
+  char artifact_path[LOOM_RUN_HAL_PROFILE_ARTIFACT_PATH_CAPACITY];
   // Length of the formatted profiling failure message.
   iree_host_size_t error_message_length;
   // Formatted profiling failure message, truncated when necessary.
@@ -134,6 +142,10 @@ typedef struct loom_run_hal_benchmark_options_t {
   iree_host_size_t profile_counter_set_count;
   // Borrowed counter selections used during profiling_begin.
   const iree_hal_profile_counter_set_selection_t* profile_counter_sets;
+  // Optional borrowed path receiving the raw final-batch profile bundle.
+  iree_string_view_t profile_artifact_path;
+  // Optional borrowed sink receiving the same final-batch profile chunks.
+  iree_hal_profile_sink_t* profile_artifact_sink;
 } loom_run_hal_benchmark_options_t;
 
 typedef struct loom_run_hal_benchmark_result_t {
