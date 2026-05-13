@@ -30,7 +30,7 @@ typedef struct loom_ireevm_run_candidate_t {
 } loom_ireevm_run_candidate_t;
 
 // Emits |run_module| to an IREE VM archive candidate. The module must already
-// contain the prepared target-low VM entry selected by |options->entry_symbol|.
+// contain prepared target-low VM functions and imports.
 iree_status_t loom_ireevm_run_candidate_emit(
     loom_run_module_t* run_module,
     const loom_run_candidate_compile_options_t* options,

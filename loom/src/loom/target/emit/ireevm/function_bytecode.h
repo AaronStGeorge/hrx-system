@@ -21,6 +21,8 @@
 extern "C" {
 #endif
 
+typedef struct loom_ireevm_module_plan_t loom_ireevm_module_plan_t;
+
 typedef struct loom_ireevm_function_bytecode_t {
   // Allocator-owned padded bytecode storage.
   uint8_t* data;
@@ -48,7 +50,8 @@ void loom_ireevm_function_bytecode_deinitialize(
 // producing partial bytecode.
 iree_status_t loom_ireevm_emit_function_bytecode(
     const loom_low_schedule_table_t* schedule,
-    const loom_low_allocation_table_t* allocation, iree_allocator_t allocator,
+    const loom_low_allocation_table_t* allocation,
+    const loom_ireevm_module_plan_t* module_plan, iree_allocator_t allocator,
     loom_ireevm_function_bytecode_t* out_bytecode);
 
 #ifdef __cplusplus

@@ -27,10 +27,6 @@ extern "C" {
 typedef struct loom_ireevm_archive_emit_options_t {
   // VM module name stored in the emitted archive. Empty uses "loom".
   iree_string_view_t module_name;
-  // Optional function symbol to emit. Empty requires exactly one
-  // IREE-VM-compatible function with a target record. A leading '@' is
-  // accepted for command-line ergonomics.
-  iree_string_view_t entry_symbol;
   // Diagnostic sink used for verification, lowering, scheduling, and
   // allocation diagnostics. A NULL callback still counts diagnostics.
   loom_diagnostic_sink_t diagnostic_sink;
@@ -47,12 +43,12 @@ typedef struct loom_ireevm_archive_emit_options_t {
 
 // Emits |module| into an allocator-owned IREE VM bytecode module archive.
 //
-// |module| must already contain the prepared target-low entry selected by
-// |options->entry_symbol|. Target records are resolved through the linked
-// descriptor registry without materializing companion target records in the IR.
-// |out_emitted| is false when target preflight or diagnostics rejected the
-// module; status remains reserved for infrastructure failures. The caller owns
-// |out_archive| when |out_emitted| is true and must release it with
+// |module| must already contain prepared target-low VM function definitions and
+// imports. Target records are resolved from the IR and VM-compatible symbols
+// are emitted as one module. |out_emitted| is false when verification or target
+// diagnostics rejected the module; status remains reserved for infrastructure
+// failures and API contract violations. The caller owns |out_archive| when
+// |out_emitted| is true and must release it with
 // loom_ireevm_module_archive_deinitialize.
 iree_status_t loom_ireevm_emit_module_archive_from_ir(
     loom_module_t* module, const loom_ireevm_archive_emit_options_t* options,

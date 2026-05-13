@@ -26,18 +26,9 @@ iree_status_t loom_ireevm_run_candidate_emit(
   };
   loom_target_compile_report_t* report =
       options->report != NULL ? &out_candidate->compile_report : NULL;
-  if (report != NULL) {
-    loom_target_compile_report_initialize(report);
-    loom_target_compile_report_set_row_storage(report,
-                                               &options->report_row_storage);
-    report->artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
-    report->module_name = options->module_name;
-    report->entry_symbol = options->entry_symbol;
-  }
 
   const loom_ireevm_archive_emit_options_t archive_emit_options = {
       .module_name = options->module_name,
-      .entry_symbol = options->entry_symbol,
       .diagnostic_sink = options->diagnostic_sink,
       .source_resolver = options->source_resolver,
       .max_errors = options->max_errors,
@@ -47,18 +38,6 @@ iree_status_t loom_ireevm_run_candidate_emit(
   iree_status_t status = loom_ireevm_emit_module_archive_from_ir(
       run_module->module, &archive_emit_options, allocator,
       &out_candidate->emitted, &out_candidate->archive);
-  if (report != NULL) {
-    report->artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
-    report->module_name = options->module_name;
-    report->entry_symbol = options->entry_symbol;
-  }
-  if (iree_status_is_ok(status) && out_candidate->emitted && report != NULL) {
-    loom_target_compile_report_record_artifact_size(
-        report, out_candidate->archive.data_length);
-  }
-  if (report != NULL) {
-    loom_target_compile_report_record_status(report, status);
-  }
   loom_ireevm_run_candidate_publish_compile_report(options, out_candidate);
   if (!iree_status_is_ok(status)) {
     loom_ireevm_run_candidate_deinitialize(out_candidate);

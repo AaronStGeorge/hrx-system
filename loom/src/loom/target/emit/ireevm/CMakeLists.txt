@@ -12,12 +12,33 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    module_plan
+  HDRS
+    "module_plan.h"
+  SRCS
+    "module_plan.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::symbol_facts
+    loom::src::loom::error::emitter
+    loom::src::loom::ir
+    loom::src::loom::ops::func_symbol_facts
+    loom::src::loom::ops::low
+    loom::src::loom::target::function_contract
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     function_bytecode
   HDRS
     "function_bytecode.h"
   SRCS
     "function_bytecode.c"
   DEPS
+    ::module_plan
     iree::base
     loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::descriptors
@@ -55,8 +76,10 @@ loom_cc_library(
   DEPS
     ::function_bytecode
     ::module_archive
+    ::module_plan
     iree::base
     iree::base::internal::arena
+    loom::src::loom::analysis::symbol_facts
     loom::src::loom::codegen::low::frame
     loom::src::loom::codegen::low::verify
     loom::src::loom::error::diagnostic
@@ -151,11 +174,14 @@ loom_cc_test(
   DEPS
     ::candidate
     iree::base
+    iree::base::internal::flatcc::parsing
     loom::src::loom::ops::op_registry
     loom::src::loom::target::arch::ireevm::low_registry
     loom::src::loom::target::arch::ireevm::ops
+    iree::schemas::bytecode_module_def_c_fbs
     iree::testing::gtest
     iree::testing::gtest_main
+    iree::vm::bytecode::archive
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -6,8 +6,11 @@
 
 #include "loom/target/emit/ireevm/candidate.h"
 
+#include "iree/base/internal/flatcc/parsing.h"
+#include "iree/schemas/bytecode_module_def_reader.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "iree/vm/bytecode/archive.h"
 #include "loom/ops/op_registry.h"
 #include "loom/target/arch/ireevm/low_registry.h"
 #include "loom/target/arch/ireevm/ops/registry.h"
@@ -32,20 +35,49 @@ constexpr char kPreparedVmSource[] =
     "ireevm.target<core> @vm_target\n"
     "\n"
     "low.func.def target(@vm_target) abi(vm_module_function) "
+    "@double(%value: reg<vm.i32>) -> (reg<vm.i32>) {\n"
+    "  %sum = low.op<iree.vm.add.i32>(%value, %value) : "
+    "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
+    "  low.return %sum : reg<vm.i32>\n"
+    "}\n"
+    "\n"
+    "low.func.def target(@vm_target) abi(vm_module_function) "
+    "export(\"branchy\") "
     "@branchy(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>) {\n"
     "  %c0 = low.const<iree.vm.const.i32> {i32_value = 0} : reg<vm.i32>\n"
     "  %is_zero = low.op<iree.vm.cmp.eq.i32>(%lhs, %c0) : "
     "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
     "  low.cond_br %is_zero, ^then, ^else : reg<vm.i32>\n"
     "^then:\n"
-    "  %sum = low.op<iree.vm.add.i32>(%rhs, %rhs) : "
-    "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
+    "  %sum = low.func.call @double(%rhs) : "
+    "(reg<vm.i32>) -> (reg<vm.i32>)\n"
     "  low.return %sum : reg<vm.i32>\n"
     "^else:\n"
     "  %diff = low.op<iree.vm.sub.i32>(%lhs, %rhs) : "
     "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
     "  low.return %diff : reg<vm.i32>\n"
     "}\n";
+
+constexpr char kPreparedVmImportSource[] =
+    "ireevm.target<core> @vm_target\n"
+    "\n"
+    "low.func.decl import(vm, \"hal.buffer.length\") target(@vm_target) "
+    "abi(vm_module_function) "
+    "@hal_buffer_length(%value: reg<vm.i32>) -> (reg<vm.i32>)\n"
+    "\n"
+    "low.func.def target(@vm_target) abi(vm_module_function) "
+    "export(\"length_identity\") "
+    "@length_identity(%value: reg<vm.i32>) -> (reg<vm.i32>) {\n"
+    "  %length = low.func.call @hal_buffer_length(%value) : "
+    "(reg<vm.i32>) -> (reg<vm.i32>)\n"
+    "  low.return %length : reg<vm.i32>\n"
+    "}\n";
+
+bool FlatbufferStringEquals(flatbuffers_string_t value,
+                            iree_string_view_t expected) {
+  return iree_string_view_equal(
+      iree_make_string_view(value, flatbuffers_string_len(value)), expected);
+}
 
 class IreeVmCandidateTest : public ::testing::Test {
  protected:
@@ -78,6 +110,16 @@ class IreeVmCandidateTest : public ::testing::Test {
       loom_run_candidate_compile_options_t* out_options) {
     loom_run_candidate_compile_options_initialize(out_options);
     out_options->source_resolver = loom_run_module_source_resolver(run_module);
+  }
+
+  void ParseArchive(const loom_ireevm_module_archive_t* archive,
+                    iree_vm_BytecodeModuleDef_table_t* out_module_def) {
+    iree_const_byte_span_t flatbuffer = iree_const_byte_span_empty();
+    IREE_ASSERT_OK(iree_vm_bytecode_archive_parse_header(
+        iree_make_const_byte_span(archive->data, archive->data_length),
+        &flatbuffer, nullptr));
+    *out_module_def = iree_vm_BytecodeModuleDef_as_root(flatbuffer.data);
+    ASSERT_NE(*out_module_def, nullptr);
   }
 
   loom_run_session_t session_ = {};
@@ -143,6 +185,23 @@ TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidate) {
             candidate.compile_report.pressure_row_total_count);
   EXPECT_EQ(report.source_low_row_total_count, 0u);
 
+  iree_vm_BytecodeModuleDef_table_t module_def = nullptr;
+  ParseArchive(&candidate.archive, &module_def);
+  iree_vm_FunctionDescriptor_vec_t function_descriptors =
+      iree_vm_BytecodeModuleDef_function_descriptors(module_def);
+  EXPECT_EQ(iree_vm_FunctionDescriptor_vec_len(function_descriptors), 2u);
+  iree_vm_ImportFunctionDef_vec_t imported_functions =
+      iree_vm_BytecodeModuleDef_imported_functions(module_def);
+  EXPECT_EQ(iree_vm_ImportFunctionDef_vec_len(imported_functions), 0u);
+  iree_vm_ExportFunctionDef_vec_t exported_functions =
+      iree_vm_BytecodeModuleDef_exported_functions(module_def);
+  ASSERT_EQ(iree_vm_ExportFunctionDef_vec_len(exported_functions), 1u);
+  iree_vm_ExportFunctionDef_table_t export_def =
+      iree_vm_ExportFunctionDef_vec_at(exported_functions, 0);
+  EXPECT_TRUE(FlatbufferStringEquals(
+      iree_vm_ExportFunctionDef_local_name(export_def), IREE_SV("branchy")));
+  EXPECT_EQ(iree_vm_ExportFunctionDef_internal_ordinal(export_def), 1);
+
   loom_ireevm_run_candidate_deinitialize(&candidate);
   loom_run_module_deinitialize(&run_module);
 }
@@ -163,6 +222,44 @@ TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidateWithoutReport) {
   EXPECT_EQ(candidate.compile_report.artifact_size, 0u);
   EXPECT_EQ(candidate.compile_report.pressure_rows, nullptr);
   EXPECT_EQ(candidate.compile_report.source_low_rows, nullptr);
+
+  loom_ireevm_run_candidate_deinitialize(&candidate);
+  loom_run_module_deinitialize(&run_module);
+}
+
+TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidateWithImport) {
+  loom_run_module_t run_module = {};
+  IREE_ASSERT_OK(Parse(IREE_SV(kPreparedVmImportSource), &run_module));
+
+  loom_run_candidate_compile_options_t options = {};
+  InitializeCandidateOptions(&run_module, &options);
+
+  loom_ireevm_run_candidate_t candidate = {};
+  IREE_ASSERT_OK(loom_ireevm_run_candidate_emit(
+      &run_module, &options, iree_allocator_system(), &candidate));
+  EXPECT_GT(candidate.archive.data_length, 0u);
+
+  iree_vm_BytecodeModuleDef_table_t module_def = nullptr;
+  ParseArchive(&candidate.archive, &module_def);
+  iree_vm_FunctionDescriptor_vec_t function_descriptors =
+      iree_vm_BytecodeModuleDef_function_descriptors(module_def);
+  EXPECT_EQ(iree_vm_FunctionDescriptor_vec_len(function_descriptors), 1u);
+  iree_vm_ImportFunctionDef_vec_t imported_functions =
+      iree_vm_BytecodeModuleDef_imported_functions(module_def);
+  ASSERT_EQ(iree_vm_ImportFunctionDef_vec_len(imported_functions), 1u);
+  iree_vm_ImportFunctionDef_table_t import_def =
+      iree_vm_ImportFunctionDef_vec_at(imported_functions, 0);
+  EXPECT_TRUE(
+      FlatbufferStringEquals(iree_vm_ImportFunctionDef_full_name(import_def),
+                             IREE_SV("hal.buffer.length")));
+  iree_vm_ExportFunctionDef_vec_t exported_functions =
+      iree_vm_BytecodeModuleDef_exported_functions(module_def);
+  ASSERT_EQ(iree_vm_ExportFunctionDef_vec_len(exported_functions), 1u);
+  iree_vm_ExportFunctionDef_table_t export_def =
+      iree_vm_ExportFunctionDef_vec_at(exported_functions, 0);
+  EXPECT_TRUE(
+      FlatbufferStringEquals(iree_vm_ExportFunctionDef_local_name(export_def),
+                             IREE_SV("length_identity")));
 
   loom_ireevm_run_candidate_deinitialize(&candidate);
   loom_run_module_deinitialize(&run_module);

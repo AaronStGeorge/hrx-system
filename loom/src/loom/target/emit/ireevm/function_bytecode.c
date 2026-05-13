@@ -13,6 +13,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/ireevm/descriptors.h"
+#include "loom/target/emit/ireevm/module_plan.h"
 
 enum {
   // VM bytecode opcodes from
@@ -28,7 +29,6 @@ enum {
   LOOM_IREEVM_OP_BLOCK = 0x79,
 };
 
-#define LOOM_IREEVM_IMPORT_ORDINAL_BIT UINT32_C(0x80000000)
 #define LOOM_IREEVM_MAX_BLOCK_BYTE_LENGTH UINT32_C(0x00FFFFFF)
 
 typedef struct loom_ireevm_branch_fixup_t {
@@ -64,6 +64,8 @@ typedef struct loom_ireevm_emit_state_t {
   const loom_low_schedule_table_t* schedule;
   // Allocation table supplying VM register ordinals.
   const loom_low_allocation_table_t* allocation;
+  // Module-wide ordinal plan for local and imported call targets.
+  const loom_ireevm_module_plan_t* module_plan;
   // Mutable bytecode writer.
   loom_ireevm_bytecode_writer_t writer;
   // Maximum i32 register ordinal plus one.
@@ -441,34 +443,6 @@ static iree_status_t loom_ireevm_emit_binary_i32(
   return loom_ireevm_bytecode_write_u16(&state->writer, result_reg);
 }
 
-static iree_status_t loom_ireevm_emit_call_import_i32(
-    loom_ireevm_emit_state_t* state, const loom_op_t* op,
-    const loom_low_descriptor_t* descriptor) {
-  if (!loom_low_op_isa(op) || op->operand_count != 1 || op->result_count != 1) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "iree.vm.call.import.i32 packet shape is invalid");
-  }
-  int64_t callee_ordinal = 0;
-  IREE_RETURN_IF_ERROR(
-      loom_ireevm_read_i64_attr(state->schedule->module, loom_low_op_attrs(op),
-                                IREE_SV("callee_ordinal"), &callee_ordinal));
-  if (callee_ordinal < 0 || callee_ordinal > INT32_MAX) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "VM import callee ordinal is outside i31 range");
-  }
-
-  IREE_RETURN_IF_ERROR(loom_ireevm_bytecode_write_u8(
-      &state->writer, (uint8_t)descriptor->encoding_id));
-  IREE_RETURN_IF_ERROR(loom_ireevm_bytecode_write_u32(
-      &state->writer,
-      ((uint32_t)callee_ordinal) | LOOM_IREEVM_IMPORT_ORDINAL_BIT));
-  loom_value_slice_t operands = loom_low_op_operands(op);
-  loom_value_slice_t results = loom_low_op_results(op);
-  IREE_RETURN_IF_ERROR(
-      loom_ireevm_write_register_list(state, operands.values, operands.count));
-  return loom_ireevm_write_register_list(state, results.values, results.count);
-}
-
 static iree_status_t loom_ireevm_emit_descriptor_packet(
     loom_ireevm_emit_state_t* state, const loom_low_packet_view_t* packet) {
   switch (packet->descriptor->encoding_id) {
@@ -480,9 +454,6 @@ static iree_status_t loom_ireevm_emit_descriptor_packet(
     case LOOM_IREEVM_OP_CMP_EQ_I32:
       return loom_ireevm_emit_binary_i32(state, packet->node->op,
                                          packet->descriptor);
-    case LOOM_IREEVM_OP_CALL:
-      return loom_ireevm_emit_call_import_i32(state, packet->node->op,
-                                              packet->descriptor);
     default: {
       iree_string_view_t key =
           loom_low_descriptor_set_string(state->schedule->target.descriptor_set,
@@ -526,6 +497,23 @@ static iree_status_t loom_ireevm_emit_low_cond_br(
                                          NULL, 0);
 }
 
+static iree_status_t loom_ireevm_emit_low_func_call(
+    loom_ireevm_emit_state_t* state, const loom_op_t* op) {
+  uint32_t encoded_ordinal = 0;
+  IREE_RETURN_IF_ERROR(loom_ireevm_module_plan_resolve_callee(
+      state->module_plan, loom_low_func_call_callee(op), &encoded_ordinal));
+
+  IREE_RETURN_IF_ERROR(
+      loom_ireevm_bytecode_write_u8(&state->writer, LOOM_IREEVM_OP_CALL));
+  IREE_RETURN_IF_ERROR(
+      loom_ireevm_bytecode_write_u32(&state->writer, encoded_ordinal));
+  loom_value_slice_t operands = loom_low_func_call_operands(op);
+  loom_value_slice_t results = loom_low_func_call_results(op);
+  IREE_RETURN_IF_ERROR(
+      loom_ireevm_write_register_list(state, operands.values, operands.count));
+  return loom_ireevm_write_register_list(state, results.values, results.count);
+}
+
 static iree_status_t loom_ireevm_emit_structural_packet(
     loom_ireevm_emit_state_t* state, const loom_op_t* op) {
   if (loom_low_return_isa(op)) {
@@ -536,6 +524,9 @@ static iree_status_t loom_ireevm_emit_structural_packet(
   }
   if (loom_low_cond_br_isa(op)) {
     return loom_ireevm_emit_low_cond_br(state, op);
+  }
+  if (loom_low_func_call_isa(op)) {
+    return loom_ireevm_emit_low_func_call(state, op);
   }
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                           "unsupported structural low op in VM bytecode");
@@ -612,14 +603,20 @@ void loom_ireevm_function_bytecode_deinitialize(
 
 iree_status_t loom_ireevm_emit_function_bytecode(
     const loom_low_schedule_table_t* schedule,
-    const loom_low_allocation_table_t* allocation, iree_allocator_t allocator,
+    const loom_low_allocation_table_t* allocation,
+    const loom_ireevm_module_plan_t* module_plan, iree_allocator_t allocator,
     loom_ireevm_function_bytecode_t* out_bytecode) {
   *out_bytecode = (loom_ireevm_function_bytecode_t){0};
+  if (!module_plan) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "VM bytecode emission requires a module plan");
+  }
   IREE_RETURN_IF_ERROR(loom_ireevm_validate_tables(schedule, allocation));
 
   loom_ireevm_emit_state_t state = {
       .schedule = schedule,
       .allocation = allocation,
+      .module_plan = module_plan,
   };
   loom_low_allocation_value_scratch_t scratch = {0};
   iree_status_t status =
