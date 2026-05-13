@@ -20,6 +20,7 @@
 #else
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 #endif  // defined(IREE_PLATFORM_WINDOWS)
 
 #include "iree/base/api.h"
@@ -71,6 +72,14 @@ IREE_FLAG(string, output, "",
 IREE_FLAG(string, file_output_dir, "",
           "Directory receiving check.file.write.* outputs. Empty uses "
           "$TMPDIR/iree-loom-tune/<source>_<hash>/ for this run.");
+IREE_FLAG(string, artifact_bundle_dir, "",
+          "Directory receiving a self-contained run bundle. When set and "
+          "--output is empty, results are written to results.jsonl inside the "
+          "bundle; check.file.write outputs and profile artifacts default to "
+          "bundle subdirectories unless their explicit flags are set.");
+IREE_FLAG(string, artifact_bundle_policy, "minimal",
+          "Artifact bundle policy when --artifact_bundle_dir is set. Use "
+          "'minimal', 'debug', or 'full'.");
 IREE_FLAG(bool, dry_run, false,
           "Emits plan rows for selected benchmarks and stops before "
           "correctness, compilation, and measurement.");
@@ -116,6 +125,62 @@ typedef enum iree_tune_loom_shape_specialization_mode_e {
   // Run both dynamic and per-sample specialization modes.
   IREE_TUNE_LOOM_SHAPE_SPECIALIZATION_BOTH = 2,
 } iree_tune_loom_shape_specialization_mode_t;
+
+typedef enum iree_tune_loom_artifact_bundle_policy_e {
+  // Bundle policy has not been requested.
+  IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_NONE = 0,
+  // Capture the JSONL stream, manifest, source identity, and controlled paths.
+  IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_MINIMAL = 1,
+  // Reserve debug artifact locations such as profiles and compile artifacts.
+  IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_DEBUG = 2,
+  // Reserve full artifact locations including future outputs and promotion
+  // data.
+  IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_FULL = 3,
+} iree_tune_loom_artifact_bundle_policy_t;
+
+static iree_string_view_t iree_tune_loom_artifact_bundle_policy_name(
+    iree_tune_loom_artifact_bundle_policy_t policy) {
+  switch (policy) {
+    case IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_NONE:
+      return IREE_SV("none");
+    case IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_MINIMAL:
+      return IREE_SV("minimal");
+    case IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_DEBUG:
+      return IREE_SV("debug");
+    case IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_FULL:
+      return IREE_SV("full");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static iree_status_t iree_tune_loom_parse_artifact_bundle_policy(
+    iree_string_view_t value,
+    iree_tune_loom_artifact_bundle_policy_t* out_policy) {
+  value = iree_string_view_trim(value);
+  if (iree_string_view_equal(value, IREE_SV("none"))) {
+    *out_policy = IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_NONE;
+    return iree_ok_status();
+  }
+  if (iree_string_view_is_empty(value) ||
+      iree_string_view_equal(value, IREE_SV("minimal"))) {
+    *out_policy = IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_MINIMAL;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(value, IREE_SV("debug"))) {
+    *out_policy = IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_DEBUG;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(value, IREE_SV("full"))) {
+    *out_policy = IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_FULL;
+    return iree_ok_status();
+  }
+  return iree_make_status(
+      IREE_STATUS_INVALID_ARGUMENT,
+      "--artifact_bundle_policy must be one of minimal, debug, full, or none; "
+      "got '%.*s'",
+      (int)value.size, value.data);
+}
 
 static iree_status_t iree_tune_loom_parse_shape_specialization_mode(
     iree_string_view_t value,
@@ -316,7 +381,14 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "relative to `--file_output_dir`, which defaults under "
           "`$TMPDIR/iree-loom-tune`. When `--profile_data` includes "
           "`counters` or `counter-ranges`, decoded rows are emitted as "
-          "`profile_counter` JSONL after the normal `profile` row.\n"
+          "`profile_counter` JSONL after the normal `profile` row. Use "
+          "`--artifact_bundle_dir=DIR` to collect `results.jsonl`, "
+          "`manifest.json`, file outputs, and profile artifacts under one "
+          "directory; the manifest records command/path/source identity and "
+          "HAL device identity when a dispatch benchmark selected a backend. "
+          "Benchmark attrs named `family`, `phase`, `strategy`, "
+          "`knobs`, `problem`, or `reference_id` are copied into a "
+          "`metadata` object on candidate rows.\n"
           "\n"
           "Examples:\n"
           "\n"
@@ -339,7 +411,7 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "iree-bazel-run //loom/src/loom/tools/iree-tune-loom -- "
           "path/to/file.loom --device=amdgpu --benchmark=@kernel_latency "
           "--profile_data=counter-ranges --profile_counter=SQ_WAVES "
-          "--file_output_dir=/tmp/loom-run --output=results.jsonl\n"
+          "--artifact_bundle_dir=/tmp/loom-run\n"
           "```\n"
           "\n"
           "```bash\n"
@@ -460,8 +532,16 @@ typedef struct iree_tune_loom_run_identity_t {
   iree_string_view_t run_id;
   // User-provided source path, or "<stdin>" when reading standard input.
   iree_string_view_t source;
+  // Effective JSONL output path, or "-" when writing to stdout.
+  iree_string_view_t results_path;
   // Directory receiving check.file.write.* outputs for this run.
   iree_string_view_t file_output_dir;
+  // Directory receiving raw profile artifacts by default.
+  iree_string_view_t profile_artifacts_dir;
+  // Directory owning the artifact bundle, or empty when bundling is disabled.
+  iree_string_view_t artifact_bundle_dir;
+  // Active artifact bundle policy name, or "none" when bundling is disabled.
+  iree_string_view_t artifact_bundle_policy;
 } iree_tune_loom_run_identity_t;
 
 typedef struct iree_tune_loom_candidate_identity_t {
@@ -481,6 +561,35 @@ typedef struct iree_tune_loom_file_provider_t {
   // Owned directory receiving relative file outputs.
   char* output_dir_storage;
 } iree_tune_loom_file_provider_t;
+
+typedef struct iree_tune_loom_artifact_bundle_t {
+  // Host allocator used for owned path strings.
+  iree_allocator_t host_allocator;
+  // True when --artifact_bundle_dir requested a bundle.
+  bool enabled;
+  // Parsed bundle policy controlling which artifact classes are expected.
+  iree_tune_loom_artifact_bundle_policy_t policy;
+  // Borrowed view into |dir_storage|.
+  iree_string_view_t dir;
+  // Owned bundle root directory.
+  char* dir_storage;
+  // Borrowed view into |results_path_storage|.
+  iree_string_view_t results_path;
+  // Owned default JSONL result path inside |dir|.
+  char* results_path_storage;
+  // Borrowed view into |manifest_path_storage|.
+  iree_string_view_t manifest_path;
+  // Owned manifest path inside |dir|.
+  char* manifest_path_storage;
+  // Borrowed view into |file_output_dir_storage|.
+  iree_string_view_t file_output_dir;
+  // Owned default file-output directory inside |dir|.
+  char* file_output_dir_storage;
+  // Borrowed view into |profile_artifacts_dir_storage|.
+  iree_string_view_t profile_artifacts_dir;
+  // Owned default profile-artifacts directory inside |dir|.
+  char* profile_artifacts_dir_storage;
+} iree_tune_loom_artifact_bundle_t;
 
 static bool iree_tune_loom_path_is_absolute(iree_string_view_t path) {
   if (iree_string_view_is_empty(path)) {
@@ -663,7 +772,8 @@ static iree_status_t iree_tune_loom_make_default_file_output_dir(
 
 static iree_status_t iree_tune_loom_file_provider_initialize(
     iree_string_view_t filename, iree_string_view_t run_id,
-    iree_allocator_t allocator, iree_tune_loom_file_provider_t* out_provider) {
+    iree_string_view_t default_output_dir, iree_allocator_t allocator,
+    iree_tune_loom_file_provider_t* out_provider) {
   memset(out_provider, 0, sizeof(*out_provider));
   out_provider->host_allocator = allocator;
   if (!iree_string_view_equal(filename, IREE_SV("<stdin>"))) {
@@ -675,6 +785,9 @@ static iree_status_t iree_tune_loom_file_provider_initialize(
   if (!iree_string_view_is_empty(output_dir)) {
     IREE_RETURN_IF_ERROR(iree_tune_loom_dup_string_view(
         output_dir, allocator, &out_provider->output_dir_storage));
+  } else if (!iree_string_view_is_empty(default_output_dir)) {
+    IREE_RETURN_IF_ERROR(iree_tune_loom_dup_string_view(
+        default_output_dir, allocator, &out_provider->output_dir_storage));
   } else {
     IREE_RETURN_IF_ERROR(iree_tune_loom_make_default_file_output_dir(
         filename, run_id, allocator, &out_provider->output_dir_storage));
@@ -783,6 +896,117 @@ static iree_status_t iree_tune_loom_create_parent_directory(
     return iree_ok_status();
   }
   return iree_tune_loom_create_directory_if_needed(parent, allocator);
+}
+
+static iree_status_t iree_tune_loom_join_bundle_path(
+    iree_string_view_t bundle_dir, iree_string_view_t child,
+    iree_allocator_t allocator, char** out_path) {
+  return iree_tune_loom_join_path(bundle_dir, child, allocator, out_path);
+}
+
+static void iree_tune_loom_artifact_bundle_deinitialize(
+    iree_tune_loom_artifact_bundle_t* bundle) {
+  if (bundle == NULL) {
+    return;
+  }
+  iree_allocator_free(bundle->host_allocator,
+                      bundle->profile_artifacts_dir_storage);
+  iree_allocator_free(bundle->host_allocator, bundle->file_output_dir_storage);
+  iree_allocator_free(bundle->host_allocator, bundle->manifest_path_storage);
+  iree_allocator_free(bundle->host_allocator, bundle->results_path_storage);
+  iree_allocator_free(bundle->host_allocator, bundle->dir_storage);
+  *bundle = (iree_tune_loom_artifact_bundle_t){0};
+}
+
+static iree_status_t iree_tune_loom_artifact_bundle_initialize(
+    iree_allocator_t allocator, iree_tune_loom_artifact_bundle_t* out_bundle) {
+  memset(out_bundle, 0, sizeof(*out_bundle));
+  out_bundle->host_allocator = allocator;
+
+  const iree_string_view_t bundle_dir =
+      iree_string_view_trim(iree_make_cstring_view(FLAG_artifact_bundle_dir));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_parse_artifact_bundle_policy(
+      iree_make_cstring_view(FLAG_artifact_bundle_policy),
+      &out_bundle->policy));
+  if (iree_string_view_is_empty(bundle_dir)) {
+    out_bundle->policy = IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_NONE;
+    return iree_ok_status();
+  }
+  if (loom_tooling_file_path_is_stdio(bundle_dir)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "--artifact_bundle_dir must name a directory");
+  }
+  if (out_bundle->policy == IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_NONE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "--artifact_bundle_policy=none conflicts with "
+                            "--artifact_bundle_dir");
+  }
+
+  iree_status_t status = iree_tune_loom_dup_string_view(
+      bundle_dir, allocator, &out_bundle->dir_storage);
+  if (iree_status_is_ok(status)) {
+    out_bundle->dir = iree_make_cstring_view(out_bundle->dir_storage);
+    status =
+        iree_tune_loom_create_directory_if_needed(out_bundle->dir, allocator);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_join_bundle_path(
+        out_bundle->dir, IREE_SV("results.jsonl"), allocator,
+        &out_bundle->results_path_storage);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_join_bundle_path(
+        out_bundle->dir, IREE_SV("manifest.json"), allocator,
+        &out_bundle->manifest_path_storage);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_join_bundle_path(
+        out_bundle->dir, IREE_SV("outputs"), allocator,
+        &out_bundle->file_output_dir_storage);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_join_bundle_path(
+        out_bundle->dir, IREE_SV("profiles"), allocator,
+        &out_bundle->profile_artifacts_dir_storage);
+  }
+  if (iree_status_is_ok(status)) {
+    out_bundle->results_path =
+        iree_make_cstring_view(out_bundle->results_path_storage);
+    out_bundle->manifest_path =
+        iree_make_cstring_view(out_bundle->manifest_path_storage);
+    out_bundle->file_output_dir =
+        iree_make_cstring_view(out_bundle->file_output_dir_storage);
+    out_bundle->profile_artifacts_dir =
+        iree_make_cstring_view(out_bundle->profile_artifacts_dir_storage);
+    out_bundle->enabled = true;
+  } else {
+    iree_tune_loom_artifact_bundle_deinitialize(out_bundle);
+  }
+  return status;
+}
+
+static iree_string_view_t iree_tune_loom_effective_results_output_path(
+    const iree_tune_loom_artifact_bundle_t* bundle) {
+  const iree_string_view_t explicit_output =
+      iree_string_view_trim(iree_make_cstring_view(FLAG_output));
+  if (!iree_string_view_is_empty(explicit_output)) {
+    return explicit_output;
+  }
+  if (bundle->enabled) {
+    return bundle->results_path;
+  }
+  return iree_string_view_empty();
+}
+
+static iree_string_view_t iree_tune_loom_effective_profile_artifacts_dir(
+    const iree_tune_loom_artifact_bundle_t* bundle) {
+  const iree_string_view_t explicit_artifacts_dir =
+      iree_string_view_trim(iree_make_cstring_view(FLAG_profile_artifacts_dir));
+  if (!iree_string_view_is_empty(explicit_artifacts_dir)) {
+    return explicit_artifacts_dir;
+  }
+  return bundle->enabled ? bundle->profile_artifacts_dir
+                         : iree_string_view_empty();
 }
 
 static iree_status_t iree_tune_loom_open_file_for_read(
@@ -1352,9 +1576,30 @@ static iree_status_t iree_tune_loom_append_run_row(
       loom_output_stream_write_cstring(&stream, ",\"source\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(&stream, run->source));
   IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"results_path\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_string(&stream, run->results_path));
+  IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"file_output_dir\":"));
   IREE_RETURN_IF_ERROR(
       loom_json_write_escaped_string(&stream, run->file_output_dir));
+  if (!iree_string_view_is_empty(run->profile_artifacts_dir)) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        &stream, ",\"profile_artifacts_dir\":"));
+    IREE_RETURN_IF_ERROR(
+        loom_json_write_escaped_string(&stream, run->profile_artifacts_dir));
+  }
+  if (!iree_string_view_is_empty(run->artifact_bundle_dir)) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        &stream, ",\"artifact_bundle\":{\"dir\":"));
+    IREE_RETURN_IF_ERROR(
+        loom_json_write_escaped_string(&stream, run->artifact_bundle_dir));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"policy\":"));
+    IREE_RETURN_IF_ERROR(
+        loom_json_write_escaped_string(&stream, run->artifact_bundle_policy));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}"));
+  }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream, ",\"dry_run\":%s", dry_run ? "true" : "false"));
   IREE_RETURN_IF_ERROR(
@@ -1363,6 +1608,79 @@ static iree_status_t iree_tune_loom_append_run_row(
       &stream, iree_tune_loom_shape_specialization_mode_name(
                    shape_specialization_mode)));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}\n"));
+  return iree_ok_status();
+}
+
+static iree_status_t iree_tune_loom_write_hal_context_identity_fields_json(
+    const iree_tune_loom_hal_context_t* context, loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, "\"device_uri\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      stream, iree_tune_loom_selected_device_uri(context)));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"driver\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      stream, context->backend->hal_driver_name));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"backend\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_string(stream, context->backend->name));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"target_family\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      stream, context->backend->target_family_name));
+  if (context->runtime_initialized && context->runtime.device != NULL) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"status\":\"created\""));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"device_id\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+        stream, iree_hal_device_id(context->runtime.device)));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"queries\":{"));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, "\"attempted\":true"));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_optional_i64_query_json(
+        context->runtime.device, IREE_SV("hal.device"), IREE_SV("concurrency"),
+        "hal_device_concurrency", stream));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_optional_i64_query_json(
+        context->runtime.device, IREE_SV("hal.dispatch"),
+        IREE_SV("concurrency"), "hal_dispatch_concurrency", stream));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
+
+    iree_hal_device_capabilities_t capabilities = {0};
+    iree_status_t capabilities_status = iree_hal_device_query_capabilities(
+        context->runtime.device, &capabilities);
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"capabilities\":"));
+    if (iree_status_is_ok(capabilities_status)) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          stream,
+          "{\"flags\":%" PRIu64 ",\"numa_node\":%" PRIu8
+          ",\"has_physical_device_uuid\":%s,\"device_group_index\":%" PRIu32
+          ",\"has_device_group\":%s",
+          capabilities.flags, capabilities.numa_node,
+          capabilities.has_physical_device_uuid ? "true" : "false",
+          capabilities.device_group_index,
+          capabilities.has_device_group ? "true" : "false"));
+      if (capabilities.has_physical_device_uuid) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+            stream, ",\"physical_device_uuid\":"));
+        IREE_RETURN_IF_ERROR(iree_tune_loom_write_hex_bytes_json(
+            capabilities.physical_device_uuid,
+            IREE_ARRAYSIZE(capabilities.physical_device_uuid), stream));
+      }
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
+    } else {
+      iree_status_t write_status =
+          iree_tune_loom_write_status_object_json(capabilities_status, stream);
+      iree_status_free(capabilities_status);
+      IREE_RETURN_IF_ERROR(write_status);
+    }
+  } else {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"status\":\"planned\""));
+  }
   return iree_ok_status();
 }
 
@@ -1381,74 +1699,9 @@ static iree_status_t iree_tune_loom_append_device_row(
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, "{\"row\":\"device\""));
   IREE_RETURN_IF_ERROR(iree_tune_loom_write_run_id_field_json(run, &stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
   IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, ",\"device_uri\":"));
-  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      &stream, iree_tune_loom_selected_device_uri(context)));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, ",\"driver\":"));
-  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      &stream, context->backend->hal_driver_name));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, ",\"backend\":"));
-  IREE_RETURN_IF_ERROR(
-      loom_json_write_escaped_string(&stream, context->backend->name));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, ",\"target_family\":"));
-  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      &stream, context->backend->target_family_name));
-  if (context->runtime_initialized && context->runtime.device != NULL) {
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(&stream, ",\"status\":\"created\""));
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(&stream, ",\"device_id\":"));
-    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-        &stream, iree_hal_device_id(context->runtime.device)));
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(&stream, ",\"queries\":{"));
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(&stream, "\"attempted\":true"));
-    IREE_RETURN_IF_ERROR(iree_tune_loom_write_optional_i64_query_json(
-        context->runtime.device, IREE_SV("hal.device"), IREE_SV("concurrency"),
-        "hal_device_concurrency", &stream));
-    IREE_RETURN_IF_ERROR(iree_tune_loom_write_optional_i64_query_json(
-        context->runtime.device, IREE_SV("hal.dispatch"),
-        IREE_SV("concurrency"), "hal_dispatch_concurrency", &stream));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}"));
-
-    iree_hal_device_capabilities_t capabilities = {0};
-    iree_status_t capabilities_status = iree_hal_device_query_capabilities(
-        context->runtime.device, &capabilities);
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(&stream, ",\"capabilities\":"));
-    if (iree_status_is_ok(capabilities_status)) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-          &stream,
-          "{\"flags\":%" PRIu64 ",\"numa_node\":%" PRIu8
-          ",\"has_physical_device_uuid\":%s,\"device_group_index\":%" PRIu32
-          ",\"has_device_group\":%s",
-          capabilities.flags, capabilities.numa_node,
-          capabilities.has_physical_device_uuid ? "true" : "false",
-          capabilities.device_group_index,
-          capabilities.has_device_group ? "true" : "false"));
-      if (capabilities.has_physical_device_uuid) {
-        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
-            &stream, ",\"physical_device_uuid\":"));
-        IREE_RETURN_IF_ERROR(iree_tune_loom_write_hex_bytes_json(
-            capabilities.physical_device_uuid,
-            IREE_ARRAYSIZE(capabilities.physical_device_uuid), &stream));
-      }
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}"));
-    } else {
-      iree_status_t write_status =
-          iree_tune_loom_write_status_object_json(capabilities_status, &stream);
-      iree_status_free(capabilities_status);
-      IREE_RETURN_IF_ERROR(write_status);
-    }
-  } else {
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(&stream, ",\"status\":\"planned\""));
-  }
+      iree_tune_loom_write_hal_context_identity_fields_json(context, &stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}\n"));
   row_state->appended = true;
   return iree_ok_status();
@@ -1590,6 +1843,229 @@ static iree_status_t iree_tune_loom_read_optional_string_attr(
   *out_value =
       iree_tune_loom_module_string(module, loom_attr_as_string_id(attr->value));
   return iree_ok_status();
+}
+
+static iree_status_t iree_tune_loom_write_f64_json(
+    double value, loom_output_stream_t* stream) {
+  if (!isfinite(value)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "metadata f64 value is not finite");
+  }
+  char buffer[64];
+  const int length = iree_snprintf(buffer, sizeof(buffer), "%.17g", value);
+  if (length <= 0 || (iree_host_size_t)length >= sizeof(buffer)) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "failed to format f64 attribute value");
+  }
+  return loom_output_stream_write(stream,
+                                  iree_make_string_view(buffer, length));
+}
+
+static iree_status_t iree_tune_loom_write_string_id_json(
+    const loom_module_t* module, loom_string_id_t string_id,
+    loom_output_stream_t* stream) {
+  if (string_id == LOOM_STRING_ID_INVALID ||
+      string_id >= module->strings.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "metadata string id %u is outside the module "
+                            "string table",
+                            string_id);
+  }
+  return loom_json_write_escaped_string(stream,
+                                        module->strings.entries[string_id]);
+}
+
+static iree_status_t iree_tune_loom_write_symbol_ref_json(
+    const loom_module_t* module, loom_symbol_ref_t symbol_ref,
+    loom_output_stream_t* stream) {
+  if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
+      symbol_ref.symbol_id >= module->symbols.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "metadata symbol reference is outside the source "
+                            "module symbol table");
+  }
+  const loom_symbol_t* symbol = &module->symbols.entries[symbol_ref.symbol_id];
+  if (symbol->name_id >= module->strings.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "metadata symbol name id %u is outside the module "
+                            "string table",
+                            symbol->name_id);
+  }
+  return loom_json_write_escaped_string(
+      stream, module->strings.entries[symbol->name_id]);
+}
+
+static iree_status_t iree_tune_loom_write_predicate_arg_tag_json(
+    uint8_t arg_tag, loom_output_stream_t* stream) {
+  switch ((loom_predicate_arg_tag_t)arg_tag) {
+    case LOOM_PRED_ARG_NONE:
+      return loom_json_write_escaped_cstring(stream, "none");
+    case LOOM_PRED_ARG_VALUE:
+      return loom_json_write_escaped_cstring(stream, "value");
+    case LOOM_PRED_ARG_CONST:
+      return loom_json_write_escaped_cstring(stream, "const");
+    case LOOM_PRED_ARG_COUNT_:
+      break;
+  }
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "unsupported predicate argument tag %u",
+                          (unsigned)arg_tag);
+}
+
+static iree_status_t iree_tune_loom_write_predicate_json(
+    const loom_predicate_t* predicate, loom_output_stream_t* stream) {
+  const char* kind_name = loom_predicate_kind_name(predicate->kind);
+  if (kind_name == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unsupported predicate kind %u",
+                            (unsigned)predicate->kind);
+  }
+  const uint8_t expected_arg_count =
+      loom_predicate_kind_argument_count(predicate->kind);
+  if (predicate->arg_count != expected_arg_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "predicate `%s` expected %u arguments but found %u",
+                            kind_name, (unsigned)expected_arg_count,
+                            (unsigned)predicate->arg_count);
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{\"kind\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(stream, kind_name));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\"args\":["));
+  for (uint8_t i = 0; i < predicate->arg_count; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{\"tag\":"));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_predicate_arg_tag_json(
+        predicate->arg_tags[i], stream));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream, ",\"value\":%" PRId64 "}", predicate->args[i]));
+  }
+  return loom_output_stream_write_cstring(stream, "]}");
+}
+
+static iree_status_t iree_tune_loom_write_attr_json(
+    const loom_module_t* module, const loom_attribute_t* attr,
+    loom_output_stream_t* stream, uint8_t depth) {
+  if (depth >= LOOM_ATTR_DICT_MAX_NESTING_DEPTH) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "attribute nesting exceeds %u",
+                            (unsigned)LOOM_ATTR_DICT_MAX_NESTING_DEPTH);
+  }
+  switch ((loom_attr_kind_t)attr->kind) {
+    case LOOM_ATTR_ABSENT:
+      return loom_output_stream_write_cstring(stream, "null");
+    case LOOM_ATTR_I64:
+      return loom_output_stream_write_format(stream, "%" PRId64, attr->i64);
+    case LOOM_ATTR_F64:
+      return iree_tune_loom_write_f64_json(attr->f64, stream);
+    case LOOM_ATTR_STRING:
+      return iree_tune_loom_write_string_id_json(module, attr->string_id,
+                                                 stream);
+    case LOOM_ATTR_BOOL:
+      return loom_output_stream_write_cstring(stream,
+                                              attr->raw ? "true" : "false");
+    case LOOM_ATTR_ENUM:
+      return loom_output_stream_write_format(stream, "%" PRIu64, attr->raw);
+    case LOOM_ATTR_I64_ARRAY: {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
+      for (uint16_t i = 0; i < attr->count; ++i) {
+        if (i != 0) {
+          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+        }
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+            stream, "%" PRId64, attr->i64_array[i]));
+      }
+      return loom_output_stream_write_cstring(stream, "]");
+    }
+    case LOOM_ATTR_SYMBOL:
+      return iree_tune_loom_write_symbol_ref_json(module, attr->symbol, stream);
+    case LOOM_ATTR_TYPE:
+      return loom_output_stream_write_format(stream, "%" PRIu32, attr->type_id);
+    case LOOM_ATTR_PREDICATE_LIST: {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
+      for (uint16_t i = 0; i < attr->count; ++i) {
+        if (i != 0) {
+          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+        }
+        IREE_RETURN_IF_ERROR(iree_tune_loom_write_predicate_json(
+            &attr->predicate_list[i], stream));
+      }
+      return loom_output_stream_write_cstring(stream, "]");
+    }
+    case LOOM_ATTR_DICT: {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+      for (uint16_t i = 0; i < attr->count; ++i) {
+        if (i != 0) {
+          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+        }
+        const loom_named_attr_t* entry = &attr->dict_entries[i];
+        IREE_RETURN_IF_ERROR(iree_tune_loom_write_string_id_json(
+            module, entry->name_id, stream));
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ":"));
+        IREE_RETURN_IF_ERROR(iree_tune_loom_write_attr_json(
+            module, &entry->value, stream, (uint8_t)(depth + 1)));
+      }
+      return loom_output_stream_write_cstring(stream, "}");
+    }
+    case LOOM_ATTR_ENCODING:
+      return loom_output_stream_write_format(stream, "%" PRIu32,
+                                             attr->encoding_id);
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unsupported metadata attribute kind %u",
+                              (unsigned)attr->kind);
+  }
+}
+
+static bool iree_tune_loom_benchmark_metadata_has_any(
+    const loom_module_t* module,
+    const loom_testbench_benchmark_plan_t* benchmark_plan) {
+  static const char* metadata_keys[] = {
+      "family", "phase", "strategy", "knobs", "problem", "reference_id",
+  };
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(metadata_keys); ++i) {
+    const iree_string_view_t metadata_key =
+        iree_make_cstring_view(metadata_keys[i]);
+    if (iree_tune_loom_find_named_attr(module, benchmark_plan->attrs,
+                                       metadata_key) != NULL) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static iree_status_t iree_tune_loom_write_benchmark_metadata_json(
+    const loom_module_t* module,
+    const loom_testbench_benchmark_plan_t* benchmark_plan,
+    loom_output_stream_t* stream) {
+  static const char* metadata_keys[] = {
+      "family", "phase", "strategy", "knobs", "problem", "reference_id",
+  };
+  if (!iree_tune_loom_benchmark_metadata_has_any(module, benchmark_plan)) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"metadata\":{"));
+  bool first = true;
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(metadata_keys); ++i) {
+    const iree_string_view_t metadata_key =
+        iree_make_cstring_view(metadata_keys[i]);
+    const loom_named_attr_t* attr = iree_tune_loom_find_named_attr(
+        module, benchmark_plan->attrs, metadata_key);
+    if (attr == NULL) {
+      continue;
+    }
+    if (!first) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+    }
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(stream, metadata_key));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ":"));
+    IREE_RETURN_IF_ERROR(
+        iree_tune_loom_write_attr_json(module, &attr->value, stream, 0));
+    first = false;
+  }
+  return loom_output_stream_write_cstring(stream, "}");
 }
 
 static iree_status_t iree_tune_loom_duration_ms_to_ns(
@@ -2600,6 +3076,10 @@ static iree_status_t iree_tune_loom_append_effective_profile_artifacts_dir(
     return iree_string_builder_append_string(artifact_dir,
                                              explicit_artifacts_dir);
   }
+  if (!iree_string_view_is_empty(run->profile_artifacts_dir)) {
+    return iree_string_builder_append_string(artifact_dir,
+                                             run->profile_artifacts_dir);
+  }
   if (!iree_tune_loom_profile_data_has_counter_data(profile_data_families)) {
     return iree_ok_status();
   }
@@ -2738,6 +3218,7 @@ static iree_status_t iree_tune_loom_run_case_correctness_range(
     const iree_tune_loom_run_identity_t* run,
     const iree_tune_loom_candidate_identity_t* candidate,
     const loom_testbench_module_plan_t* module_plan,
+    const loom_testbench_benchmark_plan_t* benchmark_plan,
     iree_host_size_t case_index,
     const loom_testbench_case_execution_options_t* execution_options,
     iree_string_view_t specialization, iree_host_size_t begin_sample,
@@ -2772,6 +3253,10 @@ static iree_status_t iree_tune_loom_run_case_correctness_range(
       if (iree_status_is_ok(status)) {
         status =
             iree_tune_loom_write_candidate_identity_json(candidate, &stream);
+      }
+      if (iree_status_is_ok(status)) {
+        status = iree_tune_loom_write_benchmark_metadata_json(
+            module_plan->module, benchmark_plan, &stream);
       }
       if (iree_status_is_ok(status)) {
         status = iree_tune_loom_write_specialization_field_json(specialization,
@@ -2811,6 +3296,7 @@ static iree_status_t iree_tune_loom_run_case_correctness(
     const iree_tune_loom_run_identity_t* run,
     const iree_tune_loom_candidate_identity_t* candidate,
     const loom_testbench_module_plan_t* module_plan,
+    const loom_testbench_benchmark_plan_t* benchmark_plan,
     iree_host_size_t case_index,
     const loom_testbench_case_execution_options_t* execution_options,
     iree_string_view_t specialization, iree_arena_allocator_t* arena,
@@ -2822,9 +3308,9 @@ static iree_status_t iree_tune_loom_run_case_correctness(
   IREE_RETURN_IF_ERROR(iree_tune_loom_validate_sample_flag(
       case_plan->sample_count, &begin_sample, &end_sample));
   return iree_tune_loom_run_case_correctness_range(
-      run, candidate, module_plan, case_index, execution_options,
-      specialization, begin_sample, end_sample, arena, sample_output,
-      out_sample_count, out_failed_sample_count);
+      run, candidate, module_plan, benchmark_plan, case_index,
+      execution_options, specialization, begin_sample, end_sample, arena,
+      sample_output, out_sample_count, out_failed_sample_count);
 }
 
 static iree_status_t iree_tune_loom_run_case_iteration(
@@ -3380,6 +3866,8 @@ static iree_status_t iree_tune_loom_append_compile_row(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ",\"case\":"));
   IREE_RETURN_IF_ERROR(
       loom_json_write_escaped_string(&stream, case_plan->name));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_benchmark_metadata_json(
+      provider->test_module, benchmark_plan, &stream));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"entry\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(&stream, entry_symbol));
@@ -3451,6 +3939,8 @@ static iree_status_t iree_tune_loom_append_benchmark_result(
     IREE_RETURN_IF_ERROR(iree_tune_loom_write_shape_point_fields_json(
         module, case_plan, benchmark_result->sample_ordinal, &stream));
   }
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_benchmark_metadata_json(
+      module, benchmark_plan, &stream));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"benchmark_result\":"));
   IREE_RETURN_IF_ERROR(iree_tune_loom_write_benchmark_result_json(
@@ -3515,6 +4005,8 @@ static iree_status_t iree_tune_loom_write_profile_counter_identity_json(
       loom_json_write_escaped_string(stream, benchmark_plan->name));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\"case\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(stream, case_plan->name));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_benchmark_metadata_json(
+      module, benchmark_plan, stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream, ",\"batch_size\":%" PRIhsz,
       benchmark_result->hal_benchmark.timing.batch_size));
@@ -3642,6 +4134,8 @@ static iree_status_t iree_tune_loom_append_profile_row(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ",\"case\":"));
   IREE_RETURN_IF_ERROR(
       loom_json_write_escaped_string(&stream, case_plan->name));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_benchmark_metadata_json(
+      module, benchmark_plan, &stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream, ",\"batch_size\":%" PRIhsz,
       benchmark_result->hal_benchmark.timing.batch_size));
@@ -3714,6 +4208,8 @@ static iree_status_t iree_tune_loom_append_plan_row(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ",\"case\":"));
   IREE_RETURN_IF_ERROR(
       loom_json_write_escaped_string(&stream, case_plan->name));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_benchmark_metadata_json(
+      module, benchmark_plan, &stream));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"measure\":"));
   IREE_RETURN_IF_ERROR(
@@ -3793,11 +4289,18 @@ static iree_status_t iree_tune_loom_append_plan_row(
       IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
           &stream, ",\"profile_counter_set_count\":%" PRIhsz,
           policy->hal_options.profile_counter_set_count));
-      if (strlen(FLAG_profile_artifacts_dir) != 0) {
+      const iree_string_view_t explicit_profile_artifacts_dir =
+          iree_string_view_trim(
+              iree_make_cstring_view(FLAG_profile_artifacts_dir));
+      const iree_string_view_t profile_artifacts_dir =
+          !iree_string_view_is_empty(explicit_profile_artifacts_dir)
+              ? explicit_profile_artifacts_dir
+              : run->profile_artifacts_dir;
+      if (!iree_string_view_is_empty(profile_artifacts_dir)) {
         IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
             &stream, ",\"profile_artifacts_dir\":"));
-        IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
-            &stream, FLAG_profile_artifacts_dir));
+        IREE_RETURN_IF_ERROR(
+            loom_json_write_escaped_string(&stream, profile_artifacts_dir));
       }
     }
   }
@@ -3922,7 +4425,7 @@ static iree_status_t iree_tune_loom_run_dispatch_complete_benchmark(
   iree_host_size_t benchmark_correctness_failed_sample_count = 0;
   if (iree_status_is_ok(status) && !hal_provider.compile_rejected) {
     status = iree_tune_loom_run_case_correctness_range(
-        run, candidate, module_plan, benchmark_plan->case_index,
+        run, candidate, module_plan, benchmark_plan, benchmark_plan->case_index,
         &benchmark_execution_options, specialization, begin_sample, end_sample,
         execution_arena, sample_output, &benchmark_correctness_sample_count,
         &benchmark_correctness_failed_sample_count);
@@ -4077,10 +4580,158 @@ static iree_status_t iree_tune_loom_write_report(
   return iree_ok_status();
 }
 
+static iree_status_t iree_tune_loom_append_artifact_bundle_manifest_json(
+    const iree_tune_loom_artifact_bundle_t* bundle,
+    const iree_tune_loom_run_identity_t* run,
+    const iree_tune_loom_hal_context_t* hal_context,
+    iree_string_view_t source_text, iree_string_view_t command_line_json,
+    bool dry_run,
+    iree_tune_loom_shape_specialization_mode_t shape_specialization_mode,
+    iree_string_builder_t* manifest) {
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(manifest, &stream);
+
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "\"tool\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_cstring(&stream, "iree-tune-loom"));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"run_id\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(&stream, run->run_id));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"source\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(&stream, run->source));
+  const uint64_t source_hash =
+      iree_tune_loom_hash_string_view(1469598103934665603ull, source_text);
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"source_identity\":{"));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, "\"byte_count\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_format(&stream, "%" PRIhsz, source_text.size));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"content_hash_fnv64\":"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, "\"%016" PRIx64 "\"", source_hash));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}"));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"policy\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      &stream, iree_tune_loom_artifact_bundle_policy_name(bundle->policy)));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"dry_run\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, dry_run ? "true" : "false"));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"shape_specialization\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      &stream, iree_tune_loom_shape_specialization_mode_name(
+                   shape_specialization_mode)));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"paths\":{"));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, "\"bundle\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(&stream, bundle->dir));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"results\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_string(&stream, run->results_path));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"manifest\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_string(&stream, bundle->manifest_path));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"file_outputs\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_string(&stream, run->file_output_dir));
+  if (!iree_string_view_is_empty(run->profile_artifacts_dir)) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"profiles\":"));
+    IREE_RETURN_IF_ERROR(
+        loom_json_write_escaped_string(&stream, run->profile_artifacts_dir));
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}"));
+  if (hal_context->backend != NULL) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"device\":{"));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_hal_context_identity_fields_json(
+        hal_context, &stream));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}"));
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"command_line\":"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write(&stream, command_line_json));
+  char cwd[4096] = {0};
+#if defined(IREE_PLATFORM_WINDOWS)
+  char* cwd_result = _getcwd(cwd, sizeof(cwd));
+#else
+  char* cwd_result = getcwd(cwd, sizeof(cwd));
+#endif  // defined(IREE_PLATFORM_WINDOWS)
+  if (cwd_result != NULL) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"cwd\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(&stream, cwd));
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}\n"));
+  return iree_ok_status();
+}
+
+static iree_status_t iree_tune_loom_write_artifact_bundle_manifest(
+    const iree_tune_loom_artifact_bundle_t* bundle,
+    const iree_tune_loom_run_identity_t* run,
+    const iree_tune_loom_hal_context_t* hal_context,
+    iree_string_view_t source_text, iree_string_view_t command_line_json,
+    bool dry_run,
+    iree_tune_loom_shape_specialization_mode_t shape_specialization_mode,
+    iree_allocator_t allocator) {
+  if (!bundle->enabled) {
+    return iree_ok_status();
+  }
+
+  iree_string_builder_t manifest;
+  iree_string_builder_initialize(allocator, &manifest);
+  iree_status_t status = iree_tune_loom_append_artifact_bundle_manifest_json(
+      bundle, run, hal_context, source_text, command_line_json, dry_run,
+      shape_specialization_mode, &manifest);
+  if (iree_status_is_ok(status)) {
+    status = loom_tooling_write_output_file(
+        bundle->manifest_path, iree_string_builder_view(&manifest), allocator);
+  }
+  iree_string_builder_deinitialize(&manifest);
+  return status;
+}
+
+static iree_status_t iree_tune_loom_append_command_line_json(
+    int argc, char** argv, iree_string_builder_t* output) {
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(output, &stream);
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "["));
+  for (int i = 0; i < argc; ++i) {
+    if (i != 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
+    }
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(&stream, argv[i]));
+  }
+  return loom_output_stream_write_cstring(&stream, "]");
+}
+
 int iree_tune_loom_main(int argc, char** argv,
                         const iree_tune_loom_configuration_t* configuration) {
   IREE_TRACE_APP_ENTER();
   IREE_TRACE_ZONE_BEGIN(z0);
+  iree_allocator_t allocator = iree_allocator_system();
+  iree_string_builder_t command_line_json;
+  iree_string_builder_initialize(allocator, &command_line_json);
+  iree_status_t status =
+      iree_tune_loom_append_command_line_json(argc, argv, &command_line_json);
+  if (!iree_status_is_ok(status)) {
+    iree_status_fprint(stderr, status);
+    iree_status_free(status);
+    iree_string_builder_deinitialize(&command_line_json);
+    IREE_TRACE_ZONE_END(z0);
+    IREE_TRACE_APP_EXIT(1);
+    return 1;
+  }
 
   iree_flags_set_usage(
       configuration->tool_name,
@@ -4100,6 +4751,8 @@ int iree_tune_loom_main(int argc, char** argv,
       "--benchmark=@kernel_latency --profile_data=counter-ranges "
       "--profile_counter=SQ_WAVES --file_output_dir=/tmp/loom-run "
       "--output=results.jsonl\n"
+      "  iree-tune-loom file.loom --device=amdgpu "
+      "--benchmark=@kernel_latency --artifact_bundle_dir=/tmp/loom-run\n"
       "  iree-tune-loom file.loom --device=amdgpu "
       "--benchmark=@kernel_latency "
       "--shape_specialization=dynamic|per_sample|both\n"
@@ -4121,6 +4774,10 @@ int iree_tune_loom_main(int argc, char** argv,
       "Every row carries run_id. Selected benchmark rows also carry "
       "candidate_id/candidate_index so agents can join plan, compile, sample, "
       "benchmark, and profile evidence across large JSONL sweeps. "
+      "When --artifact_bundle_dir is set and --output is empty, results are "
+      "written to results.jsonl in the bundle and manifest.json records "
+      "command line, source identity, output, profile, file-output paths, and "
+      "HAL device identity when a dispatch benchmark selected a backend. "
       "`--shape_specialization=dynamic` compiles once, "
       "`--shape_specialization=per_sample` compiles each selected shape with "
       "concrete parameter facts, and `--shape_specialization=both` emits both "
@@ -4143,6 +4800,8 @@ int iree_tune_loom_main(int argc, char** argv,
       "emit profile_counter JSONL rows decoded from the raw profile bundle; "
       "without an explicit --profile_artifacts_dir, those bundles are staged "
       "under the run file_output_dir.\n"
+      "Benchmark attrs named family, phase, strategy, knobs, problem, or "
+      "reference_id are copied into a metadata object on candidate rows.\n"
       "\n"
       "jq recipes:\n"
       "  jq 'select(.row==\"run\" or .row==\"summary\")' results.jsonl\n"
@@ -4155,6 +4814,8 @@ int iree_tune_loom_main(int argc, char** argv,
       "  jq 'select(.row==\"benchmark\" and .shape) | "
       "{candidate_id,shape_id,shape:.shape.parameters,"
       "p50:.benchmark_result.dispatch_timing_ns.p50}' results.jsonl\n"
+      "  jq 'select(.row==\"plan\" and .metadata) | "
+      "{candidate_id,metadata}' results.jsonl\n"
       "  jq 'select(.row==\"profile\") as $r | $r.profile.rows[]? | "
       "select(.type|startswith(\"dispatch_\")) | "
       "{candidate_id:$r.candidate_id,type,export_name,"
@@ -4166,15 +4827,16 @@ int iree_tune_loom_main(int argc, char** argv,
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
   if (FLAG_agents_md) {
     iree_tune_loom_print_agents_md(stdout);
+    iree_string_builder_deinitialize(&command_line_json);
     IREE_TRACE_ZONE_END(z0);
     IREE_TRACE_APP_EXIT(0);
     return 0;
   }
 
-  iree_allocator_t allocator = iree_allocator_system();
   iree_io_file_contents_t* contents = NULL;
   loom_run_session_t session = {0};
   loom_run_module_t run_module = {0};
+  iree_tune_loom_artifact_bundle_t artifact_bundle = {0};
   iree_tune_loom_file_provider_t file_provider = {0};
   iree_tune_loom_hal_context_t hal_context = {0};
   iree_tune_loom_hal_context_initialize(configuration, allocator, &hal_context);
@@ -4210,7 +4872,7 @@ int iree_tune_loom_main(int argc, char** argv,
   iree_host_size_t correctness_failed_sample_count = 0;
   int exit_code = 0;
 
-  iree_status_t status = iree_ok_status();
+  status = iree_ok_status();
   iree_tune_loom_shape_specialization_mode_t shape_specialization_mode =
       IREE_TUNE_LOOM_SHAPE_SPECIALIZATION_DYNAMIC;
   status = iree_tune_loom_parse_shape_specialization_mode(
@@ -4280,6 +4942,10 @@ int iree_tune_loom_main(int argc, char** argv,
     status = iree_tune_loom_compile_report_options_initialize(
         &compile_report_options);
   }
+  if (iree_status_is_ok(status)) {
+    status =
+        iree_tune_loom_artifact_bundle_initialize(allocator, &artifact_bundle);
+  }
 
   if (iree_status_is_ok(status)) {
     loom_run_session_options_t session_options = {0};
@@ -4303,14 +4969,26 @@ int iree_tune_loom_main(int argc, char** argv,
   snprintf(run_id_storage, sizeof(run_id_storage), "r%016" PRIx64,
            (uint64_t)iree_time_now());
   iree_string_view_t run_id = iree_make_cstring_view(run_id_storage);
+  const iree_string_view_t results_output_path =
+      iree_tune_loom_effective_results_output_path(&artifact_bundle);
+  const iree_string_view_t profile_artifacts_dir =
+      iree_tune_loom_effective_profile_artifacts_dir(&artifact_bundle);
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_file_provider_initialize(filename, run_id,
-                                                     allocator, &file_provider);
+    status = iree_tune_loom_file_provider_initialize(
+        filename, run_id, artifact_bundle.file_output_dir, allocator,
+        &file_provider);
   }
   const iree_tune_loom_run_identity_t run_identity = {
       .run_id = run_id,
       .source = filename,
+      .results_path = iree_string_view_is_empty(results_output_path)
+                          ? IREE_SV("-")
+                          : results_output_path,
       .file_output_dir = file_provider.output_dir,
+      .profile_artifacts_dir = profile_artifacts_dir,
+      .artifact_bundle_dir = artifact_bundle.dir,
+      .artifact_bundle_policy =
+          iree_tune_loom_artifact_bundle_policy_name(artifact_bundle.policy),
   };
   iree_string_view_t source = iree_string_view_empty();
   if (iree_status_is_ok(status)) {
@@ -4498,7 +5176,7 @@ int iree_tune_loom_main(int argc, char** argv,
       iree_host_size_t benchmark_correctness_failed_sample_count = 0;
       if (iree_status_is_ok(status)) {
         status = iree_tune_loom_run_case_correctness(
-            &run_identity, &candidate_identity, &module_plan,
+            &run_identity, &candidate_identity, &module_plan, benchmark_plan,
             benchmark_plan->case_index, &benchmark_execution_options,
             iree_string_view_empty(), &execution_arena, &sample_output,
             &benchmark_correctness_sample_count,
@@ -4574,8 +5252,14 @@ int iree_tune_loom_main(int argc, char** argv,
   }
   if (iree_status_is_ok(status)) {
     status = loom_tooling_write_output_file(
-        iree_make_cstring_view(FLAG_output),
-        iree_string_builder_view(&report_output), allocator);
+        results_output_path, iree_string_builder_view(&report_output),
+        allocator);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_write_artifact_bundle_manifest(
+        &artifact_bundle, &run_identity, &hal_context, source,
+        iree_string_builder_view(&command_line_json), FLAG_dry_run,
+        shape_specialization_mode, allocator);
   }
   if (iree_status_is_ok(status) && failure_count != 0) {
     exit_code = 1;
@@ -4602,8 +5286,10 @@ int iree_tune_loom_main(int argc, char** argv,
   loom_run_module_deinitialize(&run_module);
   iree_tune_loom_hal_context_deinitialize(&hal_context);
   iree_tune_loom_file_provider_deinitialize(&file_provider);
+  iree_tune_loom_artifact_bundle_deinitialize(&artifact_bundle);
   iree_io_file_contents_free(contents);
   loom_run_session_deinitialize(&session);
+  iree_string_builder_deinitialize(&command_line_json);
 
   IREE_TRACE_ZONE_END(z0);
   IREE_TRACE_APP_EXIT(exit_code);

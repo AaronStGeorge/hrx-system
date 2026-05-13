@@ -5,7 +5,16 @@ check.case @scalar_equal {
   check.return
 }
 
-check.benchmark @scalar_equal_latency case(@scalar_equal) attrs({iterations = 3, measure = "case_end_to_end", warmup_iterations = 1})
+check.benchmark @scalar_equal_latency case(@scalar_equal) attrs({
+  family = "scalar_equal",
+  iterations = 3,
+  knobs = {variant = "literal"},
+  measure = "case_end_to_end",
+  phase = "unit",
+  problem = {dtype = "i32", element_count = 1},
+  strategy = "literal_compare",
+  warmup_iterations = 1
+})
 check.benchmark @scalar_equal_dispatch_latency case(@scalar_equal) attrs({measure = "dispatch_complete"})
 
 check.case @sampled_choice {

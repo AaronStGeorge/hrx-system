@@ -3,6 +3,9 @@
 // RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --iterations=2 --warmup_iterations=0 | FileCheck --check-prefix=CLI-OVERRIDE %s
 // RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --dry_run --output=%t.tune.jsonl
 // RUN: FileCheck --check-prefix=DRY %s < %t.tune.jsonl
+// RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --dry_run --artifact_bundle_dir=%t.bundle
+// RUN: FileCheck --check-prefix=BUNDLE %s < %t.bundle/results.jsonl
+// RUN: FileCheck --check-prefix=BUNDLE-MANIFEST %s < %t.bundle/manifest.json
 // RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_dispatch_latency --dry_run --output=%t.dispatch_dry.jsonl
 // RUN: FileCheck --check-prefix=DISPATCH-DRY %s < %t.dispatch_dry.jsonl
 // RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_dispatch_latency --dry_run --shape_specialization=both --output=%t.dispatch_both_dry.jsonl
@@ -20,7 +23,9 @@
 // BENCH: "source":
 // BENCH: "row":"plan"
 // BENCH: "candidate_id":"c0","candidate_index":0
-// BENCH: "benchmark":"scalar_equal_latency","case":"scalar_equal","measure":"case_end_to_end"
+// BENCH: "benchmark":"scalar_equal_latency","case":"scalar_equal"
+// BENCH: "metadata":{"family":"scalar_equal"
+// BENCH: "measure":"case_end_to_end"
 // BENCH: "cli_overrides":{"iterations":false,"warmup_iterations":false}
 // BENCH: "row":"sample"
 // BENCH: "candidate_id":"c0","candidate_index":0
@@ -73,13 +78,26 @@
 
 // DRY: "row":"plan"
 // DRY: "candidate_id":"c0","candidate_index":0
-// DRY: "benchmark":"scalar_equal_latency","case":"scalar_equal","measure":"case_end_to_end"
+// DRY: "benchmark":"scalar_equal_latency","case":"scalar_equal"
+// DRY: "metadata":{"family":"scalar_equal"
+// DRY: "measure":"case_end_to_end"
 // DRY-NOT: "row":"sample"
 // DRY-NOT: "row":"benchmark"
 // DRY: "row":"summary"
 // DRY: "dry_run":true
 // DRY: "benchmark_count":1
 // DRY: "correctness_sample_count":0
+
+// BUNDLE: "row":"run"
+// BUNDLE: "artifact_bundle":{"dir":
+// BUNDLE: "row":"plan"
+// BUNDLE: "metadata":{"family":"scalar_equal"
+// BUNDLE: "row":"summary"
+
+// BUNDLE-MANIFEST: "tool":"iree-tune-loom"
+// BUNDLE-MANIFEST: "source_identity":{"byte_count":
+// BUNDLE-MANIFEST: "policy":"minimal"
+// BUNDLE-MANIFEST: "paths":{"bundle":
 
 // DISPATCH-DRY: "row":"plan"
 // DISPATCH-DRY: "candidate_id":"c0","candidate_index":0
