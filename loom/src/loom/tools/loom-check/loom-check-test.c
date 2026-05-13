@@ -13,6 +13,7 @@
 
 #include "iree/base/api.h"
 #include "loom/ops/test/registry.h"
+#include "loom/pass/test/registry.h"
 #include "loom/target/low_descriptor_registry_core_test.h"
 #include "loom/tools/loom-check/main.h"
 
@@ -44,5 +45,7 @@ static const loom_check_environment_t kLoomCheckTestEnvironment = {
 };
 
 int main(int argc, char** argv) {
-  return loom_check_main(argc, argv, &kLoomCheckTestEnvironment);
+  loom_check_environment_t environment = kLoomCheckTestEnvironment;
+  environment.pass_registry = loom_test_pass_registry();
+  return loom_check_main(argc, argv, &environment);
 }

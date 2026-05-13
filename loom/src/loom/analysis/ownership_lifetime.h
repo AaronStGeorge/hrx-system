@@ -16,6 +16,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "loom/analysis/ownership.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
 #include "loom/ir/module.h"
@@ -33,6 +34,34 @@ typedef struct loom_ownership_lifetime_options_t {
   iree_string_view_t phase_name;
 } loom_ownership_lifetime_options_t;
 
+// Builds a release operation at the builder insertion point.
+typedef iree_status_t (*loom_ownership_lifetime_build_release_op_fn_t)(
+    loom_builder_t* builder, loom_value_id_t value_id,
+    loom_location_id_t location, void* user_data, loom_op_t** out_op);
+
+// Target- or dialect-owned materialization policy for one resource family.
+typedef struct loom_ownership_lifetime_materialization_policy_t {
+  // Resource family whose values this policy materializes.
+  loom_ownership_resource_family_t family;
+  // Builder for explicit release operations.
+  loom_ownership_lifetime_build_release_op_fn_t build_release;
+  // Opaque payload passed to the builder callbacks.
+  void* user_data;
+} loom_ownership_lifetime_materialization_policy_t;
+
+typedef struct loom_ownership_lifetime_materialize_options_t {
+  // Scratch arena for module summaries and transient analysis state.
+  iree_arena_allocator_t* arena;
+  // Structured diagnostic emitter for ownership lifetime failures.
+  iree_diagnostic_emitter_t emitter;
+  // Name of the phase reporting diagnostics.
+  iree_string_view_t phase_name;
+  // Required resource-family policies active for this materialization stage.
+  const loom_ownership_lifetime_materialization_policy_t* policies;
+  // Number of entries in |policies|.
+  iree_host_size_t policy_count;
+} loom_ownership_lifetime_materialize_options_t;
+
 typedef struct loom_ownership_lifetime_result_t {
   // Number of error diagnostics emitted.
   uint32_t error_count;
@@ -42,6 +71,10 @@ typedef struct loom_ownership_lifetime_result_t {
   uint64_t ops_checked;
   // Number of descriptor-backed ownership effects interpreted.
   uint64_t effects_checked;
+  // Number of explicit release operations inserted.
+  uint64_t releases_inserted;
+  // Number of CFG edges split to preserve edge-local cleanup semantics.
+  uint64_t edges_split;
 } loom_ownership_lifetime_result_t;
 
 // Analyzes owned-resource lifetimes for all function-like bodies in a module.
@@ -53,6 +86,19 @@ typedef struct loom_ownership_lifetime_result_t {
 // status failures.
 iree_status_t loom_ownership_lifetime_analyze_module(
     loom_module_t* module, const loom_ownership_lifetime_options_t* options,
+    loom_ownership_lifetime_result_t* out_result);
+
+// Materializes explicit resource lifetime operations for all function-like
+// bodies in a module.
+//
+// This is the mutating production form of the lifetime stage. It runs the
+// same summary solver as the non-mutating analyzer, records cleanup actions
+// during the final stable transfer, and applies those actions after planning.
+// User IR failures are emitted through |options->emitter| and counted in
+// |out_result|; infrastructure failures are returned as status failures.
+iree_status_t loom_ownership_lifetime_materialize_module(
+    loom_module_t* module,
+    const loom_ownership_lifetime_materialize_options_t* options,
     loom_ownership_lifetime_result_t* out_result);
 
 #ifdef __cplusplus

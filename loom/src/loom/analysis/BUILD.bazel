@@ -96,6 +96,7 @@ loom_cc_library(
     srcs = ["ownership_lifetime.c"],
     hdrs = ["ownership_lifetime.h"],
     deps = [
+        ":liveness",
         ":ownership",
         ":scc",
         "//loom/src/loom/error:emitter",

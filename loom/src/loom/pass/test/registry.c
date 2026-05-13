@@ -8,7 +8,9 @@
 
 #include <stdint.h>
 
+#include "loom/analysis/ownership_lifetime.h"
 #include "loom/ops/op_defs.h"
+#include "loom/ops/test/ops.h"
 
 static bool loom_test_pass_target_record_satisfies_requirement(
     const loom_pass_environment_capability_t* capability,
@@ -185,6 +187,74 @@ static iree_status_t loom_test_requires_target_run(loom_pass_t* pass,
   return iree_ok_status();
 }
 
+static bool loom_test_resource_lifetime_type_matches(loom_type_t type,
+                                                     void* user_data) {
+  (void)user_data;
+  return loom_type_is_pool(type);
+}
+
+static iree_status_t loom_test_resource_lifetime_build_release(
+    loom_builder_t* builder, loom_value_id_t value_id,
+    loom_location_id_t location, void* user_data, loom_op_t** out_op) {
+  (void)user_data;
+  return loom_test_resource_release_build(builder, value_id, location, out_op);
+}
+
+enum {
+  LOOM_TEST_RESOURCE_LIFETIME_STAT_BLOCKS_CHECKED = 0,
+  LOOM_TEST_RESOURCE_LIFETIME_STAT_OPS_CHECKED = 1,
+  LOOM_TEST_RESOURCE_LIFETIME_STAT_EFFECTS_CHECKED = 2,
+  LOOM_TEST_RESOURCE_LIFETIME_STAT_RELEASES_INSERTED = 3,
+  LOOM_TEST_RESOURCE_LIFETIME_STAT_EDGES_SPLIT = 4,
+};
+
+static void loom_test_resource_lifetime_add_stat(loom_pass_t* pass,
+                                                 uint16_t statistic_index,
+                                                 uint64_t value) {
+  if (pass->statistics && value != 0) {
+    loom_pass_statistic_add(pass, statistic_index, (int64_t)value);
+  }
+}
+
+static iree_status_t loom_test_resource_lifetime_run(loom_pass_t* pass,
+                                                     loom_module_t* module) {
+  const loom_ownership_lifetime_materialization_policy_t policy = {
+      .family =
+          {
+              .name = IREE_SVL("test.resource"),
+              .type_matches = loom_test_resource_lifetime_type_matches,
+          },
+      .build_release = loom_test_resource_lifetime_build_release,
+  };
+  loom_ownership_lifetime_materialize_options_t options = {
+      .arena = pass->arena,
+      .emitter = pass->diagnostic_emitter,
+      .phase_name = pass->info->name,
+      .policies = &policy,
+      .policy_count = 1,
+  };
+  loom_ownership_lifetime_result_t result = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_ownership_lifetime_materialize_module(module, &options, &result));
+  loom_test_resource_lifetime_add_stat(
+      pass, LOOM_TEST_RESOURCE_LIFETIME_STAT_BLOCKS_CHECKED,
+      result.blocks_checked);
+  loom_test_resource_lifetime_add_stat(
+      pass, LOOM_TEST_RESOURCE_LIFETIME_STAT_OPS_CHECKED, result.ops_checked);
+  loom_test_resource_lifetime_add_stat(
+      pass, LOOM_TEST_RESOURCE_LIFETIME_STAT_EFFECTS_CHECKED,
+      result.effects_checked);
+  loom_test_resource_lifetime_add_stat(
+      pass, LOOM_TEST_RESOURCE_LIFETIME_STAT_RELEASES_INSERTED,
+      result.releases_inserted);
+  loom_test_resource_lifetime_add_stat(
+      pass, LOOM_TEST_RESOURCE_LIFETIME_STAT_EDGES_SPLIT, result.edges_split);
+  if (result.releases_inserted != 0 || result.edges_split != 0) {
+    loom_pass_mark_changed(pass);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_test_fail_run(loom_pass_t* pass,
                                         loom_module_t* module) {
   (void)module;
@@ -205,6 +275,19 @@ static const loom_pass_statistic_def_t kMarkChangedStatisticDefs[] = {
     {IREE_SVL("invocations"), IREE_SVL("Number of pass invocations.")},
     {IREE_SVL("synthetic-events"),
      IREE_SVL("Number of deterministic test events.")},
+};
+
+static const loom_pass_statistic_def_t kTestResourceLifetimeStatisticDefs[] = {
+    {IREE_SVL("blocks-checked"),
+     IREE_SVL("Number of blocks checked for resource lifetimes.")},
+    {IREE_SVL("ops-checked"),
+     IREE_SVL("Number of operations visited for resource lifetimes.")},
+    {IREE_SVL("effects-checked"),
+     IREE_SVL("Number of ownership effects interpreted.")},
+    {IREE_SVL("releases-inserted"),
+     IREE_SVL("Number of test.resource.release operations inserted.")},
+    {IREE_SVL("edges-split"),
+     IREE_SVL("Number of CFG edges split for resource cleanup.")},
 };
 
 static const loom_pass_option_def_t kTestOptionsOptionDefs[] = {
@@ -343,6 +426,19 @@ static const loom_pass_info_t* loom_test_required_pass_info(void) {
   return &kTestRequiredPassInfo;
 }
 
+static const loom_pass_info_t kTestResourceLifetimePassInfo = {
+    .name = IREE_SVL("test.resource-lifetime"),
+    .description =
+        IREE_SVL("Materialize explicit test resource lifetime operations."),
+    .kind = LOOM_PASS_MODULE,
+    .statistic_defs = kTestResourceLifetimeStatisticDefs,
+    .statistic_count = IREE_ARRAYSIZE(kTestResourceLifetimeStatisticDefs),
+};
+
+static const loom_pass_info_t* loom_test_resource_lifetime_pass_info(void) {
+  return &kTestResourceLifetimePassInfo;
+}
+
 static const loom_pass_info_t kTestRequiresTargetPassInfo = {
     .name = IREE_SVL("test.requires-target"),
     .description = IREE_SVL("Synthetic function pass with a requirement."),
@@ -406,6 +502,11 @@ static const loom_pass_descriptor_t kTestPassDescriptors[] = {
         .function_run = loom_test_requires_target_run,
         .requirement_defs = kTestRequiresTargetRequirements,
         .requirement_count = IREE_ARRAYSIZE(kTestRequiresTargetRequirements),
+    },
+    {
+        .key = IREE_SVL("test.resource-lifetime"),
+        .info = loom_test_resource_lifetime_pass_info,
+        .module_run = loom_test_resource_lifetime_run,
     },
     {
         .key = IREE_SVL("test.unavailable"),

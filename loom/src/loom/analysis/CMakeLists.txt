@@ -111,6 +111,7 @@ loom_cc_library(
   SRCS
     "ownership_lifetime.c"
   DEPS
+    ::liveness
     ::ownership
     ::scc
     iree::base

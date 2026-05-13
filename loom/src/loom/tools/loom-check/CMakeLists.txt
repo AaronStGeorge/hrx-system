@@ -356,7 +356,9 @@ loom_cc_binary(
     ::main
     iree::base
     loom::src::loom::ops::test
+    loom::src::loom::pass::test::registry
     loom::src::loom::target::low_descriptor_registry_core_test
+  TESTONLY
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

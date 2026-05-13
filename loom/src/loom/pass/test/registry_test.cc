@@ -38,6 +38,7 @@ TEST(PassTestRegistryTest, ContainsExpectedPasses) {
       IREE_SV("test.options"),
       IREE_SV("test.required"),
       IREE_SV("test.requires-target"),
+      IREE_SV("test.resource-lifetime"),
       IREE_SV("test.unavailable"),
   };
   ASSERT_EQ(registry->descriptor_count, IREE_ARRAYSIZE(expected_keys));

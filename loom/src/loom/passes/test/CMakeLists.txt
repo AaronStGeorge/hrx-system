@@ -221,6 +221,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "test_resource_lifetime"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test_resource_lifetime.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "value_facts"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/value_facts.loom-test"

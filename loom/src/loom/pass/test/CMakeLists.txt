@@ -19,7 +19,9 @@ loom_cc_library(
     "registry.c"
   DEPS
     iree::base
+    loom::src::loom::analysis::ownership_lifetime
     loom::src::loom::ops::op_defs
+    loom::src::loom::ops::test
     loom::src::loom::pass::environment
     loom::src::loom::pass::registry
     loom::src::loom::pass::types
