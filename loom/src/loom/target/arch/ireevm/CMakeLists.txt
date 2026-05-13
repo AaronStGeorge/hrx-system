@@ -25,6 +25,7 @@ loom_cc_library(
   NAME
     target_records
   HDRS
+    "feature_bits.h"
     "target_records.h"
   SRCS
     "target_records.c"
@@ -78,6 +79,21 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    math_policy
+  HDRS
+    "math_policy.h"
+  TEXTUAL_HDRS
+    "math_policy_tables.inl"
+  SRCS
+    "math_policy.c"
+  DEPS
+    iree::base
+    loom::src::loom::target::math_policy
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     provider
   HDRS
     "provider.h"
@@ -85,6 +101,7 @@ loom_cc_library(
     "provider.c"
   DEPS
     ::low_registry
+    ::math_policy
     ::ops
     iree::base
     loom::src::loom::target::emit::ireevm::lower

@@ -17,14 +17,14 @@ package(
 
 loom_target_table_cc_library(
     name = "core",
-    args = ["--contract-fragment=iree.vm.core"],
+    args = ["--contract-fragment=ireevm.core"],
     generator = "//loom/py/loom/gen:ireevm_contract_fragment",
     deps = ["//loom/src/loom/target:contract"],
 )
 
 loom_target_table_cc_library(
     name = "core_lower_rules",
-    args = ["--contract-fragment=iree.vm.core"],
+    args = ["--contract-fragment=ireevm.core"],
     generator = "//loom/py/loom/gen:ireevm_lower_rule_shard",
     deps = [
         "//loom/src/loom/codegen/low:lower",

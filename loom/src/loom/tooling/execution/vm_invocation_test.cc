@@ -36,27 +36,53 @@ constexpr char kPreparedVmSource[] =
     "ireevm.target<core> @vm_target\n"
     "\n"
     "low.func.def target(@vm_target) abi(vm_module_function) "
-    "@double(%value: reg<vm.i32>) -> (reg<vm.i32>) {\n"
-    "  %sum = low.op<iree.vm.add.i32>(%value, %value) : "
-    "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
-    "  low.return %sum : reg<vm.i32>\n"
+    "@double(%value: reg<ireevm.i32>) -> (reg<ireevm.i32>) {\n"
+    "  %sum = low.op<ireevm.add.i32>(%value, %value) : "
+    "(reg<ireevm.i32>, reg<ireevm.i32>) -> reg<ireevm.i32>\n"
+    "  low.return %sum : reg<ireevm.i32>\n"
     "}\n"
     "\n"
     "low.func.def target(@vm_target) abi(vm_module_function) "
     "export(\"branchy\") "
-    "@branchy(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>) {\n"
-    "  %c0 = low.const<iree.vm.const.i32> {i32_value = 0} : reg<vm.i32>\n"
-    "  %is_zero = low.op<iree.vm.cmp.eq.i32>(%lhs, %c0) : "
-    "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
-    "  low.cond_br %is_zero, ^then, ^else : reg<vm.i32>\n"
+    "@branchy(%lhs: reg<ireevm.i32>, %rhs: reg<ireevm.i32>) -> "
+    "(reg<ireevm.i32>) {\n"
+    "  %c0 = low.const<ireevm.const.i32> {i32_value = 0} : reg<ireevm.i32>\n"
+    "  %is_zero = low.op<ireevm.cmp.eq.i32>(%lhs, %c0) : "
+    "(reg<ireevm.i32>, reg<ireevm.i32>) -> reg<ireevm.i32>\n"
+    "  low.cond_br %is_zero, ^then, ^else : reg<ireevm.i32>\n"
     "^then:\n"
     "  %sum = low.func.call @double(%rhs) : "
-    "(reg<vm.i32>) -> (reg<vm.i32>)\n"
-    "  low.return %sum : reg<vm.i32>\n"
+    "(reg<ireevm.i32>) -> (reg<ireevm.i32>)\n"
+    "  low.return %sum : reg<ireevm.i32>\n"
     "^else:\n"
-    "  %diff = low.op<iree.vm.sub.i32>(%lhs, %rhs) : "
-    "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
-    "  low.return %diff : reg<vm.i32>\n"
+    "  %diff = low.op<ireevm.sub.i32>(%lhs, %rhs) : "
+    "(reg<ireevm.i32>, reg<ireevm.i32>) -> reg<ireevm.i32>\n"
+    "  low.return %diff : reg<ireevm.i32>\n"
+    "}\n";
+
+constexpr char kPreparedVmWideSource[] =
+    "ireevm.target<core> @vm_target\n"
+    "\n"
+    "low.func.def target(@vm_target) abi(vm_module_function) "
+    "export(\"wide_numeric\") "
+    "@wide_numeric(%lhs: reg<ireevm.i64 x2>, %rhs: reg<ireevm.i64 x2>, "
+    "%x: reg<ireevm.f32>, %y: reg<ireevm.f32>, "
+    "%z: reg<ireevm.f64 x2>) -> "
+    "(reg<ireevm.i64 x2>, reg<ireevm.f32>, reg<ireevm.f64 x2>, "
+    "reg<ireevm.i32>) {\n"
+    "  %sum = low.op<ireevm.add.i64>(%lhs, %rhs) : "
+    "(reg<ireevm.i64 x2>, reg<ireevm.i64 x2>) -> reg<ireevm.i64 x2>\n"
+    "  %product = low.op<ireevm.mul.f32>(%x, %y) : "
+    "(reg<ireevm.f32>, reg<ireevm.f32>) -> reg<ireevm.f32>\n"
+    "  %one_point_five = low.const<ireevm.const.f64> "
+    "{f64_bits = 4609434218613702656} : reg<ireevm.f64 x2>\n"
+    "  %wide_sum = low.op<ireevm.add.f64>(%z, %one_point_five) : "
+    "(reg<ireevm.f64 x2>, reg<ireevm.f64 x2>) -> reg<ireevm.f64 x2>\n"
+    "  %less = low.op<ireevm.cmp.lt.o.f64>(%z, %wide_sum) : "
+    "(reg<ireevm.f64 x2>, reg<ireevm.f64 x2>) -> reg<ireevm.i32>\n"
+    "  low.return %sum, %product, %wide_sum, %less : "
+    "reg<ireevm.i64 x2>, reg<ireevm.f32>, reg<ireevm.f64 x2>, "
+    "reg<ireevm.i32>\n"
     "}\n";
 
 class VmInvocationTest : public ::testing::Test {
@@ -83,10 +109,17 @@ class VmInvocationTest : public ::testing::Test {
 
   iree_status_t EmitArchive(loom_run_module_t* out_module,
                             loom_ireevm_run_candidate_t* out_candidate) {
+    return EmitArchiveFromSource(IREE_SV(kPreparedVmSource), out_module,
+                                 out_candidate);
+  }
+
+  iree_status_t EmitArchiveFromSource(
+      iree_string_view_t source, loom_run_module_t* out_module,
+      loom_ireevm_run_candidate_t* out_candidate) {
     loom_run_module_parse_options_t parse_options = {};
     loom_run_module_parse_options_initialize(&parse_options);
     parse_options.filename = IREE_SV("vm_invocation_test.loom");
-    parse_options.source = IREE_SV(kPreparedVmSource);
+    parse_options.source = source;
     IREE_RETURN_IF_ERROR(
         loom_run_module_parse(&session_, &parse_options, out_module));
 
@@ -115,6 +148,36 @@ class VmInvocationTest : public ::testing::Test {
     request.runtime = &runtime_;
     request.archive = archive;
     request.options.function_name = IREE_SV("branchy");
+    request.options.inputs = (loom_run_vm_value_specs_t){
+        .values = inputs,
+        .count = IREE_ARRAYSIZE(inputs),
+    };
+    request.options.expected_outputs = (loom_run_vm_value_specs_t){
+        .values = expected_outputs,
+        .count = IREE_ARRAYSIZE(expected_outputs),
+    };
+    return loom_run_vm_invocation_run(&request, iree_allocator_system(),
+                                      result);
+  }
+
+  iree_status_t RunWideNumeric(const loom_ireevm_module_archive_t* archive,
+                               loom_run_vm_invocation_result_t* result) {
+    iree_string_view_t inputs[] = {
+        IREE_SV("10"), IREE_SV("32"),   IREE_SV("2.5"),
+        IREE_SV("4"),  IREE_SV("5.25"),
+    };
+    iree_string_view_t expected_outputs[] = {
+        IREE_SV("42"),
+        IREE_SV("10"),
+        IREE_SV("6.75"),
+        IREE_SV("1"),
+    };
+
+    loom_run_vm_invocation_request_t request = {};
+    loom_run_vm_invocation_request_initialize(&request);
+    request.runtime = &runtime_;
+    request.archive = archive;
+    request.options.function_name = IREE_SV("wide_numeric");
     request.options.inputs = (loom_run_vm_value_specs_t){
         .values = inputs,
         .count = IREE_ARRAYSIZE(inputs),
@@ -175,6 +238,27 @@ TEST_F(VmInvocationTest, RunMatchesExpectedOutputs) {
   EXPECT_EQ(result.exit_code, 0);
   std::string output(result.output.buffer, result.output.size);
   EXPECT_NE(output.find("EXEC @branchy"), std::string::npos);
+  EXPECT_NE(output.find("[SUCCESS] all function outputs matched"),
+            std::string::npos);
+
+  loom_run_vm_invocation_result_deinitialize(&result);
+  loom_ireevm_run_candidate_deinitialize(&candidate);
+  loom_run_module_deinitialize(&module);
+}
+
+TEST_F(VmInvocationTest, RunWideScalarRegisters) {
+  loom_run_module_t module = {};
+  loom_ireevm_run_candidate_t candidate = {};
+  IREE_ASSERT_OK(EmitArchiveFromSource(IREE_SV(kPreparedVmWideSource), &module,
+                                       &candidate));
+
+  loom_run_vm_invocation_result_t result = {};
+  loom_run_vm_invocation_result_initialize(iree_allocator_system(), &result);
+
+  IREE_ASSERT_OK(RunWideNumeric(&candidate.archive, &result));
+  EXPECT_EQ(result.exit_code, 0);
+  std::string output(result.output.buffer, result.output.size);
+  EXPECT_NE(output.find("EXEC @wide_numeric"), std::string::npos);
   EXPECT_NE(output.find("[SUCCESS] all function outputs matched"),
             std::string::npos);
 

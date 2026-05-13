@@ -102,7 +102,7 @@ CONTRACT_FRAGMENT_REGISTRATIONS = (
         aliases=("amdgpu_view",),
     ),
     ContractFragmentRegistration(
-        key="iree.vm.core",
+        key="ireevm.core",
         module_name="loom.target.emit.ireevm.contracts",
         symbol_name="IREEVM_CORE_CONTRACT_FRAGMENT",
         dialect_ops_symbol_name="IREEVM_CORE_CONTRACT_DIALECT_OPS",

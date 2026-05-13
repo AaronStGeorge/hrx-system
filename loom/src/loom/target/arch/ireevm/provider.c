@@ -7,6 +7,7 @@
 #include "loom/target/arch/ireevm/provider.h"
 
 #include "loom/target/arch/ireevm/low_registry.h"
+#include "loom/target/arch/ireevm/math_policy.h"
 #include "loom/target/arch/ireevm/ops/registry.h"
 #include "loom/target/emit/ireevm/lower.h"
 
@@ -16,6 +17,8 @@ const loom_target_provider_t loom_ireevm_target_provider = {
         loom_ireevm_low_descriptor_registry_initialize,
     .initialize_low_lower_policy_registry =
         loom_ireevm_low_lower_policy_registry_initialize,
+    .initialize_math_policy_registry =
+        loom_ireevm_math_policy_registry_initialize,
 };
 
 static const loom_target_provider_t* const kLoomIreeVmTargetProviders[] = {

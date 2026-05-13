@@ -1,24 +1,24 @@
 // Low function exactness modes and imported-code contracts.
 test.record @vm_target
 
-low.func.def allocation(assigned) schedule(constrained) target(@vm_target) @vm_add(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>) {
-  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : (reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>
-  low.return %sum : reg<vm.i32>
+low.func.def allocation(assigned) schedule(constrained) target(@vm_target) @vm_add(%lhs: reg<ireevm.i32>, %rhs: reg<ireevm.i32>) -> (reg<ireevm.i32>) {
+  %sum = low.op<ireevm.add.i32>(%lhs, %rhs) : (reg<ireevm.i32>, reg<ireevm.i32>) -> reg<ireevm.i32>
+  low.return %sum : reg<ireevm.i32>
 }
 
-low.func.def target(@vm_target) @vm_slot_roundtrip(%input: reg<vm.i32>) -> (reg<vm.i32>) {
+low.func.def target(@vm_target) @vm_slot_roundtrip(%input: reg<ireevm.i32>) -> (reg<ireevm.i32>) {
   %storage = low.storage.reserve {byte_alignment = 4, byte_length = 4} : low.storage<scratch>
-  low.spill %input, %storage : reg<vm.i32>, low.storage<scratch>
-  %reload = low.reload %storage : low.storage<scratch> -> reg<vm.i32>
+  low.spill %input, %storage : reg<ireevm.i32>, low.storage<scratch>
+  %reload = low.reload %storage : low.storage<scratch> -> reg<ireevm.i32>
   %addr = low.storage.address %storage : low.storage<scratch> -> reg<vm.ptr>
-  low.return %reload : reg<vm.i32>
+  low.return %reload : reg<ireevm.i32>
 }
 
 test.target<low_core> @low_vm_resource_target {abi = vm_module_function}
 
-low.func.def target(@low_vm_resource_target) abi(vm_module_function) export("low_vm_resource") @low_vm_resource() -> (reg<vm.i32>) {
-  %state = low.resource<vm_state> {index = 0, source_type = vm.state} : reg<vm.i32>
-  low.return %state : reg<vm.i32>
+low.func.def target(@low_vm_resource_target) abi(vm_module_function) export("low_vm_resource") @low_vm_resource() -> (reg<ireevm.i32>) {
+  %state = low.resource<vm_state> {index = 0, source_type = vm.state} : reg<ireevm.i32>
+  low.return %state : reg<ireevm.i32>
 }
 
 test.target<low_core> @low_native_resource_target
@@ -42,4 +42,4 @@ func.def @caller(%lhs: i32, %rhs: i32) -> (i32) {
   func.return %sum : i32
 }
 
-low.func.decl allocation(fixed) schedule(locked) import(vm, "iree.vm.core.add_i32") target(@vm_target) @vm_add_i32(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>)
+low.func.decl allocation(fixed) schedule(locked) import(vm, "ireevm.core.add_i32") target(@vm_target) @vm_add_i32(%lhs: reg<ireevm.i32>, %rhs: reg<ireevm.i32>) -> (reg<ireevm.i32>)

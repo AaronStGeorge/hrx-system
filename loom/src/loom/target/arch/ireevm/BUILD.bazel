@@ -36,6 +36,7 @@ loom_assert_no_dependencies(
     targets = [
         ":descriptors",
         ":low_registry",
+        ":math_policy",
         ":ops",
         ":provider",
         ":target_records",
@@ -47,6 +48,7 @@ loom_assert_no_dependencies(
     dependencies = [
         ":descriptors",
         ":low_registry",
+        ":math_policy",
         ":ops",
         ":provider",
         ":target_records",
@@ -54,6 +56,7 @@ loom_assert_no_dependencies(
     targets = [
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:low_legality",
+        "//loom/src/loom/target:math_policy",
         "//loom/src/loom/target:provider",
     ],
 )
@@ -86,7 +89,10 @@ loom_low_descriptor_cc_library(
 loom_cc_library(
     name = "target_records",
     srcs = ["target_records.c"],
-    hdrs = ["target_records.h"],
+    hdrs = [
+        "feature_bits.h",
+        "target_records.h",
+    ],
     deps = [
         "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
@@ -134,11 +140,23 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "math_policy",
+    srcs = ["math_policy.c"],
+    hdrs = ["math_policy.h"],
+    textual_hdrs = ["math_policy_tables.inl"],
+    deps = [
+        "//loom/src/loom/target:math_policy",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "provider",
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
     deps = [
         ":low_registry",
+        ":math_policy",
         ":ops",
         "//loom/src/loom/target:provider",
         "//loom/src/loom/target/emit/ireevm:lower",

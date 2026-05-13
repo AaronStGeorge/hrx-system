@@ -9,7 +9,113 @@ func.def target(@vm_target) @vm_add(%lhs: i32, %rhs: i32) -> (i32) {
 // ----
 ireevm.target<core> @vm_target
 
-low.func.def target(@vm_target) abi(vm_module_function) @vm_add(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>) {
-  %sum = low.op<iree.vm.add.i32>(%lhs, %rhs) : (reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>
-  low.return %sum : reg<vm.i32>
+low.func.def target(@vm_target) abi(vm_module_function) @vm_add(%lhs: reg<ireevm.i32>, %rhs: reg<ireevm.i32>) -> (reg<ireevm.i32>) {
+  %sum = low.op<ireevm.add.i32>(%lhs, %rhs) : (reg<ireevm.i32>, reg<ireevm.i32>) -> reg<ireevm.i32>
+  low.return %sum : reg<ireevm.i32>
+}
+
+// ====
+
+ireevm.target<core> @vm_target
+
+func.def target(@vm_target) @vm_constants() -> (i32, i64, f32, f64) {
+  %i32 = scalar.constant 42 : i32
+  %i64 = scalar.constant 9223372036854775807 : i64
+  %f32 = scalar.constant 1.5 : f32
+  %f64 = scalar.constant 2.25 : f64
+  func.return %i32, %i64, %f32, %f64 : i32, i64, f32, f64
+}
+
+// ----
+ireevm.target<core> @vm_target
+
+low.func.def target(@vm_target) abi(vm_module_function) @vm_constants() -> (reg<ireevm.i32>, reg<ireevm.i64 x2>, reg<ireevm.f32>, reg<ireevm.f64 x2>) {
+  %i32 = low.const<ireevm.const.i32> {i32_value = 42} : reg<ireevm.i32>
+  %i64 = low.const<ireevm.const.i64> {i64_value = 9223372036854775807} : reg<ireevm.i64 x2>
+  %f32 = low.const<ireevm.const.f32> {f32_bits = 1069547520} : reg<ireevm.f32>
+  %f64 = low.const<ireevm.const.f64> {f64_bits = 4612248968380809216} : reg<ireevm.f64 x2>
+  low.return %i32, %i64, %f32, %f64 : reg<ireevm.i32>, reg<ireevm.i64 x2>, reg<ireevm.f32>, reg<ireevm.f64 x2>
+}
+
+// ====
+
+ireevm.target<core> @vm_target
+
+func.def target(@vm_target) @vm_i64_ops(%lhs: i64, %rhs: i64, %amount: i32) -> (i64, i64, i32, i64) {
+  %sum = scalar.addi %lhs, %rhs : i64
+  %product = scalar.muli %sum, %rhs : i64
+  %signed_less = scalar.cmpi slt, %lhs, %rhs : i64
+  %widened = scalar.extsi %amount : i32 to i64
+  %mixed = scalar.xori %product, %widened : i64
+  func.return %sum, %mixed, %signed_less, %widened : i64, i64, i32, i64
+}
+
+// ----
+ireevm.target<core> @vm_target
+
+low.func.def target(@vm_target) abi(vm_module_function) @vm_i64_ops(%lhs: reg<ireevm.i64 x2>, %rhs: reg<ireevm.i64 x2>, %amount: reg<ireevm.i32>) -> (reg<ireevm.i64 x2>, reg<ireevm.i64 x2>, reg<ireevm.i32>, reg<ireevm.i64 x2>) {
+  %sum = low.op<ireevm.add.i64>(%lhs, %rhs) : (reg<ireevm.i64 x2>, reg<ireevm.i64 x2>) -> reg<ireevm.i64 x2>
+  %product = low.op<ireevm.mul.i64>(%sum, %rhs) : (reg<ireevm.i64 x2>, reg<ireevm.i64 x2>) -> reg<ireevm.i64 x2>
+  %signed_less = low.op<ireevm.cmp.lt.s.i64>(%lhs, %rhs) : (reg<ireevm.i64 x2>, reg<ireevm.i64 x2>) -> reg<ireevm.i32>
+  %widened = low.op<ireevm.ext.s.i32.i64>(%amount) : (reg<ireevm.i32>) -> reg<ireevm.i64 x2>
+  %mixed = low.op<ireevm.xor.i64>(%product, %widened) : (reg<ireevm.i64 x2>, reg<ireevm.i64 x2>) -> reg<ireevm.i64 x2>
+  low.return %sum, %mixed, %signed_less, %widened : reg<ireevm.i64 x2>, reg<ireevm.i64 x2>, reg<ireevm.i32>, reg<ireevm.i64 x2>
+}
+
+// ====
+
+ireevm.target<core> @vm_target
+
+func.def target(@vm_target) @vm_float_ops(%x: f32, %y: f32, %wide: f64) -> (f32, f64, i32, i64) {
+  %sum = scalar.addf %x, %y : f32
+  %root = scalar.sqrtf %sum : f32
+  %extended = scalar.extf %root : f32 to f64
+  %wide_sum = scalar.addf %extended, %wide : f64
+  %ordered = scalar.cmpf olt, %extended, %wide_sum : f64
+  %bits = scalar.bitcast %wide_sum : f64 to i64
+  func.return %root, %wide_sum, %ordered, %bits : f32, f64, i32, i64
+}
+
+// ----
+ireevm.target<core> @vm_target
+
+low.func.def target(@vm_target) abi(vm_module_function) @vm_float_ops(%x: reg<ireevm.f32>, %y: reg<ireevm.f32>, %wide: reg<ireevm.f64 x2>) -> (reg<ireevm.f32>, reg<ireevm.f64 x2>, reg<ireevm.i32>, reg<ireevm.i64 x2>) {
+  %sum = low.op<ireevm.add.f32>(%x, %y) : (reg<ireevm.f32>, reg<ireevm.f32>) -> reg<ireevm.f32>
+  %root = low.op<ireevm.sqrt.f32>(%sum) : (reg<ireevm.f32>) -> reg<ireevm.f32>
+  %extended = low.op<ireevm.ext.f32.f64>(%root) : (reg<ireevm.f32>) -> reg<ireevm.f64 x2>
+  %wide_sum = low.op<ireevm.add.f64>(%extended, %wide) : (reg<ireevm.f64 x2>, reg<ireevm.f64 x2>) -> reg<ireevm.f64 x2>
+  %ordered = low.op<ireevm.cmp.lt.o.f64>(%extended, %wide_sum) : (reg<ireevm.f64 x2>, reg<ireevm.f64 x2>) -> reg<ireevm.i32>
+  %bits = low.op<ireevm.bitcast.f64.i64>(%wide_sum) : (reg<ireevm.f64 x2>) -> reg<ireevm.i64 x2>
+  low.return %root, %wide_sum, %ordered, %bits : reg<ireevm.f32>, reg<ireevm.f64 x2>, reg<ireevm.i32>, reg<ireevm.i64 x2>
+}
+
+// ====
+
+ireevm.target<core> @vm_target
+
+func.def target(@vm_target) @vm_i64_cfg(%start: i64, %limit: i64, %step: i64) -> (i64) {
+  cfg.br ^loop(%start: i64)
+^loop(%current: i64):
+  %keep_going = scalar.cmpi slt, %current, %limit : i64
+  cfg.cond_br %keep_going, ^body, ^exit
+^body:
+  %next = scalar.addi %current, %step : i64
+  cfg.br ^loop(%next: i64)
+^exit:
+  func.return %current : i64
+}
+
+// ----
+ireevm.target<core> @vm_target
+
+low.func.def target(@vm_target) abi(vm_module_function) @vm_i64_cfg(%start: reg<ireevm.i64 x2>, %limit: reg<ireevm.i64 x2>, %step: reg<ireevm.i64 x2>) -> (reg<ireevm.i64 x2>) {
+  low.br ^loop(%start: reg<ireevm.i64 x2>)
+^loop(%current: reg<ireevm.i64 x2>):
+  %keep_going = low.op<ireevm.cmp.lt.s.i64>(%current, %limit) : (reg<ireevm.i64 x2>, reg<ireevm.i64 x2>) -> reg<ireevm.i32>
+  low.cond_br %keep_going, ^body, ^exit : reg<ireevm.i32>
+^body:
+  %next = low.op<ireevm.add.i64>(%current, %step) : (reg<ireevm.i64 x2>, reg<ireevm.i64 x2>) -> reg<ireevm.i64 x2>
+  low.br ^loop(%next: reg<ireevm.i64 x2>)
+^exit:
+  low.return %current : reg<ireevm.i64 x2>
 }

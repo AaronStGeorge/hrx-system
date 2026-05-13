@@ -36,6 +36,8 @@ typedef struct loom_ireevm_function_bytecode_t {
   uint16_t i32_register_count;
   // Number of VM ref register slots required by the emitted function.
   uint16_t ref_register_count;
+  // IREE VM FeatureBits required by opcodes in this function body.
+  uint32_t feature_requirements;
 } loom_ireevm_function_bytecode_t;
 
 // Releases storage owned by |bytecode|. Safe to call on a zero-initialized
@@ -45,8 +47,8 @@ void loom_ireevm_function_bytecode_deinitialize(
 
 // Emits IREE VM function-body bytecode for one scheduled and allocated
 // low.func.def. The tables must describe the same function and target. The
-// current emitter supports the iree.vm.core i32 scalar subset with unspilled
-// target-id allocation; unsupported packets fail loud instead of silently
+// emitter supports unspilled ireevm.core target-id allocation for scalar
+// register-bank packets; unsupported packets fail loud instead of silently
 // producing partial bytecode.
 iree_status_t loom_ireevm_emit_function_bytecode(
     const loom_low_schedule_table_t* schedule,

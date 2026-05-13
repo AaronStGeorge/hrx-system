@@ -35,27 +35,28 @@ constexpr char kPreparedVmSource[] =
     "ireevm.target<core> @vm_target\n"
     "\n"
     "low.func.def target(@vm_target) abi(vm_module_function) "
-    "@double(%value: reg<vm.i32>) -> (reg<vm.i32>) {\n"
-    "  %sum = low.op<iree.vm.add.i32>(%value, %value) : "
-    "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
-    "  low.return %sum : reg<vm.i32>\n"
+    "@double(%value: reg<ireevm.i32>) -> (reg<ireevm.i32>) {\n"
+    "  %sum = low.op<ireevm.add.i32>(%value, %value) : "
+    "(reg<ireevm.i32>, reg<ireevm.i32>) -> reg<ireevm.i32>\n"
+    "  low.return %sum : reg<ireevm.i32>\n"
     "}\n"
     "\n"
     "low.func.def target(@vm_target) abi(vm_module_function) "
     "export(\"branchy\") "
-    "@branchy(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>) {\n"
-    "  %c0 = low.const<iree.vm.const.i32> {i32_value = 0} : reg<vm.i32>\n"
-    "  %is_zero = low.op<iree.vm.cmp.eq.i32>(%lhs, %c0) : "
-    "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
-    "  low.cond_br %is_zero, ^then, ^else : reg<vm.i32>\n"
+    "@branchy(%lhs: reg<ireevm.i32>, %rhs: reg<ireevm.i32>) -> "
+    "(reg<ireevm.i32>) {\n"
+    "  %c0 = low.const<ireevm.const.i32> {i32_value = 0} : reg<ireevm.i32>\n"
+    "  %is_zero = low.op<ireevm.cmp.eq.i32>(%lhs, %c0) : "
+    "(reg<ireevm.i32>, reg<ireevm.i32>) -> reg<ireevm.i32>\n"
+    "  low.cond_br %is_zero, ^then, ^else : reg<ireevm.i32>\n"
     "^then:\n"
     "  %sum = low.func.call @double(%rhs) : "
-    "(reg<vm.i32>) -> (reg<vm.i32>)\n"
-    "  low.return %sum : reg<vm.i32>\n"
+    "(reg<ireevm.i32>) -> (reg<ireevm.i32>)\n"
+    "  low.return %sum : reg<ireevm.i32>\n"
     "^else:\n"
-    "  %diff = low.op<iree.vm.sub.i32>(%lhs, %rhs) : "
-    "(reg<vm.i32>, reg<vm.i32>) -> reg<vm.i32>\n"
-    "  low.return %diff : reg<vm.i32>\n"
+    "  %diff = low.op<ireevm.sub.i32>(%lhs, %rhs) : "
+    "(reg<ireevm.i32>, reg<ireevm.i32>) -> reg<ireevm.i32>\n"
+    "  low.return %diff : reg<ireevm.i32>\n"
     "}\n";
 
 constexpr char kPreparedVmImportSource[] =
@@ -63,14 +64,39 @@ constexpr char kPreparedVmImportSource[] =
     "\n"
     "low.func.decl import(vm, \"hal.buffer.length\") target(@vm_target) "
     "abi(vm_module_function) "
-    "@hal_buffer_length(%value: reg<vm.i32>) -> (reg<vm.i32>)\n"
+    "@hal_buffer_length(%value: reg<ireevm.i32>) -> (reg<ireevm.i32>)\n"
     "\n"
     "low.func.def target(@vm_target) abi(vm_module_function) "
     "export(\"length_identity\") "
-    "@length_identity(%value: reg<vm.i32>) -> (reg<vm.i32>) {\n"
+    "@length_identity(%value: reg<ireevm.i32>) -> (reg<ireevm.i32>) {\n"
     "  %length = low.func.call @hal_buffer_length(%value) : "
-    "(reg<vm.i32>) -> (reg<vm.i32>)\n"
-    "  low.return %length : reg<vm.i32>\n"
+    "(reg<ireevm.i32>) -> (reg<ireevm.i32>)\n"
+    "  low.return %length : reg<ireevm.i32>\n"
+    "}\n";
+
+constexpr char kPreparedVmWideSource[] =
+    "ireevm.target<core> @vm_target\n"
+    "\n"
+    "low.func.def target(@vm_target) abi(vm_module_function) "
+    "export(\"wide_numeric\") "
+    "@wide_numeric(%lhs: reg<ireevm.i64 x2>, %rhs: reg<ireevm.i64 x2>, "
+    "%x: reg<ireevm.f32>, %y: reg<ireevm.f32>, "
+    "%z: reg<ireevm.f64 x2>) -> "
+    "(reg<ireevm.i64 x2>, reg<ireevm.f32>, reg<ireevm.f64 x2>, "
+    "reg<ireevm.i32>) {\n"
+    "  %sum = low.op<ireevm.add.i64>(%lhs, %rhs) : "
+    "(reg<ireevm.i64 x2>, reg<ireevm.i64 x2>) -> reg<ireevm.i64 x2>\n"
+    "  %product = low.op<ireevm.mul.f32>(%x, %y) : "
+    "(reg<ireevm.f32>, reg<ireevm.f32>) -> reg<ireevm.f32>\n"
+    "  %one_point_five = low.const<ireevm.const.f64> "
+    "{f64_bits = 4609434218613702656} : reg<ireevm.f64 x2>\n"
+    "  %wide_sum = low.op<ireevm.add.f64>(%z, %one_point_five) : "
+    "(reg<ireevm.f64 x2>, reg<ireevm.f64 x2>) -> reg<ireevm.f64 x2>\n"
+    "  %less = low.op<ireevm.cmp.lt.o.f64>(%z, %wide_sum) : "
+    "(reg<ireevm.f64 x2>, reg<ireevm.f64 x2>) -> reg<ireevm.i32>\n"
+    "  low.return %sum, %product, %wide_sum, %less : "
+    "reg<ireevm.i64 x2>, reg<ireevm.f32>, reg<ireevm.f64 x2>, "
+    "reg<ireevm.i32>\n"
     "}\n";
 
 bool FlatbufferStringEquals(flatbuffers_string_t value,
@@ -260,6 +286,44 @@ TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidateWithImport) {
   EXPECT_TRUE(
       FlatbufferStringEquals(iree_vm_ExportFunctionDef_local_name(export_def),
                              IREE_SV("length_identity")));
+
+  loom_ireevm_run_candidate_deinitialize(&candidate);
+  loom_run_module_deinitialize(&run_module);
+}
+
+TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidateWithWideScalars) {
+  loom_run_module_t run_module = {};
+  IREE_ASSERT_OK(Parse(IREE_SV(kPreparedVmWideSource), &run_module));
+
+  loom_run_candidate_compile_options_t options = {};
+  InitializeCandidateOptions(&run_module, &options);
+
+  loom_ireevm_run_candidate_t candidate = {};
+  IREE_ASSERT_OK(loom_ireevm_run_candidate_emit(
+      &run_module, &options, iree_allocator_system(), &candidate));
+  EXPECT_GT(candidate.archive.data_length, 0u);
+
+  iree_vm_BytecodeModuleDef_table_t module_def = nullptr;
+  ParseArchive(&candidate.archive, &module_def);
+  constexpr iree_vm_FeatureBits_enum_t kFeatureRequirements =
+      (iree_vm_FeatureBits_enum_t)(iree_vm_FeatureBits_EXT_F32 |
+                                   iree_vm_FeatureBits_EXT_F64);
+  EXPECT_EQ(iree_vm_BytecodeModuleDef_requirements(module_def),
+            kFeatureRequirements);
+  iree_vm_FunctionDescriptor_vec_t function_descriptors =
+      iree_vm_BytecodeModuleDef_function_descriptors(module_def);
+  ASSERT_EQ(iree_vm_FunctionDescriptor_vec_len(function_descriptors), 1u);
+  iree_vm_FunctionDescriptor_struct_t function_descriptor =
+      iree_vm_FunctionDescriptor_vec_at(function_descriptors, 0);
+  EXPECT_EQ(function_descriptor->requirements, kFeatureRequirements);
+  iree_vm_FunctionSignatureDef_vec_t function_signatures =
+      iree_vm_BytecodeModuleDef_function_signatures(module_def);
+  ASSERT_EQ(iree_vm_FunctionSignatureDef_vec_len(function_signatures), 1u);
+  iree_vm_FunctionSignatureDef_table_t signature_def =
+      iree_vm_FunctionSignatureDef_vec_at(function_signatures, 0);
+  EXPECT_TRUE(FlatbufferStringEquals(
+      iree_vm_FunctionSignatureDef_calling_convention(signature_def),
+      IREE_SV("0IIffF_IfFi")));
 
   loom_ireevm_run_candidate_deinitialize(&candidate);
   loom_run_module_deinitialize(&run_module);

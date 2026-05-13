@@ -16,7 +16,7 @@ loom_target_table_cc_library(
   GENERATOR
     iree::runtime::py::loom::gen::ireevm_contract_fragment
   ARGS
-    "--contract-fragment=iree.vm.core"
+    "--contract-fragment=ireevm.core"
   DEPS
     loom::src::loom::target::contract
 )
@@ -27,7 +27,7 @@ loom_target_table_cc_library(
   GENERATOR
     iree::runtime::py::loom::gen::ireevm_lower_rule_shard
   ARGS
-    "--contract-fragment=iree.vm.core"
+    "--contract-fragment=ireevm.core"
   DEPS
     loom::src::loom::codegen::low::lower
     loom::src::loom::ops::scalar

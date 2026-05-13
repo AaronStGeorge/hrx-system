@@ -8,6 +8,8 @@
 
 #include <stdint.h>
 
+#include "loom/target/arch/ireevm/feature_bits.h"
+
 static const loom_target_snapshot_t kIreeVmSnapshot = {
     .name = IREE_SVL("iree-vm"),
     .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_VM,
@@ -34,8 +36,10 @@ static const loom_target_export_plan_t kIreeVmExportPlan = {
 };
 
 static const loom_target_config_t kIreeVmConfig = {
-    .name = IREE_SVL("iree.vm.core"),
-    .contract_set_key = IREE_SVL("iree.vm.core"),
+    .name = IREE_SVL("ireevm.core"),
+    .contract_set_key = IREE_SVL("ireevm.core"),
+    .contract_feature_bits =
+        LOOM_IREEVM_FEATURE_EXT_F32 | LOOM_IREEVM_FEATURE_EXT_F64,
 };
 
 const loom_target_bundle_t loom_ireevm_low_target_bundle_core = {

@@ -219,14 +219,17 @@ typedef enum loom_low_lower_attr_copy_kind_e {
   // Emits an exact f64 source value fact as a rounded f32 packet attribute bit
   // pattern.
   LOOM_LOW_LOWER_ATTR_COPY_VALUE_F64_AS_F32_BITS = 11,
+  // Emits an exact f64 source value fact as an f64 packet attribute bit
+  // pattern.
+  LOOM_LOW_LOWER_ATTR_COPY_VALUE_F64_AS_F64_BITS = 12,
   // Expands one i64_array lane ordinal into one byte-lane immediate:
   // source_attr[source_element_index] * source_element_count + literal_i64.
-  LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_LANE_BYTE = 12,
+  LOOM_LOW_LOWER_ATTR_COPY_I64_ARRAY_LANE_BYTE = 13,
   // Emits the selected source-memory static byte offset as an i64 attribute.
-  LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_STATIC_BYTE_OFFSET = 13,
+  LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_STATIC_BYTE_OFFSET = 14,
   // Emits one selected source-memory dynamic term byte stride as an i64
   // attribute.
-  LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE = 14,
+  LOOM_LOW_LOWER_ATTR_COPY_SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE = 15,
 } loom_low_lower_attr_copy_kind_t;
 
 typedef struct loom_low_lower_attr_copy_t {

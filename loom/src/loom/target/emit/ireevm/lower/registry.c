@@ -10,19 +10,21 @@
 #include "loom/target/emit/ireevm/contracts/core_lower_rules.h"
 #include "loom/target/emit/ireevm/lower.h"
 
-static bool loom_ireevm_type_is_i1_or_i32(loom_type_t type) {
+static bool loom_ireevm_type_is_supported_scalar(loom_type_t type) {
   if (!loom_type_is_scalar(type)) {
     return false;
   }
   loom_scalar_type_t element_type = loom_type_element_type(type);
-  return element_type == LOOM_SCALAR_TYPE_I1 ||
-         element_type == LOOM_SCALAR_TYPE_I32;
-}
-
-static iree_status_t loom_ireevm_make_vm_i32_register_type(
-    loom_low_lower_context_t* context, loom_type_t* out_type) {
-  return loom_low_lower_make_register_type(
-      context, IREE_VM_CORE_REG_CLASS_ID_VM_I32, 1, out_type);
+  switch (element_type) {
+    case LOOM_SCALAR_TYPE_I1:
+    case LOOM_SCALAR_TYPE_I32:
+    case LOOM_SCALAR_TYPE_I64:
+    case LOOM_SCALAR_TYPE_F32:
+    case LOOM_SCALAR_TYPE_F64:
+      return true;
+    default:
+      return false;
+  }
 }
 
 static iree_status_t loom_ireevm_map_type(void* user_data,
@@ -31,19 +33,38 @@ static iree_status_t loom_ireevm_map_type(void* user_data,
                                           loom_type_t source_type,
                                           loom_type_t* out_low_type) {
   (void)user_data;
-  if (loom_ireevm_type_is_i1_or_i32(source_type)) {
-    return loom_ireevm_make_vm_i32_register_type(context, out_low_type);
+  if (!loom_ireevm_type_is_supported_scalar(source_type)) {
+    return loom_low_lower_emit_source_type_unsupported(
+        context, source_op, IREE_SV("source"), source_type);
   }
-  return loom_low_lower_emit_source_type_unsupported(
-      context, source_op, IREE_SV("source"), source_type);
+  switch (loom_type_element_type(source_type)) {
+    case LOOM_SCALAR_TYPE_I1:
+    case LOOM_SCALAR_TYPE_I32:
+      return loom_low_lower_make_register_type(
+          context, IREEVM_CORE_REG_CLASS_ID_I32, 1, out_low_type);
+    case LOOM_SCALAR_TYPE_I64:
+      return loom_low_lower_make_register_type(
+          context, IREEVM_CORE_REG_CLASS_ID_I64, 2, out_low_type);
+    case LOOM_SCALAR_TYPE_F32:
+      return loom_low_lower_make_register_type(
+          context, IREEVM_CORE_REG_CLASS_ID_F32, 1, out_low_type);
+    case LOOM_SCALAR_TYPE_F64:
+      return loom_low_lower_make_register_type(
+          context, IREEVM_CORE_REG_CLASS_ID_F64, 2, out_low_type);
+    default:
+      IREE_ASSERT_UNREACHABLE(
+          "checked by loom_ireevm_type_is_supported_scalar");
+      break;
+  }
+  return iree_make_status(IREE_STATUS_INTERNAL, "unreachable scalar type");
 }
 
 static const loom_low_lower_rule_set_t* const kIreeVmRuleSets[] = {
-    &loom_iree_vm_core_lower_rule_set,
+    &loom_ireevm_core_lower_rule_set,
 };
 
 static const loom_target_contract_binding_t kIreeVmContractBindings[] = {
-    {&loom_iree_vm_core_contract_fragment, 0},
+    {&loom_ireevm_core_contract_fragment, 0},
 };
 
 static const loom_low_lower_policy_t kIreeVmLowLowerPolicy = {
@@ -68,7 +89,7 @@ void loom_ireevm_low_lower_policy_registry_initialize(
     loom_low_lower_policy_registry_t* out_registry) {
   static const loom_low_lower_policy_registry_entry_t kEntries[] = {
       {
-          .contract_set_key = IREE_SVL("iree.vm.core"),
+          .contract_set_key = IREE_SVL("ireevm.core"),
           .policy = &kIreeVmLowLowerPolicy,
       },
   };

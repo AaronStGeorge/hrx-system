@@ -86,18 +86,41 @@ static iree_status_t loom_ireevm_calling_convention_append(
 static iree_status_t loom_ireevm_module_plan_append_calling_convention_type(
     const loom_module_t* module, loom_type_t type,
     loom_ireevm_calling_convention_buffer_t* buffer) {
-  if (loom_type_is_register(type) && loom_type_register_unit_count(type) == 1) {
+  if (loom_type_is_register(type)) {
     iree_string_view_t register_class = loom_ireevm_module_plan_string(
         module, loom_type_register_class_id(type));
-    if (iree_string_view_equal(register_class, IREE_SV("vm.i32"))) {
+    const uint32_t unit_count = loom_type_register_unit_count(type);
+    if (iree_string_view_equal(register_class, IREE_SV("ireevm.i32")) &&
+        unit_count == 1) {
       return loom_ireevm_calling_convention_append(buffer, 'i');
+    }
+    if (iree_string_view_equal(register_class, IREE_SV("ireevm.i64")) &&
+        unit_count == 2) {
+      return loom_ireevm_calling_convention_append(buffer, 'I');
+    }
+    if (iree_string_view_equal(register_class, IREE_SV("ireevm.f32")) &&
+        unit_count == 1) {
+      return loom_ireevm_calling_convention_append(buffer, 'f');
+    }
+    if (iree_string_view_equal(register_class, IREE_SV("ireevm.f64")) &&
+        unit_count == 2) {
+      return loom_ireevm_calling_convention_append(buffer, 'F');
     }
   }
   if (loom_type_is_scalar(type)) {
     const loom_scalar_type_t scalar_type = loom_type_element_type(type);
-    if (scalar_type == LOOM_SCALAR_TYPE_I1 ||
-        scalar_type == LOOM_SCALAR_TYPE_I32) {
-      return loom_ireevm_calling_convention_append(buffer, 'i');
+    switch (scalar_type) {
+      case LOOM_SCALAR_TYPE_I1:
+      case LOOM_SCALAR_TYPE_I32:
+        return loom_ireevm_calling_convention_append(buffer, 'i');
+      case LOOM_SCALAR_TYPE_I64:
+        return loom_ireevm_calling_convention_append(buffer, 'I');
+      case LOOM_SCALAR_TYPE_F32:
+        return loom_ireevm_calling_convention_append(buffer, 'f');
+      case LOOM_SCALAR_TYPE_F64:
+        return loom_ireevm_calling_convention_append(buffer, 'F');
+      default:
+        break;
     }
   }
   return iree_make_status(

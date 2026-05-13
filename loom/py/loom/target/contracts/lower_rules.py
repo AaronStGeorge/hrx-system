@@ -85,6 +85,7 @@ class LowerAttrCopyKind(Enum):
     VALUE_U32_DIVISOR_MAGIC_SHIFT = "value_u32_divisor_magic_shift"
     VALUE_I32_AS_U32_BITS = "value_i32_as_u32_bits"
     VALUE_F64_AS_F32_BITS = "value_f64_as_f32_bits"
+    VALUE_F64_AS_F64_BITS = "value_f64_as_f64_bits"
     I64_ARRAY_LANE_BYTE = "i64_array_lane_byte"
     SOURCE_MEMORY_STATIC_BYTE_OFFSET = "source_memory_static_byte_offset"
     SOURCE_MEMORY_DYNAMIC_BYTE_STRIDE = "source_memory_dynamic_byte_stride"
@@ -1336,6 +1337,8 @@ class _LowerRuleSetCompiler:
             kind = LowerAttrCopyKind.VALUE_I32_AS_U32_BITS
         elif project.kind == ValueProjectKind.F64_AS_F32_BITS:
             kind = LowerAttrCopyKind.VALUE_F64_AS_F32_BITS
+        elif project.kind == ValueProjectKind.F64_AS_F64_BITS:
+            kind = LowerAttrCopyKind.VALUE_F64_AS_F64_BITS
         else:
             raise ValueError(
                 f"{source_op.name}: immediate projection '{project.kind.value}' is "

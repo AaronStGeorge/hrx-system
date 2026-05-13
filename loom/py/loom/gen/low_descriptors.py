@@ -258,6 +258,8 @@ def _optional_string_expr(string_pool: _StringPool, label: str | None) -> str:
 
 
 def _i64_literal(value: int) -> str:
+    if value == -(1 << 63):
+        return "INT64_MIN"
     if value < 0:
         return f"(-INT64_C({abs(value)}))"
     return f"INT64_C({value})"

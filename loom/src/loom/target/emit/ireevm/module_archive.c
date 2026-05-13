@@ -27,6 +27,8 @@ typedef struct loom_ireevm_module_build_t {
   uint8_t* bytecode_data;
   // Number of bytes in |bytecode_data|.
   iree_host_size_t bytecode_data_length;
+  // IREE VM FeatureBits required by all local function bodies.
+  uint32_t feature_requirements;
 } loom_ireevm_module_build_t;
 
 static void loom_ireevm_module_build_deinitialize(
@@ -125,6 +127,7 @@ static iree_status_t loom_ireevm_module_archive_validate_functions(
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "VM module bytecode data exceeds i32");
     }
+    build->feature_requirements |= function->bytecode->feature_requirements;
   }
   build->bytecode_data_length = bytecode_data_length;
   return iree_ok_status();
@@ -284,7 +287,8 @@ static iree_status_t loom_ireevm_module_build_functions(
         &build->signature_references[i]));
     iree_vm_FunctionDescriptor_assign(
         &build->descriptors[i], (int32_t)bytecode_offset,
-        (int32_t)bytecode->bytecode_length, (iree_vm_FeatureBits_enum_t)0, 0,
+        (int32_t)bytecode->bytecode_length,
+        (iree_vm_FeatureBits_enum_t)bytecode->feature_requirements, 0,
         (int16_t)bytecode->block_count, (int16_t)bytecode->i32_register_count,
         (int16_t)bytecode->ref_register_count);
     memcpy(build->bytecode_data + bytecode_offset, bytecode->data,
@@ -381,6 +385,8 @@ static iree_status_t loom_ireevm_module_build_root(
                                                         signatures_reference) ||
       iree_vm_BytecodeModuleDef_function_descriptors_add(
           builder, descriptors_reference) ||
+      iree_vm_BytecodeModuleDef_requirements_add(
+          builder, (iree_vm_FeatureBits_enum_t)build->feature_requirements) ||
       iree_vm_BytecodeModuleDef_bytecode_version_add(builder,
                                                      bytecode_version) ||
       iree_vm_BytecodeModuleDef_bytecode_data_add(builder,

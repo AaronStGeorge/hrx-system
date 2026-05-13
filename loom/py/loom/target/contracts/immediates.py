@@ -41,6 +41,7 @@ class ValueProjectKind(Enum):
     U32_DIVISOR_MAGIC_SHIFT = "u32_divisor_magic_shift"
     I32_AS_U32_BITS = "i32_as_u32_bits"
     F64_AS_F32_BITS = "f64_as_f32_bits"
+    F64_AS_F64_BITS = "f64_as_f64_bits"
 
 
 @unique
@@ -274,6 +275,14 @@ class ValueProject:
     def f64_as_f32_bits(cls, source_value: str, *, target_bit_offset: int = 0) -> Self:
         return cls(
             kind=ValueProjectKind.F64_AS_F32_BITS,
+            source_value=source_value,
+            target_bit_offset=target_bit_offset,
+        )
+
+    @classmethod
+    def f64_as_f64_bits(cls, source_value: str, *, target_bit_offset: int = 0) -> Self:
+        return cls(
+            kind=ValueProjectKind.F64_AS_F64_BITS,
             source_value=source_value,
             target_bit_offset=target_bit_offset,
         )

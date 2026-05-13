@@ -7,7 +7,7 @@
 // IREE VM source-to-target-low lowering policy.
 //
 // This package-local policy plugs the generic source-to-low lowerer into the
-// iree.vm.core descriptor set. Keeping the policy here prevents VM descriptor
+// ireevm.core descriptor set. Keeping the policy here prevents VM descriptor
 // knowledge from leaking into the target-independent codegen/low layer.
 
 #ifndef LOOM_TARGET_EMIT_IREEVM_LOWER_H_
@@ -19,12 +19,11 @@
 extern "C" {
 #endif
 
-// Returns the package-local lowering policy for the VM i32 scalar subset.
+// Returns the package-local lowering policy for VM scalar source ops.
 //
-// The policy maps i1/i32 source values to reg<vm.i32> and currently lowers
-// scalar.constant, scalar.addi, scalar.subi, and scalar.cmpi eq over i32
-// values. Unsupported source ops are rejected through structured target-low
-// diagnostics instead of producing partial low IR.
+// The policy maps i1/i32/i64/f32/f64 source values to the corresponding
+// ireevm register classes. Unsupported source ops are rejected through
+// structured target-low diagnostics instead of producing partial low IR.
 const loom_low_lower_policy_t* loom_ireevm_low_lower_policy(void);
 
 // Initializes a target-owned registry mapping IREE VM target-contract keys to
