@@ -115,10 +115,12 @@ loom_cc_library(
         "//loom/src/loom/util:stream",
         "//loom/src/loom/verify",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:path",
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/hal",
-        "//runtime/src/iree/io:file_handle",
+        "//runtime/src/iree/io:stream",
         "//runtime/src/iree/tooling:device_util",
+        "//runtime/src/iree/tooling/profile:counter",
         "//runtime/src/iree/vm",
     ],
 )

@@ -19,9 +19,10 @@ loom_cc_library(
     "main.c"
   DEPS
     iree::base
+    iree::base::internal::path
     iree::base::tooling::flags
     iree::hal
-    iree::io::file_handle
+    iree::io::stream
     loom::src::loom::error::json_sink
     loom::src::loom::ir
     loom::src::loom::ir::facts
@@ -43,6 +44,7 @@ loom_cc_library(
     loom::src::loom::util::stream
     loom::src::loom::verify
     iree::tooling::device_util
+    iree::tooling::profile::counter
     iree::vm
   PUBLIC
 )

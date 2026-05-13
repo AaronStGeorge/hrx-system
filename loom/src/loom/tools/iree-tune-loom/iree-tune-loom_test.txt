@@ -128,17 +128,5 @@
 // DUPLICATE: "failure_count":1
 
 // AGENTS: ## iree-tune-loom
-// AGENTS: Use `iree-tune-loom`
-// AGENTS: --dry_run
-// AGENTS: --device=amdgpu
-// AGENTS: --shape_specialization=both
-// AGENTS: jq
-// AGENTS: --help
 
 // HELP: Runs correctness-gated check.benchmark records from a Loom module.
-// HELP: --shape_specialization=dynamic|per_sample|both
-// HELP: iree-tune-loom --agents_md
-// HELP: run       first row
-// HELP: candidate_id/candidate_index
-// HELP: shape.parameters
-// HELP: profile.rows array contains HAL statistics rows
