@@ -355,7 +355,8 @@ static iree_status_t iree_run_loom_compile_report_options_initialize(
 
 static iree_status_t iree_run_loom_run_pass_pipeline(
     const iree_run_loom_configuration_t* configuration,
-    loom_run_session_t* session, loom_run_module_t* run_module) {
+    loom_run_session_t* session, loom_run_module_t* run_module,
+    loom_pass_run_result_t* out_run_result) {
   loom_compile_pipeline_options_t pipeline_options = {0};
   loom_compile_pipeline_options_initialize(&pipeline_options);
   pipeline_options.pipeline = iree_make_cstring_view(FLAG_pipeline);
@@ -368,10 +369,9 @@ static iree_status_t iree_run_loom_run_pass_pipeline(
   pipeline_options.diagnostic_sink = (loom_diagnostic_sink_t){
       .fn = loom_diagnostic_stderr_sink,
   };
-  loom_pass_run_result_t run_result = {0};
   return loom_compile_run_pipeline(run_module->module, &pipeline_options,
                                    loom_run_session_block_pool(session),
-                                   &run_result);
+                                   out_run_result);
 }
 
 static iree_status_t iree_run_loom_make_unknown_backend_status(
@@ -548,10 +548,14 @@ int iree_run_loom_main(int argc, char** argv,
         loom_run_module_source_resolver(&run_module);
   }
   if (iree_status_is_ok(status)) {
-    status =
-        iree_run_loom_run_pass_pipeline(configuration, &session, &run_module);
+    loom_pass_run_result_t pass_run_result = {0};
+    status = iree_run_loom_run_pass_pipeline(configuration, &session,
+                                             &run_module, &pass_run_result);
+    if (iree_status_is_ok(status) && pass_run_result.error_count != 0) {
+      exit_code = 1;
+    }
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && exit_code == 0) {
     const loom_run_one_shot_request_t run_request = {
         .run_module = &run_module,
         .compile_options = &compile_options,
@@ -566,7 +570,7 @@ int iree_run_loom_main(int argc, char** argv,
     status =
         loom_tooling_write_stdout(iree_string_builder_view(&run_result.output));
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && exit_code == 0) {
     exit_code = run_result.exit_code;
   }
 

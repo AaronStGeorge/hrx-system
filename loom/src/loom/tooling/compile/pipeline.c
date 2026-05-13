@@ -6,8 +6,6 @@
 
 #include "loom/tooling/compile/pipeline.h"
 
-#include <inttypes.h>
-
 #include "loom/codegen/low/pass_environment.h"
 #include "loom/error/diagnostic.h"
 #include "loom/pass/builtin_registry.h"
@@ -180,12 +178,6 @@ iree_status_t loom_compile_run_pipeline(
   } else {
     status = loom_pass_tool_run_flat_pipeline(module, pipeline, &run_options,
                                               out_result);
-  }
-  if (iree_status_is_ok(status) && out_result->error_count != 0) {
-    status = iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "Loom compile pass pipeline failed with %" PRIu32 " error%s",
-        out_result->error_count, out_result->error_count == 1 ? "" : "s");
   }
   return status;
 }

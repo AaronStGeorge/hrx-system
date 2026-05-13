@@ -12,6 +12,18 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    benchmark
+  HDRS
+    "benchmark.h"
+  SRCS
+    "benchmark.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     hal_candidate
   HDRS
     "hal_candidate.h"
@@ -119,6 +131,23 @@ loom_cc_library(
     iree::tooling::context_util
     iree::tooling::device_util
     iree::vm
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    hal_benchmark
+  HDRS
+    "hal_benchmark.h"
+  SRCS
+    "hal_benchmark.c"
+  DEPS
+    ::benchmark
+    ::hal_invocation
+    ::hal_runtime
+    iree::base
+    iree::hal
+    iree::hal::utils::statistics_sink
   PUBLIC
 )
 
@@ -235,6 +264,18 @@ loom_cc_library(
 
 loom_cc_test(
   NAME
+    benchmark_test
+  SRCS
+    "benchmark_test.cc"
+  DEPS
+    ::benchmark
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
     hal_candidate_test
   SRCS
     "hal_candidate_test.cc"
@@ -257,6 +298,18 @@ loom_cc_test(
   DEPS
     ::compile_options
     ::compile_report_capture
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    hal_benchmark_test
+  SRCS
+    "hal_benchmark_test.cc"
+  DEPS
+    ::hal_benchmark
     iree::base
     iree::testing::gtest
     iree::testing::gtest_main

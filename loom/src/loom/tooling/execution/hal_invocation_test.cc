@@ -40,6 +40,22 @@ TEST_F(HalInvocationTest, RequestInitializeDefaultsToSingleWorkgroup) {
   EXPECT_EQ(request.options.constant_count, 0u);
 }
 
+TEST_F(HalInvocationTest, DispatchBatchOptionsUseFastReusableDefaults) {
+  loom_run_hal_dispatch_batch_options_t options = {};
+  loom_run_hal_dispatch_batch_options_initialize(&options);
+
+  EXPECT_EQ(options.dispatch_count, 1u);
+  EXPECT_TRUE(iree_all_bits_set(options.command_buffer_mode,
+                                IREE_HAL_COMMAND_BUFFER_MODE_UNVALIDATED));
+  EXPECT_TRUE(iree_all_bits_set(options.command_buffer_mode,
+                                IREE_HAL_COMMAND_BUFFER_MODE_UNRETAINED));
+  EXPECT_FALSE(iree_all_bits_set(options.command_buffer_mode,
+                                 IREE_HAL_COMMAND_BUFFER_MODE_ONE_SHOT));
+  EXPECT_TRUE(
+      iree_all_bits_set(options.execute_flags,
+                        IREE_HAL_EXECUTE_FLAG_BORROW_BINDING_TABLE_LIFETIME));
+}
+
 TEST_F(HalInvocationTest, ResultOwnsOutputBuilder) {
   loom_run_hal_invocation_result_t result = {};
   loom_run_hal_invocation_result_initialize(iree_allocator_system(), &result);
@@ -205,6 +221,53 @@ TEST_F(HalInvocationTest, DispatchPlanRejectsMissingPreparedExecutable) {
   loom_run_hal_invocation_plan_deinitialize(&plan);
 }
 
+TEST_F(HalInvocationTest, PreparePlanFromListsRetainsBindings) {
+  loom_run_hal_invocation_options_t options = {};
+  loom_run_hal_invocation_options_initialize(&options);
+
+  iree_vm_list_t* bindings = nullptr;
+  const iree_vm_type_def_t value_type =
+      iree_vm_make_value_type_def(IREE_VM_VALUE_TYPE_I32);
+  IREE_ASSERT_OK(
+      iree_vm_list_create(value_type, 1, iree_allocator_system(), &bindings));
+  iree_vm_value_t value = iree_vm_value_make_i32(0);
+  IREE_ASSERT_OK(iree_vm_list_push_value(bindings, &value));
+
+  loom_run_hal_invocation_plan_t plan = {};
+  IREE_ASSERT_OK(loom_run_hal_invocation_plan_prepare_from_lists(
+      &options, bindings, /*expected_bindings=*/nullptr,
+      /*max_output_element_count=*/0, &plan));
+  iree_vm_list_release(bindings);
+
+  EXPECT_EQ(iree_vm_list_size(plan.bindings), 1u);
+
+  loom_run_hal_invocation_plan_deinitialize(&plan);
+}
+
+TEST_F(HalInvocationTest, PreparePlanFromListsRejectsTooManyBindings) {
+  loom_run_hal_invocation_options_t options = {};
+  loom_run_hal_invocation_options_initialize(&options);
+
+  iree_vm_list_t* bindings = nullptr;
+  const iree_vm_type_def_t value_type =
+      iree_vm_make_value_type_def(IREE_VM_VALUE_TYPE_I32);
+  IREE_ASSERT_OK(
+      iree_vm_list_create(value_type, 0, iree_allocator_system(), &bindings));
+  iree_vm_value_t value = iree_vm_value_make_i32(0);
+  for (iree_host_size_t i = 0; i <= LOOM_RUN_HAL_MAX_BINDING_COUNT; ++i) {
+    IREE_ASSERT_OK(iree_vm_list_push_value(bindings, &value));
+  }
+
+  loom_run_hal_invocation_plan_t plan = {};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        loom_run_hal_invocation_plan_prepare_from_lists(
+                            &options, bindings, /*expected_bindings=*/nullptr,
+                            /*max_output_element_count=*/0, &plan));
+
+  loom_run_hal_invocation_plan_deinitialize(&plan);
+  iree_vm_list_release(bindings);
+}
+
 TEST_F(HalInvocationTest, DispatchPlanRejectsTooManyConstantsBeforeDeviceUse) {
   loom_run_hal_runtime_t runtime = {};
   loom_run_hal_prepared_candidate_t candidate = {};
@@ -224,6 +287,35 @@ TEST_F(HalInvocationTest, DispatchPlanRejectsTooManyConstantsBeforeDeviceUse) {
           &runtime, &candidate, &plan, iree_allocator_system(), &iteration));
 
   loom_run_hal_iteration_deinitialize(&iteration);
+  loom_run_hal_invocation_plan_deinitialize(&plan);
+}
+
+TEST_F(HalInvocationTest,
+       DispatchBatchRejectsZeroDispatchCountBeforeDeviceUse) {
+  loom_run_hal_runtime_t runtime = {};
+  loom_run_hal_prepared_candidate_t candidate = {
+      .executable = reinterpret_cast<iree_hal_executable_t*>(1),
+  };
+  loom_run_hal_invocation_plan_t plan = {};
+  loom_run_hal_invocation_plan_initialize(&plan);
+
+  const iree_vm_type_def_t value_type =
+      iree_vm_make_value_type_def(IREE_VM_VALUE_TYPE_I32);
+  IREE_ASSERT_OK(iree_vm_list_create(value_type, 0, iree_allocator_system(),
+                                     &plan.bindings));
+
+  loom_run_hal_dispatch_batch_options_t options = {};
+  loom_run_hal_dispatch_batch_options_initialize(&options);
+  options.dispatch_count = 0;
+
+  loom_run_hal_dispatch_batch_t batch = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_run_hal_dispatch_batch_prepare(&runtime, &candidate, &plan, &options,
+                                          iree_allocator_system(), &batch));
+
+  candidate.executable = nullptr;
+  loom_run_hal_dispatch_batch_deinitialize(&batch);
   loom_run_hal_invocation_plan_deinitialize(&plan);
 }
 

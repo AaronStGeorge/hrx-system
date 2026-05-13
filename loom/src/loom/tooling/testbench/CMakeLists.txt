@@ -36,6 +36,7 @@ loom_cc_library(
   DEPS
     ::testbench
     iree::base
+    iree::base::internal
     iree::base::internal::prng
     iree::hal
     iree::io::stream
@@ -194,6 +195,7 @@ loom_cc_test(
     ::testbench
     ::value_materializer
     iree::base
+    iree::base::internal
     iree::base::internal::arena
     iree::hal
     iree::io::stream

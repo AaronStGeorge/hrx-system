@@ -1,0 +1,145 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("@bazel_skylib//rules:common_settings.bzl", "string_list_flag")
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "iree_lit_test_suite",
+    "iree_select",
+    "loom_cc_binary",
+    "loom_cc_library",
+)
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+ALL_EXECUTION_PROVIDERS = [
+    "amdgpu",
+    "ireevm",
+]
+
+#===------------------------------------------------------------------------===#
+# Provider selection
+#===------------------------------------------------------------------------===#
+
+string_list_flag(
+    name = "enabled_providers",
+    build_setting_default = ALL_EXECUTION_PROVIDERS,
+)
+
+[
+    config_setting(
+        name = "{}_provider_enabled".format(provider),
+        flag_values = {
+            ":enabled_providers": provider,
+        },
+    )
+    for provider in ALL_EXECUTION_PROVIDERS
+]
+
+config_setting(
+    name = "amdgpu_provider_and_hal_enabled",
+    flag_values = {
+        ":enabled_providers": "amdgpu",
+        "//runtime/src/iree/hal/drivers:enabled_drivers": "amdgpu",
+    },
+)
+
+_AMDGPU_EXECUTION_COPTS = iree_select({
+    ":amdgpu_provider_and_hal_enabled": [
+        "-DIREE_TUNE_LOOM_HAVE_AMDGPU=1",
+    ],
+    "//conditions:default": [],
+})
+
+_AMDGPU_EXECUTION_DEPS = iree_select({
+    ":amdgpu_provider_and_hal_enabled": [
+        "//loom/src/loom/target/arch/amdgpu:execution_provider",
+    ],
+    "//conditions:default": [],
+})
+
+_IREEVM_EXECUTION_COPTS = iree_select({
+    ":ireevm_provider_enabled": [
+        "-DIREE_TUNE_LOOM_HAVE_IREEVM=1",
+    ],
+    "//conditions:default": [],
+})
+
+_IREEVM_EXECUTION_DEPS = iree_select({
+    ":ireevm_provider_enabled": [
+        "//loom/src/loom/target/emit/ireevm:execution_provider",
+    ],
+    "//conditions:default": [],
+})
+
+_IREE_TUNE_LOOM_PROVIDER_COPTS = (
+    _AMDGPU_EXECUTION_COPTS +
+    _IREEVM_EXECUTION_COPTS
+)
+
+_IREE_TUNE_LOOM_PROVIDER_DEPS = (
+    _AMDGPU_EXECUTION_DEPS +
+    _IREEVM_EXECUTION_DEPS
+)
+
+loom_cc_library(
+    name = "main",
+    srcs = ["main.c"],
+    hdrs = ["main.h"],
+    deps = [
+        "//loom/src/loom/error:json_sink",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/tooling/compile:pipeline",
+        "//loom/src/loom/tooling/execution:compile_options",
+        "//loom/src/loom/tooling/execution:hal_backend",
+        "//loom/src/loom/tooling/execution:hal_benchmark",
+        "//loom/src/loom/tooling/execution:hal_candidate",
+        "//loom/src/loom/tooling/execution:hal_invocation",
+        "//loom/src/loom/tooling/execution:hal_runtime",
+        "//loom/src/loom/tooling/execution:one_shot",
+        "//loom/src/loom/tooling/execution:session",
+        "//loom/src/loom/tooling/io:file",
+        "//loom/src/loom/tooling/testbench:executor",
+        "//loom/src/loom/util:json",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/tooling:flags",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/io:file_handle",
+        "//runtime/src/iree/tooling:device_util",
+        "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_binary(
+    name = "iree-tune-loom",
+    srcs = ["iree-tune-loom.c"],
+    copts = _IREE_TUNE_LOOM_PROVIDER_COPTS,
+    deps = [
+        ":main",
+        "//loom/src/loom/tooling/execution:execution_provider",
+        "//runtime/src/iree/base",
+    ] + _IREE_TUNE_LOOM_PROVIDER_DEPS,
+)
+
+iree_lit_test_suite(
+    name = "lit_test",
+    srcs = ["iree-tune-loom_test.txt"],
+    cfg = "//runtime:lit.cfg.py",
+    data = [
+        "testdata/scalar_benchmarks.loom",
+    ],
+    tags = ["hostonly"],
+    tools = [
+        ":iree-tune-loom",
+        "@llvm-project//llvm:FileCheck",
+    ],
+)

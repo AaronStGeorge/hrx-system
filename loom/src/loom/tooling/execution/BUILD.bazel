@@ -17,6 +17,15 @@ package(
 )
 
 loom_cc_library(
+    name = "benchmark",
+    srcs = ["benchmark.c"],
+    hdrs = ["benchmark.h"],
+    deps = [
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "hal_candidate",
     srcs = ["hal_candidate.c"],
     hdrs = ["hal_candidate.h"],
@@ -104,6 +113,20 @@ loom_cc_library(
         "//runtime/src/iree/tooling:context_util",
         "//runtime/src/iree/tooling:device_util",
         "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_library(
+    name = "hal_benchmark",
+    srcs = ["hal_benchmark.c"],
+    hdrs = ["hal_benchmark.h"],
+    deps = [
+        ":benchmark",
+        ":hal_invocation",
+        ":hal_runtime",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/utils:statistics_sink",
     ],
 )
 
@@ -201,6 +224,17 @@ loom_cc_library(
 )
 
 loom_cc_test(
+    name = "benchmark_test",
+    srcs = ["benchmark_test.cc"],
+    deps = [
+        ":benchmark",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "hal_candidate_test",
     srcs = ["hal_candidate_test.cc"],
     deps = [
@@ -221,6 +255,17 @@ loom_cc_test(
     deps = [
         ":compile_options",
         ":compile_report_capture",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "hal_benchmark_test",
+    srcs = ["hal_benchmark_test.cc"],
+    deps = [
+        ":hal_benchmark",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

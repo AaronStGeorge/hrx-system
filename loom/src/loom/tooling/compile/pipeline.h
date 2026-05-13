@@ -72,9 +72,10 @@ bool loom_compile_pipeline_is_default(iree_string_view_t pipeline);
 
 // Runs the selected compile pipeline on |module|.
 //
-// Status is reserved for infrastructure failures. Pass-emitted errors are
-// counted in |out_result| and converted to FAILED_PRECONDITION by this helper
-// so command-line front doors share one failure policy.
+// Status is reserved for infrastructure failures. Pass-emitted diagnostics are
+// counted in |out_result| and left to the caller's product policy: a compiler
+// front door may exit nonzero, while a tuner can preserve the diagnostics as
+// failed-candidate evidence and continue.
 iree_status_t loom_compile_run_pipeline(
     loom_module_t* module, const loom_compile_pipeline_options_t* options,
     iree_arena_block_pool_t* block_pool, loom_pass_run_result_t* out_result);

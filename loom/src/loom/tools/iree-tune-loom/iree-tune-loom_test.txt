@@ -1,0 +1,38 @@
+// RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency | FileCheck --check-prefix=BENCH %s
+// RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@sampled_choice_latency --sample=1 --iterations=2 --warmup_iterations=0 | FileCheck --check-prefix=SAMPLE %s
+// RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --iterations=2 --warmup_iterations=0 | FileCheck --check-prefix=CLI-OVERRIDE %s
+// RUN: ( iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_dispatch_latency 2>&1 || true ) | FileCheck --check-prefix=DISPATCH-NO-ACTUAL %s
+
+// BENCH: "format":"loom.tune.v0"
+// BENCH: "planned_case_count":2
+// BENCH: "planned_benchmark_count":3
+// BENCH: "benchmark_count":1
+// BENCH: "failed_benchmark_count":0
+// BENCH: "correctness_sample_count":1
+// BENCH: "correctness_failed_sample_count":0
+// BENCH: "case":"scalar_equal","sample_ordinal":0,"passed":true
+// BENCH: "benchmark":"scalar_equal_latency","case":"scalar_equal","status":"ok"
+// BENCH: "measure":"case_end_to_end"
+// BENCH: "warmup_iterations":1
+// BENCH: "iterations":3
+// BENCH: "samples_per_iteration":1
+// BENCH: "timing_ns":{"count":3
+// BENCH: "p50":
+// BENCH: "p90":
+
+// SAMPLE: "format":"loom.tune.v0"
+// SAMPLE: "benchmark_count":1
+// SAMPLE: "correctness_sample_count":1
+// SAMPLE: "case":"sampled_choice","sample_ordinal":1,"passed":true
+// SAMPLE: "benchmark":"sampled_choice_latency","case":"sampled_choice","status":"ok"
+// SAMPLE: "warmup_iterations":0
+// SAMPLE: "iterations":2
+// SAMPLE: "samples_per_iteration":1
+// SAMPLE: "timing_ns":{"count":2
+
+// CLI-OVERRIDE: "benchmark":"scalar_equal_latency","case":"scalar_equal","status":"ok"
+// CLI-OVERRIDE: "measure":"case_end_to_end"
+// CLI-OVERRIDE: "warmup_iterations":0
+// CLI-OVERRIDE: "iterations":2
+
+// DISPATCH-NO-ACTUAL: dispatch_complete V0 requires exactly one actual invocation

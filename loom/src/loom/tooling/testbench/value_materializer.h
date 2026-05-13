@@ -74,6 +74,10 @@ typedef struct loom_testbench_value_materializer_options_t {
   iree_hal_device_t* device;
   // HAL allocator used for shaped generated and file-backed values.
   iree_hal_allocator_t* device_allocator;
+  // Optional buffer placement for generated and file-backed shaped values. When
+  // zero-initialized, generated values use the materializer's default
+  // device-local placement.
+  iree_hal_buffer_params_t buffer_params;
   // Callback used to open check.file.read.* paths.
   loom_testbench_file_open_callback_t open_read_file;
   // Callback used to open check.file.write.* paths.

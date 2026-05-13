@@ -160,7 +160,8 @@ static iree_status_t loom_compile_report_options_initialize(
 
 static iree_status_t loom_compile_run_pass_pipeline(
     const loom_run_execution_environment_t* environment,
-    loom_run_session_t* session, loom_run_module_t* run_module) {
+    loom_run_session_t* session, loom_run_module_t* run_module,
+    loom_pass_run_result_t* out_run_result) {
   loom_compile_pipeline_options_t pipeline_options = {0};
   loom_compile_pipeline_options_initialize(&pipeline_options);
   pipeline_options.pipeline = iree_make_cstring_view(FLAG_pipeline);
@@ -175,10 +176,9 @@ static iree_status_t loom_compile_run_pass_pipeline(
   pipeline_options.source_resolver =
       loom_run_module_source_resolver(run_module);
 
-  loom_pass_run_result_t run_result = {0};
   return loom_compile_run_pipeline(run_module->module, &pipeline_options,
                                    loom_run_session_block_pool(session),
-                                   &run_result);
+                                   out_run_result);
 }
 
 static iree_status_t loom_compile_write_bytes(iree_string_view_t path,
@@ -382,13 +382,17 @@ int main(int argc, char** argv) {
         &compile_report_capture, &compile_options);
   }
   if (iree_status_is_ok(status)) {
-    status =
-        loom_compile_run_pass_pipeline(&environment, &session, &run_module);
+    loom_pass_run_result_t pass_run_result = {0};
+    status = loom_compile_run_pass_pipeline(&environment, &session, &run_module,
+                                            &pass_run_result);
+    if (iree_status_is_ok(status) && pass_run_result.error_count != 0) {
+      exit_code = 1;
+    }
   }
 
   const iree_string_view_t backend_name =
       iree_make_cstring_view(FLAG_loom_backend);
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && exit_code == 0) {
     const loom_run_hal_backend_t* hal_backend =
         loom_run_hal_backend_registry_lookup(
             loom_run_execution_environment_hal_backend_registry(&environment),
@@ -409,7 +413,7 @@ int main(int argc, char** argv) {
   if (iree_status_is_ok(status)) {
     status = loom_compile_write_report(&compile_report_capture, allocator);
   }
-  if (iree_status_is_ok(status) && !emitted) {
+  if (iree_status_is_ok(status) && exit_code == 0 && !emitted) {
     exit_code = 1;
   }
 

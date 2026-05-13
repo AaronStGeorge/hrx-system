@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "iree/base/internal/arena.h"
+#include "iree/base/internal/math.h"
 #include "iree/hal/api.h"
 #include "iree/io/memory_stream.h"
 #include "iree/io/vec_stream.h"
@@ -189,6 +190,7 @@ check.case @generated {
   %scalar = check.literal value(42) : i32
   %iota = check.generate.iota offset(0) step(1) : tensor<[%m]xi32>
   %fill = check.generate.fill value(1.5) : tensor<3xf32>
+  %bf16 = check.generate.fill value(0.25) : tensor<2xbf16>
   %uniform = check.generate.random.uniform seed(%seed) range(-1.0 to 1.0) : tensor<4xf32>
   check.return
 }
@@ -207,7 +209,7 @@ check.case @generated {
       &options, &case_plan, /*sample_ordinal=*/1, &table));
 
   ASSERT_EQ(case_plan.parameter_count, 2u);
-  ASSERT_EQ(case_plan.value_source_count, 4u);
+  ASSERT_EQ(case_plan.value_source_count, 5u);
   iree_vm_variant_t scalar = iree_vm_variant_empty();
   IREE_ASSERT_OK(loom_testbench_value_table_lookup_retain(
       &table, case_plan.value_sources[0].value_id, &scalar));
@@ -231,9 +233,17 @@ check.case @generated {
       fill_view, {3}, IREE_HAL_ELEMENT_TYPE_FLOAT_32, {1.5f, 1.5f, 1.5f});
   iree_vm_variant_reset(&fill);
 
+  iree_vm_variant_t bf16 = iree_vm_variant_empty();
+  iree_hal_buffer_view_t* bf16_view =
+      LookupBufferView(&table, case_plan.value_sources[3].value_id, &bf16);
+  ExpectBufferViewContents<uint16_t>(
+      bf16_view, {2}, IREE_HAL_ELEMENT_TYPE_BFLOAT_16,
+      {iree_math_f32_to_bf16(0.25f), iree_math_f32_to_bf16(0.25f)});
+  iree_vm_variant_reset(&bf16);
+
   iree_vm_variant_t uniform = iree_vm_variant_empty();
   iree_hal_buffer_view_t* uniform_view =
-      LookupBufferView(&table, case_plan.value_sources[3].value_id, &uniform);
+      LookupBufferView(&table, case_plan.value_sources[4].value_id, &uniform);
   ASSERT_EQ(iree_hal_buffer_view_shape_rank(uniform_view), 1u);
   EXPECT_EQ(iree_hal_buffer_view_shape_dim(uniform_view, 0), 4);
   EXPECT_EQ(iree_hal_buffer_view_element_type(uniform_view),

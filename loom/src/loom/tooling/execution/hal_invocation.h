@@ -71,6 +71,30 @@ typedef struct loom_run_hal_iteration_t {
   iree_vm_list_t* bindings;
 } loom_run_hal_iteration_t;
 
+typedef struct loom_run_hal_dispatch_batch_options_t {
+  // Number of identical dispatches recorded into the reusable command buffer.
+  iree_host_size_t dispatch_count;
+  // Command-buffer mode used while recording the batch.
+  iree_hal_command_buffer_mode_t command_buffer_mode;
+  // Queue execute flags used for each batch submission.
+  iree_hal_execute_flags_t execute_flags;
+} loom_run_hal_dispatch_batch_options_t;
+
+typedef struct loom_run_hal_dispatch_batch_t {
+  // Batch-owned binding list cloned from the invocation plan.
+  iree_vm_list_t* bindings;
+  // Reusable command buffer containing |dispatch_count| dispatch commands.
+  iree_hal_command_buffer_t* command_buffer;
+  // Timeline semaphore signaled after each batch submission.
+  iree_hal_semaphore_t* semaphore;
+  // Payload value to signal on the next batch submission.
+  uint64_t next_signal_value;
+  // Number of dispatches recorded in |command_buffer|.
+  iree_host_size_t dispatch_count;
+  // Queue execute flags used for each batch submission.
+  iree_hal_execute_flags_t execute_flags;
+} loom_run_hal_dispatch_batch_t;
+
 typedef struct loom_run_hal_invocation_request_t {
   // Initialized HAL runtime that owns the device used for dispatch.
   const loom_run_hal_runtime_t* runtime;
@@ -123,6 +147,18 @@ void loom_run_hal_iteration_initialize(loom_run_hal_iteration_t* out_iteration);
 // Releases storage owned by |iteration|.
 void loom_run_hal_iteration_deinitialize(loom_run_hal_iteration_t* iteration);
 
+// Initializes batch options for one reusable unvalidated/unretained dispatch.
+void loom_run_hal_dispatch_batch_options_initialize(
+    loom_run_hal_dispatch_batch_options_t* out_options);
+
+// Initializes an empty HAL dispatch batch.
+void loom_run_hal_dispatch_batch_initialize(
+    loom_run_hal_dispatch_batch_t* out_batch);
+
+// Releases storage owned by |batch|.
+void loom_run_hal_dispatch_batch_deinitialize(
+    loom_run_hal_dispatch_batch_t* batch);
+
 // Initializes an invocation result. Must be paired with
 // loom_run_hal_invocation_result_deinitialize().
 void loom_run_hal_invocation_result_initialize(
@@ -150,6 +186,29 @@ iree_status_t loom_run_hal_dispatch(
     iree_vm_list_t* binding_list,
     const loom_run_hal_invocation_options_t* options);
 
+// Records a reusable command buffer containing |batch_options->dispatch_count|
+// copies of |plan|'s dispatch. The batch clones |plan| bindings once and may be
+// executed repeatedly by loom_run_hal_dispatch_batch_execute.
+iree_status_t loom_run_hal_dispatch_batch_prepare(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_prepared_candidate_t* candidate,
+    const loom_run_hal_invocation_plan_t* plan,
+    const loom_run_hal_dispatch_batch_options_t* batch_options,
+    iree_allocator_t allocator, loom_run_hal_dispatch_batch_t* out_batch);
+
+// Submits |batch| once and waits for completion.
+iree_status_t loom_run_hal_dispatch_batch_execute(
+    const loom_run_hal_runtime_t* runtime,
+    loom_run_hal_dispatch_batch_t* batch);
+
+// Transfers |batch| bindings back to host-visible storage and records formatted
+// outputs or expected comparison diagnostics in |result|.
+iree_status_t loom_run_hal_dispatch_batch_collect_results(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_invocation_plan_t* plan,
+    const loom_run_hal_dispatch_batch_t* batch, iree_allocator_t allocator,
+    loom_run_hal_invocation_result_t* result);
+
 // Prepares and dispatches |executable| through |runtime|.
 iree_status_t loom_run_hal_invocation_execute(
     const loom_run_hal_runtime_t* runtime,
@@ -163,6 +222,14 @@ iree_status_t loom_run_hal_invocation_plan_prepare_from_specs(
     const loom_run_hal_binding_specs_t* bindings,
     const loom_run_hal_binding_specs_t* expected_bindings,
     iree_host_size_t max_output_element_count, iree_allocator_t allocator,
+    loom_run_hal_invocation_plan_t* out_plan);
+
+// Prepares a reusable invocation plan from caller-materialized binding lists.
+// |out_plan| retains |bindings| and optional |expected_bindings|.
+iree_status_t loom_run_hal_invocation_plan_prepare_from_lists(
+    const loom_run_hal_invocation_options_t* options, iree_vm_list_t* bindings,
+    iree_vm_list_t* expected_bindings,
+    iree_host_size_t max_output_element_count,
     loom_run_hal_invocation_plan_t* out_plan);
 
 // Clones plan bindings and dispatches one iteration through |candidate| without
