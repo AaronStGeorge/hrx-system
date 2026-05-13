@@ -51,6 +51,10 @@
 #include "loom/util/stream.h"
 #include "loom/verify/verify.h"
 
+enum {
+  IREE_TUNE_LOOM_DEFAULT_INPUT_RING_MIN_BYTES = 32 * 1024 * 1024,
+};
+
 IREE_FLAG(string, case, "",
           "Optional check.case symbol to benchmark, such as '@smoke'. Empty "
           "keeps all cases referenced by selected benchmarks.");
@@ -116,6 +120,17 @@ IREE_FLAG(string, shape_specialization, "dynamic",
           "'dynamic' to compile once and pass parameter values at dispatch "
           "time, 'per_sample' to compile each selected shape with concrete "
           "parameter facts, or 'both' to emit both result sets.");
+IREE_FLAG(
+    int64_t, input_ring_min_bytes, IREE_TUNE_LOOM_DEFAULT_INPUT_RING_MIN_BYTES,
+    "Minimum total byte size of the device-buffer binding ring used by "
+    "dispatch_complete benchmarks. The auto ring count is max(batch_size, "
+    "ceil(input_ring_min_bytes / bytes_per_binding_set)); use 0 to record one "
+    "hot-reuse binding set.");
+IREE_FLAG(
+    int32_t, input_ring_count, 0,
+    "Exact number of physical device-buffer binding sets to rotate through "
+    "dispatch_complete command buffers. Zero uses --input_ring_min_bytes. Use "
+    "1 to force hot-reuse measurements.");
 
 typedef enum iree_tune_loom_shape_specialization_mode_e {
   // Compile once and pass each shape's parameter values dynamically.
@@ -379,7 +394,12 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "emits both result sets. `check.file.read.npy` paths resolve "
           "relative to the `.loom` file; `check.file.write.npy` paths are "
           "relative to `--file_output_dir`, which defaults under "
-          "`$TMPDIR/iree-loom-tune`. When `--profile_data` includes "
+          "`$TMPDIR/iree-loom-tune`. Dispatch benchmarks materialize valid "
+          "check-op inputs into a device-buffer binding ring; "
+          "`--input_ring_min_bytes=33554432` is the default cache-thwarting "
+          "target and `--input_ring_count=1` forces hot-reuse timing when "
+          "that is the experiment. Benchmark rows report `data_cache` with "
+          "the effective ring count and bytes. When `--profile_data` includes "
           "`counters` or `counter-ranges`, decoded rows are emitted as "
           "`profile_counter` JSONL after the normal `profile` row; counter "
           "decode failures are reported as `counter_decode_status` rows "
@@ -409,6 +429,7 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "path/to/file.loom --device=amdgpu --benchmark=@kernel_latency "
           "--batch_size=64 --iterations=16 --warmup_iterations=4 "
           "--min_time_ms=100 --profile_final_batch=true "
+          "--input_ring_min_bytes=33554432 "
           "--shape_specialization=both "
           "--output=results.jsonl\n"
           "```\n"
@@ -432,6 +453,9 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "jq 'select(.row==\"benchmark\" and .shape) | "
           "{candidate_id,shape_id,shape:.shape.parameters,"
           "p50:.benchmark_result.dispatch_timing_ns.p50}' results.jsonl\n"
+          "jq 'select(.row==\"benchmark\") | .benchmark_result | "
+          "{benchmark,p50:.dispatch_timing_ns.p50,"
+          "data_cache}' results.jsonl\n"
           "jq 'select(.row==\"profile_counter\") | .counter | "
           "select(.type==\"counter_group\") | {key,counter,avg,sum}' "
           "results.jsonl\n"
@@ -1074,6 +1098,25 @@ typedef struct iree_tune_loom_timing_stats_t {
   int64_t p90_ns;
 } iree_tune_loom_timing_stats_t;
 
+typedef struct iree_tune_loom_data_cache_summary_t {
+  // True when the dispatch benchmark has populated this summary.
+  bool populated;
+  // Number of HAL binding references in each dispatch binding set.
+  iree_host_size_t binding_count;
+  // Number of physical binding sets materialized from check ops.
+  iree_host_size_t binding_ring_count;
+  // Number of pre-recorded command buffers rotated across benchmark batches.
+  iree_host_size_t command_buffer_ring_count;
+  // Number of dispatch slots recorded in each command buffer.
+  iree_host_size_t dispatches_per_batch;
+  // Requested minimum byte size for the physical binding ring.
+  uint64_t requested_min_ring_bytes;
+  // Byte length of the first materialized binding set.
+  uint64_t binding_set_bytes;
+  // Sum of byte lengths across materialized binding sets.
+  uint64_t binding_ring_bytes;
+} iree_tune_loom_data_cache_summary_t;
+
 typedef struct iree_tune_loom_benchmark_result_t {
   // Stable benchmark status string when it differs from the default.
   iree_string_view_t status;
@@ -1115,6 +1158,8 @@ typedef struct iree_tune_loom_benchmark_result_t {
   bool has_hal_benchmark;
   // HAL batch benchmark evidence.
   loom_run_hal_benchmark_result_t hal_benchmark;
+  // Device-buffer reuse shape used by the HAL batch benchmark.
+  iree_tune_loom_data_cache_summary_t data_cache;
 } iree_tune_loom_benchmark_result_t;
 
 typedef struct iree_tune_loom_hal_context_t {
@@ -3054,6 +3099,198 @@ static iree_status_t iree_tune_loom_create_hal_invocation_inputs_for_sample(
   return status;
 }
 
+typedef struct iree_tune_loom_hal_input_ring_t {
+  // Host allocator used for ring-owned arrays.
+  iree_allocator_t host_allocator;
+  // Ring-owned invocation plans materialized from check ops.
+  loom_run_hal_invocation_plan_t* plans;
+  // Borrowed binding-list pointers into |plans| for HAL benchmark setup.
+  iree_vm_list_t** binding_lists;
+  // Number of entries in |plans| and |binding_lists|.
+  iree_host_size_t plan_count;
+  // Data/cache summary derived while materializing the ring.
+  iree_tune_loom_data_cache_summary_t summary;
+} iree_tune_loom_hal_input_ring_t;
+
+static void iree_tune_loom_hal_input_ring_deinitialize(
+    iree_tune_loom_hal_input_ring_t* ring) {
+  if (ring == NULL) {
+    return;
+  }
+  for (iree_host_size_t i = 0; i < ring->plan_count; ++i) {
+    loom_run_hal_invocation_plan_deinitialize(&ring->plans[i]);
+  }
+  if (ring->binding_lists != NULL) {
+    iree_allocator_free(ring->host_allocator, ring->binding_lists);
+  }
+  if (ring->plans != NULL) {
+    iree_allocator_free(ring->host_allocator, ring->plans);
+  }
+  *ring = (iree_tune_loom_hal_input_ring_t){0};
+}
+
+static bool iree_tune_loom_hal_invocation_options_equal(
+    const loom_run_hal_invocation_options_t* lhs,
+    const loom_run_hal_invocation_options_t* rhs) {
+  if (lhs->entry_point != rhs->entry_point ||
+      lhs->constant_count != rhs->constant_count) {
+    return false;
+  }
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(lhs->workgroup_count); ++i) {
+    if (lhs->workgroup_count[i] != rhs->workgroup_count[i]) {
+      return false;
+    }
+  }
+  for (iree_host_size_t i = 0; i < lhs->constant_count; ++i) {
+    if (lhs->constants[i] != rhs->constants[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static iree_status_t iree_tune_loom_hal_input_ring_count_for_sample(
+    uint64_t binding_set_bytes, iree_host_size_t dispatches_per_batch,
+    iree_host_size_t* out_ring_count) {
+  *out_ring_count = 1;
+  if (FLAG_input_ring_count > 0) {
+    *out_ring_count = (iree_host_size_t)FLAG_input_ring_count;
+    return iree_ok_status();
+  }
+  if (FLAG_input_ring_min_bytes == 0 || binding_set_bytes == 0) {
+    return iree_ok_status();
+  }
+  const uint64_t requested_min_bytes = (uint64_t)FLAG_input_ring_min_bytes;
+  const uint64_t byte_sized_count =
+      requested_min_bytes / binding_set_bytes +
+      (requested_min_bytes % binding_set_bytes == 0 ? 0 : 1);
+  uint64_t ring_count = byte_sized_count;
+  if (ring_count < dispatches_per_batch) {
+    ring_count = dispatches_per_batch;
+  }
+  if (ring_count > IREE_HOST_SIZE_MAX) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "HAL benchmark input ring count %" PRIu64
+                            " exceeds host size limits",
+                            ring_count);
+  }
+  *out_ring_count = (iree_host_size_t)ring_count;
+  return iree_ok_status();
+}
+
+static iree_status_t iree_tune_loom_prepare_hal_invocation_plan_for_sample(
+    const loom_testbench_module_plan_t* module_plan,
+    const loom_testbench_case_plan_t* case_plan,
+    const iree_tune_loom_hal_actual_provider_t* provider,
+    const loom_testbench_value_materializer_options_t* materializer_options,
+    iree_host_size_t sample_ordinal, iree_allocator_t allocator,
+    loom_run_hal_invocation_plan_t* out_plan) {
+  loom_run_hal_invocation_options_t invocation_options = {0};
+  iree_vm_list_t* bindings = NULL;
+  iree_status_t status = iree_tune_loom_create_hal_invocation_inputs_for_sample(
+      module_plan->module, materializer_options, case_plan,
+      provider->actual_invocation, sample_ordinal,
+      &provider->invocation_options, allocator, &invocation_options, &bindings);
+  if (iree_status_is_ok(status)) {
+    status = loom_run_hal_invocation_plan_prepare_from_lists(
+        &invocation_options, bindings, /*expected_bindings=*/NULL,
+        /*max_output_element_count=*/0, out_plan);
+  }
+  iree_vm_list_release(bindings);
+  return status;
+}
+
+static iree_status_t iree_tune_loom_hal_input_ring_prepare(
+    const loom_testbench_module_plan_t* module_plan,
+    const loom_testbench_case_plan_t* case_plan,
+    const iree_tune_loom_benchmark_policy_t* policy,
+    const iree_tune_loom_hal_actual_provider_t* provider,
+    const loom_testbench_value_materializer_options_t* materializer_options,
+    iree_host_size_t sample_ordinal, iree_allocator_t allocator,
+    iree_tune_loom_hal_input_ring_t* out_ring) {
+  *out_ring = (iree_tune_loom_hal_input_ring_t){
+      .host_allocator = allocator,
+  };
+
+  loom_run_hal_invocation_plan_t first_plan = {0};
+  iree_status_t status = iree_tune_loom_prepare_hal_invocation_plan_for_sample(
+      module_plan, case_plan, provider, materializer_options, sample_ordinal,
+      allocator, &first_plan);
+  uint64_t first_binding_set_bytes = 0;
+  if (iree_status_is_ok(status)) {
+    status = loom_run_hal_binding_list_total_byte_length(
+        first_plan.bindings, &first_binding_set_bytes);
+  }
+
+  iree_host_size_t ring_count = 1;
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_hal_input_ring_count_for_sample(
+        first_binding_set_bytes, policy->hal_options.timing.batch_size,
+        &ring_count);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_allocator_malloc_array(allocator, ring_count,
+                                         sizeof(*out_ring->plans),
+                                         (void**)&out_ring->plans);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_allocator_malloc_array(allocator, ring_count,
+                                         sizeof(*out_ring->binding_lists),
+                                         (void**)&out_ring->binding_lists);
+  }
+  if (iree_status_is_ok(status)) {
+    out_ring->plan_count = ring_count;
+    out_ring->plans[0] = first_plan;
+    first_plan = (loom_run_hal_invocation_plan_t){0};
+    out_ring->binding_lists[0] = out_ring->plans[0].bindings;
+    out_ring->summary = (iree_tune_loom_data_cache_summary_t){
+        .populated = true,
+        .binding_count = iree_vm_list_size(out_ring->plans[0].bindings),
+        .binding_ring_count = ring_count,
+        .dispatches_per_batch = policy->hal_options.timing.batch_size,
+        .requested_min_ring_bytes = (uint64_t)FLAG_input_ring_min_bytes,
+        .binding_set_bytes = first_binding_set_bytes,
+        .binding_ring_bytes = first_binding_set_bytes,
+    };
+  }
+  for (iree_host_size_t i = 1; iree_status_is_ok(status) && i < ring_count;
+       ++i) {
+    status = iree_tune_loom_prepare_hal_invocation_plan_for_sample(
+        module_plan, case_plan, provider, materializer_options, sample_ordinal,
+        allocator, &out_ring->plans[i]);
+    if (iree_status_is_ok(status) &&
+        !iree_tune_loom_hal_invocation_options_equal(
+            &out_ring->plans[0].options, &out_ring->plans[i].options)) {
+      status = iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "HAL benchmark input ring materialization changed dispatch constants "
+          "or geometry for sample %" PRIhsz,
+          sample_ordinal);
+    }
+    uint64_t binding_set_bytes = 0;
+    if (iree_status_is_ok(status)) {
+      status = loom_run_hal_binding_list_total_byte_length(
+          out_ring->plans[i].bindings, &binding_set_bytes);
+    }
+    if (iree_status_is_ok(status)) {
+      if (UINT64_MAX - out_ring->summary.binding_ring_bytes <
+          binding_set_bytes) {
+        status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                  "HAL benchmark input ring byte count "
+                                  "overflowed uint64");
+      } else {
+        out_ring->binding_lists[i] = out_ring->plans[i].bindings;
+        out_ring->summary.binding_ring_bytes += binding_set_bytes;
+      }
+    }
+  }
+  if (!iree_status_is_ok(status)) {
+    iree_tune_loom_hal_input_ring_deinitialize(out_ring);
+  }
+  loom_run_hal_invocation_plan_deinitialize(&first_plan);
+  return status;
+}
+
 static void iree_tune_loom_benchmark_result_set_compile_rejection(
     const iree_tune_loom_hal_actual_provider_t* provider,
     iree_tune_loom_benchmark_result_t* out_result) {
@@ -3165,21 +3402,13 @@ static iree_status_t iree_tune_loom_run_hal_benchmark_sample(
     return iree_ok_status();
   }
 
-  loom_run_hal_invocation_options_t invocation_options = {0};
-  iree_vm_list_t* bindings = NULL;
-  iree_status_t status = iree_tune_loom_create_hal_invocation_inputs_for_sample(
-      module_plan->module, materializer_options, case_plan,
-      provider->actual_invocation, sample_ordinal,
-      &provider->invocation_options, allocator, &invocation_options, &bindings);
-  loom_run_hal_invocation_plan_t plan = {0};
-  if (iree_status_is_ok(status)) {
-    status = loom_run_hal_invocation_plan_prepare_from_lists(
-        &invocation_options, bindings, /*expected_bindings=*/NULL,
-        /*max_output_element_count=*/0, &plan);
-  }
-  iree_vm_list_release(bindings);
+  iree_tune_loom_hal_input_ring_t input_ring = {0};
+  iree_status_t status = iree_tune_loom_hal_input_ring_prepare(
+      module_plan, case_plan, policy, provider, materializer_options,
+      sample_ordinal, allocator, &input_ring);
   if (iree_status_is_ok(status)) {
     out_result->has_hal_benchmark = true;
+    out_result->data_cache = input_ring.summary;
     loom_run_hal_benchmark_options_t hal_options = policy->hal_options;
     iree_string_builder_t profile_artifact_path;
     iree_string_builder_initialize(allocator, &profile_artifact_path);
@@ -3197,9 +3426,14 @@ static iree_status_t iree_tune_loom_run_hal_benchmark_sample(
           iree_string_builder_view(&profile_artifact_path);
     }
     if (iree_status_is_ok(status)) {
-      status = loom_run_hal_benchmark_dispatch_plan(
-          &provider->context->runtime, &provider->prepared_candidate, &plan,
+      status = loom_run_hal_benchmark_dispatch_binding_ring(
+          &provider->context->runtime, &provider->prepared_candidate,
+          &input_ring.plans[0], input_ring.plan_count, input_ring.binding_lists,
           &hal_options, allocator, &out_result->hal_benchmark);
+    }
+    if (iree_status_is_ok(status)) {
+      out_result->data_cache.command_buffer_ring_count =
+          out_result->hal_benchmark.command_buffer_ring_count;
     }
     iree_string_builder_deinitialize(&profile_artifact_path);
   }
@@ -3207,7 +3441,7 @@ static iree_status_t iree_tune_loom_run_hal_benchmark_sample(
     out_result->executed = true;
     out_result->passed = true;
   }
-  loom_run_hal_invocation_plan_deinitialize(&plan);
+  iree_tune_loom_hal_input_ring_deinitialize(&input_ring);
   return status;
 }
 
@@ -3962,6 +4196,42 @@ static iree_status_t iree_tune_loom_write_compile_report_json(
   return iree_ok_status();
 }
 
+static iree_status_t iree_tune_loom_write_data_cache_summary_json(
+    const iree_tune_loom_data_cache_summary_t* summary,
+    loom_output_stream_t* stream) {
+  if (!summary->populated) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"data_cache\":{"));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, "\"validity\":\"check_ops\""));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+      stream, ",\"cache_policy\":\"binding_ring\""));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"binding_count\":%" PRIhsz, summary->binding_count));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"binding_ring_count\":%" PRIhsz, summary->binding_ring_count));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"command_buffer_ring_count\":%" PRIhsz,
+      summary->command_buffer_ring_count));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"dispatches_per_batch\":%" PRIhsz,
+      summary->dispatches_per_batch));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"requested_min_ring_bytes\":%" PRIu64,
+      summary->requested_min_ring_bytes));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"binding_set_bytes\":%" PRIu64, summary->binding_set_bytes));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"binding_ring_bytes\":%" PRIu64, summary->binding_ring_bytes));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"hot_reuse\":"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+      stream, summary->binding_ring_count <= 1 ? "true" : "false"));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
 static iree_status_t iree_tune_loom_write_benchmark_result_json(
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
@@ -4045,6 +4315,8 @@ static iree_status_t iree_tune_loom_write_benchmark_result_json(
         loom_output_stream_write_cstring(stream, ",\"dispatch_timing_ns\":"));
     IREE_RETURN_IF_ERROR(iree_tune_loom_write_benchmark_timing_stats_json(
         &timing->operation_timing, stream));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_data_cache_summary_json(
+        &benchmark_result->data_cache, stream));
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_cstring(stream, ",\"profile\":"));
     IREE_RETURN_IF_ERROR(iree_tune_loom_write_hal_profile_summary_json(
@@ -4606,7 +4878,8 @@ static iree_status_t iree_tune_loom_append_plan_row(
         ",\"batch_size\":%s,\"min_time_ms\":%s,\"warmup_time_ms\":%s,"
         "\"max_batches\":%s,\"stable_p90_to_p50_ppm\":%s,"
         "\"profile_final_batch\":%s,\"profile_data\":%s,"
-        "\"profile_counter\":%s,\"profile_artifacts_dir\":%s",
+        "\"profile_counter\":%s,\"profile_artifacts_dir\":%s,"
+        "\"input_ring_min_bytes\":%s,\"input_ring_count\":%s",
         FLAG_batch_size.specified ? "true" : "false",
         FLAG_min_time_ms.specified ? "true" : "false",
         FLAG_warmup_time_ms.specified ? "true" : "false",
@@ -4615,7 +4888,11 @@ static iree_status_t iree_tune_loom_append_plan_row(
         FLAG_profile_final_batch.specified ? "true" : "false",
         strlen(FLAG_profile_data) != 0 ? "true" : "false",
         FLAG_profile_counter_list().count != 0 ? "true" : "false",
-        strlen(FLAG_profile_artifacts_dir) != 0 ? "true" : "false"));
+        strlen(FLAG_profile_artifacts_dir) != 0 ? "true" : "false",
+        FLAG_input_ring_min_bytes != IREE_TUNE_LOOM_DEFAULT_INPUT_RING_MIN_BYTES
+            ? "true"
+            : "false",
+        FLAG_input_ring_count != 0 ? "true" : "false"));
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}"));
   if (policy->measure_kind == IREE_TUNE_LOOM_MEASURE_DISPATCH_COMPLETE) {
@@ -4638,6 +4915,18 @@ static iree_status_t iree_tune_loom_append_plan_row(
                           LOOM_RUN_HAL_BENCHMARK_FLAG_PROFILE_FINAL_BATCH)
             ? "true"
             : "false"));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"data_cache_policy\":{"));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        &stream, "\"validity\":\"check_ops\""));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        &stream, ",\"cache_policy\":\"binding_ring\""));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        &stream, ",\"input_ring_min_bytes\":%" PRIi64,
+        FLAG_input_ring_min_bytes));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        &stream, ",\"input_ring_count\":%" PRId32, FLAG_input_ring_count));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}"));
     if (iree_all_bits_set(policy->hal_options.flags,
                           LOOM_RUN_HAL_BENCHMARK_FLAG_PROFILE_FINAL_BATCH)) {
       IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
@@ -5187,6 +5476,13 @@ int iree_tune_loom_main(int argc, char** argv,
       "their profile.rows array contains HAL statistics rows such as "
       "dispatch_export, dispatch_command_buffer, and "
       "dispatch_command_operation when the backend provides them. "
+      "Dispatch benchmarks materialize device-buffer bindings from check ops "
+      "into an input ring before recording command buffers; dispatch slot i "
+      "uses a different physical binding set while the ring has capacity. "
+      "The default auto ring targets at least 32MiB of bindings and at least "
+      "one binding set per dispatch in the batch. Set --input_ring_count=1 "
+      "for deliberate hot-reuse measurements. Benchmark rows include "
+      "benchmark_result.data_cache with the effective ring shape and bytes. "
       "check.file.read.npy paths resolve relative to the input .loom file. "
       "check.file.write.npy paths must be relative and are rooted under "
       "--file_output_dir, which defaults under $TMPDIR/iree-loom-tune. "
@@ -5212,6 +5508,8 @@ int iree_tune_loom_main(int argc, char** argv,
       "  jq 'select(.row==\"compile\") | .diagnostics[]?' results.jsonl\n"
       "  jq 'select(.row==\"benchmark\") | .benchmark_result | "
       "{benchmark,status,p50:.dispatch_timing_ns.p50}' results.jsonl\n"
+      "  jq 'select(.row==\"benchmark\") | .benchmark_result | "
+      "{benchmark,p50:.dispatch_timing_ns.p50,data_cache}' results.jsonl\n"
       "  jq 'select(.row==\"benchmark\" and .shape) | "
       "{candidate_id,shape_id,shape:.shape.parameters,"
       "p50:.benchmark_result.dispatch_timing_ns.p50}' results.jsonl\n"
@@ -5337,6 +5635,17 @@ int iree_tune_loom_main(int argc, char** argv,
         iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                          "--stable_p90_to_p50_ppm must be non-negative; got %d",
                          (int)FLAG_stable_p90_to_p50_ppm.value);
+  }
+  if (iree_status_is_ok(status) && FLAG_input_ring_min_bytes < 0) {
+    status = iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "--input_ring_min_bytes must be non-negative; got %" PRIi64,
+        FLAG_input_ring_min_bytes);
+  }
+  if (iree_status_is_ok(status) && FLAG_input_ring_count < 0) {
+    status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "--input_ring_count must be non-negative; got %d",
+                              (int)FLAG_input_ring_count);
   }
   if (iree_status_is_ok(status) &&
       iree_string_view_equal(

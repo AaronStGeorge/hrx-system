@@ -104,6 +104,7 @@
 // DISPATCH-DRY: "benchmark":"scalar_equal_dispatch_latency","case":"scalar_equal","measure":"dispatch_complete"
 // DISPATCH-DRY: "shape_specialization":"dynamic"
 // DISPATCH-DRY: "cli_overrides":{"iterations":false,"warmup_iterations":false,"batch_size":false
+// DISPATCH-DRY: "data_cache_policy":{"validity":"check_ops","cache_policy":"binding_ring"
 // DISPATCH-DRY: "row":"device"
 // DISPATCH-DRY: "status":"planned"
 // DISPATCH-DRY: "row":"summary"

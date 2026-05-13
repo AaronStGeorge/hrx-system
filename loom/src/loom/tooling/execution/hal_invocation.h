@@ -81,8 +81,12 @@ typedef struct loom_run_hal_dispatch_batch_options_t {
 } loom_run_hal_dispatch_batch_options_t;
 
 typedef struct loom_run_hal_dispatch_batch_t {
-  // Batch-owned binding list cloned from the invocation plan.
-  iree_vm_list_t* bindings;
+  // Host allocator used for batch-owned arrays.
+  iree_allocator_t host_allocator;
+  // Batch-owned binding lists kept alive for command-buffer executions.
+  iree_vm_list_t** binding_lists;
+  // Number of entries in |binding_lists|.
+  iree_host_size_t binding_list_count;
   // Reusable command buffer containing |dispatch_count| dispatch commands.
   iree_hal_command_buffer_t* command_buffer;
   // Timeline semaphore signaled after each batch submission.
@@ -168,6 +172,11 @@ void loom_run_hal_invocation_result_initialize(
 void loom_run_hal_invocation_result_deinitialize(
     loom_run_hal_invocation_result_t* result);
 
+// Returns the total byte length of HAL buffer or buffer-view refs in
+// |binding_list|.
+iree_status_t loom_run_hal_binding_list_total_byte_length(
+    iree_vm_list_t* binding_list, uint64_t* out_byte_length);
+
 // Prepares a HAL executable object from backend-produced executable bytes.
 iree_status_t loom_run_hal_executable_prepare(
     const loom_run_hal_runtime_t* runtime,
@@ -193,6 +202,20 @@ iree_status_t loom_run_hal_dispatch_batch_prepare(
     const loom_run_hal_runtime_t* runtime,
     const loom_run_hal_prepared_candidate_t* candidate,
     const loom_run_hal_invocation_plan_t* plan,
+    const loom_run_hal_dispatch_batch_options_t* batch_options,
+    iree_allocator_t allocator, loom_run_hal_dispatch_batch_t* out_batch);
+
+// Records a reusable command buffer containing |batch_options->dispatch_count|
+// copies of |plan|'s dispatch. Dispatch slot i uses binding list
+// |(binding_list_offset + i) % binding_list_count| from |binding_lists|. The
+// batch clones each binding list once and may be executed repeatedly by
+// loom_run_hal_dispatch_batch_execute.
+iree_status_t loom_run_hal_dispatch_batch_prepare_from_binding_ring(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_prepared_candidate_t* candidate,
+    const loom_run_hal_invocation_plan_t* plan,
+    iree_host_size_t binding_list_count, iree_vm_list_t* const* binding_lists,
+    iree_host_size_t binding_list_offset,
     const loom_run_hal_dispatch_batch_options_t* batch_options,
     iree_allocator_t allocator, loom_run_hal_dispatch_batch_t* out_batch);
 

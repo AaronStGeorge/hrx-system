@@ -94,9 +94,14 @@ void loom_run_hal_dispatch_batch_deinitialize(
   if (batch == NULL) {
     return;
   }
+  for (iree_host_size_t i = 0; i < batch->binding_list_count; ++i) {
+    iree_vm_list_release(batch->binding_lists[i]);
+  }
+  if (batch->binding_lists != NULL) {
+    iree_allocator_free(batch->host_allocator, batch->binding_lists);
+  }
   iree_hal_command_buffer_release(batch->command_buffer);
   iree_hal_semaphore_release(batch->semaphore);
-  iree_vm_list_release(batch->bindings);
   *batch = (loom_run_hal_dispatch_batch_t){0};
 }
 
@@ -181,6 +186,33 @@ static iree_status_t loom_run_hal_binding_refs_from_list(
   return iree_ok_status();
 }
 
+iree_status_t loom_run_hal_binding_list_total_byte_length(
+    iree_vm_list_t* binding_list, uint64_t* out_byte_length) {
+  *out_byte_length = 0;
+  const iree_host_size_t binding_count = iree_vm_list_size(binding_list);
+  for (iree_host_size_t i = 0; i < binding_count; ++i) {
+    iree_vm_ref_t value = iree_vm_ref_null();
+    IREE_RETURN_IF_ERROR(iree_vm_list_get_ref_assign(binding_list, i, &value));
+    iree_device_size_t byte_length = 0;
+    if (iree_hal_buffer_isa(value)) {
+      byte_length = iree_hal_buffer_byte_length(iree_hal_buffer_deref(value));
+    } else if (iree_hal_buffer_view_isa(value)) {
+      byte_length =
+          iree_hal_buffer_view_byte_length(iree_hal_buffer_view_deref(value));
+    } else {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "HAL binding %" PRIhsz " is not a buffer or buffer view", i);
+    }
+    if (UINT64_MAX - *out_byte_length < byte_length) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "HAL binding byte count overflowed uint64");
+    }
+    *out_byte_length += byte_length;
+  }
+  return iree_ok_status();
+}
+
 static iree_const_byte_span_t loom_run_hal_dispatch_constants(
     const loom_run_hal_invocation_options_t* options) {
   return iree_make_const_byte_span(
@@ -190,19 +222,13 @@ static iree_const_byte_span_t loom_run_hal_dispatch_constants(
 
 static iree_status_t loom_run_hal_record_dispatch_batch(
     iree_hal_device_t* device, iree_hal_executable_t* executable,
-    iree_vm_list_t* binding_list,
+    iree_host_size_t binding_list_count, iree_vm_list_t* const* binding_lists,
+    iree_host_size_t binding_list_offset,
     const loom_run_hal_invocation_options_t* options,
     const loom_run_hal_dispatch_batch_options_t* batch_options,
     iree_hal_command_buffer_t** out_command_buffer) {
   *out_command_buffer = NULL;
 
-  iree_hal_buffer_ref_t binding_refs[LOOM_RUN_HAL_MAX_BINDING_COUNT];
-  IREE_RETURN_IF_ERROR(loom_run_hal_binding_refs_from_list(
-      binding_list, binding_refs, IREE_ARRAYSIZE(binding_refs)));
-  iree_hal_buffer_ref_list_t bindings = {
-      .count = iree_vm_list_size(binding_list),
-      .values = binding_refs,
-  };
   iree_hal_dispatch_config_t config = iree_hal_make_static_dispatch_config(
       options->workgroup_count[0], options->workgroup_count[1],
       options->workgroup_count[2]);
@@ -218,6 +244,19 @@ static iree_status_t loom_run_hal_record_dispatch_batch(
   }
   for (iree_host_size_t i = 0;
        iree_status_is_ok(status) && i < batch_options->dispatch_count; ++i) {
+    const iree_host_size_t binding_list_index =
+        (binding_list_offset + i) % binding_list_count;
+    iree_vm_list_t* binding_list = binding_lists[binding_list_index];
+    iree_hal_buffer_ref_t binding_refs[LOOM_RUN_HAL_MAX_BINDING_COUNT];
+    status = loom_run_hal_binding_refs_from_list(binding_list, binding_refs,
+                                                 IREE_ARRAYSIZE(binding_refs));
+    if (!iree_status_is_ok(status)) {
+      break;
+    }
+    iree_hal_buffer_ref_list_t bindings = {
+        .count = iree_vm_list_size(binding_list),
+        .values = binding_refs,
+    };
     status = iree_hal_command_buffer_dispatch(
         command_buffer, executable, options->entry_point, config, constants,
         bindings, IREE_HAL_DISPATCH_FLAG_NONE);
@@ -472,6 +511,52 @@ iree_status_t loom_run_hal_dispatch_batch_prepare(
     const loom_run_hal_invocation_plan_t* plan,
     const loom_run_hal_dispatch_batch_options_t* batch_options,
     iree_allocator_t allocator, loom_run_hal_dispatch_batch_t* out_batch) {
+  iree_vm_list_t* binding_list = plan->bindings;
+  return loom_run_hal_dispatch_batch_prepare_from_binding_ring(
+      runtime, candidate, plan, /*binding_list_count=*/1, &binding_list,
+      /*binding_list_offset=*/0, batch_options, allocator, out_batch);
+}
+
+static iree_status_t loom_run_hal_dispatch_binding_ring_validate(
+    const loom_run_hal_invocation_plan_t* plan,
+    iree_host_size_t binding_list_count, iree_vm_list_t* const* binding_lists) {
+  if (binding_list_count == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL dispatch binding ring must contain at least "
+                            "one binding list");
+  }
+  if (binding_lists == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL dispatch binding ring requires binding "
+                            "lists");
+  }
+  const iree_host_size_t plan_binding_count = iree_vm_list_size(plan->bindings);
+  for (iree_host_size_t i = 0; i < binding_list_count; ++i) {
+    if (binding_lists[i] == NULL) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "HAL dispatch binding ring entry %" PRIhsz " is null", i);
+    }
+    const iree_host_size_t binding_count = iree_vm_list_size(binding_lists[i]);
+    if (binding_count != plan_binding_count) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "HAL dispatch binding ring entry %" PRIhsz
+                              " binding count %" PRIhsz
+                              " must match plan binding count %" PRIhsz,
+                              i, binding_count, plan_binding_count);
+    }
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_run_hal_dispatch_batch_prepare_from_binding_ring(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_prepared_candidate_t* candidate,
+    const loom_run_hal_invocation_plan_t* plan,
+    iree_host_size_t binding_list_count, iree_vm_list_t* const* binding_lists,
+    iree_host_size_t binding_list_offset,
+    const loom_run_hal_dispatch_batch_options_t* batch_options,
+    iree_allocator_t allocator, loom_run_hal_dispatch_batch_t* out_batch) {
   loom_run_hal_dispatch_batch_initialize(out_batch);
   IREE_RETURN_IF_ERROR(loom_run_hal_invocation_plan_validate(plan));
   if (batch_options->dispatch_count == 0) {
@@ -489,13 +574,26 @@ iree_status_t loom_run_hal_dispatch_batch_prepare(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "HAL runtime is not initialized");
   }
+  IREE_RETURN_IF_ERROR(loom_run_hal_dispatch_binding_ring_validate(
+      plan, binding_list_count, binding_lists));
 
-  iree_status_t status =
-      iree_vm_list_clone(plan->bindings, allocator, &out_batch->bindings);
+  out_batch->host_allocator = allocator;
+  iree_status_t status = iree_allocator_malloc_array(
+      allocator, binding_list_count, sizeof(*out_batch->binding_lists),
+      (void**)&out_batch->binding_lists);
+  if (iree_status_is_ok(status)) {
+    out_batch->binding_list_count = binding_list_count;
+  }
+  for (iree_host_size_t i = 0;
+       iree_status_is_ok(status) && i < out_batch->binding_list_count; ++i) {
+    status = iree_vm_list_clone(binding_lists[i], allocator,
+                                &out_batch->binding_lists[i]);
+  }
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_record_dispatch_batch(
-        runtime->device, candidate->executable, out_batch->bindings,
-        &plan->options, batch_options, &out_batch->command_buffer);
+        runtime->device, candidate->executable, out_batch->binding_list_count,
+        out_batch->binding_lists, binding_list_offset, &plan->options,
+        batch_options, &out_batch->command_buffer);
   }
   if (iree_status_is_ok(status)) {
     status = iree_hal_semaphore_create(
@@ -551,8 +649,12 @@ iree_status_t loom_run_hal_dispatch_batch_collect_results(
     const loom_run_hal_invocation_plan_t* plan,
     const loom_run_hal_dispatch_batch_t* batch, iree_allocator_t allocator,
     loom_run_hal_invocation_result_t* result) {
+  if (batch->binding_list_count == 0 || batch->binding_lists == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL dispatch batch has no binding lists");
+  }
   loom_run_hal_iteration_t iteration = {
-      .bindings = batch->bindings,
+      .bindings = batch->binding_lists[0],
   };
   return loom_run_hal_invocation_collect_results(runtime, plan, &iteration,
                                                  allocator, result);

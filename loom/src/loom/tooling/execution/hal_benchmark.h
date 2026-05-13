@@ -151,6 +151,10 @@ typedef struct loom_run_hal_benchmark_options_t {
 typedef struct loom_run_hal_benchmark_result_t {
   // Generic host timing benchmark result.
   loom_run_benchmark_result_t timing;
+  // Number of physical binding lists rotated through command-buffer dispatches.
+  iree_host_size_t binding_ring_count;
+  // Number of pre-recorded command buffers rotated across benchmark batches.
+  iree_host_size_t command_buffer_ring_count;
   // Final profiled-batch summary.
   loom_run_hal_profile_summary_t profile;
 } loom_run_hal_benchmark_result_t;
@@ -168,6 +172,17 @@ iree_status_t loom_run_hal_benchmark_dispatch_plan(
     const loom_run_hal_runtime_t* runtime,
     const loom_run_hal_prepared_candidate_t* candidate,
     const loom_run_hal_invocation_plan_t* plan,
+    const loom_run_hal_benchmark_options_t* options, iree_allocator_t allocator,
+    loom_run_hal_benchmark_result_t* out_result);
+
+// Prepares and times reusable HAL command buffers whose dispatch slots cycle
+// across |binding_lists|. Each measured batch still executes
+// |options->dispatch_batch.dispatch_count| dispatches.
+iree_status_t loom_run_hal_benchmark_dispatch_binding_ring(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_prepared_candidate_t* candidate,
+    const loom_run_hal_invocation_plan_t* plan,
+    iree_host_size_t binding_list_count, iree_vm_list_t* const* binding_lists,
     const loom_run_hal_benchmark_options_t* options, iree_allocator_t allocator,
     loom_run_hal_benchmark_result_t* out_result);
 
