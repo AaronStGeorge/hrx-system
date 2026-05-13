@@ -112,6 +112,7 @@ loom_cc_library(
     "ownership_lifetime.c"
   DEPS
     ::ownership
+    ::scc
     iree::base
     iree::base::internal
     iree::base::internal::arena
@@ -119,8 +120,10 @@ loom_cc_library(
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::cfg
+    loom::src::loom::ops::func
     loom::src::loom::ops::op_defs
     loom::src::loom::util::cfg_graph
+    loom::src::loom::util::walk
   PUBLIC
 )
 

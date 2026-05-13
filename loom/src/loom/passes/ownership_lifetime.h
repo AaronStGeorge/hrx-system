@@ -19,8 +19,7 @@ extern "C" {
 const loom_pass_info_t* loom_ownership_lifetime_pass_info(void);
 
 iree_status_t loom_ownership_lifetime_run(loom_pass_t* pass,
-                                          loom_module_t* module,
-                                          loom_func_like_t function);
+                                          loom_module_t* module);
 
 #ifdef __cplusplus
 }

@@ -7,7 +7,6 @@
 #include "loom/passes/ownership_lifetime.h"
 
 #include "loom/analysis/ownership_lifetime.h"
-#include "loom/ir/local_value_domain.h"
 #include "loom/ops/op_defs.h"
 
 //===----------------------------------------------------------------------===//
@@ -31,9 +30,9 @@ static const loom_pass_statistic_def_t kOwnershipLifetimeStatistics[] = {
 
 static const loom_pass_info_t loom_ownership_lifetime_pass_info_storage = {
     .name = IREE_SVL("ownership-lifetime"),
-    .description = IREE_SVL("Verify descriptor-backed owned-resource "
-                            "lifetimes across CFG control flow."),
-    .kind = LOOM_PASS_FUNCTION,
+    .description = IREE_SVL("Analyze descriptor-backed owned-resource "
+                            "lifetimes across function and CFG control flow."),
+    .kind = LOOM_PASS_MODULE,
     .statistic_defs = kOwnershipLifetimeStatistics,
     .statistic_count = IREE_ARRAYSIZE(kOwnershipLifetimeStatistics),
 };
@@ -51,29 +50,15 @@ static void loom_ownership_lifetime_add_stat(loom_pass_t* pass,
 }
 
 iree_status_t loom_ownership_lifetime_run(loom_pass_t* pass,
-                                          loom_module_t* module,
-                                          loom_func_like_t function) {
-  loom_region_t* body = loom_func_like_body(function);
-  if (!body) {
-    return iree_ok_status();
-  }
-
-  loom_local_value_domain_t value_domain = {0};
-  iree_status_t status = loom_local_value_domain_acquire_for_region(
-      module, body, pass->arena, &value_domain);
+                                          loom_module_t* module) {
   loom_ownership_lifetime_options_t options = {
       .arena = pass->arena,
-      .value_domain = &value_domain,
       .emitter = pass->diagnostic_emitter,
       .phase_name = pass->info->name,
   };
   loom_ownership_lifetime_result_t result = {0};
-  if (iree_status_is_ok(status)) {
-    status = loom_ownership_lifetime_verify_function(module, function, &options,
-                                                     &result);
-  }
-  loom_local_value_domain_release(&value_domain);
-  IREE_RETURN_IF_ERROR(status);
+  IREE_RETURN_IF_ERROR(
+      loom_ownership_lifetime_analyze_module(module, &options, &result));
 
   loom_ownership_lifetime_add_stat(
       pass, LOOM_OWNERSHIP_LIFETIME_STAT_BLOCKS_CHECKED, result.blocks_checked);

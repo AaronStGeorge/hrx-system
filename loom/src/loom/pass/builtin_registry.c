@@ -256,7 +256,7 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
     {
         .key = IREE_SVL("ownership-lifetime"),
         .info = loom_ownership_lifetime_pass_info,
-        .function_run = loom_ownership_lifetime_run,
+        .module_run = loom_ownership_lifetime_run,
     },
     {
         .key = IREE_SVL("promote-private-fragments"),
