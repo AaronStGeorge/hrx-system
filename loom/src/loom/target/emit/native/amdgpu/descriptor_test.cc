@@ -296,6 +296,45 @@ TEST(AmdgpuDescriptorTest, RejectsWave32MetadataOnGfx942) {
                             IREE_SV("gfx942"), &metadata, 0, &descriptor));
 }
 
+TEST(AmdgpuDescriptorTest, SupportsWave64MetadataOnGfx1100AndGfx1200) {
+  static const iree_string_view_t processors[] = {
+      IREE_SVL("gfx1100"),
+      IREE_SVL("gfx1200"),
+  };
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(processors); ++i) {
+    loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
+    metadata.wavefront_size = 64;
+    loom_amdgpu_kernel_descriptor_t descriptor = {};
+    IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_initialize_from_metadata(
+        processors[i], &metadata, 0, &descriptor));
+    IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_validate_metadata(&descriptor,
+                                                                   &metadata));
+  }
+}
+
+TEST(AmdgpuDescriptorTest, RejectsWave64MetadataOnGfx1250) {
+  loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
+  metadata.wavefront_size = 64;
+  loom_amdgpu_kernel_descriptor_t descriptor = {};
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_amdgpu_kernel_descriptor_initialize_from_metadata(
+                            IREE_SV("gfx1250"), &metadata, 0, &descriptor));
+}
+
+TEST(AmdgpuDescriptorTest, RejectsWave64DescriptorOnGfx1250) {
+  loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
+  loom_amdgpu_kernel_descriptor_t descriptor = {};
+  IREE_ASSERT_OK(loom_amdgpu_kernel_descriptor_initialize_from_metadata(
+      IREE_SV("gfx1250"), &metadata, 0, &descriptor));
+  descriptor.flags &= ~LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_WAVEFRONT_SIZE32;
+
+  std::array<uint8_t, 64> bytes;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_amdgpu_kernel_descriptor_write(
+          &descriptor, iree_make_byte_span(bytes.data(), bytes.size())));
+}
+
 TEST(AmdgpuDescriptorTest, RejectsSparseWorkitemIdFlags) {
   loom_amdgpu_metadata_kernel_t metadata = MinimalMetadataKernel();
   loom_amdgpu_kernel_descriptor_t descriptor = {};

@@ -474,6 +474,25 @@ ERR_AMDGPU_025 = ErrorDef(
     fix_hint="Lower direct HAL kernel arguments to the ABI register shape",
 )
 
+# ERR_AMDGPU_026: AMDGPU target subgroup size is unsupported.
+ERR_AMDGPU_026 = ErrorDef(
+    domain=ErrorDomain.AMDGPU,
+    code=26,
+    severity=Severity.ERROR,
+    summary="AMDGPU target subgroup size is unsupported.",
+    message=(
+        "AMDGPU target record '@{target_name}' selects subgroup_size "
+        "{subgroup_size}, but processor '{processor}' does not support that "
+        "wavefront size"
+    ),
+    params=(
+        ErrorParam("target_name", ParamKind.STRING),
+        ErrorParam("subgroup_size", ParamKind.U64),
+        ErrorParam("processor", ParamKind.STRING),
+    ),
+    fix_hint="Use a wavefront size supported by the selected AMDGPU processor",
+)
+
 ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_001,
     ERR_AMDGPU_003,
@@ -499,4 +518,5 @@ ALL_AMDGPU_ERRORS = (
     ERR_AMDGPU_023,
     ERR_AMDGPU_024,
     ERR_AMDGPU_025,
+    ERR_AMDGPU_026,
 )

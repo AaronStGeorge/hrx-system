@@ -157,6 +157,28 @@ typedef struct loom_amdgpu_amdhsa_target_id_t {
   iree_string_view_t feature_suffix;
 } loom_amdgpu_amdhsa_target_id_t;
 
+// Returns true when |processor| can execute kernels with |wavefront_size|.
+static inline bool loom_amdgpu_processor_supports_wavefront_size(
+    const loom_amdgpu_processor_info_t* processor, uint32_t wavefront_size) {
+  if (processor == NULL) {
+    return false;
+  }
+  switch (wavefront_size) {
+    case 32:
+      return processor->kernel_descriptor_profile !=
+                 LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE &&
+             processor->kernel_descriptor_profile !=
+                 LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9;
+    case 64:
+      return processor->kernel_descriptor_profile !=
+                 LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE &&
+             processor->kernel_descriptor_profile !=
+                 LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125;
+    default:
+      return false;
+  }
+}
+
 // Returns the number of known AMDGPU processor fact rows.
 iree_host_size_t loom_amdgpu_target_info_processor_count(void);
 

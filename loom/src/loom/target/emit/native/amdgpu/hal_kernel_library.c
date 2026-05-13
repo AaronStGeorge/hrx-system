@@ -174,9 +174,6 @@ static iree_status_t loom_amdgpu_hal_kernel_library_apply_processor(
 
   IREE_RETURN_IF_ERROR(loom_amdgpu_target_record_set_processor(
       module, entry->target_op, processor));
-  entry->bundle_storage.snapshot.subgroup_size =
-      processor->default_wavefront_size;
-  loom_target_bundle_storage_rebind(&entry->bundle_storage);
   return iree_ok_status();
 }
 

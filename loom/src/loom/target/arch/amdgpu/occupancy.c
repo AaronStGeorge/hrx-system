@@ -484,11 +484,20 @@ iree_status_t loom_amdgpu_occupancy_build(
                             "AMDGPU occupancy requires an AMDGPU processor "
                             "target record");
   }
+  const uint32_t wave_size =
+      allocation->target.bundle_storage.snapshot.subgroup_size;
+  if (wave_size == 0) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU occupancy requires a fixed target "
+                            "subgroup size");
+  }
+  IREE_ASSERT(
+      loom_amdgpu_processor_supports_wavefront_size(processor, wave_size));
 
   loom_amdgpu_occupancy_table_t table = {
       .allocation = allocation,
       .processor = processor->processor,
-      .wave_size = model->wave_size,
+      .wave_size = wave_size,
       .max_waves_per_simd = model->max_waves_per_simd,
       .resident_waves_per_simd = model->max_waves_per_simd,
       .limiting_register_class_index = LOOM_AMDGPU_OCCUPANCY_CLASS_NONE,

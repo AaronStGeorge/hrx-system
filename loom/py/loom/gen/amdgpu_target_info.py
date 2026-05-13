@@ -54,6 +54,7 @@ from loom.target.arch.amdgpu.target_info import (  # noqa: E402
     AmdgpuDescriptorSetInfo,
     AmdgpuProcessorInfo,
     amdgpu_descriptor_set_ordinal,
+    kernel_descriptor_profile_supports_wavefront_size,
     sorted_descriptor_set_infos,
     sorted_processor_infos,
     validate_amdgpu_descriptor_set_isa_xml,
@@ -283,6 +284,10 @@ def _validate_processors(
             raise ValueError(f"AMDGPU ELF feature flags for {info.processor} must not overlap EF_AMDGPU_MACH")
         if info.default_wavefront_size not in (32, 64):
             raise ValueError(f"AMDGPU default wavefront size for {info.processor} must be 32 or 64")
+        if info.kernel_descriptor_profile != AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE and not kernel_descriptor_profile_supports_wavefront_size(
+            info.kernel_descriptor_profile, info.default_wavefront_size
+        ):
+            raise ValueError(f"AMDGPU default wavefront size for {info.processor} is not supported by its kernel descriptor profile")
         _matrix_feature_profile_expr(info.matrix_feature_profile)
         if info.kernel_descriptor_profile != AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE and (
             info.kernel_descriptor_vgpr_encoding_granule_wave32 == 0 or info.kernel_descriptor_vgpr_encoding_granule_wave64 == 0

@@ -6,6 +6,8 @@
 
 #include "loom/target/arch/amdgpu/target_info.h"
 
+#include <string>
+
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 
@@ -136,6 +138,32 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx950Processor) {
   EXPECT_FALSE(processor->has_valu_trans_use_hazard);
   EXPECT_TRUE(processor->has_valu_sgpr_read_wait_states);
   EXPECT_FALSE(processor->has_valu_sgpr_read_depctr_hazard);
+}
+
+TEST(AmdgpuTargetInfoTest, WavefrontSizeSupportMatchesGfxFamilies) {
+  struct Case {
+    iree_string_view_t processor_name;
+    bool supports_wave32;
+    bool supports_wave64;
+  };
+  static const Case cases[] = {
+      {IREE_SV("gfx942"), false, true},  {IREE_SV("gfx950"), false, true},
+      {IREE_SV("gfx1100"), true, true},  {IREE_SV("gfx1200"), true, true},
+      {IREE_SV("gfx1250"), true, false},
+  };
+  for (const Case& c : cases) {
+    const loom_amdgpu_processor_info_t* processor = nullptr;
+    IREE_ASSERT_OK(
+        loom_amdgpu_target_info_lookup_processor(c.processor_name, &processor));
+    ASSERT_NE(processor, nullptr);
+    EXPECT_EQ(loom_amdgpu_processor_supports_wavefront_size(processor, 32),
+              c.supports_wave32)
+        << std::string(c.processor_name.data, c.processor_name.size);
+    EXPECT_EQ(loom_amdgpu_processor_supports_wavefront_size(processor, 64),
+              c.supports_wave64)
+        << std::string(c.processor_name.data, c.processor_name.size);
+    EXPECT_FALSE(loom_amdgpu_processor_supports_wavefront_size(processor, 0));
+  }
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpGfx1200Processor) {

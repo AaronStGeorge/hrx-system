@@ -580,6 +580,10 @@ iree_status_t loom_amdgpu_kernel_record_build(
                             "AMDGPU kernel emission requires an AMDGPU "
                             "processor target record");
   }
+  const uint32_t wavefront_size =
+      schedule->target.bundle_storage.snapshot.subgroup_size;
+  IREE_ASSERT(
+      loom_amdgpu_processor_supports_wavefront_size(processor, wavefront_size));
 
   const uint32_t user_sgpr_count =
       abi_layout->uses_kernarg_segment_ptr
@@ -630,7 +634,7 @@ iree_status_t loom_amdgpu_kernel_record_build(
               .kernarg_segment_size = abi_layout->kernarg_segment_size,
               .kernarg_segment_alignment =
                   abi_layout->kernarg_segment_alignment,
-              .wavefront_size = processor->default_wavefront_size,
+              .wavefront_size = wavefront_size,
               .group_segment_fixed_size =
                   (uint32_t)segment_usage.group_segment_fixed_size,
               .private_segment_fixed_size =

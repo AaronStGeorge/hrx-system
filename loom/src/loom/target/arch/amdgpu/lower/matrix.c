@@ -40,7 +40,14 @@ static iree_status_t loom_amdgpu_matrix_target_facts_from_environment(
   loom_amdgpu_matrix_feature_bits_t feature_bits = 0;
   (void)loom_amdgpu_matrix_feature_bits_for_profile(
       processor->matrix_feature_profile, &feature_bits);
-  const uint16_t wavefront_size = (uint16_t)processor->default_wavefront_size;
+  if (environment->bundle == NULL || environment->bundle->snapshot == NULL ||
+      environment->bundle->snapshot->subgroup_size == 0) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "AMDGPU matrix lowering requires a fixed target "
+                            "subgroup size");
+  }
+  const uint16_t wavefront_size =
+      (uint16_t)environment->bundle->snapshot->subgroup_size;
 
   *out_facts = (loom_amdgpu_matrix_target_facts_t){
       .options =

@@ -50,6 +50,22 @@ AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4 = (
 AMDGPU_ELF_FEATURE_GENERIC_VERSION_1_V6 = 0x01000000
 
 
+def kernel_descriptor_profile_supports_wavefront_size(
+    kernel_descriptor_profile: str, wavefront_size: int
+) -> bool:
+    if wavefront_size == 32:
+        return kernel_descriptor_profile not in (
+            AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+            AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9,
+        )
+    if wavefront_size == 64:
+        return kernel_descriptor_profile not in (
+            AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
+            AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX125,
+        )
+    return False
+
+
 @dataclass(frozen=True, slots=True)
 class AmdgpuDescriptorSetInfo:
     generator_target: str

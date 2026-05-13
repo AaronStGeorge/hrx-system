@@ -6,10 +6,13 @@
 
 #include "loom/target/arch/amdgpu/ops/target.h"
 
+#include <stdint.h>
+
 #include "loom/ir/module.h"
 #include "loom/ops/target/ops.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/ops/ops.h"
+#include "loom/target/arch/amdgpu/target_records.h"
 
 static iree_string_view_t loom_amdgpu_target_record_default_processor_name(
     loom_amdgpu_target_kind_t kind) {
@@ -91,6 +94,19 @@ static iree_status_t loom_amdgpu_target_record_emit_no_descriptor_set(
                                         params, IREE_ARRAYSIZE(params));
 }
 
+static iree_status_t loom_amdgpu_target_record_emit_wavefront_size_unsupported(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, const loom_amdgpu_processor_info_t* processor,
+    uint32_t wavefront_size) {
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_amdgpu_target_record_symbol_name(module, op)),
+      loom_param_u64(wavefront_size),
+      loom_param_string(processor->processor),
+  };
+  return loom_amdgpu_target_record_emit(emitter, op, LOOM_ERR_AMDGPU_026,
+                                        params, IREE_ARRAYSIZE(params));
+}
+
 static iree_string_view_t loom_amdgpu_target_record_string_attr(
     const loom_module_t* module, const loom_op_t* target_op,
     uint8_t attr_index) {
@@ -120,6 +136,37 @@ const loom_amdgpu_processor_info_t* loom_amdgpu_target_record_processor(
     const loom_module_t* module, const loom_op_t* target_op) {
   return loom_amdgpu_target_info_find_processor(
       loom_amdgpu_target_record_processor_name(module, target_op));
+}
+
+static uint32_t loom_amdgpu_target_record_default_wavefront_size(
+    const loom_amdgpu_processor_info_t* default_processor) {
+  const loom_target_bundle_t* bundle =
+      loom_amdgpu_target_bundle_for_descriptor_set(
+          default_processor->descriptor_set_ordinal);
+  if (bundle != NULL && bundle->snapshot != NULL) {
+    return bundle->snapshot->subgroup_size;
+  }
+  return default_processor->default_wavefront_size;
+}
+
+static bool loom_amdgpu_target_record_effective_wavefront_size(
+    const loom_op_t* target_op,
+    const loom_amdgpu_processor_info_t* default_processor,
+    uint32_t* out_wavefront_size) {
+  *out_wavefront_size = 0;
+  const loom_attribute_t subgroup_size =
+      loom_op_attrs(target_op)[loom_amdgpu_target_subgroup_size_ATTR_INDEX];
+  if (!loom_attr_is_absent(subgroup_size)) {
+    const int64_t value = loom_attr_as_i64(subgroup_size);
+    if (value < 0 || value > UINT32_MAX) {
+      return false;
+    }
+    *out_wavefront_size = (uint32_t)value;
+    return true;
+  }
+  *out_wavefront_size =
+      loom_amdgpu_target_record_default_wavefront_size(default_processor);
+  return true;
 }
 
 iree_status_t loom_amdgpu_target_record_set_processor(
@@ -166,6 +213,15 @@ iree_status_t loom_amdgpu_target_record_verify(
                               default_processor->descriptor_set_key)) {
     return loom_amdgpu_target_record_emit_descriptor_set_mismatch(
         module, emitter, op, processor, default_processor->descriptor_set_key);
+  }
+
+  uint32_t wavefront_size = 0;
+  if (loom_amdgpu_target_record_effective_wavefront_size(op, default_processor,
+                                                         &wavefront_size) &&
+      !loom_amdgpu_processor_supports_wavefront_size(processor,
+                                                     wavefront_size)) {
+    return loom_amdgpu_target_record_emit_wavefront_size_unsupported(
+        module, emitter, op, processor, wavefront_size);
   }
   return iree_ok_status();
 }

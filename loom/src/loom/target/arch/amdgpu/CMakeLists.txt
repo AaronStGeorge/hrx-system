@@ -1752,6 +1752,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "target_record_diagnostics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/target_record_diagnostics.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "target_records"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/target_records.loom-test"

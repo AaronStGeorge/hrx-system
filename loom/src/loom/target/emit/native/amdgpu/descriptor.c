@@ -219,6 +219,14 @@ static bool loom_amdgpu_kernel_descriptor_supports_wgp_mode(
   return false;
 }
 
+static uint32_t loom_amdgpu_kernel_descriptor_wavefront_size(
+    const loom_amdgpu_kernel_descriptor_t* descriptor) {
+  return iree_any_bit_set(descriptor->flags,
+                          LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_WAVEFRONT_SIZE32)
+             ? 32
+             : 64;
+}
+
 static uint32_t loom_amdgpu_kernel_descriptor_user_sgpr_count_width(
     const loom_amdgpu_processor_info_t* target) {
   if (target->kernel_descriptor_profile ==
@@ -328,24 +336,36 @@ static iree_status_t loom_amdgpu_kernel_descriptor_validate(
         "AMDGPU kernel descriptor flat scratch init user SGPR is invalid with "
         "architected flat scratch");
   }
-  if ((*out_target)->kernel_descriptor_profile ==
-          LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9 &&
-      iree_any_bit_set(descriptor->flags,
-                       LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_WAVEFRONT_SIZE32)) {
+  const uint32_t wavefront_size =
+      loom_amdgpu_kernel_descriptor_wavefront_size(descriptor);
+  if (!loom_amdgpu_processor_supports_wavefront_size(*out_target,
+                                                     wavefront_size)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU GFX9 kernel descriptors require wavefront-size-64 metadata");
+        "AMDGPU processor '%.*s' kernel descriptors do not support "
+        "wavefront-size-%" PRIu32 " metadata",
+        (int)(*out_target)->processor.size, (*out_target)->processor.data,
+        wavefront_size);
   }
   return iree_ok_status();
 }
 
 static iree_status_t loom_amdgpu_kernel_descriptor_validate_metadata_kernel(
+    const loom_amdgpu_processor_info_t* target,
     const loom_amdgpu_metadata_kernel_t* metadata_kernel) {
   if (metadata_kernel->wavefront_size != 32 &&
       metadata_kernel->wavefront_size != 64) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "AMDGPU metadata wavefront size must be either 32 or 64");
+  }
+  if (!loom_amdgpu_processor_supports_wavefront_size(
+          target, metadata_kernel->wavefront_size)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU processor '%.*s' metadata does not support "
+                            "wavefront-size-%" PRIu32,
+                            (int)target->processor.size, target->processor.data,
+                            metadata_kernel->wavefront_size);
   }
   return iree_ok_status();
 }
@@ -363,8 +383,8 @@ iree_status_t loom_amdgpu_kernel_descriptor_initialize_from_metadata(
   const loom_amdgpu_processor_info_t* target = NULL;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_kernel_descriptor_resolve_target(processor_name, &target));
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_kernel_descriptor_validate_metadata_kernel(metadata_kernel));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_descriptor_validate_metadata_kernel(
+      target, metadata_kernel));
   *out_descriptor = (loom_amdgpu_kernel_descriptor_t){
       .processor = processor_name,
       .group_segment_fixed_size = metadata_kernel->group_segment_fixed_size,
@@ -394,8 +414,8 @@ iree_status_t loom_amdgpu_kernel_descriptor_validate_metadata(
   const loom_amdgpu_processor_info_t* target = NULL;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_kernel_descriptor_validate(descriptor, &target));
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_kernel_descriptor_validate_metadata_kernel(metadata_kernel));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_kernel_descriptor_validate_metadata_kernel(
+      target, metadata_kernel));
   if (descriptor->group_segment_fixed_size !=
       metadata_kernel->group_segment_fixed_size) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
