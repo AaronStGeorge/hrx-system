@@ -26,6 +26,7 @@ loom_check_test_suite(
         "licm.loom-test",
         "linearize_view_accesses.loom-test",
         "loop_fusion.loom-test",
+        "ownership_lifetime.loom-test",
         "promote_private_fragments.loom-test",
         "promote_private_fragments_footprint.loom-test",
         "refine_boundaries.loom-test",

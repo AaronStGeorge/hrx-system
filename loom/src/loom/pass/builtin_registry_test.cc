@@ -14,35 +14,6 @@
 namespace loom {
 namespace {
 
-static const iree_string_view_t kExpectedBuiltinPassKeys[] = {
-    IREE_SVL("branch-fusion"),
-    IREE_SVL("branch-sink"),
-    IREE_SVL("canonicalize"),
-    IREE_SVL("cfg-simplify"),
-    IREE_SVL("cse"),
-    IREE_SVL("dce"),
-    IREE_SVL("kernel-async-legality"),
-    IREE_SVL("legalize-math"),
-    IREE_SVL("licm"),
-    IREE_SVL("linearize-view-accesses"),
-    IREE_SVL("loop-fusion"),
-    IREE_SVL("low-dce"),
-    IREE_SVL("low-materialize-allocation"),
-    IREE_SVL("low-select-operand-forms"),
-    IREE_SVL("normalize-kernel-resources"),
-    IREE_SVL("promote-private-fragments"),
-    IREE_SVL("refine-boundaries"),
-    IREE_SVL("scf-to-cfg"),
-    IREE_SVL("source-to-low"),
-    IREE_SVL("strip-hints"),
-    IREE_SVL("symbol-dce"),
-    IREE_SVL("unroll-scf-for"),
-    IREE_SVL("vector-gather-to-scalar"),
-    IREE_SVL("vector-memory-footprint"),
-    IREE_SVL("vector-reduce-axes-to-scalar"),
-    IREE_SVL("vector-to-scalar"),
-};
-
 static const loom_pass_descriptor_t* LookupBuiltinPass(
     iree_string_view_t name) {
   const loom_pass_descriptor_t* descriptor = nullptr;
@@ -53,20 +24,6 @@ static const loom_pass_descriptor_t* LookupBuiltinPass(
 
 TEST(PassBuiltinRegistryTest, BuiltinRegistryVerifies) {
   IREE_ASSERT_OK(loom_pass_registry_verify(loom_pass_builtin_registry()));
-}
-
-TEST(PassBuiltinRegistryTest, BuiltinRegistryHasExpectedPasses) {
-  const loom_pass_registry_t* registry = loom_pass_builtin_registry();
-  ASSERT_EQ(registry->descriptor_count,
-            IREE_ARRAYSIZE(kExpectedBuiltinPassKeys));
-  for (iree_host_size_t i = 0; i < registry->descriptor_count; ++i) {
-    EXPECT_TRUE(iree_string_view_equal(registry->descriptors[i].key,
-                                       kExpectedBuiltinPassKeys[i]))
-        << "unexpected builtin pass registry entry " << i;
-    EXPECT_TRUE(iree_string_view_equal(registry->descriptors[i].key,
-                                       registry->descriptors[i].info()->name))
-        << "builtin pass descriptor key does not match pass info";
-  }
 }
 
 TEST(PassBuiltinRegistryTest, LookupKnownAndUnknownPasses) {

@@ -91,6 +91,24 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "ownership_lifetime",
+    srcs = ["ownership_lifetime.c"],
+    hdrs = ["ownership_lifetime.h"],
+    deps = [
+        ":ownership",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/cfg",
+        "//loom/src/loom/util:cfg_graph",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
 loom_cc_test(
     name = "ownership_test",
     srcs = ["ownership_test.cc"],

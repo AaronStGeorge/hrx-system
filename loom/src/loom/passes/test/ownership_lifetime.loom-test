@@ -1,0 +1,94 @@
+// RUN: pass ownership-lifetime
+
+func.def @releases_linear_owned_resource(%size: index) {
+  %resource = test.resource.alloc %size : index -> pool<16>
+  test.resource.borrow %resource : pool<16>
+  test.resource.release %resource : pool<16>
+  func.return
+}
+
+// ====
+
+func.def @retains_borrowed_argument(%resource: pool<16>) {
+  %retained = test.resource.retain %resource : pool<16> -> pool<16>
+  test.resource.release %retained : pool<16>
+  func.return
+}
+
+// ====
+
+func.def @transfers_owned_resource_through_block_arg(%size: index) {
+  %resource = test.resource.alloc %size : index -> pool<16>
+  cfg.br ^join(%resource: pool<16>)
+^join(%carried: pool<16>):
+  test.resource.release %carried : pool<16>
+  func.return
+}
+
+// ====
+
+func.def @balances_release_on_both_branch_paths(%cond: i1, %size: index) {
+  %resource = test.resource.alloc %size : index -> pool<16>
+  cfg.cond_br %cond, ^left, ^right
+^left:
+  test.resource.release %resource : pool<16>
+  cfg.br ^join
+^right:
+  test.resource.release %resource : pool<16>
+  cfg.br ^join
+^join:
+  func.return
+}
+
+// ====
+
+func.def @rejects_leaked_owned_resource(%size: index) {
+  %resource = test.resource.alloc %size : index -> pool<16>
+  // ERROR@+1: DOMINANCE/014 {phase_name="ownership-lifetime", value_name="resource"}
+  func.return
+}
+
+// ====
+
+func.def @rejects_use_after_release(%size: index) {
+  %resource = test.resource.alloc %size : index -> pool<16>
+  test.resource.release %resource : pool<16>
+  // ERROR@+1: DOMINANCE/012 {phase_name="ownership-lifetime", value_name="resource", op_name="test.resource.borrow"}
+  test.resource.borrow %resource : pool<16>
+  func.return
+}
+
+// ====
+
+func.def @rejects_branch_payload_after_release(%size: index) {
+  %resource = test.resource.alloc %size : index -> pool<16>
+  test.resource.release %resource : pool<16>
+  // ERROR@+1: DOMINANCE/012 {phase_name="ownership-lifetime", value_name="resource", op_name="cfg.br"}
+  cfg.br ^join(%resource: pool<16>)
+^join(%carried: pool<16>):
+  func.return
+}
+
+// ====
+
+func.def @rejects_release_of_borrowed_argument(%resource: pool<16>) {
+  test.resource.borrow %resource : pool<16>
+  // ERROR@+1: DOMINANCE/013 {phase_name="ownership-lifetime", op_name="test.resource.release", value_name="resource", effect_name="release", state_name="borrowed"}
+  test.resource.release %resource : pool<16>
+  func.return
+}
+
+// ====
+
+func.def @rejects_unbalanced_branch_ownership(%cond: i1, %size: index) {
+  %resource = test.resource.alloc %size : index -> pool<16>
+  cfg.cond_br %cond, ^left, ^right
+^left:
+  test.resource.release %resource : pool<16>
+  cfg.br ^join
+^right:
+  // ERROR@+1: DOMINANCE/015 {phase_name="ownership-lifetime", value_name="resource", current_state="not-owned", incoming_state="owned"}
+  cfg.br ^join
+^join:
+  func.return
+}

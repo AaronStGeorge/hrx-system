@@ -173,6 +173,87 @@ ERR_DOMINANCE_011 = ErrorDef(
     ),
 )
 
+# ERR_DOMINANCE_012: Ownership lifetime use after consume.
+ERR_DOMINANCE_012 = ErrorDef(
+    domain=ErrorDomain.DOMINANCE,
+    code=12,
+    severity=Severity.ERROR,
+    summary="Ownership lifetime use after consume.",
+    message=("{phase_name} uses consumed resource '%{value_name}' at '{op_name}'"),
+    params=(
+        ErrorParam("phase_name", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("op_name", ParamKind.STRING),
+    ),
+    fix_hint="Use the current owned carrier value or retain before consuming.",
+)
+
+# ERR_DOMINANCE_013: Ownership effect requires an owned resource.
+ERR_DOMINANCE_013 = ErrorDef(
+    domain=ErrorDomain.DOMINANCE,
+    code=13,
+    severity=Severity.ERROR,
+    summary="Ownership effect requires an owned resource.",
+    message=(
+        "{phase_name} op '{op_name}' requires owned resource "
+        "'%{value_name}' for {effect_name}, but the value is {state_name}"
+    ),
+    params=(
+        ErrorParam("phase_name", ParamKind.STRING),
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("effect_name", ParamKind.STRING),
+        ErrorParam("state_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Pass an owned resource, retain a borrowed resource, or use a "
+        "borrow-only operation."
+    ),
+)
+
+# ERR_DOMINANCE_014: Owned resource reaches function exit.
+ERR_DOMINANCE_014 = ErrorDef(
+    domain=ErrorDomain.DOMINANCE,
+    code=14,
+    severity=Severity.ERROR,
+    summary="Owned resource reaches function exit.",
+    message=(
+        "{phase_name} resource '%{value_name}' reaches function exit "
+        "without consume, release, discard, or escape"
+    ),
+    params=(
+        ErrorParam("phase_name", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Consume, release, discard, escape, or return the resource through an "
+        "owned result summary."
+    ),
+)
+
+# ERR_DOMINANCE_015: Ownership state mismatch at control-flow join.
+ERR_DOMINANCE_015 = ErrorDef(
+    domain=ErrorDomain.DOMINANCE,
+    code=15,
+    severity=Severity.ERROR,
+    summary="Ownership state mismatch at control-flow join.",
+    message=(
+        "{phase_name} cannot merge resource '%{value_name}' at a "
+        "control-flow join: incoming states are {current_state} and "
+        "{incoming_state}"
+    ),
+    params=(
+        ErrorParam("phase_name", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("current_state", ParamKind.STRING),
+        ErrorParam("incoming_state", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Balance ownership effects on all incoming paths or pass the owned "
+        "value through a block argument."
+    ),
+)
+
 ALL_DOMINANCE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_DOMINANCE_001,
     ERR_DOMINANCE_002,
@@ -185,4 +266,8 @@ ALL_DOMINANCE_ERRORS: tuple[ErrorDef, ...] = (
     ERR_DOMINANCE_009,
     ERR_DOMINANCE_010,
     ERR_DOMINANCE_011,
+    ERR_DOMINANCE_012,
+    ERR_DOMINANCE_013,
+    ERR_DOMINANCE_014,
+    ERR_DOMINANCE_015,
 )

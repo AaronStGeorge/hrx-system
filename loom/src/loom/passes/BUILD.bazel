@@ -199,6 +199,19 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "ownership_lifetime",
+    srcs = ["ownership_lifetime.c"],
+    hdrs = ["ownership_lifetime.h"],
+    deps = [
+        "//loom/src/loom/analysis:ownership_lifetime",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/pass:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "linearize_view_accesses",
     srcs = ["linearize_view_accesses.c"],
     hdrs = ["linearize_view_accesses.h"],

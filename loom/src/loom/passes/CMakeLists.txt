@@ -225,6 +225,22 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    ownership_lifetime
+  HDRS
+    "ownership_lifetime.h"
+  SRCS
+    "ownership_lifetime.c"
+  DEPS
+    iree::base
+    loom::src::loom::analysis::ownership_lifetime
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::pass::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     linearize_view_accesses
   HDRS
     "linearize_view_accesses.h"

@@ -278,6 +278,7 @@ loom_cc_library(
     loom::src::loom::passes::linearize_view_accesses
     loom::src::loom::passes::loop_fusion
     loom::src::loom::passes::math::legalize
+    loom::src::loom::passes::ownership_lifetime
     loom::src::loom::passes::promote_private_fragments
     loom::src::loom::passes::refine_boundaries
     loom::src::loom::passes::scf_to_cfg

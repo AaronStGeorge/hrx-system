@@ -26,6 +26,7 @@
 #include "loom/passes/linearize_view_accesses.h"
 #include "loom/passes/loop_fusion.h"
 #include "loom/passes/math/legalize.h"
+#include "loom/passes/ownership_lifetime.h"
 #include "loom/passes/promote_private_fragments.h"
 #include "loom/passes/refine_boundaries.h"
 #include "loom/passes/scf_to_cfg.h"
@@ -251,6 +252,11 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .key = IREE_SVL("normalize-kernel-resources"),
         .info = loom_normalize_kernel_resources_pass_info,
         .function_run = loom_normalize_kernel_resources_run,
+    },
+    {
+        .key = IREE_SVL("ownership-lifetime"),
+        .info = loom_ownership_lifetime_pass_info,
+        .function_run = loom_ownership_lifetime_run,
     },
     {
         .key = IREE_SVL("promote-private-fragments"),

@@ -133,6 +133,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "ownership_lifetime"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/ownership_lifetime.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "promote_private_fragments"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/promote_private_fragments.loom-test"
