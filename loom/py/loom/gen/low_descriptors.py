@@ -291,17 +291,18 @@ def _reg_class_id_constant_name(spec: DescriptorSet, reg_class_name: str) -> str
     return f"{spec.c_enum_prefix}_REG_CLASS_ID_{_c_identifier(reg_class_name).upper()}"
 
 
-def _reg_class_id_define(spec: DescriptorSet, reg_class_name: str, reg_class_id: int) -> str:
-    return f"#define {_reg_class_id_constant_name(spec, reg_class_name)} {reg_class_id}u"
-
-
 def _register_part_id_constant_name(spec: DescriptorSet, part_name: str) -> str:
     part_name = descriptor_set_relative_name(spec, part_name)
     return f"{spec.c_enum_prefix}_REGISTER_PART_ID_{_c_identifier(part_name).upper()}"
 
 
-def _register_part_id_define(spec: DescriptorSet, part_name: str, part_id: int) -> str:
-    return f"#define {_register_part_id_constant_name(spec, part_name)} {part_id}u"
+def _emit_id_enum(typedef_name: str, entries: Sequence[tuple[str, int]]) -> list[str]:
+    if not entries:
+        return []
+    lines = [f"typedef enum {typedef_name}_e {{"]
+    lines.extend(f"  {name} = {value}u," for name, value in entries)
+    lines.append(f"}} {typedef_name}_t;")
+    return lines
 
 
 def _register_part_id_expr(compiled: _CompiledDescriptorSet, part_name: str | None) -> str:
@@ -343,6 +344,11 @@ def _hazard_reference_id(hazard: Hazard, resource_ids: dict[str, int]) -> int:
 def _validate_u16(value: int, description: str) -> None:
     if value < 0 or value > 0xFFFF:
         raise ValueError(f"{description} does not fit u16")
+
+
+def _validate_u16_table_count(count: int, description: str) -> None:
+    if count > 0xFFFF:
+        raise ValueError(f"{description} count does not fit u16 descriptor references")
 
 
 def _validate_u64(value: int, description: str) -> None:
@@ -1044,6 +1050,8 @@ def _compile_descriptor_set(
     schedule_classes = [schedule_class for schedule_class in spec.schedule_classes if schedule_class.name in used_schedule_names]
     enum_domains = [domain for domain in spec.enum_domains if domain.name in used_enum_domain_names]
 
+    _validate_u16_table_count(len(reg_classes), f"descriptor set '{spec.key}' register class")
+    _validate_u16_table_count(len(register_parts), f"descriptor set '{spec.key}' register part")
     reg_class_ids = {reg_class.name: i for i, reg_class in enumerate(reg_classes)}
     register_part_ids = {part.name: i for i, part in enumerate(register_parts)}
     resource_ids = {resource.name: i for i, resource in enumerate(resources)}
@@ -1324,11 +1332,33 @@ def _emit_header_for_spec(
     header_reg_class_ids = [(reg_class, compiled.reg_class_ids[reg_class.name]) for reg_class in header_spec.reg_classes]
     if header_reg_class_ids:
         lines.append("")
-        lines.extend(_reg_class_id_define(header_spec, reg_class.name, reg_class_id) for reg_class, reg_class_id in header_reg_class_ids)
+        lines.extend(
+            _emit_id_enum(
+                f"{header_spec.c_enum_prefix.lower()}_reg_class_id",
+                [
+                    (
+                        _reg_class_id_constant_name(header_spec, reg_class.name),
+                        reg_class_id,
+                    )
+                    for reg_class, reg_class_id in header_reg_class_ids
+                ],
+            )
+        )
     header_register_part_ids = [(part, compiled.register_part_ids[part.name]) for part in header_spec.register_parts if part.name in compiled.register_part_ids]
     if header_register_part_ids:
         lines.append("")
-        lines.extend(_register_part_id_define(header_spec, part.name, part_id) for part, part_id in header_register_part_ids)
+        lines.extend(
+            _emit_id_enum(
+                f"{header_spec.c_enum_prefix.lower()}_register_part_id",
+                [
+                    (
+                        _register_part_id_constant_name(header_spec, part.name),
+                        part_id,
+                    )
+                    for part, part_id in header_register_part_ids
+                ],
+            )
+        )
     lines.append("")
     lines.extend(
         [

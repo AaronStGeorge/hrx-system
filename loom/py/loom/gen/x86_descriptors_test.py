@@ -43,8 +43,9 @@ def _assert_descriptor_ref(header: str, macro_name: str) -> None:
     assert re.search(rf"#define {re.escape(macro_name)} \d+u", header), macro_name
 
 
-def _assert_reg_class_id(header: str, macro_name: str) -> None:
-    assert re.search(rf"#define {re.escape(macro_name)} \d+u", header), macro_name
+def _assert_reg_class_id(header: str, constant_name: str) -> None:
+    assert re.search(rf"  {re.escape(constant_name)} = \d+u,", header), constant_name
+    assert f"#define {constant_name} " not in header
 
 
 def test_storage_generation_emits_current_public_views() -> None:
