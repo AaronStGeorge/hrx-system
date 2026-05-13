@@ -45,9 +45,14 @@
 // SAMPLE: "row":"plan"
 // SAMPLE: "candidate_id":"c0","candidate_index":0
 // SAMPLE: "selected_sample":1
+// SAMPLE: "shape_sample_count":2
+// SAMPLE: "shape_parameters":[{"name":"value","kind":"choice","sample_count":2}]
 // SAMPLE: "row":"sample"
+// SAMPLE: "shape_id":"s1","shape_index":1
+// SAMPLE: "shape":{"sample_ordinal":1,"parameter_count":1,"parameters":{"value":7},"parameter_ordinals":{"value":1}}
 // SAMPLE: "sample":{"case":"sampled_choice","sample_ordinal":1,"passed":true
 // SAMPLE: "row":"benchmark"
+// SAMPLE: "shape_id":"s1","shape_index":1
 // SAMPLE: "benchmark":"sampled_choice_latency","case":"sampled_choice","status":"ok"
 // SAMPLE: "warmup_iterations":0
 // SAMPLE: "iterations":2
@@ -121,4 +126,5 @@
 // HELP: iree-tune-loom --agents_md
 // HELP: run       first row
 // HELP: candidate_id/candidate_index
+// HELP: shape.parameters
 // HELP: profile.rows array contains HAL statistics rows
