@@ -1656,6 +1656,7 @@ def _v_unary_f32_overlay(
     instruction_name: str,
     mnemonic: str,
     semantic_tag: str,
+    schedule_class: str = _SCHEDULE_VALU,
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
@@ -1663,7 +1664,7 @@ def _v_unary_f32_overlay(
         mnemonic=mnemonic,
         encoding_name="ENC_VOP1",
         semantic_tag=semantic_tag,
-        schedule_class=_SCHEDULE_VALU,
+        schedule_class=schedule_class,
         operands=(
             AmdgpuOperandOverlay("VDST", _vgpr_result()),
             AmdgpuOperandOverlay("SRC0", _sgpr_vgpr_operand("input")),
@@ -1672,8 +1673,24 @@ def _v_unary_f32_overlay(
     )
 
 
-def _v_exp_f32_overlay() -> AmdgpuDescriptorOverlay:
+def _v_trans_unary_f32_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+) -> AmdgpuDescriptorOverlay:
     return _v_unary_f32_overlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        semantic_tag=semantic_tag,
+        schedule_class=_amdgpu_trans_schedule_class_name(descriptor_key),
+    )
+
+
+def _v_exp_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_trans_unary_f32_overlay(
         descriptor_key="amdgpu.v_exp_f32",
         instruction_name="V_EXP_F32",
         mnemonic="v_exp_f32",
@@ -1682,7 +1699,7 @@ def _v_exp_f32_overlay() -> AmdgpuDescriptorOverlay:
 
 
 def _v_log_f32_overlay() -> AmdgpuDescriptorOverlay:
-    return _v_unary_f32_overlay(
+    return _v_trans_unary_f32_overlay(
         descriptor_key="amdgpu.v_log_f32",
         instruction_name="V_LOG_F32",
         mnemonic="v_log_f32",
@@ -1691,7 +1708,7 @@ def _v_log_f32_overlay() -> AmdgpuDescriptorOverlay:
 
 
 def _v_sin_f32_overlay() -> AmdgpuDescriptorOverlay:
-    return _v_unary_f32_overlay(
+    return _v_trans_unary_f32_overlay(
         descriptor_key="amdgpu.v_sin_f32",
         instruction_name="V_SIN_F32",
         mnemonic="v_sin_f32",
@@ -1700,7 +1717,7 @@ def _v_sin_f32_overlay() -> AmdgpuDescriptorOverlay:
 
 
 def _v_cos_f32_overlay() -> AmdgpuDescriptorOverlay:
-    return _v_unary_f32_overlay(
+    return _v_trans_unary_f32_overlay(
         descriptor_key="amdgpu.v_cos_f32",
         instruction_name="V_COS_F32",
         mnemonic="v_cos_f32",
@@ -1718,7 +1735,7 @@ def _v_native_f32_math_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
 
 
 def _v_sqrt_f32_overlay() -> AmdgpuDescriptorOverlay:
-    return _v_unary_f32_overlay(
+    return _v_trans_unary_f32_overlay(
         descriptor_key="amdgpu.v_sqrt_f32",
         instruction_name="V_SQRT_F32",
         mnemonic="v_sqrt_f32",
@@ -1727,7 +1744,7 @@ def _v_sqrt_f32_overlay() -> AmdgpuDescriptorOverlay:
 
 
 def _v_rsq_f32_overlay() -> AmdgpuDescriptorOverlay:
-    return _v_unary_f32_overlay(
+    return _v_trans_unary_f32_overlay(
         descriptor_key="amdgpu.v_rsq_f32",
         instruction_name="V_RSQ_F32",
         mnemonic="v_rsq_f32",
@@ -1736,7 +1753,7 @@ def _v_rsq_f32_overlay() -> AmdgpuDescriptorOverlay:
 
 
 def _v_rcp_f32_overlay() -> AmdgpuDescriptorOverlay:
-    return _v_unary_f32_overlay(
+    return _v_trans_unary_f32_overlay(
         descriptor_key="amdgpu.v_rcp_f32",
         instruction_name="V_RCP_F32",
         mnemonic="v_rcp_f32",

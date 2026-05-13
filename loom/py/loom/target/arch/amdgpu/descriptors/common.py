@@ -10,7 +10,7 @@ from __future__ import annotations
 
 # ruff: noqa: F401
 import struct
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -113,6 +113,7 @@ _RESOURCE_CONTROL = "amdgpu.control"
 
 _SCHEDULE_SALU = "amdgpu.salu"
 _SCHEDULE_VALU = "amdgpu.valu"
+_SCHEDULE_TRANS = "amdgpu.trans"
 _SCHEDULE_SMEM_LOAD = "amdgpu.smem.load"
 _SCHEDULE_VMEM_LOAD = "amdgpu.vmem.load"
 _SCHEDULE_VMEM_LOAD_LDS = "amdgpu.vmem.load.lds"
@@ -138,12 +139,32 @@ _SCHEDULE_WAIT_STORE = "amdgpu.wait.store"
 _SCHEDULE_WAIT_ALU = "amdgpu.wait.alu"
 _SCHEDULE_WAIT_IDLE = "amdgpu.wait.idle"
 
+_AMDGPU_TRANS_DESCRIPTOR_KEYS = (
+    "amdgpu.v_exp_f32",
+    "amdgpu.v_log_f32",
+    "amdgpu.v_sin_f32",
+    "amdgpu.v_cos_f32",
+    "amdgpu.v_sqrt_f32",
+    "amdgpu.v_rsq_f32",
+    "amdgpu.v_rcp_f32",
+)
+
+_AMDGPU_TRANS_PROXY_LATENCY_CYCLES = 8
+# These proxy values keep TRANS op scheduling conservative until per-processor
+# latency tables are available. The schedule classes remain descriptor-specific
+# so a future table can tune individual operations without changing descriptors.
+_AMDGPU_TRANS_DESCRIPTOR_LATENCY_CYCLES = {
+    descriptor_key: _AMDGPU_TRANS_PROXY_LATENCY_CYCLES
+    for descriptor_key in _AMDGPU_TRANS_DESCRIPTOR_KEYS
+}
+
 # AMDGPU vector, memory, and matrix packets observe EXEC even when the vendor XML
 # does not expose EXEC as an implicit operand. Model that state read in Loom so
 # scheduling cannot move the packet across divergent-control EXEC writes.
 _EXECUTION_MASKED_SCHEDULE_CLASSES = frozenset(
     (
         _SCHEDULE_VALU,
+        _SCHEDULE_TRANS,
         _SCHEDULE_VMEM_LOAD,
         _SCHEDULE_VMEM_LOAD_LDS,
         _SCHEDULE_VMEM_STORE,
@@ -159,6 +180,20 @@ _EXECUTION_MASKED_SCHEDULE_CLASSES = frozenset(
         _SCHEDULE_SWMMAC,
     )
 )
+
+
+def _amdgpu_trans_schedule_class_name(descriptor_key: str) -> str:
+    if descriptor_key not in _AMDGPU_TRANS_DESCRIPTOR_KEYS:
+        raise ValueError(f"AMDGPU descriptor '{descriptor_key}' is not a TRANS op")
+    return f"{_SCHEDULE_TRANS}.{descriptor_key.removeprefix('amdgpu.')}"
+
+
+def _amdgpu_schedule_class_reads_exec_state(schedule_class: str) -> bool:
+    return (
+        schedule_class in _EXECUTION_MASKED_SCHEDULE_CLASSES
+        or schedule_class.startswith(f"{_SCHEDULE_TRANS}.")
+    )
+
 
 AMDGPU_SCALAR_DESCRIPTOR_CATEGORY = DescriptorCategory(
     "scalar",
@@ -508,6 +543,35 @@ def _common_scalar_vector_memory_resources() -> tuple[Resource, ...]:
     )
 
 
+def _amdgpu_trans_schedule_classes(
+    *,
+    latency_cycles_by_descriptor_key: Mapping[str, int] | None = None,
+) -> tuple[ScheduleClass, ...]:
+    latency_cycles = dict(_AMDGPU_TRANS_DESCRIPTOR_LATENCY_CYCLES)
+    if latency_cycles_by_descriptor_key is not None:
+        unknown_descriptor_keys = set(latency_cycles_by_descriptor_key).difference(
+            _AMDGPU_TRANS_DESCRIPTOR_KEYS
+        )
+        if unknown_descriptor_keys:
+            unknown_keys = ", ".join(sorted(unknown_descriptor_keys))
+            raise ValueError(
+                f"AMDGPU TRANS latency table references unknown descriptor(s): "
+                f"{unknown_keys}"
+            )
+        latency_cycles.update(latency_cycles_by_descriptor_key)
+    return tuple(
+        ScheduleClass(
+            _amdgpu_trans_schedule_class_name(descriptor_key),
+            latency_kind=LatencyKind.ESTIMATE,
+            latency_cycles=latency_cycles[descriptor_key],
+            issue_uses=(IssueUse(_RESOURCE_VALU, cycles=1, units=1),),
+            hazards=_ALU_WAIT_HAZARDS,
+            model_quality=ModelQuality.ESTIMATED,
+        )
+        for descriptor_key in _AMDGPU_TRANS_DESCRIPTOR_KEYS
+    )
+
+
 def _common_scalar_vector_memory_schedule_classes(
     *,
     smem_load_hazards: tuple[Hazard, ...],
@@ -517,6 +581,7 @@ def _common_scalar_vector_memory_schedule_classes(
     lds_store_hazards: tuple[Hazard, ...],
     lds_atomic_hazards: tuple[Hazard, ...],
     lds_crosslane_hazards: tuple[Hazard, ...],
+    trans_latency_cycles_by_descriptor_key: Mapping[str, int] | None = None,
 ) -> tuple[ScheduleClass, ...]:
     return (
         ScheduleClass(
@@ -533,6 +598,9 @@ def _common_scalar_vector_memory_schedule_classes(
             issue_uses=(IssueUse(_RESOURCE_VALU, cycles=1, units=1),),
             hazards=_ALU_WAIT_HAZARDS,
             model_quality=ModelQuality.ESTIMATED,
+        ),
+        *_amdgpu_trans_schedule_classes(
+            latency_cycles_by_descriptor_key=trans_latency_cycles_by_descriptor_key
         ),
         ScheduleClass(
             _SCHEDULE_SMEM_LOAD,
@@ -869,7 +937,7 @@ def _is_exec_state_read(operand: Operand) -> bool:
 
 
 def _with_execution_mask_state_read(descriptor: Descriptor) -> Descriptor:
-    if descriptor.schedule_class not in _EXECUTION_MASKED_SCHEDULE_CLASSES:
+    if not _amdgpu_schedule_class_reads_exec_state(descriptor.schedule_class):
         return descriptor
     if any(_is_exec_state_read(operand) for operand in descriptor.operands):
         return descriptor
@@ -2081,6 +2149,9 @@ __all__ = (
     "_AMDGPU_DESCRIPTOR_SOURCE_DIR",
     "_AMDGPU_INLINE_F32_ENUM_DOMAIN_NAME",
     "_AMDGPU_SOURCE_INLINE_F32_ENUM_DOMAIN",
+    "_AMDGPU_TRANS_DESCRIPTOR_KEYS",
+    "_AMDGPU_TRANS_DESCRIPTOR_LATENCY_CYCLES",
+    "_AMDGPU_TRANS_PROXY_LATENCY_CYCLES",
     "_BUFFER_ATOMIC_VDATA_INPUT_REASON",
     "_CACHE_CONTROL_EFFECT",
     "_CDNA_SMEM_OFFSET_ONLY_FIXED_FIELDS",
@@ -2193,6 +2264,7 @@ __all__ = (
     "_SCHEDULE_SALU",
     "_SCHEDULE_SMEM_LOAD",
     "_SCHEDULE_SWMMAC",
+    "_SCHEDULE_TRANS",
     "_SCHEDULE_VALU",
     "_SCHEDULE_VMEM_ATOMIC_NO_RETURN",
     "_SCHEDULE_VMEM_ATOMIC_RETURN",
@@ -2247,6 +2319,9 @@ __all__ = (
     "_amdgpu_camel_case",
     "_amdgpu_core_descriptor_set",
     "_amdgpu_descriptor_set_file_stem",
+    "_amdgpu_schedule_class_reads_exec_state",
+    "_amdgpu_trans_schedule_class_name",
+    "_amdgpu_trans_schedule_classes",
     "_asm",
     "_atomic_effects",
     "_buffer_off_zero_operand_form",

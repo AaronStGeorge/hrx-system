@@ -13,6 +13,8 @@ from loom.target.arch.amdgpu.descriptors import (
     _ADDRESS_OFFSET_DS16_ENCODING_ID,
     _ADDRESS_OFFSET_DWORD_ENCODING_ID,
     _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID,
+    _AMDGPU_TRANS_DESCRIPTOR_KEYS,
+    _AMDGPU_TRANS_PROXY_LATENCY_CYCLES,
     _GFX12_TH_ATOMIC_RETURN_VALUE,
     _REG_EXEC,
     _SCHEDULE_SALU,
@@ -30,6 +32,9 @@ from loom.target.arch.amdgpu.descriptors import (
     AmdgpuAtomicOperationKind,
     AmdgpuAtomicValueKind,
     AmdgpuMemoryAddressForm,
+    _amdgpu_core_descriptor_set_bases,
+    _amdgpu_trans_schedule_class_name,
+    _amdgpu_trans_schedule_classes,
     _categorize_amdgpu_descriptors,
     _gfx11_core_overlays,
     _gfx12_core_overlays,
@@ -55,6 +60,7 @@ from loom.target.low_descriptors import (
     EffectKind,
     Immediate,
     ImmediateKind,
+    LatencyKind,
     MemorySpace,
     Operand,
     OperandFlag,
@@ -152,6 +158,84 @@ def test_execution_masked_descriptors_read_exec_state() -> None:
         _with_execution_mask_state_read(masked_descriptor).operands
         == masked_descriptor.operands
     )
+
+
+def test_trans_descriptors_use_descriptor_specific_schedule_classes() -> None:
+    overlays = {
+        overlay.descriptor_key: overlay
+        for overlay in _gfx11_core_overlays()
+        if overlay.descriptor_key in _AMDGPU_TRANS_DESCRIPTOR_KEYS
+    }
+
+    assert tuple(overlays) == _AMDGPU_TRANS_DESCRIPTOR_KEYS
+    for descriptor_key, overlay in overlays.items():
+        assert overlay.schedule_class == _amdgpu_trans_schedule_class_name(
+            descriptor_key
+        )
+        assert overlay.schedule_class != _SCHEDULE_VALU
+
+    for descriptor_set in _amdgpu_core_descriptor_set_bases():
+        schedule_classes = {
+            schedule_class.name: schedule_class
+            for schedule_class in descriptor_set.schedule_classes
+        }
+        for descriptor_key in _AMDGPU_TRANS_DESCRIPTOR_KEYS:
+            schedule_class = schedule_classes[
+                _amdgpu_trans_schedule_class_name(descriptor_key)
+            ]
+            assert schedule_class.latency_kind is LatencyKind.ESTIMATE
+            assert schedule_class.latency_cycles == _AMDGPU_TRANS_PROXY_LATENCY_CYCLES
+
+
+def test_trans_schedule_classes_accept_descriptor_latency_overrides() -> None:
+    descriptor_key = "amdgpu.v_rcp_f32"
+    schedule_classes = {
+        schedule_class.name: schedule_class
+        for schedule_class in _amdgpu_trans_schedule_classes(
+            latency_cycles_by_descriptor_key={descriptor_key: 5}
+        )
+    }
+
+    override_schedule_class = schedule_classes[
+        _amdgpu_trans_schedule_class_name(descriptor_key)
+    ]
+    assert override_schedule_class.latency_cycles == 5
+    assert (
+        schedule_classes[
+            _amdgpu_trans_schedule_class_name("amdgpu.v_exp_f32")
+        ].latency_cycles
+        == _AMDGPU_TRANS_PROXY_LATENCY_CYCLES
+    )
+    _expect_value_error_contains(
+        "unknown descriptor",
+        lambda: _amdgpu_trans_schedule_classes(
+            latency_cycles_by_descriptor_key={"amdgpu.v_bad_f32": 4}
+        ),
+    )
+
+
+def test_trans_descriptors_read_exec_state() -> None:
+    descriptor = Descriptor(
+        key="amdgpu.v_exp_f32",
+        mnemonic="v_exp_f32",
+        semantic_tag="float.exp2.f32",
+        operands=(
+            Operand("dst", OperandRole.RESULT, (RegClassAlt("amdgpu.vgpr"),)),
+            Operand("input", OperandRole.OPERAND, (RegClassAlt("amdgpu.vgpr"),)),
+        ),
+        schedule_class=_amdgpu_trans_schedule_class_name("amdgpu.v_exp_f32"),
+    )
+
+    masked_descriptor = _with_execution_mask_state_read(descriptor)
+    exec_operand = masked_descriptor.operands[-1]
+
+    assert exec_operand.field_name == "exec_in"
+    assert exec_operand.role is OperandRole.IMPLICIT
+    assert exec_operand.reg_alts == (
+        RegClassAlt(_REG_EXEC, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),
+    )
+    assert OperandFlag.IMPLICIT in exec_operand.flags
+    assert OperandFlag.STATE_READ in exec_operand.flags
 
 
 def test_scalar_descriptors_do_not_get_execution_mask_state_read() -> None:
