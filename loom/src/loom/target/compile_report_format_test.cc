@@ -138,6 +138,148 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
             IREE_STRING_VIEW_NPOS);
 
   iree_string_builder_deinitialize(&builder);
+
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+  IREE_ASSERT_OK(
+      loom_target_compile_report_format_json(&report, &options, &stream));
+
+  output = iree_string_builder_view(&builder);
+  EXPECT_NE(iree_string_view_find(
+                output, IREE_SV("\"artifact_kind\":\"vm-archive\""), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output, IREE_SV("\"entry\":\"branchy\""), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("\"schedule\":{\"node_count\":5"), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output, IREE_SV("\"move_causes\":{\"kind_count\":3"), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output, IREE_SV("\"cause\":\"low_concat\""), 0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output,
+                            IREE_SV("\"pressure_rows\":{\"copied_count\":1,"
+                                    "\"total_count\":2,\"rows\":["),
+                            0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output, IREE_SV("\"register_class\":\"test.i32\""), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("\"spill_rows\":{\"copied_count\":1,"
+                                          "\"total_count\":3,\"rows\":["),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output, IREE_SV("\"source_low\":{\"selected_op_count\":4"), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("\"rule_set_index\":0,"
+                                          "\"rule_index\":1,\"plan_id\":null,"
+                                          "\"descriptor_id\":7"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+
+  iree_string_builder_deinitialize(&builder);
+}
+
+TEST(CompileReportFormatTest, FormatsJsonSummaryWithoutDetailRows) {
+  loom_target_compile_report_pressure_row_t pressure_rows[] = {
+      {
+          .register_class = IREE_SVL("test.i32"),
+          .type_kind = LOOM_TYPE_REGISTER,
+          .element_type = LOOM_SCALAR_TYPE_I32,
+          .peak_live_units = 7,
+          .peak_live_values = 4,
+          .peak_point = 3,
+      },
+  };
+  loom_target_compile_report_t report = {};
+  loom_target_compile_report_initialize(&report);
+  report.artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
+  report.backend_name = IREE_SVL("hal");
+  report.entry_symbol = IREE_SVL("entry");
+  loom_target_compile_report_record_artifact_size(&report, 256);
+  report.pressure_rows = pressure_rows;
+  report.pressure_row_count = IREE_ARRAYSIZE(pressure_rows);
+  report.pressure_row_total_count = 2;
+  report.detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS;
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+  const loom_target_compile_report_format_options_t options = {
+      .mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY,
+  };
+  IREE_ASSERT_OK(
+      loom_target_compile_report_format_json(&report, &options, &stream));
+
+  iree_string_view_t output = iree_string_builder_view(&builder);
+  EXPECT_NE(iree_string_view_find(
+                output, IREE_SV("\"artifact_kind\":\"hal-executable\""), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output, IREE_SV("\"backend\":\"hal\""), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output, IREE_SV("\"artifact_size\":256"), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output,
+                            IREE_SV("\"pressure_rows\":{\"copied_count\":1,"
+                                    "\"total_count\":2}"),
+                            0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_EQ(iree_string_view_find(output, IREE_SV("\"rows\""), 0),
+            IREE_STRING_VIEW_NPOS);
+
+  iree_string_builder_deinitialize(&builder);
+}
+
+TEST(CompileReportFormatTest, FormatsJsonEscapedStrings) {
+  loom_target_compile_report_t report = {};
+  loom_target_compile_report_initialize(&report);
+  report.entry_symbol = IREE_SVL("quote\"line\n");
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+  const loom_target_compile_report_format_options_t options = {
+      .mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY,
+  };
+  IREE_ASSERT_OK(
+      loom_target_compile_report_format_json(&report, &options, &stream));
+
+  iree_string_view_t output = iree_string_builder_view(&builder);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("\"entry\":\"quote\\\"line\\n\""), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output, IREE_SV("\"backend\":null"), 0),
+            IREE_STRING_VIEW_NPOS);
+
+  iree_string_builder_deinitialize(&builder);
+}
+
+TEST(CompileReportFormatTest, JsonModeNoneWritesNothing) {
+  loom_target_compile_report_t report = {};
+  loom_target_compile_report_initialize(&report);
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+  const loom_target_compile_report_format_options_t options = {
+      .mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE,
+  };
+  IREE_ASSERT_OK(
+      loom_target_compile_report_format_json(&report, &options, &stream));
+  EXPECT_EQ(iree_string_builder_size(&builder), 0u);
+
+  iree_string_builder_deinitialize(&builder);
 }
 
 TEST(CompileReportFormatTest, ParsesModes) {

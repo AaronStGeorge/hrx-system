@@ -108,6 +108,8 @@ loom_cc_library(
     ::compile_report
     iree::base
     loom::src::loom::ir
+    loom::src::loom::util::json
+    loom::src::loom::util::stream
   PUBLIC
 )
 
@@ -206,6 +208,7 @@ loom_cc_test(
     iree::base
     iree::base::internal::arena
     loom::src::loom::ir
+    loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main
 )

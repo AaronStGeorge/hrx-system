@@ -6,6 +6,8 @@
 
 #include "loom/tooling/execution/hal_benchmark.h"
 
+#include <string.h>
+
 #include "iree/hal/utils/statistics_sink.h"
 
 void loom_run_hal_benchmark_options_initialize(
@@ -14,9 +16,10 @@ void loom_run_hal_benchmark_options_initialize(
   loom_run_benchmark_options_initialize(&out_options->timing);
   loom_run_hal_dispatch_batch_options_initialize(&out_options->dispatch_batch);
   out_options->dispatch_batch.dispatch_count = out_options->timing.batch_size;
-  out_options->profile_flags =
-      IREE_HAL_DEVICE_PROFILING_FLAG_LIGHTWEIGHT_STATISTICS;
-  out_options->profile_data_families = IREE_HAL_DEVICE_PROFILING_DATA_NONE;
+  out_options->profile_flags = IREE_HAL_DEVICE_PROFILING_FLAG_NONE;
+  out_options->profile_data_families =
+      IREE_HAL_DEVICE_PROFILING_DATA_DISPATCH_EVENTS |
+      IREE_HAL_DEVICE_PROFILING_DATA_EXECUTABLE_METADATA;
   out_options->profile_capture_filter =
       iree_hal_profile_capture_filter_default();
 }
@@ -58,6 +61,126 @@ static iree_status_t loom_run_hal_benchmark_execute_batch(void* user_data) {
   return loom_run_hal_dispatch_batch_execute(context->runtime, context->batch);
 }
 
+static void loom_run_hal_profile_summary_record_error(
+    loom_run_hal_profile_summary_t* profile, iree_status_t status) {
+  profile->has_error = true;
+  profile->error_code = iree_status_code(status);
+  iree_host_size_t required_length = 0;
+  if (iree_status_format(status, sizeof(profile->error_message),
+                         profile->error_message, &required_length)) {
+    profile->error_message_length = required_length;
+    if (profile->error_message_length >= sizeof(profile->error_message)) {
+      profile->error_message_length = sizeof(profile->error_message) - 1;
+    }
+  } else {
+    const char* error_code_string =
+        iree_status_code_string(profile->error_code);
+    iree_host_size_t index = 0;
+    for (; error_code_string[index] != '\0' &&
+           index + 1 < sizeof(profile->error_message);
+         ++index) {
+      profile->error_message[index] = error_code_string[index];
+    }
+    profile->error_message[index] = '\0';
+    profile->error_message_length = index;
+  }
+  iree_status_free(status);
+}
+
+typedef struct loom_run_hal_profile_summary_capture_context_t {
+  // Statistics sink used to resolve export names and scale device ticks.
+  const iree_hal_profile_statistics_sink_t* sink;
+  // Profile summary receiving bounded row copies.
+  loom_run_hal_profile_summary_t* profile;
+} loom_run_hal_profile_summary_capture_context_t;
+
+static void loom_run_hal_profile_summary_copy_export_name(
+    const iree_hal_profile_statistics_sink_t* sink,
+    const iree_hal_profile_statistics_row_t* row,
+    loom_run_hal_profile_row_summary_t* summary) {
+  summary->export_name_length = 0;
+  if (row->executable_id == 0 || row->export_ordinal == UINT32_MAX) {
+    return;
+  }
+  iree_string_view_t export_name = iree_string_view_empty();
+  if (!iree_hal_profile_statistics_sink_find_export_name(
+          sink, row->executable_id, row->export_ordinal, &export_name)) {
+    return;
+  }
+  iree_host_size_t copy_length =
+      iree_min(export_name.size,
+               (iree_host_size_t)LOOM_RUN_HAL_PROFILE_EXPORT_NAME_CAPACITY - 1);
+  memcpy(summary->export_name, export_name.data, copy_length);
+  summary->export_name[copy_length] = '\0';
+  summary->export_name_length = copy_length;
+}
+
+static void loom_run_hal_profile_summary_copy_scaled_duration(
+    const iree_hal_profile_statistics_sink_t* sink,
+    const iree_hal_profile_statistics_row_t* row,
+    loom_run_hal_profile_row_summary_t* summary) {
+  if (!iree_all_bits_set(row->flags,
+                         IREE_HAL_PROFILE_STATISTICS_ROW_FLAG_TIMING)) {
+    return;
+  }
+  uint64_t total_duration_ns = 0;
+  uint64_t minimum_duration_ns = 0;
+  uint64_t maximum_duration_ns = 0;
+  if (!iree_hal_profile_statistics_sink_scale_duration_to_ns(
+          sink, row, row->total_duration, &total_duration_ns) ||
+      !iree_hal_profile_statistics_sink_scale_duration_to_ns(
+          sink, row, row->minimum_duration, &minimum_duration_ns) ||
+      !iree_hal_profile_statistics_sink_scale_duration_to_ns(
+          sink, row, row->maximum_duration, &maximum_duration_ns)) {
+    return;
+  }
+  summary->has_scaled_duration_ns = true;
+  summary->total_duration_ns = total_duration_ns;
+  summary->minimum_duration_ns = minimum_duration_ns;
+  summary->maximum_duration_ns = maximum_duration_ns;
+}
+
+static iree_status_t loom_run_hal_profile_summary_capture_row(
+    void* user_data, const iree_hal_profile_statistics_row_t* row) {
+  loom_run_hal_profile_summary_capture_context_t* context =
+      (loom_run_hal_profile_summary_capture_context_t*)user_data;
+  loom_run_hal_profile_summary_t* profile = context->profile;
+  if (profile->captured_row_count >= LOOM_RUN_HAL_PROFILE_SUMMARY_MAX_ROWS) {
+    ++profile->truncated_row_count;
+    return iree_ok_status();
+  }
+
+  loom_run_hal_profile_row_summary_t* summary =
+      &profile->rows[profile->captured_row_count++];
+  *summary = (loom_run_hal_profile_row_summary_t){
+      .row_type = row->row_type,
+      .time_domain = row->time_domain,
+      .flags = row->flags,
+      .physical_device_ordinal = row->physical_device_ordinal,
+      .queue_ordinal = row->queue_ordinal,
+      .event_type = row->event_type,
+      .executable_id = row->executable_id,
+      .command_buffer_id = row->command_buffer_id,
+      .export_ordinal = row->export_ordinal,
+      .command_index = row->command_index,
+      .sample_count = row->sample_count,
+      .invalid_sample_count = row->invalid_sample_count,
+      .operation_count = row->operation_count,
+      .payload_bytes = row->payload_bytes,
+      .tile_count = row->tile_count,
+      .tile_duration_sum_ns = row->tile_duration_sum_ns,
+      .first_start_time = row->first_start_time,
+      .last_end_time = row->last_end_time,
+      .total_duration = row->total_duration,
+      .minimum_duration = row->minimum_duration,
+      .maximum_duration = row->maximum_duration,
+  };
+  loom_run_hal_profile_summary_copy_export_name(context->sink, row, summary);
+  loom_run_hal_profile_summary_copy_scaled_duration(context->sink, row,
+                                                    summary);
+  return iree_ok_status();
+}
+
 static iree_status_t loom_run_hal_benchmark_run_profiled_batch(
     const loom_run_hal_runtime_t* runtime, loom_run_hal_dispatch_batch_t* batch,
     const loom_run_hal_benchmark_options_t* options, iree_allocator_t allocator,
@@ -69,22 +192,23 @@ static iree_status_t loom_run_hal_benchmark_run_profiled_batch(
   };
 
   iree_hal_profile_statistics_sink_t* statistics_sink = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_hal_profile_statistics_sink_create(allocator, &statistics_sink));
-
-  iree_hal_device_profiling_options_t profiling_options = {
-      .flags = options->profile_flags,
-      .data_families = options->profile_data_families,
-      .sink = iree_hal_profile_statistics_sink_base(statistics_sink),
-      .capture_filter = options->profile_capture_filter,
-      .counter_set_count = options->profile_counter_set_count,
-      .counter_sets = options->profile_counter_sets,
-  };
-
   iree_status_t status =
-      iree_hal_device_profiling_begin(runtime->device, &profiling_options);
-  const bool profiling_began = iree_status_is_ok(status);
+      iree_hal_profile_statistics_sink_create(allocator, &statistics_sink);
+
   if (iree_status_is_ok(status)) {
+    iree_hal_device_profiling_options_t profiling_options = {
+        .flags = options->profile_flags,
+        .data_families = options->profile_data_families,
+        .sink = iree_hal_profile_statistics_sink_base(statistics_sink),
+        .capture_filter = options->profile_capture_filter,
+        .counter_set_count = options->profile_counter_set_count,
+        .counter_sets = options->profile_counter_sets,
+    };
+    status =
+        iree_hal_device_profiling_begin(runtime->device, &profiling_options);
+  }
+  const bool profiling_began = iree_status_is_ok(status);
+  if (profiling_began) {
     status = loom_run_hal_dispatch_batch_execute(runtime, batch);
   }
   if (iree_status_is_ok(status)) {
@@ -100,9 +224,61 @@ static iree_status_t loom_run_hal_benchmark_run_profiled_batch(
         iree_hal_profile_statistics_sink_row_count(statistics_sink);
     out_profile->dropped_record_count =
         iree_hal_profile_statistics_sink_dropped_record_count(statistics_sink);
+    loom_run_hal_profile_summary_capture_context_t context = {
+        .sink = statistics_sink,
+        .profile = out_profile,
+    };
+    status = iree_hal_profile_statistics_sink_for_each_row(
+        statistics_sink, (iree_hal_profile_statistics_row_callback_t){
+                             .fn = loom_run_hal_profile_summary_capture_row,
+                             .user_data = &context,
+                         });
+  } else {
+    loom_run_hal_profile_summary_record_error(out_profile, status);
+    status = iree_ok_status();
   }
 
-  iree_hal_profile_statistics_sink_release(statistics_sink);
+  if (statistics_sink != NULL) {
+    iree_hal_profile_statistics_sink_release(statistics_sink);
+  }
+  return status;
+}
+
+static iree_status_t loom_run_hal_benchmark_profile_final_batch(
+    const loom_run_hal_runtime_t* runtime,
+    const loom_run_hal_prepared_candidate_t* candidate,
+    const loom_run_hal_invocation_plan_t* plan,
+    const loom_run_hal_benchmark_options_t* options, iree_allocator_t allocator,
+    loom_run_hal_profile_summary_t* out_profile) {
+  *out_profile = (loom_run_hal_profile_summary_t){
+      .requested = true,
+      .flags = options->profile_flags,
+      .data_families = options->profile_data_families,
+  };
+
+  loom_run_hal_dispatch_batch_options_t profile_dispatch_options =
+      options->dispatch_batch;
+  // Record a separate metadata-retaining batch so measured submissions keep the
+  // fast unretained command-buffer shape.
+  profile_dispatch_options.command_buffer_mode |=
+      IREE_HAL_COMMAND_BUFFER_MODE_RETAIN_PROFILE_METADATA;
+  profile_dispatch_options.command_buffer_mode &=
+      ~IREE_HAL_COMMAND_BUFFER_MODE_UNRETAINED;
+  profile_dispatch_options.execute_flags &=
+      ~IREE_HAL_EXECUTE_FLAG_BORROW_BINDING_TABLE_LIFETIME;
+
+  loom_run_hal_dispatch_batch_t profile_batch = {0};
+  iree_status_t status = loom_run_hal_dispatch_batch_prepare(
+      runtime, candidate, plan, &profile_dispatch_options, allocator,
+      &profile_batch);
+  if (iree_status_is_ok(status)) {
+    status = loom_run_hal_benchmark_run_profiled_batch(
+        runtime, &profile_batch, options, allocator, out_profile);
+  } else {
+    loom_run_hal_profile_summary_record_error(out_profile, status);
+    status = iree_ok_status();
+  }
+  loom_run_hal_dispatch_batch_deinitialize(&profile_batch);
   return status;
 }
 
@@ -134,8 +310,8 @@ iree_status_t loom_run_hal_benchmark_dispatch_plan(
   if (iree_status_is_ok(status) &&
       iree_all_bits_set(options->flags,
                         LOOM_RUN_HAL_BENCHMARK_FLAG_PROFILE_FINAL_BATCH)) {
-    status = loom_run_hal_benchmark_run_profiled_batch(
-        runtime, &batch, options, allocator, &out_result->profile);
+    status = loom_run_hal_benchmark_profile_final_batch(
+        runtime, candidate, plan, options, allocator, &out_result->profile);
   }
 
   loom_run_hal_dispatch_batch_deinitialize(&batch);

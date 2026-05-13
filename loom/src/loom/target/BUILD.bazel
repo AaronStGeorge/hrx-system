@@ -97,6 +97,8 @@ loom_cc_library(
     deps = [
         ":compile_report",
         "//loom/src/loom/ir",
+        "//loom/src/loom/util:json",
+        "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
     ],
 )
@@ -177,6 +179,7 @@ loom_cc_test(
     deps = [
         ":contract",
         "//loom/src/loom/ir",
+        "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",

@@ -228,6 +228,7 @@ loom_cc_test(
     srcs = ["benchmark_test.cc"],
     deps = [
         ":benchmark",
+        "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

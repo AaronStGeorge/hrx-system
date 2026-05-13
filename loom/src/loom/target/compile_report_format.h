@@ -4,13 +4,14 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Human-readable compile report formatting.
+// Human-readable and structured compile report formatting.
 
 #ifndef LOOM_TARGET_COMPILE_REPORT_FORMAT_H_
 #define LOOM_TARGET_COMPILE_REPORT_FORMAT_H_
 
 #include "iree/base/api.h"
 #include "loom/target/compile_report.h"
+#include "loom/util/stream.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,7 +27,7 @@ typedef enum loom_target_compile_report_format_mode_e {
 } loom_target_compile_report_format_mode_t;
 
 typedef struct loom_target_compile_report_format_options_t {
-  // Selected text detail mode.
+  // Selected report detail mode.
   loom_target_compile_report_format_mode_t mode;
 } loom_target_compile_report_format_options_t;
 
@@ -44,6 +45,16 @@ iree_status_t loom_target_compile_report_format_text(
     const loom_target_compile_report_t* report,
     const loom_target_compile_report_format_options_t* options,
     iree_string_builder_t* builder);
+
+// Formats |report| as one structured JSON object into |stream|.
+//
+// SUMMARY mode emits stable summary fields and copied/total row counts. DETAILS
+// mode additionally emits copied pressure, spill, source-low, and move-cause
+// row arrays. NONE mode writes nothing.
+iree_status_t loom_target_compile_report_format_json(
+    const loom_target_compile_report_t* report,
+    const loom_target_compile_report_format_options_t* options,
+    loom_output_stream_t* stream);
 
 #ifdef __cplusplus
 }  // extern "C"

@@ -74,6 +74,11 @@ iree_status_t loom_run_compile_report_capture_append_text(
     const loom_run_compile_report_capture_t* capture,
     iree_string_builder_t* builder);
 
+// Appends the captured report as one JSON object when capture is enabled.
+iree_status_t loom_run_compile_report_capture_append_json(
+    const loom_run_compile_report_capture_t* capture,
+    loom_output_stream_t* stream);
+
 // Releases storage owned by |capture|.
 void loom_run_compile_report_capture_deinitialize(
     loom_run_compile_report_capture_t* capture);

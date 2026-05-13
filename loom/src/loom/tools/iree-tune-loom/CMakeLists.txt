@@ -27,6 +27,7 @@ loom_cc_library(
     loom::src::loom::ops::op_registry
     loom::src::loom::tooling::compile::pipeline
     loom::src::loom::tooling::execution::compile_options
+    loom::src::loom::tooling::execution::compile_report_capture
     loom::src::loom::tooling::execution::hal_backend
     loom::src::loom::tooling::execution::hal_benchmark
     loom::src::loom::tooling::execution::hal_candidate
@@ -38,6 +39,7 @@ loom_cc_library(
     loom::src::loom::tooling::testbench::executor
     loom::src::loom::util::json
     loom::src::loom::util::stream
+    loom::src::loom::verify
     iree::tooling::device_util
     iree::vm
   PUBLIC
@@ -65,6 +67,8 @@ iree_lit_test_suite(
     ::iree-tune-loom
     FileCheck
   DATA
+    testdata::actual_entry_plan.loom
+    testdata::duplicate_symbol.loom
     testdata::scalar_benchmarks.loom
   LABELS
     "hostonly"

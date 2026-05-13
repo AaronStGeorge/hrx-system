@@ -1,0 +1,10 @@
+func.def @dry_actual_entry() {
+  func.return
+}
+
+check.case @dry_actual {
+  func.call @dry_actual_entry() : ()
+  check.return
+}
+
+check.benchmark @dry_actual_dispatch_latency case(@dry_actual) attrs({measure = "dispatch_complete"})

@@ -64,5 +64,34 @@ TEST(CompileReportCaptureTest, AppendsWithSeparator) {
   loom_run_compile_report_capture_deinitialize(&capture);
 }
 
+TEST(CompileReportCaptureTest, AppendsJsonObject) {
+  loom_run_compile_report_capture_options_t options = {};
+  loom_run_compile_report_capture_options_initialize(&options);
+  options.mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY;
+
+  loom_run_compile_report_capture_t capture = {};
+  IREE_ASSERT_OK(loom_run_compile_report_capture_initialize(
+      &options, iree_allocator_system(), &capture));
+  capture.report.artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
+  capture.report.entry_symbol = IREE_SVL("entry");
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+  IREE_ASSERT_OK(
+      loom_run_compile_report_capture_append_json(&capture, &stream));
+
+  iree_string_view_t output = iree_string_builder_view(&builder);
+  EXPECT_NE(iree_string_view_find(
+                output, IREE_SV("\"artifact_kind\":\"vm-archive\""), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output, IREE_SV("\"entry\":\"entry\""), 0),
+            IREE_STRING_VIEW_NPOS);
+
+  iree_string_builder_deinitialize(&builder);
+  loom_run_compile_report_capture_deinitialize(&capture);
+}
+
 }  // namespace
 }  // namespace loom

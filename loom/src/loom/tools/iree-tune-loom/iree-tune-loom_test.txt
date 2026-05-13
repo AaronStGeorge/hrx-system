@@ -1,16 +1,28 @@
 // RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency | FileCheck --check-prefix=BENCH %s
 // RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@sampled_choice_latency --sample=1 --iterations=2 --warmup_iterations=0 | FileCheck --check-prefix=SAMPLE %s
 // RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --iterations=2 --warmup_iterations=0 | FileCheck --check-prefix=CLI-OVERRIDE %s
+// RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --dry_run --output=%t.tune.jsonl
+// RUN: FileCheck --check-prefix=DRY %s < %t.tune.jsonl
+// RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_dispatch_latency --dry_run --output=%t.dispatch_dry.jsonl
+// RUN: FileCheck --check-prefix=DISPATCH-DRY %s < %t.dispatch_dry.jsonl
+// RUN: iree-tune-loom %S/testdata/actual_entry_plan.loom --benchmark=@dry_actual_dispatch_latency --dry_run --output=%t.actual_dry.jsonl
+// RUN: FileCheck --check-prefix=ACTUAL-DRY %s < %t.actual_dry.jsonl
 // RUN: ( iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_dispatch_latency 2>&1 || true ) | FileCheck --check-prefix=DISPATCH-NO-ACTUAL %s
+// RUN: ( iree-tune-loom %S/testdata/duplicate_symbol.loom --benchmark=@duplicate_symbol_latency || true ) | FileCheck --check-prefix=DUPLICATE %s
+// RUN: iree-tune-loom --agents_md | FileCheck --check-prefix=AGENTS %s
+// RUN: iree-tune-loom --help 2>&1 | FileCheck --check-prefix=HELP %s
 
-// BENCH: "format":"loom.tune.v0"
-// BENCH: "planned_case_count":2
-// BENCH: "planned_benchmark_count":3
-// BENCH: "benchmark_count":1
-// BENCH: "failed_benchmark_count":0
-// BENCH: "correctness_sample_count":1
-// BENCH: "correctness_failed_sample_count":0
+// BENCH: "row":"run","run_id":"r
+// BENCH: "source":
+// BENCH: "row":"plan"
+// BENCH: "candidate_id":"c0","candidate_index":0
+// BENCH: "benchmark":"scalar_equal_latency","case":"scalar_equal","measure":"case_end_to_end"
+// BENCH: "cli_overrides":{"iterations":false,"warmup_iterations":false}
+// BENCH: "row":"sample"
+// BENCH: "candidate_id":"c0","candidate_index":0
 // BENCH: "case":"scalar_equal","sample_ordinal":0,"passed":true
+// BENCH: "row":"benchmark"
+// BENCH: "candidate_id":"c0","candidate_index":0
 // BENCH: "benchmark":"scalar_equal_latency","case":"scalar_equal","status":"ok"
 // BENCH: "measure":"case_end_to_end"
 // BENCH: "warmup_iterations":1
@@ -19,20 +31,86 @@
 // BENCH: "timing_ns":{"count":3
 // BENCH: "p50":
 // BENCH: "p90":
+// BENCH: "row":"summary"
+// BENCH: "planned_case_count":2
+// BENCH: "planned_benchmark_count":3
+// BENCH: "benchmark_count":1
+// BENCH: "failure_count":0
+// BENCH: "failed_benchmark_count":0
+// BENCH: "correctness_sample_count":1
+// BENCH: "correctness_failed_sample_count":0
 
-// SAMPLE: "format":"loom.tune.v0"
-// SAMPLE: "benchmark_count":1
-// SAMPLE: "correctness_sample_count":1
-// SAMPLE: "case":"sampled_choice","sample_ordinal":1,"passed":true
+// SAMPLE: "row":"plan"
+// SAMPLE: "candidate_id":"c0","candidate_index":0
+// SAMPLE: "selected_sample":1
+// SAMPLE: "row":"sample"
+// SAMPLE: "sample":{"case":"sampled_choice","sample_ordinal":1,"passed":true
+// SAMPLE: "row":"benchmark"
 // SAMPLE: "benchmark":"sampled_choice_latency","case":"sampled_choice","status":"ok"
 // SAMPLE: "warmup_iterations":0
 // SAMPLE: "iterations":2
 // SAMPLE: "samples_per_iteration":1
 // SAMPLE: "timing_ns":{"count":2
+// SAMPLE: "row":"summary"
+// SAMPLE: "benchmark_count":1
+// SAMPLE: "correctness_sample_count":1
 
+// CLI-OVERRIDE: "row":"plan"
+// CLI-OVERRIDE: "cli_overrides":{"iterations":true,"warmup_iterations":true}
+// CLI-OVERRIDE: "row":"benchmark"
 // CLI-OVERRIDE: "benchmark":"scalar_equal_latency","case":"scalar_equal","status":"ok"
-// CLI-OVERRIDE: "measure":"case_end_to_end"
 // CLI-OVERRIDE: "warmup_iterations":0
 // CLI-OVERRIDE: "iterations":2
 
+// DRY: "row":"plan"
+// DRY: "candidate_id":"c0","candidate_index":0
+// DRY: "benchmark":"scalar_equal_latency","case":"scalar_equal","measure":"case_end_to_end"
+// DRY-NOT: "row":"sample"
+// DRY-NOT: "row":"benchmark"
+// DRY: "row":"summary"
+// DRY: "dry_run":true
+// DRY: "benchmark_count":1
+// DRY: "correctness_sample_count":0
+
+// DISPATCH-DRY: "row":"plan"
+// DISPATCH-DRY: "candidate_id":"c0","candidate_index":0
+// DISPATCH-DRY: "benchmark":"scalar_equal_dispatch_latency","case":"scalar_equal","measure":"dispatch_complete"
+// DISPATCH-DRY: "cli_overrides":{"iterations":false,"warmup_iterations":false,"batch_size":false
+// DISPATCH-DRY: "row":"device"
+// DISPATCH-DRY: "status":"planned"
+// DISPATCH-DRY: "row":"summary"
+// DISPATCH-DRY: "benchmark_count":1
+
+// ACTUAL-DRY: "row":"plan"
+// ACTUAL-DRY: "candidate_id":"c0","candidate_index":0
+// ACTUAL-DRY: "benchmark":"dry_actual_dispatch_latency","case":"dry_actual","measure":"dispatch_complete"
+// ACTUAL-DRY: "actual_invocation_count":1
+// ACTUAL-DRY: "actual_entry":"dry_actual_entry"
+// ACTUAL-DRY: "actual_input_count":0
+// ACTUAL-DRY: "actual_result_count":0
+// ACTUAL-DRY: "row":"device"
+// ACTUAL-DRY: "row":"summary"
+
 // DISPATCH-NO-ACTUAL: dispatch_complete V0 requires exactly one actual invocation
+
+// DUPLICATE: "row":"failure"
+// DUPLICATE: "stage":"verify"
+// DUPLICATE: "kind":"diagnostics"
+// DUPLICATE: "domain":"SYMBOL"
+// DUPLICATE: "code":5
+// DUPLICATE: "message":"symbol '@duplicate_symbol' is already defined"
+// DUPLICATE: "row":"summary"
+// DUPLICATE: "failure_count":1
+
+// AGENTS: ## iree-tune-loom
+// AGENTS: Use `iree-tune-loom`
+// AGENTS: --dry_run
+// AGENTS: --device=amdgpu
+// AGENTS: jq
+// AGENTS: --help
+
+// HELP: Runs correctness-gated check.benchmark records from a Loom module.
+// HELP: iree-tune-loom --agents_md
+// HELP: run       first row
+// HELP: candidate_id/candidate_index
+// HELP: profile.rows array contains HAL statistics rows

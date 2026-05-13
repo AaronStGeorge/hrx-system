@@ -137,6 +137,19 @@ iree_status_t loom_run_compile_report_capture_append_text(
                                                 &format_options, builder);
 }
 
+iree_status_t loom_run_compile_report_capture_append_json(
+    const loom_run_compile_report_capture_t* capture,
+    loom_output_stream_t* stream) {
+  if (capture->options.mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE) {
+    return iree_ok_status();
+  }
+  const loom_target_compile_report_format_options_t format_options = {
+      .mode = capture->options.mode,
+  };
+  return loom_target_compile_report_format_json(&capture->report,
+                                                &format_options, stream);
+}
+
 void loom_run_compile_report_capture_deinitialize(
     loom_run_compile_report_capture_t* capture) {
   if (capture == NULL) {

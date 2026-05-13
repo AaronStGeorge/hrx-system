@@ -270,6 +270,7 @@ loom_cc_test(
   DEPS
     ::benchmark
     iree::base
+    loom::src::loom::util::stream
     iree::testing::gtest
     iree::testing::gtest_main
 )
