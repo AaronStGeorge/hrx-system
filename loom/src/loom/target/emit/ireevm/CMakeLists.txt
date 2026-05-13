@@ -182,7 +182,9 @@ loom_cc_test(
     iree::schemas::bytecode_module_def_c_fbs
     iree::testing::gtest
     iree::testing::gtest_main
+    iree::vm
     iree::vm::bytecode::archive
+    iree::vm::bytecode::module
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

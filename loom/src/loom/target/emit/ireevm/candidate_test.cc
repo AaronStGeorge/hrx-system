@@ -7,12 +7,17 @@
 #include "loom/target/emit/ireevm/candidate.h"
 
 #include <algorithm>
+#include <cstring>
+#include <initializer_list>
+#include <utility>
 
 #include "iree/base/internal/flatcc/parsing.h"
 #include "iree/schemas/bytecode_module_def_reader.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "iree/vm/api.h"
 #include "iree/vm/bytecode/archive.h"
+#include "iree/vm/bytecode/module.h"
 #include "loom/ops/op_registry.h"
 #include "loom/target/arch/ireevm/low_registry.h"
 #include "loom/target/arch/ireevm/ops/registry.h"
@@ -125,6 +130,116 @@ constexpr char kPreparedVmRefBranchSource[] =
     "  low.return\n"
     "}\n";
 
+constexpr char kPreparedVmBufferSource[] =
+    "ireevm.target<core> @vm_target\n"
+    "\n"
+    "low.func.def target(@vm_target) abi(vm_module_function) "
+    "export(\"buffer_ops\") "
+    "@buffer_ops(%buffer: reg<ireevm.ref>, "
+    "%offset: reg<ireevm.i64 x2>, "
+    "%i32_value: reg<ireevm.i32>, "
+    "%i64_value: reg<ireevm.i64 x2>, "
+    "%f32_value: reg<ireevm.f32>, "
+    "%f64_value: reg<ireevm.f64 x2>) -> "
+    "(reg<ireevm.i64 x2>, reg<ireevm.i32>, reg<ireevm.i64 x2>, "
+    "reg<ireevm.f32>, reg<ireevm.f64 x2>) {\n"
+    "  %length = low.op<ireevm.buffer.length>(%buffer) : "
+    "(reg<ireevm.ref>) -> reg<ireevm.i64 x2>\n"
+    "  %load_i8u = low.op<ireevm.buffer.load.i8.u>(%buffer, %offset) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>) -> reg<ireevm.i32>\n"
+    "  %load_i8s = low.op<ireevm.buffer.load.i8.s>(%buffer, %offset) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>) -> reg<ireevm.i32>\n"
+    "  %load_i16u = low.op<ireevm.buffer.load.i16.u>(%buffer, %offset) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>) -> reg<ireevm.i32>\n"
+    "  %load_i16s = low.op<ireevm.buffer.load.i16.s>(%buffer, %offset) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>) -> reg<ireevm.i32>\n"
+    "  %load_i32 = low.op<ireevm.buffer.load.i32>(%buffer, %offset) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>) -> reg<ireevm.i32>\n"
+    "  %load_i64 = low.op<ireevm.buffer.load.i64>(%buffer, %offset) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>) -> reg<ireevm.i64 x2>\n"
+    "  %load_f32 = low.op<ireevm.buffer.load.f32>(%buffer, %offset) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>) -> reg<ireevm.f32>\n"
+    "  %load_f64 = low.op<ireevm.buffer.load.f64>(%buffer, %offset) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>) -> reg<ireevm.f64 x2>\n"
+    "  low.op<ireevm.buffer.store.i8>(%buffer, %offset, %i32_value) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>, reg<ireevm.i32>)\n"
+    "  low.op<ireevm.buffer.store.i16>(%buffer, %offset, %i32_value) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>, reg<ireevm.i32>)\n"
+    "  low.op<ireevm.buffer.store.i32>(%buffer, %offset, %i32_value) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>, reg<ireevm.i32>)\n"
+    "  low.op<ireevm.buffer.store.i64>(%buffer, %offset, %i64_value) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>, reg<ireevm.i64 x2>)\n"
+    "  low.op<ireevm.buffer.store.f32>(%buffer, %offset, %f32_value) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>, reg<ireevm.f32>)\n"
+    "  low.op<ireevm.buffer.store.f64>(%buffer, %offset, %f64_value) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>, reg<ireevm.f64 x2>)\n"
+    "  low.return %length, %load_i32, %load_i64, %load_f32, %load_f64 : "
+    "reg<ireevm.i64 x2>, reg<ireevm.i32>, reg<ireevm.i64 x2>, "
+    "reg<ireevm.f32>, reg<ireevm.f64 x2>\n"
+    "}\n";
+
+constexpr char kPreparedVmBufferExecutionSource[] =
+    "ireevm.target<core> @vm_target\n"
+    "\n"
+    "low.func.def target(@vm_target) abi(vm_module_function) "
+    "export(\"buffer_execute\") "
+    "@buffer_execute(%buffer: reg<ireevm.ref>, "
+    "%i32_value: reg<ireevm.i32>, "
+    "%i64_value: reg<ireevm.i64 x2>, "
+    "%f32_value: reg<ireevm.f32>, "
+    "%f64_value: reg<ireevm.f64 x2>) -> "
+    "(reg<ireevm.i64 x2>, reg<ireevm.i32>, reg<ireevm.i32>, "
+    "reg<ireevm.i32>, reg<ireevm.i32>, reg<ireevm.i32>, "
+    "reg<ireevm.i64 x2>, reg<ireevm.f32>, reg<ireevm.f64 x2>) {\n"
+    "  %offset_i8 = low.const<ireevm.const.i64> {i64_value = 0} : "
+    "reg<ireevm.i64 x2>\n"
+    "  %offset_i16 = low.const<ireevm.const.i64> {i64_value = 1} : "
+    "reg<ireevm.i64 x2>\n"
+    "  %offset_i32 = low.const<ireevm.const.i64> {i64_value = 1} : "
+    "reg<ireevm.i64 x2>\n"
+    "  %offset_i64 = low.const<ireevm.const.i64> {i64_value = 1} : "
+    "reg<ireevm.i64 x2>\n"
+    "  %offset_f32 = low.const<ireevm.const.i64> {i64_value = 4} : "
+    "reg<ireevm.i64 x2>\n"
+    "  %offset_f64 = low.const<ireevm.const.i64> {i64_value = 3} : "
+    "reg<ireevm.i64 x2>\n"
+    "  %length = low.op<ireevm.buffer.length>(%buffer) : "
+    "(reg<ireevm.ref>) -> reg<ireevm.i64 x2>\n"
+    "  %load_i8u = low.op<ireevm.buffer.load.i8.u>(%buffer, %offset_i8) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>) -> reg<ireevm.i32>\n"
+    "  %load_i8s = low.op<ireevm.buffer.load.i8.s>(%buffer, %offset_i8) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>) -> reg<ireevm.i32>\n"
+    "  %load_i16u = low.op<ireevm.buffer.load.i16.u>(%buffer, %offset_i16) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>) -> reg<ireevm.i32>\n"
+    "  %load_i16s = low.op<ireevm.buffer.load.i16.s>(%buffer, %offset_i16) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>) -> reg<ireevm.i32>\n"
+    "  %load_i32 = low.op<ireevm.buffer.load.i32>(%buffer, %offset_i32) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>) -> reg<ireevm.i32>\n"
+    "  %load_i64 = low.op<ireevm.buffer.load.i64>(%buffer, %offset_i64) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>) -> reg<ireevm.i64 x2>\n"
+    "  %load_f32 = low.op<ireevm.buffer.load.f32>(%buffer, %offset_f32) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>) -> reg<ireevm.f32>\n"
+    "  %load_f64 = low.op<ireevm.buffer.load.f64>(%buffer, %offset_f64) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>) -> reg<ireevm.f64 x2>\n"
+    "  low.op<ireevm.buffer.store.i8>(%buffer, %offset_i8, %i32_value) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>, reg<ireevm.i32>)\n"
+    "  low.op<ireevm.buffer.store.i16>(%buffer, %offset_i16, %i32_value) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>, reg<ireevm.i32>)\n"
+    "  low.op<ireevm.buffer.store.i32>(%buffer, %offset_i32, %i32_value) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>, reg<ireevm.i32>)\n"
+    "  low.op<ireevm.buffer.store.i64>(%buffer, %offset_i64, %i64_value) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>, reg<ireevm.i64 x2>)\n"
+    "  low.op<ireevm.buffer.store.f32>(%buffer, %offset_f32, %f32_value) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>, reg<ireevm.f32>)\n"
+    "  low.op<ireevm.buffer.store.f64>(%buffer, %offset_f64, %f64_value) : "
+    "(reg<ireevm.ref>, reg<ireevm.i64 x2>, reg<ireevm.f64 x2>)\n"
+    "  low.return %length, %load_i8u, %load_i8s, %load_i16u, %load_i16s, "
+    "%load_i32, %load_i64, %load_f32, %load_f64 : "
+    "reg<ireevm.i64 x2>, reg<ireevm.i32>, reg<ireevm.i32>, "
+    "reg<ireevm.i32>, reg<ireevm.i32>, reg<ireevm.i32>, "
+    "reg<ireevm.i64 x2>, reg<ireevm.f32>, reg<ireevm.f64 x2>\n"
+    "}\n";
+
 bool FlatbufferStringEquals(flatbuffers_string_t value,
                             iree_string_view_t expected) {
   return iree_string_view_equal(
@@ -161,6 +276,69 @@ void ExpectSingleBranchRemapCount(
   ASSERT_LE(remap_count_offset + sizeof(uint16_t), bytecode_length);
   EXPECT_EQ(ReadU16LE(function_bytecode + remap_count_offset),
             expected_remap_count);
+}
+
+void ExpectFunctionBytecodeContainsOpcodes(
+    iree_vm_BytecodeModuleDef_table_t module_def,
+    iree_vm_FunctionDescriptor_struct_t function_descriptor,
+    std::initializer_list<uint32_t> opcodes) {
+  flatbuffers_uint8_vec_t bytecode_data =
+      iree_vm_BytecodeModuleDef_bytecode_data(module_def);
+  ASSERT_NE(bytecode_data, nullptr);
+  const size_t bytecode_data_length = flatbuffers_uint8_vec_len(bytecode_data);
+  const size_t bytecode_offset = function_descriptor->bytecode_offset;
+  const size_t bytecode_length = function_descriptor->bytecode_length;
+  ASSERT_LE(bytecode_offset, bytecode_data_length);
+  ASSERT_LE(bytecode_length, bytecode_data_length - bytecode_offset);
+  const uint8_t* function_bytecode = bytecode_data + bytecode_offset;
+  const uint8_t* function_end = function_bytecode + bytecode_length;
+  const uint8_t* search_start = function_bytecode;
+
+  for (uint32_t opcode : opcodes) {
+    uint8_t encoded_opcode[2] = {
+        (uint8_t)(opcode >> 8),
+        (uint8_t)opcode,
+    };
+    const uint8_t* pattern =
+        opcode <= UINT8_MAX ? &encoded_opcode[1] : encoded_opcode;
+    const size_t pattern_length = opcode <= UINT8_MAX ? 1 : 2;
+    const uint8_t* match = std::search(search_start, function_end, pattern,
+                                       pattern + pattern_length);
+    ASSERT_NE(match, function_end) << "missing opcode 0x" << std::hex << opcode;
+    search_start = match + pattern_length;
+  }
+}
+
+void ExpectOutputI32(iree_vm_list_t* outputs, iree_host_size_t index,
+                     int32_t expected_value) {
+  iree_vm_value_t value = iree_vm_value_make_none();
+  IREE_ASSERT_OK(iree_vm_list_get_value(outputs, index, &value));
+  ASSERT_EQ(value.type, IREE_VM_VALUE_TYPE_I32);
+  EXPECT_EQ(value.i32, expected_value);
+}
+
+void ExpectOutputI64(iree_vm_list_t* outputs, iree_host_size_t index,
+                     int64_t expected_value) {
+  iree_vm_value_t value = iree_vm_value_make_none();
+  IREE_ASSERT_OK(iree_vm_list_get_value(outputs, index, &value));
+  ASSERT_EQ(value.type, IREE_VM_VALUE_TYPE_I64);
+  EXPECT_EQ(value.i64, expected_value);
+}
+
+void ExpectOutputF32(iree_vm_list_t* outputs, iree_host_size_t index,
+                     float expected_value) {
+  iree_vm_value_t value = iree_vm_value_make_none();
+  IREE_ASSERT_OK(iree_vm_list_get_value(outputs, index, &value));
+  ASSERT_EQ(value.type, IREE_VM_VALUE_TYPE_F32);
+  EXPECT_FLOAT_EQ(value.f32, expected_value);
+}
+
+void ExpectOutputF64(iree_vm_list_t* outputs, iree_host_size_t index,
+                     double expected_value) {
+  iree_vm_value_t value = iree_vm_value_make_none();
+  IREE_ASSERT_OK(iree_vm_list_get_value(outputs, index, &value));
+  ASSERT_EQ(value.type, IREE_VM_VALUE_TYPE_F64);
+  EXPECT_DOUBLE_EQ(value.f64, expected_value);
 }
 
 class IreeVmCandidateTest : public ::testing::Test {
@@ -447,6 +625,201 @@ TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidateWithRefBranch) {
   ExpectSingleBranchRemapCount(module_def, function_descriptor,
                                /*expected_remap_count=*/0);
 
+  loom_ireevm_run_candidate_deinitialize(&candidate);
+  loom_run_module_deinitialize(&run_module);
+}
+
+TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidateWithBufferOps) {
+  loom_run_module_t run_module = {};
+  IREE_ASSERT_OK(Parse(IREE_SV(kPreparedVmBufferSource), &run_module));
+
+  loom_run_candidate_compile_options_t options = {};
+  InitializeCandidateOptions(&run_module, &options);
+
+  loom_ireevm_run_candidate_t candidate = {};
+  IREE_ASSERT_OK(loom_ireevm_run_candidate_emit(
+      &run_module, &options, iree_allocator_system(), &candidate));
+  EXPECT_GT(candidate.archive.data_length, 0u);
+
+  iree_vm_BytecodeModuleDef_table_t module_def = nullptr;
+  ParseArchive(&candidate.archive, &module_def);
+  constexpr iree_vm_FeatureBits_enum_t kFeatureRequirements =
+      (iree_vm_FeatureBits_enum_t)(iree_vm_FeatureBits_EXT_F32 |
+                                   iree_vm_FeatureBits_EXT_F64);
+  EXPECT_EQ(iree_vm_BytecodeModuleDef_requirements(module_def),
+            kFeatureRequirements);
+  iree_vm_FunctionDescriptor_vec_t function_descriptors =
+      iree_vm_BytecodeModuleDef_function_descriptors(module_def);
+  ASSERT_EQ(iree_vm_FunctionDescriptor_vec_len(function_descriptors), 1u);
+  iree_vm_FunctionDescriptor_struct_t function_descriptor =
+      iree_vm_FunctionDescriptor_vec_at(function_descriptors, 0);
+  EXPECT_EQ(function_descriptor->requirements, kFeatureRequirements);
+  EXPECT_EQ(function_descriptor->ref_register_count, 1);
+  EXPECT_GT(function_descriptor->i32_register_count, 0);
+  ExpectFunctionBytecodeContainsOpcodes(module_def, function_descriptor,
+                                        {
+                                            0x6E,
+                                            0x62,
+                                            0x63,
+                                            0x64,
+                                            0x65,
+                                            0x66,
+                                            0x67,
+                                            0xE033,
+                                            0xE139,
+                                            0x68,
+                                            0x69,
+                                            0x6A,
+                                            0x6B,
+                                            0xE034,
+                                            0xE13A,
+                                        });
+
+  loom_ireevm_run_candidate_deinitialize(&candidate);
+  loom_run_module_deinitialize(&run_module);
+}
+
+TEST_F(IreeVmCandidateTest, ExecuteVmArchiveCandidateWithHostBuffer) {
+  loom_run_module_t run_module = {};
+  IREE_ASSERT_OK(Parse(IREE_SV(kPreparedVmBufferExecutionSource), &run_module));
+
+  loom_run_candidate_compile_options_t options = {};
+  InitializeCandidateOptions(&run_module, &options);
+
+  loom_ireevm_run_candidate_t candidate = {};
+  IREE_ASSERT_OK(loom_ireevm_run_candidate_emit(
+      &run_module, &options, iree_allocator_system(), &candidate));
+
+  iree_vm_instance_t* instance = nullptr;
+  iree_vm_module_t* module = nullptr;
+  iree_vm_context_t* context = nullptr;
+  iree_vm_buffer_t* buffer = nullptr;
+  iree_vm_list_t* inputs = nullptr;
+  iree_vm_list_t* outputs = nullptr;
+
+  IREE_ASSERT_OK(iree_vm_instance_create(IREE_VM_TYPE_CAPACITY_DEFAULT,
+                                         iree_allocator_system(), &instance));
+  IREE_ASSERT_OK(iree_vm_bytecode_module_create(
+      instance, IREE_VM_BYTECODE_MODULE_FLAG_NONE,
+      iree_make_const_byte_span(candidate.archive.data,
+                                candidate.archive.data_length),
+      iree_allocator_null(), iree_allocator_system(), &module));
+  iree_vm_module_t* modules[] = {module};
+  IREE_ASSERT_OK(iree_vm_context_create_with_modules(
+      instance, IREE_VM_CONTEXT_FLAG_NONE, IREE_ARRAYSIZE(modules), modules,
+      iree_allocator_system(), &context));
+
+  constexpr iree_host_size_t kBufferLength = 40;
+  uint8_t initial_data[kBufferLength] = {};
+  const uint16_t initial_i16 = 0xFF80u;
+  const int32_t initial_i32 = 0x01020304;
+  const int64_t initial_i64 = 0x0102030405060708ll;
+  const float initial_f32 = 1.25f;
+  const double initial_f64 = 2.5;
+  initial_data[0] = 0xFEu;
+  std::memcpy(initial_data + 2, &initial_i16, sizeof(initial_i16));
+  std::memcpy(initial_data + 4, &initial_i32, sizeof(initial_i32));
+  std::memcpy(initial_data + 8, &initial_i64, sizeof(initial_i64));
+  std::memcpy(initial_data + 16, &initial_f32, sizeof(initial_f32));
+  std::memcpy(initial_data + 24, &initial_f64, sizeof(initial_f64));
+  IREE_ASSERT_OK(iree_vm_buffer_create(
+      IREE_VM_BUFFER_ACCESS_MUTABLE | IREE_VM_BUFFER_ACCESS_ORIGIN_HOST,
+      kBufferLength, /*alignment=*/8, iree_allocator_system(), &buffer));
+  std::memcpy(iree_vm_buffer_data(buffer), initial_data, sizeof(initial_data));
+
+  IREE_ASSERT_OK(iree_vm_list_create(iree_vm_make_undefined_type_def(), 5,
+                                     iree_allocator_system(), &inputs));
+  iree_vm_ref_t buffer_ref = iree_vm_buffer_retain_ref(buffer);
+  IREE_ASSERT_OK(iree_vm_list_push_ref_retain(inputs, &buffer_ref));
+  iree_vm_ref_release(&buffer_ref);
+  iree_vm_value_t input_i32 = iree_vm_value_make_i32(0x12345678);
+  iree_vm_value_t input_i64 = iree_vm_value_make_i64(0x102030405060708ll);
+  iree_vm_value_t input_f32 = iree_vm_value_make_f32(9.5f);
+  iree_vm_value_t input_f64 = iree_vm_value_make_f64(123.25);
+  IREE_ASSERT_OK(iree_vm_list_push_value(inputs, &input_i32));
+  IREE_ASSERT_OK(iree_vm_list_push_value(inputs, &input_i64));
+  IREE_ASSERT_OK(iree_vm_list_push_value(inputs, &input_f32));
+  IREE_ASSERT_OK(iree_vm_list_push_value(inputs, &input_f64));
+
+  IREE_ASSERT_OK(iree_vm_list_create(iree_vm_make_undefined_type_def(), 9,
+                                     iree_allocator_system(), &outputs));
+  iree_vm_function_t function = {};
+  IREE_ASSERT_OK(iree_vm_module_lookup_function_by_name(
+      module, IREE_VM_FUNCTION_LINKAGE_EXPORT, IREE_SV("buffer_execute"),
+      &function));
+  IREE_ASSERT_OK(iree_vm_invoke(context, function, IREE_VM_INVOCATION_FLAG_NONE,
+                                /*policy=*/nullptr, inputs, outputs,
+                                iree_allocator_system()));
+
+  ASSERT_EQ(iree_vm_list_size(outputs), 9u);
+  ExpectOutputI64(outputs, 0, kBufferLength);
+  ExpectOutputI32(outputs, 1, 254);
+  ExpectOutputI32(outputs, 2, -2);
+  ExpectOutputI32(outputs, 3, 65408);
+  ExpectOutputI32(outputs, 4, -128);
+  ExpectOutputI32(outputs, 5, initial_i32);
+  ExpectOutputI64(outputs, 6, initial_i64);
+  ExpectOutputF32(outputs, 7, initial_f32);
+  ExpectOutputF64(outputs, 8, initial_f64);
+
+  const uint8_t* buffer_data = iree_vm_buffer_data(buffer);
+  uint8_t stored_i8 = 0;
+  uint16_t stored_i16 = 0;
+  int32_t stored_i32 = 0;
+  int64_t stored_i64 = 0;
+  float stored_f32 = 0.0f;
+  double stored_f64 = 0.0;
+  std::memcpy(&stored_i8, buffer_data + 0, sizeof(stored_i8));
+  std::memcpy(&stored_i16, buffer_data + 2, sizeof(stored_i16));
+  std::memcpy(&stored_i32, buffer_data + 4, sizeof(stored_i32));
+  std::memcpy(&stored_i64, buffer_data + 8, sizeof(stored_i64));
+  std::memcpy(&stored_f32, buffer_data + 16, sizeof(stored_f32));
+  std::memcpy(&stored_f64, buffer_data + 24, sizeof(stored_f64));
+  EXPECT_EQ(stored_i8, (uint8_t)input_i32.i32);
+  EXPECT_EQ(stored_i16, (uint16_t)input_i32.i32);
+  EXPECT_EQ(stored_i32, input_i32.i32);
+  EXPECT_EQ(stored_i64, input_i64.i64);
+  EXPECT_FLOAT_EQ(stored_f32, input_f32.f32);
+  EXPECT_DOUBLE_EQ(stored_f64, input_f64.f64);
+
+  iree_vm_buffer_t* readonly_buffer = nullptr;
+  iree_vm_list_t* readonly_inputs = nullptr;
+  iree_vm_list_t* readonly_outputs = nullptr;
+  IREE_ASSERT_OK(iree_vm_buffer_clone(
+      IREE_VM_BUFFER_ACCESS_ORIGIN_HOST, buffer, 0, kBufferLength,
+      /*alignment=*/8, iree_allocator_system(), &readonly_buffer));
+  IREE_ASSERT_OK(iree_vm_list_create(iree_vm_make_undefined_type_def(), 5,
+                                     iree_allocator_system(),
+                                     &readonly_inputs));
+  iree_vm_ref_t readonly_buffer_ref =
+      iree_vm_buffer_retain_ref(readonly_buffer);
+  IREE_ASSERT_OK(
+      iree_vm_list_push_ref_retain(readonly_inputs, &readonly_buffer_ref));
+  iree_vm_ref_release(&readonly_buffer_ref);
+  IREE_ASSERT_OK(iree_vm_list_push_value(readonly_inputs, &input_i32));
+  IREE_ASSERT_OK(iree_vm_list_push_value(readonly_inputs, &input_i64));
+  IREE_ASSERT_OK(iree_vm_list_push_value(readonly_inputs, &input_f32));
+  IREE_ASSERT_OK(iree_vm_list_push_value(readonly_inputs, &input_f64));
+  IREE_ASSERT_OK(iree_vm_list_create(iree_vm_make_undefined_type_def(), 9,
+                                     iree_allocator_system(),
+                                     &readonly_outputs));
+  iree_status_t readonly_status =
+      iree_vm_invoke(context, function, IREE_VM_INVOCATION_FLAG_NONE,
+                     /*policy=*/nullptr, readonly_inputs, readonly_outputs,
+                     iree_allocator_system());
+  EXPECT_THAT(
+      iree::Status(std::move(readonly_status)),
+      iree::testing::status::StatusIs(iree::StatusCode::kPermissionDenied));
+
+  iree_vm_list_release(readonly_outputs);
+  iree_vm_list_release(readonly_inputs);
+  iree_vm_buffer_release(readonly_buffer);
+  iree_vm_list_release(outputs);
+  iree_vm_list_release(inputs);
+  iree_vm_buffer_release(buffer);
+  iree_vm_context_release(context);
+  iree_vm_module_release(module);
+  iree_vm_instance_release(instance);
   loom_ireevm_run_candidate_deinitialize(&candidate);
   loom_run_module_deinitialize(&run_module);
 }

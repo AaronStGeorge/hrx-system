@@ -13,6 +13,7 @@
 #include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/module.h"
+#include "loom/ops/op_defs.h"
 #include "loom/target/arch/ireevm/provider.h"
 #include "loom/target/compile_report_low.h"
 #include "loom/target/emit/ireevm/function_bytecode.h"
@@ -59,12 +60,34 @@ typedef struct loom_ireevm_archive_emit_report_totals_t {
   uint64_t emitted_code_storage_byte_count;
 } loom_ireevm_archive_emit_report_totals_t;
 
+typedef struct loom_ireevm_register_class_ids_t {
+  // Interned string ID for the ireevm.i32 register class.
+  loom_string_id_t i32;
+  // Interned string ID for the ireevm.i64 register class.
+  loom_string_id_t i64;
+  // Interned string ID for the ireevm.f32 register class.
+  loom_string_id_t f32;
+  // Interned string ID for the ireevm.f64 register class.
+  loom_string_id_t f64;
+  // Interned string ID for the ireevm.ref register class.
+  loom_string_id_t ref;
+} loom_ireevm_register_class_ids_t;
+
 static iree_string_view_t loom_ireevm_archive_emit_module_name(
     const loom_ireevm_archive_emit_options_t* options) {
   if (options && !iree_string_view_is_empty(options->module_name)) {
     return options->module_name;
   }
   return IREE_SV("loom");
+}
+
+static iree_string_view_t loom_ireevm_archive_emit_module_string(
+    const loom_module_t* module, loom_string_id_t string_id) {
+  if (string_id == LOOM_STRING_ID_INVALID ||
+      string_id >= module->strings.count) {
+    return iree_string_view_empty();
+  }
+  return module->strings.entries[string_id];
 }
 
 typedef struct loom_ireevm_archive_emit_state_t {
@@ -84,6 +107,8 @@ typedef struct loom_ireevm_archive_emit_state_t {
   uint32_t max_errors;
   // Target provider environment used to compose target-owned registries.
   loom_target_environment_t target_environment;
+  // Interned VM register-class names used for ABI argument binding.
+  loom_ireevm_register_class_ids_t register_class_ids;
   // Target-low descriptor registry used for verification and emission.
   loom_target_low_descriptor_registry_t low_registry;
   // Diagnostic materializer shared by target-low verification and emission.
@@ -131,6 +156,13 @@ static iree_status_t loom_ireevm_archive_emit_state_initialize(
   };
   out_state->max_errors = loom_target_entry_max_errors(
       &out_state->target_options, LOOM_IREEVM_ARCHIVE_EMIT_DEFAULT_MAX_ERRORS);
+  out_state->register_class_ids = (loom_ireevm_register_class_ids_t){
+      .i32 = loom_module_lookup_string(module, IREE_SV("ireevm.i32")),
+      .i64 = loom_module_lookup_string(module, IREE_SV("ireevm.i64")),
+      .f32 = loom_module_lookup_string(module, IREE_SV("ireevm.f32")),
+      .f64 = loom_module_lookup_string(module, IREE_SV("ireevm.f64")),
+      .ref = loom_module_lookup_string(module, IREE_SV("ireevm.ref")),
+  };
 
   if (out_state->report != NULL) {
     loom_target_compile_report_initialize(out_state->report);
@@ -290,14 +322,125 @@ static void loom_ireevm_archive_emit_record_report_totals(
       totals->emitted_code_byte_count, totals->emitted_code_storage_byte_count);
 }
 
+static bool loom_ireevm_archive_emit_register_class_matches(
+    loom_string_id_t actual, loom_string_id_t expected) {
+  return expected != LOOM_STRING_ID_INVALID && actual == expected;
+}
+
+static iree_status_t loom_ireevm_archive_emit_function_argument_fixed_value(
+    const loom_ireevm_archive_emit_state_t* state, loom_value_id_t argument_id,
+    uint32_t* i32_register, uint32_t* ref_register,
+    loom_low_allocation_fixed_value_t* out_fixed_value) {
+  const loom_type_t type = loom_module_value_type(state->module, argument_id);
+  if (!loom_type_is_register(type)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "IREE VM ABI argument value %u is not a target-low register",
+        (unsigned)argument_id);
+  }
+
+  const loom_ireevm_register_class_ids_t* register_class_ids =
+      &state->register_class_ids;
+  const loom_string_id_t register_class_id = loom_type_register_class_id(type);
+  const uint32_t unit_count = loom_type_register_unit_count(type);
+  uint32_t location_base = 0;
+  if ((loom_ireevm_archive_emit_register_class_matches(
+           register_class_id, register_class_ids->i32) ||
+       loom_ireevm_archive_emit_register_class_matches(
+           register_class_id, register_class_ids->f32)) &&
+      unit_count == 1) {
+    location_base = (*i32_register)++;
+  } else if ((loom_ireevm_archive_emit_register_class_matches(
+                  register_class_id, register_class_ids->i64) ||
+              loom_ireevm_archive_emit_register_class_matches(
+                  register_class_id, register_class_ids->f64)) &&
+             unit_count == 2) {
+    *i32_register = (*i32_register + 1u) & ~1u;
+    location_base = *i32_register;
+    *i32_register += 2;
+  } else if (loom_ireevm_archive_emit_register_class_matches(
+                 register_class_id, register_class_ids->ref) &&
+             unit_count == 1) {
+    location_base = (*ref_register)++;
+  } else {
+    const iree_string_view_t register_class =
+        loom_ireevm_archive_emit_module_string(state->module,
+                                               register_class_id);
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "IREE VM ABI argument value %u has unsupported register class "
+        "'%.*s' with %u unit(s)",
+        (unsigned)argument_id, (int)register_class.size, register_class.data,
+        unit_count);
+  }
+
+  *out_fixed_value = (loom_low_allocation_fixed_value_t){
+      .value_id = argument_id,
+      .location_kind = LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID,
+      .location_base = location_base,
+      .location_count = unit_count,
+  };
+  return iree_ok_status();
+}
+
+static iree_status_t loom_ireevm_archive_emit_function_fixed_values(
+    loom_ireevm_archive_emit_state_t* state, loom_op_t* function_op,
+    const loom_low_allocation_fixed_value_t** out_fixed_values,
+    iree_host_size_t* out_fixed_value_count) {
+  *out_fixed_values = NULL;
+  *out_fixed_value_count = 0;
+
+  loom_func_like_t function = loom_func_like_cast(state->module, function_op);
+  if (!loom_func_like_isa(function)) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "IREE VM archive emission expected a func-like low function");
+  }
+
+  uint16_t argument_count = 0;
+  const loom_value_id_t* argument_ids =
+      loom_func_like_arg_ids(function, &argument_count);
+  if (argument_count == 0) {
+    return iree_ok_status();
+  }
+  if (argument_ids == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "IREE VM archive emission found function arguments without IDs");
+  }
+
+  loom_low_allocation_fixed_value_t* fixed_values = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(&state->table_arena, argument_count,
+                                sizeof(*fixed_values), (void**)&fixed_values));
+  uint32_t i32_register = 0;
+  uint32_t ref_register = 0;
+  for (uint16_t i = 0; i < argument_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_ireevm_archive_emit_function_argument_fixed_value(
+        state, argument_ids[i], &i32_register, &ref_register,
+        &fixed_values[i]));
+  }
+
+  *out_fixed_values = fixed_values;
+  *out_fixed_value_count = argument_count;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_ireevm_archive_emit_function(
     loom_ireevm_archive_emit_state_t* state,
     const loom_ireevm_module_plan_t* plan,
     const loom_ireevm_module_plan_function_t* function) {
+  const loom_low_allocation_fixed_value_t* fixed_values = NULL;
+  iree_host_size_t fixed_value_count = 0;
+  IREE_RETURN_IF_ERROR(loom_ireevm_archive_emit_function_fixed_values(
+      state, function->op, &fixed_values, &fixed_value_count));
+
   loom_low_emission_frame_t frame = {0};
   const loom_low_emission_frame_options_t frame_options = {
       .descriptor_registry = &state->low_registry.registry,
       .memory_access_table = loom_low_memory_access_table_empty(),
+      .allocation_fixed_values = fixed_values,
+      .allocation_fixed_value_count = fixed_value_count,
       .emitter = loom_target_entry_emitter(&state->diagnostic_emitter),
   };
   IREE_RETURN_IF_ERROR(

@@ -640,6 +640,18 @@ static iree_status_t loom_ireevm_write_return_register_list(
       state, values, value_count, LOOM_IREEVM_REGISTER_ENCODING_MOVE_REF);
 }
 
+static iree_status_t loom_ireevm_write_encoded_register(
+    loom_ireevm_emit_state_t* state, loom_value_id_t value_id,
+    loom_ireevm_register_encoding_flags_t flags) {
+  loom_ireevm_register_ref_t register_ref = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_ireevm_lookup_register(state, value_id, &register_ref));
+  uint16_t encoded_register = 0;
+  IREE_RETURN_IF_ERROR(loom_ireevm_register_ref_encode_unit(
+      register_ref, 0, flags, &encoded_register));
+  return loom_ireevm_bytecode_write_u16(&state->writer, encoded_register);
+}
+
 static iree_status_t loom_ireevm_write_moved_ref_register_list(
     loom_ireevm_emit_state_t* state, const loom_value_id_t* values,
     iree_host_size_t value_count) {
@@ -851,7 +863,7 @@ static iree_status_t loom_ireevm_emit_ref_retain(
 static iree_status_t loom_ireevm_emit_generic_low_op(
     loom_ireevm_emit_state_t* state, const loom_op_t* op,
     const loom_low_descriptor_t* descriptor) {
-  if (!loom_low_op_isa(op) || op->result_count != 1) {
+  if (!loom_low_op_isa(op)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "VM descriptor packet shape is invalid");
   }
@@ -860,16 +872,14 @@ static iree_status_t loom_ireevm_emit_generic_low_op(
   IREE_RETURN_IF_ERROR(loom_ireevm_bytecode_write_opcode(
       &state->writer, descriptor->encoding_id));
   for (iree_host_size_t i = 0; i < operands.count; ++i) {
-    loom_ireevm_register_ref_t operand_ref = {0};
-    IREE_RETURN_IF_ERROR(loom_ireevm_lookup_i32_bank_register(
-        state, operands.values[i], &operand_ref));
-    IREE_RETURN_IF_ERROR(
-        loom_ireevm_bytecode_write_u16(&state->writer, operand_ref.base));
+    IREE_RETURN_IF_ERROR(loom_ireevm_write_encoded_register(
+        state, operands.values[i], /*flags=*/0));
   }
-  loom_ireevm_register_ref_t result_ref = {0};
-  IREE_RETURN_IF_ERROR(loom_ireevm_lookup_i32_bank_register(
-      state, results.values[0], &result_ref));
-  return loom_ireevm_bytecode_write_u16(&state->writer, result_ref.base);
+  for (iree_host_size_t i = 0; i < results.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_ireevm_write_encoded_register(
+        state, results.values[i], /*flags=*/0));
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_ireevm_emit_descriptor_packet(

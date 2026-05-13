@@ -30,3 +30,16 @@ func.def target(@vm_target) @explicit_ref_lifetime(%resource: ireevm.ref<ireevm.
   ireevm.ref.discard %resource : ireevm.ref<ireevm.list<i32>>
   func.return
 }
+
+// ====
+
+// VM host buffers are heap objects carried by refs and accessed with explicit
+// element offsets.
+ireevm.target<core> @vm_target
+
+func.def target(@vm_target) @explicit_buffer_ops(%buffer: ireevm.ref<ireevm.buffer>, %offset: i64, %value: i32) -> (i64, i32) {
+  %length = ireevm.buffer.length %buffer : ireevm.ref<ireevm.buffer> -> i64
+  %loaded = ireevm.buffer.load.i32 %buffer[%offset] : ireevm.ref<ireevm.buffer>, i64 -> i32
+  ireevm.buffer.store.i32 %value, %buffer[%offset] : i32, ireevm.ref<ireevm.buffer>, i64
+  func.return %length, %loaded : i64, i32
+}

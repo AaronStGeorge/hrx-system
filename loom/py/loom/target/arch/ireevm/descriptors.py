@@ -49,11 +49,15 @@ _SCHEDULE_ALU = "ireevm.alu"
 _SCHEDULE_MATH = "ireevm.math"
 _SCHEDULE_CONVERT = "ireevm.convert"
 _SCHEDULE_REF = "ireevm.ref"
+_SCHEDULE_BUFFER_LOAD = "ireevm.buffer.load"
+_SCHEDULE_BUFFER_STORE = "ireevm.buffer.store"
 _SCHEDULE_CONTROL = "ireevm.control"
 
 _RESOURCE_ALU = "ireevm.alu"
 _RESOURCE_MATH = "ireevm.math"
 _RESOURCE_REF = "ireevm.ref"
+_RESOURCE_BUFFER_LOAD = "ireevm.buffer.load"
+_RESOURCE_BUFFER_STORE = "ireevm.buffer.store"
 _RESOURCE_CONTROL = "ireevm.control"
 
 _SCALAR_ALIAS_SET = 1
@@ -257,6 +261,17 @@ _OP_CMP_NZ_I64 = 0x52
 _OP_BRANCH = 0x56
 _OP_COND_BRANCH = 0x57
 _OP_RETURN = 0x5A
+_OP_BUFFER_LOAD_I8_U = 0x62
+_OP_BUFFER_LOAD_I8_S = 0x63
+_OP_BUFFER_LOAD_I16_U = 0x64
+_OP_BUFFER_LOAD_I16_S = 0x65
+_OP_BUFFER_LOAD_I32 = 0x66
+_OP_BUFFER_LOAD_I64 = 0x67
+_OP_BUFFER_STORE_I8 = 0x68
+_OP_BUFFER_STORE_I16 = 0x69
+_OP_BUFFER_STORE_I32 = 0x6A
+_OP_BUFFER_STORE_I64 = 0x6B
+_OP_BUFFER_LENGTH = 0x6E
 _OP_CTLZ_I32 = 0x75
 _OP_CTLZ_I64 = 0x76
 _OP_ABS_I32 = 0x77
@@ -315,6 +330,8 @@ _OP_CMP_LT_U_F32 = _ext_f32(0x2F)
 _OP_CMP_LE_O_F32 = _ext_f32(0x30)
 _OP_CMP_LE_U_F32 = _ext_f32(0x31)
 _OP_CMP_NAN_F32 = _ext_f32(0x32)
+_OP_BUFFER_LOAD_F32 = _ext_f32(0x33)
+_OP_BUFFER_STORE_F32 = _ext_f32(0x34)
 _OP_ROUND_F32 = _ext_f32(0x36)
 _OP_MIN_F32 = _ext_f32(0x37)
 _OP_MAX_F32 = _ext_f32(0x38)
@@ -373,6 +390,8 @@ _OP_CMP_LT_U_F64 = _ext_f64(0x35)
 _OP_CMP_LE_O_F64 = _ext_f64(0x36)
 _OP_CMP_LE_U_F64 = _ext_f64(0x37)
 _OP_CMP_NAN_F64 = _ext_f64(0x38)
+_OP_BUFFER_LOAD_F64 = _ext_f64(0x39)
+_OP_BUFFER_STORE_F64 = _ext_f64(0x3A)
 _OP_ROUND_F64 = _ext_f64(0x3C)
 _OP_MIN_F64 = _ext_f64(0x3D)
 _OP_MAX_F64 = _ext_f64(0x3E)
@@ -392,6 +411,18 @@ _REF_READ_EFFECT = Effect(
 _REF_WRITE_EFFECT = Effect(
     EffectKind.WRITE,
     memory_space=MemorySpace.VM_REF,
+    flags=(EffectFlag.DEPENDENCY,),
+)
+
+_BUFFER_READ_EFFECT = Effect(
+    EffectKind.READ,
+    memory_space=MemorySpace.GENERIC,
+    flags=(EffectFlag.DEPENDENCY,),
+)
+
+_BUFFER_WRITE_EFFECT = Effect(
+    EffectKind.WRITE,
+    memory_space=MemorySpace.GENERIC,
     flags=(EffectFlag.DEPENDENCY,),
 )
 
@@ -593,6 +624,69 @@ def _select_descriptor(type_name: str, *, encoding_id: int) -> Descriptor:
         feature_mask_words=_feature_mask_words(encoding_id),
         encoding_id=encoding_id,
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _buffer_length_descriptor() -> Descriptor:
+    return Descriptor(
+        key="ireevm.buffer.length",
+        mnemonic="ireevm.buffer.length",
+        semantic_tag="buffer.length",
+        operands=(_result("i64"), _operand("ref", "buffer")),
+        asm_forms=_asm(results=("dst",), operands=("buffer",)),
+        effects=(_BUFFER_READ_EFFECT,),
+        schedule_class=_SCHEDULE_BUFFER_LOAD,
+        feature_mask_words=_feature_mask_words(_OP_BUFFER_LENGTH),
+        encoding_id=_OP_BUFFER_LENGTH,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _buffer_load_descriptor(
+    suffix: str,
+    result_type: str,
+    *,
+    encoding_id: int,
+) -> Descriptor:
+    return Descriptor(
+        key=f"ireevm.buffer.load.{suffix}",
+        mnemonic=f"ireevm.buffer.load.{suffix}",
+        semantic_tag=f"buffer.load.{suffix}",
+        operands=(
+            _result(result_type),
+            _operand("ref", "buffer"),
+            _operand("i64", "element_offset"),
+        ),
+        asm_forms=_asm(results=("dst",), operands=("buffer", "element_offset")),
+        effects=(_BUFFER_READ_EFFECT,),
+        schedule_class=_SCHEDULE_BUFFER_LOAD,
+        feature_mask_words=_feature_mask_words(encoding_id),
+        encoding_id=encoding_id,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _buffer_store_descriptor(
+    suffix: str,
+    value_type: str,
+    *,
+    encoding_id: int,
+) -> Descriptor:
+    return Descriptor(
+        key=f"ireevm.buffer.store.{suffix}",
+        mnemonic=f"ireevm.buffer.store.{suffix}",
+        semantic_tag=f"buffer.store.{suffix}",
+        operands=(
+            _operand("ref", "buffer"),
+            _operand("i64", "element_offset"),
+            _operand(value_type, "value"),
+        ),
+        asm_forms=_asm(operands=("value", "buffer", "element_offset")),
+        effects=(_BUFFER_WRITE_EFFECT,),
+        schedule_class=_SCHEDULE_BUFFER_STORE,
+        feature_mask_words=_feature_mask_words(encoding_id),
+        encoding_id=encoding_id,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
     )
 
 
@@ -884,6 +978,24 @@ _REF_DESCRIPTORS = (
     ),
 )
 
+_BUFFER_DESCRIPTORS = (
+    _buffer_length_descriptor(),
+    _buffer_load_descriptor("i8.u", "i32", encoding_id=_OP_BUFFER_LOAD_I8_U),
+    _buffer_load_descriptor("i8.s", "i32", encoding_id=_OP_BUFFER_LOAD_I8_S),
+    _buffer_load_descriptor("i16.u", "i32", encoding_id=_OP_BUFFER_LOAD_I16_U),
+    _buffer_load_descriptor("i16.s", "i32", encoding_id=_OP_BUFFER_LOAD_I16_S),
+    _buffer_load_descriptor("i32", "i32", encoding_id=_OP_BUFFER_LOAD_I32),
+    _buffer_load_descriptor("i64", "i64", encoding_id=_OP_BUFFER_LOAD_I64),
+    _buffer_load_descriptor("f32", "f32", encoding_id=_OP_BUFFER_LOAD_F32),
+    _buffer_load_descriptor("f64", "f64", encoding_id=_OP_BUFFER_LOAD_F64),
+    _buffer_store_descriptor("i8", "i32", encoding_id=_OP_BUFFER_STORE_I8),
+    _buffer_store_descriptor("i16", "i32", encoding_id=_OP_BUFFER_STORE_I16),
+    _buffer_store_descriptor("i32", "i32", encoding_id=_OP_BUFFER_STORE_I32),
+    _buffer_store_descriptor("i64", "i64", encoding_id=_OP_BUFFER_STORE_I64),
+    _buffer_store_descriptor("f32", "f32", encoding_id=_OP_BUFFER_STORE_F32),
+    _buffer_store_descriptor("f64", "f64", encoding_id=_OP_BUFFER_STORE_F64),
+)
+
 _CONTROL_DESCRIPTORS = (
     Descriptor(
         key="ireevm.br",
@@ -982,6 +1094,8 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
         Resource(_RESOURCE_ALU, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),
         Resource(_RESOURCE_MATH, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),
         Resource(_RESOURCE_REF, capacity_per_cycle=1, kind=ResourceKind.STORE),
+        Resource(_RESOURCE_BUFFER_LOAD, capacity_per_cycle=1, kind=ResourceKind.LOAD),
+        Resource(_RESOURCE_BUFFER_STORE, capacity_per_cycle=1, kind=ResourceKind.STORE),
         Resource(_RESOURCE_CONTROL, capacity_per_cycle=1, kind=ResourceKind.CONTROL),
     ),
     schedule_classes=(
@@ -1019,6 +1133,22 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             model_quality=ModelQuality.EXACT,
         ),
         ScheduleClass(
+            _SCHEDULE_BUFFER_LOAD,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_BUFFER_LOAD, cycles=1, units=1),),
+            flags=(ScheduleClassFlag.MAY_LOAD,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_BUFFER_STORE,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_BUFFER_STORE, cycles=1, units=1),),
+            flags=(ScheduleClassFlag.MAY_STORE,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
             _SCHEDULE_CONTROL,
             latency_kind=LatencyKind.EXACT,
             latency_cycles=1,
@@ -1039,6 +1169,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
         *_FLOAT_CONVERSION_DESCRIPTORS,
         *_FLOAT_COMPARE_DESCRIPTORS,
         *_REF_DESCRIPTORS,
+        *_BUFFER_DESCRIPTORS,
         *_CONTROL_DESCRIPTORS,
     ),
 )

@@ -25,7 +25,22 @@ enum {
   LOOM_OP_IREEVM_REF_RETAIN = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 2),
   LOOM_OP_IREEVM_REF_RELEASE = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 3),
   LOOM_OP_IREEVM_REF_DISCARD = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 4),
-  LOOM_OP_IREEVM_COUNT_ = 5,
+  LOOM_OP_IREEVM_BUFFER_LENGTH = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 5),
+  LOOM_OP_IREEVM_BUFFER_LOAD_I8_U = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 6),
+  LOOM_OP_IREEVM_BUFFER_LOAD_I8_S = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 7),
+  LOOM_OP_IREEVM_BUFFER_LOAD_I16_U = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 8),
+  LOOM_OP_IREEVM_BUFFER_LOAD_I16_S = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 9),
+  LOOM_OP_IREEVM_BUFFER_LOAD_I32 = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 10),
+  LOOM_OP_IREEVM_BUFFER_LOAD_I64 = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 11),
+  LOOM_OP_IREEVM_BUFFER_LOAD_F32 = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 12),
+  LOOM_OP_IREEVM_BUFFER_LOAD_F64 = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 13),
+  LOOM_OP_IREEVM_BUFFER_STORE_I8 = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 14),
+  LOOM_OP_IREEVM_BUFFER_STORE_I16 = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 15),
+  LOOM_OP_IREEVM_BUFFER_STORE_I32 = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 16),
+  LOOM_OP_IREEVM_BUFFER_STORE_I64 = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 17),
+  LOOM_OP_IREEVM_BUFFER_STORE_F32 = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 18),
+  LOOM_OP_IREEVM_BUFFER_STORE_F64 = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 19),
+  LOOM_OP_IREEVM_COUNT_ = 20,
 };
 
 // IREE VM target row selected by ireevm.target.
@@ -226,6 +241,259 @@ iree_status_t loom_ireevm_ref_discard_build(
     loom_value_id_t resource,
     loom_location_id_t location,
     loom_op_t** out_op);
+
+// LOOM_OP_IREEVM_BUFFER_LENGTH: Return the byte length of an IREE VM host byte buffer.
+// %length = ireevm.buffer.length %buffer : ireevm.ref<ireevm.buffer> -> i64
+LOOM_DEFINE_ISA(loom_ireevm_buffer_length_isa, LOOM_OP_IREEVM_BUFFER_LENGTH)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_length_buffer, 0)
+LOOM_DEFINE_RESULT(loom_ireevm_buffer_length_result, 0)
+iree_status_t loom_ireevm_buffer_length_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t buffer,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_ireevm_buffer_op_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_IREEVM_BUFFER_LOAD_I8_U: Load an unsigned i8 value as i32 from an IREE VM host byte buffer.
+// %value = ireevm.buffer.load.i8.u %buffer[%offset] : ireevm.ref<ireevm.buffer>, i64 -> i32
+LOOM_DEFINE_ISA(loom_ireevm_buffer_load_i8_u_isa, LOOM_OP_IREEVM_BUFFER_LOAD_I8_U)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_load_i8_u_buffer, 0)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_load_i8_u_element_offset, 1)
+LOOM_DEFINE_RESULT(loom_ireevm_buffer_load_i8_u_result, 0)
+iree_status_t loom_ireevm_buffer_load_i8_u_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t buffer,
+    loom_may_consume loom_value_id_t element_offset,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_ireevm_buffer_op_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_IREEVM_BUFFER_LOAD_I8_S: Load a sign-extended i8 value as i32 from an IREE VM host byte buffer.
+// %value = ireevm.buffer.load.i8.s %buffer[%offset] : ireevm.ref<ireevm.buffer>, i64 -> i32
+LOOM_DEFINE_ISA(loom_ireevm_buffer_load_i8_s_isa, LOOM_OP_IREEVM_BUFFER_LOAD_I8_S)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_load_i8_s_buffer, 0)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_load_i8_s_element_offset, 1)
+LOOM_DEFINE_RESULT(loom_ireevm_buffer_load_i8_s_result, 0)
+iree_status_t loom_ireevm_buffer_load_i8_s_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t buffer,
+    loom_may_consume loom_value_id_t element_offset,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_ireevm_buffer_op_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_IREEVM_BUFFER_LOAD_I16_U: Load an unsigned i16 value as i32 from an IREE VM host byte buffer.
+// %value = ireevm.buffer.load.i16.u %buffer[%offset] : ireevm.ref<ireevm.buffer>, i64 -> i32
+LOOM_DEFINE_ISA(loom_ireevm_buffer_load_i16_u_isa, LOOM_OP_IREEVM_BUFFER_LOAD_I16_U)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_load_i16_u_buffer, 0)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_load_i16_u_element_offset, 1)
+LOOM_DEFINE_RESULT(loom_ireevm_buffer_load_i16_u_result, 0)
+iree_status_t loom_ireevm_buffer_load_i16_u_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t buffer,
+    loom_may_consume loom_value_id_t element_offset,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_ireevm_buffer_op_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_IREEVM_BUFFER_LOAD_I16_S: Load a sign-extended i16 value as i32 from an IREE VM host byte buffer.
+// %value = ireevm.buffer.load.i16.s %buffer[%offset] : ireevm.ref<ireevm.buffer>, i64 -> i32
+LOOM_DEFINE_ISA(loom_ireevm_buffer_load_i16_s_isa, LOOM_OP_IREEVM_BUFFER_LOAD_I16_S)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_load_i16_s_buffer, 0)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_load_i16_s_element_offset, 1)
+LOOM_DEFINE_RESULT(loom_ireevm_buffer_load_i16_s_result, 0)
+iree_status_t loom_ireevm_buffer_load_i16_s_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t buffer,
+    loom_may_consume loom_value_id_t element_offset,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_ireevm_buffer_op_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_IREEVM_BUFFER_LOAD_I32: Load an i32 value from an IREE VM host byte buffer.
+// %value = ireevm.buffer.load.i32 %buffer[%offset] : ireevm.ref<ireevm.buffer>, i64 -> i32
+LOOM_DEFINE_ISA(loom_ireevm_buffer_load_i32_isa, LOOM_OP_IREEVM_BUFFER_LOAD_I32)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_load_i32_buffer, 0)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_load_i32_element_offset, 1)
+LOOM_DEFINE_RESULT(loom_ireevm_buffer_load_i32_result, 0)
+iree_status_t loom_ireevm_buffer_load_i32_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t buffer,
+    loom_may_consume loom_value_id_t element_offset,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_ireevm_buffer_op_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_IREEVM_BUFFER_LOAD_I64: Load an i64 value from an IREE VM host byte buffer.
+// %value = ireevm.buffer.load.i64 %buffer[%offset] : ireevm.ref<ireevm.buffer>, i64 -> i64
+LOOM_DEFINE_ISA(loom_ireevm_buffer_load_i64_isa, LOOM_OP_IREEVM_BUFFER_LOAD_I64)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_load_i64_buffer, 0)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_load_i64_element_offset, 1)
+LOOM_DEFINE_RESULT(loom_ireevm_buffer_load_i64_result, 0)
+iree_status_t loom_ireevm_buffer_load_i64_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t buffer,
+    loom_may_consume loom_value_id_t element_offset,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_ireevm_buffer_op_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_IREEVM_BUFFER_LOAD_F32: Load an f32 value from an IREE VM host byte buffer.
+// %value = ireevm.buffer.load.f32 %buffer[%offset] : ireevm.ref<ireevm.buffer>, i64 -> f32
+LOOM_DEFINE_ISA(loom_ireevm_buffer_load_f32_isa, LOOM_OP_IREEVM_BUFFER_LOAD_F32)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_load_f32_buffer, 0)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_load_f32_element_offset, 1)
+LOOM_DEFINE_RESULT(loom_ireevm_buffer_load_f32_result, 0)
+iree_status_t loom_ireevm_buffer_load_f32_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t buffer,
+    loom_may_consume loom_value_id_t element_offset,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_ireevm_buffer_op_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_IREEVM_BUFFER_LOAD_F64: Load an f64 value from an IREE VM host byte buffer.
+// %value = ireevm.buffer.load.f64 %buffer[%offset] : ireevm.ref<ireevm.buffer>, i64 -> f64
+LOOM_DEFINE_ISA(loom_ireevm_buffer_load_f64_isa, LOOM_OP_IREEVM_BUFFER_LOAD_F64)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_load_f64_buffer, 0)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_load_f64_element_offset, 1)
+LOOM_DEFINE_RESULT(loom_ireevm_buffer_load_f64_result, 0)
+iree_status_t loom_ireevm_buffer_load_f64_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t buffer,
+    loom_may_consume loom_value_id_t element_offset,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_ireevm_buffer_op_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_IREEVM_BUFFER_STORE_I8: Store the low 8 bits of an i32 value into an IREE VM host byte buffer.
+// ireevm.buffer.store.i8 %value, %buffer[%offset] : i32, ireevm.ref<ireevm.buffer>, i64
+LOOM_DEFINE_ISA(loom_ireevm_buffer_store_i8_isa, LOOM_OP_IREEVM_BUFFER_STORE_I8)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_store_i8_buffer, 0)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_store_i8_element_offset, 1)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_store_i8_value, 2)
+iree_status_t loom_ireevm_buffer_store_i8_build(
+    loom_builder_t* builder,
+    loom_value_id_t value,
+    loom_value_id_t buffer,
+    loom_value_id_t element_offset,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_ireevm_buffer_op_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_IREEVM_BUFFER_STORE_I16: Store the low 16 bits of an i32 value into an IREE VM host byte buffer.
+// ireevm.buffer.store.i16 %value, %buffer[%offset] : i32, ireevm.ref<ireevm.buffer>, i64
+LOOM_DEFINE_ISA(loom_ireevm_buffer_store_i16_isa, LOOM_OP_IREEVM_BUFFER_STORE_I16)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_store_i16_buffer, 0)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_store_i16_element_offset, 1)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_store_i16_value, 2)
+iree_status_t loom_ireevm_buffer_store_i16_build(
+    loom_builder_t* builder,
+    loom_value_id_t value,
+    loom_value_id_t buffer,
+    loom_value_id_t element_offset,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_ireevm_buffer_op_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_IREEVM_BUFFER_STORE_I32: Store an i32 value into an IREE VM host byte buffer.
+// ireevm.buffer.store.i32 %value, %buffer[%offset] : i32, ireevm.ref<ireevm.buffer>, i64
+LOOM_DEFINE_ISA(loom_ireevm_buffer_store_i32_isa, LOOM_OP_IREEVM_BUFFER_STORE_I32)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_store_i32_buffer, 0)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_store_i32_element_offset, 1)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_store_i32_value, 2)
+iree_status_t loom_ireevm_buffer_store_i32_build(
+    loom_builder_t* builder,
+    loom_value_id_t value,
+    loom_value_id_t buffer,
+    loom_value_id_t element_offset,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_ireevm_buffer_op_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_IREEVM_BUFFER_STORE_I64: Store an i64 value into an IREE VM host byte buffer.
+// ireevm.buffer.store.i64 %value, %buffer[%offset] : i64, ireevm.ref<ireevm.buffer>, i64
+LOOM_DEFINE_ISA(loom_ireevm_buffer_store_i64_isa, LOOM_OP_IREEVM_BUFFER_STORE_I64)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_store_i64_buffer, 0)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_store_i64_element_offset, 1)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_store_i64_value, 2)
+iree_status_t loom_ireevm_buffer_store_i64_build(
+    loom_builder_t* builder,
+    loom_value_id_t value,
+    loom_value_id_t buffer,
+    loom_value_id_t element_offset,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_ireevm_buffer_op_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_IREEVM_BUFFER_STORE_F32: Store an f32 value into an IREE VM host byte buffer.
+// ireevm.buffer.store.f32 %value, %buffer[%offset] : f32, ireevm.ref<ireevm.buffer>, i64
+LOOM_DEFINE_ISA(loom_ireevm_buffer_store_f32_isa, LOOM_OP_IREEVM_BUFFER_STORE_F32)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_store_f32_buffer, 0)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_store_f32_element_offset, 1)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_store_f32_value, 2)
+iree_status_t loom_ireevm_buffer_store_f32_build(
+    loom_builder_t* builder,
+    loom_value_id_t value,
+    loom_value_id_t buffer,
+    loom_value_id_t element_offset,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_ireevm_buffer_op_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_IREEVM_BUFFER_STORE_F64: Store an f64 value into an IREE VM host byte buffer.
+// ireevm.buffer.store.f64 %value, %buffer[%offset] : f64, ireevm.ref<ireevm.buffer>, i64
+LOOM_DEFINE_ISA(loom_ireevm_buffer_store_f64_isa, LOOM_OP_IREEVM_BUFFER_STORE_F64)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_store_f64_buffer, 0)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_store_f64_element_offset, 1)
+LOOM_DEFINE_OPERAND(loom_ireevm_buffer_store_f64_value, 2)
+iree_status_t loom_ireevm_buffer_store_f64_build(
+    loom_builder_t* builder,
+    loom_value_id_t value,
+    loom_value_id_t buffer,
+    loom_value_id_t element_offset,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_ireevm_buffer_op_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // Returns the vtable array for the ireevm dialect.
 const loom_op_vtable_t* const* loom_ireevm_dialect_vtables(
