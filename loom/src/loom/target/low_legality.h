@@ -63,6 +63,17 @@ typedef iree_status_t (*loom_target_low_legality_try_op_fn_t)(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     bool* out_handled);
 
+typedef bool (*loom_target_low_legality_type_supported_fn_t)(
+    void* user_data, const loom_module_t* module, loom_type_t type);
+
+typedef struct loom_target_low_legality_type_supported_callback_t {
+  // Optional callback reporting target-owned source types that can be mapped to
+  // target-low values by the selected lowering policy.
+  loom_target_low_legality_type_supported_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_target_low_legality_type_supported_callback_t;
+
 struct loom_target_low_legality_provider_t {
   // Stable provider name available to callbacks when emitting diagnostics.
   iree_string_view_t name;
@@ -121,6 +132,10 @@ typedef struct loom_target_low_legality_options_t {
   // consulted before target-local providers so table-backed contracts stay the
   // source of truth for table-backed source-to-low emission.
   loom_target_contract_query_callback_t contract_query;
+  // Optional target-owned source type mapping predicate. Missing keeps the
+  // verifier limited to target-independent low-compatible types and registered
+  // type semantics.
+  loom_target_low_legality_type_supported_callback_t type_supported;
   // Caller-owned facts for |function|.
   loom_value_fact_table_t* fact_table;
   // Optional active value domain for |function|'s body. Providers can use this

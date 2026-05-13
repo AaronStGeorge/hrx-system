@@ -592,6 +592,44 @@ loom_ownership_lifetime_find_policy(
   return NULL;
 }
 
+static bool loom_ownership_lifetime_policy_type_matches(
+    const loom_ownership_lifetime_materialization_policy_t* policy,
+    loom_type_t type) {
+  return policy->family.type_matches(type, policy->family.user_data);
+}
+
+static bool loom_ownership_lifetime_type_has_policy_flags(
+    const loom_ownership_lifetime_module_state_t* module_state,
+    loom_type_t type,
+    loom_ownership_lifetime_materialization_policy_flags_t flags) {
+  const loom_ownership_lifetime_materialize_options_t* options =
+      module_state->materialize_options;
+  if (!options) {
+    return false;
+  }
+  for (iree_host_size_t i = 0; i < options->policy_count; ++i) {
+    const loom_ownership_lifetime_materialization_policy_t* policy =
+        &options->policies[i];
+    if (iree_all_bits_set(policy->flags, flags) &&
+        loom_ownership_lifetime_policy_type_matches(policy, type)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool loom_ownership_lifetime_value_has_policy_flags(
+    const loom_ownership_lifetime_module_state_t* module_state,
+    loom_value_id_t value_id,
+    loom_ownership_lifetime_materialization_policy_flags_t flags) {
+  if (value_id >= module_state->module->values.count) {
+    return false;
+  }
+  return loom_ownership_lifetime_type_has_policy_flags(
+      module_state, loom_module_value_type(module_state->module, value_id),
+      flags);
+}
+
 static iree_status_t loom_ownership_lifetime_append_action(
     loom_ownership_lifetime_state_t* state,
     const loom_ownership_lifetime_action_t* action) {
@@ -893,6 +931,16 @@ loom_ownership_lifetime_call_result_state(
     const loom_ownership_lifetime_function_summary_t* summary,
     uint16_t result_index) {
   if (!summary || !summary->body || result_index >= summary->result_count) {
+    if (summary && !summary->body && result_index < summary->result_count) {
+      const loom_value_id_t* result_ids =
+          loom_op_const_results(summary->function.op);
+      if (result_ids &&
+          loom_ownership_lifetime_value_has_policy_flags(
+              state->module_state, result_ids[result_index],
+              LOOM_OWNERSHIP_LIFETIME_MATERIALIZATION_POLICY_OWNED_BODYLESS_RESULTS)) {
+        return LOOM_OWNERSHIP_LIFETIME_VALUE_OWNED;
+      }
+    }
     return LOOM_OWNERSHIP_LIFETIME_VALUE_BORROWED;
   }
   loom_ownership_lifetime_value_state_t result_state =
@@ -1454,7 +1502,7 @@ static iree_status_t loom_ownership_lifetime_initialize_summary(
     return iree_ok_status();
   }
   uint16_t arg_count = 0;
-  (void)loom_func_like_arg_ids(function, &arg_count);
+  const loom_value_id_t* arg_ids = loom_func_like_arg_ids(function, &arg_count);
   *summary = (loom_ownership_lifetime_function_summary_t){
       .function = function,
       .body = loom_func_like_body(function),
@@ -1467,6 +1515,14 @@ static iree_status_t loom_ownership_lifetime_initialize_summary(
         sizeof(*summary->arg_consumed), (void**)&summary->arg_consumed));
     memset(summary->arg_consumed, 0,
            summary->arg_count * sizeof(*summary->arg_consumed));
+    if (arg_ids) {
+      for (uint16_t i = 0; i < summary->arg_count; ++i) {
+        summary->arg_consumed[i] =
+            loom_ownership_lifetime_value_has_policy_flags(
+                module_state, arg_ids[i],
+                LOOM_OWNERSHIP_LIFETIME_MATERIALIZATION_POLICY_OWNED_ARGUMENTS);
+      }
+    }
   }
   if (summary->result_count > 0) {
     IREE_RETURN_IF_ERROR(iree_arena_allocate_array(

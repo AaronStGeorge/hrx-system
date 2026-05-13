@@ -6,10 +6,24 @@
 
 #include "loom/target/arch/ireevm/provider.h"
 
+#include "loom/pass/builder.h"
 #include "loom/target/arch/ireevm/low_registry.h"
 #include "loom/target/arch/ireevm/math_policy.h"
 #include "loom/target/arch/ireevm/ops/registry.h"
+#include "loom/target/arch/ireevm/pass_registry.h"
 #include "loom/target/emit/ireevm/lower.h"
+
+static iree_status_t loom_ireevm_provider_contribute_pipeline(
+    const loom_target_pipeline_contribution_t* contribution) {
+  if (contribution->phase != LOOM_TARGET_PIPELINE_PHASE_SOURCE_TO_LOW) {
+    return iree_ok_status();
+  }
+
+  loom_op_t* run_op = NULL;
+  return loom_pass_ir_build_run(contribution->builder,
+                                IREE_SV("ireevm-ref-lifetime"),
+                                loom_named_attr_slice_empty(), &run_op);
+}
 
 const loom_target_provider_t loom_ireevm_target_provider = {
     .register_context = loom_ireevm_ops_register_dialect,
@@ -19,6 +33,8 @@ const loom_target_provider_t loom_ireevm_target_provider = {
         loom_ireevm_low_lower_policy_registry_initialize,
     .initialize_math_policy_registry =
         loom_ireevm_math_policy_registry_initialize,
+    .pass_registry = &loom_ireevm_pass_registry,
+    .contribute_pipeline = loom_ireevm_provider_contribute_pipeline,
 };
 
 static const loom_target_provider_t* const kLoomIreeVmTargetProviders[] = {

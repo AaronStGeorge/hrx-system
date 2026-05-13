@@ -375,6 +375,9 @@ typedef struct loom_low_lower_policy_t {
   const loom_error_catalog_t* error_catalog;
   // Maps source semantic types to target-low register types.
   loom_low_lower_map_type_callback_t map_type;
+  // Optionally reports source types accepted by target-low legality because
+  // |map_type| can map them to target-low values.
+  loom_target_low_legality_type_supported_callback_t source_type_supported;
   // Optionally maps concrete source SSA values to target-low register types
   // when type alone does not determine the target register class.
   loom_low_lower_map_value_callback_t map_value;

@@ -6,6 +6,8 @@
 
 #include "loom/target/emit/ireevm/candidate.h"
 
+#include <algorithm>
+
 #include "iree/base/internal/flatcc/parsing.h"
 #include "iree/schemas/bytecode_module_def_reader.h"
 #include "iree/testing/gtest.h"
@@ -99,10 +101,66 @@ constexpr char kPreparedVmWideSource[] =
     "reg<ireevm.i32>\n"
     "}\n";
 
+constexpr char kPreparedVmRefSource[] =
+    "ireevm.target<core> @vm_target\n"
+    "\n"
+    "low.func.def target(@vm_target) abi(vm_module_function) "
+    "export(\"retain_release\") "
+    "@retain_release(%value: reg<ireevm.ref>) -> (reg<ireevm.ref>) {\n"
+    "  %owned = low.op<ireevm.ref.retain>(%value) : "
+    "(reg<ireevm.ref>) -> reg<ireevm.ref>\n"
+    "  low.op<ireevm.ref.release>(%owned) : (reg<ireevm.ref>)\n"
+    "  low.return %value : reg<ireevm.ref>\n"
+    "}\n";
+
+constexpr char kPreparedVmRefBranchSource[] =
+    "ireevm.target<core> @vm_target\n"
+    "\n"
+    "low.func.def target(@vm_target) abi(vm_module_function) "
+    "export(\"ref_branch\") "
+    "@ref_branch(%value: reg<ireevm.ref>) {\n"
+    "  low.br ^join(%value: reg<ireevm.ref>)\n"
+    "^join(%arg: reg<ireevm.ref>):\n"
+    "  low.op<ireevm.ref.release>(%arg) : (reg<ireevm.ref>)\n"
+    "  low.return\n"
+    "}\n";
+
 bool FlatbufferStringEquals(flatbuffers_string_t value,
                             iree_string_view_t expected) {
   return iree_string_view_equal(
       iree_make_string_view(value, flatbuffers_string_len(value)), expected);
+}
+
+uint16_t ReadU16LE(const uint8_t* data) {
+  return (uint16_t)data[0] | ((uint16_t)data[1] << 8);
+}
+
+void ExpectSingleBranchRemapCount(
+    iree_vm_BytecodeModuleDef_table_t module_def,
+    iree_vm_FunctionDescriptor_struct_t function_descriptor,
+    uint16_t expected_remap_count) {
+  constexpr uint8_t kBranchOp = 0x56;
+  flatbuffers_uint8_vec_t bytecode_data =
+      iree_vm_BytecodeModuleDef_bytecode_data(module_def);
+  ASSERT_NE(bytecode_data, nullptr);
+  const size_t bytecode_data_length = flatbuffers_uint8_vec_len(bytecode_data);
+  const size_t bytecode_offset = function_descriptor->bytecode_offset;
+  const size_t bytecode_length = function_descriptor->bytecode_length;
+  ASSERT_LE(bytecode_offset, bytecode_data_length);
+  ASSERT_LE(bytecode_length, bytecode_data_length - bytecode_offset);
+  const uint8_t* function_bytecode = bytecode_data + bytecode_offset;
+  const uint8_t* function_end = function_bytecode + bytecode_length;
+  const uint8_t* branch_op =
+      std::find(function_bytecode, function_end, kBranchOp);
+  ASSERT_NE(branch_op, function_end);
+
+  size_t remap_count_offset = (size_t)(branch_op - function_bytecode) + 1 + 4;
+  if ((remap_count_offset & 1u) != 0) {
+    ++remap_count_offset;
+  }
+  ASSERT_LE(remap_count_offset + sizeof(uint16_t), bytecode_length);
+  EXPECT_EQ(ReadU16LE(function_bytecode + remap_count_offset),
+            expected_remap_count);
 }
 
 class IreeVmCandidateTest : public ::testing::Test {
@@ -324,6 +382,70 @@ TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidateWithWideScalars) {
   EXPECT_TRUE(FlatbufferStringEquals(
       iree_vm_FunctionSignatureDef_calling_convention(signature_def),
       IREE_SV("0IIffF_IfFi")));
+
+  loom_ireevm_run_candidate_deinitialize(&candidate);
+  loom_run_module_deinitialize(&run_module);
+}
+
+TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidateWithRefs) {
+  loom_run_module_t run_module = {};
+  IREE_ASSERT_OK(Parse(IREE_SV(kPreparedVmRefSource), &run_module));
+
+  loom_run_candidate_compile_options_t options = {};
+  InitializeCandidateOptions(&run_module, &options);
+
+  loom_ireevm_run_candidate_t candidate = {};
+  IREE_ASSERT_OK(loom_ireevm_run_candidate_emit(
+      &run_module, &options, iree_allocator_system(), &candidate));
+  EXPECT_GT(candidate.archive.data_length, 0u);
+
+  iree_vm_BytecodeModuleDef_table_t module_def = nullptr;
+  ParseArchive(&candidate.archive, &module_def);
+  iree_vm_FunctionDescriptor_vec_t function_descriptors =
+      iree_vm_BytecodeModuleDef_function_descriptors(module_def);
+  ASSERT_EQ(iree_vm_FunctionDescriptor_vec_len(function_descriptors), 1u);
+  iree_vm_FunctionDescriptor_struct_t function_descriptor =
+      iree_vm_FunctionDescriptor_vec_at(function_descriptors, 0);
+  EXPECT_GT(function_descriptor->bytecode_length, 0);
+  EXPECT_EQ(function_descriptor->i32_register_count, 0);
+  EXPECT_EQ(function_descriptor->ref_register_count, 2);
+  iree_vm_FunctionSignatureDef_vec_t function_signatures =
+      iree_vm_BytecodeModuleDef_function_signatures(module_def);
+  ASSERT_EQ(iree_vm_FunctionSignatureDef_vec_len(function_signatures), 1u);
+  iree_vm_FunctionSignatureDef_table_t signature_def =
+      iree_vm_FunctionSignatureDef_vec_at(function_signatures, 0);
+  EXPECT_TRUE(FlatbufferStringEquals(
+      iree_vm_FunctionSignatureDef_calling_convention(signature_def),
+      IREE_SV("0r_r")));
+
+  loom_ireevm_run_candidate_deinitialize(&candidate);
+  loom_run_module_deinitialize(&run_module);
+}
+
+TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidateWithRefBranch) {
+  loom_run_module_t run_module = {};
+  IREE_ASSERT_OK(Parse(IREE_SV(kPreparedVmRefBranchSource), &run_module));
+
+  loom_run_candidate_compile_options_t options = {};
+  InitializeCandidateOptions(&run_module, &options);
+
+  loom_ireevm_run_candidate_t candidate = {};
+  IREE_ASSERT_OK(loom_ireevm_run_candidate_emit(
+      &run_module, &options, iree_allocator_system(), &candidate));
+  EXPECT_GT(candidate.archive.data_length, 0u);
+
+  iree_vm_BytecodeModuleDef_table_t module_def = nullptr;
+  ParseArchive(&candidate.archive, &module_def);
+  iree_vm_FunctionDescriptor_vec_t function_descriptors =
+      iree_vm_BytecodeModuleDef_function_descriptors(module_def);
+  ASSERT_EQ(iree_vm_FunctionDescriptor_vec_len(function_descriptors), 1u);
+  iree_vm_FunctionDescriptor_struct_t function_descriptor =
+      iree_vm_FunctionDescriptor_vec_at(function_descriptors, 0);
+  EXPECT_GT(function_descriptor->bytecode_length, 0);
+  EXPECT_EQ(function_descriptor->i32_register_count, 0);
+  EXPECT_EQ(function_descriptor->ref_register_count, 1);
+  ExpectSingleBranchRemapCount(module_def, function_descriptor,
+                               /*expected_remap_count=*/0);
 
   loom_ireevm_run_candidate_deinitialize(&candidate);
   loom_run_module_deinitialize(&run_module);

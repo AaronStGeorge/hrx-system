@@ -10,6 +10,7 @@ from typing import Any
 
 from loom.assembly import (
     ARROW,
+    COLON,
     GLUE,
     LPAREN,
     RPAREN,
@@ -19,10 +20,13 @@ from loom.assembly import (
     FuncArgs,
     OptionalGroup,
     PredicateList,
+    Ref,
+    ResultType,
     ResultTypeList,
     Scope,
     SymbolRef,
     TemplateParam,
+    TypeOf,
     kw,
 )
 from loom.dialect.func.defs import CallingConv, Purity, Visibility
@@ -32,16 +36,23 @@ from loom.dsl import (
     SYMBOL_DEFINE,
     AttrDef,
     Dialect,
+    Discard,
     EnumCase,
     EnumDef,
     FuncLikeInterface,
     Op,
     Operand,
     OpPhase,
+    Release,
     Result,
+    Retain,
+    RetainedResult,
+    SameType,
     SymbolDefinition,
     SymbolReference,
     TargetLikeInterface,
+    TypeDef,
+    TypeParam,
 )
 
 ireevm_ops = Dialect(
@@ -59,6 +70,20 @@ IreeVmTargetKind = EnumDef(
         EnumCase("core", 1, doc="IREE VM core target row."),
     ],
     doc="IREE VM target row selected by ireevm.target.",
+)
+
+ireevm_ref_type = TypeDef(
+    name="ireevm.ref",
+    params=[TypeParam("object", ANY)],
+    format=[TypeOf("object")],
+    doc="IREE VM reference-counted object reference.",
+)
+
+ireevm_list_type = TypeDef(
+    name="ireevm.list",
+    params=[TypeParam("element", ANY)],
+    format=[TypeOf("element")],
+    doc="IREE VM list heap object type used behind ireevm.ref.",
 )
 
 _IMPORT_DECL_ATTRS = [
@@ -181,13 +206,69 @@ ireevm_import_decl = Op(
     ],
     examples=[
         'ireevm.import.decl target(@vm) symbol("hal.buffer.length") '
-        "@hal_buffer_length(%buffer: i32) -> (i64)",
+        "@hal_buffer_length(%buffer: ireevm.ref<ireevm.list<i32>>) -> (i64)",
         'ireevm.import.decl public target(@vm) symbol("hal.buffer.map") '
         "@hal_buffer_map(%buffer: i32) -> (i64)",
     ],
 )
 
+ireevm_ref_retain = Op(
+    "ireevm.ref.retain",
+    group=ireevm_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc="Retain an additional owned IREE VM reference.",
+    operands=[Operand("resource", ANY, doc="Reference value to retain.")],
+    results=[Result("result", ANY, doc="Retained owned reference.")],
+    constraints=[SameType("resource", "result")],
+    ownership_effects=[Retain("resource"), RetainedResult("result")],
+    format=[
+        Ref("resource"),
+        COLON,
+        TypeOf("resource"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%owned = ireevm.ref.retain %resource : "
+        "ireevm.ref<ireevm.list<i32>> -> ireevm.ref<ireevm.list<i32>>",
+    ],
+)
+
+ireevm_ref_release = Op(
+    "ireevm.ref.release",
+    group=ireevm_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc="Release an owned IREE VM reference.",
+    operands=[Operand("resource", ANY, doc="Reference value to release.")],
+    ownership_effects=[Release("resource")],
+    format=[Ref("resource"), COLON, TypeOf("resource")],
+    examples=[
+        "ireevm.ref.release %resource : ireevm.ref<ireevm.list<i32>>",
+    ],
+)
+
+ireevm_ref_discard = Op(
+    "ireevm.ref.discard",
+    group=ireevm_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc="Discard compiler ownership of an IREE VM reference without releasing it.",
+    operands=[Operand("resource", ANY, doc="Reference value to discard.")],
+    ownership_effects=[Discard("resource")],
+    format=[Ref("resource"), COLON, TypeOf("resource")],
+    examples=[
+        "ireevm.ref.discard %resource : ireevm.ref<ireevm.list<i32>>",
+    ],
+)
+
+ALL_IREEVM_TYPES: tuple[TypeDef, ...] = (
+    ireevm_ref_type,
+    ireevm_list_type,
+)
+
 ALL_IREEVM_OPS: tuple[Op, ...] = (
     ireevm_target,
     ireevm_import_decl,
+    ireevm_ref_retain,
+    ireevm_ref_release,
+    ireevm_ref_discard,
 )

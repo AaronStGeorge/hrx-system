@@ -29,9 +29,16 @@ enum {
   LOOM_IREEVM_OP_CALL = 0x58,
   LOOM_IREEVM_OP_RETURN = 0x5A,
   LOOM_IREEVM_OP_BLOCK = 0x79,
+  LOOM_IREEVM_OP_DISCARD_REFS = 0x85,
+  LOOM_IREEVM_OP_ASSIGN_REF = 0x86,
 };
 
 #define LOOM_IREEVM_MAX_BLOCK_BYTE_LENGTH UINT32_C(0x00FFFFFF)
+#define LOOM_IREEVM_I32_REGISTER_COUNT UINT32_C(0x7FFF)
+#define LOOM_IREEVM_REF_REGISTER_COUNT UINT32_C(0x3FFF)
+#define LOOM_IREEVM_REF_REGISTER_TYPE_BIT UINT16_C(0x8000)
+#define LOOM_IREEVM_REF_REGISTER_MOVE_BIT UINT16_C(0x4000)
+#define LOOM_IREEVM_REF_REGISTER_MASK UINT16_C(0x3FFF)
 
 typedef struct loom_ireevm_branch_fixup_t {
   // Target schedule block whose bytecode offset patches |offset|.
@@ -76,6 +83,8 @@ typedef struct loom_ireevm_emit_state_t {
   uint32_t ref_register_count;
   // IREE VM FeatureBits required by emitted descriptor-backed opcodes.
   uint32_t feature_requirements;
+  // Packet currently being encoded, used for scheduled-liveness MOVE bits.
+  const loom_low_packet_view_t* current_packet;
 } loom_ireevm_emit_state_t;
 
 static iree_string_view_t loom_ireevm_module_string(
@@ -344,6 +353,17 @@ static iree_status_t loom_ireevm_register_assignment_metadata(
                             (unsigned)assignment->value_id,
                             assignment->unit_count, expected_unit_count);
   }
+  const uint32_t bank_register_count =
+      register_ref.bank == LOOM_IREEVM_REGISTER_BANK_REF
+          ? LOOM_IREEVM_REF_REGISTER_COUNT
+          : LOOM_IREEVM_I32_REGISTER_COUNT;
+  const uint64_t register_limit =
+      (uint64_t)assignment->location_base + assignment->location_count;
+  if (register_limit > bank_register_count) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "VM bytecode register span exceeds target bank capacity");
+  }
 
   *out_register = register_ref;
   return iree_ok_status();
@@ -398,6 +418,19 @@ static iree_status_t loom_ireevm_lookup_i32_bank_register(
   return iree_ok_status();
 }
 
+static iree_status_t loom_ireevm_lookup_ref_bank_register(
+    loom_ireevm_emit_state_t* state, loom_value_id_t value_id,
+    loom_ireevm_register_ref_t* out_register) {
+  IREE_RETURN_IF_ERROR(
+      loom_ireevm_lookup_register(state, value_id, out_register));
+  if (out_register->bank != LOOM_IREEVM_REGISTER_BANK_REF) {
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "VM bytecode ref packet requires a ref-bank "
+                            "register");
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_ireevm_lookup_condition_register(
     loom_ireevm_emit_state_t* state, loom_value_id_t value_id,
     uint16_t* out_register) {
@@ -410,6 +443,71 @@ static iree_status_t loom_ireevm_lookup_condition_register(
   }
   *out_register = register_ref.base;
   return iree_ok_status();
+}
+
+static uint32_t loom_ireevm_current_packet_program_point(
+    const loom_ireevm_emit_state_t* state) {
+  IREE_ASSERT(state->current_packet != NULL);
+  IREE_ASSERT_LT(state->current_packet->node->block_index,
+                 state->schedule->liveness.block_count);
+  const loom_liveness_block_info_t* block_info =
+      &state->schedule->liveness
+           .blocks[state->current_packet->node->block_index];
+  return block_info->start_point +
+         state->current_packet->node->scheduled_ordinal;
+}
+
+static bool loom_ireevm_value_use_is_last(loom_ireevm_emit_state_t* state,
+                                          loom_value_id_t value_id) {
+  const loom_low_allocation_assignment_t* assignment =
+      loom_low_allocation_map_active_value_assignment(state->allocation,
+                                                      value_id, NULL);
+  return assignment->end_point ==
+         loom_ireevm_current_packet_program_point(state) + 1u;
+}
+
+typedef uint32_t loom_ireevm_register_encoding_flags_t;
+
+#define LOOM_IREEVM_REGISTER_ENCODING_MOVE_REF ((uint32_t)1u << 0)
+
+static iree_status_t loom_ireevm_register_ref_encode_unit(
+    loom_ireevm_register_ref_t register_ref, uint16_t unit_index,
+    loom_ireevm_register_encoding_flags_t flags, uint16_t* out_encoded) {
+  if (unit_index >= register_ref.unit_count) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "VM bytecode register unit is out of range");
+  }
+  const uint32_t ordinal = (uint32_t)register_ref.base + unit_index;
+  switch (register_ref.bank) {
+    case LOOM_IREEVM_REGISTER_BANK_I32:
+      if (ordinal >= LOOM_IREEVM_I32_REGISTER_COUNT) {
+        return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "VM bytecode i32 register ordinal is out of "
+                                "range");
+      }
+      *out_encoded = (uint16_t)ordinal;
+      return iree_ok_status();
+    case LOOM_IREEVM_REGISTER_BANK_REF: {
+      if (ordinal >= LOOM_IREEVM_REF_REGISTER_COUNT) {
+        return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "VM bytecode ref register ordinal is out of "
+                                "range");
+      }
+      uint16_t encoded = LOOM_IREEVM_REF_REGISTER_TYPE_BIT | (uint16_t)ordinal;
+      if (iree_all_bits_set(flags, LOOM_IREEVM_REGISTER_ENCODING_MOVE_REF)) {
+        encoded |= LOOM_IREEVM_REF_REGISTER_MOVE_BIT;
+      }
+      if ((encoded & LOOM_IREEVM_REF_REGISTER_MASK) != ordinal) {
+        return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "VM bytecode ref register ordinal is out of "
+                                "mask range");
+      }
+      *out_encoded = encoded;
+      return iree_ok_status();
+    }
+  }
+  return iree_make_status(IREE_STATUS_INTERNAL,
+                          "unknown VM bytecode register bank");
 }
 
 static const loom_named_attr_t* loom_ireevm_find_named_attr(
@@ -476,7 +574,38 @@ static iree_status_t loom_ireevm_record_descriptor_requirements(
   return iree_ok_status();
 }
 
+static iree_status_t loom_ireevm_write_encoded_register_list(
+    loom_ireevm_emit_state_t* state, const loom_value_id_t* values,
+    iree_host_size_t value_count, loom_ireevm_register_encoding_flags_t flags) {
+  if (value_count > UINT16_MAX) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "VM register list exceeds u16 entries");
+  }
+  loom_ireevm_bytecode_writer_t* writer = &state->writer;
+  IREE_RETURN_IF_ERROR(loom_ireevm_bytecode_align(writer, 2));
+  IREE_RETURN_IF_ERROR(
+      loom_ireevm_bytecode_write_u16(writer, (uint16_t)value_count));
+  for (iree_host_size_t i = 0; i < value_count; ++i) {
+    loom_ireevm_register_ref_t register_ref = {0};
+    IREE_RETURN_IF_ERROR(
+        loom_ireevm_lookup_register(state, values[i], &register_ref));
+    uint16_t encoded_register = 0;
+    IREE_RETURN_IF_ERROR(loom_ireevm_register_ref_encode_unit(
+        register_ref, 0, flags, &encoded_register));
+    IREE_RETURN_IF_ERROR(
+        loom_ireevm_bytecode_write_u16(writer, encoded_register));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_ireevm_write_register_list(
+    loom_ireevm_emit_state_t* state, const loom_value_id_t* values,
+    iree_host_size_t value_count) {
+  return loom_ireevm_write_encoded_register_list(state, values, value_count,
+                                                 /*flags=*/0);
+}
+
+static iree_status_t loom_ireevm_write_operand_register_list(
     loom_ireevm_emit_state_t* state, const loom_value_id_t* values,
     iree_host_size_t value_count) {
   if (value_count > UINT16_MAX) {
@@ -491,8 +620,47 @@ static iree_status_t loom_ireevm_write_register_list(
     loom_ireevm_register_ref_t register_ref = {0};
     IREE_RETURN_IF_ERROR(
         loom_ireevm_lookup_register(state, values[i], &register_ref));
+    loom_ireevm_register_encoding_flags_t flags =
+        loom_ireevm_value_use_is_last(state, values[i])
+            ? LOOM_IREEVM_REGISTER_ENCODING_MOVE_REF
+            : 0;
+    uint16_t encoded_register = 0;
+    IREE_RETURN_IF_ERROR(loom_ireevm_register_ref_encode_unit(
+        register_ref, 0, flags, &encoded_register));
     IREE_RETURN_IF_ERROR(
-        loom_ireevm_bytecode_write_u16(writer, register_ref.base));
+        loom_ireevm_bytecode_write_u16(writer, encoded_register));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_ireevm_write_return_register_list(
+    loom_ireevm_emit_state_t* state, const loom_value_id_t* values,
+    iree_host_size_t value_count) {
+  return loom_ireevm_write_encoded_register_list(
+      state, values, value_count, LOOM_IREEVM_REGISTER_ENCODING_MOVE_REF);
+}
+
+static iree_status_t loom_ireevm_write_moved_ref_register_list(
+    loom_ireevm_emit_state_t* state, const loom_value_id_t* values,
+    iree_host_size_t value_count) {
+  if (value_count > UINT16_MAX) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "VM ref register list exceeds u16 entries");
+  }
+  loom_ireevm_bytecode_writer_t* writer = &state->writer;
+  IREE_RETURN_IF_ERROR(loom_ireevm_bytecode_align(writer, 2));
+  IREE_RETURN_IF_ERROR(
+      loom_ireevm_bytecode_write_u16(writer, (uint16_t)value_count));
+  for (iree_host_size_t i = 0; i < value_count; ++i) {
+    loom_ireevm_register_ref_t register_ref = {0};
+    IREE_RETURN_IF_ERROR(
+        loom_ireevm_lookup_ref_bank_register(state, values[i], &register_ref));
+    uint16_t encoded_register = 0;
+    IREE_RETURN_IF_ERROR(loom_ireevm_register_ref_encode_unit(
+        register_ref, 0, LOOM_IREEVM_REGISTER_ENCODING_MOVE_REF,
+        &encoded_register));
+    IREE_RETURN_IF_ERROR(
+        loom_ireevm_bytecode_write_u16(writer, encoded_register));
   }
   return iree_ok_status();
 }
@@ -553,14 +721,21 @@ static iree_status_t loom_ireevm_write_branch_target(
         state, loom_block_arg_id(target, (uint16_t)i), &target_ref));
     for (uint16_t unit_index = 0; unit_index < source_ref.unit_count;
          ++unit_index) {
-      const uint16_t source_reg = source_ref.base + unit_index;
-      const uint16_t target_reg = target_ref.base + unit_index;
-      if (source_reg != target_reg) {
-        IREE_RETURN_IF_ERROR(
-            loom_ireevm_bytecode_write_u16(writer, source_reg));
-        IREE_RETURN_IF_ERROR(
-            loom_ireevm_bytecode_write_u16(writer, target_reg));
+      if (source_ref.base + unit_index == target_ref.base + unit_index) {
+        continue;
       }
+      uint16_t source_reg = 0;
+      loom_ireevm_register_encoding_flags_t source_flags =
+          loom_ireevm_value_use_is_last(state, values[i])
+              ? LOOM_IREEVM_REGISTER_ENCODING_MOVE_REF
+              : 0;
+      IREE_RETURN_IF_ERROR(loom_ireevm_register_ref_encode_unit(
+          source_ref, unit_index, source_flags, &source_reg));
+      uint16_t target_reg = 0;
+      IREE_RETURN_IF_ERROR(loom_ireevm_register_ref_encode_unit(
+          target_ref, unit_index, /*flags=*/0, &target_reg));
+      IREE_RETURN_IF_ERROR(loom_ireevm_bytecode_write_u16(writer, source_reg));
+      IREE_RETURN_IF_ERROR(loom_ireevm_bytecode_write_u16(writer, target_reg));
     }
   }
   return iree_ok_status();
@@ -630,6 +805,49 @@ static iree_status_t loom_ireevm_emit_const(
   return loom_ireevm_bytecode_write_u16(&state->writer, result_ref.base);
 }
 
+static iree_status_t loom_ireevm_emit_ref_release(
+    loom_ireevm_emit_state_t* state, const loom_op_t* op,
+    const loom_low_descriptor_t* descriptor) {
+  if (!loom_low_op_isa(op) || op->result_count != 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "ireevm.ref.release packet shape is invalid");
+  }
+  IREE_RETURN_IF_ERROR(loom_ireevm_bytecode_write_opcode(
+      &state->writer, descriptor->encoding_id));
+  loom_value_slice_t operands = loom_low_op_operands(op);
+  return loom_ireevm_write_moved_ref_register_list(state, operands.values,
+                                                   operands.count);
+}
+
+static iree_status_t loom_ireevm_emit_ref_retain(
+    loom_ireevm_emit_state_t* state, const loom_op_t* op,
+    const loom_low_descriptor_t* descriptor) {
+  if (!loom_low_op_isa(op) || op->operand_count != 1 || op->result_count != 1) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "ireevm.ref.retain packet shape is invalid");
+  }
+  loom_value_slice_t operands = loom_low_op_operands(op);
+  loom_value_slice_t results = loom_low_op_results(op);
+  loom_ireevm_register_ref_t operand_ref = {0};
+  IREE_RETURN_IF_ERROR(loom_ireevm_lookup_ref_bank_register(
+      state, operands.values[0], &operand_ref));
+  loom_ireevm_register_ref_t result_ref = {0};
+  IREE_RETURN_IF_ERROR(loom_ireevm_lookup_ref_bank_register(
+      state, results.values[0], &result_ref));
+
+  IREE_RETURN_IF_ERROR(loom_ireevm_bytecode_write_opcode(
+      &state->writer, descriptor->encoding_id));
+  uint16_t operand_reg = 0;
+  IREE_RETURN_IF_ERROR(loom_ireevm_register_ref_encode_unit(
+      operand_ref, 0, /*flags=*/0, &operand_reg));
+  IREE_RETURN_IF_ERROR(
+      loom_ireevm_bytecode_write_u16(&state->writer, operand_reg));
+  uint16_t result_reg = 0;
+  IREE_RETURN_IF_ERROR(loom_ireevm_register_ref_encode_unit(
+      result_ref, 0, /*flags=*/0, &result_reg));
+  return loom_ireevm_bytecode_write_u16(&state->writer, result_reg);
+}
+
 static iree_status_t loom_ireevm_emit_generic_low_op(
     loom_ireevm_emit_state_t* state, const loom_op_t* op,
     const loom_low_descriptor_t* descriptor) {
@@ -665,6 +883,12 @@ static iree_status_t loom_ireevm_emit_descriptor_packet(
     case LOOM_IREEVM_OP_CONST_F64:
       return loom_ireevm_emit_const(state, packet->node->op,
                                     packet->descriptor);
+    case LOOM_IREEVM_OP_DISCARD_REFS:
+      return loom_ireevm_emit_ref_release(state, packet->node->op,
+                                          packet->descriptor);
+    case LOOM_IREEVM_OP_ASSIGN_REF:
+      return loom_ireevm_emit_ref_retain(state, packet->node->op,
+                                         packet->descriptor);
     default: {
       return loom_ireevm_emit_generic_low_op(state, packet->node->op,
                                              packet->descriptor);
@@ -677,7 +901,8 @@ static iree_status_t loom_ireevm_emit_low_return(
   IREE_RETURN_IF_ERROR(
       loom_ireevm_bytecode_write_u8(&state->writer, LOOM_IREEVM_OP_RETURN));
   loom_value_slice_t values = loom_low_return_values(op);
-  return loom_ireevm_write_register_list(state, values.values, values.count);
+  return loom_ireevm_write_return_register_list(state, values.values,
+                                                values.count);
 }
 
 static iree_status_t loom_ireevm_emit_low_br(loom_ireevm_emit_state_t* state,
@@ -716,8 +941,8 @@ static iree_status_t loom_ireevm_emit_low_func_call(
       loom_ireevm_bytecode_write_u32(&state->writer, encoded_ordinal));
   loom_value_slice_t operands = loom_low_func_call_operands(op);
   loom_value_slice_t results = loom_low_func_call_results(op);
-  IREE_RETURN_IF_ERROR(
-      loom_ireevm_write_register_list(state, operands.values, operands.count));
+  IREE_RETURN_IF_ERROR(loom_ireevm_write_operand_register_list(
+      state, operands.values, operands.count));
   return loom_ireevm_write_register_list(state, results.values, results.count);
 }
 
@@ -741,6 +966,7 @@ static iree_status_t loom_ireevm_emit_structural_packet(
 
 static iree_status_t loom_ireevm_emit_packet(
     loom_ireevm_emit_state_t* state, const loom_low_packet_view_t* packet) {
+  state->current_packet = packet;
   if (packet->descriptor) {
     return loom_ireevm_emit_descriptor_packet(state, packet);
   }
@@ -856,15 +1082,17 @@ iree_status_t loom_ireevm_emit_function_bytecode(
     status = loom_ireevm_bytecode_align(&state.writer, 8);
   }
   if (iree_status_is_ok(status)) {
-    if (state.i32_register_count > UINT16_MAX) {
+    if (state.i32_register_count > LOOM_IREEVM_I32_REGISTER_COUNT) {
       status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                "VM bytecode i32 register count exceeds u16");
+                                "VM bytecode i32 register count exceeds "
+                                "target limit");
     }
   }
   if (iree_status_is_ok(status)) {
-    if (state.ref_register_count > UINT16_MAX) {
+    if (state.ref_register_count > LOOM_IREEVM_REF_REGISTER_COUNT) {
       status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                "VM bytecode ref register count exceeds u16");
+                                "VM bytecode ref register count exceeds "
+                                "target limit");
     }
   }
   if (iree_status_is_ok(status)) {

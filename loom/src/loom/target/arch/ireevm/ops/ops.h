@@ -22,7 +22,10 @@ extern "C" {
 enum {
   LOOM_OP_IREEVM_TARGET = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 0),
   LOOM_OP_IREEVM_IMPORT_DECL = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 1),
-  LOOM_OP_IREEVM_COUNT_ = 2,
+  LOOM_OP_IREEVM_REF_RETAIN = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 2),
+  LOOM_OP_IREEVM_REF_RELEASE = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 3),
+  LOOM_OP_IREEVM_REF_DISCARD = LOOM_OP_KIND(LOOM_DIALECT_IREEVM, 4),
+  LOOM_OP_IREEVM_COUNT_ = 5,
 };
 
 // IREE VM target row selected by ireevm.target.
@@ -153,7 +156,7 @@ iree_status_t loom_target_record_verify(
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_IREEVM_IMPORT_DECL: IREE VM imported function declaration. Callable by name via func.call and lowered to a VM module import during target materialization.
-// ireevm.import.decl target(@vm) symbol("hal.buffer.length") @hal_buffer_length(%buffer: i32) -> (i64)
+// ireevm.import.decl target(@vm) symbol("hal.buffer.length") @hal_buffer_length(%buffer: ireevm.ref<ireevm.list<i32>>) -> (i64)
 LOOM_DEFINE_ISA(loom_ireevm_import_decl_isa, LOOM_OP_IREEVM_IMPORT_DECL)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_ireevm_import_decl_args, 0)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_ireevm_import_decl_results, 0)
@@ -191,6 +194,38 @@ iree_status_t loom_ireevm_import_decl_build(
 iree_status_t loom_ireevm_import_decl_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_IREEVM_REF_RETAIN: Retain an additional owned IREE VM reference.
+// %owned = ireevm.ref.retain %resource : ireevm.ref<ireevm.list<i32>> -> ireevm.ref<ireevm.list<i32>>
+LOOM_DEFINE_ISA(loom_ireevm_ref_retain_isa, LOOM_OP_IREEVM_REF_RETAIN)
+LOOM_DEFINE_OPERAND(loom_ireevm_ref_retain_resource, 0)
+LOOM_DEFINE_RESULT(loom_ireevm_ref_retain_result, 0)
+iree_status_t loom_ireevm_ref_retain_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t resource,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_IREEVM_REF_RELEASE: Release an owned IREE VM reference.
+// ireevm.ref.release %resource : ireevm.ref<ireevm.list<i32>>
+LOOM_DEFINE_ISA(loom_ireevm_ref_release_isa, LOOM_OP_IREEVM_REF_RELEASE)
+LOOM_DEFINE_OPERAND(loom_ireevm_ref_release_resource, 0)
+iree_status_t loom_ireevm_ref_release_build(
+    loom_builder_t* builder,
+    loom_value_id_t resource,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_IREEVM_REF_DISCARD: Discard compiler ownership of an IREE VM reference without releasing it.
+// ireevm.ref.discard %resource : ireevm.ref<ireevm.list<i32>>
+LOOM_DEFINE_ISA(loom_ireevm_ref_discard_isa, LOOM_OP_IREEVM_REF_DISCARD)
+LOOM_DEFINE_OPERAND(loom_ireevm_ref_discard_resource, 0)
+iree_status_t loom_ireevm_ref_discard_build(
+    loom_builder_t* builder,
+    loom_value_id_t resource,
+    loom_location_id_t location,
+    loom_op_t** out_op);
 
 // Returns the vtable array for the ireevm dialect.
 const loom_op_vtable_t* const* loom_ireevm_dialect_vtables(

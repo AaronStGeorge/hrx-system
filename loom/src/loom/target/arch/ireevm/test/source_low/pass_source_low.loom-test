@@ -119,3 +119,23 @@ low.func.def target(@vm_target) abi(vm_module_function) @vm_i64_cfg(%start: reg<
 ^exit:
   low.return %current : reg<ireevm.i64 x2>
 }
+
+// ====
+
+// RUN: pass ireevm-ref-lifetime,source-to-low
+ireevm.target<core> @vm_target
+
+func.def target(@vm_target) @vm_ref_retain_release(%resource: ireevm.ref<ireevm.list<i32>>) {
+  %owned = ireevm.ref.retain %resource : ireevm.ref<ireevm.list<i32>> -> ireevm.ref<ireevm.list<i32>>
+  func.return
+}
+
+// ----
+ireevm.target<core> @vm_target
+
+low.func.def target(@vm_target) abi(vm_module_function) @vm_ref_retain_release(%resource: reg<ireevm.ref>) {
+  %owned = low.op<ireevm.ref.retain>(%resource) : (reg<ireevm.ref>) -> reg<ireevm.ref>
+  low.op<ireevm.ref.release>(%resource) : (reg<ireevm.ref>)
+  low.op<ireevm.ref.release>(%owned) : (reg<ireevm.ref>)
+  low.return
+}

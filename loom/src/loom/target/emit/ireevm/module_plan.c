@@ -83,6 +83,16 @@ static iree_status_t loom_ireevm_calling_convention_append(
   return iree_ok_status();
 }
 
+static bool loom_ireevm_module_plan_type_is_ref(const loom_module_t* module,
+                                                loom_type_t type) {
+  if (!loom_type_is_dialect(type) || loom_type_dialect_param_count(type) != 1) {
+    return false;
+  }
+  return iree_string_view_equal(
+      loom_ireevm_module_plan_string(module, loom_type_dialect_name_id(type)),
+      IREE_SV("ireevm.ref"));
+}
+
 static iree_status_t loom_ireevm_module_plan_append_calling_convention_type(
     const loom_module_t* module, loom_type_t type,
     loom_ireevm_calling_convention_buffer_t* buffer) {
@@ -106,6 +116,10 @@ static iree_status_t loom_ireevm_module_plan_append_calling_convention_type(
         unit_count == 2) {
       return loom_ireevm_calling_convention_append(buffer, 'F');
     }
+    if (iree_string_view_equal(register_class, IREE_SV("ireevm.ref")) &&
+        unit_count == 1) {
+      return loom_ireevm_calling_convention_append(buffer, 'r');
+    }
   }
   if (loom_type_is_scalar(type)) {
     const loom_scalar_type_t scalar_type = loom_type_element_type(type);
@@ -122,6 +136,9 @@ static iree_status_t loom_ireevm_module_plan_append_calling_convention_type(
       default:
         break;
     }
+  }
+  if (loom_ireevm_module_plan_type_is_ref(module, type)) {
+    return loom_ireevm_calling_convention_append(buffer, 'r');
   }
   return iree_make_status(
       IREE_STATUS_INTERNAL,

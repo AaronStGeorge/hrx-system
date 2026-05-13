@@ -454,6 +454,11 @@ static iree_status_t loom_target_low_legality_verify_type(
   if (registered_type_handled) {
     return iree_ok_status();
   }
+  if (context->options->type_supported.fn != NULL &&
+      context->options->type_supported.fn(
+          context->options->type_supported.user_data, context->module, type)) {
+    return iree_ok_status();
+  }
   if (loom_type_is_vector(type)) {
     if (!loom_type_is_all_static(type)) {
       return loom_target_low_legality_emit_type_constraint(

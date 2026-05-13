@@ -24,6 +24,7 @@ from loom.target.low_descriptors import (
     ImmediateKind,
     IssueUse,
     LatencyKind,
+    MemorySpace,
     ModelQuality,
     Operand,
     OperandRole,
@@ -47,10 +48,12 @@ _SCHEDULE_CONST = "ireevm.const"
 _SCHEDULE_ALU = "ireevm.alu"
 _SCHEDULE_MATH = "ireevm.math"
 _SCHEDULE_CONVERT = "ireevm.convert"
+_SCHEDULE_REF = "ireevm.ref"
 _SCHEDULE_CONTROL = "ireevm.control"
 
 _RESOURCE_ALU = "ireevm.alu"
 _RESOURCE_MATH = "ireevm.math"
+_RESOURCE_REF = "ireevm.ref"
 _RESOURCE_CONTROL = "ireevm.control"
 
 _SCALAR_ALIAS_SET = 1
@@ -63,12 +66,14 @@ _REG_BY_TYPE = {
     "i64": _REG_I64,
     "f32": _REG_F32,
     "f64": _REG_F64,
+    "ref": _REG_REF,
 }
 _UNIT_COUNT_BY_TYPE = {
     "i32": 1,
     "i64": 2,
     "f32": 1,
     "f64": 2,
+    "ref": 1,
 }
 _ALT_BY_TYPE = {
     type_name: (RegClassAlt(reg_class),)
@@ -264,6 +269,8 @@ _OP_MIN_S_I64 = 0x7E
 _OP_MIN_U_I64 = 0x7F
 _OP_MAX_S_I64 = 0x80
 _OP_MAX_U_I64 = 0x81
+_OP_DISCARD_REFS = 0x85
+_OP_ASSIGN_REF = 0x86
 
 _OP_CONST_F32 = _ext_f32(0x05)
 _OP_SELECT_F32 = _ext_f32(0x08)
@@ -374,6 +381,18 @@ _OP_ROUND_EVEN_F64 = _ext_f64(0x3F)
 _CONTROL_EFFECT = Effect(
     EffectKind.CONTROL,
     flags=(EffectFlag.ORDERED,),
+)
+
+_REF_READ_EFFECT = Effect(
+    EffectKind.READ,
+    memory_space=MemorySpace.VM_REF,
+    flags=(EffectFlag.DEPENDENCY,),
+)
+
+_REF_WRITE_EFFECT = Effect(
+    EffectKind.WRITE,
+    memory_space=MemorySpace.VM_REF,
+    flags=(EffectFlag.DEPENDENCY,),
 )
 
 
@@ -840,6 +859,31 @@ _FLOAT_COMPARE_DESCRIPTORS = (
     _cmp_nan_descriptor("f64", encoding_id=_OP_CMP_NAN_F64),
 )
 
+_REF_DESCRIPTORS = (
+    Descriptor(
+        key="ireevm.ref.retain",
+        mnemonic="ireevm.ref.retain",
+        semantic_tag="ref.retain",
+        operands=(_result("ref"), _operand("ref", "resource")),
+        asm_forms=_asm(results=("dst",), operands=("resource",)),
+        effects=(_REF_READ_EFFECT, _REF_WRITE_EFFECT),
+        schedule_class=_SCHEDULE_REF,
+        encoding_id=_OP_ASSIGN_REF,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    ),
+    Descriptor(
+        key="ireevm.ref.release",
+        mnemonic="ireevm.ref.release",
+        semantic_tag="ref.release",
+        operands=(_operand("ref", "resource"),),
+        asm_forms=_asm(operands=("resource",)),
+        effects=(_REF_WRITE_EFFECT,),
+        schedule_class=_SCHEDULE_REF,
+        encoding_id=_OP_DISCARD_REFS,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    ),
+)
+
 _CONTROL_DESCRIPTORS = (
     Descriptor(
         key="ireevm.br",
@@ -937,6 +981,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
     resources=(
         Resource(_RESOURCE_ALU, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),
         Resource(_RESOURCE_MATH, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),
+        Resource(_RESOURCE_REF, capacity_per_cycle=1, kind=ResourceKind.STORE),
         Resource(_RESOURCE_CONTROL, capacity_per_cycle=1, kind=ResourceKind.CONTROL),
     ),
     schedule_classes=(
@@ -967,6 +1012,13 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
             model_quality=ModelQuality.EXACT,
         ),
         ScheduleClass(
+            _SCHEDULE_REF,
+            latency_kind=LatencyKind.EXACT,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_REF, cycles=1, units=1),),
+            model_quality=ModelQuality.EXACT,
+        ),
+        ScheduleClass(
             _SCHEDULE_CONTROL,
             latency_kind=LatencyKind.EXACT,
             latency_cycles=1,
@@ -986,6 +1038,7 @@ IREEVM_CORE_DESCRIPTOR_SET = DescriptorSet(
         *_FLOAT_MATH_DESCRIPTORS,
         *_FLOAT_CONVERSION_DESCRIPTORS,
         *_FLOAT_COMPARE_DESCRIPTORS,
+        *_REF_DESCRIPTORS,
         *_CONTROL_DESCRIPTORS,
     ),
 )

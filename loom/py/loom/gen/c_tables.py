@@ -4655,7 +4655,11 @@ def main() -> None:
     from loom.dialect.vector import ALL_VECTOR_OPS, VECTOR_OP_CATEGORY_GROUPS, vector_ops
     from loom.dialect.view import ALL_VIEW_OPS, view_ops
     from loom.target.arch.amdgpu.dialect import ALL_AMDGPU_OPS, amdgpu_ops
-    from loom.target.arch.ireevm.dialect import ALL_IREEVM_OPS, ireevm_ops
+    from loom.target.arch.ireevm.dialect import (
+        ALL_IREEVM_OPS,
+        ALL_IREEVM_TYPES,
+        ireevm_ops,
+    )
     from loom.target.arch.wasm.dialect import ALL_WASM_OPS, wasm_ops
     from loom.target.arch.x86.dialect import ALL_X86_OPS, x86_ops
 
@@ -4742,6 +4746,7 @@ def main() -> None:
         *ALL_BUILTIN_TYPES,
         *ALL_HAL_TYPES,
         *ALL_KERNEL_TYPES,
+        *ALL_IREEVM_TYPES,
     ]
     type_reg_h, type_reg_c = generate_type_registry(all_types)
 

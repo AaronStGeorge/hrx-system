@@ -129,6 +129,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::ops::scalar
     loom::src::loom::target::arch::ireevm::descriptors_ids
+    loom::src::loom::target::arch::ireevm::ops
     loom::src::loom::target::emit::ireevm::contracts::core
     loom::src::loom::target::emit::ireevm::contracts::core_lower_rules
   PUBLIC

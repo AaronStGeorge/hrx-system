@@ -34,6 +34,17 @@ typedef struct loom_ownership_lifetime_options_t {
   iree_string_view_t phase_name;
 } loom_ownership_lifetime_options_t;
 
+typedef enum loom_ownership_lifetime_materialization_policy_flag_bits_e {
+  // Matching function-like arguments enter the analyzed body as owned values.
+  LOOM_OWNERSHIP_LIFETIME_MATERIALIZATION_POLICY_OWNED_ARGUMENTS = 1u << 0,
+  // Matching results from bodyless callees enter callers as owned values.
+  LOOM_OWNERSHIP_LIFETIME_MATERIALIZATION_POLICY_OWNED_BODYLESS_RESULTS = 1u
+                                                                          << 1,
+} loom_ownership_lifetime_materialization_policy_flag_bits_t;
+
+// Bitset of loom_ownership_lifetime_materialization_policy_flag_bits_t values.
+typedef uint32_t loom_ownership_lifetime_materialization_policy_flags_t;
+
 // Builds a release operation at the builder insertion point.
 typedef iree_status_t (*loom_ownership_lifetime_build_release_op_fn_t)(
     loom_builder_t* builder, loom_value_id_t value_id,
@@ -43,6 +54,8 @@ typedef iree_status_t (*loom_ownership_lifetime_build_release_op_fn_t)(
 typedef struct loom_ownership_lifetime_materialization_policy_t {
   // Resource family whose values this policy materializes.
   loom_ownership_resource_family_t family;
+  // ABI and materialization behavior for values matched by |family|.
+  loom_ownership_lifetime_materialization_policy_flags_t flags;
   // Builder for explicit release operations.
   loom_ownership_lifetime_build_release_op_fn_t build_release;
   // Opaque payload passed to the builder callbacks.

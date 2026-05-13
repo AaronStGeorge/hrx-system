@@ -94,6 +94,36 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    ref_lifetime_pass
+  HDRS
+    "ref_lifetime_pass.h"
+  SRCS
+    "ref_lifetime_pass.c"
+  DEPS
+    ::ops
+    iree::base
+    loom::src::loom::analysis::ownership_lifetime
+    loom::src::loom::ir
+    loom::src::loom::pass::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    pass_registry
+  HDRS
+    "pass_registry.h"
+  SRCS
+    "pass_registry.c"
+  DEPS
+    ::ref_lifetime_pass
+    iree::base
+    loom::src::loom::pass::registry
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     provider
   HDRS
     "provider.h"
@@ -103,7 +133,9 @@ loom_cc_library(
     ::low_registry
     ::math_policy
     ::ops
+    ::pass_registry
     iree::base
+    loom::src::loom::pass::builder
     loom::src::loom::target::emit::ireevm::lower
     loom::src::loom::target::provider
   PUBLIC
@@ -139,6 +171,17 @@ iree_executable_test(
     "test_import_decl_diagnostics"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/import_decl_diagnostics.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "test_ref_lifetime"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/ref_lifetime.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS
