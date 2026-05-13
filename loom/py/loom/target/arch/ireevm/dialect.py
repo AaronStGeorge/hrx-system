@@ -40,6 +40,7 @@ from loom.dsl import (
     OpPhase,
     Result,
     SymbolDefinition,
+    SymbolReference,
     TargetLikeInterface,
 )
 
@@ -63,7 +64,11 @@ IreeVmTargetKind = EnumDef(
 _IMPORT_DECL_ATTRS = [
     AttrDef("callee", "symbol"),
     AttrDef("visibility", "enum", enum_def=Visibility, optional=True),
-    AttrDef("import_module", "string"),
+    AttrDef(
+        "target",
+        "symbol",
+        symbol_ref=SymbolReference("target", ["target"]),
+    ),
     AttrDef("import_symbol", "string"),
     AttrDef("cc", "enum", enum_def=CallingConv, optional=True),
     AttrDef("purity", "enum", enum_def=Purity, optional=True),
@@ -72,10 +77,10 @@ _IMPORT_DECL_ATTRS = [
 
 _IMPORT_DECL_MODIFIER_FORMAT: list[FormatElement] = [
     OptionalGroup([Attr("visibility")], anchor="visibility"),
-    kw("module"),
+    kw("target"),
     GLUE,
     LPAREN,
-    Attr("import_module"),
+    SymbolRef("target"),
     GLUE,
     RPAREN,
     kw("symbol"),
@@ -107,7 +112,7 @@ _IMPORT_DECL_SIGNATURE_FORMAT: list[FormatElement] = [
 
 _IMPORT_DECL_FUNC_LIKE: dict[str, Any] = dict(
     callee="callee",
-    import_module="import_module",
+    target="target",
     import_symbol="import_symbol",
     visibility="visibility",
     cc="cc",
@@ -175,9 +180,9 @@ ireevm_import_decl = Op(
         *_IMPORT_DECL_SIGNATURE_FORMAT,
     ],
     examples=[
-        'ireevm.import.decl module("hal") symbol("buffer.length") '
+        'ireevm.import.decl target(@vm) symbol("hal.buffer.length") '
         "@hal_buffer_length(%buffer: i32) -> (i64)",
-        'ireevm.import.decl public module("hal") symbol("buffer.map") '
+        'ireevm.import.decl public target(@vm) symbol("hal.buffer.map") '
         "@hal_buffer_map(%buffer: i32) -> (i64)",
     ],
 )

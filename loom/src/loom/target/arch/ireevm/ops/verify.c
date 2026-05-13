@@ -55,12 +55,8 @@ iree_status_t loom_ireevm_import_decl_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter) {
   IREE_RETURN_IF_ERROR(loom_function_contract_verify(module, op, emitter));
-  IREE_RETURN_IF_ERROR(loom_ireevm_verify_non_empty_string_attr(
-      module, op, loom_ireevm_import_decl_import_module_ATTR_INDEX,
-      loom_ireevm_import_decl_import_module(op), IREE_SV("import_module"),
-      IREE_SV("non-empty import module"), emitter));
   return loom_ireevm_verify_non_empty_string_attr(
       module, op, loom_ireevm_import_decl_import_symbol_ATTR_INDEX,
-      loom_ireevm_import_decl_import_symbol(op), IREE_SV("import_symbol"),
+      loom_ireevm_import_decl_import_symbol(op), IREE_SV("symbol"),
       IREE_SV("non-empty import symbol"), emitter);
 }

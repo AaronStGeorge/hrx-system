@@ -153,13 +153,13 @@ iree_status_t loom_target_record_verify(
     iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_IREEVM_IMPORT_DECL: IREE VM imported function declaration. Callable by name via func.call and lowered to a VM module import during target materialization.
-// ireevm.import.decl module("hal") symbol("buffer.length") @hal_buffer_length(%buffer: i32) -> (i64)
+// ireevm.import.decl target(@vm) symbol("hal.buffer.length") @hal_buffer_length(%buffer: i32) -> (i64)
 LOOM_DEFINE_ISA(loom_ireevm_import_decl_isa, LOOM_OP_IREEVM_IMPORT_DECL)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_ireevm_import_decl_args, 0)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_ireevm_import_decl_results, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_ireevm_import_decl_callee, 0)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_ireevm_import_decl_visibility, 1, loom_ireevm_import_decl_visibility_t)
-LOOM_DEFINE_ATTR_STRING(loom_ireevm_import_decl_import_module, 2)
+LOOM_DEFINE_ATTR_SYMBOL(loom_ireevm_import_decl_target, 2)
 LOOM_DEFINE_ATTR_STRING(loom_ireevm_import_decl_import_symbol, 3)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_ireevm_import_decl_cc, 4, loom_ireevm_import_decl_cc_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_ireevm_import_decl_purity, 5, loom_ireevm_import_decl_purity_t)
@@ -173,7 +173,7 @@ iree_status_t loom_ireevm_import_decl_build(
     loom_builder_t* builder,
     loom_ireevm_import_decl_build_flags_t build_flags,
     loom_optional uint8_t visibility,
-    loom_string_id_t import_module,
+    loom_symbol_ref_t target,
     loom_string_id_t import_symbol,
     loom_optional uint8_t cc,
     loom_optional uint8_t purity,

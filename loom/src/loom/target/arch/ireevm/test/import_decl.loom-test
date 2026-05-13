@@ -2,9 +2,11 @@
 
 // IREE VM import declarations are ordinary function-like symbols. Source IR
 // keeps using func.call instead of target-private call ops.
-ireevm.import.decl module("hal") symbol("buffer.length") @hal_buffer_length(%buffer: i32) -> (i64)
+ireevm.target<core> @vm_target
 
-func.def @call_import(%buffer: i32) -> (i64) {
+ireevm.import.decl target(@vm_target) symbol("hal.buffer.length") @hal_buffer_length(%buffer: i32) -> (i64)
+
+func.def target(@vm_target) @call_import(%buffer: i32) -> (i64) {
   %length = func.call @hal_buffer_length(%buffer) : (i32) -> (i64)
   func.return %length : i64
 }
@@ -13,4 +15,6 @@ func.def @call_import(%buffer: i32) -> (i64) {
 
 // Generic func-like declaration modifiers remain available for linker contracts
 // and call analyses.
-ireevm.import.decl public module("hal") symbol("buffer.map") pure @hal_buffer_map(%buffer: i32, %access: i32) -> (i64)
+ireevm.target<core> @vm_target
+
+ireevm.import.decl public target(@vm_target) symbol("hal.buffer.map") pure @hal_buffer_map(%buffer: i32, %access: i32) -> (i64)
