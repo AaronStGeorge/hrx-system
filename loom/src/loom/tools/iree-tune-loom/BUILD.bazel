@@ -96,7 +96,9 @@ loom_cc_library(
     deps = [
         "//loom/src/loom/error:json_sink",
         "//loom/src/loom/ir",
+        "//loom/src/loom/ir:facts",
         "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ops:special_values",
         "//loom/src/loom/tooling/compile:pipeline",
         "//loom/src/loom/tooling/execution:compile_options",
         "//loom/src/loom/tooling/execution:compile_report_capture",
