@@ -58,6 +58,7 @@ from loom.dsl import (
     ANY,
     ANY_ENCODING,
     ATTR_TYPE_I64_ARRAY,
+    BY_REFERENCE,
     CONSTANT_LIKE,
     CONVERGENT,
     ELEMENTWISE,
@@ -76,17 +77,24 @@ from loom.dsl import (
     TERMINATOR,
     TILE,
     UNKNOWN_EFFECTS,
+    AliasResult,
     AllShapesMatch,
     AttrDef,
     BlockArgCount,
     BlockArgsMatchElementTypes,
     BlockArgsMatchTypes,
+    Borrow,
+    BorrowedResult,
     CallLikeInterface,
     CallLikeKind,
+    Consume,
     Dialect,
     DimIndexInBounds,
+    Discard,
     EnumCase,
     EnumDef,
+    Escape,
+    FreshResult,
     FuncLikeInterface,
     ImplicitTerminator,
     LiteralMatchesElementType,
@@ -96,7 +104,10 @@ from loom.dsl import (
     Reads,
     ReadWrites,
     RegionDef,
+    Release,
     Result,
+    Retain,
+    RetainedResult,
     SameElementType,
     SameType,
     Successor,
@@ -1863,6 +1874,167 @@ test_alloc = Op(
 )
 
 # ============================================================================
+# test.resource.* — owned resource operations
+# ============================================================================
+
+test_resource_alloc = Op(
+    "test.resource.alloc",
+    group=test_ops,
+    doc="Test owned-resource allocation.",
+    operands=[Operand("size", INDEX, doc="Allocation size.")],
+    results=[Result("result", POOL, doc="Fresh owned resource.", allocates=True)],
+    ownership_effects=[FreshResult("result")],
+    format=[
+        Ref("size"),
+        COLON,
+        TypeOf("size"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%resource = test.resource.alloc %sz : index -> pool<[%BS]>",
+    ],
+)
+
+test_resource_borrow = Op(
+    "test.resource.borrow",
+    group=test_ops,
+    doc="Test borrowed use of an owned resource.",
+    operands=[Operand("resource", POOL, doc="Resource to borrow.")],
+    ownership_effects=[Borrow("resource")],
+    format=[Ref("resource"), COLON, TypeOf("resource")],
+    examples=[
+        "test.resource.borrow %resource : pool<[%BS]>",
+    ],
+)
+
+test_resource_borrow_ref = Op(
+    "test.resource.borrow_ref",
+    group=test_ops,
+    doc="Test borrowed by-reference use of an owned resource carrier.",
+    operands=[Operand("resource", POOL, doc="Resource carrier to borrow.")],
+    ownership_effects=[Borrow("resource", BY_REFERENCE)],
+    format=[Ref("resource"), COLON, TypeOf("resource")],
+    examples=[
+        "test.resource.borrow_ref %resource : pool<[%BS]>",
+    ],
+)
+
+test_resource_consume = Op(
+    "test.resource.consume",
+    group=test_ops,
+    doc="Test consuming use of an owned resource.",
+    operands=[Operand("resource", POOL, doc="Resource to consume.")],
+    ownership_effects=[Consume("resource")],
+    format=[Ref("resource"), COLON, TypeOf("resource")],
+    examples=[
+        "test.resource.consume %resource : pool<[%BS]>",
+    ],
+)
+
+test_resource_retain = Op(
+    "test.resource.retain",
+    group=test_ops,
+    doc="Test retaining an additional owned reference to a resource.",
+    operands=[Operand("resource", POOL, doc="Resource to retain.")],
+    results=[Result("result", POOL, doc="Retained owned resource.")],
+    constraints=[SameType("resource", "result")],
+    ownership_effects=[Retain("resource"), RetainedResult("result")],
+    format=[
+        Ref("resource"),
+        COLON,
+        TypeOf("resource"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%retained = test.resource.retain %resource : pool<[%BS]> -> pool<[%BS]>",
+    ],
+)
+
+test_resource_release = Op(
+    "test.resource.release",
+    group=test_ops,
+    doc="Test releasing an owned resource.",
+    operands=[Operand("resource", POOL, doc="Resource to release.")],
+    ownership_effects=[Release("resource")],
+    format=[Ref("resource"), COLON, TypeOf("resource")],
+    examples=[
+        "test.resource.release %resource : pool<[%BS]>",
+    ],
+)
+
+test_resource_discard = Op(
+    "test.resource.discard",
+    group=test_ops,
+    doc="Test discarding compiler ownership without releasing the resource.",
+    operands=[Operand("resource", POOL, doc="Resource to discard.")],
+    ownership_effects=[Discard("resource")],
+    format=[Ref("resource"), COLON, TypeOf("resource")],
+    examples=[
+        "test.resource.discard %resource : pool<[%BS]>",
+    ],
+)
+
+test_resource_escape = Op(
+    "test.resource.escape",
+    group=test_ops,
+    doc="Test transferring a resource to an untracked owner.",
+    operands=[Operand("resource", POOL, doc="Resource to escape.")],
+    ownership_effects=[Escape("resource")],
+    format=[Ref("resource"), COLON, TypeOf("resource")],
+    examples=[
+        "test.resource.escape %resource : pool<[%BS]>",
+    ],
+)
+
+test_resource_alias = Op(
+    "test.resource.alias",
+    group=test_ops,
+    doc="Test producing a borrowed alias of a resource.",
+    operands=[Operand("resource", POOL, doc="Resource to alias.")],
+    results=[Result("result", POOL, doc="Borrowed alias result.")],
+    constraints=[SameType("resource", "result")],
+    ownership_effects=[
+        Borrow("resource"),
+        AliasResult("result", "resource"),
+    ],
+    format=[
+        Ref("resource"),
+        COLON,
+        TypeOf("resource"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%alias = test.resource.alias %resource : pool<[%BS]> -> pool<[%BS]>",
+    ],
+)
+
+test_resource_borrowed = Op(
+    "test.resource.borrowed",
+    group=test_ops,
+    doc="Test materializing a borrowed resource result.",
+    operands=[Operand("resource", POOL, doc="Resource to borrow.")],
+    results=[Result("result", POOL, doc="Borrowed resource result.")],
+    constraints=[SameType("resource", "result")],
+    ownership_effects=[
+        Borrow("resource"),
+        BorrowedResult("result"),
+    ],
+    format=[
+        Ref("resource"),
+        COLON,
+        TypeOf("resource"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%borrowed = test.resource.borrowed %resource : pool<[%BS]> -> pool<[%BS]>",
+    ],
+)
+
+# ============================================================================
 # test.isolated_region — isolated single-block region (for CSE testing)
 # ============================================================================
 
@@ -2109,4 +2281,14 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_typed_use,
     test_shape,
     test_target,
+    test_resource_alloc,
+    test_resource_borrow,
+    test_resource_borrow_ref,
+    test_resource_consume,
+    test_resource_retain,
+    test_resource_release,
+    test_resource_discard,
+    test_resource_escape,
+    test_resource_alias,
+    test_resource_borrowed,
 )

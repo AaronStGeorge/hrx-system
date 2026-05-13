@@ -31,6 +31,7 @@ from loom.dsl import (
     ANY,
     ANY_ENCODING,
     BUFFER,
+    BY_REFERENCE,
     COMMUTATIVE,
     CONSTANT_LIKE,
     CONVERGENT,
@@ -63,6 +64,7 @@ from loom.dsl import (
     TILE,
     UNIQUE_IDENTITY,
     UNKNOWN_EFFECTS,
+    AliasResult,
     AllShapesMatch,
     AllTypesMatch,
     AttrDef,
@@ -72,8 +74,10 @@ from loom.dsl import (
     BlockArgsMatchElementTypes,
     BlockArgsMatchTypes,
     BlockArgsSatisfy,
+    Borrow,
     CallLikeInterface,
     CallLikeKind,
+    Consume,
     ContractFamily,
     Dialect,
     DimIndexInBounds,
@@ -82,6 +86,7 @@ from loom.dsl import (
     ElementWidthLessThan,
     EnumCase,
     EnumDef,
+    FreshResult,
     HasAllStaticRankOneVector,
     HasAllStaticVector,
     HasAncestor,
@@ -106,6 +111,7 @@ from loom.dsl import (
     Op,
     OpCategory,
     Operand,
+    OperandOwnershipEffect,
     OpPhase,
     PackedPayloadBitCountMatchesStorage,
     PositiveBitWidthAttr,
@@ -113,6 +119,7 @@ from loom.dsl import (
     Reads,
     RegionDef,
     Result,
+    ResultOwnershipEffect,
     SameElementType,
     SameEncoding,
     SameKind,
@@ -1732,6 +1739,85 @@ class TestEffects:
     def test_safe_to_speculate_conflicts_with_hint(self) -> None:
         with _raises(ValueError, match="SAFE_TO_SPECULATE.*HINT"):
             Op("test.bad", traits=[SAFE_TO_SPECULATE, HINT])
+
+
+# ============================================================================
+# Ownership effects
+# ============================================================================
+
+
+class TestOwnershipEffects:
+    def test_valid_operand_and_result_ownership_effects(self) -> None:
+        op = Op(
+            "test.resource.retain",
+            operands=[Operand("resource", POOL)],
+            results=[Result("result", POOL)],
+            ownership_effects=[
+                Borrow("resource", BY_REFERENCE),
+                AliasResult("result", "resource"),
+            ],
+        )
+        assert not op.is_pure
+        operand_effect = op.ownership_effects[0]
+        result_effect = op.ownership_effects[1]
+        assert isinstance(operand_effect, OperandOwnershipEffect)
+        assert isinstance(result_effect, ResultOwnershipEffect)
+        assert operand_effect.operand == "resource"
+        assert operand_effect.carrier == BY_REFERENCE
+        assert result_effect.source == "resource"
+
+    def test_fresh_result_ownership_effect(self) -> None:
+        op = Op(
+            "test.resource.alloc",
+            results=[Result("result", POOL, allocates=True)],
+            ownership_effects=[FreshResult("result")],
+        )
+        assert not op.is_pure
+        result_effect = op.ownership_effects[0]
+        assert isinstance(result_effect, ResultOwnershipEffect)
+        assert result_effect.result == "result"
+
+    def test_alias_result_ownership_effect_requires_fixed_fields(self) -> None:
+        with _raises(ValueError, match="fixed operand/result"):
+            Op(
+                "test.resource.alias_many",
+                operands=[Operand("resources", POOL, variadic=True)],
+                results=[Result("results", POOL, variadic=True)],
+                ownership_effects=[AliasResult("results", "resources")],
+            )
+
+    def test_operand_ownership_effect_on_missing_operand_raises(self) -> None:
+        with _raises(ValueError, match="not declared"):
+            Op(
+                "test.bad",
+                operands=[Operand("resource", POOL)],
+                ownership_effects=[Consume("missing")],
+            )
+
+    def test_pure_with_ownership_effects_raises(self) -> None:
+        with _raises(ValueError, match="PURE.*ownership"):
+            Op(
+                "test.bad",
+                operands=[Operand("resource", POOL)],
+                traits=[PURE],
+                ownership_effects=[Consume("resource")],
+            )
+
+    def test_result_ownership_effect_on_missing_result_raises(self) -> None:
+        with _raises(ValueError, match="not declared"):
+            Op(
+                "test.bad",
+                results=[Result("result", POOL)],
+                ownership_effects=[FreshResult("missing")],
+            )
+
+    def test_alias_result_requires_source_operand(self) -> None:
+        with _raises(ValueError, match="not declared"):
+            Op(
+                "test.bad",
+                results=[Result("result", POOL)],
+                ownership_effects=[AliasResult("result", "missing")],
+            )
 
     def test_safe_to_speculate_conflicts_with_unknown_effects(self) -> None:
         with _raises(ValueError, match="SAFE_TO_SPECULATE.*UNKNOWN_EFFECTS"):

@@ -81,6 +81,34 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "ownership",
+    srcs = ["ownership.c"],
+    hdrs = ["ownership.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "ownership_test",
+    srcs = ["ownership_test.cc"],
+    deps = [
+        ":ownership",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/testing:module_ptr",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "kernel_async_legality",
     srcs = ["kernel_async_legality.c"],
     hdrs = ["kernel_async_legality.h"],

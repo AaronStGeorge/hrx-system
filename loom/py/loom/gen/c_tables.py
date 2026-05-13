@@ -76,8 +76,13 @@ from loom.dsl import (
     MemoryAccessInterface,
     Op,
     Operand,
+    OperandOwnershipEffect,
+    OperandOwnershipEffectKind,
+    OwnershipCarrier,
     RegionBranchInterface,
     RegionDef,
+    ResultOwnershipEffect,
+    ResultOwnershipEffectKind,
     TargetLikeInterface,
     TiedResult,
     TypeConstraint,
@@ -222,6 +227,27 @@ CALL_LIKE_KIND_MAP: dict[CallLikeKind, str] = {
     CallLikeKind.TEMPLATE: "LOOM_CALL_LIKE_KIND_TEMPLATE",
     CallLikeKind.LOW_INTERNAL: "LOOM_CALL_LIKE_KIND_LOW_INTERNAL",
     CallLikeKind.LOW_INVOKE: "LOOM_CALL_LIKE_KIND_LOW_INVOKE",
+}
+
+OWNERSHIP_CARRIER_MAP: dict[OwnershipCarrier, str] = {
+    OwnershipCarrier.BY_VALUE: "LOOM_OWNERSHIP_CARRIER_BY_VALUE",
+    OwnershipCarrier.BY_REFERENCE: "LOOM_OWNERSHIP_CARRIER_BY_REFERENCE",
+}
+
+OPERAND_OWNERSHIP_EFFECT_MAP: dict[OperandOwnershipEffectKind, str] = {
+    OperandOwnershipEffectKind.BORROW: "LOOM_OPERAND_OWNERSHIP_BORROW",
+    OperandOwnershipEffectKind.CONSUME: "LOOM_OPERAND_OWNERSHIP_CONSUME",
+    OperandOwnershipEffectKind.RETAIN: "LOOM_OPERAND_OWNERSHIP_RETAIN",
+    OperandOwnershipEffectKind.RELEASE: "LOOM_OPERAND_OWNERSHIP_RELEASE",
+    OperandOwnershipEffectKind.DISCARD: "LOOM_OPERAND_OWNERSHIP_DISCARD",
+    OperandOwnershipEffectKind.ESCAPE: "LOOM_OPERAND_OWNERSHIP_ESCAPE",
+}
+
+RESULT_OWNERSHIP_EFFECT_MAP: dict[ResultOwnershipEffectKind, str] = {
+    ResultOwnershipEffectKind.FRESH: "LOOM_RESULT_OWNERSHIP_FRESH",
+    ResultOwnershipEffectKind.BORROWED: "LOOM_RESULT_OWNERSHIP_BORROWED",
+    ResultOwnershipEffectKind.RETAINED: "LOOM_RESULT_OWNERSHIP_RETAINED",
+    ResultOwnershipEffectKind.ALIAS: "LOOM_RESULT_OWNERSHIP_ALIAS",
 }
 
 _ERROR_REF_CODE_BITS = 10
@@ -747,6 +773,13 @@ def _resolve_result_index(op: Op, result_name: str | None, interface_name: str =
         if result.name == result_name:
             return i
     raise ValueError(f"{interface_name} on {op.name!r}: result {result_name!r} not found. Available: {[r.name for r in op.results]}")
+
+
+def _resolve_ownership_source_operand_index(op: Op, operand_name: str) -> int:
+    index = _resolve_operand_index(op, operand_name, "ownership effect")
+    if index > 0xFE:
+        raise ValueError(f"ownership effect on {op.name!r}: source operand {operand_name!r} index {index} exceeds uint8_t range")
+    return index
 
 
 def _resolve_block_arg_index(
@@ -1782,6 +1815,7 @@ def _trait_flags(op: Op) -> str:
     if (
         not explicit_pure
         and not op.effects
+        and not op.ownership_effects
         and not has_non_deterministic
         and not has_unknown_effects
         and not has_hint
@@ -3456,6 +3490,7 @@ def generate_tables_c(
         if op.operands or synthesize_func_args_operand:
             func_args_name = _func_args_field_name(op) if synthesize_func_args_operand else ""
             effect_map = {effect.operand: effect.kind for effect in op.effects}
+            ownership_operand_map = {effect.operand: effect for effect in op.ownership_effects if isinstance(effect, OperandOwnershipEffect)}
             lines.append(f"static const loom_operand_descriptor_t {prefix}_operand_desc[] = {{")
             for operand in op.operands:
                 type_constraint = TYPE_CONSTRAINT_MAP[operand.type_constraint]
@@ -3470,13 +3505,24 @@ def generate_tables_c(
                 if effect_kind in (EffectKind.WRITE, EffectKind.READWRITE):
                     flags_parts.append("LOOM_OPERAND_WRITES")
                 flags = " | ".join(flags_parts) if flags_parts else "0"
-                lines.append(f"    {{{_bstring_expr(operand.name)}, {type_constraint}, {flags}}},")
+                ownership_effect = ownership_operand_map.get(operand.name)
+                if ownership_effect is None:
+                    ownership_effect_name = "LOOM_OPERAND_OWNERSHIP_NONE"
+                    ownership_carrier_name = "LOOM_OWNERSHIP_CARRIER_NONE"
+                else:
+                    ownership_effect_name = OPERAND_OWNERSHIP_EFFECT_MAP[ownership_effect.kind]
+                    ownership_carrier_name = OWNERSHIP_CARRIER_MAP[ownership_effect.carrier]
+                if ownership_effect is None:
+                    lines.append(f"    {{{_bstring_expr(operand.name)}, {type_constraint}, {flags}}},")
+                else:
+                    lines.append(f"    {{{_bstring_expr(operand.name)}, {type_constraint}, {flags}, {ownership_effect_name}, {ownership_carrier_name}}},")
             if synthesize_func_args_operand:
                 lines.append(f"    {{{_bstring_expr(func_args_name)}, LOOM_TYPE_CONSTRAINT_ANY, LOOM_OPERAND_VARIADIC}},")
             lines.append("};")
 
         # Result descriptors.
         if op.results:
+            ownership_result_map = {effect.result: effect for effect in op.ownership_effects if isinstance(effect, ResultOwnershipEffect)}
             lines.append(f"static const loom_result_descriptor_t {prefix}_result_desc[] = {{")
             for result in op.results:
                 type_constraint = TYPE_CONSTRAINT_MAP[result.type_constraint]
@@ -3486,7 +3532,18 @@ def generate_tables_c(
                 if result.allocates:
                     flags_parts.append("LOOM_RESULT_ALLOCATES")
                 flags = " | ".join(flags_parts) if flags_parts else "0"
-                lines.append(f"    {{{_bstring_expr(result.name)}, {type_constraint}, {flags}}},")
+                result_ownership_effect = ownership_result_map.get(result.name)
+                source_operand_index = "LOOM_RESULT_OWNERSHIP_SOURCE_FIELD_NONE"
+                if result_ownership_effect is not None:
+                    ownership_effect_name = RESULT_OWNERSHIP_EFFECT_MAP[result_ownership_effect.kind]
+                    if result_ownership_effect.source is not None:
+                        source_operand_index = str(_resolve_ownership_source_operand_index(op, result_ownership_effect.source))
+                else:
+                    ownership_effect_name = "LOOM_RESULT_OWNERSHIP_NONE"
+                if result_ownership_effect is None:
+                    lines.append(f"    {{{_bstring_expr(result.name)}, {type_constraint}, {flags}}},")
+                else:
+                    lines.append(f"    {{{_bstring_expr(result.name)}, {type_constraint}, {flags}, {ownership_effect_name}, {source_operand_index}}},")
             lines.append("};")
 
         # Enum case name arrays. Generated C may expose an external enum alias,

@@ -34,10 +34,13 @@ from loom.dsl import (
     ATTR_TYPE_PREDICATE_LIST,
     ATTR_TYPE_SYMBOL,
     INTEGER,
+    POOL,
     SYMBOL_DEFINE,
+    AliasResult,
     AttrDef,
     AttrMatchesElementType,
     BitRangeWithinElementWidth,
+    Borrow,
     CallLikeInterface,
     ContractFamily,
     Dialect,
@@ -56,6 +59,8 @@ from loom.dsl import (
     PositiveBitWidthAttr,
     RegionDef,
     Result,
+    Retain,
+    RetainedResult,
     SameType,
     Successor,
     SymbolDefinition,
@@ -618,6 +623,35 @@ def test_generate_tables_preserves_operand_and_result_descriptor_names() -> None
     assert ('{_BSTRING(7, "results"), LOOM_TYPE_CONSTRAINT_INTEGER, LOOM_RESULT_VARIADIC}') in tables_c
 
 
+def test_generate_tables_emits_ownership_descriptors_only_when_needed() -> None:
+    op = Op(
+        "test.resource.retain",
+        group=Dialect("test"),
+        operands=[Operand("resource", POOL)],
+        results=[Result("result", POOL)],
+        ownership_effects=[
+            Retain("resource"),
+            RetainedResult("result"),
+        ],
+    )
+    alias = Op(
+        "test.resource.alias",
+        group=Dialect("test"),
+        operands=[Operand("resource", POOL)],
+        results=[Result("result", POOL)],
+        ownership_effects=[
+            Borrow("resource"),
+            AliasResult("result", "resource"),
+        ],
+    )
+
+    tables_c = generate_tables_c("test", 0, [op, alias])
+
+    assert ('{_BSTRING(8, "resource"), LOOM_TYPE_CONSTRAINT_POOL, 0, LOOM_OPERAND_OWNERSHIP_RETAIN, LOOM_OWNERSHIP_CARRIER_BY_VALUE}') in tables_c
+    assert ('{_BSTRING(6, "result"), LOOM_TYPE_CONSTRAINT_POOL, 0, LOOM_RESULT_OWNERSHIP_RETAINED, LOOM_RESULT_OWNERSHIP_SOURCE_FIELD_NONE}') in tables_c
+    assert ('{_BSTRING(6, "result"), LOOM_TYPE_CONSTRAINT_POOL, 0, LOOM_RESULT_OWNERSHIP_ALIAS, 0}') in tables_c
+
+
 def test_generate_tables_keeps_repeated_descriptor_names_local() -> None:
     dialect = Dialect("test")
     first = Op("test.first", group=dialect, results=[Result("result", INTEGER)])
@@ -626,7 +660,7 @@ def test_generate_tables_keeps_repeated_descriptor_names_local() -> None:
     tables_c = generate_tables_c("test", 0, [first, second])
 
     assert tables_c.count('_BSTRING(6, "result")') == 2
-    result_rows = [line.strip() for line in tables_c.splitlines() if "LOOM_TYPE_CONSTRAINT_INTEGER" in line and "LOOM_RESULT_" not in line]
+    result_rows = [line.strip() for line in tables_c.splitlines() if '_BSTRING(6, "result")' in line]
     assert len(result_rows) == 2
     assert result_rows[0] == result_rows[1]
 

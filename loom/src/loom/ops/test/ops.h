@@ -104,7 +104,17 @@ enum {
   LOOM_OP_TEST_TYPED_USE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 81),
   LOOM_OP_TEST_SHAPE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 82),
   LOOM_OP_TEST_TARGET = LOOM_OP_KIND(LOOM_DIALECT_TEST, 83),
-  LOOM_OP_TEST_COUNT_ = 84,
+  LOOM_OP_TEST_RESOURCE_ALLOC = LOOM_OP_KIND(LOOM_DIALECT_TEST, 84),
+  LOOM_OP_TEST_RESOURCE_BORROW = LOOM_OP_KIND(LOOM_DIALECT_TEST, 85),
+  LOOM_OP_TEST_RESOURCE_BORROW_REF = LOOM_OP_KIND(LOOM_DIALECT_TEST, 86),
+  LOOM_OP_TEST_RESOURCE_CONSUME = LOOM_OP_KIND(LOOM_DIALECT_TEST, 87),
+  LOOM_OP_TEST_RESOURCE_RETAIN = LOOM_OP_KIND(LOOM_DIALECT_TEST, 88),
+  LOOM_OP_TEST_RESOURCE_RELEASE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 89),
+  LOOM_OP_TEST_RESOURCE_DISCARD = LOOM_OP_KIND(LOOM_DIALECT_TEST, 90),
+  LOOM_OP_TEST_RESOURCE_ESCAPE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 91),
+  LOOM_OP_TEST_RESOURCE_ALIAS = LOOM_OP_KIND(LOOM_DIALECT_TEST, 92),
+  LOOM_OP_TEST_RESOURCE_BORROWED = LOOM_OP_KIND(LOOM_DIALECT_TEST, 93),
+  LOOM_OP_TEST_COUNT_ = 94,
 };
 
 // Function visibility. Absent (0) means private.
@@ -1617,6 +1627,114 @@ iree_status_t loom_test_target_build(
 iree_status_t loom_target_record_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_TEST_RESOURCE_ALLOC: Test owned-resource allocation.
+// %resource = test.resource.alloc %sz : index -> pool<[%BS]>
+LOOM_DEFINE_ISA(loom_test_resource_alloc_isa, LOOM_OP_TEST_RESOURCE_ALLOC)
+LOOM_DEFINE_OPERAND(loom_test_resource_alloc_size, 0)
+LOOM_DEFINE_RESULT(loom_test_resource_alloc_result, 0)
+iree_status_t loom_test_resource_alloc_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t size,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_TEST_RESOURCE_BORROW: Test borrowed use of an owned resource.
+// test.resource.borrow %resource : pool<[%BS]>
+LOOM_DEFINE_ISA(loom_test_resource_borrow_isa, LOOM_OP_TEST_RESOURCE_BORROW)
+LOOM_DEFINE_OPERAND(loom_test_resource_borrow_resource, 0)
+iree_status_t loom_test_resource_borrow_build(
+    loom_builder_t* builder,
+    loom_value_id_t resource,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_TEST_RESOURCE_BORROW_REF: Test borrowed by-reference use of an owned resource carrier.
+// test.resource.borrow_ref %resource : pool<[%BS]>
+LOOM_DEFINE_ISA(loom_test_resource_borrow_ref_isa, LOOM_OP_TEST_RESOURCE_BORROW_REF)
+LOOM_DEFINE_OPERAND(loom_test_resource_borrow_ref_resource, 0)
+iree_status_t loom_test_resource_borrow_ref_build(
+    loom_builder_t* builder,
+    loom_value_id_t resource,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_TEST_RESOURCE_CONSUME: Test consuming use of an owned resource.
+// test.resource.consume %resource : pool<[%BS]>
+LOOM_DEFINE_ISA(loom_test_resource_consume_isa, LOOM_OP_TEST_RESOURCE_CONSUME)
+LOOM_DEFINE_OPERAND(loom_test_resource_consume_resource, 0)
+iree_status_t loom_test_resource_consume_build(
+    loom_builder_t* builder,
+    loom_value_id_t resource,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_TEST_RESOURCE_RETAIN: Test retaining an additional owned reference to a resource.
+// %retained = test.resource.retain %resource : pool<[%BS]> -> pool<[%BS]>
+LOOM_DEFINE_ISA(loom_test_resource_retain_isa, LOOM_OP_TEST_RESOURCE_RETAIN)
+LOOM_DEFINE_OPERAND(loom_test_resource_retain_resource, 0)
+LOOM_DEFINE_RESULT(loom_test_resource_retain_result, 0)
+iree_status_t loom_test_resource_retain_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t resource,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_TEST_RESOURCE_RELEASE: Test releasing an owned resource.
+// test.resource.release %resource : pool<[%BS]>
+LOOM_DEFINE_ISA(loom_test_resource_release_isa, LOOM_OP_TEST_RESOURCE_RELEASE)
+LOOM_DEFINE_OPERAND(loom_test_resource_release_resource, 0)
+iree_status_t loom_test_resource_release_build(
+    loom_builder_t* builder,
+    loom_value_id_t resource,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_TEST_RESOURCE_DISCARD: Test discarding compiler ownership without releasing the resource.
+// test.resource.discard %resource : pool<[%BS]>
+LOOM_DEFINE_ISA(loom_test_resource_discard_isa, LOOM_OP_TEST_RESOURCE_DISCARD)
+LOOM_DEFINE_OPERAND(loom_test_resource_discard_resource, 0)
+iree_status_t loom_test_resource_discard_build(
+    loom_builder_t* builder,
+    loom_value_id_t resource,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_TEST_RESOURCE_ESCAPE: Test transferring a resource to an untracked owner.
+// test.resource.escape %resource : pool<[%BS]>
+LOOM_DEFINE_ISA(loom_test_resource_escape_isa, LOOM_OP_TEST_RESOURCE_ESCAPE)
+LOOM_DEFINE_OPERAND(loom_test_resource_escape_resource, 0)
+iree_status_t loom_test_resource_escape_build(
+    loom_builder_t* builder,
+    loom_value_id_t resource,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_TEST_RESOURCE_ALIAS: Test producing a borrowed alias of a resource.
+// %alias = test.resource.alias %resource : pool<[%BS]> -> pool<[%BS]>
+LOOM_DEFINE_ISA(loom_test_resource_alias_isa, LOOM_OP_TEST_RESOURCE_ALIAS)
+LOOM_DEFINE_OPERAND(loom_test_resource_alias_resource, 0)
+LOOM_DEFINE_RESULT(loom_test_resource_alias_result, 0)
+iree_status_t loom_test_resource_alias_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t resource,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_TEST_RESOURCE_BORROWED: Test materializing a borrowed resource result.
+// %borrowed = test.resource.borrowed %resource : pool<[%BS]> -> pool<[%BS]>
+LOOM_DEFINE_ISA(loom_test_resource_borrowed_isa, LOOM_OP_TEST_RESOURCE_BORROWED)
+LOOM_DEFINE_OPERAND(loom_test_resource_borrowed_resource, 0)
+LOOM_DEFINE_RESULT(loom_test_resource_borrowed_result, 0)
+iree_status_t loom_test_resource_borrowed_build(
+    loom_builder_t* builder,
+    loom_may_consume loom_value_id_t resource,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
 
 // Returns the vtable array for the test dialect.
 const loom_op_vtable_t* const* loom_test_dialect_vtables(

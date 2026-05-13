@@ -868,3 +868,79 @@ class TestBuilder(DialectBuilder):
         contract_feature_bits: int | None = ...,
         location_id: int | None = ...,
     ) -> None: ...
+    def resource_alloc(
+        self,
+        *,
+        size: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
+    ) -> ValueRef: ...
+    def borrow(
+        self,
+        *,
+        resource: ValueRef,
+        location_id: int | None = ...,
+    ) -> None: ...
+    def borrow_ref(
+        self,
+        *,
+        resource: ValueRef,
+        location_id: int | None = ...,
+    ) -> None: ...
+    def consume(
+        self,
+        *,
+        resource: ValueRef,
+        location_id: int | None = ...,
+    ) -> None: ...
+    def retain(
+        self,
+        *,
+        resource: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
+    ) -> ValueRef: ...
+    def release(
+        self,
+        *,
+        resource: ValueRef,
+        location_id: int | None = ...,
+    ) -> None: ...
+    def discard(
+        self,
+        *,
+        resource: ValueRef,
+        location_id: int | None = ...,
+    ) -> None: ...
+    def escape(
+        self,
+        *,
+        resource: ValueRef,
+        location_id: int | None = ...,
+    ) -> None: ...
+    def alias(
+        self,
+        *,
+        resource: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
+    ) -> ValueRef: ...
+    def borrowed(
+        self,
+        *,
+        resource: ValueRef,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
+    ) -> ValueRef: ...

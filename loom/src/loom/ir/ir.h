@@ -1263,6 +1263,9 @@ struct loom_op_vtable_t {
   const loom_op_placement_descriptor_t* placement;
 };
 
+static_assert(sizeof(loom_op_vtable_t) == 192,
+              "loom_op_vtable_t must be exactly three cache lines");
+
 static inline uint8_t loom_op_vtable_operand_descriptor_count(
     const loom_op_vtable_t* vtable) {
   if (vtable->operand_descriptor_count != 0) {

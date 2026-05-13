@@ -91,6 +91,38 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    ownership
+  HDRS
+    "ownership.h"
+  SRCS
+    "ownership.c"
+  DEPS
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    ownership_test
+  SRCS
+    "ownership_test.cc"
+  DEPS
+    ::ownership
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::test
+    loom::src::loom::testing::module_ptr
+    loom::src::loom::verify
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     kernel_async_legality
   HDRS
     "kernel_async_legality.h"

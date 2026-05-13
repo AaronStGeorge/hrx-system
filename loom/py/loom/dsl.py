@@ -148,6 +148,24 @@ __all__ = [
     "Reads",
     "Writes",
     "ReadWrites",
+    # Ownership effects.
+    "OwnershipCarrier",
+    "BY_VALUE",
+    "BY_REFERENCE",
+    "OperandOwnershipEffectKind",
+    "ResultOwnershipEffectKind",
+    "OperandOwnershipEffect",
+    "ResultOwnershipEffect",
+    "Borrow",
+    "Consume",
+    "Retain",
+    "Release",
+    "Discard",
+    "Escape",
+    "FreshResult",
+    "BorrowedResult",
+    "RetainedResult",
+    "AliasResult",
     # Constraints.
     "Constraint",
     "SameType",
@@ -1023,6 +1041,135 @@ def Writes(operand: str) -> Effect:
 def ReadWrites(operand: str) -> Effect:
     """Op performs an atomic read-modify-write on the named resource operand."""
     return Effect(operand, EffectKind.READWRITE)
+
+
+# ============================================================================
+# Ownership effects
+# ============================================================================
+
+
+@unique
+class OwnershipCarrier(Enum):
+    """How an operand carries a managed resource into an operation."""
+
+    BY_VALUE = "by_value"
+    BY_REFERENCE = "by_reference"
+
+
+BY_VALUE = OwnershipCarrier.BY_VALUE
+BY_REFERENCE = OwnershipCarrier.BY_REFERENCE
+
+
+@unique
+class OperandOwnershipEffectKind(Enum):
+    """Ownership action applied to an operand field."""
+
+    BORROW = "borrow"
+    CONSUME = "consume"
+    RETAIN = "retain"
+    RELEASE = "release"
+    DISCARD = "discard"
+    ESCAPE = "escape"
+
+
+@unique
+class ResultOwnershipEffectKind(Enum):
+    """Ownership action applied to a result field."""
+
+    FRESH = "fresh"
+    BORROWED = "borrowed"
+    RETAINED = "retained"
+    ALIAS = "alias"
+
+
+@dataclass(frozen=True, slots=True)
+class OperandOwnershipEffect:
+    """Declares an ownership action on an operand field.
+
+    operand: Name of the operand field.
+    kind: Ownership action applied to each value in the field.
+    carrier: Whether the field carries the resource by value or by reference.
+    """
+
+    operand: str
+    kind: OperandOwnershipEffectKind
+    carrier: OwnershipCarrier = BY_VALUE
+
+
+@dataclass(frozen=True, slots=True)
+class ResultOwnershipEffect:
+    """Declares an ownership action on a result field.
+
+    result: Name of the result field.
+    kind: Ownership action applied to each value in the field.
+    source: Operand field used by aliasing result effects.
+    """
+
+    result: str
+    kind: ResultOwnershipEffectKind
+    source: str | None = None
+
+
+def Borrow(
+    operand: str, carrier: OwnershipCarrier = BY_VALUE
+) -> OperandOwnershipEffect:
+    """Operand is observed without transferring ownership."""
+    return OperandOwnershipEffect(operand, OperandOwnershipEffectKind.BORROW, carrier)
+
+
+def Consume(
+    operand: str, carrier: OwnershipCarrier = BY_VALUE
+) -> OperandOwnershipEffect:
+    """Operand ownership transfers into the operation."""
+    return OperandOwnershipEffect(operand, OperandOwnershipEffectKind.CONSUME, carrier)
+
+
+def Retain(
+    operand: str, carrier: OwnershipCarrier = BY_VALUE
+) -> OperandOwnershipEffect:
+    """Operation retains the operand resource."""
+    return OperandOwnershipEffect(operand, OperandOwnershipEffectKind.RETAIN, carrier)
+
+
+def Release(
+    operand: str, carrier: OwnershipCarrier = BY_VALUE
+) -> OperandOwnershipEffect:
+    """Operation releases one owned reference to the operand resource."""
+    return OperandOwnershipEffect(operand, OperandOwnershipEffectKind.RELEASE, carrier)
+
+
+def Discard(
+    operand: str, carrier: OwnershipCarrier = BY_VALUE
+) -> OperandOwnershipEffect:
+    """Operation drops compiler ownership without emitting a release."""
+    return OperandOwnershipEffect(operand, OperandOwnershipEffectKind.DISCARD, carrier)
+
+
+def Escape(
+    operand: str, carrier: OwnershipCarrier = BY_VALUE
+) -> OperandOwnershipEffect:
+    """Operand resource escapes to an untracked owner."""
+    return OperandOwnershipEffect(operand, OperandOwnershipEffectKind.ESCAPE, carrier)
+
+
+def FreshResult(result: str) -> ResultOwnershipEffect:
+    """Result creates a fresh owned resource."""
+    return ResultOwnershipEffect(result, ResultOwnershipEffectKind.FRESH)
+
+
+def BorrowedResult(result: str) -> ResultOwnershipEffect:
+    """Result borrows a resource owned elsewhere."""
+    return ResultOwnershipEffect(result, ResultOwnershipEffectKind.BORROWED)
+
+
+def RetainedResult(result: str) -> ResultOwnershipEffect:
+    """Result is an owned retained reference to an existing resource."""
+    return ResultOwnershipEffect(result, ResultOwnershipEffectKind.RETAINED)
+
+
+def AliasResult(result: str, source: str) -> ResultOwnershipEffect:
+    """Result aliases an operand resource without consuming it."""
+    return ResultOwnershipEffect(result, ResultOwnershipEffectKind.ALIAS, source)
 
 
 # Type constraints that represent mutable resources (as opposed to
@@ -2820,6 +2967,82 @@ def _validate_effects(
             )
 
 
+def _validate_ownership_effects(
+    op_name: str,
+    ownership_effects: tuple[OperandOwnershipEffect | ResultOwnershipEffect, ...],
+    operands: tuple[Operand, ...],
+    results: tuple[Result | TiedResult, ...],
+    traits: tuple[Trait, ...],
+) -> None:
+    """Validate ownership effect declarations against operands and results."""
+    trait_names = {t.name for t in traits}
+    if "Pure" in trait_names:
+        raise ValueError(
+            f"Op '{op_name}': declares both traits=[PURE] and ownership "
+            f"effects. Ownership transfer is semantic and cannot be pure."
+        )
+
+    operand_map = {o.name: o for o in operands}
+    result_map = {r.name: r for r in results}
+    operand_effects: set[str] = set()
+    result_effects: set[str] = set()
+
+    for effect in ownership_effects:
+        if isinstance(effect, OperandOwnershipEffect):
+            if effect.operand in operand_effects:
+                raise ValueError(
+                    f"Op '{op_name}': duplicate ownership effect for operand "
+                    f"'{effect.operand}'."
+                )
+            operand_effects.add(effect.operand)
+            if effect.operand not in operand_map:
+                raise ValueError(
+                    f"Op '{op_name}': ownership effect references operand "
+                    f"'{effect.operand}' which is not declared. "
+                    f"Declared operands: {sorted(operand_map.keys())}"
+                )
+            continue
+
+        if effect.result in result_effects:
+            raise ValueError(
+                f"Op '{op_name}': duplicate ownership effect for result "
+                f"'{effect.result}'."
+            )
+        result_effects.add(effect.result)
+        if effect.result not in result_map:
+            raise ValueError(
+                f"Op '{op_name}': ownership effect references result "
+                f"'{effect.result}' which is not declared. "
+                f"Declared results: {sorted(result_map.keys())}"
+            )
+        if effect.kind == ResultOwnershipEffectKind.ALIAS:
+            if effect.source is None:
+                raise ValueError(
+                    f"Op '{op_name}': alias result ownership effect for "
+                    f"'{effect.result}' must name a source operand."
+                )
+            if effect.source not in operand_map:
+                raise ValueError(
+                    f"Op '{op_name}': alias result ownership effect for "
+                    f"'{effect.result}' references operand '{effect.source}' "
+                    f"which is not declared. Declared operands: "
+                    f"{sorted(operand_map.keys())}"
+                )
+            source_operand = operand_map[effect.source]
+            result = result_map[effect.result]
+            if source_operand.variadic or result.variadic:
+                raise ValueError(
+                    f"Op '{op_name}': alias result ownership effect for "
+                    f"'{effect.result}' must use fixed operand/result fields."
+                )
+        elif effect.source is not None:
+            raise ValueError(
+                f"Op '{op_name}': ownership effect for result "
+                f"'{effect.result}' may not name a source operand unless it "
+                f"is an alias effect."
+            )
+
+
 def _validate_no_effect_conflicts(
     op_name: str,
     traits: tuple[Trait, ...],
@@ -3261,6 +3484,7 @@ class Op:
     regions: List of RegionDef descriptors.
     constraints: List of Constraint instances.
     traits: List of Trait instances.
+    ownership_effects: Ownership actions on operand/result fields.
     symbol_def: Symbol definition descriptor for SYMBOL_DEFINE ops.
     format: Format element list describing textual assembly.
     examples: List of example IR strings for documentation.
@@ -3284,6 +3508,7 @@ class Op:
     constraints: tuple[Constraint, ...] = ()
     traits: tuple[Trait, ...] = ()
     effects: tuple[Effect, ...] = ()
+    ownership_effects: tuple[OperandOwnershipEffect | ResultOwnershipEffect, ...] = ()
     canonicalize: str = ""  # C function name for canonicalization, or "".
     effective_traits: str = (
         ""  # C function name for per-instance trait computation, or "".
@@ -3317,6 +3542,8 @@ class Op:
         constraints: list[Constraint] | tuple[Constraint, ...] = (),
         traits: list[Trait] | tuple[Trait, ...] = (),
         effects: list[Effect] | tuple[Effect, ...] = (),
+        ownership_effects: list[OperandOwnershipEffect | ResultOwnershipEffect]
+        | tuple[OperandOwnershipEffect | ResultOwnershipEffect, ...] = (),
         canonicalize: str = "",
         effective_traits: str = "",
         facts: str = "",
@@ -3341,6 +3568,7 @@ class Op:
         frozen_successors = tuple(successors)
         frozen_regions = tuple(regions)
         frozen_effects = tuple(effects)
+        frozen_ownership_effects = tuple(ownership_effects)
         frozen_format = tuple(format)
         object.__setattr__(self, "operands", frozen_operands)
         object.__setattr__(self, "results", frozen_results)
@@ -3351,6 +3579,7 @@ class Op:
         object.__setattr__(self, "constraints", tuple(constraints))
         object.__setattr__(self, "traits", tuple(traits))
         object.__setattr__(self, "effects", frozen_effects)
+        object.__setattr__(self, "ownership_effects", frozen_ownership_effects)
         object.__setattr__(self, "canonicalize", canonicalize)
         object.__setattr__(self, "effective_traits", effective_traits)
         object.__setattr__(self, "facts", facts)
@@ -3422,6 +3651,14 @@ class Op:
             _validate_effects(name, frozen_effects, frozen_operands, tuple(traits))
         else:
             _validate_no_effect_conflicts(name, tuple(traits))
+        if frozen_ownership_effects:
+            _validate_ownership_effects(
+                name,
+                frozen_ownership_effects,
+                frozen_operands,
+                frozen_results,
+                tuple(traits),
+            )
         _validate_trait_field_contracts(
             name, frozen_operands, frozen_results, tuple(traits)
         )
@@ -3511,12 +3748,14 @@ class Op:
         """True if the op has no memory effects and is deterministic.
 
         An op is pure if it explicitly declares traits=[PURE], or if it
-        has no effects, no ALLOCATES results, and no HINT,
+        has no effects, no ownership effects, no ALLOCATES results, and no HINT,
         NON_DETERMINISTIC, UNKNOWN_EFFECTS, or UNIQUE_IDENTITY traits.
         """
         if self.has_trait("Pure"):
             return True
         if self.effects:
+            return False
+        if self.ownership_effects:
             return False
         if any(r.allocates for r in self.results):
             return False

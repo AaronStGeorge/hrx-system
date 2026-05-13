@@ -668,6 +668,57 @@ static_assert(sizeof(loom_constraint_t) == 10,
 // Field descriptors
 //===----------------------------------------------------------------------===//
 
+// How an operand carries a managed resource into an operation.
+enum loom_ownership_carrier_e {
+  // Operand has no ownership contract.
+  LOOM_OWNERSHIP_CARRIER_NONE = 0,
+  // Operand carries the resource handle value itself.
+  LOOM_OWNERSHIP_CARRIER_BY_VALUE = 1,
+  // Operand carries an addressable slot or object that may contain a resource.
+  LOOM_OWNERSHIP_CARRIER_BY_REFERENCE = 2,
+};
+typedef uint8_t loom_ownership_carrier_t;
+
+// Ownership action applied to an operand field.
+enum loom_operand_ownership_effect_e {
+  // Operand has no ownership action.
+  LOOM_OPERAND_OWNERSHIP_NONE = 0,
+  // Operand is observed without transferring ownership.
+  LOOM_OPERAND_OWNERSHIP_BORROW = 1,
+  // Operand ownership transfers into the operation.
+  LOOM_OPERAND_OWNERSHIP_CONSUME = 2,
+  // Operation retains the operand resource.
+  LOOM_OPERAND_OWNERSHIP_RETAIN = 3,
+  // Operation releases one owned reference to the operand resource.
+  LOOM_OPERAND_OWNERSHIP_RELEASE = 4,
+  // Operation drops compiler ownership without emitting a release.
+  LOOM_OPERAND_OWNERSHIP_DISCARD = 5,
+  // Operand resource escapes to an untracked owner.
+  LOOM_OPERAND_OWNERSHIP_ESCAPE = 6,
+};
+typedef uint8_t loom_operand_ownership_effect_t;
+
+// Ownership action applied to a result field.
+enum loom_result_ownership_effect_e {
+  // Result has no ownership action.
+  LOOM_RESULT_OWNERSHIP_NONE = 0,
+  // Result creates a fresh owned resource.
+  LOOM_RESULT_OWNERSHIP_FRESH = 1,
+  // Result borrows a resource owned elsewhere.
+  LOOM_RESULT_OWNERSHIP_BORROWED = 2,
+  // Result is an owned retained reference to an existing resource.
+  LOOM_RESULT_OWNERSHIP_RETAINED = 3,
+  // Result aliases an operand resource without consuming it.
+  LOOM_RESULT_OWNERSHIP_ALIAS = 4,
+  // Result receives ownership from a tied operand.
+  LOOM_RESULT_OWNERSHIP_TIED = 5,
+};
+typedef uint8_t loom_result_ownership_effect_t;
+
+#define LOOM_RESULT_OWNERSHIP_SOURCE_FIELD_NONE UINT8_MAX
+
+#define LOOM_OWNERSHIP_SOURCE_OPERAND_NONE UINT16_MAX
+
 enum loom_operand_flag_bits_e {
   LOOM_OPERAND_VARIADIC = 1u << 0,
   LOOM_OPERAND_OPTIONAL = 1u << 1,
@@ -718,7 +769,14 @@ typedef struct loom_operand_descriptor_t {
   loom_type_constraint_t type_constraint;
   // Operand representation, effect, and variadic flags.
   loom_operand_flags_t flags;
+  // Ownership action applied to each value in this operand field.
+  loom_operand_ownership_effect_t ownership_effect;
+  // Carrier mode for the operand ownership action.
+  loom_ownership_carrier_t ownership_carrier;
 } loom_operand_descriptor_t;
+
+static_assert(sizeof(loom_operand_descriptor_t) == 16,
+              "loom_operand_descriptor_t must be 16 bytes");
 
 // Per-result metadata in the op vtable.
 typedef struct loom_result_descriptor_t {
@@ -728,7 +786,14 @@ typedef struct loom_result_descriptor_t {
   loom_type_constraint_t type_constraint;
   // Result representation and variadic flags.
   loom_result_flags_t flags;
+  // Ownership action applied to each value in this result field.
+  loom_result_ownership_effect_t ownership_effect;
+  // Source operand field index for aliasing result effects.
+  uint8_t ownership_source_operand_index;
 } loom_result_descriptor_t;
+
+static_assert(sizeof(loom_result_descriptor_t) == 16,
+              "loom_result_descriptor_t must be 16 bytes");
 
 typedef uint32_t loom_symbol_interface_flags_t;
 
