@@ -394,6 +394,9 @@ typedef struct loom_low_lower_policy_t {
   // Optionally emits conditional branches that need target-specific structural
   // control packets instead of plain low.cond_br.
   loom_low_lower_emit_cond_branch_callback_t emit_cond_branch;
+  // Low declaration import kind for target-bound source imports, or zero when
+  // this policy does not lower import declarations.
+  loom_low_func_decl_import_kind_t import_decl_kind;
   // Optional table-driven source-op lowering rule sets in selection order. Rule
   // sets may overlap; the first matching rule wins and failed diagnostics use
   // the most-specific rejected candidate.
@@ -526,6 +529,16 @@ iree_status_t loom_low_lower_function(loom_module_t* module,
                                       loom_func_like_t source_function,
                                       const loom_low_lower_options_t* options,
                                       loom_low_lower_result_t* out_result);
+
+// Lowers one target-bound external function declaration into a low.func.decl.
+//
+// The emitted low declaration preserves the source symbol identity, maps the
+// source signature through |options->policy|, and records the policy import
+// kind plus the resolved import symbol as the low code symbol.
+iree_status_t loom_low_lower_import_declaration(
+    loom_module_t* module, loom_func_like_t source_declaration,
+    const loom_low_lower_options_t* options,
+    loom_low_lower_result_t* out_result);
 
 // Returns the module being mutated by the current lowering.
 loom_module_t* loom_low_lower_context_module(loom_low_lower_context_t* context);

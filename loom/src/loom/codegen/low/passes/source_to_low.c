@@ -44,12 +44,15 @@ enum {
   LOOM_LOW_SOURCE_TO_LOW_STAT_ERRORS = 0,
   LOOM_LOW_SOURCE_TO_LOW_STAT_FUNCTIONS = 1,
   LOOM_LOW_SOURCE_TO_LOW_STAT_REMARKS = 2,
+  LOOM_LOW_SOURCE_TO_LOW_STAT_DECLARATIONS = 3,
 };
 
 static const loom_pass_statistic_def_t kLowSourceToLowStatistics[] = {
     {IREE_SVL("errors"), IREE_SVL("Number of lowering errors emitted.")},
     {IREE_SVL("functions"), IREE_SVL("Number of source funcs lowered.")},
     {IREE_SVL("remarks"), IREE_SVL("Number of lowering remarks emitted.")},
+    {IREE_SVL("declarations"),
+     IREE_SVL("Number of source import declarations lowered.")},
 };
 
 static const loom_pass_info_t loom_low_source_to_low_pass_info_storage = {
@@ -190,12 +193,51 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
       .diagnostic_emitter = pass->diagnostic_emitter,
       .lowering_kind = IREE_SV("source-to-low"),
   };
-  iree_status_t status = loom_low_select_source_funcs(
+  iree_status_t status = loom_low_select_source_symbols(
       module, &selection_options, &selection_arena, &selection_list);
+  bool emitted_error_diagnostics = false;
+  uint32_t declaration_count = 0;
+  for (iree_host_size_t i = 0;
+       i < selection_list.count && iree_status_is_ok(status) &&
+       !emitted_error_diagnostics;
+       ++i) {
+    const loom_low_source_selection_t* selection = &selection_list.values[i];
+    if (selection->kind != LOOM_LOW_SOURCE_SELECTION_IMPORT_DECL) {
+      continue;
+    }
+    const loom_low_lower_options_t lower_options = {
+        .target_ref = selection->target_ref,
+        .bundle = selection->target_bundle,
+        .descriptor_registry = descriptor_registry,
+        .policy = selection->policy,
+        .emitter = pass->diagnostic_emitter,
+        .max_errors = state ? state->max_errors : 20,
+    };
+    loom_low_lower_result_t lower_result = {0};
+    status = loom_low_lower_import_declaration(module, selection->func,
+                                               &lower_options, &lower_result);
+    loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_ERRORS,
+                            lower_result.error_count);
+    loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_REMARKS,
+                            lower_result.remark_count);
+    if (iree_status_is_ok(status) && lower_result.error_count > 0) {
+      emitted_error_diagnostics = true;
+      break;
+    }
+    if (iree_status_is_ok(status)) {
+      IREE_ASSERT(lower_result.low_func_op != NULL);
+      ++declaration_count;
+    }
+  }
   uint32_t function_count = 0;
   for (iree_host_size_t i = 0;
-       i < selection_list.count && iree_status_is_ok(status); ++i) {
+       i < selection_list.count && iree_status_is_ok(status) &&
+       !emitted_error_diagnostics;
+       ++i) {
     const loom_low_source_selection_t* selection = &selection_list.values[i];
+    if (selection->kind != LOOM_LOW_SOURCE_SELECTION_FUNCTION) {
+      continue;
+    }
     const loom_target_low_legality_provider_list_t* legality_provider_list =
         loom_low_pass_capability_legality_provider_list(low_capability);
     loom_value_fact_table_t* fact_table = NULL;
@@ -229,6 +271,7 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
     loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_REMARKS,
                             lower_result.remark_count);
     if (iree_status_is_ok(status) && lower_result.error_count > 0) {
+      emitted_error_diagnostics = true;
       break;
     }
     if (iree_status_is_ok(status)) {
@@ -239,9 +282,11 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
   iree_arena_deinitialize(&selection_arena);
   IREE_RETURN_IF_ERROR(status);
 
+  loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_DECLARATIONS,
+                          declaration_count);
   loom_pass_statistic_add(pass, LOOM_LOW_SOURCE_TO_LOW_STAT_FUNCTIONS,
                           function_count);
-  if (function_count > 0) {
+  if (declaration_count + function_count > 0) {
     loom_pass_mark_changed(pass);
   }
   return iree_ok_status();

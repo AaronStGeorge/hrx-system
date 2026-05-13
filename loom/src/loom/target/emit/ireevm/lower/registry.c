@@ -50,6 +50,7 @@ static const loom_low_lower_policy_t kIreeVmLowLowerPolicy = {
     .name = IREE_SVL("iree-vm-lower"),
     .error_catalog = &loom_error_catalog_core,
     .map_type = {.fn = loom_ireevm_map_type, .user_data = NULL},
+    .import_decl_kind = LOOM_LOW_FUNC_DECL_IMPORT_KIND_VM,
     .rule_sets =
         {
             .count = IREE_ARRAYSIZE(kIreeVmRuleSets),

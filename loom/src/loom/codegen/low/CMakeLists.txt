@@ -458,6 +458,7 @@ loom_cc_library(
     loom::src::loom::ops::target
     loom::src::loom::ops::vector
     loom::src::loom::target::contract
+    loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::low_legality
     loom::src::loom::target::types
     loom::src::loom::util::fact_table

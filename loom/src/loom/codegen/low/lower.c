@@ -26,6 +26,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/target/low_descriptor_registry.h"
 
 typedef struct loom_low_lower_descriptor_matrix_plan_t {
   // Shared source adapter used by this matrix descriptor plan.
@@ -314,6 +315,7 @@ static bool loom_low_lower_op_is_structural(const loom_module_t* module,
     case LOOM_OP_BUFFER_ASSUME_SAME_ROOT:
     case LOOM_OP_CFG_BR:
     case LOOM_OP_CFG_COND_BR:
+    case LOOM_OP_FUNC_CALL:
     case LOOM_OP_FUNC_RETURN:
     case LOOM_OP_KERNEL_RETURN:
       return true;
@@ -513,6 +515,10 @@ static void loom_low_lower_mark_structural_storage_demands(
     case LOOM_OP_BUFFER_ASSUME_SAME_ROOT:
       loom_low_lower_mark_value_storage_required(
           context, loom_buffer_assume_same_root_buffer(source_op));
+      return;
+    case LOOM_OP_FUNC_CALL:
+      loom_low_lower_mark_value_slice_storage_required(
+          context, loom_func_call_operands(source_op));
       return;
     case LOOM_OP_FUNC_RETURN:
       loom_low_lower_mark_value_slice_storage_required(
@@ -1342,6 +1348,189 @@ static iree_status_t loom_low_lower_create_function_op(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_lower_map_decl_signature_types(
+    loom_low_lower_context_t* context, loom_type_t** out_arg_types,
+    iree_host_size_t* out_arg_count, loom_type_t** out_result_types,
+    iree_host_size_t* out_result_count) {
+  *out_arg_types = NULL;
+  *out_arg_count = 0;
+  *out_result_types = NULL;
+  *out_result_count = 0;
+
+  uint16_t argument_count = 0;
+  const loom_value_id_t* argument_ids =
+      loom_func_like_arg_ids(context->source_function, &argument_count);
+  loom_type_t* arg_types = NULL;
+  if (argument_count != 0) {
+    IREE_RETURN_IF_ERROR(
+        iree_arena_allocate_array(&context->arena, argument_count,
+                                  sizeof(*arg_types), (void**)&arg_types));
+    for (uint16_t i = 0; i < argument_count; ++i) {
+      IREE_RETURN_IF_ERROR(loom_low_lower_check_mapped_value(
+          context, context->source_function.op, argument_ids[i],
+          &arg_types[i]));
+    }
+  }
+
+  const uint16_t result_count = context->source_function.op->result_count;
+  loom_type_t* result_types = NULL;
+  if (result_count != 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        &context->arena, result_count, sizeof(*result_types),
+        (void**)&result_types));
+    const loom_value_id_t* result_ids =
+        loom_op_const_results(context->source_function.op);
+    for (uint16_t i = 0; i < result_count; ++i) {
+      IREE_RETURN_IF_ERROR(loom_low_lower_check_mapped_value(
+          context, context->source_function.op, result_ids[i],
+          &result_types[i]));
+    }
+  }
+
+  *out_arg_types = arg_types;
+  *out_arg_count = argument_count;
+  *out_result_types = result_types;
+  *out_result_count = result_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_lower_copy_decl_signature_names(
+    loom_low_lower_context_t* context) {
+  uint16_t argument_count = 0;
+  const loom_value_id_t* source_arguments =
+      loom_func_like_arg_ids(context->source_function, &argument_count);
+  const loom_value_id_t* low_arguments =
+      loom_op_const_operands(context->low_func_op);
+  for (uint16_t i = 0; i < argument_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_lower_copy_value_name(
+        context, source_arguments[i], low_arguments[i]));
+  }
+
+  const loom_value_id_t* source_results =
+      loom_op_const_results(context->source_function.op);
+  const loom_value_id_t* low_results =
+      loom_op_const_results(context->low_func_op);
+  for (uint16_t i = 0; i < context->source_function.op->result_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_lower_copy_value_name(
+        context, source_results[i], low_results[i]));
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_lower_import_declaration(
+    loom_module_t* module, loom_func_like_t source_declaration,
+    const loom_low_lower_options_t* options,
+    loom_low_lower_result_t* out_result) {
+  IREE_ASSERT(out_result != NULL);
+  IREE_ASSERT(loom_func_like_isa(source_declaration));
+  IREE_ASSERT(options != NULL);
+  IREE_ASSERT(options->policy != NULL);
+  IREE_ASSERT_NE(options->policy->import_decl_kind, 0);
+  *out_result = (loom_low_lower_result_t){
+      .low_func_ref = loom_symbol_ref_null(),
+  };
+
+  const loom_symbol_ref_t low_func_ref =
+      loom_func_like_callee(source_declaration);
+  IREE_ASSERT(loom_symbol_ref_is_valid(low_func_ref));
+  IREE_ASSERT_EQ(low_func_ref.module_id, 0);
+  IREE_ASSERT_LT(low_func_ref.symbol_id, module->symbols.count);
+
+  const loom_low_descriptor_set_t* descriptor_set = NULL;
+  IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
+      options->descriptor_registry, options->bundle, &descriptor_set));
+
+  loom_low_lower_context_t context = {
+      .module = module,
+      .source_function = source_declaration,
+      .options = options,
+      .policy = options->policy,
+      .descriptor_set = descriptor_set,
+      .result = out_result,
+  };
+  out_result->descriptor_set = descriptor_set;
+  iree_arena_initialize(module->arena.block_pool, &context.arena);
+
+  loom_type_t* arg_types = NULL;
+  iree_host_size_t arg_count = 0;
+  loom_type_t* result_types = NULL;
+  iree_host_size_t result_count = 0;
+  iree_status_t status = loom_low_lower_map_decl_signature_types(
+      &context, &arg_types, &arg_count, &result_types, &result_count);
+  if (iree_status_is_ok(status) && out_result->error_count == 0) {
+    loom_string_id_t code_symbol =
+        loom_func_like_import_symbol(source_declaration);
+    if (code_symbol == LOOM_STRING_ID_INVALID) {
+      code_symbol = module->symbols.entries[low_func_ref.symbol_id].name_id;
+    }
+    IREE_ASSERT_NE(code_symbol, LOOM_STRING_ID_INVALID);
+    IREE_ASSERT_LT(code_symbol, module->strings.count);
+    loom_low_func_decl_build_flags_t build_flags =
+        LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_IMPORT_KIND |
+        LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_CODE_SYMBOL;
+    const uint8_t visibility = loom_func_like_visibility(source_declaration);
+    const uint8_t cc = loom_func_like_cc(source_declaration);
+    const uint8_t purity = loom_func_like_purity(source_declaration);
+    const bool has_abi = loom_low_lower_function_attr_present(
+        source_declaration, source_declaration.vtable->abi_attr_index);
+    const loom_target_abi_kind_t abi =
+        (loom_target_abi_kind_t)loom_func_like_abi(source_declaration);
+    loom_named_attr_slice_t abi_attrs =
+        loom_func_like_abi_attrs(source_declaration);
+    loom_string_id_t export_symbol =
+        loom_func_like_export_symbol(source_declaration);
+    loom_named_attr_slice_t export_attrs =
+        loom_func_like_export_attrs(source_declaration);
+    if (visibility != 0) {
+      build_flags |= LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_VISIBILITY;
+    }
+    if (cc != 0) {
+      build_flags |= LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_CC;
+    }
+    if (purity != 0) {
+      build_flags |= LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_PURITY;
+    }
+    if (has_abi) {
+      build_flags |= LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_ABI;
+    }
+    if (export_symbol != LOOM_STRING_ID_INVALID) {
+      build_flags |= LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_EXPORT_SYMBOL;
+    }
+
+    uint16_t predicate_count = 0;
+    const loom_predicate_t* predicates =
+        loom_func_like_predicates(source_declaration, &predicate_count);
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &context.builder);
+    loom_builder_set_before(&context.builder, source_declaration.op);
+    status = loom_low_func_decl_build(
+        &context.builder, build_flags, visibility, cc, purity,
+        /*allocation=*/0, /*schedule=*/0,
+        (uint8_t)options->policy->import_decl_kind, code_symbol,
+        options->target_ref, abi, abi_attrs, export_symbol, export_attrs,
+        low_func_ref, arg_types, arg_count, result_types, result_count,
+        /*tied_results=*/NULL, /*tied_result_count=*/0, predicates,
+        predicate_count, source_declaration.op->location, &context.low_func_op);
+  }
+
+  if (iree_status_is_ok(status) && out_result->error_count == 0) {
+    status = loom_low_lower_copy_decl_signature_names(&context);
+  }
+  if (iree_status_is_ok(status) && out_result->error_count == 0) {
+    out_result->low_func_op = context.low_func_op;
+    out_result->low_func_ref = low_func_ref;
+    status = loom_op_erase(module, source_declaration.op);
+  }
+  if (iree_status_is_ok(status) && out_result->error_count == 0) {
+    loom_module_link_symbol_defining_op(
+        module, context.low_func_op,
+        loom_op_vtable(module, context.low_func_op));
+  }
+
+  iree_arena_deinitialize(&context.arena);
+  return status;
+}
+
 static iree_status_t loom_low_lower_map_blocks(
     loom_low_lower_context_t* context, loom_region_t* source_body) {
   loom_region_t* low_body = loom_low_lower_low_body(context);
@@ -1574,6 +1763,49 @@ static iree_status_t loom_low_lower_structural_op(
       loom_op_t* low_return_op = NULL;
       return loom_low_return_build(&context->builder, low_values, values.count,
                                    source_op->location, &low_return_op);
+    }
+    case LOOM_OP_FUNC_CALL: {
+      loom_value_slice_t operands = loom_func_call_operands(source_op);
+      loom_value_id_t* low_operands = NULL;
+      IREE_RETURN_IF_ERROR(loom_low_lower_remap_values(
+          context, operands.values, operands.count, &low_operands));
+
+      const loom_value_id_t* source_results = loom_op_const_results(source_op);
+      loom_type_t* result_types = NULL;
+      bool has_unmapped_result = false;
+      if (source_op->result_count != 0) {
+        IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+            &context->arena, source_op->result_count, sizeof(*result_types),
+            (void**)&result_types));
+        for (uint16_t i = 0; i < source_op->result_count; ++i) {
+          IREE_RETURN_IF_ERROR(loom_low_lower_check_mapped_value(
+              context, source_op, source_results[i], &result_types[i]));
+          has_unmapped_result |= loom_low_lower_type_is_none(result_types[i]);
+        }
+      }
+      if (has_unmapped_result) {
+        return iree_ok_status();
+      }
+
+      loom_low_func_call_build_flags_t build_flags = 0;
+      uint8_t purity = loom_func_call_purity(source_op);
+      if (purity != 0) {
+        build_flags |= LOOM_LOW_FUNC_CALL_BUILD_FLAG_HAS_PURITY;
+      }
+      loom_op_t* low_call_op = NULL;
+      IREE_RETURN_IF_ERROR(loom_low_func_call_build(
+          &context->builder, build_flags, purity,
+          loom_func_call_callee(source_op), low_operands, operands.count,
+          result_types, source_op->result_count,
+          /*tied_results=*/NULL, /*tied_result_count=*/0, source_op->location,
+          &low_call_op));
+
+      const loom_value_id_t* low_results = loom_op_const_results(low_call_op);
+      for (uint16_t i = 0; i < source_op->result_count; ++i) {
+        IREE_RETURN_IF_ERROR(loom_low_lower_bind_value(
+            context, source_results[i], low_results[i]));
+      }
+      return iree_ok_status();
     }
     case LOOM_OP_KERNEL_RETURN: {
       loom_op_t* low_return_op = NULL;

@@ -21,7 +21,6 @@
 #include "loom/codegen/low/lower.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
-#include "loom/ops/func_symbol_facts.h"
 #include "loom/target/types.h"
 
 #ifdef __cplusplus
@@ -40,12 +39,19 @@ typedef struct loom_low_source_selection_options_t {
   iree_string_view_t lowering_kind;
 } loom_low_source_selection_options_t;
 
-typedef struct loom_low_source_selection_t {
-  // Source func selected for lowering.
-  loom_func_like_t func;
+typedef enum loom_low_source_selection_kind_e {
+  // Target-bound function body selected for source-to-low lowering.
+  LOOM_LOW_SOURCE_SELECTION_FUNCTION = 1,
+  // Target-bound external declaration selected for low import declaration.
+  LOOM_LOW_SOURCE_SELECTION_IMPORT_DECL = 2,
+} loom_low_source_selection_kind_t;
 
-  // Dense func facts backing |func|.
-  const loom_func_symbol_facts_t* func_facts;
+typedef struct loom_low_source_selection_t {
+  // Selected source symbol category.
+  loom_low_source_selection_kind_t kind;
+
+  // Source func-like op selected for lowering.
+  loom_func_like_t func;
 
   // Module-local target record symbol referenced by |func|.
   loom_symbol_ref_t target_ref;
@@ -61,18 +67,30 @@ typedef struct loom_low_source_selection_t {
 } loom_low_source_selection_t;
 
 typedef struct loom_low_source_selection_list_t {
-  // Source funcs selected for lowering.
+  // Source func-like symbols selected for lowering.
   loom_low_source_selection_t* values;
 
-  // Number of source func selections in |values|.
+  // Number of source selections in |values|.
   iree_host_size_t count;
 } loom_low_source_selection_list_t;
 
+// Selects all source funcs and import declarations compatible with the injected
+// target-low registries.
+//
+// The returned selection array is allocated from |arena| and remains valid for
+// the arena lifetime. A module with no compatible symbols succeeds with an
+// empty list so module passes can be no-ops.
+iree_status_t loom_low_select_source_symbols(
+    const loom_module_t* module,
+    const loom_low_source_selection_options_t* options,
+    iree_arena_allocator_t* arena,
+    loom_low_source_selection_list_t* out_selection_list);
+
 // Selects all source funcs compatible with the injected target-low registries.
 //
-// Fact payloads and the returned selection array are allocated from |arena| and
-// remain valid for the arena lifetime. A module with no compatible funcs
-// succeeds with an empty list so module passes can be no-ops.
+// The returned selection array is allocated from |arena| and remains valid for
+// the arena lifetime. A module with no compatible funcs succeeds with an empty
+// list so module passes can be no-ops.
 iree_status_t loom_low_select_source_funcs(
     const loom_module_t* module,
     const loom_low_source_selection_options_t* options,

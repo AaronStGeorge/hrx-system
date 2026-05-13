@@ -10,6 +10,7 @@
 
 #include "loom/analysis/symbol_facts.h"
 #include "loom/ir/module.h"
+#include "loom/ops/func_symbol_facts.h"
 #include "loom/ops/target/facts.h"
 #include "loom/target/function_contract.h"
 
@@ -24,16 +25,39 @@ static iree_status_t loom_low_source_selection_lookup_func_facts(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_source_selection_try_func(
+typedef uint8_t loom_low_source_selection_filter_t;
+
+#define LOOM_LOW_SOURCE_SELECTION_FILTER_FUNCTION ((uint8_t)1u << 0)
+#define LOOM_LOW_SOURCE_SELECTION_FILTER_IMPORT_DECL ((uint8_t)1u << 1)
+
+static iree_status_t loom_low_source_selection_try_symbol(
     const loom_module_t* module,
     const loom_low_source_selection_options_t* options,
-    loom_symbol_fact_table_t* fact_table, loom_symbol_id_t symbol_id,
+    loom_symbol_fact_table_t* fact_table,
+    loom_low_source_selection_filter_t filter, loom_symbol_id_t symbol_id,
     bool* out_compatible, loom_low_source_selection_t* out_selection) {
   *out_compatible = false;
   const loom_func_symbol_facts_t* func_facts = NULL;
   IREE_RETURN_IF_ERROR(loom_low_source_selection_lookup_func_facts(
       module, fact_table, symbol_id, &func_facts));
-  if (!func_facts || !func_facts->has_body) {
+  if (!func_facts) {
+    return iree_ok_status();
+  }
+  loom_low_source_selection_kind_t kind = 0;
+  if (func_facts->has_body) {
+    kind = LOOM_LOW_SOURCE_SELECTION_FUNCTION;
+  } else if (func_facts->imports) {
+    kind = LOOM_LOW_SOURCE_SELECTION_IMPORT_DECL;
+  } else {
+    return iree_ok_status();
+  }
+  if (kind == LOOM_LOW_SOURCE_SELECTION_FUNCTION &&
+      !iree_all_bits_set(filter, LOOM_LOW_SOURCE_SELECTION_FILTER_FUNCTION)) {
+    return iree_ok_status();
+  }
+  if (kind == LOOM_LOW_SOURCE_SELECTION_IMPORT_DECL &&
+      !iree_all_bits_set(filter,
+                         LOOM_LOW_SOURCE_SELECTION_FILTER_IMPORT_DECL)) {
     return iree_ok_status();
   }
   if (!loom_symbol_ref_is_valid(func_facts->target_symbol)) {
@@ -53,9 +77,13 @@ static iree_status_t loom_low_source_selection_try_func(
   if (policy == NULL) {
     return iree_ok_status();
   }
+  if (kind == LOOM_LOW_SOURCE_SELECTION_IMPORT_DECL &&
+      policy->import_decl_kind == 0) {
+    return iree_ok_status();
+  }
 
+  out_selection->kind = kind;
   out_selection->func = loom_func_like_cast(module, func_facts->func_op);
-  out_selection->func_facts = func_facts;
   out_selection->target_ref = func_facts->target_symbol;
   out_selection->policy = policy;
   *out_compatible = true;
@@ -70,10 +98,10 @@ static void loom_low_source_selection_assign(
   out_selection->target_bundle = &out_selection->target_bundle_storage.bundle;
 }
 
-iree_status_t loom_low_select_source_funcs(
+static iree_status_t loom_low_select_source_symbols_with_filter(
     const loom_module_t* module,
     const loom_low_source_selection_options_t* options,
-    iree_arena_allocator_t* arena,
+    loom_low_source_selection_filter_t filter, iree_arena_allocator_t* arena,
     loom_low_source_selection_list_t* out_selection_list) {
   *out_selection_list = (loom_low_source_selection_list_t){0};
   loom_symbol_fact_table_t fact_table = {0};
@@ -89,8 +117,8 @@ iree_status_t loom_low_select_source_funcs(
   for (iree_host_size_t i = 0; i < module->symbols.count; ++i) {
     bool compatible = false;
     loom_low_source_selection_t candidate = {0};
-    IREE_RETURN_IF_ERROR(loom_low_source_selection_try_func(
-        module, options, &fact_table, (loom_symbol_id_t)i, &compatible,
+    IREE_RETURN_IF_ERROR(loom_low_source_selection_try_symbol(
+        module, options, &fact_table, filter, (loom_symbol_id_t)i, &compatible,
         &candidate));
     if (!compatible) {
       continue;
@@ -102,4 +130,26 @@ iree_status_t loom_low_select_source_funcs(
   out_selection_list->values = selections;
   out_selection_list->count = selection_count;
   return iree_ok_status();
+}
+
+iree_status_t loom_low_select_source_symbols(
+    const loom_module_t* module,
+    const loom_low_source_selection_options_t* options,
+    iree_arena_allocator_t* arena,
+    loom_low_source_selection_list_t* out_selection_list) {
+  return loom_low_select_source_symbols_with_filter(
+      module, options,
+      LOOM_LOW_SOURCE_SELECTION_FILTER_FUNCTION |
+          LOOM_LOW_SOURCE_SELECTION_FILTER_IMPORT_DECL,
+      arena, out_selection_list);
+}
+
+iree_status_t loom_low_select_source_funcs(
+    const loom_module_t* module,
+    const loom_low_source_selection_options_t* options,
+    iree_arena_allocator_t* arena,
+    loom_low_source_selection_list_t* out_selection_list) {
+  return loom_low_select_source_symbols_with_filter(
+      module, options, LOOM_LOW_SOURCE_SELECTION_FILTER_FUNCTION, arena,
+      out_selection_list);
 }

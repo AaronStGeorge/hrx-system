@@ -10,3 +10,22 @@ low.func.def target(@vm_target) abi(vm_module_function) @vm_add(%lhs: reg<vm.i32
   %sum = vm.add.i32 %lhs, %rhs
   return %sum
 }
+
+// ====
+
+// RUN: emit source-low output=low
+ireevm.target<core> @vm_target
+
+ireevm.import.decl target(@vm_target) symbol("hal.buffer.length") @hal_buffer_length(%buffer: i32) -> (i32)
+
+func.def target(@vm_target) @vm_import_length(%buffer: i32) -> (i32) {
+  %length = func.call @hal_buffer_length(%buffer) : (i32) -> (i32)
+  func.return %length : i32
+}
+// ----
+low.func.decl import(vm, "hal.buffer.length") target(@vm_target) @hal_buffer_length(%buffer: reg<vm.i32>) -> (reg<vm.i32>)
+
+low.func.def target(@vm_target) abi(vm_module_function) @vm_import_length(%buffer: reg<vm.i32>) -> (reg<vm.i32>) {
+  %length = low.func.call @hal_buffer_length(%buffer) : (reg<vm.i32>) -> (reg<vm.i32>)
+  low.return %length : reg<vm.i32>
+}
