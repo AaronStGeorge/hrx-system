@@ -178,7 +178,7 @@ static iree_status_t loom_amdgpu_ensure_memory_store_payload_vgpr(
   bool is_sgpr = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
       context, low_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, &is_sgpr));
-  if (is_sgpr && loom_type_register_unit_count(low_type) ==
+  if (is_sgpr && loom_low_register_type_unit_count(low_type) ==
                      access->payload_register_count) {
     return loom_amdgpu_materialize_low_vgpr_b32_registers(
         context, source_op, low_value, out_low_value);
@@ -573,14 +573,14 @@ static iree_status_t loom_amdgpu_low_value_is_register_class(
   *out_match = false;
   const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_type_t low_type = loom_module_value_type(module, low_value);
-  if (!loom_type_is_register(low_type)) {
+  if (!loom_low_type_is_register(low_type)) {
     return iree_ok_status();
   }
   bool is_class = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
       context, low_type, reg_class_id, &is_class));
   *out_match =
-      is_class && loom_type_register_unit_count(low_type) == unit_count;
+      is_class && loom_low_register_type_unit_count(low_type) == unit_count;
   return iree_ok_status();
 }
 
@@ -597,13 +597,13 @@ static iree_status_t loom_amdgpu_emit_memory_flat_wide_dynamic_term(
 
   const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_type_t low_index_type = loom_module_value_type(module, low_index);
-  if (!loom_type_is_register(low_index_type) ||
-      loom_type_register_unit_count(low_index_type) != 2) {
+  if (!loom_low_type_is_register(low_index_type) ||
+      loom_low_register_type_unit_count(low_index_type) != 2) {
     return iree_ok_status();
   }
 
-  loom_type_t source_lane_type =
-      loom_type_register(loom_type_register_class_id(low_index_type), 1);
+  loom_type_t source_lane_type = loom_low_register_type(
+      loom_low_register_type_class_name_id(low_index_type), 1);
   loom_value_id_t low_lo = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_low_slice(
       context, source_op, low_index, /*offset=*/0, source_lane_type, &low_lo));

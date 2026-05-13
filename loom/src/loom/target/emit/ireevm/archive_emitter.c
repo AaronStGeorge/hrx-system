@@ -20,6 +20,7 @@
 #include "loom/target/emit/ireevm/module_plan.h"
 #include "loom/target/entry_selection.h"
 #include "loom/target/provider.h"
+#include "loom/target/registers.h"
 
 enum {
   LOOM_IREEVM_ARCHIVE_EMIT_DEFAULT_MAX_ERRORS = 20,
@@ -332,7 +333,7 @@ static iree_status_t loom_ireevm_archive_emit_function_argument_fixed_value(
     uint32_t* i32_register, uint32_t* ref_register,
     loom_low_allocation_fixed_value_t* out_fixed_value) {
   const loom_type_t type = loom_module_value_type(state->module, argument_id);
-  if (!loom_type_is_register(type)) {
+  if (!loom_low_type_is_register(type)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "IREE VM ABI argument value %u is not a target-low register",
@@ -341,8 +342,9 @@ static iree_status_t loom_ireevm_archive_emit_function_argument_fixed_value(
 
   const loom_ireevm_register_class_ids_t* register_class_ids =
       &state->register_class_ids;
-  const loom_string_id_t register_class_id = loom_type_register_class_id(type);
-  const uint32_t unit_count = loom_type_register_unit_count(type);
+  const loom_string_id_t register_class_id =
+      loom_low_register_type_class_name_id(type);
+  const uint32_t unit_count = loom_low_register_type_unit_count(type);
   uint32_t location_base = 0;
   if ((loom_ireevm_archive_emit_register_class_matches(
            register_class_id, register_class_ids->i32) ||

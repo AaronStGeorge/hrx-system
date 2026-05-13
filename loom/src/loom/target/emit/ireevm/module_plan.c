@@ -13,6 +13,7 @@
 #include "loom/ops/func_symbol_facts.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/function_contract.h"
+#include "loom/target/registers.h"
 
 enum {
   LOOM_IREEVM_MAX_CALLING_CONVENTION_LENGTH = 256,
@@ -96,10 +97,10 @@ static bool loom_ireevm_module_plan_type_is_ref(const loom_module_t* module,
 static iree_status_t loom_ireevm_module_plan_append_calling_convention_type(
     const loom_module_t* module, loom_type_t type,
     loom_ireevm_calling_convention_buffer_t* buffer) {
-  if (loom_type_is_register(type)) {
+  if (loom_low_type_is_register(type)) {
     iree_string_view_t register_class = loom_ireevm_module_plan_string(
-        module, loom_type_register_class_id(type));
-    const uint32_t unit_count = loom_type_register_unit_count(type);
+        module, loom_low_register_type_class_name_id(type));
+    const uint32_t unit_count = loom_low_register_type_unit_count(type);
     if (iree_string_view_equal(register_class, IREE_SV("ireevm.i32")) &&
         unit_count == 1) {
       return loom_ireevm_calling_convention_append(buffer, 'i');

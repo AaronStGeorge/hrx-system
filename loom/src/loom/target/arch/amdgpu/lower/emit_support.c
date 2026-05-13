@@ -264,7 +264,7 @@ iree_status_t loom_amdgpu_low_result_type(loom_low_lower_context_t* context,
   *out_low_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_low_lower_map_value(context, source_op,
                                                 source_result, out_low_type));
-  if (!loom_type_is_register(*out_low_type)) {
+  if (!loom_low_type_is_register(*out_low_type)) {
     return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU source type did not map to a register");
   }
@@ -512,13 +512,13 @@ iree_status_t loom_amdgpu_materialize_low_vgpr_b32(
   bool is_vgpr = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
       context, low_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR, &is_vgpr));
-  if (is_vgpr && loom_type_register_unit_count(low_type) == 1) {
+  if (is_vgpr && loom_low_register_type_unit_count(low_type) == 1) {
     return iree_ok_status();
   }
   bool is_sgpr = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
       context, low_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, &is_sgpr));
-  if (!is_sgpr || loom_type_register_unit_count(low_type) != 1) {
+  if (!is_sgpr || loom_low_register_type_unit_count(low_type) != 1) {
     return iree_make_status(IREE_STATUS_INTERNAL,
                             "AMDGPU scalar VGPR materializer selected for a "
                             "non-scalar low value");
@@ -533,7 +533,7 @@ iree_status_t loom_amdgpu_materialize_low_vgpr_b32_registers(
   *out_low_value = low_value;
   const loom_module_t* module = loom_low_lower_context_module(context);
   const loom_type_t low_type = loom_module_value_type(module, low_value);
-  const uint32_t unit_count = loom_type_register_unit_count(low_type);
+  const uint32_t unit_count = loom_low_register_type_unit_count(low_type);
   bool is_vgpr = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
       context, low_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR, &is_vgpr));
@@ -782,7 +782,7 @@ iree_status_t loom_amdgpu_emit_vgpr_scale_u32(
     const loom_type_t low_type = loom_module_value_type(module, value);
     IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
         context, low_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, &is_sgpr));
-    if (is_sgpr && loom_type_register_unit_count(low_type) == 1) {
+    if (is_sgpr && loom_low_register_type_unit_count(low_type) == 1) {
       return loom_amdgpu_emit_vgpr_binary_immediate(
           context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_VOP3_IMM,
           value, shift, lane_type, out_value);
@@ -922,7 +922,7 @@ iree_status_t loom_amdgpu_lookup_or_materialize_vgpr_address(
     bool is_sgpr = false;
     IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
         context, low_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, &is_sgpr));
-    if (is_sgpr && loom_type_register_unit_count(low_type) == 1) {
+    if (is_sgpr && loom_low_register_type_unit_count(low_type) == 1) {
       return loom_amdgpu_emit_vgpr_b32_copy(context, source_op, low_value,
                                             out_low_value);
     }
@@ -950,7 +950,7 @@ iree_status_t loom_amdgpu_lookup_or_materialize_native_i1_mask(
   bool is_sgpr = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
       context, low_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR, &is_sgpr));
-  if (is_sgpr && loom_type_register_unit_count(low_type) == 2) {
+  if (is_sgpr && loom_low_register_type_unit_count(low_type) == 2) {
     *out_low_value = low_value;
     return iree_ok_status();
   }
@@ -958,7 +958,7 @@ iree_status_t loom_amdgpu_lookup_or_materialize_native_i1_mask(
   bool is_scc = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
       context, low_type, LOOM_AMDGPU_REG_CLASS_ID_SCC, &is_scc));
-  if (!is_scc || loom_type_register_unit_count(low_type) != 1) {
+  if (!is_scc || loom_low_register_type_unit_count(low_type) != 1) {
     return iree_make_status(
         IREE_STATUS_INTERNAL,
         "AMDGPU i1 value cannot materialize as a native mask operand");

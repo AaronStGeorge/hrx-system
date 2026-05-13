@@ -16,6 +16,7 @@
 #include "loom/rewrite/rewriter.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
 #include "loom/target/emit/native/amdgpu/storage_layout.h"
+#include "loom/target/registers.h"
 
 #define LOOM_AMDGPU_SCRATCH_SPILL_UNIT_BITS 32u
 
@@ -337,15 +338,15 @@ static iree_status_t loom_amdgpu_spill_lowering_make_chunk_type(
     loom_module_t* module, loom_type_t base_type, uint32_t chunk_units,
     loom_type_t* out_type) {
   *out_type = loom_type_none();
-  loom_type_t chunk_type =
-      loom_type_register(loom_type_register_class_id(base_type), chunk_units);
+  loom_type_t chunk_type = loom_low_register_type(
+      loom_low_register_type_class_name_id(base_type), chunk_units);
   return loom_module_intern_type(module, chunk_type, out_type);
 }
 
 static iree_status_t loom_amdgpu_spill_lowering_validate_register_type(
     const loom_amdgpu_spill_lowering_context_t* context, loom_type_t type) {
-  if (!loom_type_is_register(type) ||
-      loom_type_register_class_id(type) != context->vgpr_class_id) {
+  if (!loom_low_type_is_register(type) ||
+      loom_low_register_type_class_name_id(type) != context->vgpr_class_id) {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
         "AMDGPU spill lowering currently supports only VGPR register values");
@@ -436,7 +437,7 @@ static iree_status_t loom_amdgpu_spill_lowering_rewrite_spill(
   const loom_type_t value_type = loom_module_value_type(context->module, value);
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_spill_lowering_validate_register_type(context, value_type));
-  const uint32_t unit_count = loom_type_register_unit_count(value_type);
+  const uint32_t unit_count = loom_low_register_type_unit_count(value_type);
   if (unit_count == 0) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -481,7 +482,7 @@ static iree_status_t loom_amdgpu_spill_lowering_rewrite_reload(
       loom_module_value_type(context->module, result);
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_spill_lowering_validate_register_type(context, result_type));
-  const uint32_t unit_count = loom_type_register_unit_count(result_type);
+  const uint32_t unit_count = loom_low_register_type_unit_count(result_type);
   if (unit_count == 0) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,

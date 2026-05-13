@@ -39,7 +39,7 @@ static iree_status_t loom_amdgpu_dotf_result_is_one_vgpr(
   loom_type_t low_result_type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_result_type(context, source_op, result,
                                                    &low_result_type));
-  if (loom_type_register_unit_count(low_result_type) != 1) {
+  if (loom_low_register_type_unit_count(low_result_type) != 1) {
     return iree_ok_status();
   }
   return loom_amdgpu_low_type_register_class_is(
@@ -51,8 +51,8 @@ static iree_status_t loom_amdgpu_dotf_low_value_is_one_vgpr(
   *out_match = false;
   const loom_type_t type =
       loom_module_value_type(loom_low_lower_context_module(context), value);
-  if (!loom_type_is_register(type) ||
-      loom_type_register_unit_count(type) != 1) {
+  if (!loom_low_type_is_register(type) ||
+      loom_low_register_type_unit_count(type) != 1) {
     return iree_ok_status();
   }
   return loom_amdgpu_low_type_register_class_is(
@@ -234,13 +234,13 @@ static iree_status_t loom_amdgpu_dotf_extract_lane(
   }
   const loom_type_t source_type =
       loom_module_value_type(loom_low_lower_context_module(context), source);
-  if (!loom_type_is_register(source_type) ||
-      loom_type_register_unit_count(source_type) <= lane) {
+  if (!loom_low_type_is_register(source_type) ||
+      loom_low_register_type_unit_count(source_type) <= lane) {
     return iree_make_status(IREE_STATUS_INTERNAL,
                             "invalid AMDGPU dotf lane source type");
   }
-  const loom_type_t lane_type =
-      loom_type_register(loom_type_register_class_id(source_type), 1);
+  const loom_type_t lane_type = loom_low_register_type(
+      loom_low_register_type_class_name_id(source_type), 1);
   return loom_amdgpu_emit_low_slice(context, source_op, source, lane, lane_type,
                                     out_lane);
 }

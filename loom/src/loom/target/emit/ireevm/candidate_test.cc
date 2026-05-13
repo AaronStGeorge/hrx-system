@@ -240,6 +240,7 @@ constexpr char kPreparedVmBufferExecutionSource[] =
     "(reg<ireevm.ref>, reg<ireevm.i64 x2>, reg<ireevm.f32>)\n"
     "  low.op<ireevm.buffer.store.f64>(%buffer, %offset_f64, %f64_value) : "
     "(reg<ireevm.ref>, reg<ireevm.i64 x2>, reg<ireevm.f64 x2>)\n"
+    "  low.op<ireevm.ref.release>(%buffer) : (reg<ireevm.ref>)\n"
     "  low.return %length, %load_i8u, %load_i8s, %load_i16u, %load_i16s, "
     "%load_i32, %load_i64, %load_f32, %load_f64 : "
     "reg<ireevm.i64 x2>, reg<ireevm.i32>, reg<ireevm.i32>, "

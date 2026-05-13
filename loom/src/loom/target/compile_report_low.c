@@ -10,6 +10,7 @@
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/registers.h"
 
 static bool loom_target_compile_report_descriptor_semantic_tag_is(
     const loom_low_descriptor_set_t* descriptor_set,
@@ -82,7 +83,9 @@ static uint64_t loom_target_compile_report_value_register_unit_count(
     return 0;
   }
   const loom_type_t type = loom_module_value_type(module, value_id);
-  return loom_type_is_register(type) ? loom_type_register_unit_count(type) : 0;
+  return loom_low_type_is_register(type)
+             ? loom_low_register_type_unit_count(type)
+             : 0;
 }
 
 static uint64_t loom_target_compile_report_result_register_unit_count(

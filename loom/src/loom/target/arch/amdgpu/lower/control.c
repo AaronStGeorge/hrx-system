@@ -101,7 +101,7 @@ static iree_status_t loom_amdgpu_condition_is_reg_class(
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
       context, low_type, reg_class_id, &is_class));
   *out_match =
-      is_class && loom_type_register_unit_count(low_type) == unit_count;
+      is_class && loom_low_register_type_unit_count(low_type) == unit_count;
   return iree_ok_status();
 }
 
@@ -141,7 +141,8 @@ iree_status_t loom_amdgpu_materialize_branch_arg(
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
       context, required_low_type, LOOM_AMDGPU_REG_CLASS_ID_SGPR,
       &requires_sgpr));
-  if (requires_sgpr && loom_type_register_unit_count(required_low_type) == 2 &&
+  if (requires_sgpr &&
+      loom_low_register_type_unit_count(required_low_type) == 2 &&
       loom_amdgpu_type_is_i1(loom_module_value_type(
           loom_low_lower_context_module(context), source_value_id))) {
     return loom_amdgpu_lookup_or_materialize_native_i1_mask(
@@ -612,7 +613,7 @@ static iree_status_t loom_amdgpu_verify_if_else_merge_args(
     bool is_vgpr = false;
     IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
         context, merge_type, LOOM_AMDGPU_REG_CLASS_ID_VGPR, &is_vgpr));
-    const uint32_t lane_count = loom_type_register_unit_count(merge_type);
+    const uint32_t lane_count = loom_low_register_type_unit_count(merge_type);
     if (!is_vgpr || lane_count == 0 ||
         lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
       return loom_low_lower_emit_branch_constraint(
@@ -1078,13 +1079,13 @@ static iree_status_t loom_amdgpu_emit_zero_vgpr_value(
         context, source_op, IREE_SV("masked_region_merge_vgpr_values"));
   }
 
-  const uint32_t lane_count = loom_type_register_unit_count(value_type);
+  const uint32_t lane_count = loom_low_register_type_unit_count(value_type);
   if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return loom_low_lower_emit_branch_constraint(
         context, source_op, IREE_SV("masked_region_merge_vgpr_values"));
   }
-  loom_type_t lane_type =
-      loom_type_register(loom_type_register_class_id(value_type), 1);
+  loom_type_t lane_type = loom_low_register_type(
+      loom_low_register_type_class_name_id(value_type), 1);
   if (lane_count == 1) {
     return loom_amdgpu_emit_const_u32(context, source_op,
                                       LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32, 0,
@@ -1140,13 +1141,13 @@ static iree_status_t loom_amdgpu_emit_masked_merge_value(
         context, source_op, IREE_SV("masked_region_merge_vgpr_values"));
   }
 
-  const uint32_t lane_count = loom_type_register_unit_count(value_type);
+  const uint32_t lane_count = loom_low_register_type_unit_count(value_type);
   if (lane_count == 0 || lane_count > LOOM_AMDGPU_MAX_SCALARIZED_32BIT_LANES) {
     return loom_low_lower_emit_branch_constraint(
         context, source_op, IREE_SV("masked_region_merge_vgpr_values"));
   }
-  loom_type_t lane_type =
-      loom_type_register(loom_type_register_class_id(value_type), 1);
+  loom_type_t lane_type = loom_low_register_type(
+      loom_low_register_type_class_name_id(value_type), 1);
   if (lane_count == 1) {
     IREE_RETURN_IF_ERROR(loom_amdgpu_materialize_low_vgpr_b32(
         context, source_op, low_false_value, &low_false_value));

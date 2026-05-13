@@ -26,6 +26,7 @@ loom_cc_library(
     loom::src::loom::ops::func_symbol_facts
     loom::src::loom::ops::low
     loom::src::loom::target::function_contract
+    loom::src::loom::target::registers
     loom::src::loom::target::types
   PUBLIC
 )
@@ -93,6 +94,7 @@ loom_cc_library(
     loom::src::loom::target::compile_report_low
     loom::src::loom::target::entry_selection
     loom::src::loom::target::provider
+    loom::src::loom::target::registers
     loom::src::loom::verify
   PUBLIC
 )

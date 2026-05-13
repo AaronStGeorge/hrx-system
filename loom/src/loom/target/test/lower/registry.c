@@ -6,6 +6,7 @@
 
 #include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
+#include "loom/target/registers.h"
 #include "loom/target/test/contracts/core.h"
 #include "loom/target/test/contracts/core_lower_rules.h"
 #include "loom/target/test/descriptors.h"
@@ -76,7 +77,7 @@ static iree_status_t loom_test_low_make_register_type(
   IREE_RETURN_IF_ERROR(
       loom_module_intern_string(loom_low_lower_context_module(context),
                                 register_class, &register_class_id));
-  *out_type = loom_type_register(register_class_id, unit_count);
+  *out_type = loom_low_register_type(register_class_id, unit_count);
   return iree_ok_status();
 }
 

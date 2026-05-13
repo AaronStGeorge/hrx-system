@@ -11,6 +11,7 @@
 
 #include "loom/codegen/low/descriptor_traits.h"
 #include "loom/ir/module.h"
+#include "loom/target/registers.h"
 
 iree_status_t loom_low_build_register_class_string_id(
     loom_module_t* module, const loom_low_descriptor_set_t* descriptor_set,
@@ -47,7 +48,7 @@ iree_status_t loom_low_build_register_type(
   loom_string_id_t reg_class_string_id = LOOM_STRING_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_low_build_register_class_string_id(
       module, descriptor_set, reg_class_id, &reg_class_string_id));
-  *out_type = loom_type_register(reg_class_string_id, unit_count);
+  *out_type = loom_low_register_type(reg_class_string_id, unit_count);
   return iree_ok_status();
 }
 

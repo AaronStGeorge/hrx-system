@@ -22,6 +22,17 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    registers
+  HDRS
+    "registers.h"
+  DEPS
+    iree::base
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     launch
   HDRS
     "launch.h"
@@ -122,6 +133,7 @@ loom_cc_library(
     "compile_report_low.c"
   DEPS
     ::compile_report
+    ::registers
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::descriptors
@@ -223,6 +235,7 @@ loom_cc_library(
   DEPS
     ::contract
     ::low_descriptor_registry
+    ::registers
     ::types
     iree::base
     iree::base::internal::arena

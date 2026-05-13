@@ -139,6 +139,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::rewrite::rewriter
     loom::src::loom::target::arch::amdgpu::target_refs
+    loom::src::loom::target::registers
   PUBLIC
 )
 

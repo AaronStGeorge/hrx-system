@@ -13,7 +13,7 @@
 //   Tensor types:    tensor<[%M]xf32>     (logical tensor value)
 //   Tile types:      tile<[%M]x4xf32>     (tile-level aggregate value)
 //   Vector types:    vector<[%M]xf32>     (register lane grid value)
-//   Register types:  reg<amdgpu.vgpr x4> (target-low register allocation value)
+//   Register types:  reg<amdgpu.vgpr x4> (target-owned low payload)
 //   Buffer types:    buffer               (opaque storage identity)
 //   View types:      view<[%M]xf32, %layout> (typed buffer projection)
 //   Group types:     group<scope>         (barrier scoping)
@@ -115,9 +115,9 @@
 // arg/result types, so the embedded types are stored by value (24
 // bytes each), not interned.
 //
-// Register types use dims[0] as a string ID naming a namespace-qualified
-// register class and dims[1] as a unit count. The op descriptor supplies value
-// semantics; the type only describes allocation shape.
+// Register types reserve dims[0..1] as target-owned payload storage. Core IR
+// only stores and compares the payload structurally; target-low helpers
+// interpret the fields as a register-class identity plus contiguous unit count.
 //
 // Type equality is structural: callers should use loom_type_equal() on the
 // by-value representation. The module type table deduplicates equal entries,
@@ -245,7 +245,7 @@ typedef enum loom_type_kind_e {
   LOOM_TYPE_VECTOR = 9,     // vector<[%M]xf32> (register lane grid)
   LOOM_TYPE_VIEW = 10,      // view<[%M]xf32, %layout> (buffer projection)
   LOOM_TYPE_BUFFER = 11,    // buffer (opaque storage identity)
-  LOOM_TYPE_REGISTER = 12,  // reg<amdgpu.vgpr x4> (target-low registers)
+  LOOM_TYPE_REGISTER = 12,  // reg<amdgpu.vgpr x4> (target-owned low payload)
   LOOM_TYPE_STORAGE = 13,   // low.storage<workgroup> (function-local storage)
   LOOM_TYPE_COUNT_,
 } loom_type_kind_t;
@@ -749,10 +749,8 @@ static inline loom_type_t loom_type_buffer(void) {
   return type;
 }
 
-// Creates a target-low register type. |reg_class_id| names a
-// namespace-qualified register class such as "amdgpu.vgpr" in the module
-// string table. |unit_count| is the number of class units carried by the SSA
-// value and must be non-zero.
+// Creates a target-owned low register payload type. Target code should prefer
+// loom/target/registers.h so core IR remains only the by-value storage owner.
 static inline loom_type_t loom_type_register(loom_string_id_t reg_class_id,
                                              uint32_t unit_count) {
   IREE_ASSERT(unit_count > 0, "register unit count must be non-zero");
@@ -775,12 +773,12 @@ static inline loom_type_t loom_type_storage(loom_storage_space_t space) {
   return type;
 }
 
-// Returns the register class string ID for a target-low register type.
+// Returns the first target-owned register payload field.
 static inline loom_string_id_t loom_type_register_class_id(loom_type_t type) {
   return (loom_string_id_t)type.dims[0];
 }
 
-// Returns the number of register-class units carried by the type.
+// Returns the second target-owned register payload field.
 static inline uint32_t loom_type_register_unit_count(loom_type_t type) {
   return (uint32_t)type.dims[1];
 }

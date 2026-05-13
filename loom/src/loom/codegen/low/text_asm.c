@@ -10,6 +10,7 @@
 #include "loom/codegen/low/text_asm_internal.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/target/registers.h"
 
 static const loom_low_descriptor_registry_t*
 loom_low_descriptor_text_asm_state_registry(
@@ -508,7 +509,7 @@ static iree_status_t loom_low_descriptor_text_asm_make_register_type(
   IREE_RETURN_IF_ERROR(
       loom_module_intern_string(module, reg_class_name, &reg_class_string_id));
   loom_type_t type =
-      loom_type_register(reg_class_string_id, operand->unit_count);
+      loom_low_register_type(reg_class_string_id, operand->unit_count);
   return loom_module_intern_type(module, type, out_type);
 }
 
@@ -552,13 +553,14 @@ static iree_status_t loom_low_descriptor_text_asm_result_accepts_type(
     const loom_low_operand_t* operand, const loom_module_t* module,
     loom_type_t type, bool* out_accepted) {
   *out_accepted = false;
-  if (!loom_type_is_register(type)) {
+  if (!loom_low_type_is_register(type)) {
     return iree_ok_status();
   }
-  if (loom_type_register_unit_count(type) != operand->unit_count) {
+  if (loom_low_register_type_unit_count(type) != operand->unit_count) {
     return iree_ok_status();
   }
-  const loom_string_id_t actual_class_id = loom_type_register_class_id(type);
+  const loom_string_id_t actual_class_id =
+      loom_low_register_type_class_name_id(type);
   if (actual_class_id >= module->strings.count) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "low asm result type register class is out of "

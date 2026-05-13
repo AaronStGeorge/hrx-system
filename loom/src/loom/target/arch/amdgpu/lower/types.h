@@ -20,6 +20,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
 #include "loom/target/low_legality.h"
+#include "loom/target/registers.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -27,6 +27,15 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "registers",
+    hdrs = ["registers.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "launch",
     srcs = ["launch.c"],
     hdrs = ["launch.h"],
@@ -109,6 +118,7 @@ loom_cc_library(
     hdrs = ["compile_report_low.h"],
     deps = [
         ":compile_report",
+        ":registers",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:frame",
         "//loom/src/loom/codegen/low:lower",
@@ -194,6 +204,7 @@ loom_cc_library(
     deps = [
         ":contract",
         ":low_descriptor_registry",
+        ":registers",
         ":types",
         "//loom/src/loom/analysis:view_regions",
         "//loom/src/loom/error:emitter",

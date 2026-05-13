@@ -21,6 +21,7 @@
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/type_registry.h"
+#include "loom/target/registers.h"
 #include "loom/util/walk.h"
 
 typedef uint8_t loom_target_low_legality_t;
@@ -445,7 +446,7 @@ static iree_status_t loom_target_low_legality_verify_type(
     return loom_target_low_legality_verify_scalar_type(context, op, type);
   }
   if (loom_type_is_buffer(type) || loom_type_is_view(type) ||
-      loom_type_is_register(type) || loom_type_is_encoding(type)) {
+      loom_low_type_is_register(type) || loom_type_is_encoding(type)) {
     return iree_ok_status();
   }
   bool registered_type_handled = false;

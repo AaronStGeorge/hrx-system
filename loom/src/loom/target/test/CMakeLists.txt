@@ -74,6 +74,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::lower
     loom::src::loom::error::error_defs
     loom::src::loom::ir
+    loom::src::loom::target::registers
     loom::src::loom::target::test::contracts::core
     loom::src::loom::target::test::contracts::core_lower_rules
   PUBLIC

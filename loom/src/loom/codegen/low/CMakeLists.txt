@@ -66,6 +66,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::target::registers
   PUBLIC
 )
 
@@ -95,6 +96,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::src::loom::ir
+    loom::src::loom::target::registers
   PUBLIC
 )
 
@@ -171,6 +173,7 @@ loom_cc_library(
     loom::src::loom::format::text::low_asm
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::target::registers
   PUBLIC
 )
 
@@ -460,6 +463,7 @@ loom_cc_library(
     loom::src::loom::target::contract
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::low_legality
+    loom::src::loom::target::registers
     loom::src::loom::target::types
     loom::src::loom::util::fact_table
     loom::src::loom::util::math
@@ -597,6 +601,7 @@ loom_cc_library(
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::target::registers
     loom::src::loom::util::walk
   PUBLIC
 )

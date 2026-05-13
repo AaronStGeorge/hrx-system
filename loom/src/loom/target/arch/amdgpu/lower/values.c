@@ -936,7 +936,7 @@ static iree_status_t loom_amdgpu_select_index_cast_alias_plan(
   loom_type_t source_low_type = loom_type_none();
   IREE_RETURN_IF_ERROR(
       loom_low_lower_map_value(context, source_op, source, &source_low_type));
-  if (!loom_type_is_register(source_low_type)) {
+  if (!loom_low_type_is_register(source_low_type)) {
     return iree_ok_status();
   }
   loom_type_t result_low_type = loom_type_none();
@@ -1304,10 +1304,11 @@ static iree_status_t loom_amdgpu_extract_packed_register_lane(
 static loom_type_t loom_amdgpu_low_register_lane_type(
     const loom_module_t* module, loom_value_id_t low_value) {
   const loom_type_t low_type = loom_module_value_type(module, low_value);
-  if (!loom_type_is_register(low_type)) {
+  if (!loom_low_type_is_register(low_type)) {
     return loom_type_none();
   }
-  return loom_type_register(loom_type_register_class_id(low_type), 1);
+  return loom_low_register_type(loom_low_register_type_class_name_id(low_type),
+                                1);
 }
 
 static iree_status_t loom_amdgpu_lower_static_vector_extract(

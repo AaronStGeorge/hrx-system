@@ -590,6 +590,7 @@ loom_cc_library(
     loom::src::loom::target::arch::amdgpu::contracts::view
     loom::src::loom::target::arch::amdgpu::contracts::view_lower_rules
     loom::src::loom::target::low_legality
+    loom::src::loom::target::registers
     loom::src::loom::util::fact_table
     loom::src::loom::util::math
   PUBLIC
@@ -915,6 +916,7 @@ loom_cc_library(
     loom::src::loom::error::emitter
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::target::registers
     loom::src::loom::target::types
   PUBLIC
 )

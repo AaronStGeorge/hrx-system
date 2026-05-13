@@ -9,6 +9,7 @@
 #include <inttypes.h>
 
 #include "loom/ir/module.h"
+#include "loom/target/registers.h"
 
 static iree_status_t loom_low_register_class_check_descriptor_count(
     const loom_low_descriptor_set_t* descriptor_set) {
@@ -50,15 +51,10 @@ iree_status_t loom_low_register_class_map_initialize(
     iree_string_view_t descriptor_register_class_name =
         loom_low_descriptor_set_string(descriptor_set,
                                        register_class->name_string_offset);
-    for (iree_host_size_t string_id = 0; string_id < module->strings.count;
-         ++string_id) {
-      if (!iree_string_view_equal(module->strings.entries[string_id],
-                                  descriptor_register_class_name)) {
-        continue;
-      }
-      out_map->descriptor_register_class_ids[string_id] = (uint16_t)i;
-      break;
-    }
+    loom_string_id_t string_id =
+        loom_module_lookup_string(module, descriptor_register_class_name);
+    if (string_id == LOOM_STRING_ID_INVALID) continue;
+    out_map->descriptor_register_class_ids[string_id] = (uint16_t)i;
   }
   return iree_ok_status();
 }
@@ -103,12 +99,13 @@ iree_status_t loom_low_register_class_map_try_resolve_type(
     *out_descriptor_register_class = NULL;
   }
   *out_found = false;
-  if (!loom_type_is_register(type)) {
+  if (!loom_low_type_is_register(type)) {
     return iree_ok_status();
   }
   return loom_low_register_class_map_try_resolve_string_id(
-      map, loom_type_register_class_id(type), out_descriptor_register_class_id,
-      out_descriptor_register_class, out_found);
+      map, loom_low_register_type_class_name_id(type),
+      out_descriptor_register_class_id, out_descriptor_register_class,
+      out_found);
 }
 
 iree_status_t loom_low_register_class_try_lookup_name(

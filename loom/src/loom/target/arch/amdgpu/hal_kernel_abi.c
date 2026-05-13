@@ -17,6 +17,7 @@
 #include "loom/target/arch/amdgpu/hal_binding_descriptor.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
+#include "loom/target/registers.h"
 
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_COORDINATE_DIMENSION_COUNT 3u
 #define LOOM_AMDGPU_HAL_KERNEL_ABI_MAX_FIXED_VALUE_COUNT \
@@ -305,7 +306,7 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_register_value_matches(
   IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_type(
       map, type, &actual_class_id, NULL, &found_actual_class));
   *out_matches = found_actual_class && actual_class_id == expected_class_id &&
-                 loom_type_register_unit_count(type) == unit_count;
+                 loom_low_register_type_unit_count(type) == unit_count;
   return iree_ok_status();
 }
 
@@ -322,7 +323,7 @@ loom_amdgpu_hal_kernel_abi_single_physical_register_matches(
       map, type, &actual_class_id, &actual_class, &found_actual_class));
   *out_matches =
       found_actual_class && actual_class != NULL &&
-      loom_type_register_unit_count(type) == 1 &&
+      loom_low_register_type_unit_count(type) == 1 &&
       actual_class->allocatable_count == 1 &&
       iree_any_bit_set(actual_class->flags, LOOM_LOW_REG_CLASS_FLAG_PHYSICAL) &&
       iree_any_bit_set(actual_class->flags,

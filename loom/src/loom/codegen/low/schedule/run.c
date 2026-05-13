@@ -13,6 +13,7 @@
 #include "loom/codegen/low/schedule/graph.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
+#include "loom/target/registers.h"
 
 #define LOOM_LOW_SCHEDULE_READY_WINDOW 16
 
@@ -141,7 +142,7 @@ static iree_status_t loom_low_schedule_initialize_value_records(
         .register_class_id = LOOM_LOW_REG_CLASS_NONE,
     };
     const loom_type_t type = loom_module_value_type(state->module, value_id);
-    if (!loom_type_is_register(type)) {
+    if (!loom_low_type_is_register(type)) {
       continue;
     }
     bool found_reg_class = false;
@@ -149,7 +150,7 @@ static iree_status_t loom_low_schedule_initialize_value_records(
         &state->register_class_map, type, &value->register_class_id, NULL,
         &found_reg_class));
     if (found_reg_class) {
-      value->unit_count = loom_type_register_unit_count(type);
+      value->unit_count = loom_low_register_type_unit_count(type);
     }
   }
   return iree_ok_status();

@@ -27,6 +27,7 @@
 #include "loom/ops/target/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/target/low_descriptor_registry.h"
+#include "loom/target/registers.h"
 
 typedef struct loom_low_lower_descriptor_matrix_plan_t {
   // Shared source adapter used by this matrix descriptor plan.
@@ -133,7 +134,7 @@ static iree_status_t loom_low_lower_map_argument(
     }
     return iree_ok_status();
   }
-  IREE_ASSERT(loom_type_is_register(out_argument->abi_type));
+  IREE_ASSERT(loom_low_type_is_register(out_argument->abi_type));
 
   if (out_argument->kind == LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT) {
     return iree_ok_status();
@@ -2147,7 +2148,7 @@ static iree_status_t loom_low_lower_descriptor_matrix_copy_destructive_operands(
     const loom_value_id_t source_value = operands[packet_operand_index];
     const loom_type_t copy_type =
         loom_module_value_type(context->module, source_value);
-    IREE_ASSERT(loom_type_is_register(copy_type));
+    IREE_ASSERT(loom_low_type_is_register(copy_type));
     loom_op_t* copy_op = NULL;
     IREE_RETURN_IF_ERROR(loom_low_copy_build(
         loom_low_lower_context_builder(context), source_value, copy_type,
@@ -2181,7 +2182,7 @@ static iree_status_t loom_low_lower_emit_descriptor_matrix_vector_mma(
   loom_type_t result_low_type = loom_type_none();
   IREE_RETURN_IF_ERROR(
       loom_low_lower_map_value(context, source_op, result, &result_low_type));
-  IREE_ASSERT(loom_type_is_register(result_low_type));
+  IREE_ASSERT(loom_low_type_is_register(result_low_type));
 
   loom_value_id_t* operands = NULL;
   iree_host_size_t operand_count = 0;

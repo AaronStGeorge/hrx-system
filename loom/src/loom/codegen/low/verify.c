@@ -15,6 +15,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/registers.h"
 #include "loom/util/walk.h"
 
 typedef struct loom_low_verify_state_t {
@@ -973,7 +974,7 @@ static iree_status_t loom_low_verify_register_full_mask_for_type(
     loom_low_function_verify_state_t* function_state, loom_type_t type,
     loom_low_register_part_mask_t* out_mask) {
   *out_mask = 0;
-  if (!loom_type_is_register(type)) {
+  if (!loom_low_type_is_register(type)) {
     return iree_ok_status();
   }
   uint16_t descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE;
@@ -996,7 +997,7 @@ static iree_status_t loom_low_verify_descriptor_operand_part_mask(
     return loom_low_verify_register_full_mask_for_type(function_state,
                                                        actual_type, out_mask);
   }
-  if (!loom_type_is_register(actual_type)) {
+  if (!loom_low_type_is_register(actual_type)) {
     *out_mask = 0;
     return iree_ok_status();
   }
@@ -1089,7 +1090,7 @@ static iree_status_t loom_low_verify_resource(
         function_state, op, actual_type);
   }
 
-  const uint32_t unit_count = loom_type_register_unit_count(actual_type);
+  const uint32_t unit_count = loom_low_register_type_unit_count(actual_type);
   if (descriptor_register_class->allocatable_count != 0 &&
       unit_count > descriptor_register_class->allocatable_count) {
     return loom_low_verify_emit_resource_unit_count_exceeded(
@@ -1136,7 +1137,7 @@ static iree_status_t loom_low_verify_register_value_class(
     loom_value_id_t value_id) {
   const loom_module_t* module = function_state->state->module;
   loom_type_t type = loom_module_value_type(module, value_id);
-  if (!loom_type_is_register(type)) {
+  if (!loom_low_type_is_register(type)) {
     return iree_ok_status();
   }
   uint16_t descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE;
@@ -1207,8 +1208,8 @@ static iree_status_t loom_low_verify_descriptor_register_field(
   const loom_type_t actual_type = loom_module_value_type(module, value_id);
 
   bool accepted = false;
-  if (loom_type_is_register(actual_type) &&
-      loom_type_register_unit_count(actual_type) ==
+  if (loom_low_type_is_register(actual_type) &&
+      loom_low_register_type_unit_count(actual_type) ==
           descriptor_operand->unit_count) {
     uint16_t descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE;
     bool found_descriptor_register_class = false;

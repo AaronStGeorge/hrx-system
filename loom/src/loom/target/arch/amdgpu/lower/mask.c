@@ -516,7 +516,8 @@ static iree_status_t loom_amdgpu_low_type_is_register_class(
   bool is_class = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_low_type_register_class_is(
       context, type, reg_class_id, &is_class));
-  *out_match = is_class && loom_type_register_unit_count(type) == unit_count;
+  *out_match =
+      is_class && loom_low_register_type_unit_count(type) == unit_count;
   return iree_ok_status();
 }
 
