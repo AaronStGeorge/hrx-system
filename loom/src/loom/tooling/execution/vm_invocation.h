@@ -59,6 +59,10 @@ typedef struct loom_run_vm_prepared_candidate_options_t {
   iree_string_view_t function_name;
   // Optional default HAL device URI for VM modules that depend on HAL.
   iree_string_view_t default_device_uri;
+  // Borrowed VM modules loaded before the emitted bytecode module.
+  iree_vm_module_t* const* dependency_modules;
+  // Number of entries in |dependency_modules|.
+  iree_host_size_t dependency_module_count;
 } loom_run_vm_prepared_candidate_options_t;
 
 typedef struct loom_run_vm_prepared_candidate_t {

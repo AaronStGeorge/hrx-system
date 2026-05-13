@@ -209,20 +209,56 @@ static iree_status_t loom_run_vm_load_archive_module(
       iree_allocator_null(), allocator, out_module);
 }
 
+static iree_status_t loom_run_vm_dependency_modules_validate(
+    iree_vm_module_t* const* dependency_modules,
+    iree_host_size_t dependency_module_count) {
+  if (dependency_module_count > 0 && dependency_modules == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "VM dependency module list is NULL");
+  }
+  for (iree_host_size_t i = 0; i < dependency_module_count; ++i) {
+    if (dependency_modules[i] == NULL) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "VM dependency module %" PRIhsz " is NULL", i);
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_run_vm_create_context(
     const loom_run_vm_runtime_t* runtime, iree_vm_module_t* module,
-    iree_string_view_t default_device_uri, iree_allocator_t allocator,
-    iree_vm_context_t** out_context, iree_hal_device_t** out_device,
+    const loom_run_vm_prepared_candidate_options_t* options,
+    iree_allocator_t allocator, iree_vm_context_t** out_context,
+    iree_hal_device_t** out_device,
     iree_hal_allocator_t** out_device_allocator) {
   *out_context = NULL;
   *out_device = NULL;
   *out_device_allocator = NULL;
 
-  iree_vm_module_t* modules[] = {module};
-  return iree_tooling_create_context_from_flags(
-      runtime->instance, IREE_ARRAYSIZE(modules), modules, default_device_uri,
+  IREE_RETURN_IF_ERROR(loom_run_vm_dependency_modules_validate(
+      options->dependency_modules, options->dependency_module_count));
+  if (options->dependency_module_count == 0) {
+    iree_vm_module_t* modules[] = {module};
+    return iree_tooling_create_context_from_flags(
+        runtime->instance, IREE_ARRAYSIZE(modules), modules,
+        options->default_device_uri, allocator, out_context, out_device,
+        out_device_allocator, /*out_replay_recorder=*/NULL);
+  }
+
+  const iree_host_size_t module_count = options->dependency_module_count + 1;
+  iree_vm_module_t** modules = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
+      allocator, module_count * sizeof(*modules), (void**)&modules));
+  for (iree_host_size_t i = 0; i < options->dependency_module_count; ++i) {
+    modules[i] = options->dependency_modules[i];
+  }
+  modules[options->dependency_module_count] = module;
+  iree_status_t status = iree_tooling_create_context_from_flags(
+      runtime->instance, module_count, modules, options->default_device_uri,
       allocator, out_context, out_device, out_device_allocator,
       /*out_replay_recorder=*/NULL);
+  iree_allocator_free(allocator, modules);
+  return status;
 }
 
 static iree_status_t loom_run_vm_lookup_function(
@@ -267,10 +303,10 @@ iree_status_t loom_run_vm_prepared_candidate_prepare(
                                              allocator, &out_candidate->module);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_run_vm_create_context(
-        runtime, out_candidate->module, options->default_device_uri, allocator,
-        &out_candidate->context, &out_candidate->device,
-        &out_candidate->device_allocator);
+    status = loom_run_vm_create_context(runtime, out_candidate->module, options,
+                                        allocator, &out_candidate->context,
+                                        &out_candidate->device,
+                                        &out_candidate->device_allocator);
   }
   if (iree_status_is_ok(status)) {
     status = loom_run_vm_lookup_function(out_candidate->module,

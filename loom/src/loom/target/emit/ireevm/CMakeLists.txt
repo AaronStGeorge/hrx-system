@@ -177,14 +177,18 @@ loom_cc_test(
     iree::base
     iree::base::internal::flatcc::parsing
     loom::src::loom::ops::op_registry
-    loom::src::loom::target::arch::ireevm::low_registry
     loom::src::loom::target::arch::ireevm::ops
+    loom::src::loom::target::arch::ireevm::provider
+    loom::src::loom::target::provider
+    loom::src::loom::tooling::compile::pipeline
+    loom::src::loom::tooling::execution::vm_invocation
     iree::schemas::bytecode_module_def_c_fbs
     iree::testing::gtest
     iree::testing::gtest_main
     iree::vm
     iree::vm::bytecode::archive
     iree::vm::bytecode::module
+    iree::vm::impl
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -18,24 +18,31 @@
 #include "iree/vm/api.h"
 #include "iree/vm/bytecode/archive.h"
 #include "iree/vm/bytecode/module.h"
+#include "iree/vm/native_module.h"
+#include "iree/vm/shims.h"
 #include "loom/ops/op_registry.h"
-#include "loom/target/arch/ireevm/low_registry.h"
 #include "loom/target/arch/ireevm/ops/registry.h"
+#include "loom/target/arch/ireevm/provider.h"
+#include "loom/target/provider.h"
+#include "loom/tooling/compile/pipeline.h"
+#include "loom/tooling/execution/vm_invocation.h"
 
 namespace loom {
 namespace {
 
 iree_status_t RegisterContext(void* user_data, loom_context_t* context) {
-  (void)user_data;
   IREE_RETURN_IF_ERROR(loom_op_registry_register_all_dialects(context));
-  return loom_ireevm_ops_register_dialect(context);
+  const loom_target_environment_t* target_environment =
+      static_cast<const loom_target_environment_t*>(user_data);
+  return loom_target_environment_register_context(target_environment, context);
 }
 
 iree_status_t InitializeLowDescriptorRegistry(
     void* user_data, loom_target_low_descriptor_registry_t* out_registry) {
-  (void)user_data;
-  loom_ireevm_low_descriptor_registry_initialize(out_registry);
-  return iree_ok_status();
+  const loom_target_environment_t* target_environment =
+      static_cast<const loom_target_environment_t*>(user_data);
+  return loom_target_environment_initialize_low_descriptor_registry(
+      target_environment, out_registry);
 }
 
 constexpr char kPreparedVmSource[] =
@@ -240,6 +247,46 @@ constexpr char kPreparedVmBufferExecutionSource[] =
     "reg<ireevm.i64 x2>, reg<ireevm.f32>, reg<ireevm.f64 x2>\n"
     "}\n";
 
+constexpr char kSourceVmOrchestrationSource[] =
+    "ireevm.target<core> @vm_target\n"
+    "\n"
+    "ireevm.import.decl target(@vm_target) "
+    "symbol(\"loom_test.buffer_peek_i32\") "
+    "@buffer_peek_i32(%buffer: ireevm.ref<ireevm.buffer>, "
+    "%byte_offset: i64) -> (i32)\n"
+    "ireevm.import.decl target(@vm_target) "
+    "symbol(\"loom_test.retain_buffer\") "
+    "@retain_buffer(%buffer: ireevm.ref<ireevm.buffer>) -> "
+    "(ireevm.ref<ireevm.buffer>)\n"
+    "ireevm.import.decl target(@vm_target) "
+    "symbol(\"loom_test.scale_i32\") "
+    "@scale_i32(%value: i32) -> (i32)\n"
+    "\n"
+    "func.def target(@vm_target) @double_i32(%value: i32) -> (i32) {\n"
+    "  %doubled = scalar.addi %value, %value : i32\n"
+    "  func.return %doubled : i32\n"
+    "}\n"
+    "\n"
+    "func.def target(@vm_target) export(\"orchestrate\") "
+    "@orchestrate(%buffer: ireevm.ref<ireevm.buffer>, "
+    "%value: i32, %element_offset: i64) -> "
+    "(i32, i32, i32, i64, ireevm.ref<ireevm.buffer>) {\n"
+    "  %doubled = func.call @double_i32(%value) : (i32) -> (i32)\n"
+    "  %scaled = func.call @scale_i32(%doubled) : (i32) -> (i32)\n"
+    "  %direct = ireevm.buffer.load.i32 %buffer[%element_offset] : "
+    "ireevm.ref<ireevm.buffer>, i64 -> i32\n"
+    "  %double_offset = scalar.addi %element_offset, %element_offset : i64\n"
+    "  %byte_offset = scalar.addi %double_offset, %double_offset : i64\n"
+    "  %peeked = func.call @buffer_peek_i32(%buffer, %byte_offset) : "
+    "(ireevm.ref<ireevm.buffer>, i64) -> (i32)\n"
+    "  %length = ireevm.buffer.length %buffer : "
+    "ireevm.ref<ireevm.buffer> -> i64\n"
+    "  %owned_buffer = func.call @retain_buffer(%buffer) : "
+    "(ireevm.ref<ireevm.buffer>) -> (ireevm.ref<ireevm.buffer>)\n"
+    "  func.return %scaled, %direct, %peeked, %length, %owned_buffer : "
+    "i32, i32, i32, i64, ireevm.ref<ireevm.buffer>\n"
+    "}\n";
+
 bool FlatbufferStringEquals(flatbuffers_string_t value,
                             iree_string_view_t expected) {
   return iree_string_view_equal(
@@ -309,6 +356,22 @@ void ExpectFunctionBytecodeContainsOpcodes(
   }
 }
 
+void ExpectImportedFunction(iree_vm_ImportFunctionDef_vec_t imported_functions,
+                            iree_host_size_t index, iree_string_view_t name,
+                            iree_string_view_t calling_convention) {
+  ASSERT_LT(index, iree_vm_ImportFunctionDef_vec_len(imported_functions));
+  iree_vm_ImportFunctionDef_table_t import_def =
+      iree_vm_ImportFunctionDef_vec_at(imported_functions, index);
+  EXPECT_TRUE(FlatbufferStringEquals(
+      iree_vm_ImportFunctionDef_full_name(import_def), name));
+  iree_vm_FunctionSignatureDef_table_t signature_def =
+      iree_vm_ImportFunctionDef_signature(import_def);
+  ASSERT_NE(signature_def, nullptr);
+  EXPECT_TRUE(FlatbufferStringEquals(
+      iree_vm_FunctionSignatureDef_calling_convention(signature_def),
+      calling_convention));
+}
+
 void ExpectOutputI32(iree_vm_list_t* outputs, iree_host_size_t index,
                      int32_t expected_value) {
   iree_vm_value_t value = iree_vm_value_make_none();
@@ -341,22 +404,108 @@ void ExpectOutputF64(iree_vm_list_t* outputs, iree_host_size_t index,
   EXPECT_DOUBLE_EQ(value.f64, expected_value);
 }
 
+typedef struct loom_test_imports_state_t loom_test_imports_state_t;
+
+IREE_VM_ABI_EXPORT(LoomTestBufferPeekI32, loom_test_imports_state_t, rI, i) {
+  (void)stack;
+  (void)module;
+  (void)state;
+  iree_vm_buffer_t* buffer = nullptr;
+  IREE_RETURN_IF_ERROR(iree_vm_buffer_check_deref(args->r0, &buffer));
+  if (args->i1 < 0) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "negative buffer byte offset");
+  }
+  iree_const_byte_span_t source_span = iree_const_byte_span_empty();
+  IREE_RETURN_IF_ERROR(iree_vm_buffer_map_ro(buffer, (iree_host_size_t)args->i1,
+                                             sizeof(rets->i0), sizeof(rets->i0),
+                                             &source_span));
+  std::memcpy(&rets->i0, source_span.data, sizeof(rets->i0));
+  return iree_ok_status();
+}
+
+IREE_VM_ABI_EXPORT(LoomTestRetainBuffer, loom_test_imports_state_t, r, r) {
+  (void)stack;
+  (void)module;
+  (void)state;
+  iree_vm_ref_retain(&args->r0, &rets->r0);
+  return iree_ok_status();
+}
+
+IREE_VM_ABI_EXPORT(LoomTestScaleI32, loom_test_imports_state_t, i, i) {
+  (void)stack;
+  (void)module;
+  (void)state;
+  rets->i0 = args->i0 * 3;
+  return iree_ok_status();
+}
+
+static const iree_vm_native_export_descriptor_t kLoomTestImportExports[] = {
+    {IREE_SV("buffer_peek_i32"), IREE_SV("0rI_i"), 0, nullptr},
+    {IREE_SV("retain_buffer"), IREE_SV("0r_r"), 0, nullptr},
+    {IREE_SV("scale_i32"), IREE_SV("0i_i"), 0, nullptr},
+};
+
+static const iree_vm_native_function_ptr_t kLoomTestImportFunctions[] = {
+    {(iree_vm_native_function_shim_t)iree_vm_shim_rI_i,
+     (iree_vm_native_function_target_t)LoomTestBufferPeekI32},
+    {(iree_vm_native_function_shim_t)iree_vm_shim_r_r,
+     (iree_vm_native_function_target_t)LoomTestRetainBuffer},
+    {(iree_vm_native_function_shim_t)iree_vm_shim_i_i,
+     (iree_vm_native_function_target_t)LoomTestScaleI32},
+};
+
+static_assert(IREE_ARRAYSIZE(kLoomTestImportFunctions) ==
+                  IREE_ARRAYSIZE(kLoomTestImportExports),
+              "function pointer table must be 1:1 with exports");
+
+static const iree_vm_native_module_descriptor_t kLoomTestImportModule = {
+    /*name=*/IREE_SV("loom_test"),
+    /*version=*/0,
+    /*attr_count=*/0,
+    /*attrs=*/nullptr,
+    /*dependency_count=*/0,
+    /*dependencies=*/nullptr,
+    /*import_count=*/0,
+    /*imports=*/nullptr,
+    /*export_count=*/IREE_ARRAYSIZE(kLoomTestImportExports),
+    /*exports=*/kLoomTestImportExports,
+    /*function_count=*/IREE_ARRAYSIZE(kLoomTestImportFunctions),
+    /*functions=*/kLoomTestImportFunctions,
+};
+
+iree_status_t CreateLoomTestImportModule(iree_vm_instance_t* instance,
+                                         iree_allocator_t allocator,
+                                         iree_vm_module_t** out_module) {
+  iree_vm_module_t interface;
+  IREE_RETURN_IF_ERROR(iree_vm_module_initialize(&interface, nullptr));
+  return iree_vm_native_module_create(&interface, &kLoomTestImportModule,
+                                      instance, allocator, out_module);
+}
+
 class IreeVmCandidateTest : public ::testing::Test {
  protected:
   void SetUp() override {
+    IREE_ASSERT_OK(loom_target_environment_initialize(
+        &loom_ireevm_target_provider_set, &target_environment_));
     loom_run_session_options_t options = {};
     loom_run_session_options_initialize(&options);
     options.register_context = (loom_run_register_context_callback_t){
         .fn = RegisterContext,
+        .user_data = &target_environment_,
     };
     options.initialize_low_descriptor_registry =
         (loom_run_initialize_low_descriptor_registry_callback_t){
             .fn = InitializeLowDescriptorRegistry,
+            .user_data = &target_environment_,
         };
     IREE_ASSERT_OK(loom_run_session_initialize(&options, &session_));
   }
 
-  void TearDown() override { loom_run_session_deinitialize(&session_); }
+  void TearDown() override {
+    loom_run_session_deinitialize(&session_);
+    loom_target_environment_deinitialize(&target_environment_);
+  }
 
   iree_status_t Parse(iree_string_view_t source,
                       loom_run_module_t* out_module) {
@@ -374,6 +523,26 @@ class IreeVmCandidateTest : public ::testing::Test {
     out_options->source_resolver = loom_run_module_source_resolver(run_module);
   }
 
+  iree_status_t LowerToPreparedLow(loom_run_module_t* run_module) {
+    loom_compile_pipeline_options_t options = {};
+    loom_compile_pipeline_options_initialize(&options);
+    options.target_environment = &target_environment_;
+    options.low_descriptor_registry =
+        loom_run_session_low_descriptor_registry(&session_);
+    options.source_resolver = loom_run_module_source_resolver(run_module);
+
+    loom_pass_run_result_t run_result = {};
+    IREE_RETURN_IF_ERROR(loom_compile_run_pipeline(
+        run_module->module, &options, loom_run_session_block_pool(&session_),
+        &run_result));
+    if (run_result.error_count != 0) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "source-to-low pipeline emitted %u errors",
+                              run_result.error_count);
+    }
+    return iree_ok_status();
+  }
+
   void ParseArchive(const loom_ireevm_module_archive_t* archive,
                     iree_vm_BytecodeModuleDef_table_t* out_module_def) {
     iree_const_byte_span_t flatbuffer = iree_const_byte_span_empty();
@@ -385,6 +554,7 @@ class IreeVmCandidateTest : public ::testing::Test {
   }
 
   loom_run_session_t session_ = {};
+  loom_target_environment_t target_environment_ = {};
 };
 
 TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidate) {
@@ -820,6 +990,111 @@ TEST_F(IreeVmCandidateTest, ExecuteVmArchiveCandidateWithHostBuffer) {
   iree_vm_context_release(context);
   iree_vm_module_release(module);
   iree_vm_instance_release(instance);
+  loom_ireevm_run_candidate_deinitialize(&candidate);
+  loom_run_module_deinitialize(&run_module);
+}
+
+TEST_F(IreeVmCandidateTest, ExecuteSourceVmArchiveCandidateWithImports) {
+  loom_run_module_t run_module = {};
+  IREE_ASSERT_OK(Parse(IREE_SV(kSourceVmOrchestrationSource), &run_module));
+  IREE_ASSERT_OK(LowerToPreparedLow(&run_module));
+
+  loom_run_candidate_compile_options_t options = {};
+  InitializeCandidateOptions(&run_module, &options);
+
+  loom_ireevm_run_candidate_t candidate = {};
+  IREE_ASSERT_OK(loom_ireevm_run_candidate_emit(
+      &run_module, &options, iree_allocator_system(), &candidate));
+  EXPECT_GT(candidate.archive.data_length, 0u);
+
+  iree_vm_BytecodeModuleDef_table_t module_def = nullptr;
+  ParseArchive(&candidate.archive, &module_def);
+  iree_vm_FunctionDescriptor_vec_t function_descriptors =
+      iree_vm_BytecodeModuleDef_function_descriptors(module_def);
+  EXPECT_EQ(iree_vm_FunctionDescriptor_vec_len(function_descriptors), 2u);
+  iree_vm_ImportFunctionDef_vec_t imported_functions =
+      iree_vm_BytecodeModuleDef_imported_functions(module_def);
+  ASSERT_EQ(iree_vm_ImportFunctionDef_vec_len(imported_functions), 3u);
+  ExpectImportedFunction(imported_functions, 0,
+                         IREE_SV("loom_test.buffer_peek_i32"),
+                         IREE_SV("0rI_i"));
+  ExpectImportedFunction(imported_functions, 1,
+                         IREE_SV("loom_test.retain_buffer"), IREE_SV("0r_r"));
+  ExpectImportedFunction(imported_functions, 2, IREE_SV("loom_test.scale_i32"),
+                         IREE_SV("0i_i"));
+  iree_vm_ExportFunctionDef_vec_t exported_functions =
+      iree_vm_BytecodeModuleDef_exported_functions(module_def);
+  ASSERT_EQ(iree_vm_ExportFunctionDef_vec_len(exported_functions), 1u);
+  iree_vm_ExportFunctionDef_table_t export_def =
+      iree_vm_ExportFunctionDef_vec_at(exported_functions, 0);
+  EXPECT_TRUE(
+      FlatbufferStringEquals(iree_vm_ExportFunctionDef_local_name(export_def),
+                             IREE_SV("orchestrate")));
+  EXPECT_EQ(iree_vm_ExportFunctionDef_internal_ordinal(export_def), 1);
+
+  loom_run_vm_runtime_t runtime = {};
+  iree_vm_module_t* import_module = nullptr;
+  loom_run_vm_prepared_candidate_t prepared_candidate = {};
+  loom_run_vm_invocation_plan_t plan = {};
+  loom_run_vm_iteration_t iteration = {};
+  iree_vm_buffer_t* buffer = nullptr;
+
+  IREE_ASSERT_OK(
+      loom_run_vm_runtime_initialize(iree_allocator_system(), &runtime));
+  IREE_ASSERT_OK(CreateLoomTestImportModule(
+      runtime.instance, iree_allocator_system(), &import_module));
+
+  iree_vm_module_t* dependency_modules[] = {import_module};
+  loom_run_vm_prepared_candidate_options_t candidate_options = {};
+  loom_run_vm_prepared_candidate_options_initialize(&candidate_options);
+  candidate_options.function_name = IREE_SV("orchestrate");
+  candidate_options.dependency_modules = dependency_modules;
+  candidate_options.dependency_module_count =
+      IREE_ARRAYSIZE(dependency_modules);
+  IREE_ASSERT_OK(loom_run_vm_prepared_candidate_prepare(
+      &runtime, &candidate.archive, &candidate_options, iree_allocator_system(),
+      &prepared_candidate));
+
+  constexpr iree_host_size_t kBufferLength = 32;
+  constexpr int32_t kElementValue = 1234567;
+  constexpr int64_t kElementOffset = 3;
+  IREE_ASSERT_OK(iree_vm_buffer_create(
+      IREE_VM_BUFFER_ACCESS_MUTABLE | IREE_VM_BUFFER_ACCESS_ORIGIN_HOST,
+      kBufferLength, /*alignment=*/8, iree_allocator_system(), &buffer));
+  std::memcpy(iree_vm_buffer_data(buffer) + sizeof(int32_t) * kElementOffset,
+              &kElementValue, sizeof(kElementValue));
+
+  loom_run_vm_invocation_plan_initialize(&plan);
+  IREE_ASSERT_OK(iree_vm_list_create(iree_vm_make_undefined_type_def(), 3,
+                                     iree_allocator_system(), &plan.inputs));
+  iree_vm_ref_t buffer_ref = iree_vm_buffer_retain_ref(buffer);
+  IREE_ASSERT_OK(iree_vm_list_push_ref_retain(plan.inputs, &buffer_ref));
+  iree_vm_ref_release(&buffer_ref);
+  iree_vm_value_t input_value = iree_vm_value_make_i32(7);
+  iree_vm_value_t input_offset = iree_vm_value_make_i64(kElementOffset);
+  IREE_ASSERT_OK(iree_vm_list_push_value(plan.inputs, &input_value));
+  IREE_ASSERT_OK(iree_vm_list_push_value(plan.inputs, &input_offset));
+
+  IREE_ASSERT_OK(loom_run_vm_invocation_invoke_plan(
+      &prepared_candidate, &plan, iree_allocator_system(), &iteration));
+  ASSERT_EQ(iree_vm_list_size(iteration.outputs), 5u);
+  ExpectOutputI32(iteration.outputs, 0, 42);
+  ExpectOutputI32(iteration.outputs, 1, kElementValue);
+  ExpectOutputI32(iteration.outputs, 2, kElementValue);
+  ExpectOutputI64(iteration.outputs, 3, kBufferLength);
+  iree_vm_ref_t output_ref = iree_vm_ref_null();
+  IREE_ASSERT_OK(
+      iree_vm_list_get_ref_retain(iteration.outputs, 4, &output_ref));
+  EXPECT_EQ(output_ref.ptr, buffer);
+  EXPECT_EQ(output_ref.type, iree_vm_buffer_type());
+  iree_vm_ref_release(&output_ref);
+
+  loom_run_vm_iteration_deinitialize(&iteration);
+  loom_run_vm_invocation_plan_deinitialize(&plan);
+  iree_vm_buffer_release(buffer);
+  loom_run_vm_prepared_candidate_deinitialize(&prepared_candidate);
+  iree_vm_module_release(import_module);
+  loom_run_vm_runtime_deinitialize(&runtime);
   loom_ireevm_run_candidate_deinitialize(&candidate);
   loom_run_module_deinitialize(&run_module);
 }
