@@ -386,8 +386,9 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "instead of failing the timing run. Use "
           "`--artifact_bundle_dir=DIR` to collect `results.jsonl`, "
           "`manifest.json`, file outputs, and profile artifacts under one "
-          "directory; the manifest records command/path/source identity and "
-          "HAL device identity when a dispatch benchmark selected a backend. "
+          "directory; the manifest records command/path/source identity, "
+          "selected environment variables, and HAL device identity when a "
+          "dispatch benchmark selected a backend. "
           "Benchmark attrs named `family`, `phase`, `strategy`, "
           "`knobs`, `problem`, or `reference_id` are copied into a "
           "`metadata` object on candidate rows. Compile rows and benchmark "
@@ -4940,6 +4941,39 @@ static iree_status_t iree_tune_loom_write_report(
   return iree_ok_status();
 }
 
+static const char* const iree_tune_loom_manifest_environment_variables[] = {
+    "TMPDIR",
+    "TEMP",
+    "TMP",
+    "ROCR_VISIBLE_DEVICES",
+    "HIP_VISIBLE_DEVICES",
+    "CUDA_VISIBLE_DEVICES",
+    "ONEAPI_DEVICE_SELECTOR",
+    "GPU_DEVICE_ORDINAL",
+    "HSA_OVERRIDE_GFX_VERSION",
+    "HSA_ENABLE_SDMA",
+    "HSA_TOOLS_LIB",
+    "IREE_TRACY_CAPTURE",
+};
+
+static iree_status_t iree_tune_loom_write_manifest_environment_json(
+    loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"environment\":{"));
+  bool first_field = true;
+  for (iree_host_size_t i = 0;
+       i < IREE_ARRAYSIZE(iree_tune_loom_manifest_environment_variables); ++i) {
+    const char* name = iree_tune_loom_manifest_environment_variables[i];
+    const char* value = getenv(name);
+    if (value == NULL || value[0] == '\0') {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_string_field(
+        stream, &first_field, name, iree_make_cstring_view(value)));
+  }
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
 static iree_status_t iree_tune_loom_append_artifact_bundle_manifest_json(
     const iree_tune_loom_artifact_bundle_t* bundle,
     const iree_tune_loom_run_identity_t* run,
@@ -5021,6 +5055,7 @@ static iree_status_t iree_tune_loom_append_artifact_bundle_manifest_json(
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"command_line\":"));
   IREE_RETURN_IF_ERROR(loom_output_stream_write(&stream, command_line_json));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_manifest_environment_json(&stream));
   char cwd[4096] = {0};
 #if defined(IREE_PLATFORM_WINDOWS)
   char* cwd_result = _getcwd(cwd, sizeof(cwd));
@@ -5136,8 +5171,9 @@ int iree_tune_loom_main(int argc, char** argv,
       "benchmark, and profile evidence across large JSONL sweeps. "
       "When --artifact_bundle_dir is set and --output is empty, results are "
       "written to results.jsonl in the bundle and manifest.json records "
-      "command line, source identity, output, profile, file-output paths, and "
-      "HAL device identity when a dispatch benchmark selected a backend. "
+      "command line, source identity, output, profile, file-output paths, "
+      "selected environment variables, and HAL device identity when a dispatch "
+      "benchmark selected a backend. "
       "`--shape_specialization=dynamic` compiles once, "
       "`--shape_specialization=per_sample` compiles each selected shape with "
       "concrete parameter facts, and `--shape_specialization=both` emits both "
