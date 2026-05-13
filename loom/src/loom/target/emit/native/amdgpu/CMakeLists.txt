@@ -123,6 +123,27 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    spill_lowering
+  HDRS
+    "spill_lowering.h"
+  SRCS
+    "spill_lowering.c"
+  DEPS
+    ::storage_layout
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::builder
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::function
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::rewrite::rewriter
+    loom::src::loom::target::arch::amdgpu::target_refs
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     encoding
   HDRS
     "encoding.h"
@@ -286,10 +307,12 @@ loom_cc_library(
     ::hal_kernel_metadata
     ::kernel_hsaco
     ::preflight
+    ::spill_lowering
     iree::base
     iree::base::internal::arena
     iree::io::stream
     loom::src::loom::analysis::symbol_facts
+    loom::src::loom::codegen::low::allocation_materialization
     loom::src::loom::codegen::low::frame
     loom::src::loom::codegen::low::verify
     loom::src::loom::error::diagnostic

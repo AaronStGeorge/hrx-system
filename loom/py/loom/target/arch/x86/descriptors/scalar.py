@@ -665,7 +665,7 @@ X86_SCALAR_DESCRIPTOR_SET = DescriptorSet(
             32,
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
-            physical_count=16,
+            allocatable_count=16,
             alias_set_id=1,
         ),
         RegClass(
@@ -673,7 +673,7 @@ X86_SCALAR_DESCRIPTOR_SET = DescriptorSet(
             64,
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
-            physical_count=16,
+            allocatable_count=16,
             alias_set_id=1,
         ),
     ),

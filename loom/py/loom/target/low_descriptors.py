@@ -210,7 +210,7 @@ class RegClass:
     spill_slot_space: SpillSlotSpace
     flags: tuple[RegClassFlag, ...] = ()
     target_bank_id: int = 0
-    physical_count: int = 0
+    allocatable_count: int = 0
     alias_set_id: int = 0
     spill_class: str | None = None
     full_register_part_mask: int = 1

@@ -1186,6 +1186,233 @@ def _global_load_i8_overlay(
     )
 
 
+def _scratch_load_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    encoding_name: str,
+    address_field_name: str,
+    data_field_name: str,
+    offset_field_name: str,
+    offset_bit_width: int,
+    offset_signed: bool,
+    width_bits: int,
+    units: int,
+    fixed_vaddr: AmdgpuFixedEncodingValue | None,
+    fixed_saddr: AmdgpuFixedEncodingValue | None,
+    implicit_flat_scratch: bool,
+    cache_fields: tuple[tuple[str, int], ...] = (),
+) -> AmdgpuDescriptorOverlay:
+    operands: tuple[AmdgpuOperandOverlay, ...] = (
+        AmdgpuOperandOverlay(data_field_name, _vgpr_result(units=units)),
+    )
+    implicit_operands: tuple[AmdgpuImplicitOperandOverlay, ...] = (
+        _ignore_scratch_memory(width_bits=width_bits, is_input=True),
+    )
+    if implicit_flat_scratch:
+        implicit_operands = (*implicit_operands, _IGNORE_FLAT_SCRATCH_INPUT)
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("SVE", 1 if fixed_vaddr is None else 0),
+    )
+    if fixed_vaddr is None:
+        operands += (AmdgpuOperandOverlay(address_field_name, _vgpr_operand("addr")),)
+    else:
+        fixed_encoding_fields += ((address_field_name, fixed_vaddr),)
+    if fixed_saddr is None:
+        operands += (AmdgpuOperandOverlay("SADDR", _sgpr_operand("saddr")),)
+    else:
+        fixed_encoding_fields += (("SADDR", fixed_saddr),)
+    if fixed_vaddr is None and fixed_saddr is None:
+        asm_mnemonic = f"{mnemonic}_svs"
+        asm_operands: tuple[str, ...] = ("addr", "saddr")
+    elif fixed_vaddr is None:
+        asm_mnemonic = f"{mnemonic}_vaddr"
+        asm_operands = ("addr",)
+    elif fixed_saddr is None:
+        asm_mnemonic = f"{mnemonic}_saddr"
+        asm_operands = ("saddr",)
+    else:
+        asm_mnemonic = f"{mnemonic}_offset_only"
+        asm_operands = ()
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name=encoding_name,
+        semantic_tag=f"memory.stack.load.u{width_bits}",
+        schedule_class=_SCHEDULE_VMEM_LOAD,
+        operands=operands,
+        implicit_operands=implicit_operands,
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _signed_offset_immediate(offset_bit_width)
+            if offset_signed
+            else _offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_stack_memory_effect(EffectKind.READ, width_bits),),
+        constraints=_EARLY_CLOBBER_RESULT_CONSTRAINTS,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=_asm(
+            mnemonic=asm_mnemonic,
+            results=("dst",),
+            operands=asm_operands,
+            immediates=_memory_asm_immediate_names(cache_fields),
+            named_immediates=True,
+        ),
+    )
+
+
+def _scratch_store_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    encoding_name: str,
+    address_field_name: str,
+    data_field_name: str,
+    offset_field_name: str,
+    offset_bit_width: int,
+    offset_signed: bool,
+    width_bits: int,
+    units: int,
+    fixed_vaddr: AmdgpuFixedEncodingValue | None,
+    fixed_saddr: AmdgpuFixedEncodingValue | None,
+    implicit_flat_scratch: bool,
+    cache_fields: tuple[tuple[str, int], ...] = (),
+) -> AmdgpuDescriptorOverlay:
+    operands: tuple[AmdgpuOperandOverlay, ...] = ()
+    implicit_operands: tuple[AmdgpuImplicitOperandOverlay, ...] = (
+        _ignore_scratch_memory(width_bits=width_bits, is_input=False),
+    )
+    if implicit_flat_scratch:
+        implicit_operands = (*implicit_operands, _IGNORE_FLAT_SCRATCH_INPUT)
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
+        ("SVE", 1 if fixed_vaddr is None else 0),
+    )
+    if fixed_vaddr is None:
+        operands += (AmdgpuOperandOverlay(address_field_name, _vgpr_operand("addr")),)
+    else:
+        fixed_encoding_fields += ((address_field_name, fixed_vaddr),)
+    operands += (
+        AmdgpuOperandOverlay(data_field_name, _vgpr_operand("value", units=units)),
+    )
+    if fixed_saddr is None:
+        operands += (AmdgpuOperandOverlay("SADDR", _sgpr_operand("saddr")),)
+    else:
+        fixed_encoding_fields += (("SADDR", fixed_saddr),)
+    if fixed_vaddr is None and fixed_saddr is None:
+        asm_mnemonic = f"{mnemonic}_svs"
+        asm_operands: tuple[str, ...] = ("addr", "value", "saddr")
+    elif fixed_vaddr is None:
+        asm_mnemonic = f"{mnemonic}_vaddr"
+        asm_operands = ("addr", "value")
+    elif fixed_saddr is None:
+        asm_mnemonic = f"{mnemonic}_saddr"
+        asm_operands = ("value", "saddr")
+    else:
+        asm_mnemonic = f"{mnemonic}_offset_only"
+        asm_operands = ("value",)
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name=encoding_name,
+        semantic_tag=f"memory.stack.store.u{width_bits}",
+        schedule_class=_SCHEDULE_VMEM_STORE,
+        operands=operands,
+        implicit_operands=implicit_operands,
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _signed_offset_immediate(offset_bit_width)
+            if offset_signed
+            else _offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
+        fixed_encoding_fields=fixed_encoding_fields,
+        effects=(_stack_memory_effect(EffectKind.WRITE, width_bits),),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=_asm(
+            mnemonic=asm_mnemonic,
+            operands=asm_operands,
+            immediates=_memory_asm_immediate_names(cache_fields),
+            named_immediates=True,
+        ),
+    )
+
+
+def _scratch_memory_overlays(
+    *,
+    instruction_suffixes: tuple[str, str, str],
+    mnemonic_suffixes: tuple[str, str, str],
+    encoding_name: str,
+    address_field_name: str,
+    load_data_field_name: str,
+    store_data_field_name: str,
+    offset_field_name: str,
+    offset_bit_width: int,
+    offset_signed: bool,
+    fixed_vaddr: AmdgpuFixedEncodingValue | None,
+    fixed_saddr: AmdgpuFixedEncodingValue | None,
+    implicit_flat_scratch: bool = False,
+    descriptor_key_suffix: str = "",
+    cache_fields: tuple[tuple[str, int], ...] = (),
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    widths = ((32, 1), (64, 2), (128, 4))
+    return (
+        *(
+            _scratch_load_overlay(
+                descriptor_key=(
+                    f"amdgpu.scratch_load_b{width_bits}{descriptor_key_suffix}"
+                ),
+                instruction_name=f"SCRATCH_LOAD_{instruction_suffix}",
+                mnemonic=f"scratch_load_{mnemonic_suffix}",
+                encoding_name=encoding_name,
+                address_field_name=address_field_name,
+                data_field_name=load_data_field_name,
+                offset_field_name=offset_field_name,
+                offset_bit_width=offset_bit_width,
+                offset_signed=offset_signed,
+                width_bits=width_bits,
+                units=units,
+                fixed_vaddr=fixed_vaddr,
+                fixed_saddr=fixed_saddr,
+                implicit_flat_scratch=implicit_flat_scratch,
+                cache_fields=cache_fields,
+            )
+            for (width_bits, units), instruction_suffix, mnemonic_suffix in zip(
+                widths, instruction_suffixes, mnemonic_suffixes, strict=True
+            )
+        ),
+        *(
+            _scratch_store_overlay(
+                descriptor_key=(
+                    f"amdgpu.scratch_store_b{width_bits}{descriptor_key_suffix}"
+                ),
+                instruction_name=f"SCRATCH_STORE_{instruction_suffix}",
+                mnemonic=f"scratch_store_{mnemonic_suffix}",
+                encoding_name=encoding_name,
+                address_field_name=address_field_name,
+                data_field_name=store_data_field_name,
+                offset_field_name=offset_field_name,
+                offset_bit_width=offset_bit_width,
+                offset_signed=offset_signed,
+                width_bits=width_bits,
+                units=units,
+                fixed_vaddr=fixed_vaddr,
+                fixed_saddr=fixed_saddr,
+                implicit_flat_scratch=implicit_flat_scratch,
+                cache_fields=cache_fields,
+            )
+            for (width_bits, units), instruction_suffix, mnemonic_suffix in zip(
+                widths, instruction_suffixes, mnemonic_suffixes, strict=True
+            )
+        ),
+    )
+
+
 def _global_store_overlay(
     *,
     descriptor_key: str,
@@ -1604,4 +1831,5 @@ __all__ = (
     "_s_load_dword_overlay",
     "_s_load_dwordx2_overlay",
     "_s_load_dwordx4_overlay",
+    "_scratch_memory_overlays",
 )

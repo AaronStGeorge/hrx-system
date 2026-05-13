@@ -1710,16 +1710,16 @@ static iree_status_t loom_low_verify_reg_class(
         " must name exactly one virtual or physical storage kind",
         reg_class_index);
   }
-  if (is_virtual_only && reg_class->physical_count != 0) {
+  if (is_virtual_only && reg_class->allocatable_count != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low virtual register class %" PRIu32
-                            " has non-zero physical register count %" PRIu16,
-                            reg_class_index, reg_class->physical_count);
+                            " has non-zero allocatable count %" PRIu16,
+                            reg_class_index, reg_class->allocatable_count);
   }
-  if (is_physical && reg_class->physical_count == 0) {
+  if (is_physical && reg_class->allocatable_count == 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "low physical register class %" PRIu32
-                            " has zero physical register count",
+                            " has zero allocatable count",
                             reg_class_index);
   }
   if (reg_class->spill_class_id != LOOM_LOW_REG_CLASS_NONE &&

@@ -30,6 +30,11 @@ typedef struct loom_low_allocation_materialization_options_t {
   // The default false value rejects existing traffic so repeated or partial
   // materialization fails loud instead of stacking generated reloads.
   bool allow_existing_storage_traffic;
+  // Maximum number of current spill plans to materialize. Zero materializes all
+  // plans in the table. Passes that reallocate greedily use a small limit so
+  // CFG/signature rewrites can invalidate obsolete later plans before they are
+  // turned into unnecessary storage traffic.
+  iree_host_size_t max_spill_plan_count;
   // Structured diagnostic emitter for materialized allocation feedback.
   iree_diagnostic_emitter_t emitter;
 } loom_low_allocation_materialization_options_t;
@@ -46,9 +51,12 @@ typedef struct loom_low_allocation_materialization_result_t {
 // Materializes spill plans in |table| into low.storage.reserve, low.spill, and
 // low.reload ops. The table must describe |module| and a target-low function
 // inside it. Storage reservations are inserted in the low entry block after
-// ABI live-in/resource imports. Stores are inserted at the defining point of
-// each spilled value, and reloads are inserted immediately before each
-// original operand use.
+// ABI live-in/resource imports and existing storage reservations. Stores are
+// inserted at the defining point of each spilled op-result value, non-entry
+// block argument stores are inserted on incoming edges before the branch, and
+// reloads are inserted immediately before each remaining original operand use.
+// Materialized non-entry block arguments are removed from the block signature
+// and from all predecessor low.br payloads.
 iree_status_t loom_low_allocation_materialize_spills(
     loom_module_t* module, const loom_low_allocation_table_t* table,
     const loom_low_allocation_materialization_options_t* options,

@@ -111,7 +111,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             32,
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
-            physical_count=16,
+            allocatable_count=16,
             alias_set_id=1,
         ),
         RegClass(
@@ -119,7 +119,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             64,
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
-            physical_count=16,
+            allocatable_count=16,
             alias_set_id=1,
         ),
         RegClass(
@@ -127,7 +127,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             128,
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
-            physical_count=32,
+            allocatable_count=32,
             alias_set_id=2,
         ),
         RegClass(
@@ -135,7 +135,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             256,
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
-            physical_count=32,
+            allocatable_count=32,
             alias_set_id=2,
         ),
         RegClass(
@@ -143,7 +143,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             512,
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
-            physical_count=32,
+            allocatable_count=32,
             alias_set_id=2,
         ),
         RegClass(
@@ -151,7 +151,7 @@ X86_AVX512_CORE_DESCRIPTOR_SET = DescriptorSet(
             64,
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
-            physical_count=8,
+            allocatable_count=8,
         ),
     ),
     resources=(

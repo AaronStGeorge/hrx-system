@@ -1393,9 +1393,11 @@ static iree_status_t loom_amdgpu_encode_descriptor_packet(
     case LOOM_AMDGPU_ENCODING_FORMAT_MUBUF:
     case LOOM_AMDGPU_ENCODING_FORMAT_VBUFFER:
     case LOOM_AMDGPU_ENCODING_FORMAT_DS:
+    case LOOM_AMDGPU_ENCODING_FORMAT_FLAT_SCRATCH:
     case LOOM_AMDGPU_ENCODING_FORMAT_FLAT_GLBL:
     case LOOM_AMDGPU_ENCODING_FORMAT_FLAT_GLOBAL:
     case LOOM_AMDGPU_ENCODING_FORMAT_VDS:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VSCRATCH:
     case LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP1:
     case LOOM_AMDGPU_ENCODING_FORMAT_VOP1_DPP:
@@ -1868,7 +1870,7 @@ static iree_status_t loom_amdgpu_encode_packet(
   }
   const loom_op_vtable_t* vtable = loom_op_vtable(state->schedule->module, op);
   iree_string_view_t op_name =
-      vtable ? loom_bstring_view(vtable->name) : IREE_SV("<unknown>");
+      vtable ? loom_op_vtable_name(vtable) : IREE_SV("<unknown>");
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                           "AMDGPU native encoding does not support "
                           "structural op %.*s",

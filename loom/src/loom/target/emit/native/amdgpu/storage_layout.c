@@ -80,11 +80,13 @@ static iree_status_t loom_amdgpu_storage_layout_visit_reserve(
     case LOOM_STORAGE_SPACE_PRIVATE:
       segment_size = &state->sizes.private_segment_fixed_size;
       break;
-    case LOOM_STORAGE_SPACE_STACK:
     case LOOM_STORAGE_SPACE_SCRATCH:
+      segment_size = &state->sizes.private_segment_fixed_size;
+      break;
+    case LOOM_STORAGE_SPACE_STACK:
       return iree_make_status(
           IREE_STATUS_UNIMPLEMENTED,
-          "AMDGPU native emission does not lower stack/scratch storage yet");
+          "AMDGPU native emission does not lower stack storage yet");
     default:
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,

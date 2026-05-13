@@ -1739,7 +1739,7 @@ def _emit_source_for_views(
                 f".target_bank_id = {reg_class.target_bank_id},",
                 f".flags = {_flag_expr(reg_class.flags)},",
                 f".alloc_unit_bits = {reg_class.alloc_unit_bits},",
-                f".physical_count = {reg_class.physical_count},",
+                f".allocatable_count = {reg_class.allocatable_count},",
                 f".alias_set_id = {reg_class.alias_set_id},",
                 ".spill_class_id = " + ("LOOM_LOW_REG_CLASS_NONE" if reg_class.spill_class is None else str(compiled.reg_class_ids[reg_class.spill_class])) + ",",
                 f".full_register_part_mask = {_hex_u64_literal(reg_class.full_register_part_mask)},",

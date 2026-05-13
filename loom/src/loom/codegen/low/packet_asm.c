@@ -422,7 +422,7 @@ static iree_status_t loom_low_packet_asm_append_structural_packet(
   }
   const loom_op_vtable_t* vtable = loom_op_vtable(state->schedule->module, op);
   iree_string_view_t op_name =
-      vtable ? loom_bstring_view(vtable->name) : IREE_SV("<unknown>");
+      vtable ? loom_op_vtable_name(vtable) : IREE_SV("<unknown>");
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                           "low packet asm structural op %.*s is unsupported",
                           (int)op_name.size, op_name.data);

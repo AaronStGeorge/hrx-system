@@ -74,8 +74,8 @@ typedef enum loom_low_allocation_value_scratch_flag_bits_e {
 typedef uint16_t loom_low_allocation_value_scratch_flags_t;
 
 // Optional fixed register budget used by tests, tuning loops, and target
-// overlays. A missing budget uses the descriptor set's physical register count;
-// a descriptor class with physical_count == 0 is treated as unbounded.
+// overlays. A missing budget uses the descriptor set's allocatable unit count;
+// a descriptor class with allocatable_count == 0 is treated as unbounded.
 typedef struct loom_low_allocation_budget_t {
   // Stable register-class name such as "vm.i32" or "amdgpu.vgpr".
   iree_string_view_t register_class;
@@ -411,17 +411,20 @@ typedef struct loom_low_allocation_value_scratch_t {
 // Allocates one target-low function body and writes an arena-owned table.
 // This first allocator is deliberately simple and deterministic: it performs
 // per-class linear-scan-style first-fit assignment over liveness intervals,
-// uses target physical register counts or explicit budgets as hard limits, and
+// uses target allocatable unit counts or explicit budgets as hard limits, and
 // reports spills as table remarks without mutating IR.
 iree_status_t loom_low_allocate_function(
     loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_allocation_options_t* options, iree_arena_allocator_t* arena,
     loom_low_allocation_table_t* out_table);
 
-// Verifies that assigned intervals do not overlap on the same physical
-// register or target ID range. Spill slots are not treated as registers by this
-// verifier because materialized low.spill/low.reload insertion owns their
-// eventual storage reuse policy.
+// Verifies allocation-table consistency. Register-like assignments must not
+// overlap on the same physical register or target ID range. Spill slots are not
+// treated as registers by this verifier because materialized
+// low.spill/low.reload insertion owns their eventual storage reuse policy.
+// Tied-result placement is enforced only when both sides are register-like; a
+// spill-slot side defers the tie until spill materialization inserts reloads
+// and final allocation runs on the materialized IR.
 iree_status_t loom_low_allocation_verify_table(
     const loom_low_allocation_table_t* table);
 

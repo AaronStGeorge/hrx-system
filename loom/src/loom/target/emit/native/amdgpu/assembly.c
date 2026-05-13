@@ -831,6 +831,17 @@ static bool loom_amdgpu_descriptor_uses_global_pointer_format(
   }
 }
 
+static bool loom_amdgpu_descriptor_uses_scratch_format(
+    const loom_low_descriptor_t* descriptor) {
+  switch (descriptor->encoding_format_id) {
+    case LOOM_AMDGPU_ENCODING_FORMAT_FLAT_SCRATCH:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VSCRATCH:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static bool loom_amdgpu_descriptor_uses_data_share_format(
     const loom_low_descriptor_t* descriptor) {
   switch (descriptor->encoding_format_id) {
@@ -906,6 +917,59 @@ static iree_status_t loom_amdgpu_append_global_store_packet(
         iree_string_builder_append_cstring(context->builder, "off"));
   }
   return loom_amdgpu_append_offset_suffix(context);
+}
+
+static iree_status_t loom_amdgpu_append_scratch_load_packet(
+    const loom_native_assembly_packet_context_t* context) {
+  const loom_op_t* op = context->packet->node->op;
+  if (op->result_count != 1 || op->operand_count > 1) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU scratch load packet has unexpected "
+                            "operand shape");
+  }
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, " "));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_result(context, 0));
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  if (op->operand_count == 1) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 0));
+  } else {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, "off"));
+  }
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, "off"));
+  return loom_amdgpu_append_memory_immediate_suffixes(context);
+}
+
+static iree_status_t loom_amdgpu_append_scratch_store_packet(
+    const loom_native_assembly_packet_context_t* context) {
+  const loom_op_t* op = context->packet->node->op;
+  if (op->result_count != 0 || op->operand_count == 0 ||
+      op->operand_count > 2) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU scratch store packet has unexpected "
+                            "operand shape");
+  }
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, " "));
+  if (op->operand_count == 2) {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 0));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 1));
+  } else {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, "off"));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_operand(context, 0));
+  }
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, "off"));
+  return loom_amdgpu_append_memory_immediate_suffixes(context);
 }
 
 static iree_status_t loom_amdgpu_append_waitcnt_packet(
@@ -1539,6 +1603,10 @@ static iree_status_t loom_amdgpu_append_descriptor_packet(
         descriptor->encoding_format_id == LOOM_AMDGPU_ENCODING_FORMAT_VBUFFER) {
       return has_read_effect ? loom_amdgpu_append_mubuf_load_packet(context)
                              : loom_amdgpu_append_mubuf_store_packet(context);
+    }
+    if (loom_amdgpu_descriptor_uses_scratch_format(descriptor)) {
+      return has_read_effect ? loom_amdgpu_append_scratch_load_packet(context)
+                             : loom_amdgpu_append_scratch_store_packet(context);
     }
     if (loom_amdgpu_descriptor_uses_global_pointer_format(descriptor)) {
       return has_read_effect ? loom_amdgpu_append_global_load_packet(context)

@@ -33,7 +33,7 @@ low.func.def target(@test_target) @resource_missing_class() {
 
 test.target<low_core> @test_target
 low.func.def target(@test_target) @resource_too_many_units() {
-  // ERROR@+1: TARGET/043 {function_name="resource_too_many_units", value_kind="resource", value_name="low.resource", actual_type="reg<test.special x2>", unit_count="2", descriptor_set="test.low.core", physical_count="1"}
+  // ERROR@+1: TARGET/043 {function_name="resource_too_many_units", value_kind="resource", value_name="low.resource", actual_type="reg<test.special x2>", unit_count="2", descriptor_set="test.low.core", allocatable_count="1"}
   %resource = low.resource<native_pointer> {index = 0, source_type = buffer} : reg<test.special x2>
   low.return
 }

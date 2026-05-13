@@ -344,8 +344,8 @@ typedef struct loom_low_reg_class_t {
   loom_low_reg_class_flags_t flags;
   // Number of bits in one allocation unit.
   uint16_t alloc_unit_bits;
-  // Number of physical registers, or zero when virtual/unbounded.
-  uint16_t physical_count;
+  // Allocatable units in this class, or zero when virtual/unbounded.
+  uint16_t allocatable_count;
   // Alias-set identifier shared by overlapping register classes.
   uint16_t alias_set_id;
   // Register class used for spill/reload values, or LOOM_LOW_REG_CLASS_NONE.

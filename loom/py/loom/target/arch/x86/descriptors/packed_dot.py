@@ -73,7 +73,7 @@ def _packed_dot_header_guard(stem: str) -> str:
 
 
 def _packed_dot_reg_classes(
-    vector_bit_widths: Sequence[int], *, physical_count: int
+    vector_bit_widths: Sequence[int], *, allocatable_count: int
 ) -> tuple[RegClass, ...]:
     return tuple(
         RegClass(
@@ -81,7 +81,7 @@ def _packed_dot_reg_classes(
             vector_bit_width,
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
-            physical_count=physical_count,
+            allocatable_count=allocatable_count,
             alias_set_id=2,
         )
         for vector_bit_width in vector_bit_widths
@@ -147,7 +147,7 @@ def _descriptor_set(
     c_enum_prefix: str,
     descriptor_data: Sequence[PackedDotDescriptor],
     vector_bit_widths: Sequence[int],
-    physical_count: int,
+    allocatable_count: int,
 ) -> DescriptorSet:
     return DescriptorSet(
         key=key,
@@ -162,7 +162,7 @@ def _descriptor_set(
         c_enum_prefix=c_enum_prefix,
         generator_version=1,
         reg_classes=_packed_dot_reg_classes(
-            vector_bit_widths, physical_count=physical_count
+            vector_bit_widths, allocatable_count=allocatable_count
         ),
         resources=_packed_dot_resources(),
         schedule_classes=_packed_dot_schedule_classes(vector_bit_widths),
@@ -182,7 +182,7 @@ def _overlay_descriptor_set(
     c_enum_prefix: str,
     family: str,
     vector_bit_widths: Sequence[int],
-    physical_count: int,
+    allocatable_count: int,
 ) -> DescriptorSet:
     return _descriptor_set(
         key=key,
@@ -193,7 +193,7 @@ def _overlay_descriptor_set(
         c_enum_prefix=c_enum_prefix,
         descriptor_data=_packed_dot_descriptor_data((family,), vector_bit_widths),
         vector_bit_widths=vector_bit_widths,
-        physical_count=physical_count,
+        allocatable_count=allocatable_count,
     )
 
 
@@ -206,7 +206,7 @@ X86_AVX512_VNNI_DESCRIPTOR_SET = _overlay_descriptor_set(
     c_enum_prefix="X86_AVX512_VNNI_CORE",
     family=FAMILY_AVX512_VNNI,
     vector_bit_widths=(128, 256, 512),
-    physical_count=32,
+    allocatable_count=32,
 )
 
 X86_AVX512_BF16_DESCRIPTOR_SET = _overlay_descriptor_set(
@@ -218,7 +218,7 @@ X86_AVX512_BF16_DESCRIPTOR_SET = _overlay_descriptor_set(
     c_enum_prefix="X86_AVX512_BF16_CORE",
     family=FAMILY_AVX512_BF16,
     vector_bit_widths=(128, 256, 512),
-    physical_count=32,
+    allocatable_count=32,
 )
 
 X86_AVX_VNNI_DESCRIPTOR_SET = _overlay_descriptor_set(
@@ -230,7 +230,7 @@ X86_AVX_VNNI_DESCRIPTOR_SET = _overlay_descriptor_set(
     c_enum_prefix="X86_AVX_VNNI_CORE",
     family=FAMILY_AVX_VNNI,
     vector_bit_widths=(128, 256),
-    physical_count=16,
+    allocatable_count=16,
 )
 
 X86_AVX_VNNI_INT8_DESCRIPTOR_SET = _overlay_descriptor_set(
@@ -242,7 +242,7 @@ X86_AVX_VNNI_INT8_DESCRIPTOR_SET = _overlay_descriptor_set(
     c_enum_prefix="X86_AVX_VNNI_INT8_CORE",
     family=FAMILY_AVX_VNNI_INT8,
     vector_bit_widths=(128, 256),
-    physical_count=16,
+    allocatable_count=16,
 )
 
 X86_AVX_VNNI_INT16_DESCRIPTOR_SET = _overlay_descriptor_set(
@@ -254,7 +254,7 @@ X86_AVX_VNNI_INT16_DESCRIPTOR_SET = _overlay_descriptor_set(
     c_enum_prefix="X86_AVX_VNNI_INT16_CORE",
     family=FAMILY_AVX_VNNI_INT16,
     vector_bit_widths=(128, 256),
-    physical_count=16,
+    allocatable_count=16,
 )
 
 X86_AVX10_2_DESCRIPTOR_SET = _overlay_descriptor_set(
@@ -266,7 +266,7 @@ X86_AVX10_2_DESCRIPTOR_SET = _overlay_descriptor_set(
     c_enum_prefix="X86_AVX10_2_CORE",
     family=FAMILY_AVX10_2,
     vector_bit_widths=(128, 256, 512),
-    physical_count=32,
+    allocatable_count=32,
 )
 
 X86_PACKED_DOT_FEATURE_DESCRIPTOR_SETS = (
@@ -287,5 +287,5 @@ X86_PACKED_DOT_DESCRIPTOR_SET = _descriptor_set(
     c_enum_prefix="X86_PACKED_DOT_CORE",
     descriptor_data=X86_PACKED_DOT_DESCRIPTORS,
     vector_bit_widths=(128, 256, 512),
-    physical_count=32,
+    allocatable_count=32,
 )

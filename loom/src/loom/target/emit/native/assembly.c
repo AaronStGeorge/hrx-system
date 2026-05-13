@@ -97,7 +97,7 @@ static iree_status_t loom_native_assembly_append_structural_packet(
   const loom_op_vtable_t* vtable =
       loom_op_vtable(context->schedule->module, op);
   iree_string_view_t op_name =
-      vtable ? loom_bstring_view(vtable->name) : IREE_SV("<unknown>");
+      vtable ? loom_op_vtable_name(vtable) : IREE_SV("<unknown>");
   for (iree_host_size_t i = 0; i < options->structural_packet_callback_count;
        ++i) {
     const loom_native_assembly_structural_packet_callback_t* row =

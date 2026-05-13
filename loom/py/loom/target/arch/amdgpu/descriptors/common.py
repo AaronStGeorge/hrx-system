@@ -1479,6 +1479,15 @@ _GLOBAL_STORE_B128_EFFECT = Effect(
 )
 
 
+def _stack_memory_effect(kind: EffectKind, width_bits: int) -> Effect:
+    return Effect(
+        kind,
+        memory_space=MemorySpace.STACK,
+        flags=(EffectFlag.DEPENDENCY,),
+        width_bits=width_bits,
+    )
+
+
 def _workgroup_memory_effect(kind: EffectKind, width_bits: int) -> Effect:
     return Effect(
         kind,
@@ -1994,6 +2003,23 @@ _IGNORE_FLAT_SCRATCH_INPUT = AmdgpuImplicitOperandOverlay(
 )
 
 
+def _ignore_scratch_memory(
+    *, width_bits: int, is_input: bool
+) -> AmdgpuImplicitOperandOverlay:
+    return AmdgpuImplicitOperandOverlay(
+        operand_type="OPR_GPUMEM",
+        data_format_name=f"FMT_NUM_B{width_bits}",
+        size_bits=width_bits,
+        is_input=is_input,
+        is_output=not is_input,
+        ignore_reason=(
+            "modeled-by-stack-read-effect"
+            if is_input
+            else "modeled-by-stack-write-effect"
+        ),
+    )
+
+
 def _atomic_effects(
     memory_space: MemorySpace, width_bits: int, *, counter_id: int
 ) -> tuple[Effect, Effect]:
@@ -2352,6 +2378,7 @@ __all__ = (
     "_ignore_global_atomic_memory",
     "_ignore_global_read_memory",
     "_ignore_global_write_memory",
+    "_ignore_scratch_memory",
     "_ignore_workgroup_memory",
     "_implicit_m0_input",
     "_instruction_encoding_opcode",
@@ -2383,6 +2410,7 @@ __all__ = (
     "_soffset_zero_operand_form",
     "_source_inline_f32_immediate",
     "_source_inline_u32_immediate",
+    "_stack_memory_effect",
     "_u32_immediate",
     "_vgpr_agpr_const_operand",
     "_vgpr_agpr_operand",

@@ -12,6 +12,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/io/vec_stream.h"
 #include "loom/analysis/symbol_facts.h"
+#include "loom/codegen/low/allocation_materialization.h"
 #include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/module.h"
@@ -30,6 +31,7 @@
 #include "loom/target/compile_report_low.h"
 #include "loom/target/emit/native/amdgpu/kernel_hsaco.h"
 #include "loom/target/emit/native/amdgpu/preflight.h"
+#include "loom/target/emit/native/amdgpu/spill_lowering.h"
 #include "loom/target/entry_selection.h"
 #include "loom/target/function_contract.h"
 #include "loom/target/launch.h"
@@ -437,6 +439,76 @@ static iree_status_t loom_amdgpu_hal_kernel_library_compute_kernel_fixed_values(
       &plan->fixed_value_count, table_arena);
 }
 
+static iree_status_t
+loom_amdgpu_hal_kernel_library_build_spill_free_emission_frame(
+    loom_module_t* module, loom_op_t* low_function_op,
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_emission_frame_options_t* frame_options,
+    iree_arena_allocator_t* table_arena, loom_low_emission_frame_t* out_frame) {
+  *out_frame = (loom_low_emission_frame_t){0};
+
+  IREE_RETURN_IF_ERROR(loom_amdgpu_lower_spill_traffic(
+      module, low_function_op, descriptor_set, table_arena));
+  iree_host_size_t iteration_count = 0;
+  iree_host_size_t iteration_limit = 0;
+  for (;;) {
+    loom_low_emission_frame_t frame = {0};
+    IREE_RETURN_IF_ERROR(loom_low_emission_frame_build(
+        module, low_function_op, frame_options, table_arena, &frame));
+    if (iteration_limit == 0) {
+      if (frame.allocation.liveness.value_count == IREE_HOST_SIZE_MAX) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "AMDGPU spill materialization iteration limit overflows host "
+            "size");
+      }
+      iteration_limit = frame.allocation.liveness.value_count + 1;
+    }
+    if (frame.allocation.spill_plan_count == 0 &&
+        frame.allocation.spill_count == 0) {
+      *out_frame = frame;
+      return iree_ok_status();
+    }
+    if (frame.allocation.spill_plan_count == 0) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "AMDGPU native emission still has %zu spill-slot assignment(s) "
+          "after spill traffic lowering",
+          frame.allocation.spill_count);
+    }
+    if (iteration_count >= iteration_limit) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "AMDGPU native emission did not reach a spill-free final frame "
+          "after %zu spill materialization iteration(s)",
+          iteration_count);
+    }
+
+    loom_low_allocation_materialization_result_t result = {0};
+    const loom_low_allocation_materialization_options_t
+        materialization_options = {
+            .allow_existing_storage_traffic = true,
+            .max_spill_plan_count = 1,
+            .emitter = frame_options->emitter,
+        };
+    IREE_RETURN_IF_ERROR(loom_low_allocation_materialize_spills(
+        module, &frame.allocation, &materialization_options, table_arena,
+        &result));
+    if (result.storage_count == 0 && result.spill_count == 0 &&
+        result.reload_count == 0) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "AMDGPU native spill materialization made no progress with %zu "
+          "pending spill plan(s)",
+          frame.allocation.spill_plan_count);
+    }
+
+    IREE_RETURN_IF_ERROR(loom_amdgpu_lower_spill_traffic(
+        module, low_function_op, descriptor_set, table_arena));
+    ++iteration_count;
+  }
+}
+
 static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
     loom_module_t* module,
     const loom_target_low_descriptor_registry_t* low_registry,
@@ -467,8 +539,10 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
       .allocation_fixed_value_count = plan->fixed_value_count,
       .emitter = loom_target_entry_emitter(diagnostic_emitter),
   };
-  IREE_RETURN_IF_ERROR(loom_low_emission_frame_build(
-      module, plan->low_function_op, &frame_options, table_arena, &frame));
+  IREE_RETURN_IF_ERROR(
+      loom_amdgpu_hal_kernel_library_build_spill_free_emission_frame(
+          module, plan->low_function_op, descriptor_set, &frame_options,
+          table_arena, &frame));
   if (report != NULL) {
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_record_low_emission_frame(report, &frame));

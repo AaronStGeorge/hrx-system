@@ -1420,7 +1420,7 @@ TEST(LowDescriptorsTest, RejectsConflictingRegisterClassStorageKinds) {
 TEST(LowDescriptorsTest, RejectsVirtualRegisterClassWithPhysicalCount) {
   TestTables tables;
   InitializeTestTables(&tables);
-  tables.reg_classes[0].physical_count = 1;
+  tables.reg_classes[0].allocatable_count = 1;
 
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         loom_low_descriptor_set_verify(&tables.set));
@@ -1448,7 +1448,7 @@ TEST(LowDescriptorsTest, AcceptsPhysicalRegisterClassWithPhysicalCount) {
   TestTables tables;
   InitializeTestTables(&tables);
   tables.reg_classes[0].flags = LOOM_LOW_REG_CLASS_FLAG_PHYSICAL;
-  tables.reg_classes[0].physical_count = 32;
+  tables.reg_classes[0].allocatable_count = 32;
 
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
 }

@@ -323,7 +323,7 @@ loom_amdgpu_hal_kernel_abi_single_physical_register_matches(
   *out_matches =
       found_actual_class && actual_class != NULL &&
       loom_type_register_unit_count(type) == 1 &&
-      actual_class->physical_count == 1 &&
+      actual_class->allocatable_count == 1 &&
       iree_any_bit_set(actual_class->flags, LOOM_LOW_REG_CLASS_FLAG_PHYSICAL) &&
       iree_any_bit_set(actual_class->flags,
                        LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE);

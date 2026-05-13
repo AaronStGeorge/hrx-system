@@ -48,6 +48,7 @@ loom_assert_no_dependencies(
         ":metadata",
         ":hal_kernel_library",
         ":preflight",
+        ":spill_lowering",
     ],
 )
 
@@ -67,6 +68,7 @@ loom_assert_no_dependencies(
         ":loom_check",
         ":metadata",
         ":preflight",
+        ":spill_lowering",
     ],
 )
 
@@ -87,6 +89,7 @@ loom_assert_no_dependencies(
         ":metadata",
         ":hal_kernel_library",
         ":preflight",
+        ":spill_lowering",
     ],
 )
 
@@ -188,6 +191,24 @@ loom_cc_library(
         "//loom/src/loom/codegen/low:function",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "spill_lowering",
+    srcs = ["spill_lowering.c"],
+    hdrs = ["spill_lowering.h"],
+    deps = [
+        ":storage_layout",
+        "//loom/src/loom/codegen/low:builder",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:function",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/rewrite:rewriter",
+        "//loom/src/loom/target/arch/amdgpu:target_refs",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],
@@ -332,7 +353,9 @@ loom_cc_library(
         ":hal_kernel_metadata",
         ":kernel_hsaco",
         ":preflight",
+        ":spill_lowering",
         "//loom/src/loom/analysis:symbol_facts",
+        "//loom/src/loom/codegen/low:allocation_materialization",
         "//loom/src/loom/codegen/low:frame",
         "//loom/src/loom/codegen/low:verify",
         "//loom/src/loom/error:diagnostic",

@@ -336,7 +336,7 @@ X86_AVX2_DESCRIPTOR_SET = DescriptorSet(
             128,
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
-            physical_count=16,
+            allocatable_count=16,
             alias_set_id=2,
         ),
         RegClass(
@@ -344,7 +344,7 @@ X86_AVX2_DESCRIPTOR_SET = DescriptorSet(
             256,
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
-            physical_count=16,
+            allocatable_count=16,
             alias_set_id=2,
         ),
     ),

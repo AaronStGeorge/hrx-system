@@ -90,10 +90,10 @@ static iree_status_t loom_low_schedule_pressure_budget_for_class(
     *out_has_budget = true;
     return iree_ok_status();
   }
-  if (reg_class->physical_count == 0) {
+  if (reg_class->allocatable_count == 0) {
     return iree_ok_status();
   }
-  *out_budget = reg_class->physical_count;
+  *out_budget = reg_class->allocatable_count;
   *out_has_budget = true;
   return iree_ok_status();
 }

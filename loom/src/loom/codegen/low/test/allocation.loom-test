@@ -85,3 +85,39 @@ low.func.def target(@test_target) @tied_copy_preserves_later_source_use(%state: 
 
 // ----
 {"format":"loom.low.allocation.v0","function":"tied_copy_preserves_later_source_use","target":"test_target","descriptor_set":"test.low.core","allocation_mode":"virtual","assignment_count":3,"remark_count":0,"copy_decision_count":1,"spill_count":0,"spill_plan_count":0,"coalesced_copy_count":0,"materialized_copy_count":1,"assignments":[{"index":0,"value":{"id":0,"name":"state","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.i32"},"start_point":0,"end_point":3,"unit_count":1,"location":{"kind":"target_id","base":0,"count":1}},{"index":1,"value":{"id":3,"name":"copy","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.i32"},"start_point":1,"end_point":2,"unit_count":1,"location":{"kind":"target_id","base":1,"count":1}},{"index":2,"value":{"id":4,"name":"next","type":"reg<test.i32>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.i32"},"start_point":2,"end_point":3,"unit_count":1,"location":{"kind":"target_id","base":1,"count":1}}],"spill_plans":[],"copy_decisions":[{"index":0,"kind":"materialized","source_value":{"id":0,"name":"state","type":"reg<test.i32>"},"result_value":{"id":3,"name":"copy","type":"reg<test.i32>"},"source_assignment":0,"result_assignment":1}],"remarks":[]}
+
+// ====
+
+// RUN: emit low-allocation-json @physical_budget_clamps_to_allocatable_count test.alias32=64 diagnostics=predicted-spills output=none
+
+test.target<low_core> @test_target
+
+// WARNING@+1: BACKEND/008 {function_name="physical_budget_clamps_to_allocatable_count", value_name="rhs", value_class="test.alias32", spill_cause="register-budget-conflict"}
+low.func.def target(@test_target) @physical_budget_clamps_to_allocatable_count(%lhs: reg<test.alias32>, %rhs: reg<test.alias32>) -> (reg<test.alias32>, reg<test.alias32>) {
+  low.return %lhs, %rhs : reg<test.alias32>, reg<test.alias32>
+}
+
+// ====
+
+// RUN: emit low-allocation-json @multi_victim_spill test.i32=4 diagnostics=predicted-spills output=none
+
+test.target<low_core> @test_target
+
+// WARNING@+2: BACKEND/008 {function_name="multi_victim_spill", value_name="row", value_class="test.i32", spill_cause="register-budget-conflict"}
+// WARNING@+1: BACKEND/008 {function_name="multi_victim_spill", value_name="carry", value_class="test.i32", spill_cause="register-budget-conflict"}
+low.func.def target(@test_target) @multi_victim_spill(%row: reg<test.i32>, %carry: reg<test.i32>, %extra: reg<test.i32>) -> (reg<test.i32>) asm<test.low.core> {
+  low.br ^late
+^join(%state: reg<test.i32 x2>):
+  %state0 = slice %state[0] : reg<test.i32 x2> -> reg<test.i32>
+  %sum = test.add.i32 %row, %state0
+  %sum2 = test.add.i32 %sum, %carry
+  %out = test.add.i32 %sum2, %extra
+  return %out
+^late:
+  %late_state0 = test.const.i32 7
+  %late_state1 = test.const.i32 9
+  %late_state = concat(%late_state0, %late_state1) : (reg<test.i32>, reg<test.i32>) -> reg<test.i32 x2>
+  low.br ^join(%late_state: reg<test.i32 x2>)
+}
+
+// ----

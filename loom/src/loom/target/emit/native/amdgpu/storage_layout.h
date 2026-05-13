@@ -60,8 +60,9 @@ typedef struct loom_amdgpu_storage_layout_t {
 } loom_amdgpu_storage_layout_t;
 
 // Computes fixed AMDGPU segment sizes for every low.storage.reserve in
-// |function_op|. Stack and scratch storage are rejected until their ABI
-// lowering is represented in the native path.
+// |function_op|. Scratch and private storage both contribute to the AMDGPU
+// private segment; stack storage is rejected until its ABI lowering is
+// represented in the native path.
 iree_status_t loom_amdgpu_storage_layout_collect_segment_sizes(
     const loom_module_t* module, const loom_op_t* function_op,
     loom_amdgpu_storage_layout_segment_sizes_t* out_sizes);

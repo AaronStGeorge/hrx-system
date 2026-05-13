@@ -34,7 +34,7 @@ X86_SIMD128_DESCRIPTOR_SET = replace(
             128,
             SpillSlotSpace.STACK,
             flags=(RegClassFlag.PHYSICAL,),
-            physical_count=16,
+            allocatable_count=16,
             alias_set_id=2,
         ),
     ),

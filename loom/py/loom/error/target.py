@@ -837,8 +837,8 @@ ERR_TARGET_043 = ErrorDef(
     summary="Low ABI register unit count exceeds target descriptor class.",
     message=(
         "low function '@{function_name}' {value_kind} '{value_name}' has "
-        "type {actual_type}, requiring {unit_count} physical unit(s), but "
-        "descriptor set '{descriptor_set}' provides only {physical_count}"
+        "type {actual_type}, requiring {unit_count} allocatable unit(s), but "
+        "descriptor set '{descriptor_set}' provides only {allocatable_count}"
     ),
     params=(
         ErrorParam("function_name", ParamKind.STRING),
@@ -847,11 +847,11 @@ ERR_TARGET_043 = ErrorDef(
         ErrorParam("actual_type", ParamKind.TYPE),
         ErrorParam("unit_count", ParamKind.U32),
         ErrorParam("descriptor_set", ParamKind.STRING),
-        ErrorParam("physical_count", ParamKind.U32),
+        ErrorParam("allocatable_count", ParamKind.U32),
     ),
     fix_hint=(
         "Use a smaller ABI register value or select a descriptor set whose "
-        "register class has enough physical units."
+        "register class has enough allocatable units."
     ),
 )
 

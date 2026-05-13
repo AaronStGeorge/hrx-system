@@ -271,28 +271,60 @@ iree_status_t loom_low_materialize_allocation_run(loom_pass_t* pass,
       .budget_count = state ? state->budget_count : 0,
       .emitter = pass->diagnostic_emitter,
   };
-  loom_low_allocation_table_t table = {0};
-  IREE_RETURN_IF_ERROR(loom_low_allocate_function(
-      module, function.op, &allocation_options, pass->arena, &table));
+  iree_host_size_t iteration_count = 0;
+  iree_host_size_t iteration_limit = 0;
+  bool allow_existing_storage_traffic = false;
+  for (;;) {
+    loom_low_allocation_table_t table = {0};
+    IREE_RETURN_IF_ERROR(loom_low_allocate_function(
+        module, function.op, &allocation_options, pass->arena, &table));
+    if (iteration_limit == 0) {
+      if (table.liveness.value_count == IREE_HOST_SIZE_MAX) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "low allocation materialization iteration limit overflows host "
+            "size");
+      }
+      iteration_limit = table.liveness.value_count + 1;
+    }
+    if (table.spill_plan_count == 0) {
+      return iree_ok_status();
+    }
+    if (iteration_count >= iteration_limit) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "low allocation materialization did not reach a spill-free fixed "
+          "point after %zu iteration(s)",
+          iteration_count);
+    }
 
-  loom_low_allocation_materialization_result_t result = {0};
-  loom_low_allocation_materialization_options_t materialization_options = {
-      .emitter = state && state->emit_spill_diagnostics
-                     ? pass->diagnostic_emitter
-                     : (iree_diagnostic_emitter_t){0},
-  };
-  IREE_RETURN_IF_ERROR(loom_low_allocation_materialize_spills(
-      module, &table, &materialization_options, pass->arena, &result));
+    loom_low_allocation_materialization_result_t result = {0};
+    loom_low_allocation_materialization_options_t materialization_options = {
+        .allow_existing_storage_traffic = allow_existing_storage_traffic,
+        .max_spill_plan_count = 1,
+        .emitter = state && state->emit_spill_diagnostics
+                       ? pass->diagnostic_emitter
+                       : (iree_diagnostic_emitter_t){0},
+    };
+    IREE_RETURN_IF_ERROR(loom_low_allocation_materialize_spills(
+        module, &table, &materialization_options, pass->arena, &result));
+    if (result.storage_count == 0 && result.spill_count == 0 &&
+        result.reload_count == 0) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "low allocation materialization made no progress with %zu pending "
+          "spill plan(s)",
+          table.spill_plan_count);
+    }
 
-  loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_STORAGE,
-                          result.storage_count);
-  loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_SPILLS,
-                          result.spill_count);
-  loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_RELOADS,
-                          result.reload_count);
-  if (result.storage_count > 0 || result.spill_count > 0 ||
-      result.reload_count > 0) {
+    loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_STORAGE,
+                            result.storage_count);
+    loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_SPILLS,
+                            result.spill_count);
+    loom_pass_statistic_add(pass, LOOM_LOW_MATERIALIZE_ALLOCATION_STAT_RELOADS,
+                            result.reload_count);
     loom_pass_mark_changed(pass);
+    allow_existing_storage_traffic = true;
+    ++iteration_count;
   }
-  return iree_ok_status();
 }

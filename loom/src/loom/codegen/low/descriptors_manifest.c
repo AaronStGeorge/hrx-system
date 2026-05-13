@@ -221,9 +221,9 @@ static iree_status_t loom_low_append_manifest_reg_classes(
         IREE_ARRAYSIZE(kLoomLowRegClassFlagNames)));
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
         builder,
-        ",\"alloc_unit_bits\":%" PRIu16 ",\"physical_count\":%" PRIu16
+        ",\"alloc_unit_bits\":%" PRIu16 ",\"allocatable_count\":%" PRIu16
         ",\"alias_set\":%" PRIu16 ",\"spill_class\":%" PRIu16 ",",
-        reg_class->alloc_unit_bits, reg_class->physical_count,
+        reg_class->alloc_unit_bits, reg_class->allocatable_count,
         reg_class->alias_set_id, reg_class->spill_class_id));
     IREE_RETURN_IF_ERROR(loom_low_append_named_enum_field(
         builder, "spill_slot_space", "spill_slot_space_name",

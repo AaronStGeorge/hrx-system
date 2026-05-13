@@ -58,6 +58,8 @@ typedef enum loom_amdgpu_encoding_format_e {
   LOOM_AMDGPU_ENCODING_FORMAT_FLAT_GLBL = 14,
   // RDNA3 global/flat memory instruction format.
   LOOM_AMDGPU_ENCODING_FORMAT_FLAT_GLOBAL = 15,
+  // RDNA3 scratch/private-memory instruction format.
+  LOOM_AMDGPU_ENCODING_FORMAT_FLAT_SCRATCH = 16,
   // Scalar compare instruction format.
   LOOM_AMDGPU_ENCODING_FORMAT_SOPC = 20,
   // Scalar one-destination immediate instruction format.
@@ -68,6 +70,8 @@ typedef enum loom_amdgpu_encoding_format_e {
   LOOM_AMDGPU_ENCODING_FORMAT_VFLAT = 25,
   // RDNA4 global memory instruction format.
   LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL = 26,
+  // RDNA4 scratch/private-memory instruction format.
+  LOOM_AMDGPU_ENCODING_FORMAT_VSCRATCH = 34,
   // Vector one-source 32-bit instruction format.
   LOOM_AMDGPU_ENCODING_FORMAT_VOP1 = 30,
   // RDNA4 scaled WMMA 128-bit paired VOP3P instruction format.

@@ -1052,7 +1052,7 @@ static iree_status_t loom_low_verify_emit_resource_register_class_missing(
 
 static iree_status_t loom_low_verify_emit_resource_unit_count_exceeded(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
-    loom_type_t actual_type, uint32_t unit_count, uint32_t physical_count) {
+    loom_type_t actual_type, uint32_t unit_count, uint32_t allocatable_count) {
   const loom_low_resolved_target_t* target = function_state->target;
   loom_diagnostic_param_t params[] = {
       loom_param_string(function_state->function_name),
@@ -1066,7 +1066,7 @@ static iree_status_t loom_low_verify_emit_resource_unit_count_exceeded(
           loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT, 0)),
       loom_param_u32(unit_count),
       loom_param_string(target->descriptor_set_key),
-      loom_param_u32(physical_count),
+      loom_param_u32(allocatable_count),
   };
   return loom_low_verify_emit(function_state->state, op, LOOM_ERR_TARGET_043,
                               params, IREE_ARRAYSIZE(params), NULL, 0);
@@ -1090,11 +1090,11 @@ static iree_status_t loom_low_verify_resource(
   }
 
   const uint32_t unit_count = loom_type_register_unit_count(actual_type);
-  if (descriptor_register_class->physical_count != 0 &&
-      unit_count > descriptor_register_class->physical_count) {
+  if (descriptor_register_class->allocatable_count != 0 &&
+      unit_count > descriptor_register_class->allocatable_count) {
     return loom_low_verify_emit_resource_unit_count_exceeded(
         function_state, op, actual_type, unit_count,
-        descriptor_register_class->physical_count);
+        descriptor_register_class->allocatable_count);
   }
 
   return iree_ok_status();
