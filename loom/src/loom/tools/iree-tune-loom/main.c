@@ -388,7 +388,10 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "HAL device identity when a dispatch benchmark selected a backend. "
           "Benchmark attrs named `family`, `phase`, `strategy`, "
           "`knobs`, `problem`, or `reference_id` are copied into a "
-          "`metadata` object on candidate rows.\n"
+          "`metadata` object on candidate rows. Compile rows and benchmark "
+          "payloads with reports also carry `static_summary` for code size, "
+          "instruction count, spills, memory, pressure, and move-cause "
+          "totals.\n"
           "\n"
           "Examples:\n"
           "\n"
@@ -420,6 +423,9 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "results.jsonl\n"
           "jq 'select(.row==\"compile\" and .status!=\"ok\") | "
           ".diagnostics[]?' results.jsonl\n"
+          "jq 'select(.row==\"compile\" and .static_summary) | "
+          "{candidate_id,code:.static_summary.code_byte_count,"
+          "spills:.static_summary.allocation_spill_count}' results.jsonl\n"
           "jq 'select(.row==\"benchmark\" and .shape) | "
           "{candidate_id,shape_id,shape:.shape.parameters,"
           "p50:.benchmark_result.dispatch_timing_ns.p50}' results.jsonl\n"
@@ -3718,6 +3724,222 @@ static iree_status_t iree_tune_loom_write_benchmark_failure_json(
   return iree_ok_status();
 }
 
+static iree_string_view_t iree_tune_loom_compile_artifact_kind_name(
+    loom_target_compile_artifact_kind_t kind) {
+  switch (kind) {
+    case LOOM_TARGET_COMPILE_ARTIFACT_KIND_NONE:
+      return IREE_SV("none");
+    case LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE:
+      return IREE_SV("vm-archive");
+    case LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE:
+      return IREE_SV("hal-executable");
+    case LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_KERNEL_LIBRARY:
+      return IREE_SV("hal-kernel-library");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static iree_status_t iree_tune_loom_write_json_object_field_name(
+    loom_output_stream_t* stream, bool* first_field, const char* name) {
+  if (!*first_field) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+  }
+  *first_field = false;
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(stream, name));
+  return loom_output_stream_write_cstring(stream, ":");
+}
+
+static iree_status_t iree_tune_loom_write_json_string_field(
+    loom_output_stream_t* stream, bool* first_field, const char* name,
+    iree_string_view_t value) {
+  IREE_RETURN_IF_ERROR(
+      iree_tune_loom_write_json_object_field_name(stream, first_field, name));
+  return loom_json_write_escaped_string(stream, value);
+}
+
+static iree_status_t iree_tune_loom_write_json_optional_string_field(
+    loom_output_stream_t* stream, bool* first_field, const char* name,
+    iree_string_view_t value) {
+  if (iree_string_view_is_empty(value)) {
+    return iree_ok_status();
+  }
+  return iree_tune_loom_write_json_string_field(stream, first_field, name,
+                                                value);
+}
+
+static iree_status_t iree_tune_loom_write_json_u32_field(
+    loom_output_stream_t* stream, bool* first_field, const char* name,
+    uint32_t value) {
+  IREE_RETURN_IF_ERROR(
+      iree_tune_loom_write_json_object_field_name(stream, first_field, name));
+  return loom_output_stream_write_format(stream, "%" PRIu32, value);
+}
+
+static iree_status_t iree_tune_loom_write_json_u64_field(
+    loom_output_stream_t* stream, bool* first_field, const char* name,
+    uint64_t value) {
+  IREE_RETURN_IF_ERROR(
+      iree_tune_loom_write_json_object_field_name(stream, first_field, name));
+  return loom_output_stream_write_format(stream, "%" PRIu64, value);
+}
+
+static iree_status_t iree_tune_loom_write_json_size_field(
+    loom_output_stream_t* stream, bool* first_field, const char* name,
+    iree_host_size_t value) {
+  IREE_RETURN_IF_ERROR(
+      iree_tune_loom_write_json_object_field_name(stream, first_field, name));
+  return loom_output_stream_write_format(stream, "%" PRIhsz, value);
+}
+
+static void iree_tune_loom_compile_report_move_cause_totals(
+    const loom_target_compile_report_t* report, uint64_t* out_kind_count,
+    uint64_t* out_packet_count, uint64_t* out_unit_count) {
+  *out_kind_count = 0;
+  *out_packet_count = 0;
+  *out_unit_count = 0;
+  for (iree_host_size_t i = 1; i < LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_COUNT;
+       ++i) {
+    const loom_target_compile_report_move_cause_counts_t* counts =
+        &report->move_causes[i];
+    if (counts->packet_count == 0 && counts->unit_count == 0) {
+      continue;
+    }
+    ++*out_kind_count;
+    *out_packet_count += counts->packet_count;
+    *out_unit_count += counts->unit_count;
+  }
+}
+
+static iree_status_t iree_tune_loom_write_static_summary_json(
+    const loom_run_compile_report_capture_t* compile_report_capture,
+    loom_output_stream_t* stream) {
+  if (compile_report_capture == NULL ||
+      compile_report_capture->options.mode ==
+          LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE) {
+    return iree_ok_status();
+  }
+  const loom_target_compile_report_t* report = &compile_report_capture->report;
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"static_summary\":{"));
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_string_field(
+      stream, &first_field, "artifact_kind",
+      iree_tune_loom_compile_artifact_kind_name(report->artifact_kind)));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_string_field(
+      stream, &first_field, "status",
+      iree_make_cstring_view(iree_status_code_string(report->status_code))));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u32_field(
+      stream, &first_field, "detail_flags", report->detail_flags));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_optional_string_field(
+      stream, &first_field, "backend", report->backend_name));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_optional_string_field(
+      stream, &first_field, "target_family", report->target_family_name));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_optional_string_field(
+      stream, &first_field, "target_key", report->target_key));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_optional_string_field(
+      stream, &first_field, "target_bundle", report->target_bundle_name));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_optional_string_field(
+      stream, &first_field, "target_export", report->target_export_name));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_optional_string_field(
+      stream, &first_field, "target_config", report->target_config_name));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_optional_string_field(
+      stream, &first_field, "lowered", report->lowered_symbol));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_optional_string_field(
+      stream, &first_field, "executable_format", report->executable_format));
+  if (iree_any_bit_set(report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_ARTIFACT_SIZE)) {
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "artifact_size", report->artifact_size));
+  }
+  if (iree_any_bit_set(report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_EMISSION)) {
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "instruction_count",
+        report->emitted_instruction_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "code_byte_count",
+        report->emitted_code_byte_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "code_storage_byte_count",
+        report->emitted_code_storage_byte_count));
+  }
+  if (iree_any_bit_set(report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_MEMORY)) {
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "private_memory_bytes",
+        report->private_memory_bytes));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "local_memory_bytes",
+        report->local_memory_bytes));
+  }
+  if (iree_any_bit_set(report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION)) {
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "allocation_assignment_count",
+        report->allocation_assignment_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "allocation_spill_count",
+        report->allocation_spill_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "allocation_spill_plan_count",
+        report->allocation_spill_plan_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "allocation_coalesced_copy_count",
+        report->allocation_coalesced_copy_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "allocation_materialized_copy_count",
+        report->allocation_materialized_copy_count));
+  }
+  if (iree_any_bit_set(report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE)) {
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "schedule_node_count",
+        report->schedule_node_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "scheduled_node_count",
+        report->scheduled_node_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "register_pressure_summary_count",
+        report->register_pressure_summary_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "register_pressure_peak_live_units",
+        report->register_pressure_peak_live_units));
+  }
+  if (iree_any_bit_set(report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS)) {
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_size_field(
+        stream, &first_field, "pressure_row_count",
+        report->pressure_row_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_size_field(
+        stream, &first_field, "pressure_row_total_count",
+        report->pressure_row_total_count));
+  }
+  if (iree_any_bit_set(report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS)) {
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_size_field(
+        stream, &first_field, "spill_row_count", report->spill_row_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_size_field(
+        stream, &first_field, "spill_row_total_count",
+        report->spill_row_total_count));
+  }
+  if (iree_any_bit_set(report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_MOVE_CAUSES)) {
+    uint64_t kind_count = 0;
+    uint64_t packet_count = 0;
+    uint64_t unit_count = 0;
+    iree_tune_loom_compile_report_move_cause_totals(report, &kind_count,
+                                                    &packet_count, &unit_count);
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "move_cause_kind_count", kind_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "move_cause_packet_count", packet_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "move_cause_unit_count", unit_count));
+  }
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
 static iree_status_t iree_tune_loom_write_compile_report_json(
     const loom_run_compile_report_capture_t* compile_report_capture,
     loom_output_stream_t* stream) {
@@ -3824,6 +4046,8 @@ static iree_status_t iree_tune_loom_write_benchmark_result_json(
   if (benchmark_result->compile_report_capture != NULL &&
       benchmark_result->compile_report_capture->options.mode !=
           LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE) {
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_static_summary_json(
+        benchmark_result->compile_report_capture, stream));
     IREE_RETURN_IF_ERROR(iree_tune_loom_write_compile_report_json(
         benchmark_result->compile_report_capture, stream));
   }
@@ -3908,6 +4132,8 @@ static iree_status_t iree_tune_loom_append_compile_row(
   IREE_RETURN_IF_ERROR(iree_tune_loom_write_diagnostic_array_json(
       &provider->diagnostics, &stream));
   if (provider->compile_report_available) {
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_static_summary_json(
+        &provider->compile_report_capture, &stream));
     IREE_RETURN_IF_ERROR(iree_tune_loom_write_compile_report_json(
         &provider->compile_report_capture, &stream));
   }
@@ -4794,6 +5020,10 @@ int iree_tune_loom_main(int argc, char** argv,
       "check.file.read.npy paths resolve relative to the input .loom file. "
       "check.file.write.npy paths must be relative and are rooted under "
       "--file_output_dir, which defaults under $TMPDIR/iree-loom-tune. "
+      "Compile rows and benchmark payloads with reports also carry "
+      "static_summary, a compact projection of static compile evidence such "
+      "as instruction count, code bytes, spill counts, memory, pressure, and "
+      "move-cause totals. "
       "--profile_data selects final-batch HAL profiling families and "
       "--profile_artifacts_dir writes raw .irpf bundles for heavyweight "
       "families such as counters and executable traces. Counter families also "
@@ -4816,6 +5046,10 @@ int iree_tune_loom_main(int argc, char** argv,
       "p50:.benchmark_result.dispatch_timing_ns.p50}' results.jsonl\n"
       "  jq 'select(.row==\"plan\" and .metadata) | "
       "{candidate_id,metadata}' results.jsonl\n"
+      "  jq 'select(.row==\"compile\" and .static_summary) | "
+      "{candidate_id,code:.static_summary.code_byte_count,"
+      "spills:.static_summary.allocation_spill_count,"
+      "local:.static_summary.local_memory_bytes}' results.jsonl\n"
       "  jq 'select(.row==\"profile\") as $r | $r.profile.rows[]? | "
       "select(.type|startswith(\"dispatch_\")) | "
       "{candidate_id:$r.candidate_id,type,export_name,"
