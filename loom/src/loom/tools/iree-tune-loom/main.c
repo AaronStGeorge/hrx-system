@@ -381,7 +381,9 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "relative to `--file_output_dir`, which defaults under "
           "`$TMPDIR/iree-loom-tune`. When `--profile_data` includes "
           "`counters` or `counter-ranges`, decoded rows are emitted as "
-          "`profile_counter` JSONL after the normal `profile` row. Use "
+          "`profile_counter` JSONL after the normal `profile` row; counter "
+          "decode failures are reported as `counter_decode_status` rows "
+          "instead of failing the timing run. Use "
           "`--artifact_bundle_dir=DIR` to collect `results.jsonl`, "
           "`manifest.json`, file outputs, and profile artifacts under one "
           "directory; the manifest records command/path/source identity and "
@@ -431,6 +433,10 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "p50:.benchmark_result.dispatch_timing_ns.p50}' results.jsonl\n"
           "jq 'select(.row==\"profile_counter\") | .counter | "
           "select(.type==\"counter_group\") | {key,counter,avg,sum}' "
+          "results.jsonl\n"
+          "jq 'select(.row==\"profile_counter\" and "
+          ".counter.type==\"counter_decode_status\") | "
+          "{candidate_id,status:.counter.status,reason:.counter.reason}' "
           "results.jsonl\n"
           "```\n"
           "\n"
@@ -4236,13 +4242,108 @@ static iree_status_t iree_tune_loom_write_profile_counter_identity_json(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream, ",\"batch_size\":%" PRIhsz,
       benchmark_result->hal_benchmark.timing.batch_size));
+  const loom_run_hal_profile_summary_t* profile =
+      &benchmark_result->hal_benchmark.profile;
+  if (profile->has_artifact_path) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"artifact_path\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+        stream, iree_make_string_view(profile->artifact_path,
+                                      profile->artifact_path_length)));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t iree_tune_loom_write_profile_counter_status_json(
+    iree_string_view_t status, iree_string_view_t reason,
+    iree_status_code_t error_code, iree_string_view_t error_message,
+    loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_string_field(
+      stream, &first_field, "type", IREE_SV("counter_decode_status")));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_string_field(
+      stream, &first_field, "status", status));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_string_field(
+      stream, &first_field, "reason", reason));
+  if (error_code != IREE_STATUS_OK ||
+      !iree_string_view_is_empty(error_message)) {
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_object_field_name(
+        stream, &first_field, "error"));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+    bool first_error_field = true;
+    if (error_code != IREE_STATUS_OK) {
+      IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u32_field(
+          stream, &first_error_field, "code", (uint32_t)error_code));
+      IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_string_field(
+          stream, &first_error_field, "status",
+          iree_make_cstring_view(iree_status_code_string(error_code))));
+    }
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_optional_string_field(
+        stream, &first_error_field, "message", error_message));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
+  }
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t iree_tune_loom_append_profile_counter_status_row(
+    const iree_tune_loom_run_identity_t* run,
+    const iree_tune_loom_candidate_identity_t* candidate,
+    const loom_module_t* module,
+    const loom_testbench_benchmark_plan_t* benchmark_plan,
+    const loom_testbench_case_plan_t* case_plan,
+    const iree_tune_loom_benchmark_result_t* benchmark_result,
+    iree_string_view_t status, iree_string_view_t reason,
+    iree_status_code_t error_code, iree_string_view_t error_message,
+    iree_string_builder_t* profile_output) {
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(profile_output, &stream);
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+      &stream, "{\"row\":\"profile_counter\""));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_profile_counter_identity_json(
+      run, candidate, module, benchmark_plan, case_plan, benchmark_result,
+      &stream));
   IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, ",\"artifact_path\":"));
-  return loom_json_write_escaped_string(
-      stream,
-      iree_make_string_view(
-          benchmark_result->hal_benchmark.profile.artifact_path,
-          benchmark_result->hal_benchmark.profile.artifact_path_length));
+      loom_output_stream_write_cstring(&stream, ",\"counter\":"));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_profile_counter_status_json(
+      status, reason, error_code, error_message, &stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}\n"));
+  return iree_ok_status();
+}
+
+static iree_status_t iree_tune_loom_append_profile_counter_status_from_error(
+    const iree_tune_loom_run_identity_t* run,
+    const iree_tune_loom_candidate_identity_t* candidate,
+    const loom_module_t* module,
+    const loom_testbench_benchmark_plan_t* benchmark_plan,
+    const loom_testbench_case_plan_t* case_plan,
+    const iree_tune_loom_benchmark_result_t* benchmark_result,
+    iree_string_view_t status, iree_string_view_t reason,
+    iree_status_t error_status, iree_string_builder_t* profile_output) {
+  const iree_status_code_t error_code = iree_status_code(error_status);
+  char message[512] = {0};
+  iree_host_size_t required_length = 0;
+  iree_host_size_t message_length = 0;
+  if (iree_status_format(error_status, sizeof(message), message,
+                         &required_length)) {
+    message_length = required_length;
+    if (message_length >= sizeof(message)) {
+      message_length = sizeof(message) - 1;
+    }
+  } else {
+    const char* error_code_string = iree_status_code_string(error_code);
+    for (; error_code_string[message_length] != '\0' &&
+           message_length + 1 < sizeof(message);
+         ++message_length) {
+      message[message_length] = error_code_string[message_length];
+    }
+    message[message_length] = '\0';
+  }
+  iree_status_free(error_status);
+  return iree_tune_loom_append_profile_counter_status_row(
+      run, candidate, module, benchmark_plan, case_plan, benchmark_result,
+      status, reason, error_code,
+      iree_make_string_view(message, message_length), profile_output);
 }
 
 static iree_status_t iree_tune_loom_append_profile_counter_payload_row(
@@ -4278,9 +4379,36 @@ static iree_status_t iree_tune_loom_append_profile_counter_rows(
   const loom_run_hal_profile_summary_t* profile =
       &benchmark_result->hal_benchmark.profile;
   if (!benchmark_result->has_hal_benchmark || !profile->requested ||
-      !profile->executed || profile->has_error || !profile->has_artifact_path ||
       !iree_tune_loom_profile_data_has_counter_data(profile->data_families)) {
     return iree_ok_status();
+  }
+  if (!profile->executed) {
+    if (profile->has_error) {
+      return iree_tune_loom_append_profile_counter_status_row(
+          run, candidate, module, benchmark_plan, case_plan, benchmark_result,
+          IREE_SV("unavailable"), IREE_SV("profile_error"), profile->error_code,
+          iree_make_string_view(profile->error_message,
+                                profile->error_message_length),
+          profile_output);
+    }
+    return iree_tune_loom_append_profile_counter_status_row(
+        run, candidate, module, benchmark_plan, case_plan, benchmark_result,
+        IREE_SV("unavailable"), IREE_SV("profile_not_executed"), IREE_STATUS_OK,
+        iree_string_view_empty(), profile_output);
+  }
+  if (profile->has_error) {
+    return iree_tune_loom_append_profile_counter_status_row(
+        run, candidate, module, benchmark_plan, case_plan, benchmark_result,
+        IREE_SV("unavailable"), IREE_SV("profile_error"), profile->error_code,
+        iree_make_string_view(profile->error_message,
+                              profile->error_message_length),
+        profile_output);
+  }
+  if (!profile->has_artifact_path) {
+    return iree_tune_loom_append_profile_counter_status_row(
+        run, candidate, module, benchmark_plan, case_plan, benchmark_result,
+        IREE_SV("unavailable"), IREE_SV("no_profile_artifact_path"),
+        IREE_STATUS_OK, iree_string_view_empty(), profile_output);
   }
 
   FILE* counter_report_file = tmpfile();
@@ -4293,16 +4421,22 @@ static iree_status_t iree_tune_loom_append_profile_counter_rows(
 
   const iree_string_view_t artifact_path = iree_make_string_view(
       profile->artifact_path, profile->artifact_path_length);
-  iree_status_t status = iree_profile_counter_file(
+  iree_status_t decode_status = iree_profile_counter_file(
       artifact_path, IREE_SV("jsonl"), iree_string_view_empty(),
       /*id_filter=*/-1,
       /*emit_samples=*/false, counter_report_file, allocator);
   iree_string_builder_t counter_rows;
   iree_string_builder_initialize(allocator, &counter_rows);
-  if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_read_file_into_builder(counter_report_file,
-                                                   &counter_rows);
+  if (!iree_status_is_ok(decode_status)) {
+    fclose(counter_report_file);
+    iree_string_builder_deinitialize(&counter_rows);
+    return iree_tune_loom_append_profile_counter_status_from_error(
+        run, candidate, module, benchmark_plan, case_plan, benchmark_result,
+        IREE_SV("raw_artifact_only"), IREE_SV("decode_failed"), decode_status,
+        profile_output);
   }
+  iree_status_t status =
+      iree_tune_loom_read_file_into_builder(counter_report_file, &counter_rows);
   fclose(counter_report_file);
   if (!iree_status_is_ok(status)) {
     iree_string_builder_deinitialize(&counter_rows);
@@ -5028,8 +5162,9 @@ int iree_tune_loom_main(int argc, char** argv,
       "--profile_artifacts_dir writes raw .irpf bundles for heavyweight "
       "families such as counters and executable traces. Counter families also "
       "emit profile_counter JSONL rows decoded from the raw profile bundle; "
-      "without an explicit --profile_artifacts_dir, those bundles are staged "
-      "under the run file_output_dir.\n"
+      "counter decode failures emit counter_decode_status rows instead of "
+      "failing the timing run. Without an explicit --profile_artifacts_dir, "
+      "those bundles are staged under the run file_output_dir.\n"
       "Benchmark attrs named family, phase, strategy, knobs, problem, or "
       "reference_id are copied into a metadata object on candidate rows.\n"
       "\n"
@@ -5057,7 +5192,11 @@ int iree_tune_loom_main(int argc, char** argv,
       "results.jsonl\n"
       "  jq 'select(.row==\"profile_counter\") | .counter | "
       "select(.type==\"counter_group\") | {key,counter,avg,sum}' "
-      "results.jsonl\n");
+      "results.jsonl\n"
+      "  jq 'select(.row==\"profile_counter\" and "
+      ".counter.type==\"counter_decode_status\") | "
+      "{candidate_id,status:.counter.status,reason:.counter.reason,"
+      "error:.counter.error.status}' results.jsonl\n");
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
   if (FLAG_agents_md) {
     iree_tune_loom_print_agents_md(stdout);
