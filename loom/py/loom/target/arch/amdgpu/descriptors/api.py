@@ -152,6 +152,164 @@ def _with_overlay_descriptors(
     return descriptor_set
 
 
+_GFX125X_VGPR_MSB_ADDRESSABLE_UNIT_COUNT = 256
+
+_GFX125X_VOP_MODE_FIELDS = frozenset(
+    ("VDST", "SRC0", "VSRC0", "SRC1", "VSRC1", "SRC2", "VSRC2")
+)
+_GFX125X_DS_MODE_FIELDS = frozenset(("ADDR", "DATA0", "DATA1", "VDST"))
+_GFX125X_FLAT_MODE_FIELDS = frozenset(
+    ("ADDR", "VADDR", "DATA", "VDATA", "VSRC", "VDST")
+)
+_GFX125X_BUFFER_MODE_FIELDS = frozenset(("VADDR", "VDATA", "VSRC", "VDST"))
+
+_GFX125X_VGPR_MSB_FIELDS_BY_FORMAT = {
+    AMDGPU_ENCODING_FORMAT_VOP1: _GFX125X_VOP_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_VOP1_LITERAL: _GFX125X_VOP_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_VOP1_DPP: _GFX125X_VOP_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_VOP1_DPP16: _GFX125X_VOP_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_VOP1_SDWA: _GFX125X_VOP_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_VOP2: _GFX125X_VOP_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_VOP2_LITERAL: _GFX125X_VOP_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_VOP3: _GFX125X_VOP_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_VOP3_LITERAL: _GFX125X_VOP_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_VOP3P: _GFX125X_VOP_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_VOP3PX2: _GFX125X_VOP_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_VOP3_SDST: _GFX125X_VOP_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_DS: _GFX125X_DS_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_VDS: _GFX125X_DS_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_FLAT: _GFX125X_FLAT_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_VFLAT: _GFX125X_FLAT_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_VGLOBAL: _GFX125X_FLAT_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_VSCRATCH: _GFX125X_FLAT_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_MUBUF: _GFX125X_BUFFER_MODE_FIELDS,
+    AMDGPU_ENCODING_FORMAT_VBUFFER: _GFX125X_BUFFER_MODE_FIELDS,
+}
+
+
+def _operand_has_vgpr_alt(operand: Operand) -> bool:
+    return any(reg_alt.reg_class == _REG_VGPR for reg_alt in operand.reg_alts)
+
+
+def _operand_is_explicit_register(operand: Operand) -> bool:
+    return OperandFlag.IMPLICIT not in operand.flags and operand.role in (
+        OperandRole.RESULT,
+        OperandRole.OPERAND,
+        OperandRole.OPERAND_RESULT,
+        OperandRole.PREDICATE,
+        OperandRole.RESOURCE,
+    )
+
+
+def _gfx125x_operand_encoding_field_name(operand: Operand) -> str | None:
+    if operand.encoding_field_id == 0:
+        return None
+    return amdgpu_encoding_field_name(operand.encoding_field_id)
+
+
+def _gfx125x_operand_uses_vgpr_msb_state(
+    descriptor: Descriptor, operand: Operand
+) -> bool:
+    field_name = _gfx125x_operand_encoding_field_name(operand)
+    if field_name is None:
+        return False
+    return field_name in _GFX125X_VGPR_MSB_FIELDS_BY_FORMAT.get(
+        descriptor.encoding_format_id, frozenset()
+    )
+
+
+def _with_gfx125x_operand_address_state(
+    descriptor: Descriptor, operand: Operand
+) -> Operand:
+    if not _operand_is_explicit_register(operand) or not _operand_has_vgpr_alt(operand):
+        return operand
+    if operand.address_map_kind is not OperandAddressMapKind.DIRECT:
+        return operand
+    if _gfx125x_operand_uses_vgpr_msb_state(descriptor, operand):
+        return replace(
+            operand,
+            address_map_kind=OperandAddressMapKind.TARGET_STATE,
+            addressable_unit_count=_GFX125X_VGPR_MSB_ADDRESSABLE_UNIT_COUNT,
+        )
+    return replace(
+        operand,
+        address_map_kind=OperandAddressMapKind.LOW_SUBSET,
+        addressable_unit_count=_GFX125X_VGPR_MSB_ADDRESSABLE_UNIT_COUNT,
+    )
+
+
+def _with_gfx125x_vgpr_msb_address_state(descriptor: Descriptor) -> Descriptor:
+    operands = tuple(
+        _with_gfx125x_operand_address_state(descriptor, operand)
+        for operand in descriptor.operands
+    )
+    updated_descriptor = replace(descriptor, operands=operands)
+    if any(
+        operand.address_map_kind is OperandAddressMapKind.TARGET_STATE
+        for operand in operands
+    ):
+        updated_descriptor = _with_mode_state_read(updated_descriptor)
+    return updated_descriptor
+
+
+def _with_gfx125x_vgpr_msb_address_states(
+    descriptor_set: DescriptorSet,
+) -> DescriptorSet:
+    descriptor_set = replace(
+        descriptor_set,
+        descriptors=tuple(
+            _with_gfx125x_vgpr_msb_address_state(descriptor)
+            for descriptor in descriptor_set.descriptors
+        ),
+    )
+    _validate_gfx125x_vgpr_msb_address_state(descriptor_set)
+    return descriptor_set
+
+
+def _descriptor_writes_mode_state(descriptor: Descriptor) -> bool:
+    return any(
+        OperandFlag.STATE_WRITE in operand.flags
+        and len(operand.reg_alts) == 1
+        and operand.reg_alts[0].reg_class == _REG_MODE
+        for operand in descriptor.operands
+    )
+
+
+def _validate_gfx125x_vgpr_msb_address_state(descriptor_set: DescriptorSet) -> None:
+    descriptors_by_key = {
+        descriptor.key: descriptor for descriptor in descriptor_set.descriptors
+    }
+    try:
+        mode_descriptor = descriptors_by_key["amdgpu.s_set_vgpr_msb"]
+    except KeyError as exc:
+        raise ValueError(
+            "gfx125x VGPR-MSB target-state operands require 'amdgpu.s_set_vgpr_msb'"
+        ) from exc
+    if not _descriptor_writes_mode_state(mode_descriptor):
+        raise ValueError(
+            "gfx125x descriptor 'amdgpu.s_set_vgpr_msb' must write MODE state"
+        )
+    for descriptor in descriptor_set.descriptors:
+        has_target_state_operand = False
+        for operand in descriptor.operands:
+            if operand.address_map_kind is not OperandAddressMapKind.TARGET_STATE:
+                continue
+            has_target_state_operand = True
+            if not _gfx125x_operand_uses_vgpr_msb_state(descriptor, operand):
+                raise ValueError(
+                    f"gfx125x descriptor '{descriptor.key}' marks operand "
+                    f"'{operand.field_name}' as VGPR-MSB target-state, but "
+                    "the operand encoding field has no S_SET_VGPR_MSB slot"
+                )
+        if has_target_state_operand and not any(
+            _is_mode_state_read(operand) for operand in descriptor.operands
+        ):
+            raise ValueError(
+                f"gfx125x descriptor '{descriptor.key}' uses VGPR-MSB "
+                "target-state operands but does not read MODE state"
+            )
+
+
 @dataclass(frozen=True, slots=True)
 class _AmdgpuCoreDescriptorSetBuilder:
     base: DescriptorSet
@@ -201,11 +359,14 @@ def build_amdgpu_core_descriptor_set_from_spec(
     validate_amdgpu_descriptor_set_isa_xml(
         amdgpu_descriptor_set_info_by_generator_target(target), spec
     )
-    return _with_overlay_descriptors(
+    descriptor_set = _with_overlay_descriptors(
         builder.base,
         spec,
         builder.overlay_descriptors(spec),
     )
+    if target == "rdna4_gfx125x":
+        descriptor_set = _with_gfx125x_vgpr_msb_address_states(descriptor_set)
+    return descriptor_set
 
 
 def build_amdgpu_core_descriptor_set(
@@ -223,6 +384,9 @@ __all__ = (
     "_AmdgpuCoreDescriptorSetBuilder",
     "_descriptor_address_offset_immediates",
     "_descriptor_has_memory_effect",
+    "_gfx125x_operand_uses_vgpr_msb_state",
+    "_with_gfx125x_vgpr_msb_address_state",
+    "_with_gfx125x_vgpr_msb_address_states",
     "_validate_address_immediate_units",
     "_with_overlay_descriptors",
     "amdgpu_common_reg_class_ids",

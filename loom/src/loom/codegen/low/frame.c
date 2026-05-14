@@ -165,6 +165,20 @@ static iree_status_t loom_low_emission_frame_lower_spill_traffic(
                                       module, low_func_op, arena);
 }
 
+static iree_status_t loom_low_emission_frame_materialize_address_state(
+    const loom_low_emission_frame_spill_free_options_t* options,
+    loom_module_t* module, loom_op_t* low_func_op,
+    const loom_low_emission_frame_t* frame, iree_arena_allocator_t* arena,
+    loom_low_emission_frame_materialize_address_state_result_t* out_result) {
+  *out_result = (loom_low_emission_frame_materialize_address_state_result_t){0};
+  if (options->materialize_address_state == NULL) {
+    return iree_ok_status();
+  }
+  return options->materialize_address_state(
+      options->materialize_address_state_user_data, module, low_func_op, frame,
+      arena, out_result);
+}
+
 static iree_status_t loom_low_emission_frame_validate_final(
     const loom_low_emission_frame_options_t* frame_options,
     const loom_low_emission_frame_spill_free_options_t* options,
@@ -218,6 +232,21 @@ static iree_status_t loom_low_emission_frame_make_iteration_limit_status(
       frame->allocation.spill_count);
 }
 
+static iree_status_t
+loom_low_emission_frame_make_address_state_iteration_limit_status(
+    const loom_low_emission_frame_t* frame, iree_host_size_t iteration_count) {
+  const iree_string_view_t target_key =
+      loom_low_diagnostic_target_key(&frame->target);
+  const iree_string_view_t function_name =
+      loom_low_diagnostic_function_name(frame->module, frame->function_op);
+  return iree_make_status(
+      IREE_STATUS_FAILED_PRECONDITION,
+      "low emission frame for target '%.*s' function '@%.*s' did not reach a "
+      "stable final frame after %zu address-state materialization iteration(s)",
+      (int)target_key.size, target_key.data, (int)function_name.size,
+      function_name.data, iteration_count);
+}
+
 static iree_status_t loom_low_emission_frame_make_no_progress_status(
     const loom_low_emission_frame_t* frame) {
   const iree_string_view_t target_key =
@@ -249,6 +278,8 @@ iree_status_t loom_low_emission_frame_build_spill_free(
       spill_free_options, module, low_func_op, arena));
   iree_host_size_t iteration_count = 0;
   iree_host_size_t iteration_limit = 0;
+  iree_host_size_t address_state_iteration_count = 0;
+  iree_host_size_t address_state_iteration_limit = 0;
   for (;;) {
     loom_low_emission_frame_t frame = {0};
     IREE_RETURN_IF_ERROR(loom_low_emission_frame_build(
@@ -264,6 +295,31 @@ iree_status_t loom_low_emission_frame_build_spill_free(
     }
     if (frame.allocation.spill_plan_count == 0 &&
         frame.allocation.spill_count == 0) {
+      if (address_state_iteration_limit == 0) {
+        if (frame.schedule.scheduled_node_count == IREE_HOST_SIZE_MAX) {
+          return iree_make_status(
+              IREE_STATUS_OUT_OF_RANGE,
+              "low emission frame address-state materialization iteration "
+              "limit overflows host size");
+        }
+        address_state_iteration_limit = frame.schedule.scheduled_node_count + 1;
+      }
+      loom_low_emission_frame_materialize_address_state_result_t
+          address_state_result = {0};
+      IREE_RETURN_IF_ERROR(loom_low_emission_frame_materialize_address_state(
+          spill_free_options, module, low_func_op, &frame, arena,
+          &address_state_result));
+      if (address_state_result.error_count != 0) {
+        return iree_ok_status();
+      }
+      if (address_state_result.changed) {
+        if (address_state_iteration_count >= address_state_iteration_limit) {
+          return loom_low_emission_frame_make_address_state_iteration_limit_status(
+              &frame, address_state_iteration_count);
+        }
+        ++address_state_iteration_count;
+        continue;
+      }
       bool accepted = false;
       IREE_RETURN_IF_ERROR(loom_low_emission_frame_validate_final(
           frame_options, spill_free_options, &frame, arena, &accepted));

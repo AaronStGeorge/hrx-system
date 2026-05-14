@@ -229,6 +229,52 @@ TEST(AmdgpuEncodingTest, ScaleSourcesUseUnifiedSourceSelectors) {
       LOOM_AMDGPU_ENCODING_FIELD_SCALE_SRC1));
 }
 
+TEST(AmdgpuEncodingTest, MapsVopFieldsToVgprMsbSlots) {
+  EXPECT_EQ(loom_amdgpu_encoding_vgpr_msb_slot(LOOM_AMDGPU_ENCODING_FORMAT_VOP3,
+                                               LOOM_AMDGPU_ENCODING_FIELD_SRC0),
+            LOOM_AMDGPU_VGPR_MSB_SLOT_SRC0);
+  EXPECT_EQ(
+      loom_amdgpu_encoding_vgpr_msb_slot(LOOM_AMDGPU_ENCODING_FORMAT_VOP3,
+                                         LOOM_AMDGPU_ENCODING_FIELD_VSRC1),
+      LOOM_AMDGPU_VGPR_MSB_SLOT_SRC1);
+  EXPECT_EQ(
+      loom_amdgpu_encoding_vgpr_msb_slot(LOOM_AMDGPU_ENCODING_FORMAT_VOP3,
+                                         LOOM_AMDGPU_ENCODING_FIELD_VSRC2),
+      LOOM_AMDGPU_VGPR_MSB_SLOT_SRC2);
+  EXPECT_EQ(loom_amdgpu_encoding_vgpr_msb_slot(LOOM_AMDGPU_ENCODING_FORMAT_VOP1,
+                                               LOOM_AMDGPU_ENCODING_FIELD_VDST),
+            LOOM_AMDGPU_VGPR_MSB_SLOT_DST);
+}
+
+TEST(AmdgpuEncodingTest, MapsMemoryFieldsToVgprMsbSlots) {
+  EXPECT_EQ(loom_amdgpu_encoding_vgpr_msb_slot(LOOM_AMDGPU_ENCODING_FORMAT_VDS,
+                                               LOOM_AMDGPU_ENCODING_FIELD_ADDR),
+            LOOM_AMDGPU_VGPR_MSB_SLOT_SRC0);
+  EXPECT_EQ(
+      loom_amdgpu_encoding_vgpr_msb_slot(LOOM_AMDGPU_ENCODING_FORMAT_VDS,
+                                         LOOM_AMDGPU_ENCODING_FIELD_DATA0),
+      LOOM_AMDGPU_VGPR_MSB_SLOT_SRC1);
+  EXPECT_EQ(
+      loom_amdgpu_encoding_vgpr_msb_slot(LOOM_AMDGPU_ENCODING_FORMAT_VDS,
+                                         LOOM_AMDGPU_ENCODING_FIELD_DATA1),
+      LOOM_AMDGPU_VGPR_MSB_SLOT_SRC2);
+  EXPECT_EQ(
+      loom_amdgpu_encoding_vgpr_msb_slot(LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL,
+                                         LOOM_AMDGPU_ENCODING_FIELD_VDST),
+      LOOM_AMDGPU_VGPR_MSB_SLOT_DST);
+  EXPECT_EQ(
+      loom_amdgpu_encoding_vgpr_msb_slot(LOOM_AMDGPU_ENCODING_FORMAT_VBUFFER,
+                                         LOOM_AMDGPU_ENCODING_FIELD_VDATA),
+      LOOM_AMDGPU_VGPR_MSB_SLOT_DST);
+}
+
+TEST(AmdgpuEncodingTest, LeavesUncontrolledFieldsWithoutVgprMsbSlot) {
+  EXPECT_EQ(
+      loom_amdgpu_encoding_vgpr_msb_slot(LOOM_AMDGPU_ENCODING_FORMAT_VOP3PX2,
+                                         LOOM_AMDGPU_ENCODING_FIELD_SCALE_SRC0),
+      LOOM_AMDGPU_VGPR_MSB_SLOT_NONE);
+}
+
 TEST(AmdgpuEncodingTest, PacksRdna3VMovB32Dpp16LaneControl) {
   loom_amdgpu_encoding_packet_t packet = {};
   IREE_ASSERT_OK(PackVMovB32Dpp(

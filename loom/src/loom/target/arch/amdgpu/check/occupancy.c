@@ -159,7 +159,8 @@ static iree_status_t loom_amdgpu_occupancy_check_emit_provider_execute(
       request, options.function_symbol_name, options.schedule_strategy,
       options.allocation_budgets, options.allocation_budget_count,
       options.allocation_fixed_value_specs,
-      options.allocation_fixed_value_spec_count, &frame));
+      options.allocation_fixed_value_spec_count, /*spill_free_options=*/NULL,
+      &frame));
 
   loom_check_diagnostic_emitter_capture_t diagnostic_capture = {
       .diagnostic_collector = request->diagnostic_collector,

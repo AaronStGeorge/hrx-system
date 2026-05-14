@@ -63,6 +63,18 @@ iree_py_library(
 
 iree_py_test(
   NAME
+    target_info_test
+  SRCS
+    "../../../tools/pytest_style_runner.py"
+  ARGS
+    "loom.target.arch.amdgpu.target_info_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
+)
+
+iree_py_test(
+  NAME
     descriptors_test
   SRCS
     "../../../tools/pytest_style_runner.py"

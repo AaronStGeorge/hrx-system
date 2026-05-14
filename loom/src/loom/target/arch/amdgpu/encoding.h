@@ -203,6 +203,24 @@ typedef struct loom_amdgpu_encoding_packet_t {
   uint16_t word_count;
 } loom_amdgpu_encoding_packet_t;
 
+typedef enum loom_amdgpu_vgpr_msb_slot_e {
+  // Encoding field is not controlled by S_SET_VGPR_MSB.
+  LOOM_AMDGPU_VGPR_MSB_SLOT_NONE = 0,
+  // Encoding field reads the SRC0 VGPR high-bank selector.
+  LOOM_AMDGPU_VGPR_MSB_SLOT_SRC0 = 1,
+  // Encoding field reads the SRC1 VGPR high-bank selector.
+  LOOM_AMDGPU_VGPR_MSB_SLOT_SRC1 = 2,
+  // Encoding field reads the SRC2 VGPR high-bank selector.
+  LOOM_AMDGPU_VGPR_MSB_SLOT_SRC2 = 3,
+  // Encoding field reads the destination/data VGPR high-bank selector.
+  LOOM_AMDGPU_VGPR_MSB_SLOT_DST = 4,
+} loom_amdgpu_vgpr_msb_slot_t;
+
+enum {
+  // Number of low VGPR indices addressed by one S_SET_VGPR_MSB selector bank.
+  LOOM_AMDGPU_VGPR_MSB_WINDOW_SIZE = 256,
+};
+
 typedef struct loom_amdgpu_encoding_vopdxy_fields_t {
   // X-slot VOPD operation id.
   uint16_t op_x;
@@ -234,6 +252,12 @@ bool loom_amdgpu_encoding_field_is_src0(uint16_t field_id);
 
 // Returns true when |field_id| is the literal payload field.
 bool loom_amdgpu_encoding_field_is_literal(uint16_t field_id);
+
+// Returns the S_SET_VGPR_MSB selector slot controlling |encoding_field_id| in
+// |encoding_format_id|, or NONE when the field does not read the MODE VGPR-MSB
+// state.
+loom_amdgpu_vgpr_msb_slot_t loom_amdgpu_encoding_vgpr_msb_slot(
+    uint16_t encoding_format_id, uint16_t encoding_field_id);
 
 // Maps a verified inline unsigned integer into the target's scalar/vector
 // source selector domain.

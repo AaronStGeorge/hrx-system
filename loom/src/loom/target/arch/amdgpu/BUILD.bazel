@@ -53,6 +53,7 @@ loom_assert_no_dependencies(
         "//loom/src/loom/target/emit/llvmir:llvmir",
     ],
     targets = [
+        ":address_state",
         ":cdna3_descriptors",
         ":cdna4_descriptors",
         ":rdna3_descriptors",
@@ -85,6 +86,7 @@ loom_assert_no_dependencies(
     name = "amdgpu_lightweight_analysis_no_low_registry_dep",
     dependencies = [":low_registry"],
     targets = [
+        ":address_state",
         ":occupancy",
         ":occupancy_tables",
         ":packet_plan",
@@ -372,6 +374,26 @@ loom_cc_library(
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
+loom_cc_library(
+    name = "address_state",
+    srcs = ["address_state.c"],
+    hdrs = ["address_state.h"],
+    deps = [
+        ":encoding",
+        ":target_refs",
+        "//loom/src/loom/codegen/low:allocation",
+        "//loom/src/loom/codegen/low:builder",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:frame",
+        "//loom/src/loom/codegen/low/schedule",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
 loom_target_table_cc_library(
     name = "target_refs",
     args = [
@@ -460,8 +482,6 @@ loom_target_table_cc_library(
         "--public-header=loom/target/arch/amdgpu/rdna4_encoding_tables.h",
     ],
     exclude_from_cmake_all = True,
-    generated_hdr_flags = ["--view-header=rdna4_gfx125x"],
-    generated_hdrs = ["rdna4_gfx125x_encoding_tables.h"],
     generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
     inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml"],
     deps = [
@@ -472,11 +492,17 @@ loom_target_table_cc_library(
 
 loom_target_table_cc_library(
     name = "rdna4_gfx125x_encoding_tables",
+    args = [
+        "--target=rdna4_gfx125x",
+        "--descriptor-set-key=amdgpu.rdna4.gfx125x.core",
+        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
+        "--public-header=loom/target/arch/amdgpu/rdna4_gfx125x_encoding_tables.h",
+    ],
     exclude_from_cmake_all = True,
-    header_only = True,
+    generator = _AMDGPU_ENCODING_TABLE_GENERATOR,
+    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml"],
     deps = [
         ":encoding_defs",
-        ":rdna4_encoding_tables",
         "//runtime/src/iree/base",
     ],
 )
@@ -545,8 +571,6 @@ loom_low_descriptor_cc_library(
         "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
     ],
     exclude_from_cmake_all = True,
-    generated_hdr_flags = ["--view-header=rdna4_gfx125x"],
-    generated_hdrs = ["rdna4_gfx125x_descriptors.h"],
     generator = _AMDGPU_DESCRIPTOR_GENERATOR,
     inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml"],
     deps = ["//loom/src/loom/codegen/low:descriptors"],
@@ -554,13 +578,14 @@ loom_low_descriptor_cc_library(
 
 loom_low_descriptor_cc_library(
     name = "rdna4_gfx125x_descriptors",
-    exclude_from_cmake_all = True,
-    header_only = True,
-    ids_deps = ["//loom/src/loom/codegen/low:descriptors"],
-    deps = [
-        ":rdna4_descriptors",
-        "//loom/src/loom/codegen/low:descriptors",
+    args = [
+        "--target=rdna4_gfx125x",
+        "--xml=$(rootpath @amdgpu_isa_xml//:amdgpu_isa_rdna4.xml)",
     ],
+    exclude_from_cmake_all = True,
+    generator = _AMDGPU_DESCRIPTOR_GENERATOR,
+    inputs = ["@amdgpu_isa_xml//:amdgpu_isa_rdna4.xml"],
+    deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
 loom_low_descriptor_cc_library(

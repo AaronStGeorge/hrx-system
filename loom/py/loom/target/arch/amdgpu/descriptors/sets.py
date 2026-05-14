@@ -1900,9 +1900,27 @@ def _gfx1250_wmma_scale_immediates() -> tuple[Immediate, ...]:
     )
 
 
+def _gfx125x_reg_classes() -> tuple[RegClass, ...]:
+    return (
+        *(
+            replace(reg_class, allocatable_count=1024)
+            if reg_class.name == _REG_VGPR
+            else reg_class
+            for reg_class in _AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE.reg_classes
+        ),
+        RegClass(
+            _REG_MODE,
+            32,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.PHYSICAL, RegClassFlag.UNSPILLABLE),
+            allocatable_count=1,
+        ),
+    )
+
+
 _AMDGPU_RDNA4_GFX125X_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
     key="amdgpu.rdna4.gfx125x.core",
-    reg_classes=_AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE.reg_classes,
+    reg_classes=_gfx125x_reg_classes(),
     register_parts=_AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE.register_parts,
     resources=(
         *_AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE.resources,
@@ -1926,8 +1944,17 @@ _AMDGPU_RDNA4_GFX125X_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             hazards=_matrix_hazards(_RESOURCE_SWMMAC),
             model_quality=ModelQuality.ESTIMATED,
         ),
+        ScheduleClass(
+            _SCHEDULE_MODE_CONTROL,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=1,
+            issue_uses=(IssueUse(_RESOURCE_CONTROL, cycles=1, units=1),),
+            flags=(ScheduleClassFlag.CONTROL,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
     ),
     descriptors=(
+        _s_set_vgpr_msb_descriptor(),
         Descriptor(
             key="amdgpu.v_wmma_f32_16x16x32_f16",
             mnemonic="v_wmma_f32_16x16x32_f16",
@@ -2106,6 +2133,7 @@ __all__ = (
     "_amdgpu_core_descriptor_set_bases",
     "_amdgpu_descriptor_ref_key_set",
     "_cdna_core_overlays",
+    "_gfx125x_reg_classes",
     "_gfx11_core_overlay_descriptors",
     "_gfx11_core_overlays",
     "_gfx1250_core_overlay_descriptors",

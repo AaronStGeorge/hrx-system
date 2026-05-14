@@ -51,6 +51,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::frame
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::target::arch::amdgpu::address_state
     loom::src::loom::target::arch::amdgpu::packet_plan
     loom::src::loom::tools::loom-check::execute
   PUBLIC
@@ -335,6 +336,7 @@ loom_cc_library(
     loom::src::loom::ops::func_symbol_facts
     loom::src::loom::ops::low
     loom::src::loom::ops::target
+    loom::src::loom::target::arch::amdgpu::address_state
     loom::src::loom::target::arch::amdgpu::error_defs
     loom::src::loom::target::arch::amdgpu::hal_kernel_abi
     loom::src::loom::target::arch::amdgpu::occupancy

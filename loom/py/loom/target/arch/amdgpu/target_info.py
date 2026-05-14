@@ -233,7 +233,6 @@ AMDGPU_DESCRIPTOR_SET_INFOS: tuple[AmdgpuDescriptorSetInfo, ...] = (
         isa_architecture_name="AMD RDNA 4",
         isa_architecture_id=10,
         supports_descriptor_packet_encoding=True,
-        storage_generator_target="rdna4",
         vector_memory_cache_policy_encoding=AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH,
     ),
     AmdgpuDescriptorSetInfo(

@@ -17,6 +17,8 @@ from loom.target.arch.amdgpu.descriptors import (
     _AMDGPU_TRANS_PROXY_LATENCY_CYCLES,
     _GFX12_TH_ATOMIC_RETURN_VALUE,
     _REG_EXEC,
+    _REG_MODE,
+    _SCHEDULE_MODE_CONTROL,
     _SCHEDULE_SALU,
     _SCHEDULE_VALU,
     _SOURCE_INLINE_F32_ENCODING_ID,
@@ -25,6 +27,8 @@ from loom.target.arch.amdgpu.descriptors import (
     AMDGPU_COMPARE_SELECT_DESCRIPTOR_CATEGORY,
     AMDGPU_CONTROL_DESCRIPTOR_CATEGORY,
     AMDGPU_DESCRIPTOR_CATEGORIES,
+    AMDGPU_ENCODING_FORMAT_VOP1,
+    AMDGPU_ENCODING_FORMAT_VOP2,
     AMDGPU_MEMORY_DESCRIPTOR_CATEGORY,
     AMDGPU_VECTOR_DESCRIPTOR_CATEGORY,
     AmdgpuAtomicKind,
@@ -38,13 +42,19 @@ from loom.target.arch.amdgpu.descriptors import (
     _categorize_amdgpu_descriptors,
     _gfx11_core_overlays,
     _gfx12_core_overlays,
+    _gfx125x_reg_classes,
     _gfx950_core_overlays,
     _gfx1250_core_overlays,
     _validate_address_immediate_units,
     _with_execution_mask_state_read,
+    _with_gfx125x_vgpr_msb_address_state,
+    _with_gfx125x_vgpr_msb_address_states,
+    _with_mode_state_read,
     amdgpu_atomic_descriptor_candidates,
     amdgpu_descriptor_category_groups,
+    amdgpu_encoding_field_id,
 )
+from loom.target.arch.amdgpu.descriptors.control import _s_set_vgpr_msb_descriptor
 from loom.target.arch.amdgpu.descriptors.memory import (
     _s_buffer_load_64_overlay,
     _s_buffer_load_dword_overlay,
@@ -63,14 +73,16 @@ from loom.target.low_descriptors import (
     LatencyKind,
     MemorySpace,
     Operand,
+    OperandAddressMapKind,
     OperandFlag,
     OperandRole,
     RegClassAlt,
     RegClassAltFlag,
+    RegClassFlag,
 )
 
 
-def _descriptor_set(descriptor: Descriptor) -> DescriptorSet:
+def _descriptor_set(*descriptors: Descriptor) -> DescriptorSet:
     return DescriptorSet(
         key="amdgpu.test.core",
         target_key="amdgpu.test",
@@ -86,7 +98,7 @@ def _descriptor_set(descriptor: Descriptor) -> DescriptorSet:
         reg_classes=(),
         resources=(),
         schedule_classes=(),
-        descriptors=(descriptor,),
+        descriptors=descriptors,
     )
 
 
@@ -252,6 +264,158 @@ def test_scalar_descriptors_do_not_get_execution_mask_state_read() -> None:
     )
 
     assert _with_execution_mask_state_read(descriptor) is descriptor
+
+
+def test_gfx125x_register_classes_expose_mode_and_high_vgprs() -> None:
+    reg_classes = {reg_class.name: reg_class for reg_class in _gfx125x_reg_classes()}
+
+    assert reg_classes["amdgpu.vgpr"].allocatable_count == 1024
+    mode = reg_classes[_REG_MODE]
+    assert mode.alloc_unit_bits == 32
+    assert mode.allocatable_count == 1
+    assert RegClassFlag.PHYSICAL in mode.flags
+    assert RegClassFlag.UNSPILLABLE in mode.flags
+
+
+def test_s_set_vgpr_msb_writes_mode_state() -> None:
+    descriptor = _s_set_vgpr_msb_descriptor()
+
+    assert descriptor.key == "amdgpu.s_set_vgpr_msb"
+    assert descriptor.mnemonic == "s_set_vgpr_msb"
+    assert descriptor.schedule_class == _SCHEDULE_MODE_CONTROL
+    assert tuple(immediate.field_name for immediate in descriptor.immediates) == (
+        "mode",
+    )
+    mode_operand = descriptor.operands[0]
+    assert mode_operand.field_name == "mode"
+    assert mode_operand.role is OperandRole.IMPLICIT
+    assert mode_operand.reg_alts == (
+        RegClassAlt(_REG_MODE, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),
+    )
+    assert OperandFlag.IMPLICIT in mode_operand.flags
+    assert OperandFlag.STATE_WRITE in mode_operand.flags
+
+
+def test_gfx125x_vop_operands_use_mode_address_state() -> None:
+    descriptor = Descriptor(
+        key="amdgpu.test.v_add_u32",
+        mnemonic="v_add_u32",
+        semantic_tag="test.v_add_u32",
+        operands=(
+            Operand(
+                "dst",
+                OperandRole.RESULT,
+                (RegClassAlt("amdgpu.vgpr"),),
+                encoding_field_id=amdgpu_encoding_field_id("VDST"),
+            ),
+            Operand(
+                "lhs",
+                OperandRole.OPERAND,
+                (RegClassAlt("amdgpu.vgpr"),),
+                encoding_field_id=amdgpu_encoding_field_id("SRC0"),
+            ),
+            Operand(
+                "rhs",
+                OperandRole.OPERAND,
+                (RegClassAlt("amdgpu.vgpr"),),
+                encoding_field_id=amdgpu_encoding_field_id("VSRC1"),
+            ),
+        ),
+        schedule_class=_SCHEDULE_VALU,
+        encoding_format_id=AMDGPU_ENCODING_FORMAT_VOP2,
+    )
+    descriptor = _with_gfx125x_vgpr_msb_address_state(descriptor)
+    operands = {operand.field_name: operand for operand in descriptor.operands}
+
+    for field_name in ("dst", "lhs", "rhs"):
+        operand = operands[field_name]
+        assert operand.address_map_kind is OperandAddressMapKind.TARGET_STATE
+        assert operand.addressable_unit_count == 256
+
+    mode_operand = operands["mode_in"]
+    assert mode_operand.role is OperandRole.IMPLICIT
+    assert mode_operand.reg_alts == (
+        RegClassAlt(_REG_MODE, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),
+    )
+    assert OperandFlag.IMPLICIT in mode_operand.flags
+    assert OperandFlag.STATE_READ in mode_operand.flags
+
+
+def test_gfx125x_uncontrolled_vgpr_operands_use_low_subset() -> None:
+    descriptor = Descriptor(
+        key="amdgpu.test.uncontrolled_vgpr",
+        mnemonic="uncontrolled_vgpr",
+        semantic_tag="test.uncontrolled_vgpr",
+        operands=(
+            Operand(
+                "scale_src0",
+                OperandRole.OPERAND,
+                (RegClassAlt("amdgpu.vgpr"),),
+                encoding_field_id=amdgpu_encoding_field_id("SDST"),
+            ),
+        ),
+        schedule_class=_SCHEDULE_VALU,
+        encoding_format_id=AMDGPU_ENCODING_FORMAT_VOP1,
+    )
+    descriptor = _with_gfx125x_vgpr_msb_address_state(descriptor)
+    operands = {operand.field_name: operand for operand in descriptor.operands}
+
+    for field_name in ("scale_src0",):
+        operand = operands[field_name]
+        assert operand.address_map_kind is OperandAddressMapKind.LOW_SUBSET
+        assert operand.addressable_unit_count == 256
+
+
+def test_gfx125x_target_state_validation_requires_mode_control_descriptor() -> None:
+    descriptor = Descriptor(
+        key="amdgpu.test.v_mov",
+        mnemonic="v_mov_b32",
+        semantic_tag="test.v_mov",
+        operands=(
+            Operand(
+                "dst",
+                OperandRole.RESULT,
+                (RegClassAlt("amdgpu.vgpr"),),
+                encoding_field_id=amdgpu_encoding_field_id("VDST"),
+            ),
+        ),
+        schedule_class=_SCHEDULE_VALU,
+        encoding_format_id=AMDGPU_ENCODING_FORMAT_VOP1,
+    )
+
+    _expect_value_error_contains(
+        "amdgpu.s_set_vgpr_msb",
+        lambda: _with_gfx125x_vgpr_msb_address_states(_descriptor_set(descriptor)),
+    )
+
+
+def test_gfx125x_target_state_validation_requires_encoding_slot() -> None:
+    descriptor = _with_mode_state_read(
+        Descriptor(
+            key="amdgpu.test.bad_vgpr_msb_slot",
+            mnemonic="bad_vgpr_msb_slot",
+            semantic_tag="test.bad_vgpr_msb_slot",
+            operands=(
+                Operand(
+                    "dst",
+                    OperandRole.RESULT,
+                    (RegClassAlt("amdgpu.vgpr"),),
+                    encoding_field_id=amdgpu_encoding_field_id("SDST"),
+                    address_map_kind=OperandAddressMapKind.TARGET_STATE,
+                    addressable_unit_count=256,
+                ),
+            ),
+            schedule_class=_SCHEDULE_VALU,
+            encoding_format_id=AMDGPU_ENCODING_FORMAT_VOP1,
+        )
+    )
+
+    _expect_value_error_contains(
+        "has no S_SET_VGPR_MSB slot",
+        lambda: _with_gfx125x_vgpr_msb_address_states(
+            _descriptor_set(_s_set_vgpr_msb_descriptor(), descriptor)
+        ),
+    )
 
 
 def test_amdgpu_descriptor_categories_are_stable() -> None:

@@ -386,6 +386,84 @@ low.func.def target(@gfx11_target) @gfx11_branch_args(%resource: reg<amdgpu.sgpr
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx1250_vgpr_msb_valu waits=none strategy=source fixed=%lhs:physical_register:512:1 fixed=%rhs:physical_register:768:1 fixed=%sum:physical_register:513:1
+amdgpu.target<gfx1250> @gfx1250_target
+low.func.def target(@gfx1250_target) @gfx1250_vgpr_msb_valu(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) asm<amdgpu.rdna4.gfx125x.core> {
+  %sum = v_add_u32 %lhs, %rhs
+  return
+}
+
+// ----
+  s_set_vgpr_msb 142
+  v_add_u32 v1, v0, v0
+  s_set_vgpr_msb 36352
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx1250_vgpr_msb_boundary_registers waits=none strategy=source fixed=%lhs:physical_register:256:1 fixed=%rhs:physical_register:1023:1 fixed=%sum:physical_register:512:1
+amdgpu.target<gfx1250> @gfx1250_target
+low.func.def target(@gfx1250_target) @gfx1250_vgpr_msb_boundary_registers(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) asm<amdgpu.rdna4.gfx125x.core> {
+  %sum = v_add_u32 %lhs, %rhs
+  return
+}
+
+// ----
+  s_set_vgpr_msb 141
+  v_add_u32 v0, v0, v255
+  s_set_vgpr_msb 36096
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx1250_vgpr_msb_copy waits=none strategy=source fixed=%source:physical_register:512:1 fixed=%copy:physical_register:768:1
+amdgpu.target<gfx1250> @gfx1250_target
+low.func.def target(@gfx1250_target) @gfx1250_vgpr_msb_copy(%source: reg<amdgpu.vgpr>) {
+  %copy = low.copy %source : reg<amdgpu.vgpr> -> reg<amdgpu.vgpr>
+  low.return
+}
+
+// ----
+  s_set_vgpr_msb 194
+  v_mov_b32 v0, v0
+  s_set_vgpr_msb 49664
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-native @gfx1250_vgpr_msb_valu_native waits=none strategy=source fixed=%lhs:physical_register:512:1 fixed=%rhs:physical_register:768:1 fixed=%sum:physical_register:513:1
+amdgpu.target<gfx1250> @gfx1250_target
+low.func.def target(@gfx1250_target) @gfx1250_vgpr_msb_valu_native(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) asm<amdgpu.rdna4.gfx125x.core> {
+  %sum = v_add_u32 %lhs, %rhs
+  return
+}
+
+// ----
+
+// ====
+
+// RUN: emit amdgpu-native @gfx1250_vgpr_msb_boundary_registers_native waits=none strategy=source fixed=%lhs:physical_register:256:1 fixed=%rhs:physical_register:1023:1 fixed=%sum:physical_register:512:1
+amdgpu.target<gfx1250> @gfx1250_target
+low.func.def target(@gfx1250_target) @gfx1250_vgpr_msb_boundary_registers_native(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) asm<amdgpu.rdna4.gfx125x.core> {
+  %sum = v_add_u32 %lhs, %rhs
+  return
+}
+
+// ----
+
+// ====
+
+// RUN: emit amdgpu-native @gfx1250_vgpr_msb_copy_native waits=none strategy=source fixed=%source:physical_register:512:1 fixed=%copy:physical_register:768:1
+amdgpu.target<gfx1250> @gfx1250_target
+low.func.def target(@gfx1250_target) @gfx1250_vgpr_msb_copy_native(%source: reg<amdgpu.vgpr>) {
+  %copy = low.copy %source : reg<amdgpu.vgpr> -> reg<amdgpu.vgpr>
+  low.return
+}
+
+// ----
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_branch_arg_cycle waits=none
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_branch_arg_cycle(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {

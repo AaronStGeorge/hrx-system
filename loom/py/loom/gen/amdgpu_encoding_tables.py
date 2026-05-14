@@ -122,7 +122,7 @@ def _rdna4_vop3px2_supplemental_encoding() -> AmdgpuIsaEncoding:
 def _supplemental_fields_by_encoding(
     target: str,
 ) -> dict[str, tuple[AmdgpuIsaEncodingField, ...]]:
-    if target == "rdna4":
+    if target in ("rdna4", "rdna4_gfx125x"):
         return {
             "ENC_VOP3P": _rdna4_vop3p_supplemental_fields(),
         }
@@ -133,7 +133,7 @@ def _supplemental_encodings(
     target: str,
     _encodings: tuple[AmdgpuIsaEncoding, ...],
 ) -> tuple[AmdgpuIsaEncoding, ...]:
-    if target == "rdna4":
+    if target in ("rdna4", "rdna4_gfx125x"):
         return (_rdna4_vop3px2_supplemental_encoding(),)
     return ()
 

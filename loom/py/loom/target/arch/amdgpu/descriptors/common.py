@@ -25,12 +25,31 @@ from loom.target.arch.amdgpu.descriptor_overlay import (
     materialize_amdgpu_descriptor_overlays,
 )
 from loom.target.arch.amdgpu.encoding import (
+    AMDGPU_ENCODING_FORMAT_DS,
+    AMDGPU_ENCODING_FORMAT_FLAT,
+    AMDGPU_ENCODING_FORMAT_MUBUF,
     AMDGPU_ENCODING_FORMAT_SOP1,
     AMDGPU_ENCODING_FORMAT_SOP2,
+    AMDGPU_ENCODING_FORMAT_SOPP,
+    AMDGPU_ENCODING_FORMAT_VBUFFER,
+    AMDGPU_ENCODING_FORMAT_VDS,
+    AMDGPU_ENCODING_FORMAT_VFLAT,
+    AMDGPU_ENCODING_FORMAT_VGLOBAL,
+    AMDGPU_ENCODING_FORMAT_VOP1,
+    AMDGPU_ENCODING_FORMAT_VOP1_DPP,
+    AMDGPU_ENCODING_FORMAT_VOP1_DPP16,
+    AMDGPU_ENCODING_FORMAT_VOP1_LITERAL,
+    AMDGPU_ENCODING_FORMAT_VOP1_SDWA,
+    AMDGPU_ENCODING_FORMAT_VOP2,
+    AMDGPU_ENCODING_FORMAT_VOP2_LITERAL,
+    AMDGPU_ENCODING_FORMAT_VOP3,
     AMDGPU_ENCODING_FORMAT_VOP3_LITERAL,
+    AMDGPU_ENCODING_FORMAT_VOP3_SDST,
     AMDGPU_ENCODING_FORMAT_VOP3P,
     AMDGPU_ENCODING_FORMAT_VOP3PX2,
+    AMDGPU_ENCODING_FORMAT_VSCRATCH,
     amdgpu_encoding_field_id,
+    amdgpu_encoding_field_name,
 )
 from loom.target.arch.amdgpu.isa_xml import (
     AmdgpuIsaFactSource,
@@ -69,6 +88,7 @@ from loom.target.low_descriptors import (
     MemorySpace,
     ModelQuality,
     Operand,
+    OperandAddressMapKind,
     OperandFlag,
     OperandForm,
     OperandFormImmediateAction,
@@ -93,6 +113,7 @@ _REG_AGPR = "amdgpu.agpr"
 _REG_M0 = "amdgpu.m0"
 _REG_SCC = "amdgpu.scc"
 _REG_EXEC = "amdgpu.exec"
+_REG_MODE = "amdgpu.mode"
 
 _REG_PART_VGPR_LOW16 = "amdgpu.vgpr.low16"
 _REG_PART_VGPR_HIGH16 = "amdgpu.vgpr.high16"
@@ -130,6 +151,7 @@ _SCHEDULE_WMMA = "amdgpu.wmma"
 _SCHEDULE_WMMA_SCALE = "amdgpu.wmma.scale"
 _SCHEDULE_SWMMAC = "amdgpu.swmmac"
 _SCHEDULE_CACHE_CONTROL = "amdgpu.cache.control"
+_SCHEDULE_MODE_CONTROL = "amdgpu.mode.control"
 _SCHEDULE_WAIT_MEMORY = "amdgpu.wait.memory"
 _SCHEDULE_WAIT_VMEM_STORE = "amdgpu.wait.vmem.store"
 _SCHEDULE_WAIT_LDS = "amdgpu.wait.lds"
@@ -460,6 +482,7 @@ _VGPR_AGPR_CONST_ALT = (
 _M0_ALT = (RegClassAlt(_REG_M0, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),)
 _SCC_ALT = (RegClassAlt(_REG_SCC, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),)
 _EXEC_ALT = (RegClassAlt(_REG_EXEC, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),)
+_MODE_ALT = (RegClassAlt(_REG_MODE, flags=(RegClassAltFlag.PHYSICAL_ONLY,)),)
 
 _VGPR_REGISTER_PARTS = (
     RegisterPart(_REG_PART_VGPR_LOW16, _REG_VGPR, 0x1),
@@ -928,11 +951,39 @@ def _exec_state_read(field_name: str = "exec_in") -> Operand:
     )
 
 
+def _mode_state_read(field_name: str = "mode_in") -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.IMPLICIT,
+        _MODE_ALT,
+        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_READ),
+        unit_count=1,
+    )
+
+
+def _mode_state_write(field_name: str = "mode") -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.IMPLICIT,
+        _MODE_ALT,
+        flags=(OperandFlag.IMPLICIT, OperandFlag.STATE_WRITE),
+        unit_count=1,
+    )
+
+
 def _is_exec_state_read(operand: Operand) -> bool:
     return (
         OperandFlag.STATE_READ in operand.flags
         and len(operand.reg_alts) == 1
         and operand.reg_alts[0].reg_class == _REG_EXEC
+    )
+
+
+def _is_mode_state_read(operand: Operand) -> bool:
+    return (
+        OperandFlag.STATE_READ in operand.flags
+        and len(operand.reg_alts) == 1
+        and operand.reg_alts[0].reg_class == _REG_MODE
     )
 
 
@@ -950,6 +1001,12 @@ def _with_execution_mask_state_reads(
     return tuple(
         _with_execution_mask_state_read(descriptor) for descriptor in descriptors
     )
+
+
+def _with_mode_state_read(descriptor: Descriptor) -> Descriptor:
+    if any(_is_mode_state_read(operand) for operand in descriptor.operands):
+        return descriptor
+    return replace(descriptor, operands=(*descriptor.operands, _mode_state_read()))
 
 
 def _vgpr_result(
@@ -2090,11 +2147,29 @@ __all__ = (
     "AMDGPU_CONTROL_DESCRIPTOR_CATEGORY",
     "AMDGPU_CONVERT_DESCRIPTOR_CATEGORY",
     "AMDGPU_DESCRIPTOR_CATEGORIES",
+    "AMDGPU_ENCODING_FORMAT_DS",
+    "AMDGPU_ENCODING_FORMAT_FLAT",
+    "AMDGPU_ENCODING_FORMAT_MUBUF",
     "AMDGPU_ENCODING_FORMAT_SOP1",
     "AMDGPU_ENCODING_FORMAT_SOP2",
+    "AMDGPU_ENCODING_FORMAT_SOPP",
+    "AMDGPU_ENCODING_FORMAT_VBUFFER",
+    "AMDGPU_ENCODING_FORMAT_VDS",
+    "AMDGPU_ENCODING_FORMAT_VFLAT",
+    "AMDGPU_ENCODING_FORMAT_VGLOBAL",
+    "AMDGPU_ENCODING_FORMAT_VOP1",
+    "AMDGPU_ENCODING_FORMAT_VOP1_DPP",
+    "AMDGPU_ENCODING_FORMAT_VOP1_DPP16",
+    "AMDGPU_ENCODING_FORMAT_VOP1_LITERAL",
+    "AMDGPU_ENCODING_FORMAT_VOP1_SDWA",
+    "AMDGPU_ENCODING_FORMAT_VOP2",
+    "AMDGPU_ENCODING_FORMAT_VOP2_LITERAL",
+    "AMDGPU_ENCODING_FORMAT_VOP3",
     "AMDGPU_ENCODING_FORMAT_VOP3_LITERAL",
     "AMDGPU_ENCODING_FORMAT_VOP3P",
     "AMDGPU_ENCODING_FORMAT_VOP3PX2",
+    "AMDGPU_ENCODING_FORMAT_VOP3_SDST",
+    "AMDGPU_ENCODING_FORMAT_VSCRATCH",
     "AMDGPU_MATRIX_DESCRIPTOR_CATEGORY",
     "AMDGPU_MEMORY_DESCRIPTOR_CATEGORY",
     "AMDGPU_MISC_DESCRIPTOR_CATEGORY",
@@ -2142,6 +2217,7 @@ __all__ = (
     "MemorySpace",
     "ModelQuality",
     "Operand",
+    "OperandAddressMapKind",
     "OperandFlag",
     "OperandForm",
     "OperandFormImmediateAction",
@@ -2243,6 +2319,7 @@ __all__ = (
     "_LITERAL_U32_IMMEDIATE",
     "_LOADCNT_IMMEDIATE",
     "_M0_ALT",
+    "_MODE_ALT",
     "_MANUAL_SCALAR_DESCRIPTOR_KEYS",
     "_MATRIX_A_FORMAT_IMMEDIATE",
     "_MATRIX_A_REUSE_IMMEDIATE",
@@ -2260,6 +2337,7 @@ __all__ = (
     "_REG_AGPR",
     "_REG_EXEC",
     "_REG_M0",
+    "_REG_MODE",
     "_REG_PART_VGPR_FULL32_MASK",
     "_REG_PART_VGPR_HIGH16",
     "_REG_PART_VGPR_LOW16",
@@ -2287,6 +2365,7 @@ __all__ = (
     "_SCHEDULE_LDS_LOAD",
     "_SCHEDULE_LDS_STORE",
     "_SCHEDULE_MFMA",
+    "_SCHEDULE_MODE_CONTROL",
     "_SCHEDULE_SALU",
     "_SCHEDULE_SMEM_LOAD",
     "_SCHEDULE_SWMMAC",
@@ -2383,9 +2462,12 @@ __all__ = (
     "_implicit_m0_input",
     "_instruction_encoding_opcode",
     "_is_exec_state_read",
+    "_is_mode_state_read",
     "_literal_operand_form",
     "_m0_implicit_resource",
     "_m0_result",
+    "_mode_state_read",
+    "_mode_state_write",
     "_manual_scalar_descriptors",
     "_matrix_hazards",
     "_memory_asm_immediate_names",
@@ -2420,10 +2502,12 @@ __all__ = (
     "_vgpr_result",
     "_with_execution_mask_state_read",
     "_with_execution_mask_state_reads",
+    "_with_mode_state_read",
     "_workgroup_memory_effect",
     "amdgpu_descriptor_set_info_by_generator_target",
     "amdgpu_descriptor_set_ordinal",
     "amdgpu_encoding_field_id",
+    "amdgpu_encoding_field_name",
     "dataclass",
     "materialize_amdgpu_descriptor_overlays",
     "parse_amdgpu_isa_xml_path",

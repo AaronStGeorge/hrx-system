@@ -20,6 +20,7 @@
 #include "loom/ops/low/kernel.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
+#include "loom/target/arch/amdgpu/address_state.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
 #include "loom/target/arch/amdgpu/hal_kernel_abi.h"
 #include "loom/target/arch/amdgpu/occupancy.h"
@@ -470,6 +471,15 @@ static iree_status_t loom_amdgpu_hal_kernel_library_lower_spill_traffic(
                                          context->descriptor_set, table_arena);
 }
 
+static iree_status_t loom_amdgpu_hal_kernel_library_materialize_address_state(
+    void* user_data, loom_module_t* module, loom_op_t* low_function_op,
+    const loom_low_emission_frame_t* frame, iree_arena_allocator_t* table_arena,
+    loom_low_emission_frame_materialize_address_state_result_t* out_result) {
+  (void)user_data;
+  return loom_amdgpu_materialize_address_state(module, low_function_op, frame,
+                                               table_arena, out_result);
+}
+
 static iree_status_t loom_amdgpu_hal_kernel_library_validate_native_frame(
     void* user_data, const loom_low_emission_frame_t* frame,
     iree_arena_allocator_t* table_arena) {
@@ -527,6 +537,9 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
           },
       .lower_spill_traffic = loom_amdgpu_hal_kernel_library_lower_spill_traffic,
       .lower_spill_traffic_user_data = &spill_lowering_context,
+      .materialize_address_state =
+          loom_amdgpu_hal_kernel_library_materialize_address_state,
+      .materialize_address_state_user_data = NULL,
       .validate_frame = loom_amdgpu_hal_kernel_library_validate_native_frame,
       .validate_frame_user_data = &preflight,
   };

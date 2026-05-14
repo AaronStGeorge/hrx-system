@@ -105,12 +105,23 @@ static iree_status_t loom_low_addressability_packet_field_for_operand(
 static bool loom_low_addressability_assignment_exceeds_operand_range(
     const loom_low_operand_t* operand,
     const loom_low_allocation_assignment_t* assignment) {
-  if (!loom_low_operand_requires_low_subset_assignment(operand)) {
-    return false;
-  }
   const uint64_t assigned_end =
       (uint64_t)assignment->location_base + assignment->location_count;
-  return assigned_end > operand->addressable_unit_count;
+  switch (operand->address_map_kind) {
+    case LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET:
+      return assigned_end > operand->addressable_unit_count;
+    case LOOM_LOW_OPERAND_ADDRESS_MAP_TARGET_STATE: {
+      const uint32_t addressable_unit_count = operand->addressable_unit_count;
+      if (assignment->location_count == 0 || addressable_unit_count == 0) {
+        return true;
+      }
+      const uint64_t assigned_last = assigned_end - 1;
+      return assignment->location_base / addressable_unit_count !=
+             assigned_last / addressable_unit_count;
+    }
+    default:
+      return false;
+  }
 }
 
 static iree_status_t loom_low_addressability_emit_error(
@@ -179,7 +190,7 @@ static iree_status_t loom_low_addressability_validate_operand(
                             operand_row);
   }
   const loom_low_operand_t* operand = &descriptor_set->operands[operand_row];
-  if (!loom_low_operand_requires_low_subset_assignment(operand)) {
+  if (!loom_low_operand_requires_low_window_assignment(operand)) {
     return iree_ok_status();
   }
   loom_low_addressability_packet_field_t field = {0};

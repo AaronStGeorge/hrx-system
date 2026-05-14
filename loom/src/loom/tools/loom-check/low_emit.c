@@ -11,6 +11,7 @@
 #include "loom/codegen/low/function.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/tools/loom-check/diagnostics.h"
 
 iree_status_t loom_check_low_emit_parse_schedule_strategy(
     iree_string_view_t value, iree_string_view_t option_scope,
@@ -337,6 +338,7 @@ iree_status_t loom_check_low_emit_packetize_function(
     iree_host_size_t allocation_budget_count,
     const loom_check_low_emit_fixed_value_spec_t* allocation_fixed_specs,
     iree_host_size_t allocation_fixed_spec_count,
+    const loom_low_emission_frame_spill_free_options_t* spill_free_options,
     loom_low_emission_frame_t* out_frame) {
   loom_op_t* low_function = NULL;
   IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_function_def(
@@ -356,7 +358,24 @@ iree_status_t loom_check_low_emit_packetize_function(
       .allocation_fixed_values = fixed_values,
       .allocation_fixed_value_count = fixed_value_count,
   };
+  loom_check_diagnostic_emitter_capture_t diagnostic_capture = {
+      .diagnostic_collector = request->diagnostic_collector,
+      .module = request->module,
+      .source_resolver = request->source_resolver,
+      .emitter = LOOM_EMITTER_PASS,
+  };
+  if (request->diagnostic_collector != NULL) {
+    frame_options.emitter = (iree_diagnostic_emitter_t){
+        .fn = loom_check_diagnostic_emitter_capture_emit,
+        .user_data = &diagnostic_capture,
+    };
+  }
   *out_frame = (loom_low_emission_frame_t){0};
+  if (spill_free_options != NULL) {
+    return loom_low_emission_frame_build_spill_free(
+        request->module, low_function, &frame_options, spill_free_options,
+        request->case_arena, out_frame);
+  }
   return loom_low_emission_frame_build(request->module, low_function,
                                        &frame_options, request->case_arena,
                                        out_frame);

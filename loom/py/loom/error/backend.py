@@ -413,8 +413,9 @@ ERR_BACKEND_020 = ErrorDef(
         "cannot encode {value_class} value '{value_name}' for "
         "'@{function_name}' packet {packet_index} descriptor '{packet_key}' "
         "operand '{operand_field}': assigned register base {assigned_base} "
-        "with {assigned_units} unit(s) exceeds {address_map_kind} address "
-        "map covering the first {addressable_units} unit(s)"
+        "with {assigned_units} unit(s) is outside the encodable "
+        "{address_map_kind} address map with {addressable_units} addressable "
+        "unit(s)"
     ),
     params=(
         ErrorParam("target_key", ParamKind.STRING),

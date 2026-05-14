@@ -965,11 +965,12 @@ static inline bool loom_low_operand_address_map_kind_has_low_window(
          kind == LOOM_LOW_OPERAND_ADDRESS_MAP_TARGET_STATE;
 }
 
-// Returns true when |operand| must be assigned inside an encodable low-register
-// subset before final emission.
-static inline bool loom_low_operand_requires_low_subset_assignment(
+// Returns true when |operand| must fit a target-encodable low-register window
+// before final emission.
+static inline bool loom_low_operand_requires_low_window_assignment(
     const loom_low_operand_t* operand) {
-  return operand->address_map_kind == LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET;
+  return loom_low_operand_address_map_kind_has_low_window(
+      operand->address_map_kind);
 }
 
 // Returns the stable diagnostic spelling for an immediate kind.

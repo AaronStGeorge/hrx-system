@@ -57,9 +57,9 @@ struct AddressabilityTestState {
   loom_low_schedule_node_t nodes[1] = {};
   uint32_t scheduled_node_indices[1] = {};
   loom_low_schedule_table_t schedule = {};
-  loom_low_allocation_assignment_t assignments[1] = {};
-  loom_value_id_t value_ids[1] = {};
-  uint32_t assignment_indices_by_value_ordinal[1] = {};
+  loom_low_allocation_assignment_t assignments[2] = {};
+  loom_value_id_t value_ids[2] = {};
+  uint32_t assignment_indices_by_value_ordinal[2] = {};
   loom_low_allocation_table_t allocation = {};
 };
 
@@ -85,7 +85,7 @@ iree_status_t CaptureDiagnostic(void* user_data,
 void InitializeAddressabilityTestState(
     loom_low_operand_address_map_kind_t address_map_kind,
     uint16_t addressable_unit_count, uint32_t assigned_base,
-    AddressabilityTestState* state) {
+    AddressabilityTestState* state, uint32_t assigned_count = 1) {
   *state = {};
   state->descriptor_set.stable_id = 0x1000u;
   state->descriptor_set.key_string_offset =
@@ -122,7 +122,7 @@ void InitializeAddressabilityTestState(
       .role = LOOM_LOW_OPERAND_ROLE_OPERAND,
       .reg_class_alt_start = 0,
       .reg_class_alt_count = 1,
-      .unit_count = 1,
+      .unit_count = static_cast<uint16_t>(assigned_count),
       .address_map_kind = address_map_kind,
       .addressable_unit_count = addressable_unit_count,
       .register_part_id = LOOM_LOW_REGISTER_PART_NONE,
@@ -142,8 +142,8 @@ void InitializeAddressabilityTestState(
   state->nodes[0].result_count = 1;
   loom_value_ordinal_t* value_ordinals =
       loom_low_schedule_node_value_ordinals(&state->nodes[0]);
-  value_ordinals[0] = 0;
-  value_ordinals[1] = 1;
+  value_ordinals[0] = 1;
+  value_ordinals[1] = 0;
   state->scheduled_node_indices[0] = 0;
   state->schedule.module = &state->module;
   state->schedule.function_op = &state->function_op;
@@ -164,13 +164,30 @@ void InitializeAddressabilityTestState(
               .register_class_id = 0,
           },
       .descriptor_reg_class_id = 0,
-      .unit_count = 1,
+      .unit_count = assigned_count,
       .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
-      .location_base = assigned_base,
+      .location_base = 0,
       .location_count = 1,
   };
+  state->assignments[1] = (loom_low_allocation_assignment_t){
+      .value_id = 1,
+      .value_class =
+          {
+              .type_kind = LOOM_TYPE_REGISTER,
+              .register_descriptor_set_stable_id =
+                  state->descriptor_set.stable_id,
+              .register_class_id = 0,
+          },
+      .descriptor_reg_class_id = 0,
+      .unit_count = assigned_count,
+      .location_kind = LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+      .location_base = assigned_base,
+      .location_count = assigned_count,
+  };
   state->assignment_indices_by_value_ordinal[0] = 0;
+  state->assignment_indices_by_value_ordinal[1] = 1;
   state->value_ids[0] = 0;
+  state->value_ids[1] = 1;
   state->allocation.module = &state->module;
   state->allocation.function_op = &state->function_op;
   state->allocation.target.descriptor_set = &state->descriptor_set;
@@ -219,6 +236,42 @@ TEST(LowAddressabilityTest, ReportsLowSubsetUnaddressableAssignment) {
   InitializeAddressabilityTestState(LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET,
                                     /*addressable_unit_count=*/2,
                                     /*assigned_base=*/2, &state);
+
+  CapturedDiagnostic captured;
+  const iree_diagnostic_emitter_t emitter = {
+      .fn = CaptureDiagnostic,
+      .user_data = &captured,
+  };
+  loom_low_addressability_validation_result_t result = {};
+  IREE_ASSERT_OK(loom_low_addressability_validate_allocated_packets(
+      &state.schedule, &state.allocation, emitter, &result));
+
+  EXPECT_EQ(result.error_count, 1u);
+  EXPECT_EQ(captured.count, 1u);
+  EXPECT_EQ(captured.domain, LOOM_ERROR_DOMAIN_BACKEND);
+  EXPECT_EQ(captured.code, 20u);
+  EXPECT_EQ(captured.packet_index, 0u);
+}
+
+TEST(LowAddressabilityTest, AcceptsTargetStateAssignmentInsideWindow) {
+  AddressabilityTestState state;
+  InitializeAddressabilityTestState(LOOM_LOW_OPERAND_ADDRESS_MAP_TARGET_STATE,
+                                    /*addressable_unit_count=*/256,
+                                    /*assigned_base=*/511, &state);
+
+  loom_low_addressability_validation_result_t result = {};
+  IREE_ASSERT_OK(loom_low_addressability_validate_allocated_packets(
+      &state.schedule, &state.allocation, /*emitter=*/{}, &result));
+
+  EXPECT_EQ(result.error_count, 0u);
+}
+
+TEST(LowAddressabilityTest, ReportsTargetStateAssignmentCrossingWindow) {
+  AddressabilityTestState state;
+  InitializeAddressabilityTestState(LOOM_LOW_OPERAND_ADDRESS_MAP_TARGET_STATE,
+                                    /*addressable_unit_count=*/256,
+                                    /*assigned_base=*/255, &state,
+                                    /*assigned_count=*/2);
 
   CapturedDiagnostic captured;
   const iree_diagnostic_emitter_t emitter = {

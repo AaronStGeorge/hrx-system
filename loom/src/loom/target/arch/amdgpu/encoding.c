@@ -241,6 +241,97 @@ bool loom_amdgpu_encoding_field_is_literal(uint16_t field_id) {
   return field_id == LOOM_AMDGPU_ENCODING_FIELD_LITERAL;
 }
 
+static bool loom_amdgpu_encoding_format_uses_vop_vgpr_msb_slots(
+    uint16_t encoding_format_id) {
+  switch (encoding_format_id) {
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP1:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP1_LITERAL:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP1_DPP:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP1_DPP16:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP1_SDWA:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP2:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP2_LITERAL:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP3:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP3_LITERAL:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP3P:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP3P_MFMA:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP3PX2:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP3_SDST:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP3_SDST_LITERAL:
+      return true;
+    default:
+      return false;
+  }
+}
+
+loom_amdgpu_vgpr_msb_slot_t loom_amdgpu_encoding_vgpr_msb_slot(
+    uint16_t encoding_format_id, uint16_t encoding_field_id) {
+  if (loom_amdgpu_encoding_format_uses_vop_vgpr_msb_slots(encoding_format_id)) {
+    switch (encoding_field_id) {
+      case LOOM_AMDGPU_ENCODING_FIELD_SRC0:
+      case LOOM_AMDGPU_ENCODING_FIELD_VSRC0:
+        return LOOM_AMDGPU_VGPR_MSB_SLOT_SRC0;
+      case LOOM_AMDGPU_ENCODING_FIELD_SRC1:
+      case LOOM_AMDGPU_ENCODING_FIELD_VSRC1:
+        return LOOM_AMDGPU_VGPR_MSB_SLOT_SRC1;
+      case LOOM_AMDGPU_ENCODING_FIELD_SRC2:
+      case LOOM_AMDGPU_ENCODING_FIELD_VSRC2:
+        return LOOM_AMDGPU_VGPR_MSB_SLOT_SRC2;
+      case LOOM_AMDGPU_ENCODING_FIELD_VDST:
+        return LOOM_AMDGPU_VGPR_MSB_SLOT_DST;
+      default:
+        return LOOM_AMDGPU_VGPR_MSB_SLOT_NONE;
+    }
+  }
+
+  switch (encoding_format_id) {
+    case LOOM_AMDGPU_ENCODING_FORMAT_DS:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VDS:
+      switch (encoding_field_id) {
+        case LOOM_AMDGPU_ENCODING_FIELD_ADDR:
+          return LOOM_AMDGPU_VGPR_MSB_SLOT_SRC0;
+        case LOOM_AMDGPU_ENCODING_FIELD_DATA0:
+          return LOOM_AMDGPU_VGPR_MSB_SLOT_SRC1;
+        case LOOM_AMDGPU_ENCODING_FIELD_DATA1:
+          return LOOM_AMDGPU_VGPR_MSB_SLOT_SRC2;
+        case LOOM_AMDGPU_ENCODING_FIELD_VDST:
+          return LOOM_AMDGPU_VGPR_MSB_SLOT_DST;
+        default:
+          return LOOM_AMDGPU_VGPR_MSB_SLOT_NONE;
+      }
+    case LOOM_AMDGPU_ENCODING_FORMAT_FLAT:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VFLAT:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VSCRATCH:
+      switch (encoding_field_id) {
+        case LOOM_AMDGPU_ENCODING_FIELD_ADDR:
+        case LOOM_AMDGPU_ENCODING_FIELD_VADDR:
+          return LOOM_AMDGPU_VGPR_MSB_SLOT_SRC0;
+        case LOOM_AMDGPU_ENCODING_FIELD_DATA:
+        case LOOM_AMDGPU_ENCODING_FIELD_VDATA:
+        case LOOM_AMDGPU_ENCODING_FIELD_VSRC:
+          return LOOM_AMDGPU_VGPR_MSB_SLOT_SRC1;
+        case LOOM_AMDGPU_ENCODING_FIELD_VDST:
+          return LOOM_AMDGPU_VGPR_MSB_SLOT_DST;
+        default:
+          return LOOM_AMDGPU_VGPR_MSB_SLOT_NONE;
+      }
+    case LOOM_AMDGPU_ENCODING_FORMAT_MUBUF:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VBUFFER:
+      switch (encoding_field_id) {
+        case LOOM_AMDGPU_ENCODING_FIELD_VADDR:
+          return LOOM_AMDGPU_VGPR_MSB_SLOT_SRC0;
+        case LOOM_AMDGPU_ENCODING_FIELD_VDATA:
+        case LOOM_AMDGPU_ENCODING_FIELD_VDST:
+          return LOOM_AMDGPU_VGPR_MSB_SLOT_DST;
+        default:
+          return LOOM_AMDGPU_VGPR_MSB_SLOT_NONE;
+      }
+    default:
+      return LOOM_AMDGPU_VGPR_MSB_SLOT_NONE;
+  }
+}
+
 bool loom_amdgpu_encoding_inline_u32_source(
     const loom_amdgpu_encoding_table_t* table, uint32_t value,
     uint16_t* out_source) {

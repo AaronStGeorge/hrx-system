@@ -183,6 +183,29 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    address_state
+  HDRS
+    "address_state.h"
+  SRCS
+    "address_state.c"
+  DEPS
+    ::encoding
+    ::target_refs
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::builder
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::frame
+    loom::src::loom::codegen::low::schedule
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
 loom_target_table_cc_library(
   NAME
     target_refs
@@ -273,10 +296,6 @@ loom_target_table_cc_library(
     rdna4_encoding_tables
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_encoding_tables
-  GENERATED_HDR_FLAGS
-    "--view-header=rdna4_gfx125x"
-  GENERATED_HDRS
-    "rdna4_gfx125x_encoding_tables.h"
   ARGS
     "--target=rdna4"
     "--descriptor-set-key=amdgpu.rdna4.core"
@@ -294,12 +313,20 @@ loom_target_table_cc_library(
 loom_target_table_cc_library(
   NAME
     rdna4_gfx125x_encoding_tables
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_encoding_tables
+  ARGS
+    "--target=rdna4_gfx125x"
+    "--descriptor-set-key=amdgpu.rdna4.gfx125x.core"
+    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
+    "--public-header=loom/target/arch/amdgpu/rdna4_gfx125x_encoding_tables.h"
+  INPUTS
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
+    "loom_amdgpu_isa_xml"
   DEPS
     ::encoding_defs
-    ::rdna4_encoding_tables
     iree::base
   EXCLUDE_FROM_ALL
-  HEADER_ONLY
 )
 
 loom_target_table_cc_library(
@@ -377,10 +404,6 @@ loom_low_descriptor_cc_library(
     rdna4_descriptors
   GENERATOR
     iree::runtime::py::loom::gen::amdgpu_descriptors
-  GENERATED_HDR_FLAGS
-    "--view-header=rdna4_gfx125x"
-  GENERATED_HDRS
-    "rdna4_gfx125x_descriptors.h"
   ARGS
     "--target=rdna4"
     "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
@@ -395,13 +418,17 @@ loom_low_descriptor_cc_library(
 loom_low_descriptor_cc_library(
   NAME
     rdna4_gfx125x_descriptors
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_descriptors
+  ARGS
+    "--target=rdna4_gfx125x"
+    "--xml=${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
+  INPUTS
+    "${_LOOM_AMDGPU_ISA_XML_SOURCE_DIR}/amdgpu_isa_rdna4.xml"
+    "loom_amdgpu_isa_xml"
   DEPS
-    ::rdna4_descriptors
-    loom::src::loom::codegen::low::descriptors
-  IDS_DEPS
     loom::src::loom::codegen::low::descriptors
   EXCLUDE_FROM_ALL
-  HEADER_ONLY
 )
 
 loom_low_descriptor_cc_library(

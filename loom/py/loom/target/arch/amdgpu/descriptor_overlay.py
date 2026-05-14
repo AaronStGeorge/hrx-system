@@ -59,6 +59,7 @@ _REGISTER_WIDTH_BITS = {
     "amdgpu.m0": 32,
     "amdgpu.scc": 1,
     "amdgpu.exec": 64,
+    "amdgpu.mode": 32,
 }
 
 _REGISTER_PART_WIDTH_BITS = {

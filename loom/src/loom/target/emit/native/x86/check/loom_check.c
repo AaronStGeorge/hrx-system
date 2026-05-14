@@ -133,7 +133,8 @@ static iree_status_t loom_x86_loom_check_emit_provider_execute(
       request, options.function_symbol_name, options.schedule_strategy,
       options.allocation_budgets, options.allocation_budget_count,
       options.allocation_fixed_value_specs,
-      options.allocation_fixed_value_spec_count, &frame));
+      options.allocation_fixed_value_spec_count, /*spill_free_options=*/NULL,
+      &frame));
   return loom_x86_loom_check_emit_assembly(
       &frame, &request->result->actual_output, request->case_arena);
 }

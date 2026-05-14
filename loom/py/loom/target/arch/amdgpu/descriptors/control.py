@@ -162,6 +162,29 @@ def _s_wait_idle_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _s_set_vgpr_msb_descriptor() -> Descriptor:
+    return Descriptor(
+        key="amdgpu.s_set_vgpr_msb",
+        mnemonic="s_set_vgpr_msb",
+        semantic_tag="control.mode.vgpr_msb",
+        schedule_class=_SCHEDULE_MODE_CONTROL,
+        operands=(_mode_state_write(),),
+        immediates=(
+            Immediate(
+                "mode",
+                ImmediateKind.UNSIGNED,
+                bit_width=16,
+                encoding_field_id=amdgpu_encoding_field_id("SIMM16"),
+                unsigned_max=0xFFFF,
+            ),
+        ),
+        asm_forms=_asm(immediates=("mode",)),
+        encoding_format_id=AMDGPU_ENCODING_FORMAT_SOPP,
+        encoding_id=0x006,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
 def _s_barrier_overlay() -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
         descriptor_key="amdgpu.s_barrier",
@@ -475,6 +498,7 @@ __all__ = (
     "_s_dcache_discard_overlay",
     "_s_prefetch_overlay",
     "_s_set_inst_prefetch_distance_overlay",
+    "_s_set_vgpr_msb_descriptor",
     "_s_wait_alu_overlay",
     "_s_wait_dscnt_overlay",
     "_s_wait_idle_overlay",

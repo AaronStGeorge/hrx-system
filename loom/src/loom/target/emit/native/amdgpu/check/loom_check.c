@@ -9,9 +9,11 @@
 #include "loom/codegen/low/frame.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/amdgpu/address_state.h"
 #include "loom/target/arch/amdgpu/packet_plan.h"
 #include "loom/target/emit/native/amdgpu/assembly.h"
 #include "loom/target/emit/native/amdgpu/encoding.h"
+#include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/low_emit.h"
 
 typedef enum loom_amdgpu_loom_check_wait_mode_e {
@@ -190,6 +192,15 @@ static iree_status_t loom_amdgpu_loom_check_emit_native(
       &frame->schedule, &frame->allocation, &encoding_options, &text, arena);
 }
 
+static iree_status_t loom_amdgpu_loom_check_materialize_address_state(
+    void* user_data, loom_module_t* module, loom_op_t* low_function_op,
+    const loom_low_emission_frame_t* frame, iree_arena_allocator_t* arena,
+    loom_low_emission_frame_materialize_address_state_result_t* out_result) {
+  (void)user_data;
+  return loom_amdgpu_materialize_address_state(module, low_function_op, frame,
+                                               arena, out_result);
+}
+
 static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
     const loom_check_emit_provider_t* provider,
     const loom_check_emit_provider_request_t* request) {
@@ -198,11 +209,19 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_loom_check_parse_emit_options(request, &options));
   loom_low_emission_frame_t frame = {0};
+  const loom_low_emission_frame_spill_free_options_t spill_free_options = {
+      .materialize_address_state =
+          loom_amdgpu_loom_check_materialize_address_state,
+  };
   IREE_RETURN_IF_ERROR(loom_check_low_emit_packetize_function(
       request, options.function_symbol_name, options.schedule_strategy,
       options.allocation_budgets, options.allocation_budget_count,
       options.allocation_fixed_value_specs,
-      options.allocation_fixed_value_spec_count, &frame));
+      options.allocation_fixed_value_spec_count, &spill_free_options, &frame));
+  if (request->diagnostic_collector != NULL &&
+      request->diagnostic_collector->count != 0) {
+    return iree_ok_status();
+  }
   if (iree_string_view_equal(request->target_name, IREE_SV("amdgpu-native"))) {
     return loom_amdgpu_loom_check_emit_native(&frame, &options,
                                               request->case_arena);
