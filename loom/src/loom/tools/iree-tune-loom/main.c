@@ -495,8 +495,9 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "records command/path/source identity, path/size/mtime metadata "
           "for observed fixture/output/profile/compile-report/executable "
           "files, selected environment variables, and HAL device identity "
-          "when a dispatch benchmark selected a backend. Large fixture and "
-          "artifact files are not content-hashed by this CLI. "
+          "when a dispatch benchmark selected a backend. Source, fixture, "
+          "and artifact files are identified by path/size/mtime; this CLI "
+          "does not content-hash large files or act as a CAS. "
           "Benchmark attrs named `family`, `phase`, `strategy`, "
           "`knobs`, `problem`, or `reference_id` are copied into a "
           "`metadata` object on candidate rows. Compile rows and benchmark "
@@ -7660,18 +7661,12 @@ static iree_status_t iree_tune_loom_append_artifact_bundle_manifest_json(
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"source\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(&stream, run->source));
-  const uint64_t source_hash =
-      iree_tune_loom_hash_string_view(1469598103934665603ull, source_text);
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"source_identity\":{"));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, "\"byte_count\":"));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_format(&stream, "%" PRIhsz, source_text.size));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, ",\"content_hash_fnv64\":"));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      &stream, "\"%016" PRIx64 "\"", source_hash));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ",\"file\":"));
   IREE_RETURN_IF_ERROR(iree_tune_loom_write_manifest_file_reference_json(
       run->source, allocator, &stream));
@@ -7871,8 +7866,9 @@ int iree_tune_loom_main(int argc, char** argv,
       "compile_reports/, target-native artifacts under target_artifacts/, "
       "and HAL executable packages under hal_executables/; compile and "
       "benchmark rows link them from compile_report_path, "
-      "target_artifact_path, and hal_executable_path. Large fixture and "
-      "artifact files are not content-hashed by this CLI. "
+      "target_artifact_path, and hal_executable_path. Source, fixture, and "
+      "artifact files are identified by path/size/mtime; this CLI does not "
+      "content-hash large files or act as a CAS. "
       "`--shape_specialization=dynamic` compiles once, "
       "`--shape_specialization=per_sample` compiles each selected shape with "
       "concrete parameter facts, and `--shape_specialization=both` emits both "
