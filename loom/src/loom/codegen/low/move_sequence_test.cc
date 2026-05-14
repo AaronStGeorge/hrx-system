@@ -23,6 +23,25 @@ loom_liveness_value_class_t ValueClass(uint16_t register_class_id) {
   };
 }
 
+const loom_low_descriptor_set_t* AliasDescriptorSet() {
+  static const loom_low_reg_class_t kRegClasses[] = {
+      {
+          .alias_set_id = 1,
+      },
+      {
+          .alias_set_id = 1,
+      },
+      {
+          .alias_set_id = 0,
+      },
+  };
+  static const loom_low_descriptor_set_t kDescriptorSet = {
+      .reg_classes = kRegClasses,
+      .reg_class_count = IREE_ARRAYSIZE(kRegClasses),
+  };
+  return &kDescriptorSet;
+}
+
 loom_low_move_location_t Location(uint32_t ordinal,
                                   uint16_t register_class_id = 0) {
   return loom_low_move_location_t{
@@ -38,6 +57,16 @@ loom_low_move_t Move(uint32_t destination, uint32_t source,
   return loom_low_move_t{
       .destination = Location(destination, register_class_id),
       .source = Location(source, register_class_id),
+  };
+}
+
+loom_low_move_t MoveBetween(uint32_t destination,
+                            uint16_t destination_register_class_id,
+                            uint32_t source,
+                            uint16_t source_register_class_id) {
+  return loom_low_move_t{
+      .destination = Location(destination, destination_register_class_id),
+      .source = Location(source, source_register_class_id),
   };
 }
 
@@ -78,10 +107,11 @@ class TestArena {
   iree_arena_allocator_t arena_ = {};
 };
 
-std::vector<std::string> EmitMoves(const loom_low_move_t* input_moves,
-                                   iree_host_size_t move_count,
-                                   const loom_low_move_location_t* temporaries,
-                                   iree_host_size_t temporary_count) {
+std::vector<std::string> EmitMoves(
+    const loom_low_move_t* input_moves, iree_host_size_t move_count,
+    const loom_low_move_location_t* temporaries,
+    iree_host_size_t temporary_count,
+    const loom_low_descriptor_set_t* descriptor_set = nullptr) {
   TestArena arena;
   loom_low_move_sequence_scratch_t scratch;
   loom_low_move_sequence_scratch_initialize(arena.arena(), &scratch);
@@ -99,6 +129,7 @@ std::vector<std::string> EmitMoves(const loom_low_move_t* input_moves,
   }
   std::vector<std::string> emitted_moves;
   loom_low_move_sequence_options_t options = {
+      .descriptor_set = descriptor_set,
       .temporary_locations = temporary_storage,
       .temporary_location_count = temporary_count,
       .emit_move =
@@ -120,6 +151,16 @@ TEST(LowMoveSequenceTest, SkipsIdentityMoves) {
   EXPECT_TRUE(EmitMoves(moves, IREE_ARRAYSIZE(moves), nullptr, 0).empty());
 }
 
+TEST(LowMoveSequenceTest, SkipsAliasIdentityMoves) {
+  loom_low_move_t moves[] = {
+      MoveBetween(0, 1, 0, 0),
+  };
+
+  EXPECT_TRUE(
+      EmitMoves(moves, IREE_ARRAYSIZE(moves), nullptr, 0, AliasDescriptorSet())
+          .empty());
+}
+
 TEST(LowMoveSequenceTest, EmitsIndependentMovesInInputOrder) {
   loom_low_move_t moves[] = {
       Move(4, 0),
@@ -138,6 +179,17 @@ TEST(LowMoveSequenceTest, ReordersForwardClobberingShift) {
 
   EXPECT_THAT(EmitMoves(moves, IREE_ARRAYSIZE(moves), nullptr, 0),
               ::testing::ElementsAre("0:2<-1", "0:1<-0"));
+}
+
+TEST(LowMoveSequenceTest, ReordersAliasClobberingShift) {
+  loom_low_move_t moves[] = {
+      MoveBetween(1, 1, 0, 1),
+      MoveBetween(2, 0, 1, 0),
+  };
+
+  EXPECT_THAT(
+      EmitMoves(moves, IREE_ARRAYSIZE(moves), nullptr, 0, AliasDescriptorSet()),
+      ::testing::ElementsAre("0:2<-1", "1:1<-0"));
 }
 
 TEST(LowMoveSequenceTest, KeepsBackwardShiftInInputOrder) {
@@ -204,6 +256,36 @@ TEST(LowMoveSequenceTest, RejectsCycleWithoutTemporary) {
 
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_FAILED_PRECONDITION,
+      loom_low_move_sequence_emit(&scratch, IREE_ARRAYSIZE(moves), &options));
+  EXPECT_TRUE(emitted_moves.empty());
+}
+
+TEST(LowMoveSequenceTest, RejectsAliasDuplicateDestinations) {
+  loom_low_move_t moves[] = {
+      MoveBetween(0, 0, 2, 0),
+      MoveBetween(0, 1, 3, 1),
+  };
+  std::vector<std::string> emitted_moves;
+  loom_low_move_sequence_options_t options = {
+      .descriptor_set = AliasDescriptorSet(),
+      .emit_move =
+          {
+              .fn = RecordMove,
+              .user_data = &emitted_moves,
+          },
+  };
+  TestArena arena;
+  loom_low_move_sequence_scratch_t scratch;
+  loom_low_move_sequence_scratch_initialize(arena.arena(), &scratch);
+  loom_low_move_t* scratch_moves = nullptr;
+  IREE_ASSERT_OK(loom_low_move_sequence_scratch_reserve_moves(
+      &scratch, IREE_ARRAYSIZE(moves), &scratch_moves));
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(moves); ++i) {
+    scratch_moves[i] = moves[i];
+  }
+
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
       loom_low_move_sequence_emit(&scratch, IREE_ARRAYSIZE(moves), &options));
   EXPECT_TRUE(emitted_moves.empty());
 }

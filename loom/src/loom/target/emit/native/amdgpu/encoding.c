@@ -793,6 +793,7 @@ static iree_status_t loom_amdgpu_encode_move_sequence(
     const loom_low_move_location_t* temporary_locations,
     iree_host_size_t temporary_location_count) {
   loom_low_move_sequence_options_t options = {
+      .descriptor_set = state->allocation->target.descriptor_set,
       .temporary_locations = temporary_locations,
       .temporary_location_count = temporary_location_count,
       .emit_move =

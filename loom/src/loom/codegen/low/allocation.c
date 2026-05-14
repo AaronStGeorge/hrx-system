@@ -232,15 +232,6 @@ typedef struct loom_low_allocation_packet_unit_move_t {
   loom_low_allocation_unit_location_t source;
 } loom_low_allocation_packet_unit_move_t;
 
-static iree_string_view_t loom_low_allocation_module_string(
-    const loom_module_t* module, loom_string_id_t string_id) {
-  if (string_id == LOOM_STRING_ID_INVALID ||
-      string_id >= module->strings.count) {
-    return iree_string_view_empty();
-  }
-  return module->strings.entries[string_id];
-}
-
 static const loom_low_reg_class_t* loom_low_allocation_reg_class_at(
     const loom_low_descriptor_set_t* descriptor_set, uint16_t reg_class_id) {
   IREE_ASSERT(descriptor_set != NULL);
@@ -249,7 +240,7 @@ static const loom_low_reg_class_t* loom_low_allocation_reg_class_at(
   return &descriptor_set->reg_classes[reg_class_id];
 }
 
-static bool loom_low_allocation_reg_classes_share_storage(
+bool loom_low_allocation_reg_classes_share_storage(
     const loom_low_descriptor_set_t* descriptor_set, uint16_t lhs_reg_class_id,
     uint16_t rhs_reg_class_id) {
   if (lhs_reg_class_id == rhs_reg_class_id) {
@@ -263,7 +254,7 @@ static bool loom_low_allocation_reg_classes_share_storage(
          lhs_reg_class->alias_set_id == rhs_reg_class->alias_set_id;
 }
 
-static bool loom_low_allocation_assignment_classes_share_storage(
+bool loom_low_allocation_assignments_share_target_storage(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs) {
@@ -271,6 +262,42 @@ static bool loom_low_allocation_assignment_classes_share_storage(
          loom_low_allocation_reg_classes_share_storage(
              descriptor_set, lhs->descriptor_reg_class_id,
              rhs->descriptor_reg_class_id);
+}
+
+static bool loom_low_allocation_assignment_classes_share_storage(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_allocation_assignment_t* lhs,
+    const loom_low_allocation_assignment_t* rhs) {
+  return loom_low_allocation_assignments_share_target_storage(descriptor_set,
+                                                              lhs, rhs);
+}
+
+bool loom_low_allocation_assignment_subranges_match_target_storage(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_allocation_assignment_t* lhs, uint32_t lhs_start,
+    const loom_low_allocation_assignment_t* rhs, uint32_t rhs_start,
+    uint32_t unit_count) {
+  return unit_count != 0 &&
+         loom_low_allocation_assignments_share_target_storage(descriptor_set,
+                                                              lhs, rhs) &&
+         (uint64_t)lhs->location_base + lhs_start ==
+             (uint64_t)rhs->location_base + rhs_start;
+}
+
+bool loom_low_allocation_assignment_subranges_overlap_target_storage(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_allocation_assignment_t* lhs, uint32_t lhs_start,
+    const loom_low_allocation_assignment_t* rhs, uint32_t rhs_start,
+    uint32_t unit_count) {
+  if (!loom_low_allocation_assignments_share_target_storage(descriptor_set, lhs,
+                                                            rhs)) {
+    return false;
+  }
+  const uint64_t lhs_begin = (uint64_t)lhs->location_base + lhs_start;
+  const uint64_t rhs_begin = (uint64_t)rhs->location_base + rhs_start;
+  const uint64_t lhs_end = lhs_begin + unit_count;
+  const uint64_t rhs_end = rhs_begin + unit_count;
+  return lhs_begin < rhs_end && rhs_begin < lhs_end;
 }
 
 static bool loom_low_allocation_assignment_overlaps_liveness_interval(
@@ -1633,13 +1660,14 @@ static iree_status_t loom_low_allocation_record_spill_plan(
   return iree_ok_status();
 }
 
-static bool loom_low_allocation_assignment_locations_equal(
+static bool loom_low_allocation_assignment_locations_share_target_storage(
+    const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs) {
-  return lhs->location_kind == rhs->location_kind &&
-         lhs->descriptor_reg_class_id == rhs->descriptor_reg_class_id &&
-         lhs->location_base == rhs->location_base &&
-         lhs->location_count == rhs->location_count;
+  return lhs->location_base == rhs->location_base &&
+         lhs->location_count == rhs->location_count &&
+         loom_low_allocation_assignments_share_target_storage(descriptor_set,
+                                                              lhs, rhs);
 }
 
 static bool loom_low_allocation_unit_locations_equal(
@@ -2426,6 +2454,9 @@ static iree_status_t loom_low_allocation_assign_tied_interval(
   if (!loom_low_allocation_assignment_is_coalescable(operand_assignment)) {
     return iree_ok_status();
   }
+  uint16_t interval_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_descriptor_register_class(
+      state, interval->value_class, &interval_reg_class_id, NULL));
   if (!loom_liveness_value_class_equal(operand_assignment->value_class,
                                        interval->value_class) ||
       operand_assignment->location_count != interval->unit_count) {
@@ -2445,7 +2476,7 @@ static iree_status_t loom_low_allocation_assign_tied_interval(
     ignored_value_ids[ignored_value_count++] = copy_source_id;
   }
   if (loom_low_allocation_candidate_conflicts(
-          state, interval, operand_assignment->descriptor_reg_class_id,
+          state, interval, interval_reg_class_id,
           operand_assignment->location_kind, operand_assignment->location_base,
           operand_assignment->location_count, ignored_value_ids,
           ignored_value_count)) {
@@ -2458,7 +2489,7 @@ static iree_status_t loom_low_allocation_assign_tied_interval(
   const loom_low_allocation_assignment_t assignment = {
       .value_id = interval->value_id,
       .value_class = interval->value_class,
-      .descriptor_reg_class_id = operand_assignment->descriptor_reg_class_id,
+      .descriptor_reg_class_id = interval_reg_class_id,
       .start_point = interval->start_point,
       .end_point = loom_low_allocation_interval_storage_end_point(interval),
       .unit_count = interval->unit_count,
@@ -2599,11 +2630,13 @@ static iree_status_t loom_low_allocation_append_relation_interval(
   }
   const uint32_t result_location_base =
       source_unit_location - relation->result_unit_offset;
+  uint16_t interval_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_descriptor_register_class(
+      state, interval->value_class, &interval_reg_class_id, NULL));
   return loom_low_allocation_append_interval_at_location(
-      state, interval, source_assignment->descriptor_reg_class_id,
-      source_assignment->location_kind, result_location_base,
-      interval->unit_count, ignored_value_ids, ignored_value_count,
-      out_assigned);
+      state, interval, interval_reg_class_id, source_assignment->location_kind,
+      result_location_base, interval->unit_count, ignored_value_ids,
+      ignored_value_count, out_assigned);
 }
 
 static iree_status_t
@@ -2650,11 +2683,13 @@ loom_low_allocation_append_relation_interval_if_source_assigned(
     ignored_value_ids = &source_value_id;
     ignored_value_count = 1;
   }
+  uint16_t interval_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_descriptor_register_class(
+      state, interval->value_class, &interval_reg_class_id, NULL));
   return loom_low_allocation_append_interval_at_location(
-      state, interval, source_assignment->descriptor_reg_class_id,
-      source_assignment->location_kind, result_location_base,
-      interval->unit_count, ignored_value_ids, ignored_value_count,
-      out_assigned);
+      state, interval, interval_reg_class_id, source_assignment->location_kind,
+      result_location_base, interval->unit_count, ignored_value_ids,
+      ignored_value_count, out_assigned);
 }
 
 static iree_status_t loom_low_allocation_assign_relation_interval(
@@ -2769,11 +2804,13 @@ static iree_status_t loom_low_allocation_assign_concat_interval(
       state, first_source_value_id, &first_assignment_index));
   const loom_low_allocation_assignment_t* first_assignment =
       &state->assignments[first_assignment_index];
+  uint16_t interval_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_descriptor_register_class(
+      state, interval->value_class, &interval_reg_class_id, NULL));
   return loom_low_allocation_append_interval_at_location(
-      state, interval, first_assignment->descriptor_reg_class_id,
-      first_assignment->location_kind, result_location_base,
-      interval->unit_count, ignored_value_ids, ignored_value_count,
-      out_assigned);
+      state, interval, interval_reg_class_id, first_assignment->location_kind,
+      result_location_base, interval->unit_count, ignored_value_ids,
+      ignored_value_count, out_assigned);
 }
 
 static bool loom_low_allocation_relation_source_matches_interval(
@@ -2856,10 +2893,13 @@ static iree_status_t loom_low_allocation_assign_concat_source_from_result(
   }
   const loom_value_id_t result_value_id =
       loom_low_placement_value_id(&state->placement, relation->result_ordinal);
+  uint16_t interval_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_descriptor_register_class(
+      state, interval->value_class, &interval_reg_class_id, NULL));
   return loom_low_allocation_append_interval_at_location(
-      state, interval, result_assignment->descriptor_reg_class_id,
-      result_assignment->location_kind, location_base, interval->unit_count,
-      &result_value_id, /*ignored_value_count=*/1, out_assigned);
+      state, interval, interval_reg_class_id, result_assignment->location_kind,
+      location_base, interval->unit_count, &result_value_id,
+      /*ignored_value_count=*/1, out_assigned);
 }
 
 static iree_status_t loom_low_allocation_concat_ignored_sources(
@@ -3101,8 +3141,11 @@ loom_low_allocation_assign_concat_source_from_branch_destination(
       ignored_value_ids = &destination_value_id;
       ignored_value_count = 1;
     }
+    uint16_t interval_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+    IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_descriptor_register_class(
+        state, interval->value_class, &interval_reg_class_id, NULL));
     IREE_RETURN_IF_ERROR(loom_low_allocation_append_interval_at_location(
-        state, interval, destination_assignment->descriptor_reg_class_id,
+        state, interval, interval_reg_class_id,
         destination_assignment->location_kind, source_location_base,
         interval->unit_count, ignored_value_ids, ignored_value_count,
         out_assigned));
@@ -3177,8 +3220,11 @@ static iree_status_t loom_low_allocation_assign_branch_source_interval(
       ignored_value_ids = &destination_value_id;
       ignored_value_count = 1;
     }
+    uint16_t interval_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+    IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_descriptor_register_class(
+        state, interval->value_class, &interval_reg_class_id, NULL));
     IREE_RETURN_IF_ERROR(loom_low_allocation_append_interval_at_location(
-        state, interval, destination_assignment->descriptor_reg_class_id,
+        state, interval, interval_reg_class_id,
         destination_assignment->location_kind, source_location_base,
         interval->unit_count, ignored_value_ids, ignored_value_count,
         out_assigned));
@@ -3270,8 +3316,12 @@ static iree_status_t loom_low_allocation_assign_concat_source_interval(
               relation, sibling_relation, sibling_assignment, &location_base)) {
         continue;
       }
+      uint16_t interval_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+      IREE_RETURN_IF_ERROR(
+          loom_low_allocation_resolve_descriptor_register_class(
+              state, interval->value_class, &interval_reg_class_id, NULL));
       IREE_RETURN_IF_ERROR(loom_low_allocation_append_interval_at_location(
-          state, interval, sibling_assignment->descriptor_reg_class_id,
+          state, interval, interval_reg_class_id,
           sibling_assignment->location_kind, location_base,
           interval->unit_count, /*ignored_value_ids=*/NULL,
           /*ignored_value_count=*/0, out_assigned));
@@ -3388,8 +3438,8 @@ static iree_status_t loom_low_allocation_record_copy_decision(
   const bool coalesced =
       loom_low_allocation_assignment_is_coalescable(source_assignment) &&
       loom_low_allocation_assignment_is_coalescable(result_assignment) &&
-      loom_low_allocation_assignment_locations_equal(source_assignment,
-                                                     result_assignment);
+      loom_low_allocation_assignment_locations_share_target_storage(
+          state->target.descriptor_set, source_assignment, result_assignment);
   state->copy_decisions[state->copy_decision_count++] =
       (loom_low_allocation_copy_decision_t){
           .source_value_id = loom_low_copy_source(op),
@@ -5479,8 +5529,9 @@ static iree_status_t loom_low_allocation_verify_tied_result_assignments(
           IREE_STATUS_FAILED_PRECONDITION,
           "allocation tied result has a non-register-like non-spill location");
     }
-    if (!loom_low_allocation_assignment_locations_equal(result_assignment,
-                                                        operand_assignment)) {
+    if (!loom_low_allocation_assignment_locations_share_target_storage(
+            table->target.descriptor_set, result_assignment,
+            operand_assignment)) {
       return iree_make_status(
           IREE_STATUS_FAILED_PRECONDITION,
           "allocation tied result does not share the operand location");
@@ -5561,6 +5612,25 @@ static iree_status_t loom_low_allocation_verify_assignment(
         "allocation assignment %zu has invalid descriptor register class ID "
         "%" PRIu16,
         assignment_index, assignment->descriptor_reg_class_id);
+  }
+  if (assignment->value_class.type_kind != LOOM_TYPE_REGISTER) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation assignment %zu has a non-register value class",
+        assignment_index);
+  }
+  if (assignment->value_class.register_descriptor_set_stable_id !=
+          table->target.descriptor_set->stable_id ||
+      assignment->value_class.register_class_id !=
+          assignment->descriptor_reg_class_id) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation assignment %zu descriptor register class %" PRIu16
+        " does not match value class descriptor set %" PRIu64
+        " register class %" PRIu16,
+        assignment_index, assignment->descriptor_reg_class_id,
+        assignment->value_class.register_descriptor_set_stable_id,
+        assignment->value_class.register_class_id);
   }
   if (loom_low_allocation_location_kind_is_register_owned(
           assignment->location_kind)) {
@@ -5696,8 +5766,9 @@ static iree_status_t loom_low_allocation_verify_copy_decision(
         "assignments",
         copy_decision_index);
   }
-  const bool locations_equal = loom_low_allocation_assignment_locations_equal(
-      source_assignment, result_assignment);
+  const bool locations_equal =
+      loom_low_allocation_assignment_locations_share_target_storage(
+          table->target.descriptor_set, source_assignment, result_assignment);
   if (copy_decision->kind == LOOM_LOW_ALLOCATION_COPY_COALESCED &&
       (!loom_low_allocation_assignment_is_coalescable(source_assignment) ||
        !loom_low_allocation_assignment_is_coalescable(result_assignment) ||
@@ -6462,8 +6533,8 @@ static iree_string_view_t loom_low_allocation_coalescing_constraint(
   if (!loom_low_allocation_assignment_is_coalescable(result_assignment)) {
     return IREE_SV("result-not-register-like");
   }
-  if (loom_low_allocation_assignment_locations_equal(source_assignment,
-                                                     result_assignment)) {
+  if (loom_low_allocation_assignment_locations_share_target_storage(
+          table->target.descriptor_set, source_assignment, result_assignment)) {
     return IREE_SV("assigned-locations-match");
   }
   return IREE_SV("assigned-locations-differ");

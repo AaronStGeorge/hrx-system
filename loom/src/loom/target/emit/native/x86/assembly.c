@@ -1076,6 +1076,7 @@ static iree_status_t loom_x86_emit_edge_copy_group(
       .context = context,
   };
   loom_low_move_sequence_options_t options = {
+      .descriptor_set = context->allocation->target.descriptor_set,
       .temporary_locations = temporaries,
       .temporary_location_count = group->temporary_count,
       .emit_move =

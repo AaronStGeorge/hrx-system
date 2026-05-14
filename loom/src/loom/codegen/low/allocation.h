@@ -179,6 +179,36 @@ static inline bool loom_low_allocation_assignment_subranges_overlap(
   return lhs_begin < rhs_end && rhs_begin < lhs_end;
 }
 
+// Returns true when the two descriptor register classes address the same
+// backing storage space. Classes share storage when they are the same class or
+// when both opt into the same non-zero alias set.
+bool loom_low_allocation_reg_classes_share_storage(
+    const loom_low_descriptor_set_t* descriptor_set, uint16_t lhs_reg_class_id,
+    uint16_t rhs_reg_class_id);
+
+// Returns true when two assignments name the same target-visible storage space
+// under |descriptor_set|'s alias contracts.
+bool loom_low_allocation_assignments_share_target_storage(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_allocation_assignment_t* lhs,
+    const loom_low_allocation_assignment_t* rhs);
+
+// Returns true when two same-length assignment subranges name the same target
+// storage units under |descriptor_set|'s alias contracts.
+bool loom_low_allocation_assignment_subranges_match_target_storage(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_allocation_assignment_t* lhs, uint32_t lhs_start,
+    const loom_low_allocation_assignment_t* rhs, uint32_t rhs_start,
+    uint32_t unit_count);
+
+// Returns true when two same-length assignment subranges overlap in target
+// storage under |descriptor_set|'s alias contracts.
+bool loom_low_allocation_assignment_subranges_overlap_target_storage(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_allocation_assignment_t* lhs, uint32_t lhs_start,
+    const loom_low_allocation_assignment_t* rhs, uint32_t rhs_start,
+    uint32_t unit_count);
+
 // Allocation remark for agent/tool feedback.
 typedef struct loom_low_allocation_remark_t {
   // Remark category.

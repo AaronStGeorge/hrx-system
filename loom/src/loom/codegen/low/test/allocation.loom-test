@@ -99,6 +99,17 @@ low.func.def target(@test_target) @physical_budget_clamps_to_allocatable_count(%
 
 // ====
 
+// RUN: emit low-allocation-json @physical_alias_classes_share_storage test.alias32=64 diagnostics=predicted-spills output=none
+
+test.target<low_core> @test_target
+
+// WARNING@+1: BACKEND/008 {function_name="physical_alias_classes_share_storage", value_name="narrow", value_class="test.alias32", spill_cause="register-budget-conflict"}
+low.func.def target(@test_target) @physical_alias_classes_share_storage(%wide: reg<test.alias64>, %narrow: reg<test.alias32>) -> (reg<test.alias64>, reg<test.alias32>) {
+  low.return %wide, %narrow : reg<test.alias64>, reg<test.alias32>
+}
+
+// ====
+
 // RUN: emit low-allocation-json @multi_victim_spill test.i32=4 diagnostics=predicted-spills output=none
 
 test.target<low_core> @test_target

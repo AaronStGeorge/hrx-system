@@ -18,10 +18,34 @@ bool loom_low_move_locations_equal(const loom_low_move_location_t* lhs,
          lhs->descriptor_reg_class_id == rhs->descriptor_reg_class_id;
 }
 
-static bool loom_low_move_locations_share_storage_class(
+static bool loom_low_move_locations_share_target_storage(
+    const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_move_location_t* lhs, const loom_low_move_location_t* rhs) {
-  return lhs->location_kind == rhs->location_kind &&
-         lhs->descriptor_reg_class_id == rhs->descriptor_reg_class_id &&
+  if (lhs->location_kind != rhs->location_kind ||
+      lhs->location != rhs->location) {
+    return false;
+  }
+  if (descriptor_set == NULL) {
+    return lhs->descriptor_reg_class_id == rhs->descriptor_reg_class_id;
+  }
+  return loom_low_allocation_reg_classes_share_storage(
+      descriptor_set, lhs->descriptor_reg_class_id,
+      rhs->descriptor_reg_class_id);
+}
+
+static bool loom_low_move_locations_share_storage_class(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_move_location_t* lhs, const loom_low_move_location_t* rhs) {
+  if (lhs->location_kind != rhs->location_kind) {
+    return false;
+  }
+  const bool classes_share_storage =
+      descriptor_set == NULL
+          ? lhs->descriptor_reg_class_id == rhs->descriptor_reg_class_id
+          : loom_low_allocation_reg_classes_share_storage(
+                descriptor_set, lhs->descriptor_reg_class_id,
+                rhs->descriptor_reg_class_id);
+  return classes_share_storage &&
          loom_liveness_value_class_equal(lhs->value_class, rhs->value_class);
 }
 
@@ -168,10 +192,12 @@ loom_low_move_sequence_assignment(const loom_low_allocation_table_t* allocation,
 }
 
 static iree_status_t loom_low_move_sequence_require_same_storage_class(
+    const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs,
     iree_string_view_t structural_op) {
-  if (!loom_low_allocation_assignments_share_storage(lhs, rhs)) {
+  if (!loom_low_allocation_assignments_share_target_storage(descriptor_set, lhs,
+                                                            rhs)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "%.*s structural move crosses allocation storage classes",
@@ -333,7 +359,8 @@ static iree_status_t loom_low_move_sequence_slice_assignments(
   *out_result_assignment =
       loom_low_move_sequence_assignment(allocation, loom_low_slice_result(op));
   IREE_RETURN_IF_ERROR(loom_low_move_sequence_require_same_storage_class(
-      *out_source_assignment, *out_result_assignment, IREE_SV("low.slice")));
+      allocation->target.descriptor_set, *out_source_assignment,
+      *out_result_assignment, IREE_SV("low.slice")));
   const uint32_t source_offset = (uint32_t)offset;
   if (source_offset > (*out_source_assignment)->location_count ||
       (*out_result_assignment)->location_count >
@@ -355,8 +382,9 @@ iree_status_t loom_low_move_sequence_count_slice_units(
   uint32_t source_offset = 0;
   IREE_RETURN_IF_ERROR(loom_low_move_sequence_slice_assignments(
       allocation, op, &source_assignment, &result_assignment, &source_offset));
-  if (loom_low_allocation_assignment_subranges_match(
-          result_assignment, /*lhs_start=*/0, source_assignment, source_offset,
+  if (loom_low_allocation_assignment_subranges_match_target_storage(
+          allocation->target.descriptor_set, result_assignment, /*lhs_start=*/0,
+          source_assignment, source_offset,
           result_assignment->location_count)) {
     return iree_ok_status();
   }
@@ -372,9 +400,10 @@ iree_status_t loom_low_move_sequence_populate_slice_units(
   uint32_t source_offset = 0;
   IREE_RETURN_IF_ERROR(loom_low_move_sequence_slice_assignments(
       allocation, op, &source_assignment, &result_assignment, &source_offset));
-  const bool coalesced = loom_low_allocation_assignment_subranges_match(
-      result_assignment, /*lhs_start=*/0, source_assignment, source_offset,
-      result_assignment->location_count);
+  const bool coalesced =
+      loom_low_allocation_assignment_subranges_match_target_storage(
+          allocation->target.descriptor_set, result_assignment, /*lhs_start=*/0,
+          source_assignment, source_offset, result_assignment->location_count);
   const iree_host_size_t expected_move_count =
       coalesced ? 0 : result_assignment->location_count;
   if (move_count != expected_move_count) {
@@ -419,7 +448,8 @@ static iree_status_t loom_low_move_sequence_concat_assignments(
     source_assignment =
         loom_low_move_sequence_assignment(allocation, sources.values[i]);
     IREE_RETURN_IF_ERROR(loom_low_move_sequence_require_same_storage_class(
-        *out_result_assignment, source_assignment, IREE_SV("low.concat")));
+        allocation->target.descriptor_set, *out_result_assignment,
+        source_assignment, IREE_SV("low.concat")));
     if (result_offset > (*out_result_assignment)->location_count ||
         source_assignment->location_count >
             (*out_result_assignment)->location_count - result_offset) {
@@ -427,9 +457,10 @@ static iree_status_t loom_low_move_sequence_concat_assignments(
           IREE_STATUS_FAILED_PRECONDITION,
           "low.concat structural move source ranges exceed result assignment");
     }
-    if (!loom_low_allocation_assignment_subranges_match(
-            *out_result_assignment, result_offset, source_assignment,
-            /*rhs_start=*/0, source_assignment->location_count)) {
+    if (!loom_low_allocation_assignment_subranges_match_target_storage(
+            allocation->target.descriptor_set, *out_result_assignment,
+            result_offset, source_assignment, /*rhs_start=*/0,
+            source_assignment->location_count)) {
       *out_coalesced = false;
     }
     if (source_assignment->location_count >
@@ -529,11 +560,27 @@ static uint64_t loom_low_move_sequence_mix64(uint64_t value) {
   return value;
 }
 
+static uint32_t loom_low_move_sequence_storage_class_key(
+    const loom_low_descriptor_set_t* descriptor_set, uint16_t reg_class_id) {
+  if (descriptor_set != NULL &&
+      reg_class_id < descriptor_set->reg_class_count) {
+    const loom_low_reg_class_t* reg_class =
+        &descriptor_set->reg_classes[reg_class_id];
+    if (reg_class->alias_set_id != 0) {
+      return reg_class->alias_set_id;
+    }
+  }
+  return 0x10000u + reg_class_id;
+}
+
 static uint64_t loom_low_move_sequence_location_hash(
+    const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_move_location_t* location) {
   uint64_t value = (uint64_t)location->location;
   value ^= (uint64_t)location->location_kind << 32;
-  value ^= (uint64_t)location->descriptor_reg_class_id << 48;
+  value ^= (uint64_t)loom_low_move_sequence_storage_class_key(
+               descriptor_set, location->descriptor_reg_class_id)
+           << 40;
   return loom_low_move_sequence_mix64(value);
 }
 
@@ -588,7 +635,9 @@ loom_low_move_sequence_lookup_location(
   loom_low_move_sequence_scratch_t* scratch = state->scratch;
   const iree_host_size_t mask = state->location_entry_count - 1;
   iree_host_size_t index =
-      (iree_host_size_t)loom_low_move_sequence_location_hash(location) & mask;
+      (iree_host_size_t)loom_low_move_sequence_location_hash(
+          state->options->descriptor_set, location) &
+      mask;
   for (iree_host_size_t probe = 0; probe < state->location_entry_count;
        ++probe) {
     loom_low_move_sequence_location_entry_t* entry =
@@ -597,7 +646,8 @@ loom_low_move_sequence_lookup_location(
                           LOOM_LOW_MOVE_SEQUENCE_LOCATION_FLAG_OCCUPIED)) {
       return NULL;
     }
-    if (loom_low_move_locations_equal(&entry->location, location)) {
+    if (loom_low_move_locations_share_target_storage(
+            state->options->descriptor_set, &entry->location, location)) {
       return entry;
     }
     index = (index + 1) & mask;
@@ -612,7 +662,9 @@ loom_low_move_sequence_insert_location(
   loom_low_move_sequence_scratch_t* scratch = state->scratch;
   const iree_host_size_t mask = state->location_entry_count - 1;
   iree_host_size_t index =
-      (iree_host_size_t)loom_low_move_sequence_location_hash(location) & mask;
+      (iree_host_size_t)loom_low_move_sequence_location_hash(
+          state->options->descriptor_set, location) &
+      mask;
   for (iree_host_size_t probe = 0; probe < state->location_entry_count;
        ++probe) {
     loom_low_move_sequence_location_entry_t* entry =
@@ -626,7 +678,8 @@ loom_low_move_sequence_insert_location(
       };
       return entry;
     }
-    if (loom_low_move_locations_equal(&entry->location, location)) {
+    if (loom_low_move_locations_share_target_storage(
+            state->options->descriptor_set, &entry->location, location)) {
       return entry;
     }
     index = (index + 1) & mask;
@@ -690,8 +743,8 @@ static iree_status_t loom_low_move_sequence_find_temporary(
   for (iree_host_size_t i = 0; i < options->temporary_location_count; ++i) {
     const loom_low_move_location_t* temporary =
         &options->temporary_locations[i];
-    if (!loom_low_move_locations_share_storage_class(temporary,
-                                                     storage_class)) {
+    if (!loom_low_move_locations_share_storage_class(
+            options->descriptor_set, temporary, storage_class)) {
       continue;
     }
     *out_temporary_location = temporary;
@@ -710,7 +763,8 @@ static iree_status_t loom_low_move_sequence_prepare(
   iree_host_size_t active_move_count = 0;
   for (iree_host_size_t i = 0; i < state->move_count; ++i) {
     const loom_low_move_t move = scratch->moves[i];
-    if (loom_low_move_locations_equal(&move.destination, &move.source)) {
+    if (loom_low_move_locations_share_target_storage(
+            state->options->descriptor_set, &move.destination, &move.source)) {
       continue;
     }
     scratch->moves[active_move_count++] = move;
@@ -783,7 +837,8 @@ static iree_status_t loom_low_move_sequence_emit_one(
     const loom_low_move_sequence_options_t* options,
     const loom_low_move_location_t* destination,
     const loom_low_move_location_t* source) {
-  if (loom_low_move_locations_equal(destination, source)) {
+  if (loom_low_move_locations_share_target_storage(options->descriptor_set,
+                                                   destination, source)) {
     return iree_ok_status();
   }
   return options->emit_move.fn(options->emit_move.user_data, destination,
@@ -838,7 +893,8 @@ static iree_status_t loom_low_move_sequence_emit_cycle(
     }
     const iree_host_size_t move_index =
         destination_entry->destination_move_index;
-    if (loom_low_move_locations_equal(&source, &saved_location)) {
+    if (loom_low_move_locations_share_target_storage(
+            state->options->descriptor_set, &source, &saved_location)) {
       IREE_RETURN_IF_ERROR(loom_low_move_sequence_emit_one(
           state->options, &destination, temporary_location));
       return loom_low_move_sequence_deactivate_move(state, move_index);

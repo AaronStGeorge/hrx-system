@@ -1195,6 +1195,7 @@ static iree_status_t loom_amdgpu_emit_move_sequence(
       .mnemonic = mnemonic,
   };
   loom_low_move_sequence_options_t options = {
+      .descriptor_set = context->allocation->target.descriptor_set,
       .temporary_locations = temporary_locations,
       .temporary_location_count = temporary_location_count,
       .emit_move =
@@ -1264,6 +1265,7 @@ static iree_status_t loom_amdgpu_emit_edge_copy_group(
       .context = context,
   };
   loom_low_move_sequence_options_t options = {
+      .descriptor_set = context->allocation->target.descriptor_set,
       .temporary_locations = temporaries,
       .temporary_location_count = group->temporary_count,
       .emit_move =

@@ -87,6 +87,9 @@ typedef struct loom_low_move_sequence_emit_callback_t {
 
 // Options for lowering one parallel move set to a linear sequence.
 typedef struct loom_low_move_sequence_options_t {
+  // Descriptor set defining register-class alias contracts. When absent,
+  // move sequencing treats descriptor register classes as independent storage.
+  const loom_low_descriptor_set_t* descriptor_set;
   // Scratch units available to break cycles.
   const loom_low_move_location_t* temporary_locations;
   // Number of entries in |temporary_locations|.
