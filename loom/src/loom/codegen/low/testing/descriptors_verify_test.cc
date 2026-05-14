@@ -378,6 +378,19 @@ TEST(LowDescriptorsTest, EnumNamesAreStableDiagnosticSpellings) {
                 loom_low_operand_role_name(LOOM_LOW_OPERAND_ROLE_IMPLICIT)),
             "implicit");
 
+  EXPECT_EQ(StringViewToString(loom_low_operand_address_map_kind_name(
+                LOOM_LOW_OPERAND_ADDRESS_MAP_DIRECT)),
+            "direct");
+  EXPECT_EQ(StringViewToString(loom_low_operand_address_map_kind_name(
+                LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET)),
+            "low_subset");
+  EXPECT_EQ(StringViewToString(loom_low_operand_address_map_kind_name(
+                LOOM_LOW_OPERAND_ADDRESS_MAP_TARGET_STATE)),
+            "target_state");
+  EXPECT_EQ(StringViewToString(loom_low_operand_address_map_kind_name(
+                (loom_low_operand_address_map_kind_t)99)),
+            "unknown");
+
   EXPECT_EQ(StringViewToString(
                 loom_low_immediate_kind_name(LOOM_LOW_IMMEDIATE_KIND_UNKNOWN)),
             "unknown");
@@ -701,6 +714,87 @@ TEST(LowDescriptorsTest, AcceptsImplicitRowsWithImplicitFlag) {
   tables.operands[2].flags = LOOM_LOW_OPERAND_FLAG_IMPLICIT;
 
   IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, AcceptsLowSubsetOperandAddressMap) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.operands[2].address_map_kind = LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET;
+  tables.operands[2].addressable_unit_count = 16;
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, AcceptsTargetStateOperandAddressMap) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.operands[2].address_map_kind =
+      LOOM_LOW_OPERAND_ADDRESS_MAP_TARGET_STATE;
+  tables.operands[2].addressable_unit_count = 256;
+
+  IREE_ASSERT_OK(loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, RejectsInvalidOperandAddressMap) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.operands[2].address_map_kind = (loom_low_operand_address_map_kind_t)99;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, RejectsDirectOperandAddressMapWithBound) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.operands[2].addressable_unit_count = 16;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, RejectsBoundedOperandAddressMapWithoutUnits) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.operands[2].address_map_kind = LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, RejectsBoundedOperandAddressMapOnImplicitOperand) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.operands[2].role = LOOM_LOW_OPERAND_ROLE_IMPLICIT;
+  tables.operands[2].flags = LOOM_LOW_OPERAND_FLAG_IMPLICIT;
+  tables.operands[2].address_map_kind = LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET;
+  tables.operands[2].addressable_unit_count = 1;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, RejectsBoundedOperandAddressMapSmallerThanOperand) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.operands[2].unit_count = 4;
+  tables.operands[2].address_map_kind = LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET;
+  tables.operands[2].addressable_unit_count = 2;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_descriptor_set_verify(&tables.set));
+}
+
+TEST(LowDescriptorsTest, RejectsBoundedOperandAddressMapWithoutConcreteAlt) {
+  TestTables tables;
+  InitializeTestTables(&tables);
+  tables.reg_class_alts[0].reg_class_id = LOOM_LOW_REG_CLASS_NONE;
+  tables.reg_class_alts[0].flags = LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE;
+  tables.operands[2].address_map_kind = LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET;
+  tables.operands[2].addressable_unit_count = 1;
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        loom_low_descriptor_set_verify(&tables.set));
 }
 
 TEST(LowDescriptorsTest, AcceptsAsmFormImplicitFlagPacketOperands) {

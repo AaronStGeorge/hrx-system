@@ -35,6 +35,7 @@ loom_assert_no_dependencies(
     targets = [
         ":allocation",
         ":allocation_materialization",
+        ":addressability",
         ":descriptors",
         ":descriptor_traits",
         ":descriptors_manifest",
@@ -63,6 +64,7 @@ loom_assert_no_dependencies(
     targets = [
         ":allocation",
         ":allocation_materialization",
+        ":addressability",
         ":descriptor_traits",
         ":diagnostics",
         ":function",
@@ -394,6 +396,33 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "addressability",
+    srcs = ["addressability.c"],
+    hdrs = ["addressability.h"],
+    deps = [
+        ":allocation",
+        ":descriptors",
+        ":diagnostics",
+        ":packet",
+        "//loom/src/loom/codegen/low/schedule",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/error:error_defs",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "addressability_test",
+    srcs = ["addressability_test.cc"],
+    deps = [
+        ":addressability",
+        "//loom/src/loom/error:error_defs",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "packet_asm",
     srcs = ["packet_asm.c"],
     hdrs = ["packet_asm.h"],
@@ -415,6 +444,7 @@ loom_cc_library(
     srcs = ["frame.c"],
     hdrs = ["frame.h"],
     deps = [
+        ":addressability",
         ":allocation",
         ":allocation_materialization",
         ":diagnostics",

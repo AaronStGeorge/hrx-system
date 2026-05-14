@@ -6,6 +6,7 @@
 
 #include "loom/codegen/low/frame.h"
 
+#include "loom/codegen/low/addressability.h"
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packet.h"
@@ -165,13 +166,26 @@ static iree_status_t loom_low_emission_frame_lower_spill_traffic(
 }
 
 static iree_status_t loom_low_emission_frame_validate_final(
+    const loom_low_emission_frame_options_t* frame_options,
     const loom_low_emission_frame_spill_free_options_t* options,
-    const loom_low_emission_frame_t* frame, iree_arena_allocator_t* arena) {
-  if (options->validate_frame == NULL) {
+    const loom_low_emission_frame_t* frame, iree_arena_allocator_t* arena,
+    bool* out_accepted) {
+  *out_accepted = false;
+  loom_low_addressability_validation_result_t addressability_result = {0};
+  IREE_RETURN_IF_ERROR(loom_low_addressability_validate_allocated_packets(
+      &frame->schedule, &frame->allocation, frame_options->emitter,
+      &addressability_result));
+  if (addressability_result.error_count != 0) {
     return iree_ok_status();
   }
-  return options->validate_frame(options->validate_frame_user_data, frame,
-                                 arena);
+  if (options->validate_frame == NULL) {
+    *out_accepted = true;
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(
+      options->validate_frame(options->validate_frame_user_data, frame, arena));
+  *out_accepted = true;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_emission_frame_make_spill_assignment_status(
@@ -250,9 +264,13 @@ iree_status_t loom_low_emission_frame_build_spill_free(
     }
     if (frame.allocation.spill_plan_count == 0 &&
         frame.allocation.spill_count == 0) {
-      *out_frame = frame;
+      bool accepted = false;
       IREE_RETURN_IF_ERROR(loom_low_emission_frame_validate_final(
-          spill_free_options, out_frame, arena));
+          frame_options, spill_free_options, &frame, arena, &accepted));
+      if (!accepted) {
+        return iree_ok_status();
+      }
+      *out_frame = frame;
       return iree_ok_status();
     }
     if (frame.allocation.spill_plan_count == 0) {

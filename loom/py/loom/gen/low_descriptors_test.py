@@ -34,11 +34,14 @@ from loom.target.low_descriptors import (
     ImmediateEncodingSlice,
     ImmediateFlag,
     ImmediateKind,
+    OperandAddressMapKind,
     OperandFlag,
     OperandForm,
     OperandFormMatch,
     OperandFormMatchKind,
     OperandRole,
+    RegClassAlt,
+    RegClassAltFlag,
 )
 from loom.target.test.descriptors import (
     TEST_LOW_ADD_I32_DESCRIPTOR,
@@ -776,6 +779,158 @@ def test_generator_accepts_tied_duplicate_operand_encoding_field() -> None:
     generated = generate_descriptor_set(descriptor_set)
 
     assert "test.add.i32" in generated.source
+
+
+def test_generator_emits_operand_low_subset_address_map() -> None:
+    base_descriptor = TEST_LOW_ADD_I32_DESCRIPTOR
+    descriptor = replace(
+        base_descriptor,
+        operands=(
+            replace(
+                base_descriptor.operands[0],
+                address_map_kind=OperandAddressMapKind.LOW_SUBSET,
+                addressable_unit_count=16,
+            ),
+            *base_descriptor.operands[1:],
+        ),
+    )
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    generated = generate_descriptor_set(descriptor_set)
+
+    assert ".address_map_kind = LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET" in generated.source
+    assert ".addressable_unit_count = 16" in generated.source
+
+
+def test_generator_emits_operand_target_state_address_map() -> None:
+    base_descriptor = TEST_LOW_ADD_I32_DESCRIPTOR
+    descriptor = replace(
+        base_descriptor,
+        operands=(
+            replace(
+                base_descriptor.operands[0],
+                address_map_kind=OperandAddressMapKind.TARGET_STATE,
+                addressable_unit_count=256,
+            ),
+            *base_descriptor.operands[1:],
+        ),
+    )
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    generated = generate_descriptor_set(descriptor_set)
+
+    assert ".address_map_kind = LOOM_LOW_OPERAND_ADDRESS_MAP_TARGET_STATE" in generated.source
+    assert ".addressable_unit_count = 256" in generated.source
+
+
+def test_generator_rejects_direct_address_map_with_unit_count() -> None:
+    base_descriptor = TEST_LOW_ADD_I32_DESCRIPTOR
+    descriptor = replace(
+        base_descriptor,
+        operands=(
+            replace(base_descriptor.operands[0], addressable_unit_count=16),
+            *base_descriptor.operands[1:],
+        ),
+    )
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'test.add.i32' operand 'dst' direct address map must not set an addressable unit count"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_bounded_address_map_without_unit_count() -> None:
+    base_descriptor = TEST_LOW_ADD_I32_DESCRIPTOR
+    descriptor = replace(
+        base_descriptor,
+        operands=(
+            replace(
+                base_descriptor.operands[0],
+                address_map_kind=OperandAddressMapKind.LOW_SUBSET,
+            ),
+            *base_descriptor.operands[1:],
+        ),
+    )
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'test.add.i32' operand 'dst' bounded address map must set an addressable unit count"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_bounded_address_map_on_implicit_operand() -> None:
+    base_descriptor = TEST_LOW_ADD_I32_DESCRIPTOR
+    descriptor = replace(
+        base_descriptor,
+        operands=(
+            base_descriptor.operands[0],
+            replace(
+                base_descriptor.operands[1],
+                role=OperandRole.IMPLICIT,
+                flags=(OperandFlag.IMPLICIT,),
+                address_map_kind=OperandAddressMapKind.LOW_SUBSET,
+                addressable_unit_count=1,
+            ),
+            *base_descriptor.operands[2:],
+        ),
+    )
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'test.add.i32' operand 'lhs' bounded address map must apply to an explicit value operand"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_bounded_address_map_smaller_than_operand() -> None:
+    base_descriptor = TEST_LOW_ADD_I32_DESCRIPTOR
+    descriptor = replace(
+        base_descriptor,
+        operands=(
+            replace(
+                base_descriptor.operands[0],
+                unit_count=4,
+                address_map_kind=OperandAddressMapKind.LOW_SUBSET,
+                addressable_unit_count=2,
+            ),
+            *base_descriptor.operands[1:],
+        ),
+    )
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'test.add.i32' operand 'dst' bounded address map covers fewer units than the operand consumes"),
+    ):
+        generate_descriptor_set(descriptor_set)
+
+
+def test_generator_rejects_bounded_address_map_without_concrete_alt() -> None:
+    base_descriptor = TEST_LOW_ADD_I32_DESCRIPTOR
+    descriptor = replace(
+        base_descriptor,
+        operands=(
+            replace(
+                base_descriptor.operands[0],
+                reg_alts=(RegClassAlt(None, flags=(RegClassAltFlag.IMMEDIATE,)),),
+                address_map_kind=OperandAddressMapKind.LOW_SUBSET,
+                addressable_unit_count=1,
+            ),
+            *base_descriptor.operands[1:],
+        ),
+    )
+    descriptor_set = replace(TEST_LOW_CORE_DESCRIPTOR_SET, descriptors=(descriptor,))
+
+    with pytest.raises(
+        ValueError,
+        match=("descriptor 'test.add.i32' operand 'dst' bounded address map requires a concrete register-class alternative"),
+    ):
+        generate_descriptor_set(descriptor_set)
 
 
 def test_generator_rejects_untied_duplicate_operand_encoding_field() -> None:

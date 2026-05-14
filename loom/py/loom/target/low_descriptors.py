@@ -14,7 +14,7 @@ from pathlib import Path
 
 from loom.stable_id import stable_id_from_string
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 22
+LOW_DESCRIPTOR_SET_ABI_VERSION = 23
 LOW_DESCRIPTOR_ENCODING_ID_NONE = (2**16) - 1
 LOW_DESCRIPTOR_SET_ORDINAL_NONE = (2**16) - 1
 
@@ -48,6 +48,12 @@ class OperandRole(CEnum):
     PREDICATE = "LOOM_LOW_OPERAND_ROLE_PREDICATE"
     RESOURCE = "LOOM_LOW_OPERAND_ROLE_RESOURCE"
     IMPLICIT = "LOOM_LOW_OPERAND_ROLE_IMPLICIT"
+
+
+class OperandAddressMapKind(CEnum):
+    DIRECT = "LOOM_LOW_OPERAND_ADDRESS_MAP_DIRECT"
+    LOW_SUBSET = "LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET"
+    TARGET_STATE = "LOOM_LOW_OPERAND_ADDRESS_MAP_TARGET_STATE"
 
 
 class OperandFlag(CEnum):
@@ -236,6 +242,8 @@ class Operand:
     reg_alts: tuple[RegClassAlt, ...]
     flags: tuple[OperandFlag, ...] = ()
     unit_count: int = 1
+    address_map_kind: OperandAddressMapKind = OperandAddressMapKind.DIRECT
+    addressable_unit_count: int = 0
     encoding_field_id: int = 0
     data_format_id: int = 0
     register_part: str | None = None

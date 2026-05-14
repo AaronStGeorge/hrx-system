@@ -43,6 +43,20 @@ iree_string_view_t loom_low_operand_role_name(loom_low_operand_role_t role) {
   }
 }
 
+iree_string_view_t loom_low_operand_address_map_kind_name(
+    loom_low_operand_address_map_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_OPERAND_ADDRESS_MAP_DIRECT:
+      return IREE_SV("direct");
+    case LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET:
+      return IREE_SV("low_subset");
+    case LOOM_LOW_OPERAND_ADDRESS_MAP_TARGET_STATE:
+      return IREE_SV("target_state");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
 iree_string_view_t loom_low_immediate_kind_name(
     loom_low_immediate_kind_t kind) {
   switch (kind) {

@@ -397,10 +397,17 @@ static iree_status_t loom_low_append_manifest_operand(
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       builder,
       ",\"unit_count\":%" PRIu16 ",\"encoding_field\":%" PRIu16
+      ",\"addressable_unit_count\":%" PRIu16 ",",
+      operand->unit_count, operand->encoding_field_id,
+      operand->addressable_unit_count));
+  IREE_RETURN_IF_ERROR(loom_low_append_named_enum_field(
+      builder, "address_map", "address_map_name", operand->address_map_kind,
+      loom_low_operand_address_map_kind_name(operand->address_map_kind)));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      builder,
       ",\"data_format\":%" PRIu16 ",\"read_stage\":%" PRIu16
       ",\"ready_stage\":%" PRIu16 ",\"reg_class_alts\":[",
-      operand->unit_count, operand->encoding_field_id, operand->data_format_id,
-      operand->read_stage, operand->ready_stage));
+      operand->data_format_id, operand->read_stage, operand->ready_stage));
   for (uint16_t i = 0; i < operand->reg_class_alt_count; ++i) {
     if (i != 0) {
       IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, ","));

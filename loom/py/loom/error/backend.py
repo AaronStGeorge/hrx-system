@@ -402,6 +402,41 @@ ERR_BACKEND_019 = ErrorDef(
     ),
 )
 
+# ERR_BACKEND_020: Register assignment is outside an operand address map.
+ERR_BACKEND_020 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=20,
+    severity=Severity.ERROR,
+    summary="Register assignment is not operand-addressable.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot encode {value_class} value '{value_name}' for "
+        "'@{function_name}' packet {packet_index} descriptor '{packet_key}' "
+        "operand '{operand_field}': assigned register base {assigned_base} "
+        "with {assigned_units} unit(s) exceeds {address_map_kind} address "
+        "map covering the first {addressable_units} unit(s)"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("packet_key", ParamKind.STRING),
+        ErrorParam("packet_index", ParamKind.U32),
+        ErrorParam("operand_field", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("value_class", ParamKind.STRING),
+        ErrorParam("assigned_base", ParamKind.U32),
+        ErrorParam("assigned_units", ParamKind.U32),
+        ErrorParam("address_map_kind", ParamKind.STRING),
+        ErrorParam("addressable_units", ParamKind.U32),
+    ),
+    fix_hint=(
+        "Constrain allocation for '{operand_field}' to an addressable subset "
+        "or materialize the target address state before final emission"
+    ),
+)
+
 ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_003,
     ERR_BACKEND_005,
@@ -416,4 +451,5 @@ ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_017,
     ERR_BACKEND_018,
     ERR_BACKEND_019,
+    ERR_BACKEND_020,
 )

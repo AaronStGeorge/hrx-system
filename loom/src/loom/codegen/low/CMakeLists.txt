@@ -380,6 +380,37 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    addressability
+  HDRS
+    "addressability.h"
+  SRCS
+    "addressability.c"
+  DEPS
+    ::allocation
+    ::descriptors
+    ::diagnostics
+    ::packet
+    iree::base
+    loom::src::loom::codegen::low::schedule
+    loom::src::loom::error::emitter
+    loom::src::loom::error::error_defs
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    addressability_test
+  SRCS
+    "addressability_test.cc"
+  DEPS
+    ::addressability
+    loom::src::loom::error::error_defs
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     packet_asm
   HDRS
     "packet_asm.h"
@@ -406,6 +437,7 @@ loom_cc_library(
   SRCS
     "frame.c"
   DEPS
+    ::addressability
     ::allocation
     ::allocation_materialization
     ::diagnostics

@@ -1416,9 +1416,76 @@ static iree_status_t loom_low_verify_operand(
                             "low operand %" PRIu32 " has invalid role %u",
                             operand_index, (unsigned)operand->role);
   }
+  if (!loom_low_operand_address_map_kind_is_valid(operand->address_map_kind)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low operand %" PRIu32
+                            " has invalid address map %u",
+                            operand_index, (unsigned)operand->address_map_kind);
+  }
+  if (operand->address_map_kind == LOOM_LOW_OPERAND_ADDRESS_MAP_DIRECT &&
+      operand->addressable_unit_count != 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low operand %" PRIu32
+        " has a direct address map with bounded addressable units",
+        operand_index);
+  }
+  const bool has_addressable_assignment =
+      operand->role == LOOM_LOW_OPERAND_ROLE_RESULT ||
+      (loom_low_operand_role_is_packet_operand(operand->role) &&
+       !iree_any_bit_set(operand->flags, LOOM_LOW_OPERAND_FLAG_IMPLICIT));
+  if (loom_low_operand_address_map_kind_has_low_window(
+          operand->address_map_kind) &&
+      !has_addressable_assignment) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low operand %" PRIu32
+        " has a bounded address map without an explicit value operand",
+        operand_index);
+  }
+  if (loom_low_operand_address_map_kind_has_low_window(
+          operand->address_map_kind) &&
+      operand->addressable_unit_count == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low operand %" PRIu32
+                            " has a bounded address map with no addressable "
+                            "units",
+                            operand_index);
+  }
   IREE_RETURN_IF_ERROR(loom_low_verify_span(
       operand->reg_class_alt_start, operand->reg_class_alt_count,
       descriptor_set->reg_class_alt_count, "reg_class_alts"));
+  if (loom_low_operand_address_map_kind_has_low_window(
+          operand->address_map_kind)) {
+    if (operand->addressable_unit_count < operand->unit_count) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low operand %" PRIu32
+          " has a bounded address map that covers fewer units than the "
+          "operand consumes",
+          operand_index);
+    }
+    bool has_concrete_alt = false;
+    for (uint16_t i = 0; i < operand->reg_class_alt_count; ++i) {
+      const uint16_t alt_index = operand->reg_class_alt_start + i;
+      const loom_low_reg_class_alt_t* alt =
+          &descriptor_set->reg_class_alts[alt_index];
+      if (!iree_any_bit_set(alt->flags,
+                            LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE) &&
+          alt->reg_class_id != LOOM_LOW_REG_CLASS_NONE) {
+        has_concrete_alt = true;
+        break;
+      }
+    }
+    if (!has_concrete_alt) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "low operand %" PRIu32
+          " has a bounded address map without a concrete register-class "
+          "alternative",
+          operand_index);
+    }
+  }
   if (operand->register_part_id != LOOM_LOW_REGISTER_PART_NONE) {
     if (operand->register_part_id >= descriptor_set->register_part_count) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,

@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 22u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 23u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -76,6 +76,15 @@ typedef enum loom_low_operand_role_e {
   // Target-owned implicit architectural operand.
   LOOM_LOW_OPERAND_ROLE_IMPLICIT = 6,
 } loom_low_operand_role_t;
+
+typedef enum loom_low_operand_address_map_kind_e {
+  // Operand can directly address any unit assigned by its register class.
+  LOOM_LOW_OPERAND_ADDRESS_MAP_DIRECT = 0,
+  // Operand directly encodes only the low |addressable_unit_count| units.
+  LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET = 1,
+  // Operand encodes a low window selected by target-owned address state.
+  LOOM_LOW_OPERAND_ADDRESS_MAP_TARGET_STATE = 2,
+} loom_low_operand_address_map_kind_t;
 
 // Bitset of descriptor operand flags.
 typedef uint16_t loom_low_operand_flags_t;
@@ -390,6 +399,11 @@ typedef struct loom_low_operand_t {
   uint16_t reg_class_alt_count;
   // Number of allocation units consumed or produced.
   uint16_t unit_count;
+  // Operand register-address mapping.
+  loom_low_operand_address_map_kind_t address_map_kind;
+  // Directly addressable low units for bounded address maps, or zero when the
+  // map directly addresses the selected register class.
+  uint16_t addressable_unit_count;
   // Target-owned data-format identifier.
   uint16_t data_format_id;
   // Register part read or written by this operand, or NONE for full register.
@@ -926,6 +940,37 @@ iree_string_view_t loom_low_operand_role_name(loom_low_operand_role_t role);
 // Returns true if |role| names an explicit packet operand consumed by a low
 // descriptor. Result and implicit rows are not packet operands.
 bool loom_low_operand_role_is_packet_operand(loom_low_operand_role_t role);
+
+// Returns the stable diagnostic spelling for an operand address map.
+iree_string_view_t loom_low_operand_address_map_kind_name(
+    loom_low_operand_address_map_kind_t kind);
+
+// Returns true if |kind| names a known operand address map.
+static inline bool loom_low_operand_address_map_kind_is_valid(
+    loom_low_operand_address_map_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_OPERAND_ADDRESS_MAP_DIRECT:
+    case LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET:
+    case LOOM_LOW_OPERAND_ADDRESS_MAP_TARGET_STATE:
+      return true;
+    default:
+      return false;
+  }
+}
+
+// Returns true when |kind| uses an operand-local low-address window.
+static inline bool loom_low_operand_address_map_kind_has_low_window(
+    loom_low_operand_address_map_kind_t kind) {
+  return kind == LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET ||
+         kind == LOOM_LOW_OPERAND_ADDRESS_MAP_TARGET_STATE;
+}
+
+// Returns true when |operand| must be assigned inside an encodable low-register
+// subset before final emission.
+static inline bool loom_low_operand_requires_low_subset_assignment(
+    const loom_low_operand_t* operand) {
+  return operand->address_map_kind == LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET;
+}
 
 // Returns the stable diagnostic spelling for an immediate kind.
 iree_string_view_t loom_low_immediate_kind_name(loom_low_immediate_kind_t kind);
