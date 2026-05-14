@@ -72,6 +72,7 @@ iree_lit_test_suite(
     FileCheck
   DATA
     testdata::actual_entry_plan.loom
+    testdata::compare_dispatch.loom
     testdata::duplicate_symbol.loom
     testdata::scalar_benchmarks.loom
   LABELS

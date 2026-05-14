@@ -142,6 +142,7 @@ iree_lit_test_suite(
     cfg = "//runtime:lit.cfg.py",
     data = [
         "testdata/actual_entry_plan.loom",
+        "testdata/compare_dispatch.loom",
         "testdata/duplicate_symbol.loom",
         "testdata/scalar_benchmarks.loom",
     ],
