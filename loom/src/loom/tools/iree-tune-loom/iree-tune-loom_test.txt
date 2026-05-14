@@ -12,7 +12,7 @@
 // RUN: FileCheck --check-prefix=DISPATCH-BOTH-DRY %s < %t.dispatch_both_dry.jsonl
 // RUN: iree-tune-loom %S/testdata/compare_dispatch.loom --compare=@base_dispatch,@variant_dispatch --dry_run --output=%t.compare_dry.jsonl
 // RUN: FileCheck --check-prefix=COMPARE-DRY %s < %t.compare_dry.jsonl
-// RUN: iree-tune-loom %S/testdata/actual_entry_plan.loom --benchmark=@dry_actual_dispatch_latency --dry_run --profile_artifacts_dir=%t.profiles --profile_data=dispatch-events,executable-metadata,counter-ranges --output=%t.profile_plan.jsonl
+// RUN: iree-tune-loom %S/testdata/actual_entry_plan.loom --benchmark=@dry_actual_dispatch_latency --dry_run --profile_artifacts_dir=%t.profiles --profile_data=dispatch-events,executable-metadata,counter-ranges --profile_counter=SQ_WAVES --output=%t.profile_plan.jsonl
 // RUN: FileCheck --check-prefix=PROFILE-PLAN %s < %t.profile_plan.jsonl
 // RUN: iree-tune-loom %S/testdata/actual_entry_plan.loom --benchmark=@dry_actual_dispatch_latency --dry_run --output=%t.actual_dry.jsonl
 // RUN: FileCheck --check-prefix=ACTUAL-DRY %s < %t.actual_dry.jsonl
@@ -137,6 +137,7 @@
 // PROFILE-PLAN: "row":"plan"
 // PROFILE-PLAN: "profile_final_batch":true
 // PROFILE-PLAN: "profile_data_family_names":["dispatch_events","executable_metadata","counter_ranges"]
+// PROFILE-PLAN: "profile_counter_request":{"data_family_names":["dispatch_events","executable_metadata","counter_ranges"],"counter_set_count":1,"counter_sets":[{"name":"iree-tune-loom","counter_count":1,"counter_names":["SQ_WAVES"]}]}
 // PROFILE-PLAN: "profile_artifacts_dir":
 // PROFILE-PLAN: "row":"summary"
 

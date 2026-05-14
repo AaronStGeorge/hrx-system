@@ -19,6 +19,7 @@ loom_cc_library(
     "main.c"
   DEPS
     iree::base
+    iree::base::internal::json
     iree::base::internal::path
     iree::base::tooling::flags
     iree::hal
