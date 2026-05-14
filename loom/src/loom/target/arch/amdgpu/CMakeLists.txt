@@ -100,6 +100,24 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_test(
+  NAME
+    registers_test
+  SRCS
+    "registers_test.cc"
+  DEPS
+    ::cdna3_descriptors
+    ::cdna4_descriptors
+    ::occupancy_tables
+    ::rdna3_descriptors
+    ::rdna4_descriptors
+    ::rdna4_gfx125x_descriptors
+    ::target_info
+    loom::src::loom::codegen::low::descriptors
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_library(
   NAME
     ops

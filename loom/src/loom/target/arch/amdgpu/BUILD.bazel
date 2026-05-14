@@ -297,6 +297,23 @@ loom_cc_test(
     ],
 )
 
+loom_cc_test(
+    name = "registers_test",
+    srcs = ["registers_test.cc"],
+    deps = [
+        ":cdna3_descriptors",
+        ":cdna4_descriptors",
+        ":occupancy_tables",
+        ":rdna3_descriptors",
+        ":rdna4_descriptors",
+        ":rdna4_gfx125x_descriptors",
+        ":target_info",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_library(
     name = "ops",
     srcs = [
