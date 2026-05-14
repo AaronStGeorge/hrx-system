@@ -115,6 +115,21 @@ constexpr char kPreparedVmWideSource[] =
     "reg<ireevm.i32>\n"
     "}\n";
 
+constexpr char kPreparedVmWideAbiLayoutSource[] =
+    "ireevm.target<core> @vm_target\n"
+    "\n"
+    "low.func.def target(@vm_target) abi(vm_module_function) "
+    "export(\"wide_abi_layout\") "
+    "@wide_abi_layout(%wide0: reg<ireevm.i64 x2>, "
+    "%narrow: reg<ireevm.i32>, %wide1: reg<ireevm.i64 x2>, "
+    "%scalar: reg<ireevm.f32>, %wide2: reg<ireevm.f64 x2>) -> "
+    "(reg<ireevm.i64 x2>, reg<ireevm.i32>, reg<ireevm.i64 x2>, "
+    "reg<ireevm.f32>, reg<ireevm.f64 x2>) {\n"
+    "  low.return %wide0, %narrow, %wide1, %scalar, %wide2 : "
+    "reg<ireevm.i64 x2>, reg<ireevm.i32>, reg<ireevm.i64 x2>, "
+    "reg<ireevm.f32>, reg<ireevm.f64 x2>\n"
+    "}\n";
+
 constexpr char kPreparedVmRefSource[] =
     "ireevm.target<core> @vm_target\n"
     "\n"
@@ -764,6 +779,41 @@ TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidateWithWideScalars) {
   EXPECT_TRUE(FlatbufferStringEquals(
       iree_vm_FunctionSignatureDef_calling_convention(signature_def),
       IREE_SV("0IIffF_IfFi")));
+
+  loom_ireevm_run_candidate_deinitialize(&candidate);
+  loom_run_module_deinitialize(&run_module);
+}
+
+TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidateWithWideAbiLayout) {
+  loom_run_module_t run_module = {};
+  IREE_ASSERT_OK(Parse(IREE_SV(kPreparedVmWideAbiLayoutSource), &run_module));
+
+  loom_run_candidate_compile_options_t options = {};
+  InitializeCandidateOptions(&run_module, &options);
+
+  loom_ireevm_run_candidate_t candidate = {};
+  IREE_ASSERT_OK(loom_ireevm_run_candidate_emit(
+      &run_module, &options, iree_allocator_system(), &candidate));
+  EXPECT_GT(candidate.archive.data_length, 0u);
+
+  iree_vm_BytecodeModuleDef_table_t module_def = nullptr;
+  ParseArchive(&candidate.archive, &module_def);
+  iree_vm_FunctionDescriptor_vec_t function_descriptors =
+      iree_vm_BytecodeModuleDef_function_descriptors(module_def);
+  ASSERT_EQ(iree_vm_FunctionDescriptor_vec_len(function_descriptors), 1u);
+  iree_vm_FunctionDescriptor_struct_t function_descriptor =
+      iree_vm_FunctionDescriptor_vec_at(function_descriptors, 0);
+  EXPECT_GT(function_descriptor->bytecode_length, 0);
+  EXPECT_EQ(function_descriptor->i32_register_count, 10);
+  EXPECT_EQ(function_descriptor->ref_register_count, 0);
+  iree_vm_FunctionSignatureDef_vec_t function_signatures =
+      iree_vm_BytecodeModuleDef_function_signatures(module_def);
+  ASSERT_EQ(iree_vm_FunctionSignatureDef_vec_len(function_signatures), 1u);
+  iree_vm_FunctionSignatureDef_table_t signature_def =
+      iree_vm_FunctionSignatureDef_vec_at(function_signatures, 0);
+  EXPECT_TRUE(FlatbufferStringEquals(
+      iree_vm_FunctionSignatureDef_calling_convention(signature_def),
+      IREE_SV("0IiIfF_IiIfF")));
 
   loom_ireevm_run_candidate_deinitialize(&candidate);
   loom_run_module_deinitialize(&run_module);
