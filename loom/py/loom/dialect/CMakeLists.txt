@@ -19,6 +19,7 @@ iree_py_library(
     iree::runtime::py::loom::dialect::buffer::buffer
     iree::runtime::py::loom::dialect::cfg::cfg
     iree::runtime::py::loom::dialect::check::check
+    iree::runtime::py::loom::dialect::config::config
     iree::runtime::py::loom::dialect::encoding::encoding
     iree::runtime::py::loom::dialect::func::func
     iree::runtime::py::loom::dialect::globals::globals

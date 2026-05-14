@@ -808,6 +808,8 @@ enum loom_symbol_interface_bits_e {
   LOOM_SYMBOL_INTERFACE_RECORD = 1u << 3,
   // Symbol names a target environment record.
   LOOM_SYMBOL_INTERFACE_TARGET = 1u << 4,
+  // Symbol names a compile/link-time configuration value.
+  LOOM_SYMBOL_INTERFACE_CONFIG = 1u << 5,
 };
 
 // Generated metadata for an op that defines a module symbol.

@@ -15,6 +15,7 @@
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/config/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/global/ops.h"
 #include "loom/ops/op_defs.h"
@@ -32,6 +33,7 @@ class SymbolDependenciesTest : public ::testing::Test {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_CONFIG, loom_config_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_GLOBAL, loom_global_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
@@ -214,6 +216,29 @@ func.def @entry() -> (index) {
 
   EXPECT_EQ(table.symbols[state].incoming_count, 2u);
   EXPECT_EQ(table.symbols[reader].incoming_count, 1u);
+}
+
+TEST_F(SymbolDependenciesTest, ConfigReadsUseNormalSymbolAttrEdges) {
+  ModulePtr module = ParseModule(R"(
+config.def @enable_mtp = true : i1
+
+func.def @reader() -> (i1) {
+  %enabled = config.get @enable_mtp : i1
+  func.return %enabled : i1
+}
+)");
+
+  loom_symbol_id_t enable_mtp = FindSymbol(module.get(), IREE_SV("enable_mtp"));
+  loom_symbol_id_t reader = FindSymbol(module.get(), IREE_SV("reader"));
+
+  loom_symbol_dependency_table_t table = BuildTable(module.get());
+
+  const loom_symbol_dependency_edge_t* config_edge = FindEdge(
+      table, reader, enable_mtp, LOOM_SYMBOL_DEPENDENCY_EDGE_SYMBOL_ATTR);
+  ASSERT_NE(config_edge, nullptr);
+  ASSERT_NE(config_edge->user_op, nullptr);
+  EXPECT_EQ(config_edge->user_op->kind, LOOM_OP_CONFIG_GET);
+  EXPECT_EQ(table.symbols[enable_mtp].incoming_count, 1u);
 }
 
 TEST_F(SymbolDependenciesTest, NestedDictRefsFeedSymbolSccGraph) {

@@ -354,6 +354,16 @@ TEST(Tokenizer, Symbol) {
   EXPECT_TRUE(iree_string_view_equal(token.source_text, IREE_SV("@main")));
 }
 
+TEST(Tokenizer, DottedSymbol) {
+  ScopedTokenizer t("@model36.model.hidden_size");
+  loom_token_t token = t.next();
+  EXPECT_EQ(token.kind, LOOM_TOKEN_SYMBOL);
+  EXPECT_TRUE(
+      iree_string_view_equal(token.text, IREE_SV("model36.model.hidden_size")));
+  EXPECT_TRUE(iree_string_view_equal(token.source_text,
+                                     IREE_SV("@model36.model.hidden_size")));
+}
+
 TEST(Tokenizer, HashAttr) {
   ScopedTokenizer t("#q8_0");
   loom_token_t token = t.next();

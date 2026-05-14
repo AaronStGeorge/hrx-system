@@ -535,6 +535,7 @@ loom_cc_test(
     iree::base::internal::arena
     loom::src::loom::format::text::parser
     loom::src::loom::ir
+    loom::src::loom::ops::config
     loom::src::loom::ops::func
     loom::src::loom::ops::global
     loom::src::loom::ops::op_defs

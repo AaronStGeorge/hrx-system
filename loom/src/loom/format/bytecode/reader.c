@@ -3246,12 +3246,12 @@ static iree_status_t loom_bytecode_reader_validate_global_vtable(
     const loom_op_vtable_t* vtable, uint64_t op_ref_offset) {
   if (!iree_all_bits_set(vtable->traits, LOOM_TRAIT_SYMBOL_DEFINE) ||
       !vtable->symbol_def ||
-      !loom_symbol_definition_implements(vtable->symbol_def,
-                                         LOOM_SYMBOL_INTERFACE_GLOBAL)) {
+      vtable->symbol_def->bytecode_kind != LOOM_SYMBOL_GLOBAL) {
     return loom_bytecode_reader_emit_invalid_field(
         reader, IREE_SV("SYMBOLS"), IREE_SV("symbol"), symbol_index,
         IREE_SV("def_op_table_index_plus1"), op_ref_offset,
-        IREE_SV("global symbol defining op must define a GLOBAL symbol"));
+        IREE_SV("global-payload symbol defining op must use the GLOBAL "
+                "bytecode payload"));
   }
   if (loom_op_vtable_operand_descriptor_count(vtable) != 0 ||
       vtable->region_count != 0 ||

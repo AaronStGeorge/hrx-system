@@ -406,6 +406,7 @@ def main() -> None:
     from loom.builtin_types import ALL_BUILTIN_TYPES
     from loom.dialect.buffer import ALL_BUFFER_OPS
     from loom.dialect.check import ALL_CHECK_OPS
+    from loom.dialect.config import ALL_CONFIG_OPS
     from loom.dialect.encoding import ALL_ENCODING_OPS
     from loom.dialect.func import ALL_FUNC_OPS
     from loom.dialect.globals import ALL_GLOBAL_OPS
@@ -430,6 +431,7 @@ def main() -> None:
         *ALL_GLOBAL_OPS,
         *ALL_SCF_OPS,
         *ALL_CHECK_OPS,
+        *ALL_CONFIG_OPS,
         *ALL_BUFFER_OPS,
         *ALL_VIEW_OPS,
         *ALL_VECTOR_OPS,

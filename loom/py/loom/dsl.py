@@ -500,6 +500,7 @@ _VALID_SYMBOL_INTERFACES = frozenset(
         "executable",
         "record",
         "target",
+        "config",
     }
 )
 

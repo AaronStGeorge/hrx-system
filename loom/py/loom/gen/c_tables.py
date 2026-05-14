@@ -664,6 +664,7 @@ SYMBOL_INTERFACE_MAP: dict[str, str] = {
     "executable": "LOOM_SYMBOL_INTERFACE_EXECUTABLE",
     "record": "LOOM_SYMBOL_INTERFACE_RECORD",
     "target": "LOOM_SYMBOL_INTERFACE_TARGET",
+    "config": "LOOM_SYMBOL_INTERFACE_CONFIG",
 }
 
 
@@ -4638,6 +4639,7 @@ def main() -> None:
     from loom.dialect.buffer import ALL_BUFFER_OPS, buffer_ops
     from loom.dialect.cfg import ALL_CFG_OPS, cfg_ops
     from loom.dialect.check import ALL_CHECK_OPS, check_ops
+    from loom.dialect.config import ALL_CONFIG_OPS, config_ops
     from loom.dialect.encoding import ALL_ENCODING_OPS, encoding_ops
     from loom.dialect.func import ALL_FUNC_OPS, func_ops
     from loom.dialect.globals import ALL_GLOBAL_OPS, global_ops
@@ -4683,6 +4685,7 @@ def main() -> None:
         (target_ops, list(ALL_TARGET_OPS), None),
         (low_ops, list(ALL_LOW_OPS), None),
         (pass_ops, list(ALL_PASS_OPS), None),
+        (config_ops, list(ALL_CONFIG_OPS), None),
         (amdgpu_ops, list(ALL_AMDGPU_OPS), None),
         (x86_ops, list(ALL_X86_OPS), None),
         (spirv_ops, list(ALL_SPIRV_OPS), None),

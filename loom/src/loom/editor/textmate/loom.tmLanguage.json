@@ -101,6 +101,18 @@
         },
         {
           "name": "meta.operation-name.loom",
+          "match": "\\b(config)\\.(decl|def|get)\\b",
+          "captures": {
+            "1": {
+              "name": "support.namespace.dialect.loom"
+            },
+            "2": {
+              "name": "entity.name.function.operation.loom"
+            }
+          }
+        },
+        {
+          "name": "meta.operation-name.loom",
           "match": "\\b(encoding)\\.(layout\\.assume\\.strided|layout\\.assume\\.dense|layout\\.strided|layout\\.dense|assume\\.spec|define|isa)\\b",
           "captures": {
             "1": {

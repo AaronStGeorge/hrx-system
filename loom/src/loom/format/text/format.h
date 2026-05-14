@@ -128,8 +128,9 @@
 //   SSA value:     '%' identifier | '%' digit+
 //                  Examples: %x, %tile, %0, %arg0, %M, %contract0
 //
-//   Symbol name:   '@' identifier
-//                  Examples: @main, @dn_layer, @vnni_q8
+//   Symbol name:   '@' identifier ('.' identifier)*
+//                  Examples: @main, @dn_layer, @vnni_q8,
+//                            @model36.model.hidden_size
 //
 //   Hash attr:     '#' identifier
 //                  Examples: #q6_k, #enc, #q8_0

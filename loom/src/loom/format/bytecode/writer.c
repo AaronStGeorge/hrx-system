@@ -3640,11 +3640,11 @@ static iree_status_t loom_bytecode_validate_module(
       if (!vtable ||
           !iree_all_bits_set(vtable->traits, LOOM_TRAIT_SYMBOL_DEFINE) ||
           !vtable->symbol_def ||
-          !loom_symbol_definition_implements(vtable->symbol_def,
-                                             LOOM_SYMBOL_INTERFACE_GLOBAL)) {
+          vtable->symbol_def->bytecode_kind != LOOM_SYMBOL_GLOBAL) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                                 "GLOBAL symbol %" PRIhsz
-                                " defining op is not a global symbol op",
+                                " defining op does not use the GLOBAL "
+                                "bytecode payload",
                                 i);
       }
       if (op->operand_count != 0 || op->region_count != 0 ||

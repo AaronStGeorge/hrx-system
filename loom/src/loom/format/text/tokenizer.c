@@ -857,7 +857,7 @@ static iree_status_t loom_tokenizer_scan_symbol(loom_tokenizer_t* t,
   // Token text starts after the '@' prefix.
   iree_host_size_t name_start = t->position;
 
-  while (loom_is_ident_continue_no_dot(loom_tokenizer_char(t))) {
+  while (loom_is_ident_continue(loom_tokenizer_char(t))) {
     ++t->position;
     ++t->column;
   }
