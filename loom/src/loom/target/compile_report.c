@@ -108,6 +108,14 @@ void loom_target_compile_report_record_move_cause(
   counts->unit_count += unit_count;
 }
 
+void loom_target_compile_report_record_static_instruction_mix(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_static_instruction_mix_t* mix) {
+  report->detail_flags |=
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_STATIC_INSTRUCTION_MIX;
+  report->static_instruction_mix = *mix;
+}
+
 void loom_target_compile_report_record_emission(
     loom_target_compile_report_t* report, uint64_t instruction_count,
     uint64_t code_byte_count, uint64_t code_storage_byte_count) {

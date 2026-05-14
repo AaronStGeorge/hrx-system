@@ -501,8 +501,8 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "`knobs`, `problem`, or `reference_id` are copied into a "
           "`metadata` object on candidate rows. Compile rows and benchmark "
           "payloads with reports also carry `static_summary` for code size, "
-          "instruction count, spills, memory, pressure, and move-cause "
-          "totals.\n"
+          "instruction count, descriptor instruction mix, spills, memory, "
+          "pressure, source-low counts, and move-cause totals.\n"
           "\n"
           "Examples:\n"
           "\n"
@@ -545,6 +545,7 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           ".diagnostics[]?' results.jsonl\n"
           "jq 'select(.row==\"compile\" and .static_summary) | "
           "{candidate_id,code:.static_summary.code_byte_count,"
+          "valu:.static_summary.vector_alu_count,"
           "spills:.static_summary.allocation_spill_count}' results.jsonl\n"
           "jq 'select(.row==\"compile\" and .compile_report_path) | "
           "{candidate_id,path:.compile_report_path}' results.jsonl\n"
@@ -4751,6 +4752,66 @@ static iree_status_t iree_tune_loom_write_static_summary_json(
         stream, &first_field, "register_pressure_peak_live_units",
         report->register_pressure_peak_live_units));
   }
+  if (iree_any_bit_set(
+          report->detail_flags,
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_STATIC_INSTRUCTION_MIX)) {
+    const loom_target_compile_report_static_instruction_mix_t* mix =
+        &report->static_instruction_mix;
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "descriptor_count", mix->descriptor_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "unknown_descriptor_count", mix->unknown_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "scalar_alu_count", mix->scalar_alu_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "vector_alu_count", mix->vector_alu_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "matrix_count", mix->matrix_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "mfma_count", mix->mfma_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "wmma_count", mix->wmma_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "dot_count", mix->dot_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "global_memory_count", mix->global_memory_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "local_memory_count", mix->local_memory_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "scalar_memory_count", mix->scalar_memory_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "generic_memory_count",
+        mix->generic_memory_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "atomic_count", mix->atomic_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "branch_count", mix->branch_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "barrier_count", mix->barrier_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "control_count", mix->control_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "conversion_count", mix->conversion_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "cache_count", mix->cache_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "register_move_count", mix->register_move_count));
+  }
+  if (iree_any_bit_set(report->detail_flags,
+                       LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS)) {
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "source_low_selected_op_count",
+        report->source_low_selected_op_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "source_low_emitted_op_count",
+        report->source_low_emitted_op_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_size_field(
+        stream, &first_field, "source_low_row_count",
+        report->source_low_row_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_size_field(
+        stream, &first_field, "source_low_row_total_count",
+        report->source_low_row_total_count));
+  }
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS)) {
     IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_size_field(
@@ -7847,8 +7908,8 @@ int iree_tune_loom_main(int argc, char** argv,
       "--file_output_dir, which defaults under $TMPDIR/iree-loom-tune. "
       "Compile rows and benchmark payloads with reports also carry "
       "static_summary, a compact projection of static compile evidence such "
-      "as instruction count, code bytes, spill counts, memory, pressure, and "
-      "move-cause totals. "
+      "as instruction count, code bytes, descriptor instruction mix, spill "
+      "counts, memory, pressure, source-low counts, and move-cause totals. "
       "--profile_data selects final-batch HAL profiling families and "
       "--profile_artifacts_dir writes raw .irpf bundles for heavyweight "
       "families such as counters, device metrics, and executable traces. Raw "
@@ -7892,6 +7953,7 @@ int iree_tune_loom_main(int argc, char** argv,
       "  jq 'select(.row==\"compile\" and .static_summary) | "
       "{candidate_id,code:.static_summary.code_byte_count,"
       "spills:.static_summary.allocation_spill_count,"
+      "valu:.static_summary.vector_alu_count,"
       "local:.static_summary.local_memory_bytes}' results.jsonl\n"
       "  jq 'select(.row==\"compile\" and .compile_report_path) | "
       "{candidate_id,path:.compile_report_path}' results.jsonl\n"

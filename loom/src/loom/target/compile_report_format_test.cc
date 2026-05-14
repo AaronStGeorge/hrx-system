@@ -74,6 +74,18 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   loom_target_compile_report_record_move_cause(
       &report,
       LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_OPERAND_BANK_MATERIALIZATION, 1, 1);
+  const loom_target_compile_report_static_instruction_mix_t instruction_mix = {
+      .descriptor_count = 9,
+      .scalar_alu_count = 2,
+      .vector_alu_count = 3,
+      .matrix_count = 1,
+      .wmma_count = 1,
+      .global_memory_count = 2,
+      .barrier_count = 1,
+      .conversion_count = 1,
+  };
+  loom_target_compile_report_record_static_instruction_mix(&report,
+                                                           &instruction_mix);
   loom_target_compile_report_record_emission(&report, 8, 64, 80);
   loom_target_compile_report_record_memory(&report, 16, 32);
   report.pressure_rows = pressure_rows;
@@ -125,6 +137,13 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                         "units=1"),
                 0),
             IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("static_instruction_mix "
+                                          "descriptors=9"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output, IREE_SV("vector_alu=3"), 0),
+            IREE_STRING_VIEW_NPOS);
   EXPECT_NE(
       iree_string_view_find(output, IREE_SV("pressure[0] class=test.i32"), 0),
       IREE_STRING_VIEW_NPOS);
@@ -156,6 +175,13 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(
                 output, IREE_SV("\"move_causes\":{\"kind_count\":3"), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(
+          output, IREE_SV("\"static_instruction_mix\":{\"descriptor_count\":9"),
+          0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output, IREE_SV("\"wmma_count\":1"), 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(
       iree_string_view_find(output, IREE_SV("\"cause\":\"low_concat\""), 0),

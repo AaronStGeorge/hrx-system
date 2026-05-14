@@ -18,9 +18,218 @@ static bool loom_target_compile_report_descriptor_semantic_tag_is(
   if (descriptor_set == NULL || descriptor == NULL) {
     return false;
   }
+  if (descriptor->semantic_tag_string_offset == LOOM_LOW_STRING_OFFSET_NONE) {
+    return false;
+  }
   const iree_string_view_t semantic_tag = loom_low_descriptor_set_string(
       descriptor_set, descriptor->semantic_tag_string_offset);
   return iree_string_view_equal(semantic_tag, tag);
+}
+
+static iree_string_view_t loom_target_compile_report_descriptor_semantic_tag(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor) {
+  if (descriptor_set == NULL || descriptor == NULL ||
+      descriptor->semantic_tag_string_offset == LOOM_LOW_STRING_OFFSET_NONE) {
+    return iree_string_view_empty();
+  }
+  return loom_low_descriptor_set_string(descriptor_set,
+                                        descriptor->semantic_tag_string_offset);
+}
+
+static bool loom_target_compile_report_string_contains(
+    iree_string_view_t value, iree_string_view_t needle) {
+  return iree_string_view_find(value, needle, /*pos=*/0) !=
+         IREE_STRING_VIEW_NPOS;
+}
+
+static const loom_low_schedule_class_t*
+loom_target_compile_report_descriptor_schedule_class(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor) {
+  if (descriptor_set == NULL || descriptor == NULL ||
+      descriptor->schedule_class_id >= descriptor_set->schedule_class_count) {
+    return NULL;
+  }
+  return &descriptor_set->schedule_classes[descriptor->schedule_class_id];
+}
+
+static iree_string_view_t loom_target_compile_report_schedule_class_name(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_node_t* node) {
+  if (!iree_string_view_is_empty(node->schedule_class_name)) {
+    return node->schedule_class_name;
+  }
+  const loom_low_schedule_class_t* schedule_class =
+      loom_target_compile_report_descriptor_schedule_class(descriptor_set,
+                                                           node->descriptor);
+  if (schedule_class == NULL ||
+      schedule_class->name_string_offset == LOOM_LOW_STRING_OFFSET_NONE) {
+    return iree_string_view_empty();
+  }
+  return loom_low_descriptor_set_string(descriptor_set,
+                                        schedule_class->name_string_offset);
+}
+
+static bool loom_target_compile_report_schedule_class_uses_resource_kind(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_schedule_class_t* schedule_class,
+    loom_low_resource_kind_t kind) {
+  if (descriptor_set == NULL || schedule_class == NULL) {
+    return false;
+  }
+  const uint32_t end = (uint32_t)schedule_class->issue_use_start +
+                       schedule_class->issue_use_count;
+  if (end > descriptor_set->issue_use_count) {
+    return false;
+  }
+  for (uint16_t i = 0; i < schedule_class->issue_use_count; ++i) {
+    const loom_low_issue_use_t* issue_use =
+        &descriptor_set->issue_uses[schedule_class->issue_use_start + i];
+    if (issue_use->resource_id >= descriptor_set->resource_count) {
+      continue;
+    }
+    if (descriptor_set->resources[issue_use->resource_id].kind == kind) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void loom_target_compile_report_record_low_static_instruction_mix(
+    loom_target_compile_report_t* report,
+    const loom_low_emission_frame_t* frame) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      frame->schedule.target.descriptor_set;
+  loom_target_compile_report_static_instruction_mix_t mix = {0};
+  for (iree_host_size_t i = 0; i < frame->schedule.node_count; ++i) {
+    const loom_low_schedule_node_t* node = &frame->schedule.nodes[i];
+    if (node->kind != LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR ||
+        node->descriptor == NULL) {
+      continue;
+    }
+    ++mix.descriptor_count;
+    const loom_low_descriptor_t* descriptor = node->descriptor;
+    const loom_low_schedule_class_t* schedule_class =
+        loom_target_compile_report_descriptor_schedule_class(descriptor_set,
+                                                             descriptor);
+    const iree_string_view_t schedule_class_name =
+        loom_target_compile_report_schedule_class_name(descriptor_set, node);
+    const iree_string_view_t semantic_tag =
+        loom_target_compile_report_descriptor_semantic_tag(descriptor_set,
+                                                           descriptor);
+
+    bool scalar_alu =
+        iree_string_view_starts_with(schedule_class_name,
+                                     IREE_SV("amdgpu.salu")) ||
+        loom_target_compile_report_schedule_class_uses_resource_kind(
+            descriptor_set, schedule_class, LOOM_LOW_RESOURCE_KIND_SCALAR_ALU);
+    bool vector_alu =
+        iree_string_view_starts_with(schedule_class_name,
+                                     IREE_SV("amdgpu.valu")) ||
+        loom_target_compile_report_schedule_class_uses_resource_kind(
+            descriptor_set, schedule_class, LOOM_LOW_RESOURCE_KIND_VECTOR_ALU);
+    bool matrix =
+        iree_string_view_starts_with(semantic_tag, IREE_SV("matrix.")) ||
+        iree_string_view_starts_with(schedule_class_name,
+                                     IREE_SV("amdgpu.mfma")) ||
+        iree_string_view_starts_with(schedule_class_name,
+                                     IREE_SV("amdgpu.wmma")) ||
+        loom_target_compile_report_schedule_class_uses_resource_kind(
+            descriptor_set, schedule_class, LOOM_LOW_RESOURCE_KIND_MATRIX);
+    bool mfma =
+        iree_string_view_starts_with(semantic_tag, IREE_SV("matrix.mfma.")) ||
+        iree_string_view_starts_with(semantic_tag, IREE_SV("matrix.smfmac.")) ||
+        iree_string_view_starts_with(schedule_class_name,
+                                     IREE_SV("amdgpu.mfma"));
+    bool wmma =
+        iree_string_view_starts_with(semantic_tag, IREE_SV("matrix.wmma.")) ||
+        iree_string_view_starts_with(semantic_tag, IREE_SV("matrix.swmmac.")) ||
+        iree_string_view_starts_with(schedule_class_name,
+                                     IREE_SV("amdgpu.wmma"));
+    const bool dot =
+        iree_string_view_starts_with(semantic_tag, IREE_SV("dot."));
+    const bool cache =
+        iree_string_view_starts_with(semantic_tag, IREE_SV("memory.cache."));
+    bool global_memory =
+        iree_string_view_starts_with(schedule_class_name,
+                                     IREE_SV("amdgpu.vmem")) ||
+        iree_string_view_starts_with(semantic_tag, IREE_SV("memory.global."));
+    bool local_memory =
+        iree_string_view_starts_with(schedule_class_name,
+                                     IREE_SV("amdgpu.lds")) ||
+        iree_string_view_equal(schedule_class_name,
+                               IREE_SV("amdgpu.vmem.load.lds")) ||
+        iree_string_view_starts_with(semantic_tag,
+                                     IREE_SV("memory.workgroup."));
+    bool scalar_memory = iree_string_view_starts_with(schedule_class_name,
+                                                      IREE_SV("amdgpu.smem"));
+    bool generic_memory =
+        iree_string_view_starts_with(semantic_tag,
+                                     IREE_SV("memory.generic.")) ||
+        iree_string_view_starts_with(semantic_tag, IREE_SV("memory.load.")) ||
+        iree_string_view_starts_with(semantic_tag, IREE_SV("memory.store.")) ||
+        iree_string_view_starts_with(semantic_tag, IREE_SV("memory.hal."));
+    const bool memory_resource =
+        loom_target_compile_report_schedule_class_uses_resource_kind(
+            descriptor_set, schedule_class, LOOM_LOW_RESOURCE_KIND_LOAD) ||
+        loom_target_compile_report_schedule_class_uses_resource_kind(
+            descriptor_set, schedule_class, LOOM_LOW_RESOURCE_KIND_STORE);
+    if (memory_resource && !global_memory && !local_memory && !scalar_memory &&
+        !generic_memory) {
+      generic_memory = true;
+    }
+    const bool atomic = loom_target_compile_report_string_contains(
+        semantic_tag, IREE_SV(".atomic."));
+    const bool branch =
+        iree_string_view_starts_with(semantic_tag, IREE_SV("control.branch")) ||
+        iree_string_view_starts_with(semantic_tag,
+                                     IREE_SV("control.cond_branch")) ||
+        iree_string_view_starts_with(semantic_tag, IREE_SV("control.return")) ||
+        iree_string_view_starts_with(semantic_tag, IREE_SV("control.call"));
+    const bool barrier = iree_string_view_starts_with(
+                             semantic_tag, IREE_SV("control.barrier")) ||
+                         iree_string_view_starts_with(
+                             schedule_class_name, IREE_SV("amdgpu.barrier"));
+    const bool control =
+        iree_string_view_starts_with(semantic_tag, IREE_SV("control.")) ||
+        (schedule_class != NULL &&
+         iree_all_bits_set(schedule_class->flags,
+                           LOOM_LOW_SCHEDULE_CLASS_FLAG_CONTROL)) ||
+        loom_target_compile_report_schedule_class_uses_resource_kind(
+            descriptor_set, schedule_class, LOOM_LOW_RESOURCE_KIND_CONTROL);
+    const bool conversion =
+        iree_string_view_starts_with(semantic_tag, IREE_SV("convert."));
+    const bool register_move =
+        iree_string_view_starts_with(semantic_tag, IREE_SV("register.copy.")) ||
+        iree_string_view_starts_with(semantic_tag, IREE_SV("integer.move."));
+
+    mix.scalar_alu_count += scalar_alu ? 1 : 0;
+    mix.vector_alu_count += vector_alu ? 1 : 0;
+    mix.matrix_count += matrix ? 1 : 0;
+    mix.mfma_count += mfma ? 1 : 0;
+    mix.wmma_count += wmma ? 1 : 0;
+    mix.dot_count += dot ? 1 : 0;
+    mix.global_memory_count += global_memory ? 1 : 0;
+    mix.local_memory_count += local_memory ? 1 : 0;
+    mix.scalar_memory_count += scalar_memory ? 1 : 0;
+    mix.generic_memory_count += generic_memory ? 1 : 0;
+    mix.atomic_count += atomic ? 1 : 0;
+    mix.branch_count += branch ? 1 : 0;
+    mix.barrier_count += barrier ? 1 : 0;
+    mix.control_count += control ? 1 : 0;
+    mix.conversion_count += conversion ? 1 : 0;
+    mix.cache_count += cache ? 1 : 0;
+    mix.register_move_count += register_move ? 1 : 0;
+
+    const bool recognized = scalar_alu || vector_alu || matrix || mfma ||
+                            wmma || dot || global_memory || local_memory ||
+                            scalar_memory || generic_memory || atomic ||
+                            branch || barrier || control || conversion ||
+                            cache || register_move;
+    mix.unknown_count += recognized ? 0 : 1;
+  }
+  loom_target_compile_report_record_static_instruction_mix(report, &mix);
 }
 
 static iree_string_view_t loom_target_compile_report_module_string(
@@ -478,6 +687,7 @@ iree_status_t loom_target_compile_report_record_low_emission_frame(
       frame->allocation.spill_plan_count,
       frame->allocation.coalesced_copy_count,
       frame->allocation.materialized_copy_count);
+  loom_target_compile_report_record_low_static_instruction_mix(report, frame);
   loom_target_compile_report_record_move_causes(report, frame);
   loom_target_compile_report_record_pressure_rows(report, liveness);
   loom_target_compile_report_record_spill_rows(report, &frame->allocation);

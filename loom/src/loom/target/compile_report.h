@@ -49,6 +49,8 @@ enum {
   LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS = 1u << 7,
   // Residual target move causes were recorded or counted.
   LOOM_TARGET_COMPILE_REPORT_DETAIL_MOVE_CAUSES = 1u << 8,
+  // Static instruction-mix feature counters were recorded.
+  LOOM_TARGET_COMPILE_REPORT_DETAIL_STATIC_INSTRUCTION_MIX = 1u << 9,
 };
 
 typedef enum loom_target_compile_report_move_cause_e {
@@ -96,6 +98,54 @@ typedef struct loom_target_compile_report_move_cause_counts_t {
   // Number of register-unit moves attributed to this cause.
   uint64_t unit_count;
 } loom_target_compile_report_move_cause_counts_t;
+
+// Static feature counters for descriptor-backed low schedule nodes.
+//
+// These counters are compile-time proxies derived from descriptor semantic
+// tags, schedule classes, and schedule resources. They are intentionally
+// separate from measured HAL profiling counters and may overlap: for example an
+// AMDGPU global atomic packet is both global memory and atomic.
+typedef struct loom_target_compile_report_static_instruction_mix_t {
+  // Descriptor-backed schedule nodes inspected for feature classification.
+  uint64_t descriptor_count;
+  // Descriptor-backed schedule nodes with no recognized static feature.
+  uint64_t unknown_count;
+  // Descriptor-backed nodes that use scalar ALU resources.
+  uint64_t scalar_alu_count;
+  // Descriptor-backed nodes that use vector ALU resources.
+  uint64_t vector_alu_count;
+  // Descriptor-backed nodes that use matrix/tensor-core-like resources.
+  uint64_t matrix_count;
+  // Descriptor-backed nodes identified as MFMA-like matrix instructions.
+  uint64_t mfma_count;
+  // Descriptor-backed nodes identified as WMMA-like matrix instructions.
+  uint64_t wmma_count;
+  // Descriptor-backed nodes identified as dot-product instructions.
+  uint64_t dot_count;
+  // Descriptor-backed nodes identified as global or vector-memory operations.
+  uint64_t global_memory_count;
+  // Descriptor-backed nodes identified as local/shared/workgroup memory ops.
+  uint64_t local_memory_count;
+  // Descriptor-backed nodes identified as scalar-memory operations.
+  uint64_t scalar_memory_count;
+  // Descriptor-backed nodes identified as generic memory operations.
+  uint64_t generic_memory_count;
+  // Descriptor-backed nodes identified as atomic memory operations.
+  uint64_t atomic_count;
+  // Descriptor-backed nodes identified as branch, return, or call control flow.
+  uint64_t branch_count;
+  // Descriptor-backed nodes identified as barrier or synchronization packets.
+  uint64_t barrier_count;
+  // Descriptor-backed nodes identified as other control packets.
+  uint64_t control_count;
+  // Descriptor-backed nodes identified as numeric conversion packets.
+  uint64_t conversion_count;
+  // Descriptor-backed nodes identified as cache maintenance or prefetch
+  // packets.
+  uint64_t cache_count;
+  // Descriptor-backed nodes identified as register moves or copies.
+  uint64_t register_move_count;
+} loom_target_compile_report_static_instruction_mix_t;
 
 // One register-pressure peak row copied into a compile report.
 typedef struct loom_target_compile_report_pressure_row_t {
@@ -261,6 +311,8 @@ typedef struct loom_target_compile_report_t {
   // loom_target_compile_report_move_cause_t.
   loom_target_compile_report_move_cause_counts_t
       move_causes[LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_COUNT];
+  // Static descriptor-backed instruction-mix feature counters.
+  loom_target_compile_report_static_instruction_mix_t static_instruction_mix;
   // Caller-owned pressure row storage.
   loom_target_compile_report_pressure_row_t* pressure_rows;
   // Capacity of |pressure_rows|.
@@ -331,6 +383,11 @@ void loom_target_compile_report_record_move_cause(
     loom_target_compile_report_t* report,
     loom_target_compile_report_move_cause_t cause, uint64_t packet_count,
     uint64_t unit_count);
+
+// Records static descriptor-backed instruction-mix feature counters.
+void loom_target_compile_report_record_static_instruction_mix(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_static_instruction_mix_t* mix);
 
 // Records target emission instruction and code-size summary counts in |report|.
 void loom_target_compile_report_record_emission(

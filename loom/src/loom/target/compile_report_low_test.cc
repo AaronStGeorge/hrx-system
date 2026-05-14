@@ -17,11 +17,26 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
   constexpr uint32_t kSourceAssignmentIndex = 0;
   constexpr uint32_t kResultAssignmentIndex = 1;
   constexpr uint32_t kEdgeCopyCount = 1;
+  constexpr uint32_t kRegisterCopyTagOffset = 0;
+  constexpr uint32_t kMemoryGlobalTagOffset = 18;
+  constexpr uint32_t kMatrixWmmaTagOffset = 41;
   static const uint8_t kDescriptorStringTable[] =
       "\x11"
-      "register.copy.b32";
-  const loom_low_descriptor_t copy_descriptor = {
-      .semantic_tag_string_offset = 0,
+      "register.copy.b32"
+      "\x16"
+      "memory.global.load.u32"
+      "\x0f"
+      "matrix.wmma.f32";
+  const loom_low_descriptor_t descriptors[] = {
+      {
+          .semantic_tag_string_offset = kRegisterCopyTagOffset,
+      },
+      {
+          .semantic_tag_string_offset = kMemoryGlobalTagOffset,
+      },
+      {
+          .semantic_tag_string_offset = kMatrixWmmaTagOffset,
+      },
   };
   const loom_low_descriptor_set_t descriptor_set = {
       .string_table =
@@ -29,8 +44,8 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
               .data = kDescriptorStringTable,
               .data_length = sizeof(kDescriptorStringTable) - 1,
           },
-      .descriptors = &copy_descriptor,
-      .descriptor_count = 1,
+      .descriptors = descriptors,
+      .descriptor_count = IREE_ARRAYSIZE(descriptors),
   };
   loom_target_compile_report_pressure_row_t pressure_rows[1] = {};
   loom_target_compile_report_spill_row_t spill_rows[1] = {};
@@ -177,13 +192,24 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
   schedule_nodes[0] = (loom_low_schedule_node_t){
       .op = &copy_op,
       .kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR,
-      .descriptor = &copy_descriptor,
+      .descriptor = &descriptors[0],
+      .schedule_class_name = IREE_SVL("amdgpu.valu"),
       .operand_count = 1,
       .result_count = 1,
       .value_ordinals =
           {
               .inline_value_ordinals = {0, 1},
           },
+  };
+  schedule_nodes[1] = (loom_low_schedule_node_t){
+      .kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR,
+      .descriptor = &descriptors[1],
+      .schedule_class_name = IREE_SVL("amdgpu.vmem.load"),
+  };
+  schedule_nodes[2] = (loom_low_schedule_node_t){
+      .kind = LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR,
+      .descriptor = &descriptors[2],
+      .schedule_class_name = IREE_SVL("amdgpu.wmma"),
   };
   const loom_low_emission_frame_t frame = {
       .schedule =
@@ -237,6 +263,9 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_SCHEDULE));
   EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_ALLOCATION));
+  EXPECT_TRUE(iree_all_bits_set(
+      report.detail_flags,
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_STATIC_INSTRUCTION_MIX));
   EXPECT_TRUE(iree_all_bits_set(report.detail_flags,
                                 LOOM_TARGET_COMPILE_REPORT_DETAIL_MOVE_CAUSES));
   EXPECT_TRUE(iree_all_bits_set(
@@ -247,6 +276,13 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
   EXPECT_EQ(report.register_pressure_summary_count, 2u);
   EXPECT_EQ(report.register_pressure_peak_live_units, 11u);
   EXPECT_EQ(report.allocation_spill_count, 2u);
+  EXPECT_EQ(report.static_instruction_mix.descriptor_count, 3u);
+  EXPECT_EQ(report.static_instruction_mix.vector_alu_count, 1u);
+  EXPECT_EQ(report.static_instruction_mix.global_memory_count, 1u);
+  EXPECT_EQ(report.static_instruction_mix.matrix_count, 1u);
+  EXPECT_EQ(report.static_instruction_mix.wmma_count, 1u);
+  EXPECT_EQ(report.static_instruction_mix.register_move_count, 1u);
+  EXPECT_EQ(report.static_instruction_mix.unknown_count, 0u);
   EXPECT_EQ(report.move_causes[LOOM_TARGET_COMPILE_REPORT_MOVE_CAUSE_LOW_COPY]
                 .packet_count,
             1u);
