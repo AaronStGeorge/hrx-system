@@ -17,6 +17,15 @@
 extern "C" {
 #endif
 
+typedef enum loom_run_candidate_artifact_flag_bits_e {
+  LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_NONE = 0u,
+  // Requests target-owned textual executable listings when the selected backend
+  // can produce them without changing the loaded executable.
+  LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_TARGET_LISTING = 1u << 0,
+} loom_run_candidate_artifact_flag_bits_t;
+
+typedef uint32_t loom_run_candidate_artifact_flags_t;
+
 typedef struct loom_run_candidate_compile_options_t {
   // VM module name stored in VM bytecode archives. Empty uses "loom".
   iree_string_view_t module_name;
@@ -35,6 +44,8 @@ typedef struct loom_run_candidate_compile_options_t {
   loom_target_compile_report_t* report;
   // Optional caller-owned row storage for detailed compile report rows.
   loom_target_compile_report_row_storage_t report_row_storage;
+  // Optional debug artifacts requested from the selected backend.
+  loom_run_candidate_artifact_flags_t artifact_flags;
 } loom_run_candidate_compile_options_t;
 
 // Initializes compile options with stderr diagnostics and a small error cap.

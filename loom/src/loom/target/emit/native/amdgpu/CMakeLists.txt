@@ -318,6 +318,7 @@ loom_cc_library(
     "hal_kernel_library.c"
   DEPS
     ::hal_kernel_metadata
+    ::kernel_assembly
     ::kernel_hsaco
     ::preflight
     ::spill_lowering

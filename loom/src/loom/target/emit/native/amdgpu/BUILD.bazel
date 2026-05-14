@@ -363,6 +363,7 @@ loom_cc_library(
     hdrs = ["hal_kernel_library.h"],
     deps = [
         ":hal_kernel_metadata",
+        ":kernel_assembly",
         ":kernel_hsaco",
         ":preflight",
         ":spill_lowering",

@@ -73,7 +73,8 @@ static iree_status_t loom_run_hal_candidate_emit_selected_target(
   iree_status_t status = backend->emit_executable(
       backend, run_module->module, &candidate->target, options->entry_symbol,
       options->diagnostic_sink, options->source_resolver, options->max_errors,
-      report, allocator, &candidate->compiled, &candidate->executable);
+      options->artifact_flags, report, allocator, &candidate->compiled,
+      &candidate->executable);
   if (iree_status_is_ok(status) && candidate->compiled &&
       candidate->executable.target_bundle == NULL) {
     candidate->executable.target_bundle = candidate->target.target_bundle;

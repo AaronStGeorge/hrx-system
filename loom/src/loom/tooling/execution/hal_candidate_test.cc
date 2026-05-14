@@ -93,6 +93,7 @@ iree_status_t FakeHalEmitExecutable(
     const loom_run_hal_selected_target_t* target,
     iree_string_view_t entry_symbol, loom_diagnostic_sink_t diagnostic_sink,
     loom_source_resolver_t source_resolver, uint32_t max_errors,
+    loom_run_candidate_artifact_flags_t artifact_flags,
     loom_target_compile_report_t* report, iree_allocator_t allocator,
     bool* out_emitted, loom_run_hal_executable_t* out_executable) {
   (void)backend;
@@ -101,6 +102,7 @@ iree_status_t FakeHalEmitExecutable(
   (void)diagnostic_sink;
   (void)source_resolver;
   (void)max_errors;
+  (void)artifact_flags;
   (void)allocator;
   g_fake_hal_emit_was_called = true;
   g_fake_hal_emit_report = report;

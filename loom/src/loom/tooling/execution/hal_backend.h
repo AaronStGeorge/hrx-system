@@ -19,6 +19,7 @@
 #include "loom/ir/module.h"
 #include "loom/target/compile_report.h"
 #include "loom/target/types.h"
+#include "loom/tooling/execution/compile_options.h"
 #include "loom/verify/verify.h"
 
 #ifdef __cplusplus
@@ -50,6 +51,10 @@ typedef struct loom_run_hal_executable_t {
   iree_string_view_t target_artifact_format;
   // Target-native artifact bytes before any runtime-loader packaging.
   iree_const_byte_span_t target_artifact_data;
+  // Target-owned textual listing format, such as `amdgpu-assembly`.
+  iree_string_view_t target_listing_format;
+  // Target-owned textual listing bytes for debug artifact bundles.
+  iree_const_byte_span_t target_listing_data;
   // Backend-owned executable container bytes.
   iree_const_byte_span_t executable_data;
   // Backend-owned storage released by |deinitialize_executable|.
@@ -71,6 +76,7 @@ typedef iree_status_t (*loom_run_hal_emit_executable_fn_t)(
     const loom_run_hal_selected_target_t* target,
     iree_string_view_t entry_symbol, loom_diagnostic_sink_t diagnostic_sink,
     loom_source_resolver_t source_resolver, uint32_t max_errors,
+    loom_run_candidate_artifact_flags_t artifact_flags,
     loom_target_compile_report_t* report, iree_allocator_t allocator,
     bool* out_emitted, loom_run_hal_executable_t* out_executable);
 

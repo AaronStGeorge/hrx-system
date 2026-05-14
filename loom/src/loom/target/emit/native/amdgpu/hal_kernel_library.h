@@ -50,6 +50,8 @@ typedef struct loom_amdgpu_hal_kernel_library_options_t {
   loom_target_compile_report_t* report;
   // Optional caller-owned row storage for detailed compile report rows.
   loom_target_compile_report_row_storage_t report_row_storage;
+  // True to retain target-owned textual assembly listings for debug artifacts.
+  bool capture_target_listing;
 } loom_amdgpu_hal_kernel_library_options_t;
 
 // Allocator-owned AMDGPU HAL kernel-library artifact.
@@ -60,6 +62,12 @@ typedef struct loom_amdgpu_hal_kernel_library_t {
   uint8_t* hsaco_data;
   // Number of bytes in |hsaco_data|.
   iree_host_size_t hsaco_data_length;
+  // Textual listing format for |target_listing_data|.
+  iree_string_view_t target_listing_format;
+  // Allocator-owned textual target listing.
+  char* target_listing_data;
+  // Number of bytes in |target_listing_data|, excluding the trailing NUL.
+  iree_host_size_t target_listing_data_length;
   // Allocator-owned export metadata in executable entry-point order.
   loom_amdgpu_hal_kernel_export_t* exports;
   // Number of entries in |exports|.
