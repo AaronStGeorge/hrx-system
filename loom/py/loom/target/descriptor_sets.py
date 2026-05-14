@@ -51,6 +51,13 @@ DESCRIPTOR_SET_REGISTRATIONS = (
         generates_checked_in_c=False,
     ),
     DescriptorSetRegistration(
+        key="spirv.logical.core",
+        module_name="loom.target.arch.spirv.descriptors",
+        symbol_name="SPIRV_LOGICAL_CORE_DESCRIPTOR_SET",
+        aliases=("spirv_logical_core",),
+        generates_checked_in_c=False,
+    ),
+    DescriptorSetRegistration(
         key="x86.scalar.core",
         module_name="loom.target.arch.x86.descriptors",
         symbol_name="X86_SCALAR_DESCRIPTOR_SET",

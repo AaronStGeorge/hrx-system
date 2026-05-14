@@ -4660,6 +4660,7 @@ def main() -> None:
         ALL_IREEVM_TYPES,
         ireevm_ops,
     )
+    from loom.target.arch.spirv.dialect import ALL_SPIRV_OPS, spirv_ops
     from loom.target.arch.wasm.dialect import ALL_WASM_OPS, wasm_ops
     from loom.target.arch.x86.dialect import ALL_X86_OPS, x86_ops
 
@@ -4684,6 +4685,7 @@ def main() -> None:
         (pass_ops, list(ALL_PASS_OPS), None),
         (amdgpu_ops, list(ALL_AMDGPU_OPS), None),
         (x86_ops, list(ALL_X86_OPS), None),
+        (spirv_ops, list(ALL_SPIRV_OPS), None),
         (wasm_ops, list(ALL_WASM_OPS), None),
         (ireevm_ops, list(ALL_IREEVM_OPS), None),
     ]

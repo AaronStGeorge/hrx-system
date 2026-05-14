@@ -187,6 +187,19 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    spirv_low_descriptor_shard
+  MAIN
+    "low_descriptor_shard.py"
+  SRCS
+    "low_descriptor_shard.py"
+  DEPS
+    iree::runtime::py::loom::gen::low_descriptors
+    iree::runtime::py::loom::target::descriptor_sets
+    iree::runtime::py::loom::target::arch::spirv::descriptors
+)
+
+iree_py_library(
+  NAME
     ireevm_contract_fragment
   MAIN
     "target_contract_fragment.py"

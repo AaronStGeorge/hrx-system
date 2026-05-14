@@ -19,6 +19,9 @@
 #ifndef LOOM_CHECK_HAVE_LLVMIR
 #define LOOM_CHECK_HAVE_LLVMIR 0
 #endif  // LOOM_CHECK_HAVE_LLVMIR
+#ifndef LOOM_CHECK_HAVE_SPIRV
+#define LOOM_CHECK_HAVE_SPIRV 0
+#endif  // LOOM_CHECK_HAVE_SPIRV
 #ifndef LOOM_CHECK_HAVE_WASM
 #define LOOM_CHECK_HAVE_WASM 0
 #endif  // LOOM_CHECK_HAVE_WASM
@@ -26,9 +29,10 @@
 #define LOOM_CHECK_HAVE_X86 0
 #endif  // LOOM_CHECK_HAVE_X86
 
-#define LOOM_CHECK_HAVE_ANY_PROVIDER                   \
-  (LOOM_CHECK_HAVE_AMDGPU || LOOM_CHECK_HAVE_IREEVM || \
-   LOOM_CHECK_HAVE_LLVMIR || LOOM_CHECK_HAVE_WASM || LOOM_CHECK_HAVE_X86)
+#define LOOM_CHECK_HAVE_ANY_PROVIDER                                          \
+  (LOOM_CHECK_HAVE_AMDGPU || LOOM_CHECK_HAVE_IREEVM ||                        \
+   LOOM_CHECK_HAVE_LLVMIR || LOOM_CHECK_HAVE_SPIRV || LOOM_CHECK_HAVE_WASM || \
+   LOOM_CHECK_HAVE_X86)
 
 #if LOOM_CHECK_HAVE_AMDGPU
 #include "loom/target/arch/amdgpu/check/provider.h"
@@ -39,6 +43,9 @@
 #if LOOM_CHECK_HAVE_LLVMIR
 #include "loom/target/emit/llvmir/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_LLVMIR
+#if LOOM_CHECK_HAVE_SPIRV
+#include "loom/target/arch/spirv/check/provider.h"
+#endif  // LOOM_CHECK_HAVE_SPIRV
 #if LOOM_CHECK_HAVE_WASM
 #include "loom/target/arch/wasm/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_WASM
@@ -57,6 +64,9 @@ static const loom_check_provider_t* const kLoomCheckProviders[] = {
 #if LOOM_CHECK_HAVE_LLVMIR
     &loom_llvmir_check_provider,
 #endif  // LOOM_CHECK_HAVE_LLVMIR
+#if LOOM_CHECK_HAVE_SPIRV
+    &loom_spirv_check_provider,
+#endif  // LOOM_CHECK_HAVE_SPIRV
 #if LOOM_CHECK_HAVE_WASM
     &loom_wasm_check_provider,
 #endif  // LOOM_CHECK_HAVE_WASM

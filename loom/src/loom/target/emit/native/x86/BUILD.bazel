@@ -29,8 +29,9 @@ loom_assert_no_dependencies(
     name = "x86_native_emit_no_other_target_deps",
     dependencies = [
         "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-        "//loom/src/loom/target/arch/wasm:descriptors",
         "//loom/src/loom/target/arch/ireevm:descriptors",
+        "//loom/src/loom/target/arch/spirv:descriptors",
+        "//loom/src/loom/target/arch/wasm:descriptors",
         "//loom/src/loom/target/emit/llvmir:llvmir",
         "//loom/src/loom/target/tool:llvm",
     ],

@@ -1,0 +1,43 @@
+// RUN: emit low-allocation-json @spirv_iadd_ids_allocate_logical_ids output=none
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) @spirv_iadd_ids_allocate_logical_ids(%lhs: reg<spirv.id>, %rhs: reg<spirv.id>) -> (reg<spirv.id>) asm<spirv.logical.core> {
+  %sum = OpIAdd %lhs, %rhs
+  return %sum
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) @spirv_workgroup_storage_address() asm<spirv.logical.core> {
+  %storage = storage {byte_alignment = 4, byte_length = 256} : low.storage<workgroup>
+  %ptr = storage_address %storage : low.storage<workgroup> -> reg<spirv.ptr.workgroup>
+  return
+}
+
+// ====
+
+// RUN: emit low-allocation-json @spirv_storage_buffer_load_store output=none
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) @spirv_storage_buffer_load_store(%ptr: reg<spirv.ptr.storage_buffer>) -> (reg<spirv.id>) asm<spirv.logical.core> {
+  %loaded = OpLoad.storage_buffer.i32 %ptr
+  OpStore.storage_buffer.i32 %ptr, %loaded
+  return %loaded
+}
+
+// ====
+
+// RUN: pass low-materialize-allocation{budgets=spirv.id=1,spill-storage-spaces=workgroup}
+
+spirv.target<vulkan1_3> @target
+
+// ERROR@+1: BACKEND/019 {function_name="spirv_private_spill_requires_function_storage", value_class="spirv.id", spill_slot_space="private", storage_space="private"}
+low.func.def target(@target) @spirv_private_spill_requires_function_storage(%lhs: reg<spirv.id>, %rhs: reg<spirv.id>) -> (reg<spirv.id>, reg<spirv.id>) asm<spirv.logical.core> {
+  return %lhs, %rhs
+}

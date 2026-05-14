@@ -8,6 +8,7 @@ load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_assert_no_dependencies",
     "loom_cc_library",
+    "loom_cc_test",
     "loom_low_descriptor_cc_library",
 )
 load(
@@ -26,10 +27,10 @@ package(
 #===------------------------------------------------------------------------===#
 
 loom_assert_no_dependencies(
-    name = "ireevm_target_no_other_target_deps",
+    name = "spirv_target_no_other_target_deps",
     dependencies = [
         "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-        "//loom/src/loom/target/arch/spirv:descriptors",
+        "//loom/src/loom/target/arch/ireevm:descriptors",
         "//loom/src/loom/target/arch/wasm:descriptors",
         "//loom/src/loom/target/arch/x86:packed_dot_contract",
         "//loom/src/loom/target/emit/llvmir:llvmir",
@@ -37,42 +38,34 @@ loom_assert_no_dependencies(
     targets = [
         ":descriptors",
         ":low_registry",
-        ":math_policy",
         ":ops",
-        ":pass_registry",
         ":provider",
-        ":ref_lifetime_pass",
         ":target_records",
     ],
 )
 
 loom_assert_no_dependencies(
-    name = "core_target_interfaces_no_ireevm_target_deps",
+    name = "core_target_interfaces_no_spirv_target_deps",
     dependencies = [
         ":descriptors",
         ":low_registry",
-        ":math_policy",
-        ":ops",
-        ":pass_registry",
         ":provider",
-        ":ref_lifetime_pass",
         ":target_records",
     ],
     targets = [
         "//loom/src/loom/target:low_descriptor_registry",
-        "//loom/src/loom/target:low_legality",
-        "//loom/src/loom/target:math_policy",
         "//loom/src/loom/target:provider",
     ],
 )
 
 loom_assert_no_dependencies(
-    name = "core_tools_no_ireevm_target_provider_deps",
+    name = "core_tools_no_spirv_target_provider_deps",
     dependencies = [
         ":low_registry",
         ":provider",
     ],
     targets = [
+        "//loom/src/loom/tools/iree-run-loom:main",
         "//loom/src/loom/tools/loom-check:execute",
         "//loom/src/loom/tools/loom-check:loom-check-test",
         "//loom/src/loom/tools/loom-check:main",
@@ -81,23 +74,20 @@ loom_assert_no_dependencies(
 )
 
 #===------------------------------------------------------------------------===#
-# IREE VM low descriptors
+# SPIR-V low descriptors
 #===------------------------------------------------------------------------===#
 
 loom_low_descriptor_cc_library(
     name = "descriptors",
-    args = ["--descriptor-set=ireevm_core"],
-    generator = "//loom/py/loom/gen:ireevm_low_descriptor_shard",
+    args = ["--descriptor-set=spirv_logical_core"],
+    generator = "//loom/py/loom/gen:spirv_low_descriptor_shard",
     deps = ["//loom/src/loom/codegen/low:descriptors"],
 )
 
 loom_cc_library(
     name = "target_records",
     srcs = ["target_records.c"],
-    hdrs = [
-        "feature_bits.h",
-        "target_records.h",
-    ],
+    hdrs = ["target_records.h"],
     deps = [
         "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
@@ -110,7 +100,6 @@ loom_cc_library(
         "ops/builders.c",
         "ops/registry.c",
         "ops/tables.c",
-        "ops/verify.c",
     ],
     hdrs = [
         "ops/ops.h",
@@ -118,11 +107,8 @@ loom_cc_library(
     ],
     deps = [
         ":target_records",
-        "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
-        "//loom/src/loom/ops:func_symbol_facts",
-        "//loom/src/loom/ops:function_contract_verify",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/target",
         "//loom/src/loom/target:types",
@@ -136,45 +122,9 @@ loom_cc_library(
     hdrs = ["low_registry.h"],
     deps = [
         ":descriptors",
-        ":target_records",
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/target:low_descriptor_registry",
         "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "math_policy",
-    srcs = ["math_policy.c"],
-    hdrs = ["math_policy.h"],
-    textual_hdrs = ["math_policy_tables.inl"],
-    deps = [
-        "//loom/src/loom/target:math_policy",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "ref_lifetime_pass",
-    srcs = ["ref_lifetime_pass.c"],
-    hdrs = ["ref_lifetime_pass.h"],
-    deps = [
-        ":ops",
-        "//loom/src/loom/analysis:ownership_lifetime",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/pass:types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "pass_registry",
-    srcs = ["pass_registry.c"],
-    hdrs = ["pass_registry.h"],
-    deps = [
-        ":ref_lifetime_pass",
-        "//loom/src/loom/pass:registry",
         "//runtime/src/iree/base",
     ],
 )
@@ -185,12 +135,8 @@ loom_cc_library(
     hdrs = ["provider.h"],
     deps = [
         ":low_registry",
-        ":math_policy",
         ":ops",
-        ":pass_registry",
-        "//loom/src/loom/pass:builder",
         "//loom/src/loom/target:provider",
-        "//loom/src/loom/target/emit/ireevm:lower",
         "//runtime/src/iree/base",
     ],
 )
@@ -206,16 +152,21 @@ loom_cc_library(
     ],
 )
 
+loom_cc_test(
+    name = "registers_test",
+    srcs = ["registers_test.cc"],
+    deps = [
+        ":descriptors",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
-        "test/import_decl.loom-test",
-        "test/import_decl_diagnostics.loom-test",
-        "test/ref_lifetime.loom-test",
-        "test/source_low/allocation.loom-test",
-        "test/source_low/pass_source_low.loom-test",
-        "test/source_low/source_low.loom-test",
-        "test/source_low/source_low_diagnostics.loom-test",
+        "test/source_low/baseline.loom-test",
     ],
     test_name_prefix_to_strip = "test/source_low/",
 )

@@ -24,6 +24,7 @@ loom_assert_no_dependencies(
     name = "tool_runners_no_target_implementation_deps",
     dependencies = [
         "//loom/src/loom/target/arch/amdgpu:low_registry",
+        "//loom/src/loom/target/arch/spirv:descriptors",
         "//loom/src/loom/target/arch/wasm:descriptors",
         "//loom/src/loom/target/arch/x86:packed_dot_contract",
         "//loom/src/loom/target/arch/ireevm:descriptors",

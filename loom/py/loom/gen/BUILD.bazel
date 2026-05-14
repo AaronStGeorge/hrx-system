@@ -188,6 +188,17 @@ py_binary(
 )
 
 py_binary(
+    name = "spirv_low_descriptor_shard",
+    srcs = ["low_descriptor_shard.py"],
+    main = "low_descriptor_shard.py",
+    deps = [
+        ":low_descriptors",
+        "//loom/py/loom/target:descriptor_sets",
+        "//loom/py/loom/target/arch/spirv:descriptors",
+    ],
+)
+
+py_binary(
     name = "ireevm_contract_fragment",
     srcs = ["target_contract_fragment.py"],
     main = "target_contract_fragment.py",

@@ -18,6 +18,7 @@ ALL_CHECK_PROVIDERS = [
     "amdgpu",
     "ireevm",
     "llvmir",
+    "spirv",
     "wasm",
     "x86",
 ]
@@ -102,6 +103,20 @@ _LLVMIR_CHECK_DEPS = iree_select({
     "//conditions:default": [],
 })
 
+_SPIRV_CHECK_COPTS = iree_select({
+    ":spirv_provider_enabled": [
+        "-DLOOM_CHECK_HAVE_SPIRV=1",
+    ],
+    "//conditions:default": [],
+})
+
+_SPIRV_CHECK_DEPS = iree_select({
+    ":spirv_provider_enabled": [
+        "//loom/src/loom/target/arch/spirv:check_provider",
+    ],
+    "//conditions:default": [],
+})
+
 _WASM_CHECK_COPTS = iree_select({
     ":wasm_provider_enabled": [
         "-DLOOM_CHECK_HAVE_WASM=1",
@@ -134,6 +149,7 @@ _LOOM_CHECK_PROVIDER_COPTS = (
     _AMDGPU_CHECK_COPTS +
     _IREEVM_CHECK_COPTS +
     _LLVMIR_CHECK_COPTS +
+    _SPIRV_CHECK_COPTS +
     _WASM_CHECK_COPTS +
     _X86_CHECK_COPTS
 )
@@ -142,6 +158,7 @@ _LOOM_CHECK_PROVIDER_DEPS = (
     _AMDGPU_CHECK_DEPS +
     _IREEVM_CHECK_DEPS +
     _LLVMIR_CHECK_DEPS +
+    _SPIRV_CHECK_DEPS +
     _WASM_CHECK_DEPS +
     _X86_CHECK_DEPS
 )

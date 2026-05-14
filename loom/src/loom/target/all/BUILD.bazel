@@ -46,6 +46,7 @@ loom_cc_library(
         "//loom/src/loom/target:provider",
         "//loom/src/loom/target/arch/amdgpu:provider",
         "//loom/src/loom/target/arch/ireevm:provider",
+        "//loom/src/loom/target/arch/spirv:provider",
         "//loom/src/loom/target/arch/wasm:provider",
         "//loom/src/loom/target/arch/x86:provider",
         "//runtime/src/iree/base",
