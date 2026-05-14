@@ -130,7 +130,7 @@ SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
         ),
         RegClass(
             _REG_PTR_STORAGE_BUFFER,
-            32,
+            64,
             SpillSlotSpace.PRIVATE,
             flags=(RegClassFlag.VIRTUAL_ONLY,),
         ),

@@ -8,22 +8,13 @@
 
 #include <stdint.h>
 
-enum {
-  LOOM_SPIRV_STORAGE_CLASS_UNIFORM = 2,
-  LOOM_SPIRV_STORAGE_CLASS_WORKGROUP = 4,
-  LOOM_SPIRV_STORAGE_CLASS_CROSS_WORKGROUP = 5,
-  LOOM_SPIRV_STORAGE_CLASS_FUNCTION = 7,
-  LOOM_SPIRV_STORAGE_CLASS_GENERIC = 8,
-  LOOM_SPIRV_STORAGE_CLASS_STORAGE_BUFFER = 12,
-};
-
 static const loom_target_snapshot_t kSpirvVulkan13Snapshot = {
     .name = IREE_SVL("spirv-vulkan1.3"),
     .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_SPIRV,
     .artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_SPIRV_BINARY,
-    .default_pointer_bitwidth = 32,
+    .default_pointer_bitwidth = 64,
     .index_bitwidth = 32,
-    .offset_bitwidth = 32,
+    .offset_bitwidth = 64,
     .memory_spaces =
         {
             .generic = LOOM_SPIRV_STORAGE_CLASS_GENERIC,
@@ -32,7 +23,7 @@ static const loom_target_snapshot_t kSpirvVulkan13Snapshot = {
             .constant = LOOM_SPIRV_STORAGE_CLASS_UNIFORM,
             .private_memory = LOOM_SPIRV_STORAGE_CLASS_FUNCTION,
             .host = UINT32_MAX,
-            .descriptor = LOOM_SPIRV_STORAGE_CLASS_STORAGE_BUFFER,
+            .descriptor = LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER,
         },
 };
 

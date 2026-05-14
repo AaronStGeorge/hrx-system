@@ -157,6 +157,7 @@ loom_cc_test(
     srcs = ["registers_test.cc"],
     deps = [
         ":descriptors",
+        ":target_records",
         "//loom/src/loom/codegen/low:descriptors",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

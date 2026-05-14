@@ -9,6 +9,7 @@
 #include "iree/testing/gtest.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/target/arch/spirv/descriptors.h"
+#include "loom/target/arch/spirv/target_records.h"
 
 namespace {
 
@@ -35,7 +36,7 @@ const loom_low_descriptor_t* LookupDescriptor(
                                                descriptor_ordinal);
 }
 
-TEST(SpirvRegistersTest, LogicalIdsAreVirtualFunctionStorageValues) {
+TEST(SpirvRegistersTest, LogicalIdsAndPointerValuesUseSeparateWidths) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_spirv_logical_core_descriptor_set();
   ASSERT_NE(descriptor_set, nullptr);
@@ -70,11 +71,21 @@ TEST(SpirvRegistersTest, LogicalIdsAreVirtualFunctionStorageValues) {
   const loom_low_reg_class_t* storage_buffer_ptr_class =
       LookupRegisterClass(descriptor_set, IREE_SV("spirv.ptr.storage_buffer"));
   ASSERT_NE(storage_buffer_ptr_class, nullptr);
-  EXPECT_EQ(storage_buffer_ptr_class->alloc_unit_bits, 32);
+  EXPECT_EQ(storage_buffer_ptr_class->alloc_unit_bits, 64);
   EXPECT_TRUE(iree_all_bits_set(storage_buffer_ptr_class->flags,
                                 LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY));
   EXPECT_EQ(storage_buffer_ptr_class->spill_slot_space,
             LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE);
+}
+
+TEST(SpirvRegistersTest, VulkanTargetUsesBufferDeviceAddressWidths) {
+  const loom_target_bundle_t& target = loom_spirv_low_target_bundle_vulkan1_3;
+  ASSERT_NE(target.snapshot, nullptr);
+  EXPECT_EQ(target.snapshot->default_pointer_bitwidth, 64u);
+  EXPECT_EQ(target.snapshot->index_bitwidth, 32u);
+  EXPECT_EQ(target.snapshot->offset_bitwidth, 64u);
+  EXPECT_EQ(target.snapshot->memory_spaces.descriptor,
+            LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER);
 }
 
 TEST(SpirvRegistersTest, StorageBufferEffectsStayDescriptorLocal) {

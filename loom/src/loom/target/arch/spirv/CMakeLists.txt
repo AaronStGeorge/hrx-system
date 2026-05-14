@@ -107,6 +107,7 @@ loom_cc_test(
     "registers_test.cc"
   DEPS
     ::descriptors
+    ::target_records
     loom::src::loom::codegen::low::descriptors
     iree::testing::gtest
     iree::testing::gtest_main
