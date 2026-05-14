@@ -68,6 +68,39 @@ void ExpectDescriptorMissing(const loom_low_descriptor_set_t* descriptor_set,
       << ToString(descriptor_key);
 }
 
+void ExpectOperandAddressMap(const loom_low_descriptor_set_t* descriptor_set,
+                             iree_string_view_t descriptor_key,
+                             iree_string_view_t field_name,
+                             loom_low_operand_address_map_kind_t expected_kind,
+                             uint32_t expected_addressable_unit_count) {
+  const uint16_t descriptor_ordinal =
+      loom_low_descriptor_set_lookup_descriptor(descriptor_set, descriptor_key);
+  ASSERT_NE(descriptor_ordinal, LOOM_LOW_DESCRIPTOR_ORDINAL_NONE)
+      << ToString(descriptor_key);
+  ASSERT_LT(descriptor_ordinal, descriptor_set->descriptor_count);
+  const loom_low_descriptor_t& descriptor =
+      descriptor_set->descriptors[descriptor_ordinal];
+  ASSERT_LE((uint64_t)descriptor.operand_start + descriptor.operand_count,
+            descriptor_set->operand_count);
+  for (uint16_t i = 0; i < descriptor.operand_count; ++i) {
+    const loom_low_operand_t& operand =
+        descriptor_set->operands[descriptor.operand_start + i];
+    if (!iree_string_view_equal(
+            loom_low_descriptor_set_string(descriptor_set,
+                                           operand.field_name_string_offset),
+            field_name)) {
+      continue;
+    }
+    EXPECT_EQ(operand.address_map_kind, expected_kind)
+        << ToString(descriptor_key) << " " << ToString(field_name);
+    EXPECT_EQ(operand.addressable_unit_count, expected_addressable_unit_count)
+        << ToString(descriptor_key) << " " << ToString(field_name);
+    return;
+  }
+  ADD_FAILURE() << "descriptor " << ToString(descriptor_key)
+                << " has no operand field " << ToString(field_name);
+}
+
 TEST(X86RegisterClassesTest, SharedScalarClassesAcrossViews) {
   const loom_low_descriptor_set_t* scalar_descriptor_set =
       loom_x86_scalar_core_descriptor_set();
@@ -120,6 +153,32 @@ TEST(X86RegisterClassesTest, VectorClassesAcrossProfileViews) {
                         LOOM_X86_REGISTER_CLASS_YMM);
   ExpectDescriptorClass(avx512_packed_dot_descriptor_set,
                         LOOM_X86_REGISTER_CLASS_ZMM);
+}
+
+TEST(X86RegisterClassesTest, VexRowsImportedIntoWideViewsStayLow16) {
+  const loom_low_descriptor_set_t* avx512_descriptor_set =
+      loom_x86_avx512_core_descriptor_set();
+  ExpectOperandAddressMap(avx512_descriptor_set, IREE_SV("x86.avx2.vpaddd.xmm"),
+                          IREE_SV("dst"),
+                          LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET, 16);
+  ExpectOperandAddressMap(avx512_descriptor_set, IREE_SV("x86.avx2.vpaddd.xmm"),
+                          IREE_SV("lhs"),
+                          LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET, 16);
+  ExpectOperandAddressMap(avx512_descriptor_set, IREE_SV("x86.avx2.vpaddd.xmm"),
+                          IREE_SV("rhs"),
+                          LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET, 16);
+  ExpectOperandAddressMap(avx512_descriptor_set,
+                          IREE_SV("x86.avx512.vpaddd.zmm"), IREE_SV("dst"),
+                          LOOM_LOW_OPERAND_ADDRESS_MAP_DIRECT, 0);
+
+  const loom_low_descriptor_set_t* avx512_packed_dot_descriptor_set =
+      loom_x86_avx512_packed_dot_core_descriptor_set();
+  ExpectOperandAddressMap(avx512_packed_dot_descriptor_set,
+                          IREE_SV("x86.avx_vnni.vpdpbusd.ymm"), IREE_SV("dst"),
+                          LOOM_LOW_OPERAND_ADDRESS_MAP_LOW_SUBSET, 16);
+  ExpectOperandAddressMap(
+      avx512_packed_dot_descriptor_set, IREE_SV("x86.avx512_vnni.vpdpbusd.zmm"),
+      IREE_SV("dst"), LOOM_LOW_OPERAND_ADDRESS_MAP_DIRECT, 0);
 }
 
 TEST(X86RegisterClassesTest,

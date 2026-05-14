@@ -7,6 +7,7 @@
 #include "loom/target/emit/native/x86/check/loom_check.h"
 
 #include "loom/target/emit/native/x86/assembly.h"
+#include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/low_emit.h"
 
 typedef struct loom_x86_loom_check_emit_options_t {
@@ -129,12 +130,16 @@ static iree_status_t loom_x86_loom_check_emit_provider_execute(
       loom_x86_loom_check_parse_emit_options(request, &options));
 
   loom_low_emission_frame_t frame = {0};
+  const loom_low_emission_frame_spill_free_options_t spill_free_options = {0};
   IREE_RETURN_IF_ERROR(loom_check_low_emit_packetize_function(
       request, options.function_symbol_name, options.schedule_strategy,
       options.allocation_budgets, options.allocation_budget_count,
       options.allocation_fixed_value_specs,
-      options.allocation_fixed_value_spec_count, /*spill_free_options=*/NULL,
-      &frame));
+      options.allocation_fixed_value_spec_count, &spill_free_options, &frame));
+  if (request->diagnostic_collector != NULL &&
+      request->diagnostic_collector->count != 0) {
+    return iree_ok_status();
+  }
   return loom_x86_loom_check_emit_assembly(
       &frame, &request->result->actual_output, request->case_arena);
 }

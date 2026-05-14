@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from loom.target.low_descriptors import (
@@ -17,6 +18,7 @@ from loom.target.low_descriptors import (
     IssueUse,
     LatencyKind,
     ModelQuality,
+    Operand,
     RegClass,
     RegClassFlag,
     Resource,
@@ -49,6 +51,7 @@ from .common import (
     _gpr32_result,
     _gpr64_resource,
     _load_effect,
+    _low_subset_operand,
     _scalar_f32_binary_descriptor,
     _store_effect,
     _vector_f32_binary_descriptor,
@@ -65,7 +68,23 @@ from .scalar import (
     X86_SCALAR_SUFFIX_DESCRIPTORS,
 )
 
-X86_AVX2_XMM_DESCRIPTORS = (
+_X86_VEX_ADDRESSABLE_REGISTER_COUNT = 16
+
+
+def _vex_operand(operand: Operand) -> Operand:
+    if any(reg_alt.reg_class in (_REG_XMM, _REG_YMM) for reg_alt in operand.reg_alts):
+        return _low_subset_operand(operand, _X86_VEX_ADDRESSABLE_REGISTER_COUNT)
+    return operand
+
+
+def _vex_descriptor(descriptor: Descriptor) -> Descriptor:
+    return replace(
+        descriptor,
+        operands=tuple(_vex_operand(operand) for operand in descriptor.operands),
+    )
+
+
+_X86_AVX2_XMM_DESCRIPTORS = (
     _vector_splat_descriptor(
         vector_bit_width=128,
         key="x86.avx2.vpbroadcastd.xmm",
@@ -309,6 +328,10 @@ X86_AVX2_XMM_DESCRIPTORS = (
         schedule_class=_SCHEDULE_MEMORY_STORE_XMM,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
     ),
+)
+
+X86_AVX2_XMM_DESCRIPTORS = tuple(
+    _vex_descriptor(descriptor) for descriptor in _X86_AVX2_XMM_DESCRIPTORS
 )
 
 X86_AVX2_DESCRIPTORS = (

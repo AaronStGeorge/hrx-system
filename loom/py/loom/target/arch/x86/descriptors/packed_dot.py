@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 
 from loom.target.arch.x86.packed_dot_data import (
@@ -22,6 +23,7 @@ from loom.target.arch.x86.packed_dot_data import (
     PackedDotDescriptor,
 )
 from loom.target.low_descriptors import (
+    Descriptor,
     DescriptorSet,
     IssueUse,
     LatencyKind,
@@ -42,6 +44,7 @@ from .common import (
     _SCHEDULE_VECTOR_DOT_XMM,
     _SCHEDULE_VECTOR_DOT_YMM,
     _SCHEDULE_VECTOR_DOT_ZMM,
+    _low_subset_operand,
     _packed_dot_descriptor,
     _vector_lane_units,
 )
@@ -58,6 +61,14 @@ _PACKED_DOT_VECTOR_WIDTH_TO_SCHEDULE = {
     256: _SCHEDULE_VECTOR_DOT_YMM,
     512: _SCHEDULE_VECTOR_DOT_ZMM,
 }
+_X86_VEX_ADDRESSABLE_REGISTER_COUNT = 16
+_X86_VEX_PACKED_DOT_FAMILIES = frozenset(
+    (
+        FAMILY_AVX_VNNI,
+        FAMILY_AVX_VNNI_INT8,
+        FAMILY_AVX_VNNI_INT16,
+    )
+)
 
 
 def _packed_dot_file_name(stem: str, suffix: str) -> Path:
@@ -137,6 +148,21 @@ def _packed_dot_descriptor_data(
     return descriptor_data
 
 
+def _packed_dot_target_descriptor(
+    descriptor_data: PackedDotDescriptor,
+) -> Descriptor:
+    descriptor = _packed_dot_descriptor(descriptor_data)
+    if descriptor_data.family not in _X86_VEX_PACKED_DOT_FAMILIES:
+        return descriptor
+    return replace(
+        descriptor,
+        operands=tuple(
+            _low_subset_operand(operand, _X86_VEX_ADDRESSABLE_REGISTER_COUNT)
+            for operand in descriptor.operands
+        ),
+    )
+
+
 def _descriptor_set(
     *,
     key: str,
@@ -167,7 +193,7 @@ def _descriptor_set(
         resources=_packed_dot_resources(),
         schedule_classes=_packed_dot_schedule_classes(vector_bit_widths),
         descriptors=tuple(
-            _packed_dot_descriptor(descriptor) for descriptor in descriptor_data
+            _packed_dot_target_descriptor(descriptor) for descriptor in descriptor_data
         ),
     )
 

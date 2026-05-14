@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TypeVar
 
 from loom.target.arch.x86.packed_dot_data import (
@@ -38,6 +39,7 @@ from loom.target.low_descriptors import (
     ImmediateKind,
     MemorySpace,
     Operand,
+    OperandAddressMapKind,
     OperandRole,
     RegClass,
     RegClassAlt,
@@ -93,6 +95,14 @@ _XMM_ALT = (RegClassAlt(_REG_XMM),)
 _YMM_ALT = (RegClassAlt(_REG_YMM),)
 _ZMM_ALT = (RegClassAlt(_REG_ZMM),)
 _K_ALT = (RegClassAlt(_REG_K),)
+
+
+def _low_subset_operand(operand: Operand, addressable_unit_count: int) -> Operand:
+    return replace(
+        operand,
+        address_map_kind=OperandAddressMapKind.LOW_SUBSET,
+        addressable_unit_count=addressable_unit_count,
+    )
 
 
 def _vector_lane_units(vector_bit_width: int) -> int:
