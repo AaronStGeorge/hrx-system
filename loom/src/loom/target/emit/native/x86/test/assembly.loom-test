@@ -657,3 +657,13 @@ low.func.def target(@x86_target) @x86_avx_vnni_low_subset_rejects_high_ymm(%acc:
   %dot = low.op<x86.avx_vnni.vpdpbusd.ymm>(%acc_copy, %lhs, %rhs) : (reg<x86.ymm>, reg<x86.ymm>, reg<x86.ymm>) -> %acc_copy as reg<x86.ymm>
   low.return %dot : reg<x86.ymm>
 }
+
+// ====
+
+// RUN: emit x86-asm @x86_spill_traffic_register_exhaustion_reports_allocation_gap x86.gpr32=1
+x86.target<scalar> @x86_target
+
+// ERROR@+1: BACKEND/005 {function_name="x86_spill_traffic_register_exhaustion_reports_allocation_gap", value_class="x86.gpr32", budget="1", failure_kind="spill-traffic-register-exhausted"}
+low.func.def target(@x86_target) @x86_spill_traffic_register_exhaustion_reports_allocation_gap(%lhs: reg<x86.gpr32>, %rhs: reg<x86.gpr32>) -> (reg<x86.gpr32>, reg<x86.gpr32>) asm<x86.scalar.core> {
+  return %lhs, %rhs
+}

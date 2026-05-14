@@ -438,6 +438,38 @@ ERR_BACKEND_020 = ErrorDef(
     ),
 )
 
+# ERR_BACKEND_021: Final emission-frame preparation failed.
+ERR_BACKEND_021 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=21,
+    severity=Severity.ERROR,
+    summary="Final emission frame is not target-ready.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "could not prepare a final emission frame for '@{function_name}': "
+        "{failure_kind}; iteration {iteration_count} of {iteration_limit}, "
+        "{spill_plan_count} pending spill plan(s), "
+        "{spill_assignment_count} spill-slot assignment(s), and "
+        "{scheduled_packet_count} scheduled packet(s)"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("failure_kind", ParamKind.STRING),
+        ErrorParam("iteration_count", ParamKind.U64),
+        ErrorParam("iteration_limit", ParamKind.U64),
+        ErrorParam("spill_plan_count", ParamKind.U64),
+        ErrorParam("spill_assignment_count", ParamKind.U64),
+        ErrorParam("scheduled_packet_count", ParamKind.U64),
+    ),
+    fix_hint=(
+        "Implement target lowering for the remaining spill or address-state "
+        "traffic, or constrain allocation so final emission is target-ready"
+    ),
+)
+
 ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_003,
     ERR_BACKEND_005,
@@ -453,4 +485,5 @@ ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_018,
     ERR_BACKEND_019,
     ERR_BACKEND_020,
+    ERR_BACKEND_021,
 )

@@ -135,10 +135,10 @@ iree_status_t loom_low_emission_frame_build(
 // traffic until the final frame contains no spill assignments or spill plans.
 // The loop materializes one spill plan per iteration because each rewrite can
 // change liveness and invalidate later spill plans in the current frame.
-// Materialization and final addressability diagnostics follow the normal
-// target-entry convention: if an error diagnostic is emitted, the function
-// returns OK with |out_frame| left empty and the caller must check its
-// diagnostic emitter before consuming the frame.
+// Materialization, final addressability, and final-frame convergence
+// diagnostics follow the normal target-entry convention: if an error diagnostic
+// is emitted, the function returns OK with |out_frame| left empty and the
+// caller must check its diagnostic emitter before consuming the frame.
 iree_status_t loom_low_emission_frame_build_spill_free(
     loom_module_t* module, loom_op_t* low_func_op,
     const loom_low_emission_frame_options_t* frame_options,

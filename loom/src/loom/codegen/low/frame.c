@@ -11,7 +11,15 @@
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packet.h"
 #include "loom/codegen/low/schedule/run.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ops/low/ops.h"
+
+typedef enum loom_low_emission_frame_failure_e {
+  LOOM_LOW_EMISSION_FRAME_FAILURE_SPILL_ASSIGNMENTS = 0,
+  LOOM_LOW_EMISSION_FRAME_FAILURE_SPILL_ITERATION_LIMIT = 1,
+  LOOM_LOW_EMISSION_FRAME_FAILURE_ADDRESS_STATE_ITERATION_LIMIT = 2,
+  LOOM_LOW_EMISSION_FRAME_FAILURE_SPILL_NO_PROGRESS = 3,
+} loom_low_emission_frame_failure_t;
 
 static iree_status_t loom_low_emission_frame_liveness_order_from_schedule(
     loom_op_t* low_func_op, const loom_low_schedule_table_t* schedule,
@@ -261,6 +269,75 @@ static iree_status_t loom_low_emission_frame_make_no_progress_status(
       function_name.data, frame->allocation.spill_plan_count);
 }
 
+static iree_string_view_t loom_low_emission_frame_failure_name(
+    loom_low_emission_frame_failure_t failure) {
+  switch (failure) {
+    case LOOM_LOW_EMISSION_FRAME_FAILURE_SPILL_ASSIGNMENTS:
+      return IREE_SV("remaining-spill-assignments");
+    case LOOM_LOW_EMISSION_FRAME_FAILURE_SPILL_ITERATION_LIMIT:
+      return IREE_SV("spill-materialization-iteration-limit");
+    case LOOM_LOW_EMISSION_FRAME_FAILURE_ADDRESS_STATE_ITERATION_LIMIT:
+      return IREE_SV("address-state-iteration-limit");
+    case LOOM_LOW_EMISSION_FRAME_FAILURE_SPILL_NO_PROGRESS:
+      return IREE_SV("spill-materialization-no-progress");
+    default:
+      return IREE_SV("<unknown>");
+  }
+}
+
+static iree_status_t loom_low_emission_frame_emit_final_failure(
+    const loom_low_emission_frame_options_t* frame_options,
+    const loom_low_emission_frame_t* frame,
+    loom_low_emission_frame_failure_t failure, iree_host_size_t iteration_count,
+    iree_host_size_t iteration_limit) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(&frame->target)),
+      loom_param_string(loom_low_diagnostic_export_name(&frame->target)),
+      loom_param_string(loom_low_diagnostic_config_key(&frame->target)),
+      loom_param_string(
+          loom_low_diagnostic_function_name(frame->module, frame->function_op)),
+      loom_param_string(loom_low_emission_frame_failure_name(failure)),
+      loom_param_u64((uint64_t)iteration_count),
+      loom_param_u64((uint64_t)iteration_limit),
+      loom_param_u64((uint64_t)frame->allocation.spill_plan_count),
+      loom_param_u64((uint64_t)frame->allocation.spill_count),
+      loom_param_u64((uint64_t)frame->schedule.scheduled_node_count),
+  };
+  const loom_diagnostic_emission_t emission = {
+      .op = frame->function_op,
+      .error = LOOM_ERR_BACKEND_021,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  return iree_diagnostic_emit(frame_options->emitter, &emission);
+}
+
+static iree_status_t loom_low_emission_frame_fail_final(
+    const loom_low_emission_frame_options_t* frame_options,
+    const loom_low_emission_frame_t* frame,
+    loom_low_emission_frame_failure_t failure, iree_host_size_t iteration_count,
+    iree_host_size_t iteration_limit) {
+  if (frame_options->emitter.fn != NULL) {
+    return loom_low_emission_frame_emit_final_failure(
+        frame_options, frame, failure, iteration_count, iteration_limit);
+  }
+  switch (failure) {
+    case LOOM_LOW_EMISSION_FRAME_FAILURE_SPILL_ASSIGNMENTS:
+      return loom_low_emission_frame_make_spill_assignment_status(frame);
+    case LOOM_LOW_EMISSION_FRAME_FAILURE_SPILL_ITERATION_LIMIT:
+      return loom_low_emission_frame_make_iteration_limit_status(
+          frame, iteration_count);
+    case LOOM_LOW_EMISSION_FRAME_FAILURE_ADDRESS_STATE_ITERATION_LIMIT:
+      return loom_low_emission_frame_make_address_state_iteration_limit_status(
+          frame, iteration_count);
+    case LOOM_LOW_EMISSION_FRAME_FAILURE_SPILL_NO_PROGRESS:
+      return loom_low_emission_frame_make_no_progress_status(frame);
+    default:
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "unknown low emission-frame failure");
+  }
+}
+
 iree_status_t loom_low_emission_frame_build_spill_free(
     loom_module_t* module, loom_op_t* low_func_op,
     const loom_low_emission_frame_options_t* frame_options,
@@ -314,8 +391,10 @@ iree_status_t loom_low_emission_frame_build_spill_free(
       }
       if (address_state_result.changed) {
         if (address_state_iteration_count >= address_state_iteration_limit) {
-          return loom_low_emission_frame_make_address_state_iteration_limit_status(
-              &frame, address_state_iteration_count);
+          return loom_low_emission_frame_fail_final(
+              frame_options, &frame,
+              LOOM_LOW_EMISSION_FRAME_FAILURE_ADDRESS_STATE_ITERATION_LIMIT,
+              address_state_iteration_count, address_state_iteration_limit);
         }
         ++address_state_iteration_count;
         continue;
@@ -330,11 +409,16 @@ iree_status_t loom_low_emission_frame_build_spill_free(
       return iree_ok_status();
     }
     if (frame.allocation.spill_plan_count == 0) {
-      return loom_low_emission_frame_make_spill_assignment_status(&frame);
+      return loom_low_emission_frame_fail_final(
+          frame_options, &frame,
+          LOOM_LOW_EMISSION_FRAME_FAILURE_SPILL_ASSIGNMENTS, iteration_count,
+          iteration_limit);
     }
     if (iteration_count >= iteration_limit) {
-      return loom_low_emission_frame_make_iteration_limit_status(
-          &frame, iteration_count);
+      return loom_low_emission_frame_fail_final(
+          frame_options, &frame,
+          LOOM_LOW_EMISSION_FRAME_FAILURE_SPILL_ITERATION_LIMIT,
+          iteration_count, iteration_limit);
     }
 
     loom_low_allocation_materialization_result_t result = {0};
@@ -352,7 +436,10 @@ iree_status_t loom_low_emission_frame_build_spill_free(
     }
     if (result.storage_count == 0 && result.spill_count == 0 &&
         result.reload_count == 0) {
-      return loom_low_emission_frame_make_no_progress_status(&frame);
+      return loom_low_emission_frame_fail_final(
+          frame_options, &frame,
+          LOOM_LOW_EMISSION_FRAME_FAILURE_SPILL_NO_PROGRESS, iteration_count,
+          iteration_limit);
     }
 
     IREE_RETURN_IF_ERROR(loom_low_emission_frame_lower_spill_traffic(

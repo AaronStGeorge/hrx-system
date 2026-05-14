@@ -5255,9 +5255,17 @@ static iree_status_t loom_low_allocation_assign_intervals(
           &descriptor_set->reg_classes[capacity.descriptor_reg_class_id];
       iree_string_view_t reg_class_name = loom_low_descriptor_set_string(
           descriptor_set, reg_class->name_string_offset);
+      const uint32_t budget_units =
+          capacity.is_bounded ? capacity.max_units : UINT32_MAX;
       if (requires_register) {
         iree_string_view_t value_name =
             loom_low_diagnostic_value_name(state->module, interval->value_id);
+        IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
+            state,
+            loom_low_diagnostic_value_origin_op(
+                state->module, interval->value_id, state->function_op),
+            interval->value_class, budget_units, interval->unit_count,
+            IREE_SV("spill-traffic-register-exhausted")));
         return iree_make_status(
             IREE_STATUS_FAILED_PRECONDITION,
             "allocation exhausted register class '%.*s' for materialized "
@@ -5265,6 +5273,9 @@ static iree_status_t loom_low_allocation_assign_intervals(
             (int)reg_class_name.size, reg_class_name.data, (int)value_name.size,
             value_name.data);
       }
+      IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
+          state, state->function_op, interval->value_class, budget_units,
+          interval->unit_count, IREE_SV("unspillable-register-exhausted")));
       return iree_make_status(
           IREE_STATUS_FAILED_PRECONDITION,
           "allocation exhausted unspillable register class '%.*s'",
