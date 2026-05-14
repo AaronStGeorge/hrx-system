@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/analysis/symbol_dependencies.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
@@ -62,6 +63,8 @@ typedef struct loom_symbol_dce_state_t {
   uint8_t* live_symbols;
   // Pending reachable symbols whose defining op still needs to be scanned.
   loom_symbol_dce_worklist_t worklist;
+  // Rebuilt module symbol dependency table.
+  loom_symbol_dependency_table_t dependencies;
 } loom_symbol_dce_state_t;
 
 static bool loom_symbol_dce_symbol_is_erasable(const loom_module_t* module,
@@ -118,92 +121,33 @@ static iree_status_t loom_symbol_dce_mark_symbol_id(
   return iree_ok_status();
 }
 
-static iree_status_t loom_symbol_dce_mark_symbol_ref(
-    loom_symbol_dce_state_t* state, loom_symbol_ref_t ref) {
-  if (!loom_symbol_ref_is_valid(ref)) return iree_ok_status();
-  if (ref.module_id != 0) return iree_ok_status();
-  return loom_symbol_dce_mark_symbol_id(state, ref.symbol_id);
-}
-
-static iree_status_t loom_symbol_dce_mark_attr_refs(
-    loom_symbol_dce_state_t* state, const loom_attribute_t* attr) {
-  if (!attr) return iree_ok_status();
-  if (attr->kind == LOOM_ATTR_SYMBOL) {
-    return loom_symbol_dce_mark_symbol_ref(state, attr->symbol);
-  }
-  if (attr->kind != LOOM_ATTR_DICT || attr->count == 0) {
-    return iree_ok_status();
-  }
-  for (uint16_t i = 0; i < attr->count; ++i) {
-    IREE_RETURN_IF_ERROR(
-        loom_symbol_dce_mark_attr_refs(state, &attr->dict_entries[i].value));
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_symbol_dce_mark_named_attr_refs(
-    loom_symbol_dce_state_t* state, const loom_named_attr_t* attrs,
-    iree_host_size_t attr_count) {
-  for (iree_host_size_t i = 0; i < attr_count; ++i) {
-    IREE_RETURN_IF_ERROR(
-        loom_symbol_dce_mark_attr_refs(state, &attrs[i].value));
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_symbol_dce_mark_op_attr_refs(
-    loom_symbol_dce_state_t* state, const loom_op_t* op) {
-  const loom_attribute_t* attrs = loom_op_const_attrs(op);
-  for (uint8_t i = 0; i < op->attribute_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_symbol_dce_mark_attr_refs(state, &attrs[i]));
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_symbol_dce_mark_region_refs(
-    loom_symbol_dce_state_t* state, const loom_region_t* region) {
-  const loom_block_t* block = NULL;
-  loom_region_for_each_block(region, block) {
-    const loom_op_t* op = NULL;
-    loom_block_for_each_op(block, op) {
-      IREE_RETURN_IF_ERROR(loom_symbol_dce_mark_op_attr_refs(state, op));
-      loom_region_t** regions = loom_op_regions(op);
-      for (uint8_t i = 0; i < op->region_count; ++i) {
-        if (regions[i]) {
-          IREE_RETURN_IF_ERROR(
-              loom_symbol_dce_mark_region_refs(state, regions[i]));
-        }
-      }
-    }
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_symbol_dce_mark_module_encoding_refs(
-    loom_symbol_dce_state_t* state) {
-  for (iree_host_size_t i = 0; i < state->module->encodings.count; ++i) {
-    const loom_encoding_t* encoding = &state->module->encodings.entries[i];
-    IREE_RETURN_IF_ERROR(loom_symbol_dce_mark_named_attr_refs(
-        state, encoding->attributes, encoding->attribute_count));
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_symbol_dce_traverse_symbol(
     loom_symbol_dce_state_t* state, uint16_t symbol_id) {
-  if (symbol_id >= state->module->symbols.count) return iree_ok_status();
-  const loom_symbol_t* symbol = &state->module->symbols.entries[symbol_id];
-  const loom_op_t* op = symbol->defining_op;
-  if (!op) return iree_ok_status();
-
-  IREE_RETURN_IF_ERROR(loom_symbol_dce_mark_op_attr_refs(state, op));
-  loom_region_t** regions = loom_op_regions(op);
-  for (uint8_t i = 0; i < op->region_count; ++i) {
-    if (regions[i]) {
-      IREE_RETURN_IF_ERROR(loom_symbol_dce_mark_region_refs(state, regions[i]));
-    }
+  if (symbol_id >= state->dependencies.symbol_count) return iree_ok_status();
+  loom_symbol_dependency_edge_id_t edge_id =
+      state->dependencies.symbols[symbol_id].first_outgoing_edge_id;
+  while (edge_id != LOOM_SYMBOL_DEPENDENCY_EDGE_ID_INVALID) {
+    const loom_symbol_dependency_edge_t* edge =
+        &state->dependencies.edges[edge_id];
+    IREE_RETURN_IF_ERROR(
+        loom_symbol_dce_mark_symbol_id(state, edge->target_symbol_id));
+    edge_id = edge->next_outgoing_edge_id;
   }
 
+  return iree_ok_status();
+}
+
+static iree_status_t loom_symbol_dce_mark_module_root_refs(
+    loom_symbol_dce_state_t* state) {
+  loom_symbol_dependency_edge_id_t edge_id =
+      state->dependencies.first_module_edge_id;
+  while (edge_id != LOOM_SYMBOL_DEPENDENCY_EDGE_ID_INVALID) {
+    const loom_symbol_dependency_edge_t* edge =
+        &state->dependencies.edges[edge_id];
+    IREE_RETURN_IF_ERROR(
+        loom_symbol_dce_mark_symbol_id(state, edge->target_symbol_id));
+    edge_id = edge->next_outgoing_edge_id;
+  }
   return iree_ok_status();
 }
 
@@ -221,10 +165,12 @@ static iree_status_t loom_symbol_dce_seed_roots(
 
 static iree_status_t loom_symbol_dce_compute_live_symbols(
     loom_symbol_dce_state_t* state) {
+  IREE_RETURN_IF_ERROR(loom_symbol_dependency_table_build(
+      state->module, state->pass->arena, &state->dependencies));
   IREE_RETURN_IF_ERROR(loom_symbol_dce_seed_roots(state));
   // Encodings are module-table records that serialize with the module. Until
   // there is encoding-table DCE, their symbol refs are part of the root set.
-  IREE_RETURN_IF_ERROR(loom_symbol_dce_mark_module_encoding_refs(state));
+  IREE_RETURN_IF_ERROR(loom_symbol_dce_mark_module_root_refs(state));
   while (state->worklist.count > 0) {
     uint16_t symbol_id = state->worklist.entries[--state->worklist.count];
     IREE_RETURN_IF_ERROR(loom_symbol_dce_traverse_symbol(state, symbol_id));

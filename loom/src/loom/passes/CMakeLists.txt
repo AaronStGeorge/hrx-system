@@ -430,6 +430,7 @@ loom_cc_library(
     "symbol_dce.c"
   DEPS
     iree::base
+    loom::src::loom::analysis::symbol_dependencies
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs

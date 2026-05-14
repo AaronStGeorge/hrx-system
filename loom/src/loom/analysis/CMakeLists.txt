@@ -511,6 +511,41 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    symbol_dependencies
+  HDRS
+    "symbol_dependencies.h"
+  SRCS
+    "symbol_dependencies.c"
+  DEPS
+    ::scc
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    symbol_dependencies_test
+  SRCS
+    "symbol_dependencies_test.cc"
+  DEPS
+    ::symbol_dependencies
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::global
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::test
+    loom::src::loom::testing::module_ptr
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     symbol_facts
   HDRS
     "symbol_facts.h"

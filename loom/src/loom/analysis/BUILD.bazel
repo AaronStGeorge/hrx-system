@@ -438,6 +438,37 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "symbol_dependencies",
+    srcs = ["symbol_dependencies.c"],
+    hdrs = ["symbol_dependencies.h"],
+    deps = [
+        ":scc",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "symbol_dependencies_test",
+    srcs = ["symbol_dependencies_test.cc"],
+    deps = [
+        ":symbol_dependencies",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/global",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/testing:module_ptr",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "symbol_facts",
     srcs = ["symbol_facts.c"],
     hdrs = ["symbol_facts.h"],

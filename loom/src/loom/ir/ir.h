@@ -19,8 +19,8 @@
 //
 // Symbol:     A named module-level entity: function-like op, global,
 //             executable. Flat symbol table per module (no nesting).
-//             Symbols carry use lists for efficient "find all
-//             references" queries.
+//             Symbol dependency/use queries are built by analysis passes; the
+//             core table stores identity and definition state.
 //
 // Block:      A basic block within a region. Contains a linear
 //             sequence of operations. May have block arguments (for
@@ -1719,8 +1719,6 @@ static inline bool loom_symbol_kind_is_function_like(loom_symbol_kind_t kind) {
 enum loom_symbol_flag_bits_e {
   // Symbol is visible outside the module (exported for linking).
   LOOM_SYMBOL_FLAG_PUBLIC = 1u << 0,
-  // Use list has overflowed inline storage.
-  LOOM_SYMBOL_FLAG_OVERFLOW_USES = 1u << 1,
 };
 typedef uint16_t loom_symbol_flags_t;
 
@@ -1728,14 +1726,7 @@ typedef uint16_t loom_symbol_flags_t;
 // Symbol
 //===----------------------------------------------------------------------===//
 
-// A symbol use: records which operation references this symbol.
-typedef struct loom_symbol_use_t {
-  uint32_t user_op_id;
-  uint16_t block_id;
-  uint16_t operand_index;
-} loom_symbol_use_t;
-
-// A module-level named symbol with use tracking.
+// A module-level named symbol.
 //
 // The symbol table stores identity and link state only. The shape of the symbol
 // is described by the defining op's generated symbol-definition descriptor,
@@ -1748,21 +1739,13 @@ typedef struct loom_symbol_t {
   loom_string_id_t name_id;
   // Legacy bytecode symbol payload kind derived from |definition|.
   loom_symbol_kind_t kind;
-  // Visibility/use-list flags.
+  // Visibility and link-state flags.
   loom_symbol_flags_t flags;
-  // Number of symbol-use entries in the inline or overflow list.
-  uint16_t use_count;
   // Generated symbol contract implemented by |defining_op|.
   const loom_symbol_definition_descriptor_t* definition;
   // The op that defines this symbol, or NULL until a forward reference is
   // linked to its definition.
   loom_op_t* defining_op;
-  union {
-    // Inline storage for the common case of at most two symbol uses.
-    loom_symbol_use_t inline_uses[2];
-    // Arena-owned overflow storage when use_count exceeds the inline capacity.
-    loom_symbol_use_t* overflow_uses;
-  };
 } loom_symbol_t;
 
 //===----------------------------------------------------------------------===//

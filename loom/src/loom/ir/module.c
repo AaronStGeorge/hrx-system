@@ -1061,7 +1061,7 @@ iree_status_t loom_module_compact_symbols(loom_module_t* module,
     const loom_symbol_t* symbol = &module->symbols.entries[i];
     const bool has_definition = symbol->kind != LOOM_SYMBOL_NONE ||
                                 symbol->definition || symbol->defining_op;
-    const bool has_side_data = symbol->flags != 0 || symbol->use_count != 0;
+    const bool has_side_data = symbol->flags != 0;
     const bool keep =
         has_definition || has_side_data || referenced_symbols[i] != 0;
     if (keep) {
