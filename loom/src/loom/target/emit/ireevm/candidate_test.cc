@@ -21,8 +21,10 @@
 #include "iree/vm/native_module.h"
 #include "iree/vm/shims.h"
 #include "loom/ops/op_registry.h"
+#include "loom/target/arch/ireevm/descriptors.h"
 #include "loom/target/arch/ireevm/ops/registry.h"
 #include "loom/target/arch/ireevm/provider.h"
+#include "loom/target/emit/ireevm/function_bytecode.h"
 #include "loom/target/provider.h"
 #include "loom/tooling/compile/pipeline.h"
 #include "loom/tooling/execution/vm_invocation.h"
@@ -373,6 +375,19 @@ void ExpectImportedFunction(iree_vm_ImportFunctionDef_vec_t imported_functions,
       calling_convention));
 }
 
+void ExpectRegisterClassLayout(uint16_t register_class_id,
+                               loom_ireevm_register_bank_t expected_bank,
+                               uint16_t expected_unit_count,
+                               uint16_t expected_alignment,
+                               iree_string_view_t expected_class_name) {
+  loom_ireevm_register_class_layout_t layout = {};
+  IREE_ASSERT_OK(loom_ireevm_register_class_layout(register_class_id, &layout));
+  EXPECT_EQ(layout.bank, expected_bank);
+  EXPECT_EQ(layout.unit_count, expected_unit_count);
+  EXPECT_EQ(layout.alignment, expected_alignment);
+  EXPECT_TRUE(iree_string_view_equal(layout.class_name, expected_class_name));
+}
+
 void ExpectOutputI32(iree_vm_list_t* outputs, iree_host_size_t index,
                      int32_t expected_value) {
   iree_vm_value_t value = iree_vm_value_make_none();
@@ -557,6 +572,24 @@ class IreeVmCandidateTest : public ::testing::Test {
   loom_run_session_t session_ = {};
   loom_target_environment_t target_environment_ = {};
 };
+
+TEST(IreeVmRegisterClassLayoutTest, MapsCoreClassesToVmBytecodeBanks) {
+  ExpectRegisterClassLayout(IREEVM_CORE_REG_CLASS_ID_I32,
+                            LOOM_IREEVM_REGISTER_BANK_I32, 1, 1,
+                            IREE_SV("ireevm.i32"));
+  ExpectRegisterClassLayout(IREEVM_CORE_REG_CLASS_ID_I64,
+                            LOOM_IREEVM_REGISTER_BANK_I32, 2, 2,
+                            IREE_SV("ireevm.i64"));
+  ExpectRegisterClassLayout(IREEVM_CORE_REG_CLASS_ID_F32,
+                            LOOM_IREEVM_REGISTER_BANK_I32, 1, 1,
+                            IREE_SV("ireevm.f32"));
+  ExpectRegisterClassLayout(IREEVM_CORE_REG_CLASS_ID_F64,
+                            LOOM_IREEVM_REGISTER_BANK_I32, 2, 2,
+                            IREE_SV("ireevm.f64"));
+  ExpectRegisterClassLayout(IREEVM_CORE_REG_CLASS_ID_REF,
+                            LOOM_IREEVM_REGISTER_BANK_REF, 1, 1,
+                            IREE_SV("ireevm.ref"));
+}
 
 TEST_F(IreeVmCandidateTest, EmitVmArchiveCandidate) {
   loom_run_module_t run_module = {};

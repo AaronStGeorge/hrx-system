@@ -301,24 +301,6 @@ static void loom_ireevm_archive_emit_record_report_totals(
       totals->emitted_code_byte_count, totals->emitted_code_storage_byte_count);
 }
 
-static iree_string_view_t loom_ireevm_archive_emit_register_class_name(
-    uint16_t register_class_id) {
-  switch (register_class_id) {
-    case IREEVM_CORE_REG_CLASS_ID_I32:
-      return IREE_SV("ireevm.i32");
-    case IREEVM_CORE_REG_CLASS_ID_I64:
-      return IREE_SV("ireevm.i64");
-    case IREEVM_CORE_REG_CLASS_ID_F32:
-      return IREE_SV("ireevm.f32");
-    case IREEVM_CORE_REG_CLASS_ID_F64:
-      return IREE_SV("ireevm.f64");
-    case IREEVM_CORE_REG_CLASS_ID_REF:
-      return IREE_SV("ireevm.ref");
-    default:
-      return IREE_SV("<unknown>");
-  }
-}
-
 static iree_status_t loom_ireevm_archive_emit_function_argument_fixed_value(
     const loom_ireevm_archive_emit_state_t* state, loom_value_id_t argument_id,
     uint32_t* i32_register, uint32_t* ref_register,
@@ -333,31 +315,40 @@ static iree_status_t loom_ireevm_archive_emit_function_argument_fixed_value(
 
   const uint16_t register_class_id = loom_low_register_type_class_id(type);
   const uint32_t unit_count = loom_low_register_type_unit_count(type);
-  uint32_t location_base = 0;
-  if ((register_class_id == IREEVM_CORE_REG_CLASS_ID_I32 ||
-       register_class_id == IREEVM_CORE_REG_CLASS_ID_F32) &&
-      unit_count == 1) {
-    location_base = (*i32_register)++;
-  } else if ((register_class_id == IREEVM_CORE_REG_CLASS_ID_I64 ||
-              register_class_id == IREEVM_CORE_REG_CLASS_ID_F64) &&
-             unit_count == 2) {
-    *i32_register = (*i32_register + 1u) & ~1u;
-    location_base = *i32_register;
-    *i32_register += 2;
-  } else if (register_class_id == IREEVM_CORE_REG_CLASS_ID_REF &&
-             unit_count == 1) {
-    location_base = (*ref_register)++;
-  } else {
-    const iree_string_view_t register_class =
-        loom_ireevm_archive_emit_register_class_name(register_class_id);
+  loom_ireevm_register_class_layout_t layout = {0};
+  iree_status_t status =
+      loom_ireevm_register_class_layout(register_class_id, &layout);
+  if (!iree_status_is_ok(status)) {
+    return iree_status_annotate_f(status,
+                                  "while mapping IREE VM ABI argument value %u",
+                                  (unsigned)argument_id);
+  }
+  if (unit_count != layout.unit_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "IREE VM ABI argument value %u has unsupported register class "
         "'%.*s' with %u unit(s)",
-        (unsigned)argument_id, (int)register_class.size, register_class.data,
-        unit_count);
+        (unsigned)argument_id, (int)layout.class_name.size,
+        layout.class_name.data, unit_count);
   }
 
+  uint32_t* bank_register = layout.bank == LOOM_IREEVM_REGISTER_BANK_REF
+                                ? ref_register
+                                : i32_register;
+  iree_host_size_t aligned_register = *bank_register;
+  if (!iree_host_size_checked_align(aligned_register, layout.alignment,
+                                    &aligned_register) ||
+      aligned_register > UINT32_MAX) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "IREE VM ABI argument register base overflow");
+  }
+  *bank_register = (uint32_t)aligned_register;
+  if (*bank_register > UINT32_MAX - layout.unit_count) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "IREE VM ABI argument register span overflow");
+  }
+  const uint32_t location_base = *bank_register;
+  *bank_register += layout.unit_count;
   *out_fixed_value = (loom_low_allocation_fixed_value_t){
       .value_id = argument_id,
       .location_kind = LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID,

@@ -178,9 +178,11 @@ loom_cc_test(
     "candidate_test.cc"
   DEPS
     ::candidate
+    ::function_bytecode
     iree::base
     iree::base::internal::flatcc::parsing
     loom::src::loom::ops::op_registry
+    loom::src::loom::target::arch::ireevm::descriptors
     loom::src::loom::target::arch::ireevm::ops
     loom::src::loom::target::arch::ireevm::provider
     loom::src::loom::target::provider

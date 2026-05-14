@@ -1,0 +1,8 @@
+// RUN: emit low-allocation-json @vm_scalar_alias_classes_share_storage ireevm.i32=2 diagnostics=predicted-spills output=none
+
+ireevm.target<core> @vm_target
+
+// WARNING@+1: BACKEND/008 {function_name="vm_scalar_alias_classes_share_storage", value_name="narrow", value_class="ireevm.i32", spill_cause="register-budget-conflict"}
+low.func.def target(@vm_target) @vm_scalar_alias_classes_share_storage(%wide: reg<ireevm.i64 x2>, %narrow: reg<ireevm.i32>) -> (reg<ireevm.i64 x2>, reg<ireevm.i32>) asm<ireevm.core> {
+  return %wide, %narrow
+}

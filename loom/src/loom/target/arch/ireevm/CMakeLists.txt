@@ -190,6 +190,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "allocation"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/allocation.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "pass_source_low"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/pass_source_low.loom-test"

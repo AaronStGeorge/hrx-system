@@ -214,8 +214,10 @@ loom_cc_test(
     srcs = ["candidate_test.cc"],
     deps = [
         ":candidate",
+        ":function_bytecode",
         "//loom/src/loom/ops:op_registry",
         "//loom/src/loom/target:provider",
+        "//loom/src/loom/target/arch/ireevm:descriptors",
         "//loom/src/loom/target/arch/ireevm:ops",
         "//loom/src/loom/target/arch/ireevm:provider",
         "//loom/src/loom/tooling/compile:pipeline",

@@ -266,10 +266,58 @@ static iree_status_t loom_ireevm_bytecode_fixup_branch_targets(
   return iree_ok_status();
 }
 
-typedef enum loom_ireevm_register_bank_e {
-  LOOM_IREEVM_REGISTER_BANK_I32 = 0,
-  LOOM_IREEVM_REGISTER_BANK_REF = 1,
-} loom_ireevm_register_bank_t;
+iree_status_t loom_ireevm_register_class_layout(
+    uint16_t register_class_id,
+    loom_ireevm_register_class_layout_t* out_layout) {
+  *out_layout = (loom_ireevm_register_class_layout_t){0};
+  switch (register_class_id) {
+    case IREEVM_CORE_REG_CLASS_ID_I32:
+      *out_layout = (loom_ireevm_register_class_layout_t){
+          .class_name = IREE_SV("ireevm.i32"),
+          .bank = LOOM_IREEVM_REGISTER_BANK_I32,
+          .unit_count = 1,
+          .alignment = 1,
+      };
+      return iree_ok_status();
+    case IREEVM_CORE_REG_CLASS_ID_I64:
+      *out_layout = (loom_ireevm_register_class_layout_t){
+          .class_name = IREE_SV("ireevm.i64"),
+          .bank = LOOM_IREEVM_REGISTER_BANK_I32,
+          .unit_count = 2,
+          .alignment = 2,
+      };
+      return iree_ok_status();
+    case IREEVM_CORE_REG_CLASS_ID_F32:
+      *out_layout = (loom_ireevm_register_class_layout_t){
+          .class_name = IREE_SV("ireevm.f32"),
+          .bank = LOOM_IREEVM_REGISTER_BANK_I32,
+          .unit_count = 1,
+          .alignment = 1,
+      };
+      return iree_ok_status();
+    case IREEVM_CORE_REG_CLASS_ID_F64:
+      *out_layout = (loom_ireevm_register_class_layout_t){
+          .class_name = IREE_SV("ireevm.f64"),
+          .bank = LOOM_IREEVM_REGISTER_BANK_I32,
+          .unit_count = 2,
+          .alignment = 2,
+      };
+      return iree_ok_status();
+    case IREEVM_CORE_REG_CLASS_ID_REF:
+      *out_layout = (loom_ireevm_register_class_layout_t){
+          .class_name = IREE_SV("ireevm.ref"),
+          .bank = LOOM_IREEVM_REGISTER_BANK_REF,
+          .unit_count = 1,
+          .alignment = 1,
+      };
+      return iree_ok_status();
+    default:
+      return iree_make_status(
+          IREE_STATUS_UNIMPLEMENTED,
+          "IREE VM bytecode emission does not support register class id %u",
+          register_class_id);
+  }
+}
 
 typedef struct loom_ireevm_register_ref_t {
   // VM register bank used by the bytecode operand.
@@ -310,48 +358,43 @@ static iree_status_t loom_ireevm_register_assignment_metadata(
                             "VM bytecode register span exceeds u16");
   }
 
+  loom_ireevm_register_class_layout_t layout = {0};
+  iree_status_t status = loom_ireevm_register_class_layout(
+      assignment->descriptor_reg_class_id, &layout);
+  if (!iree_status_is_ok(status)) {
+    iree_string_view_t register_class = iree_string_view_empty();
+    IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
+        allocation, assignment, &register_class));
+    return iree_status_annotate_f(status,
+                                  "while emitting VM bytecode value %u "
+                                  "allocated to register class '%.*s'",
+                                  (unsigned)assignment->value_id,
+                                  (int)register_class.size,
+                                  register_class.data);
+  }
+
   loom_ireevm_register_ref_t register_ref = {
-      .bank = LOOM_IREEVM_REGISTER_BANK_I32,
+      .bank = layout.bank,
       .base = (uint16_t)assignment->location_base,
       .unit_count = (uint16_t)assignment->location_count,
   };
-  uint32_t expected_unit_count = 0;
-  switch (assignment->descriptor_reg_class_id) {
-    case IREEVM_CORE_REG_CLASS_ID_I32:
-    case IREEVM_CORE_REG_CLASS_ID_F32:
-      expected_unit_count = 1;
-      break;
-    case IREEVM_CORE_REG_CLASS_ID_I64:
-    case IREEVM_CORE_REG_CLASS_ID_F64:
-      expected_unit_count = 2;
-      if ((assignment->location_base & 1u) != 0) {
-        return iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
-            "VM bytecode value %u uses an unaligned i64/f64 register ordinal",
-            (unsigned)assignment->value_id);
-      }
-      break;
-    case IREEVM_CORE_REG_CLASS_ID_REF:
-      register_ref.bank = LOOM_IREEVM_REGISTER_BANK_REF;
-      expected_unit_count = 1;
-      break;
-    default: {
-      iree_string_view_t register_class = iree_string_view_empty();
-      IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_register_class_name(
-          allocation, assignment, &register_class));
-      return iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
-          "VM bytecode emission does not support register class '%.*s'",
-          (int)register_class.size, register_class.data);
-    }
+  if (layout.alignment != 0 &&
+      assignment->location_base % layout.alignment != 0) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "VM bytecode value %u uses unaligned base %u for register class "
+        "'%.*s', which requires %u-unit alignment",
+        (unsigned)assignment->value_id, assignment->location_base,
+        (int)layout.class_name.size, layout.class_name.data, layout.alignment);
   }
-  if (assignment->unit_count != expected_unit_count ||
-      assignment->location_count != expected_unit_count) {
+  if (assignment->unit_count != layout.unit_count ||
+      assignment->location_count != layout.unit_count) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "VM bytecode value %u uses %" PRIu32
                             " units but its register class requires %" PRIu32,
                             (unsigned)assignment->value_id,
-                            assignment->unit_count, expected_unit_count);
+                            assignment->unit_count,
+                            (uint32_t)layout.unit_count);
   }
   const uint32_t bank_register_count =
       register_ref.bank == LOOM_IREEVM_REGISTER_BANK_REF

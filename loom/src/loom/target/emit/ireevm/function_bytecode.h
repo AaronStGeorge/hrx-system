@@ -23,6 +23,29 @@ extern "C" {
 
 typedef struct loom_ireevm_module_plan_t loom_ireevm_module_plan_t;
 
+typedef enum loom_ireevm_register_bank_e {
+  LOOM_IREEVM_REGISTER_BANK_I32 = 0,
+  LOOM_IREEVM_REGISTER_BANK_REF = 1,
+} loom_ireevm_register_bank_t;
+
+typedef struct loom_ireevm_register_class_layout_t {
+  // Human-readable target-low register class name used in diagnostics.
+  iree_string_view_t class_name;
+  // VM bytecode register bank storing values of this class.
+  loom_ireevm_register_bank_t bank;
+  // Number of VM bank slots occupied by one value of this class.
+  uint16_t unit_count;
+  // Required base ordinal alignment, in VM bank slots.
+  uint16_t alignment;
+} loom_ireevm_register_class_layout_t;
+
+// Returns the VM bytecode storage layout for an ireevm.core target-low register
+// class. The VM ABI has i32 and ref banks; i64/f64 values are aligned two-slot
+// spans in the i32 bank instead of an independent bank.
+iree_status_t loom_ireevm_register_class_layout(
+    uint16_t register_class_id,
+    loom_ireevm_register_class_layout_t* out_layout);
+
 typedef struct loom_ireevm_function_bytecode_t {
   // Allocator-owned padded bytecode storage.
   uint8_t* data;
