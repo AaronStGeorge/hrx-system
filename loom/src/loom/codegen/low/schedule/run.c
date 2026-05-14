@@ -145,11 +145,9 @@ static iree_status_t loom_low_schedule_initialize_value_records(
     if (!loom_low_type_is_register(type)) {
       continue;
     }
-    bool found_reg_class = false;
-    IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_type(
-        &state->register_class_map, type, &value->register_class_id, NULL,
-        &found_reg_class));
-    if (found_reg_class) {
+    if (loom_low_register_type_resolver_try_resolve(
+            &state->register_type_resolver, type, &value->register_class_id,
+            NULL)) {
       value->unit_count = loom_low_register_type_unit_count(type);
     }
   }
@@ -1365,8 +1363,9 @@ iree_status_t loom_low_schedule_function(
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "low function target did not resolve");
   }
-  IREE_RETURN_IF_ERROR(loom_low_register_class_map_initialize(
-      module, state.target.descriptor_set, arena, &state.register_class_map));
+  state.register_type_resolver =
+      loom_low_register_type_resolver_for_descriptor_set(
+          state.target.descriptor_set);
 
   iree_host_size_t node_count = 0;
   loom_low_schedule_count_nodes(state.body, &node_count);

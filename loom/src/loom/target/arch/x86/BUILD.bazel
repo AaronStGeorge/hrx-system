@@ -387,7 +387,6 @@ loom_cc_library(
     hdrs = ["register_classes.h"],
     deps = [
         "//loom/src/loom/codegen/low:descriptors",
-        "//loom/src/loom/codegen/low:register_class_map",
         "//runtime/src/iree/base",
     ],
 )

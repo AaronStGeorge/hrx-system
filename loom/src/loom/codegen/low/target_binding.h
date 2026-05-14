@@ -44,6 +44,29 @@ typedef struct loom_low_resolved_target_t {
   const loom_low_descriptor_set_t* descriptor_set;
 } loom_low_resolved_target_t;
 
+typedef struct loom_low_register_type_resolver_t {
+  // Descriptor set defining the resolved descriptor register-class IDs.
+  const loom_low_descriptor_set_t* descriptor_set;
+} loom_low_register_type_resolver_t;
+
+// Returns a resolver that borrows |descriptor_set|.
+static inline loom_low_register_type_resolver_t
+loom_low_register_type_resolver_for_descriptor_set(
+    const loom_low_descriptor_set_t* descriptor_set) {
+  return (loom_low_register_type_resolver_t){
+      .descriptor_set = descriptor_set,
+  };
+}
+
+// Resolves a Loom register type to a descriptor-set-local register class.
+// |out_descriptor_register_class| may be NULL when only the dense descriptor ID
+// is needed. Returns false when |type| is not a register type or its class is
+// not defined by the descriptor set.
+bool loom_low_register_type_resolver_try_resolve(
+    const loom_low_register_type_resolver_t* resolver, loom_type_t type,
+    uint16_t* out_descriptor_register_class_id,
+    const loom_low_reg_class_t** out_descriptor_register_class);
+
 typedef enum loom_low_descriptor_packet_kind_e {
   // Not a descriptor-backed low packet.
   LOOM_LOW_DESCRIPTOR_PACKET_NONE = 0,

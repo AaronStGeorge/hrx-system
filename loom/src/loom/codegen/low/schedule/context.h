@@ -14,8 +14,8 @@
 #include "loom/analysis/liveness.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/memory_access.h"
-#include "loom/codegen/low/register_class_map.h"
 #include "loom/codegen/low/schedule/types.h"
+#include "loom/codegen/low/target_binding.h"
 #include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
 
@@ -106,8 +106,8 @@ typedef struct loom_low_schedule_build_state_t {
   loom_region_t* body;
   // Resolved target records and descriptor set for the low function.
   loom_low_resolved_target_t target;
-  // Descriptor register-class lookup map for module register types.
-  loom_low_register_class_map_t register_class_map;
+  // Descriptor register-class resolver for module register types.
+  loom_low_register_type_resolver_t register_type_resolver;
   // Active function-local value domain for this scheduling run.
   const loom_local_value_domain_t* value_domain;
   // Dense per-local-value scheduler records indexed by value ordinal.

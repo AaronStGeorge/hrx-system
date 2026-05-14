@@ -12,7 +12,6 @@
 #include "loom/analysis/consumption.h"
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
-#include "loom/codegen/low/register_class_map.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
@@ -772,10 +771,9 @@ static iree_status_t loom_low_allocation_resolve_budgets(
   for (iree_host_size_t i = 0; i < state->options->budget_count; ++i) {
     const loom_low_allocation_budget_t* budget = &state->options->budgets[i];
     uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
-    bool found_reg_class = false;
-    IREE_RETURN_IF_ERROR(loom_low_register_class_try_lookup_name(
+    bool found_reg_class = loom_low_descriptor_set_lookup_register_class(
         state->target.descriptor_set, budget->register_class, &reg_class_id,
-        NULL, &found_reg_class));
+        NULL);
     if (!found_reg_class) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
@@ -905,10 +903,9 @@ static iree_status_t loom_low_allocation_resolve_reserved_ranges(
           "low allocation reserved range %zu has no register class", i);
     }
     uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
-    bool found_reg_class = false;
-    IREE_RETURN_IF_ERROR(loom_low_register_class_try_lookup_name(
+    bool found_reg_class = loom_low_descriptor_set_lookup_register_class(
         state->target.descriptor_set, reserved_range->register_class,
-        &reg_class_id, NULL, &found_reg_class));
+        &reg_class_id, NULL);
     if (!found_reg_class) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,

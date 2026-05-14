@@ -169,14 +169,12 @@ loom_cc_library(
 )
 
 loom_cc_test(
-    name = "register_class_map_test",
-    srcs = ["register_class_map_test.cc"],
+    name = "registers_test",
+    srcs = ["registers_test.cc"],
     deps = [
         ":descriptors",
-        "//loom/src/loom/codegen/low:register_class_map",
-        "//loom/src/loom/ir",
+        "//loom/src/loom/codegen/low:target_binding",
         "//loom/src/loom/target:registers",
-        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

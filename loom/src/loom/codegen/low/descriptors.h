@@ -860,6 +860,15 @@ iree_string_view_t loom_low_descriptor_set_string(
     const loom_low_descriptor_set_t* descriptor_set,
     loom_bstring_table_offset_t string_offset);
 
+// Looks up a descriptor-set-local register class by stable register-class name.
+// |out_descriptor_register_class| may be NULL when only the dense descriptor ID
+// is needed. Returns false when the name is not present.
+bool loom_low_descriptor_set_lookup_register_class(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_view_t register_class_name,
+    uint16_t* out_descriptor_register_class_id,
+    const loom_low_reg_class_t** out_descriptor_register_class);
+
 // Returns a descriptor row by ordinal, or NULL when |descriptor_ordinal| is out
 // of bounds.
 const loom_low_descriptor_t* loom_low_descriptor_set_descriptor_at(

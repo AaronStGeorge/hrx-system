@@ -149,6 +149,36 @@ iree_string_view_t loom_low_descriptor_set_string(
   return loom_low_descriptor_set_string_view(descriptor_set, string_offset);
 }
 
+bool loom_low_descriptor_set_lookup_register_class(
+    const loom_low_descriptor_set_t* descriptor_set,
+    iree_string_view_t register_class_name,
+    uint16_t* out_descriptor_register_class_id,
+    const loom_low_reg_class_t** out_descriptor_register_class) {
+  *out_descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE;
+  if (out_descriptor_register_class) {
+    *out_descriptor_register_class = NULL;
+  }
+  for (uint32_t i = 0;
+       i < descriptor_set->reg_class_count && i < LOOM_LOW_REG_CLASS_NONE;
+       ++i) {
+    const loom_low_reg_class_t* register_class =
+        &descriptor_set->reg_classes[i];
+    iree_string_view_t descriptor_register_class_name =
+        loom_low_descriptor_set_string_view(descriptor_set,
+                                            register_class->name_string_offset);
+    if (!iree_string_view_equal(register_class_name,
+                                descriptor_register_class_name)) {
+      continue;
+    }
+    *out_descriptor_register_class_id = (uint16_t)i;
+    if (out_descriptor_register_class) {
+      *out_descriptor_register_class = register_class;
+    }
+    return true;
+  }
+  return false;
+}
+
 const loom_low_descriptor_t* loom_low_descriptor_set_descriptor_at(
     const loom_low_descriptor_set_t* descriptor_set,
     uint32_t descriptor_ordinal) {

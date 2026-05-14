@@ -285,7 +285,6 @@ loom_cc_library(
   DEPS
     iree::base
     loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::register_class_map
   PUBLIC
 )
 

@@ -50,7 +50,6 @@ loom_assert_no_dependencies(
         ":frame",
         ":pipeline",
         ":pass_environment",
-        ":register_class_map",
         ":source_memory_plan",
         ":source_selection",
         ":text_asm",
@@ -74,7 +73,6 @@ loom_assert_no_dependencies(
         ":placement",
         ":pipeline",
         ":frame",
-        ":register_class_map",
         ":source_memory_plan",
     ],
 )
@@ -141,19 +139,6 @@ loom_cc_library(
     deps = [
         ":descriptors",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "register_class_map",
-    srcs = ["register_class_map.c"],
-    hdrs = ["register_class_map.h"],
-    deps = [
-        ":descriptors",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/target:registers",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
     ],
 )
 
@@ -240,6 +225,7 @@ loom_cc_library(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/target",
         "//loom/src/loom/target:function_contract",
+        "//loom/src/loom/target:registers",
         "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
@@ -304,7 +290,6 @@ loom_cc_library(
         ":diagnostics",
         ":function",
         ":placement",
-        ":register_class_map",
         ":target_binding",
         "//loom/src/loom/analysis:consumption",
         "//loom/src/loom/analysis:liveness",
@@ -594,7 +579,6 @@ loom_cc_library(
     srcs = ["verify.c"],
     hdrs = ["verify.h"],
     deps = [
-        ":register_class_map",
         ":target_binding",
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",
@@ -645,20 +629,8 @@ loom_cc_test(
     srcs = ["requirements_test.cc"],
     deps = [
         ":requirements",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "register_class_map_test",
-    srcs = ["register_class_map_test.cc"],
-    deps = [
-        ":register_class_map",
-        "//loom/src/loom/ir",
+        ":target_binding",
         "//loom/src/loom/target:registers",
-        "//loom/src/loom/target/test:descriptors",
-        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

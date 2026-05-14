@@ -10,7 +10,6 @@
 #include <string.h>
 
 #include "iree/base/internal/arena.h"
-#include "loom/codegen/low/register_class_map.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -32,7 +31,7 @@ typedef struct loom_low_verify_state_t {
 typedef struct loom_low_function_verify_state_t {
   loom_low_verify_state_t* state;
   const loom_low_resolved_target_t* target;
-  loom_low_register_class_map_t register_class_map;
+  loom_low_register_type_resolver_t register_type_resolver;
   iree_string_view_t function_name;
 } loom_low_function_verify_state_t;
 
@@ -979,10 +978,10 @@ static iree_status_t loom_low_verify_register_full_mask_for_type(
   }
   uint16_t descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE;
   const loom_low_reg_class_t* descriptor_register_class = NULL;
-  bool found_descriptor_register_class = false;
-  IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_type(
-      &function_state->register_class_map, type, &descriptor_register_class_id,
-      &descriptor_register_class, &found_descriptor_register_class));
+  bool found_descriptor_register_class =
+      loom_low_register_type_resolver_try_resolve(
+          &function_state->register_type_resolver, type,
+          &descriptor_register_class_id, &descriptor_register_class);
   if (found_descriptor_register_class) {
     *out_mask = descriptor_register_class->full_register_part_mask;
   }
@@ -1015,10 +1014,10 @@ static iree_status_t loom_low_verify_descriptor_operand_part_mask(
   const loom_low_register_part_t* register_part =
       &descriptor_set->register_parts[descriptor_operand->register_part_id];
   uint16_t descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE;
-  bool found_descriptor_register_class = false;
-  IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_type(
-      &function_state->register_class_map, actual_type,
-      &descriptor_register_class_id, NULL, &found_descriptor_register_class));
+  bool found_descriptor_register_class =
+      loom_low_register_type_resolver_try_resolve(
+          &function_state->register_type_resolver, actual_type,
+          &descriptor_register_class_id, NULL);
   if (!found_descriptor_register_class ||
       descriptor_register_class_id != register_part->reg_class_id) {
     return iree_make_status(
@@ -1080,11 +1079,10 @@ static iree_status_t loom_low_verify_resource(
       loom_module_value_type(module, loom_low_resource_result(op));
   const loom_low_reg_class_t* descriptor_register_class = NULL;
   uint16_t descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE;
-  bool found_descriptor_register_class = false;
-  IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_type(
-      &function_state->register_class_map, actual_type,
-      &descriptor_register_class_id, &descriptor_register_class,
-      &found_descriptor_register_class));
+  bool found_descriptor_register_class =
+      loom_low_register_type_resolver_try_resolve(
+          &function_state->register_type_resolver, actual_type,
+          &descriptor_register_class_id, &descriptor_register_class);
   if (!found_descriptor_register_class) {
     return loom_low_verify_emit_resource_register_class_missing(
         function_state, op, actual_type);
@@ -1141,10 +1139,10 @@ static iree_status_t loom_low_verify_register_value_class(
     return iree_ok_status();
   }
   uint16_t descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE;
-  bool found_descriptor_register_class = false;
-  IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_type(
-      &function_state->register_class_map, type, &descriptor_register_class_id,
-      NULL, &found_descriptor_register_class));
+  bool found_descriptor_register_class =
+      loom_low_register_type_resolver_try_resolve(
+          &function_state->register_type_resolver, type,
+          &descriptor_register_class_id, NULL);
   if (found_descriptor_register_class) {
     return iree_ok_status();
   }
@@ -1212,10 +1210,10 @@ static iree_status_t loom_low_verify_descriptor_register_field(
       loom_low_register_type_unit_count(actual_type) ==
           descriptor_operand->unit_count) {
     uint16_t descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE;
-    bool found_descriptor_register_class = false;
-    IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_type(
-        &function_state->register_class_map, actual_type,
-        &descriptor_register_class_id, NULL, &found_descriptor_register_class));
+    bool found_descriptor_register_class =
+        loom_low_register_type_resolver_try_resolve(
+            &function_state->register_type_resolver, actual_type,
+            &descriptor_register_class_id, NULL);
     accepted =
         found_descriptor_register_class &&
         loom_low_verify_operand_accepts_register_class(
@@ -1614,9 +1612,8 @@ static iree_status_t loom_low_verify_function(loom_low_verify_state_t* state,
       .function_name =
           loom_low_verify_function_name(state->module, low_func_op),
   };
-  IREE_RETURN_IF_ERROR(loom_low_register_class_map_initialize(
-      state->module, target.descriptor_set, &state->arena,
-      &function_state.register_class_map));
+  function_state.register_type_resolver =
+      loom_low_register_type_resolver_for_descriptor_set(target.descriptor_set);
   IREE_RETURN_IF_ERROR(loom_low_verify_function_register_values(
       &function_state, low_func_op, body));
   if (loom_low_verify_should_stop(state)) {

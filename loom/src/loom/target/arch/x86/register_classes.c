@@ -8,8 +8,6 @@
 
 #include <inttypes.h>
 
-#include "loom/codegen/low/register_class_map.h"
-
 iree_status_t loom_x86_register_class_name(
     loom_x86_register_class_t register_class, iree_string_view_t* out_name) {
   *out_name = iree_string_view_empty();
@@ -70,10 +68,8 @@ iree_status_t loom_x86_descriptor_set_register_class_id(
   iree_string_view_t register_class_name = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(
       loom_x86_register_class_name(register_class, &register_class_name));
-  bool found = false;
-  IREE_RETURN_IF_ERROR(loom_low_register_class_try_lookup_name(
-      descriptor_set, register_class_name, out_descriptor_reg_class_id, NULL,
-      &found));
+  bool found = loom_low_descriptor_set_lookup_register_class(
+      descriptor_set, register_class_name, out_descriptor_reg_class_id, NULL);
   if (found) {
     return iree_ok_status();
   }

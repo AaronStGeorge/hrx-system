@@ -8,11 +8,11 @@
 #include "loom/analysis/liveness_json.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/allocation_json.h"
+#include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/low/descriptors_manifest.h"
 #include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packet_json.h"
-#include "loom/codegen/low/register_class_map.h"
 #include "loom/codegen/low/schedule/json.h"
 #include "loom/codegen/low/schedule/run.h"
 #include "loom/codegen/low/schedule/types.h"
@@ -847,10 +847,8 @@ static iree_status_t loom_check_emit_write_low_schedule_json(
       const loom_check_emit_pressure_cliff_spec_t* spec =
           &pressure_cliff_specs[i];
       uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
-      bool found_reg_class = false;
-      IREE_RETURN_IF_ERROR(loom_low_register_class_try_lookup_name(
-          target.descriptor_set, spec->register_class, &reg_class_id, NULL,
-          &found_reg_class));
+      bool found_reg_class = loom_low_descriptor_set_lookup_register_class(
+          target.descriptor_set, spec->register_class, &reg_class_id, NULL);
       if (!found_reg_class) {
         return iree_make_status(
             IREE_STATUS_INVALID_ARGUMENT,

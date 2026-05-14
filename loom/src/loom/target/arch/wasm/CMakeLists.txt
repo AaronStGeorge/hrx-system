@@ -120,14 +120,12 @@ loom_cc_library(
 
 loom_cc_test(
   NAME
-    register_class_map_test
+    registers_test
   SRCS
-    "register_class_map_test.cc"
+    "registers_test.cc"
   DEPS
     ::descriptors
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::register_class_map
-    loom::src::loom::ir
+    loom::src::loom::codegen::low::target_binding
     loom::src::loom::target::registers
     iree::testing::gtest
     iree::testing::gtest_main

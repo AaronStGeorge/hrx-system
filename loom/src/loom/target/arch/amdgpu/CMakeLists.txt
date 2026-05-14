@@ -914,7 +914,7 @@ loom_cc_library(
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::function
-    loom::src::loom::codegen::low::register_class_map
+    loom::src::loom::codegen::low::target_binding
     loom::src::loom::error::emitter
     loom::src::loom::ir
     loom::src::loom::ops::low

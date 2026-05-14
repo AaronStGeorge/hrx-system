@@ -86,22 +86,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    register_class_map
-  HDRS
-    "register_class_map.h"
-  SRCS
-    "register_class_map.c"
-  DEPS
-    ::descriptors
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::ir
-    loom::src::loom::target::registers
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
     pass_requirements
   HDRS
     "pass_requirements.h"
@@ -199,6 +183,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::ops::target
     loom::src::loom::target::function_contract
+    loom::src::loom::target::registers
     loom::src::loom::target::types
   PUBLIC
 )
@@ -276,7 +261,6 @@ loom_cc_library(
     ::diagnostics
     ::function
     ::placement
-    ::register_class_map
     ::target_binding
     iree::base
     iree::base::internal::arena
@@ -599,7 +583,6 @@ loom_cc_library(
   SRCS
     "verify.c"
   DEPS
-    ::register_class_map
     ::target_binding
     iree::base
     iree::base::internal::arena
@@ -655,21 +638,8 @@ loom_cc_test(
     "requirements_test.cc"
   DEPS
     ::requirements
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    register_class_map_test
-  SRCS
-    "register_class_map_test.cc"
-  DEPS
-    ::register_class_map
-    iree::base::internal::arena
-    loom::src::loom::ir
+    ::target_binding
     loom::src::loom::target::registers
-    loom::src::loom::target::test::descriptors
     iree::testing::gtest
     iree::testing::gtest_main
 )

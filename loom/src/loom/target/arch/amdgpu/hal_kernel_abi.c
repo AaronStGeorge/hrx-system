@@ -10,7 +10,7 @@
 #include <string.h>
 
 #include "loom/codegen/low/function.h"
-#include "loom/codegen/low/register_class_map.h"
+#include "loom/codegen/low/target_binding.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/error_catalog.h"
@@ -293,18 +293,19 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_descriptor_reg_class(
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_register_value_matches(
-    const loom_module_t* module, const loom_low_register_class_map_t* map,
+    const loom_module_t* module,
+    const loom_low_register_type_resolver_t* register_type_resolver,
     loom_value_id_t value_id, loom_amdgpu_hal_kernel_abi_reg_class_t reg_class,
     uint32_t unit_count, bool* out_matches) {
   *out_matches = false;
   uint16_t expected_class_id = LOOM_LOW_REG_CLASS_NONE;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_descriptor_reg_class(
-      map->descriptor_set, reg_class, &expected_class_id, NULL));
+      register_type_resolver->descriptor_set, reg_class, &expected_class_id,
+      NULL));
   loom_type_t type = loom_module_value_type(module, value_id);
   uint16_t actual_class_id = LOOM_LOW_REG_CLASS_NONE;
-  bool found_actual_class = false;
-  IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_type(
-      map, type, &actual_class_id, NULL, &found_actual_class));
+  bool found_actual_class = loom_low_register_type_resolver_try_resolve(
+      register_type_resolver, type, &actual_class_id, NULL);
   *out_matches = found_actual_class && actual_class_id == expected_class_id &&
                  loom_low_register_type_unit_count(type) == unit_count;
   return iree_ok_status();
@@ -312,15 +313,15 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_register_value_matches(
 
 static iree_status_t
 loom_amdgpu_hal_kernel_abi_single_physical_register_matches(
-    const loom_module_t* module, const loom_low_register_class_map_t* map,
+    const loom_module_t* module,
+    const loom_low_register_type_resolver_t* register_type_resolver,
     loom_value_id_t value_id, bool* out_matches) {
   *out_matches = false;
   loom_type_t type = loom_module_value_type(module, value_id);
   uint16_t actual_class_id = LOOM_LOW_REG_CLASS_NONE;
   const loom_low_reg_class_t* actual_class = NULL;
-  bool found_actual_class = false;
-  IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_type(
-      map, type, &actual_class_id, &actual_class, &found_actual_class));
+  bool found_actual_class = loom_low_register_type_resolver_try_resolve(
+      register_type_resolver, type, &actual_class_id, &actual_class);
   *out_matches =
       found_actual_class && actual_class != NULL &&
       loom_low_register_type_unit_count(type) == 1 &&
@@ -781,8 +782,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_resource_from_import(
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_verify_direct_arguments(
     const loom_module_t* module, const loom_op_t* function_op,
-    const loom_low_register_class_map_t* map, uint32_t max_errors,
-    iree_diagnostic_emitter_t emitter,
+    const loom_low_register_type_resolver_t* register_type_resolver,
+    uint32_t max_errors, iree_diagnostic_emitter_t emitter,
     loom_amdgpu_hal_kernel_abi_verify_result_t* result) {
   const loom_region_t* body = loom_low_function_const_body(function_op);
   if (body == NULL || body->block_count == 0) {
@@ -797,8 +798,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_direct_arguments(
     const loom_value_id_t arg_id = loom_block_arg_id(entry_block, i);
     bool type_matches = false;
     IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_register_value_matches(
-        module, map, arg_id, LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR, 1,
-        &type_matches));
+        module, register_type_resolver, arg_id,
+        LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR, 1, &type_matches));
     if (!type_matches) {
       IREE_RETURN_IF_ERROR(
           loom_amdgpu_hal_kernel_abi_emit_direct_arg_type_error(
@@ -810,13 +811,14 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_direct_arguments(
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_verify_resource_type(
-    const loom_module_t* module, const loom_low_register_class_map_t* map,
+    const loom_module_t* module,
+    const loom_low_register_type_resolver_t* register_type_resolver,
     const loom_op_t* resource_op, uint32_t max_errors,
     iree_diagnostic_emitter_t emitter,
     loom_amdgpu_hal_kernel_abi_verify_result_t* result) {
   bool type_matches = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_register_value_matches(
-      module, map, loom_low_resource_result(resource_op),
+      module, register_type_resolver, loom_low_resource_result(resource_op),
       LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR, 2, &type_matches));
   if (!type_matches) {
     return loom_amdgpu_hal_kernel_abi_emit_resource_result_type_error(
@@ -827,8 +829,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_resource_type(
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_verify_resources(
     const loom_module_t* module, const loom_op_t* function_op,
-    const loom_low_register_class_map_t* map, uint32_t max_errors,
-    iree_diagnostic_emitter_t emitter,
+    const loom_low_register_type_resolver_t* register_type_resolver,
+    uint32_t max_errors, iree_diagnostic_emitter_t emitter,
     loom_amdgpu_hal_kernel_abi_verify_result_t* result,
     iree_arena_allocator_t* arena) {
   const loom_region_t* body = loom_low_function_const_body(function_op);
@@ -877,7 +879,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_resources(
                 max_errors, emitter, result));
       }
       IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_resource_type(
-          module, map, resource_op, max_errors, emitter, result));
+          module, register_type_resolver, resource_op, max_errors, emitter,
+          result));
 
       const int64_t binding_index = loom_low_resource_index(resource_op);
       if (binding_index < 0) {
@@ -999,7 +1002,8 @@ loom_amdgpu_hal_kernel_abi_verify_hal_buffer_descriptor_pseudos(
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_verify_live_in_type(
-    const loom_module_t* module, const loom_low_register_class_map_t* map,
+    const loom_module_t* module,
+    const loom_low_register_type_resolver_t* register_type_resolver,
     const loom_op_t* live_in_op,
     loom_amdgpu_hal_kernel_abi_reg_class_t reg_class, uint32_t unit_count,
     iree_string_view_t source_name, uint32_t max_errors,
@@ -1010,8 +1014,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_live_in_type(
       reg_class, &expected_reg_class_id));
   bool type_matches = false;
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_register_value_matches(
-      module, map, loom_low_live_in_result(live_in_op), reg_class, unit_count,
-      &type_matches));
+      module, register_type_resolver, loom_low_live_in_result(live_in_op),
+      reg_class, unit_count, &type_matches));
   if (!type_matches) {
     return loom_amdgpu_hal_kernel_abi_emit_live_in_type_error(
         module, live_in_op, source_name, expected_reg_class_id, unit_count,
@@ -1021,14 +1025,16 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_live_in_type(
 }
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_verify_m0_live_in_type(
-    const loom_module_t* module, const loom_low_register_class_map_t* map,
+    const loom_module_t* module,
+    const loom_low_register_type_resolver_t* register_type_resolver,
     const loom_op_t* live_in_op, iree_string_view_t source_name,
     uint32_t max_errors, iree_diagnostic_emitter_t emitter,
     loom_amdgpu_hal_kernel_abi_verify_result_t* result) {
   bool type_matches = false;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_hal_kernel_abi_single_physical_register_matches(
-          module, map, loom_low_live_in_result(live_in_op), &type_matches));
+          module, register_type_resolver, loom_low_live_in_result(live_in_op),
+          &type_matches));
   if (!type_matches) {
     return loom_amdgpu_hal_kernel_abi_emit_m0_type_error(
         module, live_in_op, source_name, max_errors, emitter, result);
@@ -1038,8 +1044,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_m0_live_in_type(
 
 static iree_status_t loom_amdgpu_hal_kernel_abi_verify_live_ins(
     const loom_module_t* module, const loom_op_t* function_op,
-    const loom_low_register_class_map_t* map, uint32_t max_errors,
-    iree_diagnostic_emitter_t emitter,
+    const loom_low_register_type_resolver_t* register_type_resolver,
+    uint32_t max_errors, iree_diagnostic_emitter_t emitter,
     loom_amdgpu_hal_kernel_abi_verify_result_t* result) {
   const loom_region_t* body = loom_low_function_const_body(function_op);
   if (body == NULL || body->block_count == 0) {
@@ -1083,8 +1089,9 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_live_ins(
       }
       kernarg_ptr_op = live_in_op;
       IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_live_in_type(
-          module, map, live_in_op, LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR, 2,
-          source_name, max_errors, emitter, result));
+          module, register_type_resolver, live_in_op,
+          LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR, 2, source_name, max_errors,
+          emitter, result));
       continue;
     }
 
@@ -1098,8 +1105,9 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_live_ins(
       }
       workgroup_id_ops[dimension] = live_in_op;
       IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_live_in_type(
-          module, map, live_in_op, LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR, 1,
-          source_name, max_errors, emitter, result));
+          module, register_type_resolver, live_in_op,
+          LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_SGPR, 1, source_name, max_errors,
+          emitter, result));
       continue;
     }
 
@@ -1118,8 +1126,9 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_live_ins(
       }
       workitem_id_ops[dimension] = live_in_op;
       IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_live_in_type(
-          module, map, live_in_op, LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_VGPR, 1,
-          source_name, max_errors, emitter, result));
+          module, register_type_resolver, live_in_op,
+          LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_VGPR, 1, source_name, max_errors,
+          emitter, result));
       continue;
     }
 
@@ -1149,8 +1158,9 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_live_ins(
       packed_workitem_op = live_in_op;
       packed_workitem_source_name = source_name;
       IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_live_in_type(
-          module, map, live_in_op, LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_VGPR, 1,
-          source_name, max_errors, emitter, result));
+          module, register_type_resolver, live_in_op,
+          LOOM_AMDGPU_HAL_KERNEL_ABI_REG_CLASS_VGPR, 1, source_name, max_errors,
+          emitter, result));
       continue;
     }
 
@@ -1161,7 +1171,8 @@ static iree_status_t loom_amdgpu_hal_kernel_abi_verify_live_ins(
       }
       m0_op = live_in_op;
       IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_m0_live_in_type(
-          module, map, live_in_op, source_name, max_errors, emitter, result));
+          module, register_type_resolver, live_in_op, source_name, max_errors,
+          emitter, result));
       continue;
     }
   }
@@ -1189,21 +1200,20 @@ iree_status_t loom_amdgpu_hal_kernel_abi_verify_low(
         "low.kernel.def");
   }
 
-  loom_low_register_class_map_t register_class_map = {0};
-  IREE_RETURN_IF_ERROR(loom_low_register_class_map_initialize(
-      module, descriptor_set, arena, &register_class_map));
+  loom_low_register_type_resolver_t register_type_resolver =
+      loom_low_register_type_resolver_for_descriptor_set(descriptor_set);
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_direct_arguments(
-      module, function_op, &register_class_map, max_errors, emitter,
+      module, function_op, &register_type_resolver, max_errors, emitter,
       out_result));
   IREE_RETURN_IF_ERROR(loom_amdgpu_hal_kernel_abi_verify_resources(
-      module, function_op, &register_class_map, max_errors, emitter, out_result,
-      arena));
+      module, function_op, &register_type_resolver, max_errors, emitter,
+      out_result, arena));
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_hal_kernel_abi_verify_hal_buffer_descriptor_pseudos(
           module, function_op, descriptor_set, max_errors, emitter,
           out_result));
   return loom_amdgpu_hal_kernel_abi_verify_live_ins(
-      module, function_op, &register_class_map, max_errors, emitter,
+      module, function_op, &register_type_resolver, max_errors, emitter,
       out_result);
 }
 
