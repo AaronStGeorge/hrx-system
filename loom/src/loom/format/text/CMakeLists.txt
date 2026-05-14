@@ -92,6 +92,7 @@ loom_cc_test(
     ::parser
     ::printer
     iree::base::internal::arena
+    loom::src::loom::codegen::low::text_asm
     loom::src::loom::error::diagnostic
     loom::src::loom::ir
     loom::src::loom::ops::buffer
@@ -107,6 +108,7 @@ loom_cc_test(
     loom::src::loom::ops::test
     loom::src::loom::ops::vector
     loom::src::loom::ops::view
+    loom::src::loom::target::low_descriptor_registry_core_test
     loom::src::loom::test::corpus::text::golden_text_corpus
     loom::src::loom::testing::context
     iree::testing::gtest

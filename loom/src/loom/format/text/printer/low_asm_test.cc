@@ -162,7 +162,7 @@ TEST_F(LowAsmPrinterTest, PrintsStructuralIntrinsics) {
   const char* source =
       "test.low_asm_region asm<test.low.core> {\n"
       "  %state = resource<vm_state> {index = 0, source_type = i64} : "
-      "reg<vm.i64>\n"
+      "reg<test.i64>\n"
       "  %arg0 = live_in<test.arg0> : reg<test.i32>\n"
       "  %pair = concat(%arg0, %arg0) : (reg<test.i32>, reg<test.i32>) -> "
       "reg<test.i32 x2>\n"

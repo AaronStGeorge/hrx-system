@@ -10,7 +10,6 @@
 #include <string.h>
 
 #include "loom/error/renderer.h"
-#include "loom/format/text/printer.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
 
@@ -38,11 +37,17 @@ static iree_status_t loom_check_diagnostic_collector_grow(
 
 static iree_status_t loom_check_format_type(loom_type_t type, void* user_data,
                                             loom_output_stream_t* stream) {
-  const loom_module_t* module = (const loom_module_t*)user_data;
-  if (!module) {
+  const loom_check_diagnostic_collector_t* collector =
+      (const loom_check_diagnostic_collector_t*)user_data;
+  if (collector->type_print_context.options.low_asm_environment.vtable) {
+    return loom_text_print_type_with_options(
+        type, collector->module, stream,
+        &collector->type_print_context.options);
+  }
+  if (!collector->module) {
     return loom_type_format_minimal(type, NULL, stream);
   }
-  return loom_text_print_type(type, module, stream);
+  return loom_text_print_type(type, collector->module, stream);
 }
 
 static iree_status_t loom_check_diagnostic_collector_copy_string(
@@ -154,8 +159,7 @@ iree_status_t loom_check_diagnostic_collector_sink(
   iree_string_builder_initialize(collector->host_allocator, &message_builder);
   loom_output_stream_t message_stream;
   loom_output_stream_for_builder(&message_builder, &message_stream);
-  loom_type_formatter_t type_formatter = {loom_check_format_type,
-                                          (void*)collector->module};
+  loom_type_formatter_t type_formatter = {loom_check_format_type, collector};
   iree_status_t render_status = loom_diagnostic_render_message(
       diagnostic->error, diagnostic->params, diagnostic->param_count,
       type_formatter, &message_stream);

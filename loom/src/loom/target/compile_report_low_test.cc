@@ -8,6 +8,7 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/target/registers.h"
 
 namespace loom {
 namespace {
@@ -53,8 +54,10 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
               .capacity = IREE_ARRAYSIZE(value_ordinals),
           },
   };
-  module_values[4].type = loom_type_register(LOOM_STRING_ID_INVALID, 1);
-  module_values[5].type = loom_type_register(LOOM_STRING_ID_INVALID, 2);
+  module_values[4].type = loom_low_register_type(/*descriptor_set_stable_id=*/1,
+                                                 /*register_class_id=*/0, 1);
+  module_values[5].type = loom_low_register_type(/*descriptor_set_stable_id=*/1,
+                                                 /*register_class_id=*/0, 2);
   const loom_target_compile_report_row_storage_t row_storage = {
       .pressure_rows = pressure_rows,
       .pressure_row_capacity = IREE_ARRAYSIZE(pressure_rows),
@@ -72,7 +75,8 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
               {
                   .type_kind = LOOM_TYPE_REGISTER,
                   .element_type = LOOM_SCALAR_TYPE_I32,
-                  .register_class_id = LOOM_STRING_ID_INVALID,
+                  .register_descriptor_set_stable_id = 1,
+                  .register_class_id = 0,
               },
           .peak_live_units = 7,
           .peak_live_values = 5,
@@ -83,7 +87,8 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
               {
                   .type_kind = LOOM_TYPE_REGISTER,
                   .element_type = LOOM_SCALAR_TYPE_F32,
-                  .register_class_id = LOOM_STRING_ID_INVALID,
+                  .register_descriptor_set_stable_id = 1,
+                  .register_class_id = 0,
               },
           .peak_live_units = 11,
           .peak_live_values = 2,

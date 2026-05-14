@@ -208,8 +208,9 @@ iree_status_t loom_check_execute_case(
 
   switch (test_case->mode) {
     case LOOM_CHECK_MODE_ROUNDTRIP: {
-      IREE_RETURN_IF_ERROR(loom_check_execute_roundtrip(
-          test_case, filename, context, block_pool, allocator, result));
+      IREE_RETURN_IF_ERROR(
+          loom_check_execute_roundtrip(test_case, filename, environment,
+                                       context, block_pool, allocator, result));
       break;
     }
     case LOOM_CHECK_MODE_VERIFY: {
@@ -225,8 +226,9 @@ iree_status_t loom_check_execute_case(
       break;
     }
     case LOOM_CHECK_MODE_FORMAT: {
-      IREE_RETURN_IF_ERROR(loom_check_execute_format(
-          test_case, filename, context, block_pool, allocator, result));
+      IREE_RETURN_IF_ERROR(
+          loom_check_execute_format(test_case, filename, environment, context,
+                                    block_pool, allocator, result));
       break;
     }
     case LOOM_CHECK_MODE_EMIT: {
@@ -349,8 +351,12 @@ iree_status_t loom_check_execute_pass(
   iree_status_t status =
       loom_check_environment_initialize_low_descriptor_registry(environment,
                                                                 &low_registry);
-  loom_low_descriptor_text_asm_environment_initialize(
-      &low_registry.registry, &parse_options.low_asm_environment);
+  if (iree_status_is_ok(status)) {
+    loom_low_descriptor_text_print_context_initialize(
+        &low_registry.registry, &diagnostic_collector.type_print_context);
+    loom_low_descriptor_text_asm_environment_initialize(
+        &low_registry.registry, &parse_options.low_asm_environment);
+  }
   if (iree_status_is_ok(status)) {
     status = loom_text_parse(test_case->input, filename, context, block_pool,
                              &parse_options, &module);
@@ -492,8 +498,15 @@ iree_status_t loom_check_execute_pass(
   }
 
   // Print the result (stripping comments for comparison).
-  status = loom_text_print_module_to_builder(module, &result->actual_output,
-                                             LOOM_TEXT_PRINT_DEFAULT);
+  loom_text_low_asm_environment_t low_asm_environment = {0};
+  loom_low_descriptor_text_asm_environment_initialize(&low_registry.registry,
+                                                      &low_asm_environment);
+  const loom_text_print_options_t print_options = {
+      .flags = LOOM_TEXT_PRINT_DEFAULT,
+      .low_asm_environment = low_asm_environment,
+  };
+  status = loom_text_print_module_to_builder_with_options(
+      module, &result->actual_output, &print_options);
   loom_module_free(module);
   if (iree_status_is_ok(status)) {
     result->has_actual_output = true;
@@ -524,12 +537,11 @@ iree_status_t loom_check_execute_pass(
   return status;
 }
 
-iree_status_t loom_check_execute_format(const loom_check_case_t* test_case,
-                                        iree_string_view_t filename,
-                                        loom_context_t* context,
-                                        iree_arena_block_pool_t* block_pool,
-                                        iree_allocator_t allocator,
-                                        loom_check_result_t* result) {
+iree_status_t loom_check_execute_format(
+    const loom_check_case_t* test_case, iree_string_view_t filename,
+    const loom_check_environment_t* environment, loom_context_t* context,
+    iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
+    loom_check_result_t* result) {
   loom_module_format_t format = LOOM_MODULE_FORMAT_AUTO;
   IREE_RETURN_IF_ERROR(loom_module_format_parse(test_case->format_target,
                                                 /*allow_auto=*/false, &format));
@@ -543,11 +555,22 @@ iree_status_t loom_check_execute_format(const loom_check_case_t* test_case,
       .detail = &result->detail,
       .result = result,
   };
+  loom_target_low_descriptor_registry_t low_registry = {0};
+  if (iree_status_is_ok(status)) {
+    status = loom_check_environment_initialize_low_descriptor_registry(
+        environment, &low_registry);
+  }
+  loom_text_low_asm_environment_t low_asm_environment = {0};
+  if (iree_status_is_ok(status)) {
+    loom_low_descriptor_text_asm_environment_initialize(&low_registry.registry,
+                                                        &low_asm_environment);
+  }
   loom_format_convert_options_t to_format_options = {
       .input_format = LOOM_MODULE_FORMAT_TEXT,
       .output_format = format,
       .diagnostic_sink = {.fn = loom_check_diagnostic_capture_sink,
                           .user_data = &diagnostic_capture},
+      .low_asm_environment = low_asm_environment,
   };
   loom_format_output_t formatted_output = {0};
   iree_string_view_t stripped_view = iree_string_builder_view(&stripped_input);
@@ -566,6 +589,7 @@ iree_status_t loom_check_execute_format(const loom_check_case_t* test_case,
       .output_format = LOOM_MODULE_FORMAT_TEXT,
       .diagnostic_sink = {.fn = loom_check_diagnostic_capture_sink,
                           .user_data = &diagnostic_capture},
+      .low_asm_environment = low_asm_environment,
   };
   if (iree_status_is_ok(status)) {
     status =

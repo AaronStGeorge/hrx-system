@@ -433,8 +433,10 @@ static iree_status_t loom_type_propagator_refine_property_with_candidate(
       *out_type = current_type;
       *out_result = loom_type_is_register(current_type) &&
                             loom_type_is_register(candidate_type) &&
-                            loom_type_register_class_id(current_type) ==
-                                loom_type_register_class_id(candidate_type)
+                            loom_type_register_payload0(current_type) ==
+                                loom_type_register_payload0(candidate_type) &&
+                            loom_type_register_payload1(current_type) ==
+                                loom_type_register_payload1(candidate_type)
                         ? LOOM_TYPE_REFINEMENT_UNCHANGED
                         : LOOM_TYPE_REFINEMENT_CONFLICT;
       return iree_ok_status();
@@ -442,8 +444,8 @@ static iree_status_t loom_type_propagator_refine_property_with_candidate(
       *out_type = current_type;
       *out_result = loom_type_is_register(current_type) &&
                             loom_type_is_register(candidate_type) &&
-                            loom_type_register_unit_count(current_type) ==
-                                loom_type_register_unit_count(candidate_type)
+                            loom_type_register_payload1(current_type) ==
+                                loom_type_register_payload1(candidate_type)
                         ? LOOM_TYPE_REFINEMENT_UNCHANGED
                         : LOOM_TYPE_REFINEMENT_CONFLICT;
       return iree_ok_status();

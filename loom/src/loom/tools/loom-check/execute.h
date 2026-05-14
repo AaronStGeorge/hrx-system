@@ -402,12 +402,11 @@ iree_status_t loom_check_execute_case(
 // Strips comments from input, parses, prints, and compares against the
 // expected section. On mismatch, appends a unified diff to result->detail
 // and copies the printed output to result->actual_output for --update.
-iree_status_t loom_check_execute_roundtrip(const loom_check_case_t* test_case,
-                                           iree_string_view_t filename,
-                                           loom_context_t* context,
-                                           iree_arena_block_pool_t* block_pool,
-                                           iree_allocator_t allocator,
-                                           loom_check_result_t* result);
+iree_status_t loom_check_execute_roundtrip(
+    const loom_check_case_t* test_case, iree_string_view_t filename,
+    const loom_check_environment_t* environment, loom_context_t* context,
+    iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
+    loom_check_result_t* result);
 
 // Strips comments from input, parses (collecting diagnostics), verifies
 // (collecting more diagnostics), then matches collected diagnostics against
@@ -435,12 +434,11 @@ iree_status_t loom_check_execute_pass(
 // in test_case->format_target (e.g. bytecode), converts back to text,
 // and compares against the expected section. Same diff/update behavior
 // as roundtrip.
-iree_status_t loom_check_execute_format(const loom_check_case_t* test_case,
-                                        iree_string_view_t filename,
-                                        loom_context_t* context,
-                                        iree_arena_block_pool_t* block_pool,
-                                        iree_allocator_t allocator,
-                                        loom_check_result_t* result);
+iree_status_t loom_check_execute_format(
+    const loom_check_case_t* test_case, iree_string_view_t filename,
+    const loom_check_environment_t* environment, loom_context_t* context,
+    iree_arena_block_pool_t* block_pool, iree_allocator_t allocator,
+    loom_check_result_t* result);
 
 // Strips comments from input, parses, lowers to the target specified in
 // test_case->emit_target, writes a comparable target output form, and compares

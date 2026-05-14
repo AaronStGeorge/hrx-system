@@ -1320,8 +1320,10 @@ def _field_element_type(item: Any) -> Any:
 def _field_register_class(item: Any) -> Any:
     """Returns the register class carried by a register field."""
     value_type = _field_value_type(item)
-    if hasattr(value_type, "reg_class"):
-        return value_type.reg_class
+    if hasattr(value_type, "descriptor_set_stable_id") and hasattr(
+        value_type, "register_class_id"
+    ):
+        return (value_type.descriptor_set_stable_id, value_type.register_class_id)
     return None
 
 

@@ -128,6 +128,7 @@ from loom.ir import (
     TiedResult as IRTiedResult,
 )
 from loom.stable_id import stable_id_from_string
+from loom.target.descriptor_sets import DESCRIPTOR_SET_REGISTRATIONS
 
 __all__ = [
     "ParseError",
@@ -679,6 +680,42 @@ def parse_type_from_tokens(
     )
 
 
+def _resolve_register_type(
+    register_class_name: str, unit_count: int, location: SourceLocation, filename: str
+) -> RegisterType:
+    namespace = register_class_name.split(".", 1)[0]
+    matches: list[RegisterType] = []
+    for registration in DESCRIPTOR_SET_REGISTRATIONS:
+        if not registration.key.startswith(f"{namespace}."):
+            continue
+        descriptor_set = registration.load()
+        for register_class_id, register_class in enumerate(descriptor_set.reg_classes):
+            if register_class.name == register_class_name:
+                matches.append(
+                    RegisterType(
+                        stable_id_from_string(descriptor_set.key),
+                        register_class_id,
+                        unit_count,
+                        register_class_name,
+                    )
+                )
+    if not matches:
+        raise ParseError(
+            "register class is not defined by a registered descriptor set: "
+            f"{register_class_name}",
+            location,
+            filename,
+        )
+    if len(matches) > 1:
+        raise ParseError(
+            "register class is ambiguous across descriptor sets: "
+            f"{register_class_name}",
+            location,
+            filename,
+        )
+    return matches[0]
+
+
 def _parse_register_type(tokenizer: Tokenizer) -> tuple[RegisterType, dict[int, int]]:
     """Parse reg<namespace.class> or reg<namespace.class xN>."""
     tokenizer.expect(TokenKind.BARE_IDENT, "reg")
@@ -709,7 +746,12 @@ def _parse_register_type(tokenizer: Tokenizer) -> tuple[RegisterType, dict[int, 
             )
     tokenizer.expect(TokenKind.RANGLE)
     try:
-        return RegisterType(class_token.text, unit_count), {}
+        return (
+            _resolve_register_type(
+                class_token.text, unit_count, class_token.location, tokenizer._filename
+            ),
+            {},
+        )
     except ValueError as err:
         raise ParseError(str(err), class_token.location, tokenizer._filename) from err
 

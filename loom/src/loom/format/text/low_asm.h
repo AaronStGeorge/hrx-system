@@ -166,6 +166,13 @@ typedef iree_status_t (*loom_text_low_asm_lookup_descriptor_set_fn_t)(
     const loom_text_low_asm_environment_state_t* state, iree_string_view_t key,
     const loom_text_low_asm_descriptor_set_t** out_descriptor_set);
 
+// Resolves a target symbol reference to the descriptor set selected by that
+// target. Returns OK with NULL when the target cannot select a descriptor set.
+typedef iree_status_t (*loom_text_low_asm_lookup_target_descriptor_set_fn_t)(
+    const loom_text_low_asm_environment_state_t* state,
+    const loom_module_t* module, loom_attribute_t target_attr,
+    const loom_text_low_asm_descriptor_set_t** out_descriptor_set);
+
 // Resolves a mnemonic within a descriptor set to a packet descriptor. Returns
 // OK with |out_packet->descriptor| NULL when no packet matches.
 typedef iree_status_t (*loom_text_low_asm_lookup_packet_fn_t)(
@@ -232,9 +239,36 @@ typedef iree_status_t (*loom_text_low_asm_describe_operation_fn_t)(
     const loom_module_t* module, const loom_op_t* op,
     loom_text_low_asm_statement_t* out_statement);
 
+// Resolves a textual register class in |descriptor_set| to a compact target-low
+// register type. Returns OK with |out_found| false when no class matches.
+typedef iree_status_t (*loom_text_low_asm_resolve_register_type_fn_t)(
+    const loom_text_low_asm_environment_state_t* state,
+    const loom_text_low_asm_descriptor_set_t* descriptor_set,
+    iree_string_view_t register_class_name, uint32_t unit_count,
+    loom_type_t* out_type, bool* out_found);
+
+// Resolves the descriptor set that owns a compact target-low register type.
+// Returns OK with |out_descriptor_set| NULL when |type| is not a known register
+// type in this environment.
+typedef iree_status_t (*loom_text_low_asm_lookup_register_descriptor_set_fn_t)(
+    const loom_text_low_asm_environment_state_t* state, loom_type_t type,
+    const loom_text_low_asm_descriptor_set_t** out_descriptor_set);
+
+// Resolves a compact target-low register type to its textual class name in
+// |descriptor_set|. Returns OK with |out_found| false when the type does not
+// belong to the descriptor set.
+typedef iree_status_t (*loom_text_low_asm_describe_register_type_fn_t)(
+    const loom_text_low_asm_environment_state_t* state,
+    const loom_text_low_asm_descriptor_set_t* descriptor_set, loom_type_t type,
+    iree_string_view_t* out_register_class_name, uint32_t* out_unit_count,
+    bool* out_found);
+
 typedef struct loom_text_low_asm_vtable_t {
   // Resolves an `asm<...>` descriptor-set key to an environment-owned handle.
   loom_text_low_asm_lookup_descriptor_set_fn_t lookup_descriptor_set;
+  // Resolves a target symbol reference to its descriptor-set handle.
+  loom_text_low_asm_lookup_target_descriptor_set_fn_t
+      lookup_target_descriptor_set;
   // Resolves a mnemonic within a descriptor-set handle to a packet descriptor.
   loom_text_low_asm_lookup_packet_fn_t lookup_packet;
   // Infers a result type when the asm packet omits explicit type annotations.
@@ -259,6 +293,13 @@ typedef struct loom_text_low_asm_vtable_t {
   // See the statement description contract above for the validity guarantees
   // required when a concrete statement kind is returned.
   loom_text_low_asm_describe_operation_fn_t describe_operation;
+  // Resolves textual register classes while parsing target-low register types.
+  loom_text_low_asm_resolve_register_type_fn_t resolve_register_type;
+  // Resolves the descriptor-set handle owning a compact register type.
+  loom_text_low_asm_lookup_register_descriptor_set_fn_t
+      lookup_register_descriptor_set;
+  // Resolves compact target-low register types while printing text.
+  loom_text_low_asm_describe_register_type_fn_t describe_register_type;
 } loom_text_low_asm_vtable_t;
 
 typedef struct loom_text_low_asm_environment_t {
@@ -273,6 +314,7 @@ static inline bool loom_text_low_asm_environment_is_configured(
   return environment && environment->vtable && environment->state &&
          environment->vtable->lookup_descriptor_set &&
          environment->vtable->lookup_packet &&
+         environment->vtable->resolve_register_type &&
          environment->vtable->infer_result_type &&
          environment->vtable->validate_result_type &&
          environment->vtable->immediate_descriptor &&
@@ -288,7 +330,9 @@ static inline bool loom_text_low_asm_environment_supports_printing(
          environment->vtable->lookup_descriptor_set &&
          environment->vtable->result_type_annotation_required &&
          environment->vtable->immediate_descriptor &&
-         environment->vtable->describe_operation;
+         environment->vtable->describe_operation &&
+         environment->vtable->lookup_register_descriptor_set &&
+         environment->vtable->describe_register_type;
 }
 
 #ifdef __cplusplus

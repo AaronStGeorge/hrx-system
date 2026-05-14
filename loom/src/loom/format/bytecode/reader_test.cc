@@ -22,6 +22,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/global/ops.h"
 #include "loom/ops/test/ops.h"
+#include "loom/target/registers.h"
 
 namespace loom {
 namespace {
@@ -194,10 +195,9 @@ class ReaderTest : public ::testing::Test {
 
   loom_module_t* CreateRegisterDeclModule() {
     loom_module_t* module = CreateModule("reader_register_decl");
-    loom_string_id_t reg_class_id = LOOM_STRING_ID_INVALID;
-    IREE_CHECK_OK(loom_module_intern_string(module, IREE_SV("amdgpu.vgpr"),
-                                            &reg_class_id));
-    loom_type_t reg_type = loom_type_register(reg_class_id, 4);
+    loom_type_t reg_type =
+        loom_low_register_type(/*descriptor_set_stable_id=*/1,
+                               /*register_class_id=*/0, /*unit_count=*/4);
     IREE_CHECK_OK(loom_module_intern_type(module, reg_type, &reg_type));
 
     loom_builder_t builder;

@@ -57,6 +57,9 @@ typedef struct loom_parser_t {
   // Parse-time environment for low.asm regions.
   loom_text_low_asm_environment_t low_asm_environment;
 
+  // Descriptor-set context used for parsing target-low register types.
+  const loom_text_low_asm_descriptor_set_t* low_register_descriptor_set;
+
   uint32_t error_count;
   uint32_t max_errors;
   iree_string_view_t filename;

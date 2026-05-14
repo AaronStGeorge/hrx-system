@@ -591,7 +591,7 @@ TEST_F(ParserTest, FunctionTypeScratchAndModulePayloadAreReusedOnInternHits) {
   loom_module_free(module);
 }
 
-TEST_F(ParserTest, RegisterTypeParsesToInternedClassAndUnits) {
+TEST_F(ParserTest, RegisterTypeRequiresTargetLowDescriptorContext) {
   loom_module_t* module = nullptr;
   IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV(""), &block_pool_,
                                       /*hints=*/nullptr,
@@ -607,20 +607,13 @@ TEST_F(ParserTest, RegisterTypeParsesToInternedClassAndUnits) {
           },
   };
   iree_arena_initialize(&block_pool_, &parser.parser_arena);
-  loom_tokenizer_initialize(IREE_SV("reg<amdgpu.vgpr x4>"),
-                            IREE_SV("test.loom"), &parser.parser_arena,
-                            &parser.tokenizer);
+  loom_tokenizer_initialize(IREE_SV("reg<test.ptr x4>"), IREE_SV("test.loom"),
+                            &parser.parser_arena, &parser.tokenizer);
 
   loom_type_t type = {};
   IREE_ASSERT_OK(loom_parse_type(&parser, LOOM_TYPE_PARSE_BODY, &type));
-  EXPECT_EQ(parser.error_count, 0u);
-  EXPECT_TRUE(loom_tokenizer_at(&parser.tokenizer, LOOM_TOKEN_EOF));
-  EXPECT_TRUE(loom_type_is_register(type));
-  EXPECT_EQ(loom_type_register_unit_count(type), 4u);
-  loom_string_id_t class_id = loom_type_register_class_id(type);
-  ASSERT_LT(class_id, module->strings.count);
-  EXPECT_TRUE(iree_string_view_equal(module->strings.entries[class_id],
-                                     IREE_SV("amdgpu.vgpr")));
+  EXPECT_EQ(parser.error_count, 1u);
+  EXPECT_FALSE(loom_type_is_register(type));
 
   loom_tokenizer_deinitialize(&parser.tokenizer);
   iree_arena_deinitialize(&parser.parser_arena);

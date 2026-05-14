@@ -9,6 +9,7 @@
 #include "iree/base/internal/math.h"
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
+#include "loom/target/registers.h"
 #include "loom/util/cfg_graph.h"
 
 typedef struct loom_liveness_bitset_t {
@@ -229,10 +230,13 @@ static loom_liveness_value_class_t loom_liveness_classify_value(
   loom_liveness_value_class_t value_class = {
       .type_kind = loom_type_kind(type),
       .element_type = loom_type_element_type(type),
-      .register_class_id = LOOM_STRING_ID_INVALID,
+      .register_descriptor_set_stable_id = 0,
+      .register_class_id = LOOM_LOW_REGISTER_CLASS_ID_INVALID,
   };
   if (loom_type_is_register(type)) {
-    value_class.register_class_id = loom_type_register_class_id(type);
+    value_class.register_descriptor_set_stable_id =
+        loom_low_register_type_descriptor_set_stable_id(type);
+    value_class.register_class_id = loom_low_register_type_class_id(type);
   }
   return value_class;
 }
@@ -240,7 +244,9 @@ static loom_liveness_value_class_t loom_liveness_classify_value(
 static uint32_t loom_liveness_value_unit_count(const loom_module_t* module,
                                                loom_value_id_t value_id) {
   loom_type_t type = loom_module_value_type(module, value_id);
-  if (loom_type_is_register(type)) return loom_type_register_unit_count(type);
+  if (loom_type_is_register(type)) {
+    return loom_low_register_type_unit_count(type);
+  }
   return 1;
 }
 
@@ -248,6 +254,8 @@ bool loom_liveness_value_class_equal(loom_liveness_value_class_t lhs,
                                      loom_liveness_value_class_t rhs) {
   return lhs.type_kind == rhs.type_kind &&
          lhs.element_type == rhs.element_type &&
+         lhs.register_descriptor_set_stable_id ==
+             rhs.register_descriptor_set_stable_id &&
          lhs.register_class_id == rhs.register_class_id;
 }
 

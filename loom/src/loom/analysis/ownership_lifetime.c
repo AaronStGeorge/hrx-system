@@ -175,6 +175,8 @@ typedef struct loom_ownership_lifetime_state_t {
   uint16_t* value_origin_args;
   // Number of 64-bit words in local value bitsets.
   iree_host_size_t word_count;
+  // Values matched by the active materialization policies.
+  loom_ownership_lifetime_bitset_t policy_values;
   // Values produced by ownership-aware results or consumed from owned state.
   loom_ownership_lifetime_bitset_t ever_seen;
   // Per-block live-in bitsets used by materialization, or NULL.
@@ -283,6 +285,30 @@ static bool loom_ownership_lifetime_bitset_reset(
   uint64_t old_word = bitset.words[word_index];
   bitset.words[word_index] = old_word & ~mask;
   return old_word != bitset.words[word_index];
+}
+
+static iree_status_t loom_ownership_lifetime_initialize_policy_values(
+    loom_ownership_lifetime_state_t* state, iree_arena_allocator_t* arena) {
+  if (!state->materialize_options) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_ownership_lifetime_bitset_allocate(
+      arena, state->word_count, &state->policy_values));
+  for (iree_host_size_t i = 0; i < state->value_count; ++i) {
+    const loom_value_id_t value_id = state->value_ids[i];
+    for (iree_host_size_t j = 0; j < state->materialize_options->policy_count;
+         ++j) {
+      const loom_ownership_lifetime_materialization_policy_t* policy =
+          &state->materialize_options->policies[j];
+      if (loom_ownership_value_matches(state->module, &policy->family,
+                                       value_id)) {
+        loom_ownership_lifetime_bitset_set(state->policy_values,
+                                           (loom_value_ordinal_t)i);
+        break;
+      }
+    }
+  }
+  return iree_ok_status();
 }
 
 static bool loom_ownership_lifetime_state_bits_equal(
@@ -521,7 +547,16 @@ static loom_value_ordinal_t loom_ownership_lifetime_try_ordinal(
       value_id >= state->module->values.count) {
     return LOOM_VALUE_ORDINAL_INVALID;
   }
-  return loom_local_value_domain_try_ordinal(state->value_domain, value_id);
+  loom_value_ordinal_t value_ordinal =
+      loom_local_value_domain_try_ordinal(state->value_domain, value_id);
+  if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID ||
+      !state->materialize_options) {
+    return value_ordinal;
+  }
+  return loom_ownership_lifetime_bitset_test(state->policy_values,
+                                             value_ordinal)
+             ? value_ordinal
+             : LOOM_VALUE_ORDINAL_INVALID;
 }
 
 static bool loom_ownership_lifetime_value_ever_seen(
@@ -1727,6 +1762,9 @@ static iree_status_t loom_ownership_lifetime_analyze_function(
       .count_statistics = count_statistics,
   };
 
+  if (iree_status_is_ok(status)) {
+    status = loom_ownership_lifetime_initialize_policy_values(&state, arena);
+  }
   if (iree_status_is_ok(status)) {
     status = loom_ownership_lifetime_bitset_allocate(arena, state.word_count,
                                                      &state.ever_seen);

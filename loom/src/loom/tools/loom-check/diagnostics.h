@@ -11,6 +11,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "loom/codegen/low/text_asm.h"
 #include "loom/error/diagnostic.h"
 #include "loom/error/emitter.h"
 #include "loom/error/error_defs.h"
@@ -77,6 +78,9 @@ typedef struct loom_check_diagnostic_collector_t {
   // Current parsed module for full type rendering, or NULL during parse
   // recovery.
   const loom_module_t* module;
+
+  // Printer context used to render type-bearing diagnostic parameters.
+  loom_low_descriptor_text_print_context_t type_print_context;
 
   // File-level result receiving structured diagnostic JSON captures.
   loom_check_result_t* result;

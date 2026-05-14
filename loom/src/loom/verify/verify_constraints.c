@@ -10,6 +10,7 @@
 
 #include "loom/error/error_catalog.h"
 #include "loom/ir/scalar_type.h"
+#include "loom/target/registers.h"
 #include "loom/verify/verify_diagnostics.h"
 #include "loom/verify/verify_structure.h"
 
@@ -30,11 +31,13 @@ static bool loom_constraint_property_equals(
       return loom_type_rank(a) == loom_type_rank(b);
     case LOOM_PROPERTY_REGISTER_CLASS:
       return loom_type_is_register(a) && loom_type_is_register(b) &&
-             loom_type_register_class_id(a) == loom_type_register_class_id(b);
+             loom_type_register_payload0(a) == loom_type_register_payload0(b) &&
+             loom_low_register_type_class_id(a) ==
+                 loom_low_register_type_class_id(b);
     case LOOM_PROPERTY_REGISTER_UNIT_COUNT:
       return loom_type_is_register(a) && loom_type_is_register(b) &&
-             loom_type_register_unit_count(a) ==
-                 loom_type_register_unit_count(b);
+             loom_low_register_type_unit_count(a) ==
+                 loom_low_register_type_unit_count(b);
     default:
       return false;
   }
@@ -1529,14 +1532,14 @@ static void loom_verify_relation_register_unit_count_sum(
     if (!loom_type_is_register(source_type)) {
       return;
     }
-    source_unit_count += loom_type_register_unit_count(source_type);
+    source_unit_count += loom_low_register_type_unit_count(source_type);
   }
 
   loom_type_t result_type = loom_verify_value_type(state, result_value);
   if (!loom_type_is_register(result_type)) {
     return;
   }
-  if (source_unit_count == loom_type_register_unit_count(result_type)) {
+  if (source_unit_count == loom_low_register_type_unit_count(result_type)) {
     return;
   }
 

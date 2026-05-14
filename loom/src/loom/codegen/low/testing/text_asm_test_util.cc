@@ -84,10 +84,23 @@ iree_status_t LowTextAsmTypeInferenceHarness::LookupPacket(
 iree_status_t LowTextAsmTypeInferenceHarness::MakeRegisterType(
     iree_string_view_t reg_class_name, uint16_t unit_count,
     loom_type_t* out_type) const {
-  loom_string_id_t reg_class_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_module_intern_string(module_, reg_class_name, &reg_class_id));
-  loom_type_t type = loom_type_register(reg_class_id, unit_count);
+  const loom_low_descriptor_set_t* descriptor_set = descriptor_set_provider_();
+  const loom_text_low_asm_descriptor_set_t* descriptor_set_handle = nullptr;
+  IREE_RETURN_IF_ERROR(environment_.vtable->lookup_descriptor_set(
+      environment_.state,
+      loom_low_descriptor_set_string(descriptor_set,
+                                     descriptor_set->key_string_offset),
+      &descriptor_set_handle));
+  bool found = false;
+  loom_type_t type = loom_type_none();
+  IREE_RETURN_IF_ERROR(environment_.vtable->resolve_register_type(
+      environment_.state, descriptor_set_handle, reg_class_name, unit_count,
+      &type, &found));
+  if (!found) {
+    return iree_make_status(IREE_STATUS_NOT_FOUND,
+                            "register class '%.*s' was not found",
+                            (int)reg_class_name.size, reg_class_name.data);
+  }
   return loom_module_intern_type(module_, type, out_type);
 }
 
@@ -123,11 +136,25 @@ bool LowTextAsmTypeInferenceHarness::RegisterTypeEquals(
     loom_type_t type, iree_string_view_t reg_class_name,
     uint32_t unit_count) const {
   if (!loom_type_is_register(type)) return false;
-  if (loom_type_register_unit_count(type) != unit_count) return false;
-  loom_string_id_t reg_class_id = loom_type_register_class_id(type);
-  if (reg_class_id >= module_->strings.count) return false;
-  return iree_string_view_equal(module_->strings.entries[reg_class_id],
-                                reg_class_name);
+  const loom_low_descriptor_set_t* descriptor_set = descriptor_set_provider_();
+  const loom_text_low_asm_descriptor_set_t* descriptor_set_handle = nullptr;
+  if (!iree_status_is_ok(environment_.vtable->lookup_descriptor_set(
+          environment_.state,
+          loom_low_descriptor_set_string(descriptor_set,
+                                         descriptor_set->key_string_offset),
+          &descriptor_set_handle))) {
+    return false;
+  }
+  iree_string_view_t actual_class_name = iree_string_view_empty();
+  uint32_t actual_unit_count = 0;
+  bool found = false;
+  if (!iree_status_is_ok(environment_.vtable->describe_register_type(
+          environment_.state, descriptor_set_handle, type, &actual_class_name,
+          &actual_unit_count, &found))) {
+    return false;
+  }
+  return found && actual_unit_count == unit_count &&
+         iree_string_view_equal(actual_class_name, reg_class_name);
 }
 
 }  // namespace loom::testing

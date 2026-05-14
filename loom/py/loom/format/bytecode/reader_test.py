@@ -67,6 +67,15 @@ from loom.ir import (
     Use,
     Value,
 )
+from loom.stable_id import stable_id_from_string
+from loom.target.test.descriptors import TEST_LOW_CORE_DESCRIPTOR_SET
+
+_TEST_LOW_CORE_STABLE_ID = stable_id_from_string(TEST_LOW_CORE_DESCRIPTOR_SET.key)
+_TEST_PTR_REGISTER_CLASS_ID = next(
+    i
+    for i, register_class in enumerate(TEST_LOW_CORE_DESCRIPTOR_SET.reg_classes)
+    if register_class.name == "test.ptr"
+)
 
 # ============================================================================
 # Helpers
@@ -76,6 +85,15 @@ from loom.ir import (
 def _roundtrip(module: Module) -> Module:
     """Write → read round-trip."""
     return read_module(write_module(module))
+
+
+def _test_ptr_register_type(unit_count: int = 1) -> RegisterType:
+    return RegisterType(
+        _TEST_LOW_CORE_STABLE_ID,
+        _TEST_PTR_REGISTER_CLASS_ID,
+        unit_count,
+        "test.ptr",
+    )
 
 
 def _make_value_with_bindings(
@@ -225,6 +243,8 @@ def _single_op_offset(data: bytes | bytearray) -> int:
     offset = body_offset
     for _ in range(4):
         _count, offset = decode_varint(data, offset)
+    _root_region_count, offset = decode_varint(data, offset)
+    _root_region_index, offset = decode_varint(data, offset)
     _block_count, offset = decode_varint(data, offset)
     offset += 1  # block has_label byte.
     comment_count, offset = decode_varint(data, offset)
@@ -391,13 +411,14 @@ class TestMalformedIrSection:
             data, SECTION_IR
         )
 
-        # The valid fixture has one operation. Claim the body has zero operations
-        # so the local body summary fails before the module summary is checked.
+        # The valid fixture has one operation. Claim the symbol region payload
+        # has zero operations so its local summary fails before the module
+        # summary is checked.
         body_offset = module_offset + section_offset
         op_count_offset = body_offset + 3
         data[op_count_offset] = 0
 
-        with pytest.raises(BytecodeError, match="function body allocation summary"):
+        with pytest.raises(BytecodeError, match="symbol region allocation summary"):
             read_module(bytes(data))
 
 
@@ -750,7 +771,7 @@ class TestTypeRoundTrips:
         assert loaded.params[1].name == "hal.fence"
 
     def test_register_type(self) -> None:
-        t = RegisterType("amdgpu.vgpr", 4)
+        t = _test_ptr_register_type(4)
         assert self._roundtrip_type(t) == t
 
     def test_buffer_type(self) -> None:

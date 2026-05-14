@@ -71,13 +71,11 @@ static bool loom_test_low_is_vector_16xi8(loom_type_t type) {
 }
 
 static iree_status_t loom_test_low_make_register_type(
-    loom_low_lower_context_t* context, iree_string_view_t register_class,
+    loom_low_lower_context_t* context, uint16_t register_class_id,
     uint32_t unit_count, loom_type_t* out_type) {
-  loom_string_id_t register_class_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_module_intern_string(loom_low_lower_context_module(context),
-                                register_class, &register_class_id));
-  *out_type = loom_low_register_type(register_class_id, unit_count);
+  *out_type = loom_low_register_type(
+      loom_low_lower_context_descriptor_set(context)->stable_id,
+      register_class_id, unit_count);
   return iree_ok_status();
 }
 
@@ -89,32 +87,32 @@ iree_status_t loom_test_low_lower_map_type(void* user_data,
   (void)user_data;
   if (loom_test_low_is_i32(source_type) || loom_test_low_is_i1(source_type) ||
       loom_test_low_is_index_like(source_type)) {
-    return loom_test_low_make_register_type(context, IREE_SV("test.i32"), 1,
-                                            out_low_type);
+    return loom_test_low_make_register_type(
+        context, TEST_LOW_CORE_REG_CLASS_ID_TEST_I32, 1, out_low_type);
   }
   if (loom_test_low_is_i8(source_type)) {
-    return loom_test_low_make_register_type(context, IREE_SV("test.i8"), 1,
-                                            out_low_type);
+    return loom_test_low_make_register_type(
+        context, TEST_LOW_CORE_REG_CLASS_ID_TEST_I8, 1, out_low_type);
   }
   if (loom_test_low_is_f32(source_type)) {
-    return loom_test_low_make_register_type(context, IREE_SV("test.f32"), 1,
-                                            out_low_type);
+    return loom_test_low_make_register_type(
+        context, TEST_LOW_CORE_REG_CLASS_ID_TEST_F32, 1, out_low_type);
   }
   if (loom_test_low_is_vector_4xi32(source_type)) {
-    return loom_test_low_make_register_type(context, IREE_SV("test.i32"), 4,
-                                            out_low_type);
+    return loom_test_low_make_register_type(
+        context, TEST_LOW_CORE_REG_CLASS_ID_TEST_I32, 4, out_low_type);
   }
   if (loom_test_low_is_vector_4xf32(source_type)) {
-    return loom_test_low_make_register_type(context, IREE_SV("test.f32"), 4,
-                                            out_low_type);
+    return loom_test_low_make_register_type(
+        context, TEST_LOW_CORE_REG_CLASS_ID_TEST_F32, 4, out_low_type);
   }
   if (loom_test_low_is_vector_4xi1(source_type)) {
-    return loom_test_low_make_register_type(context, IREE_SV("test.i32"), 4,
-                                            out_low_type);
+    return loom_test_low_make_register_type(
+        context, TEST_LOW_CORE_REG_CLASS_ID_TEST_I32, 4, out_low_type);
   }
   if (loom_test_low_is_vector_16xi8(source_type)) {
-    return loom_test_low_make_register_type(context, IREE_SV("test.i8"), 16,
-                                            out_low_type);
+    return loom_test_low_make_register_type(
+        context, TEST_LOW_CORE_REG_CLASS_ID_TEST_I8, 16, out_low_type);
   }
   return loom_low_lower_emit_source_type_unsupported(
       context, source_op, IREE_SV("source"), source_type);
@@ -130,7 +128,7 @@ iree_status_t loom_test_low_lower_map_argument(
   if (loom_type_is_buffer(source_type)) {
     loom_type_t resource_type = loom_type_none();
     IREE_RETURN_IF_ERROR(loom_test_low_make_register_type(
-        context, IREE_SV("test.ptr"), 1, &resource_type));
+        context, TEST_LOW_CORE_REG_CLASS_ID_TEST_PTR, 1, &resource_type));
     *out_argument = (loom_low_lower_abi_argument_t){
         .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_RESOURCE,
         .abi_type = resource_type,

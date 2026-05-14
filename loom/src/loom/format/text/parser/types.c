@@ -11,6 +11,7 @@
 #include "loom/error/error_catalog.h"
 #include "loom/format/text/parser/aliases.h"
 #include "loom/format/text/parser/attrs.h"
+#include "loom/format/text/parser/context.h"
 #include "loom/format/text/parser/diagnostics.h"
 #include "loom/format/text/parser/scope.h"
 #include "loom/ir/context.h"
@@ -932,10 +933,25 @@ static iree_status_t loom_parse_register_type(loom_parser_t* parser,
   }
   LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_RANGLE, NULL);
 
-  loom_string_id_t class_id = LOOM_STRING_ID_INVALID;
+  if (!parser->low_register_descriptor_set ||
+      !parser->low_asm_environment.vtable ||
+      !parser->low_asm_environment.vtable->resolve_register_type) {
+    return loom_parser_emit_unexpected_token(
+        parser, class_token,
+        IREE_SV("register class in a target-low descriptor context"));
+  }
+  loom_type_t type = loom_type_none();
+  bool found = false;
   IREE_RETURN_IF_ERROR(
-      loom_module_intern_string(parser->module, class_token.text, &class_id));
-  loom_type_t type = loom_type_register(class_id, unit_count);
+      parser->low_asm_environment.vtable->resolve_register_type(
+          parser->low_asm_environment.state,
+          parser->low_register_descriptor_set, class_token.text, unit_count,
+          &type, &found));
+  if (!found) {
+    return loom_parser_emit_unexpected_token(
+        parser, class_token,
+        IREE_SV("register class defined by the selected descriptor set"));
+  }
   return loom_module_intern_type(parser->module, type, out_type);
 }
 

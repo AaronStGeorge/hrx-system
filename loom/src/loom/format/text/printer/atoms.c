@@ -12,6 +12,7 @@
 #include "iree/base/internal/unicode.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/target/registers.h"
 
 static const loom_op_vtable_t* loom_print_value_defining_op_vtable(
     const loom_module_t* module, const loom_op_t* op) {
@@ -527,9 +528,9 @@ static iree_status_t loom_print_shaped_type_prefix(loom_output_stream_t* stream,
   }
 }
 
-iree_status_t loom_text_print_type(loom_type_t type,
-                                   const loom_module_t* module,
-                                   loom_output_stream_t* stream) {
+static iree_status_t loom_text_print_type_impl(
+    loom_type_t type, const loom_module_t* module, loom_output_stream_t* stream,
+    const loom_print_context_t* ctx) {
   switch (loom_type_kind(type)) {
     case LOOM_TYPE_NONE:
       return loom_output_stream_write_cstring(stream, "none");
@@ -575,23 +576,57 @@ iree_status_t loom_text_print_type(loom_type_t type,
             IREE_RETURN_IF_ERROR(
                 loom_output_stream_write_cstring(stream, ", "));
           }
-          IREE_RETURN_IF_ERROR(loom_text_print_type(params[i], module, stream));
+          IREE_RETURN_IF_ERROR(
+              loom_text_print_type_impl(params[i], module, stream, ctx));
         }
         IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '>'));
       }
       return iree_ok_status();
     }
     case LOOM_TYPE_REGISTER: {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "reg<"));
-      loom_string_id_t class_id = loom_type_register_class_id(type);
-      if (module && class_id < module->strings.count) {
-        IREE_RETURN_IF_ERROR(loom_output_stream_write(
-            stream, module->strings.entries[class_id]));
-      } else {
-        IREE_RETURN_IF_ERROR(
-            loom_output_stream_write_cstring(stream, "?register"));
+      if (!ctx) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "reg<"));
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+            stream, "0x%" PRIx64 ":%" PRIu16,
+            loom_low_register_type_descriptor_set_stable_id(type),
+            loom_low_register_type_class_id(type)));
+        uint32_t unit_count = loom_low_register_type_unit_count(type);
+        if (unit_count != 1) {
+          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " x"));
+          IREE_RETURN_IF_ERROR(
+              loom_output_stream_write_format(stream, "%u", unit_count));
+        }
+        return loom_output_stream_write_cstring(stream, ">");
       }
-      uint32_t unit_count = loom_type_register_unit_count(type);
+      const loom_text_low_asm_descriptor_set_t* descriptor_set =
+          ctx->low_register_descriptor_set;
+      if (!descriptor_set && ctx->low_asm_environment.vtable &&
+          ctx->low_asm_environment.vtable->lookup_register_descriptor_set) {
+        IREE_RETURN_IF_ERROR(
+            ctx->low_asm_environment.vtable->lookup_register_descriptor_set(
+                ctx->low_asm_environment.state, type, &descriptor_set));
+      }
+      if (!descriptor_set || !ctx->low_asm_environment.vtable ||
+          !ctx->low_asm_environment.vtable->describe_register_type) {
+        return iree_make_status(
+            IREE_STATUS_FAILED_PRECONDITION,
+            "printing reg<...> requires a target-low descriptor context");
+      }
+      iree_string_view_t register_class_name = iree_string_view_empty();
+      uint32_t unit_count = 0;
+      bool found = false;
+      IREE_RETURN_IF_ERROR(
+          ctx->low_asm_environment.vtable->describe_register_type(
+              ctx->low_asm_environment.state, descriptor_set, type,
+              &register_class_name, &unit_count, &found));
+      if (!found) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "reg<...> type does not belong to the selected descriptor set");
+      }
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "reg<"));
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write(stream, register_class_name));
       if (unit_count != 1) {
         IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, " x"));
         IREE_RETURN_IF_ERROR(
@@ -629,16 +664,16 @@ iree_status_t loom_text_print_type(loom_type_t type,
         if (i > 0) {
           IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
         }
-        IREE_RETURN_IF_ERROR(
-            loom_text_print_type(func_data->types[i], module, stream));
+        IREE_RETURN_IF_ERROR(loom_text_print_type_impl(func_data->types[i],
+                                                       module, stream, ctx));
       }
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ") -> ("));
       for (uint16_t i = 0; i < func_data->result_count; ++i) {
         if (i > 0) {
           IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ", "));
         }
-        IREE_RETURN_IF_ERROR(loom_text_print_type(
-            func_data->types[func_data->arg_count + i], module, stream));
+        IREE_RETURN_IF_ERROR(loom_text_print_type_impl(
+            func_data->types[func_data->arg_count + i], module, stream, ctx));
       }
       return loom_output_stream_write_char(stream, ')');
     }
@@ -647,6 +682,39 @@ iree_status_t loom_text_print_type(loom_type_t type,
                               "unknown type kind %d",
                               (int)loom_type_kind(type));
   }
+}
+
+iree_status_t loom_text_print_type(loom_type_t type,
+                                   const loom_module_t* module,
+                                   loom_output_stream_t* stream) {
+  return loom_text_print_type_impl(type, module, stream, NULL);
+}
+
+iree_status_t loom_text_print_type_with_options(
+    loom_type_t type, const loom_module_t* module, loom_output_stream_t* stream,
+    const loom_text_print_options_t* options) {
+  loom_print_context_t ctx = {
+      .stream = stream,
+      .module = module,
+      .flags = options ? options->flags : LOOM_TEXT_PRINT_DEFAULT,
+      .low_asm_environment = options ? options->low_asm_environment
+                                     : (loom_text_low_asm_environment_t){0},
+      .low_asm_descriptor_set_key = options
+                                        ? options->low_asm_descriptor_set_key
+                                        : iree_string_view_empty(),
+  };
+  if (!iree_string_view_is_empty(ctx.low_asm_descriptor_set_key) &&
+      ctx.low_asm_environment.vtable &&
+      ctx.low_asm_environment.vtable->lookup_descriptor_set) {
+    IREE_RETURN_IF_ERROR(ctx.low_asm_environment.vtable->lookup_descriptor_set(
+        ctx.low_asm_environment.state, ctx.low_asm_descriptor_set_key,
+        &ctx.low_register_descriptor_set));
+  }
+  return loom_text_print_type_impl(type, module, stream, &ctx);
+}
+
+iree_status_t loom_print_type(loom_print_context_t* ctx, loom_type_t type) {
+  return loom_text_print_type_impl(type, ctx->module, ctx->stream, ctx);
 }
 
 static iree_status_t loom_print_result_type_dim(loom_output_stream_t* stream,
@@ -658,7 +726,8 @@ static iree_status_t loom_print_result_type_dim(loom_output_stream_t* stream,
 
 static iree_status_t loom_text_print_result_type(loom_type_t type,
                                                  const loom_module_t* module,
-                                                 loom_output_stream_t* stream) {
+                                                 loom_output_stream_t* stream,
+                                                 loom_print_context_t* ctx) {
   switch (loom_type_kind(type)) {
     case LOOM_TYPE_TILE:
     case LOOM_TYPE_TENSOR:
@@ -692,15 +761,14 @@ static iree_status_t loom_text_print_result_type(loom_type_t type,
       return loom_output_stream_write_cstring(stream, ">");
     }
     default:
-      return loom_text_print_type(type, module, stream);
+      return loom_text_print_type_impl(type, module, stream, ctx);
   }
 }
 
 iree_status_t loom_print_value_type(loom_print_context_t* ctx,
                                     loom_value_id_t value_id) {
   if (value_id < ctx->module->values.count) {
-    return loom_text_print_type(ctx->module->values.entries[value_id].type,
-                                ctx->module, ctx->stream);
+    return loom_print_type(ctx, ctx->module->values.entries[value_id].type);
   }
   return loom_output_stream_write_cstring(ctx->stream, "<unknown>");
 }
@@ -709,7 +777,8 @@ iree_status_t loom_print_result_value_type(loom_print_context_t* ctx,
                                            loom_value_id_t value_id) {
   if (value_id < ctx->module->values.count) {
     return loom_text_print_result_type(
-        ctx->module->values.entries[value_id].type, ctx->module, ctx->stream);
+        ctx->module->values.entries[value_id].type, ctx->module, ctx->stream,
+        ctx);
   }
   return loom_output_stream_write_cstring(ctx->stream, "<unknown>");
 }

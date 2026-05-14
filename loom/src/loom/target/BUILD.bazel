@@ -425,6 +425,7 @@ loom_cc_test(
     srcs = ["compile_report_low_test.cc"],
     deps = [
         ":compile_report_low",
+        ":registers",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

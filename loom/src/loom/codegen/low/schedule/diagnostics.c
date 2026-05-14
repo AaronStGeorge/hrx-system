@@ -71,18 +71,16 @@ static iree_status_t loom_low_schedule_pressure_budget_for_class(
   *out_budget = 0;
   *out_has_budget = false;
   if (value_class.type_kind != LOOM_TYPE_REGISTER ||
-      !state->target.descriptor_set) {
+      !state->target.descriptor_set ||
+      value_class.register_descriptor_set_stable_id !=
+          state->target.descriptor_set->stable_id ||
+      value_class.register_class_id >=
+          state->target.descriptor_set->reg_class_count) {
     return iree_ok_status();
   }
-  uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
-  const loom_low_reg_class_t* reg_class = NULL;
-  bool found_reg_class = false;
-  IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_string_id(
-      &state->register_class_map, value_class.register_class_id, &reg_class_id,
-      &reg_class, &found_reg_class));
-  if (!found_reg_class) {
-    return iree_ok_status();
-  }
+  const uint16_t reg_class_id = value_class.register_class_id;
+  const loom_low_reg_class_t* reg_class =
+      &state->target.descriptor_set->reg_classes[reg_class_id];
   const loom_low_schedule_pressure_cliff_t* first_cliff = NULL;
   if (loom_low_schedule_first_pressure_cliff_for_reg_class(state, reg_class_id,
                                                            &first_cliff)) {
@@ -174,7 +172,7 @@ static iree_status_t loom_low_schedule_emit_pressure_summary(
       loom_param_string(
           loom_low_diagnostic_function_name(state->module, state->function_op)),
       loom_param_string(loom_low_diagnostic_value_class_name(
-          state->module, summary->value_class)),
+          state->target.descriptor_set, summary->value_class)),
       loom_param_u32(budget),
       loom_param_u32(summary->peak_live_units),
       loom_param_string(

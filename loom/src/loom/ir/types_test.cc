@@ -98,18 +98,18 @@ TEST(TypesTest, DialectTypeEqualAndHashAreStructural) {
 }
 
 TEST(TypesTest, RegisterTypeEqualAndHashAreStructural) {
-  loom_type_t first = loom_type_register((loom_string_id_t)42, 4);
-  loom_type_t duplicate = loom_type_register((loom_string_id_t)42, 4);
-  loom_type_t different_class = loom_type_register((loom_string_id_t)43, 4);
-  loom_type_t different_units = loom_type_register((loom_string_id_t)42, 8);
+  loom_type_t first = loom_type_register_payload(42, 4);
+  loom_type_t duplicate = loom_type_register_payload(42, 4);
+  loom_type_t different_payload0 = loom_type_register_payload(43, 4);
+  loom_type_t different_payload1 = loom_type_register_payload(42, 8);
 
   EXPECT_TRUE(loom_type_is_register(first));
-  EXPECT_EQ(loom_type_register_class_id(first), 42u);
-  EXPECT_EQ(loom_type_register_unit_count(first), 4u);
+  EXPECT_EQ(loom_type_register_payload0(first), 42u);
+  EXPECT_EQ(loom_type_register_payload1(first), 4u);
   EXPECT_TRUE(loom_type_equal(first, duplicate));
   EXPECT_EQ(loom_type_hash(first), loom_type_hash(duplicate));
-  EXPECT_FALSE(loom_type_equal(first, different_class));
-  EXPECT_FALSE(loom_type_equal(first, different_units));
+  EXPECT_FALSE(loom_type_equal(first, different_payload0));
+  EXPECT_FALSE(loom_type_equal(first, different_payload1));
 }
 
 TEST(TypesTest, RegisterClassNamesMustBeNamespaceQualified) {

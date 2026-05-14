@@ -31,8 +31,6 @@ typedef struct loom_low_lower_contract_query_options_t {
   loom_low_lower_rule_set_list_t rule_sets;
   // Source-value to target-low register metadata mapper.
   loom_low_lower_rule_match_map_value_callback_t map_value;
-  // Optional descriptor-register-class to module string mapper.
-  loom_low_lower_rule_match_register_class_callback_t register_class;
   // Optional source value materializer predicate bridge.
   loom_low_lower_rule_match_can_materialize_value_callback_t can_materialize;
   // Optional rule-local descriptor-ref resolver.

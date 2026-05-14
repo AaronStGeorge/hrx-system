@@ -17,6 +17,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/test/ops.h"
+#include "loom/target/registers.h"
 #include "loom/target/test/alt_descriptors.h"
 #include "loom/target/test/descriptors.h"
 #include "loom/testing/diagnostic_matchers.h"
@@ -167,6 +168,18 @@ static const loom_named_attr_t* FindNamedAttr(const loom_module_t* module,
   return nullptr;
 }
 
+static void ExpectTestLowCoreRegisterType(loom_type_t type,
+                                          uint16_t register_class_id,
+                                          uint32_t unit_count) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_test_low_core_descriptor_set();
+  ASSERT_TRUE(loom_type_is_register(type));
+  EXPECT_EQ(loom_low_register_type_descriptor_set_stable_id(type),
+            descriptor_set->stable_id);
+  EXPECT_EQ(loom_low_register_type_class_id(type), register_class_id);
+  EXPECT_EQ(loom_low_register_type_unit_count(type), unit_count);
+}
+
 TEST_F(LowAsmParserTest, BuildsCanonicalLowOps) {
   loom_module_t* module = ParseOk(
       "test.low_asm_region asm<test.low.core> {\n"
@@ -202,10 +215,8 @@ TEST_F(LowAsmParserTest, BuildsCanonicalLowOps) {
 
   loom_type_t const_type =
       loom_module_value_type(module, loom_low_const_result(const_op));
-  ASSERT_TRUE(loom_type_is_register(const_type));
-  EXPECT_EQ(StringFromId(module, loom_type_register_class_id(const_type)),
-            "test.i32");
-  EXPECT_EQ(loom_type_register_unit_count(const_type), 1u);
+  ExpectTestLowCoreRegisterType(const_type, TEST_LOW_CORE_REG_CLASS_ID_TEST_I32,
+                                1);
 
   loom_op_t* add_op = loom_block_op(entry, 1);
   ASSERT_TRUE(loom_low_op_isa(add_op));
@@ -301,9 +312,8 @@ TEST_F(LowAsmParserTest, BuildsStructuralCopy) {
   EXPECT_EQ(loom_low_copy_source(copy_op), loom_low_const_result(const_op));
   loom_type_t result_type =
       loom_module_value_type(module, loom_low_copy_result(copy_op));
-  ASSERT_TRUE(loom_type_is_register(result_type));
-  EXPECT_EQ(StringFromId(module, loom_type_register_class_id(result_type)),
-            "test.i32");
+  ExpectTestLowCoreRegisterType(result_type,
+                                TEST_LOW_CORE_REG_CLASS_ID_TEST_I32, 1);
 
   loom_module_free(module);
 }
@@ -342,10 +352,8 @@ TEST_F(LowAsmParserTest, AcceptsExplicitAmbiguousResultType) {
   ASSERT_TRUE(loom_low_op_isa(ambiguous_op));
   loom_type_t result_type = loom_module_value_type(
       module, loom_low_op_results(ambiguous_op).values[0]);
-  ASSERT_TRUE(loom_type_is_register(result_type));
-  EXPECT_EQ(StringFromId(module, loom_type_register_class_id(result_type)),
-            "test.i64");
-  EXPECT_EQ(loom_type_register_unit_count(result_type), 1u);
+  ExpectTestLowCoreRegisterType(result_type,
+                                TEST_LOW_CORE_REG_CLASS_ID_TEST_I64, 1);
 
   loom_module_free(module);
 }
@@ -385,9 +393,8 @@ TEST_F(LowAsmParserTest, InfersTiedResultTypeFromOperand) {
   ASSERT_TRUE(loom_low_op_isa(tied_op));
   loom_type_t result_type =
       loom_module_value_type(module, loom_low_op_results(tied_op).values[0]);
-  ASSERT_TRUE(loom_type_is_register(result_type));
-  EXPECT_EQ(StringFromId(module, loom_type_register_class_id(result_type)),
-            "test.i32");
+  ExpectTestLowCoreRegisterType(result_type,
+                                TEST_LOW_CORE_REG_CLASS_ID_TEST_I32, 1);
   ASSERT_EQ(tied_op->tied_result_count, 1u);
   const loom_tied_result_t* tied_results = loom_op_tied_results(tied_op);
   EXPECT_EQ(tied_results[0].result_index, 0u);

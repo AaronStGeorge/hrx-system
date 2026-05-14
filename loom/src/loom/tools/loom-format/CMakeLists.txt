@@ -25,6 +25,7 @@ loom_cc_library(
     loom::src::loom::format::bytecode::format
     loom::src::loom::format::bytecode::reader
     loom::src::loom::format::bytecode::writer
+    loom::src::loom::format::text::low_asm
     loom::src::loom::format::text::parser
     loom::src::loom::format::text::printer
     loom::src::loom::ir

@@ -12,6 +12,7 @@
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/analysis/liveness_json.h"
+#include "loom/codegen/low/text_asm.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -21,6 +22,8 @@
 #include "loom/ops/op_defs.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/test/ops.h"
+#include "loom/target/registers.h"
+#include "loom/target/test/descriptors.h"
 #include "loom/testing/module_ptr.h"
 
 namespace loom {
@@ -52,6 +55,16 @@ class LivenessTest : public ::testing::Test {
   ModulePtr ParseModule(const char* source) {
     loom_module_t* module = nullptr;
     loom_text_parse_options_t options = {};
+    const loom_low_descriptor_set_provider_t descriptor_set_providers[] = {
+        loom_test_low_core_descriptor_set,
+    };
+    loom_low_descriptor_registry_t descriptor_registry = {
+        .descriptor_set_providers = descriptor_set_providers,
+        .descriptor_set_provider_count =
+            IREE_ARRAYSIZE(descriptor_set_providers),
+    };
+    loom_low_descriptor_text_asm_environment_initialize(
+        &descriptor_registry, &options.low_asm_environment);
     IREE_CHECK_OK(loom_text_parse(iree_make_cstring_view(source),
                                   IREE_SV("liveness_test.loom"), &context_,
                                   &block_pool_, &options, &module));
@@ -98,10 +111,13 @@ class LivenessTest : public ::testing::Test {
   }
 
   static const loom_liveness_pressure_summary_t* FindRegisterPressure(
-      const loom_liveness_analysis_t& analysis, loom_string_id_t class_id) {
+      const loom_liveness_analysis_t& analysis,
+      uint64_t descriptor_set_stable_id, uint16_t class_id) {
     for (iree_host_size_t i = 0; i < analysis.pressure_summary_count; ++i) {
       const auto* summary = &analysis.pressure_summaries[i];
       if (summary->value_class.type_kind == LOOM_TYPE_REGISTER &&
+          summary->value_class.register_descriptor_set_stable_id ==
+              descriptor_set_stable_id &&
           summary->value_class.register_class_id == class_id) {
         return summary;
       }
@@ -298,22 +314,22 @@ func.def @tied_update(%tile: tile<4xf32>, %tensor: tensor<4xf32>, %off: index) -
 
 TEST_F(LivenessTest, RegisterPressureGroupsByRegisterClassUnits) {
   ModulePtr module = ParseModule(R"(
-func.def @register_pressure(%a: reg<vm.i32>, %b: reg<vm.i32>, %c: reg<vm.i32>) -> (reg<vm.i32>) {
-  %ab = low.copy %a : reg<vm.i32> -> reg<vm.i32>
-  %bc = low.copy %b : reg<vm.i32> -> reg<vm.i32>
-  %cc = low.copy %c : reg<vm.i32> -> reg<vm.i32>
-  func.return %ab : reg<vm.i32>
+test.target<low_core> @test_target
+low.func.def target(@test_target) @register_pressure(%a: reg<test.i32>, %b: reg<test.i32>, %c: reg<test.i32>) -> (reg<test.i32>) {
+  %ab = low.copy %a : reg<test.i32> -> reg<test.i32>
+  %bc = low.copy %b : reg<test.i32> -> reg<test.i32>
+  %cc = low.copy %c : reg<test.i32> -> reg<test.i32>
+  low.return %ab : reg<test.i32>
 }
 )");
   loom_func_like_t func =
       FindFunction(module.get(), IREE_SV("register_pressure"));
   loom_liveness_analysis_t analysis = AnalyzeBody(module.get(), func);
 
-  loom_string_id_t vm_i32 =
-      loom_module_lookup_string(module.get(), IREE_SV("vm.i32"));
-  ASSERT_NE(vm_i32, LOOM_STRING_ID_INVALID);
-  const loom_liveness_pressure_summary_t* pressure =
-      FindRegisterPressure(analysis, vm_i32);
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_test_low_core_descriptor_set();
+  const loom_liveness_pressure_summary_t* pressure = FindRegisterPressure(
+      analysis, descriptor_set->stable_id, TEST_LOW_CORE_REG_CLASS_ID_TEST_I32);
   ASSERT_NE(pressure, nullptr);
   EXPECT_EQ(pressure->peak_live_units, 3u);
   EXPECT_EQ(pressure->peak_live_values, 3u);
@@ -321,24 +337,24 @@ func.def @register_pressure(%a: reg<vm.i32>, %b: reg<vm.i32>, %c: reg<vm.i32>) -
 
 TEST_F(LivenessTest, PressureBudgetReportsHighUnrolledRegisterUse) {
   ModulePtr module = ParseModule(R"(
-func.def @high_pressure(%a0: reg<vm.i32>, %a1: reg<vm.i32>, %a2: reg<vm.i32>, %a3: reg<vm.i32>, %a4: reg<vm.i32>, %a5: reg<vm.i32>) -> (reg<vm.i32>) {
-  %r0 = low.copy %a0 : reg<vm.i32> -> reg<vm.i32>
-  %r1 = low.copy %a1 : reg<vm.i32> -> reg<vm.i32>
-  %r2 = low.copy %a2 : reg<vm.i32> -> reg<vm.i32>
-  %r3 = low.copy %a3 : reg<vm.i32> -> reg<vm.i32>
-  %r4 = low.copy %a4 : reg<vm.i32> -> reg<vm.i32>
-  %r5 = low.copy %a5 : reg<vm.i32> -> reg<vm.i32>
-  func.return %r0 : reg<vm.i32>
+test.target<low_core> @test_target
+low.func.def target(@test_target) @high_pressure(%a0: reg<test.i32>, %a1: reg<test.i32>, %a2: reg<test.i32>, %a3: reg<test.i32>, %a4: reg<test.i32>, %a5: reg<test.i32>) -> (reg<test.i32>) {
+  %r0 = low.copy %a0 : reg<test.i32> -> reg<test.i32>
+  %r1 = low.copy %a1 : reg<test.i32> -> reg<test.i32>
+  %r2 = low.copy %a2 : reg<test.i32> -> reg<test.i32>
+  %r3 = low.copy %a3 : reg<test.i32> -> reg<test.i32>
+  %r4 = low.copy %a4 : reg<test.i32> -> reg<test.i32>
+  %r5 = low.copy %a5 : reg<test.i32> -> reg<test.i32>
+  low.return %r0 : reg<test.i32>
 }
 )");
   loom_func_like_t func = FindFunction(module.get(), IREE_SV("high_pressure"));
   loom_liveness_analysis_t analysis = AnalyzeBody(module.get(), func);
 
-  loom_string_id_t vm_i32 =
-      loom_module_lookup_string(module.get(), IREE_SV("vm.i32"));
-  ASSERT_NE(vm_i32, LOOM_STRING_ID_INVALID);
-  const loom_liveness_pressure_summary_t* pressure =
-      FindRegisterPressure(analysis, vm_i32);
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_test_low_core_descriptor_set();
+  const loom_liveness_pressure_summary_t* pressure = FindRegisterPressure(
+      analysis, descriptor_set->stable_id, TEST_LOW_CORE_REG_CLASS_ID_TEST_I32);
   ASSERT_NE(pressure, nullptr);
   EXPECT_EQ(pressure->peak_live_units, 6u);
 
@@ -361,10 +377,11 @@ func.def @high_pressure(%a0: reg<vm.i32>, %a1: reg<vm.i32>, %a2: reg<vm.i32>, %a
 
 TEST_F(LivenessTest, FormatsMachineReadableJsonSummary) {
   ModulePtr module = ParseModule(R"(
-func.def @json_pressure(%a: reg<vm.i32>, %b: reg<vm.i32>) -> (reg<vm.i32>) {
-  %r = low.copy %a : reg<vm.i32> -> reg<vm.i32>
-  %dead = low.copy %b : reg<vm.i32> -> reg<vm.i32>
-  func.return %r : reg<vm.i32>
+test.target<low_core> @test_target
+low.func.def target(@test_target) @json_pressure(%a: reg<test.i32>, %b: reg<test.i32>) -> (reg<test.i32>) {
+  %r = low.copy %a : reg<test.i32> -> reg<test.i32>
+  %dead = low.copy %b : reg<test.i32> -> reg<test.i32>
+  low.return %r : reg<test.i32>
 }
 )");
   loom_func_like_t func = FindFunction(module.get(), IREE_SV("json_pressure"));
@@ -372,14 +389,15 @@ func.def @json_pressure(%a: reg<vm.i32>, %b: reg<vm.i32>) -> (reg<vm.i32>) {
 
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_system(), &builder);
-  IREE_ASSERT_OK(loom_liveness_format_json(&analysis, &builder));
+  IREE_ASSERT_OK(loom_liveness_format_json(&analysis, NULL, &builder));
   std::string json(iree_string_builder_buffer(&builder),
                    iree_string_builder_size(&builder));
   EXPECT_NE(json.find("\"format\":\"loom.liveness.v0\""), std::string::npos);
   EXPECT_NE(json.find("\"blocks\""), std::string::npos);
   EXPECT_NE(json.find("\"intervals\""), std::string::npos);
   EXPECT_NE(json.find("\"pressure_summaries\""), std::string::npos);
-  EXPECT_NE(json.find("\"register_class\":\"vm.i32\""), std::string::npos);
+  EXPECT_NE(json.find("\"register_descriptor_set\":"), std::string::npos);
+  EXPECT_NE(json.find("\"register_class_id\":"), std::string::npos);
   EXPECT_NE(json.find("\"peak_live_units\":2"), std::string::npos);
   iree_string_builder_deinitialize(&builder);
 }

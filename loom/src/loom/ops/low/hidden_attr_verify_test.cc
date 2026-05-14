@@ -7,6 +7,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/text_asm.h"
 #include "loom/error/error_defs.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
@@ -15,6 +16,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
 #include "loom/ops/test/ops.h"
+#include "loom/target/low_descriptor_registry_core_test.h"
 #include "loom/testing/diagnostic_matchers.h"
 #include "loom/verify/verify.h"
 
@@ -39,6 +41,7 @@ class LowHiddenAttrVerifyTest : public ::testing::Test {
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
+    loom_target_core_test_low_descriptor_registry_initialize(&low_registry_);
   }
 
   void TearDown() override {
@@ -62,6 +65,8 @@ class LowHiddenAttrVerifyTest : public ::testing::Test {
     loom_text_parse_options_t parse_options = {};
     parse_options.diagnostic_sink = parse_capture.sink();
     parse_options.max_errors = 20;
+    loom_low_descriptor_text_asm_environment_initialize(
+        &low_registry_.registry, &parse_options.low_asm_environment);
 
     loom_module_t* module = NULL;
     IREE_EXPECT_OK(loom_text_parse(
@@ -99,6 +104,7 @@ class LowHiddenAttrVerifyTest : public ::testing::Test {
 
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
+  loom_target_low_descriptor_registry_t low_registry_;
 };
 
 TEST_F(LowHiddenAttrVerifyTest, DescriptorOrdinalRejectsInvalidNegative) {

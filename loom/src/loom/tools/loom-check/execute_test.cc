@@ -1246,17 +1246,18 @@ TEST_F(ExecuteTest, EmitLowScheduleJsonAnchorsLiveInPreamble) {
 
 TEST_F(ExecuteTest, EmitLivenessJsonReportsPressureSummary) {
   loom_check_result_t result;
-  IREE_ASSERT_OK(
-      ExecuteFirst("// RUN: emit liveness-json @pressure\n"
-                   "func.def @pressure(%a: reg<test.i32>, "
-                   "%b: reg<test.i32>, %c: reg<test.i32>) -> "
-                   "(reg<test.i32>) {\n"
-                   "  %ab = low.copy %a : reg<test.i32> -> reg<test.i32>\n"
-                   "  %bc = low.copy %b : reg<test.i32> -> reg<test.i32>\n"
-                   "  %cc = low.copy %c : reg<test.i32> -> reg<test.i32>\n"
-                   "  func.return %ab : reg<test.i32>\n"
-                   "}\n",
-                   &result));
+  IREE_ASSERT_OK(ExecuteFirst(
+      "// RUN: emit liveness-json @pressure\n"
+      "test.target<low_core> @test_target\n"
+      "low.func.def target(@test_target) @pressure(%a: reg<test.i32>, "
+      "%b: reg<test.i32>, %c: reg<test.i32>) -> "
+      "(reg<test.i32>) {\n"
+      "  %ab = low.copy %a : reg<test.i32> -> reg<test.i32>\n"
+      "  %bc = low.copy %b : reg<test.i32> -> reg<test.i32>\n"
+      "  %cc = low.copy %c : reg<test.i32> -> reg<test.i32>\n"
+      "  low.return %ab : reg<test.i32>\n"
+      "}\n",
+      &result));
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
   const std::string actual_output = ActualOutputString(result);
@@ -1264,8 +1265,9 @@ TEST_F(ExecuteTest, EmitLivenessJsonReportsPressureSummary) {
             std::string::npos);
   EXPECT_NE(actual_output.find("\"intervals\""), std::string::npos);
   EXPECT_NE(actual_output.find("\"pressure_summaries\""), std::string::npos);
-  EXPECT_NE(actual_output.find("\"register_class\":\"test.i32\""),
+  EXPECT_NE(actual_output.find("\"register_descriptor_set\":"),
             std::string::npos);
+  EXPECT_NE(actual_output.find("\"register_class_id\":0"), std::string::npos);
   EXPECT_NE(actual_output.find("\"peak_live_units\":3"), std::string::npos);
   loom_check_result_deinitialize(&result);
 }

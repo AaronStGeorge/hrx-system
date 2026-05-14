@@ -103,7 +103,8 @@ class CfgGraphTest : public ::testing::Test {
   }
 
   void BuildGraph(loom_cfg_graph_t* out_graph) {
-    IREE_ASSERT_OK(loom_cfg_graph_build(body_, &graph_arena_, out_graph));
+    IREE_ASSERT_OK(
+        loom_cfg_graph_build(module_, body_, &graph_arena_, out_graph));
   }
 
   iree_arena_block_pool_t block_pool_;

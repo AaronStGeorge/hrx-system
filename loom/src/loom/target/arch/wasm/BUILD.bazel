@@ -37,6 +37,7 @@ loom_assert_no_dependencies(
     targets = [
         ":descriptors",
         ":low_registry",
+        ":math_policy",
         ":ops",
         ":provider",
         ":target_records",
@@ -48,6 +49,7 @@ loom_assert_no_dependencies(
     dependencies = [
         ":descriptors",
         ":low_registry",
+        ":math_policy",
         ":provider",
         ":target_records",
     ],
@@ -95,6 +97,17 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "math_policy",
+    srcs = ["math_policy.c"],
+    hdrs = ["math_policy.h"],
+    textual_hdrs = ["math_policy_tables.inl"],
+    deps = [
+        "//loom/src/loom/target:math_policy",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "ops",
     srcs = [
         "ops/builders.c",
@@ -136,6 +149,7 @@ loom_cc_library(
     hdrs = ["provider.h"],
     deps = [
         ":low_registry",
+        ":math_policy",
         ":ops",
         "//loom/src/loom/target:provider",
         "//loom/src/loom/target/emit/wasm:lower",
@@ -161,6 +175,7 @@ loom_cc_test(
         ":descriptors",
         "//loom/src/loom/codegen/low:register_class_map",
         "//loom/src/loom/ir",
+        "//loom/src/loom/target:registers",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

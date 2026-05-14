@@ -224,9 +224,12 @@ iree_status_t loom_print_op(loom_print_context_t* ctx, const loom_op_t* op) {
 
   // Walk format elements. Regions are printed inline when their REGION format
   // element is encountered, properly interleaving tokens with region bodies.
+  const loom_text_low_asm_descriptor_set_t* previous_descriptor_set =
+      ctx->low_register_descriptor_set;
   if (iree_status_is_ok(status)) {
     status = loom_print_format_elements(ctx, op, vtable);
   }
+  ctx->low_register_descriptor_set = previous_descriptor_set;
 
   // Location annotation (omitted for LOOM_LOCATION_UNKNOWN).
   if (iree_status_is_ok(status) && (ctx->flags & LOOM_TEXT_PRINT_LOCATIONS)) {
@@ -276,8 +279,7 @@ iree_status_t loom_print_block_label_line_with_options(
           loom_print_value_ref(ctx->stream, ctx->module, arg_id));
       IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, ": "));
       IREE_RETURN_IF_ERROR(
-          loom_text_print_type(loom_module_value_type(ctx->module, arg_id),
-                               ctx->module, ctx->stream));
+          loom_print_type(ctx, loom_module_value_type(ctx->module, arg_id)));
     }
     IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, ')'));
   }

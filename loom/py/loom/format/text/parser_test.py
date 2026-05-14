@@ -65,6 +65,15 @@ from loom.ir import (
     Use,
     Value,
 )
+from loom.stable_id import stable_id_from_string
+from loom.target.test.descriptors import TEST_LOW_CORE_DESCRIPTOR_SET
+
+_TEST_LOW_CORE_STABLE_ID = stable_id_from_string(TEST_LOW_CORE_DESCRIPTOR_SET.key)
+_TEST_PTR_REGISTER_CLASS_ID = next(
+    i
+    for i, register_class in enumerate(TEST_LOW_CORE_DESCRIPTOR_SET.reg_classes)
+    if register_class.name == "test.ptr"
+)
 
 # ============================================================================
 # Helpers
@@ -80,6 +89,15 @@ def _parse(text: str, **kwargs: Any) -> tuple[Type, dict[int, int]]:
 def _parse_type(text: str, **kwargs: Any) -> Type:
     """Parse a type string, returning just the type."""
     return _parse(text, **kwargs)[0]
+
+
+def _test_ptr_register_type(unit_count: int = 1) -> RegisterType:
+    return RegisterType(
+        _TEST_LOW_CORE_STABLE_ID,
+        _TEST_PTR_REGISTER_CLASS_ID,
+        unit_count,
+        "test.ptr",
+    )
 
 
 # ============================================================================
@@ -457,13 +475,13 @@ class TestParseStorageType:
 
 class TestParseRegisterType:
     def test_single_unit(self) -> None:
-        assert _parse_type("reg<amdgpu.vgpr>") == RegisterType("amdgpu.vgpr")
+        assert _parse_type("reg<test.ptr>") == _test_ptr_register_type()
 
     def test_multiple_units(self) -> None:
-        assert _parse_type("reg<amdgpu.vgpr x4>") == RegisterType("amdgpu.vgpr", 4)
+        assert _parse_type("reg<test.ptr x4>") == _test_ptr_register_type(4)
 
     def test_multiple_units_with_spaced_suffix(self) -> None:
-        assert _parse_type("reg<amdgpu.vgpr x 4>") == RegisterType("amdgpu.vgpr", 4)
+        assert _parse_type("reg<test.ptr x 4>") == _test_ptr_register_type(4)
 
     def test_requires_namespace(self) -> None:
         with pytest.raises(ParseError, match="expected OP_NAME"):
@@ -471,7 +489,7 @@ class TestParseRegisterType:
 
     def test_rejects_zero_units(self) -> None:
         with pytest.raises(ParseError, match="unit count"):
-            _parse_type("reg<amdgpu.vgpr x0>")
+            _parse_type("reg<test.ptr x0>")
 
 
 # ============================================================================

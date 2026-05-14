@@ -5,13 +5,11 @@ test.record @target_snapshot {arch = "gfx1100", lanes = 64}
 test.target<low_core> @test_target {subgroup_size = 64}
 
 // Low function declarations carry their source semantic mapping inline.
-test.record @vm_target
-
 func.decl @extern_add(%lhs: i32, %rhs: i32) -> (i32)
 
 func.def @caller(%lhs: i32, %rhs: i32) -> (i32) {
-  %sum = low.invoke @vm_add_i32(%lhs, %rhs) : (i32, i32) -> (i32)
+  %sum = low.invoke @test_add_i32(%lhs, %rhs) : (i32, i32) -> (i32)
   func.return %sum : i32
 }
 
-low.func.decl target(@vm_target) @vm_add_i32(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>)
+low.func.decl target(@test_target) @test_add_i32(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>)

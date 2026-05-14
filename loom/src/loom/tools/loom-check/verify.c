@@ -51,6 +51,10 @@ iree_status_t loom_check_execute_verify(
         environment, &low_registry);
   }
   if (iree_status_is_ok(status)) {
+    loom_low_descriptor_text_print_context_initialize(
+        &low_registry.registry, &collector.type_print_context);
+  }
+  if (iree_status_is_ok(status)) {
     loom_text_parse_options_t parse_options = {
         .diagnostic_sink = {.fn = loom_check_diagnostic_collector_sink,
                             .user_data = &collector},

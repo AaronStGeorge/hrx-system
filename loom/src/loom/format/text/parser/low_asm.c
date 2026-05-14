@@ -862,6 +862,11 @@ iree_status_t loom_parse_low_asm_prefixed_region(
       .fn = loom_parse_low_asm_region_body,
       .user_data = descriptor_set,
   };
-  return loom_parse_braced_region_with_body(parser, region_descriptor, body,
-                                            out_region);
+  const loom_text_low_asm_descriptor_set_t* previous_descriptor_set =
+      parser->low_register_descriptor_set;
+  parser->low_register_descriptor_set = descriptor_set;
+  iree_status_t status = loom_parse_braced_region_with_body(
+      parser, region_descriptor, body, out_region);
+  parser->low_register_descriptor_set = previous_descriptor_set;
+  return status;
 }

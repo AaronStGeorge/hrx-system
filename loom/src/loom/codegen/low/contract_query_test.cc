@@ -128,7 +128,6 @@ TEST(LowContractQueryTest, ContractIndexDescriptorRuleSelectsLegalCase) {
           /*.values=*/rule_sets,
       },
       /*.map_value=*/{},
-      /*.register_class=*/{},
       /*.can_materialize=*/{},
       /*.descriptor_ref=*/
       {

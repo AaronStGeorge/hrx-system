@@ -110,18 +110,6 @@ typedef struct loom_low_lower_rule_match_map_value_callback_t {
   void* user_data;
 } loom_low_lower_rule_match_map_value_callback_t;
 
-typedef iree_status_t (*loom_low_lower_rule_match_register_class_fn_t)(
-    void* user_data, const loom_low_lower_rule_match_context_t* context,
-    uint16_t descriptor_register_class_id, loom_string_id_t* out_string_id);
-
-typedef struct loom_low_lower_rule_match_register_class_callback_t {
-  // Callback invoked when a mapped value reports a module string ID and a guard
-  // needs the equivalent descriptor-set register-class spelling.
-  loom_low_lower_rule_match_register_class_fn_t fn;
-  // Caller-owned payload passed to |fn|.
-  void* user_data;
-} loom_low_lower_rule_match_register_class_callback_t;
-
 typedef bool (*loom_low_lower_rule_match_can_materialize_value_fn_t)(
     void* user_data, const loom_low_lower_rule_match_context_t* context,
     const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
@@ -160,8 +148,6 @@ struct loom_low_lower_rule_match_context_t {
   uint64_t feature_bits;
   // Source-value to target-low register metadata mapper.
   loom_low_lower_rule_match_map_value_callback_t map_value;
-  // Optional descriptor-register-class to module string mapper.
-  loom_low_lower_rule_match_register_class_callback_t register_class;
   // Optional source value materializer predicate bridge.
   loom_low_lower_rule_match_can_materialize_value_callback_t can_materialize;
   // Optional rule-local descriptor-ref resolver. Missing uses descriptor keys

@@ -513,33 +513,47 @@ class FunctionType:
 
 @dataclass(frozen=True, slots=True)
 class RegisterType:
-    """A target-low register value with an allocation class and unit count.
+    """A target-low register value with compact descriptor identity.
 
     Register types carry only physical allocation shape, not value semantics.
     The op descriptor determines whether a register is interpreted as i32,
     f32, v128, an address, or an instruction-specific packed payload.
     """
 
-    reg_class: str
+    descriptor_set_stable_id: int
+    register_class_id: int
     unit_count: int = 1
+    name: str | None = None
 
     def __post_init__(self) -> None:
-        parts = self.reg_class.split(".")
-        if len(parts) < 2 or any(not part for part in parts):
-            raise ValueError(
-                f"register class must be namespace-qualified: {self.reg_class!r}"
-            )
+        if self.descriptor_set_stable_id < 1:
+            raise ValueError("register descriptor set stable ID must be non-zero")
+        if self.register_class_id < 0 or self.register_class_id >= 2**16:
+            raise ValueError("register class ID must fit uint16_t")
         if self.unit_count < 1:
             raise ValueError("register unit count must be >= 1")
+        if self.unit_count >= 2**32:
+            raise ValueError("register unit count must fit uint32_t")
+        if self.name is not None:
+            parts = self.name.split(".")
+            if len(parts) < 2 or any(not part for part in parts):
+                raise ValueError(
+                    f"register class must be namespace-qualified: {self.name!r}"
+                )
 
     @property
     def type_kind(self) -> TypeKind:
         return TypeKind.REGISTER
 
     def __repr__(self) -> str:
+        reg_class = (
+            self.name
+            if self.name is not None
+            else f"0x{self.descriptor_set_stable_id:x}:{self.register_class_id}"
+        )
         if self.unit_count == 1:
-            return f"reg<{self.reg_class}>"
-        return f"reg<{self.reg_class} x{self.unit_count}>"
+            return f"reg<{reg_class}>"
+        return f"reg<{reg_class} x{self.unit_count}>"
 
 
 @dataclass(frozen=True, slots=True)

@@ -13,6 +13,7 @@
 #include "iree/io/vec_stream.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/text_asm.h"
 #include "loom/format/bytecode/reader.h"
 #include "loom/format/bytecode/writer.h"
 #include "loom/format/text/parser.h"
@@ -23,12 +24,18 @@
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
 #include "loom/ops/test/ops.h"
+#include "loom/target/test/descriptors.h"
 #include "loom/testing/module_ptr.h"
 
 namespace loom {
 namespace {
 
 using ModulePtr = ::loom::testing::ModulePtr;
+
+static const loom_low_descriptor_set_provider_t
+    kSymbolDCETestDescriptorSetProviders[] = {
+        loom_test_low_core_descriptor_set,
+};
 
 class SymbolDCETest : public ::testing::Test {
  protected:
@@ -41,6 +48,11 @@ class SymbolDCETest : public ::testing::Test {
     RegisterDialect(LOOM_DIALECT_LOW, loom_low_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_TARGET, loom_target_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
+    low_descriptor_registry_ = {};
+    low_descriptor_registry_.descriptor_set_providers =
+        kSymbolDCETestDescriptorSetProviders;
+    low_descriptor_registry_.descriptor_set_provider_count =
+        IREE_ARRAYSIZE(kSymbolDCETestDescriptorSetProviders);
   }
 
   void TearDown() override {
@@ -62,6 +74,8 @@ class SymbolDCETest : public ::testing::Test {
   loom_module_t* Parse(iree_string_view_t source) {
     loom_module_t* module = nullptr;
     loom_text_parse_options_t options = {};
+    loom_low_descriptor_text_asm_environment_initialize(
+        &low_descriptor_registry_, &options.low_asm_environment);
     IREE_EXPECT_OK(loom_text_parse(source, IREE_SV("symbol_dce_test.loom"),
                                    &context_, &block_pool_, &options, &module));
     EXPECT_NE(module, nullptr);
@@ -69,10 +83,17 @@ class SymbolDCETest : public ::testing::Test {
   }
 
   std::string Print(const loom_module_t* module) {
+    loom_text_low_asm_environment_t low_asm_environment = {};
+    loom_low_descriptor_text_asm_environment_initialize(
+        &low_descriptor_registry_, &low_asm_environment);
+    loom_text_print_options_t options = {
+        .flags = LOOM_TEXT_PRINT_DEFAULT,
+        .low_asm_environment = low_asm_environment,
+    };
     iree_string_builder_t builder;
     iree_string_builder_initialize(iree_allocator_system(), &builder);
-    IREE_EXPECT_OK(loom_text_print_module_to_builder(module, &builder,
-                                                     LOOM_TEXT_PRINT_DEFAULT));
+    IREE_EXPECT_OK(loom_text_print_module_to_builder_with_options(
+        module, &builder, &options));
     std::string printed(iree_string_builder_buffer(&builder),
                         iree_string_builder_size(&builder));
     iree_string_builder_deinitialize(&builder);
@@ -137,11 +158,12 @@ class SymbolDCETest : public ::testing::Test {
 
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
+  loom_low_descriptor_registry_t low_descriptor_registry_;
 };
 
 TEST_F(SymbolDCETest, PrunedLowIslandRoundTripsThroughBytecode) {
   const char* source = R"(
-test.target<low_core> @vm_target
+test.target<low_core> @test_target
 
 func.decl @add_i32(%lhs: i32, %rhs: i32) -> (i32)
 
@@ -155,9 +177,9 @@ func.def @dead_wrapper(%lhs: i32, %rhs: i32) -> (i32) {
   func.return %sum : i32
 }
 
-low.func.decl target(@vm_target) @live_add(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>)
+low.func.decl target(@test_target) @live_add(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>)
 
-low.func.decl target(@vm_target) @dead_add(%lhs: reg<vm.i32>, %rhs: reg<vm.i32>) -> (reg<vm.i32>)
+low.func.decl target(@test_target) @dead_add(%lhs: reg<test.i32>, %rhs: reg<test.i32>) -> (reg<test.i32>)
 )";
 
   ModulePtr module(Parse(iree_make_cstring_view(source)));

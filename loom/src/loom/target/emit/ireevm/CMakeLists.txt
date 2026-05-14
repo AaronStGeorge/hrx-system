@@ -25,6 +25,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::func_symbol_facts
     loom::src::loom::ops::low
+    loom::src::loom::target::arch::ireevm::descriptors
     loom::src::loom::target::function_contract
     loom::src::loom::target::registers
     loom::src::loom::target::types
@@ -89,6 +90,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::target
+    loom::src::loom::target::arch::ireevm::descriptors
     loom::src::loom::target::arch::ireevm::provider
     loom::src::loom::target::compile_report
     loom::src::loom::target::compile_report_low

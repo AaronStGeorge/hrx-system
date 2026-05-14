@@ -37,10 +37,6 @@ const loom_block_t* LowFuncEntryBlock(const loom_op_t* low_func_op);
 const loom_op_t* FindLowFuncBodyOp(const loom_op_t* low_func_op,
                                    loom_op_kind_t kind);
 
-// Returns true when |type| is the requested register class and unit count.
-bool RegisterTypeEquals(const loom_module_t* module, loom_type_t type,
-                        iree_string_view_t register_class, uint32_t unit_count);
-
 }  // namespace loom::testing
 
 #endif  // LOOM_CODEGEN_LOW_TESTING_IR_MATCH_TEST_UTIL_H_

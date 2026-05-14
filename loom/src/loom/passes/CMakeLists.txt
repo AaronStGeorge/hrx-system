@@ -446,6 +446,7 @@ loom_cc_test(
     ::symbol_dce
     iree::base::internal::arena
     iree::io::stream
+    loom::src::loom::codegen::low::text_asm
     loom::src::loom::format::bytecode::reader
     loom::src::loom::format::bytecode::writer
     loom::src::loom::format::text::parser
@@ -455,6 +456,7 @@ loom_cc_test(
     loom::src::loom::ops::low
     loom::src::loom::ops::target
     loom::src::loom::ops::test
+    loom::src::loom::target::test::descriptors
     loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main

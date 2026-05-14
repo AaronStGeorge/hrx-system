@@ -9,6 +9,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/rewrite/rewriter.h"
+#include "loom/target/registers.h"
 
 static loom_op_t* loom_low_defining_op(loom_rewriter_t* rewriter,
                                        loom_value_id_t value_id) {
@@ -38,7 +39,8 @@ static bool loom_low_slice_matches_concat_source(loom_rewriter_t* rewriter,
   const loom_type_t slice_type =
       loom_module_value_type(rewriter->module, loom_low_slice_result(slice_op));
   if (!loom_type_is_register(slice_type)) return false;
-  const uint32_t slice_unit_count = loom_type_register_unit_count(slice_type);
+  const uint32_t slice_unit_count =
+      loom_low_register_type_unit_count(slice_type);
 
   uint32_t source_offset = 0;
   loom_value_slice_t sources = loom_low_concat_sources(concat_op);
@@ -49,7 +51,7 @@ static bool loom_low_slice_matches_concat_source(loom_rewriter_t* rewriter,
     if (!loom_type_is_register(source_type)) return false;
 
     const uint32_t source_unit_count =
-        loom_type_register_unit_count(source_type);
+        loom_low_register_type_unit_count(source_type);
     if ((uint64_t)slice_offset == source_offset &&
         slice_unit_count == source_unit_count &&
         loom_type_equal(slice_type, source_type)) {

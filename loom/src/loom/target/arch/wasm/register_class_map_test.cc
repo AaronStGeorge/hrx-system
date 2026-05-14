@@ -14,6 +14,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/target/arch/wasm/descriptors.h"
+#include "loom/target/registers.h"
 
 namespace loom {
 namespace {
@@ -37,9 +38,6 @@ TEST(WasmRegisterClassMapTest, ResolvesRealDescriptorIds) {
                                       &block_pool, nullptr,
                                       iree_allocator_system(), &module));
   ASSERT_NE(module, nullptr);
-  loom_string_id_t v128_string_id = LOOM_STRING_ID_INVALID;
-  IREE_ASSERT_OK(
-      loom_module_intern_string(module, IREE_SV("wasm.v128"), &v128_string_id));
 
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool, &arena);
@@ -52,9 +50,11 @@ TEST(WasmRegisterClassMapTest, ResolvesRealDescriptorIds) {
   uint16_t descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE;
   const loom_low_reg_class_t* descriptor_register_class = nullptr;
   bool found = false;
-  IREE_ASSERT_OK(loom_low_register_class_map_try_resolve_string_id(
-      &map, v128_string_id, &descriptor_register_class_id,
-      &descriptor_register_class, &found));
+  IREE_ASSERT_OK(loom_low_register_class_map_try_resolve_type(
+      &map,
+      loom_low_register_type(descriptor_set->stable_id,
+                             WASM_CORE_SIMD128_REG_CLASS_ID_V128, 1),
+      &descriptor_register_class_id, &descriptor_register_class, &found));
   ASSERT_TRUE(found);
   EXPECT_EQ(descriptor_register_class_id, WASM_CORE_SIMD128_REG_CLASS_ID_V128);
   ASSERT_NE(descriptor_register_class, nullptr);

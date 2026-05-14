@@ -591,8 +591,8 @@ class BytecodeWriter:
                 self._ctx.intern_string(name)
                 for p in params:
                     self._number_type(p)
-            case RegisterType(reg_class=reg_class):
-                self._ctx.intern_string(reg_class)
+            case RegisterType():
+                pass
             case _:
                 pass
         # Intern the parent AFTER sub-types (ensures sub-types have lower IDs).
@@ -759,10 +759,14 @@ class BytecodeWriter:
                 buf.write_varint(len(params))
                 for param in params:
                     buf.write_varint(self._ctx.intern_type(param))
-            case RegisterType(reg_class=reg_class, unit_count=unit_count):
+            case RegisterType(
+                descriptor_set_stable_id=descriptor_set_stable_id,
+                register_class_id=register_class_id,
+                unit_count=unit_count,
+            ):
                 buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.REGISTER])
-                buf.write_varint(self._ctx.strings[reg_class])
-                buf.write_varint(unit_count)
+                buf.write_varint(descriptor_set_stable_id)
+                buf.write_varint(register_class_id | (unit_count << 16))
             case StorageType(space=space):
                 buf.write_u8(BYTECODE_TYPE_KIND_BY_IR_KIND[TypeKind.STORAGE])
                 buf.write_u8(space.value)

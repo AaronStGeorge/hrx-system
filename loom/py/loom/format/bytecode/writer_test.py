@@ -100,6 +100,15 @@ from loom.ir import (
     TypeKind,
     Value,
 )
+from loom.stable_id import stable_id_from_string
+from loom.target.test.descriptors import TEST_LOW_CORE_DESCRIPTOR_SET
+
+_TEST_LOW_CORE_STABLE_ID = stable_id_from_string(TEST_LOW_CORE_DESCRIPTOR_SET.key)
+_TEST_PTR_REGISTER_CLASS_ID = next(
+    i
+    for i, register_class in enumerate(TEST_LOW_CORE_DESCRIPTOR_SET.reg_classes)
+    if register_class.name == "test.ptr"
+)
 
 # ============================================================================
 # Helpers
@@ -137,6 +146,15 @@ def _section_kinds(data: bytes | bytearray) -> list[int]:
         section_kinds.append(struct.unpack_from("<H", data, offset)[0])
         offset += 32
     return section_kinds
+
+
+def _test_ptr_register_type(unit_count: int = 1) -> RegisterType:
+    return RegisterType(
+        _TEST_LOW_CORE_STABLE_ID,
+        _TEST_PTR_REGISTER_CLASS_ID,
+        unit_count,
+        "test.ptr",
+    )
 
 
 def _text_parser(
@@ -743,7 +761,7 @@ class TestTypesSection:
         self._roundtrip_type(DialectType("vm.ref", (inner,)))
 
     def test_register_type(self) -> None:
-        self._roundtrip_type(RegisterType("amdgpu.vgpr", 4))
+        self._roundtrip_type(_test_ptr_register_type(4))
 
     def test_pool_static(self) -> None:
         self._roundtrip_type(PoolType(StaticDim(65536)))
@@ -1483,13 +1501,13 @@ class TestCrossFormatRoundTrip:
 
     def test_low_func_target_and_register_body_survive_bytecode(self) -> None:
         text = (
-            'test.record @gfx1100 {arch = "gfx1100"}\n\n'
-            "low.func.def target(@gfx1100) "
-            "@add(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) "
-            "-> (reg<amdgpu.vgpr>) {\n"
-            "  %sum = low.op<amdgpu.v_add_u32>(%lhs, %rhs) : "
-            "(reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr>\n"
-            "  low.return %sum : reg<amdgpu.vgpr>\n"
+            "test.record @test_target\n\n"
+            "low.func.def target(@test_target) "
+            "@add(%lhs: reg<test.ptr>, %rhs: reg<test.ptr>) "
+            "-> (reg<test.ptr>) {\n"
+            "  %sum = low.op<test.add.i32>(%lhs, %rhs) : "
+            "(reg<test.ptr>, reg<test.ptr>) -> reg<test.ptr>\n"
+            "  low.return %sum : reg<test.ptr>\n"
             "}\n"
         )
 
@@ -1499,19 +1517,19 @@ class TestCrossFormatRoundTrip:
         assert symbol.kind == SymbolKind.FUNC_DEF
         assert symbol.op is not None
         assert symbol.op.attributes["callee"] == "add"
-        assert symbol.op.attributes["target"] == "gfx1100"
+        assert symbol.op.attributes["target"] == "test_target"
         assert _roundtrip_text_through_bytecode(text, include_low=True) == text
 
     def test_low_invoke_and_low_function_survive_bytecode(self) -> None:
         text = (
-            "test.record @vm_target\n\n"
+            "test.record @test_target\n\n"
             "func.def @caller(%lhs: i32, %rhs: i32) -> (i32) {\n"
-            "  %sum = low.invoke @vm_add_i32(%lhs, %rhs) : "
+            "  %sum = low.invoke @test_add(%lhs, %rhs) : "
             "(i32, i32) -> (i32)\n"
             "  func.return %sum : i32\n"
             "}\n\n"
-            "low.func.decl target(@vm_target) @vm_add_i32(%lhs: reg<vm.i32>, "
-            "%rhs: reg<vm.i32>) -> (reg<vm.i32>)\n"
+            "low.func.decl target(@test_target) @test_add(%lhs: reg<test.ptr>, "
+            "%rhs: reg<test.ptr>) -> (reg<test.ptr>)\n"
         )
 
         loaded = _parse_write_read(text, include_low=True)

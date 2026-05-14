@@ -880,11 +880,13 @@ loom_cc_test(
     name = "amdgpu_hal_backend_test",
     srcs = ["execution/amdgpu_hal_backend_test.cc"],
     deps = [
+        ":low_registry",
         ":ops",
         ":amdgpu_hal_backend",
         ":target_info",
         ":target_info_defs",
         ":target_record_table",
+        "//loom/src/loom/codegen/low:text_asm",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_registry",

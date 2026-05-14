@@ -87,8 +87,8 @@ func.def @dynamic_unknown(%x: i32) -> (i64, i64) {
 }
 // ----
 func.def @dynamic_unknown(%x: i32) -> (i64, i64) {
-  %lo = scalar.constant -9223372036854775808 : i64
-  %hi = scalar.constant 9223372036854775807 : i64
+  %lo = scalar.constant -2147483648 : i64
+  %hi = scalar.constant 2147483647 : i64
   func.return %lo, %hi : i64, i64
 }
 

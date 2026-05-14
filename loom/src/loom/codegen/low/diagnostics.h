@@ -46,9 +46,10 @@ iree_string_view_t loom_low_diagnostic_function_name(
 iree_string_view_t loom_low_diagnostic_value_name(const loom_module_t* module,
                                                   loom_value_id_t value_id);
 
-// Returns a display name for |value_class|, or "<unknown>".
+// Returns a descriptor-local display name for |value_class|, or "<unknown>".
 iree_string_view_t loom_low_diagnostic_value_class_name(
-    const loom_module_t* module, loom_liveness_value_class_t value_class);
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_liveness_value_class_t value_class);
 
 // Returns a display name for |block|, or "<anonymous>".
 iree_string_view_t loom_low_diagnostic_block_name(const loom_module_t* module,

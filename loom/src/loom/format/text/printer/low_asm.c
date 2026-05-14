@@ -329,9 +329,8 @@ static iree_status_t loom_print_low_asm_result_type_annotation(
       IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ",", false));
     }
     IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
-    IREE_RETURN_IF_ERROR(loom_text_print_type(
-        ctx->module->values.entries[statement->results[i]].type, ctx->module,
-        ctx->stream));
+    IREE_RETURN_IF_ERROR(loom_print_type(
+        ctx, ctx->module->values.entries[statement->results[i]].type));
     loom_print_did_write(ctx);
   }
   return iree_ok_status();
@@ -662,23 +661,43 @@ static iree_status_t loom_print_low_asm_region_with_descriptor_set(
     loom_print_context_t* ctx, const loom_region_t* region,
     iree_string_view_t descriptor_set_key, bool entry_args_declared_by_parent,
     const loom_text_low_asm_descriptor_set_t* descriptor_set) {
-  IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "asm", false));
-  IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "<", true));
-  IREE_RETURN_IF_ERROR(loom_print_emit(ctx, descriptor_set_key, true));
-  IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ">", true));
-  IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
-  if (iree_any_bit_set(ctx->flags, LOOM_TEXT_PRINT_SKIP_REGIONS)) {
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(ctx->stream, "{ ... }"));
-  } else {
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(ctx->stream, "{\n"));
-    ++ctx->indent;
-    IREE_RETURN_IF_ERROR(loom_print_low_asm_region_body(
-        ctx, region, descriptor_set, entry_args_declared_by_parent));
-    --ctx->indent;
-    IREE_RETURN_IF_ERROR(loom_print_indent(ctx));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(ctx->stream, '}'));
+  const loom_text_low_asm_descriptor_set_t* previous_descriptor_set =
+      ctx->low_register_descriptor_set;
+  ctx->low_register_descriptor_set = descriptor_set;
+  iree_status_t status = iree_ok_status();
+  status = loom_print_emit_cstr(ctx, "asm", false);
+  if (iree_status_is_ok(status)) {
+    status = loom_print_emit_cstr(ctx, "<", true);
   }
+  if (iree_status_is_ok(status)) {
+    status = loom_print_emit(ctx, descriptor_set_key, true);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_print_emit_cstr(ctx, ">", true);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_print_space_if_needed(ctx);
+  }
+  if (iree_status_is_ok(status) &&
+      iree_any_bit_set(ctx->flags, LOOM_TEXT_PRINT_SKIP_REGIONS)) {
+    status = loom_output_stream_write_cstring(ctx->stream, "{ ... }");
+  } else if (iree_status_is_ok(status)) {
+    status = loom_output_stream_write_cstring(ctx->stream, "{\n");
+    ++ctx->indent;
+    if (iree_status_is_ok(status)) {
+      status = loom_print_low_asm_region_body(ctx, region, descriptor_set,
+                                              entry_args_declared_by_parent);
+    }
+    --ctx->indent;
+    if (iree_status_is_ok(status)) {
+      status = loom_print_indent(ctx);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_output_stream_write_char(ctx->stream, '}');
+    }
+  }
+  ctx->low_register_descriptor_set = previous_descriptor_set;
+  IREE_RETURN_IF_ERROR(status);
   ctx->has_previous_token = true;
   ctx->last_char = '}';
   ctx->glue_next = false;

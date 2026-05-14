@@ -10,6 +10,7 @@
 
 #include "loom/analysis/liveness_json.h"
 #include "loom/codegen/low/function.h"
+#include "loom/codegen/low/text_asm.h"
 #include "loom/ir/context.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
@@ -613,7 +614,11 @@ iree_status_t loom_low_schedule_format_json(
 
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"liveness\":"));
-  IREE_RETURN_IF_ERROR(loom_liveness_format_json(&table->liveness, builder));
+  loom_low_descriptor_text_print_context_t type_print_context;
+  loom_low_descriptor_text_print_context_initialize_for_set(
+      table->target.descriptor_set, &type_print_context);
+  IREE_RETURN_IF_ERROR(loom_liveness_format_json(
+      &table->liveness, &type_print_context.options, builder));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}"));
   return iree_ok_status();
 }

@@ -12,6 +12,7 @@
 #include "iree/base/api.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/format/text/low_asm.h"
+#include "loom/format/text/printer.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -24,6 +25,29 @@ extern "C" {
 void loom_low_descriptor_text_asm_environment_initialize(
     const loom_low_descriptor_registry_t* descriptor_registry,
     loom_text_low_asm_environment_t* out_environment);
+
+// Descriptor-backed text printer context for target-low types.
+typedef struct loom_low_descriptor_text_print_context_t {
+  // Single descriptor-set backing storage used by the descriptor-set
+  // initializer.
+  const loom_low_descriptor_set_t* descriptor_sets[1];
+  // Registry view used by |options.low_asm_environment|.
+  loom_low_descriptor_registry_t descriptor_registry;
+  // Text printer options configured for descriptor-backed register types.
+  loom_text_print_options_t options;
+} loom_low_descriptor_text_print_context_t;
+
+// Initializes |out_context| to print target-low register types through
+// |descriptor_registry|. The registry is borrowed and must outlive the context.
+void loom_low_descriptor_text_print_context_initialize(
+    const loom_low_descriptor_registry_t* descriptor_registry,
+    loom_low_descriptor_text_print_context_t* out_context);
+
+// Initializes |out_context| to print target-low register types from one
+// descriptor set.
+void loom_low_descriptor_text_print_context_initialize_for_set(
+    const loom_low_descriptor_set_t* descriptor_set,
+    loom_low_descriptor_text_print_context_t* out_context);
 
 #ifdef __cplusplus
 }  // extern "C"

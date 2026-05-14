@@ -757,6 +757,7 @@ loom_cc_test(
   SRCS
     "execution/amdgpu_hal_backend_test.cc"
   DEPS
+    ::low_registry
     ::ops
     ::amdgpu_hal_backend
     ::target_info
@@ -764,6 +765,7 @@ loom_cc_test(
     ::target_record_table
     iree::base
     iree::base::internal::arena
+    loom::src::loom::codegen::low::text_asm
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::op_registry

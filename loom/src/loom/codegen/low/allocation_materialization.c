@@ -43,7 +43,7 @@ static iree_status_t loom_low_allocation_emit_materialized_spill(
       loom_param_string(
           loom_low_diagnostic_value_name(table->module, plan->value_id)),
       loom_param_string(loom_low_diagnostic_value_class_name(
-          table->module, assignment->value_class)),
+          table->target.descriptor_set, assignment->value_class)),
       loom_param_string(
           loom_low_diagnostic_value_name(table->module, storage_value_id)),
       loom_param_u32(plan->byte_size),

@@ -19,6 +19,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 #include "loom/ops/test/ops.h"
+#include "loom/target/registers.h"
 #include "loom/util/stream.h"
 
 namespace loom {
@@ -457,8 +458,10 @@ class PrintOpTest : public ::testing::Test {
 };
 
 TEST_F(PrintOpTest, PrintRegisterType) {
-  loom_type_t type = loom_type_register(intern("amdgpu.vgpr"), 4);
-  EXPECT_EQ(print_type(type, module_), "reg<amdgpu.vgpr x4>");
+  loom_type_t type = loom_low_register_type(
+      /*descriptor_set_stable_id=*/0x2a, /*register_class_id=*/7,
+      /*unit_count=*/4);
+  EXPECT_EQ(print_type(type, module_), "reg<0x2a:7 x4>");
 }
 
 //===----------------------------------------------------------------------===//

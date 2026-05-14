@@ -12,6 +12,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/target/registers.h"
 #include "loom/target/test/descriptors.h"
 
 namespace loom {
@@ -51,12 +52,9 @@ class RegisterClassMapTest : public ::testing::Test {
   loom_context_t context_;
 };
 
-TEST_F(RegisterClassMapTest, ResolvesModuleStringIdsToDescriptorIds) {
+TEST_F(RegisterClassMapTest, ResolvesCompactRegisterTypesToDescriptorIds) {
   loom_module_t* module = AllocateModule();
   ASSERT_NE(module, nullptr);
-  loom_string_id_t i32_string_id = LOOM_STRING_ID_INVALID;
-  IREE_ASSERT_OK(
-      loom_module_intern_string(module, IREE_SV("test.i32"), &i32_string_id));
 
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
@@ -69,23 +67,14 @@ TEST_F(RegisterClassMapTest, ResolvesModuleStringIdsToDescriptorIds) {
   uint16_t descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE;
   const loom_low_reg_class_t* descriptor_register_class = nullptr;
   bool found = false;
-  IREE_ASSERT_OK(loom_low_register_class_map_try_resolve_string_id(
-      &map, i32_string_id, &descriptor_register_class_id,
-      &descriptor_register_class, &found));
-  ASSERT_TRUE(found);
-  ASSERT_NE(descriptor_register_class, nullptr);
-  EXPECT_NE(descriptor_register_class_id, LOOM_LOW_REG_CLASS_NONE);
-  EXPECT_EQ(DescriptorString(descriptor_set,
-                             descriptor_register_class->name_string_offset),
-            "test.i32");
-
-  found = false;
   IREE_ASSERT_OK(loom_low_register_class_map_try_resolve_type(
-      &map, loom_type_register(i32_string_id, 4), &descriptor_register_class_id,
-      &descriptor_register_class, &found));
+      &map,
+      loom_low_register_type(descriptor_set->stable_id,
+                             TEST_LOW_CORE_REG_CLASS_ID_TEST_I32, 4),
+      &descriptor_register_class_id, &descriptor_register_class, &found));
   ASSERT_TRUE(found);
   ASSERT_NE(descriptor_register_class, nullptr);
-  EXPECT_NE(descriptor_register_class_id, LOOM_LOW_REG_CLASS_NONE);
+  EXPECT_EQ(descriptor_register_class_id, TEST_LOW_CORE_REG_CLASS_ID_TEST_I32);
   EXPECT_EQ(DescriptorString(descriptor_set,
                              descriptor_register_class->name_string_offset),
             "test.i32");
@@ -97,9 +86,6 @@ TEST_F(RegisterClassMapTest, ResolvesModuleStringIdsToDescriptorIds) {
 TEST_F(RegisterClassMapTest, RejectsUnknownAndNonRegisterTypes) {
   loom_module_t* module = AllocateModule();
   ASSERT_NE(module, nullptr);
-  loom_string_id_t unknown_string_id = LOOM_STRING_ID_INVALID;
-  IREE_ASSERT_OK(loom_module_intern_string(module, IREE_SV("test.unknown"),
-                                           &unknown_string_id));
 
   iree_arena_allocator_t arena;
   iree_arena_initialize(&block_pool_, &arena);
@@ -113,7 +99,20 @@ TEST_F(RegisterClassMapTest, RejectsUnknownAndNonRegisterTypes) {
   const loom_low_reg_class_t* descriptor_register_class = nullptr;
   bool found = true;
   IREE_ASSERT_OK(loom_low_register_class_map_try_resolve_type(
-      &map, loom_type_register(unknown_string_id, 1),
+      &map,
+      loom_low_register_type(
+          /*descriptor_set_stable_id=*/descriptor_set->stable_id + 1,
+          TEST_LOW_CORE_REG_CLASS_ID_TEST_I32, 1),
+      &descriptor_register_class_id, &descriptor_register_class, &found));
+  EXPECT_FALSE(found);
+  EXPECT_EQ(descriptor_register_class_id, LOOM_LOW_REG_CLASS_NONE);
+  EXPECT_EQ(descriptor_register_class, nullptr);
+
+  found = true;
+  IREE_ASSERT_OK(loom_low_register_class_map_try_resolve_type(
+      &map,
+      loom_low_register_type(descriptor_set->stable_id,
+                             (uint16_t)descriptor_set->reg_class_count, 1),
       &descriptor_register_class_id, &descriptor_register_class, &found));
   EXPECT_FALSE(found);
   EXPECT_EQ(descriptor_register_class_id, LOOM_LOW_REG_CLASS_NONE);

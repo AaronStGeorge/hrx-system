@@ -84,6 +84,8 @@ from loom.ir import (
     Value,
     rebuild_value_metadata,
 )
+from loom.stable_id import stable_id_from_string
+from loom.target.descriptor_sets import DESCRIPTOR_SET_REGISTRATIONS
 
 __all__ = [
     "BytecodeReader",
@@ -109,6 +111,19 @@ _SYMBOL_FLAG_IMPORT_SYMBOL = 0x0004
 
 class BytecodeError(Exception):
     """Error reading bytecode."""
+
+
+def _register_name_for_payload(
+    descriptor_set_stable_id: int, register_class_id: int
+) -> str | None:
+    for registration in DESCRIPTOR_SET_REGISTRATIONS:
+        if stable_id_from_string(registration.key) != descriptor_set_stable_id:
+            continue
+        descriptor_set = registration.load()
+        if register_class_id >= len(descriptor_set.reg_classes):
+            return None
+        return descriptor_set.reg_classes[register_class_id].name
+    return None
 
 
 class BytecodeReader:
@@ -538,10 +553,30 @@ class BytecodeReader:
                         params.append(self._types[type_idx])
                     ir_type = DialectType(self._strings[name_id], tuple(params))
                 case TypeKind.REGISTER:
-                    class_id, offset = decode_varint(data, offset)
-                    unit_count, offset = decode_varint(data, offset)
+                    descriptor_set_stable_id, offset = decode_varint(data, offset)
+                    payload1, offset = decode_varint(data, offset)
+                    register_class_id = payload1 & 0xFFFF
+                    unit_count = (payload1 >> 16) & 0xFFFFFFFF
+                    if descriptor_set_stable_id == 0:
+                        raise BytecodeError(
+                            "register descriptor set stable ID must be non-zero"
+                        )
+                    if unit_count == 0:
+                        raise BytecodeError("register unit count must be non-zero")
+                    if payload1 >> 48:
+                        raise BytecodeError(
+                            "register payload reserved bits must be zero"
+                        )
+                    name = _register_name_for_payload(
+                        descriptor_set_stable_id, register_class_id
+                    )
                     try:
-                        ir_type = RegisterType(self._strings[class_id], unit_count)
+                        ir_type = RegisterType(
+                            descriptor_set_stable_id,
+                            register_class_id,
+                            unit_count,
+                            name,
+                        )
                     except ValueError as err:
                         raise BytecodeError(str(err)) from err
                 case TypeKind.STORAGE:

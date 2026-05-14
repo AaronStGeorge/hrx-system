@@ -29,8 +29,7 @@ static iree_status_t loom_amdgpu_hal_binding_make_sgpr_type(
   *out_type = loom_type_none();
   loom_type_t type = loom_type_none();
   IREE_RETURN_IF_ERROR(loom_low_build_register_type(
-      module, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_SGPR, unit_count,
-      &type));
+      descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_SGPR, unit_count, &type));
   return loom_module_intern_type(module, type, out_type);
 }
 

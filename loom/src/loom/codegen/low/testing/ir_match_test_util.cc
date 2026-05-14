@@ -66,15 +66,4 @@ const loom_op_t* FindLowFuncBodyOp(const loom_op_t* low_func_op,
   return nullptr;
 }
 
-bool RegisterTypeEquals(const loom_module_t* module, loom_type_t type,
-                        iree_string_view_t register_class,
-                        uint32_t unit_count) {
-  if (!loom_type_is_register(type) ||
-      loom_type_register_unit_count(type) != unit_count) {
-    return false;
-  }
-  return ModuleStringEquals(module, loom_type_register_class_id(type),
-                            register_class);
-}
-
 }  // namespace loom::testing

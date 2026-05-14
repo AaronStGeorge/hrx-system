@@ -751,15 +751,14 @@ static inline loom_type_t loom_type_buffer(void) {
 
 // Creates a target-owned low register payload type. Target code should prefer
 // loom/target/registers.h so core IR remains only the by-value storage owner.
-static inline loom_type_t loom_type_register(loom_string_id_t reg_class_id,
-                                             uint32_t unit_count) {
-  IREE_ASSERT(unit_count > 0, "register unit count must be non-zero");
+static inline loom_type_t loom_type_register_payload(uint64_t payload0,
+                                                     uint64_t payload1) {
   loom_type_t type = {0};
   type.header = loom_type_make_header(
       LOOM_TYPE_REGISTER, (loom_scalar_type_t)0, 0,
       LOOM_TYPE_FLAG_INLINE_DIMS | LOOM_TYPE_FLAG_ALL_STATIC);
-  type.dims[0] = reg_class_id;
-  type.dims[1] = unit_count;
+  type.dims[0] = payload0;
+  type.dims[1] = payload1;
   return type;
 }
 
@@ -774,13 +773,13 @@ static inline loom_type_t loom_type_storage(loom_storage_space_t space) {
 }
 
 // Returns the first target-owned register payload field.
-static inline loom_string_id_t loom_type_register_class_id(loom_type_t type) {
-  return (loom_string_id_t)type.dims[0];
+static inline uint64_t loom_type_register_payload0(loom_type_t type) {
+  return type.dims[0];
 }
 
 // Returns the second target-owned register payload field.
-static inline uint32_t loom_type_register_unit_count(loom_type_t type) {
-  return (uint32_t)type.dims[1];
+static inline uint64_t loom_type_register_payload1(loom_type_t type) {
+  return type.dims[1];
 }
 
 // Creates a pool type with a single block_size dimension.

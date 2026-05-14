@@ -60,6 +60,15 @@ from loom.ir import (
 from loom.ir import (
     TiedResult as IRTiedResult,
 )
+from loom.stable_id import stable_id_from_string
+from loom.target.test.descriptors import TEST_LOW_CORE_DESCRIPTOR_SET
+
+_TEST_LOW_CORE_STABLE_ID = stable_id_from_string(TEST_LOW_CORE_DESCRIPTOR_SET.key)
+_TEST_PTR_REGISTER_CLASS_ID = next(
+    i
+    for i, register_class in enumerate(TEST_LOW_CORE_DESCRIPTOR_SET.reg_classes)
+    if register_class.name == "test.ptr"
+)
 
 # ============================================================================
 # Helpers
@@ -112,6 +121,15 @@ def _module_with(*names_and_types: tuple[str, Type]) -> tuple[Module, list[int]]
         vid = module.add_value(Value(name=name, type=value_type))
         value_ids.append(vid)
     return module, value_ids
+
+
+def _test_ptr_register_type(unit_count: int = 1) -> RegisterType:
+    return RegisterType(
+        _TEST_LOW_CORE_STABLE_ID,
+        _TEST_PTR_REGISTER_CLASS_ID,
+        unit_count,
+        "test.ptr",
+    )
 
 
 _tile_4xf32 = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
@@ -263,8 +281,8 @@ class TestPrintType:
         )
 
     def test_register_type(self) -> None:
-        assert print_type(RegisterType("amdgpu.vgpr")) == "reg<amdgpu.vgpr>"
-        assert print_type(RegisterType("amdgpu.vgpr", 4)) == "reg<amdgpu.vgpr x4>"
+        assert print_type(_test_ptr_register_type()) == "reg<test.ptr>"
+        assert print_type(_test_ptr_register_type(4)) == "reg<test.ptr x4>"
 
     def test_dialect_type_opaque(self) -> None:
         from loom.ir import DialectType

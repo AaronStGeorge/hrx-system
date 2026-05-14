@@ -14,6 +14,7 @@
 
 #include "iree/base/api.h"
 #include "loom/analysis/liveness.h"
+#include "loom/format/text/printer.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,7 +23,9 @@ extern "C" {
 // Appends a compact JSON object describing |analysis| to |builder|. The format
 // is diagnostic/test output, not bytecode-stable artifact identity.
 iree_status_t loom_liveness_format_json(
-    const loom_liveness_analysis_t* analysis, iree_string_builder_t* builder);
+    const loom_liveness_analysis_t* analysis,
+    const loom_text_print_options_t* type_print_options,
+    iree_string_builder_t* builder);
 
 #ifdef __cplusplus
 }

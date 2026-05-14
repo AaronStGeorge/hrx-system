@@ -54,8 +54,9 @@ static iree_string_view_t loom_target_compile_report_block_name(
 
 static iree_string_view_t loom_target_compile_report_value_class_name(
     const loom_module_t* module, loom_liveness_value_class_t value_class) {
-  return loom_target_compile_report_module_string(
-      module, value_class.register_class_id, iree_string_view_empty());
+  (void)module;
+  (void)value_class;
+  return iree_string_view_empty();
 }
 
 static iree_string_view_t loom_target_compile_report_op_name(

@@ -41,6 +41,9 @@ iree_status_t loom_print_attr(loom_output_stream_t* stream,
                               const loom_module_t* module,
                               const loom_attr_descriptor_t* descriptor);
 
+// Prints |type| using the current contextual printer state.
+iree_status_t loom_print_type(loom_print_context_t* ctx, loom_type_t type);
+
 // Prints the canonical type of |value_id|, or <unknown> for malformed IR.
 iree_status_t loom_print_value_type(loom_print_context_t* ctx,
                                     loom_value_id_t value_id);

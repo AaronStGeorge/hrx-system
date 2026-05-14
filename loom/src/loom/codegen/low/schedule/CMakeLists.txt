@@ -38,6 +38,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::memory_access
     loom::src::loom::codegen::low::register_class_map
     loom::src::loom::codegen::low::target_binding
+    loom::src::loom::codegen::low::text_asm
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir

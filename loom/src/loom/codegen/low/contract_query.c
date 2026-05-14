@@ -360,7 +360,6 @@ iree_status_t loom_low_lower_query_target_contract(
       .descriptor_set = environment->descriptor_set,
       .feature_bits = environment->bundle->config->contract_feature_bits,
       .map_value = options->map_value,
-      .register_class = options->register_class,
       .can_materialize = options->can_materialize,
       .descriptor_ref = options->descriptor_ref,
       .fact_table = environment->fact_table,

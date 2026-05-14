@@ -42,12 +42,9 @@ typedef struct loom_view_region_table_t loom_view_region_table_t;
 typedef struct loom_low_lower_rule_mapped_value_t {
   // True when the source value maps to a target-low register.
   bool is_register;
-  // Descriptor-set register-class ID, or LOOM_LOW_REG_CLASS_NONE if the mapped
-  // value only has a module string ID for its class.
+  // Descriptor-set register-class ID, or LOOM_LOW_REG_CLASS_NONE for
+  // non-register values.
   uint16_t descriptor_register_class_id;
-  // Module string ID for the register class, or LOOM_STRING_ID_INVALID if the
-  // mapped value carries a descriptor-set register-class ID directly.
-  loom_string_id_t register_class_id;
   // Number of target-low allocation units occupied by the mapped register.
   uint32_t register_unit_count;
 } loom_low_lower_rule_mapped_value_t;
@@ -58,7 +55,6 @@ loom_low_lower_rule_mapped_value_none(void) {
   return (loom_low_lower_rule_mapped_value_t){
       .is_register = false,
       .descriptor_register_class_id = LOOM_LOW_REG_CLASS_NONE,
-      .register_class_id = LOOM_STRING_ID_INVALID,
       .register_unit_count = 0,
   };
 }
@@ -70,7 +66,6 @@ loom_low_lower_rule_mapped_value_register(uint16_t descriptor_register_class_id,
   return (loom_low_lower_rule_mapped_value_t){
       .is_register = true,
       .descriptor_register_class_id = descriptor_register_class_id,
-      .register_class_id = LOOM_STRING_ID_INVALID,
       .register_unit_count = register_unit_count,
   };
 }
@@ -721,11 +716,6 @@ iree_status_t loom_low_lower_bind_value_alias(loom_low_lower_context_t* context,
 // be consumed as target-low operands.
 iree_status_t loom_low_lower_elide_value(loom_low_lower_context_t* context,
                                          loom_value_id_t source_value_id);
-
-// Interns a descriptor-set register-class spelling in the low module.
-iree_status_t loom_low_lower_register_class_string_id(
-    loom_low_lower_context_t* context, uint16_t reg_class_id,
-    loom_string_id_t* out_string_id);
 
 // Creates a target-low register type from a descriptor-set register-class ID.
 iree_status_t loom_low_lower_make_register_type(

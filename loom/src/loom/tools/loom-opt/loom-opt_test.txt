@@ -70,7 +70,7 @@
 // RUN:   | loom-opt --pass=source-to-low \
 // RUN:   | FileCheck --check-prefix=SOURCE-LOW-LEGALITY %s
 // SOURCE-LOW-LEGALITY: low.kernel.def target(@target) workgroup_size(1, 1, 1) @target_legality_provider() {
-// SOURCE-LOW-LEGALITY: low.op<amdgpu.s_barrier>() : ()
+// SOURCE-LOW-LEGALITY: low.op<amdgpu.s_waitcnt>() {lgkmcnt = 0, vmcnt = 63} : ()
 // SOURCE-LOW-LEGALITY: low.return
 
 // RUN: printf '%%s\n' \

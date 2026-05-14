@@ -349,8 +349,8 @@ typedef enum loom_bytecode_section_kind_e {
 //       [is_dynamic: byte]          (0 = static, 1 = dynamic)
 //       (if static: [size: varint]) (block size in bytes))
 //     (REGISTER:
-//       [class_id: varint]          (string table index)
-//       [unit_count: varint]        (non-zero register-class unit count))
+//       [payload0: varint]          (target-owned register payload word)
+//       [payload1: varint]          (target-owned register payload word))
 //     (STORAGE:
 //       [space: byte]               (loom_bytecode_storage_space_t))
 

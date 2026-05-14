@@ -17,6 +17,7 @@
 #include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/registers.h"
 
 typedef struct loom_low_allocation_active_unit_entry_t {
   // Assignment occupying this active unit.
@@ -46,8 +47,6 @@ typedef struct loom_low_allocation_build_state_t {
   const loom_op_t* function_op;
   // Resolved target selected by the low function.
   loom_low_resolved_target_t target;
-  // Descriptor register-class lookup map for module register types.
-  loom_low_register_class_map_t register_class_map;
   // Resolved explicit per-class register budgets.
   struct loom_low_allocation_resolved_budget_t* resolved_budgets;
   // Number of entries in |resolved_budgets|.
@@ -683,31 +682,19 @@ static iree_status_t loom_low_allocation_resolve_descriptor_register_class(
     *out_reg_class = NULL;
   }
   if (value_class.type_kind != LOOM_TYPE_REGISTER ||
-      value_class.register_class_id == LOOM_STRING_ID_INVALID) {
-    iree_string_view_t register_class = loom_low_allocation_module_string(
-        state->module, value_class.register_class_id);
+      value_class.register_descriptor_set_stable_id !=
+          state->target.descriptor_set->stable_id ||
+      value_class.register_class_id >=
+          state->target.descriptor_set->reg_class_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "low allocation value class '%.*s' is not a descriptor register class",
-        (int)register_class.size, register_class.data);
-  }
-  uint16_t reg_class_id = LOOM_LOW_REG_CLASS_NONE;
-  const loom_low_reg_class_t* reg_class = NULL;
-  bool found_reg_class = false;
-  IREE_RETURN_IF_ERROR(loom_low_register_class_map_try_resolve_string_id(
-      &state->register_class_map, value_class.register_class_id, &reg_class_id,
-      &reg_class, &found_reg_class));
-  if (!found_reg_class) {
-    iree_string_view_t register_class = loom_low_allocation_module_string(
-        state->module, value_class.register_class_id);
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "low allocation register class '%.*s' is not defined by descriptor set "
-        "'%.*s'",
-        (int)register_class.size, register_class.data,
+        "low allocation value class is not defined by descriptor set '%.*s'",
         (int)state->target.descriptor_set_key.size,
         state->target.descriptor_set_key.data);
   }
+  uint16_t reg_class_id = value_class.register_class_id;
+  const loom_low_reg_class_t* reg_class =
+      &state->target.descriptor_set->reg_classes[reg_class_id];
   if (out_reg_class_id) {
     *out_reg_class_id = reg_class_id;
   }
@@ -4345,8 +4332,8 @@ static iree_status_t loom_low_allocation_emit_failure(
       loom_param_string(loom_low_diagnostic_config_key(&state->target)),
       loom_param_string(
           loom_low_diagnostic_function_name(state->module, state->function_op)),
-      loom_param_string(
-          loom_low_diagnostic_value_class_name(state->module, value_class)),
+      loom_param_string(loom_low_diagnostic_value_class_name(
+          state->target.descriptor_set, value_class)),
       loom_param_u32(budget_units),
       loom_param_u32(peak_units),
       loom_param_string(failure_kind),
@@ -6435,7 +6422,7 @@ static iree_status_t loom_low_allocation_emit_predicted_spills(
         loom_param_string(loom_low_diagnostic_value_name(table->module,
                                                          spill_plan->value_id)),
         loom_param_string(loom_low_diagnostic_value_class_name(
-            table->module, assignment->value_class)),
+            table->target.descriptor_set, assignment->value_class)),
         loom_param_u32(spill_plan->byte_size),
         loom_param_u32(spill_plan->store_count),
         loom_param_u32(spill_plan->reload_count),
@@ -6546,8 +6533,6 @@ iree_status_t loom_low_allocate_function(
                             "low function target did not resolve");
   }
   loom_local_value_domain_t value_domain = {0};
-  IREE_RETURN_IF_ERROR(loom_low_register_class_map_initialize(
-      module, state.target.descriptor_set, arena, &state.register_class_map));
   IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_budgets(&state));
   IREE_RETURN_IF_ERROR(loom_low_allocation_resolve_reserved_ranges(&state));
 

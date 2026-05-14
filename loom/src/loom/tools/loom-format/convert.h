@@ -17,6 +17,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/error/diagnostic.h"
+#include "loom/format/text/low_asm.h"
 #include "loom/ir/context.h"
 
 #ifdef __cplusplus
@@ -42,6 +43,9 @@ typedef struct loom_format_convert_options_t {
   // Sink for parser and bytecode-reader diagnostics. If fn is NULL, diagnostics
   // are dropped and conversion failure is reported through the returned status.
   loom_diagnostic_sink_t diagnostic_sink;
+
+  // Optional environment used to parse and print target-low register types.
+  loom_text_low_asm_environment_t low_asm_environment;
 } loom_format_convert_options_t;
 
 // Allocator-owned output bytes from a conversion.

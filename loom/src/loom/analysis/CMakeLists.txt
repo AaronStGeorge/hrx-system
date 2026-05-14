@@ -323,6 +323,7 @@ loom_cc_library(
     iree::base::internal
     iree::base::internal::arena
     loom::src::loom::ir
+    loom::src::loom::target::registers
     loom::src::loom::util::cfg_graph
   PUBLIC
 )
@@ -353,6 +354,7 @@ loom_cc_test(
     ::liveness
     ::liveness_json
     iree::base::internal::arena
+    loom::src::loom::codegen::low::text_asm
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::cfg
@@ -361,6 +363,8 @@ loom_cc_test(
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scalar
     loom::src::loom::ops::test
+    loom::src::loom::target::registers
+    loom::src::loom::target::test::descriptors
     loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main

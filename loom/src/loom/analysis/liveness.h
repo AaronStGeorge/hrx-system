@@ -31,8 +31,8 @@ extern "C" {
 
 // Class used for pressure accounting.
 //
-// Register values use LOOM_TYPE_REGISTER plus |register_class_id| so target-low
-// pressure groups naturally as amdgpu.sgpr/amdgpu.vgpr/x86.zmm/etc.
+// Register values use LOOM_TYPE_REGISTER plus compact target-low descriptor
+// identity so pressure groups naturally by descriptor-set register class.
 // Non-register values use their type kind and element type with an invalid
 // register class.
 typedef struct loom_liveness_value_class_t {
@@ -40,8 +40,10 @@ typedef struct loom_liveness_value_class_t {
   loom_type_kind_t type_kind;
   // Element/scalar type for scalar and shaped semantic values.
   loom_scalar_type_t element_type;
-  // Register class string ID for LOOM_TYPE_REGISTER, otherwise invalid.
-  loom_string_id_t register_class_id;
+  // Low descriptor-set stable ID for LOOM_TYPE_REGISTER, otherwise zero.
+  uint64_t register_descriptor_set_stable_id;
+  // Descriptor-set-local register class for LOOM_TYPE_REGISTER.
+  uint16_t register_class_id;
 } loom_liveness_value_class_t;
 
 // Returns true when two values contribute to the same pressure class.

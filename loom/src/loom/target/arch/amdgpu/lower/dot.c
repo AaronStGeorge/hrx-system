@@ -239,8 +239,8 @@ static iree_status_t loom_amdgpu_dotf_extract_lane(
     return iree_make_status(IREE_STATUS_INTERNAL,
                             "invalid AMDGPU dotf lane source type");
   }
-  const loom_type_t lane_type = loom_low_register_type(
-      loom_low_register_type_class_name_id(source_type), 1);
+  const loom_type_t lane_type =
+      loom_low_register_type_with_unit_count(source_type, 1);
   return loom_amdgpu_emit_low_slice(context, source_op, source, lane, lane_type,
                                     out_lane);
 }

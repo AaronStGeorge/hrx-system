@@ -14,6 +14,7 @@
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
+#include "loom/target/arch/ireevm/descriptors.h"
 #include "loom/target/arch/ireevm/provider.h"
 #include "loom/target/compile_report_low.h"
 #include "loom/target/emit/ireevm/function_bytecode.h"
@@ -61,19 +62,6 @@ typedef struct loom_ireevm_archive_emit_report_totals_t {
   uint64_t emitted_code_storage_byte_count;
 } loom_ireevm_archive_emit_report_totals_t;
 
-typedef struct loom_ireevm_register_class_ids_t {
-  // Interned string ID for the ireevm.i32 register class.
-  loom_string_id_t i32;
-  // Interned string ID for the ireevm.i64 register class.
-  loom_string_id_t i64;
-  // Interned string ID for the ireevm.f32 register class.
-  loom_string_id_t f32;
-  // Interned string ID for the ireevm.f64 register class.
-  loom_string_id_t f64;
-  // Interned string ID for the ireevm.ref register class.
-  loom_string_id_t ref;
-} loom_ireevm_register_class_ids_t;
-
 static iree_string_view_t loom_ireevm_archive_emit_module_name(
     const loom_ireevm_archive_emit_options_t* options) {
   if (options && !iree_string_view_is_empty(options->module_name)) {
@@ -108,8 +96,6 @@ typedef struct loom_ireevm_archive_emit_state_t {
   uint32_t max_errors;
   // Target provider environment used to compose target-owned registries.
   loom_target_environment_t target_environment;
-  // Interned VM register-class names used for ABI argument binding.
-  loom_ireevm_register_class_ids_t register_class_ids;
   // Target-low descriptor registry used for verification and emission.
   loom_target_low_descriptor_registry_t low_registry;
   // Diagnostic materializer shared by target-low verification and emission.
@@ -157,14 +143,6 @@ static iree_status_t loom_ireevm_archive_emit_state_initialize(
   };
   out_state->max_errors = loom_target_entry_max_errors(
       &out_state->target_options, LOOM_IREEVM_ARCHIVE_EMIT_DEFAULT_MAX_ERRORS);
-  out_state->register_class_ids = (loom_ireevm_register_class_ids_t){
-      .i32 = loom_module_lookup_string(module, IREE_SV("ireevm.i32")),
-      .i64 = loom_module_lookup_string(module, IREE_SV("ireevm.i64")),
-      .f32 = loom_module_lookup_string(module, IREE_SV("ireevm.f32")),
-      .f64 = loom_module_lookup_string(module, IREE_SV("ireevm.f64")),
-      .ref = loom_module_lookup_string(module, IREE_SV("ireevm.ref")),
-  };
-
   if (out_state->report != NULL) {
     loom_target_compile_report_initialize(out_state->report);
     loom_target_compile_report_set_row_storage(
@@ -323,9 +301,22 @@ static void loom_ireevm_archive_emit_record_report_totals(
       totals->emitted_code_byte_count, totals->emitted_code_storage_byte_count);
 }
 
-static bool loom_ireevm_archive_emit_register_class_matches(
-    loom_string_id_t actual, loom_string_id_t expected) {
-  return expected != LOOM_STRING_ID_INVALID && actual == expected;
+static iree_string_view_t loom_ireevm_archive_emit_register_class_name(
+    uint16_t register_class_id) {
+  switch (register_class_id) {
+    case IREEVM_CORE_REG_CLASS_ID_I32:
+      return IREE_SV("ireevm.i32");
+    case IREEVM_CORE_REG_CLASS_ID_I64:
+      return IREE_SV("ireevm.i64");
+    case IREEVM_CORE_REG_CLASS_ID_F32:
+      return IREE_SV("ireevm.f32");
+    case IREEVM_CORE_REG_CLASS_ID_F64:
+      return IREE_SV("ireevm.f64");
+    case IREEVM_CORE_REG_CLASS_ID_REF:
+      return IREE_SV("ireevm.ref");
+    default:
+      return IREE_SV("<unknown>");
+  }
 }
 
 static iree_status_t loom_ireevm_archive_emit_function_argument_fixed_value(
@@ -340,34 +331,25 @@ static iree_status_t loom_ireevm_archive_emit_function_argument_fixed_value(
         (unsigned)argument_id);
   }
 
-  const loom_ireevm_register_class_ids_t* register_class_ids =
-      &state->register_class_ids;
-  const loom_string_id_t register_class_id =
-      loom_low_register_type_class_name_id(type);
+  const uint16_t register_class_id = loom_low_register_type_class_id(type);
   const uint32_t unit_count = loom_low_register_type_unit_count(type);
   uint32_t location_base = 0;
-  if ((loom_ireevm_archive_emit_register_class_matches(
-           register_class_id, register_class_ids->i32) ||
-       loom_ireevm_archive_emit_register_class_matches(
-           register_class_id, register_class_ids->f32)) &&
+  if ((register_class_id == IREEVM_CORE_REG_CLASS_ID_I32 ||
+       register_class_id == IREEVM_CORE_REG_CLASS_ID_F32) &&
       unit_count == 1) {
     location_base = (*i32_register)++;
-  } else if ((loom_ireevm_archive_emit_register_class_matches(
-                  register_class_id, register_class_ids->i64) ||
-              loom_ireevm_archive_emit_register_class_matches(
-                  register_class_id, register_class_ids->f64)) &&
+  } else if ((register_class_id == IREEVM_CORE_REG_CLASS_ID_I64 ||
+              register_class_id == IREEVM_CORE_REG_CLASS_ID_F64) &&
              unit_count == 2) {
     *i32_register = (*i32_register + 1u) & ~1u;
     location_base = *i32_register;
     *i32_register += 2;
-  } else if (loom_ireevm_archive_emit_register_class_matches(
-                 register_class_id, register_class_ids->ref) &&
+  } else if (register_class_id == IREEVM_CORE_REG_CLASS_ID_REF &&
              unit_count == 1) {
     location_base = (*ref_register)++;
   } else {
     const iree_string_view_t register_class =
-        loom_ireevm_archive_emit_module_string(state->module,
-                                               register_class_id);
+        loom_ireevm_archive_emit_register_class_name(register_class_id);
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "IREE VM ABI argument value %u has unsupported register class "

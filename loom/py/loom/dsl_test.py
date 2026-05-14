@@ -612,7 +612,7 @@ class TestConstraints:
             def __init__(self, value_type: object):
                 self.type = value_type
 
-        assert HasRegister("x").check({"x": FakeValue(RegisterType("amdgpu.vgpr"))})[0]
+        assert HasRegister("x").check({"x": FakeValue(RegisterType(1, 0))})[0]
         assert not HasRegister("x").check({"x": FakeValue(I32)})[0]
 
     def test_exact_element_constraints_validate_shaped_types(self) -> None:

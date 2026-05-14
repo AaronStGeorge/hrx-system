@@ -34,6 +34,7 @@ loom_cc_library(
     loom::src::loom::ops::successor_verify
     loom::src::loom::ops::target
     loom::src::loom::rewrite::rewriter
+    loom::src::loom::target::registers
     loom::src::loom::target::types
     loom::src::loom::util::fact_table
     loom::src::loom::util::stable_id
@@ -48,12 +49,14 @@ loom_cc_test(
   DEPS
     ::low
     iree::base::internal::arena
+    loom::src::loom::codegen::low::text_asm
     loom::src::loom::error::error_defs
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::func
     loom::src::loom::ops::target
     loom::src::loom::ops::test
+    loom::src::loom::target::low_descriptor_registry_core_test
     loom::src::loom::testing::diagnostic_matchers
     loom::src::loom::verify
     iree::testing::gtest

@@ -481,6 +481,7 @@ loom_cc_test(
     "compile_report_low_test.cc"
   DEPS
     ::compile_report_low
+    ::registers
     iree::testing::gtest
     iree::testing::gtest_main
 )

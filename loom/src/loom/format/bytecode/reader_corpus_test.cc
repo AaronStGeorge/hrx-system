@@ -18,6 +18,7 @@
 #include "iree/io/vec_stream.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/text_asm.h"
 #include "loom/error/diagnostic.h"
 #include "loom/format/bytecode/reader.h"
 #include "loom/format/bytecode/writer.h"
@@ -25,6 +26,7 @@
 #include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/target/low_descriptor_registry_core_test.h"
 #include "loom/test/corpus/text/golden_text_corpus.h"
 #include "loom/testing/context.h"
 
@@ -47,6 +49,7 @@ class ReaderCorpusTest : public ::testing::Test {
     // appear in corpus entries and must round-trip through bytecode.
     IREE_ASSERT_OK(loom_testing_context_initialize_all(iree_allocator_system(),
                                                        &context_));
+    loom_target_core_test_low_descriptor_registry_initialize(&low_registry_);
   }
 
   void TearDown() override {
@@ -59,6 +62,8 @@ class ReaderCorpusTest : public ::testing::Test {
         .diagnostic_sink = {loom_diagnostic_stderr_sink, nullptr},
         .max_errors = 20,
     };
+    loom_low_descriptor_text_asm_environment_initialize(
+        &low_registry_.registry, &options.low_asm_environment);
     loom_module_t* module = nullptr;
     IREE_EXPECT_OK(loom_text_parse(source, filename, &context_, &block_pool_,
                                    &options, &module));
@@ -70,8 +75,15 @@ class ReaderCorpusTest : public ::testing::Test {
   std::string Print(const loom_module_t* module) {
     iree_string_builder_t builder;
     iree_string_builder_initialize(iree_allocator_system(), &builder);
-    IREE_EXPECT_OK(loom_text_print_module_to_builder(module, &builder,
-                                                     LOOM_TEXT_PRINT_DEFAULT));
+    loom_text_low_asm_environment_t low_asm_environment = {};
+    loom_low_descriptor_text_asm_environment_initialize(&low_registry_.registry,
+                                                        &low_asm_environment);
+    const loom_text_print_options_t options = {
+        .flags = LOOM_TEXT_PRINT_DEFAULT,
+        .low_asm_environment = low_asm_environment,
+    };
+    IREE_EXPECT_OK(loom_text_print_module_to_builder_with_options(
+        module, &builder, &options));
     std::string printed(iree_string_builder_buffer(&builder),
                         iree_string_builder_size(&builder));
     iree_string_builder_deinitialize(&builder);
@@ -126,6 +138,7 @@ class ReaderCorpusTest : public ::testing::Test {
 
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
+  loom_target_low_descriptor_registry_t low_registry_;
 };
 
 TEST_F(ReaderCorpusTest, CorpusIsNotEmpty) {

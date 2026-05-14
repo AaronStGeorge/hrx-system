@@ -108,6 +108,7 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::global
     loom::src::loom::ops::test
+    loom::src::loom::target::registers
     iree::testing::gtest
     iree::testing::gtest_main
 )
@@ -122,10 +123,12 @@ loom_cc_test(
     ::writer
     iree::base::internal::arena
     iree::io::stream
+    loom::src::loom::codegen::low::text_asm
     loom::src::loom::error::diagnostic
     loom::src::loom::format::text::parser
     loom::src::loom::format::text::printer
     loom::src::loom::ir
+    loom::src::loom::target::low_descriptor_registry_core_test
     loom::src::loom::test::corpus::text::golden_text_corpus
     loom::src::loom::testing::context
     iree::testing::gtest

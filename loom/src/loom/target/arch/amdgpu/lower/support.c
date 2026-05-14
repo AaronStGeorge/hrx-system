@@ -526,10 +526,9 @@ iree_status_t loom_amdgpu_low_type_register_class_is(
   if (!loom_low_type_is_register(type)) {
     return iree_ok_status();
   }
-  loom_string_id_t expected_class_id = LOOM_STRING_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_low_lower_register_class_string_id(
-      context, reg_class_id, &expected_class_id));
-  *out_match = loom_low_register_type_class_name_id(type) == expected_class_id;
+  *out_match = loom_low_register_type_descriptor_set_stable_id(type) ==
+                   loom_low_lower_context_descriptor_set(context)->stable_id &&
+               loom_low_register_type_class_id(type) == reg_class_id;
   return iree_ok_status();
 }
 

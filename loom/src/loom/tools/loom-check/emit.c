@@ -815,7 +815,7 @@ static iree_status_t loom_check_emit_write_liveness_json(
   loom_liveness_analysis_t analysis = {0};
   IREE_RETURN_IF_ERROR(loom_liveness_analyze_region(
       module, loom_func_like_body(function), analysis_arena, &analysis));
-  return loom_liveness_format_json(&analysis, &result->actual_output);
+  return loom_liveness_format_json(&analysis, NULL, &result->actual_output);
 }
 
 static iree_status_t loom_check_emit_write_low_schedule_json(
@@ -1281,6 +1281,10 @@ iree_status_t loom_check_execute_emit(
   loom_target_low_descriptor_registry_t low_registry = {0};
   status = loom_check_environment_initialize_low_descriptor_registry(
       environment, &low_registry);
+  if (iree_status_is_ok(status)) {
+    loom_low_descriptor_text_print_context_initialize(
+        &low_registry.registry, &diagnostic_collector.type_print_context);
+  }
   loom_text_parse_options_t parse_options = {
       .diagnostic_sink = {.fn = loom_check_diagnostic_collector_sink,
                           .user_data = &diagnostic_collector},

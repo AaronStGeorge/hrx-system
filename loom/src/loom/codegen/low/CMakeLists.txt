@@ -170,9 +170,12 @@ loom_cc_library(
     ::builder
     ::descriptors
     iree::base
+    loom::src::loom::analysis::symbol_facts
     loom::src::loom::format::text::low_asm
+    loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::ops::target
     loom::src::loom::target::registers
   PUBLIC
 )
@@ -283,6 +286,7 @@ loom_cc_library(
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::target::registers
   PUBLIC
 )
 
@@ -333,6 +337,7 @@ loom_cc_library(
     ::allocation
     ::descriptors
     ::function
+    ::text_asm
     iree::base
     loom::src::loom::format::text::printer
     loom::src::loom::ir
@@ -411,6 +416,7 @@ loom_cc_library(
     ::descriptors
     ::function
     ::packet
+    ::text_asm
     iree::base
     loom::src::loom::codegen::low::schedule
     loom::src::loom::format::text::printer
@@ -662,6 +668,7 @@ loom_cc_test(
     ::register_class_map
     iree::base::internal::arena
     loom::src::loom::ir
+    loom::src::loom::target::registers
     loom::src::loom::target::test::descriptors
     iree::testing::gtest
     iree::testing::gtest_main

@@ -141,6 +141,7 @@ TEST_F(TargetPipelineTest, BuildsVisibleSourceLowPipeline) {
       IREE_SV("normalize-kernel-resources"),
       IREE_SV("promote-private-fragments"),
       IREE_SV("vector-reduce-axes-to-scalar"),
+      IREE_SV("vector-gather-to-scalar"),
       IREE_SV("linearize-view-accesses"),
       IREE_SV("canonicalize"),
       IREE_SV("cse"),
@@ -151,6 +152,7 @@ TEST_F(TargetPipelineTest, BuildsVisibleSourceLowPipeline) {
       IREE_SV("cfg-simplify"),
       IREE_SV("canonicalize"),
       IREE_SV("cse"),
+      IREE_SV("branch-sink"),
   };
   ExpectRunKeySequence(module.get(), source_body, source_keys,
                        IREE_ARRAYSIZE(source_keys));
@@ -203,6 +205,7 @@ TEST_F(TargetPipelineTest, BuildsVisiblePreparedLowPipeline) {
       IREE_SV("normalize-kernel-resources"),
       IREE_SV("promote-private-fragments"),
       IREE_SV("vector-reduce-axes-to-scalar"),
+      IREE_SV("vector-gather-to-scalar"),
       IREE_SV("linearize-view-accesses"),
       IREE_SV("canonicalize"),
       IREE_SV("cse"),
@@ -213,6 +216,7 @@ TEST_F(TargetPipelineTest, BuildsVisiblePreparedLowPipeline) {
       IREE_SV("cfg-simplify"),
       IREE_SV("canonicalize"),
       IREE_SV("cse"),
+      IREE_SV("branch-sink"),
   };
   ExpectRunKeySequence(module.get(), source_body, source_keys,
                        IREE_ARRAYSIZE(source_keys));

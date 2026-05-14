@@ -36,6 +36,21 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    math_policy
+  HDRS
+    "math_policy.h"
+  TEXTUAL_HDRS
+    "math_policy_tables.inl"
+  SRCS
+    "math_policy.c"
+  DEPS
+    iree::base
+    loom::src::loom::target::math_policy
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     ops
   HDRS
     "ops/ops.h"
@@ -81,6 +96,7 @@ loom_cc_library(
     "provider.c"
   DEPS
     ::low_registry
+    ::math_policy
     ::ops
     iree::base
     loom::src::loom::target::emit::wasm::lower
@@ -112,6 +128,7 @@ loom_cc_test(
     iree::base::internal::arena
     loom::src::loom::codegen::low::register_class_map
     loom::src::loom::ir
+    loom::src::loom::target::registers
     iree::testing::gtest
     iree::testing::gtest_main
 )

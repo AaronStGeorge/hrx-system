@@ -274,6 +274,7 @@ loom_cc_library(
     hdrs = ["liveness.h"],
     deps = [
         "//loom/src/loom/ir",
+        "//loom/src/loom/target:registers",
         "//loom/src/loom/util:cfg_graph",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
@@ -301,6 +302,7 @@ loom_cc_test(
     deps = [
         ":liveness",
         ":liveness_json",
+        "//loom/src/loom/codegen/low:text_asm",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
@@ -309,6 +311,8 @@ loom_cc_test(
         "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/scalar",
         "//loom/src/loom/ops/test",
+        "//loom/src/loom/target:registers",
+        "//loom/src/loom/target/test:descriptors",
         "//loom/src/loom/testing:module_ptr",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",

@@ -12,6 +12,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/func_symbol_facts.h"
 #include "loom/ops/low/ops.h"
+#include "loom/target/arch/ireevm/descriptors.h"
 #include "loom/target/function_contract.h"
 #include "loom/target/registers.h"
 
@@ -98,28 +99,33 @@ static iree_status_t loom_ireevm_module_plan_append_calling_convention_type(
     const loom_module_t* module, loom_type_t type,
     loom_ireevm_calling_convention_buffer_t* buffer) {
   if (loom_low_type_is_register(type)) {
-    iree_string_view_t register_class = loom_ireevm_module_plan_string(
-        module, loom_low_register_type_class_name_id(type));
     const uint32_t unit_count = loom_low_register_type_unit_count(type);
-    if (iree_string_view_equal(register_class, IREE_SV("ireevm.i32")) &&
-        unit_count == 1) {
-      return loom_ireevm_calling_convention_append(buffer, 'i');
-    }
-    if (iree_string_view_equal(register_class, IREE_SV("ireevm.i64")) &&
-        unit_count == 2) {
-      return loom_ireevm_calling_convention_append(buffer, 'I');
-    }
-    if (iree_string_view_equal(register_class, IREE_SV("ireevm.f32")) &&
-        unit_count == 1) {
-      return loom_ireevm_calling_convention_append(buffer, 'f');
-    }
-    if (iree_string_view_equal(register_class, IREE_SV("ireevm.f64")) &&
-        unit_count == 2) {
-      return loom_ireevm_calling_convention_append(buffer, 'F');
-    }
-    if (iree_string_view_equal(register_class, IREE_SV("ireevm.ref")) &&
-        unit_count == 1) {
-      return loom_ireevm_calling_convention_append(buffer, 'r');
+    switch (loom_low_register_type_class_id(type)) {
+      case IREEVM_CORE_REG_CLASS_ID_I32:
+        if (unit_count == 1) {
+          return loom_ireevm_calling_convention_append(buffer, 'i');
+        }
+        break;
+      case IREEVM_CORE_REG_CLASS_ID_I64:
+        if (unit_count == 2) {
+          return loom_ireevm_calling_convention_append(buffer, 'I');
+        }
+        break;
+      case IREEVM_CORE_REG_CLASS_ID_F32:
+        if (unit_count == 1) {
+          return loom_ireevm_calling_convention_append(buffer, 'f');
+        }
+        break;
+      case IREEVM_CORE_REG_CLASS_ID_F64:
+        if (unit_count == 2) {
+          return loom_ireevm_calling_convention_append(buffer, 'F');
+        }
+        break;
+      case IREEVM_CORE_REG_CLASS_ID_REF:
+        if (unit_count == 1) {
+          return loom_ireevm_calling_convention_append(buffer, 'r');
+        }
+        break;
     }
   }
   if (loom_type_is_scalar(type)) {

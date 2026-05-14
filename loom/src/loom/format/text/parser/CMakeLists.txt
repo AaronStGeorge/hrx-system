@@ -92,6 +92,7 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::ops::test
+    loom::src::loom::target::registers
     loom::src::loom::target::test::alt_descriptors
     loom::src::loom::target::test::descriptors
     loom::src::loom::testing::diagnostic_matchers

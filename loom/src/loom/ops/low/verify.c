@@ -13,6 +13,7 @@
 #include "loom/ops/function_contract_verify.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/successor_verify.h"
+#include "loom/target/registers.h"
 #include "loom/util/stable_id.h"
 
 typedef struct loom_low_callee_signature_t {
@@ -658,8 +659,8 @@ static iree_status_t loom_low_verify_same_register_unit_count(
       !loom_type_is_register(result_type)) {
     return iree_ok_status();
   }
-  if (loom_type_register_unit_count(source_type) ==
-      loom_type_register_unit_count(result_type)) {
+  if (loom_low_register_type_unit_count(source_type) ==
+      loom_low_register_type_unit_count(result_type)) {
     return iree_ok_status();
   }
   loom_diagnostic_param_t params[] = {
@@ -695,8 +696,10 @@ static iree_status_t loom_low_verify_slice_register_range(
     return iree_ok_status();
   }
 
-  const uint64_t source_unit_count = loom_type_register_unit_count(source_type);
-  const uint64_t result_unit_count = loom_type_register_unit_count(result_type);
+  const uint64_t source_unit_count =
+      loom_low_register_type_unit_count(source_type);
+  const uint64_t result_unit_count =
+      loom_low_register_type_unit_count(result_type);
   const uint64_t offset_unit_count = (uint64_t)offset;
   if (offset_unit_count > source_unit_count ||
       result_unit_count > source_unit_count - offset_unit_count) {

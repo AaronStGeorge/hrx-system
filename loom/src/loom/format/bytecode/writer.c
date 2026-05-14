@@ -473,10 +473,10 @@ static uint32_t loom_bytecode_type_wire_hash(loom_type_t type) {
       return hash;
     }
     case LOOM_TYPE_REGISTER:
-      hash = loom_bytecode_type_hash_mix_u32(hash,
-                                             loom_type_register_class_id(type));
-      return loom_bytecode_type_hash_mix_u64(
-          hash, loom_type_register_unit_count(type));
+      hash = loom_bytecode_type_hash_mix_u64(hash,
+                                             loom_type_register_payload0(type));
+      return loom_bytecode_type_hash_mix_u64(hash,
+                                             loom_type_register_payload1(type));
     case LOOM_TYPE_STORAGE:
       return loom_bytecode_type_hash_mix_u8(
           hash, (uint8_t)loom_type_storage_space(type));
@@ -567,9 +567,8 @@ static bool loom_bytecode_type_wire_equal(loom_type_t a, loom_type_t b) {
       return true;
     }
     case LOOM_TYPE_REGISTER:
-      return loom_type_register_class_id(a) == loom_type_register_class_id(b) &&
-             loom_type_register_unit_count(a) ==
-                 loom_type_register_unit_count(b);
+      return loom_type_register_payload0(a) == loom_type_register_payload0(b) &&
+             loom_type_register_payload1(a) == loom_type_register_payload1(b);
     case LOOM_TYPE_STORAGE:
       return loom_type_storage_space(a) == loom_type_storage_space(b);
     case LOOM_TYPE_ENCODING:
@@ -820,15 +819,8 @@ static iree_status_t loom_bytecode_numbering_intern_type(
       }
       break;
     }
-    case LOOM_TYPE_REGISTER: {
-      loom_string_id_t reg_class_id = loom_type_register_class_id(type);
-      if (reg_class_id < numbering->module->strings.count) {
-        IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
-            numbering, numbering->module->strings.entries[reg_class_id],
-            &unused_id));
-      }
+    case LOOM_TYPE_REGISTER:
       break;
-    }
     default:
       break;
   }
@@ -3417,17 +3409,10 @@ static iree_status_t loom_bytecode_write_types_section(
         break;
       }
       case LOOM_TYPE_REGISTER: {
-        loom_string_id_t reg_class_id = loom_type_register_class_id(type);
-        uint32_t class_writer_id = 0;
-        if (reg_class_id < numbering->module->strings.count) {
-          IREE_RETURN_IF_ERROR(loom_bytecode_numbering_intern_string_view(
-              numbering, numbering->module->strings.entries[reg_class_id],
-              &class_writer_id));
-        }
         IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
-            page_writer, class_writer_id));
+            page_writer, loom_type_register_payload0(type)));
         IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
-            page_writer, loom_type_register_unit_count(type)));
+            page_writer, loom_type_register_payload1(type)));
         break;
       }
       case LOOM_TYPE_STORAGE: {

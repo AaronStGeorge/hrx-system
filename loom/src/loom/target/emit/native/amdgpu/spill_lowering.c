@@ -45,8 +45,8 @@ typedef struct loom_amdgpu_spill_lowering_context_t {
   const loom_low_descriptor_set_t* descriptor_set;
   // Built fixed-segment layout for the function storage reservations.
   loom_amdgpu_storage_layout_t storage_layout;
-  // Module string ID for the AMDGPU VGPR register class.
-  loom_string_id_t vgpr_class_id;
+  // Descriptor-set-local ID for the AMDGPU VGPR register class.
+  uint16_t vgpr_class_id;
   // Bytes in one VGPR allocation unit.
   uint32_t vgpr_unit_bytes;
   // Attribute name used by scratch packet descriptors.
@@ -338,15 +338,17 @@ static iree_status_t loom_amdgpu_spill_lowering_make_chunk_type(
     loom_module_t* module, loom_type_t base_type, uint32_t chunk_units,
     loom_type_t* out_type) {
   *out_type = loom_type_none();
-  loom_type_t chunk_type = loom_low_register_type(
-      loom_low_register_type_class_name_id(base_type), chunk_units);
+  loom_type_t chunk_type =
+      loom_low_register_type_with_unit_count(base_type, chunk_units);
   return loom_module_intern_type(module, chunk_type, out_type);
 }
 
 static iree_status_t loom_amdgpu_spill_lowering_validate_register_type(
     const loom_amdgpu_spill_lowering_context_t* context, loom_type_t type) {
   if (!loom_low_type_is_register(type) ||
-      loom_low_register_type_class_name_id(type) != context->vgpr_class_id) {
+      loom_low_register_type_descriptor_set_stable_id(type) !=
+          context->descriptor_set->stable_id ||
+      loom_low_register_type_class_id(type) != context->vgpr_class_id) {
     return iree_make_status(
         IREE_STATUS_UNIMPLEMENTED,
         "AMDGPU spill lowering currently supports only VGPR register values");
@@ -593,9 +595,7 @@ static iree_status_t loom_amdgpu_spill_lowering_initialize_context(
         (int)class_name.size, class_name.data, vgpr_class->alloc_unit_bits);
   }
   out_context->vgpr_unit_bytes = vgpr_class->alloc_unit_bits / 8u;
-  IREE_RETURN_IF_ERROR(loom_low_build_register_class_string_id(
-      module, descriptor_set, LOOM_AMDGPU_REG_CLASS_ID_VGPR,
-      &out_context->vgpr_class_id));
+  out_context->vgpr_class_id = LOOM_AMDGPU_REG_CLASS_ID_VGPR;
   IREE_RETURN_IF_ERROR(loom_module_intern_string(module, IREE_SV("offset"),
                                                  &out_context->offset_attr_id));
   return loom_amdgpu_storage_layout_build(module, function_op, scratch_arena,

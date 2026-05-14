@@ -27,7 +27,6 @@ low.func.decl import(vm, "hal.buffer.length") target(@vm_target) @hal_buffer_len
 
 low.func.def target(@vm_target) abi(vm_module_function) @vm_import_length(%buffer: reg<ireevm.ref>) -> (reg<ireevm.i32>) {
   %length = low.func.call @hal_buffer_length(%buffer) : (reg<ireevm.ref>) -> (reg<ireevm.i32>)
-  low.op<ireevm.ref.release>(%buffer) : (reg<ireevm.ref>)
   low.return %length : reg<ireevm.i32>
 }
 
