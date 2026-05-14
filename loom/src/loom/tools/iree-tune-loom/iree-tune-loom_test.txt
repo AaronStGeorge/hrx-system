@@ -101,6 +101,8 @@
 // BUNDLE-MANIFEST: "source_identity":{"byte_count":
 // BUNDLE-MANIFEST: "policy":"minimal"
 // BUNDLE-MANIFEST: "paths":{"bundle":
+// BUNDLE-MANIFEST: "files":{"results":{"path":
+// BUNDLE-MANIFEST: "identity":{"status":"ok","byte_count":
 
 // DISPATCH-DRY: "row":"plan"
 // DISPATCH-DRY: "candidate_id":"c0","candidate_index":0
