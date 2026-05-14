@@ -487,13 +487,16 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "`--artifact_bundle_dir=DIR` to collect `results.jsonl`, "
           "`manifest.json`, file outputs, and profile artifacts under one "
           "directory; `--artifact_bundle_policy=debug|full` also writes "
-          "per-candidate compile report sidecars under `compile_reports/` "
-          "and links them from `compile_report_path`. The manifest records "
-          "command/path/source identity, path/size/mtime metadata for "
-          "observed fixture/output/profile/compile-report files, selected "
-          "environment variables, and HAL device identity when a dispatch "
-          "benchmark selected a backend. Large fixture and artifact files "
-          "are not content-hashed by this CLI. "
+          "per-candidate compile report sidecars under `compile_reports/`, "
+          "target-native artifacts under `target_artifacts/`, and HAL "
+          "executable packages under `hal_executables/`; compile and "
+          "benchmark rows link them from `compile_report_path`, "
+          "`target_artifact_path`, and `hal_executable_path`. The manifest "
+          "records command/path/source identity, path/size/mtime metadata "
+          "for observed fixture/output/profile/compile-report/executable "
+          "files, selected environment variables, and HAL device identity "
+          "when a dispatch benchmark selected a backend. Large fixture and "
+          "artifact files are not content-hashed by this CLI. "
           "Benchmark attrs named `family`, `phase`, `strategy`, "
           "`knobs`, `problem`, or `reference_id` are copied into a "
           "`metadata` object on candidate rows. Compile rows and benchmark "
@@ -545,6 +548,9 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "spills:.static_summary.allocation_spill_count}' results.jsonl\n"
           "jq 'select(.row==\"compile\" and .compile_report_path) | "
           "{candidate_id,path:.compile_report_path}' results.jsonl\n"
+          "jq 'select(.row==\"compile\" and .target_artifact_path) | "
+          "{candidate_id,target:.target_artifact_path,"
+          "hal:.hal_executable_path}' results.jsonl\n"
           "jq 'select(.row==\"benchmark\" and .shape) | "
           "{candidate_id,shape_id,shape:.shape.parameters,"
           "p50:.benchmark_result.dispatch_timing_ns.p50}' results.jsonl\n"
@@ -722,6 +728,8 @@ typedef enum iree_tune_loom_bundle_file_kind_e {
   IREE_TUNE_LOOM_BUNDLE_FILE_OUTPUT = 1,
   IREE_TUNE_LOOM_BUNDLE_FILE_PROFILE = 2,
   IREE_TUNE_LOOM_BUNDLE_FILE_COMPILE_REPORT = 3,
+  IREE_TUNE_LOOM_BUNDLE_FILE_TARGET_ARTIFACT = 4,
+  IREE_TUNE_LOOM_BUNDLE_FILE_HAL_EXECUTABLE = 5,
 } iree_tune_loom_bundle_file_kind_t;
 
 typedef struct iree_tune_loom_bundle_file_entry_t {
@@ -791,6 +799,14 @@ struct iree_tune_loom_artifact_bundle_t {
   iree_string_view_t compile_report_dir;
   // Owned debug compile-report directory inside |dir|.
   char* compile_report_dir_storage;
+  // Borrowed view into |target_artifact_dir_storage|.
+  iree_string_view_t target_artifact_dir;
+  // Owned debug target-native artifact directory inside |dir|.
+  char* target_artifact_dir_storage;
+  // Borrowed view into |hal_executable_dir_storage|.
+  iree_string_view_t hal_executable_dir;
+  // Owned debug HAL executable package directory inside |dir|.
+  char* hal_executable_dir_storage;
   // Owned file references observed while the run executed.
   iree_tune_loom_bundle_file_entry_t* file_entries;
   // Number of populated entries in |file_entries|.
@@ -1276,6 +1292,10 @@ static void iree_tune_loom_artifact_bundle_deinitialize(
   }
   iree_allocator_free(bundle->host_allocator, bundle->file_entries);
   iree_allocator_free(bundle->host_allocator,
+                      bundle->hal_executable_dir_storage);
+  iree_allocator_free(bundle->host_allocator,
+                      bundle->target_artifact_dir_storage);
+  iree_allocator_free(bundle->host_allocator,
                       bundle->compile_report_dir_storage);
   iree_allocator_free(bundle->host_allocator,
                       bundle->profile_artifacts_dir_storage);
@@ -1343,6 +1363,16 @@ static iree_status_t iree_tune_loom_artifact_bundle_initialize(
         &out_bundle->compile_report_dir_storage);
   }
   if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_join_bundle_path(
+        out_bundle->dir, IREE_SV("target_artifacts"), allocator,
+        &out_bundle->target_artifact_dir_storage);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_join_bundle_path(
+        out_bundle->dir, IREE_SV("hal_executables"), allocator,
+        &out_bundle->hal_executable_dir_storage);
+  }
+  if (iree_status_is_ok(status)) {
     out_bundle->results_path =
         iree_make_cstring_view(out_bundle->results_path_storage);
     out_bundle->manifest_path =
@@ -1353,6 +1383,10 @@ static iree_status_t iree_tune_loom_artifact_bundle_initialize(
         iree_make_cstring_view(out_bundle->profile_artifacts_dir_storage);
     out_bundle->compile_report_dir =
         iree_make_cstring_view(out_bundle->compile_report_dir_storage);
+    out_bundle->target_artifact_dir =
+        iree_make_cstring_view(out_bundle->target_artifact_dir_storage);
+    out_bundle->hal_executable_dir =
+        iree_make_cstring_view(out_bundle->hal_executable_dir_storage);
     out_bundle->enabled = true;
   } else {
     iree_tune_loom_artifact_bundle_deinitialize(out_bundle);
@@ -1488,6 +1522,10 @@ typedef struct iree_tune_loom_benchmark_result_t {
   const loom_run_compile_report_capture_t* compile_report_capture;
   // Sidecar compile report artifact path for debug/full bundles, if any.
   iree_string_view_t compile_report_artifact_path;
+  // Target-native executable artifact path for debug/full bundles, if any.
+  iree_string_view_t target_artifact_path;
+  // HAL executable package artifact path for debug/full bundles, if any.
+  iree_string_view_t hal_executable_path;
   // True when benchmark setup and timing completed.
   bool executed;
   // True when no measured or warmup sample failed expectations.
@@ -1566,6 +1604,14 @@ typedef struct iree_tune_loom_hal_actual_provider_t {
   iree_string_view_t compile_report_artifact_path;
   // Owned debug/full bundle compile-report artifact path.
   char* compile_report_artifact_path_storage;
+  // Borrowed view into |target_artifact_path_storage|.
+  iree_string_view_t target_artifact_path;
+  // Owned debug/full bundle target-native artifact path.
+  char* target_artifact_path_storage;
+  // Borrowed view into |hal_executable_path_storage|.
+  iree_string_view_t hal_executable_path;
+  // Owned debug/full bundle HAL executable package path.
+  char* hal_executable_path_storage;
   // Pass diagnostic counts from the Loom compile pipeline.
   loom_pass_run_result_t pass_result;
   // True when compile completed with product diagnostics rather than an
@@ -3135,6 +3181,10 @@ static void iree_tune_loom_hal_actual_provider_deinitialize(
         &provider->compile_report_capture);
   }
   iree_allocator_free(provider->context->host_allocator,
+                      provider->hal_executable_path_storage);
+  iree_allocator_free(provider->context->host_allocator,
+                      provider->target_artifact_path_storage);
+  iree_allocator_free(provider->context->host_allocator,
                       provider->compile_report_artifact_path_storage);
   iree_tune_loom_diagnostic_capture_deinitialize(&provider->diagnostics);
   *provider = (iree_tune_loom_hal_actual_provider_t){0};
@@ -3853,6 +3903,8 @@ static void iree_tune_loom_benchmark_result_set_compile_rejection(
   }
   out_result->compile_report_artifact_path =
       provider->compile_report_artifact_path;
+  out_result->target_artifact_path = provider->target_artifact_path;
+  out_result->hal_executable_path = provider->hal_executable_path;
 }
 
 static iree_status_t iree_tune_loom_append_effective_profile_artifacts_dir(
@@ -3935,6 +3987,8 @@ static iree_status_t iree_tune_loom_run_hal_benchmark_sample(
   }
   out_result->compile_report_artifact_path =
       provider->compile_report_artifact_path;
+  out_result->target_artifact_path = provider->target_artifact_path;
+  out_result->hal_executable_path = provider->hal_executable_path;
   if (provider->compile_rejected) {
     iree_tune_loom_benchmark_result_set_compile_rejection(provider, out_result);
     out_result->has_sample_ordinal = true;
@@ -4746,10 +4800,37 @@ static iree_status_t iree_tune_loom_write_compile_report_json(
   return iree_ok_status();
 }
 
-static bool iree_tune_loom_artifact_bundle_wants_compile_reports(
+static bool iree_tune_loom_artifact_bundle_wants_debug_artifacts(
     const iree_tune_loom_artifact_bundle_t* bundle) {
   return bundle != NULL && bundle->enabled &&
          bundle->policy >= IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_DEBUG;
+}
+
+static bool iree_tune_loom_artifact_bundle_wants_compile_reports(
+    const iree_tune_loom_artifact_bundle_t* bundle) {
+  return iree_tune_loom_artifact_bundle_wants_debug_artifacts(bundle);
+}
+
+static iree_status_t iree_tune_loom_append_candidate_artifact_stem(
+    const iree_tune_loom_run_identity_t* run,
+    const iree_tune_loom_candidate_identity_t* candidate,
+    const iree_tune_loom_hal_actual_provider_t* provider,
+    iree_string_builder_t* stem) {
+  IREE_RETURN_IF_ERROR(
+      iree_tune_loom_append_sanitized_path_component(run->run_id, stem));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(stem, "_"));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_append_sanitized_path_component(
+      candidate->candidate_id, stem));
+  if (!iree_string_view_is_empty(provider->specialization)) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(stem, "_"));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_append_sanitized_path_component(
+        provider->specialization, stem));
+  }
+  if (provider->has_specialization_sample_ordinal) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        stem, "_sample%" PRIhsz, provider->specialization_sample_ordinal));
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t iree_tune_loom_append_compile_report_artifact_leaf(
@@ -4757,21 +4838,112 @@ static iree_status_t iree_tune_loom_append_compile_report_artifact_leaf(
     const iree_tune_loom_candidate_identity_t* candidate,
     const iree_tune_loom_hal_actual_provider_t* provider,
     iree_string_builder_t* leaf) {
-  IREE_RETURN_IF_ERROR(
-      iree_tune_loom_append_sanitized_path_component(run->run_id, leaf));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(leaf, "_"));
-  IREE_RETURN_IF_ERROR(iree_tune_loom_append_sanitized_path_component(
-      candidate->candidate_id, leaf));
-  if (!iree_string_view_is_empty(provider->specialization)) {
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(leaf, "_"));
-    IREE_RETURN_IF_ERROR(iree_tune_loom_append_sanitized_path_component(
-        provider->specialization, leaf));
-  }
-  if (provider->has_specialization_sample_ordinal) {
-    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-        leaf, "_sample%" PRIhsz, provider->specialization_sample_ordinal));
-  }
+  IREE_RETURN_IF_ERROR(iree_tune_loom_append_candidate_artifact_stem(
+      run, candidate, provider, leaf));
   return iree_string_builder_append_cstring(leaf, "_compile_report.json");
+}
+
+static iree_status_t iree_tune_loom_append_artifact_extension(
+    iree_string_view_t format, iree_string_view_t fallback_extension,
+    iree_string_builder_t* leaf) {
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(leaf, "."));
+  if (iree_string_view_is_empty(format)) {
+    return iree_tune_loom_append_sanitized_path_component(fallback_extension,
+                                                          leaf);
+  }
+  return iree_tune_loom_append_sanitized_path_component(format, leaf);
+}
+
+static iree_status_t iree_tune_loom_write_candidate_byte_artifact(
+    iree_tune_loom_artifact_bundle_t* bundle,
+    iree_tune_loom_bundle_file_kind_t kind, iree_string_view_t directory,
+    iree_string_view_t leaf, iree_const_byte_span_t contents,
+    iree_allocator_t allocator, char** inout_path_storage,
+    iree_string_view_t* inout_path) {
+  if (!iree_tune_loom_artifact_bundle_wants_debug_artifacts(bundle) ||
+      !iree_string_view_is_empty(*inout_path)) {
+    return iree_ok_status();
+  }
+  if (contents.data == NULL || contents.data_length == 0) {
+    return iree_ok_status();
+  }
+
+  char* path_storage = NULL;
+  iree_status_t status =
+      iree_tune_loom_join_path(directory, leaf, allocator, &path_storage);
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_create_parent_directory(
+        iree_make_cstring_view(path_storage), allocator);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_tooling_write_output_file(
+        iree_make_cstring_view(path_storage),
+        iree_make_string_view((const char*)contents.data, contents.data_length),
+        allocator);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_artifact_bundle_record_file(
+        bundle, kind, iree_make_cstring_view(path_storage));
+  }
+  if (iree_status_is_ok(status)) {
+    iree_allocator_free(allocator, *inout_path_storage);
+    *inout_path_storage = path_storage;
+    *inout_path = iree_make_cstring_view(path_storage);
+    path_storage = NULL;
+  }
+  iree_allocator_free(allocator, path_storage);
+  return status;
+}
+
+static iree_status_t iree_tune_loom_write_compiled_artifacts(
+    const iree_tune_loom_run_identity_t* run,
+    const iree_tune_loom_candidate_identity_t* candidate,
+    iree_tune_loom_hal_actual_provider_t* provider,
+    iree_allocator_t allocator) {
+  iree_tune_loom_artifact_bundle_t* bundle = provider->context->artifact_bundle;
+  if (!iree_tune_loom_artifact_bundle_wants_debug_artifacts(bundle) ||
+      !provider->candidate_initialized || !provider->candidate.compiled) {
+    return iree_ok_status();
+  }
+
+  iree_string_builder_t leaf;
+  iree_string_builder_initialize(allocator, &leaf);
+  const loom_run_hal_executable_t* executable = &provider->candidate.executable;
+  iree_status_t status = iree_tune_loom_append_candidate_artifact_stem(
+      run, candidate, provider, &leaf);
+  if (iree_status_is_ok(status)) {
+    status = iree_string_builder_append_cstring(&leaf, "_target");
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_append_artifact_extension(
+        executable->target_artifact_format, IREE_SV("bin"), &leaf);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_write_candidate_byte_artifact(
+        bundle, IREE_TUNE_LOOM_BUNDLE_FILE_TARGET_ARTIFACT,
+        bundle->target_artifact_dir, iree_string_builder_view(&leaf),
+        executable->target_artifact_data, allocator,
+        &provider->target_artifact_path_storage,
+        &provider->target_artifact_path);
+  }
+
+  iree_string_builder_reset(&leaf);
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_append_candidate_artifact_stem(run, candidate,
+                                                           provider, &leaf);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_string_builder_append_cstring(&leaf, "_hal_executable.hal");
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_write_candidate_byte_artifact(
+        bundle, IREE_TUNE_LOOM_BUNDLE_FILE_HAL_EXECUTABLE,
+        bundle->hal_executable_dir, iree_string_builder_view(&leaf),
+        executable->executable_data, allocator,
+        &provider->hal_executable_path_storage, &provider->hal_executable_path);
+  }
+  iree_string_builder_deinitialize(&leaf);
+  return status;
 }
 
 static iree_status_t iree_tune_loom_append_compile_report_artifact_json(
@@ -4810,6 +4982,18 @@ static iree_status_t iree_tune_loom_append_compile_report_artifact_json(
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"entry\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(&stream, entry_symbol));
+  if (!iree_string_view_is_empty(provider->target_artifact_path)) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        &stream, ",\"target_artifact_path\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+        &stream, provider->target_artifact_path));
+  }
+  if (!iree_string_view_is_empty(provider->hal_executable_path)) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"hal_executable_path\":"));
+    IREE_RETURN_IF_ERROR(
+        loom_json_write_escaped_string(&stream, provider->hal_executable_path));
+  }
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"status\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
@@ -4984,6 +5168,18 @@ static iree_status_t iree_tune_loom_write_benchmark_result_json(
     IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
         stream, benchmark_result->compile_report_artifact_path));
   }
+  if (!iree_string_view_is_empty(benchmark_result->target_artifact_path)) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"target_artifact_path\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+        stream, benchmark_result->target_artifact_path));
+  }
+  if (!iree_string_view_is_empty(benchmark_result->hal_executable_path)) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"hal_executable_path\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+        stream, benchmark_result->hal_executable_path));
+  }
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"measure\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(stream, policy->measure));
@@ -5137,6 +5333,18 @@ static iree_status_t iree_tune_loom_append_compile_row(
         loom_output_stream_write_cstring(&stream, ",\"compile_report_path\":"));
     IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
         &stream, provider->compile_report_artifact_path));
+  }
+  if (!iree_string_view_is_empty(provider->target_artifact_path)) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        &stream, ",\"target_artifact_path\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+        &stream, provider->target_artifact_path));
+  }
+  if (!iree_string_view_is_empty(provider->hal_executable_path)) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"hal_executable_path\":"));
+    IREE_RETURN_IF_ERROR(
+        loom_json_write_escaped_string(&stream, provider->hal_executable_path));
   }
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"diagnostics\":"));
@@ -6295,6 +6503,10 @@ static iree_status_t iree_tune_loom_run_dispatch_complete_benchmark(
     status = iree_tune_loom_hal_actual_provider_compile(&hal_provider);
   }
   if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_write_compiled_artifacts(run, candidate,
+                                                     &hal_provider, allocator);
+  }
+  if (iree_status_is_ok(status)) {
     status = iree_tune_loom_write_compile_report_artifact(
         run, candidate, benchmark_plan, case_plan, &hal_provider, allocator);
   }
@@ -6355,6 +6567,8 @@ static iree_status_t iree_tune_loom_run_dispatch_complete_benchmark(
         .passed = false,
         .compile_report_artifact_path =
             hal_provider.compile_report_artifact_path,
+        .target_artifact_path = hal_provider.target_artifact_path,
+        .hal_executable_path = hal_provider.hal_executable_path,
         .specialization = specialization,
         .samples_per_iteration = benchmark_correctness_sample_count,
         .failed_sample_count = benchmark_correctness_failed_sample_count,
@@ -6752,6 +6966,10 @@ static iree_status_t iree_tune_loom_prepare_dispatch_comparison_candidate(
     status = iree_tune_loom_hal_actual_provider_compile(&candidate->provider);
   }
   if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_write_compiled_artifacts(
+        run, &selection->identity, &candidate->provider, allocator);
+  }
+  if (iree_status_is_ok(status)) {
     status = iree_tune_loom_write_compile_report_artifact(
         run, &selection->identity, selection->benchmark_plan,
         selection->case_plan, &candidate->provider, allocator);
@@ -6802,6 +7020,8 @@ static iree_status_t iree_tune_loom_prepare_dispatch_comparison_candidate(
         .passed = false,
         .compile_report_artifact_path =
             candidate->provider.compile_report_artifact_path,
+        .target_artifact_path = candidate->provider.target_artifact_path,
+        .hal_executable_path = candidate->provider.hal_executable_path,
         .specialization = candidate->specialization,
         .has_sample_ordinal = true,
         .sample_ordinal = candidate->begin_sample,
@@ -7347,6 +7567,14 @@ static iree_status_t iree_tune_loom_write_manifest_files_json(
       loom_output_stream_write_cstring(stream, ",\"compile_reports\":"));
   IREE_RETURN_IF_ERROR(iree_tune_loom_write_manifest_file_array_json(
       bundle, IREE_TUNE_LOOM_BUNDLE_FILE_COMPILE_REPORT, allocator, stream));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"target_artifacts\":"));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_manifest_file_array_json(
+      bundle, IREE_TUNE_LOOM_BUNDLE_FILE_TARGET_ARTIFACT, allocator, stream));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"hal_executables\":"));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_manifest_file_array_json(
+      bundle, IREE_TUNE_LOOM_BUNDLE_FILE_HAL_EXECUTABLE, allocator, stream));
   return loom_output_stream_write_cstring(stream, "}");
 }
 
@@ -7428,6 +7656,14 @@ static iree_status_t iree_tune_loom_append_artifact_bundle_manifest_json(
         loom_output_stream_write_cstring(&stream, ",\"compile_reports\":"));
     IREE_RETURN_IF_ERROR(
         loom_json_write_escaped_string(&stream, bundle->compile_report_dir));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"target_artifacts\":"));
+    IREE_RETURN_IF_ERROR(
+        loom_json_write_escaped_string(&stream, bundle->target_artifact_dir));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"hal_executables\":"));
+    IREE_RETURN_IF_ERROR(
+        loom_json_write_escaped_string(&stream, bundle->hal_executable_dir));
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}"));
   IREE_RETURN_IF_ERROR(iree_tune_loom_write_manifest_files_json(
@@ -7571,9 +7807,11 @@ int iree_tune_loom_main(int argc, char** argv,
       "selected environment variables, and HAL device identity when a dispatch "
       "benchmark selected a backend. With --artifact_bundle_policy=debug|full, "
       "per-candidate compile report sidecars are written under "
-      "compile_reports/ and linked from compile_report_path on compile and "
-      "benchmark rows. Large fixture and artifact files are not "
-      "content-hashed by this CLI. "
+      "compile_reports/, target-native artifacts under target_artifacts/, "
+      "and HAL executable packages under hal_executables/; compile and "
+      "benchmark rows link them from compile_report_path, "
+      "target_artifact_path, and hal_executable_path. Large fixture and "
+      "artifact files are not content-hashed by this CLI. "
       "`--shape_specialization=dynamic` compiles once, "
       "`--shape_specialization=per_sample` compiles each selected shape with "
       "concrete parameter facts, and `--shape_specialization=both` emits both "
@@ -7657,6 +7895,9 @@ int iree_tune_loom_main(int argc, char** argv,
       "local:.static_summary.local_memory_bytes}' results.jsonl\n"
       "  jq 'select(.row==\"compile\" and .compile_report_path) | "
       "{candidate_id,path:.compile_report_path}' results.jsonl\n"
+      "  jq 'select(.row==\"compile\" and .target_artifact_path) | "
+      "{candidate_id,target:.target_artifact_path,"
+      "hal:.hal_executable_path}' results.jsonl\n"
       "  jq 'select(.row==\"profile\") as $r | $r.profile.rows[]? | "
       "select(.type|startswith(\"dispatch_\")) | "
       "{candidate_id:$r.candidate_id,type,export_name,"
