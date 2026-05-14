@@ -436,8 +436,12 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "compile diagnostics, or HAL dispatch evidence for kernel tuning. "
           "The tool emits JSONL: every row has `row` and `run_id`; selected "
           "benchmarks also have `candidate_id` so rows can be joined across "
-          "large sweeps. Use `--profile_final_batch=true` for dispatch "
-          "timing evidence outside the measured window; add "
+          "large sweeps. Rows are written and flushed as each lifecycle step "
+          "finishes, so `tail -f results.jsonl` is useful while a long run is "
+          "still active. The final `summary` row carries both flat totals and "
+          "a nested `summary` object for agent consumers. Use "
+          "`--profile_final_batch=true` for dispatch timing evidence outside "
+          "the measured window; add "
           "`--profile_artifacts_dir=DIR` when you need the raw HAL profile "
           "bundle for counters or traces. Parameterized cases report "
           "`shape_id`, `shape_index`, and a concrete `shape.parameters` map on "
@@ -540,6 +544,9 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           ".counter.type==\"counter_decode_status\") | "
           "{candidate_id,status:.counter.status,reason:.counter.reason}' "
           "results.jsonl\n"
+          "tail -f results.jsonl | jq -c 'select(.row==\"compile\" or "
+          ".row==\"benchmark\" or .row==\"comparison\" or "
+          ".row==\"summary\")'\n"
           "```\n"
           "\n"
           "Use `iree-tune-loom --help` for the full flag list, JSONL row "
@@ -657,6 +664,17 @@ typedef struct iree_tune_loom_run_identity_t {
   // Active artifact bundle policy name, or "none" when bundling is disabled.
   iree_string_view_t artifact_bundle_policy;
 } iree_tune_loom_run_identity_t;
+
+typedef struct iree_tune_loom_jsonl_sink_t {
+  // Host allocator used for scratch row storage.
+  iree_allocator_t host_allocator;
+  // Open FILE receiving the JSONL stream.
+  FILE* file;
+  // True when |file| is owned by this sink and must be closed.
+  bool owns_file;
+  // Scratch storage used to assemble complete rows before writing.
+  iree_string_builder_t row_builder;
+} iree_tune_loom_jsonl_sink_t;
 
 typedef struct iree_tune_loom_candidate_identity_t {
   // Deterministic candidate identifier within the source/run selection.
@@ -1023,6 +1041,109 @@ static iree_status_t iree_tune_loom_create_parent_directory(
     return iree_ok_status();
   }
   return iree_tune_loom_create_directory_if_needed(parent, allocator);
+}
+
+static iree_status_t iree_tune_loom_jsonl_sink_initialize(
+    iree_string_view_t path, iree_allocator_t allocator,
+    iree_tune_loom_jsonl_sink_t* out_sink) {
+  memset(out_sink, 0, sizeof(*out_sink));
+  out_sink->host_allocator = allocator;
+  iree_string_builder_initialize(allocator, &out_sink->row_builder);
+
+  path = iree_string_view_trim(path);
+  if (loom_tooling_file_path_is_stdio(path)) {
+    out_sink->file = stdout;
+    return iree_ok_status();
+  }
+
+  iree_status_t status =
+      iree_tune_loom_create_parent_directory(path, allocator);
+  char* storage = NULL;
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_dup_string_view(path, allocator, &storage);
+  }
+  if (iree_status_is_ok(status)) {
+    out_sink->file = fopen(storage, "wb");
+    if (out_sink->file == NULL) {
+      status = iree_make_status(IREE_STATUS_UNAVAILABLE,
+                                "failed to open JSONL output `%s`: %s", storage,
+                                strerror(errno));
+    } else {
+      out_sink->owns_file = true;
+    }
+  }
+  iree_allocator_free(allocator, storage);
+  if (!iree_status_is_ok(status)) {
+    iree_string_builder_deinitialize(&out_sink->row_builder);
+    memset(out_sink, 0, sizeof(*out_sink));
+  }
+  return status;
+}
+
+static void iree_tune_loom_jsonl_sink_deinitialize(
+    iree_tune_loom_jsonl_sink_t* sink) {
+  if (sink == NULL) {
+    return;
+  }
+  if (sink->owns_file && sink->file != NULL) {
+    fclose(sink->file);
+  }
+  iree_string_builder_deinitialize(&sink->row_builder);
+  memset(sink, 0, sizeof(*sink));
+}
+
+static iree_string_builder_t* iree_tune_loom_jsonl_sink_begin(
+    iree_tune_loom_jsonl_sink_t* sink) {
+  iree_string_builder_reset(&sink->row_builder);
+  return &sink->row_builder;
+}
+
+static iree_status_t iree_tune_loom_jsonl_sink_flush(
+    iree_tune_loom_jsonl_sink_t* sink) {
+  iree_string_view_t contents = iree_string_builder_view(&sink->row_builder);
+  if (iree_string_view_is_empty(contents)) {
+    return iree_ok_status();
+  }
+  const size_t written = fwrite(contents.data, 1, contents.size, sink->file);
+  if (written != contents.size) {
+    return iree_make_status(IREE_STATUS_DATA_LOSS,
+                            "failed to write %" PRIhsz
+                            " bytes to JSONL output: %s",
+                            contents.size, strerror(errno));
+  }
+  if (fflush(sink->file) != 0) {
+    return iree_make_status(IREE_STATUS_DATA_LOSS,
+                            "failed to flush JSONL output: %s",
+                            strerror(errno));
+  }
+  iree_string_builder_reset(&sink->row_builder);
+  return iree_ok_status();
+}
+
+static iree_status_t iree_tune_loom_jsonl_sink_close(
+    iree_tune_loom_jsonl_sink_t* sink) {
+  if (!sink->owns_file || sink->file == NULL) {
+    return iree_ok_status();
+  }
+  if (fclose(sink->file) != 0) {
+    sink->file = NULL;
+    sink->owns_file = false;
+    return iree_make_status(IREE_STATUS_DATA_LOSS,
+                            "failed to close JSONL output: %s",
+                            strerror(errno));
+  }
+  sink->file = NULL;
+  sink->owns_file = false;
+  return iree_ok_status();
+}
+
+static iree_status_t iree_tune_loom_jsonl_sink_end(
+    iree_tune_loom_jsonl_sink_t* sink, iree_status_t row_status) {
+  if (!iree_status_is_ok(row_status)) {
+    iree_string_builder_reset(&sink->row_builder);
+    return row_status;
+  }
+  return iree_tune_loom_jsonl_sink_flush(sink);
 }
 
 static iree_status_t iree_tune_loom_join_bundle_path(
@@ -3739,7 +3860,7 @@ static iree_status_t iree_tune_loom_run_case_correctness_range(
     const loom_testbench_case_execution_options_t* execution_options,
     iree_string_view_t specialization, iree_host_size_t begin_sample,
     iree_host_size_t end_sample, iree_arena_allocator_t* arena,
-    iree_string_builder_t* sample_output, iree_host_size_t* out_sample_count,
+    iree_tune_loom_jsonl_sink_t* jsonl_sink, iree_host_size_t* out_sample_count,
     iree_host_size_t* out_failed_sample_count) {
   *out_sample_count = 0;
   *out_failed_sample_count = 0;
@@ -3761,7 +3882,8 @@ static iree_status_t iree_tune_loom_run_case_correctness_range(
                                             &sample_result);
     if (iree_status_is_ok(status)) {
       loom_output_stream_t stream;
-      loom_output_stream_for_builder(sample_output, &stream);
+      loom_output_stream_for_builder(
+          iree_tune_loom_jsonl_sink_begin(jsonl_sink), &stream);
       status = loom_output_stream_write_cstring(&stream, "{\"row\":\"sample\"");
       if (iree_status_is_ok(status)) {
         status = iree_tune_loom_write_run_id_field_json(run, &stream);
@@ -3792,6 +3914,7 @@ static iree_status_t iree_tune_loom_run_case_correctness_range(
       if (iree_status_is_ok(status)) {
         status = loom_output_stream_write_cstring(&stream, "}\n");
       }
+      status = iree_tune_loom_jsonl_sink_end(jsonl_sink, status);
     }
     if (iree_status_is_ok(status)) {
       ++*out_sample_count;
@@ -3816,7 +3939,7 @@ static iree_status_t iree_tune_loom_run_case_correctness(
     iree_host_size_t case_index,
     const loom_testbench_case_execution_options_t* execution_options,
     iree_string_view_t specialization, iree_arena_allocator_t* arena,
-    iree_string_builder_t* sample_output, iree_host_size_t* out_sample_count,
+    iree_tune_loom_jsonl_sink_t* jsonl_sink, iree_host_size_t* out_sample_count,
     iree_host_size_t* out_failed_sample_count) {
   const loom_testbench_case_plan_t* case_plan = &module_plan->cases[case_index];
   iree_host_size_t begin_sample = 0;
@@ -3826,7 +3949,7 @@ static iree_status_t iree_tune_loom_run_case_correctness(
   return iree_tune_loom_run_case_correctness_range(
       run, candidate, module_plan, benchmark_plan, case_index,
       execution_options, specialization, begin_sample, end_sample, arena,
-      sample_output, out_sample_count, out_failed_sample_count);
+      jsonl_sink, out_sample_count, out_failed_sample_count);
 }
 
 static iree_status_t iree_tune_loom_run_case_iteration(
@@ -5237,15 +5360,18 @@ static iree_status_t iree_tune_loom_append_dispatch_benchmark_result(
     const iree_tune_loom_benchmark_result_t* benchmark_result,
     iree_host_size_t correctness_sample_count,
     iree_host_size_t correctness_failed_sample_count,
-    iree_string_builder_t* benchmark_output, iree_allocator_t allocator,
-    iree_string_builder_t* profile_output) {
-  IREE_RETURN_IF_ERROR(iree_tune_loom_append_benchmark_result(
-      run, candidate, module_plan->module, benchmark_plan, case_plan, policy,
-      benchmark_result, correctness_sample_count,
-      correctness_failed_sample_count, benchmark_output));
-  return iree_tune_loom_append_profile_row(
-      run, candidate, module_plan->module, benchmark_plan, case_plan,
-      benchmark_result, allocator, profile_output);
+    iree_tune_loom_jsonl_sink_t* jsonl_sink, iree_allocator_t allocator) {
+  IREE_RETURN_IF_ERROR(iree_tune_loom_jsonl_sink_end(
+      jsonl_sink, iree_tune_loom_append_benchmark_result(
+                      run, candidate, module_plan->module, benchmark_plan,
+                      case_plan, policy, benchmark_result,
+                      correctness_sample_count, correctness_failed_sample_count,
+                      iree_tune_loom_jsonl_sink_begin(jsonl_sink))));
+  return iree_tune_loom_jsonl_sink_end(
+      jsonl_sink, iree_tune_loom_append_profile_row(
+                      run, candidate, module_plan->module, benchmark_plan,
+                      case_plan, benchmark_result, allocator,
+                      iree_tune_loom_jsonl_sink_begin(jsonl_sink)));
 }
 
 static iree_status_t iree_tune_loom_run_dispatch_complete_benchmark(
@@ -5263,10 +5389,7 @@ static iree_status_t iree_tune_loom_run_dispatch_complete_benchmark(
     iree_host_size_t specialization_sample_ordinal,
     iree_tune_loom_device_row_state_t* device_row_state,
     iree_arena_allocator_t* execution_arena, iree_allocator_t allocator,
-    iree_string_builder_t* device_output, iree_string_builder_t* compile_output,
-    iree_string_builder_t* sample_output,
-    iree_string_builder_t* benchmark_output,
-    iree_string_builder_t* profile_output,
+    iree_tune_loom_jsonl_sink_t* jsonl_sink,
     iree_host_size_t* inout_correctness_sample_count,
     iree_host_size_t* inout_correctness_failed_sample_count,
     iree_host_size_t* inout_failed_benchmark_count) {
@@ -5309,13 +5432,17 @@ static iree_status_t iree_tune_loom_run_dispatch_complete_benchmark(
     status = iree_tune_loom_hal_actual_provider_compile(&hal_provider);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_append_device_row(run, hal_context,
-                                              device_row_state, device_output);
+    status = iree_tune_loom_jsonl_sink_end(
+        jsonl_sink, iree_tune_loom_append_device_row(
+                        run, hal_context, device_row_state,
+                        iree_tune_loom_jsonl_sink_begin(jsonl_sink)));
   }
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_append_compile_row(run, candidate, benchmark_plan,
-                                               case_plan, &hal_provider,
-                                               compile_output);
+    status = iree_tune_loom_jsonl_sink_end(
+        jsonl_sink,
+        iree_tune_loom_append_compile_row(
+            run, candidate, benchmark_plan, case_plan, &hal_provider,
+            iree_tune_loom_jsonl_sink_begin(jsonl_sink)));
   }
   if (iree_status_is_ok(status) && hal_provider.compile_rejected) {
     iree_tune_loom_benchmark_result_t benchmark_result = {0};
@@ -5325,8 +5452,7 @@ static iree_status_t iree_tune_loom_run_dispatch_complete_benchmark(
     status = iree_tune_loom_append_dispatch_benchmark_result(
         run, candidate, module_plan, benchmark_plan, case_plan, policy,
         &benchmark_result, /*correctness_sample_count=*/0,
-        /*correctness_failed_sample_count=*/0, benchmark_output, allocator,
-        profile_output);
+        /*correctness_failed_sample_count=*/0, jsonl_sink, allocator);
   }
 
   iree_host_size_t begin_sample = 0;
@@ -5346,7 +5472,7 @@ static iree_status_t iree_tune_loom_run_dispatch_complete_benchmark(
     status = iree_tune_loom_run_case_correctness_range(
         run, candidate, module_plan, benchmark_plan, benchmark_plan->case_index,
         &benchmark_execution_options, specialization, begin_sample, end_sample,
-        execution_arena, sample_output, &benchmark_correctness_sample_count,
+        execution_arena, jsonl_sink, &benchmark_correctness_sample_count,
         &benchmark_correctness_failed_sample_count);
   }
   if (iree_status_is_ok(status) && !hal_provider.compile_rejected) {
@@ -5374,8 +5500,7 @@ static iree_status_t iree_tune_loom_run_dispatch_complete_benchmark(
     status = iree_tune_loom_append_dispatch_benchmark_result(
         run, candidate, module_plan, benchmark_plan, case_plan, policy,
         &benchmark_result, benchmark_correctness_sample_count,
-        benchmark_correctness_failed_sample_count, benchmark_output, allocator,
-        profile_output);
+        benchmark_correctness_failed_sample_count, jsonl_sink, allocator);
   }
 
   for (iree_host_size_t sample_ordinal = begin_sample;
@@ -5394,8 +5519,7 @@ static iree_status_t iree_tune_loom_run_dispatch_complete_benchmark(
       status = iree_tune_loom_append_dispatch_benchmark_result(
           run, candidate, module_plan, benchmark_plan, case_plan, policy,
           &benchmark_result, benchmark_correctness_sample_count,
-          benchmark_correctness_failed_sample_count, benchmark_output,
-          allocator, profile_output);
+          benchmark_correctness_failed_sample_count, jsonl_sink, allocator);
     }
   }
 
@@ -5716,10 +5840,7 @@ static iree_status_t iree_tune_loom_prepare_dispatch_comparison_candidate(
     const loom_testbench_case_execution_options_t* execution_options,
     iree_tune_loom_device_row_state_t* device_row_state,
     iree_arena_allocator_t* execution_arena, iree_allocator_t allocator,
-    iree_string_builder_t* device_output, iree_string_builder_t* compile_output,
-    iree_string_builder_t* sample_output,
-    iree_string_builder_t* benchmark_output,
-    iree_string_builder_t* profile_output,
+    iree_tune_loom_jsonl_sink_t* jsonl_sink,
     iree_host_size_t* inout_correctness_sample_count,
     iree_host_size_t* inout_correctness_failed_sample_count,
     iree_host_size_t* inout_failed_benchmark_count) {
@@ -5762,13 +5883,17 @@ static iree_status_t iree_tune_loom_prepare_dispatch_comparison_candidate(
     status = iree_tune_loom_hal_actual_provider_compile(&candidate->provider);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_append_device_row(run, hal_context,
-                                              device_row_state, device_output);
+    status = iree_tune_loom_jsonl_sink_end(
+        jsonl_sink, iree_tune_loom_append_device_row(
+                        run, hal_context, device_row_state,
+                        iree_tune_loom_jsonl_sink_begin(jsonl_sink)));
   }
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_append_compile_row(
-        run, &selection->identity, selection->benchmark_plan,
-        selection->case_plan, &candidate->provider, compile_output);
+    status = iree_tune_loom_jsonl_sink_end(
+        jsonl_sink, iree_tune_loom_append_compile_row(
+                        run, &selection->identity, selection->benchmark_plan,
+                        selection->case_plan, &candidate->provider,
+                        iree_tune_loom_jsonl_sink_begin(jsonl_sink)));
   }
   if (iree_status_is_ok(status) && candidate->provider.compile_rejected) {
     iree_tune_loom_benchmark_result_t benchmark_result = {0};
@@ -5779,8 +5904,7 @@ static iree_status_t iree_tune_loom_prepare_dispatch_comparison_candidate(
         run, &selection->identity, module_plan, selection->benchmark_plan,
         selection->case_plan, &selection->policy, &benchmark_result,
         /*correctness_sample_count=*/0,
-        /*correctness_failed_sample_count=*/0, benchmark_output, allocator,
-        profile_output);
+        /*correctness_failed_sample_count=*/0, jsonl_sink, allocator);
   }
 
   if (iree_status_is_ok(status)) {
@@ -5788,7 +5912,7 @@ static iree_status_t iree_tune_loom_prepare_dispatch_comparison_candidate(
         run, &selection->identity, module_plan, selection->benchmark_plan,
         selection->benchmark_plan->case_index, &candidate_execution_options,
         candidate->specialization, candidate->begin_sample,
-        candidate->end_sample, execution_arena, sample_output,
+        candidate->end_sample, execution_arena, jsonl_sink,
         &candidate->correctness_sample_count,
         &candidate->correctness_failed_sample_count);
   }
@@ -5813,8 +5937,7 @@ static iree_status_t iree_tune_loom_prepare_dispatch_comparison_candidate(
         run, &selection->identity, module_plan, selection->benchmark_plan,
         selection->case_plan, &selection->policy, &benchmark_result,
         candidate->correctness_sample_count,
-        candidate->correctness_failed_sample_count, benchmark_output, allocator,
-        profile_output);
+        candidate->correctness_failed_sample_count, jsonl_sink, allocator);
   }
   if (iree_status_is_ok(status)) {
     candidate->runnable = true;
@@ -5945,7 +6068,7 @@ static iree_status_t iree_tune_loom_run_comparison_window(
     iree_string_view_t comparison_group, iree_string_view_t method,
     iree_host_size_t order_index, iree_host_size_t repetition_index,
     char schedule_token, iree_allocator_t allocator,
-    iree_string_builder_t* benchmark_output,
+    iree_tune_loom_jsonl_sink_t* jsonl_sink,
     iree_host_size_t* inout_failed_benchmark_count) {
   if (!candidate->runnable) {
     return iree_ok_status();
@@ -5973,10 +6096,12 @@ static iree_status_t iree_tune_loom_run_comparison_window(
         candidate, &benchmark_result);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_append_benchmark_repetition_row(
-        run, candidate, baseline, comparison_group, method, order_index,
-        repetition_index, schedule_token, profile_suppressed, &benchmark_result,
-        benchmark_output);
+    status = iree_tune_loom_jsonl_sink_end(
+        jsonl_sink,
+        iree_tune_loom_append_benchmark_repetition_row(
+            run, candidate, baseline, comparison_group, method, order_index,
+            repetition_index, schedule_token, profile_suppressed,
+            &benchmark_result, iree_tune_loom_jsonl_sink_begin(jsonl_sink)));
   }
   return status;
 }
@@ -5995,10 +6120,7 @@ static iree_status_t iree_tune_loom_run_dispatch_comparison(
     const loom_testbench_case_execution_options_t* execution_options,
     iree_tune_loom_device_row_state_t* device_row_state,
     iree_arena_allocator_t* execution_arena, iree_allocator_t allocator,
-    iree_string_builder_t* device_output, iree_string_builder_t* compile_output,
-    iree_string_builder_t* sample_output,
-    iree_string_builder_t* benchmark_output,
-    iree_string_builder_t* profile_output,
+    iree_tune_loom_jsonl_sink_t* jsonl_sink,
     iree_host_size_t* inout_correctness_sample_count,
     iree_host_size_t* inout_correctness_failed_sample_count,
     iree_host_size_t* inout_failed_benchmark_count) {
@@ -6016,10 +6138,8 @@ static iree_status_t iree_tune_loom_run_dispatch_comparison(
     status = iree_tune_loom_prepare_dispatch_comparison_candidate(
         run, &candidates[i], module_plan, hal_context, session, filename,
         source, compile_report_options, execution_options, device_row_state,
-        execution_arena, allocator, device_output, compile_output,
-        sample_output, benchmark_output, profile_output,
-        inout_correctness_sample_count, inout_correctness_failed_sample_count,
-        inout_failed_benchmark_count);
+        execution_arena, allocator, jsonl_sink, inout_correctness_sample_count,
+        inout_correctness_failed_sample_count, inout_failed_benchmark_count);
   }
 
   const iree_tune_loom_candidate_identity_t* baseline = &selections[0].identity;
@@ -6035,21 +6155,21 @@ static iree_status_t iree_tune_loom_run_dispatch_comparison(
          ++candidate_index) {
       status = iree_tune_loom_run_comparison_window(
           run, &candidates[0], baseline, module_plan, comparison_group, method,
-          order_index++, /*repetition_index=*/0, 'A', allocator,
-          benchmark_output, inout_failed_benchmark_count);
+          order_index++, /*repetition_index=*/0, 'A', allocator, jsonl_sink,
+          inout_failed_benchmark_count);
       for (iree_host_size_t repetition_index = 0;
            iree_status_is_ok(status) && repetition_index < repetitions;
            ++repetition_index) {
         status = iree_tune_loom_run_comparison_window(
             run, &candidates[candidate_index], baseline, module_plan,
             comparison_group, method, order_index++, repetition_index,
-            (char)('A' + candidate_index), allocator, benchmark_output,
+            (char)('A' + candidate_index), allocator, jsonl_sink,
             inout_failed_benchmark_count);
         if (iree_status_is_ok(status)) {
           status = iree_tune_loom_run_comparison_window(
               run, &candidates[0], baseline, module_plan, comparison_group,
               method, order_index++, repetition_index + 1, 'A', allocator,
-              benchmark_output, inout_failed_benchmark_count);
+              jsonl_sink, inout_failed_benchmark_count);
         }
       }
     }
@@ -6064,7 +6184,7 @@ static iree_status_t iree_tune_loom_run_dispatch_comparison(
         status = iree_tune_loom_run_comparison_window(
             run, &candidates[candidate_index], baseline, module_plan,
             comparison_group, method, order_index++, repetition_index,
-            (char)('A' + candidate_index), allocator, benchmark_output,
+            (char)('A' + candidate_index), allocator, jsonl_sink,
             inout_failed_benchmark_count);
       }
     }
@@ -6073,9 +6193,11 @@ static iree_status_t iree_tune_loom_run_dispatch_comparison(
   for (iree_host_size_t candidate_index = 1;
        iree_status_is_ok(status) && candidate_index < selection_count;
        ++candidate_index) {
-    status = iree_tune_loom_append_comparison_row(
-        run, &candidates[0], &candidates[candidate_index], comparison_group,
-        method, benchmark_output);
+    status = iree_tune_loom_jsonl_sink_end(
+        jsonl_sink,
+        iree_tune_loom_append_comparison_row(
+            run, &candidates[0], &candidates[candidate_index], comparison_group,
+            method, iree_tune_loom_jsonl_sink_begin(jsonl_sink)));
   }
 
   iree_tune_loom_dispatch_comparison_candidates_deinitialize(
@@ -6122,7 +6244,7 @@ static iree_status_t iree_tune_loom_append_failure_row(
   return iree_ok_status();
 }
 
-static iree_status_t iree_tune_loom_write_report(
+static iree_status_t iree_tune_loom_append_summary_row(
     const iree_tune_loom_run_identity_t* run,
     iree_host_size_t planned_case_count,
     iree_host_size_t planned_benchmark_count,
@@ -6131,19 +6253,7 @@ static iree_status_t iree_tune_loom_write_report(
     iree_host_size_t correctness_sample_count,
     iree_host_size_t correctness_failed_sample_count, bool dry_run,
     iree_tune_loom_shape_specialization_mode_t shape_specialization_mode,
-    iree_string_view_t failures, iree_string_view_t plans,
-    iree_string_view_t devices, iree_string_view_t compiles,
-    iree_string_view_t samples, iree_string_view_t benchmarks,
-    iree_string_view_t profiles, iree_string_builder_t* output) {
-  IREE_RETURN_IF_ERROR(iree_tune_loom_append_run_row(
-      run, dry_run, shape_specialization_mode, output));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_string(output, failures));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_string(output, plans));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_string(output, devices));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_string(output, compiles));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_string(output, samples));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_string(output, benchmarks));
-  IREE_RETURN_IF_ERROR(iree_string_builder_append_string(output, profiles));
+    iree_string_builder_t* output) {
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(output, "{\"row\":\"summary\""));
   loom_output_stream_t stream;
@@ -6173,6 +6283,23 @@ static iree_status_t iree_tune_loom_write_report(
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       output, ",\"correctness_failed_sample_count\":%" PRIhsz,
       correctness_failed_sample_count));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(output, ",\"summary\":{"));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      output,
+      "\"planned\":{\"case_count\":%" PRIhsz ",\"benchmark_count\":%" PRIhsz
+      ",\"selected_benchmark_count\":%" PRIhsz "}",
+      planned_case_count, planned_benchmark_count, selected_benchmark_count));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      output,
+      ",\"failures\":{\"row_count\":%" PRIhsz
+      ",\"failed_benchmark_count\":%" PRIhsz "}",
+      failure_count, failed_benchmark_count));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      output,
+      ",\"correctness\":{\"sample_count\":%" PRIhsz
+      ",\"failed_sample_count\":%" PRIhsz "}}",
+      correctness_sample_count, correctness_failed_sample_count));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "}\n"));
   return iree_ok_status();
 }
@@ -6407,7 +6534,9 @@ int iree_tune_loom_main(int argc, char** argv,
       "  failure   parse/verify/planning failure diagnostics\n"
       "  summary   final totals row\n"
       "\n"
-      "Every row carries run_id. Selected benchmark rows also carry "
+      "Rows are written and flushed as evidence becomes available, so an agent "
+      "can `tail -f` an --output file during long sweeps. Every row carries "
+      "run_id. Selected benchmark rows also carry "
       "candidate_id/candidate_index so agents can join plan, compile, sample, "
       "benchmark, and profile evidence across large JSONL sweeps. "
       "When --artifact_bundle_dir is set and --output is empty, results are "
@@ -6460,7 +6589,10 @@ int iree_tune_loom_main(int argc, char** argv,
       "failing the timing run. Without an explicit --profile_artifacts_dir, "
       "those bundles are staged under the run file_output_dir.\n"
       "Benchmark attrs named family, phase, strategy, knobs, problem, or "
-      "reference_id are copied into a metadata object on candidate rows.\n"
+      "reference_id are copied into a metadata object on candidate rows. "
+      "The final summary row keeps the existing flat count fields and also "
+      "carries a nested summary object grouping planned, failure, and "
+      "correctness totals for compact agent consumption.\n"
       "\n"
       "jq recipes:\n"
       "  jq 'select(.row==\"run\" or .row==\"summary\")' results.jsonl\n"
@@ -6499,7 +6631,9 @@ int iree_tune_loom_main(int argc, char** argv,
       "  jq 'select(.row==\"profile_counter\" and "
       ".counter.type==\"counter_decode_status\") | "
       "{candidate_id,status:.counter.status,reason:.counter.reason,"
-      "error:.counter.error.status}' results.jsonl\n");
+      "error:.counter.error.status}' results.jsonl\n"
+      "  tail -f results.jsonl | jq -c 'select(.row==\"compile\" or "
+      ".row==\"benchmark\" or .row==\"comparison\" or .row==\"summary\")'\n");
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
   if (FLAG_agents_md) {
     iree_tune_loom_print_agents_md(stdout);
@@ -6520,22 +6654,8 @@ int iree_tune_loom_main(int argc, char** argv,
   memset(&plan_arena, 0, sizeof(plan_arena));
   iree_arena_allocator_t execution_arena;
   memset(&execution_arena, 0, sizeof(execution_arena));
-  iree_string_builder_t plan_output;
-  iree_string_builder_initialize(allocator, &plan_output);
-  iree_string_builder_t device_output;
-  iree_string_builder_initialize(allocator, &device_output);
-  iree_string_builder_t compile_output;
-  iree_string_builder_initialize(allocator, &compile_output);
-  iree_string_builder_t sample_output;
-  iree_string_builder_initialize(allocator, &sample_output);
-  iree_string_builder_t benchmark_output;
-  iree_string_builder_initialize(allocator, &benchmark_output);
-  iree_string_builder_t profile_output;
-  iree_string_builder_initialize(allocator, &profile_output);
-  iree_string_builder_t failure_output;
-  iree_string_builder_initialize(allocator, &failure_output);
-  iree_string_builder_t report_output;
-  iree_string_builder_initialize(allocator, &report_output);
+  iree_tune_loom_jsonl_sink_t jsonl_sink = {0};
+  bool jsonl_sink_initialized = false;
   iree_tune_loom_diagnostic_capture_t source_diagnostics = {0};
   iree_tune_loom_diagnostic_capture_initialize(allocator, &source_diagnostics);
   iree_tune_loom_device_row_state_t device_row_state = {0};
@@ -6712,6 +6832,18 @@ int iree_tune_loom_main(int argc, char** argv,
       .artifact_bundle_policy =
           iree_tune_loom_artifact_bundle_policy_name(artifact_bundle.policy),
   };
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_jsonl_sink_initialize(results_output_path,
+                                                  allocator, &jsonl_sink);
+    if (iree_status_is_ok(status)) {
+      jsonl_sink_initialized = true;
+      status = iree_tune_loom_jsonl_sink_end(
+          &jsonl_sink,
+          iree_tune_loom_append_run_row(
+              &run_identity, FLAG_dry_run, shape_specialization_mode,
+              iree_tune_loom_jsonl_sink_begin(&jsonl_sink)));
+    }
+  }
   iree_string_view_t source = iree_string_view_empty();
   if (iree_status_is_ok(status)) {
     status = loom_tooling_read_input_file(input_path, allocator, &contents);
@@ -6733,10 +6865,12 @@ int iree_tune_loom_main(int argc, char** argv,
       // The diagnostic sink owns the input rejection evidence; the status only
       // carries the same non-infrastructure failure.
       iree_status_free(status);
-      status = iree_tune_loom_append_failure_row(
-          &run_identity, IREE_SV("parse"), IREE_SV("diagnostics"),
-          IREE_SV("input module has parse errors"), &source_diagnostics,
-          &failure_output);
+      status = iree_tune_loom_jsonl_sink_end(
+          &jsonl_sink,
+          iree_tune_loom_append_failure_row(
+              &run_identity, IREE_SV("parse"), IREE_SV("diagnostics"),
+              IREE_SV("input module has parse errors"), &source_diagnostics,
+              iree_tune_loom_jsonl_sink_begin(&jsonl_sink)));
       ++failure_count;
       exit_code = 1;
     }
@@ -6758,10 +6892,12 @@ int iree_tune_loom_main(int argc, char** argv,
     status =
         loom_verify_module(run_module.module, &verify_options, &verify_result);
     if (iree_status_is_ok(status) && verify_result.error_count != 0) {
-      status = iree_tune_loom_append_failure_row(
-          &run_identity, IREE_SV("verify"), IREE_SV("diagnostics"),
-          IREE_SV("input module failed verification"), &source_diagnostics,
-          &failure_output);
+      status = iree_tune_loom_jsonl_sink_end(
+          &jsonl_sink,
+          iree_tune_loom_append_failure_row(
+              &run_identity, IREE_SV("verify"), IREE_SV("diagnostics"),
+              IREE_SV("input module failed verification"), &source_diagnostics,
+              iree_tune_loom_jsonl_sink_begin(&jsonl_sink)));
       ++failure_count;
       exit_code = 1;
     }
@@ -6822,13 +6958,18 @@ int iree_tune_loom_main(int argc, char** argv,
                                selections[i].benchmark_plan->name.data);
           break;
         }
-        status = iree_tune_loom_append_plan_row(
-            &run_identity, &selections[i].identity, module_plan.module,
-            selections[i].benchmark_plan, selections[i].case_plan,
-            &selections[i].policy, shape_specialization_mode, &plan_output);
+        status = iree_tune_loom_jsonl_sink_end(
+            &jsonl_sink,
+            iree_tune_loom_append_plan_row(
+                &run_identity, &selections[i].identity, module_plan.module,
+                selections[i].benchmark_plan, selections[i].case_plan,
+                &selections[i].policy, shape_specialization_mode,
+                iree_tune_loom_jsonl_sink_begin(&jsonl_sink)));
         if (iree_status_is_ok(status) && FLAG_dry_run) {
-          status = iree_tune_loom_append_device_row(
-              &run_identity, &hal_context, &device_row_state, &device_output);
+          status = iree_tune_loom_jsonl_sink_end(
+              &jsonl_sink, iree_tune_loom_append_device_row(
+                               &run_identity, &hal_context, &device_row_state,
+                               iree_tune_loom_jsonl_sink_begin(&jsonl_sink)));
         }
       }
       if (iree_status_is_ok(status) && !FLAG_dry_run) {
@@ -6837,8 +6978,7 @@ int iree_tune_loom_main(int argc, char** argv,
             shape_specialization_mode, interleave_mode,
             (iree_host_size_t)FLAG_repetitions, &hal_context, &session,
             filename, source, &compile_report_options, &execution_options,
-            &device_row_state, &execution_arena, allocator, &device_output,
-            &compile_output, &sample_output, &benchmark_output, &profile_output,
+            &device_row_state, &execution_arena, allocator, &jsonl_sink,
             &correctness_sample_count, &correctness_failed_sample_count,
             &failed_benchmark_count);
       }
@@ -6882,15 +7022,19 @@ int iree_tune_loom_main(int argc, char** argv,
       status = iree_tune_loom_policy_from_benchmark(&module_plan,
                                                     benchmark_plan, &policy);
       if (iree_status_is_ok(status)) {
-        status = iree_tune_loom_append_plan_row(
-            &run_identity, &candidate_identity, module_plan.module,
-            benchmark_plan, case_plan, &policy, shape_specialization_mode,
-            &plan_output);
+        status = iree_tune_loom_jsonl_sink_end(
+            &jsonl_sink,
+            iree_tune_loom_append_plan_row(
+                &run_identity, &candidate_identity, module_plan.module,
+                benchmark_plan, case_plan, &policy, shape_specialization_mode,
+                iree_tune_loom_jsonl_sink_begin(&jsonl_sink)));
       }
       if (iree_status_is_ok(status) && FLAG_dry_run &&
           policy.measure_kind == IREE_TUNE_LOOM_MEASURE_DISPATCH_COMPLETE) {
-        status = iree_tune_loom_append_device_row(
-            &run_identity, &hal_context, &device_row_state, &device_output);
+        status = iree_tune_loom_jsonl_sink_end(
+            &jsonl_sink, iree_tune_loom_append_device_row(
+                             &run_identity, &hal_context, &device_row_state,
+                             iree_tune_loom_jsonl_sink_begin(&jsonl_sink)));
       }
       if (iree_status_is_ok(status) && FLAG_dry_run) {
         continue;
@@ -6906,8 +7050,7 @@ int iree_tune_loom_main(int argc, char** argv,
               &compile_report_options, &execution_options, IREE_SV("dynamic"),
               /*has_specialization_sample_ordinal=*/false,
               /*specialization_sample_ordinal=*/0, &device_row_state,
-              &execution_arena, allocator, &device_output, &compile_output,
-              &sample_output, &benchmark_output, &profile_output,
+              &execution_arena, allocator, &jsonl_sink,
               &correctness_sample_count, &correctness_failed_sample_count,
               &failed_benchmark_count);
         }
@@ -6927,10 +7070,9 @@ int iree_tune_loom_main(int argc, char** argv,
                 filename, source, &compile_report_options, &execution_options,
                 IREE_SV("per_sample"),
                 /*has_specialization_sample_ordinal=*/true, sample_ordinal,
-                &device_row_state, &execution_arena, allocator, &device_output,
-                &compile_output, &sample_output, &benchmark_output,
-                &profile_output, &correctness_sample_count,
-                &correctness_failed_sample_count, &failed_benchmark_count);
+                &device_row_state, &execution_arena, allocator, &jsonl_sink,
+                &correctness_sample_count, &correctness_failed_sample_count,
+                &failed_benchmark_count);
           }
         }
         continue;
@@ -6944,7 +7086,7 @@ int iree_tune_loom_main(int argc, char** argv,
         status = iree_tune_loom_run_case_correctness(
             &run_identity, &candidate_identity, &module_plan, benchmark_plan,
             benchmark_plan->case_index, &benchmark_execution_options,
-            iree_string_view_empty(), &execution_arena, &sample_output,
+            iree_string_view_empty(), &execution_arena, &jsonl_sink,
             &benchmark_correctness_sample_count,
             &benchmark_correctness_failed_sample_count);
       }
@@ -6979,16 +7121,21 @@ int iree_tune_loom_main(int argc, char** argv,
         if (!benchmark_result.executed || !benchmark_result.passed) {
           ++failed_benchmark_count;
         }
-        status = iree_tune_loom_append_benchmark_result(
-            &run_identity, &candidate_identity, module_plan.module,
-            benchmark_plan, case_plan, &policy, &benchmark_result,
-            benchmark_correctness_sample_count,
-            benchmark_correctness_failed_sample_count, &benchmark_output);
+        status = iree_tune_loom_jsonl_sink_end(
+            &jsonl_sink,
+            iree_tune_loom_append_benchmark_result(
+                &run_identity, &candidate_identity, module_plan.module,
+                benchmark_plan, case_plan, &policy, &benchmark_result,
+                benchmark_correctness_sample_count,
+                benchmark_correctness_failed_sample_count,
+                iree_tune_loom_jsonl_sink_begin(&jsonl_sink)));
         if (iree_status_is_ok(status)) {
-          status = iree_tune_loom_append_profile_row(
-              &run_identity, &candidate_identity, module_plan.module,
-              benchmark_plan, case_plan, &benchmark_result, allocator,
-              &profile_output);
+          status = iree_tune_loom_jsonl_sink_end(
+              &jsonl_sink,
+              iree_tune_loom_append_profile_row(
+                  &run_identity, &candidate_identity, module_plan.module,
+                  benchmark_plan, case_plan, &benchmark_result, allocator,
+                  iree_tune_loom_jsonl_sink_begin(&jsonl_sink)));
         }
       }
     }
@@ -7004,28 +7151,23 @@ int iree_tune_loom_main(int argc, char** argv,
   }
 
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_write_report(
-        &run_identity, planned_case_count, planned_benchmark_count,
-        selected_benchmark_count, failure_count, failed_benchmark_count,
-        correctness_sample_count, correctness_failed_sample_count, FLAG_dry_run,
-        shape_specialization_mode, iree_string_builder_view(&failure_output),
-        iree_string_builder_view(&plan_output),
-        iree_string_builder_view(&device_output),
-        iree_string_builder_view(&compile_output),
-        iree_string_builder_view(&sample_output),
-        iree_string_builder_view(&benchmark_output),
-        iree_string_builder_view(&profile_output), &report_output);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_tooling_write_output_file(
-        results_output_path, iree_string_builder_view(&report_output),
-        allocator);
+    status = iree_tune_loom_jsonl_sink_end(
+        &jsonl_sink,
+        iree_tune_loom_append_summary_row(
+            &run_identity, planned_case_count, planned_benchmark_count,
+            selected_benchmark_count, failure_count, failed_benchmark_count,
+            correctness_sample_count, correctness_failed_sample_count,
+            FLAG_dry_run, shape_specialization_mode,
+            iree_tune_loom_jsonl_sink_begin(&jsonl_sink)));
   }
   if (iree_status_is_ok(status)) {
     status = iree_tune_loom_write_artifact_bundle_manifest(
         &artifact_bundle, &run_identity, &hal_context, source,
         iree_string_builder_view(&command_line_json), FLAG_dry_run,
         shape_specialization_mode, allocator);
+  }
+  if (iree_status_is_ok(status) && jsonl_sink_initialized) {
+    status = iree_tune_loom_jsonl_sink_close(&jsonl_sink);
   }
   if (iree_status_is_ok(status) && failure_count != 0) {
     exit_code = 1;
@@ -7038,15 +7180,10 @@ int iree_tune_loom_main(int argc, char** argv,
     exit_code = 1;
   }
 
-  iree_string_builder_deinitialize(&report_output);
   iree_tune_loom_diagnostic_capture_deinitialize(&source_diagnostics);
-  iree_string_builder_deinitialize(&failure_output);
-  iree_string_builder_deinitialize(&profile_output);
-  iree_string_builder_deinitialize(&benchmark_output);
-  iree_string_builder_deinitialize(&sample_output);
-  iree_string_builder_deinitialize(&compile_output);
-  iree_string_builder_deinitialize(&device_output);
-  iree_string_builder_deinitialize(&plan_output);
+  if (jsonl_sink_initialized) {
+    iree_tune_loom_jsonl_sink_deinitialize(&jsonl_sink);
+  }
   iree_arena_deinitialize(&execution_arena);
   iree_arena_deinitialize(&plan_arena);
   loom_run_module_deinitialize(&run_module);
