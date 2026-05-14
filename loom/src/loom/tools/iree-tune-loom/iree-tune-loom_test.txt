@@ -50,7 +50,7 @@
 // BENCH: "failed_benchmark_count":0
 // BENCH: "correctness_sample_count":1
 // BENCH: "correctness_failed_sample_count":0
-// BENCH: "summary":{"planned":{"case_count":2,"benchmark_count":3,"selected_benchmark_count":1},"failures":{"row_count":0,"failed_benchmark_count":0},"correctness":{"sample_count":1,"failed_sample_count":0}}
+// BENCH: "summary":{"planned":{"case_count":2,"benchmark_count":3,"selected_benchmark_count":1},"failures":{"row_count":0,"failed_benchmark_count":0},"correctness":{"sample_count":1,"failed_sample_count":0},"artifacts":{"bundle_enabled":false
 
 // SAMPLE: "row":"plan"
 // SAMPLE: "candidate_id":"c0","candidate_index":0
@@ -96,6 +96,7 @@
 // BUNDLE: "row":"plan"
 // BUNDLE: "metadata":{"family":"scalar_equal"
 // BUNDLE: "row":"summary"
+// BUNDLE: "artifacts":{"bundle_enabled":true
 
 // BUNDLE-MANIFEST: "tool":"iree-tune-loom"
 // BUNDLE-MANIFEST: "source_identity":{"byte_count":

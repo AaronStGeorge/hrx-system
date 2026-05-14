@@ -449,7 +449,8 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "large sweeps. Rows are written and flushed as each lifecycle step "
           "finishes, so `tail -f results.jsonl` is useful while a long run is "
           "still active. The final `summary` row carries both flat totals and "
-          "a nested `summary` object for agent consumers. Use "
+          "a nested `summary` object with planned/failure/correctness/artifact "
+          "counts for agent consumers. Use "
           "`--profile_final_batch=true` for dispatch timing evidence outside "
           "the measured window; add "
           "`--profile_artifacts_dir=DIR` when you need the raw HAL profile "
@@ -1050,6 +1051,21 @@ static iree_status_t iree_tune_loom_artifact_bundle_record_file(
       path, bundle->host_allocator, &entry->path));
   ++bundle->file_entry_count;
   return iree_ok_status();
+}
+
+static iree_host_size_t iree_tune_loom_artifact_bundle_file_count(
+    const iree_tune_loom_artifact_bundle_t* bundle,
+    iree_tune_loom_bundle_file_kind_t kind) {
+  if (bundle == NULL || !bundle->enabled) {
+    return 0;
+  }
+  iree_host_size_t count = 0;
+  for (iree_host_size_t i = 0; i < bundle->file_entry_count; ++i) {
+    if (bundle->file_entries[i].kind == kind) {
+      ++count;
+    }
+  }
+  return count;
 }
 
 static iree_status_t iree_tune_loom_file_provider_initialize(
@@ -7477,6 +7493,7 @@ static iree_status_t iree_tune_loom_append_failure_row(
 
 static iree_status_t iree_tune_loom_append_summary_row(
     const iree_tune_loom_run_identity_t* run,
+    const iree_tune_loom_artifact_bundle_t* bundle,
     iree_host_size_t planned_case_count,
     iree_host_size_t planned_benchmark_count,
     iree_host_size_t selected_benchmark_count, iree_host_size_t failure_count,
@@ -7529,8 +7546,30 @@ static iree_status_t iree_tune_loom_append_summary_row(
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       output,
       ",\"correctness\":{\"sample_count\":%" PRIhsz
-      ",\"failed_sample_count\":%" PRIhsz "}}",
+      ",\"failed_sample_count\":%" PRIhsz "}",
       correctness_sample_count, correctness_failed_sample_count));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      output,
+      ",\"artifacts\":{\"bundle_enabled\":%s,\"fixture_read_count\":%" PRIhsz
+      ",\"file_output_count\":%" PRIhsz ",\"profile_count\":%" PRIhsz
+      ",\"compile_report_count\":%" PRIhsz ",\"target_artifact_count\":%" PRIhsz
+      ",\"target_listing_count\":%" PRIhsz ",\"hal_executable_count\":%" PRIhsz
+      "}}",
+      bundle != NULL && bundle->enabled ? "true" : "false",
+      iree_tune_loom_artifact_bundle_file_count(
+          bundle, IREE_TUNE_LOOM_BUNDLE_FILE_FIXTURE_READ),
+      iree_tune_loom_artifact_bundle_file_count(
+          bundle, IREE_TUNE_LOOM_BUNDLE_FILE_OUTPUT),
+      iree_tune_loom_artifact_bundle_file_count(
+          bundle, IREE_TUNE_LOOM_BUNDLE_FILE_PROFILE),
+      iree_tune_loom_artifact_bundle_file_count(
+          bundle, IREE_TUNE_LOOM_BUNDLE_FILE_COMPILE_REPORT),
+      iree_tune_loom_artifact_bundle_file_count(
+          bundle, IREE_TUNE_LOOM_BUNDLE_FILE_TARGET_ARTIFACT),
+      iree_tune_loom_artifact_bundle_file_count(
+          bundle, IREE_TUNE_LOOM_BUNDLE_FILE_TARGET_LISTING),
+      iree_tune_loom_artifact_bundle_file_count(
+          bundle, IREE_TUNE_LOOM_BUNDLE_FILE_HAL_EXECUTABLE)));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "}\n"));
   return iree_ok_status();
 }
@@ -8003,8 +8042,8 @@ int iree_tune_loom_main(int argc, char** argv,
       "Benchmark attrs named family, phase, strategy, knobs, problem, or "
       "reference_id are copied into a metadata object on candidate rows. "
       "The final summary row keeps the existing flat count fields and also "
-      "carries a nested summary object grouping planned, failure, and "
-      "correctness totals for compact agent consumption.\n"
+      "carries a nested summary object grouping planned, failure, correctness, "
+      "and artifact totals for compact agent consumption.\n"
       "\n"
       "jq recipes:\n"
       "  jq 'select(.row==\"run\" or .row==\"summary\")' results.jsonl\n"
@@ -8586,10 +8625,11 @@ int iree_tune_loom_main(int argc, char** argv,
     status = iree_tune_loom_jsonl_sink_end(
         &jsonl_sink,
         iree_tune_loom_append_summary_row(
-            &run_identity, planned_case_count, planned_benchmark_count,
-            selected_benchmark_count, failure_count, failed_benchmark_count,
-            correctness_sample_count, correctness_failed_sample_count,
-            FLAG_dry_run, shape_specialization_mode,
+            &run_identity, &artifact_bundle, planned_case_count,
+            planned_benchmark_count, selected_benchmark_count, failure_count,
+            failed_benchmark_count, correctness_sample_count,
+            correctness_failed_sample_count, FLAG_dry_run,
+            shape_specialization_mode,
             iree_tune_loom_jsonl_sink_begin(&jsonl_sink)));
   }
   if (iree_status_is_ok(status) && jsonl_sink_initialized) {
