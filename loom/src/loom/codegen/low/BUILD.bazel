@@ -52,6 +52,7 @@ loom_assert_no_dependencies(
         ":pass_environment",
         ":source_memory_plan",
         ":source_selection",
+        ":storage_layout",
         ":text_asm",
     ],
 )
@@ -74,6 +75,7 @@ loom_assert_no_dependencies(
         ":pipeline",
         ":frame",
         ":source_memory_plan",
+        ":storage_layout",
     ],
 )
 
@@ -240,6 +242,32 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "storage_layout",
+    srcs = ["storage_layout.c"],
+    hdrs = ["storage_layout.h"],
+    deps = [
+        ":function",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "storage_layout_test",
+    srcs = ["storage_layout_test.cc"],
+    deps = [
+        ":storage_layout",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

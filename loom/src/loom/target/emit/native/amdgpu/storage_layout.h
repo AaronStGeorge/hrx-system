@@ -17,8 +17,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
-#include "loom/ir/ir.h"
-#include "loom/ops/low/ops.h"
+#include "loom/codegen/low/storage_layout.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,23 +31,19 @@ typedef struct loom_amdgpu_storage_layout_segment_sizes_t {
   uint64_t private_segment_fixed_size;
 } loom_amdgpu_storage_layout_segment_sizes_t;
 
-typedef struct loom_amdgpu_storage_layout_reservation_t {
-  // Storage segment containing the resolved reservation.
-  loom_storage_space_t space;
-  // Byte offset assigned to the reservation within its storage segment.
-  uint64_t byte_offset;
-  // Reservation size in bytes.
-  uint64_t byte_size;
-  // Reservation alignment in bytes.
-  uint64_t byte_alignment;
-} loom_amdgpu_storage_layout_reservation_t;
+// AMDGPU target-segment placement for one low.storage.reserve result. The
+// storage space remains the original low space, while byte_offset is relative
+// to the projected AMDGPU segment.
+typedef loom_low_storage_layout_reservation_t
+    loom_amdgpu_storage_layout_reservation_t;
 
-typedef struct loom_amdgpu_storage_layout_record_t {
-  // SSA storage value resolved by this record.
-  loom_value_id_t storage_value_id;
-  // Segment placement assigned to the storage reservation.
-  loom_amdgpu_storage_layout_reservation_t reservation;
-} loom_amdgpu_storage_layout_record_t;
+// AMDGPU storage layout record in function storage declaration order.
+typedef loom_low_storage_layout_record_t loom_amdgpu_storage_layout_record_t;
+
+// AMDGPU resolved storage reference after applying low.storage.view offsets to
+// the target-segment reservation.
+typedef loom_low_storage_layout_reference_t
+    loom_amdgpu_storage_layout_reference_t;
 
 typedef struct loom_amdgpu_storage_layout_t {
   // Fixed segment sizes after laying out all function-local storage.
@@ -79,12 +74,26 @@ iree_status_t loom_amdgpu_storage_layout_lookup(
     loom_value_id_t storage_value_id,
     loom_amdgpu_storage_layout_reservation_t* out_reservation);
 
+// Resolves a low.storage.reserve or low.storage.view handle against a
+// previously built AMDGPU fixed-segment layout.
+iree_status_t loom_amdgpu_storage_layout_lookup_reference(
+    const loom_amdgpu_storage_layout_t* layout, const loom_module_t* module,
+    loom_value_id_t storage_value_id,
+    loom_amdgpu_storage_layout_reference_t* out_reference);
+
 // Resolves one storage reservation from |function_op| without materializing the
 // complete layout record table.
 iree_status_t loom_amdgpu_storage_layout_resolve(
     const loom_module_t* module, const loom_op_t* function_op,
     loom_value_id_t storage_value_id,
     loom_amdgpu_storage_layout_reservation_t* out_reservation);
+
+// Resolves a low.storage.reserve or low.storage.view handle from |function_op|
+// without materializing the complete layout record table.
+iree_status_t loom_amdgpu_storage_layout_resolve_reference(
+    const loom_module_t* module, const loom_op_t* function_op,
+    loom_value_id_t storage_value_id,
+    loom_amdgpu_storage_layout_reference_t* out_reference);
 
 #ifdef __cplusplus
 }  // extern "C"

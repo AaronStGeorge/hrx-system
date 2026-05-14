@@ -123,6 +123,14 @@ iree_status_t loom_low_descriptor_text_asm_structural_attr_descriptor(
         iree_string_view_equal(attr_name, IREE_SV("offset"))) {
       *out_descriptor = &kLowAsmStorageAddressOffsetAttr;
     }
+    if (kind == LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_VIEW &&
+        iree_string_view_equal(attr_name, IREE_SV("offset"))) {
+      *out_descriptor = &kLowAsmStorageAddressOffsetAttr;
+    }
+    if (kind == LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_VIEW &&
+        iree_string_view_equal(attr_name, IREE_SV("byte_length"))) {
+      *out_descriptor = &kLowAsmStorageReserveByteLengthAttr;
+    }
     return iree_ok_status();
   }
   if (iree_string_view_equal(attr_name, IREE_SV("index"))) {
@@ -264,6 +272,36 @@ static iree_status_t loom_low_descriptor_text_asm_build_storage_address(
                                         location, out_op);
 }
 
+static iree_status_t loom_low_descriptor_text_asm_build_storage_view(
+    loom_builder_t* builder, loom_value_id_t storage,
+    loom_named_attr_slice_t attrs, loom_type_t result_type,
+    loom_location_id_t location, loom_op_t** out_op) {
+  const loom_named_attr_t* byte_length_attr = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_required_attr(
+      builder->module, attrs, IREE_SV("byte_length"), &byte_length_attr));
+  if (byte_length_attr->value.kind != LOOM_ATTR_I64) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low asm storage_view byte_length must be an i64 attr");
+  }
+
+  const loom_named_attr_t* offset_attr = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_lookup_attr(
+      builder->module, attrs, IREE_SV("offset"), &offset_attr));
+  if (offset_attr != NULL && offset_attr->value.kind != LOOM_ATTR_I64) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low asm storage_view offset must be an i64 attr");
+  }
+  int64_t offset = 0;
+  if (offset_attr != NULL) {
+    offset = offset_attr->value.i64;
+  }
+
+  return loom_low_storage_view_build(builder, storage, offset,
+                                     byte_length_attr->value.i64, result_type,
+                                     location, out_op);
+}
+
 iree_status_t loom_low_descriptor_text_asm_build_structural(
     const loom_text_low_asm_environment_state_t* state, loom_builder_t* builder,
     loom_text_low_asm_structural_kind_t kind, iree_string_view_t key,
@@ -313,6 +351,13 @@ iree_status_t loom_low_descriptor_text_asm_build_structural(
                                 "low asm storage_address takes one operand");
       }
       return loom_low_descriptor_text_asm_build_storage_address(
+          builder, operands[0], attributes, result_type, location, out_op);
+    case LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_VIEW:
+      if (operand_count != 1) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "low asm storage_view takes one operand");
+      }
+      return loom_low_descriptor_text_asm_build_storage_view(
           builder, operands[0], attributes, result_type, location, out_op);
     case LOOM_TEXT_LOW_ASM_STRUCTURAL_COPY:
       if (operand_count != 1) {
@@ -499,6 +544,28 @@ static iree_status_t loom_low_descriptor_text_asm_describe_storage_address(
       &kLowAsmStorageAddressOffsetAttr, out_statement);
 }
 
+static iree_status_t loom_low_descriptor_text_asm_describe_storage_view(
+    const loom_module_t* module, const loom_op_t* op,
+    loom_text_low_asm_statement_t* out_statement) {
+  *out_statement = (loom_text_low_asm_statement_t){
+      .kind = LOOM_TEXT_LOW_ASM_STATEMENT_STRUCTURAL,
+      .op = op,
+      .structural_kind = LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_VIEW,
+      .results = loom_op_const_results(op),
+      .result_count = 1,
+      .operands = loom_op_const_operands(op),
+      .operand_count = 1,
+      .location = op->location,
+  };
+  IREE_RETURN_IF_ERROR(loom_low_descriptor_text_asm_set_structural_attr(
+      module, op, loom_low_storage_view_offset_ATTR_INDEX, IREE_SV("offset"),
+      &kLowAsmStorageAddressOffsetAttr, out_statement));
+  return loom_low_descriptor_text_asm_set_structural_attr(
+      module, op, loom_low_storage_view_byte_length_ATTR_INDEX,
+      IREE_SV("byte_length"), &kLowAsmStorageReserveByteLengthAttr,
+      out_statement);
+}
+
 iree_status_t loom_low_descriptor_text_asm_describe_structural_operation(
     const loom_module_t* module, const loom_op_t* op,
     loom_text_low_asm_statement_t* out_statement) {
@@ -529,6 +596,10 @@ iree_status_t loom_low_descriptor_text_asm_describe_structural_operation(
   if (loom_low_storage_address_isa(op)) {
     return loom_low_descriptor_text_asm_describe_storage_address(module, op,
                                                                  out_statement);
+  }
+  if (loom_low_storage_view_isa(op)) {
+    return loom_low_descriptor_text_asm_describe_storage_view(module, op,
+                                                              out_statement);
   }
   return iree_ok_status();
 }

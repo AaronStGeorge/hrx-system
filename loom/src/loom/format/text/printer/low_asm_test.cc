@@ -170,7 +170,9 @@ TEST_F(LowAsmPrinterTest, PrintsStructuralIntrinsics) {
       "  %copied = copy %lane : reg<test.i32> -> reg<test.i32>\n"
       "  %storage = storage {byte_alignment = 4, byte_length = 16} : "
       "low.storage<workgroup>\n"
-      "  %addr = storage_address %storage : "
+      "  %window = storage_view %storage {offset = 4, byte_length = 8} : "
+      "low.storage<workgroup> -> low.storage<workgroup>\n"
+      "  %addr = storage_address %window : "
       "low.storage<workgroup> -> reg<test.i32>\n"
       "  return %copied\n"
       "}\n";

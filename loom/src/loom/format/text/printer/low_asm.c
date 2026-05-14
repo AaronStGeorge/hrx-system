@@ -534,6 +534,25 @@ static iree_status_t loom_print_low_asm_structural_storage_address(
   return iree_ok_status();
 }
 
+static iree_status_t loom_print_low_asm_structural_storage_view(
+    loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement) {
+  IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "storage_view", false));
+  IREE_RETURN_IF_ERROR(loom_print_low_asm_value_list(ctx, statement->operands,
+                                                     statement->operand_count,
+                                                     LOOM_PRINT_FIELD_OPERAND));
+  IREE_RETURN_IF_ERROR(loom_print_low_asm_structural_attr_dict(ctx, statement));
+  IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ":", false));
+  IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+  IREE_RETURN_IF_ERROR(loom_print_value_type(ctx, statement->operands[0]));
+  loom_print_did_write(ctx);
+  IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "->", false));
+  IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
+  IREE_RETURN_IF_ERROR(
+      loom_print_result_value_type(ctx, statement->results[0]));
+  loom_print_did_write(ctx);
+  return iree_ok_status();
+}
+
 static iree_status_t loom_print_low_asm_structural(
     loom_print_context_t* ctx, const loom_text_low_asm_statement_t* statement) {
   IREE_RETURN_IF_ERROR(loom_print_low_asm_result_list(ctx, statement));
@@ -550,6 +569,8 @@ static iree_status_t loom_print_low_asm_structural(
       return loom_print_low_asm_structural_storage_reserve(ctx, statement);
     case LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_ADDRESS:
       return loom_print_low_asm_structural_storage_address(ctx, statement);
+    case LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_VIEW:
+      return loom_print_low_asm_structural_storage_view(ctx, statement);
     case LOOM_TEXT_LOW_ASM_STRUCTURAL_COPY:
       return loom_print_low_asm_structural_copy(ctx, statement);
     default:

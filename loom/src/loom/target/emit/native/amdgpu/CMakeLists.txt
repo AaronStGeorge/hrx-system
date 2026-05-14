@@ -115,10 +115,22 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
-    loom::src::loom::codegen::low::function
+    loom::src::loom::codegen::low::storage_layout
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    storage_layout_test
+  SRCS
+    "storage_layout_test.cc"
+  DEPS
+    ::storage_layout
+    iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::ops::low
-  PUBLIC
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_library(

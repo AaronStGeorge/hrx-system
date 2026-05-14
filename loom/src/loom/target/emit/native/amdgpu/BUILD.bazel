@@ -188,11 +188,22 @@ loom_cc_library(
     srcs = ["storage_layout.c"],
     hdrs = ["storage_layout.h"],
     deps = [
-        "//loom/src/loom/codegen/low:function",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
+        "//loom/src/loom/codegen/low:storage_layout",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "storage_layout_test",
+    srcs = ["storage_layout_test.cc"],
+    deps = [
+        ":storage_layout",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

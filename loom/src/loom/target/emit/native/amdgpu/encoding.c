@@ -1569,14 +1569,21 @@ static iree_status_t loom_amdgpu_encode_storage_reserve_packet(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_encode_storage_view_packet(
+    loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
+  (void)state;
+  (void)packet;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_amdgpu_encode_storage_address_packet(
     loom_amdgpu_encode_state_t* state, const loom_low_packet_view_t* packet) {
   const loom_op_t* op = packet->node->op;
-  loom_amdgpu_storage_layout_reservation_t reservation;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_storage_layout_lookup(
-      state->storage_layout, loom_low_storage_address_storage(op),
-      &reservation));
-  if (reservation.space != LOOM_STORAGE_SPACE_WORKGROUP) {
+  loom_amdgpu_storage_layout_reference_t reference;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_storage_layout_lookup_reference(
+      state->storage_layout, state->schedule->module,
+      loom_low_storage_address_storage(op), &reference));
+  if (reference.reservation.space != LOOM_STORAGE_SPACE_WORKGROUP) {
     return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                             "AMDGPU native encoding only supports "
                             "low.storage.address for workgroup storage");
@@ -1589,16 +1596,28 @@ static iree_status_t loom_amdgpu_encode_storage_address_packet(
         "non-negative");
   }
   const uint64_t offset = (uint64_t)signed_offset;
-  if (reservation.byte_offset > UINT32_MAX ||
-      offset > UINT32_MAX - reservation.byte_offset) {
+  if (offset >= reference.byte_length) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU native encoding low.storage.address "
+                            "offset exceeds storage reference size");
+  }
+  uint64_t byte_offset = reference.reservation.byte_offset;
+  if (byte_offset > UINT32_MAX ||
+      reference.byte_offset > UINT32_MAX - byte_offset) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU native encoding low.storage.address byte offset exceeds u32");
+  }
+  byte_offset += reference.byte_offset;
+  if (offset > UINT32_MAX - byte_offset) {
     return iree_make_status(
         IREE_STATUS_OUT_OF_RANGE,
         "AMDGPU native encoding low.storage.address byte offset exceeds u32");
   }
   uint16_t vdst = 0;
   IREE_RETURN_IF_ERROR(loom_amdgpu_packet_result_vgpr(state, packet, 0, &vdst));
-  return loom_amdgpu_encode_v_mov_b32_u32(
-      state, vdst, (uint32_t)(reservation.byte_offset + offset));
+  return loom_amdgpu_encode_v_mov_b32_u32(state, vdst,
+                                          (uint32_t)(byte_offset + offset));
 }
 
 static bool loom_amdgpu_wait_packet_is_before_node(
@@ -1834,6 +1853,7 @@ static const loom_amdgpu_encode_structural_dispatch_t
         {LOOM_OP_LOW_LIVE_IN, loom_amdgpu_encode_live_in_packet},
         {LOOM_OP_LOW_STORAGE_RESERVE,
          loom_amdgpu_encode_storage_reserve_packet},
+        {LOOM_OP_LOW_STORAGE_VIEW, loom_amdgpu_encode_storage_view_packet},
         {LOOM_OP_LOW_COPY, loom_amdgpu_encode_copy_packet},
         {LOOM_OP_LOW_SLICE, loom_amdgpu_encode_slice_packet},
         {LOOM_OP_LOW_CONCAT, loom_amdgpu_encode_concat_packet},

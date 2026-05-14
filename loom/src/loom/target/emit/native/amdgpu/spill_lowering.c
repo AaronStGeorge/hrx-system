@@ -20,15 +20,6 @@
 
 #define LOOM_AMDGPU_SCRATCH_SPILL_UNIT_BITS 32u
 
-typedef struct loom_amdgpu_spill_storage_reference_t {
-  // Resolved backing storage reservation.
-  loom_amdgpu_storage_layout_reservation_t reservation;
-  // Static byte offset from the reservation to the referenced storage view.
-  uint64_t byte_offset;
-  // Static byte length visible through the referenced storage handle.
-  uint64_t byte_length;
-} loom_amdgpu_spill_storage_reference_t;
-
 typedef struct loom_amdgpu_spill_descriptor_t {
   // Descriptor table row for the selected scratch packet.
   const loom_low_descriptor_t* descriptor;
@@ -163,79 +154,14 @@ static iree_status_t loom_amdgpu_spill_lowering_validate_offset_immediate(
 static iree_status_t loom_amdgpu_spill_lowering_resolve_storage_reference(
     const loom_amdgpu_spill_lowering_context_t* context,
     loom_value_id_t storage_value_id,
-    loom_amdgpu_spill_storage_reference_t* out_reference) {
-  *out_reference = (loom_amdgpu_spill_storage_reference_t){0};
-  if (storage_value_id == LOOM_VALUE_ID_INVALID ||
-      storage_value_id >= context->module->values.count) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU spill lowering found an invalid storage value");
-  }
-  const loom_value_t* storage_value =
-      loom_module_value(context->module, storage_value_id);
-  if (loom_value_is_block_arg(storage_value)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU spill lowering requires storage defined by "
-                            "low.storage.reserve or low.storage.view");
-  }
-  const loom_op_t* defining_op = loom_value_def_op(storage_value);
-  if (defining_op == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU spill lowering found storage without a defining op");
-  }
-
-  if (loom_low_storage_reserve_isa(defining_op)) {
-    loom_amdgpu_storage_layout_reservation_t reservation = {0};
-    IREE_RETURN_IF_ERROR(loom_amdgpu_storage_layout_lookup(
-        &context->storage_layout, storage_value_id, &reservation));
-    *out_reference = (loom_amdgpu_spill_storage_reference_t){
-        .reservation = reservation,
-        .byte_offset = 0,
-        .byte_length = reservation.byte_size,
-    };
-    return iree_ok_status();
-  }
-
-  if (!loom_low_storage_view_isa(defining_op)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU spill lowering requires storage defined by "
-                            "low.storage.reserve or low.storage.view");
-  }
-
-  loom_amdgpu_spill_storage_reference_t source_reference = {0};
-  IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_resolve_storage_reference(
-      context, loom_low_storage_view_source(defining_op), &source_reference));
-  const int64_t signed_offset = loom_low_storage_view_offset(defining_op);
-  const int64_t signed_byte_length =
-      loom_low_storage_view_byte_length(defining_op);
-  if (signed_offset < 0 || signed_byte_length <= 0) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "AMDGPU spill lowering requires non-negative storage view offsets and "
-        "positive storage view lengths");
-  }
-  const uint64_t offset = (uint64_t)signed_offset;
-  const uint64_t byte_length = (uint64_t)signed_byte_length;
-  if (offset > source_reference.byte_length ||
-      byte_length > source_reference.byte_length - offset) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "AMDGPU spill lowering storage view range exceeds its source storage");
-  }
-  uint64_t byte_offset = 0;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_checked_add_u64(
-      source_reference.byte_offset, offset, &byte_offset));
-  *out_reference = (loom_amdgpu_spill_storage_reference_t){
-      .reservation = source_reference.reservation,
-      .byte_offset = byte_offset,
-      .byte_length = byte_length,
-  };
-  return iree_ok_status();
+    loom_amdgpu_storage_layout_reference_t* out_reference) {
+  return loom_amdgpu_storage_layout_lookup_reference(
+      &context->storage_layout, context->module, storage_value_id,
+      out_reference);
 }
 
 static iree_status_t loom_amdgpu_spill_lowering_validate_storage_space(
-    const loom_amdgpu_spill_storage_reference_t* storage_reference) {
+    const loom_amdgpu_storage_layout_reference_t* storage_reference) {
   switch (storage_reference->reservation.space) {
     case LOOM_STORAGE_SPACE_PRIVATE:
     case LOOM_STORAGE_SPACE_SCRATCH:
@@ -250,7 +176,7 @@ static iree_status_t loom_amdgpu_spill_lowering_validate_storage_space(
 }
 
 static iree_status_t loom_amdgpu_spill_lowering_access_offset(
-    const loom_amdgpu_spill_storage_reference_t* storage_reference,
+    const loom_amdgpu_storage_layout_reference_t* storage_reference,
     int64_t operation_offset, uint64_t chunk_byte_offset,
     uint64_t chunk_byte_length, int64_t* out_absolute_offset) {
   *out_absolute_offset = 0;
@@ -446,7 +372,7 @@ static iree_status_t loom_amdgpu_spill_lowering_rewrite_spill(
         "AMDGPU spill lowering found a zero-unit spill value");
   }
 
-  loom_amdgpu_spill_storage_reference_t storage_reference = {0};
+  loom_amdgpu_storage_layout_reference_t storage_reference = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_resolve_storage_reference(
       context, loom_low_spill_storage(op), &storage_reference));
   IREE_RETURN_IF_ERROR(
@@ -491,7 +417,7 @@ static iree_status_t loom_amdgpu_spill_lowering_rewrite_reload(
         "AMDGPU spill lowering found a zero-unit reload result");
   }
 
-  loom_amdgpu_spill_storage_reference_t storage_reference = {0};
+  loom_amdgpu_storage_layout_reference_t storage_reference = {0};
   IREE_RETURN_IF_ERROR(loom_amdgpu_spill_lowering_resolve_storage_reference(
       context, loom_low_reload_storage(op), &storage_reference));
   IREE_RETURN_IF_ERROR(

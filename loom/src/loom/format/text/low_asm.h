@@ -96,6 +96,8 @@ typedef enum loom_text_low_asm_structural_kind_e {
   LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_ADDRESS = 6,
   // Explicit virtual-register copy/coalescing boundary.
   LOOM_TEXT_LOW_ASM_STRUCTURAL_COPY = 7,
+  // Function-local storage subspan projection.
+  LOOM_TEXT_LOW_ASM_STRUCTURAL_STORAGE_VIEW = 8,
 } loom_text_low_asm_structural_kind_t;
 
 typedef struct loom_text_low_asm_structural_attribute_t {

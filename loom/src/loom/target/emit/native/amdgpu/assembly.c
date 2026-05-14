@@ -1408,11 +1408,11 @@ static iree_status_t loom_amdgpu_append_storage_address_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   (void)user_data;
   const loom_op_t* op = context->packet->node->op;
-  loom_amdgpu_storage_layout_reservation_t reservation;
-  IREE_RETURN_IF_ERROR(loom_amdgpu_storage_layout_resolve(
+  loom_amdgpu_storage_layout_reference_t reference;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_storage_layout_resolve_reference(
       context->schedule->module, context->schedule->function_op,
-      loom_low_storage_address_storage(op), &reservation));
-  if (reservation.space != LOOM_STORAGE_SPACE_WORKGROUP) {
+      loom_low_storage_address_storage(op), &reference));
+  if (reference.reservation.space != LOOM_STORAGE_SPACE_WORKGROUP) {
     return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                             "AMDGPU assembly only supports "
                             "low.storage.address for workgroup storage");
@@ -1424,8 +1424,20 @@ static iree_status_t loom_amdgpu_append_storage_address_packet(
         "AMDGPU assembly low.storage.address offset must be non-negative");
   }
   const uint64_t offset = (uint64_t)signed_offset;
-  if (reservation.byte_offset > UINT32_MAX ||
-      offset > UINT32_MAX - reservation.byte_offset) {
+  if (offset >= reference.byte_length) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU assembly low.storage.address offset "
+                            "exceeds storage reference size");
+  }
+  uint64_t byte_offset = reference.reservation.byte_offset;
+  if (byte_offset > UINT32_MAX ||
+      reference.byte_offset > UINT32_MAX - byte_offset) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "AMDGPU assembly low.storage.address byte offset exceeds u32");
+  }
+  byte_offset += reference.byte_offset;
+  if (offset > UINT32_MAX - byte_offset) {
     return iree_make_status(
         IREE_STATUS_OUT_OF_RANGE,
         "AMDGPU assembly low.storage.address byte offset exceeds u32");
@@ -1443,9 +1455,8 @@ static iree_status_t loom_amdgpu_append_storage_address_packet(
       iree_string_builder_append_cstring(context->builder, "v_mov_b32 "));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_assignment(context, assignment));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
-  return iree_string_builder_append_format(
-      context->builder, "%" PRIu32,
-      (uint32_t)(reservation.byte_offset + offset));
+  return iree_string_builder_append_format(context->builder, "%" PRIu32,
+                                           (uint32_t)(byte_offset + offset));
 }
 
 static iree_status_t loom_amdgpu_append_matrix_packet(

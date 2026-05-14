@@ -204,6 +204,36 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    storage_layout
+  HDRS
+    "storage_layout.h"
+  SRCS
+    "storage_layout.c"
+  DEPS
+    ::function
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    storage_layout_test
+  SRCS
+    "storage_layout_test.cc"
+  DEPS
+    ::storage_layout
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     diagnostics
   HDRS
     "diagnostics.h"
