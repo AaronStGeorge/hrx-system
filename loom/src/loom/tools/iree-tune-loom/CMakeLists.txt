@@ -46,6 +46,7 @@ loom_cc_library(
     loom::src::loom::verify
     iree::tooling::device_util
     iree::tooling::profile::counter
+    iree::tooling::profile::summary
     iree::vm
   PUBLIC
 )

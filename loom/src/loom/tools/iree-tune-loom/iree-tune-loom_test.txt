@@ -164,6 +164,8 @@
 
 // AGENTS: ## iree-tune-loom
 // AGENTS: Rows are written and flushed
+// AGENTS: profile_summary
 
 // HELP: Runs correctness-gated check.benchmark records from a Loom module.
 // HELP: Rows are written and flushed as evidence becomes available
+// HELP: Raw bundles emit profile_summary JSONL rows
