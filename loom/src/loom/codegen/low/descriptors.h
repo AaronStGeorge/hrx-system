@@ -809,6 +809,21 @@ typedef struct loom_low_descriptor_set_t {
   uint32_t encoding_field_value_count;
 } loom_low_descriptor_set_t;
 
+// Returns the target-storage identity key for |reg_class_id|. Register classes
+// in the same non-zero alias set intentionally return the same key; all other
+// classes use a disjoint class-local key.
+static inline uint32_t loom_low_reg_class_storage_key(
+    const loom_low_descriptor_set_t* descriptor_set, uint16_t reg_class_id) {
+  if (descriptor_set && reg_class_id < descriptor_set->reg_class_count) {
+    const loom_low_reg_class_t* reg_class =
+        &descriptor_set->reg_classes[reg_class_id];
+    if (reg_class->alias_set_id != 0) {
+      return reg_class->alias_set_id;
+    }
+  }
+  return UINT32_C(0x10000) + reg_class_id;
+}
+
 // Returns a borrowed descriptor set linked into a target package. Providers
 // must be stable and return the same non-NULL descriptor set for each call.
 typedef const loom_low_descriptor_set_t* (*loom_low_descriptor_set_provider_t)(

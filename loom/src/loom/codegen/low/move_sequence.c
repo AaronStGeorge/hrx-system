@@ -560,25 +560,12 @@ static uint64_t loom_low_move_sequence_mix64(uint64_t value) {
   return value;
 }
 
-static uint32_t loom_low_move_sequence_storage_class_key(
-    const loom_low_descriptor_set_t* descriptor_set, uint16_t reg_class_id) {
-  if (descriptor_set != NULL &&
-      reg_class_id < descriptor_set->reg_class_count) {
-    const loom_low_reg_class_t* reg_class =
-        &descriptor_set->reg_classes[reg_class_id];
-    if (reg_class->alias_set_id != 0) {
-      return reg_class->alias_set_id;
-    }
-  }
-  return 0x10000u + reg_class_id;
-}
-
 static uint64_t loom_low_move_sequence_location_hash(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_move_location_t* location) {
   uint64_t value = (uint64_t)location->location;
   value ^= (uint64_t)location->location_kind << 32;
-  value ^= (uint64_t)loom_low_move_sequence_storage_class_key(
+  value ^= (uint64_t)loom_low_reg_class_storage_key(
                descriptor_set, location->descriptor_reg_class_id)
            << 40;
   return loom_low_move_sequence_mix64(value);

@@ -27,6 +27,8 @@ typedef struct loom_low_allocation_active_unit_entry_t {
   uint32_t previous_entry;
   // Hash bucket containing this entry.
   uint32_t bucket_index;
+  // Target-storage identity key for the register class owning this unit.
+  uint32_t storage_key;
   // Target-visible storage kind for this unit.
   loom_low_allocation_location_kind_t location_kind;
   // Physical register or target ID for this unit.
@@ -246,12 +248,12 @@ bool loom_low_allocation_reg_classes_share_storage(
   if (lhs_reg_class_id == rhs_reg_class_id) {
     return true;
   }
-  const loom_low_reg_class_t* lhs_reg_class =
-      loom_low_allocation_reg_class_at(descriptor_set, lhs_reg_class_id);
-  const loom_low_reg_class_t* rhs_reg_class =
-      loom_low_allocation_reg_class_at(descriptor_set, rhs_reg_class_id);
-  return lhs_reg_class->alias_set_id != 0 &&
-         lhs_reg_class->alias_set_id == rhs_reg_class->alias_set_id;
+  if (!descriptor_set || lhs_reg_class_id >= descriptor_set->reg_class_count ||
+      rhs_reg_class_id >= descriptor_set->reg_class_count) {
+    return false;
+  }
+  return loom_low_reg_class_storage_key(descriptor_set, lhs_reg_class_id) ==
+         loom_low_reg_class_storage_key(descriptor_set, rhs_reg_class_id);
 }
 
 bool loom_low_allocation_assignments_share_target_storage(
@@ -1162,8 +1164,10 @@ static bool loom_low_allocation_active_unit_index_is_enabled(
 }
 
 static uint32_t loom_low_allocation_active_unit_hash(
-    loom_low_allocation_location_kind_t location_kind, uint32_t location) {
+    loom_low_allocation_location_kind_t location_kind, uint32_t storage_key,
+    uint32_t location) {
   uint32_t hash = location ^ ((uint32_t)location_kind * 0x9E3779B9u);
+  hash ^= storage_key * 0x7F4A7C15u;
   hash ^= hash >> 16;
   hash *= 0x85EBCA6Bu;
   hash ^= hash >> 13;
@@ -1174,9 +1178,11 @@ static uint32_t loom_low_allocation_active_unit_hash(
 
 static uint32_t loom_low_allocation_active_unit_bucket_index(
     const loom_low_allocation_build_state_t* state,
-    loom_low_allocation_location_kind_t location_kind, uint32_t location) {
+    loom_low_allocation_location_kind_t location_kind, uint32_t storage_key,
+    uint32_t location) {
   IREE_ASSERT(loom_low_allocation_active_unit_index_is_enabled(state));
-  return loom_low_allocation_active_unit_hash(location_kind, location) &
+  return loom_low_allocation_active_unit_hash(location_kind, storage_key,
+                                              location) &
          (state->active_units.bucket_count - 1u);
 }
 
@@ -1267,6 +1273,8 @@ static bool loom_low_allocation_active_unit_index_conflicts(
           candidate->location_kind)) {
     return false;
   }
+  const uint32_t storage_key = loom_low_reg_class_storage_key(
+      state->target.descriptor_set, candidate->descriptor_reg_class_id);
   const uint32_t generation =
       loom_low_allocation_active_unit_next_seen_generation(state);
   for (uint32_t unit_offset = 0; unit_offset < candidate->location_count;
@@ -1276,7 +1284,7 @@ static bool loom_low_allocation_active_unit_index_conflicts(
     }
     const uint32_t location = candidate->location_base + unit_offset;
     const uint32_t bucket_index = loom_low_allocation_active_unit_bucket_index(
-        state, candidate->location_kind, location);
+        state, candidate->location_kind, storage_key, location);
     uint32_t entry_index = state->active_units.bucket_heads[bucket_index];
     while (entry_index != UINT32_MAX) {
       IREE_ASSERT_LT(entry_index, state->active_units.entry_count);
@@ -1287,7 +1295,7 @@ static bool loom_low_allocation_active_unit_index_conflicts(
       const loom_low_allocation_assignment_t* existing =
           &state->assignments[assignment_index];
       if (entry->location_kind == candidate->location_kind &&
-          entry->location == location &&
+          entry->storage_key == storage_key && entry->location == location &&
           existing->end_point > candidate->start_point &&
           !loom_low_allocation_active_unit_mark_assignment_seen(
               state, assignment_index, generation) &&
@@ -1989,11 +1997,13 @@ static void loom_low_allocation_active_unit_index_insert_assignment(
   IREE_ASSERT(entry_start <= UINT32_MAX);
   state->active_units.entry_starts_by_assignment_index[assignment_index] =
       (uint32_t)entry_start;
+  const uint32_t storage_key = loom_low_reg_class_storage_key(
+      state->target.descriptor_set, assignment->descriptor_reg_class_id);
   for (uint32_t unit_offset = 0; unit_offset < assignment->location_count;
        ++unit_offset) {
     const uint32_t location = assignment->location_base + unit_offset;
     const uint32_t bucket_index = loom_low_allocation_active_unit_bucket_index(
-        state, assignment->location_kind, location);
+        state, assignment->location_kind, storage_key, location);
     const uint32_t entry_index = (uint32_t)state->active_units.entry_count++;
     loom_low_allocation_active_unit_entry_t* entry =
         &state->active_units.entries[entry_index];
@@ -2002,6 +2012,7 @@ static void loom_low_allocation_active_unit_index_insert_assignment(
         .next_entry = state->active_units.bucket_heads[bucket_index],
         .previous_entry = UINT32_MAX,
         .bucket_index = bucket_index,
+        .storage_key = storage_key,
         .location_kind = assignment->location_kind,
         .location = location,
     };
