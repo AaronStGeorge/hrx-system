@@ -372,6 +372,36 @@ ERR_BACKEND_018 = ErrorDef(
     ),
 )
 
+# ERR_BACKEND_019: Spill storage is unsupported by the selected target.
+ERR_BACKEND_019 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=19,
+    severity=Severity.ERROR,
+    summary="Spill storage unsupported.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot materialize {value_class} value '{value_name}' in "
+        "'@{function_name}': spill slot space '{spill_slot_space}' maps to "
+        "storage space '{storage_space}', but supported storage spaces are "
+        "{supported_storage_spaces}"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("value_class", ParamKind.STRING),
+        ErrorParam("spill_slot_space", ParamKind.STRING),
+        ErrorParam("storage_space", ParamKind.STRING),
+        ErrorParam("supported_storage_spaces", ParamKind.STRING_LIST),
+    ),
+    fix_hint=(
+        "Choose a spill slot space supported by target lowering or implement "
+        "target storage lowering for '{storage_space}'"
+    ),
+)
+
 ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_003,
     ERR_BACKEND_005,
@@ -385,4 +415,5 @@ ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_016,
     ERR_BACKEND_017,
     ERR_BACKEND_018,
+    ERR_BACKEND_019,
 )

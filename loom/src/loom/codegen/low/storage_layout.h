@@ -23,6 +23,46 @@
 extern "C" {
 #endif
 
+// Bitset of function-local storage spaces.
+typedef uint32_t loom_low_storage_space_set_t;
+
+// Empty storage-space set.
+#define LOOM_LOW_STORAGE_SPACE_SET_NONE ((loom_low_storage_space_set_t)0u)
+// Set bit for host stack-frame storage.
+#define LOOM_LOW_STORAGE_SPACE_SET_STACK \
+  ((loom_low_storage_space_set_t)1u << LOOM_STORAGE_SPACE_STACK)
+// Set bit for per-lane spill/scratch storage.
+#define LOOM_LOW_STORAGE_SPACE_SET_SCRATCH \
+  ((loom_low_storage_space_set_t)1u << LOOM_STORAGE_SPACE_SCRATCH)
+// Set bit for target-private per-invocation storage.
+#define LOOM_LOW_STORAGE_SPACE_SET_PRIVATE \
+  ((loom_low_storage_space_set_t)1u << LOOM_STORAGE_SPACE_PRIVATE)
+// Set bit for workgroup-local shared storage.
+#define LOOM_LOW_STORAGE_SPACE_SET_WORKGROUP \
+  ((loom_low_storage_space_set_t)1u << LOOM_STORAGE_SPACE_WORKGROUP)
+// Set containing every currently defined function-local storage space.
+#define LOOM_LOW_STORAGE_SPACE_SET_ALL                                     \
+  (LOOM_LOW_STORAGE_SPACE_SET_STACK | LOOM_LOW_STORAGE_SPACE_SET_SCRATCH | \
+   LOOM_LOW_STORAGE_SPACE_SET_PRIVATE | LOOM_LOW_STORAGE_SPACE_SET_WORKGROUP)
+
+// Returns the singleton set for |space|, or NONE when |space| is invalid.
+static inline loom_low_storage_space_set_t loom_low_storage_space_set_for(
+    loom_storage_space_t space) {
+  if (!loom_storage_space_is_valid(space)) {
+    return LOOM_LOW_STORAGE_SPACE_SET_NONE;
+  }
+  return (loom_low_storage_space_set_t)1u << (uint32_t)space;
+}
+
+// Returns true when |set| contains |space|.
+static inline bool loom_low_storage_space_set_contains(
+    loom_low_storage_space_set_t set, loom_storage_space_t space) {
+  const loom_low_storage_space_set_t singleton =
+      loom_low_storage_space_set_for(space);
+  return singleton != LOOM_LOW_STORAGE_SPACE_SET_NONE &&
+         iree_all_bits_set(set, singleton);
+}
+
 typedef struct loom_low_storage_layout_space_sizes_t {
   // Bytes reserved in function stack-frame storage.
   uint64_t stack_bytes;

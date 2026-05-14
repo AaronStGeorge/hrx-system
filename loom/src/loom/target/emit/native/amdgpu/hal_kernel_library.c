@@ -488,12 +488,19 @@ loom_amdgpu_hal_kernel_library_build_spill_free_emission_frame(
     const loom_low_allocation_materialization_options_t
         materialization_options = {
             .allow_existing_storage_traffic = true,
+            .has_supported_storage_spaces = true,
+            .supported_storage_spaces = LOOM_LOW_STORAGE_SPACE_SET_SCRATCH |
+                                        LOOM_LOW_STORAGE_SPACE_SET_PRIVATE,
+            .emit_spill_diagnostics = true,
             .max_spill_plan_count = 1,
             .emitter = frame_options->emitter,
         };
     IREE_RETURN_IF_ERROR(loom_low_allocation_materialize_spills(
         module, &frame.allocation, &materialization_options, table_arena,
         &result));
+    if (result.error_count != 0) {
+      return iree_ok_status();
+    }
     if (result.storage_count == 0 && result.spill_count == 0 &&
         result.reload_count == 0) {
       return iree_make_status(

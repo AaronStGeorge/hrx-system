@@ -81,3 +81,14 @@ low.func.def target(@test_target) @spill(%a: reg<test.i32>, %b: reg<test.i32>, %
 }
 
 // ----
+
+// ====
+
+// RUN: pass low-materialize-allocation{spill-storage-spaces=private}
+
+test.target<low_core> @test_target
+
+// ERROR@+1: BACKEND/019 {function_name="unsupported_stack_spill_space", value_class="test.alias32", spill_slot_space="stack", storage_space="stack"}
+low.func.def target(@test_target) @unsupported_stack_spill_space(%lhs: reg<test.alias32>, %rhs: reg<test.alias32>) -> (reg<test.alias32>, reg<test.alias32>) {
+  low.return %lhs, %rhs : reg<test.alias32>, reg<test.alias32>
+}

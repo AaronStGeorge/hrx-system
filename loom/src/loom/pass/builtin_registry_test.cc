@@ -22,6 +22,29 @@ static const loom_pass_descriptor_t* LookupBuiltinPass(
   return descriptor;
 }
 
+static iree_status_t CreateBuiltinPass(const loom_pass_descriptor_t* descriptor,
+                                       iree_string_view_t options) {
+  iree_arena_block_pool_t block_pool = {};
+  iree_arena_block_pool_initialize(/*block_size=*/4096, iree_allocator_system(),
+                                   &block_pool);
+  iree_arena_allocator_t instance_arena = {};
+  iree_arena_initialize(&block_pool, &instance_arena);
+
+  loom_pass_t pass = {
+      .info = descriptor->info(),
+      .instance_arena = &instance_arena,
+  };
+  iree_status_t status = descriptor->create ? descriptor->create(&pass, options)
+                                            : iree_ok_status();
+  if (iree_status_is_ok(status) && descriptor->destroy) {
+    descriptor->destroy(&pass);
+  }
+
+  iree_arena_deinitialize(&instance_arena);
+  iree_arena_block_pool_deinitialize(&block_pool);
+  return status;
+}
+
 TEST(PassBuiltinRegistryTest, BuiltinRegistryVerifies) {
   IREE_ASSERT_OK(loom_pass_registry_verify(loom_pass_builtin_registry()));
 }
@@ -70,6 +93,19 @@ TEST(PassBuiltinRegistryTest, ValidatesBuiltinOptionSchemas) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         loom_pass_descriptor_validate_options(
                             allocation, IREE_SV("diagnostics=verbose")));
+  IREE_ASSERT_OK(CreateBuiltinPass(
+      allocation, IREE_SV("spill-storage-spaces=stack;private")));
+  IREE_ASSERT_OK(
+      CreateBuiltinPass(allocation, IREE_SV("spill-storage-spaces=all")));
+  IREE_ASSERT_OK(
+      CreateBuiltinPass(allocation, IREE_SV("spill-storage-spaces=none")));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      CreateBuiltinPass(allocation,
+                        IREE_SV("spill-storage-spaces=private;private")));
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      CreateBuiltinPass(allocation, IREE_SV("spill-storage-spaces=scratch;")));
 
   const loom_pass_descriptor_t* operand_forms =
       LookupBuiltinPass(IREE_SV("low-select-operand-forms"));

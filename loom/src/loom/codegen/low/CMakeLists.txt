@@ -331,6 +331,7 @@ loom_cc_library(
     ::descriptors
     ::diagnostics
     ::function
+    ::storage_layout
     iree::base
     iree::base::internal::arena
     loom::src::loom::error::error_defs

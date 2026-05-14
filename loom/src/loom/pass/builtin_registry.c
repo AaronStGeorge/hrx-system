@@ -64,6 +64,10 @@ static const loom_pass_option_schema_t kLowMaterializeAllocationOptionSchema[] =
             .enum_value_count =
                 IREE_ARRAYSIZE(kLowMaterializeAllocationDiagnosticsValues),
         },
+        {
+            .name = IREE_SVL("spill-storage-spaces"),
+            .kind = LOOM_PASS_OPTION_SCHEMA_STRING,
+        },
 };
 
 static const loom_pass_requirement_def_t

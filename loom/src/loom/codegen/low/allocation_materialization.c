@@ -82,6 +82,101 @@ static iree_status_t loom_low_allocation_map_slot_space(
   }
 }
 
+static loom_diagnostic_string_list_t
+loom_low_allocation_supported_storage_space_names(
+    loom_low_storage_space_set_t supported_storage_spaces,
+    iree_string_view_t* storage_space_names) {
+  static const loom_storage_space_t kStorageSpaceOrder[] = {
+      LOOM_STORAGE_SPACE_STACK,
+      LOOM_STORAGE_SPACE_SCRATCH,
+      LOOM_STORAGE_SPACE_PRIVATE,
+      LOOM_STORAGE_SPACE_WORKGROUP,
+  };
+  iree_host_size_t count = 0;
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kStorageSpaceOrder); ++i) {
+    const loom_storage_space_t storage_space = kStorageSpaceOrder[i];
+    if (!loom_low_storage_space_set_contains(supported_storage_spaces,
+                                             storage_space)) {
+      continue;
+    }
+    storage_space_names[count++] =
+        iree_make_cstring_view(loom_storage_space_name(storage_space));
+  }
+  return (loom_diagnostic_string_list_t){
+      .values = storage_space_names,
+      .count = count,
+  };
+}
+
+static iree_status_t loom_low_allocation_emit_unsupported_spill_storage_space(
+    const loom_low_allocation_table_t* table,
+    const loom_low_allocation_spill_plan_t* plan,
+    loom_storage_space_t storage_space,
+    loom_low_storage_space_set_t supported_storage_spaces,
+    iree_diagnostic_emitter_t emitter) {
+  if (plan->assignment_index >= table->assignment_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "allocation spill plan references an out-of-range assignment");
+  }
+  const loom_low_allocation_assignment_t* assignment =
+      &table->assignments[plan->assignment_index];
+  iree_string_view_t supported_storage_space_names[LOOM_STORAGE_SPACE_COUNT_];
+  const loom_diagnostic_string_list_t supported_storage_space_list =
+      loom_low_allocation_supported_storage_space_names(
+          supported_storage_spaces, supported_storage_space_names);
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(&table->target)),
+      loom_param_string(loom_low_diagnostic_export_name(&table->target)),
+      loom_param_string(loom_low_diagnostic_config_key(&table->target)),
+      loom_param_string(
+          loom_low_diagnostic_function_name(table->module, table->function_op)),
+      loom_param_string(
+          loom_low_diagnostic_value_name(table->module, plan->value_id)),
+      loom_param_string(loom_low_diagnostic_value_class_name(
+          table->target.descriptor_set, assignment->value_class)),
+      loom_param_string(loom_low_spill_slot_space_name(plan->slot_space)),
+      loom_param_string(
+          iree_make_cstring_view(loom_storage_space_name(storage_space))),
+      loom_param_string_list(supported_storage_space_list.values,
+                             supported_storage_space_list.count),
+  };
+  loom_diagnostic_emission_t emission = {
+      .op = loom_low_diagnostic_value_origin_op(table->module, plan->value_id,
+                                                table->function_op),
+      .error = LOOM_ERR_BACKEND_019,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  return iree_diagnostic_emit(emitter, &emission);
+}
+
+static iree_status_t
+loom_low_allocation_validate_supported_spill_storage_spaces(
+    const loom_low_allocation_table_t* table, iree_host_size_t spill_plan_count,
+    const loom_low_allocation_materialization_options_t* options,
+    loom_low_allocation_materialization_result_t* result) {
+  if (!options || !options->has_supported_storage_spaces) {
+    return iree_ok_status();
+  }
+  for (iree_host_size_t i = 0; i < spill_plan_count; ++i) {
+    const loom_low_allocation_spill_plan_t* plan = &table->spill_plans[i];
+    loom_storage_space_t storage_space = LOOM_STORAGE_SPACE_COUNT_;
+    IREE_RETURN_IF_ERROR(
+        loom_low_allocation_map_slot_space(plan->slot_space, &storage_space));
+    if (loom_low_storage_space_set_contains(options->supported_storage_spaces,
+                                            storage_space)) {
+      continue;
+    }
+    ++result->error_count;
+    IREE_RETURN_IF_ERROR(
+        loom_low_allocation_emit_unsupported_spill_storage_space(
+            table, plan, storage_space, options->supported_storage_spaces,
+            options->emitter));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_allocation_verify_no_existing_storage_traffic(
     const loom_op_t* function_op) {
   loom_region_t* body = loom_low_function_body((loom_op_t*)function_op);
@@ -644,6 +739,8 @@ iree_status_t loom_low_allocation_materialize_spills(
 
   const bool allow_existing_storage_traffic =
       options && options->allow_existing_storage_traffic;
+  const bool emit_spill_diagnostics =
+      options && options->emit_spill_diagnostics;
   const iree_diagnostic_emitter_t emitter =
       options ? options->emitter : (iree_diagnostic_emitter_t){0};
   if (!allow_existing_storage_traffic) {
@@ -661,6 +758,14 @@ iree_status_t loom_low_allocation_materialize_spills(
                             "materialized storage count overflow");
   }
 
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_validate_supported_spill_storage_spaces(
+          table, spill_plan_count, options, &result));
+  if (result.error_count != 0) {
+    if (out_result) *out_result = result;
+    return iree_ok_status();
+  }
+
   loom_low_materialized_spill_slot_t* slots = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       arena, spill_plan_count, sizeof(*slots), (void**)&slots));
@@ -673,7 +778,8 @@ iree_status_t loom_low_allocation_materialize_spills(
   for (iree_host_size_t i = 0; i < spill_plan_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_materialize_one_spill_plan(
         module, table, &table->spill_plans[i], slots[i].storage_value_id,
-        emitter, arena, &result));
+        emit_spill_diagnostics ? emitter : (iree_diagnostic_emitter_t){0},
+        arena, &result));
   }
 
   if (out_result) *out_result = result;

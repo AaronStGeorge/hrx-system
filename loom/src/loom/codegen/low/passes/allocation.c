@@ -25,6 +25,11 @@ typedef struct loom_low_materialize_allocation_pass_state_t {
   bool emit_spill_diagnostics;
   // True once the diagnostics option has been parsed.
   bool has_diagnostics_option;
+  // True when the pass received a complete target spill-storage capability and
+  // should reject generated storage outside |spill_storage_spaces|.
+  bool has_spill_storage_spaces;
+  // Storage spaces allowed for newly generated spill storage.
+  loom_low_storage_space_set_t spill_storage_spaces;
 } loom_low_materialize_allocation_pass_state_t;
 
 typedef struct loom_low_materialize_allocation_parse_context_t {
@@ -40,6 +45,9 @@ static const loom_pass_option_def_t kLowMaterializeAllocationOptions[] = {
               "vm.i32=2;x86.zmm=1.")},
     {IREE_SVL("diagnostics"),
      IREE_SVL("Diagnostic feedback to emit: none or spills.")},
+    {IREE_SVL("spill-storage-spaces"),
+     IREE_SVL("Semicolon-separated storage spaces supported by the target "
+              "spill lowering path, or all/none.")},
 };
 
 enum {
@@ -187,6 +195,80 @@ static iree_status_t loom_low_materialize_allocation_parse_diagnostics(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_materialize_allocation_parse_storage_space(
+    iree_string_view_t token,
+    loom_low_materialize_allocation_parse_context_t* context) {
+  loom_storage_space_t storage_space = LOOM_STORAGE_SPACE_COUNT_;
+  if (!loom_storage_space_parse(token, &storage_space)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass 'low-materialize-allocation' option 'spill-storage-spaces' "
+        "expected storage space 'stack', 'scratch', 'private', or "
+        "'workgroup', got '%.*s'",
+        (int)token.size, token.data);
+  }
+  const loom_low_storage_space_set_t storage_space_set =
+      loom_low_storage_space_set_for(storage_space);
+  if (iree_any_bit_set(context->state->spill_storage_spaces,
+                       storage_space_set)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass 'low-materialize-allocation' option 'spill-storage-spaces' "
+        "contains duplicate storage space '%.*s'",
+        (int)token.size, token.data);
+  }
+  context->state->spill_storage_spaces |= storage_space_set;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_materialize_allocation_parse_spill_storage_spaces(
+    iree_string_view_t text,
+    loom_low_materialize_allocation_parse_context_t* context) {
+  if (context->state->has_spill_storage_spaces) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "duplicate option 'spill-storage-spaces' for pass "
+                            "'low-materialize-allocation'");
+  }
+  text = iree_string_view_trim(text);
+  context->state->has_spill_storage_spaces = true;
+  context->state->spill_storage_spaces = LOOM_LOW_STORAGE_SPACE_SET_NONE;
+  if (iree_string_view_is_empty(text)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass 'low-materialize-allocation' option 'spill-storage-spaces' "
+        "must be all, none, or a semicolon-separated storage space list");
+  }
+  if (iree_string_view_equal(text, IREE_SV("all"))) {
+    context->state->spill_storage_spaces = LOOM_LOW_STORAGE_SPACE_SET_ALL;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(text, IREE_SV("none"))) {
+    return iree_ok_status();
+  }
+  if (text.data[text.size - 1] == ';') {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "pass 'low-materialize-allocation' option 'spill-storage-spaces' "
+        "contains an empty storage space entry");
+  }
+  while (!iree_string_view_is_empty(text)) {
+    iree_string_view_t token = iree_string_view_empty();
+    iree_string_view_t remaining = iree_string_view_empty();
+    iree_string_view_split(text, ';', &token, &remaining);
+    token = iree_string_view_trim(token);
+    if (iree_string_view_is_empty(token)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "pass 'low-materialize-allocation' option 'spill-storage-spaces' "
+          "contains an empty storage space entry");
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_low_materialize_allocation_parse_storage_space(token, context));
+    text = iree_string_view_trim(remaining);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_materialize_allocation_parse_option(
     void* user_data, iree_string_view_t name, iree_string_view_t value) {
   loom_low_materialize_allocation_parse_context_t* context =
@@ -196,6 +278,10 @@ static iree_status_t loom_low_materialize_allocation_parse_option(
   }
   if (iree_string_view_equal(name, IREE_SV("diagnostics"))) {
     return loom_low_materialize_allocation_parse_diagnostics(value, context);
+  }
+  if (iree_string_view_equal(name, IREE_SV("spill-storage-spaces"))) {
+    return loom_low_materialize_allocation_parse_spill_storage_spaces(value,
+                                                                      context);
   }
   return iree_make_status(
       IREE_STATUS_INVALID_ARGUMENT,
@@ -232,6 +318,13 @@ iree_status_t loom_low_materialize_allocation_create(
             option->schema->enum_values[option->enum_value_index].value;
         IREE_RETURN_IF_ERROR(
             loom_low_materialize_allocation_parse_diagnostics(value, &context));
+        continue;
+      }
+      if (iree_string_view_equal(option->schema->name,
+                                 IREE_SV("spill-storage-spaces"))) {
+        IREE_RETURN_IF_ERROR(
+            loom_low_materialize_allocation_parse_spill_storage_spaces(
+                option->string_value, &context));
         continue;
       }
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -301,13 +394,19 @@ iree_status_t loom_low_materialize_allocation_run(loom_pass_t* pass,
     loom_low_allocation_materialization_result_t result = {0};
     loom_low_allocation_materialization_options_t materialization_options = {
         .allow_existing_storage_traffic = allow_existing_storage_traffic,
+        .has_supported_storage_spaces =
+            state && state->has_spill_storage_spaces,
+        .supported_storage_spaces = state ? state->spill_storage_spaces
+                                          : LOOM_LOW_STORAGE_SPACE_SET_ALL,
+        .emit_spill_diagnostics = state && state->emit_spill_diagnostics,
         .max_spill_plan_count = 1,
-        .emitter = state && state->emit_spill_diagnostics
-                       ? pass->diagnostic_emitter
-                       : (iree_diagnostic_emitter_t){0},
+        .emitter = pass->diagnostic_emitter,
     };
     IREE_RETURN_IF_ERROR(loom_low_allocation_materialize_spills(
         module, &table, &materialization_options, pass->arena, &result));
+    if (result.error_count != 0) {
+      return iree_ok_status();
+    }
     if (result.storage_count == 0 && result.spill_count == 0 &&
         result.reload_count == 0) {
       return iree_make_status(

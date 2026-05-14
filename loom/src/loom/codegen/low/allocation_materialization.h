@@ -19,6 +19,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/allocation.h"
+#include "loom/codegen/low/storage_layout.h"
 #include "loom/ir/ir.h"
 
 #ifdef __cplusplus
@@ -30,6 +31,13 @@ typedef struct loom_low_allocation_materialization_options_t {
   // The default false value rejects existing traffic so repeated or partial
   // materialization fails loud instead of stacking generated reloads.
   bool allow_existing_storage_traffic;
+  // True when |supported_storage_spaces| names the complete target lowering
+  // capability for newly generated spill storage.
+  bool has_supported_storage_spaces;
+  // Storage spaces this materialization may create for spill slots.
+  loom_low_storage_space_set_t supported_storage_spaces;
+  // True when successful spill insertion should emit BACKEND/009 feedback.
+  bool emit_spill_diagnostics;
   // Maximum number of current spill plans to materialize. Zero materializes all
   // plans in the table. Passes that reallocate greedily use a small limit so
   // CFG/signature rewrites can invalidate obsolete later plans before they are
@@ -40,6 +48,8 @@ typedef struct loom_low_allocation_materialization_options_t {
 } loom_low_allocation_materialization_options_t;
 
 typedef struct loom_low_allocation_materialization_result_t {
+  // Number of error diagnostics emitted before mutating the low function.
+  uint32_t error_count;
   // Number of low.storage.reserve ops created from spill plans.
   uint32_t storage_count;
   // Number of low.spill stores inserted.
