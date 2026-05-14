@@ -22,6 +22,13 @@ std::string ToString(iree_string_view_t value) {
   return std::string(value.data, value.size);
 }
 
+struct RegisterAltExpectation {
+  // Descriptor-set-local register class accepted by the alternative.
+  uint16_t reg_class_id;
+  // Required alternative flags.
+  loom_low_reg_class_alt_flags_t flags;
+};
+
 void ExpectRegisterClass(const loom_low_descriptor_set_t* descriptor_set,
                          uint16_t reg_class_id,
                          iree_string_view_t expected_name,
@@ -57,6 +64,65 @@ void ExpectRegisterClassMissing(const loom_low_descriptor_set_t* descriptor_set,
   EXPECT_EQ(descriptor_register_class_id, LOOM_LOW_REG_CLASS_NONE)
       << ToString(register_class_name);
   EXPECT_EQ(reg_class, nullptr) << ToString(register_class_name);
+}
+
+void ExpectOperandRegisterAlts(const loom_low_descriptor_set_t* descriptor_set,
+                               uint32_t descriptor_ref, uint16_t operand_index,
+                               loom_low_operand_role_t expected_role,
+                               uint16_t expected_unit_count,
+                               const RegisterAltExpectation* expected_alts,
+                               iree_host_size_t expected_alt_count) {
+  ASSERT_LT(descriptor_ref, descriptor_set->descriptor_count);
+  const loom_low_descriptor_t* descriptor =
+      &descriptor_set->descriptors[descriptor_ref];
+  ASSERT_LT(operand_index, descriptor->operand_count);
+  const loom_low_operand_t* operand =
+      &descriptor_set->operands[descriptor->operand_start + operand_index];
+  EXPECT_EQ(operand->role, expected_role);
+  EXPECT_EQ(operand->unit_count, expected_unit_count);
+  EXPECT_EQ(operand->address_map_kind, LOOM_LOW_OPERAND_ADDRESS_MAP_DIRECT);
+  ASSERT_EQ(operand->reg_class_alt_count, expected_alt_count);
+  for (iree_host_size_t i = 0; i < expected_alt_count; ++i) {
+    const loom_low_reg_class_alt_t* alt =
+        &descriptor_set
+             ->reg_class_alts[operand->reg_class_alt_start + (uint16_t)i];
+    EXPECT_EQ(alt->reg_class_id, expected_alts[i].reg_class_id)
+        << "operand " << operand_index << " alt " << i;
+    EXPECT_EQ(alt->flags, expected_alts[i].flags)
+        << "operand " << operand_index << " alt " << i;
+  }
+}
+
+void ExpectCdnaMfmaVgprAgprOperands(
+    const loom_low_descriptor_set_t* descriptor_set, uint32_t descriptor_ref,
+    uint16_t vgpr_id, uint16_t agpr_id) {
+  constexpr loom_low_reg_class_alt_flags_t kPreferred =
+      LOOM_LOW_REG_CLASS_ALT_FLAG_PREFERRED;
+  const RegisterAltExpectation vgpr_agpr[] = {
+      {vgpr_id, kPreferred},
+      {agpr_id, kPreferred},
+  };
+  const RegisterAltExpectation vgpr_agpr_or_immediate[] = {
+      {vgpr_id, kPreferred},
+      {agpr_id, kPreferred},
+      {LOOM_LOW_REG_CLASS_NONE, LOOM_LOW_REG_CLASS_ALT_FLAG_IMMEDIATE},
+  };
+  ExpectOperandRegisterAlts(descriptor_set, descriptor_ref, /*operand_index=*/0,
+                            LOOM_LOW_OPERAND_ROLE_RESULT,
+                            /*expected_unit_count=*/4, vgpr_agpr,
+                            IREE_ARRAYSIZE(vgpr_agpr));
+  ExpectOperandRegisterAlts(descriptor_set, descriptor_ref, /*operand_index=*/1,
+                            LOOM_LOW_OPERAND_ROLE_OPERAND,
+                            /*expected_unit_count=*/2, vgpr_agpr,
+                            IREE_ARRAYSIZE(vgpr_agpr));
+  ExpectOperandRegisterAlts(descriptor_set, descriptor_ref, /*operand_index=*/2,
+                            LOOM_LOW_OPERAND_ROLE_OPERAND,
+                            /*expected_unit_count=*/2, vgpr_agpr,
+                            IREE_ARRAYSIZE(vgpr_agpr));
+  ExpectOperandRegisterAlts(descriptor_set, descriptor_ref, /*operand_index=*/3,
+                            LOOM_LOW_OPERAND_ROLE_OPERAND,
+                            /*expected_unit_count=*/4, vgpr_agpr_or_immediate,
+                            IREE_ARRAYSIZE(vgpr_agpr_or_immediate));
 }
 
 void ExpectOccupancyRegisterClass(const loom_amdgpu_occupancy_model_t* model,
@@ -183,6 +249,38 @@ TEST(AmdgpuRegistersTest, DescriptorSetsExposeAddressableRegisterNamespaces) {
                           LOOM_LOW_REG_CLASS_FLAG_PHYSICAL |
                               LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE);
     }
+  }
+}
+
+TEST(AmdgpuRegistersTest, CdnaMfmaOperandsExposeAccumulatorRegisterNamespace) {
+  struct MfmaCase {
+    // Generated descriptor set under test.
+    const loom_low_descriptor_set_t* descriptor_set;
+    // Generated MFMA descriptor reference.
+    uint32_t descriptor_ref;
+    // Descriptor-set-local VGPR register-class ID.
+    uint16_t vgpr_id;
+    // Descriptor-set-local AGPR register-class ID.
+    uint16_t agpr_id;
+  };
+  const MfmaCase cases[] = {
+      {
+          loom_amdgpu_cdna3_core_descriptor_set(),
+          AMDGPU_CDNA3_CORE_DESCRIPTOR_REF_V_MFMA_F32_16X16X16_F16,
+          AMDGPU_CDNA3_CORE_REG_CLASS_ID_VGPR,
+          AMDGPU_CDNA3_CORE_REG_CLASS_ID_AGPR,
+      },
+      {
+          loom_amdgpu_cdna4_core_descriptor_set(),
+          AMDGPU_CDNA4_CORE_DESCRIPTOR_REF_V_MFMA_F32_16X16X16_F16,
+          AMDGPU_CDNA4_CORE_REG_CLASS_ID_VGPR,
+          AMDGPU_CDNA4_CORE_REG_CLASS_ID_AGPR,
+      },
+  };
+
+  for (const MfmaCase& c : cases) {
+    ExpectCdnaMfmaVgprAgprOperands(c.descriptor_set, c.descriptor_ref,
+                                   c.vgpr_id, c.agpr_id);
   }
 }
 
