@@ -486,11 +486,14 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "trace byte counts, device metric counts, and decode status. Use "
           "`--artifact_bundle_dir=DIR` to collect `results.jsonl`, "
           "`manifest.json`, file outputs, and profile artifacts under one "
-          "directory; the manifest records command/path/source identity, "
-          "path/size/mtime metadata for observed fixture/output/profile "
-          "files, selected environment variables, and HAL device identity "
-          "when a dispatch benchmark selected a backend. Large fixture and "
-          "artifact files are not content-hashed by this CLI. "
+          "directory; `--artifact_bundle_policy=debug|full` also writes "
+          "per-candidate compile report sidecars under `compile_reports/` "
+          "and links them from `compile_report_path`. The manifest records "
+          "command/path/source identity, path/size/mtime metadata for "
+          "observed fixture/output/profile/compile-report files, selected "
+          "environment variables, and HAL device identity when a dispatch "
+          "benchmark selected a backend. Large fixture and artifact files "
+          "are not content-hashed by this CLI. "
           "Benchmark attrs named `family`, `phase`, `strategy`, "
           "`knobs`, `problem`, or `reference_id` are copied into a "
           "`metadata` object on candidate rows. Compile rows and benchmark "
@@ -540,6 +543,8 @@ static void iree_tune_loom_print_agents_md(FILE* file) {
           "jq 'select(.row==\"compile\" and .static_summary) | "
           "{candidate_id,code:.static_summary.code_byte_count,"
           "spills:.static_summary.allocation_spill_count}' results.jsonl\n"
+          "jq 'select(.row==\"compile\" and .compile_report_path) | "
+          "{candidate_id,path:.compile_report_path}' results.jsonl\n"
           "jq 'select(.row==\"benchmark\" and .shape) | "
           "{candidate_id,shape_id,shape:.shape.parameters,"
           "p50:.benchmark_result.dispatch_timing_ns.p50}' results.jsonl\n"
@@ -716,6 +721,7 @@ typedef enum iree_tune_loom_bundle_file_kind_e {
   IREE_TUNE_LOOM_BUNDLE_FILE_FIXTURE_READ = 0,
   IREE_TUNE_LOOM_BUNDLE_FILE_OUTPUT = 1,
   IREE_TUNE_LOOM_BUNDLE_FILE_PROFILE = 2,
+  IREE_TUNE_LOOM_BUNDLE_FILE_COMPILE_REPORT = 3,
 } iree_tune_loom_bundle_file_kind_t;
 
 typedef struct iree_tune_loom_bundle_file_entry_t {
@@ -781,6 +787,10 @@ struct iree_tune_loom_artifact_bundle_t {
   iree_string_view_t profile_artifacts_dir;
   // Owned default profile-artifacts directory inside |dir|.
   char* profile_artifacts_dir_storage;
+  // Borrowed view into |compile_report_dir_storage|.
+  iree_string_view_t compile_report_dir;
+  // Owned debug compile-report directory inside |dir|.
+  char* compile_report_dir_storage;
   // Owned file references observed while the run executed.
   iree_tune_loom_bundle_file_entry_t* file_entries;
   // Number of populated entries in |file_entries|.
@@ -1266,6 +1276,8 @@ static void iree_tune_loom_artifact_bundle_deinitialize(
   }
   iree_allocator_free(bundle->host_allocator, bundle->file_entries);
   iree_allocator_free(bundle->host_allocator,
+                      bundle->compile_report_dir_storage);
+  iree_allocator_free(bundle->host_allocator,
                       bundle->profile_artifacts_dir_storage);
   iree_allocator_free(bundle->host_allocator, bundle->file_output_dir_storage);
   iree_allocator_free(bundle->host_allocator, bundle->manifest_path_storage);
@@ -1326,6 +1338,11 @@ static iree_status_t iree_tune_loom_artifact_bundle_initialize(
         &out_bundle->profile_artifacts_dir_storage);
   }
   if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_join_bundle_path(
+        out_bundle->dir, IREE_SV("compile_reports"), allocator,
+        &out_bundle->compile_report_dir_storage);
+  }
+  if (iree_status_is_ok(status)) {
     out_bundle->results_path =
         iree_make_cstring_view(out_bundle->results_path_storage);
     out_bundle->manifest_path =
@@ -1334,6 +1351,8 @@ static iree_status_t iree_tune_loom_artifact_bundle_initialize(
         iree_make_cstring_view(out_bundle->file_output_dir_storage);
     out_bundle->profile_artifacts_dir =
         iree_make_cstring_view(out_bundle->profile_artifacts_dir_storage);
+    out_bundle->compile_report_dir =
+        iree_make_cstring_view(out_bundle->compile_report_dir_storage);
     out_bundle->enabled = true;
   } else {
     iree_tune_loom_artifact_bundle_deinitialize(out_bundle);
@@ -1467,6 +1486,8 @@ typedef struct iree_tune_loom_benchmark_result_t {
   iree_string_view_t diagnostic_json;
   // Captured structured compile report for the benchmark candidate.
   const loom_run_compile_report_capture_t* compile_report_capture;
+  // Sidecar compile report artifact path for debug/full bundles, if any.
+  iree_string_view_t compile_report_artifact_path;
   // True when benchmark setup and timing completed.
   bool executed;
   // True when no measured or warmup sample failed expectations.
@@ -1541,6 +1562,10 @@ typedef struct iree_tune_loom_hal_actual_provider_t {
   iree_tune_loom_diagnostic_capture_t diagnostics;
   // Structured compile report populated while emitting this candidate.
   loom_run_compile_report_capture_t compile_report_capture;
+  // Borrowed view into |compile_report_artifact_path_storage|.
+  iree_string_view_t compile_report_artifact_path;
+  // Owned debug/full bundle compile-report artifact path.
+  char* compile_report_artifact_path_storage;
   // Pass diagnostic counts from the Loom compile pipeline.
   loom_pass_run_result_t pass_result;
   // True when compile completed with product diagnostics rather than an
@@ -3109,6 +3134,8 @@ static void iree_tune_loom_hal_actual_provider_deinitialize(
     loom_run_compile_report_capture_deinitialize(
         &provider->compile_report_capture);
   }
+  iree_allocator_free(provider->context->host_allocator,
+                      provider->compile_report_artifact_path_storage);
   iree_tune_loom_diagnostic_capture_deinitialize(&provider->diagnostics);
   *provider = (iree_tune_loom_hal_actual_provider_t){0};
 }
@@ -3824,6 +3851,8 @@ static void iree_tune_loom_benchmark_result_set_compile_rejection(
   if (provider->compile_report_available) {
     out_result->compile_report_capture = &provider->compile_report_capture;
   }
+  out_result->compile_report_artifact_path =
+      provider->compile_report_artifact_path;
 }
 
 static iree_status_t iree_tune_loom_append_effective_profile_artifacts_dir(
@@ -3904,6 +3933,8 @@ static iree_status_t iree_tune_loom_run_hal_benchmark_sample(
   if (provider->compile_report_available) {
     out_result->compile_report_capture = &provider->compile_report_capture;
   }
+  out_result->compile_report_artifact_path =
+      provider->compile_report_artifact_path;
   if (provider->compile_rejected) {
     iree_tune_loom_benchmark_result_set_compile_rejection(provider, out_result);
     out_result->has_sample_ordinal = true;
@@ -4715,6 +4746,175 @@ static iree_status_t iree_tune_loom_write_compile_report_json(
   return iree_ok_status();
 }
 
+static bool iree_tune_loom_artifact_bundle_wants_compile_reports(
+    const iree_tune_loom_artifact_bundle_t* bundle) {
+  return bundle != NULL && bundle->enabled &&
+         bundle->policy >= IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_DEBUG;
+}
+
+static iree_status_t iree_tune_loom_append_compile_report_artifact_leaf(
+    const iree_tune_loom_run_identity_t* run,
+    const iree_tune_loom_candidate_identity_t* candidate,
+    const iree_tune_loom_hal_actual_provider_t* provider,
+    iree_string_builder_t* leaf) {
+  IREE_RETURN_IF_ERROR(
+      iree_tune_loom_append_sanitized_path_component(run->run_id, leaf));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(leaf, "_"));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_append_sanitized_path_component(
+      candidate->candidate_id, leaf));
+  if (!iree_string_view_is_empty(provider->specialization)) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(leaf, "_"));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_append_sanitized_path_component(
+        provider->specialization, leaf));
+  }
+  if (provider->has_specialization_sample_ordinal) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        leaf, "_sample%" PRIhsz, provider->specialization_sample_ordinal));
+  }
+  return iree_string_builder_append_cstring(leaf, "_compile_report.json");
+}
+
+static iree_status_t iree_tune_loom_append_compile_report_artifact_json(
+    const iree_tune_loom_run_identity_t* run,
+    const iree_tune_loom_candidate_identity_t* candidate,
+    const loom_testbench_benchmark_plan_t* benchmark_plan,
+    const loom_testbench_case_plan_t* case_plan,
+    const iree_tune_loom_hal_actual_provider_t* provider,
+    iree_string_builder_t* output) {
+  iree_string_view_t entry_symbol = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(iree_tune_loom_module_symbol_name_from_ref(
+      provider->test_module, provider->actual_invocation->callee_ref,
+      &entry_symbol));
+
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(output, &stream);
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+      &stream, "{\"type\":\"compile_report\""));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_run_id_field_json(run, &stream));
+  IREE_RETURN_IF_ERROR(
+      iree_tune_loom_write_candidate_identity_json(candidate, &stream));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_specialization_field_json(
+      provider->specialization, &stream));
+  if (provider->has_specialization_sample_ordinal) {
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_shape_point_fields_json(
+        provider->test_module, case_plan,
+        provider->specialization_sample_ordinal, &stream));
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"benchmark\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_string(&stream, benchmark_plan->name));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ",\"case\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_string(&stream, case_plan->name));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"entry\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(&stream, entry_symbol));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"status\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(
+      &stream, provider->compile_rejected ? "failed" : "ok"));
+  if (provider->compile_rejected) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"stage\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+        &stream, provider->compile_failure_stage));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"kind\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+        &stream, provider->compile_failure_kind));
+    if (!iree_string_view_is_empty(provider->compile_failure_message)) {
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(&stream, ",\"message\":"));
+      IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+          &stream, provider->compile_failure_message));
+    }
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"diagnostic_error_count\":%" PRIhsz,
+      provider->diagnostics.error_count));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"diagnostic_warning_count\":%" PRIhsz,
+      provider->diagnostics.warning_count));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"diagnostic_remark_count\":%" PRIhsz,
+      provider->diagnostics.remark_count));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"specialized_argument_count\":%" PRIhsz,
+      provider->specialized_argument_count));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"diagnostics\":"));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_diagnostic_array_json(
+      &provider->diagnostics, &stream));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_static_summary_json(
+      &provider->compile_report_capture, &stream));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_compile_report_json(
+      &provider->compile_report_capture, &stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}\n"));
+  return iree_ok_status();
+}
+
+static iree_status_t iree_tune_loom_write_compile_report_artifact(
+    const iree_tune_loom_run_identity_t* run,
+    const iree_tune_loom_candidate_identity_t* candidate,
+    const loom_testbench_benchmark_plan_t* benchmark_plan,
+    const loom_testbench_case_plan_t* case_plan,
+    iree_tune_loom_hal_actual_provider_t* provider,
+    iree_allocator_t allocator) {
+  if (!provider->compile_report_available ||
+      provider->compile_report_capture.options.mode ==
+          LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE ||
+      !iree_string_view_is_empty(provider->compile_report_artifact_path)) {
+    return iree_ok_status();
+  }
+  iree_tune_loom_artifact_bundle_t* bundle = provider->context->artifact_bundle;
+  if (!iree_tune_loom_artifact_bundle_wants_compile_reports(bundle)) {
+    return iree_ok_status();
+  }
+
+  iree_string_builder_t leaf;
+  iree_string_builder_initialize(allocator, &leaf);
+  char* path_storage = NULL;
+  iree_status_t status = iree_tune_loom_append_compile_report_artifact_leaf(
+      run, candidate, provider, &leaf);
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_join_path(bundle->compile_report_dir,
+                                      iree_string_builder_view(&leaf),
+                                      allocator, &path_storage);
+  }
+
+  iree_string_builder_t artifact;
+  iree_string_builder_initialize(allocator, &artifact);
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_append_compile_report_artifact_json(
+        run, candidate, benchmark_plan, case_plan, provider, &artifact);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_create_parent_directory(
+        iree_make_cstring_view(path_storage), allocator);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_tooling_write_output_file(
+        iree_make_cstring_view(path_storage),
+        iree_string_builder_view(&artifact), allocator);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_artifact_bundle_record_file(
+        bundle, IREE_TUNE_LOOM_BUNDLE_FILE_COMPILE_REPORT,
+        iree_make_cstring_view(path_storage));
+  }
+  if (iree_status_is_ok(status)) {
+    provider->compile_report_artifact_path_storage = path_storage;
+    provider->compile_report_artifact_path =
+        iree_make_cstring_view(path_storage);
+    path_storage = NULL;
+  }
+  iree_string_builder_deinitialize(&artifact);
+  iree_allocator_free(allocator, path_storage);
+  iree_string_builder_deinitialize(&leaf);
+  return status;
+}
+
 static iree_status_t iree_tune_loom_write_data_cache_summary_json(
     const iree_tune_loom_data_cache_summary_t* summary,
     loom_output_stream_t* stream) {
@@ -4776,6 +4976,13 @@ static iree_status_t iree_tune_loom_write_benchmark_result_json(
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_format(stream, ",\"sample_ordinal\":%" PRIhsz,
                                         benchmark_result->sample_ordinal));
+  }
+  if (!iree_string_view_is_empty(
+          benchmark_result->compile_report_artifact_path)) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"compile_report_path\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+        stream, benchmark_result->compile_report_artifact_path));
   }
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"measure\":"));
@@ -4925,6 +5132,12 @@ static iree_status_t iree_tune_loom_append_compile_row(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream, ",\"specialized_argument_count\":%" PRIhsz,
       provider->specialized_argument_count));
+  if (!iree_string_view_is_empty(provider->compile_report_artifact_path)) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"compile_report_path\":"));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+        &stream, provider->compile_report_artifact_path));
+  }
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"diagnostics\":"));
   IREE_RETURN_IF_ERROR(iree_tune_loom_write_diagnostic_array_json(
@@ -6082,6 +6295,10 @@ static iree_status_t iree_tune_loom_run_dispatch_complete_benchmark(
     status = iree_tune_loom_hal_actual_provider_compile(&hal_provider);
   }
   if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_write_compile_report_artifact(
+        run, candidate, benchmark_plan, case_plan, &hal_provider, allocator);
+  }
+  if (iree_status_is_ok(status)) {
     status = iree_tune_loom_jsonl_sink_end(
         jsonl_sink, iree_tune_loom_append_device_row(
                         run, hal_context, device_row_state,
@@ -6136,6 +6353,8 @@ static iree_status_t iree_tune_loom_run_dispatch_complete_benchmark(
     iree_tune_loom_benchmark_result_t benchmark_result = {
         .executed = false,
         .passed = false,
+        .compile_report_artifact_path =
+            hal_provider.compile_report_artifact_path,
         .specialization = specialization,
         .samples_per_iteration = benchmark_correctness_sample_count,
         .failed_sample_count = benchmark_correctness_failed_sample_count,
@@ -6533,6 +6752,11 @@ static iree_status_t iree_tune_loom_prepare_dispatch_comparison_candidate(
     status = iree_tune_loom_hal_actual_provider_compile(&candidate->provider);
   }
   if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_write_compile_report_artifact(
+        run, &selection->identity, selection->benchmark_plan,
+        selection->case_plan, &candidate->provider, allocator);
+  }
+  if (iree_status_is_ok(status)) {
     status = iree_tune_loom_jsonl_sink_end(
         jsonl_sink, iree_tune_loom_append_device_row(
                         run, hal_context, device_row_state,
@@ -6576,6 +6800,8 @@ static iree_status_t iree_tune_loom_prepare_dispatch_comparison_candidate(
     iree_tune_loom_benchmark_result_t benchmark_result = {
         .executed = false,
         .passed = false,
+        .compile_report_artifact_path =
+            candidate->provider.compile_report_artifact_path,
         .specialization = candidate->specialization,
         .has_sample_ordinal = true,
         .sample_ordinal = candidate->begin_sample,
@@ -7117,6 +7343,10 @@ static iree_status_t iree_tune_loom_write_manifest_files_json(
       loom_output_stream_write_cstring(stream, ",\"profiles\":"));
   IREE_RETURN_IF_ERROR(iree_tune_loom_write_manifest_file_array_json(
       bundle, IREE_TUNE_LOOM_BUNDLE_FILE_PROFILE, allocator, stream));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"compile_reports\":"));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_manifest_file_array_json(
+      bundle, IREE_TUNE_LOOM_BUNDLE_FILE_COMPILE_REPORT, allocator, stream));
   return loom_output_stream_write_cstring(stream, "}");
 }
 
@@ -7192,6 +7422,12 @@ static iree_status_t iree_tune_loom_append_artifact_bundle_manifest_json(
         loom_output_stream_write_cstring(&stream, ",\"profiles\":"));
     IREE_RETURN_IF_ERROR(
         loom_json_write_escaped_string(&stream, run->profile_artifacts_dir));
+  }
+  if (iree_tune_loom_artifact_bundle_wants_compile_reports(bundle)) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(&stream, ",\"compile_reports\":"));
+    IREE_RETURN_IF_ERROR(
+        loom_json_write_escaped_string(&stream, bundle->compile_report_dir));
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}"));
   IREE_RETURN_IF_ERROR(iree_tune_loom_write_manifest_files_json(
@@ -7333,7 +7569,10 @@ int iree_tune_loom_main(int argc, char** argv,
       "command line, source identity, output, profile, file-output paths, "
       "path/size/mtime metadata for observed fixture/output/profile files, "
       "selected environment variables, and HAL device identity when a dispatch "
-      "benchmark selected a backend. Large fixture and artifact files are not "
+      "benchmark selected a backend. With --artifact_bundle_policy=debug|full, "
+      "per-candidate compile report sidecars are written under "
+      "compile_reports/ and linked from compile_report_path on compile and "
+      "benchmark rows. Large fixture and artifact files are not "
       "content-hashed by this CLI. "
       "`--shape_specialization=dynamic` compiles once, "
       "`--shape_specialization=per_sample` compiles each selected shape with "
@@ -7416,6 +7655,8 @@ int iree_tune_loom_main(int argc, char** argv,
       "{candidate_id,code:.static_summary.code_byte_count,"
       "spills:.static_summary.allocation_spill_count,"
       "local:.static_summary.local_memory_bytes}' results.jsonl\n"
+      "  jq 'select(.row==\"compile\" and .compile_report_path) | "
+      "{candidate_id,path:.compile_report_path}' results.jsonl\n"
       "  jq 'select(.row==\"profile\") as $r | $r.profile.rows[]? | "
       "select(.type|startswith(\"dispatch_\")) | "
       "{candidate_id:$r.candidate_id,type,export_name,"
