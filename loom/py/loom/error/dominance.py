@@ -164,8 +164,8 @@ ERR_DOMINANCE_011 = ErrorDef(
         ErrorParam("function_name", ParamKind.STRING),
         ErrorParam("op_name", ParamKind.STRING),
         ErrorParam("field_name", ParamKind.STRING),
-        ErrorParam("required_mask", ParamKind.U64),
-        ErrorParam("defined_mask", ParamKind.U64),
+        ErrorParam("required_mask", ParamKind.U32),
+        ErrorParam("defined_mask", ParamKind.U32),
     ),
     fix_hint=(
         "Compose the missing register part with an explicitly tied partial "

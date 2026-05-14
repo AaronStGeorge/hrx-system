@@ -480,16 +480,6 @@ static iree_status_t loom_amdgpu_hal_kernel_library_materialize_address_state(
                                                table_arena, out_result);
 }
 
-static iree_status_t loom_amdgpu_hal_kernel_library_validate_native_frame(
-    void* user_data, const loom_low_emission_frame_t* frame,
-    iree_arena_allocator_t* table_arena) {
-  (void)table_arena;
-  loom_amdgpu_native_preflight_t* preflight =
-      (loom_amdgpu_native_preflight_t*)user_data;
-  return loom_amdgpu_native_preflight_analyze(&frame->schedule,
-                                              &frame->allocation, preflight);
-}
-
 static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
     loom_module_t* module,
     const loom_target_low_descriptor_registry_t* low_registry,
@@ -540,8 +530,6 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
       .materialize_address_state =
           loom_amdgpu_hal_kernel_library_materialize_address_state,
       .materialize_address_state_user_data = NULL,
-      .validate_frame = loom_amdgpu_hal_kernel_library_validate_native_frame,
-      .validate_frame_user_data = &preflight,
   };
   IREE_RETURN_IF_ERROR(loom_low_emission_frame_build_spill_free(
       module, plan->low_function_op, &frame_options, &spill_free_options,
@@ -549,6 +537,8 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
   if (diagnostic_emitter->error_count != 0) {
     return iree_ok_status();
   }
+  IREE_RETURN_IF_ERROR(loom_amdgpu_native_preflight_analyze(
+      &frame.schedule, &frame.allocation, &preflight));
   if (report != NULL) {
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_record_low_emission_frame(report, &frame));
@@ -648,8 +638,10 @@ static iree_status_t loom_amdgpu_hal_kernel_library_entries(
     return iree_ok_status();
   }
   loom_low_verify_result_t low_verify_result = {0};
+  loom_low_verify_scratch_t low_verify_scratch =
+      loom_low_verify_scratch_for_module(module);
   IREE_RETURN_IF_ERROR(loom_target_entry_verify_low_module(
-      module, low_registry, diagnostic_emitter, max_errors,
+      module, low_registry, diagnostic_emitter, max_errors, &low_verify_scratch,
       &low_verify_result));
   if (low_verify_result.error_count != 0) {
     return iree_ok_status();

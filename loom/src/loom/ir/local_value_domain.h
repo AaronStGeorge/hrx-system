@@ -77,11 +77,12 @@ static inline loom_value_ordinal_t loom_local_value_domain_try_ordinal(
     const loom_local_value_domain_t* domain, loom_value_id_t value_id) {
   IREE_ASSERT(
       iree_any_bit_set(domain->flags, LOOM_LOCAL_VALUE_DOMAIN_FLAG_ACQUIRED));
-  if (value_id >= domain->module->value_ordinal_scratch.capacity) {
+  const loom_value_u32_scratch_t* scratch = &domain->module->scratch.values;
+  if (value_id >= domain->module->values.count) {
     return LOOM_VALUE_ORDINAL_INVALID;
   }
   const loom_value_ordinal_t value_ordinal =
-      domain->module->value_ordinal_scratch.ordinals_by_value_id[value_id];
+      scratch->values_by_value_id[value_id];
   if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID) {
     return LOOM_VALUE_ORDINAL_INVALID;
   }

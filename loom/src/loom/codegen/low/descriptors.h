@@ -117,7 +117,7 @@ typedef uint16_t loom_low_reg_class_alt_flags_t;
 typedef uint16_t loom_low_reg_class_flags_t;
 
 // Register-part definedness mask within one allocation unit.
-typedef uint64_t loom_low_register_part_mask_t;
+typedef uint32_t loom_low_register_part_mask_t;
 
 // Register class is virtual-only and has no physical register inventory.
 #define LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY ((uint16_t)1u << 0)

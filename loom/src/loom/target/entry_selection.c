@@ -236,14 +236,16 @@ iree_status_t loom_target_entry_verify_low_module(
     const loom_module_t* module,
     const loom_target_low_descriptor_registry_t* low_registry,
     loom_target_entry_diagnostic_emitter_t* diagnostic_emitter,
-    uint32_t max_errors, loom_low_verify_result_t* out_result) {
+    uint32_t max_errors, loom_low_verify_scratch_t* scratch,
+    loom_low_verify_result_t* out_result) {
   const loom_low_verify_options_t low_verify_options = {
       .descriptor_registry = &low_registry->registry,
       .emitter = loom_target_entry_emitter(diagnostic_emitter),
       .max_errors = max_errors,
   };
   *out_result = (loom_low_verify_result_t){0};
-  return loom_low_verify_module(module, &low_verify_options, out_result);
+  return loom_low_verify_module(module, &low_verify_options, scratch,
+                                out_result);
 }
 
 static void loom_target_entry_initialize_fact_table(

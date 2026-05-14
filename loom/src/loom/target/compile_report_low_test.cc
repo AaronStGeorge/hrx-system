@@ -63,10 +63,14 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
               .capacity = IREE_ARRAYSIZE(module_values),
               .entries = module_values,
           },
-      .value_ordinal_scratch =
+      .scratch =
           {
-              .ordinals_by_value_id = value_ordinals,
-              .capacity = IREE_ARRAYSIZE(value_ordinals),
+              .values =
+                  {
+                      .values_by_value_id = value_ordinals,
+                      .capacity = IREE_ARRAYSIZE(value_ordinals),
+                      .state = LOOM_VALUE_U32_SCRATCH_STATE_UNACQUIRED_ORDINALS,
+                  },
           },
   };
   module_values[4].type = loom_low_register_type(/*descriptor_set_stable_id=*/1,

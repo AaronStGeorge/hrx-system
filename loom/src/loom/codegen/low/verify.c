@@ -21,11 +21,12 @@ typedef struct loom_low_verify_state_t {
   const loom_module_t* module;
   const loom_low_descriptor_registry_t* registry;
   iree_diagnostic_emitter_t emitter;
+  loom_low_verify_scratch_t* scratch;
   loom_low_verify_result_t* result;
   uint32_t max_errors;
   iree_arena_allocator_t arena;
-  loom_low_register_part_mask_t* value_defined_masks;
-  iree_host_size_t value_defined_mask_count;
+  iree_arena_allocator_t walk_arena;
+  loom_symbol_fact_table_t symbol_facts;
 } loom_low_verify_state_t;
 
 typedef struct loom_low_function_verify_state_t {
@@ -946,8 +947,8 @@ static iree_status_t loom_low_verify_emit_undefined_register_part(
       loom_param_string(function_state->function_name),
       loom_param_string(op_name),
       loom_param_with_field_ref(loom_param_string(field_name), field_ref),
-      loom_param_u64(required_mask),
-      loom_param_u64(defined_mask),
+      loom_param_u32(required_mask),
+      loom_param_u32(defined_mask),
   };
   return loom_low_verify_emit(function_state->state, op, LOOM_ERR_DOMINANCE_011,
                               params, IREE_ARRAYSIZE(params), NULL, 0);
@@ -956,17 +957,23 @@ static iree_status_t loom_low_verify_emit_undefined_register_part(
 static loom_low_register_part_mask_t loom_low_verify_value_defined_mask(
     const loom_low_function_verify_state_t* function_state,
     loom_value_id_t value_id) {
+  const loom_value_u32_scratch_t* scratch =
+      function_state->state->scratch->value_scratch;
+  IREE_ASSERT_EQ(scratch->state, LOOM_VALUE_U32_SCRATCH_STATE_ACQUIRED_ZEROED);
   IREE_ASSERT(value_id != LOOM_VALUE_ID_INVALID &&
-              value_id < function_state->state->value_defined_mask_count);
-  return function_state->state->value_defined_masks[value_id];
+              value_id < function_state->state->module->values.count);
+  return scratch->values_by_value_id[value_id];
 }
 
 static void loom_low_verify_set_value_defined_mask(
     loom_low_function_verify_state_t* function_state, loom_value_id_t value_id,
     loom_low_register_part_mask_t mask) {
+  loom_value_u32_scratch_t* scratch =
+      function_state->state->scratch->value_scratch;
+  IREE_ASSERT_EQ(scratch->state, LOOM_VALUE_U32_SCRATCH_STATE_ACQUIRED_ZEROED);
   IREE_ASSERT(value_id != LOOM_VALUE_ID_INVALID &&
-              value_id < function_state->state->value_defined_mask_count);
-  function_state->state->value_defined_masks[value_id] = mask;
+              value_id < function_state->state->module->values.count);
+  scratch->values_by_value_id[value_id] = mask;
 }
 
 static iree_status_t loom_low_verify_register_full_mask_for_type(
@@ -1599,8 +1606,9 @@ static iree_status_t loom_low_verify_function(loom_low_verify_state_t* state,
       .user_data = state,
   };
   loom_low_resolved_target_t target = {0};
-  IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
-      state->module, low_func_op, state->registry, counting_emitter, &target));
+  IREE_RETURN_IF_ERROR(loom_low_resolve_function_target_with_facts(
+      state->module, &state->symbol_facts, low_func_op, state->registry,
+      counting_emitter, &target));
   loom_region_t* body = loom_low_verify_function_body(low_func_op);
   if (target.descriptor_set == NULL || loom_low_verify_should_stop(state)) {
     return iree_ok_status();
@@ -1622,46 +1630,54 @@ static iree_status_t loom_low_verify_function(loom_low_verify_state_t* state,
   if (body == NULL) {
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(
-      loom_low_verify_initialize_block_arg_masks(&function_state, body));
-  loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
-  return loom_walk_region(
-      state->module, body, LOOM_WALK_PRE_ORDER,
-      (loom_walk_callback_t){loom_low_verify_walk_op, &function_state},
-      &state->arena, &walk_result);
+
+  iree_status_t status =
+      loom_low_verify_initialize_block_arg_masks(&function_state, body);
+  if (iree_status_is_ok(status)) {
+    loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
+    status = loom_walk_region(
+        state->module, body, LOOM_WALK_PRE_ORDER,
+        (loom_walk_callback_t){loom_low_verify_walk_op, &function_state},
+        &state->walk_arena, &walk_result);
+  }
+  return status;
 }
 
 iree_status_t loom_low_verify_module(const loom_module_t* module,
                                      const loom_low_verify_options_t* options,
+                                     loom_low_verify_scratch_t* scratch,
                                      loom_low_verify_result_t* out_result) {
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(scratch);
+  IREE_ASSERT_ARGUMENT(out_result);
   *out_result = (loom_low_verify_result_t){0};
+  if (scratch->value_scratch == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low verifier requires value scratch");
+  }
+  if (scratch->value_scratch->capacity < module->values.count) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "low verifier scratch capacity %" PRIhsz
+                            " is smaller than module value count %" PRIhsz,
+                            scratch->value_scratch->capacity,
+                            module->values.count);
+  }
   loom_low_verify_state_t state = {
       .module = module,
       .registry = options->descriptor_registry,
       .emitter = options->emitter,
+      .scratch = scratch,
       .result = out_result,
       .max_errors = options->max_errors,
-      .value_defined_mask_count = module->values.count,
   };
   iree_arena_initialize(module->arena.block_pool, &state.arena);
+  iree_arena_initialize(module->arena.block_pool, &state.walk_arena);
+  loom_symbol_fact_table_initialize(&state.symbol_facts, &state.arena);
+  loom_value_u32_scratch_acquire_zeroed(scratch->value_scratch,
+                                        module->values.count);
 
   iree_status_t status = iree_ok_status();
-  if (state.value_defined_mask_count > 0) {
-    iree_host_size_t mask_byte_count = 0;
-    if (!iree_host_size_checked_mul(state.value_defined_mask_count,
-                                    sizeof(state.value_defined_masks[0]),
-                                    &mask_byte_count)) {
-      status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                "low verifier value mask table overflow");
-    }
-    if (iree_status_is_ok(status)) {
-      status = iree_arena_allocate(&state.arena, mask_byte_count,
-                                   (void**)&state.value_defined_masks);
-    }
-    if (iree_status_is_ok(status)) {
-      memset(state.value_defined_masks, 0, mask_byte_count);
-    }
-  }
   if (iree_status_is_ok(status) && module->body &&
       module->body->block_count > 0) {
     loom_block_t* entry_block = loom_region_entry_block(module->body);
@@ -1672,12 +1688,15 @@ iree_status_t loom_low_verify_module(const loom_module_t* module,
         continue;
       }
       status = loom_low_verify_function(&state, op);
+      iree_arena_reset(&state.walk_arena);
       if (!iree_status_is_ok(status) || loom_low_verify_should_stop(&state)) {
         break;
       }
     }
   }
 
+  loom_value_u32_scratch_release_zeroed(scratch->value_scratch);
+  iree_arena_deinitialize(&state.walk_arena);
   iree_arena_deinitialize(&state.arena);
   return status;
 }

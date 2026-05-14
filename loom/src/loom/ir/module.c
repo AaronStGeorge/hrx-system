@@ -188,25 +188,35 @@ static iree_status_t loom_value_table_ensure_capacity(
   return iree_ok_status();
 }
 
-static void loom_value_ordinal_scratch_initialize_range(
-    loom_value_ordinal_t* ordinals_by_value_id, iree_host_size_t count) {
+static void loom_value_u32_scratch_initialize_ordinal_range(
+    uint32_t* values_by_value_id, iree_host_size_t count) {
   for (iree_host_size_t i = 0; i < count; ++i) {
-    ordinals_by_value_id[i] = LOOM_VALUE_ORDINAL_INVALID;
+    values_by_value_id[i] = LOOM_VALUE_ORDINAL_INVALID;
   }
 }
 
-static iree_status_t loom_value_ordinal_scratch_ensure_capacity(
-    iree_arena_allocator_t* arena, loom_value_ordinal_scratch_t* scratch,
+static iree_status_t loom_value_u32_scratch_ensure_capacity(
+    iree_arena_allocator_t* arena, loom_value_u32_scratch_t* scratch,
     iree_host_size_t minimum_capacity) {
   if (scratch->capacity >= minimum_capacity) return iree_ok_status();
   iree_host_size_t old_capacity = scratch->capacity;
   IREE_RETURN_IF_ERROR(iree_arena_grow_array(
       arena, old_capacity, minimum_capacity,
-      sizeof(*scratch->ordinals_by_value_id), &scratch->capacity,
-      (void**)&scratch->ordinals_by_value_id));
-  loom_value_ordinal_scratch_initialize_range(
-      scratch->ordinals_by_value_id + old_capacity,
-      scratch->capacity - old_capacity);
+      sizeof(*scratch->values_by_value_id), &scratch->capacity,
+      (void**)&scratch->values_by_value_id));
+  if (scratch->state == LOOM_VALUE_U32_SCRATCH_STATE_ACQUIRED_ZEROED ||
+      scratch->state == LOOM_VALUE_U32_SCRATCH_STATE_UNACQUIRED_ZEROED) {
+    memset(scratch->values_by_value_id + old_capacity, 0,
+           (scratch->capacity - old_capacity) *
+               sizeof(scratch->values_by_value_id[0]));
+  } else {
+    loom_value_u32_scratch_initialize_ordinal_range(
+        scratch->values_by_value_id + old_capacity,
+        scratch->capacity - old_capacity);
+  }
+  if (scratch->state == LOOM_VALUE_U32_SCRATCH_STATE_UNACQUIRED_UNKNOWN) {
+    scratch->state = LOOM_VALUE_U32_SCRATCH_STATE_UNACQUIRED_ORDINALS;
+  }
   return iree_ok_status();
 }
 
@@ -509,9 +519,9 @@ static iree_status_t loom_module_initialize_tables(
   module->values.capacity = value_capacity;
   memset(module->values.entries, 0, value_capacity * sizeof(loom_value_t));
 
-  // Value-ordinal scratch: dense compiler scratch indexed by value ID.
-  IREE_RETURN_IF_ERROR(loom_value_ordinal_scratch_ensure_capacity(
-      arena, &module->value_ordinal_scratch, value_capacity));
+  // Value scratch: dense compiler scratch indexed by value ID.
+  IREE_RETURN_IF_ERROR(loom_value_u32_scratch_ensure_capacity(
+      arena, &module->scratch.values, value_capacity));
 
   // Type-use heads: dense side metadata indexed by value ID.
   IREE_RETURN_IF_ERROR(loom_type_use_table_ensure_value_capacity(
@@ -598,13 +608,40 @@ void loom_module_free(loom_module_t* module) {
 }
 
 void loom_module_value_ordinal_scratch_acquire(loom_module_t* module) {
-  IREE_ASSERT(!module->value_ordinal_scratch.is_active);
-  module->value_ordinal_scratch.is_active = true;
+  loom_value_u32_scratch_t* scratch = &module->scratch.values;
+  IREE_ASSERT(scratch->state != LOOM_VALUE_U32_SCRATCH_STATE_ACQUIRED_ORDINALS);
+  IREE_ASSERT(scratch->state != LOOM_VALUE_U32_SCRATCH_STATE_ACQUIRED_ZEROED);
+  if (scratch->state != LOOM_VALUE_U32_SCRATCH_STATE_UNACQUIRED_ORDINALS) {
+    loom_value_u32_scratch_initialize_ordinal_range(scratch->values_by_value_id,
+                                                    module->values.count);
+  }
+  scratch->state = LOOM_VALUE_U32_SCRATCH_STATE_ACQUIRED_ORDINALS;
 }
 
 void loom_module_value_ordinal_scratch_release(loom_module_t* module) {
-  IREE_ASSERT(module->value_ordinal_scratch.is_active);
-  module->value_ordinal_scratch.is_active = false;
+  loom_value_u32_scratch_t* scratch = &module->scratch.values;
+  IREE_ASSERT_EQ(scratch->state,
+                 LOOM_VALUE_U32_SCRATCH_STATE_ACQUIRED_ORDINALS);
+  scratch->state = LOOM_VALUE_U32_SCRATCH_STATE_UNACQUIRED_ORDINALS;
+}
+
+void loom_value_u32_scratch_acquire_zeroed(loom_value_u32_scratch_t* scratch,
+                                           iree_host_size_t value_count) {
+  IREE_ASSERT(scratch != NULL);
+  IREE_ASSERT(value_count <= scratch->capacity);
+  IREE_ASSERT(scratch->state != LOOM_VALUE_U32_SCRATCH_STATE_ACQUIRED_ORDINALS);
+  IREE_ASSERT(scratch->state != LOOM_VALUE_U32_SCRATCH_STATE_ACQUIRED_ZEROED);
+  if (value_count != 0) {
+    memset(scratch->values_by_value_id, 0,
+           value_count * sizeof(scratch->values_by_value_id[0]));
+  }
+  scratch->state = LOOM_VALUE_U32_SCRATCH_STATE_ACQUIRED_ZEROED;
+}
+
+void loom_value_u32_scratch_release_zeroed(loom_value_u32_scratch_t* scratch) {
+  IREE_ASSERT(scratch != NULL);
+  IREE_ASSERT_EQ(scratch->state, LOOM_VALUE_U32_SCRATCH_STATE_ACQUIRED_ZEROED);
+  scratch->state = LOOM_VALUE_U32_SCRATCH_STATE_UNACQUIRED_ZEROED;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1442,8 +1479,8 @@ iree_status_t loom_module_define_value(loom_module_t* module, loom_type_t type,
 
   IREE_RETURN_IF_ERROR(
       loom_value_table_ensure_capacity(&module->arena, &module->values));
-  IREE_RETURN_IF_ERROR(loom_value_ordinal_scratch_ensure_capacity(
-      &module->arena, &module->value_ordinal_scratch, module->values.capacity));
+  IREE_RETURN_IF_ERROR(loom_value_u32_scratch_ensure_capacity(
+      &module->arena, &module->scratch.values, module->values.capacity));
   IREE_RETURN_IF_ERROR(loom_type_use_table_ensure_value_capacity(
       &module->arena, &module->type_uses, module->values.capacity));
   loom_type_t canonical_type = {0};

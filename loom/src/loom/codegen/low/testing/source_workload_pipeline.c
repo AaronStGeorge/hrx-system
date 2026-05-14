@@ -55,15 +55,17 @@ static void loom_low_source_workload_count_module_source_ops(
 }
 
 static iree_status_t loom_low_source_workload_verify_low_module(
-    const loom_module_t* module,
+    loom_module_t* module,
     const loom_low_source_workload_pipeline_options_t* options) {
   const loom_low_verify_options_t verify_options = {
       .descriptor_registry = options->descriptor_registry,
       .max_errors = 20,
   };
   loom_low_verify_result_t result = {0};
+  loom_low_verify_scratch_t scratch =
+      loom_low_verify_scratch_for_module(module);
   IREE_RETURN_IF_ERROR(
-      loom_low_verify_module(module, &verify_options, &result));
+      loom_low_verify_module(module, &verify_options, &scratch, &result));
   if (result.error_count != 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "generated low function failed verification");

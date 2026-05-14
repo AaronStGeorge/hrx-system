@@ -169,12 +169,22 @@ void loom_module_value_ordinal_scratch_acquire(loom_module_t* module);
 // frame has cleared all value IDs it registered.
 void loom_module_value_ordinal_scratch_release(loom_module_t* module);
 
+// Acquires |scratch| as a value-id indexed zeroed u32 table. Entries in the
+// caller-specified active value range are reset to zero. Callers must release
+// before any other scratch mode can acquire the same storage.
+void loom_value_u32_scratch_acquire_zeroed(loom_value_u32_scratch_t* scratch,
+                                           iree_host_size_t value_count);
+
+// Releases |scratch| from zeroed u32 payload use.
+void loom_value_u32_scratch_release_zeroed(loom_value_u32_scratch_t* scratch);
+
 // Returns true while a compiler frame owns the module value-ordinal scratch
 // map.
 static inline bool loom_module_value_ordinal_scratch_is_active(
     const loom_module_t* module) {
   IREE_ASSERT(module != NULL);
-  return module->value_ordinal_scratch.is_active;
+  return module->scratch.values.state ==
+         LOOM_VALUE_U32_SCRATCH_STATE_ACQUIRED_ORDINALS;
 }
 
 // Registers |value_id| with |ordinal| in the active value-ordinal scratch map.
@@ -182,12 +192,14 @@ static inline void loom_module_value_ordinal_scratch_set(
     loom_module_t* module, loom_value_id_t value_id,
     loom_value_ordinal_t ordinal) {
   IREE_ASSERT(module != NULL);
-  IREE_ASSERT(module->value_ordinal_scratch.is_active);
-  IREE_ASSERT(value_id < module->value_ordinal_scratch.capacity);
+  loom_value_u32_scratch_t* scratch = &module->scratch.values;
+  IREE_ASSERT_EQ(scratch->state,
+                 LOOM_VALUE_U32_SCRATCH_STATE_ACQUIRED_ORDINALS);
+  IREE_ASSERT(value_id < module->values.count);
   IREE_ASSERT(ordinal != LOOM_VALUE_ORDINAL_INVALID);
-  IREE_ASSERT_EQ(module->value_ordinal_scratch.ordinals_by_value_id[value_id],
+  IREE_ASSERT_EQ(scratch->values_by_value_id[value_id],
                  LOOM_VALUE_ORDINAL_INVALID);
-  module->value_ordinal_scratch.ordinals_by_value_id[value_id] = ordinal;
+  scratch->values_by_value_id[value_id] = ordinal;
 }
 
 // Clears a previously-registered |value_id| from the active value-ordinal
@@ -195,10 +207,11 @@ static inline void loom_module_value_ordinal_scratch_set(
 static inline void loom_module_value_ordinal_scratch_clear(
     loom_module_t* module, loom_value_id_t value_id) {
   IREE_ASSERT(module != NULL);
-  IREE_ASSERT(module->value_ordinal_scratch.is_active);
-  IREE_ASSERT(value_id < module->value_ordinal_scratch.capacity);
-  module->value_ordinal_scratch.ordinals_by_value_id[value_id] =
-      LOOM_VALUE_ORDINAL_INVALID;
+  loom_value_u32_scratch_t* scratch = &module->scratch.values;
+  IREE_ASSERT_EQ(scratch->state,
+                 LOOM_VALUE_U32_SCRATCH_STATE_ACQUIRED_ORDINALS);
+  IREE_ASSERT(value_id < module->values.count);
+  scratch->values_by_value_id[value_id] = LOOM_VALUE_ORDINAL_INVALID;
 }
 
 // Returns the active local ordinal for |value_id|, or INVALID when the active
@@ -206,11 +219,13 @@ static inline void loom_module_value_ordinal_scratch_clear(
 static inline loom_value_ordinal_t loom_module_value_ordinal_scratch_lookup(
     const loom_module_t* module, loom_value_id_t value_id) {
   IREE_ASSERT(module != NULL);
-  IREE_ASSERT(module->value_ordinal_scratch.is_active);
-  if (value_id >= module->value_ordinal_scratch.capacity) {
+  const loom_value_u32_scratch_t* scratch = &module->scratch.values;
+  IREE_ASSERT_EQ(scratch->state,
+                 LOOM_VALUE_U32_SCRATCH_STATE_ACQUIRED_ORDINALS);
+  if (value_id >= module->values.count) {
     return LOOM_VALUE_ORDINAL_INVALID;
   }
-  return module->value_ordinal_scratch.ordinals_by_value_id[value_id];
+  return scratch->values_by_value_id[value_id];
 }
 
 // Attaches leading source comments to |op|. Comment payloads are the exact

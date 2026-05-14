@@ -1788,22 +1788,42 @@ typedef struct loom_value_table_t {
   loom_value_t* entries;
 } loom_value_table_t;
 
-// Compiler scratch mapping module value IDs to a currently-active local value
-// ordinal.
+// Active state for module value-id indexed u32 scratch storage.
+typedef enum loom_value_u32_scratch_state_e {
+  // Scratch contents are not initialized for a specific typed user.
+  LOOM_VALUE_U32_SCRATCH_STATE_UNACQUIRED_UNKNOWN = 0,
+  // Scratch contents are initialized as value ordinals and not acquired.
+  LOOM_VALUE_U32_SCRATCH_STATE_UNACQUIRED_ORDINALS = 1,
+  // Scratch contents were last used as zero-initialized payloads and are not
+  // acquired.
+  LOOM_VALUE_U32_SCRATCH_STATE_UNACQUIRED_ZEROED = 2,
+  // Scratch is acquired as value ordinals by one compiler frame.
+  LOOM_VALUE_U32_SCRATCH_STATE_ACQUIRED_ORDINALS = 3,
+  // Scratch is acquired as zero-initialized u32 payloads by one frame.
+  LOOM_VALUE_U32_SCRATCH_STATE_ACQUIRED_ZEROED = 4,
+} loom_value_u32_scratch_state_t;
+
+// Compiler scratch mapping module value IDs to one active u32 payload.
 //
 // The entries mirror the value table capacity and are reused by phase frames
-// that need compact function-local arrays. The table does not describe
-// semantic IR state: value IDs remain the durable identity, while ordinals are
-// transient density assigned by the active frame. Frames must clear only the
-// value IDs they registered before releasing ownership.
-typedef struct loom_value_ordinal_scratch_t {
-  // Dense value_id -> local ordinal entries, or INVALID when unregistered.
-  loom_value_ordinal_t* ordinals_by_value_id;
-  // Number of entries allocated in ordinals_by_value_id.
+// that need value-id keyed scratch. The table does not describe semantic IR
+// state: value IDs remain the durable identity, while payloads are transient
+// facts assigned by the active frame. Only one typed frame may acquire the
+// table at a time.
+typedef struct loom_value_u32_scratch_t {
+  // Dense value_id -> typed u32 payload entries.
+  uint32_t* values_by_value_id;
+  // Number of entries allocated in values_by_value_id.
   iree_host_size_t capacity;
-  // True while one compiler frame owns the scratch mapping.
-  bool is_active;
-} loom_value_ordinal_scratch_t;
+  // Active ownership and payload interpretation state.
+  loom_value_u32_scratch_state_t state;
+} loom_value_u32_scratch_t;
+
+// Reusable non-semantic compiler scratch owned by a module.
+typedef struct loom_module_scratch_t {
+  // Exclusive value-id indexed u32 scratch storage.
+  loom_value_u32_scratch_t values;
+} loom_module_scratch_t;
 
 // Symbol table. Flat (no nesting), one per module.
 typedef struct loom_symbol_table_t {
@@ -1975,7 +1995,7 @@ typedef struct loom_module_t {
   loom_value_table_t values;
 
   // Reusable compiler scratch indexed by value ID.
-  loom_value_ordinal_scratch_t value_ordinal_scratch;
+  loom_module_scratch_t scratch;
 
   // SSA references carried by value types.
   loom_type_use_table_t type_uses;

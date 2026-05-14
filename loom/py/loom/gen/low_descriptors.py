@@ -274,6 +274,10 @@ def _hex_u64_literal(value: int) -> str:
     return f"UINT64_C(0x{value:x})"
 
 
+def _hex_u32_literal(value: int) -> str:
+    return f"UINT32_C(0x{value:x})"
+
+
 def _u16_literal(value: int) -> str:
     return f"UINT16_C({value})"
 
@@ -512,8 +516,8 @@ def _validate_descriptor_operands(descriptor: Descriptor) -> int:
 def _validate_register_part(part: RegisterPart) -> None:
     if part.mask == 0:
         raise ValueError(f"register part '{part.name}' has an empty mask")
-    if part.mask < 0 or part.mask > (2**64) - 1:
-        raise ValueError(f"register part '{part.name}' mask does not fit u64")
+    if part.mask < 0 or part.mask > (2**32) - 1:
+        raise ValueError(f"register part '{part.name}' mask does not fit u32")
 
 
 def _descriptor_has_tied_constraint(
@@ -914,8 +918,8 @@ def _compile_descriptor_set(
     for reg_class in spec.reg_classes:
         if reg_class.full_register_part_mask == 0:
             raise ValueError(f"register class '{reg_class.name}' has an empty full register-part mask")
-        if reg_class.full_register_part_mask < 0 or reg_class.full_register_part_mask > (2**64) - 1:
-            raise ValueError(f"register class '{reg_class.name}' full register-part mask does not fit u64")
+        if reg_class.full_register_part_mask < 0 or reg_class.full_register_part_mask > (2**32) - 1:
+            raise ValueError(f"register class '{reg_class.name}' full register-part mask does not fit u32")
 
     # Register classes are target vocabulary, not just descriptor closure:
     # low function signatures and allocation diagnostics may reference classes
@@ -1793,7 +1797,7 @@ def _emit_source_for_views(
                 f".allocatable_count = {reg_class.allocatable_count},",
                 f".alias_set_id = {reg_class.alias_set_id},",
                 ".spill_class_id = " + ("LOOM_LOW_REG_CLASS_NONE" if reg_class.spill_class is None else str(compiled.reg_class_ids[reg_class.spill_class])) + ",",
-                f".full_register_part_mask = {_hex_u64_literal(reg_class.full_register_part_mask)},",
+                f".full_register_part_mask = {_hex_u32_literal(reg_class.full_register_part_mask)},",
                 f".spill_slot_space = {reg_class.spill_slot_space.c_name},",
             ]
             for reg_class in compiled.reg_classes
@@ -1809,7 +1813,7 @@ def _emit_source_for_views(
                 f".name_string_offset = {pool.ref(f'register_part_{part.name}')},",
                 f".reg_class_id = {compiled.reg_class_ids[part.reg_class]},",
                 ".reserved = 0,",
-                f".mask = {_hex_u64_literal(part.mask)},",
+                f".mask = {_hex_u32_literal(part.mask)},",
             ]
             for part in compiled.register_parts
         ],

@@ -16,6 +16,7 @@
 #define LOOM_CODEGEN_LOW_TARGET_BINDING_H_
 
 #include "iree/base/api.h"
+#include "loom/analysis/symbol_facts.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
@@ -102,6 +103,15 @@ typedef struct loom_low_resolved_descriptor_packet_t {
 // declaration.
 iree_status_t loom_low_resolve_function_target(
     const loom_module_t* module, const loom_op_t* low_func_op,
+    const loom_low_descriptor_registry_t* registry,
+    iree_diagnostic_emitter_t emitter, loom_low_resolved_target_t* out_target);
+
+// Resolves the target record payloads and descriptor set for |low_func_op|
+// using caller-owned symbol facts. This is the batched form for module-scope
+// analyses that resolve many low functions against one fact table.
+iree_status_t loom_low_resolve_function_target_with_facts(
+    const loom_module_t* module, loom_symbol_fact_table_t* symbol_facts,
+    const loom_op_t* low_func_op,
     const loom_low_descriptor_registry_t* registry,
     iree_diagnostic_emitter_t emitter, loom_low_resolved_target_t* out_target);
 

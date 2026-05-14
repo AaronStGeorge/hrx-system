@@ -1826,8 +1826,8 @@ static iree_status_t loom_low_verify_register_part(
   if ((register_part->mask & ~reg_class->full_register_part_mask) != 0) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "low register part %" PRIu32 " mask 0x%016" PRIx64
-        " exceeds register class %" PRIu16 " full mask 0x%016" PRIx64,
+        "low register part %" PRIu32 " mask 0x%08" PRIx32
+        " exceeds register class %" PRIu16 " full mask 0x%08" PRIx32,
         register_part_index, register_part->mask, register_part->reg_class_id,
         reg_class->full_register_part_mask);
   }

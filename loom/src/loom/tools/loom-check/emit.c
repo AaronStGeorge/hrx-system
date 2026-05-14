@@ -1132,8 +1132,11 @@ static iree_status_t loom_check_emit_write_source_low_text(
   loom_target_entry_diagnostic_emitter_initialize(
       module, &entry_options, LOOM_EMITTER_VERIFIER, &verifier_emitter);
   loom_low_verify_result_t low_verify_result = {0};
+  loom_low_verify_scratch_t low_verify_scratch =
+      loom_low_verify_scratch_for_module(module);
   IREE_RETURN_IF_ERROR(loom_target_entry_verify_low_module(
-      module, low_registry, &verifier_emitter, 20, &low_verify_result));
+      module, low_registry, &verifier_emitter, 20, &low_verify_scratch,
+      &low_verify_result));
   if (low_verify_result.error_count != 0) {
     return iree_ok_status();
   }
@@ -1152,7 +1155,7 @@ static iree_status_t loom_check_emit_write_source_low_text(
 }
 
 static iree_status_t loom_check_emit_verify_provider_module(
-    const loom_module_t* module,
+    loom_module_t* module,
     const loom_target_low_descriptor_registry_t* low_registry,
     loom_source_resolver_t source_resolver,
     loom_check_diagnostic_collector_t* diagnostic_collector) {
@@ -1173,8 +1176,11 @@ static iree_status_t loom_check_emit_verify_provider_module(
   loom_target_entry_diagnostic_emitter_initialize(
       module, &entry_options, LOOM_EMITTER_VERIFIER, &verifier_emitter);
   loom_low_verify_result_t low_verify_result = {0};
+  loom_low_verify_scratch_t low_verify_scratch =
+      loom_low_verify_scratch_for_module(module);
   IREE_RETURN_IF_ERROR(loom_target_entry_verify_low_module(
-      module, low_registry, &verifier_emitter, 20, &low_verify_result));
+      module, low_registry, &verifier_emitter, 20, &low_verify_scratch,
+      &low_verify_result));
   return iree_ok_status();
 }
 
@@ -1510,8 +1516,10 @@ iree_status_t loom_check_execute_emit(
           .max_errors = 20,
       };
       loom_low_verify_result_t low_verify_result = {0};
+      loom_low_verify_scratch_t low_verify_scratch =
+          loom_low_verify_scratch_for_module(module);
       status = loom_low_verify_module(module, &low_verify_options,
-                                      &low_verify_result);
+                                      &low_verify_scratch, &low_verify_result);
       low_diagnostic_count = low_diagnostic_capture.emission_count;
       if (iree_status_is_ok(status) && (low_verify_result.error_count > 0 ||
                                         diagnostic_collector.count > 0)) {
