@@ -416,6 +416,8 @@ loom_cc_library(
     hdrs = ["frame.h"],
     deps = [
         ":allocation",
+        ":allocation_materialization",
+        ":diagnostics",
         ":function",
         ":memory_access",
         ":packet",

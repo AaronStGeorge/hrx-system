@@ -6,6 +6,7 @@
 
 #include "loom/codegen/low/frame.h"
 
+#include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packet.h"
 #include "loom/codegen/low/schedule/run.h"
@@ -150,4 +151,138 @@ iree_status_t loom_low_emission_frame_build(
                                                        &out_frame->allocation));
   out_frame->target = out_frame->schedule.target;
   return iree_ok_status();
+}
+
+static iree_status_t loom_low_emission_frame_lower_spill_traffic(
+    const loom_low_emission_frame_spill_free_options_t* options,
+    loom_module_t* module, loom_op_t* low_func_op,
+    iree_arena_allocator_t* arena) {
+  if (options->lower_spill_traffic == NULL) {
+    return iree_ok_status();
+  }
+  return options->lower_spill_traffic(options->lower_spill_traffic_user_data,
+                                      module, low_func_op, arena);
+}
+
+static iree_status_t loom_low_emission_frame_validate_final(
+    const loom_low_emission_frame_spill_free_options_t* options,
+    const loom_low_emission_frame_t* frame, iree_arena_allocator_t* arena) {
+  if (options->validate_frame == NULL) {
+    return iree_ok_status();
+  }
+  return options->validate_frame(options->validate_frame_user_data, frame,
+                                 arena);
+}
+
+static iree_status_t loom_low_emission_frame_make_spill_assignment_status(
+    const loom_low_emission_frame_t* frame) {
+  const iree_string_view_t target_key =
+      loom_low_diagnostic_target_key(&frame->target);
+  const iree_string_view_t function_name =
+      loom_low_diagnostic_function_name(frame->module, frame->function_op);
+  return iree_make_status(
+      IREE_STATUS_FAILED_PRECONDITION,
+      "low emission frame for target '%.*s' function '@%.*s' still has %zu "
+      "spill-slot assignment(s) after spill traffic lowering",
+      (int)target_key.size, target_key.data, (int)function_name.size,
+      function_name.data, frame->allocation.spill_count);
+}
+
+static iree_status_t loom_low_emission_frame_make_iteration_limit_status(
+    const loom_low_emission_frame_t* frame, iree_host_size_t iteration_count) {
+  const iree_string_view_t target_key =
+      loom_low_diagnostic_target_key(&frame->target);
+  const iree_string_view_t function_name =
+      loom_low_diagnostic_function_name(frame->module, frame->function_op);
+  return iree_make_status(
+      IREE_STATUS_FAILED_PRECONDITION,
+      "low emission frame for target '%.*s' function '@%.*s' did not reach a "
+      "spill-free final frame after %zu spill materialization iteration(s); "
+      "%zu spill plan(s) and %zu spill-slot assignment(s) remain",
+      (int)target_key.size, target_key.data, (int)function_name.size,
+      function_name.data, iteration_count, frame->allocation.spill_plan_count,
+      frame->allocation.spill_count);
+}
+
+static iree_status_t loom_low_emission_frame_make_no_progress_status(
+    const loom_low_emission_frame_t* frame) {
+  const iree_string_view_t target_key =
+      loom_low_diagnostic_target_key(&frame->target);
+  const iree_string_view_t function_name =
+      loom_low_diagnostic_function_name(frame->module, frame->function_op);
+  return iree_make_status(
+      IREE_STATUS_FAILED_PRECONDITION,
+      "low emission frame for target '%.*s' function '@%.*s' made no spill "
+      "materialization progress with %zu pending spill plan(s)",
+      (int)target_key.size, target_key.data, (int)function_name.size,
+      function_name.data, frame->allocation.spill_plan_count);
+}
+
+iree_status_t loom_low_emission_frame_build_spill_free(
+    loom_module_t* module, loom_op_t* low_func_op,
+    const loom_low_emission_frame_options_t* frame_options,
+    const loom_low_emission_frame_spill_free_options_t* spill_free_options,
+    iree_arena_allocator_t* arena, loom_low_emission_frame_t* out_frame) {
+  *out_frame = (loom_low_emission_frame_t){0};
+  if (spill_free_options == NULL) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "spill-free low emission frame construction requires spill-free "
+        "options");
+  }
+
+  IREE_RETURN_IF_ERROR(loom_low_emission_frame_lower_spill_traffic(
+      spill_free_options, module, low_func_op, arena));
+  iree_host_size_t iteration_count = 0;
+  iree_host_size_t iteration_limit = 0;
+  for (;;) {
+    loom_low_emission_frame_t frame = {0};
+    IREE_RETURN_IF_ERROR(loom_low_emission_frame_build(
+        module, low_func_op, frame_options, arena, &frame));
+    if (iteration_limit == 0) {
+      if (frame.allocation.liveness.value_count == IREE_HOST_SIZE_MAX) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "low emission frame spill materialization iteration limit "
+            "overflows host size");
+      }
+      iteration_limit = frame.allocation.liveness.value_count + 1;
+    }
+    if (frame.allocation.spill_plan_count == 0 &&
+        frame.allocation.spill_count == 0) {
+      *out_frame = frame;
+      IREE_RETURN_IF_ERROR(loom_low_emission_frame_validate_final(
+          spill_free_options, out_frame, arena));
+      return iree_ok_status();
+    }
+    if (frame.allocation.spill_plan_count == 0) {
+      return loom_low_emission_frame_make_spill_assignment_status(&frame);
+    }
+    if (iteration_count >= iteration_limit) {
+      return loom_low_emission_frame_make_iteration_limit_status(
+          &frame, iteration_count);
+    }
+
+    loom_low_allocation_materialization_result_t result = {0};
+    loom_low_allocation_materialization_options_t materialization_options =
+        spill_free_options->materialization_options;
+    materialization_options.allow_existing_storage_traffic = true;
+    materialization_options.max_spill_plan_count = 1;
+    if (materialization_options.emitter.fn == NULL) {
+      materialization_options.emitter = frame_options->emitter;
+    }
+    IREE_RETURN_IF_ERROR(loom_low_allocation_materialize_spills(
+        module, &frame.allocation, &materialization_options, arena, &result));
+    if (result.error_count != 0) {
+      return iree_ok_status();
+    }
+    if (result.storage_count == 0 && result.spill_count == 0 &&
+        result.reload_count == 0) {
+      return loom_low_emission_frame_make_no_progress_status(&frame);
+    }
+
+    IREE_RETURN_IF_ERROR(loom_low_emission_frame_lower_spill_traffic(
+        spill_free_options, module, low_func_op, arena));
+    ++iteration_count;
+  }
 }

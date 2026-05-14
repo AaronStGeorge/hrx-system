@@ -407,6 +407,8 @@ loom_cc_library(
     "frame.c"
   DEPS
     ::allocation
+    ::allocation_materialization
+    ::diagnostics
     ::function
     ::memory_access
     ::packet

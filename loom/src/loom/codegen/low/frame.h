@@ -20,6 +20,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/allocation.h"
+#include "loom/codegen/low/allocation_materialization.h"
 #include "loom/codegen/low/memory_access.h"
 #include "loom/codegen/low/schedule/types.h"
 #include "loom/error/emitter.h"
@@ -74,11 +75,50 @@ typedef struct loom_low_emission_frame_t {
   loom_low_allocation_table_t allocation;
 } loom_low_emission_frame_t;
 
+// Target callback that rewrites structural low.spill/low.reload traffic into
+// target packets before the next emission-frame scheduling/allocation round.
+typedef iree_status_t (*loom_low_emission_frame_lower_spill_traffic_fn_t)(
+    void* user_data, loom_module_t* module, loom_op_t* low_func_op,
+    iree_arena_allocator_t* arena);
+
+// Target callback that validates the accepted final spill-free frame.
+typedef iree_status_t (*loom_low_emission_frame_validate_fn_t)(
+    void* user_data, const loom_low_emission_frame_t* frame,
+    iree_arena_allocator_t* arena);
+
+// Options controlling final spill-free emission frame construction.
+typedef struct loom_low_emission_frame_spill_free_options_t {
+  // Materialization contract used when final allocation exposes new spills.
+  loom_low_allocation_materialization_options_t materialization_options;
+  // Target-owned lowering callback for structural spill traffic.
+  loom_low_emission_frame_lower_spill_traffic_fn_t lower_spill_traffic;
+  // Caller-owned data passed to |lower_spill_traffic|.
+  void* lower_spill_traffic_user_data;
+  // Optional final target validation callback.
+  loom_low_emission_frame_validate_fn_t validate_frame;
+  // Caller-owned data passed to |validate_frame|.
+  void* validate_frame_user_data;
+} loom_low_emission_frame_spill_free_options_t;
+
 // Schedules, allocates, and validates one target-low function for target
 // emitters. |arena| must outlive |out_frame|.
 iree_status_t loom_low_emission_frame_build(
     loom_module_t* module, loom_op_t* low_func_op,
     const loom_low_emission_frame_options_t* options,
+    iree_arena_allocator_t* arena, loom_low_emission_frame_t* out_frame);
+
+// Builds an emission frame and greedily materializes target-lowerable spill
+// traffic until the final frame contains no spill assignments or spill plans.
+// The loop materializes one spill plan per iteration because each rewrite can
+// change liveness and invalidate later spill plans in the current frame.
+// Materialization diagnostics follow the normal target-entry convention: if
+// unsupported spill storage emits an error diagnostic, the function returns OK
+// with |out_frame| left empty and the caller must check its diagnostic emitter
+// before consuming the frame.
+iree_status_t loom_low_emission_frame_build_spill_free(
+    loom_module_t* module, loom_op_t* low_func_op,
+    const loom_low_emission_frame_options_t* frame_options,
+    const loom_low_emission_frame_spill_free_options_t* spill_free_options,
     iree_arena_allocator_t* arena, loom_low_emission_frame_t* out_frame);
 
 #ifdef __cplusplus

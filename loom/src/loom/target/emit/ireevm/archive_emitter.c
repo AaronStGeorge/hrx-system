@@ -418,9 +418,20 @@ static iree_status_t loom_ireevm_archive_emit_function(
       .allocation_fixed_value_count = fixed_value_count,
       .emitter = loom_target_entry_emitter(&state->diagnostic_emitter),
   };
-  IREE_RETURN_IF_ERROR(
-      loom_low_emission_frame_build(state->module, function->op, &frame_options,
-                                    &state->table_arena, &frame));
+  const loom_low_emission_frame_spill_free_options_t spill_free_options = {
+      .materialization_options =
+          {
+              .has_supported_storage_spaces = true,
+              .supported_storage_spaces = LOOM_LOW_STORAGE_SPACE_SET_NONE,
+              .emitter = frame_options.emitter,
+          },
+  };
+  IREE_RETURN_IF_ERROR(loom_low_emission_frame_build_spill_free(
+      state->module, function->op, &frame_options, &spill_free_options,
+      &state->table_arena, &frame));
+  if (state->diagnostic_emitter.error_count != 0) {
+    return iree_ok_status();
+  }
   if (state->report != NULL) {
     IREE_RETURN_IF_ERROR(loom_target_compile_report_record_low_emission_frame(
         state->report, &frame));
@@ -450,6 +461,9 @@ static iree_status_t loom_ireevm_archive_emit_functions(
     const loom_ireevm_module_plan_function_t* function = &plan->functions[i];
     loom_ireevm_archive_emit_record_first_function(state, function);
     status = loom_ireevm_archive_emit_function(state, plan, function);
+    if (state->diagnostic_emitter.error_count != 0) {
+      break;
+    }
   }
   return status;
 }
@@ -549,6 +563,9 @@ static iree_status_t loom_ireevm_archive_emit(
   }
 
   IREE_RETURN_IF_ERROR(loom_ireevm_archive_emit_functions(state, &plan));
+  if (state->diagnostic_emitter.error_count != 0) {
+    return iree_ok_status();
+  }
   loom_ireevm_archive_emit_record_report_totals(state);
   IREE_RETURN_IF_ERROR(
       loom_ireevm_archive_emit_wrap_archive(state, &plan, out_archive));
