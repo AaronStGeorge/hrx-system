@@ -35,6 +35,20 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    cooperative_properties
+  HDRS
+    "cooperative_properties.h"
+  SRCS
+    "cooperative_properties.c"
+  DEPS
+    ::features
+    iree::base
+    loom::src::loom::analysis::policy
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     target_records
   HDRS
     "target_records.h"
@@ -111,6 +125,18 @@ loom_cc_library(
     iree::base
     loom::src::loom::tools::loom-check::provider
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    cooperative_properties_test
+  SRCS
+    "cooperative_properties_test.cc"
+  DEPS
+    ::cooperative_properties
+    ::features
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

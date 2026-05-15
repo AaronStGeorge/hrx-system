@@ -1,0 +1,591 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "loom/target/arch/spirv/cooperative_properties.h"
+
+#define MATRIX_LAYOUT_ANY                               \
+  (LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_BIT | \
+   LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_COLUMN_MAJOR_BIT)
+
+#define VECTOR_LAYOUT_INFERENCE_ANY                               \
+  (LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_ROW_MAJOR_BIT |    \
+   LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_COLUMN_MAJOR_BIT | \
+   LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_INFERENCING_OPTIMAL_BIT)
+
+#define MATRIX_STORAGE_ANY                       \
+  (LOOM_SPIRV_STORAGE_CLASS_BIT_WORKGROUP |      \
+   LOOM_SPIRV_STORAGE_CLASS_BIT_STORAGE_BUFFER | \
+   LOOM_SPIRV_STORAGE_CLASS_BIT_PHYSICAL_STORAGE_BUFFER)
+
+#define STORAGE_BUFFER_OR_BDA                    \
+  (LOOM_SPIRV_STORAGE_CLASS_BIT_STORAGE_BUFFER | \
+   LOOM_SPIRV_STORAGE_CLASS_BIT_PHYSICAL_STORAGE_BUFFER)
+
+#define MATRIX_PROPERTY(name_value, m_value, n_value, k_value, lhs_value, \
+                        rhs_value, accumulator_value, result_value,       \
+                        scope_value, layout_flags_value,                  \
+                        storage_class_flags_value, operand_flags_value)   \
+  {                                                                       \
+      .name = IREE_SVL(name_value),                                       \
+      .required_feature_bits = LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR, \
+      .m_size = (m_value),                                                \
+      .n_size = (n_value),                                                \
+      .k_size = (k_value),                                                \
+      .lhs_type = (lhs_value),                                            \
+      .rhs_type = (rhs_value),                                            \
+      .accumulator_type = (accumulator_value),                            \
+      .result_type = (result_value),                                      \
+      .scope = (scope_value),                                             \
+      .layout_flags = (layout_flags_value),                               \
+      .storage_class_flags = (storage_class_flags_value),                 \
+      .operand_flags = (operand_flags_value),                             \
+  }
+
+#define VECTOR_PROPERTY(                                                     \
+    name_value, feature_bits_value, m_value, k_value, input_type_value,      \
+    input_interpretation_value, matrix_interpretation_value,                 \
+    bias_interpretation_value, result_type_value, matrix_layout_flags_value, \
+    storage_class_flags_value, flags_value)                                  \
+  {                                                                          \
+      .name = IREE_SVL(name_value),                                          \
+      .required_feature_bits = (feature_bits_value),                         \
+      .m_size = (m_value),                                                   \
+      .k_size = (k_value),                                                   \
+      .input_type = (input_type_value),                                      \
+      .input_interpretation = (input_interpretation_value),                  \
+      .matrix_interpretation = (matrix_interpretation_value),                \
+      .bias_interpretation = (bias_interpretation_value),                    \
+      .result_type = (result_type_value),                                    \
+      .matrix_layout_flags = (matrix_layout_flags_value),                    \
+      .storage_class_flags = (storage_class_flags_value),                    \
+      .flags = (flags_value),                                                \
+  }
+
+static const loom_spirv_cooperative_matrix_property_t
+    kCooperativeMatrixProperties[] = {
+        MATRIX_PROPERTY("khr.cooperative_matrix.f16.16x16x16.f32.subgroup", 16,
+                        16, 16, LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT32,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT32,
+                        LOOM_SPIRV_SCOPE_SUBGROUP, MATRIX_LAYOUT_ANY,
+                        MATRIX_STORAGE_ANY, 0),
+        MATRIX_PROPERTY(
+            "khr.cooperative_matrix.s8.16x16x32.s32.subgroup.saturating", 16,
+            16, 32, LOOM_SPIRV_COMPONENT_TYPE_SINT8,
+            LOOM_SPIRV_COMPONENT_TYPE_SINT8, LOOM_SPIRV_COMPONENT_TYPE_SINT32,
+            LOOM_SPIRV_COMPONENT_TYPE_SINT32, LOOM_SPIRV_SCOPE_SUBGROUP,
+            MATRIX_LAYOUT_ANY, STORAGE_BUFFER_OR_BDA,
+            LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_A_SIGNED_COMPONENTS |
+                LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_B_SIGNED_COMPONENTS |
+                LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_C_SIGNED_COMPONENTS |
+                LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_RESULT_SIGNED_COMPONENTS |
+                LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_SATURATING_ACCUMULATION),
+};
+
+static const loom_spirv_cooperative_property_span_t
+    kCooperativeMatrixShapeSpans[] = {
+        {.shape_key = UINT64_C(0x001000100010), .start = 0, .count = 1},
+        {.shape_key = UINT64_C(0x001000100020), .start = 1, .count = 1},
+};
+
+static const loom_spirv_cooperative_vector_property_t
+    kCooperativeVectorProperties[] = {
+        VECTOR_PROPERTY("nv.cooperative_vector.f16.16x16.f16",
+                        LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV, 16, 16,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
+                        VECTOR_LAYOUT_INFERENCE_ANY, STORAGE_BUFFER_OR_BDA,
+                        LOOM_SPIRV_COOPERATIVE_VECTOR_FLAG_TRANSPOSE),
+        VECTOR_PROPERTY("nv.cooperative_vector.f16.16x32.e4m3",
+                        LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV, 16, 32,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E4M3,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E4M3,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
+                        VECTOR_LAYOUT_INFERENCE_ANY, STORAGE_BUFFER_OR_BDA,
+                        LOOM_SPIRV_COOPERATIVE_VECTOR_FLAG_TRANSPOSE),
+        VECTOR_PROPERTY("nv.cooperative_vector.u32.32x32.s8_packed",
+                        LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV, 32, 32,
+                        LOOM_SPIRV_COMPONENT_TYPE_UINT32,
+                        LOOM_SPIRV_COMPONENT_TYPE_SINT8_PACKED,
+                        LOOM_SPIRV_COMPONENT_TYPE_SINT8,
+                        LOOM_SPIRV_COMPONENT_TYPE_SINT32,
+                        LOOM_SPIRV_COMPONENT_TYPE_SINT32,
+                        VECTOR_LAYOUT_INFERENCE_ANY, STORAGE_BUFFER_OR_BDA, 0),
+        VECTOR_PROPERTY(
+            "nv.cooperative_vector.training.u32.32x32.s8_packed",
+            LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV |
+                LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_TRAINING_NV,
+            32, 32, LOOM_SPIRV_COMPONENT_TYPE_UINT32,
+            LOOM_SPIRV_COMPONENT_TYPE_SINT8_PACKED,
+            LOOM_SPIRV_COMPONENT_TYPE_SINT8, LOOM_SPIRV_COMPONENT_TYPE_SINT32,
+            LOOM_SPIRV_COMPONENT_TYPE_SINT32,
+            LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_TRAINING_OPTIMAL_BIT,
+            STORAGE_BUFFER_OR_BDA, LOOM_SPIRV_COOPERATIVE_VECTOR_FLAG_TRAINING),
+};
+
+static const loom_spirv_cooperative_property_span_t
+    kCooperativeVectorShapeSpans[] = {
+        {.shape_key = UINT64_C(0x00100010), .start = 0, .count = 1},
+        {.shape_key = UINT64_C(0x00100020), .start = 1, .count = 1},
+        {.shape_key = UINT64_C(0x00200020), .start = 2, .count = 2},
+};
+
+iree_string_view_t loom_spirv_component_type_name(
+    loom_spirv_component_type_t component_type) {
+  switch (component_type) {
+    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT16:
+      return IREE_SV("f16");
+    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT32:
+      return IREE_SV("f32");
+    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT64:
+      return IREE_SV("f64");
+    case LOOM_SPIRV_COMPONENT_TYPE_SINT8:
+      return IREE_SV("s8");
+    case LOOM_SPIRV_COMPONENT_TYPE_SINT16:
+      return IREE_SV("s16");
+    case LOOM_SPIRV_COMPONENT_TYPE_SINT32:
+      return IREE_SV("s32");
+    case LOOM_SPIRV_COMPONENT_TYPE_SINT64:
+      return IREE_SV("s64");
+    case LOOM_SPIRV_COMPONENT_TYPE_UINT8:
+      return IREE_SV("u8");
+    case LOOM_SPIRV_COMPONENT_TYPE_UINT16:
+      return IREE_SV("u16");
+    case LOOM_SPIRV_COMPONENT_TYPE_UINT32:
+      return IREE_SV("u32");
+    case LOOM_SPIRV_COMPONENT_TYPE_UINT64:
+      return IREE_SV("u64");
+    case LOOM_SPIRV_COMPONENT_TYPE_BFLOAT16:
+      return IREE_SV("bf16");
+    case LOOM_SPIRV_COMPONENT_TYPE_SINT8_PACKED:
+      return IREE_SV("s8_packed");
+    case LOOM_SPIRV_COMPONENT_TYPE_UINT8_PACKED:
+      return IREE_SV("u8_packed");
+    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E4M3:
+      return IREE_SV("f8e4m3");
+    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E5M2:
+      return IREE_SV("f8e5m2");
+    case LOOM_SPIRV_COMPONENT_TYPE_UNKNOWN:
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+iree_string_view_t loom_spirv_scope_name(loom_spirv_scope_t scope) {
+  switch (scope) {
+    case LOOM_SPIRV_SCOPE_DEVICE:
+      return IREE_SV("device");
+    case LOOM_SPIRV_SCOPE_WORKGROUP:
+      return IREE_SV("workgroup");
+    case LOOM_SPIRV_SCOPE_SUBGROUP:
+      return IREE_SV("subgroup");
+    case LOOM_SPIRV_SCOPE_QUEUE_FAMILY:
+      return IREE_SV("queue_family");
+    case LOOM_SPIRV_SCOPE_UNKNOWN:
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+iree_string_view_t loom_spirv_cooperative_matrix_layout_name(
+    loom_spirv_cooperative_matrix_layout_t layout) {
+  switch (layout) {
+    case LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR:
+      return IREE_SV("row_major");
+    case LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_COLUMN_MAJOR:
+      return IREE_SV("column_major");
+    case LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_UNKNOWN:
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+iree_string_view_t loom_spirv_cooperative_vector_matrix_layout_name(
+    loom_spirv_cooperative_vector_matrix_layout_t layout) {
+  switch (layout) {
+    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_ROW_MAJOR:
+      return IREE_SV("row_major");
+    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_COLUMN_MAJOR:
+      return IREE_SV("column_major");
+    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_INFERENCING_OPTIMAL:
+      return IREE_SV("inferencing_optimal");
+    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_TRAINING_OPTIMAL:
+      return IREE_SV("training_optimal");
+    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_UNKNOWN:
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+iree_string_view_t loom_spirv_storage_class_name(
+    loom_spirv_storage_class_t storage_class) {
+  switch (storage_class) {
+    case LOOM_SPIRV_STORAGE_CLASS_WORKGROUP:
+      return IREE_SV("Workgroup");
+    case LOOM_SPIRV_STORAGE_CLASS_STORAGE_BUFFER:
+      return IREE_SV("StorageBuffer");
+    case LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER:
+      return IREE_SV("PhysicalStorageBuffer");
+    case LOOM_SPIRV_STORAGE_CLASS_UNIFORM_CONSTANT:
+      return IREE_SV("UniformConstant");
+    case LOOM_SPIRV_STORAGE_CLASS_UNIFORM:
+      return IREE_SV("Uniform");
+    case LOOM_SPIRV_STORAGE_CLASS_CROSS_WORKGROUP:
+      return IREE_SV("CrossWorkgroup");
+    case LOOM_SPIRV_STORAGE_CLASS_FUNCTION:
+      return IREE_SV("Function");
+    case LOOM_SPIRV_STORAGE_CLASS_GENERIC:
+      return IREE_SV("Generic");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+loom_spirv_storage_class_flags_t loom_spirv_storage_class_bit(
+    loom_spirv_storage_class_t storage_class) {
+  switch (storage_class) {
+    case LOOM_SPIRV_STORAGE_CLASS_WORKGROUP:
+      return LOOM_SPIRV_STORAGE_CLASS_BIT_WORKGROUP;
+    case LOOM_SPIRV_STORAGE_CLASS_STORAGE_BUFFER:
+      return LOOM_SPIRV_STORAGE_CLASS_BIT_STORAGE_BUFFER;
+    case LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER:
+      return LOOM_SPIRV_STORAGE_CLASS_BIT_PHYSICAL_STORAGE_BUFFER;
+    default:
+      return 0;
+  }
+}
+
+static uint64_t loom_spirv_matrix_shape_key(uint16_t m_size, uint16_t n_size,
+                                            uint16_t k_size) {
+  return ((uint64_t)m_size << 32) | ((uint64_t)n_size << 16) | k_size;
+}
+
+static uint64_t loom_spirv_vector_shape_key(uint16_t m_size, uint16_t k_size) {
+  return ((uint64_t)m_size << 16) | k_size;
+}
+
+static const loom_spirv_cooperative_property_span_t*
+loom_spirv_property_span_find(
+    const loom_spirv_cooperative_property_span_t* spans, uint16_t span_count,
+    uint64_t shape_key) {
+  uint16_t lo = 0;
+  uint16_t hi = span_count;
+  while (lo < hi) {
+    uint16_t mid = (uint16_t)(lo + (hi - lo) / 2u);
+    if (spans[mid].shape_key < shape_key) {
+      lo = (uint16_t)(mid + 1u);
+    } else {
+      hi = mid;
+    }
+  }
+  if (lo < span_count && spans[lo].shape_key == shape_key) {
+    return &spans[lo];
+  }
+  return NULL;
+}
+
+static bool loom_spirv_policy_requires_target_primitive(
+    loom_lowering_policy_t policy) {
+  return policy == LOOM_LOWERING_POLICY_OPTIMIZED_REQUIRED ||
+         policy == LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED;
+}
+
+static void loom_spirv_cooperative_diagnostic_fail(
+    loom_spirv_cooperative_selection_status_t status,
+    loom_spirv_feature_atom_t feature_atom,
+    loom_spirv_cooperative_rejection_flags_t rejection_flags,
+    loom_spirv_cooperative_diagnostic_t* out_diagnostic) {
+  if (out_diagnostic) {
+    *out_diagnostic = (loom_spirv_cooperative_diagnostic_t){
+        .status = status,
+        .feature_atom = feature_atom,
+        .rejection_flags = rejection_flags,
+    };
+  }
+}
+
+static void loom_spirv_cooperative_diagnostic_match(
+    loom_spirv_feature_atom_t feature_atom,
+    loom_spirv_cooperative_diagnostic_t* out_diagnostic) {
+  if (out_diagnostic) {
+    *out_diagnostic = (loom_spirv_cooperative_diagnostic_t){
+        .status = LOOM_SPIRV_COOPERATIVE_SELECTION_MATCHED,
+        .feature_atom = feature_atom,
+    };
+  }
+}
+
+void loom_spirv_cooperative_property_set_prepare(
+    const loom_spirv_feature_set_t* feature_set,
+    loom_spirv_cooperative_property_set_t* out_property_set) {
+  IREE_ASSERT_ARGUMENT(feature_set);
+  IREE_ASSERT_ARGUMENT(out_property_set);
+  *out_property_set = (loom_spirv_cooperative_property_set_t){
+      .feature_bits = feature_set->atom_bits,
+      .matrix_properties = kCooperativeMatrixProperties,
+      .matrix_property_count = IREE_ARRAYSIZE(kCooperativeMatrixProperties),
+      .matrix_shape_spans = kCooperativeMatrixShapeSpans,
+      .matrix_shape_span_count = IREE_ARRAYSIZE(kCooperativeMatrixShapeSpans),
+      .vector_properties = kCooperativeVectorProperties,
+      .vector_property_count = IREE_ARRAYSIZE(kCooperativeVectorProperties),
+      .vector_shape_spans = kCooperativeVectorShapeSpans,
+      .vector_shape_span_count = IREE_ARRAYSIZE(kCooperativeVectorShapeSpans),
+  };
+}
+
+static loom_spirv_cooperative_matrix_layout_flags_t
+loom_spirv_matrix_layout_bit(loom_spirv_cooperative_matrix_layout_t layout) {
+  switch (layout) {
+    case LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR:
+      return LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_BIT;
+    case LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_COLUMN_MAJOR:
+      return LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_COLUMN_MAJOR_BIT;
+    default:
+      return 0;
+  }
+}
+
+const loom_spirv_cooperative_matrix_property_t*
+loom_spirv_cooperative_matrix_property_select(
+    const loom_spirv_cooperative_property_set_t* property_set,
+    const loom_spirv_cooperative_matrix_query_t* query,
+    loom_spirv_cooperative_diagnostic_t* out_diagnostic) {
+  IREE_ASSERT_ARGUMENT(property_set);
+  IREE_ASSERT_ARGUMENT(query);
+  const loom_spirv_feature_bits_t required_feature_bits =
+      LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR;
+  if (!iree_all_bits_set(property_set->feature_bits, required_feature_bits)) {
+    const loom_spirv_cooperative_selection_status_t status =
+        !loom_spirv_policy_requires_target_primitive(query->policy)
+            ? LOOM_SPIRV_COOPERATIVE_SELECTION_FALLBACK_PERMITTED
+            : LOOM_SPIRV_COOPERATIVE_SELECTION_REQUIRED_FEATURE_MISSING;
+    const loom_spirv_cooperative_rejection_flags_t rejection_flags =
+        LOOM_SPIRV_COOPERATIVE_REJECTION_FEATURE |
+        (status == LOOM_SPIRV_COOPERATIVE_SELECTION_FALLBACK_PERMITTED
+             ? LOOM_SPIRV_COOPERATIVE_REJECTION_POLICY_FALLBACK
+             : 0);
+    loom_spirv_cooperative_diagnostic_fail(
+        status, LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_MATRIX_KHR, rejection_flags,
+        out_diagnostic);
+    return NULL;
+  }
+
+  const uint64_t shape_key =
+      loom_spirv_matrix_shape_key(query->m_size, query->n_size, query->k_size);
+  const loom_spirv_cooperative_property_span_t* span =
+      loom_spirv_property_span_find(property_set->matrix_shape_spans,
+                                    property_set->matrix_shape_span_count,
+                                    shape_key);
+  loom_spirv_cooperative_diagnostic_t diagnostic = {
+      .status = LOOM_SPIRV_COOPERATIVE_SELECTION_REQUIRED_PROPERTY_MISSING,
+      .feature_atom = LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_MATRIX_KHR,
+      .rejection_flags = LOOM_SPIRV_COOPERATIVE_REJECTION_SHAPE,
+  };
+  if (span == NULL) {
+    if (!loom_spirv_policy_requires_target_primitive(query->policy)) {
+      diagnostic.status = LOOM_SPIRV_COOPERATIVE_SELECTION_FALLBACK_PERMITTED;
+      diagnostic.rejection_flags |=
+          LOOM_SPIRV_COOPERATIVE_REJECTION_POLICY_FALLBACK;
+    }
+    if (out_diagnostic) {
+      *out_diagnostic = diagnostic;
+    }
+    return NULL;
+  }
+
+  diagnostic.shape_candidate_count = span->count;
+  const loom_spirv_cooperative_matrix_layout_flags_t layout_bit =
+      loom_spirv_matrix_layout_bit(query->layout);
+  const loom_spirv_storage_class_flags_t storage_class_bit =
+      loom_spirv_storage_class_bit(query->storage_class);
+  diagnostic.rejection_flags = LOOM_SPIRV_COOPERATIVE_REJECTION_COMPONENT_TYPE;
+  for (uint16_t i = 0; i < span->count; ++i) {
+    const loom_spirv_cooperative_matrix_property_t* row =
+        &property_set->matrix_properties[span->start + i];
+    if (row->lhs_type != query->lhs_type || row->rhs_type != query->rhs_type ||
+        row->accumulator_type != query->accumulator_type ||
+        row->result_type != query->result_type) {
+      continue;
+    }
+    ++diagnostic.type_candidate_count;
+    diagnostic.rejection_flags = LOOM_SPIRV_COOPERATIVE_REJECTION_SCOPE;
+    if (row->scope != query->scope) {
+      continue;
+    }
+    diagnostic.rejection_flags = LOOM_SPIRV_COOPERATIVE_REJECTION_LAYOUT;
+    if (layout_bit == 0 || !iree_any_bit_set(row->layout_flags, layout_bit)) {
+      continue;
+    }
+    ++diagnostic.layout_candidate_count;
+    diagnostic.rejection_flags = LOOM_SPIRV_COOPERATIVE_REJECTION_STORAGE_CLASS;
+    if (storage_class_bit == 0 ||
+        !iree_any_bit_set(row->storage_class_flags, storage_class_bit)) {
+      continue;
+    }
+    ++diagnostic.storage_candidate_count;
+    diagnostic.rejection_flags = LOOM_SPIRV_COOPERATIVE_REJECTION_OPERANDS;
+    if (row->operand_flags != query->operand_flags) {
+      continue;
+    }
+    loom_spirv_cooperative_diagnostic_match(
+        LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_MATRIX_KHR, out_diagnostic);
+    return row;
+  }
+
+  if (!loom_spirv_policy_requires_target_primitive(query->policy)) {
+    diagnostic.status = LOOM_SPIRV_COOPERATIVE_SELECTION_FALLBACK_PERMITTED;
+    diagnostic.rejection_flags |=
+        LOOM_SPIRV_COOPERATIVE_REJECTION_POLICY_FALLBACK;
+  }
+  if (out_diagnostic) {
+    *out_diagnostic = diagnostic;
+  }
+  return NULL;
+}
+
+static loom_spirv_cooperative_vector_matrix_layout_flags_t
+loom_spirv_vector_matrix_layout_bit(
+    loom_spirv_cooperative_vector_matrix_layout_t layout) {
+  switch (layout) {
+    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_ROW_MAJOR:
+      return LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_ROW_MAJOR_BIT;
+    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_COLUMN_MAJOR:
+      return LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_COLUMN_MAJOR_BIT;
+    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_INFERENCING_OPTIMAL:
+      return LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_INFERENCING_OPTIMAL_BIT;
+    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_TRAINING_OPTIMAL:
+      return LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_TRAINING_OPTIMAL_BIT;
+    default:
+      return 0;
+  }
+}
+
+static bool loom_spirv_cooperative_vector_flags_match(
+    loom_spirv_cooperative_vector_flags_t row_flags,
+    loom_spirv_cooperative_vector_flags_t query_flags) {
+  const bool row_is_training =
+      iree_any_bit_set(row_flags, LOOM_SPIRV_COOPERATIVE_VECTOR_FLAG_TRAINING);
+  const bool query_is_training = iree_any_bit_set(
+      query_flags, LOOM_SPIRV_COOPERATIVE_VECTOR_FLAG_TRAINING);
+  if (row_is_training != query_is_training) {
+    return false;
+  }
+  return iree_all_bits_set(row_flags, query_flags);
+}
+
+const loom_spirv_cooperative_vector_property_t*
+loom_spirv_cooperative_vector_property_select(
+    const loom_spirv_cooperative_property_set_t* property_set,
+    const loom_spirv_cooperative_vector_query_t* query,
+    loom_spirv_cooperative_diagnostic_t* out_diagnostic) {
+  IREE_ASSERT_ARGUMENT(property_set);
+  IREE_ASSERT_ARGUMENT(query);
+  const loom_spirv_feature_bits_t required_feature_bits =
+      iree_any_bit_set(query->flags,
+                       LOOM_SPIRV_COOPERATIVE_VECTOR_FLAG_TRAINING)
+          ? LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV |
+                LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_TRAINING_NV
+          : LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV;
+  const loom_spirv_feature_atom_t feature_atom =
+      iree_any_bit_set(required_feature_bits,
+                       LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_TRAINING_NV)
+          ? LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_VECTOR_TRAINING_NV
+          : LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_VECTOR_NV;
+  if (!iree_all_bits_set(property_set->feature_bits, required_feature_bits)) {
+    const loom_spirv_cooperative_selection_status_t status =
+        !loom_spirv_policy_requires_target_primitive(query->policy)
+            ? LOOM_SPIRV_COOPERATIVE_SELECTION_FALLBACK_PERMITTED
+            : LOOM_SPIRV_COOPERATIVE_SELECTION_REQUIRED_FEATURE_MISSING;
+    const loom_spirv_cooperative_rejection_flags_t rejection_flags =
+        LOOM_SPIRV_COOPERATIVE_REJECTION_FEATURE |
+        (status == LOOM_SPIRV_COOPERATIVE_SELECTION_FALLBACK_PERMITTED
+             ? LOOM_SPIRV_COOPERATIVE_REJECTION_POLICY_FALLBACK
+             : 0);
+    loom_spirv_cooperative_diagnostic_fail(status, feature_atom,
+                                           rejection_flags, out_diagnostic);
+    return NULL;
+  }
+
+  const uint64_t shape_key =
+      loom_spirv_vector_shape_key(query->m_size, query->k_size);
+  const loom_spirv_cooperative_property_span_t* span =
+      loom_spirv_property_span_find(property_set->vector_shape_spans,
+                                    property_set->vector_shape_span_count,
+                                    shape_key);
+  loom_spirv_cooperative_diagnostic_t diagnostic = {
+      .status = LOOM_SPIRV_COOPERATIVE_SELECTION_REQUIRED_PROPERTY_MISSING,
+      .feature_atom = feature_atom,
+      .rejection_flags = LOOM_SPIRV_COOPERATIVE_REJECTION_SHAPE,
+  };
+  if (span == NULL) {
+    if (!loom_spirv_policy_requires_target_primitive(query->policy)) {
+      diagnostic.status = LOOM_SPIRV_COOPERATIVE_SELECTION_FALLBACK_PERMITTED;
+      diagnostic.rejection_flags |=
+          LOOM_SPIRV_COOPERATIVE_REJECTION_POLICY_FALLBACK;
+    }
+    if (out_diagnostic) {
+      *out_diagnostic = diagnostic;
+    }
+    return NULL;
+  }
+
+  diagnostic.shape_candidate_count = span->count;
+  const loom_spirv_cooperative_vector_matrix_layout_flags_t layout_bit =
+      loom_spirv_vector_matrix_layout_bit(query->matrix_layout);
+  const loom_spirv_storage_class_flags_t storage_class_bit =
+      loom_spirv_storage_class_bit(query->storage_class);
+  diagnostic.rejection_flags = LOOM_SPIRV_COOPERATIVE_REJECTION_COMPONENT_TYPE;
+  for (uint16_t i = 0; i < span->count; ++i) {
+    const loom_spirv_cooperative_vector_property_t* row =
+        &property_set->vector_properties[span->start + i];
+    if (!iree_all_bits_set(property_set->feature_bits,
+                           row->required_feature_bits)) {
+      continue;
+    }
+    if (row->input_type != query->input_type ||
+        row->input_interpretation != query->input_interpretation ||
+        row->matrix_interpretation != query->matrix_interpretation ||
+        row->bias_interpretation != query->bias_interpretation ||
+        row->result_type != query->result_type) {
+      continue;
+    }
+    ++diagnostic.type_candidate_count;
+    diagnostic.rejection_flags = LOOM_SPIRV_COOPERATIVE_REJECTION_LAYOUT;
+    if (layout_bit == 0 ||
+        !iree_any_bit_set(row->matrix_layout_flags, layout_bit)) {
+      continue;
+    }
+    ++diagnostic.layout_candidate_count;
+    diagnostic.rejection_flags = LOOM_SPIRV_COOPERATIVE_REJECTION_STORAGE_CLASS;
+    if (storage_class_bit == 0 ||
+        !iree_any_bit_set(row->storage_class_flags, storage_class_bit)) {
+      continue;
+    }
+    ++diagnostic.storage_candidate_count;
+    diagnostic.rejection_flags = LOOM_SPIRV_COOPERATIVE_REJECTION_OPERANDS;
+    if (!loom_spirv_cooperative_vector_flags_match(row->flags, query->flags)) {
+      continue;
+    }
+    loom_spirv_cooperative_diagnostic_match(feature_atom, out_diagnostic);
+    return row;
+  }
+
+  if (!loom_spirv_policy_requires_target_primitive(query->policy)) {
+    diagnostic.status = LOOM_SPIRV_COOPERATIVE_SELECTION_FALLBACK_PERMITTED;
+    diagnostic.rejection_flags |=
+        LOOM_SPIRV_COOPERATIVE_REJECTION_POLICY_FALLBACK;
+  }
+  if (out_diagnostic) {
+    *out_diagnostic = diagnostic;
+  }
+  return NULL;
+}

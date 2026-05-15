@@ -207,8 +207,8 @@ loom_spirv_feature_bits_t loom_spirv_known_feature_bits(void) {
 bool loom_spirv_feature_set_has_atom(
     const loom_spirv_feature_set_t* feature_set,
     loom_spirv_feature_atom_t atom) {
-  return feature_set != NULL &&
-         iree_any_bit_set(feature_set->atom_bits,
+  IREE_ASSERT_ARGUMENT(feature_set);
+  return iree_any_bit_set(feature_set->atom_bits,
                           loom_spirv_feature_atom_bit(atom));
 }
 
@@ -380,10 +380,7 @@ iree_status_t loom_spirv_feature_set_prepare(
     iree_string_view_t target_name,
     loom_spirv_feature_bits_t requested_atom_bits,
     loom_spirv_feature_set_t* out_feature_set) {
-  if (out_feature_set == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "out_feature_set must not be NULL");
-  }
+  IREE_ASSERT_ARGUMENT(out_feature_set);
 
   const loom_spirv_feature_bits_t unknown_bits =
       requested_atom_bits & ~loom_spirv_known_feature_bits();
