@@ -94,6 +94,15 @@ TEST(SpirvFeaturesTest, KnownAtomsHaveDirectBitsAndDescriptors) {
   EXPECT_EQ(loom_spirv_feature_atom_bit(
                 LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_MATRIX_KHR),
             LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR);
+  EXPECT_EQ(
+      loom_spirv_feature_atom_bit(LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_TYPE_KHR),
+      LOOM_SPIRV_FEATURE_BFLOAT16_TYPE_KHR);
+  EXPECT_EQ(loom_spirv_feature_atom_bit(
+                LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_DOT_PRODUCT_KHR),
+            LOOM_SPIRV_FEATURE_BFLOAT16_DOT_PRODUCT_KHR);
+  EXPECT_EQ(loom_spirv_feature_atom_bit(
+                LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_COOPERATIVE_MATRIX_KHR),
+            LOOM_SPIRV_FEATURE_BFLOAT16_COOPERATIVE_MATRIX_KHR);
 
   const loom_spirv_feature_atom_descriptor_t* bda_descriptor =
       loom_spirv_feature_atom_descriptor(
@@ -186,6 +195,56 @@ TEST(SpirvFeaturesTest, PreparesCooperativeVectorTrainingAtom) {
       feature_set, LOOM_SPIRV_OP_COOPERATIVE_VECTOR_REDUCE_SUM_ACCUMULATE_NV));
 }
 
+TEST(SpirvFeaturesTest, PreparesBfloat16TypeAtom) {
+  loom_spirv_feature_set_t feature_set;
+  IREE_ASSERT_OK(loom_spirv_feature_set_prepare(
+      IREE_SV("test.bfloat16_type"),
+      LOOM_SPIRV_FEATURE_VULKAN_SHADER | LOOM_SPIRV_FEATURE_BFLOAT16_TYPE_KHR,
+      &feature_set));
+
+  EXPECT_TRUE(loom_spirv_feature_set_has_atom(
+      &feature_set, LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_TYPE_KHR));
+  EXPECT_TRUE(ContainsExtension(feature_set, IREE_SV("SPV_KHR_bfloat16")));
+  EXPECT_TRUE(ContainsCapability(feature_set,
+                                 LOOM_SPIRV_CAPABILITY_B_FLOAT16_TYPE_KHR));
+}
+
+TEST(SpirvFeaturesTest, PreparesBfloat16CooperativeMatrixAtom) {
+  loom_spirv_feature_set_t feature_set;
+  IREE_ASSERT_OK(loom_spirv_feature_set_prepare(
+      IREE_SV("test.bfloat16_cooperative_matrix"),
+      LOOM_SPIRV_FEATURE_VULKAN_SHADER |
+          LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR |
+          LOOM_SPIRV_FEATURE_BFLOAT16_TYPE_KHR |
+          LOOM_SPIRV_FEATURE_BFLOAT16_COOPERATIVE_MATRIX_KHR,
+      &feature_set));
+
+  EXPECT_TRUE(
+      ContainsExtension(feature_set, IREE_SV("SPV_KHR_cooperative_matrix")));
+  EXPECT_TRUE(ContainsExtension(feature_set, IREE_SV("SPV_KHR_bfloat16")));
+  EXPECT_TRUE(ContainsCapability(feature_set,
+                                 LOOM_SPIRV_CAPABILITY_COOPERATIVE_MATRIX_KHR));
+  EXPECT_TRUE(ContainsCapability(feature_set,
+                                 LOOM_SPIRV_CAPABILITY_B_FLOAT16_TYPE_KHR));
+  EXPECT_TRUE(ContainsCapability(
+      feature_set, LOOM_SPIRV_CAPABILITY_B_FLOAT16_COOPERATIVE_MATRIX_KHR));
+}
+
+TEST(SpirvFeaturesTest, PreparesBfloat16DotProductAtom) {
+  loom_spirv_feature_set_t feature_set;
+  IREE_ASSERT_OK(loom_spirv_feature_set_prepare(
+      IREE_SV("test.bfloat16_dot_product"),
+      LOOM_SPIRV_FEATURE_VULKAN_SHADER | LOOM_SPIRV_FEATURE_BFLOAT16_TYPE_KHR |
+          LOOM_SPIRV_FEATURE_BFLOAT16_DOT_PRODUCT_KHR,
+      &feature_set));
+
+  EXPECT_TRUE(ContainsExtension(feature_set, IREE_SV("SPV_KHR_bfloat16")));
+  EXPECT_TRUE(ContainsCapability(feature_set,
+                                 LOOM_SPIRV_CAPABILITY_B_FLOAT16_TYPE_KHR));
+  EXPECT_TRUE(ContainsCapability(
+      feature_set, LOOM_SPIRV_CAPABILITY_B_FLOAT16_DOT_PRODUCT_KHR));
+}
+
 TEST(SpirvFeaturesTest, RejectsMissingAtomDependency) {
   loom_spirv_feature_set_t feature_set;
   iree_status_t status = loom_spirv_feature_set_prepare(
@@ -200,6 +259,23 @@ TEST(SpirvFeaturesTest, RejectsMissingAtomDependency) {
               ::testing::HasSubstr("SPV_KHR_physical_storage_buffer"));
   EXPECT_THAT(diagnostic, ::testing::HasSubstr("5347"));
   EXPECT_THAT(diagnostic, ::testing::HasSubstr("spirv.vulkan.shader"));
+}
+
+TEST(SpirvFeaturesTest, RejectsMissingBfloat16TypeDependency) {
+  loom_spirv_feature_set_t feature_set;
+  iree_status_t status = loom_spirv_feature_set_prepare(
+      IREE_SV("test.bfloat16_cooperative_without_type"),
+      LOOM_SPIRV_FEATURE_VULKAN_SHADER |
+          LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR |
+          LOOM_SPIRV_FEATURE_BFLOAT16_COOPERATIVE_MATRIX_KHR,
+      &feature_set);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_FAILED_PRECONDITION);
+  std::string diagnostic = StatusToStringAndFree(status);
+  EXPECT_THAT(diagnostic,
+              ::testing::HasSubstr("spirv.bfloat16.cooperative_matrix.khr"));
+  EXPECT_THAT(diagnostic, ::testing::HasSubstr("SPV_KHR_bfloat16"));
+  EXPECT_THAT(diagnostic, ::testing::HasSubstr("5118"));
+  EXPECT_THAT(diagnostic, ::testing::HasSubstr("spirv.bfloat16.type.khr"));
 }
 
 TEST(SpirvFeaturesTest, RejectsUnknownBits) {

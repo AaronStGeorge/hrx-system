@@ -25,10 +25,27 @@ loom_spirv_cooperative_matrix_query_t F16MatrixQuery(
       .m_size = 16,
       .n_size = 16,
       .k_size = 16,
-      .lhs_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
-      .rhs_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
-      .accumulator_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT32_NV,
-      .result_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT32_NV,
+      .lhs_type = LOOM_SPIRV_SCALAR_TYPE_F16,
+      .rhs_type = LOOM_SPIRV_SCALAR_TYPE_F16,
+      .accumulator_type = LOOM_SPIRV_SCALAR_TYPE_F32,
+      .result_type = LOOM_SPIRV_SCALAR_TYPE_F32,
+      .scope = LOOM_SPIRV_SCOPE_SUBGROUP,
+      .layout = LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_KHR,
+      .storage_class = LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER,
+      .policy = policy,
+  };
+}
+
+loom_spirv_cooperative_matrix_query_t Bf16MatrixQuery(
+    loom_lowering_policy_t policy) {
+  return {
+      .m_size = 16,
+      .n_size = 16,
+      .k_size = 16,
+      .lhs_type = LOOM_SPIRV_SCALAR_TYPE_BF16,
+      .rhs_type = LOOM_SPIRV_SCALAR_TYPE_BF16,
+      .accumulator_type = LOOM_SPIRV_SCALAR_TYPE_F32,
+      .result_type = LOOM_SPIRV_SCALAR_TYPE_F32,
       .scope = LOOM_SPIRV_SCOPE_SUBGROUP,
       .layout = LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_KHR,
       .storage_class = LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER,
@@ -74,7 +91,48 @@ loom_spirv_cooperative_vector_query_t F8E4M3VectorQuery(
   };
 }
 
-TEST(SpirvCooperativePropertiesTest, MapsNumericFormatsToComponentTypes) {
+TEST(SpirvCooperativePropertiesTest, MapsNumericFormatsToScalarTypes) {
+  loom_spirv_scalar_type_t scalar_type = LOOM_SPIRV_SCALAR_TYPE_UNKNOWN;
+  EXPECT_TRUE(loom_spirv_scalar_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_F16, &scalar_type));
+  EXPECT_EQ(scalar_type, LOOM_SPIRV_SCALAR_TYPE_F16);
+  EXPECT_TRUE(loom_spirv_scalar_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_BF16, &scalar_type));
+  EXPECT_EQ(scalar_type, LOOM_SPIRV_SCALAR_TYPE_BF16);
+  EXPECT_TRUE(loom_spirv_scalar_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_QUANT_I8, &scalar_type));
+  EXPECT_EQ(scalar_type, LOOM_SPIRV_SCALAR_TYPE_S8);
+
+  const loom_spirv_scalar_type_descriptor_t* descriptor =
+      loom_spirv_scalar_type_descriptor(LOOM_SPIRV_SCALAR_TYPE_BF16);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(descriptor->kind, LOOM_SPIRV_SCALAR_TYPE_KIND_FLOAT);
+  EXPECT_EQ(descriptor->bit_width, 16);
+  EXPECT_EQ(descriptor->fp_encoding, LOOM_SPIRV_FP_ENCODING_B_FLOAT16_KHR);
+  EXPECT_EQ(descriptor->required_feature_bits,
+            LOOM_SPIRV_FEATURE_BFLOAT16_TYPE_KHR);
+}
+
+TEST(SpirvCooperativePropertiesTest,
+     RejectsUnknownAndMultiValuedScalarNumericFormats) {
+  loom_spirv_scalar_type_t scalar_type = LOOM_SPIRV_SCALAR_TYPE_F16;
+  EXPECT_FALSE(loom_spirv_scalar_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_UNKNOWN, &scalar_type));
+  EXPECT_EQ(scalar_type, LOOM_SPIRV_SCALAR_TYPE_UNKNOWN);
+  EXPECT_FALSE(loom_spirv_scalar_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_F16 | LOOM_VALUE_FACT_NUMERIC_FORMAT_BF16,
+      &scalar_type));
+  EXPECT_EQ(scalar_type, LOOM_SPIRV_SCALAR_TYPE_UNKNOWN);
+  EXPECT_FALSE(loom_spirv_scalar_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3, &scalar_type));
+  EXPECT_EQ(scalar_type, LOOM_SPIRV_SCALAR_TYPE_UNKNOWN);
+  EXPECT_FALSE(loom_spirv_scalar_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_I4, &scalar_type));
+  EXPECT_EQ(scalar_type, LOOM_SPIRV_SCALAR_TYPE_UNKNOWN);
+}
+
+TEST(SpirvCooperativePropertiesTest,
+     MapsNumericFormatsToComponentEnumOperands) {
   loom_spirv_component_type_t component_type = LOOM_SPIRV_COMPONENT_TYPE_MAX;
   EXPECT_TRUE(loom_spirv_component_type_from_numeric_format(
       LOOM_VALUE_FACT_NUMERIC_FORMAT_F16, &component_type));
@@ -93,8 +151,7 @@ TEST(SpirvCooperativePropertiesTest, MapsNumericFormatsToComponentTypes) {
   EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_FLOAT_E5_M2_NV);
 }
 
-TEST(SpirvCooperativePropertiesTest,
-     RejectsUnknownAndMultiValuedNumericFormats) {
+TEST(SpirvCooperativePropertiesTest, RejectsBfloat16AsComponentEnumOperand) {
   loom_spirv_component_type_t component_type =
       LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV;
   EXPECT_FALSE(loom_spirv_component_type_from_numeric_format(
@@ -147,6 +204,55 @@ TEST(SpirvCooperativePropertiesTest, SelectsCooperativeMatrixByShapeAndFacts) {
       property->name,
       IREE_SV("khr.cooperative_matrix.f16.16x16x16.f32.subgroup")));
   EXPECT_EQ(diagnostic.status, LOOM_SPIRV_COOPERATIVE_SELECTION_MATCHED);
+}
+
+TEST(SpirvCooperativePropertiesTest, SelectsBfloat16CooperativeMatrixRow) {
+  loom_spirv_cooperative_property_set_t property_set = {};
+  PreparePropertySet(LOOM_SPIRV_FEATURE_VULKAN_SHADER |
+                         LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR |
+                         LOOM_SPIRV_FEATURE_BFLOAT16_TYPE_KHR |
+                         LOOM_SPIRV_FEATURE_BFLOAT16_COOPERATIVE_MATRIX_KHR,
+                     &property_set);
+  const loom_spirv_cooperative_matrix_query_t query =
+      Bf16MatrixQuery(LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED);
+
+  loom_spirv_cooperative_diagnostic_t diagnostic = {};
+  const loom_spirv_cooperative_matrix_property_t* property =
+      loom_spirv_cooperative_matrix_property_select(&property_set, &query,
+                                                    &diagnostic);
+
+  ASSERT_NE(property, nullptr);
+  EXPECT_TRUE(iree_string_view_equal(
+      property->name,
+      IREE_SV("khr.cooperative_matrix.bf16.16x16x16.f32.subgroup")));
+  EXPECT_EQ(property->lhs_type, LOOM_SPIRV_SCALAR_TYPE_BF16);
+  EXPECT_EQ(property->rhs_type, LOOM_SPIRV_SCALAR_TYPE_BF16);
+  EXPECT_EQ(property->accumulator_type, LOOM_SPIRV_SCALAR_TYPE_F32);
+  EXPECT_EQ(diagnostic.status, LOOM_SPIRV_COOPERATIVE_SELECTION_MATCHED);
+}
+
+TEST(SpirvCooperativePropertiesTest,
+     RejectsBfloat16MatrixWhenCooperativeFeatureIsMissing) {
+  loom_spirv_cooperative_property_set_t property_set = {};
+  PreparePropertySet(LOOM_SPIRV_FEATURE_VULKAN_SHADER |
+                         LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR |
+                         LOOM_SPIRV_FEATURE_BFLOAT16_TYPE_KHR,
+                     &property_set);
+  const loom_spirv_cooperative_matrix_query_t query =
+      Bf16MatrixQuery(LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED);
+
+  loom_spirv_cooperative_diagnostic_t diagnostic = {};
+  EXPECT_EQ(loom_spirv_cooperative_matrix_property_select(&property_set, &query,
+                                                          &diagnostic),
+            nullptr);
+
+  EXPECT_EQ(diagnostic.status,
+            LOOM_SPIRV_COOPERATIVE_SELECTION_REQUIRED_FEATURE_MISSING);
+  EXPECT_EQ(diagnostic.feature_atom,
+            LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_COOPERATIVE_MATRIX_KHR);
+  EXPECT_TRUE(iree_any_bit_set(diagnostic.rejection_flags,
+                               LOOM_SPIRV_COOPERATIVE_REJECTION_FEATURE));
+  EXPECT_EQ(diagnostic.type_candidate_count, 1);
 }
 
 TEST(SpirvCooperativePropertiesTest, RejectsMissingMatrixFeatureSeparately) {

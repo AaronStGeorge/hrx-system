@@ -18,6 +18,7 @@
 #include "iree/base/api.h"
 #include "loom/analysis/policy.h"
 #include "loom/target/arch/spirv/features.h"
+#include "loom/target/arch/spirv/scalar_types.h"
 #include "loom/util/numeric_format.h"
 
 #ifdef __cplusplus
@@ -145,14 +146,14 @@ typedef struct loom_spirv_cooperative_matrix_property_t {
   uint16_t n_size;
   // Matrix A column count and Matrix B row count.
   uint16_t k_size;
-  // Matrix A component type.
-  loom_spirv_component_type_t lhs_type;
-  // Matrix B component type.
-  loom_spirv_component_type_t rhs_type;
-  // Matrix C accumulator component type.
-  loom_spirv_component_type_t accumulator_type;
-  // Result component type.
-  loom_spirv_component_type_t result_type;
+  // Matrix A scalar component type.
+  loom_spirv_scalar_type_t lhs_type;
+  // Matrix B scalar component type.
+  loom_spirv_scalar_type_t rhs_type;
+  // Matrix C accumulator scalar component type.
+  loom_spirv_scalar_type_t accumulator_type;
+  // Result scalar component type.
+  loom_spirv_scalar_type_t result_type;
   // Cooperative matrix scope.
   loom_spirv_scope_t scope;
   // Accepted load/store memory layouts.
@@ -227,14 +228,14 @@ typedef struct loom_spirv_cooperative_matrix_query_t {
   uint16_t n_size;
   // Matrix A column count and Matrix B row count.
   uint16_t k_size;
-  // Matrix A component type.
-  loom_spirv_component_type_t lhs_type;
-  // Matrix B component type.
-  loom_spirv_component_type_t rhs_type;
-  // Matrix C accumulator component type.
-  loom_spirv_component_type_t accumulator_type;
-  // Result component type.
-  loom_spirv_component_type_t result_type;
+  // Matrix A scalar component type.
+  loom_spirv_scalar_type_t lhs_type;
+  // Matrix B scalar component type.
+  loom_spirv_scalar_type_t rhs_type;
+  // Matrix C accumulator scalar component type.
+  loom_spirv_scalar_type_t accumulator_type;
+  // Result scalar component type.
+  loom_spirv_scalar_type_t result_type;
   // Cooperative matrix scope.
   loom_spirv_scope_t scope;
   // Requested load/store memory layout.

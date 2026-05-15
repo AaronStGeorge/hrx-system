@@ -68,8 +68,24 @@ static const iree_string_view_t kSpirvCooperativeMatrixKhrExtensions[] = {
     IREE_SVL("SPV_KHR_cooperative_matrix"),
 };
 
+static const iree_string_view_t kSpirvBfloat16KhrExtensions[] = {
+    IREE_SVL("SPV_KHR_bfloat16"),
+};
+
 static const uint32_t kSpirvCooperativeMatrixKhrCapabilities[] = {
     LOOM_SPIRV_CAPABILITY_COOPERATIVE_MATRIX_KHR,
+};
+
+static const uint32_t kSpirvBfloat16TypeKhrCapabilities[] = {
+    LOOM_SPIRV_CAPABILITY_B_FLOAT16_TYPE_KHR,
+};
+
+static const uint32_t kSpirvBfloat16DotProductKhrCapabilities[] = {
+    LOOM_SPIRV_CAPABILITY_B_FLOAT16_DOT_PRODUCT_KHR,
+};
+
+static const uint32_t kSpirvBfloat16CooperativeMatrixKhrCapabilities[] = {
+    LOOM_SPIRV_CAPABILITY_B_FLOAT16_COOPERATIVE_MATRIX_KHR,
 };
 
 static const uint32_t kSpirvCooperativeMatrixKhrOpcodes[] = {
@@ -169,6 +185,51 @@ static const loom_spirv_feature_atom_descriptor_t kSpirvFeatureAtoms[] = {
                 IREE_ARRAYSIZE(kSpirvCooperativeMatrixKhrCapabilities),
             .opcodes = kSpirvCooperativeMatrixKhrOpcodes,
             .opcode_count = IREE_ARRAYSIZE(kSpirvCooperativeMatrixKhrOpcodes),
+        },
+    [LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_TYPE_KHR] =
+        {
+            .atom = LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_TYPE_KHR,
+            .name = IREE_SVL("spirv.bfloat16.type.khr"),
+            .required_atom_bits = LOOM_SPIRV_FEATURE_VULKAN_SHADER,
+            .minimum_spirv_version = LOOM_SPIRV_VERSION_1_0,
+            .addressing_model = LOOM_SPIRV_ADDRESSING_MODEL_UNSPECIFIED,
+            .memory_model = LOOM_SPIRV_MEMORY_MODEL_UNSPECIFIED,
+            .extension_names = kSpirvBfloat16KhrExtensions,
+            .extension_count = IREE_ARRAYSIZE(kSpirvBfloat16KhrExtensions),
+            .capabilities = kSpirvBfloat16TypeKhrCapabilities,
+            .capability_count =
+                IREE_ARRAYSIZE(kSpirvBfloat16TypeKhrCapabilities),
+        },
+    [LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_DOT_PRODUCT_KHR] =
+        {
+            .atom = LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_DOT_PRODUCT_KHR,
+            .name = IREE_SVL("spirv.bfloat16.dot_product.khr"),
+            .required_atom_bits = LOOM_SPIRV_FEATURE_VULKAN_SHADER |
+                                  LOOM_SPIRV_FEATURE_BFLOAT16_TYPE_KHR,
+            .minimum_spirv_version = LOOM_SPIRV_VERSION_1_0,
+            .addressing_model = LOOM_SPIRV_ADDRESSING_MODEL_UNSPECIFIED,
+            .memory_model = LOOM_SPIRV_MEMORY_MODEL_UNSPECIFIED,
+            .extension_names = kSpirvBfloat16KhrExtensions,
+            .extension_count = IREE_ARRAYSIZE(kSpirvBfloat16KhrExtensions),
+            .capabilities = kSpirvBfloat16DotProductKhrCapabilities,
+            .capability_count =
+                IREE_ARRAYSIZE(kSpirvBfloat16DotProductKhrCapabilities),
+        },
+    [LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_COOPERATIVE_MATRIX_KHR] =
+        {
+            .atom = LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_COOPERATIVE_MATRIX_KHR,
+            .name = IREE_SVL("spirv.bfloat16.cooperative_matrix.khr"),
+            .required_atom_bits = LOOM_SPIRV_FEATURE_VULKAN_SHADER |
+                                  LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR |
+                                  LOOM_SPIRV_FEATURE_BFLOAT16_TYPE_KHR,
+            .minimum_spirv_version = LOOM_SPIRV_VERSION_1_0,
+            .addressing_model = LOOM_SPIRV_ADDRESSING_MODEL_UNSPECIFIED,
+            .memory_model = LOOM_SPIRV_MEMORY_MODEL_UNSPECIFIED,
+            .extension_names = kSpirvBfloat16KhrExtensions,
+            .extension_count = IREE_ARRAYSIZE(kSpirvBfloat16KhrExtensions),
+            .capabilities = kSpirvBfloat16CooperativeMatrixKhrCapabilities,
+            .capability_count =
+                IREE_ARRAYSIZE(kSpirvBfloat16CooperativeMatrixKhrCapabilities),
         },
 };
 

@@ -36,6 +36,7 @@ loom_assert_no_dependencies(
         ":lower",
         ":low_registry",
         ":provider",
+        ":scalar_types",
         ":target_records",
     ],
     targets = [
@@ -86,11 +87,23 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "scalar_types",
+    srcs = ["scalar_types.c"],
+    hdrs = ["scalar_types.h"],
+    deps = [
+        ":features",
+        "//loom/src/loom/util:numeric_format",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "cooperative_properties",
     srcs = ["cooperative_properties.c"],
     hdrs = ["cooperative_properties.h"],
     deps = [
         ":features",
+        ":scalar_types",
         "//loom/src/loom/analysis:policy",
         "//loom/src/loom/util:numeric_format",
         "//runtime/src/iree/base",

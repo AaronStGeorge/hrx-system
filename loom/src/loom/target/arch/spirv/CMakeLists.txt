@@ -46,6 +46,20 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    scalar_types
+  HDRS
+    "scalar_types.h"
+  SRCS
+    "scalar_types.c"
+  DEPS
+    ::features
+    iree::base
+    loom::src::loom::util::numeric_format
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     cooperative_properties
   HDRS
     "cooperative_properties.h"
@@ -53,6 +67,7 @@ loom_cc_library(
     "cooperative_properties.c"
   DEPS
     ::features
+    ::scalar_types
     iree::base
     loom::src::loom::analysis::policy
     loom::src::loom::util::numeric_format

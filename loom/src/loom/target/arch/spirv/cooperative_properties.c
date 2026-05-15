@@ -24,13 +24,13 @@
   (LOOM_SPIRV_STORAGE_CLASS_BIT_STORAGE_BUFFER | \
    LOOM_SPIRV_STORAGE_CLASS_BIT_PHYSICAL_STORAGE_BUFFER)
 
-#define MATRIX_PROPERTY(name_value, m_value, n_value, k_value, lhs_value, \
-                        rhs_value, accumulator_value, result_value,       \
-                        scope_value, layout_flags_value,                  \
+#define MATRIX_PROPERTY(name_value, feature_bits_value, m_value, n_value, \
+                        k_value, lhs_value, rhs_value, accumulator_value, \
+                        result_value, scope_value, layout_flags_value,    \
                         storage_class_flags_value, operand_flags_value)   \
   {                                                                       \
       .name = IREE_SVL(name_value),                                       \
-      .required_feature_bits = LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR, \
+      .required_feature_bits = (feature_bits_value),                      \
       .m_size = (m_value),                                                \
       .n_size = (n_value),                                                \
       .k_size = (k_value),                                                \
@@ -66,19 +66,25 @@
 
 static const loom_spirv_cooperative_matrix_property_t
     kCooperativeMatrixProperties[] = {
-        MATRIX_PROPERTY("khr.cooperative_matrix.f16.16x16x16.f32.subgroup", 16,
-                        16, 16, LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT32_NV,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT32_NV,
+        MATRIX_PROPERTY("khr.cooperative_matrix.f16.16x16x16.f32.subgroup",
+                        LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR, 16, 16, 16,
+                        LOOM_SPIRV_SCALAR_TYPE_F16, LOOM_SPIRV_SCALAR_TYPE_F16,
+                        LOOM_SPIRV_SCALAR_TYPE_F32, LOOM_SPIRV_SCALAR_TYPE_F32,
                         LOOM_SPIRV_SCOPE_SUBGROUP, MATRIX_LAYOUT_ANY,
                         MATRIX_STORAGE_ANY, 0),
+        MATRIX_PROPERTY("khr.cooperative_matrix.bf16.16x16x16.f32.subgroup",
+                        LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR |
+                            LOOM_SPIRV_FEATURE_BFLOAT16_TYPE_KHR |
+                            LOOM_SPIRV_FEATURE_BFLOAT16_COOPERATIVE_MATRIX_KHR,
+                        16, 16, 16, LOOM_SPIRV_SCALAR_TYPE_BF16,
+                        LOOM_SPIRV_SCALAR_TYPE_BF16, LOOM_SPIRV_SCALAR_TYPE_F32,
+                        LOOM_SPIRV_SCALAR_TYPE_F32, LOOM_SPIRV_SCOPE_SUBGROUP,
+                        MATRIX_LAYOUT_ANY, MATRIX_STORAGE_ANY, 0),
         MATRIX_PROPERTY(
-            "khr.cooperative_matrix.s8.16x16x32.s32.subgroup.saturating", 16,
-            16, 32, LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_NV,
-            LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_NV,
-            LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV,
-            LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV,
+            "khr.cooperative_matrix.s8.16x16x32.s32.subgroup.saturating",
+            LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR, 16, 16, 32,
+            LOOM_SPIRV_SCALAR_TYPE_S8, LOOM_SPIRV_SCALAR_TYPE_S8,
+            LOOM_SPIRV_SCALAR_TYPE_S32, LOOM_SPIRV_SCALAR_TYPE_S32,
             LOOM_SPIRV_SCOPE_SUBGROUP, MATRIX_LAYOUT_ANY, STORAGE_BUFFER_OR_BDA,
             LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_A_SIGNED_COMPONENTS |
                 LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_B_SIGNED_COMPONENTS |
@@ -89,8 +95,8 @@ static const loom_spirv_cooperative_matrix_property_t
 
 static const loom_spirv_cooperative_property_span_t
     kCooperativeMatrixShapeSpans[] = {
-        {.shape_key = UINT64_C(0x001000100010), .start = 0, .count = 1},
-        {.shape_key = UINT64_C(0x001000100020), .start = 1, .count = 1},
+        {.shape_key = UINT64_C(0x001000100010), .start = 0, .count = 2},
+        {.shape_key = UINT64_C(0x001000100020), .start = 2, .count = 1},
 };
 
 static const loom_spirv_cooperative_vector_property_t
@@ -346,6 +352,19 @@ static bool loom_spirv_policy_requires_target_primitive(
          policy == LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED;
 }
 
+static loom_spirv_feature_atom_t loom_spirv_first_missing_feature_atom(
+    loom_spirv_feature_bits_t missing_feature_bits) {
+  for (uint32_t i = LOOM_SPIRV_FEATURE_ATOM_UNKNOWN + 1;
+       i < LOOM_SPIRV_FEATURE_ATOM_COUNT; ++i) {
+    const loom_spirv_feature_atom_t atom = (loom_spirv_feature_atom_t)i;
+    if (iree_any_bit_set(missing_feature_bits,
+                         loom_spirv_feature_atom_bit(atom))) {
+      return atom;
+    }
+  }
+  return LOOM_SPIRV_FEATURE_ATOM_UNKNOWN;
+}
+
 static void loom_spirv_cooperative_diagnostic_fail(
     loom_spirv_cooperative_selection_status_t status,
     loom_spirv_feature_atom_t feature_atom,
@@ -455,6 +474,8 @@ loom_spirv_cooperative_matrix_property_select(
   const loom_spirv_storage_class_flags_t storage_class_bit =
       loom_spirv_storage_class_bit(query->storage_class);
   diagnostic.rejection_flags = LOOM_SPIRV_COOPERATIVE_REJECTION_COMPONENT_TYPE;
+  loom_spirv_feature_bits_t missing_row_feature_bits = 0;
+  uint16_t enabled_type_candidate_count = 0;
   for (uint16_t i = 0; i < span->count; ++i) {
     const loom_spirv_cooperative_matrix_property_t* row =
         &property_set->matrix_properties[span->start + i];
@@ -464,6 +485,13 @@ loom_spirv_cooperative_matrix_property_select(
       continue;
     }
     ++diagnostic.type_candidate_count;
+    const loom_spirv_feature_bits_t row_missing_bits =
+        row->required_feature_bits & ~property_set->feature_bits;
+    if (row_missing_bits != 0) {
+      missing_row_feature_bits |= row_missing_bits;
+      continue;
+    }
+    ++enabled_type_candidate_count;
     diagnostic.rejection_flags = LOOM_SPIRV_COOPERATIVE_REJECTION_SCOPE;
     if (row->scope != query->scope) {
       continue;
@@ -486,6 +514,26 @@ loom_spirv_cooperative_matrix_property_select(
     loom_spirv_cooperative_diagnostic_match(
         LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_MATRIX_KHR, out_diagnostic);
     return row;
+  }
+
+  if (diagnostic.type_candidate_count != 0 &&
+      enabled_type_candidate_count == 0 && missing_row_feature_bits != 0) {
+    diagnostic.status =
+        !loom_spirv_policy_requires_target_primitive(query->policy)
+            ? LOOM_SPIRV_COOPERATIVE_SELECTION_FALLBACK_PERMITTED
+            : LOOM_SPIRV_COOPERATIVE_SELECTION_REQUIRED_FEATURE_MISSING;
+    diagnostic.feature_atom =
+        loom_spirv_first_missing_feature_atom(missing_row_feature_bits);
+    diagnostic.rejection_flags = LOOM_SPIRV_COOPERATIVE_REJECTION_FEATURE;
+    if (diagnostic.status ==
+        LOOM_SPIRV_COOPERATIVE_SELECTION_FALLBACK_PERMITTED) {
+      diagnostic.rejection_flags |=
+          LOOM_SPIRV_COOPERATIVE_REJECTION_POLICY_FALLBACK;
+    }
+    if (out_diagnostic) {
+      *out_diagnostic = diagnostic;
+    }
+    return NULL;
   }
 
   if (!loom_spirv_policy_requires_target_primitive(query->policy)) {

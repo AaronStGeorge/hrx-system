@@ -41,8 +41,14 @@ typedef enum loom_spirv_feature_atom_e {
   LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_VECTOR_TRAINING_NV = 4,
   // SPV_KHR_cooperative_matrix support.
   LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_MATRIX_KHR = 5,
+  // SPV_KHR_bfloat16 scalar type support.
+  LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_TYPE_KHR = 6,
+  // SPV_KHR_bfloat16 dot-product support.
+  LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_DOT_PRODUCT_KHR = 7,
+  // SPV_KHR_bfloat16 cooperative-matrix support.
+  LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_COOPERATIVE_MATRIX_KHR = 8,
   // Number of feature atom enum slots.
-  LOOM_SPIRV_FEATURE_ATOM_COUNT = 6,
+  LOOM_SPIRV_FEATURE_ATOM_COUNT = 9,
 } loom_spirv_feature_atom_t;
 
 // Bitset of loom_spirv_feature_atom_t values.
@@ -63,6 +69,15 @@ typedef uint64_t loom_spirv_feature_bits_t;
 // Target enables SPV_KHR_cooperative_matrix.
 #define LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR \
   (UINT64_C(1) << LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_MATRIX_KHR)
+// Target enables SPV_KHR_bfloat16 scalar type support.
+#define LOOM_SPIRV_FEATURE_BFLOAT16_TYPE_KHR \
+  (UINT64_C(1) << LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_TYPE_KHR)
+// Target enables SPV_KHR_bfloat16 dot-product support.
+#define LOOM_SPIRV_FEATURE_BFLOAT16_DOT_PRODUCT_KHR \
+  (UINT64_C(1) << LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_DOT_PRODUCT_KHR)
+// Target enables SPV_KHR_bfloat16 cooperative-matrix support.
+#define LOOM_SPIRV_FEATURE_BFLOAT16_COOPERATIVE_MATRIX_KHR \
+  (UINT64_C(1) << LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_COOPERATIVE_MATRIX_KHR)
 
 // Feature bits selected by the built-in Vulkan 1.3 BDA profile.
 #define LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA \
@@ -72,7 +87,7 @@ typedef uint64_t loom_spirv_feature_bits_t;
 // Maximum number of OpExtension rows emitted by the initial atom set.
 #define LOOM_SPIRV_FEATURE_MAX_EXTENSION_COUNT 8
 // Maximum number of OpCapability rows emitted by the initial atom set.
-#define LOOM_SPIRV_FEATURE_MAX_CAPABILITY_COUNT 8
+#define LOOM_SPIRV_FEATURE_MAX_CAPABILITY_COUNT 16
 // Maximum number of opcode rows exposed by the initial atom set.
 #define LOOM_SPIRV_FEATURE_MAX_OPCODE_COUNT 16
 // Maximum number of storage-class rows exposed by the initial atom set.
