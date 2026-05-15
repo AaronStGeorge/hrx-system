@@ -33,6 +33,19 @@ low.func.def target(@target) @spirv_storage_buffer_load_store(%ptr: reg<spirv.pt
 
 // ====
 
+// RUN: emit low-allocation-json @spirv_storage_buffer_bda_addressing output=none
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) @spirv_storage_buffer_bda_addressing(%base: reg<spirv.ptr.storage_buffer>, %row: reg<spirv.offset64>, %column: reg<spirv.offset64>) -> (reg<spirv.id>) asm<spirv.logical.core> {
+  %byte_offset = OpIAdd.offset64 %row, %column
+  %ptr = OpPtrAccessChain.storage_buffer.byte_offset %base, %byte_offset
+  %loaded = OpLoad.storage_buffer.i32 %ptr
+  return %loaded
+}
+
+// ====
+
 // RUN: pass low-materialize-allocation{budgets=spirv.id=1,spill-storage-spaces=workgroup}
 
 spirv.target<vulkan1_3> @target

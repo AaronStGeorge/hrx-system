@@ -36,6 +36,22 @@ const loom_low_descriptor_t* LookupDescriptor(
                                                descriptor_ordinal);
 }
 
+const loom_low_reg_class_t* OperandRegisterClass(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_operand_t& operand) {
+  EXPECT_EQ(operand.reg_class_alt_count, 1);
+  if (operand.reg_class_alt_count != 1) {
+    return nullptr;
+  }
+  const loom_low_reg_class_alt_t& alt =
+      descriptor_set->reg_class_alts[operand.reg_class_alt_start];
+  EXPECT_NE(alt.reg_class_id, LOOM_LOW_REG_CLASS_NONE);
+  if (alt.reg_class_id == LOOM_LOW_REG_CLASS_NONE) {
+    return nullptr;
+  }
+  return &descriptor_set->reg_classes[alt.reg_class_id];
+}
+
 TEST(SpirvRegistersTest, LogicalIdsAndPointerValuesUseSeparateWidths) {
   const loom_low_descriptor_set_t* descriptor_set =
       loom_spirv_logical_core_descriptor_set();
@@ -49,6 +65,16 @@ TEST(SpirvRegistersTest, LogicalIdsAndPointerValuesUseSeparateWidths) {
   EXPECT_TRUE(
       iree_all_bits_set(id_class->flags, LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY));
   EXPECT_EQ(id_class->spill_slot_space, LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE);
+
+  const loom_low_reg_class_t* offset64_class =
+      LookupRegisterClass(descriptor_set, IREE_SV("spirv.offset64"));
+  ASSERT_NE(offset64_class, nullptr);
+  EXPECT_EQ(offset64_class->alloc_unit_bits, 64);
+  EXPECT_EQ(offset64_class->allocatable_count, 0);
+  EXPECT_TRUE(iree_all_bits_set(offset64_class->flags,
+                                LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY));
+  EXPECT_EQ(offset64_class->spill_slot_space,
+            LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE);
 
   const loom_low_reg_class_t* function_ptr_class =
       LookupRegisterClass(descriptor_set, IREE_SV("spirv.ptr.function"));
@@ -114,6 +140,42 @@ TEST(SpirvRegistersTest, StorageBufferEffectsStayDescriptorLocal) {
   EXPECT_EQ(store_effect.memory_space, LOOM_LOW_MEMORY_SPACE_GLOBAL);
   EXPECT_TRUE(
       iree_all_bits_set(store_effect.flags, LOOM_LOW_EFFECT_FLAG_DEPENDENCY));
+}
+
+TEST(SpirvRegistersTest, StorageBufferAddressArithmeticUsesBdaRegisters) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_spirv_logical_core_descriptor_set();
+  ASSERT_NE(descriptor_set, nullptr);
+
+  const loom_low_descriptor_t* offset_add =
+      LookupDescriptor(descriptor_set, IREE_SV("spirv.op_iadd.offset64"));
+  ASSERT_NE(offset_add, nullptr);
+  const loom_low_reg_class_t* offset_class =
+      LookupRegisterClass(descriptor_set, IREE_SV("spirv.offset64"));
+  ASSERT_NE(offset_class, nullptr);
+  ASSERT_EQ(offset_add->operand_count, 3);
+  const loom_low_operand_t* operands =
+      &descriptor_set->operands[offset_add->operand_start];
+  EXPECT_EQ(OperandRegisterClass(descriptor_set, operands[0]), offset_class);
+  EXPECT_EQ(OperandRegisterClass(descriptor_set, operands[1]), offset_class);
+  EXPECT_EQ(OperandRegisterClass(descriptor_set, operands[2]), offset_class);
+
+  const loom_low_descriptor_t* ptr_access_chain = LookupDescriptor(
+      descriptor_set,
+      IREE_SV("spirv.op_ptr_access_chain.storage_buffer.byte_offset"));
+  ASSERT_NE(ptr_access_chain, nullptr);
+  const loom_low_reg_class_t* storage_buffer_ptr_class =
+      LookupRegisterClass(descriptor_set, IREE_SV("spirv.ptr.storage_buffer"));
+  ASSERT_NE(storage_buffer_ptr_class, nullptr);
+  ASSERT_EQ(ptr_access_chain->operand_count, 3);
+  operands = &descriptor_set->operands[ptr_access_chain->operand_start];
+  EXPECT_EQ(OperandRegisterClass(descriptor_set, operands[0]),
+            storage_buffer_ptr_class);
+  EXPECT_EQ(OperandRegisterClass(descriptor_set, operands[1]),
+            storage_buffer_ptr_class);
+  EXPECT_EQ(OperandRegisterClass(descriptor_set, operands[2]), offset_class);
+  EXPECT_EQ(operands[1].role, LOOM_LOW_OPERAND_ROLE_RESOURCE);
+  EXPECT_EQ(operands[2].role, LOOM_LOW_OPERAND_ROLE_OPERAND);
 }
 
 }  // namespace

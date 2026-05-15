@@ -35,6 +35,7 @@ from loom.target.low_descriptors import (
 )
 
 _REG_ID = "spirv.id"
+_REG_OFFSET64 = "spirv.offset64"
 _REG_PTR_FUNCTION = "spirv.ptr.function"
 _REG_PTR_WORKGROUP = "spirv.ptr.workgroup"
 _REG_PTR_STORAGE_BUFFER = "spirv.ptr.storage_buffer"
@@ -50,6 +51,7 @@ _SCHEDULE_STORE = "spirv.store"
 _SCHEDULE_VARIABLE = "spirv.variable"
 
 _ID_ALT = (RegClassAlt(_REG_ID),)
+_OFFSET64_ALT = (RegClassAlt(_REG_OFFSET64),)
 _PTR_FUNCTION_ALT = (RegClassAlt(_REG_PTR_FUNCTION),)
 _PTR_WORKGROUP_ALT = (RegClassAlt(_REG_PTR_WORKGROUP),)
 _PTR_STORAGE_BUFFER_ALT = (RegClassAlt(_REG_PTR_STORAGE_BUFFER),)
@@ -71,12 +73,24 @@ def _id_operand(field_name: str) -> Operand:
     return Operand(field_name, OperandRole.OPERAND, _ID_ALT)
 
 
+def _offset64_result(field_name: str = "dst") -> Operand:
+    return Operand(field_name, OperandRole.RESULT, _OFFSET64_ALT)
+
+
+def _offset64_operand(field_name: str) -> Operand:
+    return Operand(field_name, OperandRole.OPERAND, _OFFSET64_ALT)
+
+
 def _ptr_function_result(field_name: str = "ptr") -> Operand:
     return Operand(field_name, OperandRole.RESULT, _PTR_FUNCTION_ALT)
 
 
 def _ptr_workgroup_result(field_name: str = "ptr") -> Operand:
     return Operand(field_name, OperandRole.RESULT, _PTR_WORKGROUP_ALT)
+
+
+def _ptr_storage_buffer_result(field_name: str = "ptr") -> Operand:
+    return Operand(field_name, OperandRole.RESULT, _PTR_STORAGE_BUFFER_ALT)
 
 
 def _ptr_storage_buffer_operand(field_name: str) -> Operand:
@@ -113,6 +127,12 @@ SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
         RegClass(
             _REG_ID,
             32,
+            SpillSlotSpace.PRIVATE,
+            flags=(RegClassFlag.VIRTUAL_ONLY,),
+        ),
+        RegClass(
+            _REG_OFFSET64,
+            64,
             SpillSlotSpace.PRIVATE,
             flags=(RegClassFlag.VIRTUAL_ONLY,),
         ),
@@ -181,6 +201,32 @@ SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
             operands=(_id_result(), _id_operand("lhs"), _id_operand("rhs")),
             asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
             schedule_class=_SCHEDULE_ALU,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="spirv.op_iadd.offset64",
+            mnemonic="OpIAdd.offset64",
+            semantic_tag="spirv.op_iadd.offset64",
+            operands=(
+                _offset64_result(),
+                _offset64_operand("lhs"),
+                _offset64_operand("rhs"),
+            ),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_ALU,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="spirv.op_ptr_access_chain.storage_buffer.byte_offset",
+            mnemonic="OpPtrAccessChain.storage_buffer.byte_offset",
+            semantic_tag="spirv.op_ptr_access_chain.storage_buffer.byte_offset",
+            operands=(
+                _ptr_storage_buffer_result(),
+                _ptr_storage_buffer_operand("base"),
+                _offset64_operand("byte_offset"),
+            ),
+            asm_forms=_asm(results=("ptr",), operands=("base", "byte_offset")),
+            schedule_class=_SCHEDULE_VARIABLE,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         Descriptor(
