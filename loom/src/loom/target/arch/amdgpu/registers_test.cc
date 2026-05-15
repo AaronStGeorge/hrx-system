@@ -140,6 +140,34 @@ void ExpectOccupancyRegisterClass(const loom_amdgpu_occupancy_model_t* model,
       << ToString(expected_name);
 }
 
+void ExpectOccupancyPressureResource(
+    const loom_amdgpu_occupancy_model_t* model, iree_host_size_t index,
+    iree_string_view_t expected_name, uint32_t expected_pool_units,
+    uint32_t expected_allocation_granularity, uint16_t expected_vgpr_index,
+    uint32_t expected_vgpr_contribution_granularity,
+    uint16_t expected_agpr_index,
+    uint32_t expected_agpr_contribution_granularity) {
+  ASSERT_LT(index, model->resource_count) << ToString(expected_name);
+  const loom_amdgpu_occupancy_resource_model_t* resource =
+      &model->resources[index];
+  EXPECT_EQ(ToString(resource->resource), ToString(expected_name));
+  EXPECT_EQ(resource->pool_units, expected_pool_units)
+      << ToString(expected_name);
+  EXPECT_EQ(resource->allocation_granularity, expected_allocation_granularity)
+      << ToString(expected_name);
+  ASSERT_EQ(resource->member_count, 2u) << ToString(expected_name);
+  EXPECT_EQ(resource->members[0].register_class_index, expected_vgpr_index)
+      << ToString(expected_name);
+  EXPECT_EQ(resource->members[0].contribution_granularity,
+            expected_vgpr_contribution_granularity)
+      << ToString(expected_name);
+  EXPECT_EQ(resource->members[1].register_class_index, expected_agpr_index)
+      << ToString(expected_name);
+  EXPECT_EQ(resource->members[1].contribution_granularity,
+            expected_agpr_contribution_granularity)
+      << ToString(expected_name);
+}
+
 TEST(AmdgpuRegistersTest, DescriptorSetsExposeAddressableRegisterNamespaces) {
   struct DescriptorSetCase {
     // Generated descriptor set under test.
@@ -300,6 +328,10 @@ TEST(AmdgpuRegistersTest, OccupancyPoolsStaySeparateFromAddressability) {
     uint32_t agpr_pool_units;
     // AGPR allocation granularity used by occupancy calculations.
     uint32_t agpr_allocation_granularity;
+    // Combined VGPR+AGPR resource pool, or zero when absent.
+    uint32_t combined_pool_units;
+    // Combined VGPR+AGPR allocation granularity.
+    uint32_t combined_allocation_granularity;
   };
   const OccupancyCase cases[] = {
       {
@@ -310,6 +342,8 @@ TEST(AmdgpuRegistersTest, OccupancyPoolsStaySeparateFromAddressability) {
           8,
           256,
           4,
+          512,
+          8,
       },
       {
           LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_CDNA4,
@@ -319,6 +353,8 @@ TEST(AmdgpuRegistersTest, OccupancyPoolsStaySeparateFromAddressability) {
           4,
           256,
           4,
+          512,
+          8,
       },
       {
           LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA3,
@@ -326,6 +362,8 @@ TEST(AmdgpuRegistersTest, OccupancyPoolsStaySeparateFromAddressability) {
           16,
           1024,
           4,
+          0,
+          0,
           0,
           0,
       },
@@ -337,6 +375,8 @@ TEST(AmdgpuRegistersTest, OccupancyPoolsStaySeparateFromAddressability) {
           4,
           0,
           0,
+          0,
+          0,
       },
       {
           LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_RDNA4_GFX125X,
@@ -344,6 +384,8 @@ TEST(AmdgpuRegistersTest, OccupancyPoolsStaySeparateFromAddressability) {
           16,
           1024,
           4,
+          0,
+          0,
           0,
           0,
       },
@@ -363,11 +405,19 @@ TEST(AmdgpuRegistersTest, OccupancyPoolsStaySeparateFromAddressability) {
                                  c.vgpr_allocation_granularity);
     if (c.agpr_pool_units == 0) {
       EXPECT_EQ(model->register_class_count, 2u);
+      EXPECT_EQ(model->resource_count, 0u);
     } else {
       ASSERT_EQ(model->register_class_count, 3u);
       ExpectOccupancyRegisterClass(model, 2, IREE_SV("amdgpu.agpr"),
                                    c.agpr_pool_units,
                                    c.agpr_allocation_granularity);
+      ASSERT_EQ(model->resource_count, 1u);
+      ExpectOccupancyPressureResource(
+          model, 0, IREE_SV("amdgpu.vgpr_agpr"), c.combined_pool_units,
+          c.combined_allocation_granularity, /*expected_vgpr_index=*/1,
+          /*expected_vgpr_contribution_granularity=*/4,
+          /*expected_agpr_index=*/2,
+          /*expected_agpr_contribution_granularity=*/1);
     }
   }
 }

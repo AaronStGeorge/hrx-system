@@ -56,7 +56,18 @@ def _model_symbol_suffix(descriptor_set_key: str) -> str:
 
 
 def _model_c_suffix(descriptor_set_key: str) -> str:
-    return "".join(part[:1].upper() + part[1:].lower() for part in _model_symbol_suffix(descriptor_set_key).split("_") if part)
+    return _camel_c_suffix(_model_symbol_suffix(descriptor_set_key))
+
+
+def _resource_c_suffix(resource: str) -> str:
+    prefix = "amdgpu."
+    if resource.startswith(prefix):
+        resource = resource.removeprefix(prefix)
+    return _camel_c_suffix(_c_identifier(resource))
+
+
+def _camel_c_suffix(value: str) -> str:
+    return "".join(part[:1].upper() + part[1:].lower() for part in value.split("_") if part)
 
 
 def _u16_expr(value: int) -> str:
@@ -82,6 +93,8 @@ def _validate_models(models: Sequence[AmdgpuOccupancyModelInfo]) -> None:
         if model.max_waves_per_simd <= 0:
             raise ValueError(f"AMDGPU occupancy max waves for {model.descriptor_set_key} must be positive")
         register_classes = [row.register_class for row in model.register_classes]
+        if len(register_classes) > 0x10000:
+            raise ValueError(f"AMDGPU occupancy model for {model.descriptor_set_key} has too many register classes")
         if len(register_classes) != len(set(register_classes)):
             raise ValueError(f"AMDGPU occupancy model for {model.descriptor_set_key} has duplicate register classes")
         for row in model.register_classes:
@@ -89,6 +102,24 @@ def _validate_models(models: Sequence[AmdgpuOccupancyModelInfo]) -> None:
                 raise ValueError(f"AMDGPU occupancy pool for {row.register_class} must be positive")
             if row.allocation_granularity <= 0:
                 raise ValueError(f"AMDGPU occupancy granularity for {row.register_class} must be positive")
+        resources = [row.resource for row in model.resources]
+        if len(resources) != len(set(resources)):
+            raise ValueError(f"AMDGPU occupancy model for {model.descriptor_set_key} has duplicate resources")
+        for resource in model.resources:
+            if resource.pool_units <= 0:
+                raise ValueError(f"AMDGPU occupancy resource pool for {resource.resource} must be positive")
+            if resource.allocation_granularity <= 0:
+                raise ValueError(f"AMDGPU occupancy resource granularity for {resource.resource} must be positive")
+            if not resource.members:
+                raise ValueError(f"AMDGPU occupancy resource {resource.resource} must have members")
+            member_register_classes = [member.register_class for member in resource.members]
+            if len(member_register_classes) != len(set(member_register_classes)):
+                raise ValueError(f"AMDGPU occupancy resource {resource.resource} has duplicate members")
+            for member in resource.members:
+                if member.register_class not in register_classes:
+                    raise ValueError(f"AMDGPU occupancy resource {resource.resource} references unknown register class {member.register_class}")
+                if member.contribution_granularity <= 0:
+                    raise ValueError(f"AMDGPU occupancy resource {resource.resource} member {member.register_class} granularity must be positive")
 
 
 def _emit_header() -> str:
@@ -123,6 +154,26 @@ def _emit_header() -> str:
         "  uint32_t allocation_granularity;",
         "} loom_amdgpu_occupancy_register_class_model_t;",
         "",
+        "typedef struct loom_amdgpu_occupancy_resource_member_model_t {",
+        "  // Index into loom_amdgpu_occupancy_model_t::register_classes.",
+        "  uint16_t register_class_index;",
+        "  // Member contribution granularity applied before summing pressure.",
+        "  uint32_t contribution_granularity;",
+        "} loom_amdgpu_occupancy_resource_member_model_t;",
+        "",
+        "typedef struct loom_amdgpu_occupancy_resource_model_t {",
+        "  // Stable target-low resource name.",
+        "  iree_string_view_t resource;",
+        "  // Occupancy resource pool shared by resident waves.",
+        "  uint32_t pool_units;",
+        "  // Allocation granularity used by occupancy calculations.",
+        "  uint32_t allocation_granularity;",
+        "  // Register-class members contributing to this resource.",
+        "  const loom_amdgpu_occupancy_resource_member_model_t* members;",
+        "  // Number of entries in members.",
+        "  iree_host_size_t member_count;",
+        "} loom_amdgpu_occupancy_resource_model_t;",
+        "",
         "typedef struct loom_amdgpu_occupancy_model_t {",
         "  // Dense generated AMDGPU descriptor-set ordinal.",
         "  uint16_t descriptor_set_ordinal;",
@@ -134,6 +185,10 @@ def _emit_header() -> str:
         "  const loom_amdgpu_occupancy_register_class_model_t* register_classes;",
         "  // Number of entries in register_classes.",
         "  iree_host_size_t register_class_count;",
+        "  // Derived occupancy resources in diagnostic order.",
+        "  const loom_amdgpu_occupancy_resource_model_t* resources;",
+        "  // Number of entries in resources.",
+        "  iree_host_size_t resource_count;",
         "} loom_amdgpu_occupancy_model_t;",
         "",
         "// Returns the generated occupancy model for descriptor_set_ordinal.",
@@ -166,6 +221,7 @@ def _emit_source(models: Sequence[AmdgpuOccupancyModelInfo]) -> str:
     ]
     for model in models:
         suffix = _model_c_suffix(model.descriptor_set_key)
+        register_class_indices = {row.register_class: index for index, row in enumerate(model.register_classes)}
         lines.extend(
             [
                 "",
@@ -183,6 +239,50 @@ def _emit_source(models: Sequence[AmdgpuOccupancyModelInfo]) -> str:
                 ]
             )
         lines.append("};")
+        for resource in model.resources:
+            resource_suffix = _resource_c_suffix(resource.resource)
+            lines.extend(
+                [
+                    "",
+                    f"static const loom_amdgpu_occupancy_resource_member_model_t kAmdgpu{suffix}{resource_suffix}Members[] = {{",
+                ]
+            )
+            for member in resource.members:
+                lines.extend(
+                    [
+                        "  {",
+                        f"    .register_class_index = {_u16_expr(register_class_indices[member.register_class])},",
+                        f"    .contribution_granularity = {_u32_expr(member.contribution_granularity)},",
+                        "  },",
+                    ]
+                )
+            lines.append("};")
+        if model.resources:
+            lines.extend(
+                [
+                    "",
+                    f"static const loom_amdgpu_occupancy_resource_model_t kAmdgpu{suffix}Resources[] = {{",
+                ]
+            )
+            for resource in model.resources:
+                resource_suffix = _resource_c_suffix(resource.resource)
+                lines.extend(
+                    [
+                        "  {",
+                        f'    .resource = IREE_SVL("{_c_string_literal(resource.resource)}"),',
+                        f"    .pool_units = {_u32_expr(resource.pool_units)},",
+                        f"    .allocation_granularity = {_u32_expr(resource.allocation_granularity)},",
+                        f"    .members = kAmdgpu{suffix}{resource_suffix}Members,",
+                        f"    .member_count = IREE_ARRAYSIZE(kAmdgpu{suffix}{resource_suffix}Members),",
+                        "  },",
+                    ]
+                )
+            lines.append("};")
+            resource_initializer = f"kAmdgpu{suffix}Resources"
+            resource_count_initializer = f"IREE_ARRAYSIZE(kAmdgpu{suffix}Resources)"
+        else:
+            resource_initializer = "NULL"
+            resource_count_initializer = "0"
         lines.extend(
             [
                 "",
@@ -192,6 +292,8 @@ def _emit_source(models: Sequence[AmdgpuOccupancyModelInfo]) -> str:
                 f"  .max_waves_per_simd = {_u32_expr(model.max_waves_per_simd)},",
                 f"  .register_classes = kAmdgpu{suffix}RegisterClasses,",
                 f"  .register_class_count = IREE_ARRAYSIZE(kAmdgpu{suffix}RegisterClasses),",
+                f"  .resources = {resource_initializer},",
+                f"  .resource_count = {resource_count_initializer},",
                 "};",
             ]
         )

@@ -29,6 +29,18 @@ extern "C" {
 // Sentinel for no limiting register class.
 #define LOOM_AMDGPU_OCCUPANCY_CLASS_NONE UINT32_MAX
 
+// Sentinel for no limiting occupancy resource.
+#define LOOM_AMDGPU_OCCUPANCY_RESOURCE_NONE UINT32_MAX
+
+typedef enum loom_amdgpu_occupancy_limiting_resource_kind_e {
+  // Occupancy is capped only by the target's maximum wave count.
+  LOOM_AMDGPU_OCCUPANCY_LIMITING_RESOURCE_MAX_WAVES = 0,
+  // Occupancy is limited by a physical register class.
+  LOOM_AMDGPU_OCCUPANCY_LIMITING_RESOURCE_REGISTER_CLASS = 1,
+  // Occupancy is limited by a derived target pressure resource.
+  LOOM_AMDGPU_OCCUPANCY_LIMITING_RESOURCE_PRESSURE_RESOURCE = 2,
+} loom_amdgpu_occupancy_limiting_resource_kind_t;
+
 typedef enum loom_amdgpu_occupancy_diagnostic_bits_e {
   // Emits BACKEND/010 remarks summarizing estimated occupancy.
   LOOM_AMDGPU_OCCUPANCY_DIAGNOSTIC_SUMMARY = 1u << 0,
@@ -77,6 +89,28 @@ typedef struct loom_amdgpu_occupancy_register_class_t {
   uint32_t spill_reload_count;
 } loom_amdgpu_occupancy_register_class_t;
 
+// Occupancy facts for one AMDGPU target pressure resource.
+typedef struct loom_amdgpu_occupancy_pressure_resource_t {
+  // Stable resource name such as "amdgpu.vgpr_agpr".
+  iree_string_view_t resource;
+  // Highest allocated physical unit count after member contribution rounding.
+  uint32_t allocated_units;
+  // Allocation units rounded according to the occupancy model.
+  uint32_t rounded_units;
+  // Target resource capacity available to waves.
+  uint32_t pool_units;
+  // Allocation granularity applied before estimating occupancy.
+  uint32_t allocation_granularity;
+  // Maximum resident waves allowed by this resource.
+  uint32_t wave_limit;
+  // Smallest allocated unit count that would reduce |wave_limit|, or 0 when
+  // this resource is already at zero occupancy or has no lower modeled cliff.
+  uint32_t next_cliff_units;
+  // Additional units available before |next_cliff_units|, or UINT32_MAX when no
+  // lower modeled cliff exists.
+  uint32_t units_until_next_cliff;
+} loom_amdgpu_occupancy_pressure_resource_t;
+
 // AMDGPU occupancy table for one allocated target-low function body.
 typedef struct loom_amdgpu_occupancy_table_t {
   // Allocation table this occupancy estimate was built from.
@@ -97,13 +131,20 @@ typedef struct loom_amdgpu_occupancy_table_t {
   uint32_t resident_waves_per_simd;
   // Estimated resident wave occupancy as a percentage of |max_waves_per_simd|.
   uint32_t occupancy_percent;
-  // Index into |register_classes| that limited occupancy, or
-  // LOOM_AMDGPU_OCCUPANCY_CLASS_NONE when occupancy is capped by max waves.
-  uint32_t limiting_register_class_index;
+  // Kind of resource that limited occupancy.
+  loom_amdgpu_occupancy_limiting_resource_kind_t limiting_resource_kind;
+  // Index into |register_classes| or |pressure_resources| according to
+  // |limiting_resource_kind|, or LOOM_AMDGPU_OCCUPANCY_RESOURCE_NONE when
+  // occupancy is capped by max waves.
+  uint32_t limiting_resource_index;
   // Per-register-class summaries in target model order.
   const loom_amdgpu_occupancy_register_class_t* register_classes;
   // Number of records in |register_classes|.
   iree_host_size_t register_class_count;
+  // Derived target pressure resources in target model order.
+  const loom_amdgpu_occupancy_pressure_resource_t* pressure_resources;
+  // Number of records in |pressure_resources|.
+  iree_host_size_t pressure_resource_count;
   // Number of spilled assignments across all AMDGPU register classes.
   uint32_t spill_count;
   // Total scratch spill-slot bytes across all AMDGPU register classes.

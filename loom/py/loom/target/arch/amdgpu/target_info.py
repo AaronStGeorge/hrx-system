@@ -110,11 +110,26 @@ class AmdgpuOccupancyRegisterClassInfo:
 
 
 @dataclass(frozen=True, slots=True)
+class AmdgpuOccupancyResourceMemberInfo:
+    register_class: str
+    contribution_granularity: int = 1
+
+
+@dataclass(frozen=True, slots=True)
+class AmdgpuOccupancyResourceInfo:
+    resource: str
+    pool_units: int
+    allocation_granularity: int
+    members: tuple[AmdgpuOccupancyResourceMemberInfo, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class AmdgpuOccupancyModelInfo:
     descriptor_set_key: str
     wave_size: int
     max_waves_per_simd: int
     register_classes: tuple[AmdgpuOccupancyRegisterClassInfo, ...]
+    resources: tuple[AmdgpuOccupancyResourceInfo, ...] = ()
 
 
 class AmdgpuIsaArchitectureInfo(Protocol):
@@ -498,6 +513,17 @@ AMDGPU_OCCUPANCY_MODEL_INFOS: tuple[AmdgpuOccupancyModelInfo, ...] = (
             AmdgpuOccupancyRegisterClassInfo("amdgpu.vgpr", 512, 8),
             AmdgpuOccupancyRegisterClassInfo("amdgpu.agpr", 256, 4),
         ),
+        resources=(
+            AmdgpuOccupancyResourceInfo(
+                "amdgpu.vgpr_agpr",
+                512,
+                8,
+                (
+                    AmdgpuOccupancyResourceMemberInfo("amdgpu.vgpr", 4),
+                    AmdgpuOccupancyResourceMemberInfo("amdgpu.agpr"),
+                ),
+            ),
+        ),
     ),
     AmdgpuOccupancyModelInfo(
         descriptor_set_key="amdgpu.cdna4.core",
@@ -507,6 +533,17 @@ AMDGPU_OCCUPANCY_MODEL_INFOS: tuple[AmdgpuOccupancyModelInfo, ...] = (
             AmdgpuOccupancyRegisterClassInfo("amdgpu.sgpr", 800, 16),
             AmdgpuOccupancyRegisterClassInfo("amdgpu.vgpr", 1024, 4),
             AmdgpuOccupancyRegisterClassInfo("amdgpu.agpr", 256, 4),
+        ),
+        resources=(
+            AmdgpuOccupancyResourceInfo(
+                "amdgpu.vgpr_agpr",
+                512,
+                8,
+                (
+                    AmdgpuOccupancyResourceMemberInfo("amdgpu.vgpr", 4),
+                    AmdgpuOccupancyResourceMemberInfo("amdgpu.agpr"),
+                ),
+            ),
         ),
     ),
     AmdgpuOccupancyModelInfo(
