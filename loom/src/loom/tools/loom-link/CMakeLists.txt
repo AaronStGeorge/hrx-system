@@ -26,6 +26,7 @@ loom_cc_binary(
     loom::src::loom::ir
     loom::src::loom::link::linker
     loom::src::loom::ops::op_registry
+    loom::src::loom::tooling::config
     loom::src::loom::tooling::io::file
     loom::src::loom::util::stream
     loom::src::loom::verify

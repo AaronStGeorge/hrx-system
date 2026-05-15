@@ -28,6 +28,23 @@ typedef struct loom_tooling_config_binding_t {
   iree_string_view_t value;
 } loom_tooling_config_binding_t;
 
+// Owned config bindings for one compiler operation.
+//
+// Config sets are explicit invocation state. They are intentionally separate
+// from sessions, contexts, and pass managers so callers can reuse long-lived
+// compiler infrastructure across many independent compilations without ambient
+// config leakage.
+typedef struct loom_tooling_config_set_t {
+  // Host allocator owning the binding array and copied key/value strings.
+  iree_allocator_t host_allocator;
+  // Owned normalized bindings. Callers must not mutate this array directly.
+  loom_tooling_config_binding_t* bindings;
+  // Number of entries in |bindings|.
+  iree_host_size_t binding_count;
+  // Allocated capacity of |bindings|.
+  iree_host_size_t binding_capacity;
+} loom_tooling_config_set_t;
+
 // Materialization policy flags.
 enum loom_tooling_config_materialize_flag_bits_e {
   // Reject bindings whose keys do not name config symbols in the module.
@@ -41,10 +58,9 @@ typedef uint32_t loom_tooling_config_materialize_flags_t;
 typedef struct loom_tooling_config_materialize_options_t {
   // Policy flags controlling typo handling and module sensitivity.
   loom_tooling_config_materialize_flags_t flags;
-  // Borrowed array of caller-provided bindings.
-  const loom_tooling_config_binding_t* bindings;
-  // Number of entries in |bindings|.
-  iree_host_size_t binding_count;
+  // Borrowed config set for the current compiler operation. NULL is accepted
+  // and treated as an empty set.
+  const loom_tooling_config_set_t* config_set;
 } loom_tooling_config_materialize_options_t;
 
 // Summary of a materialization run.
@@ -60,6 +76,24 @@ typedef struct loom_tooling_config_materialize_result_t {
 void loom_tooling_config_materialize_options_initialize(
     loom_tooling_config_materialize_options_t* out_options);
 
+// Initializes |out_config_set| as an empty owned config set.
+void loom_tooling_config_set_initialize(
+    iree_allocator_t host_allocator, loom_tooling_config_set_t* out_config_set);
+
+// Releases all strings and storage owned by |config_set|.
+void loom_tooling_config_set_deinitialize(
+    loom_tooling_config_set_t* config_set);
+
+// Appends a single config binding to |config_set|.
+//
+// The key is normalized in the same way as command-line assignments:
+// surrounding whitespace is trimmed and one leading '@' sigil is removed. The
+// value is trimmed and stored as text to parse against each matching IR symbol
+// type. Duplicate normalized keys are rejected so precedence remains explicit.
+iree_status_t loom_tooling_config_set_append(
+    loom_tooling_config_set_t* config_set, iree_string_view_t key,
+    iree_string_view_t value);
+
 // Parses a single `key=value` command-line assignment into borrowed views.
 //
 // The split happens at the first '='. Both sides are trimmed. A leading '@' on
@@ -68,9 +102,13 @@ void loom_tooling_config_materialize_options_initialize(
 iree_status_t loom_tooling_config_parse_assignment(
     iree_string_view_t assignment, loom_tooling_config_binding_t* out_binding);
 
+// Parses and appends one `key=value` command-line assignment to |config_set|.
+iree_status_t loom_tooling_config_set_append_assignment(
+    loom_tooling_config_set_t* config_set, iree_string_view_t assignment);
+
 // Replaces matching config.decl/config.def symbol ops with config.def ops whose
-// initializer attributes are parsed from |options->bindings|. Bindings without
-// matching config symbols are ignored unless REQUIRE_MATCHES is set.
+// initializer attributes are parsed from |options->config_set|. Bindings
+// without matching config symbols are ignored unless REQUIRE_MATCHES is set.
 //
 // This is intentionally a direct module operation rather than a pass. Tooling
 // should call it immediately after loading and, when requested, initially

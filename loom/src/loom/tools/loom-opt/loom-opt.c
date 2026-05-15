@@ -744,34 +744,26 @@ static iree_status_t loom_opt_run_passes(
   return status;
 }
 
-static iree_status_t loom_opt_materialize_config_flags(
-    loom_module_t* module, iree_arena_block_pool_t* block_pool,
-    loom_tooling_config_materialize_result_t* out_result,
-    iree_allocator_t allocator) {
-  *out_result = (loom_tooling_config_materialize_result_t){0};
+static iree_status_t loom_opt_append_config_flags(
+    loom_tooling_config_set_t* config_set) {
   iree_flag_string_list_t assignments = FLAG_config_list();
-  if (assignments.count == 0) {
-    return iree_ok_status();
+  for (iree_host_size_t i = 0; i < assignments.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_tooling_config_set_append_assignment(
+        config_set, assignments.values[i]));
   }
+  return iree_ok_status();
+}
 
-  loom_tooling_config_binding_t* bindings = NULL;
-  iree_status_t status = iree_allocator_malloc_array(
-      allocator, assignments.count, sizeof(*bindings), (void**)&bindings);
-  for (iree_host_size_t i = 0;
-       i < assignments.count && iree_status_is_ok(status); ++i) {
-    status = loom_tooling_config_parse_assignment(assignments.values[i],
-                                                  &bindings[i]);
-  }
-  if (iree_status_is_ok(status)) {
-    loom_tooling_config_materialize_options_t options;
-    loom_tooling_config_materialize_options_initialize(&options);
-    options.bindings = bindings;
-    options.binding_count = assignments.count;
-    status = loom_tooling_config_materialize_module(module, &options,
-                                                    block_pool, out_result);
-  }
-  iree_allocator_free(allocator, bindings);
-  return status;
+static iree_status_t loom_opt_materialize_config_set(
+    loom_module_t* module, const loom_tooling_config_set_t* config_set,
+    iree_arena_block_pool_t* block_pool,
+    loom_tooling_config_materialize_result_t* out_result) {
+  *out_result = (loom_tooling_config_materialize_result_t){0};
+  loom_tooling_config_materialize_options_t options;
+  loom_tooling_config_materialize_options_initialize(&options);
+  options.config_set = config_set;
+  return loom_tooling_config_materialize_module(module, &options, block_pool,
+                                                out_result);
 }
 
 static iree_status_t loom_opt_write_pass_report(
@@ -939,6 +931,8 @@ int main(int argc, char** argv) {
   iree_io_file_contents_t* contents = NULL;
   loom_run_session_t run_session = {0};
   loom_run_module_t run_module = {0};
+  loom_tooling_config_set_t config_set;
+  loom_tooling_config_set_initialize(allocator, &config_set);
   const loom_target_environment_t* target_environment =
       loom_all_target_environment();
   loom_pass_registry_storage_t pass_registry_storage = {0};
@@ -1008,6 +1002,9 @@ int main(int argc, char** argv) {
   }
 
   if (iree_status_is_ok(status) && !metadata_only) {
+    status = loom_opt_append_config_flags(&config_set);
+  }
+  if (iree_status_is_ok(status) && !metadata_only) {
     loom_run_session_options_t session_options = {0};
     loom_run_session_options_initialize(&session_options);
     session_options.host_allocator = allocator;
@@ -1056,9 +1053,9 @@ int main(int argc, char** argv) {
         diagnostic_sink);
   }
   if (iree_status_is_ok(status) && !metadata_only) {
-    status = loom_opt_materialize_config_flags(
-        run_module.module, loom_run_session_block_pool(&run_session),
-        &config_materialize_result, allocator);
+    status = loom_opt_materialize_config_set(
+        run_module.module, &config_set,
+        loom_run_session_block_pool(&run_session), &config_materialize_result);
   }
   if (iree_status_is_ok(status) && !metadata_only && FLAG_verify &&
       config_materialize_result.materialized_count > 0) {
@@ -1124,6 +1121,7 @@ int main(int argc, char** argv) {
   if (pass_report_initialized) {
     loom_pass_report_deinitialize(&pass_report);
   }
+  loom_tooling_config_set_deinitialize(&config_set);
   loom_run_module_deinitialize(&run_module);
   iree_io_file_contents_free(contents);
   loom_run_session_deinitialize(&run_session);

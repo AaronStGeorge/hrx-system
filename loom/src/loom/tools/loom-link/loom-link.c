@@ -19,6 +19,7 @@
 #include "loom/ir/module.h"
 #include "loom/link/linker.h"
 #include "loom/ops/op_registry.h"
+#include "loom/tooling/config/config.h"
 #include "loom/tooling/io/file.h"
 #include "loom/util/stream.h"
 #include "loom/verify/verify.h"
@@ -28,6 +29,11 @@ IREE_FLAG(string, output, "-",
 IREE_FLAG_LIST(string, root,
                "Root symbol to materialize. Repeat for multiple roots. Empty "
                "links every materialized symbol.");
+IREE_FLAG_LIST(string, config,
+               "Compile/link-time config binding. Repeat as "
+               "--config=key=value. Bindings are materialized after linked "
+               "config declarations/defaults merge; unused bindings are "
+               "ignored.");
 IREE_FLAG(bool, verify, true,
           "Verify the linked output module before printing.");
 
@@ -141,6 +147,28 @@ static void loom_link_release_inputs(loom_link_input_t* inputs,
   }
 }
 
+static iree_status_t loom_link_append_config_flags(
+    loom_tooling_config_set_t* config_set) {
+  iree_flag_string_list_t assignments = FLAG_config_list();
+  for (iree_host_size_t i = 0; i < assignments.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_tooling_config_set_append_assignment(
+        config_set, assignments.values[i]));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_link_materialize_config_set(
+    loom_module_t* module, const loom_tooling_config_set_t* config_set,
+    iree_arena_block_pool_t* block_pool,
+    loom_tooling_config_materialize_result_t* out_result) {
+  *out_result = (loom_tooling_config_materialize_result_t){0};
+  loom_tooling_config_materialize_options_t options;
+  loom_tooling_config_materialize_options_initialize(&options);
+  options.config_set = config_set;
+  return loom_tooling_config_materialize_module(module, &options, block_pool,
+                                                out_result);
+}
+
 int main(int argc, char** argv) {
   iree_flags_set_usage(
       "loom-link",
@@ -152,7 +180,9 @@ int main(int argc, char** argv) {
       "--output=linked.loom\n"
       "\n"
       "Input defaults to stdin when no files are provided. A '-' input reads "
-      "stdin and must be the only input path.\n");
+      "stdin and must be the only input path.\n"
+      "Repeat --config=key=value to override linked config symbols after "
+      "config declarations/defaults merge.\n");
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t allocator = iree_allocator_system();
@@ -165,6 +195,9 @@ int main(int argc, char** argv) {
   const loom_module_t** source_modules = NULL;
   loom_source_entry_t* source_entries = NULL;
   loom_module_t* linked_module = NULL;
+  loom_tooling_config_set_t config_set;
+  loom_tooling_config_set_initialize(allocator, &config_set);
+  loom_tooling_config_materialize_result_t config_materialize_result = {0};
 
   iree_host_size_t input_count = argc < 2 ? 1 : (iree_host_size_t)(argc - 1);
   iree_status_t status = iree_allocator_malloc(
@@ -184,6 +217,9 @@ int main(int argc, char** argv) {
   if (iree_status_is_ok(status)) {
     status = loom_op_registry_initialize_context(allocator, &context);
     context_initialized = iree_status_is_ok(status);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_link_append_config_flags(&config_set);
   }
   for (iree_host_size_t i = 0; i < input_count && iree_status_is_ok(status);
        ++i) {
@@ -215,6 +251,10 @@ int main(int argc, char** argv) {
                                             &link_options, &block_pool,
                                             allocator, &linked_module);
   }
+  if (iree_status_is_ok(status)) {
+    status = loom_link_materialize_config_set(
+        linked_module, &config_set, &block_pool, &config_materialize_result);
+  }
   if (iree_status_is_ok(status) && FLAG_verify) {
     status =
         loom_link_verify_output(source_entries, input_count, linked_module);
@@ -231,6 +271,7 @@ int main(int argc, char** argv) {
   }
 
   loom_module_free(linked_module);
+  loom_tooling_config_set_deinitialize(&config_set);
   loom_link_release_inputs(inputs, input_count);
   iree_allocator_free(allocator, source_entries);
   iree_allocator_free(allocator, source_modules);

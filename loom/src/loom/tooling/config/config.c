@@ -25,6 +25,31 @@ void loom_tooling_config_materialize_options_initialize(
   memset(out_options, 0, sizeof(*out_options));
 }
 
+void loom_tooling_config_set_initialize(
+    iree_allocator_t host_allocator,
+    loom_tooling_config_set_t* out_config_set) {
+  IREE_ASSERT_ARGUMENT(out_config_set);
+  memset(out_config_set, 0, sizeof(*out_config_set));
+  out_config_set->host_allocator = host_allocator;
+}
+
+void loom_tooling_config_set_deinitialize(
+    loom_tooling_config_set_t* config_set) {
+  if (!config_set) {
+    return;
+  }
+  for (iree_host_size_t i = 0; i < config_set->binding_count; ++i) {
+    iree_allocator_free(config_set->host_allocator,
+                        (void*)config_set->bindings[i].key.data);
+    iree_allocator_free(config_set->host_allocator,
+                        (void*)config_set->bindings[i].value.data);
+  }
+  iree_allocator_free(config_set->host_allocator, config_set->bindings);
+  iree_allocator_t host_allocator = config_set->host_allocator;
+  memset(config_set, 0, sizeof(*config_set));
+  config_set->host_allocator = host_allocator;
+}
+
 static iree_string_view_t loom_tooling_config_normalize_key(
     iree_string_view_t key) {
   key = iree_string_view_trim(key);
@@ -62,6 +87,114 @@ iree_status_t loom_tooling_config_parse_assignment(
   return iree_ok_status();
 }
 
+static iree_status_t loom_tooling_config_clone_string_view(
+    iree_allocator_t allocator, iree_string_view_t value,
+    iree_string_view_t* out_value) {
+  iree_host_size_t byte_length = 0;
+  if (!iree_host_size_checked_add(value.size, 1, &byte_length)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "config string length overflow");
+  }
+  char* data = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_allocator_malloc(allocator, byte_length, (void**)&data));
+  memcpy(data, value.data, value.size);
+  data[value.size] = '\0';
+  *out_value = iree_make_string_view(data, value.size);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_tooling_config_set_reserve(
+    loom_tooling_config_set_t* config_set, iree_host_size_t minimum_capacity) {
+  if (config_set->binding_capacity >= minimum_capacity) {
+    return iree_ok_status();
+  }
+  iree_host_size_t new_capacity =
+      config_set->binding_capacity ? config_set->binding_capacity : 4;
+  while (new_capacity < minimum_capacity) {
+    if (new_capacity > IREE_HOST_SIZE_MAX / 2) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "config binding capacity overflow");
+    }
+    new_capacity *= 2;
+  }
+  IREE_RETURN_IF_ERROR(iree_allocator_realloc_array(
+      config_set->host_allocator, new_capacity, sizeof(*config_set->bindings),
+      (void**)&config_set->bindings));
+  config_set->binding_capacity = new_capacity;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_tooling_config_set_check_duplicate(
+    const loom_tooling_config_set_t* config_set, iree_string_view_t key) {
+  for (iree_host_size_t i = 0; i < config_set->binding_count; ++i) {
+    if (!iree_string_view_equal(config_set->bindings[i].key, key)) {
+      continue;
+    }
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "duplicate config binding for '%.*s'",
+                            (int)key.size, key.data);
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_tooling_config_set_append(
+    loom_tooling_config_set_t* config_set, iree_string_view_t key,
+    iree_string_view_t value) {
+  IREE_ASSERT_ARGUMENT(config_set);
+  key = loom_tooling_config_normalize_key(key);
+  value = iree_string_view_trim(value);
+  if (iree_string_view_is_empty(key)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "config binding key must not be empty");
+  }
+  if (iree_string_view_is_empty(value)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "config binding for '%.*s' must provide a non-empty value",
+        (int)key.size, key.data);
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_tooling_config_set_check_duplicate(config_set, key));
+  iree_host_size_t minimum_capacity = 0;
+  if (!iree_host_size_checked_add(config_set->binding_count, 1,
+                                  &minimum_capacity)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "config binding count overflow");
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_tooling_config_set_reserve(config_set, minimum_capacity));
+
+  iree_string_view_t copied_key = iree_string_view_empty();
+  iree_status_t status = loom_tooling_config_clone_string_view(
+      config_set->host_allocator, key, &copied_key);
+  iree_string_view_t copied_value = iree_string_view_empty();
+  if (iree_status_is_ok(status)) {
+    status = loom_tooling_config_clone_string_view(config_set->host_allocator,
+                                                   value, &copied_value);
+  }
+  if (!iree_status_is_ok(status)) {
+    iree_allocator_free(config_set->host_allocator, (void*)copied_key.data);
+    return status;
+  }
+
+  config_set->bindings[config_set->binding_count++] =
+      (loom_tooling_config_binding_t){
+          .key = copied_key,
+          .value = copied_value,
+      };
+  return iree_ok_status();
+}
+
+iree_status_t loom_tooling_config_set_append_assignment(
+    loom_tooling_config_set_t* config_set, iree_string_view_t assignment) {
+  IREE_ASSERT_ARGUMENT(config_set);
+  loom_tooling_config_binding_t binding = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_tooling_config_parse_assignment(assignment, &binding));
+  return loom_tooling_config_set_append(config_set, binding.key, binding.value);
+}
+
 static iree_string_view_t loom_tooling_config_symbol_name(
     const loom_module_t* module, const loom_symbol_t* symbol) {
   if (!module || !symbol || symbol->name_id == LOOM_STRING_ID_INVALID ||
@@ -69,29 +202,6 @@ static iree_string_view_t loom_tooling_config_symbol_name(
     return IREE_SV("<invalid>");
   }
   return module->strings.entries[symbol->name_id];
-}
-
-static iree_status_t loom_tooling_config_binding_check_duplicates(
-    const loom_tooling_config_materialize_options_t* options) {
-  for (iree_host_size_t i = 0; i < options->binding_count; ++i) {
-    iree_string_view_t lhs_key =
-        loom_tooling_config_normalize_key(options->bindings[i].key);
-    if (iree_string_view_is_empty(lhs_key)) {
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "config binding key must not be empty");
-    }
-    for (iree_host_size_t j = i + 1; j < options->binding_count; ++j) {
-      iree_string_view_t rhs_key =
-          loom_tooling_config_normalize_key(options->bindings[j].key);
-      if (!iree_string_view_equal(lhs_key, rhs_key)) {
-        continue;
-      }
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "duplicate config binding for '%.*s'",
-                              (int)lhs_key.size, lhs_key.data);
-    }
-  }
-  return iree_ok_status();
 }
 
 static iree_status_t loom_tooling_config_lookup_symbol(
@@ -467,30 +577,26 @@ iree_status_t loom_tooling_config_materialize_module(
   IREE_ASSERT_ARGUMENT(module);
   IREE_ASSERT_ARGUMENT(options);
   IREE_ASSERT_ARGUMENT(block_pool);
-  if (!options->bindings && options->binding_count > 0) {
+  const loom_tooling_config_set_t* config_set = options->config_set;
+  const iree_host_size_t binding_count =
+      config_set ? config_set->binding_count : 0;
+  if (config_set && !config_set->bindings && binding_count > 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "config bindings pointer is NULL");
   }
 
   loom_tooling_config_materialize_result_t result = {0};
-  if (options->binding_count == 0) {
+  if (binding_count == 0) {
     if (out_result) *out_result = result;
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(loom_tooling_config_binding_check_duplicates(options));
 
   const bool require_matches = iree_any_bit_set(
       options->flags, LOOM_TOOLING_CONFIG_MATERIALIZE_REQUIRE_MATCHES);
-  for (iree_host_size_t i = 0; i < options->binding_count; ++i) {
-    const loom_tooling_config_binding_t* binding = &options->bindings[i];
-    iree_string_view_t key = loom_tooling_config_normalize_key(binding->key);
-    iree_string_view_t value_text = iree_string_view_trim(binding->value);
-    if (iree_string_view_is_empty(value_text)) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "config binding for '%.*s' must provide a non-empty value",
-          (int)key.size, key.data);
-    }
+  for (iree_host_size_t i = 0; i < binding_count; ++i) {
+    const loom_tooling_config_binding_t* binding = &config_set->bindings[i];
+    iree_string_view_t key = binding->key;
+    iree_string_view_t value_text = binding->value;
     uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
     IREE_RETURN_IF_ERROR(
         loom_tooling_config_lookup_symbol(module, key, &symbol_id));

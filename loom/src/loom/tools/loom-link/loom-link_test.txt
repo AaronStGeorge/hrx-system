@@ -53,3 +53,36 @@
 // RUN: FileCheck --check-prefix=DUPLICATE %s < %t.duplicate.err
 
 // DUPLICATE: duplicate concrete symbol definition '@duplicate'
+
+// RUN: printf '%%s\n' \
+// RUN:   'config.decl @model36.model.hidden_size : %value: index where [range(%value, 0, 8192)]' \
+// RUN:   '' \
+// RUN:   'func.def @read_config() -> (index) {' \
+// RUN:   '  %hidden = config.get @model36.model.hidden_size : index' \
+// RUN:   '  func.return %hidden : index' \
+// RUN:   '}' \
+// RUN:   > %t.config_a.loom
+// RUN: printf '%%s\n' \
+// RUN:   'config.decl @model36.model.hidden_size : %value: index where [mul(%value, 16)]' \
+// RUN:   '' \
+// RUN:   'func.def @also_reads_config() -> (index) {' \
+// RUN:   '  %hidden = config.get @model36.model.hidden_size : index' \
+// RUN:   '  func.return %hidden : index' \
+// RUN:   '}' \
+// RUN:   > %t.config_b.loom
+// RUN: loom-link %t.config_a.loom %t.config_b.loom \
+// RUN:     --config=model36.model.hidden_size=4096 \
+// RUN:   | FileCheck --check-prefix=CONFIG-LINK %s
+
+// CONFIG-LINK: config.def @model36.model.hidden_size = 4096 : index
+// CONFIG-LINK-NOT: config.decl @model36.model.hidden_size
+// CONFIG-LINK: func.def @read_config() -> (index) {
+// CONFIG-LINK: func.def @also_reads_config() -> (index) {
+// CONFIG-LINK-NOT: config.decl @model36.model.hidden_size
+
+// RUN: loom-link %t.config_a.loom %t.config_b.loom \
+// RUN:     --config=model36.model.hidden_size=4103 \
+// RUN:   > %t.config.err 2>&1; test $? -ne 0
+// RUN: FileCheck --check-prefix=CONFIG-CONSTRAINT %s < %t.config.err
+
+// CONFIG-CONSTRAINT: config 'model36.model.hidden_size' value 4103 violates constraint 'mul'

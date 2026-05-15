@@ -245,6 +245,13 @@
 // CONFIG-FOLD: %result = index.constant 42 : index
 
 // RUN: printf '%%s\n' \
+// RUN:   'config.decl @answer : index' \
+// RUN:   | loom-opt --config=answer=40 --config=@answer=41 \
+// RUN:       --output=%t.unused > %t.config-duplicate.err 2>&1; test $? -ne 0
+// RUN: FileCheck --check-prefix=CONFIG-DUPLICATE %s < %t.config-duplicate.err
+// CONFIG-DUPLICATE: duplicate config binding for 'answer'
+
+// RUN: printf '%%s\n' \
 // RUN:   'config.decl @model36.model.hidden_size : %%value: index where [range(%%value, 0, 8192), mul(%%value, 16)]' \
 // RUN:   '' \
 // RUN:   'func.def @bad_config_constraint() -> (index) {' \

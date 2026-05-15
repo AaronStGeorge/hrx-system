@@ -64,18 +64,50 @@ class ConfigMaterializeTest : public ::testing::Test {
       iree_host_size_t binding_count,
       loom_tooling_config_materialize_flags_t flags,
       loom_tooling_config_materialize_result_t* out_result) {
+    loom_tooling_config_set_t config_set;
+    loom_tooling_config_set_initialize(iree_allocator_system(), &config_set);
     loom_tooling_config_materialize_options_t options;
     loom_tooling_config_materialize_options_initialize(&options);
     options.flags = flags;
-    options.bindings = bindings;
-    options.binding_count = binding_count;
-    return loom_tooling_config_materialize_module(module, &options,
-                                                  &block_pool_, out_result);
+    options.config_set = &config_set;
+    iree_status_t status = iree_ok_status();
+    for (iree_host_size_t i = 0; i < binding_count && iree_status_is_ok(status);
+         ++i) {
+      status = loom_tooling_config_set_append(&config_set, bindings[i].key,
+                                              bindings[i].value);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_tooling_config_materialize_module(module, &options,
+                                                      &block_pool_, out_result);
+    }
+    loom_tooling_config_set_deinitialize(&config_set);
+    return status;
   }
 
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
 };
+
+TEST_F(ConfigMaterializeTest, ConfigSetOwnsAssignmentsAndRejectsDuplicates) {
+  loom_tooling_config_set_t config_set;
+  loom_tooling_config_set_initialize(iree_allocator_system(), &config_set);
+
+  IREE_ASSERT_OK(loom_tooling_config_set_append_assignment(
+      &config_set, IREE_SV(" @model36.model.hidden_size = 4096 ")));
+  EXPECT_EQ(config_set.binding_count, 1u);
+  EXPECT_TRUE(iree_string_view_equal(
+      config_set.bindings[0].key,
+      iree_make_cstring_view("model36.model.hidden_size")));
+  EXPECT_TRUE(iree_string_view_equal(config_set.bindings[0].value,
+                                     iree_make_cstring_view("4096")));
+
+  iree_status_t status = loom_tooling_config_set_append_assignment(
+      &config_set, IREE_SV("model36.model.hidden_size=8192"));
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  iree_status_free(status);
+
+  loom_tooling_config_set_deinitialize(&config_set);
+}
 
 TEST_F(ConfigMaterializeTest, IgnoresNonSensitiveBindings) {
   ModulePtr module = Parse(R"(
