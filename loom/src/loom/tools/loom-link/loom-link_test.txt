@@ -81,6 +81,29 @@
 // CONFIG-LINK: func.def @also_reads_config() -> (index) {
 // CONFIG-LINK-NOT: config.decl @model36.model.hidden_size
 
+// RUN: loom-link %t.config_a.loom %t.config_b.loom --print-config-schema \
+// RUN:   | FileCheck --check-prefix=CONFIG-SCHEMA %s
+// CONFIG-SCHEMA: {"configs":[
+// CONFIG-SCHEMA: "name":"model36.model.hidden_size"
+// CONFIG-SCHEMA: "state":"decl"
+// CONFIG-SCHEMA: "required":true
+// CONFIG-SCHEMA: "type":"index"
+// CONFIG-SCHEMA: "constraints":[
+// CONFIG-SCHEMA: "kind":"range"
+// CONFIG-SCHEMA: "kind":"mul"
+// CONFIG-SCHEMA: "count":1}
+
+// RUN: loom-link %t.config_a.loom %t.config_b.loom \
+// RUN:     --config=model36.model.hidden_size=4096 \
+// RUN:     --print-config-schema \
+// RUN:   | FileCheck --check-prefix=CONFIG-SCHEMA-MATERIALIZED %s
+// CONFIG-SCHEMA-MATERIALIZED: "name":"model36.model.hidden_size"
+// CONFIG-SCHEMA-MATERIALIZED: "state":"def"
+// CONFIG-SCHEMA-MATERIALIZED: "required":false
+// CONFIG-SCHEMA-MATERIALIZED: "type":"index"
+// CONFIG-SCHEMA-MATERIALIZED: "default":"4096"
+// CONFIG-SCHEMA-MATERIALIZED: "count":1}
+
 // RUN: loom-link %t.config_a.loom %t.config_b.loom \
 // RUN:     --config=model36.model.hidden_size=4103 \
 // RUN:   > %t.config.err 2>&1; test $? -ne 0

@@ -25,6 +25,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::config
     loom::src::loom::ops::encoding
+    loom::src::loom::util::json
     loom::src::loom::util::stream
   PUBLIC
 )

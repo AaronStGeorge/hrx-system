@@ -46,6 +46,8 @@ IREE_FLAG_LIST(
     "not referenced by the loaded module are ignored.");
 IREE_FLAG(bool, require_resolved_config, false,
           "Require all config.decl symbols to be materialized before output.");
+IREE_FLAG(bool, print_config_schema, false,
+          "Print config schema JSON instead of Loom IR.");
 IREE_FLAG(bool, verify, true,
           "Verify the module before and after executing passes.");
 IREE_FLAG(bool, list_passes, false, "Print registered passes and exit.");
@@ -815,6 +817,26 @@ static iree_status_t loom_opt_print_module(
   return status;
 }
 
+static iree_status_t loom_opt_print_config_schema(
+    iree_string_view_t output_path, const loom_module_t* module,
+    iree_allocator_t allocator) {
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(allocator, &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+  iree_status_t status =
+      loom_tooling_config_format_schema_json(module, &stream);
+  if (iree_status_is_ok(status)) {
+    status = iree_string_builder_append_string(&builder, IREE_SV("\n"));
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_tooling_write_output_file(
+        output_path, iree_string_builder_view(&builder), allocator);
+  }
+  iree_string_builder_deinitialize(&builder);
+  return status;
+}
+
 static iree_status_t loom_opt_print_pass_list(
     const loom_pass_registry_t* registry) {
   for (iree_host_size_t i = 0; i < registry->descriptor_count; ++i) {
@@ -923,6 +945,8 @@ int main(int argc, char** argv) {
       "symbols before passes run. Unused config bindings are ignored.\n"
       "Use --require-resolved-config for final outputs that must not retain "
       "config.decl symbols.\n"
+      "Use --print-config-schema to print config schema JSON instead of Loom "
+      "IR.\n"
       "Use --pass-report=json to print a structured execution report to "
       "stderr.\n"
       "Use --diagnostic-format=json to print structured diagnostic JSONL to "
@@ -1114,10 +1138,15 @@ int main(int argc, char** argv) {
   }
   if (iree_status_is_ok(status) && pass_run_result.error_count == 0 &&
       !metadata_only) {
-    status = loom_opt_print_module(
-        iree_make_cstring_view(FLAG_output),
-        loom_run_session_low_descriptor_registry(&run_session),
-        run_module.module, allocator);
+    if (FLAG_print_config_schema) {
+      status = loom_opt_print_config_schema(iree_make_cstring_view(FLAG_output),
+                                            run_module.module, allocator);
+    } else {
+      status = loom_opt_print_module(
+          iree_make_cstring_view(FLAG_output),
+          loom_run_session_low_descriptor_registry(&run_session),
+          run_module.module, allocator);
+    }
   }
 
   bool had_status_error = !iree_status_is_ok(status);

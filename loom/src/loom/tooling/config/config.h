@@ -13,6 +13,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/ir/module.h"
+#include "loom/util/stream.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -135,6 +136,15 @@ iree_status_t loom_tooling_config_materialize_module(
 iree_status_t loom_tooling_config_require_resolved_module(
     const loom_module_t* module,
     loom_tooling_config_resolution_result_t* out_result);
+
+// Writes a stable JSON description of config symbols in |module|.
+//
+// The report includes both unresolved config.decl symbols and resolved
+// config.def defaults/overrides. Consumers should treat the textual type and
+// default fields as display/round-trip strings and the constraints array as the
+// structured contract for programmatic validation.
+iree_status_t loom_tooling_config_format_schema_json(
+    const loom_module_t* module, loom_output_stream_t* stream);
 
 #ifdef __cplusplus
 }  // extern "C"

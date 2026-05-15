@@ -36,6 +36,8 @@ IREE_FLAG_LIST(string, config,
                "ignored.");
 IREE_FLAG(bool, require_resolved_config, false,
           "Require all config.decl symbols to be materialized before output.");
+IREE_FLAG(bool, print_config_schema, false,
+          "Print config schema JSON instead of linked Loom IR.");
 IREE_FLAG(bool, verify, true,
           "Verify the linked output module before printing.");
 
@@ -138,6 +140,26 @@ static iree_status_t loom_link_print_output(iree_string_view_t path,
   return status;
 }
 
+static iree_status_t loom_link_print_config_schema(iree_string_view_t path,
+                                                   const loom_module_t* module,
+                                                   iree_allocator_t allocator) {
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(allocator, &builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&builder, &stream);
+  iree_status_t status =
+      loom_tooling_config_format_schema_json(module, &stream);
+  if (iree_status_is_ok(status)) {
+    status = iree_string_builder_append_string(&builder, IREE_SV("\n"));
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_tooling_write_output_file(
+        path, iree_string_builder_view(&builder), allocator);
+  }
+  iree_string_builder_deinitialize(&builder);
+  return status;
+}
+
 static void loom_link_release_inputs(loom_link_input_t* inputs,
                                      iree_host_size_t input_count) {
   if (!inputs) {
@@ -186,7 +208,9 @@ int main(int argc, char** argv) {
       "Repeat --config=key=value to override linked config symbols after "
       "config declarations/defaults merge.\n"
       "Use --require-resolved-config for final outputs that must not retain "
-      "config.decl symbols.\n");
+      "config.decl symbols.\n"
+      "Use --print-config-schema to print config schema JSON instead of Loom "
+      "IR.\n");
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t allocator = iree_allocator_system();
@@ -267,8 +291,13 @@ int main(int argc, char** argv) {
         loom_link_verify_output(source_entries, input_count, linked_module);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_link_print_output(iree_make_cstring_view(FLAG_output),
-                                    linked_module);
+    if (FLAG_print_config_schema) {
+      status = loom_link_print_config_schema(
+          iree_make_cstring_view(FLAG_output), linked_module, allocator);
+    } else {
+      status = loom_link_print_output(iree_make_cstring_view(FLAG_output),
+                                      linked_module);
+    }
   }
 
   bool had_error = !iree_status_is_ok(status);

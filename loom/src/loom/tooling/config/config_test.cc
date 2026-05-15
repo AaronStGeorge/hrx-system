@@ -59,6 +59,18 @@ class ConfigMaterializeTest : public ::testing::Test {
     return printed;
   }
 
+  std::string PrintSchema(const loom_module_t* module) {
+    iree_string_builder_t builder;
+    iree_string_builder_initialize(iree_allocator_system(), &builder);
+    loom_output_stream_t stream;
+    loom_output_stream_for_builder(&builder, &stream);
+    IREE_EXPECT_OK(loom_tooling_config_format_schema_json(module, &stream));
+    std::string printed(iree_string_builder_buffer(&builder),
+                        iree_string_builder_size(&builder));
+    iree_string_builder_deinitialize(&builder);
+    return printed;
+  }
+
   iree_status_t Materialize(
       loom_module_t* module, const loom_tooling_config_binding_t* bindings,
       iree_host_size_t binding_count,
@@ -233,6 +245,29 @@ config.def @model36.model.hidden_size = 4096 : index
   IREE_ASSERT_OK(
       loom_tooling_config_require_resolved_module(module.get(), &result));
   EXPECT_EQ(result.unresolved_count, 0u);
+}
+
+TEST_F(ConfigMaterializeTest, FormatsConfigSchemaJson) {
+  ModulePtr module = Parse(R"(
+config.decl @model36.model.hidden_size : %value: index where [range(%value, 0, 8192), mul(%value, 16)]
+config.def @model36.features.enable_mtp = true : i1
+)");
+
+  std::string schema = PrintSchema(module.get());
+  EXPECT_NE(schema.find("\"count\":2"), std::string::npos);
+  EXPECT_NE(schema.find("\"name\":\"model36.model.hidden_size\""),
+            std::string::npos);
+  EXPECT_NE(schema.find("\"state\":\"decl\""), std::string::npos);
+  EXPECT_NE(schema.find("\"required\":true"), std::string::npos);
+  EXPECT_NE(schema.find("\"type\":\"index\""), std::string::npos);
+  EXPECT_NE(schema.find("\"kind\":\"range\""), std::string::npos);
+  EXPECT_NE(schema.find("\"kind\":\"mul\""), std::string::npos);
+  EXPECT_NE(schema.find("\"value\":8192"), std::string::npos);
+  EXPECT_NE(schema.find("\"name\":\"model36.features.enable_mtp\""),
+            std::string::npos);
+  EXPECT_NE(schema.find("\"state\":\"def\""), std::string::npos);
+  EXPECT_NE(schema.find("\"required\":false"), std::string::npos);
+  EXPECT_NE(schema.find("\"default\":\"true\""), std::string::npos);
 }
 
 }  // namespace

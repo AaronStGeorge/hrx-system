@@ -17,6 +17,7 @@
 #include "loom/ops/config/contract.h"
 #include "loom/ops/config/ops.h"
 #include "loom/ops/encoding/roles.h"
+#include "loom/util/json.h"
 #include "loom/util/stream.h"
 
 void loom_tooling_config_materialize_options_initialize(
@@ -676,4 +677,190 @@ iree_status_t loom_tooling_config_require_resolved_module(
       " unresolved config%s total)",
       (int)first_unresolved_name.size, first_unresolved_name.data,
       result.unresolved_count, result.unresolved_count == 1 ? "" : "s");
+}
+
+static iree_status_t loom_tooling_config_write_json_string_field(
+    loom_output_stream_t* stream, const char* name, iree_string_view_t value) {
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_format(stream, "\"%s\":", name));
+  return loom_json_write_escaped_string(stream, value);
+}
+
+static iree_status_t loom_tooling_config_write_printed_type_string(
+    const loom_module_t* module, loom_type_t type,
+    loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '"'));
+  loom_json_escape_stream_t escape_data;
+  loom_output_stream_t escape_stream;
+  loom_json_escape_stream_init(stream, &escape_data, &escape_stream);
+  IREE_RETURN_IF_ERROR(loom_text_print_type(type, module, &escape_stream));
+  return loom_output_stream_write_char(stream, '"');
+}
+
+static iree_status_t loom_tooling_config_write_printed_attr_string(
+    const loom_module_t* module, loom_attribute_t attr,
+    loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '"'));
+  loom_json_escape_stream_t escape_data;
+  loom_output_stream_t escape_stream;
+  loom_json_escape_stream_init(stream, &escape_data, &escape_stream);
+  IREE_RETURN_IF_ERROR(
+      loom_text_print_attribute(&attr, module, &escape_stream));
+  return loom_output_stream_write_char(stream, '"');
+}
+
+static iree_string_view_t loom_tooling_config_predicate_arg_kind_name(
+    uint8_t tag) {
+  switch ((loom_predicate_arg_tag_t)tag) {
+    case LOOM_PRED_ARG_NONE:
+      return IREE_SV("none");
+    case LOOM_PRED_ARG_VALUE:
+      return IREE_SV("value");
+    case LOOM_PRED_ARG_CONST:
+      return IREE_SV("const");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static iree_status_t loom_tooling_config_format_predicate_arg_json(
+    const loom_predicate_t* predicate, uint8_t arg_index,
+    loom_output_stream_t* stream) {
+  uint8_t tag = LOOM_PRED_ARG_NONE;
+  int64_t value = 0;
+  if (arg_index < predicate->arg_count) {
+    tag = predicate->arg_tags[arg_index];
+    value = predicate->args[arg_index];
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_tooling_config_write_json_string_field(
+      stream, "kind", loom_tooling_config_predicate_arg_kind_name(tag)));
+  switch ((loom_predicate_arg_tag_t)tag) {
+    case LOOM_PRED_ARG_VALUE: {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          stream, ",\"value_id\":%" PRId64, value));
+      break;
+    }
+    case LOOM_PRED_ARG_CONST: {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          stream, ",\"value\":%" PRId64, value));
+      break;
+    }
+    default:
+      break;
+  }
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t loom_tooling_config_format_predicate_json(
+    const loom_predicate_t* predicate, loom_output_stream_t* stream) {
+  const char* kind_name = loom_predicate_kind_name(predicate->kind);
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_tooling_config_write_json_string_field(
+      stream, "kind",
+      kind_name ? iree_make_cstring_view(kind_name) : IREE_SV("unknown")));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\"args\":["));
+  for (uint8_t i = 0; i < predicate->arg_count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, i == 0 ? "" : ","));
+    IREE_RETURN_IF_ERROR(
+        loom_tooling_config_format_predicate_arg_json(predicate, i, stream));
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t loom_tooling_config_format_predicates_json(
+    loom_attribute_t predicates, loom_output_stream_t* stream) {
+  if (predicates.kind != LOOM_ATTR_ABSENT &&
+      predicates.kind != LOOM_ATTR_PREDICATE_LIST) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "config constraints must be a predicate list");
+  }
+  if (predicates.kind == LOOM_ATTR_PREDICATE_LIST && predicates.count > 0 &&
+      !predicates.predicate_list) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "config constraints predicate list is missing");
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
+  if (predicates.kind == LOOM_ATTR_PREDICATE_LIST) {
+    for (uint16_t i = 0; i < predicates.count; ++i) {
+      IREE_RETURN_IF_ERROR(
+          loom_output_stream_write_cstring(stream, i == 0 ? "" : ","));
+      IREE_RETURN_IF_ERROR(loom_tooling_config_format_predicate_json(
+          &predicates.predicate_list[i], stream));
+    }
+  }
+  return loom_output_stream_write_cstring(stream, "]");
+}
+
+static iree_status_t loom_tooling_config_format_schema_entry_json(
+    const loom_module_t* module, const loom_symbol_t* symbol,
+    loom_output_stream_t* stream) {
+  loom_op_t* op = symbol->defining_op;
+  const bool is_decl = loom_config_decl_isa(op);
+  const bool is_def = loom_config_def_isa(op);
+  if (!is_decl && !is_def) {
+    iree_string_view_t symbol_name =
+        loom_tooling_config_symbol_name(module, symbol);
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "config symbol '@%.*s' is not a config.decl/def",
+                            (int)symbol_name.size, symbol_name.data);
+  }
+
+  loom_value_id_t config_value = loom_config_symbol_result_value(op);
+  if (config_value == LOOM_VALUE_ID_INVALID ||
+      config_value >= module->values.count) {
+    iree_string_view_t symbol_name =
+        loom_tooling_config_symbol_name(module, symbol);
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "config symbol '@%.*s' has no result value",
+                            (int)symbol_name.size, symbol_name.data);
+  }
+  loom_type_t config_type = loom_module_value_type(module, config_value);
+
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_tooling_config_write_json_string_field(
+      stream, "name", loom_tooling_config_symbol_name(module, symbol)));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+  IREE_RETURN_IF_ERROR(loom_tooling_config_write_json_string_field(
+      stream, "state", is_decl ? IREE_SV("decl") : IREE_SV("def")));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"required\":%s,\"type\":", is_decl ? "true" : "false"));
+  IREE_RETURN_IF_ERROR(loom_tooling_config_write_printed_type_string(
+      module, config_type, stream));
+  if (is_def) {
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"default\":"));
+    IREE_RETURN_IF_ERROR(loom_tooling_config_write_printed_attr_string(
+        module, loom_config_def_value(op), stream));
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"constraints\":"));
+  IREE_RETURN_IF_ERROR(loom_tooling_config_format_predicates_json(
+      loom_config_decl_predicates(op), stream));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+iree_status_t loom_tooling_config_format_schema_json(
+    const loom_module_t* module, loom_output_stream_t* stream) {
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(stream);
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, "{\"configs\":["));
+  iree_host_size_t config_count = 0;
+  const loom_symbol_t* symbol = NULL;
+  loom_module_for_each_symbol(module, symbol) {
+    if (!loom_tooling_config_symbol_is_config(symbol)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, config_count == 0 ? "" : ","));
+    IREE_RETURN_IF_ERROR(
+        loom_tooling_config_format_schema_entry_json(module, symbol, stream));
+    ++config_count;
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, "],\"count\":%" PRIhsz "}", config_count));
+  return iree_ok_status();
 }

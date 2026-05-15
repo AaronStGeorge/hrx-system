@@ -271,6 +271,39 @@
 
 // RUN: printf '%%s\n' \
 // RUN:   'config.decl @model36.model.hidden_size : %%value: index where [range(%%value, 0, 8192), mul(%%value, 16)]' \
+// RUN:   'config.def @model36.features.enable_mtp = true : i1' \
+// RUN:   | loom-opt --print-config-schema \
+// RUN:   | FileCheck --check-prefix=CONFIG-SCHEMA %s
+// CONFIG-SCHEMA: {"configs":[
+// CONFIG-SCHEMA: "name":"model36.model.hidden_size"
+// CONFIG-SCHEMA: "state":"decl"
+// CONFIG-SCHEMA: "required":true
+// CONFIG-SCHEMA: "type":"index"
+// CONFIG-SCHEMA: "constraints":[
+// CONFIG-SCHEMA: "kind":"range"
+// CONFIG-SCHEMA: "value":8192
+// CONFIG-SCHEMA: "kind":"mul"
+// CONFIG-SCHEMA: "name":"model36.features.enable_mtp"
+// CONFIG-SCHEMA: "state":"def"
+// CONFIG-SCHEMA: "required":false
+// CONFIG-SCHEMA: "type":"i1"
+// CONFIG-SCHEMA: "default":"true"
+// CONFIG-SCHEMA: "constraints":[]
+// CONFIG-SCHEMA: "count":2}
+
+// RUN: printf '%%s\n' \
+// RUN:   'config.decl @answer : index' \
+// RUN:   | loom-opt --config=answer=40 --print-config-schema \
+// RUN:   | FileCheck --check-prefix=CONFIG-SCHEMA-MATERIALIZED %s
+// CONFIG-SCHEMA-MATERIALIZED: "name":"answer"
+// CONFIG-SCHEMA-MATERIALIZED: "state":"def"
+// CONFIG-SCHEMA-MATERIALIZED: "required":false
+// CONFIG-SCHEMA-MATERIALIZED: "type":"index"
+// CONFIG-SCHEMA-MATERIALIZED: "default":"40"
+// CONFIG-SCHEMA-MATERIALIZED: "count":1}
+
+// RUN: printf '%%s\n' \
+// RUN:   'config.decl @model36.model.hidden_size : %%value: index where [range(%%value, 0, 8192), mul(%%value, 16)]' \
 // RUN:   '' \
 // RUN:   'func.def @bad_config_constraint() -> (index) {' \
 // RUN:   '  %%hidden = config.get @model36.model.hidden_size : index' \
