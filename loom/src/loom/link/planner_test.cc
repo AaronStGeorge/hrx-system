@@ -194,6 +194,36 @@ class LinkPlannerTest : public ::testing::Test {
   std::vector<loom_module_t*> modules_;
 };
 
+typedef struct BytecodePlanMaterializer {
+  // Materialized IR matching the used bytecode provider.
+  const loom_module_t* used_module;
+  // Number of times the used provider was materialized.
+  int used_count;
+  // Number of times an unused provider was materialized.
+  int unused_count;
+} BytecodePlanMaterializer;
+
+static iree_status_t MaterializeUsedBytecodeModule(
+    void* user_data, const loom_link_module_index_t* index,
+    const loom_link_module_index_module_t* module,
+    const loom_module_t** out_module) {
+  BytecodePlanMaterializer* materializer = (BytecodePlanMaterializer*)user_data;
+  const loom_link_module_index_provider_t* provider =
+      loom_link_module_index_provider_at(index, module->provider_ordinal);
+  if (!provider) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "missing provider for test module");
+  }
+  if (iree_string_view_equal(provider->name, IREE_SV("used-lib"))) {
+    ++materializer->used_count;
+    *out_module = materializer->used_module;
+    return iree_ok_status();
+  }
+  ++materializer->unused_count;
+  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                          "unused bytecode provider was materialized");
+}
+
 TEST_F(LinkPlannerTest, ArchiveSelectsAllSymbolsInStableIndexOrder) {
   loom_module_t* first = Parse(IREE_SV(R"(
 func.def public @entry_a(%x: i32) -> (i32) {
@@ -296,6 +326,80 @@ func.def @unused_private(%x: i32) -> (i32) {
   EXPECT_EQ(planned_entry->reason, LOOM_LINK_PLAN_LIVE_ROOT);
   EXPECT_EQ(planned_helper->reason, LOOM_LINK_PLAN_LIVE_DEPENDENCY);
   EXPECT_EQ(planned_helper->cause_ordinal, planned_entry->ordinal);
+}
+
+TEST_F(LinkPlannerTest, SelectiveBytecodePlanningMaterializesSelectedModules) {
+  loom_module_t* used = Parse(IREE_SV(R"(
+func.def public @entry(%x: i32) -> (i32) {
+  %y = func.call @helper(%x) : (i32) -> (i32)
+  func.return %y : i32
+}
+
+func.def @helper(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+  loom_module_t* unused = Parse(IREE_SV(R"(
+func.def public @unused(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+  std::vector<uint8_t> used_bytes = WriteModule(used);
+  std::vector<uint8_t> unused_bytes = WriteModule(unused);
+
+  IndexPtr index = CreateIndex();
+  loom_link_module_index_add_options_t used_options = {
+      .provider_name = IREE_SV("used-lib"),
+      .role = LOOM_LINK_PROVIDER_ROLE_LIBRARY,
+  };
+  IREE_ASSERT_OK(loom_link_module_index_add_bytecode(
+      index.get(),
+      iree_make_const_byte_span(used_bytes.data(), used_bytes.size()),
+      IREE_SV("used.loombc"), /*read_options=*/nullptr, &used_options,
+      /*out_provider_ordinal=*/nullptr));
+  loom_link_module_index_add_options_t unused_options = {
+      .provider_name = IREE_SV("unused-lib"),
+      .role = LOOM_LINK_PROVIDER_ROLE_LIBRARY,
+  };
+  IREE_ASSERT_OK(loom_link_module_index_add_bytecode(
+      index.get(),
+      iree_make_const_byte_span(unused_bytes.data(), unused_bytes.size()),
+      IREE_SV("unused.loombc"), /*read_options=*/nullptr, &unused_options,
+      /*out_provider_ordinal=*/nullptr));
+
+  const loom_link_module_index_module_t* used_module =
+      loom_link_module_index_module_at(index.get(), 0);
+  const loom_link_module_index_module_t* unused_module =
+      loom_link_module_index_module_at(index.get(), 1);
+  ASSERT_NE(used_module, nullptr);
+  ASSERT_NE(unused_module, nullptr);
+  EXPECT_EQ(used_module->materialized_module, nullptr);
+  EXPECT_EQ(unused_module->materialized_module, nullptr);
+
+  BytecodePlanMaterializer materializer = {
+      .used_module = used,
+  };
+  iree_string_view_t roots[] = {IREE_SV("@entry")};
+  loom_link_plan_options_t options = {
+      .mode = LOOM_LINK_PLAN_SELECTIVE,
+      .root_symbols = {.count = IREE_ARRAYSIZE(roots), .values = roots},
+      .materialize_module = MaterializeUsedBytecodeModule,
+      .materialize_module_user_data = &materializer,
+  };
+  PlanPtr plan = BuildPlan(index.get(), &options);
+
+  const loom_link_module_index_symbol_t* entry =
+      loom_link_module_index_lookup_global(index.get(), IREE_SV("entry"));
+  const loom_link_module_index_symbol_t* helper =
+      loom_link_module_index_lookup_private(index.get(), used_module,
+                                            IREE_SV("helper"));
+  const loom_link_module_index_symbol_t* unused_symbol =
+      loom_link_module_index_lookup_global(index.get(), IREE_SV("unused"));
+  EXPECT_TRUE(ContainsSymbol(plan.get(), entry));
+  EXPECT_TRUE(ContainsSymbol(plan.get(), helper));
+  EXPECT_FALSE(ContainsSymbol(plan.get(), unused_symbol));
+  EXPECT_EQ(materializer.used_count, 1);
+  EXPECT_EQ(materializer.unused_count, 0);
 }
 
 TEST_F(LinkPlannerTest, SelectiveRootMayNameUniquePrivateSymbol) {

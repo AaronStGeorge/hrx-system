@@ -226,7 +226,8 @@ static iree_status_t loom_link_plan_select_global_reference(
 }
 
 static iree_status_t loom_link_plan_build_module_dependencies(
-    loom_link_plan_t* plan, iree_host_size_t module_ordinal,
+    loom_link_plan_t* plan, const loom_link_plan_options_t* options,
+    iree_host_size_t module_ordinal,
     loom_link_plan_module_state_t** out_state) {
   *out_state = NULL;
   if (module_ordinal >= plan->module_state_count) {
@@ -242,15 +243,35 @@ static iree_status_t loom_link_plan_build_module_dependencies(
 
   const loom_link_module_index_module_t* module =
       loom_link_module_index_module_at(plan->index, module_ordinal);
-  if (!module || !module->materialized_module) {
+  if (!module) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "module ordinal %" PRIhsz " is missing",
+                            module_ordinal);
+  }
+
+  const loom_module_t* dependency_module = module->materialized_module;
+  if (!dependency_module && options && options->materialize_module) {
+    IREE_RETURN_IF_ERROR(
+        options->materialize_module(options->materialize_module_user_data,
+                                    plan->index, module, &dependency_module));
+  }
+  if (!dependency_module) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "selective dependency closure for module %" PRIhsz
         " requires materialized IR or serialized symbol-use metadata",
         module_ordinal);
   }
+  if (dependency_module->symbols.count != module->symbol_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "materialized module '%.*s' has %" PRIhsz
+                            " symbols but index metadata has %" PRIhsz,
+                            (int)module->name.size, module->name.data,
+                            dependency_module->symbols.count,
+                            module->symbol_count);
+  }
   IREE_RETURN_IF_ERROR(loom_symbol_dependency_table_build(
-      module->materialized_module, &plan->arena, &state->dependency_table));
+      dependency_module, &plan->arena, &state->dependency_table));
   state->dependencies_built = true;
   *out_state = state;
   return iree_ok_status();
@@ -326,8 +347,8 @@ static iree_status_t loom_link_plan_expand_symbol_dependencies(
   }
 
   loom_link_plan_module_state_t* state = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_link_plan_build_module_dependencies(plan, module->ordinal, &state));
+  IREE_RETURN_IF_ERROR(loom_link_plan_build_module_dependencies(
+      plan, options, module->ordinal, &state));
   IREE_RETURN_IF_ERROR(loom_link_plan_scan_module_edges(plan, options, module,
                                                         state, plan_ordinal));
 

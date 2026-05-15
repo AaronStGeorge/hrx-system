@@ -83,6 +83,37 @@
 // SYMBOLS: @identity role=library
 
 // RUN: printf '%%s\n' \
+// RUN:   'config.decl @model36.model.hidden_size : %value: index where [mul(%value, 16)]' \
+// RUN:   'func.decl @model36.kernel.rmsnorm(%x: index) -> (index)' \
+// RUN:   '' \
+// RUN:   'func.def public @model36.block() -> (index) {' \
+// RUN:   '  %hidden = config.get @model36.model.hidden_size : index' \
+// RUN:   '  %y = func.call @model36.kernel.rmsnorm(%hidden) : (index) -> (index)' \
+// RUN:   '  func.return %y : index' \
+// RUN:   '}' \
+// RUN:   > %t.model.loom
+// RUN: printf '%%s\n' \
+// RUN:   'func.def @model36.kernel.rmsnorm(%x: index) -> (index) {' \
+// RUN:   '  func.return %x : index' \
+// RUN:   '}' \
+// RUN:   '' \
+// RUN:   'func.def @model36.kernel.unused(%x: index) -> (index) {' \
+// RUN:   '  func.return %x : index' \
+// RUN:   '}' \
+// RUN:   > %t.model_kernels.loom
+// RUN: loom-format --from=text --to=bc --output=%t.model_kernels.loombc \
+// RUN:   %t.model_kernels.loom
+// RUN: loom-link %t.model.loom --library=%t.model_kernels.loombc \
+// RUN:     --root=@model36.block --config=model36.model.hidden_size=4096 \
+// RUN:   | FileCheck --check-prefix=MODEL %s
+
+// MODEL-NOT: @model36.kernel.unused
+// MODEL: config.def @model36.model.hidden_size = 4096 : index
+// MODEL: func.def @model36.kernel.rmsnorm(%x: index) -> (index) {
+// MODEL: func.def public @model36.block() -> (index) {
+// MODEL-NOT: @model36.kernel.unused
+
+// RUN: printf '%%s\n' \
 // RUN:   'func.def public @duplicate(%x: i32) -> (i32) {' \
 // RUN:   '  func.return %x : i32' \
 // RUN:   '}' \
@@ -98,6 +129,33 @@
 
 // DUPLICATE: global symbol '@duplicate'
 // DUPLICATE: conflicts with provider
+
+// RUN: printf '%%s\n' \
+// RUN:   'func.def public @entry_a(%x: i32) -> (i32) {' \
+// RUN:   '  %y = func.call @helper(%x) : (i32) -> (i32)' \
+// RUN:   '  func.return %y : i32' \
+// RUN:   '}' \
+// RUN:   '' \
+// RUN:   'func.def @helper(%x: i32) -> (i32) {' \
+// RUN:   '  func.return %x : i32' \
+// RUN:   '}' \
+// RUN:   > %t.private_a.loom
+// RUN: printf '%%s\n' \
+// RUN:   'func.def public @entry_b(%x: i32) -> (i32) {' \
+// RUN:   '  %y = func.call @helper(%x) : (i32) -> (i32)' \
+// RUN:   '  func.return %y : i32' \
+// RUN:   '}' \
+// RUN:   '' \
+// RUN:   'func.def @helper(%x: i32) -> (i32) {' \
+// RUN:   '  func.return %x : i32' \
+// RUN:   '}' \
+// RUN:   > %t.private_b.loom
+// RUN: loom-link %t.private_a.loom %t.private_b.loom \
+// RUN:   | FileCheck --check-prefix=PRIVATE-RENAME %s
+
+// PRIVATE-RENAME: func.def @helper(%x: i32) -> (i32) {
+// PRIVATE-RENAME: func.call @helper{{[$]}}link0(%x) : (i32) -> (i32)
+// PRIVATE-RENAME: func.def @helper{{[$]}}link0(%x: i32) -> (i32) {
 
 // RUN: printf '%%s\n' \
 // RUN:   'func.def @kernel(%x: i32) -> (i32) {' \
@@ -119,6 +177,15 @@
 // STRIP-CHECK: func.def @kernel(%x: i32) -> (i32) {
 // STRIP-CHECK-NOT: check.case
 // STRIP-CHECK-NOT: check.benchmark
+
+// RUN: loom-link %t.checks.loom --mode=archive --strip_check --to=bc \
+// RUN:     --output=%t.kernels_only.loombc
+// RUN: loom-format --from=bc --to=text %t.kernels_only.loombc \
+// RUN:   | FileCheck --check-prefix=KERNEL-LIB-BC %s
+
+// KERNEL-LIB-BC: func.def @kernel(%x: i32) -> (i32) {
+// KERNEL-LIB-BC-NOT: check.case
+// KERNEL-LIB-BC-NOT: check.benchmark
 
 // RUN: printf '%%s\n' \
 // RUN:   'config.decl @model36.model.hidden_size : %value: index where [range(%value, 0, 8192)]' \
