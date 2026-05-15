@@ -50,7 +50,6 @@ class TargetBuilder(DialectBuilder):
         abi: str | None = ...,
         export_symbol: str | None = ...,
         linkage: str | None = ...,
-        hal_binding_alignment: int | None = ...,
         hal_buffer_resource_flags: int | None = ...,
         contract_set_key: str | None = ...,
         contract_feature_bits: int | None = ...,

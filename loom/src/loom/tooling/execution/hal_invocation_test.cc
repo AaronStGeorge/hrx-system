@@ -330,7 +330,6 @@ TEST_F(HalInvocationTest,
       .abi_kind = LOOM_TARGET_ABI_HAL_KERNEL,
       .hal_kernel =
           {
-              .binding_alignment = 16,
               .required_workgroup_size = {.x = 0, .y = 0, .z = 0},
           },
   };

@@ -136,7 +136,6 @@ TEST_F(TargetFunctionContractTest, HalContractOverlaysTargetRecord) {
   ModulePtr module = ParseModule(R"(
 test.target<low_core> @test_target {
   abi = hal_kernel,
-  hal_binding_alignment = 16,
   hal_buffer_resource_flags = 7
 }
 
@@ -155,7 +154,6 @@ low.kernel.def target(@test_target) export("dispatch") ordinal(5) linkage(dso_lo
       iree_string_view_equal(storage.export_plan.name, IREE_SV("kernel")));
   EXPECT_TRUE(iree_string_view_equal(storage.export_plan.export_symbol,
                                      IREE_SV("dispatch")));
-  EXPECT_EQ(storage.export_plan.hal_kernel.binding_alignment, 16u);
   EXPECT_EQ(storage.export_plan.hal_kernel.flat_workgroup_size_min, 0u);
   EXPECT_EQ(storage.export_plan.hal_kernel.flat_workgroup_size_max, 0u);
   EXPECT_EQ(storage.export_plan.hal_kernel.buffer_resource_flags, 7u);

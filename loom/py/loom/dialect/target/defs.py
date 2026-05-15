@@ -189,7 +189,6 @@ TARGET_COMMON_OVERRIDE_ATTRS = [
         open_enum=True,
         optional=True,
     ),
-    AttrDef("hal_binding_alignment", ATTR_TYPE_I64, optional=True),
     AttrDef("hal_buffer_resource_flags", ATTR_TYPE_I64, optional=True),
     AttrDef("contract_set_key", ATTR_TYPE_STRING, optional=True),
     AttrDef("contract_feature_bits", ATTR_TYPE_I64, optional=True),

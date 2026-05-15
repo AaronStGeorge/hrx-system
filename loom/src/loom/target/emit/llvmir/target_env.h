@@ -35,7 +35,7 @@ typedef enum loom_llvmir_target_profile_kind_e {
 } loom_llvmir_target_profile_kind_t;
 
 enum {
-  LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT = 5,
+  LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT = 2,
   LOOM_LLVMIR_TARGET_PROFILE_MAX_LLC_ARGUMENT_COUNT = 3,
   LOOM_LLVMIR_TARGET_PROFILE_LLC_ARGUMENT_STORAGE_LENGTH = 512,
 };
@@ -84,8 +84,6 @@ typedef struct loom_llvmir_target_env_t {
 } loom_llvmir_target_env_t;
 
 typedef struct loom_llvmir_amdgpu_hal_abi_t {
-  // ABI-required byte alignment for HAL binding pointer parameters.
-  uint32_t binding_alignment;
   // ABI-selected fixed workgroup size attached to each kernel entry point, or
   // zero when launch selection remains dynamic.
   loom_llvmir_workgroup_size_t required_workgroup_size;
@@ -160,7 +158,9 @@ iree_status_t loom_llvmir_target_profile_llc_arguments(
     const loom_llvmir_target_profile_t* profile,
     loom_llvmir_target_profile_llc_arguments_t* out_arguments);
 
-// Writes ABI-required parameter attrs for a HAL kernel binding pointer.
+// Writes ABI-required calling-convention attrs for a HAL kernel binding
+// pointer. Memory facts such as noalias, nonnull, and pointee alignment must be
+// proven on the individual binding value before they are attached.
 // The caller provides temporary storage; loom_llvmir_function_add_parameter()
 // copies the attrs into the target module when attaching them to a parameter.
 void loom_llvmir_target_profile_kernel_binding_attrs(

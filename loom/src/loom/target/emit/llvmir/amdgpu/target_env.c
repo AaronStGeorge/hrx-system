@@ -84,7 +84,6 @@ static const loom_target_export_plan_t kAmdgpuHalExportPlan = {
     .linkage = LOOM_TARGET_LINKAGE_DEFAULT,
     .hal_kernel =
         {
-            .binding_alignment = 16,
             .required_workgroup_size = {.x = 0, .y = 0, .z = 0},
             .flat_workgroup_size_min = 0,
             .flat_workgroup_size_max = 0,
@@ -114,7 +113,6 @@ static const loom_llvmir_target_profile_t kAmdgpuHalProfile = {
     .required_workgroup_size_metadata_name = IREE_SVL("reqd_work_group_size"),
     .amdgpu_hal =
         {
-            .binding_alignment = 16,
             .required_workgroup_size = {.x = 0, .y = 0, .z = 0},
             .flat_workgroup_size_min = 1,
             .flat_workgroup_size_max = 1024,

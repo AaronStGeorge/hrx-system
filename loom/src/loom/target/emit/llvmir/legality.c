@@ -335,11 +335,6 @@ static bool loom_llvmir_target_legality_verify_hal_kernel_launch(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
         IREE_SV("hal-global-address-space"), snapshot->name);
   }
-  if (hal_kernel->binding_alignment == 0) {
-    return loom_llvmir_target_legality_fail(
-        context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,
-        IREE_SV("hal-binding-alignment"), context->options->export_plan->name);
-  }
   if (loom_target_workgroup_size_is_partial(required)) {
     return loom_llvmir_target_legality_fail(
         context, NULL, LOOM_LLVMIR_TARGET_LEGALITY_INVALID_TARGET, NULL,

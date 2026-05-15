@@ -1269,9 +1269,9 @@ static iree_status_t loom_low_source_workload_generate_module_into(
       /*memory_space_constant=*/0, /*memory_space_private=*/0,
       /*memory_space_host=*/0, /*memory_space_descriptor=*/0, /*abi=*/0,
       /*export_symbol=*/LOOM_STRING_ID_INVALID, /*linkage=*/0,
-      /*hal_binding_alignment=*/0, /*hal_buffer_resource_flags=*/0,
-      /*contract_set_key=*/LOOM_STRING_ID_INVALID,
-      /*contract_feature_bits=*/0, LOOM_LOCATION_UNKNOWN, &target_op));
+      /*hal_buffer_resource_flags=*/0,
+      /*contract_set_key=*/LOOM_STRING_ID_INVALID, /*contract_feature_bits=*/0,
+      LOOM_LOCATION_UNKNOWN, &target_op));
   (void)target_op;
 
   iree_string_view_t function_symbol_name =

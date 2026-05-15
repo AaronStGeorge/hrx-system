@@ -172,14 +172,42 @@ func.def public device @vector_dispatch(%input: buffer, %output: buffer, %base: 
 }
 
 // ----
-define amdgpu_kernel void @vector_dispatch(ptr addrspace(1) inreg noalias noundef nonnull align 16 %input, ptr addrspace(1) inreg noalias noundef nonnull align 16 %output, i32 %base) #0 {
+define amdgpu_kernel void @vector_dispatch(ptr addrspace(1) inreg noundef %input, ptr addrspace(1) inreg noundef %output, i32 %base) #0 {
 entry:
   %input_view = getelementptr i8, ptr addrspace(1) %input, i64 0
   %output_view = getelementptr i8, ptr addrspace(1) %output, i64 0
   %v6 = getelementptr float, ptr addrspace(1) %input_view, i32 %base
-  %loaded = load <4 x float>, ptr addrspace(1) %v6, align 4
+  %loaded = load <4 x float>, ptr addrspace(1) %v6
   %v8 = getelementptr float, ptr addrspace(1) %output_view, i32 %base
-  store <4 x float> %loaded, ptr addrspace(1) %v8, align 4
+  store <4 x float> %loaded, ptr addrspace(1) %v8
+  ret void
+}
+
+attributes #0 = { alwaysinline "amdgpu-flat-work-group-size"="1,1024" "uniform-work-group-size" }
+
+// ====
+
+// RUN: emit llvmir-body amdgpu-hal
+
+// Byte-offset HAL binding views do not inherit target-wide pointee alignment.
+func.def public device @byte_offset_binding_view(%input: buffer, %output: buffer) {
+  %offset = index.constant 5 : offset
+  %input_view = buffer.view %input[%offset] : buffer -> view<1xi32, #dense>
+  %output_view = buffer.view %output[%offset] : buffer -> view<1xi32, #dense>
+  %loaded = view.load %input_view[0] : view<1xi32, #dense> -> i32
+  view.store %loaded, %output_view[0] : i32, view<1xi32, #dense>
+  func.return
+}
+
+// ----
+define amdgpu_kernel void @byte_offset_binding_view(ptr addrspace(1) inreg noundef %input, ptr addrspace(1) inreg noundef %output) #0 {
+entry:
+  %input_view = getelementptr i8, ptr addrspace(1) %input, i64 5
+  %output_view = getelementptr i8, ptr addrspace(1) %output, i64 5
+  %v6 = getelementptr i32, ptr addrspace(1) %input_view, i32 0
+  %loaded = load i32, ptr addrspace(1) %v6
+  %v9 = getelementptr i32, ptr addrspace(1) %output_view, i32 0
+  store i32 %loaded, ptr addrspace(1) %v9
   ret void
 }
 

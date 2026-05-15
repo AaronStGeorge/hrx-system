@@ -26,7 +26,6 @@ loom_target_snapshot_t TestSnapshot() {
 loom_target_hal_kernel_abi_t TestHalKernelAbi(
     loom_target_workgroup_size_t required_workgroup_size) {
   return loom_target_hal_kernel_abi_t{
-      .binding_alignment = 16,
       .required_workgroup_size = required_workgroup_size,
   };
 }

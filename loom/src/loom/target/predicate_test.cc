@@ -186,7 +186,7 @@ func.def target(@other_target) abi(object_function) @rejected() {
 
 TEST_F(TargetPredicateTest, MatchesExportArtifactFacts) {
   ModulePtr module = ParseModule(R"(
-test.target<low_core> @test_target {abi = hal_kernel, hal_binding_alignment = 16}
+test.target<low_core> @test_target {abi = hal_kernel}
 target.artifact @object target(@test_target) {abi = hal_executable, artifact_format = elf}
 target.artifact @wasm target(@test_target) {abi = wasm_module, artifact_format = wasm_binary}
 

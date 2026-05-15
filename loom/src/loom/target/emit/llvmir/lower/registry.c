@@ -524,7 +524,6 @@ static iree_status_t loom_llvmir_lowering_add_function_signature(
           &kernel_binding_attr_count);
       parameter_desc.attrs = kernel_binding_attrs;
       parameter_desc.attr_count = kernel_binding_attr_count;
-      pointer_alignment = state->target_profile->amdgpu_hal.binding_alignment;
     }
     loom_llvmir_value_id_t parameter_value = LOOM_LLVMIR_VALUE_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_llvmir_function_add_parameter(

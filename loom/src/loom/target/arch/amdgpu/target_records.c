@@ -47,7 +47,6 @@ static const loom_target_export_plan_t kAmdgpuHalExportPlan = {
   .abi_kind = LOOM_TARGET_ABI_HAL_KERNEL,
   .linkage = LOOM_TARGET_LINKAGE_DEFAULT,
   .hal_kernel = {
-    .binding_alignment = 16,
     .required_workgroup_size = {.x = 0, .y = 0, .z = 0},
     .flat_workgroup_size_min = 0,
     .flat_workgroup_size_max = 0,

@@ -130,7 +130,6 @@ void loom_llvmir_target_profile_storage_initialize_from_bundle(
     out_storage->profile.required_workgroup_size_metadata_name =
         projected_profile->required_workgroup_size_metadata_name;
     out_storage->profile.amdgpu_hal = (loom_llvmir_amdgpu_hal_abi_t){
-        .binding_alignment = export_plan->hal_kernel.binding_alignment,
         .required_workgroup_size =
             {
                 .x = export_plan->hal_kernel.required_workgroup_size.x,
@@ -185,29 +184,19 @@ iree_status_t loom_llvmir_target_profile_llc_arguments(
 void loom_llvmir_target_profile_kernel_binding_attrs(
     const loom_llvmir_target_profile_t* profile, loom_llvmir_attr_t* attrs,
     iree_host_size_t* out_attr_count) {
+  IREE_ASSERT_ARGUMENT(profile);
+  IREE_ASSERT_ARGUMENT(attrs);
+  IREE_ASSERT_ARGUMENT(out_attr_count);
   *out_attr_count = 0;
   attrs[0] = (loom_llvmir_attr_t){
       .kind = LOOM_LLVMIR_ATTR_INREG,
       .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
   };
   attrs[1] = (loom_llvmir_attr_t){
-      .kind = LOOM_LLVMIR_ATTR_NOALIAS,
-      .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
-  };
-  attrs[2] = (loom_llvmir_attr_t){
       .kind = LOOM_LLVMIR_ATTR_NOUNDEF,
       .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
   };
-  attrs[3] = (loom_llvmir_attr_t){
-      .kind = LOOM_LLVMIR_ATTR_NONNULL,
-      .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
-  };
-  attrs[4] = (loom_llvmir_attr_t){
-      .kind = LOOM_LLVMIR_ATTR_ALIGN,
-      .value = profile->amdgpu_hal.binding_alignment,
-      .type_id = LOOM_LLVMIR_TYPE_ID_INVALID,
-  };
-  *out_attr_count = LOOM_LLVMIR_TARGET_PROFILE_MAX_KERNEL_BINDING_ATTR_COUNT;
+  *out_attr_count = 2;
 }
 
 static iree_string_view_t loom_llvmir_target_profile_flat_workgroup_size_attr(

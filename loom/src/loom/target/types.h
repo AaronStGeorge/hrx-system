@@ -246,8 +246,6 @@ typedef struct loom_target_snapshot_t {
 } loom_target_snapshot_t;
 
 typedef struct loom_target_hal_kernel_abi_t {
-  // ABI-required byte alignment for binding pointer parameters.
-  uint32_t binding_alignment;
   // Function-selected fixed workgroup size for a kernel entry point. A zero
   // dimension means the function has not selected a fixed size yet.
   loom_target_workgroup_size_t required_workgroup_size;

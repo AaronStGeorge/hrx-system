@@ -124,8 +124,6 @@ void ExpectDerivedProfileMatchesStatic(
             static_profile->kernel_calling_convention);
   EXPECT_EQ(ToString(derived_profile->required_workgroup_size_metadata_name),
             ToString(static_profile->required_workgroup_size_metadata_name));
-  EXPECT_EQ(derived_profile->amdgpu_hal.binding_alignment,
-            static_profile->amdgpu_hal.binding_alignment);
   EXPECT_EQ(derived_profile->amdgpu_hal.required_workgroup_size.x,
             static_profile->amdgpu_hal.required_workgroup_size.x);
   EXPECT_EQ(derived_profile->amdgpu_hal.required_workgroup_size.y,
@@ -260,7 +258,6 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileNamesKernelAbi) {
   EXPECT_EQ(profile->target_env->address_spaces.buffer_resource, 7u);
   EXPECT_EQ(profile->kernel_calling_convention,
             LOOM_LLVMIR_CALLING_CONVENTION_AMDGPU_KERNEL);
-  EXPECT_EQ(profile->amdgpu_hal.binding_alignment, 16u);
   EXPECT_EQ(profile->amdgpu_hal.required_workgroup_size.x, 0u);
   EXPECT_EQ(profile->amdgpu_hal.required_workgroup_size.y, 0u);
   EXPECT_EQ(profile->amdgpu_hal.required_workgroup_size.z, 0u);
@@ -273,9 +270,9 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileNamesKernelAbi) {
   iree_host_size_t binding_attr_count = 0;
   loom_llvmir_target_profile_kernel_binding_attrs(profile, binding_attrs,
                                                   &binding_attr_count);
-  EXPECT_EQ(binding_attr_count, 5u);
-  EXPECT_EQ(binding_attrs[4].kind, LOOM_LLVMIR_ATTR_ALIGN);
-  EXPECT_EQ(binding_attrs[4].value, 16u);
+  ASSERT_EQ(binding_attr_count, 2u);
+  EXPECT_EQ(binding_attrs[0].kind, LOOM_LLVMIR_ATTR_INREG);
+  EXPECT_EQ(binding_attrs[1].kind, LOOM_LLVMIR_ATTR_NOUNDEF);
 }
 
 TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileHasGenericTargetBundle) {
@@ -298,8 +295,6 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileHasGenericTargetBundle) {
   EXPECT_EQ(ToString(bundle->export_plan->name), ToString(profile->name));
   EXPECT_EQ(bundle->export_plan->abi_kind, LOOM_TARGET_ABI_HAL_KERNEL);
   EXPECT_EQ(bundle->export_plan->linkage, LOOM_TARGET_LINKAGE_DEFAULT);
-  EXPECT_EQ(bundle->export_plan->hal_kernel.binding_alignment,
-            profile->amdgpu_hal.binding_alignment);
   EXPECT_EQ(bundle->export_plan->hal_kernel.required_workgroup_size.x, 0u);
   EXPECT_EQ(bundle->export_plan->hal_kernel.required_workgroup_size.y, 0u);
   EXPECT_EQ(bundle->export_plan->hal_kernel.required_workgroup_size.z, 0u);
@@ -456,7 +451,6 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileCopyControlsKernelDecorations) {
   profile.name = IREE_SV("amdgpu-hal-variant");
   profile.target_cpu = IREE_SV("gfx1100");
   profile.target_features = IREE_SV("+wavefrontsize64");
-  profile.amdgpu_hal.binding_alignment = 32;
   profile.amdgpu_hal.required_workgroup_size.x = 128;
   profile.amdgpu_hal.required_workgroup_size.y = 2;
   profile.amdgpu_hal.required_workgroup_size.z = 1;
@@ -516,8 +510,7 @@ TEST(LlvmIrTargetEnvTest, AmdgpuHalProfileCopyControlsKernelDecorations) {
   IREE_ASSERT_OK(loom_llvmir_verify_module(module_ptr.get()));
 
   std::string text = WriteText(module_ptr.get());
-  EXPECT_NE(text.find("ptr addrspace(1) inreg noalias noundef nonnull align "
-                      "32 %input"),
+  EXPECT_NE(text.find("ptr addrspace(1) inreg noundef %input"),
             std::string::npos)
       << text;
   EXPECT_NE(text.find("\"amdgpu-flat-work-group-size\"=\"128,256\""),

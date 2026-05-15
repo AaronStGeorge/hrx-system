@@ -331,11 +331,6 @@ iree_status_t loom_target_function_contract_resolve(
     return iree_ok_status();
   }
   if (out_bundle_storage->export_plan.abi_kind == LOOM_TARGET_ABI_HAL_KERNEL) {
-    if (out_bundle_storage->export_plan.hal_kernel.binding_alignment == 0) {
-      return loom_target_function_contract_reject_target_constraint(
-          diagnostic_emitter, func_facts, target,
-          IREE_SV("hal_binding_alignment.nonzero"), out_valid);
-    }
     IREE_RETURN_IF_ERROR(loom_target_function_contract_validate_hal_kernel(
         diagnostic_emitter, func_facts, target->name,
         &out_bundle_storage->snapshot,

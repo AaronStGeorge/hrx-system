@@ -111,7 +111,7 @@ func.def public device @dispatch_with_bindings(%input: buffer, %output: buffer, 
 }
 
 // ----
-define amdgpu_kernel void @dispatch_with_bindings(ptr addrspace(1) inreg noalias noundef nonnull align 16 %input, ptr addrspace(1) inreg noalias noundef nonnull align 16 %output, i32 %n) #0 {
+define amdgpu_kernel void @dispatch_with_bindings(ptr addrspace(1) inreg noundef %input, ptr addrspace(1) inreg noundef %output, i32 %n) #0 {
 entry:
   ret void
 }
@@ -137,17 +137,17 @@ func.def public device @vector_hal_kernel(%input: buffer, %output: buffer, %base
 }
 
 // ----
-define amdgpu_kernel void @vector_hal_kernel(ptr addrspace(1) inreg noalias noundef nonnull align 16 %input, ptr addrspace(1) inreg noalias noundef nonnull align 16 %output, i32 %base) #0 {
+define amdgpu_kernel void @vector_hal_kernel(ptr addrspace(1) inreg noundef %input, ptr addrspace(1) inreg noundef %output, i32 %base) #0 {
 entry:
   %tid_x = call i32 @llvm.amdgcn.workitem.id.x()
   %element = add i32 %base, %tid_x
   %input_view = getelementptr i8, ptr addrspace(1) %input, i64 0
   %output_view = getelementptr i8, ptr addrspace(1) %output, i64 0
   %v8 = getelementptr float, ptr addrspace(1) %input_view, i32 %element
-  %loaded = load <4 x float>, ptr addrspace(1) %v8, align 4
+  %loaded = load <4 x float>, ptr addrspace(1) %v8
   %doubled = fadd nnan <4 x float> %loaded, %loaded
   %v11 = getelementptr float, ptr addrspace(1) %output_view, i32 %element
-  store <4 x float> %doubled, ptr addrspace(1) %v11, align 4
+  store <4 x float> %doubled, ptr addrspace(1) %v11
   ret void
 }
 

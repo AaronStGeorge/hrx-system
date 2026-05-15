@@ -65,14 +65,13 @@ LOOM_DEFINE_ATTR_I64(loom_llvmir_target_memory_space_descriptor, 21)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_llvmir_target_abi, 22, loom_target_abi_kind_t)
 LOOM_DEFINE_ATTR_STRING(loom_llvmir_target_export_symbol, 23)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_llvmir_target_linkage, 24, loom_target_linkage_t)
-LOOM_DEFINE_ATTR_I64(loom_llvmir_target_hal_binding_alignment, 25)
-LOOM_DEFINE_ATTR_I64(loom_llvmir_target_hal_buffer_resource_flags, 26)
-LOOM_DEFINE_ATTR_STRING(loom_llvmir_target_contract_set_key, 27)
-LOOM_DEFINE_ATTR_I64(loom_llvmir_target_contract_feature_bits, 28)
-LOOM_DEFINE_ATTR_STRING(loom_llvmir_target_triple, 29)
-LOOM_DEFINE_ATTR_STRING(loom_llvmir_target_data_layout, 30)
-LOOM_DEFINE_ATTR_STRING(loom_llvmir_target_cpu, 31)
-LOOM_DEFINE_ATTR_STRING(loom_llvmir_target_features, 32)
+LOOM_DEFINE_ATTR_I64(loom_llvmir_target_hal_buffer_resource_flags, 25)
+LOOM_DEFINE_ATTR_STRING(loom_llvmir_target_contract_set_key, 26)
+LOOM_DEFINE_ATTR_I64(loom_llvmir_target_contract_feature_bits, 27)
+LOOM_DEFINE_ATTR_STRING(loom_llvmir_target_triple, 28)
+LOOM_DEFINE_ATTR_STRING(loom_llvmir_target_data_layout, 29)
+LOOM_DEFINE_ATTR_STRING(loom_llvmir_target_cpu, 30)
+LOOM_DEFINE_ATTR_STRING(loom_llvmir_target_features, 31)
 enum loom_llvmir_target_build_flag_bits_e {
   LOOM_LLVMIR_TARGET_BUILD_FLAG_HAS_CODEGEN_FORMAT = 1u << 0,
   LOOM_LLVMIR_TARGET_BUILD_FLAG_HAS_ARTIFACT_FORMAT = 1u << 1,
@@ -97,13 +96,12 @@ enum loom_llvmir_target_build_flag_bits_e {
   LOOM_LLVMIR_TARGET_BUILD_FLAG_HAS_ABI = 1u << 20,
   LOOM_LLVMIR_TARGET_BUILD_FLAG_HAS_EXPORT_SYMBOL = 1u << 21,
   LOOM_LLVMIR_TARGET_BUILD_FLAG_HAS_LINKAGE = 1u << 22,
-  LOOM_LLVMIR_TARGET_BUILD_FLAG_HAS_HAL_BINDING_ALIGNMENT = 1u << 23,
-  LOOM_LLVMIR_TARGET_BUILD_FLAG_HAS_HAL_BUFFER_RESOURCE_FLAGS = 1u << 24,
-  LOOM_LLVMIR_TARGET_BUILD_FLAG_HAS_CONTRACT_SET_KEY = 1u << 25,
-  LOOM_LLVMIR_TARGET_BUILD_FLAG_HAS_CONTRACT_FEATURE_BITS = 1u << 26,
-  LOOM_LLVMIR_TARGET_BUILD_FLAG_HAS_DATA_LAYOUT = 1u << 27,
-  LOOM_LLVMIR_TARGET_BUILD_FLAG_HAS_CPU = 1u << 28,
-  LOOM_LLVMIR_TARGET_BUILD_FLAG_HAS_FEATURES = 1u << 29,
+  LOOM_LLVMIR_TARGET_BUILD_FLAG_HAS_HAL_BUFFER_RESOURCE_FLAGS = 1u << 23,
+  LOOM_LLVMIR_TARGET_BUILD_FLAG_HAS_CONTRACT_SET_KEY = 1u << 24,
+  LOOM_LLVMIR_TARGET_BUILD_FLAG_HAS_CONTRACT_FEATURE_BITS = 1u << 25,
+  LOOM_LLVMIR_TARGET_BUILD_FLAG_HAS_DATA_LAYOUT = 1u << 26,
+  LOOM_LLVMIR_TARGET_BUILD_FLAG_HAS_CPU = 1u << 27,
+  LOOM_LLVMIR_TARGET_BUILD_FLAG_HAS_FEATURES = 1u << 28,
 };
 typedef uint32_t loom_llvmir_target_build_flags_t;
 iree_status_t loom_llvmir_target_build(
@@ -134,7 +132,6 @@ iree_status_t loom_llvmir_target_build(
     loom_optional uint8_t abi,
     loom_optional loom_string_id_t export_symbol,
     loom_optional uint8_t linkage,
-    loom_optional int64_t hal_binding_alignment,
     loom_optional int64_t hal_buffer_resource_flags,
     loom_optional loom_string_id_t contract_set_key,
     loom_optional int64_t contract_feature_bits,
