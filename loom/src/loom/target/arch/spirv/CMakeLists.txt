@@ -44,6 +44,7 @@ loom_cc_library(
     ::features
     iree::base
     loom::src::loom::analysis::policy
+    loom::src::loom::util::numeric_format
   PUBLIC
 )
 

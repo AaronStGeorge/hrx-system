@@ -18,6 +18,7 @@
 #include "iree/base/api.h"
 #include "loom/analysis/policy.h"
 #include "loom/target/arch/spirv/features.h"
+#include "loom/util/numeric_format.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -190,6 +191,16 @@ typedef enum loom_spirv_cooperative_rejection_flag_bits_e {
   LOOM_SPIRV_COOPERATIVE_REJECTION_OPERANDS = 1u << 6,
   // The lowering policy permits reference fallback for this miss.
   LOOM_SPIRV_COOPERATIVE_REJECTION_POLICY_FALLBACK = 1u << 7,
+  // The cooperative vector Input object component type differs.
+  LOOM_SPIRV_COOPERATIVE_REJECTION_INPUT_TYPE = 1u << 8,
+  // The cooperative vector InputInterpretation operand differs.
+  LOOM_SPIRV_COOPERATIVE_REJECTION_INPUT_INTERPRETATION = 1u << 9,
+  // The cooperative vector MatrixInterpretation operand differs.
+  LOOM_SPIRV_COOPERATIVE_REJECTION_MATRIX_INTERPRETATION = 1u << 10,
+  // The cooperative vector BiasInterpretation operand differs.
+  LOOM_SPIRV_COOPERATIVE_REJECTION_BIAS_INTERPRETATION = 1u << 11,
+  // The cooperative vector Result object component type differs.
+  LOOM_SPIRV_COOPERATIVE_REJECTION_RESULT_TYPE = 1u << 12,
 } loom_spirv_cooperative_rejection_flag_bits_t;
 
 // Bitset of loom_spirv_cooperative_rejection_flag_bits_t values.
@@ -353,6 +364,14 @@ typedef struct loom_spirv_cooperative_diagnostic_t {
 // Returns the stable diagnostic spelling for a component type.
 iree_string_view_t loom_spirv_component_type_name(
     loom_spirv_component_type_t component_type);
+
+// Maps a target-independent encoded numeric format to a SPIR-V ComponentType
+// operand value. Returns false when the numeric format is unknown,
+// multi-valued, or not representable by the currently modeled SPIR-V extension
+// component vocabulary.
+bool loom_spirv_component_type_from_numeric_format(
+    loom_value_fact_numeric_format_flags_t numeric_format,
+    loom_spirv_component_type_t* out_component_type);
 
 // Returns the stable diagnostic spelling for a scope.
 iree_string_view_t loom_spirv_scope_name(loom_spirv_scope_t scope);

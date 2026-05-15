@@ -53,6 +53,66 @@ loom_spirv_cooperative_vector_query_t PackedS8VectorQuery(
   };
 }
 
+loom_spirv_cooperative_vector_query_t F8E4M3VectorQuery(
+    loom_lowering_policy_t policy) {
+  loom_spirv_component_type_t f8e4m3_component_type =
+      LOOM_SPIRV_COMPONENT_TYPE_UNKNOWN;
+  EXPECT_TRUE(loom_spirv_component_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3, &f8e4m3_component_type));
+  return {
+      .m_size = 16,
+      .k_size = 32,
+      .input_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
+      .input_interpretation = f8e4m3_component_type,
+      .matrix_interpretation = f8e4m3_component_type,
+      .bias_interpretation = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
+      .result_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
+      .matrix_layout =
+          LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_INFERENCING_OPTIMAL,
+      .storage_class = LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER,
+      .policy = policy,
+  };
+}
+
+TEST(SpirvCooperativePropertiesTest, MapsNumericFormatsToComponentTypes) {
+  loom_spirv_component_type_t component_type =
+      LOOM_SPIRV_COMPONENT_TYPE_UNKNOWN;
+  EXPECT_TRUE(loom_spirv_component_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_F16, &component_type));
+  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_FLOAT16);
+  EXPECT_TRUE(loom_spirv_component_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_BF16, &component_type));
+  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_BFLOAT16);
+  EXPECT_TRUE(loom_spirv_component_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_QUANT_I8, &component_type));
+  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_SINT8);
+  EXPECT_TRUE(loom_spirv_component_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_U8, &component_type));
+  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_UINT8);
+  EXPECT_TRUE(loom_spirv_component_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3, &component_type));
+  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E4M3);
+  EXPECT_TRUE(loom_spirv_component_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_BF8, &component_type));
+  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E5M2);
+}
+
+TEST(SpirvCooperativePropertiesTest,
+     RejectsUnknownAndMultiValuedNumericFormats) {
+  loom_spirv_component_type_t component_type =
+      LOOM_SPIRV_COMPONENT_TYPE_FLOAT16;
+  EXPECT_FALSE(loom_spirv_component_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_UNKNOWN, &component_type));
+  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_UNKNOWN);
+  EXPECT_FALSE(loom_spirv_component_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_F16 | LOOM_VALUE_FACT_NUMERIC_FORMAT_BF16,
+      &component_type));
+  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_UNKNOWN);
+  EXPECT_FALSE(loom_spirv_component_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_I4, &component_type));
+  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_UNKNOWN);
+}
+
 TEST(SpirvCooperativePropertiesTest, PreparesSelectedPropertyTables) {
   loom_spirv_cooperative_property_set_t property_set = {};
   PreparePropertySet(LOOM_SPIRV_FEATURE_VULKAN_SHADER |
@@ -170,6 +230,57 @@ TEST(SpirvCooperativePropertiesTest, SelectsCooperativeVectorInterpretation) {
   EXPECT_TRUE(iree_string_view_equal(
       property->name, IREE_SV("nv.cooperative_vector.u32.32x32.s8_packed")));
   EXPECT_EQ(diagnostic.status, LOOM_SPIRV_COOPERATIVE_SELECTION_MATCHED);
+}
+
+TEST(SpirvCooperativePropertiesTest, SelectsNarrowFloatVectorInterpretation) {
+  loom_spirv_cooperative_property_set_t property_set = {};
+  PreparePropertySet(LOOM_SPIRV_FEATURE_VULKAN_SHADER |
+                         LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV,
+                     &property_set);
+  const loom_spirv_cooperative_vector_query_t query =
+      F8E4M3VectorQuery(LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED);
+
+  loom_spirv_cooperative_diagnostic_t diagnostic = {};
+  const loom_spirv_cooperative_vector_property_t* property =
+      loom_spirv_cooperative_vector_property_select(&property_set, &query,
+                                                    &diagnostic);
+
+  ASSERT_NE(property, nullptr);
+  EXPECT_TRUE(iree_string_view_equal(
+      property->name, IREE_SV("nv.cooperative_vector.f16.16x32.e4m3")));
+  EXPECT_EQ(property->input_interpretation,
+            LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E4M3);
+  EXPECT_EQ(property->matrix_interpretation,
+            LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E4M3);
+  EXPECT_EQ(diagnostic.status, LOOM_SPIRV_COOPERATIVE_SELECTION_MATCHED);
+}
+
+TEST(SpirvCooperativePropertiesTest,
+     DistinguishesVectorPhysicalAndInterpretedMisses) {
+  loom_spirv_cooperative_property_set_t property_set = {};
+  PreparePropertySet(LOOM_SPIRV_FEATURE_VULKAN_SHADER |
+                         LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV,
+                     &property_set);
+  loom_spirv_cooperative_vector_query_t query =
+      PackedS8VectorQuery(LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED);
+  query.input_type = LOOM_SPIRV_COMPONENT_TYPE_SINT8_PACKED;
+  query.matrix_interpretation = LOOM_SPIRV_COMPONENT_TYPE_UINT8;
+
+  loom_spirv_cooperative_diagnostic_t diagnostic = {};
+  EXPECT_EQ(loom_spirv_cooperative_vector_property_select(&property_set, &query,
+                                                          &diagnostic),
+            nullptr);
+
+  EXPECT_EQ(diagnostic.status,
+            LOOM_SPIRV_COOPERATIVE_SELECTION_REQUIRED_PROPERTY_MISSING);
+  EXPECT_TRUE(
+      iree_any_bit_set(diagnostic.rejection_flags,
+                       LOOM_SPIRV_COOPERATIVE_REJECTION_COMPONENT_TYPE));
+  EXPECT_TRUE(iree_any_bit_set(diagnostic.rejection_flags,
+                               LOOM_SPIRV_COOPERATIVE_REJECTION_INPUT_TYPE));
+  EXPECT_TRUE(
+      iree_any_bit_set(diagnostic.rejection_flags,
+                       LOOM_SPIRV_COOPERATIVE_REJECTION_MATRIX_INTERPRETATION));
 }
 
 TEST(SpirvCooperativePropertiesTest, RequiresTrainingFeatureForTrainingQuery) {

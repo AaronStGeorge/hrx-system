@@ -68,6 +68,16 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    numeric_format
+  HDRS
+    "numeric_format.h"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     math_test
@@ -112,6 +122,7 @@ loom_cc_library(
   DEPS
     ::cfg_graph
     ::math
+    ::numeric_format
     iree::base
     iree::base::internal::arena
     loom::src::loom::ir

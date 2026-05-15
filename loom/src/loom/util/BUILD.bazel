@@ -61,6 +61,14 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "numeric_format",
+    hdrs = ["numeric_format.h"],
+    deps = [
+        "//runtime/src/iree/base",
+    ],
+)
+
 loom_cc_test(
     name = "math_test",
     srcs = ["math_test.cc"],
@@ -97,6 +105,7 @@ loom_cc_library(
     deps = [
         ":cfg_graph",
         ":math",
+        ":numeric_format",
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",
         "//loom/src/loom/ops:op_defs",
