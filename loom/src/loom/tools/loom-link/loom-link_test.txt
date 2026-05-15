@@ -14,10 +14,10 @@
 // RUN: loom-link %t.harness.loom %t.corpus.loom | FileCheck --check-prefix=LINK %s
 
 // LINK-NOT: func.decl @identity
+// LINK: func.def @identity(%x: i32) -> (i32) {
 // LINK: func.def @caller(%x: i32) -> (i32) {
 // LINK: %y = func.call @identity(%x) : (i32) -> (i32)
 // LINK: func.return %y : i32
-// LINK: func.def @identity(%x: i32) -> (i32) {
 // LINK-NOT: func.decl @identity
 
 // RUN: printf '%%s\n' \
@@ -39,12 +39,12 @@
 // ROOT-NOT: func.decl @identity
 
 // RUN: printf '%%s\n' \
-// RUN:   'func.def @duplicate(%x: i32) -> (i32) {' \
+// RUN:   'func.def public @duplicate(%x: i32) -> (i32) {' \
 // RUN:   '  func.return %x : i32' \
 // RUN:   '}' \
 // RUN:   > %t.duplicate_a.loom
 // RUN: printf '%%s\n' \
-// RUN:   'func.def @duplicate(%x: i32) -> (i32) {' \
+// RUN:   'func.def public @duplicate(%x: i32) -> (i32) {' \
 // RUN:   '  func.return %x : i32' \
 // RUN:   '}' \
 // RUN:   > %t.duplicate_b.loom

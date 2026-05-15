@@ -6,6 +6,7 @@
 
 #include "loom/link/linker.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -24,6 +25,11 @@
 
 namespace loom {
 namespace {
+
+struct ModuleDeleter {
+  void operator()(loom_module_t* module) const { loom_module_free(module); }
+};
+using ModulePtr = std::unique_ptr<loom_module_t, ModuleDeleter>;
 
 class LinkerTest : public ::testing::Test {
  protected:
@@ -80,6 +86,18 @@ class LinkerTest : public ::testing::Test {
       modules_.push_back(module);
     }
     return module;
+  }
+
+  ModulePtr ParseOwned(iree_string_view_t source,
+                       iree_string_view_t filename = IREE_SV("test.loom")) {
+    loom_module_t* module = nullptr;
+    loom_text_parse_options_t parse_options = {
+        .max_errors = 20,
+    };
+    IREE_EXPECT_OK(loom_text_parse(source, filename, &context_, &block_pool_,
+                                   &parse_options, &module));
+    EXPECT_NE(module, nullptr);
+    return ModulePtr(module);
   }
 
   loom_module_t* Link(std::initializer_list<loom_module_t*> source_modules) {
@@ -259,6 +277,31 @@ func.def @identity(%x: i32) -> (i32) {
   EXPECT_NE(after, std::string::npos);
   EXPECT_LT(identity, after);
   EXPECT_EQ(before, std::string::npos);
+}
+
+TEST_F(LinkerTest, SelectiveRootCanResolveProviderBeforeRootModule) {
+  loom_module_t* corpus = Parse(IREE_SV(R"(
+func.def @identity(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+  loom_module_t* harness = Parse(IREE_SV(R"(
+func.decl @identity(%x: i32) -> (i32)
+
+func.def @caller(%x: i32) -> (i32) {
+  %y = func.call @identity(%x) : (i32) -> (i32)
+  func.return %y : i32
+}
+)"));
+
+  loom_module_t* linked = LinkRoots({corpus, harness}, {IREE_SV("@caller")});
+  Verify(linked);
+
+  std::string text = Print(linked);
+  EXPECT_EQ(text.find("func.decl @identity"), std::string::npos);
+  EXPECT_NE(text.find("func.def @identity"), std::string::npos);
+  EXPECT_NE(text.find("func.def @caller"), std::string::npos);
+  EXPECT_NE(text.find("func.call @identity"), std::string::npos);
 }
 
 TEST_F(LinkerTest, SelectiveRootIgnoresUnreachableDuplicateDefinition) {
@@ -529,14 +572,122 @@ config.decl @model36.model.hidden_size : %value: index where [mul(%value, 16)]
   EXPECT_NE(text.find("mul(%value, 16)"), std::string::npos);
 }
 
-TEST_F(LinkerTest, RejectsDuplicateConcreteDefinitions) {
+TEST_F(LinkerTest, RenamesPrivateDefinitionConflictsAndRewritesCalls) {
   loom_module_t* first = Parse(IREE_SV(R"(
-func.def @identity(%x: i32) -> (i32) {
+func.def public @entry_a(%x: i32) -> (i32) {
+  %y = func.call @helper(%x) : (i32) -> (i32)
+  func.return %y : i32
+}
+
+func.def @helper(%x: i32) -> (i32) {
   func.return %x : i32
 }
 )"));
   loom_module_t* second = Parse(IREE_SV(R"(
+func.def public @entry_b(%x: i32) -> (i32) {
+  %y = func.call @helper(%x) : (i32) -> (i32)
+  func.return %y : i32
+}
+
+func.def @helper(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+
+  loom_module_t* linked = Link({first, second});
+  Verify(linked);
+
+  std::string text = Print(linked);
+  EXPECT_NE(text.find("func.def @helper("), std::string::npos);
+  EXPECT_NE(text.find("func.def @helper$link0("), std::string::npos);
+  EXPECT_NE(text.find("func.def public @entry_a"), std::string::npos);
+  EXPECT_NE(text.find("func.call @helper(%x)"), std::string::npos);
+  EXPECT_NE(text.find("func.def public @entry_b"), std::string::npos);
+  EXPECT_NE(text.find("func.call @helper$link0(%x)"), std::string::npos);
+}
+
+TEST_F(LinkerTest, PrivateRenameOutputIsStable) {
+  loom_module_t* first = Parse(IREE_SV(R"(
+func.def public @entry_a(%x: i32) -> (i32) {
+  %y = func.call @helper(%x) : (i32) -> (i32)
+  func.return %y : i32
+}
+
+func.def @helper(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+  loom_module_t* second = Parse(IREE_SV(R"(
+func.def public @entry_b(%x: i32) -> (i32) {
+  %y = func.call @helper(%x) : (i32) -> (i32)
+  func.return %y : i32
+}
+
+func.def @helper(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+
+  loom_module_t* linked_a = Link({first, second});
+  loom_module_t* linked_b = Link({first, second});
+  Verify(linked_a);
+  Verify(linked_b);
+  EXPECT_EQ(Print(linked_a), Print(linked_b));
+}
+
+TEST_F(LinkerTest, IncrementalAddDoesNotRetainPreviousSourceModule) {
+  loom_linker_t* linker = nullptr;
+  loom_linker_options_t linker_options = {
+      .module_name = IREE_SV("linked"),
+  };
+  IREE_ASSERT_OK(loom_linker_create(&context_, &linker_options, &block_pool_,
+                                    iree_allocator_system(), &linker));
+
+  iree_string_view_t roots[] = {IREE_SV("@caller")};
+  loom_linker_add_options_t add_options = {
+      .root_symbols = {.count = IREE_ARRAYSIZE(roots), .values = roots},
+  };
+  {
+    ModulePtr harness = ParseOwned(IREE_SV(R"(
+func.decl @identity(%x: i32) -> (i32)
+
+func.def @caller(%x: i32) -> (i32) {
+  %y = func.call @identity(%x) : (i32) -> (i32)
+  func.return %y : i32
+}
+)"));
+    IREE_ASSERT_OK(loom_linker_add_module(linker, harness.get(), &add_options));
+  }
+  {
+    ModulePtr corpus = ParseOwned(IREE_SV(R"(
 func.def @identity(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+    IREE_ASSERT_OK(loom_linker_add_module(linker, corpus.get(), &add_options));
+  }
+
+  loom_module_t* linked = nullptr;
+  IREE_ASSERT_OK(loom_linker_finish(linker, &linked));
+  loom_linker_free(linker);
+  modules_.push_back(linked);
+  Verify(linked);
+
+  std::string text = Print(linked);
+  EXPECT_EQ(text.find("func.decl @identity"), std::string::npos);
+  EXPECT_NE(text.find("func.def @identity"), std::string::npos);
+  EXPECT_NE(text.find("func.def @caller"), std::string::npos);
+  EXPECT_NE(text.find("func.call @identity"), std::string::npos);
+}
+
+TEST_F(LinkerTest, RejectsDuplicatePublicConcreteDefinitions) {
+  loom_module_t* first = Parse(IREE_SV(R"(
+func.def public @identity(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+  loom_module_t* second = Parse(IREE_SV(R"(
+func.def public @identity(%x: i32) -> (i32) {
   func.return %x : i32
 }
 )"));
