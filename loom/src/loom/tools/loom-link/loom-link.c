@@ -31,9 +31,8 @@ IREE_FLAG_LIST(string, root,
                "links every materialized symbol.");
 IREE_FLAG_LIST(string, config,
                "Compile/link-time config binding. Repeat as "
-               "--config=key=value. Bindings are materialized after linked "
-               "config declarations/defaults merge; unused bindings are "
-               "ignored.");
+               "--config=key=value. Bindings specialize each loaded input "
+               "module before linking; unused bindings are ignored.");
 IREE_FLAG_LIST(string, config_file,
                "JSON/JSONC config object file. Repeat for multiple files. "
                "Nested object keys are flattened with '.' separators.");
@@ -194,16 +193,14 @@ static iree_status_t loom_link_append_config_files(
   return iree_ok_status();
 }
 
-static iree_status_t loom_link_materialize_config_set(
+static iree_status_t loom_link_materialize_input_config(
     loom_module_t* module, const loom_tooling_config_set_t* config_set,
-    iree_arena_block_pool_t* block_pool,
-    loom_tooling_config_materialize_result_t* out_result) {
-  *out_result = (loom_tooling_config_materialize_result_t){0};
+    iree_arena_block_pool_t* block_pool) {
   loom_tooling_config_materialize_options_t options;
   loom_tooling_config_materialize_options_initialize(&options);
   options.config_set = config_set;
   return loom_tooling_config_materialize_module(module, &options, block_pool,
-                                                out_result);
+                                                NULL);
 }
 
 int main(int argc, char** argv) {
@@ -218,8 +215,8 @@ int main(int argc, char** argv) {
       "\n"
       "Input defaults to stdin when no files are provided. A '-' input reads "
       "stdin and must be the only input path.\n"
-      "Repeat --config=key=value to override linked config symbols after "
-      "config declarations/defaults merge.\n"
+      "Repeat --config=key=value to specialize each input module before "
+      "linking.\n"
       "Use --config-file=path to load a JSON/JSONC config object. Files and "
       "--config values share one config set and duplicate keys are rejected.\n"
       "Use --require-resolved-config for final outputs that must not retain "
@@ -240,7 +237,6 @@ int main(int argc, char** argv) {
   loom_module_t* linked_module = NULL;
   loom_tooling_config_set_t config_set;
   loom_tooling_config_set_initialize(allocator, &config_set);
-  loom_tooling_config_materialize_result_t config_materialize_result = {0};
 
   iree_host_size_t input_count = argc < 2 ? 1 : (iree_host_size_t)(argc - 1);
   iree_status_t status = iree_allocator_malloc(
@@ -282,6 +278,10 @@ int main(int argc, char** argv) {
     status = loom_link_parse_input(path, filename, &context, &block_pool,
                                    allocator, &inputs[i]);
     if (iree_status_is_ok(status)) {
+      status = loom_link_materialize_input_config(inputs[i].module, &config_set,
+                                                  &block_pool);
+    }
+    if (iree_status_is_ok(status)) {
       source_modules[i] = inputs[i].module;
       source_entries[i] = inputs[i].source_entry;
     }
@@ -296,10 +296,6 @@ int main(int argc, char** argv) {
     status = loom_link_materialized_modules(source_modules, input_count,
                                             &link_options, &block_pool,
                                             allocator, &linked_module);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_link_materialize_config_set(
-        linked_module, &config_set, &block_pool, &config_materialize_result);
   }
   if (iree_status_is_ok(status) && FLAG_require_resolved_config) {
     status = loom_tooling_config_require_resolved_module(linked_module, NULL);

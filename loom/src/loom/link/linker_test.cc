@@ -328,6 +328,30 @@ func.def @identity(%x: i32) -> (i32) {
   EXPECT_EQ(Print(linked), Print(linked_with_unrelated));
 }
 
+TEST_F(LinkerTest, SelectiveRootMaterializesConfigDependency) {
+  loom_module_t* module = Parse(IREE_SV(R"(
+config.decl @model36.model.hidden_size : index
+
+func.def @read_config() -> (index) {
+  %hidden = config.get @model36.model.hidden_size : index
+  func.return %hidden : index
+}
+
+func.def @unrelated(%x: index) -> (index) {
+  func.return %x : index
+}
+)"));
+
+  loom_module_t* linked = LinkRoots({module}, {IREE_SV("@read_config")});
+  Verify(linked);
+
+  std::string text = Print(linked);
+  EXPECT_NE(text.find("config.decl @model36.model.hidden_size"),
+            std::string::npos);
+  EXPECT_NE(text.find("func.def @read_config"), std::string::npos);
+  EXPECT_EQ(text.find("func.def @unrelated"), std::string::npos);
+}
+
 TEST_F(LinkerTest, MergesDeclarationTargetContractIntoDefinition) {
   loom_module_t* harness = Parse(IREE_SV(R"(
 test.target<low_core> @test_target
@@ -438,6 +462,39 @@ config.decl @model36.model.hidden_size : %value: index where [range(%value, 1, 8
             std::string::npos);
   EXPECT_EQ(text.find("config.decl @model36.model.hidden_size"),
             std::string::npos);
+}
+
+TEST_F(LinkerTest, MergesIdenticalConfigDefinitions) {
+  loom_module_t* first = Parse(IREE_SV(R"(
+config.def @model36.model.hidden_size = 4096 : index
+)"));
+  loom_module_t* second = Parse(IREE_SV(R"(
+config.def @model36.model.hidden_size = 4096 : index
+)"));
+
+  loom_module_t* linked = Link({first, second});
+  Verify(linked);
+
+  std::string text = Print(linked);
+  size_t first_def =
+      text.find("config.def @model36.model.hidden_size = 4096 : index");
+  EXPECT_NE(first_def, std::string::npos);
+  EXPECT_EQ(text.find("config.def @model36.model.hidden_size", first_def + 1),
+            std::string::npos);
+}
+
+TEST_F(LinkerTest, RejectsConflictingConfigDefinitions) {
+  loom_module_t* first = Parse(IREE_SV(R"(
+config.def @model36.model.hidden_size = 4096 : index
+)"));
+  loom_module_t* second = Parse(IREE_SV(R"(
+config.def @model36.model.hidden_size = 2048 : index
+)"));
+
+  loom_module_t* linked = nullptr;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_ALREADY_EXISTS,
+                        LinkStatus({first, second}, &linked));
+  EXPECT_EQ(linked, nullptr);
 }
 
 TEST_F(LinkerTest, RejectsConfigDefinitionViolatingDeclaration) {

@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/analysis/symbol_dependencies.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/symbol_map.h"
@@ -66,6 +67,8 @@ typedef struct loom_link_state_t {
   loom_link_module_map_t* module_maps;
   // Number of entries in module_maps.
   iree_host_size_t module_map_count;
+  // Lazily rebuilt source-module symbol dependency tables.
+  loom_symbol_dependency_table_t* module_dependency_tables;
   // Lazily initialized source-module to target-module remap tables.
   loom_ir_remap_t* module_remaps;
   // Chosen source materialization for each target symbol.
@@ -173,6 +176,79 @@ static iree_status_t loom_link_source_symbol_name(
   return iree_ok_status();
 }
 
+static iree_status_t loom_link_duplicate_config_definition_status(
+    const loom_link_state_t* state, loom_symbol_ref_t target_ref,
+    iree_string_view_t field_name) {
+  iree_string_view_t name =
+      loom_link_target_symbol_name(state->target_module, target_ref);
+  return iree_make_status(IREE_STATUS_ALREADY_EXISTS,
+                          "duplicate config definition '@%.*s' has "
+                          "incompatible %.*s",
+                          (int)name.size, name.data, (int)field_name.size,
+                          field_name.data);
+}
+
+static iree_status_t loom_link_remap_config_def_type_and_value(
+    loom_link_state_t* state, const loom_module_t* source_module,
+    const loom_op_t* source_op, loom_type_t* out_type,
+    loom_attribute_t* out_value) {
+  loom_value_id_t source_value_id = loom_config_def_type(source_op);
+  if (source_value_id == LOOM_VALUE_ID_INVALID ||
+      source_value_id >= source_module->values.count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "config definition has no result value");
+  }
+
+  loom_ir_remap_t remap = {0};
+  IREE_RETURN_IF_ERROR(loom_ir_remap_initialize(
+      source_module, state->target_module, state->scratch_arena,
+      /*options=*/NULL, &remap));
+  IREE_RETURN_IF_ERROR(loom_ir_remap_type(
+      &remap, loom_module_value_type(source_module, source_value_id),
+      out_type));
+  return loom_ir_remap_attribute(&remap, loom_config_def_value(source_op),
+                                 out_value);
+}
+
+static iree_status_t loom_link_check_duplicate_config_definition(
+    loom_link_state_t* state, const loom_link_materialization_t* existing,
+    const loom_module_t* source_module, uint16_t source_symbol_id,
+    loom_symbol_ref_t target_ref, bool* out_merge) {
+  *out_merge = false;
+  const loom_symbol_t* existing_symbol =
+      &existing->source_module->symbols.entries[existing->source_symbol_id];
+  const loom_symbol_t* new_symbol =
+      &source_module->symbols.entries[source_symbol_id];
+  if (!existing_symbol->defining_op || !new_symbol->defining_op ||
+      !loom_config_def_isa(existing_symbol->defining_op) ||
+      !loom_config_def_isa(new_symbol->defining_op)) {
+    return iree_ok_status();
+  }
+
+  loom_type_t existing_type = {0};
+  loom_attribute_t existing_value = {0};
+  IREE_RETURN_IF_ERROR(loom_link_remap_config_def_type_and_value(
+      state, existing->source_module, existing_symbol->defining_op,
+      &existing_type, &existing_value));
+
+  loom_type_t new_type = {0};
+  loom_attribute_t new_value = {0};
+  IREE_RETURN_IF_ERROR(loom_link_remap_config_def_type_and_value(
+      state, source_module, new_symbol->defining_op, &new_type, &new_value));
+
+  if (!loom_type_equal(existing_type, new_type)) {
+    return loom_link_duplicate_config_definition_status(state, target_ref,
+                                                        IREE_SV("type"));
+  }
+  if (!loom_attribute_equal(&existing_value, &new_value)) {
+    return loom_link_duplicate_config_definition_status(state, target_ref,
+                                                        IREE_SV("value"));
+  }
+
+  *out_merge = true;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_link_record_materialization(
     loom_link_state_t* state, const loom_module_t* source_module,
     uint16_t source_symbol_id, loom_symbol_ref_t target_ref) {
@@ -225,6 +301,14 @@ static iree_status_t loom_link_record_materialization(
   }
 
   if (new_is_declaration) {
+    return iree_ok_status();
+  }
+
+  bool merge_duplicate_config_definition = false;
+  IREE_RETURN_IF_ERROR(loom_link_check_duplicate_config_definition(
+      state, materialization, source_module, source_symbol_id, target_ref,
+      &merge_duplicate_config_definition));
+  if (merge_duplicate_config_definition) {
     return iree_ok_status();
   }
 
@@ -433,136 +517,48 @@ static iree_status_t loom_link_mark_source_symbol_live(
   return loom_link_mark_target_symbol_live(state, target_ref);
 }
 
-static iree_status_t loom_link_mark_attr_symbol_refs_live(
+static iree_status_t loom_link_get_module_dependencies(
     loom_link_state_t* state, const loom_module_t* source_module,
-    const loom_attribute_t* attr, uint8_t dict_depth);
-
-static iree_status_t loom_link_mark_encoding_symbol_refs_live(
-    loom_link_state_t* state, const loom_module_t* source_module,
-    uint16_t encoding_id, uint8_t encoding_depth) {
-  if (encoding_id == 0) {
-    return iree_ok_status();
-  }
-  if (encoding_depth >= LOOM_ATTR_DICT_MAX_NESTING_DEPTH) {
+    const loom_symbol_dependency_table_t** out_table) {
+  *out_table = NULL;
+  iree_host_size_t module_index = 0;
+  if (!loom_link_find_module_map_index(state, source_module, &module_index)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "encoding nesting exceeds max depth %u",
-                            (unsigned)LOOM_ATTR_DICT_MAX_NESTING_DEPTH);
+                            "source module is not part of this link");
   }
-  const loom_encoding_t* encoding =
-      loom_module_encoding(source_module, encoding_id);
-  if (!encoding) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "source encoding id %u out of range (source module has %" PRIhsz
-        " encodings)",
-        (unsigned)encoding_id, source_module->encodings.count);
+  loom_symbol_dependency_table_t* table =
+      &state->module_dependency_tables[module_index];
+  if (!table->module) {
+    IREE_RETURN_IF_ERROR(loom_symbol_dependency_table_build(
+        source_module, state->scratch_arena, table));
   }
-  for (uint8_t i = 0; i < encoding->attribute_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_link_mark_attr_symbol_refs_live(
-        state, source_module, &encoding->attributes[i].value,
-        (uint8_t)(encoding_depth + 1)));
-  }
+  *out_table = table;
   return iree_ok_status();
 }
 
-static iree_status_t loom_link_mark_type_symbol_refs_live(
+static iree_status_t loom_link_mark_symbol_dependencies_live(
     loom_link_state_t* state, const loom_module_t* source_module,
-    loom_type_t type) {
-  if (!loom_type_has_static_encoding(type)) {
-    return iree_ok_status();
+    uint16_t source_symbol_id) {
+  const loom_symbol_dependency_table_t* table = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_link_get_module_dependencies(state, source_module, &table));
+  if (source_symbol_id >= table->symbol_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "source symbol %u is out of range for dependency table with %" PRIhsz
+        " symbols",
+        (unsigned)source_symbol_id, table->symbol_count);
   }
-  return loom_link_mark_encoding_symbol_refs_live(state, source_module,
-                                                  type.encoding_id, 0);
-}
 
-static iree_status_t loom_link_mark_attr_symbol_refs_live(
-    loom_link_state_t* state, const loom_module_t* source_module,
-    const loom_attribute_t* attr, uint8_t dict_depth) {
-  if (!attr) {
-    return iree_ok_status();
-  }
-  switch ((loom_attr_kind_t)attr->kind) {
-    case LOOM_ATTR_SYMBOL:
-      return loom_link_mark_source_symbol_live(state, source_module,
-                                               loom_attr_as_symbol(*attr));
-    case LOOM_ATTR_TYPE:
-      if (attr->type_id >= source_module->types.count) {
-        return iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "type attribute references source type id %u but source module has "
-            "%" PRIhsz " types",
-            (unsigned)attr->type_id, source_module->types.count);
-      }
-      return loom_link_mark_type_symbol_refs_live(
-          state, source_module, source_module->types.entries[attr->type_id]);
-    case LOOM_ATTR_ENCODING:
-      return loom_link_mark_encoding_symbol_refs_live(
-          state, source_module, loom_attr_as_encoding_id(*attr), dict_depth);
-    case LOOM_ATTR_DICT:
-      if (dict_depth >= LOOM_ATTR_DICT_MAX_NESTING_DEPTH) {
-        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "dict attribute nesting exceeds max depth %u",
-                                (unsigned)LOOM_ATTR_DICT_MAX_NESTING_DEPTH);
-      }
-      if (attr->count > 0 && !attr->dict_entries) {
-        return iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "non-empty dict attribute has a NULL entry pointer");
-      }
-      for (uint16_t i = 0; i < attr->count; ++i) {
-        IREE_RETURN_IF_ERROR(loom_link_mark_attr_symbol_refs_live(
-            state, source_module, &attr->dict_entries[i].value,
-            (uint8_t)(dict_depth + 1)));
-      }
-      return iree_ok_status();
-    default:
-      return iree_ok_status();
-  }
-}
-
-static iree_status_t loom_link_mark_op_symbol_refs_live(
-    loom_link_state_t* state, const loom_module_t* source_module,
-    const loom_op_t* op) {
-  const loom_value_id_t* operands = loom_op_const_operands(op);
-  for (uint16_t i = 0; i < op->operand_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_link_mark_type_symbol_refs_live(
+  loom_symbol_dependency_edge_id_t edge_id =
+      table->symbols[source_symbol_id].first_outgoing_edge_id;
+  while (edge_id != LOOM_SYMBOL_DEPENDENCY_EDGE_ID_INVALID) {
+    const loom_symbol_dependency_edge_t* edge = &table->edges[edge_id];
+    IREE_RETURN_IF_ERROR(loom_link_mark_source_symbol_live(
         state, source_module,
-        loom_module_value_type(source_module, operands[i])));
-  }
-
-  const loom_value_id_t* results = loom_op_const_results(op);
-  for (uint16_t i = 0; i < op->result_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_link_mark_type_symbol_refs_live(
-        state, source_module,
-        loom_module_value_type(source_module, results[i])));
-  }
-
-  const loom_attribute_t* attrs = loom_op_const_attrs(op);
-  for (uint8_t i = 0; i < op->attribute_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_link_mark_attr_symbol_refs_live(
-        state, source_module, &attrs[i], 0));
-  }
-
-  loom_region_t** regions = loom_op_regions(op);
-  for (uint8_t i = 0; i < op->region_count; ++i) {
-    const loom_region_t* region = regions[i];
-    if (!region) {
-      continue;
-    }
-    const loom_block_t* block = NULL;
-    loom_region_for_each_block(region, block) {
-      for (uint16_t arg_index = 0; arg_index < block->arg_count; ++arg_index) {
-        IREE_RETURN_IF_ERROR(loom_link_mark_type_symbol_refs_live(
-            state, source_module,
-            loom_module_value_type(source_module,
-                                   loom_block_arg_id(block, arg_index))));
-      }
-      const loom_op_t* child_op = NULL;
-      loom_block_for_each_op(block, child_op) {
-        IREE_RETURN_IF_ERROR(
-            loom_link_mark_op_symbol_refs_live(state, source_module, child_op));
-      }
-    }
+        (loom_symbol_ref_t){.module_id = 0,
+                            .symbol_id = edge->target_symbol_id}));
+    edge_id = edge->next_outgoing_edge_id;
   }
   return iree_ok_status();
 }
@@ -602,24 +598,16 @@ static iree_status_t loom_link_mark_materialization_dependencies_live(
   const loom_link_materialization_t* materialization =
       &state->materializations[target_symbol_id];
   if (materialization->source_module) {
-    const loom_symbol_t* source_symbol =
-        &materialization->source_module->symbols
-             .entries[materialization->source_symbol_id];
-    if (source_symbol->defining_op) {
-      IREE_RETURN_IF_ERROR(loom_link_mark_op_symbol_refs_live(
-          state, materialization->source_module, source_symbol->defining_op));
-    }
+    IREE_RETURN_IF_ERROR(loom_link_mark_symbol_dependencies_live(
+        state, materialization->source_module,
+        materialization->source_symbol_id));
   }
   for (const loom_link_contract_source_t* contract_source =
            materialization->contract_sources;
        contract_source; contract_source = contract_source->next) {
-    const loom_symbol_t* source_symbol =
-        &contract_source->source_module->symbols
-             .entries[contract_source->source_symbol_id];
-    if (source_symbol->defining_op) {
-      IREE_RETURN_IF_ERROR(loom_link_mark_op_symbol_refs_live(
-          state, contract_source->source_module, source_symbol->defining_op));
-    }
+    IREE_RETURN_IF_ERROR(loom_link_mark_symbol_dependencies_live(
+        state, contract_source->source_module,
+        contract_source->source_symbol_id));
   }
   return iree_ok_status();
 }
@@ -1413,11 +1401,20 @@ iree_status_t loom_link_materialized_modules(
                                        sizeof(*state.module_remaps),
                                        (void**)&state.module_remaps);
   }
+  if (iree_status_is_ok(status) && !materialize_all_symbols) {
+    status = iree_arena_allocate_array(&scratch_arena, source_module_count,
+                                       sizeof(*state.module_dependency_tables),
+                                       (void**)&state.module_dependency_tables);
+  }
   if (iree_status_is_ok(status)) {
     memset(state.module_maps, 0,
            source_module_count * sizeof(*state.module_maps));
     memset(state.module_remaps, 0,
            source_module_count * sizeof(*state.module_remaps));
+    if (state.module_dependency_tables) {
+      memset(state.module_dependency_tables, 0,
+             source_module_count * sizeof(*state.module_dependency_tables));
+    }
     for (iree_host_size_t i = 0; i < source_module_count; ++i) {
       state.module_maps[i].source_module = source_modules[i];
       status = loom_link_map_module_symbols(&state, &state.module_maps[i],

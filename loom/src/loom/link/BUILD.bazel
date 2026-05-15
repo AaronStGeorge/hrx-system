@@ -17,6 +17,7 @@ loom_cc_library(
     srcs = ["linker.c"],
     hdrs = ["linker.h"],
     deps = [
+        "//loom/src/loom/analysis:symbol_dependencies",
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:symbol_map",
         "//loom/src/loom/ops:op_defs",

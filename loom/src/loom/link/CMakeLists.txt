@@ -20,6 +20,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
+    loom::src::loom::analysis::symbol_dependencies
     loom::src::loom::ir
     loom::src::loom::ir::symbol_map
     loom::src::loom::ops::config
