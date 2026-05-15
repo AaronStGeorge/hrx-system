@@ -228,6 +228,22 @@ loom_cc_library(
     ],
 )
 
+loom_cc_test(
+    name = "spill_lowering_test",
+    srcs = ["spill_lowering_test.cc"],
+    deps = [
+        ":spill_lowering",
+        "//loom/src/loom/codegen/low:builder",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target/arch/amdgpu:rdna3_descriptors",
+        "//loom/src/loom/target/arch/amdgpu:target_refs",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_library(
     name = "encoding",
     srcs = ["encoding.c"],

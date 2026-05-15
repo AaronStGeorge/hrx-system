@@ -156,6 +156,23 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_test(
+  NAME
+    spill_lowering_test
+  SRCS
+    "spill_lowering_test.cc"
+  DEPS
+    ::spill_lowering
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::builder
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::arch::amdgpu::rdna3_descriptors
+    loom::src::loom::target::arch::amdgpu::target_refs
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_library(
   NAME
     encoding

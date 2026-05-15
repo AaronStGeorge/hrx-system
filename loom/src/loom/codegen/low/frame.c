@@ -425,7 +425,9 @@ iree_status_t loom_low_emission_frame_build_spill_free(
     loom_low_allocation_materialization_options_t materialization_options =
         spill_free_options->materialization_options;
     materialization_options.allow_existing_storage_traffic = true;
-    materialization_options.max_spill_plan_count = 1;
+    // The frame loop materializes one complete allocation snapshot at a time;
+    // the next iteration accounts for any spill traffic introduced by it.
+    materialization_options.max_spill_plan_count = 0;
     if (materialization_options.emitter.fn == NULL) {
       materialization_options.emitter = frame_options->emitter;
     }

@@ -1851,11 +1851,6 @@ static iree_status_t loom_amdgpu_encode_storage_address_packet(
   IREE_RETURN_IF_ERROR(loom_amdgpu_storage_layout_lookup_reference(
       state->storage_layout, state->schedule->module,
       loom_low_storage_address_storage(op), &reference));
-  if (reference.reservation.space != LOOM_STORAGE_SPACE_WORKGROUP) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "AMDGPU native encoding only supports "
-                            "low.storage.address for workgroup storage");
-  }
   const int64_t signed_offset = loom_low_storage_address_offset(op);
   if (signed_offset < 0) {
     return iree_make_status(
