@@ -38,6 +38,50 @@
 // ROOT-NOT: func.def @unused
 // ROOT-NOT: func.decl @identity
 
+// RUN: loom-format --from=text --to=bc --output=%t.root_corpus.loombc \
+// RUN:   %t.root_corpus.loom
+// RUN: loom-link %t.harness.loom --library=%t.root_corpus.loombc \
+// RUN:     --root=@caller \
+// RUN:   | FileCheck --check-prefix=BYTECODE-LIB %s
+
+// BYTECODE-LIB-NOT: func.def @unused
+// BYTECODE-LIB: func.def @identity(%x: i32) -> (i32) {
+// BYTECODE-LIB: func.def @caller(%x: i32) -> (i32) {
+// BYTECODE-LIB-NOT: func.def @unused
+// BYTECODE-LIB-NOT: func.decl @identity
+
+// RUN: loom-link %t.harness.loom --library=%t.root_corpus.loombc \
+// RUN:     --root=@caller --to=bc --output=%t.linked.loombc
+// RUN: loom-format --from=bc --to=text %t.linked.loombc \
+// RUN:   | FileCheck --check-prefix=BYTECODE-OUT %s
+
+// BYTECODE-OUT-NOT: func.def @unused
+// BYTECODE-OUT: func.def @caller(%x: i32) -> (i32) {
+// BYTECODE-OUT: func.def @identity(%x: i32) -> (i32) {
+// BYTECODE-OUT-NOT: func.decl @identity
+
+// RUN: loom-link %t.harness.loom --library=%t.root_corpus.loombc \
+// RUN:     --root=@caller --print-plan \
+// RUN:   | FileCheck --check-prefix=PLAN %s
+
+// PLAN: plan mode=link
+// PLAN: root @caller
+// PLAN: dependency @identity
+// PLAN-NOT: @unused
+
+// RUN: loom-link %t.harness.loom --print-plan --list-symbols \
+// RUN:   > %t.diag_conflict.err 2>&1; test $? -ne 0
+// RUN: FileCheck --check-prefix=DIAG-CONFLICT %s < %t.diag_conflict.err
+
+// DIAG-CONFLICT: --print_plan cannot be combined with --list_symbols
+
+// RUN: loom-link --library=%t.root_corpus.loombc --list-symbols \
+// RUN:   | FileCheck --check-prefix=SYMBOLS %s
+
+// SYMBOLS: symbols
+// SYMBOLS: @unused role=library
+// SYMBOLS: @identity role=library
+
 // RUN: printf '%%s\n' \
 // RUN:   'func.def public @duplicate(%x: i32) -> (i32) {' \
 // RUN:   '  func.return %x : i32' \
@@ -52,7 +96,29 @@
 // RUN:   > %t.duplicate.err 2>&1; test $? -ne 0
 // RUN: FileCheck --check-prefix=DUPLICATE %s < %t.duplicate.err
 
-// DUPLICATE: duplicate concrete symbol definition '@duplicate'
+// DUPLICATE: global symbol '@duplicate'
+// DUPLICATE: conflicts with provider
+
+// RUN: printf '%%s\n' \
+// RUN:   'func.def @kernel(%x: i32) -> (i32) {' \
+// RUN:   '  func.return %x : i32' \
+// RUN:   '}' \
+// RUN:   '' \
+// RUN:   'check.case public @kernel_case {' \
+// RUN:   '  %input = check.literal value(1) : i32' \
+// RUN:   '  %actual = func.call @kernel(%input) : (i32) -> (i32)' \
+// RUN:   '  check.expect.equal actual(%actual) expected(%input) : i32' \
+// RUN:   '  check.return' \
+// RUN:   '}' \
+// RUN:   '' \
+// RUN:   'check.benchmark @kernel_bench case(@kernel_case) attrs({iterations = 100})' \
+// RUN:   > %t.checks.loom
+// RUN: loom-link %t.checks.loom --strip_check \
+// RUN:   | FileCheck --check-prefix=STRIP-CHECK %s
+
+// STRIP-CHECK: func.def @kernel(%x: i32) -> (i32) {
+// STRIP-CHECK-NOT: check.case
+// STRIP-CHECK-NOT: check.benchmark
 
 // RUN: printf '%%s\n' \
 // RUN:   'config.decl @model36.model.hidden_size : %value: index where [range(%value, 0, 8192)]' \

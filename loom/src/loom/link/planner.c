@@ -106,18 +106,26 @@ static bool loom_link_plan_symbol_has_body(
          iree_any_bit_set(symbol->flags, LOOM_LINK_SYMBOL_FLAG_HAS_BODY);
 }
 
+// Finds the first concrete body that can fill a selected declaration anchor.
+// The body may be private: a declaration gives the linked output a global
+// anchor, and the materialized linker can replace that anchor with a same-name
+// private definition from a later provider.
 static const loom_link_module_index_symbol_t*
-loom_link_plan_find_concrete_global_duplicate(
+loom_link_plan_find_concrete_duplicate_for_declaration(
     const loom_link_plan_t* plan,
     const loom_link_module_index_symbol_t* symbol) {
-  for (const loom_link_module_index_symbol_t* duplicate =
-           loom_link_module_index_next_global_duplicate(plan->index, symbol);
-       duplicate; duplicate = loom_link_module_index_next_global_duplicate(
-                      plan->index, duplicate)) {
-    if (!loom_link_plan_symbol_is_declaration_like(duplicate) &&
-        loom_link_plan_symbol_has_body(duplicate)) {
-      return duplicate;
+  const iree_host_size_t symbol_count =
+      loom_link_module_index_symbol_count(plan->index);
+  for (iree_host_size_t i = 0; i < symbol_count; ++i) {
+    const loom_link_module_index_symbol_t* duplicate =
+        loom_link_module_index_symbol_at(plan->index, i);
+    if (duplicate == symbol ||
+        !iree_string_view_equal(symbol->name, duplicate->name) ||
+        loom_link_plan_symbol_is_declaration_like(duplicate) ||
+        !loom_link_plan_symbol_has_body(duplicate)) {
+      continue;
     }
+    return duplicate;
   }
   return NULL;
 }
@@ -206,7 +214,8 @@ static iree_status_t loom_link_plan_select_global_reference(
     return iree_ok_status();
   }
   const loom_link_module_index_symbol_t* concrete_symbol =
-      loom_link_plan_find_concrete_global_duplicate(plan, selected_symbol);
+      loom_link_plan_find_concrete_duplicate_for_declaration(plan,
+                                                             selected_symbol);
   if (!concrete_symbol) {
     return iree_ok_status();
   }
@@ -395,13 +404,38 @@ static iree_status_t loom_link_plan_select_root(
   }
   const loom_link_module_index_symbol_t* root =
       loom_link_module_index_lookup_global(plan->index, normalized_name);
-  if (!root) {
+  if (root) {
+    return loom_link_plan_select_global_reference(
+        plan, options, root, LOOM_LINK_PLAN_LIVE_ROOT,
+        LOOM_LINK_MODULE_INDEX_INVALID_ORDINAL, root_name,
+        /*out_plan_ordinal=*/NULL);
+  }
+
+  const loom_link_module_index_symbol_t* private_root = NULL;
+  const iree_host_size_t symbol_count =
+      loom_link_module_index_symbol_count(plan->index);
+  for (iree_host_size_t i = 0; i < symbol_count; ++i) {
+    const loom_link_module_index_symbol_t* symbol =
+        loom_link_module_index_symbol_at(plan->index, i);
+    if (symbol->identity != LOOM_LINK_SYMBOL_IDENTITY_PRIVATE ||
+        !iree_string_view_equal(symbol->name, normalized_name)) {
+      continue;
+    }
+    if (private_root) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "root symbol '@%.*s' is private in multiple modules",
+          (int)normalized_name.size, normalized_name.data);
+    }
+    private_root = symbol;
+  }
+  if (!private_root) {
     return iree_make_status(IREE_STATUS_NOT_FOUND,
                             "root symbol '@%.*s' was not found",
                             (int)normalized_name.size, normalized_name.data);
   }
-  return loom_link_plan_select_global_reference(
-      plan, options, root, LOOM_LINK_PLAN_LIVE_ROOT,
+  return loom_link_plan_select_symbol(
+      plan, options, private_root, LOOM_LINK_PLAN_LIVE_ROOT,
       LOOM_LINK_MODULE_INDEX_INVALID_ORDINAL, root_name,
       /*out_plan_ordinal=*/NULL);
 }

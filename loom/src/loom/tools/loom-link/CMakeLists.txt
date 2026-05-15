@@ -20,14 +20,20 @@ loom_cc_binary(
     iree::base::internal::arena
     iree::base::tooling::flags
     iree::io::file_handle
+    iree::io::stream
     loom::src::loom::error::diagnostic
+    loom::src::loom::format::bytecode::reader
+    loom::src::loom::format::bytecode::writer
     loom::src::loom::format::text::parser
     loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::link::linker
+    loom::src::loom::link::module_index
+    loom::src::loom::link::planner
     loom::src::loom::ops::op_registry
     loom::src::loom::tooling::config
     loom::src::loom::tooling::io::file
+    loom::src::loom::tools::loom-format::convert
     loom::src::loom::util::stream
     loom::src::loom::verify
 )
@@ -40,6 +46,7 @@ iree_lit_test_suite(
   TOOLS
     ::loom-link
     FileCheck
+    loom::src::loom::tools::loom-format
   LABELS
     "hostonly"
 )

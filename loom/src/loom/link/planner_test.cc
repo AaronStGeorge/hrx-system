@@ -298,6 +298,41 @@ func.def @unused_private(%x: i32) -> (i32) {
   EXPECT_EQ(planned_helper->cause_ordinal, planned_entry->ordinal);
 }
 
+TEST_F(LinkPlannerTest, SelectiveRootMayNameUniquePrivateSymbol) {
+  loom_module_t* module = Parse(IREE_SV(R"(
+func.def @entry(%x: i32) -> (i32) {
+  %y = func.call @helper(%x) : (i32) -> (i32)
+  func.return %y : i32
+}
+
+func.def @helper(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+
+  IndexPtr index = CreateIndex();
+  AddMaterialized(index.get(), module, IREE_SV("input"),
+                  LOOM_LINK_PROVIDER_ROLE_INPUT);
+  iree_string_view_t roots[] = {IREE_SV("@entry")};
+  loom_link_plan_options_t options = {
+      .mode = LOOM_LINK_PLAN_SELECTIVE,
+      .root_symbols = {.count = IREE_ARRAYSIZE(roots), .values = roots},
+  };
+  PlanPtr plan = BuildPlan(index.get(), &options);
+
+  const loom_link_module_index_module_t* indexed_module =
+      loom_link_module_index_module_at(index.get(), 0);
+  ASSERT_NE(indexed_module, nullptr);
+  const loom_link_module_index_symbol_t* entry =
+      loom_link_module_index_lookup_private(index.get(), indexed_module,
+                                            IREE_SV("entry"));
+  const loom_link_module_index_symbol_t* helper =
+      loom_link_module_index_lookup_private(index.get(), indexed_module,
+                                            IREE_SV("helper"));
+  EXPECT_TRUE(ContainsSymbol(plan.get(), entry));
+  EXPECT_TRUE(ContainsSymbol(plan.get(), helper));
+}
+
 TEST_F(LinkPlannerTest, SelectiveDeclarationPullsConcreteProviderDefinition) {
   loom_module_t* harness = Parse(IREE_SV(R"(
 func.decl public @callee(%x: i32) -> (i32)
@@ -359,6 +394,52 @@ func.def public @unused(%x: i32) -> (i32) {
   EXPECT_EQ(planned_decl->reason, LOOM_LINK_PLAN_LIVE_DEPENDENCY);
   EXPECT_EQ(planned_def->reason, LOOM_LINK_PLAN_LIVE_DEPENDENCY);
   EXPECT_EQ(planned_def->cause_ordinal, planned_decl->ordinal);
+}
+
+TEST_F(LinkPlannerTest, SelectiveDeclarationMayPullPrivateConcreteDefinition) {
+  loom_module_t* harness = Parse(IREE_SV(R"(
+func.decl @callee(%x: i32) -> (i32)
+
+func.def @entry(%x: i32) -> (i32) {
+  %y = func.call @callee(%x) : (i32) -> (i32)
+  func.return %y : i32
+}
+)"));
+  loom_module_t* library = Parse(IREE_SV(R"(
+func.def @callee(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)"));
+
+  IndexPtr index = CreateIndex();
+  AddMaterialized(index.get(), harness, IREE_SV("harness"),
+                  LOOM_LINK_PROVIDER_ROLE_INPUT);
+  AddMaterialized(index.get(), library, IREE_SV("library"),
+                  LOOM_LINK_PROVIDER_ROLE_LIBRARY);
+  iree_string_view_t roots[] = {IREE_SV("@entry")};
+  loom_link_plan_options_t options = {
+      .mode = LOOM_LINK_PLAN_SELECTIVE,
+      .root_symbols = {.count = IREE_ARRAYSIZE(roots), .values = roots},
+  };
+  PlanPtr plan = BuildPlan(index.get(), &options);
+
+  const loom_link_module_index_module_t* harness_module =
+      loom_link_module_index_module_at(index.get(), 0);
+  const loom_link_module_index_module_t* library_module =
+      loom_link_module_index_module_at(index.get(), 1);
+  ASSERT_NE(harness_module, nullptr);
+  ASSERT_NE(library_module, nullptr);
+  const loom_link_module_index_symbol_t* entry =
+      loom_link_module_index_lookup_private(index.get(), harness_module,
+                                            IREE_SV("entry"));
+  const loom_link_module_index_symbol_t* callee_decl =
+      loom_link_module_index_lookup_global(index.get(), IREE_SV("callee"));
+  const loom_link_module_index_symbol_t* callee_def =
+      loom_link_module_index_lookup_private(index.get(), library_module,
+                                            IREE_SV("callee"));
+  EXPECT_TRUE(ContainsSymbol(plan.get(), entry));
+  EXPECT_TRUE(ContainsSymbol(plan.get(), callee_decl));
+  EXPECT_TRUE(ContainsSymbol(plan.get(), callee_def));
 }
 
 TEST_F(LinkPlannerTest, SelectiveRootIgnoresUnreachableDuplicateDefinition) {
