@@ -39,10 +39,13 @@ loom_assert_no_dependencies(
         ":cooperative_properties",
         ":descriptors",
         ":features",
+        ":lower",
         ":low_registry",
         ":ops",
         ":provider",
         ":target_records",
+        "//loom/src/loom/target/arch/spirv/contracts:logical_core",
+        "//loom/src/loom/target/arch/spirv/contracts:logical_core_lower_rules",
     ],
 )
 
@@ -52,6 +55,7 @@ loom_assert_no_dependencies(
         ":cooperative_properties",
         ":descriptors",
         ":features",
+        ":lower",
         ":low_registry",
         ":provider",
         ":target_records",
@@ -154,11 +158,27 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "lower",
+    srcs = ["lower/registry.c"],
+    hdrs = ["lower.h"],
+    deps = [
+        ":descriptors_ids",
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/target/arch/spirv/contracts:logical_core",
+        "//loom/src/loom/target/arch/spirv/contracts:logical_core_lower_rules",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "provider",
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
     deps = [
         ":low_registry",
+        ":lower",
         ":ops",
         "//loom/src/loom/target:provider",
         "//runtime/src/iree/base",
@@ -214,6 +234,8 @@ loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
         "test/source_low/baseline.loom-test",
+        "test/source_low/source_low.loom-test",
+        "test/source_low/source_low_diagnostics.loom-test",
     ],
     test_name_prefix_to_strip = "test/source_low/",
 )

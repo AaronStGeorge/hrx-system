@@ -200,6 +200,32 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    spirv_contract_fragment
+  MAIN
+    "target_contract_fragment.py"
+  SRCS
+    "target_contract_fragment.py"
+  DEPS
+    iree::runtime::py::loom::gen::target_contract_fragments
+    iree::runtime::py::loom::target::contract_fragments
+    iree::runtime::py::loom::target::arch::spirv::contracts::contracts
+)
+
+iree_py_library(
+  NAME
+    spirv_lower_rule_shard
+  MAIN
+    "target_lower_rule_shard.py"
+  SRCS
+    "target_lower_rule_shard.py"
+  DEPS
+    iree::runtime::py::loom::gen::target_lower_rules
+    iree::runtime::py::loom::target::contract_fragments
+    iree::runtime::py::loom::target::arch::spirv::contracts::contracts
+)
+
+iree_py_library(
+  NAME
     ireevm_contract_fragment
   MAIN
     "target_contract_fragment.py"

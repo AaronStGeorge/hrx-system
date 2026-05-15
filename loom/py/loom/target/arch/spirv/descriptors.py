@@ -12,12 +12,15 @@ from pathlib import Path
 
 from loom.target.low_descriptors import (
     AsmForm,
+    AsmImmediate,
     Descriptor,
     DescriptorFlag,
     DescriptorSet,
     Effect,
     EffectFlag,
     EffectKind,
+    Immediate,
+    ImmediateKind,
     IssueUse,
     LatencyKind,
     MemorySpace,
@@ -56,13 +59,36 @@ _PTR_FUNCTION_ALT = (RegClassAlt(_REG_PTR_FUNCTION),)
 _PTR_WORKGROUP_ALT = (RegClassAlt(_REG_PTR_WORKGROUP),)
 _PTR_STORAGE_BUFFER_ALT = (RegClassAlt(_REG_PTR_STORAGE_BUFFER),)
 
+_I32_VALUE_IMMEDIATE = Immediate(
+    "i32_value",
+    ImmediateKind.SIGNED,
+    bit_width=32,
+    signed_min=-(2**31),
+    unsigned_max=(2**31) - 1,
+)
+
+_OFFSET64_VALUE_IMMEDIATE = Immediate(
+    "offset64_value",
+    ImmediateKind.SIGNED,
+    bit_width=64,
+    signed_min=-(2**63),
+    unsigned_max=(2**63) - 1,
+)
+
 
 def _asm(
     *,
     results: tuple[str, ...] = (),
     operands: tuple[str, ...] = (),
+    immediates: tuple[str, ...] = (),
 ) -> tuple[AsmForm, ...]:
-    return (AsmForm(results=results, operands=operands),)
+    return (
+        AsmForm(
+            results=results,
+            operands=operands,
+            immediates=tuple(AsmImmediate(field_name) for field_name in immediates),
+        ),
+    )
 
 
 def _id_result(field_name: str = "dst") -> Operand:
@@ -194,6 +220,26 @@ SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
         ),
     ),
     descriptors=(
+        Descriptor(
+            key="spirv.op_constant.i32",
+            mnemonic="OpConstant.i32",
+            semantic_tag="spirv.op_constant.i32",
+            operands=(_id_result(),),
+            immediates=(_I32_VALUE_IMMEDIATE,),
+            asm_forms=_asm(results=("dst",), immediates=("i32_value",)),
+            schedule_class=_SCHEDULE_ALU,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="spirv.op_constant.offset64",
+            mnemonic="OpConstant.offset64",
+            semantic_tag="spirv.op_constant.offset64",
+            operands=(_offset64_result(),),
+            immediates=(_OFFSET64_VALUE_IMMEDIATE,),
+            asm_forms=_asm(results=("dst",), immediates=("offset64_value",)),
+            schedule_class=_SCHEDULE_ALU,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
         Descriptor(
             key="spirv.op_iadd.i32",
             mnemonic="OpIAdd",

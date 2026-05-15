@@ -199,6 +199,28 @@ py_binary(
 )
 
 py_binary(
+    name = "spirv_contract_fragment",
+    srcs = ["target_contract_fragment.py"],
+    main = "target_contract_fragment.py",
+    deps = [
+        ":target_contract_fragments",
+        "//loom/py/loom/target:contract_fragments",
+        "//loom/py/loom/target/arch/spirv/contracts",
+    ],
+)
+
+py_binary(
+    name = "spirv_lower_rule_shard",
+    srcs = ["target_lower_rule_shard.py"],
+    main = "target_lower_rule_shard.py",
+    deps = [
+        ":target_lower_rules",
+        "//loom/py/loom/target:contract_fragments",
+        "//loom/py/loom/target/arch/spirv/contracts",
+    ],
+)
+
+py_binary(
     name = "ireevm_contract_fragment",
     srcs = ["target_contract_fragment.py"],
     main = "target_contract_fragment.py",

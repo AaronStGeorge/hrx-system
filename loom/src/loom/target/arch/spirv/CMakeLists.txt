@@ -101,6 +101,24 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    lower
+  HDRS
+    "lower.h"
+  SRCS
+    "lower/registry.c"
+  DEPS
+    ::descriptors_ids
+    iree::base
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::target::arch::spirv::contracts::logical_core
+    loom::src::loom::target::arch::spirv::contracts::logical_core_lower_rules
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     provider
   HDRS
     "provider.h"
@@ -108,6 +126,7 @@ loom_cc_library(
     "provider.c"
   DEPS
     ::low_registry
+    ::lower
     ::ops
     iree::base
     loom::src::loom::target::provider
@@ -170,6 +189,28 @@ iree_executable_test(
     "baseline"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/baseline.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_low_diagnostics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_diagnostics.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

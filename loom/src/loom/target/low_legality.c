@@ -299,6 +299,7 @@ static bool loom_target_low_legality_codegen_format_is_low(
     loom_target_codegen_format_t codegen_format) {
   switch (codegen_format) {
     case LOOM_TARGET_CODEGEN_FORMAT_LOW_NATIVE:
+    case LOOM_TARGET_CODEGEN_FORMAT_SPIRV:
     case LOOM_TARGET_CODEGEN_FORMAT_VM:
     case LOOM_TARGET_CODEGEN_FORMAT_WASM:
       return true;
@@ -312,6 +313,7 @@ static bool loom_target_low_legality_abi_is_low(
   switch (abi_kind) {
     case LOOM_TARGET_ABI_OBJECT_FUNCTION:
     case LOOM_TARGET_ABI_HAL_KERNEL:
+    case LOOM_TARGET_ABI_SHADER_ENTRY_POINT:
     case LOOM_TARGET_ABI_VM_MODULE_FUNCTION:
     case LOOM_TARGET_ABI_WASM_FUNCTION:
       return true;

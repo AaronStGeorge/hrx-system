@@ -7,12 +7,15 @@
 #include "loom/target/arch/spirv/provider.h"
 
 #include "loom/target/arch/spirv/low_registry.h"
+#include "loom/target/arch/spirv/lower.h"
 #include "loom/target/arch/spirv/ops/registry.h"
 
 const loom_target_provider_t loom_spirv_target_provider = {
     .register_context = loom_spirv_ops_register_dialect,
     .initialize_low_descriptor_registry =
         loom_spirv_low_descriptor_registry_initialize,
+    .initialize_low_lower_policy_registry =
+        loom_spirv_low_lower_policy_registry_initialize,
 };
 
 static const loom_target_provider_t* const kLoomSpirvTargetProviders[] = {

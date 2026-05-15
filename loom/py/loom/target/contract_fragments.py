@@ -109,6 +109,13 @@ CONTRACT_FRAGMENT_REGISTRATIONS = (
         aliases=("ireevm_core",),
     ),
     ContractFragmentRegistration(
+        key="spirv.logical.core",
+        module_name="loom.target.arch.spirv.contracts.logical_core",
+        symbol_name="SPIRV_LOGICAL_CORE_CONTRACT_FRAGMENT",
+        dialect_ops_symbol_name="SPIRV_LOGICAL_CORE_CONTRACT_DIALECT_OPS",
+        aliases=("spirv_logical_core",),
+    ),
+    ContractFragmentRegistration(
         key="wasm.core.simd128",
         module_name="loom.target.emit.wasm.contracts",
         symbol_name="WASM_CORE_SIMD128_CONTRACT_FRAGMENT",

@@ -1,0 +1,79 @@
+// RUN: emit source-low output=low
+
+spirv.target<vulkan1_3> @target
+
+func.def target(@target) @spirv_i32_arithmetic(%lhs: i32, %rhs: i32) -> (i32) {
+  %bias = scalar.constant 7 : i32
+  %sum = scalar.addi %lhs, %rhs : i32
+  %result = scalar.addi %sum, %bias : i32
+  func.return %result : i32
+}
+
+// ----
+low.func.def target(@target) abi(shader_entry_point) @spirv_i32_arithmetic(%lhs: reg<spirv.id>, %rhs: reg<spirv.id>) -> (reg<spirv.id>) asm<spirv.logical.core> {
+  %bias = OpConstant.i32 7
+  %sum = OpIAdd %lhs, %rhs
+  %result = OpIAdd %sum, %bias
+  return %result
+}
+
+// ====
+
+spirv.target<vulkan1_3> @target
+
+func.def target(@target) @spirv_index_arithmetic(%index: index) -> (index) {
+  %one = index.constant 1 : index
+  %next = index.add %index, %one : index
+  func.return %next : index
+}
+
+// ----
+low.func.def target(@target) abi(shader_entry_point) @spirv_index_arithmetic(%index: reg<spirv.id>) -> (reg<spirv.id>) asm<spirv.logical.core> {
+  %one = OpConstant.i32 1
+  %next = OpIAdd %index, %one
+  return %next
+}
+
+// ====
+
+spirv.target<vulkan1_3> @target
+
+func.def target(@target) @spirv_offset_addressing(%base: buffer, %row: offset) -> (i32) {
+  %column = index.constant 4 : offset
+  %byte_offset = index.add %row, %column : offset
+  %view = buffer.view %base[%byte_offset] : buffer -> view<1xi32, #dense>
+  %loaded = view.load %view[0] : view<1xi32, #dense> -> i32
+  func.return %loaded : i32
+}
+
+// ----
+low.func.def target(@target) abi(shader_entry_point) @spirv_offset_addressing(%base: reg<spirv.ptr.storage_buffer>, %row: reg<spirv.offset64>) -> (reg<spirv.id>) asm<spirv.logical.core> {
+  %column = OpConstant.offset64 4
+  %byte_offset = OpIAdd.offset64 %row, %column
+  %view = OpPtrAccessChain.storage_buffer.byte_offset %base, %byte_offset
+  %loaded = OpLoad.storage_buffer.i32 %view
+  return %loaded
+}
+
+// ====
+
+spirv.target<vulkan1_3> @target
+
+func.def target(@target) @spirv_storage_buffer_i32_roundtrip(%input: buffer, %output: buffer, %byte_offset: offset) -> (i32) {
+  %input_view = buffer.view %input[%byte_offset] : buffer -> view<1xi32, #dense>
+  %loaded = view.load %input_view[0] : view<1xi32, #dense> -> i32
+  %incremented = scalar.addi %loaded, %loaded : i32
+  %output_view = buffer.view %output[%byte_offset] : buffer -> view<1xi32, #dense>
+  view.store %incremented, %output_view[0] : i32, view<1xi32, #dense>
+  func.return %loaded : i32
+}
+
+// ----
+low.func.def target(@target) abi(shader_entry_point) @spirv_storage_buffer_i32_roundtrip(%input: reg<spirv.ptr.storage_buffer>, %output: reg<spirv.ptr.storage_buffer>, %byte_offset: reg<spirv.offset64>) -> (reg<spirv.id>) asm<spirv.logical.core> {
+  %input_view = OpPtrAccessChain.storage_buffer.byte_offset %input, %byte_offset
+  %loaded = OpLoad.storage_buffer.i32 %input_view
+  %incremented = OpIAdd %loaded, %loaded
+  %output_view = OpPtrAccessChain.storage_buffer.byte_offset %output, %byte_offset
+  OpStore.storage_buffer.i32 %output_view, %incremented
+  return %loaded
+}
