@@ -25,12 +25,12 @@ loom_spirv_cooperative_matrix_query_t F16MatrixQuery(
       .m_size = 16,
       .n_size = 16,
       .k_size = 16,
-      .lhs_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
-      .rhs_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
-      .accumulator_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT32,
-      .result_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT32,
+      .lhs_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
+      .rhs_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
+      .accumulator_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT32_NV,
+      .result_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT32_NV,
       .scope = LOOM_SPIRV_SCOPE_SUBGROUP,
-      .layout = LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR,
+      .layout = LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_KHR,
       .storage_class = LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER,
       .policy = policy,
   };
@@ -41,13 +41,13 @@ loom_spirv_cooperative_vector_query_t PackedS8VectorQuery(
   return {
       .m_size = 32,
       .k_size = 32,
-      .input_type = LOOM_SPIRV_COMPONENT_TYPE_UINT32,
-      .input_interpretation = LOOM_SPIRV_COMPONENT_TYPE_SINT8_PACKED,
-      .matrix_interpretation = LOOM_SPIRV_COMPONENT_TYPE_SINT8,
-      .bias_interpretation = LOOM_SPIRV_COMPONENT_TYPE_SINT32,
-      .result_type = LOOM_SPIRV_COMPONENT_TYPE_SINT32,
+      .input_type = LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT32_NV,
+      .input_interpretation = LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_PACKED_NV,
+      .matrix_interpretation = LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_NV,
+      .bias_interpretation = LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV,
+      .result_type = LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV,
       .matrix_layout =
-          LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_INFERENCING_OPTIMAL,
+          LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_INFERENCING_OPTIMAL_NV,
       .storage_class = LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER,
       .policy = policy,
   };
@@ -56,61 +56,60 @@ loom_spirv_cooperative_vector_query_t PackedS8VectorQuery(
 loom_spirv_cooperative_vector_query_t F8E4M3VectorQuery(
     loom_lowering_policy_t policy) {
   loom_spirv_component_type_t f8e4m3_component_type =
-      LOOM_SPIRV_COMPONENT_TYPE_UNKNOWN;
+      LOOM_SPIRV_COMPONENT_TYPE_MAX;
   EXPECT_TRUE(loom_spirv_component_type_from_numeric_format(
       LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3, &f8e4m3_component_type));
   return {
       .m_size = 16,
       .k_size = 32,
-      .input_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
+      .input_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
       .input_interpretation = f8e4m3_component_type,
       .matrix_interpretation = f8e4m3_component_type,
-      .bias_interpretation = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
-      .result_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
+      .bias_interpretation = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
+      .result_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
       .matrix_layout =
-          LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_INFERENCING_OPTIMAL,
+          LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_INFERENCING_OPTIMAL_NV,
       .storage_class = LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER,
       .policy = policy,
   };
 }
 
 TEST(SpirvCooperativePropertiesTest, MapsNumericFormatsToComponentTypes) {
-  loom_spirv_component_type_t component_type =
-      LOOM_SPIRV_COMPONENT_TYPE_UNKNOWN;
+  loom_spirv_component_type_t component_type = LOOM_SPIRV_COMPONENT_TYPE_MAX;
   EXPECT_TRUE(loom_spirv_component_type_from_numeric_format(
       LOOM_VALUE_FACT_NUMERIC_FORMAT_F16, &component_type));
-  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_FLOAT16);
-  EXPECT_TRUE(loom_spirv_component_type_from_numeric_format(
-      LOOM_VALUE_FACT_NUMERIC_FORMAT_BF16, &component_type));
-  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_BFLOAT16);
+  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV);
   EXPECT_TRUE(loom_spirv_component_type_from_numeric_format(
       LOOM_VALUE_FACT_NUMERIC_FORMAT_QUANT_I8, &component_type));
-  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_SINT8);
+  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_NV);
   EXPECT_TRUE(loom_spirv_component_type_from_numeric_format(
       LOOM_VALUE_FACT_NUMERIC_FORMAT_U8, &component_type));
-  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_UINT8);
+  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT8_NV);
   EXPECT_TRUE(loom_spirv_component_type_from_numeric_format(
       LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3, &component_type));
-  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E4M3);
+  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_FLOAT_E4_M3_NV);
   EXPECT_TRUE(loom_spirv_component_type_from_numeric_format(
       LOOM_VALUE_FACT_NUMERIC_FORMAT_BF8, &component_type));
-  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E5M2);
+  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_FLOAT_E5_M2_NV);
 }
 
 TEST(SpirvCooperativePropertiesTest,
      RejectsUnknownAndMultiValuedNumericFormats) {
   loom_spirv_component_type_t component_type =
-      LOOM_SPIRV_COMPONENT_TYPE_FLOAT16;
+      LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV;
   EXPECT_FALSE(loom_spirv_component_type_from_numeric_format(
       LOOM_VALUE_FACT_NUMERIC_FORMAT_UNKNOWN, &component_type));
-  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_UNKNOWN);
+  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_MAX);
+  EXPECT_FALSE(loom_spirv_component_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_BF16, &component_type));
+  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_MAX);
   EXPECT_FALSE(loom_spirv_component_type_from_numeric_format(
       LOOM_VALUE_FACT_NUMERIC_FORMAT_F16 | LOOM_VALUE_FACT_NUMERIC_FORMAT_BF16,
       &component_type));
-  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_UNKNOWN);
+  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_MAX);
   EXPECT_FALSE(loom_spirv_component_type_from_numeric_format(
       LOOM_VALUE_FACT_NUMERIC_FORMAT_I4, &component_type));
-  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_UNKNOWN);
+  EXPECT_EQ(component_type, LOOM_SPIRV_COMPONENT_TYPE_MAX);
 }
 
 TEST(SpirvCooperativePropertiesTest, PreparesSelectedPropertyTables) {
@@ -249,9 +248,9 @@ TEST(SpirvCooperativePropertiesTest, SelectsNarrowFloatVectorInterpretation) {
   EXPECT_TRUE(iree_string_view_equal(
       property->name, IREE_SV("nv.cooperative_vector.f16.16x32.e4m3")));
   EXPECT_EQ(property->input_interpretation,
-            LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E4M3);
+            LOOM_SPIRV_COMPONENT_TYPE_FLOAT_E4_M3_NV);
   EXPECT_EQ(property->matrix_interpretation,
-            LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E4M3);
+            LOOM_SPIRV_COMPONENT_TYPE_FLOAT_E4_M3_NV);
   EXPECT_EQ(diagnostic.status, LOOM_SPIRV_COOPERATIVE_SELECTION_MATCHED);
 }
 
@@ -263,8 +262,8 @@ TEST(SpirvCooperativePropertiesTest,
                      &property_set);
   loom_spirv_cooperative_vector_query_t query =
       PackedS8VectorQuery(LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED);
-  query.input_type = LOOM_SPIRV_COMPONENT_TYPE_SINT8_PACKED;
-  query.matrix_interpretation = LOOM_SPIRV_COMPONENT_TYPE_UINT8;
+  query.input_type = LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_PACKED_NV;
+  query.matrix_interpretation = LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT8_NV;
 
   loom_spirv_cooperative_diagnostic_t diagnostic = {};
   EXPECT_EQ(loom_spirv_cooperative_vector_property_select(&property_set, &query,
@@ -291,7 +290,7 @@ TEST(SpirvCooperativePropertiesTest, RequiresTrainingFeatureForTrainingQuery) {
   loom_spirv_cooperative_vector_query_t query =
       PackedS8VectorQuery(LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED);
   query.matrix_layout =
-      LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_TRAINING_OPTIMAL;
+      LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_TRAINING_OPTIMAL_NV;
   query.flags = LOOM_SPIRV_COOPERATIVE_VECTOR_FLAG_TRAINING;
 
   loom_spirv_cooperative_diagnostic_t diagnostic = {};
@@ -314,7 +313,7 @@ TEST(SpirvCooperativePropertiesTest, SelectsCooperativeVectorTrainingRow) {
   loom_spirv_cooperative_vector_query_t query =
       PackedS8VectorQuery(LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED);
   query.matrix_layout =
-      LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_TRAINING_OPTIMAL;
+      LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_TRAINING_OPTIMAL_NV;
   query.flags = LOOM_SPIRV_COOPERATIVE_VECTOR_FLAG_TRAINING;
 
   loom_spirv_cooperative_diagnostic_t diagnostic = {};

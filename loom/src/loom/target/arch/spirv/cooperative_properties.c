@@ -67,18 +67,19 @@
 static const loom_spirv_cooperative_matrix_property_t
     kCooperativeMatrixProperties[] = {
         MATRIX_PROPERTY("khr.cooperative_matrix.f16.16x16x16.f32.subgroup", 16,
-                        16, 16, LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT32,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT32,
+                        16, 16, LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT32_NV,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT32_NV,
                         LOOM_SPIRV_SCOPE_SUBGROUP, MATRIX_LAYOUT_ANY,
                         MATRIX_STORAGE_ANY, 0),
         MATRIX_PROPERTY(
             "khr.cooperative_matrix.s8.16x16x32.s32.subgroup.saturating", 16,
-            16, 32, LOOM_SPIRV_COMPONENT_TYPE_SINT8,
-            LOOM_SPIRV_COMPONENT_TYPE_SINT8, LOOM_SPIRV_COMPONENT_TYPE_SINT32,
-            LOOM_SPIRV_COMPONENT_TYPE_SINT32, LOOM_SPIRV_SCOPE_SUBGROUP,
-            MATRIX_LAYOUT_ANY, STORAGE_BUFFER_OR_BDA,
+            16, 32, LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_NV,
+            LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_NV,
+            LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV,
+            LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV,
+            LOOM_SPIRV_SCOPE_SUBGROUP, MATRIX_LAYOUT_ANY, STORAGE_BUFFER_OR_BDA,
             LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_A_SIGNED_COMPONENTS |
                 LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_B_SIGNED_COMPONENTS |
                 LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_C_SIGNED_COMPONENTS |
@@ -96,38 +97,39 @@ static const loom_spirv_cooperative_vector_property_t
     kCooperativeVectorProperties[] = {
         VECTOR_PROPERTY("nv.cooperative_vector.f16.16x16.f16",
                         LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV, 16, 16,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
                         VECTOR_LAYOUT_INFERENCE_ANY, STORAGE_BUFFER_OR_BDA,
                         LOOM_SPIRV_COOPERATIVE_VECTOR_FLAG_TRANSPOSE),
         VECTOR_PROPERTY("nv.cooperative_vector.f16.16x32.e4m3",
                         LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV, 16, 32,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E4M3,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E4M3,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT_E4_M3_NV,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT_E4_M3_NV,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
+                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
                         VECTOR_LAYOUT_INFERENCE_ANY, STORAGE_BUFFER_OR_BDA,
                         LOOM_SPIRV_COOPERATIVE_VECTOR_FLAG_TRANSPOSE),
         VECTOR_PROPERTY("nv.cooperative_vector.u32.32x32.s8_packed",
                         LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV, 32, 32,
-                        LOOM_SPIRV_COMPONENT_TYPE_UINT32,
-                        LOOM_SPIRV_COMPONENT_TYPE_SINT8_PACKED,
-                        LOOM_SPIRV_COMPONENT_TYPE_SINT8,
-                        LOOM_SPIRV_COMPONENT_TYPE_SINT32,
-                        LOOM_SPIRV_COMPONENT_TYPE_SINT32,
+                        LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT32_NV,
+                        LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_PACKED_NV,
+                        LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_NV,
+                        LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV,
+                        LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV,
                         VECTOR_LAYOUT_INFERENCE_ANY, STORAGE_BUFFER_OR_BDA, 0),
         VECTOR_PROPERTY(
             "nv.cooperative_vector.training.u32.32x32.s8_packed",
             LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV |
                 LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_TRAINING_NV,
-            32, 32, LOOM_SPIRV_COMPONENT_TYPE_UINT32,
-            LOOM_SPIRV_COMPONENT_TYPE_SINT8_PACKED,
-            LOOM_SPIRV_COMPONENT_TYPE_SINT8, LOOM_SPIRV_COMPONENT_TYPE_SINT32,
-            LOOM_SPIRV_COMPONENT_TYPE_SINT32,
+            32, 32, LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT32_NV,
+            LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_PACKED_NV,
+            LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_NV,
+            LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV,
+            LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV,
             LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_TRAINING_OPTIMAL_BIT,
             STORAGE_BUFFER_OR_BDA, LOOM_SPIRV_COOPERATIVE_VECTOR_FLAG_TRAINING),
 };
@@ -142,39 +144,37 @@ static const loom_spirv_cooperative_property_span_t
 iree_string_view_t loom_spirv_component_type_name(
     loom_spirv_component_type_t component_type) {
   switch (component_type) {
-    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT16:
+    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV:
       return IREE_SV("f16");
-    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT32:
+    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT32_NV:
       return IREE_SV("f32");
-    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT64:
+    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT64_NV:
       return IREE_SV("f64");
-    case LOOM_SPIRV_COMPONENT_TYPE_SINT8:
+    case LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_NV:
       return IREE_SV("s8");
-    case LOOM_SPIRV_COMPONENT_TYPE_SINT16:
+    case LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT16_NV:
       return IREE_SV("s16");
-    case LOOM_SPIRV_COMPONENT_TYPE_SINT32:
+    case LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV:
       return IREE_SV("s32");
-    case LOOM_SPIRV_COMPONENT_TYPE_SINT64:
+    case LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT64_NV:
       return IREE_SV("s64");
-    case LOOM_SPIRV_COMPONENT_TYPE_UINT8:
+    case LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT8_NV:
       return IREE_SV("u8");
-    case LOOM_SPIRV_COMPONENT_TYPE_UINT16:
+    case LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT16_NV:
       return IREE_SV("u16");
-    case LOOM_SPIRV_COMPONENT_TYPE_UINT32:
+    case LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT32_NV:
       return IREE_SV("u32");
-    case LOOM_SPIRV_COMPONENT_TYPE_UINT64:
+    case LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT64_NV:
       return IREE_SV("u64");
-    case LOOM_SPIRV_COMPONENT_TYPE_BFLOAT16:
-      return IREE_SV("bf16");
-    case LOOM_SPIRV_COMPONENT_TYPE_SINT8_PACKED:
+    case LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_PACKED_NV:
       return IREE_SV("s8_packed");
-    case LOOM_SPIRV_COMPONENT_TYPE_UINT8_PACKED:
+    case LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT8_PACKED_NV:
       return IREE_SV("u8_packed");
-    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E4M3:
+    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT_E4_M3_NV:
       return IREE_SV("f8e4m3");
-    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E5M2:
+    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT_E5_M2_NV:
       return IREE_SV("f8e5m2");
-    case LOOM_SPIRV_COMPONENT_TYPE_UNKNOWN:
+    case LOOM_SPIRV_COMPONENT_TYPE_MAX:
     default:
       return IREE_SV("unknown");
   }
@@ -184,46 +184,43 @@ bool loom_spirv_component_type_from_numeric_format(
     loom_value_fact_numeric_format_flags_t numeric_format,
     loom_spirv_component_type_t* out_component_type) {
   IREE_ASSERT_ARGUMENT(out_component_type);
-  *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_UNKNOWN;
+  *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_MAX;
   switch (numeric_format) {
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F64:
-      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT64;
+      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT64_NV;
       return true;
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F32:
-      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT32;
+      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT32_NV;
       return true;
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F16:
-      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16;
-      return true;
-    case LOOM_VALUE_FACT_NUMERIC_FORMAT_BF16:
-      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_BFLOAT16;
+      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV;
       return true;
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_I32:
-      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_SINT32;
+      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV;
       return true;
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_I16:
-      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_SINT16;
+      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT16_NV;
       return true;
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_I8:
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_QUANT_I8:
-      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_SINT8;
+      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_NV;
       return true;
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_U32:
-      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_UINT32;
+      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT32_NV;
       return true;
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_U16:
-      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_UINT16;
+      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT16_NV;
       return true;
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_U8:
-      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_UINT8;
+      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT8_NV;
       return true;
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3:
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E4M3FN:
-      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E4M3;
+      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT_E4_M3_NV;
       return true;
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_F8_E5M2:
     case LOOM_VALUE_FACT_NUMERIC_FORMAT_BF8:
-      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E5M2;
+      *out_component_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT_E5_M2_NV;
       return true;
     default:
       return false;
@@ -240,7 +237,7 @@ iree_string_view_t loom_spirv_scope_name(loom_spirv_scope_t scope) {
       return IREE_SV("subgroup");
     case LOOM_SPIRV_SCOPE_QUEUE_FAMILY:
       return IREE_SV("queue_family");
-    case LOOM_SPIRV_SCOPE_UNKNOWN:
+    case LOOM_SPIRV_SCOPE_MAX:
     default:
       return IREE_SV("unknown");
   }
@@ -249,11 +246,11 @@ iree_string_view_t loom_spirv_scope_name(loom_spirv_scope_t scope) {
 iree_string_view_t loom_spirv_cooperative_matrix_layout_name(
     loom_spirv_cooperative_matrix_layout_t layout) {
   switch (layout) {
-    case LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR:
+    case LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_KHR:
       return IREE_SV("row_major");
-    case LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_COLUMN_MAJOR:
+    case LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_COLUMN_MAJOR_KHR:
       return IREE_SV("column_major");
-    case LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_UNKNOWN:
+    case LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_MAX:
     default:
       return IREE_SV("unknown");
   }
@@ -262,15 +259,15 @@ iree_string_view_t loom_spirv_cooperative_matrix_layout_name(
 iree_string_view_t loom_spirv_cooperative_vector_matrix_layout_name(
     loom_spirv_cooperative_vector_matrix_layout_t layout) {
   switch (layout) {
-    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_ROW_MAJOR:
+    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_ROW_MAJOR_NV:
       return IREE_SV("row_major");
-    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_COLUMN_MAJOR:
+    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_COLUMN_MAJOR_NV:
       return IREE_SV("column_major");
-    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_INFERENCING_OPTIMAL:
+    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_INFERENCING_OPTIMAL_NV:
       return IREE_SV("inferencing_optimal");
-    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_TRAINING_OPTIMAL:
+    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_TRAINING_OPTIMAL_NV:
       return IREE_SV("training_optimal");
-    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_UNKNOWN:
+    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_MAX:
     default:
       return IREE_SV("unknown");
   }
@@ -395,9 +392,9 @@ void loom_spirv_cooperative_property_set_prepare(
 static loom_spirv_cooperative_matrix_layout_flags_t
 loom_spirv_matrix_layout_bit(loom_spirv_cooperative_matrix_layout_t layout) {
   switch (layout) {
-    case LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR:
+    case LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_KHR:
       return LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_BIT;
-    case LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_COLUMN_MAJOR:
+    case LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_COLUMN_MAJOR_KHR:
       return LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_COLUMN_MAJOR_BIT;
     default:
       return 0;
@@ -506,13 +503,13 @@ static loom_spirv_cooperative_vector_matrix_layout_flags_t
 loom_spirv_vector_matrix_layout_bit(
     loom_spirv_cooperative_vector_matrix_layout_t layout) {
   switch (layout) {
-    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_ROW_MAJOR:
+    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_ROW_MAJOR_NV:
       return LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_ROW_MAJOR_BIT;
-    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_COLUMN_MAJOR:
+    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_COLUMN_MAJOR_NV:
       return LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_COLUMN_MAJOR_BIT;
-    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_INFERENCING_OPTIMAL:
+    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_INFERENCING_OPTIMAL_NV:
       return LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_INFERENCING_OPTIMAL_BIT;
-    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_TRAINING_OPTIMAL:
+    case LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_TRAINING_OPTIMAL_NV:
       return LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_TRAINING_OPTIMAL_BIT;
     default:
       return 0;

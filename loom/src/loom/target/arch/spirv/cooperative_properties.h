@@ -24,65 +24,6 @@
 extern "C" {
 #endif
 
-typedef enum loom_spirv_component_type_e {
-  // Unknown or uninitialized component type.
-  LOOM_SPIRV_COMPONENT_TYPE_UNKNOWN = UINT32_MAX,
-  // Float16 component type.
-  LOOM_SPIRV_COMPONENT_TYPE_FLOAT16 = 0,
-  // Float32 component type.
-  LOOM_SPIRV_COMPONENT_TYPE_FLOAT32 = 1,
-  // Float64 component type.
-  LOOM_SPIRV_COMPONENT_TYPE_FLOAT64 = 2,
-  // Signed int8 component type.
-  LOOM_SPIRV_COMPONENT_TYPE_SINT8 = 3,
-  // Signed int16 component type.
-  LOOM_SPIRV_COMPONENT_TYPE_SINT16 = 4,
-  // Signed int32 component type.
-  LOOM_SPIRV_COMPONENT_TYPE_SINT32 = 5,
-  // Signed int64 component type.
-  LOOM_SPIRV_COMPONENT_TYPE_SINT64 = 6,
-  // Unsigned int8 component type.
-  LOOM_SPIRV_COMPONENT_TYPE_UINT8 = 7,
-  // Unsigned int16 component type.
-  LOOM_SPIRV_COMPONENT_TYPE_UINT16 = 8,
-  // Unsigned int32 component type.
-  LOOM_SPIRV_COMPONENT_TYPE_UINT32 = 9,
-  // Unsigned int64 component type.
-  LOOM_SPIRV_COMPONENT_TYPE_UINT64 = 10,
-  // VK_COMPONENT_TYPE_BFLOAT16_KHR.
-  LOOM_SPIRV_COMPONENT_TYPE_BFLOAT16 = 1000141000,
-  // SpvComponentTypeSignedInt8PackedNV.
-  LOOM_SPIRV_COMPONENT_TYPE_SINT8_PACKED = 1000491000,
-  // SpvComponentTypeUnsignedInt8PackedNV.
-  LOOM_SPIRV_COMPONENT_TYPE_UINT8_PACKED = 1000491001,
-  // SpvComponentTypeFloatE4M3NV.
-  LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E4M3 = 1000491002,
-  // SpvComponentTypeFloatE5M2NV.
-  LOOM_SPIRV_COMPONENT_TYPE_FLOAT8_E5M2 = 1000491003,
-} loom_spirv_component_type_t;
-
-typedef enum loom_spirv_scope_e {
-  // Unknown or uninitialized scope.
-  LOOM_SPIRV_SCOPE_UNKNOWN = UINT32_MAX,
-  // Device scope.
-  LOOM_SPIRV_SCOPE_DEVICE = 1,
-  // Workgroup scope.
-  LOOM_SPIRV_SCOPE_WORKGROUP = 2,
-  // Subgroup scope.
-  LOOM_SPIRV_SCOPE_SUBGROUP = 3,
-  // Queue-family scope.
-  LOOM_SPIRV_SCOPE_QUEUE_FAMILY = 5,
-} loom_spirv_scope_t;
-
-typedef enum loom_spirv_cooperative_matrix_layout_e {
-  // Unknown or uninitialized cooperative matrix memory layout.
-  LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_UNKNOWN = UINT32_MAX,
-  // RowMajorKHR cooperative matrix memory layout.
-  LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR = 0,
-  // ColumnMajorKHR cooperative matrix memory layout.
-  LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_COLUMN_MAJOR = 1,
-} loom_spirv_cooperative_matrix_layout_t;
-
 typedef enum loom_spirv_cooperative_matrix_layout_flag_bits_e {
   // RowMajorKHR layout is accepted.
   LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_BIT = 1u << 0,
@@ -108,19 +49,6 @@ typedef enum loom_spirv_cooperative_matrix_operand_flag_bits_e {
 
 // Bitset of loom_spirv_cooperative_matrix_operand_flag_bits_t values.
 typedef uint32_t loom_spirv_cooperative_matrix_operand_flags_t;
-
-typedef enum loom_spirv_cooperative_vector_matrix_layout_e {
-  // Unknown or uninitialized cooperative vector matrix layout.
-  LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_UNKNOWN = UINT32_MAX,
-  // RowMajorNV cooperative vector matrix layout.
-  LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_ROW_MAJOR = 0,
-  // ColumnMajorNV cooperative vector matrix layout.
-  LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_COLUMN_MAJOR = 1,
-  // InferencingOptimalNV cooperative vector matrix layout.
-  LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_INFERENCING_OPTIMAL = 2,
-  // TrainingOptimalNV cooperative vector matrix layout.
-  LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_TRAINING_OPTIMAL = 3,
-} loom_spirv_cooperative_vector_matrix_layout_t;
 
 typedef enum loom_spirv_cooperative_vector_matrix_layout_flag_bits_e {
   // RowMajorNV layout is accepted.
