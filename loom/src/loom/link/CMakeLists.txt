@@ -12,12 +12,28 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    symbol_policy
+  HDRS
+    "symbol_policy.h"
+  SRCS
+    "symbol_policy.c"
+  DEPS
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::config
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     linker
   HDRS
     "linker.h"
   SRCS
     "linker.c"
   DEPS
+    ::symbol_policy
     iree::base
     iree::base::internal::arena
     loom::src::loom::analysis::symbol_dependencies
@@ -47,6 +63,44 @@ loom_cc_test(
     loom::src::loom::ops::target
     loom::src::loom::ops::test
     loom::src::loom::verify
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
+    module_index
+  HDRS
+    "module_index.h"
+  SRCS
+    "module_index.c"
+  DEPS
+    ::symbol_policy
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::format::bytecode::reader
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    module_index_test
+  SRCS
+    "module_index_test.cc"
+  DEPS
+    ::module_index
+    iree::base
+    iree::base::internal::arena
+    iree::io::stream
+    loom::src::loom::format::bytecode::writer
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::config
+    loom::src::loom::ops::func
+    loom::src::loom::ops::test
     iree::testing::gtest
     iree::testing::gtest_main
 )
