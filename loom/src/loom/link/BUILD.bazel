@@ -95,3 +95,33 @@ loom_cc_test(
         "//runtime/src/iree/testing:gtest_main",
     ],
 )
+
+loom_cc_library(
+    name = "planner",
+    srcs = ["planner.c"],
+    hdrs = ["planner.h"],
+    deps = [
+        ":module_index",
+        "//loom/src/loom/analysis:symbol_dependencies",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "planner_test",
+    srcs = ["planner_test.cc"],
+    deps = [
+        ":module_index",
+        ":planner",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/config",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/test",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
