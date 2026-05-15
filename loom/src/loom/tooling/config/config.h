@@ -113,6 +113,17 @@ iree_status_t loom_tooling_config_parse_assignment(
 iree_status_t loom_tooling_config_set_append_assignment(
     loom_tooling_config_set_t* config_set, iree_string_view_t assignment);
 
+// Parses a JSON/JSONC object and appends flattened config bindings.
+//
+// Nested object keys are joined with '.' so `{ "model36": { "model": {
+// "hidden_size": 4096 }}}` appends the same binding as
+// `--config=model36.model.hidden_size=4096`. Leaf values may be JSON booleans,
+// numbers, or strings. String leaves are unescaped and then parsed later using
+// the matched config symbol type, which lets structured files carry textual
+// Loom values such as encodings without inventing a second value grammar.
+iree_status_t loom_tooling_config_set_append_json_object(
+    loom_tooling_config_set_t* config_set, iree_string_view_t json_object);
+
 // Replaces matching config.decl/config.def symbol ops with config.def ops whose
 // initializer attributes are parsed from |options->config_set|. Bindings
 // without matching config symbols are ignored unless REQUIRE_MATCHES is set.

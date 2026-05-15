@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "iree/base/api.h"
+#include "iree/base/internal/json.h"
 #include "loom/format/text/parser.h"
 #include "loom/format/text/printer.h"
 #include "loom/ir/attribute.h"
@@ -194,6 +195,145 @@ iree_status_t loom_tooling_config_set_append_assignment(
   IREE_RETURN_IF_ERROR(
       loom_tooling_config_parse_assignment(assignment, &binding));
   return loom_tooling_config_set_append(config_set, binding.key, binding.value);
+}
+
+static iree_status_t loom_tooling_config_append_unescaped_json_string(
+    iree_string_view_t escaped_string, iree_string_builder_t* builder,
+    iree_host_size_t* out_length) {
+  iree_host_size_t unescaped_length = 0;
+  IREE_RETURN_IF_ERROR(
+      iree_json_unescape_string(escaped_string, 0, NULL, &unescaped_length));
+  char* target = NULL;
+  if (unescaped_length > 0) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_inline(builder, unescaped_length, &target));
+    IREE_RETURN_IF_ERROR(iree_json_unescape_string(
+        escaped_string, unescaped_length, target, &unescaped_length));
+  }
+  *out_length = unescaped_length;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_tooling_config_append_json_key(
+    iree_string_view_t prefix, iree_string_view_t escaped_key,
+    iree_string_builder_t* builder) {
+  if (!iree_string_view_is_empty(prefix)) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_string(builder, prefix));
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "."));
+  }
+  iree_host_size_t key_length = 0;
+  IREE_RETURN_IF_ERROR(loom_tooling_config_append_unescaped_json_string(
+      escaped_key, builder, &key_length));
+  if (key_length == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "config JSON object keys must not be empty");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_tooling_config_set_append_json_value(
+    loom_tooling_config_set_t* config_set, iree_string_view_t key,
+    iree_json_value_type_t value_type, iree_string_view_t value) {
+  switch (value_type) {
+    case IREE_JSON_VALUE_TYPE_STRING: {
+      iree_string_builder_t value_builder;
+      iree_string_builder_initialize(config_set->host_allocator,
+                                     &value_builder);
+      iree_host_size_t value_length = 0;
+      iree_status_t status = loom_tooling_config_append_unescaped_json_string(
+          value, &value_builder, &value_length);
+      if (iree_status_is_ok(status)) {
+        status = loom_tooling_config_set_append(
+            config_set, key, iree_string_builder_view(&value_builder));
+      }
+      iree_string_builder_deinitialize(&value_builder);
+      return status;
+    }
+    case IREE_JSON_VALUE_TYPE_NUMBER:
+    case IREE_JSON_VALUE_TYPE_TRUE:
+    case IREE_JSON_VALUE_TYPE_FALSE:
+      return loom_tooling_config_set_append(config_set, key, value);
+    case IREE_JSON_VALUE_TYPE_ARRAY:
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "config JSON binding '%.*s' uses an unsupported array value",
+          (int)key.size, key.data);
+    case IREE_JSON_VALUE_TYPE_NULL:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "config JSON binding '%.*s' must not be null",
+                              (int)key.size, key.data);
+    case IREE_JSON_VALUE_TYPE_OBJECT:
+    default:
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "config JSON binding '%.*s' has unsupported value type",
+          (int)key.size, key.data);
+  }
+}
+
+typedef struct loom_tooling_config_json_object_state_t {
+  loom_tooling_config_set_t* config_set;
+  iree_string_view_t prefix;
+  uint8_t depth;
+} loom_tooling_config_json_object_state_t;
+
+static iree_status_t loom_tooling_config_set_append_json_object_impl(
+    loom_tooling_config_set_t* config_set, iree_string_view_t object,
+    iree_string_view_t prefix, uint8_t depth);
+
+static iree_status_t loom_tooling_config_set_append_json_member(
+    void* user_data, iree_string_view_t escaped_key,
+    iree_json_value_type_t value_type, iree_string_view_t value) {
+  loom_tooling_config_json_object_state_t* state =
+      (loom_tooling_config_json_object_state_t*)user_data;
+  iree_string_builder_t key_builder;
+  iree_string_builder_initialize(state->config_set->host_allocator,
+                                 &key_builder);
+  iree_status_t status = loom_tooling_config_append_json_key(
+      state->prefix, escaped_key, &key_builder);
+  if (iree_status_is_ok(status)) {
+    iree_string_view_t key = iree_string_builder_view(&key_builder);
+    if (value_type == IREE_JSON_VALUE_TYPE_OBJECT) {
+      status = loom_tooling_config_set_append_json_object_impl(
+          state->config_set, value, key, (uint8_t)(state->depth + 1));
+    } else {
+      status = loom_tooling_config_set_append_json_value(state->config_set, key,
+                                                         value_type, value);
+    }
+  }
+  iree_string_builder_deinitialize(&key_builder);
+  return status;
+}
+
+static iree_status_t loom_tooling_config_set_append_json_object_impl(
+    loom_tooling_config_set_t* config_set, iree_string_view_t object,
+    iree_string_view_t prefix, uint8_t depth) {
+  if (depth >= 128) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "config JSON object nesting is too deep");
+  }
+  loom_tooling_config_json_object_state_t state = {
+      .config_set = config_set,
+      .prefix = prefix,
+      .depth = depth,
+  };
+  return iree_json_enumerate_object_typed(
+      object, loom_tooling_config_set_append_json_member, &state);
+}
+
+iree_status_t loom_tooling_config_set_append_json_object(
+    loom_tooling_config_set_t* config_set, iree_string_view_t json_object) {
+  IREE_ASSERT_ARGUMENT(config_set);
+  iree_string_view_t cursor = json_object;
+  iree_string_view_t object = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(iree_json_consume_object(&cursor, &object));
+  IREE_RETURN_IF_ERROR(iree_json_consume_insignificant(&cursor));
+  if (!iree_string_view_is_empty(cursor)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unexpected trailing content after config JSON");
+  }
+  return loom_tooling_config_set_append_json_object_impl(
+      config_set, object, iree_string_view_empty(), /*depth=*/0);
 }
 
 static iree_string_view_t loom_tooling_config_symbol_name(

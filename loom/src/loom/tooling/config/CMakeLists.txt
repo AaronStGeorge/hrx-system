@@ -20,6 +20,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::base::internal::arena
+    iree::base::internal::json
     loom::src::loom::format::text::parser
     loom::src::loom::format::text::printer
     loom::src::loom::ir

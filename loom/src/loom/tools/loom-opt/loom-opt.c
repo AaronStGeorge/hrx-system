@@ -44,6 +44,9 @@ IREE_FLAG_LIST(
     string, config,
     "Compile/link-time config binding. Repeat as --config=key=value. Bindings "
     "not referenced by the loaded module are ignored.");
+IREE_FLAG_LIST(string, config_file,
+               "JSON/JSONC config object file. Repeat for multiple files. "
+               "Nested object keys are flattened with '.' separators.");
 IREE_FLAG(bool, require_resolved_config, false,
           "Require all config.decl symbols to be materialized before output.");
 IREE_FLAG(bool, print_config_schema, false,
@@ -758,6 +761,32 @@ static iree_status_t loom_opt_append_config_flags(
   return iree_ok_status();
 }
 
+static iree_status_t loom_opt_append_config_file(
+    loom_tooling_config_set_t* config_set, iree_string_view_t path,
+    iree_allocator_t allocator) {
+  if (loom_tooling_file_path_is_stdio(path)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "--config-file requires a filesystem path and cannot read stdin");
+  }
+  iree_io_file_contents_t* contents = NULL;
+  IREE_RETURN_IF_ERROR(iree_io_file_contents_read(path, allocator, &contents));
+  iree_status_t status = loom_tooling_config_set_append_json_object(
+      config_set, loom_tooling_file_contents_string_view(contents));
+  iree_io_file_contents_free(contents);
+  return status;
+}
+
+static iree_status_t loom_opt_append_config_files(
+    loom_tooling_config_set_t* config_set, iree_allocator_t allocator) {
+  iree_flag_string_list_t paths = FLAG_config_file_list();
+  for (iree_host_size_t i = 0; i < paths.count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_opt_append_config_file(config_set, paths.values[i], allocator));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_opt_materialize_config_set(
     loom_module_t* module, const loom_tooling_config_set_t* config_set,
     iree_arena_block_pool_t* block_pool,
@@ -943,6 +972,8 @@ int main(int argc, char** argv) {
       "registry.\n"
       "Repeat --config=key=value to materialize compile/link-time config "
       "symbols before passes run. Unused config bindings are ignored.\n"
+      "Use --config-file=path to load a JSON/JSONC config object. Files and "
+      "--config values share one config set and duplicate keys are rejected.\n"
       "Use --require-resolved-config for final outputs that must not retain "
       "config.decl symbols.\n"
       "Use --print-config-schema to print config schema JSON instead of Loom "
@@ -1029,6 +1060,9 @@ int main(int argc, char** argv) {
         argc - 1);
   }
 
+  if (iree_status_is_ok(status) && !metadata_only) {
+    status = loom_opt_append_config_files(&config_set, allocator);
+  }
   if (iree_status_is_ok(status) && !metadata_only) {
     status = loom_opt_append_config_flags(&config_set);
   }

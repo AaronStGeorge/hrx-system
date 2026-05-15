@@ -220,6 +220,23 @@
 // CONFIG-MATERIALIZE: %hidden = config.get @model36.model.hidden_size : index
 
 // RUN: printf '%%s\n' \
+// RUN:   '{' \
+// RUN:   '  "model36": {' \
+// RUN:   '    "model": {"hidden_size": 4096},' \
+// RUN:   '    "features": {"enable_mtp": true},' \
+// RUN:   '  },' \
+// RUN:   '}' \
+// RUN:   > %t.config.json
+// RUN: printf '%%s\n' \
+// RUN:   'config.decl @model36.model.hidden_size : index' \
+// RUN:   'config.decl @model36.features.enable_mtp : i1' \
+// RUN:   | loom-opt --config-file=%t.config.json \
+// RUN:   | FileCheck --check-prefix=CONFIG-FILE %s
+// CONFIG-FILE: config.def @model36.model.hidden_size = 4096 : index
+// CONFIG-FILE: config.def @model36.features.enable_mtp = true : i1
+// CONFIG-FILE-NOT: config.decl
+
+// RUN: printf '%%s\n' \
 // RUN:   'func.def @root_module() {' \
 // RUN:   '  func.return' \
 // RUN:   '}' \

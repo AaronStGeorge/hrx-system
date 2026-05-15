@@ -26,6 +26,7 @@ loom_cc_library(
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/base/internal:json",
     ],
 )
 

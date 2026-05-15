@@ -81,6 +81,17 @@
 // CONFIG-LINK: func.def @also_reads_config() -> (index) {
 // CONFIG-LINK-NOT: config.decl @model36.model.hidden_size
 
+// RUN: printf '%%s\n' \
+// RUN:   '{"model36": {"model": {"hidden_size": 4096}}}' \
+// RUN:   > %t.config.json
+// RUN: loom-link %t.config_a.loom %t.config_b.loom \
+// RUN:     --config-file=%t.config.json \
+// RUN:   | FileCheck --check-prefix=CONFIG-FILE %s
+// CONFIG-FILE: config.def @model36.model.hidden_size = 4096 : index
+// CONFIG-FILE-NOT: config.decl @model36.model.hidden_size
+// CONFIG-FILE: func.def @read_config() -> (index) {
+// CONFIG-FILE: func.def @also_reads_config() -> (index) {
+
 // RUN: loom-link %t.config_a.loom %t.config_b.loom --print-config-schema \
 // RUN:   | FileCheck --check-prefix=CONFIG-SCHEMA %s
 // CONFIG-SCHEMA: {"configs":[

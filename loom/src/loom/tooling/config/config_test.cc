@@ -121,6 +121,44 @@ TEST_F(ConfigMaterializeTest, ConfigSetOwnsAssignmentsAndRejectsDuplicates) {
   loom_tooling_config_set_deinitialize(&config_set);
 }
 
+TEST_F(ConfigMaterializeTest, ConfigSetAppendsJsonObjectBindings) {
+  loom_tooling_config_set_t config_set;
+  loom_tooling_config_set_initialize(iree_allocator_system(), &config_set);
+
+  IREE_ASSERT_OK(
+      loom_tooling_config_set_append_json_object(&config_set, IREE_SV(R"({
+        // JSONC comments are accepted because config files are edited by hand.
+        "model36": {
+          "model": {"hidden_size": 4096},
+          "features": {"enable_mtp": true}
+        },
+        "@direct": "4\u0032",
+        "looks_object": "{not_object}",
+      })")));
+
+  ASSERT_EQ(config_set.binding_count, 4u);
+  EXPECT_TRUE(iree_string_view_equal(
+      config_set.bindings[0].key,
+      iree_make_cstring_view("model36.model.hidden_size")));
+  EXPECT_TRUE(iree_string_view_equal(config_set.bindings[0].value,
+                                     iree_make_cstring_view("4096")));
+  EXPECT_TRUE(iree_string_view_equal(
+      config_set.bindings[1].key,
+      iree_make_cstring_view("model36.features.enable_mtp")));
+  EXPECT_TRUE(iree_string_view_equal(config_set.bindings[1].value,
+                                     iree_make_cstring_view("true")));
+  EXPECT_TRUE(iree_string_view_equal(config_set.bindings[2].key,
+                                     iree_make_cstring_view("direct")));
+  EXPECT_TRUE(iree_string_view_equal(config_set.bindings[2].value,
+                                     iree_make_cstring_view("42")));
+  EXPECT_TRUE(iree_string_view_equal(config_set.bindings[3].key,
+                                     iree_make_cstring_view("looks_object")));
+  EXPECT_TRUE(iree_string_view_equal(config_set.bindings[3].value,
+                                     iree_make_cstring_view("{not_object}")));
+
+  loom_tooling_config_set_deinitialize(&config_set);
+}
+
 TEST_F(ConfigMaterializeTest, IgnoresNonSensitiveBindings) {
   ModulePtr module = Parse(R"(
 func.def @no_config(%x: i32) -> (i32) {
