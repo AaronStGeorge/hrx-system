@@ -11,11 +11,15 @@
 #include <vector>
 
 #include "iree/base/internal/arena.h"
+#include "iree/io/stream.h"
+#include "iree/io/vec_stream.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/format/bytecode/writer.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/check/ops.h"
 #include "loom/ops/config/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/test/ops.h"
@@ -45,6 +49,8 @@ class LinkPlannerTest : public ::testing::Test {
     iree_arena_block_pool_initialize(32 * 1024, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_CHECK, loom_check_dialect_vtables,
+                    loom_check_dialect_op_semantics);
     RegisterDialect(LOOM_DIALECT_CONFIG, loom_config_dialect_vtables,
                     loom_config_dialect_op_semantics);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables,
@@ -99,6 +105,25 @@ class LinkPlannerTest : public ::testing::Test {
     IREE_CHECK_OK(loom_link_module_index_create(
         &context_, &block_pool_, iree_allocator_system(), &index));
     return IndexPtr(index);
+  }
+
+  std::vector<uint8_t> WriteModule(const loom_module_t* module) {
+    iree_io_stream_t* stream = nullptr;
+    IREE_CHECK_OK(iree_io_vec_stream_create(
+        IREE_IO_STREAM_MODE_WRITABLE | IREE_IO_STREAM_MODE_SEEKABLE |
+            IREE_IO_STREAM_MODE_READABLE | IREE_IO_STREAM_MODE_RESIZABLE,
+        4096, iree_allocator_system(), &stream));
+    IREE_CHECK_OK(loom_bytecode_write_module(module, stream,
+                                             /*options=*/nullptr,
+                                             &block_pool_));
+
+    iree_io_stream_pos_t length = iree_io_stream_length(stream);
+    std::vector<uint8_t> bytes(length);
+    IREE_CHECK_OK(iree_io_stream_seek(stream, IREE_IO_STREAM_SEEK_SET, 0));
+    IREE_CHECK_OK(
+        iree_io_stream_read(stream, bytes.size(), bytes.data(), nullptr));
+    iree_io_stream_release(stream);
+    return bytes;
   }
 
   void AddMaterialized(loom_link_module_index_t* index,
@@ -501,6 +526,109 @@ func.def @helper(%x: i32) -> (i32) {
                                             IREE_SV("helper"));
   EXPECT_TRUE(ContainsSymbol(plan.get(), entry));
   EXPECT_FALSE(ContainsSymbol(plan.get(), helper));
+}
+
+TEST_F(LinkPlannerTest, CheckStripPolicyRemovesBytecodeCasesAndBenchmarks) {
+  loom_module_t* module = Parse(IREE_SV(R"(
+func.def public @kernel(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+
+check.case public @kernel_case {
+  %input = check.literal value(1) : i32
+  %actual = func.call @kernel(%input) : (i32) -> (i32)
+  check.expect.equal actual(%actual) expected(%input) : i32
+  check.return
+}
+
+check.benchmark @kernel_bench case(@kernel_case) attrs({iterations = 100})
+)"));
+  std::vector<uint8_t> bytes = WriteModule(module);
+
+  IndexPtr index = CreateIndex();
+  loom_link_module_index_add_options_t provider_options = {
+      .provider_name = IREE_SV("kernel-lib"),
+      .role = LOOM_LINK_PROVIDER_ROLE_INPUT,
+  };
+  IREE_ASSERT_OK(loom_link_module_index_add_bytecode(
+      index.get(), iree_make_const_byte_span(bytes.data(), bytes.size()),
+      IREE_SV("kernel-lib.loombc"), /*read_options=*/nullptr, &provider_options,
+      /*out_provider_ordinal=*/nullptr));
+  const loom_link_module_index_module_t* indexed_module =
+      loom_link_module_index_module_at(index.get(), 0);
+  ASSERT_NE(indexed_module, nullptr);
+  EXPECT_EQ(indexed_module->materialized_module, nullptr);
+
+  loom_link_plan_options_t strip_options = {
+      .mode = LOOM_LINK_PLAN_ARCHIVE,
+      .check_policy = LOOM_LINK_PLAN_CHECK_STRIP,
+  };
+  PlanPtr plan = BuildPlan(index.get(), &strip_options);
+
+  const loom_link_module_index_symbol_t* kernel =
+      loom_link_module_index_lookup_global(index.get(), IREE_SV("kernel"));
+  const loom_link_module_index_symbol_t* check_case =
+      loom_link_module_index_lookup_global(index.get(), IREE_SV("kernel_case"));
+  const loom_link_module_index_symbol_t* benchmark =
+      loom_link_module_index_lookup_private(index.get(), indexed_module,
+                                            IREE_SV("kernel_bench"));
+  EXPECT_TRUE(ContainsSymbol(plan.get(), kernel));
+  EXPECT_FALSE(ContainsSymbol(plan.get(), check_case));
+  EXPECT_FALSE(ContainsSymbol(plan.get(), benchmark));
+}
+
+TEST_F(LinkPlannerTest, KeepCheckPolicyPreservesCaseDependencies) {
+  loom_module_t* module = Parse(IREE_SV(R"(
+func.def public @kernel(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+
+check.case public @kernel_case {
+  %input = check.literal value(1) : i32
+  %actual = func.call @kernel(%input) : (i32) -> (i32)
+  check.expect.equal actual(%actual) expected(%input) : i32
+  check.return
+}
+)"));
+
+  IndexPtr index = CreateIndex();
+  AddMaterialized(index.get(), module, IREE_SV("input"),
+                  LOOM_LINK_PROVIDER_ROLE_INPUT);
+  iree_string_view_t roots[] = {IREE_SV("@kernel_case")};
+  loom_link_plan_options_t options = {
+      .mode = LOOM_LINK_PLAN_SELECTIVE,
+      .root_symbols = {.count = IREE_ARRAYSIZE(roots), .values = roots},
+  };
+  PlanPtr plan = BuildPlan(index.get(), &options);
+
+  const loom_link_module_index_symbol_t* kernel =
+      loom_link_module_index_lookup_global(index.get(), IREE_SV("kernel"));
+  const loom_link_module_index_symbol_t* check_case =
+      loom_link_module_index_lookup_global(index.get(), IREE_SV("kernel_case"));
+  EXPECT_TRUE(ContainsSymbol(plan.get(), kernel));
+  EXPECT_TRUE(ContainsSymbol(plan.get(), check_case));
+}
+
+TEST_F(LinkPlannerTest, CheckStripPolicyRejectsStrippedRoots) {
+  loom_module_t* module = Parse(IREE_SV(R"(
+check.case public @kernel_case {
+  check.return
+}
+)"));
+
+  IndexPtr index = CreateIndex();
+  AddMaterialized(index.get(), module, IREE_SV("input"),
+                  LOOM_LINK_PROVIDER_ROLE_INPUT);
+  iree_string_view_t roots[] = {IREE_SV("@kernel_case")};
+  loom_link_plan_options_t options = {
+      .mode = LOOM_LINK_PLAN_SELECTIVE,
+      .root_symbols = {.count = IREE_ARRAYSIZE(roots), .values = roots},
+      .check_policy = LOOM_LINK_PLAN_CHECK_STRIP,
+  };
+
+  PlanPtr plan;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_NOT_FOUND,
+                        BuildPlanStatus(index.get(), &options, &plan));
 }
 
 TEST_F(LinkPlannerTest, ExportedRootPolicySelectsExportsAndDependencies) {

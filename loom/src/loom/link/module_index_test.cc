@@ -19,6 +19,7 @@
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/check/ops.h"
 #include "loom/ops/config/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/test/ops.h"
@@ -56,6 +57,8 @@ class ModuleIndexTest : public ::testing::Test {
     iree_arena_block_pool_initialize(32 * 1024, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_CHECK, loom_check_dialect_vtables,
+                    loom_check_dialect_op_semantics);
     RegisterDialect(LOOM_DIALECT_CONFIG, loom_config_dialect_vtables,
                     loom_config_dialect_op_semantics);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables,
@@ -293,6 +296,45 @@ func.def public @exported(%x: i32) -> (i32) {
   ASSERT_NE(symbol, nullptr);
   EXPECT_EQ(symbol->kind, LOOM_SYMBOL_FUNC_DEF);
   EXPECT_TRUE(iree_all_bits_set(symbol->flags, LOOM_LINK_SYMBOL_FLAG_EXPORT));
+}
+
+TEST_F(ModuleIndexTest, IndexesCheckSymbolsForStripPolicy) {
+  loom_module_t* module = Parse(IREE_SV(R"(
+check.case public @kernel_case {
+  check.return
+}
+
+check.benchmark @kernel_bench case(@kernel_case) attrs({})
+)"));
+  std::vector<uint8_t> bytes = WriteModule(module);
+
+  IndexPtr index = CreateIndex();
+  loom_link_module_index_add_options_t options = {
+      .provider_name = IREE_SV("checks"),
+      .role = LOOM_LINK_PROVIDER_ROLE_INPUT,
+  };
+  IREE_ASSERT_OK(loom_link_module_index_add_bytecode(
+      index.get(), iree_make_const_byte_span(bytes.data(), bytes.size()),
+      IREE_SV("checks.loombc"), /*read_options=*/nullptr, &options,
+      /*out_provider_ordinal=*/nullptr));
+
+  const loom_link_module_index_symbol_t* check_case =
+      loom_link_module_index_lookup_global(index.get(), IREE_SV("kernel_case"));
+  ASSERT_NE(check_case, nullptr);
+  EXPECT_TRUE(
+      iree_all_bits_set(check_case->flags, LOOM_LINK_SYMBOL_FLAG_CHECK_CASE));
+  EXPECT_TRUE(
+      iree_all_bits_set(check_case->flags, LOOM_LINK_SYMBOL_FLAG_HAS_BODY));
+
+  const loom_link_module_index_module_t* indexed_module =
+      loom_link_module_index_module_at(index.get(), 0);
+  ASSERT_NE(indexed_module, nullptr);
+  const loom_link_module_index_symbol_t* benchmark =
+      loom_link_module_index_lookup_private(index.get(), indexed_module,
+                                            IREE_SV("kernel_bench"));
+  ASSERT_NE(benchmark, nullptr);
+  EXPECT_TRUE(iree_all_bits_set(benchmark->flags,
+                                LOOM_LINK_SYMBOL_FLAG_CHECK_BENCHMARK));
 }
 
 TEST_F(ModuleIndexTest, IndexesTextProviderThroughMaterializedColdPath) {

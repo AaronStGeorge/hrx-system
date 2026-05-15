@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "loom/ir/context.h"
 #include "loom/link/symbol_policy.h"
 #include "loom/ops/op_defs.h"
 
@@ -380,10 +381,45 @@ static iree_status_t loom_link_index_append_symbol(
 // Symbol classification
 //===----------------------------------------------------------------------===//
 
+static loom_link_symbol_flags_t loom_link_check_symbol_flags(
+    iree_string_view_t defining_op_name) {
+  if (iree_string_view_equal(defining_op_name, IREE_SV("check.case"))) {
+    return LOOM_LINK_SYMBOL_FLAG_CHECK_CASE;
+  }
+  if (iree_string_view_equal(defining_op_name, IREE_SV("check.benchmark"))) {
+    return LOOM_LINK_SYMBOL_FLAG_CHECK_BENCHMARK;
+  }
+  return 0;
+}
+
+static bool loom_link_materialized_symbol_has_visibility_attr(
+    const loom_module_t* module, const loom_symbol_t* symbol) {
+  if (!symbol->defining_op) return false;
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, symbol->defining_op);
+  if (!vtable || !vtable->attr_descriptors) return false;
+  const loom_attribute_t* attrs = loom_op_const_attrs(symbol->defining_op);
+  for (uint8_t i = 0; i < vtable->attribute_count; ++i) {
+    const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
+    if (!iree_string_view_equal(loom_attr_descriptor_name(descriptor),
+                                IREE_SV("visibility"))) {
+      continue;
+    }
+    if (descriptor->attr_kind != LOOM_ATTR_ENUM ||
+        i >= symbol->defining_op->attribute_count) {
+      return false;
+    }
+    return loom_attr_as_enum(attrs[i]) != 0;
+  }
+  return false;
+}
+
 static loom_link_symbol_flags_t loom_link_materialized_symbol_flags(
     const loom_module_t* module, const loom_symbol_t* symbol) {
   loom_link_symbol_flags_t flags = 0;
   if (iree_any_bit_set(symbol->flags, LOOM_SYMBOL_FLAG_PUBLIC)) {
+    flags |= LOOM_LINK_SYMBOL_FLAG_PUBLIC;
+  }
+  if (loom_link_materialized_symbol_has_visibility_attr(module, symbol)) {
     flags |= LOOM_LINK_SYMBOL_FLAG_PUBLIC;
   }
   if (loom_link_symbol_is_declaration(symbol)) {
@@ -395,11 +431,12 @@ static loom_link_symbol_flags_t loom_link_materialized_symbol_flags(
   if (loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_CONFIG)) {
     flags |= LOOM_LINK_SYMBOL_FLAG_CONFIG;
   }
+  if (symbol->defining_op) {
+    flags |= loom_link_check_symbol_flags(
+        loom_op_vtable_name(loom_op_vtable(module, symbol->defining_op)));
+  }
 
   loom_func_like_t func = loom_func_like_cast(module, symbol->defining_op);
-  if (loom_func_like_isa(func) && loom_func_like_visibility(func) != 0) {
-    flags |= LOOM_LINK_SYMBOL_FLAG_PUBLIC;
-  }
   const bool has_import =
       loom_func_like_isa(func) &&
       (loom_func_like_import_module(func) != LOOM_STRING_ID_INVALID ||
@@ -475,6 +512,7 @@ static loom_link_symbol_flags_t loom_link_bytecode_symbol_flags(
   if (loom_link_bytecode_symbol_is_config(symbol)) {
     flags |= LOOM_LINK_SYMBOL_FLAG_CONFIG;
   }
+  flags |= loom_link_check_symbol_flags(symbol->defining_op_name);
   return flags;
 }
 

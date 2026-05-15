@@ -3074,11 +3074,33 @@ typedef struct loom_bytecode_symbol_linkage_t {
   loom_string_id_t import_symbol_id;  // Source symbol for imported symbols.
 } loom_bytecode_symbol_linkage_t;
 
+static bool loom_bytecode_symbol_has_visibility_attr(
+    const loom_module_t* module, const loom_symbol_t* symbol) {
+  if (!symbol->defining_op) return false;
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, symbol->defining_op);
+  if (!vtable || !vtable->attr_descriptors) return false;
+  const loom_attribute_t* attrs = loom_op_const_attrs(symbol->defining_op);
+  for (uint8_t i = 0; i < vtable->attribute_count; ++i) {
+    const loom_attr_descriptor_t* descriptor = &vtable->attr_descriptors[i];
+    if (!iree_string_view_equal(loom_attr_descriptor_name(descriptor),
+                                IREE_SV("visibility"))) {
+      continue;
+    }
+    if (descriptor->attr_kind != LOOM_ATTR_ENUM ||
+        i >= symbol->defining_op->attribute_count) {
+      return false;
+    }
+    return loom_attr_as_enum(attrs[i]) != 0;
+  }
+  return false;
+}
+
 static iree_status_t loom_bytecode_symbol_linkage(
     const loom_module_t* module, const loom_symbol_t* symbol,
     loom_bytecode_symbol_linkage_t* out_linkage) {
   *out_linkage = (loom_bytecode_symbol_linkage_t){
-      .is_public = iree_any_bit_set(symbol->flags, LOOM_SYMBOL_FLAG_PUBLIC),
+      .is_public = iree_any_bit_set(symbol->flags, LOOM_SYMBOL_FLAG_PUBLIC) ||
+                   loom_bytecode_symbol_has_visibility_attr(module, symbol),
       .is_import = false,
       .has_import_symbol = false,
       .import_module_id = LOOM_STRING_ID_INVALID,
@@ -3088,9 +3110,6 @@ static iree_status_t loom_bytecode_symbol_linkage(
 
   loom_func_like_t func_like = loom_func_like_cast(module, symbol->defining_op);
   if (!loom_func_like_isa(func_like)) return iree_ok_status();
-
-  out_linkage->is_public =
-      out_linkage->is_public || loom_func_like_visibility(func_like) != 0;
 
   const loom_op_vtable_t* op_vtable = loom_op_vtable(module, func_like.op);
   IREE_RETURN_IF_ERROR(loom_bytecode_find_string_attr_by_name(

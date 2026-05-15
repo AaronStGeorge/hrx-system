@@ -98,6 +98,7 @@ loom_cc_test(
     loom::src::loom::format::bytecode::writer
     loom::src::loom::format::text::parser
     loom::src::loom::ir
+    loom::src::loom::ops::check
     loom::src::loom::ops::config
     loom::src::loom::ops::func
     loom::src::loom::ops::test
@@ -130,8 +131,11 @@ loom_cc_test(
     ::planner
     iree::base
     iree::base::internal::arena
+    iree::io::stream
+    loom::src::loom::format::bytecode::writer
     loom::src::loom::format::text::parser
     loom::src::loom::ir
+    loom::src::loom::ops::check
     loom::src::loom::ops::config
     loom::src::loom::ops::func
     loom::src::loom::ops::test

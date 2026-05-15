@@ -67,6 +67,12 @@ static iree_status_t loom_link_plan_reserve_symbols(loom_link_plan_t* plan,
 static bool loom_link_plan_symbol_is_stripped(
     const loom_link_plan_options_t* options, const loom_link_plan_t* plan,
     const loom_link_module_index_symbol_t* symbol) {
+  const loom_link_symbol_flags_t check_flags =
+      LOOM_LINK_SYMBOL_FLAG_CHECK_CASE | LOOM_LINK_SYMBOL_FLAG_CHECK_BENCHMARK;
+  if (options && options->check_policy == LOOM_LINK_PLAN_CHECK_STRIP &&
+      iree_any_bit_set(symbol->flags, check_flags)) {
+    return true;
+  }
   return options && options->strip_symbol &&
          options->strip_symbol(options->strip_symbol_user_data, plan->index,
                                symbol);
@@ -367,6 +373,9 @@ static iree_status_t loom_link_plan_select_archive(
   for (iree_host_size_t i = 0; i < symbol_count; ++i) {
     const loom_link_module_index_symbol_t* symbol =
         loom_link_module_index_symbol_at(plan->index, i);
+    if (loom_link_plan_symbol_is_stripped(options, plan, symbol)) {
+      continue;
+    }
     IREE_RETURN_IF_ERROR(loom_link_plan_select_symbol(
         plan, options, symbol, LOOM_LINK_PLAN_LIVE_ARCHIVE,
         LOOM_LINK_MODULE_INDEX_INVALID_ORDINAL, iree_string_view_empty(),
