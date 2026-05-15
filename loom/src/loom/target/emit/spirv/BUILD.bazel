@@ -1,0 +1,88 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_library",
+    "loom_cc_test",
+)
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_assert_no_dependencies",
+)
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+#===------------------------------------------------------------------------===#
+# Layering checks
+#===------------------------------------------------------------------------===#
+
+loom_assert_no_dependencies(
+    name = "spirv_emit_no_other_target_deps",
+    dependencies = [
+        "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+        "//loom/src/loom/target/arch/ireevm:descriptors",
+        "//loom/src/loom/target/arch/wasm:descriptors",
+        "//loom/src/loom/target/arch/x86:packed_dot_contract",
+        "//loom/src/loom/target/emit/llvmir:llvmir",
+    ],
+    targets = [
+        ":binary_writer",
+        ":module_builder",
+    ],
+)
+
+loom_assert_no_dependencies(
+    name = "core_run_tool_no_spirv_emit_dep",
+    dependencies = [":module_builder"],
+    targets = ["//loom/src/loom/tools/iree-run-loom:main"],
+)
+
+#===------------------------------------------------------------------------===#
+# SPIR-V emission
+#===------------------------------------------------------------------------===#
+
+loom_cc_library(
+    name = "binary_format",
+    hdrs = ["binary_format.h"],
+)
+
+loom_cc_library(
+    name = "binary_writer",
+    srcs = ["binary_writer.c"],
+    hdrs = ["binary_writer.h"],
+    deps = ["//runtime/src/iree/base"],
+)
+
+loom_cc_library(
+    name = "module_builder",
+    srcs = ["module_builder.c"],
+    hdrs = ["module_builder.h"],
+    deps = [
+        ":binary_format",
+        ":binary_writer",
+        "//loom/src/loom/target:types",
+        "//loom/src/loom/target/arch/spirv:features",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "module_builder_test",
+    srcs = ["module_builder_test.cc"],
+    deps = [
+        ":binary_format",
+        ":module_builder",
+        "//loom/src/loom/target/arch/spirv:features",
+        "//loom/src/loom/target/arch/spirv:target_records",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)

@@ -41,6 +41,8 @@ typedef enum loom_spirv_memory_model_e {
 typedef enum loom_spirv_storage_class_e {
   // UniformConstant storage class.
   LOOM_SPIRV_STORAGE_CLASS_UNIFORM_CONSTANT = 0,
+  // Input storage class.
+  LOOM_SPIRV_STORAGE_CLASS_INPUT = 1,
   // Uniform storage class.
   LOOM_SPIRV_STORAGE_CLASS_UNIFORM = 2,
   // Workgroup storage class.
