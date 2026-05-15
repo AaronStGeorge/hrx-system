@@ -31,7 +31,7 @@ static const loom_pass_statistic_def_t kSymbolDCEStatistics[] = {
 
 static const loom_pass_info_t loom_symbol_dce_pass_info_storage = {
     .name = IREE_SVL("symbol-dce"),
-    .description = IREE_SVL("Remove unreachable private function symbols."),
+    .description = IREE_SVL("Remove unreachable private symbol definitions."),
     .kind = LOOM_PASS_MODULE,
     .statistic_defs = kSymbolDCEStatistics,
     .statistic_count = IREE_ARRAYSIZE(kSymbolDCEStatistics),
@@ -90,6 +90,10 @@ static bool loom_symbol_dce_symbol_is_erasable(const loom_module_t* module,
         loom_symbol_ref_is_valid(loom_func_like_artifact(function))) {
       return false;
     }
+    return true;
+  }
+
+  if (loom_symbol_implements(symbol, LOOM_SYMBOL_INTERFACE_CONFIG)) {
     return true;
   }
 

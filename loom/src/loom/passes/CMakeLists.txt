@@ -453,6 +453,7 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::format::text::printer
     loom::src::loom::ir
+    loom::src::loom::ops::config
     loom::src::loom::ops::func
     loom::src::loom::ops::low
     loom::src::loom::ops::target

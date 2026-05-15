@@ -20,6 +20,7 @@
 #include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/config/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/target/ops.h"
@@ -43,6 +44,7 @@ class SymbolDCETest : public ::testing::Test {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_CONFIG, loom_config_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_LOW, loom_low_dialect_vtables);
@@ -228,6 +230,27 @@ func.def target(@test_target) abi(object_function) @dead() {
   EXPECT_NE(pruned_text.find("@helper"), std::string::npos);
   EXPECT_EQ(pruned_text.find("@dead"), std::string::npos);
   EXPECT_NE(pruned_text.find("target.artifact @module"), std::string::npos);
+}
+
+TEST_F(SymbolDCETest, ConfigSymbolsAreReachableThroughReads) {
+  const char* source = R"(
+config.decl @live_config : index
+config.decl @dead_config : index
+
+func.def public @entry() -> (index) {
+  %value = config.get @live_config : index
+  func.return %value : index
+}
+)";
+
+  ModulePtr module(Parse(iree_make_cstring_view(source)));
+  ASSERT_NE(module.get(), nullptr);
+
+  RunSymbolDCE(module.get(), 1, 0);
+  std::string pruned_text = Print(module.get());
+  EXPECT_NE(pruned_text.find("config.decl @live_config"), std::string::npos);
+  EXPECT_EQ(pruned_text.find("config.decl @dead_config"), std::string::npos);
+  EXPECT_NE(pruned_text.find("config.get @live_config"), std::string::npos);
 }
 
 }  // namespace
