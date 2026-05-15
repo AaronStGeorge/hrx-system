@@ -27,6 +27,7 @@
 #include "loom/target/all/provider.h"
 #include "loom/target/predicate.h"
 #include "loom/target/provider.h"
+#include "loom/tooling/config/config.h"
 #include "loom/tooling/execution/session.h"
 #include "loom/tooling/io/file.h"
 #include "loom/util/json.h"
@@ -39,6 +40,10 @@ IREE_FLAG(string, pipeline, "",
           "Named pass.pipeline symbol to execute from the input module.");
 IREE_FLAG_LIST(string, pass,
                "Pass pipeline entry to append. Repeat for multiple passes.");
+IREE_FLAG_LIST(
+    string, config,
+    "Compile/link-time config binding. Repeat as --config=key=value. Bindings "
+    "not referenced by the loaded module are ignored.");
 IREE_FLAG(bool, verify, true,
           "Verify the module before and after executing passes.");
 IREE_FLAG(bool, list_passes, false, "Print registered passes and exit.");
@@ -306,6 +311,13 @@ static iree_status_t loom_opt_append_reproducer_run_line(
     iree_string_builder_t* builder, bool use_synthetic_pipeline) {
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       builder, "// RUN: loom-opt --verify=%s", FLAG_verify ? "true" : "false"));
+  iree_flag_string_list_t config_assignments = FLAG_config_list();
+  for (iree_host_size_t i = 0; i < config_assignments.count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(builder, " --config="));
+    IREE_RETURN_IF_ERROR(
+        loom_opt_append_shell_quoted(builder, config_assignments.values[i]));
+  }
   iree_string_view_t low_asm_descriptor_set = iree_string_view_trim(
       iree_make_cstring_view(FLAG_low_asm_descriptor_set));
   if (!iree_string_view_is_empty(low_asm_descriptor_set)) {
@@ -732,6 +744,36 @@ static iree_status_t loom_opt_run_passes(
   return status;
 }
 
+static iree_status_t loom_opt_materialize_config_flags(
+    loom_module_t* module, iree_arena_block_pool_t* block_pool,
+    loom_tooling_config_materialize_result_t* out_result,
+    iree_allocator_t allocator) {
+  *out_result = (loom_tooling_config_materialize_result_t){0};
+  iree_flag_string_list_t assignments = FLAG_config_list();
+  if (assignments.count == 0) {
+    return iree_ok_status();
+  }
+
+  loom_tooling_config_binding_t* bindings = NULL;
+  iree_status_t status = iree_allocator_malloc_array(
+      allocator, assignments.count, sizeof(*bindings), (void**)&bindings);
+  for (iree_host_size_t i = 0;
+       i < assignments.count && iree_status_is_ok(status); ++i) {
+    status = loom_tooling_config_parse_assignment(assignments.values[i],
+                                                  &bindings[i]);
+  }
+  if (iree_status_is_ok(status)) {
+    loom_tooling_config_materialize_options_t options;
+    loom_tooling_config_materialize_options_initialize(&options);
+    options.bindings = bindings;
+    options.binding_count = assignments.count;
+    status = loom_tooling_config_materialize_module(module, &options,
+                                                    block_pool, out_result);
+  }
+  iree_allocator_free(allocator, bindings);
+  return status;
+}
+
 static iree_status_t loom_opt_write_pass_report(
     loom_opt_pass_report_mode_t mode, const loom_pass_report_t* report) {
   switch (mode) {
@@ -883,6 +925,8 @@ int main(int argc, char** argv) {
       "module, or\n"
       "repeat --pass for a shallow command-line pipeline backed by the C pass "
       "registry.\n"
+      "Repeat --config=key=value to materialize compile/link-time config "
+      "symbols before passes run. Unused config bindings are ignored.\n"
       "Use --pass-report=json to print a structured execution report to "
       "stderr.\n"
       "Use --diagnostic-format=json to print structured diagnostic JSONL to "
@@ -911,6 +955,7 @@ int main(int argc, char** argv) {
   loom_pass_report_t pass_report = {0};
   bool pass_report_initialized = false;
   bool pass_execution_started = false;
+  loom_tooling_config_materialize_result_t config_materialize_result = {0};
   loom_pass_run_result_t pass_run_result = {0};
   iree_status_t pass_pipeline_status = iree_ok_status();
 
@@ -1006,6 +1051,17 @@ int main(int argc, char** argv) {
     status = loom_run_module_parse(&run_session, &parse_options, &run_module);
   }
   if (iree_status_is_ok(status) && !metadata_only && FLAG_verify) {
+    status = loom_opt_verify_module(
+        loom_run_session_low_descriptor_registry(&run_session), &run_module,
+        diagnostic_sink);
+  }
+  if (iree_status_is_ok(status) && !metadata_only) {
+    status = loom_opt_materialize_config_flags(
+        run_module.module, loom_run_session_block_pool(&run_session),
+        &config_materialize_result, allocator);
+  }
+  if (iree_status_is_ok(status) && !metadata_only && FLAG_verify &&
+      config_materialize_result.materialized_count > 0) {
     status = loom_opt_verify_module(
         loom_run_session_low_descriptor_registry(&run_session), &run_module,
         diagnostic_sink);

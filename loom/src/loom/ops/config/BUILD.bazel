@@ -16,16 +16,21 @@ loom_cc_library(
     name = "config",
     srcs = [
         "builders.c",
+        "contract.c",
         "facts.c",
         "tables.c",
         "verify.c",
     ],
-    hdrs = ["ops.h"],
+    hdrs = [
+        "contract.h",
+        "ops.h",
+    ],
     deps = [
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/ir:facts",
         "//loom/src/loom/ops:op_defs",
+        "//runtime/src/iree/base",
     ],
 )

@@ -22,6 +22,7 @@ loom_cc_library(
     iree::base::internal::arena
     loom::src::loom::ir
     loom::src::loom::ir::symbol_map
+    loom::src::loom::ops::config
     loom::src::loom::ops::op_defs
     loom::src::loom::rewrite::materialize
     loom::src::loom::rewrite::remap
@@ -40,6 +41,7 @@ loom_cc_test(
     loom::src::loom::format::text::parser
     loom::src::loom::format::text::printer
     loom::src::loom::ir
+    loom::src::loom::ops::config
     loom::src::loom::ops::func
     loom::src::loom::ops::target
     loom::src::loom::ops::test

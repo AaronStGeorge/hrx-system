@@ -205,3 +205,62 @@
 // NAMED: func.def @dce_named(%x: i32) -> (i32) {
 // NAMED-NOT: %dead
 // NAMED: func.return %x : i32
+
+// RUN: printf '%%s\n' \
+// RUN:   'config.decl @model36.model.hidden_size : index' \
+// RUN:   '' \
+// RUN:   'func.def @read_config() -> (index) {' \
+// RUN:   '  %%hidden = config.get @model36.model.hidden_size : index' \
+// RUN:   '  func.return %%hidden : index' \
+// RUN:   '}' \
+// RUN:   | loom-opt --config=model36.model.hidden_size=4096 \
+// RUN:   | FileCheck --check-prefix=CONFIG-MATERIALIZE %s
+// CONFIG-MATERIALIZE: config.def @model36.model.hidden_size = 4096 : index
+// CONFIG-MATERIALIZE-NOT: config.decl @model36.model.hidden_size
+// CONFIG-MATERIALIZE: %hidden = config.get @model36.model.hidden_size : index
+
+// RUN: printf '%%s\n' \
+// RUN:   'func.def @root_module() {' \
+// RUN:   '  func.return' \
+// RUN:   '}' \
+// RUN:   | loom-opt --config=model36.model.hidden_size=4096 \
+// RUN:   | FileCheck --check-prefix=CONFIG-IGNORE-MISSING %s
+// CONFIG-IGNORE-MISSING-NOT: config.def
+// CONFIG-IGNORE-MISSING: func.def @root_module() {
+
+// RUN: printf '%%s\n' \
+// RUN:   'config.decl @answer : index' \
+// RUN:   '' \
+// RUN:   'func.def @fold_config() -> (index) {' \
+// RUN:   '  %%value = config.get @answer : index' \
+// RUN:   '  %%two = index.constant 2 : index' \
+// RUN:   '  %%result = index.add %%value, %%two : index' \
+// RUN:   '  func.return %%result : index' \
+// RUN:   '}' \
+// RUN:   | loom-opt --config=@answer=40 --pass=canonicalize \
+// RUN:   | FileCheck --check-prefix=CONFIG-FOLD %s
+// CONFIG-FOLD: config.def @answer = 40 : index
+// CONFIG-FOLD: func.def @fold_config() -> (index) {
+// CONFIG-FOLD-NOT: config.get @answer
+// CONFIG-FOLD: %result = index.constant 42 : index
+
+// RUN: printf '%%s\n' \
+// RUN:   'config.decl @model36.model.hidden_size : %%value: index where [range(%%value, 0, 8192), mul(%%value, 16)]' \
+// RUN:   '' \
+// RUN:   'func.def @bad_config_constraint() -> (index) {' \
+// RUN:   '  %%hidden = config.get @model36.model.hidden_size : index' \
+// RUN:   '  func.return %%hidden : index' \
+// RUN:   '}' \
+// RUN:   | loom-opt --config=model36.model.hidden_size=4103 \
+// RUN:       --output=%t.unused > %t.config-constraint.err 2>&1; test $? -ne 0
+// RUN: FileCheck --check-prefix=CONFIG-CONSTRAINT %s < %t.config-constraint.err
+// CONFIG-CONSTRAINT: config 'model36.model.hidden_size' value 4103 violates constraint 'mul'
+
+// RUN: printf '%%s\n' \
+// RUN:   'func.def @no_config(%x: i32) -> (i32) {' \
+// RUN:   '  func.return %x : i32' \
+// RUN:   '}' \
+// RUN:   | loom-opt --config=missing=1 \
+// RUN:   | FileCheck --check-prefix=CONFIG-IGNORE-UNUSED %s
+// CONFIG-IGNORE-UNUSED-NOT: config.def
+// CONFIG-IGNORE-UNUSED: func.def @no_config

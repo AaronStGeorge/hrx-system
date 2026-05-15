@@ -16,6 +16,7 @@
 #include "loom/format/text/printer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/config/ops.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/target/ops.h"
 #include "loom/ops/test/ops.h"
@@ -30,6 +31,8 @@ class LinkerTest : public ::testing::Test {
     iree_arena_block_pool_initialize(32 * 1024, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
+    RegisterDialect(LOOM_DIALECT_CONFIG, loom_config_dialect_vtables,
+                    loom_config_dialect_op_semantics);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables,
                     loom_func_dialect_op_semantics);
     RegisterDialect(LOOM_DIALECT_TARGET, loom_target_dialect_vtables,
@@ -417,6 +420,56 @@ func.decl @external_identity(%m: index, %x: tensor<[%m]xf32>) -> (tensor<[%m]xf3
   EXPECT_NE(text.find("func.decl @external_identity"), std::string::npos);
   EXPECT_NE(text.find("tensor<[%m]xf32"), std::string::npos);
   EXPECT_NE(text.find("where [mul(%m, 16)]"), std::string::npos);
+}
+
+TEST_F(LinkerTest, UsesConfigDefinitionOverDeclaration) {
+  loom_module_t* root = Parse(IREE_SV(R"(
+config.def @model36.model.hidden_size = 4096 : index
+)"));
+  loom_module_t* library = Parse(IREE_SV(R"(
+config.decl @model36.model.hidden_size : %value: index where [range(%value, 1, 8192), mul(%value, 16)]
+)"));
+
+  loom_module_t* linked = Link({root, library});
+  Verify(linked);
+
+  std::string text = Print(linked);
+  EXPECT_NE(text.find("config.def @model36.model.hidden_size = 4096 : index"),
+            std::string::npos);
+  EXPECT_EQ(text.find("config.decl @model36.model.hidden_size"),
+            std::string::npos);
+}
+
+TEST_F(LinkerTest, RejectsConfigDefinitionViolatingDeclaration) {
+  loom_module_t* root = Parse(IREE_SV(R"(
+config.def @model36.model.hidden_size = 4103 : index
+)"));
+  loom_module_t* library = Parse(IREE_SV(R"(
+config.decl @model36.model.hidden_size : %value: index where [range(%value, 1, 8192), mul(%value, 16)]
+)"));
+
+  loom_module_t* linked = nullptr;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+                        LinkStatus({root, library}, &linked));
+  EXPECT_EQ(linked, nullptr);
+}
+
+TEST_F(LinkerTest, MergesConfigDeclarations) {
+  loom_module_t* first = Parse(IREE_SV(R"(
+config.decl @model36.model.hidden_size : %value: index where [range(%value, 1, 8192)]
+)"));
+  loom_module_t* second = Parse(IREE_SV(R"(
+config.decl @model36.model.hidden_size : %value: index where [mul(%value, 16)]
+)"));
+
+  loom_module_t* linked = Link({first, second});
+  Verify(linked);
+
+  std::string text = Print(linked);
+  EXPECT_NE(text.find("config.decl @model36.model.hidden_size"),
+            std::string::npos);
+  EXPECT_NE(text.find("range(%value, 1, 8192)"), std::string::npos);
+  EXPECT_NE(text.find("mul(%value, 16)"), std::string::npos);
 }
 
 TEST_F(LinkerTest, RejectsDuplicateConcreteDefinitions) {

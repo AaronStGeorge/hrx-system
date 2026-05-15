@@ -11,6 +11,8 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ir/symbol_map.h"
+#include "loom/ops/config/contract.h"
+#include "loom/ops/config/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/rewrite/materialize.h"
 #include "loom/rewrite/remap.h"
@@ -81,7 +83,8 @@ typedef struct loom_link_state_t {
 } loom_link_state_t;
 
 static bool loom_link_symbol_is_declaration(const loom_symbol_t* symbol) {
-  return symbol->kind == LOOM_SYMBOL_FUNC_DECL;
+  return symbol->kind == LOOM_SYMBOL_FUNC_DECL ||
+         (symbol->defining_op && loom_config_decl_isa(symbol->defining_op));
 }
 
 static bool loom_link_is_selective(const loom_link_state_t* state) {
@@ -988,6 +991,171 @@ static iree_status_t loom_link_merge_func_contract(loom_link_state_t* state,
   return iree_ok_status();
 }
 
+static iree_status_t loom_link_incompatible_config_status(
+    const loom_link_state_t* state, loom_symbol_ref_t target_ref,
+    iree_string_view_t field_name) {
+  iree_string_view_t symbol_name =
+      loom_link_target_symbol_name(state->target_module, target_ref);
+  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                          "linked config declaration for '@%.*s' has "
+                          "incompatible field '%.*s'",
+                          (int)symbol_name.size, symbol_name.data,
+                          (int)field_name.size, field_name.data);
+}
+
+static iree_status_t loom_link_append_config_decl_predicates(
+    loom_link_state_t* state, loom_symbol_ref_t target_ref,
+    loom_op_t* target_op, loom_attribute_t predicates) {
+  if (predicates.kind == LOOM_ATTR_ABSENT || predicates.count == 0) {
+    return iree_ok_status();
+  }
+  if (predicates.kind != LOOM_ATTR_PREDICATE_LIST ||
+      !predicates.predicate_list || target_op->attribute_count <= 1) {
+    return loom_link_incompatible_config_status(state, target_ref,
+                                                IREE_SV("predicates"));
+  }
+
+  loom_attribute_t old_predicates = loom_op_attrs(target_op)[1];
+  if (old_predicates.kind != LOOM_ATTR_ABSENT &&
+      old_predicates.kind != LOOM_ATTR_PREDICATE_LIST) {
+    return loom_link_incompatible_config_status(state, target_ref,
+                                                IREE_SV("predicates"));
+  }
+  if (old_predicates.count > 0 && !old_predicates.predicate_list) {
+    return loom_link_incompatible_config_status(state, target_ref,
+                                                IREE_SV("predicates"));
+  }
+
+  iree_host_size_t total_count =
+      (iree_host_size_t)old_predicates.count + predicates.count;
+  if (total_count > UINT16_MAX) {
+    iree_string_view_t symbol_name =
+        loom_link_target_symbol_name(state->target_module, target_ref);
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "linked config declaration for '@%.*s' has %" PRIhsz
+                            " merged predicates, max %u",
+                            (int)symbol_name.size, symbol_name.data,
+                            total_count, (unsigned)UINT16_MAX);
+  }
+
+  loom_predicate_t* merged_predicates = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      &state->target_module->arena, total_count, sizeof(*merged_predicates),
+      (void**)&merged_predicates));
+  if (old_predicates.count > 0) {
+    memcpy(merged_predicates, old_predicates.predicate_list,
+           (iree_host_size_t)old_predicates.count * sizeof(*merged_predicates));
+  }
+  memcpy(merged_predicates + old_predicates.count, predicates.predicate_list,
+         (iree_host_size_t)predicates.count * sizeof(*merged_predicates));
+  loom_op_attrs(target_op)[1] =
+      loom_attr_predicate_list(merged_predicates, (uint16_t)total_count);
+  return iree_ok_status();
+}
+
+static iree_status_t loom_link_merge_config_contract(
+    loom_link_state_t* state, loom_symbol_ref_t target_ref,
+    loom_op_t* target_op) {
+  const loom_link_materialization_t* materialization =
+      &state->materializations[target_ref.symbol_id];
+  if (!materialization->contract_sources) {
+    return iree_ok_status();
+  }
+
+  loom_value_id_t target_value_id = loom_config_symbol_result_value(target_op);
+  if (target_value_id == LOOM_VALUE_ID_INVALID) {
+    return loom_link_incompatible_config_status(state, target_ref,
+                                                IREE_SV("definition"));
+  }
+  loom_type_t target_type =
+      loom_module_value_type(state->target_module, target_value_id);
+
+  for (const loom_link_contract_source_t* source =
+           materialization->contract_sources;
+       source; source = source->next) {
+    if (source->source_module == materialization->source_module &&
+        source->source_symbol_id == materialization->source_symbol_id) {
+      continue;
+    }
+
+    const loom_symbol_t* source_symbol =
+        &source->source_module->symbols.entries[source->source_symbol_id];
+    loom_op_t* source_op = source_symbol->defining_op;
+    if (!loom_config_decl_isa(source_op)) {
+      return loom_link_incompatible_config_status(state, target_ref,
+                                                  IREE_SV("declaration"));
+    }
+    loom_value_id_t source_value_id = loom_config_decl_type(source_op);
+
+    loom_ir_remap_t contract_remap = {0};
+    IREE_RETURN_IF_ERROR(loom_ir_remap_initialize(
+        source->source_module, state->target_module, state->scratch_arena,
+        &(loom_ir_remap_options_t){
+            .remap_symbol = loom_ir_remap_symbol_callback_make(
+                loom_link_remap_symbol, state),
+        },
+        &contract_remap));
+    IREE_RETURN_IF_ERROR(loom_ir_remap_map_value(
+        &contract_remap, source_value_id, target_value_id));
+    loom_type_t remapped_source_type = {0};
+    IREE_RETURN_IF_ERROR(loom_ir_remap_type(
+        &contract_remap,
+        loom_module_value_type(source->source_module, source_value_id),
+        &remapped_source_type));
+    if (!loom_type_equal(remapped_source_type, target_type)) {
+      return loom_link_incompatible_config_status(state, target_ref,
+                                                  IREE_SV("type"));
+    }
+
+    loom_attribute_t source_predicates = loom_config_decl_predicates(source_op);
+    loom_predicate_t* remapped_predicates = NULL;
+    IREE_RETURN_IF_ERROR(loom_ir_remap_predicate_list(
+        &contract_remap, source_predicates.predicate_list,
+        source_predicates.count, &remapped_predicates));
+    loom_attribute_t predicate_attr =
+        loom_attr_predicate_list(remapped_predicates, source_predicates.count);
+
+    if (loom_config_def_isa(target_op)) {
+      IREE_RETURN_IF_ERROR(loom_config_check_value_constraints(
+          loom_link_target_symbol_name(state->target_module, target_ref),
+          target_type, target_value_id, loom_config_def_value(target_op),
+          predicate_attr));
+      continue;
+    }
+    if (loom_config_decl_isa(target_op)) {
+      IREE_RETURN_IF_ERROR(loom_link_append_config_decl_predicates(
+          state, target_ref, target_op, predicate_attr));
+      continue;
+    }
+    return loom_link_incompatible_config_status(state, target_ref,
+                                                IREE_SV("definition"));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_link_merge_symbol_contract(
+    loom_link_state_t* state, loom_symbol_ref_t target_ref,
+    loom_op_t* target_op) {
+  if (target_ref.symbol_id >= state->materialization_count) {
+    return iree_ok_status();
+  }
+  const loom_link_materialization_t* materialization =
+      &state->materializations[target_ref.symbol_id];
+  if (!materialization->contract_sources) {
+    return iree_ok_status();
+  }
+
+  if (loom_func_like_isa(
+          loom_func_like_cast(state->target_module, target_op))) {
+    return loom_link_merge_func_contract(state, target_ref, target_op);
+  }
+  if (loom_config_decl_isa(target_op) || loom_config_def_isa(target_op)) {
+    return loom_link_merge_config_contract(state, target_ref, target_op);
+  }
+  return loom_link_incompatible_contract_status(state, target_ref,
+                                                IREE_SV("declaration"));
+}
+
 static iree_status_t loom_link_clone_module_body(
     loom_link_state_t* state, const loom_module_t* source_module) {
   loom_builder_t builder;
@@ -1027,7 +1195,7 @@ static iree_status_t loom_link_clone_module_body(
     if (has_symbol_ref) {
       state->cloned_target_symbols[target_ref.symbol_id] = 1;
       IREE_RETURN_IF_ERROR(
-          loom_link_merge_func_contract(state, target_ref, cloned_op));
+          loom_link_merge_symbol_contract(state, target_ref, cloned_op));
     }
   }
   return iree_ok_status();
