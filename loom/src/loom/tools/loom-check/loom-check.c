@@ -45,6 +45,7 @@
 #endif  // LOOM_CHECK_HAVE_LLVMIR
 #if LOOM_CHECK_HAVE_SPIRV
 #include "loom/target/arch/spirv/check/provider.h"
+#include "loom/target/emit/spirv/check/provider.h"
 #endif  // LOOM_CHECK_HAVE_SPIRV
 #if LOOM_CHECK_HAVE_WASM
 #include "loom/target/arch/wasm/check/provider.h"
@@ -66,6 +67,9 @@ static const loom_check_provider_t* const kLoomCheckProviders[] = {
 #endif  // LOOM_CHECK_HAVE_LLVMIR
 #if LOOM_CHECK_HAVE_SPIRV
     &loom_spirv_check_provider,
+#endif  // LOOM_CHECK_HAVE_SPIRV
+#if LOOM_CHECK_HAVE_SPIRV
+    &loom_spirv_emit_check_provider,
 #endif  // LOOM_CHECK_HAVE_SPIRV
 #if LOOM_CHECK_HAVE_WASM
     &loom_wasm_check_provider,

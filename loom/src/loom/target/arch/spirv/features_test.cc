@@ -118,6 +118,7 @@ TEST(SpirvFeaturesTest, PreparesVulkanBdaProfile) {
   EXPECT_EQ(feature_set.addressing_model,
             LOOM_SPIRV_ADDRESSING_MODEL_PHYSICAL_STORAGE_BUFFER64);
   EXPECT_EQ(feature_set.memory_model, LOOM_SPIRV_MEMORY_MODEL_VULKAN);
+  EXPECT_EQ(feature_set.minimum_spirv_version, UINT32_C(0x00010300));
   EXPECT_TRUE(
       ContainsExtension(feature_set, IREE_SV("SPV_KHR_vulkan_memory_model")));
   EXPECT_TRUE(ContainsExtension(feature_set,
@@ -146,6 +147,7 @@ TEST(SpirvFeaturesTest, PreparesCooperativeFeatureAtomsWithoutBda) {
 
   EXPECT_EQ(feature_set.addressing_model, LOOM_SPIRV_ADDRESSING_MODEL_LOGICAL);
   EXPECT_EQ(feature_set.memory_model, LOOM_SPIRV_MEMORY_MODEL_VULKAN);
+  EXPECT_EQ(feature_set.minimum_spirv_version, UINT32_C(0x00010300));
   EXPECT_TRUE(
       ContainsExtension(feature_set, IREE_SV("SPV_KHR_cooperative_matrix")));
   EXPECT_TRUE(
@@ -154,14 +156,14 @@ TEST(SpirvFeaturesTest, PreparesCooperativeFeatureAtomsWithoutBda) {
                                  LOOM_SPIRV_CAPABILITY_COOPERATIVE_MATRIX_KHR));
   EXPECT_TRUE(ContainsCapability(feature_set,
                                  LOOM_SPIRV_CAPABILITY_COOPERATIVE_VECTOR_NV));
+  EXPECT_TRUE(
+      ContainsOpcode(feature_set, LOOM_SPIRV_OP_TYPE_COOPERATIVE_MATRIX_KHR));
   EXPECT_TRUE(ContainsOpcode(feature_set,
-                             LOOM_SPIRV_OPCODE_TYPE_COOPERATIVE_MATRIX_KHR));
-  EXPECT_TRUE(ContainsOpcode(feature_set,
-                             LOOM_SPIRV_OPCODE_COOPERATIVE_MATRIX_MUL_ADD_KHR));
-  EXPECT_TRUE(ContainsOpcode(feature_set,
-                             LOOM_SPIRV_OPCODE_TYPE_COOPERATIVE_VECTOR_NV));
+                             LOOM_SPIRV_OP_COOPERATIVE_MATRIX_MUL_ADD_KHR));
+  EXPECT_TRUE(
+      ContainsOpcode(feature_set, LOOM_SPIRV_OP_TYPE_COOPERATIVE_VECTOR_NV));
   EXPECT_TRUE(ContainsOpcode(
-      feature_set, LOOM_SPIRV_OPCODE_COOPERATIVE_VECTOR_MATRIX_MUL_ADD_NV));
+      feature_set, LOOM_SPIRV_OP_COOPERATIVE_VECTOR_MATRIX_MUL_ADD_NV));
 }
 
 TEST(SpirvFeaturesTest, PreparesCooperativeVectorTrainingAtom) {
@@ -179,10 +181,9 @@ TEST(SpirvFeaturesTest, PreparesCooperativeVectorTrainingAtom) {
       feature_set, LOOM_SPIRV_CAPABILITY_COOPERATIVE_VECTOR_TRAINING_NV));
   EXPECT_TRUE(ContainsOpcode(
       feature_set,
-      LOOM_SPIRV_OPCODE_COOPERATIVE_VECTOR_OUTER_PRODUCT_ACCUMULATE_NV));
+      LOOM_SPIRV_OP_COOPERATIVE_VECTOR_OUTER_PRODUCT_ACCUMULATE_NV));
   EXPECT_TRUE(ContainsOpcode(
-      feature_set,
-      LOOM_SPIRV_OPCODE_COOPERATIVE_VECTOR_REDUCE_SUM_ACCUMULATE_NV));
+      feature_set, LOOM_SPIRV_OP_COOPERATIVE_VECTOR_REDUCE_SUM_ACCUMULATE_NV));
 }
 
 TEST(SpirvFeaturesTest, RejectsMissingAtomDependency) {

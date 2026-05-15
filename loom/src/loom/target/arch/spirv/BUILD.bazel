@@ -32,6 +32,7 @@ loom_assert_no_dependencies(
         ":cooperative_properties",
         ":descriptors",
         ":features",
+        ":isa",
         ":lower",
         ":low_registry",
         ":provider",
@@ -70,10 +71,18 @@ loom_low_descriptor_cc_library(
 )
 
 loom_cc_library(
+    name = "isa",
+    hdrs = ["isa.h"],
+)
+
+loom_cc_library(
     name = "features",
     srcs = ["features.c"],
     hdrs = ["features.h"],
-    deps = ["//runtime/src/iree/base"],
+    deps = [
+        ":isa",
+        "//runtime/src/iree/base",
+    ],
 )
 
 loom_cc_library(

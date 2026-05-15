@@ -16,7 +16,7 @@ loom_cc_library(
   HDRS
     "binary_format.h"
   DEPS
-
+    loom::src::loom::target::arch::spirv::isa
   PUBLIC
 )
 
@@ -48,6 +48,60 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    module_emitter
+  HDRS
+    "module_emitter.h"
+  SRCS
+    "module_emitter.c"
+  DEPS
+    ::binary_format
+    ::module_builder
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::function
+    loom::src::loom::codegen::low::target_binding
+    loom::src::loom::error::emitter
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::arch::spirv::descriptors_ids
+    loom::src::loom::target::arch::spirv::features
+    loom::src::loom::target::low_descriptor_registry
+    loom::src::loom::target::registers
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    loom_check
+  HDRS
+    "check/loom_check.h"
+  SRCS
+    "check/loom_check.c"
+  DEPS
+    ::module_emitter
+    iree::base
+    loom::src::loom::target::tool::spirv
+    loom::src::loom::tools::loom-check::execute
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    check_provider
+  HDRS
+    "check/provider.h"
+  SRCS
+    "check/provider.c"
+  DEPS
+    ::loom_check
+    iree::base
+    loom::src::loom::tools::loom-check::provider
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     module_builder_test
@@ -60,6 +114,17 @@ loom_cc_test(
     loom::src::loom::target::arch::spirv::target_records
     iree::testing::gtest
     iree::testing::gtest_main
+)
+
+iree_executable_test(
+  NAME
+    "emit"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/emit.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -113,6 +113,7 @@ _SPIRV_CHECK_COPTS = iree_select({
 _SPIRV_CHECK_DEPS = iree_select({
     ":spirv_provider_enabled": [
         "//loom/src/loom/target/arch/spirv:check_provider",
+        "//loom/src/loom/target/emit/spirv:check_provider",
     ],
     "//conditions:default": [],
 })

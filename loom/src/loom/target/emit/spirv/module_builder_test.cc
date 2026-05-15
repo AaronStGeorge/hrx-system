@@ -153,7 +153,7 @@ iree_status_t EmitStorageBufferI32Add(loom_spirv_module_builder_t* builder,
 
   IREE_RETURN_IF_ERROR(WriteStringInstruction(
       builder, LOOM_SPIRV_MODULE_SECTION_ENTRY_POINT, LOOM_SPIRV_OP_ENTRY_POINT,
-      {LOOM_SPIRV_EXECUTION_MODEL_GLCOMPUTE, kMainFunction}, entry_point_name,
+      {LOOM_SPIRV_EXECUTION_MODEL_GL_COMPUTE, kMainFunction}, entry_point_name,
       {kGlobalInvocationId, kInput0, kInput1, kOutput}));
   IREE_RETURN_IF_ERROR(WriteInstruction(
       builder, LOOM_SPIRV_MODULE_SECTION_EXECUTION_MODE,
@@ -163,7 +163,7 @@ iree_status_t EmitStorageBufferI32Add(loom_spirv_module_builder_t* builder,
   IREE_RETURN_IF_ERROR(WriteInstruction(
       builder, LOOM_SPIRV_MODULE_SECTION_ANNOTATION, LOOM_SPIRV_OP_DECORATE,
       {kGlobalInvocationId, LOOM_SPIRV_DECORATION_BUILT_IN,
-       LOOM_SPIRV_BUILTIN_GLOBAL_INVOCATION_ID}));
+       LOOM_SPIRV_BUILT_IN_GLOBAL_INVOCATION_ID}));
   IREE_RETURN_IF_ERROR(WriteInstruction(
       builder, LOOM_SPIRV_MODULE_SECTION_ANNOTATION, LOOM_SPIRV_OP_DECORATE,
       {kRuntimeArrayI32Type, LOOM_SPIRV_DECORATION_ARRAY_STRIDE, 4}));
@@ -285,7 +285,7 @@ iree_status_t EmitStorageBufferI32Add(loom_spirv_module_builder_t* builder,
       builder, LOOM_SPIRV_MODULE_SECTION_FUNCTION, LOOM_SPIRV_OP_LOAD,
       {kI32Type, kInput1Value, kInput1Pointer}));
   IREE_RETURN_IF_ERROR(WriteInstruction(
-      builder, LOOM_SPIRV_MODULE_SECTION_FUNCTION, LOOM_SPIRV_OP_IADD,
+      builder, LOOM_SPIRV_MODULE_SECTION_FUNCTION, LOOM_SPIRV_OP_I_ADD,
       {kI32Type, kSumValue, kInput0Value, kInput1Value}));
   IREE_RETURN_IF_ERROR(
       WriteInstruction(builder, LOOM_SPIRV_MODULE_SECTION_FUNCTION,
@@ -309,7 +309,7 @@ TEST(SpirvModuleBuilderTest, BuildsStorageBufferI32AddModule) {
 
   ASSERT_GE(module.word_count, 5u);
   EXPECT_EQ(module.words[0], LOOM_SPIRV_MAGIC_NUMBER);
-  EXPECT_EQ(module.words[1], UINT32_C(0x00010000));
+  EXPECT_EQ(module.words[1], UINT32_C(0x00010300));
   EXPECT_EQ(module.words[2], LOOM_SPIRV_GENERATOR_LOOM);
   EXPECT_EQ(module.words[3], kIdBound);
   EXPECT_EQ(module.words[4], LOOM_SPIRV_SCHEMA_RESERVED);
@@ -353,7 +353,7 @@ TEST(SpirvModuleBuilderTest, BuildsStorageBufferI32AddModule) {
 
   const Instruction* entry_point =
       FindInstruction(instructions, LOOM_SPIRV_OP_ENTRY_POINT,
-                      {LOOM_SPIRV_EXECUTION_MODEL_GLCOMPUTE, kMainFunction});
+                      {LOOM_SPIRV_EXECUTION_MODEL_GL_COMPUTE, kMainFunction});
   ASSERT_NE(entry_point, nullptr);
   EXPECT_EQ(DecodeStringOperand(entry_point->operands, 2, &next_operand_index),
             "vector_add_i32");
@@ -369,7 +369,7 @@ TEST(SpirvModuleBuilderTest, BuildsStorageBufferI32AddModule) {
   EXPECT_TRUE(
       HasInstruction(instructions, LOOM_SPIRV_OP_DECORATE,
                      {kGlobalInvocationId, LOOM_SPIRV_DECORATION_BUILT_IN,
-                      LOOM_SPIRV_BUILTIN_GLOBAL_INVOCATION_ID}));
+                      LOOM_SPIRV_BUILT_IN_GLOBAL_INVOCATION_ID}));
   EXPECT_TRUE(HasInstruction(instructions, LOOM_SPIRV_OP_DECORATE,
                              {kInput0, LOOM_SPIRV_DECORATION_BINDING, 0}));
   EXPECT_TRUE(HasInstruction(instructions, LOOM_SPIRV_OP_DECORATE,
@@ -389,7 +389,7 @@ TEST(SpirvModuleBuilderTest, BuildsStorageBufferI32AddModule) {
                              {kPtrStorageBufferI32Type, kInput1Pointer, kInput1,
                               kU32Zero, kGlobalInvocationX}));
   EXPECT_TRUE(
-      HasInstruction(instructions, LOOM_SPIRV_OP_IADD,
+      HasInstruction(instructions, LOOM_SPIRV_OP_I_ADD,
                      {kI32Type, kSumValue, kInput0Value, kInput1Value}));
   EXPECT_TRUE(HasInstruction(instructions, LOOM_SPIRV_OP_STORE,
                              {kOutputPointer, kSumValue}));

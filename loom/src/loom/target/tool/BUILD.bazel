@@ -33,6 +33,7 @@ loom_assert_no_dependencies(
     targets = [
         ":llvm",
         ":process",
+        ":spirv",
     ],
 )
 
@@ -58,5 +59,17 @@ loom_cc_library(
         "//runtime/src/iree/base/internal:path",
         "//runtime/src/iree/io:file_handle",
         "//runtime/src/iree/io:stream",
+    ],
+)
+
+loom_cc_library(
+    name = "spirv",
+    srcs = ["spirv.c"],
+    hdrs = ["spirv.h"],
+    deps = [
+        ":process",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:path",
+        "//runtime/src/iree/io:file_handle",
     ],
 )

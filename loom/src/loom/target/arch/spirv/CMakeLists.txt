@@ -23,12 +23,23 @@ loom_low_descriptor_cc_library(
 
 loom_cc_library(
   NAME
+    isa
+  HDRS
+    "isa.h"
+  DEPS
+
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     features
   HDRS
     "features.h"
   SRCS
     "features.c"
   DEPS
+    ::isa
     iree::base
   PUBLIC
 )

@@ -1,0 +1,123 @@
+// RUN: emit spirv-dis @empty_entry validate
+// REQUIRES: spirv-dis, spirv-val
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) abi(shader_entry_point) @empty_entry() asm<spirv.logical.core> {
+  return
+}
+
+// ----
+               OpCapability Shader
+               OpCapability VulkanMemoryModel
+               OpCapability PhysicalStorageBufferAddresses
+               OpCapability Int64
+               OpExtension "SPV_KHR_vulkan_memory_model"
+               OpExtension "SPV_KHR_physical_storage_buffer"
+               OpMemoryModel PhysicalStorageBuffer64 Vulkan
+               OpEntryPoint GLCompute %empty_entry "empty_entry"
+               OpExecutionMode %empty_entry LocalSize 1 1 1
+               OpName %empty_entry "empty_entry"
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+%empty_entry = OpFunction %void None %3
+          %4 = OpLabel
+               OpReturn
+               OpFunctionEnd
+
+// ====
+
+// RUN: emit spirv-dis @spirv_i32_arithmetic
+// REQUIRES: spirv-dis
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) abi(shader_entry_point) @spirv_i32_arithmetic(%lhs: reg<spirv.id>, %rhs: reg<spirv.id>) -> (reg<spirv.id>) asm<spirv.logical.core> {
+  %bias = OpConstant.i32 7
+  %sum = OpIAdd %lhs, %rhs
+  %result = OpIAdd %sum, %bias
+  return %result
+}
+
+// ----
+               OpCapability Shader
+               OpCapability VulkanMemoryModel
+               OpCapability PhysicalStorageBufferAddresses
+               OpCapability Int64
+               OpExtension "SPV_KHR_vulkan_memory_model"
+               OpExtension "SPV_KHR_physical_storage_buffer"
+               OpMemoryModel PhysicalStorageBuffer64 Vulkan
+               OpEntryPoint GLCompute %spirv_i32_arithmetic "spirv_i32_arithmetic"
+               OpExecutionMode %spirv_i32_arithmetic LocalSize 1 1 1
+               OpName %spirv_i32_arithmetic "spirv_i32_arithmetic"
+               OpName %lhs "lhs"
+               OpName %rhs "rhs"
+               OpName %bias "bias"
+               OpName %sum "sum"
+               OpName %result "result"
+        %int = OpTypeInt 32 1
+          %3 = OpTypeFunction %int %int %int
+       %bias = OpConstant %int 7
+%spirv_i32_arithmetic = OpFunction %int None %3
+        %lhs = OpFunctionParameter %int
+        %rhs = OpFunctionParameter %int
+          %6 = OpLabel
+        %sum = OpIAdd %int %lhs %rhs
+     %result = OpIAdd %int %sum %bias
+               OpReturnValue %result
+               OpFunctionEnd
+
+// ====
+
+// RUN: emit spirv-dis @spirv_storage_buffer_i32_roundtrip
+// REQUIRES: spirv-dis
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) abi(shader_entry_point) @spirv_storage_buffer_i32_roundtrip(%input: reg<spirv.ptr.storage_buffer>, %output: reg<spirv.ptr.storage_buffer>, %byte_offset: reg<spirv.offset64>) -> (reg<spirv.id>) asm<spirv.logical.core> {
+  %input_view = OpPtrAccessChain.storage_buffer.byte_offset %input, %byte_offset
+  %loaded = OpLoad.storage_buffer.i32 %input_view
+  %incremented = OpIAdd %loaded, %loaded
+  %output_view = OpPtrAccessChain.storage_buffer.byte_offset %output, %byte_offset
+  OpStore.storage_buffer.i32 %output_view, %incremented
+  return %loaded
+}
+
+// ----
+               OpCapability Shader
+               OpCapability VulkanMemoryModel
+               OpCapability PhysicalStorageBufferAddresses
+               OpCapability Int64
+               OpExtension "SPV_KHR_vulkan_memory_model"
+               OpExtension "SPV_KHR_physical_storage_buffer"
+               OpMemoryModel PhysicalStorageBuffer64 Vulkan
+               OpEntryPoint GLCompute %spirv_storage_buffer_i32_roundtrip "spirv_storage_buffer_i32_roundtrip"
+               OpExecutionMode %spirv_storage_buffer_i32_roundtrip LocalSize 1 1 1
+               OpName %spirv_storage_buffer_i32_roundtrip "spirv_storage_buffer_i32_roundtrip"
+               OpName %input "input"
+               OpName %output "output"
+               OpName %byte_offset "byte_offset"
+               OpName %input_view "input_view"
+               OpName %loaded "loaded"
+               OpName %incremented "incremented"
+               OpName %output_view "output_view"
+               OpDecorate %_runtimearr_int ArrayStride 4
+        %int = OpTypeInt 32 1
+%_runtimearr_int = OpTypeRuntimeArray %int
+%_ptr_PhysicalStorageBuffer__runtimearr_int = OpTypePointer PhysicalStorageBuffer %_runtimearr_int
+      %ulong = OpTypeInt 64 0
+          %3 = OpTypeFunction %int %_ptr_PhysicalStorageBuffer__runtimearr_int %_ptr_PhysicalStorageBuffer__runtimearr_int %ulong
+%_ptr_PhysicalStorageBuffer_int = OpTypePointer PhysicalStorageBuffer %int
+      %int_0 = OpConstant %int 0
+%spirv_storage_buffer_i32_roundtrip = OpFunction %int None %3
+      %input = OpFunctionParameter %_ptr_PhysicalStorageBuffer__runtimearr_int
+     %output = OpFunctionParameter %_ptr_PhysicalStorageBuffer__runtimearr_int
+%byte_offset = OpFunctionParameter %ulong
+         %10 = OpLabel
+ %input_view = OpPtrAccessChain %_ptr_PhysicalStorageBuffer_int %input %byte_offset %int_0
+     %loaded = OpLoad %int %input_view Aligned 4
+%incremented = OpIAdd %int %loaded %loaded
+%output_view = OpPtrAccessChain %_ptr_PhysicalStorageBuffer_int %output %byte_offset %int_0
+               OpStore %output_view %incremented Aligned 4
+               OpReturnValue %loaded
+               OpFunctionEnd

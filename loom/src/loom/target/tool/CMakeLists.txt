@@ -37,4 +37,19 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    spirv
+  HDRS
+    "spirv.h"
+  SRCS
+    "spirv.c"
+  DEPS
+    ::process
+    iree::base
+    iree::base::internal::path
+    iree::io::file_handle
+  PUBLIC
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

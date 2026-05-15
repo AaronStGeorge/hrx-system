@@ -10,6 +10,7 @@
 #include <string.h>
 
 #define LOOM_SPIRV_VERSION_1_0 UINT32_C(0x00010000)
+#define LOOM_SPIRV_VERSION_1_3 UINT32_C(0x00010300)
 
 static const iree_string_view_t kSpirvVulkanShaderExtensions[] = {
     IREE_SVL("SPV_KHR_vulkan_memory_model"),
@@ -26,6 +27,7 @@ static const iree_string_view_t kSpirvPhysicalStorageBufferExtensions[] = {
 
 static const uint32_t kSpirvPhysicalStorageBufferCapabilities[] = {
     LOOM_SPIRV_CAPABILITY_PHYSICAL_STORAGE_BUFFER_ADDRESSES,
+    LOOM_SPIRV_CAPABILITY_INT64,
 };
 
 static const uint32_t kSpirvPhysicalStorageBufferStorageClasses[] = {
@@ -46,11 +48,11 @@ static const uint32_t kSpirvCooperativeVectorNvCapabilities[] = {
 };
 
 static const uint32_t kSpirvCooperativeVectorNvOpcodes[] = {
-    LOOM_SPIRV_OPCODE_TYPE_COOPERATIVE_VECTOR_NV,
-    LOOM_SPIRV_OPCODE_COOPERATIVE_VECTOR_MATRIX_MUL_NV,
-    LOOM_SPIRV_OPCODE_COOPERATIVE_VECTOR_MATRIX_MUL_ADD_NV,
-    LOOM_SPIRV_OPCODE_COOPERATIVE_VECTOR_LOAD_NV,
-    LOOM_SPIRV_OPCODE_COOPERATIVE_VECTOR_STORE_NV,
+    LOOM_SPIRV_OP_TYPE_COOPERATIVE_VECTOR_NV,
+    LOOM_SPIRV_OP_COOPERATIVE_VECTOR_MATRIX_MUL_NV,
+    LOOM_SPIRV_OP_COOPERATIVE_VECTOR_MATRIX_MUL_ADD_NV,
+    LOOM_SPIRV_OP_COOPERATIVE_VECTOR_LOAD_NV,
+    LOOM_SPIRV_OP_COOPERATIVE_VECTOR_STORE_NV,
 };
 
 static const uint32_t kSpirvCooperativeVectorTrainingNvCapabilities[] = {
@@ -58,8 +60,8 @@ static const uint32_t kSpirvCooperativeVectorTrainingNvCapabilities[] = {
 };
 
 static const uint32_t kSpirvCooperativeVectorTrainingNvOpcodes[] = {
-    LOOM_SPIRV_OPCODE_COOPERATIVE_VECTOR_OUTER_PRODUCT_ACCUMULATE_NV,
-    LOOM_SPIRV_OPCODE_COOPERATIVE_VECTOR_REDUCE_SUM_ACCUMULATE_NV,
+    LOOM_SPIRV_OP_COOPERATIVE_VECTOR_OUTER_PRODUCT_ACCUMULATE_NV,
+    LOOM_SPIRV_OP_COOPERATIVE_VECTOR_REDUCE_SUM_ACCUMULATE_NV,
 };
 
 static const iree_string_view_t kSpirvCooperativeMatrixKhrExtensions[] = {
@@ -71,11 +73,11 @@ static const uint32_t kSpirvCooperativeMatrixKhrCapabilities[] = {
 };
 
 static const uint32_t kSpirvCooperativeMatrixKhrOpcodes[] = {
-    LOOM_SPIRV_OPCODE_TYPE_COOPERATIVE_MATRIX_KHR,
-    LOOM_SPIRV_OPCODE_COOPERATIVE_MATRIX_LOAD_KHR,
-    LOOM_SPIRV_OPCODE_COOPERATIVE_MATRIX_STORE_KHR,
-    LOOM_SPIRV_OPCODE_COOPERATIVE_MATRIX_MUL_ADD_KHR,
-    LOOM_SPIRV_OPCODE_COOPERATIVE_MATRIX_LENGTH_KHR,
+    LOOM_SPIRV_OP_TYPE_COOPERATIVE_MATRIX_KHR,
+    LOOM_SPIRV_OP_COOPERATIVE_MATRIX_LOAD_KHR,
+    LOOM_SPIRV_OP_COOPERATIVE_MATRIX_STORE_KHR,
+    LOOM_SPIRV_OP_COOPERATIVE_MATRIX_MUL_ADD_KHR,
+    LOOM_SPIRV_OP_COOPERATIVE_MATRIX_LENGTH_KHR,
 };
 
 static const loom_spirv_feature_atom_descriptor_t kSpirvFeatureAtoms[] = {
@@ -85,7 +87,7 @@ static const loom_spirv_feature_atom_descriptor_t kSpirvFeatureAtoms[] = {
             .atom = LOOM_SPIRV_FEATURE_ATOM_VULKAN_SHADER,
             .name = IREE_SVL("spirv.vulkan.shader"),
             .required_atom_bits = 0,
-            .minimum_spirv_version = LOOM_SPIRV_VERSION_1_0,
+            .minimum_spirv_version = LOOM_SPIRV_VERSION_1_3,
             .addressing_model = LOOM_SPIRV_ADDRESSING_MODEL_UNSPECIFIED,
             .memory_model = LOOM_SPIRV_MEMORY_MODEL_VULKAN,
             .extension_names = kSpirvVulkanShaderExtensions,

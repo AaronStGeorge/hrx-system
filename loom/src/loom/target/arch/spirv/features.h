@@ -15,98 +15,18 @@
 #define LOOM_TARGET_ARCH_SPIRV_FEATURES_H_
 
 #include "iree/base/api.h"
+#include "loom/target/arch/spirv/isa.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef enum loom_spirv_addressing_model_e {
+enum {
   // Feature atom does not impose an addressing model.
   LOOM_SPIRV_ADDRESSING_MODEL_UNSPECIFIED = UINT32_MAX,
-  // Logical addressing model.
-  LOOM_SPIRV_ADDRESSING_MODEL_LOGICAL = 0,
-  // PhysicalStorageBuffer64 addressing model.
-  LOOM_SPIRV_ADDRESSING_MODEL_PHYSICAL_STORAGE_BUFFER64 = 5348,
-} loom_spirv_addressing_model_t;
-
-typedef enum loom_spirv_memory_model_e {
   // Feature atom does not impose a memory model.
   LOOM_SPIRV_MEMORY_MODEL_UNSPECIFIED = UINT32_MAX,
-  // GLSL450 memory model.
-  LOOM_SPIRV_MEMORY_MODEL_GLSL450 = 1,
-  // Vulkan memory model.
-  LOOM_SPIRV_MEMORY_MODEL_VULKAN = 3,
-} loom_spirv_memory_model_t;
-
-typedef enum loom_spirv_storage_class_e {
-  // UniformConstant storage class.
-  LOOM_SPIRV_STORAGE_CLASS_UNIFORM_CONSTANT = 0,
-  // Input storage class.
-  LOOM_SPIRV_STORAGE_CLASS_INPUT = 1,
-  // Uniform storage class.
-  LOOM_SPIRV_STORAGE_CLASS_UNIFORM = 2,
-  // Workgroup storage class.
-  LOOM_SPIRV_STORAGE_CLASS_WORKGROUP = 4,
-  // CrossWorkgroup storage class.
-  LOOM_SPIRV_STORAGE_CLASS_CROSS_WORKGROUP = 5,
-  // Function storage class.
-  LOOM_SPIRV_STORAGE_CLASS_FUNCTION = 7,
-  // Generic storage class.
-  LOOM_SPIRV_STORAGE_CLASS_GENERIC = 8,
-  // StorageBuffer storage class.
-  LOOM_SPIRV_STORAGE_CLASS_STORAGE_BUFFER = 12,
-  // PhysicalStorageBuffer storage class.
-  LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER = 5349,
-} loom_spirv_storage_class_t;
-
-typedef enum loom_spirv_decoration_e {
-  // RestrictPointer decoration.
-  LOOM_SPIRV_DECORATION_RESTRICT_POINTER = 5355,
-  // AliasedPointer decoration.
-  LOOM_SPIRV_DECORATION_ALIASED_POINTER = 5356,
-} loom_spirv_decoration_t;
-
-typedef enum loom_spirv_capability_e {
-  // Shader capability.
-  LOOM_SPIRV_CAPABILITY_SHADER = 1,
-  // VulkanMemoryModel capability.
-  LOOM_SPIRV_CAPABILITY_VULKAN_MEMORY_MODEL = 5345,
-  // PhysicalStorageBufferAddresses capability.
-  LOOM_SPIRV_CAPABILITY_PHYSICAL_STORAGE_BUFFER_ADDRESSES = 5347,
-  // CooperativeVectorNV capability.
-  LOOM_SPIRV_CAPABILITY_COOPERATIVE_VECTOR_NV = 5394,
-  // CooperativeVectorTrainingNV capability.
-  LOOM_SPIRV_CAPABILITY_COOPERATIVE_VECTOR_TRAINING_NV = 5435,
-  // CooperativeMatrixKHR capability.
-  LOOM_SPIRV_CAPABILITY_COOPERATIVE_MATRIX_KHR = 6022,
-} loom_spirv_capability_t;
-
-typedef enum loom_spirv_opcode_e {
-  // OpTypeCooperativeMatrixKHR opcode.
-  LOOM_SPIRV_OPCODE_TYPE_COOPERATIVE_MATRIX_KHR = 4456,
-  // OpCooperativeMatrixLoadKHR opcode.
-  LOOM_SPIRV_OPCODE_COOPERATIVE_MATRIX_LOAD_KHR = 4457,
-  // OpCooperativeMatrixStoreKHR opcode.
-  LOOM_SPIRV_OPCODE_COOPERATIVE_MATRIX_STORE_KHR = 4458,
-  // OpCooperativeMatrixMulAddKHR opcode.
-  LOOM_SPIRV_OPCODE_COOPERATIVE_MATRIX_MUL_ADD_KHR = 4459,
-  // OpCooperativeMatrixLengthKHR opcode.
-  LOOM_SPIRV_OPCODE_COOPERATIVE_MATRIX_LENGTH_KHR = 4460,
-  // OpTypeCooperativeVectorNV opcode.
-  LOOM_SPIRV_OPCODE_TYPE_COOPERATIVE_VECTOR_NV = 5288,
-  // OpCooperativeVectorMatrixMulNV opcode.
-  LOOM_SPIRV_OPCODE_COOPERATIVE_VECTOR_MATRIX_MUL_NV = 5289,
-  // OpCooperativeVectorOuterProductAccumulateNV opcode.
-  LOOM_SPIRV_OPCODE_COOPERATIVE_VECTOR_OUTER_PRODUCT_ACCUMULATE_NV = 5290,
-  // OpCooperativeVectorReduceSumAccumulateNV opcode.
-  LOOM_SPIRV_OPCODE_COOPERATIVE_VECTOR_REDUCE_SUM_ACCUMULATE_NV = 5291,
-  // OpCooperativeVectorMatrixMulAddNV opcode.
-  LOOM_SPIRV_OPCODE_COOPERATIVE_VECTOR_MATRIX_MUL_ADD_NV = 5292,
-  // OpCooperativeVectorLoadNV opcode.
-  LOOM_SPIRV_OPCODE_COOPERATIVE_VECTOR_LOAD_NV = 5302,
-  // OpCooperativeVectorStoreNV opcode.
-  LOOM_SPIRV_OPCODE_COOPERATIVE_VECTOR_STORE_NV = 5303,
-} loom_spirv_opcode_t;
+};
 
 typedef enum loom_spirv_feature_atom_e {
   // Unknown or uninitialized feature atom.
