@@ -6,10 +6,14 @@
 
 #include "loom/tooling/config/config.h"
 
+#include <cstdio>
+#include <cstdlib>
 #include <string>
+#include <utility>
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "iree/io/file_contents.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 #include "loom/format/text/parser.h"
@@ -19,10 +23,66 @@
 #include "loom/testing/context.h"
 #include "loom/testing/module_ptr.h"
 
+#if defined(IREE_PLATFORM_WINDOWS)
+#if !defined(WIN32_LEAN_AND_MEAN)
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
 namespace loom {
 namespace {
 
 using ModulePtr = ::loom::testing::ModulePtr;
+
+const char* TempDirectory() {
+  const char* temp_directory = getenv("TEST_TMPDIR");
+  if (temp_directory != NULL && temp_directory[0] != '\0') {
+    return temp_directory;
+  }
+  temp_directory = getenv("TMPDIR");
+  if (temp_directory != NULL && temp_directory[0] != '\0') {
+    return temp_directory;
+  }
+#if defined(IREE_PLATFORM_WINDOWS)
+  temp_directory = getenv("TEMP");
+  if (temp_directory != NULL && temp_directory[0] != '\0') {
+    return temp_directory;
+  }
+  return "C:/Temp";
+#else
+  return "/tmp";
+#endif
+}
+
+uint32_t ProcessId() {
+#if defined(IREE_PLATFORM_WINDOWS)
+  return (uint32_t)GetCurrentProcessId();
+#else
+  return (uint32_t)getpid();
+#endif
+}
+
+std::string TempPath(const char* suffix) {
+  static uint32_t counter = 0;
+  return std::string(TempDirectory()) + "/loom_config_test_" +
+         std::to_string(ProcessId()) + "_" + std::to_string(counter++) + suffix;
+}
+
+class TempFile {
+ public:
+  explicit TempFile(std::string path) : path_(std::move(path)) {}
+  TempFile(const TempFile&) = delete;
+  TempFile& operator=(const TempFile&) = delete;
+  ~TempFile() { std::remove(path_.c_str()); }
+
+  const std::string& path() const { return path_; }
+
+ private:
+  std::string path_;
+};
 
 class ConfigMaterializeTest : public ::testing::Test {
  protected:
@@ -155,6 +215,39 @@ TEST_F(ConfigMaterializeTest, ConfigSetAppendsJsonObjectBindings) {
                                      iree_make_cstring_view("looks_object")));
   EXPECT_TRUE(iree_string_view_equal(config_set.bindings[3].value,
                                      iree_make_cstring_view("{not_object}")));
+
+  loom_tooling_config_set_deinitialize(&config_set);
+}
+
+TEST_F(ConfigMaterializeTest, ConfigSetAppendsJsonFileBindings) {
+  TempFile config_file(TempPath(".json"));
+  std::string json = R"({
+    "model36": {
+      "model": {"hidden_size": 4096}
+    }
+  })";
+  IREE_ASSERT_OK(iree_io_file_contents_write(
+      iree_make_cstring_view(config_file.path().c_str()),
+      iree_make_const_byte_span(json.data(), json.size()),
+      iree_allocator_system()));
+
+  loom_tooling_config_set_t config_set;
+  loom_tooling_config_set_initialize(iree_allocator_system(), &config_set);
+
+  IREE_ASSERT_OK(loom_tooling_config_set_append_json_file(
+      &config_set, iree_make_cstring_view(config_file.path().c_str()),
+      iree_allocator_system()));
+  ASSERT_EQ(config_set.binding_count, 1u);
+  EXPECT_TRUE(iree_string_view_equal(
+      config_set.bindings[0].key,
+      iree_make_cstring_view("model36.model.hidden_size")));
+  EXPECT_TRUE(iree_string_view_equal(config_set.bindings[0].value,
+                                     iree_make_cstring_view("4096")));
+
+  iree_status_t status = loom_tooling_config_set_append_json_file(
+      &config_set, IREE_SV("-"), iree_allocator_system());
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_INVALID_ARGUMENT);
+  iree_status_free(status);
 
   loom_tooling_config_set_deinitialize(&config_set);
 }

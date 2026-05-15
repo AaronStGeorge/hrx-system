@@ -24,6 +24,7 @@ loom_cc_binary(
     loom::src::loom::error::diagnostic
     loom::src::loom::ops::op_registry
     loom::src::loom::tooling::compile::pipeline
+    loom::src::loom::tooling::config
     loom::src::loom::tooling::execution::compile_options
     loom::src::loom::tooling::execution::compile_report_capture
     loom::src::loom::tooling::execution::execution_provider

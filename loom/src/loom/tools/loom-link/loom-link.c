@@ -184,28 +184,12 @@ static iree_status_t loom_link_append_config_flags(
   return iree_ok_status();
 }
 
-static iree_status_t loom_link_append_config_file(
-    loom_tooling_config_set_t* config_set, iree_string_view_t path,
-    iree_allocator_t allocator) {
-  if (loom_tooling_file_path_is_stdio(path)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "--config-file requires a filesystem path and cannot read stdin");
-  }
-  iree_io_file_contents_t* contents = NULL;
-  IREE_RETURN_IF_ERROR(iree_io_file_contents_read(path, allocator, &contents));
-  iree_status_t status = loom_tooling_config_set_append_json_object(
-      config_set, loom_tooling_file_contents_string_view(contents));
-  iree_io_file_contents_free(contents);
-  return status;
-}
-
 static iree_status_t loom_link_append_config_files(
     loom_tooling_config_set_t* config_set, iree_allocator_t allocator) {
   iree_flag_string_list_t paths = FLAG_config_file_list();
   for (iree_host_size_t i = 0; i < paths.count; ++i) {
-    IREE_RETURN_IF_ERROR(
-        loom_link_append_config_file(config_set, paths.values[i], allocator));
+    IREE_RETURN_IF_ERROR(loom_tooling_config_set_append_json_file(
+        config_set, paths.values[i], allocator));
   }
   return iree_ok_status();
 }

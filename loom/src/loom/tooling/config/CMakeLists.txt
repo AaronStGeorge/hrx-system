@@ -26,6 +26,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::ops::config
     loom::src::loom::ops::encoding
+    loom::src::loom::tooling::io::file
     loom::src::loom::util::json
     loom::src::loom::util::stream
   PUBLIC
@@ -40,6 +41,7 @@ loom_cc_test(
     ::config
     iree::base
     iree::base::internal::arena
+    iree::io::file_handle
     loom::src::loom::format::text::parser
     loom::src::loom::format::text::printer
     loom::src::loom::ir

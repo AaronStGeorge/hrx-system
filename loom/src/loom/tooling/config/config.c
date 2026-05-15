@@ -18,6 +18,7 @@
 #include "loom/ops/config/contract.h"
 #include "loom/ops/config/ops.h"
 #include "loom/ops/encoding/roles.h"
+#include "loom/tooling/io/file.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
 
@@ -334,6 +335,32 @@ iree_status_t loom_tooling_config_set_append_json_object(
   }
   return loom_tooling_config_set_append_json_object_impl(
       config_set, object, iree_string_view_empty(), /*depth=*/0);
+}
+
+iree_status_t loom_tooling_config_set_append_json_file(
+    loom_tooling_config_set_t* config_set, iree_string_view_t path,
+    iree_allocator_t host_allocator) {
+  IREE_ASSERT_ARGUMENT(config_set);
+  path = iree_string_view_trim(path);
+  if (loom_tooling_file_path_is_stdio(path)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "config JSON file requires a filesystem path, not stdin");
+  }
+
+  iree_io_file_contents_t* contents = NULL;
+  iree_status_t status =
+      loom_tooling_read_input_file(path, host_allocator, &contents);
+  if (iree_status_is_ok(status)) {
+    status = loom_tooling_config_set_append_json_object(
+        config_set, loom_tooling_file_contents_string_view(contents));
+  }
+  if (!iree_status_is_ok(status)) {
+    status = iree_status_annotate_f(status, "config JSON file '%.*s'",
+                                    (int)path.size, path.data);
+  }
+  iree_io_file_contents_free(contents);
+  return status;
 }
 
 static iree_string_view_t loom_tooling_config_symbol_name(

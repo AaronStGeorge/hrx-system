@@ -6,6 +6,20 @@
 
 // Config materialization helpers shared by Loom command-line tools and
 // programmatic compiler entry points.
+//
+// Config bindings are explicit invocation state. Tools append direct
+// assignments:
+//
+//   --config=model36.model.hidden_size=4096
+//
+// and JSON/JSONC config files:
+//
+//   {"model36":{"model":{"hidden_size":4096}}}
+//
+// Both forms produce the same flattened key/value binding. Materialization
+// then replaces matching config.decl/config.def symbols in the loaded module,
+// leaving unreferenced caller bindings in the config set so one invocation can
+// specialize whichever declarations are present after later linking.
 
 #ifndef LOOM_TOOLING_CONFIG_CONFIG_H_
 #define LOOM_TOOLING_CONFIG_CONFIG_H_
@@ -123,6 +137,15 @@ iree_status_t loom_tooling_config_set_append_assignment(
 // Loom values such as encodings without inventing a second value grammar.
 iree_status_t loom_tooling_config_set_append_json_object(
     loom_tooling_config_set_t* config_set, iree_string_view_t json_object);
+
+// Reads a JSON/JSONC config object file and appends flattened bindings.
+//
+// Empty paths and "-" are rejected. Command-line tools reserve those spellings
+// for stdin/stdout, but config file loading is intentionally a filesystem-path
+// operation so accidental stdin consumption cannot race the module input.
+iree_status_t loom_tooling_config_set_append_json_file(
+    loom_tooling_config_set_t* config_set, iree_string_view_t path,
+    iree_allocator_t host_allocator);
 
 // Replaces matching config.decl/config.def symbol ops with config.def ops whose
 // initializer attributes are parsed from |options->config_set|. Bindings

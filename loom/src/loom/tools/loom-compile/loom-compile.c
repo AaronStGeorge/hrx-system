@@ -14,6 +14,7 @@
 #include "loom/error/diagnostic.h"
 #include "loom/ops/op_registry.h"
 #include "loom/tooling/compile/pipeline.h"
+#include "loom/tooling/config/config.h"
 #include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/execution/execution_provider.h"
 #include "loom/tooling/execution/hal_backend.h"
@@ -54,6 +55,13 @@ IREE_FLAG(string, pipeline, "default",
           "disable pass execution, '@symbol' to run a module-local "
           "pass.pipeline, or a comma-separated pass list such as "
           "'canonicalize,cse'.");
+IREE_FLAG_LIST(
+    string, config,
+    "Compile-time config binding. Repeat as --config=key=value. Bindings not "
+    "referenced by the loaded module are ignored.");
+IREE_FLAG_LIST(string, config_file,
+               "JSON/JSONC config object file. Repeat for multiple files. "
+               "Nested object keys are flattened with '.' separators.");
 IREE_FLAG(string, output, "-",
           "Output path for the primary runtime artifact. For VM this is the VM "
           "bytecode archive; for HAL this is the HAL executable package.");
@@ -141,6 +149,36 @@ static iree_status_t loom_compile_parse_input_module(
   parse_options.filename = filename;
   parse_options.source = loom_tooling_file_contents_string_view(*out_contents);
   return loom_run_module_parse(session, &parse_options, out_run_module);
+}
+
+static iree_status_t loom_compile_append_config_flags(
+    loom_tooling_config_set_t* config_set) {
+  iree_flag_string_list_t assignments = FLAG_config_list();
+  for (iree_host_size_t i = 0; i < assignments.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_tooling_config_set_append_assignment(
+        config_set, assignments.values[i]));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_compile_append_config_files(
+    loom_tooling_config_set_t* config_set, iree_allocator_t allocator) {
+  iree_flag_string_list_t paths = FLAG_config_file_list();
+  for (iree_host_size_t i = 0; i < paths.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_tooling_config_set_append_json_file(
+        config_set, paths.values[i], allocator));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_compile_materialize_config_set(
+    loom_run_session_t* session, loom_run_module_t* run_module,
+    const loom_tooling_config_set_t* config_set) {
+  loom_tooling_config_materialize_options_t options;
+  loom_tooling_config_materialize_options_initialize(&options);
+  options.config_set = config_set;
+  return loom_tooling_config_materialize_module(
+      run_module->module, &options, loom_run_session_block_pool(session), NULL);
 }
 
 static iree_status_t loom_compile_report_options_initialize(
@@ -339,13 +377,21 @@ int main(int argc, char** argv) {
       "Usage:\n"
       "  loom-compile [file.loom] --loom_backend=vm --output=module.vmfb\n"
       "  loom-compile [file.loom] --loom_backend=amdgpu-hal "
-      "--output=kernel.vmfb --emit_target_artifact=kernel.hsaco\n");
+      "--output=kernel.vmfb --emit_target_artifact=kernel.hsaco\n"
+      "\n"
+      "Repeat --config=key=value to materialize compile-time config symbols "
+      "before the pass pipeline. Use --config-file=path for a JSON/JSONC "
+      "object such as {\"model36\":{\"model\":{\"hidden_size\":4096}}}. "
+      "Files and direct bindings share one config set and duplicate keys are "
+      "rejected.\n");
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t allocator = iree_allocator_system();
   loom_run_execution_environment_t environment = {0};
   iree_status_t status = loom_run_execution_environment_initialize(
       &kLoomCompileProviderSet, &environment);
+  loom_tooling_config_set_t config_set;
+  loom_tooling_config_set_initialize(allocator, &config_set);
 
   iree_io_file_contents_t* contents = NULL;
   loom_run_session_t session = {0};
@@ -358,8 +404,18 @@ int main(int argc, char** argv) {
     status = loom_compile_initialize_session(&environment, allocator, &session);
   }
   if (iree_status_is_ok(status)) {
+    status = loom_compile_append_config_files(&config_set, allocator);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_compile_append_config_flags(&config_set);
+  }
+  if (iree_status_is_ok(status)) {
     status = loom_compile_parse_input_module(argc, argv, &session, allocator,
                                              &contents, &run_module);
+  }
+  if (iree_status_is_ok(status)) {
+    status =
+        loom_compile_materialize_config_set(&session, &run_module, &config_set);
   }
 
   loom_run_compile_report_capture_options_t compile_report_options = {0};
@@ -388,6 +444,10 @@ int main(int argc, char** argv) {
     if (iree_status_is_ok(status) && pass_run_result.error_count != 0) {
       exit_code = 1;
     }
+  }
+  if (iree_status_is_ok(status) && exit_code == 0) {
+    status =
+        loom_tooling_config_require_resolved_module(run_module.module, NULL);
   }
 
   const iree_string_view_t backend_name =
@@ -427,6 +487,7 @@ int main(int argc, char** argv) {
   loom_run_compile_report_capture_deinitialize(&compile_report_capture);
   loom_run_module_deinitialize(&run_module);
   iree_io_file_contents_free(contents);
+  loom_tooling_config_set_deinitialize(&config_set);
   loom_run_session_deinitialize(&session);
   loom_run_execution_environment_deinitialize(&environment);
 
