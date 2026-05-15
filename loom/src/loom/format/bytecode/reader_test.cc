@@ -20,6 +20,7 @@
 #include "loom/format/bytecode/writer.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/func/ops.h"
 #include "loom/ops/global/ops.h"
 #include "loom/ops/test/ops.h"
 #include "loom/target/registers.h"
@@ -76,20 +77,31 @@ class ReaderTest : public ::testing::Test {
 
   using DialectVtablesFn = const loom_op_vtable_t* const* (*)(iree_host_size_t *
                                                               out_count);
+  using DialectSemanticsFn = const loom_op_semantics_t* (*)(iree_host_size_t *
+                                                            out_count);
 
   void InitializeBytecodeTestContext(loom_context_t* context) {
     loom_context_initialize(iree_allocator_system(), context);
-    RegisterDialect(context, LOOM_DIALECT_GLOBAL, loom_global_dialect_vtables);
-    RegisterDialect(context, LOOM_DIALECT_TEST, loom_test_dialect_vtables);
+    RegisterDialect(context, LOOM_DIALECT_FUNC, loom_func_dialect_vtables,
+                    loom_func_dialect_op_semantics);
+    RegisterDialect(context, LOOM_DIALECT_GLOBAL, loom_global_dialect_vtables,
+                    loom_global_dialect_op_semantics);
+    RegisterDialect(context, LOOM_DIALECT_TEST, loom_test_dialect_vtables,
+                    loom_test_dialect_op_semantics);
     IREE_ASSERT_OK(loom_context_finalize(context));
   }
 
   void RegisterDialect(loom_context_t* context, loom_dialect_id_t dialect_id,
-                       DialectVtablesFn fn) {
+                       DialectVtablesFn vtables_fn,
+                       DialectSemanticsFn semantics_fn) {
     iree_host_size_t vtable_count = 0;
-    const loom_op_vtable_t* const* vtables = fn(&vtable_count);
+    const loom_op_vtable_t* const* vtables = vtables_fn(&vtable_count);
     IREE_ASSERT_OK(loom_context_register_dialect(context, dialect_id, vtables,
                                                  (uint16_t)vtable_count));
+    iree_host_size_t semantics_count = 0;
+    const loom_op_semantics_t* semantics = semantics_fn(&semantics_count);
+    IREE_ASSERT_OK(loom_context_register_dialect_semantics(
+        context, dialect_id, semantics, (uint16_t)semantics_count));
   }
 
   loom_module_t* CreateModule(const char* name) {
@@ -147,6 +159,42 @@ class ReaderTest : public ::testing::Test {
   loom_module_t* CreateFunctionModule() {
     loom_module_t* module = CreateModule("reader_func");
     AddSimpleFunction(module, "f");
+    return module;
+  }
+
+  loom_module_t* CreateImportedFunctionModule() {
+    loom_module_t* module = CreateModule("reader_import");
+    loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+    IREE_CHECK_OK(loom_module_intern_type(module, i32_type, &i32_type));
+
+    loom_builder_t builder;
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &builder);
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(
+        loom_builder_intern_string(&builder, IREE_SV("decl"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+    loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+    loom_string_id_t import_module_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_intern_string(&builder, IREE_SV("kernel_lib"),
+                                             &import_module_id));
+    loom_string_id_t import_symbol_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_intern_string(&builder, IREE_SV("extern_f"),
+                                             &import_symbol_id));
+    loom_type_t arg_types[1] = {i32_type};
+    loom_type_t result_types[1] = {i32_type};
+    loom_op_t* decl_op = nullptr;
+    IREE_CHECK_OK(loom_func_decl_build(
+        &builder,
+        LOOM_FUNC_DECL_BUILD_FLAG_HAS_IMPORT_MODULE |
+            LOOM_FUNC_DECL_BUILD_FLAG_HAS_IMPORT_SYMBOL,
+        /*visibility=*/0, import_module_id, import_symbol_id, /*cc=*/0,
+        /*purity=*/0, loom_symbol_ref_null(), /*abi=*/0,
+        loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
+        loom_named_attr_slice_empty(), callee, arg_types,
+        IREE_ARRAYSIZE(arg_types), result_types, IREE_ARRAYSIZE(result_types),
+        nullptr, 0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &decl_op));
     return module;
   }
 
@@ -744,6 +792,25 @@ class ReaderTest : public ::testing::Test {
     return ReadMetadata(bytes, &context_, error_ids);
   }
 
+  loom_bytecode_read_result_t ReadIndex(
+      const std::vector<uint8_t>& bytes, iree_arena_allocator_t* metadata_arena,
+      loom_bytecode_file_metadata_t* out_metadata,
+      std::vector<std::string>* error_ids) {
+    loom_bytecode_read_result_t result = {0};
+    loom_bytecode_read_options_t options = {
+        .diagnostic_sink =
+            {
+                .fn = CaptureDiagnostic,
+                .user_data = error_ids,
+            },
+    };
+    IREE_CHECK_OK(loom_bytecode_read_index(
+        iree_make_const_byte_span(bytes.data(), bytes.size()),
+        IREE_SV("test.loombc"), &context_, &block_pool_, metadata_arena,
+        &options, &result, out_metadata));
+    return result;
+  }
+
   loom_bytecode_read_result_t ReadModule(const std::vector<uint8_t>& bytes,
                                          loom_context_t* context,
                                          loom_module_t** out_module,
@@ -770,6 +837,26 @@ class ReaderTest : public ::testing::Test {
                                          std::vector<std::string>* error_ids,
                                          bool verify_module = false) {
     return ReadModule(bytes, &context_, out_module, error_ids, verify_module);
+  }
+
+  loom_bytecode_read_result_t ReadModuleOrdinal(
+      const std::vector<uint8_t>& bytes, uint16_t module_ordinal,
+      loom_module_t** out_module, std::vector<std::string>* error_ids,
+      bool verify_module = false) {
+    loom_bytecode_read_result_t result = {0};
+    loom_bytecode_read_options_t options = {
+        .diagnostic_sink =
+            {
+                .fn = CaptureDiagnostic,
+                .user_data = error_ids,
+            },
+        .verify_module = verify_module,
+    };
+    IREE_CHECK_OK(loom_bytecode_read_module_ordinal(
+        iree_make_const_byte_span(bytes.data(), bytes.size()),
+        IREE_SV("test.loombc"), &context_, &block_pool_, module_ordinal,
+        &options, &result, out_module, iree_allocator_system()));
+    return result;
   }
 
   uint16_t ReadU16LE(const std::vector<uint8_t>& bytes, size_t offset) {
@@ -806,6 +893,38 @@ class ReaderTest : public ::testing::Test {
   void WriteU64LE(std::vector<uint8_t>* bytes, size_t offset, uint64_t value) {
     for (int i = 0; i < 8; ++i) {
       (*bytes)[offset + i] = (uint8_t)(value >> (i * 8));
+    }
+  }
+
+  void AppendU8(std::vector<uint8_t>* bytes, uint8_t value) {
+    bytes->push_back(value);
+  }
+
+  void AppendU16LE(std::vector<uint8_t>* bytes, uint16_t value) {
+    bytes->push_back((uint8_t)value);
+    bytes->push_back((uint8_t)(value >> 8));
+  }
+
+  void AppendU32LE(std::vector<uint8_t>* bytes, uint32_t value) {
+    for (int i = 0; i < 4; ++i) {
+      bytes->push_back((uint8_t)(value >> (i * 8)));
+    }
+  }
+
+  void AppendU64LE(std::vector<uint8_t>* bytes, uint64_t value) {
+    for (int i = 0; i < 8; ++i) {
+      bytes->push_back((uint8_t)(value >> (i * 8)));
+    }
+  }
+
+  void AppendString(std::vector<uint8_t>* bytes, iree_string_view_t string) {
+    const auto* data = reinterpret_cast<const uint8_t*>(string.data);
+    bytes->insert(bytes->end(), data, data + string.size);
+  }
+
+  void PadToAlignment(std::vector<uint8_t>* bytes, size_t alignment) {
+    while ((bytes->size() & (alignment - 1)) != 0) {
+      bytes->push_back(0);
     }
   }
 
@@ -974,6 +1093,66 @@ class ReaderTest : public ::testing::Test {
 
   uint64_t ModuleOffset(const std::vector<uint8_t>& bytes) {
     return ReadU64LE(bytes, ModuleDirectoryOffset(bytes) + 8);
+  }
+
+  uint64_t ModuleLength(const std::vector<uint8_t>& bytes) {
+    return ReadU64LE(bytes, ModuleDirectoryOffset(bytes) + 16);
+  }
+
+  std::vector<uint8_t> CombineModuleBytecode(const std::vector<uint8_t>& first,
+                                             iree_string_view_t first_name,
+                                             const std::vector<uint8_t>& second,
+                                             iree_string_view_t second_name) {
+    uint64_t first_module_offset = ModuleOffset(first);
+    uint64_t first_module_length = ModuleLength(first);
+    uint64_t second_module_offset = ModuleOffset(second);
+    uint64_t second_module_length = ModuleLength(second);
+    EXPECT_LE(first_module_offset + first_module_length, first.size());
+    EXPECT_LE(second_module_offset + second_module_length, second.size());
+
+    std::vector<uint8_t> bytes;
+    const auto* magic = reinterpret_cast<const uint8_t*>(LOOM_BYTECODE_MAGIC);
+    bytes.insert(bytes.end(), magic, magic + LOOM_BYTECODE_MAGIC_LENGTH);
+    AppendU8(&bytes, LOOM_BYTECODE_FORMAT_VERSION);
+    AppendU8(&bytes, first[5]);
+    AppendU16LE(&bytes, 2);
+    uint32_t string_pool_length =
+        (uint32_t)(first_name.size + second_name.size);
+    AppendU32LE(&bytes, string_pool_length);
+    AppendU32LE(&bytes, 0);
+    AppendString(&bytes, IREE_SV("reader-test"));
+    AppendU8(&bytes, 0);
+    PadToAlignment(&bytes, 8);
+
+    size_t module_directory_offset = bytes.size();
+    bytes.resize(bytes.size() + 2 * sizeof(loom_bytecode_module_dir_entry_t));
+
+    AppendString(&bytes, first_name);
+    AppendString(&bytes, second_name);
+    PadToAlignment(&bytes, 8);
+
+    uint64_t output_first_module_offset = bytes.size();
+    const uint8_t* first_module_data = first.data() + first_module_offset;
+    bytes.insert(bytes.end(), first_module_data,
+                 first_module_data + first_module_length);
+    uint64_t output_second_module_offset = bytes.size();
+    const uint8_t* second_module_data = second.data() + second_module_offset;
+    bytes.insert(bytes.end(), second_module_data,
+                 second_module_data + second_module_length);
+
+    WriteU32LE(&bytes, module_directory_offset, 0);
+    WriteU16LE(&bytes, module_directory_offset + 4, (uint16_t)first_name.size);
+    WriteU16LE(&bytes, module_directory_offset + 6, 0);
+    WriteU64LE(&bytes, module_directory_offset + 8, output_first_module_offset);
+    WriteU64LE(&bytes, module_directory_offset + 16, first_module_length);
+    WriteU32LE(&bytes, module_directory_offset + 24, (uint32_t)first_name.size);
+    WriteU16LE(&bytes, module_directory_offset + 28,
+               (uint16_t)second_name.size);
+    WriteU16LE(&bytes, module_directory_offset + 30, 0);
+    WriteU64LE(&bytes, module_directory_offset + 32,
+               output_second_module_offset);
+    WriteU64LE(&bytes, module_directory_offset + 40, second_module_length);
+    return bytes;
   }
 
   std::vector<SectionEntry> ReadSectionDirectory(
@@ -1351,6 +1530,170 @@ TEST_F(ReaderTest, AcceptsGlobalMetadata) {
   EXPECT_GT(result.first_module.op_name_count, 0u);
 
   loom_module_free(module);
+}
+
+TEST_F(ReaderTest, ReadsFunctionModuleIndex) {
+  loom_module_t* module = CreateFunctionModule();
+  auto bytes = WriteModule(module);
+
+  iree_arena_allocator_t metadata_arena;
+  iree_arena_initialize(&block_pool_, &metadata_arena);
+  loom_bytecode_file_metadata_t metadata = {0};
+  std::vector<std::string> error_ids;
+  loom_bytecode_read_result_t result =
+      ReadIndex(bytes, &metadata_arena, &metadata, &error_ids);
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(error_ids.empty());
+  EXPECT_EQ(metadata.format_version, LOOM_BYTECODE_FORMAT_VERSION);
+  EXPECT_EQ(metadata.location_mode,
+            LOOM_BYTECODE_LOCATION_MODE_SOURCE_LOCATIONS);
+  EXPECT_EQ(metadata.module_count, 1u);
+  ASSERT_NE(metadata.modules, nullptr);
+  const loom_bytecode_module_metadata_t& module_metadata = metadata.modules[0];
+  EXPECT_TRUE(
+      iree_string_view_equal(module_metadata.name, IREE_SV("reader_func")));
+  EXPECT_GT(module_metadata.section_count, 0u);
+  ASSERT_NE(module_metadata.sections, nullptr);
+  EXPECT_EQ(module_metadata.summary.symbol_count, 1u);
+  EXPECT_EQ(module_metadata.symbol_count, 1u);
+  EXPECT_EQ(module_metadata.import_count, 0u);
+  EXPECT_EQ(module_metadata.export_count, 1u);
+  ASSERT_NE(module_metadata.export_symbol_indices, nullptr);
+  EXPECT_EQ(module_metadata.export_symbol_indices[0], 0u);
+
+  ASSERT_NE(module_metadata.symbols, nullptr);
+  const loom_bytecode_symbol_metadata_t& symbol = module_metadata.symbols[0];
+  EXPECT_TRUE(iree_string_view_equal(symbol.name, IREE_SV("f")));
+  EXPECT_EQ(symbol.kind, LOOM_BYTECODE_SYMBOL_FUNC_DEF);
+  EXPECT_EQ(symbol.visibility, LOOM_BYTECODE_SYMBOL_VISIBILITY_PUBLIC);
+  EXPECT_TRUE(
+      iree_all_bits_set(symbol.flags, LOOM_BYTECODE_SYMBOL_FLAG_PUBLIC));
+  EXPECT_TRUE(
+      iree_string_view_equal(symbol.defining_op_name, IREE_SV("test.func")));
+  EXPECT_EQ(symbol.argument_count, 1u);
+  EXPECT_EQ(symbol.result_count, 1u);
+  EXPECT_TRUE(symbol.has_body);
+  EXPECT_GT(symbol.body_length, 0u);
+  EXPECT_GE(symbol.body_absolute_offset, module_metadata.offset);
+  EXPECT_GT(symbol.entry_length, 0u);
+
+  iree_arena_deinitialize(&metadata_arena);
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, ReadsImportOffsetTableInIndex) {
+  loom_module_t* module = CreateImportedFunctionModule();
+  auto bytes = WriteModule(module);
+
+  iree_arena_allocator_t metadata_arena;
+  iree_arena_initialize(&block_pool_, &metadata_arena);
+  loom_bytecode_file_metadata_t metadata = {0};
+  std::vector<std::string> error_ids;
+  loom_bytecode_read_result_t result =
+      ReadIndex(bytes, &metadata_arena, &metadata, &error_ids);
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(error_ids.empty());
+  ASSERT_EQ(metadata.module_count, 1u);
+  const loom_bytecode_module_metadata_t& module_metadata = metadata.modules[0];
+  EXPECT_EQ(module_metadata.symbol_count, 1u);
+  EXPECT_EQ(module_metadata.import_count, 1u);
+  EXPECT_EQ(module_metadata.export_count, 0u);
+  ASSERT_NE(module_metadata.import_symbol_indices, nullptr);
+  EXPECT_EQ(module_metadata.import_symbol_indices[0], 0u);
+
+  ASSERT_NE(module_metadata.symbols, nullptr);
+  const loom_bytecode_symbol_metadata_t& symbol = module_metadata.symbols[0];
+  EXPECT_TRUE(iree_string_view_equal(symbol.name, IREE_SV("decl")));
+  EXPECT_EQ(symbol.kind, LOOM_BYTECODE_SYMBOL_FUNC_DECL);
+  EXPECT_TRUE(
+      iree_all_bits_set(symbol.flags, LOOM_BYTECODE_SYMBOL_FLAG_IMPORT));
+  EXPECT_TRUE(
+      iree_all_bits_set(symbol.flags, LOOM_BYTECODE_SYMBOL_FLAG_IMPORT_SYMBOL));
+  EXPECT_TRUE(
+      iree_string_view_equal(symbol.import_module, IREE_SV("kernel_lib")));
+  EXPECT_TRUE(
+      iree_string_view_equal(symbol.import_symbol, IREE_SV("extern_f")));
+  EXPECT_TRUE(
+      iree_string_view_equal(symbol.defining_op_name, IREE_SV("func.decl")));
+  EXPECT_EQ(symbol.argument_count, 1u);
+  EXPECT_EQ(symbol.result_count, 1u);
+  EXPECT_FALSE(symbol.has_body);
+
+  iree_arena_deinitialize(&metadata_arena);
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, RejectsImportOffsetTableMismatchedEntry) {
+  loom_module_t* module = CreateImportedFunctionModule();
+  auto bytes = WriteModule(module);
+  size_t offset = SectionPayloadOffset(bytes, LOOM_BYTECODE_SECTION_SYMBOLS);
+  uint64_t symbol_count = ReadUVarint(bytes, &offset);
+  ASSERT_EQ(symbol_count, 1u);
+  uint64_t import_count = ReadUVarint(bytes, &offset);
+  uint64_t export_count = ReadUVarint(bytes, &offset);
+  ASSERT_EQ(import_count, 1u);
+  ASSERT_EQ(export_count, 0u);
+  WriteU64LE(&bytes, offset, 1);
+
+  ExpectReadError(bytes, "ERR_BYTECODE_006");
+
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, ReadsMultiModuleIndexAndMaterializesByOrdinal) {
+  loom_module_t* first_module = CreateModule("first_original");
+  loom_module_t* second_module = CreateFunctionModule();
+  auto first_bytes = WriteModule(first_module);
+  auto second_bytes = WriteModule(second_module);
+  auto bytes = CombineModuleBytecode(first_bytes, IREE_SV("module_a"),
+                                     second_bytes, IREE_SV("module_b"));
+
+  iree_arena_allocator_t metadata_arena;
+  iree_arena_initialize(&block_pool_, &metadata_arena);
+  loom_bytecode_file_metadata_t metadata = {0};
+  std::vector<std::string> error_ids;
+  loom_bytecode_read_result_t result =
+      ReadIndex(bytes, &metadata_arena, &metadata, &error_ids);
+
+  EXPECT_EQ(result.error_count, 0u);
+  EXPECT_TRUE(error_ids.empty());
+  ASSERT_EQ(metadata.module_count, 2u);
+  EXPECT_TRUE(
+      iree_string_view_equal(metadata.modules[0].name, IREE_SV("module_a")));
+  EXPECT_TRUE(
+      iree_string_view_equal(metadata.modules[1].name, IREE_SV("module_b")));
+  EXPECT_EQ(metadata.modules[0].symbol_count, 0u);
+  EXPECT_EQ(metadata.modules[1].symbol_count, 1u);
+
+  loom_module_t* read_module = nullptr;
+  std::vector<std::string> ordinal_error_ids;
+  loom_bytecode_read_result_t ordinal_result = ReadModuleOrdinal(
+      bytes, 1, &read_module, &ordinal_error_ids, /*verify_module=*/true);
+  EXPECT_EQ(ordinal_result.error_count, 0u);
+  EXPECT_TRUE(ordinal_error_ids.empty());
+  ASSERT_NE(read_module, nullptr);
+  EXPECT_TRUE(iree_string_view_equal(
+      read_module->strings.entries[read_module->name_id], IREE_SV("module_b")));
+  ASSERT_EQ(read_module->symbols.count, 1u);
+  EXPECT_TRUE(iree_string_view_equal(
+      read_module->strings.entries[read_module->symbols.entries[0].name_id],
+      IREE_SV("f")));
+  loom_module_free(read_module);
+
+  loom_module_t* rejected_module = nullptr;
+  std::vector<std::string> single_error_ids;
+  loom_bytecode_read_result_t single_result =
+      ReadModule(bytes, &rejected_module, &single_error_ids);
+  EXPECT_GT(single_result.error_count, 0u);
+  EXPECT_EQ(rejected_module, nullptr);
+  ASSERT_FALSE(single_error_ids.empty());
+  EXPECT_EQ(single_error_ids.front(), "ERR_BYTECODE_006");
+
+  iree_arena_deinitialize(&metadata_arena);
+  loom_module_free(first_module);
+  loom_module_free(second_module);
 }
 
 TEST_F(ReaderTest, ReadsFunctionBodyModule) {

@@ -106,6 +106,7 @@ loom_cc_test(
     iree::base::internal::arena
     iree::io::stream
     loom::src::loom::ir
+    loom::src::loom::ops::func
     loom::src::loom::ops::global
     loom::src::loom::ops::test
     loom::src::loom::target::registers
