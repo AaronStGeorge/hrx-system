@@ -23,12 +23,25 @@ loom_low_descriptor_cc_library(
 
 loom_cc_library(
   NAME
+    features
+  HDRS
+    "features.h"
+  SRCS
+    "features.c"
+  DEPS
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     target_records
   HDRS
     "target_records.h"
   SRCS
     "target_records.c"
   DEPS
+    ::features
     iree::base
     loom::src::loom::target::types
   PUBLIC
@@ -98,6 +111,18 @@ loom_cc_library(
     iree::base
     loom::src::loom::tools::loom-check::provider
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    features_test
+  SRCS
+    "features_test.cc"
+  DEPS
+    ::features
+    ::target_records
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

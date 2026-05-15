@@ -8,6 +8,8 @@
 
 #include <stdint.h>
 
+#include "loom/target/arch/spirv/features.h"
+
 static const loom_target_snapshot_t kSpirvVulkan13Snapshot = {
     .name = IREE_SVL("spirv-vulkan1.3"),
     .codegen_format = LOOM_TARGET_CODEGEN_FORMAT_SPIRV,
@@ -36,6 +38,7 @@ static const loom_target_export_plan_t kSpirvVulkan13ExportPlan = {
 static const loom_target_config_t kSpirvVulkan13Config = {
     .name = IREE_SVL("spirv.logical.core"),
     .contract_set_key = IREE_SVL("spirv.logical.core"),
+    .contract_feature_bits = LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA,
 };
 
 const loom_target_bundle_t loom_spirv_low_target_bundle_vulkan1_3 = {

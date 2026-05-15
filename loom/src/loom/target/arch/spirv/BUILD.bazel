@@ -37,6 +37,7 @@ loom_assert_no_dependencies(
     ],
     targets = [
         ":descriptors",
+        ":features",
         ":low_registry",
         ":ops",
         ":provider",
@@ -48,6 +49,7 @@ loom_assert_no_dependencies(
     name = "core_target_interfaces_no_spirv_target_deps",
     dependencies = [
         ":descriptors",
+        ":features",
         ":low_registry",
         ":provider",
         ":target_records",
@@ -85,10 +87,18 @@ loom_low_descriptor_cc_library(
 )
 
 loom_cc_library(
+    name = "features",
+    srcs = ["features.c"],
+    hdrs = ["features.h"],
+    deps = ["//runtime/src/iree/base"],
+)
+
+loom_cc_library(
     name = "target_records",
     srcs = ["target_records.c"],
     hdrs = ["target_records.h"],
     deps = [
+        ":features",
         "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
     ],
@@ -149,6 +159,17 @@ loom_cc_library(
         ":provider",
         "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "features_test",
+    srcs = ["features_test.cc"],
+    deps = [
+        ":features",
+        ":target_records",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
