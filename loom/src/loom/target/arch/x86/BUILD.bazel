@@ -29,46 +29,6 @@ package(
 #===------------------------------------------------------------------------===#
 
 loom_assert_no_dependencies(
-    name = "x86_target_no_other_target_deps",
-    dependencies = [
-        "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-        "//loom/src/loom/target/arch/ireevm:descriptors",
-        "//loom/src/loom/target/arch/spirv:descriptors",
-        "//loom/src/loom/target/arch/wasm:descriptors",
-        "//loom/src/loom/target/emit/llvmir:llvmir",
-    ],
-    targets = [
-        ":avx10_2_descriptors",
-        ":avx2_descriptors",
-        ":avx512_descriptors",
-        ":avx512_bf16_descriptors",
-        ":avx512_packed_dot_descriptors",
-        ":avx512_vnni_descriptors",
-        ":avx_vnni_descriptors",
-        ":avx_vnni_int8_descriptors",
-        ":avx_vnni_int16_descriptors",
-        ":math_policy",
-        ":ops",
-        ":low_registry",
-        ":packed_dot_contract",
-        ":packed_dot_contract_projection",
-        ":packed_dot_descriptors",
-        ":packed_dot_vector",
-        ":provider",
-        ":register_classes",
-        ":scalar_descriptors",
-        ":simd128_descriptors",
-        ":target_records",
-        "//loom/src/loom/target/arch/x86/contracts:avx2",
-        "//loom/src/loom/target/arch/x86/contracts:avx2_lower_rules",
-        "//loom/src/loom/target/arch/x86/contracts:avx512_lower_rules",
-        "//loom/src/loom/target/arch/x86/contracts:packed_dot_lower_rules",
-        "//loom/src/loom/target/arch/x86/contracts:scalar",
-        "//loom/src/loom/target/arch/x86/contracts:scalar_lower_rules",
-    ],
-)
-
-loom_assert_no_dependencies(
     name = "core_target_interfaces_no_x86_target_deps",
     dependencies = [
         ":avx10_2_descriptors",

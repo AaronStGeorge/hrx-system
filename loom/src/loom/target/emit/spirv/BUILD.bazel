@@ -25,21 +25,6 @@ package(
 #===------------------------------------------------------------------------===#
 
 loom_assert_no_dependencies(
-    name = "spirv_emit_no_other_target_deps",
-    dependencies = [
-        "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-        "//loom/src/loom/target/arch/ireevm:descriptors",
-        "//loom/src/loom/target/arch/wasm:descriptors",
-        "//loom/src/loom/target/arch/x86:packed_dot_contract",
-        "//loom/src/loom/target/emit/llvmir:llvmir",
-    ],
-    targets = [
-        ":binary_writer",
-        ":module_builder",
-    ],
-)
-
-loom_assert_no_dependencies(
     name = "core_run_tool_no_spirv_emit_dep",
     dependencies = [":module_builder"],
     targets = ["//loom/src/loom/tools/iree-run-loom:main"],

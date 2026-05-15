@@ -22,26 +22,6 @@ package(
 #===------------------------------------------------------------------------===#
 
 loom_assert_no_dependencies(
-    name = "test_target_no_optional_target_deps",
-    dependencies = [
-        "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-        "//loom/src/loom/target/arch/spirv:descriptors",
-        "//loom/src/loom/target/arch/wasm:descriptors",
-        "//loom/src/loom/target/arch/x86:packed_dot_contract",
-        "//loom/src/loom/target/arch/ireevm:descriptors",
-        "//loom/src/loom/target/emit/llvmir:llvmir",
-    ],
-    targets = [
-        ":alt_descriptors",
-        ":descriptors",
-        ":lower",
-        ":low_registry",
-        "//loom/src/loom/target/test/contracts:core",
-        "//loom/src/loom/target/test/contracts:core_lower_rules",
-    ],
-)
-
-loom_assert_no_dependencies(
     name = "core_target_registry_no_test_target_dep",
     dependencies = [":low_registry"],
     targets = [

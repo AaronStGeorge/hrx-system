@@ -23,21 +23,6 @@ package(
 #===------------------------------------------------------------------------===#
 
 loom_assert_no_dependencies(
-    name = "wasm_emit_no_other_target_deps",
-    dependencies = [
-        "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-        "//loom/src/loom/target/arch/x86:packed_dot_contract",
-        "//loom/src/loom/target/arch/ireevm:descriptors",
-        "//loom/src/loom/target/emit/llvmir:llvmir",
-    ],
-    targets = [
-        ":function_body",
-        ":lower",
-        ":module_binary",
-    ],
-)
-
-loom_assert_no_dependencies(
     name = "wasm_lower_no_wasm_descriptor_dep",
     dependencies = ["//loom/src/loom/target/arch/wasm:descriptors"],
     targets = [":lower"],

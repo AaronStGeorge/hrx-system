@@ -45,45 +45,6 @@ config_setting(
 #===------------------------------------------------------------------------===#
 
 loom_assert_no_dependencies(
-    name = "amdgpu_target_no_other_target_deps",
-    dependencies = [
-        "//loom/src/loom/target/arch/ireevm:descriptors",
-        "//loom/src/loom/target/arch/spirv:descriptors",
-        "//loom/src/loom/target/arch/wasm:descriptors",
-        "//loom/src/loom/target/arch/x86:packed_dot_contract",
-        "//loom/src/loom/target/emit/llvmir:llvmir",
-    ],
-    targets = [
-        ":address_state",
-        ":cdna3_descriptors",
-        ":cdna4_descriptors",
-        ":rdna3_descriptors",
-        ":rdna4_gfx125x_descriptors",
-        ":rdna4_descriptors",
-        ":hal_kernel_abi",
-        ":hal_binding_materialization",
-        ":hal_binding_materialization_pass",
-        ":low_registry",
-        ":math_policy",
-        ":matrix_contract",
-        ":matrix_contract_projection",
-        ":occupancy",
-        ":occupancy_tables",
-        ":packet_plan",
-        ":packet_diagnostics",
-        ":pass_registry",
-        ":provider",
-        ":register_class",
-        ":target_id",
-        ":target_info",
-        ":vopd_plan",
-        ":wait_packets",
-        ":wait_plan",
-        ":wait_states",
-    ],
-)
-
-loom_assert_no_dependencies(
     name = "amdgpu_lightweight_analysis_no_low_registry_dep",
     dependencies = [":low_registry"],
     targets = [

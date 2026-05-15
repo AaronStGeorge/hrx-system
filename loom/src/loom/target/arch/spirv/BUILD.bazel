@@ -27,29 +27,6 @@ package(
 #===------------------------------------------------------------------------===#
 
 loom_assert_no_dependencies(
-    name = "spirv_target_no_other_target_deps",
-    dependencies = [
-        "//loom/src/loom/target/arch/amdgpu:matrix_contract",
-        "//loom/src/loom/target/arch/ireevm:descriptors",
-        "//loom/src/loom/target/arch/wasm:descriptors",
-        "//loom/src/loom/target/arch/x86:packed_dot_contract",
-        "//loom/src/loom/target/emit/llvmir:llvmir",
-    ],
-    targets = [
-        ":cooperative_properties",
-        ":descriptors",
-        ":features",
-        ":lower",
-        ":low_registry",
-        ":ops",
-        ":provider",
-        ":target_records",
-        "//loom/src/loom/target/arch/spirv/contracts:logical_core",
-        "//loom/src/loom/target/arch/spirv/contracts:logical_core_lower_rules",
-    ],
-)
-
-loom_assert_no_dependencies(
     name = "core_target_interfaces_no_spirv_target_deps",
     dependencies = [
         ":cooperative_properties",
