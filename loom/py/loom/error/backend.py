@@ -470,6 +470,38 @@ ERR_BACKEND_021 = ErrorDef(
     ),
 )
 
+# ERR_BACKEND_022: Register location exceeds the allocation capacity.
+ERR_BACKEND_022 = ErrorDef(
+    domain=ErrorDomain.BACKEND,
+    code=22,
+    severity=Severity.ERROR,
+    summary="Register location exceeds allocation capacity.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "cannot place {subject_kind} for '@{function_name}' in "
+        "{register_class}: location range [{location_base}, {location_end}) "
+        "with {location_count} unit(s) exceeds allocation capacity "
+        "{allocation_capacity}"
+    ),
+    params=(
+        ErrorParam("target_key", ParamKind.STRING),
+        ErrorParam("export_name", ParamKind.STRING),
+        ErrorParam("config_key", ParamKind.STRING),
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("subject_kind", ParamKind.STRING),
+        ErrorParam("register_class", ParamKind.STRING),
+        ErrorParam("location_base", ParamKind.U32),
+        ErrorParam("location_count", ParamKind.U32),
+        ErrorParam("location_end", ParamKind.U64),
+        ErrorParam("allocation_capacity", ParamKind.U32),
+    ),
+    fix_hint=(
+        "Constrain the requested fixed or reserved location to the target "
+        "register class capacity, or select a target descriptor set with a "
+        "larger allocation space"
+    ),
+)
+
 ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_003,
     ERR_BACKEND_005,
@@ -486,4 +518,5 @@ ALL_BACKEND_ERRORS: tuple[ErrorDef, ...] = (
     ERR_BACKEND_019,
     ERR_BACKEND_020,
     ERR_BACKEND_021,
+    ERR_BACKEND_022,
 )

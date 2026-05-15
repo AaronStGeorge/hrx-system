@@ -38,6 +38,31 @@ low.func.def target(@test_target) @branch_concat_destination_layout(%cond: reg<t
 
 // ====
 
+// RUN: emit low-allocation-json @structural_physical_span_rebased_at_capacity fixed=%wide:physical_register:20:12 fixed=%tail:physical_register:0:1
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @structural_physical_span_rebased_at_capacity(%wide: reg<test.phys x12>, %tail: reg<test.phys>) -> (reg<test.phys x13>) asm<test.low.core> {
+  %packed = concat(%wide, %tail) : (reg<test.phys x12>, reg<test.phys>) -> reg<test.phys x13>
+  return %packed
+}
+
+// ----
+{"format":"loom.low.allocation.v0","function":"structural_physical_span_rebased_at_capacity","target":"test_target","descriptor_set":"test.low.core","allocation_mode":"virtual","assignment_count":3,"remark_count":0,"copy_decision_count":0,"spill_count":0,"spill_plan_count":0,"coalesced_copy_count":0,"materialized_copy_count":0,"assignments":[{"index":0,"value":{"id":0,"name":"wide","type":"reg<test.phys x12>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.phys"},"start_point":0,"end_point":1,"unit_count":12,"location":{"kind":"physical_register","base":20,"count":12}},{"index":1,"value":{"id":1,"name":"tail","type":"reg<test.phys>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.phys"},"start_point":0,"end_point":1,"unit_count":1,"location":{"kind":"physical_register","base":0,"count":1}},{"index":2,"value":{"id":3,"name":"packed","type":"reg<test.phys x13>"},"class":{"type_kind":12,"type_kind_name":"register","element_type":0,"element_type_name":"index","register_class":"test.phys"},"start_point":1,"end_point":2,"unit_count":13,"location":{"kind":"physical_register","base":0,"count":13}}],"spill_plans":[],"copy_decisions":[],"remarks":[]}
+
+// ====
+
+// RUN: emit low-allocation-json @fixed_physical_span_exceeds_capacity fixed=%value:physical_register:32:1 output=none
+
+test.target<low_core> @test_target
+
+// ERROR@+1: BACKEND/022 {function_name="fixed_physical_span_exceeds_capacity", subject_kind="fixed value", register_class="test.phys", location_base="32", location_count="1", location_end="33", allocation_capacity="32"}
+low.func.def target(@test_target) @fixed_physical_span_exceeds_capacity(%value: reg<test.phys>) -> (reg<test.phys>) asm<test.low.core> {
+  return %value
+}
+
+// ====
+
 // RUN: emit low-allocation-json @dead_result_clobber_window
 
 test.target<low_core> @test_target

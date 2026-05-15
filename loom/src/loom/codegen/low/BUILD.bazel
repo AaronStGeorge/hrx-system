@@ -334,6 +334,25 @@ loom_cc_library(
     ],
 )
 
+loom_cc_test(
+    name = "allocation_test",
+    srcs = ["allocation_test.cc"],
+    deps = [
+        ":allocation",
+        ":text_asm",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/target/test:descriptors",
+        "//loom/src/loom/testing:module_ptr",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_library(
     name = "move_sequence",
     srcs = ["move_sequence.c"],
