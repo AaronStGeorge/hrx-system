@@ -647,3 +647,33 @@ iree_status_t loom_tooling_config_materialize_module(
   if (out_result) *out_result = result;
   return iree_ok_status();
 }
+
+iree_status_t loom_tooling_config_require_resolved_module(
+    const loom_module_t* module,
+    loom_tooling_config_resolution_result_t* out_result) {
+  IREE_ASSERT_ARGUMENT(module);
+  loom_tooling_config_resolution_result_t result = {0};
+  iree_string_view_t first_unresolved_name = iree_string_view_empty();
+
+  const loom_symbol_t* symbol = NULL;
+  loom_module_for_each_symbol(module, symbol) {
+    if (!symbol->defining_op || !loom_config_decl_isa(symbol->defining_op)) {
+      continue;
+    }
+    if (result.unresolved_count == 0) {
+      first_unresolved_name = loom_tooling_config_symbol_name(module, symbol);
+    }
+    ++result.unresolved_count;
+  }
+
+  if (out_result) *out_result = result;
+  if (result.unresolved_count == 0) {
+    return iree_ok_status();
+  }
+  return iree_make_status(
+      IREE_STATUS_FAILED_PRECONDITION,
+      "unresolved config '@%.*s' remains for final compilation (%" PRIhsz
+      " unresolved config%s total)",
+      (int)first_unresolved_name.size, first_unresolved_name.data,
+      result.unresolved_count, result.unresolved_count == 1 ? "" : "s");
+}

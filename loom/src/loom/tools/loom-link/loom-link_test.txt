@@ -72,6 +72,7 @@
 // RUN:   > %t.config_b.loom
 // RUN: loom-link %t.config_a.loom %t.config_b.loom \
 // RUN:     --config=model36.model.hidden_size=4096 \
+// RUN:     --require-resolved-config \
 // RUN:   | FileCheck --check-prefix=CONFIG-LINK %s
 
 // CONFIG-LINK: config.def @model36.model.hidden_size = 4096 : index
@@ -86,3 +87,10 @@
 // RUN: FileCheck --check-prefix=CONFIG-CONSTRAINT %s < %t.config.err
 
 // CONFIG-CONSTRAINT: config 'model36.model.hidden_size' value 4103 violates constraint 'mul'
+
+// RUN: loom-link %t.config_a.loom %t.config_b.loom \
+// RUN:     --require-resolved-config \
+// RUN:   > %t.config-unresolved.err 2>&1; test $? -ne 0
+// RUN: FileCheck --check-prefix=CONFIG-UNRESOLVED %s < %t.config-unresolved.err
+
+// CONFIG-UNRESOLVED: unresolved config '@model36.model.hidden_size' remains for final compilation

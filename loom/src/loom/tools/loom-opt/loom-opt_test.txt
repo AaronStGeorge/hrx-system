@@ -252,6 +252,13 @@
 // CONFIG-DUPLICATE: duplicate config binding for 'answer'
 
 // RUN: printf '%%s\n' \
+// RUN:   'config.decl @answer : index' \
+// RUN:   | loom-opt --require-resolved-config \
+// RUN:       --output=%t.unused > %t.config-unresolved.err 2>&1; test $? -ne 0
+// RUN: FileCheck --check-prefix=CONFIG-UNRESOLVED %s < %t.config-unresolved.err
+// CONFIG-UNRESOLVED: unresolved config '@answer' remains for final compilation
+
+// RUN: printf '%%s\n' \
 // RUN:   'config.decl @model36.model.hidden_size : %%value: index where [range(%%value, 0, 8192), mul(%%value, 16)]' \
 // RUN:   '' \
 // RUN:   'func.def @bad_config_constraint() -> (index) {' \

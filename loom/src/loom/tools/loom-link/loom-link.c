@@ -34,6 +34,8 @@ IREE_FLAG_LIST(string, config,
                "--config=key=value. Bindings are materialized after linked "
                "config declarations/defaults merge; unused bindings are "
                "ignored.");
+IREE_FLAG(bool, require_resolved_config, false,
+          "Require all config.decl symbols to be materialized before output.");
 IREE_FLAG(bool, verify, true,
           "Verify the linked output module before printing.");
 
@@ -182,7 +184,9 @@ int main(int argc, char** argv) {
       "Input defaults to stdin when no files are provided. A '-' input reads "
       "stdin and must be the only input path.\n"
       "Repeat --config=key=value to override linked config symbols after "
-      "config declarations/defaults merge.\n");
+      "config declarations/defaults merge.\n"
+      "Use --require-resolved-config for final outputs that must not retain "
+      "config.decl symbols.\n");
   iree_flags_parse_checked(IREE_FLAGS_PARSE_MODE_DEFAULT, &argc, &argv);
 
   iree_allocator_t allocator = iree_allocator_system();
@@ -254,6 +258,9 @@ int main(int argc, char** argv) {
   if (iree_status_is_ok(status)) {
     status = loom_link_materialize_config_set(
         linked_module, &config_set, &block_pool, &config_materialize_result);
+  }
+  if (iree_status_is_ok(status) && FLAG_require_resolved_config) {
+    status = loom_tooling_config_require_resolved_module(linked_module, NULL);
   }
   if (iree_status_is_ok(status) && FLAG_verify) {
     status =

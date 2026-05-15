@@ -44,6 +44,8 @@ IREE_FLAG_LIST(
     string, config,
     "Compile/link-time config binding. Repeat as --config=key=value. Bindings "
     "not referenced by the loaded module are ignored.");
+IREE_FLAG(bool, require_resolved_config, false,
+          "Require all config.decl symbols to be materialized before output.");
 IREE_FLAG(bool, verify, true,
           "Verify the module before and after executing passes.");
 IREE_FLAG(bool, list_passes, false, "Print registered passes and exit.");
@@ -919,6 +921,8 @@ int main(int argc, char** argv) {
       "registry.\n"
       "Repeat --config=key=value to materialize compile/link-time config "
       "symbols before passes run. Unused config bindings are ignored.\n"
+      "Use --require-resolved-config for final outputs that must not retain "
+      "config.decl symbols.\n"
       "Use --pass-report=json to print a structured execution report to "
       "stderr.\n"
       "Use --diagnostic-format=json to print structured diagnostic JSONL to "
@@ -1102,6 +1106,11 @@ int main(int argc, char** argv) {
               iree_make_cstring_view(FLAG_pass_reproducer), filename, source,
               pass_registry, iree_status_code(status), allocator));
     }
+  }
+  if (iree_status_is_ok(status) && pass_run_result.error_count == 0 &&
+      !metadata_only && FLAG_require_resolved_config) {
+    status =
+        loom_tooling_config_require_resolved_module(run_module.module, NULL);
   }
   if (iree_status_is_ok(status) && pass_run_result.error_count == 0 &&
       !metadata_only) {

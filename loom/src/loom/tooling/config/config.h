@@ -72,6 +72,12 @@ typedef struct loom_tooling_config_materialize_result_t {
   iree_host_size_t ignored_count;
 } loom_tooling_config_materialize_result_t;
 
+// Summary of a config resolution check.
+typedef struct loom_tooling_config_resolution_result_t {
+  // Number of unresolved config.decl symbols found in the module.
+  iree_host_size_t unresolved_count;
+} loom_tooling_config_resolution_result_t;
+
 // Initializes options to a safe default: no bindings and non-strict matching.
 void loom_tooling_config_materialize_options_initialize(
     loom_tooling_config_materialize_options_t* out_options);
@@ -119,6 +125,16 @@ iree_status_t loom_tooling_config_materialize_module(
     const loom_tooling_config_materialize_options_t* options,
     iree_arena_block_pool_t* block_pool,
     loom_tooling_config_materialize_result_t* out_result);
+
+// Requires that |module| contains no remaining config.decl symbols.
+//
+// Linkable/library outputs should not call this: unresolved declarations are
+// valid IR and keep config sensitivity visible to symbol dependency/index
+// consumers. Final compilation drivers should call this after config
+// materialization and any pruning passes that remove unused declarations.
+iree_status_t loom_tooling_config_require_resolved_module(
+    const loom_module_t* module,
+    loom_tooling_config_resolution_result_t* out_result);
 
 #ifdef __cplusplus
 }  // extern "C"

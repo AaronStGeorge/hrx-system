@@ -211,5 +211,29 @@ config.decl @model36.layout : encoding<layout>
   iree_status_free(status);
 }
 
+TEST_F(ConfigMaterializeTest, RequireResolvedRejectsRemainingDecls) {
+  ModulePtr module = Parse(R"(
+config.decl @model36.model.hidden_size : index
+)");
+
+  loom_tooling_config_resolution_result_t result = {0};
+  iree_status_t status =
+      loom_tooling_config_require_resolved_module(module.get(), &result);
+  EXPECT_EQ(iree_status_code(status), IREE_STATUS_FAILED_PRECONDITION);
+  EXPECT_EQ(result.unresolved_count, 1u);
+  iree_status_free(status);
+}
+
+TEST_F(ConfigMaterializeTest, RequireResolvedAcceptsDefs) {
+  ModulePtr module = Parse(R"(
+config.def @model36.model.hidden_size = 4096 : index
+)");
+
+  loom_tooling_config_resolution_result_t result = {0};
+  IREE_ASSERT_OK(
+      loom_tooling_config_require_resolved_module(module.get(), &result));
+  EXPECT_EQ(result.unresolved_count, 0u);
+}
+
 }  // namespace
 }  // namespace loom
