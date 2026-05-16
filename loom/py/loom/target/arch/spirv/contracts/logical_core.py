@@ -15,6 +15,8 @@ from loom.dialect.index import defs as index
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import arithmetic as scalar_arithmetic
 from loom.dialect.scalar import conversion as scalar_conversion
+from loom.dialect.vector import ALL_VECTOR_OPS
+from loom.dialect.vector import defs as vector
 from loom.dialect.view import ALL_VIEW_OPS
 from loom.dialect.view import defs as view
 from loom.dsl import Op
@@ -23,6 +25,7 @@ from loom.target.contracts import (
     AttrProject,
     ContractFragment,
     DescriptorEmitForm,
+    DescriptorMatrixRule,
     DescriptorRule,
     EmitDescriptorOp,
     Guard,
@@ -217,6 +220,7 @@ SPIRV_LOGICAL_CORE_CONTRACT_DIALECT_OPS = {
     "buffer": ALL_BUFFER_OPS,
     "index": ALL_INDEX_OPS,
     "scalar": ALL_SCALAR_OPS,
+    "vector": ALL_VECTOR_OPS,
     "view": ALL_VIEW_OPS,
 }
 
@@ -234,5 +238,9 @@ SPIRV_LOGICAL_CORE_CONTRACT_FRAGMENT = ContractFragment(
         _buffer_view_rule(),
         _view_load_i32_rule(),
         _view_store_i32_rule(),
+        DescriptorMatrixRule(
+            source_op=vector.vector_mma,
+            source="vector_mma",
+        ),
     ),
 )

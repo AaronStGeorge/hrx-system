@@ -10,6 +10,7 @@
 #include "loom/target/arch/spirv/contracts/logical_core_lower_rules.h"
 #include "loom/target/arch/spirv/descriptors.h"
 #include "loom/target/arch/spirv/lower.h"
+#include "loom/target/arch/spirv/lower/matrix.h"
 
 static iree_status_t loom_spirv_make_register_type(
     loom_low_lower_context_t* context, uint16_t register_class_id,
@@ -74,6 +75,13 @@ static const loom_low_lower_policy_t kSpirvLowLowerPolicy = {
         },
     .contract_bindings = kSpirvContractBindings,
     .contract_binding_count = IREE_ARRAYSIZE(kSpirvContractBindings),
+    .descriptor_matrix =
+        {
+            .options = loom_spirv_descriptor_matrix_options,
+            .query = loom_spirv_descriptor_matrix_query,
+            .attrs = NULL,
+            .user_data = NULL,
+        },
 };
 
 const loom_low_lower_policy_t* loom_spirv_low_lower_policy(void) {

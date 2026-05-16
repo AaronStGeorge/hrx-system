@@ -1,0 +1,95 @@
+// RUN: pass target-legalize{mode=final},dce,canonicalize
+
+spirv.target<vulkan1_3> @target
+
+func.def target(@target) @reference_fallback_for_dense_logical_mma(%lhs_data: vector<4xi32>, %rhs_data: vector<4xi32>, %init_data: vector<4xi32>) -> (vector<4xi32>) {
+  %m = index.constant 2 : index
+  %n = index.constant 2 : index
+  %k = index.constant 2 : index
+  %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : vector<4xi32>
+  %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : vector<4xi32>
+  %init = vector.fragment<init> %init_data shape [%m, %n] : vector<4xi32>
+  %result = vector.mma %lhs, %rhs, %init : vector<4xi32>, vector<4xi32>, vector<4xi32>
+  func.return %result : vector<4xi32>
+}
+
+// ----
+spirv.target<vulkan1_3> @target
+
+func.def target(@target) @reference_fallback_for_dense_logical_mma(%lhs_data: vector<4xi32>, %rhs_data: vector<4xi32>, %init_data: vector<4xi32>) -> (vector<4xi32>) {
+  %m = index.constant 2 : index
+  %n = index.constant 2 : index
+  %11 = vector.extract %init_data[0] : vector<4xi32> -> i32
+  %12 = vector.extract %lhs_data[0] : vector<4xi32> -> i32
+  %13 = vector.extract %rhs_data[0] : vector<4xi32> -> i32
+  %14 = scalar.muli %12, %13 : i32
+  %15 = scalar.addi %11, %14 : i32
+  %16 = vector.extract %lhs_data[1] : vector<4xi32> -> i32
+  %17 = vector.extract %rhs_data[2] : vector<4xi32> -> i32
+  %18 = scalar.muli %16, %17 : i32
+  %19 = scalar.addi %15, %18 : i32
+  %20 = vector.extract %init_data[1] : vector<4xi32> -> i32
+  %21 = vector.extract %lhs_data[0] : vector<4xi32> -> i32
+  %22 = vector.extract %rhs_data[1] : vector<4xi32> -> i32
+  %23 = scalar.muli %21, %22 : i32
+  %24 = scalar.addi %20, %23 : i32
+  %25 = vector.extract %lhs_data[1] : vector<4xi32> -> i32
+  %26 = vector.extract %rhs_data[3] : vector<4xi32> -> i32
+  %27 = scalar.muli %25, %26 : i32
+  %28 = scalar.addi %24, %27 : i32
+  %29 = vector.extract %init_data[2] : vector<4xi32> -> i32
+  %30 = vector.extract %lhs_data[2] : vector<4xi32> -> i32
+  %31 = vector.extract %rhs_data[0] : vector<4xi32> -> i32
+  %32 = scalar.muli %30, %31 : i32
+  %33 = scalar.addi %29, %32 : i32
+  %34 = vector.extract %lhs_data[3] : vector<4xi32> -> i32
+  %35 = vector.extract %rhs_data[2] : vector<4xi32> -> i32
+  %36 = scalar.muli %34, %35 : i32
+  %37 = scalar.addi %33, %36 : i32
+  %38 = vector.extract %init_data[3] : vector<4xi32> -> i32
+  %39 = vector.extract %lhs_data[2] : vector<4xi32> -> i32
+  %40 = vector.extract %rhs_data[1] : vector<4xi32> -> i32
+  %41 = scalar.muli %39, %40 : i32
+  %42 = scalar.addi %38, %41 : i32
+  %43 = vector.extract %lhs_data[3] : vector<4xi32> -> i32
+  %44 = vector.extract %rhs_data[3] : vector<4xi32> -> i32
+  %45 = scalar.muli %43, %44 : i32
+  %46 = scalar.addi %42, %45 : i32
+  %47 = vector.from_elements %19, %28, %37, %46 : vector<4xi32>
+  %result = vector.fragment<result> %47 shape [%m, %n] : vector<4xi32>
+  func.return %result : vector<4xi32>
+}
+
+// ====
+// RUN: pass target-legalize{mode=final}
+
+spirv.target<vulkan1_3> @target
+
+func.def target(@target) @rejects_missing_cooperative_matrix_feature(%lhs_data: vector<16xf16>, %rhs_data: vector<16xf16>, %init_data: vector<8xf32>) -> (vector<8xf32>) {
+  %m = index.constant 16 : index
+  %n = index.constant 16 : index
+  %k = index.constant 16 : index
+  %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : vector<16xf16>
+  %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : vector<16xf16>
+  %init = vector.fragment<init> %init_data shape [%m, %n] : vector<8xf32>
+  // ERROR@+1: TARGET/039 {source_contract="spirv.cooperative_matrix", matrix_constraint="spirv.cooperative_matrix.khr"}
+  %result = vector.mma %lhs, %rhs, %init : vector<16xf16>, vector<16xf16>, vector<8xf32>
+  func.return %result : vector<8xf32>
+}
+
+// ====
+// RUN: pass target-legalize{mode=final}
+
+spirv.target<vulkan1_3> @target {contract_feature_bits = 38}
+
+func.def target(@target) @rejects_cooperative_property_without_low_descriptor(%lhs_data: vector<16xf16>, %rhs_data: vector<16xf16>, %init_data: vector<8xf32>) -> (vector<8xf32>) {
+  %m = index.constant 16 : index
+  %n = index.constant 16 : index
+  %k = index.constant 16 : index
+  %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : vector<16xf16>
+  %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : vector<16xf16>
+  %init = vector.fragment<init> %init_data shape [%m, %n] : vector<8xf32>
+  // ERROR@+1: TARGET/039 {source_contract="spirv.cooperative_matrix", matrix_constraint="target_low_descriptor_mapping"}
+  %result = vector.mma %lhs, %rhs, %init : vector<16xf16>, vector<16xf16>, vector<8xf32>
+  func.return %result : vector<8xf32>
+}

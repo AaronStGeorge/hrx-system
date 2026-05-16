@@ -130,11 +130,15 @@ loom_cc_library(
     lower
   HDRS
     "lower.h"
+    "lower/matrix.h"
   SRCS
+    "lower/matrix.c"
     "lower/registry.c"
   DEPS
+    ::cooperative_properties
     ::descriptors_ids
     iree::base
+    loom::src::loom::analysis::contract_vector
     loom::src::loom::codegen::low::lower
     loom::src::loom::error::error_defs
     loom::src::loom::ir
@@ -237,6 +241,17 @@ iree_executable_test(
     "source_low_diagnostics"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_diagnostics.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "target_legalize"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/target_legalize.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

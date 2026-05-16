@@ -130,6 +130,8 @@ typedef enum loom_spirv_cooperative_rejection_flag_bits_e {
   LOOM_SPIRV_COOPERATIVE_REJECTION_BIAS_INTERPRETATION = 1u << 11,
   // The cooperative vector Result object component type differs.
   LOOM_SPIRV_COOPERATIVE_REJECTION_RESULT_TYPE = 1u << 12,
+  // A property row matched, but no target-low descriptor maps it yet.
+  LOOM_SPIRV_COOPERATIVE_REJECTION_DESCRIPTOR = 1u << 13,
 } loom_spirv_cooperative_rejection_flag_bits_t;
 
 // Bitset of loom_spirv_cooperative_rejection_flag_bits_t values.
