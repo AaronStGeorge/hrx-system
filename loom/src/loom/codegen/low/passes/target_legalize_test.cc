@@ -11,12 +11,14 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/analysis/contract.h"
 #include "loom/codegen/low/lower_rules.h"
 #include "loom/codegen/low/pass_environment.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
+#include "loom/ops/index/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/target/ops.h"
 #include "loom/ops/test/ops.h"
@@ -44,6 +46,7 @@ class TargetLegalizePassTest : public ::testing::Test {
     loom_context_initialize(iree_allocator_system(), &context_);
     RegisterDialect(LOOM_DIALECT_TARGET, loom_target_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_INDEX, loom_index_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables);
@@ -78,7 +81,8 @@ class TargetLegalizePassTest : public ::testing::Test {
 
   iree_status_t RunTargetLegalize(
       loom_low_lower_policy_registry_t* policy_registry, loom_module_t* module,
-      loom_target_compile_report_t* compile_report) {
+      loom_target_compile_report_t* compile_report,
+      iree_string_view_t options = iree_string_view_empty()) {
     iree_arena_allocator_t instance_arena;
     iree_arena_initialize(&block_pool_, &instance_arena);
     loom_pass_value_fact_owner_t value_facts = {};
@@ -100,8 +104,7 @@ class TargetLegalizePassTest : public ::testing::Test {
         .value_facts = &value_facts,
     };
 
-    iree_status_t status =
-        loom_low_target_legalize_create(&pass, iree_string_view_empty());
+    iree_status_t status = loom_low_target_legalize_create(&pass, options);
     if (iree_status_is_ok(status)) {
       status = loom_low_target_legalize_run(&pass, module);
     }
@@ -161,6 +164,68 @@ TEST_F(TargetLegalizePassTest, RecordsRewriteRowsInCompileReport) {
   EXPECT_EQ(rows[0].mode, LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_MODE_EAGER);
   EXPECT_GT(rows[0].created_op_count, 0u);
   EXPECT_EQ(rows[0].erased_op_count, 1u);
+}
+
+TEST_F(TargetLegalizePassTest, RecordsReferenceRejectReasonInCompileReport) {
+  ModulePtr module = Parse(
+      IREE_SV("test.target<low_core> @test_target\n"
+              "func.def target(@test_target) @mma(%lhs_data: vector<16xf16>, "
+              "%rhs_data: vector<16xf16>, %init_data: vector<8xf32>) -> "
+              "(vector<8xf32>) {\n"
+              "  %m = index.constant 16 : index\n"
+              "  %n = index.constant 16 : index\n"
+              "  %k = index.constant 16 : index\n"
+              "  %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : "
+              "vector<16xf16>\n"
+              "  %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : "
+              "vector<16xf16>\n"
+              "  %init = vector.fragment<init> %init_data shape [%m, %n] : "
+              "vector<8xf32>\n"
+              "  %result = vector.mma %lhs, %rhs, %init : vector<16xf16>, "
+              "vector<16xf16>, vector<8xf32>\n"
+              "  func.return %result : vector<8xf32>\n"
+              "}\n"));
+
+  loom_low_lower_policy_t policy = *loom_test_low_lower_policy();
+  const loom_low_lower_policy_registry_entry_t entries[] = {
+      {
+          .contract_set_key = IREE_SVL("test.low.core"),
+          .policy = &policy,
+      },
+  };
+  loom_low_lower_policy_registry_t policy_registry = {};
+  loom_low_lower_policy_registry_initialize_from_entries(
+      &policy_registry, entries, IREE_ARRAYSIZE(entries));
+
+  loom_target_compile_report_legalization_row_t rows[8] = {};
+  const loom_target_compile_report_row_storage_t row_storage = {
+      .target_legalization_rows = rows,
+      .target_legalization_row_capacity = IREE_ARRAYSIZE(rows),
+  };
+  loom_target_compile_report_t report = {};
+  loom_target_compile_report_initialize(&report);
+  loom_target_compile_report_set_row_storage(&report, &row_storage);
+
+  IREE_ASSERT_OK(RunTargetLegalize(&policy_registry, module.get(), &report,
+                                   IREE_SV("mode=final")));
+  EXPECT_EQ(report.target_legalization_unsupported_op_count, 1u);
+
+  const loom_target_compile_report_legalization_row_t* mma_row = nullptr;
+  for (iree_host_size_t i = 0; i < report.target_legalization_row_count; ++i) {
+    if (rows[i].source_op_kind == LOOM_OP_VECTOR_MMA &&
+        rows[i].action ==
+            LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REJECT_UNSUPPORTED_FINAL) {
+      mma_row = &rows[i];
+      break;
+    }
+  }
+  ASSERT_NE(mma_row, nullptr);
+  EXPECT_TRUE(
+      iree_string_view_equal(mma_row->legalizer_name, IREE_SV("vector")));
+  EXPECT_EQ(mma_row->legalizer_strategy,
+            LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_REFERENCE);
+  EXPECT_TRUE(iree_any_bit_set(mma_row->source_rejection_bits,
+                               LOOM_CONTRACT_REJECTION_FRAGMENT));
 }
 
 }  // namespace

@@ -45,6 +45,13 @@ bool loom_vector_to_scalar_encoded_matrix_operand_is_supported(
     const loom_vector_to_scalar_encoded_matrix_operand_t* operand,
     loom_type_t raw_lane_type, loom_type_t result_type);
 
+// Returns contract rejection bits for encoded matrix operand forms the generic
+// scalar lane builder cannot decode.
+uint32_t loom_vector_to_scalar_encoded_matrix_operand_rejection_bits(
+    loom_vector_to_scalar_state_t* state,
+    const loom_vector_to_scalar_encoded_matrix_operand_t* operand,
+    loom_type_t raw_lane_type, loom_type_t result_type);
+
 // Builds one decoded logical lane from |raw_lane|. The caller provides the
 // logical matrix coordinates and row-major logical ordinal so scale/table
 // topologies remain explicit SSA computations in the generated reference IR.

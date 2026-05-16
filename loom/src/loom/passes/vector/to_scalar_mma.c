@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 
+#include "loom/analysis/contract.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/index/ops.h"
@@ -87,6 +88,30 @@ static bool loom_vector_to_scalar_mma_query_fragment(
           loom_vector_to_scalar_value_term(state, fact.shape_value_ids[1]),
   };
   return true;
+}
+
+static uint32_t loom_vector_to_scalar_mma_fragment_query_rejection_bits(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t value,
+    loom_vector_fragment_role_flags_t role_flags) {
+  if (state->rewriter->fact_table == NULL || value == LOOM_VALUE_ID_INVALID) {
+    return LOOM_CONTRACT_REJECTION_INVALID_REQUEST;
+  }
+  loom_value_facts_t facts = loom_rewriter_value_facts(state->rewriter, value);
+  loom_vector_fragment_fact_t fact;
+  if (!loom_vector_fragment_fact_query_value_facts(
+          &state->rewriter->fact_table->context, facts, &fact) ||
+      !iree_any_bit_set(fact.role_flags, role_flags)) {
+    return LOOM_CONTRACT_REJECTION_ROLE;
+  }
+  if (fact.shape_rank != 2) {
+    return LOOM_CONTRACT_REJECTION_SHAPE;
+  }
+  if (fact.auxiliary.present_keys != 0 &&
+      !loom_vector_to_scalar_mma_fragment_has_schema(&fact)) {
+    return LOOM_CONTRACT_REJECTION_SCHEMA |
+           LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND;
+  }
+  return LOOM_CONTRACT_REJECTION_NONE;
 }
 
 static bool loom_vector_to_scalar_mma_logical_element_count(
@@ -275,6 +300,30 @@ static bool loom_vector_to_scalar_mma_fragment_supports_logical_lanes(
   return false;
 }
 
+static uint32_t loom_vector_to_scalar_mma_fragment_logical_lane_rejection_bits(
+    loom_vector_to_scalar_state_t* state,
+    const loom_vector_to_scalar_mma_fragment_t* fragment) {
+  if (loom_vector_to_scalar_mma_fragment_has_schema(&fragment->fact) &&
+      fragment->fact.encoded_operand.payload_packing !=
+          LOOM_VALUE_FACT_PAYLOAD_PACKING_DENSE_LANES) {
+    return LOOM_CONTRACT_REJECTION_SCHEMA;
+  }
+  loom_vector_to_scalar_mma_payload_layout_t layout =
+      LOOM_VECTOR_TO_SCALAR_MMA_PAYLOAD_LAYOUT_UNSUPPORTED;
+  if (loom_vector_to_scalar_mma_type_is_dense_payload(
+          state, fragment->type, fragment->rows, fragment->columns, &layout)) {
+    return LOOM_CONTRACT_REJECTION_NONE;
+  }
+  if (loom_vector_to_scalar_mma_fragment_has_schema(&fragment->fact)) {
+    return LOOM_CONTRACT_REJECTION_SCHEMA | LOOM_CONTRACT_REJECTION_SHAPE;
+  }
+  if (loom_vector_to_scalar_mma_value_is_fragment_load(state,
+                                                       fragment->payload)) {
+    return LOOM_CONTRACT_REJECTION_NONE;
+  }
+  return LOOM_CONTRACT_REJECTION_FRAGMENT;
+}
+
 static bool loom_vector_to_scalar_mma_result_is_dense_payload(
     loom_vector_to_scalar_state_t* state,
     const loom_vector_to_scalar_mma_fragment_t* init) {
@@ -411,6 +460,85 @@ static bool loom_vector_to_scalar_mma_shapes_match(
   }
   *out_numeric = numeric;
   return true;
+}
+
+static uint32_t loom_vector_to_scalar_mma_semantic_rejection_bits(
+    loom_vector_to_scalar_state_t* state,
+    const loom_vector_to_scalar_mma_fragment_t* lhs,
+    const loom_vector_to_scalar_mma_fragment_t* rhs,
+    const loom_vector_to_scalar_mma_fragment_t* init) {
+  loom_contract_rejection_bits_t rejection_bits = LOOM_CONTRACT_REJECTION_NONE;
+  loom_type_t result_type = loom_module_value_type(
+      state->rewriter->module, loom_vector_mma_result(state->op));
+  if (!loom_vector_to_scalar_mma_terms_equal(lhs->columns, rhs->rows) ||
+      !loom_vector_to_scalar_mma_terms_equal(lhs->rows, init->rows) ||
+      !loom_vector_to_scalar_mma_terms_equal(rhs->columns, init->columns) ||
+      !loom_type_is_vector(result_type)) {
+    rejection_bits |= LOOM_CONTRACT_REJECTION_SHAPE;
+  }
+  rejection_bits |=
+      loom_vector_to_scalar_mma_fragment_logical_lane_rejection_bits(state,
+                                                                     lhs);
+  rejection_bits |=
+      loom_vector_to_scalar_mma_fragment_logical_lane_rejection_bits(state,
+                                                                     rhs);
+  rejection_bits |=
+      loom_vector_to_scalar_mma_fragment_logical_lane_rejection_bits(state,
+                                                                     init);
+  if (loom_vector_to_scalar_mma_fragment_has_schema(&init->fact)) {
+    rejection_bits |= LOOM_CONTRACT_REJECTION_SCHEMA;
+  }
+
+  const loom_scalar_type_t accumulator_element_type =
+      loom_type_element_type(init->type);
+  if (loom_type_element_type(result_type) != accumulator_element_type) {
+    rejection_bits |= LOOM_CONTRACT_REJECTION_NUMERIC;
+  }
+  const loom_type_t accumulator_type =
+      loom_type_scalar(accumulator_element_type);
+  const bool lhs_encoded =
+      loom_vector_to_scalar_mma_fragment_has_schema(&lhs->fact);
+  const bool rhs_encoded =
+      loom_vector_to_scalar_mma_fragment_has_schema(&rhs->fact);
+  if ((lhs_encoded || rhs_encoded) &&
+      !loom_scalar_type_is_float(accumulator_element_type)) {
+    rejection_bits |= LOOM_CONTRACT_REJECTION_NUMERIC;
+  }
+  if (lhs_encoded) {
+    const loom_vector_to_scalar_encoded_matrix_operand_t operand =
+        loom_vector_to_scalar_mma_encoded_operand(lhs);
+    rejection_bits |=
+        loom_vector_to_scalar_encoded_matrix_operand_rejection_bits(
+            state, &operand, loom_vector_to_scalar_lane_type(lhs->type),
+            accumulator_type);
+  }
+  if (rhs_encoded) {
+    const loom_vector_to_scalar_encoded_matrix_operand_t operand =
+        loom_vector_to_scalar_mma_encoded_operand(rhs);
+    rejection_bits |=
+        loom_vector_to_scalar_encoded_matrix_operand_rejection_bits(
+            state, &operand, loom_vector_to_scalar_lane_type(rhs->type),
+            accumulator_type);
+  }
+
+  const loom_scalar_type_t lhs_element_type =
+      lhs_encoded ? accumulator_element_type
+                  : loom_type_element_type(lhs->type);
+  const loom_scalar_type_t rhs_element_type =
+      rhs_encoded ? accumulator_element_type
+                  : loom_type_element_type(rhs->type);
+  loom_vector_to_scalar_mma_numeric_t numeric =
+      LOOM_VECTOR_TO_SCALAR_MMA_NUMERIC_UNSUPPORTED;
+  if (!loom_vector_to_scalar_mma_numeric_kind(
+          lhs_element_type, rhs_element_type, accumulator_element_type,
+          &numeric) ||
+      !loom_vector_to_scalar_mma_cast_is_supported(
+          lhs_element_type, accumulator_element_type, numeric) ||
+      !loom_vector_to_scalar_mma_cast_is_supported(
+          rhs_element_type, accumulator_element_type, numeric)) {
+    rejection_bits |= LOOM_CONTRACT_REJECTION_NUMERIC;
+  }
+  return rejection_bits;
 }
 
 static iree_status_t loom_vector_to_scalar_mma_cast_float(
@@ -988,6 +1116,46 @@ bool loom_vector_to_scalar_mma_supports_logical_result_lanes(
       LOOM_VECTOR_TO_SCALAR_MMA_NUMERIC_UNSUPPORTED;
   return loom_vector_to_scalar_mma_query_operands(&lane_state, &lhs, &rhs,
                                                   &init, &numeric);
+}
+
+uint32_t loom_vector_to_scalar_mma_reference_rejection_bits(
+    loom_vector_to_scalar_state_t* state) {
+  if (!loom_vector_mma_isa(state->op)) {
+    return LOOM_CONTRACT_REJECTION_INVALID_REQUEST;
+  }
+  if (state->rewriter->fact_table == NULL) {
+    return LOOM_CONTRACT_REJECTION_INVALID_REQUEST;
+  }
+
+  loom_contract_rejection_bits_t rejection_bits = LOOM_CONTRACT_REJECTION_NONE;
+  rejection_bits |= loom_vector_to_scalar_mma_fragment_query_rejection_bits(
+      state, loom_vector_mma_lhs(state->op),
+      LOOM_VECTOR_FRAGMENT_ROLE_FLAG_LHS);
+  rejection_bits |= loom_vector_to_scalar_mma_fragment_query_rejection_bits(
+      state, loom_vector_mma_rhs(state->op),
+      LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RHS);
+  rejection_bits |= loom_vector_to_scalar_mma_fragment_query_rejection_bits(
+      state, loom_vector_mma_init(state->op),
+      LOOM_VECTOR_FRAGMENT_ROLE_FLAG_INIT |
+          LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RESULT);
+  if (rejection_bits != LOOM_CONTRACT_REJECTION_NONE) {
+    return rejection_bits;
+  }
+
+  loom_vector_to_scalar_mma_fragment_t lhs = {0};
+  loom_vector_to_scalar_mma_fragment_t rhs = {0};
+  loom_vector_to_scalar_mma_fragment_t init = {0};
+  loom_vector_to_scalar_mma_numeric_t numeric =
+      LOOM_VECTOR_TO_SCALAR_MMA_NUMERIC_UNSUPPORTED;
+  if (!loom_vector_to_scalar_mma_query_operands(state, &lhs, &rhs, &init,
+                                                &numeric)) {
+    return loom_vector_to_scalar_mma_semantic_rejection_bits(state, &lhs, &rhs,
+                                                             &init);
+  }
+  if (!loom_vector_to_scalar_mma_result_is_dense_payload(state, &init)) {
+    return LOOM_CONTRACT_REJECTION_FRAGMENT;
+  }
+  return LOOM_CONTRACT_REJECTION_NONE;
 }
 
 static iree_status_t loom_vector_to_scalar_mma_result_lane_terms(

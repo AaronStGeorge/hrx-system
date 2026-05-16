@@ -17,8 +17,8 @@ extern "C" {
 
 // Lowers a vector.mma whose result can be represented as a dense full-logical
 // matrix fragment. Returns out_handled=false when the result remains
-// target-shaped, encoded operands are present, or numeric forms need a richer
-// reference decomposition.
+// target-shaped or numeric/encoded forms need reference semantics that this
+// generic decomposition does not cover.
 iree_status_t loom_vector_to_scalar_lower_mma(
     loom_vector_to_scalar_state_t* state, bool* out_handled,
     loom_value_id_t* out_replacement);
@@ -39,6 +39,11 @@ iree_status_t loom_vector_to_scalar_try_materialize_mma_lane(
 // store loops.
 bool loom_vector_to_scalar_mma_supports_logical_result_lanes(
     loom_vector_to_scalar_state_t* state, loom_op_t* op);
+
+// Returns contract rejection bits for the vector.mma forms this reference
+// lowering cannot scalarize.
+uint32_t loom_vector_to_scalar_mma_reference_rejection_bits(
+    loom_vector_to_scalar_state_t* state);
 
 #ifdef __cplusplus
 }

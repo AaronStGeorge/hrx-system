@@ -6,6 +6,7 @@
 
 #include "loom/passes/vector/to_scalar_encoding.h"
 
+#include "loom/analysis/contract.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/index/ops.h"
@@ -379,21 +380,45 @@ bool loom_vector_to_scalar_encoded_matrix_operand_is_supported(
     loom_type_t raw_lane_type, loom_type_t result_type) {
   IREE_ASSERT_ARGUMENT(state);
   IREE_ASSERT_ARGUMENT(operand);
-  if (!loom_vector_to_scalar_encoded_schema_is_supported(operand->schema) ||
-      !loom_vector_to_scalar_encoded_schema_auxiliary_is_supported(
-          operand->schema, operand->auxiliary) ||
-      !loom_vector_to_scalar_encoded_logical_element_count_matches(operand) ||
-      !loom_vector_to_scalar_encoded_raw_lane_type_matches(operand->schema,
+  return loom_vector_to_scalar_encoded_matrix_operand_rejection_bits(
+             state, operand, raw_lane_type, result_type) ==
+         LOOM_CONTRACT_REJECTION_NONE;
+}
+
+uint32_t loom_vector_to_scalar_encoded_matrix_operand_rejection_bits(
+    loom_vector_to_scalar_state_t* state,
+    const loom_vector_to_scalar_encoded_matrix_operand_t* operand,
+    loom_type_t raw_lane_type, loom_type_t result_type) {
+  IREE_ASSERT_ARGUMENT(state);
+  IREE_ASSERT_ARGUMENT(operand);
+  loom_contract_rejection_bits_t rejection_bits = LOOM_CONTRACT_REJECTION_NONE;
+  if (!loom_vector_to_scalar_encoded_schema_is_supported(operand->schema)) {
+    return LOOM_CONTRACT_REJECTION_SCHEMA;
+  }
+  if (!loom_vector_to_scalar_encoded_schema_auxiliary_is_supported(
+          operand->schema, operand->auxiliary)) {
+    rejection_bits |= LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND;
+  }
+  if (!loom_vector_to_scalar_encoded_logical_element_count_matches(operand)) {
+    rejection_bits |= LOOM_CONTRACT_REJECTION_SHAPE;
+  }
+  if (!loom_vector_to_scalar_encoded_raw_lane_type_matches(operand->schema,
                                                            raw_lane_type) ||
       !loom_vector_to_scalar_numeric_lane_cast_is_supported(raw_lane_type,
-                                                            result_type) ||
-      !loom_vector_to_scalar_encoded_affine_is_supported(state, operand,
-                                                         result_type) ||
-      !loom_vector_to_scalar_encoded_codebook_is_supported(state, operand,
-                                                           result_type)) {
-    return false;
+                                                            result_type)) {
+    rejection_bits |= LOOM_CONTRACT_REJECTION_NUMERIC;
   }
-  return true;
+  if (!loom_vector_to_scalar_encoded_affine_is_supported(state, operand,
+                                                         result_type)) {
+    rejection_bits |= LOOM_CONTRACT_REJECTION_NUMERIC |
+                      LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND;
+  }
+  if (!loom_vector_to_scalar_encoded_codebook_is_supported(state, operand,
+                                                           result_type)) {
+    rejection_bits |= LOOM_CONTRACT_REJECTION_NUMERIC |
+                      LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND;
+  }
+  return rejection_bits;
 }
 
 //===----------------------------------------------------------------------===//

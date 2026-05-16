@@ -70,6 +70,14 @@ typedef enum loom_target_legalizer_strategy_e {
 typedef struct loom_target_legalizer_result_t {
   // Outcome selected by the legalizer.
   loom_target_legalizer_action_t action;
+  // Target-independent rejection flags added by the legalizer.
+  uint32_t source_rejection_bits;
+  // Target-owned rejection flags added by the legalizer.
+  uint32_t target_rejection_bits;
+  // Target feature bits required by the legalizer but absent from the bundle.
+  uint32_t missing_feature_bits;
+  // Value fact categories required by the legalizer but absent from the IR.
+  uint32_t missing_fact_bits;
 } loom_target_legalizer_result_t;
 
 typedef struct loom_target_legalization_context_t {

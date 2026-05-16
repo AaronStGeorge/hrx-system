@@ -6,6 +6,7 @@
 
 #include "loom/passes/vector/to_scalar_memory.h"
 
+#include "loom/analysis/contract.h"
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/index/ops.h"
@@ -737,6 +738,45 @@ static bool loom_vector_to_scalar_fragment_store_source_is_supported(
 static bool loom_vector_to_scalar_fragment_store_source_is_supported_root(
     loom_vector_to_scalar_state_t* state) {
   return loom_vector_to_scalar_fragment_store_source_is_supported(
+      state, loom_vector_to_scalar_store_value(state));
+}
+
+static uint32_t loom_vector_to_scalar_fragment_store_source_rejection_bits(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t value) {
+  loom_op_t* def_op =
+      loom_vector_to_scalar_value_def_op(state->rewriter->module, value);
+  if (def_op == NULL) {
+    return LOOM_CONTRACT_REJECTION_FRAGMENT;
+  }
+  const loom_trait_flags_t traits =
+      loom_op_effective_traits(state->rewriter->module, def_op);
+  if (loom_traits_are_value_alias(traits)) {
+    IREE_ASSERT(def_op->operand_count >= 1);
+    return loom_vector_to_scalar_fragment_store_source_rejection_bits(
+        state, loom_op_const_operands(def_op)[0]);
+  }
+  if (loom_vector_fragment_load_isa(def_op) || loom_vector_splat_isa(def_op) ||
+      loom_vector_constant_isa(def_op) || loom_vector_poison_isa(def_op)) {
+    return LOOM_CONTRACT_REJECTION_NONE;
+  }
+  if (loom_vector_mma_isa(def_op)) {
+    loom_vector_to_scalar_state_t mma_state = *state;
+    mma_state.op = def_op;
+    mma_state.vector_type = loom_module_value_type(
+        state->rewriter->module, loom_vector_mma_result(def_op));
+    mma_state.result_scalar_type =
+        loom_vector_to_scalar_lane_type(mma_state.vector_type);
+    return loom_vector_to_scalar_mma_reference_rejection_bits(&mma_state);
+  }
+  return LOOM_CONTRACT_REJECTION_CAPABILITY;
+}
+
+uint32_t loom_vector_to_scalar_fragment_store_reference_rejection_bits(
+    loom_vector_to_scalar_state_t* state) {
+  if (!loom_vector_fragment_store_isa(state->op)) {
+    return LOOM_CONTRACT_REJECTION_INVALID_REQUEST;
+  }
+  return loom_vector_to_scalar_fragment_store_source_rejection_bits(
       state, loom_vector_to_scalar_store_value(state));
 }
 

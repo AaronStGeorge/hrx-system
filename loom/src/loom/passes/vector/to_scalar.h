@@ -51,6 +51,12 @@ iree_status_t loom_vector_mma_to_scalar_rewrite_op(loom_pass_t* pass,
                                                    loom_op_t* op,
                                                    bool* out_rewritten);
 
+// Returns target-independent rejection flags explaining why the scalar
+// reference lowering would refuse one vector.mma op. This is a cold reporting
+// predicate for target legalization; it does not emit IR or diagnostics.
+uint32_t loom_vector_mma_to_scalar_reference_rejection_bits(
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op);
+
 // Rewrites one vector.store into scalar view.store loops. The source vector is
 // consumed lane-by-lane so supported producer trees can disappear through DCE
 // without first materializing a dynamic vector aggregate.
@@ -66,6 +72,11 @@ iree_status_t loom_vector_store_to_scalar_rewrite_op(loom_pass_t* pass,
 iree_status_t loom_vector_fragment_store_to_scalar_rewrite_op(
     loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op,
     bool* out_rewritten);
+
+// Returns target-independent rejection flags explaining why the scalar
+// reference lowering would refuse one vector.fragment.store op.
+uint32_t loom_vector_fragment_store_to_scalar_reference_rejection_bits(
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op);
 
 // Rewrites one scalar-result vector.extract when its lane can be rematerialized
 // from the source producer tree.

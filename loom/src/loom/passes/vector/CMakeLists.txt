@@ -61,6 +61,7 @@ loom_cc_library(
     "to_scalar_transforms.h"
   DEPS
     iree::base
+    loom::src::loom::analysis::contract
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::combining

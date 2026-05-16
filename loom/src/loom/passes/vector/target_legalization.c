@@ -66,15 +66,6 @@ static iree_status_t loom_vector_legalize_mma(
     return iree_ok_status();
   }
 
-  loom_type_t result_type =
-      loom_module_value_type(context->module, loom_vector_mma_result(op));
-  if (!loom_type_is_all_static(result_type)) {
-    *out_result = (loom_target_legalizer_result_t){
-        .action = LOOM_TARGET_LEGALIZER_ACTION_DEFER,
-    };
-    return iree_ok_status();
-  }
-
   bool rewritten = false;
   IREE_RETURN_IF_ERROR(loom_vector_mma_to_scalar_rewrite_op(
       context->pass, context->rewriter, op, &rewritten));
@@ -82,6 +73,10 @@ static iree_status_t loom_vector_legalize_mma(
       .action = rewritten
                     ? LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN
                     : LOOM_TARGET_LEGALIZER_ACTION_REJECT_UNSUPPORTED_FINAL,
+      .source_rejection_bits =
+          rewritten ? 0
+                    : loom_vector_mma_to_scalar_reference_rejection_bits(
+                          context->pass, context->rewriter, op),
   };
   return iree_ok_status();
 }
@@ -134,6 +129,11 @@ static iree_status_t loom_vector_legalize_fragment_store(
       .action = rewritten
                     ? LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN
                     : LOOM_TARGET_LEGALIZER_ACTION_REJECT_UNSUPPORTED_FINAL,
+      .source_rejection_bits =
+          rewritten
+              ? 0
+              : loom_vector_fragment_store_to_scalar_reference_rejection_bits(
+                    context->pass, context->rewriter, op),
   };
   return iree_ok_status();
 }

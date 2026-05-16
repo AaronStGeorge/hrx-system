@@ -6,6 +6,7 @@
 
 #include "loom/passes/vector/to_scalar.h"
 
+#include "loom/analysis/contract.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -782,6 +783,24 @@ iree_status_t loom_vector_mma_to_scalar_rewrite_op(loom_pass_t* pass,
   return iree_ok_status();
 }
 
+uint32_t loom_vector_mma_to_scalar_reference_rejection_bits(
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op) {
+  if (!loom_vector_mma_isa(op)) {
+    return LOOM_CONTRACT_REJECTION_INVALID_REQUEST;
+  }
+  loom_vector_to_scalar_state_t state = {
+      .pass = pass,
+      .rewriter = rewriter,
+      .op = op,
+      .vector_type =
+          loom_module_value_type(rewriter->module, loom_vector_mma_result(op)),
+      .result_scalar_type = loom_vector_to_scalar_lane_type(
+          loom_module_value_type(rewriter->module, loom_vector_mma_result(op))),
+      .location = op->location,
+  };
+  return loom_vector_to_scalar_mma_reference_rejection_bits(&state);
+}
+
 iree_status_t loom_vector_store_to_scalar_rewrite_op(loom_pass_t* pass,
                                                      loom_rewriter_t* rewriter,
                                                      loom_op_t* op,
@@ -815,6 +834,24 @@ iree_status_t loom_vector_fragment_store_to_scalar_rewrite_op(
     *out_rewritten = true;
   }
   return iree_ok_status();
+}
+
+uint32_t loom_vector_fragment_store_to_scalar_reference_rejection_bits(
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op) {
+  if (!loom_vector_fragment_store_isa(op)) {
+    return LOOM_CONTRACT_REJECTION_INVALID_REQUEST;
+  }
+  const loom_value_id_t value = loom_vector_fragment_store_value(op);
+  loom_type_t vector_type = loom_module_value_type(rewriter->module, value);
+  loom_vector_to_scalar_state_t state = {
+      .pass = pass,
+      .rewriter = rewriter,
+      .op = op,
+      .vector_type = vector_type,
+      .result_scalar_type = loom_vector_to_scalar_lane_type(vector_type),
+      .location = op->location,
+  };
+  return loom_vector_to_scalar_fragment_store_reference_rejection_bits(&state);
 }
 
 iree_status_t loom_vector_extract_to_scalar_rewrite_op(

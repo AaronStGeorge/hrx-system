@@ -41,6 +41,11 @@ iree_status_t loom_vector_to_scalar_lower_memory_store(
 iree_status_t loom_vector_to_scalar_lower_fragment_store(
     loom_vector_to_scalar_state_t* state, bool* out_handled);
 
+// Returns contract rejection bits for the vector.fragment.store forms this
+// reference lowering cannot scalarize.
+uint32_t loom_vector_to_scalar_fragment_store_reference_rejection_bits(
+    loom_vector_to_scalar_state_t* state);
+
 iree_status_t loom_vector_to_scalar_lower_memory_store_compress(
     loom_vector_to_scalar_state_t* state);
 
