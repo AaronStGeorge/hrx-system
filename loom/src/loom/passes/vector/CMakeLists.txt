@@ -39,6 +39,8 @@ loom_cc_library(
     "to_scalar_core.h"
     "to_scalar_descriptors.c"
     "to_scalar_descriptors.h"
+    "to_scalar_encoding.c"
+    "to_scalar_encoding.h"
     "to_scalar_lanes.c"
     "to_scalar_lanes.h"
     "to_scalar_memory.c"
