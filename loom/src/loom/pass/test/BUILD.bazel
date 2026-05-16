@@ -21,7 +21,7 @@ loom_assert_no_dependencies(
     name = "registry_no_production_pass_deps",
     dependencies = [
         "//loom/src/loom/pass:builtin_registry",
-        "//loom/src/loom/passes:canonicalize",
+        "//loom/src/loom/transforms/cleanup:canonicalize",
     ],
     targets = [":registry"],
 )
