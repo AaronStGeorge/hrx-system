@@ -15,6 +15,7 @@
 #include "loom/ops/test/registry.h"
 #include "loom/pass/test/registry.h"
 #include "loom/target/low_descriptor_registry_core_test.h"
+#include "loom/target/test/lower.h"
 #include "loom/tools/loom-check/main.h"
 
 static iree_status_t loom_check_test_register_context(void* user_data,
@@ -31,6 +32,13 @@ static iree_status_t loom_check_test_initialize_low_descriptor_registry(
   return iree_ok_status();
 }
 
+static iree_status_t loom_check_test_initialize_low_lower_policy_registry(
+    void* user_data, loom_low_lower_policy_registry_t* out_registry) {
+  (void)user_data;
+  loom_test_low_lower_policy_registry_initialize(out_registry);
+  return iree_ok_status();
+}
+
 static const loom_check_environment_t kLoomCheckTestEnvironment = {
     .register_context =
         {
@@ -40,6 +48,11 @@ static const loom_check_environment_t kLoomCheckTestEnvironment = {
     .initialize_low_descriptor_registry =
         {
             .fn = loom_check_test_initialize_low_descriptor_registry,
+            .user_data = NULL,
+        },
+    .initialize_low_lower_policy_registry =
+        {
+            .fn = loom_check_test_initialize_low_lower_policy_registry,
             .user_data = NULL,
         },
 };

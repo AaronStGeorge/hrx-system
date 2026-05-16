@@ -32,6 +32,8 @@ typedef struct loom_low_lower_policy_registry_t
     loom_low_lower_policy_registry_t;
 typedef struct loom_target_low_legality_provider_list_t
     loom_target_low_legality_provider_list_t;
+typedef struct loom_target_legalizer_provider_list_t
+    loom_target_legalizer_provider_list_t;
 
 typedef struct loom_low_pass_capability_t {
   // Base capability header. Must remain the first field.
@@ -43,6 +45,9 @@ typedef struct loom_low_pass_capability_t {
   // Optional target-specific source legality providers linked into this
   // compiler.
   const loom_target_low_legality_provider_list_t* legality_provider_list;
+  // Optional target-specific source legalizer providers linked into this
+  // compiler.
+  const loom_target_legalizer_provider_list_t* legalizer_provider_list;
 } loom_low_pass_capability_t;
 
 typedef struct loom_low_pass_environment_storage_t {
@@ -60,7 +65,8 @@ typedef struct loom_low_pass_environment_storage_t {
 loom_low_pass_capability_t loom_low_pass_capability_make(
     const loom_low_descriptor_registry_t* descriptor_registry,
     const loom_low_lower_policy_registry_t* lower_policy_registry,
-    const loom_target_low_legality_provider_list_t* legality_provider_list);
+    const loom_target_low_legality_provider_list_t* legality_provider_list,
+    const loom_target_legalizer_provider_list_t* legalizer_provider_list);
 
 // Initializes stack storage for a pass environment containing one low
 // capability. The returned environment must not outlive |out_storage|.
@@ -68,6 +74,7 @@ loom_pass_environment_t loom_low_pass_environment_storage_initialize(
     const loom_low_descriptor_registry_t* descriptor_registry,
     const loom_low_lower_policy_registry_t* lower_policy_registry,
     const loom_target_low_legality_provider_list_t* legality_provider_list,
+    const loom_target_legalizer_provider_list_t* legalizer_provider_list,
     const loom_target_math_policy_registry_t* math_policy_registry,
     loom_low_pass_environment_storage_t* out_storage);
 
@@ -93,6 +100,11 @@ loom_low_pass_capability_lower_policy_registry(
 // Returns the legality provider list selected by |capability|, or NULL.
 const loom_target_low_legality_provider_list_t*
 loom_low_pass_capability_legality_provider_list(
+    const loom_low_pass_capability_t* capability);
+
+// Returns the legalizer provider list selected by |capability|, or NULL.
+const loom_target_legalizer_provider_list_t*
+loom_low_pass_capability_legalizer_provider_list(
     const loom_low_pass_capability_t* capability);
 
 #ifdef __cplusplus

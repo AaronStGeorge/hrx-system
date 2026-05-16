@@ -14,6 +14,7 @@
 #include "loom/codegen/low/passes/dce.h"
 #include "loom/codegen/low/passes/operand_forms.h"
 #include "loom/codegen/low/passes/source_to_low.h"
+#include "loom/codegen/low/passes/target_legalize.h"
 #include "loom/passes/branch_fusion.h"
 #include "loom/passes/branch_sink.h"
 #include "loom/passes/canonicalize.h"
@@ -128,6 +129,51 @@ static const loom_pass_option_schema_t kLowSourceToLowOptionSchema[] = {
 };
 
 static const loom_pass_requirement_def_t kLowSourceToLowRequirements[] = {
+    {
+        .capability_type = &loom_low_pass_capability_type,
+        .key =
+            IREE_SVL(LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_DESCRIPTOR_REGISTRY),
+        .description =
+            IREE_SVL("Requires a pass environment target-low descriptor "
+                     "registry."),
+    },
+    {
+        .capability_type = &loom_low_pass_capability_type,
+        .key = IREE_SVL(
+            LOOM_LOW_PASS_REQUIREMENT_TARGET_LOW_LOWER_POLICY_REGISTRY),
+        .description =
+            IREE_SVL("Requires a pass environment source-to-target-low "
+                     "lowering policy registry."),
+    },
+};
+
+static const loom_pass_option_enum_value_t kLowTargetLegalizeModeValues[] = {
+    {.value = IREE_SVL("eager")},
+    {.value = IREE_SVL("final")},
+};
+
+static const loom_pass_option_schema_t kLowTargetLegalizeOptionSchema[] = {
+    {
+        .name = IREE_SVL("max-errors"),
+        .kind = LOOM_PASS_OPTION_SCHEMA_UINT32,
+        .minimum_uint32 = 0,
+        .maximum_uint32 = UINT32_MAX,
+    },
+    {
+        .name = IREE_SVL("max-iterations"),
+        .kind = LOOM_PASS_OPTION_SCHEMA_UINT32,
+        .minimum_uint32 = 1,
+        .maximum_uint32 = UINT32_MAX,
+    },
+    {
+        .name = IREE_SVL("mode"),
+        .kind = LOOM_PASS_OPTION_SCHEMA_ENUM,
+        .enum_values = kLowTargetLegalizeModeValues,
+        .enum_value_count = IREE_ARRAYSIZE(kLowTargetLegalizeModeValues),
+    },
+};
+
+static const loom_pass_requirement_def_t kLowTargetLegalizeRequirements[] = {
     {
         .capability_type = &loom_low_pass_capability_type,
         .key =
@@ -299,6 +345,16 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .key = IREE_SVL("symbol-dce"),
         .info = loom_symbol_dce_pass_info,
         .module_run = loom_symbol_dce_run,
+    },
+    {
+        .key = IREE_SVL("target-legalize"),
+        .info = loom_low_target_legalize_pass_info,
+        .module_run = loom_low_target_legalize_run,
+        .create = loom_low_target_legalize_create,
+        .option_schema = kLowTargetLegalizeOptionSchema,
+        .option_schema_count = IREE_ARRAYSIZE(kLowTargetLegalizeOptionSchema),
+        .requirement_defs = kLowTargetLegalizeRequirements,
+        .requirement_count = IREE_ARRAYSIZE(kLowTargetLegalizeRequirements),
     },
     {
         .key = IREE_SVL("unroll-scf-for"),

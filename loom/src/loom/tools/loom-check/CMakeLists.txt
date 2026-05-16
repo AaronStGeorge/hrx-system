@@ -81,6 +81,7 @@ loom_cc_library(
     loom::src::loom::pass::registry
     loom::src::loom::pass::tooling
     loom::src::loom::target::entry_selection
+    loom::src::loom::target::legalization
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::low_descriptor_registry_manifest
     loom::src::loom::target::low_legality
@@ -358,6 +359,7 @@ loom_cc_binary(
     loom::src::loom::ops::test
     loom::src::loom::pass::test::registry
     loom::src::loom::target::low_descriptor_registry_core_test
+    loom::src::loom::target::test::lower
   TESTONLY
 )
 

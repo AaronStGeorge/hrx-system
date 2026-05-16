@@ -210,6 +210,25 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    legalization
+  HDRS
+    "legalization.h"
+  SRCS
+    "legalization.c"
+  DEPS
+    ::contract
+    ::types
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::pass::types
+    loom::src::loom::rewrite::rewriter
+    loom::src::loom::util::fact_table
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     contract_test
@@ -282,6 +301,7 @@ loom_cc_library(
   SRCS
     "provider.c"
   DEPS
+    ::legalization
     ::low_descriptor_registry
     ::low_legality
     ::low_packet_diagnostics

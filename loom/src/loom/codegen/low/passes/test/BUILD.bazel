@@ -17,6 +17,8 @@ loom_check_test_suite(
     srcs = [
         "allocation_materialization.loom-test",
         "dce.loom-test",
+        "target_legalize.loom-test",
+        "target_legalize_diagnostics.loom-test",
     ],
     runner = "//loom/src/loom/tools/loom-check:loom-check-test",
 )

@@ -80,6 +80,23 @@ static iree_status_t loom_target_environment_append_low_legality_providers(
   return iree_ok_status();
 }
 
+static iree_status_t loom_target_environment_append_legalizer_providers(
+    loom_target_environment_t* environment,
+    const loom_target_provider_t* provider) {
+  if (environment->legalizer_provider_count +
+          provider->legalizer_provider_list.count >
+      IREE_ARRAYSIZE(environment->legalizer_providers)) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "target legalizer provider capacity exceeded");
+  }
+  for (iree_host_size_t i = 0; i < provider->legalizer_provider_list.count;
+       ++i) {
+    environment->legalizer_providers[environment->legalizer_provider_count++] =
+        provider->legalizer_provider_list.values[i];
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t
 loom_target_environment_append_low_packet_diagnostic_providers(
     loom_target_environment_t* environment,
@@ -129,6 +146,8 @@ iree_status_t loom_target_environment_initialize(
     IREE_RETURN_IF_ERROR(loom_target_environment_append_math_policy_registry(
         out_environment, provider));
     IREE_RETURN_IF_ERROR(loom_target_environment_append_low_legality_providers(
+        out_environment, provider));
+    IREE_RETURN_IF_ERROR(loom_target_environment_append_legalizer_providers(
         out_environment, provider));
     IREE_RETURN_IF_ERROR(
         loom_target_environment_append_low_packet_diagnostic_providers(
@@ -203,6 +222,14 @@ loom_target_environment_low_legality_provider_list(
   return loom_target_low_legality_provider_list_make(
       environment->low_legality_providers,
       environment->low_legality_provider_count);
+}
+
+loom_target_legalizer_provider_list_t
+loom_target_environment_legalizer_provider_list(
+    const loom_target_environment_t* environment) {
+  IREE_ASSERT_ARGUMENT(environment);
+  return loom_target_legalizer_provider_list_make(
+      environment->legalizer_providers, environment->legalizer_provider_count);
 }
 
 loom_target_low_packet_diagnostic_provider_list_t

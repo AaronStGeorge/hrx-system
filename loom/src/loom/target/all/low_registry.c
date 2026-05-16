@@ -25,3 +25,8 @@ loom_target_low_legality_provider_list_t loom_all_low_legality_provider_list(
   return loom_target_environment_low_legality_provider_list(
       loom_all_target_environment());
 }
+
+loom_target_legalizer_provider_list_t loom_all_legalizer_provider_list(void) {
+  return loom_target_environment_legalizer_provider_list(
+      loom_all_target_environment());
+}

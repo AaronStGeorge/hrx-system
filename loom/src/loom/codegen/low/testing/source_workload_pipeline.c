@@ -123,8 +123,8 @@ static iree_status_t loom_low_source_workload_prepare_low_functions(
   loom_pass_environment_t environment =
       loom_low_pass_environment_storage_initialize(
           options->descriptor_registry, /*lower_policy_registry=*/NULL,
-          /*legality_provider_list=*/NULL, /*math_policy_registry=*/NULL,
-          &environment_storage);
+          /*legality_provider_list=*/NULL, /*legalizer_provider_list=*/NULL,
+          /*math_policy_registry=*/NULL, &environment_storage);
   loom_pass_program_t program = {0};
   if (iree_status_is_ok(status)) {
     const loom_pass_program_compile_options_t compile_options = {

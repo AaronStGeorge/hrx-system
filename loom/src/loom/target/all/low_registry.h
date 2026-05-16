@@ -11,6 +11,7 @@
 #define LOOM_TARGET_ALL_LOW_REGISTRY_H_
 
 #include "loom/codegen/low/lower.h"
+#include "loom/target/legalization.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/low_legality.h"
 
@@ -28,6 +29,10 @@ void loom_all_low_lower_policy_registry_initialize(
 // all-target developer registry.
 loom_target_low_legality_provider_list_t loom_all_low_legality_provider_list(
     void);
+
+// Returns every target-specific legalization provider linked into the
+// all-target developer registry.
+loom_target_legalizer_provider_list_t loom_all_legalizer_provider_list(void);
 
 #ifdef __cplusplus
 }  // extern "C"

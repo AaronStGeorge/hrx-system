@@ -75,3 +75,15 @@ loom_cc_library(
         "//runtime/src/iree/base",
     ],
 )
+
+loom_cc_library(
+    name = "target_legalization",
+    srcs = ["target_legalization.c"],
+    hdrs = ["target_legalization.h"],
+    deps = [
+        ":to_scalar",
+        "//loom/src/loom/ops/vector",
+        "//loom/src/loom/target:legalization",
+        "//runtime/src/iree/base",
+    ],
+)

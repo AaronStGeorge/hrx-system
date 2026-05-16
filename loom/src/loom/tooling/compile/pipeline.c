@@ -141,6 +141,9 @@ iree_status_t loom_compile_run_pipeline(
   const loom_target_low_legality_provider_list_t low_legality_provider_list =
       loom_target_environment_low_legality_provider_list(
           options->target_environment);
+  const loom_target_legalizer_provider_list_t legalizer_provider_list =
+      loom_target_environment_legalizer_provider_list(
+          options->target_environment);
 
   const loom_target_entry_options_t entry_options = {
       .entry_symbol = options->entry_symbol,
@@ -161,7 +164,8 @@ iree_status_t loom_compile_run_pipeline(
       .environment = loom_low_pass_environment_storage_initialize(
           &options->low_descriptor_registry->registry,
           &low_lower_policy_registry, &low_legality_provider_list,
-          &math_policy_registry, &low_pass_environment_storage),
+          &legalizer_provider_list, &math_policy_registry,
+          &low_pass_environment_storage),
       .predicate_provider =
           loom_target_pass_predicate_provider(&predicate_storage),
       .block_pool = block_pool,

@@ -25,6 +25,33 @@ static iree_status_t loom_target_pipeline_build_run(loom_builder_t* builder,
                                 &run_op);
 }
 
+static iree_status_t loom_target_pipeline_build_string_attr(
+    loom_builder_t* builder, iree_string_view_t name, iree_string_view_t value,
+    loom_named_attr_t* out_attr) {
+  loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_module_intern_string(builder->module, name, &name_id));
+  loom_string_id_t value_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_module_intern_string(builder->module, value, &value_id));
+  *out_attr = (loom_named_attr_t){
+      .name_id = name_id,
+      .value = loom_attr_string(value_id),
+  };
+  return iree_ok_status();
+}
+
+static iree_status_t loom_target_pipeline_build_target_legalize(
+    loom_builder_t* builder, iree_string_view_t mode) {
+  loom_named_attr_t option_attr = {0};
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_string_attr(
+      builder, IREE_SV("mode"), mode, &option_attr));
+  loom_op_t* run_op = NULL;
+  return loom_pass_ir_build_run(builder, IREE_SV("target-legalize"),
+                                loom_make_named_attr_slice(&option_attr, 1),
+                                &run_op);
+}
+
 static iree_status_t loom_target_pipeline_build_source_to_low(
     loom_builder_t* builder, const loom_target_pipeline_options_t* options) {
   loom_named_attr_t option_attrs[1] = {0};
@@ -73,7 +100,8 @@ static iree_status_t loom_target_pipeline_build_low_cleanup_body(
   return loom_target_pipeline_build_run(builder, IREE_SV("low-dce"));
 }
 
-static iree_status_t loom_target_pipeline_build_source_normalization(
+static iree_status_t
+loom_target_pipeline_build_source_normalization_before_legalize(
     loom_builder_t* builder, void* user_data) {
   const loom_target_pipeline_build_context_t* context =
       (const loom_target_pipeline_build_context_t*)user_data;
@@ -85,8 +113,13 @@ static iree_status_t loom_target_pipeline_build_source_normalization(
       builder, IREE_SV("normalize-kernel-resources")));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
       builder, IREE_SV("promote-private-fragments")));
-  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
-      builder, IREE_SV("vector-reduce-axes-to-scalar")));
+  return iree_ok_status();
+}
+
+static iree_status_t
+loom_target_pipeline_build_source_normalization_after_legalize(
+    loom_builder_t* builder, void* user_data) {
+  (void)user_data;
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
       builder, IREE_SV("vector-gather-to-scalar")));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
@@ -122,7 +155,14 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
   loom_op_t* for_op = NULL;
   IREE_RETURN_IF_ERROR(loom_pass_ir_build_for(
       builder, LOOM_PASS_ANCHOR_FUNC,
-      loom_target_pipeline_build_source_normalization, user_data, &for_op));
+      loom_target_pipeline_build_source_normalization_before_legalize,
+      user_data, &for_op));
+  IREE_RETURN_IF_ERROR(
+      loom_target_pipeline_build_target_legalize(builder, IREE_SV("eager")));
+  IREE_RETURN_IF_ERROR(loom_pass_ir_build_for(
+      builder, LOOM_PASS_ANCHOR_FUNC,
+      loom_target_pipeline_build_source_normalization_after_legalize, user_data,
+      &for_op));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_contribute_phase(
       builder, context, LOOM_TARGET_PIPELINE_PHASE_SOURCE_TO_LOW));
   IREE_RETURN_IF_ERROR(

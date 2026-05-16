@@ -176,6 +176,9 @@ int loom_check_provider_main(int argc, char** argv,
       .low_legality_provider_list =
           loom_target_environment_low_legality_provider_list(
               &state.target_environment),
+      .legalizer_provider_list =
+          loom_target_environment_legalizer_provider_list(
+              &state.target_environment),
       .low_packet_diagnostic_provider_list =
           loom_target_environment_low_packet_diagnostic_provider_list(
               &state.target_environment),

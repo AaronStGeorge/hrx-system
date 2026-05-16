@@ -101,6 +101,32 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    target_legalize
+  HDRS
+    "target_legalize.h"
+  SRCS
+    "target_legalize.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::codegen::low::pass_environment
+    loom::src::loom::codegen::low::source_selection
+    loom::src::loom::ir
+    loom::src::loom::pass::pipeline
+    loom::src::loom::pass::registry
+    loom::src::loom::pass::types
+    loom::src::loom::pass::value_facts
+    loom::src::loom::passes::vector::target_legalization
+    loom::src::loom::rewrite::greedy
+    loom::src::loom::target::legalization
+    loom::src::loom::target::low_descriptor_registry
+    loom::src::loom::target::low_legality
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     source_to_low_test

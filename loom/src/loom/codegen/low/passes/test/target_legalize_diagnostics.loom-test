@@ -1,0 +1,9 @@
+// RUN: pass source-to-low
+
+test.target<low_core> @test_target
+
+func.def target(@test_target) @rejects_reduce_axes_without_target_legalization(%v: vector<4xi32>, %init: i32) -> (i32) {
+  // ERROR@+1: TARGET/001 {op_name="vector.reduce.axes"}
+  %r = vector.reduce.axes<addi> %v, %init axes [0] : vector<4xi32>, i32
+  func.return %r : i32
+}

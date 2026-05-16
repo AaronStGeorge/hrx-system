@@ -1,0 +1,33 @@
+// RUN: pass target-legalize{mode=final},dce,canonicalize
+
+test.target<low_core> @test_target
+
+func.def target(@test_target) @leaves_legal_source_op(%lhs: i32, %rhs: i32) -> (i32) {
+  %sum = scalar.addi %lhs, %rhs : i32
+  func.return %sum : i32
+}
+
+func.def target(@test_target) @scalarizes_reduce_axes_for_target(%v: vector<4xi32>, %init: i32) -> (i32) {
+  %r = vector.reduce.axes<addi> %v, %init axes [0] : vector<4xi32>, i32
+  func.return %r : i32
+}
+
+// ----
+test.target<low_core> @test_target
+
+func.def target(@test_target) @leaves_legal_source_op(%lhs: i32, %rhs: i32) -> (i32) {
+  %sum = scalar.addi %lhs, %rhs : i32
+  func.return %sum : i32
+}
+
+func.def target(@test_target) @scalarizes_reduce_axes_for_target(%v: vector<4xi32>, %init: i32) -> (i32) {
+  %8 = vector.extract %v[0] : vector<4xi32> -> i32
+  %9 = scalar.addi %init, %8 : i32
+  %10 = vector.extract %v[1] : vector<4xi32> -> i32
+  %11 = scalar.addi %9, %10 : i32
+  %12 = vector.extract %v[2] : vector<4xi32> -> i32
+  %13 = scalar.addi %11, %12 : i32
+  %14 = vector.extract %v[3] : vector<4xi32> -> i32
+  %r = scalar.addi %13, %14 : i32
+  func.return %r : i32
+}

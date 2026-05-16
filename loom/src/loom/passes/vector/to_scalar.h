@@ -17,6 +17,7 @@
 
 #include "iree/base/api.h"
 #include "loom/pass/types.h"
+#include "loom/rewrite/rewriter.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,6 +34,14 @@ const loom_pass_info_t* loom_vector_reduce_axes_to_scalar_pass_info(void);
 iree_status_t loom_vector_reduce_axes_to_scalar_run(loom_pass_t* pass,
                                                     loom_module_t* module,
                                                     loom_func_like_t function);
+
+// Rewrites one vector.reduce.axes op using the same scalar reference lowering
+// as the standalone pass. Statistics for lane and loop materialization are
+// recorded in the current pass when provided; the caller owns op-rewrite
+// accounting.
+iree_status_t loom_vector_reduce_axes_to_scalar_rewrite_op(
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op,
+    bool* out_rewritten);
 
 const loom_pass_info_t* loom_vector_gather_to_scalar_pass_info(void);
 

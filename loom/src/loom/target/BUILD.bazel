@@ -183,6 +183,22 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "legalization",
+    srcs = ["legalization.c"],
+    hdrs = ["legalization.h"],
+    deps = [
+        ":contract",
+        ":types",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/pass:types",
+        "//loom/src/loom/rewrite:rewriter",
+        "//loom/src/loom/util:fact_table",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
 loom_cc_test(
     name = "contract_test",
     srcs = ["contract_test.cc"],
@@ -245,6 +261,7 @@ loom_cc_library(
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
     deps = [
+        ":legalization",
         ":low_descriptor_registry",
         ":low_legality",
         ":low_packet_diagnostics",

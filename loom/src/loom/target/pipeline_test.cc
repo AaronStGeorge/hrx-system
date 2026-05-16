@@ -57,12 +57,42 @@ static iree_string_view_t RunKey(loom_module_t* module, const loom_op_t* op) {
   return module->strings.entries[loom_pass_run_key(op)];
 }
 
+static const loom_named_attr_t* FindAttr(loom_module_t* module,
+                                         loom_named_attr_slice_t attrs,
+                                         iree_string_view_t name) {
+  for (iree_host_size_t i = 0; i < attrs.count; ++i) {
+    if (iree_string_view_equal(
+            module->strings.entries[attrs.entries[i].name_id], name)) {
+      return &attrs.entries[i];
+    }
+  }
+  return nullptr;
+}
+
 static void ExpectRunKey(loom_module_t* module, const loom_op_t* op,
                          iree_string_view_t expected) {
   ASSERT_TRUE(loom_pass_run_isa(op));
   EXPECT_TRUE(iree_string_view_equal(RunKey(module, op), expected))
       << "expected " << std::string(expected.data, expected.size) << ", got "
       << std::string(RunKey(module, op).data, RunKey(module, op).size);
+}
+
+static void ExpectRunStringOption(loom_module_t* module, const loom_op_t* op,
+                                  iree_string_view_t name,
+                                  iree_string_view_t expected_value) {
+  ASSERT_TRUE(loom_pass_run_isa(op));
+  const loom_attribute_t options_attr =
+      loom_op_attrs(op)[loom_pass_run_options_ATTR_INDEX];
+  ASSERT_EQ(options_attr.kind, LOOM_ATTR_DICT);
+  const loom_named_attr_t* attr =
+      FindAttr(module, loom_attr_as_dict(options_attr), name);
+  ASSERT_NE(attr, nullptr);
+  ASSERT_EQ(attr->value.kind, LOOM_ATTR_STRING);
+  const iree_string_view_t actual_value =
+      module->strings.entries[loom_attr_as_string_id(attr->value)];
+  EXPECT_TRUE(iree_string_view_equal(actual_value, expected_value))
+      << "expected " << std::string(expected_value.data, expected_value.size)
+      << ", got " << std::string(actual_value.data, actual_value.size);
 }
 
 static void ExpectRunKeySequence(loom_module_t* module, loom_block_t* block,
@@ -129,7 +159,7 @@ TEST_F(TargetPipelineTest, BuildsVisibleSourceLowPipeline) {
   loom_block_t* pipeline_body =
       loom_region_entry_block(loom_pass_pipeline_body(pipeline_op));
   ASSERT_NE(pipeline_body, nullptr);
-  ASSERT_EQ(pipeline_body->op_count, 5u);
+  ASSERT_EQ(pipeline_body->op_count, 7u);
 
   loom_op_t* source_for = pipeline_body->first_op;
   ASSERT_TRUE(loom_pass_for_isa(source_for));
@@ -140,7 +170,20 @@ TEST_F(TargetPipelineTest, BuildsVisibleSourceLowPipeline) {
       IREE_SV("legalize-math"),
       IREE_SV("normalize-kernel-resources"),
       IREE_SV("promote-private-fragments"),
-      IREE_SV("vector-reduce-axes-to-scalar"),
+  };
+  ExpectRunKeySequence(module.get(), source_body, source_keys,
+                       IREE_ARRAYSIZE(source_keys));
+
+  loom_op_t* target_legalize = source_for->next_op;
+  ExpectRunKey(module.get(), target_legalize, IREE_SV("target-legalize"));
+  ExpectRunStringOption(module.get(), target_legalize, IREE_SV("mode"),
+                        IREE_SV("eager"));
+
+  loom_op_t* source_finish_for = target_legalize->next_op;
+  ASSERT_TRUE(loom_pass_for_isa(source_finish_for));
+  loom_block_t* source_finish_body =
+      loom_region_entry_block(loom_pass_for_body(source_finish_for));
+  const iree_string_view_t source_finish_keys[] = {
       IREE_SV("vector-gather-to-scalar"),
       IREE_SV("linearize-view-accesses"),
       IREE_SV("canonicalize"),
@@ -154,10 +197,10 @@ TEST_F(TargetPipelineTest, BuildsVisibleSourceLowPipeline) {
       IREE_SV("cse"),
       IREE_SV("branch-sink"),
   };
-  ExpectRunKeySequence(module.get(), source_body, source_keys,
-                       IREE_ARRAYSIZE(source_keys));
+  ExpectRunKeySequence(module.get(), source_finish_body, source_finish_keys,
+                       IREE_ARRAYSIZE(source_finish_keys));
 
-  loom_op_t* source_to_low_hook = source_for->next_op;
+  loom_op_t* source_to_low_hook = source_finish_for->next_op;
   ExpectRunKey(module.get(), source_to_low_hook, IREE_SV("mock-source-to-low"));
 
   loom_op_t* source_to_low = source_to_low_hook->next_op;
@@ -193,7 +236,7 @@ TEST_F(TargetPipelineTest, BuildsVisiblePreparedLowPipeline) {
   loom_block_t* pipeline_body =
       loom_region_entry_block(loom_pass_pipeline_body(pipeline_op));
   ASSERT_NE(pipeline_body, nullptr);
-  ASSERT_EQ(pipeline_body->op_count, 6u);
+  ASSERT_EQ(pipeline_body->op_count, 8u);
 
   loom_op_t* source_for = pipeline_body->first_op;
   ASSERT_TRUE(loom_pass_for_isa(source_for));
@@ -204,7 +247,20 @@ TEST_F(TargetPipelineTest, BuildsVisiblePreparedLowPipeline) {
       IREE_SV("legalize-math"),
       IREE_SV("normalize-kernel-resources"),
       IREE_SV("promote-private-fragments"),
-      IREE_SV("vector-reduce-axes-to-scalar"),
+  };
+  ExpectRunKeySequence(module.get(), source_body, source_keys,
+                       IREE_ARRAYSIZE(source_keys));
+
+  loom_op_t* target_legalize = source_for->next_op;
+  ExpectRunKey(module.get(), target_legalize, IREE_SV("target-legalize"));
+  ExpectRunStringOption(module.get(), target_legalize, IREE_SV("mode"),
+                        IREE_SV("eager"));
+
+  loom_op_t* source_finish_for = target_legalize->next_op;
+  ASSERT_TRUE(loom_pass_for_isa(source_finish_for));
+  loom_block_t* source_finish_body =
+      loom_region_entry_block(loom_pass_for_body(source_finish_for));
+  const iree_string_view_t source_finish_keys[] = {
       IREE_SV("vector-gather-to-scalar"),
       IREE_SV("linearize-view-accesses"),
       IREE_SV("canonicalize"),
@@ -218,10 +274,10 @@ TEST_F(TargetPipelineTest, BuildsVisiblePreparedLowPipeline) {
       IREE_SV("cse"),
       IREE_SV("branch-sink"),
   };
-  ExpectRunKeySequence(module.get(), source_body, source_keys,
-                       IREE_ARRAYSIZE(source_keys));
+  ExpectRunKeySequence(module.get(), source_finish_body, source_finish_keys,
+                       IREE_ARRAYSIZE(source_finish_keys));
 
-  loom_op_t* source_to_low_hook = source_for->next_op;
+  loom_op_t* source_to_low_hook = source_finish_for->next_op;
   ExpectRunKey(module.get(), source_to_low_hook, IREE_SV("mock-source-to-low"));
 
   loom_op_t* source_to_low = source_to_low_hook->next_op;

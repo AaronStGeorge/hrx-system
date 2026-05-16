@@ -20,6 +20,7 @@
 #include "loom/ir/context.h"
 #include "loom/pass/environment.h"
 #include "loom/pass/registry.h"
+#include "loom/target/legalization.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/low_legality.h"
 #include "loom/target/low_packet_diagnostics.h"
@@ -92,6 +93,8 @@ typedef struct loom_target_provider_t {
       initialize_math_policy_registry;
   // Optional source legality providers contributed by this target.
   loom_target_low_legality_provider_list_t low_legality_provider_list;
+  // Optional source legalization providers contributed by this target.
+  loom_target_legalizer_provider_list_t legalizer_provider_list;
   // Optional low-packet diagnostic providers contributed by this target.
   loom_target_low_packet_diagnostic_provider_list_t
       low_packet_diagnostic_provider_list;
@@ -114,6 +117,7 @@ enum {
   LOOM_TARGET_PROVIDER_LOW_LOWER_POLICY_CAPACITY = 128,
   LOOM_TARGET_PROVIDER_MATH_POLICY_CAPACITY = 128,
   LOOM_TARGET_PROVIDER_LOW_LEGALITY_PROVIDER_CAPACITY = 64,
+  LOOM_TARGET_PROVIDER_LEGALIZER_PROVIDER_CAPACITY = 64,
   LOOM_TARGET_PROVIDER_LOW_PACKET_DIAGNOSTIC_PROVIDER_CAPACITY = 64,
   LOOM_TARGET_PROVIDER_PASS_REGISTRY_CAPACITY = 64,
 };
@@ -142,6 +146,11 @@ struct loom_target_environment_t {
       [LOOM_TARGET_PROVIDER_LOW_LEGALITY_PROVIDER_CAPACITY];
   // Number of entries in |low_legality_providers|.
   iree_host_size_t low_legality_provider_count;
+  // Target legalizer provider table assembled once.
+  const loom_target_legalizer_provider_t*
+      legalizer_providers[LOOM_TARGET_PROVIDER_LEGALIZER_PROVIDER_CAPACITY];
+  // Number of entries in |legalizer_providers|.
+  iree_host_size_t legalizer_provider_count;
   // Target-low packet diagnostic provider table assembled once.
   const loom_target_low_packet_diagnostic_provider_t*
       low_packet_diagnostic_providers
@@ -194,6 +203,11 @@ iree_status_t loom_target_environment_initialize_math_policy_registry(
 // Returns target-low source legality providers linked into |environment|.
 loom_target_low_legality_provider_list_t
 loom_target_environment_low_legality_provider_list(
+    const loom_target_environment_t* environment);
+
+// Returns target legalizer providers linked into |environment|.
+loom_target_legalizer_provider_list_t
+loom_target_environment_legalizer_provider_list(
     const loom_target_environment_t* environment);
 
 // Returns target-low packet diagnostic providers linked into |environment|.

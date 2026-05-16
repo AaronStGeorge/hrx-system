@@ -266,6 +266,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::passes::dce
     loom::src::loom::codegen::low::passes::operand_forms
     loom::src::loom::codegen::low::passes::source_to_low
+    loom::src::loom::codegen::low::passes::target_legalize
     loom::src::loom::passes::branch_fusion
     loom::src::loom::passes::branch_sink
     loom::src::loom::passes::canonicalize

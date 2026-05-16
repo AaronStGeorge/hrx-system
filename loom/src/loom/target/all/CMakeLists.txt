@@ -40,6 +40,7 @@ loom_cc_library(
     ::provider
     iree::base
     loom::src::loom::codegen::low::lower
+    loom::src::loom::target::legalization
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::low_legality
   PUBLIC
