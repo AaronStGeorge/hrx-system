@@ -1994,6 +1994,52 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_active_mask_i6
 // RUN: emit source-low output=low
 
 amdgpu.target<gfx950> @target
+kernel.def target(@target) @subgroup_divergent_lane_mask_select_i64_wave64(%output: buffer) {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %zero_offset = index.constant 0 : offset
+  %output_view = buffer.view %output[%zero_offset] : buffer -> view<64xi64, #dense>
+  %lane = kernel.subgroup.lane.id : index
+  %lane_i32 = index.cast %lane : index to i32
+  %limit = scalar.constant 32 : i32
+  %predicate = scalar.cmpi slt, %lane_i32, %limit : i32
+  %active = kernel.subgroup.active.mask : i64
+  %zero = scalar.constant 0 : i64
+  %selected = scf.select %predicate, %active, %zero : i64
+  %result = vector.from_elements %selected : vector<1xi64>
+  vector.store %result, %output_view[%tid] : vector<1xi64>, view<64xi64, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_divergent_lane_mask_select_i64_wave64() asm<amdgpu.cdna4.core> {
+  %lane_i32 = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %output_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 512} : reg<amdgpu.sgpr x2>
+  %predicate = v_cmp_lt_i32_src1_inline %lane_i32 {rhs = 32}
+  %active = s_mov_b64_exec_read
+  %21 = s_mov_b32 0
+  %24 = slice %active[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %25 = v_mov_b32_copy %24
+  %27 = v_mov_b32_copy %21
+  %28 = v_cndmask_b32 %27, %25, %predicate
+  %29 = slice %active[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %30 = v_mov_b32_copy %29
+  %33 = v_cndmask_b32 %27, %30, %predicate
+  %result = concat(%28, %33) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %35 = v_lshlrev_b32_src0_inline %lane_i32, 3
+  %36 = s_mov_b32_m0_imm 0
+  global_store_dwordx2_saddr %35, %result, %output_view, %36
+  return
+}
+
+// ====
+// RUN: emit source-low output=low
+
+amdgpu.target<gfx950> @target
 kernel.def target(@target) @subgroup_active_mask_trunci_i32_wave64() {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index
