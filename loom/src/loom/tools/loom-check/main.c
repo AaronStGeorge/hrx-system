@@ -142,14 +142,13 @@ static void loom_check_print_agent_markdown(FILE* stream) {
       "\n"
       "`--update` cannot be used with stdin or verify-mode cases.\n"
       "\n"
-      "### Emit JSON discipline\n"
+      "### Emit output discipline\n"
       "\n"
       "Prefer IR output checks for compiler behavior. Use large JSON emit "
       "goldens\n"
-      "only when the JSON structure is the unit under test; for "
-      "diagnostic-only\n"
-      "emitter checks, pass `output=none` and match `ERROR@`/`REMARK@`\n"
-      "annotations instead.\n");
+      "only when the JSON structure is the unit under test. Prefer concise\n"
+      "text emit targets, such as `low-allocation`, when the test only needs\n"
+      "to prove compiler facts.\n");
 }
 
 iree_status_t loom_check_register_production_context(void* user_data,
@@ -201,13 +200,13 @@ int loom_check_main(int argc, char** argv,
       "  emit <t>    Parse, emit analysis or target-structured output <t>,\n"
       "              print, compare.\n"
       "              Core targets include liveness-json, low-schedule-json,\n"
-      "              low-allocation-json, low-packet-json,\n"
+      "              low-allocation, low-allocation-json, low-packet-json,\n"
       "              low-descriptor-manifest, target-low-registry-manifest,\n"
       "              and source-low. source-low runs the shared source-to-low\n"
       "              pass pipeline and accepts output=module|low and\n"
       "              diagnostics=none|memory|all.\n"
-      "              low-allocation-json and low-packet-json accept\n"
-      "              "
+      "              low-allocation, low-allocation-json, and low-packet-json\n"
+      "              accept "
       "fixed=%value:<physical_register|target_id>:<base>:<count>\n"
       "              allocation anchors.\n"
       "              low-schedule-json, low-allocation-json, and\n"

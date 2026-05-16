@@ -1,4 +1,4 @@
-// RUN: emit low-allocation-json @spirv_iadd_ids_allocate_logical_ids output=none
+// RUN: emit low-allocation @spirv_iadd_ids_allocate_logical_ids
 
 spirv.target<vulkan1_3> @target
 
@@ -6,6 +6,18 @@ low.func.def target(@target) @spirv_iadd_ids_allocate_logical_ids(%lhs: reg<spir
   %sum = OpIAdd %lhs, %rhs
   return %sum
 }
+
+// ----
+low-allocation @spirv_iadd_ids_allocate_logical_ids
+target: target
+descriptor_set: spirv.logical.core
+mode: virtual
+assignments: 3
+remarks: 0
+spills: 0
+copies: coalesced=0 materialized=0
+classes:
+  spirv.id: assignments=3 units=3 target_ids=2 physical=0 spill_slots=0 unassigned=0
 
 // ====
 
@@ -21,7 +33,7 @@ low.func.def target(@target) @spirv_workgroup_storage_address() asm<spirv.logica
 
 // ====
 
-// RUN: emit low-allocation-json @spirv_storage_buffer_load_store output=none
+// RUN: emit low-allocation @spirv_storage_buffer_load_store
 
 spirv.target<vulkan1_3> @target
 
@@ -31,9 +43,22 @@ low.func.def target(@target) @spirv_storage_buffer_load_store(%ptr: reg<spirv.pt
   return %loaded
 }
 
+// ----
+low-allocation @spirv_storage_buffer_load_store
+target: target
+descriptor_set: spirv.logical.core
+mode: virtual
+assignments: 2
+remarks: 0
+spills: 0
+copies: coalesced=0 materialized=0
+classes:
+  spirv.id: assignments=1 units=1 target_ids=1 physical=0 spill_slots=0 unassigned=0
+  spirv.ptr.storage_buffer: assignments=1 units=1 target_ids=1 physical=0 spill_slots=0 unassigned=0
+
 // ====
 
-// RUN: emit low-allocation-json @spirv_storage_buffer_bda_addressing output=none
+// RUN: emit low-allocation @spirv_storage_buffer_bda_addressing
 
 spirv.target<vulkan1_3> @target
 
@@ -43,6 +68,20 @@ low.func.def target(@target) @spirv_storage_buffer_bda_addressing(%base: reg<spi
   %loaded = OpLoad.storage_buffer.i32 %ptr
   return %loaded
 }
+
+// ----
+low-allocation @spirv_storage_buffer_bda_addressing
+target: target
+descriptor_set: spirv.logical.core
+mode: virtual
+assignments: 6
+remarks: 0
+spills: 0
+copies: coalesced=0 materialized=0
+classes:
+  spirv.id: assignments=1 units=1 target_ids=1 physical=0 spill_slots=0 unassigned=0
+  spirv.offset64: assignments=3 units=3 target_ids=2 physical=0 spill_slots=0 unassigned=0
+  spirv.ptr.storage_buffer: assignments=2 units=2 target_ids=1 physical=0 spill_slots=0 unassigned=0
 
 // ====
 

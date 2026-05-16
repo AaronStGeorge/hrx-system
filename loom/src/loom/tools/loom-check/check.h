@@ -34,10 +34,11 @@
 //                           Analysis targets include liveness-json @function,
 //                           low-schedule-json @function [strategy=...]
 //                           [diagnostics=...] [cliff=<reg-class>:...],
-//                           low-allocation-json @function
+//                           low-allocation @function
 //                           [diagnostics=...] [class=units...]
 //                           [fixed=%value:<kind>:<base>:<count>],
-//                           and low-packet-json @function.
+//                           low-allocation-json @function for the full
+//                           allocation table, and low-packet-json @function.
 //                           Source-to-low tests use source-low
 //                           [output=module|low]
 //                           [diagnostics=none|memory|all]. Linked providers
