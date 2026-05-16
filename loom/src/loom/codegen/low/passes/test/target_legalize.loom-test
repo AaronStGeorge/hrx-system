@@ -61,6 +61,44 @@ func.def target(@test_target) @scalarizes_dynamic_flat_mma_store(%m: index, %n: 
   func.return
 }
 
+func.def target(@test_target) @scalarizes_dense_flat_mma_fragment_store(%lhs0: f32, %rhs0: f32, %init0: f32, %out_buffer: buffer) {
+  %base = index.constant 0 : offset
+  %origin = index.constant 0 : index
+  %m = index.constant 2 : index
+  %n = index.constant 2 : index
+  %k = index.constant 2 : index
+  %layout = encoding.layout.dense : encoding<layout>
+  %out_view = buffer.view %out_buffer[%base] : buffer -> view<2x2xf32, %layout>
+  %lhs_data = vector.splat %lhs0 : vector<4xf32>
+  %rhs_data = vector.splat %rhs0 : vector<4xf32>
+  %init_data = vector.splat %init0 : vector<4xf32>
+  %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : vector<4xf32>
+  %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : vector<4xf32>
+  %init = vector.fragment<init> %init_data shape [%m, %n] : vector<4xf32>
+  %result = vector.mma %lhs, %rhs, %init : vector<4xf32>, vector<4xf32>, vector<4xf32>
+  vector.fragment.store<result> %result, %out_view[%origin, %origin] shape [%m, %n] : vector<4xf32>, view<2x2xf32, %layout>
+  func.return
+}
+
+func.def target(@test_target) @scalarizes_target_shaped_fragment_mma_store(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer) {
+  %base = index.constant 0 : offset
+  %origin = index.constant 0 : index
+  %m = index.constant 16 : index
+  %n = index.constant 16 : index
+  %k = index.constant 16 : index
+  %layout = encoding.layout.dense : encoding<layout>
+  %lhs_view = buffer.view %lhs_buffer[%base] : buffer -> view<16x16xf16, %layout>
+  %rhs_view = buffer.view %rhs_buffer[%base] : buffer -> view<16x16xf16, %layout>
+  %init_view = buffer.view %init_buffer[%base] : buffer -> view<16x16xf32, %layout>
+  %out_view = buffer.view %out_buffer[%base] : buffer -> view<16x16xf32, %layout>
+  %lhs = vector.fragment.load<lhs> %lhs_view[%origin, %origin] shape [%m, %k] : view<16x16xf16, %layout> -> vector<16xf16>
+  %rhs = vector.fragment.load<rhs> %rhs_view[%origin, %origin] shape [%k, %n] : view<16x16xf16, %layout> -> vector<16xf16>
+  %init = vector.fragment.load<init> %init_view[%origin, %origin] shape [%m, %n] : view<16x16xf32, %layout> -> vector<8xf32>
+  %result = vector.mma %lhs, %rhs, %init : vector<16xf16>, vector<16xf16>, vector<8xf32>
+  vector.fragment.store<result> %result, %out_view[%origin, %origin] shape [%m, %n] : vector<8xf32>, view<16x16xf32, %layout>
+  func.return
+}
+
 // ----
 test.target<low_core> @test_target
 
@@ -70,58 +108,58 @@ func.def target(@test_target) @leaves_legal_source_op(%lhs: i32, %rhs: i32) -> (
 }
 
 func.def target(@test_target) @scalarizes_reduce_axes_for_target(%v: vector<4xi32>, %init: i32) -> (i32) {
-  %61 = vector.extract %v[0] : vector<4xi32> -> i32
-  %62 = scalar.addi %init, %61 : i32
-  %63 = vector.extract %v[1] : vector<4xi32> -> i32
-  %64 = scalar.addi %62, %63 : i32
-  %65 = vector.extract %v[2] : vector<4xi32> -> i32
-  %66 = scalar.addi %64, %65 : i32
-  %67 = vector.extract %v[3] : vector<4xi32> -> i32
-  %r = scalar.addi %66, %67 : i32
+  %97 = vector.extract %v[0] : vector<4xi32> -> i32
+  %98 = scalar.addi %init, %97 : i32
+  %99 = vector.extract %v[1] : vector<4xi32> -> i32
+  %100 = scalar.addi %98, %99 : i32
+  %101 = vector.extract %v[2] : vector<4xi32> -> i32
+  %102 = scalar.addi %100, %101 : i32
+  %103 = vector.extract %v[3] : vector<4xi32> -> i32
+  %r = scalar.addi %102, %103 : i32
   func.return %r : i32
 }
 
 func.def target(@test_target) @scalarizes_dense_full_logical_mma(%lhs_data: vector<4xi32>, %rhs_data: vector<4xi32>, %init_data: vector<4xi32>) -> (vector<4xi32>) {
   %m = index.constant 2 : index
   %n = index.constant 2 : index
-  %69 = vector.extract %init_data[0] : vector<4xi32> -> i32
-  %70 = vector.extract %lhs_data[0] : vector<4xi32> -> i32
-  %71 = vector.extract %rhs_data[0] : vector<4xi32> -> i32
-  %72 = scalar.muli %70, %71 : i32
-  %73 = scalar.addi %69, %72 : i32
-  %74 = vector.extract %lhs_data[1] : vector<4xi32> -> i32
-  %75 = vector.extract %rhs_data[2] : vector<4xi32> -> i32
-  %76 = scalar.muli %74, %75 : i32
-  %77 = scalar.addi %73, %76 : i32
-  %78 = vector.extract %init_data[1] : vector<4xi32> -> i32
-  %79 = vector.extract %lhs_data[0] : vector<4xi32> -> i32
-  %80 = vector.extract %rhs_data[1] : vector<4xi32> -> i32
-  %81 = scalar.muli %79, %80 : i32
-  %82 = scalar.addi %78, %81 : i32
-  %83 = vector.extract %lhs_data[1] : vector<4xi32> -> i32
-  %84 = vector.extract %rhs_data[3] : vector<4xi32> -> i32
-  %85 = scalar.muli %83, %84 : i32
-  %86 = scalar.addi %82, %85 : i32
-  %87 = vector.extract %init_data[2] : vector<4xi32> -> i32
-  %88 = vector.extract %lhs_data[2] : vector<4xi32> -> i32
-  %89 = vector.extract %rhs_data[0] : vector<4xi32> -> i32
-  %90 = scalar.muli %88, %89 : i32
-  %91 = scalar.addi %87, %90 : i32
-  %92 = vector.extract %lhs_data[3] : vector<4xi32> -> i32
-  %93 = vector.extract %rhs_data[2] : vector<4xi32> -> i32
-  %94 = scalar.muli %92, %93 : i32
-  %95 = scalar.addi %91, %94 : i32
-  %96 = vector.extract %init_data[3] : vector<4xi32> -> i32
-  %97 = vector.extract %lhs_data[2] : vector<4xi32> -> i32
-  %98 = vector.extract %rhs_data[1] : vector<4xi32> -> i32
-  %99 = scalar.muli %97, %98 : i32
-  %100 = scalar.addi %96, %99 : i32
-  %101 = vector.extract %lhs_data[3] : vector<4xi32> -> i32
-  %102 = vector.extract %rhs_data[3] : vector<4xi32> -> i32
-  %103 = scalar.muli %101, %102 : i32
-  %104 = scalar.addi %100, %103 : i32
-  %105 = vector.from_elements %77, %86, %95, %104 : vector<4xi32>
-  %result = vector.fragment<result> %105 shape [%m, %n] : vector<4xi32>
+  %105 = vector.extract %init_data[0] : vector<4xi32> -> i32
+  %106 = vector.extract %lhs_data[0] : vector<4xi32> -> i32
+  %107 = vector.extract %rhs_data[0] : vector<4xi32> -> i32
+  %108 = scalar.muli %106, %107 : i32
+  %109 = scalar.addi %105, %108 : i32
+  %110 = vector.extract %lhs_data[1] : vector<4xi32> -> i32
+  %111 = vector.extract %rhs_data[2] : vector<4xi32> -> i32
+  %112 = scalar.muli %110, %111 : i32
+  %113 = scalar.addi %109, %112 : i32
+  %114 = vector.extract %init_data[1] : vector<4xi32> -> i32
+  %115 = vector.extract %lhs_data[0] : vector<4xi32> -> i32
+  %116 = vector.extract %rhs_data[1] : vector<4xi32> -> i32
+  %117 = scalar.muli %115, %116 : i32
+  %118 = scalar.addi %114, %117 : i32
+  %119 = vector.extract %lhs_data[1] : vector<4xi32> -> i32
+  %120 = vector.extract %rhs_data[3] : vector<4xi32> -> i32
+  %121 = scalar.muli %119, %120 : i32
+  %122 = scalar.addi %118, %121 : i32
+  %123 = vector.extract %init_data[2] : vector<4xi32> -> i32
+  %124 = vector.extract %lhs_data[2] : vector<4xi32> -> i32
+  %125 = vector.extract %rhs_data[0] : vector<4xi32> -> i32
+  %126 = scalar.muli %124, %125 : i32
+  %127 = scalar.addi %123, %126 : i32
+  %128 = vector.extract %lhs_data[3] : vector<4xi32> -> i32
+  %129 = vector.extract %rhs_data[2] : vector<4xi32> -> i32
+  %130 = scalar.muli %128, %129 : i32
+  %131 = scalar.addi %127, %130 : i32
+  %132 = vector.extract %init_data[3] : vector<4xi32> -> i32
+  %133 = vector.extract %lhs_data[2] : vector<4xi32> -> i32
+  %134 = vector.extract %rhs_data[1] : vector<4xi32> -> i32
+  %135 = scalar.muli %133, %134 : i32
+  %136 = scalar.addi %132, %135 : i32
+  %137 = vector.extract %lhs_data[3] : vector<4xi32> -> i32
+  %138 = vector.extract %rhs_data[3] : vector<4xi32> -> i32
+  %139 = scalar.muli %137, %138 : i32
+  %140 = scalar.addi %136, %139 : i32
+  %141 = vector.from_elements %113, %122, %131, %140 : vector<4xi32>
+  %result = vector.fragment<result> %141 shape [%m, %n] : vector<4xi32>
   func.return %result : vector<4xi32>
 }
 
@@ -132,42 +170,42 @@ func.def target(@test_target) @scalarizes_dynamic_rank2_mma_store(%m: index, %n:
   %rhs_view = buffer.view %rhs_buffer[%base] : buffer -> view<[%k]x[%n]xf32, %layout>
   %init_view = buffer.view %init_buffer[%base] : buffer -> view<[%m]x[%n]xf32, %layout>
   %out_view = buffer.view %out_buffer[%base] : buffer -> view<[%m]x[%n]xf32, %layout>
-  %107 = index.constant 0 : index
-  %108 = index.constant 1 : index
-  cfg.br ^_bb1(%107: index)
-^_bb1(%122: index):
-  %123 = index.cmp slt, %122, %m : index
-  cfg.cond_br %123, ^_bb2, ^_bb10
+  %143 = index.constant 0 : index
+  %144 = index.constant 1 : index
+  cfg.br ^_bb1(%143: index)
+^_bb1(%158: index):
+  %159 = index.cmp slt, %158, %m : index
+  cfg.cond_br %159, ^_bb2, ^_bb10
 ^_bb2:
-  %110 = index.constant 0 : index
-  %111 = index.constant 1 : index
-  cfg.br ^_bb3(%110: index)
-^_bb3(%125: index):
-  %126 = index.cmp slt, %125, %n : index
-  cfg.cond_br %126, ^_bb4, ^_bb9
+  %146 = index.constant 0 : index
+  %147 = index.constant 1 : index
+  cfg.br ^_bb3(%146: index)
+^_bb3(%161: index):
+  %162 = index.cmp slt, %161, %n : index
+  cfg.cond_br %162, ^_bb4, ^_bb9
 ^_bb4:
-  %113 = view.load %init_view[%122, %125] : view<[%m]x[%n]xf32, %layout> -> f32
-  %114 = index.constant 0 : index
-  %115 = index.constant 1 : index
-  cfg.br ^_bb5(%114: index, %113: f32)
-^_bb5(%129: index, %130: f32):
-  %131 = index.cmp slt, %129, %k : index
-  cfg.cond_br %131, ^_bb6, ^_bb7
+  %149 = view.load %init_view[%158, %161] : view<[%m]x[%n]xf32, %layout> -> f32
+  %150 = index.constant 0 : index
+  %151 = index.constant 1 : index
+  cfg.br ^_bb5(%150: index, %149: f32)
+^_bb5(%165: index, %166: f32):
+  %167 = index.cmp slt, %165, %k : index
+  cfg.cond_br %167, ^_bb6, ^_bb7
 ^_bb6:
-  %119 = view.load %lhs_view[%122, %129] : view<[%m]x[%k]xf32, %layout> -> f32
-  %120 = view.load %rhs_view[%129, %125] : view<[%k]x[%n]xf32, %layout> -> f32
-  %121 = scalar.fmaf %119, %120, %130 : f32
-  %132 = index.add %129, %115 : index
-  cfg.br ^_bb5(%132: index, %121: f32)
+  %155 = view.load %lhs_view[%158, %165] : view<[%m]x[%k]xf32, %layout> -> f32
+  %156 = view.load %rhs_view[%165, %161] : view<[%k]x[%n]xf32, %layout> -> f32
+  %157 = scalar.fmaf %155, %156, %166 : f32
+  %168 = index.add %165, %151 : index
+  cfg.br ^_bb5(%168: index, %157: f32)
 ^_bb7:
-  cfg.br ^_bb8(%130: f32)
-^_bb8(%128: f32):
-  view.store %128, %out_view[%122, %125] : f32, view<[%m]x[%n]xf32, %layout>
-  %127 = index.add %125, %111 : index
-  cfg.br ^_bb3(%127: index)
+  cfg.br ^_bb8(%166: f32)
+^_bb8(%164: f32):
+  view.store %164, %out_view[%158, %161] : f32, view<[%m]x[%n]xf32, %layout>
+  %163 = index.add %161, %147 : index
+  cfg.br ^_bb3(%163: index)
 ^_bb9:
-  %124 = index.add %122, %108 : index
-  cfg.br ^_bb1(%124: index)
+  %160 = index.add %158, %144 : index
+  cfg.br ^_bb1(%160: index)
 ^_bb10:
   func.return
 }
@@ -177,30 +215,132 @@ func.def target(@test_target) @scalarizes_dynamic_flat_mma_store(%m: index, %n: 
   %layout = encoding.layout.dense : encoding<layout>
   %mn = index.mul %m, %n : index
   %out_view = buffer.view %out_buffer[%base] : buffer -> view<[%mn]xf32, %layout>
-  %133 = index.constant 0 : index
-  %134 = index.constant 1 : index
-  cfg.br ^_bb1(%133: index)
-^_bb1(%150: index):
-  %151 = index.cmp slt, %150, %mn : index
-  cfg.cond_br %151, ^_bb2, ^_bb7
+  %169 = index.constant 0 : index
+  %170 = index.constant 1 : index
+  cfg.br ^_bb1(%169: index)
+^_bb1(%186: index):
+  %187 = index.cmp slt, %186, %mn : index
+  cfg.cond_br %187, ^_bb2, ^_bb7
 ^_bb2:
-  %140 = index.constant 0 : index
-  %141 = index.constant 1 : index
-  cfg.br ^_bb3(%140: index, %init0: f32)
-^_bb3(%154: index, %155: f32):
-  %156 = index.cmp slt, %154, %k : index
-  cfg.cond_br %156, ^_bb4, ^_bb5
+  %176 = index.constant 0 : index
+  %177 = index.constant 1 : index
+  cfg.br ^_bb3(%176: index, %init0: f32)
+^_bb3(%190: index, %191: f32):
+  %192 = index.cmp slt, %190, %k : index
+  cfg.cond_br %192, ^_bb4, ^_bb5
 ^_bb4:
-  %149 = scalar.fmaf %lhs0, %rhs0, %155 : f32
-  %157 = index.add %154, %141 : index
-  cfg.br ^_bb3(%157: index, %149: f32)
+  %185 = scalar.fmaf %lhs0, %rhs0, %191 : f32
+  %193 = index.add %190, %177 : index
+  cfg.br ^_bb3(%193: index, %185: f32)
 ^_bb5:
-  cfg.br ^_bb6(%155: f32)
-^_bb6(%153: f32):
-  view.store %153, %out_view[%150] : f32, view<[%mn]xf32, %layout>
-  %152 = index.add %150, %134 : index
-  cfg.br ^_bb1(%152: index)
+  cfg.br ^_bb6(%191: f32)
+^_bb6(%189: f32):
+  view.store %189, %out_view[%186] : f32, view<[%mn]xf32, %layout>
+  %188 = index.add %186, %170 : index
+  cfg.br ^_bb1(%188: index)
 ^_bb7:
+  func.return
+}
+
+func.def target(@test_target) @scalarizes_dense_flat_mma_fragment_store(%lhs0: f32, %rhs0: f32, %init0: f32, %out_buffer: buffer) {
+  %base = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %out_view = buffer.view %out_buffer[%base] : buffer -> view<2x2xf32, %layout>
+  %194 = index.constant 0 : index
+  %195 = index.constant 2 : index
+  %196 = index.constant 1 : index
+  cfg.br ^_bb1(%194: index)
+^_bb1(%218: index):
+  %220 = index.cmp slt, %218, %195 : index
+  cfg.cond_br %220, ^_bb2, ^_bb10
+^_bb2:
+  %219 = index.assume %218 [range(%218, 0, 1)] : index
+  %198 = index.constant 0 : index
+  %199 = index.constant 2 : index
+  %200 = index.constant 1 : index
+  cfg.br ^_bb3(%198: index)
+^_bb3(%222: index):
+  %224 = index.cmp slt, %222, %199 : index
+  cfg.cond_br %224, ^_bb4, ^_bb9
+^_bb4:
+  %223 = index.assume %222 [range(%222, 0, 1)] : index
+  %205 = index.constant 0 : index
+  %206 = index.constant 2 : index
+  %207 = index.constant 1 : index
+  cfg.br ^_bb5(%205: index, %init0: f32)
+^_bb5(%227: index, %228: f32):
+  %230 = index.cmp slt, %227, %206 : index
+  cfg.cond_br %230, ^_bb6, ^_bb7
+^_bb6:
+  %229 = index.assume %227 [range(%227, 0, 1)] : index
+  %217 = scalar.fmaf %lhs0, %rhs0, %228 : f32
+  %231 = index.add %229, %207 : index
+  cfg.br ^_bb5(%231: index, %217: f32)
+^_bb7:
+  cfg.br ^_bb8(%228: f32)
+^_bb8(%226: f32):
+  view.store %226, %out_view[%219, %223] : f32, view<2x2xf32, %layout>
+  %225 = index.add %223, %200 : index
+  cfg.br ^_bb3(%225: index)
+^_bb9:
+  %221 = index.add %219, %196 : index
+  cfg.br ^_bb1(%221: index)
+^_bb10:
+  func.return
+}
+
+func.def target(@test_target) @scalarizes_target_shaped_fragment_mma_store(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer) {
+  %base = index.constant 0 : offset
+  %layout = encoding.layout.dense : encoding<layout>
+  %lhs_view = buffer.view %lhs_buffer[%base] : buffer -> view<16x16xf16, %layout>
+  %rhs_view = buffer.view %rhs_buffer[%base] : buffer -> view<16x16xf16, %layout>
+  %init_view = buffer.view %init_buffer[%base] : buffer -> view<16x16xf32, %layout>
+  %out_view = buffer.view %out_buffer[%base] : buffer -> view<16x16xf32, %layout>
+  %232 = index.constant 0 : index
+  %233 = index.constant 16 : index
+  %234 = index.constant 1 : index
+  cfg.br ^_bb1(%232: index)
+^_bb1(%252: index):
+  %254 = index.cmp slt, %252, %233 : index
+  cfg.cond_br %254, ^_bb2, ^_bb10
+^_bb2:
+  %253 = index.assume %252 [range(%252, 0, 15)] : index
+  %236 = index.constant 0 : index
+  %237 = index.constant 16 : index
+  %238 = index.constant 1 : index
+  cfg.br ^_bb3(%236: index)
+^_bb3(%256: index):
+  %258 = index.cmp slt, %256, %237 : index
+  cfg.cond_br %258, ^_bb4, ^_bb9
+^_bb4:
+  %257 = index.assume %256 [range(%256, 0, 15)] : index
+  %240 = view.load %init_view[%253, %257] : view<16x16xf32, %layout> -> f32
+  %241 = index.constant 0 : index
+  %242 = index.constant 16 : index
+  %243 = index.constant 1 : index
+  cfg.br ^_bb5(%241: index, %240: f32)
+^_bb5(%261: index, %262: f32):
+  %264 = index.cmp slt, %261, %242 : index
+  cfg.cond_br %264, ^_bb6, ^_bb7
+^_bb6:
+  %263 = index.assume %261 [range(%261, 0, 15)] : index
+  %247 = view.load %lhs_view[%253, %263] : view<16x16xf16, %layout> -> f16
+  %248 = view.load %rhs_view[%263, %257] : view<16x16xf16, %layout> -> f16
+  %249 = scalar.extf %247 : f16 to f32
+  %250 = scalar.extf %248 : f16 to f32
+  %251 = scalar.fmaf %249, %250, %262 : f32
+  %265 = index.add %263, %243 : index
+  cfg.br ^_bb5(%265: index, %251: f32)
+^_bb7:
+  cfg.br ^_bb8(%262: f32)
+^_bb8(%260: f32):
+  view.store %260, %out_view[%253, %257] : f32, view<16x16xf32, %layout>
+  %259 = index.add %257, %238 : index
+  cfg.br ^_bb3(%259: index)
+^_bb9:
+  %255 = index.add %253, %234 : index
+  cfg.br ^_bb1(%255: index)
+^_bb10:
   func.return
 }
 

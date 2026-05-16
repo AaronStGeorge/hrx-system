@@ -43,10 +43,9 @@ iree_status_t loom_vector_reduce_axes_to_scalar_rewrite_op(
     loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op,
     bool* out_rewritten);
 
-// Rewrites one dense full-logical vector.mma op using scalar reference
-// semantics. Target-shaped compressed fragments are left untouched because they
-// require explicit fragment layout facts before a target-independent fallback
-// can expand them correctly.
+// Rewrites one vector.mma op using scalar reference semantics when the result
+// can be represented as a dense full-logical matrix fragment. Target-shaped
+// results are instead drained through fragment movement boundaries.
 iree_status_t loom_vector_mma_to_scalar_rewrite_op(loom_pass_t* pass,
                                                    loom_rewriter_t* rewriter,
                                                    loom_op_t* op,
@@ -59,6 +58,14 @@ iree_status_t loom_vector_store_to_scalar_rewrite_op(loom_pass_t* pass,
                                                      loom_rewriter_t* rewriter,
                                                      loom_op_t* op,
                                                      bool* out_rewritten);
+
+// Rewrites one vector.fragment.store into scalar view.store loops over the
+// fragment's logical matrix shape. The source fragment is consumed
+// lane-by-lane so target-shaped producers can be erased without first
+// materializing a dense vector aggregate.
+iree_status_t loom_vector_fragment_store_to_scalar_rewrite_op(
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op,
+    bool* out_rewritten);
 
 // Rewrites one scalar-result vector.extract when its lane can be rematerialized
 // from the source producer tree.

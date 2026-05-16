@@ -38,6 +38,9 @@ iree_status_t loom_vector_to_scalar_build_load_expand_lane(
 iree_status_t loom_vector_to_scalar_lower_memory_store(
     loom_vector_to_scalar_state_t* state);
 
+iree_status_t loom_vector_to_scalar_lower_fragment_store(
+    loom_vector_to_scalar_state_t* state, bool* out_handled);
+
 iree_status_t loom_vector_to_scalar_lower_memory_store_compress(
     loom_vector_to_scalar_state_t* state);
 

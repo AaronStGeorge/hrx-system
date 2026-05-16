@@ -658,6 +658,24 @@ iree_status_t loom_vector_to_scalar_try_materialize_def_lane(
     *out_materialized = true;
     return iree_ok_status();
   }
+  if (loom_vector_fragment_load_isa(def_op)) {
+    if (indices.rank != 2) {
+      return iree_ok_status();
+    }
+    loom_vector_to_scalar_state_t def_state = {
+        .pass = state->pass,
+        .rewriter = state->rewriter,
+        .op = def_op,
+        .value_checkpoint = state->value_checkpoint,
+        .vector_type = vector_type,
+        .result_scalar_type = loom_vector_to_scalar_lane_type(vector_type),
+        .location = def_op->location,
+    };
+    IREE_RETURN_IF_ERROR(
+        loom_vector_to_scalar_build_load_lane(&def_state, indices, out_lane));
+    *out_materialized = true;
+    return iree_ok_status();
+  }
   if (loom_vector_mma_isa(def_op)) {
     return loom_vector_to_scalar_try_materialize_mma_lane(
         state, def_op, indices, out_materialized, out_lane);

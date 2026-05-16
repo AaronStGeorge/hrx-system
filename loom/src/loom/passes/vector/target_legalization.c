@@ -11,6 +11,21 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/passes/vector/to_scalar.h"
 
+static bool loom_vector_mma_has_fragment_store_user(const loom_module_t* module,
+                                                    const loom_op_t* op) {
+  const loom_value_t* result =
+      loom_module_value(module, loom_vector_mma_result(op));
+  const loom_use_t* use = NULL;
+  loom_value_for_each_use(result, use) {
+    const loom_op_t* user = loom_use_user_op(*use);
+    if (loom_vector_fragment_store_isa(user) &&
+        loom_vector_fragment_store_value(user) == loom_vector_mma_result(op)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static iree_status_t loom_vector_legalize_reduce_axes(
     const loom_target_legalizer_entry_t* entry,
     loom_target_legalization_context_t* context, loom_op_t* op,
@@ -39,6 +54,12 @@ static iree_status_t loom_vector_legalize_mma(
       .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
   };
   if (context->mode != LOOM_TARGET_LEGALIZATION_MODE_FINAL) {
+    *out_result = (loom_target_legalizer_result_t){
+        .action = LOOM_TARGET_LEGALIZER_ACTION_DEFER,
+    };
+    return iree_ok_status();
+  }
+  if (loom_vector_mma_has_fragment_store_user(context->module, op)) {
     *out_result = (loom_target_legalizer_result_t){
         .action = LOOM_TARGET_LEGALIZER_ACTION_DEFER,
     };
@@ -91,6 +112,32 @@ static iree_status_t loom_vector_legalize_store(
   return iree_ok_status();
 }
 
+static iree_status_t loom_vector_legalize_fragment_store(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  (void)entry;
+  *out_result = (loom_target_legalizer_result_t){
+      .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
+  };
+  if (context->mode != LOOM_TARGET_LEGALIZATION_MODE_FINAL) {
+    *out_result = (loom_target_legalizer_result_t){
+        .action = LOOM_TARGET_LEGALIZER_ACTION_DEFER,
+    };
+    return iree_ok_status();
+  }
+
+  bool rewritten = false;
+  IREE_RETURN_IF_ERROR(loom_vector_fragment_store_to_scalar_rewrite_op(
+      context->pass, context->rewriter, op, &rewritten));
+  *out_result = (loom_target_legalizer_result_t){
+      .action = rewritten
+                    ? LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN
+                    : LOOM_TARGET_LEGALIZER_ACTION_REJECT_UNSUPPORTED_FINAL,
+  };
+  return iree_ok_status();
+}
+
 static iree_status_t loom_vector_legalize_extract(
     const loom_target_legalizer_entry_t* entry,
     loom_target_legalization_context_t* context, loom_op_t* op,
@@ -129,6 +176,10 @@ static const loom_target_legalizer_entry_t kVectorLegalizerEntries[] = {
     {
         .root_kind = LOOM_OP_VECTOR_STORE,
         .legalize = loom_vector_legalize_store,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_FRAGMENT_STORE,
+        .legalize = loom_vector_legalize_fragment_store,
     },
     {
         .root_kind = LOOM_OP_VECTOR_EXTRACT,

@@ -15,20 +15,30 @@
 extern "C" {
 #endif
 
-// Lowers a vector.mma over dense full-logical matrix fragments. Returns
-// out_handled=false when the op uses target-shaped physical fragments, encoded
-// operands, or numeric forms that need a richer reference decomposition.
+// Lowers a vector.mma whose result can be represented as a dense full-logical
+// matrix fragment. Returns out_handled=false when the result remains
+// target-shaped, encoded operands are present, or numeric forms need a richer
+// reference decomposition.
 iree_status_t loom_vector_to_scalar_lower_mma(
     loom_vector_to_scalar_state_t* state, bool* out_handled,
     loom_value_id_t* out_replacement);
 
-// Materializes one logical result lane of a dense full-logical vector.mma.
+// Materializes one result lane of a vector.mma. Dense full-logical result
+// vectors accept their normal vector indices; target-shaped matrix-fragment
+// consumers may pass logical rank-2 matrix indices.
 // Returns out_materialized=false when the op is not an MMA or uses a shape that
 // the target-independent reference decomposition does not cover.
 iree_status_t loom_vector_to_scalar_try_materialize_mma_lane(
     loom_vector_to_scalar_state_t* state, loom_op_t* op,
     loom_vector_to_scalar_index_list_t indices, bool* out_materialized,
     loom_value_id_t* out_lane);
+
+// Returns true when every operand needed to materialize logical result lanes is
+// present in value facts and covered by the target-independent reference
+// semantics. This is a no-IR-emission predicate used before building fragment
+// store loops.
+bool loom_vector_to_scalar_mma_supports_logical_result_lanes(
+    loom_vector_to_scalar_state_t* state, loom_op_t* op);
 
 #ifdef __cplusplus
 }

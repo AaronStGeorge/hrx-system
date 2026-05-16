@@ -9,10 +9,12 @@
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/index/ops.h"
+#include "loom/ops/op_defs.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/ops/view/ops.h"
+#include "loom/passes/vector/to_scalar_mma.h"
 
 //===----------------------------------------------------------------------===//
 // Logical view indices
@@ -686,6 +688,171 @@ iree_status_t loom_vector_to_scalar_lower_memory_store(
     return loom_vector_to_scalar_lower_static_memory_store(state);
   }
   return loom_vector_to_scalar_lower_dynamic_memory_store(state);
+}
+
+//===----------------------------------------------------------------------===//
+// Fragment store lanes
+//===----------------------------------------------------------------------===//
+
+static iree_status_t loom_vector_to_scalar_fragment_store_loop_bounds(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_term_t upper_bound_term,
+    loom_value_id_t* out_lower_bound, loom_value_id_t* out_upper_bound,
+    loom_value_id_t* out_step) {
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_scalar_constant(
+      &state->rewriter->builder, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+      state->location, 0, out_lower_bound));
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_term_value(state, upper_bound_term,
+                                                        out_upper_bound));
+  return loom_vector_to_scalar_build_scalar_constant(
+      &state->rewriter->builder, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+      state->location, 1, out_step);
+}
+
+static bool loom_vector_to_scalar_fragment_store_source_is_supported(
+    loom_vector_to_scalar_state_t* state, loom_value_id_t value) {
+  loom_op_t* def_op =
+      loom_vector_to_scalar_value_def_op(state->rewriter->module, value);
+  if (def_op == NULL) {
+    return false;
+  }
+  const loom_trait_flags_t traits =
+      loom_op_effective_traits(state->rewriter->module, def_op);
+  if (loom_traits_are_value_alias(traits)) {
+    IREE_ASSERT(def_op->operand_count >= 1);
+    return loom_vector_to_scalar_fragment_store_source_is_supported(
+        state, loom_op_const_operands(def_op)[0]);
+  }
+  if (loom_vector_fragment_load_isa(def_op) || loom_vector_splat_isa(def_op) ||
+      loom_vector_constant_isa(def_op) || loom_vector_poison_isa(def_op)) {
+    return true;
+  }
+  if (loom_vector_mma_isa(def_op)) {
+    return loom_vector_to_scalar_mma_supports_logical_result_lanes(state,
+                                                                   def_op);
+  }
+  return false;
+}
+
+static bool loom_vector_to_scalar_fragment_store_source_is_supported_root(
+    loom_vector_to_scalar_state_t* state) {
+  return loom_vector_to_scalar_fragment_store_source_is_supported(
+      state, loom_vector_to_scalar_store_value(state));
+}
+
+static iree_status_t loom_vector_to_scalar_materialize_fragment_store_lane(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t indices, loom_value_id_t* out_lane) {
+  bool materialized = false;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_try_materialize_def_lane(
+      state, loom_vector_to_scalar_store_value(state), state->vector_type,
+      indices, &materialized, out_lane));
+  if (!materialized) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "supported vector.fragment.store source failed lane materialization");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_vector_to_scalar_emit_fragment_store_lane(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_list_t indices) {
+  loom_value_id_t lane = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_materialize_fragment_store_lane(
+      state, indices, &lane));
+  loom_vector_to_scalar_view_indices_t view_indices = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_view_indices(
+      state, indices, /*add_lane_indices=*/true, LOOM_VALUE_ID_INVALID,
+      /*add_last_axis_offset=*/false, (loom_vector_to_scalar_index_term_t){0},
+      &view_indices));
+  loom_op_t* store_op = NULL;
+  loom_vector_memory_cache_policy_t cache_policy =
+      loom_vector_to_scalar_memory_cache_policy(state);
+  return loom_view_store_build(
+      &state->rewriter->builder, cache_policy.build_flags, lane,
+      loom_vector_to_scalar_memory_view(state), view_indices.dynamic_indices,
+      view_indices.dynamic_index_count, view_indices.static_indices,
+      view_indices.static_index_count, cache_policy.cache_scope,
+      cache_policy.cache_temporal, state->location, &store_op);
+}
+
+static iree_status_t loom_vector_to_scalar_lower_fragment_store_columns(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_term_t row) {
+  loom_value_id_t lower_bound = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t upper_bound = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t step = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_fragment_store_loop_bounds(
+      state,
+      loom_vector_to_scalar_value_term(
+          state, loom_vector_fragment_store_columns(state->op)),
+      &lower_bound, &upper_bound, &step));
+
+  loom_op_t* loop = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_for_build(
+      &state->rewriter->builder, lower_bound, upper_bound, step, NULL, 0, NULL,
+      0, NULL, 0, state->location, &loop));
+  if (state->pass->statistics) {
+    loom_pass_statistic_add(state->pass,
+                            LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
+  }
+
+  loom_builder_ip_t saved = loom_builder_enter_region(
+      &state->rewriter->builder, loop, loom_scf_for_body(loop));
+  loom_vector_to_scalar_index_term_t column =
+      loom_vector_to_scalar_dynamic_term(
+          loom_region_entry_arg_id(loom_scf_for_body(loop), 0));
+  loom_vector_to_scalar_index_term_t terms[2] = {row, column};
+  loom_vector_to_scalar_index_list_t indices = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_vector_to_scalar_terms_to_index_list(state, terms, 2, &indices));
+  IREE_RETURN_IF_ERROR(
+      loom_vector_to_scalar_emit_fragment_store_lane(state, indices));
+  loom_op_t* yield_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_yield_build(&state->rewriter->builder, NULL, 0,
+                                            state->location, &yield_op));
+  loom_builder_restore(&state->rewriter->builder, saved);
+  return iree_ok_status();
+}
+
+iree_status_t loom_vector_to_scalar_lower_fragment_store(
+    loom_vector_to_scalar_state_t* state, bool* out_handled) {
+  *out_handled = false;
+  if (!loom_vector_to_scalar_fragment_store_source_is_supported_root(state)) {
+    return iree_ok_status();
+  }
+
+  loom_value_id_t lower_bound = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t upper_bound = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t step = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_fragment_store_loop_bounds(
+      state,
+      loom_vector_to_scalar_value_term(
+          state, loom_vector_fragment_store_rows(state->op)),
+      &lower_bound, &upper_bound, &step));
+
+  loom_op_t* loop = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_for_build(
+      &state->rewriter->builder, lower_bound, upper_bound, step, NULL, 0, NULL,
+      0, NULL, 0, state->location, &loop));
+  if (state->pass->statistics) {
+    loom_pass_statistic_add(state->pass,
+                            LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
+  }
+
+  loom_builder_ip_t saved = loom_builder_enter_region(
+      &state->rewriter->builder, loop, loom_scf_for_body(loop));
+  loom_vector_to_scalar_index_term_t row = loom_vector_to_scalar_dynamic_term(
+      loom_region_entry_arg_id(loom_scf_for_body(loop), 0));
+  IREE_RETURN_IF_ERROR(
+      loom_vector_to_scalar_lower_fragment_store_columns(state, row));
+  loom_op_t* yield_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_scf_yield_build(&state->rewriter->builder, NULL, 0,
+                                            state->location, &yield_op));
+  loom_builder_restore(&state->rewriter->builder, saved);
+  *out_handled = true;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_vector_to_scalar_lower_static_store_compress(
