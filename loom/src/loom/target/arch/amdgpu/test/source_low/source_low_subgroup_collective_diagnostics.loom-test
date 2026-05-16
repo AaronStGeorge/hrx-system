@@ -273,14 +273,14 @@ kernel.def target(@target) @workgroup_scan_wave_count_rejected() {
 
 amdgpu.target<gfx1100> @target
 
-kernel.def target(@target) @subgroup_match_any_requires_legalization() {
+kernel.def target(@target) @subgroup_match_any_f32_requires_legalization() {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index
   kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
-  %value = scalar.constant 1 : i32
+  %value = scalar.constant 1.0 : f32
   // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_match.target_legalization"}
-  %mask = kernel.subgroup.match.any %value : i32 -> i64
+  %mask = kernel.subgroup.match.any %value : f32 -> i64
   kernel.return
 }
 

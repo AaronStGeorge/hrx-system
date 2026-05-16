@@ -746,6 +746,7 @@ loom_cc_library(
   DEPS
     iree::base
     loom::src::loom::ir
+    loom::src::loom::ops::index
     loom::src::loom::ops::kernel
     loom::src::loom::ops::scalar
     loom::src::loom::ops::scf
@@ -914,6 +915,7 @@ iree_c_embed_data(
     "execution/testdata/model_ffn_vector4_gelu_epilogue.loom"
     "execution/testdata/model_swiglu_tile4_f32.loom"
     "execution/testdata/scf_if_vector_result.loom"
+    "execution/testdata/subgroup_match_any_i32.loom"
     "execution/testdata/workgroup_reduce_addf_28_waves_two_results.loom"
     "execution/testdata/workgroup_reduce_addf_partial_tail.loom"
     "execution/testdata/workgroup_reduce_down_x2_addressing.loom"

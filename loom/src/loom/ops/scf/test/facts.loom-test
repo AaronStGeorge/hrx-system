@@ -310,6 +310,67 @@ func.def @while_unchanged_carried_result(%keep_going: i1) -> (i64) {
 
 // ====
 
+// Selecting between different uniform values with a lane-local predicate
+// produces lane-varying data, not a uniform unknown.
+kernel.def @select_lane_predicate_different_values_is_varying(%lhs: i32, %rhs: i32) {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch {
+  %lane = kernel.subgroup.lane.id : index
+  %zero = index.constant 0 : index
+  %condition = index.cmp eq, %lane, %zero : index
+  %selected = scf.select %condition, %lhs, %rhs : i32
+  %selected_is_varying = test.fact_lane_varying %selected : i32 -> i1
+  %selected_is_uniform = test.fact_uniform %selected : i32 -> i1
+  test.use %selected_is_varying, %selected_is_uniform : i1, i1
+  kernel.return
+}
+
+// ----
+kernel.def @select_lane_predicate_different_values_is_varying(%lhs: i32, %rhs: i32) {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch {
+  %selected_is_varying = scalar.constant true : i1
+  %selected_is_uniform = scalar.constant false : i1
+  test.use %selected_is_varying, %selected_is_uniform : i1, i1
+  kernel.return
+}
+
+// ====
+
+// The boolean form keeps the stronger lane-predicate classification.
+kernel.def @select_lane_predicate_boolean_result_is_predicate(%lhs: i1, %rhs: i1) {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch {
+  %lane = kernel.subgroup.lane.id : index
+  %zero = index.constant 0 : index
+  %condition = index.cmp eq, %lane, %zero : index
+  %selected = scf.select %condition, %lhs, %rhs : i1
+  %selected_is_predicate = test.fact_lane_predicate %selected : i1 -> i1
+  %selected_is_uniform = test.fact_uniform %selected : i1 -> i1
+  test.use %selected_is_predicate, %selected_is_uniform : i1, i1
+  kernel.return
+}
+
+// ----
+kernel.def @select_lane_predicate_boolean_result_is_predicate(%lhs: i1, %rhs: i1) {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch {
+  %selected_is_predicate = scalar.constant true : i1
+  %selected_is_uniform = scalar.constant false : i1
+  test.use %selected_is_predicate, %selected_is_uniform : i1, i1
+  kernel.return
+}
+
+// ====
+
 // Lookup facts meet only rows that selector range facts allow. Since the
 // explicit keys cover the full [0, 1] selector domain, the default row is not
 // included in the result range.

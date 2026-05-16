@@ -10,6 +10,7 @@
 
 #include "loom/ir/attribute.h"
 #include "loom/ir/module.h"
+#include "loom/ir/types.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/util/fact_table.h"
 #include "loom/util/math.h"
@@ -35,6 +36,32 @@ static bool loom_scf_lookup_key_is_explicit(loom_attribute_t case_keys,
     if (case_keys.i64_array[i] > key) return false;
   }
   return false;
+}
+
+static bool loom_scf_fact_type_is_i1(loom_type_t type) {
+  return loom_type_is_scalar(type) &&
+         loom_type_element_type(type) == LOOM_SCALAR_TYPE_I1;
+}
+
+static void loom_scf_mark_lane_distribution_for_result(
+    const loom_module_t* module, const loom_op_t* op, uint16_t result_index,
+    loom_value_facts_t* facts) {
+  const loom_value_id_t result_id = loom_op_const_results(op)[result_index];
+  const loom_type_t result_type = loom_module_value_type(module, result_id);
+  if (loom_scf_fact_type_is_i1(result_type)) {
+    loom_value_facts_mark_lane_predicate(facts);
+  } else {
+    loom_value_facts_mark_lane_varying(facts);
+  }
+}
+
+static bool loom_scf_select_arms_are_proven_equal(
+    const loom_op_t* op, const loom_value_facts_t* operand_facts) {
+  if (loom_scf_select_true_value(op) == loom_scf_select_false_value(op)) {
+    return true;
+  }
+  return loom_value_facts_is_exact(operand_facts[1]) &&
+         loom_value_facts_equal(operand_facts[1], operand_facts[2]);
 }
 
 static bool loom_scf_lookup_default_row_may_match(
@@ -102,12 +129,18 @@ iree_status_t loom_scf_select_facts(loom_fact_context_t* context,
         operand_facts[0].range_lo ? operand_facts[1] : operand_facts[2];
     return iree_ok_status();
   }
-  if (loom_value_facts_equal(operand_facts[1], operand_facts[2])) {
+  if (loom_scf_select_arms_are_proven_equal(op, operand_facts)) {
     result_facts[0] = operand_facts[1];
     return iree_ok_status();
   }
-  return loom_scf_meet_result_facts(context, module, op, 0, operand_facts[1],
-                                    operand_facts[2], &result_facts[0]);
+  IREE_RETURN_IF_ERROR(
+      loom_scf_meet_result_facts(context, module, op, 0, operand_facts[1],
+                                 operand_facts[2], &result_facts[0]));
+  if (loom_value_facts_is_lane_varying(operand_facts[0]) ||
+      loom_value_facts_is_lane_predicate(operand_facts[0])) {
+    loom_scf_mark_lane_distribution_for_result(module, op, 0, &result_facts[0]);
+  }
+  return iree_ok_status();
 }
 
 iree_status_t loom_scf_lookup_facts(loom_fact_context_t* context,

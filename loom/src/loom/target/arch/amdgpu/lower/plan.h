@@ -537,6 +537,8 @@ typedef struct loom_amdgpu_subgroup_active_mask_plan_t {
   loom_value_id_t mask;
   // Static bit width of the source integer mask result.
   uint32_t mask_bit_count;
+  // Exact subgroup width selected by the active target bundle.
+  uint32_t wavefront_size;
 } loom_amdgpu_subgroup_active_mask_plan_t;
 
 typedef struct loom_amdgpu_subgroup_ballot_plan_t {
@@ -546,6 +548,8 @@ typedef struct loom_amdgpu_subgroup_ballot_plan_t {
   loom_value_id_t mask;
   // Static bit width of the source integer mask result.
   uint32_t mask_bit_count;
+  // Exact subgroup width selected by the active target bundle.
+  uint32_t wavefront_size;
 } loom_amdgpu_subgroup_ballot_plan_t;
 
 typedef struct loom_amdgpu_subgroup_vote_any_plan_t {
