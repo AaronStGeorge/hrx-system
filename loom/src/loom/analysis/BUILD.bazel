@@ -69,6 +69,26 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "matrix_fragment_layout",
+    srcs = ["matrix_fragment_layout.c"],
+    hdrs = ["matrix_fragment_layout.h"],
+    deps = [
+        ":contract",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "matrix_fragment_layout_test",
+    srcs = ["matrix_fragment_layout_test.cc"],
+    deps = [
+        ":matrix_fragment_layout",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "consumption",
     srcs = ["consumption.c"],
     hdrs = ["consumption.h"],

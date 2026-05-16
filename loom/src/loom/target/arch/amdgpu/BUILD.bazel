@@ -1315,6 +1315,7 @@ loom_cc_library(
         ":target_info",
         ":target_info_defs",
         ":target_refs",
+        "//loom/src/loom/analysis:matrix_fragment_layout",
         "//runtime/src/iree/base",
     ],
 )

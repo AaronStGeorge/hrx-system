@@ -95,61 +95,55 @@
       .wave_size = 32,                                                         \
       .tile_shape = MATRIX_TILE_SHAPE(16, 16, 16),                             \
       .lhs = MATRIX_ROLE_LAYOUT(                                               \
-          LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS,                                 \
-          LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_PACKED_REDUCTION, 8, 2, \
-          16,                                                                  \
-          LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_ROW |                         \
-              LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_REDUCTION),               \
+          LOOM_CONTRACT_OPERAND_ROLE_LHS,                                      \
+          LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_PACKED_REDUCTION, 8, 2, 16,    \
+          LOOM_MATRIX_FRAGMENT_COORDINATE_ROW |                                \
+              LOOM_MATRIX_FRAGMENT_COORDINATE_REDUCTION),                      \
       .rhs = MATRIX_ROLE_LAYOUT(                                               \
-          LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS,                                 \
-          LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_PACKED_REDUCTION, 8, \
-          2, 16,                                                               \
-          LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_COLUMN |                      \
-              LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_REDUCTION),               \
+          LOOM_CONTRACT_OPERAND_ROLE_RHS,                                      \
+          LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_PACKED_REDUCTION, 8, 2, 16, \
+          LOOM_MATRIX_FRAGMENT_COORDINATE_COLUMN |                             \
+              LOOM_MATRIX_FRAGMENT_COORDINATE_REDUCTION),                      \
       .accumulator = MATRIX_ROLE_LAYOUT(                                       \
-          LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR,                         \
-          LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN, 8,  \
-          1, 32,                                                               \
-          LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_ROW |                         \
-              LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_COLUMN),                  \
+          LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,                              \
+          LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN, 8, 1, 32,  \
+          LOOM_MATRIX_FRAGMENT_COORDINATE_ROW |                                \
+              LOOM_MATRIX_FRAGMENT_COORDINATE_COLUMN),                         \
       .result = MATRIX_ROLE_LAYOUT(                                            \
-          LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT,                              \
-          LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN, 8,  \
-          1, 32,                                                               \
-          LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_ROW |                         \
-              LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_COLUMN),                  \
+          LOOM_CONTRACT_OPERAND_ROLE_RESULT,                                   \
+          LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN, 8, 1, 32,  \
+          LOOM_MATRIX_FRAGMENT_COORDINATE_ROW |                                \
+              LOOM_MATRIX_FRAGMENT_COORDINATE_COLUMN),                         \
   }
 
-#define MATRIX_FRAGMENT_LAYOUT_CDNA_MFMA_F32_16X16X16(kind_value, name_value)          \
-  {                                                                                    \
-      .kind = (kind_value),                                                            \
-      .name = IREE_SVL(name_value),                                                    \
-      .wave_size = 64,                                                                 \
-      .tile_shape = MATRIX_TILE_SHAPE(16, 16, 16),                                     \
-      .lhs = MATRIX_ROLE_LAYOUT(                                                       \
-          LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS,                                         \
-          LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_LANE_GROUP_PACKED_REDUCTION,    \
-          2, 2, 16,                                                                    \
-          LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_ROW |                                 \
-              LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_REDUCTION),                       \
-      .rhs = MATRIX_ROLE_LAYOUT(                                                       \
-          LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS,                                         \
-          LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_LANE_GROUP_PACKED_REDUCTION, \
-          2, 2, 16,                                                                    \
-          LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_COLUMN |                              \
-              LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_REDUCTION),                       \
-      .accumulator = MATRIX_ROLE_LAYOUT(                                               \
-          LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR,                                 \
-          LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN, 4,           \
-          1, 32,                                                                       \
-          LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_ROW |                                 \
-              LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_COLUMN),                          \
-      .result = MATRIX_ROLE_LAYOUT(                                                    \
-          LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT,                                      \
-          LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN, 4,           \
-          1, 32,                                                                       \
-          LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_ROW |                                 \
-              LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_COLUMN),                          \
+#define MATRIX_FRAGMENT_LAYOUT_CDNA_MFMA_F32_16X16X16(kind_value, name_value)   \
+  {                                                                             \
+      .kind = (kind_value),                                                     \
+      .name = IREE_SVL(name_value),                                             \
+      .wave_size = 64,                                                          \
+      .tile_shape = MATRIX_TILE_SHAPE(16, 16, 16),                              \
+      .lhs = MATRIX_ROLE_LAYOUT(                                                \
+          LOOM_CONTRACT_OPERAND_ROLE_LHS,                                       \
+          LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_LANE_GROUP_PACKED_REDUCTION,    \
+          2, 2, 16,                                                             \
+          LOOM_MATRIX_FRAGMENT_COORDINATE_ROW |                                 \
+              LOOM_MATRIX_FRAGMENT_COORDINATE_REDUCTION),                       \
+      .rhs = MATRIX_ROLE_LAYOUT(                                                \
+          LOOM_CONTRACT_OPERAND_ROLE_RHS,                                       \
+          LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_LANE_GROUP_PACKED_REDUCTION, \
+          2, 2, 16,                                                             \
+          LOOM_MATRIX_FRAGMENT_COORDINATE_COLUMN |                              \
+              LOOM_MATRIX_FRAGMENT_COORDINATE_REDUCTION),                       \
+      .accumulator = MATRIX_ROLE_LAYOUT(                                        \
+          LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,                               \
+          LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN, 4, 1, 32,    \
+          LOOM_MATRIX_FRAGMENT_COORDINATE_ROW |                                 \
+              LOOM_MATRIX_FRAGMENT_COORDINATE_COLUMN),                          \
+      .result = MATRIX_ROLE_LAYOUT(                                             \
+          LOOM_CONTRACT_OPERAND_ROLE_RESULT,                                    \
+          LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN, 4, 1, 32,    \
+          LOOM_MATRIX_FRAGMENT_COORDINATE_ROW |                                 \
+              LOOM_MATRIX_FRAGMENT_COORDINATE_COLUMN),                          \
   }
 
 static const loom_amdgpu_matrix_fragment_layout_t kMatrixFragmentLayouts[] = {
@@ -1798,112 +1792,8 @@ const loom_amdgpu_matrix_fragment_role_layout_t*
 loom_amdgpu_matrix_fragment_role_layout(
     const loom_amdgpu_matrix_fragment_layout_t* layout,
     loom_amdgpu_matrix_operand_role_t role) {
-  if (layout == NULL) {
-    return NULL;
-  }
-  switch (role) {
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS:
-      return &layout->lhs;
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS:
-      return &layout->rhs;
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR:
-      return &layout->accumulator;
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT:
-      return &layout->result;
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_UNKNOWN:
-    default:
-      return NULL;
-  }
-}
-
-static bool loom_amdgpu_matrix_fragment_coordinate_from_role_layout(
-    const loom_amdgpu_matrix_fragment_layout_t* layout,
-    const loom_amdgpu_matrix_fragment_role_layout_t* role_layout, uint16_t lane,
-    uint16_t register_index, uint16_t element_index,
-    loom_amdgpu_matrix_fragment_coordinate_t* out_coordinate) {
-  const loom_amdgpu_matrix_tile_shape_t tile_shape = layout->tile_shape;
-  if (tile_shape.result_row_count == 0 || tile_shape.result_column_count == 0 ||
-      tile_shape.reduction_count == 0) {
-    return false;
-  }
-
-  out_coordinate->coordinate_flags = role_layout->coordinate_flags;
-  switch (role_layout->map_kind) {
-    case LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_PACKED_REDUCTION: {
-      const uint32_t reduction =
-          (uint32_t)register_index * role_layout->elements_per_register +
-          element_index;
-      if (reduction >= tile_shape.reduction_count) {
-        return false;
-      }
-      out_coordinate->row = lane % tile_shape.result_row_count;
-      out_coordinate->reduction = (uint16_t)reduction;
-      return true;
-    }
-    case LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_PACKED_REDUCTION: {
-      const uint32_t reduction =
-          (uint32_t)register_index * role_layout->elements_per_register +
-          element_index;
-      if (reduction >= tile_shape.reduction_count) {
-        return false;
-      }
-      out_coordinate->column = lane % tile_shape.result_column_count;
-      out_coordinate->reduction = (uint16_t)reduction;
-      return true;
-    }
-    case LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN: {
-      const uint32_t row =
-          (uint32_t)register_index * 2u + lane / tile_shape.result_column_count;
-      if (row >= tile_shape.result_row_count) {
-        return false;
-      }
-      out_coordinate->row = (uint16_t)row;
-      out_coordinate->column = lane % tile_shape.result_column_count;
-      return true;
-    }
-    case LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_LANE_GROUP_PACKED_REDUCTION: {
-      const uint32_t lane_group = lane / tile_shape.result_row_count;
-      const uint32_t reduction =
-          lane_group * role_layout->register_count *
-              role_layout->elements_per_register +
-          (uint32_t)register_index * role_layout->elements_per_register +
-          element_index;
-      if (reduction >= tile_shape.reduction_count) {
-        return false;
-      }
-      out_coordinate->row = lane % tile_shape.result_row_count;
-      out_coordinate->reduction = (uint16_t)reduction;
-      return true;
-    }
-    case LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_LANE_GROUP_PACKED_REDUCTION: {
-      const uint32_t lane_group = lane / tile_shape.result_column_count;
-      const uint32_t reduction =
-          lane_group * role_layout->register_count *
-              role_layout->elements_per_register +
-          (uint32_t)register_index * role_layout->elements_per_register +
-          element_index;
-      if (reduction >= tile_shape.reduction_count) {
-        return false;
-      }
-      out_coordinate->column = lane % tile_shape.result_column_count;
-      out_coordinate->reduction = (uint16_t)reduction;
-      return true;
-    }
-    case LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN: {
-      const uint32_t row = (uint32_t)(lane / tile_shape.result_column_count) *
-                               role_layout->register_count +
-                           register_index;
-      if (row >= tile_shape.result_row_count) {
-        return false;
-      }
-      out_coordinate->row = (uint16_t)row;
-      out_coordinate->column = lane % tile_shape.result_column_count;
-      return true;
-    }
-    case LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_UNKNOWN:
-    default:
-      return false;
-  }
+  return loom_matrix_fragment_role_layout(layout,
+                                          (loom_contract_operand_role_t)role);
 }
 
 bool loom_amdgpu_matrix_fragment_coordinate(
@@ -1911,18 +1801,9 @@ bool loom_amdgpu_matrix_fragment_coordinate(
     loom_amdgpu_matrix_operand_role_t role, uint16_t lane,
     uint16_t register_index, uint16_t element_index,
     loom_amdgpu_matrix_fragment_coordinate_t* out_coordinate) {
-  *out_coordinate = (loom_amdgpu_matrix_fragment_coordinate_t){0};
-  const loom_amdgpu_matrix_fragment_role_layout_t* role_layout =
-      loom_amdgpu_matrix_fragment_role_layout(layout, role);
-  if (layout == NULL || role_layout == NULL || layout->wave_size == 0 ||
-      lane >= layout->wave_size ||
-      register_index >= role_layout->register_count ||
-      element_index >= role_layout->elements_per_register) {
-    return false;
-  }
-
-  return loom_amdgpu_matrix_fragment_coordinate_from_role_layout(
-      layout, role_layout, lane, register_index, element_index, out_coordinate);
+  return loom_matrix_fragment_coordinate(
+      layout, (loom_contract_operand_role_t)role, lane, register_index,
+      element_index, out_coordinate);
 }
 
 bool loom_amdgpu_matrix_feature_bits_from_profile(

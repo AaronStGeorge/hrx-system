@@ -76,6 +76,30 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    matrix_fragment_layout
+  HDRS
+    "matrix_fragment_layout.h"
+  SRCS
+    "matrix_fragment_layout.c"
+  DEPS
+    ::contract
+    iree::base
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    matrix_fragment_layout_test
+  SRCS
+    "matrix_fragment_layout_test.cc"
+  DEPS
+    ::matrix_fragment_layout
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     consumption
   HDRS
     "consumption.h"

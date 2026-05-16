@@ -17,6 +17,7 @@
 #define LOOM_TARGET_AMDGPU_MATRIX_CONTRACT_H_
 
 #include "iree/base/api.h"
+#include "loom/analysis/matrix_fragment_layout.h"
 #include "loom/target/arch/amdgpu/target_info_defs.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
 
@@ -163,17 +164,37 @@ typedef enum loom_amdgpu_matrix_operand_role_e {
   LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT = 4,
 } loom_amdgpu_matrix_operand_role_t;
 
+static_assert(LOOM_AMDGPU_MATRIX_OPERAND_ROLE_UNKNOWN ==
+                  LOOM_CONTRACT_OPERAND_ROLE_UNKNOWN,
+              "AMDGPU and generic contract roles must align");
+static_assert(LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS ==
+                  LOOM_CONTRACT_OPERAND_ROLE_LHS,
+              "AMDGPU and generic contract roles must align");
+static_assert(LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS ==
+                  LOOM_CONTRACT_OPERAND_ROLE_RHS,
+              "AMDGPU and generic contract roles must align");
+static_assert(LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR ==
+                  LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,
+              "AMDGPU and generic contract roles must align");
+static_assert(LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT ==
+                  LOOM_CONTRACT_OPERAND_ROLE_RESULT,
+              "AMDGPU and generic contract roles must align");
+
 typedef enum loom_amdgpu_matrix_fragment_coordinate_flag_bits_e {
   // Coordinate carries an M/result-row value.
-  LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_ROW = 1u << 0,
+  LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_ROW =
+      LOOM_MATRIX_FRAGMENT_COORDINATE_ROW,
   // Coordinate carries an N/result-column value.
-  LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_COLUMN = 1u << 1,
+  LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_COLUMN =
+      LOOM_MATRIX_FRAGMENT_COORDINATE_COLUMN,
   // Coordinate carries a K/reduction value.
-  LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_REDUCTION = 1u << 2,
+  LOOM_AMDGPU_MATRIX_FRAGMENT_COORDINATE_REDUCTION =
+      LOOM_MATRIX_FRAGMENT_COORDINATE_REDUCTION,
 } loom_amdgpu_matrix_fragment_coordinate_flag_bits_t;
 
 // Bitset of loom_amdgpu_matrix_fragment_coordinate_flag_bits_t values.
-typedef uint32_t loom_amdgpu_matrix_fragment_coordinate_flags_t;
+typedef loom_matrix_fragment_coordinate_flags_t
+    loom_amdgpu_matrix_fragment_coordinate_flags_t;
 
 typedef enum loom_amdgpu_matrix_fragment_layout_kind_e {
   // No target-owned fragment layout is attached.
@@ -190,21 +211,26 @@ typedef enum loom_amdgpu_matrix_fragment_layout_kind_e {
 
 typedef enum loom_amdgpu_matrix_fragment_map_kind_e {
   // No lane/register coordinate formula is defined.
-  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_UNKNOWN = 0,
+  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_UNKNOWN = LOOM_MATRIX_FRAGMENT_MAP_UNKNOWN,
   // Row is lane mod M; reduction is packed by register element.
-  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_PACKED_REDUCTION = 1,
+  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_PACKED_REDUCTION =
+      LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_PACKED_REDUCTION,
   // Column is lane mod N; reduction is packed by register element.
-  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_PACKED_REDUCTION = 2,
+  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_PACKED_REDUCTION =
+      LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_PACKED_REDUCTION,
   // Row is register-interleaved by the lane group; column is lane mod N.
-  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN = 3,
+  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN =
+      LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN,
   // Row is lane mod M; reduction is packed by lane group and register element.
-  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_LANE_GROUP_PACKED_REDUCTION = 4,
+  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_LANE_GROUP_PACKED_REDUCTION =
+      LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_LANE_GROUP_PACKED_REDUCTION,
   // Column is lane mod N; reduction is packed by lane group and register
   // element.
   LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_LANE_GROUP_PACKED_REDUCTION =
-      5,
+      LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_LANE_GROUP_PACKED_REDUCTION,
   // Row is register-local within a lane group; column is lane mod N.
-  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN = 6,
+  LOOM_AMDGPU_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN =
+      LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN,
 } loom_amdgpu_matrix_fragment_map_kind_t;
 
 typedef enum loom_amdgpu_matrix_contract_flag_bits_e {
@@ -239,14 +265,8 @@ typedef uint32_t loom_amdgpu_matrix_contract_flags_t;
 #define LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_REF_NONE \
   LOOM_AMDGPU_DESCRIPTOR_REF_NONE
 
-typedef struct loom_amdgpu_matrix_tile_shape_t {
-  // Contracted result rows in the target-native tile.
-  uint16_t result_row_count;
-  // Contracted result columns in the target-native tile.
-  uint16_t result_column_count;
-  // Contracted K depth consumed by one target-native instruction.
-  uint16_t reduction_count;
-} loom_amdgpu_matrix_tile_shape_t;
+// AMDGPU descriptors use the generic M/N/K matrix tile shape record.
+typedef loom_matrix_fragment_tile_shape_t loom_amdgpu_matrix_tile_shape_t;
 
 typedef struct loom_amdgpu_matrix_payload_shape_t {
   // Logical numeric type represented by this operand or result.
@@ -260,50 +280,16 @@ typedef struct loom_amdgpu_matrix_payload_shape_t {
   uint16_t element_count;
 } loom_amdgpu_matrix_payload_shape_t;
 
-typedef struct loom_amdgpu_matrix_fragment_role_layout_t {
-  // Matrix operand role described by this role layout.
-  loom_amdgpu_matrix_operand_role_t role;
-  // Formula used to map lane/register elements into logical coordinates.
-  loom_amdgpu_matrix_fragment_map_kind_t map_kind;
-  // Number of 32-bit VGPR payload registers held by each participating lane.
-  uint16_t register_count;
-  // Number of logical scalar elements packed into each payload register.
-  uint16_t elements_per_register;
-  // Bit width of each logical scalar element.
-  uint16_t element_bit_count;
-  // Coordinate axes produced by this role layout.
-  loom_amdgpu_matrix_fragment_coordinate_flags_t coordinate_flags;
-} loom_amdgpu_matrix_fragment_role_layout_t;
+// AMDGPU descriptors use the generic role-local lane/register layout record.
+typedef loom_matrix_fragment_role_layout_t
+    loom_amdgpu_matrix_fragment_role_layout_t;
 
-typedef struct loom_amdgpu_matrix_fragment_layout_t {
-  // Stable target-owned layout kind.
-  loom_amdgpu_matrix_fragment_layout_kind_t kind;
-  // Stable layout name used by diagnostics and tests.
-  iree_string_view_t name;
-  // Wave size for which lane formulas are defined.
-  uint16_t wave_size;
-  // Logical tile shape covered by the layout.
-  loom_amdgpu_matrix_tile_shape_t tile_shape;
-  // Matrix A source role layout.
-  loom_amdgpu_matrix_fragment_role_layout_t lhs;
-  // Matrix B source role layout.
-  loom_amdgpu_matrix_fragment_role_layout_t rhs;
-  // Matrix C accumulator input role layout.
-  loom_amdgpu_matrix_fragment_role_layout_t accumulator;
-  // Matrix D result role layout.
-  loom_amdgpu_matrix_fragment_role_layout_t result;
-} loom_amdgpu_matrix_fragment_layout_t;
+// AMDGPU descriptors use the generic matrix fragment layout record.
+typedef loom_matrix_fragment_layout_t loom_amdgpu_matrix_fragment_layout_t;
 
-typedef struct loom_amdgpu_matrix_fragment_coordinate_t {
-  // Coordinate axes populated for this role.
-  loom_amdgpu_matrix_fragment_coordinate_flags_t coordinate_flags;
-  // M/result-row coordinate when ROW is set.
-  uint16_t row;
-  // N/result-column coordinate when COLUMN is set.
-  uint16_t column;
-  // K/reduction coordinate when REDUCTION is set.
-  uint16_t reduction;
-} loom_amdgpu_matrix_fragment_coordinate_t;
+// AMDGPU descriptors use the generic logical coordinate record.
+typedef loom_matrix_fragment_coordinate_t
+    loom_amdgpu_matrix_fragment_coordinate_t;
 
 typedef struct loom_amdgpu_matrix_contract_descriptor_t {
   // Stable Loom descriptor name used by tests, diagnostics, and target logs.
