@@ -20,7 +20,7 @@ func.def target(@test_target) @rejects_mma_without_target_legalization(%lhs_data
   %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : vector<4xi32>
   %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : vector<4xi32>
   %init = vector.fragment<init> %init_data shape [%m, %n] : vector<4xi32>
-  // ERROR@+1: TARGET/032
+  // ERROR@+1: TARGET/032 {op_constraint="target_contract.vector_contraction.provider_required"}
   %result = vector.mma %lhs, %rhs, %init : vector<4xi32>, vector<4xi32>, vector<4xi32>
   func.return %result : vector<4xi32>
 }
@@ -48,7 +48,7 @@ func.def target(@test_target) @rejects_target_shaped_mma_without_layout_fallback
   %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : vector<16xf16>
   %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : vector<16xf16>
   %init = vector.fragment<init> %init_data shape [%m, %n] : vector<8xf32>
-  // ERROR@+1: TARGET/032
+  // ERROR@+1: TARGET/032 {op_constraint="target_contract.vector_contraction.provider_required"}
   %result = vector.mma %lhs, %rhs, %init : vector<16xf16>, vector<16xf16>, vector<8xf32>
   func.return %result : vector<8xf32>
 }

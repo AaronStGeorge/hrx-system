@@ -599,6 +599,43 @@ static iree_status_t loom_target_low_legality_reject_source_only_op(
   }
 }
 
+static iree_string_view_t loom_target_low_legality_contract_family_constraint(
+    loom_contract_family_set_t contract_families) {
+  if (loom_contract_family_set_has_any(contract_families,
+                                       LOOM_CONTRACT_VECTOR_CONTRACTION)) {
+    return IREE_SV("target_contract.vector_contraction.provider_required");
+  }
+  if (loom_contract_family_set_has_any(contract_families,
+                                       LOOM_CONTRACT_VECTOR_TABLE_LOOKUP)) {
+    return IREE_SV("target_contract.vector_table_lookup.provider_required");
+  }
+  if (loom_contract_family_set_has_any(contract_families,
+                                       LOOM_CONTRACT_REGISTER_PERMUTATION)) {
+    return IREE_SV("target_contract.register_permutation.provider_required");
+  }
+  if (loom_contract_family_set_has_any(contract_families,
+                                       LOOM_CONTRACT_VECTOR_COORDINATE)) {
+    return IREE_SV("target_contract.vector_coordinate.provider_required");
+  }
+  if (loom_contract_family_set_has_any(contract_families,
+                                       LOOM_CONTRACT_MEMORY_ATOMIC)) {
+    return IREE_SV("target_contract.memory_atomic.provider_required");
+  }
+  if (loom_contract_family_set_has_any(contract_families,
+                                       LOOM_CONTRACT_KERNEL_ASYNC)) {
+    return IREE_SV("target_contract.kernel_async.provider_required");
+  }
+  if (loom_contract_family_set_has_any(contract_families,
+                                       LOOM_CONTRACT_KERNEL_SYNCHRONIZATION)) {
+    return IREE_SV("target_contract.kernel_synchronization.provider_required");
+  }
+  if (loom_contract_family_set_has_any(contract_families,
+                                       LOOM_CONTRACT_TENSOR_MEMORY)) {
+    return IREE_SV("target_contract.tensor_memory.provider_required");
+  }
+  return IREE_SV("target_contract.provider_required");
+}
+
 static iree_status_t loom_target_low_legality_verify_op_class(
     loom_target_low_legality_context_t* context, const loom_op_t* op) {
   const loom_trait_flags_t traits =
@@ -645,7 +682,9 @@ static iree_status_t loom_target_low_legality_verify_op_class(
       return iree_ok_status();
     case LOOM_TARGET_LOW_LEGALITY_PROVIDER:
       return loom_target_low_legality_emit_op_constraint(
-          context, op, IREE_SV("target_contract.provider_required"));
+          context, op,
+          loom_target_low_legality_contract_family_constraint(
+              semantics.contract_families));
     case LOOM_TARGET_LOW_LEGALITY_SOURCE_ONLY:
       return loom_target_low_legality_reject_source_only_op(context, op);
     case LOOM_TARGET_LOW_LEGALITY_MODULE_METADATA:
