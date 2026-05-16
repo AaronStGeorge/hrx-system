@@ -159,6 +159,141 @@ func.def @scalarizes_dense_i8_i32_mma(%lhs_data: vector<4xi8>, %rhs_data: vector
 
 // ====
 
+func.def @scalarizes_static_dense_rank2_f32_mma(%lhs_data: vector<1x2xf32>, %rhs_data: vector<2x1xf32>, %init_data: vector<1x1xf32>) -> (vector<1x1xf32>) {
+  %m = index.constant 1 : index
+  %n = index.constant 1 : index
+  %k = index.constant 2 : index
+  %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : vector<1x2xf32>
+  %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : vector<2x1xf32>
+  %init = vector.fragment<init> %init_data shape [%m, %n] : vector<1x1xf32>
+  %result = vector.mma %lhs, %rhs, %init : vector<1x2xf32>, vector<2x1xf32>, vector<1x1xf32>
+  func.return %result : vector<1x1xf32>
+}
+
+// ----
+func.def @scalarizes_static_dense_rank2_f32_mma(%lhs_data: vector<1x2xf32>, %rhs_data: vector<2x1xf32>, %init_data: vector<1x1xf32>) -> (vector<1x1xf32>) {
+  %m = index.constant 1 : index
+  %n = index.constant 1 : index
+  %11 = vector.extract %init_data[0, 0] : vector<1x1xf32> -> f32
+  %12 = vector.extract %lhs_data[0, 0] : vector<1x2xf32> -> f32
+  %13 = vector.extract %rhs_data[0, 0] : vector<2x1xf32> -> f32
+  %14 = scalar.fmaf %12, %13, %11 : f32
+  %15 = vector.extract %lhs_data[0, 1] : vector<1x2xf32> -> f32
+  %16 = vector.extract %rhs_data[1, 0] : vector<2x1xf32> -> f32
+  %17 = scalar.fmaf %15, %16, %14 : f32
+  %20 = vector.splat %17 : vector<1x1xf32>
+  %result = vector.fragment<result> %20 shape [%m, %n] : vector<1x1xf32>
+  func.return %result : vector<1x1xf32>
+}
+
+// ====
+
+func.def @scalarizes_static_zero_dense_mma(%lhs_data: vector<0x2xf32>, %rhs_data: vector<2x1xf32>, %init_data: vector<0x1xf32>) -> (vector<0x1xf32>) {
+  %m = index.constant 0 : index
+  %n = index.constant 1 : index
+  %k = index.constant 2 : index
+  %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : vector<0x2xf32>
+  %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : vector<2x1xf32>
+  %init = vector.fragment<init> %init_data shape [%m, %n] : vector<0x1xf32>
+  %result = vector.mma %lhs, %rhs, %init : vector<0x2xf32>, vector<2x1xf32>, vector<0x1xf32>
+  func.return %result : vector<0x1xf32>
+}
+
+// ----
+func.def @scalarizes_static_zero_dense_mma(%lhs_data: vector<0x2xf32>, %rhs_data: vector<2x1xf32>, %init_data: vector<0x1xf32>) -> (vector<0x1xf32>) {
+  %result = vector.empty : vector<0x1xf32>
+  func.return %result : vector<0x1xf32>
+}
+
+// ====
+
+func.def @scalarizes_dynamic_dense_rank2_f32_mma(%m: index, %n: index, %k: index, %lhs_data: vector<[%m]x[%k]xf32>, %rhs_data: vector<[%k]x[%n]xf32>, %init_data: vector<[%m]x[%n]xf32>) -> (vector<[%m]x[%n]xf32>) {
+  %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : vector<[%m]x[%k]xf32>
+  %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : vector<[%k]x[%n]xf32>
+  %init = vector.fragment<init> %init_data shape [%m, %n] : vector<[%m]x[%n]xf32>
+  %result = vector.mma %lhs, %rhs, %init : vector<[%m]x[%k]xf32>, vector<[%k]x[%n]xf32>, vector<[%m]x[%n]xf32>
+  func.return %result : vector<[%m]x[%n]xf32>
+}
+
+// ----
+func.def @scalarizes_dynamic_dense_rank2_f32_mma(%m: index, %n: index, %k: index, %lhs_data: vector<[%m]x[%k]xf32>, %rhs_data: vector<[%k]x[%n]xf32>, %init_data: vector<[%m]x[%n]xf32>) -> (vector<[%m]x[%n]xf32>) {
+  %11 = index.constant 0 : index
+  %12 = index.constant 1 : index
+  %15 = scf.for %13 = [%11 to %m step %12](%14 = %init_data : vector<[%m]x[%n]xf32>) -> (vector<[%m]x[%n]xf32>) {
+    %16 = index.constant 0 : index
+    %17 = index.constant 1 : index
+    %20 = scf.for %18 = [%16 to %n step %17](%19 = %14 : vector<[%m]x[%n]xf32>) -> (vector<[%m]x[%n]xf32>) {
+      %21 = vector.extract %init_data[%13, %18] : vector<[%m]x[%n]xf32> -> f32
+      %22 = index.constant 0 : index
+      %23 = index.constant 1 : index
+      %26 = scf.for %24 = [%22 to %k step %23](%25 = %21 : f32) -> (f32) {
+        %27 = vector.extract %lhs_data[%13, %24] : vector<[%m]x[%k]xf32> -> f32
+        %28 = vector.extract %rhs_data[%24, %18] : vector<[%k]x[%n]xf32> -> f32
+        %29 = scalar.fmaf %27, %28, %25 : f32
+        scf.yield %29 : f32
+      }
+      %30 = vector.insert %26 into %19[%13, %18] : f32, vector<[%m]x[%n]xf32>
+      scf.yield %30 : vector<[%m]x[%n]xf32>
+    }
+    scf.yield %20 : vector<[%m]x[%n]xf32>
+  }
+  %result = vector.fragment<result> %15 shape [%m, %n] : vector<[%m]x[%n]xf32>
+  func.return %result : vector<[%m]x[%n]xf32>
+}
+
+// ====
+
+func.def @scalarizes_dynamic_flat_product_f32_mma(%m: index, %n: index, %k: index, %lhs0: f32, %rhs0: f32, %init0: f32) {
+  %mk = index.mul %m, %k : index
+  %kn = index.mul %k, %n : index
+  %mn = index.mul %m, %n : index
+  %lhs_data = vector.splat %lhs0 : vector<[%mk]xf32>
+  %rhs_data = vector.splat %rhs0 : vector<[%kn]xf32>
+  %init_data = vector.splat %init0 : vector<[%mn]xf32>
+  %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : vector<[%mk]xf32>
+  %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : vector<[%kn]xf32>
+  %init = vector.fragment<init> %init_data shape [%m, %n] : vector<[%mn]xf32>
+  %result = vector.mma %lhs, %rhs, %init : vector<[%mk]xf32>, vector<[%kn]xf32>, vector<[%mn]xf32>
+  test.use %result : vector<[%mn]xf32>
+  func.return
+}
+
+// ----
+func.def @scalarizes_dynamic_flat_product_f32_mma(%m: index, %n: index, %k: index, %lhs0: f32, %rhs0: f32, %init0: f32) {
+  %mn = index.mul %m, %n : index
+  %42 = vector.constant 0.0 : vector<[%mn]xf32>
+  %43 = index.constant 0 : index
+  %44 = index.constant 1 : index
+  %init_data = scf.for %45 = [%43 to %mn step %44](%46 = %42 : vector<[%mn]xf32>) -> (vector<[%mn]xf32>) {
+    %48 = vector.insert %init0 into %46[%45] : f32, vector<[%mn]xf32>
+    scf.yield %48 : vector<[%mn]xf32>
+  }
+  %16 = index.constant 0 : index
+  %17 = index.constant 1 : index
+  %20 = scf.for %18 = [%16 to %m step %17](%19 = %init_data : vector<[%mn]xf32>) -> (vector<[%mn]xf32>) {
+    %21 = index.constant 0 : index
+    %22 = index.constant 1 : index
+    %25 = scf.for %23 = [%21 to %n step %22](%24 = %19 : vector<[%mn]xf32>) -> (vector<[%mn]xf32>) {
+      %28 = index.constant 0 : index
+      %29 = index.constant 1 : index
+      %32 = scf.for %30 = [%28 to %k step %29](%31 = %init0 : f32) -> (f32) {
+        %37 = scalar.fmaf %lhs0, %rhs0, %31 : f32
+        scf.yield %37 : f32
+      }
+      %38 = index.mul %18, %n : index
+      %39 = index.add %38, %23 : index
+      %40 = vector.insert %32 into %24[%39] : f32, vector<[%mn]xf32>
+      scf.yield %40 : vector<[%mn]xf32>
+    }
+    scf.yield %25 : vector<[%mn]xf32>
+  }
+  %result = vector.fragment<result> %20 shape [%m, %n] : vector<[%mn]xf32>
+  test.use %result : vector<[%mn]xf32>
+  func.return
+}
+
+// ====
+
 func.def @rejects_unrepresentable_static_lane_count() {
   // ERROR@+1: SHAPE/007 "vector.poison" "vector-to-scalar" "vector<4294967296x4294967296xi32>"
   %value = vector.poison : vector<4294967296x4294967296xi32>
