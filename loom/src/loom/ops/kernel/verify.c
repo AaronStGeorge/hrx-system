@@ -322,6 +322,23 @@ static iree_status_t loom_kernel_verify_first_result_i32_or_i64(
                                             result_type, IREE_SV("i32 or i64"));
 }
 
+static iree_status_t loom_kernel_verify_result_i1(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, uint16_t result_index,
+    iree_string_view_t result_name) {
+  if (result_index >= op->result_count) {
+    return iree_ok_status();
+  }
+  loom_value_id_t result_id = loom_op_const_results(op)[result_index];
+  loom_type_t result_type = loom_module_value_type(module, result_id);
+  if (loom_type_is_scalar(result_type) &&
+      loom_type_element_type(result_type) == LOOM_SCALAR_TYPE_I1) {
+    return iree_ok_status();
+  }
+  return loom_kernel_emit_result_constraint(emitter, op, result_name,
+                                            result_type, IREE_SV("i1"));
+}
+
 static iree_status_t loom_kernel_verify_combining_kind_for_value(
     const loom_module_t* module, iree_diagnostic_emitter_t emitter,
     const loom_op_t* op, loom_value_id_t value_id, loom_combining_kind_t kind) {
@@ -994,8 +1011,10 @@ iree_status_t loom_kernel_subgroup_mask_result_verify(
 iree_status_t loom_kernel_subgroup_match_all_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter) {
-  return loom_kernel_verify_first_result_i32_or_i64(module, emitter, op,
-                                                    IREE_SV("mask"));
+  IREE_RETURN_IF_ERROR(loom_kernel_verify_first_result_i32_or_i64(
+      module, emitter, op, IREE_SV("mask")));
+  return loom_kernel_verify_result_i1(module, emitter, op, /*result_index=*/1,
+                                      IREE_SV("all_equal"));
 }
 
 iree_status_t loom_kernel_workgroup_reduce_verify(
