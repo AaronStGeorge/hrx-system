@@ -718,8 +718,11 @@ static iree_status_t loom_low_target_legalize_rewrite_op(
     loom_target_legalizer_result_t legalizer_result = {
         .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
     };
-    IREE_RETURN_IF_ERROR(entry->legalize(entry, &state->legalization_context,
-                                         op, &legalizer_result));
+    state->legalization_context.contract_query_result = &query_result;
+    iree_status_t legalizer_status = entry->legalize(
+        entry, &state->legalization_context, op, &legalizer_result);
+    state->legalization_context.contract_query_result = NULL;
+    IREE_RETURN_IF_ERROR(legalizer_status);
     const bool legalizer_mutated =
         iree_any_bit_set(driver->rewriter.flags, LOOM_REWRITER_FLAG_CHANGED);
     if (legalizer_result.action == LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN) {

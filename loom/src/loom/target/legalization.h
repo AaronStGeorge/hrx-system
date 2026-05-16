@@ -105,6 +105,9 @@ typedef struct loom_target_legalization_context_t {
   loom_target_legalization_mode_t mode;
   // Scoped arena available for rare legalization-side records.
   iree_arena_allocator_t* arena;
+  // Target contract query result for the op currently being passed to a
+  // legalizer, or NULL outside a legalizer callback.
+  const loom_target_contract_query_result_t* contract_query_result;
   // Read-only target contract query for already-legal checks.
   loom_target_contract_query_callback_t contract_query;
 } loom_target_legalization_context_t;

@@ -25,6 +25,7 @@
 #include "loom/ops/vector/ops.h"
 #include "loom/pass/value_facts.h"
 #include "loom/target/compile_report.h"
+#include "loom/target/legalization.h"
 #include "loom/target/test/contracts/core_lower_rules.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/target/test/lower.h"
@@ -82,7 +83,9 @@ class TargetLegalizePassTest : public ::testing::Test {
   iree_status_t RunTargetLegalize(
       loom_low_lower_policy_registry_t* policy_registry, loom_module_t* module,
       loom_target_compile_report_t* compile_report,
-      iree_string_view_t options = iree_string_view_empty()) {
+      iree_string_view_t options = iree_string_view_empty(),
+      const loom_target_legalizer_provider_list_t* legalizer_provider_list =
+          nullptr) {
     iree_arena_allocator_t instance_arena;
     iree_arena_initialize(&block_pool_, &instance_arena);
     loom_pass_value_fact_owner_t value_facts = {};
@@ -92,8 +95,9 @@ class TargetLegalizePassTest : public ::testing::Test {
     loom_low_pass_environment_storage_t low_pass_environment_storage;
     loom_pass_environment_t environment =
         loom_low_pass_environment_storage_initialize(
-            &registry_.registry, policy_registry, nullptr, nullptr, nullptr,
-            compile_report, &low_pass_environment_storage);
+            &registry_.registry, policy_registry, nullptr,
+            legalizer_provider_list, nullptr, compile_report,
+            &low_pass_environment_storage);
     loom_pass_t pass = {
         .info = pass_info,
         .module_run = loom_low_target_legalize_run,
@@ -117,6 +121,33 @@ class TargetLegalizePassTest : public ::testing::Test {
   loom_context_t context_;
   loom_target_low_descriptor_registry_t registry_ = {};
 };
+
+struct ObserveContractQueryResultState {
+  bool saw_query_result = false;
+  loom_target_contract_query_outcome_t outcome =
+      LOOM_TARGET_CONTRACT_QUERY_INVALID_IR;
+  const loom_matrix_fragment_layout_t* selected_matrix_fragment_layout =
+      nullptr;
+};
+
+static iree_status_t ObserveContractQueryResultLegalizer(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  (void)op;
+  auto* state = static_cast<ObserveContractQueryResultState*>(
+      const_cast<void*>(entry->user_data));
+  state->saw_query_result = context->contract_query_result != nullptr;
+  if (context->contract_query_result != nullptr) {
+    state->outcome = context->contract_query_result->outcome;
+    state->selected_matrix_fragment_layout =
+        context->contract_query_result->selected_matrix_fragment_layout;
+  }
+  *out_result = (loom_target_legalizer_result_t){
+      .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
+  };
+  return iree_ok_status();
+}
 
 TEST_F(TargetLegalizePassTest, RecordsRewriteRowsInCompileReport) {
   ModulePtr module = Parse(IREE_SV(
@@ -164,6 +195,56 @@ TEST_F(TargetLegalizePassTest, RecordsRewriteRowsInCompileReport) {
   EXPECT_EQ(rows[0].mode, LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_MODE_EAGER);
   EXPECT_GT(rows[0].created_op_count, 0u);
   EXPECT_EQ(rows[0].erased_op_count, 1u);
+}
+
+TEST_F(TargetLegalizePassTest, LegalizerReceivesCurrentContractQueryResult) {
+  ModulePtr module = Parse(IREE_SV(
+      "test.target<low_core> @test_target\n"
+      "func.def target(@test_target) @reduce(%v: vector<4xi32>, %init: i32) "
+      "-> (i32) {\n"
+      "  %r = vector.reduce.axes<addi> %v, %init axes [0] : vector<4xi32>, "
+      "i32\n"
+      "  func.return %r : i32\n"
+      "}\n"));
+
+  loom_low_lower_policy_t policy = *loom_test_low_lower_policy();
+  const loom_low_lower_policy_registry_entry_t policy_entries[] = {
+      {
+          .contract_set_key = IREE_SVL("test.low.core"),
+          .policy = &policy,
+      },
+  };
+  loom_low_lower_policy_registry_t policy_registry = {};
+  loom_low_lower_policy_registry_initialize_from_entries(
+      &policy_registry, policy_entries, IREE_ARRAYSIZE(policy_entries));
+
+  ObserveContractQueryResultState observer_state = {};
+  const loom_target_legalizer_entry_t legalizer_entries[] = {
+      {
+          .root_kind = LOOM_OP_VECTOR_REDUCE_AXES,
+          .legalize = ObserveContractQueryResultLegalizer,
+          .user_data = &observer_state,
+      },
+  };
+  const loom_target_legalizer_provider_t legalizer_provider = {
+      .name = IREE_SVL("observer"),
+      .strategy = LOOM_TARGET_LEGALIZER_STRATEGY_UNKNOWN,
+      .entries = legalizer_entries,
+      .entry_count = IREE_ARRAYSIZE(legalizer_entries),
+  };
+  const loom_target_legalizer_provider_t* legalizer_providers[] = {
+      &legalizer_provider,
+  };
+  const loom_target_legalizer_provider_list_t legalizer_provider_list =
+      loom_target_legalizer_provider_list_make(
+          legalizer_providers, IREE_ARRAYSIZE(legalizer_providers));
+
+  IREE_ASSERT_OK(RunTargetLegalize(&policy_registry, module.get(), nullptr,
+                                   iree_string_view_empty(),
+                                   &legalizer_provider_list));
+  EXPECT_TRUE(observer_state.saw_query_result);
+  EXPECT_EQ(observer_state.outcome, LOOM_TARGET_CONTRACT_QUERY_UNHANDLED);
+  EXPECT_EQ(observer_state.selected_matrix_fragment_layout, nullptr);
 }
 
 TEST_F(TargetLegalizePassTest, RecordsReferenceRejectReasonInCompileReport) {
