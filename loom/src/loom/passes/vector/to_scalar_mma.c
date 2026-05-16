@@ -615,16 +615,11 @@ static iree_status_t loom_vector_to_scalar_mma_build_accumulate(
           state, lhs, lhs_scalar_type, accumulator_type, &cast_lhs));
       IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_cast_integer(
           state, rhs, rhs_scalar_type, accumulator_type, &cast_rhs));
-      loom_op_t* product_op = NULL;
-      IREE_RETURN_IF_ERROR(loom_scalar_muli_build(
-          &state->rewriter->builder, 0, cast_lhs, cast_rhs, accumulator_type,
-          state->location, &product_op));
-      loom_op_t* add_op = NULL;
-      IREE_RETURN_IF_ERROR(
-          loom_scalar_addi_build(&state->rewriter->builder, 0, accumulator,
-                                 loom_scalar_muli_result(product_op),
-                                 accumulator_type, state->location, &add_op));
-      *out_next = loom_scalar_addi_result(add_op);
+      loom_op_t* fma_op = NULL;
+      IREE_RETURN_IF_ERROR(loom_scalar_fmai_build(
+          &state->rewriter->builder, 0, cast_lhs, cast_rhs, accumulator,
+          accumulator_type, state->location, &fma_op));
+      *out_next = loom_scalar_fmai_result(fma_op);
       return iree_ok_status();
     }
     case LOOM_VECTOR_TO_SCALAR_MMA_NUMERIC_UNSUPPORTED:

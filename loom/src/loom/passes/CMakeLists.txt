@@ -189,6 +189,22 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    scalar_target_legalization
+  HDRS
+    "scalar_target_legalization.h"
+  SRCS
+    "scalar_target_legalization.c"
+  DEPS
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::scalar
+    loom::src::loom::rewrite::rewriter
+    loom::src::loom::target::legalization
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     kernel_async_legality
   HDRS
     "kernel_async_legality.h"

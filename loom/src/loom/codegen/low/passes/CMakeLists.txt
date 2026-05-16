@@ -122,6 +122,7 @@ loom_cc_library(
     loom::src::loom::pass::registry
     loom::src::loom::pass::types
     loom::src::loom::pass::value_facts
+    loom::src::loom::passes::scalar_target_legalization
     loom::src::loom::passes::scf_to_cfg
     loom::src::loom::passes::vector::target_legalization
     loom::src::loom::rewrite::greedy

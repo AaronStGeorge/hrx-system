@@ -17,6 +17,7 @@
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 #include "loom/pass/value_facts.h"
+#include "loom/passes/scalar_target_legalization.h"
 #include "loom/passes/scf_to_cfg.h"
 #include "loom/passes/vector/target_legalization.h"
 #include "loom/rewrite/greedy.h"
@@ -1016,18 +1017,21 @@ static iree_status_t loom_low_target_legalize_compose_providers(
     iree_arena_allocator_t* arena,
     const loom_target_legalizer_provider_t* const** out_providers,
     iree_host_size_t* out_provider_count) {
+  const loom_target_legalizer_provider_t* scalar_provider =
+      loom_scalar_target_legalizer_provider();
   const loom_target_legalizer_provider_t* vector_provider =
       loom_vector_target_legalizer_provider();
   const iree_host_size_t target_provider_count =
       target_provider_list ? target_provider_list->count : 0;
-  const iree_host_size_t provider_count = target_provider_count + 1;
+  const iree_host_size_t provider_count = target_provider_count + 2;
   const loom_target_legalizer_provider_t** providers = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       arena, provider_count, sizeof(*providers), (void**)&providers));
   for (iree_host_size_t i = 0; i < target_provider_count; ++i) {
     providers[i] = target_provider_list->values[i];
   }
-  providers[target_provider_count] = vector_provider;
+  providers[target_provider_count] = scalar_provider;
+  providers[target_provider_count + 1] = vector_provider;
   *out_providers = providers;
   *out_provider_count = provider_count;
   return iree_ok_status();

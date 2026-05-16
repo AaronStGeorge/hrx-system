@@ -169,6 +169,19 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "scalar_target_legalization",
+    srcs = ["scalar_target_legalization.c"],
+    hdrs = ["scalar_target_legalization.h"],
+    deps = [
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/rewrite:rewriter",
+        "//loom/src/loom/target:legalization",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "kernel_async_legality",
     srcs = ["kernel_async_legality.c"],
     hdrs = ["kernel_async_legality.h"],
