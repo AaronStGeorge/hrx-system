@@ -8,8 +8,10 @@
 
 #include <string.h>
 
+#include "loom/analysis/contract.h"
 #include "loom/codegen/low/pass_environment.h"
 #include "loom/codegen/low/source_selection.h"
+#include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ops/op_defs.h"
 #include "loom/pass/pipeline.h"
@@ -229,6 +231,15 @@ iree_status_t loom_low_target_legalize_create(loom_pass_t* pass,
   return iree_ok_status();
 }
 
+typedef struct loom_low_target_legalize_final_rejection_t {
+  // Op rejected by a final legalizer.
+  const loom_op_t* op;
+  // Legalizer rejection result copied for final verification.
+  loom_target_legalizer_result_t result;
+  // Next final rejection record in function-local insertion order.
+  struct loom_low_target_legalize_final_rejection_t* next;
+} loom_low_target_legalize_final_rejection_t;
+
 typedef struct loom_low_target_legalize_function_state_t {
   // Pass invocation being executed.
   loom_pass_t* pass;
@@ -254,6 +265,10 @@ typedef struct loom_low_target_legalize_function_state_t {
   loom_target_legalization_context_t legalization_context;
   // Optional compile report receiving cold legalization decision rows.
   loom_target_compile_report_t* compile_report;
+  // First final legalizer rejection retained for final legality diagnostics.
+  loom_low_target_legalize_final_rejection_t* final_rejections;
+  // True when contract queries should surface retained legalizer rejections.
+  bool use_final_rejections;
 } loom_low_target_legalize_function_state_t;
 
 static loom_target_compile_report_legalization_mode_t
@@ -313,6 +328,11 @@ static iree_string_view_t loom_low_target_legalize_function_name(
     return iree_string_view_empty();
   }
   return state->module->strings.entries[symbol->name_id];
+}
+
+static iree_string_view_t loom_low_target_legalize_nonempty(
+    iree_string_view_t value, iree_string_view_t placeholder) {
+  return iree_string_view_is_empty(value) ? placeholder : value;
 }
 
 static uint64_t loom_low_target_legalize_report_descriptor_id(
@@ -398,6 +418,168 @@ loom_low_target_legalize_result_for_legalizer_report(
   return report_result;
 }
 
+static bool loom_low_target_legalize_should_record_final_rejection(
+    const loom_low_target_legalize_function_state_t* state,
+    const loom_target_legalizer_entry_t* entry) {
+  return state->legalization_context.mode ==
+             LOOM_TARGET_LEGALIZATION_MODE_FINAL &&
+         entry->provider_strategy == LOOM_TARGET_LEGALIZER_STRATEGY_REFERENCE;
+}
+
+static iree_status_t loom_low_target_legalize_record_final_rejection(
+    loom_low_target_legalize_function_state_t* state, const loom_op_t* op,
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalizer_result_t result) {
+  if (!loom_low_target_legalize_should_record_final_rejection(state, entry)) {
+    return iree_ok_status();
+  }
+  loom_low_target_legalize_final_rejection_t* rejection = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(
+      state->query_scope_arena, sizeof(*rejection), (void**)&rejection));
+  *rejection = (loom_low_target_legalize_final_rejection_t){
+      .op = op,
+      .result = result,
+      .next = state->final_rejections,
+  };
+  state->final_rejections = rejection;
+  return iree_ok_status();
+}
+
+static const loom_low_target_legalize_final_rejection_t*
+loom_low_target_legalize_find_final_rejection(
+    const loom_low_target_legalize_function_state_t* state,
+    const loom_op_t* op) {
+  if (!state->use_final_rejections) {
+    return NULL;
+  }
+  const loom_low_target_legalize_final_rejection_t* rejection =
+      state->final_rejections;
+  while (rejection != NULL) {
+    if (rejection->op == op) {
+      return rejection;
+    }
+    rejection = rejection->next;
+  }
+  return NULL;
+}
+
+static iree_string_view_t loom_low_target_legalize_reference_source_contract(
+    void) {
+  return IREE_SV("target.reference");
+}
+
+static iree_string_view_t loom_low_target_legalize_reference_constraint_key(
+    const loom_target_legalizer_result_t* result) {
+  const uint32_t bits = result->source_rejection_bits;
+  if (iree_any_bit_set(bits, LOOM_CONTRACT_REJECTION_INVALID_REQUEST)) {
+    return IREE_SV("reference.request_shape");
+  }
+  if (iree_any_bit_set(bits, LOOM_CONTRACT_REJECTION_ROLE)) {
+    return IREE_SV("reference.fragment_roles");
+  }
+  if (iree_any_bit_set(bits, LOOM_CONTRACT_REJECTION_SHAPE)) {
+    return IREE_SV("reference.fragment_shape");
+  }
+  if (iree_any_bit_set(bits, LOOM_CONTRACT_REJECTION_SCHEMA)) {
+    return IREE_SV("reference.fragment_schema");
+  }
+  if (iree_any_bit_set(bits, LOOM_CONTRACT_REJECTION_AUXILIARY_OPERAND)) {
+    return IREE_SV("reference.auxiliary_operands");
+  }
+  if (iree_any_bit_set(bits, LOOM_CONTRACT_REJECTION_NUMERIC)) {
+    return IREE_SV("reference.numeric_type");
+  }
+  if (iree_any_bit_set(bits, LOOM_CONTRACT_REJECTION_FRAGMENT)) {
+    return IREE_SV("reference.fragment_ownership");
+  }
+  if (iree_any_bit_set(bits, LOOM_CONTRACT_REJECTION_CAPABILITY)) {
+    return IREE_SV("reference.capability");
+  }
+  if (iree_any_bit_set(bits, LOOM_CONTRACT_REJECTION_POLICY)) {
+    return IREE_SV("reference.policy");
+  }
+  if (result->missing_feature_bits != 0) {
+    return IREE_SV("reference.target_features");
+  }
+  if (result->missing_fact_bits != 0) {
+    return IREE_SV("reference.value_facts");
+  }
+  if (result->target_rejection_bits != 0) {
+    return IREE_SV("reference.target_constraints");
+  }
+  return IREE_SV("reference.unsupported");
+}
+
+static iree_status_t loom_low_target_legalize_make_final_rejection(
+    loom_low_target_legalize_function_state_t* state,
+    const loom_target_contract_query_environment_t* environment,
+    const loom_op_t* source_op,
+    const loom_low_target_legalize_final_rejection_t* final_rejection,
+    const loom_target_contract_rejection_t** out_rejection) {
+  *out_rejection = NULL;
+  loom_target_contract_rejection_t* rejection = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate(
+      environment->arena, sizeof(*rejection), (void**)&rejection));
+  loom_diagnostic_param_t* params = NULL;
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      environment->arena, 7, sizeof(*params), (void**)&params));
+  const loom_target_bundle_t* bundle = environment->bundle;
+  const loom_target_config_t* config = bundle ? bundle->config : NULL;
+  const loom_target_export_plan_t* export_plan =
+      bundle ? bundle->export_plan : NULL;
+  params[0] = loom_param_string(loom_low_target_legalize_nonempty(
+      bundle ? bundle->name : iree_string_view_empty(), IREE_SV("<empty>")));
+  params[1] = loom_param_string(loom_low_target_legalize_nonempty(
+      export_plan ? export_plan->name : iree_string_view_empty(),
+      IREE_SV("<empty>")));
+  params[2] = loom_param_string(loom_low_target_legalize_nonempty(
+      config ? config->name : iree_string_view_empty(), IREE_SV("<empty>")));
+  params[3] = loom_param_string(loom_low_target_legalize_nonempty(
+      loom_low_target_legalize_function_name(state), IREE_SV("<module>")));
+  params[4] = loom_param_string(loom_op_name(environment->module, source_op));
+  params[5] =
+      loom_param_string(loom_low_target_legalize_reference_source_contract());
+  params[6] =
+      loom_param_string(loom_low_target_legalize_reference_constraint_key(
+          &final_rejection->result));
+  *rejection = (loom_target_contract_rejection_t){
+      .error_ref = LOOM_ERR_TARGET_039_REF,
+      .params = params,
+      .param_count = 7,
+  };
+  *out_rejection = rejection;
+  return iree_ok_status();
+}
+
+static iree_status_t
+loom_low_target_legalize_apply_final_rejection_to_contract_query(
+    loom_low_target_legalize_function_state_t* state,
+    const loom_target_contract_query_environment_t* environment,
+    const loom_op_t* source_op, loom_target_contract_query_result_t* result) {
+  if (result->outcome != LOOM_TARGET_CONTRACT_QUERY_UNHANDLED) {
+    return iree_ok_status();
+  }
+  const loom_low_target_legalize_final_rejection_t* final_rejection =
+      loom_low_target_legalize_find_final_rejection(state, source_op);
+  if (final_rejection == NULL) {
+    return iree_ok_status();
+  }
+  const loom_target_contract_rejection_t* rejection = NULL;
+  IREE_RETURN_IF_ERROR(loom_low_target_legalize_make_final_rejection(
+      state, environment, source_op, final_rejection, &rejection));
+  *result = loom_target_contract_query_result_empty();
+  result->outcome = final_rejection->result.action ==
+                            LOOM_TARGET_LEGALIZER_ACTION_REJECT_INVALID_IR
+                        ? LOOM_TARGET_CONTRACT_QUERY_INVALID_IR
+                        : LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED;
+  result->source_rejection_bits = final_rejection->result.source_rejection_bits;
+  result->target_rejection_bits = final_rejection->result.target_rejection_bits;
+  result->missing_feature_bits = final_rejection->result.missing_feature_bits;
+  result->missing_fact_bits = final_rejection->result.missing_fact_bits;
+  result->rejection = rejection;
+  return iree_ok_status();
+}
+
 static void loom_low_target_legalize_destroy_query_scope(
     loom_low_target_legalize_function_state_t* state) {
   if (state->query_scope == NULL) {
@@ -441,7 +623,10 @@ static iree_status_t loom_low_target_legalize_query_contract(
       state, environment->fact_table));
   const loom_target_contract_query_callback_t callback =
       loom_low_lower_source_query_scope_callback(state->query_scope);
-  return callback.fn(callback.user_data, environment, source_op, out_result);
+  IREE_RETURN_IF_ERROR(
+      callback.fn(callback.user_data, environment, source_op, out_result));
+  return loom_low_target_legalize_apply_final_rejection_to_contract_query(
+      state, environment, source_op, out_result);
 }
 
 static iree_status_t loom_low_target_legalize_rewrite_op(
@@ -563,6 +748,8 @@ static iree_status_t loom_low_target_legalize_rewrite_op(
         return iree_ok_status();
       }
       case LOOM_TARGET_LEGALIZER_ACTION_REJECT_INVALID_IR: {
+        IREE_RETURN_IF_ERROR(loom_low_target_legalize_record_final_rejection(
+            state, op, entry, legalizer_result));
         const loom_target_contract_query_result_t invalid_report_result =
             loom_low_target_legalize_result_for_legalizer_report(
                 &query_result, &legalizer_result);
@@ -576,6 +763,8 @@ static iree_status_t loom_low_target_legalize_rewrite_op(
         return iree_ok_status();
       }
       case LOOM_TARGET_LEGALIZER_ACTION_REJECT_UNSUPPORTED_FINAL: {
+        IREE_RETURN_IF_ERROR(loom_low_target_legalize_record_final_rejection(
+            state, op, entry, legalizer_result));
         const loom_target_contract_query_result_t unsupported_report_result =
             loom_low_target_legalize_result_for_legalizer_report(
                 &query_result, &legalizer_result);
@@ -619,8 +808,10 @@ static iree_status_t loom_low_target_legalize_verify_final(
   *out_error_count = 0;
   IREE_RETURN_IF_ERROR(
       loom_low_target_legalize_refresh_query_scope(state, fact_table));
-  const loom_target_contract_query_callback_t contract_query =
-      loom_low_lower_source_query_scope_callback(state->query_scope);
+  const loom_target_contract_query_callback_t contract_query = {
+      .fn = loom_low_target_legalize_query_contract,
+      .user_data = state,
+  };
   loom_target_low_legality_result_t result = {0};
   const loom_target_low_legality_options_t legality_options = {
       .bundle = state->selection->target_bundle,
@@ -636,8 +827,10 @@ static iree_status_t loom_low_target_legalize_verify_final(
       .emitter = state->pass->diagnostic_emitter,
       .max_errors = pass_state->max_errors,
   };
+  state->use_final_rejections = true;
   iree_status_t status = loom_target_low_verify_function_legality(
       module, state->selection->func, &legality_options, &result);
+  state->use_final_rejections = false;
   *out_error_count = result.error_count;
   return status;
 }
