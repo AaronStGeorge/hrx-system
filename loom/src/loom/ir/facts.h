@@ -80,6 +80,9 @@ enum loom_value_fact_flag_bits_e {
   LOOM_VALUE_FACT_LANE_VARYING = 1u << 8,
   // The i1 value is a lane mask/predicate rather than a scalar condition code.
   LOOM_VALUE_FACT_LANE_PREDICATE = 1u << 9,
+  // The integer value encodes subgroup lane membership as one bit per lane.
+  // This is independent of whether each lane observes the same mask value.
+  LOOM_VALUE_FACT_SUBGROUP_LANE_MASK = 1u << 10,
 };
 typedef uint32_t loom_value_fact_flags_t;
 
@@ -237,6 +240,11 @@ static inline bool loom_value_facts_is_lane_predicate(
   return (facts.flags & LOOM_VALUE_FACT_LANE_PREDICATE) != 0;
 }
 
+static inline bool loom_value_facts_is_subgroup_lane_mask(
+    loom_value_facts_t facts) {
+  return (facts.flags & LOOM_VALUE_FACT_SUBGROUP_LANE_MASK) != 0;
+}
+
 static inline void loom_value_facts_mark_uniform(loom_value_facts_t* facts) {
   facts->flags &=
       ~(LOOM_VALUE_FACT_DISTRIBUTION_MASK | LOOM_VALUE_FACT_LANE_PREDICATE);
@@ -251,9 +259,16 @@ static inline void loom_value_facts_mark_lane_varying(
 
 static inline void loom_value_facts_mark_lane_predicate(
     loom_value_facts_t* facts) {
-  facts->flags &= ~LOOM_VALUE_FACT_UNIFORM;
+  facts->flags &=
+      ~(LOOM_VALUE_FACT_UNIFORM | LOOM_VALUE_FACT_SUBGROUP_LANE_MASK);
   facts->flags |= LOOM_VALUE_FACT_LANE_VARYING |
                   LOOM_VALUE_FACT_LANE_PREDICATE | LOOM_VALUE_FACT_BOOLEAN;
+}
+
+static inline void loom_value_facts_mark_subgroup_lane_mask(
+    loom_value_facts_t* facts) {
+  facts->flags &= ~LOOM_VALUE_FACT_LANE_PREDICATE;
+  facts->flags |= LOOM_VALUE_FACT_SUBGROUP_LANE_MASK;
 }
 
 // Returns true when the integer fact domain proves the value is exactly zero.
@@ -354,10 +369,20 @@ static inline void loom_value_facts_meet(
     const loom_value_facts_t* IREE_RESTRICT a,
     const loom_value_facts_t* IREE_RESTRICT b,
     loom_value_facts_t* IREE_RESTRICT out) {
+  const bool preserves_subgroup_lane_mask =
+      (loom_value_facts_is_subgroup_lane_mask(*a) &&
+       loom_value_facts_is_subgroup_lane_mask(*b)) ||
+      (loom_value_facts_is_subgroup_lane_mask(*a) &&
+       loom_value_facts_is_zero(*b)) ||
+      (loom_value_facts_is_zero(*a) &&
+       loom_value_facts_is_subgroup_lane_mask(*b));
   *out = loom_value_facts_make(
       a->range_lo < b->range_lo ? a->range_lo : b->range_lo,
       a->range_hi > b->range_hi ? a->range_hi : b->range_hi,
       loom_gcd_i64(a->known_divisor, b->known_divisor));
+  if (preserves_subgroup_lane_mask) {
+    loom_value_facts_mark_subgroup_lane_mask(out);
+  }
   if (loom_value_facts_is_lane_predicate(*a) ||
       loom_value_facts_is_lane_predicate(*b)) {
     loom_value_facts_mark_lane_predicate(out);

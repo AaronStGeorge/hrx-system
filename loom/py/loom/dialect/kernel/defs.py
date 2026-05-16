@@ -862,6 +862,7 @@ kernel_subgroup_vote_any = Op(
     operands=[Operand("predicate", I1, doc="Per-invocation predicate.")],
     results=[Result("result", I1, doc="Subgroup-uniform vote result.")],
     traits=_KERNEL_CONVERGENT_TRAITS,
+    facts="loom_kernel_subgroup_vote_any_facts",
     format=[Ref("predicate"), COLON, TypeOf("predicate")],
     examples=["%any = kernel.subgroup.vote.any %p : i1"],
 )
@@ -875,6 +876,7 @@ kernel_subgroup_vote_all = Op(
     operands=[Operand("predicate", I1, doc="Per-invocation predicate.")],
     results=[Result("result", I1, doc="Subgroup-uniform vote result.")],
     traits=_KERNEL_CONVERGENT_TRAITS,
+    facts="loom_kernel_subgroup_vote_all_facts",
     format=[Ref("predicate"), COLON, TypeOf("predicate")],
     examples=["%all = kernel.subgroup.vote.all %p : i1"],
 )
@@ -889,6 +891,7 @@ kernel_subgroup_vote_ballot = Op(
     results=[Result("mask", INTEGER, doc="Integer subgroup lane mask.")],
     traits=_KERNEL_CONVERGENT_TRAITS,
     verify="loom_kernel_subgroup_mask_result_verify",
+    facts="loom_kernel_subgroup_vote_ballot_facts",
     format=[Ref("predicate"), COLON, TypeOf("predicate"), ARROW, ResultType("mask")],
     examples=["%mask = kernel.subgroup.vote.ballot %p : i1 -> i64"],
 )
@@ -902,6 +905,7 @@ kernel_subgroup_active_mask = Op(
     results=[Result("mask", INTEGER, doc="Integer active-lane mask.")],
     traits=_KERNEL_CONVERGENT_TRAITS,
     verify="loom_kernel_subgroup_mask_result_verify",
+    facts="loom_kernel_subgroup_active_mask_facts",
     format=[COLON, ResultType("mask")],
     examples=["%mask = kernel.subgroup.active.mask : i64"],
 )
@@ -916,6 +920,7 @@ kernel_subgroup_match_any = Op(
     results=[Result("mask", INTEGER, doc="Integer lane-equality mask.")],
     traits=_KERNEL_CONVERGENT_TRAITS,
     verify="loom_kernel_subgroup_mask_result_verify",
+    facts="loom_kernel_subgroup_match_any_facts",
     format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("mask")],
     examples=["%mask = kernel.subgroup.match.any %v : i32 -> i64"],
 )
@@ -933,6 +938,7 @@ kernel_subgroup_match_all = Op(
     ],
     traits=_KERNEL_CONVERGENT_TRAITS,
     verify="loom_kernel_subgroup_match_all_verify",
+    facts="loom_kernel_subgroup_match_all_facts",
     format=[
         Ref("value"),
         COLON,

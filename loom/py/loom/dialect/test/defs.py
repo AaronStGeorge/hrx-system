@@ -439,6 +439,54 @@ test_fact_power_of_two = Op(
     examples=["%p2 = test.fact_power_of_two %x : index -> i1"],
 )
 
+test_fact_uniform = Op(
+    "test.fact_uniform",
+    group=test_ops,
+    doc="Returns 1 if the input is provably uniform across active lanes, 0 otherwise.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", I1)],
+    traits=[PURE],
+    facts="loom_test_fact_uniform_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%uniform = test.fact_uniform %x : index -> i1"],
+)
+
+test_fact_lane_varying = Op(
+    "test.fact_lane_varying",
+    group=test_ops,
+    doc="Returns 1 if the input may vary across active lanes, 0 otherwise.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", I1)],
+    traits=[PURE],
+    facts="loom_test_fact_lane_varying_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%varying = test.fact_lane_varying %x : index -> i1"],
+)
+
+test_fact_lane_predicate = Op(
+    "test.fact_lane_predicate",
+    group=test_ops,
+    doc="Returns 1 if the input is an i1 lane predicate, 0 otherwise.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", I1)],
+    traits=[PURE],
+    facts="loom_test_fact_lane_predicate_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%predicate = test.fact_lane_predicate %x : i1 -> i1"],
+)
+
+test_fact_subgroup_lane_mask = Op(
+    "test.fact_subgroup_lane_mask",
+    group=test_ops,
+    doc="Returns 1 if the input is an integer subgroup lane mask, 0 otherwise.",
+    operands=[Operand("value", ANY)],
+    results=[Result("result", I1)],
+    traits=[PURE],
+    facts="loom_test_fact_subgroup_lane_mask_facts",
+    format=[Ref("value"), COLON, TypeOf("value"), ARROW, ResultType("result")],
+    examples=["%mask = test.fact_subgroup_lane_mask %x : i64 -> i1"],
+)
+
 test_fact_is_vector_iota = Op(
     "test.fact_is_vector_iota",
     group=test_ops,
@@ -2245,6 +2293,10 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_fact_non_zero,
     test_fact_positive,
     test_fact_power_of_two,
+    test_fact_uniform,
+    test_fact_lane_varying,
+    test_fact_lane_predicate,
+    test_fact_subgroup_lane_mask,
     test_fact_is_vector_iota,
     test_fact_is_vector_prefix_mask,
     test_fact_encoding_layout_kind,

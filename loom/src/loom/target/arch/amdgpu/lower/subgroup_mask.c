@@ -369,8 +369,13 @@ static iree_status_t loom_amdgpu_low_legality_verify_subgroup_wavefront(
 static iree_status_t loom_amdgpu_low_legality_verify_subgroup_native_predicate(
     loom_target_low_legality_context_t* context, const loom_op_t* op,
     loom_value_id_t predicate, iree_string_view_t constraint_key) {
-  if (!loom_amdgpu_module_value_is_native_i1_mask(
-          loom_target_low_legality_module(context), predicate)) {
+  const loom_view_region_table_t* view_regions = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_target_low_legality_view_regions(context, &view_regions));
+  if (!loom_amdgpu_source_value_is_native_i1_mask(
+          loom_target_low_legality_module(context),
+          loom_target_low_legality_fact_table(context), view_regions,
+          predicate)) {
     return loom_amdgpu_low_legality_reject(context, op, constraint_key);
   }
   return iree_ok_status();
@@ -390,6 +395,11 @@ static iree_status_t loom_amdgpu_low_legality_verify_subgroup_mask_result(
                                                   wavefront_size)) {
     return loom_amdgpu_low_legality_reject(
         context, op, IREE_SV("subgroup_mask.wavefront_coverage"));
+  }
+  if (!loom_amdgpu_source_value_is_uniform_subgroup_lane_mask(
+          module, loom_target_low_legality_fact_table(context), mask)) {
+    return loom_amdgpu_low_legality_reject(
+        context, op, IREE_SV("subgroup_mask.uniform_lane_mask"));
   }
   return iree_ok_status();
 }

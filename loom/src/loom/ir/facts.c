@@ -88,8 +88,9 @@ loom_value_facts_t loom_value_facts_clamp_domain(loom_value_facts_t facts,
     result.flags |= LOOM_VALUE_FACT_POWER_OF_TWO;
   }
   result.flags |=
-      facts.flags & (LOOM_VALUE_FACT_UNIFORM | LOOM_VALUE_FACT_LANE_VARYING |
-                     LOOM_VALUE_FACT_LANE_PREDICATE);
+      facts.flags &
+      (LOOM_VALUE_FACT_UNIFORM | LOOM_VALUE_FACT_LANE_VARYING |
+       LOOM_VALUE_FACT_LANE_PREDICATE | LOOM_VALUE_FACT_SUBGROUP_LANE_MASK);
   result.extension_id = facts.extension_id;
   return result;
 }
@@ -102,9 +103,10 @@ void loom_value_facts_recompute_flags(loom_value_facts_t* facts) {
   // Preserve flags that come from external sources (predicates, not
   // range analysis).
   uint32_t preserved =
-      facts->flags & (LOOM_VALUE_FACT_POWER_OF_TWO | LOOM_VALUE_FACT_FLOAT |
-                      LOOM_VALUE_FACT_UNIFORM | LOOM_VALUE_FACT_LANE_VARYING |
-                      LOOM_VALUE_FACT_LANE_PREDICATE);
+      facts->flags &
+      (LOOM_VALUE_FACT_POWER_OF_TWO | LOOM_VALUE_FACT_FLOAT |
+       LOOM_VALUE_FACT_UNIFORM | LOOM_VALUE_FACT_LANE_VARYING |
+       LOOM_VALUE_FACT_LANE_PREDICATE | LOOM_VALUE_FACT_SUBGROUP_LANE_MASK);
   facts->flags =
       loom_value_facts_compute_flags(facts->range_lo, facts->range_hi) |
       preserved;

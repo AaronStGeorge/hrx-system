@@ -152,6 +152,42 @@ iree_status_t loom_test_fact_power_of_two_facts(
   return iree_ok_status();
 }
 
+iree_status_t loom_test_fact_uniform_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  result_facts[0] = loom_value_facts_exact_i64(
+      loom_value_facts_is_uniform(operand_facts[0]) ? 1 : 0);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_lane_varying_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  result_facts[0] = loom_value_facts_exact_i64(
+      loom_value_facts_is_lane_varying(operand_facts[0]) ? 1 : 0);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_lane_predicate_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  result_facts[0] = loom_value_facts_exact_i64(
+      loom_value_facts_is_lane_predicate(operand_facts[0]) ? 1 : 0);
+  return iree_ok_status();
+}
+
+iree_status_t loom_test_fact_subgroup_lane_mask_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  result_facts[0] = loom_value_facts_exact_i64(
+      loom_value_facts_is_subgroup_lane_mask(operand_facts[0]) ? 1 : 0);
+  return iree_ok_status();
+}
+
 iree_status_t loom_test_fact_is_vector_iota_facts(
     loom_fact_context_t* context, const loom_module_t* module,
     const loom_op_t* op, const loom_value_facts_t* operand_facts,

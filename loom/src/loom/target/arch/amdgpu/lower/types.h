@@ -217,6 +217,25 @@ bool loom_amdgpu_source_value_prefers_vgpr(
     const loom_view_region_table_t* view_regions,
     loom_value_id_t source_value_id);
 
+// Returns true when the source value is an i1 represented by an EXEC-width
+// native lane mask using the supplied fact and view-region context.
+bool loom_amdgpu_source_value_is_native_i1_mask(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    const loom_view_region_table_t* view_regions,
+    loom_value_id_t source_value_id);
+
+// Returns true when the source value is a subgroup lane-mask integer and every
+// active lane observes the same mask payload.
+bool loom_amdgpu_source_value_is_uniform_subgroup_lane_mask(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t source_value_id);
+
+// Returns true when the source value is a subgroup lane-mask integer whose
+// payload may differ per active lane.
+bool loom_amdgpu_source_value_is_divergent_subgroup_lane_mask(
+    const loom_module_t* module, const loom_value_fact_table_t* fact_table,
+    loom_value_id_t source_value_id);
+
 // Returns true when the module source value should prefer a VGPR mapping even
 // if its scalar type could otherwise map to an SGPR.
 bool loom_amdgpu_module_value_prefers_vgpr(const loom_module_t* module,

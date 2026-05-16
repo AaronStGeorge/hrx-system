@@ -24,6 +24,36 @@ static loom_value_facts_t loom_kernel_hal_positive_u32_facts(void) {
   return loom_value_facts_make(1, (int64_t)UINT32_MAX, 1);
 }
 
+static bool loom_kernel_value_integer_domain_facts(
+    const loom_module_t* module, loom_value_id_t value_id,
+    loom_value_facts_t* out_facts) {
+  *out_facts = loom_value_facts_unknown();
+  if (value_id == LOOM_VALUE_ID_INVALID || value_id >= module->values.count) {
+    return false;
+  }
+  const loom_type_t type = loom_module_value_type(module, value_id);
+  if (!loom_type_is_scalar(type)) {
+    return false;
+  }
+  int64_t lower_bound = 0;
+  int64_t upper_bound = 0;
+  if (!loom_value_facts_scalar_type_domain(loom_type_element_type(type),
+                                           &lower_bound, &upper_bound)) {
+    return false;
+  }
+  *out_facts = loom_value_facts_make(lower_bound, upper_bound, 1);
+  return true;
+}
+
+static loom_value_facts_t loom_kernel_subgroup_lane_mask_facts(
+    const loom_module_t* module, loom_value_id_t mask) {
+  loom_value_facts_t facts = loom_value_facts_unknown();
+  if (loom_kernel_value_integer_domain_facts(module, mask, &facts)) {
+    loom_value_facts_mark_subgroup_lane_mask(&facts);
+  }
+  return facts;
+}
+
 static loom_value_facts_t loom_kernel_positive_u32_extent_facts(
     loom_value_facts_t facts, uint32_t maximum_extent) {
   const int64_t maximum =
@@ -615,5 +645,93 @@ iree_status_t loom_kernel_subgroup_count_facts(
                                             (int64_t)max_subgroup_count, 1);
   }
   loom_value_facts_mark_uniform(&result_facts[0]);
+  return iree_ok_status();
+}
+
+iree_status_t loom_kernel_subgroup_vote_any_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  (void)context;
+  (void)module;
+  (void)op;
+  (void)operand_facts;
+  result_facts[0] = loom_value_facts_make(0, 1, 1);
+  loom_value_facts_mark_uniform(&result_facts[0]);
+  return iree_ok_status();
+}
+
+iree_status_t loom_kernel_subgroup_vote_all_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  (void)context;
+  (void)module;
+  (void)op;
+  (void)operand_facts;
+  result_facts[0] = loom_value_facts_make(0, 1, 1);
+  loom_value_facts_mark_uniform(&result_facts[0]);
+  return iree_ok_status();
+}
+
+iree_status_t loom_kernel_subgroup_vote_ballot_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  (void)context;
+  (void)operand_facts;
+  result_facts[0] = loom_kernel_subgroup_lane_mask_facts(
+      module, loom_kernel_subgroup_vote_ballot_mask(op));
+  if (loom_value_facts_is_subgroup_lane_mask(result_facts[0])) {
+    loom_value_facts_mark_uniform(&result_facts[0]);
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_kernel_subgroup_active_mask_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  (void)context;
+  (void)operand_facts;
+  result_facts[0] = loom_kernel_subgroup_lane_mask_facts(
+      module, loom_kernel_subgroup_active_mask_mask(op));
+  if (loom_value_facts_is_subgroup_lane_mask(result_facts[0])) {
+    loom_value_facts_mark_uniform(&result_facts[0]);
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_kernel_subgroup_match_any_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  (void)context;
+  result_facts[0] = loom_kernel_subgroup_lane_mask_facts(
+      module, loom_kernel_subgroup_match_any_mask(op));
+  if (!loom_value_facts_is_subgroup_lane_mask(result_facts[0])) {
+    return iree_ok_status();
+  }
+  if (loom_value_facts_is_uniform(operand_facts[0])) {
+    loom_value_facts_mark_uniform(&result_facts[0]);
+  } else {
+    loom_value_facts_mark_lane_varying(&result_facts[0]);
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_kernel_subgroup_match_all_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  (void)context;
+  (void)operand_facts;
+  result_facts[0] = loom_kernel_subgroup_lane_mask_facts(
+      module, loom_kernel_subgroup_match_all_mask(op));
+  if (loom_value_facts_is_subgroup_lane_mask(result_facts[0])) {
+    loom_value_facts_mark_uniform(&result_facts[0]);
+  }
+  result_facts[1] = loom_value_facts_make(0, 1, 1);
+  loom_value_facts_mark_uniform(&result_facts[1]);
   return iree_ok_status();
 }

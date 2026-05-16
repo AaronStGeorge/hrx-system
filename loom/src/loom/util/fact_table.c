@@ -1596,6 +1596,11 @@ static void loom_value_fact_table_apply_operand_distribution(
     loom_value_facts_mark_uniform(result_facts);
     return;
   }
+  if (iree_any_bit_set(
+          result_facts->flags,
+          LOOM_VALUE_FACT_DISTRIBUTION_MASK | LOOM_VALUE_FACT_LANE_PREDICATE)) {
+    return;
+  }
   if (op->operand_count == 0) {
     return;
   }
