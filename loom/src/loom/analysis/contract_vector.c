@@ -201,14 +201,48 @@ static bool loom_contract_vector_exact_positive_i64(loom_value_facts_t facts,
   return true;
 }
 
-static bool loom_contract_vector_query_exact_shape_value(
+typedef struct loom_contract_vector_shape_dimension_t {
+  // Exact positive value when value facts prove it, or 0 when dynamic.
+  int64_t exact_value;
+
+  // SSA value carrying the dimension.
+  loom_contract_value_ref_t value_ref;
+} loom_contract_vector_shape_dimension_t;
+
+static bool loom_contract_vector_query_shape_dimension(
     const loom_value_fact_table_t* fact_table, loom_value_id_t value_id,
-    int64_t* out_value) {
+    loom_contract_vector_shape_dimension_t* out_dimension) {
+  *out_dimension = (loom_contract_vector_shape_dimension_t){0};
   if (value_id == LOOM_VALUE_ID_INVALID) {
     return false;
   }
-  return loom_contract_vector_exact_positive_i64(
-      loom_value_fact_table_lookup(fact_table, value_id), out_value);
+  out_dimension->value_ref = loom_contract_value_ref_from_value_id(value_id);
+  int64_t exact_value = 0;
+  if (loom_contract_vector_exact_positive_i64(
+          loom_value_fact_table_lookup(fact_table, value_id), &exact_value)) {
+    out_dimension->exact_value = exact_value;
+  }
+  return true;
+}
+
+static bool loom_contract_vector_shape_dimensions_match(
+    loom_contract_vector_shape_dimension_t lhs,
+    loom_contract_vector_shape_dimension_t rhs,
+    loom_contract_vector_shape_dimension_t* out_dimension) {
+  *out_dimension = lhs;
+  if (lhs.exact_value > 0 && rhs.exact_value > 0) {
+    if (lhs.exact_value != rhs.exact_value) {
+      return false;
+    }
+    return true;
+  }
+  if (!loom_contract_value_ref_is_present(lhs.value_ref) ||
+      lhs.value_ref != rhs.value_ref) {
+    return false;
+  }
+  out_dimension->exact_value =
+      lhs.exact_value > 0 ? lhs.exact_value : rhs.exact_value;
+  return true;
 }
 
 static bool loom_contract_vector_query_fragment_fact(
@@ -656,25 +690,30 @@ bool loom_contract_request_from_vector_mma_op(
                                          out_diagnostic);
   }
 
-  int64_t lhs_m = 0;
-  int64_t lhs_k = 0;
-  int64_t rhs_k = 0;
-  int64_t rhs_n = 0;
-  int64_t init_m = 0;
-  int64_t init_n = 0;
-  if (!loom_contract_vector_query_exact_shape_value(
+  loom_contract_vector_shape_dimension_t lhs_m = {0};
+  loom_contract_vector_shape_dimension_t lhs_k = {0};
+  loom_contract_vector_shape_dimension_t rhs_k = {0};
+  loom_contract_vector_shape_dimension_t rhs_n = {0};
+  loom_contract_vector_shape_dimension_t init_m = {0};
+  loom_contract_vector_shape_dimension_t init_n = {0};
+  loom_contract_vector_shape_dimension_t m = {0};
+  loom_contract_vector_shape_dimension_t n = {0};
+  loom_contract_vector_shape_dimension_t k = {0};
+  if (!loom_contract_vector_query_shape_dimension(
           fact_table, lhs_fragment.shape_value_ids[0], &lhs_m) ||
-      !loom_contract_vector_query_exact_shape_value(
+      !loom_contract_vector_query_shape_dimension(
           fact_table, lhs_fragment.shape_value_ids[1], &lhs_k) ||
-      !loom_contract_vector_query_exact_shape_value(
+      !loom_contract_vector_query_shape_dimension(
           fact_table, rhs_fragment.shape_value_ids[0], &rhs_k) ||
-      !loom_contract_vector_query_exact_shape_value(
+      !loom_contract_vector_query_shape_dimension(
           fact_table, rhs_fragment.shape_value_ids[1], &rhs_n) ||
-      !loom_contract_vector_query_exact_shape_value(
+      !loom_contract_vector_query_shape_dimension(
           fact_table, init_fragment.shape_value_ids[0], &init_m) ||
-      !loom_contract_vector_query_exact_shape_value(
+      !loom_contract_vector_query_shape_dimension(
           fact_table, init_fragment.shape_value_ids[1], &init_n) ||
-      lhs_m != init_m || lhs_k != rhs_k || rhs_n != init_n) {
+      !loom_contract_vector_shape_dimensions_match(lhs_m, init_m, &m) ||
+      !loom_contract_vector_shape_dimensions_match(rhs_n, init_n, &n) ||
+      !loom_contract_vector_shape_dimensions_match(lhs_k, rhs_k, &k)) {
     return loom_contract_vector_mma_fail(LOOM_CONTRACT_REJECTION_SHAPE,
                                          out_diagnostic);
   }
@@ -705,9 +744,14 @@ bool loom_contract_request_from_vector_mma_op(
 
   out_request->kind = LOOM_CONTRACT_KIND_MATRIX_MULTIPLY;
   out_request->shape = (loom_contract_shape_t){
-      .m = lhs_m,
-      .n = rhs_n,
-      .k = lhs_k,
+      .m = m.exact_value,
+      .n = n.exact_value,
+      .k = k.exact_value,
+  };
+  out_request->shape_value_refs = (loom_contract_shape_value_refs_t){
+      .m = m.value_ref,
+      .n = n.value_ref,
+      .k = k.value_ref,
   };
   out_request->k_group_size = options->k_group_size;
   out_request->fragment = options->fragment;

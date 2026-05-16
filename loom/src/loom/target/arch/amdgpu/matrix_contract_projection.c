@@ -82,10 +82,12 @@ static bool loom_amdgpu_matrix_contract_fragment_is_complete(
   return fragment->subgroup_size == 0 || fragment->subgroup_size == wave_size;
 }
 
-static bool loom_amdgpu_matrix_contract_shape_fits(
-    const loom_contract_shape_t* shape) {
-  return shape->m <= UINT16_MAX && shape->n <= UINT16_MAX &&
-         shape->k <= UINT16_MAX;
+static bool loom_amdgpu_matrix_contract_shape_is_native(
+    const loom_contract_request_t* request) {
+  return request->shape.m > 0 && request->shape.m <= UINT16_MAX &&
+         request->shape.n > 0 && request->shape.n <= UINT16_MAX &&
+         request->shape.k > 0 && request->shape.k <= UINT16_MAX &&
+         request->k_group_size != 0;
 }
 
 static loom_amdgpu_matrix_contract_flags_t
@@ -209,7 +211,7 @@ bool loom_amdgpu_matrix_contract_match_request_from_contract(
     return loom_amdgpu_matrix_contract_fail(LOOM_CONTRACT_REJECTION_FRAGMENT,
                                             out_diagnostic);
   }
-  if (!loom_amdgpu_matrix_contract_shape_fits(&contract_request->shape)) {
+  if (!loom_amdgpu_matrix_contract_shape_is_native(contract_request)) {
     return loom_amdgpu_matrix_contract_fail(LOOM_CONTRACT_REJECTION_SHAPE,
                                             out_diagnostic);
   }

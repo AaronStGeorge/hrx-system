@@ -79,10 +79,13 @@ bool loom_contract_view_payload_from_type(
     bool plain_integer_is_unsigned, loom_contract_view_payload_t* out_payload);
 
 typedef struct loom_contract_matrix_request_options_t {
-  // Exact matrix/vector contraction shape.
+  // Exact matrix/vector contraction shape facts, with 0 for dynamic dimensions.
   loom_contract_shape_t shape;
 
-  // Number of K payload elements reduced into each accumulator contribution.
+  // Optional SSA witnesses for dynamic shape and K-group dimensions.
+  loom_contract_shape_value_refs_t shape_value_refs;
+
+  // Exact K-group element count when proven, or 0 when dynamic.
   uint16_t k_group_size;
 
   // Left-hand payload interpretation.

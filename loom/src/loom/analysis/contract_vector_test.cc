@@ -314,6 +314,64 @@ func.def @dense_mma(%lhs_data: vector<8xf16>, %rhs_data: vector<8xf16>, %init_da
   loom_pass_value_fact_owner_deinitialize(&value_facts);
 }
 
+TEST_F(ContractVectorTest, BuildsDynamicShapeMmaContractFromFragmentFacts) {
+  static const char kSource[] = R"(
+func.def @dynamic_shape_mma(%m: index, %n: index, %k: index, %lhs_data: vector<8xf16>, %rhs_data: vector<8xf16>, %init_data: vector<8xf32>) -> (vector<8xf32>) {
+  %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : vector<8xf16>
+  %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : vector<8xf16>
+  %init = vector.fragment<init> %init_data shape [%m, %n] : vector<8xf32>
+  %result = vector.mma %lhs, %rhs, %init : vector<8xf16>, vector<8xf16>, vector<8xf32>
+  func.return %result : vector<8xf32>
+}
+)";
+
+  loom_module_t* module = nullptr;
+  IREE_ASSERT_OK(ParseAndVerify(kSource, &module));
+  ModulePtr module_ptr(module);
+
+  loom_pass_value_fact_owner_t value_facts = {};
+  loom_pass_value_fact_owner_initialize(module->arena.block_pool, &value_facts);
+  loom_value_fact_table_t* fact_table = nullptr;
+  IREE_ASSERT_OK(loom_pass_value_fact_owner_acquire(
+      &value_facts, module_ptr.get(),
+      loom_pass_value_fact_scope_function(FirstFunction(module_ptr.get())),
+      &fact_table));
+
+  const loom_op_t* op = FirstVectorMmaOp(module_ptr.get());
+  ASSERT_NE(op, nullptr);
+  const loom_contract_vector_mma_options_t options = GpuMatrixMmaOptions();
+  loom_contract_request_t request = {};
+  loom_contract_diagnostic_t diagnostic = {};
+  ASSERT_TRUE(loom_contract_request_from_vector_mma_op(
+      module_ptr.get(), fact_table, op, &options, &request, &diagnostic));
+  EXPECT_EQ(diagnostic.rejection_bits, LOOM_CONTRACT_REJECTION_NONE);
+  EXPECT_EQ(request.shape.m, 0);
+  EXPECT_EQ(request.shape.n, 0);
+  EXPECT_EQ(request.shape.k, 0);
+
+  loom_vector_fragment_fact_t lhs_fragment = {};
+  ASSERT_TRUE(loom_vector_fragment_fact_query_value_facts(
+      &fact_table->context,
+      loom_value_fact_table_lookup(fact_table, loom_vector_mma_lhs(op)),
+      &lhs_fragment));
+  loom_vector_fragment_fact_t rhs_fragment = {};
+  ASSERT_TRUE(loom_vector_fragment_fact_query_value_facts(
+      &fact_table->context,
+      loom_value_fact_table_lookup(fact_table, loom_vector_mma_rhs(op)),
+      &rhs_fragment));
+  EXPECT_EQ(loom_contract_value_ref_value_id(request.shape_value_refs.m),
+            lhs_fragment.shape_value_ids[0]);
+  EXPECT_EQ(loom_contract_value_ref_value_id(request.shape_value_refs.n),
+            rhs_fragment.shape_value_ids[1]);
+  EXPECT_EQ(loom_contract_value_ref_value_id(request.shape_value_refs.k),
+            lhs_fragment.shape_value_ids[1]);
+  EXPECT_EQ(
+      loom_contract_value_ref_value_id(request.shape_value_refs.k_group_size),
+      LOOM_VALUE_ID_INVALID);
+  EXPECT_EQ(request.k_group_size, 1);
+  loom_pass_value_fact_owner_deinitialize(&value_facts);
+}
+
 TEST_F(ContractVectorTest, BuildsEncodedMmaContractFromFragmentFacts) {
   static const char kSource[] = R"(
 func.def @encoded_mma(%lhs_data: vector<6xi32>, %rhs_data: vector<6xi32>, %init_data: vector<8xf32>, %scale: vector<1xf16>) -> (vector<8xf32>) {
@@ -392,6 +450,40 @@ func.def @shape_mismatch_mma(%lhs_data: vector<8xf16>, %rhs_data: vector<8xf16>,
   %n = index.constant 16 : index
   %lhs_k = index.constant 16 : index
   %rhs_k = index.constant 32 : index
+  %lhs = vector.fragment<lhs> %lhs_data shape [%m, %lhs_k] : vector<8xf16>
+  %rhs = vector.fragment<rhs> %rhs_data shape [%rhs_k, %n] : vector<8xf16>
+  %init = vector.fragment<init> %init_data shape [%m, %n] : vector<8xf32>
+  %result = vector.mma %lhs, %rhs, %init : vector<8xf16>, vector<8xf16>, vector<8xf32>
+  func.return %result : vector<8xf32>
+}
+)";
+
+  loom_module_t* module = nullptr;
+  IREE_ASSERT_OK(ParseAndVerify(kSource, &module));
+  ModulePtr module_ptr(module);
+
+  loom_pass_value_fact_owner_t value_facts = {};
+  loom_pass_value_fact_owner_initialize(module->arena.block_pool, &value_facts);
+  loom_value_fact_table_t* fact_table = nullptr;
+  IREE_ASSERT_OK(loom_pass_value_fact_owner_acquire(
+      &value_facts, module_ptr.get(),
+      loom_pass_value_fact_scope_function(FirstFunction(module_ptr.get())),
+      &fact_table));
+
+  const loom_op_t* op = FirstVectorMmaOp(module_ptr.get());
+  ASSERT_NE(op, nullptr);
+  const loom_contract_vector_mma_options_t options = GpuMatrixMmaOptions();
+  loom_contract_request_t request = {};
+  loom_contract_diagnostic_t diagnostic = {};
+  EXPECT_FALSE(loom_contract_request_from_vector_mma_op(
+      module_ptr.get(), fact_table, op, &options, &request, &diagnostic));
+  EXPECT_EQ(diagnostic.rejection_bits, LOOM_CONTRACT_REJECTION_SHAPE);
+  loom_pass_value_fact_owner_deinitialize(&value_facts);
+}
+
+TEST_F(ContractVectorTest, MmaDynamicShapeMismatchReportsShapeRejection) {
+  static const char kSource[] = R"(
+func.def @dynamic_shape_mismatch_mma(%m: index, %n: index, %lhs_k: index, %rhs_k: index, %lhs_data: vector<8xf16>, %rhs_data: vector<8xf16>, %init_data: vector<8xf32>) -> (vector<8xf32>) {
   %lhs = vector.fragment<lhs> %lhs_data shape [%m, %lhs_k] : vector<8xf16>
   %rhs = vector.fragment<rhs> %rhs_data shape [%rhs_k, %n] : vector<8xf16>
   %init = vector.fragment<init> %init_data shape [%m, %n] : vector<8xf32>

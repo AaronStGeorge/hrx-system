@@ -22,6 +22,26 @@ static bool loom_contract_operand_numeric_is_known(
   return operand.numeric_type != LOOM_CONTRACT_NUMERIC_UNKNOWN;
 }
 
+static bool loom_contract_shape_dimension_is_valid(
+    int64_t exact_value, loom_contract_value_ref_t value_ref) {
+  if (exact_value < 0) {
+    return false;
+  }
+  return exact_value > 0 || loom_contract_value_ref_is_present(value_ref);
+}
+
+static bool loom_contract_shape_is_valid(
+    loom_contract_shape_t shape, loom_contract_shape_value_refs_t value_refs) {
+  return loom_contract_shape_dimension_is_valid(shape.m, value_refs.m) &&
+         loom_contract_shape_dimension_is_valid(shape.n, value_refs.n) &&
+         loom_contract_shape_dimension_is_valid(shape.k, value_refs.k);
+}
+
+static bool loom_contract_k_group_size_is_valid(
+    uint16_t exact_value, loom_contract_value_ref_t value_ref) {
+  return exact_value != 0 || loom_contract_value_ref_is_present(value_ref);
+}
+
 static bool loom_contract_storage_schema_is_known(
     loom_value_fact_storage_schema_t schema) {
   return schema.static_spec_encoding_id != 0 ||
@@ -137,8 +157,10 @@ bool loom_contract_request_validate(
       request->arithmetic == LOOM_CONTRACT_ARITHMETIC_UNKNOWN) {
     rejection_bits |= LOOM_CONTRACT_REJECTION_INVALID_REQUEST;
   }
-  if (request->shape.m <= 0 || request->shape.n <= 0 || request->shape.k <= 0 ||
-      request->k_group_size == 0) {
+  if (!loom_contract_shape_is_valid(request->shape,
+                                    request->shape_value_refs) ||
+      !loom_contract_k_group_size_is_valid(
+          request->k_group_size, request->shape_value_refs.k_group_size)) {
     rejection_bits |= LOOM_CONTRACT_REJECTION_SHAPE;
   }
   if (!loom_contract_operand_role_matches(request->lhs,

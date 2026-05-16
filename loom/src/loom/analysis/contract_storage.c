@@ -319,6 +319,7 @@ bool loom_contract_request_from_matrix_payloads(
   out_request->kind = LOOM_CONTRACT_KIND_MATRIX_MULTIPLY;
   out_request->arithmetic = options->arithmetic;
   out_request->shape = options->shape;
+  out_request->shape_value_refs = options->shape_value_refs;
   out_request->k_group_size = options->k_group_size;
   out_request->lhs = options->lhs.operand;
   out_request->lhs.role = LOOM_CONTRACT_OPERAND_ROLE_LHS;

@@ -200,6 +200,36 @@ TEST(ContractStorageTest, BuildsMatrixRequestFromPayloadFacts) {
           LOOM_CONTRACT_CAPABILITY_FORMAT_SELECTORS));
 }
 
+TEST(ContractStorageTest, BuildsMatrixRequestWithDynamicShapeRefs) {
+  loom_contract_matrix_request_options_t options = {};
+  options.shape = (loom_contract_shape_t){.m = 0, .n = 16, .k = 128};
+  options.shape_value_refs.m = loom_contract_value_ref_from_value_id(42);
+  options.k_group_size = 1;
+  options.lhs =
+      PlainPayload(LOOM_CONTRACT_OPERAND_ROLE_LHS, LOOM_CONTRACT_NUMERIC_F16);
+  options.rhs =
+      PlainPayload(LOOM_CONTRACT_OPERAND_ROLE_RHS, LOOM_CONTRACT_NUMERIC_F16);
+  options.accumulator_numeric_type = LOOM_CONTRACT_NUMERIC_F32;
+  options.result_numeric_type = LOOM_CONTRACT_NUMERIC_F32;
+  options.arithmetic = LOOM_CONTRACT_ARITHMETIC_FLOAT_DOT;
+  options.fragment = (loom_contract_fragment_t){
+      .atom_bits = LOOM_CONTRACT_FRAGMENT_SUBGROUP_LANE,
+      .subgroup_size = 64,
+  };
+  options.capability_class = LOOM_CONTRACT_CAPABILITY_CLASS_GPU_MATRIX;
+  options.policy = LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED;
+
+  loom_contract_request_t request = {};
+  loom_contract_diagnostic_t diagnostic = {};
+  ASSERT_TRUE(loom_contract_request_from_matrix_payloads(&options, &request,
+                                                         &diagnostic));
+  EXPECT_EQ(diagnostic.rejection_bits, LOOM_CONTRACT_REJECTION_NONE);
+  EXPECT_EQ(request.shape.m, 0);
+  EXPECT_EQ(loom_contract_value_ref_value_id(request.shape_value_refs.m), 42u);
+  EXPECT_EQ(request.shape.n, 16);
+  EXPECT_EQ(request.shape.k, 128);
+}
+
 TEST(ContractStorageTest, BuildsPackedDotRequestFromPlainPayloadFacts) {
   loom_contract_matrix_request_options_t options = {};
   options.shape = (loom_contract_shape_t){.m = 8, .n = 1, .k = 32};

@@ -83,6 +83,27 @@ TEST(PackedDotContractProjectionTest, RejectsMissingVectorFragmentFacts) {
   EXPECT_EQ(diagnostic.rejection_bits, LOOM_CONTRACT_REJECTION_FRAGMENT);
 }
 
+TEST(PackedDotContractProjectionTest, RejectsDynamicKGroupValueRef) {
+  loom_contract_request_t contract = {};
+  ASSERT_TRUE(BuildPackedDotRequest(
+      LOOM_CONTRACT_NUMERIC_BF16, LOOM_CONTRACT_NUMERIC_BF16,
+      LOOM_CONTRACT_NUMERIC_F32, LOOM_CONTRACT_NUMERIC_F32, 256, 16, 8, 2,
+      &contract));
+  contract.k_group_size = 0;
+  contract.shape_value_refs.k_group_size =
+      loom_contract_value_ref_from_value_id(42);
+
+  loom_contract_diagnostic_t generic_diagnostic = {};
+  ASSERT_TRUE(loom_contract_request_validate(&contract, &generic_diagnostic));
+  EXPECT_EQ(generic_diagnostic.rejection_bits, LOOM_CONTRACT_REJECTION_NONE);
+
+  loom_x86_packed_dot_match_request_t x86_request = {};
+  loom_contract_diagnostic_t diagnostic = {};
+  EXPECT_FALSE(loom_x86_packed_dot_match_request_from_contract(
+      &contract, 0, &x86_request, &diagnostic));
+  EXPECT_EQ(diagnostic.rejection_bits, LOOM_CONTRACT_REJECTION_SHAPE);
+}
+
 TEST(PackedDotContractProjectionTest, RejectsUnsupportedNumericType) {
   loom_contract_request_t contract = {};
   ASSERT_TRUE(BuildPackedDotRequest(

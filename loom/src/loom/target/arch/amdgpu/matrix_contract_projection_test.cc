@@ -108,6 +108,23 @@ TEST(MatrixContractProjectionTest, RejectsMissingSubgroupFragmentFacts) {
   EXPECT_EQ(diagnostic.rejection_bits, LOOM_CONTRACT_REJECTION_FRAGMENT);
 }
 
+TEST(MatrixContractProjectionTest, RejectsDynamicShapeValueRefs) {
+  loom_contract_request_t contract = MatrixRequest(
+      16, 16, 0, LOOM_CONTRACT_NUMERIC_I8, LOOM_CONTRACT_NUMERIC_I8,
+      LOOM_CONTRACT_NUMERIC_I32, LOOM_CONTRACT_NUMERIC_I32);
+  contract.shape_value_refs.k = loom_contract_value_ref_from_value_id(42);
+
+  loom_contract_diagnostic_t generic_diagnostic = {};
+  ASSERT_TRUE(loom_contract_request_validate(&contract, &generic_diagnostic));
+  EXPECT_EQ(generic_diagnostic.rejection_bits, LOOM_CONTRACT_REJECTION_NONE);
+
+  loom_amdgpu_matrix_contract_match_request_t amdgpu_request = {};
+  loom_contract_diagnostic_t diagnostic = {};
+  EXPECT_FALSE(loom_amdgpu_matrix_contract_match_request_from_contract(
+      &contract, 0, 64, &amdgpu_request, &diagnostic));
+  EXPECT_EQ(diagnostic.rejection_bits, LOOM_CONTRACT_REJECTION_SHAPE);
+}
+
 TEST(MatrixContractProjectionTest, ProjectsRoleLocalScaleFacts) {
   loom_contract_request_t contract = MatrixRequest(
       16, 16, 16, LOOM_CONTRACT_NUMERIC_FP4, LOOM_CONTRACT_NUMERIC_FP4,

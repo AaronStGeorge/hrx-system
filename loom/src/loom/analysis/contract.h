@@ -277,15 +277,29 @@ loom_contract_auxiliary_operand_key_flag(
 }
 
 typedef struct loom_contract_shape_t {
-  // Exact M/result-row extent, or 0 when unknown.
+  // Exact M/result-row extent when proven, or 0 when dynamic.
   int64_t m;
 
-  // Exact N/result-column extent, or 0 when unknown.
+  // Exact N/result-column extent when proven, or 0 when dynamic.
   int64_t n;
 
-  // Exact K/reduction extent, or 0 when unknown.
+  // Exact K/reduction extent when proven, or 0 when dynamic.
   int64_t k;
 } loom_contract_shape_t;
+
+typedef struct loom_contract_shape_value_refs_t {
+  // Optional SSA value carrying the M/result-row extent.
+  loom_contract_value_ref_t m;
+
+  // Optional SSA value carrying the N/result-column extent.
+  loom_contract_value_ref_t n;
+
+  // Optional SSA value carrying the K/reduction extent.
+  loom_contract_value_ref_t k;
+
+  // Optional SSA value carrying the K-group element count.
+  loom_contract_value_ref_t k_group_size;
+} loom_contract_shape_value_refs_t;
 
 typedef struct loom_contract_encoded_operand_t {
   // Schema facts proven for the source operand before preparation or
@@ -355,10 +369,13 @@ typedef struct loom_contract_request_t {
   // Arithmetic family for the contraction.
   loom_contract_arithmetic_t arithmetic;
 
-  // Exact logical matrix/vector contract shape.
+  // Exact logical contract shape facts, with 0 for dynamic dimensions.
   loom_contract_shape_t shape;
 
-  // Number of K payload elements reduced into each accumulator contribution.
+  // Optional SSA witnesses for dynamic logical shape and K-group dimensions.
+  loom_contract_shape_value_refs_t shape_value_refs;
+
+  // Exact K-group element count when proven, or 0 when dynamic.
   uint16_t k_group_size;
 
   // Left-hand source operand facts.
@@ -388,7 +405,7 @@ enum loom_contract_rejection_bits_e {
   LOOM_CONTRACT_REJECTION_NONE = 0u,
   // The request itself was invalid or absent.
   LOOM_CONTRACT_REJECTION_INVALID_REQUEST = 1u << 0,
-  // The exact M/N/K shape or K grouping was missing or invalid.
+  // The logical M/N/K shape or K grouping was missing or invalid.
   LOOM_CONTRACT_REJECTION_SHAPE = 1u << 1,
   // One or more operand roles were missing or inconsistent.
   LOOM_CONTRACT_REJECTION_ROLE = 1u << 2,

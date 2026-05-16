@@ -78,6 +78,10 @@ bool loom_x86_packed_dot_match_request_from_contract(
     return loom_x86_packed_dot_fail(LOOM_CONTRACT_REJECTION_FRAGMENT,
                                     out_diagnostic);
   }
+  if (contract_request->k_group_size == 0) {
+    return loom_x86_packed_dot_fail(LOOM_CONTRACT_REJECTION_SHAPE,
+                                    out_diagnostic);
+  }
 
   loom_x86_packed_dot_match_request_t request = {0};
   request.family = LOOM_X86_PACKED_DOT_FAMILY_UNKNOWN;

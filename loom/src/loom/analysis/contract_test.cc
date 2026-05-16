@@ -68,6 +68,41 @@ TEST(ContractTest, ValidatesCompletePackedDotRequest) {
   EXPECT_EQ(diagnostic.rejection_bits, LOOM_CONTRACT_REJECTION_NONE);
 }
 
+TEST(ContractTest, ValidatesDynamicShapeWithValueRefs) {
+  loom_contract_request_t request = CompletePackedDotRequest();
+  request.shape = {};
+  request.shape_value_refs = {
+      .m = loom_contract_value_ref_from_value_id(10),
+      .n = loom_contract_value_ref_from_value_id(11),
+      .k = loom_contract_value_ref_from_value_id(12),
+      .k_group_size = loom_contract_value_ref_from_value_id(13),
+  };
+  request.k_group_size = 0;
+
+  loom_contract_diagnostic_t diagnostic = {};
+  EXPECT_TRUE(loom_contract_request_validate(&request, &diagnostic));
+  EXPECT_EQ(diagnostic.rejection_bits, LOOM_CONTRACT_REJECTION_NONE);
+}
+
+TEST(ContractTest, RejectsDynamicShapeWithoutValueRef) {
+  loom_contract_request_t request = CompletePackedDotRequest();
+  request.shape.k = 0;
+
+  loom_contract_diagnostic_t diagnostic = {};
+  EXPECT_FALSE(loom_contract_request_validate(&request, &diagnostic));
+  EXPECT_EQ(diagnostic.rejection_bits, LOOM_CONTRACT_REJECTION_SHAPE);
+}
+
+TEST(ContractTest, RejectsNegativeShapeWithValueRef) {
+  loom_contract_request_t request = CompletePackedDotRequest();
+  request.shape.m = -1;
+  request.shape_value_refs.m = loom_contract_value_ref_from_value_id(10);
+
+  loom_contract_diagnostic_t diagnostic = {};
+  EXPECT_FALSE(loom_contract_request_validate(&request, &diagnostic));
+  EXPECT_EQ(diagnostic.rejection_bits, LOOM_CONTRACT_REJECTION_SHAPE);
+}
+
 TEST(ContractTest, RejectsUnavailableRequiredCapability) {
   loom_contract_request_t request = CompletePackedDotRequest();
   request.lhs.encoded.target_schema = EncodedTargetSchema();
