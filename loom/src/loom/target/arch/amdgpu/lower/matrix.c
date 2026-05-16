@@ -38,7 +38,7 @@ static iree_status_t loom_amdgpu_matrix_target_facts_from_environment(
                             "processor target record");
   }
   loom_amdgpu_matrix_feature_bits_t feature_bits = 0;
-  (void)loom_amdgpu_matrix_feature_bits_for_profile(
+  (void)loom_amdgpu_matrix_feature_bits_from_profile(
       processor->matrix_feature_profile, &feature_bits);
   if (environment->bundle == NULL || environment->bundle->snapshot == NULL ||
       environment->bundle->snapshot->subgroup_size == 0) {

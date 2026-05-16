@@ -24,37 +24,39 @@
 extern "C" {
 #endif
 
-// Bitset of AMDGPU matrix features available on a selected processor.
-typedef uint64_t loom_amdgpu_matrix_feature_bits_t;
+typedef enum loom_amdgpu_matrix_feature_flag_bits_e {
+  // Processor supports gfx908-era MFMA instructions.
+  LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908 = UINT64_C(1) << 0,
+  // Processor supports gfx90a BF16 1k MFMA variants.
+  LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_BF16_1K = UINT64_C(1) << 1,
+  // Processor supports gfx90a F64 MFMA variants.
+  LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_F64 = UINT64_C(1) << 2,
+  // Processor supports gfx940 FP8/BF8 and XF32 MFMA variants.
+  LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX940_FP8 = UINT64_C(1) << 3,
+  // Processor supports gfx950 F16/BF16/I8 MFMA shape variants.
+  LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX950 = UINT64_C(1) << 4,
+  // Processor supports gfx950 scaled F8/F6/F4 MFMA variants.
+  LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX950_SCALE_F8F6F4 = UINT64_C(1) << 5,
+  // Processor supports gfx940 sparse MFMA accumulate variants.
+  LOOM_AMDGPU_MATRIX_FEATURE_SMFMAC_GFX940 = UINT64_C(1) << 6,
+  // Processor supports gfx950 sparse MFMA accumulate variants.
+  LOOM_AMDGPU_MATRIX_FEATURE_SMFMAC_GFX950 = UINT64_C(1) << 7,
+  // Processor supports gfx11 WMMA variants.
+  LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11 = UINT64_C(1) << 8,
+  // Processor supports gfx12 WMMA FP8/BF8/IU4 variants.
+  LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX12 = UINT64_C(1) << 9,
+  // Processor supports gfx12 SWMMAC sparse variants.
+  LOOM_AMDGPU_MATRIX_FEATURE_SWMMAC_GFX12 = UINT64_C(1) << 10,
+  // Processor supports gfx1250 WMMA modifier/reuse variants.
+  LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX1250 = UINT64_C(1) << 11,
+  // Processor supports gfx1250 WMMA scaled F8/F6/F4 and F4 variants.
+  LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX1250_SCALE_F8F6F4 = UINT64_C(1) << 12,
+  // Processor supports gfx1250 SWMMAC modifier/reuse variants.
+  LOOM_AMDGPU_MATRIX_FEATURE_SWMMAC_GFX1250 = UINT64_C(1) << 13,
+} loom_amdgpu_matrix_feature_flag_bits_t;
 
-// Processor supports gfx908-era MFMA instructions.
-#define LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908 (UINT64_C(1) << 0)
-// Processor supports gfx90a BF16 1k MFMA variants.
-#define LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_BF16_1K (UINT64_C(1) << 1)
-// Processor supports gfx90a F64 MFMA variants.
-#define LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_F64 (UINT64_C(1) << 2)
-// Processor supports gfx940 FP8/BF8 and XF32 MFMA variants.
-#define LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX940_FP8 (UINT64_C(1) << 3)
-// Processor supports gfx950 F16/BF16/I8 MFMA shape variants.
-#define LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX950 (UINT64_C(1) << 4)
-// Processor supports gfx950 scaled F8/F6/F4 MFMA variants.
-#define LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX950_SCALE_F8F6F4 (UINT64_C(1) << 5)
-// Processor supports gfx940 sparse MFMA accumulate variants.
-#define LOOM_AMDGPU_MATRIX_FEATURE_SMFMAC_GFX940 (UINT64_C(1) << 6)
-// Processor supports gfx950 sparse MFMA accumulate variants.
-#define LOOM_AMDGPU_MATRIX_FEATURE_SMFMAC_GFX950 (UINT64_C(1) << 7)
-// Processor supports gfx11 WMMA variants.
-#define LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX11 (UINT64_C(1) << 8)
-// Processor supports gfx12 WMMA FP8/BF8/IU4 variants.
-#define LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX12 (UINT64_C(1) << 9)
-// Processor supports gfx12 SWMMAC sparse variants.
-#define LOOM_AMDGPU_MATRIX_FEATURE_SWMMAC_GFX12 (UINT64_C(1) << 10)
-// Processor supports gfx1250 WMMA modifier/reuse variants.
-#define LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX1250 (UINT64_C(1) << 11)
-// Processor supports gfx1250 WMMA scaled F8/F6/F4 and F4 variants.
-#define LOOM_AMDGPU_MATRIX_FEATURE_WMMA_GFX1250_SCALE_F8F6F4 (UINT64_C(1) << 12)
-// Processor supports gfx1250 SWMMAC modifier/reuse variants.
-#define LOOM_AMDGPU_MATRIX_FEATURE_SWMMAC_GFX1250 (UINT64_C(1) << 13)
+// Bitset of loom_amdgpu_matrix_feature_flag_bits_t values.
+typedef uint64_t loom_amdgpu_matrix_feature_bits_t;
 
 enum loom_amdgpu_matrix_wave_size_bits_e {
   // Contract may be selected for wave32 code generation.
@@ -471,13 +473,13 @@ bool loom_amdgpu_matrix_fragment_coordinate(
     uint16_t register_index, uint16_t element_index,
     loom_amdgpu_matrix_fragment_coordinate_t* out_coordinate);
 
-// Maps a matrix feature profile to matrix feature bits.
-bool loom_amdgpu_matrix_feature_bits_for_profile(
+// Maps a matrix feature profile enum to matrix feature bits.
+bool loom_amdgpu_matrix_feature_bits_from_profile(
     loom_amdgpu_matrix_feature_profile_t profile,
     loom_amdgpu_matrix_feature_bits_t* out_feature_bits);
 
 // Maps a processor name such as "gfx942" or "gfx1250" to matrix feature bits.
-iree_status_t loom_amdgpu_matrix_feature_bits_for_processor(
+iree_status_t loom_amdgpu_matrix_feature_bits_from_processor(
     iree_string_view_t processor,
     loom_amdgpu_matrix_feature_bits_t* out_feature_bits);
 

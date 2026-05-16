@@ -1925,7 +1925,7 @@ bool loom_amdgpu_matrix_fragment_coordinate(
       layout, role_layout, lane, register_index, element_index, out_coordinate);
 }
 
-bool loom_amdgpu_matrix_feature_bits_for_profile(
+bool loom_amdgpu_matrix_feature_bits_from_profile(
     loom_amdgpu_matrix_feature_profile_t profile,
     loom_amdgpu_matrix_feature_bits_t* out_feature_bits) {
   *out_feature_bits = 0;
@@ -1974,14 +1974,14 @@ bool loom_amdgpu_matrix_feature_bits_for_profile(
   return false;
 }
 
-iree_status_t loom_amdgpu_matrix_feature_bits_for_processor(
+iree_status_t loom_amdgpu_matrix_feature_bits_from_processor(
     iree_string_view_t processor,
     loom_amdgpu_matrix_feature_bits_t* out_feature_bits) {
   processor = iree_string_view_trim(processor);
   const loom_amdgpu_processor_info_t* processor_info = NULL;
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_target_info_lookup_processor(processor, &processor_info));
-  if (loom_amdgpu_matrix_feature_bits_for_profile(
+  if (loom_amdgpu_matrix_feature_bits_from_profile(
           processor_info->matrix_feature_profile, out_feature_bits)) {
     return iree_ok_status();
   }
