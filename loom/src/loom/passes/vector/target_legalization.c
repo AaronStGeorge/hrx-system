@@ -8,8 +8,24 @@
 
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
+#include "loom/ops/kernel/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/passes/vector/to_scalar.h"
+
+static loom_vector_mma_to_scalar_options_t loom_vector_mma_options(
+    const loom_target_legalization_context_t* context) {
+  const loom_target_contract_query_result_t* query_result =
+      context->contract_query_result;
+  loom_vector_to_scalar_flags_t flags = LOOM_VECTOR_TO_SCALAR_FLAG_NONE;
+  if (loom_kernel_def_isa(context->function.op)) {
+    flags |= LOOM_VECTOR_TO_SCALAR_FLAG_ALLOW_SUBGROUP_COMMUNICATION;
+  }
+  return (loom_vector_mma_to_scalar_options_t){
+      .matrix_fragment_layout =
+          query_result ? query_result->selected_matrix_fragment_layout : NULL,
+      .flags = flags,
+  };
+}
 
 static bool loom_vector_mma_has_fragment_store_user(const loom_module_t* module,
                                                     const loom_op_t* op) {
@@ -67,8 +83,10 @@ static iree_status_t loom_vector_legalize_mma(
   }
 
   bool rewritten = false;
+  const loom_vector_mma_to_scalar_options_t options =
+      loom_vector_mma_options(context);
   IREE_RETURN_IF_ERROR(loom_vector_mma_to_scalar_rewrite_op(
-      context->pass, context->rewriter, op, &rewritten));
+      context->pass, context->rewriter, op, options, &rewritten));
   *out_result = (loom_target_legalizer_result_t){
       .action = rewritten
                     ? LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN
@@ -76,11 +94,11 @@ static iree_status_t loom_vector_legalize_mma(
       .source_rejection_bits =
           rewritten ? 0
                     : loom_vector_mma_to_scalar_reference_rejection_bits(
-                          context->pass, context->rewriter, op),
+                          context->pass, context->rewriter, op, options),
       .source_rejection_detail =
           rewritten ? 0
                     : loom_vector_mma_to_scalar_reference_rejection_detail(
-                          context->pass, context->rewriter, op),
+                          context->pass, context->rewriter, op, options),
   };
   return iree_ok_status();
 }

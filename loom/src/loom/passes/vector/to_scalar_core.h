@@ -13,6 +13,7 @@
 #include "loom/ir/module.h"
 #include "loom/ir/types.h"
 #include "loom/pass/types.h"
+#include "loom/passes/vector/to_scalar_options.h"
 #include "loom/rewrite/rewriter.h"
 
 #ifdef __cplusplus
@@ -48,6 +49,10 @@ typedef struct loom_vector_to_scalar_state_t {
   loom_type_t vector_type;
   // Scalar type produced by each lane program.
   loom_type_t result_scalar_type;
+  // Optional lowering behaviors enabled for this scalarization.
+  loom_vector_to_scalar_flags_t flags;
+  // Target-selected matrix fragment layout available to MMA fallback lowering.
+  const loom_matrix_fragment_layout_t* matrix_fragment_layout;
   // Source location assigned to replacement ops.
   loom_location_id_t location;
 } loom_vector_to_scalar_state_t;

@@ -15,10 +15,11 @@
 extern "C" {
 #endif
 
-// Lowers a vector.mma whose result can be represented as a dense full-logical
-// matrix fragment. Returns out_handled=false when the result remains
-// target-shaped or numeric/encoded forms need reference semantics that this
-// generic decomposition does not cover.
+// Lowers a vector.mma using scalar reference semantics. Dense logical fragments
+// lower directly; target-shaped physical fragments require selected matrix
+// fragment layout state and permission to emit subgroup communication ops.
+// Returns out_handled=false when the selected lowering state does not cover the
+// op's numeric, shape, payload, or placement form.
 iree_status_t loom_vector_to_scalar_lower_mma(
     loom_vector_to_scalar_state_t* state, bool* out_handled,
     loom_value_id_t* out_replacement);
@@ -41,12 +42,12 @@ bool loom_vector_to_scalar_mma_supports_logical_result_lanes(
     loom_vector_to_scalar_state_t* state, loom_op_t* op);
 
 // Returns contract rejection bits for the vector.mma forms this reference
-// lowering cannot scalarize.
+// lowering cannot scalarize under the selected state.
 uint32_t loom_vector_to_scalar_mma_reference_rejection_bits(
     loom_vector_to_scalar_state_t* state);
 
 // Returns the first role-local contract rejection detail for the vector.mma
-// forms this reference lowering cannot scalarize.
+// forms this reference lowering cannot scalarize under the selected state.
 uint32_t loom_vector_to_scalar_mma_reference_rejection_detail(
     loom_vector_to_scalar_state_t* state);
 

@@ -47,6 +47,7 @@ loom_cc_library(
     "to_scalar_memory.h"
     "to_scalar_mma.c"
     "to_scalar_mma.h"
+    "to_scalar_options.h"
     "to_scalar_quantized.c"
     "to_scalar_quantized.h"
     "to_scalar_reductions.c"
@@ -62,11 +63,13 @@ loom_cc_library(
   DEPS
     iree::base
     loom::src::loom::analysis::contract
+    loom::src::loom::analysis::matrix_fragment_layout
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::combining
     loom::src::loom::ops::encoding
     loom::src::loom::ops::index
+    loom::src::loom::ops::kernel
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scalar
     loom::src::loom::ops::scf
@@ -90,9 +93,35 @@ loom_cc_library(
     ::to_scalar
     iree::base
     loom::src::loom::ir
+    loom::src::loom::ops::kernel
     loom::src::loom::ops::vector
     loom::src::loom::target::legalization
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    to_scalar_test
+  SRCS
+    "to_scalar_test.cc"
+  DEPS
+    ::to_scalar
+    iree::base::internal::arena
+    loom::src::loom::analysis::contract
+    loom::src::loom::analysis::matrix_fragment_layout
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::index
+    loom::src::loom::ops::kernel
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::scf
+    loom::src::loom::ops::vector
+    loom::src::loom::pass::types
+    loom::src::loom::pass::value_facts
+    loom::src::loom::rewrite::rewriter
+    loom::src::loom::verify
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

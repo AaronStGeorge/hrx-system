@@ -17,6 +17,7 @@
 
 #include "iree/base/api.h"
 #include "loom/pass/types.h"
+#include "loom/passes/vector/to_scalar_options.h"
 #include "loom/rewrite/rewriter.h"
 
 #ifdef __cplusplus
@@ -43,24 +44,26 @@ iree_status_t loom_vector_reduce_axes_to_scalar_rewrite_op(
     loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op,
     bool* out_rewritten);
 
-// Rewrites one vector.mma op using scalar reference semantics when the result
-// can be represented as a dense full-logical matrix fragment. Target-shaped
-// results are instead drained through fragment movement boundaries.
-iree_status_t loom_vector_mma_to_scalar_rewrite_op(loom_pass_t* pass,
-                                                   loom_rewriter_t* rewriter,
-                                                   loom_op_t* op,
-                                                   bool* out_rewritten);
+// Rewrites one vector.mma op using scalar reference semantics. Dense logical
+// fragments lower directly; target-shaped physical fragments require options
+// that provide the selected matrix-fragment layout and permit subgroup
+// communication in the current source placement.
+iree_status_t loom_vector_mma_to_scalar_rewrite_op(
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op,
+    loom_vector_mma_to_scalar_options_t options, bool* out_rewritten);
 
-// Returns target-independent rejection flags explaining why the scalar
-// reference lowering would refuse one vector.mma op. This is a cold reporting
-// predicate for target legalization; it does not emit IR or diagnostics.
+// Returns rejection flags explaining why the scalar reference lowering would
+// refuse one vector.mma op under |options|. This is a cold reporting predicate
+// for target legalization; it does not emit IR or diagnostics.
 uint32_t loom_vector_mma_to_scalar_reference_rejection_bits(
-    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op);
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op,
+    loom_vector_mma_to_scalar_options_t options);
 
 // Returns the first role-local rejection detail explaining why the scalar
-// reference lowering would refuse one vector.mma op.
+// reference lowering would refuse one vector.mma op under |options|.
 uint32_t loom_vector_mma_to_scalar_reference_rejection_detail(
-    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op);
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op,
+    loom_vector_mma_to_scalar_options_t options);
 
 // Rewrites one vector.store into scalar view.store loops. The source vector is
 // consumed lane-by-lane so supported producer trees can disappear through DCE
