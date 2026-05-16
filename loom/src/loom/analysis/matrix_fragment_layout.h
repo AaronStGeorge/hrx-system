@@ -106,6 +106,15 @@ typedef struct loom_matrix_fragment_coordinate_t {
   uint16_t reduction;
 } loom_matrix_fragment_coordinate_t;
 
+typedef struct loom_matrix_fragment_physical_element_t {
+  // Subgroup lane that owns or replicates the logical coordinate.
+  uint16_t lane;
+  // Lane-local 32-bit payload register ordinal.
+  uint16_t register_index;
+  // Logical scalar element ordinal within register_index.
+  uint16_t element_index;
+} loom_matrix_fragment_physical_element_t;
+
 // Returns the role layout within |layout|, or NULL when the role is not
 // modeled.
 const loom_matrix_fragment_role_layout_t* loom_matrix_fragment_role_layout(
@@ -130,6 +139,25 @@ bool loom_matrix_fragment_coordinate_from_role_layout(
     const loom_matrix_fragment_role_layout_t* role_layout, uint16_t lane,
     uint16_t register_index, uint16_t element_index,
     loom_matrix_fragment_coordinate_t* out_coordinate);
+
+// Counts physical lane/register elements that carry |coordinate| for |role|.
+// Some target fragment layouts intentionally replicate input operands across
+// lanes; callers that need a canonical owner can request occurrence zero from
+// loom_matrix_fragment_physical_element().
+bool loom_matrix_fragment_physical_element_count(
+    const loom_matrix_fragment_layout_t* layout,
+    loom_contract_operand_role_t role,
+    loom_matrix_fragment_coordinate_t coordinate, uint16_t* out_count);
+
+// Returns the |occurrence_index|-th physical lane/register element that carries
+// |coordinate| for |role|. occurrence_index is zero-based and follows ascending
+// lane, register, and element order. Returns false when the role is unmodeled,
+// the coordinate does not match that role's axes, or the occurrence is absent.
+bool loom_matrix_fragment_physical_element(
+    const loom_matrix_fragment_layout_t* layout,
+    loom_contract_operand_role_t role,
+    loom_matrix_fragment_coordinate_t coordinate, uint16_t occurrence_index,
+    loom_matrix_fragment_physical_element_t* out_element);
 
 #ifdef __cplusplus
 }
