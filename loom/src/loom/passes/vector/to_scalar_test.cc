@@ -254,7 +254,8 @@ TEST_F(VectorToScalarTest, TargetFragmentLayoutEnablesDistributedMmaFallback) {
   EXPECT_TRUE(rewritten);
   EXPECT_EQ(CountOps(module->body, LOOM_OP_VECTOR_MMA), 0u);
   EXPECT_GT(CountOps(module->body, LOOM_OP_KERNEL_SUBGROUP_LANE_ID), 0u);
-  EXPECT_GT(CountOps(module->body, LOOM_OP_KERNEL_SUBGROUP_BROADCAST), 0u);
+  EXPECT_EQ(CountOps(module->body, LOOM_OP_KERNEL_SUBGROUP_BROADCAST), 8u);
+  EXPECT_EQ(CountOps(module->body, LOOM_OP_SCF_SELECT), 0u);
   ExpectModuleVerifies(module);
 
   loom_rewriter_deinitialize(&rewriter);

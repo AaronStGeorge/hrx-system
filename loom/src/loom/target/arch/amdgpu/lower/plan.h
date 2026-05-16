@@ -339,12 +339,14 @@ typedef struct loom_amdgpu_subgroup_broadcast_plan_t {
   loom_value_id_t value;
   // Result value receiving the broadcast payload.
   loom_value_id_t result;
+  // Subgroup lane SSA value read by the broadcast.
+  loom_value_id_t source_lane;
+  // Exact source lane when known during planning, or UINT32_MAX when dynamic.
+  uint32_t exact_source_lane;
   // Source/result payload shape selected during planning.
   loom_amdgpu_subgroup_payload_kind_t payload_kind;
   // Number of 32-bit registers in the broadcast payload.
   uint32_t register_count;
-  // Exact subgroup lane read by the broadcast.
-  uint32_t source_lane;
 } loom_amdgpu_subgroup_broadcast_plan_t;
 
 typedef struct loom_amdgpu_subgroup_broadcast_first_plan_t {

@@ -37,6 +37,44 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_i32_
 
 amdgpu.target<gfx1100> @target
 
+kernel.def target(@target) @subgroup_broadcast_dynamic_i32_wave32(%input: buffer, %output: buffer) {
+  %c1 = index.constant 1 : index
+  %c64 = index.constant 64 : index
+  kernel.launch.config workgroups(%c1, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+} launch {
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 63)] : index
+  %lane_id = kernel.subgroup.lane.id : index
+  %lane = index.cast %lane_id : index to i32
+  %zero = index.constant 0 : offset
+  %input_view = buffer.view %input[%zero] : buffer -> view<64xi32, #dense>
+  %output_view = buffer.view %output[%zero] : buffer -> view<64xi32, #dense>
+  %loaded = vector.load %input_view[%tid] : view<64xi32, #dense> -> vector<1xi32>
+  %value = vector.extract %loaded[0] : vector<1xi32> -> i32
+  %broadcast = kernel.subgroup.broadcast %value from %lane : i32, i32
+  %result = vector.from_elements %broadcast : vector<1xi32>
+  vector.store %result, %output_view[%tid] : vector<1xi32>, view<64xi32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_dynamic_i32_wave32() asm<amdgpu.rdna3.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %lane = v_and_b32_src0_inline %tid, 31
+  %23 = v_lshlrev_b32_src0_inline %tid, 2
+  %value = global_load_b32_saddr %23, %input_view
+  %25 = v_lshlrev_b32_src0_inline %lane, 2
+  %result = ds_bpermute_b32 %25, %value
+  global_store_b32_saddr %23, %result, %output_view
+  return
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
+
 kernel.def target(@target) @subgroup_broadcast_first_i32_wave32(%input: buffer, %output: buffer) {
   %c1 = index.constant 1 : index
   %c64 = index.constant 64 : index

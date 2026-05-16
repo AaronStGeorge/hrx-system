@@ -1065,6 +1065,115 @@ static bool loom_vector_to_scalar_mma_physical_payload_matches_role(
          (int32_t)role_layout->element_bit_count;
 }
 
+static iree_status_t loom_vector_to_scalar_mma_extract_physical_lane(
+    loom_vector_to_scalar_state_t* state,
+    const loom_vector_to_scalar_mma_fragment_t* fragment,
+    const loom_matrix_fragment_role_layout_t* role_layout,
+    loom_matrix_fragment_physical_element_t element,
+    loom_value_id_t* out_lane) {
+  const int64_t ordinal =
+      (int64_t)element.register_index * role_layout->elements_per_register +
+      element.element_index;
+  const int64_t static_indices[1] = {ordinal};
+  const loom_vector_to_scalar_index_list_t indices = {
+      .static_indices = static_indices,
+      .rank = 1,
+  };
+  return loom_vector_to_scalar_materialize_lane(state, fragment->payload,
+                                                indices, out_lane);
+}
+
+static iree_status_t loom_vector_to_scalar_mma_build_lane_id_term(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_index_term_t* out_lane_id) {
+  loom_op_t* lane_id_op = NULL;
+  IREE_RETURN_IF_ERROR(loom_kernel_subgroup_lane_id_build(
+      &state->rewriter->builder, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+      state->location, &lane_id_op));
+  *out_lane_id = loom_vector_to_scalar_dynamic_term(
+      loom_kernel_subgroup_lane_id_result(lane_id_op));
+  return iree_ok_status();
+}
+
+static bool loom_vector_to_scalar_mma_role_layouts_match(
+    const loom_matrix_fragment_role_layout_t* lhs,
+    const loom_matrix_fragment_role_layout_t* rhs) {
+  return lhs->map_kind == rhs->map_kind &&
+         lhs->register_count == rhs->register_count &&
+         lhs->elements_per_register == rhs->elements_per_register &&
+         lhs->element_bit_count == rhs->element_bit_count &&
+         lhs->coordinate_flags == rhs->coordinate_flags;
+}
+
+static bool loom_vector_to_scalar_mma_result_layout_is_supported(
+    const loom_matrix_fragment_layout_t* layout) {
+  const loom_matrix_fragment_role_layout_t* result = &layout->result;
+  if (result->coordinate_flags != (LOOM_MATRIX_FRAGMENT_COORDINATE_ROW |
+                                   LOOM_MATRIX_FRAGMENT_COORDINATE_COLUMN) ||
+      layout->tile_shape.result_column_count == 0) {
+    return false;
+  }
+  switch (result->map_kind) {
+    case LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN:
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN:
+      return true;
+    case LOOM_MATRIX_FRAGMENT_MAP_UNKNOWN:
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_PACKED_REDUCTION:
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_PACKED_REDUCTION:
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_LANE_GROUP_PACKED_REDUCTION:
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_LANE_GROUP_PACKED_REDUCTION:
+    default:
+      return false;
+  }
+}
+
+static bool loom_vector_to_scalar_mma_reduction_role_layout_is_supported(
+    const loom_matrix_fragment_layout_t* layout,
+    const loom_matrix_fragment_role_layout_t* role_layout) {
+  const bool carries_row = role_layout->coordinate_flags ==
+                           (LOOM_MATRIX_FRAGMENT_COORDINATE_ROW |
+                            LOOM_MATRIX_FRAGMENT_COORDINATE_REDUCTION);
+  const bool carries_column = role_layout->coordinate_flags ==
+                              (LOOM_MATRIX_FRAGMENT_COORDINATE_COLUMN |
+                               LOOM_MATRIX_FRAGMENT_COORDINATE_REDUCTION);
+  if (!carries_row && !carries_column) {
+    return false;
+  }
+  if (layout->tile_shape.reduction_count == 0) {
+    return false;
+  }
+  const uint32_t reduction_group_span = (uint32_t)role_layout->register_count *
+                                        role_layout->elements_per_register;
+  if (reduction_group_span == 0) {
+    return false;
+  }
+  switch (role_layout->map_kind) {
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_PACKED_REDUCTION:
+      return carries_row &&
+             layout->tile_shape.reduction_count <= reduction_group_span;
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_PACKED_REDUCTION:
+      return carries_column &&
+             layout->tile_shape.reduction_count <= reduction_group_span;
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_LANE_GROUP_PACKED_REDUCTION:
+      return carries_row &&
+             ((uint32_t)(layout->tile_shape.reduction_count - 1) /
+                  reduction_group_span +
+              1u) * layout->tile_shape.result_row_count <=
+                 layout->wave_size;
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_LANE_GROUP_PACKED_REDUCTION:
+      return carries_column &&
+             ((uint32_t)(layout->tile_shape.reduction_count - 1) /
+                  reduction_group_span +
+              1u) * layout->tile_shape.result_column_count <=
+                 layout->wave_size;
+    case LOOM_MATRIX_FRAGMENT_MAP_UNKNOWN:
+    case LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN:
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN:
+    default:
+      return false;
+  }
+}
+
 static bool loom_vector_to_scalar_mma_distributed_static_is_supported(
     loom_vector_to_scalar_state_t* state,
     const loom_vector_to_scalar_mma_fragment_t* lhs,
@@ -1077,7 +1186,7 @@ static bool loom_vector_to_scalar_mma_distributed_static_is_supported(
     return false;
   }
   const loom_matrix_fragment_layout_t* layout = state->matrix_fragment_layout;
-  if (layout->wave_size == 0) {
+  if (layout->wave_size == 0 || layout->tile_shape.reduction_count == 0) {
     return false;
   }
   int64_t m = 0;
@@ -1107,120 +1216,139 @@ static bool loom_vector_to_scalar_mma_distributed_static_is_supported(
           &layout->result)) {
     return false;
   }
+  if (!loom_vector_to_scalar_mma_role_layouts_match(&layout->accumulator,
+                                                    &layout->result) ||
+      !loom_vector_to_scalar_mma_result_layout_is_supported(layout) ||
+      !loom_vector_to_scalar_mma_reduction_role_layout_is_supported(
+          layout, &layout->lhs) ||
+      !loom_vector_to_scalar_mma_reduction_role_layout_is_supported(
+          layout, &layout->rhs)) {
+    return false;
+  }
   *out_k = k;
   return true;
 }
 
-static loom_matrix_fragment_coordinate_t
-loom_vector_to_scalar_mma_row_column_coordinate(uint16_t row, uint16_t column) {
-  return (loom_matrix_fragment_coordinate_t){
-      .coordinate_flags = LOOM_MATRIX_FRAGMENT_COORDINATE_ROW |
-                          LOOM_MATRIX_FRAGMENT_COORDINATE_COLUMN,
-      .row = row,
-      .column = column,
-  };
-}
-
-static loom_matrix_fragment_coordinate_t
-loom_vector_to_scalar_mma_row_reduction_coordinate(uint16_t row,
-                                                   uint16_t reduction) {
-  return (loom_matrix_fragment_coordinate_t){
-      .coordinate_flags = LOOM_MATRIX_FRAGMENT_COORDINATE_ROW |
-                          LOOM_MATRIX_FRAGMENT_COORDINATE_REDUCTION,
-      .row = row,
-      .reduction = reduction,
-  };
-}
-
-static loom_matrix_fragment_coordinate_t
-loom_vector_to_scalar_mma_column_reduction_coordinate(uint16_t column,
-                                                      uint16_t reduction) {
-  return (loom_matrix_fragment_coordinate_t){
-      .coordinate_flags = LOOM_MATRIX_FRAGMENT_COORDINATE_COLUMN |
-                          LOOM_MATRIX_FRAGMENT_COORDINATE_REDUCTION,
-      .column = column,
-      .reduction = reduction,
-  };
-}
-
-static iree_status_t loom_vector_to_scalar_mma_extract_physical_lane(
+static iree_status_t loom_vector_to_scalar_mma_build_result_coordinate_terms(
     loom_vector_to_scalar_state_t* state,
-    const loom_vector_to_scalar_mma_fragment_t* fragment,
+    loom_vector_to_scalar_index_term_t lane_id, uint16_t register_index,
+    loom_vector_to_scalar_index_term_t* out_row,
+    loom_vector_to_scalar_index_term_t* out_column) {
+  const loom_matrix_fragment_layout_t* layout = state->matrix_fragment_layout;
+  const loom_matrix_fragment_role_layout_t* result_layout = &layout->result;
+  const loom_vector_to_scalar_index_term_t column_count =
+      loom_vector_to_scalar_static_term(layout->tile_shape.result_column_count);
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
+      state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_REM, lane_id, column_count,
+      out_column));
+
+  loom_vector_to_scalar_index_term_t lane_group = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
+      state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_DIV, lane_id, column_count,
+      &lane_group));
+  switch (result_layout->map_kind) {
+    case LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN: {
+      const loom_vector_to_scalar_index_term_t register_base =
+          loom_vector_to_scalar_static_term((int64_t)register_index * 2);
+      return loom_vector_to_scalar_build_term_binary(
+          state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD, register_base,
+          lane_group, out_row);
+    }
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN: {
+      const loom_vector_to_scalar_index_term_t register_count =
+          loom_vector_to_scalar_static_term(result_layout->register_count);
+      loom_vector_to_scalar_index_term_t group_base = {0};
+      IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
+          state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_MUL, lane_group,
+          register_count, &group_base));
+      const loom_vector_to_scalar_index_term_t register_offset =
+          loom_vector_to_scalar_static_term(register_index);
+      return loom_vector_to_scalar_build_term_binary(
+          state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD, group_base,
+          register_offset, out_row);
+    }
+    case LOOM_MATRIX_FRAGMENT_MAP_UNKNOWN:
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_PACKED_REDUCTION:
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_PACKED_REDUCTION:
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_LANE_GROUP_PACKED_REDUCTION:
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_LANE_GROUP_PACKED_REDUCTION:
+    default:
+      return iree_make_status(IREE_STATUS_INTERNAL,
+                              "unsupported matrix result fragment layout");
+  }
+}
+
+static iree_status_t loom_vector_to_scalar_mma_build_reduction_source_lane(
+    loom_vector_to_scalar_state_t* state,
     const loom_matrix_fragment_role_layout_t* role_layout,
-    loom_matrix_fragment_physical_element_t element,
-    loom_value_id_t* out_lane) {
-  const int64_t ordinal =
-      (int64_t)element.register_index * role_layout->elements_per_register +
-      element.element_index;
-  const int64_t static_indices[1] = {ordinal};
-  const loom_vector_to_scalar_index_list_t indices = {
-      .static_indices = static_indices,
-      .rank = 1,
-  };
-  return loom_vector_to_scalar_materialize_lane(state, fragment->payload,
-                                                indices, out_lane);
-}
+    loom_vector_to_scalar_index_term_t row,
+    loom_vector_to_scalar_index_term_t column, uint16_t reduction,
+    loom_vector_to_scalar_index_term_t* out_source_lane,
+    uint16_t* out_register_index, uint16_t* out_element_index) {
+  const uint32_t reduction_group_span = (uint32_t)role_layout->register_count *
+                                        role_layout->elements_per_register;
+  if (reduction_group_span == 0) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "matrix reduction fragment layout has no payload "
+                            "elements");
+  }
+  const uint32_t group_relative_reduction =
+      (uint32_t)reduction % reduction_group_span;
+  *out_register_index =
+      (uint16_t)(group_relative_reduction / role_layout->elements_per_register);
+  *out_element_index =
+      (uint16_t)(group_relative_reduction % role_layout->elements_per_register);
 
-static iree_status_t loom_vector_to_scalar_mma_build_i32_constant(
-    loom_vector_to_scalar_state_t* state, int64_t value,
-    loom_value_id_t* out_value) {
-  return loom_vector_to_scalar_build_scalar_constant(
-      &state->rewriter->builder, loom_type_scalar(LOOM_SCALAR_TYPE_I32),
-      state->location, value, out_value);
-}
-
-static iree_status_t loom_vector_to_scalar_mma_build_lane_id_i32(
-    loom_vector_to_scalar_state_t* state, loom_value_id_t* out_lane_id) {
-  loom_op_t* lane_id_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_kernel_subgroup_lane_id_build(
-      &state->rewriter->builder, loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
-      state->location, &lane_id_op));
-  loom_op_t* cast_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_index_cast_build(
-      &state->rewriter->builder,
-      loom_kernel_subgroup_lane_id_result(lane_id_op),
-      loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
-      loom_type_scalar(LOOM_SCALAR_TYPE_I32), state->location, &cast_op));
-  *out_lane_id = loom_index_cast_result(cast_op);
-  return iree_ok_status();
-}
-
-static iree_status_t loom_vector_to_scalar_mma_build_lane_eq(
-    loom_vector_to_scalar_state_t* state, loom_value_id_t lane_id_i32,
-    uint16_t lane, loom_value_id_t* out_condition) {
-  loom_value_id_t lane_constant = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_build_i32_constant(
-      state, lane, &lane_constant));
-  loom_op_t* cmp_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_scalar_cmpi_build(
-      &state->rewriter->builder, LOOM_SCALAR_CMPI_PREDICATE_EQ, lane_id_i32,
-      lane_constant, loom_type_scalar(LOOM_SCALAR_TYPE_I32),
-      loom_type_scalar(LOOM_SCALAR_TYPE_I1), state->location, &cmp_op));
-  *out_condition = loom_scalar_cmpi_result(cmp_op);
-  return iree_ok_status();
+  switch (role_layout->map_kind) {
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_PACKED_REDUCTION:
+      *out_source_lane = row;
+      return iree_ok_status();
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_PACKED_REDUCTION:
+      *out_source_lane = column;
+      return iree_ok_status();
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_LANE_GROUP_PACKED_REDUCTION: {
+      const int64_t lane_group =
+          (int64_t)((uint32_t)reduction / reduction_group_span);
+      const loom_vector_to_scalar_index_term_t lane_group_base =
+          loom_vector_to_scalar_static_term(
+              lane_group *
+              state->matrix_fragment_layout->tile_shape.result_row_count);
+      return loom_vector_to_scalar_build_term_binary(
+          state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD, lane_group_base, row,
+          out_source_lane);
+    }
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_LANE_GROUP_PACKED_REDUCTION: {
+      const int64_t lane_group =
+          (int64_t)((uint32_t)reduction / reduction_group_span);
+      const loom_vector_to_scalar_index_term_t lane_group_base =
+          loom_vector_to_scalar_static_term(
+              lane_group *
+              state->matrix_fragment_layout->tile_shape.result_column_count);
+      return loom_vector_to_scalar_build_term_binary(
+          state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_ADD, lane_group_base,
+          column, out_source_lane);
+    }
+    case LOOM_MATRIX_FRAGMENT_MAP_UNKNOWN:
+    case LOOM_MATRIX_FRAGMENT_MAP_REGISTER_INTERLEAVED_ROW_COLUMN:
+    case LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN:
+    default:
+      return iree_make_status(IREE_STATUS_INTERNAL,
+                              "unsupported matrix reduction fragment layout");
+  }
 }
 
 static iree_status_t loom_vector_to_scalar_mma_broadcast_physical_lane(
     loom_vector_to_scalar_state_t* state,
     loom_vector_to_scalar_mma_numeric_t numeric,
     const loom_vector_to_scalar_mma_fragment_t* fragment,
-    loom_contract_operand_role_t role,
-    loom_matrix_fragment_coordinate_t coordinate, loom_type_t result_type,
+    const loom_matrix_fragment_role_layout_t* role_layout,
+    loom_vector_to_scalar_index_term_t source_lane, uint16_t register_index,
+    uint16_t element_index, loom_type_t result_type,
     loom_value_id_t* out_lane) {
-  loom_matrix_fragment_physical_element_t element = {0};
-  if (!loom_matrix_fragment_physical_element(state->matrix_fragment_layout,
-                                             role, coordinate, 0, &element)) {
-    return iree_make_status(IREE_STATUS_INTERNAL,
-                            "matrix fragment layout has no physical owner for "
-                            "a referenced coordinate");
-  }
-  const loom_matrix_fragment_role_layout_t* role_layout =
-      loom_matrix_fragment_role_layout(state->matrix_fragment_layout, role);
-  if (role_layout == NULL) {
-    return iree_make_status(IREE_STATUS_INTERNAL,
-                            "matrix fragment layout is missing a referenced "
-                            "operand role");
-  }
+  const loom_matrix_fragment_physical_element_t element = {
+      .register_index = register_index,
+      .element_index = element_index,
+  };
   loom_value_id_t raw_lane = LOOM_VALUE_ID_INVALID;
   IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_extract_physical_lane(
       state, fragment, role_layout, element, &raw_lane));
@@ -1245,69 +1373,15 @@ static iree_status_t loom_vector_to_scalar_mma_broadcast_physical_lane(
                               "unsupported vector.mma scalar numeric kind");
   }
 
-  loom_value_id_t source_lane = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_build_i32_constant(
-      state, element.lane, &source_lane));
+  loom_value_id_t source_lane_i32 = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_index_term_as_scalar(
+      state, source_lane, loom_type_scalar(LOOM_SCALAR_TYPE_I32),
+      &source_lane_i32));
   loom_op_t* broadcast_op = NULL;
   IREE_RETURN_IF_ERROR(loom_kernel_subgroup_broadcast_build(
-      &state->rewriter->builder, cast_lane, source_lane, result_type,
+      &state->rewriter->builder, cast_lane, source_lane_i32, result_type,
       state->location, &broadcast_op));
   *out_lane = loom_kernel_subgroup_broadcast_result(broadcast_op);
-  return iree_ok_status();
-}
-
-static iree_status_t loom_vector_to_scalar_mma_build_distributed_lane_for_owner(
-    loom_vector_to_scalar_state_t* state,
-    loom_vector_to_scalar_mma_numeric_t numeric,
-    const loom_vector_to_scalar_mma_fragment_t* lhs,
-    const loom_vector_to_scalar_mma_fragment_t* rhs,
-    const loom_vector_to_scalar_mma_fragment_t* init, uint16_t owner_lane,
-    uint16_t register_index, uint16_t element_index, int64_t k,
-    loom_value_id_t* out_lane) {
-  loom_matrix_fragment_coordinate_t result_coordinate = {0};
-  if (!loom_matrix_fragment_coordinate(
-          state->matrix_fragment_layout, LOOM_CONTRACT_OPERAND_ROLE_RESULT,
-          owner_lane, register_index, element_index, &result_coordinate)) {
-    return iree_make_status(IREE_STATUS_INTERNAL,
-                            "matrix fragment layout has no result coordinate "
-                            "for a referenced physical element");
-  }
-  loom_type_t accumulator_type =
-      loom_type_scalar(loom_type_element_type(init->type));
-  loom_matrix_fragment_coordinate_t accumulator_coordinate =
-      loom_vector_to_scalar_mma_row_column_coordinate(result_coordinate.row,
-                                                      result_coordinate.column);
-  loom_value_id_t accumulator = LOOM_VALUE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_broadcast_physical_lane(
-      state, numeric, init, LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,
-      accumulator_coordinate, accumulator_type, &accumulator));
-
-  const loom_scalar_type_t accumulator_element_type =
-      loom_type_element_type(accumulator_type);
-  for (int64_t reduction = 0; reduction < k; ++reduction) {
-    loom_matrix_fragment_coordinate_t lhs_coordinate =
-        loom_vector_to_scalar_mma_row_reduction_coordinate(
-            result_coordinate.row, (uint16_t)reduction);
-    loom_matrix_fragment_coordinate_t rhs_coordinate =
-        loom_vector_to_scalar_mma_column_reduction_coordinate(
-            result_coordinate.column, (uint16_t)reduction);
-    loom_value_id_t lhs_lane = LOOM_VALUE_ID_INVALID;
-    loom_value_id_t rhs_lane = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_broadcast_physical_lane(
-        state, numeric, lhs, LOOM_CONTRACT_OPERAND_ROLE_LHS, lhs_coordinate,
-        accumulator_type, &lhs_lane));
-    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_broadcast_physical_lane(
-        state, numeric, rhs, LOOM_CONTRACT_OPERAND_ROLE_RHS, rhs_coordinate,
-        accumulator_type, &rhs_lane));
-    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_build_accumulate(
-        state, numeric, lhs_lane, accumulator_element_type, rhs_lane,
-        accumulator_element_type, accumulator, accumulator_type, &accumulator));
-    if (state->pass->statistics) {
-      loom_pass_statistic_add(state->pass,
-                              LOOM_VECTOR_TO_SCALAR_STAT_LANES_MATERIALIZED, 1);
-    }
-  }
-  *out_lane = accumulator;
   return iree_ok_status();
 }
 
@@ -1317,30 +1391,57 @@ static iree_status_t loom_vector_to_scalar_mma_build_distributed_lane(
     const loom_vector_to_scalar_mma_fragment_t* lhs,
     const loom_vector_to_scalar_mma_fragment_t* rhs,
     const loom_vector_to_scalar_mma_fragment_t* init,
-    loom_value_id_t lane_id_i32, uint16_t register_index,
+    loom_vector_to_scalar_index_term_t lane_id, uint16_t register_index,
     uint16_t element_index, int64_t k, loom_value_id_t* out_lane) {
-  loom_value_id_t selected_lane = LOOM_VALUE_ID_INVALID;
-  for (uint16_t lane = 0; lane < state->matrix_fragment_layout->wave_size;
-       ++lane) {
-    loom_value_id_t candidate_lane = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(
-        loom_vector_to_scalar_mma_build_distributed_lane_for_owner(
-            state, numeric, lhs, rhs, init, lane, register_index, element_index,
-            k, &candidate_lane));
-    if (lane == 0) {
-      selected_lane = candidate_lane;
-      continue;
+  const loom_matrix_fragment_layout_t* layout = state->matrix_fragment_layout;
+  loom_vector_to_scalar_index_term_t row = {0};
+  loom_vector_to_scalar_index_term_t column = {0};
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_build_result_coordinate_terms(
+      state, lane_id, register_index, &row, &column));
+
+  loom_type_t accumulator_type =
+      loom_type_scalar(loom_type_element_type(init->type));
+  const loom_matrix_fragment_physical_element_t accumulator_element = {
+      .register_index = register_index,
+      .element_index = element_index,
+  };
+  loom_value_id_t accumulator = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_extract_physical_lane(
+      state, init, &layout->accumulator, accumulator_element, &accumulator));
+
+  const loom_scalar_type_t accumulator_element_type =
+      loom_type_element_type(accumulator_type);
+  for (int64_t reduction = 0; reduction < k; ++reduction) {
+    loom_vector_to_scalar_index_term_t lhs_source_lane = {0};
+    uint16_t lhs_register_index = 0;
+    uint16_t lhs_element_index = 0;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_build_reduction_source_lane(
+        state, &layout->lhs, row, column, (uint16_t)reduction, &lhs_source_lane,
+        &lhs_register_index, &lhs_element_index));
+    loom_vector_to_scalar_index_term_t rhs_source_lane = {0};
+    uint16_t rhs_register_index = 0;
+    uint16_t rhs_element_index = 0;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_build_reduction_source_lane(
+        state, &layout->rhs, row, column, (uint16_t)reduction, &rhs_source_lane,
+        &rhs_register_index, &rhs_element_index));
+
+    loom_value_id_t lhs_lane = LOOM_VALUE_ID_INVALID;
+    loom_value_id_t rhs_lane = LOOM_VALUE_ID_INVALID;
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_broadcast_physical_lane(
+        state, numeric, lhs, &layout->lhs, lhs_source_lane, lhs_register_index,
+        lhs_element_index, accumulator_type, &lhs_lane));
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_broadcast_physical_lane(
+        state, numeric, rhs, &layout->rhs, rhs_source_lane, rhs_register_index,
+        rhs_element_index, accumulator_type, &rhs_lane));
+    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_build_accumulate(
+        state, numeric, lhs_lane, accumulator_element_type, rhs_lane,
+        accumulator_element_type, accumulator, accumulator_type, &accumulator));
+    if (state->pass->statistics) {
+      loom_pass_statistic_add(state->pass,
+                              LOOM_VECTOR_TO_SCALAR_STAT_LANES_MATERIALIZED, 1);
     }
-    loom_value_id_t lane_matches = LOOM_VALUE_ID_INVALID;
-    IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_build_lane_eq(
-        state, lane_id_i32, lane, &lane_matches));
-    loom_op_t* select_op = NULL;
-    IREE_RETURN_IF_ERROR(loom_scf_select_build(
-        &state->rewriter->builder, lane_matches, candidate_lane, selected_lane,
-        state->result_scalar_type, state->location, &select_op));
-    selected_lane = loom_scf_select_result(select_op);
   }
-  *out_lane = selected_lane;
+  *out_lane = accumulator;
   return iree_ok_status();
 }
 
@@ -1364,9 +1465,9 @@ static iree_status_t loom_vector_to_scalar_mma_lower_distributed_static(
   IREE_RETURN_IF_ERROR(
       iree_arena_allocate_array(state->rewriter->arena, element_count,
                                 sizeof(*elements), (void**)&elements));
-  loom_value_id_t lane_id_i32 = LOOM_VALUE_ID_INVALID;
+  loom_vector_to_scalar_index_term_t lane_id = {0};
   IREE_RETURN_IF_ERROR(
-      loom_vector_to_scalar_mma_build_lane_id_i32(state, &lane_id_i32));
+      loom_vector_to_scalar_mma_build_lane_id_term(state, &lane_id));
   uint16_t ordinal = 0;
   for (uint16_t register_index = 0;
        register_index < result_layout->register_count; ++register_index) {
@@ -1374,7 +1475,7 @@ static iree_status_t loom_vector_to_scalar_mma_lower_distributed_static(
          element_index < result_layout->elements_per_register;
          ++element_index) {
       IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_build_distributed_lane(
-          state, numeric, lhs, rhs, init, lane_id_i32, register_index,
+          state, numeric, lhs, rhs, init, lane_id, register_index,
           element_index, k, &elements[ordinal]));
       ++ordinal;
     }

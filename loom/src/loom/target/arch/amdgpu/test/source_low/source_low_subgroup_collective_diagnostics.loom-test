@@ -11,7 +11,7 @@ kernel.def target(@target) @subgroup_broadcast_dynamic_lane_rejected(%input: buf
   %lane_vector = vector.load %input_view[0] : view<1xi32, #dense> -> vector<1xi32>
   %lane = vector.extract %lane_vector[0] : vector<1xi32> -> i32
   %value = scalar.constant 1 : i32
-  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_broadcast.exact_lane"}
+  // ERROR@+1: AMDGPU/023 {constraint_key="subgroup_broadcast.lane_range"}
   %broadcast = kernel.subgroup.broadcast %value from %lane : i32, i32
   kernel.return
 }
