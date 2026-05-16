@@ -920,6 +920,15 @@ static bool loom_low_lower_contract_query_can_materialize(
   return materializer->can_materialize(state->context, source_value_id);
 }
 
+struct loom_low_lower_source_query_scope_t {
+  // Read-only lowering context backing source-to-low contract queries.
+  loom_low_lower_context_t context;
+  // Diagnostic/result scratch required by the lowering context contract.
+  loom_low_lower_result_t result;
+  // True after context.lowering.value_domain has acquired module scratch.
+  bool value_domain_initialized;
+};
+
 static iree_status_t loom_low_lower_query_target_contract_from_context(
     void* user_data,
     const loom_target_contract_query_environment_t* environment,
@@ -928,7 +937,16 @@ static iree_status_t loom_low_lower_query_target_contract_from_context(
   loom_low_lower_context_t* context = (loom_low_lower_context_t*)user_data;
   const loom_low_descriptor_set_t* saved_descriptor_set =
       context->descriptor_set;
+  loom_value_fact_table_t* saved_fact_table = context->lowering.fact_table;
+  const bool fact_table_changed =
+      saved_fact_table != (loom_value_fact_table_t*)environment->fact_table;
   context->descriptor_set = environment->descriptor_set;
+  context->lowering.fact_table =
+      (loom_value_fact_table_t*)environment->fact_table;
+  if (fact_table_changed) {
+    context->lowering.view_regions_initialized = false;
+    context->lowering.view_regions_analyzed = false;
+  }
   loom_low_lower_contract_query_state_t state = {
       .context = context,
       .environment = environment,
@@ -957,7 +975,94 @@ static iree_status_t loom_low_lower_query_target_contract_from_context(
   iree_status_t status = loom_low_lower_query_target_contract(
       environment, &query_options, source_op, out_result);
   context->descriptor_set = saved_descriptor_set;
+  context->lowering.fact_table = saved_fact_table;
+  if (fact_table_changed) {
+    context->lowering.view_regions_initialized = false;
+    context->lowering.view_regions_analyzed = false;
+  }
   return status;
+}
+
+iree_status_t loom_low_lower_source_query_scope_create(
+    loom_module_t* module, loom_func_like_t source_function,
+    const loom_low_lower_options_t* options, iree_arena_allocator_t* arena,
+    loom_low_lower_source_query_scope_t** out_scope) {
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(arena);
+  IREE_ASSERT_ARGUMENT(out_scope);
+  *out_scope = NULL;
+  loom_low_lower_assert_options(module, source_function, options);
+
+  loom_low_lower_source_query_scope_t* scope = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate(arena, sizeof(*scope), (void**)&scope));
+  memset(scope, 0, sizeof(*scope));
+  scope->result = (loom_low_lower_result_t){
+      .low_func_ref = loom_symbol_ref_null(),
+  };
+  scope->context = (loom_low_lower_context_t){
+      .module = module,
+      .source_function = source_function,
+      .options = options,
+      .policy = options->policy,
+      .result = &scope->result,
+  };
+  scope->context.lowering.fact_table = options->fact_table;
+  iree_arena_initialize(module->arena.block_pool, &scope->context.arena);
+
+  iree_status_t status = loom_target_low_descriptor_set_select_for_bundle(
+      options->descriptor_registry, options->bundle,
+      &scope->context.descriptor_set);
+  loom_region_t* source_body = loom_func_like_body(source_function);
+  if (iree_status_is_ok(status) && source_body != NULL) {
+    status = loom_low_lowering_frame_initialize_value_ordinals(&scope->context,
+                                                               source_body);
+    scope->value_domain_initialized = iree_status_is_ok(status);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_target_contract_index_compose(
+        scope->context.policy->contract_bindings,
+        scope->context.policy->contract_binding_count,
+        &scope->context.contract_index, &scope->context.arena);
+  }
+  if (!iree_status_is_ok(status)) {
+    loom_low_lower_source_query_scope_destroy(scope);
+    return status;
+  }
+
+  *out_scope = scope;
+  return iree_ok_status();
+}
+
+void loom_low_lower_source_query_scope_destroy(
+    loom_low_lower_source_query_scope_t* scope) {
+  if (scope == NULL) {
+    return;
+  }
+  if (scope->value_domain_initialized) {
+    loom_low_lowering_frame_deinitialize(&scope->context);
+    scope->value_domain_initialized = false;
+  }
+  iree_arena_deinitialize(&scope->context.arena);
+  memset(scope, 0, sizeof(*scope));
+}
+
+loom_target_contract_query_callback_t
+loom_low_lower_source_query_scope_callback(
+    loom_low_lower_source_query_scope_t* scope) {
+  IREE_ASSERT_ARGUMENT(scope);
+  return (loom_target_contract_query_callback_t){
+      .fn = loom_low_lower_query_target_contract_from_context,
+      .user_data = &scope->context,
+  };
+}
+
+const loom_local_value_domain_t* loom_low_lower_source_query_scope_value_domain(
+    const loom_low_lower_source_query_scope_t* scope) {
+  IREE_ASSERT_ARGUMENT(scope);
+  return scope->value_domain_initialized ? &scope->context.lowering.value_domain
+                                         : NULL;
 }
 
 static void loom_low_lower_record_report_row(

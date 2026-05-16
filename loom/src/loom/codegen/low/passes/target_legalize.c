@@ -6,13 +6,10 @@
 
 #include "loom/codegen/low/passes/target_legalize.h"
 
-#include <inttypes.h>
 #include <string.h>
 
-#include "loom/codegen/low/contract_query.h"
 #include "loom/codegen/low/pass_environment.h"
 #include "loom/codegen/low/source_selection.h"
-#include "loom/ir/local_value_domain.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 #include "loom/pass/value_facts.h"
@@ -228,30 +225,23 @@ iree_status_t loom_low_target_legalize_create(loom_pass_t* pass,
   return iree_ok_status();
 }
 
-typedef struct loom_low_target_legalize_descriptor_map_t {
-  // Rule set owning this descriptor-ref map.
-  const loom_low_lower_rule_set_t* rule_set;
-  // Descriptor rows resolved by rule-set-local descriptor-ref ordinal.
-  const loom_low_descriptor_t** descriptors;
-  // Number of entries in descriptors.
-  uint16_t descriptor_count;
-} loom_low_target_legalize_descriptor_map_t;
-
 typedef struct loom_low_target_legalize_function_state_t {
   // Pass invocation being executed.
   loom_pass_t* pass;
+  // Module being legalized.
+  loom_module_t* module;
   // Selected target-bound source function.
   const loom_low_source_selection_t* selection;
+  // Source-to-low query options shared by eager and final legality checks.
+  loom_low_lower_options_t lower_options;
   // Low descriptor set selected by selection->target_bundle.
   const loom_low_descriptor_set_t* descriptor_set;
-  // Dense target contract index for selection->policy.
-  loom_target_contract_index_t contract_index;
-  // Descriptor-ref maps keyed by policy rule-set pointer.
-  loom_low_target_legalize_descriptor_map_t* descriptor_maps;
-  // Number of entries in descriptor_maps.
-  iree_host_size_t descriptor_map_count;
-  // Active query environment visible to map-value callbacks.
-  const loom_target_contract_query_environment_t* active_query_environment;
+  // Active source-to-low contract query scope, rebuilt after IR mutation.
+  loom_low_lower_source_query_scope_t* query_scope;
+  // Fact table used to initialize query_scope.
+  const loom_value_fact_table_t* query_scope_fact_table;
+  // Arena receiving query_scope storage for this function run.
+  iree_arena_allocator_t* query_scope_arena;
   // Target legalizer registry shared across functions in this pass run.
   const loom_target_legalizer_registry_t* legalizer_registry;
   // Target-low legality providers available to the final verifier.
@@ -260,112 +250,36 @@ typedef struct loom_low_target_legalize_function_state_t {
   loom_target_legalization_context_t legalization_context;
 } loom_low_target_legalize_function_state_t;
 
-static const loom_low_target_legalize_descriptor_map_t*
-loom_low_target_legalize_descriptor_map_find(
-    const loom_low_target_legalize_function_state_t* state,
-    const loom_low_lower_rule_set_t* rule_set) {
-  for (iree_host_size_t i = 0; i < state->descriptor_map_count; ++i) {
-    const loom_low_target_legalize_descriptor_map_t* map =
-        &state->descriptor_maps[i];
-    if (map->rule_set == rule_set) {
-      return map;
-    }
+static void loom_low_target_legalize_destroy_query_scope(
+    loom_low_target_legalize_function_state_t* state) {
+  if (state->query_scope == NULL) {
+    return;
   }
-  return NULL;
+  loom_low_lower_source_query_scope_destroy(state->query_scope);
+  state->query_scope = NULL;
+  state->query_scope_fact_table = NULL;
 }
 
-static iree_status_t loom_low_target_legalize_descriptor_ref(
-    void* user_data, const loom_low_lower_rule_match_context_t* match_context,
-    const loom_low_lower_rule_set_t* rule_set,
-    loom_low_lower_descriptor_ref_t descriptor_ref,
-    const loom_low_descriptor_t** out_descriptor) {
-  (void)match_context;
-  *out_descriptor = NULL;
-  const loom_low_target_legalize_function_state_t* state =
-      (const loom_low_target_legalize_function_state_t*)user_data;
-  const loom_low_target_legalize_descriptor_map_t* map =
-      loom_low_target_legalize_descriptor_map_find(state, rule_set);
-  if (map == NULL || descriptor_ref >= map->descriptor_count) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "generated target-low rule set is missing from target-legalize "
-        "descriptor-ref maps");
-  }
-  *out_descriptor = map->descriptors[descriptor_ref];
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_target_legalize_prepare_descriptor_maps(
+static iree_status_t loom_low_target_legalize_refresh_query_scope(
     loom_low_target_legalize_function_state_t* state,
-    iree_arena_allocator_t* arena) {
-  const loom_low_lower_rule_set_list_t rule_sets =
-      state->selection->policy->rule_sets;
-  if (rule_sets.count == 0) {
-    return iree_ok_status();
-  }
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      arena, rule_sets.count, sizeof(*state->descriptor_maps),
-      (void**)&state->descriptor_maps));
-  state->descriptor_map_count = rule_sets.count;
-  for (uint16_t rule_set_index = 0; rule_set_index < rule_sets.count;
-       ++rule_set_index) {
-    const loom_low_lower_rule_set_t* rule_set =
-        rule_sets.values[rule_set_index];
-    loom_low_target_legalize_descriptor_map_t* map =
-        &state->descriptor_maps[rule_set_index];
-    *map = (loom_low_target_legalize_descriptor_map_t){
-        .rule_set = rule_set,
-        .descriptor_count = rule_set->descriptor_ref_count,
-    };
-    if (rule_set->descriptor_ref_count == 0) {
-      continue;
-    }
-    if (rule_set->descriptor_refs == NULL) {
-      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                              "generated target-low rule set has %" PRIu32
-                              " descriptor refs but no descriptor-ref table",
-                              (uint32_t)rule_set->descriptor_ref_count);
-    }
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        arena, rule_set->descriptor_ref_count, sizeof(*map->descriptors),
-        (void**)&map->descriptors));
-    for (uint16_t i = 0; i < rule_set->descriptor_ref_count; ++i) {
-      map->descriptors[i] = NULL;
-      const iree_string_view_t key = rule_set->descriptor_refs[i].key;
-      const uint32_t descriptor_ordinal =
-          loom_low_descriptor_set_lookup_descriptor(state->descriptor_set, key);
-      if (descriptor_ordinal == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-        continue;
-      }
-      map->descriptors[i] = loom_low_descriptor_set_descriptor_at(
-          state->descriptor_set, descriptor_ordinal);
-      if (map->descriptors[i] == NULL) {
-        return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                                "descriptor ref '%.*s' resolved to invalid "
-                                "descriptor ordinal %" PRIu32,
-                                (int)key.size, key.data, descriptor_ordinal);
-      }
-    }
-  }
+    const loom_value_fact_table_t* fact_table) {
+  loom_low_target_legalize_destroy_query_scope(state);
+  state->lower_options.fact_table = (loom_value_fact_table_t*)fact_table;
+  IREE_RETURN_IF_ERROR(loom_low_lower_source_query_scope_create(
+      state->module, state->selection->func, &state->lower_options,
+      state->query_scope_arena, &state->query_scope));
+  state->query_scope_fact_table = fact_table;
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_target_legalize_map_contract_value(
-    void* user_data, const loom_low_lower_rule_match_context_t* match_context,
-    const loom_op_t* source_op, loom_value_id_t source_value_id,
-    loom_low_lower_rule_mapped_value_t* out_mapped_value) {
-  (void)match_context;
-  *out_mapped_value = loom_low_lower_rule_mapped_value_none();
-  loom_low_target_legalize_function_state_t* state =
-      (loom_low_target_legalize_function_state_t*)user_data;
-  const loom_low_lower_map_contract_value_callback_t map_contract_value =
-      state->selection->policy->map_contract_value;
-  if (map_contract_value.fn == NULL) {
+static iree_status_t loom_low_target_legalize_ensure_query_scope(
+    loom_low_target_legalize_function_state_t* state,
+    const loom_value_fact_table_t* fact_table) {
+  if (state->query_scope != NULL &&
+      state->query_scope_fact_table == fact_table) {
     return iree_ok_status();
   }
-  return map_contract_value.fn(map_contract_value.user_data,
-                               state->active_query_environment, source_op,
-                               source_value_id, out_mapped_value);
+  return loom_low_target_legalize_refresh_query_scope(state, fact_table);
 }
 
 static iree_status_t loom_low_target_legalize_query_contract(
@@ -375,26 +289,11 @@ static iree_status_t loom_low_target_legalize_query_contract(
     loom_target_contract_query_result_t* out_result) {
   loom_low_target_legalize_function_state_t* state =
       (loom_low_target_legalize_function_state_t*)user_data;
-  state->active_query_environment = environment;
-  const loom_low_lower_contract_query_options_t query_options = {
-      .contract_index = &state->contract_index,
-      .rule_sets = state->selection->policy->rule_sets,
-      .map_value =
-          {
-              .fn = loom_low_target_legalize_map_contract_value,
-              .user_data = state,
-          },
-      .descriptor_ref =
-          {
-              .fn = loom_low_target_legalize_descriptor_ref,
-              .user_data = state,
-          },
-      .descriptor_matrix = state->selection->policy->descriptor_matrix,
-  };
-  iree_status_t status = loom_low_lower_query_target_contract(
-      environment, &query_options, source_op, out_result);
-  state->active_query_environment = NULL;
-  return status;
+  IREE_RETURN_IF_ERROR(loom_low_target_legalize_ensure_query_scope(
+      state, environment->fact_table));
+  const loom_target_contract_query_callback_t callback =
+      loom_low_lower_source_query_scope_callback(state->query_scope);
+  return callback.fn(callback.user_data, environment, source_op, out_result);
 }
 
 static iree_status_t loom_low_target_legalize_rewrite_op(
@@ -466,45 +365,39 @@ static iree_status_t loom_low_target_legalize_rewrite_op(
   return iree_ok_status();
 }
 
+static void loom_low_target_legalize_changed(
+    void* user_data, loom_greedy_rewrite_driver_t* driver) {
+  (void)driver;
+  loom_low_target_legalize_destroy_query_scope(
+      (loom_low_target_legalize_function_state_t*)user_data);
+}
+
 static iree_status_t loom_low_target_legalize_verify_final(
     loom_module_t* module, loom_low_target_legalize_function_state_t* state,
     const loom_low_target_legalize_pass_state_t* pass_state,
-    const loom_value_fact_table_t* fact_table, iree_arena_allocator_t* arena,
-    uint32_t* out_error_count) {
+    const loom_value_fact_table_t* fact_table, uint32_t* out_error_count) {
   *out_error_count = 0;
-  loom_region_t* body = loom_func_like_body(state->selection->func);
-  loom_local_value_domain_t value_domain = {0};
-  iree_status_t status = iree_ok_status();
-  if (body != NULL) {
-    status = loom_local_value_domain_acquire_for_region(module, body, arena,
-                                                        &value_domain);
-  }
+  IREE_RETURN_IF_ERROR(
+      loom_low_target_legalize_refresh_query_scope(state, fact_table));
+  const loom_target_contract_query_callback_t contract_query =
+      loom_low_lower_source_query_scope_callback(state->query_scope);
   loom_target_low_legality_result_t result = {0};
-  if (iree_status_is_ok(status)) {
-    const loom_target_low_legality_options_t legality_options = {
-        .bundle = state->selection->target_bundle,
-        .target_ref = state->selection->target_ref,
-        .descriptor_registry = loom_low_pass_capability_descriptor_registry(
-            loom_low_pass_capability_from_pass(state->pass)),
-        .error_catalog = state->selection->policy->error_catalog,
-        .provider_list = state->legality_provider_list,
-        .contract_query =
-            {
-                .fn = loom_low_target_legalize_query_contract,
-                .user_data = state,
-            },
-        .type_supported = state->selection->policy->source_type_supported,
-        .fact_table = (loom_value_fact_table_t*)fact_table,
-        .value_domain = body != NULL ? &value_domain : NULL,
-        .emitter = state->pass->diagnostic_emitter,
-        .max_errors = pass_state->max_errors,
-    };
-    status = loom_target_low_verify_function_legality(
-        module, state->selection->func, &legality_options, &result);
-  }
-  if (body != NULL) {
-    loom_local_value_domain_release(&value_domain);
-  }
+  const loom_target_low_legality_options_t legality_options = {
+      .bundle = state->selection->target_bundle,
+      .target_ref = state->selection->target_ref,
+      .descriptor_registry = state->lower_options.descriptor_registry,
+      .error_catalog = state->selection->policy->error_catalog,
+      .provider_list = state->legality_provider_list,
+      .contract_query = contract_query,
+      .type_supported = state->selection->policy->source_type_supported,
+      .fact_table = (loom_value_fact_table_t*)fact_table,
+      .value_domain =
+          loom_low_lower_source_query_scope_value_domain(state->query_scope),
+      .emitter = state->pass->diagnostic_emitter,
+      .max_errors = pass_state->max_errors,
+  };
+  iree_status_t status = loom_target_low_verify_function_legality(
+      module, state->selection->func, &legality_options, &result);
   *out_error_count = result.error_count;
   return status;
 }
@@ -524,17 +417,14 @@ static iree_status_t loom_low_target_legalize_function(
 
   loom_low_target_legalize_function_state_t state = {
       .pass = pass,
+      .module = module,
       .selection = selection,
+      .query_scope_arena = arena,
       .legalizer_registry = legalizer_registry,
       .legality_provider_list = legality_provider_list,
   };
   IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
       descriptor_registry, selection->target_bundle, &state.descriptor_set));
-  IREE_RETURN_IF_ERROR(loom_target_contract_index_compose(
-      selection->policy->contract_bindings,
-      selection->policy->contract_binding_count, &state.contract_index, arena));
-  IREE_RETURN_IF_ERROR(
-      loom_low_target_legalize_prepare_descriptor_maps(&state, arena));
 
   loom_value_fact_table_t* seed_facts = NULL;
   if (pass->value_facts != NULL) {
@@ -544,6 +434,16 @@ static iree_status_t loom_low_target_legalize_function(
             selection->func, selection->target_bundle),
         &seed_facts));
   }
+  state.lower_options = (loom_low_lower_options_t){
+      .target_ref = selection->target_ref,
+      .bundle = selection->target_bundle,
+      .descriptor_registry = descriptor_registry,
+      .legality_provider_list = legality_provider_list,
+      .policy = selection->policy,
+      .fact_table = seed_facts,
+      .emitter = pass->diagnostic_emitter,
+      .max_errors = pass_state->max_errors,
+  };
 
   loom_pass_value_fact_owner_t rewrite_value_facts = {0};
   loom_pass_value_fact_owner_initialize(module->arena.block_pool,
@@ -575,6 +475,7 @@ static iree_status_t loom_low_target_legalize_function(
   const loom_greedy_rewrite_callbacks_t rewrite_callbacks = {
       .user_data = &state,
       .rewrite_op = loom_low_target_legalize_rewrite_op,
+      .changed = loom_low_target_legalize_changed,
   };
   loom_greedy_rewrite_result_t rewrite_result = {0};
   iree_status_t status = loom_greedy_rewrite_run_region(
@@ -593,9 +494,10 @@ static iree_status_t loom_low_target_legalize_function(
       pass_state->mode == LOOM_TARGET_LEGALIZATION_MODE_FINAL) {
     status = loom_low_target_legalize_verify_final(
         module, &state, pass_state,
-        loom_greedy_rewrite_driver_fact_table(&rewrite_driver), arena,
+        loom_greedy_rewrite_driver_fact_table(&rewrite_driver),
         &final_error_count);
   }
+  loom_low_target_legalize_destroy_query_scope(&state);
   loom_greedy_rewrite_driver_deinitialize(&rewrite_driver);
   iree_arena_deinitialize(&rewrite_arena);
   loom_pass_value_fact_owner_deinitialize(&rewrite_value_facts);

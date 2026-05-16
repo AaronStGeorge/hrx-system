@@ -34,6 +34,8 @@ extern "C" {
 #endif
 
 typedef struct loom_low_lower_context_t loom_low_lower_context_t;
+typedef struct loom_low_lower_source_query_scope_t
+    loom_low_lower_source_query_scope_t;
 typedef struct loom_low_lower_rule_set_t loom_low_lower_rule_set_t;
 typedef struct loom_low_source_memory_access_plan_t
     loom_low_source_memory_access_plan_t;
@@ -537,6 +539,34 @@ iree_status_t loom_low_lower_import_declaration(
     loom_module_t* module, loom_func_like_t source_declaration,
     const loom_low_lower_options_t* options,
     loom_low_lower_result_t* out_result);
+
+// Creates a read-only source-to-low target contract query scope for one source
+// function.
+//
+// The scope shares source-to-low's contract adapter: generated rule refs,
+// policy map-contract-value callbacks, descriptor-matrix queries, and value
+// materializer predicates all observe the same lowering context shape used by
+// loom_low_lower_function. Callers must destroy the scope before releasing
+// |module| or |options| even though the scope storage itself is arena-owned.
+iree_status_t loom_low_lower_source_query_scope_create(
+    loom_module_t* module, loom_func_like_t source_function,
+    const loom_low_lower_options_t* options, iree_arena_allocator_t* arena,
+    loom_low_lower_source_query_scope_t** out_scope);
+
+// Releases analyses owned by |scope|. The scope allocation itself remains owned
+// by the arena passed to loom_low_lower_source_query_scope_create.
+void loom_low_lower_source_query_scope_destroy(
+    loom_low_lower_source_query_scope_t* scope);
+
+// Returns a contract-query callback backed by |scope|.
+loom_target_contract_query_callback_t
+loom_low_lower_source_query_scope_callback(
+    loom_low_lower_source_query_scope_t* scope);
+
+// Returns the active function-local value domain owned by |scope|, or NULL when
+// the scoped source function has no body.
+const loom_local_value_domain_t* loom_low_lower_source_query_scope_value_domain(
+    const loom_low_lower_source_query_scope_t* scope);
 
 // Returns the module being mutated by the current lowering.
 loom_module_t* loom_low_lower_context_module(loom_low_lower_context_t* context);
