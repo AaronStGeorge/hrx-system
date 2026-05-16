@@ -159,12 +159,16 @@ iree_status_t loom_compile_run_pipeline(
   loom_target_pass_predicate_provider_storage_t predicate_storage = {0};
   loom_target_pass_predicate_provider_storage_initialize(block_pool,
                                                          &predicate_storage);
+  if (options->report != NULL) {
+    loom_target_compile_report_initialize_if_empty(
+        options->report, &options->report_row_storage);
+  }
   loom_pass_tool_run_options_t run_options = {
       .registry = pass_registry,
       .environment = loom_low_pass_environment_storage_initialize(
           &options->low_descriptor_registry->registry,
           &low_lower_policy_registry, &low_legality_provider_list,
-          &legalizer_provider_list, &math_policy_registry,
+          &legalizer_provider_list, &math_policy_registry, options->report,
           &low_pass_environment_storage),
       .predicate_provider =
           loom_target_pass_predicate_provider(&predicate_storage),

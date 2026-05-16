@@ -163,7 +163,11 @@ static void loom_target_legalizer_registry_fill_entries(
       const uint8_t op_index = loom_op_dialect_index(source_entry->root_kind);
       loom_target_legalizer_op_entry_t* op_entry =
           &op_entries_by_dialect[dialect_id][op_index];
-      entries[op_entry->entry_start + op_entry->entry_count++] = *source_entry;
+      loom_target_legalizer_entry_t* target_entry =
+          &entries[op_entry->entry_start + op_entry->entry_count++];
+      *target_entry = *source_entry;
+      target_entry->provider_name = provider->name;
+      target_entry->provider_strategy = provider->strategy;
     }
   }
 }

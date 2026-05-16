@@ -199,6 +199,7 @@ static iree_status_t loom_compile_report_options_initialize(
 static iree_status_t loom_compile_run_pass_pipeline(
     const loom_run_execution_environment_t* environment,
     loom_run_session_t* session, loom_run_module_t* run_module,
+    const loom_run_candidate_compile_options_t* compile_options,
     loom_pass_run_result_t* out_run_result) {
   loom_compile_pipeline_options_t pipeline_options = {0};
   loom_compile_pipeline_options_initialize(&pipeline_options);
@@ -213,6 +214,8 @@ static iree_status_t loom_compile_run_pass_pipeline(
   };
   pipeline_options.source_resolver =
       loom_run_module_source_resolver(run_module);
+  pipeline_options.report = compile_options->report;
+  pipeline_options.report_row_storage = compile_options->report_row_storage;
 
   return loom_compile_run_pipeline(run_module->module, &pipeline_options,
                                    loom_run_session_block_pool(session),
@@ -440,7 +443,7 @@ int main(int argc, char** argv) {
   if (iree_status_is_ok(status)) {
     loom_pass_run_result_t pass_run_result = {0};
     status = loom_compile_run_pass_pipeline(&environment, &session, &run_module,
-                                            &pass_run_result);
+                                            &compile_options, &pass_run_result);
     if (iree_status_is_ok(status) && pass_run_result.error_count != 0) {
       exit_code = 1;
     }

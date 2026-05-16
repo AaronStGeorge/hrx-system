@@ -115,6 +115,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::pass_environment
     loom::src::loom::codegen::low::source_selection
     loom::src::loom::ir
+    loom::src::loom::ops::op_defs
     loom::src::loom::pass::pipeline
     loom::src::loom::pass::registry
     loom::src::loom::pass::types
@@ -122,6 +123,7 @@ loom_cc_library(
     loom::src::loom::passes::scf_to_cfg
     loom::src::loom::passes::vector::target_legalization
     loom::src::loom::rewrite::greedy
+    loom::src::loom::target::compile_report
     loom::src::loom::target::legalization
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::low_legality
@@ -146,6 +148,33 @@ loom_cc_test(
     loom::src::loom::ops::target
     loom::src::loom::ops::test
     loom::src::loom::pass::value_facts
+    loom::src::loom::target::test::contracts::core_lower_rules
+    loom::src::loom::target::test::low_registry
+    loom::src::loom::target::test::lower
+    loom::src::loom::testing::module_ptr
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    target_legalize_test
+  SRCS
+    "target_legalize_test.cc"
+  DEPS
+    ::target_legalize
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::codegen::low::pass_environment
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::target
+    loom::src::loom::ops::test
+    loom::src::loom::ops::vector
+    loom::src::loom::pass::value_facts
+    loom::src::loom::target::compile_report
     loom::src::loom::target::test::contracts::core_lower_rules
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower

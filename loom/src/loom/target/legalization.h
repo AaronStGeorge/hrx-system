@@ -58,6 +58,15 @@ typedef enum loom_target_legalizer_action_e {
   LOOM_TARGET_LEGALIZER_ACTION_REJECT_UNSUPPORTED_FINAL = 4,
 } loom_target_legalizer_action_t;
 
+typedef enum loom_target_legalizer_strategy_e {
+  // The provider did not classify its rewrite strategy.
+  LOOM_TARGET_LEGALIZER_STRATEGY_UNKNOWN = 0,
+  // Target-specific rewrite intended to reach a native target contract.
+  LOOM_TARGET_LEGALIZER_STRATEGY_TARGET = 1,
+  // Target-independent reference rewrite used as a portable fallback.
+  LOOM_TARGET_LEGALIZER_STRATEGY_REFERENCE = 2,
+} loom_target_legalizer_strategy_t;
+
 typedef struct loom_target_legalizer_result_t {
   // Outcome selected by the legalizer.
   loom_target_legalizer_action_t action;
@@ -98,6 +107,10 @@ typedef iree_status_t (*loom_target_legalizer_fn_t)(
 struct loom_target_legalizer_entry_t {
   // Op kind this legalizer can rewrite.
   loom_op_kind_t root_kind;
+  // Stable provider name attached while composing the dense registry.
+  iree_string_view_t provider_name;
+  // Rewrite strategy attached while composing the dense registry.
+  loom_target_legalizer_strategy_t provider_strategy;
   // Rewriter callback for root_kind.
   loom_target_legalizer_fn_t legalize;
   // Provider-owned payload consumed by legalize.
@@ -107,6 +120,8 @@ struct loom_target_legalizer_entry_t {
 struct loom_target_legalizer_provider_t {
   // Stable provider name for cold reports and diagnostics.
   iree_string_view_t name;
+  // Strategy shared by legalizer rows from this provider.
+  loom_target_legalizer_strategy_t strategy;
   // Legalizer rows contributed by this provider.
   const loom_target_legalizer_entry_t* entries;
   // Number of rows in entries.

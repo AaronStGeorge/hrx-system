@@ -449,7 +449,8 @@ iree_status_t loom_check_execute_pass(
             &low_registry.registry, low_lower_policy_registry_ref,
             environment ? &environment->low_legality_provider_list : NULL,
             environment ? &environment->legalizer_provider_list : NULL,
-            math_policy_registry_ref, &low_pass_environment_storage),
+            math_policy_registry_ref, /*compile_report=*/NULL,
+            &low_pass_environment_storage),
         .predicate_provider =
             loom_target_pass_predicate_provider(&predicate_storage),
         .block_pool = block_pool,

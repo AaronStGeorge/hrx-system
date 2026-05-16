@@ -28,9 +28,9 @@ static void loom_run_hal_candidate_initialize(
   if (report == NULL) {
     return;
   }
-  loom_target_compile_report_initialize(report);
-  loom_target_compile_report_set_row_storage(report,
-                                             &options->report_row_storage);
+  *report = *options->report;
+  loom_target_compile_report_initialize_if_empty(report,
+                                                 &options->report_row_storage);
   report->artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_EXECUTABLE;
   report->entry_symbol = options->entry_symbol;
   report->backend_name = backend->name;

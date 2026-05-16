@@ -725,7 +725,8 @@ static iree_status_t loom_opt_run_passes(
       .environment = loom_low_pass_environment_storage_initialize(
           &low_registry->registry, &low_lower_policy_registry,
           &low_legality_provider_list, &legalizer_provider_list,
-          &math_policy_registry, &low_pass_environment_storage),
+          &math_policy_registry, /*compile_report=*/NULL,
+          &low_pass_environment_storage),
       .predicate_provider =
           loom_target_pass_predicate_provider(&predicate_storage),
       .block_pool = block_pool,

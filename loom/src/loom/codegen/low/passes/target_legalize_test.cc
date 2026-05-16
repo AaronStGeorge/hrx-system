@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/codegen/low/passes/source_to_low.h"
+#include "loom/codegen/low/passes/target_legalize.h"
 
 #include <vector>
 
@@ -17,11 +17,12 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
-#include "loom/ops/low/ops.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/target/ops.h"
 #include "loom/ops/test/ops.h"
+#include "loom/ops/vector/ops.h"
 #include "loom/pass/value_facts.h"
+#include "loom/target/compile_report.h"
 #include "loom/target/test/contracts/core_lower_rules.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/target/test/lower.h"
@@ -32,28 +33,20 @@ namespace {
 
 using ModulePtr = ::loom::testing::ModulePtr;
 
-struct DiagnosticEmissionCollector {
-  int count = 0;
-};
-
-static iree_status_t CollectDiagnosticEmission(
-    void* user_data, const loom_diagnostic_emission_t*) {
-  auto* collector = static_cast<DiagnosticEmissionCollector*>(user_data);
-  ++collector->count;
-  return iree_ok_status();
-}
-
-class LowLowerPassTest : public ::testing::Test {
+class TargetLegalizePassTest : public ::testing::Test {
  protected:
+  using DialectVtablesFn =
+      const loom_op_vtable_t* const* (*)(iree_host_size_t*);
+
   void SetUp() override {
     iree_arena_block_pool_initialize(4096, iree_allocator_system(),
                                      &block_pool_);
     loom_context_initialize(iree_allocator_system(), &context_);
     RegisterDialect(LOOM_DIALECT_TARGET, loom_target_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_FUNC, loom_func_dialect_vtables);
-    RegisterDialect(LOOM_DIALECT_LOW, loom_low_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_SCALAR, loom_scalar_dialect_vtables);
     RegisterDialect(LOOM_DIALECT_TEST, loom_test_dialect_vtables);
+    RegisterDialect(LOOM_DIALECT_VECTOR, loom_vector_dialect_vtables);
     IREE_ASSERT_OK(loom_context_finalize(&context_));
     loom_test_low_descriptor_registry_initialize(&registry_);
   }
@@ -62,9 +55,6 @@ class LowLowerPassTest : public ::testing::Test {
     loom_context_deinitialize(&context_);
     iree_arena_block_pool_deinitialize(&block_pool_);
   }
-
-  using DialectVtablesFn =
-      const loom_op_vtable_t* const* (*)(iree_host_size_t*);
 
   void RegisterDialect(uint8_t dialect_id,
                        DialectVtablesFn dialect_vtables_fn) {
@@ -75,51 +65,45 @@ class LowLowerPassTest : public ::testing::Test {
   }
 
   ModulePtr Parse(iree_string_view_t source) {
-    loom_text_parse_options_t parse_options = {
+    const loom_text_parse_options_t parse_options = {
         .max_errors = 20,
     };
     loom_module_t* module = nullptr;
-    IREE_CHECK_OK(loom_text_parse(source, IREE_SV("source_to_low_test.loom"),
+    IREE_CHECK_OK(loom_text_parse(source, IREE_SV("target_legalize_test.loom"),
                                   &context_, &block_pool_, &parse_options,
                                   &module));
     IREE_ASSERT(module != nullptr);
     return ModulePtr(module);
   }
 
-  iree_status_t RunSourceToLow(
+  iree_status_t RunTargetLegalize(
       loom_low_lower_policy_registry_t* policy_registry, loom_module_t* module,
-      DiagnosticEmissionCollector* collector = nullptr) {
+      loom_target_compile_report_t* compile_report) {
     iree_arena_allocator_t instance_arena;
     iree_arena_initialize(&block_pool_, &instance_arena);
     loom_pass_value_fact_owner_t value_facts = {};
     loom_pass_value_fact_owner_initialize(&block_pool_, &value_facts);
-    const loom_pass_info_t* pass_info = loom_low_source_to_low_pass_info();
+    const loom_pass_info_t* pass_info = loom_low_target_legalize_pass_info();
     std::vector<int64_t> statistics(pass_info->statistic_count, 0);
     loom_low_pass_environment_storage_t low_pass_environment_storage;
     loom_pass_environment_t environment =
         loom_low_pass_environment_storage_initialize(
             &registry_.registry, policy_registry, nullptr, nullptr, nullptr,
-            nullptr, &low_pass_environment_storage);
+            compile_report, &low_pass_environment_storage);
     loom_pass_t pass = {
         .info = pass_info,
-        .module_run = loom_low_source_to_low_run,
+        .module_run = loom_low_target_legalize_run,
         .instance_arena = &instance_arena,
         .arena = &instance_arena,
         .statistics = statistics.data(),
         .environment = &environment,
         .value_facts = &value_facts,
     };
-    if (collector != nullptr) {
-      pass.diagnostic_emitter = {
-          .fn = CollectDiagnosticEmission,
-          .user_data = collector,
-      };
-    }
 
     iree_status_t status =
-        loom_low_source_to_low_create(&pass, iree_string_view_empty());
+        loom_low_target_legalize_create(&pass, iree_string_view_empty());
     if (iree_status_is_ok(status)) {
-      status = loom_low_source_to_low_run(&pass, module);
+      status = loom_low_target_legalize_run(&pass, module);
     }
     loom_pass_value_fact_owner_deinitialize(&value_facts);
     iree_arena_deinitialize(&instance_arena);
@@ -131,27 +115,17 @@ class LowLowerPassTest : public ::testing::Test {
   loom_target_low_descriptor_registry_t registry_ = {};
 };
 
-TEST_F(LowLowerPassTest,
-       ContractFragmentDrivesRuleSelectionWithoutLegacySpans) {
+TEST_F(TargetLegalizePassTest, RecordsRewriteRowsInCompileReport) {
   ModulePtr module = Parse(IREE_SV(
       "test.target<low_core> @test_target\n"
-      "func.def target(@test_target) @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
-      "  %sum = scalar.addi %lhs, %rhs : i32\n"
-      "  func.return %sum : i32\n"
+      "func.def target(@test_target) @reduce(%v: vector<4xi32>, %init: i32) "
+      "-> (i32) {\n"
+      "  %r = vector.reduce.axes<addi> %v, %init axes [0] : vector<4xi32>, "
+      "i32\n"
+      "  func.return %r : i32\n"
       "}\n"));
 
-  loom_low_lower_rule_set_t no_span_rule_set =
-      loom_test_low_core_lower_rule_set;
-  no_span_rule_set.spans = nullptr;
-  no_span_rule_set.span_count = 0;
-  const loom_low_lower_rule_set_t* rule_sets[] = {
-      &no_span_rule_set,
-  };
   loom_low_lower_policy_t policy = *loom_test_low_lower_policy();
-  policy.rule_sets = {
-      .count = IREE_ARRAYSIZE(rule_sets),
-      .values = rule_sets,
-  };
   const loom_low_lower_policy_registry_entry_t entries[] = {
       {
           .contract_set_key = IREE_SVL("test.low.core"),
@@ -162,11 +136,31 @@ TEST_F(LowLowerPassTest,
   loom_low_lower_policy_registry_initialize_from_entries(
       &policy_registry, entries, IREE_ARRAYSIZE(entries));
 
-  DiagnosticEmissionCollector collector;
-  iree_status_t status =
-      RunSourceToLow(&policy_registry, module.get(), &collector);
-  EXPECT_EQ(collector.count, 0);
-  IREE_ASSERT_OK(status);
+  loom_target_compile_report_legalization_row_t rows[8] = {};
+  const loom_target_compile_report_row_storage_t row_storage = {
+      .target_legalization_rows = rows,
+      .target_legalization_row_capacity = IREE_ARRAYSIZE(rows),
+  };
+  loom_target_compile_report_t report = {};
+  loom_target_compile_report_initialize(&report);
+  loom_target_compile_report_set_row_storage(&report, &row_storage);
+
+  IREE_ASSERT_OK(RunTargetLegalize(&policy_registry, module.get(), &report));
+  EXPECT_EQ(report.target_legalization_rewritten_op_count, 1u);
+  EXPECT_GE(report.target_legalization_row_total_count, 1u);
+  ASSERT_GE(report.target_legalization_row_count, 1u);
+  EXPECT_TRUE(iree_string_view_equal(rows[0].function_name, IREE_SV("reduce")));
+  EXPECT_TRUE(iree_string_view_equal(rows[0].source_op_name,
+                                     IREE_SV("vector.reduce.axes")));
+  EXPECT_TRUE(
+      iree_string_view_equal(rows[0].legalizer_name, IREE_SV("vector")));
+  EXPECT_EQ(rows[0].legalizer_strategy,
+            LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_REFERENCE);
+  EXPECT_EQ(rows[0].action,
+            LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REWRITTEN);
+  EXPECT_EQ(rows[0].mode, LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_MODE_EAGER);
+  EXPECT_GT(rows[0].created_op_count, 0u);
+  EXPECT_EQ(rows[0].erased_op_count, 1u);
 }
 
 }  // namespace

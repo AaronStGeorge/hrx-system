@@ -144,8 +144,7 @@ static iree_status_t loom_ireevm_archive_emit_state_initialize(
   out_state->max_errors = loom_target_entry_max_errors(
       &out_state->target_options, LOOM_IREEVM_ARCHIVE_EMIT_DEFAULT_MAX_ERRORS);
   if (out_state->report != NULL) {
-    loom_target_compile_report_initialize(out_state->report);
-    loom_target_compile_report_set_row_storage(
+    loom_target_compile_report_initialize_if_empty(
         out_state->report, options ? &options->report_row_storage : NULL);
     out_state->report->artifact_kind =
         LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;

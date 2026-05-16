@@ -703,8 +703,7 @@ iree_status_t loom_amdgpu_emit_hal_kernel_library(
   *out_library = (loom_amdgpu_hal_kernel_library_t){0};
   loom_target_compile_report_t* report = options ? options->report : NULL;
   if (report != NULL) {
-    loom_target_compile_report_initialize(report);
-    loom_target_compile_report_set_row_storage(
+    loom_target_compile_report_initialize_if_empty(
         report, options ? &options->report_row_storage : NULL);
     report->artifact_kind =
         LOOM_TARGET_COMPILE_ARTIFACT_KIND_HAL_KERNEL_LIBRARY;

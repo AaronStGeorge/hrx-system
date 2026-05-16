@@ -67,8 +67,20 @@ static iree_status_t loom_run_compile_report_capture_allocate_rows(
         IREE_STATUS_OUT_OF_RANGE,
         "compile report source-low row storage is too large");
   }
-  return iree_allocator_malloc(capture->host_allocator, source_low_rows_size,
-                               (void**)&capture->source_low_rows);
+  IREE_RETURN_IF_ERROR(
+      iree_allocator_malloc(capture->host_allocator, source_low_rows_size,
+                            (void**)&capture->source_low_rows));
+  iree_host_size_t target_legalization_rows_size = 0;
+  if (!iree_host_size_checked_mul(capture->options.row_limit,
+                                  sizeof(*capture->target_legalization_rows),
+                                  &target_legalization_rows_size)) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "compile report target-legalization row storage is too large");
+  }
+  return iree_allocator_malloc(capture->host_allocator,
+                               target_legalization_rows_size,
+                               (void**)&capture->target_legalization_rows);
 }
 
 iree_status_t loom_run_compile_report_capture_initialize(
@@ -106,7 +118,14 @@ void loom_run_compile_report_capture_configure_compile_options(
           .source_low_rows = capture->source_low_rows,
           .source_low_row_capacity =
               capture->source_low_rows != NULL ? capture->options.row_limit : 0,
+          .target_legalization_rows = capture->target_legalization_rows,
+          .target_legalization_row_capacity =
+              capture->target_legalization_rows != NULL
+                  ? capture->options.row_limit
+                  : 0,
       };
+  loom_target_compile_report_set_row_storage(
+      &capture->report, &compile_options->report_row_storage);
 }
 
 static iree_status_t loom_run_compile_report_capture_append_separator(
@@ -158,5 +177,7 @@ void loom_run_compile_report_capture_deinitialize(
   iree_allocator_free(capture->host_allocator, capture->spill_rows);
   iree_allocator_free(capture->host_allocator, capture->pressure_rows);
   iree_allocator_free(capture->host_allocator, capture->source_low_rows);
+  iree_allocator_free(capture->host_allocator,
+                      capture->target_legalization_rows);
   *capture = (loom_run_compile_report_capture_t){0};
 }

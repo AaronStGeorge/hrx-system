@@ -35,6 +35,10 @@ TEST(CompileReportCaptureTest, ConfiguresDetailedRowStorage) {
   EXPECT_EQ(compile_options.report_row_storage.source_low_rows,
             capture.source_low_rows);
   EXPECT_EQ(compile_options.report_row_storage.source_low_row_capacity, 2u);
+  EXPECT_EQ(compile_options.report_row_storage.target_legalization_rows,
+            capture.target_legalization_rows);
+  EXPECT_EQ(compile_options.report_row_storage.target_legalization_row_capacity,
+            2u);
 
   loom_run_compile_report_capture_deinitialize(&capture);
 }

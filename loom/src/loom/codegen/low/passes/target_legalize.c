@@ -10,12 +10,15 @@
 
 #include "loom/codegen/low/pass_environment.h"
 #include "loom/codegen/low/source_selection.h"
+#include "loom/ir/context.h"
+#include "loom/ops/op_defs.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 #include "loom/pass/value_facts.h"
 #include "loom/passes/scf_to_cfg.h"
 #include "loom/passes/vector/target_legalization.h"
 #include "loom/rewrite/greedy.h"
+#include "loom/target/compile_report.h"
 #include "loom/target/legalization.h"
 #include "loom/target/low_descriptor_registry.h"
 #include "loom/target/low_legality.h"
@@ -249,7 +252,137 @@ typedef struct loom_low_target_legalize_function_state_t {
   loom_target_low_legality_provider_list_t legality_provider_list;
   // Current legalization context passed to legalizer callbacks.
   loom_target_legalization_context_t legalization_context;
+  // Optional compile report receiving cold legalization decision rows.
+  loom_target_compile_report_t* compile_report;
 } loom_low_target_legalize_function_state_t;
+
+static loom_target_compile_report_legalization_mode_t
+loom_low_target_legalize_report_mode(loom_target_legalization_mode_t mode) {
+  switch (mode) {
+    case LOOM_TARGET_LEGALIZATION_MODE_EAGER:
+      return LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_MODE_EAGER;
+    case LOOM_TARGET_LEGALIZATION_MODE_FINAL:
+      return LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_MODE_FINAL;
+    default:
+      return LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_MODE_NONE;
+  }
+}
+
+static loom_target_compile_report_contract_outcome_t
+loom_low_target_legalize_report_contract_outcome(
+    loom_target_contract_query_outcome_t outcome) {
+  switch (outcome) {
+    case LOOM_TARGET_CONTRACT_QUERY_UNHANDLED:
+      return LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_UNHANDLED;
+    case LOOM_TARGET_CONTRACT_QUERY_LEGAL:
+      return LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_LEGAL;
+    case LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED:
+      return LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_UNSUPPORTED;
+    case LOOM_TARGET_CONTRACT_QUERY_INVALID_IR:
+      return LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_INVALID_IR;
+    default:
+      return LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_NONE;
+  }
+}
+
+static loom_target_compile_report_legalizer_strategy_t
+loom_low_target_legalize_report_legalizer_strategy(
+    loom_target_legalizer_strategy_t strategy) {
+  switch (strategy) {
+    case LOOM_TARGET_LEGALIZER_STRATEGY_TARGET:
+      return LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_TARGET;
+    case LOOM_TARGET_LEGALIZER_STRATEGY_REFERENCE:
+      return LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_REFERENCE;
+    case LOOM_TARGET_LEGALIZER_STRATEGY_UNKNOWN:
+    default:
+      return LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_NONE;
+  }
+}
+
+static iree_string_view_t loom_low_target_legalize_function_name(
+    const loom_low_target_legalize_function_state_t* state) {
+  const loom_symbol_ref_t callee =
+      loom_func_like_callee(state->selection->func);
+  if (!loom_symbol_ref_is_valid(callee) || callee.module_id != 0 ||
+      callee.symbol_id >= state->module->symbols.count) {
+    return iree_string_view_empty();
+  }
+  const loom_symbol_t* symbol =
+      &state->module->symbols.entries[callee.symbol_id];
+  if (symbol->name_id >= state->module->strings.count) {
+    return iree_string_view_empty();
+  }
+  return state->module->strings.entries[symbol->name_id];
+}
+
+static uint64_t loom_low_target_legalize_report_descriptor_id(
+    const loom_target_contract_query_result_t* query_result) {
+  return query_result->selected_descriptor
+             ? query_result->selected_descriptor->stable_id
+             : UINT64_MAX;
+}
+
+static bool loom_low_target_legalize_report_wants_rows(
+    const loom_low_target_legalize_function_state_t* state) {
+  return state->compile_report != NULL &&
+         state->compile_report->target_legalization_rows != NULL;
+}
+
+static void loom_low_target_legalize_record_report_row(
+    loom_low_target_legalize_function_state_t* state,
+    iree_string_view_t source_op_name, uint32_t source_op_kind,
+    loom_target_compile_report_legalization_action_t action,
+    const loom_target_contract_query_result_t* query_result,
+    const loom_target_legalizer_entry_t* legalizer_entry,
+    uint64_t created_op_count, uint64_t erased_op_count) {
+  if (state->compile_report == NULL) {
+    return;
+  }
+  const loom_target_compile_report_legalizer_strategy_t legalizer_strategy =
+      legalizer_entry ? loom_low_target_legalize_report_legalizer_strategy(
+                            legalizer_entry->provider_strategy)
+                      : LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_NONE;
+  if (!loom_low_target_legalize_report_wants_rows(state)) {
+    loom_target_compile_report_record_legalization_summary(
+        state->compile_report, action, legalizer_strategy);
+    return;
+  }
+
+  const loom_target_bundle_t* bundle = state->selection->target_bundle;
+  const loom_target_config_t* config = bundle ? bundle->config : NULL;
+  const iree_string_view_t legalizer_name = legalizer_entry
+                                                ? legalizer_entry->provider_name
+                                                : iree_string_view_empty();
+  const loom_target_compile_report_legalization_row_t row = {
+      .function_name = loom_low_target_legalize_function_name(state),
+      .source_op_name = source_op_name,
+      .source_op_kind = source_op_kind,
+      .target_bundle_name = bundle ? bundle->name : iree_string_view_empty(),
+      .target_config_name = config ? config->name : iree_string_view_empty(),
+      .legalizer_name = legalizer_name,
+      .legalizer_strategy = legalizer_strategy,
+      .mode = loom_low_target_legalize_report_mode(
+          state->legalization_context.mode),
+      .action = action,
+      .contract_outcome = loom_low_target_legalize_report_contract_outcome(
+          query_result->outcome),
+      .binding_index = query_result->binding_index,
+      .case_index = query_result->case_index,
+      .rule_set_index = query_result->rule_set_index,
+      .rule_index = query_result->rule_index,
+      .diagnostic_index = query_result->diagnostic_index,
+      .descriptor_id =
+          loom_low_target_legalize_report_descriptor_id(query_result),
+      .source_rejection_bits = query_result->source_rejection_bits,
+      .target_rejection_bits = query_result->target_rejection_bits,
+      .missing_feature_bits = query_result->missing_feature_bits,
+      .missing_fact_bits = query_result->missing_fact_bits,
+      .created_op_count = created_op_count,
+      .erased_op_count = erased_op_count,
+  };
+  loom_target_compile_report_record_legalization_row(state->compile_report,
+                                                     &row);
+}
 
 static void loom_low_target_legalize_destroy_query_scope(
     loom_low_target_legalize_function_state_t* state) {
@@ -321,6 +454,12 @@ static iree_status_t loom_low_target_legalize_rewrite_op(
   if (loom_target_legalizer_op_entry_is_empty(op_entry)) {
     return iree_ok_status();
   }
+  const bool report_wants_rows =
+      loom_low_target_legalize_report_wants_rows(state);
+  const iree_string_view_t source_op_name =
+      report_wants_rows ? loom_op_name(state->module, op)
+                        : iree_string_view_empty();
+  const uint32_t source_op_kind = op->kind;
 
   state->legalization_context.fact_table = driver->latest_facts;
   state->legalization_context.rewriter = &driver->rewriter;
@@ -330,11 +469,21 @@ static iree_status_t loom_low_target_legalize_rewrite_op(
   IREE_RETURN_IF_ERROR(loom_target_legalization_query_contract(
       &state->legalization_context, op, &query_result));
   if (query_result.outcome == LOOM_TARGET_CONTRACT_QUERY_LEGAL) {
+    loom_low_target_legalize_record_report_row(
+        state, source_op_name, source_op_kind,
+        LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_LEGAL, &query_result,
+        /*legalizer_entry=*/NULL, /*created_op_count=*/0,
+        /*erased_op_count=*/0);
     loom_pass_statistic_add(state->pass,
                             LOOM_LOW_TARGET_LEGALIZE_STAT_OPS_LEGAL, 1);
     return iree_ok_status();
   }
   if (query_result.outcome == LOOM_TARGET_CONTRACT_QUERY_INVALID_IR) {
+    loom_low_target_legalize_record_report_row(
+        state, source_op_name, source_op_kind,
+        LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REJECT_INVALID_IR,
+        &query_result, /*legalizer_entry=*/NULL, /*created_op_count=*/0,
+        /*erased_op_count=*/0);
     loom_pass_statistic_add(state->pass,
                             LOOM_LOW_TARGET_LEGALIZE_STAT_OPS_DEFERRED, 1);
     return iree_ok_status();
@@ -344,11 +493,27 @@ static iree_status_t loom_low_target_legalize_rewrite_op(
     const loom_target_legalizer_entry_t* entry =
         &state->legalizer_registry->entries[op_entry.entry_start + i];
     driver->rewriter.flags = 0;
+    const uint64_t created_op_count_before = driver->rewriter.created_op_count;
+    const uint64_t erased_op_count_before = driver->rewriter.erased_op_count;
     loom_target_legalizer_result_t legalizer_result = {
         .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
     };
     IREE_RETURN_IF_ERROR(entry->legalize(entry, &state->legalization_context,
                                          op, &legalizer_result));
+    const bool legalizer_mutated =
+        iree_any_bit_set(driver->rewriter.flags, LOOM_REWRITER_FLAG_CHANGED);
+    if (legalizer_result.action == LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN) {
+      if (!legalizer_mutated) {
+        return iree_make_status(
+            IREE_STATUS_FAILED_PRECONDITION,
+            "target legalizer reported REWRITTEN without mutating IR");
+      }
+    } else if (legalizer_mutated) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "target legalizer action %d mutated IR without reporting REWRITTEN",
+          (int)legalizer_result.action);
+    }
     switch (legalizer_result.action) {
       case LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT:
         continue;
@@ -356,13 +521,40 @@ static iree_status_t loom_low_target_legalize_rewrite_op(
         loom_greedy_rewrite_result_record_change(
             result, &driver->rewriter,
             LOOM_GREEDY_REWRITE_CHANGE_FLAG_COUNT_MODIFIED_OP);
+        loom_low_target_legalize_record_report_row(
+            state, source_op_name, source_op_kind,
+            LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REWRITTEN,
+            &query_result, entry,
+            driver->rewriter.created_op_count - created_op_count_before,
+            driver->rewriter.erased_op_count - erased_op_count_before);
         loom_pass_statistic_add(state->pass,
                                 LOOM_LOW_TARGET_LEGALIZE_STAT_OPS_REWRITTEN, 1);
         *out_changed = true;
         return iree_ok_status();
       case LOOM_TARGET_LEGALIZER_ACTION_DEFER:
+        loom_low_target_legalize_record_report_row(
+            state, source_op_name, source_op_kind,
+            LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_DEFERRED,
+            &query_result, entry,
+            /*created_op_count=*/0, /*erased_op_count=*/0);
+        loom_pass_statistic_add(state->pass,
+                                LOOM_LOW_TARGET_LEGALIZE_STAT_OPS_DEFERRED, 1);
+        return iree_ok_status();
       case LOOM_TARGET_LEGALIZER_ACTION_REJECT_INVALID_IR:
+        loom_low_target_legalize_record_report_row(
+            state, source_op_name, source_op_kind,
+            LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REJECT_INVALID_IR,
+            &query_result, entry,
+            /*created_op_count=*/0, /*erased_op_count=*/0);
+        loom_pass_statistic_add(state->pass,
+                                LOOM_LOW_TARGET_LEGALIZE_STAT_OPS_DEFERRED, 1);
+        return iree_ok_status();
       case LOOM_TARGET_LEGALIZER_ACTION_REJECT_UNSUPPORTED_FINAL:
+        loom_low_target_legalize_record_report_row(
+            state, source_op_name, source_op_kind,
+            LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REJECT_UNSUPPORTED_FINAL,
+            &query_result, entry,
+            /*created_op_count=*/0, /*erased_op_count=*/0);
         loom_pass_statistic_add(state->pass,
                                 LOOM_LOW_TARGET_LEGALIZE_STAT_OPS_DEFERRED, 1);
         return iree_ok_status();
@@ -375,6 +567,11 @@ static iree_status_t loom_low_target_legalize_rewrite_op(
 
   loom_pass_statistic_add(state->pass,
                           LOOM_LOW_TARGET_LEGALIZE_STAT_OPS_DEFERRED, 1);
+  loom_low_target_legalize_record_report_row(
+      state, source_op_name, source_op_kind,
+      LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_UNHANDLED, &query_result,
+      /*legalizer_entry=*/NULL, /*created_op_count=*/0,
+      /*erased_op_count=*/0);
   return iree_ok_status();
 }
 
@@ -469,6 +666,7 @@ static iree_status_t loom_low_target_legalize_function(
       .query_scope_arena = arena,
       .legalizer_registry = legalizer_registry,
       .legality_provider_list = legality_provider_list,
+      .compile_report = loom_low_pass_capability_compile_report(low_capability),
   };
   IREE_RETURN_IF_ERROR(loom_target_low_descriptor_set_select_for_bundle(
       descriptor_registry, selection->target_bundle, &state.descriptor_set));

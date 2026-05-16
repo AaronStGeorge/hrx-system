@@ -71,6 +71,70 @@ static iree_string_view_t loom_target_compile_report_source_low_selection_name(
   }
 }
 
+static iree_string_view_t loom_target_compile_report_legalization_mode_name(
+    loom_target_compile_report_legalization_mode_t mode) {
+  switch (mode) {
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_MODE_EAGER:
+      return IREE_SV("eager");
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_MODE_FINAL:
+      return IREE_SV("final");
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_MODE_NONE:
+    default:
+      return IREE_SV("none");
+  }
+}
+
+static iree_string_view_t loom_target_compile_report_legalization_action_name(
+    loom_target_compile_report_legalization_action_t action) {
+  switch (action) {
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_LEGAL:
+      return IREE_SV("legal");
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REWRITTEN:
+      return IREE_SV("rewritten");
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_DEFERRED:
+      return IREE_SV("deferred");
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REJECT_INVALID_IR:
+      return IREE_SV("reject-invalid-ir");
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REJECT_UNSUPPORTED_FINAL:
+      return IREE_SV("reject-unsupported-final");
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_UNHANDLED:
+      return IREE_SV("unhandled");
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_NONE:
+    default:
+      return IREE_SV("none");
+  }
+}
+
+static iree_string_view_t loom_target_compile_report_contract_outcome_name(
+    loom_target_compile_report_contract_outcome_t outcome) {
+  switch (outcome) {
+    case LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_UNHANDLED:
+      return IREE_SV("unhandled");
+    case LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_LEGAL:
+      return IREE_SV("legal");
+    case LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_UNSUPPORTED:
+      return IREE_SV("unsupported");
+    case LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_INVALID_IR:
+      return IREE_SV("invalid-ir");
+    case LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_NONE:
+    default:
+      return IREE_SV("none");
+  }
+}
+
+static iree_string_view_t loom_target_compile_report_legalizer_strategy_name(
+    loom_target_compile_report_legalizer_strategy_t strategy) {
+  switch (strategy) {
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_TARGET:
+      return IREE_SV("target");
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_REFERENCE:
+      return IREE_SV("reference");
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_NONE:
+    default:
+      return IREE_SV("none");
+  }
+}
+
 typedef struct loom_target_compile_report_move_cause_descriptor_t {
   // Residual move cause used as the report counter index.
   loom_target_compile_report_move_cause_t cause;
@@ -304,6 +368,28 @@ static iree_status_t loom_target_compile_report_format_summary(
         report->source_low_row_total_count));
   }
 
+  if (iree_any_bit_set(
+          report->detail_flags,
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS)) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder,
+        "COMPILE-REPORT: target_legalization legal=%" PRIu64
+        " rewritten=%" PRIu64 " target_rewritten=%" PRIu64
+        " reference_rewritten=%" PRIu64 " deferred=%" PRIu64
+        " invalid_ir=%" PRIu64 " unsupported=%" PRIu64 " unhandled=%" PRIu64
+        " rows copied=%" PRIhsz " total=%" PRIhsz "\n",
+        report->target_legalization_legal_op_count,
+        report->target_legalization_rewritten_op_count,
+        report->target_legalization_target_rewritten_op_count,
+        report->target_legalization_reference_rewritten_op_count,
+        report->target_legalization_deferred_op_count,
+        report->target_legalization_invalid_ir_op_count,
+        report->target_legalization_unsupported_op_count,
+        report->target_legalization_unhandled_op_count,
+        report->target_legalization_row_count,
+        report->target_legalization_row_total_count));
+  }
+
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_MEMORY)) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
@@ -458,6 +544,57 @@ static iree_status_t loom_target_compile_report_format_source_low_rows(
         (int)source_op_name.size, source_op_name.data, (int)selection_name.size,
         selection_name.data, row->plan_id, row->descriptor_id,
         row->emitted_low_op_count));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_target_compile_report_format_legalization_rows(
+    const loom_target_compile_report_t* report,
+    iree_string_builder_t* builder) {
+  for (iree_host_size_t i = 0; i < report->target_legalization_row_count; ++i) {
+    const loom_target_compile_report_legalization_row_t* row =
+        &report->target_legalization_rows[i];
+    const iree_string_view_t function_name =
+        loom_target_compile_report_non_empty(row->function_name);
+    const iree_string_view_t source_op_name =
+        loom_target_compile_report_non_empty(row->source_op_name);
+    const iree_string_view_t target_bundle_name =
+        loom_target_compile_report_non_empty(row->target_bundle_name);
+    const iree_string_view_t target_config_name =
+        loom_target_compile_report_non_empty(row->target_config_name);
+    const iree_string_view_t legalizer_name =
+        loom_target_compile_report_non_empty(row->legalizer_name);
+    const iree_string_view_t strategy_name =
+        loom_target_compile_report_legalizer_strategy_name(
+            row->legalizer_strategy);
+    const iree_string_view_t mode_name =
+        loom_target_compile_report_legalization_mode_name(row->mode);
+    const iree_string_view_t action_name =
+        loom_target_compile_report_legalization_action_name(row->action);
+    const iree_string_view_t outcome_name =
+        loom_target_compile_report_contract_outcome_name(row->contract_outcome);
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+        builder,
+        "COMPILE-REPORT: target_legalization[%" PRIhsz
+        "] function=%.*s source_op=%.*s mode=%.*s action=%.*s "
+        "contract=%.*s legalizer=%.*s strategy=%.*s bundle=%.*s "
+        "config=%.*s binding=%u case=%u rule_set=%u rule=%u diagnostic=%u "
+        "descriptor=%" PRIu64 " source_rejections=0x%08" PRIx32
+        " target_rejections=0x%08" PRIx32 " missing_features=0x%08" PRIx32
+        " missing_facts=0x%08" PRIx32 " created_ops=%" PRIu64
+        " erased_ops=%" PRIu64 "\n",
+        i, (int)function_name.size, function_name.data,
+        (int)source_op_name.size, source_op_name.data, (int)mode_name.size,
+        mode_name.data, (int)action_name.size, action_name.data,
+        (int)outcome_name.size, outcome_name.data, (int)legalizer_name.size,
+        legalizer_name.data, (int)strategy_name.size, strategy_name.data,
+        (int)target_bundle_name.size, target_bundle_name.data,
+        (int)target_config_name.size, target_config_name.data,
+        row->binding_index, row->case_index, row->rule_set_index,
+        row->rule_index, row->diagnostic_index, row->descriptor_id,
+        row->source_rejection_bits, row->target_rejection_bits,
+        row->missing_feature_bits, row->missing_fact_bits,
+        row->created_op_count, row->erased_op_count));
   }
   return iree_ok_status();
 }
@@ -923,6 +1060,126 @@ static iree_status_t loom_target_compile_report_format_source_low_json(
   return loom_output_stream_write_cstring(stream, "}");
 }
 
+static iree_status_t loom_target_compile_report_format_legalization_row_json(
+    const loom_target_compile_report_legalization_row_t* row,
+    iree_host_size_t row_index, loom_output_stream_t* stream) {
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+      stream, &first_field, "index", row_index));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "function", row->function_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "source_op", row->source_op_name));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "source_op_kind", row->source_op_kind));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "target_bundle", row->target_bundle_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "target_config", row->target_config_name));
+  IREE_RETURN_IF_ERROR(
+      loom_target_compile_report_json_write_optional_string_field(
+          stream, &first_field, "legalizer", row->legalizer_name));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_string_field(
+      stream, &first_field, "legalizer_strategy",
+      loom_target_compile_report_legalizer_strategy_name(
+          row->legalizer_strategy)));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_string_field(
+      stream, &first_field, "mode",
+      loom_target_compile_report_legalization_mode_name(row->mode)));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_string_field(
+      stream, &first_field, "action",
+      loom_target_compile_report_legalization_action_name(row->action)));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_string_field(
+      stream, &first_field, "contract_outcome",
+      loom_target_compile_report_contract_outcome_name(row->contract_outcome)));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_optional_u16_field(
+      stream, &first_field, "binding_index", row->binding_index));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_optional_u16_field(
+      stream, &first_field, "case_index", row->case_index));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_optional_u16_field(
+      stream, &first_field, "rule_set_index", row->rule_set_index));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_optional_u16_field(
+      stream, &first_field, "rule_index", row->rule_index));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_optional_u16_field(
+      stream, &first_field, "diagnostic_index", row->diagnostic_index));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_optional_u64_field(
+      stream, &first_field, "descriptor_id", row->descriptor_id));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "source_rejection_bits",
+      row->source_rejection_bits));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "target_rejection_bits",
+      row->target_rejection_bits));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "missing_feature_bits", row->missing_feature_bits));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "missing_fact_bits", row->missing_fact_bits));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "created_op_count", row->created_op_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "erased_op_count", row->erased_op_count));
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
+static iree_status_t loom_target_compile_report_format_legalization_json(
+    const loom_target_compile_report_t* report,
+    loom_target_compile_report_format_mode_t mode,
+    loom_output_stream_t* stream) {
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "legal_op_count",
+      report->target_legalization_legal_op_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "rewritten_op_count",
+      report->target_legalization_rewritten_op_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "target_rewritten_op_count",
+      report->target_legalization_target_rewritten_op_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "reference_rewritten_op_count",
+      report->target_legalization_reference_rewritten_op_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "deferred_op_count",
+      report->target_legalization_deferred_op_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "invalid_ir_op_count",
+      report->target_legalization_invalid_ir_op_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "unsupported_op_count",
+      report->target_legalization_unsupported_op_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u64_field(
+      stream, &first_field, "unhandled_op_count",
+      report->target_legalization_unhandled_op_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+      stream, &first_field, "copied_count",
+      report->target_legalization_row_count));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_size_field(
+      stream, &first_field, "total_count",
+      report->target_legalization_row_total_count));
+  if (mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
+        stream, &first_field, "rows"));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
+    for (iree_host_size_t i = 0; i < report->target_legalization_row_count;
+         ++i) {
+      if (i != 0) {
+        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
+      }
+      IREE_RETURN_IF_ERROR(
+          loom_target_compile_report_format_legalization_row_json(
+              &report->target_legalization_rows[i], i, stream));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "]"));
+  }
+  return loom_output_stream_write_cstring(stream, "}");
+}
+
 iree_status_t loom_target_compile_report_format_text(
     const loom_target_compile_report_t* report,
     const loom_target_compile_report_format_options_t* options,
@@ -941,6 +1198,8 @@ iree_status_t loom_target_compile_report_format_text(
         loom_target_compile_report_format_spill_rows(report, builder));
     IREE_RETURN_IF_ERROR(
         loom_target_compile_report_format_source_low_rows(report, builder));
+    IREE_RETURN_IF_ERROR(
+        loom_target_compile_report_format_legalization_rows(report, builder));
   }
   return iree_ok_status();
 }
@@ -1068,6 +1327,14 @@ iree_status_t loom_target_compile_report_format_json(
     IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
         stream, &first_field, "source_low"));
     IREE_RETURN_IF_ERROR(loom_target_compile_report_format_source_low_json(
+        report, options->mode, stream));
+  }
+  if (iree_any_bit_set(
+          report->detail_flags,
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS)) {
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_json_begin_field(
+        stream, &first_field, "target_legalization"));
+    IREE_RETURN_IF_ERROR(loom_target_compile_report_format_legalization_json(
         report, options->mode, stream));
   }
   return loom_output_stream_write_cstring(stream, "}");

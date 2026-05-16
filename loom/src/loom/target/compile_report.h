@@ -51,6 +51,8 @@ enum {
   LOOM_TARGET_COMPILE_REPORT_DETAIL_MOVE_CAUSES = 1u << 8,
   // Static instruction-mix feature counters were recorded.
   LOOM_TARGET_COMPILE_REPORT_DETAIL_STATIC_INSTRUCTION_MIX = 1u << 9,
+  // Target-legalization decision rows were recorded or counted.
+  LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS = 1u << 10,
 };
 
 typedef enum loom_target_compile_report_move_cause_e {
@@ -90,6 +92,54 @@ typedef enum loom_target_compile_report_source_low_selection_kind_e {
   // Selection came from a target-owned callback plan.
   LOOM_TARGET_COMPILE_REPORT_SOURCE_LOW_SELECTION_PLAN = 2,
 } loom_target_compile_report_source_low_selection_kind_t;
+
+typedef enum loom_target_compile_report_legalization_mode_e {
+  // No target-legalization mode was recorded.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_MODE_NONE = 0,
+  // Eager legalization may leave unsupported ops for later specialization.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_MODE_EAGER = 1,
+  // Final legalization must leave the function accepted by target lowering.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_MODE_FINAL = 2,
+} loom_target_compile_report_legalization_mode_t;
+
+typedef enum loom_target_compile_report_legalization_action_e {
+  // No target-legalization action was recorded.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_NONE = 0,
+  // The target contract already accepts the source op.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_LEGAL = 1,
+  // A legalizer rewrote or erased the source op.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REWRITTEN = 2,
+  // A legalizer recognized the source op but deferred it to a later phase.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_DEFERRED = 3,
+  // The source op violates the source contract required before legalization.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REJECT_INVALID_IR = 4,
+  // The source op is recognized but unsupported by the final target contract.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REJECT_UNSUPPORTED_FINAL = 5,
+  // No composed legalizer had an opinion about the unsupported source op.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_UNHANDLED = 6,
+} loom_target_compile_report_legalization_action_t;
+
+typedef enum loom_target_compile_report_contract_outcome_e {
+  // No target-contract query outcome was recorded.
+  LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_NONE = 0,
+  // No linked target-contract fragment had an opinion about the op.
+  LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_UNHANDLED = 1,
+  // The op is already legal for the selected target contract.
+  LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_LEGAL = 2,
+  // The op family is recognized but unsupported by the selected target.
+  LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_UNSUPPORTED = 3,
+  // The op violates the source contract required before target selection.
+  LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_INVALID_IR = 4,
+} loom_target_compile_report_contract_outcome_t;
+
+typedef enum loom_target_compile_report_legalizer_strategy_e {
+  // No target-legalizer strategy was recorded.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_NONE = 0,
+  // Target-specific rewrite intended to reach a native target contract.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_TARGET = 1,
+  // Target-independent reference rewrite used as a portable fallback.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_REFERENCE = 2,
+} loom_target_compile_report_legalizer_strategy_t;
 
 // Residual move-cause counters for one category.
 typedef struct loom_target_compile_report_move_cause_counts_t {
@@ -215,6 +265,54 @@ typedef struct loom_target_compile_report_source_low_row_t {
   uint32_t emitted_low_op_count;
 } loom_target_compile_report_source_low_row_t;
 
+// One target-legalization decision row copied into a compile report.
+typedef struct loom_target_compile_report_legalization_row_t {
+  // Source function symbol containing the legalized source operation.
+  iree_string_view_t function_name;
+  // Source operation mnemonic considered by target legalization.
+  iree_string_view_t source_op_name;
+  // Numeric source operation kind considered by target legalization.
+  uint32_t source_op_kind;
+  // Target bundle selected for the containing function.
+  iree_string_view_t target_bundle_name;
+  // Target config selected for the containing function, if any.
+  iree_string_view_t target_config_name;
+  // Stable provider name for the legalizer that decided this row, if any.
+  iree_string_view_t legalizer_name;
+  // Strategy for the deciding legalizer, if any.
+  loom_target_compile_report_legalizer_strategy_t legalizer_strategy;
+  // Target-legalization phase in which the decision was made.
+  loom_target_compile_report_legalization_mode_t mode;
+  // Legalization decision recorded for this source operation.
+  loom_target_compile_report_legalization_action_t action;
+  // Read-only target-contract query outcome observed before rewriting.
+  loom_target_compile_report_contract_outcome_t contract_outcome;
+  // Active target-contract fragment binding ordinal, or UINT16_MAX.
+  uint16_t binding_index;
+  // Composed target-contract case ordinal, or UINT16_MAX.
+  uint16_t case_index;
+  // Policy rule-set ordinal selected or rejected, or UINT16_MAX.
+  uint16_t rule_set_index;
+  // Policy rule ordinal selected or rejected, or UINT16_MAX.
+  uint16_t rule_index;
+  // Diagnostic row ordinal retained by the rejected rule, or UINT16_MAX.
+  uint16_t diagnostic_index;
+  // Low descriptor stable id selected by the accepted rule, or UINT64_MAX.
+  uint64_t descriptor_id;
+  // Compact target-independent rejection flags.
+  uint32_t source_rejection_bits;
+  // Compact target-owned rejection flags.
+  uint32_t target_rejection_bits;
+  // Target feature bits missing from the selected bundle.
+  uint32_t missing_feature_bits;
+  // Value fact categories missing for the selected rule.
+  uint32_t missing_fact_bits;
+  // Operations created by the deciding legalizer.
+  uint64_t created_op_count;
+  // Operations erased by the deciding legalizer.
+  uint64_t erased_op_count;
+} loom_target_compile_report_legalization_row_t;
+
 // Caller-owned storage for optional detailed compile report rows.
 typedef struct loom_target_compile_report_row_storage_t {
   // Caller-owned pressure row storage.
@@ -229,6 +327,10 @@ typedef struct loom_target_compile_report_row_storage_t {
   loom_target_compile_report_source_low_row_t* source_low_rows;
   // Capacity of |source_low_rows|.
   iree_host_size_t source_low_row_capacity;
+  // Caller-owned target-legalization row storage.
+  loom_target_compile_report_legalization_row_t* target_legalization_rows;
+  // Capacity of |target_legalization_rows|.
+  iree_host_size_t target_legalization_row_capacity;
 } loom_target_compile_report_row_storage_t;
 
 // Structured feedback from one module-to-artifact compilation.
@@ -307,6 +409,22 @@ typedef struct loom_target_compile_report_t {
   uint64_t source_low_selected_op_count;
   // Number of low operations emitted during source-to-low lowering.
   uint64_t source_low_emitted_op_count;
+  // Number of source ops already accepted by target legalization.
+  uint64_t target_legalization_legal_op_count;
+  // Number of source ops rewritten by target legalization.
+  uint64_t target_legalization_rewritten_op_count;
+  // Number of target-specific native-path rewrites.
+  uint64_t target_legalization_target_rewritten_op_count;
+  // Number of portable reference fallback rewrites.
+  uint64_t target_legalization_reference_rewritten_op_count;
+  // Number of source ops deferred by target legalization.
+  uint64_t target_legalization_deferred_op_count;
+  // Number of invalid source ops observed by target legalization.
+  uint64_t target_legalization_invalid_ir_op_count;
+  // Number of final unsupported source ops observed by target legalization.
+  uint64_t target_legalization_unsupported_op_count;
+  // Number of unsupported source ops with no legalizer opinion.
+  uint64_t target_legalization_unhandled_op_count;
   // Residual target move counts indexed by
   // loom_target_compile_report_move_cause_t.
   loom_target_compile_report_move_cause_counts_t
@@ -337,6 +455,14 @@ typedef struct loom_target_compile_report_t {
   iree_host_size_t source_low_row_count;
   // Total number of available source-low rows before capacity truncation.
   iree_host_size_t source_low_row_total_count;
+  // Caller-owned target-legalization row storage.
+  loom_target_compile_report_legalization_row_t* target_legalization_rows;
+  // Capacity of |target_legalization_rows|.
+  iree_host_size_t target_legalization_row_capacity;
+  // Number of target-legalization rows copied into storage.
+  iree_host_size_t target_legalization_row_count;
+  // Total number of available target-legalization rows before truncation.
+  iree_host_size_t target_legalization_row_total_count;
   // Estimated target private memory bytes.
   uint64_t private_memory_bytes;
   // Estimated target local/shared memory bytes.
@@ -349,6 +475,14 @@ void loom_target_compile_report_initialize(
 
 // Configures caller-owned row storage for optional detailed report rows.
 void loom_target_compile_report_set_row_storage(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_row_storage_t* row_storage);
+
+// Initializes a zeroed report and attaches row storage only when no report
+// details or row storage have been populated yet. Artifact emitters use this to
+// support direct zeroed-report callers without wiping pass-phase report rows
+// already appended by a compile pipeline.
+void loom_target_compile_report_initialize_if_empty(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_row_storage_t* row_storage);
 
@@ -413,6 +547,19 @@ void loom_target_compile_report_record_spill_row(
 void loom_target_compile_report_record_source_low_row(
     loom_target_compile_report_t* report,
     const loom_target_compile_report_source_low_row_t* row);
+
+// Records one target-legalization decision for summary counters without
+// materializing a detailed row.
+void loom_target_compile_report_record_legalization_summary(
+    loom_target_compile_report_t* report,
+    loom_target_compile_report_legalization_action_t action,
+    loom_target_compile_report_legalizer_strategy_t legalizer_strategy);
+
+// Records one target-legalization row, truncating only the copied row storage
+// when full.
+void loom_target_compile_report_record_legalization_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_legalization_row_t* row);
 
 #ifdef __cplusplus
 }  // extern "C"

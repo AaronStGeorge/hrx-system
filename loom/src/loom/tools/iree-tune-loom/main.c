@@ -3452,6 +3452,19 @@ static iree_status_t iree_tune_loom_hal_actual_provider_compile(
   provider->invocation_options.workgroup_count[2] =
       one_shot_options.hal_workgroup_count[2];
 
+  loom_run_candidate_compile_options_t compile_options = {0};
+  loom_run_candidate_compile_options_initialize(&compile_options);
+  compile_options.module_name = IREE_SV("loom");
+  compile_options.entry_symbol = entry_symbol;
+  compile_options.diagnostic_sink = (loom_diagnostic_sink_t){
+      .fn = iree_tune_loom_diagnostic_capture_sink,
+      .user_data = &provider->diagnostics,
+  };
+  compile_options.source_resolver =
+      loom_run_module_source_resolver(&provider->compile_module);
+  loom_run_compile_report_capture_configure_compile_options(
+      &provider->compile_report_capture, &compile_options);
+
   if (provider->context->configuration->target_environment == NULL) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
@@ -3471,6 +3484,8 @@ static iree_status_t iree_tune_loom_hal_actual_provider_compile(
   };
   pipeline_options.source_resolver =
       loom_run_module_source_resolver(&provider->compile_module);
+  pipeline_options.report = compile_options.report;
+  pipeline_options.report_row_storage = compile_options.report_row_storage;
   iree_status_t status = loom_compile_run_pipeline(
       provider->compile_module.module, &pipeline_options,
       loom_run_session_block_pool(provider->session), &provider->pass_result);
@@ -3493,16 +3508,6 @@ static iree_status_t iree_tune_loom_hal_actual_provider_compile(
     return iree_ok_status();
   }
 
-  loom_run_candidate_compile_options_t compile_options = {0};
-  loom_run_candidate_compile_options_initialize(&compile_options);
-  compile_options.module_name = IREE_SV("loom");
-  compile_options.entry_symbol = entry_symbol;
-  compile_options.diagnostic_sink = (loom_diagnostic_sink_t){
-      .fn = iree_tune_loom_diagnostic_capture_sink,
-      .user_data = &provider->diagnostics,
-  };
-  compile_options.source_resolver =
-      loom_run_module_source_resolver(&provider->compile_module);
   if (provider->context->artifact_bundle != NULL &&
       provider->context->artifact_bundle->enabled &&
       provider->context->artifact_bundle->policy >=
@@ -3510,8 +3515,6 @@ static iree_status_t iree_tune_loom_hal_actual_provider_compile(
     compile_options.artifact_flags |=
         LOOM_RUN_CANDIDATE_ARTIFACT_FLAG_TARGET_LISTING;
   }
-  loom_run_compile_report_capture_configure_compile_options(
-      &provider->compile_report_capture, &compile_options);
   provider->candidate_initialized = true;
   status = loom_run_hal_candidate_compile(
       provider->context->backend, &provider->context->runtime,
@@ -4861,6 +4864,41 @@ static iree_status_t iree_tune_loom_write_static_summary_json(
     IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_size_field(
         stream, &first_field, "source_low_row_total_count",
         report->source_low_row_total_count));
+  }
+  if (iree_any_bit_set(
+          report->detail_flags,
+          LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS)) {
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "target_legalization_legal_op_count",
+        report->target_legalization_legal_op_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "target_legalization_rewritten_op_count",
+        report->target_legalization_rewritten_op_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "target_legalization_target_rewritten_op_count",
+        report->target_legalization_target_rewritten_op_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field,
+        "target_legalization_reference_rewritten_op_count",
+        report->target_legalization_reference_rewritten_op_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "target_legalization_deferred_op_count",
+        report->target_legalization_deferred_op_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "target_legalization_invalid_ir_op_count",
+        report->target_legalization_invalid_ir_op_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "target_legalization_unsupported_op_count",
+        report->target_legalization_unsupported_op_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_u64_field(
+        stream, &first_field, "target_legalization_unhandled_op_count",
+        report->target_legalization_unhandled_op_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_size_field(
+        stream, &first_field, "target_legalization_row_count",
+        report->target_legalization_row_count));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_json_size_field(
+        stream, &first_field, "target_legalization_row_total_count",
+        report->target_legalization_row_total_count));
   }
   if (iree_any_bit_set(report->detail_flags,
                        LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS)) {

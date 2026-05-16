@@ -56,6 +56,7 @@ static iree_status_t loom_rewriter_recompute_op_facts(
 static iree_status_t loom_rewriter_on_op_finalized(void* user_data,
                                                    loom_op_t* op) {
   loom_rewriter_t* rewriter = (loom_rewriter_t*)user_data;
+  ++rewriter->created_op_count;
   IREE_RETURN_IF_ERROR(loom_rewriter_add_to_worklist(rewriter, op));
   IREE_RETURN_IF_ERROR(
       loom_rewriter_add_parent_summary_ops_to_worklist(rewriter, op));
@@ -537,6 +538,7 @@ iree_status_t loom_rewriter_replace_all_uses_and_erase(
   IREE_RETURN_IF_ERROR(
       loom_rewriter_add_parent_summary_ops_to_worklist(rewriter, op));
   IREE_RETURN_IF_ERROR(loom_op_erase(rewriter->module, op));
+  ++rewriter->erased_op_count;
   rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
   return iree_ok_status();
 }
@@ -596,6 +598,7 @@ iree_status_t loom_rewriter_erase(loom_rewriter_t* rewriter, loom_op_t* op) {
   IREE_RETURN_IF_ERROR(
       loom_rewriter_add_parent_summary_ops_to_worklist(rewriter, op));
   IREE_RETURN_IF_ERROR(loom_op_erase(rewriter->module, op));
+  ++rewriter->erased_op_count;
   rewriter->flags |= LOOM_REWRITER_FLAG_CHANGED;
   return iree_ok_status();
 }

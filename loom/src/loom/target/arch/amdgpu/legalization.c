@@ -314,6 +314,7 @@ static const loom_target_legalizer_entry_t kAmdgpuLegalizerEntries[] = {
 const loom_target_legalizer_provider_t
     loom_amdgpu_target_legalizer_provider_storage = {
         .name = IREE_SVL("amdgpu"),
+        .strategy = LOOM_TARGET_LEGALIZER_STRATEGY_TARGET,
         .entries = kAmdgpuLegalizerEntries,
         .entry_count = IREE_ARRAYSIZE(kAmdgpuLegalizerEntries),
 };

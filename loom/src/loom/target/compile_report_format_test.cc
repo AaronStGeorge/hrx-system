@@ -57,6 +57,34 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           .emitted_low_op_count = 1,
       },
   };
+  loom_target_compile_report_legalization_row_t target_legalization_rows[] = {
+      {
+          .function_name = IREE_SVL("branchy"),
+          .source_op_name = IREE_SVL("vector.reduce.axes"),
+          .source_op_kind = 73,
+          .target_bundle_name = IREE_SVL("vm_target"),
+          .target_config_name = IREE_SVL("vm_o0"),
+          .legalizer_name = IREE_SVL("vector"),
+          .legalizer_strategy =
+              LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_REFERENCE,
+          .mode = LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_MODE_FINAL,
+          .action = LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REWRITTEN,
+          .contract_outcome =
+              LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_UNSUPPORTED,
+          .binding_index = 0,
+          .case_index = 2,
+          .rule_set_index = 3,
+          .rule_index = 4,
+          .diagnostic_index = UINT16_MAX,
+          .descriptor_id = UINT64_MAX,
+          .source_rejection_bits = 0x1,
+          .target_rejection_bits = 0x2,
+          .missing_feature_bits = 0x4,
+          .missing_fact_bits = 0x8,
+          .created_op_count = 6,
+          .erased_op_count = 1,
+      },
+  };
   loom_target_compile_report_t report = {};
   loom_target_compile_report_initialize(&report);
   report.artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
@@ -99,6 +127,11 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   report.source_low_rows = source_low_rows;
   report.source_low_row_count = IREE_ARRAYSIZE(source_low_rows);
   report.source_low_row_total_count = 4;
+  report.target_legalization_rows = target_legalization_rows;
+  report.target_legalization_row_capacity =
+      IREE_ARRAYSIZE(target_legalization_rows);
+  loom_target_compile_report_record_legalization_row(
+      &report, &target_legalization_rows[0]);
   report.detail_flags |= LOOM_TARGET_COMPILE_REPORT_DETAIL_PRESSURE_ROWS |
                          LOOM_TARGET_COMPILE_REPORT_DETAIL_SPILL_ROWS |
                          LOOM_TARGET_COMPILE_REPORT_DETAIL_SOURCE_LOW_ROWS;
@@ -155,6 +188,23 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("source_low[0] function=branchy"), 0),
             IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("target_legalization legal=0 "
+                                          "rewritten=1 target_rewritten=0 "
+                                          "reference_rewritten=1 deferred=0"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("target_legalization[0] function=branchy source_op="
+                        "vector.reduce.axes mode=final action=rewritten"),
+                0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output, IREE_SV("strategy=reference"), 0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output, IREE_SV("created_ops=6 erased_ops=1"), 0),
+      IREE_STRING_VIEW_NPOS);
 
   iree_string_builder_deinitialize(&builder);
 
@@ -207,6 +257,28 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                                   IREE_SV("\"rule_set_index\":0,"
                                           "\"rule_index\":1,\"plan_id\":null,"
                                           "\"descriptor_id\":7"),
+                                  0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output,
+                IREE_SV("\"target_legalization\":{\"legal_op_count\":0,"
+                        "\"rewritten_op_count\":1,"
+                        "\"target_rewritten_op_count\":0,"
+                        "\"reference_rewritten_op_count\":1"),
+                0),
+            IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
+      iree_string_view_find(output,
+                            IREE_SV("\"legalizer\":\"vector\","
+                                    "\"legalizer_strategy\":\"reference\","
+                                    "\"mode\":\"final\","
+                                    "\"action\":\"rewritten\","
+                                    "\"contract_outcome\":\"unsupported\""),
+                            0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("\"created_op_count\":6,"
+                                          "\"erased_op_count\":1"),
                                   0),
             IREE_STRING_VIEW_NPOS);
 

@@ -32,6 +32,42 @@ void loom_target_compile_report_set_row_storage(
                                         : 0;
   report->source_low_row_count = 0;
   report->source_low_row_total_count = 0;
+  report->target_legalization_rows =
+      row_storage ? row_storage->target_legalization_rows : NULL;
+  report->target_legalization_row_capacity =
+      report->target_legalization_rows != NULL
+          ? row_storage->target_legalization_row_capacity
+          : 0;
+  report->target_legalization_row_count = 0;
+  report->target_legalization_row_total_count = 0;
+}
+
+static bool loom_target_compile_report_has_row_storage_or_counts(
+    const loom_target_compile_report_t* report) {
+  return report->pressure_rows != NULL || report->pressure_row_capacity != 0 ||
+         report->pressure_row_count != 0 ||
+         report->pressure_row_total_count != 0 || report->spill_rows != NULL ||
+         report->spill_row_capacity != 0 || report->spill_row_count != 0 ||
+         report->spill_row_total_count != 0 ||
+         report->source_low_rows != NULL ||
+         report->source_low_row_capacity != 0 ||
+         report->source_low_row_count != 0 ||
+         report->source_low_row_total_count != 0 ||
+         report->target_legalization_rows != NULL ||
+         report->target_legalization_row_capacity != 0 ||
+         report->target_legalization_row_count != 0 ||
+         report->target_legalization_row_total_count != 0;
+}
+
+void loom_target_compile_report_initialize_if_empty(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_row_storage_t* row_storage) {
+  if (report->detail_flags != LOOM_TARGET_COMPILE_REPORT_DETAIL_NONE ||
+      loom_target_compile_report_has_row_storage_or_counts(report)) {
+    return;
+  }
+  loom_target_compile_report_initialize(report);
+  loom_target_compile_report_set_row_storage(report, row_storage);
 }
 
 void loom_target_compile_report_record_status(
@@ -163,5 +199,69 @@ void loom_target_compile_report_record_source_low_row(
   if (report->source_low_rows != NULL &&
       report->source_low_row_count < report->source_low_row_capacity) {
     report->source_low_rows[report->source_low_row_count++] = *row;
+  }
+}
+
+static void loom_target_compile_report_count_legalization_action(
+    loom_target_compile_report_t* report,
+    loom_target_compile_report_legalization_action_t action,
+    loom_target_compile_report_legalizer_strategy_t legalizer_strategy) {
+  switch (action) {
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_LEGAL:
+      ++report->target_legalization_legal_op_count;
+      break;
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REWRITTEN:
+      ++report->target_legalization_rewritten_op_count;
+      switch (legalizer_strategy) {
+        case LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_TARGET:
+          ++report->target_legalization_target_rewritten_op_count;
+          break;
+        case LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_REFERENCE:
+          ++report->target_legalization_reference_rewritten_op_count;
+          break;
+        case LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_NONE:
+        default:
+          break;
+      }
+      break;
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_DEFERRED:
+      ++report->target_legalization_deferred_op_count;
+      break;
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REJECT_INVALID_IR:
+      ++report->target_legalization_invalid_ir_op_count;
+      break;
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REJECT_UNSUPPORTED_FINAL:
+      ++report->target_legalization_unsupported_op_count;
+      break;
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_UNHANDLED:
+      ++report->target_legalization_unhandled_op_count;
+      break;
+    case LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_NONE:
+    default:
+      break;
+  }
+}
+
+void loom_target_compile_report_record_legalization_summary(
+    loom_target_compile_report_t* report,
+    loom_target_compile_report_legalization_action_t action,
+    loom_target_compile_report_legalizer_strategy_t legalizer_strategy) {
+  report->detail_flags |=
+      LOOM_TARGET_COMPILE_REPORT_DETAIL_TARGET_LEGALIZATION_ROWS;
+  loom_target_compile_report_count_legalization_action(report, action,
+                                                       legalizer_strategy);
+  ++report->target_legalization_row_total_count;
+}
+
+void loom_target_compile_report_record_legalization_row(
+    loom_target_compile_report_t* report,
+    const loom_target_compile_report_legalization_row_t* row) {
+  loom_target_compile_report_record_legalization_summary(
+      report, row->action, row->legalizer_strategy);
+  if (report->target_legalization_rows != NULL &&
+      report->target_legalization_row_count <
+          report->target_legalization_row_capacity) {
+    report->target_legalization_rows[report->target_legalization_row_count++] =
+        *row;
   }
 }

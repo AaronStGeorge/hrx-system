@@ -94,6 +94,12 @@ struct loom_rewriter_t {
   // before each pattern invocation.
   loom_rewriter_flags_t flags;
 
+  // Number of operations finalized by the builder during this rewrite run.
+  uint64_t created_op_count;
+
+  // Number of operations erased through this rewriter during this rewrite run.
+  uint64_t erased_op_count;
+
   // Central policy for optional SSA display names created during rewrites.
   loom_rewriter_name_policy_flags_t name_policy;
 

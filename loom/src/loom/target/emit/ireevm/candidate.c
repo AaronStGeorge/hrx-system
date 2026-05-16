@@ -26,6 +26,11 @@ iree_status_t loom_ireevm_run_candidate_emit(
   };
   loom_target_compile_report_t* report =
       options->report != NULL ? &out_candidate->compile_report : NULL;
+  if (report != NULL) {
+    *report = *options->report;
+    loom_target_compile_report_initialize_if_empty(
+        report, &options->report_row_storage);
+  }
 
   const loom_ireevm_archive_emit_options_t archive_emit_options = {
       .module_name = options->module_name,
