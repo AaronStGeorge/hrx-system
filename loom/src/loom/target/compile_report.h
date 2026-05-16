@@ -102,6 +102,17 @@ typedef enum loom_target_compile_report_legalization_mode_e {
   LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_MODE_FINAL = 2,
 } loom_target_compile_report_legalization_mode_t;
 
+typedef enum loom_target_compile_report_legalization_policy_e {
+  // No target-legalization policy was recorded.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_POLICY_NONE = 0,
+  // Target-native contracts and rewrites are preferred over reference fallback.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_POLICY_PREFER_NATIVE = 1,
+  // Target-native rewrites are skipped in favor of reference rewrites.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_POLICY_REFERENCE_ONLY = 2,
+  // Reference rewrites are rejected so native coverage gaps stay visible.
+  LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_POLICY_REQUIRE_NATIVE = 3,
+} loom_target_compile_report_legalization_policy_t;
+
 typedef enum loom_target_compile_report_legalization_action_e {
   // No target-legalization action was recorded.
   LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_NONE = 0,
@@ -283,6 +294,8 @@ typedef struct loom_target_compile_report_legalization_row_t {
   loom_target_compile_report_legalizer_strategy_t legalizer_strategy;
   // Target-legalization phase in which the decision was made.
   loom_target_compile_report_legalization_mode_t mode;
+  // Target-legalization strategy policy in effect for this decision.
+  loom_target_compile_report_legalization_policy_t policy;
   // Legalization decision recorded for this source operation.
   loom_target_compile_report_legalization_action_t action;
   // Read-only target-contract query outcome observed before rewriting.

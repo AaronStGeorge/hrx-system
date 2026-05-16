@@ -42,6 +42,15 @@ typedef enum loom_target_legalization_mode_e {
   LOOM_TARGET_LEGALIZATION_MODE_FINAL = 1,
 } loom_target_legalization_mode_t;
 
+typedef enum loom_target_legalization_policy_e {
+  // Prefer target-native rewrites and contracts, then use reference fallbacks.
+  LOOM_TARGET_LEGALIZATION_POLICY_PREFER_NATIVE = 0,
+  // Skip target-native rewrites and prefer semantic reference rewrites.
+  LOOM_TARGET_LEGALIZATION_POLICY_REFERENCE_ONLY = 1,
+  // Require target-native contracts or rewrites; reject reference fallbacks.
+  LOOM_TARGET_LEGALIZATION_POLICY_REQUIRE_NATIVE = 2,
+} loom_target_legalization_policy_t;
+
 typedef enum loom_target_legalizer_action_e {
   // The legalizer has no opinion about this op under the current target.
   LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT = 0,
@@ -103,6 +112,8 @@ typedef struct loom_target_legalization_context_t {
   loom_rewriter_t* rewriter;
   // Current legalization phase.
   loom_target_legalization_mode_t mode;
+  // Strategy policy controlling native and reference legalizer participation.
+  loom_target_legalization_policy_t policy;
   // Scoped arena available for rare legalization-side records.
   iree_arena_allocator_t* arena;
   // Target contract query result for the op currently being passed to a

@@ -152,6 +152,12 @@ static const loom_pass_option_enum_value_t kLowTargetLegalizeModeValues[] = {
     {.value = IREE_SVL("final")},
 };
 
+static const loom_pass_option_enum_value_t kLowTargetLegalizePolicyValues[] = {
+    {.value = IREE_SVL("prefer-native")},
+    {.value = IREE_SVL("reference-only")},
+    {.value = IREE_SVL("require-native")},
+};
+
 static const loom_pass_option_schema_t kLowTargetLegalizeOptionSchema[] = {
     {
         .name = IREE_SVL("max-errors"),
@@ -170,6 +176,12 @@ static const loom_pass_option_schema_t kLowTargetLegalizeOptionSchema[] = {
         .kind = LOOM_PASS_OPTION_SCHEMA_ENUM,
         .enum_values = kLowTargetLegalizeModeValues,
         .enum_value_count = IREE_ARRAYSIZE(kLowTargetLegalizeModeValues),
+    },
+    {
+        .name = IREE_SVL("policy"),
+        .kind = LOOM_PASS_OPTION_SCHEMA_ENUM,
+        .enum_values = kLowTargetLegalizePolicyValues,
+        .enum_value_count = IREE_ARRAYSIZE(kLowTargetLegalizePolicyValues),
     },
 };
 

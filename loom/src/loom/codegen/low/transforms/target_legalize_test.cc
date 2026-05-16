@@ -210,6 +210,9 @@ static iree_status_t ObserveContractQueryResultLegalizer(
 struct MatrixFallbackContractState {
   // Layout returned by the synthetic matrix contract query.
   const loom_matrix_fragment_layout_t* selected_layout = nullptr;
+  // Outcome returned by the synthetic matrix contract query.
+  loom_target_contract_query_outcome_t outcome =
+      LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED;
   // Number of descriptor-matrix queries observed.
   uint32_t query_count = 0;
   // Last generic matrix contract request seen by the query callback.
@@ -251,7 +254,7 @@ static iree_status_t MatrixFallbackContractQuery(
   ++state->query_count;
   state->last_request = *request;
   *out_result = loom_target_contract_query_result_empty();
-  out_result->outcome = LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED;
+  out_result->outcome = state->outcome;
   out_result->selected_matrix_fragment_layout = state->selected_layout;
   return iree_ok_status();
 }
@@ -358,6 +361,8 @@ TEST_F(TargetLegalizePassTest, RecordsRewriteRowsInCompileReport) {
   EXPECT_EQ(rows[0].action,
             LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REWRITTEN);
   EXPECT_EQ(rows[0].mode, LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_MODE_EAGER);
+  EXPECT_EQ(rows[0].policy,
+            LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_POLICY_PREFER_NATIVE);
   EXPECT_GT(rows[0].created_op_count, 0u);
   EXPECT_EQ(rows[0].erased_op_count, 1u);
 }
@@ -492,12 +497,166 @@ TEST_F(TargetLegalizePassTest,
   EXPECT_EQ(rows[0].source_op_kind, LOOM_OP_VECTOR_MMA);
   EXPECT_EQ(rows[0].action,
             LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REWRITTEN);
+  EXPECT_EQ(rows[0].policy,
+            LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_POLICY_PREFER_NATIVE);
   EXPECT_EQ(rows[0].contract_outcome,
             LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_UNSUPPORTED);
   EXPECT_EQ(CountOps(module->body, LOOM_OP_VECTOR_MMA), 0u);
   EXPECT_GT(CountOps(module->body, LOOM_OP_KERNEL_SUBGROUP_LANE_ID), 0u);
   EXPECT_EQ(CountOps(module->body, LOOM_OP_KERNEL_SUBGROUP_BROADCAST), 8u);
   EXPECT_EQ(CountOps(module->body, LOOM_OP_SCF_SELECT), 0u);
+}
+
+TEST_F(TargetLegalizePassTest, ReferenceOnlyOverridesLegalMatrixContract) {
+  ModulePtr module = Parse(
+      IREE_SV("test.target<low_core> @test_target\n"
+              "kernel.def target(@test_target) @physical_mma("
+              "%lhs_data: vector<2xf16>, %rhs_data: vector<2xf16>, "
+              "%init_data: vector<2xf32>) {\n"
+              "  %c1 = index.constant 1 : index\n"
+              "  %c2 = index.constant 2 : index\n"
+              "  kernel.launch.config workgroups(%c1, %c1, %c1) "
+              "workgroup_size(%c2, %c1, %c1) : index\n"
+              "} launch {\n"
+              "  %m = index.constant 2 : index\n"
+              "  %n = index.constant 2 : index\n"
+              "  %k = index.constant 2 : index\n"
+              "  %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : "
+              "vector<2xf16>\n"
+              "  %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : "
+              "vector<2xf16>\n"
+              "  %init = vector.fragment<init> %init_data shape [%m, %n] : "
+              "vector<2xf32>\n"
+              "  %result = vector.mma %lhs, %rhs, %init : vector<2xf16>, "
+              "vector<2xf16>, vector<2xf32>\n"
+              "  test.use %result : vector<2xf32>\n"
+              "  kernel.return\n"
+              "}\n"));
+
+  std::vector<loom_target_contract_op_entry_t> op_entries;
+  loom_target_contract_dialect_table_t dialect = {};
+  const loom_target_contract_fragment_t fragment =
+      MakeMatrixFallbackContractFragment(&op_entries, &dialect);
+  const loom_target_contract_binding_t contract_bindings[] = {
+      {
+          .fragment = &fragment,
+          .rule_set_index = 0,
+      },
+  };
+
+  MatrixFallbackContractState matrix_state = {
+      .selected_layout = &kTinyDistributedMmaLayout,
+      .outcome = LOOM_TARGET_CONTRACT_QUERY_LEGAL,
+  };
+  loom_low_lower_policy_t policy = *loom_test_low_lower_policy();
+  policy.contract_bindings = contract_bindings;
+  policy.contract_binding_count = IREE_ARRAYSIZE(contract_bindings);
+  policy.descriptor_matrix = (loom_low_lower_descriptor_matrix_t){
+      .options = MatrixFallbackContractOptions,
+      .query = MatrixFallbackContractQuery,
+      .user_data = &matrix_state,
+  };
+  const loom_low_lower_policy_registry_entry_t policy_entries[] = {
+      {
+          .contract_set_key = IREE_SVL("test.low.core"),
+          .policy = &policy,
+      },
+  };
+  loom_low_lower_policy_registry_t policy_registry = {};
+  loom_low_lower_policy_registry_initialize_from_entries(
+      &policy_registry, policy_entries, IREE_ARRAYSIZE(policy_entries));
+
+  loom_target_compile_report_legalization_row_t rows[8] = {};
+  const loom_target_compile_report_row_storage_t row_storage = {
+      .target_legalization_rows = rows,
+      .target_legalization_row_capacity = IREE_ARRAYSIZE(rows),
+  };
+  loom_target_compile_report_t report = {};
+  loom_target_compile_report_initialize(&report);
+  loom_target_compile_report_set_row_storage(&report, &row_storage);
+
+  IREE_ASSERT_OK(
+      RunTargetLegalize(&policy_registry, module.get(), &report,
+                        IREE_SV("mode=final,policy=reference-only")));
+  EXPECT_EQ(matrix_state.query_count, 1u);
+  EXPECT_EQ(report.target_legalization_rewritten_op_count, 1u);
+  ASSERT_GE(report.target_legalization_row_count, 1u);
+  EXPECT_EQ(rows[0].source_op_kind, LOOM_OP_VECTOR_MMA);
+  EXPECT_EQ(rows[0].action,
+            LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REWRITTEN);
+  EXPECT_EQ(rows[0].policy,
+            LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_POLICY_REFERENCE_ONLY);
+  EXPECT_EQ(rows[0].contract_outcome,
+            LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_LEGAL);
+  EXPECT_EQ(CountOps(module->body, LOOM_OP_VECTOR_MMA), 0u);
+  EXPECT_GT(CountOps(module->body, LOOM_OP_KERNEL_SUBGROUP_LANE_ID), 0u);
+  EXPECT_EQ(CountOps(module->body, LOOM_OP_KERNEL_SUBGROUP_BROADCAST), 8u);
+}
+
+TEST_F(TargetLegalizePassTest, RequireNativeRejectsReferenceFallback) {
+  ModulePtr module = Parse(
+      IREE_SV("test.target<low_core> @test_target\n"
+              "func.def target(@test_target) @mma(%lhs_data: vector<4xi32>, "
+              "%rhs_data: vector<4xi32>, %init_data: vector<4xi32>) -> "
+              "(vector<4xi32>) {\n"
+              "  %m = index.constant 2 : index\n"
+              "  %n = index.constant 2 : index\n"
+              "  %k = index.constant 2 : index\n"
+              "  %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : "
+              "vector<4xi32>\n"
+              "  %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : "
+              "vector<4xi32>\n"
+              "  %init = vector.fragment<init> %init_data shape [%m, %n] : "
+              "vector<4xi32>\n"
+              "  %result = vector.mma %lhs, %rhs, %init : vector<4xi32>, "
+              "vector<4xi32>, vector<4xi32>\n"
+              "  func.return %result : vector<4xi32>\n"
+              "}\n"));
+
+  loom_low_lower_policy_t policy = *loom_test_low_lower_policy();
+  const loom_low_lower_policy_registry_entry_t entries[] = {
+      {
+          .contract_set_key = IREE_SVL("test.low.core"),
+          .policy = &policy,
+      },
+  };
+  loom_low_lower_policy_registry_t policy_registry = {};
+  loom_low_lower_policy_registry_initialize_from_entries(
+      &policy_registry, entries, IREE_ARRAYSIZE(entries));
+
+  loom_target_compile_report_legalization_row_t rows[8] = {};
+  const loom_target_compile_report_row_storage_t row_storage = {
+      .target_legalization_rows = rows,
+      .target_legalization_row_capacity = IREE_ARRAYSIZE(rows),
+  };
+  loom_target_compile_report_t report = {};
+  loom_target_compile_report_initialize(&report);
+  loom_target_compile_report_set_row_storage(&report, &row_storage);
+
+  IREE_ASSERT_OK(
+      RunTargetLegalize(&policy_registry, module.get(), &report,
+                        IREE_SV("mode=final,policy=require-native")));
+  EXPECT_EQ(report.target_legalization_unsupported_op_count, 1u);
+
+  const loom_target_compile_report_legalization_row_t* mma_row = nullptr;
+  for (iree_host_size_t i = 0; i < report.target_legalization_row_count; ++i) {
+    if (rows[i].source_op_kind == LOOM_OP_VECTOR_MMA &&
+        rows[i].action ==
+            LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REJECT_UNSUPPORTED_FINAL) {
+      mma_row = &rows[i];
+      break;
+    }
+  }
+  ASSERT_NE(mma_row, nullptr);
+  EXPECT_TRUE(
+      iree_string_view_equal(mma_row->legalizer_name, IREE_SV("vector")));
+  EXPECT_EQ(mma_row->legalizer_strategy,
+            LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_REFERENCE);
+  EXPECT_EQ(mma_row->policy,
+            LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_POLICY_REQUIRE_NATIVE);
+  EXPECT_TRUE(iree_any_bit_set(mma_row->source_rejection_bits,
+                               LOOM_CONTRACT_REJECTION_POLICY));
+  EXPECT_EQ(CountOps(module->body, LOOM_OP_VECTOR_MMA), 1u);
 }
 
 TEST_F(TargetLegalizePassTest, RecordsReferenceRejectReasonInCompileReport) {

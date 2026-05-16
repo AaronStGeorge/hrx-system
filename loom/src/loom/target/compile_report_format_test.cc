@@ -70,6 +70,8 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           .legalizer_strategy =
               LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_REFERENCE,
           .mode = LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_MODE_FINAL,
+          .policy =
+              LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_POLICY_REFERENCE_ONLY,
           .action = LOOM_TARGET_COMPILE_REPORT_LEGALIZATION_ACTION_REWRITTEN,
           .contract_outcome =
               LOOM_TARGET_COMPILE_REPORT_CONTRACT_OUTCOME_UNSUPPORTED,
@@ -200,7 +202,8 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(iree_string_view_find(
                 output,
                 IREE_SV("target_legalization[0] function=branchy source_op="
-                        "vector.reduce.axes mode=final action=rewritten"),
+                        "vector.reduce.axes mode=final policy=reference-only "
+                        "action=rewritten"),
                 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output, IREE_SV("strategy=reference"), 0),
@@ -278,6 +281,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                             IREE_SV("\"legalizer\":\"vector\","
                                     "\"legalizer_strategy\":\"reference\","
                                     "\"mode\":\"final\","
+                                    "\"policy\":\"reference-only\","
                                     "\"action\":\"rewritten\","
                                     "\"contract_outcome\":\"unsupported\""),
                             0),
