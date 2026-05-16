@@ -154,7 +154,7 @@ iree_status_t EmitStorageBufferI32Add(loom_spirv_module_builder_t* builder,
   IREE_RETURN_IF_ERROR(WriteStringInstruction(
       builder, LOOM_SPIRV_MODULE_SECTION_ENTRY_POINT, LOOM_SPIRV_OP_ENTRY_POINT,
       {LOOM_SPIRV_EXECUTION_MODEL_GL_COMPUTE, kMainFunction}, entry_point_name,
-      {kGlobalInvocationId, kInput0, kInput1, kOutput}));
+      {kGlobalInvocationId}));
   IREE_RETURN_IF_ERROR(WriteInstruction(
       builder, LOOM_SPIRV_MODULE_SECTION_EXECUTION_MODE,
       LOOM_SPIRV_OP_EXECUTION_MODE,
@@ -357,11 +357,8 @@ TEST(SpirvModuleBuilderTest, BuildsStorageBufferI32AddModule) {
   ASSERT_NE(entry_point, nullptr);
   EXPECT_EQ(DecodeStringOperand(entry_point->operands, 2, &next_operand_index),
             "vector_add_i32");
-  ASSERT_EQ(next_operand_index + 4, entry_point->operands.size());
+  ASSERT_EQ(next_operand_index + 1, entry_point->operands.size());
   EXPECT_EQ(entry_point->operands[next_operand_index], kGlobalInvocationId);
-  EXPECT_EQ(entry_point->operands[next_operand_index + 1], kInput0);
-  EXPECT_EQ(entry_point->operands[next_operand_index + 2], kInput1);
-  EXPECT_EQ(entry_point->operands[next_operand_index + 3], kOutput);
 
   EXPECT_TRUE(HasInstruction(
       instructions, LOOM_SPIRV_OP_EXECUTION_MODE,

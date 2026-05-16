@@ -27,8 +27,8 @@ low.func.def target(@target) abi(shader_entry_point) @empty_entry() asm<spirv.lo
 
 // ====
 
-// RUN: emit spirv-dis @spirv_i32_arithmetic
-// REQUIRES: spirv-dis
+// RUN: emit spirv-dis @spirv_i32_arithmetic validate
+// REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @target
 
@@ -55,22 +55,42 @@ low.func.def target(@target) abi(shader_entry_point) @spirv_i32_arithmetic(%lhs:
                OpName %bias "bias"
                OpName %sum "sum"
                OpName %result "result"
+               OpMemberDecorate %_struct_5 0 Offset 0
+               OpDecorate %_struct_5 Block
+               OpDecorate %4 DescriptorSet 0
+               OpDecorate %4 Binding 0
+               OpDecorate %8 DescriptorSet 0
+               OpDecorate %8 Binding 1
+               OpDecorate %9 DescriptorSet 0
+               OpDecorate %9 Binding 2
         %int = OpTypeInt 32 1
-          %3 = OpTypeFunction %int %int %int
+      %int_0 = OpConstant %int 0
+  %_struct_5 = OpTypeStruct %int
+%_ptr_StorageBuffer__struct_5 = OpTypePointer StorageBuffer %_struct_5
+%_ptr_StorageBuffer_int = OpTypePointer StorageBuffer %int
+          %4 = OpVariable %_ptr_StorageBuffer__struct_5 StorageBuffer
+          %8 = OpVariable %_ptr_StorageBuffer__struct_5 StorageBuffer
+          %9 = OpVariable %_ptr_StorageBuffer__struct_5 StorageBuffer
+       %void = OpTypeVoid
+         %11 = OpTypeFunction %void
        %bias = OpConstant %int 7
-%spirv_i32_arithmetic = OpFunction %int None %3
-        %lhs = OpFunctionParameter %int
-        %rhs = OpFunctionParameter %int
-          %6 = OpLabel
+%spirv_i32_arithmetic = OpFunction %void None %11
+         %12 = OpLabel
+         %13 = OpAccessChain %_ptr_StorageBuffer_int %4 %int_0
+        %lhs = OpLoad %int %13 Aligned 4
+         %15 = OpAccessChain %_ptr_StorageBuffer_int %8 %int_0
+        %rhs = OpLoad %int %15 Aligned 4
         %sum = OpIAdd %int %lhs %rhs
      %result = OpIAdd %int %sum %bias
-               OpReturnValue %result
+         %20 = OpAccessChain %_ptr_StorageBuffer_int %9 %int_0
+               OpStore %20 %result Aligned 4
+               OpReturn
                OpFunctionEnd
 
 // ====
 
-// RUN: emit spirv-dis @spirv_storage_buffer_i32_roundtrip
-// REQUIRES: spirv-dis
+// RUN: emit spirv-dis @spirv_storage_buffer_i32_roundtrip validate
+// REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @target
 
@@ -101,23 +121,51 @@ low.func.def target(@target) abi(shader_entry_point) @spirv_storage_buffer_i32_r
                OpName %loaded "loaded"
                OpName %incremented "incremented"
                OpName %output_view "output_view"
-               OpDecorate %_runtimearr_int ArrayStride 4
+               OpDecorate %_ptr_PhysicalStorageBuffer_int ArrayStride 1
+               OpMemberDecorate %_struct_7 0 Offset 0
+               OpDecorate %_struct_7 Block
+               OpDecorate %4 DescriptorSet 0
+               OpDecorate %4 Binding 0
+               OpDecorate %10 DescriptorSet 0
+               OpDecorate %10 Binding 1
+               OpDecorate %11 DescriptorSet 0
+               OpDecorate %11 Binding 2
+               OpMemberDecorate %_struct_13 0 Offset 0
+               OpDecorate %_struct_13 Block
+               OpDecorate %12 DescriptorSet 0
+               OpDecorate %12 Binding 3
         %int = OpTypeInt 32 1
-%_runtimearr_int = OpTypeRuntimeArray %int
-%_ptr_PhysicalStorageBuffer__runtimearr_int = OpTypePointer PhysicalStorageBuffer %_runtimearr_int
-      %ulong = OpTypeInt 64 0
-          %3 = OpTypeFunction %int %_ptr_PhysicalStorageBuffer__runtimearr_int %_ptr_PhysicalStorageBuffer__runtimearr_int %ulong
-%_ptr_PhysicalStorageBuffer_int = OpTypePointer PhysicalStorageBuffer %int
       %int_0 = OpConstant %int 0
-%spirv_storage_buffer_i32_roundtrip = OpFunction %int None %3
-      %input = OpFunctionParameter %_ptr_PhysicalStorageBuffer__runtimearr_int
-     %output = OpFunctionParameter %_ptr_PhysicalStorageBuffer__runtimearr_int
-%byte_offset = OpFunctionParameter %ulong
-         %10 = OpLabel
- %input_view = OpPtrAccessChain %_ptr_PhysicalStorageBuffer_int %input %byte_offset %int_0
+%_ptr_PhysicalStorageBuffer_int = OpTypePointer PhysicalStorageBuffer %int
+      %ulong = OpTypeInt 64 0
+  %_struct_7 = OpTypeStruct %ulong
+%_ptr_StorageBuffer__struct_7 = OpTypePointer StorageBuffer %_struct_7
+%_ptr_StorageBuffer_ulong = OpTypePointer StorageBuffer %ulong
+          %4 = OpVariable %_ptr_StorageBuffer__struct_7 StorageBuffer
+         %10 = OpVariable %_ptr_StorageBuffer__struct_7 StorageBuffer
+         %11 = OpVariable %_ptr_StorageBuffer__struct_7 StorageBuffer
+ %_struct_13 = OpTypeStruct %int
+%_ptr_StorageBuffer__struct_13 = OpTypePointer StorageBuffer %_struct_13
+%_ptr_StorageBuffer_int = OpTypePointer StorageBuffer %int
+         %12 = OpVariable %_ptr_StorageBuffer__struct_13 StorageBuffer
+       %void = OpTypeVoid
+         %17 = OpTypeFunction %void
+%spirv_storage_buffer_i32_roundtrip = OpFunction %void None %17
+         %18 = OpLabel
+         %19 = OpAccessChain %_ptr_StorageBuffer_ulong %4 %int_0
+         %20 = OpLoad %ulong %19 Aligned 8
+      %input = OpConvertUToPtr %_ptr_PhysicalStorageBuffer_int %20
+         %22 = OpAccessChain %_ptr_StorageBuffer_ulong %10 %int_0
+         %23 = OpLoad %ulong %22 Aligned 8
+     %output = OpConvertUToPtr %_ptr_PhysicalStorageBuffer_int %23
+         %25 = OpAccessChain %_ptr_StorageBuffer_ulong %11 %int_0
+%byte_offset = OpLoad %ulong %25 Aligned 8
+ %input_view = OpPtrAccessChain %_ptr_PhysicalStorageBuffer_int %input %byte_offset
      %loaded = OpLoad %int %input_view Aligned 4
 %incremented = OpIAdd %int %loaded %loaded
-%output_view = OpPtrAccessChain %_ptr_PhysicalStorageBuffer_int %output %byte_offset %int_0
+%output_view = OpPtrAccessChain %_ptr_PhysicalStorageBuffer_int %output %byte_offset
                OpStore %output_view %incremented Aligned 4
-               OpReturnValue %loaded
+         %31 = OpAccessChain %_ptr_StorageBuffer_int %12 %int_0
+               OpStore %31 %loaded Aligned 4
+               OpReturn
                OpFunctionEnd
