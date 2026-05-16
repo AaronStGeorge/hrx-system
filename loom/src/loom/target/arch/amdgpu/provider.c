@@ -7,6 +7,7 @@
 #include "loom/target/arch/amdgpu/provider.h"
 
 #include "loom/pass/builder.h"
+#include "loom/target/arch/amdgpu/legalization.h"
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/lower.h"
 #include "loom/target/arch/amdgpu/math_policy.h"
@@ -17,6 +18,11 @@
 static const loom_target_low_legality_provider_t*
     kLoomAmdgpuLowLegalityProviders[] = {
         &loom_amdgpu_low_legality_provider_storage,
+};
+
+static const loom_target_legalizer_provider_t* kLoomAmdgpuLegalizerProviders[] =
+    {
+        &loom_amdgpu_target_legalizer_provider_storage,
 };
 
 static const loom_target_low_packet_diagnostic_provider_t*
@@ -84,6 +90,11 @@ const loom_target_provider_t loom_amdgpu_target_provider = {
         {
             .count = IREE_ARRAYSIZE(kLoomAmdgpuLowLegalityProviders),
             .values = kLoomAmdgpuLowLegalityProviders,
+        },
+    .legalizer_provider_list =
+        {
+            .count = IREE_ARRAYSIZE(kLoomAmdgpuLegalizerProviders),
+            .values = kLoomAmdgpuLegalizerProviders,
         },
     .low_packet_diagnostic_provider_list =
         {

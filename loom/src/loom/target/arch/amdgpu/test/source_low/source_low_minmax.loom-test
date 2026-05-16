@@ -166,6 +166,28 @@ low.func.def target(@target) abi(hal_kernel) @scf_select_sgpr(%lhs: reg<amdgpu.s
 // ====
 
 amdgpu.target<gfx1100> @target
+func.def target(@target) @scf_select_i64_sgpr(%lhs: i32, %rhs: i32, %a: i64, %b: i64) -> (i64) {
+  %cond = scalar.cmpi slt, %lhs, %rhs : i32
+  %selected = scf.select %cond, %a, %b : i64
+  func.return %selected : i64
+}
+
+// ----
+low.func.def target(@target) abi(hal_kernel) @scf_select_i64_sgpr(%lhs: reg<amdgpu.sgpr>, %rhs: reg<amdgpu.sgpr>, %a: reg<amdgpu.sgpr x2>, %b: reg<amdgpu.sgpr x2>) -> (reg<amdgpu.sgpr x2>) asm<amdgpu.rdna3.core> {
+  %cond = s_cmp_lt_i32 %lhs, %rhs
+  %13 = slice %a[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %14 = slice %b[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %15 = s_cselect_b32 %13, %14, %cond
+  %16 = slice %a[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %17 = slice %b[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %18 = s_cselect_b32 %16, %17, %cond
+  %selected = concat(%15, %18) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  return %selected
+}
+
+// ====
+
+amdgpu.target<gfx1100> @target
 func.def target(@target) @scf_select_vgpr(%lhs: f32, %rhs: f32, %a: f32, %b: f32) -> (f32) {
   %cond = scalar.cmpf olt, %lhs, %rhs : f32
   %selected = scf.select %cond, %a, %b : f32

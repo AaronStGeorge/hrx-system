@@ -69,6 +69,14 @@ func.def @scf_select_sgpr(%lhs: i32, %rhs: i32, %a: i32, %b: i32) -> (i32) {
 
 // ====
 
+func.def @scf_select_i64_sgpr(%lhs: i32, %rhs: i32, %a: i64, %b: i64) -> (i64) {
+  %cond = scalar.cmpi slt, %lhs, %rhs : i32
+  %selected = scf.select %cond, %a, %b : i64
+  func.return %selected : i64
+}
+
+// ====
+
 func.def @scf_select_vgpr(%lhs: f32, %rhs: f32, %a: f32, %b: f32) -> (f32) {
   %cond = scalar.cmpf olt, %lhs, %rhs : f32
   %selected = scf.select %cond, %a, %b : f32

@@ -738,12 +738,32 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    legalization
+  HDRS
+    "legalization.h"
+  SRCS
+    "legalization.c"
+  DEPS
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::kernel
+    loom::src::loom::ops::scalar
+    loom::src::loom::ops::scf
+    loom::src::loom::rewrite::rewriter
+    loom::src::loom::target::arch::amdgpu::target_info_defs
+    loom::src::loom::target::legalization
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     provider
   HDRS
     "provider.h"
   SRCS
     "provider.c"
   DEPS
+    ::legalization
     ::low_registry
     ::lower
     ::math_policy
