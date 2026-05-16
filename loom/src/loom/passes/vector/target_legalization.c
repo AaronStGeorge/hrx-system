@@ -6,6 +6,8 @@
 
 #include "loom/passes/vector/target_legalization.h"
 
+#include "loom/ir/module.h"
+#include "loom/ir/types.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/passes/vector/to_scalar.h"
 
@@ -43,6 +45,15 @@ static iree_status_t loom_vector_legalize_mma(
     return iree_ok_status();
   }
 
+  loom_type_t result_type =
+      loom_module_value_type(context->module, loom_vector_mma_result(op));
+  if (!loom_type_is_all_static(result_type)) {
+    *out_result = (loom_target_legalizer_result_t){
+        .action = LOOM_TARGET_LEGALIZER_ACTION_DEFER,
+    };
+    return iree_ok_status();
+  }
+
   bool rewritten = false;
   IREE_RETURN_IF_ERROR(loom_vector_mma_to_scalar_rewrite_op(
       context->pass, context->rewriter, op, &rewritten));
@@ -54,6 +65,58 @@ static iree_status_t loom_vector_legalize_mma(
   return iree_ok_status();
 }
 
+static iree_status_t loom_vector_legalize_store(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  (void)entry;
+  *out_result = (loom_target_legalizer_result_t){
+      .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
+  };
+  if (context->mode != LOOM_TARGET_LEGALIZATION_MODE_FINAL) {
+    *out_result = (loom_target_legalizer_result_t){
+        .action = LOOM_TARGET_LEGALIZER_ACTION_DEFER,
+    };
+    return iree_ok_status();
+  }
+
+  bool rewritten = false;
+  IREE_RETURN_IF_ERROR(loom_vector_store_to_scalar_rewrite_op(
+      context->pass, context->rewriter, op, &rewritten));
+  if (rewritten) {
+    *out_result = (loom_target_legalizer_result_t){
+        .action = LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN,
+    };
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_vector_legalize_extract(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  (void)entry;
+  *out_result = (loom_target_legalizer_result_t){
+      .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
+  };
+  if (context->mode != LOOM_TARGET_LEGALIZATION_MODE_FINAL) {
+    *out_result = (loom_target_legalizer_result_t){
+        .action = LOOM_TARGET_LEGALIZER_ACTION_DEFER,
+    };
+    return iree_ok_status();
+  }
+
+  bool rewritten = false;
+  IREE_RETURN_IF_ERROR(loom_vector_extract_to_scalar_rewrite_op(
+      context->pass, context->rewriter, op, &rewritten));
+  if (rewritten) {
+    *out_result = (loom_target_legalizer_result_t){
+        .action = LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN,
+    };
+  }
+  return iree_ok_status();
+}
+
 static const loom_target_legalizer_entry_t kVectorLegalizerEntries[] = {
     {
         .root_kind = LOOM_OP_VECTOR_REDUCE_AXES,
@@ -62,6 +125,14 @@ static const loom_target_legalizer_entry_t kVectorLegalizerEntries[] = {
     {
         .root_kind = LOOM_OP_VECTOR_MMA,
         .legalize = loom_vector_legalize_mma,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_STORE,
+        .legalize = loom_vector_legalize_store,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_EXTRACT,
+        .legalize = loom_vector_legalize_extract,
     },
 };
 

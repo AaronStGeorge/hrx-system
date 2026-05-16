@@ -757,6 +757,42 @@ iree_status_t loom_vector_mma_to_scalar_rewrite_op(loom_pass_t* pass,
   return iree_ok_status();
 }
 
+iree_status_t loom_vector_store_to_scalar_rewrite_op(loom_pass_t* pass,
+                                                     loom_rewriter_t* rewriter,
+                                                     loom_op_t* op,
+                                                     bool* out_rewritten) {
+  *out_rewritten = false;
+  if (!loom_vector_store_isa(op)) {
+    return iree_ok_status();
+  }
+  loom_builder_set_before(&rewriter->builder, op);
+  bool handled = false;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_lower_memory_store_op(
+      pass, rewriter, op, &handled));
+  if (handled && !loom_pass_has_error_diagnostics(pass)) {
+    *out_rewritten = true;
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_vector_extract_to_scalar_rewrite_op(
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op,
+    bool* out_rewritten) {
+  *out_rewritten = false;
+  if (!loom_vector_extract_isa(op)) {
+    return iree_ok_status();
+  }
+  loom_builder_set_before(&rewriter->builder, op);
+  bool handled = false;
+  IREE_RETURN_IF_ERROR(
+      loom_vector_to_scalar_lower_scalar_extract(pass, rewriter, op, &handled));
+  if (handled && !loom_pass_has_error_diagnostics(pass) &&
+      iree_any_bit_set(op->flags, LOOM_OP_FLAG_DEAD)) {
+    *out_rewritten = true;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_vector_gather_to_scalar_lower_op(
     loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op) {
   if (!loom_vector_gather_isa(op) && !loom_vector_gather_mask_isa(op)) {

@@ -9,10 +9,12 @@
 #include "loom/ir/module.h"
 #include "loom/ir/scalar_type.h"
 #include "loom/ops/index/ops.h"
+#include "loom/ops/op_defs.h"
 #include "loom/ops/scalar/ops.h"
 #include "loom/ops/scf/ops.h"
 #include "loom/ops/vector/ops.h"
 #include "loom/passes/vector/to_scalar_memory.h"
+#include "loom/passes/vector/to_scalar_mma.h"
 #include "loom/passes/vector/to_scalar_quantized.h"
 #include "loom/passes/vector/to_scalar_structural.h"
 #include "loom/passes/vector/to_scalar_tables.h"
@@ -607,6 +609,15 @@ iree_status_t loom_vector_to_scalar_try_materialize_def_lane(
   if (!def_op) {
     return iree_ok_status();
   }
+  const loom_trait_flags_t traits =
+      loom_op_effective_traits(state->rewriter->module, def_op);
+  if (loom_traits_are_value_alias(traits)) {
+    IREE_ASSERT(def_op->operand_count >= 1);
+    IREE_ASSERT(def_op->result_count == 1);
+    return loom_vector_to_scalar_try_materialize_def_lane(
+        state, loom_op_const_operands(def_op)[0], vector_type, indices,
+        out_materialized, out_lane);
+  }
   if (loom_vector_to_scalar_try_from_elements_lane(def_op, vector_type, indices,
                                                    out_lane)) {
     *out_materialized = true;
@@ -646,6 +657,10 @@ iree_status_t loom_vector_to_scalar_try_materialize_def_lane(
         loom_vector_to_scalar_build_poison_lane(&def_state, out_lane));
     *out_materialized = true;
     return iree_ok_status();
+  }
+  if (loom_vector_mma_isa(def_op)) {
+    return loom_vector_to_scalar_try_materialize_mma_lane(
+        state, def_op, indices, out_materialized, out_lane);
   }
 
   const loom_vector_to_scalar_descriptor_t* descriptor =

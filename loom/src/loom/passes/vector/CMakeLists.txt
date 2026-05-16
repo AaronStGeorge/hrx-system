@@ -86,6 +86,7 @@ loom_cc_library(
   DEPS
     ::to_scalar
     iree::base
+    loom::src::loom::ir
     loom::src::loom::ops::vector
     loom::src::loom::target::legalization
   PUBLIC

@@ -797,6 +797,107 @@ static iree_status_t loom_vector_to_scalar_mma_lower_dynamic(
   return iree_ok_status();
 }
 
+static bool loom_vector_to_scalar_mma_query_operands(
+    loom_vector_to_scalar_state_t* state,
+    loom_vector_to_scalar_mma_fragment_t* lhs,
+    loom_vector_to_scalar_mma_fragment_t* rhs,
+    loom_vector_to_scalar_mma_fragment_t* init,
+    loom_vector_to_scalar_mma_numeric_t* out_numeric) {
+  if (!loom_vector_to_scalar_mma_query_fragment(
+          state, loom_vector_mma_lhs(state->op),
+          LOOM_VECTOR_FRAGMENT_ROLE_FLAG_LHS, lhs) ||
+      !loom_vector_to_scalar_mma_query_fragment(
+          state, loom_vector_mma_rhs(state->op),
+          LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RHS, rhs) ||
+      !loom_vector_to_scalar_mma_query_fragment(
+          state, loom_vector_mma_init(state->op),
+          LOOM_VECTOR_FRAGMENT_ROLE_FLAG_INIT |
+              LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RESULT,
+          init)) {
+    return false;
+  }
+  return loom_vector_to_scalar_mma_shapes_match(state, lhs, rhs, init,
+                                                out_numeric);
+}
+
+static iree_status_t loom_vector_to_scalar_mma_result_lane_terms(
+    loom_vector_to_scalar_state_t* state,
+    const loom_vector_to_scalar_mma_fragment_t* init,
+    loom_vector_to_scalar_index_list_t indices, bool* out_supported,
+    loom_vector_to_scalar_index_term_t* out_row,
+    loom_vector_to_scalar_index_term_t* out_column) {
+  *out_supported = false;
+  switch (init->layout) {
+    case LOOM_VECTOR_TO_SCALAR_MMA_PAYLOAD_LAYOUT_MATRIX_ROW_MAJOR:
+      if (indices.rank != 2) {
+        return iree_ok_status();
+      }
+      *out_row = loom_vector_to_scalar_lane_term(state, indices, 0);
+      *out_column = loom_vector_to_scalar_lane_term(state, indices, 1);
+      *out_supported = true;
+      return iree_ok_status();
+    case LOOM_VECTOR_TO_SCALAR_MMA_PAYLOAD_LAYOUT_FLAT_ROW_MAJOR: {
+      if (indices.rank != 1) {
+        return iree_ok_status();
+      }
+      loom_vector_to_scalar_index_term_t ordinal =
+          loom_vector_to_scalar_lane_term(state, indices, 0);
+      IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
+          state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_DIV, ordinal, init->columns,
+          out_row));
+      IREE_RETURN_IF_ERROR(loom_vector_to_scalar_build_term_binary(
+          state, LOOM_VECTOR_TO_SCALAR_INDEX_BINARY_REM, ordinal, init->columns,
+          out_column));
+      *out_supported = true;
+      return iree_ok_status();
+    }
+    case LOOM_VECTOR_TO_SCALAR_MMA_PAYLOAD_LAYOUT_UNSUPPORTED:
+    default:
+      return iree_ok_status();
+  }
+}
+
+iree_status_t loom_vector_to_scalar_try_materialize_mma_lane(
+    loom_vector_to_scalar_state_t* state, loom_op_t* op,
+    loom_vector_to_scalar_index_list_t indices, bool* out_materialized,
+    loom_value_id_t* out_lane) {
+  *out_materialized = false;
+  if (!loom_vector_mma_isa(op) || state->rewriter->fact_table == NULL) {
+    return iree_ok_status();
+  }
+
+  loom_vector_to_scalar_state_t lane_state = *state;
+  lane_state.op = op;
+  lane_state.vector_type = loom_module_value_type(state->rewriter->module,
+                                                  loom_vector_mma_result(op));
+  lane_state.result_scalar_type =
+      loom_vector_to_scalar_lane_type(lane_state.vector_type);
+  lane_state.location = op->location;
+
+  loom_vector_to_scalar_mma_fragment_t lhs = {0};
+  loom_vector_to_scalar_mma_fragment_t rhs = {0};
+  loom_vector_to_scalar_mma_fragment_t init = {0};
+  loom_vector_to_scalar_mma_numeric_t numeric =
+      LOOM_VECTOR_TO_SCALAR_MMA_NUMERIC_UNSUPPORTED;
+  if (!loom_vector_to_scalar_mma_query_operands(&lane_state, &lhs, &rhs, &init,
+                                                &numeric)) {
+    return iree_ok_status();
+  }
+
+  loom_vector_to_scalar_index_term_t row = {0};
+  loom_vector_to_scalar_index_term_t column = {0};
+  bool lane_supported = false;
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_result_lane_terms(
+      &lane_state, &init, indices, &lane_supported, &row, &column));
+  if (!lane_supported) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_vector_to_scalar_mma_build_dynamic_result_lane(
+      &lane_state, numeric, &lhs, &rhs, &init, row, column, out_lane));
+  *out_materialized = true;
+  return iree_ok_status();
+}
+
 iree_status_t loom_vector_to_scalar_lower_mma(
     loom_vector_to_scalar_state_t* state, bool* out_handled,
     loom_value_id_t* out_replacement) {
@@ -809,24 +910,10 @@ iree_status_t loom_vector_to_scalar_lower_mma(
   loom_vector_to_scalar_mma_fragment_t lhs = {0};
   loom_vector_to_scalar_mma_fragment_t rhs = {0};
   loom_vector_to_scalar_mma_fragment_t init = {0};
-  if (!loom_vector_to_scalar_mma_query_fragment(
-          state, loom_vector_mma_lhs(state->op),
-          LOOM_VECTOR_FRAGMENT_ROLE_FLAG_LHS, &lhs) ||
-      !loom_vector_to_scalar_mma_query_fragment(
-          state, loom_vector_mma_rhs(state->op),
-          LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RHS, &rhs) ||
-      !loom_vector_to_scalar_mma_query_fragment(
-          state, loom_vector_mma_init(state->op),
-          LOOM_VECTOR_FRAGMENT_ROLE_FLAG_INIT |
-              LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RESULT,
-          &init)) {
-    return iree_ok_status();
-  }
-
   loom_vector_to_scalar_mma_numeric_t numeric =
       LOOM_VECTOR_TO_SCALAR_MMA_NUMERIC_UNSUPPORTED;
-  if (!loom_vector_to_scalar_mma_shapes_match(state, &lhs, &rhs, &init,
-                                              &numeric)) {
+  if (!loom_vector_to_scalar_mma_query_operands(state, &lhs, &rhs, &init,
+                                                &numeric)) {
     return iree_ok_status();
   }
 

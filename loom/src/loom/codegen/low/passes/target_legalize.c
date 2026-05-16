@@ -13,6 +13,7 @@
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
 #include "loom/pass/value_facts.h"
+#include "loom/passes/scf_to_cfg.h"
 #include "loom/passes/vector/target_legalization.h"
 #include "loom/rewrite/greedy.h"
 #include "loom/target/legalization.h"
@@ -302,6 +303,18 @@ static iree_status_t loom_low_target_legalize_rewrite_op(
   *out_changed = false;
   loom_low_target_legalize_function_state_t* state =
       (loom_low_target_legalize_function_state_t*)user_data;
+  driver->rewriter.flags = 0;
+  bool erased = false;
+  IREE_RETURN_IF_ERROR(
+      loom_rewriter_erase_if_dead(&driver->rewriter, op, &erased));
+  if (erased) {
+    loom_greedy_rewrite_result_record_change(
+        result, &driver->rewriter,
+        LOOM_GREEDY_REWRITE_CHANGE_FLAG_COUNT_MODIFIED_OP);
+    *out_changed = true;
+    return iree_ok_status();
+  }
+
   const loom_target_legalizer_op_entry_t op_entry =
       loom_target_legalizer_registry_lookup_kind(state->legalizer_registry,
                                                  op->kind);
@@ -402,6 +415,40 @@ static iree_status_t loom_low_target_legalize_verify_final(
   return status;
 }
 
+static iree_status_t loom_low_target_legalize_run_final_structure_lowering(
+    loom_pass_t* pass, loom_module_t* module, loom_func_like_t function) {
+  const loom_pass_info_t* original_info = pass->info;
+  int64_t* original_statistics = pass->statistics;
+  void* original_state = pass->state;
+  pass->info = loom_scf_to_cfg_pass_info();
+  pass->statistics = NULL;
+  pass->state = NULL;
+  iree_status_t status = loom_scf_to_cfg_run(pass, module, function);
+  pass->info = original_info;
+  pass->statistics = original_statistics;
+  pass->state = original_state;
+  return status;
+}
+
+static iree_status_t loom_low_target_legalize_acquire_final_facts(
+    loom_pass_t* pass, loom_module_t* module,
+    const loom_low_source_selection_t* selection,
+    const loom_greedy_rewrite_driver_t* rewrite_driver,
+    const loom_value_fact_table_t** out_fact_table) {
+  *out_fact_table = loom_greedy_rewrite_driver_fact_table(rewrite_driver);
+  if (pass->value_facts == NULL) {
+    return iree_ok_status();
+  }
+  loom_value_fact_table_t* fact_table = NULL;
+  IREE_RETURN_IF_ERROR(loom_pass_value_facts_acquire(
+      pass, module,
+      loom_pass_value_fact_scope_function_for_target(selection->func,
+                                                     selection->target_bundle),
+      &fact_table));
+  *out_fact_table = fact_table;
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_target_legalize_function(
     loom_pass_t* pass, loom_module_t* module,
     const loom_low_target_legalize_pass_state_t* pass_state,
@@ -492,11 +539,21 @@ static iree_status_t loom_low_target_legalize_function(
   uint32_t final_error_count = 0;
   if (iree_status_is_ok(status) &&
       pass_state->mode == LOOM_TARGET_LEGALIZATION_MODE_FINAL) {
-    status = loom_low_target_legalize_verify_final(
-        module, &state, pass_state,
-        loom_greedy_rewrite_driver_fact_table(&rewrite_driver),
-        &final_error_count);
+    status = loom_low_target_legalize_run_final_structure_lowering(
+        pass, module, selection->func);
   }
+  if (iree_status_is_ok(status) &&
+      pass_state->mode == LOOM_TARGET_LEGALIZATION_MODE_FINAL) {
+    const loom_value_fact_table_t* final_facts = NULL;
+    status = loom_low_target_legalize_acquire_final_facts(
+        pass, module, selection, &rewrite_driver, &final_facts);
+    if (!iree_status_is_ok(status)) {
+      goto cleanup;
+    }
+    status = loom_low_target_legalize_verify_final(
+        module, &state, pass_state, final_facts, &final_error_count);
+  }
+cleanup:
   loom_low_target_legalize_destroy_query_scope(&state);
   loom_greedy_rewrite_driver_deinitialize(&rewrite_driver);
   iree_arena_deinitialize(&rewrite_arena);
