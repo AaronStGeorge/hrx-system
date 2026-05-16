@@ -73,7 +73,7 @@ loom_cc_library(
     srcs = ["matrix_fragment_layout.c"],
     hdrs = ["matrix_fragment_layout.h"],
     deps = [
-        ":contract",
+        ":contract_roles",
         "//runtime/src/iree/base",
     ],
 )
@@ -190,10 +190,16 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "contract_roles",
+    hdrs = ["contract_roles.h"],
+)
+
+loom_cc_library(
     name = "contract",
     srcs = ["contract.c"],
     hdrs = ["contract.h"],
     deps = [
+        ":contract_roles",
         ":policy",
         "//loom/src/loom/ir",
         "//loom/src/loom/util:fact_table",

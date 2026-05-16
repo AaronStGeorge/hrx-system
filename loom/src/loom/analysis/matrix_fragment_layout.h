@@ -16,7 +16,7 @@
 #define LOOM_ANALYSIS_MATRIX_FRAGMENT_LAYOUT_H_
 
 #include "iree/base/api.h"
-#include "loom/analysis/contract.h"
+#include "loom/analysis/contract_roles.h"
 
 #ifdef __cplusplus
 extern "C" {

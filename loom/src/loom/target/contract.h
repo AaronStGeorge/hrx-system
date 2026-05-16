@@ -36,6 +36,7 @@ extern "C" {
 #endif
 
 typedef struct loom_view_region_table_t loom_view_region_table_t;
+typedef struct loom_matrix_fragment_layout_t loom_matrix_fragment_layout_t;
 
 typedef enum loom_target_contract_query_outcome_e {
   // No linked contract fragment or provider has an opinion about the op.
@@ -75,6 +76,9 @@ typedef struct loom_target_contract_query_result_t {
   uint16_t matched_guard_count;
   // Low descriptor row selected by the accepted rule, or NULL.
   const loom_low_descriptor_t* selected_descriptor;
+  // Matrix-fragment lane/register layout selected with the source contract, or
+  // NULL when the queried op is not a matrix-fragment contract.
+  const loom_matrix_fragment_layout_t* selected_matrix_fragment_layout;
   // Compact target-independent rejection flags.
   uint32_t source_rejection_bits;
   // Optional target-independent rejection detail enum.
@@ -302,6 +306,7 @@ loom_target_contract_query_result_empty(void) {
       /*.diagnostic_index=*/UINT16_MAX,
       /*.matched_guard_count=*/0,
       /*.selected_descriptor=*/NULL,
+      /*.selected_matrix_fragment_layout=*/NULL,
       /*.source_rejection_bits=*/0,
       /*.source_rejection_detail=*/0,
       /*.target_rejection_bits=*/0,

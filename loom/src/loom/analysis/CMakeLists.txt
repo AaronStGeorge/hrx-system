@@ -82,7 +82,7 @@ loom_cc_library(
   SRCS
     "matrix_fragment_layout.c"
   DEPS
-    ::contract
+    ::contract_roles
     iree::base
   PUBLIC
 )
@@ -222,12 +222,23 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    contract_roles
+  HDRS
+    "contract_roles.h"
+  DEPS
+
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     contract
   HDRS
     "contract.h"
   SRCS
     "contract.c"
   DEPS
+    ::contract_roles
     ::policy
     iree::base
     loom::src::loom::ir

@@ -15,6 +15,7 @@
 #define LOOM_ANALYSIS_CONTRACT_H_
 
 #include "iree/base/api.h"
+#include "loom/analysis/contract_roles.h"
 #include "loom/analysis/policy.h"
 #include "loom/ir/types.h"
 #include "loom/util/fact_table.h"
@@ -46,19 +47,6 @@ typedef enum loom_contract_arithmetic_e {
   // Contraction depends on an explicit numeric transform.
   LOOM_CONTRACT_ARITHMETIC_TRANSFORM_BACKED = 4,
 } loom_contract_arithmetic_t;
-
-typedef enum loom_contract_operand_role_e {
-  // Unknown or uninitialized operand role.
-  LOOM_CONTRACT_OPERAND_ROLE_UNKNOWN = 0,
-  // Left-hand source operand.
-  LOOM_CONTRACT_OPERAND_ROLE_LHS = 1,
-  // Right-hand source operand.
-  LOOM_CONTRACT_OPERAND_ROLE_RHS = 2,
-  // Accumulator input operand.
-  LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR = 3,
-  // Result operand.
-  LOOM_CONTRACT_OPERAND_ROLE_RESULT = 4,
-} loom_contract_operand_role_t;
 
 typedef enum loom_contract_numeric_type_e {
   // Unknown or uninitialized numeric payload.
