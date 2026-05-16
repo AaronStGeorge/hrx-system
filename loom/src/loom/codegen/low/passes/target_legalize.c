@@ -394,6 +394,7 @@ static void loom_low_target_legalize_record_report_row(
       .descriptor_id =
           loom_low_target_legalize_report_descriptor_id(query_result),
       .source_rejection_bits = query_result->source_rejection_bits,
+      .source_rejection_detail = query_result->source_rejection_detail,
       .target_rejection_bits = query_result->target_rejection_bits,
       .missing_feature_bits = query_result->missing_feature_bits,
       .missing_fact_bits = query_result->missing_fact_bits,
@@ -411,6 +412,11 @@ loom_low_target_legalize_result_for_legalizer_report(
   loom_target_contract_query_result_t report_result = *query_result;
   report_result.source_rejection_bits |=
       legalizer_result->source_rejection_bits;
+  if (legalizer_result->source_rejection_detail !=
+      LOOM_CONTRACT_REJECTION_DETAIL_NONE) {
+    report_result.source_rejection_detail =
+        legalizer_result->source_rejection_detail;
+  }
   report_result.target_rejection_bits |=
       legalizer_result->target_rejection_bits;
   report_result.missing_feature_bits |= legalizer_result->missing_feature_bits;
@@ -470,6 +476,19 @@ static iree_string_view_t loom_low_target_legalize_reference_source_contract(
 
 static iree_string_view_t loom_low_target_legalize_reference_constraint_key(
     const loom_target_legalizer_result_t* result) {
+  switch ((loom_contract_rejection_detail_t)result->source_rejection_detail) {
+    case LOOM_CONTRACT_REJECTION_DETAIL_MATRIX_LHS_FRAGMENT_OWNERSHIP:
+      return IREE_SV("reference.lhs_fragment_ownership");
+    case LOOM_CONTRACT_REJECTION_DETAIL_MATRIX_RHS_FRAGMENT_OWNERSHIP:
+      return IREE_SV("reference.rhs_fragment_ownership");
+    case LOOM_CONTRACT_REJECTION_DETAIL_MATRIX_INIT_FRAGMENT_OWNERSHIP:
+      return IREE_SV("reference.init_fragment_ownership");
+    case LOOM_CONTRACT_REJECTION_DETAIL_MATRIX_RESULT_FRAGMENT_PAYLOAD:
+      return IREE_SV("reference.result_fragment_payload");
+    case LOOM_CONTRACT_REJECTION_DETAIL_NONE:
+    default:
+      break;
+  }
   const uint32_t bits = result->source_rejection_bits;
   if (iree_any_bit_set(bits, LOOM_CONTRACT_REJECTION_INVALID_REQUEST)) {
     return IREE_SV("reference.request_shape");
@@ -573,6 +592,8 @@ loom_low_target_legalize_apply_final_rejection_to_contract_query(
                         ? LOOM_TARGET_CONTRACT_QUERY_INVALID_IR
                         : LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED;
   result->source_rejection_bits = final_rejection->result.source_rejection_bits;
+  result->source_rejection_detail =
+      final_rejection->result.source_rejection_detail;
   result->target_rejection_bits = final_rejection->result.target_rejection_bits;
   result->missing_feature_bits = final_rejection->result.missing_feature_bits;
   result->missing_fact_bits = final_rejection->result.missing_fact_bits;

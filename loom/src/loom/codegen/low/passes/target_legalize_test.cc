@@ -226,6 +226,8 @@ TEST_F(TargetLegalizePassTest, RecordsReferenceRejectReasonInCompileReport) {
             LOOM_TARGET_COMPILE_REPORT_LEGALIZER_STRATEGY_REFERENCE);
   EXPECT_TRUE(iree_any_bit_set(mma_row->source_rejection_bits,
                                LOOM_CONTRACT_REJECTION_FRAGMENT));
+  EXPECT_EQ(mma_row->source_rejection_detail,
+            LOOM_CONTRACT_REJECTION_DETAIL_MATRIX_LHS_FRAGMENT_OWNERSHIP);
 }
 
 }  // namespace

@@ -301,6 +301,8 @@ typedef struct loom_target_compile_report_legalization_row_t {
   uint64_t descriptor_id;
   // Compact target-independent rejection flags.
   uint32_t source_rejection_bits;
+  // Optional target-independent rejection detail enum.
+  uint32_t source_rejection_detail;
   // Compact target-owned rejection flags.
   uint32_t target_rejection_bits;
   // Target feature bits missing from the selected bundle.

@@ -72,6 +72,8 @@ typedef struct loom_target_legalizer_result_t {
   loom_target_legalizer_action_t action;
   // Target-independent rejection flags added by the legalizer.
   uint32_t source_rejection_bits;
+  // Optional target-independent rejection detail enum added by the legalizer.
+  uint32_t source_rejection_detail;
   // Target-owned rejection flags added by the legalizer.
   uint32_t target_rejection_bits;
   // Target feature bits required by the legalizer but absent from the bundle.

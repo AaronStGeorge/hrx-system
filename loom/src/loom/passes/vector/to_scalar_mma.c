@@ -1158,6 +1158,89 @@ uint32_t loom_vector_to_scalar_mma_reference_rejection_bits(
   return LOOM_CONTRACT_REJECTION_NONE;
 }
 
+static loom_contract_rejection_detail_t
+loom_vector_to_scalar_mma_fragment_rejection_detail(
+    loom_vector_to_scalar_state_t* state,
+    const loom_vector_to_scalar_mma_fragment_t* fragment,
+    loom_contract_rejection_detail_t detail) {
+  const loom_contract_rejection_bits_t bits =
+      loom_vector_to_scalar_mma_fragment_logical_lane_rejection_bits(state,
+                                                                     fragment);
+  return iree_any_bit_set(bits, LOOM_CONTRACT_REJECTION_FRAGMENT)
+             ? detail
+             : LOOM_CONTRACT_REJECTION_DETAIL_NONE;
+}
+
+uint32_t loom_vector_to_scalar_mma_reference_rejection_detail(
+    loom_vector_to_scalar_state_t* state) {
+  if (!loom_vector_mma_isa(state->op) || state->rewriter->fact_table == NULL) {
+    return LOOM_CONTRACT_REJECTION_DETAIL_NONE;
+  }
+
+  loom_contract_rejection_bits_t rejection_bits = LOOM_CONTRACT_REJECTION_NONE;
+  rejection_bits |= loom_vector_to_scalar_mma_fragment_query_rejection_bits(
+      state, loom_vector_mma_lhs(state->op),
+      LOOM_VECTOR_FRAGMENT_ROLE_FLAG_LHS);
+  rejection_bits |= loom_vector_to_scalar_mma_fragment_query_rejection_bits(
+      state, loom_vector_mma_rhs(state->op),
+      LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RHS);
+  rejection_bits |= loom_vector_to_scalar_mma_fragment_query_rejection_bits(
+      state, loom_vector_mma_init(state->op),
+      LOOM_VECTOR_FRAGMENT_ROLE_FLAG_INIT |
+          LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RESULT);
+  if (rejection_bits != LOOM_CONTRACT_REJECTION_NONE) {
+    return LOOM_CONTRACT_REJECTION_DETAIL_NONE;
+  }
+
+  loom_vector_to_scalar_mma_fragment_t lhs = {0};
+  loom_vector_to_scalar_mma_fragment_t rhs = {0};
+  loom_vector_to_scalar_mma_fragment_t init = {0};
+  if (!loom_vector_to_scalar_mma_query_fragment(
+          state, loom_vector_mma_lhs(state->op),
+          LOOM_VECTOR_FRAGMENT_ROLE_FLAG_LHS, &lhs) ||
+      !loom_vector_to_scalar_mma_query_fragment(
+          state, loom_vector_mma_rhs(state->op),
+          LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RHS, &rhs) ||
+      !loom_vector_to_scalar_mma_query_fragment(
+          state, loom_vector_mma_init(state->op),
+          LOOM_VECTOR_FRAGMENT_ROLE_FLAG_INIT |
+              LOOM_VECTOR_FRAGMENT_ROLE_FLAG_RESULT,
+          &init)) {
+    return LOOM_CONTRACT_REJECTION_DETAIL_NONE;
+  }
+
+  loom_contract_rejection_detail_t detail =
+      loom_vector_to_scalar_mma_fragment_rejection_detail(
+          state, &lhs,
+          LOOM_CONTRACT_REJECTION_DETAIL_MATRIX_LHS_FRAGMENT_OWNERSHIP);
+  if (detail != LOOM_CONTRACT_REJECTION_DETAIL_NONE) {
+    return detail;
+  }
+  detail = loom_vector_to_scalar_mma_fragment_rejection_detail(
+      state, &rhs,
+      LOOM_CONTRACT_REJECTION_DETAIL_MATRIX_RHS_FRAGMENT_OWNERSHIP);
+  if (detail != LOOM_CONTRACT_REJECTION_DETAIL_NONE) {
+    return detail;
+  }
+  detail = loom_vector_to_scalar_mma_fragment_rejection_detail(
+      state, &init,
+      LOOM_CONTRACT_REJECTION_DETAIL_MATRIX_INIT_FRAGMENT_OWNERSHIP);
+  if (detail != LOOM_CONTRACT_REJECTION_DETAIL_NONE) {
+    return detail;
+  }
+
+  loom_vector_to_scalar_mma_numeric_t numeric =
+      LOOM_VECTOR_TO_SCALAR_MMA_NUMERIC_UNSUPPORTED;
+  if (!loom_vector_to_scalar_mma_query_operands(state, &lhs, &rhs, &init,
+                                                &numeric)) {
+    return LOOM_CONTRACT_REJECTION_DETAIL_NONE;
+  }
+  if (!loom_vector_to_scalar_mma_result_is_dense_payload(state, &init)) {
+    return LOOM_CONTRACT_REJECTION_DETAIL_MATRIX_RESULT_FRAGMENT_PAYLOAD;
+  }
+  return LOOM_CONTRACT_REJECTION_DETAIL_NONE;
+}
+
 static iree_status_t loom_vector_to_scalar_mma_result_lane_terms(
     loom_vector_to_scalar_state_t* state,
     const loom_vector_to_scalar_mma_fragment_t* init,

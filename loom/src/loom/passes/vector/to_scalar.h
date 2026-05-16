@@ -57,6 +57,11 @@ iree_status_t loom_vector_mma_to_scalar_rewrite_op(loom_pass_t* pass,
 uint32_t loom_vector_mma_to_scalar_reference_rejection_bits(
     loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op);
 
+// Returns the first role-local rejection detail explaining why the scalar
+// reference lowering would refuse one vector.mma op.
+uint32_t loom_vector_mma_to_scalar_reference_rejection_detail(
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op);
+
 // Rewrites one vector.store into scalar view.store loops. The source vector is
 // consumed lane-by-lane so supported producer trees can disappear through DCE
 // without first materializing a dynamic vector aggregate.

@@ -77,6 +77,8 @@ typedef struct loom_target_contract_query_result_t {
   const loom_low_descriptor_t* selected_descriptor;
   // Compact target-independent rejection flags.
   uint32_t source_rejection_bits;
+  // Optional target-independent rejection detail enum.
+  uint32_t source_rejection_detail;
   // Compact target-owned rejection flags.
   uint32_t target_rejection_bits;
   // Target feature bits missing from the selected bundle.
@@ -301,6 +303,7 @@ loom_target_contract_query_result_empty(void) {
       /*.matched_guard_count=*/0,
       /*.selected_descriptor=*/NULL,
       /*.source_rejection_bits=*/0,
+      /*.source_rejection_detail=*/0,
       /*.target_rejection_bits=*/0,
       /*.missing_feature_bits=*/0,
       /*.missing_fact_bits=*/0,

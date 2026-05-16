@@ -45,6 +45,11 @@ bool loom_vector_to_scalar_mma_supports_logical_result_lanes(
 uint32_t loom_vector_to_scalar_mma_reference_rejection_bits(
     loom_vector_to_scalar_state_t* state);
 
+// Returns the first role-local contract rejection detail for the vector.mma
+// forms this reference lowering cannot scalarize.
+uint32_t loom_vector_to_scalar_mma_reference_rejection_detail(
+    loom_vector_to_scalar_state_t* state);
+
 #ifdef __cplusplus
 }
 #endif

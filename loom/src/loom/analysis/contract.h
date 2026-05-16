@@ -426,6 +426,23 @@ enum loom_contract_rejection_bits_e {
 // Bitset of loom_contract_rejection_bits_e values.
 typedef uint32_t loom_contract_rejection_bits_t;
 
+typedef enum loom_contract_rejection_detail_e {
+  // No finer-grained source rejection detail was recorded.
+  LOOM_CONTRACT_REJECTION_DETAIL_NONE = 0,
+  // Matrix LHS payload is subgroup-distributed without reference ownership
+  // semantics.
+  LOOM_CONTRACT_REJECTION_DETAIL_MATRIX_LHS_FRAGMENT_OWNERSHIP = 1,
+  // Matrix RHS payload is subgroup-distributed without reference ownership
+  // semantics.
+  LOOM_CONTRACT_REJECTION_DETAIL_MATRIX_RHS_FRAGMENT_OWNERSHIP = 2,
+  // Matrix init payload is subgroup-distributed without reference ownership
+  // semantics.
+  LOOM_CONTRACT_REJECTION_DETAIL_MATRIX_INIT_FRAGMENT_OWNERSHIP = 3,
+  // Matrix result payload is not representable by the scalar reference
+  // aggregate shape selected for the op.
+  LOOM_CONTRACT_REJECTION_DETAIL_MATRIX_RESULT_FRAGMENT_PAYLOAD = 4,
+} loom_contract_rejection_detail_t;
+
 typedef struct loom_contract_diagnostic_t {
   // Bitset of loom_contract_rejection_bits_t values.
   loom_contract_rejection_bits_t rejection_bits;

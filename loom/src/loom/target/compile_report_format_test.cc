@@ -15,6 +15,8 @@
 namespace loom {
 namespace {
 
+constexpr uint32_t kTestSourceRejectionDetail = 4;
+
 TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   loom_target_compile_report_pressure_row_t pressure_rows[] = {
       {
@@ -78,6 +80,7 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
           .diagnostic_index = UINT16_MAX,
           .descriptor_id = UINT64_MAX,
           .source_rejection_bits = 0x1,
+          .source_rejection_detail = kTestSourceRejectionDetail,
           .target_rejection_bits = 0x2,
           .missing_feature_bits = 0x4,
           .missing_fact_bits = 0x8,
@@ -203,6 +206,9 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
   EXPECT_NE(iree_string_view_find(output, IREE_SV("strategy=reference"), 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(
+      iree_string_view_find(output, IREE_SV("source_rejection_detail=4"), 0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(
       iree_string_view_find(output, IREE_SV("created_ops=6 erased_ops=1"), 0),
       IREE_STRING_VIEW_NPOS);
 
@@ -276,6 +282,9 @@ TEST(CompileReportFormatTest, FormatsSummaryAndDetails) {
                                     "\"contract_outcome\":\"unsupported\""),
                             0),
       IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(output,
+                                  IREE_SV("\"source_rejection_detail\":4"), 0),
+            IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output,
                                   IREE_SV("\"created_op_count\":6,"
                                           "\"erased_op_count\":1"),

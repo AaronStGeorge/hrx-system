@@ -580,9 +580,9 @@ static iree_status_t loom_target_compile_report_format_legalization_rows(
         "contract=%.*s legalizer=%.*s strategy=%.*s bundle=%.*s "
         "config=%.*s binding=%u case=%u rule_set=%u rule=%u diagnostic=%u "
         "descriptor=%" PRIu64 " source_rejections=0x%08" PRIx32
-        " target_rejections=0x%08" PRIx32 " missing_features=0x%08" PRIx32
-        " missing_facts=0x%08" PRIx32 " created_ops=%" PRIu64
-        " erased_ops=%" PRIu64 "\n",
+        " source_rejection_detail=%" PRIu32 " target_rejections=0x%08" PRIx32
+        " missing_features=0x%08" PRIx32 " missing_facts=0x%08" PRIx32
+        " created_ops=%" PRIu64 " erased_ops=%" PRIu64 "\n",
         i, (int)function_name.size, function_name.data,
         (int)source_op_name.size, source_op_name.data, (int)mode_name.size,
         mode_name.data, (int)action_name.size, action_name.data,
@@ -592,9 +592,9 @@ static iree_status_t loom_target_compile_report_format_legalization_rows(
         (int)target_config_name.size, target_config_name.data,
         row->binding_index, row->case_index, row->rule_set_index,
         row->rule_index, row->diagnostic_index, row->descriptor_id,
-        row->source_rejection_bits, row->target_rejection_bits,
-        row->missing_feature_bits, row->missing_fact_bits,
-        row->created_op_count, row->erased_op_count));
+        row->source_rejection_bits, row->source_rejection_detail,
+        row->target_rejection_bits, row->missing_feature_bits,
+        row->missing_fact_bits, row->created_op_count, row->erased_op_count));
   }
   return iree_ok_status();
 }
@@ -1112,6 +1112,9 @@ static iree_status_t loom_target_compile_report_format_legalization_row_json(
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
       stream, &first_field, "source_rejection_bits",
       row->source_rejection_bits));
+  IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
+      stream, &first_field, "source_rejection_detail",
+      row->source_rejection_detail));
   IREE_RETURN_IF_ERROR(loom_target_compile_report_json_write_u32_field(
       stream, &first_field, "target_rejection_bits",
       row->target_rejection_bits));

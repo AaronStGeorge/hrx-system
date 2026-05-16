@@ -77,6 +77,10 @@ static iree_status_t loom_vector_legalize_mma(
           rewritten ? 0
                     : loom_vector_mma_to_scalar_reference_rejection_bits(
                           context->pass, context->rewriter, op),
+      .source_rejection_detail =
+          rewritten ? 0
+                    : loom_vector_mma_to_scalar_reference_rejection_detail(
+                          context->pass, context->rewriter, op),
   };
   return iree_ok_status();
 }
