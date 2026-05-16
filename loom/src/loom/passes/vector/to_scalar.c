@@ -22,6 +22,7 @@
 #include "loom/passes/vector/to_scalar_descriptors.h"
 #include "loom/passes/vector/to_scalar_lanes.h"
 #include "loom/passes/vector/to_scalar_memory.h"
+#include "loom/passes/vector/to_scalar_mma.h"
 #include "loom/passes/vector/to_scalar_reductions.h"
 #include "loom/passes/vector/to_scalar_terms.h"
 #include "loom/passes/vector/to_scalar_transforms.h"
@@ -552,6 +553,30 @@ static iree_status_t loom_vector_to_scalar_lower_dotf_op(
   return loom_vector_to_scalar_replace_one_result(&state, replacement);
 }
 
+static iree_status_t loom_vector_to_scalar_lower_mma_op(
+    loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op,
+    bool* out_handled) {
+  *out_handled = false;
+  loom_vector_to_scalar_state_t state = {
+      .pass = pass,
+      .rewriter = rewriter,
+      .op = op,
+      .value_checkpoint = loom_rewriter_value_checkpoint(rewriter),
+      .vector_type =
+          loom_module_value_type(rewriter->module, loom_vector_mma_result(op)),
+      .result_scalar_type = loom_vector_to_scalar_lane_type(
+          loom_module_value_type(rewriter->module, loom_vector_mma_result(op))),
+      .location = op->location,
+  };
+  loom_value_id_t replacement = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_vector_to_scalar_lower_mma(&state, out_handled, &replacement));
+  if (!*out_handled || loom_pass_has_error_diagnostics(pass)) {
+    return iree_ok_status();
+  }
+  return loom_vector_to_scalar_replace_one_result(&state, replacement);
+}
+
 typedef iree_status_t (*loom_vector_to_scalar_op_lowerer_t)(
     loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op,
     bool* out_handled);
@@ -593,6 +618,7 @@ static const loom_vector_to_scalar_op_lowerer_def_t
         {LOOM_OP_VECTOR_REDUCE_AXES,
          loom_vector_to_scalar_lower_reduce_axes_op},
         {LOOM_OP_VECTOR_DOTF, loom_vector_to_scalar_lower_dotf_op},
+        {LOOM_OP_VECTOR_MMA, loom_vector_to_scalar_lower_mma_op},
 };
 
 static iree_status_t loom_vector_to_scalar_try_direct_lowerer(
@@ -695,6 +721,39 @@ iree_status_t loom_vector_reduce_axes_to_scalar_rewrite_op(
   IREE_RETURN_IF_ERROR(
       loom_rewriter_replace_all_uses_and_erase(rewriter, op, &replacement, 1));
   *out_rewritten = true;
+  return iree_ok_status();
+}
+
+iree_status_t loom_vector_mma_to_scalar_rewrite_op(loom_pass_t* pass,
+                                                   loom_rewriter_t* rewriter,
+                                                   loom_op_t* op,
+                                                   bool* out_rewritten) {
+  *out_rewritten = false;
+  if (!loom_vector_mma_isa(op)) {
+    return iree_ok_status();
+  }
+  loom_builder_set_before(&rewriter->builder, op);
+  loom_vector_to_scalar_state_t state = {
+      .pass = pass,
+      .rewriter = rewriter,
+      .op = op,
+      .value_checkpoint = loom_rewriter_value_checkpoint(rewriter),
+      .vector_type =
+          loom_module_value_type(rewriter->module, loom_vector_mma_result(op)),
+      .result_scalar_type = loom_vector_to_scalar_lane_type(
+          loom_module_value_type(rewriter->module, loom_vector_mma_result(op))),
+      .location = op->location,
+  };
+  loom_value_id_t replacement = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_vector_to_scalar_lower_mma(&state, out_rewritten, &replacement));
+  if (!*out_rewritten || loom_pass_has_error_diagnostics(pass)) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_rewriter_preserve_result_names_on_new_values(
+      rewriter, op, &replacement, 1, state.value_checkpoint));
+  IREE_RETURN_IF_ERROR(
+      loom_rewriter_replace_all_uses_and_erase(rewriter, op, &replacement, 1));
   return iree_ok_status();
 }
 

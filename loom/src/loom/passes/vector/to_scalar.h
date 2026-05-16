@@ -43,6 +43,15 @@ iree_status_t loom_vector_reduce_axes_to_scalar_rewrite_op(
     loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op,
     bool* out_rewritten);
 
+// Rewrites one dense full-logical vector.mma op using scalar reference
+// semantics. Target-shaped compressed fragments are left untouched because they
+// require explicit fragment layout facts before a target-independent fallback
+// can expand them correctly.
+iree_status_t loom_vector_mma_to_scalar_rewrite_op(loom_pass_t* pass,
+                                                   loom_rewriter_t* rewriter,
+                                                   loom_op_t* op,
+                                                   bool* out_rewritten);
+
 const loom_pass_info_t* loom_vector_gather_to_scalar_pass_info(void);
 
 iree_status_t loom_vector_gather_to_scalar_run(loom_pass_t* pass,

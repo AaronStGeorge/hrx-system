@@ -28,10 +28,40 @@ static iree_status_t loom_vector_legalize_reduce_axes(
   return iree_ok_status();
 }
 
+static iree_status_t loom_vector_legalize_mma(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  (void)entry;
+  *out_result = (loom_target_legalizer_result_t){
+      .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
+  };
+  if (context->mode != LOOM_TARGET_LEGALIZATION_MODE_FINAL) {
+    *out_result = (loom_target_legalizer_result_t){
+        .action = LOOM_TARGET_LEGALIZER_ACTION_DEFER,
+    };
+    return iree_ok_status();
+  }
+
+  bool rewritten = false;
+  IREE_RETURN_IF_ERROR(loom_vector_mma_to_scalar_rewrite_op(
+      context->pass, context->rewriter, op, &rewritten));
+  *out_result = (loom_target_legalizer_result_t){
+      .action = rewritten
+                    ? LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN
+                    : LOOM_TARGET_LEGALIZER_ACTION_REJECT_UNSUPPORTED_FINAL,
+  };
+  return iree_ok_status();
+}
+
 static const loom_target_legalizer_entry_t kVectorLegalizerEntries[] = {
     {
         .root_kind = LOOM_OP_VECTOR_REDUCE_AXES,
         .legalize = loom_vector_legalize_reduce_axes,
+    },
+    {
+        .root_kind = LOOM_OP_VECTOR_MMA,
+        .legalize = loom_vector_legalize_mma,
     },
 };
 

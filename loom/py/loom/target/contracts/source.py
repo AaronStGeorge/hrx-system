@@ -23,13 +23,21 @@ class ValueRef:
     kind: SourceValueKind
     field: str
     materializer: str | None = None
+    element: int = 0
 
     @classmethod
-    def operand(cls, field: str, *, materializer: str | None = None) -> Self:
+    def operand(
+        cls,
+        field: str,
+        *,
+        materializer: str | None = None,
+        element: int = 0,
+    ) -> Self:
         return cls(
             kind=SourceValueKind.OPERAND,
             field=field,
             materializer=materializer,
+            element=element,
         )
 
     @classmethod
@@ -59,8 +67,21 @@ class ValueRef:
                     f"{source_op.name}: {subject} materializer requires an operand"
                 )
         if self.kind == SourceValueKind.OPERAND:
-            _require_operand(source_op, self.field, subject)
+            operand = _require_operand(source_op, self.field, subject)
+            if self.element < 0:
+                raise ValueError(
+                    f"{source_op.name}: {subject} operand element must be non-negative"
+                )
+            if self.element != 0 and not operand.variadic:
+                raise ValueError(
+                    f"{source_op.name}: {subject} operand field '{self.field}' "
+                    "is not variadic"
+                )
             return
+        if self.element != 0:
+            raise ValueError(
+                f"{source_op.name}: {subject} element selection requires an operand"
+            )
         if self.kind == SourceValueKind.RESULT:
             _require_result(source_op, self.field, subject)
             return

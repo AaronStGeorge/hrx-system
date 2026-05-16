@@ -50,6 +50,7 @@ from loom.target.test.descriptors import (
     TEST_LOW_CONST_I32_DESCRIPTOR,
     TEST_LOW_CORE_DESCRIPTOR_SET,
     TEST_LOW_DOT4I_S8S8_DESCRIPTOR,
+    TEST_LOW_FROM_ELEMENTS_V4I32_DESCRIPTOR,
     TEST_LOW_LOAD_INDEX_V4F32_DESCRIPTOR,
     TEST_LOW_LOAD_INDEX_V4I32_DESCRIPTOR,
     TEST_LOW_LOAD_V4F32_DESCRIPTOR,
@@ -490,6 +491,26 @@ TEST_LOW_CORE_CONTRACT_FRAGMENT = ContractFragment(
                             bit_width=2,
                         )
                     },
+                ),
+            ),
+        ),
+        DescriptorRule(
+            source_op=vector.vector_from_elements,
+            descriptor=TEST_LOW_FROM_ELEMENTS_V4I32_DESCRIPTOR,
+            guards=(
+                Guard.operand_segment_count("elements", 4),
+                Guard.value_type("result", _V4I32),
+            ),
+            emit=(
+                EmitDescriptorOp(
+                    descriptor=TEST_LOW_FROM_ELEMENTS_V4I32_DESCRIPTOR,
+                    operands={
+                        "lane0": ValueRef.operand("elements", element=0),
+                        "lane1": ValueRef.operand("elements", element=1),
+                        "lane2": ValueRef.operand("elements", element=2),
+                        "lane3": ValueRef.operand("elements", element=3),
+                    },
+                    results={"dst": ValueRef.result("result")},
                 ),
             ),
         ),

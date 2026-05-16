@@ -38,6 +38,7 @@ from loom.target.test.descriptors import (
     TEST_LOW_ADD_I32_DESCRIPTOR,
     TEST_LOW_CONST_I32_DESCRIPTOR,
     TEST_LOW_CORE_DESCRIPTOR_SET,
+    TEST_LOW_FROM_ELEMENTS_V4I32_DESCRIPTOR,
 )
 
 
@@ -167,6 +168,43 @@ def test_compile_lower_rule_set_compiles_value_elide_cases() -> None:
     assert compiled.rules[0].elide_ref_count == 1
     assert len(compiled.value_refs) == 1
     assert compiled.spans[0].source_op is vector.vector_extract
+
+
+def test_compile_lower_rule_set_offsets_variadic_operand_elements() -> None:
+    table = ContractFragment(
+        name="test.from-elements",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            DescriptorRule(
+                source_op=vector.vector_from_elements,
+                descriptor=TEST_LOW_FROM_ELEMENTS_V4I32_DESCRIPTOR,
+                guards=(
+                    Guard.operand_segment_count("elements", 4),
+                    Guard.value_type("result", Vector("i32", lanes=4)),
+                ),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_FROM_ELEMENTS_V4I32_DESCRIPTOR,
+                        operands={
+                            "lane0": ValueRef.operand("elements", element=0),
+                            "lane1": ValueRef.operand("elements", element=1),
+                            "lane2": ValueRef.operand("elements", element=2),
+                            "lane3": ValueRef.operand("elements", element=3),
+                        },
+                        results={"dst": ValueRef.result("result")},
+                    ),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    emit = compiled.emits[0]
+    value_refs = compiled.value_refs[
+        emit.operand_ref_start : emit.operand_ref_start + emit.operand_ref_count
+    ]
+    assert tuple(value_ref.index for value_ref in value_refs) == (0, 1, 2, 3)
 
 
 def test_compile_lower_rule_set_rejects_descriptor_rule_without_emit() -> None:

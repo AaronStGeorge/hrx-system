@@ -32,6 +32,7 @@ from loom.target.test.descriptors import (
     TEST_LOW_CMP_EQ_V4I32_DESCRIPTOR,
     TEST_LOW_CORE_DESCRIPTOR_SET,
     TEST_LOW_EXTRACT_LANE_I32_DESCRIPTOR,
+    TEST_LOW_FROM_ELEMENTS_V4I32_DESCRIPTOR,
     TEST_LOW_SHUFFLE_BYTES_DESCRIPTOR,
 )
 
@@ -410,6 +411,72 @@ def test_descriptor_rule_rejects_unknown_descriptor_operand_field() -> None:
                                     "static_indices", element=0
                                 )
                             },
+                        )
+                    ],
+                )
+            ],
+        )
+
+
+def test_descriptor_rule_rejects_variadic_element_on_fixed_operand() -> None:
+    descriptor = TEST_LOW_ADD_I32_DESCRIPTOR
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"scalar.addi: descriptor 'test.add.i32' operand 'lhs' "
+            r"operand field 'lhs' is not variadic"
+        ),
+    ):
+        ContractFragment(
+            name="bad.fixed.operand.element",
+            descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+            cases=[
+                DescriptorRule(
+                    source_op=scalar_arithmetic.scalar_addi,
+                    descriptor=descriptor,
+                    emit=[
+                        EmitDescriptorOp(
+                            descriptor=descriptor,
+                            operands={
+                                "lhs": ValueRef.operand("lhs", element=1),
+                                "rhs": ValueRef.operand("rhs"),
+                            },
+                            results={"dst": ValueRef.result("result")},
+                        )
+                    ],
+                )
+            ],
+        )
+
+
+def test_descriptor_rule_rejects_negative_variadic_operand_element() -> None:
+    descriptor = TEST_LOW_FROM_ELEMENTS_V4I32_DESCRIPTOR
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"vector.from_elements: descriptor 'test.from_elements.v4i32' "
+            r"operand 'lane0' operand element must be non-negative"
+        ),
+    ):
+        ContractFragment(
+            name="bad.variadic.operand.element",
+            descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+            cases=[
+                DescriptorRule(
+                    source_op=vector.vector_from_elements,
+                    descriptor=descriptor,
+                    emit=[
+                        EmitDescriptorOp(
+                            descriptor=descriptor,
+                            operands={
+                                "lane0": ValueRef.operand("elements", element=-1),
+                                "lane1": ValueRef.operand("elements", element=1),
+                                "lane2": ValueRef.operand("elements", element=2),
+                                "lane3": ValueRef.operand("elements", element=3),
+                            },
+                            results={"dst": ValueRef.result("result")},
                         )
                     ],
                 )

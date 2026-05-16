@@ -19,6 +19,146 @@ func.def @zero_extent_vector_memory_erases(%features: index, %buffer: buffer, %b
 
 // ====
 
+func.def @scalarizes_dense_f16_f32_mma(%lhs_data: vector<4xf16>, %rhs_data: vector<4xf16>, %init_data: vector<4xf32>) -> (vector<4xf32>) {
+  %m = index.constant 2 : index
+  %n = index.constant 2 : index
+  %k = index.constant 2 : index
+  %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : vector<4xf16>
+  %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : vector<4xf16>
+  %init = vector.fragment<init> %init_data shape [%m, %n] : vector<4xf32>
+  %result = vector.mma %lhs, %rhs, %init : vector<4xf16>, vector<4xf16>, vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ----
+func.def @scalarizes_dense_f16_f32_mma(%lhs_data: vector<4xf16>, %rhs_data: vector<4xf16>, %init_data: vector<4xf32>) -> (vector<4xf32>) {
+  %m = index.constant 2 : index
+  %n = index.constant 2 : index
+  %11 = vector.extract %init_data[0] : vector<4xf32> -> f32
+  %12 = vector.extract %lhs_data[0] : vector<4xf16> -> f16
+  %13 = vector.extract %rhs_data[0] : vector<4xf16> -> f16
+  %14 = scalar.extf %12 : f16 to f32
+  %15 = scalar.extf %13 : f16 to f32
+  %16 = scalar.fmaf %14, %15, %11 : f32
+  %17 = vector.extract %lhs_data[1] : vector<4xf16> -> f16
+  %18 = vector.extract %rhs_data[2] : vector<4xf16> -> f16
+  %19 = scalar.extf %17 : f16 to f32
+  %20 = scalar.extf %18 : f16 to f32
+  %21 = scalar.fmaf %19, %20, %16 : f32
+  %22 = vector.extract %init_data[1] : vector<4xf32> -> f32
+  %23 = vector.extract %lhs_data[0] : vector<4xf16> -> f16
+  %24 = vector.extract %rhs_data[1] : vector<4xf16> -> f16
+  %25 = scalar.extf %23 : f16 to f32
+  %26 = scalar.extf %24 : f16 to f32
+  %27 = scalar.fmaf %25, %26, %22 : f32
+  %28 = vector.extract %lhs_data[1] : vector<4xf16> -> f16
+  %29 = vector.extract %rhs_data[3] : vector<4xf16> -> f16
+  %30 = scalar.extf %28 : f16 to f32
+  %31 = scalar.extf %29 : f16 to f32
+  %32 = scalar.fmaf %30, %31, %27 : f32
+  %33 = vector.extract %init_data[2] : vector<4xf32> -> f32
+  %34 = vector.extract %lhs_data[2] : vector<4xf16> -> f16
+  %35 = vector.extract %rhs_data[0] : vector<4xf16> -> f16
+  %36 = scalar.extf %34 : f16 to f32
+  %37 = scalar.extf %35 : f16 to f32
+  %38 = scalar.fmaf %36, %37, %33 : f32
+  %39 = vector.extract %lhs_data[3] : vector<4xf16> -> f16
+  %40 = vector.extract %rhs_data[2] : vector<4xf16> -> f16
+  %41 = scalar.extf %39 : f16 to f32
+  %42 = scalar.extf %40 : f16 to f32
+  %43 = scalar.fmaf %41, %42, %38 : f32
+  %44 = vector.extract %init_data[3] : vector<4xf32> -> f32
+  %45 = vector.extract %lhs_data[2] : vector<4xf16> -> f16
+  %46 = vector.extract %rhs_data[1] : vector<4xf16> -> f16
+  %47 = scalar.extf %45 : f16 to f32
+  %48 = scalar.extf %46 : f16 to f32
+  %49 = scalar.fmaf %47, %48, %44 : f32
+  %50 = vector.extract %lhs_data[3] : vector<4xf16> -> f16
+  %51 = vector.extract %rhs_data[3] : vector<4xf16> -> f16
+  %52 = scalar.extf %50 : f16 to f32
+  %53 = scalar.extf %51 : f16 to f32
+  %54 = scalar.fmaf %52, %53, %49 : f32
+  %55 = vector.from_elements %21, %32, %43, %54 : vector<4xf32>
+  %result = vector.fragment<result> %55 shape [%m, %n] : vector<4xf32>
+  func.return %result : vector<4xf32>
+}
+
+// ====
+
+func.def @scalarizes_dense_i8_i32_mma(%lhs_data: vector<4xi8>, %rhs_data: vector<4xi8>, %init_data: vector<4xi32>) -> (vector<4xi32>) {
+  %m = index.constant 2 : index
+  %n = index.constant 2 : index
+  %k = index.constant 2 : index
+  %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : vector<4xi8>
+  %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : vector<4xi8>
+  %init = vector.fragment<init> %init_data shape [%m, %n] : vector<4xi32>
+  %result = vector.mma %lhs, %rhs, %init : vector<4xi8>, vector<4xi8>, vector<4xi32>
+  func.return %result : vector<4xi32>
+}
+
+// ----
+func.def @scalarizes_dense_i8_i32_mma(%lhs_data: vector<4xi8>, %rhs_data: vector<4xi8>, %init_data: vector<4xi32>) -> (vector<4xi32>) {
+  %m = index.constant 2 : index
+  %n = index.constant 2 : index
+  %11 = vector.extract %init_data[0] : vector<4xi32> -> i32
+  %12 = vector.extract %lhs_data[0] : vector<4xi8> -> i8
+  %13 = vector.extract %rhs_data[0] : vector<4xi8> -> i8
+  %14 = scalar.extsi %12 : i8 to i32
+  %15 = scalar.extsi %13 : i8 to i32
+  %16 = scalar.muli %14, %15 : i32
+  %17 = scalar.addi %11, %16 : i32
+  %18 = vector.extract %lhs_data[1] : vector<4xi8> -> i8
+  %19 = vector.extract %rhs_data[2] : vector<4xi8> -> i8
+  %20 = scalar.extsi %18 : i8 to i32
+  %21 = scalar.extsi %19 : i8 to i32
+  %22 = scalar.muli %20, %21 : i32
+  %23 = scalar.addi %17, %22 : i32
+  %24 = vector.extract %init_data[1] : vector<4xi32> -> i32
+  %25 = vector.extract %lhs_data[0] : vector<4xi8> -> i8
+  %26 = vector.extract %rhs_data[1] : vector<4xi8> -> i8
+  %27 = scalar.extsi %25 : i8 to i32
+  %28 = scalar.extsi %26 : i8 to i32
+  %29 = scalar.muli %27, %28 : i32
+  %30 = scalar.addi %24, %29 : i32
+  %31 = vector.extract %lhs_data[1] : vector<4xi8> -> i8
+  %32 = vector.extract %rhs_data[3] : vector<4xi8> -> i8
+  %33 = scalar.extsi %31 : i8 to i32
+  %34 = scalar.extsi %32 : i8 to i32
+  %35 = scalar.muli %33, %34 : i32
+  %36 = scalar.addi %30, %35 : i32
+  %37 = vector.extract %init_data[2] : vector<4xi32> -> i32
+  %38 = vector.extract %lhs_data[2] : vector<4xi8> -> i8
+  %39 = vector.extract %rhs_data[0] : vector<4xi8> -> i8
+  %40 = scalar.extsi %38 : i8 to i32
+  %41 = scalar.extsi %39 : i8 to i32
+  %42 = scalar.muli %40, %41 : i32
+  %43 = scalar.addi %37, %42 : i32
+  %44 = vector.extract %lhs_data[3] : vector<4xi8> -> i8
+  %45 = vector.extract %rhs_data[2] : vector<4xi8> -> i8
+  %46 = scalar.extsi %44 : i8 to i32
+  %47 = scalar.extsi %45 : i8 to i32
+  %48 = scalar.muli %46, %47 : i32
+  %49 = scalar.addi %43, %48 : i32
+  %50 = vector.extract %init_data[3] : vector<4xi32> -> i32
+  %51 = vector.extract %lhs_data[2] : vector<4xi8> -> i8
+  %52 = vector.extract %rhs_data[1] : vector<4xi8> -> i8
+  %53 = scalar.extsi %51 : i8 to i32
+  %54 = scalar.extsi %52 : i8 to i32
+  %55 = scalar.muli %53, %54 : i32
+  %56 = scalar.addi %50, %55 : i32
+  %57 = vector.extract %lhs_data[3] : vector<4xi8> -> i8
+  %58 = vector.extract %rhs_data[3] : vector<4xi8> -> i8
+  %59 = scalar.extsi %57 : i8 to i32
+  %60 = scalar.extsi %58 : i8 to i32
+  %61 = scalar.muli %59, %60 : i32
+  %62 = scalar.addi %56, %61 : i32
+  %63 = vector.from_elements %23, %36, %49, %62 : vector<4xi32>
+  %result = vector.fragment<result> %63 shape [%m, %n] : vector<4xi32>
+  func.return %result : vector<4xi32>
+}
+
+// ====
+
 func.def @rejects_unrepresentable_static_lane_count() {
   // ERROR@+1: SHAPE/007 "vector.poison" "vector-to-scalar" "vector<4294967296x4294967296xi32>"
   %value = vector.poison : vector<4294967296x4294967296xi32>

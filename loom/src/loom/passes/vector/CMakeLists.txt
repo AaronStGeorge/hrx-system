@@ -43,6 +43,8 @@ loom_cc_library(
     "to_scalar_lanes.h"
     "to_scalar_memory.c"
     "to_scalar_memory.h"
+    "to_scalar_mma.c"
+    "to_scalar_mma.h"
     "to_scalar_quantized.c"
     "to_scalar_quantized.h"
     "to_scalar_reductions.c"

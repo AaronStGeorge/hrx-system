@@ -420,6 +420,25 @@ TEST_LOW_SHUFFLE_V4I32_DESCRIPTOR = Descriptor(
     flags=(DescriptorFlag.DEAD_REMOVABLE,),
 )
 
+TEST_LOW_FROM_ELEMENTS_V4I32_DESCRIPTOR = Descriptor(
+    key="test.from_elements.v4i32",
+    mnemonic="test.from_elements.v4i32",
+    semantic_tag="vector.from_elements.i32x4",
+    operands=(
+        _v4i32_result(),
+        _i32_operand("lane0"),
+        _i32_operand("lane1"),
+        _i32_operand("lane2"),
+        _i32_operand("lane3"),
+    ),
+    asm_forms=_asm(
+        results=("dst",),
+        operands=("lane0", "lane1", "lane2", "lane3"),
+    ),
+    schedule_class=_SCHEDULE_VECTOR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
 TEST_LOW_CMP_EQ_V4I32_DESCRIPTOR = Descriptor(
     key="test.cmp.eq.v4i32",
     mnemonic="test.cmp.eq.v4i32",
@@ -908,6 +927,7 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
         TEST_LOW_ADD_V4I32_DESCRIPTOR,
         TEST_LOW_DOT4I_S8S8_DESCRIPTOR,
         TEST_LOW_SHUFFLE_V4I32_DESCRIPTOR,
+        TEST_LOW_FROM_ELEMENTS_V4I32_DESCRIPTOR,
         TEST_LOW_CMP_EQ_V4I32_DESCRIPTOR,
         TEST_LOW_EXTRACT_LANE_I32_DESCRIPTOR,
         TEST_LOW_SHUFFLE_BYTES_DESCRIPTOR,

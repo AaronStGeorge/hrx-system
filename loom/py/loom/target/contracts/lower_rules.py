@@ -1606,7 +1606,7 @@ def _source_value_index(
     if value_ref.kind == SourceValueKind.OPERAND:
         operand = source_op.operand(value_ref.field)
         if operand is not None:
-            return source_op.operands.index(operand)
+            return source_op.operands.index(operand) + value_ref.element
     if value_ref.kind == SourceValueKind.RESULT:
         result = source_op.result(value_ref.field)
         if result is not None:
