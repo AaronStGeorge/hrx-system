@@ -93,11 +93,11 @@ IREE_FLAG(bool, agents_md, false,
           "Prints a compact Markdown snippet suitable for AGENTS.md and "
           "exits.");
 IREE_FLAG(string, compile_report, "summary",
-          "Compile report embedded in benchmark rows. Use 'summary', "
-          "'details', or empty/'none'.");
+          "Structured compile report embedded in benchmark rows. Use "
+          "'summary', 'details', or empty/'none'.");
 IREE_FLAG(int32_t, compile_report_row_limit,
           LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT,
-          "Maximum pressure, spill, and source-low rows to capture for "
+          "Maximum rows per report row category to capture for "
           "--compile_report=details.");
 IREE_FLAG(
     string, profile_data, "",
@@ -2978,8 +2978,14 @@ static iree_status_t iree_tune_loom_select_compare_benchmarks(
 static iree_status_t iree_tune_loom_compile_report_options_initialize(
     loom_run_compile_report_capture_options_t* out_options) {
   loom_run_compile_report_capture_options_initialize(out_options);
-  IREE_RETURN_IF_ERROR(loom_run_compile_report_capture_options_parse_mode(
+  IREE_RETURN_IF_ERROR(loom_run_compile_report_capture_options_parse_request(
       iree_make_cstring_view(FLAG_compile_report), out_options));
+  if (out_options->sink_format == LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_TEXT) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "iree-tune-loom emits structured JSONL reports; use "
+        "--compile_report=summary, details, json-summary, or json-details");
+  }
   if (FLAG_compile_report_row_limit < 0) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
@@ -4714,8 +4720,7 @@ static iree_status_t iree_tune_loom_write_static_summary_json(
     const loom_run_compile_report_capture_t* compile_report_capture,
     loom_output_stream_t* stream) {
   if (compile_report_capture == NULL ||
-      compile_report_capture->options.mode ==
-          LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE) {
+      !loom_run_compile_report_capture_is_enabled(compile_report_capture)) {
     return iree_ok_status();
   }
   const loom_target_compile_report_t* report = &compile_report_capture->report;
@@ -4938,8 +4943,7 @@ static iree_status_t iree_tune_loom_write_compile_report_json(
     const loom_run_compile_report_capture_t* compile_report_capture,
     loom_output_stream_t* stream) {
   if (compile_report_capture == NULL ||
-      compile_report_capture->options.mode ==
-          LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE) {
+      !loom_run_compile_report_capture_is_enabled(compile_report_capture)) {
     return iree_ok_status();
   }
   IREE_RETURN_IF_ERROR(
@@ -5221,8 +5225,8 @@ static iree_status_t iree_tune_loom_write_compile_report_artifact(
     iree_tune_loom_hal_actual_provider_t* provider,
     iree_allocator_t allocator) {
   if (!provider->compile_report_available ||
-      provider->compile_report_capture.options.mode ==
-          LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE ||
+      !loom_run_compile_report_capture_is_enabled(
+          &provider->compile_report_capture) ||
       !iree_string_view_is_empty(provider->compile_report_artifact_path)) {
     return iree_ok_status();
   }
@@ -5426,8 +5430,8 @@ static iree_status_t iree_tune_loom_write_benchmark_result_json(
         &benchmark_result->hal_benchmark.profile, stream));
   }
   if (benchmark_result->compile_report_capture != NULL &&
-      benchmark_result->compile_report_capture->options.mode !=
-          LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE) {
+      loom_run_compile_report_capture_is_enabled(
+          benchmark_result->compile_report_capture)) {
     IREE_RETURN_IF_ERROR(iree_tune_loom_write_static_summary_json(
         benchmark_result->compile_report_capture, stream));
     IREE_RETURN_IF_ERROR(iree_tune_loom_write_compile_report_json(

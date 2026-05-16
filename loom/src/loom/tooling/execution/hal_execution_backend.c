@@ -203,7 +203,7 @@ iree_status_t loom_run_hal_execution_backend_run_one_shot(
         iree_string_builder_view(&invocation_result.output));
   }
   if (iree_status_is_ok(status) && request->compile_report_capture != NULL) {
-    status = loom_run_compile_report_capture_append_text(
+    status = loom_run_compile_report_capture_append_output(
         request->compile_report_capture, &request->result->output);
   }
 

@@ -6,6 +6,7 @@
 
 // loom-compile: compiles a Loom module to a runtime artifact.
 
+#include <errno.h>
 #include <stdio.h>
 
 #include "iree/base/api.h"
@@ -69,11 +70,15 @@ IREE_FLAG(string, emit_target_artifact, "",
           "Optional output path for a target-native artifact produced beside "
           "the primary runtime artifact, such as AMDGPU HSACO.");
 IREE_FLAG(string, compile_report, "",
-          "Optional compile report output to stderr. Use 'summary', 'details', "
-          "or empty/'none'.");
+          "Optional compile report output. Use 'summary'/'details' for "
+          "structured JSON, 'text-summary'/'text-details' for human-readable "
+          "text, or empty/'none'.");
+IREE_FLAG(string, compile_report_output, "stderr",
+          "Output path for --compile_report. Use 'stderr', '-', or a file "
+          "path.");
 IREE_FLAG(int32_t, compile_report_row_limit,
           LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT,
-          "Maximum pressure and spill rows to capture for "
+          "Maximum rows per report row category to capture for "
           "--compile_report=details.");
 
 #if LOOM_COMPILE_HAVE_ANY_PROVIDER
@@ -184,7 +189,7 @@ static iree_status_t loom_compile_materialize_config_set(
 static iree_status_t loom_compile_report_options_initialize(
     loom_run_compile_report_capture_options_t* out_options) {
   loom_run_compile_report_capture_options_initialize(out_options);
-  IREE_RETURN_IF_ERROR(loom_run_compile_report_capture_options_parse_mode(
+  IREE_RETURN_IF_ERROR(loom_run_compile_report_capture_options_parse_request(
       iree_make_cstring_view(FLAG_compile_report), out_options));
   if (FLAG_compile_report_row_limit < 0) {
     return iree_make_status(
@@ -350,22 +355,61 @@ static iree_status_t loom_compile_make_unknown_backend_status(
 static iree_status_t loom_compile_write_report(
     const loom_run_compile_report_capture_t* compile_report_capture,
     iree_allocator_t allocator) {
-  iree_string_builder_t builder;
-  iree_string_builder_initialize(allocator, &builder);
-  iree_status_t status = loom_run_compile_report_capture_append_text(
-      compile_report_capture, &builder);
-  const iree_string_view_t text = iree_string_builder_view(&builder);
-  if (iree_status_is_ok(status) && !iree_string_view_is_empty(text)) {
-    if (fwrite(text.data, text.size, 1, stderr) != 1) {
-      status = iree_make_status(IREE_STATUS_DATA_LOSS,
-                                "failed to write compile report to stderr");
+  if (!loom_run_compile_report_capture_is_enabled(compile_report_capture)) {
+    return iree_ok_status();
+  }
+  const iree_string_view_t path =
+      iree_make_cstring_view(FLAG_compile_report_output);
+  if (iree_string_view_is_empty(path) ||
+      iree_string_view_equal(path, IREE_SV("stderr"))) {
+    loom_output_stream_t stream;
+    loom_output_stream_for_file(stderr, &stream);
+    IREE_RETURN_IF_ERROR(loom_run_compile_report_capture_write_output(
+        compile_report_capture, &stream, allocator));
+    return fflush(stderr) == 0
+               ? iree_ok_status()
+               : iree_make_status(IREE_STATUS_DATA_LOSS,
+                                  "failed to flush compile report stderr");
+  }
+  if (loom_tooling_file_path_is_stdio(path)) {
+    const iree_string_view_t target_artifact_path =
+        iree_make_cstring_view(FLAG_emit_target_artifact);
+    if (loom_tooling_file_path_is_stdio(iree_make_cstring_view(FLAG_output)) ||
+        (!iree_string_view_is_empty(target_artifact_path) &&
+         loom_tooling_file_path_is_stdio(target_artifact_path))) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "--compile_report_output=- cannot share stdout with --output=- or "
+          "--emit_target_artifact=-");
     }
+    loom_output_stream_t stream;
+    loom_output_stream_for_file(stdout, &stream);
+    IREE_RETURN_IF_ERROR(loom_run_compile_report_capture_write_output(
+        compile_report_capture, &stream, allocator));
+    return fflush(stdout) == 0
+               ? iree_ok_status()
+               : iree_make_status(IREE_STATUS_DATA_LOSS,
+                                  "failed to flush compile report stdout");
   }
-  if (iree_status_is_ok(status) && fflush(stderr) != 0) {
-    status = iree_make_status(IREE_STATUS_DATA_LOSS,
-                              "failed to flush compile report");
+
+  FILE* file = fopen(FLAG_compile_report_output, "wb");
+  if (file == NULL) {
+    const int open_error = errno;
+    return iree_make_status(iree_status_code_from_errno(open_error),
+                            "failed to open compile report output '%.*s' (%d)",
+                            (int)path.size, path.data, open_error);
   }
-  iree_string_builder_deinitialize(&builder);
+  loom_output_stream_t stream;
+  loom_output_stream_for_file(file, &stream);
+  iree_status_t status = loom_run_compile_report_capture_write_output(
+      compile_report_capture, &stream, allocator);
+  if (fclose(file) != 0 && iree_status_is_ok(status)) {
+    const int close_error = errno;
+    status = iree_make_status(iree_status_code_from_errno(close_error),
+                              "failed to close compile report output '%.*s' "
+                              "(%d)",
+                              (int)path.size, path.data, close_error);
+  }
   return status;
 }
 

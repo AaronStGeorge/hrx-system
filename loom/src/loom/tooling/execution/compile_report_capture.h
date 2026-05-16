@@ -18,14 +18,25 @@ extern "C" {
 #endif
 
 enum {
-  // Default number of detailed pressure/spill rows captured per category.
+  // Default number of detailed rows captured per report row category.
   LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT = 8,
 };
 
+typedef enum loom_run_compile_report_sink_format_e {
+  // Report capture and output are disabled.
+  LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_NONE = 0,
+  // Emits structured JSON from typed report fields.
+  LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_JSON = 1,
+  // Emits human-readable text for interactive debugging.
+  LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_TEXT = 2,
+} loom_run_compile_report_sink_format_t;
+
 typedef struct loom_run_compile_report_capture_options_t {
-  // Formatting mode requested by the caller.
-  loom_target_compile_report_format_mode_t mode;
-  // Maximum copied pressure rows and maximum copied spill rows in details mode.
+  // Output sink format requested by the caller.
+  loom_run_compile_report_sink_format_t sink_format;
+  // Bounded report detail level captured and emitted by the sink.
+  loom_target_compile_report_format_mode_t detail_mode;
+  // Maximum copied rows per row category in details mode.
   iree_host_size_t row_limit;
 } loom_run_compile_report_capture_options_t;
 
@@ -50,8 +61,13 @@ typedef struct loom_run_compile_report_capture_t {
 void loom_run_compile_report_capture_options_initialize(
     loom_run_compile_report_capture_options_t* out_options);
 
-// Parses and stores a compile report mode.
-iree_status_t loom_run_compile_report_capture_options_parse_mode(
+// Parses and stores a compile report request.
+//
+// Empty and "none" disable capture. "summary", "details", "json",
+// "json-summary", and "json-details" request the structured JSON sink.
+// "text", "text-summary", and "text-details" request the human-readable text
+// adapter explicitly.
+iree_status_t loom_run_compile_report_capture_options_parse_request(
     iree_string_view_t value,
     loom_run_compile_report_capture_options_t* options);
 
@@ -59,6 +75,14 @@ iree_status_t loom_run_compile_report_capture_options_parse_mode(
 iree_status_t loom_run_compile_report_capture_options_parse_row_limit(
     iree_string_view_t value,
     loom_run_compile_report_capture_options_t* options);
+
+// Returns true when report capture and sink emission are enabled.
+bool loom_run_compile_report_capture_options_is_enabled(
+    const loom_run_compile_report_capture_options_t* options);
+
+// Returns true when report capture and sink emission are enabled.
+bool loom_run_compile_report_capture_is_enabled(
+    const loom_run_compile_report_capture_t* capture);
 
 // Allocates optional row storage for |options| and initializes |out_capture|.
 iree_status_t loom_run_compile_report_capture_initialize(
@@ -80,6 +104,21 @@ iree_status_t loom_run_compile_report_capture_append_text(
 iree_status_t loom_run_compile_report_capture_append_json(
     const loom_run_compile_report_capture_t* capture,
     loom_output_stream_t* stream);
+
+// Appends the captured report to |builder| using the configured sink format.
+//
+// This is for one-shot tools that already own a textual result buffer. JSON
+// sinks append one structured object; text sinks append the human-readable
+// adapter output. A separating newline is inserted when the builder already
+// contains output.
+iree_status_t loom_run_compile_report_capture_append_output(
+    const loom_run_compile_report_capture_t* capture,
+    iree_string_builder_t* builder);
+
+// Writes the captured report to |stream| using the configured sink format.
+iree_status_t loom_run_compile_report_capture_write_output(
+    const loom_run_compile_report_capture_t* capture,
+    loom_output_stream_t* stream, iree_allocator_t host_allocator);
 
 // Releases storage owned by |capture|.
 void loom_run_compile_report_capture_deinitialize(

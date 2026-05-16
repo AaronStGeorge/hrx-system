@@ -15,11 +15,11 @@
 // CUSTOM-PIPELINE: EXEC @branchy
 // CUSTOM-PIPELINE: [SUCCESS] all function outputs matched their expected values.
 // NO-PIPELINE: IREE VM archive emission requires at least one VM low.func.def
-// REPORT: COMPILE-REPORT: summary artifact=vm-archive status=OK
-// REPORT: COMPILE-REPORT: schedule nodes={{[0-9]+}}
-// REPORT: COMPILE-REPORT: allocation assignments={{[0-9]+}} spills=0
-// REPORT: COMPILE-REPORT: emission instructions={{[0-9]+}}
-// REPORT: COMPILE-REPORT: pressure_rows copied=0 total={{[0-9]+}}
+// REPORT: "artifact_kind":"vm-archive","status_code":0,"status":"OK"
+// REPORT: "schedule":{"node_count":{{[0-9]+}}
+// REPORT: "allocation":{"assignment_count":{{[0-9]+}},"spill_count":0
+// REPORT: "emission":{"instruction_count":{{[0-9]+}}
+// REPORT: "pressure_rows":{"copied_count":0,"total_count":{{[0-9]+}}}
 // EMIT-ONLY-VM: --emit_target_artifact, --emit_hal_executable, and --emit_only require a HAL backend
 
 ireevm.target<core> @vm_target

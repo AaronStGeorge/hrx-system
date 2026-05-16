@@ -15,7 +15,8 @@ namespace {
 TEST(CompileReportCaptureTest, ConfiguresDetailedRowStorage) {
   loom_run_compile_report_capture_options_t options = {};
   loom_run_compile_report_capture_options_initialize(&options);
-  options.mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS;
+  options.sink_format = LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_JSON;
+  options.detail_mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS;
   options.row_limit = 2;
 
   loom_run_compile_report_capture_t capture = {};
@@ -46,7 +47,8 @@ TEST(CompileReportCaptureTest, ConfiguresDetailedRowStorage) {
 TEST(CompileReportCaptureTest, AppendsWithSeparator) {
   loom_run_compile_report_capture_options_t options = {};
   loom_run_compile_report_capture_options_initialize(&options);
-  options.mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY;
+  options.sink_format = LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_TEXT;
+  options.detail_mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY;
 
   loom_run_compile_report_capture_t capture = {};
   IREE_ASSERT_OK(loom_run_compile_report_capture_initialize(
@@ -71,7 +73,8 @@ TEST(CompileReportCaptureTest, AppendsWithSeparator) {
 TEST(CompileReportCaptureTest, AppendsJsonObject) {
   loom_run_compile_report_capture_options_t options = {};
   loom_run_compile_report_capture_options_initialize(&options);
-  options.mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY;
+  options.sink_format = LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_JSON;
+  options.detail_mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY;
 
   loom_run_compile_report_capture_t capture = {};
   IREE_ASSERT_OK(loom_run_compile_report_capture_initialize(
@@ -91,6 +94,63 @@ TEST(CompileReportCaptureTest, AppendsJsonObject) {
                 output, IREE_SV("\"artifact_kind\":\"vm-archive\""), 0),
             IREE_STRING_VIEW_NPOS);
   EXPECT_NE(iree_string_view_find(output, IREE_SV("\"entry\":\"entry\""), 0),
+            IREE_STRING_VIEW_NPOS);
+
+  iree_string_builder_deinitialize(&builder);
+  loom_run_compile_report_capture_deinitialize(&capture);
+}
+
+TEST(CompileReportCaptureTest, ParsesStructuredRequestsByDefault) {
+  loom_run_compile_report_capture_options_t options = {};
+  loom_run_compile_report_capture_options_initialize(&options);
+
+  IREE_ASSERT_OK(loom_run_compile_report_capture_options_parse_request(
+      IREE_SV("summary"), &options));
+  EXPECT_EQ(options.sink_format, LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_JSON);
+  EXPECT_EQ(options.detail_mode,
+            LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY);
+
+  IREE_ASSERT_OK(loom_run_compile_report_capture_options_parse_request(
+      IREE_SV("details"), &options));
+  EXPECT_EQ(options.sink_format, LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_JSON);
+  EXPECT_EQ(options.detail_mode,
+            LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS);
+
+  IREE_ASSERT_OK(loom_run_compile_report_capture_options_parse_request(
+      IREE_SV("text-details"), &options));
+  EXPECT_EQ(options.sink_format, LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_TEXT);
+  EXPECT_EQ(options.detail_mode,
+            LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS);
+
+  IREE_ASSERT_OK(loom_run_compile_report_capture_options_parse_request(
+      IREE_SV("none"), &options));
+  EXPECT_FALSE(loom_run_compile_report_capture_options_is_enabled(&options));
+}
+
+TEST(CompileReportCaptureTest, AppendsConfiguredJsonOutput) {
+  loom_run_compile_report_capture_options_t options = {};
+  loom_run_compile_report_capture_options_initialize(&options);
+  IREE_ASSERT_OK(loom_run_compile_report_capture_options_parse_request(
+      IREE_SV("summary"), &options));
+
+  loom_run_compile_report_capture_t capture = {};
+  IREE_ASSERT_OK(loom_run_compile_report_capture_initialize(
+      &options, iree_allocator_system(), &capture));
+  capture.report.artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
+
+  iree_string_builder_t builder;
+  iree_string_builder_initialize(iree_allocator_system(), &builder);
+  IREE_ASSERT_OK(
+      iree_string_builder_append_string(&builder, IREE_SV("output")));
+  IREE_ASSERT_OK(
+      loom_run_compile_report_capture_append_output(&capture, &builder));
+
+  iree_string_view_t output = iree_string_builder_view(&builder);
+  EXPECT_NE(
+      iree_string_view_find(output, IREE_SV("output\n{\"artifact_kind\""), 0),
+      IREE_STRING_VIEW_NPOS);
+  EXPECT_NE(iree_string_view_find(
+                output, IREE_SV("\"artifact_kind\":\"vm-archive\""), 0),
             IREE_STRING_VIEW_NPOS);
 
   iree_string_builder_deinitialize(&builder);

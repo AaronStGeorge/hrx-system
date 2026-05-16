@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Human-readable and structured compile report formatting.
+// Cold compile report formatting adapters.
 
 #ifndef LOOM_TARGET_COMPILE_REPORT_FORMAT_H_
 #define LOOM_TARGET_COMPILE_REPORT_FORMAT_H_

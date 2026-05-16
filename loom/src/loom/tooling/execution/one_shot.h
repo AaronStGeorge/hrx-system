@@ -106,8 +106,7 @@ struct loom_run_one_shot_request_t {
   const loom_run_candidate_compile_options_t* compile_options;
   // Invocation options selected by the front door.
   const loom_run_one_shot_options_t* options;
-  // Optional compile report capture formatted before backend candidate
-  // teardown.
+  // Optional compile report capture emitted before backend candidate teardown.
   loom_run_compile_report_capture_t* compile_report_capture;
   // Host allocator for transient execution allocations.
   iree_allocator_t host_allocator;

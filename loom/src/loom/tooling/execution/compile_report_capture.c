@@ -9,15 +9,51 @@
 void loom_run_compile_report_capture_options_initialize(
     loom_run_compile_report_capture_options_t* out_options) {
   *out_options = (loom_run_compile_report_capture_options_t){
-      .mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE,
+      .sink_format = LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_NONE,
+      .detail_mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE,
       .row_limit = LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT,
   };
 }
 
-iree_status_t loom_run_compile_report_capture_options_parse_mode(
+iree_status_t loom_run_compile_report_capture_options_parse_request(
     iree_string_view_t value,
     loom_run_compile_report_capture_options_t* options) {
-  return loom_target_compile_report_format_mode_parse(value, &options->mode);
+  if (iree_string_view_is_empty(value) ||
+      iree_string_view_equal(value, IREE_SV("none"))) {
+    options->sink_format = LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_NONE;
+    options->detail_mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(value, IREE_SV("summary")) ||
+      iree_string_view_equal(value, IREE_SV("json")) ||
+      iree_string_view_equal(value, IREE_SV("json-summary"))) {
+    options->sink_format = LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_JSON;
+    options->detail_mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(value, IREE_SV("details")) ||
+      iree_string_view_equal(value, IREE_SV("json-details"))) {
+    options->sink_format = LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_JSON;
+    options->detail_mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(value, IREE_SV("text")) ||
+      iree_string_view_equal(value, IREE_SV("text-summary"))) {
+    options->sink_format = LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_TEXT;
+    options->detail_mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(value, IREE_SV("text-details"))) {
+    options->sink_format = LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_TEXT;
+    options->detail_mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS;
+    return iree_ok_status();
+  }
+  return iree_make_status(
+      IREE_STATUS_INVALID_ARGUMENT,
+      "unsupported compile report request '%.*s'; expected 'none', 'summary', "
+      "'details', 'json', 'json-summary', 'json-details', 'text', "
+      "'text-summary', or 'text-details'",
+      (int)value.size, value.data);
 }
 
 iree_status_t loom_run_compile_report_capture_options_parse_row_limit(
@@ -34,9 +70,22 @@ iree_status_t loom_run_compile_report_capture_options_parse_row_limit(
   return iree_ok_status();
 }
 
+bool loom_run_compile_report_capture_options_is_enabled(
+    const loom_run_compile_report_capture_options_t* options) {
+  return options != NULL &&
+         options->sink_format != LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_NONE;
+}
+
+bool loom_run_compile_report_capture_is_enabled(
+    const loom_run_compile_report_capture_t* capture) {
+  return capture != NULL &&
+         loom_run_compile_report_capture_options_is_enabled(&capture->options);
+}
+
 static iree_status_t loom_run_compile_report_capture_allocate_rows(
     loom_run_compile_report_capture_t* capture) {
-  if (capture->options.mode != LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS ||
+  if (capture->options.detail_mode !=
+          LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_DETAILS ||
       capture->options.row_limit == 0) {
     return iree_ok_status();
   }
@@ -103,7 +152,7 @@ iree_status_t loom_run_compile_report_capture_initialize(
 void loom_run_compile_report_capture_configure_compile_options(
     loom_run_compile_report_capture_t* capture,
     loom_run_candidate_compile_options_t* compile_options) {
-  if (capture->options.mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE) {
+  if (!loom_run_compile_report_capture_is_enabled(capture)) {
     return;
   }
   compile_options->report = &capture->report;
@@ -144,13 +193,13 @@ static iree_status_t loom_run_compile_report_capture_append_separator(
 iree_status_t loom_run_compile_report_capture_append_text(
     const loom_run_compile_report_capture_t* capture,
     iree_string_builder_t* builder) {
-  if (capture->options.mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE) {
+  if (!loom_run_compile_report_capture_is_enabled(capture)) {
     return iree_ok_status();
   }
   IREE_RETURN_IF_ERROR(
       loom_run_compile_report_capture_append_separator(builder));
   const loom_target_compile_report_format_options_t format_options = {
-      .mode = capture->options.mode,
+      .mode = capture->options.detail_mode,
   };
   return loom_target_compile_report_format_text(&capture->report,
                                                 &format_options, builder);
@@ -159,14 +208,68 @@ iree_status_t loom_run_compile_report_capture_append_text(
 iree_status_t loom_run_compile_report_capture_append_json(
     const loom_run_compile_report_capture_t* capture,
     loom_output_stream_t* stream) {
-  if (capture->options.mode == LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_NONE) {
+  if (!loom_run_compile_report_capture_is_enabled(capture)) {
     return iree_ok_status();
   }
   const loom_target_compile_report_format_options_t format_options = {
-      .mode = capture->options.mode,
+      .mode = capture->options.detail_mode,
   };
   return loom_target_compile_report_format_json(&capture->report,
                                                 &format_options, stream);
+}
+
+iree_status_t loom_run_compile_report_capture_append_output(
+    const loom_run_compile_report_capture_t* capture,
+    iree_string_builder_t* builder) {
+  if (!loom_run_compile_report_capture_is_enabled(capture)) {
+    return iree_ok_status();
+  }
+  switch (capture->options.sink_format) {
+    case LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_JSON: {
+      IREE_RETURN_IF_ERROR(
+          loom_run_compile_report_capture_append_separator(builder));
+      loom_output_stream_t stream;
+      loom_output_stream_for_builder(builder, &stream);
+      IREE_RETURN_IF_ERROR(
+          loom_run_compile_report_capture_append_json(capture, &stream));
+      return iree_string_builder_append_string(builder, IREE_SV("\n"));
+    }
+    case LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_TEXT:
+      return loom_run_compile_report_capture_append_text(capture, builder);
+    case LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_NONE:
+    default:
+      return iree_ok_status();
+  }
+}
+
+iree_status_t loom_run_compile_report_capture_write_output(
+    const loom_run_compile_report_capture_t* capture,
+    loom_output_stream_t* stream, iree_allocator_t host_allocator) {
+  if (!loom_run_compile_report_capture_is_enabled(capture)) {
+    return iree_ok_status();
+  }
+  switch (capture->options.sink_format) {
+    case LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_JSON: {
+      IREE_RETURN_IF_ERROR(
+          loom_run_compile_report_capture_append_json(capture, stream));
+      return loom_output_stream_write_cstring(stream, "\n");
+    }
+    case LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_TEXT: {
+      iree_string_builder_t builder;
+      iree_string_builder_initialize(host_allocator, &builder);
+      iree_status_t status =
+          loom_run_compile_report_capture_append_text(capture, &builder);
+      if (iree_status_is_ok(status)) {
+        status = loom_output_stream_write(stream,
+                                          iree_string_builder_view(&builder));
+      }
+      iree_string_builder_deinitialize(&builder);
+      return status;
+    }
+    case LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_NONE:
+    default:
+      return iree_ok_status();
+  }
 }
 
 void loom_run_compile_report_capture_deinitialize(

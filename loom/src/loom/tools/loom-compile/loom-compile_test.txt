@@ -1,10 +1,16 @@
 // RUN: loom-compile %s --output=%t.vmfb --compile_report=summary 2> %t.report
 // RUN: iree-run-module --module=%t.vmfb --function=branchy --input=0 --input=21 --expected_output=42 | FileCheck --check-prefix=EXEC %s
 // RUN: FileCheck --check-prefix=REPORT %s < %t.report
+// RUN: loom-compile %s --output=%t.file.vmfb --compile_report=details --compile_report_output=%t.report.json
+// RUN: FileCheck --check-prefix=REPORT-FILE %s < %t.report.json
+// RUN: loom-compile %s --output=%t.stdout.vmfb --compile_report=summary --compile_report_output=- > %t.stdout-report.json
+// RUN: FileCheck --check-prefix=REPORT %s < %t.stdout-report.json
 
 // EXEC: EXEC @branchy
 // EXEC: [SUCCESS] all function outputs matched their expected values.
-// REPORT: COMPILE-REPORT: summary artifact=vm-archive status=OK
+// REPORT: {"artifact_kind":"vm-archive","status_code":0,"status":"OK"
+// REPORT-FILE: {"artifact_kind":"vm-archive","status_code":0,"status":"OK"
+// REPORT-FILE: "pressure_rows":{"copied_count":{{[0-9]+}},"total_count":{{[0-9]+}},"rows":[
 
 // RUN: printf '%%s\n' \
 // RUN:   '{"model36": {"model": {"delta": 32}}}' \

@@ -56,11 +56,12 @@ IREE_FLAG(string, workgroup_count, "",
           "static kernel.launch.config workgroup count is used when available, "
           "otherwise one workgroup is dispatched.");
 IREE_FLAG(string, compile_report, "",
-          "Optional compile report output. Use 'summary', 'details', or "
-          "empty/'none'.");
+          "Optional compile report output. Use 'summary'/'details' for "
+          "structured JSON, 'text-summary'/'text-details' for human-readable "
+          "text, or empty/'none'.");
 IREE_FLAG(int32_t, compile_report_row_limit,
           LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT,
-          "Maximum pressure and spill rows to capture for "
+          "Maximum rows per report row category to capture for "
           "--compile_report=details.");
 IREE_FLAG(string, emit_target_artifact, "",
           "Optional output path for the selected HAL backend's target-native "
@@ -341,7 +342,7 @@ static iree_status_t iree_run_loom_one_shot_options_initialize(
 static iree_status_t iree_run_loom_compile_report_options_initialize(
     loom_run_compile_report_capture_options_t* out_options) {
   loom_run_compile_report_capture_options_initialize(out_options);
-  IREE_RETURN_IF_ERROR(loom_run_compile_report_capture_options_parse_mode(
+  IREE_RETURN_IF_ERROR(loom_run_compile_report_capture_options_parse_request(
       iree_make_cstring_view(FLAG_compile_report), out_options));
   if (FLAG_compile_report_row_limit < 0) {
     return iree_make_status(
