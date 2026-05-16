@@ -167,13 +167,16 @@ loom_cc_test(
     ::target_legalize
     iree::base::internal::arena
     loom::src::loom::analysis::contract
+    loom::src::loom::analysis::matrix_fragment_layout
     loom::src::loom::codegen::low::lower
     loom::src::loom::codegen::low::pass_environment
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::func
     loom::src::loom::ops::index
+    loom::src::loom::ops::kernel
     loom::src::loom::ops::scalar
+    loom::src::loom::ops::scf
     loom::src::loom::ops::target
     loom::src::loom::ops::test
     loom::src::loom::ops::vector
