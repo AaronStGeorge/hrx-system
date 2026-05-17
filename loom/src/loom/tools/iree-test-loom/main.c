@@ -35,6 +35,11 @@ IREE_FLAG(string, pipeline, "default",
           "Pass pipeline used for HAL actual invocations. Use 'default', "
           "'none', '@symbol', or a comma-separated pass list.");
 
+enum {
+  // Generic HAL requirements plus target-linked requirement providers.
+  IREE_TEST_LOOM_MAX_REQUIREMENT_PROVIDERS = 8,
+};
+
 static iree_status_t iree_test_loom_register_context(void* user_data,
                                                      loom_context_t* context) {
   const iree_test_loom_configuration_t* configuration =
@@ -172,13 +177,25 @@ static iree_status_t iree_test_loom_run_case_samples(
     iree_host_size_t* inout_failed_sample_count,
     iree_host_size_t* inout_skipped_case_count) {
   const loom_testbench_case_plan_t* case_plan = &module_plan->cases[case_index];
-  loom_testbench_requirement_provider_t requirement_providers[1];
+  loom_testbench_requirement_provider_t
+      requirement_providers[IREE_TEST_LOOM_MAX_REQUIREMENT_PROVIDERS] = {0};
+  iree_host_size_t requirement_provider_count = 0;
   loom_run_hal_testbench_requirement_provider_initialize(
-      hal_context, &requirement_providers[0]);
+      hal_context, &requirement_providers[requirement_provider_count++]);
+  if (configuration->populate_requirement_providers.fn != NULL) {
+    IREE_RETURN_IF_ERROR(configuration->populate_requirement_providers.fn(
+        configuration->populate_requirement_providers.user_data, hal_context,
+        IREE_ARRAYSIZE(requirement_providers), requirement_providers,
+        &requirement_provider_count));
+  }
+  if (requirement_provider_count > IREE_ARRAYSIZE(requirement_providers)) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "iree-test-loom requirement provider capacity exceeded");
+  }
   loom_testbench_requirement_provider_registry_t requirement_registry = {0};
   loom_testbench_requirement_provider_registry_initialize(
-      requirement_providers, IREE_ARRAYSIZE(requirement_providers),
-      &requirement_registry);
+      requirement_providers, requirement_provider_count, &requirement_registry);
   loom_testbench_requirement_result_t requirement_result = {0};
   IREE_RETURN_IF_ERROR(loom_testbench_evaluate_case_requirements(
       module_plan->module, case_plan, &requirement_registry,

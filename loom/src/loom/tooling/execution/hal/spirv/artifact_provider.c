@@ -18,35 +18,6 @@ typedef struct loom_spirv_hal_artifact_storage_t {
   loom_spirv_module_binary_t module;
 } loom_spirv_hal_artifact_storage_t;
 
-static iree_status_t loom_spirv_hal_artifact_provider_query_matrix_rows(
-    iree_hal_device_t* device, iree_allocator_t allocator,
-    iree_hal_vulkan_cooperative_matrix_property_t** out_rows,
-    iree_host_size_t* out_row_count) {
-  *out_rows = NULL;
-  *out_row_count = 0;
-  iree_host_size_t row_count = 0;
-  IREE_RETURN_IF_ERROR(
-      iree_hal_vulkan_device_query_cooperative_matrix_properties(
-          device, /*property_capacity=*/0, &row_count,
-          /*out_properties=*/NULL));
-  if (row_count == 0) {
-    return iree_ok_status();
-  }
-  iree_hal_vulkan_cooperative_matrix_property_t* rows = NULL;
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
-      allocator, row_count * sizeof(*rows), (void**)&rows));
-  iree_status_t status =
-      iree_hal_vulkan_device_query_cooperative_matrix_properties(
-          device, row_count, &row_count, rows);
-  if (iree_status_is_ok(status)) {
-    *out_rows = rows;
-    *out_row_count = row_count;
-  } else {
-    iree_allocator_free(allocator, rows);
-  }
-  return status;
-}
-
 static bool loom_spirv_hal_artifact_provider_bundle_is_compatible(
     void* user_data, const loom_target_entry_t* entry) {
   (void)user_data;
@@ -82,7 +53,7 @@ static iree_status_t loom_spirv_hal_artifact_provider_select_device_target(
   if (iree_any_bit_set(
           facts.flags,
           LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_COOPERATIVE_MATRIX_KHR)) {
-    status = loom_spirv_hal_artifact_provider_query_matrix_rows(
+    status = loom_spirv_vulkan_hal_query_cooperative_matrix_properties(
         runtime->device, allocator, &matrix_rows, &matrix_row_count);
   }
   loom_spirv_vulkan_hal_target_profile_storage_t* profile_storage = NULL;

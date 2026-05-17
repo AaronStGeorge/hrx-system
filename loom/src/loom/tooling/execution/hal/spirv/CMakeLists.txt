@@ -51,6 +51,21 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    testbench_requirements
+  HDRS
+    "testbench_requirements.h"
+  SRCS
+    "testbench_requirements.c"
+  DEPS
+    ::vulkan_profile
+    iree::base
+    loom::src::loom::tooling::execution::hal::testbench_actual
+    loom::src::loom::tooling::testbench::requirements
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     vulkan_profile
   HDRS
     "vulkan_profile.h"

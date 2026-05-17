@@ -147,6 +147,39 @@ iree_status_t loom_spirv_vulkan_hal_profile_query(
   return iree_ok_status();
 }
 
+iree_status_t loom_spirv_vulkan_hal_query_cooperative_matrix_properties(
+    iree_hal_device_t* device, iree_allocator_t allocator,
+    iree_hal_vulkan_cooperative_matrix_property_t** out_properties,
+    iree_host_size_t* out_property_count) {
+  IREE_ASSERT_ARGUMENT(device);
+  IREE_ASSERT_ARGUMENT(out_properties);
+  IREE_ASSERT_ARGUMENT(out_property_count);
+
+  *out_properties = NULL;
+  *out_property_count = 0;
+  iree_host_size_t property_count = 0;
+  IREE_RETURN_IF_ERROR(
+      iree_hal_vulkan_device_query_cooperative_matrix_properties(
+          device, /*property_capacity=*/0, &property_count,
+          /*out_properties=*/NULL));
+  if (property_count == 0) {
+    return iree_ok_status();
+  }
+  iree_hal_vulkan_cooperative_matrix_property_t* properties = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
+      allocator, property_count * sizeof(*properties), (void**)&properties));
+  iree_status_t status =
+      iree_hal_vulkan_device_query_cooperative_matrix_properties(
+          device, property_count, &property_count, properties);
+  if (iree_status_is_ok(status)) {
+    *out_properties = properties;
+    *out_property_count = property_count;
+  } else {
+    iree_allocator_free(allocator, properties);
+  }
+  return status;
+}
+
 static iree_status_t loom_spirv_vulkan_hal_profile_require_flag(
     const loom_spirv_vulkan_hal_profile_facts_t* facts,
     loom_spirv_vulkan_hal_profile_flag_bits_t flag,

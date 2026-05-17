@@ -102,6 +102,12 @@ iree_status_t loom_spirv_vulkan_hal_profile_query(
     iree_hal_device_t* device, iree_hal_executable_cache_t* executable_cache,
     loom_spirv_vulkan_hal_profile_facts_t* out_facts);
 
+// Queries active Vulkan cooperative matrix rows into caller-owned storage.
+iree_status_t loom_spirv_vulkan_hal_query_cooperative_matrix_properties(
+    iree_hal_device_t* device, iree_allocator_t allocator,
+    iree_hal_vulkan_cooperative_matrix_property_t** out_properties,
+    iree_host_size_t* out_property_count);
+
 // Initializes target-local SPIR-V profile storage from exact Vulkan
 // cooperative matrix property rows.
 iree_status_t loom_spirv_vulkan_hal_target_profile_storage_initialize(

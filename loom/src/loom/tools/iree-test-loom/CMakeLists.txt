@@ -138,6 +138,9 @@ if(IREE_TEST_LOOM_ENABLE_SPIRV)
     IREE_TEST_LOOM_HAVE_SPIRV
     loom::src::loom::tooling::execution::hal::spirv::provider
   )
+  target_link_libraries(${_IREE_TEST_LOOM_TARGET} PRIVATE
+    loom::src::loom::tooling::execution::hal::spirv::testbench_requirements
+  )
 endif()
 
 unset(_IREE_TEST_LOOM_TARGET)

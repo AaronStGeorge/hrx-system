@@ -40,7 +40,7 @@ check.case @cooperative_matrix_f16_two_tiles_case {
   check.requires<hal.device.i64> {category = "vulkan.feature", key = "cooperative_matrix_khr", equals = 1}
   check.requires<hal.device.i64> {category = "vulkan.feature", key = "shader_float16", equals = 1}
   check.requires<hal.device.i64> {category = "vulkan.feature", key = "storage_buffer_16bit_access", equals = 1}
-  check.requires<hal.device.i64> {category = "vulkan.cooperative_matrix", key = "property_count", minimum = 1}
+  check.requires<hal.spirv.cooperative_matrix> {row = "khr.cooperative_matrix.f16.16x16x16.f32.subgroup"}
   %lhs = check.generate.iota offset(1.0) step(1.0) : tensor<32x16xf16>
   %rhs = check.generate.iota offset(0.5) step(0.5) : tensor<16x16xf16>
   %init = check.generate.iota offset(0.25) step(0.25) : tensor<32x16xf32>
