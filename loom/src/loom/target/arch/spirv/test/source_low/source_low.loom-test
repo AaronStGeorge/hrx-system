@@ -25,6 +25,23 @@ low.func.def target(@target) abi(shader_entry_point) @spirv_i32_arithmetic(%lhs:
 
 spirv.target<vulkan1_3> @target
 
+func.def target(@target) @spirv_i32_compare_select(%lhs: i32, %rhs: i32) -> (i32) {
+  %less = scalar.cmpi slt, %lhs, %rhs : i32
+  %selected = scf.select %less, %lhs, %rhs : i32
+  func.return %selected : i32
+}
+
+// ----
+low.func.def target(@target) abi(shader_entry_point) @spirv_i32_compare_select(%lhs: reg<spirv.id>, %rhs: reg<spirv.id>) -> (reg<spirv.id>) asm<spirv.logical.core> {
+  %less = OpSLessThan %lhs, %rhs
+  %selected = OpSelect %less, %lhs, %rhs
+  return %selected
+}
+
+// ====
+
+spirv.target<vulkan1_3> @target
+
 func.def target(@target) @spirv_index_arithmetic(%index: index, %factor: index) -> (index) {
   %one = index.constant 1 : index
   %previous = index.sub %index, %one : index
@@ -40,6 +57,25 @@ low.func.def target(@target) abi(shader_entry_point) @spirv_index_arithmetic(%in
   %scaled = OpIMul %previous, %factor
   %next = OpIMulAdd %scaled, %factor, %one
   return %next
+}
+
+// ====
+
+spirv.target<vulkan1_3> @target
+
+func.def target(@target) @spirv_offset_compare_select(%byte_offset: offset, %limit: offset) -> (offset) {
+  %zero = index.constant 0 : offset
+  %inside = index.cmp ule, %byte_offset, %limit : offset
+  %selected = scf.select %inside, %byte_offset, %zero : offset
+  func.return %selected : offset
+}
+
+// ----
+low.func.def target(@target) abi(shader_entry_point) @spirv_offset_compare_select(%byte_offset: reg<spirv.offset64>, %limit: reg<spirv.offset64>) -> (reg<spirv.offset64>) asm<spirv.logical.core> {
+  %zero = OpConstant.offset64 0
+  %inside = OpULessThanEqual.offset64 %byte_offset, %limit
+  %selected = OpSelect.offset64 %inside, %byte_offset, %zero
+  return %selected
 }
 
 // ====

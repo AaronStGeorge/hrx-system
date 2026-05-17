@@ -221,6 +221,7 @@ iree_py_library(
     iree::runtime::py::loom::gen::generated_file
     iree::runtime::py::loom::target::low_descriptors
     iree::runtime::py::loom::target::arch::spirv::descriptors
+    iree::runtime::py::loom::target::arch::spirv::scalar_alu
     iree::runtime::py::loom::target::arch::spirv::scalar_memory
 )
 

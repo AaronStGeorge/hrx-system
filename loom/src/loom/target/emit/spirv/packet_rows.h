@@ -33,6 +33,8 @@ typedef enum loom_spirv_value_class_e {
   LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS = 3,
   // PhysicalStorageBuffer pointer with a concrete scalar pointee type.
   LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER = 4,
+  // SPIR-V boolean SSA ID produced by compare packets.
+  LOOM_SPIRV_VALUE_CLASS_BOOL = 5,
 } loom_spirv_value_class_t;
 
 typedef struct loom_spirv_value_type_t {
@@ -50,6 +52,8 @@ typedef enum loom_spirv_packet_form_e {
   LOOM_SPIRV_PACKET_FORM_LOAD_ALIGNED = 4,
   LOOM_SPIRV_PACKET_FORM_STORE_ALIGNED = 5,
   LOOM_SPIRV_PACKET_FORM_INTEGER_MUL_ADD = 6,
+  LOOM_SPIRV_PACKET_FORM_COMPARE_SAME_TYPE = 7,
+  LOOM_SPIRV_PACKET_FORM_SELECT = 8,
 } loom_spirv_packet_form_t;
 
 typedef struct loom_spirv_packet_row_t {

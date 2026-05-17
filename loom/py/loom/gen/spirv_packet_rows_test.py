@@ -43,3 +43,15 @@ def test_generation_emits_coordinate_arithmetic_packet_rows() -> None:
     assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_IMUL_ADD_I32" in tables
     assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_ISUB_OFFSET64" in tables
     assert "LOOM_SPIRV_PACKET_FORM_INTEGER_MUL_ADD" in tables
+
+
+def test_generation_emits_integer_compare_and_select_rows() -> None:
+    tables = generate_tables()
+
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_S_LESS_THAN_I32" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_U_LESS_THAN_EQUAL_OFFSET64" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_SELECT_I32" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_SELECT_OFFSET64" in tables
+    assert "LOOM_SPIRV_VALUE_CLASS_BOOL" in tables
+    assert "LOOM_SPIRV_PACKET_FORM_COMPARE_SAME_TYPE" in tables
+    assert "LOOM_SPIRV_PACKET_FORM_SELECT" in tables

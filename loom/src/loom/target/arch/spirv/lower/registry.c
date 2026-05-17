@@ -37,7 +37,8 @@ static bool loom_spirv_source_type_is_id(loom_type_t type) {
     return false;
   }
   const loom_scalar_type_t scalar_type = loom_type_element_type(type);
-  return scalar_type == LOOM_SCALAR_TYPE_I32 ||
+  return scalar_type == LOOM_SCALAR_TYPE_I1 ||
+         scalar_type == LOOM_SCALAR_TYPE_I32 ||
          scalar_type == LOOM_SCALAR_TYPE_INDEX;
 }
 

@@ -33,6 +33,7 @@ typedef enum loom_spirv_type_key_kind_e {
   LOOM_SPIRV_TYPE_KEY_RUNTIME_ARRAY = 7,
   LOOM_SPIRV_TYPE_KEY_STRUCT = 8,
   LOOM_SPIRV_TYPE_KEY_ARRAY = 9,
+  LOOM_SPIRV_TYPE_KEY_BOOL = 10,
 } loom_spirv_type_key_kind_t;
 
 enum {
@@ -317,6 +318,12 @@ static iree_status_t loom_spirv_emit_type_declaration(
           loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_DECLARATION),
           LOOM_SPIRV_OP_TYPE_VOID, operands, IREE_ARRAYSIZE(operands));
     }
+    case LOOM_SPIRV_TYPE_KEY_BOOL: {
+      const uint32_t operands[] = {type_id};
+      return loom_spirv_binary_write_instruction(
+          loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_DECLARATION),
+          LOOM_SPIRV_OP_TYPE_BOOL, operands, IREE_ARRAYSIZE(operands));
+    }
     case LOOM_SPIRV_TYPE_KEY_INT: {
       const uint32_t operands[] = {type_id, key->operands[0], key->operands[1]};
       return loom_spirv_binary_write_instruction(
@@ -420,6 +427,15 @@ static iree_status_t loom_spirv_emit_type_void(loom_spirv_emit_state_t* state,
                                                uint32_t* out_type_id) {
   const loom_spirv_type_key_t key = {
       .kind = LOOM_SPIRV_TYPE_KEY_VOID,
+  };
+  return loom_spirv_emit_type_id(state, &key, out_type_id,
+                                 /*out_emitted=*/NULL);
+}
+
+static iree_status_t loom_spirv_emit_type_bool(loom_spirv_emit_state_t* state,
+                                               uint32_t* out_type_id) {
+  const loom_spirv_type_key_t key = {
+      .kind = LOOM_SPIRV_TYPE_KEY_BOOL,
   };
   return loom_spirv_emit_type_id(state, &key, out_type_id,
                                  /*out_emitted=*/NULL);
@@ -975,6 +991,7 @@ static bool loom_spirv_value_type_equal(loom_spirv_value_type_t lhs,
       return lhs.scalar_type == rhs.scalar_type;
     case LOOM_SPIRV_VALUE_CLASS_OFFSET64:
     case LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS:
+    case LOOM_SPIRV_VALUE_CLASS_BOOL:
     case LOOM_SPIRV_VALUE_CLASS_UNKNOWN:
       return true;
   }
@@ -1238,6 +1255,7 @@ static iree_status_t loom_spirv_emit_abi_slot_type_info(
       return iree_ok_status();
     }
     case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
+    case LOOM_SPIRV_VALUE_CLASS_BOOL:
     case LOOM_SPIRV_VALUE_CLASS_UNKNOWN:
       break;
   }
@@ -1377,6 +1395,7 @@ static iree_status_t loom_spirv_emit_build_raw_bda_abi_plan(
         break;
       case LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS:
       case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
+      case LOOM_SPIRV_VALUE_CLASS_BOOL:
       case LOOM_SPIRV_VALUE_CLASS_UNKNOWN:
         return iree_make_status(
             IREE_STATUS_UNIMPLEMENTED,
@@ -1661,6 +1680,7 @@ static iree_status_t loom_spirv_emit_materialize_bda_arg(
       return loom_spirv_emit_materialize_bda_u64_arg(state, slot);
     case LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS:
     case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
+    case LOOM_SPIRV_VALUE_CLASS_BOOL:
     case LOOM_SPIRV_VALUE_CLASS_UNKNOWN:
       break;
   }
@@ -1839,6 +1859,8 @@ static iree_status_t loom_spirv_emit_type_id_for_value_type(
   switch (type.value_class) {
     case LOOM_SPIRV_VALUE_CLASS_SCALAR:
       return loom_spirv_emit_type_scalar(state, type.scalar_type, out_type_id);
+    case LOOM_SPIRV_VALUE_CLASS_BOOL:
+      return loom_spirv_emit_type_bool(state, out_type_id);
     case LOOM_SPIRV_VALUE_CLASS_OFFSET64:
     case LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS:
       return loom_spirv_emit_type_u64(state, out_type_id);
@@ -2079,6 +2101,81 @@ static iree_status_t loom_spirv_emit_integer_mul_add_packet(
                                       true);
 }
 
+static iree_status_t loom_spirv_emit_compare_same_type_packet(
+    loom_spirv_emit_state_t* state,
+    const loom_low_resolved_descriptor_packet_t* packet,
+    const loom_spirv_packet_row_t* row) {
+  loom_spirv_value_ref_t operands[2] = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_spirv_emit_load_packet_operands(state, packet, row, operands));
+  if (operands[0].type_id != operands[1].type_id) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "SPIR-V low descriptor '%.*s' operand types do "
+                            "not match",
+                            (int)packet->key.size, packet->key.data);
+  }
+  uint32_t result_type_id = 0;
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_type_id_for_value_type(
+      state, row->result_type, &result_type_id));
+  const uint32_t result_id = loom_spirv_emit_allocate_id(state);
+  const uint32_t instruction_operands[] = {
+      result_type_id,
+      result_id,
+      operands[0].id,
+      operands[1].id,
+  };
+  IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
+      loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+      row->opcode, instruction_operands, IREE_ARRAYSIZE(instruction_operands)));
+  return loom_spirv_emit_define_value(state,
+                                      loom_op_const_results(packet->op)[0],
+                                      (loom_spirv_value_ref_t){
+                                          .id = result_id,
+                                          .type_id = result_type_id,
+                                          .value_type = row->result_type,
+                                      },
+                                      true);
+}
+
+static iree_status_t loom_spirv_emit_select_packet(
+    loom_spirv_emit_state_t* state,
+    const loom_low_resolved_descriptor_packet_t* packet,
+    const loom_spirv_packet_row_t* row) {
+  loom_spirv_value_ref_t operands[3] = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_spirv_emit_load_packet_operands(state, packet, row, operands));
+  if (operands[1].type_id != operands[2].type_id) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "SPIR-V low descriptor '%.*s' select value types "
+                            "do not match",
+                            (int)packet->key.size, packet->key.data);
+  }
+  uint32_t result_type_id = 0;
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_type_id_for_value_type(
+      state, row->result_type, &result_type_id));
+  if (result_type_id != operands[1].type_id) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "SPIR-V low descriptor '%.*s' select row result "
+                            "type does not match operand types",
+                            (int)packet->key.size, packet->key.data);
+  }
+  const uint32_t result_id = loom_spirv_emit_allocate_id(state);
+  const uint32_t instruction_operands[] = {
+      result_type_id, result_id, operands[0].id, operands[1].id, operands[2].id,
+  };
+  IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
+      loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+      row->opcode, instruction_operands, IREE_ARRAYSIZE(instruction_operands)));
+  return loom_spirv_emit_define_value(state,
+                                      loom_op_const_results(packet->op)[0],
+                                      (loom_spirv_value_ref_t){
+                                          .id = result_id,
+                                          .type_id = result_type_id,
+                                          .value_type = row->result_type,
+                                      },
+                                      true);
+}
+
 static iree_status_t loom_spirv_emit_typed_physical_storage_buffer_pointer(
     loom_spirv_emit_state_t* state, loom_spirv_value_ref_t address,
     loom_spirv_value_type_t pointer_type, uint32_t pointer_type_id,
@@ -2223,6 +2320,10 @@ static iree_status_t loom_spirv_emit_descriptor_packet(
       return loom_spirv_emit_binary_same_type_packet(state, packet, row);
     case LOOM_SPIRV_PACKET_FORM_INTEGER_MUL_ADD:
       return loom_spirv_emit_integer_mul_add_packet(state, packet, row);
+    case LOOM_SPIRV_PACKET_FORM_COMPARE_SAME_TYPE:
+      return loom_spirv_emit_compare_same_type_packet(state, packet, row);
+    case LOOM_SPIRV_PACKET_FORM_SELECT:
+      return loom_spirv_emit_select_packet(state, packet, row);
     case LOOM_SPIRV_PACKET_FORM_PTR_ACCESS_CHAIN:
       return loom_spirv_emit_ptr_access_chain_packet(state, packet, row);
     case LOOM_SPIRV_PACKET_FORM_LOAD_ALIGNED:

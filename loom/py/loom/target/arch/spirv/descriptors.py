@@ -10,6 +10,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from loom.target.arch.spirv.scalar_alu import (
+    INTEGER_COMPARE_PREDICATES,
+    UNSIGNED_INTEGER_COMPARE_PREDICATES,
+    IntegerComparePredicate,
+)
 from loom.target.arch.spirv.scalar_memory import (
     STORAGE_BUFFER_SCALARS,
     StorageBufferScalar,
@@ -145,6 +150,47 @@ def _binary_same_type_descriptor(
     )
 
 
+def _compare_descriptor(
+    predicate: IntegerComparePredicate,
+    *,
+    suffix: str,
+    operands: tuple[Operand, Operand, Operand],
+) -> Descriptor:
+    key = f"spirv.op_{predicate.descriptor_suffix}.{suffix}"
+    mnemonic = (
+        predicate.mnemonic if suffix == "i32" else f"{predicate.mnemonic}.{suffix}"
+    )
+    return Descriptor(
+        key=key,
+        mnemonic=mnemonic,
+        semantic_tag=key,
+        operands=operands,
+        asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+        schedule_class=_SCHEDULE_ALU,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _select_descriptor(
+    *,
+    key: str,
+    mnemonic: str,
+    operands: tuple[Operand, Operand, Operand, Operand],
+) -> Descriptor:
+    return Descriptor(
+        key=key,
+        mnemonic=mnemonic,
+        semantic_tag=key,
+        operands=operands,
+        asm_forms=_asm(
+            results=("dst",),
+            operands=("condition", "true_value", "false_value"),
+        ),
+        schedule_class=_SCHEDULE_ALU,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _ternary_same_type_descriptor(
     *,
     key: str,
@@ -228,6 +274,36 @@ def _storage_buffer_descriptors() -> tuple[Descriptor, ...]:
         descriptors.append(_ptr_access_chain_storage_buffer_descriptor(scalar))
         descriptors.append(_load_storage_buffer_descriptor(scalar))
         descriptors.append(_store_storage_buffer_descriptor(scalar))
+    return tuple(descriptors)
+
+
+def _compare_descriptors() -> tuple[Descriptor, ...]:
+    descriptors = [
+        _compare_descriptor(
+            predicate,
+            suffix="i32",
+            operands=(
+                _id_result(),
+                _id_operand("lhs"),
+                _id_operand("rhs"),
+            ),
+        )
+        for predicate in INTEGER_COMPARE_PREDICATES
+    ]
+    descriptors.extend(
+        [
+            _compare_descriptor(
+                predicate,
+                suffix="offset64",
+                operands=(
+                    _id_result(),
+                    _offset64_operand("lhs"),
+                    _offset64_operand("rhs"),
+                ),
+            )
+            for predicate in UNSIGNED_INTEGER_COMPARE_PREDICATES
+        ]
+    )
     return tuple(descriptors)
 
 
@@ -381,6 +457,27 @@ SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _offset64_result(),
                 _offset64_operand("lhs"),
                 _offset64_operand("rhs"),
+            ),
+        ),
+        *_compare_descriptors(),
+        _select_descriptor(
+            key="spirv.op_select.i32",
+            mnemonic="OpSelect",
+            operands=(
+                _id_result(),
+                _id_operand("condition"),
+                _id_operand("true_value"),
+                _id_operand("false_value"),
+            ),
+        ),
+        _select_descriptor(
+            key="spirv.op_select.offset64",
+            mnemonic="OpSelect.offset64",
+            operands=(
+                _offset64_result(),
+                _id_operand("condition"),
+                _offset64_operand("true_value"),
+                _offset64_operand("false_value"),
             ),
         ),
         *_storage_buffer_descriptors(),

@@ -132,6 +132,137 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
 
 // ====
 
+// RUN: emit spirv-dis @spirv_raw_bda_storage_buffer_i32_select validate
+// REQUIRES: spirv-dis, spirv-val
+
+spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}
+
+low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storage_buffer_i32_select(%byte_offset: reg<spirv.offset64>, %limit: reg<spirv.offset64>) asm<spirv.logical.core> {
+  %input = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %zero_offset = OpConstant.offset64 0
+  %inside = OpULessThanEqual.offset64 %byte_offset, %limit
+  %selected_offset = OpSelect.offset64 %inside, %byte_offset, %zero_offset
+  %input_view = OpPtrAccessChain.storage_buffer.i32.byte_offset %input, %selected_offset
+  %loaded = OpLoad.storage_buffer.i32 %input_view
+  %zero = OpConstant.i32 0
+  %positive = OpSGreaterThan %loaded, %zero
+  %selected = OpSelect %positive, %loaded, %zero
+  %output_view = OpPtrAccessChain.storage_buffer.i32.byte_offset %output, %selected_offset
+  OpStore.storage_buffer.i32 %output_view, %selected
+  return
+}
+
+// ----
+               OpCapability Shader
+               OpCapability PhysicalStorageBufferAddresses
+               OpCapability Int64
+               OpExtension "SPV_KHR_physical_storage_buffer"
+               OpMemoryModel PhysicalStorageBuffer64 GLSL450
+               OpEntryPoint GLCompute %spirv_raw_bda_storage_buffer_i32_select "spirv_raw_bda_storage_buffer_i32_select"
+               OpExecutionMode %spirv_raw_bda_storage_buffer_i32_select LocalSize 1 1 1
+               OpName %spirv_raw_bda_storage_buffer_i32_select "spirv_raw_bda_storage_buffer_i32_select"
+               OpName %byte_offset "byte_offset"
+               OpName %limit "limit"
+               OpName %input "input"
+               OpName %output "output"
+               OpName %zero_offset "zero_offset"
+               OpName %inside "inside"
+               OpName %selected_offset "selected_offset"
+               OpName %input_view "input_view"
+               OpName %loaded "loaded"
+               OpName %zero "zero"
+               OpName %positive "positive"
+               OpName %selected "selected"
+               OpName %output_view "output_view"
+               OpModuleProcessed "iree.vulkan.bda.v1"
+               OpModuleProcessed "iree.vulkan.bda.v1.root=0,32"
+               OpModuleProcessed "iree.vulkan.bda.v1.constant_offset=32"
+               OpModuleProcessed "iree.vulkan.bda.v1.constants=4"
+               OpModuleProcessed "iree.vulkan.bda.v1.bindings=2"
+               OpDecorate %_arr_uint_uint_4 ArrayStride 4
+               OpDecorate %_struct_6 Block
+               OpMemberDecorate %_struct_6 0 Offset 0
+               OpMemberDecorate %_struct_6 1 Offset 8
+               OpMemberDecorate %_struct_6 2 Offset 16
+               OpMemberDecorate %_struct_6 3 Offset 20
+               OpMemberDecorate %_struct_6 4 Offset 24
+               OpMemberDecorate %_struct_6 5 Offset 28
+               OpMemberDecorate %_struct_6 6 Offset 32
+               OpDecorate %_runtimearr_ulong ArrayStride 8
+               OpDecorate %_struct_38 Block
+               OpMemberDecorate %_struct_38 0 Offset 0
+               OpDecorate %_ptr_PhysicalStorageBuffer_int ArrayStride 1
+      %ulong = OpTypeInt 64 0
+       %uint = OpTypeInt 32 0
+     %uint_4 = OpConstant %uint 4
+%_arr_uint_uint_4 = OpTypeArray %uint %uint_4
+  %_struct_6 = OpTypeStruct %ulong %ulong %uint %uint %uint %uint %_arr_uint_uint_4
+%_ptr_PushConstant__struct_6 = OpTypePointer PushConstant %_struct_6
+          %8 = OpVariable %_ptr_PushConstant__struct_6 PushConstant
+       %void = OpTypeVoid
+         %10 = OpTypeFunction %void
+%_ptr_PushConstant_uint = OpTypePointer PushConstant %uint
+        %int = OpTypeInt 32 1
+      %int_6 = OpConstant %int 6
+      %int_0 = OpConstant %int 0
+      %int_1 = OpConstant %int 1
+   %ulong_32 = OpConstant %ulong 32
+      %int_2 = OpConstant %int 2
+      %int_3 = OpConstant %int 3
+%_ptr_PushConstant_ulong = OpTypePointer PushConstant %ulong
+%_runtimearr_ulong = OpTypeRuntimeArray %ulong
+ %_struct_38 = OpTypeStruct %_runtimearr_ulong
+%_ptr_PhysicalStorageBuffer__struct_38 = OpTypePointer PhysicalStorageBuffer %_struct_38
+%_ptr_PhysicalStorageBuffer_ulong = OpTypePointer PhysicalStorageBuffer %ulong
+     %uint_1 = OpConstant %uint 1
+%zero_offset = OpConstant %ulong 0
+       %bool = OpTypeBool
+%_ptr_PhysicalStorageBuffer_int = OpTypePointer PhysicalStorageBuffer %int
+       %zero = OpConstant %int 0
+%spirv_raw_bda_storage_buffer_i32_select = OpFunction %void None %10
+         %11 = OpLabel
+         %16 = OpAccessChain %_ptr_PushConstant_uint %8 %int_6 %int_0
+         %17 = OpLoad %uint %16 Aligned 4
+         %19 = OpAccessChain %_ptr_PushConstant_uint %8 %int_6 %int_1
+         %20 = OpLoad %uint %19 Aligned 4
+         %21 = OpUConvert %ulong %17
+         %22 = OpUConvert %ulong %20
+         %24 = OpShiftLeftLogical %ulong %22 %ulong_32
+%byte_offset = OpBitwiseOr %ulong %24 %21
+         %27 = OpAccessChain %_ptr_PushConstant_uint %8 %int_6 %int_2
+         %28 = OpLoad %uint %27 Aligned 4
+         %30 = OpAccessChain %_ptr_PushConstant_uint %8 %int_6 %int_3
+         %31 = OpLoad %uint %30 Aligned 4
+         %32 = OpUConvert %ulong %28
+         %33 = OpUConvert %ulong %31
+         %34 = OpShiftLeftLogical %ulong %33 %ulong_32
+      %limit = OpBitwiseOr %ulong %34 %32
+         %40 = OpAccessChain %_ptr_PushConstant_ulong %8 %int_0
+         %41 = OpLoad %ulong %40 Aligned 8
+         %42 = OpConvertUToPtr %_ptr_PhysicalStorageBuffer__struct_38 %41
+         %43 = OpAccessChain %_ptr_PushConstant_uint %8 %int_2
+         %44 = OpLoad %uint %43 Aligned 4
+         %46 = OpAccessChain %_ptr_PhysicalStorageBuffer_ulong %42 %int_0 %44
+      %input = OpLoad %ulong %46 Aligned 8
+         %49 = OpIAdd %uint %44 %uint_1
+         %50 = OpAccessChain %_ptr_PhysicalStorageBuffer_ulong %42 %int_0 %49
+     %output = OpLoad %ulong %50 Aligned 8
+     %inside = OpULessThanEqual %bool %byte_offset %limit
+%selected_offset = OpSelect %ulong %inside %byte_offset %zero_offset
+         %57 = OpConvertUToPtr %_ptr_PhysicalStorageBuffer_int %input
+ %input_view = OpPtrAccessChain %_ptr_PhysicalStorageBuffer_int %57 %selected_offset
+     %loaded = OpLoad %int %input_view Aligned 4
+   %positive = OpSGreaterThan %bool %loaded %zero
+   %selected = OpSelect %int %positive %loaded %zero
+         %63 = OpConvertUToPtr %_ptr_PhysicalStorageBuffer_int %output
+%output_view = OpPtrAccessChain %_ptr_PhysicalStorageBuffer_int %63 %selected_offset
+               OpStore %output_view %selected Aligned 4
+               OpReturn
+               OpFunctionEnd
+
+// ====
+
 // RUN: emit spirv-dis @spirv_raw_bda_storage_buffer_f32_copy validate
 // REQUIRES: spirv-dis, spirv-val
 

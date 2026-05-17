@@ -27,6 +27,10 @@ from loom.gen.generated_file import line_comment_header  # noqa: E402
 from loom.target.arch.spirv.descriptors import (  # noqa: E402
     SPIRV_LOGICAL_CORE_DESCRIPTOR_SET,
 )
+from loom.target.arch.spirv.scalar_alu import (  # noqa: E402
+    INTEGER_COMPARE_PREDICATES,
+    UNSIGNED_INTEGER_COMPARE_PREDICATES,
+)
 from loom.target.arch.spirv.scalar_memory import (  # noqa: E402
     STORAGE_BUFFER_SCALARS,
     StorageBufferScalar,
@@ -69,6 +73,10 @@ def _physical_storage_buffer_pointer_value(scalar: StorageBufferScalar) -> str:
 
 def _offset64_value() -> str:
     return _value_type("LOOM_SPIRV_VALUE_CLASS_OFFSET64", "LOOM_SPIRV_SCALAR_TYPE_U64")
+
+
+def _bool_value() -> str:
+    return _value_type("LOOM_SPIRV_VALUE_CLASS_BOOL")
 
 
 def _unknown_value() -> str:
@@ -222,6 +230,61 @@ def _mul_add_rows() -> list[str]:
     ]
 
 
+def _integer_compare_rows() -> list[str]:
+    i32_value = _value_type("LOOM_SPIRV_VALUE_CLASS_SCALAR", "LOOM_SPIRV_SCALAR_TYPE_S32")
+    offset64_value = _offset64_value()
+    bool_value = _bool_value()
+    rows = [
+        _row(
+            f"spirv.op_{predicate.descriptor_suffix}.i32",
+            opcode=predicate.opcode,
+            form="LOOM_SPIRV_PACKET_FORM_COMPARE_SAME_TYPE",
+            result_type=bool_value,
+            operand_types=(i32_value, i32_value),
+            result_count=1,
+        )
+        for predicate in INTEGER_COMPARE_PREDICATES
+    ]
+    rows.extend(
+        [
+            _row(
+                f"spirv.op_{predicate.descriptor_suffix}.offset64",
+                opcode=predicate.opcode,
+                form="LOOM_SPIRV_PACKET_FORM_COMPARE_SAME_TYPE",
+                result_type=bool_value,
+                operand_types=(offset64_value, offset64_value),
+                result_count=1,
+            )
+            for predicate in UNSIGNED_INTEGER_COMPARE_PREDICATES
+        ]
+    )
+    return rows
+
+
+def _select_rows() -> list[str]:
+    i32_value = _value_type("LOOM_SPIRV_VALUE_CLASS_SCALAR", "LOOM_SPIRV_SCALAR_TYPE_S32")
+    offset64_value = _offset64_value()
+    bool_value = _bool_value()
+    return [
+        _row(
+            "spirv.op_select.i32",
+            opcode="LOOM_SPIRV_OP_SELECT",
+            form="LOOM_SPIRV_PACKET_FORM_SELECT",
+            result_type=i32_value,
+            operand_types=(bool_value, i32_value, i32_value),
+            result_count=1,
+        ),
+        _row(
+            "spirv.op_select.offset64",
+            opcode="LOOM_SPIRV_OP_SELECT",
+            form="LOOM_SPIRV_PACKET_FORM_SELECT",
+            result_type=offset64_value,
+            operand_types=(bool_value, offset64_value, offset64_value),
+            result_count=1,
+        ),
+    ]
+
+
 def _validate_rows() -> None:
     descriptor_keys = {descriptor.key for descriptor in SPIRV_LOGICAL_CORE_DESCRIPTOR_SET.descriptors}
     row_keys = {
@@ -233,7 +296,13 @@ def _validate_rows() -> None:
         "spirv.op_imul_add.i32",
         "spirv.op_iadd.offset64",
         "spirv.op_isub.offset64",
+        "spirv.op_select.i32",
+        "spirv.op_select.offset64",
     }
+    for predicate in INTEGER_COMPARE_PREDICATES:
+        row_keys.add(f"spirv.op_{predicate.descriptor_suffix}.i32")
+    for predicate in UNSIGNED_INTEGER_COMPARE_PREDICATES:
+        row_keys.add(f"spirv.op_{predicate.descriptor_suffix}.offset64")
     for scalar in STORAGE_BUFFER_SCALARS:
         row_keys.add(f"spirv.op_ptr_access_chain.storage_buffer.{scalar.suffix}.byte_offset")
         row_keys.add(f"spirv.op_load.storage_buffer.{scalar.suffix}")
@@ -270,6 +339,8 @@ def generate_tables() -> str:
         ),
         *_binary_same_type_rows(),
         *_mul_add_rows(),
+        *_integer_compare_rows(),
+        *_select_rows(),
         *_storage_buffer_rows(),
     ]
     lines = [

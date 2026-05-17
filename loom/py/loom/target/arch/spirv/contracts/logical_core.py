@@ -14,13 +14,21 @@ from loom.dialect.index import ALL_INDEX_OPS
 from loom.dialect.index import defs as index
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import arithmetic as scalar_arithmetic
+from loom.dialect.scalar import comparison as scalar_comparison
 from loom.dialect.scalar import conversion as scalar_conversion
+from loom.dialect.scf import ALL_SCF_OPS
+from loom.dialect.scf import defs as scf
 from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector import defs as vector
 from loom.dialect.view import ALL_VIEW_OPS
 from loom.dialect.view import defs as view
 from loom.dsl import Op
 from loom.target.arch.spirv.descriptors import SPIRV_LOGICAL_CORE_DESCRIPTOR_SET
+from loom.target.arch.spirv.scalar_alu import (
+    INTEGER_COMPARE_PREDICATES,
+    UNSIGNED_INTEGER_COMPARE_PREDICATES,
+    IntegerComparePredicate,
+)
 from loom.target.arch.spirv.scalar_memory import (
     STORAGE_BUFFER_SCALARS,
     StorageBufferScalar,
@@ -41,6 +49,7 @@ from loom.target.contracts import (
 )
 from loom.target.low_descriptors import Descriptor
 
+_I1 = Scalar("i1")
 _I32 = Scalar("i32")
 _INDEX = Scalar("index")
 _OFFSET = Scalar("offset")
@@ -190,6 +199,60 @@ def _ternary_rule(
     )
 
 
+def _compare_rule(
+    source_op: Op,
+    predicate: IntegerComparePredicate,
+    type_pattern: TypePattern,
+    descriptor_key: str,
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            Guard.enum_attr_equals("predicate", predicate.source_predicate),
+            *_typed_guards(("lhs", "rhs"), type_pattern),
+            Guard.value_type("result", _I1),
+        ),
+        emit=(
+            _descriptor_emit(
+                descriptor=descriptor,
+                operands={
+                    "lhs": ValueRef.operand("lhs"),
+                    "rhs": ValueRef.operand("rhs"),
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+def _select_rule(
+    type_pattern: TypePattern,
+    descriptor_key: str,
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    return DescriptorRule(
+        source_op=scf.scf_select,
+        descriptor=descriptor,
+        guards=(
+            Guard.value_type("condition", _I1),
+            *_typed_guards(("true_value", "false_value", "result"), type_pattern),
+        ),
+        emit=(
+            _descriptor_emit(
+                descriptor=descriptor,
+                operands={
+                    "condition": ValueRef.operand("condition"),
+                    "true_value": ValueRef.operand("true_value"),
+                    "false_value": ValueRef.operand("false_value"),
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
 def _buffer_view_rule(scalar: StorageBufferScalar) -> DescriptorRule:
     view_type = View(scalar.source_type)
     descriptor = _descriptor(
@@ -272,10 +335,42 @@ def _storage_buffer_rules() -> tuple[DescriptorRule, ...]:
     return tuple(rules)
 
 
+def _compare_rules() -> tuple[DescriptorRule, ...]:
+    rules: list[DescriptorRule] = []
+    for predicate in INTEGER_COMPARE_PREDICATES:
+        rules.append(
+            _compare_rule(
+                scalar_comparison.scalar_cmpi,
+                predicate,
+                _I32,
+                f"spirv.op_{predicate.descriptor_suffix}.i32",
+            )
+        )
+        rules.append(
+            _compare_rule(
+                index.index_cmp,
+                predicate,
+                _INDEX,
+                f"spirv.op_{predicate.descriptor_suffix}.i32",
+            )
+        )
+    rules.extend(
+        _compare_rule(
+            index.index_cmp,
+            predicate,
+            _OFFSET,
+            f"spirv.op_{predicate.descriptor_suffix}.offset64",
+        )
+        for predicate in UNSIGNED_INTEGER_COMPARE_PREDICATES
+    )
+    return tuple(rules)
+
+
 SPIRV_LOGICAL_CORE_CONTRACT_DIALECT_OPS = {
     "buffer": ALL_BUFFER_OPS,
     "index": ALL_INDEX_OPS,
     "scalar": ALL_SCALAR_OPS,
+    "scf": ALL_SCF_OPS,
     "vector": ALL_VECTOR_OPS,
     "view": ALL_VIEW_OPS,
 }
@@ -297,6 +392,10 @@ SPIRV_LOGICAL_CORE_CONTRACT_FRAGMENT = ContractFragment(
         _ternary_rule(index.index_madd, _INDEX, "spirv.op_imul_add.i32"),
         _binary_rule(index.index_add, _OFFSET, "spirv.op_iadd.offset64"),
         _binary_rule(index.index_sub, _OFFSET, "spirv.op_isub.offset64"),
+        *_compare_rules(),
+        _select_rule(_I32, "spirv.op_select.i32"),
+        _select_rule(_INDEX, "spirv.op_select.i32"),
+        _select_rule(_OFFSET, "spirv.op_select.offset64"),
         *_storage_buffer_rules(),
         DescriptorMatrixRule(
             source_op=vector.vector_mma,
