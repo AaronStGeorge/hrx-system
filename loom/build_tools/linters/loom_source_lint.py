@@ -5,13 +5,17 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Checks Loom C/C++ source invariants that are easy to regress.
+"""Checks Loom source invariants that are easy to regress.
 
 This is intentionally a small guardrail, not a general C parser. It catches the
 module-value-cardinality storage pattern that is especially toxic for Loom's
 function-local compiler phases: allocating or resetting scratch sized by
 `module->values.count`/`capacity` instead of using function-local domains,
 maintained facts, or reviewed module-owned structures.
+
+It also protects the Loom execution package boundary. Optional targets may
+project device/environment facts and emit artifacts, but they must not grow
+private runner/execution stacks under `loom/src/loom/target/**`.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ import sys
 REPO_ROOT = Path(__file__).resolve().parents[3]
 LOOM_SOURCE_ROOT = REPO_ROOT / "loom" / "src" / "loom"
 SOURCE_SUFFIXES = {".c", ".cc", ".h"}
+TARGET_SOURCE_ROOT = LOOM_SOURCE_ROOT / "target"
 
 # Matches common module pointers and nested owner paths ending in module, such
 # as `module->values.count`, `source_module->values.capacity`, and
@@ -49,6 +54,19 @@ CARDINALITY_ALIAS_PATTERN = re.compile(
     r"\b(?:value_count|value_capacity|capacity|mask_count|"
     r"defined_bits_length|consuming_op_count|source_value_snapshot_count)\b"
     r"\s*(?:=|\+=)"
+)
+
+TARGET_EXECUTION_INCLUDE_OR_DEP_PATTERN = re.compile(
+    r"(?:#\s*include\s+\"loom/tooling/execution/(?:hal|ireevm)/)"
+    r"|(?://loom/src/loom/tooling/execution/(?:hal|ireevm)(?::|/))"
+)
+
+TARGET_PRIVATE_EXECUTION_SYMBOL_PATTERN = re.compile(
+    r"\b(?:"
+    r"loom_run_hal_[A-Za-z0-9_]*"
+    r"|loom_run_execution_(?:backend|provider)[A-Za-z0-9_]*"
+    r"|loom_ireevm_execution_[A-Za-z0-9_]*"
+    r")\b"
 )
 
 
@@ -116,7 +134,8 @@ class Finding:
 
     path: Path
     line: int
-    statement: str
+    message: str
+    context: str
 
 
 def _relative_path(path: Path) -> str:
@@ -165,7 +184,17 @@ def _scan_file(path: Path) -> list[Finding]:
     findings: list[Finding] = []
     for line, statement in _iter_statements(path):
         if _is_suspicious(statement) and not _is_approved(path, statement):
-            findings.append(Finding(path=path, line=line, statement=statement))
+            findings.append(
+                Finding(
+                    path=path,
+                    line=line,
+                    message=(
+                        "module-value-cardinality storage/reset requires "
+                        "reviewed infrastructure"
+                    ),
+                    context=statement,
+                )
+            )
     return findings
 
 
@@ -182,28 +211,93 @@ def _format_statement(statement: str) -> str:
     return " ".join(line for line in stripped_lines if line)
 
 
+def _target_path_has_execution_package(path: Path) -> bool:
+    try:
+        target_relative_path = path.relative_to(TARGET_SOURCE_ROOT)
+    except ValueError:
+        return False
+    return "execution" in target_relative_path.parts[:-1]
+
+
+def _iter_lint_files() -> list[Path]:
+    return sorted(
+        path
+        for path in LOOM_SOURCE_ROOT.rglob("*")
+        if path.is_file()
+        and (
+            path.suffix in SOURCE_SUFFIXES
+            or path.name == "BUILD.bazel"
+            or path.name == "CMakeLists.txt"
+        )
+    )
+
+
+def _scan_target_execution_boundaries(path: Path) -> list[Finding]:
+    if not path.is_relative_to(TARGET_SOURCE_ROOT):
+        return []
+
+    findings: list[Finding] = []
+    if _target_path_has_execution_package(path):
+        findings.append(
+            Finding(
+                path=path,
+                line=1,
+                message="target packages must not own execution subpackages",
+                context=(
+                    "move runner/backend/provider/invocation code under "
+                    "loom/src/loom/tooling/execution/<mechanism>"
+                ),
+            )
+        )
+
+    for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+        stripped_line = _strip_line_comments(line).strip()
+        if TARGET_EXECUTION_INCLUDE_OR_DEP_PATTERN.search(stripped_line):
+            findings.append(
+                Finding(
+                    path=path,
+                    line=line_number,
+                    message=(
+                        "target packages must not include or depend on "
+                        "execution mechanism internals"
+                    ),
+                    context=stripped_line,
+                )
+            )
+        if (
+            path.suffix in SOURCE_SUFFIXES
+            and TARGET_PRIVATE_EXECUTION_SYMBOL_PATTERN.search(stripped_line)
+        ):
+            findings.append(
+                Finding(
+                    path=path,
+                    line=line_number,
+                    message=(
+                        "target packages must not define private Loom "
+                        "execution backend/provider stacks"
+                    ),
+                    context=stripped_line,
+                )
+            )
+    return findings
+
+
 def main() -> int:
     findings: list[Finding] = []
     for path in _iter_source_files():
         findings.extend(_scan_file(path))
+    for path in _iter_lint_files():
+        findings.extend(_scan_target_execution_boundaries(path))
 
     if not findings:
         print("loom-source-lint: PASS")
         return 0
 
-    print(
-        "loom-source-lint: FAIL: module-value-cardinality storage/reset "
-        "requires reviewed infrastructure."
-    )
-    print(
-        "Use function-local value domains, maintained facts, or an explicitly "
-        "reviewed module-owned structure instead of local scratch sized by "
-        "module->values.count/capacity."
-    )
+    print("loom-source-lint: FAIL: Loom source invariant violation.")
     for finding in findings:
         print(
             f"{_relative_path(finding.path)}:{finding.line}: "
-            f"{_format_statement(finding.statement)}"
+            f"{finding.message}: {_format_statement(finding.context)}"
         )
     return 1
 
