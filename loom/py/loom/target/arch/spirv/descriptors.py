@@ -400,12 +400,15 @@ def cooperative_matrix_descriptor_key(
     accumulator: str,
     scope: str,
     layout: str | None = None,
+    operand_mode: str | None = None,
 ) -> str:
     role_part = f".{role}" if role else ""
     layout_part = f".{layout}" if layout else ""
+    operand_mode_part = f".{operand_mode}" if operand_mode else ""
     return (
         f"spirv.{op_name}{role_part}.{element}."
-        f"m{m_size}n{n_size}k{k_size}.{accumulator}.{scope}{layout_part}"
+        f"m{m_size}n{n_size}k{k_size}.{accumulator}.{scope}"
+        f"{layout_part}{operand_mode_part}"
     )
 
 
@@ -510,6 +513,7 @@ def _cooperative_matrix_mul_add_descriptor(
     k_size: int,
     accumulator: str,
     feature_bits: int,
+    operand_mode: str | None = None,
 ) -> Descriptor:
     key = cooperative_matrix_descriptor_key(
         "op_cooperative_matrix_mul_add_khr",
@@ -519,12 +523,15 @@ def _cooperative_matrix_mul_add_descriptor(
         k_size=k_size,
         accumulator=accumulator,
         scope="subgroup",
+        operand_mode=operand_mode,
     )
+    operand_mode_part = f".{operand_mode}" if operand_mode else ""
     return Descriptor(
         key=key,
         mnemonic=(
             f"OpCooperativeMatrixMulAddKHR.{element}."
             f"{m_size}x{n_size}x{k_size}.{accumulator}.subgroup"
+            f"{operand_mode_part}"
         ),
         semantic_tag=key,
         operands=(
@@ -611,6 +618,83 @@ def _cooperative_matrix_16x16x16_f32_descriptors(
     )
 
 
+def _cooperative_matrix_16x16x32_s32_signed_saturating_descriptors() -> tuple[
+    Descriptor, ...
+]:
+    m_size = 16
+    n_size = 16
+    k_size = 32
+    element = "s8"
+    accumulator = "s32"
+    matrix_feature_bits = feature_bits_value(
+        (
+            "cooperative_matrix_khr",
+            "int8",
+        )
+    )
+    memory_feature_bits = matrix_feature_bits | feature_bits_value(
+        ("storage_buffer_8bit_access",)
+    )
+    return (
+        _cooperative_matrix_load_descriptor(
+            role="lhs",
+            element=element,
+            element_byte_width=1,
+            rows=16,
+            columns=32,
+            m_size=m_size,
+            n_size=n_size,
+            k_size=k_size,
+            accumulator=accumulator,
+            feature_bits=memory_feature_bits,
+        ),
+        _cooperative_matrix_load_descriptor(
+            role="rhs",
+            element=element,
+            element_byte_width=1,
+            rows=32,
+            columns=16,
+            m_size=m_size,
+            n_size=n_size,
+            k_size=k_size,
+            accumulator=accumulator,
+            feature_bits=memory_feature_bits,
+        ),
+        _cooperative_matrix_load_descriptor(
+            role="init",
+            element=element,
+            element_byte_width=4,
+            rows=16,
+            columns=16,
+            m_size=m_size,
+            n_size=n_size,
+            k_size=k_size,
+            accumulator=accumulator,
+            feature_bits=matrix_feature_bits,
+        ),
+        _cooperative_matrix_mul_add_descriptor(
+            element=element,
+            m_size=m_size,
+            n_size=n_size,
+            k_size=k_size,
+            accumulator=accumulator,
+            feature_bits=matrix_feature_bits,
+            operand_mode="signed_saturating",
+        ),
+        _cooperative_matrix_store_descriptor(
+            element=element,
+            element_byte_width=4,
+            rows=16,
+            columns=16,
+            m_size=m_size,
+            n_size=n_size,
+            k_size=k_size,
+            accumulator=accumulator,
+            feature_bits=matrix_feature_bits,
+        ),
+    )
+
+
 def _cooperative_matrix_descriptors() -> tuple[Descriptor, ...]:
     return (
         *_cooperative_matrix_16x16x16_f32_descriptors(
@@ -640,6 +724,7 @@ def _cooperative_matrix_descriptors() -> tuple[Descriptor, ...]:
                 ("storage_buffer_16bit_access",)
             ),
         ),
+        *_cooperative_matrix_16x16x32_s32_signed_saturating_descriptors(),
     )
 
 

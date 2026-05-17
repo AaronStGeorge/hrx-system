@@ -34,6 +34,9 @@ typedef enum loom_spirv_packet_form_e {
   LOOM_SPIRV_PACKET_FORM_SELECT = 8,
   LOOM_SPIRV_PACKET_FORM_UNARY_CONVERT = 9,
   LOOM_SPIRV_PACKET_FORM_LOAD_BUILTIN = 10,
+  LOOM_SPIRV_PACKET_FORM_COOPERATIVE_MATRIX_LOAD = 11,
+  LOOM_SPIRV_PACKET_FORM_COOPERATIVE_MATRIX_STORE = 12,
+  LOOM_SPIRV_PACKET_FORM_COOPERATIVE_MATRIX_MUL_ADD = 13,
 } loom_spirv_packet_form_t;
 
 typedef struct loom_spirv_packet_row_t {
@@ -59,6 +62,12 @@ typedef struct loom_spirv_packet_row_t {
   uint32_t builtin;
   // Vector component extracted from built-in input rows.
   uint8_t component_index;
+  // Cooperative matrix layout literal for load/store rows.
+  uint32_t cooperative_matrix_layout;
+  // Cooperative matrix stride literal for load/store rows.
+  uint32_t cooperative_matrix_stride;
+  // Cooperative matrix operands mask literal for mul-add rows.
+  uint32_t cooperative_matrix_operands;
 } loom_spirv_packet_row_t;
 
 // Returns the packet row for |descriptor_ordinal|, or NULL when the descriptor

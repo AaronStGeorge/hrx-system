@@ -643,6 +643,7 @@ def _cooperative_matrix_memory(
     *,
     element_byte_width: int,
     lane_count: int,
+    minimum_alignment: int,
 ) -> SourceMemoryConstraint:
     return SourceMemoryConstraint(
         operation=operation,
@@ -653,10 +654,10 @@ def _cooperative_matrix_memory(
         vector_lane_byte_stride=element_byte_width,
         static_byte_offset_minimum=-(2**63),
         static_byte_offset_maximum=(2**63) - 1,
-        minimum_alignment=element_byte_width,
+        minimum_alignment=minimum_alignment,
         dynamic_term_count=None,
         dynamic_index_source=SourceMemoryDynamicIndexSource.NONE,
-        diagnostic=_storage_buffer_alignment_diagnostic(element_byte_width),
+        diagnostic=_storage_buffer_alignment_diagnostic(minimum_alignment),
     )
 
 
@@ -728,6 +729,7 @@ def _cooperative_matrix_load_rule(
                     SourceMemoryOperation.LOAD,
                     element_byte_width=element_byte_width,
                     lane_count=result_lanes,
+                    minimum_alignment=16,
                 ),
             ),
         ),
@@ -783,6 +785,7 @@ def _cooperative_matrix_store_rule(
                     SourceMemoryOperation.STORE,
                     element_byte_width=element_byte_width,
                     lane_count=value_lanes,
+                    minimum_alignment=16,
                 ),
             ),
         ),

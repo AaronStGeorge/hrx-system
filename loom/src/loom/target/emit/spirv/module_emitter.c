@@ -649,6 +649,7 @@ static iree_status_t loom_spirv_emit_abi_slot_type_info(
       return iree_ok_status();
     }
     case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
+    case LOOM_SPIRV_VALUE_CLASS_COOPERATIVE_MATRIX:
     case LOOM_SPIRV_VALUE_CLASS_UNKNOWN:
       break;
   }
@@ -725,6 +726,7 @@ static iree_status_t loom_spirv_emit_abi_slot_constant_word_count(
       return iree_ok_status();
     case LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS:
     case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
+    case LOOM_SPIRV_VALUE_CLASS_COOPERATIVE_MATRIX:
     case LOOM_SPIRV_VALUE_CLASS_UNKNOWN:
       break;
   }
@@ -822,6 +824,7 @@ static iree_status_t loom_spirv_emit_build_raw_bda_abi_plan(
       }
       case LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS:
       case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
+      case LOOM_SPIRV_VALUE_CLASS_COOPERATIVE_MATRIX:
       case LOOM_SPIRV_VALUE_CLASS_UNKNOWN:
         return iree_make_status(
             IREE_STATUS_UNIMPLEMENTED,
@@ -1207,6 +1210,7 @@ static iree_status_t loom_spirv_emit_materialize_bda_arg(
       return loom_spirv_emit_materialize_bda_u64_arg(state, slot);
     case LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS:
     case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
+    case LOOM_SPIRV_VALUE_CLASS_COOPERATIVE_MATRIX:
     case LOOM_SPIRV_VALUE_CLASS_UNKNOWN:
       break;
   }
@@ -1907,6 +1911,95 @@ static iree_status_t loom_spirv_emit_store_aligned_packet(
       row->opcode, instruction_operands, IREE_ARRAYSIZE(instruction_operands));
 }
 
+static iree_status_t loom_spirv_emit_cooperative_matrix_layout_operands(
+    loom_spirv_emit_state_t* state, const loom_spirv_packet_row_t* row,
+    uint32_t* out_layout_id, uint32_t* out_stride_id) {
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_u32_constant(
+      &state->type_context, row->cooperative_matrix_layout, out_layout_id));
+  return loom_spirv_emit_u32_constant(
+      &state->type_context, row->cooperative_matrix_stride, out_stride_id);
+}
+
+static iree_status_t loom_spirv_emit_cooperative_matrix_load_packet(
+    loom_spirv_emit_state_t* state,
+    const loom_low_resolved_descriptor_packet_t* packet,
+    const loom_spirv_packet_row_t* row) {
+  loom_spirv_value_ref_t operands[1] = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_spirv_emit_load_packet_operands(state, packet, row, operands));
+  uint32_t result_type_id = 0;
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_type_id_for_value_type(
+      &state->type_context, row->result_type, &result_type_id));
+  uint32_t layout_id = 0;
+  uint32_t stride_id = 0;
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_cooperative_matrix_layout_operands(
+      state, row, &layout_id, &stride_id));
+  const uint32_t result_id = loom_spirv_emit_allocate_id(state);
+  const uint32_t instruction_operands[] = {
+      result_type_id,
+      result_id,
+      operands[0].id,
+      layout_id,
+      stride_id,
+      LOOM_SPIRV_MEMORY_ACCESS_ALIGNED_MASK,
+      row->memory_alignment,
+  };
+  IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
+      loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+      row->opcode, instruction_operands, IREE_ARRAYSIZE(instruction_operands)));
+  return loom_spirv_emit_define_packet_result(state, packet, result_id,
+                                              result_type_id, row->result_type);
+}
+
+static iree_status_t loom_spirv_emit_cooperative_matrix_store_packet(
+    loom_spirv_emit_state_t* state,
+    const loom_low_resolved_descriptor_packet_t* packet,
+    const loom_spirv_packet_row_t* row) {
+  loom_spirv_value_ref_t operands[2] = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_spirv_emit_load_packet_operands(state, packet, row, operands));
+  uint32_t layout_id = 0;
+  uint32_t stride_id = 0;
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_cooperative_matrix_layout_operands(
+      state, row, &layout_id, &stride_id));
+  const uint32_t instruction_operands[] = {
+      operands[0].id,
+      operands[1].id,
+      layout_id,
+      stride_id,
+      LOOM_SPIRV_MEMORY_ACCESS_ALIGNED_MASK,
+      row->memory_alignment,
+  };
+  return loom_spirv_binary_write_instruction(
+      loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+      row->opcode, instruction_operands, IREE_ARRAYSIZE(instruction_operands));
+}
+
+static iree_status_t loom_spirv_emit_cooperative_matrix_mul_add_packet(
+    loom_spirv_emit_state_t* state,
+    const loom_low_resolved_descriptor_packet_t* packet,
+    const loom_spirv_packet_row_t* row) {
+  loom_spirv_value_ref_t operands[3] = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_spirv_emit_load_packet_operands(state, packet, row, operands));
+  uint32_t result_type_id = 0;
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_type_id_for_value_type(
+      &state->type_context, row->result_type, &result_type_id));
+  const uint32_t result_id = loom_spirv_emit_allocate_id(state);
+  uint32_t instruction_operands[6] = {
+      result_type_id, result_id, operands[0].id, operands[1].id, operands[2].id,
+  };
+  uint8_t operand_count = 5;
+  if (row->cooperative_matrix_operands != 0) {
+    instruction_operands[operand_count++] = row->cooperative_matrix_operands;
+  }
+  IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
+      loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+      row->opcode, instruction_operands, operand_count));
+  return loom_spirv_emit_define_packet_result(state, packet, result_id,
+                                              result_type_id, row->result_type);
+}
+
 static iree_status_t loom_spirv_emit_copy(loom_spirv_emit_state_t* state,
                                           const loom_op_t* op) {
   loom_spirv_value_ref_t source = {0};
@@ -1952,6 +2045,14 @@ static iree_status_t loom_spirv_emit_descriptor_packet(
       return loom_spirv_emit_load_aligned_packet(state, packet, row);
     case LOOM_SPIRV_PACKET_FORM_STORE_ALIGNED:
       return loom_spirv_emit_store_aligned_packet(state, packet, row);
+    case LOOM_SPIRV_PACKET_FORM_COOPERATIVE_MATRIX_LOAD:
+      return loom_spirv_emit_cooperative_matrix_load_packet(state, packet, row);
+    case LOOM_SPIRV_PACKET_FORM_COOPERATIVE_MATRIX_STORE:
+      return loom_spirv_emit_cooperative_matrix_store_packet(state, packet,
+                                                             row);
+    case LOOM_SPIRV_PACKET_FORM_COOPERATIVE_MATRIX_MUL_ADD:
+      return loom_spirv_emit_cooperative_matrix_mul_add_packet(state, packet,
+                                                               row);
     case LOOM_SPIRV_PACKET_FORM_UNSUPPORTED:
       break;
   }

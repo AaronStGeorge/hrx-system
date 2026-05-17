@@ -84,6 +84,9 @@ iree_status_t loom_spirv_emit_type_vector(loom_spirv_type_context_t* context,
                                           uint32_t element_type_id,
                                           uint32_t component_count,
                                           uint32_t* out_type_id);
+iree_status_t loom_spirv_emit_type_cooperative_matrix(
+    loom_spirv_type_context_t* context, loom_spirv_value_type_t value_type,
+    uint32_t* out_type_id);
 iree_status_t loom_spirv_emit_type_i32(loom_spirv_type_context_t* context,
                                        uint32_t* out_type_id);
 iree_status_t loom_spirv_emit_type_u32(loom_spirv_type_context_t* context,

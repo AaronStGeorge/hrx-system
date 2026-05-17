@@ -296,19 +296,32 @@ static uint32_t loom_spirv_matrix_low_descriptor_ref(
   if (query->layout != LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_KHR ||
       query->storage_class !=
           LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER ||
-      query->operand_flags != 0 || property->m_size != 16 ||
-      property->n_size != 16 || property->k_size != 16 ||
-      property->accumulator_type != LOOM_SPIRV_SCALAR_TYPE_F32 ||
-      property->result_type != LOOM_SPIRV_SCALAR_TYPE_F32) {
+      property->m_size != 16 || property->n_size != 16) {
     return LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
   }
-  if (property->lhs_type == LOOM_SPIRV_SCALAR_TYPE_F16 &&
+  if (property->k_size == 16 &&
+      property->accumulator_type == LOOM_SPIRV_SCALAR_TYPE_F32 &&
+      property->result_type == LOOM_SPIRV_SCALAR_TYPE_F32 &&
+      query->operand_flags == 0 &&
+      property->lhs_type == LOOM_SPIRV_SCALAR_TYPE_F16 &&
       property->rhs_type == LOOM_SPIRV_SCALAR_TYPE_F16) {
     return SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_COOPERATIVE_MATRIX_MUL_ADD_KHR_F16_M16N16K16_F32_SUBGROUP;
   }
-  if (property->lhs_type == LOOM_SPIRV_SCALAR_TYPE_BF16 &&
+  if (property->k_size == 16 &&
+      property->accumulator_type == LOOM_SPIRV_SCALAR_TYPE_F32 &&
+      property->result_type == LOOM_SPIRV_SCALAR_TYPE_F32 &&
+      query->operand_flags == 0 &&
+      property->lhs_type == LOOM_SPIRV_SCALAR_TYPE_BF16 &&
       property->rhs_type == LOOM_SPIRV_SCALAR_TYPE_BF16) {
     return SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_COOPERATIVE_MATRIX_MUL_ADD_KHR_BF16_M16N16K16_F32_SUBGROUP;
+  }
+  if (property->k_size == 32 &&
+      property->accumulator_type == LOOM_SPIRV_SCALAR_TYPE_S32 &&
+      property->result_type == LOOM_SPIRV_SCALAR_TYPE_S32 &&
+      query->operand_flags == property->operand_flags &&
+      property->lhs_type == LOOM_SPIRV_SCALAR_TYPE_S8 &&
+      property->rhs_type == LOOM_SPIRV_SCALAR_TYPE_S8) {
+    return SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_COOPERATIVE_MATRIX_MUL_ADD_KHR_S8_M16N16K32_S32_SUBGROUP_SIGNED_SATURATING;
   }
   return LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
 }

@@ -15,6 +15,7 @@
 #define LOOM_TARGET_ARCH_SPIRV_VALUE_TYPES_H_
 
 #include "iree/base/api.h"
+#include "loom/target/arch/spirv/isa.h"
 #include "loom/target/arch/spirv/scalar_types.h"
 
 #ifdef __cplusplus
@@ -34,13 +35,23 @@ typedef enum loom_spirv_value_class_e {
   LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER = 4,
   // SPIR-V boolean SSA ID produced by compare packets.
   LOOM_SPIRV_VALUE_CLASS_BOOL = 5,
+  // KHR cooperative matrix SSA ID with concrete component and use operands.
+  LOOM_SPIRV_VALUE_CLASS_COOPERATIVE_MATRIX = 6,
 } loom_spirv_value_class_t;
 
 typedef struct loom_spirv_value_type_t {
   // Target-local value class consumed by lowering and emission.
   loom_spirv_value_class_t value_class;
-  // Scalar type for SCALAR and PTR_PHYSICAL_STORAGE_BUFFER classes.
+  // Scalar component type for scalar, pointer, and cooperative matrix classes.
   loom_spirv_scalar_type_t scalar_type;
+  // Cooperative matrix row count.
+  uint16_t rows;
+  // Cooperative matrix column count.
+  uint16_t columns;
+  // Cooperative matrix scope operand.
+  loom_spirv_scope_t scope;
+  // Cooperative matrix use operand.
+  loom_spirv_cooperative_matrix_use_t cooperative_matrix_use;
 } loom_spirv_value_type_t;
 
 enum loom_spirv_abi_value_type_code_e {
@@ -60,6 +71,7 @@ static inline int64_t loom_spirv_abi_value_type_code_from_scalar(
 
 static inline bool loom_spirv_abi_value_type_encode(
     loom_spirv_value_type_t value_type, int64_t* out_code) {
+  *out_code = LOOM_SPIRV_ABI_VALUE_TYPE_NONE;
   switch (value_type.value_class) {
     case LOOM_SPIRV_VALUE_CLASS_SCALAR:
       if (loom_spirv_scalar_type_descriptor(value_type.scalar_type) == NULL) {
@@ -75,7 +87,7 @@ static inline bool loom_spirv_abi_value_type_encode(
     case LOOM_SPIRV_VALUE_CLASS_OFFSET64:
     case LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS:
     case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
-      *out_code = LOOM_SPIRV_ABI_VALUE_TYPE_NONE;
+    case LOOM_SPIRV_VALUE_CLASS_COOPERATIVE_MATRIX:
       return true;
   }
   return false;

@@ -20,6 +20,7 @@ typedef enum loom_spirv_type_key_kind_e {
   LOOM_SPIRV_TYPE_KEY_ARRAY = 9,
   LOOM_SPIRV_TYPE_KEY_BOOL = 10,
   LOOM_SPIRV_TYPE_KEY_VECTOR = 11,
+  LOOM_SPIRV_TYPE_KEY_COOPERATIVE_MATRIX = 12,
 } loom_spirv_type_key_kind_t;
 
 enum {
@@ -153,6 +154,17 @@ static iree_status_t loom_spirv_emit_type_declaration(
           loom_spirv_type_context_section(
               context, LOOM_SPIRV_MODULE_SECTION_DECLARATION),
           LOOM_SPIRV_OP_TYPE_VECTOR, operands, IREE_ARRAYSIZE(operands));
+    }
+    case LOOM_SPIRV_TYPE_KEY_COOPERATIVE_MATRIX: {
+      const uint32_t operands[] = {
+          type_id,          key->operands[0], key->operands[1],
+          key->operands[2], key->operands[3], key->operands[4],
+      };
+      return loom_spirv_binary_write_instruction(
+          loom_spirv_type_context_section(
+              context, LOOM_SPIRV_MODULE_SECTION_DECLARATION),
+          LOOM_SPIRV_OP_TYPE_COOPERATIVE_MATRIX_KHR, operands,
+          IREE_ARRAYSIZE(operands));
     }
     case LOOM_SPIRV_TYPE_KEY_POINTER: {
       const uint32_t operands[] = {
@@ -326,6 +338,33 @@ iree_status_t loom_spirv_emit_type_vector(loom_spirv_type_context_t* context,
       .kind = LOOM_SPIRV_TYPE_KEY_VECTOR,
       .operand_count = 2,
       .operands = {element_type_id, component_count},
+  };
+  return loom_spirv_emit_type_id(context, &key, out_type_id,
+                                 /*out_emitted=*/NULL);
+}
+
+iree_status_t loom_spirv_emit_type_cooperative_matrix(
+    loom_spirv_type_context_t* context, loom_spirv_value_type_t value_type,
+    uint32_t* out_type_id) {
+  uint32_t component_type_id = 0;
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_type_scalar(
+      context, value_type.scalar_type, &component_type_id));
+  uint32_t scope_id = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_spirv_emit_u32_constant(context, value_type.scope, &scope_id));
+  uint32_t rows_id = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_spirv_emit_u32_constant(context, value_type.rows, &rows_id));
+  uint32_t columns_id = 0;
+  IREE_RETURN_IF_ERROR(
+      loom_spirv_emit_u32_constant(context, value_type.columns, &columns_id));
+  uint32_t use_id = 0;
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_u32_constant(
+      context, value_type.cooperative_matrix_use, &use_id));
+  const loom_spirv_type_key_t key = {
+      .kind = LOOM_SPIRV_TYPE_KEY_COOPERATIVE_MATRIX,
+      .operand_count = 5,
+      .operands = {component_type_id, scope_id, rows_id, columns_id, use_id},
   };
   return loom_spirv_emit_type_id(context, &key, out_type_id,
                                  /*out_emitted=*/NULL);
@@ -802,6 +841,10 @@ bool loom_spirv_value_type_equal(loom_spirv_value_type_t lhs,
     case LOOM_SPIRV_VALUE_CLASS_SCALAR:
     case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
       return lhs.scalar_type == rhs.scalar_type;
+    case LOOM_SPIRV_VALUE_CLASS_COOPERATIVE_MATRIX:
+      return lhs.scalar_type == rhs.scalar_type && lhs.rows == rhs.rows &&
+             lhs.columns == rhs.columns && lhs.scope == rhs.scope &&
+             lhs.cooperative_matrix_use == rhs.cooperative_matrix_use;
     case LOOM_SPIRV_VALUE_CLASS_OFFSET64:
     case LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS:
     case LOOM_SPIRV_VALUE_CLASS_BOOL:
@@ -826,6 +869,9 @@ iree_status_t loom_spirv_emit_type_id_for_value_type(
     case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
       return loom_spirv_emit_type_ptr_physical_storage_buffer_scalar(
           context, type.scalar_type, out_type_id);
+    case LOOM_SPIRV_VALUE_CLASS_COOPERATIVE_MATRIX:
+      return loom_spirv_emit_type_cooperative_matrix(context, type,
+                                                     out_type_id);
     case LOOM_SPIRV_VALUE_CLASS_UNKNOWN:
       break;
   }

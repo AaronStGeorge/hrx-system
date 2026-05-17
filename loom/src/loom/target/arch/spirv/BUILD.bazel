@@ -176,6 +176,7 @@ loom_cc_library(
     name = "value_types",
     hdrs = ["value_types.h"],
     deps = [
+        ":isa",
         ":scalar_types",
         "//runtime/src/iree/base",
     ],

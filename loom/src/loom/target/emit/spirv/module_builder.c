@@ -54,9 +54,18 @@ static bool loom_spirv_module_builder_uses_raw_bda_abi(
   return builder->abi_kind == LOOM_TARGET_ABI_HAL_KERNEL;
 }
 
+static bool loom_spirv_module_builder_uses_vulkan_memory_model(
+    const loom_spirv_module_builder_t* builder) {
+  if (!loom_spirv_module_builder_uses_raw_bda_abi(builder)) {
+    return true;
+  }
+  return loom_spirv_feature_set_has_atom(
+      &builder->feature_set, LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_MATRIX_KHR);
+}
+
 static bool loom_spirv_module_builder_should_emit_capability(
     const loom_spirv_module_builder_t* builder, uint32_t capability) {
-  if (loom_spirv_module_builder_uses_raw_bda_abi(builder) &&
+  if (!loom_spirv_module_builder_uses_vulkan_memory_model(builder) &&
       capability == LOOM_SPIRV_CAPABILITY_VULKAN_MEMORY_MODEL) {
     return false;
   }
@@ -65,7 +74,7 @@ static bool loom_spirv_module_builder_should_emit_capability(
 
 static bool loom_spirv_module_builder_should_emit_extension(
     const loom_spirv_module_builder_t* builder, iree_string_view_t extension) {
-  if (loom_spirv_module_builder_uses_raw_bda_abi(builder) &&
+  if (!loom_spirv_module_builder_uses_vulkan_memory_model(builder) &&
       iree_string_view_equal(extension,
                              IREE_SV("SPV_KHR_vulkan_memory_model"))) {
     return false;
@@ -79,7 +88,10 @@ static void loom_spirv_module_builder_select_memory_model(
   if (loom_spirv_module_builder_uses_raw_bda_abi(builder)) {
     *out_addressing_model =
         LOOM_SPIRV_ADDRESSING_MODEL_PHYSICAL_STORAGE_BUFFER64;
-    *out_memory_model = LOOM_SPIRV_MEMORY_MODEL_GLSL450;
+    *out_memory_model =
+        loom_spirv_module_builder_uses_vulkan_memory_model(builder)
+            ? builder->feature_set.memory_model
+            : LOOM_SPIRV_MEMORY_MODEL_GLSL450;
     return;
   }
   *out_addressing_model = builder->feature_set.addressing_model;

@@ -115,6 +115,7 @@ loom_cc_library(
   HDRS
     "value_types.h"
   DEPS
+    ::isa
     ::scalar_types
     iree::base
   PUBLIC
