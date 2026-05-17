@@ -87,6 +87,7 @@ iree_lit_test_suite(
     ::iree-test-loom
     FileCheck
   DATA
+    testdata::spirv_vulkan_coop_hal_actual.loom
     testdata::spirv_vulkan_hal_actual.loom
   LABELS
     "driver=vulkan"
