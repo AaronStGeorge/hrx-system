@@ -123,6 +123,7 @@ FEATURE_ATOMS = (
         doc="8-bit storage-buffer access support.",
         required=("vulkan_shader",),
         minimum_spirv_version=SPIRV_VERSION_1_0,
+        extensions=("SPV_KHR_8bit_storage",),
         capabilities=("LOOM_SPIRV_CAPABILITY_STORAGE_BUFFER8_BIT_ACCESS",),
     ),
     FeatureAtom(
@@ -132,6 +133,7 @@ FEATURE_ATOMS = (
         doc="16-bit storage-buffer access support.",
         required=("vulkan_shader",),
         minimum_spirv_version=SPIRV_VERSION_1_0,
+        extensions=("SPV_KHR_16bit_storage",),
         capabilities=("LOOM_SPIRV_CAPABILITY_STORAGE_BUFFER16_BIT_ACCESS",),
     ),
     FeatureAtom(

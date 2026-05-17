@@ -46,6 +46,8 @@ def test_generation_emits_public_atoms_profiles_and_compact_tables() -> None:
     assert f"#define LOOM_SPIRV_FEATURE_MAX_EXTENSION_COUNT {feature_row_capacity('extensions')}" in header
     assert f"#define LOOM_SPIRV_FEATURE_MAX_CAPABILITY_COUNT {feature_row_capacity('capabilities')}" in header
     assert "static const loom_spirv_feature_atom_descriptor_t kSpirvFeatureAtoms[]" in tables
+    assert 'IREE_SVL("SPV_KHR_8bit_storage")' in tables
+    assert 'IREE_SVL("SPV_KHR_16bit_storage")' in tables
     assert 'IREE_SVL("SPV_KHR_bfloat16")' in tables
     assert "LOOM_SPIRV_CAPABILITY_B_FLOAT16_COOPERATIVE_MATRIX_KHR" in tables
     assert "LOOM_SPIRV_OP_COOPERATIVE_VECTOR_MATRIX_MUL_ADD_NV" in tables
