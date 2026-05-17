@@ -1,0 +1,7 @@
+// RUN: iree-test-loom %S/testdata/spirv_vulkan_hal_actual.loom --case=@double_i32_at_byte_offset_case --device=vulkan | FileCheck --check-prefix=SPIRV %s
+
+// SPIRV: "format":"loom.test.v0"
+// SPIRV: "case_count":1
+// SPIRV: "sample_count":1
+// SPIRV: "failed_sample_count":0
+// SPIRV: "case":"double_i32_at_byte_offset_case","sample_ordinal":0,"passed":true

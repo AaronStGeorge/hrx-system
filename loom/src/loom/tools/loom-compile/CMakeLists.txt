@@ -49,18 +49,12 @@ iree_lit_test_suite(
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
 
-set(_LOOM_COMPILE_ALL_PROVIDERS amdgpu ireevm)
-set(LOOM_COMPILE_PROVIDERS "${_LOOM_COMPILE_ALL_PROVIDERS}" CACHE STRING
-  "Semicolon-separated list of providers linked into loom-compile."
-)
-foreach(_LOOM_COMPILE_PROVIDER ${LOOM_COMPILE_PROVIDERS})
-  if(NOT _LOOM_COMPILE_PROVIDER IN_LIST _LOOM_COMPILE_ALL_PROVIDERS)
-    message(FATAL_ERROR
-      "Unknown loom-compile provider '${_LOOM_COMPILE_PROVIDER}'. "
-      "Expected one of: ${_LOOM_COMPILE_ALL_PROVIDERS}"
-    )
-  endif()
-endforeach()
+option(LOOM_COMPILE_ENABLE_AMDGPU
+  "Link the AMDGPU target provider into loom-compile." ON)
+option(LOOM_COMPILE_ENABLE_IREEVM
+  "Link the IREEVM execution provider into loom-compile." ON)
+option(LOOM_COMPILE_ENABLE_SPIRV
+  "Link the SPIR-V target provider into loom-compile." ON)
 
 iree_package_name(_LOOM_COMPILE_PACKAGE_NAME)
 set(_LOOM_COMPILE_TARGET "${_LOOM_COMPILE_PACKAGE_NAME}_loom-compile")
@@ -74,7 +68,7 @@ function(_loom_compile_enable_provider _target _definition _library)
   )
 endfunction()
 
-if("amdgpu" IN_LIST LOOM_COMPILE_PROVIDERS)
+if(LOOM_COMPILE_ENABLE_AMDGPU)
   _loom_compile_enable_provider(
     ${_LOOM_COMPILE_TARGET}
     LOOM_COMPILE_HAVE_AMDGPU
@@ -82,7 +76,7 @@ if("amdgpu" IN_LIST LOOM_COMPILE_PROVIDERS)
   )
 endif()
 
-if("ireevm" IN_LIST LOOM_COMPILE_PROVIDERS)
+if(LOOM_COMPILE_ENABLE_IREEVM)
   _loom_compile_enable_provider(
     ${_LOOM_COMPILE_TARGET}
     LOOM_COMPILE_HAVE_IREEVM
@@ -93,6 +87,16 @@ if("ireevm" IN_LIST LOOM_COMPILE_PROVIDERS)
   )
 endif()
 
+if(LOOM_COMPILE_ENABLE_SPIRV)
+  _loom_compile_enable_provider(
+    ${_LOOM_COMPILE_TARGET}
+    LOOM_COMPILE_HAVE_SPIRV
+    loom::src::loom::target::arch::spirv::provider
+  )
+  target_link_libraries(${_LOOM_COMPILE_TARGET} PRIVATE
+    loom::src::loom::tooling::execution::hal::spirv::artifact_provider
+  )
+endif()
+
 unset(_LOOM_COMPILE_TARGET)
 unset(_LOOM_COMPILE_PACKAGE_NAME)
-unset(_LOOM_COMPILE_ALL_PROVIDERS)

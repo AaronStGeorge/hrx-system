@@ -82,3 +82,55 @@ iree_lit_test_suite(
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
+
+option(IREE_TUNE_LOOM_ENABLE_AMDGPU
+  "Link the AMDGPU HAL execution provider into iree-tune-loom." ON)
+option(IREE_TUNE_LOOM_ENABLE_IREEVM
+  "Link the IREEVM execution provider into iree-tune-loom." ON)
+option(IREE_TUNE_LOOM_ENABLE_SPIRV
+  "Link the SPIR-V Vulkan HAL execution provider into iree-tune-loom." ON)
+
+iree_package_name(_IREE_TUNE_LOOM_PACKAGE_NAME)
+set(_IREE_TUNE_LOOM_TARGET "${_IREE_TUNE_LOOM_PACKAGE_NAME}_iree-tune-loom")
+
+function(_iree_tune_loom_enable_provider _target _definition _library)
+  target_compile_definitions(${_target} PRIVATE
+    ${_definition}=1
+  )
+  target_link_libraries(${_target} PRIVATE
+    ${_library}
+  )
+endfunction()
+
+if(IREE_TUNE_LOOM_ENABLE_AMDGPU)
+  _iree_tune_loom_enable_provider(
+    ${_IREE_TUNE_LOOM_TARGET}
+    IREE_TUNE_LOOM_HAVE_AMDGPU
+    loom::src::loom::target::arch::amdgpu::provider
+  )
+  target_link_libraries(${_IREE_TUNE_LOOM_TARGET} PRIVATE
+    loom::src::loom::tooling::execution::hal::amdgpu::artifact_provider
+  )
+endif()
+
+if(IREE_TUNE_LOOM_ENABLE_IREEVM)
+  _iree_tune_loom_enable_provider(
+    ${_IREE_TUNE_LOOM_TARGET}
+    IREE_TUNE_LOOM_HAVE_IREEVM
+    loom::src::loom::tooling::execution::ireevm::provider
+  )
+endif()
+
+if(IREE_TUNE_LOOM_ENABLE_SPIRV)
+  _iree_tune_loom_enable_provider(
+    ${_IREE_TUNE_LOOM_TARGET}
+    IREE_TUNE_LOOM_HAVE_SPIRV
+    loom::src::loom::target::arch::spirv::provider
+  )
+  target_link_libraries(${_IREE_TUNE_LOOM_TARGET} PRIVATE
+    loom::src::loom::tooling::execution::hal::spirv::artifact_provider
+  )
+endif()
+
+unset(_IREE_TUNE_LOOM_TARGET)
+unset(_IREE_TUNE_LOOM_PACKAGE_NAME)

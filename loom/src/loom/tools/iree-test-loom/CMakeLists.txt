@@ -75,20 +75,30 @@ iree_lit_test_suite(
     "requires-gpu-amd"
 )
 
+iree_lit_test_suite(
+  NAME
+    spirv_vulkan_lit_test
+  SRCS
+    "iree-test-loom_spirv_vulkan_test.txt"
+  TOOLS
+    ::iree-test-loom
+    FileCheck
+  DATA
+    testdata::spirv_vulkan_hal_actual.loom
+  LABELS
+    "driver=vulkan"
+    "manual"
+    "requires-gpu-vulkan"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
 
-set(_IREE_TEST_LOOM_ALL_PROVIDERS amdgpu ireevm)
-set(IREE_TEST_LOOM_PROVIDERS "${_IREE_TEST_LOOM_ALL_PROVIDERS}" CACHE STRING
-  "Semicolon-separated list of execution providers linked into iree-test-loom."
-)
-foreach(_IREE_TEST_LOOM_PROVIDER ${IREE_TEST_LOOM_PROVIDERS})
-  if(NOT _IREE_TEST_LOOM_PROVIDER IN_LIST _IREE_TEST_LOOM_ALL_PROVIDERS)
-    message(FATAL_ERROR
-      "Unknown iree-test-loom provider '${_IREE_TEST_LOOM_PROVIDER}'. "
-      "Expected one of: ${_IREE_TEST_LOOM_ALL_PROVIDERS}"
-    )
-  endif()
-endforeach()
+option(IREE_TEST_LOOM_ENABLE_AMDGPU
+  "Link the AMDGPU HAL execution provider into iree-test-loom." ON)
+option(IREE_TEST_LOOM_ENABLE_IREEVM
+  "Link the IREEVM execution provider into iree-test-loom." ON)
+option(IREE_TEST_LOOM_ENABLE_SPIRV
+  "Link the SPIR-V Vulkan HAL execution provider into iree-test-loom." ON)
 
 iree_package_name(_IREE_TEST_LOOM_PACKAGE_NAME)
 set(_IREE_TEST_LOOM_TARGET "${_IREE_TEST_LOOM_PACKAGE_NAME}_iree-test-loom")
@@ -102,7 +112,7 @@ function(_iree_test_loom_enable_provider _target _definition _library)
   )
 endfunction()
 
-if("amdgpu" IN_LIST IREE_TEST_LOOM_PROVIDERS)
+if(IREE_TEST_LOOM_ENABLE_AMDGPU)
   _iree_test_loom_enable_provider(
     ${_IREE_TEST_LOOM_TARGET}
     IREE_TEST_LOOM_HAVE_AMDGPU
@@ -110,7 +120,7 @@ if("amdgpu" IN_LIST IREE_TEST_LOOM_PROVIDERS)
   )
 endif()
 
-if("ireevm" IN_LIST IREE_TEST_LOOM_PROVIDERS)
+if(IREE_TEST_LOOM_ENABLE_IREEVM)
   _iree_test_loom_enable_provider(
     ${_IREE_TEST_LOOM_TARGET}
     IREE_TEST_LOOM_HAVE_IREEVM
@@ -118,6 +128,13 @@ if("ireevm" IN_LIST IREE_TEST_LOOM_PROVIDERS)
   )
 endif()
 
+if(IREE_TEST_LOOM_ENABLE_SPIRV)
+  _iree_test_loom_enable_provider(
+    ${_IREE_TEST_LOOM_TARGET}
+    IREE_TEST_LOOM_HAVE_SPIRV
+    loom::src::loom::tooling::execution::hal::spirv::provider
+  )
+endif()
+
 unset(_IREE_TEST_LOOM_TARGET)
 unset(_IREE_TEST_LOOM_PACKAGE_NAME)
-unset(_IREE_TEST_LOOM_ALL_PROVIDERS)

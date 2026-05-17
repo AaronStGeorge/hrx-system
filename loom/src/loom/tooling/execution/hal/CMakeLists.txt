@@ -202,4 +202,18 @@ loom_cc_test(
     iree::vm
 )
 
+loom_cc_test(
+  NAME
+    testbench_actual_test
+  SRCS
+    "testbench_actual_test.cc"
+  DEPS
+    ::invocation
+    ::testbench_actual
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::vm
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -183,3 +183,16 @@ loom_cc_test(
         "//runtime/src/iree/vm",
     ],
 )
+
+loom_cc_test(
+    name = "testbench_actual_test",
+    srcs = ["testbench_actual_test.cc"],
+    deps = [
+        ":invocation",
+        ":testbench_actual",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/vm",
+    ],
+)

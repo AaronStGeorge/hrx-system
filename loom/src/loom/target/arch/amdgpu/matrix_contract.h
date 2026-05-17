@@ -153,32 +153,17 @@ typedef enum loom_amdgpu_matrix_scale_format_selector_e {
 
 typedef enum loom_amdgpu_matrix_operand_role_e {
   // Unknown or uninitialized matrix operand role.
-  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_UNKNOWN = 0,
+  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_UNKNOWN = LOOM_CONTRACT_OPERAND_ROLE_UNKNOWN,
   // Matrix A source operand.
-  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS = 1,
+  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS = LOOM_CONTRACT_OPERAND_ROLE_LHS,
   // Matrix B source operand.
-  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS = 2,
+  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS = LOOM_CONTRACT_OPERAND_ROLE_RHS,
   // Matrix C accumulator input operand.
-  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR = 3,
+  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR =
+      LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,
   // Matrix D result operand.
-  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT = 4,
+  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT = LOOM_CONTRACT_OPERAND_ROLE_RESULT,
 } loom_amdgpu_matrix_operand_role_t;
-
-static_assert(LOOM_AMDGPU_MATRIX_OPERAND_ROLE_UNKNOWN ==
-                  LOOM_CONTRACT_OPERAND_ROLE_UNKNOWN,
-              "AMDGPU and generic contract roles must align");
-static_assert(LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS ==
-                  LOOM_CONTRACT_OPERAND_ROLE_LHS,
-              "AMDGPU and generic contract roles must align");
-static_assert(LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS ==
-                  LOOM_CONTRACT_OPERAND_ROLE_RHS,
-              "AMDGPU and generic contract roles must align");
-static_assert(LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR ==
-                  LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,
-              "AMDGPU and generic contract roles must align");
-static_assert(LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT ==
-                  LOOM_CONTRACT_OPERAND_ROLE_RESULT,
-              "AMDGPU and generic contract roles must align");
 
 typedef enum loom_amdgpu_matrix_fragment_coordinate_flag_bits_e {
   // Coordinate carries an M/result-row value.

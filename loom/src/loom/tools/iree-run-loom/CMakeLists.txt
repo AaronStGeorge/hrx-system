@@ -61,18 +61,12 @@ iree_lit_test_suite(
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
 
-set(_IREE_RUN_LOOM_ALL_PROVIDERS amdgpu ireevm)
-set(IREE_RUN_LOOM_PROVIDERS "${_IREE_RUN_LOOM_ALL_PROVIDERS}" CACHE STRING
-  "Semicolon-separated list of execution providers linked into iree-run-loom."
-)
-foreach(_IREE_RUN_LOOM_PROVIDER ${IREE_RUN_LOOM_PROVIDERS})
-  if(NOT _IREE_RUN_LOOM_PROVIDER IN_LIST _IREE_RUN_LOOM_ALL_PROVIDERS)
-    message(FATAL_ERROR
-      "Unknown iree-run-loom provider '${_IREE_RUN_LOOM_PROVIDER}'. "
-      "Expected one of: ${_IREE_RUN_LOOM_ALL_PROVIDERS}"
-    )
-  endif()
-endforeach()
+option(IREE_RUN_LOOM_ENABLE_AMDGPU
+  "Link the AMDGPU HAL execution provider into iree-run-loom." ON)
+option(IREE_RUN_LOOM_ENABLE_IREEVM
+  "Link the IREEVM execution provider into iree-run-loom." ON)
+option(IREE_RUN_LOOM_ENABLE_SPIRV
+  "Link the SPIR-V Vulkan HAL execution provider into iree-run-loom." ON)
 
 iree_package_name(_IREE_RUN_LOOM_PACKAGE_NAME)
 set(_IREE_RUN_LOOM_TARGET "${_IREE_RUN_LOOM_PACKAGE_NAME}_iree-run-loom")
@@ -86,7 +80,7 @@ function(_iree_run_loom_enable_provider _target _definition _library)
   )
 endfunction()
 
-if("amdgpu" IN_LIST IREE_RUN_LOOM_PROVIDERS)
+if(IREE_RUN_LOOM_ENABLE_AMDGPU)
   _iree_run_loom_enable_provider(
     ${_IREE_RUN_LOOM_TARGET}
     IREE_RUN_LOOM_HAVE_AMDGPU
@@ -94,7 +88,7 @@ if("amdgpu" IN_LIST IREE_RUN_LOOM_PROVIDERS)
   )
 endif()
 
-if("ireevm" IN_LIST IREE_RUN_LOOM_PROVIDERS)
+if(IREE_RUN_LOOM_ENABLE_IREEVM)
   _iree_run_loom_enable_provider(
     ${_IREE_RUN_LOOM_TARGET}
     IREE_RUN_LOOM_HAVE_IREEVM
@@ -102,6 +96,13 @@ if("ireevm" IN_LIST IREE_RUN_LOOM_PROVIDERS)
   )
 endif()
 
+if(IREE_RUN_LOOM_ENABLE_SPIRV)
+  _iree_run_loom_enable_provider(
+    ${_IREE_RUN_LOOM_TARGET}
+    IREE_RUN_LOOM_HAVE_SPIRV
+    loom::src::loom::tooling::execution::hal::spirv::provider
+  )
+endif()
+
 unset(_IREE_RUN_LOOM_TARGET)
 unset(_IREE_RUN_LOOM_PACKAGE_NAME)
-unset(_IREE_RUN_LOOM_ALL_PROVIDERS)

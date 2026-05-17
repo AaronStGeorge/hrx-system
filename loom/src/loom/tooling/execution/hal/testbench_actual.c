@@ -546,49 +546,61 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
 static iree_status_t loom_run_hal_testbench_invocation_options_push_constant(
     const iree_vm_variant_t* variant,
     loom_run_hal_invocation_options_t* options) {
-  if (options->constant_count >= LOOM_RUN_HAL_MAX_CONSTANT_COUNT) {
+  const iree_vm_value_t value = iree_vm_variant_value(*variant);
+  iree_host_size_t word_count = 1;
+  switch (value.type) {
+    case IREE_VM_VALUE_TYPE_I64:
+    case IREE_VM_VALUE_TYPE_F64:
+      word_count = 2;
+      break;
+    default:
+      break;
+  }
+  if (options->constant_count + word_count > LOOM_RUN_HAL_MAX_CONSTANT_COUNT) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "HAL dispatch constant count exceeds capacity "
                             "%" PRIhsz,
                             (iree_host_size_t)LOOM_RUN_HAL_MAX_CONSTANT_COUNT);
   }
-  const iree_vm_value_t value = iree_vm_variant_value(*variant);
-  uint32_t raw_value = 0;
   switch (value.type) {
     case IREE_VM_VALUE_TYPE_I8:
-      raw_value = (uint32_t)(int32_t)value.i8;
+      options->constants[options->constant_count++] =
+          (uint32_t)(int32_t)value.i8;
       break;
     case IREE_VM_VALUE_TYPE_I16:
-      raw_value = (uint32_t)(int32_t)value.i16;
+      options->constants[options->constant_count++] =
+          (uint32_t)(int32_t)value.i16;
       break;
     case IREE_VM_VALUE_TYPE_I32:
-      raw_value = (uint32_t)value.i32;
+      options->constants[options->constant_count++] = (uint32_t)value.i32;
       break;
-    case IREE_VM_VALUE_TYPE_I64:
-      if (value.i64 < INT32_MIN || value.i64 > UINT32_MAX) {
-        return iree_make_status(
-            IREE_STATUS_OUT_OF_RANGE,
-            "HAL dispatch scalar i64 value %" PRIi64
-            " does not fit in the current 32-bit direct argument ABI",
-            value.i64);
-      }
-      raw_value = (uint32_t)value.i64;
+    case IREE_VM_VALUE_TYPE_I64: {
+      const uint64_t raw_value = (uint64_t)value.i64;
+      options->constants[options->constant_count++] = (uint32_t)raw_value;
+      options->constants[options->constant_count++] =
+          (uint32_t)(raw_value >> 32);
       break;
-    case IREE_VM_VALUE_TYPE_F32:
+    }
+    case IREE_VM_VALUE_TYPE_F32: {
+      uint32_t raw_value = 0;
       memcpy(&raw_value, &value.f32, sizeof(raw_value));
+      options->constants[options->constant_count++] = raw_value;
       break;
-    case IREE_VM_VALUE_TYPE_F64:
-      return iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
-          "HAL dispatch scalar f64 values are not supported by the current "
-          "32-bit direct argument ABI");
+    }
+    case IREE_VM_VALUE_TYPE_F64: {
+      uint64_t raw_value = 0;
+      memcpy(&raw_value, &value.f64, sizeof(raw_value));
+      options->constants[options->constant_count++] = (uint32_t)raw_value;
+      options->constants[options->constant_count++] =
+          (uint32_t)(raw_value >> 32);
+      break;
+    }
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "VM value type %d cannot be passed as a HAL "
                               "dispatch constant",
                               (int)value.type);
   }
-  options->constants[options->constant_count++] = raw_value;
   return iree_ok_status();
 }
 
