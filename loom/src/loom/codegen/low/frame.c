@@ -129,6 +129,7 @@ iree_status_t loom_low_emission_frame_build(
 
   loom_low_schedule_options_t schedule_options = {
       .descriptor_registry = options->descriptor_registry,
+      .target_selection = options->target_selection,
       .memory_access_table = options->memory_access_table,
       .pressure_cliffs = options->schedule_pressure_cliffs,
       .emitter = options->emitter,
@@ -144,6 +145,7 @@ iree_status_t loom_low_emission_frame_build(
   loom_low_allocation_options_t allocation_options = {
       .liveness_order = liveness_order,
       .descriptor_registry = options->descriptor_registry,
+      .target_selection = options->target_selection,
       .budgets = options->allocation_budgets,
       .budget_count = options->allocation_budget_count,
       .fixed_values = options->allocation_fixed_values,

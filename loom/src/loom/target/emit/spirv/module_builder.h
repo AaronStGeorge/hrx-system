@@ -7,10 +7,11 @@
 // Sectioned SPIR-V module builder.
 //
 // The builder owns the target-local binary envelope for structured SPIR-V
-// emission. It consumes the shared Loom target bundle, prepares the SPIR-V
-// feature set from the target config, emits target-selected capability,
-// extension, and memory-model rows, and then exposes ordered logical sections
-// for target lowering to populate with declarations and functions.
+// emission. It consumes the shared Loom target bundle, accumulates the SPIR-V
+// feature atoms required by the ABI and emitted packets, and exposes ordered
+// logical sections for target lowering to populate with declarations and
+// functions. Finalization emits the capability, extension, and memory-model
+// rows selected by the accumulated feature set.
 
 #ifndef LOOM_TARGET_EMIT_SPIRV_MODULE_BUILDER_H_
 #define LOOM_TARGET_EMIT_SPIRV_MODULE_BUILDER_H_
@@ -58,9 +59,13 @@ typedef struct loom_spirv_module_binary_t {
 typedef struct loom_spirv_module_builder_t {
   // Allocator used for section and final module storage.
   iree_allocator_t allocator;
+  // Target name used in feature diagnostics.
+  iree_string_view_t target_name;
   // Export ABI selected for this module.
   loom_target_abi_kind_t abi_kind;
-  // Prepared target feature set emitted into the module preamble.
+  // Feature atoms required by the ABI and emitted packets.
+  loom_spirv_feature_bits_t required_feature_bits;
+  // Prepared feature set emitted into the module preamble during finalization.
   loom_spirv_feature_set_t feature_set;
   // Upper bound for allocated result IDs, including the invalid zero ID.
   uint32_t id_bound;
@@ -80,9 +85,8 @@ static inline iree_const_byte_span_t loom_spirv_module_binary_byte_span(
 void loom_spirv_module_binary_deinitialize(loom_spirv_module_binary_t* module,
                                            iree_allocator_t allocator);
 
-// Initializes a sectioned builder for |target| and emits target-selected
-// feature rows into the preamble sections. |target| must describe a SPIR-V
-// binary shader-entry-point or HAL-kernel bundle.
+// Initializes a sectioned builder for |target|. |target| must describe a
+// SPIR-V binary shader-entry-point or HAL-kernel bundle.
 iree_status_t loom_spirv_module_builder_initialize(
     const loom_target_bundle_t* target, iree_allocator_t allocator,
     loom_spirv_module_builder_t* out_builder);
@@ -92,7 +96,12 @@ iree_status_t loom_spirv_module_builder_initialize(
 void loom_spirv_module_builder_deinitialize(
     loom_spirv_module_builder_t* builder);
 
-// Returns the prepared feature set selected during initialization.
+// Adds feature atoms required by emitted module contents.
+void loom_spirv_module_builder_require_feature_bits(
+    loom_spirv_module_builder_t* builder,
+    loom_spirv_feature_bits_t feature_bits);
+
+// Returns the prepared feature set selected during finalization.
 static inline const loom_spirv_feature_set_t*
 loom_spirv_module_builder_feature_set(
     const loom_spirv_module_builder_t* builder) {

@@ -250,9 +250,6 @@ class _CooperativeMatrixCase:
     rhs_columns: int
     accumulator_rows: int
     accumulator_columns: int
-    lhs_stride: int
-    rhs_stride: int
-    accumulator_stride: int
     operand_mode: str | None = None
     cooperative_matrix_operands: str | None = None
 
@@ -281,9 +278,6 @@ _COOPERATIVE_MATRIX_CASES = (
         rhs_columns=16,
         accumulator_rows=16,
         accumulator_columns=16,
-        lhs_stride=16,
-        rhs_stride=16,
-        accumulator_stride=16,
     ),
     _CooperativeMatrixCase(
         element="bf16",
@@ -299,9 +293,6 @@ _COOPERATIVE_MATRIX_CASES = (
         rhs_columns=16,
         accumulator_rows=16,
         accumulator_columns=16,
-        lhs_stride=16,
-        rhs_stride=16,
-        accumulator_stride=16,
     ),
     _CooperativeMatrixCase(
         element="s8",
@@ -317,13 +308,14 @@ _COOPERATIVE_MATRIX_CASES = (
         rhs_columns=16,
         accumulator_rows=16,
         accumulator_columns=16,
-        lhs_stride=32,
-        rhs_stride=16,
-        accumulator_stride=16,
         operand_mode="signed_saturating",
         cooperative_matrix_operands=_COOPERATIVE_MATRIX_SIGNED_SATURATING_OPERANDS,
     ),
 )
+
+
+def _row_byte_stride(columns: int, scalar: StorageBufferScalar) -> int:
+    return columns * scalar.byte_width
 
 
 def _cooperative_matrix_descriptor(
@@ -370,6 +362,9 @@ def _cooperative_matrix_rows_for_case(case: _CooperativeMatrixCase) -> list[str]
         matrix_use="LOOM_SPIRV_COOPERATIVE_MATRIX_USE_MATRIX_ACCUMULATOR_KHR",
     )
     row_major_layout = "LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_KHR"
+    lhs_stride = _row_byte_stride(case.lhs_columns, element_scalar)
+    rhs_stride = _row_byte_stride(case.rhs_columns, element_scalar)
+    accumulator_stride = _row_byte_stride(case.accumulator_columns, accumulator_scalar)
     return [
         _row(
             _cooperative_matrix_descriptor(
@@ -385,7 +380,7 @@ def _cooperative_matrix_rows_for_case(case: _CooperativeMatrixCase) -> list[str]
             result_count=1,
             memory_alignment=16,
             cooperative_matrix_layout=row_major_layout,
-            cooperative_matrix_stride=case.lhs_stride,
+            cooperative_matrix_stride=lhs_stride,
         ),
         _row(
             _cooperative_matrix_descriptor(
@@ -401,7 +396,7 @@ def _cooperative_matrix_rows_for_case(case: _CooperativeMatrixCase) -> list[str]
             result_count=1,
             memory_alignment=16,
             cooperative_matrix_layout=row_major_layout,
-            cooperative_matrix_stride=case.rhs_stride,
+            cooperative_matrix_stride=rhs_stride,
         ),
         _row(
             _cooperative_matrix_descriptor(
@@ -417,7 +412,7 @@ def _cooperative_matrix_rows_for_case(case: _CooperativeMatrixCase) -> list[str]
             result_count=1,
             memory_alignment=16,
             cooperative_matrix_layout=row_major_layout,
-            cooperative_matrix_stride=case.accumulator_stride,
+            cooperative_matrix_stride=accumulator_stride,
         ),
         _row(
             _cooperative_matrix_descriptor(
@@ -448,7 +443,7 @@ def _cooperative_matrix_rows_for_case(case: _CooperativeMatrixCase) -> list[str]
             ),
             memory_alignment=16,
             cooperative_matrix_layout=row_major_layout,
-            cooperative_matrix_stride=case.accumulator_stride,
+            cooperative_matrix_stride=accumulator_stride,
         ),
     ]
 

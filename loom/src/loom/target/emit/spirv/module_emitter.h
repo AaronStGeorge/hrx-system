@@ -20,6 +20,7 @@
 #include "loom/ir/ir.h"
 #include "loom/target/emit/spirv/module_builder.h"
 #include "loom/target/low_descriptor_registry.h"
+#include "loom/target/types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,6 +34,7 @@ extern "C" {
 iree_status_t loom_spirv_emit_low_function_module(
     loom_module_t* module, loom_op_t* low_function_op,
     const loom_low_descriptor_registry_t* descriptor_registry,
+    loom_target_selection_t target_selection,
     iree_diagnostic_emitter_t diagnostic_emitter,
     iree_arena_allocator_t* scratch_arena,
     loom_spirv_module_binary_t* out_module, iree_allocator_t allocator);

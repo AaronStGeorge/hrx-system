@@ -125,6 +125,7 @@ static constexpr fake_query_row_t kBaselineQueryRows[] = {
     {IREE_SVL("vulkan.feature"), IREE_SVL("subgroup_size_control"), 1},
     {IREE_SVL("vulkan.feature"), IREE_SVL("cooperative_matrix_khr"), 0},
     {IREE_SVL("vulkan.feature"), IREE_SVL("storage_buffer_8bit_access"), 1},
+    {IREE_SVL("vulkan.feature"), IREE_SVL("storage_buffer_16bit_access"), 1},
     {IREE_SVL("vulkan.feature"), IREE_SVL("shader_float16"), 1},
     {IREE_SVL("vulkan.feature"), IREE_SVL("shader_float64"), 0},
     {IREE_SVL("vulkan.feature"), IREE_SVL("shader_int8"), 1},

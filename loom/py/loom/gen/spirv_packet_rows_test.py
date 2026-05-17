@@ -6,9 +6,39 @@
 
 from __future__ import annotations
 
-from loom.gen.spirv_packet_rows import generate_tables
+from loom.gen.spirv_packet_rows import _descriptor_ref_constant_name, generate_tables
 from loom.target.arch.spirv.builtins import BUILTIN_DIMENSIONS, BUILTIN_INDEX_QUERIES
+from loom.target.arch.spirv.descriptors import cooperative_matrix_descriptor_key
 from loom.target.arch.spirv.scalar_memory import STORAGE_BUFFER_SCALARS
+
+
+def _generated_row(tables: str, descriptor_key: str) -> str:
+    marker = f"[{_descriptor_ref_constant_name(descriptor_key)}] ="
+    start = tables.index(marker)
+    end = tables.index("\n        },", start)
+    return tables[start:end]
+
+
+def _cooperative_matrix_descriptor(
+    op_name: str,
+    *,
+    role: str | None,
+    element: str,
+    k_size: int,
+    accumulator: str,
+    layout: str | None = None,
+) -> str:
+    return cooperative_matrix_descriptor_key(
+        op_name,
+        role=role,
+        element=element,
+        m_size=16,
+        n_size=16,
+        k_size=k_size,
+        accumulator=accumulator,
+        scope="subgroup",
+        layout=layout,
+    )
 
 
 def test_generation_emits_scalar_memory_packet_rows() -> None:
@@ -24,6 +54,97 @@ def test_generation_emits_scalar_memory_packet_rows() -> None:
 
     assert "LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS" in tables
     assert "LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER" in tables
+
+
+def test_generation_uses_byte_strides_for_cooperative_matrix_rows() -> None:
+    tables = generate_tables()
+
+    f16_lhs = _generated_row(
+        tables,
+        _cooperative_matrix_descriptor(
+            "op_cooperative_matrix_load_khr",
+            role="lhs",
+            element="f16",
+            k_size=16,
+            accumulator="f32",
+            layout="row_major",
+        ),
+    )
+    f16_init = _generated_row(
+        tables,
+        _cooperative_matrix_descriptor(
+            "op_cooperative_matrix_load_khr",
+            role="init",
+            element="f16",
+            k_size=16,
+            accumulator="f32",
+            layout="row_major",
+        ),
+    )
+    f16_store = _generated_row(
+        tables,
+        _cooperative_matrix_descriptor(
+            "op_cooperative_matrix_store_khr",
+            role="result",
+            element="f16",
+            k_size=16,
+            accumulator="f32",
+            layout="row_major",
+        ),
+    )
+    assert ".cooperative_matrix_stride = 32" in f16_lhs
+    assert ".cooperative_matrix_stride = 64" in f16_init
+    assert ".cooperative_matrix_stride = 64" in f16_store
+
+    bf16_rhs = _generated_row(
+        tables,
+        _cooperative_matrix_descriptor(
+            "op_cooperative_matrix_load_khr",
+            role="rhs",
+            element="bf16",
+            k_size=16,
+            accumulator="f32",
+            layout="row_major",
+        ),
+    )
+    assert ".cooperative_matrix_stride = 32" in bf16_rhs
+
+    s8_lhs = _generated_row(
+        tables,
+        _cooperative_matrix_descriptor(
+            "op_cooperative_matrix_load_khr",
+            role="lhs",
+            element="s8",
+            k_size=32,
+            accumulator="s32",
+            layout="row_major",
+        ),
+    )
+    s8_rhs = _generated_row(
+        tables,
+        _cooperative_matrix_descriptor(
+            "op_cooperative_matrix_load_khr",
+            role="rhs",
+            element="s8",
+            k_size=32,
+            accumulator="s32",
+            layout="row_major",
+        ),
+    )
+    s8_store = _generated_row(
+        tables,
+        _cooperative_matrix_descriptor(
+            "op_cooperative_matrix_store_khr",
+            role="result",
+            element="s8",
+            k_size=32,
+            accumulator="s32",
+            layout="row_major",
+        ),
+    )
+    assert ".cooperative_matrix_stride = 32" in s8_lhs
+    assert ".cooperative_matrix_stride = 16" in s8_rhs
+    assert ".cooperative_matrix_stride = 64" in s8_store
 
 
 def test_generation_keeps_storage_buffer_address_untyped_until_access_chain() -> None:

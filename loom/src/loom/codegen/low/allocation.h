@@ -338,6 +338,9 @@ typedef struct loom_low_allocation_options_t {
   loom_liveness_order_t liveness_order;
   // Descriptor registry available to the allocator.
   const loom_low_descriptor_registry_t* descriptor_registry;
+  // Optional runtime/device target overlay applied when compatible with the
+  // function's target record.
+  loom_target_selection_t target_selection;
   // Explicit per-class register budgets.
   const loom_low_allocation_budget_t* budgets;
   // Number of entries in |budgets|.

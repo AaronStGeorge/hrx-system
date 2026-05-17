@@ -13,6 +13,21 @@
 #include "loom/ops/target/facts.h"
 #include "loom/target/launch.h"
 
+bool loom_target_function_contract_bundles_compatible(
+    const loom_target_bundle_t* module_bundle,
+    const loom_target_bundle_t* selected_bundle) {
+  IREE_ASSERT_ARGUMENT(module_bundle);
+  IREE_ASSERT_ARGUMENT(selected_bundle);
+  return module_bundle->snapshot->codegen_format ==
+             selected_bundle->snapshot->codegen_format &&
+         module_bundle->snapshot->artifact_format ==
+             selected_bundle->snapshot->artifact_format &&
+         module_bundle->export_plan->abi_kind ==
+             selected_bundle->export_plan->abi_kind &&
+         iree_string_view_equal(module_bundle->config->contract_set_key,
+                                selected_bundle->config->contract_set_key);
+}
+
 static iree_string_view_t loom_target_function_contract_string_from_id(
     const loom_module_t* module, loom_string_id_t string_id) {
   if (string_id >= module->strings.count) {

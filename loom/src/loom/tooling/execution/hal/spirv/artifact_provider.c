@@ -139,8 +139,12 @@ static iree_status_t loom_spirv_hal_artifact_provider_emit_selected_entry(
   loom_low_verify_result_t low_verify_result = {0};
   loom_low_verify_scratch_t low_verify_scratch =
       loom_low_verify_scratch_for_module(module);
+  const loom_target_selection_t target_selection = {
+      .bundle = target->target_bundle,
+      .data = target->data,
+  };
   IREE_RETURN_IF_ERROR(loom_target_entry_verify_low_module(
-      module, low_registry, diagnostic_emitter,
+      module, low_registry, diagnostic_emitter, target_selection,
       loom_target_entry_max_errors(target_options, /*default_max_errors=*/20),
       &low_verify_scratch, &low_verify_result));
   if (low_verify_result.error_count != 0) {
@@ -153,7 +157,7 @@ static iree_status_t loom_spirv_hal_artifact_provider_emit_selected_entry(
   *storage = (loom_spirv_hal_artifact_storage_t){0};
 
   iree_status_t status = loom_spirv_emit_low_function_module(
-      module, entry->func.op, &low_registry->registry,
+      module, entry->func.op, &low_registry->registry, target_selection,
       loom_target_entry_emitter(diagnostic_emitter), arena, &storage->module,
       allocator);
   if (iree_status_is_ok(status) && diagnostic_emitter->error_count == 0) {
@@ -198,6 +202,7 @@ static iree_status_t loom_spirv_hal_artifact_provider_emit_artifact(
       .diagnostic_sink = diagnostic_sink,
       .source_resolver = source_resolver,
       .max_errors = max_errors,
+      .effective_target_bundle = target->target_bundle,
   };
   loom_target_entry_diagnostic_emitter_t diagnostic_emitter = {0};
   loom_target_entry_diagnostic_emitter_initialize(

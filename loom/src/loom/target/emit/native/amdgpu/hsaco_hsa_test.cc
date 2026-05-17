@@ -714,7 +714,7 @@ class LowKernelEmitter {
     loom_low_resolved_target_t target = {};
     IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
         module_, low_function, &target_registry_.registry,
-        iree_diagnostic_emitter_t{}, &target));
+        loom_target_selection_empty(), iree_diagnostic_emitter_t{}, &target));
     bundle_storage = target.bundle_storage;
     loom_target_bundle_storage_rebind(&bundle_storage);
     const loom_low_descriptor_set_t* descriptor_set = nullptr;

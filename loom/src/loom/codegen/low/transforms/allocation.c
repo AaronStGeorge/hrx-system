@@ -358,8 +358,11 @@ iree_status_t loom_low_materialize_allocation_run(loom_pass_t* pass,
       loom_low_pass_capability_from_pass(pass);
   const loom_low_descriptor_registry_t* descriptor_registry =
       loom_low_pass_capability_descriptor_registry(low_capability);
+  const loom_target_selection_t target_selection =
+      loom_low_pass_capability_target_selection(low_capability);
   loom_low_allocation_options_t allocation_options = {
       .descriptor_registry = descriptor_registry,
+      .target_selection = target_selection,
       .budgets = state ? state->budgets : NULL,
       .budget_count = state ? state->budget_count : 0,
       .emitter = pass->diagnostic_emitter,

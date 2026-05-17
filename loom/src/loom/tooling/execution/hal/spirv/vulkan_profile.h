@@ -61,6 +61,8 @@ typedef enum loom_spirv_vulkan_hal_profile_flag_bits_e {
   // The logical device exposes vulkanMemoryModelDeviceScope.
   LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_VULKAN_MEMORY_MODEL_DEVICE_SCOPE = 1u
                                                                         << 12,
+  // The logical device exposes storageBuffer16BitAccess.
+  LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_STORAGE_BUFFER_16BIT_ACCESS = 1u << 13,
 } loom_spirv_vulkan_hal_profile_flag_bits_t;
 
 typedef uint32_t loom_spirv_vulkan_hal_profile_flags_t;
@@ -119,9 +121,9 @@ void loom_spirv_vulkan_hal_target_profile_storage_deinitialize(
 // Materializes a HAL-kernel Vulkan 1.3 raw-BDA SPIR-V target bundle.
 //
 // The returned storage borrows no fact memory and remains valid until
-// overwritten by the caller. Cooperative matrix support remains a fact here;
-// this function does not enable the SPIR-V cooperative-matrix feature atom
-// until dynamic property rows participate in legality.
+// overwritten by the caller. Device-reported feature bits are projected into
+// the target config so source lowering and low verification see the same
+// concrete target that the Vulkan HAL will execute.
 iree_status_t loom_spirv_vulkan_hal_profile_initialize_target_bundle(
     const loom_spirv_vulkan_hal_profile_facts_t* facts,
     loom_target_bundle_storage_t* out_storage);

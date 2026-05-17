@@ -6658,8 +6658,8 @@ iree_status_t loom_low_allocate_function(
       loom_low_allocation_validate_synthesis_mode(low_func_op));
 
   IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
-      module, low_func_op, options->descriptor_registry, options->emitter,
-      &state.target));
+      module, low_func_op, options->descriptor_registry,
+      options->target_selection, options->emitter, &state.target));
   if (!state.target.descriptor_set) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "low function target did not resolve");

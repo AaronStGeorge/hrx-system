@@ -236,10 +236,11 @@ iree_status_t loom_target_entry_verify_low_module(
     const loom_module_t* module,
     const loom_target_low_descriptor_registry_t* low_registry,
     loom_target_entry_diagnostic_emitter_t* diagnostic_emitter,
-    uint32_t max_errors, loom_low_verify_scratch_t* scratch,
-    loom_low_verify_result_t* out_result) {
+    loom_target_selection_t target_selection, uint32_t max_errors,
+    loom_low_verify_scratch_t* scratch, loom_low_verify_result_t* out_result) {
   const loom_low_verify_options_t low_verify_options = {
       .descriptor_registry = &low_registry->registry,
+      .target_selection = target_selection,
       .emitter = loom_target_entry_emitter(diagnostic_emitter),
       .max_errors = max_errors,
   };
@@ -368,7 +369,8 @@ static iree_status_t loom_target_entry_emit_empty_artifact(
 
 static iree_status_t loom_target_entry_try_entry(
     const loom_module_t* module, loom_symbol_fact_table_t* fact_table,
-    loom_symbol_id_t symbol_id, loom_target_entry_predicate_t predicate,
+    const loom_target_entry_options_t* options, loom_symbol_id_t symbol_id,
+    loom_target_entry_predicate_t predicate,
     loom_target_entry_diagnostic_emitter_t* diagnostic_emitter,
     iree_string_view_t pipeline_name, bool require_compatible,
     bool* out_compatible, loom_target_entry_t* out_entry) {
@@ -417,6 +419,39 @@ static iree_status_t loom_target_entry_try_entry(
     return iree_ok_status();
   }
 
+  const loom_target_bundle_t* effective_target_bundle =
+      options ? options->effective_target_bundle : NULL;
+  if (effective_target_bundle != NULL) {
+    if (!loom_target_function_contract_bundles_compatible(
+            &entry.bundle_storage.bundle, effective_target_bundle)) {
+      if (!require_compatible) {
+        return iree_ok_status();
+      }
+      IREE_RETURN_IF_ERROR(loom_target_entry_emit_incompatible_bundle(
+          diagnostic_emitter, &entry, pipeline_name));
+      return iree_ok_status();
+    }
+    const iree_string_view_t effective_target_name =
+        !iree_string_view_is_empty(effective_target_bundle->name)
+            ? effective_target_bundle->name
+            : entry.bundle_storage.bundle.name;
+    IREE_RETURN_IF_ERROR(loom_target_function_contract_resolve_from_bundle(
+        module, func_facts, effective_target_name, effective_target_bundle,
+        loom_target_entry_emitter(diagnostic_emitter), &contract_valid,
+        &entry.bundle_storage));
+    if (!contract_valid) {
+      return iree_ok_status();
+    }
+    if (!predicate.fn(predicate.user_data, &entry)) {
+      if (!require_compatible) {
+        return iree_ok_status();
+      }
+      IREE_RETURN_IF_ERROR(loom_target_entry_emit_incompatible_bundle(
+          diagnostic_emitter, &entry, pipeline_name));
+      return iree_ok_status();
+    }
+  }
+
   loom_target_entry_assign_entry(&entry, out_entry);
   *out_compatible = true;
   return iree_ok_status();
@@ -424,7 +459,8 @@ static iree_status_t loom_target_entry_try_entry(
 
 static iree_status_t loom_target_entry_select_named_entry(
     const loom_module_t* module, loom_symbol_fact_table_t* fact_table,
-    iree_string_view_t entry_symbol, loom_target_entry_predicate_t predicate,
+    const loom_target_entry_options_t* options, iree_string_view_t entry_symbol,
+    loom_target_entry_predicate_t predicate,
     loom_target_entry_diagnostic_emitter_t* diagnostic_emitter,
     iree_string_view_t pipeline_name, bool* out_selected,
     loom_target_entry_t* out_entry) {
@@ -439,7 +475,7 @@ static iree_status_t loom_target_entry_select_named_entry(
   }
   bool compatible = false;
   IREE_RETURN_IF_ERROR(loom_target_entry_try_entry(
-      module, fact_table, symbol_id, predicate, diagnostic_emitter,
+      module, fact_table, options, symbol_id, predicate, diagnostic_emitter,
       pipeline_name, /*require_compatible=*/true, &compatible, out_entry));
   *out_selected = compatible;
   return iree_ok_status();
@@ -447,6 +483,7 @@ static iree_status_t loom_target_entry_select_named_entry(
 
 static iree_status_t loom_target_entry_select_single_entry(
     const loom_module_t* module, loom_symbol_fact_table_t* fact_table,
+    const loom_target_entry_options_t* options,
     loom_target_entry_predicate_t predicate,
     loom_target_entry_diagnostic_emitter_t* diagnostic_emitter,
     iree_string_view_t pipeline_name, bool* out_selected,
@@ -457,8 +494,9 @@ static iree_status_t loom_target_entry_select_single_entry(
     bool compatible = false;
     loom_target_entry_t candidate = {0};
     IREE_RETURN_IF_ERROR(loom_target_entry_try_entry(
-        module, fact_table, (loom_symbol_id_t)i, predicate, diagnostic_emitter,
-        pipeline_name, /*require_compatible=*/false, &compatible, &candidate));
+        module, fact_table, options, (loom_symbol_id_t)i, predicate,
+        diagnostic_emitter, pipeline_name, /*require_compatible=*/false,
+        &compatible, &candidate));
     if (!compatible) {
       continue;
     }
@@ -497,12 +535,12 @@ iree_status_t loom_target_entry_select_entry(
   iree_string_view_t entry_symbol = loom_target_entry_symbol_name(options);
   if (!iree_string_view_is_empty(entry_symbol)) {
     return loom_target_entry_select_named_entry(
-        module, &fact_table, entry_symbol, predicate, diagnostic_emitter,
-        entry_kind, out_selected, out_entry);
+        module, &fact_table, options, entry_symbol, predicate,
+        diagnostic_emitter, entry_kind, out_selected, out_entry);
   }
-  return loom_target_entry_select_single_entry(module, &fact_table, predicate,
-                                               diagnostic_emitter, entry_kind,
-                                               out_selected, out_entry);
+  return loom_target_entry_select_single_entry(
+      module, &fact_table, options, predicate, diagnostic_emitter, entry_kind,
+      out_selected, out_entry);
 }
 
 iree_status_t loom_target_entry_select_artifact_entries(
@@ -556,7 +594,7 @@ iree_status_t loom_target_entry_select_artifact_entries(
   for (uint16_t i = 0; i < artifact_plan.entry_count; ++i) {
     bool compatible = false;
     IREE_RETURN_IF_ERROR(loom_target_entry_try_entry(
-        module, &fact_table, artifact_plan.entry_symbol_ids[i], predicate,
+        module, &fact_table, NULL, artifact_plan.entry_symbol_ids[i], predicate,
         diagnostic_emitter, entry_kind, /*require_compatible=*/true,
         &compatible, &entries[i]));
     if (!compatible) {

@@ -867,7 +867,8 @@ static iree_status_t loom_check_emit_write_low_schedule_json(
   if (pressure_cliff_spec_count != 0) {
     loom_low_resolved_target_t target = {0};
     IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
-        module, low_function, descriptor_registry, emitter, &target));
+        module, low_function, descriptor_registry,
+        loom_target_selection_empty(), emitter, &target));
     if (!target.descriptor_set) {
       return iree_make_status(
           IREE_STATUS_FAILED_PRECONDITION,
@@ -1200,7 +1201,8 @@ static iree_status_t loom_check_emit_select_single_low_descriptor_set_key(
     }
     loom_low_resolved_target_t target = {0};
     IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
-        module, op, descriptor_registry, emitter, &target));
+        module, op, descriptor_registry, loom_target_selection_empty(), emitter,
+        &target));
     if (target.descriptor_set == NULL) {
       continue;
     }
@@ -1319,8 +1321,8 @@ static iree_status_t loom_check_emit_write_source_low_text(
   loom_low_verify_scratch_t low_verify_scratch =
       loom_low_verify_scratch_for_module(module);
   IREE_RETURN_IF_ERROR(loom_target_entry_verify_low_module(
-      module, low_registry, &verifier_emitter, 20, &low_verify_scratch,
-      &low_verify_result));
+      module, low_registry, &verifier_emitter, loom_target_selection_empty(),
+      20, &low_verify_scratch, &low_verify_result));
   if (low_verify_result.error_count != 0) {
     return iree_ok_status();
   }
@@ -1363,8 +1365,8 @@ static iree_status_t loom_check_emit_verify_provider_module(
   loom_low_verify_scratch_t low_verify_scratch =
       loom_low_verify_scratch_for_module(module);
   IREE_RETURN_IF_ERROR(loom_target_entry_verify_low_module(
-      module, low_registry, &verifier_emitter, 20, &low_verify_scratch,
-      &low_verify_result));
+      module, low_registry, &verifier_emitter, loom_target_selection_empty(),
+      20, &low_verify_scratch, &low_verify_result));
   return iree_ok_status();
 }
 

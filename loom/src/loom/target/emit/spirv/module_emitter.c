@@ -2012,6 +2012,20 @@ static iree_status_t loom_spirv_emit_copy(loom_spirv_emit_state_t* state,
 static iree_status_t loom_spirv_emit_descriptor_packet(
     loom_spirv_emit_state_t* state, const loom_op_t* op,
     const loom_low_resolved_descriptor_packet_t* packet) {
+  for (uint16_t i = 0; i < packet->descriptor->feature_mask_word_count; ++i) {
+    const uint32_t feature_mask_row =
+        packet->descriptor->feature_mask_word_start + i;
+    const uint64_t feature_bits =
+        state->target->descriptor_set->feature_mask_words[feature_mask_row];
+    if (i != 0 && feature_bits != 0) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "SPIR-V emission only supports descriptor feature bits in word 0");
+    }
+    loom_spirv_module_builder_require_feature_bits(
+        state->builder, (loom_spirv_feature_bits_t)feature_bits);
+  }
+
   const uint32_t descriptor_ordinal =
       loom_low_descriptor_set_descriptor_ordinal(state->target->descriptor_set,
                                                  packet->descriptor);
@@ -2241,6 +2255,7 @@ static iree_status_t loom_spirv_emit_function(loom_spirv_emit_state_t* state) {
 iree_status_t loom_spirv_emit_low_function_module(
     loom_module_t* module, loom_op_t* low_function_op,
     const loom_low_descriptor_registry_t* descriptor_registry,
+    loom_target_selection_t target_selection,
     iree_diagnostic_emitter_t diagnostic_emitter,
     iree_arena_allocator_t* scratch_arena,
     loom_spirv_module_binary_t* out_module, iree_allocator_t allocator) {
@@ -2259,8 +2274,8 @@ iree_status_t loom_spirv_emit_low_function_module(
 
   loom_low_resolved_target_t target = {0};
   IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
-      module, low_function_op, descriptor_registry, diagnostic_emitter,
-      &target));
+      module, low_function_op, descriptor_registry, target_selection,
+      diagnostic_emitter, &target));
   if (target.descriptor_set == NULL) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "SPIR-V low function target did not resolve to a "

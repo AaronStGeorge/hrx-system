@@ -90,12 +90,20 @@ static void loom_spirv_module_builder_select_memory_model(
         LOOM_SPIRV_ADDRESSING_MODEL_PHYSICAL_STORAGE_BUFFER64;
     *out_memory_model =
         loom_spirv_module_builder_uses_vulkan_memory_model(builder)
-            ? builder->feature_set.memory_model
+            ? LOOM_SPIRV_MEMORY_MODEL_VULKAN
             : LOOM_SPIRV_MEMORY_MODEL_GLSL450;
     return;
   }
   *out_addressing_model = builder->feature_set.addressing_model;
   *out_memory_model = builder->feature_set.memory_model;
+}
+
+static loom_spirv_feature_bits_t loom_spirv_module_builder_base_feature_bits(
+    const loom_target_bundle_t* target) {
+  if (target->export_plan->abi_kind == LOOM_TARGET_ABI_HAL_KERNEL) {
+    return LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA;
+  }
+  return (loom_spirv_feature_bits_t)target->config->contract_feature_bits;
 }
 
 static iree_status_t loom_spirv_module_builder_emit_feature_preamble(
@@ -157,24 +165,16 @@ iree_status_t loom_spirv_module_builder_initialize(
 
   *out_builder = (loom_spirv_module_builder_t){
       .allocator = allocator,
+      .target_name = target->name,
       .abi_kind = target->export_plan->abi_kind,
+      .required_feature_bits =
+          loom_spirv_module_builder_base_feature_bits(target),
       .id_bound = 1,
   };
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(out_builder->sections); ++i) {
     loom_spirv_binary_writer_initialize(allocator, &out_builder->sections[i]);
   }
-
-  const loom_spirv_feature_bits_t feature_bits =
-      (loom_spirv_feature_bits_t)target->config->contract_feature_bits;
-  iree_status_t status = loom_spirv_feature_set_prepare(
-      target->name, feature_bits, &out_builder->feature_set);
-  if (iree_status_is_ok(status)) {
-    status = loom_spirv_module_builder_emit_feature_preamble(out_builder);
-  }
-  if (!iree_status_is_ok(status)) {
-    loom_spirv_module_builder_deinitialize(out_builder);
-  }
-  return status;
+  return iree_ok_status();
 }
 
 void loom_spirv_module_builder_deinitialize(
@@ -184,6 +184,13 @@ void loom_spirv_module_builder_deinitialize(
     loom_spirv_binary_writer_deinitialize(&builder->sections[i]);
   }
   *builder = (loom_spirv_module_builder_t){0};
+}
+
+void loom_spirv_module_builder_require_feature_bits(
+    loom_spirv_module_builder_t* builder,
+    loom_spirv_feature_bits_t feature_bits) {
+  IREE_ASSERT_ARGUMENT(builder);
+  builder->required_feature_bits |= feature_bits;
 }
 
 loom_spirv_binary_writer_t* loom_spirv_module_builder_section(
@@ -226,6 +233,12 @@ iree_status_t loom_spirv_module_builder_finalize(
   IREE_ASSERT_ARGUMENT(out_module);
 
   *out_module = (loom_spirv_module_binary_t){0};
+  IREE_RETURN_IF_ERROR(loom_spirv_feature_set_prepare(
+      builder->target_name, builder->required_feature_bits,
+      &builder->feature_set));
+  IREE_RETURN_IF_ERROR(
+      loom_spirv_module_builder_emit_feature_preamble(builder));
+
   loom_spirv_binary_writer_t module_writer;
   loom_spirv_binary_writer_initialize(builder->allocator, &module_writer);
   iree_status_t status =

@@ -17,6 +17,7 @@
 #include "loom/tooling/execution/hal/testbench_actual.h"
 #include "loom/tooling/io/file.h"
 #include "loom/tooling/testbench/executor.h"
+#include "loom/tooling/testbench/reference.h"
 #include "loom/tooling/testbench/requirements.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
@@ -199,12 +200,30 @@ static iree_status_t iree_test_loom_run_case_samples(
   loom_testbench_case_execution_options_t execution_options =
       *base_execution_options;
   loom_run_hal_testbench_actual_provider_t hal_actual_provider = {0};
+  loom_testbench_reference_matmul_oracle_options_t matmul_oracle_options = {0};
+  loom_testbench_oracle_provider_t oracle_providers[1] = {0};
   bool hal_actual_provider_initialized = false;
   if (iree_test_loom_case_has_actual_invocation(case_plan)) {
     status = iree_test_loom_configure_hal_actual_provider(
         configuration, session, run_module, module_plan, case_plan, hal_context,
         &execution_options, &hal_actual_provider);
     hal_actual_provider_initialized = iree_status_is_ok(status);
+    if (iree_status_is_ok(status)) {
+      matmul_oracle_options =
+          (loom_testbench_reference_matmul_oracle_options_t){
+              .device = hal_context->runtime.device,
+              .device_allocator =
+                  iree_hal_device_allocator(hal_context->runtime.device),
+              .result_buffer_params =
+                  loom_run_hal_testbench_host_visible_buffer_params(),
+              .host_allocator = execution_options.materializer.host_allocator,
+          };
+      loom_testbench_reference_matmul_oracle_provider_initialize(
+          &matmul_oracle_options, &oracle_providers[0]);
+      execution_options.invocation.oracle_providers =
+          loom_make_testbench_oracle_provider_list(
+              oracle_providers, IREE_ARRAYSIZE(oracle_providers));
+    }
   }
 
   loom_testbench_prepared_case_t prepared_case = {0};

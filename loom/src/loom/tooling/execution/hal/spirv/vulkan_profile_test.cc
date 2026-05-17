@@ -164,6 +164,7 @@ static constexpr fake_query_row_t kBaselineQueryRows[] = {
     {IREE_SVL("vulkan.feature"), IREE_SVL("subgroup_size_control"), 1},
     {IREE_SVL("vulkan.feature"), IREE_SVL("cooperative_matrix_khr"), 1},
     {IREE_SVL("vulkan.feature"), IREE_SVL("storage_buffer_8bit_access"), 1},
+    {IREE_SVL("vulkan.feature"), IREE_SVL("storage_buffer_16bit_access"), 1},
     {IREE_SVL("vulkan.feature"), IREE_SVL("shader_float16"), 1},
     {IREE_SVL("vulkan.feature"), IREE_SVL("shader_float64"), 0},
     {IREE_SVL("vulkan.feature"), IREE_SVL("shader_int8"), 1},
@@ -199,6 +200,9 @@ TEST(VulkanProfileTest, QueryReadsHalDeviceAndExecutableCacheFacts) {
   EXPECT_TRUE(iree_all_bits_set(
       facts.flags,
       LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_STORAGE_BUFFER_8BIT_ACCESS));
+  EXPECT_TRUE(iree_all_bits_set(
+      facts.flags,
+      LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_STORAGE_BUFFER_16BIT_ACCESS));
   EXPECT_TRUE(iree_all_bits_set(
       facts.flags, LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_FLOAT16));
   EXPECT_FALSE(iree_all_bits_set(
@@ -314,6 +318,8 @@ TEST(VulkanProfileTest, RejectsMissingBufferDeviceAddress) {
 TEST(VulkanProfileTest, MaterializesCooperativeMatrixFeature) {
   loom_spirv_vulkan_hal_profile_facts_t facts = BaselineFacts();
   facts.flags |= LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_COOPERATIVE_MATRIX_KHR;
+  facts.flags |= LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_FLOAT16;
+  facts.flags |= LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_STORAGE_BUFFER_16BIT_ACCESS;
   facts.cooperative_matrix_property_count = 7;
   facts.cooperative_matrix_supported_stages = 0x20;
 
@@ -325,11 +331,17 @@ TEST(VulkanProfileTest, MaterializesCooperativeMatrixFeature) {
                                 LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA));
   EXPECT_TRUE(iree_all_bits_set(storage.config.contract_feature_bits,
                                 LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR));
+  EXPECT_TRUE(iree_all_bits_set(storage.config.contract_feature_bits,
+                                LOOM_SPIRV_FEATURE_FLOAT16));
+  EXPECT_TRUE(
+      iree_all_bits_set(storage.config.contract_feature_bits,
+                        LOOM_SPIRV_FEATURE_STORAGE_BUFFER_16BIT_ACCESS));
 }
 
 TEST(VulkanProfileTest, ImportsExactCooperativeMatrixRows) {
   loom_spirv_vulkan_hal_profile_facts_t facts = BaselineFacts();
   facts.flags |= LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_COOPERATIVE_MATRIX_KHR;
+  facts.flags |= LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_FLOAT16;
   const iree_hal_vulkan_cooperative_matrix_property_t device_rows[] = {
       F16DeviceMatrixRow(),
   };

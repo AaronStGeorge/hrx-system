@@ -110,6 +110,20 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "reference",
+    srcs = ["reference.c"],
+    hdrs = ["reference.h"],
+    deps = [
+        ":invocation",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/modules/hal:types",
+        "//runtime/src/iree/vm",
+    ],
+)
+
 loom_cc_test(
     name = "testbench_test",
     srcs = ["testbench_test.cc"],
@@ -179,6 +193,21 @@ loom_cc_test(
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_test(
+    name = "reference_test",
+    srcs = ["reference_test.cc"],
+    deps = [
+        ":reference",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/modules/hal:types",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
         "//runtime/src/iree/vm",

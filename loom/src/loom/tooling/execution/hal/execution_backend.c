@@ -27,7 +27,6 @@ loom_run_hal_execution_backend_artifact_provider(
     const loom_run_execution_backend_t* backend) {
   const loom_run_hal_execution_backend_t* hal_execution_backend =
       loom_run_hal_execution_backend_from_base(backend);
-  IREE_ASSERT_ARGUMENT(hal_execution_backend->artifact_provider);
   return hal_execution_backend->artifact_provider;
 }
 

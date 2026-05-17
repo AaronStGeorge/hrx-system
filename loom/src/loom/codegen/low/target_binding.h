@@ -33,7 +33,8 @@ typedef struct loom_low_resolved_target_t {
   // Defining op for |target_symbol|.
   const loom_op_t* target_op;
   // Materialized target payloads selected by this low function. Snapshot and
-  // config come from the target record; export_plan is function-local.
+  // config come from the target record or a compatible runtime-selected target
+  // overlay; export_plan is function-local.
   loom_target_bundle_storage_t bundle_storage;
   // Borrowed target symbol name without the leading '@'.
   iree_string_view_t target_name;
@@ -104,7 +105,8 @@ typedef struct loom_low_resolved_descriptor_packet_t {
 iree_status_t loom_low_resolve_function_target(
     const loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_descriptor_registry_t* registry,
-    iree_diagnostic_emitter_t emitter, loom_low_resolved_target_t* out_target);
+    loom_target_selection_t target_selection, iree_diagnostic_emitter_t emitter,
+    loom_low_resolved_target_t* out_target);
 
 // Resolves the target record payloads and descriptor set for |low_func_op|
 // using caller-owned symbol facts. This is the batched form for module-scope
@@ -113,7 +115,8 @@ iree_status_t loom_low_resolve_function_target_with_facts(
     const loom_module_t* module, loom_symbol_fact_table_t* symbol_facts,
     const loom_op_t* low_func_op,
     const loom_low_descriptor_registry_t* registry,
-    iree_diagnostic_emitter_t emitter, loom_low_resolved_target_t* out_target);
+    loom_target_selection_t target_selection, iree_diagnostic_emitter_t emitter,
+    loom_low_resolved_target_t* out_target);
 
 // Resolves |op| as a descriptor-backed low packet in |target|.
 //

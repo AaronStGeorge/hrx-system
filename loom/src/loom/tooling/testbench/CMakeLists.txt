@@ -122,6 +122,23 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    reference
+  HDRS
+    "reference.h"
+  SRCS
+    "reference.c"
+  DEPS
+    ::invocation
+    iree::base
+    iree::base::internal
+    iree::hal
+    iree::modules::hal::types
+    iree::vm
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     testbench_test
@@ -196,6 +213,22 @@ loom_cc_test(
     loom::src::loom::ops::check
     loom::src::loom::ops::test
     loom::src::loom::util::stream
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::vm
+)
+
+loom_cc_test(
+  NAME
+    reference_test
+  SRCS
+    "reference_test.cc"
+  DEPS
+    ::reference
+    iree::base
+    iree::base::internal
+    iree::hal
+    iree::modules::hal::types
     iree::testing::gtest
     iree::testing::gtest_main
     iree::vm
