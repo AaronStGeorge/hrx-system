@@ -1,0 +1,71 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_library",
+    "loom_cc_test",
+)
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+loom_cc_library(
+    name = "artifact_provider",
+    srcs = ["artifact_provider.c"],
+    hdrs = ["artifact_provider.h"],
+    deps = [
+        "//loom/src/loom/target:compile_report",
+        "//loom/src/loom/target:types",
+        "//loom/src/loom/target/arch/amdgpu:target_id",
+        "//loom/src/loom/target/arch/amdgpu:target_info",
+        "//loom/src/loom/target/arch/amdgpu:target_record_table",
+        "//loom/src/loom/target/emit/native/amdgpu:hal_executable",
+        "//loom/src/loom/target/emit/native/amdgpu:hal_kernel_library",
+        "//loom/src/loom/tooling/execution:compile_options",
+        "//loom/src/loom/tooling/execution/hal:artifact",
+        "//loom/src/loom/tooling/execution/hal:runtime",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "provider",
+    srcs = ["provider.c"],
+    hdrs = ["provider.h"],
+    deps = [
+        ":artifact_provider",
+        "//loom/src/loom/target/arch/amdgpu:provider",
+        "//loom/src/loom/tooling/execution:execution_provider",
+        "//loom/src/loom/tooling/execution/hal:execution_backend",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "artifact_provider_test",
+    srcs = ["artifact_provider_test.cc"],
+    deps = [
+        ":artifact_provider",
+        "//loom/src/loom/codegen/low:text_asm",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/target:compile_report",
+        "//loom/src/loom/target/arch/amdgpu:low_registry",
+        "//loom/src/loom/target/arch/amdgpu:ops",
+        "//loom/src/loom/target/arch/amdgpu:target_info",
+        "//loom/src/loom/target/arch/amdgpu:target_record_table",
+        "//loom/src/loom/testing:module_ptr",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)

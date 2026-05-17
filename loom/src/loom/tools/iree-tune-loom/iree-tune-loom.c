@@ -25,6 +25,7 @@
 
 #if IREE_TUNE_LOOM_HAVE_AMDGPU
 #include "loom/target/arch/amdgpu/provider.h"
+#include "loom/tooling/execution/hal/amdgpu/artifact_provider.h"
 #endif  // IREE_TUNE_LOOM_HAVE_AMDGPU
 #if IREE_TUNE_LOOM_HAVE_IREEVM
 #include "loom/tooling/execution/ireevm/provider.h"
@@ -58,10 +59,22 @@ static const loom_run_execution_provider_set_t kIreeTuneLoomProviderSet = {
 #endif  // IREE_TUNE_LOOM_HAVE_ANY_PROVIDER
 };
 
+#if IREE_TUNE_LOOM_HAVE_AMDGPU
+static const loom_run_hal_artifact_provider_t* const
+    kIreeTuneLoomHalArtifactProviders[] = {
+        &loom_amdgpu_hal_artifact_provider,
+};
+#endif  // IREE_TUNE_LOOM_HAVE_AMDGPU
+
 static const loom_run_hal_artifact_provider_registry_t
     kIreeTuneLoomHalArtifactProviderRegistry = {
+#if IREE_TUNE_LOOM_HAVE_AMDGPU
+        .providers = kIreeTuneLoomHalArtifactProviders,
+        .provider_count = IREE_ARRAYSIZE(kIreeTuneLoomHalArtifactProviders),
+#else
         .providers = NULL,
         .provider_count = 0,
+#endif  // IREE_TUNE_LOOM_HAVE_AMDGPU
 };
 
 int main(int argc, char** argv) {

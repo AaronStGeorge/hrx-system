@@ -35,6 +35,7 @@
 
 #if LOOM_COMPILE_HAVE_AMDGPU
 #include "loom/target/arch/amdgpu/provider.h"
+#include "loom/tooling/execution/hal/amdgpu/artifact_provider.h"
 #endif  // LOOM_COMPILE_HAVE_AMDGPU
 #if LOOM_COMPILE_HAVE_IREEVM
 #include "loom/tooling/execution/ireevm/candidate.h"
@@ -109,10 +110,22 @@ static const loom_run_execution_provider_set_t kLoomCompileProviderSet = {
 #endif  // LOOM_COMPILE_HAVE_ANY_PROVIDER
 };
 
+#if LOOM_COMPILE_HAVE_AMDGPU
+static const loom_run_hal_artifact_provider_t* const
+    kLoomCompileHalArtifactProviders[] = {
+        &loom_amdgpu_hal_artifact_provider,
+};
+#endif  // LOOM_COMPILE_HAVE_AMDGPU
+
 static const loom_run_hal_artifact_provider_registry_t
     kLoomCompileHalArtifactProviderRegistry = {
+#if LOOM_COMPILE_HAVE_AMDGPU
+        .providers = kLoomCompileHalArtifactProviders,
+        .provider_count = IREE_ARRAYSIZE(kLoomCompileHalArtifactProviders),
+#else
         .providers = NULL,
         .provider_count = 0,
+#endif  // LOOM_COMPILE_HAVE_AMDGPU
 };
 
 static iree_status_t loom_compile_register_context(void* user_data,

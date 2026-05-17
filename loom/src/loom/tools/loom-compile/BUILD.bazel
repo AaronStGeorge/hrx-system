@@ -48,6 +48,7 @@ _AMDGPU_COMPILE_COPTS = iree_select({
 _AMDGPU_COMPILE_DEPS = iree_select({
     ":amdgpu_provider_enabled": [
         "//loom/src/loom/target/arch/amdgpu:provider",
+        "//loom/src/loom/tooling/execution/hal/amdgpu:artifact_provider",
     ],
     "//conditions:default": [],
 })
