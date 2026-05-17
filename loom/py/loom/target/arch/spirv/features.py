@@ -216,13 +216,22 @@ FEATURE_ATOMS = (
         extensions=("SPV_KHR_bfloat16",),
         capabilities=("LOOM_SPIRV_CAPABILITY_B_FLOAT16_COOPERATIVE_MATRIX_KHR",),
     ),
+    FeatureAtom(
+        key="int64",
+        c_suffix="INT64",
+        name="spirv.int64",
+        doc="64-bit integer scalar support.",
+        required=("vulkan_shader",),
+        minimum_spirv_version=SPIRV_VERSION_1_0,
+        capabilities=("LOOM_SPIRV_CAPABILITY_INT64",),
+    ),
 )
 
 FEATURE_PROFILES = (
     FeatureProfile(
         c_suffix="VULKAN_1_3_BDA",
         doc="Feature bits selected by the built-in Vulkan 1.3 BDA profile.",
-        atoms=("vulkan_shader", "physical_storage_buffer"),
+        atoms=("vulkan_shader", "physical_storage_buffer", "int64"),
     ),
 )
 

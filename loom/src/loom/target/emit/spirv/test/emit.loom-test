@@ -346,7 +346,10 @@ spirv.target<vulkan1_3> @target
 low.func.def target(@target) abi(shader_entry_point) @spirv_i32_arithmetic(%lhs: reg<spirv.id>, %rhs: reg<spirv.id>) -> (reg<spirv.id>) asm<spirv.logical.core> {
   %bias = OpConstant.i32 7
   %sum = OpIAdd %lhs, %rhs
-  %result = OpIAdd %sum, %bias
+  %difference = OpISub %sum, %bias
+  %product = OpIMul %difference, %rhs
+  %scaled = OpIMulAdd %product, %rhs, %bias
+  %result = OpIAdd %scaled, %bias
   return %result
 }
 
@@ -365,6 +368,9 @@ low.func.def target(@target) abi(shader_entry_point) @spirv_i32_arithmetic(%lhs:
                OpName %rhs "rhs"
                OpName %bias "bias"
                OpName %sum "sum"
+               OpName %difference "difference"
+               OpName %product "product"
+               OpName %scaled "scaled"
                OpName %result "result"
                OpMemberDecorate %_struct_5 0 Offset 0
                OpDecorate %_struct_5 Block
@@ -392,9 +398,13 @@ low.func.def target(@target) abi(shader_entry_point) @spirv_i32_arithmetic(%lhs:
          %15 = OpAccessChain %_ptr_StorageBuffer_int %8 %int_0
         %rhs = OpLoad %int %15 Aligned 4
         %sum = OpIAdd %int %lhs %rhs
-     %result = OpIAdd %int %sum %bias
-         %20 = OpAccessChain %_ptr_StorageBuffer_int %9 %int_0
-               OpStore %20 %result Aligned 4
+ %difference = OpISub %int %sum %bias
+    %product = OpIMul %int %difference %rhs
+         %21 = OpIMul %int %product %rhs
+     %scaled = OpIAdd %int %21 %bias
+     %result = OpIAdd %int %scaled %bias
+         %24 = OpAccessChain %_ptr_StorageBuffer_int %9 %int_0
+               OpStore %24 %result Aligned 4
                OpReturn
                OpFunctionEnd
 

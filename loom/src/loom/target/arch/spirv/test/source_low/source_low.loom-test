@@ -5,7 +5,9 @@ spirv.target<vulkan1_3> @target
 func.def target(@target) @spirv_i32_arithmetic(%lhs: i32, %rhs: i32) -> (i32) {
   %bias = scalar.constant 7 : i32
   %sum = scalar.addi %lhs, %rhs : i32
-  %result = scalar.addi %sum, %bias : i32
+  %difference = scalar.subi %lhs, %rhs : i32
+  %product = scalar.muli %difference, %sum : i32
+  %result = scalar.addi %product, %bias : i32
   func.return %result : i32
 }
 
@@ -13,7 +15,9 @@ func.def target(@target) @spirv_i32_arithmetic(%lhs: i32, %rhs: i32) -> (i32) {
 low.func.def target(@target) abi(shader_entry_point) @spirv_i32_arithmetic(%lhs: reg<spirv.id>, %rhs: reg<spirv.id>) -> (reg<spirv.id>) asm<spirv.logical.core> {
   %bias = OpConstant.i32 7
   %sum = OpIAdd %lhs, %rhs
-  %result = OpIAdd %sum, %bias
+  %difference = OpISub %lhs, %rhs
+  %product = OpIMul %difference, %sum
+  %result = OpIAdd %product, %bias
   return %result
 }
 
@@ -21,16 +25,20 @@ low.func.def target(@target) abi(shader_entry_point) @spirv_i32_arithmetic(%lhs:
 
 spirv.target<vulkan1_3> @target
 
-func.def target(@target) @spirv_index_arithmetic(%index: index) -> (index) {
+func.def target(@target) @spirv_index_arithmetic(%index: index, %factor: index) -> (index) {
   %one = index.constant 1 : index
-  %next = index.add %index, %one : index
+  %previous = index.sub %index, %one : index
+  %scaled = index.mul %previous, %factor : index
+  %next = index.madd %scaled, %factor, %one : index
   func.return %next : index
 }
 
 // ----
-low.func.def target(@target) abi(shader_entry_point) @spirv_index_arithmetic(%index: reg<spirv.id>) -> (reg<spirv.id>) asm<spirv.logical.core> {
+low.func.def target(@target) abi(shader_entry_point) @spirv_index_arithmetic(%index: reg<spirv.id>, %factor: reg<spirv.id>) -> (reg<spirv.id>) asm<spirv.logical.core> {
   %one = OpConstant.i32 1
-  %next = OpIAdd %index, %one
+  %previous = OpISub %index, %one
+  %scaled = OpIMul %previous, %factor
+  %next = OpIMulAdd %scaled, %factor, %one
   return %next
 }
 

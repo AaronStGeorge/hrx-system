@@ -160,13 +160,79 @@ def _storage_buffer_rows() -> list[str]:
     return rows
 
 
+def _binary_same_type_rows() -> list[str]:
+    i32_value = _value_type("LOOM_SPIRV_VALUE_CLASS_SCALAR", "LOOM_SPIRV_SCALAR_TYPE_S32")
+    offset64_value = _offset64_value()
+    rows = [
+        _row(
+            "spirv.op_iadd.i32",
+            opcode="LOOM_SPIRV_OP_I_ADD",
+            form="LOOM_SPIRV_PACKET_FORM_BINARY_SAME_TYPE",
+            result_type=i32_value,
+            operand_types=(i32_value, i32_value),
+            result_count=1,
+        ),
+        _row(
+            "spirv.op_isub.i32",
+            opcode="LOOM_SPIRV_OP_I_SUB",
+            form="LOOM_SPIRV_PACKET_FORM_BINARY_SAME_TYPE",
+            result_type=i32_value,
+            operand_types=(i32_value, i32_value),
+            result_count=1,
+        ),
+        _row(
+            "spirv.op_imul.i32",
+            opcode="LOOM_SPIRV_OP_I_MUL",
+            form="LOOM_SPIRV_PACKET_FORM_BINARY_SAME_TYPE",
+            result_type=i32_value,
+            operand_types=(i32_value, i32_value),
+            result_count=1,
+        ),
+        _row(
+            "spirv.op_iadd.offset64",
+            opcode="LOOM_SPIRV_OP_I_ADD",
+            form="LOOM_SPIRV_PACKET_FORM_BINARY_SAME_TYPE",
+            result_type=offset64_value,
+            operand_types=(offset64_value, offset64_value),
+            result_count=1,
+        ),
+        _row(
+            "spirv.op_isub.offset64",
+            opcode="LOOM_SPIRV_OP_I_SUB",
+            form="LOOM_SPIRV_PACKET_FORM_BINARY_SAME_TYPE",
+            result_type=offset64_value,
+            operand_types=(offset64_value, offset64_value),
+            result_count=1,
+        ),
+    ]
+    return rows
+
+
+def _mul_add_rows() -> list[str]:
+    i32_value = _value_type("LOOM_SPIRV_VALUE_CLASS_SCALAR", "LOOM_SPIRV_SCALAR_TYPE_S32")
+    return [
+        _row(
+            "spirv.op_imul_add.i32",
+            opcode="LOOM_SPIRV_OP_I_MUL",
+            form="LOOM_SPIRV_PACKET_FORM_INTEGER_MUL_ADD",
+            result_type=i32_value,
+            operand_types=(i32_value, i32_value, i32_value),
+            result_count=1,
+        ),
+    ]
+
+
 def _validate_rows() -> None:
     descriptor_keys = {descriptor.key for descriptor in SPIRV_LOGICAL_CORE_DESCRIPTOR_SET.descriptors}
     row_keys = {
         "spirv.op_constant.i32",
         "spirv.op_constant.offset64",
         "spirv.op_iadd.i32",
+        "spirv.op_isub.i32",
+        "spirv.op_imul.i32",
+        "spirv.op_imul_add.i32",
         "spirv.op_iadd.offset64",
+        "spirv.op_isub.offset64",
     }
     for scalar in STORAGE_BUFFER_SCALARS:
         row_keys.add(f"spirv.op_ptr_access_chain.storage_buffer.{scalar.suffix}.byte_offset")
@@ -202,22 +268,8 @@ def generate_tables() -> str:
             immediate_index=0,
             literal_word_count=2,
         ),
-        _row(
-            "spirv.op_iadd.i32",
-            opcode="LOOM_SPIRV_OP_I_ADD",
-            form="LOOM_SPIRV_PACKET_FORM_BINARY_SAME_TYPE",
-            result_type=i32_value,
-            operand_types=(i32_value, i32_value),
-            result_count=1,
-        ),
-        _row(
-            "spirv.op_iadd.offset64",
-            opcode="LOOM_SPIRV_OP_I_ADD",
-            form="LOOM_SPIRV_PACKET_FORM_BINARY_SAME_TYPE",
-            result_type=_offset64_value(),
-            operand_types=(_offset64_value(), _offset64_value()),
-            result_count=1,
-        ),
+        *_binary_same_type_rows(),
+        *_mul_add_rows(),
         *_storage_buffer_rows(),
     ]
     lines = [

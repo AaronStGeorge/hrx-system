@@ -256,6 +256,17 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
+    scalar_types_test
+  SRCS
+    "scalar_types_test.cc"
+  DEPS
+    ::scalar_types
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
     registers_test
   SRCS
     "registers_test.cc"

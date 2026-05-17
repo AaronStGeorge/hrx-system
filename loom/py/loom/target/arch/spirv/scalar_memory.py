@@ -52,6 +52,7 @@ STORAGE_BUFFER_SCALARS = (
         suffix="i64",
         scalar_enum="LOOM_SPIRV_SCALAR_TYPE_S64",
         byte_width=8,
+        feature_atoms=("int64",),
     ),
     StorageBufferScalar(
         source_type="f16",

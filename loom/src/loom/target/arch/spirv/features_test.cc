@@ -91,6 +91,8 @@ TEST(SpirvFeaturesTest, KnownAtomsHaveDirectBitsAndDescriptors) {
   EXPECT_EQ(loom_spirv_feature_atom_bit(
                 LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_VECTOR_TRAINING_NV),
             LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_TRAINING_NV);
+  EXPECT_EQ(loom_spirv_feature_atom_bit(LOOM_SPIRV_FEATURE_ATOM_INT64),
+            LOOM_SPIRV_FEATURE_INT64);
   EXPECT_EQ(loom_spirv_feature_atom_bit(
                 LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_MATRIX_KHR),
             LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR);
@@ -124,6 +126,8 @@ TEST(SpirvFeaturesTest, PreparesVulkanBdaProfile) {
       &feature_set, LOOM_SPIRV_FEATURE_ATOM_VULKAN_SHADER));
   EXPECT_TRUE(loom_spirv_feature_set_has_atom(
       &feature_set, LOOM_SPIRV_FEATURE_ATOM_PHYSICAL_STORAGE_BUFFER));
+  EXPECT_TRUE(loom_spirv_feature_set_has_atom(&feature_set,
+                                              LOOM_SPIRV_FEATURE_ATOM_INT64));
   EXPECT_EQ(feature_set.addressing_model,
             LOOM_SPIRV_ADDRESSING_MODEL_PHYSICAL_STORAGE_BUFFER64);
   EXPECT_EQ(feature_set.memory_model, LOOM_SPIRV_MEMORY_MODEL_VULKAN);
@@ -137,6 +141,7 @@ TEST(SpirvFeaturesTest, PreparesVulkanBdaProfile) {
                                  LOOM_SPIRV_CAPABILITY_VULKAN_MEMORY_MODEL));
   EXPECT_TRUE(ContainsCapability(
       feature_set, LOOM_SPIRV_CAPABILITY_PHYSICAL_STORAGE_BUFFER_ADDRESSES));
+  EXPECT_TRUE(ContainsCapability(feature_set, LOOM_SPIRV_CAPABILITY_INT64));
   EXPECT_TRUE(ContainsStorageClass(
       feature_set, LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER));
   EXPECT_TRUE(

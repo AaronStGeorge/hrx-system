@@ -127,6 +127,42 @@ def _ptr_storage_buffer_operand(field_name: str) -> Operand:
     return Operand(field_name, OperandRole.RESOURCE, _PTR_STORAGE_BUFFER_ALT)
 
 
+def _binary_same_type_descriptor(
+    *,
+    key: str,
+    mnemonic: str,
+    semantic_tag: str,
+    operands: tuple[Operand, Operand, Operand],
+) -> Descriptor:
+    return Descriptor(
+        key=key,
+        mnemonic=mnemonic,
+        semantic_tag=semantic_tag,
+        operands=operands,
+        asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+        schedule_class=_SCHEDULE_ALU,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _ternary_same_type_descriptor(
+    *,
+    key: str,
+    mnemonic: str,
+    semantic_tag: str,
+    operands: tuple[Operand, Operand, Operand, Operand],
+) -> Descriptor:
+    return Descriptor(
+        key=key,
+        mnemonic=mnemonic,
+        semantic_tag=semantic_tag,
+        operands=operands,
+        asm_forms=_asm(results=("dst",), operands=("a", "b", "c")),
+        schedule_class=_SCHEDULE_ALU,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _storage_buffer_effect(
     kind: EffectKind,
     scalar: StorageBufferScalar,
@@ -298,16 +334,36 @@ SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
             schedule_class=_SCHEDULE_ALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
-        Descriptor(
+        _binary_same_type_descriptor(
             key="spirv.op_iadd.i32",
             mnemonic="OpIAdd",
             semantic_tag="spirv.op_iadd.i32",
             operands=(_id_result(), _id_operand("lhs"), _id_operand("rhs")),
-            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
-            schedule_class=_SCHEDULE_ALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
-        Descriptor(
+        _binary_same_type_descriptor(
+            key="spirv.op_isub.i32",
+            mnemonic="OpISub",
+            semantic_tag="spirv.op_isub.i32",
+            operands=(_id_result(), _id_operand("lhs"), _id_operand("rhs")),
+        ),
+        _binary_same_type_descriptor(
+            key="spirv.op_imul.i32",
+            mnemonic="OpIMul",
+            semantic_tag="spirv.op_imul.i32",
+            operands=(_id_result(), _id_operand("lhs"), _id_operand("rhs")),
+        ),
+        _ternary_same_type_descriptor(
+            key="spirv.op_imul_add.i32",
+            mnemonic="OpIMulAdd",
+            semantic_tag="spirv.op_imul_add.i32",
+            operands=(
+                _id_result(),
+                _id_operand("a"),
+                _id_operand("b"),
+                _id_operand("c"),
+            ),
+        ),
+        _binary_same_type_descriptor(
             key="spirv.op_iadd.offset64",
             mnemonic="OpIAdd.offset64",
             semantic_tag="spirv.op_iadd.offset64",
@@ -316,9 +372,16 @@ SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _offset64_operand("lhs"),
                 _offset64_operand("rhs"),
             ),
-            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
-            schedule_class=_SCHEDULE_ALU,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        _binary_same_type_descriptor(
+            key="spirv.op_isub.offset64",
+            mnemonic="OpISub.offset64",
+            semantic_tag="spirv.op_isub.offset64",
+            operands=(
+                _offset64_result(),
+                _offset64_operand("lhs"),
+                _offset64_operand("rhs"),
+            ),
         ),
         *_storage_buffer_descriptors(),
         Descriptor(

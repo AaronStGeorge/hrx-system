@@ -33,3 +33,13 @@ def test_generation_keeps_storage_buffer_address_untyped_until_access_chain() ->
     assert "LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS" in access_row
     assert "LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER" in access_row
     assert "LOOM_SPIRV_SCALAR_TYPE_F32" in access_row
+
+
+def test_generation_emits_coordinate_arithmetic_packet_rows() -> None:
+    tables = generate_tables()
+
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_ISUB_I32" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_IMUL_I32" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_IMUL_ADD_I32" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_ISUB_OFFSET64" in tables
+    assert "LOOM_SPIRV_PACKET_FORM_INTEGER_MUL_ADD" in tables

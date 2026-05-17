@@ -3,9 +3,9 @@
 spirv.target<vulkan1_3> @target
 
 func.def target(@target) @unsupported_source_op(%lhs: i32, %rhs: i32) -> (i32) {
-  // ERROR@+1: TARGET/001 {op_name="scalar.subi"}
-  %difference = scalar.subi %lhs, %rhs : i32
-  func.return %difference : i32
+  // ERROR@+1: TARGET/001 {op_name="scalar.divsi"}
+  %quotient = scalar.divsi %lhs, %rhs : i32
+  func.return %quotient : i32
 }
 
 // ====

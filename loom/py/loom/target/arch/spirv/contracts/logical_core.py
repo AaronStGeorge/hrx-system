@@ -166,6 +166,30 @@ def _binary_rule(
     )
 
 
+def _ternary_rule(
+    source_op: Op,
+    type_pattern: TypePattern,
+    descriptor_key: str,
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=_typed_guards(("a", "b", "c", "result"), type_pattern),
+        emit=(
+            _descriptor_emit(
+                descriptor=descriptor,
+                operands={
+                    "a": ValueRef.operand("a"),
+                    "b": ValueRef.operand("b"),
+                    "c": ValueRef.operand("c"),
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
 def _buffer_view_rule(scalar: StorageBufferScalar) -> DescriptorRule:
     view_type = View(scalar.source_type)
     descriptor = _descriptor(
@@ -265,8 +289,14 @@ SPIRV_LOGICAL_CORE_CONTRACT_FRAGMENT = ContractFragment(
         _i32_index_constant_rule(),
         _offset_constant_rule(),
         _binary_rule(scalar_arithmetic.scalar_addi, _I32, "spirv.op_iadd.i32"),
+        _binary_rule(scalar_arithmetic.scalar_subi, _I32, "spirv.op_isub.i32"),
+        _binary_rule(scalar_arithmetic.scalar_muli, _I32, "spirv.op_imul.i32"),
         _binary_rule(index.index_add, _INDEX, "spirv.op_iadd.i32"),
+        _binary_rule(index.index_sub, _INDEX, "spirv.op_isub.i32"),
+        _binary_rule(index.index_mul, _INDEX, "spirv.op_imul.i32"),
+        _ternary_rule(index.index_madd, _INDEX, "spirv.op_imul_add.i32"),
         _binary_rule(index.index_add, _OFFSET, "spirv.op_iadd.offset64"),
+        _binary_rule(index.index_sub, _OFFSET, "spirv.op_isub.offset64"),
         *_storage_buffer_rules(),
         DescriptorMatrixRule(
             source_op=vector.vector_mma,

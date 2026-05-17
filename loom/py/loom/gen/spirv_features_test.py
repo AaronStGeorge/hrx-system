@@ -39,6 +39,7 @@ def test_generation_emits_public_atoms_profiles_and_compact_tables() -> None:
     tables = generate_tables()
 
     assert "LOOM_SPIRV_FEATURE_ATOM_FLOAT16" in header
+    assert "LOOM_SPIRV_FEATURE_ATOM_INT64" in header
     assert "LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_TYPE_KHR" in header
     assert "#define LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR" in header
     assert "#define LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA" in header

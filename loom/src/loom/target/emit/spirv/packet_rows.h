@@ -49,6 +49,7 @@ typedef enum loom_spirv_packet_form_e {
   LOOM_SPIRV_PACKET_FORM_PTR_ACCESS_CHAIN = 3,
   LOOM_SPIRV_PACKET_FORM_LOAD_ALIGNED = 4,
   LOOM_SPIRV_PACKET_FORM_STORE_ALIGNED = 5,
+  LOOM_SPIRV_PACKET_FORM_INTEGER_MUL_ADD = 6,
 } loom_spirv_packet_form_t;
 
 typedef struct loom_spirv_packet_row_t {
@@ -59,7 +60,7 @@ typedef struct loom_spirv_packet_row_t {
   // Result value type, or UNKNOWN for result-less packets.
   loom_spirv_value_type_t result_type;
   // Required value type for each packet operand.
-  loom_spirv_value_type_t operand_types[2];
+  loom_spirv_value_type_t operand_types[3];
   // Expected packet result count.
   uint8_t result_count;
   // Expected packet operand count.

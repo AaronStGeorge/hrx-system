@@ -300,6 +300,16 @@ loom_cc_test(
 )
 
 loom_cc_test(
+    name = "scalar_types_test",
+    srcs = ["scalar_types_test.cc"],
+    deps = [
+        ":scalar_types",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "registers_test",
     srcs = ["registers_test.cc"],
     deps = [

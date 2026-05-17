@@ -2040,6 +2040,45 @@ static iree_status_t loom_spirv_emit_binary_same_type_packet(
                                       true);
 }
 
+static iree_status_t loom_spirv_emit_integer_mul_add_packet(
+    loom_spirv_emit_state_t* state,
+    const loom_low_resolved_descriptor_packet_t* packet,
+    const loom_spirv_packet_row_t* row) {
+  loom_spirv_value_ref_t operands[3] = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_spirv_emit_load_packet_operands(state, packet, row, operands));
+  if (operands[0].type_id != operands[1].type_id ||
+      operands[0].type_id != operands[2].type_id) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "SPIR-V low descriptor '%.*s' operand types do "
+                            "not match",
+                            (int)packet->key.size, packet->key.data);
+  }
+  uint32_t product_id = 0;
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_binary_result(
+      state, LOOM_SPIRV_OP_I_MUL, operands[0].type_id, operands[0].id,
+      operands[1].id, &product_id));
+  const uint32_t result_id = loom_spirv_emit_allocate_id(state);
+  const uint32_t instruction_operands[] = {
+      operands[0].type_id,
+      result_id,
+      product_id,
+      operands[2].id,
+  };
+  IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
+      loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+      LOOM_SPIRV_OP_I_ADD, instruction_operands,
+      IREE_ARRAYSIZE(instruction_operands)));
+  return loom_spirv_emit_define_value(state,
+                                      loom_op_const_results(packet->op)[0],
+                                      (loom_spirv_value_ref_t){
+                                          .id = result_id,
+                                          .type_id = operands[0].type_id,
+                                          .value_type = row->result_type,
+                                      },
+                                      true);
+}
+
 static iree_status_t loom_spirv_emit_typed_physical_storage_buffer_pointer(
     loom_spirv_emit_state_t* state, loom_spirv_value_ref_t address,
     loom_spirv_value_type_t pointer_type, uint32_t pointer_type_id,
@@ -2182,6 +2221,8 @@ static iree_status_t loom_spirv_emit_descriptor_packet(
       return loom_spirv_emit_integer_constant_packet(state, packet, row);
     case LOOM_SPIRV_PACKET_FORM_BINARY_SAME_TYPE:
       return loom_spirv_emit_binary_same_type_packet(state, packet, row);
+    case LOOM_SPIRV_PACKET_FORM_INTEGER_MUL_ADD:
+      return loom_spirv_emit_integer_mul_add_packet(state, packet, row);
     case LOOM_SPIRV_PACKET_FORM_PTR_ACCESS_CHAIN:
       return loom_spirv_emit_ptr_access_chain_packet(state, packet, row);
     case LOOM_SPIRV_PACKET_FORM_LOAD_ALIGNED:
