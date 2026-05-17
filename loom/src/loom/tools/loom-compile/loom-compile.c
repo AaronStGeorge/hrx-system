@@ -29,9 +29,15 @@
 #ifndef LOOM_COMPILE_HAVE_IREEVM
 #define LOOM_COMPILE_HAVE_IREEVM 0
 #endif  // LOOM_COMPILE_HAVE_IREEVM
+#ifndef LOOM_COMPILE_HAVE_SPIRV
+#define LOOM_COMPILE_HAVE_SPIRV 0
+#endif  // LOOM_COMPILE_HAVE_SPIRV
 
-#define LOOM_COMPILE_HAVE_ANY_PROVIDER \
-  (LOOM_COMPILE_HAVE_AMDGPU || LOOM_COMPILE_HAVE_IREEVM)
+#define LOOM_COMPILE_HAVE_ANY_PROVIDER                     \
+  (LOOM_COMPILE_HAVE_AMDGPU || LOOM_COMPILE_HAVE_IREEVM || \
+   LOOM_COMPILE_HAVE_SPIRV)
+#define LOOM_COMPILE_HAVE_ANY_HAL_ARTIFACT_PROVIDER \
+  (LOOM_COMPILE_HAVE_AMDGPU || LOOM_COMPILE_HAVE_SPIRV)
 
 #if LOOM_COMPILE_HAVE_AMDGPU
 #include "loom/target/arch/amdgpu/provider.h"
@@ -41,6 +47,10 @@
 #include "loom/tooling/execution/ireevm/candidate.h"
 #include "loom/tooling/execution/ireevm/provider.h"
 #endif  // LOOM_COMPILE_HAVE_IREEVM
+#if LOOM_COMPILE_HAVE_SPIRV
+#include "loom/target/arch/spirv/provider.h"
+#include "loom/tooling/execution/hal/spirv/artifact_provider.h"
+#endif  // LOOM_COMPILE_HAVE_SPIRV
 
 IREE_FLAG(string, loom_entry, "",
           "Optional function symbol to compile, such as '@main'. When omitted "
@@ -89,6 +99,13 @@ static const loom_run_execution_provider_t kLoomCompileAmdgpuProvider = {
 };
 #endif  // LOOM_COMPILE_HAVE_AMDGPU
 
+#if LOOM_COMPILE_HAVE_SPIRV
+static const loom_run_execution_provider_t kLoomCompileSpirvProvider = {
+    .name = IREE_SVL("spirv"),
+    .target_provider = &loom_spirv_target_provider,
+};
+#endif  // LOOM_COMPILE_HAVE_SPIRV
+
 #if LOOM_COMPILE_HAVE_ANY_PROVIDER
 static const loom_run_execution_provider_t* const kLoomCompileProviders[] = {
 #if LOOM_COMPILE_HAVE_AMDGPU
@@ -97,6 +114,9 @@ static const loom_run_execution_provider_t* const kLoomCompileProviders[] = {
 #if LOOM_COMPILE_HAVE_IREEVM
     &loom_ireevm_execution_provider,
 #endif  // LOOM_COMPILE_HAVE_IREEVM
+#if LOOM_COMPILE_HAVE_SPIRV
+    &kLoomCompileSpirvProvider,
+#endif  // LOOM_COMPILE_HAVE_SPIRV
 };
 #endif  // LOOM_COMPILE_HAVE_ANY_PROVIDER
 
@@ -110,22 +130,27 @@ static const loom_run_execution_provider_set_t kLoomCompileProviderSet = {
 #endif  // LOOM_COMPILE_HAVE_ANY_PROVIDER
 };
 
-#if LOOM_COMPILE_HAVE_AMDGPU
+#if LOOM_COMPILE_HAVE_ANY_HAL_ARTIFACT_PROVIDER
 static const loom_run_hal_artifact_provider_t* const
     kLoomCompileHalArtifactProviders[] = {
+#if LOOM_COMPILE_HAVE_AMDGPU
         &loom_amdgpu_hal_artifact_provider,
-};
 #endif  // LOOM_COMPILE_HAVE_AMDGPU
+#if LOOM_COMPILE_HAVE_SPIRV
+        &loom_spirv_vulkan_hal_artifact_provider,
+#endif  // LOOM_COMPILE_HAVE_SPIRV
+};
+#endif  // LOOM_COMPILE_HAVE_ANY_HAL_ARTIFACT_PROVIDER
 
 static const loom_run_hal_artifact_provider_registry_t
     kLoomCompileHalArtifactProviderRegistry = {
-#if LOOM_COMPILE_HAVE_AMDGPU
+#if LOOM_COMPILE_HAVE_ANY_HAL_ARTIFACT_PROVIDER
         .providers = kLoomCompileHalArtifactProviders,
         .provider_count = IREE_ARRAYSIZE(kLoomCompileHalArtifactProviders),
 #else
         .providers = NULL,
         .provider_count = 0,
-#endif  // LOOM_COMPILE_HAVE_AMDGPU
+#endif  // LOOM_COMPILE_HAVE_ANY_HAL_ARTIFACT_PROVIDER
 };
 
 static iree_status_t loom_compile_register_context(void* user_data,

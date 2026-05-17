@@ -38,6 +38,10 @@ typedef struct loom_run_hal_device_target_t {
   // requests emission from the module's target records without a runtime
   // processor override.
   const void* data;
+  // Per-device target-bundle storage owned by this selection. If a selection
+  // containing this storage is copied, the copy must rebind the storage before
+  // publishing |target_bundle|.
+  loom_target_bundle_storage_t target_storage;
   // Target-neutral bundle resolved for the selected device target.
   const loom_target_bundle_t* target_bundle;
   // Provider-facing target key selected for emission and diagnostics, if any.

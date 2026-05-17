@@ -22,6 +22,7 @@ package(
 ALL_EXECUTION_PROVIDERS = [
     "amdgpu",
     "ireevm",
+    "spirv",
 ]
 
 #===------------------------------------------------------------------------===#
@@ -72,14 +73,31 @@ _IREEVM_EXECUTION_DEPS = iree_select({
     "//conditions:default": [],
 })
 
+_SPIRV_PROVIDER_COPTS = iree_select({
+    ":spirv_provider_enabled": [
+        "-DIREE_TEST_LOOM_HAVE_SPIRV=1",
+    ],
+    "//conditions:default": [],
+})
+
+_SPIRV_PROVIDER_DEPS = iree_select({
+    ":spirv_provider_enabled": [
+        "//loom/src/loom/tooling/execution/hal/spirv:artifact_provider",
+        "//loom/src/loom/tooling/execution/hal/spirv:provider",
+    ],
+    "//conditions:default": [],
+})
+
 _IREE_TEST_LOOM_PROVIDER_COPTS = (
     _AMDGPU_PROVIDER_COPTS +
-    _IREEVM_EXECUTION_COPTS
+    _IREEVM_EXECUTION_COPTS +
+    _SPIRV_PROVIDER_COPTS
 )
 
 _IREE_TEST_LOOM_PROVIDER_DEPS = (
     _AMDGPU_PROVIDER_DEPS +
-    _IREEVM_EXECUTION_DEPS
+    _IREEVM_EXECUTION_DEPS +
+    _SPIRV_PROVIDER_DEPS
 )
 
 loom_cc_library(

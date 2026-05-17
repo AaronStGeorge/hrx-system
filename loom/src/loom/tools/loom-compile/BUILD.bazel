@@ -21,6 +21,7 @@ package(
 ALL_COMPILE_PROVIDERS = [
     "amdgpu",
     "ireevm",
+    "spirv",
 ]
 
 string_list_flag(
@@ -68,10 +69,25 @@ _IREEVM_COMPILE_DEPS = iree_select({
     "//conditions:default": [],
 })
 
+_SPIRV_COMPILE_COPTS = iree_select({
+    ":spirv_provider_enabled": [
+        "-DLOOM_COMPILE_HAVE_SPIRV=1",
+    ],
+    "//conditions:default": [],
+})
+
+_SPIRV_COMPILE_DEPS = iree_select({
+    ":spirv_provider_enabled": [
+        "//loom/src/loom/target/arch/spirv:provider",
+        "//loom/src/loom/tooling/execution/hal/spirv:artifact_provider",
+    ],
+    "//conditions:default": [],
+})
+
 loom_cc_binary(
     name = "loom-compile",
     srcs = ["loom-compile.c"],
-    copts = _AMDGPU_COMPILE_COPTS + _IREEVM_COMPILE_COPTS,
+    copts = _AMDGPU_COMPILE_COPTS + _IREEVM_COMPILE_COPTS + _SPIRV_COMPILE_COPTS,
     deps = [
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/ops:op_registry",
@@ -87,7 +103,7 @@ loom_cc_binary(
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/io:file_handle",
-    ] + _AMDGPU_COMPILE_DEPS + _IREEVM_COMPILE_DEPS,
+    ] + _AMDGPU_COMPILE_DEPS + _IREEVM_COMPILE_DEPS + _SPIRV_COMPILE_DEPS,
 )
 
 iree_lit_test_suite(

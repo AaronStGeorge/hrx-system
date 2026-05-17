@@ -18,9 +18,15 @@
 #ifndef IREE_TEST_LOOM_HAVE_IREEVM
 #define IREE_TEST_LOOM_HAVE_IREEVM 0
 #endif  // IREE_TEST_LOOM_HAVE_IREEVM
+#ifndef IREE_TEST_LOOM_HAVE_SPIRV
+#define IREE_TEST_LOOM_HAVE_SPIRV 0
+#endif  // IREE_TEST_LOOM_HAVE_SPIRV
 
-#define IREE_TEST_LOOM_HAVE_ANY_PROVIDER \
-  (IREE_TEST_LOOM_HAVE_AMDGPU || IREE_TEST_LOOM_HAVE_IREEVM)
+#define IREE_TEST_LOOM_HAVE_ANY_PROVIDER                       \
+  (IREE_TEST_LOOM_HAVE_AMDGPU || IREE_TEST_LOOM_HAVE_IREEVM || \
+   IREE_TEST_LOOM_HAVE_SPIRV)
+#define IREE_TEST_LOOM_HAVE_ANY_HAL_ARTIFACT_PROVIDER \
+  (IREE_TEST_LOOM_HAVE_AMDGPU || IREE_TEST_LOOM_HAVE_SPIRV)
 
 #if IREE_TEST_LOOM_HAVE_AMDGPU
 #include "loom/tooling/execution/hal/amdgpu/artifact_provider.h"
@@ -29,6 +35,10 @@
 #if IREE_TEST_LOOM_HAVE_IREEVM
 #include "loom/tooling/execution/ireevm/provider.h"
 #endif  // IREE_TEST_LOOM_HAVE_IREEVM
+#if IREE_TEST_LOOM_HAVE_SPIRV
+#include "loom/tooling/execution/hal/spirv/artifact_provider.h"
+#include "loom/tooling/execution/hal/spirv/provider.h"
+#endif  // IREE_TEST_LOOM_HAVE_SPIRV
 
 #if IREE_TEST_LOOM_HAVE_ANY_PROVIDER
 static const loom_run_execution_provider_t* const kIreeTestLoomProviders[] = {
@@ -38,6 +48,9 @@ static const loom_run_execution_provider_t* const kIreeTestLoomProviders[] = {
 #if IREE_TEST_LOOM_HAVE_IREEVM
     &loom_ireevm_execution_provider,
 #endif  // IREE_TEST_LOOM_HAVE_IREEVM
+#if IREE_TEST_LOOM_HAVE_SPIRV
+    &loom_spirv_vulkan_hal_execution_provider,
+#endif  // IREE_TEST_LOOM_HAVE_SPIRV
 };
 #endif  // IREE_TEST_LOOM_HAVE_ANY_PROVIDER
 
@@ -51,22 +64,27 @@ static const loom_run_execution_provider_set_t kIreeTestLoomProviderSet = {
 #endif  // IREE_TEST_LOOM_HAVE_ANY_PROVIDER
 };
 
-#if IREE_TEST_LOOM_HAVE_AMDGPU
+#if IREE_TEST_LOOM_HAVE_ANY_HAL_ARTIFACT_PROVIDER
 static const loom_run_hal_artifact_provider_t* const
     kIreeTestLoomHalArtifactProviders[] = {
+#if IREE_TEST_LOOM_HAVE_AMDGPU
         &loom_amdgpu_hal_artifact_provider,
-};
 #endif  // IREE_TEST_LOOM_HAVE_AMDGPU
+#if IREE_TEST_LOOM_HAVE_SPIRV
+        &loom_spirv_vulkan_hal_artifact_provider,
+#endif  // IREE_TEST_LOOM_HAVE_SPIRV
+};
+#endif  // IREE_TEST_LOOM_HAVE_ANY_HAL_ARTIFACT_PROVIDER
 
 static const loom_run_hal_artifact_provider_registry_t
     kIreeTestLoomHalArtifactProviderRegistry = {
-#if IREE_TEST_LOOM_HAVE_AMDGPU
+#if IREE_TEST_LOOM_HAVE_ANY_HAL_ARTIFACT_PROVIDER
         .providers = kIreeTestLoomHalArtifactProviders,
         .provider_count = IREE_ARRAYSIZE(kIreeTestLoomHalArtifactProviders),
 #else
         .providers = NULL,
         .provider_count = 0,
-#endif  // IREE_TEST_LOOM_HAVE_AMDGPU
+#endif  // IREE_TEST_LOOM_HAVE_ANY_HAL_ARTIFACT_PROVIDER
 };
 
 int main(int argc, char** argv) {

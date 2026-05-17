@@ -12,6 +12,45 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    artifact_provider
+  HDRS
+    "artifact_provider.h"
+  SRCS
+    "artifact_provider.c"
+  DEPS
+    ::vulkan_profile
+    iree::base
+    loom::src::loom::target::arch::spirv::low_registry
+    loom::src::loom::target::compile_report
+    loom::src::loom::target::emit::spirv::module_builder
+    loom::src::loom::target::emit::spirv::module_emitter
+    loom::src::loom::target::entry_selection
+    loom::src::loom::target::low_descriptor_registry
+    loom::src::loom::target::types
+    loom::src::loom::tooling::execution::compile_options
+    loom::src::loom::tooling::execution::hal::artifact
+    loom::src::loom::tooling::execution::hal::runtime
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    provider
+  HDRS
+    "provider.h"
+  SRCS
+    "provider.c"
+  DEPS
+    ::artifact_provider
+    iree::base
+    loom::src::loom::target::arch::spirv::provider
+    loom::src::loom::tooling::execution::execution_provider
+    loom::src::loom::tooling::execution::hal::execution_backend
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     vulkan_profile
   HDRS
     "vulkan_profile.h"
@@ -24,6 +63,31 @@ loom_cc_library(
     loom::src::loom::target::arch::spirv::target_records
     loom::src::loom::target::types
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    artifact_provider_test
+  SRCS
+    "artifact_provider_test.cc"
+  DEPS
+    ::artifact_provider
+    ::vulkan_profile
+    iree::base
+    iree::base::internal::arena
+    iree::hal
+    loom::src::loom::codegen::low::text_asm
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::op_registry
+    loom::src::loom::target::arch::spirv::low_registry
+    loom::src::loom::target::arch::spirv::ops
+    loom::src::loom::target::types
+    loom::src::loom::testing::module_ptr
+    loom::src::loom::tooling::execution::hal::artifact
+    loom::src::loom::tooling::execution::hal::runtime
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(
