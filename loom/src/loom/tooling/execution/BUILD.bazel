@@ -108,24 +108,6 @@ loom_cc_library(
     ],
 )
 
-loom_cc_library(
-    name = "vm_invocation",
-    srcs = ["vm_invocation.c"],
-    hdrs = ["vm_invocation.h"],
-    deps = [
-        "//loom/src/loom/target/emit/ireevm:module_archive",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/hal",
-        "//runtime/src/iree/io:stream",
-        "//runtime/src/iree/tooling:comparison",
-        "//runtime/src/iree/tooling:context_util",
-        "//runtime/src/iree/tooling:function_io",
-        "//runtime/src/iree/tooling:function_util",
-        "//runtime/src/iree/vm",
-        "//runtime/src/iree/vm/bytecode:module",
-    ],
-)
-
 loom_cc_test(
     name = "benchmark_test",
     srcs = ["benchmark_test.cc"],
@@ -169,22 +151,6 @@ loom_cc_test(
     srcs = ["measurement_test.cc"],
     deps = [
         ":measurement",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "vm_invocation_test",
-    srcs = ["vm_invocation_test.cc"],
-    deps = [
-        ":session",
-        ":vm_invocation",
-        "//loom/src/loom/ops:op_registry",
-        "//loom/src/loom/target/arch/ireevm:low_registry",
-        "//loom/src/loom/target/arch/ireevm:ops",
-        "//loom/src/loom/target/emit/ireevm:candidate",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

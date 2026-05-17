@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tooling/execution/vm_invocation.h"
+#include "loom/tooling/execution/ireevm/invocation.h"
 
 #include <string>
 
@@ -13,7 +13,7 @@
 #include "loom/ops/op_registry.h"
 #include "loom/target/arch/ireevm/low_registry.h"
 #include "loom/target/arch/ireevm/ops/registry.h"
-#include "loom/target/emit/ireevm/candidate.h"
+#include "loom/tooling/execution/ireevm/candidate.h"
 #include "loom/tooling/execution/session.h"
 
 namespace loom {
@@ -118,7 +118,7 @@ class VmInvocationTest : public ::testing::Test {
       loom_ireevm_run_candidate_t* out_candidate) {
     loom_run_module_parse_options_t parse_options = {};
     loom_run_module_parse_options_initialize(&parse_options);
-    parse_options.filename = IREE_SV("vm_invocation_test.loom");
+    parse_options.filename = IREE_SV("ireevm_invocation_test.loom");
     parse_options.source = source;
     IREE_RETURN_IF_ERROR(
         loom_run_module_parse(&session_, &parse_options, out_module));

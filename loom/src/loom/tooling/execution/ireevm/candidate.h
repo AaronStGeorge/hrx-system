@@ -6,8 +6,8 @@
 
 // IREE VM archive candidates produced by Loom execution tooling.
 
-#ifndef LOOM_TARGET_EMIT_IREEVM_CANDIDATE_H_
-#define LOOM_TARGET_EMIT_IREEVM_CANDIDATE_H_
+#ifndef LOOM_TOOLING_EXECUTION_IREEVM_CANDIDATE_H_
+#define LOOM_TOOLING_EXECUTION_IREEVM_CANDIDATE_H_
 
 #include "iree/base/api.h"
 #include "loom/target/emit/ireevm/module_archive.h"
@@ -44,4 +44,4 @@ void loom_ireevm_run_candidate_deinitialize(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_EMIT_IREEVM_CANDIDATE_H_
+#endif  // LOOM_TOOLING_EXECUTION_IREEVM_CANDIDATE_H_

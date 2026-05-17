@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/emit/ireevm/candidate.h"
+#include "loom/tooling/execution/ireevm/candidate.h"
 
 #include "loom/target/emit/ireevm/archive_emitter.h"
 

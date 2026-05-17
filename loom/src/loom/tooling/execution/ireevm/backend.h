@@ -6,8 +6,8 @@
 
 // IREE VM one-shot execution backend for Loom run tools.
 
-#ifndef LOOM_TARGET_EMIT_IREEVM_EXECUTION_BACKEND_H_
-#define LOOM_TARGET_EMIT_IREEVM_EXECUTION_BACKEND_H_
+#ifndef LOOM_TOOLING_EXECUTION_IREEVM_BACKEND_H_
+#define LOOM_TOOLING_EXECUTION_IREEVM_BACKEND_H_
 
 #include "iree/base/api.h"
 #include "loom/tooling/execution/execution_backend.h"
@@ -23,4 +23,4 @@ extern const loom_run_execution_backend_t loom_ireevm_execution_backend;
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_EMIT_IREEVM_EXECUTION_BACKEND_H_
+#endif  // LOOM_TOOLING_EXECUTION_IREEVM_BACKEND_H_

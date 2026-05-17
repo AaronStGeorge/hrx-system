@@ -103,23 +103,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    candidate
-  HDRS
-    "candidate.h"
-  SRCS
-    "candidate.c"
-  DEPS
-    ::archive_emitter
-    ::module_archive
-    iree::base
-    loom::src::loom::target::compile_report
-    loom::src::loom::tooling::execution::compile_options
-    loom::src::loom::tooling::execution::session
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
     lower
   HDRS
     "lower.h"
@@ -137,64 +120,6 @@ loom_cc_library(
     loom::src::loom::target::emit::ireevm::contracts::core
     loom::src::loom::target::emit::ireevm::contracts::core_lower_rules
   PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    execution_provider
-  HDRS
-    "execution/provider.h"
-  SRCS
-    "execution/provider.c"
-  DEPS
-    ::execution_backend
-    iree::base
-    loom::src::loom::target::arch::ireevm::provider
-    loom::src::loom::tooling::execution::execution_provider
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    execution_backend
-  HDRS
-    "execution/backend.h"
-  SRCS
-    "execution/backend.c"
-  DEPS
-    ::candidate
-    iree::base
-    loom::src::loom::tooling::execution::compile_report_capture
-    loom::src::loom::tooling::execution::execution_backend
-    loom::src::loom::tooling::execution::one_shot
-    loom::src::loom::tooling::execution::vm_invocation
-  PUBLIC
-)
-
-loom_cc_test(
-  NAME
-    candidate_test
-  SRCS
-    "candidate_test.cc"
-  DEPS
-    ::candidate
-    ::function_bytecode
-    iree::base
-    iree::base::internal::flatcc::parsing
-    loom::src::loom::ops::op_registry
-    loom::src::loom::target::arch::ireevm::descriptors
-    loom::src::loom::target::arch::ireevm::ops
-    loom::src::loom::target::arch::ireevm::provider
-    loom::src::loom::target::provider
-    loom::src::loom::tooling::compile::pipeline
-    loom::src::loom::tooling::execution::vm_invocation
-    iree::schemas::bytecode_module_def_c_fbs
-    iree::testing::gtest
-    iree::testing::gtest_main
-    iree::vm
-    iree::vm::bytecode::archive
-    iree::vm::bytecode::module
-    iree::vm::impl
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

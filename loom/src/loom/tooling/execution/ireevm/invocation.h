@@ -4,10 +4,10 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Generic VM archive invocation helpers for Loom execution sessions.
+// IREE VM archive invocation helpers for Loom execution sessions.
 
-#ifndef LOOM_TOOLING_EXECUTION_VM_INVOCATION_H_
-#define LOOM_TOOLING_EXECUTION_VM_INVOCATION_H_
+#ifndef LOOM_TOOLING_EXECUTION_IREEVM_INVOCATION_H_
+#define LOOM_TOOLING_EXECUTION_IREEVM_INVOCATION_H_
 
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
@@ -239,4 +239,4 @@ iree_status_t loom_run_vm_invocation_run(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TOOLING_EXECUTION_VM_INVOCATION_H_
+#endif  // LOOM_TOOLING_EXECUTION_IREEVM_INVOCATION_H_

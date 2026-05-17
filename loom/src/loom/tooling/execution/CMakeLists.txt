@@ -126,27 +126,6 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_cc_library(
-  NAME
-    vm_invocation
-  HDRS
-    "vm_invocation.h"
-  SRCS
-    "vm_invocation.c"
-  DEPS
-    iree::base
-    iree::hal
-    iree::io::stream
-    loom::src::loom::target::emit::ireevm::module_archive
-    iree::tooling::comparison
-    iree::tooling::context_util
-    iree::tooling::function_io
-    iree::tooling::function_util
-    iree::vm
-    iree::vm::bytecode::module
-  PUBLIC
-)
-
 loom_cc_test(
   NAME
     benchmark_test
@@ -196,23 +175,6 @@ loom_cc_test(
   DEPS
     ::measurement
     iree::base
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    vm_invocation_test
-  SRCS
-    "vm_invocation_test.cc"
-  DEPS
-    ::session
-    ::vm_invocation
-    iree::base
-    loom::src::loom::ops::op_registry
-    loom::src::loom::target::arch::ireevm::low_registry
-    loom::src::loom::target::arch::ireevm::ops
-    loom::src::loom::target::emit::ireevm::candidate
     iree::testing::gtest
     iree::testing::gtest_main
 )

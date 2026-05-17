@@ -37,8 +37,8 @@
 #include "loom/target/arch/amdgpu/provider.h"
 #endif  // LOOM_COMPILE_HAVE_AMDGPU
 #if LOOM_COMPILE_HAVE_IREEVM
-#include "loom/target/emit/ireevm/candidate.h"
-#include "loom/target/emit/ireevm/execution/provider.h"
+#include "loom/tooling/execution/ireevm/candidate.h"
+#include "loom/tooling/execution/ireevm/provider.h"
 #endif  // LOOM_COMPILE_HAVE_IREEVM
 
 IREE_FLAG(string, loom_entry, "",
