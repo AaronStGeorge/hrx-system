@@ -109,13 +109,14 @@ LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_def_callee, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_def_target, 1)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_abi, 2, loom_target_abi_kind_t)
 LOOM_DEFINE_ATTR_DICT(loom_low_func_def_abi_attrs, 3)
-LOOM_DEFINE_ATTR_STRING(loom_low_func_def_export_symbol, 4)
-LOOM_DEFINE_ATTR_DICT(loom_low_func_def_export_attrs, 5)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_visibility, 6, loom_low_visibility_t)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_cc, 7, loom_low_cc_t)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_purity, 8, loom_low_purity_t)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_allocation, 9, loom_low_allocation_t)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_schedule, 10, loom_low_schedule_t)
+LOOM_DEFINE_ATTR_DICT(loom_low_func_def_abi_layout, 4)
+LOOM_DEFINE_ATTR_STRING(loom_low_func_def_export_symbol, 5)
+LOOM_DEFINE_ATTR_DICT(loom_low_func_def_export_attrs, 6)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_visibility, 7, loom_low_visibility_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_cc, 8, loom_low_cc_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_purity, 9, loom_low_purity_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_allocation, 10, loom_low_allocation_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_def_schedule, 11, loom_low_schedule_t)
 LOOM_DEFINE_REGION(loom_low_func_def_body, 0)
 enum loom_low_func_def_build_flag_bits_e {
   LOOM_LOW_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
@@ -138,6 +139,7 @@ iree_status_t loom_low_func_def_build(
     loom_symbol_ref_t target,
     loom_optional uint8_t abi,
     loom_optional loom_named_attr_slice_t abi_attrs,
+    loom_optional loom_named_attr_slice_t abi_layout,
     loom_optional loom_string_id_t export_symbol,
     loom_optional loom_named_attr_slice_t export_attrs,
     loom_symbol_ref_t callee,
@@ -219,15 +221,16 @@ LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_decl_callee, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_low_func_decl_target, 1)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_abi, 2, loom_target_abi_kind_t)
 LOOM_DEFINE_ATTR_DICT(loom_low_func_decl_abi_attrs, 3)
-LOOM_DEFINE_ATTR_STRING(loom_low_func_decl_export_symbol, 4)
-LOOM_DEFINE_ATTR_DICT(loom_low_func_decl_export_attrs, 5)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_visibility, 6, loom_low_visibility_t)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_cc, 7, loom_low_cc_t)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_purity, 8, loom_low_purity_t)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_allocation, 9, loom_low_allocation_t)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_schedule, 10, loom_low_schedule_t)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_import_kind, 12, loom_low_func_decl_import_kind_t)
-LOOM_DEFINE_ATTR_STRING(loom_low_func_decl_code_symbol, 13)
+LOOM_DEFINE_ATTR_DICT(loom_low_func_decl_abi_layout, 4)
+LOOM_DEFINE_ATTR_STRING(loom_low_func_decl_export_symbol, 5)
+LOOM_DEFINE_ATTR_DICT(loom_low_func_decl_export_attrs, 6)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_visibility, 7, loom_low_visibility_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_cc, 8, loom_low_cc_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_purity, 9, loom_low_purity_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_allocation, 10, loom_low_allocation_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_schedule, 11, loom_low_schedule_t)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_func_decl_import_kind, 13, loom_low_func_decl_import_kind_t)
+LOOM_DEFINE_ATTR_STRING(loom_low_func_decl_code_symbol, 14)
 enum loom_low_func_decl_build_flag_bits_e {
   LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_VISIBILITY = 1u << 0,
   LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_CC = 1u << 1,
@@ -253,6 +256,7 @@ iree_status_t loom_low_func_decl_build(
     loom_symbol_ref_t target,
     loom_optional uint8_t abi,
     loom_optional loom_named_attr_slice_t abi_attrs,
+    loom_optional loom_named_attr_slice_t abi_layout,
     loom_optional loom_string_id_t export_symbol,
     loom_optional loom_named_attr_slice_t export_attrs,
     loom_symbol_ref_t callee,

@@ -230,6 +230,28 @@ typedef struct loom_low_lower_emit_cond_branch_callback_t {
   void* user_data;
 } loom_low_lower_emit_cond_branch_callback_t;
 
+typedef enum loom_low_lower_abi_layout_kind_e {
+  // Low function boundary layout on low.func.def/decl.
+  LOOM_LOW_LOWER_ABI_LAYOUT_KIND_FUNC = 0,
+  // Low kernel entry layout on low.kernel.def.
+  LOOM_LOW_LOWER_ABI_LAYOUT_KIND_KERNEL = 1,
+} loom_low_lower_abi_layout_kind_t;
+
+typedef iree_status_t (*loom_low_lower_map_abi_layout_fn_t)(
+    void* user_data, loom_low_lower_context_t* context,
+    loom_low_lower_abi_layout_kind_t layout_kind, const loom_type_t* arg_types,
+    iree_host_size_t arg_count, const loom_type_t* result_types,
+    iree_host_size_t result_count, loom_named_attr_slice_t* out_abi_layout);
+
+typedef struct loom_low_lower_map_abi_layout_callback_t {
+  // Optional callback invoked once while building a low boundary op. The
+  // callback returns target-owned structured ABI layout facts; the low op
+  // builder canonicalizes and copies the returned slice into the module arena.
+  loom_low_lower_map_abi_layout_fn_t fn;
+  // Caller-owned payload passed to |fn|.
+  void* user_data;
+} loom_low_lower_map_abi_layout_callback_t;
+
 typedef uint64_t loom_low_lower_plan_id_t;
 
 #define LOOM_LOW_LOWER_PLAN_ID_NONE UINT64_MAX
@@ -386,6 +408,9 @@ typedef struct loom_low_lower_policy_t {
   loom_low_lower_map_argument_callback_t map_argument;
   // Optionally emits target live-ins or other structural preamble packets.
   loom_low_lower_emit_preamble_callback_t emit_preamble;
+  // Optionally materializes target-owned low boundary attrs/layout from the
+  // source function signature and mapped low signature.
+  loom_low_lower_map_abi_layout_callback_t map_abi_layout;
   // Optionally plans target-specific branch expansion after low blocks exist.
   loom_low_lower_prepare_branch_callback_t prepare_branch;
   // Optionally materializes branch payloads to the exact destination block

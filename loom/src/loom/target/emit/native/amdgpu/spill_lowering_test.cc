@@ -107,8 +107,9 @@ class AmdgpuSpillLoweringTest : public ::testing::Test {
     IREE_CHECK_OK(loom_low_func_def_build(
         &module_builder, 0, /*visibility=*/0, /*cc=*/0, /*purity=*/0,
         /*allocation=*/0, /*schedule=*/0, target_ref, /*abi=*/0,
-        loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
-        loom_named_attr_slice_empty(), function_ref, &arg_type,
+        loom_named_attr_slice_empty(), loom_named_attr_slice_empty(),
+        LOOM_STRING_ID_INVALID, loom_named_attr_slice_empty(), function_ref,
+        &arg_type,
         /*arg_types_count=*/1, /*result_types=*/nullptr, /*result_count=*/0,
         /*tied_results=*/nullptr, /*tied_result_count=*/0,
         /*predicates=*/nullptr, /*predicates_count=*/0, LOOM_LOCATION_UNKNOWN,

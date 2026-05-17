@@ -14,35 +14,13 @@
 #define LOOM_TARGET_EMIT_SPIRV_PACKET_ROWS_H_
 
 #include "iree/base/api.h"
-#include "loom/target/arch/spirv/scalar_types.h"
+#include "loom/target/arch/spirv/value_types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #define LOOM_SPIRV_PACKET_IMMEDIATE_NONE UINT8_MAX
-
-typedef enum loom_spirv_value_class_e {
-  // Unknown or uninitialized value class.
-  LOOM_SPIRV_VALUE_CLASS_UNKNOWN = 0,
-  // SPIR-V SSA scalar ID with a concrete scalar type.
-  LOOM_SPIRV_VALUE_CLASS_SCALAR = 1,
-  // 64-bit byte offset used by address calculations.
-  LOOM_SPIRV_VALUE_CLASS_OFFSET64 = 2,
-  // Raw 64-bit PhysicalStorageBuffer address before scalar pointer typing.
-  LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS = 3,
-  // PhysicalStorageBuffer pointer with a concrete scalar pointee type.
-  LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER = 4,
-  // SPIR-V boolean SSA ID produced by compare packets.
-  LOOM_SPIRV_VALUE_CLASS_BOOL = 5,
-} loom_spirv_value_class_t;
-
-typedef struct loom_spirv_value_type_t {
-  // Target-local value class consumed by packet emission.
-  loom_spirv_value_class_t value_class;
-  // Scalar type for SCALAR and PTR_PHYSICAL_STORAGE_BUFFER classes.
-  loom_spirv_scalar_type_t scalar_type;
-} loom_spirv_value_type_t;
 
 typedef enum loom_spirv_packet_form_e {
   LOOM_SPIRV_PACKET_FORM_UNSUPPORTED = 0,

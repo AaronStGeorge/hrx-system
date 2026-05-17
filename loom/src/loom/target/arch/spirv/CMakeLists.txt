@@ -99,6 +99,29 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    abi
+  HDRS
+    "abi.h"
+  DEPS
+    ::value_types
+    iree::base
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    value_types
+  HDRS
+    "value_types.h"
+  DEPS
+    ::scalar_types
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     cooperative_properties
   HDRS
     "cooperative_properties.h"
@@ -200,6 +223,7 @@ loom_cc_library(
     "lower/matrix.c"
     "lower/registry.c"
   DEPS
+    ::abi
     ::cooperative_properties
     ::descriptors_ids
     ::profile
@@ -212,6 +236,7 @@ loom_cc_library(
     loom::src::loom::ops::kernel
     loom::src::loom::target::arch::spirv::contracts::logical_core
     loom::src::loom::target::arch::spirv::contracts::logical_core_lower_rules
+    loom::src::loom::target::registers
   PUBLIC
 )
 

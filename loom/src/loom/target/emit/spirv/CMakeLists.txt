@@ -66,6 +66,7 @@ loom_cc_library(
     loom::src::loom::error::emitter
     loom::src::loom::ir
     loom::src::loom::ops::low
+    loom::src::loom::target::arch::spirv::abi
     loom::src::loom::target::arch::spirv::descriptors_ids
     loom::src::loom::target::arch::spirv::features
     loom::src::loom::target::arch::spirv::scalar_types
@@ -101,7 +102,7 @@ loom_cc_library(
     ::binary_format
     iree::base
     loom::src::loom::target::arch::spirv::descriptors_ids
-    loom::src::loom::target::arch::spirv::scalar_types
+    loom::src::loom::target::arch::spirv::value_types
   PUBLIC
 )
 

@@ -31,6 +31,7 @@ package(
 loom_assert_no_dependencies(
     name = "core_target_interfaces_no_spirv_target_deps",
     dependencies = [
+        ":abi",
         ":cooperative_properties",
         ":descriptors",
         ":features",
@@ -41,6 +42,7 @@ loom_assert_no_dependencies(
         ":provider",
         ":scalar_types",
         ":target_records",
+        ":value_types",
     ],
     targets = [
         "//loom/src/loom/target:low_descriptor_registry",
@@ -161,6 +163,25 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "abi",
+    hdrs = ["abi.h"],
+    deps = [
+        ":value_types",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "value_types",
+    hdrs = ["value_types.h"],
+    deps = [
+        ":scalar_types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "cooperative_properties",
     srcs = ["cooperative_properties.c"],
     hdrs = ["cooperative_properties.h"],
@@ -250,6 +271,7 @@ loom_cc_library(
         "lower/matrix.h",
     ],
     deps = [
+        ":abi",
         ":cooperative_properties",
         ":descriptors_ids",
         ":profile",
@@ -259,6 +281,7 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/func",
         "//loom/src/loom/ops/kernel",
+        "//loom/src/loom/target:registers",
         "//loom/src/loom/target/arch/spirv/contracts:logical_core",
         "//loom/src/loom/target/arch/spirv/contracts:logical_core_lower_rules",
         "//runtime/src/iree/base",

@@ -1293,6 +1293,20 @@ static iree_status_t loom_low_lower_map_signature_types(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_lower_map_abi_layout(
+    loom_low_lower_context_t* context,
+    loom_low_lower_abi_layout_kind_t layout_kind, const loom_type_t* arg_types,
+    iree_host_size_t arg_count, const loom_type_t* result_types,
+    iree_host_size_t result_count, loom_named_attr_slice_t* out_abi_layout) {
+  *out_abi_layout = loom_named_attr_slice_empty();
+  if (context->policy->map_abi_layout.fn == NULL) {
+    return iree_ok_status();
+  }
+  return context->policy->map_abi_layout.fn(
+      context->policy->map_abi_layout.user_data, context, layout_kind,
+      arg_types, arg_count, result_types, result_count, out_abi_layout);
+}
+
 static loom_region_t* loom_low_lower_low_body(
     const loom_low_lower_context_t* context) {
   if (loom_low_func_def_isa(context->low_func_op)) {
@@ -1325,6 +1339,10 @@ static iree_status_t loom_low_lower_create_func_op(
   loom_target_abi_kind_t abi = loom_low_lower_function_abi(context);
   loom_named_attr_slice_t abi_attrs =
       loom_func_like_abi_attrs(context->source_function);
+  loom_named_attr_slice_t abi_layout = loom_named_attr_slice_empty();
+  IREE_RETURN_IF_ERROR(loom_low_lower_map_abi_layout(
+      context, LOOM_LOW_LOWER_ABI_LAYOUT_KIND_FUNC, arg_types, arg_count,
+      result_types, result_count, &abi_layout));
   loom_string_id_t export_symbol =
       loom_func_like_export_symbol(context->source_function);
   loom_named_attr_slice_t export_attrs =
@@ -1351,8 +1369,8 @@ static iree_status_t loom_low_lower_create_func_op(
   IREE_RETURN_IF_ERROR(loom_low_func_def_build(
       &context->builder, build_flags, visibility, cc, purity,
       /*allocation=*/0, /*schedule=*/0, context->options->target_ref, abi,
-      abi_attrs, export_symbol, export_attrs, low_func_ref, arg_types,
-      arg_count, result_types, result_count, /*tied_results=*/NULL,
+      abi_attrs, abi_layout, export_symbol, export_attrs, low_func_ref,
+      arg_types, arg_count, result_types, result_count, /*tied_results=*/NULL,
       /*tied_result_count=*/0, predicates, predicate_count,
       context->source_function.op->location, &context->low_func_op));
 
@@ -1407,12 +1425,16 @@ static iree_status_t loom_low_lower_create_kernel_op(
                           loom_module_block(context->module),
                           &context->builder);
   loom_builder_set_before(&context->builder, context->source_function.op);
+  loom_named_attr_slice_t abi_layout = loom_named_attr_slice_empty();
+  IREE_RETURN_IF_ERROR(loom_low_lower_map_abi_layout(
+      context, LOOM_LOW_LOWER_ABI_LAYOUT_KIND_KERNEL, arg_types, arg_count,
+      /*result_types=*/NULL, /*result_count=*/0, &abi_layout));
   IREE_RETURN_IF_ERROR(loom_low_kernel_def_build(
       &context->builder, build_flags, /*allocation=*/0, /*schedule=*/0,
-      context->options->target_ref, loom_named_attr_slice_empty(),
-      export_symbol, artifact, export_ordinal, export_linkage, workgroup_size.x,
-      workgroup_size.y, workgroup_size.z, low_func_ref, arg_types, arg_count,
-      predicates, predicate_count, context->source_function.op->location,
+      context->options->target_ref, abi_layout, export_symbol, artifact,
+      export_ordinal, export_linkage, workgroup_size.x, workgroup_size.y,
+      workgroup_size.z, low_func_ref, arg_types, arg_count, predicates,
+      predicate_count, context->source_function.op->location,
       &context->low_func_op));
 
   loom_region_t* low_body = loom_low_lower_low_body(context);
@@ -1584,6 +1606,10 @@ iree_status_t loom_low_lower_import_declaration(
         (loom_target_abi_kind_t)loom_func_like_abi(source_declaration);
     loom_named_attr_slice_t abi_attrs =
         loom_func_like_abi_attrs(source_declaration);
+    loom_named_attr_slice_t abi_layout = loom_named_attr_slice_empty();
+    status = loom_low_lower_map_abi_layout(
+        &context, LOOM_LOW_LOWER_ABI_LAYOUT_KIND_FUNC, arg_types, arg_count,
+        result_types, result_count, &abi_layout);
     loom_string_id_t export_symbol =
         loom_func_like_export_symbol(source_declaration);
     loom_named_attr_slice_t export_attrs =
@@ -1604,20 +1630,23 @@ iree_status_t loom_low_lower_import_declaration(
       build_flags |= LOOM_LOW_FUNC_DECL_BUILD_FLAG_HAS_EXPORT_SYMBOL;
     }
 
-    uint16_t predicate_count = 0;
-    const loom_predicate_t* predicates =
-        loom_func_like_predicates(source_declaration, &predicate_count);
-    loom_builder_initialize(module, &module->arena, loom_module_block(module),
-                            &context.builder);
-    loom_builder_set_before(&context.builder, source_declaration.op);
-    status = loom_low_func_decl_build(
-        &context.builder, build_flags, visibility, cc, purity,
-        /*allocation=*/0, /*schedule=*/0,
-        (uint8_t)options->policy->import_decl_kind, code_symbol,
-        options->target_ref, abi, abi_attrs, export_symbol, export_attrs,
-        low_func_ref, arg_types, arg_count, result_types, result_count,
-        /*tied_results=*/NULL, /*tied_result_count=*/0, predicates,
-        predicate_count, source_declaration.op->location, &context.low_func_op);
+    if (iree_status_is_ok(status)) {
+      uint16_t predicate_count = 0;
+      const loom_predicate_t* predicates =
+          loom_func_like_predicates(source_declaration, &predicate_count);
+      loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                              &context.builder);
+      loom_builder_set_before(&context.builder, source_declaration.op);
+      status = loom_low_func_decl_build(
+          &context.builder, build_flags, visibility, cc, purity,
+          /*allocation=*/0, /*schedule=*/0,
+          (uint8_t)options->policy->import_decl_kind, code_symbol,
+          options->target_ref, abi, abi_attrs, abi_layout, export_symbol,
+          export_attrs, low_func_ref, arg_types, arg_count, result_types,
+          result_count, /*tied_results=*/NULL, /*tied_result_count=*/0,
+          predicates, predicate_count, source_declaration.op->location,
+          &context.low_func_op);
+    }
   }
 
   if (iree_status_is_ok(status) && out_result->error_count == 0) {
