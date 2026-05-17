@@ -145,6 +145,35 @@ static iree_hal_vulkan_cooperative_matrix_property_t F16DeviceMatrixRow() {
   };
 }
 
+static loom_spirv_cooperative_matrix_query_t U8MatrixQuery() {
+  return {
+      .m_size = 16,
+      .n_size = 16,
+      .k_size = 32,
+      .lhs_type = LOOM_SPIRV_SCALAR_TYPE_U8,
+      .rhs_type = LOOM_SPIRV_SCALAR_TYPE_U8,
+      .accumulator_type = LOOM_SPIRV_SCALAR_TYPE_U32,
+      .result_type = LOOM_SPIRV_SCALAR_TYPE_U32,
+      .scope = LOOM_SPIRV_SCOPE_SUBGROUP,
+      .layout = LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_KHR,
+      .storage_class = LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER,
+      .policy = LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED,
+  };
+}
+
+static iree_hal_vulkan_cooperative_matrix_property_t U8DeviceMatrixRow() {
+  return {
+      .m_size = 16,
+      .n_size = 16,
+      .k_size = 32,
+      .a_type = LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT8_NV,
+      .b_type = LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT8_NV,
+      .c_type = LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT32_NV,
+      .result_type = LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT32_NV,
+      .scope = LOOM_SPIRV_SCOPE_SUBGROUP,
+  };
+}
+
 static constexpr fake_query_row_t kBaselineQueryRows[] = {
     {IREE_SVL("vulkan.device"), IREE_SVL("api_version"),
      LOOM_SPIRV_VULKAN_API_VERSION_1_3},
@@ -365,6 +394,51 @@ TEST(VulkanProfileTest, ImportsExactCooperativeMatrixRows) {
   EXPECT_TRUE(iree_string_view_equal(
       property->name,
       IREE_SV("khr.cooperative_matrix.f16.16x16x16.f32.subgroup")));
+  EXPECT_EQ(diagnostic.status, LOOM_SPIRV_COOPERATIVE_SELECTION_MATCHED);
+
+  loom_spirv_vulkan_hal_target_profile_storage_deinitialize(
+      &storage, iree_allocator_system());
+}
+
+TEST(VulkanProfileTest, ImportsUnsignedCooperativeMatrixRows) {
+  loom_spirv_vulkan_hal_profile_facts_t facts = BaselineFacts();
+  facts.flags |= LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_COOPERATIVE_MATRIX_KHR;
+  facts.flags |= LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_INT8;
+  facts.flags |= LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_STORAGE_BUFFER_8BIT_ACCESS;
+  const iree_hal_vulkan_cooperative_matrix_property_t device_rows[] = {
+      U8DeviceMatrixRow(),
+  };
+
+  loom_spirv_vulkan_hal_target_profile_storage_t storage = {};
+  IREE_ASSERT_OK(loom_spirv_vulkan_hal_target_profile_storage_initialize(
+      &facts, device_rows, IREE_ARRAYSIZE(device_rows), iree_allocator_system(),
+      &storage));
+
+  ASSERT_NE(storage.profile.cooperative_properties, nullptr);
+  EXPECT_EQ(storage.profile.cooperative_properties->matrix_property_count, 1u);
+  EXPECT_TRUE(
+      iree_all_bits_set(storage.profile.cooperative_properties->feature_bits,
+                        LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR));
+  EXPECT_TRUE(
+      iree_all_bits_set(storage.profile.cooperative_properties->feature_bits,
+                        LOOM_SPIRV_FEATURE_INT8));
+  EXPECT_TRUE(
+      iree_all_bits_set(storage.profile.cooperative_properties->feature_bits,
+                        LOOM_SPIRV_FEATURE_STORAGE_BUFFER_8BIT_ACCESS));
+  const loom_spirv_cooperative_matrix_query_t query = U8MatrixQuery();
+  loom_spirv_cooperative_diagnostic_t diagnostic = {};
+  const loom_spirv_cooperative_matrix_property_t* property =
+      loom_spirv_cooperative_matrix_property_select(
+          storage.profile.cooperative_properties, &query, &diagnostic);
+  ASSERT_NE(property, nullptr);
+  EXPECT_TRUE(iree_string_view_equal(
+      property->name,
+      IREE_SV("khr.cooperative_matrix.u8.16x16x32.u32.subgroup")));
+  EXPECT_EQ(property->lhs_type, LOOM_SPIRV_SCALAR_TYPE_U8);
+  EXPECT_EQ(property->rhs_type, LOOM_SPIRV_SCALAR_TYPE_U8);
+  EXPECT_EQ(property->accumulator_type, LOOM_SPIRV_SCALAR_TYPE_U32);
+  EXPECT_EQ(property->result_type, LOOM_SPIRV_SCALAR_TYPE_U32);
+  EXPECT_EQ(property->operand_flags, 0u);
   EXPECT_EQ(diagnostic.status, LOOM_SPIRV_COOPERATIVE_SELECTION_MATCHED);
 
   loom_spirv_vulkan_hal_target_profile_storage_deinitialize(
