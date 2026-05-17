@@ -32,4 +32,14 @@ iree_py_library(
     iree::runtime::py::loom::target::arch::package
 )
 
+iree_py_library(
+  NAME
+    features
+  SRCS
+    "__init__.py"
+    "features.py"
+  DEPS
+    iree::runtime::py::loom::target::arch::package
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

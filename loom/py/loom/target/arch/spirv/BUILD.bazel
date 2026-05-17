@@ -34,3 +34,14 @@ py_library(
         "//loom/py/loom/target/arch:package",
     ],
 )
+
+py_library(
+    name = "features",
+    srcs = [
+        "__init__.py",
+        "features.py",
+    ],
+    deps = [
+        "//loom/py/loom/target/arch:package",
+    ],
+)

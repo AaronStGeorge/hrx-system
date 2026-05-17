@@ -199,6 +199,30 @@ py_binary(
 )
 
 py_binary(
+    name = "spirv_features",
+    srcs = ["spirv_features.py"],
+    main = "spirv_features.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target/arch/spirv:features",
+    ],
+)
+
+py_test(
+    name = "spirv_features_test",
+    srcs = [
+        "spirv_features_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.gen.spirv_features_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":spirv_features",
+        "//loom/py/loom/target/arch/spirv:features",
+    ],
+)
+
+py_binary(
     name = "spirv_contract_fragment",
     srcs = ["target_contract_fragment.py"],
     main = "target_contract_fragment.py",

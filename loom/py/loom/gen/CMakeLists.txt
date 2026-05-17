@@ -200,6 +200,30 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    spirv_features
+  MAIN
+    "spirv_features.py"
+  SRCS
+    "spirv_features.py"
+  DEPS
+    iree::runtime::py::loom::gen::generated_file
+    iree::runtime::py::loom::target::arch::spirv::features
+)
+
+iree_py_test(
+  NAME
+    spirv_features_test
+  SRCS
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.gen.spirv_features_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
+)
+
+iree_py_library(
+  NAME
     spirv_contract_fragment
   MAIN
     "target_contract_fragment.py"

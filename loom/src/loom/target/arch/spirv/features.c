@@ -9,229 +9,7 @@
 #include <inttypes.h>
 #include <string.h>
 
-#define LOOM_SPIRV_VERSION_1_0 UINT32_C(0x00010000)
-#define LOOM_SPIRV_VERSION_1_3 UINT32_C(0x00010300)
-
-static const iree_string_view_t kSpirvVulkanShaderExtensions[] = {
-    IREE_SVL("SPV_KHR_vulkan_memory_model"),
-};
-
-static const uint32_t kSpirvVulkanShaderCapabilities[] = {
-    LOOM_SPIRV_CAPABILITY_SHADER,
-    LOOM_SPIRV_CAPABILITY_VULKAN_MEMORY_MODEL,
-};
-
-static const iree_string_view_t kSpirvPhysicalStorageBufferExtensions[] = {
-    IREE_SVL("SPV_KHR_physical_storage_buffer"),
-};
-
-static const uint32_t kSpirvPhysicalStorageBufferCapabilities[] = {
-    LOOM_SPIRV_CAPABILITY_PHYSICAL_STORAGE_BUFFER_ADDRESSES,
-    LOOM_SPIRV_CAPABILITY_INT64,
-};
-
-static const uint32_t kSpirvPhysicalStorageBufferStorageClasses[] = {
-    LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER,
-};
-
-static const uint32_t kSpirvPhysicalStorageBufferDecorations[] = {
-    LOOM_SPIRV_DECORATION_RESTRICT_POINTER,
-    LOOM_SPIRV_DECORATION_ALIASED_POINTER,
-};
-
-static const iree_string_view_t kSpirvCooperativeVectorNvExtensions[] = {
-    IREE_SVL("SPV_NV_cooperative_vector"),
-};
-
-static const uint32_t kSpirvCooperativeVectorNvCapabilities[] = {
-    LOOM_SPIRV_CAPABILITY_COOPERATIVE_VECTOR_NV,
-};
-
-static const uint32_t kSpirvCooperativeVectorNvOpcodes[] = {
-    LOOM_SPIRV_OP_TYPE_COOPERATIVE_VECTOR_NV,
-    LOOM_SPIRV_OP_COOPERATIVE_VECTOR_MATRIX_MUL_NV,
-    LOOM_SPIRV_OP_COOPERATIVE_VECTOR_MATRIX_MUL_ADD_NV,
-    LOOM_SPIRV_OP_COOPERATIVE_VECTOR_LOAD_NV,
-    LOOM_SPIRV_OP_COOPERATIVE_VECTOR_STORE_NV,
-};
-
-static const uint32_t kSpirvCooperativeVectorTrainingNvCapabilities[] = {
-    LOOM_SPIRV_CAPABILITY_COOPERATIVE_VECTOR_TRAINING_NV,
-};
-
-static const uint32_t kSpirvCooperativeVectorTrainingNvOpcodes[] = {
-    LOOM_SPIRV_OP_COOPERATIVE_VECTOR_OUTER_PRODUCT_ACCUMULATE_NV,
-    LOOM_SPIRV_OP_COOPERATIVE_VECTOR_REDUCE_SUM_ACCUMULATE_NV,
-};
-
-static const iree_string_view_t kSpirvCooperativeMatrixKhrExtensions[] = {
-    IREE_SVL("SPV_KHR_cooperative_matrix"),
-};
-
-static const iree_string_view_t kSpirvBfloat16KhrExtensions[] = {
-    IREE_SVL("SPV_KHR_bfloat16"),
-};
-
-static const uint32_t kSpirvCooperativeMatrixKhrCapabilities[] = {
-    LOOM_SPIRV_CAPABILITY_COOPERATIVE_MATRIX_KHR,
-};
-
-static const uint32_t kSpirvBfloat16TypeKhrCapabilities[] = {
-    LOOM_SPIRV_CAPABILITY_B_FLOAT16_TYPE_KHR,
-};
-
-static const uint32_t kSpirvBfloat16DotProductKhrCapabilities[] = {
-    LOOM_SPIRV_CAPABILITY_B_FLOAT16_DOT_PRODUCT_KHR,
-};
-
-static const uint32_t kSpirvBfloat16CooperativeMatrixKhrCapabilities[] = {
-    LOOM_SPIRV_CAPABILITY_B_FLOAT16_COOPERATIVE_MATRIX_KHR,
-};
-
-static const uint32_t kSpirvCooperativeMatrixKhrOpcodes[] = {
-    LOOM_SPIRV_OP_TYPE_COOPERATIVE_MATRIX_KHR,
-    LOOM_SPIRV_OP_COOPERATIVE_MATRIX_LOAD_KHR,
-    LOOM_SPIRV_OP_COOPERATIVE_MATRIX_STORE_KHR,
-    LOOM_SPIRV_OP_COOPERATIVE_MATRIX_MUL_ADD_KHR,
-    LOOM_SPIRV_OP_COOPERATIVE_MATRIX_LENGTH_KHR,
-};
-
-static const loom_spirv_feature_atom_descriptor_t kSpirvFeatureAtoms[] = {
-    [LOOM_SPIRV_FEATURE_ATOM_UNKNOWN] = {0},
-    [LOOM_SPIRV_FEATURE_ATOM_VULKAN_SHADER] =
-        {
-            .atom = LOOM_SPIRV_FEATURE_ATOM_VULKAN_SHADER,
-            .name = IREE_SVL("spirv.vulkan.shader"),
-            .required_atom_bits = 0,
-            .minimum_spirv_version = LOOM_SPIRV_VERSION_1_3,
-            .addressing_model = LOOM_SPIRV_ADDRESSING_MODEL_UNSPECIFIED,
-            .memory_model = LOOM_SPIRV_MEMORY_MODEL_VULKAN,
-            .extension_names = kSpirvVulkanShaderExtensions,
-            .extension_count = IREE_ARRAYSIZE(kSpirvVulkanShaderExtensions),
-            .capabilities = kSpirvVulkanShaderCapabilities,
-            .capability_count = IREE_ARRAYSIZE(kSpirvVulkanShaderCapabilities),
-        },
-    [LOOM_SPIRV_FEATURE_ATOM_PHYSICAL_STORAGE_BUFFER] =
-        {
-            .atom = LOOM_SPIRV_FEATURE_ATOM_PHYSICAL_STORAGE_BUFFER,
-            .name = IREE_SVL("spirv.physical_storage_buffer"),
-            .required_atom_bits = LOOM_SPIRV_FEATURE_VULKAN_SHADER,
-            .minimum_spirv_version = LOOM_SPIRV_VERSION_1_0,
-            .addressing_model =
-                LOOM_SPIRV_ADDRESSING_MODEL_PHYSICAL_STORAGE_BUFFER64,
-            .memory_model = LOOM_SPIRV_MEMORY_MODEL_UNSPECIFIED,
-            .extension_names = kSpirvPhysicalStorageBufferExtensions,
-            .extension_count =
-                IREE_ARRAYSIZE(kSpirvPhysicalStorageBufferExtensions),
-            .capabilities = kSpirvPhysicalStorageBufferCapabilities,
-            .capability_count =
-                IREE_ARRAYSIZE(kSpirvPhysicalStorageBufferCapabilities),
-            .storage_classes = kSpirvPhysicalStorageBufferStorageClasses,
-            .storage_class_count =
-                IREE_ARRAYSIZE(kSpirvPhysicalStorageBufferStorageClasses),
-            .decorations = kSpirvPhysicalStorageBufferDecorations,
-            .decoration_count =
-                IREE_ARRAYSIZE(kSpirvPhysicalStorageBufferDecorations),
-        },
-    [LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_VECTOR_NV] =
-        {
-            .atom = LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_VECTOR_NV,
-            .name = IREE_SVL("spirv.cooperative_vector.nv"),
-            .required_atom_bits = LOOM_SPIRV_FEATURE_VULKAN_SHADER,
-            .minimum_spirv_version = LOOM_SPIRV_VERSION_1_0,
-            .addressing_model = LOOM_SPIRV_ADDRESSING_MODEL_UNSPECIFIED,
-            .memory_model = LOOM_SPIRV_MEMORY_MODEL_UNSPECIFIED,
-            .extension_names = kSpirvCooperativeVectorNvExtensions,
-            .extension_count =
-                IREE_ARRAYSIZE(kSpirvCooperativeVectorNvExtensions),
-            .capabilities = kSpirvCooperativeVectorNvCapabilities,
-            .capability_count =
-                IREE_ARRAYSIZE(kSpirvCooperativeVectorNvCapabilities),
-            .opcodes = kSpirvCooperativeVectorNvOpcodes,
-            .opcode_count = IREE_ARRAYSIZE(kSpirvCooperativeVectorNvOpcodes),
-        },
-    [LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_VECTOR_TRAINING_NV] =
-        {
-            .atom = LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_VECTOR_TRAINING_NV,
-            .name = IREE_SVL("spirv.cooperative_vector.training.nv"),
-            .required_atom_bits = LOOM_SPIRV_FEATURE_VULKAN_SHADER |
-                                  LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV,
-            .minimum_spirv_version = LOOM_SPIRV_VERSION_1_0,
-            .addressing_model = LOOM_SPIRV_ADDRESSING_MODEL_UNSPECIFIED,
-            .memory_model = LOOM_SPIRV_MEMORY_MODEL_UNSPECIFIED,
-            .extension_names = kSpirvCooperativeVectorNvExtensions,
-            .extension_count =
-                IREE_ARRAYSIZE(kSpirvCooperativeVectorNvExtensions),
-            .capabilities = kSpirvCooperativeVectorTrainingNvCapabilities,
-            .capability_count =
-                IREE_ARRAYSIZE(kSpirvCooperativeVectorTrainingNvCapabilities),
-            .opcodes = kSpirvCooperativeVectorTrainingNvOpcodes,
-            .opcode_count =
-                IREE_ARRAYSIZE(kSpirvCooperativeVectorTrainingNvOpcodes),
-        },
-    [LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_MATRIX_KHR] =
-        {
-            .atom = LOOM_SPIRV_FEATURE_ATOM_COOPERATIVE_MATRIX_KHR,
-            .name = IREE_SVL("spirv.cooperative_matrix.khr"),
-            .required_atom_bits = LOOM_SPIRV_FEATURE_VULKAN_SHADER,
-            .minimum_spirv_version = LOOM_SPIRV_VERSION_1_0,
-            .addressing_model = LOOM_SPIRV_ADDRESSING_MODEL_UNSPECIFIED,
-            .memory_model = LOOM_SPIRV_MEMORY_MODEL_UNSPECIFIED,
-            .extension_names = kSpirvCooperativeMatrixKhrExtensions,
-            .extension_count =
-                IREE_ARRAYSIZE(kSpirvCooperativeMatrixKhrExtensions),
-            .capabilities = kSpirvCooperativeMatrixKhrCapabilities,
-            .capability_count =
-                IREE_ARRAYSIZE(kSpirvCooperativeMatrixKhrCapabilities),
-            .opcodes = kSpirvCooperativeMatrixKhrOpcodes,
-            .opcode_count = IREE_ARRAYSIZE(kSpirvCooperativeMatrixKhrOpcodes),
-        },
-    [LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_TYPE_KHR] =
-        {
-            .atom = LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_TYPE_KHR,
-            .name = IREE_SVL("spirv.bfloat16.type.khr"),
-            .required_atom_bits = LOOM_SPIRV_FEATURE_VULKAN_SHADER,
-            .minimum_spirv_version = LOOM_SPIRV_VERSION_1_0,
-            .addressing_model = LOOM_SPIRV_ADDRESSING_MODEL_UNSPECIFIED,
-            .memory_model = LOOM_SPIRV_MEMORY_MODEL_UNSPECIFIED,
-            .extension_names = kSpirvBfloat16KhrExtensions,
-            .extension_count = IREE_ARRAYSIZE(kSpirvBfloat16KhrExtensions),
-            .capabilities = kSpirvBfloat16TypeKhrCapabilities,
-            .capability_count =
-                IREE_ARRAYSIZE(kSpirvBfloat16TypeKhrCapabilities),
-        },
-    [LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_DOT_PRODUCT_KHR] =
-        {
-            .atom = LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_DOT_PRODUCT_KHR,
-            .name = IREE_SVL("spirv.bfloat16.dot_product.khr"),
-            .required_atom_bits = LOOM_SPIRV_FEATURE_VULKAN_SHADER |
-                                  LOOM_SPIRV_FEATURE_BFLOAT16_TYPE_KHR,
-            .minimum_spirv_version = LOOM_SPIRV_VERSION_1_0,
-            .addressing_model = LOOM_SPIRV_ADDRESSING_MODEL_UNSPECIFIED,
-            .memory_model = LOOM_SPIRV_MEMORY_MODEL_UNSPECIFIED,
-            .extension_names = kSpirvBfloat16KhrExtensions,
-            .extension_count = IREE_ARRAYSIZE(kSpirvBfloat16KhrExtensions),
-            .capabilities = kSpirvBfloat16DotProductKhrCapabilities,
-            .capability_count =
-                IREE_ARRAYSIZE(kSpirvBfloat16DotProductKhrCapabilities),
-        },
-    [LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_COOPERATIVE_MATRIX_KHR] =
-        {
-            .atom = LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_COOPERATIVE_MATRIX_KHR,
-            .name = IREE_SVL("spirv.bfloat16.cooperative_matrix.khr"),
-            .required_atom_bits = LOOM_SPIRV_FEATURE_VULKAN_SHADER |
-                                  LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR |
-                                  LOOM_SPIRV_FEATURE_BFLOAT16_TYPE_KHR,
-            .minimum_spirv_version = LOOM_SPIRV_VERSION_1_0,
-            .addressing_model = LOOM_SPIRV_ADDRESSING_MODEL_UNSPECIFIED,
-            .memory_model = LOOM_SPIRV_MEMORY_MODEL_UNSPECIFIED,
-            .extension_names = kSpirvBfloat16KhrExtensions,
-            .extension_count = IREE_ARRAYSIZE(kSpirvBfloat16KhrExtensions),
-            .capabilities = kSpirvBfloat16CooperativeMatrixKhrCapabilities,
-            .capability_count =
-                IREE_ARRAYSIZE(kSpirvBfloat16CooperativeMatrixKhrCapabilities),
-        },
-};
+#include "loom/target/arch/spirv/features_tables.inl"
 
 loom_spirv_feature_bits_t loom_spirv_feature_atom_bit(
     loom_spirv_feature_atom_t atom) {
@@ -259,12 +37,7 @@ iree_string_view_t loom_spirv_feature_atom_name(
 }
 
 loom_spirv_feature_bits_t loom_spirv_known_feature_bits(void) {
-  loom_spirv_feature_bits_t known_bits = 0;
-  for (uint32_t i = LOOM_SPIRV_FEATURE_ATOM_UNKNOWN + 1;
-       i < LOOM_SPIRV_FEATURE_ATOM_COUNT; ++i) {
-    known_bits |= loom_spirv_feature_atom_bit((loom_spirv_feature_atom_t)i);
-  }
-  return known_bits;
+  return LOOM_SPIRV_FEATURE_KNOWN_BITS;
 }
 
 bool loom_spirv_feature_set_has_atom(
@@ -285,17 +58,12 @@ static bool loom_spirv_feature_set_has_extension(
   return false;
 }
 
-static iree_status_t loom_spirv_feature_set_append_extension(
+static void loom_spirv_feature_set_append_extension(
     loom_spirv_feature_set_t* feature_set, iree_string_view_t name) {
   if (loom_spirv_feature_set_has_extension(feature_set, name)) {
-    return iree_ok_status();
-  }
-  if (feature_set->extension_count >= LOOM_SPIRV_FEATURE_MAX_EXTENSION_COUNT) {
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "SPIR-V feature extension list overflow");
+    return;
   }
   feature_set->extension_names[feature_set->extension_count++] = name;
-  return iree_ok_status();
 }
 
 static bool loom_spirv_feature_set_has_uint32(const uint32_t* values,
@@ -308,49 +76,24 @@ static bool loom_spirv_feature_set_has_uint32(const uint32_t* values,
   return false;
 }
 
-static iree_status_t loom_spirv_feature_set_append_uint32(
-    uint32_t* values, uint8_t* count, uint8_t capacity, uint32_t value,
-    const char* row_name) {
+static void loom_spirv_feature_set_append_uint32(uint32_t* values,
+                                                 uint8_t* count,
+                                                 uint32_t value) {
   if (loom_spirv_feature_set_has_uint32(values, *count, value)) {
-    return iree_ok_status();
-  }
-  if (*count >= capacity) {
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "SPIR-V feature %s list overflow", row_name);
+    return;
   }
   values[(*count)++] = value;
-  return iree_ok_status();
 }
 
-static iree_status_t loom_spirv_feature_set_apply_models(
+static void loom_spirv_feature_set_apply_models(
     const loom_spirv_feature_atom_descriptor_t* descriptor,
-    iree_string_view_t target_name, loom_spirv_feature_set_t* feature_set) {
+    loom_spirv_feature_set_t* feature_set) {
   if (descriptor->addressing_model != LOOM_SPIRV_ADDRESSING_MODEL_UNSPECIFIED) {
-    if (feature_set->addressing_model !=
-            LOOM_SPIRV_ADDRESSING_MODEL_UNSPECIFIED &&
-        feature_set->addressing_model != descriptor->addressing_model) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "SPIR-V target '%.*s' feature atom '%.*s' conflicts with the "
-          "selected addressing model",
-          (int)target_name.size, target_name.data, (int)descriptor->name.size,
-          descriptor->name.data);
-    }
     feature_set->addressing_model = descriptor->addressing_model;
   }
   if (descriptor->memory_model != LOOM_SPIRV_MEMORY_MODEL_UNSPECIFIED) {
-    if (feature_set->memory_model != LOOM_SPIRV_MEMORY_MODEL_UNSPECIFIED &&
-        feature_set->memory_model != descriptor->memory_model) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "SPIR-V target '%.*s' feature atom '%.*s' conflicts with the "
-          "selected memory model",
-          (int)target_name.size, target_name.data, (int)descriptor->name.size,
-          descriptor->name.data);
-    }
     feature_set->memory_model = descriptor->memory_model;
   }
-  return iree_ok_status();
 }
 
 static const loom_spirv_feature_atom_descriptor_t*
@@ -407,34 +150,30 @@ static iree_status_t loom_spirv_feature_set_apply_atom(
   }
   feature_set->minimum_spirv_version = iree_max(
       feature_set->minimum_spirv_version, descriptor->minimum_spirv_version);
-  IREE_RETURN_IF_ERROR(loom_spirv_feature_set_apply_models(
-      descriptor, target_name, feature_set));
+  loom_spirv_feature_set_apply_models(descriptor, feature_set);
   for (uint8_t i = 0; i < descriptor->extension_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_spirv_feature_set_append_extension(
-        feature_set, descriptor->extension_names[i]));
+    loom_spirv_feature_set_append_extension(feature_set,
+                                            descriptor->extension_names[i]);
   }
   for (uint8_t i = 0; i < descriptor->capability_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_spirv_feature_set_append_uint32(
-        feature_set->capabilities, &feature_set->capability_count,
-        LOOM_SPIRV_FEATURE_MAX_CAPABILITY_COUNT, descriptor->capabilities[i],
-        "capability"));
+    loom_spirv_feature_set_append_uint32(feature_set->capabilities,
+                                         &feature_set->capability_count,
+                                         descriptor->capabilities[i]);
   }
   for (uint8_t i = 0; i < descriptor->opcode_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_spirv_feature_set_append_uint32(
-        feature_set->opcodes, &feature_set->opcode_count,
-        LOOM_SPIRV_FEATURE_MAX_OPCODE_COUNT, descriptor->opcodes[i], "opcode"));
+    loom_spirv_feature_set_append_uint32(feature_set->opcodes,
+                                         &feature_set->opcode_count,
+                                         descriptor->opcodes[i]);
   }
   for (uint8_t i = 0; i < descriptor->storage_class_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_spirv_feature_set_append_uint32(
-        feature_set->storage_classes, &feature_set->storage_class_count,
-        LOOM_SPIRV_FEATURE_MAX_STORAGE_CLASS_COUNT,
-        descriptor->storage_classes[i], "storage-class"));
+    loom_spirv_feature_set_append_uint32(feature_set->storage_classes,
+                                         &feature_set->storage_class_count,
+                                         descriptor->storage_classes[i]);
   }
   for (uint8_t i = 0; i < descriptor->decoration_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_spirv_feature_set_append_uint32(
-        feature_set->decorations, &feature_set->decoration_count,
-        LOOM_SPIRV_FEATURE_MAX_DECORATION_COUNT, descriptor->decorations[i],
-        "decoration"));
+    loom_spirv_feature_set_append_uint32(feature_set->decorations,
+                                         &feature_set->decoration_count,
+                                         descriptor->decorations[i]);
   }
   return iree_ok_status();
 }
