@@ -10,6 +10,8 @@
 #define LOOM_TOOLS_IREE_TEST_LOOM_MAIN_H_
 
 #include "iree/base/api.h"
+#include "loom/target/provider.h"
+#include "loom/tooling/execution/hal/artifact.h"
 #include "loom/tooling/execution/session.h"
 
 #ifdef __cplusplus
@@ -19,6 +21,13 @@ extern "C" {
 typedef struct iree_test_loom_configuration_t {
   // Null-terminated executable name used in help and diagnostics.
   const char* tool_name;
+  // Registers target-specific dialects and attrs linked into this runner.
+  loom_run_register_context_callback_t register_context;
+  // Target environment composed from linked execution providers.
+  const loom_target_environment_t* target_environment;
+  // Linked HAL artifact providers available to actual invocations.
+  const loom_run_hal_artifact_provider_registry_t*
+      hal_artifact_provider_registry;
   // Target-low descriptor registry package linked into this runner.
   loom_run_initialize_low_descriptor_registry_callback_t
       initialize_low_descriptor_registry;

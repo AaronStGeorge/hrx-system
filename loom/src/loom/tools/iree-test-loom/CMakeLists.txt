@@ -22,6 +22,9 @@ loom_cc_library(
     iree::base::tooling::flags
     iree::io::file_handle
     loom::src::loom::ops::op_registry
+    loom::src::loom::target::provider
+    loom::src::loom::tooling::execution::hal::artifact
+    loom::src::loom::tooling::execution::hal::testbench_actual
     loom::src::loom::tooling::execution::session
     loom::src::loom::tooling::io::file
     loom::src::loom::tooling::testbench::executor
@@ -56,6 +59,22 @@ iree_lit_test_suite(
     "hostonly"
 )
 
+iree_lit_test_suite(
+  NAME
+    amdgpu_lit_test
+  SRCS
+    "iree-test-loom_amdgpu_test.txt"
+  TOOLS
+    ::iree-test-loom
+    FileCheck
+  DATA
+    testdata::amdgpu_hal_actual.loom
+  LABELS
+    "driver=amdgpu"
+    "manual"
+    "requires-gpu-amd"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
 
 set(_IREE_TEST_LOOM_ALL_PROVIDERS amdgpu ireevm)
@@ -87,7 +106,7 @@ if("amdgpu" IN_LIST IREE_TEST_LOOM_PROVIDERS)
   _iree_test_loom_enable_provider(
     ${_IREE_TEST_LOOM_TARGET}
     IREE_TEST_LOOM_HAVE_AMDGPU
-    loom::src::loom::target::arch::amdgpu::provider
+    loom::src::loom::tooling::execution::hal::amdgpu::provider
   )
 endif()
 

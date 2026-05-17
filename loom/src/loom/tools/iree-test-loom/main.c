@@ -14,6 +14,7 @@
 #include "iree/base/api.h"
 #include "iree/base/tooling/flags.h"
 #include "loom/ops/op_registry.h"
+#include "loom/tooling/execution/hal/testbench_actual.h"
 #include "loom/tooling/io/file.h"
 #include "loom/tooling/testbench/executor.h"
 #include "loom/util/stream.h"
@@ -27,11 +28,20 @@ IREE_FLAG(int32_t, sample, -1,
 IREE_FLAG(int32_t, max_samples_per_case,
           LOOM_TESTBENCH_DEFAULT_MAX_SAMPLES_PER_CASE,
           "Maximum number of samples planned per check.case.");
+IREE_FLAG(string, pipeline, "default",
+          "Pass pipeline used for HAL actual invocations. Use 'default', "
+          "'none', '@symbol', or a comma-separated pass list.");
 
 static iree_status_t iree_test_loom_register_context(void* user_data,
                                                      loom_context_t* context) {
-  (void)user_data;
-  return loom_op_registry_register_all_dialects(context);
+  const iree_test_loom_configuration_t* configuration =
+      (const iree_test_loom_configuration_t*)user_data;
+  IREE_RETURN_IF_ERROR(loom_op_registry_register_all_dialects(context));
+  if (configuration->register_context.fn == NULL) {
+    return iree_ok_status();
+  }
+  return configuration->register_context.fn(
+      configuration->register_context.user_data, context);
 }
 
 static iree_string_view_t iree_test_loom_normalize_case_name(
@@ -69,10 +79,63 @@ static iree_status_t iree_test_loom_validate_sample_flag(
   return iree_ok_status();
 }
 
+static bool iree_test_loom_case_has_actual_invocation(
+    const loom_testbench_case_plan_t* case_plan) {
+  for (iree_host_size_t i = 0; i < case_plan->invocation_count; ++i) {
+    if (case_plan->invocations[i].kind == LOOM_TESTBENCH_INVOCATION_ACTUAL) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static iree_status_t iree_test_loom_configure_hal_actual_provider(
+    const iree_test_loom_configuration_t* configuration,
+    loom_run_session_t* session, const loom_run_module_t* run_module,
+    const loom_testbench_module_plan_t* module_plan,
+    const loom_testbench_case_plan_t* case_plan,
+    loom_run_hal_testbench_context_t* hal_context,
+    loom_testbench_case_execution_options_t* execution_options,
+    loom_run_hal_testbench_actual_provider_t* out_provider) {
+  const loom_testbench_invocation_plan_t* actual_invocation = NULL;
+  IREE_RETURN_IF_ERROR(loom_run_hal_testbench_select_actual_invocation(
+      case_plan, &actual_invocation));
+  IREE_RETURN_IF_ERROR(
+      loom_run_hal_testbench_context_ensure_runtime(hal_context));
+
+  execution_options->materializer.device = hal_context->runtime.device;
+  execution_options->materializer.device_allocator =
+      iree_hal_device_allocator(hal_context->runtime.device);
+  execution_options->materializer.buffer_params =
+      loom_run_hal_testbench_host_visible_buffer_params();
+
+  const loom_run_hal_testbench_actual_provider_options_t provider_options = {
+      .context = hal_context,
+      .session = session,
+      .target_environment = configuration->target_environment,
+      .filename = run_module->filename,
+      .source = run_module->source,
+      .pipeline = iree_make_cstring_view(FLAG_pipeline),
+      .test_module = module_plan->module,
+      .actual_invocation = actual_invocation,
+  };
+  loom_run_hal_testbench_actual_provider_initialize(&provider_options,
+                                                    out_provider);
+  execution_options->invocation.invoke_actual =
+      (loom_testbench_invocation_callback_t){
+          .fn = loom_run_hal_testbench_actual_invoke,
+          .user_data = out_provider,
+      };
+  return iree_ok_status();
+}
+
 static iree_status_t iree_test_loom_run_case_samples(
+    const iree_test_loom_configuration_t* configuration,
+    loom_run_session_t* session, const loom_run_module_t* run_module,
     const loom_testbench_module_plan_t* module_plan,
     iree_host_size_t case_index,
-    const loom_testbench_case_execution_options_t* execution_options,
+    const loom_testbench_case_execution_options_t* base_execution_options,
+    loom_run_hal_testbench_context_t* hal_context,
     iree_arena_allocator_t* arena, iree_string_builder_t* sample_output,
     bool* inout_first_sample, iree_host_size_t* inout_sample_count,
     iree_host_size_t* inout_failed_sample_count) {
@@ -83,15 +146,28 @@ static iree_status_t iree_test_loom_run_case_samples(
       case_plan->sample_count, &selected_sample_ordinal, &has_selected_sample));
 
   iree_status_t status = iree_ok_status();
+  loom_testbench_case_execution_options_t execution_options =
+      *base_execution_options;
+  loom_run_hal_testbench_actual_provider_t hal_actual_provider = {0};
+  bool hal_actual_provider_initialized = false;
+  if (iree_test_loom_case_has_actual_invocation(case_plan)) {
+    status = iree_test_loom_configure_hal_actual_provider(
+        configuration, session, run_module, module_plan, case_plan, hal_context,
+        &execution_options, &hal_actual_provider);
+    hal_actual_provider_initialized = iree_status_is_ok(status);
+  }
+
   loom_testbench_prepared_case_t prepared_case = {0};
-  status = loom_testbench_prepare_case_execution(
-      execution_options, module_plan, case_index, arena, &prepared_case);
+  if (iree_status_is_ok(status)) {
+    status = loom_testbench_prepare_case_execution(
+        &execution_options, module_plan, case_index, arena, &prepared_case);
+  }
 
   bool executor_initialized = false;
   loom_testbench_case_executor_t executor = {0};
   if (iree_status_is_ok(status)) {
     status = loom_testbench_case_executor_initialize(
-        &prepared_case, execution_options, &executor);
+        &prepared_case, &execution_options, &executor);
     executor_initialized = iree_status_is_ok(status);
   }
 
@@ -128,6 +204,9 @@ static iree_status_t iree_test_loom_run_case_samples(
 
   if (executor_initialized) {
     loom_testbench_case_executor_deinitialize(&executor);
+  }
+  if (hal_actual_provider_initialized) {
+    loom_run_hal_testbench_actual_provider_deinitialize(&hal_actual_provider);
   }
   iree_arena_reset(arena);
   return status;
@@ -170,6 +249,7 @@ int iree_test_loom_main(int argc, char** argv,
   iree_io_file_contents_t* contents = NULL;
   loom_run_session_t session = {0};
   loom_run_module_t run_module = {0};
+  loom_run_hal_testbench_context_t hal_context = {0};
   iree_arena_allocator_t plan_arena;
   memset(&plan_arena, 0, sizeof(plan_arena));
   iree_arena_allocator_t execution_arena;
@@ -201,10 +281,15 @@ int iree_test_loom_main(int argc, char** argv,
     session_options.host_allocator = allocator;
     session_options.register_context = (loom_run_register_context_callback_t){
         .fn = iree_test_loom_register_context,
+        .user_data = (void*)configuration,
     };
     session_options.initialize_low_descriptor_registry =
         configuration->initialize_low_descriptor_registry;
     status = loom_run_session_initialize(&session_options, &session);
+  }
+  if (iree_status_is_ok(status)) {
+    loom_run_hal_testbench_context_initialize(
+        configuration->hal_artifact_provider_registry, allocator, &hal_context);
   }
 
   const iree_string_view_t input_path =
@@ -260,8 +345,9 @@ int iree_test_loom_main(int argc, char** argv,
       }
       ++selected_case_count;
       status = iree_test_loom_run_case_samples(
-          &module_plan, case_index, &execution_options, &execution_arena,
-          &sample_output, &first_sample, &sample_count, &failed_sample_count);
+          configuration, &session, &run_module, &module_plan, case_index,
+          &execution_options, &hal_context, &execution_arena, &sample_output,
+          &first_sample, &sample_count, &failed_sample_count);
     }
     if (iree_status_is_ok(status) && selected_case_count == 0) {
       status = iree_make_status(
@@ -293,6 +379,7 @@ int iree_test_loom_main(int argc, char** argv,
   iree_string_builder_deinitialize(&sample_output);
   iree_arena_deinitialize(&execution_arena);
   iree_arena_deinitialize(&plan_arena);
+  loom_run_hal_testbench_context_deinitialize(&hal_context);
   loom_run_module_deinitialize(&run_module);
   iree_io_file_contents_free(contents);
   loom_run_session_deinitialize(&session);

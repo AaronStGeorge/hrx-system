@@ -37,6 +37,7 @@ loom_cc_library(
     loom::src::loom::tooling::execution::hal::candidate
     loom::src::loom::tooling::execution::hal::invocation
     loom::src::loom::tooling::execution::hal::runtime
+    loom::src::loom::tooling::execution::hal::testbench_actual
     loom::src::loom::tooling::execution::one_shot
     loom::src::loom::tooling::execution::session
     loom::src::loom::tooling::io::file

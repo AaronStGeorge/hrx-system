@@ -1,0 +1,7 @@
+// RUN: iree-test-loom %S/testdata/amdgpu_hal_actual.loom --case=@store_i32_case --device=amdgpu | FileCheck --check-prefix=STORE %s
+
+// STORE: "format":"loom.test.v0"
+// STORE: "case_count":1
+// STORE: "sample_count":1
+// STORE: "failed_sample_count":0
+// STORE: "case":"store_i32_case","sample_ordinal":0,"passed":true

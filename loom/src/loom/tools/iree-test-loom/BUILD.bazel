@@ -52,7 +52,8 @@ _AMDGPU_PROVIDER_COPTS = iree_select({
 
 _AMDGPU_PROVIDER_DEPS = iree_select({
     ":amdgpu_provider_enabled": [
-        "//loom/src/loom/target/arch/amdgpu:provider",
+        "//loom/src/loom/tooling/execution/hal/amdgpu:artifact_provider",
+        "//loom/src/loom/tooling/execution/hal/amdgpu:provider",
     ],
     "//conditions:default": [],
 })
@@ -87,7 +88,10 @@ loom_cc_library(
     hdrs = ["main.h"],
     deps = [
         "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/target:provider",
         "//loom/src/loom/tooling/execution:session",
+        "//loom/src/loom/tooling/execution/hal:artifact",
+        "//loom/src/loom/tooling/execution/hal:testbench_actual",
         "//loom/src/loom/tooling/io:file",
         "//loom/src/loom/tooling/testbench:executor",
         "//loom/src/loom/util:stream",
@@ -116,6 +120,24 @@ iree_lit_test_suite(
         "testdata/scalar_cases.loom",
     ],
     tags = ["hostonly"],
+    tools = [
+        ":iree-test-loom",
+        "@llvm-project//llvm:FileCheck",
+    ],
+)
+
+iree_lit_test_suite(
+    name = "amdgpu_lit_test",
+    srcs = ["iree-test-loom_amdgpu_test.txt"],
+    cfg = "//runtime:lit.cfg.py",
+    data = [
+        "testdata/amdgpu_hal_actual.loom",
+    ],
+    tags = [
+        "driver=amdgpu",
+        "manual",
+        "requires-gpu-amd",
+    ],
     tools = [
         ":iree-test-loom",
         "@llvm-project//llvm:FileCheck",

@@ -23,23 +23,17 @@
   (IREE_TEST_LOOM_HAVE_AMDGPU || IREE_TEST_LOOM_HAVE_IREEVM)
 
 #if IREE_TEST_LOOM_HAVE_AMDGPU
-#include "loom/target/arch/amdgpu/provider.h"
+#include "loom/tooling/execution/hal/amdgpu/artifact_provider.h"
+#include "loom/tooling/execution/hal/amdgpu/provider.h"
 #endif  // IREE_TEST_LOOM_HAVE_AMDGPU
 #if IREE_TEST_LOOM_HAVE_IREEVM
 #include "loom/tooling/execution/ireevm/provider.h"
 #endif  // IREE_TEST_LOOM_HAVE_IREEVM
 
-#if IREE_TEST_LOOM_HAVE_AMDGPU
-static const loom_run_execution_provider_t kIreeTestLoomAmdgpuProvider = {
-    .name = IREE_SVL("amdgpu"),
-    .target_provider = &loom_amdgpu_target_provider,
-};
-#endif  // IREE_TEST_LOOM_HAVE_AMDGPU
-
 #if IREE_TEST_LOOM_HAVE_ANY_PROVIDER
 static const loom_run_execution_provider_t* const kIreeTestLoomProviders[] = {
 #if IREE_TEST_LOOM_HAVE_AMDGPU
-    &kIreeTestLoomAmdgpuProvider,
+    &loom_amdgpu_hal_execution_provider,
 #endif  // IREE_TEST_LOOM_HAVE_AMDGPU
 #if IREE_TEST_LOOM_HAVE_IREEVM
     &loom_ireevm_execution_provider,
@@ -57,6 +51,24 @@ static const loom_run_execution_provider_set_t kIreeTestLoomProviderSet = {
 #endif  // IREE_TEST_LOOM_HAVE_ANY_PROVIDER
 };
 
+#if IREE_TEST_LOOM_HAVE_AMDGPU
+static const loom_run_hal_artifact_provider_t* const
+    kIreeTestLoomHalArtifactProviders[] = {
+        &loom_amdgpu_hal_artifact_provider,
+};
+#endif  // IREE_TEST_LOOM_HAVE_AMDGPU
+
+static const loom_run_hal_artifact_provider_registry_t
+    kIreeTestLoomHalArtifactProviderRegistry = {
+#if IREE_TEST_LOOM_HAVE_AMDGPU
+        .providers = kIreeTestLoomHalArtifactProviders,
+        .provider_count = IREE_ARRAYSIZE(kIreeTestLoomHalArtifactProviders),
+#else
+        .providers = NULL,
+        .provider_count = 0,
+#endif  // IREE_TEST_LOOM_HAVE_AMDGPU
+};
+
 int main(int argc, char** argv) {
   loom_run_execution_environment_t environment;
   iree_status_t status = loom_run_execution_environment_initialize(
@@ -69,6 +81,13 @@ int main(int argc, char** argv) {
 
   const iree_test_loom_configuration_t configuration = {
       .tool_name = "iree-test-loom",
+      .register_context =
+          loom_run_execution_environment_register_context_callback(
+              &environment),
+      .target_environment =
+          loom_run_execution_environment_target_environment(&environment),
+      .hal_artifact_provider_registry =
+          &kIreeTestLoomHalArtifactProviderRegistry,
       .initialize_low_descriptor_registry =
           loom_run_execution_environment_low_descriptor_registry_callback(
               &environment),

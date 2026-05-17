@@ -95,7 +95,7 @@
 // BUNDLE-MANIFEST: "files":{"results":{"path":
 // BUNDLE-MANIFEST: "identity":{"status":"ok","byte_count":
 
-// DISPATCH-NO-ACTUAL: dispatch_complete V0 requires exactly one actual invocation
+// DISPATCH-NO-ACTUAL: HAL actual invocations require exactly one actual invocation
 
 // DUPLICATE: "row":"failure"
 // DUPLICATE: "stage":"verify"

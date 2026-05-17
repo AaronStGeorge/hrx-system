@@ -90,7 +90,7 @@ if("amdgpu" IN_LIST IREE_RUN_LOOM_PROVIDERS)
   _iree_run_loom_enable_provider(
     ${_IREE_RUN_LOOM_TARGET}
     IREE_RUN_LOOM_HAVE_AMDGPU
-    loom::src::loom::target::arch::amdgpu::provider
+    loom::src::loom::tooling::execution::hal::amdgpu::provider
   )
 endif()
 

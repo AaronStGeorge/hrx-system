@@ -89,6 +89,38 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    testbench_actual
+  HDRS
+    "testbench_actual.h"
+  SRCS
+    "testbench_actual.c"
+  DEPS
+    ::artifact
+    ::candidate
+    ::invocation
+    ::runtime
+    iree::base
+    iree::hal
+    loom::src::loom::error::diagnostic
+    loom::src::loom::ir
+    loom::src::loom::ir::facts
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::special_values
+    loom::src::loom::pass::types
+    loom::src::loom::target::provider
+    loom::src::loom::tooling::compile::pipeline
+    loom::src::loom::tooling::execution::compile_options
+    loom::src::loom::tooling::execution::one_shot
+    loom::src::loom::tooling::execution::session
+    loom::src::loom::tooling::testbench
+    loom::src::loom::tooling::testbench::value_materializer
+    iree::tooling::device_util
+    iree::vm
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     benchmark
   HDRS
     "benchmark.h"
