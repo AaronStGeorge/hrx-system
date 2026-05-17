@@ -58,6 +58,7 @@ loom_cc_library(
   DEPS
     ::binary_format
     ::module_builder
+    ::packet_rows
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::function
@@ -70,6 +71,20 @@ loom_cc_library(
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::registers
     loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    packet_rows
+  HDRS
+    "packet_rows.h"
+  SRCS
+    "packet_rows.c"
+  DEPS
+    ::binary_format
+    iree::base
+    loom::src::loom::target::arch::spirv::descriptors_ids
   PUBLIC
 )
 

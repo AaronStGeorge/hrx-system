@@ -71,6 +71,7 @@ loom_cc_library(
     deps = [
         ":binary_format",
         ":module_builder",
+        ":packet_rows",
         "//loom/src/loom/codegen/low:function",
         "//loom/src/loom/codegen/low:target_binding",
         "//loom/src/loom/error:emitter",
@@ -83,6 +84,17 @@ loom_cc_library(
         "//loom/src/loom/target/arch/spirv:features",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "packet_rows",
+    srcs = ["packet_rows.c"],
+    hdrs = ["packet_rows.h"],
+    deps = [
+        ":binary_format",
+        "//loom/src/loom/target/arch/spirv:descriptors_ids",
+        "//runtime/src/iree/base",
     ],
 )
 

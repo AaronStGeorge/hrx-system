@@ -33,6 +33,18 @@ low.func.def target(@target) @spirv_workgroup_storage_address() asm<spirv.logica
 
 // ====
 
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) @spirv_constant_requires_immediate() -> (reg<spirv.id>) {
+  // ERROR@+1: TARGET/047 {function_name="spirv_constant_requires_immediate", opcode="spirv.op_constant.i32", immediate_name="i32_value"}
+  %c0 = low.const<spirv.op_constant.i32> : reg<spirv.id>
+  low.return %c0 : reg<spirv.id>
+}
+
+// ====
+
 // RUN: emit low-allocation @spirv_storage_buffer_load_store
 
 spirv.target<vulkan1_3> @target
