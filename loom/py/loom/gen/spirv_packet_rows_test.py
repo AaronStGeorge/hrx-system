@@ -146,6 +146,33 @@ def test_generation_uses_byte_strides_for_cooperative_matrix_rows() -> None:
     assert ".cooperative_matrix_stride = 16" in s8_rhs
     assert ".cooperative_matrix_stride = 64" in s8_store
 
+    u8_lhs = _generated_row(
+        tables,
+        _cooperative_matrix_descriptor(
+            "op_cooperative_matrix_load_khr",
+            role="lhs",
+            element="u8",
+            k_size=32,
+            accumulator="u32",
+            layout="row_major",
+        ),
+    )
+    u8_store = _generated_row(
+        tables,
+        _cooperative_matrix_descriptor(
+            "op_cooperative_matrix_store_khr",
+            role="result",
+            element="u8",
+            k_size=32,
+            accumulator="u32",
+            layout="row_major",
+        ),
+    )
+    assert "LOOM_SPIRV_SCALAR_TYPE_U8" in u8_lhs
+    assert "LOOM_SPIRV_SCALAR_TYPE_U32" in u8_store
+    assert ".cooperative_matrix_stride = 32" in u8_lhs
+    assert ".cooperative_matrix_stride = 64" in u8_store
+
 
 def test_generation_keeps_storage_buffer_address_untyped_until_access_chain() -> None:
     tables = generate_tables()

@@ -60,7 +60,7 @@ from loom.target.arch.spirv.scalar_conversion import (
     ScalarConversion,
 )
 from loom.target.arch.spirv.scalar_memory import (
-    STORAGE_BUFFER_SCALARS,
+    SOURCE_STORAGE_BUFFER_SCALARS,
     StorageBufferScalar,
 )
 from loom.target.contracts import (
@@ -822,6 +822,8 @@ def _cooperative_matrix_rules_for_case(
 def _cooperative_matrix_rules() -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
     for case in COOPERATIVE_MATRIX_CASES:
+        if not case.source_rule_enabled:
+            continue
         rules.extend(_cooperative_matrix_rules_for_case(case))
     return tuple(rules)
 
@@ -884,7 +886,7 @@ def _view_store_rule(scalar: StorageBufferScalar) -> DescriptorRule:
 
 def _storage_buffer_rules() -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
-    for scalar in STORAGE_BUFFER_SCALARS:
+    for scalar in SOURCE_STORAGE_BUFFER_SCALARS:
         rules.append(_buffer_view_rule(scalar))
         rules.append(_view_load_rule(scalar))
         rules.append(_view_store_rule(scalar))

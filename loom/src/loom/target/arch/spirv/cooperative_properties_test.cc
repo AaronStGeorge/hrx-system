@@ -27,6 +27,11 @@ constexpr loom_spirv_feature_bits_t kS8CooperativeMatrixFeatures =
     LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR | LOOM_SPIRV_FEATURE_INT8 |
     LOOM_SPIRV_FEATURE_STORAGE_BUFFER_8BIT_ACCESS;
 
+constexpr loom_spirv_feature_bits_t kU8CooperativeMatrixFeatures =
+    LOOM_SPIRV_FEATURE_VULKAN_SHADER |
+    LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR | LOOM_SPIRV_FEATURE_INT8 |
+    LOOM_SPIRV_FEATURE_STORAGE_BUFFER_8BIT_ACCESS;
+
 void PreparePropertySet(loom_spirv_feature_bits_t feature_bits,
                         loom_spirv_cooperative_property_set_t* property_set) {
   loom_spirv_feature_set_t feature_set = {};
@@ -92,6 +97,23 @@ loom_spirv_cooperative_matrix_query_t S8MatrixQuery(
   };
 }
 
+loom_spirv_cooperative_matrix_query_t U8MatrixQuery(
+    loom_lowering_policy_t policy) {
+  return {
+      .m_size = 16,
+      .n_size = 16,
+      .k_size = 32,
+      .lhs_type = LOOM_SPIRV_SCALAR_TYPE_U8,
+      .rhs_type = LOOM_SPIRV_SCALAR_TYPE_U8,
+      .accumulator_type = LOOM_SPIRV_SCALAR_TYPE_U32,
+      .result_type = LOOM_SPIRV_SCALAR_TYPE_U32,
+      .scope = LOOM_SPIRV_SCOPE_SUBGROUP,
+      .layout = LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_KHR,
+      .storage_class = LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER,
+      .policy = policy,
+  };
+}
+
 loom_spirv_cooperative_vector_query_t PackedS8VectorQuery(
     loom_lowering_policy_t policy) {
   return {
@@ -141,6 +163,9 @@ TEST(SpirvCooperativePropertiesTest, MapsNumericFormatsToScalarTypes) {
   EXPECT_TRUE(loom_spirv_scalar_type_from_numeric_format(
       LOOM_VALUE_FACT_NUMERIC_FORMAT_QUANT_I8, &scalar_type));
   EXPECT_EQ(scalar_type, LOOM_SPIRV_SCALAR_TYPE_S8);
+  EXPECT_TRUE(loom_spirv_scalar_type_from_numeric_format(
+      LOOM_VALUE_FACT_NUMERIC_FORMAT_U8, &scalar_type));
+  EXPECT_EQ(scalar_type, LOOM_SPIRV_SCALAR_TYPE_U8);
 
   const loom_spirv_scalar_type_descriptor_t* descriptor =
       loom_spirv_scalar_type_descriptor(LOOM_SPIRV_SCALAR_TYPE_BF16);
@@ -323,6 +348,52 @@ TEST(SpirvCooperativePropertiesTest,
       property->mul_add_descriptor_ref,
       SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_COOPERATIVE_MATRIX_MUL_ADD_KHR_S8_M16N16K32_S32_SUBGROUP_SIGNED_SATURATING);
   EXPECT_EQ(diagnostic.status, LOOM_SPIRV_COOPERATIVE_SELECTION_MATCHED);
+}
+
+TEST(SpirvCooperativePropertiesTest, SelectsUnsignedU8CooperativeMatrixRow) {
+  loom_spirv_cooperative_property_set_t property_set = {};
+  PreparePropertySet(kU8CooperativeMatrixFeatures, &property_set);
+  const loom_spirv_cooperative_matrix_query_t query =
+      U8MatrixQuery(LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED);
+
+  loom_spirv_cooperative_diagnostic_t diagnostic = {};
+  const loom_spirv_cooperative_matrix_property_t* property =
+      loom_spirv_cooperative_matrix_property_select(&property_set, &query,
+                                                    &diagnostic);
+
+  ASSERT_NE(property, nullptr);
+  EXPECT_TRUE(iree_string_view_equal(
+      property->name,
+      IREE_SV("khr.cooperative_matrix.u8.16x16x32.u32.subgroup")));
+  EXPECT_EQ(property->lhs_type, LOOM_SPIRV_SCALAR_TYPE_U8);
+  EXPECT_EQ(property->rhs_type, LOOM_SPIRV_SCALAR_TYPE_U8);
+  EXPECT_EQ(property->accumulator_type, LOOM_SPIRV_SCALAR_TYPE_U32);
+  EXPECT_EQ(property->result_type, LOOM_SPIRV_SCALAR_TYPE_U32);
+  EXPECT_EQ(property->operand_flags, 0u);
+  EXPECT_EQ(
+      property->mul_add_descriptor_ref,
+      SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_COOPERATIVE_MATRIX_MUL_ADD_KHR_U8_M16N16K32_U32_SUBGROUP);
+  EXPECT_EQ(diagnostic.status, LOOM_SPIRV_COOPERATIVE_SELECTION_MATCHED);
+}
+
+TEST(SpirvCooperativePropertiesTest,
+     DistinguishesUnsignedMatrixRowsFromSignedOperandFlags) {
+  loom_spirv_cooperative_property_set_t property_set = {};
+  PreparePropertySet(kU8CooperativeMatrixFeatures, &property_set);
+  loom_spirv_cooperative_matrix_query_t query =
+      U8MatrixQuery(LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED);
+  query.operand_flags =
+      LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_A_SIGNED_COMPONENTS;
+
+  loom_spirv_cooperative_diagnostic_t diagnostic = {};
+  EXPECT_EQ(loom_spirv_cooperative_matrix_property_select(&property_set, &query,
+                                                          &diagnostic),
+            nullptr);
+
+  EXPECT_EQ(diagnostic.status,
+            LOOM_SPIRV_COOPERATIVE_SELECTION_REQUIRED_PROPERTY_MISSING);
+  EXPECT_TRUE(iree_any_bit_set(diagnostic.rejection_flags,
+                               LOOM_SPIRV_COOPERATIVE_REJECTION_OPERANDS));
 }
 
 TEST(SpirvCooperativePropertiesTest,

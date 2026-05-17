@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from loom.target.arch.spirv.features import feature_bits_expression, feature_bits_value
 from loom.target.arch.spirv.scalar_memory import (
     StorageBufferScalar,
-    storage_buffer_scalar_by_source_type,
+    storage_buffer_scalar_by_suffix,
 )
 
 
@@ -61,10 +61,15 @@ class CooperativeMatrixCase:
     accumulator_columns: int
     accumulator_vector_lanes: int
     feature_atoms: tuple[str, ...]
+    lhs_scalar_suffix: str | None = None
+    rhs_scalar_suffix: str | None = None
+    accumulator_scalar_suffix: str | None = None
+    result_scalar_suffix: str | None = None
     property_storage_flags: str = "MATRIX_STORAGE_ANY"
     operand_mode: str | None = None
     property_operand_flags: str = "0"
     packet_operand_mask: str | None = None
+    source_rule_enabled: bool = True
 
     @property
     def property_name(self) -> str:
@@ -85,19 +90,27 @@ class CooperativeMatrixCase:
 
     @property
     def lhs_scalar(self) -> StorageBufferScalar:
-        return _require_storage_buffer_scalar(self.lhs_source_type)
+        return _require_storage_buffer_scalar(
+            self.lhs_scalar_suffix or self.lhs_source_type
+        )
 
     @property
     def rhs_scalar(self) -> StorageBufferScalar:
-        return _require_storage_buffer_scalar(self.rhs_source_type)
+        return _require_storage_buffer_scalar(
+            self.rhs_scalar_suffix or self.rhs_source_type
+        )
 
     @property
     def accumulator_scalar(self) -> StorageBufferScalar:
-        return _require_storage_buffer_scalar(self.accumulator_source_type)
+        return _require_storage_buffer_scalar(
+            self.accumulator_scalar_suffix or self.accumulator_source_type
+        )
 
     @property
     def result_scalar(self) -> StorageBufferScalar:
-        return _require_storage_buffer_scalar(self.result_source_type)
+        return _require_storage_buffer_scalar(
+            self.result_scalar_suffix or self.result_source_type
+        )
 
     @property
     def shape_key(self) -> int:
@@ -128,10 +141,10 @@ class CooperativeMatrixCase:
         return self.feature_bits | scalar.feature_bits
 
 
-def _require_storage_buffer_scalar(source_type: str) -> StorageBufferScalar:
-    scalar = storage_buffer_scalar_by_source_type(source_type)
+def _require_storage_buffer_scalar(suffix: str) -> StorageBufferScalar:
+    scalar = storage_buffer_scalar_by_suffix(suffix)
     if scalar is None:
-        raise ValueError(f"missing SPIR-V storage-buffer scalar row for {source_type}")
+        raise ValueError(f"missing SPIR-V storage-buffer scalar row for {suffix}")
     return scalar
 
 
@@ -231,5 +244,36 @@ COOPERATIVE_MATRIX_CASES = (
         operand_mode="signed_saturating",
         property_operand_flags=_SIGNED_SATURATING_PROPERTY_OPERANDS,
         packet_operand_mask=_SIGNED_SATURATING_PACKET_OPERANDS,
+    ),
+    CooperativeMatrixCase(
+        element="u8",
+        lhs_source_type="i8",
+        rhs_source_type="i8",
+        accumulator_source_type="i32",
+        result_source_type="i32",
+        accumulator="u32",
+        m_size=16,
+        n_size=16,
+        k_size=32,
+        lhs_rows=16,
+        lhs_columns=32,
+        lhs_vector_lanes=32,
+        rhs_rows=32,
+        rhs_columns=16,
+        rhs_vector_lanes=32,
+        accumulator_rows=16,
+        accumulator_columns=16,
+        accumulator_vector_lanes=8,
+        feature_atoms=(
+            "cooperative_matrix_khr",
+            "int8",
+            "storage_buffer_8bit_access",
+        ),
+        lhs_scalar_suffix="u8",
+        rhs_scalar_suffix="u8",
+        accumulator_scalar_suffix="u32",
+        result_scalar_suffix="u32",
+        property_storage_flags="STORAGE_BUFFER_OR_BDA",
+        source_rule_enabled=False,
     ),
 )

@@ -35,7 +35,7 @@ def test_generation_maps_matrix_properties_to_low_descriptors() -> None:
         assert _descriptor_ref_constant_name(_mul_add_descriptor_key(case)) in row
 
     assert "{.shape_key = UINT64_C(0x001000100010), .start = 0, .count = 2}" in tables
-    assert "{.shape_key = UINT64_C(0x001000100020), .start = 2, .count = 1}" in tables
+    assert "{.shape_key = UINT64_C(0x001000100020), .start = 2, .count = 2}" in tables
 
 
 def test_generation_maps_vector_properties_to_component_rows() -> None:
