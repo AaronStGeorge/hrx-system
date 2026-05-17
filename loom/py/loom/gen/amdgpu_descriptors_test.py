@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from loom.gen import amdgpu_descriptors
+from loom.target.arch.amdgpu.target_info import AmdgpuDescriptorSetInfo
 from loom.target.low_descriptors import Descriptor, DescriptorSet
 
 
@@ -45,7 +46,27 @@ def _descriptor_set(target: str, descriptor_count: int) -> DescriptorSet:
     )
 
 
+def _descriptor_set_info(
+    target: str,
+    *,
+    storage_target: str | None = None,
+) -> AmdgpuDescriptorSetInfo:
+    return AmdgpuDescriptorSetInfo(
+        generator_target=target,
+        key=f"amdgpu.{target}.core",
+        isa_xml_key="test",
+        isa_architecture_name="AMDGPU Test",
+        isa_architecture_id=0,
+        supports_descriptor_packet_encoding=True,
+        storage_generator_target=storage_target,
+    )
+
+
 def test_storage_generation_reuses_parsed_isa_for_declared_views() -> None:
+    storage_target = "test_storage"
+    view_target = "test_view"
+    storage_info = _descriptor_set_info(storage_target)
+    view_info = _descriptor_set_info(view_target, storage_target=storage_target)
     parsed_spec = object()
     parse_calls: list[Path] = []
     build_calls: list[tuple[str, object]] = []
@@ -56,7 +77,7 @@ def test_storage_generation_reuses_parsed_isa_for_declared_views() -> None:
 
     def build_descriptor_set(target: str, spec: object) -> DescriptorSet:
         build_calls.append((target, spec))
-        descriptor_count = 2 if target == "rdna4_gfx125x" else 1
+        descriptor_count = 2 if target == view_target else 1
         return _descriptor_set(target, descriptor_count)
 
     def generate_descriptor_set(descriptor_set: DescriptorSet, format_output: bool) -> SimpleNamespace:
@@ -69,8 +90,47 @@ def test_storage_generation_reuses_parsed_isa_for_declared_views() -> None:
     ) -> str:
         return "// shared\n"
 
+    def descriptor_set_info_by_target(target: str) -> AmdgpuDescriptorSetInfo:
+        if target == storage_target:
+            return storage_info
+        if target == view_target:
+            return view_info
+        raise ValueError(target)
+
+    def storage_info_by_target(target: str) -> AmdgpuDescriptorSetInfo:
+        if target in (storage_target, view_target):
+            return storage_info
+        raise ValueError(target)
+
+    def view_infos_by_storage_target(
+        target: str,
+    ) -> tuple[AmdgpuDescriptorSetInfo, ...]:
+        if target == storage_target:
+            return (view_info,)
+        return ()
+
     with (
         TemporaryDirectory() as temporary_directory,
+        mock.patch.object(
+            amdgpu_descriptors,
+            "AMDGPU_DESCRIPTOR_SET_GENERATOR_TARGETS",
+            (storage_target, view_target),
+        ),
+        mock.patch.object(
+            amdgpu_descriptors,
+            "amdgpu_descriptor_set_info_by_generator_target",
+            descriptor_set_info_by_target,
+        ),
+        mock.patch.object(
+            amdgpu_descriptors,
+            "amdgpu_descriptor_set_storage_info_by_generator_target",
+            storage_info_by_target,
+        ),
+        mock.patch.object(
+            amdgpu_descriptors,
+            "amdgpu_descriptor_set_view_infos_by_storage_generator_target",
+            view_infos_by_storage_target,
+        ),
         mock.patch.object(amdgpu_descriptors, "parse_amdgpu_isa_xml_path", parse_xml),
         mock.patch.object(
             amdgpu_descriptors,
@@ -89,15 +149,16 @@ def test_storage_generation_reuses_parsed_isa_for_declared_views() -> None:
         ),
     ):
         tmp_path = Path(temporary_directory)
-        xml_path = tmp_path / "amdgpu_isa_rdna4.xml"
+        xml_path = tmp_path / "amdgpu_isa_test.xml"
+        view_header_path = tmp_path / "test_view_descriptors.h"
         assert (
             amdgpu_descriptors.main(
                 [
-                    "--target=rdna4",
+                    f"--target={storage_target}",
                     f"--xml={xml_path}",
-                    f"--header={tmp_path / 'rdna4_descriptors.h'}",
-                    f"--source={tmp_path / 'rdna4_descriptors.c'}",
-                    f"--view-header=rdna4_gfx125x={tmp_path / 'rdna4_gfx125x_descriptors.h'}",
+                    f"--header={tmp_path / 'test_storage_descriptors.h'}",
+                    f"--source={tmp_path / 'test_storage_descriptors.c'}",
+                    f"--view-header={view_target}={view_header_path}",
                 ]
             )
             == 0
@@ -105,6 +166,6 @@ def test_storage_generation_reuses_parsed_isa_for_declared_views() -> None:
 
     assert parse_calls == [xml_path]
     assert build_calls == [
-        ("rdna4", parsed_spec),
-        ("rdna4_gfx125x", parsed_spec),
+        (storage_target, parsed_spec),
+        (view_target, parsed_spec),
     ]
