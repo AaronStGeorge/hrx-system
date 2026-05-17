@@ -101,25 +101,4 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_cc_library(
-  NAME
-    lower
-  HDRS
-    "lower.h"
-  SRCS
-    "lower/registry.c"
-  DEPS
-    iree::base
-    loom::src::loom::codegen::low::lower
-    loom::src::loom::error::error_defs
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::scalar
-    loom::src::loom::target::arch::ireevm::descriptors_ids
-    loom::src::loom::target::arch::ireevm::ops
-    loom::src::loom::target::emit::ireevm::contracts::core
-    loom::src::loom::target::emit::ireevm::contracts::core_lower_rules
-  PUBLIC
-)
-
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

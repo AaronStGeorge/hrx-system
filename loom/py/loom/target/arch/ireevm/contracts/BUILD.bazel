@@ -15,7 +15,7 @@ py_library(
     name = "contracts",
     srcs = [
         "__init__.py",
-        "contracts.py",
+        "core.py",
     ],
     deps = [
         "//loom/py/loom:core",

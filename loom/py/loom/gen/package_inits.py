@@ -61,6 +61,10 @@ PACKAGE_INITS = (
         "x86 source-to-low contract fragments.",
     ),
     PackageInit(
+        "loom/py/loom/target/arch/ireevm/contracts/__init__.py",
+        "IREE VM source-to-low contract fragments.",
+    ),
+    PackageInit(
         "loom/py/loom/target/emit/__init__.py",
         "Emission-target descriptor inputs.",
     ),
@@ -71,10 +75,6 @@ PACKAGE_INITS = (
     PackageInit(
         "loom/py/loom/target/emit/llvmir/x86/__init__.py",
         "x86 LLVMIR debug projection metadata.",
-    ),
-    PackageInit(
-        "loom/py/loom/target/emit/ireevm/__init__.py",
-        "IREE VM descriptor inputs.",
     ),
     PackageInit(
         "loom/py/loom/target/emit/wasm/__init__.py",

@@ -29,6 +29,7 @@ loom_assert_no_dependencies(
     name = "core_target_interfaces_no_ireevm_target_deps",
     dependencies = [
         ":descriptors",
+        ":lower",
         ":low_registry",
         ":math_policy",
         ":ops",
@@ -110,6 +111,24 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "lower",
+    srcs = ["lower/registry.c"],
+    hdrs = ["lower.h"],
+    deps = [
+        ":descriptors_ids",
+        ":ops",
+        "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/scalar",
+        "//loom/src/loom/target/arch/ireevm/contracts:core",
+        "//loom/src/loom/target/arch/ireevm/contracts:core_lower_rules",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "low_registry",
     srcs = ["low_registry.c"],
     hdrs = ["low_registry.h"],
@@ -164,12 +183,12 @@ loom_cc_library(
     hdrs = ["provider.h"],
     deps = [
         ":low_registry",
+        ":lower",
         ":math_policy",
         ":ops",
         ":pass_registry",
         "//loom/src/loom/pass:builder",
         "//loom/src/loom/target:provider",
-        "//loom/src/loom/target/emit/ireevm:lower",
         "//runtime/src/iree/base",
     ],
 )

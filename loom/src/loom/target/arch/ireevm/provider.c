@@ -7,10 +7,10 @@
 #include "loom/target/arch/ireevm/provider.h"
 
 #include "loom/target/arch/ireevm/low_registry.h"
+#include "loom/target/arch/ireevm/lower.h"
 #include "loom/target/arch/ireevm/math_policy.h"
 #include "loom/target/arch/ireevm/ops/registry.h"
 #include "loom/target/arch/ireevm/pass_registry.h"
-#include "loom/target/emit/ireevm/lower.h"
 
 const loom_target_provider_t loom_ireevm_target_provider = {
     .register_context = loom_ireevm_ops_register_dialect,

@@ -6,11 +6,11 @@
 
 #include "loom/error/error_catalog.h"
 #include "loom/ir/scalar_type.h"
+#include "loom/target/arch/ireevm/contracts/core.h"
+#include "loom/target/arch/ireevm/contracts/core_lower_rules.h"
 #include "loom/target/arch/ireevm/descriptors.h"
+#include "loom/target/arch/ireevm/lower.h"
 #include "loom/target/arch/ireevm/ops/ops.h"
-#include "loom/target/emit/ireevm/contracts/core.h"
-#include "loom/target/emit/ireevm/contracts/core_lower_rules.h"
-#include "loom/target/emit/ireevm/lower.h"
 
 static iree_string_view_t loom_ireevm_lower_module_string(
     const loom_module_t* module, loom_string_id_t string_id) {

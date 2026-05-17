@@ -64,7 +64,7 @@ def contract_fragment_public_header(fragment: ContractFragment) -> str:
         return fragment.public_header
     name_parts = _identifier_parts(fragment.name)
     if name_parts[:2] == ("iree", "vm"):
-        return f"loom/target/emit/ireevm/contracts/{'_'.join(name_parts[2:])}.h"
+        return f"loom/target/arch/ireevm/contracts/{'_'.join(name_parts[2:])}.h"
     if name_parts[:1] == ("wasm",):
         return f"loom/target/emit/wasm/contracts/{'_'.join(name_parts[1:])}.h"
     if name_parts[:2] == ("test", "low"):

@@ -9,25 +9,11 @@ load(
     "loom_cc_library",
     "loom_cc_test",
 )
-load(
-    "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
-)
 
 package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
-)
-
-#===------------------------------------------------------------------------===#
-# Layering checks
-#===------------------------------------------------------------------------===#
-
-loom_assert_no_dependencies(
-    name = "ireevm_lower_no_descriptor_shard_dep",
-    dependencies = ["//loom/src/loom/target/arch/ireevm:descriptors"],
-    targets = [":lower"],
 )
 
 #===------------------------------------------------------------------------===#
@@ -110,23 +96,5 @@ loom_cc_library(
         "//loom/src/loom/verify",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
-    ],
-)
-
-loom_cc_library(
-    name = "lower",
-    srcs = ["lower/registry.c"],
-    hdrs = ["lower.h"],
-    deps = [
-        "//loom/src/loom/codegen/low:lower",
-        "//loom/src/loom/error:error_defs",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/ops/scalar",
-        "//loom/src/loom/target/arch/ireevm:descriptors_ids",
-        "//loom/src/loom/target/arch/ireevm:ops",
-        "//loom/src/loom/target/emit/ireevm/contracts:core",
-        "//loom/src/loom/target/emit/ireevm/contracts:core_lower_rules",
-        "//runtime/src/iree/base",
     ],
 )

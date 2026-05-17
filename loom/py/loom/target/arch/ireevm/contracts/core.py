@@ -620,7 +620,7 @@ IREEVM_CORE_CONTRACT_DIALECT_OPS = {
 IREEVM_CORE_CONTRACT_FRAGMENT = ContractFragment(
     name="ireevm.core",
     descriptor_set=IREEVM_CORE_DESCRIPTOR_SET,
-    public_header="loom/target/emit/ireevm/contracts/core.h",
+    public_header="loom/target/arch/ireevm/contracts/core.h",
     cases=(
         *_integer_rules(),
         *_float_rules(),

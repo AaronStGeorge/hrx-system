@@ -172,7 +172,7 @@ py_binary(
     deps = [
         ":target_lower_rules",
         "//loom/py/loom/target:contract_fragments",
-        "//loom/py/loom/target/emit/ireevm:contracts",
+        "//loom/py/loom/target/arch/ireevm/contracts",
     ],
 )
 
@@ -227,7 +227,7 @@ py_binary(
     deps = [
         ":target_contract_fragments",
         "//loom/py/loom/target:contract_fragments",
-        "//loom/py/loom/target/emit/ireevm:contracts",
+        "//loom/py/loom/target/arch/ireevm/contracts",
     ],
 )
 

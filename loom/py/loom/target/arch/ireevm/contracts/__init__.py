@@ -8,4 +8,4 @@
 # Generator: loom.gen.package_inits.
 # Regenerate: python3 loom/py/loom/gen/run.py package_inits --in-place
 
-"""IREE VM descriptor inputs."""
+"""IREE VM source-to-low contract fragments."""

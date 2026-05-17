@@ -103,7 +103,7 @@ CONTRACT_FRAGMENT_REGISTRATIONS = (
     ),
     ContractFragmentRegistration(
         key="ireevm.core",
-        module_name="loom.target.emit.ireevm.contracts",
+        module_name="loom.target.arch.ireevm.contracts.core",
         symbol_name="IREEVM_CORE_CONTRACT_FRAGMENT",
         dialect_ops_symbol_name="IREEVM_CORE_CONTRACT_DIALECT_OPS",
         aliases=("ireevm_core",),

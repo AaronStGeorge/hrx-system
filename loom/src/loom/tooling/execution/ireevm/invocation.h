@@ -5,6 +5,10 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // IREE VM archive invocation helpers for Loom execution sessions.
+//
+// VM invocation may touch HAL types because VM modules can import HAL modules
+// or exchange HAL buffer values. HAL executable loading, dispatch, correctness,
+// and measurement stay owned by tooling/execution/hal.
 
 #ifndef LOOM_TOOLING_EXECUTION_IREEVM_INVOCATION_H_
 #define LOOM_TOOLING_EXECUTION_IREEVM_INVOCATION_H_

@@ -62,6 +62,27 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    lower
+  HDRS
+    "lower.h"
+  SRCS
+    "lower/registry.c"
+  DEPS
+    ::descriptors_ids
+    ::ops
+    iree::base
+    loom::src::loom::codegen::low::lower
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::scalar
+    loom::src::loom::target::arch::ireevm::contracts::core
+    loom::src::loom::target::arch::ireevm::contracts::core_lower_rules
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     low_registry
   HDRS
     "low_registry.h"
@@ -131,12 +152,12 @@ loom_cc_library(
     "provider.c"
   DEPS
     ::low_registry
+    ::lower
     ::math_policy
     ::ops
     ::pass_registry
     iree::base
     loom::src::loom::pass::builder
-    loom::src::loom::target::emit::ireevm::lower
     loom::src::loom::target::provider
   PUBLIC
 )

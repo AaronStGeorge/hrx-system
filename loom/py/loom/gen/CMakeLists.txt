@@ -169,7 +169,7 @@ iree_py_library(
   DEPS
     iree::runtime::py::loom::gen::target_lower_rules
     iree::runtime::py::loom::target::contract_fragments
-    iree::runtime::py::loom::target::emit::ireevm::contracts
+    iree::runtime::py::loom::target::arch::ireevm::contracts::contracts
 )
 
 iree_py_library(
@@ -234,7 +234,7 @@ iree_py_library(
   DEPS
     iree::runtime::py::loom::gen::target_contract_fragments
     iree::runtime::py::loom::target::contract_fragments
-    iree::runtime::py::loom::target::emit::ireevm::contracts
+    iree::runtime::py::loom::target::arch::ireevm::contracts::contracts
 )
 
 iree_py_library(
