@@ -20,10 +20,12 @@ iree_py_library(
     iree::runtime::py::loom::core
     iree::runtime::py::loom::dialect::buffer::buffer
     iree::runtime::py::loom::dialect::index::index
+    iree::runtime::py::loom::dialect::kernel::kernel
     iree::runtime::py::loom::dialect::scalar::scalar
     iree::runtime::py::loom::dialect::scf::scf
     iree::runtime::py::loom::dialect::vector::vector
     iree::runtime::py::loom::dialect::view::view
+    iree::runtime::py::loom::target::arch::spirv::builtins
     iree::runtime::py::loom::target::arch::spirv::descriptors
     iree::runtime::py::loom::target::arch::spirv::scalar_alu
     iree::runtime::py::loom::target::arch::spirv::scalar_conversion

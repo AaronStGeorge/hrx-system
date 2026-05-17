@@ -24,12 +24,21 @@ py_library(
 )
 
 py_library(
+    name = "builtins",
+    srcs = [
+        "__init__.py",
+        "builtins.py",
+    ],
+)
+
+py_library(
     name = "descriptors",
     srcs = [
         "__init__.py",
         "descriptors.py",
     ],
     deps = [
+        ":builtins",
         ":features",
         ":scalar_alu",
         ":scalar_conversion",

@@ -12,6 +12,8 @@ from loom.dialect.buffer import ALL_BUFFER_OPS
 from loom.dialect.buffer import defs as buffer
 from loom.dialect.index import ALL_INDEX_OPS
 from loom.dialect.index import defs as index
+from loom.dialect.kernel import ALL_KERNEL_OPS
+from loom.dialect.kernel import defs as kernel
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import arithmetic as scalar_arithmetic
 from loom.dialect.scalar import comparison as scalar_comparison
@@ -24,6 +26,12 @@ from loom.dialect.view import ALL_VIEW_OPS
 from loom.dialect.view import defs as view
 from loom.dsl import Op
 from loom.error.target import ERR_TARGET_050
+from loom.target.arch.spirv.builtins import (
+    BUILTIN_DIMENSIONS,
+    BUILTIN_INDEX_QUERIES,
+    BuiltinDimension,
+    BuiltinIndexQuery,
+)
 from loom.target.arch.spirv.descriptors import SPIRV_LOGICAL_CORE_DESCRIPTOR_SET
 from loom.target.arch.spirv.scalar_alu import (
     FLOAT_BINARY_OPERATIONS,
@@ -252,6 +260,65 @@ def _conversion_rule(row: ScalarConversion) -> DescriptorRule:
                 results={"dst": ValueRef.result("result")},
             ),
         ),
+    )
+
+
+def _index_cast_to_offset_rule() -> DescriptorRule:
+    descriptor = _descriptor("spirv.op_uconvert.i32.offset64")
+    return DescriptorRule(
+        source_op=index.index_cast,
+        descriptor=descriptor,
+        guards=(
+            Guard.value_type("input", _INDEX),
+            Guard.value_type("result", _OFFSET),
+            *_feature_guards(descriptor),
+        ),
+        emit=(
+            _descriptor_emit(
+                descriptor=descriptor,
+                operands={"input": ValueRef.operand("input")},
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+_KERNEL_BUILTIN_SOURCE_OPS = {
+    "workgroup_id": kernel.kernel_workgroup_id,
+    "workitem_id": kernel.kernel_workitem_id,
+    "workitem_dispatch_id": kernel.kernel_workitem_dispatch_id,
+}
+
+
+def _builtin_index_rule(
+    query: BuiltinIndexQuery,
+    dimension: BuiltinDimension,
+) -> DescriptorRule:
+    descriptor = _descriptor(
+        f"spirv.op_load_builtin.{query.descriptor_suffix}.{dimension.source_keyword}"
+    )
+    return DescriptorRule(
+        source_op=_KERNEL_BUILTIN_SOURCE_OPS[query.source_op_key],
+        descriptor=descriptor,
+        guards=(
+            Guard.enum_attr_equals("dimension", dimension.source_keyword),
+            Guard.value_type("result", _INDEX),
+            *_feature_guards(descriptor),
+        ),
+        emit=(
+            _descriptor_emit(
+                descriptor=descriptor,
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+def _builtin_index_rules() -> tuple[DescriptorRule, ...]:
+    return tuple(
+        _builtin_index_rule(query, dimension)
+        for query in BUILTIN_INDEX_QUERIES
+        for dimension in BUILTIN_DIMENSIONS
     )
 
 
@@ -773,6 +840,7 @@ def _select_rules() -> tuple[DescriptorRule, ...]:
 SPIRV_LOGICAL_CORE_CONTRACT_DIALECT_OPS = {
     "buffer": ALL_BUFFER_OPS,
     "index": ALL_INDEX_OPS,
+    "kernel": ALL_KERNEL_OPS,
     "scalar": ALL_SCALAR_OPS,
     "scf": ALL_SCF_OPS,
     "vector": ALL_VECTOR_OPS,
@@ -799,11 +867,14 @@ SPIRV_LOGICAL_CORE_CONTRACT_FRAGMENT = ContractFragment(
             result=ValueRef.result("results"),
             guards=(Guard.operand_segment_count("buffers", 1),),
         ),
+        *_builtin_index_rules(),
         *_conversion_rules(),
+        _index_cast_to_offset_rule(),
         *_scalar_binary_rules(),
         _binary_rule(index.index_add, _INDEX, "spirv.op_iadd.i32"),
         _binary_rule(index.index_sub, _INDEX, "spirv.op_isub.i32"),
         _binary_rule(index.index_mul, _INDEX, "spirv.op_imul.i32"),
+        _binary_rule(index.index_shli, _INDEX, "spirv.op_shift_left_logical.i32"),
         _ternary_rule(index.index_madd, _INDEX, "spirv.op_imul_add.i32"),
         _binary_rule(index.index_add, _OFFSET, "spirv.op_iadd.offset64"),
         _binary_rule(index.index_sub, _OFFSET, "spirv.op_isub.offset64"),

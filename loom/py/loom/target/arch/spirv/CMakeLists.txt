@@ -23,11 +23,20 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    builtins
+  SRCS
+    "__init__.py"
+    "builtins.py"
+)
+
+iree_py_library(
+  NAME
     descriptors
   SRCS
     "__init__.py"
     "descriptors.py"
   DEPS
+    iree::runtime::py::loom::target::arch::spirv::builtins
     iree::runtime::py::loom::target::arch::spirv::features
     iree::runtime::py::loom::target::arch::spirv::scalar_alu
     iree::runtime::py::loom::target::arch::spirv::scalar_conversion

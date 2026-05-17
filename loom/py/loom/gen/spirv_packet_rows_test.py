@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from loom.gen.spirv_packet_rows import generate_tables
+from loom.target.arch.spirv.builtins import BUILTIN_DIMENSIONS, BUILTIN_INDEX_QUERIES
 from loom.target.arch.spirv.scalar_memory import STORAGE_BUFFER_SCALARS
 
 
@@ -47,6 +48,7 @@ def test_generation_emits_coordinate_arithmetic_packet_rows() -> None:
     assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_UMOD_U64" in tables
     assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_IMUL_I32" in tables
     assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_IMUL_ADD_I32" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_SHIFT_LEFT_LOGICAL_I32" in tables
     assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_ISUB_OFFSET64" in tables
     assert "LOOM_SPIRV_PACKET_FORM_INTEGER_MUL_ADD" in tables
 
@@ -83,3 +85,20 @@ def test_generation_emits_scalar_conversion_rows() -> None:
     assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_F_CONVERT_F32_F16" in tables
     assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_BITCAST_I32_F32" in tables
     assert "LOOM_SPIRV_PACKET_FORM_UNARY_CONVERT" in tables
+
+
+def test_generation_emits_index_to_offset_and_builtin_rows() -> None:
+    tables = generate_tables()
+
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_UCONVERT_I32_OFFSET64" in tables
+    assert "LOOM_SPIRV_VALUE_CLASS_OFFSET64" in tables
+    assert "LOOM_SPIRV_OP_U_CONVERT" in tables
+
+    for query in BUILTIN_INDEX_QUERIES:
+        for dimension in BUILTIN_DIMENSIONS:
+            suffix = f"{query.descriptor_suffix}_{dimension.source_keyword}".upper()
+            assert f"SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_LOAD_BUILTIN_{suffix}" in tables
+            assert query.builtin_enum in tables
+            assert f".component_index = {dimension.component_index}" in tables
+
+    assert "LOOM_SPIRV_PACKET_FORM_LOAD_BUILTIN" in tables

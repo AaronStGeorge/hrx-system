@@ -33,6 +33,7 @@ typedef enum loom_spirv_packet_form_e {
   LOOM_SPIRV_PACKET_FORM_COMPARE_SAME_TYPE = 7,
   LOOM_SPIRV_PACKET_FORM_SELECT = 8,
   LOOM_SPIRV_PACKET_FORM_UNARY_CONVERT = 9,
+  LOOM_SPIRV_PACKET_FORM_LOAD_BUILTIN = 10,
 } loom_spirv_packet_form_t;
 
 typedef struct loom_spirv_packet_row_t {
@@ -54,6 +55,10 @@ typedef struct loom_spirv_packet_row_t {
   uint8_t literal_word_count;
   // Alignment operand for aligned memory access rows.
   uint8_t memory_alignment;
+  // SPIR-V BuiltIn enumerant for built-in load rows.
+  uint32_t builtin;
+  // Vector component extracted from built-in input rows.
+  uint8_t component_index;
 } loom_spirv_packet_row_t;
 
 // Returns the packet row for |descriptor_ordinal|, or NULL when the descriptor

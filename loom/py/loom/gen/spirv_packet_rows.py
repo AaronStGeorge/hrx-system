@@ -24,6 +24,10 @@ def _ensure_runtime_py_on_path() -> None:
 _ensure_runtime_py_on_path()
 
 from loom.gen.generated_file import line_comment_header  # noqa: E402
+from loom.target.arch.spirv.builtins import (  # noqa: E402
+    BUILTIN_DIMENSIONS,
+    BUILTIN_INDEX_QUERIES,
+)
 from loom.target.arch.spirv.descriptors import (  # noqa: E402
     SPIRV_LOGICAL_CORE_DESCRIPTOR_SET,
 )
@@ -115,6 +119,8 @@ def _row(
     immediate_index: int | None = None,
     literal_word_count: int = 0,
     memory_alignment: int = 0,
+    builtin: str | None = None,
+    component_index: int | None = None,
 ) -> str:
     lines = [
         f"    [{_descriptor_ref_constant_name(descriptor_key)}] =",
@@ -139,6 +145,10 @@ def _row(
         lines.append(f"            .literal_word_count = {literal_word_count},")
     if memory_alignment:
         lines.append(f"            .memory_alignment = {memory_alignment},")
+    if builtin is not None:
+        lines.append(f"            .builtin = {builtin},")
+    if component_index is not None:
+        lines.append(f"            .component_index = {component_index},")
     lines.extend(
         [
             "        },",
@@ -233,12 +243,55 @@ def _integer_value_view_row(row: IntegerValueViewConversion) -> str:
 def _conversion_rows() -> list[str]:
     rows = [_conversion_row(row) for row in LOW_SCALAR_CONVERSIONS]
     rows.extend(_integer_value_view_row(row) for row in INTEGER_VALUE_VIEW_CONVERSIONS)
+    rows.append(
+        _row(
+            "spirv.op_uconvert.i32.offset64",
+            opcode="LOOM_SPIRV_OP_U_CONVERT",
+            form="LOOM_SPIRV_PACKET_FORM_UNARY_CONVERT",
+            result_type=_offset64_value(),
+            operand_types=(
+                _value_type(
+                    "LOOM_SPIRV_VALUE_CLASS_SCALAR",
+                    "LOOM_SPIRV_SCALAR_TYPE_S32",
+                ),
+            ),
+            result_count=1,
+        )
+    )
     return rows
 
 
+def _builtin_index_rows() -> list[str]:
+    return [
+        _row(
+            f"spirv.op_load_builtin.{query.descriptor_suffix}.{dimension.source_keyword}",
+            opcode="LOOM_SPIRV_OP_LOAD",
+            form="LOOM_SPIRV_PACKET_FORM_LOAD_BUILTIN",
+            result_type=_value_type(
+                "LOOM_SPIRV_VALUE_CLASS_SCALAR",
+                "LOOM_SPIRV_SCALAR_TYPE_S32",
+            ),
+            result_count=1,
+            builtin=query.builtin_enum,
+            component_index=dimension.component_index,
+        )
+        for query in BUILTIN_INDEX_QUERIES
+        for dimension in BUILTIN_DIMENSIONS
+    ]
+
+
 def _coordinate_binary_rows() -> list[str]:
+    i32_value = _value_type("LOOM_SPIRV_VALUE_CLASS_SCALAR", "LOOM_SPIRV_SCALAR_TYPE_S32")
     offset64_value = _offset64_value()
     rows = [
+        _row(
+            "spirv.op_shift_left_logical.i32",
+            opcode="LOOM_SPIRV_OP_SHIFT_LEFT_LOGICAL",
+            form="LOOM_SPIRV_PACKET_FORM_BINARY_SAME_TYPE",
+            result_type=i32_value,
+            operand_types=(i32_value, i32_value),
+            result_count=1,
+        ),
         _row(
             "spirv.op_iadd.offset64",
             opcode="LOOM_SPIRV_OP_I_ADD",
@@ -358,6 +411,8 @@ def _validate_rows() -> None:
         "spirv.op_constant.i32",
         "spirv.op_constant.offset64",
         "spirv.op_imul_add.i32",
+        "spirv.op_uconvert.i32.offset64",
+        "spirv.op_shift_left_logical.i32",
         "spirv.op_iadd.offset64",
         "spirv.op_isub.offset64",
         "spirv.op_select.offset64",
@@ -379,6 +434,9 @@ def _validate_rows() -> None:
         row_keys.add(conversion.key)
     for view_conversion in INTEGER_VALUE_VIEW_CONVERSIONS:
         row_keys.add(view_conversion.key)
+    for query in BUILTIN_INDEX_QUERIES:
+        for dimension in BUILTIN_DIMENSIONS:
+            row_keys.add(f"spirv.op_load_builtin.{query.descriptor_suffix}.{dimension.source_keyword}")
     for scalar in SCALAR_ALU_TYPES:
         row_keys.add(f"spirv.op_select.{scalar.suffix}")
     for predicate in OFFSET64_COMPARE_PREDICATES:
@@ -419,6 +477,7 @@ def generate_tables() -> str:
         ),
         *_scalar_binary_rows(),
         *_conversion_rows(),
+        *_builtin_index_rows(),
         *_coordinate_binary_rows(),
         *_mul_add_rows(),
         *_integer_compare_rows(),

@@ -10,6 +10,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from loom.target.arch.spirv.builtins import (
+    BUILTIN_DIMENSIONS,
+    BUILTIN_INDEX_QUERIES,
+)
 from loom.target.arch.spirv.scalar_alu import (
     FLOAT_BINARY_OPERATIONS,
     FLOAT_SCALAR_ALU_TYPES,
@@ -237,6 +241,35 @@ def _integer_value_view_descriptor(row: IntegerValueViewConversion) -> Descripto
         asm_forms=_asm(results=("dst",), operands=("input",)),
         schedule_class=_SCHEDULE_ALU,
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _builtin_index_descriptor(
+    query_suffix: str,
+    mnemonic_suffix: str,
+    dimension: str,
+) -> Descriptor:
+    key = f"spirv.op_load_builtin.{query_suffix}.{dimension}"
+    return Descriptor(
+        key=key,
+        mnemonic=f"OpLoadBuiltin.{mnemonic_suffix}.{dimension}",
+        semantic_tag=key,
+        operands=(_id_result(),),
+        asm_forms=_asm(results=("dst",)),
+        schedule_class=_SCHEDULE_LOAD,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _builtin_index_descriptors() -> tuple[Descriptor, ...]:
+    return tuple(
+        _builtin_index_descriptor(
+            query.descriptor_suffix,
+            query.mnemonic_suffix,
+            dimension.source_keyword,
+        )
+        for query in BUILTIN_INDEX_QUERIES
+        for dimension in BUILTIN_DIMENSIONS
     )
 
 
@@ -590,6 +623,25 @@ SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
                 _offset64_operand("rhs"),
             ),
         ),
+        Descriptor(
+            key="spirv.op_uconvert.i32.offset64",
+            mnemonic="OpUConvert.i32.offset64",
+            semantic_tag="spirv.op_uconvert.i32.offset64",
+            operands=(_offset64_result(), _id_operand("input")),
+            asm_forms=_asm(results=("dst",), operands=("input",)),
+            schedule_class=_SCHEDULE_ALU,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        Descriptor(
+            key="spirv.op_shift_left_logical.i32",
+            mnemonic="OpShiftLeftLogical",
+            semantic_tag="spirv.op_shift_left_logical.i32",
+            operands=(_id_result(), _id_operand("lhs"), _id_operand("rhs")),
+            asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
+            schedule_class=_SCHEDULE_ALU,
+            flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        ),
+        *_builtin_index_descriptors(),
         *_compare_descriptors(),
         *_select_descriptors(),
         *_storage_buffer_descriptors(),
