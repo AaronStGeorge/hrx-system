@@ -221,10 +221,25 @@ iree_py_library(
     iree::runtime::py::loom::gen::generated_file
     iree::runtime::py::loom::target::low_descriptors
     iree::runtime::py::loom::target::arch::spirv::builtins
+    iree::runtime::py::loom::target::arch::spirv::cooperative_matrix
     iree::runtime::py::loom::target::arch::spirv::descriptors
     iree::runtime::py::loom::target::arch::spirv::scalar_alu
     iree::runtime::py::loom::target::arch::spirv::scalar_conversion
     iree::runtime::py::loom::target::arch::spirv::scalar_memory
+)
+
+iree_py_library(
+  NAME
+    spirv_cooperative_properties
+  MAIN
+    "spirv_cooperative_properties.py"
+  SRCS
+    "spirv_cooperative_properties.py"
+  DEPS
+    iree::runtime::py::loom::gen::generated_file
+    iree::runtime::py::loom::target::low_descriptors
+    iree::runtime::py::loom::target::arch::spirv::cooperative_matrix
+    iree::runtime::py::loom::target::arch::spirv::descriptors
 )
 
 iree_py_test(
@@ -234,6 +249,18 @@ iree_py_test(
     "../tools/pytest_style_runner.py"
   ARGS
     "loom.gen.spirv_packet_rows_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
+)
+
+iree_py_test(
+  NAME
+    spirv_cooperative_properties_test
+  SRCS
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.gen.spirv_cooperative_properties_test"
   PACKAGE_DIRS
     "${IREE_SOURCE_DIR}/runtime/py"
     "${IREE_BINARY_DIR}/runtime/py"

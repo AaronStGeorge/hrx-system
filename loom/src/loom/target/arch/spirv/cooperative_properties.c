@@ -8,6 +8,8 @@
 
 #include <string.h>
 
+#include "loom/target/arch/spirv/descriptors.h"
+
 #define MATRIX_LAYOUT_ANY                               \
   (LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_BIT | \
    LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_COLUMN_MAJOR_BIT)
@@ -25,26 +27,6 @@
 #define STORAGE_BUFFER_OR_BDA                    \
   (LOOM_SPIRV_STORAGE_CLASS_BIT_STORAGE_BUFFER | \
    LOOM_SPIRV_STORAGE_CLASS_BIT_PHYSICAL_STORAGE_BUFFER)
-
-#define MATRIX_PROPERTY(name_value, feature_bits_value, m_value, n_value, \
-                        k_value, lhs_value, rhs_value, accumulator_value, \
-                        result_value, scope_value, layout_flags_value,    \
-                        storage_class_flags_value, operand_flags_value)   \
-  {                                                                       \
-      .name = IREE_SVL(name_value),                                       \
-      .required_feature_bits = (feature_bits_value),                      \
-      .m_size = (m_value),                                                \
-      .n_size = (n_value),                                                \
-      .k_size = (k_value),                                                \
-      .lhs_type = (lhs_value),                                            \
-      .rhs_type = (rhs_value),                                            \
-      .accumulator_type = (accumulator_value),                            \
-      .result_type = (result_value),                                      \
-      .scope = (scope_value),                                             \
-      .layout_flags = (layout_flags_value),                               \
-      .storage_class_flags = (storage_class_flags_value),                 \
-      .operand_flags = (operand_flags_value),                             \
-  }
 
 #define VECTOR_PROPERTY(                                                     \
     name_value, feature_bits_value, m_value, k_value, input_type_value,      \
@@ -66,43 +48,7 @@
       .flags = (flags_value),                                                \
   }
 
-static const loom_spirv_cooperative_matrix_property_t
-    kCooperativeMatrixProperties[] = {
-        MATRIX_PROPERTY("khr.cooperative_matrix.f16.16x16x16.f32.subgroup",
-                        LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR |
-                            LOOM_SPIRV_FEATURE_FLOAT16,
-                        16, 16, 16, LOOM_SPIRV_SCALAR_TYPE_F16,
-                        LOOM_SPIRV_SCALAR_TYPE_F16, LOOM_SPIRV_SCALAR_TYPE_F32,
-                        LOOM_SPIRV_SCALAR_TYPE_F32, LOOM_SPIRV_SCOPE_SUBGROUP,
-                        MATRIX_LAYOUT_ANY, MATRIX_STORAGE_ANY, 0),
-        MATRIX_PROPERTY("khr.cooperative_matrix.bf16.16x16x16.f32.subgroup",
-                        LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR |
-                            LOOM_SPIRV_FEATURE_BFLOAT16_TYPE_KHR |
-                            LOOM_SPIRV_FEATURE_BFLOAT16_COOPERATIVE_MATRIX_KHR,
-                        16, 16, 16, LOOM_SPIRV_SCALAR_TYPE_BF16,
-                        LOOM_SPIRV_SCALAR_TYPE_BF16, LOOM_SPIRV_SCALAR_TYPE_F32,
-                        LOOM_SPIRV_SCALAR_TYPE_F32, LOOM_SPIRV_SCOPE_SUBGROUP,
-                        MATRIX_LAYOUT_ANY, MATRIX_STORAGE_ANY, 0),
-        MATRIX_PROPERTY(
-            "khr.cooperative_matrix.s8.16x16x32.s32.subgroup.saturating",
-            LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR |
-                LOOM_SPIRV_FEATURE_INT8 |
-                LOOM_SPIRV_FEATURE_STORAGE_BUFFER_8BIT_ACCESS,
-            16, 16, 32, LOOM_SPIRV_SCALAR_TYPE_S8, LOOM_SPIRV_SCALAR_TYPE_S8,
-            LOOM_SPIRV_SCALAR_TYPE_S32, LOOM_SPIRV_SCALAR_TYPE_S32,
-            LOOM_SPIRV_SCOPE_SUBGROUP, MATRIX_LAYOUT_ANY, STORAGE_BUFFER_OR_BDA,
-            LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_A_SIGNED_COMPONENTS |
-                LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_B_SIGNED_COMPONENTS |
-                LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_C_SIGNED_COMPONENTS |
-                LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_RESULT_SIGNED_COMPONENTS |
-                LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_SATURATING_ACCUMULATION),
-};
-
-static const loom_spirv_cooperative_property_span_t
-    kCooperativeMatrixShapeSpans[] = {
-        {.shape_key = UINT64_C(0x001000100010), .start = 0, .count = 2},
-        {.shape_key = UINT64_C(0x001000100020), .start = 2, .count = 1},
-};
+#include "loom/target/arch/spirv/cooperative_properties_tables.inl"
 
 static const loom_spirv_cooperative_vector_property_t
     kCooperativeVectorProperties[] = {

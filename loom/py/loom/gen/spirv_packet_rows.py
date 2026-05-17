@@ -11,7 +11,6 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -29,10 +28,11 @@ from loom.target.arch.spirv.builtins import (  # noqa: E402
     BUILTIN_DIMENSIONS,
     BUILTIN_INDEX_QUERIES,
 )
-from loom.target.arch.spirv.descriptors import (  # noqa: E402
-    SPIRV_LOGICAL_CORE_DESCRIPTOR_SET,
-    cooperative_matrix_descriptor_key,
+from loom.target.arch.spirv.cooperative_matrix import (  # noqa: E402
+    COOPERATIVE_MATRIX_CASES,
+    CooperativeMatrixCase,
 )
+from loom.target.arch.spirv.descriptors import SPIRV_LOGICAL_CORE_DESCRIPTOR_SET  # noqa: E402
 from loom.target.arch.spirv.scalar_alu import (  # noqa: E402
     FLOAT_BINARY_OPERATIONS,
     FLOAT_SCALAR_ALU_TYPES,
@@ -57,7 +57,6 @@ from loom.target.arch.spirv.scalar_conversion import (  # noqa: E402
 from loom.target.arch.spirv.scalar_memory import (  # noqa: E402
     STORAGE_BUFFER_SCALARS,
     StorageBufferScalar,
-    storage_buffer_scalar_by_source_type,
 )
 from loom.target.low_descriptors import descriptor_set_relative_name  # noqa: E402
 
@@ -228,129 +227,23 @@ def _storage_buffer_rows() -> list[str]:
     return rows
 
 
-def _require_storage_buffer_scalar(source_type: str) -> StorageBufferScalar:
-    scalar = storage_buffer_scalar_by_source_type(source_type)
-    if scalar is None:
-        raise ValueError(f"missing SPIR-V storage-buffer scalar row for {source_type}")
-    return scalar
-
-
-@dataclass(frozen=True, slots=True)
-class _CooperativeMatrixCase:
-    element: str
-    lhs_source_type: str
-    accumulator_source_type: str
-    m_size: int
-    n_size: int
-    k_size: int
-    accumulator: str
-    lhs_rows: int
-    lhs_columns: int
-    rhs_rows: int
-    rhs_columns: int
-    accumulator_rows: int
-    accumulator_columns: int
-    operand_mode: str | None = None
-    cooperative_matrix_operands: str | None = None
-
-
-_COOPERATIVE_MATRIX_SIGNED_SATURATING_OPERANDS = (
-    "LOOM_SPIRV_COOPERATIVE_MATRIX_OPERANDS_MATRIX_A_SIGNED_COMPONENTS_KHR_MASK | "
-    "LOOM_SPIRV_COOPERATIVE_MATRIX_OPERANDS_MATRIX_B_SIGNED_COMPONENTS_KHR_MASK | "
-    "LOOM_SPIRV_COOPERATIVE_MATRIX_OPERANDS_MATRIX_C_SIGNED_COMPONENTS_KHR_MASK | "
-    "LOOM_SPIRV_COOPERATIVE_MATRIX_OPERANDS_MATRIX_RESULT_SIGNED_COMPONENTS_KHR_MASK | "
-    "LOOM_SPIRV_COOPERATIVE_MATRIX_OPERANDS_SATURATING_ACCUMULATION_KHR_MASK"
-)
-
-
-_COOPERATIVE_MATRIX_CASES = (
-    _CooperativeMatrixCase(
-        element="f16",
-        lhs_source_type="f16",
-        accumulator_source_type="f32",
-        m_size=16,
-        n_size=16,
-        k_size=16,
-        accumulator="f32",
-        lhs_rows=16,
-        lhs_columns=16,
-        rhs_rows=16,
-        rhs_columns=16,
-        accumulator_rows=16,
-        accumulator_columns=16,
-    ),
-    _CooperativeMatrixCase(
-        element="bf16",
-        lhs_source_type="bf16",
-        accumulator_source_type="f32",
-        m_size=16,
-        n_size=16,
-        k_size=16,
-        accumulator="f32",
-        lhs_rows=16,
-        lhs_columns=16,
-        rhs_rows=16,
-        rhs_columns=16,
-        accumulator_rows=16,
-        accumulator_columns=16,
-    ),
-    _CooperativeMatrixCase(
-        element="s8",
-        lhs_source_type="i8",
-        accumulator_source_type="i32",
-        m_size=16,
-        n_size=16,
-        k_size=32,
-        accumulator="s32",
-        lhs_rows=16,
-        lhs_columns=32,
-        rhs_rows=32,
-        rhs_columns=16,
-        accumulator_rows=16,
-        accumulator_columns=16,
-        operand_mode="signed_saturating",
-        cooperative_matrix_operands=_COOPERATIVE_MATRIX_SIGNED_SATURATING_OPERANDS,
-    ),
-)
-
-
 def _row_byte_stride(columns: int, scalar: StorageBufferScalar) -> int:
     return columns * scalar.byte_width
 
 
-def _cooperative_matrix_descriptor(
-    op_name: str,
-    *,
-    role: str | None,
-    case: _CooperativeMatrixCase,
-    layout: str | None = None,
-    include_operand_mode: bool = False,
-) -> str:
-    return cooperative_matrix_descriptor_key(
-        op_name,
-        role=role,
-        element=case.element,
-        m_size=case.m_size,
-        n_size=case.n_size,
-        k_size=case.k_size,
-        accumulator=case.accumulator,
-        scope="subgroup",
-        layout=layout,
-        operand_mode=case.operand_mode if include_operand_mode else None,
-    )
-
-
-def _cooperative_matrix_rows_for_case(case: _CooperativeMatrixCase) -> list[str]:
-    element_scalar = _require_storage_buffer_scalar(case.lhs_source_type)
-    accumulator_scalar = _require_storage_buffer_scalar(case.accumulator_source_type)
+def _cooperative_matrix_rows_for_case(case: CooperativeMatrixCase) -> list[str]:
+    lhs_scalar = case.lhs_scalar
+    rhs_scalar = case.rhs_scalar
+    accumulator_scalar = case.accumulator_scalar
+    result_scalar = case.result_scalar
     lhs_value = _cooperative_matrix_value(
-        scalar_enum=element_scalar.scalar_enum,
+        scalar_enum=lhs_scalar.scalar_enum,
         rows=case.lhs_rows,
         columns=case.lhs_columns,
         matrix_use="LOOM_SPIRV_COOPERATIVE_MATRIX_USE_MATRIX_AKHR",
     )
     rhs_value = _cooperative_matrix_value(
-        scalar_enum=element_scalar.scalar_enum,
+        scalar_enum=rhs_scalar.scalar_enum,
         rows=case.rhs_rows,
         columns=case.rhs_columns,
         matrix_use="LOOM_SPIRV_COOPERATIVE_MATRIX_USE_MATRIX_BKHR",
@@ -361,48 +254,52 @@ def _cooperative_matrix_rows_for_case(case: _CooperativeMatrixCase) -> list[str]
         columns=case.accumulator_columns,
         matrix_use="LOOM_SPIRV_COOPERATIVE_MATRIX_USE_MATRIX_ACCUMULATOR_KHR",
     )
+    result_value = _cooperative_matrix_value(
+        scalar_enum=result_scalar.scalar_enum,
+        rows=case.accumulator_rows,
+        columns=case.accumulator_columns,
+        matrix_use="LOOM_SPIRV_COOPERATIVE_MATRIX_USE_MATRIX_ACCUMULATOR_KHR",
+    )
     row_major_layout = "LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_KHR"
-    lhs_stride = _row_byte_stride(case.lhs_columns, element_scalar)
-    rhs_stride = _row_byte_stride(case.rhs_columns, element_scalar)
+    lhs_stride = _row_byte_stride(case.lhs_columns, lhs_scalar)
+    rhs_stride = _row_byte_stride(case.rhs_columns, rhs_scalar)
     accumulator_stride = _row_byte_stride(case.accumulator_columns, accumulator_scalar)
+    result_stride = _row_byte_stride(case.accumulator_columns, result_scalar)
     return [
         _row(
-            _cooperative_matrix_descriptor(
+            case.descriptor_key(
                 "op_cooperative_matrix_load_khr",
                 role="lhs",
-                case=case,
                 layout="row_major",
             ),
             opcode="LOOM_SPIRV_OP_COOPERATIVE_MATRIX_LOAD_KHR",
             form="LOOM_SPIRV_PACKET_FORM_COOPERATIVE_MATRIX_LOAD",
             result_type=lhs_value,
-            operand_types=(_physical_storage_buffer_pointer_value(element_scalar),),
+            operand_types=(_physical_storage_buffer_pointer_value(lhs_scalar),),
             result_count=1,
             memory_alignment=16,
             cooperative_matrix_layout=row_major_layout,
             cooperative_matrix_stride=lhs_stride,
         ),
         _row(
-            _cooperative_matrix_descriptor(
+            case.descriptor_key(
                 "op_cooperative_matrix_load_khr",
                 role="rhs",
-                case=case,
                 layout="row_major",
             ),
             opcode="LOOM_SPIRV_OP_COOPERATIVE_MATRIX_LOAD_KHR",
             form="LOOM_SPIRV_PACKET_FORM_COOPERATIVE_MATRIX_LOAD",
             result_type=rhs_value,
-            operand_types=(_physical_storage_buffer_pointer_value(element_scalar),),
+            operand_types=(_physical_storage_buffer_pointer_value(rhs_scalar),),
             result_count=1,
             memory_alignment=16,
             cooperative_matrix_layout=row_major_layout,
             cooperative_matrix_stride=rhs_stride,
         ),
         _row(
-            _cooperative_matrix_descriptor(
+            case.descriptor_key(
                 "op_cooperative_matrix_load_khr",
                 role="init",
-                case=case,
                 layout="row_major",
             ),
             opcode="LOOM_SPIRV_OP_COOPERATIVE_MATRIX_LOAD_KHR",
@@ -415,42 +312,40 @@ def _cooperative_matrix_rows_for_case(case: _CooperativeMatrixCase) -> list[str]
             cooperative_matrix_stride=accumulator_stride,
         ),
         _row(
-            _cooperative_matrix_descriptor(
+            case.descriptor_key(
                 "op_cooperative_matrix_mul_add_khr",
                 role=None,
-                case=case,
                 include_operand_mode=True,
             ),
             opcode="LOOM_SPIRV_OP_COOPERATIVE_MATRIX_MUL_ADD_KHR",
             form="LOOM_SPIRV_PACKET_FORM_COOPERATIVE_MATRIX_MUL_ADD",
-            result_type=accumulator_value,
+            result_type=result_value,
             operand_types=(lhs_value, rhs_value, accumulator_value),
             result_count=1,
-            cooperative_matrix_operands=case.cooperative_matrix_operands,
+            cooperative_matrix_operands=case.packet_operand_mask,
         ),
         _row(
-            _cooperative_matrix_descriptor(
+            case.descriptor_key(
                 "op_cooperative_matrix_store_khr",
                 role="result",
-                case=case,
                 layout="row_major",
             ),
             opcode="LOOM_SPIRV_OP_COOPERATIVE_MATRIX_STORE_KHR",
             form="LOOM_SPIRV_PACKET_FORM_COOPERATIVE_MATRIX_STORE",
             operand_types=(
-                _physical_storage_buffer_pointer_value(accumulator_scalar),
-                accumulator_value,
+                _physical_storage_buffer_pointer_value(result_scalar),
+                result_value,
             ),
             memory_alignment=16,
             cooperative_matrix_layout=row_major_layout,
-            cooperative_matrix_stride=accumulator_stride,
+            cooperative_matrix_stride=result_stride,
         ),
     ]
 
 
 def _cooperative_matrix_rows() -> list[str]:
     rows: list[str] = []
-    for case in _COOPERATIVE_MATRIX_CASES:
+    for case in COOPERATIVE_MATRIX_CASES:
         rows.extend(_cooperative_matrix_rows_for_case(case))
     return rows
 
@@ -701,29 +596,26 @@ def _validate_rows() -> None:
         row_keys.add(f"spirv.op_ptr_access_chain.storage_buffer.{storage_scalar.suffix}.byte_offset")
         row_keys.add(f"spirv.op_load.storage_buffer.{storage_scalar.suffix}")
         row_keys.add(f"spirv.op_store.storage_buffer.{storage_scalar.suffix}")
-    for case in _COOPERATIVE_MATRIX_CASES:
+    for case in COOPERATIVE_MATRIX_CASES:
         for role in ("lhs", "rhs", "init"):
             row_keys.add(
-                _cooperative_matrix_descriptor(
+                case.descriptor_key(
                     "op_cooperative_matrix_load_khr",
                     role=role,
-                    case=case,
                     layout="row_major",
                 )
             )
         row_keys.add(
-            _cooperative_matrix_descriptor(
+            case.descriptor_key(
                 "op_cooperative_matrix_mul_add_khr",
                 role=None,
-                case=case,
                 include_operand_mode=True,
             )
         )
         row_keys.add(
-            _cooperative_matrix_descriptor(
+            case.descriptor_key(
                 "op_cooperative_matrix_store_khr",
                 role="result",
-                case=case,
                 layout="row_major",
             )
         )

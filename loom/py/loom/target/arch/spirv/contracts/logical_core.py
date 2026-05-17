@@ -32,10 +32,11 @@ from loom.target.arch.spirv.builtins import (
     BuiltinDimension,
     BuiltinIndexQuery,
 )
-from loom.target.arch.spirv.descriptors import (
-    SPIRV_LOGICAL_CORE_DESCRIPTOR_SET,
-    cooperative_matrix_descriptor_key,
+from loom.target.arch.spirv.cooperative_matrix import (
+    COOPERATIVE_MATRIX_CASES,
+    CooperativeMatrixCase,
 )
+from loom.target.arch.spirv.descriptors import SPIRV_LOGICAL_CORE_DESCRIPTOR_SET
 from loom.target.arch.spirv.scalar_alu import (
     FLOAT_BINARY_OPERATIONS,
     FLOAT_SCALAR_ALU_TYPES,
@@ -684,28 +685,18 @@ def _cooperative_matrix_shape_guards(
 def _cooperative_matrix_load_rule(
     *,
     role: str,
-    descriptor_element: str,
+    case: CooperativeMatrixCase,
     view_element: str,
     result_element: str,
     result_lanes: int,
     rows: int,
     columns: int,
-    m_size: int,
-    n_size: int,
-    k_size: int,
-    accumulator: str,
     element_byte_width: int,
 ) -> DescriptorRule:
     descriptor = _descriptor(
-        cooperative_matrix_descriptor_key(
+        case.descriptor_key(
             "op_cooperative_matrix_load_khr",
             role=role,
-            element=descriptor_element,
-            m_size=m_size,
-            n_size=n_size,
-            k_size=k_size,
-            accumulator=accumulator,
-            scope="subgroup",
             layout="row_major",
         )
     )
@@ -738,28 +729,18 @@ def _cooperative_matrix_load_rule(
 
 def _cooperative_matrix_store_rule(
     *,
-    descriptor_element: str,
+    case: CooperativeMatrixCase,
     view_element: str,
     value_element: str,
     value_lanes: int,
     rows: int,
     columns: int,
-    m_size: int,
-    n_size: int,
-    k_size: int,
-    accumulator: str,
     element_byte_width: int,
 ) -> DescriptorRule:
     descriptor = _descriptor(
-        cooperative_matrix_descriptor_key(
+        case.descriptor_key(
             "op_cooperative_matrix_store_khr",
             role="result",
-            element=descriptor_element,
-            m_size=m_size,
-            n_size=n_size,
-            k_size=k_size,
-            accumulator=accumulator,
-            scope="subgroup",
             layout="row_major",
         )
     )
@@ -792,85 +773,57 @@ def _cooperative_matrix_store_rule(
     )
 
 
-def _cooperative_matrix_16x16x16_f32_rules(
-    element: str,
-    *,
-    element_byte_width: int,
+def _cooperative_matrix_rules_for_case(
+    case: CooperativeMatrixCase,
 ) -> tuple[DescriptorRule, ...]:
-    m_size = 16
-    n_size = 16
-    k_size = 16
-    accumulator = "f32"
     return (
         _cooperative_matrix_load_rule(
             role="lhs",
-            descriptor_element=element,
-            view_element=element,
-            result_element=element,
-            result_lanes=16,
-            rows=16,
-            columns=16,
-            m_size=m_size,
-            n_size=n_size,
-            k_size=k_size,
-            accumulator=accumulator,
-            element_byte_width=element_byte_width,
+            case=case,
+            view_element=case.lhs_source_type,
+            result_element=case.lhs_source_type,
+            result_lanes=case.lhs_vector_lanes,
+            rows=case.lhs_rows,
+            columns=case.lhs_columns,
+            element_byte_width=case.lhs_scalar.byte_width,
         ),
         _cooperative_matrix_load_rule(
             role="rhs",
-            descriptor_element=element,
-            view_element=element,
-            result_element=element,
-            result_lanes=16,
-            rows=16,
-            columns=16,
-            m_size=m_size,
-            n_size=n_size,
-            k_size=k_size,
-            accumulator=accumulator,
-            element_byte_width=element_byte_width,
+            case=case,
+            view_element=case.rhs_source_type,
+            result_element=case.rhs_source_type,
+            result_lanes=case.rhs_vector_lanes,
+            rows=case.rhs_rows,
+            columns=case.rhs_columns,
+            element_byte_width=case.rhs_scalar.byte_width,
         ),
         _cooperative_matrix_load_rule(
             role="init",
-            descriptor_element=element,
-            view_element="f32",
-            result_element="f32",
-            result_lanes=8,
-            rows=16,
-            columns=16,
-            m_size=m_size,
-            n_size=n_size,
-            k_size=k_size,
-            accumulator=accumulator,
-            element_byte_width=4,
+            case=case,
+            view_element=case.accumulator_source_type,
+            result_element=case.accumulator_source_type,
+            result_lanes=case.accumulator_vector_lanes,
+            rows=case.accumulator_rows,
+            columns=case.accumulator_columns,
+            element_byte_width=case.accumulator_scalar.byte_width,
         ),
         _cooperative_matrix_store_rule(
-            descriptor_element=element,
-            view_element="f32",
-            value_element="f32",
-            value_lanes=8,
-            rows=16,
-            columns=16,
-            m_size=m_size,
-            n_size=n_size,
-            k_size=k_size,
-            accumulator=accumulator,
-            element_byte_width=4,
+            case=case,
+            view_element=case.result_source_type,
+            value_element=case.result_source_type,
+            value_lanes=case.accumulator_vector_lanes,
+            rows=case.accumulator_rows,
+            columns=case.accumulator_columns,
+            element_byte_width=case.result_scalar.byte_width,
         ),
     )
 
 
 def _cooperative_matrix_rules() -> tuple[DescriptorRule, ...]:
-    return (
-        *_cooperative_matrix_16x16x16_f32_rules(
-            "f16",
-            element_byte_width=2,
-        ),
-        *_cooperative_matrix_16x16x16_f32_rules(
-            "bf16",
-            element_byte_width=2,
-        ),
-    )
+    rules: list[DescriptorRule] = []
+    for case in COOPERATIVE_MATRIX_CASES:
+        rules.extend(_cooperative_matrix_rules_for_case(case))
+    return tuple(rules)
 
 
 def _view_load_rule(scalar: StorageBufferScalar) -> DescriptorRule:

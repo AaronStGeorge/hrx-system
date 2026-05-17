@@ -121,20 +121,42 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_generated_textual_header(
+  NAME
+    cooperative_properties_tables_gen
+  GENERATOR
+    iree::runtime::py::loom::gen::spirv_cooperative_properties
+  OUTPUT
+    "cooperative_properties_tables.inl"
+  OUTPUT_FLAG
+    "--tables"
+  COMMENT
+    "Generating SPIR-V cooperative property rows"
+)
+
 loom_cc_library(
   NAME
     cooperative_properties
   HDRS
     "cooperative_properties.h"
+  TEXTUAL_HDRS
+    "cooperative_properties_tables.inl"
   SRCS
     "cooperative_properties.c"
   DEPS
+    ::descriptors_ids
     ::features
     ::scalar_types
     iree::base
     loom::src::loom::analysis::policy
     loom::src::loom::util::numeric_format
   PUBLIC
+)
+
+iree_package_name(_PACKAGE_NAME)
+add_dependencies(
+  "${_PACKAGE_NAME}_cooperative_properties.objects"
+  "${_PACKAGE_NAME}_cooperative_properties_tables_gen"
 )
 
 loom_cc_library(
@@ -280,6 +302,7 @@ loom_cc_test(
     "cooperative_properties_test.cc"
   DEPS
     ::cooperative_properties
+    ::descriptors_ids
     ::features
     iree::testing::gtest
     iree::testing::gtest_main

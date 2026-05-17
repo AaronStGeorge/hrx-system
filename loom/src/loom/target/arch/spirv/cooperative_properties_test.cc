@@ -8,6 +8,7 @@
 
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/target/arch/spirv/descriptors.h"
 
 namespace {
 
@@ -20,6 +21,11 @@ constexpr loom_spirv_feature_bits_t kBf16CooperativeMatrixFeatures =
     LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR |
     LOOM_SPIRV_FEATURE_BFLOAT16_TYPE_KHR |
     LOOM_SPIRV_FEATURE_BFLOAT16_COOPERATIVE_MATRIX_KHR;
+
+constexpr loom_spirv_feature_bits_t kS8CooperativeMatrixFeatures =
+    LOOM_SPIRV_FEATURE_VULKAN_SHADER |
+    LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR | LOOM_SPIRV_FEATURE_INT8 |
+    LOOM_SPIRV_FEATURE_STORAGE_BUFFER_8BIT_ACCESS;
 
 void PreparePropertySet(loom_spirv_feature_bits_t feature_bits,
                         loom_spirv_cooperative_property_set_t* property_set) {
@@ -59,6 +65,29 @@ loom_spirv_cooperative_matrix_query_t Bf16MatrixQuery(
       .scope = LOOM_SPIRV_SCOPE_SUBGROUP,
       .layout = LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_KHR,
       .storage_class = LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER,
+      .policy = policy,
+  };
+}
+
+loom_spirv_cooperative_matrix_query_t S8MatrixQuery(
+    loom_lowering_policy_t policy) {
+  return {
+      .m_size = 16,
+      .n_size = 16,
+      .k_size = 32,
+      .lhs_type = LOOM_SPIRV_SCALAR_TYPE_S8,
+      .rhs_type = LOOM_SPIRV_SCALAR_TYPE_S8,
+      .accumulator_type = LOOM_SPIRV_SCALAR_TYPE_S32,
+      .result_type = LOOM_SPIRV_SCALAR_TYPE_S32,
+      .scope = LOOM_SPIRV_SCOPE_SUBGROUP,
+      .layout = LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_KHR,
+      .storage_class = LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER,
+      .operand_flags =
+          LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_A_SIGNED_COMPONENTS |
+          LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_B_SIGNED_COMPONENTS |
+          LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_C_SIGNED_COMPONENTS |
+          LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_RESULT_SIGNED_COMPONENTS |
+          LOOM_SPIRV_COOPERATIVE_MATRIX_OPERAND_SATURATING_ACCUMULATION,
       .policy = policy,
   };
 }
@@ -211,6 +240,9 @@ TEST(SpirvCooperativePropertiesTest, SelectsCooperativeMatrixByShapeAndFacts) {
   EXPECT_TRUE(iree_string_view_equal(
       property->name,
       IREE_SV("khr.cooperative_matrix.f16.16x16x16.f32.subgroup")));
+  EXPECT_EQ(
+      property->mul_add_descriptor_ref,
+      SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_COOPERATIVE_MATRIX_MUL_ADD_KHR_F16_M16N16K16_F32_SUBGROUP);
   EXPECT_EQ(diagnostic.status, LOOM_SPIRV_COOPERATIVE_SELECTION_MATCHED);
 }
 
@@ -264,6 +296,32 @@ TEST(SpirvCooperativePropertiesTest, SelectsBfloat16CooperativeMatrixRow) {
   EXPECT_EQ(property->lhs_type, LOOM_SPIRV_SCALAR_TYPE_BF16);
   EXPECT_EQ(property->rhs_type, LOOM_SPIRV_SCALAR_TYPE_BF16);
   EXPECT_EQ(property->accumulator_type, LOOM_SPIRV_SCALAR_TYPE_F32);
+  EXPECT_EQ(
+      property->mul_add_descriptor_ref,
+      SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_COOPERATIVE_MATRIX_MUL_ADD_KHR_BF16_M16N16K16_F32_SUBGROUP);
+  EXPECT_EQ(diagnostic.status, LOOM_SPIRV_COOPERATIVE_SELECTION_MATCHED);
+}
+
+TEST(SpirvCooperativePropertiesTest,
+     SelectsSignedSaturatingS8CooperativeMatrixRow) {
+  loom_spirv_cooperative_property_set_t property_set = {};
+  PreparePropertySet(kS8CooperativeMatrixFeatures, &property_set);
+  const loom_spirv_cooperative_matrix_query_t query =
+      S8MatrixQuery(LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED);
+
+  loom_spirv_cooperative_diagnostic_t diagnostic = {};
+  const loom_spirv_cooperative_matrix_property_t* property =
+      loom_spirv_cooperative_matrix_property_select(&property_set, &query,
+                                                    &diagnostic);
+
+  ASSERT_NE(property, nullptr);
+  EXPECT_TRUE(iree_string_view_equal(
+      property->name, IREE_SV("khr.cooperative_matrix.s8.16x16x32.s32.subgroup."
+                              "signed_saturating")));
+  EXPECT_EQ(property->operand_flags, query.operand_flags);
+  EXPECT_EQ(
+      property->mul_add_descriptor_ref,
+      SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_COOPERATIVE_MATRIX_MUL_ADD_KHR_S8_M16N16K32_S32_SUBGROUP_SIGNED_SATURATING);
   EXPECT_EQ(diagnostic.status, LOOM_SPIRV_COOPERATIVE_SELECTION_MATCHED);
 }
 

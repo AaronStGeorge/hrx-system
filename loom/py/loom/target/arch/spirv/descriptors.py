@@ -14,7 +14,11 @@ from loom.target.arch.spirv.builtins import (
     BUILTIN_DIMENSIONS,
     BUILTIN_INDEX_QUERIES,
 )
-from loom.target.arch.spirv.features import feature_bits_value
+from loom.target.arch.spirv.cooperative_matrix import (
+    COOPERATIVE_MATRIX_CASES,
+    CooperativeMatrixCase,
+    cooperative_matrix_descriptor_key,
+)
 from loom.target.arch.spirv.scalar_alu import (
     FLOAT_BINARY_OPERATIONS,
     FLOAT_SCALAR_ALU_TYPES,
@@ -389,65 +393,39 @@ def _storage_buffer_descriptors() -> tuple[Descriptor, ...]:
     return tuple(descriptors)
 
 
-def cooperative_matrix_descriptor_key(
-    op_name: str,
-    *,
-    role: str | None = None,
-    element: str,
-    m_size: int,
-    n_size: int,
-    k_size: int,
-    accumulator: str,
-    scope: str,
-    layout: str | None = None,
-    operand_mode: str | None = None,
-) -> str:
-    role_part = f".{role}" if role else ""
-    layout_part = f".{layout}" if layout else ""
-    operand_mode_part = f".{operand_mode}" if operand_mode else ""
-    return (
-        f"spirv.{op_name}{role_part}.{element}."
-        f"m{m_size}n{n_size}k{k_size}.{accumulator}.{scope}"
-        f"{layout_part}{operand_mode_part}"
-    )
-
-
 def _cooperative_matrix_load_descriptor(
     *,
     role: str,
-    element: str,
-    element_byte_width: int,
+    case: CooperativeMatrixCase,
+    scalar: StorageBufferScalar,
     rows: int,
     columns: int,
-    m_size: int,
-    n_size: int,
-    k_size: int,
-    accumulator: str,
     feature_bits: int,
 ) -> Descriptor:
     key = cooperative_matrix_descriptor_key(
         "op_cooperative_matrix_load_khr",
         role=role,
-        element=element,
-        m_size=m_size,
-        n_size=n_size,
-        k_size=k_size,
-        accumulator=accumulator,
+        element=case.element,
+        m_size=case.m_size,
+        n_size=case.n_size,
+        k_size=case.k_size,
+        accumulator=case.accumulator,
         scope="subgroup",
         layout="row_major",
     )
     return Descriptor(
         key=key,
         mnemonic=(
-            f"OpCooperativeMatrixLoadKHR.{role}.{element}."
-            f"{m_size}x{n_size}x{k_size}.{accumulator}.subgroup.row_major"
+            f"OpCooperativeMatrixLoadKHR.{role}.{case.element}."
+            f"{case.m_size}x{case.n_size}x{case.k_size}."
+            f"{case.accumulator}.subgroup.row_major"
         ),
         semantic_tag=key,
         operands=(_id_result(), _ptr_storage_buffer_operand("ptr")),
         effects=(
             _cooperative_matrix_effect(
                 EffectKind.READ,
-                byte_width=element_byte_width,
+                byte_width=scalar.byte_width,
                 rows=rows,
                 columns=columns,
             ),
@@ -461,39 +439,36 @@ def _cooperative_matrix_load_descriptor(
 
 def _cooperative_matrix_store_descriptor(
     *,
-    element: str,
-    element_byte_width: int,
+    case: CooperativeMatrixCase,
+    scalar: StorageBufferScalar,
     rows: int,
     columns: int,
-    m_size: int,
-    n_size: int,
-    k_size: int,
-    accumulator: str,
     feature_bits: int,
 ) -> Descriptor:
     key = cooperative_matrix_descriptor_key(
         "op_cooperative_matrix_store_khr",
         role="result",
-        element=element,
-        m_size=m_size,
-        n_size=n_size,
-        k_size=k_size,
-        accumulator=accumulator,
+        element=case.element,
+        m_size=case.m_size,
+        n_size=case.n_size,
+        k_size=case.k_size,
+        accumulator=case.accumulator,
         scope="subgroup",
         layout="row_major",
     )
     return Descriptor(
         key=key,
         mnemonic=(
-            f"OpCooperativeMatrixStoreKHR.result.{element}."
-            f"{m_size}x{n_size}x{k_size}.{accumulator}.subgroup.row_major"
+            f"OpCooperativeMatrixStoreKHR.result.{case.element}."
+            f"{case.m_size}x{case.n_size}x{case.k_size}."
+            f"{case.accumulator}.subgroup.row_major"
         ),
         semantic_tag=key,
         operands=(_ptr_storage_buffer_operand("ptr"), _id_operand("value")),
         effects=(
             _cooperative_matrix_effect(
                 EffectKind.WRITE,
-                byte_width=element_byte_width,
+                byte_width=scalar.byte_width,
                 rows=rows,
                 columns=columns,
             ),
@@ -507,30 +482,25 @@ def _cooperative_matrix_store_descriptor(
 
 def _cooperative_matrix_mul_add_descriptor(
     *,
-    element: str,
-    m_size: int,
-    n_size: int,
-    k_size: int,
-    accumulator: str,
-    feature_bits: int,
-    operand_mode: str | None = None,
+    case: CooperativeMatrixCase,
 ) -> Descriptor:
     key = cooperative_matrix_descriptor_key(
         "op_cooperative_matrix_mul_add_khr",
-        element=element,
-        m_size=m_size,
-        n_size=n_size,
-        k_size=k_size,
-        accumulator=accumulator,
+        element=case.element,
+        m_size=case.m_size,
+        n_size=case.n_size,
+        k_size=case.k_size,
+        accumulator=case.accumulator,
         scope="subgroup",
-        operand_mode=operand_mode,
+        operand_mode=case.operand_mode,
     )
-    operand_mode_part = f".{operand_mode}" if operand_mode else ""
+    operand_mode_part = f".{case.operand_mode}" if case.operand_mode else ""
     return Descriptor(
         key=key,
         mnemonic=(
-            f"OpCooperativeMatrixMulAddKHR.{element}."
-            f"{m_size}x{n_size}x{k_size}.{accumulator}.subgroup"
+            f"OpCooperativeMatrixMulAddKHR.{case.element}."
+            f"{case.m_size}x{case.n_size}x{case.k_size}."
+            f"{case.accumulator}.subgroup"
             f"{operand_mode_part}"
         ),
         semantic_tag=key,
@@ -540,192 +510,57 @@ def _cooperative_matrix_mul_add_descriptor(
             _id_operand("b"),
             _id_operand("acc"),
         ),
-        feature_mask_words=(feature_bits,),
+        feature_mask_words=(case.feature_bits,),
         asm_forms=_asm(results=("dst",), operands=("a", "b", "acc")),
         schedule_class=_SCHEDULE_MATRIX,
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
 
 
-def _cooperative_matrix_16x16x16_f32_descriptors(
-    *,
-    element: str,
-    element_byte_width: int,
-    matrix_feature_bits: int,
-    storage_buffer_access_feature_bits: int,
+def _cooperative_matrix_descriptors_for_case(
+    case: CooperativeMatrixCase,
 ) -> tuple[Descriptor, ...]:
-    m_size = 16
-    n_size = 16
-    k_size = 16
-    accumulator = "f32"
-    memory_feature_bits = matrix_feature_bits | storage_buffer_access_feature_bits
     return (
         _cooperative_matrix_load_descriptor(
             role="lhs",
-            element=element,
-            element_byte_width=element_byte_width,
-            rows=16,
-            columns=16,
-            m_size=m_size,
-            n_size=n_size,
-            k_size=k_size,
-            accumulator=accumulator,
-            feature_bits=memory_feature_bits,
+            case=case,
+            scalar=case.lhs_scalar,
+            rows=case.lhs_rows,
+            columns=case.lhs_columns,
+            feature_bits=case.memory_feature_bits(case.lhs_scalar),
         ),
         _cooperative_matrix_load_descriptor(
             role="rhs",
-            element=element,
-            element_byte_width=element_byte_width,
-            rows=16,
-            columns=16,
-            m_size=m_size,
-            n_size=n_size,
-            k_size=k_size,
-            accumulator=accumulator,
-            feature_bits=memory_feature_bits,
+            case=case,
+            scalar=case.rhs_scalar,
+            rows=case.rhs_rows,
+            columns=case.rhs_columns,
+            feature_bits=case.memory_feature_bits(case.rhs_scalar),
         ),
         _cooperative_matrix_load_descriptor(
             role="init",
-            element=element,
-            element_byte_width=4,
-            rows=16,
-            columns=16,
-            m_size=m_size,
-            n_size=n_size,
-            k_size=k_size,
-            accumulator=accumulator,
-            feature_bits=matrix_feature_bits,
+            case=case,
+            scalar=case.accumulator_scalar,
+            rows=case.accumulator_rows,
+            columns=case.accumulator_columns,
+            feature_bits=case.memory_feature_bits(case.accumulator_scalar),
         ),
-        _cooperative_matrix_mul_add_descriptor(
-            element=element,
-            m_size=m_size,
-            n_size=n_size,
-            k_size=k_size,
-            accumulator=accumulator,
-            feature_bits=matrix_feature_bits,
-        ),
+        _cooperative_matrix_mul_add_descriptor(case=case),
         _cooperative_matrix_store_descriptor(
-            element=element,
-            element_byte_width=4,
-            rows=16,
-            columns=16,
-            m_size=m_size,
-            n_size=n_size,
-            k_size=k_size,
-            accumulator=accumulator,
-            feature_bits=matrix_feature_bits,
-        ),
-    )
-
-
-def _cooperative_matrix_16x16x32_s32_signed_saturating_descriptors() -> tuple[
-    Descriptor, ...
-]:
-    m_size = 16
-    n_size = 16
-    k_size = 32
-    element = "s8"
-    accumulator = "s32"
-    matrix_feature_bits = feature_bits_value(
-        (
-            "cooperative_matrix_khr",
-            "int8",
-        )
-    )
-    memory_feature_bits = matrix_feature_bits | feature_bits_value(
-        ("storage_buffer_8bit_access",)
-    )
-    return (
-        _cooperative_matrix_load_descriptor(
-            role="lhs",
-            element=element,
-            element_byte_width=1,
-            rows=16,
-            columns=32,
-            m_size=m_size,
-            n_size=n_size,
-            k_size=k_size,
-            accumulator=accumulator,
-            feature_bits=memory_feature_bits,
-        ),
-        _cooperative_matrix_load_descriptor(
-            role="rhs",
-            element=element,
-            element_byte_width=1,
-            rows=32,
-            columns=16,
-            m_size=m_size,
-            n_size=n_size,
-            k_size=k_size,
-            accumulator=accumulator,
-            feature_bits=memory_feature_bits,
-        ),
-        _cooperative_matrix_load_descriptor(
-            role="init",
-            element=element,
-            element_byte_width=4,
-            rows=16,
-            columns=16,
-            m_size=m_size,
-            n_size=n_size,
-            k_size=k_size,
-            accumulator=accumulator,
-            feature_bits=matrix_feature_bits,
-        ),
-        _cooperative_matrix_mul_add_descriptor(
-            element=element,
-            m_size=m_size,
-            n_size=n_size,
-            k_size=k_size,
-            accumulator=accumulator,
-            feature_bits=matrix_feature_bits,
-            operand_mode="signed_saturating",
-        ),
-        _cooperative_matrix_store_descriptor(
-            element=element,
-            element_byte_width=4,
-            rows=16,
-            columns=16,
-            m_size=m_size,
-            n_size=n_size,
-            k_size=k_size,
-            accumulator=accumulator,
-            feature_bits=matrix_feature_bits,
+            case=case,
+            scalar=case.result_scalar,
+            rows=case.accumulator_rows,
+            columns=case.accumulator_columns,
+            feature_bits=case.memory_feature_bits(case.result_scalar),
         ),
     )
 
 
 def _cooperative_matrix_descriptors() -> tuple[Descriptor, ...]:
-    return (
-        *_cooperative_matrix_16x16x16_f32_descriptors(
-            element="f16",
-            element_byte_width=2,
-            matrix_feature_bits=feature_bits_value(
-                (
-                    "cooperative_matrix_khr",
-                    "float16",
-                )
-            ),
-            storage_buffer_access_feature_bits=feature_bits_value(
-                ("storage_buffer_16bit_access",)
-            ),
-        ),
-        *_cooperative_matrix_16x16x16_f32_descriptors(
-            element="bf16",
-            element_byte_width=2,
-            matrix_feature_bits=feature_bits_value(
-                (
-                    "cooperative_matrix_khr",
-                    "bfloat16_type_khr",
-                    "bfloat16_cooperative_matrix_khr",
-                )
-            ),
-            storage_buffer_access_feature_bits=feature_bits_value(
-                ("storage_buffer_16bit_access",)
-            ),
-        ),
-        *_cooperative_matrix_16x16x32_s32_signed_saturating_descriptors(),
-    )
+    descriptors: list[Descriptor] = []
+    for case in COOPERATIVE_MATRIX_CASES:
+        descriptors.extend(_cooperative_matrix_descriptors_for_case(case))
+    return tuple(descriptors)
 
 
 def _scalar_binary_descriptor(

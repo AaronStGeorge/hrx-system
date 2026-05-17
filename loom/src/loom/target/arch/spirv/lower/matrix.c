@@ -11,7 +11,6 @@
 #include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/target/arch/spirv/cooperative_properties.h"
-#include "loom/target/arch/spirv/descriptors.h"
 #include "loom/target/arch/spirv/profile.h"
 
 static bool loom_spirv_contract_numeric_scalar_type(
@@ -290,58 +289,14 @@ static void loom_spirv_matrix_prepare_properties(
   loom_spirv_cooperative_property_set_prepare(&feature_set, out_property_set);
 }
 
-static uint32_t loom_spirv_matrix_low_descriptor_ref(
-    const loom_spirv_cooperative_matrix_property_t* property,
-    const loom_spirv_cooperative_matrix_query_t* query) {
-  if (query->layout != LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_KHR ||
-      query->storage_class !=
-          LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER ||
-      property->m_size != 16 || property->n_size != 16) {
-    return LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-  }
-  if (property->k_size == 16 &&
-      property->accumulator_type == LOOM_SPIRV_SCALAR_TYPE_F32 &&
-      property->result_type == LOOM_SPIRV_SCALAR_TYPE_F32 &&
-      query->operand_flags == 0 &&
-      property->lhs_type == LOOM_SPIRV_SCALAR_TYPE_F16 &&
-      property->rhs_type == LOOM_SPIRV_SCALAR_TYPE_F16) {
-    return SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_COOPERATIVE_MATRIX_MUL_ADD_KHR_F16_M16N16K16_F32_SUBGROUP;
-  }
-  if (property->k_size == 16 &&
-      property->accumulator_type == LOOM_SPIRV_SCALAR_TYPE_F32 &&
-      property->result_type == LOOM_SPIRV_SCALAR_TYPE_F32 &&
-      query->operand_flags == 0 &&
-      property->lhs_type == LOOM_SPIRV_SCALAR_TYPE_BF16 &&
-      property->rhs_type == LOOM_SPIRV_SCALAR_TYPE_BF16) {
-    return SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_COOPERATIVE_MATRIX_MUL_ADD_KHR_BF16_M16N16K16_F32_SUBGROUP;
-  }
-  if (property->k_size == 32 &&
-      property->accumulator_type == LOOM_SPIRV_SCALAR_TYPE_S32 &&
-      property->result_type == LOOM_SPIRV_SCALAR_TYPE_S32 &&
-      query->operand_flags == property->operand_flags &&
-      property->lhs_type == LOOM_SPIRV_SCALAR_TYPE_S8 &&
-      property->rhs_type == LOOM_SPIRV_SCALAR_TYPE_S8) {
-    return SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_COOPERATIVE_MATRIX_MUL_ADD_KHR_S8_M16N16K32_S32_SUBGROUP_SIGNED_SATURATING;
-  }
-  return LOOM_LOW_DESCRIPTOR_ORDINAL_NONE;
-}
-
 static iree_status_t loom_spirv_matrix_query_select_descriptor(
     const loom_target_contract_query_environment_t* environment,
     const loom_op_t* source_op,
     const loom_spirv_cooperative_matrix_property_t* property,
-    const loom_spirv_cooperative_matrix_query_t* query,
     loom_target_contract_query_result_t* out_result) {
-  const uint32_t descriptor_ref =
-      loom_spirv_matrix_low_descriptor_ref(property, query);
-  if (descriptor_ref == LOOM_LOW_DESCRIPTOR_ORDINAL_NONE) {
-    return loom_spirv_matrix_contract_query_reject(
-        environment, source_op, IREE_SV("target_low_descriptor_mapping"), 0,
-        LOOM_SPIRV_COOPERATIVE_REJECTION_DESCRIPTOR, 0, out_result);
-  }
   const loom_low_descriptor_t* descriptor =
       loom_low_descriptor_set_descriptor_at(environment->descriptor_set,
-                                            descriptor_ref);
+                                            property->mul_add_descriptor_ref);
   if (descriptor == NULL) {
     return loom_spirv_matrix_contract_query_reject(
         environment, source_op, IREE_SV("descriptor_set_packet"), 0,
@@ -413,6 +368,6 @@ iree_status_t loom_spirv_descriptor_matrix_query(
         diagnostic.rejection_flags, missing_feature_bits, out_result);
   }
 
-  return loom_spirv_matrix_query_select_descriptor(
-      environment, source_op, property, &query, out_result);
+  return loom_spirv_matrix_query_select_descriptor(environment, source_op,
+                                                   property, out_result);
 }

@@ -37,12 +37,24 @@ iree_py_library(
     "descriptors.py"
   DEPS
     iree::runtime::py::loom::target::arch::spirv::builtins
+    iree::runtime::py::loom::target::arch::spirv::cooperative_matrix
     iree::runtime::py::loom::target::arch::spirv::features
     iree::runtime::py::loom::target::arch::spirv::scalar_alu
     iree::runtime::py::loom::target::arch::spirv::scalar_conversion
     iree::runtime::py::loom::target::arch::spirv::scalar_memory
     iree::runtime::py::loom::target::low_descriptors
     iree::runtime::py::loom::target::arch::package
+)
+
+iree_py_library(
+  NAME
+    cooperative_matrix
+  SRCS
+    "__init__.py"
+    "cooperative_matrix.py"
+  DEPS
+    iree::runtime::py::loom::target::arch::spirv::features
+    iree::runtime::py::loom::target::arch::spirv::scalar_memory
 )
 
 iree_py_library(

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from loom.gen.spirv_packet_rows import _descriptor_ref_constant_name, generate_tables
 from loom.target.arch.spirv.builtins import BUILTIN_DIMENSIONS, BUILTIN_INDEX_QUERIES
-from loom.target.arch.spirv.descriptors import cooperative_matrix_descriptor_key
+from loom.target.arch.spirv.cooperative_matrix import cooperative_matrix_descriptor_key
 from loom.target.arch.spirv.scalar_memory import STORAGE_BUFFER_SCALARS
 
 

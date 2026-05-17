@@ -26,6 +26,7 @@ iree_py_library(
     iree::runtime::py::loom::dialect::vector::vector
     iree::runtime::py::loom::dialect::view::view
     iree::runtime::py::loom::target::arch::spirv::builtins
+    iree::runtime::py::loom::target::arch::spirv::cooperative_matrix
     iree::runtime::py::loom::target::arch::spirv::descriptors
     iree::runtime::py::loom::target::arch::spirv::scalar_alu
     iree::runtime::py::loom::target::arch::spirv::scalar_conversion

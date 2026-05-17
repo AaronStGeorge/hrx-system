@@ -164,6 +164,8 @@ typedef struct loom_spirv_cooperative_matrix_property_t {
   loom_spirv_storage_class_flags_t storage_class_flags;
   // Required cooperative matrix operand bits for this row.
   loom_spirv_cooperative_matrix_operand_flags_t operand_flags;
+  // Target-low descriptor ref selected for the matrix multiply-add operation.
+  uint32_t mul_add_descriptor_ref;
 } loom_spirv_cooperative_matrix_property_t;
 
 typedef struct loom_spirv_cooperative_vector_property_t {

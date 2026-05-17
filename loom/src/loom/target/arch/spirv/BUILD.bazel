@@ -182,17 +182,59 @@ loom_cc_library(
     ],
 )
 
+iree_genrule(
+    name = "cooperative_properties_tables_gen",
+    srcs = [],
+    outs = [
+        "cooperative_properties_tables.inl",
+    ],
+    cmd = "$(location //loom/py/loom/gen:spirv_cooperative_properties) --tables=$(execpath cooperative_properties_tables.inl)",
+    tags = ["skip-bazel_to_cmake"],
+    tools = ["//loom/py/loom/gen:spirv_cooperative_properties"],
+)
+
+iree_cmake_extra_content(
+    content = """
+loom_generated_textual_header(
+  NAME
+    cooperative_properties_tables_gen
+  GENERATOR
+    iree::runtime::py::loom::gen::spirv_cooperative_properties
+  OUTPUT
+    "cooperative_properties_tables.inl"
+  OUTPUT_FLAG
+    "--tables"
+  COMMENT
+    "Generating SPIR-V cooperative property rows"
+)
+""",
+    inline = True,
+)
+
 loom_cc_library(
     name = "cooperative_properties",
     srcs = ["cooperative_properties.c"],
     hdrs = ["cooperative_properties.h"],
+    textual_hdrs = [":cooperative_properties_tables.inl"],
     deps = [
+        ":descriptors_ids",
         ":features",
         ":scalar_types",
         "//loom/src/loom/analysis:policy",
         "//loom/src/loom/util:numeric_format",
         "//runtime/src/iree/base",
     ],
+)
+
+iree_cmake_extra_content(
+    content = """
+iree_package_name(_PACKAGE_NAME)
+add_dependencies(
+  "${_PACKAGE_NAME}_cooperative_properties.objects"
+  "${_PACKAGE_NAME}_cooperative_properties_tables_gen"
+)
+""",
+    inline = True,
 )
 
 loom_cc_library(
@@ -320,6 +362,7 @@ loom_cc_test(
     srcs = ["cooperative_properties_test.cc"],
     deps = [
         ":cooperative_properties",
+        ":descriptors_ids",
         ":features",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
