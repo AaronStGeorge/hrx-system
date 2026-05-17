@@ -86,10 +86,10 @@ if("ireevm" IN_LIST LOOM_COMPILE_PROVIDERS)
   _loom_compile_enable_provider(
     ${_LOOM_COMPILE_TARGET}
     LOOM_COMPILE_HAVE_IREEVM
-    loom::src::loom::target::emit::ireevm::candidate
+    loom::src::loom::tooling::execution::ireevm::candidate
   )
   target_link_libraries(${_LOOM_COMPILE_TARGET} PRIVATE
-    loom::src::loom::target::emit::ireevm::execution_provider
+    loom::src::loom::tooling::execution::ireevm::provider
   )
 endif()
 
