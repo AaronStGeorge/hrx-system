@@ -3,9 +3,29 @@
 spirv.target<vulkan1_3> @target
 
 func.def target(@target) @unsupported_source_op(%lhs: i32, %rhs: i32) -> (i32) {
-  // ERROR@+1: TARGET/001 {op_name="scalar.divui"}
-  %quotient = scalar.divui %lhs, %rhs : i32
+  // ERROR@+1: TARGET/001 {op_name="scalar.ceildivui"}
+  %quotient = scalar.ceildivui %lhs, %rhs : i32
   func.return %quotient : i32
+}
+
+// ====
+
+spirv.target<vulkan1_3> @target
+
+func.def target(@target) @unsigned_i16_requires_target_features(%lhs: i16, %rhs: i16) -> (i16) {
+  // ERROR@+1: TARGET/003 {subject_kind="descriptor", subject_name="spirv.op_udiv.u16", constraint_key="descriptor_available"}
+  %quotient = scalar.divui %lhs, %rhs : i16
+  func.return %quotient : i16
+}
+
+// ====
+
+spirv.target<vulkan1_3> @target
+
+func.def target(@target) @unsigned_i16_conversion_requires_target_features(%lhs: i16) -> (i32) {
+  // ERROR@+1: TARGET/003 {subject_kind="descriptor", subject_name="spirv.op_u_convert.u16.u32", constraint_key="descriptor_available"}
+  %wide = scalar.extui %lhs : i16 to i32
+  func.return %wide : i32
 }
 
 // ====

@@ -26,6 +26,13 @@ class ScalarAluType:
 
 
 @dataclass(frozen=True, slots=True)
+class IntegerAluTypePair:
+    source_type: str
+    signed: ScalarAluType
+    unsigned: ScalarAluType
+
+
+@dataclass(frozen=True, slots=True)
 class ScalarBinaryOperation:
     source_op_key: str
     descriptor_suffix: str
@@ -41,30 +48,72 @@ class IntegerComparePredicate:
     opcode: str
 
 
-INTEGER_SCALAR_ALU_TYPES = (
-    ScalarAluType(
+INTEGER_SCALAR_ALU_TYPE_PAIRS = (
+    IntegerAluTypePair(
         source_type="i8",
-        suffix="i8",
-        scalar_enum="LOOM_SPIRV_SCALAR_TYPE_S8",
-        feature_atoms=("int8",),
+        signed=ScalarAluType(
+            source_type="i8",
+            suffix="i8",
+            scalar_enum="LOOM_SPIRV_SCALAR_TYPE_S8",
+            feature_atoms=("int8",),
+        ),
+        unsigned=ScalarAluType(
+            source_type="i8",
+            suffix="u8",
+            scalar_enum="LOOM_SPIRV_SCALAR_TYPE_U8",
+            feature_atoms=("int8",),
+        ),
     ),
-    ScalarAluType(
+    IntegerAluTypePair(
         source_type="i16",
-        suffix="i16",
-        scalar_enum="LOOM_SPIRV_SCALAR_TYPE_S16",
-        feature_atoms=("int16",),
+        signed=ScalarAluType(
+            source_type="i16",
+            suffix="i16",
+            scalar_enum="LOOM_SPIRV_SCALAR_TYPE_S16",
+            feature_atoms=("int16",),
+        ),
+        unsigned=ScalarAluType(
+            source_type="i16",
+            suffix="u16",
+            scalar_enum="LOOM_SPIRV_SCALAR_TYPE_U16",
+            feature_atoms=("int16",),
+        ),
     ),
-    ScalarAluType(
+    IntegerAluTypePair(
         source_type="i32",
-        suffix="i32",
-        scalar_enum="LOOM_SPIRV_SCALAR_TYPE_S32",
+        signed=ScalarAluType(
+            source_type="i32",
+            suffix="i32",
+            scalar_enum="LOOM_SPIRV_SCALAR_TYPE_S32",
+        ),
+        unsigned=ScalarAluType(
+            source_type="i32",
+            suffix="u32",
+            scalar_enum="LOOM_SPIRV_SCALAR_TYPE_U32",
+        ),
     ),
-    ScalarAluType(
+    IntegerAluTypePair(
         source_type="i64",
-        suffix="i64",
-        scalar_enum="LOOM_SPIRV_SCALAR_TYPE_S64",
-        feature_atoms=("int64",),
+        signed=ScalarAluType(
+            source_type="i64",
+            suffix="i64",
+            scalar_enum="LOOM_SPIRV_SCALAR_TYPE_S64",
+            feature_atoms=("int64",),
+        ),
+        unsigned=ScalarAluType(
+            source_type="i64",
+            suffix="u64",
+            scalar_enum="LOOM_SPIRV_SCALAR_TYPE_U64",
+            feature_atoms=("int64",),
+        ),
     ),
+)
+
+SIGNED_INTEGER_SCALAR_ALU_TYPES = tuple(
+    scalar_pair.signed for scalar_pair in INTEGER_SCALAR_ALU_TYPE_PAIRS
+)
+UNSIGNED_INTEGER_SCALAR_ALU_TYPES = tuple(
+    scalar_pair.unsigned for scalar_pair in INTEGER_SCALAR_ALU_TYPE_PAIRS
 )
 
 FLOAT_SCALAR_ALU_TYPES = (
@@ -87,7 +136,7 @@ FLOAT_SCALAR_ALU_TYPES = (
     ),
 )
 
-SCALAR_ALU_TYPES = INTEGER_SCALAR_ALU_TYPES + FLOAT_SCALAR_ALU_TYPES
+SCALAR_ALU_TYPES = SIGNED_INTEGER_SCALAR_ALU_TYPES + FLOAT_SCALAR_ALU_TYPES
 
 OFFSET64_ALU_TYPE = ScalarAluType(
     source_type="offset",
@@ -95,12 +144,17 @@ OFFSET64_ALU_TYPE = ScalarAluType(
     scalar_enum="LOOM_SPIRV_SCALAR_TYPE_U64",
 )
 
-INTEGER_BINARY_OPERATIONS = (
+SIGNED_INTEGER_BINARY_OPERATIONS = (
     ScalarBinaryOperation("addi", "iadd", "OpIAdd", "LOOM_SPIRV_OP_I_ADD"),
     ScalarBinaryOperation("subi", "isub", "OpISub", "LOOM_SPIRV_OP_I_SUB"),
     ScalarBinaryOperation("muli", "imul", "OpIMul", "LOOM_SPIRV_OP_I_MUL"),
     ScalarBinaryOperation("divsi", "sdiv", "OpSDiv", "LOOM_SPIRV_OP_S_DIV"),
     ScalarBinaryOperation("remsi", "srem", "OpSRem", "LOOM_SPIRV_OP_S_REM"),
+)
+
+UNSIGNED_INTEGER_BINARY_OPERATIONS = (
+    ScalarBinaryOperation("divui", "udiv", "OpUDiv", "LOOM_SPIRV_OP_U_DIV"),
+    ScalarBinaryOperation("remui", "umod", "OpUMod", "LOOM_SPIRV_OP_U_MOD"),
 )
 
 FLOAT_BINARY_OPERATIONS = (
@@ -169,7 +223,19 @@ INTEGER_COMPARE_PREDICATES = (
     ),
 )
 
-UNSIGNED_INTEGER_COMPARE_PREDICATES = tuple(
+SIGNED_INTEGER_COMPARE_PREDICATES = tuple(
+    row
+    for row in INTEGER_COMPARE_PREDICATES
+    if row.source_predicate in ("eq", "ne", "slt", "sle", "sgt", "sge")
+)
+
+UNSIGNED_ORDERED_INTEGER_COMPARE_PREDICATES = tuple(
+    row
+    for row in INTEGER_COMPARE_PREDICATES
+    if row.source_predicate in ("ult", "ule", "ugt", "uge")
+)
+
+OFFSET64_COMPARE_PREDICATES = tuple(
     row
     for row in INTEGER_COMPARE_PREDICATES
     if row.source_predicate in ("eq", "ne", "ult", "ule", "ugt", "uge")

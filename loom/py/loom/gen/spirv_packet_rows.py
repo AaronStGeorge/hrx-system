@@ -30,17 +30,22 @@ from loom.target.arch.spirv.descriptors import (  # noqa: E402
 from loom.target.arch.spirv.scalar_alu import (  # noqa: E402
     FLOAT_BINARY_OPERATIONS,
     FLOAT_SCALAR_ALU_TYPES,
-    INTEGER_BINARY_OPERATIONS,
-    INTEGER_COMPARE_PREDICATES,
-    INTEGER_SCALAR_ALU_TYPES,
+    INTEGER_SCALAR_ALU_TYPE_PAIRS,
     OFFSET64_ALU_TYPE,
+    OFFSET64_COMPARE_PREDICATES,
     SCALAR_ALU_TYPES,
-    UNSIGNED_INTEGER_COMPARE_PREDICATES,
+    SIGNED_INTEGER_BINARY_OPERATIONS,
+    SIGNED_INTEGER_COMPARE_PREDICATES,
+    SIGNED_INTEGER_SCALAR_ALU_TYPES,
+    UNSIGNED_INTEGER_BINARY_OPERATIONS,
+    UNSIGNED_ORDERED_INTEGER_COMPARE_PREDICATES,
     ScalarAluType,
     ScalarBinaryOperation,
 )
 from loom.target.arch.spirv.scalar_conversion import (  # noqa: E402
-    SCALAR_CONVERSIONS,
+    INTEGER_VALUE_VIEW_CONVERSIONS,
+    LOW_SCALAR_CONVERSIONS,
+    IntegerValueViewConversion,
     ScalarConversion,
 )
 from loom.target.arch.spirv.scalar_memory import (  # noqa: E402
@@ -197,7 +202,8 @@ def _scalar_binary_row(scalar: ScalarAluType, operation: ScalarBinaryOperation) 
 
 
 def _scalar_binary_rows() -> list[str]:
-    rows = [_scalar_binary_row(scalar, operation) for scalar in INTEGER_SCALAR_ALU_TYPES for operation in INTEGER_BINARY_OPERATIONS]
+    rows = [_scalar_binary_row(scalar, operation) for scalar in SIGNED_INTEGER_SCALAR_ALU_TYPES for operation in SIGNED_INTEGER_BINARY_OPERATIONS]
+    rows.extend(_scalar_binary_row(scalar_pair.unsigned, operation) for scalar_pair in INTEGER_SCALAR_ALU_TYPE_PAIRS for operation in UNSIGNED_INTEGER_BINARY_OPERATIONS)
     rows.extend(_scalar_binary_row(scalar, operation) for scalar in FLOAT_SCALAR_ALU_TYPES for operation in FLOAT_BINARY_OPERATIONS)
     return rows
 
@@ -213,8 +219,21 @@ def _conversion_row(row: ScalarConversion) -> str:
     )
 
 
+def _integer_value_view_row(row: IntegerValueViewConversion) -> str:
+    return _row(
+        row.key,
+        opcode="LOOM_SPIRV_OP_BITCAST",
+        form="LOOM_SPIRV_PACKET_FORM_UNARY_CONVERT",
+        result_type=_alu_scalar_value(row.result_type),
+        operand_types=(_alu_scalar_value(row.source_type),),
+        result_count=1,
+    )
+
+
 def _conversion_rows() -> list[str]:
-    return [_conversion_row(row) for row in SCALAR_CONVERSIONS]
+    rows = [_conversion_row(row) for row in LOW_SCALAR_CONVERSIONS]
+    rows.extend(_integer_value_view_row(row) for row in INTEGER_VALUE_VIEW_CONVERSIONS)
+    return rows
 
 
 def _coordinate_binary_rows() -> list[str]:
@@ -266,9 +285,26 @@ def _integer_compare_rows() -> list[str]:
             operand_types=(_alu_scalar_value(scalar), _alu_scalar_value(scalar)),
             result_count=1,
         )
-        for scalar in INTEGER_SCALAR_ALU_TYPES
-        for predicate in INTEGER_COMPARE_PREDICATES
+        for scalar in SIGNED_INTEGER_SCALAR_ALU_TYPES
+        for predicate in SIGNED_INTEGER_COMPARE_PREDICATES
     ]
+    rows.extend(
+        [
+            _row(
+                f"spirv.op_{predicate.descriptor_suffix}.{scalar_pair.unsigned.suffix}",
+                opcode=predicate.opcode,
+                form="LOOM_SPIRV_PACKET_FORM_COMPARE_SAME_TYPE",
+                result_type=bool_value,
+                operand_types=(
+                    _alu_scalar_value(scalar_pair.unsigned),
+                    _alu_scalar_value(scalar_pair.unsigned),
+                ),
+                result_count=1,
+            )
+            for scalar_pair in INTEGER_SCALAR_ALU_TYPE_PAIRS
+            for predicate in UNSIGNED_ORDERED_INTEGER_COMPARE_PREDICATES
+        ]
+    )
     rows.extend(
         [
             _row(
@@ -279,7 +315,7 @@ def _integer_compare_rows() -> list[str]:
                 operand_types=(offset64_value, offset64_value),
                 result_count=1,
             )
-            for predicate in UNSIGNED_INTEGER_COMPARE_PREDICATES
+            for predicate in OFFSET64_COMPARE_PREDICATES
         ]
     )
     return rows
@@ -326,19 +362,26 @@ def _validate_rows() -> None:
         "spirv.op_isub.offset64",
         "spirv.op_select.offset64",
     }
-    for scalar in INTEGER_SCALAR_ALU_TYPES:
-        for operation in INTEGER_BINARY_OPERATIONS:
+    for scalar in SIGNED_INTEGER_SCALAR_ALU_TYPES:
+        for operation in SIGNED_INTEGER_BINARY_OPERATIONS:
             row_keys.add(f"spirv.op_{operation.descriptor_suffix}.{scalar.suffix}")
-        for predicate in INTEGER_COMPARE_PREDICATES:
+        for predicate in SIGNED_INTEGER_COMPARE_PREDICATES:
             row_keys.add(f"spirv.op_{predicate.descriptor_suffix}.{scalar.suffix}")
+    for scalar_pair in INTEGER_SCALAR_ALU_TYPE_PAIRS:
+        for operation in UNSIGNED_INTEGER_BINARY_OPERATIONS:
+            row_keys.add(f"spirv.op_{operation.descriptor_suffix}.{scalar_pair.unsigned.suffix}")
+        for predicate in UNSIGNED_ORDERED_INTEGER_COMPARE_PREDICATES:
+            row_keys.add(f"spirv.op_{predicate.descriptor_suffix}.{scalar_pair.unsigned.suffix}")
     for scalar in FLOAT_SCALAR_ALU_TYPES:
         for operation in FLOAT_BINARY_OPERATIONS:
             row_keys.add(f"spirv.op_{operation.descriptor_suffix}.{scalar.suffix}")
-    for conversion in SCALAR_CONVERSIONS:
+    for conversion in LOW_SCALAR_CONVERSIONS:
         row_keys.add(conversion.key)
+    for view_conversion in INTEGER_VALUE_VIEW_CONVERSIONS:
+        row_keys.add(view_conversion.key)
     for scalar in SCALAR_ALU_TYPES:
         row_keys.add(f"spirv.op_select.{scalar.suffix}")
-    for predicate in UNSIGNED_INTEGER_COMPARE_PREDICATES:
+    for predicate in OFFSET64_COMPARE_PREDICATES:
         row_keys.add(f"spirv.op_{predicate.descriptor_suffix}.{OFFSET64_ALU_TYPE.suffix}")
     for storage_scalar in STORAGE_BUFFER_SCALARS:
         row_keys.add(f"spirv.op_ptr_access_chain.storage_buffer.{storage_scalar.suffix}.byte_offset")

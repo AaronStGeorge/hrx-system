@@ -272,6 +272,69 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
 
 // ====
 
+// RUN: emit spirv-dis @spirv_unsigned_integer_views validate
+// REQUIRES: spirv-dis, spirv-val
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) abi(shader_entry_point) @spirv_unsigned_integer_views() asm<spirv.logical.core> {
+  %loaded = OpConstant.i32 42
+  %one = OpConstant.i32 1
+  %u_loaded = OpBitcast.i32.u32 %loaded
+  %u_one = OpBitcast.i32.u32 %one
+  %quotient = OpUDiv.u32 %u_loaded, %u_one
+  %remainder = OpUMod.u32 %quotient, %u_one
+  %less = OpULessThan.u32 %remainder, %u_loaded
+  %as_float = OpConvertUToF.u32.f32 %remainder
+  %roundtrip = OpConvertFToU.f32.u32 %as_float
+  %result = OpBitcast.u32.i32 %roundtrip
+  return
+}
+
+// ----
+               OpCapability Shader
+               OpCapability VulkanMemoryModel
+               OpCapability PhysicalStorageBufferAddresses
+               OpCapability Int64
+               OpExtension "SPV_KHR_vulkan_memory_model"
+               OpExtension "SPV_KHR_physical_storage_buffer"
+               OpMemoryModel PhysicalStorageBuffer64 Vulkan
+               OpEntryPoint GLCompute %spirv_unsigned_integer_views "spirv_unsigned_integer_views"
+               OpExecutionMode %spirv_unsigned_integer_views LocalSize 1 1 1
+               OpName %spirv_unsigned_integer_views "spirv_unsigned_integer_views"
+               OpName %loaded "loaded"
+               OpName %one "one"
+               OpName %u_loaded "u_loaded"
+               OpName %u_one "u_one"
+               OpName %quotient "quotient"
+               OpName %remainder "remainder"
+               OpName %less "less"
+               OpName %as_float "as_float"
+               OpName %roundtrip "roundtrip"
+               OpName %result "result"
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+        %int = OpTypeInt 32 1
+     %loaded = OpConstant %int 42
+        %one = OpConstant %int 1
+       %uint = OpTypeInt 32 0
+       %bool = OpTypeBool
+      %float = OpTypeFloat 32
+%spirv_unsigned_integer_views = OpFunction %void None %3
+          %4 = OpLabel
+   %u_loaded = OpBitcast %uint %loaded
+      %u_one = OpBitcast %uint %one
+   %quotient = OpUDiv %uint %u_loaded %u_one
+  %remainder = OpUMod %uint %quotient %u_one
+       %less = OpULessThan %bool %remainder %u_loaded
+   %as_float = OpConvertUToF %float %remainder
+  %roundtrip = OpConvertFToU %uint %as_float
+     %result = OpBitcast %int %roundtrip
+               OpReturn
+               OpFunctionEnd
+
+// ====
+
 // RUN: emit spirv-dis @spirv_raw_bda_storage_buffer_f32_copy validate
 // REQUIRES: spirv-dis, spirv-val
 

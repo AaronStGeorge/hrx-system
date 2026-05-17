@@ -44,6 +44,46 @@ low.func.def target(@target) abi(shader_entry_point) @spirv_i32_compare_select(%
 
 // ====
 
+spirv.target<vulkan1_3> @target_unsigned {contract_feature_bits = 33278}
+
+func.def target(@target_unsigned) @spirv_unsigned_integer_views(%lhs: i32, %rhs: i32, %index: index, %limit: index) -> (i32, i32, i1, i1) {
+  %quotient = scalar.divui %lhs, %rhs : i32
+  %remainder = scalar.remui %quotient, %rhs : i32
+  %narrow = scalar.trunci %lhs : i32 to i16
+  %wide = scalar.extui %narrow : i16 to i32
+  %as_float = scalar.uitofp %wide : i32 to f32
+  %back_to_int = scalar.fptoui %as_float : f32 to i32
+  %less = scalar.cmpi ult, %lhs, %rhs : i32
+  %index_less = index.cmp ult, %index, %limit : index
+  func.return %remainder, %back_to_int, %less, %index_less : i32, i32, i1, i1
+}
+
+// ----
+low.func.def target(@target_unsigned) abi(shader_entry_point) @spirv_unsigned_integer_views(%lhs: reg<spirv.id>, %rhs: reg<spirv.id>, %index: reg<spirv.id>, %limit: reg<spirv.id>) -> (reg<spirv.id>, reg<spirv.id>, reg<spirv.id>, reg<spirv.id>) asm<spirv.logical.core> {
+  %24 = OpBitcast.i32.u32 %lhs
+  %25 = OpBitcast.i32.u32 %rhs
+  %26 = OpUDiv.u32 %24, %25
+  %quotient = OpBitcast.u32.i32 %26
+  %28 = OpBitcast.i32.u32 %quotient
+  %30 = OpUMod.u32 %28, %25
+  %remainder = OpBitcast.u32.i32 %30
+  %narrow = OpSConvert.i32.i16 %lhs
+  %33 = OpBitcast.i16.u16 %narrow
+  %34 = OpUConvert.u16.u32 %33
+  %wide = OpBitcast.u32.i32 %34
+  %36 = OpBitcast.i32.u32 %wide
+  %as_float = OpConvertUToF.u32.f32 %36
+  %38 = OpConvertFToU.f32.u32 %as_float
+  %back_to_int = OpBitcast.u32.i32 %38
+  %less = OpULessThan.u32 %24, %25
+  %43 = OpBitcast.i32.u32 %index
+  %44 = OpBitcast.i32.u32 %limit
+  %index_less = OpULessThan.u32 %43, %44
+  return %remainder, %back_to_int, %less, %index_less
+}
+
+// ====
+
 spirv.target<vulkan1_3> @target
 
 func.def target(@target) @spirv_index_arithmetic(%index: index, %factor: index) -> (index) {

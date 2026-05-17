@@ -27,18 +27,23 @@ from loom.target.arch.spirv.descriptors import SPIRV_LOGICAL_CORE_DESCRIPTOR_SET
 from loom.target.arch.spirv.scalar_alu import (
     FLOAT_BINARY_OPERATIONS,
     FLOAT_SCALAR_ALU_TYPES,
-    INTEGER_BINARY_OPERATIONS,
-    INTEGER_COMPARE_PREDICATES,
-    INTEGER_SCALAR_ALU_TYPES,
+    INTEGER_SCALAR_ALU_TYPE_PAIRS,
     OFFSET64_ALU_TYPE,
+    OFFSET64_COMPARE_PREDICATES,
     SCALAR_ALU_TYPES,
-    UNSIGNED_INTEGER_COMPARE_PREDICATES,
+    SIGNED_INTEGER_BINARY_OPERATIONS,
+    SIGNED_INTEGER_COMPARE_PREDICATES,
+    SIGNED_INTEGER_SCALAR_ALU_TYPES,
+    UNSIGNED_INTEGER_BINARY_OPERATIONS,
+    UNSIGNED_ORDERED_INTEGER_COMPARE_PREDICATES,
+    IntegerAluTypePair,
     IntegerComparePredicate,
     ScalarAluType,
     ScalarBinaryOperation,
 )
 from loom.target.arch.spirv.scalar_conversion import (
-    SCALAR_CONVERSIONS,
+    DIRECT_SCALAR_CONVERSIONS,
+    UNSIGNED_SCALAR_CONVERSIONS,
     ScalarConversion,
 )
 from loom.target.arch.spirv.scalar_memory import (
@@ -237,6 +242,155 @@ def _conversion_rule(row: ScalarConversion) -> DescriptorRule:
     )
 
 
+def _integer_view_key(source_type: ScalarAluType, result_type: ScalarAluType) -> str:
+    return f"spirv.op_bitcast.{source_type.suffix}.{result_type.suffix}"
+
+
+def _integer_view_emit(
+    *,
+    source_type: ScalarAluType,
+    result_type: ScalarAluType,
+    input_ref: ValueRef,
+    output_ref: ValueRef,
+) -> EmitDescriptorOp:
+    return _descriptor_emit(
+        descriptor=_descriptor(_integer_view_key(source_type, result_type)),
+        operands={"input": input_ref},
+        results={"dst": output_ref},
+    )
+
+
+def _unsigned_binary_rule(
+    scalar_pair: IntegerAluTypePair,
+    operation: ScalarBinaryOperation,
+) -> DescriptorRule:
+    descriptor = _descriptor(
+        f"spirv.op_{operation.descriptor_suffix}.{scalar_pair.unsigned.suffix}"
+    )
+    type_pattern = Scalar(scalar_pair.source_type)
+    return DescriptorRule(
+        source_op=_INTEGER_BINARY_SOURCE_OPS[operation.source_op_key],
+        descriptor=descriptor,
+        guards=(
+            *_typed_guards(("lhs", "rhs", "result"), type_pattern),
+            *_feature_guards(descriptor),
+        ),
+        emit=(
+            _integer_view_emit(
+                source_type=scalar_pair.signed,
+                result_type=scalar_pair.unsigned,
+                input_ref=ValueRef.operand("lhs"),
+                output_ref=ValueRef.temporary("unsigned_lhs"),
+            ),
+            _integer_view_emit(
+                source_type=scalar_pair.signed,
+                result_type=scalar_pair.unsigned,
+                input_ref=ValueRef.operand("rhs"),
+                output_ref=ValueRef.temporary("unsigned_rhs"),
+            ),
+            _descriptor_emit(
+                descriptor=descriptor,
+                operands={
+                    "lhs": ValueRef.temporary("unsigned_lhs"),
+                    "rhs": ValueRef.temporary("unsigned_rhs"),
+                },
+                results={"dst": ValueRef.temporary("unsigned_result")},
+            ),
+            _integer_view_emit(
+                source_type=scalar_pair.unsigned,
+                result_type=scalar_pair.signed,
+                input_ref=ValueRef.temporary("unsigned_result"),
+                output_ref=ValueRef.result("result"),
+            ),
+        ),
+    )
+
+
+def _unsigned_conversion_rule(row: ScalarConversion) -> DescriptorRule:
+    descriptor = _descriptor(row.key)
+    source_op = _CONVERSION_SOURCE_OPS[row.source_op_key]
+    if row.source_op_key == "extui":
+        source_pair = _INTEGER_ALU_TYPE_PAIR_BY_SOURCE_TYPE[row.source_type.source_type]
+        result_pair = _INTEGER_ALU_TYPE_PAIR_BY_SOURCE_TYPE[row.result_type.source_type]
+        return DescriptorRule(
+            source_op=source_op,
+            descriptor=descriptor,
+            guards=(
+                Guard.value_type("input", Scalar(row.source_type.source_type)),
+                Guard.value_type("result", Scalar(row.result_type.source_type)),
+                *_feature_guards(descriptor),
+            ),
+            emit=(
+                _integer_view_emit(
+                    source_type=source_pair.signed,
+                    result_type=source_pair.unsigned,
+                    input_ref=ValueRef.operand("input"),
+                    output_ref=ValueRef.temporary("unsigned_input"),
+                ),
+                _descriptor_emit(
+                    descriptor=descriptor,
+                    operands={"input": ValueRef.temporary("unsigned_input")},
+                    results={"dst": ValueRef.temporary("unsigned_result")},
+                ),
+                _integer_view_emit(
+                    source_type=result_pair.unsigned,
+                    result_type=result_pair.signed,
+                    input_ref=ValueRef.temporary("unsigned_result"),
+                    output_ref=ValueRef.result("result"),
+                ),
+            ),
+        )
+    if row.source_op_key == "uitofp":
+        source_pair = _INTEGER_ALU_TYPE_PAIR_BY_SOURCE_TYPE[row.source_type.source_type]
+        return DescriptorRule(
+            source_op=source_op,
+            descriptor=descriptor,
+            guards=(
+                Guard.value_type("input", Scalar(row.source_type.source_type)),
+                Guard.value_type("result", Scalar(row.result_type.source_type)),
+                *_feature_guards(descriptor),
+            ),
+            emit=(
+                _integer_view_emit(
+                    source_type=source_pair.signed,
+                    result_type=source_pair.unsigned,
+                    input_ref=ValueRef.operand("input"),
+                    output_ref=ValueRef.temporary("unsigned_input"),
+                ),
+                _descriptor_emit(
+                    descriptor=descriptor,
+                    operands={"input": ValueRef.temporary("unsigned_input")},
+                    results={"dst": ValueRef.result("result")},
+                ),
+            ),
+        )
+    if row.source_op_key == "fptoui":
+        result_pair = _INTEGER_ALU_TYPE_PAIR_BY_SOURCE_TYPE[row.result_type.source_type]
+        return DescriptorRule(
+            source_op=source_op,
+            descriptor=descriptor,
+            guards=(
+                Guard.value_type("input", Scalar(row.source_type.source_type)),
+                Guard.value_type("result", Scalar(row.result_type.source_type)),
+                *_feature_guards(descriptor),
+            ),
+            emit=(
+                _descriptor_emit(
+                    descriptor=descriptor,
+                    operands={"input": ValueRef.operand("input")},
+                    results={"dst": ValueRef.temporary("unsigned_result")},
+                ),
+                _integer_view_emit(
+                    source_type=result_pair.unsigned,
+                    result_type=result_pair.signed,
+                    input_ref=ValueRef.temporary("unsigned_result"),
+                    output_ref=ValueRef.result("result"),
+                ),
+            ),
+        )
+    raise ValueError(f"unsupported unsigned SPIR-V scalar conversion {row.key}")
+
+
 def _compare_rule(
     source_op: Op,
     predicate: IntegerComparePredicate,
@@ -259,6 +413,52 @@ def _compare_rule(
                 operands={
                     "lhs": ValueRef.operand("lhs"),
                     "rhs": ValueRef.operand("rhs"),
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+def _unsigned_compare_rule(
+    source_op: Op,
+    predicate: IntegerComparePredicate,
+    scalar_pair: IntegerAluTypePair,
+    type_pattern: TypePattern | None = None,
+) -> DescriptorRule:
+    descriptor = _descriptor(
+        f"spirv.op_{predicate.descriptor_suffix}.{scalar_pair.unsigned.suffix}"
+    )
+    operand_type_pattern = (
+        Scalar(scalar_pair.source_type) if type_pattern is None else type_pattern
+    )
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            Guard.enum_attr_equals("predicate", predicate.source_predicate),
+            *_typed_guards(("lhs", "rhs"), operand_type_pattern),
+            Guard.value_type("result", _I1),
+            *_feature_guards(descriptor),
+        ),
+        emit=(
+            _integer_view_emit(
+                source_type=scalar_pair.signed,
+                result_type=scalar_pair.unsigned,
+                input_ref=ValueRef.operand("lhs"),
+                output_ref=ValueRef.temporary("unsigned_lhs"),
+            ),
+            _integer_view_emit(
+                source_type=scalar_pair.signed,
+                result_type=scalar_pair.unsigned,
+                input_ref=ValueRef.operand("rhs"),
+                output_ref=ValueRef.temporary("unsigned_rhs"),
+            ),
+            _descriptor_emit(
+                descriptor=descriptor,
+                operands={
+                    "lhs": ValueRef.temporary("unsigned_lhs"),
+                    "rhs": ValueRef.temporary("unsigned_rhs"),
                 },
                 results={"dst": ValueRef.result("result")},
             ),
@@ -395,12 +595,20 @@ _FLOAT_BINARY_SOURCE_OPS = {
 
 _CONVERSION_SOURCE_OPS = {
     "sitofp": scalar_conversion.scalar_sitofp,
+    "uitofp": scalar_conversion.scalar_uitofp,
     "fptosi": scalar_conversion.scalar_fptosi,
+    "fptoui": scalar_conversion.scalar_fptoui,
     "extf": scalar_conversion.scalar_extf,
     "fptrunc": scalar_conversion.scalar_fptrunc,
     "extsi": scalar_conversion.scalar_extsi,
+    "extui": scalar_conversion.scalar_extui,
     "trunci": scalar_conversion.scalar_trunci,
     "bitcast": scalar_conversion.scalar_bitcast,
+}
+
+_INTEGER_ALU_TYPE_PAIR_BY_SOURCE_TYPE = {
+    scalar_pair.source_type: scalar_pair
+    for scalar_pair in INTEGER_SCALAR_ALU_TYPE_PAIRS
 }
 
 
@@ -423,9 +631,14 @@ def _scalar_binary_rule(
 def _scalar_binary_rules() -> tuple[DescriptorRule, ...]:
     rules = [
         _scalar_binary_rule(scalar, operation, _INTEGER_BINARY_SOURCE_OPS)
-        for scalar in INTEGER_SCALAR_ALU_TYPES
-        for operation in INTEGER_BINARY_OPERATIONS
+        for scalar in SIGNED_INTEGER_SCALAR_ALU_TYPES
+        for operation in SIGNED_INTEGER_BINARY_OPERATIONS
     ]
+    rules.extend(
+        _unsigned_binary_rule(scalar_pair, operation)
+        for scalar_pair in INTEGER_SCALAR_ALU_TYPE_PAIRS
+        for operation in UNSIGNED_INTEGER_BINARY_OPERATIONS
+    )
     rules.extend(
         _scalar_binary_rule(scalar, operation, _FLOAT_BINARY_SOURCE_OPS)
         for scalar in FLOAT_SCALAR_ALU_TYPES
@@ -435,7 +648,9 @@ def _scalar_binary_rules() -> tuple[DescriptorRule, ...]:
 
 
 def _conversion_rules() -> tuple[DescriptorRule, ...]:
-    return tuple(_conversion_rule(row) for row in SCALAR_CONVERSIONS)
+    rules = [_conversion_rule(row) for row in DIRECT_SCALAR_CONVERSIONS]
+    rules.extend(_unsigned_conversion_rule(row) for row in UNSIGNED_SCALAR_CONVERSIONS)
+    return tuple(rules)
 
 
 def _compare_rules() -> tuple[DescriptorRule, ...]:
@@ -446,9 +661,18 @@ def _compare_rules() -> tuple[DescriptorRule, ...]:
             _scalar_type_pattern(scalar),
             f"spirv.op_{predicate.descriptor_suffix}.{scalar.suffix}",
         )
-        for scalar in INTEGER_SCALAR_ALU_TYPES
-        for predicate in INTEGER_COMPARE_PREDICATES
+        for scalar in SIGNED_INTEGER_SCALAR_ALU_TYPES
+        for predicate in SIGNED_INTEGER_COMPARE_PREDICATES
     ]
+    rules.extend(
+        _unsigned_compare_rule(
+            scalar_comparison.scalar_cmpi,
+            predicate,
+            scalar_pair,
+        )
+        for scalar_pair in INTEGER_SCALAR_ALU_TYPE_PAIRS
+        for predicate in UNSIGNED_ORDERED_INTEGER_COMPARE_PREDICATES
+    )
     rules.extend(
         _compare_rule(
             index.index_cmp,
@@ -456,7 +680,16 @@ def _compare_rules() -> tuple[DescriptorRule, ...]:
             _INDEX,
             f"spirv.op_{predicate.descriptor_suffix}.i32",
         )
-        for predicate in INTEGER_COMPARE_PREDICATES
+        for predicate in SIGNED_INTEGER_COMPARE_PREDICATES
+    )
+    rules.extend(
+        _unsigned_compare_rule(
+            index.index_cmp,
+            predicate,
+            _INTEGER_ALU_TYPE_PAIR_BY_SOURCE_TYPE["i32"],
+            _INDEX,
+        )
+        for predicate in UNSIGNED_ORDERED_INTEGER_COMPARE_PREDICATES
     )
     rules.extend(
         _compare_rule(
@@ -465,7 +698,7 @@ def _compare_rules() -> tuple[DescriptorRule, ...]:
             _OFFSET,
             f"spirv.op_{predicate.descriptor_suffix}.{OFFSET64_ALU_TYPE.suffix}",
         )
-        for predicate in UNSIGNED_INTEGER_COMPARE_PREDICATES
+        for predicate in OFFSET64_COMPARE_PREDICATES
     )
     return tuple(rules)
 

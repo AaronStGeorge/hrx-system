@@ -13,18 +13,23 @@ from pathlib import Path
 from loom.target.arch.spirv.scalar_alu import (
     FLOAT_BINARY_OPERATIONS,
     FLOAT_SCALAR_ALU_TYPES,
-    INTEGER_BINARY_OPERATIONS,
-    INTEGER_COMPARE_PREDICATES,
-    INTEGER_SCALAR_ALU_TYPES,
+    INTEGER_SCALAR_ALU_TYPE_PAIRS,
     OFFSET64_ALU_TYPE,
+    OFFSET64_COMPARE_PREDICATES,
     SCALAR_ALU_TYPES,
-    UNSIGNED_INTEGER_COMPARE_PREDICATES,
+    SIGNED_INTEGER_BINARY_OPERATIONS,
+    SIGNED_INTEGER_COMPARE_PREDICATES,
+    SIGNED_INTEGER_SCALAR_ALU_TYPES,
+    UNSIGNED_INTEGER_BINARY_OPERATIONS,
+    UNSIGNED_ORDERED_INTEGER_COMPARE_PREDICATES,
     IntegerComparePredicate,
     ScalarAluType,
     ScalarBinaryOperation,
 )
 from loom.target.arch.spirv.scalar_conversion import (
-    SCALAR_CONVERSIONS,
+    INTEGER_VALUE_VIEW_CONVERSIONS,
+    LOW_SCALAR_CONVERSIONS,
+    IntegerValueViewConversion,
     ScalarConversion,
 )
 from loom.target.arch.spirv.scalar_memory import (
@@ -222,8 +227,29 @@ def _conversion_descriptor(row: ScalarConversion) -> Descriptor:
     )
 
 
+def _integer_value_view_descriptor(row: IntegerValueViewConversion) -> Descriptor:
+    return Descriptor(
+        key=row.key,
+        mnemonic=row.display_mnemonic,
+        semantic_tag=row.key,
+        operands=(_id_result(), _id_operand("input")),
+        feature_mask_words=(row.feature_bits,) if row.feature_bits else (),
+        asm_forms=_asm(results=("dst",), operands=("input",)),
+        schedule_class=_SCHEDULE_ALU,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _conversion_descriptors() -> tuple[Descriptor, ...]:
-    return tuple(_conversion_descriptor(row) for row in SCALAR_CONVERSIONS)
+    return (
+        *(tuple(_conversion_descriptor(row) for row in LOW_SCALAR_CONVERSIONS)),
+        *(
+            tuple(
+                _integer_value_view_descriptor(row)
+                for row in INTEGER_VALUE_VIEW_CONVERSIONS
+            )
+        ),
+    )
 
 
 def _ternary_same_type_descriptor(
@@ -334,9 +360,14 @@ def _scalar_binary_descriptor(
 def _scalar_binary_descriptors() -> tuple[Descriptor, ...]:
     descriptors = [
         _scalar_binary_descriptor(scalar, operation)
-        for scalar in INTEGER_SCALAR_ALU_TYPES
-        for operation in INTEGER_BINARY_OPERATIONS
+        for scalar in SIGNED_INTEGER_SCALAR_ALU_TYPES
+        for operation in SIGNED_INTEGER_BINARY_OPERATIONS
     ]
+    descriptors.extend(
+        _scalar_binary_descriptor(scalar_pair.unsigned, operation)
+        for scalar_pair in INTEGER_SCALAR_ALU_TYPE_PAIRS
+        for operation in UNSIGNED_INTEGER_BINARY_OPERATIONS
+    )
     descriptors.extend(
         _scalar_binary_descriptor(scalar, operation)
         for scalar in FLOAT_SCALAR_ALU_TYPES
@@ -356,9 +387,24 @@ def _compare_descriptors() -> tuple[Descriptor, ...]:
                 _id_operand("rhs"),
             ),
         )
-        for scalar in INTEGER_SCALAR_ALU_TYPES
-        for predicate in INTEGER_COMPARE_PREDICATES
+        for scalar in SIGNED_INTEGER_SCALAR_ALU_TYPES
+        for predicate in SIGNED_INTEGER_COMPARE_PREDICATES
     ]
+    descriptors.extend(
+        [
+            _compare_descriptor(
+                predicate,
+                scalar=scalar_pair.unsigned,
+                operands=(
+                    _id_result(),
+                    _id_operand("lhs"),
+                    _id_operand("rhs"),
+                ),
+            )
+            for scalar_pair in INTEGER_SCALAR_ALU_TYPE_PAIRS
+            for predicate in UNSIGNED_ORDERED_INTEGER_COMPARE_PREDICATES
+        ]
+    )
     descriptors.extend(
         [
             _compare_descriptor(
@@ -370,7 +416,7 @@ def _compare_descriptors() -> tuple[Descriptor, ...]:
                     _offset64_operand("rhs"),
                 ),
             )
-            for predicate in UNSIGNED_INTEGER_COMPARE_PREDICATES
+            for predicate in OFFSET64_COMPARE_PREDICATES
         ]
     )
     return tuple(descriptors)
