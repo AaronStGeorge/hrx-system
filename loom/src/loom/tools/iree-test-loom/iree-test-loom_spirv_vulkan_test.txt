@@ -1,4 +1,6 @@
-// RUN: iree-test-loom %S/testdata/spirv_vulkan_hal_actual.loom --case=@double_i32_at_byte_offset_case --device=vulkan | FileCheck --check-prefix=SPIRV %s
+// RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
+// RUN:   iree-test-loom %S/testdata/spirv_vulkan_hal_actual.loom --case=@double_i32_at_byte_offset_case --device=vulkan \
+// RUN:     | FileCheck --check-prefix=SPIRV %s
 
 // SPIRV: "format":"loom.test.v0"
 // SPIRV: "case_count":1

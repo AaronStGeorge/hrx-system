@@ -178,8 +178,14 @@ check.case @buffer_expectations {
   %actual_iota = check.generate.iota offset(0) step(1) : tensor<[%m]xi32>
   %actual = check.generate.fill value(1.0) : tensor<4xf32>
   %expected = check.generate.fill value(1.001) : tensor<4xf32>
+  %actual_f16 = check.generate.fill value(0.5) : tensor<2xf16>
+  %expected_f16 = check.generate.fill value(0.5005) : tensor<2xf16>
+  %actual_bf16 = check.generate.fill value(0.25) : tensor<2xbf16>
+  %expected_bf16 = check.generate.fill value(0.2505) : tensor<2xbf16>
   check.expect.shape value(%actual_iota) shape([%m]) : tensor<[%m]xi32>
   check.expect.close actual(%actual) expected(%expected) atol(0.01) rtol(0.0) nan(different) : tensor<4xf32>
+  check.expect.close actual(%actual_f16) expected(%expected_f16) atol(0.01) rtol(0.0) nan(different) : tensor<2xf16>
+  check.expect.close actual(%actual_bf16) expected(%expected_bf16) atol(0.01) rtol(0.0) nan(different) : tensor<2xbf16>
   check.return
 }
 )");
@@ -189,9 +195,11 @@ check.case @buffer_expectations {
   ASSERT_EQ(plan.issue_count, 0u);
   ASSERT_EQ(plan.case_count, 1u);
   const loom_testbench_case_plan_t& case_plan = plan.cases[0];
-  ASSERT_EQ(case_plan.expectation_count, 2u);
+  ASSERT_EQ(case_plan.expectation_count, 4u);
   EXPECT_EQ(case_plan.expectations[0].kind, LOOM_TESTBENCH_EXPECTATION_SHAPE);
   EXPECT_EQ(case_plan.expectations[1].kind, LOOM_TESTBENCH_EXPECTATION_CLOSE);
+  EXPECT_EQ(case_plan.expectations[2].kind, LOOM_TESTBENCH_EXPECTATION_CLOSE);
+  EXPECT_EQ(case_plan.expectations[3].kind, LOOM_TESTBENCH_EXPECTATION_CLOSE);
 
   loom_testbench_value_table_t table = {};
   IREE_ASSERT_OK(loom_testbench_value_table_initialize(
@@ -213,8 +221,8 @@ check.case @buffer_expectations {
   IREE_ASSERT_OK(
       loom_testbench_evaluate_case_expectations(&schedule, &table, &report));
 
-  EXPECT_EQ(report.expectation_count, 2u);
-  EXPECT_EQ(report.passed_count, 2u);
+  EXPECT_EQ(report.expectation_count, 4u);
+  EXPECT_EQ(report.passed_count, 4u);
   EXPECT_EQ(report.failure_count, 0u);
 
   loom_testbench_expectation_report_deinitialize(&report);

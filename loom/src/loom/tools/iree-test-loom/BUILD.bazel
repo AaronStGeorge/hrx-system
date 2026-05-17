@@ -168,6 +168,7 @@ iree_lit_test_suite(
     cfg = "//runtime:lit.cfg.py",
     data = [
         "testdata/spirv_vulkan_hal_actual.loom",
+        "//build_tools/sanitizer:lsan_suppressions_vulkan.txt",
     ],
     tags = [
         "driver=vulkan",
