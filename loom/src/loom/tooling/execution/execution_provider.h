@@ -12,7 +12,6 @@
 #include "iree/base/api.h"
 #include "loom/target/provider.h"
 #include "loom/tooling/execution/execution_backend.h"
-#include "loom/tooling/execution/hal_backend.h"
 #include "loom/tooling/execution/session.h"
 
 #ifdef __cplusplus
@@ -25,10 +24,6 @@ typedef struct loom_run_execution_provider_t {
   iree_string_view_t name;
   // Optional target provider contribution reused by compile and check tools.
   const loom_target_provider_t* target_provider;
-  // Optional HAL backend table contributed by this provider.
-  const loom_run_hal_backend_t* const* hal_backends;
-  // Number of entries in |hal_backends|.
-  iree_host_size_t hal_backend_count;
   // Optional execution backend table contributed by this provider.
   const loom_run_execution_backend_t* const* execution_backends;
   // Number of entries in |execution_backends|.
@@ -45,7 +40,6 @@ typedef struct loom_run_execution_provider_set_t {
 
 enum {
   LOOM_RUN_EXECUTION_PROVIDER_TARGET_PROVIDER_CAPACITY = 64,
-  LOOM_RUN_EXECUTION_PROVIDER_HAL_BACKEND_CAPACITY = 64,
   LOOM_RUN_EXECUTION_PROVIDER_EXECUTION_BACKEND_CAPACITY = 64,
 };
 
@@ -62,13 +56,6 @@ typedef struct loom_run_execution_environment_t {
   loom_target_provider_set_t target_provider_set;
   // Core target environment composed from |target_providers|.
   loom_target_environment_t target_environment;
-  // HAL backend table assembled once for the environment.
-  const loom_run_hal_backend_t*
-      hal_backends[LOOM_RUN_EXECUTION_PROVIDER_HAL_BACKEND_CAPACITY];
-  // Number of entries in |hal_backends|.
-  iree_host_size_t hal_backend_count;
-  // HAL backend registry view over |hal_backends|.
-  loom_run_hal_backend_registry_t hal_backend_registry;
   // Execution backend table assembled once for the environment.
   const loom_run_execution_backend_t* execution_backends
       [LOOM_RUN_EXECUTION_PROVIDER_EXECUTION_BACKEND_CAPACITY];
@@ -98,11 +85,6 @@ loom_run_execution_environment_register_context_callback(
 loom_run_initialize_low_descriptor_registry_callback_t
 loom_run_execution_environment_low_descriptor_registry_callback(
     loom_run_execution_environment_t* environment);
-
-// Returns the HAL backend registry composed from |environment|'s providers.
-const loom_run_hal_backend_registry_t*
-loom_run_execution_environment_hal_backend_registry(
-    const loom_run_execution_environment_t* environment);
 
 // Returns the target environment composed from |environment|'s providers.
 const loom_target_environment_t*

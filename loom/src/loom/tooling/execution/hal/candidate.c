@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tooling/execution/hal_candidate.h"
+#include "loom/tooling/execution/hal/candidate.h"
 
 static void loom_run_hal_candidate_publish_compile_report(
     const loom_run_candidate_compile_options_t* options,

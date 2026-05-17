@@ -13,7 +13,7 @@
 #include "iree/hal/api.h"
 #include "iree/vm/api.h"
 #include "loom/target/types.h"
-#include "loom/tooling/execution/hal_runtime.h"
+#include "loom/tooling/execution/hal/runtime.h"
 
 #ifdef __cplusplus
 extern "C" {

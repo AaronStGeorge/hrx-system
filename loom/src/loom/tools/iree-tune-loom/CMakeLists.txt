@@ -32,11 +32,11 @@ loom_cc_library(
     loom::src::loom::tooling::compile::pipeline
     loom::src::loom::tooling::execution::compile_options
     loom::src::loom::tooling::execution::compile_report_capture
-    loom::src::loom::tooling::execution::hal_backend
-    loom::src::loom::tooling::execution::hal_benchmark
-    loom::src::loom::tooling::execution::hal_candidate
-    loom::src::loom::tooling::execution::hal_invocation
-    loom::src::loom::tooling::execution::hal_runtime
+    loom::src::loom::tooling::execution::hal::backend
+    loom::src::loom::tooling::execution::hal::benchmark
+    loom::src::loom::tooling::execution::hal::candidate
+    loom::src::loom::tooling::execution::hal::invocation
+    loom::src::loom::tooling::execution::hal::runtime
     loom::src::loom::tooling::execution::one_shot
     loom::src::loom::tooling::execution::session
     loom::src::loom::tooling::io::file
@@ -62,6 +62,7 @@ loom_cc_binary(
     ::main
     iree::base
     loom::src::loom::tooling::execution::execution_provider
+    loom::src::loom::tooling::execution::hal::backend
 )
 
 iree_lit_test_suite(

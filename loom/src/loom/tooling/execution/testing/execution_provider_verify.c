@@ -21,33 +21,12 @@ static iree_status_t loom_run_execution_provider_verify(
                             "loom execution provider %" PRIhsz " has no name",
                             provider_index);
   }
-  if (provider->hal_backend_count != 0 && provider->hal_backends == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "loom execution provider '%.*s' has no HAL backend table",
-        (int)provider->name.size, provider->name.data);
-  }
   if (provider->execution_backend_count != 0 &&
       provider->execution_backends == NULL) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "loom execution provider '%.*s' has no execution backend table",
         (int)provider->name.size, provider->name.data);
-  }
-  for (iree_host_size_t i = 0; i < provider->hal_backend_count; ++i) {
-    const loom_run_hal_backend_t* backend = provider->hal_backends[i];
-    if (backend == NULL) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "loom execution provider '%.*s' has null HAL backend %" PRIhsz,
-          (int)provider->name.size, provider->name.data, i);
-    }
-    if (iree_string_view_is_empty(iree_string_view_trim(backend->name))) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "loom execution provider '%.*s' has unnamed HAL backend %" PRIhsz,
-          (int)provider->name.size, provider->name.data, i);
-    }
   }
   for (iree_host_size_t i = 0; i < provider->execution_backend_count; ++i) {
     const loom_run_execution_backend_t* backend =
@@ -85,27 +64,6 @@ static iree_status_t loom_run_execution_provider_verify_unique_name(
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                               "duplicate loom execution provider '%.*s'",
                               (int)provider->name.size, provider->name.data);
-    }
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_run_execution_provider_verify_unique_hal_backend_name(
-    const loom_run_execution_provider_set_t* provider_set,
-    iree_host_size_t provider_index, iree_host_size_t backend_index) {
-  const loom_run_hal_backend_t* backend =
-      provider_set->providers[provider_index]->hal_backends[backend_index];
-  for (iree_host_size_t i = 0; i <= provider_index; ++i) {
-    const loom_run_execution_provider_t* provider = provider_set->providers[i];
-    const iree_host_size_t end =
-        i == provider_index ? backend_index : provider->hal_backend_count;
-    for (iree_host_size_t j = 0; j < end; ++j) {
-      const loom_run_hal_backend_t* existing = provider->hal_backends[j];
-      if (iree_string_view_equal(existing->name, backend->name)) {
-        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "duplicate loom HAL backend '%.*s'",
-                                (int)backend->name.size, backend->name.data);
-      }
     }
   }
   return iree_ok_status();
@@ -150,11 +108,6 @@ iree_status_t loom_run_execution_provider_set_verify(
     IREE_RETURN_IF_ERROR(loom_run_execution_provider_verify(provider, i));
     IREE_RETURN_IF_ERROR(
         loom_run_execution_provider_verify_unique_name(provider_set, i));
-    for (iree_host_size_t j = 0; j < provider->hal_backend_count; ++j) {
-      IREE_RETURN_IF_ERROR(
-          loom_run_execution_provider_verify_unique_hal_backend_name(
-              provider_set, i, j));
-    }
     for (iree_host_size_t j = 0; j < provider->execution_backend_count; ++j) {
       IREE_RETURN_IF_ERROR(
           loom_run_execution_provider_verify_unique_execution_backend_name(

@@ -22,21 +22,6 @@ static iree_status_t loom_run_execution_environment_append_target_provider(
   return iree_ok_status();
 }
 
-static iree_status_t loom_run_execution_environment_append_hal_backends(
-    loom_run_execution_environment_t* environment,
-    const loom_run_execution_provider_t* provider) {
-  if (environment->hal_backend_count + provider->hal_backend_count >
-      IREE_ARRAYSIZE(environment->hal_backends)) {
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "loom execution HAL backend capacity exceeded");
-  }
-  for (iree_host_size_t i = 0; i < provider->hal_backend_count; ++i) {
-    environment->hal_backends[environment->hal_backend_count++] =
-        provider->hal_backends[i];
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_run_execution_environment_append_execution_backends(
     loom_run_execution_environment_t* environment,
     const loom_run_execution_provider_t* provider) {
@@ -63,8 +48,6 @@ iree_status_t loom_run_execution_environment_initialize(
     const loom_run_execution_provider_t* provider = provider_set->providers[i];
     IREE_RETURN_IF_ERROR(loom_run_execution_environment_append_target_provider(
         out_environment, provider));
-    IREE_RETURN_IF_ERROR(loom_run_execution_environment_append_hal_backends(
-        out_environment, provider));
     IREE_RETURN_IF_ERROR(
         loom_run_execution_environment_append_execution_backends(
             out_environment, provider));
@@ -75,9 +58,6 @@ iree_status_t loom_run_execution_environment_initialize(
   IREE_RETURN_IF_ERROR(
       loom_target_environment_initialize(&out_environment->target_provider_set,
                                          &out_environment->target_environment));
-  loom_run_hal_backend_registry_initialize_from_entries(
-      out_environment->hal_backends, out_environment->hal_backend_count,
-      &out_environment->hal_backend_registry);
   loom_run_execution_backend_registry_initialize_from_entries(
       out_environment->execution_backends,
       out_environment->execution_backend_count,
@@ -126,12 +106,6 @@ loom_run_execution_environment_low_descriptor_registry_callback(
       .fn = loom_run_execution_environment_initialize_low_descriptor_registry,
       .user_data = environment,
   };
-}
-
-const loom_run_hal_backend_registry_t*
-loom_run_execution_environment_hal_backend_registry(
-    const loom_run_execution_environment_t* environment) {
-  return &environment->hal_backend_registry;
 }
 
 const loom_target_environment_t*

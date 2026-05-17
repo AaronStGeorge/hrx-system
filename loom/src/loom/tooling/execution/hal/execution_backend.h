@@ -11,7 +11,7 @@
 
 #include "iree/base/api.h"
 #include "loom/tooling/execution/execution_backend.h"
-#include "loom/tooling/execution/hal_backend.h"
+#include "loom/tooling/execution/hal/backend.h"
 #include "loom/tooling/execution/one_shot.h"
 
 #ifdef __cplusplus

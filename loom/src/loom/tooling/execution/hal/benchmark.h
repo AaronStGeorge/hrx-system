@@ -14,7 +14,7 @@
 #include "iree/hal/profile_sink.h"
 #include "iree/hal/utils/statistics_sink.h"
 #include "loom/tooling/execution/benchmark.h"
-#include "loom/tooling/execution/hal_invocation.h"
+#include "loom/tooling/execution/hal/invocation.h"
 
 #ifdef __cplusplus
 extern "C" {

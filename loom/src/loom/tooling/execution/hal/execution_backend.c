@@ -4,15 +4,15 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tooling/execution/hal_execution_backend.h"
+#include "loom/tooling/execution/hal/execution_backend.h"
 
 #include <string.h>
 
 #include "iree/base/alignment.h"
 #include "loom/tooling/execution/compile_report_capture.h"
-#include "loom/tooling/execution/hal_candidate.h"
-#include "loom/tooling/execution/hal_invocation.h"
-#include "loom/tooling/execution/hal_runtime.h"
+#include "loom/tooling/execution/hal/candidate.h"
+#include "loom/tooling/execution/hal/invocation.h"
+#include "loom/tooling/execution/hal/runtime.h"
 #include "loom/tooling/io/file.h"
 
 static const loom_run_hal_execution_backend_t*

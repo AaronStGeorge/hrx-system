@@ -28,8 +28,8 @@ loom_cc_binary(
     loom::src::loom::tooling::execution::compile_options
     loom::src::loom::tooling::execution::compile_report_capture
     loom::src::loom::tooling::execution::execution_provider
-    loom::src::loom::tooling::execution::hal_backend
-    loom::src::loom::tooling::execution::hal_candidate
+    loom::src::loom::tooling::execution::hal::backend
+    loom::src::loom::tooling::execution::hal::candidate
     loom::src::loom::tooling::execution::session
     loom::src::loom::tooling::io::file
 )

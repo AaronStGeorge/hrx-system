@@ -11,7 +11,7 @@
 
 #include "iree/base/api.h"
 #include "loom/tooling/execution/compile_options.h"
-#include "loom/tooling/execution/hal_backend.h"
+#include "loom/tooling/execution/hal/backend.h"
 #include "loom/tooling/execution/session.h"
 
 #ifdef __cplusplus

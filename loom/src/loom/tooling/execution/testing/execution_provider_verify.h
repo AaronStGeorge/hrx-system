@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-// Verifies execution provider, HAL backend, and execution backend table shape.
+// Verifies execution provider and execution backend table shape.
 iree_status_t loom_run_execution_provider_set_verify(
     const loom_run_execution_provider_set_t* provider_set);
 

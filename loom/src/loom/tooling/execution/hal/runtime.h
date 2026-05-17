@@ -12,7 +12,7 @@
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
 #include "iree/vm/api.h"
-#include "loom/tooling/execution/hal_backend.h"
+#include "loom/tooling/execution/hal/backend.h"
 
 #ifdef __cplusplus
 extern "C" {

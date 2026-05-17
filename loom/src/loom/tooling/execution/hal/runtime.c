@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tooling/execution/hal_runtime.h"
+#include "loom/tooling/execution/hal/runtime.h"
 
 #include "iree/async/frontier_tracker.h"
 #include "iree/async/util/proactor_pool.h"

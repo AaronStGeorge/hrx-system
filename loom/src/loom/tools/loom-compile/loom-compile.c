@@ -18,8 +18,8 @@
 #include "loom/tooling/config/config.h"
 #include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/execution/execution_provider.h"
-#include "loom/tooling/execution/hal_backend.h"
-#include "loom/tooling/execution/hal_candidate.h"
+#include "loom/tooling/execution/hal/backend.h"
+#include "loom/tooling/execution/hal/candidate.h"
 #include "loom/tooling/execution/session.h"
 #include "loom/tooling/io/file.h"
 
@@ -107,6 +107,11 @@ static const loom_run_execution_provider_set_t kLoomCompileProviderSet = {
     .providers = NULL,
     .provider_count = 0,
 #endif  // LOOM_COMPILE_HAVE_ANY_PROVIDER
+};
+
+static const loom_run_hal_backend_registry_t kLoomCompileHalBackendRegistry = {
+    .backends = NULL,
+    .backend_count = 0,
 };
 
 static iree_status_t loom_compile_register_context(void* user_data,
@@ -506,9 +511,8 @@ int main(int argc, char** argv) {
       iree_make_cstring_view(FLAG_loom_backend);
   if (iree_status_is_ok(status) && exit_code == 0) {
     const loom_run_hal_backend_t* hal_backend =
-        loom_run_hal_backend_registry_lookup(
-            loom_run_execution_environment_hal_backend_registry(&environment),
-            backend_name);
+        loom_run_hal_backend_registry_lookup(&kLoomCompileHalBackendRegistry,
+                                             backend_name);
     if (hal_backend != NULL) {
       status = loom_compile_emit_hal(hal_backend, &run_module, &compile_options,
                                      allocator, &emitted);
@@ -517,9 +521,7 @@ int main(int argc, char** argv) {
                                     &emitted);
     } else {
       status = loom_compile_make_unknown_backend_status(
-          backend_name,
-          loom_run_execution_environment_hal_backend_registry(&environment),
-          allocator);
+          backend_name, &kLoomCompileHalBackendRegistry, allocator);
     }
   }
   if (iree_status_is_ok(status)) {

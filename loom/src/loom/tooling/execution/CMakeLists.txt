@@ -24,23 +24,6 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
-    hal_candidate
-  HDRS
-    "hal_candidate.h"
-  SRCS
-    "hal_candidate.c"
-  DEPS
-    ::compile_options
-    ::hal_backend
-    ::session
-    iree::base
-    loom::src::loom::target::compile_report
-    loom::src::loom::verify
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
     compile_options
   HDRS
     "compile_options.h"
@@ -78,7 +61,6 @@ loom_cc_library(
     "execution_provider.c"
   DEPS
     ::execution_backend
-    ::hal_backend
     ::session
     iree::base
     loom::src::loom::target::provider
@@ -94,106 +76,6 @@ loom_cc_library(
     "execution_backend.c"
   DEPS
     iree::base
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    hal_backend
-  HDRS
-    "hal_backend.h"
-  SRCS
-    "hal_backend.c"
-  DEPS
-    iree::base
-    loom::src::loom::error::diagnostic
-    loom::src::loom::ir
-    loom::src::loom::target::compile_report
-    loom::src::loom::target::types
-    loom::src::loom::tooling::execution::compile_options
-    loom::src::loom::verify
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    hal_runtime
-  HDRS
-    "hal_runtime.h"
-  SRCS
-    "hal_runtime.c"
-  DEPS
-    ::hal_backend
-    iree::async
-    iree::async::util::proactor_pool
-    iree::base
-    iree::base::threading
-    iree::hal
-    iree::tooling::context_util
-    iree::tooling::device_util
-    iree::vm
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    hal_benchmark
-  HDRS
-    "hal_benchmark.h"
-  SRCS
-    "hal_benchmark.c"
-  DEPS
-    ::benchmark
-    ::hal_invocation
-    ::hal_runtime
-    iree::base
-    iree::hal
-    iree::hal::utils::profile_file
-    iree::hal::utils::statistics_sink
-    iree::io::file_handle
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    hal_execution_backend
-  HDRS
-    "hal_execution_backend.h"
-  SRCS
-    "hal_execution_backend.c"
-  DEPS
-    ::compile_report_capture
-    ::execution_backend
-    ::hal_backend
-    ::hal_candidate
-    ::hal_invocation
-    ::hal_runtime
-    ::one_shot
-    iree::base
-    iree::base::core_headers
-    loom::src::loom::tooling::io::file
-  PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    hal_invocation
-  HDRS
-    "hal_invocation.h"
-  SRCS
-    "hal_invocation.c"
-  DEPS
-    ::hal_backend
-    ::hal_runtime
-    iree::base
-    iree::hal
-    iree::modules::hal::types
-    loom::src::loom::target::launch
-    loom::src::loom::target::types
-    iree::tooling::comparison
-    iree::tooling::function_io
-    iree::tooling::function_util
-    iree::vm
   PUBLIC
 )
 
@@ -280,22 +162,6 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
-    hal_candidate_test
-  SRCS
-    "hal_candidate_test.cc"
-  DEPS
-    ::hal_candidate
-    ::session
-    iree::base
-    loom::src::loom::ops::func
-    loom::src::loom::target::low_descriptor_registry_core_test
-    loom::src::loom::target::types
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
     compile_report_capture_test
   SRCS
     "compile_report_capture_test.cc"
@@ -305,33 +171,6 @@ loom_cc_test(
     iree::base
     iree::testing::gtest
     iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    hal_benchmark_test
-  SRCS
-    "hal_benchmark_test.cc"
-  DEPS
-    ::hal_benchmark
-    iree::base
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_test(
-  NAME
-    hal_invocation_test
-  SRCS
-    "hal_invocation_test.cc"
-  DEPS
-    ::hal_invocation
-    ::hal_runtime
-    iree::base
-    loom::src::loom::target::types
-    iree::testing::gtest
-    iree::testing::gtest_main
-    iree::vm
 )
 
 loom_cc_test(

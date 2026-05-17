@@ -26,20 +26,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "hal_candidate",
-    srcs = ["hal_candidate.c"],
-    hdrs = ["hal_candidate.h"],
-    deps = [
-        ":compile_options",
-        ":hal_backend",
-        ":session",
-        "//loom/src/loom/target:compile_report",
-        "//loom/src/loom/verify",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "compile_options",
     srcs = ["compile_options.c"],
     hdrs = ["compile_options.h"],
@@ -69,7 +55,6 @@ loom_cc_library(
     hdrs = ["execution_provider.h"],
     deps = [
         ":execution_backend",
-        ":hal_backend",
         ":session",
         "//loom/src/loom/target:provider",
         "//runtime/src/iree/base",
@@ -82,91 +67,6 @@ loom_cc_library(
     hdrs = ["execution_backend.h"],
     deps = [
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "hal_backend",
-    srcs = ["hal_backend.c"],
-    hdrs = ["hal_backend.h"],
-    deps = [
-        "//loom/src/loom/error:diagnostic",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/target:compile_report",
-        "//loom/src/loom/target:types",
-        "//loom/src/loom/tooling/execution:compile_options",
-        "//loom/src/loom/verify",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "hal_runtime",
-    srcs = ["hal_runtime.c"],
-    hdrs = ["hal_runtime.h"],
-    deps = [
-        ":hal_backend",
-        "//runtime/src/iree/async",
-        "//runtime/src/iree/async/util:proactor_pool",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/threading",
-        "//runtime/src/iree/hal",
-        "//runtime/src/iree/tooling:context_util",
-        "//runtime/src/iree/tooling:device_util",
-        "//runtime/src/iree/vm",
-    ],
-)
-
-loom_cc_library(
-    name = "hal_benchmark",
-    srcs = ["hal_benchmark.c"],
-    hdrs = ["hal_benchmark.h"],
-    deps = [
-        ":benchmark",
-        ":hal_invocation",
-        ":hal_runtime",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/hal",
-        "//runtime/src/iree/hal/utils:profile_file",
-        "//runtime/src/iree/hal/utils:statistics_sink",
-        "//runtime/src/iree/io:file_handle",
-    ],
-)
-
-loom_cc_library(
-    name = "hal_execution_backend",
-    srcs = ["hal_execution_backend.c"],
-    hdrs = ["hal_execution_backend.h"],
-    deps = [
-        ":compile_report_capture",
-        ":execution_backend",
-        ":hal_backend",
-        ":hal_candidate",
-        ":hal_invocation",
-        ":hal_runtime",
-        ":one_shot",
-        "//loom/src/loom/tooling/io:file",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base:core_headers",
-    ],
-)
-
-loom_cc_library(
-    name = "hal_invocation",
-    srcs = ["hal_invocation.c"],
-    hdrs = ["hal_invocation.h"],
-    deps = [
-        ":hal_backend",
-        ":hal_runtime",
-        "//loom/src/loom/target:launch",
-        "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/hal",
-        "//runtime/src/iree/modules/hal:types",
-        "//runtime/src/iree/tooling:comparison",
-        "//runtime/src/iree/tooling:function_io",
-        "//runtime/src/iree/tooling:function_util",
-        "//runtime/src/iree/vm",
     ],
 )
 
@@ -239,21 +139,6 @@ loom_cc_test(
 )
 
 loom_cc_test(
-    name = "hal_candidate_test",
-    srcs = ["hal_candidate_test.cc"],
-    deps = [
-        ":hal_candidate",
-        ":session",
-        "//loom/src/loom/ops/func",
-        "//loom/src/loom/target:low_descriptor_registry_core_test",
-        "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
     name = "compile_report_capture_test",
     srcs = ["compile_report_capture_test.cc"],
     deps = [
@@ -262,31 +147,6 @@ loom_cc_test(
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "hal_benchmark_test",
-    srcs = ["hal_benchmark_test.cc"],
-    deps = [
-        ":hal_benchmark",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_test(
-    name = "hal_invocation_test",
-    srcs = ["hal_invocation_test.cc"],
-    deps = [
-        ":hal_invocation",
-        ":hal_runtime",
-        "//loom/src/loom/target:types",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-        "//runtime/src/iree/vm",
     ],
 )
 
