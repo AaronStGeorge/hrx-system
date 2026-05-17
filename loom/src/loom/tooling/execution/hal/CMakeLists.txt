@@ -113,6 +113,7 @@ loom_cc_library(
     loom::src::loom::tooling::execution::one_shot
     loom::src::loom::tooling::execution::session
     loom::src::loom::tooling::testbench
+    loom::src::loom::tooling::testbench::requirements
     loom::src::loom::tooling::testbench::value_materializer
     iree::tooling::device_util
     iree::vm

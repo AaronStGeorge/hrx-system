@@ -107,6 +107,21 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    requirements
+  HDRS
+    "requirements.h"
+  SRCS
+    "requirements.c"
+  DEPS
+    ::testbench
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::check
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     testbench_test
@@ -184,6 +199,24 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
     iree::vm
+)
+
+loom_cc_test(
+  NAME
+    requirements_test
+  SRCS
+    "requirements_test.cc"
+  DEPS
+    ::requirements
+    ::testbench
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::check
+    loom::src::loom::testing::module_ptr
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

@@ -4,4 +4,5 @@
 // STORE: "case_count":1
 // STORE: "sample_count":1
 // STORE: "failed_sample_count":0
+// STORE: "skipped_case_count":0
 // STORE: "case":"store_i32_case","sample_ordinal":0,"passed":true

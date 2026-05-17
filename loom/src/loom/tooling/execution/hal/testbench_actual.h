@@ -25,6 +25,7 @@
 #include "loom/tooling/execution/hal/invocation.h"
 #include "loom/tooling/execution/hal/runtime.h"
 #include "loom/tooling/execution/session.h"
+#include "loom/tooling/testbench/requirements.h"
 #include "loom/tooling/testbench/testbench.h"
 #include "loom/tooling/testbench/value_materializer.h"
 
@@ -58,6 +59,11 @@ void loom_run_hal_testbench_context_deinitialize(
 // Selects a linked artifact provider and initializes the HAL runtime on demand.
 iree_status_t loom_run_hal_testbench_context_ensure_runtime(
     loom_run_hal_testbench_context_t* context);
+
+// Initializes a requirement provider for HAL device integer queries.
+void loom_run_hal_testbench_requirement_provider_initialize(
+    loom_run_hal_testbench_context_t* context,
+    loom_testbench_requirement_provider_t* out_provider);
 
 // Returns the driver component of an IREE --device= URI.
 iree_string_view_t loom_run_hal_testbench_device_uri_driver_name(

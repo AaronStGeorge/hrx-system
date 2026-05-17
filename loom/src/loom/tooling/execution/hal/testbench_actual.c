@@ -112,6 +112,68 @@ iree_status_t loom_run_hal_testbench_context_ensure_runtime(
   return iree_ok_status();
 }
 
+static iree_status_t loom_run_hal_testbench_requirement_query_i64(
+    void* user_data, const loom_module_t* module, loom_named_attr_slice_t attrs,
+    bool* out_satisfied, iree_string_view_t* out_reason) {
+  loom_run_hal_testbench_context_t* context =
+      (loom_run_hal_testbench_context_t*)user_data;
+  iree_string_view_t category = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_testbench_requirement_read_string_attr(
+      module, attrs, IREE_SV("category"), &category));
+  iree_string_view_t key = iree_string_view_empty();
+  IREE_RETURN_IF_ERROR(loom_testbench_requirement_read_string_attr(
+      module, attrs, IREE_SV("key"), &key));
+
+  bool has_equals = false;
+  int64_t equals = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_requirement_read_optional_i64_attr(
+      module, attrs, IREE_SV("equals"), &has_equals, &equals));
+  bool has_minimum = false;
+  int64_t minimum = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_requirement_read_optional_i64_attr(
+      module, attrs, IREE_SV("minimum"), &has_minimum, &minimum));
+  bool has_maximum = false;
+  int64_t maximum = 0;
+  IREE_RETURN_IF_ERROR(loom_testbench_requirement_read_optional_i64_attr(
+      module, attrs, IREE_SV("maximum"), &has_maximum, &maximum));
+  if (!has_equals && !has_minimum && !has_maximum) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "hal.device.i64 requirement requires equals, minimum, or maximum");
+  }
+
+  IREE_RETURN_IF_ERROR(loom_run_hal_testbench_context_ensure_runtime(context));
+
+  int64_t value = 0;
+  IREE_RETURN_IF_ERROR(iree_hal_device_query_i64(context->runtime.device,
+                                                 category, key, &value));
+  bool satisfied = true;
+  if (has_equals) {
+    satisfied = satisfied && value == equals;
+  }
+  if (has_minimum) {
+    satisfied = satisfied && value >= minimum;
+  }
+  if (has_maximum) {
+    satisfied = satisfied && value <= maximum;
+  }
+  *out_satisfied = satisfied;
+  *out_reason = IREE_SV("HAL device i64 requirement was not satisfied");
+  return iree_ok_status();
+}
+
+void loom_run_hal_testbench_requirement_provider_initialize(
+    loom_run_hal_testbench_context_t* context,
+    loom_testbench_requirement_provider_t* out_provider) {
+  IREE_ASSERT_ARGUMENT(context);
+  IREE_ASSERT_ARGUMENT(out_provider);
+  *out_provider = (loom_testbench_requirement_provider_t){
+      .name = IREE_SV("hal.device.i64"),
+      .user_data = context,
+      .query = loom_run_hal_testbench_requirement_query_i64,
+  };
+}
+
 iree_hal_buffer_params_t loom_run_hal_testbench_host_visible_buffer_params(
     void) {
   return (iree_hal_buffer_params_t){

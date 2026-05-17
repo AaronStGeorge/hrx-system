@@ -5,12 +5,14 @@
 // SAMPLE: "case_count":1
 // SAMPLE: "sample_count":1
 // SAMPLE: "failed_sample_count":0
+// SAMPLE: "skipped_case_count":0
 // SAMPLE: "case":"sampled_choice","sample_ordinal":1,"passed":true
 
 // ALL: "format":"loom.test.v0"
 // ALL: "case_count":2
 // ALL: "sample_count":3
 // ALL: "failed_sample_count":0
+// ALL: "skipped_case_count":0
 // ALL: "case":"scalar_equal","sample_ordinal":0,"passed":true
 // ALL: "case":"sampled_choice","sample_ordinal":0,"passed":true
 // ALL: "case":"sampled_choice","sample_ordinal":1,"passed":true

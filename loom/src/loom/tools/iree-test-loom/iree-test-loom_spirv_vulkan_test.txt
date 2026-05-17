@@ -6,4 +6,5 @@
 // SPIRV: "case_count":1
 // SPIRV: "sample_count":1
 // SPIRV: "failed_sample_count":0
+// SPIRV: "skipped_case_count":0
 // SPIRV: "case":"double_i32_at_byte_offset_case","sample_ordinal":0,"passed":true

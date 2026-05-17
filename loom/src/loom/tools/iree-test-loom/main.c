@@ -17,6 +17,8 @@
 #include "loom/tooling/execution/hal/testbench_actual.h"
 #include "loom/tooling/io/file.h"
 #include "loom/tooling/testbench/executor.h"
+#include "loom/tooling/testbench/requirements.h"
+#include "loom/util/json.h"
 #include "loom/util/stream.h"
 
 IREE_FLAG(string, case, "",
@@ -89,6 +91,33 @@ static bool iree_test_loom_case_has_actual_invocation(
   return false;
 }
 
+static iree_status_t iree_test_loom_append_skipped_case(
+    const loom_testbench_case_plan_t* case_plan,
+    const loom_testbench_requirement_result_t* requirement_result,
+    iree_string_builder_t* skipped_output, bool* inout_first_skipped_case) {
+  if (!*inout_first_skipped_case) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(skipped_output, ","));
+  }
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(skipped_output, &stream);
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "{"));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "\"case\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_string(&stream, case_plan->name));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"provider\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_string(&stream, requirement_result->provider));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"reason\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_string(&stream, requirement_result->reason));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}"));
+  *inout_first_skipped_case = false;
+  return iree_ok_status();
+}
+
 static iree_status_t iree_test_loom_configure_hal_actual_provider(
     const iree_test_loom_configuration_t* configuration,
     loom_run_session_t* session, const loom_run_module_t* run_module,
@@ -137,9 +166,30 @@ static iree_status_t iree_test_loom_run_case_samples(
     const loom_testbench_case_execution_options_t* base_execution_options,
     loom_run_hal_testbench_context_t* hal_context,
     iree_arena_allocator_t* arena, iree_string_builder_t* sample_output,
-    bool* inout_first_sample, iree_host_size_t* inout_sample_count,
-    iree_host_size_t* inout_failed_sample_count) {
+    iree_string_builder_t* skipped_output, bool* inout_first_sample,
+    bool* inout_first_skipped_case, iree_host_size_t* inout_sample_count,
+    iree_host_size_t* inout_failed_sample_count,
+    iree_host_size_t* inout_skipped_case_count) {
   const loom_testbench_case_plan_t* case_plan = &module_plan->cases[case_index];
+  loom_testbench_requirement_provider_t requirement_providers[1];
+  loom_run_hal_testbench_requirement_provider_initialize(
+      hal_context, &requirement_providers[0]);
+  loom_testbench_requirement_provider_registry_t requirement_registry = {0};
+  loom_testbench_requirement_provider_registry_initialize(
+      requirement_providers, IREE_ARRAYSIZE(requirement_providers),
+      &requirement_registry);
+  loom_testbench_requirement_result_t requirement_result = {0};
+  IREE_RETURN_IF_ERROR(loom_testbench_evaluate_case_requirements(
+      module_plan->module, case_plan, &requirement_registry,
+      &requirement_result));
+  if (requirement_result.skipped) {
+    IREE_RETURN_IF_ERROR(iree_test_loom_append_skipped_case(
+        case_plan, &requirement_result, skipped_output,
+        inout_first_skipped_case));
+    ++*inout_skipped_case_count;
+    return iree_ok_status();
+  }
+
   iree_host_size_t selected_sample_ordinal = 0;
   bool has_selected_sample = false;
   IREE_RETURN_IF_ERROR(iree_test_loom_validate_sample_flag(
@@ -214,7 +264,8 @@ static iree_status_t iree_test_loom_run_case_samples(
 
 static iree_status_t iree_test_loom_write_report(
     iree_host_size_t case_count, iree_host_size_t sample_count,
-    iree_host_size_t failed_sample_count, iree_string_view_t samples,
+    iree_host_size_t failed_sample_count, iree_host_size_t skipped_case_count,
+    iree_string_view_t samples, iree_string_view_t skipped_cases,
     iree_string_builder_t* output) {
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(
       output, "{\"format\":\"loom.test.v0\""));
@@ -224,9 +275,15 @@ static iree_status_t iree_test_loom_write_report(
       output, ",\"sample_count\":%" PRIhsz, sample_count));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       output, ",\"failed_sample_count\":%" PRIhsz, failed_sample_count));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      output, ",\"skipped_case_count\":%" PRIhsz, skipped_case_count));
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(output, ",\"samples\":["));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_string(output, samples));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(output, "],\"skipped_cases\":["));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_string(output, skipped_cases));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "]}\n"));
   return iree_ok_status();
 }
@@ -256,6 +313,8 @@ int iree_test_loom_main(int argc, char** argv,
   memset(&execution_arena, 0, sizeof(execution_arena));
   iree_string_builder_t sample_output;
   iree_string_builder_initialize(allocator, &sample_output);
+  iree_string_builder_t skipped_output;
+  iree_string_builder_initialize(allocator, &skipped_output);
   iree_string_builder_t report_output;
   iree_string_builder_initialize(allocator, &report_output);
   int exit_code = 0;
@@ -333,7 +392,9 @@ int iree_test_loom_main(int argc, char** argv,
     iree_host_size_t selected_case_count = 0;
     iree_host_size_t sample_count = 0;
     iree_host_size_t failed_sample_count = 0;
+    iree_host_size_t skipped_case_count = 0;
     bool first_sample = true;
+    bool first_skipped_case = true;
     for (iree_host_size_t case_index = 0;
          iree_status_is_ok(status) && case_index < module_plan.case_count;
          ++case_index) {
@@ -347,7 +408,8 @@ int iree_test_loom_main(int argc, char** argv,
       status = iree_test_loom_run_case_samples(
           configuration, &session, &run_module, &module_plan, case_index,
           &execution_options, &hal_context, &execution_arena, &sample_output,
-          &first_sample, &sample_count, &failed_sample_count);
+          &skipped_output, &first_sample, &first_skipped_case, &sample_count,
+          &failed_sample_count, &skipped_case_count);
     }
     if (iree_status_is_ok(status) && selected_case_count == 0) {
       status = iree_make_status(
@@ -357,7 +419,8 @@ int iree_test_loom_main(int argc, char** argv,
     if (iree_status_is_ok(status)) {
       status = iree_test_loom_write_report(
           selected_case_count, sample_count, failed_sample_count,
-          iree_string_builder_view(&sample_output), &report_output);
+          skipped_case_count, iree_string_builder_view(&sample_output),
+          iree_string_builder_view(&skipped_output), &report_output);
     }
     if (iree_status_is_ok(status)) {
       status =
@@ -376,6 +439,7 @@ int iree_test_loom_main(int argc, char** argv,
   }
 
   iree_string_builder_deinitialize(&report_output);
+  iree_string_builder_deinitialize(&skipped_output);
   iree_string_builder_deinitialize(&sample_output);
   iree_arena_deinitialize(&execution_arena);
   iree_arena_deinitialize(&plan_arena);

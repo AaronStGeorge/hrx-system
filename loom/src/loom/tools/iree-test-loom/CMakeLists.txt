@@ -28,6 +28,8 @@ loom_cc_library(
     loom::src::loom::tooling::execution::session
     loom::src::loom::tooling::io::file
     loom::src::loom::tooling::testbench::executor
+    loom::src::loom::tooling::testbench::requirements
+    loom::src::loom::util::json
     loom::src::loom::util::stream
   PUBLIC
 )
