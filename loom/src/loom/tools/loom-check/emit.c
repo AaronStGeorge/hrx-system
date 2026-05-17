@@ -1322,7 +1322,8 @@ static iree_status_t loom_check_emit_write_source_low_text(
       loom_low_verify_scratch_for_module(module);
   IREE_RETURN_IF_ERROR(loom_target_entry_verify_low_module(
       module, low_registry, &verifier_emitter, loom_target_selection_empty(),
-      20, &low_verify_scratch, &low_verify_result));
+      20, environment->low_verify_provider_list, &low_verify_scratch,
+      &low_verify_result));
   if (low_verify_result.error_count != 0) {
     return iree_ok_status();
   }
@@ -1344,6 +1345,7 @@ static iree_status_t loom_check_emit_verify_provider_module(
     loom_module_t* module,
     const loom_target_low_descriptor_registry_t* low_registry,
     loom_source_resolver_t source_resolver,
+    loom_low_verify_provider_list_t low_verify_provider_list,
     loom_check_diagnostic_collector_t* diagnostic_collector) {
   const loom_target_entry_options_t entry_options = {
       .diagnostic_sink = {.fn = loom_check_diagnostic_collector_sink,
@@ -1366,7 +1368,7 @@ static iree_status_t loom_check_emit_verify_provider_module(
       loom_low_verify_scratch_for_module(module);
   IREE_RETURN_IF_ERROR(loom_target_entry_verify_low_module(
       module, low_registry, &verifier_emitter, loom_target_selection_empty(),
-      20, &low_verify_scratch, &low_verify_result));
+      20, low_verify_provider_list, &low_verify_scratch, &low_verify_result));
   return iree_ok_status();
 }
 
@@ -1526,7 +1528,8 @@ iree_status_t loom_check_execute_emit(
     };
     if (iree_status_is_ok(status)) {
       status = loom_check_emit_verify_provider_module(
-          module, &low_registry, source_resolver, &diagnostic_collector);
+          module, &low_registry, source_resolver,
+          environment->low_verify_provider_list, &diagnostic_collector);
     }
     if (!iree_status_is_ok(status)) {
       loom_module_free(module);
@@ -1701,6 +1704,7 @@ iree_status_t loom_check_execute_emit(
                   .fn = loom_check_diagnostic_emitter_capture_emit,
                   .user_data = &low_diagnostic_capture,
               },
+          .provider_list = environment->low_verify_provider_list,
           .max_errors = 20,
       };
       loom_low_verify_result_t low_verify_result = {0};

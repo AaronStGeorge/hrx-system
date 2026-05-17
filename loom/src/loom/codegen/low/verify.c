@@ -22,6 +22,7 @@ typedef struct loom_low_verify_state_t {
   const loom_low_descriptor_registry_t* registry;
   loom_target_selection_t target_selection;
   iree_diagnostic_emitter_t emitter;
+  loom_low_verify_provider_list_t provider_list;
   loom_low_verify_scratch_t* scratch;
   loom_low_verify_result_t* result;
   uint32_t max_errors;
@@ -35,7 +36,14 @@ typedef struct loom_low_function_verify_state_t {
   const loom_low_resolved_target_t* target;
   loom_low_register_type_resolver_t register_type_resolver;
   iree_string_view_t function_name;
+  const loom_op_t* function_op;
+  loom_region_t* body;
+  void** provider_states;
 } loom_low_function_verify_state_t;
+
+struct loom_low_verify_context_t {
+  loom_low_function_verify_state_t* function_state;
+};
 
 typedef struct loom_low_packet_field_t {
   iree_string_view_t field_name;
@@ -80,6 +88,44 @@ static iree_status_t loom_low_verify_counting_emitter(
   return loom_low_verify_emit(
       state, emission->op, emission->error, emission->params,
       emission->param_count, emission->related_ops, emission->related_op_count);
+}
+
+const loom_module_t* loom_low_verify_context_module(
+    const loom_low_verify_context_t* context) {
+  return context->function_state->state->module;
+}
+
+const loom_op_t* loom_low_verify_context_function_op(
+    const loom_low_verify_context_t* context) {
+  return context->function_state->function_op;
+}
+
+const loom_region_t* loom_low_verify_context_function_body(
+    const loom_low_verify_context_t* context) {
+  return context->function_state->body;
+}
+
+const loom_low_resolved_target_t* loom_low_verify_context_target(
+    const loom_low_verify_context_t* context) {
+  return context->function_state->target;
+}
+
+iree_arena_allocator_t* loom_low_verify_context_arena(
+    loom_low_verify_context_t* context) {
+  return &context->function_state->state->walk_arena;
+}
+
+bool loom_low_verify_context_should_stop(
+    const loom_low_verify_context_t* context) {
+  return loom_low_verify_should_stop(context->function_state->state);
+}
+
+iree_status_t loom_low_verify_context_emit(
+    loom_low_verify_context_t* context, const loom_op_t* op,
+    const loom_error_def_t* error, const loom_diagnostic_param_t* params,
+    iree_host_size_t param_count) {
+  return loom_low_verify_emit(context->function_state->state, op, error, params,
+                              param_count, NULL, 0);
 }
 
 static iree_string_view_t loom_low_verify_symbol_name(
@@ -1553,6 +1599,77 @@ static iree_status_t loom_low_verify_packet(
                                              opcode_attr_index, descriptor);
 }
 
+static iree_status_t loom_low_verify_begin_function_providers(
+    loom_low_function_verify_state_t* function_state) {
+  loom_low_verify_provider_list_t provider_list =
+      function_state->state->provider_list;
+  if (loom_low_verify_provider_list_is_empty(provider_list)) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+      &function_state->state->walk_arena, provider_list.count,
+      sizeof(*function_state->provider_states),
+      (void**)&function_state->provider_states));
+  memset(function_state->provider_states, 0,
+         provider_list.count * sizeof(*function_state->provider_states));
+  loom_low_verify_context_t context = {
+      .function_state = function_state,
+  };
+  for (iree_host_size_t i = 0; i < provider_list.count; ++i) {
+    const loom_low_verify_provider_t* provider = provider_list.values[i];
+    if (provider->begin_function != NULL) {
+      IREE_RETURN_IF_ERROR(provider->begin_function(
+          provider, &context, &function_state->provider_states[i]));
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_run_op_providers(
+    loom_low_function_verify_state_t* function_state,
+    const loom_low_resolved_descriptor_packet_t* packet) {
+  loom_low_verify_provider_list_t provider_list =
+      function_state->state->provider_list;
+  if (loom_low_verify_provider_list_is_empty(provider_list) ||
+      loom_low_verify_should_stop(function_state->state)) {
+    return iree_ok_status();
+  }
+  loom_low_verify_context_t context = {
+      .function_state = function_state,
+  };
+  for (iree_host_size_t i = 0; i < provider_list.count; ++i) {
+    const loom_low_verify_provider_t* provider = provider_list.values[i];
+    if (provider->verify_op != NULL) {
+      IREE_RETURN_IF_ERROR(provider->verify_op(
+          provider, &context, function_state->provider_states[i], packet));
+    }
+    if (loom_low_verify_should_stop(function_state->state)) {
+      break;
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_end_function_providers(
+    loom_low_function_verify_state_t* function_state) {
+  loom_low_verify_provider_list_t provider_list =
+      function_state->state->provider_list;
+  if (loom_low_verify_provider_list_is_empty(provider_list)) {
+    return iree_ok_status();
+  }
+  loom_low_verify_context_t context = {
+      .function_state = function_state,
+  };
+  for (iree_host_size_t i = 0; i < provider_list.count; ++i) {
+    const loom_low_verify_provider_t* provider = provider_list.values[i];
+    if (provider->end_function != NULL) {
+      IREE_RETURN_IF_ERROR(provider->end_function(
+          provider, &context, function_state->provider_states[i]));
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_walk_op(void* user_data, loom_op_t* op,
                                              const loom_walk_context_t* context,
                                              loom_walk_result_t* out_result) {
@@ -1572,9 +1689,18 @@ static iree_status_t loom_low_verify_walk_op(void* user_data, loom_op_t* op,
     if (loom_low_resource_isa(op)) {
       IREE_RETURN_IF_ERROR(loom_low_verify_resource(function_state, op));
     }
-    return loom_low_verify_structural_register_parts(function_state, op);
+    IREE_RETURN_IF_ERROR(
+        loom_low_verify_structural_register_parts(function_state, op));
+    IREE_RETURN_IF_ERROR(
+        loom_low_verify_run_op_providers(function_state, &packet));
+    if (loom_low_verify_should_stop(function_state->state)) {
+      *out_result = LOOM_WALK_ABORT;
+    }
+    return iree_ok_status();
   }
   IREE_RETURN_IF_ERROR(loom_low_verify_packet(function_state, &packet));
+  IREE_RETURN_IF_ERROR(
+      loom_low_verify_run_op_providers(function_state, &packet));
   if (loom_low_verify_should_stop(function_state->state)) {
     *out_result = LOOM_WALK_ABORT;
   }
@@ -1618,6 +1744,8 @@ static iree_status_t loom_low_verify_function(loom_low_verify_state_t* state,
   loom_low_function_verify_state_t function_state = {
       .state = state,
       .target = &target,
+      .function_op = low_func_op,
+      .body = body,
       .function_name =
           loom_low_verify_function_name(state->module, low_func_op),
   };
@@ -1633,13 +1761,19 @@ static iree_status_t loom_low_verify_function(loom_low_verify_state_t* state,
   }
 
   iree_status_t status =
-      loom_low_verify_initialize_block_arg_masks(&function_state, body);
+      loom_low_verify_begin_function_providers(&function_state);
+  if (iree_status_is_ok(status)) {
+    status = loom_low_verify_initialize_block_arg_masks(&function_state, body);
+  }
   if (iree_status_is_ok(status)) {
     loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
     status = loom_walk_region(
         state->module, body, LOOM_WALK_PRE_ORDER,
         (loom_walk_callback_t){loom_low_verify_walk_op, &function_state},
         &state->walk_arena, &walk_result);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_low_verify_end_function_providers(&function_state);
   }
   return status;
 }
@@ -1669,6 +1803,7 @@ iree_status_t loom_low_verify_module(const loom_module_t* module,
       .registry = options->descriptor_registry,
       .target_selection = options->target_selection,
       .emitter = options->emitter,
+      .provider_list = options->provider_list,
       .scratch = scratch,
       .result = out_result,
       .max_errors = options->max_errors,

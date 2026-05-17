@@ -308,6 +308,7 @@ loom_cc_library(
     ::math_policy
     iree::base
     loom::src::loom::codegen::low::lower
+    loom::src::loom::codegen::low::verify
     loom::src::loom::ir
     loom::src::loom::pass::environment
     loom::src::loom::pass::registry

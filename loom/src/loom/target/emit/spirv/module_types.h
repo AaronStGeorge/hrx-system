@@ -61,11 +61,6 @@ void loom_spirv_type_context_initialize(loom_spirv_module_builder_t* builder,
                                         iree_arena_allocator_t* scratch_arena,
                                         loom_spirv_type_context_t* out_context);
 
-// Returns true when |lhs| and |rhs| name the same target-local SPIR-V value
-// type.
-bool loom_spirv_value_type_equal(loom_spirv_value_type_t lhs,
-                                 loom_spirv_value_type_t rhs);
-
 iree_status_t loom_spirv_emit_type_void(loom_spirv_type_context_t* context,
                                         uint32_t* out_type_id);
 iree_status_t loom_spirv_emit_type_bool(loom_spirv_type_context_t* context,

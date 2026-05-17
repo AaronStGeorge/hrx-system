@@ -1,0 +1,216 @@
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+// ERROR@+1: SPIRV/001 {function_name="malformed_abi_value_types", attr_name="spirv_arg_value_types", expected_count="1"}
+low.func.def target(@target) abi_layout({spirv_arg_value_types = [23, 23]}) @malformed_abi_value_types(%value: reg<spirv.id>) asm<spirv.logical.core> {
+  return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+// ERROR@+1: SPIRV/001 {function_name="malformed_result_value_types", attr_name="spirv_result_value_types", expected_count="1"}
+low.func.def target(@target) abi_layout({spirv_arg_value_types = [23], spirv_result_value_types = [23, 23]}) @malformed_result_value_types(%value: reg<spirv.id>) -> (reg<spirv.id>) asm<spirv.logical.core> {
+  return %value
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+// ERROR@+1: SPIRV/002 {function_name="missing_id_payload_type", attr_name="spirv_arg_value_types", value_name="value"}
+low.func.def target(@target) @missing_id_payload_type(%value: reg<spirv.id>) asm<spirv.logical.core> {
+  return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+// ERROR@+1: SPIRV/003 {function_name="non_id_payload_type", attr_name="spirv_arg_value_types", value_name="byte_offset", value_code="23"}
+low.func.def target(@target) abi_layout({spirv_arg_value_types = [23]}) @non_id_payload_type(%byte_offset: reg<spirv.offset64>) asm<spirv.logical.core> {
+  return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+// ERROR@+1: SPIRV/004 {function_name="invalid_id_payload_type", attr_name="spirv_arg_value_types", value_name="value", value_code="999"}
+low.func.def target(@target) abi_layout({spirv_arg_value_types = [999]}) @invalid_id_payload_type(%value: reg<spirv.id>) asm<spirv.logical.core> {
+  return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+// ERROR@+1: SPIRV/005 {function_name="unsupported_register_type", value_name="value", actual_type="reg<spirv.ptr.function>"}
+low.func.def target(@target) @unsupported_register_type(%value: reg<spirv.ptr.function>) asm<spirv.logical.core> {
+  return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}
+
+// ERROR@+1: SPIRV/006 {function_name="raw_bda_returns_values"}
+low.func.def target(@hal_target) abi(hal_kernel) abi_layout({spirv_arg_value_types = [23], spirv_result_value_types = [23]}) @raw_bda_returns_values(%value: reg<spirv.id>) -> (reg<spirv.id>) asm<spirv.logical.core> {
+  return %value
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}
+
+// ERROR@+1: SPIRV/007 {function_name="raw_bda_direct_pointer", value_name="input", actual_value_type="storage_buffer_address"}
+low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @raw_bda_direct_pointer(%input: reg<spirv.ptr.storage_buffer>) asm<spirv.logical.core> {
+  return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}
+
+low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @raw_bda_resource_import_kind(%byte_offset: reg<spirv.offset64>) asm<spirv.logical.core> {
+  // ERROR@+1: SPIRV/008 {function_name="raw_bda_resource_import_kind", import_kind="1"}
+  %input = resource<native_pointer> {index = 0, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}
+
+low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @raw_bda_resource_binding_range(%byte_offset: reg<spirv.offset64>) asm<spirv.logical.core> {
+  // ERROR@+1: SPIRV/009 {function_name="raw_bda_resource_binding_range", binding_index="65535"}
+  %input = resource<hal_binding> {index = 65535, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}
+
+low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @raw_bda_resource_result_type(%byte_offset: reg<spirv.offset64>) asm<spirv.logical.core> {
+  // ERROR@+1: SPIRV/011 {function_name="raw_bda_resource_result_type", value_name="input", actual_value_type="offset64"}
+  %input = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<spirv.offset64>
+  return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) @resource_requires_raw_bda_hal_abi() asm<spirv.logical.core> {
+  // ERROR@+1: SPIRV/018 {function_name="resource_requires_raw_bda_hal_abi"}
+  %input = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) @missing_packet_row() asm<spirv.logical.core> {
+  // ERROR@+1: SPIRV/012 {function_name="missing_packet_row", descriptor_key="spirv.op_variable.function.ptr"}
+  %ptr = OpVariable.function.ptr
+  return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) abi_layout({spirv_arg_value_types = [23, 18], spirv_result_value_types = [23]}) @packet_operand_value_type_mismatch(%lhs: reg<spirv.id>, %rhs: reg<spirv.id>) -> (reg<spirv.id>) asm<spirv.logical.core> {
+  // ERROR@+1: SPIRV/013 {function_name="packet_operand_value_type_mismatch", descriptor_key="spirv.op_iadd.i32", field_kind="operand", field_index="1", value_name="rhs", expected_value_type="s32", actual_value_type="f32"}
+  %sum = OpIAdd %lhs, %rhs
+  return %sum
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) abi_layout({spirv_arg_value_types = [18], spirv_result_value_types = [23]}) @return_value_type_mismatch(%value: reg<spirv.id>) -> (reg<spirv.id>) asm<spirv.logical.core> {
+  // ERROR@+1: SPIRV/014 {function_name="return_value_type_mismatch", result_index="0", value_name="value", expected_value_type="s32", actual_value_type="f32"}
+  return %value
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}
+
+low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @raw_bda_resource_source_type(%byte_offset: reg<spirv.offset64>) asm<spirv.logical.core> {
+  // ERROR@+1: SPIRV/010 {function_name="raw_bda_resource_source_type", actual_type="i32"}
+  %input = resource<hal_binding> {index = 0, source_type = i32} : reg<spirv.ptr.storage_buffer>
+  return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+// ERROR@+1: SPIRV/015 {function_name="multiblock_function", block_count="2"}
+low.func.def target(@target) @multiblock_function() asm<spirv.logical.core> {
+  low.br ^exit
+^exit:
+  return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+// ERROR@+1: SPIRV/016 {function_name="shader_entry_pointer_result", value_name="<unnamed>", actual_value_type="storage_buffer_address"}
+low.func.def target(@target) @shader_entry_pointer_result(%result: reg<spirv.ptr.storage_buffer>) -> (reg<spirv.ptr.storage_buffer>) asm<spirv.logical.core> {
+  return %result
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) @unsupported_structural_op() asm<spirv.logical.core> {
+  // ERROR@+1: SPIRV/017 {function_name="unsupported_structural_op", op_name="low.live_in"}
+  %value = live_in<spirv.arg0> : reg<spirv.id>
+  return
+}

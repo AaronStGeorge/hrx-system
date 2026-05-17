@@ -7,6 +7,7 @@
 #include "loom/tooling/target/spirv/artifact_provider.h"
 
 #include "loom/target/arch/spirv/low_registry.h"
+#include "loom/target/arch/spirv/low_verify.h"
 #include "loom/target/emit/spirv/module_builder.h"
 #include "loom/target/emit/spirv/module_emitter.h"
 #include "loom/target/entry_selection.h"
@@ -117,7 +118,8 @@ static iree_status_t loom_spirv_hal_artifact_provider_emit_selected_entry(
   IREE_RETURN_IF_ERROR(loom_target_entry_verify_low_module(
       module, low_registry, diagnostic_emitter, target_selection,
       loom_target_entry_max_errors(target_options, /*default_max_errors=*/20),
-      &low_verify_scratch, &low_verify_result));
+      loom_spirv_low_verify_provider_list(), &low_verify_scratch,
+      &low_verify_result));
   if (low_verify_result.error_count != 0) {
     return iree_ok_status();
   }

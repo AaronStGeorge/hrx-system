@@ -85,7 +85,6 @@ loom_cc_library(
         ":binary_format",
         ":module_builder",
         ":module_types",
-        ":packet_rows",
         "//loom/src/loom/codegen/low:function",
         "//loom/src/loom/codegen/low:target_binding",
         "//loom/src/loom/error:emitter",
@@ -97,63 +96,11 @@ loom_cc_library(
         "//loom/src/loom/target/arch/spirv:abi",
         "//loom/src/loom/target/arch/spirv:descriptors_ids",
         "//loom/src/loom/target/arch/spirv:features",
+        "//loom/src/loom/target/arch/spirv:packet_rows",
         "//loom/src/loom/target/arch/spirv:scalar_types",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],
-)
-
-iree_genrule(
-    name = "packet_rows_tables_gen",
-    srcs = [],
-    outs = [
-        "packet_rows_tables.inl",
-    ],
-    cmd = "$(location //loom/py/loom/gen:spirv_packet_rows) --tables=$(execpath packet_rows_tables.inl)",
-    tags = ["skip-bazel_to_cmake"],
-    tools = ["//loom/py/loom/gen:spirv_packet_rows"],
-)
-
-iree_cmake_extra_content(
-    content = """
-loom_generated_textual_header(
-  NAME
-    packet_rows_tables_gen
-  GENERATOR
-    iree::runtime::py::loom::gen::spirv_packet_rows
-  OUTPUT
-    "packet_rows_tables.inl"
-  OUTPUT_FLAG
-    "--tables"
-  COMMENT
-    "Generating SPIR-V packet emission rows"
-)
-""",
-    inline = True,
-)
-
-loom_cc_library(
-    name = "packet_rows",
-    srcs = ["packet_rows.c"],
-    hdrs = ["packet_rows.h"],
-    textual_hdrs = [":packet_rows_tables.inl"],
-    deps = [
-        ":binary_format",
-        "//loom/src/loom/target/arch/spirv:descriptors_ids",
-        "//loom/src/loom/target/arch/spirv:value_types",
-        "//runtime/src/iree/base",
-    ],
-)
-
-iree_cmake_extra_content(
-    content = """
-iree_package_name(_PACKAGE_NAME)
-add_dependencies(
-  "${_PACKAGE_NAME}_packet_rows.objects"
-  "${_PACKAGE_NAME}_packet_rows_tables_gen"
-)
-""",
-    inline = True,
 )
 
 loom_cc_library(

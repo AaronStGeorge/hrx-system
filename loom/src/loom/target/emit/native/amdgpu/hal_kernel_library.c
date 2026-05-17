@@ -642,7 +642,8 @@ static iree_status_t loom_amdgpu_hal_kernel_library_entries(
       loom_low_verify_scratch_for_module(module);
   IREE_RETURN_IF_ERROR(loom_target_entry_verify_low_module(
       module, low_registry, diagnostic_emitter, loom_target_selection_empty(),
-      max_errors, &low_verify_scratch, &low_verify_result));
+      max_errors, loom_low_verify_provider_list_empty(), &low_verify_scratch,
+      &low_verify_result));
   if (low_verify_result.error_count != 0) {
     return iree_ok_status();
   }

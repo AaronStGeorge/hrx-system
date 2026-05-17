@@ -4,14 +4,15 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Target-owned SPIR-V packet emission rows.
+// Target-owned SPIR-V packet rows.
 //
-// These rows describe how selected target-low descriptors serialize to SPIR-V
-// instructions. They are keyed by dense descriptor ordinal so the binary
-// emitter can dispatch without string comparisons or descriptor-key switches.
+// These rows describe the exact value types and binary instruction forms for
+// selected target-low descriptors. They are keyed by dense descriptor ordinal
+// so target-low verification and emission can dispatch without string
+// comparisons or descriptor-key switches.
 
-#ifndef LOOM_TARGET_EMIT_SPIRV_PACKET_ROWS_H_
-#define LOOM_TARGET_EMIT_SPIRV_PACKET_ROWS_H_
+#ifndef LOOM_TARGET_ARCH_SPIRV_PACKET_ROWS_H_
+#define LOOM_TARGET_ARCH_SPIRV_PACKET_ROWS_H_
 
 #include "iree/base/api.h"
 #include "loom/target/arch/spirv/value_types.h"
@@ -79,4 +80,4 @@ const loom_spirv_packet_row_t* loom_spirv_packet_row_for_descriptor_ordinal(
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TARGET_EMIT_SPIRV_PACKET_ROWS_H_
+#endif  // LOOM_TARGET_ARCH_SPIRV_PACKET_ROWS_H_

@@ -18,10 +18,10 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/spirv/abi.h"
 #include "loom/target/arch/spirv/descriptors.h"
+#include "loom/target/arch/spirv/packet_rows.h"
 #include "loom/target/arch/spirv/scalar_types.h"
 #include "loom/target/emit/spirv/binary_format.h"
 #include "loom/target/emit/spirv/module_types.h"
-#include "loom/target/emit/spirv/packet_rows.h"
 #include "loom/target/registers.h"
 #include "loom/target/types.h"
 

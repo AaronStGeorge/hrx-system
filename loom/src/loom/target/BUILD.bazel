@@ -267,6 +267,7 @@ loom_cc_library(
         ":low_packet_diagnostics",
         ":math_policy",
         "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/codegen/low:verify",
         "//loom/src/loom/ir",
         "//loom/src/loom/pass:environment",
         "//loom/src/loom/pass:registry",

@@ -104,6 +104,7 @@ iree_status_t loom_check_execute_verify(
                   .fn = loom_check_diagnostic_emitter_capture_emit,
                   .user_data = &low_diagnostic_capture,
               },
+          .provider_list = environment->low_verify_provider_list,
           .max_errors = 100,
       };
       loom_low_verify_result_t low_verify_result = {0};

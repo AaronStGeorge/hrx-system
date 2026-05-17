@@ -11,6 +11,7 @@ load(
     "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
+    "loom_generated_cc_library",
     "loom_low_descriptor_cc_library",
 )
 load(
@@ -37,8 +38,10 @@ loom_assert_no_dependencies(
         ":features",
         ":isa",
         ":lower",
+        ":low_verify",
         ":low_registry",
         ":math_policy",
+        ":packet_rows",
         ":provider",
         ":scalar_types",
         ":target_records",
@@ -68,6 +71,23 @@ loom_assert_no_dependencies(
 #===------------------------------------------------------------------------===#
 # SPIR-V low descriptors
 #===------------------------------------------------------------------------===#
+
+loom_generated_cc_library(
+    name = "error_defs",
+    args = [
+        "--catalog-symbol=loom_spirv_error_catalog",
+        "--fallback-catalog-symbol=loom_error_catalog_core",
+        "--fallback-public-header=loom/error/error_catalog.h",
+        "--no-runtime",
+        "--public-header=loom/target/arch/spirv/error_catalog.h",
+        "--shard=spirv",
+    ],
+    generated_hdr_flags = ["--header"],
+    generated_hdrs = ["error_catalog.h"],
+    generator = "//loom/py/loom/gen:c_errors",
+    source = "error_catalog.c",
+    deps = ["//loom/src/loom/error:error_defs"],
+)
 
 loom_low_descriptor_cc_library(
     name = "descriptors",
@@ -180,6 +200,59 @@ loom_cc_library(
         ":scalar_types",
         "//runtime/src/iree/base",
     ],
+)
+
+iree_genrule(
+    name = "packet_rows_tables_gen",
+    srcs = [],
+    outs = [
+        "packet_rows_tables.inl",
+    ],
+    cmd = "$(location //loom/py/loom/gen:spirv_packet_rows) --tables=$(execpath packet_rows_tables.inl)",
+    tags = ["skip-bazel_to_cmake"],
+    tools = ["//loom/py/loom/gen:spirv_packet_rows"],
+)
+
+iree_cmake_extra_content(
+    content = """
+loom_generated_textual_header(
+  NAME
+    packet_rows_tables_gen
+  GENERATOR
+    iree::runtime::py::loom::gen::spirv_packet_rows
+  OUTPUT
+    "packet_rows_tables.inl"
+  OUTPUT_FLAG
+    "--tables"
+  COMMENT
+    "Generating SPIR-V packet rows"
+)
+""",
+    inline = True,
+)
+
+loom_cc_library(
+    name = "packet_rows",
+    srcs = ["packet_rows.c"],
+    hdrs = ["packet_rows.h"],
+    textual_hdrs = [":packet_rows_tables.inl"],
+    deps = [
+        ":descriptors",
+        ":isa",
+        ":value_types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+iree_cmake_extra_content(
+    content = """
+iree_package_name(_PACKAGE_NAME)
+add_dependencies(
+  "${_PACKAGE_NAME}_packet_rows.objects"
+  "${_PACKAGE_NAME}_packet_rows_tables_gen"
+)
+""",
+    inline = True,
 )
 
 iree_genrule(
@@ -304,6 +377,27 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "low_verify",
+    srcs = ["low_verify.c"],
+    hdrs = ["low_verify.h"],
+    deps = [
+        ":abi",
+        ":descriptors",
+        ":error_defs",
+        ":packet_rows",
+        ":scalar_types",
+        "//loom/src/loom/codegen/low:diagnostics",
+        "//loom/src/loom/codegen/low:verify",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:registers",
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "lower",
     srcs = [
         "lower/matrix.c",
@@ -338,6 +432,7 @@ loom_cc_library(
     hdrs = ["provider.h"],
     deps = [
         ":low_registry",
+        ":low_verify",
         ":lower",
         ":math_policy",
         ":ops",
@@ -406,6 +501,7 @@ loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
         "test/source_low/baseline.loom-test",
+        "test/source_low/low_verify_diagnostics.loom-test",
         "test/source_low/source_low.loom-test",
         "test/source_low/source_low_diagnostics.loom-test",
         "test/source_low/target_legalize.loom-test",

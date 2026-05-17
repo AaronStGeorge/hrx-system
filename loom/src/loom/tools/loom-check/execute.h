@@ -27,6 +27,7 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "loom/codegen/low/verify.h"
 #include "loom/error/diagnostic.h"
 #include "loom/ir/context.h"
 #include "loom/pass/registry.h"
@@ -327,6 +328,8 @@ struct loom_check_environment_t {
   // Optional target-low packet diagnostic providers linked into this runner.
   loom_target_low_packet_diagnostic_provider_list_t
       low_packet_diagnostic_provider_list;
+  // Optional target-owned low verifier providers linked into this runner.
+  loom_low_verify_provider_list_t low_verify_provider_list;
   // Optional emit providers linked into this runner.
   loom_check_emit_provider_registry_t emit_providers;
   // Optional requirement providers linked into this runner.

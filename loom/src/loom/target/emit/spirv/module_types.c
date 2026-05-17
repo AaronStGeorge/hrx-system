@@ -832,28 +832,6 @@ iree_status_t loom_spirv_emit_u64_constant(loom_spirv_type_context_t* context,
                                                  out_constant_id);
 }
 
-bool loom_spirv_value_type_equal(loom_spirv_value_type_t lhs,
-                                 loom_spirv_value_type_t rhs) {
-  if (lhs.value_class != rhs.value_class) {
-    return false;
-  }
-  switch (lhs.value_class) {
-    case LOOM_SPIRV_VALUE_CLASS_SCALAR:
-    case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
-      return lhs.scalar_type == rhs.scalar_type;
-    case LOOM_SPIRV_VALUE_CLASS_COOPERATIVE_MATRIX:
-      return lhs.scalar_type == rhs.scalar_type && lhs.rows == rhs.rows &&
-             lhs.columns == rhs.columns && lhs.scope == rhs.scope &&
-             lhs.cooperative_matrix_use == rhs.cooperative_matrix_use;
-    case LOOM_SPIRV_VALUE_CLASS_OFFSET64:
-    case LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS:
-    case LOOM_SPIRV_VALUE_CLASS_BOOL:
-    case LOOM_SPIRV_VALUE_CLASS_UNKNOWN:
-      return true;
-  }
-  return false;
-}
-
 iree_status_t loom_spirv_emit_type_id_for_value_type(
     loom_spirv_type_context_t* context, loom_spirv_value_type_t type,
     uint32_t* out_type_id) {

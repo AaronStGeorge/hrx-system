@@ -10,6 +10,28 @@
 
 iree_add_all_subdirs()
 
+loom_generated_cc_library(
+  NAME
+    error_defs
+  GENERATOR
+    iree::runtime::py::loom::gen::c_errors
+  SOURCE
+    "error_catalog.c"
+  GENERATED_HDR_FLAGS
+    "--header"
+  GENERATED_HDRS
+    "error_catalog.h"
+  ARGS
+    "--catalog-symbol=loom_spirv_error_catalog"
+    "--fallback-catalog-symbol=loom_error_catalog_core"
+    "--fallback-public-header=loom/error/error_catalog.h"
+    "--no-runtime"
+    "--public-header=loom/target/arch/spirv/error_catalog.h"
+    "--shard=spirv"
+  DEPS
+    loom::src::loom::error::error_defs
+)
+
 loom_low_descriptor_cc_library(
   NAME
     descriptors
@@ -119,6 +141,42 @@ loom_cc_library(
     ::scalar_types
     iree::base
   PUBLIC
+)
+
+loom_generated_textual_header(
+  NAME
+    packet_rows_tables_gen
+  GENERATOR
+    iree::runtime::py::loom::gen::spirv_packet_rows
+  OUTPUT
+    "packet_rows_tables.inl"
+  OUTPUT_FLAG
+    "--tables"
+  COMMENT
+    "Generating SPIR-V packet rows"
+)
+
+loom_cc_library(
+  NAME
+    packet_rows
+  HDRS
+    "packet_rows.h"
+  TEXTUAL_HDRS
+    "packet_rows_tables.inl"
+  SRCS
+    "packet_rows.c"
+  DEPS
+    ::descriptors
+    ::isa
+    ::value_types
+    iree::base
+  PUBLIC
+)
+
+iree_package_name(_PACKAGE_NAME)
+add_dependencies(
+  "${_PACKAGE_NAME}_packet_rows.objects"
+  "${_PACKAGE_NAME}_packet_rows_tables_gen"
 )
 
 loom_generated_textual_header(
@@ -238,6 +296,30 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    low_verify
+  HDRS
+    "low_verify.h"
+  SRCS
+    "low_verify.c"
+  DEPS
+    ::abi
+    ::descriptors
+    ::error_defs
+    ::packet_rows
+    ::scalar_types
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::diagnostics
+    loom::src::loom::codegen::low::verify
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::registers
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     lower
   HDRS
     "lower.h"
@@ -273,6 +355,7 @@ loom_cc_library(
     "provider.c"
   DEPS
     ::low_registry
+    ::low_verify
     ::lower
     ::math_policy
     ::ops
@@ -349,6 +432,17 @@ iree_executable_test(
     "baseline"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/baseline.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "low_verify_diagnostics"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/low_verify_diagnostics.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

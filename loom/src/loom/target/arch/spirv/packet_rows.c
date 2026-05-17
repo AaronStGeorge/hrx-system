@@ -4,11 +4,11 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/target/emit/spirv/packet_rows.h"
+#include "loom/target/arch/spirv/packet_rows.h"
 
 #include "loom/target/arch/spirv/descriptors.h"
-#include "loom/target/emit/spirv/binary_format.h"
-#include "loom/target/emit/spirv/packet_rows_tables.inl"
+#include "loom/target/arch/spirv/isa.h"
+#include "loom/target/arch/spirv/packet_rows_tables.inl"
 
 const loom_spirv_packet_row_t* loom_spirv_packet_row_for_descriptor_ordinal(
     uint32_t descriptor_ordinal) {

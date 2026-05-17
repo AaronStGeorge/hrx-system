@@ -76,7 +76,6 @@ loom_cc_library(
     ::binary_format
     ::module_builder
     ::module_types
-    ::packet_rows
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::function
@@ -87,47 +86,12 @@ loom_cc_library(
     loom::src::loom::target::arch::spirv::abi
     loom::src::loom::target::arch::spirv::descriptors_ids
     loom::src::loom::target::arch::spirv::features
+    loom::src::loom::target::arch::spirv::packet_rows
     loom::src::loom::target::arch::spirv::scalar_types
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::registers
     loom::src::loom::target::types
   PUBLIC
-)
-
-loom_generated_textual_header(
-  NAME
-    packet_rows_tables_gen
-  GENERATOR
-    iree::runtime::py::loom::gen::spirv_packet_rows
-  OUTPUT
-    "packet_rows_tables.inl"
-  OUTPUT_FLAG
-    "--tables"
-  COMMENT
-    "Generating SPIR-V packet emission rows"
-)
-
-loom_cc_library(
-  NAME
-    packet_rows
-  HDRS
-    "packet_rows.h"
-  TEXTUAL_HDRS
-    "packet_rows_tables.inl"
-  SRCS
-    "packet_rows.c"
-  DEPS
-    ::binary_format
-    iree::base
-    loom::src::loom::target::arch::spirv::descriptors_ids
-    loom::src::loom::target::arch::spirv::value_types
-  PUBLIC
-)
-
-iree_package_name(_PACKAGE_NAME)
-add_dependencies(
-  "${_PACKAGE_NAME}_packet_rows.objects"
-  "${_PACKAGE_NAME}_packet_rows_tables_gen"
 )
 
 loom_cc_library(
