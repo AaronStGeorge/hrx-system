@@ -34,7 +34,7 @@
   (LOOM_COMPILE_HAVE_AMDGPU || LOOM_COMPILE_HAVE_IREEVM)
 
 #if LOOM_COMPILE_HAVE_AMDGPU
-#include "loom/target/arch/amdgpu/execution/provider.h"
+#include "loom/target/arch/amdgpu/provider.h"
 #endif  // LOOM_COMPILE_HAVE_AMDGPU
 #if LOOM_COMPILE_HAVE_IREEVM
 #include "loom/target/emit/ireevm/candidate.h"
@@ -81,10 +81,17 @@ IREE_FLAG(int32_t, compile_report_row_limit,
           "Maximum rows per report row category to capture for "
           "--compile_report=details.");
 
+#if LOOM_COMPILE_HAVE_AMDGPU
+static const loom_run_execution_provider_t kLoomCompileAmdgpuProvider = {
+    .name = IREE_SVL("amdgpu"),
+    .target_provider = &loom_amdgpu_target_provider,
+};
+#endif  // LOOM_COMPILE_HAVE_AMDGPU
+
 #if LOOM_COMPILE_HAVE_ANY_PROVIDER
 static const loom_run_execution_provider_t* const kLoomCompileProviders[] = {
 #if LOOM_COMPILE_HAVE_AMDGPU
-    &loom_amdgpu_target_provider,
+    &kLoomCompileAmdgpuProvider,
 #endif  // LOOM_COMPILE_HAVE_AMDGPU
 #if LOOM_COMPILE_HAVE_IREEVM
     &loom_ireevm_execution_provider,
@@ -423,8 +430,6 @@ int main(int argc, char** argv) {
       "\n"
       "Usage:\n"
       "  loom-compile [file.loom] --loom_backend=vm --output=module.vmfb\n"
-      "  loom-compile [file.loom] --loom_backend=amdgpu-hal "
-      "--output=kernel.vmfb --emit_target_artifact=kernel.hsaco\n"
       "\n"
       "Repeat --config=key=value to materialize compile-time config symbols "
       "before the pass pipeline. Use --config-file=path for a JSON/JSONC "

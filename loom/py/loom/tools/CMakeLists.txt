@@ -41,16 +41,6 @@ iree_py_library(
 
 iree_py_library(
   NAME
-    iree_run_loom
-  SRCS
-    "__init__.py"
-    "iree_run_loom.py"
-  DEPS
-    iree::runtime::py::loom::tools::loom_opt
-)
-
-iree_py_library(
-  NAME
     pytest_style_runner
   MAIN
     "pytest_style_runner.py"
@@ -65,7 +55,6 @@ iree_py_test(
     "pytest_style_runner.py"
   ARGS
     "loom.tools.amdgpu_asm_test"
-    "loom.tools.iree_run_loom_test"
     "loom.tools.loom_opt_test"
   PACKAGE_DIRS
     "${IREE_SOURCE_DIR}/runtime/py"

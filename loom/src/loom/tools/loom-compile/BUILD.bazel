@@ -38,24 +38,16 @@ string_list_flag(
     for provider in ALL_COMPILE_PROVIDERS
 ]
 
-config_setting(
-    name = "amdgpu_provider_and_hal_enabled",
-    flag_values = {
-        ":enabled_providers": "amdgpu",
-        "//runtime/src/iree/hal/drivers:enabled_drivers": "amdgpu",
-    },
-)
-
 _AMDGPU_COMPILE_COPTS = iree_select({
-    ":amdgpu_provider_and_hal_enabled": [
+    ":amdgpu_provider_enabled": [
         "-DLOOM_COMPILE_HAVE_AMDGPU=1",
     ],
     "//conditions:default": [],
 })
 
 _AMDGPU_COMPILE_DEPS = iree_select({
-    ":amdgpu_provider_and_hal_enabled": [
-        "//loom/src/loom/target/arch/amdgpu:execution_provider",
+    ":amdgpu_provider_enabled": [
+        "//loom/src/loom/target/arch/amdgpu:provider",
     ],
     "//conditions:default": [],
 })

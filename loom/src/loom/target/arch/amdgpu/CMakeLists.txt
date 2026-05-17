@@ -800,48 +800,6 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
-    amdgpu_hal_backend
-  HDRS
-    "execution/amdgpu_hal_backend.h"
-  SRCS
-    "execution/amdgpu_hal_backend.c"
-  DEPS
-    ::target_id
-    ::target_info
-    ::target_record_table
-    iree::base
-    loom::src::loom::target::emit::native::amdgpu::hal_executable
-    loom::src::loom::target::emit::native::amdgpu::hal_kernel_library
-    loom::src::loom::tooling::execution::hal_backend
-    loom::src::loom::tooling::execution::hal_runtime
-  PUBLIC
-)
-
-loom_cc_test(
-  NAME
-    amdgpu_hal_backend_test
-  SRCS
-    "execution/amdgpu_hal_backend_test.cc"
-  DEPS
-    ::low_registry
-    ::ops
-    ::amdgpu_hal_backend
-    ::target_info
-    ::target_info_defs
-    ::target_record_table
-    iree::base
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::text_asm
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::op_registry
-    loom::src::loom::testing::module_ptr
-    iree::testing::gtest
-    iree::testing::gtest_main
-)
-
-loom_cc_library(
-  NAME
     check_provider
   HDRS
     "check/occupancy.h"
@@ -857,112 +815,6 @@ loom_cc_library(
     loom::src::loom::tools::loom-check::execute
     loom::src::loom::tools::loom-check::provider
   PUBLIC
-)
-
-loom_cc_library(
-  NAME
-    execution_provider
-  HDRS
-    "execution/provider.h"
-  SRCS
-    "execution/provider.c"
-  DEPS
-    ::provider
-    ::amdgpu_hal_backend
-    iree::base
-    loom::src::loom::tooling::execution::execution_provider
-    loom::src::loom::tooling::execution::hal_execution_backend
-  PUBLIC
-)
-
-iree_c_embed_data(
-  NAME
-    amdgpu_hal_testdata
-  SRCS
-    "execution/testdata/b128_vector_add.loom"
-    "execution/testdata/divergent_if_else_store.loom"
-    "execution/testdata/divergent_lds_producer.loom"
-    "execution/testdata/divergent_then_store.loom"
-    "execution/testdata/dot2f_bf16_buffer.loom"
-    "execution/testdata/dot2f_bf16_gemm4x8x4.loom"
-    "execution/testdata/dot2f_f16_buffer.loom"
-    "execution/testdata/dot2f_f16_gemm4x8x4.loom"
-    "execution/testdata/dot2f_f16_lds_coop_gemm4x4x8.loom"
-    "execution/testdata/dot2f_f16_lds_gemm4x8x4.loom"
-    "execution/testdata/dot2f_f16_lds_gemm4x8x8.loom"
-    "execution/testdata/dot4i_signed_buffer.loom"
-    "execution/testdata/dot4i_u8u8_buffer.loom"
-    "execution/testdata/dot4i_u8u8_gemm4x8x4.loom"
-    "execution/testdata/dot4i_u8u8_tile8x4.loom"
-    "execution/testdata/dot8i4_signed_buffer.loom"
-    "execution/testdata/dot8i4_u4u4_buffer.loom"
-    "execution/testdata/dot8i4_u4u4_lds_coop_gemm4x4x32.loom"
-    "execution/testdata/gfx11_d16_lds_roundtrip.loom"
-    "execution/testdata/gfx11_wmma_lds_roundtrip.loom"
-    "execution/testdata/gfx11_wmma_zero.loom"
-    "execution/testdata/lds_b128_roundtrip.loom"
-    "execution/testdata/masked_upsample6_reduce.loom"
-    "execution/testdata/model_attention_score_dot2_bf16_fptrunc.loom"
-    "execution/testdata/model_attention_score_scalar_bf16_fptrunc.loom"
-    "execution/testdata/model_dense_projection_block_f16.loom"
-    "execution/testdata/model_dense_projection_partial_m2_f32_to_bf16_mfma_k32.loom"
-    "execution/testdata/model_dense_projection_partial_m2_f32_to_bf16_wmma_k32.loom"
-    "execution/testdata/model_dense_projection_tile_bf16.loom"
-    "execution/testdata/model_dense_projection_tile_bf16_k32.loom"
-    "execution/testdata/model_dense_projection_tile_bf16_wmma_k32.loom"
-    "execution/testdata/model_dense_projection_tile_f16.loom"
-    "execution/testdata/model_dense_projection_tile_f16_lds.loom"
-    "execution/testdata/model_ffn_vector4_gelu_epilogue.loom"
-    "execution/testdata/model_swiglu_tile4_f32.loom"
-    "execution/testdata/scf_if_vector_result.loom"
-    "execution/testdata/subgroup_match_any_i32.loom"
-    "execution/testdata/workgroup_reduce_addf_28_waves_two_results.loom"
-    "execution/testdata/workgroup_reduce_addf_partial_tail.loom"
-    "execution/testdata/workgroup_reduce_down_x2_addressing.loom"
-    "execution/testdata/workgroup_reduce_down_x4_addressing.loom"
-    "execution/testdata/workgroup_reduce_maxnumf.loom"
-    "execution/testdata/workitem_id_x_256_store.loom"
-  C_FILE_OUTPUT
-    "execution/amdgpu_hal_testdata.c"
-  H_FILE_OUTPUT
-    "execution/amdgpu_hal_testdata.h"
-  IDENTIFIER
-    "loom_amdgpu_amdgpu_hal_testdata"
-  TESTONLY
-  FLATTEN
-  PUBLIC
-)
-
-loom_cc_test(
-  NAME
-    hal_execution_test
-  SRCS
-    "execution/hal_execution_test.cc"
-  DEPS
-    ::execution_provider
-    ::amdgpu_hal_testdata
-    ::low_registry
-    ::amdgpu_hal_backend
-    ::target_info
-    ::target_record_table
-    iree::base
-    loom::src::loom::ops::op_registry
-    loom::src::loom::tooling::compile::pipeline
-    loom::src::loom::tooling::execution::compile_options
-    loom::src::loom::tooling::execution::execution_provider
-    loom::src::loom::tooling::execution::hal_candidate
-    loom::src::loom::tooling::execution::hal_invocation
-    loom::src::loom::tooling::execution::hal_runtime
-    loom::src::loom::tooling::execution::one_shot
-    loom::src::loom::tooling::execution::session
-    iree::testing::gtest
-    iree::testing::gtest_main
-  LABELS
-    "driver=amdgpu"
-    "nodocker"
-    "requires-gpu-amd"
-  GROUP
-    "iree-loom-amdgpu-tests"
 )
 
 loom_cc_library(
@@ -1592,17 +1444,6 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
-    "source_low_mma_model"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_mma_model.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
     "source_low_numeric_f32"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_numeric_f32.loom-test"
@@ -1661,28 +1502,6 @@ iree_executable_test(
     "source_low_prefetch_gfx12"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_prefetch_gfx12.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "source_low_model"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_model.loom-test"
-  SRC
-    loom::src::loom::tools::loom-check
-  LABELS
-    "loom-check"
-)
-
-iree_executable_test(
-  NAME
-    "source_low_model_rope"
-  ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_model_rope.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

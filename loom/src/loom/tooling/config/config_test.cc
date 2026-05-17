@@ -295,8 +295,9 @@ func.def @read_config() -> (index) {
   EXPECT_EQ(result.ignored_count, 0u);
 
   std::string printed = Print(module.get());
-  EXPECT_NE(printed.find("config.def @model36.model.hidden_size = 4096 : index"),
-            std::string::npos);
+  EXPECT_NE(
+      printed.find("config.def @model36.model.hidden_size = 4096 : index"),
+      std::string::npos);
   EXPECT_EQ(printed.find("config.decl @model36.model.hidden_size"),
             std::string::npos);
 }

@@ -23,16 +23,23 @@
   (IREE_RUN_LOOM_HAVE_AMDGPU || IREE_RUN_LOOM_HAVE_IREEVM)
 
 #if IREE_RUN_LOOM_HAVE_AMDGPU
-#include "loom/target/arch/amdgpu/execution/provider.h"
+#include "loom/target/arch/amdgpu/provider.h"
 #endif  // IREE_RUN_LOOM_HAVE_AMDGPU
 #if IREE_RUN_LOOM_HAVE_IREEVM
 #include "loom/target/emit/ireevm/execution/provider.h"
 #endif  // IREE_RUN_LOOM_HAVE_IREEVM
 
+#if IREE_RUN_LOOM_HAVE_AMDGPU
+static const loom_run_execution_provider_t kIreeRunLoomAmdgpuProvider = {
+    .name = IREE_SVL("amdgpu"),
+    .target_provider = &loom_amdgpu_target_provider,
+};
+#endif  // IREE_RUN_LOOM_HAVE_AMDGPU
+
 #if IREE_RUN_LOOM_HAVE_ANY_PROVIDER
 static const loom_run_execution_provider_t* const kIreeRunLoomProviders[] = {
 #if IREE_RUN_LOOM_HAVE_AMDGPU
-    &loom_amdgpu_target_provider,
+    &kIreeRunLoomAmdgpuProvider,
 #endif  // IREE_RUN_LOOM_HAVE_AMDGPU
 #if IREE_RUN_LOOM_HAVE_IREEVM
     &loom_ireevm_execution_provider,

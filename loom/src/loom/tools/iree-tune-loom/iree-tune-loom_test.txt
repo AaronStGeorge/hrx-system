@@ -6,16 +6,6 @@
 // RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --dry_run --artifact_bundle_dir=%t.bundle
 // RUN: FileCheck --check-prefix=BUNDLE %s < %t.bundle/results.jsonl
 // RUN: FileCheck --check-prefix=BUNDLE-MANIFEST %s < %t.bundle/manifest.json
-// RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_dispatch_latency --dry_run --output=%t.dispatch_dry.jsonl
-// RUN: FileCheck --check-prefix=DISPATCH-DRY %s < %t.dispatch_dry.jsonl
-// RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_dispatch_latency --dry_run --shape_specialization=both --output=%t.dispatch_both_dry.jsonl
-// RUN: FileCheck --check-prefix=DISPATCH-BOTH-DRY %s < %t.dispatch_both_dry.jsonl
-// RUN: iree-tune-loom %S/testdata/compare_dispatch.loom --compare=@base_dispatch,@variant_dispatch --dry_run --output=%t.compare_dry.jsonl
-// RUN: FileCheck --check-prefix=COMPARE-DRY %s < %t.compare_dry.jsonl
-// RUN: iree-tune-loom %S/testdata/actual_entry_plan.loom --benchmark=@dry_actual_dispatch_latency --dry_run --profile_artifacts_dir=%t.profiles --profile_data=dispatch-events,executable-metadata,counter-ranges --profile_counter=SQ_WAVES --output=%t.profile_plan.jsonl
-// RUN: FileCheck --check-prefix=PROFILE-PLAN %s < %t.profile_plan.jsonl
-// RUN: iree-tune-loom %S/testdata/actual_entry_plan.loom --benchmark=@dry_actual_dispatch_latency --dry_run --output=%t.actual_dry.jsonl
-// RUN: FileCheck --check-prefix=ACTUAL-DRY %s < %t.actual_dry.jsonl
 // RUN: ( iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_dispatch_latency 2>&1 || true ) | FileCheck --check-prefix=DISPATCH-NO-ACTUAL %s
 // RUN: ( iree-tune-loom %S/testdata/duplicate_symbol.loom --benchmark=@duplicate_symbol_latency || true ) | FileCheck --check-prefix=DUPLICATE %s
 // RUN: iree-tune-loom --agents_md | FileCheck --check-prefix=AGENTS %s
@@ -104,53 +94,6 @@
 // BUNDLE-MANIFEST: "paths":{"bundle":
 // BUNDLE-MANIFEST: "files":{"results":{"path":
 // BUNDLE-MANIFEST: "identity":{"status":"ok","byte_count":
-
-// DISPATCH-DRY: "row":"plan"
-// DISPATCH-DRY: "candidate_id":"c0","candidate_index":0
-// DISPATCH-DRY: "benchmark":"scalar_equal_dispatch_latency","case":"scalar_equal","measure":"dispatch_complete"
-// DISPATCH-DRY: "shape_specialization":"dynamic"
-// DISPATCH-DRY: "cli_overrides":{"iterations":false,"warmup_iterations":false,"batch_size":false
-// DISPATCH-DRY: "data_cache_policy":{"validity":"check_ops","cache_policy":"binding_ring"
-// DISPATCH-DRY: "row":"device"
-// DISPATCH-DRY: "status":"planned"
-// DISPATCH-DRY: "row":"summary"
-// DISPATCH-DRY: "shape_specialization":"dynamic"
-// DISPATCH-DRY: "benchmark_count":1
-
-// DISPATCH-BOTH-DRY: "row":"run"
-// DISPATCH-BOTH-DRY: "shape_specialization":"both"
-// DISPATCH-BOTH-DRY: "row":"plan"
-// DISPATCH-BOTH-DRY: "measure":"dispatch_complete"
-// DISPATCH-BOTH-DRY: "shape_specialization":"both"
-// DISPATCH-BOTH-DRY: "row":"summary"
-// DISPATCH-BOTH-DRY: "shape_specialization":"both"
-
-// COMPARE-DRY: "row":"plan"
-// COMPARE-DRY: "candidate_id":"c0","candidate_index":0
-// COMPARE-DRY: "benchmark":"base_dispatch","case":"compare_case","measure":"dispatch_complete"
-// COMPARE-DRY: "row":"plan"
-// COMPARE-DRY: "candidate_id":"c1","candidate_index":1
-// COMPARE-DRY: "benchmark":"variant_dispatch","case":"compare_case","measure":"dispatch_complete"
-// COMPARE-DRY-NOT: "row":"benchmark.repetition"
-// COMPARE-DRY: "row":"summary"
-// COMPARE-DRY: "benchmark_count":2
-
-// PROFILE-PLAN: "row":"plan"
-// PROFILE-PLAN: "profile_final_batch":true
-// PROFILE-PLAN: "profile_data_family_names":["dispatch_events","executable_metadata","counter_ranges"]
-// PROFILE-PLAN: "profile_counter_request":{"data_family_names":["dispatch_events","executable_metadata","counter_ranges"],"counter_set_count":1,"counter_sets":[{"name":"iree-tune-loom","counter_count":1,"counter_names":["SQ_WAVES"]}]}
-// PROFILE-PLAN: "profile_artifacts_dir":
-// PROFILE-PLAN: "row":"summary"
-
-// ACTUAL-DRY: "row":"plan"
-// ACTUAL-DRY: "candidate_id":"c0","candidate_index":0
-// ACTUAL-DRY: "benchmark":"dry_actual_dispatch_latency","case":"dry_actual","measure":"dispatch_complete"
-// ACTUAL-DRY: "actual_invocation_count":1
-// ACTUAL-DRY: "actual_entry":"dry_actual_entry"
-// ACTUAL-DRY: "actual_input_count":0
-// ACTUAL-DRY: "actual_result_count":0
-// ACTUAL-DRY: "row":"device"
-// ACTUAL-DRY: "row":"summary"
 
 // DISPATCH-NO-ACTUAL: dispatch_complete V0 requires exactly one actual invocation
 

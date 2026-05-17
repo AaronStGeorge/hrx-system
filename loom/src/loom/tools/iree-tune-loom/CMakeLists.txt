@@ -73,8 +73,6 @@ iree_lit_test_suite(
     ::iree-tune-loom
     FileCheck
   DATA
-    testdata::actual_entry_plan.loom
-    testdata::compare_dispatch.loom
     testdata::duplicate_symbol.loom
     testdata::scalar_benchmarks.loom
   LABELS

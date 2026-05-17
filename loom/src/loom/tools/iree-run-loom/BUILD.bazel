@@ -43,24 +43,16 @@ string_list_flag(
     for provider in ALL_EXECUTION_PROVIDERS
 ]
 
-config_setting(
-    name = "amdgpu_provider_and_hal_enabled",
-    flag_values = {
-        ":enabled_providers": "amdgpu",
-        "//runtime/src/iree/hal/drivers:enabled_drivers": "amdgpu",
-    },
-)
-
-_AMDGPU_EXECUTION_COPTS = iree_select({
-    ":amdgpu_provider_and_hal_enabled": [
+_AMDGPU_PROVIDER_COPTS = iree_select({
+    ":amdgpu_provider_enabled": [
         "-DIREE_RUN_LOOM_HAVE_AMDGPU=1",
     ],
     "//conditions:default": [],
 })
 
-_AMDGPU_EXECUTION_DEPS = iree_select({
-    ":amdgpu_provider_and_hal_enabled": [
-        "//loom/src/loom/target/arch/amdgpu:execution_provider",
+_AMDGPU_PROVIDER_DEPS = iree_select({
+    ":amdgpu_provider_enabled": [
+        "//loom/src/loom/target/arch/amdgpu:provider",
     ],
     "//conditions:default": [],
 })
@@ -80,12 +72,12 @@ _IREEVM_EXECUTION_DEPS = iree_select({
 })
 
 _IREE_RUN_LOOM_PROVIDER_COPTS = (
-    _AMDGPU_EXECUTION_COPTS +
+    _AMDGPU_PROVIDER_COPTS +
     _IREEVM_EXECUTION_COPTS
 )
 
 _IREE_RUN_LOOM_PROVIDER_DEPS = (
-    _AMDGPU_EXECUTION_DEPS +
+    _AMDGPU_PROVIDER_DEPS +
     _IREEVM_EXECUTION_DEPS
 )
 

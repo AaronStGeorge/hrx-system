@@ -74,11 +74,11 @@ function(_loom_compile_enable_provider _target _definition _library)
   )
 endfunction()
 
-if("amdgpu" IN_LIST LOOM_COMPILE_PROVIDERS AND IREE_HAL_DRIVER_AMDGPU)
+if("amdgpu" IN_LIST LOOM_COMPILE_PROVIDERS)
   _loom_compile_enable_provider(
     ${_LOOM_COMPILE_TARGET}
     LOOM_COMPILE_HAVE_AMDGPU
-    loom::src::loom::target::arch::amdgpu::execution_provider
+    loom::src::loom::target::arch::amdgpu::provider
   )
 endif()
 

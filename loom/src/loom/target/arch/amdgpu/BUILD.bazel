@@ -6,24 +6,19 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "iree_select",
     "iree_cmake_extra_content",
+    "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
-)
-load(
-    "//loom/build_tools/bazel:loom_check.bzl",
-    "loom_check_test_suite",
-)
-load("//build_tools/embed_data:build_defs.bzl", "iree_c_embed_data")
-load(
-    "//loom/build_tools/bazel:build_defs.bzl",
-    "loom_assert_no_dependencies",
     "loom_generated_cc_library",
     "loom_low_descriptor_cc_library",
     "loom_low_descriptor_data_archive",
     "loom_low_descriptor_exclude_from_cmake_all",
     "loom_target_table_cc_library",
+)
+load(
+    "//loom/build_tools/bazel:loom_check.bzl",
+    "loom_check_test_suite",
 )
 load(":archives.bzl", "AMDGPU_ISA_XML_ARCHIVE")
 
@@ -31,13 +26,6 @@ package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
-)
-
-config_setting(
-    name = "hal_driver_enabled",
-    flag_values = {
-        "//runtime/src/iree/hal/drivers:enabled_drivers": "amdgpu",
-    },
 )
 
 #===------------------------------------------------------------------------===#
@@ -167,16 +155,6 @@ loom_assert_no_dependencies(
         "//loom/src/loom/tools/loom-check:main",
         "//loom/src/loom/tools/loom-check:provider",
     ],
-)
-
-loom_assert_no_dependencies(
-    name = "core_run_tool_no_amdgpu_execution_deps",
-    dependencies = [
-        ":execution_provider",
-        ":low_registry",
-        ":amdgpu_hal_backend",
-    ],
-    targets = ["//loom/src/loom/tools/iree-run-loom:main"],
 )
 
 #===------------------------------------------------------------------------===#
@@ -883,44 +861,6 @@ loom_cc_test(
 )
 
 loom_cc_library(
-    name = "amdgpu_hal_backend",
-    srcs = ["execution/amdgpu_hal_backend.c"],
-    hdrs = ["execution/amdgpu_hal_backend.h"],
-    deps = [
-        ":target_id",
-        ":target_info",
-        ":target_record_table",
-        "//loom/src/loom/target/emit/native/amdgpu:hal_executable",
-        "//loom/src/loom/target/emit/native/amdgpu:hal_kernel_library",
-        "//loom/src/loom/tooling/execution:hal_backend",
-        "//loom/src/loom/tooling/execution:hal_runtime",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_test(
-    name = "amdgpu_hal_backend_test",
-    srcs = ["execution/amdgpu_hal_backend_test.cc"],
-    deps = [
-        ":low_registry",
-        ":ops",
-        ":amdgpu_hal_backend",
-        ":target_info",
-        ":target_info_defs",
-        ":target_record_table",
-        "//loom/src/loom/codegen/low:text_asm",
-        "//loom/src/loom/format/text:parser",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_registry",
-        "//loom/src/loom/testing:module_ptr",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_library(
     name = "check_provider",
     srcs = [
         "check/occupancy.c",
@@ -937,104 +877,6 @@ loom_cc_library(
         "//loom/src/loom/tools/loom-check:execute",
         "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
-    name = "execution_provider",
-    srcs = ["execution/provider.c"],
-    hdrs = ["execution/provider.h"],
-    deps = [
-        ":provider",
-        ":amdgpu_hal_backend",
-        "//loom/src/loom/tooling/execution:execution_provider",
-        "//loom/src/loom/tooling/execution:hal_execution_backend",
-        "//runtime/src/iree/base",
-    ],
-)
-
-iree_c_embed_data(
-    name = "amdgpu_hal_testdata",
-    testonly = True,
-    srcs = [
-        "execution/testdata/b128_vector_add.loom",
-        "execution/testdata/divergent_if_else_store.loom",
-        "execution/testdata/divergent_lds_producer.loom",
-        "execution/testdata/divergent_then_store.loom",
-        "execution/testdata/dot2f_bf16_buffer.loom",
-        "execution/testdata/dot2f_bf16_gemm4x8x4.loom",
-        "execution/testdata/dot2f_f16_buffer.loom",
-        "execution/testdata/dot2f_f16_gemm4x8x4.loom",
-        "execution/testdata/dot2f_f16_lds_coop_gemm4x4x8.loom",
-        "execution/testdata/dot2f_f16_lds_gemm4x8x4.loom",
-        "execution/testdata/dot2f_f16_lds_gemm4x8x8.loom",
-        "execution/testdata/dot4i_signed_buffer.loom",
-        "execution/testdata/dot4i_u8u8_buffer.loom",
-        "execution/testdata/dot4i_u8u8_gemm4x8x4.loom",
-        "execution/testdata/dot4i_u8u8_tile8x4.loom",
-        "execution/testdata/dot8i4_signed_buffer.loom",
-        "execution/testdata/dot8i4_u4u4_buffer.loom",
-        "execution/testdata/dot8i4_u4u4_lds_coop_gemm4x4x32.loom",
-        "execution/testdata/gfx11_d16_lds_roundtrip.loom",
-        "execution/testdata/gfx11_wmma_lds_roundtrip.loom",
-        "execution/testdata/gfx11_wmma_zero.loom",
-        "execution/testdata/lds_b128_roundtrip.loom",
-        "execution/testdata/masked_upsample6_reduce.loom",
-        "execution/testdata/model_attention_score_dot2_bf16_fptrunc.loom",
-        "execution/testdata/model_attention_score_scalar_bf16_fptrunc.loom",
-        "execution/testdata/model_dense_projection_block_f16.loom",
-        "execution/testdata/model_dense_projection_partial_m2_f32_to_bf16_mfma_k32.loom",
-        "execution/testdata/model_dense_projection_partial_m2_f32_to_bf16_wmma_k32.loom",
-        "execution/testdata/model_dense_projection_tile_bf16.loom",
-        "execution/testdata/model_dense_projection_tile_bf16_k32.loom",
-        "execution/testdata/model_dense_projection_tile_bf16_wmma_k32.loom",
-        "execution/testdata/model_dense_projection_tile_f16.loom",
-        "execution/testdata/model_dense_projection_tile_f16_lds.loom",
-        "execution/testdata/model_ffn_vector4_gelu_epilogue.loom",
-        "execution/testdata/model_swiglu_tile4_f32.loom",
-        "execution/testdata/scf_if_vector_result.loom",
-        "execution/testdata/subgroup_match_any_i32.loom",
-        "execution/testdata/workgroup_reduce_addf_28_waves_two_results.loom",
-        "execution/testdata/workgroup_reduce_addf_partial_tail.loom",
-        "execution/testdata/workgroup_reduce_down_x2_addressing.loom",
-        "execution/testdata/workgroup_reduce_down_x4_addressing.loom",
-        "execution/testdata/workgroup_reduce_maxnumf.loom",
-        "execution/testdata/workitem_id_x_256_store.loom",
-    ],
-    c_file_output = "execution/amdgpu_hal_testdata.c",
-    flatten = True,
-    h_file_output = "execution/amdgpu_hal_testdata.h",
-    identifier = "loom_amdgpu_amdgpu_hal_testdata",
-)
-
-loom_cc_test(
-    name = "hal_execution_test",
-    srcs = ["execution/hal_execution_test.cc"],
-    group = "iree-loom-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-        "requires-gpu-amd",
-    ],
-    deps = [
-        ":execution_provider",
-        ":amdgpu_hal_testdata",
-        ":low_registry",
-        ":amdgpu_hal_backend",
-        ":target_info",
-        ":target_record_table",
-        "//loom/src/loom/ops:op_registry",
-        "//loom/src/loom/tooling/compile:pipeline",
-        "//loom/src/loom/tooling/execution:compile_options",
-        "//loom/src/loom/tooling/execution:execution_provider",
-        "//loom/src/loom/tooling/execution:hal_candidate",
-        "//loom/src/loom/tooling/execution:hal_invocation",
-        "//loom/src/loom/tooling/execution:hal_runtime",
-        "//loom/src/loom/tooling/execution:one_shot",
-        "//loom/src/loom/tooling/execution:session",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
@@ -1166,15 +1008,12 @@ loom_check_test_suite(
         "test/source_low/source_low_minmax_diagnostics.loom-test",
         "test/source_low/source_low_mma.loom-test",
         "test/source_low/source_low_mma_cdna3.loom-test",
-        "test/source_low/source_low_mma_model.loom-test",
         "test/source_low/source_low_numeric_f32.loom-test",
         "test/source_low/source_low_numeric_i32.loom-test",
         "test/source_low/source_low_packed_dot.loom-test",
         "test/source_low/source_low_packed_dot_gfx12.loom-test",
         "test/source_low/source_low_packed_dot_gfx950.loom-test",
         "test/source_low/source_low_prefetch_gfx12.loom-test",
-        "test/source_low/source_low_model.loom-test",
-        "test/source_low/source_low_model_rope.loom-test",
         "test/source_low/source_low_reduce.loom-test",
         "test/source_low/source_low_scalar_i32.loom-test",
         "test/source_low/source_low_slice.loom-test",
