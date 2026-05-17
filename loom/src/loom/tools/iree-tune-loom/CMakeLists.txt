@@ -14,9 +14,26 @@ loom_cc_library(
   NAME
     main
   HDRS
+    "diagnostics.h"
+    "help.h"
     "main.h"
+    "manifest.h"
+    "model.h"
+    "module_query.h"
+    "options.h"
+    "output.h"
+    "profile_report.h"
+    "report.h"
   SRCS
+    "diagnostics.c"
+    "help.c"
     "main.c"
+    "manifest.c"
+    "module_query.c"
+    "options.c"
+    "output.c"
+    "profile_report.c"
+    "report.c"
   DEPS
     iree::base
     iree::base::internal::json
@@ -24,7 +41,9 @@ loom_cc_library(
     iree::base::tooling::flags
     iree::hal
     iree::io::stream
+    loom::src::loom::error::diagnostic
     loom::src::loom::error::json_sink
+    loom::src::loom::error::renderer
     loom::src::loom::ir
     loom::src::loom::ir::facts
     loom::src::loom::ops::op_registry
@@ -41,6 +60,7 @@ loom_cc_library(
     loom::src::loom::tooling::execution::one_shot
     loom::src::loom::tooling::execution::session
     loom::src::loom::tooling::io::file
+    loom::src::loom::tooling::testbench
     loom::src::loom::tooling::testbench::executor
     loom::src::loom::util::json
     loom::src::loom::util::stream
