@@ -41,7 +41,7 @@
 #include "loom/tooling/compile/pipeline.h"
 #include "loom/tooling/execution/compile_options.h"
 #include "loom/tooling/execution/compile_report_capture.h"
-#include "loom/tooling/execution/hal/backend.h"
+#include "loom/tooling/execution/hal/artifact.h"
 #include "loom/tooling/execution/hal/benchmark.h"
 #include "loom/tooling/execution/hal/candidate.h"
 #include "loom/tooling/execution/hal/invocation.h"
@@ -1587,14 +1587,14 @@ typedef struct iree_tune_loom_benchmark_result_t {
 } iree_tune_loom_benchmark_result_t;
 
 typedef struct iree_tune_loom_hal_context_t {
-  // Tool configuration with linked backend registries.
+  // Tool configuration with linked artifact-provider registries.
   const iree_tune_loom_configuration_t* configuration;
   // Host allocator used for runtime and candidate storage.
   iree_allocator_t host_allocator;
   // Optional artifact bundle receiving HAL profile artifact references.
   iree_tune_loom_artifact_bundle_t* artifact_bundle;
-  // Selected HAL backend for dispatch_complete benchmarks.
-  const loom_run_hal_backend_t* backend;
+  // Selected HAL artifact provider for dispatch_complete benchmarks.
+  const loom_run_hal_artifact_provider_t* artifact_provider;
   // Shared HAL runtime used by selected dispatch_complete benchmarks.
   loom_run_hal_runtime_t runtime;
   // True when |runtime| owns initialized HAL state.
@@ -1602,7 +1602,7 @@ typedef struct iree_tune_loom_hal_context_t {
 } iree_tune_loom_hal_context_t;
 
 typedef struct iree_tune_loom_hal_actual_provider_t {
-  // Shared HAL runtime and backend state.
+  // Shared HAL runtime and artifact-provider state.
   iree_tune_loom_hal_context_t* context;
   // Execution session used to parse the compile copy.
   loom_run_session_t* session;
@@ -1813,7 +1813,7 @@ static iree_string_view_t iree_tune_loom_device_uri_driver_name(
   return driver_name;
 }
 
-static iree_status_t iree_tune_loom_hal_context_select_backend(
+static iree_status_t iree_tune_loom_hal_context_select_artifact_provider(
     iree_tune_loom_hal_context_t* context);
 
 static iree_string_view_t iree_tune_loom_selected_device_uri(
@@ -1822,8 +1822,8 @@ static iree_string_view_t iree_tune_loom_selected_device_uri(
   if (device_uris.count == 1) {
     return device_uris.values[0];
   }
-  if (context->backend != NULL) {
-    return context->backend->hal_driver_name;
+  if (context->artifact_provider != NULL) {
+    return context->artifact_provider->hal_driver_name;
   }
   return iree_string_view_empty();
 }
@@ -2155,15 +2155,15 @@ static iree_status_t iree_tune_loom_write_hal_context_identity_fields_json(
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"driver\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      stream, context->backend->hal_driver_name));
+      stream, context->artifact_provider->hal_driver_name));
   IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, ",\"backend\":"));
+      loom_output_stream_write_cstring(stream, ",\"provider\":"));
   IREE_RETURN_IF_ERROR(
-      loom_json_write_escaped_string(stream, context->backend->name));
+      loom_json_write_escaped_string(stream, context->artifact_provider->name));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"target_family\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      stream, context->backend->target_family_name));
+      stream, context->artifact_provider->target_family_name));
   if (context->runtime_initialized && context->runtime.device != NULL) {
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_cstring(stream, ",\"status\":\"created\""));
@@ -2227,7 +2227,8 @@ static iree_status_t iree_tune_loom_append_device_row(
   if (row_state->appended) {
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(iree_tune_loom_hal_context_select_backend(context));
+  IREE_RETURN_IF_ERROR(
+      iree_tune_loom_hal_context_select_artifact_provider(context));
 
   loom_output_stream_t stream;
   loom_output_stream_for_builder(device_output, &stream);
@@ -3075,17 +3076,17 @@ static void iree_tune_loom_hal_context_deinitialize(
   *context = (iree_tune_loom_hal_context_t){0};
 }
 
-static iree_status_t iree_tune_loom_hal_context_select_backend(
+static iree_status_t iree_tune_loom_hal_context_select_artifact_provider(
     iree_tune_loom_hal_context_t* context) {
-  if (context->backend != NULL) {
+  if (context->artifact_provider != NULL) {
     return iree_ok_status();
   }
-  const loom_run_hal_backend_registry_t* registry =
-      context->configuration->hal_backend_registry;
-  if (registry == NULL || registry->backend_count == 0) {
+  const loom_run_hal_artifact_provider_registry_t* registry =
+      context->configuration->hal_artifact_provider_registry;
+  if (registry == NULL || registry->provider_count == 0) {
     return iree_make_status(
         IREE_STATUS_UNAVAILABLE,
-        "dispatch_complete benchmarks require a linked HAL backend");
+        "dispatch_complete benchmarks require a linked HAL artifact provider");
   }
 
   const iree_string_view_list_t device_uris = iree_hal_device_flag_list();
@@ -3098,29 +3099,31 @@ static iree_status_t iree_tune_loom_hal_context_select_backend(
   if (device_uris.count == 1) {
     const iree_string_view_t driver_name =
         iree_tune_loom_device_uri_driver_name(device_uris.values[0]);
-    for (iree_host_size_t i = 0; i < registry->backend_count; ++i) {
-      const loom_run_hal_backend_t* backend = registry->backends[i];
-      if (iree_string_view_equal(backend->hal_driver_name, driver_name)) {
-        context->backend = backend;
+    for (iree_host_size_t i = 0; i < registry->provider_count; ++i) {
+      const loom_run_hal_artifact_provider_t* artifact_provider =
+          registry->providers[i];
+      if (iree_string_view_equal(artifact_provider->hal_driver_name,
+                                 driver_name)) {
+        context->artifact_provider = artifact_provider;
         return iree_ok_status();
       }
     }
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "--device=%.*s selects HAL driver `%.*s`, but no linked Loom HAL "
-        "backend can emit for that driver",
+        "artifact provider can emit for that driver",
         (int)device_uris.values[0].size, device_uris.values[0].data,
         (int)driver_name.size, driver_name.data);
   }
 
-  if (registry->backend_count != 1) {
+  if (registry->provider_count != 1) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "dispatch_complete benchmarks require --device= when %" PRIhsz
-        " HAL backends are linked",
-        registry->backend_count);
+        " HAL artifact providers are linked",
+        registry->provider_count);
   }
-  context->backend = registry->backends[0];
+  context->artifact_provider = registry->providers[0];
   return iree_ok_status();
 }
 
@@ -3129,9 +3132,11 @@ static iree_status_t iree_tune_loom_hal_context_ensure_runtime(
   if (context->runtime_initialized) {
     return iree_ok_status();
   }
-  IREE_RETURN_IF_ERROR(iree_tune_loom_hal_context_select_backend(context));
+  IREE_RETURN_IF_ERROR(
+      iree_tune_loom_hal_context_select_artifact_provider(context));
   IREE_RETURN_IF_ERROR(loom_run_hal_runtime_initialize(
-      context->backend, context->host_allocator, &context->runtime));
+      context->artifact_provider->hal_driver_name, context->host_allocator,
+      &context->runtime));
   context->runtime_initialized = true;
   return iree_ok_status();
 }
@@ -3523,7 +3528,7 @@ static iree_status_t iree_tune_loom_hal_actual_provider_compile(
   }
   provider->candidate_initialized = true;
   status = loom_run_hal_candidate_compile(
-      provider->context->backend, &provider->context->runtime,
+      provider->context->artifact_provider, &provider->context->runtime,
       &provider->compile_module, &compile_options,
       provider->context->host_allocator, &provider->candidate);
   provider->compile_report_available = true;
@@ -3544,12 +3549,12 @@ static iree_status_t iree_tune_loom_hal_actual_provider_compile(
     provider->compile_failure_stage = IREE_SV("emit");
     provider->compile_failure_kind = IREE_SV("no_executable");
     provider->compile_failure_message =
-        IREE_SV("HAL backend did not emit an executable");
+        IREE_SV("HAL artifact provider did not emit an artifact");
     return iree_ok_status();
   }
 
   IREE_RETURN_IF_ERROR(loom_run_hal_prepared_candidate_prepare(
-      &provider->context->runtime, &provider->candidate.executable,
+      &provider->context->runtime, &provider->candidate.artifact,
       &provider->prepared_candidate));
   provider->prepared_candidate_initialized = true;
   return iree_ok_status();
@@ -5007,6 +5012,17 @@ static iree_status_t iree_tune_loom_append_artifact_extension(
   return iree_tune_loom_append_sanitized_path_component(format, leaf);
 }
 
+static iree_status_t iree_tune_loom_append_target_artifact_extension(
+    loom_target_artifact_format_t format, iree_string_view_t fallback_extension,
+    iree_string_builder_t* leaf) {
+  iree_string_view_t format_name = iree_string_view_empty();
+  if (format != LOOM_TARGET_ARTIFACT_FORMAT_UNKNOWN) {
+    format_name = loom_target_artifact_format_name(format);
+  }
+  return iree_tune_loom_append_artifact_extension(format_name,
+                                                  fallback_extension, leaf);
+}
+
 static iree_status_t iree_tune_loom_write_candidate_byte_artifact(
     iree_tune_loom_artifact_bundle_t* bundle,
     iree_tune_loom_bundle_file_kind_t kind, iree_string_view_t directory,
@@ -5061,21 +5077,21 @@ static iree_status_t iree_tune_loom_write_compiled_artifacts(
 
   iree_string_builder_t leaf;
   iree_string_builder_initialize(allocator, &leaf);
-  const loom_run_hal_executable_t* executable = &provider->candidate.executable;
+  const loom_run_hal_artifact_t* artifact = &provider->candidate.artifact;
   iree_status_t status = iree_tune_loom_append_candidate_artifact_stem(
       run, candidate, provider, &leaf);
   if (iree_status_is_ok(status)) {
     status = iree_string_builder_append_cstring(&leaf, "_target");
   }
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_append_artifact_extension(
-        executable->target_artifact_format, IREE_SV("bin"), &leaf);
+    status = iree_tune_loom_append_target_artifact_extension(
+        artifact->target_artifact_format, IREE_SV("bin"), &leaf);
   }
   if (iree_status_is_ok(status)) {
     status = iree_tune_loom_write_candidate_byte_artifact(
         bundle, IREE_TUNE_LOOM_BUNDLE_FILE_TARGET_ARTIFACT,
         bundle->target_artifact_dir, iree_string_builder_view(&leaf),
-        executable->target_artifact_data, allocator,
+        artifact->target_artifact_data, allocator,
         &provider->target_artifact_path_storage,
         &provider->target_artifact_path);
   }
@@ -5090,13 +5106,13 @@ static iree_status_t iree_tune_loom_write_compiled_artifacts(
   }
   if (iree_status_is_ok(status)) {
     status = iree_tune_loom_append_artifact_extension(
-        executable->target_listing_format, IREE_SV("txt"), &leaf);
+        artifact->target_listing_format, IREE_SV("txt"), &leaf);
   }
   if (iree_status_is_ok(status)) {
     status = iree_tune_loom_write_candidate_byte_artifact(
         bundle, IREE_TUNE_LOOM_BUNDLE_FILE_TARGET_LISTING,
         bundle->target_listing_dir, iree_string_builder_view(&leaf),
-        executable->target_listing_data, allocator,
+        artifact->target_listing_data, allocator,
         &provider->target_listing_path_storage, &provider->target_listing_path);
   }
 
@@ -5112,7 +5128,7 @@ static iree_status_t iree_tune_loom_write_compiled_artifacts(
     status = iree_tune_loom_write_candidate_byte_artifact(
         bundle, IREE_TUNE_LOOM_BUNDLE_FILE_HAL_EXECUTABLE,
         bundle->hal_executable_dir, iree_string_builder_view(&leaf),
-        executable->executable_data, allocator,
+        artifact->executable_data, allocator,
         &provider->hal_executable_path_storage, &provider->hal_executable_path);
   }
   iree_string_builder_deinitialize(&leaf);
@@ -7886,7 +7902,7 @@ static iree_status_t iree_tune_loom_append_artifact_bundle_manifest_json(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}"));
   IREE_RETURN_IF_ERROR(iree_tune_loom_write_manifest_files_json(
       bundle, run, allocator, &stream));
-  if (hal_context->backend != NULL) {
+  if (hal_context->artifact_provider != NULL) {
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_cstring(&stream, ",\"device\":{"));
     IREE_RETURN_IF_ERROR(iree_tune_loom_write_hal_context_identity_fields_json(

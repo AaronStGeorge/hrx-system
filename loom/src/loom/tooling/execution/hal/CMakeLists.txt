@@ -12,11 +12,11 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
-    backend
+    artifact
   HDRS
-    "backend.h"
+    "artifact.h"
   SRCS
-    "backend.c"
+    "artifact.c"
   DEPS
     iree::base
     loom::src::loom::error::diagnostic
@@ -36,7 +36,6 @@ loom_cc_library(
   SRCS
     "runtime.c"
   DEPS
-    ::backend
     iree::async
     iree::async::util::proactor_pool
     iree::base
@@ -56,7 +55,7 @@ loom_cc_library(
   SRCS
     "candidate.c"
   DEPS
-    ::backend
+    ::artifact
     ::runtime
     iree::base
     loom::src::loom::target::compile_report
@@ -74,7 +73,7 @@ loom_cc_library(
   SRCS
     "invocation.c"
   DEPS
-    ::backend
+    ::artifact
     ::runtime
     iree::base
     iree::hal
@@ -115,7 +114,7 @@ loom_cc_library(
   SRCS
     "execution_backend.c"
   DEPS
-    ::backend
+    ::artifact
     ::candidate
     ::invocation
     ::runtime

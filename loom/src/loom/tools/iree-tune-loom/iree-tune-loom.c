@@ -10,7 +10,7 @@
 #include <stdio.h>
 
 #include "loom/tooling/execution/execution_provider.h"
-#include "loom/tooling/execution/hal/backend.h"
+#include "loom/tooling/execution/hal/artifact.h"
 #include "loom/tools/iree-tune-loom/main.h"
 
 #ifndef IREE_TUNE_LOOM_HAVE_AMDGPU
@@ -58,9 +58,10 @@ static const loom_run_execution_provider_set_t kIreeTuneLoomProviderSet = {
 #endif  // IREE_TUNE_LOOM_HAVE_ANY_PROVIDER
 };
 
-static const loom_run_hal_backend_registry_t kIreeTuneLoomHalBackendRegistry = {
-    .backends = NULL,
-    .backend_count = 0,
+static const loom_run_hal_artifact_provider_registry_t
+    kIreeTuneLoomHalArtifactProviderRegistry = {
+        .providers = NULL,
+        .provider_count = 0,
 };
 
 int main(int argc, char** argv) {
@@ -80,7 +81,8 @@ int main(int argc, char** argv) {
               &environment),
       .target_environment =
           loom_run_execution_environment_target_environment(&environment),
-      .hal_backend_registry = &kIreeTuneLoomHalBackendRegistry,
+      .hal_artifact_provider_registry =
+          &kIreeTuneLoomHalArtifactProviderRegistry,
       .initialize_low_descriptor_registry =
           loom_run_execution_environment_low_descriptor_registry_callback(
               &environment),

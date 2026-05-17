@@ -69,11 +69,11 @@ TEST_F(HalInvocationTest, ResultOwnsOutputBuilder) {
 
 TEST_F(HalInvocationTest, RunRejectsTooManyBindingsBeforeDeviceUse) {
   loom_run_hal_runtime_t runtime = {};
-  loom_run_hal_executable_t executable = {};
+  loom_run_hal_artifact_t executable = {};
   loom_run_hal_invocation_request_t request = {};
   loom_run_hal_invocation_request_initialize(&request);
   request.runtime = &runtime;
-  request.executable = &executable;
+  request.artifact = &executable;
   request.bindings.count = LOOM_RUN_HAL_MAX_BINDING_COUNT + 1;
 
   loom_run_hal_invocation_result_t result = {};
@@ -88,11 +88,11 @@ TEST_F(HalInvocationTest, RunRejectsTooManyBindingsBeforeDeviceUse) {
 
 TEST_F(HalInvocationTest, RunRejectsMissingBindingStorageBeforeDeviceUse) {
   loom_run_hal_runtime_t runtime = {};
-  loom_run_hal_executable_t executable = {};
+  loom_run_hal_artifact_t executable = {};
   loom_run_hal_invocation_request_t request = {};
   loom_run_hal_invocation_request_initialize(&request);
   request.runtime = &runtime;
-  request.executable = &executable;
+  request.artifact = &executable;
   request.bindings.count = 1;
 
   loom_run_hal_invocation_result_t result = {};
@@ -108,7 +108,7 @@ TEST_F(HalInvocationTest, RunRejectsMissingBindingStorageBeforeDeviceUse) {
 TEST_F(HalInvocationTest,
        RunRejectsExpectedBindingCountMismatchBeforeDeviceUse) {
   loom_run_hal_runtime_t runtime = {};
-  loom_run_hal_executable_t executable = {};
+  loom_run_hal_artifact_t executable = {};
   iree_string_view_t bindings[] = {IREE_SV("&4xi32")};
   const char binding_conventions[] = {'r'};
   iree_string_view_t expected_bindings[] = {IREE_SV("4xi32=0"),
@@ -118,7 +118,7 @@ TEST_F(HalInvocationTest,
   loom_run_hal_invocation_request_t request = {};
   loom_run_hal_invocation_request_initialize(&request);
   request.runtime = &runtime;
-  request.executable = &executable;
+  request.artifact = &executable;
   request.bindings = (loom_run_hal_binding_specs_t){
       .values = bindings,
       .conventions = binding_conventions,
@@ -142,11 +142,11 @@ TEST_F(HalInvocationTest,
 
 TEST_F(HalInvocationTest, RunRequiresInitializedRuntime) {
   loom_run_hal_runtime_t runtime = {};
-  loom_run_hal_executable_t executable = {};
+  loom_run_hal_artifact_t executable = {};
   loom_run_hal_invocation_request_t request = {};
   loom_run_hal_invocation_request_initialize(&request);
   request.runtime = &runtime;
-  request.executable = &executable;
+  request.artifact = &executable;
 
   loom_run_hal_invocation_result_t result = {};
   loom_run_hal_invocation_result_initialize(iree_allocator_system(), &result);
@@ -161,7 +161,7 @@ TEST_F(HalInvocationTest, RunRequiresInitializedRuntime) {
 TEST_F(HalInvocationTest,
        RunPlanRejectsExpectedBindingCountMismatchBeforeDeviceUse) {
   loom_run_hal_runtime_t runtime = {};
-  loom_run_hal_executable_t executable = {};
+  loom_run_hal_artifact_t executable = {};
   loom_run_hal_invocation_plan_t plan = {};
   loom_run_hal_invocation_plan_initialize(&plan);
 
@@ -190,7 +190,7 @@ TEST_F(HalInvocationTest,
 
 TEST_F(HalInvocationTest, PreparedCandidatePrepareRequiresInitializedRuntime) {
   loom_run_hal_runtime_t runtime = {};
-  loom_run_hal_executable_t executable = {};
+  loom_run_hal_artifact_t executable = {};
   loom_run_hal_prepared_candidate_t candidate = {};
 
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,

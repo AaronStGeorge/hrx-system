@@ -16,7 +16,8 @@
 extern "C" {
 #endif
 
-typedef struct loom_run_hal_backend_registry_t loom_run_hal_backend_registry_t;
+typedef struct loom_run_hal_artifact_provider_registry_t
+    loom_run_hal_artifact_provider_registry_t;
 typedef struct loom_target_environment_t loom_target_environment_t;
 
 typedef struct iree_tune_loom_configuration_t {
@@ -26,8 +27,9 @@ typedef struct iree_tune_loom_configuration_t {
   loom_run_register_context_callback_t register_context;
   // Target environment linked into this runner.
   const loom_target_environment_t* target_environment;
-  // HAL backend registry linked into this runner.
-  const loom_run_hal_backend_registry_t* hal_backend_registry;
+  // HAL artifact provider registry linked into this runner.
+  const loom_run_hal_artifact_provider_registry_t*
+      hal_artifact_provider_registry;
   // Target-low descriptor registry package linked into this runner.
   loom_run_initialize_low_descriptor_registry_callback_t
       initialize_low_descriptor_registry;

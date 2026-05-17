@@ -120,9 +120,9 @@ void loom_run_hal_invocation_result_deinitialize(
   *result = (loom_run_hal_invocation_result_t){0};
 }
 
-iree_status_t loom_run_hal_executable_prepare(
+iree_status_t loom_run_hal_artifact_prepare(
     const loom_run_hal_runtime_t* runtime,
-    const loom_run_hal_executable_t* executable,
+    const loom_run_hal_artifact_t* artifact,
     iree_hal_executable_t** out_hal_executable) {
   *out_hal_executable = NULL;
   if (runtime->device == NULL || runtime->executable_cache == NULL) {
@@ -135,21 +135,21 @@ iree_status_t loom_run_hal_executable_prepare(
   executable_params.caching_mode =
       IREE_HAL_EXECUTABLE_CACHING_MODE_ALLOW_OPTIMIZATION |
       IREE_HAL_EXECUTABLE_CACHING_MODE_ALIAS_PROVIDED_DATA;
-  executable_params.executable_format = executable->executable_format;
-  executable_params.executable_data = executable->executable_data;
+  executable_params.executable_format = artifact->executable_format;
+  executable_params.executable_data = artifact->executable_data;
   return iree_hal_executable_cache_prepare_executable(
       runtime->executable_cache, &executable_params, out_hal_executable);
 }
 
 iree_status_t loom_run_hal_prepared_candidate_prepare(
     const loom_run_hal_runtime_t* runtime,
-    const loom_run_hal_executable_t* executable,
+    const loom_run_hal_artifact_t* artifact,
     loom_run_hal_prepared_candidate_t* out_candidate) {
   loom_run_hal_prepared_candidate_initialize(out_candidate);
-  iree_status_t status = loom_run_hal_executable_prepare(
-      runtime, executable, &out_candidate->executable);
+  iree_status_t status = loom_run_hal_artifact_prepare(
+      runtime, artifact, &out_candidate->executable);
   if (iree_status_is_ok(status)) {
-    out_candidate->target_bundle = executable->target_bundle;
+    out_candidate->target_bundle = artifact->target_bundle;
   }
   if (!iree_status_is_ok(status)) {
     loom_run_hal_prepared_candidate_deinitialize(out_candidate);
@@ -339,11 +339,11 @@ iree_status_t loom_run_hal_dispatch(
 
 iree_status_t loom_run_hal_invocation_execute(
     const loom_run_hal_runtime_t* runtime,
-    const loom_run_hal_executable_t* executable, iree_vm_list_t* binding_list,
+    const loom_run_hal_artifact_t* artifact, iree_vm_list_t* binding_list,
     const loom_run_hal_invocation_options_t* options) {
   loom_run_hal_prepared_candidate_t candidate = {0};
   iree_status_t status =
-      loom_run_hal_prepared_candidate_prepare(runtime, executable, &candidate);
+      loom_run_hal_prepared_candidate_prepare(runtime, artifact, &candidate);
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_dispatch(runtime->device, candidate.executable,
                                    binding_list, options);
@@ -812,7 +812,7 @@ iree_status_t loom_run_hal_invocation_run_prepared(
 
 iree_status_t loom_run_hal_invocation_run_plan(
     const loom_run_hal_runtime_t* runtime,
-    const loom_run_hal_executable_t* executable,
+    const loom_run_hal_artifact_t* artifact,
     const loom_run_hal_invocation_plan_t* plan, iree_allocator_t allocator,
     loom_run_hal_invocation_result_t* result) {
   iree_string_builder_reset(&result->output);
@@ -820,7 +820,7 @@ iree_status_t loom_run_hal_invocation_run_plan(
   IREE_RETURN_IF_ERROR(loom_run_hal_invocation_plan_validate(plan));
   loom_run_hal_prepared_candidate_t candidate = {0};
   iree_status_t status =
-      loom_run_hal_prepared_candidate_prepare(runtime, executable, &candidate);
+      loom_run_hal_prepared_candidate_prepare(runtime, artifact, &candidate);
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_invocation_run_prepared(runtime, &candidate, plan,
                                                   allocator, result);
@@ -841,7 +841,7 @@ iree_status_t loom_run_hal_invocation_run(
       &plan);
   if (iree_status_is_ok(status)) {
     status = loom_run_hal_invocation_run_plan(
-        request->runtime, request->executable, &plan, allocator, result);
+        request->runtime, request->artifact, &plan, allocator, result);
   }
   loom_run_hal_invocation_plan_deinitialize(&plan);
   return status;

@@ -17,9 +17,9 @@ package(
 )
 
 loom_cc_library(
-    name = "backend",
-    srcs = ["backend.c"],
-    hdrs = ["backend.h"],
+    name = "artifact",
+    srcs = ["artifact.c"],
+    hdrs = ["artifact.h"],
     deps = [
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/ir",
@@ -36,7 +36,6 @@ loom_cc_library(
     srcs = ["runtime.c"],
     hdrs = ["runtime.h"],
     deps = [
-        ":backend",
         "//runtime/src/iree/async",
         "//runtime/src/iree/async/util:proactor_pool",
         "//runtime/src/iree/base",
@@ -53,7 +52,7 @@ loom_cc_library(
     srcs = ["candidate.c"],
     hdrs = ["candidate.h"],
     deps = [
-        ":backend",
+        ":artifact",
         ":runtime",
         "//loom/src/loom/target:compile_report",
         "//loom/src/loom/tooling/execution:compile_options",
@@ -68,7 +67,7 @@ loom_cc_library(
     srcs = ["invocation.c"],
     hdrs = ["invocation.h"],
     deps = [
-        ":backend",
+        ":artifact",
         ":runtime",
         "//loom/src/loom/target:launch",
         "//loom/src/loom/target:types",
@@ -103,7 +102,7 @@ loom_cc_library(
     srcs = ["execution_backend.c"],
     hdrs = ["execution_backend.h"],
     deps = [
-        ":backend",
+        ":artifact",
         ":candidate",
         ":invocation",
         ":runtime",

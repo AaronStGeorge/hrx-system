@@ -13,6 +13,7 @@
 #include "iree/hal/api.h"
 #include "iree/vm/api.h"
 #include "loom/target/types.h"
+#include "loom/tooling/execution/hal/artifact.h"
 #include "loom/tooling/execution/hal/runtime.h"
 
 #ifdef __cplusplus
@@ -102,8 +103,8 @@ typedef struct loom_run_hal_dispatch_batch_t {
 typedef struct loom_run_hal_invocation_request_t {
   // Initialized HAL runtime that owns the device used for dispatch.
   const loom_run_hal_runtime_t* runtime;
-  // Backend-produced executable bytes to prepare and dispatch.
-  const loom_run_hal_executable_t* executable;
+  // Provider-produced artifact bytes to prepare and dispatch.
+  const loom_run_hal_artifact_t* artifact;
   // HAL dispatch entry point and workgroup count.
   loom_run_hal_invocation_options_t options;
   // Textual input/output binding specs parsed before dispatch.
@@ -177,16 +178,16 @@ void loom_run_hal_invocation_result_deinitialize(
 iree_status_t loom_run_hal_binding_list_total_byte_length(
     iree_vm_list_t* binding_list, uint64_t* out_byte_length);
 
-// Prepares a HAL executable object from backend-produced executable bytes.
-iree_status_t loom_run_hal_executable_prepare(
+// Prepares a HAL executable object from provider-produced artifact bytes.
+iree_status_t loom_run_hal_artifact_prepare(
     const loom_run_hal_runtime_t* runtime,
-    const loom_run_hal_executable_t* executable,
+    const loom_run_hal_artifact_t* artifact,
     iree_hal_executable_t** out_hal_executable);
 
-// Prepares |executable| once for repeated dispatches.
+// Prepares |artifact| once for repeated dispatches.
 iree_status_t loom_run_hal_prepared_candidate_prepare(
     const loom_run_hal_runtime_t* runtime,
-    const loom_run_hal_executable_t* executable,
+    const loom_run_hal_artifact_t* artifact,
     loom_run_hal_prepared_candidate_t* out_candidate);
 
 // Dispatches a prepared HAL executable with |binding_list|.
@@ -232,10 +233,10 @@ iree_status_t loom_run_hal_dispatch_batch_collect_results(
     const loom_run_hal_dispatch_batch_t* batch, iree_allocator_t allocator,
     loom_run_hal_invocation_result_t* result);
 
-// Prepares and dispatches |executable| through |runtime|.
+// Prepares and dispatches |artifact| through |runtime|.
 iree_status_t loom_run_hal_invocation_execute(
     const loom_run_hal_runtime_t* runtime,
-    const loom_run_hal_executable_t* executable, iree_vm_list_t* binding_list,
+    const loom_run_hal_artifact_t* artifact, iree_vm_list_t* binding_list,
     const loom_run_hal_invocation_options_t* options);
 
 // Parses textual binding specs into a reusable typed invocation plan.
@@ -279,13 +280,13 @@ iree_status_t loom_run_hal_invocation_run_prepared(
     const loom_run_hal_invocation_plan_t* plan, iree_allocator_t allocator,
     loom_run_hal_invocation_result_t* result);
 
-// Dispatches |executable| using |plan| and records either formatted outputs or
+// Dispatches |artifact| using |plan| and records either formatted outputs or
 // expected comparison diagnostics in |result|. The plan bindings are cloned
 // before dispatch so host-transfer helpers cannot mutate the plan's list
 // container.
 iree_status_t loom_run_hal_invocation_run_plan(
     const loom_run_hal_runtime_t* runtime,
-    const loom_run_hal_executable_t* executable,
+    const loom_run_hal_artifact_t* artifact,
     const loom_run_hal_invocation_plan_t* plan, iree_allocator_t allocator,
     loom_run_hal_invocation_result_t* result);
 
@@ -293,7 +294,7 @@ iree_status_t loom_run_hal_invocation_run_plan(
 iree_status_t loom_run_hal_transfer_bindings_to_host(
     const loom_run_hal_runtime_t* runtime, iree_vm_list_t* binding_list);
 
-// Parses bindings, dispatches |request->executable|, transfers bindings back
+// Parses bindings, dispatches |request->artifact|, transfers bindings back
 // to host-visible storage, and records either formatted outputs or expected
 // comparison diagnostics in |result|.
 iree_status_t loom_run_hal_invocation_run(

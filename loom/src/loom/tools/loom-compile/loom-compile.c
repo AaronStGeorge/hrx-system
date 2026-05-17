@@ -18,7 +18,7 @@
 #include "loom/tooling/config/config.h"
 #include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/execution/execution_provider.h"
-#include "loom/tooling/execution/hal/backend.h"
+#include "loom/tooling/execution/hal/artifact.h"
 #include "loom/tooling/execution/hal/candidate.h"
 #include "loom/tooling/execution/session.h"
 #include "loom/tooling/io/file.h"
@@ -109,9 +109,10 @@ static const loom_run_execution_provider_set_t kLoomCompileProviderSet = {
 #endif  // LOOM_COMPILE_HAVE_ANY_PROVIDER
 };
 
-static const loom_run_hal_backend_registry_t kLoomCompileHalBackendRegistry = {
-    .backends = NULL,
-    .backend_count = 0,
+static const loom_run_hal_artifact_provider_registry_t
+    kLoomCompileHalArtifactProviderRegistry = {
+        .providers = NULL,
+        .provider_count = 0,
 };
 
 static iree_status_t loom_compile_register_context(void* user_data,
@@ -249,24 +250,25 @@ static iree_status_t loom_compile_write_bytes(iree_string_view_t path,
 }
 
 static iree_status_t loom_compile_write_optional_target_artifact(
-    const loom_run_hal_executable_t* executable, iree_allocator_t allocator) {
+    const loom_run_hal_artifact_t* artifact, iree_allocator_t allocator) {
   const iree_string_view_t path =
       iree_make_cstring_view(FLAG_emit_target_artifact);
   if (iree_string_view_is_empty(path)) {
     return iree_ok_status();
   }
-  if (executable->target_artifact_data.data == NULL ||
-      executable->target_artifact_data.data_length == 0) {
+  if (artifact->target_artifact_data.data == NULL ||
+      artifact->target_artifact_data.data_length == 0) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "selected HAL backend produced no target-native "
-                            "artifact");
+                            "selected HAL artifact provider produced no "
+                            "target-native artifact");
   }
-  return loom_compile_write_bytes(path, executable->target_artifact_data,
+  return loom_compile_write_bytes(path, artifact->target_artifact_data,
                                   allocator);
 }
 
 static iree_status_t loom_compile_emit_hal(
-    const loom_run_hal_backend_t* hal_backend, loom_run_module_t* run_module,
+    const loom_run_hal_artifact_provider_t* artifact_provider,
+    loom_run_module_t* run_module,
     const loom_run_candidate_compile_options_t* compile_options,
     iree_allocator_t allocator, bool* out_emitted) {
   *out_emitted = false;
@@ -283,13 +285,13 @@ static iree_status_t loom_compile_emit_hal(
 
   loom_run_hal_candidate_t candidate = {0};
   iree_status_t status = loom_run_hal_candidate_emit_module_target(
-      hal_backend, run_module, compile_options, allocator, &candidate);
+      artifact_provider, run_module, compile_options, allocator, &candidate);
   if (iree_status_is_ok(status) && candidate.compiled) {
     status = loom_compile_write_bytes(
-        output_path, candidate.executable.executable_data, allocator);
+        output_path, candidate.artifact.executable_data, allocator);
   }
   if (iree_status_is_ok(status) && candidate.compiled) {
-    status = loom_compile_write_optional_target_artifact(&candidate.executable,
+    status = loom_compile_write_optional_target_artifact(&candidate.artifact,
                                                          allocator);
   }
   if (iree_status_is_ok(status)) {
@@ -308,7 +310,7 @@ static iree_status_t loom_compile_emit_vm(
           iree_make_cstring_view(FLAG_emit_target_artifact))) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "--emit_target_artifact is only valid for HAL backends");
+        "--emit_target_artifact is only valid for HAL artifact providers");
   }
 #if LOOM_COMPILE_HAVE_IREEVM
   loom_ireevm_run_candidate_t candidate = {0};
@@ -337,18 +339,19 @@ static iree_status_t loom_compile_emit_vm(
 
 static iree_status_t loom_compile_make_unknown_backend_status(
     iree_string_view_t backend_name,
-    const loom_run_hal_backend_registry_t* hal_backend_registry,
+    const loom_run_hal_artifact_provider_registry_t* artifact_provider_registry,
     iree_allocator_t allocator) {
   iree_string_builder_t backend_names;
   iree_string_builder_initialize(allocator, &backend_names);
   iree_status_t status =
       iree_string_builder_append_cstring(&backend_names, "vm");
-  if (iree_status_is_ok(status) && hal_backend_registry->backend_count != 0) {
+  if (iree_status_is_ok(status) &&
+      artifact_provider_registry->provider_count != 0) {
     status = iree_string_builder_append_cstring(&backend_names, ", ");
   }
   if (iree_status_is_ok(status)) {
-    status = loom_run_hal_backend_registry_format_names(hal_backend_registry,
-                                                        &backend_names);
+    status = loom_run_hal_artifact_provider_registry_format_names(
+        artifact_provider_registry, &backend_names);
   }
   if (!iree_status_is_ok(status)) {
     iree_string_builder_deinitialize(&backend_names);
@@ -510,18 +513,18 @@ int main(int argc, char** argv) {
   const iree_string_view_t backend_name =
       iree_make_cstring_view(FLAG_loom_backend);
   if (iree_status_is_ok(status) && exit_code == 0) {
-    const loom_run_hal_backend_t* hal_backend =
-        loom_run_hal_backend_registry_lookup(&kLoomCompileHalBackendRegistry,
-                                             backend_name);
-    if (hal_backend != NULL) {
-      status = loom_compile_emit_hal(hal_backend, &run_module, &compile_options,
-                                     allocator, &emitted);
+    const loom_run_hal_artifact_provider_t* artifact_provider =
+        loom_run_hal_artifact_provider_registry_lookup(
+            &kLoomCompileHalArtifactProviderRegistry, backend_name);
+    if (artifact_provider != NULL) {
+      status = loom_compile_emit_hal(artifact_provider, &run_module,
+                                     &compile_options, allocator, &emitted);
     } else if (iree_string_view_equal(backend_name, IREE_SV("vm"))) {
       status = loom_compile_emit_vm(&run_module, &compile_options, allocator,
                                     &emitted);
     } else {
       status = loom_compile_make_unknown_backend_status(
-          backend_name, &kLoomCompileHalBackendRegistry, allocator);
+          backend_name, &kLoomCompileHalArtifactProviderRegistry, allocator);
     }
   }
   if (iree_status_is_ok(status)) {

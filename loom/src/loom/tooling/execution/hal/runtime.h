@@ -12,14 +12,13 @@
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
 #include "iree/vm/api.h"
-#include "loom/tooling/execution/hal/backend.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // Shared HAL runtime state created by the execution layer.
-struct loom_run_hal_runtime_t {
+typedef struct loom_run_hal_runtime_t {
   // VM instance retaining HAL ref-type registrations for function I/O helpers.
   iree_vm_instance_t* instance;
   // Selected HAL device used for executable preparation and dispatch.
@@ -28,11 +27,11 @@ struct loom_run_hal_runtime_t {
   iree_hal_device_group_t* device_group;
   // Executable cache owned by |device| and used for target probing/loading.
   iree_hal_executable_cache_t* executable_cache;
-};
+} loom_run_hal_runtime_t;
 
-// Initializes the HAL runtime state needed by |backend|.
+// Initializes the HAL runtime state for |hal_driver_name|.
 iree_status_t loom_run_hal_runtime_initialize(
-    const loom_run_hal_backend_t* backend, iree_allocator_t allocator,
+    iree_string_view_t hal_driver_name, iree_allocator_t allocator,
     loom_run_hal_runtime_t* out_runtime);
 
 // Releases all resources owned by |runtime|.
