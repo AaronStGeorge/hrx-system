@@ -270,6 +270,25 @@ def _v_mfma_f32_16x16x16_bf16_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
+def _v_mfma_f32_16x16x4_f32_overlay() -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key="amdgpu.v_mfma_f32_16x16x4_f32",
+        instruction_name="V_MFMA_F32_16X16X4_F32",
+        mnemonic="v_mfma_f32_16x16x4_f32",
+        encoding_name="VOP3P_MFMA",
+        semantic_tag="matrix.mfma.f32.16x16x4.f32",
+        schedule_class=_SCHEDULE_MFMA,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_agpr_result(units=4)),
+            AmdgpuOperandOverlay("SRC0", _vgpr_agpr_operand("a", units=1)),
+            AmdgpuOperandOverlay("SRC1", _vgpr_agpr_operand("b", units=1)),
+            AmdgpuOperandOverlay("SRC2", _vgpr_agpr_const_operand("acc", units=4)),
+        ),
+        constraints=_destructive_accumulator_constraints(3),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
 def _v_smfmac_f32_16x16x32_bf16_overlay() -> AmdgpuDescriptorOverlay:
     return _v_smfmac_f32_overlay(
         descriptor_key="amdgpu.v_smfmac_f32_16x16x32_bf16",
@@ -614,6 +633,7 @@ __all__ = (
     "_v_dot8_u32_u4_overlay",
     "_v_mfma_f32_16x16x16_bf16_overlay",
     "_v_mfma_f32_16x16x16_f16_overlay",
+    "_v_mfma_f32_16x16x4_f32_overlay",
     "_v_smfmac_f32_16x16x32_bf16_overlay",
     "_v_smfmac_f32_16x16x32_f16_overlay",
     "_v_smfmac_f32_32x32x16_bf16_overlay",

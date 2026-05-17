@@ -339,6 +339,7 @@ def _cdna_core_overlays(
         _v_dot8_i32_i4_overlay(signedness_modifiers=False),
         _v_dot8_u32_u4_overlay(),
         *(_gfx950_ds_transpose_read_overlays() if include_ds_transpose_reads else ()),
+        _v_mfma_f32_16x16x4_f32_overlay(),
         _v_mfma_f32_16x16x16_f16_overlay(),
         _v_mfma_f32_16x16x16_bf16_overlay(),
         _v_smfmac_f32_16x16x32_f16_overlay(),

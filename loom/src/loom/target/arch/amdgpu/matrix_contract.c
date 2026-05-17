@@ -146,6 +146,37 @@
               LOOM_MATRIX_FRAGMENT_COORDINATE_COLUMN),                          \
   }
 
+#define MATRIX_FRAGMENT_LAYOUT_CDNA_MFMA_F32_16X16X4_F32(kind_value,            \
+                                                         name_value)            \
+  {                                                                             \
+      .kind = (kind_value),                                                     \
+      .name = IREE_SVL(name_value),                                             \
+      .wave_size = 64,                                                          \
+      .tile_shape = MATRIX_TILE_SHAPE(16, 16, 4),                               \
+      .lhs = MATRIX_ROLE_LAYOUT(                                                \
+          LOOM_CONTRACT_OPERAND_ROLE_LHS,                                       \
+          LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_ROW_LANE_GROUP_PACKED_REDUCTION,    \
+          1, 1, 32,                                                             \
+          LOOM_MATRIX_FRAGMENT_COORDINATE_ROW |                                 \
+              LOOM_MATRIX_FRAGMENT_COORDINATE_REDUCTION),                       \
+      .rhs = MATRIX_ROLE_LAYOUT(                                                \
+          LOOM_CONTRACT_OPERAND_ROLE_RHS,                                       \
+          LOOM_MATRIX_FRAGMENT_MAP_LANE_MOD_COLUMN_LANE_GROUP_PACKED_REDUCTION, \
+          1, 1, 32,                                                             \
+          LOOM_MATRIX_FRAGMENT_COORDINATE_COLUMN |                              \
+              LOOM_MATRIX_FRAGMENT_COORDINATE_REDUCTION),                       \
+      .accumulator = MATRIX_ROLE_LAYOUT(                                        \
+          LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,                               \
+          LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN, 4, 1, 32,    \
+          LOOM_MATRIX_FRAGMENT_COORDINATE_ROW |                                 \
+              LOOM_MATRIX_FRAGMENT_COORDINATE_COLUMN),                          \
+      .result = MATRIX_ROLE_LAYOUT(                                             \
+          LOOM_CONTRACT_OPERAND_ROLE_RESULT,                                    \
+          LOOM_MATRIX_FRAGMENT_MAP_LANE_GROUP_REGISTER_ROW_COLUMN, 4, 1, 32,    \
+          LOOM_MATRIX_FRAGMENT_COORDINATE_ROW |                                 \
+              LOOM_MATRIX_FRAGMENT_COORDINATE_COLUMN),                          \
+  }
+
 static const loom_amdgpu_matrix_fragment_layout_t kMatrixFragmentLayouts[] = {
     [LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_F32_16X16X16_F16] =
         MATRIX_FRAGMENT_LAYOUT_RDNA3_WMMAR3_F32_16X16X16(
@@ -163,6 +194,10 @@ static const loom_amdgpu_matrix_fragment_layout_t kMatrixFragmentLayouts[] = {
         MATRIX_FRAGMENT_LAYOUT_CDNA_MFMA_F32_16X16X16(
             LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_CDNA_MFMA_F32_16X16X16_BF16,
             "cdna.mfma.f32.16x16x16.bf16"),
+    [LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_CDNA_MFMA_F32_16X16X4_F32] =
+        MATRIX_FRAGMENT_LAYOUT_CDNA_MFMA_F32_16X16X4_F32(
+            LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_CDNA_MFMA_F32_16X16X4_F32,
+            "cdna.mfma.f32.16x16x4.f32"),
 };
 
 #define MATRIX_DESCRIPTOR(                                                     \
@@ -270,16 +305,17 @@ static const loom_amdgpu_matrix_contract_descriptor_t
                           LOOM_AMDGPU_MATRIX_NUMERIC_F32, 16, 16,
                           LOOM_AMDGPU_MATRIX_NUMERIC_F32, 16, 16,
                           LOOM_AMDGPU_MATRIX_SCALE_NONE),
-        MATRIX_DESCRIPTOR("mfma.f32.16x16x4.f32",
-                          "llvm.amdgcn.mfma.f32.16x16x4.f32",
-                          LOOM_AMDGPU_MATRIX_FAMILY_MFMA,
-                          LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908,
-                          LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY, 0, 16, 16, 4,
-                          LOOM_AMDGPU_MATRIX_NUMERIC_F32, 1, 1,
-                          LOOM_AMDGPU_MATRIX_NUMERIC_F32, 1, 1,
-                          LOOM_AMDGPU_MATRIX_NUMERIC_F32, 4, 4,
-                          LOOM_AMDGPU_MATRIX_NUMERIC_F32, 4, 4,
-                          LOOM_AMDGPU_MATRIX_SCALE_NONE),
+        MATRIX_DESCRIPTOR_WITH_LOW_ID_AND_LAYOUT(
+            "mfma.f32.16x16x4.f32",
+            LOOM_AMDGPU_DESCRIPTOR_REF_V_MFMA_F32_16X16X4_F32,
+            "llvm.amdgcn.mfma.f32.16x16x4.f32", LOOM_AMDGPU_MATRIX_FAMILY_MFMA,
+            LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908,
+            LOOM_AMDGPU_MATRIX_WAVE_SIZE_ANY, 0, 16, 16, 4,
+            LOOM_AMDGPU_MATRIX_NUMERIC_F32, 1, 1,
+            LOOM_AMDGPU_MATRIX_NUMERIC_F32, 1, 1,
+            LOOM_AMDGPU_MATRIX_NUMERIC_F32, 4, 4,
+            LOOM_AMDGPU_MATRIX_NUMERIC_F32, 4, 4, LOOM_AMDGPU_MATRIX_SCALE_NONE,
+            LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_CDNA_MFMA_F32_16X16X4_F32),
         MATRIX_DESCRIPTOR("mfma.f32.16x16x8.bf16",
                           "llvm.amdgcn.mfma.f32.16x16x8.bf16",
                           LOOM_AMDGPU_MATRIX_FAMILY_MFMA,

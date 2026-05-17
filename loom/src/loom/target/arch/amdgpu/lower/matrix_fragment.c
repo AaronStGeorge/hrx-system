@@ -191,8 +191,19 @@ static bool loom_amdgpu_fragment_memory_payload_matches(
     case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS:
     case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS: {
       if (loom_type_element_type(payload_type) != expected_element_type ||
-          !loom_scalar_type_is_float(expected_element_type) ||
-          loom_scalar_type_bitwidth(expected_element_type) != 16) {
+          !loom_scalar_type_is_float(expected_element_type)) {
+        return false;
+      }
+      const int32_t element_bit_count =
+          loom_scalar_type_bitwidth(expected_element_type);
+      if (element_bit_count != role_layout->element_bit_count) {
+        return false;
+      }
+      if (element_bit_count == 32) {
+        return loom_amdgpu_vector_f32_lane_count(payload_type) ==
+               role_layout->register_count;
+      }
+      if (element_bit_count != 16) {
         return false;
       }
       uint32_t payload_bit_count = 0;
@@ -335,7 +346,8 @@ static bool loom_amdgpu_fragment_memory_view_matches(
     case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS:
     case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS:
       if (!loom_scalar_type_is_float(expected_element_type) ||
-          loom_scalar_type_bitwidth(expected_element_type) != 16) {
+          loom_scalar_type_bitwidth(expected_element_type) !=
+              role_layout->element_bit_count) {
         return false;
       }
       break;
