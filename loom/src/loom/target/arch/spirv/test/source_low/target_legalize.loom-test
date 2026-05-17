@@ -80,16 +80,15 @@ func.def target(@target) @rejects_missing_cooperative_matrix_feature(%lhs_data: 
 // ====
 // RUN: pass target-legalize{mode=final}
 
-spirv.target<vulkan1_3> @target {contract_feature_bits = 2054}
+spirv.target<vulkan1_3> @target {contract_feature_bits = 2058}
 
-func.def target(@target) @rejects_cooperative_property_without_low_descriptor(%lhs_data: vector<16xf16>, %rhs_data: vector<16xf16>, %init_data: vector<8xf32>) -> (vector<8xf32>) {
+func.def target(@target) @keeps_supported_cooperative_matrix_contract(%lhs_data: vector<16xf16>, %rhs_data: vector<16xf16>, %init_data: vector<8xf32>) -> (vector<8xf32>) {
   %m = index.constant 16 : index
   %n = index.constant 16 : index
   %k = index.constant 16 : index
   %lhs = vector.fragment<lhs> %lhs_data shape [%m, %k] : vector<16xf16>
   %rhs = vector.fragment<rhs> %rhs_data shape [%k, %n] : vector<16xf16>
   %init = vector.fragment<init> %init_data shape [%m, %n] : vector<8xf32>
-  // ERROR@+1: TARGET/039 {source_contract="spirv.cooperative_matrix", matrix_constraint="target_low_descriptor_mapping"}
   %result = vector.mma %lhs, %rhs, %init : vector<16xf16>, vector<16xf16>, vector<8xf32>
   func.return %result : vector<8xf32>
 }

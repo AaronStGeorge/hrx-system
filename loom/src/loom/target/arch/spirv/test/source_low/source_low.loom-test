@@ -545,3 +545,95 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_hal_scalar_con
   OpStore.storage_buffer.f32 %output_bitcast_f32_view, %bitcast_f32
   return
 }
+
+// ====
+
+spirv.target<vulkan1_3> @hal_target_coop_f16 {abi = hal_kernel, contract_feature_bits = 2318}
+
+kernel.def target(@hal_target_coop_f16) @spirv_hal_cooperative_matrix_f16(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer, %byte_offset: offset) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch {
+  %byte_offset_aligned = index.assume %byte_offset [mul(%byte_offset, 4)] : offset
+  %m = index.constant 16 : index
+  %n = index.constant 16 : index
+  %k = index.constant 16 : index
+  %lhs_aligned = buffer.assume.alignment %lhs_buffer {minimum_alignment = 4} : buffer
+  %rhs_aligned = buffer.assume.alignment %rhs_buffer {minimum_alignment = 4} : buffer
+  %init_aligned = buffer.assume.alignment %init_buffer {minimum_alignment = 4} : buffer
+  %out_aligned = buffer.assume.alignment %out_buffer {minimum_alignment = 4} : buffer
+  %lhs_view = buffer.view %lhs_aligned[%byte_offset_aligned] : buffer -> view<16x16xf16, #dense>
+  %rhs_view = buffer.view %rhs_aligned[%byte_offset_aligned] : buffer -> view<16x16xf16, #dense>
+  %init_view = buffer.view %init_aligned[%byte_offset_aligned] : buffer -> view<16x16xf32, #dense>
+  %out_view = buffer.view %out_aligned[%byte_offset_aligned] : buffer -> view<16x16xf32, #dense>
+  %lhs = vector.fragment.load<lhs> %lhs_view[0, 0] shape [%m, %k] : view<16x16xf16, #dense> -> vector<16xf16>
+  %rhs = vector.fragment.load<rhs> %rhs_view[0, 0] shape [%k, %n] : view<16x16xf16, #dense> -> vector<16xf16>
+  %init = vector.fragment.load<init> %init_view[0, 0] shape [%m, %n] : view<16x16xf32, #dense> -> vector<8xf32>
+  %result = vector.mma %lhs, %rhs, %init : vector<16xf16>, vector<16xf16>, vector<8xf32>
+  vector.fragment.store<result> %result, %out_view[0, 0] shape [%m, %n] : vector<8xf32>, view<16x16xf32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@hal_target_coop_f16) workgroup_size(1, 1, 1) @spirv_hal_cooperative_matrix_f16(%byte_offset_aligned: reg<spirv.offset64>) asm<spirv.logical.core> {
+  %lhs_aligned = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %rhs_aligned = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %init_aligned = resource<hal_binding> {index = 2, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %out_aligned = resource<hal_binding> {index = 3, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %lhs_view = OpPtrAccessChain.storage_buffer.f16.byte_offset %lhs_aligned, %byte_offset_aligned
+  %rhs_view = OpPtrAccessChain.storage_buffer.f16.byte_offset %rhs_aligned, %byte_offset_aligned
+  %init_view = OpPtrAccessChain.storage_buffer.f32.byte_offset %init_aligned, %byte_offset_aligned
+  %out_view = OpPtrAccessChain.storage_buffer.f32.byte_offset %out_aligned, %byte_offset_aligned
+  %lhs = OpCooperativeMatrixLoadKHR.lhs.f16.16x16x16.f32.subgroup.row_major %lhs_view
+  %rhs = OpCooperativeMatrixLoadKHR.rhs.f16.16x16x16.f32.subgroup.row_major %rhs_view
+  %init = OpCooperativeMatrixLoadKHR.init.f16.16x16x16.f32.subgroup.row_major %init_view
+  %result = OpCooperativeMatrixMulAddKHR.f16.16x16x16.f32.subgroup %lhs, %rhs, %init
+  OpCooperativeMatrixStoreKHR.result.f16.16x16x16.f32.subgroup.row_major %out_view, %result
+  return
+}
+
+// ====
+
+spirv.target<vulkan1_3> @hal_target_coop_bf16 {abi = hal_kernel, contract_feature_bits = 22790}
+
+kernel.def target(@hal_target_coop_bf16) @spirv_hal_cooperative_matrix_bf16(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer, %byte_offset: offset) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch {
+  %byte_offset_aligned = index.assume %byte_offset [mul(%byte_offset, 4)] : offset
+  %m = index.constant 16 : index
+  %n = index.constant 16 : index
+  %k = index.constant 16 : index
+  %lhs_aligned = buffer.assume.alignment %lhs_buffer {minimum_alignment = 4} : buffer
+  %rhs_aligned = buffer.assume.alignment %rhs_buffer {minimum_alignment = 4} : buffer
+  %init_aligned = buffer.assume.alignment %init_buffer {minimum_alignment = 4} : buffer
+  %out_aligned = buffer.assume.alignment %out_buffer {minimum_alignment = 4} : buffer
+  %lhs_view = buffer.view %lhs_aligned[%byte_offset_aligned] : buffer -> view<16x16xbf16, #dense>
+  %rhs_view = buffer.view %rhs_aligned[%byte_offset_aligned] : buffer -> view<16x16xbf16, #dense>
+  %init_view = buffer.view %init_aligned[%byte_offset_aligned] : buffer -> view<16x16xf32, #dense>
+  %out_view = buffer.view %out_aligned[%byte_offset_aligned] : buffer -> view<16x16xf32, #dense>
+  %lhs = vector.fragment.load<lhs> %lhs_view[0, 0] shape [%m, %k] : view<16x16xbf16, #dense> -> vector<16xbf16>
+  %rhs = vector.fragment.load<rhs> %rhs_view[0, 0] shape [%k, %n] : view<16x16xbf16, #dense> -> vector<16xbf16>
+  %init = vector.fragment.load<init> %init_view[0, 0] shape [%m, %n] : view<16x16xf32, #dense> -> vector<8xf32>
+  %result = vector.mma %lhs, %rhs, %init : vector<16xbf16>, vector<16xbf16>, vector<8xf32>
+  vector.fragment.store<result> %result, %out_view[0, 0] shape [%m, %n] : vector<8xf32>, view<16x16xf32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@hal_target_coop_bf16) workgroup_size(1, 1, 1) @spirv_hal_cooperative_matrix_bf16(%byte_offset_aligned: reg<spirv.offset64>) asm<spirv.logical.core> {
+  %lhs_aligned = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %rhs_aligned = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %init_aligned = resource<hal_binding> {index = 2, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %out_aligned = resource<hal_binding> {index = 3, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %lhs_view = OpPtrAccessChain.storage_buffer.bf16.byte_offset %lhs_aligned, %byte_offset_aligned
+  %rhs_view = OpPtrAccessChain.storage_buffer.bf16.byte_offset %rhs_aligned, %byte_offset_aligned
+  %init_view = OpPtrAccessChain.storage_buffer.f32.byte_offset %init_aligned, %byte_offset_aligned
+  %out_view = OpPtrAccessChain.storage_buffer.f32.byte_offset %out_aligned, %byte_offset_aligned
+  %lhs = OpCooperativeMatrixLoadKHR.lhs.bf16.16x16x16.f32.subgroup.row_major %lhs_view
+  %rhs = OpCooperativeMatrixLoadKHR.rhs.bf16.16x16x16.f32.subgroup.row_major %rhs_view
+  %init = OpCooperativeMatrixLoadKHR.init.bf16.16x16x16.f32.subgroup.row_major %init_view
+  %result = OpCooperativeMatrixMulAddKHR.bf16.16x16x16.f32.subgroup %lhs, %rhs, %init
+  OpCooperativeMatrixStoreKHR.result.bf16.16x16x16.f32.subgroup.row_major %out_view, %result
+  return
+}

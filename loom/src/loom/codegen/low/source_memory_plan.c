@@ -1032,10 +1032,12 @@ static bool loom_low_source_memory_operation_kind_from_op(
     const loom_op_t* source_op,
     loom_low_source_memory_operation_kind_t* out_operation_kind) {
   switch (source_op->kind) {
+    case LOOM_OP_VECTOR_FRAGMENT_LOAD:
     case LOOM_OP_VECTOR_LOAD:
     case LOOM_OP_VIEW_LOAD:
       *out_operation_kind = LOOM_LOW_SOURCE_MEMORY_OPERATION_LOAD;
       return true;
+    case LOOM_OP_VECTOR_FRAGMENT_STORE:
     case LOOM_OP_VECTOR_STORE:
     case LOOM_OP_VIEW_STORE:
       *out_operation_kind = LOOM_LOW_SOURCE_MEMORY_OPERATION_STORE;

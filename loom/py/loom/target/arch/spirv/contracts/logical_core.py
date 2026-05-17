@@ -32,7 +32,10 @@ from loom.target.arch.spirv.builtins import (
     BuiltinDimension,
     BuiltinIndexQuery,
 )
-from loom.target.arch.spirv.descriptors import SPIRV_LOGICAL_CORE_DESCRIPTOR_SET
+from loom.target.arch.spirv.descriptors import (
+    SPIRV_LOGICAL_CORE_DESCRIPTOR_SET,
+    cooperative_matrix_descriptor_key,
+)
 from loom.target.arch.spirv.scalar_alu import (
     FLOAT_BINARY_OPERATIONS,
     FLOAT_SCALAR_ALU_TYPES,
@@ -76,6 +79,7 @@ from loom.target.contracts import (
     TypePattern,
     ValueAliasRule,
     ValueRef,
+    Vector,
     View,
     descriptor_by_key,
     source_memory_minimum_alignment_param,
@@ -634,6 +638,238 @@ def _storage_buffer_source_memory(
     )
 
 
+def _cooperative_matrix_memory(
+    operation: SourceMemoryOperation,
+    *,
+    element_byte_width: int,
+    lane_count: int,
+) -> SourceMemoryConstraint:
+    return SourceMemoryConstraint(
+        operation=operation,
+        root_kind=SourceMemoryRootKind.ANY,
+        memory_spaces=_STORAGE_BUFFER_MEMORY_SPACES,
+        element_byte_count=element_byte_width,
+        vector_lane_count=lane_count,
+        vector_lane_byte_stride=element_byte_width,
+        static_byte_offset_minimum=-(2**63),
+        static_byte_offset_maximum=(2**63) - 1,
+        minimum_alignment=element_byte_width,
+        dynamic_term_count=None,
+        dynamic_index_source=SourceMemoryDynamicIndexSource.NONE,
+        diagnostic=_storage_buffer_alignment_diagnostic(element_byte_width),
+    )
+
+
+def _cooperative_matrix_zero_indices_guards() -> tuple[Guard, ...]:
+    return (
+        Guard.operand_segment_count("indices", 0),
+        Guard.i64_array_count("static_indices", 2),
+        Guard.i64_array_element_range("static_indices", 0, 0, 0),
+        Guard.i64_array_element_range("static_indices", 1, 0, 0),
+    )
+
+
+def _cooperative_matrix_shape_guards(
+    *,
+    rows: int,
+    columns: int,
+) -> tuple[Guard, ...]:
+    return (
+        Guard.value_i64_range("rows", rows, rows),
+        Guard.value_i64_range("columns", columns, columns),
+    )
+
+
+def _cooperative_matrix_load_rule(
+    *,
+    role: str,
+    descriptor_element: str,
+    view_element: str,
+    result_element: str,
+    result_lanes: int,
+    rows: int,
+    columns: int,
+    m_size: int,
+    n_size: int,
+    k_size: int,
+    accumulator: str,
+    element_byte_width: int,
+) -> DescriptorRule:
+    descriptor = _descriptor(
+        cooperative_matrix_descriptor_key(
+            "op_cooperative_matrix_load_khr",
+            role=role,
+            element=descriptor_element,
+            m_size=m_size,
+            n_size=n_size,
+            k_size=k_size,
+            accumulator=accumulator,
+            scope="subgroup",
+            layout="row_major",
+        )
+    )
+    return DescriptorRule(
+        source_op=vector.vector_fragment_load,
+        descriptor=descriptor,
+        guards=(
+            Guard.enum_attr_equals("role", role),
+            Guard.value_type("view", View(view_element)),
+            Guard.value_type("result", Vector(result_element, lanes=result_lanes)),
+            *_cooperative_matrix_shape_guards(rows=rows, columns=columns),
+            *_cooperative_matrix_zero_indices_guards(),
+            *_feature_guards(descriptor),
+        ),
+        emit=(
+            _descriptor_emit(
+                descriptor=descriptor,
+                operands={"ptr": ValueRef.operand("view")},
+                results={"dst": ValueRef.result("result")},
+                source_memory=_cooperative_matrix_memory(
+                    SourceMemoryOperation.LOAD,
+                    element_byte_width=element_byte_width,
+                    lane_count=result_lanes,
+                ),
+            ),
+        ),
+    )
+
+
+def _cooperative_matrix_store_rule(
+    *,
+    descriptor_element: str,
+    view_element: str,
+    value_element: str,
+    value_lanes: int,
+    rows: int,
+    columns: int,
+    m_size: int,
+    n_size: int,
+    k_size: int,
+    accumulator: str,
+    element_byte_width: int,
+) -> DescriptorRule:
+    descriptor = _descriptor(
+        cooperative_matrix_descriptor_key(
+            "op_cooperative_matrix_store_khr",
+            role="result",
+            element=descriptor_element,
+            m_size=m_size,
+            n_size=n_size,
+            k_size=k_size,
+            accumulator=accumulator,
+            scope="subgroup",
+            layout="row_major",
+        )
+    )
+    return DescriptorRule(
+        source_op=vector.vector_fragment_store,
+        descriptor=descriptor,
+        guards=(
+            Guard.enum_attr_equals("role", "result"),
+            Guard.value_type("view", View(view_element)),
+            Guard.value_type("value", Vector(value_element, lanes=value_lanes)),
+            *_cooperative_matrix_shape_guards(rows=rows, columns=columns),
+            *_cooperative_matrix_zero_indices_guards(),
+            *_feature_guards(descriptor),
+        ),
+        emit=(
+            _descriptor_emit(
+                descriptor=descriptor,
+                operands={
+                    "ptr": ValueRef.operand("view"),
+                    "value": ValueRef.operand("value"),
+                },
+                source_memory=_cooperative_matrix_memory(
+                    SourceMemoryOperation.STORE,
+                    element_byte_width=element_byte_width,
+                    lane_count=value_lanes,
+                ),
+            ),
+        ),
+    )
+
+
+def _cooperative_matrix_16x16x16_f32_rules(
+    element: str,
+    *,
+    element_byte_width: int,
+) -> tuple[DescriptorRule, ...]:
+    m_size = 16
+    n_size = 16
+    k_size = 16
+    accumulator = "f32"
+    return (
+        _cooperative_matrix_load_rule(
+            role="lhs",
+            descriptor_element=element,
+            view_element=element,
+            result_element=element,
+            result_lanes=16,
+            rows=16,
+            columns=16,
+            m_size=m_size,
+            n_size=n_size,
+            k_size=k_size,
+            accumulator=accumulator,
+            element_byte_width=element_byte_width,
+        ),
+        _cooperative_matrix_load_rule(
+            role="rhs",
+            descriptor_element=element,
+            view_element=element,
+            result_element=element,
+            result_lanes=16,
+            rows=16,
+            columns=16,
+            m_size=m_size,
+            n_size=n_size,
+            k_size=k_size,
+            accumulator=accumulator,
+            element_byte_width=element_byte_width,
+        ),
+        _cooperative_matrix_load_rule(
+            role="init",
+            descriptor_element=element,
+            view_element="f32",
+            result_element="f32",
+            result_lanes=8,
+            rows=16,
+            columns=16,
+            m_size=m_size,
+            n_size=n_size,
+            k_size=k_size,
+            accumulator=accumulator,
+            element_byte_width=4,
+        ),
+        _cooperative_matrix_store_rule(
+            descriptor_element=element,
+            view_element="f32",
+            value_element="f32",
+            value_lanes=8,
+            rows=16,
+            columns=16,
+            m_size=m_size,
+            n_size=n_size,
+            k_size=k_size,
+            accumulator=accumulator,
+            element_byte_width=4,
+        ),
+    )
+
+
+def _cooperative_matrix_rules() -> tuple[DescriptorRule, ...]:
+    return (
+        *_cooperative_matrix_16x16x16_f32_rules(
+            "f16",
+            element_byte_width=2,
+        ),
+        *_cooperative_matrix_16x16x16_f32_rules(
+            "bf16",
+            element_byte_width=2,
+        ),
+    )
+
+
 def _view_load_rule(scalar: StorageBufferScalar) -> DescriptorRule:
     scalar_type = Scalar(scalar.source_type)
     view_type = View(scalar.source_type)
@@ -881,6 +1117,7 @@ SPIRV_LOGICAL_CORE_CONTRACT_FRAGMENT = ContractFragment(
         *_compare_rules(),
         *_select_rules(),
         *_storage_buffer_rules(),
+        *_cooperative_matrix_rules(),
         DescriptorMatrixRule(
             source_op=vector.vector_mma,
             source="vector_mma",

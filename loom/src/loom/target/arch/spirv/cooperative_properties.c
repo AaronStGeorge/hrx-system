@@ -69,11 +69,12 @@
 static const loom_spirv_cooperative_matrix_property_t
     kCooperativeMatrixProperties[] = {
         MATRIX_PROPERTY("khr.cooperative_matrix.f16.16x16x16.f32.subgroup",
-                        LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR, 16, 16, 16,
-                        LOOM_SPIRV_SCALAR_TYPE_F16, LOOM_SPIRV_SCALAR_TYPE_F16,
-                        LOOM_SPIRV_SCALAR_TYPE_F32, LOOM_SPIRV_SCALAR_TYPE_F32,
-                        LOOM_SPIRV_SCOPE_SUBGROUP, MATRIX_LAYOUT_ANY,
-                        MATRIX_STORAGE_ANY, 0),
+                        LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR |
+                            LOOM_SPIRV_FEATURE_FLOAT16,
+                        16, 16, 16, LOOM_SPIRV_SCALAR_TYPE_F16,
+                        LOOM_SPIRV_SCALAR_TYPE_F16, LOOM_SPIRV_SCALAR_TYPE_F32,
+                        LOOM_SPIRV_SCALAR_TYPE_F32, LOOM_SPIRV_SCOPE_SUBGROUP,
+                        MATRIX_LAYOUT_ANY, MATRIX_STORAGE_ANY, 0),
         MATRIX_PROPERTY("khr.cooperative_matrix.bf16.16x16x16.f32.subgroup",
                         LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR |
                             LOOM_SPIRV_FEATURE_BFLOAT16_TYPE_KHR |

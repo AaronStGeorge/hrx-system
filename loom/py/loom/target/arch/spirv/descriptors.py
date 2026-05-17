@@ -14,6 +14,7 @@ from loom.target.arch.spirv.builtins import (
     BUILTIN_DIMENSIONS,
     BUILTIN_INDEX_QUERIES,
 )
+from loom.target.arch.spirv.features import feature_bits_value
 from loom.target.arch.spirv.scalar_alu import (
     FLOAT_BINARY_OPERATIONS,
     FLOAT_SCALAR_ALU_TYPES,
@@ -75,11 +76,13 @@ _REG_PTR_STORAGE_BUFFER = "spirv.ptr.storage_buffer"
 
 _RESOURCE_ALU = "spirv.alu"
 _RESOURCE_LOAD = "spirv.load"
+_RESOURCE_MATRIX = "spirv.matrix"
 _RESOURCE_STORE = "spirv.store"
 _RESOURCE_VARIABLE = "spirv.variable"
 
 _SCHEDULE_ALU = "spirv.alu"
 _SCHEDULE_LOAD = "spirv.load"
+_SCHEDULE_MATRIX = "spirv.matrix"
 _SCHEDULE_STORE = "spirv.store"
 _SCHEDULE_VARIABLE = "spirv.variable"
 
@@ -315,6 +318,21 @@ def _storage_buffer_effect(
     )
 
 
+def _cooperative_matrix_effect(
+    kind: EffectKind,
+    *,
+    byte_width: int,
+    rows: int,
+    columns: int,
+) -> Effect:
+    return Effect(
+        kind,
+        memory_space=MemorySpace.GLOBAL,
+        flags=(EffectFlag.DEPENDENCY,),
+        width_bits=byte_width * rows * columns * 8,
+    )
+
+
 def _ptr_access_chain_storage_buffer_descriptor(
     scalar: StorageBufferScalar,
 ) -> Descriptor:
@@ -369,6 +387,260 @@ def _storage_buffer_descriptors() -> tuple[Descriptor, ...]:
         descriptors.append(_load_storage_buffer_descriptor(scalar))
         descriptors.append(_store_storage_buffer_descriptor(scalar))
     return tuple(descriptors)
+
+
+def cooperative_matrix_descriptor_key(
+    op_name: str,
+    *,
+    role: str | None = None,
+    element: str,
+    m_size: int,
+    n_size: int,
+    k_size: int,
+    accumulator: str,
+    scope: str,
+    layout: str | None = None,
+) -> str:
+    role_part = f".{role}" if role else ""
+    layout_part = f".{layout}" if layout else ""
+    return (
+        f"spirv.{op_name}{role_part}.{element}."
+        f"m{m_size}n{n_size}k{k_size}.{accumulator}.{scope}{layout_part}"
+    )
+
+
+def _cooperative_matrix_load_descriptor(
+    *,
+    role: str,
+    element: str,
+    element_byte_width: int,
+    rows: int,
+    columns: int,
+    m_size: int,
+    n_size: int,
+    k_size: int,
+    accumulator: str,
+    feature_bits: int,
+) -> Descriptor:
+    key = cooperative_matrix_descriptor_key(
+        "op_cooperative_matrix_load_khr",
+        role=role,
+        element=element,
+        m_size=m_size,
+        n_size=n_size,
+        k_size=k_size,
+        accumulator=accumulator,
+        scope="subgroup",
+        layout="row_major",
+    )
+    return Descriptor(
+        key=key,
+        mnemonic=(
+            f"OpCooperativeMatrixLoadKHR.{role}.{element}."
+            f"{m_size}x{n_size}x{k_size}.{accumulator}.subgroup.row_major"
+        ),
+        semantic_tag=key,
+        operands=(_id_result(), _ptr_storage_buffer_operand("ptr")),
+        effects=(
+            _cooperative_matrix_effect(
+                EffectKind.READ,
+                byte_width=element_byte_width,
+                rows=rows,
+                columns=columns,
+            ),
+        ),
+        feature_mask_words=(feature_bits,),
+        asm_forms=_asm(results=("dst",), operands=("ptr",)),
+        schedule_class=_SCHEDULE_LOAD,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _cooperative_matrix_store_descriptor(
+    *,
+    element: str,
+    element_byte_width: int,
+    rows: int,
+    columns: int,
+    m_size: int,
+    n_size: int,
+    k_size: int,
+    accumulator: str,
+    feature_bits: int,
+) -> Descriptor:
+    key = cooperative_matrix_descriptor_key(
+        "op_cooperative_matrix_store_khr",
+        role="result",
+        element=element,
+        m_size=m_size,
+        n_size=n_size,
+        k_size=k_size,
+        accumulator=accumulator,
+        scope="subgroup",
+        layout="row_major",
+    )
+    return Descriptor(
+        key=key,
+        mnemonic=(
+            f"OpCooperativeMatrixStoreKHR.result.{element}."
+            f"{m_size}x{n_size}x{k_size}.{accumulator}.subgroup.row_major"
+        ),
+        semantic_tag=key,
+        operands=(_ptr_storage_buffer_operand("ptr"), _id_operand("value")),
+        effects=(
+            _cooperative_matrix_effect(
+                EffectKind.WRITE,
+                byte_width=element_byte_width,
+                rows=rows,
+                columns=columns,
+            ),
+        ),
+        feature_mask_words=(feature_bits,),
+        asm_forms=_asm(operands=("ptr", "value")),
+        schedule_class=_SCHEDULE_STORE,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _cooperative_matrix_mul_add_descriptor(
+    *,
+    element: str,
+    m_size: int,
+    n_size: int,
+    k_size: int,
+    accumulator: str,
+    feature_bits: int,
+) -> Descriptor:
+    key = cooperative_matrix_descriptor_key(
+        "op_cooperative_matrix_mul_add_khr",
+        element=element,
+        m_size=m_size,
+        n_size=n_size,
+        k_size=k_size,
+        accumulator=accumulator,
+        scope="subgroup",
+    )
+    return Descriptor(
+        key=key,
+        mnemonic=(
+            f"OpCooperativeMatrixMulAddKHR.{element}."
+            f"{m_size}x{n_size}x{k_size}.{accumulator}.subgroup"
+        ),
+        semantic_tag=key,
+        operands=(
+            _id_result(),
+            _id_operand("a"),
+            _id_operand("b"),
+            _id_operand("acc"),
+        ),
+        feature_mask_words=(feature_bits,),
+        asm_forms=_asm(results=("dst",), operands=("a", "b", "acc")),
+        schedule_class=_SCHEDULE_MATRIX,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _cooperative_matrix_16x16x16_f32_descriptors(
+    *,
+    element: str,
+    element_byte_width: int,
+    matrix_feature_bits: int,
+    storage_buffer_access_feature_bits: int,
+) -> tuple[Descriptor, ...]:
+    m_size = 16
+    n_size = 16
+    k_size = 16
+    accumulator = "f32"
+    memory_feature_bits = matrix_feature_bits | storage_buffer_access_feature_bits
+    return (
+        _cooperative_matrix_load_descriptor(
+            role="lhs",
+            element=element,
+            element_byte_width=element_byte_width,
+            rows=16,
+            columns=16,
+            m_size=m_size,
+            n_size=n_size,
+            k_size=k_size,
+            accumulator=accumulator,
+            feature_bits=memory_feature_bits,
+        ),
+        _cooperative_matrix_load_descriptor(
+            role="rhs",
+            element=element,
+            element_byte_width=element_byte_width,
+            rows=16,
+            columns=16,
+            m_size=m_size,
+            n_size=n_size,
+            k_size=k_size,
+            accumulator=accumulator,
+            feature_bits=memory_feature_bits,
+        ),
+        _cooperative_matrix_load_descriptor(
+            role="init",
+            element=element,
+            element_byte_width=4,
+            rows=16,
+            columns=16,
+            m_size=m_size,
+            n_size=n_size,
+            k_size=k_size,
+            accumulator=accumulator,
+            feature_bits=matrix_feature_bits,
+        ),
+        _cooperative_matrix_mul_add_descriptor(
+            element=element,
+            m_size=m_size,
+            n_size=n_size,
+            k_size=k_size,
+            accumulator=accumulator,
+            feature_bits=matrix_feature_bits,
+        ),
+        _cooperative_matrix_store_descriptor(
+            element=element,
+            element_byte_width=4,
+            rows=16,
+            columns=16,
+            m_size=m_size,
+            n_size=n_size,
+            k_size=k_size,
+            accumulator=accumulator,
+            feature_bits=matrix_feature_bits,
+        ),
+    )
+
+
+def _cooperative_matrix_descriptors() -> tuple[Descriptor, ...]:
+    return (
+        *_cooperative_matrix_16x16x16_f32_descriptors(
+            element="f16",
+            element_byte_width=2,
+            matrix_feature_bits=feature_bits_value(
+                (
+                    "cooperative_matrix_khr",
+                    "float16",
+                )
+            ),
+            storage_buffer_access_feature_bits=feature_bits_value(
+                ("storage_buffer_16bit_access",)
+            ),
+        ),
+        *_cooperative_matrix_16x16x16_f32_descriptors(
+            element="bf16",
+            element_byte_width=2,
+            matrix_feature_bits=feature_bits_value(
+                (
+                    "cooperative_matrix_khr",
+                    "bfloat16_type_khr",
+                    "bfloat16_cooperative_matrix_khr",
+                )
+            ),
+            storage_buffer_access_feature_bits=feature_bits_value(
+                ("storage_buffer_16bit_access",)
+            ),
+        ),
+    )
 
 
 def _scalar_binary_descriptor(
@@ -534,6 +806,7 @@ SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
     resources=(
         Resource(_RESOURCE_ALU, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),
         Resource(_RESOURCE_LOAD, capacity_per_cycle=1, kind=ResourceKind.LOAD),
+        Resource(_RESOURCE_MATRIX, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
         Resource(_RESOURCE_STORE, capacity_per_cycle=1, kind=ResourceKind.STORE),
         Resource(_RESOURCE_VARIABLE, capacity_per_cycle=1, kind=ResourceKind.ADDRESS),
     ),
@@ -551,6 +824,13 @@ SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
             latency_cycles=4,
             issue_uses=(IssueUse(_RESOURCE_LOAD, cycles=1, units=1),),
             flags=(ScheduleClassFlag.MAY_LOAD,),
+            model_quality=ModelQuality.ESTIMATED,
+        ),
+        ScheduleClass(
+            _SCHEDULE_MATRIX,
+            latency_kind=LatencyKind.ESTIMATE,
+            latency_cycles=4,
+            issue_uses=(IssueUse(_RESOURCE_MATRIX, cycles=1, units=1),),
             model_quality=ModelQuality.ESTIMATED,
         ),
         ScheduleClass(
@@ -645,6 +925,7 @@ SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
         *_compare_descriptors(),
         *_select_descriptors(),
         *_storage_buffer_descriptors(),
+        *_cooperative_matrix_descriptors(),
         Descriptor(
             key="spirv.op_variable.function.ptr",
             mnemonic="OpVariable.function.ptr",

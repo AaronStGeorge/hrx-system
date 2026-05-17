@@ -281,6 +281,7 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/func",
         "//loom/src/loom/ops/kernel",
+        "//loom/src/loom/ops/vector",
         "//loom/src/loom/target:registers",
         "//loom/src/loom/target/arch/spirv/contracts:logical_core",
         "//loom/src/loom/target/arch/spirv/contracts:logical_core_lower_rules",
