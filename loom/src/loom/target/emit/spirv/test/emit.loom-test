@@ -146,10 +146,13 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
   %input_view = OpPtrAccessChain.storage_buffer.i32.byte_offset %input, %selected_offset
   %loaded = OpLoad.storage_buffer.i32 %input_view
   %zero = OpConstant.i32 0
+  %one = OpConstant.i32 1
   %positive = OpSGreaterThan %loaded, %zero
   %selected = OpSelect %positive, %loaded, %zero
+  %quotient = OpSDiv %selected, %one
+  %remainder = OpSRem %quotient, %one
   %output_view = OpPtrAccessChain.storage_buffer.i32.byte_offset %output, %selected_offset
-  OpStore.storage_buffer.i32 %output_view, %selected
+  OpStore.storage_buffer.i32 %output_view, %remainder
   return
 }
 
@@ -172,8 +175,11 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
                OpName %input_view "input_view"
                OpName %loaded "loaded"
                OpName %zero "zero"
+               OpName %one "one"
                OpName %positive "positive"
                OpName %selected "selected"
+               OpName %quotient "quotient"
+               OpName %remainder "remainder"
                OpName %output_view "output_view"
                OpModuleProcessed "iree.vulkan.bda.v1"
                OpModuleProcessed "iree.vulkan.bda.v1.root=0,32"
@@ -220,6 +226,7 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
        %bool = OpTypeBool
 %_ptr_PhysicalStorageBuffer_int = OpTypePointer PhysicalStorageBuffer %int
        %zero = OpConstant %int 0
+        %one = OpConstant %int 1
 %spirv_raw_bda_storage_buffer_i32_select = OpFunction %void None %10
          %11 = OpLabel
          %16 = OpAccessChain %_ptr_PushConstant_uint %8 %int_6 %int_0
@@ -255,9 +262,11 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
      %loaded = OpLoad %int %input_view Aligned 4
    %positive = OpSGreaterThan %bool %loaded %zero
    %selected = OpSelect %int %positive %loaded %zero
-         %63 = OpConvertUToPtr %_ptr_PhysicalStorageBuffer_int %output
-%output_view = OpPtrAccessChain %_ptr_PhysicalStorageBuffer_int %63 %selected_offset
-               OpStore %output_view %selected Aligned 4
+   %quotient = OpSDiv %int %selected %one
+  %remainder = OpSRem %int %quotient %one
+         %66 = OpConvertUToPtr %_ptr_PhysicalStorageBuffer_int %output
+%output_view = OpPtrAccessChain %_ptr_PhysicalStorageBuffer_int %66 %selected_offset
+               OpStore %output_view %remainder Aligned 4
                OpReturn
                OpFunctionEnd
 
@@ -273,8 +282,12 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
   %output = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
   %input_view = OpPtrAccessChain.storage_buffer.f32.byte_offset %input, %byte_offset
   %loaded = OpLoad.storage_buffer.f32 %input_view
+  %sum = OpFAdd.f32 %loaded, %loaded
+  %product = OpFMul.f32 %sum, %loaded
+  %quotient = OpFDiv.f32 %product, %loaded
+  %remainder = OpFRem.f32 %quotient, %loaded
   %output_view = OpPtrAccessChain.storage_buffer.f32.byte_offset %output, %byte_offset
-  OpStore.storage_buffer.f32 %output_view, %loaded
+  OpStore.storage_buffer.f32 %output_view, %remainder
   return
 }
 
@@ -292,6 +305,10 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
                OpName %output "output"
                OpName %input_view "input_view"
                OpName %loaded "loaded"
+               OpName %sum "sum"
+               OpName %product "product"
+               OpName %quotient "quotient"
+               OpName %remainder "remainder"
                OpName %output_view "output_view"
                OpModuleProcessed "iree.vulkan.bda.v1"
                OpModuleProcessed "iree.vulkan.bda.v1.root=0,32"
@@ -358,9 +375,13 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
          %45 = OpConvertUToPtr %_ptr_PhysicalStorageBuffer_float %input
  %input_view = OpPtrAccessChain %_ptr_PhysicalStorageBuffer_float %45 %byte_offset
      %loaded = OpLoad %float %input_view Aligned 4
-         %48 = OpConvertUToPtr %_ptr_PhysicalStorageBuffer_float %output
-%output_view = OpPtrAccessChain %_ptr_PhysicalStorageBuffer_float %48 %byte_offset
-               OpStore %output_view %loaded Aligned 4
+        %sum = OpFAdd %float %loaded %loaded
+    %product = OpFMul %float %sum %loaded
+   %quotient = OpFDiv %float %product %loaded
+  %remainder = OpFRem %float %quotient %loaded
+         %52 = OpConvertUToPtr %_ptr_PhysicalStorageBuffer_float %output
+%output_view = OpPtrAccessChain %_ptr_PhysicalStorageBuffer_float %52 %byte_offset
+               OpStore %output_view %remainder Aligned 4
                OpReturn
                OpFunctionEnd
 
@@ -376,8 +397,11 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
   %output = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
   %input_view = OpPtrAccessChain.storage_buffer.i64.byte_offset %input, %byte_offset
   %loaded = OpLoad.storage_buffer.i64 %input_view
+  %sum = OpIAdd.i64 %loaded, %loaded
+  %larger = OpSGreaterThan.i64 %sum, %loaded
+  %selected = OpSelect.i64 %larger, %sum, %loaded
   %output_view = OpPtrAccessChain.storage_buffer.i64.byte_offset %output, %byte_offset
-  OpStore.storage_buffer.i64 %output_view, %loaded
+  OpStore.storage_buffer.i64 %output_view, %selected
   return
 }
 
@@ -395,6 +419,9 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
                OpName %output "output"
                OpName %input_view "input_view"
                OpName %loaded "loaded"
+               OpName %sum "sum"
+               OpName %larger "larger"
+               OpName %selected "selected"
                OpName %output_view "output_view"
                OpModuleProcessed "iree.vulkan.bda.v1"
                OpModuleProcessed "iree.vulkan.bda.v1.root=0,32"
@@ -438,6 +465,7 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
      %uint_1 = OpConstant %uint 1
        %long = OpTypeInt 64 1
 %_ptr_PhysicalStorageBuffer_long = OpTypePointer PhysicalStorageBuffer %long
+       %bool = OpTypeBool
 %spirv_raw_bda_storage_buffer_i64_copy = OpFunction %void None %10
          %11 = OpLabel
          %16 = OpAccessChain %_ptr_PushConstant_uint %8 %int_6 %int_0
@@ -461,9 +489,12 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
          %45 = OpConvertUToPtr %_ptr_PhysicalStorageBuffer_long %input
  %input_view = OpPtrAccessChain %_ptr_PhysicalStorageBuffer_long %45 %byte_offset
      %loaded = OpLoad %long %input_view Aligned 8
-         %48 = OpConvertUToPtr %_ptr_PhysicalStorageBuffer_long %output
-%output_view = OpPtrAccessChain %_ptr_PhysicalStorageBuffer_long %48 %byte_offset
-               OpStore %output_view %loaded Aligned 8
+        %sum = OpIAdd %long %loaded %loaded
+     %larger = OpSGreaterThan %bool %sum %loaded
+   %selected = OpSelect %long %larger %sum %loaded
+         %52 = OpConvertUToPtr %_ptr_PhysicalStorageBuffer_long %output
+%output_view = OpPtrAccessChain %_ptr_PhysicalStorageBuffer_long %52 %byte_offset
+               OpStore %output_view %selected Aligned 8
                OpReturn
                OpFunctionEnd
 

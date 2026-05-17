@@ -28,8 +28,16 @@ from loom.target.arch.spirv.descriptors import (  # noqa: E402
     SPIRV_LOGICAL_CORE_DESCRIPTOR_SET,
 )
 from loom.target.arch.spirv.scalar_alu import (  # noqa: E402
+    FLOAT_BINARY_OPERATIONS,
+    FLOAT_SCALAR_ALU_TYPES,
+    INTEGER_BINARY_OPERATIONS,
     INTEGER_COMPARE_PREDICATES,
+    INTEGER_SCALAR_ALU_TYPES,
+    OFFSET64_ALU_TYPE,
+    SCALAR_ALU_TYPES,
     UNSIGNED_INTEGER_COMPARE_PREDICATES,
+    ScalarAluType,
+    ScalarBinaryOperation,
 )
 from loom.target.arch.spirv.scalar_memory import (  # noqa: E402
     STORAGE_BUFFER_SCALARS,
@@ -60,6 +68,10 @@ def _value_type(
 
 
 def _scalar_value(scalar: StorageBufferScalar) -> str:
+    return _value_type("LOOM_SPIRV_VALUE_CLASS_SCALAR", scalar.scalar_enum)
+
+
+def _alu_scalar_value(scalar: ScalarAluType) -> str:
     return _value_type("LOOM_SPIRV_VALUE_CLASS_SCALAR", scalar.scalar_enum)
 
 
@@ -168,34 +180,27 @@ def _storage_buffer_rows() -> list[str]:
     return rows
 
 
-def _binary_same_type_rows() -> list[str]:
-    i32_value = _value_type("LOOM_SPIRV_VALUE_CLASS_SCALAR", "LOOM_SPIRV_SCALAR_TYPE_S32")
+def _scalar_binary_row(scalar: ScalarAluType, operation: ScalarBinaryOperation) -> str:
+    scalar_value = _alu_scalar_value(scalar)
+    return _row(
+        f"spirv.op_{operation.descriptor_suffix}.{scalar.suffix}",
+        opcode=operation.opcode,
+        form="LOOM_SPIRV_PACKET_FORM_BINARY_SAME_TYPE",
+        result_type=scalar_value,
+        operand_types=(scalar_value, scalar_value),
+        result_count=1,
+    )
+
+
+def _scalar_binary_rows() -> list[str]:
+    rows = [_scalar_binary_row(scalar, operation) for scalar in INTEGER_SCALAR_ALU_TYPES for operation in INTEGER_BINARY_OPERATIONS]
+    rows.extend(_scalar_binary_row(scalar, operation) for scalar in FLOAT_SCALAR_ALU_TYPES for operation in FLOAT_BINARY_OPERATIONS)
+    return rows
+
+
+def _coordinate_binary_rows() -> list[str]:
     offset64_value = _offset64_value()
     rows = [
-        _row(
-            "spirv.op_iadd.i32",
-            opcode="LOOM_SPIRV_OP_I_ADD",
-            form="LOOM_SPIRV_PACKET_FORM_BINARY_SAME_TYPE",
-            result_type=i32_value,
-            operand_types=(i32_value, i32_value),
-            result_count=1,
-        ),
-        _row(
-            "spirv.op_isub.i32",
-            opcode="LOOM_SPIRV_OP_I_SUB",
-            form="LOOM_SPIRV_PACKET_FORM_BINARY_SAME_TYPE",
-            result_type=i32_value,
-            operand_types=(i32_value, i32_value),
-            result_count=1,
-        ),
-        _row(
-            "spirv.op_imul.i32",
-            opcode="LOOM_SPIRV_OP_I_MUL",
-            form="LOOM_SPIRV_PACKET_FORM_BINARY_SAME_TYPE",
-            result_type=i32_value,
-            operand_types=(i32_value, i32_value),
-            result_count=1,
-        ),
         _row(
             "spirv.op_iadd.offset64",
             opcode="LOOM_SPIRV_OP_I_ADD",
@@ -231,18 +236,18 @@ def _mul_add_rows() -> list[str]:
 
 
 def _integer_compare_rows() -> list[str]:
-    i32_value = _value_type("LOOM_SPIRV_VALUE_CLASS_SCALAR", "LOOM_SPIRV_SCALAR_TYPE_S32")
     offset64_value = _offset64_value()
     bool_value = _bool_value()
     rows = [
         _row(
-            f"spirv.op_{predicate.descriptor_suffix}.i32",
+            f"spirv.op_{predicate.descriptor_suffix}.{scalar.suffix}",
             opcode=predicate.opcode,
             form="LOOM_SPIRV_PACKET_FORM_COMPARE_SAME_TYPE",
             result_type=bool_value,
-            operand_types=(i32_value, i32_value),
+            operand_types=(_alu_scalar_value(scalar), _alu_scalar_value(scalar)),
             result_count=1,
         )
+        for scalar in INTEGER_SCALAR_ALU_TYPES
         for predicate in INTEGER_COMPARE_PREDICATES
     ]
     rows.extend(
@@ -262,18 +267,24 @@ def _integer_compare_rows() -> list[str]:
 
 
 def _select_rows() -> list[str]:
-    i32_value = _value_type("LOOM_SPIRV_VALUE_CLASS_SCALAR", "LOOM_SPIRV_SCALAR_TYPE_S32")
     offset64_value = _offset64_value()
     bool_value = _bool_value()
-    return [
+    rows = [
         _row(
-            "spirv.op_select.i32",
+            f"spirv.op_select.{scalar.suffix}",
             opcode="LOOM_SPIRV_OP_SELECT",
             form="LOOM_SPIRV_PACKET_FORM_SELECT",
-            result_type=i32_value,
-            operand_types=(bool_value, i32_value, i32_value),
+            result_type=_alu_scalar_value(scalar),
+            operand_types=(
+                bool_value,
+                _alu_scalar_value(scalar),
+                _alu_scalar_value(scalar),
+            ),
             result_count=1,
-        ),
+        )
+        for scalar in SCALAR_ALU_TYPES
+    ]
+    rows.append(
         _row(
             "spirv.op_select.offset64",
             opcode="LOOM_SPIRV_OP_SELECT",
@@ -281,8 +292,9 @@ def _select_rows() -> list[str]:
             result_type=offset64_value,
             operand_types=(bool_value, offset64_value, offset64_value),
             result_count=1,
-        ),
-    ]
+        )
+    )
+    return rows
 
 
 def _validate_rows() -> None:
@@ -290,23 +302,27 @@ def _validate_rows() -> None:
     row_keys = {
         "spirv.op_constant.i32",
         "spirv.op_constant.offset64",
-        "spirv.op_iadd.i32",
-        "spirv.op_isub.i32",
-        "spirv.op_imul.i32",
         "spirv.op_imul_add.i32",
         "spirv.op_iadd.offset64",
         "spirv.op_isub.offset64",
-        "spirv.op_select.i32",
         "spirv.op_select.offset64",
     }
-    for predicate in INTEGER_COMPARE_PREDICATES:
-        row_keys.add(f"spirv.op_{predicate.descriptor_suffix}.i32")
+    for scalar in INTEGER_SCALAR_ALU_TYPES:
+        for operation in INTEGER_BINARY_OPERATIONS:
+            row_keys.add(f"spirv.op_{operation.descriptor_suffix}.{scalar.suffix}")
+        for predicate in INTEGER_COMPARE_PREDICATES:
+            row_keys.add(f"spirv.op_{predicate.descriptor_suffix}.{scalar.suffix}")
+    for scalar in FLOAT_SCALAR_ALU_TYPES:
+        for operation in FLOAT_BINARY_OPERATIONS:
+            row_keys.add(f"spirv.op_{operation.descriptor_suffix}.{scalar.suffix}")
+    for scalar in SCALAR_ALU_TYPES:
+        row_keys.add(f"spirv.op_select.{scalar.suffix}")
     for predicate in UNSIGNED_INTEGER_COMPARE_PREDICATES:
-        row_keys.add(f"spirv.op_{predicate.descriptor_suffix}.offset64")
-    for scalar in STORAGE_BUFFER_SCALARS:
-        row_keys.add(f"spirv.op_ptr_access_chain.storage_buffer.{scalar.suffix}.byte_offset")
-        row_keys.add(f"spirv.op_load.storage_buffer.{scalar.suffix}")
-        row_keys.add(f"spirv.op_store.storage_buffer.{scalar.suffix}")
+        row_keys.add(f"spirv.op_{predicate.descriptor_suffix}.{OFFSET64_ALU_TYPE.suffix}")
+    for storage_scalar in STORAGE_BUFFER_SCALARS:
+        row_keys.add(f"spirv.op_ptr_access_chain.storage_buffer.{storage_scalar.suffix}.byte_offset")
+        row_keys.add(f"spirv.op_load.storage_buffer.{storage_scalar.suffix}")
+        row_keys.add(f"spirv.op_store.storage_buffer.{storage_scalar.suffix}")
     missing = sorted(row_keys - descriptor_keys)
     if missing:
         raise ValueError("SPIR-V packet rows reference missing descriptors: " + ", ".join(missing))
@@ -337,7 +353,8 @@ def generate_tables() -> str:
             immediate_index=0,
             literal_word_count=2,
         ),
-        *_binary_same_type_rows(),
+        *_scalar_binary_rows(),
+        *_coordinate_binary_rows(),
         *_mul_add_rows(),
         *_integer_compare_rows(),
         *_select_rows(),

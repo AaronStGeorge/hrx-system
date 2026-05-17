@@ -39,6 +39,10 @@ def test_generation_emits_coordinate_arithmetic_packet_rows() -> None:
     tables = generate_tables()
 
     assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_ISUB_I32" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_FADD_F32" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_FMUL_F64" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_SDIV_I16" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_SREM_I64" in tables
     assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_IMUL_I32" in tables
     assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_IMUL_ADD_I32" in tables
     assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_ISUB_OFFSET64" in tables
@@ -49,7 +53,11 @@ def test_generation_emits_integer_compare_and_select_rows() -> None:
     tables = generate_tables()
 
     assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_S_LESS_THAN_I32" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_S_GREATER_THAN_I64" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_U_LESS_THAN_I8" in tables
     assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_U_LESS_THAN_EQUAL_OFFSET64" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_SELECT_F32" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_SELECT_I64" in tables
     assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_SELECT_I32" in tables
     assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_SELECT_OFFSET64" in tables
     assert "LOOM_SPIRV_VALUE_CLASS_BOOL" in tables

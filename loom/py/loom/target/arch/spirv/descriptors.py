@@ -11,9 +11,17 @@ from __future__ import annotations
 from pathlib import Path
 
 from loom.target.arch.spirv.scalar_alu import (
+    FLOAT_BINARY_OPERATIONS,
+    FLOAT_SCALAR_ALU_TYPES,
+    INTEGER_BINARY_OPERATIONS,
     INTEGER_COMPARE_PREDICATES,
+    INTEGER_SCALAR_ALU_TYPES,
+    OFFSET64_ALU_TYPE,
+    SCALAR_ALU_TYPES,
     UNSIGNED_INTEGER_COMPARE_PREDICATES,
     IntegerComparePredicate,
+    ScalarAluType,
+    ScalarBinaryOperation,
 )
 from loom.target.arch.spirv.scalar_memory import (
     STORAGE_BUFFER_SCALARS,
@@ -138,12 +146,14 @@ def _binary_same_type_descriptor(
     mnemonic: str,
     semantic_tag: str,
     operands: tuple[Operand, Operand, Operand],
+    feature_bits: int = 0,
 ) -> Descriptor:
     return Descriptor(
         key=key,
         mnemonic=mnemonic,
         semantic_tag=semantic_tag,
         operands=operands,
+        feature_mask_words=(feature_bits,) if feature_bits else (),
         asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
         schedule_class=_SCHEDULE_ALU,
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
@@ -153,9 +163,10 @@ def _binary_same_type_descriptor(
 def _compare_descriptor(
     predicate: IntegerComparePredicate,
     *,
-    suffix: str,
+    scalar: ScalarAluType,
     operands: tuple[Operand, Operand, Operand],
 ) -> Descriptor:
+    suffix = scalar.suffix
     key = f"spirv.op_{predicate.descriptor_suffix}.{suffix}"
     mnemonic = (
         predicate.mnemonic if suffix == "i32" else f"{predicate.mnemonic}.{suffix}"
@@ -165,6 +176,7 @@ def _compare_descriptor(
         mnemonic=mnemonic,
         semantic_tag=key,
         operands=operands,
+        feature_mask_words=(scalar.feature_bits,) if scalar.feature_bits else (),
         asm_forms=_asm(results=("dst",), operands=("lhs", "rhs")),
         schedule_class=_SCHEDULE_ALU,
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
@@ -176,12 +188,14 @@ def _select_descriptor(
     key: str,
     mnemonic: str,
     operands: tuple[Operand, Operand, Operand, Operand],
+    feature_bits: int = 0,
 ) -> Descriptor:
     return Descriptor(
         key=key,
         mnemonic=mnemonic,
         semantic_tag=key,
         operands=operands,
+        feature_mask_words=(feature_bits,) if feature_bits else (),
         asm_forms=_asm(
             results=("dst",),
             operands=("condition", "true_value", "false_value"),
@@ -277,24 +291,58 @@ def _storage_buffer_descriptors() -> tuple[Descriptor, ...]:
     return tuple(descriptors)
 
 
+def _scalar_binary_descriptor(
+    scalar: ScalarAluType,
+    operation: ScalarBinaryOperation,
+) -> Descriptor:
+    key = f"spirv.op_{operation.descriptor_suffix}.{scalar.suffix}"
+    mnemonic = (
+        operation.mnemonic
+        if scalar.suffix == "i32"
+        else f"{operation.mnemonic}.{scalar.suffix}"
+    )
+    return _binary_same_type_descriptor(
+        key=key,
+        mnemonic=mnemonic,
+        semantic_tag=key,
+        operands=(_id_result(), _id_operand("lhs"), _id_operand("rhs")),
+        feature_bits=scalar.feature_bits,
+    )
+
+
+def _scalar_binary_descriptors() -> tuple[Descriptor, ...]:
+    descriptors = [
+        _scalar_binary_descriptor(scalar, operation)
+        for scalar in INTEGER_SCALAR_ALU_TYPES
+        for operation in INTEGER_BINARY_OPERATIONS
+    ]
+    descriptors.extend(
+        _scalar_binary_descriptor(scalar, operation)
+        for scalar in FLOAT_SCALAR_ALU_TYPES
+        for operation in FLOAT_BINARY_OPERATIONS
+    )
+    return tuple(descriptors)
+
+
 def _compare_descriptors() -> tuple[Descriptor, ...]:
     descriptors = [
         _compare_descriptor(
             predicate,
-            suffix="i32",
+            scalar=scalar,
             operands=(
                 _id_result(),
                 _id_operand("lhs"),
                 _id_operand("rhs"),
             ),
         )
+        for scalar in INTEGER_SCALAR_ALU_TYPES
         for predicate in INTEGER_COMPARE_PREDICATES
     ]
     descriptors.extend(
         [
             _compare_descriptor(
                 predicate,
-                suffix="offset64",
+                scalar=OFFSET64_ALU_TYPE,
                 operands=(
                     _id_result(),
                     _offset64_operand("lhs"),
@@ -303,6 +351,38 @@ def _compare_descriptors() -> tuple[Descriptor, ...]:
             )
             for predicate in UNSIGNED_INTEGER_COMPARE_PREDICATES
         ]
+    )
+    return tuple(descriptors)
+
+
+def _select_descriptors() -> tuple[Descriptor, ...]:
+    descriptors = [
+        _select_descriptor(
+            key=f"spirv.op_select.{scalar.suffix}",
+            mnemonic="OpSelect"
+            if scalar.suffix == "i32"
+            else f"OpSelect.{scalar.suffix}",
+            operands=(
+                _id_result(),
+                _id_operand("condition"),
+                _id_operand("true_value"),
+                _id_operand("false_value"),
+            ),
+            feature_bits=scalar.feature_bits,
+        )
+        for scalar in SCALAR_ALU_TYPES
+    ]
+    descriptors.append(
+        _select_descriptor(
+            key="spirv.op_select.offset64",
+            mnemonic="OpSelect.offset64",
+            operands=(
+                _offset64_result(),
+                _id_operand("condition"),
+                _offset64_operand("true_value"),
+                _offset64_operand("false_value"),
+            ),
+        )
     )
     return tuple(descriptors)
 
@@ -410,24 +490,7 @@ SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
             schedule_class=_SCHEDULE_ALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
-        _binary_same_type_descriptor(
-            key="spirv.op_iadd.i32",
-            mnemonic="OpIAdd",
-            semantic_tag="spirv.op_iadd.i32",
-            operands=(_id_result(), _id_operand("lhs"), _id_operand("rhs")),
-        ),
-        _binary_same_type_descriptor(
-            key="spirv.op_isub.i32",
-            mnemonic="OpISub",
-            semantic_tag="spirv.op_isub.i32",
-            operands=(_id_result(), _id_operand("lhs"), _id_operand("rhs")),
-        ),
-        _binary_same_type_descriptor(
-            key="spirv.op_imul.i32",
-            mnemonic="OpIMul",
-            semantic_tag="spirv.op_imul.i32",
-            operands=(_id_result(), _id_operand("lhs"), _id_operand("rhs")),
-        ),
+        *_scalar_binary_descriptors(),
         _ternary_same_type_descriptor(
             key="spirv.op_imul_add.i32",
             mnemonic="OpIMulAdd",
@@ -460,26 +523,7 @@ SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
             ),
         ),
         *_compare_descriptors(),
-        _select_descriptor(
-            key="spirv.op_select.i32",
-            mnemonic="OpSelect",
-            operands=(
-                _id_result(),
-                _id_operand("condition"),
-                _id_operand("true_value"),
-                _id_operand("false_value"),
-            ),
-        ),
-        _select_descriptor(
-            key="spirv.op_select.offset64",
-            mnemonic="OpSelect.offset64",
-            operands=(
-                _offset64_result(),
-                _id_operand("condition"),
-                _offset64_operand("true_value"),
-                _offset64_operand("false_value"),
-            ),
-        ),
+        *_select_descriptors(),
         *_storage_buffer_descriptors(),
         Descriptor(
             key="spirv.op_variable.function.ptr",

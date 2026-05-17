@@ -3,9 +3,19 @@
 spirv.target<vulkan1_3> @target
 
 func.def target(@target) @unsupported_source_op(%lhs: i32, %rhs: i32) -> (i32) {
-  // ERROR@+1: TARGET/001 {op_name="scalar.divsi"}
-  %quotient = scalar.divsi %lhs, %rhs : i32
+  // ERROR@+1: TARGET/001 {op_name="scalar.divui"}
+  %quotient = scalar.divui %lhs, %rhs : i32
   func.return %quotient : i32
+}
+
+// ====
+
+spirv.target<vulkan1_3> @target
+
+func.def target(@target) @unsupported_semantic_math(%input: f32) -> (f32) {
+  // ERROR@+1: LOWERING/036 {op_name="scalar.logisticf", phase_name="legalize-math", policy_name="spirv-math", math_op="logisticf", lane_domain="scalar", element_type="f32", constraint_key="math.op.native_arithmetic"}
+  %result = scalar.logisticf %input : f32
+  func.return %result : f32
 }
 
 // ====

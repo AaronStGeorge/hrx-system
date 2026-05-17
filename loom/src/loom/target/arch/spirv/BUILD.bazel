@@ -37,6 +37,7 @@ loom_assert_no_dependencies(
         ":isa",
         ":lower",
         ":low_registry",
+        ":math_policy",
         ":provider",
         ":scalar_types",
         ":target_records",
@@ -215,6 +216,17 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "math_policy",
+    srcs = ["math_policy.c"],
+    hdrs = ["math_policy.h"],
+    textual_hdrs = ["math_policy_tables.inl"],
+    deps = [
+        "//loom/src/loom/target:math_policy",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "low_registry",
     srcs = ["low_registry.c"],
     hdrs = ["low_registry.h"],
@@ -260,6 +272,7 @@ loom_cc_library(
     deps = [
         ":low_registry",
         ":lower",
+        ":math_policy",
         ":ops",
         "//loom/src/loom/target:provider",
         "//runtime/src/iree/base",

@@ -61,6 +61,8 @@ iree_py_library(
   SRCS
     "__init__.py"
     "scalar_alu.py"
+  DEPS
+    iree::runtime::py::loom::target::arch::spirv::features
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

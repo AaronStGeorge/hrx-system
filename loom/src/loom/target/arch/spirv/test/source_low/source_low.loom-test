@@ -7,7 +7,9 @@ func.def target(@target) @spirv_i32_arithmetic(%lhs: i32, %rhs: i32) -> (i32) {
   %sum = scalar.addi %lhs, %rhs : i32
   %difference = scalar.subi %lhs, %rhs : i32
   %product = scalar.muli %difference, %sum : i32
-  %result = scalar.addi %product, %bias : i32
+  %signed_quotient = scalar.divsi %product, %bias : i32
+  %signed_remainder = scalar.remsi %signed_quotient, %bias : i32
+  %result = scalar.addi %signed_remainder, %bias : i32
   func.return %result : i32
 }
 
@@ -17,7 +19,9 @@ low.func.def target(@target) abi(shader_entry_point) @spirv_i32_arithmetic(%lhs:
   %sum = OpIAdd %lhs, %rhs
   %difference = OpISub %lhs, %rhs
   %product = OpIMul %difference, %sum
-  %result = OpIAdd %product, %bias
+  %signed_quotient = OpSDiv %product, %bias
+  %signed_remainder = OpSRem %signed_quotient, %bias
+  %result = OpIAdd %signed_remainder, %bias
   return %result
 }
 
@@ -160,8 +164,12 @@ kernel.def target(@hal_target) @spirv_hal_resource_storage_buffer_f32(%input: bu
 } launch {
   %input_view = buffer.view %input[%byte_offset] : buffer -> view<1xf32, #dense>
   %loaded = view.load %input_view[0] : view<1xf32, #dense> -> f32
+  %sum = scalar.addf %loaded, %loaded : f32
+  %product = scalar.mulf %sum, %loaded : f32
+  %quotient = scalar.divf %product, %loaded : f32
+  %remainder = scalar.remf %quotient, %loaded : f32
   %output_view = buffer.view %output[%byte_offset] : buffer -> view<1xf32, #dense>
-  view.store %loaded, %output_view[0] : f32, view<1xf32, #dense>
+  view.store %remainder, %output_view[0] : f32, view<1xf32, #dense>
   kernel.return
 }
 
@@ -171,8 +179,12 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_hal_resource_s
   %output = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
   %input_view = OpPtrAccessChain.storage_buffer.f32.byte_offset %input, %byte_offset
   %loaded = OpLoad.storage_buffer.f32 %input_view
+  %sum = OpFAdd.f32 %loaded, %loaded
+  %product = OpFMul.f32 %sum, %loaded
+  %quotient = OpFDiv.f32 %product, %loaded
+  %remainder = OpFRem.f32 %quotient, %loaded
   %output_view = OpPtrAccessChain.storage_buffer.f32.byte_offset %output, %byte_offset
-  OpStore.storage_buffer.f32 %output_view, %loaded
+  OpStore.storage_buffer.f32 %output_view, %remainder
   return
 }
 
@@ -186,8 +198,11 @@ kernel.def target(@hal_target) @spirv_hal_resource_storage_buffer_i64(%input: bu
 } launch {
   %input_view = buffer.view %input[%byte_offset] : buffer -> view<1xi64, #dense>
   %loaded = view.load %input_view[0] : view<1xi64, #dense> -> i64
+  %sum = scalar.addi %loaded, %loaded : i64
+  %larger = scalar.cmpi sgt, %sum, %loaded : i64
+  %selected = scf.select %larger, %sum, %loaded : i64
   %output_view = buffer.view %output[%byte_offset] : buffer -> view<1xi64, #dense>
-  view.store %loaded, %output_view[0] : i64, view<1xi64, #dense>
+  view.store %selected, %output_view[0] : i64, view<1xi64, #dense>
   kernel.return
 }
 
@@ -197,7 +212,10 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_hal_resource_s
   %output = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
   %input_view = OpPtrAccessChain.storage_buffer.i64.byte_offset %input, %byte_offset
   %loaded = OpLoad.storage_buffer.i64 %input_view
+  %sum = OpIAdd.i64 %loaded, %loaded
+  %larger = OpSGreaterThan.i64 %sum, %loaded
+  %selected = OpSelect.i64 %larger, %sum, %loaded
   %output_view = OpPtrAccessChain.storage_buffer.i64.byte_offset %output, %byte_offset
-  OpStore.storage_buffer.i64 %output_view, %loaded
+  OpStore.storage_buffer.i64 %output_view, %selected
   return
 }

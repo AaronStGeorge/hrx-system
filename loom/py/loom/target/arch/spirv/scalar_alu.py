@@ -10,6 +10,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from loom.target.arch.spirv.features import feature_bits_value
+
+
+@dataclass(frozen=True, slots=True)
+class ScalarAluType:
+    source_type: str
+    suffix: str
+    scalar_enum: str
+    feature_atoms: tuple[str, ...] = ()
+
+    @property
+    def feature_bits(self) -> int:
+        return feature_bits_value(self.feature_atoms)
+
+
+@dataclass(frozen=True, slots=True)
+class ScalarBinaryOperation:
+    source_op_key: str
+    descriptor_suffix: str
+    mnemonic: str
+    opcode: str
+
 
 @dataclass(frozen=True, slots=True)
 class IntegerComparePredicate:
@@ -18,6 +40,76 @@ class IntegerComparePredicate:
     mnemonic: str
     opcode: str
 
+
+INTEGER_SCALAR_ALU_TYPES = (
+    ScalarAluType(
+        source_type="i8",
+        suffix="i8",
+        scalar_enum="LOOM_SPIRV_SCALAR_TYPE_S8",
+        feature_atoms=("int8",),
+    ),
+    ScalarAluType(
+        source_type="i16",
+        suffix="i16",
+        scalar_enum="LOOM_SPIRV_SCALAR_TYPE_S16",
+        feature_atoms=("int16",),
+    ),
+    ScalarAluType(
+        source_type="i32",
+        suffix="i32",
+        scalar_enum="LOOM_SPIRV_SCALAR_TYPE_S32",
+    ),
+    ScalarAluType(
+        source_type="i64",
+        suffix="i64",
+        scalar_enum="LOOM_SPIRV_SCALAR_TYPE_S64",
+        feature_atoms=("int64",),
+    ),
+)
+
+FLOAT_SCALAR_ALU_TYPES = (
+    ScalarAluType(
+        source_type="f16",
+        suffix="f16",
+        scalar_enum="LOOM_SPIRV_SCALAR_TYPE_F16",
+        feature_atoms=("float16",),
+    ),
+    ScalarAluType(
+        source_type="f32",
+        suffix="f32",
+        scalar_enum="LOOM_SPIRV_SCALAR_TYPE_F32",
+    ),
+    ScalarAluType(
+        source_type="f64",
+        suffix="f64",
+        scalar_enum="LOOM_SPIRV_SCALAR_TYPE_F64",
+        feature_atoms=("float64",),
+    ),
+)
+
+SCALAR_ALU_TYPES = INTEGER_SCALAR_ALU_TYPES + FLOAT_SCALAR_ALU_TYPES
+
+OFFSET64_ALU_TYPE = ScalarAluType(
+    source_type="offset",
+    suffix="offset64",
+    scalar_enum="LOOM_SPIRV_SCALAR_TYPE_U64",
+)
+
+INTEGER_BINARY_OPERATIONS = (
+    ScalarBinaryOperation("addi", "iadd", "OpIAdd", "LOOM_SPIRV_OP_I_ADD"),
+    ScalarBinaryOperation("subi", "isub", "OpISub", "LOOM_SPIRV_OP_I_SUB"),
+    ScalarBinaryOperation("muli", "imul", "OpIMul", "LOOM_SPIRV_OP_I_MUL"),
+    ScalarBinaryOperation("divsi", "sdiv", "OpSDiv", "LOOM_SPIRV_OP_S_DIV"),
+    ScalarBinaryOperation("remsi", "srem", "OpSRem", "LOOM_SPIRV_OP_S_REM"),
+)
+
+FLOAT_BINARY_OPERATIONS = (
+    ScalarBinaryOperation("addf", "fadd", "OpFAdd", "LOOM_SPIRV_OP_F_ADD"),
+    ScalarBinaryOperation("subf", "fsub", "OpFSub", "LOOM_SPIRV_OP_F_SUB"),
+    ScalarBinaryOperation("mulf", "fmul", "OpFMul", "LOOM_SPIRV_OP_F_MUL"),
+    ScalarBinaryOperation("divf", "fdiv", "OpFDiv", "LOOM_SPIRV_OP_F_DIV"),
+    ScalarBinaryOperation("remf", "frem", "OpFRem", "LOOM_SPIRV_OP_F_REM"),
+)
 
 INTEGER_COMPARE_PREDICATES = (
     IntegerComparePredicate("eq", "i_equal", "OpIEqual", "LOOM_SPIRV_OP_I_EQUAL"),

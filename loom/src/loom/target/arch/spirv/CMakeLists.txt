@@ -161,6 +161,21 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    math_policy
+  HDRS
+    "math_policy.h"
+  TEXTUAL_HDRS
+    "math_policy_tables.inl"
+  SRCS
+    "math_policy.c"
+  DEPS
+    iree::base
+    loom::src::loom::target::math_policy
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     low_registry
   HDRS
     "low_registry.h"
@@ -210,6 +225,7 @@ loom_cc_library(
   DEPS
     ::low_registry
     ::lower
+    ::math_policy
     ::ops
     iree::base
     loom::src::loom::target::provider

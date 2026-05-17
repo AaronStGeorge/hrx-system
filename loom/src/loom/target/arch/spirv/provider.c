@@ -8,6 +8,7 @@
 
 #include "loom/target/arch/spirv/low_registry.h"
 #include "loom/target/arch/spirv/lower.h"
+#include "loom/target/arch/spirv/math_policy.h"
 #include "loom/target/arch/spirv/ops/registry.h"
 
 const loom_target_provider_t loom_spirv_target_provider = {
@@ -16,6 +17,8 @@ const loom_target_provider_t loom_spirv_target_provider = {
         loom_spirv_low_descriptor_registry_initialize,
     .initialize_low_lower_policy_registry =
         loom_spirv_low_lower_policy_registry_initialize,
+    .initialize_math_policy_registry =
+        loom_spirv_math_policy_registry_initialize,
 };
 
 static const loom_target_provider_t* const kLoomSpirvTargetProviders[] = {

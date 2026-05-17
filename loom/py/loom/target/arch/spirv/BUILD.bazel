@@ -66,4 +66,7 @@ py_library(
         "__init__.py",
         "scalar_alu.py",
     ],
+    deps = [
+        ":features",
+    ],
 )
