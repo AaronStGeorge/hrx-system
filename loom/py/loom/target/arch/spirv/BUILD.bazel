@@ -62,6 +62,17 @@ py_library(
 )
 
 py_library(
+    name = "cooperative_vector",
+    srcs = [
+        "__init__.py",
+        "cooperative_vector.py",
+    ],
+    deps = [
+        ":features",
+    ],
+)
+
+py_library(
     name = "features",
     srcs = [
         "__init__.py",

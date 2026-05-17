@@ -59,6 +59,16 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    cooperative_vector
+  SRCS
+    "__init__.py"
+    "cooperative_vector.py"
+  DEPS
+    iree::runtime::py::loom::target::arch::spirv::features
+)
+
+iree_py_library(
+  NAME
     features
   SRCS
     "__init__.py"

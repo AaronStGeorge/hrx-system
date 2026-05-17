@@ -13,6 +13,7 @@ import re
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Protocol
 
 
 def _ensure_runtime_py_on_path() -> None:
@@ -28,6 +29,10 @@ from loom.gen.generated_file import line_comment_header  # noqa: E402
 from loom.target.arch.spirv.cooperative_matrix import (  # noqa: E402
     COOPERATIVE_MATRIX_CASES,
     CooperativeMatrixCase,
+)
+from loom.target.arch.spirv.cooperative_vector import (  # noqa: E402
+    COOPERATIVE_VECTOR_CASES,
+    CooperativeVectorCase,
 )
 from loom.target.arch.spirv.descriptors import SPIRV_LOGICAL_CORE_DESCRIPTOR_SET  # noqa: E402
 from loom.target.low_descriptors import descriptor_set_relative_name  # noqa: E402
@@ -62,6 +67,11 @@ def _mul_add_descriptor_key(case: CooperativeMatrixCase) -> str:
     )
 
 
+class _ShapeKeyCase(Protocol):
+    @property
+    def shape_key(self) -> int: ...
+
+
 def _matrix_property_row(case: CooperativeMatrixCase) -> list[str]:
     return [
         "    {",
@@ -83,8 +93,27 @@ def _matrix_property_row(case: CooperativeMatrixCase) -> list[str]:
     ]
 
 
+def _vector_property_row(case: CooperativeVectorCase) -> list[str]:
+    return [
+        "    {",
+        f'        .name = IREE_SVL("{_c_string_literal(case.property_name)}"),',
+        f"        .required_feature_bits = {case.feature_bits_c_expression},",
+        f"        .m_size = {case.m_size},",
+        f"        .k_size = {case.k_size},",
+        f"        .input_type = {case.input_type},",
+        f"        .input_interpretation = {case.input_interpretation},",
+        f"        .matrix_interpretation = {case.matrix_interpretation},",
+        f"        .bias_interpretation = {case.bias_interpretation},",
+        f"        .result_type = {case.result_type},",
+        f"        .matrix_layout_flags = {case.matrix_layout_flags},",
+        f"        .storage_class_flags = {case.storage_class_flags},",
+        f"        .flags = {case.flags},",
+        "    },",
+    ]
+
+
 def _shape_spans(
-    cases: Sequence[CooperativeMatrixCase],
+    cases: Sequence[_ShapeKeyCase],
 ) -> list[tuple[int, int, int]]:
     spans: list[tuple[int, int, int]] = []
     previous_shape_key: int | None = None
@@ -98,8 +127,8 @@ def _shape_spans(
     return spans
 
 
-def _shape_span_row(shape_key: int, start: int, count: int) -> str:
-    return f"    {{.shape_key = UINT64_C(0x{shape_key:012x}), .start = {start}, .count = {count}}},"
+def _shape_span_row(shape_key: int, start: int, count: int, hex_digits: int) -> str:
+    return f"    {{.shape_key = UINT64_C(0x{shape_key:0{hex_digits}x}), .start = {start}, .count = {count}}},"
 
 
 def _validate_matrix_cases(cases: Sequence[CooperativeMatrixCase]) -> None:
@@ -118,8 +147,23 @@ def _validate_matrix_cases(cases: Sequence[CooperativeMatrixCase]) -> None:
         previous_shape_key = case.shape_key
 
 
+def _validate_vector_cases(cases: Sequence[CooperativeVectorCase]) -> None:
+    names: set[str] = set()
+    previous_shape_key = 0
+    for index, case in enumerate(cases):
+        if case.property_name in names:
+            raise ValueError(f"duplicate SPIR-V cooperative vector property {case.property_name!r}")
+        names.add(case.property_name)
+        if index != 0 and case.shape_key < previous_shape_key:
+            raise ValueError("SPIR-V cooperative vector property rows must be sorted")
+        if "LOOM_SPIRV_COOPERATIVE_VECTOR_FLAG_TRAINING" in case.flags and "cooperative_vector_training_nv" not in case.feature_atoms:
+            raise ValueError(f"training cooperative vector property {case.property_name!r} is missing the training feature")
+        previous_shape_key = case.shape_key
+
+
 def generate_tables() -> str:
     _validate_matrix_cases(COOPERATIVE_MATRIX_CASES)
+    _validate_vector_cases(COOPERATIVE_VECTOR_CASES)
     lines = [
         "// Copyright 2026 The IREE Authors",
         "//",
@@ -131,8 +175,8 @@ def generate_tables() -> str:
         "",
         ("static const loom_spirv_cooperative_matrix_property_t kCooperativeMatrixProperties[] = {"),
     ]
-    for case in COOPERATIVE_MATRIX_CASES:
-        lines.extend(_matrix_property_row(case))
+    for matrix_case in COOPERATIVE_MATRIX_CASES:
+        lines.extend(_matrix_property_row(matrix_case))
     lines.extend(
         [
             "};",
@@ -141,7 +185,25 @@ def generate_tables() -> str:
         ]
     )
     for shape_key, start, count in _shape_spans(COOPERATIVE_MATRIX_CASES):
-        lines.append(_shape_span_row(shape_key, start, count))
+        lines.append(_shape_span_row(shape_key, start, count, 12))
+    lines.extend(
+        [
+            "};",
+            "",
+            ("static const loom_spirv_cooperative_vector_property_t kCooperativeVectorProperties[] = {"),
+        ]
+    )
+    for vector_case in COOPERATIVE_VECTOR_CASES:
+        lines.extend(_vector_property_row(vector_case))
+    lines.extend(
+        [
+            "};",
+            "",
+            ("static const loom_spirv_cooperative_property_span_t kCooperativeVectorShapeSpans[] = {"),
+        ]
+    )
+    for shape_key, start, count in _shape_spans(COOPERATIVE_VECTOR_CASES):
+        lines.append(_shape_span_row(shape_key, start, count, 8))
     lines.extend(
         [
             "};",

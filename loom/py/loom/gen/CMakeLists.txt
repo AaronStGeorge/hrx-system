@@ -239,6 +239,7 @@ iree_py_library(
     iree::runtime::py::loom::gen::generated_file
     iree::runtime::py::loom::target::low_descriptors
     iree::runtime::py::loom::target::arch::spirv::cooperative_matrix
+    iree::runtime::py::loom::target::arch::spirv::cooperative_vector
     iree::runtime::py::loom::target::arch::spirv::descriptors
 )
 

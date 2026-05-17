@@ -12,6 +12,7 @@ from loom.gen.spirv_cooperative_properties import (
     generate_tables,
 )
 from loom.target.arch.spirv.cooperative_matrix import COOPERATIVE_MATRIX_CASES
+from loom.target.arch.spirv.cooperative_vector import COOPERATIVE_VECTOR_CASES
 
 
 def _generated_row(tables: str, property_name: str) -> str:
@@ -35,3 +36,25 @@ def test_generation_maps_matrix_properties_to_low_descriptors() -> None:
 
     assert "{.shape_key = UINT64_C(0x001000100010), .start = 0, .count = 2}" in tables
     assert "{.shape_key = UINT64_C(0x001000100020), .start = 2, .count = 1}" in tables
+
+
+def test_generation_maps_vector_properties_to_component_rows() -> None:
+    tables = generate_tables()
+
+    for case in COOPERATIVE_VECTOR_CASES:
+        row = _generated_row(tables, case.property_name)
+        assert f".required_feature_bits = {case.feature_bits_c_expression}" in row
+        assert f".m_size = {case.m_size}" in row
+        assert f".k_size = {case.k_size}" in row
+        assert f".input_type = {case.input_type}" in row
+        assert f".input_interpretation = {case.input_interpretation}" in row
+        assert f".matrix_interpretation = {case.matrix_interpretation}" in row
+        assert f".bias_interpretation = {case.bias_interpretation}" in row
+        assert f".result_type = {case.result_type}" in row
+        assert f".matrix_layout_flags = {case.matrix_layout_flags}" in row
+        assert f".storage_class_flags = {case.storage_class_flags}" in row
+        assert f".flags = {case.flags}" in row
+
+    assert "{.shape_key = UINT64_C(0x00100010), .start = 0, .count = 1}" in tables
+    assert "{.shape_key = UINT64_C(0x00100020), .start = 1, .count = 1}" in tables
+    assert "{.shape_key = UINT64_C(0x00200020), .start = 2, .count = 2}" in tables

@@ -28,75 +28,7 @@
   (LOOM_SPIRV_STORAGE_CLASS_BIT_STORAGE_BUFFER | \
    LOOM_SPIRV_STORAGE_CLASS_BIT_PHYSICAL_STORAGE_BUFFER)
 
-#define VECTOR_PROPERTY(                                                     \
-    name_value, feature_bits_value, m_value, k_value, input_type_value,      \
-    input_interpretation_value, matrix_interpretation_value,                 \
-    bias_interpretation_value, result_type_value, matrix_layout_flags_value, \
-    storage_class_flags_value, flags_value)                                  \
-  {                                                                          \
-      .name = IREE_SVL(name_value),                                          \
-      .required_feature_bits = (feature_bits_value),                         \
-      .m_size = (m_value),                                                   \
-      .k_size = (k_value),                                                   \
-      .input_type = (input_type_value),                                      \
-      .input_interpretation = (input_interpretation_value),                  \
-      .matrix_interpretation = (matrix_interpretation_value),                \
-      .bias_interpretation = (bias_interpretation_value),                    \
-      .result_type = (result_type_value),                                    \
-      .matrix_layout_flags = (matrix_layout_flags_value),                    \
-      .storage_class_flags = (storage_class_flags_value),                    \
-      .flags = (flags_value),                                                \
-  }
-
 #include "loom/target/arch/spirv/cooperative_properties_tables.inl"
-
-static const loom_spirv_cooperative_vector_property_t
-    kCooperativeVectorProperties[] = {
-        VECTOR_PROPERTY("nv.cooperative_vector.f16.16x16.f16",
-                        LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV, 16, 16,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
-                        VECTOR_LAYOUT_INFERENCE_ANY, STORAGE_BUFFER_OR_BDA,
-                        LOOM_SPIRV_COOPERATIVE_VECTOR_FLAG_TRANSPOSE),
-        VECTOR_PROPERTY("nv.cooperative_vector.f16.16x32.e4m3",
-                        LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV, 16, 32,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT_E4_M3_NV,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT_E4_M3_NV,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
-                        LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
-                        VECTOR_LAYOUT_INFERENCE_ANY, STORAGE_BUFFER_OR_BDA,
-                        LOOM_SPIRV_COOPERATIVE_VECTOR_FLAG_TRANSPOSE),
-        VECTOR_PROPERTY("nv.cooperative_vector.u32.32x32.s8_packed",
-                        LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV, 32, 32,
-                        LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT32_NV,
-                        LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_PACKED_NV,
-                        LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_NV,
-                        LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV,
-                        LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV,
-                        VECTOR_LAYOUT_INFERENCE_ANY, STORAGE_BUFFER_OR_BDA, 0),
-        VECTOR_PROPERTY(
-            "nv.cooperative_vector.training.u32.32x32.s8_packed",
-            LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV |
-                LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_TRAINING_NV,
-            32, 32, LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT32_NV,
-            LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_PACKED_NV,
-            LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_NV,
-            LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV,
-            LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV,
-            LOOM_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_TRAINING_OPTIMAL_BIT,
-            STORAGE_BUFFER_OR_BDA, LOOM_SPIRV_COOPERATIVE_VECTOR_FLAG_TRAINING),
-};
-
-static const loom_spirv_cooperative_property_span_t
-    kCooperativeVectorShapeSpans[] = {
-        {.shape_key = UINT64_C(0x00100010), .start = 0, .count = 1},
-        {.shape_key = UINT64_C(0x00100020), .start = 1, .count = 1},
-        {.shape_key = UINT64_C(0x00200020), .start = 2, .count = 2},
-};
 
 iree_string_view_t loom_spirv_component_type_name(
     loom_spirv_component_type_t component_type) {
