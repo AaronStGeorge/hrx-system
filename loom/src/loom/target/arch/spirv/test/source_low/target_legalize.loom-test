@@ -80,7 +80,7 @@ func.def target(@target) @rejects_missing_cooperative_matrix_feature(%lhs_data: 
 // ====
 // RUN: pass target-legalize{mode=final}
 
-spirv.target<vulkan1_3> @target {contract_feature_bits = 38}
+spirv.target<vulkan1_3> @target {contract_feature_bits = 2054}
 
 func.def target(@target) @rejects_cooperative_property_without_low_descriptor(%lhs_data: vector<16xf16>, %rhs_data: vector<16xf16>, %init_data: vector<8xf32>) -> (vector<8xf32>) {
   %m = index.constant 16 : index

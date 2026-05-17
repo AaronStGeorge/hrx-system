@@ -162,7 +162,7 @@ TEST(SpirvRegistersTest, StorageBufferAddressArithmeticUsesBdaRegisters) {
 
   const loom_low_descriptor_t* ptr_access_chain = LookupDescriptor(
       descriptor_set,
-      IREE_SV("spirv.op_ptr_access_chain.storage_buffer.byte_offset"));
+      IREE_SV("spirv.op_ptr_access_chain.storage_buffer.i32.byte_offset"));
   ASSERT_NE(ptr_access_chain, nullptr);
   const loom_low_reg_class_t* storage_buffer_ptr_class =
       LookupRegisterClass(descriptor_set, IREE_SV("spirv.ptr.storage_buffer"));

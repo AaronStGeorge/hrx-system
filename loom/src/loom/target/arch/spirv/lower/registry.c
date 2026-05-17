@@ -6,6 +6,8 @@
 
 #include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
+#include "loom/ops/func/ops.h"
+#include "loom/ops/kernel/ops.h"
 #include "loom/target/arch/spirv/contracts/logical_core.h"
 #include "loom/target/arch/spirv/contracts/logical_core_lower_rules.h"
 #include "loom/target/arch/spirv/descriptors.h"
@@ -44,6 +46,32 @@ static bool loom_spirv_source_type_is_offset64(loom_type_t type) {
          loom_type_element_type(type) == LOOM_SCALAR_TYPE_OFFSET;
 }
 
+static bool loom_spirv_source_type_is_storage_scalar(loom_type_t type) {
+  if (!loom_type_is_scalar(type)) {
+    return false;
+  }
+  switch (loom_type_element_type(type)) {
+    case LOOM_SCALAR_TYPE_I8:
+    case LOOM_SCALAR_TYPE_I16:
+    case LOOM_SCALAR_TYPE_I32:
+    case LOOM_SCALAR_TYPE_I64:
+    case LOOM_SCALAR_TYPE_F16:
+    case LOOM_SCALAR_TYPE_BF16:
+    case LOOM_SCALAR_TYPE_F32:
+    case LOOM_SCALAR_TYPE_F64:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_spirv_source_op_maps_signature_value(
+    const loom_op_t* source_op) {
+  return source_op == NULL || loom_func_def_isa(source_op) ||
+         loom_kernel_def_isa(source_op) || loom_func_return_isa(source_op) ||
+         loom_kernel_return_isa(source_op);
+}
+
 static iree_status_t loom_spirv_map_type(void* user_data,
                                          loom_low_lower_context_t* context,
                                          const loom_op_t* source_op,
@@ -57,6 +85,11 @@ static iree_status_t loom_spirv_map_type(void* user_data,
   if (loom_spirv_source_type_is_offset64(source_type)) {
     return loom_spirv_make_register_type(
         context, SPIRV_LOGICAL_CORE_REG_CLASS_ID_OFFSET64, out_low_type);
+  }
+  if (!loom_spirv_source_op_maps_signature_value(source_op) &&
+      loom_spirv_source_type_is_storage_scalar(source_type)) {
+    return loom_spirv_make_register_type(
+        context, SPIRV_LOGICAL_CORE_REG_CLASS_ID_ID, out_low_type);
   }
   if (loom_type_is_buffer(source_type) || loom_type_is_view(source_type)) {
     return loom_spirv_make_register_type(

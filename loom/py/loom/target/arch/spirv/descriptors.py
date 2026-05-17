@@ -10,6 +10,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from loom.target.arch.spirv.scalar_memory import (
+    STORAGE_BUFFER_SCALARS,
+    StorageBufferScalar,
+)
 from loom.target.low_descriptors import (
     AsmForm,
     AsmImmediate,
@@ -123,19 +127,73 @@ def _ptr_storage_buffer_operand(field_name: str) -> Operand:
     return Operand(field_name, OperandRole.RESOURCE, _PTR_STORAGE_BUFFER_ALT)
 
 
-_LOAD_STORAGE_BUFFER_EFFECT = Effect(
-    EffectKind.READ,
-    memory_space=MemorySpace.GLOBAL,
-    flags=(EffectFlag.DEPENDENCY,),
-    width_bits=32,
-)
+def _storage_buffer_effect(
+    kind: EffectKind,
+    scalar: StorageBufferScalar,
+) -> Effect:
+    return Effect(
+        kind,
+        memory_space=MemorySpace.GLOBAL,
+        flags=(EffectFlag.DEPENDENCY,),
+        width_bits=scalar.byte_width * 8,
+    )
 
-_STORE_STORAGE_BUFFER_EFFECT = Effect(
-    EffectKind.WRITE,
-    memory_space=MemorySpace.GLOBAL,
-    flags=(EffectFlag.DEPENDENCY,),
-    width_bits=32,
-)
+
+def _ptr_access_chain_storage_buffer_descriptor(
+    scalar: StorageBufferScalar,
+) -> Descriptor:
+    return Descriptor(
+        key=f"spirv.op_ptr_access_chain.storage_buffer.{scalar.suffix}.byte_offset",
+        mnemonic=f"OpPtrAccessChain.storage_buffer.{scalar.suffix}.byte_offset",
+        semantic_tag=f"spirv.op_ptr_access_chain.storage_buffer.{scalar.suffix}.byte_offset",
+        operands=(
+            _ptr_storage_buffer_result(),
+            _ptr_storage_buffer_operand("base"),
+            _offset64_operand("byte_offset"),
+        ),
+        feature_mask_words=(scalar.feature_bits,) if scalar.feature_bits else (),
+        asm_forms=_asm(results=("ptr",), operands=("base", "byte_offset")),
+        schedule_class=_SCHEDULE_VARIABLE,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _load_storage_buffer_descriptor(scalar: StorageBufferScalar) -> Descriptor:
+    return Descriptor(
+        key=f"spirv.op_load.storage_buffer.{scalar.suffix}",
+        mnemonic=f"OpLoad.storage_buffer.{scalar.suffix}",
+        semantic_tag=f"spirv.op_load.storage_buffer.{scalar.suffix}",
+        operands=(_id_result(), _ptr_storage_buffer_operand("ptr")),
+        effects=(_storage_buffer_effect(EffectKind.READ, scalar),),
+        feature_mask_words=(scalar.feature_bits,) if scalar.feature_bits else (),
+        asm_forms=_asm(results=("dst",), operands=("ptr",)),
+        schedule_class=_SCHEDULE_LOAD,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _store_storage_buffer_descriptor(scalar: StorageBufferScalar) -> Descriptor:
+    return Descriptor(
+        key=f"spirv.op_store.storage_buffer.{scalar.suffix}",
+        mnemonic=f"OpStore.storage_buffer.{scalar.suffix}",
+        semantic_tag=f"spirv.op_store.storage_buffer.{scalar.suffix}",
+        operands=(_ptr_storage_buffer_operand("ptr"), _id_operand("value")),
+        effects=(_storage_buffer_effect(EffectKind.WRITE, scalar),),
+        feature_mask_words=(scalar.feature_bits,) if scalar.feature_bits else (),
+        asm_forms=_asm(operands=("ptr", "value")),
+        schedule_class=_SCHEDULE_STORE,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _storage_buffer_descriptors() -> tuple[Descriptor, ...]:
+    descriptors: list[Descriptor] = []
+    for scalar in STORAGE_BUFFER_SCALARS:
+        descriptors.append(_ptr_access_chain_storage_buffer_descriptor(scalar))
+        descriptors.append(_load_storage_buffer_descriptor(scalar))
+        descriptors.append(_store_storage_buffer_descriptor(scalar))
+    return tuple(descriptors)
+
 
 SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
     key="spirv.logical.core",
@@ -262,39 +320,7 @@ SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
             schedule_class=_SCHEDULE_ALU,
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
-        Descriptor(
-            key="spirv.op_ptr_access_chain.storage_buffer.byte_offset",
-            mnemonic="OpPtrAccessChain.storage_buffer.byte_offset",
-            semantic_tag="spirv.op_ptr_access_chain.storage_buffer.byte_offset",
-            operands=(
-                _ptr_storage_buffer_result(),
-                _ptr_storage_buffer_operand("base"),
-                _offset64_operand("byte_offset"),
-            ),
-            asm_forms=_asm(results=("ptr",), operands=("base", "byte_offset")),
-            schedule_class=_SCHEDULE_VARIABLE,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="spirv.op_load.storage_buffer.i32",
-            mnemonic="OpLoad.storage_buffer.i32",
-            semantic_tag="spirv.op_load.storage_buffer.i32",
-            operands=(_id_result(), _ptr_storage_buffer_operand("ptr")),
-            effects=(_LOAD_STORAGE_BUFFER_EFFECT,),
-            asm_forms=_asm(results=("dst",), operands=("ptr",)),
-            schedule_class=_SCHEDULE_LOAD,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
-        Descriptor(
-            key="spirv.op_store.storage_buffer.i32",
-            mnemonic="OpStore.storage_buffer.i32",
-            semantic_tag="spirv.op_store.storage_buffer.i32",
-            operands=(_ptr_storage_buffer_operand("ptr"), _id_operand("value")),
-            effects=(_STORE_STORAGE_BUFFER_EFFECT,),
-            asm_forms=_asm(operands=("ptr", "value")),
-            schedule_class=_SCHEDULE_STORE,
-            flags=(DescriptorFlag.SIDE_EFFECTING,),
-        ),
+        *_storage_buffer_descriptors(),
         Descriptor(
             key="spirv.op_variable.function.ptr",
             mnemonic="OpVariable.function.ptr",

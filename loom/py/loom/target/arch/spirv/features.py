@@ -81,6 +81,60 @@ FEATURE_ATOMS = (
         ),
     ),
     FeatureAtom(
+        key="float16",
+        c_suffix="FLOAT16",
+        name="spirv.float16",
+        doc="16-bit floating-point scalar support.",
+        required=("vulkan_shader",),
+        minimum_spirv_version=SPIRV_VERSION_1_0,
+        capabilities=("LOOM_SPIRV_CAPABILITY_FLOAT16",),
+    ),
+    FeatureAtom(
+        key="float64",
+        c_suffix="FLOAT64",
+        name="spirv.float64",
+        doc="64-bit floating-point scalar support.",
+        required=("vulkan_shader",),
+        minimum_spirv_version=SPIRV_VERSION_1_0,
+        capabilities=("LOOM_SPIRV_CAPABILITY_FLOAT64",),
+    ),
+    FeatureAtom(
+        key="int8",
+        c_suffix="INT8",
+        name="spirv.int8",
+        doc="8-bit integer scalar support.",
+        required=("vulkan_shader",),
+        minimum_spirv_version=SPIRV_VERSION_1_0,
+        capabilities=("LOOM_SPIRV_CAPABILITY_INT8",),
+    ),
+    FeatureAtom(
+        key="int16",
+        c_suffix="INT16",
+        name="spirv.int16",
+        doc="16-bit integer scalar support.",
+        required=("vulkan_shader",),
+        minimum_spirv_version=SPIRV_VERSION_1_0,
+        capabilities=("LOOM_SPIRV_CAPABILITY_INT16",),
+    ),
+    FeatureAtom(
+        key="storage_buffer_8bit_access",
+        c_suffix="STORAGE_BUFFER_8BIT_ACCESS",
+        name="spirv.storage_buffer_8bit_access",
+        doc="8-bit storage-buffer access support.",
+        required=("vulkan_shader",),
+        minimum_spirv_version=SPIRV_VERSION_1_0,
+        capabilities=("LOOM_SPIRV_CAPABILITY_STORAGE_BUFFER8_BIT_ACCESS",),
+    ),
+    FeatureAtom(
+        key="storage_buffer_16bit_access",
+        c_suffix="STORAGE_BUFFER_16BIT_ACCESS",
+        name="spirv.storage_buffer_16bit_access",
+        doc="16-bit storage-buffer access support.",
+        required=("vulkan_shader",),
+        minimum_spirv_version=SPIRV_VERSION_1_0,
+        capabilities=("LOOM_SPIRV_CAPABILITY_STORAGE_BUFFER16_BIT_ACCESS",),
+    ),
+    FeatureAtom(
         key="cooperative_vector_nv",
         c_suffix="COOPERATIVE_VECTOR_NV",
         name="spirv.cooperative_vector.nv",
@@ -181,6 +235,17 @@ def feature_bit_macro(atom: FeatureAtom) -> str:
     return f"LOOM_SPIRV_FEATURE_{atom.c_suffix}"
 
 
+def feature_bit_value(
+    atom_key: str,
+    *,
+    atoms: Iterable[FeatureAtom] = FEATURE_ATOMS,
+) -> int:
+    for index, atom in enumerate(atoms, start=1):
+        if atom.key == atom_key:
+            return 1 << index
+    raise ValueError(f"unknown SPIR-V feature atom {atom_key!r}")
+
+
 def feature_atom_enum(atom: FeatureAtom) -> str:
     return f"LOOM_SPIRV_FEATURE_ATOM_{atom.c_suffix}"
 
@@ -193,6 +258,17 @@ def feature_bits_expression(
     atoms_by_key = atom_by_key(atoms)
     parts = [feature_bit_macro(atoms_by_key[key]) for key in atom_keys]
     return " | ".join(parts) if parts else "0"
+
+
+def feature_bits_value(
+    atom_keys: Iterable[str],
+    *,
+    atoms: Iterable[FeatureAtom] = FEATURE_ATOMS,
+) -> int:
+    bits = 0
+    for atom_key in atom_keys:
+        bits |= feature_bit_value(atom_key, atoms=atoms)
+    return bits
 
 
 def feature_row_capacity(

@@ -208,6 +208,31 @@ py_binary(
     ],
 )
 
+py_binary(
+    name = "spirv_packet_rows",
+    srcs = ["spirv_packet_rows.py"],
+    main = "spirv_packet_rows.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/spirv:descriptors",
+        "//loom/py/loom/target/arch/spirv:scalar_memory",
+    ],
+)
+
+py_test(
+    name = "spirv_packet_rows_test",
+    srcs = [
+        "spirv_packet_rows_test.py",
+        "//loom/py/loom/tools:pytest_style_runner.py",
+    ],
+    args = ["loom.gen.spirv_packet_rows_test"],
+    main = "pytest_style_runner.py",
+    deps = [
+        ":spirv_packet_rows",
+    ],
+)
+
 py_test(
     name = "spirv_features_test",
     srcs = [

@@ -1,0 +1,35 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+from __future__ import annotations
+
+from loom.gen.spirv_packet_rows import generate_tables
+from loom.target.arch.spirv.scalar_memory import STORAGE_BUFFER_SCALARS
+
+
+def test_generation_emits_scalar_memory_packet_rows() -> None:
+    tables = generate_tables()
+
+    for scalar in STORAGE_BUFFER_SCALARS:
+        suffix = scalar.suffix.upper()
+        assert f"SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_PTR_ACCESS_CHAIN_STORAGE_BUFFER_{suffix}_BYTE_OFFSET" in tables
+        assert f"SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_LOAD_STORAGE_BUFFER_{suffix}" in tables
+        assert f"SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_STORE_STORAGE_BUFFER_{suffix}" in tables
+        assert scalar.scalar_enum in tables
+        assert f".memory_alignment = {scalar.byte_width}" in tables
+
+    assert "LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS" in tables
+    assert "LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER" in tables
+
+
+def test_generation_keeps_storage_buffer_address_untyped_until_access_chain() -> None:
+    tables = generate_tables()
+
+    access_row_start = tables.index("SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_PTR_ACCESS_CHAIN_STORAGE_BUFFER_F32_BYTE_OFFSET")
+    access_row = tables[access_row_start : access_row_start + 800]
+    assert "LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS" in access_row
+    assert "LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER" in access_row
+    assert "LOOM_SPIRV_SCALAR_TYPE_F32" in access_row

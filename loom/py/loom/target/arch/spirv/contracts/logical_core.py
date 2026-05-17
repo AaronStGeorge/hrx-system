@@ -21,6 +21,10 @@ from loom.dialect.view import ALL_VIEW_OPS
 from loom.dialect.view import defs as view
 from loom.dsl import Op
 from loom.target.arch.spirv.descriptors import SPIRV_LOGICAL_CORE_DESCRIPTOR_SET
+from loom.target.arch.spirv.scalar_memory import (
+    STORAGE_BUFFER_SCALARS,
+    StorageBufferScalar,
+)
 from loom.target.contracts import (
     AttrProject,
     ContractFragment,
@@ -40,7 +44,6 @@ from loom.target.low_descriptors import Descriptor
 _I32 = Scalar("i32")
 _INDEX = Scalar("index")
 _OFFSET = Scalar("offset")
-_I32_VIEW = View("i32")
 
 
 def _descriptor(key: str) -> Descriptor:
@@ -52,6 +55,14 @@ def _typed_guards(
     type_pattern: TypePattern,
 ) -> tuple[Guard, ...]:
     return tuple(Guard.value_type(field, type_pattern) for field in fields)
+
+
+def _feature_guards(descriptor: Descriptor) -> tuple[Guard, ...]:
+    return (
+        (Guard.descriptor_available(descriptor),)
+        if descriptor.feature_mask_words
+        else ()
+    )
 
 
 def _descriptor_emit(
@@ -155,12 +166,18 @@ def _binary_rule(
     )
 
 
-def _buffer_view_rule() -> DescriptorRule:
-    descriptor = _descriptor("spirv.op_ptr_access_chain.storage_buffer.byte_offset")
+def _buffer_view_rule(scalar: StorageBufferScalar) -> DescriptorRule:
+    view_type = View(scalar.source_type)
+    descriptor = _descriptor(
+        f"spirv.op_ptr_access_chain.storage_buffer.{scalar.suffix}.byte_offset"
+    )
     return DescriptorRule(
         source_op=buffer.buffer_view,
         descriptor=descriptor,
-        guards=(Guard.value_type("result", _I32_VIEW),),
+        guards=(
+            Guard.value_type("result", view_type),
+            *_feature_guards(descriptor),
+        ),
         emit=(
             _descriptor_emit(
                 descriptor=descriptor,
@@ -174,15 +191,18 @@ def _buffer_view_rule() -> DescriptorRule:
     )
 
 
-def _view_load_i32_rule() -> DescriptorRule:
-    descriptor = _descriptor("spirv.op_load.storage_buffer.i32")
+def _view_load_rule(scalar: StorageBufferScalar) -> DescriptorRule:
+    scalar_type = Scalar(scalar.source_type)
+    view_type = View(scalar.source_type)
+    descriptor = _descriptor(f"spirv.op_load.storage_buffer.{scalar.suffix}")
     return DescriptorRule(
         source_op=view.view_load,
         descriptor=descriptor,
         guards=(
             Guard.operand_segment_count("indices", 0),
-            Guard.value_type("view", _I32_VIEW),
-            Guard.value_type("result", _I32),
+            Guard.value_type("view", view_type),
+            Guard.value_type("result", scalar_type),
+            *_feature_guards(descriptor),
         ),
         emit=(
             _descriptor_emit(
@@ -194,15 +214,18 @@ def _view_load_i32_rule() -> DescriptorRule:
     )
 
 
-def _view_store_i32_rule() -> DescriptorRule:
-    descriptor = _descriptor("spirv.op_store.storage_buffer.i32")
+def _view_store_rule(scalar: StorageBufferScalar) -> DescriptorRule:
+    scalar_type = Scalar(scalar.source_type)
+    view_type = View(scalar.source_type)
+    descriptor = _descriptor(f"spirv.op_store.storage_buffer.{scalar.suffix}")
     return DescriptorRule(
         source_op=view.view_store,
         descriptor=descriptor,
         guards=(
             Guard.operand_segment_count("indices", 0),
-            Guard.value_type("view", _I32_VIEW),
-            Guard.value_type("value", _I32),
+            Guard.value_type("view", view_type),
+            Guard.value_type("value", scalar_type),
+            *_feature_guards(descriptor),
         ),
         emit=(
             _descriptor_emit(
@@ -214,6 +237,15 @@ def _view_store_i32_rule() -> DescriptorRule:
             ),
         ),
     )
+
+
+def _storage_buffer_rules() -> tuple[DescriptorRule, ...]:
+    rules: list[DescriptorRule] = []
+    for scalar in STORAGE_BUFFER_SCALARS:
+        rules.append(_buffer_view_rule(scalar))
+        rules.append(_view_load_rule(scalar))
+        rules.append(_view_store_rule(scalar))
+    return tuple(rules)
 
 
 SPIRV_LOGICAL_CORE_CONTRACT_DIALECT_OPS = {
@@ -235,9 +267,7 @@ SPIRV_LOGICAL_CORE_CONTRACT_FRAGMENT = ContractFragment(
         _binary_rule(scalar_arithmetic.scalar_addi, _I32, "spirv.op_iadd.i32"),
         _binary_rule(index.index_add, _INDEX, "spirv.op_iadd.i32"),
         _binary_rule(index.index_add, _OFFSET, "spirv.op_iadd.offset64"),
-        _buffer_view_rule(),
-        _view_load_i32_rule(),
-        _view_store_i32_rule(),
+        *_storage_buffer_rules(),
         DescriptorMatrixRule(
             source_op=vector.vector_mma,
             source="vector_mma",

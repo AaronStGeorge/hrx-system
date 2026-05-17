@@ -15,7 +15,7 @@ static const loom_spirv_scalar_type_descriptor_t kScalarTypeDescriptors[] = {
             .bit_width = 16,
             .kind = LOOM_SPIRV_SCALAR_TYPE_KIND_FLOAT,
             .fp_encoding = LOOM_SPIRV_FP_ENCODING_MAX,
-            .required_feature_bits = 0,
+            .required_feature_bits = LOOM_SPIRV_FEATURE_FLOAT16,
         },
     [LOOM_SPIRV_SCALAR_TYPE_F32] =
         {
@@ -24,7 +24,7 @@ static const loom_spirv_scalar_type_descriptor_t kScalarTypeDescriptors[] = {
             .bit_width = 32,
             .kind = LOOM_SPIRV_SCALAR_TYPE_KIND_FLOAT,
             .fp_encoding = LOOM_SPIRV_FP_ENCODING_MAX,
-            .required_feature_bits = 0,
+            .required_feature_bits = LOOM_SPIRV_FEATURE_FLOAT64,
         },
     [LOOM_SPIRV_SCALAR_TYPE_F64] =
         {
@@ -51,7 +51,7 @@ static const loom_spirv_scalar_type_descriptor_t kScalarTypeDescriptors[] = {
             .bit_width = 8,
             .kind = LOOM_SPIRV_SCALAR_TYPE_KIND_SIGNED_INT,
             .fp_encoding = LOOM_SPIRV_FP_ENCODING_MAX,
-            .required_feature_bits = 0,
+            .required_feature_bits = LOOM_SPIRV_FEATURE_INT8,
         },
     [LOOM_SPIRV_SCALAR_TYPE_S16] =
         {
@@ -60,7 +60,7 @@ static const loom_spirv_scalar_type_descriptor_t kScalarTypeDescriptors[] = {
             .bit_width = 16,
             .kind = LOOM_SPIRV_SCALAR_TYPE_KIND_SIGNED_INT,
             .fp_encoding = LOOM_SPIRV_FP_ENCODING_MAX,
-            .required_feature_bits = 0,
+            .required_feature_bits = LOOM_SPIRV_FEATURE_INT16,
         },
     [LOOM_SPIRV_SCALAR_TYPE_S32] =
         {
@@ -87,7 +87,7 @@ static const loom_spirv_scalar_type_descriptor_t kScalarTypeDescriptors[] = {
             .bit_width = 8,
             .kind = LOOM_SPIRV_SCALAR_TYPE_KIND_UNSIGNED_INT,
             .fp_encoding = LOOM_SPIRV_FP_ENCODING_MAX,
-            .required_feature_bits = 0,
+            .required_feature_bits = LOOM_SPIRV_FEATURE_INT8,
         },
     [LOOM_SPIRV_SCALAR_TYPE_U16] =
         {
@@ -96,7 +96,7 @@ static const loom_spirv_scalar_type_descriptor_t kScalarTypeDescriptors[] = {
             .bit_width = 16,
             .kind = LOOM_SPIRV_SCALAR_TYPE_KIND_UNSIGNED_INT,
             .fp_encoding = LOOM_SPIRV_FP_ENCODING_MAX,
-            .required_feature_bits = 0,
+            .required_feature_bits = LOOM_SPIRV_FEATURE_INT16,
         },
     [LOOM_SPIRV_SCALAR_TYPE_U32] =
         {

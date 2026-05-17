@@ -245,6 +245,8 @@ loom_cc_library(
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/kernel",
         "//loom/src/loom/target/arch/spirv/contracts:logical_core",
         "//loom/src/loom/target/arch/spirv/contracts:logical_core_lower_rules",
         "//runtime/src/iree/base",

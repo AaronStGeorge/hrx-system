@@ -28,6 +28,8 @@ iree_py_library(
     "__init__.py"
     "descriptors.py"
   DEPS
+    iree::runtime::py::loom::target::arch::spirv::features
+    iree::runtime::py::loom::target::arch::spirv::scalar_memory
     iree::runtime::py::loom::target::low_descriptors
     iree::runtime::py::loom::target::arch::package
 )
@@ -40,6 +42,16 @@ iree_py_library(
     "features.py"
   DEPS
     iree::runtime::py::loom::target::arch::package
+)
+
+iree_py_library(
+  NAME
+    scalar_memory
+  SRCS
+    "__init__.py"
+    "scalar_memory.py"
+  DEPS
+    iree::runtime::py::loom::target::arch::spirv::features
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

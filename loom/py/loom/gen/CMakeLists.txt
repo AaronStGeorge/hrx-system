@@ -210,6 +210,32 @@ iree_py_library(
     iree::runtime::py::loom::target::arch::spirv::features
 )
 
+iree_py_library(
+  NAME
+    spirv_packet_rows
+  MAIN
+    "spirv_packet_rows.py"
+  SRCS
+    "spirv_packet_rows.py"
+  DEPS
+    iree::runtime::py::loom::gen::generated_file
+    iree::runtime::py::loom::target::low_descriptors
+    iree::runtime::py::loom::target::arch::spirv::descriptors
+    iree::runtime::py::loom::target::arch::spirv::scalar_memory
+)
+
+iree_py_test(
+  NAME
+    spirv_packet_rows_test
+  SRCS
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.gen.spirv_packet_rows_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
+)
+
 iree_py_test(
   NAME
     spirv_features_test

@@ -16,3 +16,19 @@ func.def target(@target) @unsupported_source_type(%value: f32) {
   // ERROR@-1: TARGET/033 {field_name="source", actual_type="f32"}
   func.return
 }
+
+// ====
+
+spirv.target<vulkan1_3> @target
+
+func.def target(@target) @storage_buffer_f16_requires_target_features(%input: buffer, %output: buffer, %byte_offset: offset) {
+  // ERROR@+1: TARGET/003 {subject_kind="descriptor", subject_name="spirv.op_ptr_access_chain.storage_buffer.f16.byte_offset", constraint_key="descriptor_available"}
+  %input_view = buffer.view %input[%byte_offset] : buffer -> view<1xf16, #dense>
+  // ERROR@+1: TARGET/003 {subject_kind="descriptor", subject_name="spirv.op_load.storage_buffer.f16", constraint_key="descriptor_available"}
+  %loaded = view.load %input_view[0] : view<1xf16, #dense> -> f16
+  // ERROR@+1: TARGET/003 {subject_kind="descriptor", subject_name="spirv.op_ptr_access_chain.storage_buffer.f16.byte_offset", constraint_key="descriptor_available"}
+  %output_view = buffer.view %output[%byte_offset] : buffer -> view<1xf16, #dense>
+  // ERROR@+1: TARGET/003 {subject_kind="descriptor", subject_name="spirv.op_store.storage_buffer.f16", constraint_key="descriptor_available"}
+  view.store %loaded, %output_view[0] : f16, view<1xf16, #dense>
+  func.return
+}

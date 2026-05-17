@@ -273,6 +273,27 @@ iree_status_t loom_spirv_vulkan_hal_target_profile_storage_initialize(
   if (has_cooperative_matrix_khr) {
     feature_bits |= LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR;
   }
+  if (iree_any_bit_set(facts->flags,
+                       LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_FLOAT16)) {
+    feature_bits |= LOOM_SPIRV_FEATURE_FLOAT16;
+  }
+  if (iree_any_bit_set(facts->flags,
+                       LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_FLOAT64)) {
+    feature_bits |= LOOM_SPIRV_FEATURE_FLOAT64;
+  }
+  if (iree_any_bit_set(facts->flags,
+                       LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_INT8)) {
+    feature_bits |= LOOM_SPIRV_FEATURE_INT8;
+  }
+  if (iree_any_bit_set(facts->flags,
+                       LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_INT16)) {
+    feature_bits |= LOOM_SPIRV_FEATURE_INT16;
+  }
+  if (iree_any_bit_set(
+          facts->flags,
+          LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_STORAGE_BUFFER_8BIT_ACCESS)) {
+    feature_bits |= LOOM_SPIRV_FEATURE_STORAGE_BUFFER_8BIT_ACCESS;
+  }
 
   loom_spirv_cooperative_matrix_property_t* matrix_rows = NULL;
   iree_host_size_t matrix_row_count = 0;
@@ -359,6 +380,28 @@ iree_status_t loom_spirv_vulkan_hal_profile_initialize_target_bundle(
           LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_COOPERATIVE_MATRIX_KHR)) {
     out_storage->config.contract_feature_bits |=
         LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR;
+  }
+  if (iree_any_bit_set(facts->flags,
+                       LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_FLOAT16)) {
+    out_storage->config.contract_feature_bits |= LOOM_SPIRV_FEATURE_FLOAT16;
+  }
+  if (iree_any_bit_set(facts->flags,
+                       LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_FLOAT64)) {
+    out_storage->config.contract_feature_bits |= LOOM_SPIRV_FEATURE_FLOAT64;
+  }
+  if (iree_any_bit_set(facts->flags,
+                       LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_INT8)) {
+    out_storage->config.contract_feature_bits |= LOOM_SPIRV_FEATURE_INT8;
+  }
+  if (iree_any_bit_set(facts->flags,
+                       LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_INT16)) {
+    out_storage->config.contract_feature_bits |= LOOM_SPIRV_FEATURE_INT16;
+  }
+  if (iree_any_bit_set(
+          facts->flags,
+          LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_STORAGE_BUFFER_8BIT_ACCESS)) {
+    out_storage->config.contract_feature_bits |=
+        LOOM_SPIRV_FEATURE_STORAGE_BUFFER_8BIT_ACCESS;
   }
   return iree_ok_status();
 }
