@@ -1827,19 +1827,17 @@ loom_amdgpu_matrix_contract_descriptor_fragment_layout(
 const loom_amdgpu_matrix_fragment_role_layout_t*
 loom_amdgpu_matrix_fragment_role_layout(
     const loom_amdgpu_matrix_fragment_layout_t* layout,
-    loom_amdgpu_matrix_operand_role_t role) {
-  return loom_matrix_fragment_role_layout(layout,
-                                          (loom_contract_operand_role_t)role);
+    loom_contract_operand_role_t role) {
+  return loom_matrix_fragment_role_layout(layout, role);
 }
 
 bool loom_amdgpu_matrix_fragment_coordinate(
     const loom_amdgpu_matrix_fragment_layout_t* layout,
-    loom_amdgpu_matrix_operand_role_t role, uint16_t lane,
-    uint16_t register_index, uint16_t element_index,
+    loom_contract_operand_role_t role, uint16_t lane, uint16_t register_index,
+    uint16_t element_index,
     loom_amdgpu_matrix_fragment_coordinate_t* out_coordinate) {
-  return loom_matrix_fragment_coordinate(
-      layout, (loom_contract_operand_role_t)role, lane, register_index,
-      element_index, out_coordinate);
+  return loom_matrix_fragment_coordinate(layout, role, lane, register_index,
+                                         element_index, out_coordinate);
 }
 
 bool loom_amdgpu_matrix_feature_bits_from_profile(

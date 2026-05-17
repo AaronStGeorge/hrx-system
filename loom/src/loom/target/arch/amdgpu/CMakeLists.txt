@@ -1771,6 +1771,7 @@ loom_cc_library(
     ::target_info_defs
     ::target_refs
     iree::base
+    loom::src::loom::analysis::contract_roles
     loom::src::loom::analysis::matrix_fragment_layout
   PUBLIC
 )

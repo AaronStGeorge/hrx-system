@@ -681,8 +681,8 @@ typedef struct loom_amdgpu_fragment_origin_plan_t {
 typedef struct loom_amdgpu_fragment_memory_plan_t {
   // Direction of the fragment memory movement.
   loom_amdgpu_memory_operation_kind_t operation_kind;
-  // Matrix-fragment role selected from source IR.
-  loom_amdgpu_matrix_operand_role_t role;
+  // Contract operand role selected from source IR.
+  loom_contract_operand_role_t role;
   // Target-owned lane/register layout selected for the fragment payload.
   loom_amdgpu_matrix_fragment_layout_kind_t layout_kind;
   // Source or destination view SSA value.

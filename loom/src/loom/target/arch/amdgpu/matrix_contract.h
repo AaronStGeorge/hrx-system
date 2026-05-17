@@ -17,6 +17,7 @@
 #define LOOM_TARGET_AMDGPU_MATRIX_CONTRACT_H_
 
 #include "iree/base/api.h"
+#include "loom/analysis/contract_roles.h"
 #include "loom/analysis/matrix_fragment_layout.h"
 #include "loom/target/arch/amdgpu/target_info_defs.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
@@ -150,20 +151,6 @@ typedef enum loom_amdgpu_matrix_scale_format_selector_e {
   // LLVM selector value for FP8 E4M3-family scale payloads.
   LOOM_AMDGPU_MATRIX_SCALE_FORMAT_SELECTOR_FP8_E4M3 = 2,
 } loom_amdgpu_matrix_scale_format_selector_t;
-
-typedef enum loom_amdgpu_matrix_operand_role_e {
-  // Unknown or uninitialized matrix operand role.
-  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_UNKNOWN = LOOM_CONTRACT_OPERAND_ROLE_UNKNOWN,
-  // Matrix A source operand.
-  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS = LOOM_CONTRACT_OPERAND_ROLE_LHS,
-  // Matrix B source operand.
-  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS = LOOM_CONTRACT_OPERAND_ROLE_RHS,
-  // Matrix C accumulator input operand.
-  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR =
-      LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR,
-  // Matrix D result operand.
-  LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT = LOOM_CONTRACT_OPERAND_ROLE_RESULT,
-} loom_amdgpu_matrix_operand_role_t;
 
 typedef enum loom_amdgpu_matrix_fragment_coordinate_flag_bits_e {
   // Coordinate carries an M/result-row value.
@@ -437,13 +424,13 @@ loom_amdgpu_matrix_contract_descriptor_fragment_layout(
 const loom_amdgpu_matrix_fragment_role_layout_t*
 loom_amdgpu_matrix_fragment_role_layout(
     const loom_amdgpu_matrix_fragment_layout_t* layout,
-    loom_amdgpu_matrix_operand_role_t role);
+    loom_contract_operand_role_t role);
 
 // Maps a lane-local payload register element to a logical matrix coordinate.
 bool loom_amdgpu_matrix_fragment_coordinate(
     const loom_amdgpu_matrix_fragment_layout_t* layout,
-    loom_amdgpu_matrix_operand_role_t role, uint16_t lane,
-    uint16_t register_index, uint16_t element_index,
+    loom_contract_operand_role_t role, uint16_t lane, uint16_t register_index,
+    uint16_t element_index,
     loom_amdgpu_matrix_fragment_coordinate_t* out_coordinate);
 
 // Maps a matrix feature profile enum to matrix feature bits.

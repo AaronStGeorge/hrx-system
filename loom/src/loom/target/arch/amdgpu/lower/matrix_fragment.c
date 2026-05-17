@@ -118,20 +118,20 @@ static bool loom_amdgpu_fragment_memory_descriptor_present(
 }
 
 static bool loom_amdgpu_fragment_memory_role_from_vector_role(
-    loom_vector_role_t role, loom_amdgpu_matrix_operand_role_t* out_role) {
-  *out_role = LOOM_AMDGPU_MATRIX_OPERAND_ROLE_UNKNOWN;
+    loom_vector_role_t role, loom_contract_operand_role_t* out_role) {
+  *out_role = LOOM_CONTRACT_OPERAND_ROLE_UNKNOWN;
   switch (role) {
     case LOOM_VECTOR_ROLE_LHS:
-      *out_role = LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS;
+      *out_role = LOOM_CONTRACT_OPERAND_ROLE_LHS;
       return true;
     case LOOM_VECTOR_ROLE_RHS:
-      *out_role = LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS;
+      *out_role = LOOM_CONTRACT_OPERAND_ROLE_RHS;
       return true;
     case LOOM_VECTOR_ROLE_INIT:
-      *out_role = LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR;
+      *out_role = LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR;
       return true;
     case LOOM_VECTOR_ROLE_RESULT:
-      *out_role = LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT;
+      *out_role = LOOM_CONTRACT_OPERAND_ROLE_RESULT;
       return true;
     case LOOM_VECTOR_ROLE_COUNT_:
     default:
@@ -149,7 +149,7 @@ static bool loom_amdgpu_fragment_memory_exact_nonnegative_i64(
 static bool loom_amdgpu_fragment_memory_shape_matches(
     const loom_value_fact_table_t* fact_table,
     const loom_amdgpu_matrix_fragment_layout_t* layout,
-    loom_amdgpu_matrix_operand_role_t role, loom_value_id_t rows,
+    loom_contract_operand_role_t role, loom_value_id_t rows,
     loom_value_id_t columns) {
   int64_t row_count = 0;
   int64_t column_count = 0;
@@ -162,17 +162,17 @@ static bool loom_amdgpu_fragment_memory_shape_matches(
 
   const loom_amdgpu_matrix_tile_shape_t shape = layout->tile_shape;
   switch (role) {
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS:
+    case LOOM_CONTRACT_OPERAND_ROLE_LHS:
       return row_count == shape.result_row_count &&
              column_count == shape.reduction_count;
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS:
+    case LOOM_CONTRACT_OPERAND_ROLE_RHS:
       return row_count == shape.reduction_count &&
              column_count == shape.result_column_count;
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR:
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT:
+    case LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR:
+    case LOOM_CONTRACT_OPERAND_ROLE_RESULT:
       return row_count == shape.result_row_count &&
              column_count == shape.result_column_count;
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_UNKNOWN:
+    case LOOM_CONTRACT_OPERAND_ROLE_UNKNOWN:
     default:
       return false;
   }
@@ -188,8 +188,8 @@ static bool loom_amdgpu_fragment_memory_payload_matches(
   }
 
   switch (role_layout->role) {
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS:
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS: {
+    case LOOM_CONTRACT_OPERAND_ROLE_LHS:
+    case LOOM_CONTRACT_OPERAND_ROLE_RHS: {
       if (loom_type_element_type(payload_type) != expected_element_type ||
           !loom_scalar_type_is_float(expected_element_type)) {
         return false;
@@ -213,13 +213,13 @@ static bool loom_amdgpu_fragment_memory_payload_matches(
              register_count == role_layout->register_count &&
              payload_bit_count == (uint32_t)role_layout->register_count * 32u;
     }
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR:
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT:
+    case LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR:
+    case LOOM_CONTRACT_OPERAND_ROLE_RESULT:
       return expected_element_type == LOOM_SCALAR_TYPE_F32 &&
              loom_type_element_type(payload_type) == expected_element_type &&
              loom_amdgpu_vector_f32_lane_count(payload_type) ==
                  role_layout->register_count;
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_UNKNOWN:
+    case LOOM_CONTRACT_OPERAND_ROLE_UNKNOWN:
     default:
       return false;
   }
@@ -246,23 +246,23 @@ static bool loom_amdgpu_fragment_memory_scalar_type_from_numeric(
 
 static bool loom_amdgpu_fragment_memory_descriptor_payload(
     const loom_amdgpu_matrix_contract_descriptor_t* descriptor,
-    loom_amdgpu_matrix_operand_role_t role,
+    loom_contract_operand_role_t role,
     loom_amdgpu_matrix_payload_shape_t* out_payload) {
   *out_payload = (loom_amdgpu_matrix_payload_shape_t){0};
   switch (role) {
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS:
+    case LOOM_CONTRACT_OPERAND_ROLE_LHS:
       *out_payload = descriptor->lhs_payload;
       return true;
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS:
+    case LOOM_CONTRACT_OPERAND_ROLE_RHS:
       *out_payload = descriptor->rhs_payload;
       return true;
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR:
+    case LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR:
       *out_payload = descriptor->accumulator_payload;
       return true;
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT:
+    case LOOM_CONTRACT_OPERAND_ROLE_RESULT:
       *out_payload = descriptor->result_payload;
       return true;
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_UNKNOWN:
+    case LOOM_CONTRACT_OPERAND_ROLE_UNKNOWN:
     default:
       return false;
   }
@@ -270,8 +270,7 @@ static bool loom_amdgpu_fragment_memory_descriptor_payload(
 
 static bool loom_amdgpu_fragment_memory_descriptor_role_element_type(
     const loom_amdgpu_matrix_contract_descriptor_t* descriptor,
-    loom_amdgpu_matrix_operand_role_t role,
-    loom_scalar_type_t* out_element_type) {
+    loom_contract_operand_role_t role, loom_scalar_type_t* out_element_type) {
   loom_amdgpu_matrix_payload_shape_t payload = {0};
   return loom_amdgpu_fragment_memory_descriptor_payload(descriptor, role,
                                                         &payload) &&
@@ -287,7 +286,7 @@ static bool loom_amdgpu_fragment_memory_payload_element_matches(
 
 static bool loom_amdgpu_fragment_memory_target_layout(
     const loom_amdgpu_fragment_memory_environment_t* environment,
-    loom_amdgpu_matrix_operand_role_t role, loom_type_t payload_type,
+    loom_contract_operand_role_t role, loom_type_t payload_type,
     const loom_amdgpu_matrix_fragment_layout_t** out_layout,
     loom_scalar_type_t* out_expected_element_type,
     loom_amdgpu_fragment_memory_diagnostic_t* diagnostic) {
@@ -343,21 +342,21 @@ static bool loom_amdgpu_fragment_memory_view_matches(
   }
 
   switch (role_layout->role) {
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_LHS:
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RHS:
+    case LOOM_CONTRACT_OPERAND_ROLE_LHS:
+    case LOOM_CONTRACT_OPERAND_ROLE_RHS:
       if (!loom_scalar_type_is_float(expected_element_type) ||
           loom_scalar_type_bitwidth(expected_element_type) !=
               role_layout->element_bit_count) {
         return false;
       }
       break;
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_ACCUMULATOR:
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_RESULT:
+    case LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR:
+    case LOOM_CONTRACT_OPERAND_ROLE_RESULT:
       if (expected_element_type != LOOM_SCALAR_TYPE_F32) {
         return false;
       }
       break;
-    case LOOM_AMDGPU_MATRIX_OPERAND_ROLE_UNKNOWN:
+    case LOOM_CONTRACT_OPERAND_ROLE_UNKNOWN:
     default:
       return false;
   }
@@ -610,8 +609,7 @@ static bool loom_amdgpu_fragment_memory_analyze(
         diagnostic, IREE_SV("fragment_memory.cache_policy"));
   }
 
-  loom_amdgpu_matrix_operand_role_t role =
-      LOOM_AMDGPU_MATRIX_OPERAND_ROLE_UNKNOWN;
+  loom_contract_operand_role_t role = LOOM_CONTRACT_OPERAND_ROLE_UNKNOWN;
   if (!loom_amdgpu_fragment_memory_role_from_vector_role(source->vector_role,
                                                          &role)) {
     return loom_amdgpu_fragment_memory_reject(diagnostic,
