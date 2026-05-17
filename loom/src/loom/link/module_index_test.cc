@@ -304,7 +304,7 @@ check.case public @kernel_case {
   check.return
 }
 
-check.benchmark @kernel_bench case(@kernel_case) attrs({})
+check.benchmark @kernel_bench case(@kernel_case) {}
 )"));
   std::vector<uint8_t> bytes = WriteModule(module);
 

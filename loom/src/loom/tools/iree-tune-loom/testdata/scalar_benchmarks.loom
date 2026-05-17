@@ -5,7 +5,7 @@ check.case @scalar_equal {
   check.return
 }
 
-check.benchmark @scalar_equal_latency case(@scalar_equal) attrs({
+check.benchmark @scalar_equal_latency case(@scalar_equal) {
   family = "scalar_equal",
   iterations = 3,
   knobs = {variant = "literal"},
@@ -14,8 +14,8 @@ check.benchmark @scalar_equal_latency case(@scalar_equal) attrs({
   problem = {dtype = "i32", element_count = 1},
   strategy = "literal_compare",
   warmup_iterations = 1
-})
-check.benchmark @scalar_equal_dispatch_latency case(@scalar_equal) attrs({measure = "dispatch_complete"})
+}
+check.benchmark @scalar_equal_dispatch_latency case(@scalar_equal) {measure = "dispatch_complete"}
 
 check.case @sampled_choice {
   %value = check.param.choice values([5, 7]) : i32
@@ -23,4 +23,4 @@ check.case @sampled_choice {
   check.return
 }
 
-check.benchmark @sampled_choice_latency case(@sampled_choice) attrs({measure = "case_end_to_end"})
+check.benchmark @sampled_choice_latency case(@sampled_choice) {measure = "case_end_to_end"}

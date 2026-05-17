@@ -26,7 +26,7 @@ check.case @wrong_terminator {
 
 // check.benchmark references a concrete check.case symbol.
 // ERROR@+1: SYMBOL/002 "missing_case"
-check.benchmark @missing_case_benchmark case(@missing_case) attrs({})
+check.benchmark @missing_case_benchmark case(@missing_case) {}
 
 // ====
 
@@ -34,7 +34,7 @@ check.benchmark @missing_case_benchmark case(@missing_case) attrs({})
 func.decl @not_a_case()
 
 // ERROR@+1: SYMBOL/003 "expected check case"
-check.benchmark @wrong_case_kind case(@not_a_case) attrs({})
+check.benchmark @wrong_case_kind case(@not_a_case) {}
 
 // ====
 

@@ -160,9 +160,9 @@ check_requires = Op(
     traits=_CASE_BODY_TRAITS,
     format=[
         OpRef("provider"),
-        Clause("attrs", AttrDict("attrs")),
+        AttrDict("attrs"),
     ],
-    examples=['check.requires<target.feature> attrs({feature = "amdgpu.gfx11"})'],
+    examples=['check.requires<target.feature> {feature = "amdgpu.gfx11"}'],
 )
 
 check_skip_if = Op(
@@ -177,11 +177,11 @@ check_skip_if = Op(
     traits=_CASE_BODY_TRAITS,
     format=[
         OpRef("provider"),
-        Clause("attrs", AttrDict("attrs")),
+        AttrDict("attrs"),
         OptionalGroup([Clause("reason", Attr("reason"))], anchor="reason"),
     ],
     examples=[
-        'check.skip_if<device.memory> attrs({max_bytes = 1073741824}) reason("fixture too large")',
+        'check.skip_if<device.memory> {max_bytes = 1073741824} reason("fixture too large")',
     ],
 )
 
@@ -535,12 +535,12 @@ check_expect = Op(
     format=[
         OpRef("provider"),
         *_EXPECT_VALUE_CLAUSES,
-        OptionalGroup([Clause("attrs", AttrDict("attrs"))], anchor="attrs"),
+        OptionalGroup([AttrDict("attrs")], anchor="attrs"),
         COLON,
         TypeOf("actual"),
     ],
     examples=[
-        "check.expect<topk.equal> actual(%actual) expected(%expected) attrs({k = 5}) : tensor<1000xf32>",
+        "check.expect<topk.equal> actual(%actual) expected(%expected) {k = 5} : tensor<1000xf32>",
     ],
 )
 
@@ -572,10 +572,10 @@ check_benchmark = Op(
     format=[
         SymbolRef("benchmark"),
         Clause("case", SymbolRef("case_ref")),
-        Clause("attrs", AttrDict("attrs")),
+        AttrDict("attrs"),
     ],
     examples=[
-        'check.benchmark @gemv_latency case(@gemv_sweep) attrs({measure = "dispatch_complete", iterations = 100})',
+        'check.benchmark @gemv_latency case(@gemv_sweep) {measure = "dispatch_complete", iterations = 100}',
     ],
 )
 

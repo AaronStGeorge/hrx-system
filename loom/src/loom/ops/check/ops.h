@@ -98,7 +98,7 @@ iree_status_t loom_check_return_build(
     loom_op_t** out_op);
 
 // LOOM_OP_CHECK_REQUIRES: Declares a provider requirement; unmet requirements skip the case.
-// check.requires<target.feature> attrs({feature = "amdgpu.gfx11"})
+// check.requires<target.feature> {feature = "amdgpu.gfx11"}
 LOOM_DEFINE_ISA(loom_check_requires_isa, LOOM_OP_CHECK_REQUIRES)
 LOOM_DEFINE_ATTR_STRING(loom_check_requires_provider, 0)
 LOOM_DEFINE_ATTR_DICT(loom_check_requires_attrs, 1)
@@ -110,7 +110,7 @@ iree_status_t loom_check_requires_build(
     loom_op_t** out_op);
 
 // LOOM_OP_CHECK_SKIP_IF: Declares a provider skip predicate for exceptional environments.
-// check.skip_if<device.memory> attrs({max_bytes = 1073741824}) reason("fixture too large")
+// check.skip_if<device.memory> {max_bytes = 1073741824} reason("fixture too large")
 LOOM_DEFINE_ISA(loom_check_skip_if_isa, LOOM_OP_CHECK_SKIP_IF)
 LOOM_DEFINE_ATTR_STRING(loom_check_skip_if_provider, 0)
 LOOM_DEFINE_ATTR_DICT(loom_check_skip_if_attrs, 1)
@@ -337,7 +337,7 @@ iree_status_t loom_check_expect_shape_build(
     loom_op_t** out_op);
 
 // LOOM_OP_CHECK_EXPECT: Runs a pluggable custom validator over actual and expected values.
-// check.expect<topk.equal> actual(%actual) expected(%expected) attrs({k = 5}) : tensor<1000xf32>
+// check.expect<topk.equal> actual(%actual) expected(%expected) {k = 5} : tensor<1000xf32>
 LOOM_DEFINE_ISA(loom_check_expect_isa, LOOM_OP_CHECK_EXPECT)
 LOOM_DEFINE_OPERAND(loom_check_expect_actual, 0)
 LOOM_DEFINE_OPERAND(loom_check_expect_expected, 1)
@@ -353,7 +353,7 @@ iree_status_t loom_check_expect_build(
     loom_op_t** out_op);
 
 // LOOM_OP_CHECK_BENCHMARK: Declarative benchmark/tuning policy over a check.case.
-// check.benchmark @gemv_latency case(@gemv_sweep) attrs({measure = "dispatch_complete", iterations = 100})
+// check.benchmark @gemv_latency case(@gemv_sweep) {measure = "dispatch_complete", iterations = 100}
 LOOM_DEFINE_ISA(loom_check_benchmark_isa, LOOM_OP_CHECK_BENCHMARK)
 LOOM_DEFINE_ATTR_SYMBOL(loom_check_benchmark_benchmark, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_check_benchmark_case_ref, 1)

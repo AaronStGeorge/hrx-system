@@ -294,7 +294,7 @@ TEST_F(ExpectationTest, DispatchesCustomExpectationProvidersOncePrepared) {
 check.case @custom {
   %actual = check.literal value(1) : i32
   %expected = check.literal value(1) : i32
-  check.expect<always.fails> actual(%actual) expected(%expected) attrs({k = 5}) : i32
+  check.expect<always.fails> actual(%actual) expected(%expected) {k = 5} : i32
   check.return
 }
 )");

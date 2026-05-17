@@ -80,7 +80,7 @@ check.case @private_case {
   check.return
 }
 
-check.benchmark @scale_latency case(@scale_case) attrs({iterations = 100})
+check.benchmark @scale_latency case(@scale_case) {iterations = 100}
 )");
   ASSERT_NE(module, nullptr);
 
