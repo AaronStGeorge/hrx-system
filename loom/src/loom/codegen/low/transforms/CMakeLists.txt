@@ -143,6 +143,7 @@ loom_cc_test(
     iree::base::internal::arena
     loom::src::loom::codegen::low::lower
     loom::src::loom::codegen::low::pass_environment
+    loom::src::loom::codegen::low::source_selection
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::func
@@ -154,6 +155,7 @@ loom_cc_test(
     loom::src::loom::target::test::contracts::core_lower_rules
     loom::src::loom::target::test::low_registry
     loom::src::loom::target::test::lower
+    loom::src::loom::target::test::target_record_table
     loom::src::loom::testing::module_ptr
     iree::testing::gtest
     iree::testing::gtest_main

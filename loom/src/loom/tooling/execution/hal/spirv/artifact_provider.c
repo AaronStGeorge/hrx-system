@@ -18,6 +18,35 @@ typedef struct loom_spirv_hal_artifact_storage_t {
   loom_spirv_module_binary_t module;
 } loom_spirv_hal_artifact_storage_t;
 
+static iree_status_t loom_spirv_hal_artifact_provider_query_matrix_rows(
+    iree_hal_device_t* device, iree_allocator_t allocator,
+    iree_hal_vulkan_cooperative_matrix_property_t** out_rows,
+    iree_host_size_t* out_row_count) {
+  *out_rows = NULL;
+  *out_row_count = 0;
+  iree_host_size_t row_count = 0;
+  IREE_RETURN_IF_ERROR(
+      iree_hal_vulkan_device_query_cooperative_matrix_properties(
+          device, /*property_capacity=*/0, &row_count,
+          /*out_properties=*/NULL));
+  if (row_count == 0) {
+    return iree_ok_status();
+  }
+  iree_hal_vulkan_cooperative_matrix_property_t* rows = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
+      allocator, row_count * sizeof(*rows), (void**)&rows));
+  iree_status_t status =
+      iree_hal_vulkan_device_query_cooperative_matrix_properties(
+          device, row_count, &row_count, rows);
+  if (iree_status_is_ok(status)) {
+    *out_rows = rows;
+    *out_row_count = row_count;
+  } else {
+    iree_allocator_free(allocator, rows);
+  }
+  return status;
+}
+
 static bool loom_spirv_hal_artifact_provider_bundle_is_compatible(
     void* user_data, const loom_target_entry_t* entry) {
   (void)user_data;
@@ -38,7 +67,6 @@ static iree_status_t loom_spirv_hal_artifact_provider_select_device_target(
   IREE_ASSERT_ARGUMENT(provider);
   IREE_ASSERT_ARGUMENT(runtime);
   IREE_ASSERT_ARGUMENT(out_target);
-  (void)allocator;
 
   *out_target = (loom_run_hal_device_target_t){0};
 
@@ -47,9 +75,55 @@ static iree_status_t loom_spirv_hal_artifact_provider_select_device_target(
       runtime->device, runtime->executable_cache, &facts));
   IREE_RETURN_IF_ERROR(loom_spirv_vulkan_hal_profile_initialize_target_bundle(
       &facts, &out_target->target_storage));
+
+  iree_hal_vulkan_cooperative_matrix_property_t* matrix_rows = NULL;
+  iree_host_size_t matrix_row_count = 0;
+  iree_status_t status = iree_ok_status();
+  if (iree_any_bit_set(
+          facts.flags,
+          LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_COOPERATIVE_MATRIX_KHR)) {
+    status = loom_spirv_hal_artifact_provider_query_matrix_rows(
+        runtime->device, allocator, &matrix_rows, &matrix_row_count);
+  }
+  loom_spirv_vulkan_hal_target_profile_storage_t* profile_storage = NULL;
+  if (iree_status_is_ok(status) &&
+      iree_any_bit_set(
+          facts.flags,
+          LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_COOPERATIVE_MATRIX_KHR)) {
+    status = iree_allocator_malloc(allocator, sizeof(*profile_storage),
+                                   (void**)&profile_storage);
+  }
+  if (iree_status_is_ok(status) && profile_storage != NULL) {
+    status = loom_spirv_vulkan_hal_target_profile_storage_initialize(
+        &facts, matrix_rows, matrix_row_count, allocator, profile_storage);
+  }
+  iree_allocator_free(allocator, matrix_rows);
+  if (!iree_status_is_ok(status)) {
+    iree_allocator_free(allocator, profile_storage);
+    return status;
+  }
+
+  out_target->data = profile_storage != NULL ? &profile_storage->profile : NULL;
   out_target->target_bundle = &out_target->target_storage.bundle;
   out_target->target_key = out_target->target_storage.bundle.name;
   return iree_ok_status();
+}
+
+static void loom_spirv_hal_artifact_provider_deinitialize_device_target(
+    const loom_run_hal_artifact_provider_t* provider,
+    loom_run_hal_device_target_t* target, iree_allocator_t allocator) {
+  (void)provider;
+  if (target == NULL) {
+    return;
+  }
+  if (target->data != NULL) {
+    loom_spirv_vulkan_hal_target_profile_storage_t* storage =
+        (loom_spirv_vulkan_hal_target_profile_storage_t*)target->data;
+    loom_spirv_vulkan_hal_target_profile_storage_deinitialize(storage,
+                                                              allocator);
+    iree_allocator_free(allocator, storage);
+  }
+  *target = (loom_run_hal_device_target_t){0};
 }
 
 static iree_status_t loom_spirv_hal_artifact_provider_emit_selected_entry(
@@ -195,6 +269,8 @@ const loom_run_hal_artifact_provider_t loom_spirv_vulkan_hal_artifact_provider =
         .target_family_name = IREE_SVL("SPIR-V/Vulkan"),
         .select_device_target =
             loom_spirv_hal_artifact_provider_select_device_target,
+        .deinitialize_device_target =
+            loom_spirv_hal_artifact_provider_deinitialize_device_target,
         .emit_artifact = loom_spirv_hal_artifact_provider_emit_artifact,
         .deinitialize_artifact =
             loom_spirv_hal_artifact_provider_deinitialize_artifact,

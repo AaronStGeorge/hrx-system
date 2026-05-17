@@ -206,6 +206,39 @@ TEST(SpirvCooperativePropertiesTest, SelectsCooperativeMatrixByShapeAndFacts) {
   EXPECT_EQ(diagnostic.status, LOOM_SPIRV_COOPERATIVE_SELECTION_MATCHED);
 }
 
+TEST(SpirvCooperativePropertiesTest, SelectsFromOwnedMatrixRowSubset) {
+  iree_host_size_t model_count = 0;
+  const loom_spirv_cooperative_matrix_property_t* model_rows =
+      loom_spirv_cooperative_matrix_model_properties(&model_count);
+  ASSERT_GE(model_count, 2u);
+
+  loom_spirv_cooperative_property_storage_t storage = {};
+  IREE_ASSERT_OK(loom_spirv_cooperative_property_storage_initialize_matrix_rows(
+      LOOM_SPIRV_FEATURE_VULKAN_SHADER |
+          LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR,
+      model_rows, 1, iree_allocator_system(), &storage));
+
+  loom_spirv_cooperative_diagnostic_t diagnostic = {};
+  const loom_spirv_cooperative_matrix_query_t f16_query =
+      F16MatrixQuery(LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED);
+  ASSERT_NE(loom_spirv_cooperative_matrix_property_select(
+                &storage.set, &f16_query, &diagnostic),
+            nullptr);
+  const loom_spirv_cooperative_matrix_query_t bf16_query =
+      Bf16MatrixQuery(LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED);
+  EXPECT_EQ(loom_spirv_cooperative_matrix_property_select(
+                &storage.set, &bf16_query, &diagnostic),
+            nullptr);
+  EXPECT_EQ(diagnostic.status,
+            LOOM_SPIRV_COOPERATIVE_SELECTION_REQUIRED_PROPERTY_MISSING);
+  EXPECT_TRUE(
+      iree_any_bit_set(diagnostic.rejection_flags,
+                       LOOM_SPIRV_COOPERATIVE_REJECTION_COMPONENT_TYPE));
+
+  loom_spirv_cooperative_property_storage_deinitialize(&storage,
+                                                       iree_allocator_system());
+}
+
 TEST(SpirvCooperativePropertiesTest, SelectsBfloat16CooperativeMatrixRow) {
   loom_spirv_cooperative_property_set_t property_set = {};
   PreparePropertySet(LOOM_SPIRV_FEATURE_VULKAN_SHADER |

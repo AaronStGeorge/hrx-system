@@ -100,6 +100,8 @@ typedef struct loom_target_legalization_context_t {
   loom_func_like_t function;
   // Target bundle selected for this function.
   const loom_target_bundle_t* bundle;
+  // Target-owned payload associated with |bundle|, or NULL.
+  const void* target_data;
   // Module-local target record symbol selected for this function.
   loom_symbol_ref_t target_ref;
   // Low descriptor set selected by the target bundle.

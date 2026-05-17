@@ -42,6 +42,20 @@ iree_status_t loom_target_function_contract_resolve(
     iree_diagnostic_emitter_t diagnostic_emitter, bool* out_valid,
     loom_target_bundle_storage_t* out_bundle_storage);
 
+// Materializes the effective target bundle by overlaying |func_facts|'s
+// function-owned ABI/export attrs onto |base_bundle|.
+//
+// This is the contract resolver used when a compile front door has already
+// selected an effective target bundle, such as a HAL-device-derived runtime
+// target. |target_name| is used only for diagnostics. Returns status only for
+// infrastructure failures; invalid user IR emits diagnostics and sets
+// |out_valid| false.
+iree_status_t loom_target_function_contract_resolve_from_bundle(
+    const loom_module_t* module, const loom_func_symbol_facts_t* func_facts,
+    iree_string_view_t target_name, const loom_target_bundle_t* base_bundle,
+    iree_diagnostic_emitter_t diagnostic_emitter, bool* out_valid,
+    loom_target_bundle_storage_t* out_bundle_storage);
+
 // Applies a fixed workgroup size to an already resolved HAL-kernel export plan.
 //
 // Kernel dialect code calls this after it has derived launch metadata from

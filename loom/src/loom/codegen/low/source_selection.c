@@ -25,6 +25,50 @@ static iree_status_t loom_low_source_selection_lookup_func_facts(
   return iree_ok_status();
 }
 
+static bool loom_low_source_selection_bundle_compatible(
+    const loom_target_bundle_t* module_bundle,
+    const loom_target_bundle_t* selected_bundle) {
+  const loom_target_snapshot_t* module_snapshot = module_bundle->snapshot;
+  const loom_target_snapshot_t* selected_snapshot = selected_bundle->snapshot;
+  const loom_target_export_plan_t* module_export = module_bundle->export_plan;
+  const loom_target_export_plan_t* selected_export =
+      selected_bundle->export_plan;
+  const loom_target_config_t* module_config = module_bundle->config;
+  const loom_target_config_t* selected_config = selected_bundle->config;
+  return module_snapshot->codegen_format == selected_snapshot->codegen_format &&
+         module_snapshot->artifact_format ==
+             selected_snapshot->artifact_format &&
+         module_export->abi_kind == selected_export->abi_kind &&
+         iree_string_view_equal(module_config->contract_set_key,
+                                selected_config->contract_set_key);
+}
+
+static iree_status_t loom_low_source_selection_apply_target_selection(
+    const loom_module_t* module,
+    const loom_low_source_selection_options_t* options,
+    const loom_func_symbol_facts_t* func_facts, bool* inout_contract_valid,
+    loom_low_source_selection_t* selection) {
+  if (!*inout_contract_valid ||
+      loom_target_selection_is_empty(options->target_selection)) {
+    selection->target_data = NULL;
+    return iree_ok_status();
+  }
+  if (!loom_low_source_selection_bundle_compatible(
+          &selection->target_bundle_storage.bundle,
+          options->target_selection.bundle)) {
+    selection->target_data = NULL;
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_target_function_contract_resolve_from_bundle(
+      module, func_facts, options->target_selection.bundle->name,
+      options->target_selection.bundle, options->diagnostic_emitter,
+      inout_contract_valid, &selection->target_bundle_storage));
+  selection->target_bundle = &selection->target_bundle_storage.bundle;
+  selection->target_data =
+      *inout_contract_valid ? options->target_selection.data : NULL;
+  return iree_ok_status();
+}
+
 typedef uint8_t loom_low_source_selection_filter_t;
 
 #define LOOM_LOW_SOURCE_SELECTION_FILTER_FUNCTION ((uint8_t)1u << 0)
@@ -71,6 +115,11 @@ static iree_status_t loom_low_source_selection_try_symbol(
     return iree_ok_status();
   }
   out_selection->target_bundle = &out_selection->target_bundle_storage.bundle;
+  IREE_RETURN_IF_ERROR(loom_low_source_selection_apply_target_selection(
+      module, options, func_facts, &contract_valid, out_selection));
+  if (!contract_valid) {
+    return iree_ok_status();
+  }
   const loom_low_lower_policy_t* policy =
       loom_low_lower_policy_registry_lookup_for_bundle(
           options->policy_registry, out_selection->target_bundle);

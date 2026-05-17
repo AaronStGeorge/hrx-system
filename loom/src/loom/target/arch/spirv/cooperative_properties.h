@@ -223,6 +223,15 @@ typedef struct loom_spirv_cooperative_property_set_t {
   uint16_t vector_shape_span_count;
 } loom_spirv_cooperative_property_set_t;
 
+typedef struct loom_spirv_cooperative_property_storage_t {
+  // Borrowable property set view over rows owned by this storage object.
+  loom_spirv_cooperative_property_set_t set;
+  // Matrix property rows owned by this storage object.
+  loom_spirv_cooperative_matrix_property_t* matrix_properties;
+  // Shape-key spans owned by this storage object.
+  loom_spirv_cooperative_property_span_t* matrix_shape_spans;
+} loom_spirv_cooperative_property_storage_t;
+
 typedef struct loom_spirv_cooperative_matrix_query_t {
   // Result row count and Matrix A row count.
   uint16_t m_size;
@@ -323,10 +332,37 @@ iree_string_view_t loom_spirv_storage_class_name(
 loom_spirv_storage_class_flags_t loom_spirv_storage_class_bit(
     loom_spirv_storage_class_t storage_class);
 
+// Returns the sorted static cooperative matrix model rows.
+const loom_spirv_cooperative_matrix_property_t*
+loom_spirv_cooperative_matrix_model_properties(iree_host_size_t* out_count);
+
+// Returns the shape key used to group matrix property rows.
+uint64_t loom_spirv_cooperative_matrix_shape_key(uint16_t m_size,
+                                                 uint16_t n_size,
+                                                 uint16_t k_size);
+
 // Prepares static cooperative property rows for a prepared feature set.
 void loom_spirv_cooperative_property_set_prepare(
     const loom_spirv_feature_set_t* feature_set,
     loom_spirv_cooperative_property_set_t* out_property_set);
+
+// Initializes storage with a copied, sorted subset of matrix rows.
+//
+// |matrix_properties| must already be sorted by
+// loom_spirv_cooperative_matrix_shape_key. This helper owns allocation and
+// span construction; selection remains the same direct shape-key lookup used by
+// static property sets.
+iree_status_t loom_spirv_cooperative_property_storage_initialize_matrix_rows(
+    loom_spirv_feature_bits_t feature_bits,
+    const loom_spirv_cooperative_matrix_property_t* matrix_properties,
+    iree_host_size_t matrix_property_count, iree_allocator_t allocator,
+    loom_spirv_cooperative_property_storage_t* out_storage);
+
+// Releases storage allocated by
+// loom_spirv_cooperative_property_storage_initialize_matrix_rows.
+void loom_spirv_cooperative_property_storage_deinitialize(
+    loom_spirv_cooperative_property_storage_t* storage,
+    iree_allocator_t allocator);
 
 // Selects a cooperative matrix property row for |query|. |out_diagnostic| may
 // be NULL when the caller only needs the selected row.

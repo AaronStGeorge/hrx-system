@@ -145,6 +145,8 @@ typedef struct loom_run_hal_testbench_actual_provider_t {
   loom_run_module_t compile_module;
   // Backend-produced HAL executable candidate.
   loom_run_hal_candidate_t candidate;
+  // Target selected before the compile pipeline runs.
+  loom_run_hal_device_target_t compile_device_target;
   // Prepared executable retained for correctness and benchmark dispatches.
   loom_run_hal_prepared_candidate_t prepared_candidate;
   // Dispatch options derived from the compiled source entry.
@@ -170,6 +172,8 @@ typedef struct loom_run_hal_testbench_actual_provider_t {
   bool compile_module_initialized;
   // True when |candidate| has been initialized.
   bool candidate_initialized;
+  // True when |compile_device_target| owns provider-selected target storage.
+  bool compile_device_target_initialized;
   // True when |prepared_candidate| has been initialized.
   bool prepared_candidate_initialized;
   // True when HAL candidate emission populated the caller's compile report.

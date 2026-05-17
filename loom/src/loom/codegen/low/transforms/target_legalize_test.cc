@@ -102,7 +102,7 @@ class TargetLegalizePassTest : public ::testing::Test {
         loom_low_pass_environment_storage_initialize(
             &registry_.registry, policy_registry, nullptr,
             legalizer_provider_list, nullptr, compile_report,
-            &low_pass_environment_storage);
+            loom_target_selection_empty(), &low_pass_environment_storage);
     loom_pass_t pass = {
         .info = pass_info,
         .module_run = loom_low_target_legalize_run,

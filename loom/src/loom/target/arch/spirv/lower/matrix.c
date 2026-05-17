@@ -11,6 +11,7 @@
 #include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/target/arch/spirv/cooperative_properties.h"
+#include "loom/target/arch/spirv/profile.h"
 
 static bool loom_spirv_contract_numeric_scalar_type(
     loom_contract_numeric_type_t numeric_type,
@@ -273,6 +274,12 @@ static bool loom_spirv_cooperative_matrix_query_from_contract(
 static void loom_spirv_matrix_prepare_properties(
     const loom_target_contract_query_environment_t* environment,
     loom_spirv_cooperative_property_set_t* out_property_set) {
+  const loom_spirv_target_profile_t* profile =
+      loom_spirv_target_profile_from_data(environment->target_data);
+  if (profile != NULL && profile->cooperative_properties != NULL) {
+    *out_property_set = *profile->cooperative_properties;
+    return;
+  }
   // Cooperative property selection only needs feature atom membership; full
   // SPIR-V capability/extension preparation is emission-owned.
   const loom_spirv_feature_set_t feature_set = {

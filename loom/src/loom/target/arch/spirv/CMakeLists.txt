@@ -76,6 +76,17 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    profile
+  HDRS
+    "profile.h"
+  DEPS
+    ::cooperative_properties
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     target_records
   HDRS
     "target_records.h"
@@ -137,6 +148,7 @@ loom_cc_library(
   DEPS
     ::cooperative_properties
     ::descriptors_ids
+    ::profile
     iree::base
     loom::src::loom::analysis::contract_vector
     loom::src::loom::codegen::low::lower

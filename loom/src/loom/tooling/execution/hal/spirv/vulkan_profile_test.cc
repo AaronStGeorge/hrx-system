@@ -9,6 +9,7 @@
 #include "iree/hal/api.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/target/arch/spirv/cooperative_properties.h"
 #include "loom/target/arch/spirv/features.h"
 
 namespace loom {
@@ -112,6 +113,35 @@ static loom_spirv_vulkan_hal_profile_facts_t BaselineFacts() {
               .y = 65535,
               .z = 65535,
           },
+  };
+}
+
+static loom_spirv_cooperative_matrix_query_t F16MatrixQuery() {
+  return {
+      .m_size = 16,
+      .n_size = 16,
+      .k_size = 16,
+      .lhs_type = LOOM_SPIRV_SCALAR_TYPE_F16,
+      .rhs_type = LOOM_SPIRV_SCALAR_TYPE_F16,
+      .accumulator_type = LOOM_SPIRV_SCALAR_TYPE_F32,
+      .result_type = LOOM_SPIRV_SCALAR_TYPE_F32,
+      .scope = LOOM_SPIRV_SCOPE_SUBGROUP,
+      .layout = LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_KHR,
+      .storage_class = LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER,
+      .policy = LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED,
+  };
+}
+
+static iree_hal_vulkan_cooperative_matrix_property_t F16DeviceMatrixRow() {
+  return {
+      .m_size = 16,
+      .n_size = 16,
+      .k_size = 16,
+      .a_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
+      .b_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV,
+      .c_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT32_NV,
+      .result_type = LOOM_SPIRV_COMPONENT_TYPE_FLOAT32_NV,
+      .scope = LOOM_SPIRV_SCOPE_SUBGROUP,
   };
 }
 
@@ -281,7 +311,7 @@ TEST(VulkanProfileTest, RejectsMissingBufferDeviceAddress) {
       loom_spirv_vulkan_hal_profile_initialize_target_bundle(&facts, &storage));
 }
 
-TEST(VulkanProfileTest, KeepsCooperativeMatrixAsUnmaterializedFact) {
+TEST(VulkanProfileTest, MaterializesCooperativeMatrixFeature) {
   loom_spirv_vulkan_hal_profile_facts_t facts = BaselineFacts();
   facts.flags |= LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_COOPERATIVE_MATRIX_KHR;
   facts.cooperative_matrix_property_count = 7;
@@ -291,11 +321,69 @@ TEST(VulkanProfileTest, KeepsCooperativeMatrixAsUnmaterializedFact) {
   IREE_ASSERT_OK(
       loom_spirv_vulkan_hal_profile_initialize_target_bundle(&facts, &storage));
 
-  EXPECT_EQ(storage.config.contract_feature_bits,
-            LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA);
-  EXPECT_EQ(storage.config.contract_feature_bits &
-                LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR,
-            0u);
+  EXPECT_TRUE(iree_all_bits_set(storage.config.contract_feature_bits,
+                                LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA));
+  EXPECT_TRUE(iree_all_bits_set(storage.config.contract_feature_bits,
+                                LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR));
+}
+
+TEST(VulkanProfileTest, ImportsExactCooperativeMatrixRows) {
+  loom_spirv_vulkan_hal_profile_facts_t facts = BaselineFacts();
+  facts.flags |= LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_COOPERATIVE_MATRIX_KHR;
+  const iree_hal_vulkan_cooperative_matrix_property_t device_rows[] = {
+      F16DeviceMatrixRow(),
+  };
+
+  loom_spirv_vulkan_hal_target_profile_storage_t storage = {};
+  IREE_ASSERT_OK(loom_spirv_vulkan_hal_target_profile_storage_initialize(
+      &facts, device_rows, IREE_ARRAYSIZE(device_rows), iree_allocator_system(),
+      &storage));
+
+  ASSERT_NE(storage.profile.cooperative_properties, nullptr);
+  EXPECT_EQ(storage.profile.cooperative_properties->matrix_property_count, 1u);
+  EXPECT_TRUE(
+      iree_all_bits_set(storage.profile.cooperative_properties->feature_bits,
+                        LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR));
+  const loom_spirv_cooperative_matrix_query_t query = F16MatrixQuery();
+  loom_spirv_cooperative_diagnostic_t diagnostic = {};
+  const loom_spirv_cooperative_matrix_property_t* property =
+      loom_spirv_cooperative_matrix_property_select(
+          storage.profile.cooperative_properties, &query, &diagnostic);
+  ASSERT_NE(property, nullptr);
+  EXPECT_TRUE(iree_string_view_equal(
+      property->name,
+      IREE_SV("khr.cooperative_matrix.f16.16x16x16.f32.subgroup")));
+  EXPECT_EQ(diagnostic.status, LOOM_SPIRV_COOPERATIVE_SELECTION_MATCHED);
+
+  loom_spirv_vulkan_hal_target_profile_storage_deinitialize(
+      &storage, iree_allocator_system());
+}
+
+TEST(VulkanProfileTest, RejectsCooperativeMatrixRowsAbsentFromDevice) {
+  loom_spirv_vulkan_hal_profile_facts_t facts = BaselineFacts();
+  facts.flags |= LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_COOPERATIVE_MATRIX_KHR;
+  iree_hal_vulkan_cooperative_matrix_property_t mismatched_row =
+      F16DeviceMatrixRow();
+  mismatched_row.k_size = 8;
+
+  loom_spirv_vulkan_hal_target_profile_storage_t storage = {};
+  IREE_ASSERT_OK(loom_spirv_vulkan_hal_target_profile_storage_initialize(
+      &facts, &mismatched_row, 1, iree_allocator_system(), &storage));
+
+  ASSERT_NE(storage.profile.cooperative_properties, nullptr);
+  EXPECT_EQ(storage.profile.cooperative_properties->matrix_property_count, 0u);
+  const loom_spirv_cooperative_matrix_query_t query = F16MatrixQuery();
+  loom_spirv_cooperative_diagnostic_t diagnostic = {};
+  EXPECT_EQ(loom_spirv_cooperative_matrix_property_select(
+                storage.profile.cooperative_properties, &query, &diagnostic),
+            nullptr);
+  EXPECT_EQ(diagnostic.status,
+            LOOM_SPIRV_COOPERATIVE_SELECTION_REQUIRED_PROPERTY_MISSING);
+  EXPECT_TRUE(iree_any_bit_set(diagnostic.rejection_flags,
+                               LOOM_SPIRV_COOPERATIVE_REJECTION_SHAPE));
+
+  loom_spirv_vulkan_hal_target_profile_storage_deinitialize(
+      &storage, iree_allocator_system());
 }
 
 }  // namespace

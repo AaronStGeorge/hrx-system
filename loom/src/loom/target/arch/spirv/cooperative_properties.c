@@ -6,6 +6,8 @@
 
 #include "loom/target/arch/spirv/cooperative_properties.h"
 
+#include <string.h>
+
 #define MATRIX_LAYOUT_ANY                               \
   (LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_BIT | \
    LOOM_SPIRV_COOPERATIVE_MATRIX_LAYOUT_COLUMN_MAJOR_BIT)
@@ -317,8 +319,9 @@ loom_spirv_storage_class_flags_t loom_spirv_storage_class_bit(
   }
 }
 
-static uint64_t loom_spirv_matrix_shape_key(uint16_t m_size, uint16_t n_size,
-                                            uint16_t k_size) {
+uint64_t loom_spirv_cooperative_matrix_shape_key(uint16_t m_size,
+                                                 uint16_t n_size,
+                                                 uint16_t k_size) {
   return ((uint64_t)m_size << 32) | ((uint64_t)n_size << 16) | k_size;
 }
 
@@ -408,6 +411,110 @@ void loom_spirv_cooperative_property_set_prepare(
   };
 }
 
+const loom_spirv_cooperative_matrix_property_t*
+loom_spirv_cooperative_matrix_model_properties(iree_host_size_t* out_count) {
+  IREE_ASSERT_ARGUMENT(out_count);
+  *out_count = IREE_ARRAYSIZE(kCooperativeMatrixProperties);
+  return kCooperativeMatrixProperties;
+}
+
+static iree_status_t loom_spirv_cooperative_property_storage_copy_matrix_rows(
+    const loom_spirv_cooperative_matrix_property_t* matrix_properties,
+    iree_host_size_t matrix_property_count, iree_allocator_t allocator,
+    loom_spirv_cooperative_property_storage_t* storage) {
+  if (matrix_property_count == 0) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
+      allocator, matrix_property_count * sizeof(*storage->matrix_properties),
+      (void**)&storage->matrix_properties));
+  memcpy(storage->matrix_properties, matrix_properties,
+         matrix_property_count * sizeof(*storage->matrix_properties));
+  storage->set.matrix_properties = storage->matrix_properties;
+  storage->set.matrix_property_count = (uint16_t)matrix_property_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_spirv_cooperative_property_storage_build_matrix_spans(
+    iree_host_size_t matrix_property_count, iree_allocator_t allocator,
+    loom_spirv_cooperative_property_storage_t* storage) {
+  if (matrix_property_count == 0) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
+      allocator, matrix_property_count * sizeof(*storage->matrix_shape_spans),
+      (void**)&storage->matrix_shape_spans));
+  uint64_t previous_shape_key = 0;
+  for (iree_host_size_t i = 0; i < matrix_property_count; ++i) {
+    const loom_spirv_cooperative_matrix_property_t* row =
+        &storage->matrix_properties[i];
+    const uint64_t shape_key = loom_spirv_cooperative_matrix_shape_key(
+        row->m_size, row->n_size, row->k_size);
+    if (i != 0 && shape_key < previous_shape_key) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "SPIR-V cooperative matrix rows must be sorted by shape key");
+    }
+    if (i == 0 || shape_key != previous_shape_key) {
+      storage->matrix_shape_spans[storage->set.matrix_shape_span_count++] =
+          (loom_spirv_cooperative_property_span_t){
+              .shape_key = shape_key,
+              .start = (uint16_t)i,
+              .count = 1,
+          };
+    } else {
+      const uint16_t span_index = storage->set.matrix_shape_span_count - 1;
+      loom_spirv_cooperative_property_span_t* span =
+          &storage->matrix_shape_spans[span_index];
+      ++span->count;
+    }
+    previous_shape_key = shape_key;
+  }
+  storage->set.matrix_shape_spans = storage->matrix_shape_spans;
+  return iree_ok_status();
+}
+
+iree_status_t loom_spirv_cooperative_property_storage_initialize_matrix_rows(
+    loom_spirv_feature_bits_t feature_bits,
+    const loom_spirv_cooperative_matrix_property_t* matrix_properties,
+    iree_host_size_t matrix_property_count, iree_allocator_t allocator,
+    loom_spirv_cooperative_property_storage_t* out_storage) {
+  IREE_ASSERT_ARGUMENT(out_storage);
+  if (matrix_property_count != 0) {
+    IREE_ASSERT_ARGUMENT(matrix_properties);
+  }
+  memset(out_storage, 0, sizeof(*out_storage));
+  if (matrix_property_count > UINT16_MAX) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "SPIR-V cooperative matrix property count exceeds uint16_t capacity");
+  }
+  out_storage->set.feature_bits = feature_bits;
+  iree_status_t status =
+      loom_spirv_cooperative_property_storage_copy_matrix_rows(
+          matrix_properties, matrix_property_count, allocator, out_storage);
+  if (iree_status_is_ok(status)) {
+    status = loom_spirv_cooperative_property_storage_build_matrix_spans(
+        matrix_property_count, allocator, out_storage);
+  }
+  if (!iree_status_is_ok(status)) {
+    loom_spirv_cooperative_property_storage_deinitialize(out_storage,
+                                                         allocator);
+  }
+  return status;
+}
+
+void loom_spirv_cooperative_property_storage_deinitialize(
+    loom_spirv_cooperative_property_storage_t* storage,
+    iree_allocator_t allocator) {
+  if (storage == NULL) {
+    return;
+  }
+  iree_allocator_free(allocator, storage->matrix_shape_spans);
+  iree_allocator_free(allocator, storage->matrix_properties);
+  *storage = (loom_spirv_cooperative_property_storage_t){0};
+}
+
 static loom_spirv_cooperative_matrix_layout_flags_t
 loom_spirv_matrix_layout_bit(loom_spirv_cooperative_matrix_layout_t layout) {
   switch (layout) {
@@ -445,8 +552,8 @@ loom_spirv_cooperative_matrix_property_select(
     return NULL;
   }
 
-  const uint64_t shape_key =
-      loom_spirv_matrix_shape_key(query->m_size, query->n_size, query->k_size);
+  const uint64_t shape_key = loom_spirv_cooperative_matrix_shape_key(
+      query->m_size, query->n_size, query->k_size);
   const loom_spirv_cooperative_property_span_t* span =
       loom_spirv_property_span_find(property_set->matrix_shape_spans,
                                     property_set->matrix_shape_span_count,

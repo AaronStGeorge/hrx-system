@@ -37,6 +37,11 @@ typedef struct loom_low_source_selection_options_t {
 
   // User-facing lowering kind used in diagnostics.
   iree_string_view_t lowering_kind;
+
+  // Optional runtime-selected target overlay. When compatible with a source
+  // function's module target record, this bundle refines the target contract
+  // used by legality and lowering while preserving the module target symbol.
+  loom_target_selection_t target_selection;
 } loom_low_source_selection_options_t;
 
 typedef enum loom_low_source_selection_kind_e {
@@ -61,6 +66,10 @@ typedef struct loom_low_source_selection_t {
 
   // Effective target bundle selected by |func|.
   const loom_target_bundle_t* target_bundle;
+
+  // Target-owned payload associated with |target_bundle|, or NULL when the
+  // bundle came only from module target records.
+  const void* target_data;
 
   // Lowering policy selected by |target_bundle|.
   const loom_low_lower_policy_t* policy;

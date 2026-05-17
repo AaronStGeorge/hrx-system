@@ -111,6 +111,15 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "profile",
+    hdrs = ["profile.h"],
+    deps = [
+        ":cooperative_properties",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "target_records",
     srcs = ["target_records.c"],
     hdrs = ["target_records.h"],
@@ -169,6 +178,7 @@ loom_cc_library(
     deps = [
         ":cooperative_properties",
         ":descriptors_ids",
+        ":profile",
         "//loom/src/loom/analysis:contract_vector",
         "//loom/src/loom/codegen/low:lower",
         "//loom/src/loom/error:error_defs",

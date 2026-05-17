@@ -55,10 +55,13 @@ loom_cc_library(
     hdrs = ["vulkan_profile.h"],
     deps = [
         "//loom/src/loom/target:types",
+        "//loom/src/loom/target/arch/spirv:cooperative_properties",
         "//loom/src/loom/target/arch/spirv:features",
+        "//loom/src/loom/target/arch/spirv:profile",
         "//loom/src/loom/target/arch/spirv:target_records",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/vulkan:api",
     ],
 )
 
@@ -92,9 +95,12 @@ loom_cc_test(
     deps = [
         ":vulkan_profile",
         "//loom/src/loom/target:types",
+        "//loom/src/loom/target/arch/spirv:cooperative_properties",
         "//loom/src/loom/target/arch/spirv:features",
+        "//loom/src/loom/target/arch/spirv:profile",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/vulkan:api",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

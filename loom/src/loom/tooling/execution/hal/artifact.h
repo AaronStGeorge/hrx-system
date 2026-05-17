@@ -73,6 +73,10 @@ typedef iree_status_t (*loom_run_hal_select_device_target_fn_t)(
     const struct loom_run_hal_runtime_t* runtime, iree_allocator_t allocator,
     loom_run_hal_device_target_t* out_target);
 
+typedef void (*loom_run_hal_deinitialize_device_target_fn_t)(
+    const loom_run_hal_artifact_provider_t* provider,
+    loom_run_hal_device_target_t* target, iree_allocator_t allocator);
+
 typedef iree_status_t (*loom_run_hal_emit_artifact_fn_t)(
     const loom_run_hal_artifact_provider_t* provider, loom_module_t* module,
     const loom_run_hal_device_target_t* target, iree_string_view_t entry_symbol,
@@ -96,6 +100,8 @@ struct loom_run_hal_artifact_provider_t {
   iree_string_view_t target_family_name;
   // Selects a concrete target supported by the active HAL executable cache.
   loom_run_hal_select_device_target_fn_t select_device_target;
+  // Releases storage owned by a target returned from |select_device_target|.
+  loom_run_hal_deinitialize_device_target_fn_t deinitialize_device_target;
   // Emits a prepared target-low Loom module to a HAL loadable artifact.
   loom_run_hal_emit_artifact_fn_t emit_artifact;
   // Releases storage owned by an artifact returned from |emit_artifact|.

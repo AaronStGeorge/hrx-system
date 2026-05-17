@@ -108,6 +108,7 @@ loom_cc_library(
     loom::src::loom::pass::environment
     loom::src::loom::pass::types
     loom::src::loom::target::math_policy
+    loom::src::loom::target::types
   PUBLIC
 )
 

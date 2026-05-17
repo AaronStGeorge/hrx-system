@@ -16,6 +16,8 @@
 
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
+#include "iree/hal/drivers/vulkan/api.h"
+#include "loom/target/arch/spirv/profile.h"
 #include "loom/target/types.h"
 
 #ifdef __cplusplus
@@ -84,10 +86,35 @@ typedef struct loom_spirv_vulkan_hal_profile_facts_t {
   uint32_t cooperative_matrix_supported_stages;
 } loom_spirv_vulkan_hal_profile_facts_t;
 
+typedef struct loom_spirv_vulkan_hal_target_profile_storage_t {
+  // SPIR-V profile payload passed opaquely through core compiler target_data.
+  // This must remain the first field so provider deinitialization can recover
+  // the owning storage from loom_run_hal_device_target_t.data.
+  loom_spirv_target_profile_t profile;
+  // Cooperative property storage owned by this target profile.
+  loom_spirv_cooperative_property_storage_t cooperative_properties;
+} loom_spirv_vulkan_hal_target_profile_storage_t;
+
 // Queries Vulkan/SPIR-V profile facts from |device| and |executable_cache|.
 iree_status_t loom_spirv_vulkan_hal_profile_query(
     iree_hal_device_t* device, iree_hal_executable_cache_t* executable_cache,
     loom_spirv_vulkan_hal_profile_facts_t* out_facts);
+
+// Initializes target-local SPIR-V profile storage from exact Vulkan
+// cooperative matrix property rows.
+iree_status_t loom_spirv_vulkan_hal_target_profile_storage_initialize(
+    const loom_spirv_vulkan_hal_profile_facts_t* facts,
+    const iree_hal_vulkan_cooperative_matrix_property_t*
+        cooperative_matrix_properties,
+    iree_host_size_t cooperative_matrix_property_count,
+    iree_allocator_t allocator,
+    loom_spirv_vulkan_hal_target_profile_storage_t* out_storage);
+
+// Releases storage allocated by
+// loom_spirv_vulkan_hal_target_profile_storage_initialize.
+void loom_spirv_vulkan_hal_target_profile_storage_deinitialize(
+    loom_spirv_vulkan_hal_target_profile_storage_t* storage,
+    iree_allocator_t allocator);
 
 // Materializes a HAL-kernel Vulkan 1.3 raw-BDA SPIR-V target bundle.
 //

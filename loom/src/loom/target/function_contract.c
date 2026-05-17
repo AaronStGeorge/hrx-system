@@ -302,28 +302,43 @@ iree_status_t loom_target_function_contract_resolve(
     const loom_func_symbol_facts_t* func_facts,
     iree_diagnostic_emitter_t diagnostic_emitter, bool* out_valid,
     loom_target_bundle_storage_t* out_bundle_storage) {
-  memset(out_bundle_storage, 0, sizeof(*out_bundle_storage));
-  *out_valid = false;
-
   const loom_target_symbol_facts_t* target = NULL;
   IREE_RETURN_IF_ERROR(loom_target_function_contract_lookup_target(
       module, fact_table, func_facts, diagnostic_emitter, out_valid, &target));
   if (!*out_valid) {
     return iree_ok_status();
   }
-  *out_bundle_storage = target->storage;
-  loom_target_bundle_storage_rebind(out_bundle_storage);
+  return loom_target_function_contract_resolve_from_bundle(
+      module, func_facts, target->name, &target->storage.bundle,
+      diagnostic_emitter, out_valid, out_bundle_storage);
+}
 
+iree_status_t loom_target_function_contract_resolve_from_bundle(
+    const loom_module_t* module, const loom_func_symbol_facts_t* func_facts,
+    iree_string_view_t target_name, const loom_target_bundle_t* base_bundle,
+    iree_diagnostic_emitter_t diagnostic_emitter, bool* out_valid,
+    loom_target_bundle_storage_t* out_bundle_storage) {
+  memset(out_bundle_storage, 0, sizeof(*out_bundle_storage));
+  *out_valid = false;
+
+  *out_bundle_storage = (loom_target_bundle_storage_t){
+      .snapshot = *base_bundle->snapshot,
+      .export_plan = *base_bundle->export_plan,
+      .config = *base_bundle->config,
+      .bundle = *base_bundle,
+  };
+  loom_target_bundle_storage_rebind(out_bundle_storage);
   out_bundle_storage->export_plan.name = func_facts->name;
   out_bundle_storage->export_plan.export_symbol = iree_string_view_empty();
   if (func_facts->has_abi) {
     out_bundle_storage->export_plan.abi_kind = func_facts->abi_kind;
   }
   if (out_bundle_storage->export_plan.abi_kind == LOOM_TARGET_ABI_UNKNOWN) {
-    return loom_target_function_contract_reject_target_constraint(
-        diagnostic_emitter, func_facts, target, IREE_SV("abi.concrete"),
+    return loom_target_function_contract_reject_constraint(
+        diagnostic_emitter, func_facts, target_name, IREE_SV("abi.concrete"),
         out_valid);
   }
+  *out_valid = true;
   IREE_RETURN_IF_ERROR(loom_target_function_contract_apply_abi_attrs(
       module, func_facts, diagnostic_emitter, func_facts->abi_attrs,
       out_valid));
@@ -332,7 +347,7 @@ iree_status_t loom_target_function_contract_resolve(
   }
   if (out_bundle_storage->export_plan.abi_kind == LOOM_TARGET_ABI_HAL_KERNEL) {
     IREE_RETURN_IF_ERROR(loom_target_function_contract_validate_hal_kernel(
-        diagnostic_emitter, func_facts, target->name,
+        diagnostic_emitter, func_facts, target_name,
         &out_bundle_storage->snapshot,
         &out_bundle_storage->export_plan.hal_kernel, out_valid));
     if (!*out_valid) {

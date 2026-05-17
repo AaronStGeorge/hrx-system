@@ -194,6 +194,15 @@ void loom_run_hal_testbench_actual_provider_deinitialize(
   if (provider->candidate_initialized) {
     loom_run_hal_candidate_deinitialize(&provider->candidate);
   }
+  if (provider->compile_device_target_initialized &&
+      provider->context != NULL &&
+      provider->context->artifact_provider != NULL &&
+      provider->context->artifact_provider->deinitialize_device_target !=
+          NULL) {
+    provider->context->artifact_provider->deinitialize_device_target(
+        provider->context->artifact_provider, &provider->compile_device_target,
+        provider->context->host_allocator);
+  }
   if (provider->compile_module_initialized) {
     loom_run_module_deinitialize(&provider->compile_module);
   }
@@ -426,6 +435,21 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
   }
   IREE_RETURN_IF_ERROR(
       loom_run_hal_testbench_context_ensure_runtime(provider->context));
+  if (!provider->compile_device_target_initialized) {
+    const loom_run_hal_artifact_provider_t* artifact_provider =
+        provider->context->artifact_provider;
+    if (artifact_provider->select_device_target == NULL) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "HAL artifact provider '%.*s' is missing required device target "
+          "selection hook",
+          (int)artifact_provider->name.size, artifact_provider->name.data);
+    }
+    IREE_RETURN_IF_ERROR(artifact_provider->select_device_target(
+        artifact_provider, &provider->context->runtime,
+        provider->context->host_allocator, &provider->compile_device_target));
+    provider->compile_device_target_initialized = true;
+  }
 
   iree_string_view_t entry_symbol = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(loom_run_hal_testbench_module_symbol_name_from_ref(
@@ -472,6 +496,10 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
   pipeline_options.pipeline = provider->pipeline;
   pipeline_options.entry_symbol = entry_symbol;
   pipeline_options.target_environment = provider->target_environment;
+  pipeline_options.target_selection = (loom_target_selection_t){
+      .bundle = provider->compile_device_target.target_bundle,
+      .data = provider->compile_device_target.data,
+  };
   pipeline_options.low_descriptor_registry =
       loom_run_session_low_descriptor_registry(provider->session);
   pipeline_options.diagnostic_sink = diagnostic_sink;

@@ -13,6 +13,7 @@
 #include "iree/testing/status_matchers.h"
 #include "loom/codegen/low/lower_rules.h"
 #include "loom/codegen/low/pass_environment.h"
+#include "loom/codegen/low/source_selection.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -25,6 +26,7 @@
 #include "loom/target/test/contracts/core_lower_rules.h"
 #include "loom/target/test/low_registry.h"
 #include "loom/target/test/lower.h"
+#include "loom/target/test/target_records.h"
 #include "loom/testing/module_ptr.h"
 
 namespace loom {
@@ -99,7 +101,8 @@ class LowLowerPassTest : public ::testing::Test {
     loom_pass_environment_t environment =
         loom_low_pass_environment_storage_initialize(
             &registry_.registry, policy_registry, nullptr, nullptr, nullptr,
-            nullptr, &low_pass_environment_storage);
+            nullptr, loom_target_selection_empty(),
+            &low_pass_environment_storage);
     loom_pass_t pass = {
         .info = pass_info,
         .module_run = loom_low_source_to_low_run,
@@ -130,6 +133,93 @@ class LowLowerPassTest : public ::testing::Test {
   loom_context_t context_;
   loom_target_low_descriptor_registry_t registry_ = {};
 };
+
+static loom_target_bundle_storage_t CopyTargetBundle(
+    const loom_target_bundle_t* bundle) {
+  loom_target_bundle_storage_t storage = {
+      .snapshot = *bundle->snapshot,
+      .export_plan = *bundle->export_plan,
+      .config = *bundle->config,
+      .bundle = *bundle,
+  };
+  loom_target_bundle_storage_rebind(&storage);
+  return storage;
+}
+
+TEST_F(LowLowerPassTest,
+       SourceSelectionAppliesCompatibleRuntimeTargetSelection) {
+  ModulePtr module = Parse(IREE_SV(
+      "test.target<low_core> @test_target\n"
+      "func.def target(@test_target) @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
+      "  %sum = scalar.addi %lhs, %rhs : i32\n"
+      "  func.return %sum : i32\n"
+      "}\n"));
+  ASSERT_GT(loom_test_target_bundles.count, 2u);
+  const int target_payload = 42;
+  loom_target_bundle_storage_t selected_storage =
+      CopyTargetBundle(loom_test_target_bundles.values[2]);
+
+  loom_low_lower_policy_registry_t policy_registry = {};
+  loom_test_low_lower_policy_registry_initialize(&policy_registry);
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_source_selection_options_t options = {
+      .policy_registry = &policy_registry,
+      .target_selection =
+          {
+              .bundle = &selected_storage.bundle,
+              .data = &target_payload,
+          },
+  };
+  loom_low_source_selection_list_t selections = {};
+  IREE_ASSERT_OK(loom_low_select_source_symbols(module.get(), &options, &arena,
+                                                &selections));
+
+  ASSERT_EQ(selections.count, 1u);
+  EXPECT_TRUE(
+      iree_string_view_equal(selections.values[0].target_bundle->snapshot->name,
+                             IREE_SV("test-quirky")));
+  EXPECT_EQ(selections.values[0].target_data, &target_payload);
+  iree_arena_deinitialize(&arena);
+}
+
+TEST_F(LowLowerPassTest,
+       SourceSelectionIgnoresIncompatibleRuntimeTargetSelection) {
+  ModulePtr module = Parse(IREE_SV(
+      "test.target<low_core> @test_target\n"
+      "func.def target(@test_target) @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
+      "  %sum = scalar.addi %lhs, %rhs : i32\n"
+      "  func.return %sum : i32\n"
+      "}\n"));
+  ASSERT_GT(loom_test_target_bundles.count, 2u);
+  const int target_payload = 42;
+  loom_target_bundle_storage_t selected_storage =
+      CopyTargetBundle(loom_test_target_bundles.values[2]);
+  selected_storage.export_plan.abi_kind = LOOM_TARGET_ABI_HAL_KERNEL;
+
+  loom_low_lower_policy_registry_t policy_registry = {};
+  loom_test_low_lower_policy_registry_initialize(&policy_registry);
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_source_selection_options_t options = {
+      .policy_registry = &policy_registry,
+      .target_selection =
+          {
+              .bundle = &selected_storage.bundle,
+              .data = &target_payload,
+          },
+  };
+  loom_low_source_selection_list_t selections = {};
+  IREE_ASSERT_OK(loom_low_select_source_symbols(module.get(), &options, &arena,
+                                                &selections));
+
+  ASSERT_EQ(selections.count, 1u);
+  EXPECT_EQ(selections.values[0].target_bundle->export_plan->abi_kind,
+            LOOM_TARGET_ABI_OBJECT_FUNCTION);
+  EXPECT_EQ(selections.values[0].target_bundle->snapshot->subgroup_size, 0u);
+  EXPECT_EQ(selections.values[0].target_data, nullptr);
+  iree_arena_deinitialize(&arena);
+}
 
 TEST_F(LowLowerPassTest,
        ContractFragmentDrivesRuleSelectionWithoutLegacySpans) {

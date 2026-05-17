@@ -143,5 +143,11 @@ void loom_run_hal_candidate_deinitialize(loom_run_hal_candidate_t* candidate) {
     candidate->provider->deinitialize_artifact(
         candidate->provider, &candidate->artifact, candidate->host_allocator);
   }
+  if (candidate->provider != NULL &&
+      candidate->provider->deinitialize_device_target != NULL) {
+    candidate->provider->deinitialize_device_target(candidate->provider,
+                                                    &candidate->device_target,
+                                                    candidate->host_allocator);
+  }
   *candidate = (loom_run_hal_candidate_t){0};
 }

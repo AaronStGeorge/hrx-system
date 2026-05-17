@@ -967,6 +967,7 @@ static iree_status_t loom_low_target_legalize_verify_final(
       .fact_table = (loom_value_fact_table_t*)fact_table,
       .value_domain =
           loom_low_lower_source_query_scope_value_domain(state->query_scope),
+      .target_data = state->selection->target_data,
       .emitter = state->pass->diagnostic_emitter,
       .max_errors = pass_state->max_errors,
   };
@@ -1048,6 +1049,7 @@ static iree_status_t loom_low_target_legalize_function(
   state.lower_options = (loom_low_lower_options_t){
       .target_ref = selection->target_ref,
       .bundle = selection->target_bundle,
+      .target_data = selection->target_data,
       .descriptor_registry = descriptor_registry,
       .legality_provider_list = legality_provider_list,
       .policy = selection->policy,
@@ -1070,6 +1072,7 @@ static iree_status_t loom_low_target_legalize_function(
       .module = module,
       .function = selection->func,
       .bundle = selection->target_bundle,
+      .target_data = selection->target_data,
       .target_ref = selection->target_ref,
       .descriptor_set = state.descriptor_set,
       .mode = pass_state->mode,
@@ -1191,6 +1194,8 @@ iree_status_t loom_low_target_legalize_run(loom_pass_t* pass,
         .policy_registry = policy_registry,
         .diagnostic_emitter = pass->diagnostic_emitter,
         .lowering_kind = IREE_SV("target-legalize"),
+        .target_selection =
+            loom_low_pass_capability_target_selection(low_capability),
     };
     status = loom_low_select_source_funcs(module, &selection_options,
                                           &run_arena, &selection_list);

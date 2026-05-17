@@ -20,6 +20,7 @@
 #include "loom/pass/interpreter.h"
 #include "loom/target/compile_report.h"
 #include "loom/target/low_descriptor_registry.h"
+#include "loom/target/types.h"
 #include "loom/verify/verify.h"
 
 #ifdef __cplusplus
@@ -49,6 +50,8 @@ typedef struct loom_compile_pipeline_options_t {
   iree_string_view_t entry_symbol;
   // Target environment linked into this compile front door.
   const loom_target_environment_t* target_environment;
+  // Optional runtime-selected target overlay visible to source-to-low passes.
+  loom_target_selection_t target_selection;
   // Target-low descriptor registry package initialized for this session.
   const loom_target_low_descriptor_registry_t* low_descriptor_registry;
   // Diagnostic sink used by pass execution.

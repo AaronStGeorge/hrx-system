@@ -37,7 +37,8 @@ loom_low_pass_capability_t loom_low_pass_capability_make(
     const loom_low_lower_policy_registry_t* lower_policy_registry,
     const loom_target_low_legality_provider_list_t* legality_provider_list,
     const loom_target_legalizer_provider_list_t* legalizer_provider_list,
-    loom_target_compile_report_t* compile_report) {
+    loom_target_compile_report_t* compile_report,
+    loom_target_selection_t target_selection) {
   return (loom_low_pass_capability_t){
       .base =
           {
@@ -48,6 +49,7 @@ loom_low_pass_capability_t loom_low_pass_capability_make(
       .legality_provider_list = legality_provider_list,
       .legalizer_provider_list = legalizer_provider_list,
       .compile_report = compile_report,
+      .target_selection = target_selection,
   };
 }
 
@@ -58,10 +60,11 @@ loom_pass_environment_t loom_low_pass_environment_storage_initialize(
     const loom_target_legalizer_provider_list_t* legalizer_provider_list,
     const loom_target_math_policy_registry_t* math_policy_registry,
     loom_target_compile_report_t* compile_report,
+    loom_target_selection_t target_selection,
     loom_low_pass_environment_storage_t* out_storage) {
   out_storage->low_capability = loom_low_pass_capability_make(
       descriptor_registry, lower_policy_registry, legality_provider_list,
-      legalizer_provider_list, compile_report);
+      legalizer_provider_list, compile_report, target_selection);
   out_storage->math_capability =
       loom_target_math_pass_capability_make(math_policy_registry);
   out_storage->capabilities[0] = &out_storage->low_capability.base;
@@ -111,4 +114,10 @@ loom_low_pass_capability_legalizer_provider_list(
 loom_target_compile_report_t* loom_low_pass_capability_compile_report(
     const loom_low_pass_capability_t* capability) {
   return capability ? capability->compile_report : NULL;
+}
+
+loom_target_selection_t loom_low_pass_capability_target_selection(
+    const loom_low_pass_capability_t* capability) {
+  return capability ? capability->target_selection
+                    : loom_target_selection_empty();
 }

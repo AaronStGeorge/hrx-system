@@ -458,6 +458,8 @@ typedef struct loom_low_lower_options_t {
   loom_symbol_ref_t target_ref;
   // Target bundle selected for this lowering attempt.
   const loom_target_bundle_t* bundle;
+  // Target-owned payload associated with |bundle|, or NULL.
+  const void* target_data;
   // Low descriptor registry linked into the current compiler binary.
   const loom_low_descriptor_registry_t* descriptor_registry;
   // Optional target-specific legality providers forwarded to source legality.

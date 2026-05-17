@@ -192,6 +192,8 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
       .policy_registry = policy_registry,
       .diagnostic_emitter = pass->diagnostic_emitter,
       .lowering_kind = IREE_SV("source-to-low"),
+      .target_selection =
+          loom_low_pass_capability_target_selection(low_capability),
   };
   iree_status_t status = loom_low_select_source_symbols(
       module, &selection_options, &selection_arena, &selection_list);
@@ -208,6 +210,7 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
     const loom_low_lower_options_t lower_options = {
         .target_ref = selection->target_ref,
         .bundle = selection->target_bundle,
+        .target_data = selection->target_data,
         .descriptor_registry = descriptor_registry,
         .policy = selection->policy,
         .emitter = pass->diagnostic_emitter,
@@ -250,6 +253,7 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
     const loom_low_lower_options_t lower_options = {
         .target_ref = selection->target_ref,
         .bundle = selection->target_bundle,
+        .target_data = selection->target_data,
         .descriptor_registry = descriptor_registry,
         .legality_provider_list =
             legality_provider_list

@@ -292,6 +292,26 @@ typedef struct loom_target_bundle_t {
   const loom_target_config_t* config;
 } loom_target_bundle_t;
 
+typedef struct loom_target_selection_t {
+  // Runtime-selected effective target bundle, or NULL when source IR target
+  // records alone select the target contract.
+  const loom_target_bundle_t* bundle;
+  // Target-owned immutable payload associated with |bundle|. Core compiler
+  // code passes this through and never interprets it.
+  const void* data;
+} loom_target_selection_t;
+
+// Returns an empty selected target overlay.
+static inline loom_target_selection_t loom_target_selection_empty(void) {
+  return (loom_target_selection_t){0};
+}
+
+// Returns true when |selection| has no selected target overlay.
+static inline bool loom_target_selection_is_empty(
+    loom_target_selection_t selection) {
+  return selection.bundle == NULL;
+}
+
 typedef struct loom_target_bundle_table_t {
   // Selector-indexed target row pointers. Entry zero is normally NULL because
   // generated enums reserve zero for absent/unknown cases.

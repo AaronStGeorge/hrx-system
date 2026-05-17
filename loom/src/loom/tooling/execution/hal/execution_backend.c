@@ -99,6 +99,10 @@ iree_status_t loom_run_hal_execution_backend_probe(
         (int)target.target_key.size, target.target_key.data);
   }
 
+  if (artifact_provider->deinitialize_device_target != NULL) {
+    artifact_provider->deinitialize_device_target(artifact_provider, &target,
+                                                  request->host_allocator);
+  }
   loom_run_hal_runtime_deinitialize(&runtime);
   return status;
 }

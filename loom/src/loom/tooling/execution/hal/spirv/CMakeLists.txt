@@ -59,7 +59,10 @@ loom_cc_library(
   DEPS
     iree::base
     iree::hal
+    iree::hal::drivers::vulkan::api
+    loom::src::loom::target::arch::spirv::cooperative_properties
     loom::src::loom::target::arch::spirv::features
+    loom::src::loom::target::arch::spirv::profile
     loom::src::loom::target::arch::spirv::target_records
     loom::src::loom::target::types
   PUBLIC
@@ -99,7 +102,10 @@ loom_cc_test(
     ::vulkan_profile
     iree::base
     iree::hal
+    iree::hal::drivers::vulkan::api
+    loom::src::loom::target::arch::spirv::cooperative_properties
     loom::src::loom::target::arch::spirv::features
+    loom::src::loom::target::arch::spirv::profile
     loom::src::loom::target::types
     iree::testing::gtest
     iree::testing::gtest_main
