@@ -28,7 +28,8 @@ from loom.target.arch.spirv.features import (  # noqa: E402
     FEATURE_ATOMS,
     FEATURE_PROFILES,
     feature_atom_enum,
-    feature_bit_macro,
+    feature_bit_constant,
+    feature_bit_constants,
     feature_bits_expression,
     feature_row_capacity,
     parse_isa_symbols,
@@ -78,6 +79,24 @@ def _emit_descriptor_field(
         return
     lines.append(f"            .{field_name} = {array_symbol},")
     lines.append(f"            .{count_name} = IREE_ARRAYSIZE({array_symbol}),")
+
+
+def _emit_enum_bitset(
+    lines: list[str],
+    *,
+    name: str,
+    parts: Sequence[str],
+) -> None:
+    if not parts:
+        lines.append(f"  {name} = 0,")
+        return
+    if len(parts) == 1:
+        lines.append(f"  {name} = {parts[0]},")
+        return
+    lines.append(f"  {name} =")
+    for index, part in enumerate(parts):
+        suffix = " |" if index + 1 < len(parts) else ","
+        lines.append(f"      {part}{suffix}")
 
 
 def generate_header() -> str:
@@ -136,26 +155,34 @@ def generate_header() -> str:
         ]
     )
     known_bits_parts: list[str] = []
-    for atom in FEATURE_ATOMS:
-        bit_macro = feature_bit_macro(atom)
-        known_bits_parts.append(bit_macro)
-        lines.append(f"// Target enables {atom.doc.removesuffix('.')}.")
-        lines.append(f"#define {bit_macro} (UINT64_C(1) << {feature_atom_enum(atom)})")
     lines.extend(
         [
-            "",
-            "// Feature bits known by the generated SPIR-V target package.",
-            "#define LOOM_SPIRV_FEATURE_KNOWN_BITS \\",
-            "  (" + " | \\\n   ".join(known_bits_parts) + ")",
-            "",
+            "typedef enum loom_spirv_feature_bit_e {",
         ]
     )
-    for profile in FEATURE_PROFILES:
-        lines.append(f"// {profile.doc}")
-        lines.append(f"#define LOOM_SPIRV_FEATURE_PROFILE_{profile.c_suffix} \\")
-        lines.append(f"  ({feature_bits_expression(profile.atoms)})")
+    for atom in FEATURE_ATOMS:
+        bit_constant = feature_bit_constant(atom)
+        known_bits_parts.append(bit_constant)
+        lines.append(f"  // Target enables {atom.doc.removesuffix('.')}.")
+        lines.append(f"  {bit_constant} =")
+        lines.append(f"      UINT64_C(1) << {feature_atom_enum(atom)},")
     lines.extend(
         [
+            "",
+            "  // Feature bits known by the generated SPIR-V target package.",
+        ]
+    )
+    _emit_enum_bitset(lines, name="LOOM_SPIRV_FEATURE_KNOWN_BITS", parts=known_bits_parts)
+    for profile in FEATURE_PROFILES:
+        lines.append(f"  // {profile.doc}")
+        _emit_enum_bitset(
+            lines,
+            name=f"LOOM_SPIRV_FEATURE_PROFILE_{profile.c_suffix}",
+            parts=feature_bit_constants(profile.atoms),
+        )
+    lines.extend(
+        [
+            "} loom_spirv_feature_bit_t;",
             "",
             "// Maximum number of OpExtension rows emitted by all modeled atoms.",
             f"#define LOOM_SPIRV_FEATURE_MAX_EXTENSION_COUNT {feature_row_capacity('extensions')}",

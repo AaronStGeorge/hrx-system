@@ -242,7 +242,7 @@ def atom_by_key(atoms: Iterable[FeatureAtom] = FEATURE_ATOMS) -> dict[str, Featu
     return {atom.key: atom for atom in atoms}
 
 
-def feature_bit_macro(atom: FeatureAtom) -> str:
+def feature_bit_constant(atom: FeatureAtom) -> str:
     return f"LOOM_SPIRV_FEATURE_{atom.c_suffix}"
 
 
@@ -261,13 +261,21 @@ def feature_atom_enum(atom: FeatureAtom) -> str:
     return f"LOOM_SPIRV_FEATURE_ATOM_{atom.c_suffix}"
 
 
+def feature_bit_constants(
+    atom_keys: Iterable[str],
+    *,
+    atoms: Iterable[FeatureAtom] = FEATURE_ATOMS,
+) -> tuple[str, ...]:
+    atoms_by_key = atom_by_key(atoms)
+    return tuple(feature_bit_constant(atoms_by_key[key]) for key in atom_keys)
+
+
 def feature_bits_expression(
     atom_keys: Iterable[str],
     *,
     atoms: Iterable[FeatureAtom] = FEATURE_ATOMS,
 ) -> str:
-    atoms_by_key = atom_by_key(atoms)
-    parts = [feature_bit_macro(atoms_by_key[key]) for key in atom_keys]
+    parts = feature_bit_constants(atom_keys, atoms=atoms)
     return " | ".join(parts) if parts else "0"
 
 

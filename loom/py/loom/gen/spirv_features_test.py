@@ -41,8 +41,12 @@ def test_generation_emits_public_atoms_profiles_and_compact_tables() -> None:
     assert "LOOM_SPIRV_FEATURE_ATOM_FLOAT16" in header
     assert "LOOM_SPIRV_FEATURE_ATOM_INT64" in header
     assert "LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_TYPE_KHR" in header
-    assert "#define LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR" in header
-    assert "#define LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA" in header
+    assert "typedef enum loom_spirv_feature_bit_e" in header
+    assert "LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR =\n      UINT64_C(1)" in header
+    assert "LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA =" in header
+    assert "#define LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR" not in header
+    assert "#define LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA" not in header
+    assert "#define LOOM_SPIRV_FEATURE_KNOWN_BITS" not in header
     assert f"#define LOOM_SPIRV_FEATURE_MAX_EXTENSION_COUNT {feature_row_capacity('extensions')}" in header
     assert f"#define LOOM_SPIRV_FEATURE_MAX_CAPABILITY_COUNT {feature_row_capacity('capabilities')}" in header
     assert "static const loom_spirv_feature_atom_descriptor_t kSpirvFeatureAtoms[]" in tables
