@@ -16,20 +16,30 @@ maintained facts, or reviewed module-owned structures.
 It also protects the Loom execution package boundary. Optional targets may
 project device/environment facts and emit artifacts, but they must not grow
 private runner/execution stacks under `loom/src/loom/target/**`.
+
+The SPIR-V backend has additional guardrails because its opcode, feature,
+property, ABI, and resource cross-products are especially easy to turn into a
+large hand-maintained emitter. Backend source files must stay below the reviewed
+size ceiling and must not introduce broad `internal.h` umbrella headers as a
+cosmetic split.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
 import re
 import sys
-
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 LOOM_SOURCE_ROOT = REPO_ROOT / "loom" / "src" / "loom"
 SOURCE_SUFFIXES = {".c", ".cc", ".h"}
 TARGET_SOURCE_ROOT = LOOM_SOURCE_ROOT / "target"
+SPIRV_BACKEND_RELATIVE_ROOTS = (
+    "loom/src/loom/target/arch/spirv",
+    "loom/src/loom/target/emit/spirv",
+)
+SPIRV_BACKEND_SOURCE_LINE_LIMIT = 3000
 
 # Matches common module pointers and nested owner paths ending in module, such
 # as `module->values.count`, `source_module->values.capacity`, and
@@ -67,6 +77,10 @@ TARGET_PRIVATE_EXECUTION_SYMBOL_PATTERN = re.compile(
     r"|loom_run_execution_(?:backend|provider)[A-Za-z0-9_]*"
     r"|loom_ireevm_execution_[A-Za-z0-9_]*"
     r")\b"
+)
+
+SPIRV_INTERNAL_HEADER_INCLUDE_PATTERN = re.compile(
+    r'#\s*include\s+"loom/target/(?:arch|emit)/spirv/.+' r'(?:^|/|_)internal\.h"'
 )
 
 
@@ -211,6 +225,70 @@ def _format_statement(statement: str) -> str:
     return " ".join(line for line in stripped_lines if line)
 
 
+def _is_spirv_backend_relative_path(relative_path: str) -> bool:
+    return any(
+        relative_path == root or relative_path.startswith(root + "/")
+        for root in SPIRV_BACKEND_RELATIVE_ROOTS
+    )
+
+
+def _is_source_relative_path(relative_path: str) -> bool:
+    return PurePosixPath(relative_path).suffix in SOURCE_SUFFIXES
+
+
+def _is_internal_header_name(relative_path: str) -> bool:
+    name = PurePosixPath(relative_path).name
+    return name == "internal.h" or name.endswith("_internal.h")
+
+
+def _scan_spirv_backend_text(
+    relative_path: str, text: str
+) -> list[tuple[int, str, str]]:
+    if not _is_spirv_backend_relative_path(relative_path):
+        return []
+
+    findings: list[tuple[int, str, str]] = []
+    if _is_source_relative_path(relative_path):
+        line_count = len(text.splitlines())
+        if line_count > SPIRV_BACKEND_SOURCE_LINE_LIMIT:
+            findings.append(
+                (
+                    SPIRV_BACKEND_SOURCE_LINE_LIMIT + 1,
+                    "SPIR-V backend source exceeds the reviewed file-size ceiling",
+                    (
+                        f"{line_count} lines exceeds "
+                        f"{SPIRV_BACKEND_SOURCE_LINE_LIMIT}; move the "
+                        "cross-product into generated/source-of-truth tables "
+                        "or a public invariant boundary"
+                    ),
+                )
+            )
+
+    if _is_internal_header_name(relative_path):
+        findings.append(
+            (
+                1,
+                "SPIR-V backend must not use internal.h-style umbrella headers",
+                (
+                    "split by public representation contract instead of "
+                    "sharing private declarations through a broad internal header"
+                ),
+            )
+        )
+
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        stripped_line = _strip_line_comments(line).strip()
+        if SPIRV_INTERNAL_HEADER_INCLUDE_PATTERN.search(stripped_line):
+            findings.append(
+                (
+                    line_number,
+                    "SPIR-V backend must not include internal.h-style umbrellas",
+                    stripped_line,
+                )
+            )
+    return findings
+
+
 def _target_path_has_execution_package(path: Path) -> bool:
     try:
         target_relative_path = path.relative_to(TARGET_SOURCE_ROOT)
@@ -282,12 +360,86 @@ def _scan_target_execution_boundaries(path: Path) -> list[Finding]:
     return findings
 
 
+def _scan_spirv_backend_guardrails(path: Path) -> list[Finding]:
+    relative_path = _relative_path(path)
+    findings: list[Finding] = []
+    for line, message, context in _scan_spirv_backend_text(
+        relative_path, path.read_text()
+    ):
+        findings.append(
+            Finding(
+                path=path,
+                line=line,
+                message=message,
+                context=context,
+            )
+        )
+    return findings
+
+
+def _expect_spirv_self_test(
+    name: str, relative_path: str, text: str, expected_messages: tuple[str, ...]
+) -> bool:
+    findings = _scan_spirv_backend_text(relative_path, text)
+    messages = tuple(finding[1] for finding in findings)
+    if messages == expected_messages:
+        print(f"  PASS  {name}")
+        return True
+    print(f"  FAIL  {name}")
+    print(f"        expected: {expected_messages!r}")
+    print(f"        actual:   {messages!r}")
+    return False
+
+
+def _run_self_tests() -> int:
+    ok = True
+    print("loom-source-lint: self-test")
+    ok &= _expect_spirv_self_test(
+        "SPIR-V small source passes",
+        "loom/src/loom/target/emit/spirv/packet_rows.c",
+        "void f(void) {}\n",
+        (),
+    )
+    ok &= _expect_spirv_self_test(
+        "SPIR-V oversized source fails",
+        "loom/src/loom/target/emit/spirv/module_emitter.c",
+        "\n".join("line" for _ in range(SPIRV_BACKEND_SOURCE_LINE_LIMIT + 1)),
+        ("SPIR-V backend source exceeds the reviewed file-size ceiling",),
+    )
+    ok &= _expect_spirv_self_test(
+        "SPIR-V internal header path fails",
+        "loom/src/loom/target/emit/spirv/lower/internal.h",
+        "",
+        ("SPIR-V backend must not use internal.h-style umbrella headers",),
+    )
+    ok &= _expect_spirv_self_test(
+        "SPIR-V internal header include fails",
+        "loom/src/loom/target/emit/spirv/packet.c",
+        '#include "loom/target/emit/spirv/lower/internal.h"\n',
+        ("SPIR-V backend must not include internal.h-style umbrellas",),
+    )
+    ok &= _expect_spirv_self_test(
+        "non-SPIR-V internal header is out of scope",
+        "loom/src/loom/target/emit/llvmir/lower/internal.h",
+        "",
+        (),
+    )
+    return 0 if ok else 1
+
+
 def main() -> int:
+    if sys.argv[1:] == ["--self-test"]:
+        return _run_self_tests()
+    if len(sys.argv) > 1:
+        print("usage: loom_source_lint.py [--self-test]")
+        return 2
+
     findings: list[Finding] = []
     for path in _iter_source_files():
         findings.extend(_scan_file(path))
     for path in _iter_lint_files():
         findings.extend(_scan_target_execution_boundaries(path))
+        findings.extend(_scan_spirv_backend_guardrails(path))
 
     if not findings:
         print("loom-source-lint: PASS")
