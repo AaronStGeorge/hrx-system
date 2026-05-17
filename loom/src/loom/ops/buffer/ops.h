@@ -21,11 +21,12 @@ extern "C" {
 
 enum {
   LOOM_OP_BUFFER_ALLOCA = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 0),
-  LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 1),
-  LOOM_OP_BUFFER_ASSUME_NOALIAS = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 2),
-  LOOM_OP_BUFFER_ASSUME_SAME_ROOT = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 3),
-  LOOM_OP_BUFFER_VIEW = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 4),
-  LOOM_OP_BUFFER_COUNT_ = 5,
+  LOOM_OP_BUFFER_ASSUME_ALIGNMENT = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 1),
+  LOOM_OP_BUFFER_ASSUME_MEMORY_SPACE = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 2),
+  LOOM_OP_BUFFER_ASSUME_NOALIAS = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 3),
+  LOOM_OP_BUFFER_ASSUME_SAME_ROOT = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 4),
+  LOOM_OP_BUFFER_VIEW = LOOM_OP_KIND(LOOM_DIALECT_BUFFER, 5),
+  LOOM_OP_BUFFER_COUNT_ = 6,
 };
 
 // LOOM_OP_BUFFER_ALLOCA: Create a fixed-frame scratch buffer root in workgroup or private memory. Each execution produces a distinct storage identity; identical allocas must not be commoned. The byte length is a physical byte count, and base_alignment is the minimum byte alignment of the root storage base.
@@ -49,6 +50,30 @@ iree_status_t loom_buffer_alloca_facts(
     const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts);
 iree_status_t loom_buffer_alloca_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_BUFFER_ASSUME_ALIGNMENT: Refine existing buffer roots with an explicit minimum byte alignment contract. The result preserves the same storage identity, extent, memory-space, alias, and nullability facts while strengthening the root base alignment fact.
+// %aligned = buffer.assume.alignment %buffer {minimum_alignment = 16} : buffer
+LOOM_DEFINE_ISA(loom_buffer_assume_alignment_isa, LOOM_OP_BUFFER_ASSUME_ALIGNMENT)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_buffer_assume_alignment_buffers, 0)
+LOOM_DEFINE_VARIADIC_RESULTS(loom_buffer_assume_alignment_results, 0)
+LOOM_DEFINE_ATTR_I64(loom_buffer_assume_alignment_minimum_alignment, 0)
+iree_status_t loom_buffer_assume_alignment_build(
+    loom_builder_t* builder,
+    const loom_value_id_t* buffers,
+    iree_host_size_t buffers_count,
+    int64_t minimum_alignment,
+    const loom_type_t* result_types,
+    iree_host_size_t result_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_buffer_assume_alignment_facts(
+    loom_fact_context_t* context,
+    const loom_module_t* module, const loom_op_t* op,
+    const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts);
+iree_status_t loom_buffer_assume_alignment_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

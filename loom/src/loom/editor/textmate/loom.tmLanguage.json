@@ -77,7 +77,7 @@
       "patterns": [
         {
           "name": "meta.operation-name.loom",
-          "match": "\\b(buffer)\\.(assume\\.memory_space|assume\\.same_root|assume\\.noalias|alloca|view)\\b",
+          "match": "\\b(buffer)\\.(assume\\.memory_space|assume\\.alignment|assume\\.same_root|assume\\.noalias|alloca|view)\\b",
           "captures": {
             "1": {
               "name": "support.namespace.dialect.loom"

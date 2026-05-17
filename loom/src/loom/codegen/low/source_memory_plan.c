@@ -72,6 +72,33 @@ static bool loom_low_source_memory_access_exact_i64(loom_value_facts_t facts,
   return true;
 }
 
+static uint32_t loom_low_source_memory_clamp_alignment(uint64_t alignment) {
+  if (alignment == 0) return 1;
+  return alignment > UINT32_MAX ? UINT32_MAX : (uint32_t)alignment;
+}
+
+static uint32_t loom_low_source_memory_combine_alignment(uint32_t alignment,
+                                                         int64_t byte_offset) {
+  if (byte_offset == 0) return alignment == 0 ? 1 : alignment;
+  return (uint32_t)loom_gcd_i64((int64_t)alignment, byte_offset);
+}
+
+static void loom_low_source_memory_access_finalize_alignment(
+    loom_low_source_memory_access_plan_t* plan) {
+  uint32_t alignment =
+      plan->root_minimum_alignment == 0 ? 1 : plan->root_minimum_alignment;
+  alignment = loom_low_source_memory_combine_alignment(
+      alignment, plan->static_byte_offset);
+  for (uint8_t i = 0; i < plan->dynamic_term_count; ++i) {
+    const int64_t divisor =
+        plan->dynamic_terms[i].byte_facts.known_divisor > 0
+            ? plan->dynamic_terms[i].byte_facts.known_divisor
+            : 1;
+    alignment = loom_low_source_memory_combine_alignment(alignment, divisor);
+  }
+  plan->minimum_alignment = alignment == 0 ? 1 : alignment;
+}
+
 static loom_value_id_t loom_low_source_memory_access_identity_source_value(
     const loom_module_t* module, loom_value_id_t value_id) {
   while (value_id < module->values.count) {
@@ -893,6 +920,8 @@ static bool loom_low_source_memory_access_add_view_base_byte_offset(
 
   plan->memory_space = view_reference.memory_space;
   plan->root_value_id = view_reference.root_value_id;
+  plan->root_minimum_alignment = loom_low_source_memory_clamp_alignment(
+      view_reference.root_minimum_alignment);
   plan->alias_scope_id = view_reference.alias_scope_id;
   return true;
 }
@@ -1071,7 +1100,9 @@ static bool loom_low_source_memory_access_plan_from_components(
       .view_value_id = view_value_id,
       .memory_space = LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN,
       .root_value_id = LOOM_VALUE_ID_INVALID,
+      .root_minimum_alignment = 1,
       .alias_scope_id = LOOM_VALUE_FACT_ALIAS_SCOPE_ID_NONE,
+      .minimum_alignment = 1,
       .cache_policy = cache_policy,
   };
   *out_diagnostic = (loom_low_source_memory_access_diagnostic_t){0};
@@ -1217,6 +1248,7 @@ static bool loom_low_source_memory_access_plan_from_components(
     }
   }
   out_plan->static_byte_offset = static_byte_offset;
+  loom_low_source_memory_access_finalize_alignment(out_plan);
   return true;
 }
 

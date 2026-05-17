@@ -254,9 +254,9 @@ class EmitDescriptorOp:
                             f"'{immediate_name}' needs a source-memory emit"
                         )
                     binding.validate(source_op, self.descriptor, immediate_name)
-                    if (
-                        binding.kind == SourceMemoryProjectKind.DYNAMIC_BYTE_STRIDE
-                        and binding.dynamic_term_index
+                    if binding.kind == SourceMemoryProjectKind.DYNAMIC_BYTE_STRIDE and (
+                        self.source_memory.dynamic_term_count is None
+                        or binding.dynamic_term_index
                         >= self.source_memory.dynamic_term_count
                     ):
                         raise ValueError(

@@ -23,6 +23,7 @@ from loom.dialect.vector import defs as vector
 from loom.dialect.view import ALL_VIEW_OPS
 from loom.dialect.view import defs as view
 from loom.dsl import Op
+from loom.error.target import ERR_TARGET_050
 from loom.target.arch.spirv.descriptors import SPIRV_LOGICAL_CORE_DESCRIPTOR_SET
 from loom.target.arch.spirv.scalar_alu import (
     FLOAT_BINARY_OPERATIONS,
@@ -58,11 +59,21 @@ from loom.target.contracts import (
     DescriptorRule,
     EmitDescriptorOp,
     Guard,
+    GuardDiagnostic,
     Scalar,
+    SourceMemoryConstraint,
+    SourceMemoryDynamicIndexSource,
+    SourceMemoryOperation,
+    SourceMemoryRootKind,
     TypePattern,
+    ValueAliasRule,
     ValueRef,
     View,
     descriptor_by_key,
+    source_memory_minimum_alignment_param,
+    target_diagnostic,
+    u32_param,
+    value_type_param,
 )
 from loom.target.low_descriptors import Descriptor
 
@@ -97,6 +108,7 @@ def _descriptor_emit(
     operands: dict[str, ValueRef] | None = None,
     results: dict[str, ValueRef] | None = None,
     immediates: dict[str, AttrProject] | None = None,
+    source_memory: SourceMemoryConstraint | None = None,
 ) -> EmitDescriptorOp:
     return EmitDescriptorOp(
         descriptor=descriptor,
@@ -104,6 +116,7 @@ def _descriptor_emit(
         results={} if results is None else results,
         immediates={} if immediates is None else immediates,
         form=DescriptorEmitForm.OP,
+        source_memory=source_memory,
     )
 
 
@@ -518,6 +531,42 @@ def _buffer_view_rule(scalar: StorageBufferScalar) -> DescriptorRule:
     )
 
 
+_STORAGE_BUFFER_MEMORY_SPACES = ("unknown", "generic", "global", "descriptor")
+
+
+def _storage_buffer_alignment_diagnostic(
+    required_alignment: int,
+) -> GuardDiagnostic:
+    return GuardDiagnostic(
+        ref=target_diagnostic(
+            ERR_TARGET_050,
+            value_type_param("value_type", "view"),
+            u32_param("required_alignment", required_alignment),
+            source_memory_minimum_alignment_param("known_alignment"),
+        )
+    )
+
+
+def _storage_buffer_source_memory(
+    operation: SourceMemoryOperation,
+    scalar: StorageBufferScalar,
+) -> SourceMemoryConstraint:
+    return SourceMemoryConstraint(
+        operation=operation,
+        root_kind=SourceMemoryRootKind.ANY,
+        memory_spaces=_STORAGE_BUFFER_MEMORY_SPACES,
+        element_byte_count=scalar.byte_width,
+        vector_lane_count=1,
+        vector_lane_byte_stride=scalar.byte_width,
+        static_byte_offset_minimum=-(2**63),
+        static_byte_offset_maximum=(2**63) - 1,
+        minimum_alignment=scalar.byte_width,
+        dynamic_term_count=None,
+        dynamic_index_source=SourceMemoryDynamicIndexSource.NONE,
+        diagnostic=_storage_buffer_alignment_diagnostic(scalar.byte_width),
+    )
+
+
 def _view_load_rule(scalar: StorageBufferScalar) -> DescriptorRule:
     scalar_type = Scalar(scalar.source_type)
     view_type = View(scalar.source_type)
@@ -536,6 +585,10 @@ def _view_load_rule(scalar: StorageBufferScalar) -> DescriptorRule:
                 descriptor=descriptor,
                 operands={"ptr": ValueRef.operand("view")},
                 results={"dst": ValueRef.result("result")},
+                source_memory=_storage_buffer_source_memory(
+                    SourceMemoryOperation.LOAD,
+                    scalar,
+                ),
             ),
         ),
     )
@@ -561,6 +614,10 @@ def _view_store_rule(scalar: StorageBufferScalar) -> DescriptorRule:
                     "ptr": ValueRef.operand("view"),
                     "value": ValueRef.operand("value"),
                 },
+                source_memory=_storage_buffer_source_memory(
+                    SourceMemoryOperation.STORE,
+                    scalar,
+                ),
             ),
         ),
     )
@@ -730,6 +787,18 @@ SPIRV_LOGICAL_CORE_CONTRACT_FRAGMENT = ContractFragment(
         _i32_constant_rule(scalar_conversion.scalar_constant),
         _i32_index_constant_rule(),
         _offset_constant_rule(),
+        ValueAliasRule(
+            source_op=index.index_assume,
+            source=ValueRef.operand("values"),
+            result=ValueRef.result("results"),
+            guards=(Guard.operand_segment_count("values", 1),),
+        ),
+        ValueAliasRule(
+            source_op=buffer.buffer_assume_alignment,
+            source=ValueRef.operand("buffers"),
+            result=ValueRef.result("results"),
+            guards=(Guard.operand_segment_count("buffers", 1),),
+        ),
         *_conversion_rules(),
         *_scalar_binary_rules(),
         _binary_rule(index.index_add, _INDEX, "spirv.op_iadd.i32"),

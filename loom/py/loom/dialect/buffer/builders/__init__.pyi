@@ -25,6 +25,17 @@ class BufferBuilder(DialectBuilder):
         result_names: Sequence[str] | None = ...,
         location_id: int | None = ...,
     ) -> ValueRef: ...
+    def alignment(
+        self,
+        *,
+        buffers: list[ValueRef] = ...,
+        minimum_alignment: int,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
+    ) -> list[ValueRef]: ...
     def memory_space(
         self,
         *,

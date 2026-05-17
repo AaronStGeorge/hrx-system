@@ -111,6 +111,16 @@ class SourceMemoryPlanTest : public ::testing::Test {
     return loom_buffer_assume_noalias_results(op).values[0];
   }
 
+  loom_value_id_t BuildAligned(loom_value_id_t buffer,
+                               int64_t minimum_alignment) {
+    loom_op_t* op = nullptr;
+    const loom_type_t result_type = loom_type_buffer();
+    IREE_CHECK_OK(loom_buffer_assume_alignment_build(
+        &builder_, &buffer, 1, minimum_alignment, &result_type, 1,
+        LOOM_LOCATION_UNKNOWN, &op));
+    return loom_buffer_assume_alignment_results(op).values[0];
+  }
+
   loom_op_t* BuildOffsetConstant(int64_t value) {
     loom_op_t* op = nullptr;
     IREE_CHECK_OK(loom_index_constant_build(
@@ -242,7 +252,36 @@ TEST_F(SourceMemoryPlanTest, StaticDenseLoadIncludesViewBase) {
   EXPECT_EQ(plan.vector_lane_count, 4u);
   EXPECT_EQ(plan.vector_lane_byte_stride, 4);
   EXPECT_EQ(plan.static_byte_offset, 28);
+  EXPECT_EQ(plan.root_minimum_alignment, 1u);
+  EXPECT_EQ(plan.minimum_alignment, 1u);
   EXPECT_EQ(plan.dynamic_term_count, 0u);
+}
+
+TEST_F(SourceMemoryPlanTest, StaticOffsetCombinesWithRootAlignment) {
+  loom_value_id_t buffer = BuildAligned(DefineBufferArg(), 16);
+  loom_value_id_t layout = BuildDenseLayout();
+  loom_value_id_t base_offset =
+      loom_index_constant_result(BuildOffsetConstant(8));
+
+  loom_op_t* view_op = nullptr;
+  IREE_ASSERT_OK(loom_buffer_view_build(&builder_, buffer, base_offset,
+                                        ViewType1D(32, layout),
+                                        LOOM_LOCATION_UNKNOWN, &view_op));
+  int64_t static_indices[] = {1};
+  loom_op_t* load_op = nullptr;
+  IREE_ASSERT_OK(loom_view_load_build(
+      &builder_, 0, loom_buffer_view_result(view_op), nullptr, 0,
+      static_indices, IREE_ARRAYSIZE(static_indices), 0, 0,
+      loom_type_scalar(LOOM_SCALAR_TYPE_F32), LOOM_LOCATION_UNKNOWN, &load_op));
+
+  loom_value_fact_table_t facts = {0};
+  ComputeFacts(&facts);
+  loom_low_source_memory_access_plan_t plan = {};
+  loom_low_source_memory_access_diagnostic_t diagnostic = {0};
+  ASSERT_TRUE(BuildPlan(&facts, load_op, &plan, &diagnostic));
+  EXPECT_EQ(plan.root_minimum_alignment, 16u);
+  EXPECT_EQ(plan.static_byte_offset, 12);
+  EXPECT_EQ(plan.minimum_alignment, 4u);
 }
 
 TEST_F(SourceMemoryPlanTest, ExternalBufferArgHasNoComparableAliasScope) {

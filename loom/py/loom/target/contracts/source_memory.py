@@ -76,7 +76,8 @@ class SourceMemoryConstraint:
     vector_lane_byte_stride: int
     static_byte_offset_minimum: int
     static_byte_offset_maximum: int
-    dynamic_term_count: int = 0
+    minimum_alignment: int = 0
+    dynamic_term_count: int | None = 0
     dynamic_index_source: SourceMemoryDynamicIndexSource = (
         SourceMemoryDynamicIndexSource.NONE
     )
@@ -97,7 +98,8 @@ class SourceMemoryConstraint:
         static_byte_offset: int | None = None,
         static_byte_offset_minimum: int | None = None,
         static_byte_offset_maximum: int | None = None,
-        dynamic_term_count: int = 0,
+        minimum_alignment: int = 0,
+        dynamic_term_count: int | None = 0,
         dynamic_index_source: SourceMemoryDynamicIndexSource = (
             SourceMemoryDynamicIndexSource.NONE
         ),
@@ -119,6 +121,7 @@ class SourceMemoryConstraint:
         )
         object.__setattr__(self, "static_byte_offset_minimum", minimum)
         object.__setattr__(self, "static_byte_offset_maximum", maximum)
+        object.__setattr__(self, "minimum_alignment", minimum_alignment)
         object.__setattr__(self, "dynamic_term_count", dynamic_term_count)
         object.__setattr__(self, "dynamic_index_source", dynamic_index_source)
         object.__setattr__(self, "dynamic_byte_stride", dynamic_byte_stride)
@@ -157,9 +160,27 @@ class SourceMemoryConstraint:
             raise ValueError("source memory maximum static byte offset must fit in i64")
         if self.static_byte_offset_minimum > self.static_byte_offset_maximum:
             raise ValueError("source memory static byte offset range is empty")
-        if not 0 <= self.dynamic_term_count <= _U8_MAX:
+        if not 0 <= self.minimum_alignment <= _U32_MAX:
+            raise ValueError("source memory minimum alignment must fit in u32")
+        if self.minimum_alignment != 0 and (
+            self.minimum_alignment & (self.minimum_alignment - 1)
+        ):
+            raise ValueError("source memory minimum alignment must be a power of two")
+        dynamic_term_count = self.dynamic_term_count
+        if dynamic_term_count is None:
+            if self.dynamic_index_source != SourceMemoryDynamicIndexSource.NONE:
+                raise ValueError(
+                    "source memory with any dynamic term count cannot require "
+                    "a dynamic index source"
+                )
+            if self.dynamic_byte_stride != 0:
+                raise ValueError(
+                    "source memory with any dynamic term count cannot require "
+                    "a dynamic stride"
+                )
+        elif not 0 <= dynamic_term_count < _U8_MAX:
             raise ValueError("source memory dynamic term count must be non-negative")
-        if self.dynamic_term_count == 0:
+        elif dynamic_term_count == 0:
             if self.dynamic_index_source != SourceMemoryDynamicIndexSource.NONE:
                 raise ValueError("static source memory cannot require a dynamic index")
             if self.dynamic_byte_stride != 0:

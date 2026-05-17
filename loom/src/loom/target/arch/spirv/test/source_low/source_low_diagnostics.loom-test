@@ -62,3 +62,28 @@ func.def target(@target) @storage_buffer_f16_requires_target_features(%input: bu
   view.store %loaded, %output_view[0] : f16, view<1xf16, #dense>
   func.return
 }
+
+// ====
+
+spirv.target<vulkan1_3> @target
+
+func.def target(@target) @storage_buffer_i32_requires_known_root_alignment(%input: buffer, %byte_offset: offset) -> (i32) {
+  %byte_offset_aligned = index.assume %byte_offset [mul(%byte_offset, 4)] : offset
+  %input_view = buffer.view %input[%byte_offset_aligned] : buffer -> view<1xi32, #dense>
+  // ERROR@+1: TARGET/050 {required_alignment="4", known_alignment="1"}
+  %loaded = view.load %input_view[0] : view<1xi32, #dense> -> i32
+  func.return %loaded : i32
+}
+
+// ====
+
+spirv.target<vulkan1_3> @target
+
+func.def target(@target) @storage_buffer_i32_rejects_misaligned_static_offset(%input: buffer) -> (i32) {
+  %input_aligned = buffer.assume.alignment %input {minimum_alignment = 4} : buffer
+  %two = index.constant 2 : offset
+  %input_view = buffer.view %input_aligned[%two] : buffer -> view<1xi32, #dense>
+  // ERROR@+1: TARGET/050 {required_alignment="4", known_alignment="2"}
+  %loaded = view.load %input_view[0] : view<1xi32, #dense> -> i32
+  func.return %loaded : i32
+}

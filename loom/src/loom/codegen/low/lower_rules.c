@@ -68,6 +68,22 @@ static iree_string_view_t loom_low_lower_rule_function_name(
       match_context->module, loom_func_like_callee(match_context->function));
 }
 
+static uint32_t loom_low_lower_rule_source_memory_minimum_alignment(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_op_t* source_op) {
+  if (match_context->fact_table == NULL) {
+    return 0;
+  }
+  loom_low_source_memory_access_plan_t access = {0};
+  loom_low_source_memory_access_diagnostic_t diagnostic = {0};
+  if (!loom_low_source_memory_access_plan_build(
+          match_context->module, match_context->fact_table, source_op, &access,
+          &diagnostic)) {
+    return 0;
+  }
+  return access.minimum_alignment;
+}
+
 static iree_string_view_t loom_low_lower_rule_target_key(
     const loom_target_bundle_t* bundle) {
   return loom_low_lower_rule_nonempty(bundle->name, IREE_SV("<empty>"));
@@ -755,6 +771,10 @@ static bool loom_low_lower_source_memory_space_matches(
 static bool loom_low_lower_source_memory_dynamic_terms_match(
     const loom_low_lower_source_memory_t* source_memory,
     const loom_low_source_memory_access_plan_t* access) {
+  if (source_memory->dynamic_term_count ==
+      LOOM_LOW_LOWER_SOURCE_MEMORY_DYNAMIC_TERM_COUNT_ANY) {
+    return true;
+  }
   if (access->dynamic_term_count != source_memory->dynamic_term_count) {
     return false;
   }
@@ -828,6 +848,8 @@ static bool loom_low_lower_source_memory_matches(
           source_memory->vector_lane_byte_stride ||
       access.static_byte_offset < source_memory->static_byte_offset_minimum ||
       access.static_byte_offset > source_memory->static_byte_offset_maximum ||
+      (source_memory->minimum_alignment != 0 &&
+       access.minimum_alignment < source_memory->minimum_alignment) ||
       access.cache_policy.build_flags !=
           source_memory->cache_policy_build_flags ||
       !loom_low_lower_source_memory_dynamic_terms_match(source_memory,
@@ -1383,6 +1405,11 @@ void loom_low_lower_rule_materialize_diagnostic_params(
         break;
       case LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_BOOL_LITERAL:
         out_params[i] = loom_param_bool(row->bool_value);
+        break;
+      case LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_SOURCE_MEMORY_MINIMUM_ALIGNMENT:
+        out_params[i] =
+            loom_param_u32(loom_low_lower_rule_source_memory_minimum_alignment(
+                match_context, source_op));
         break;
       default:
         IREE_ASSERT_UNREACHABLE("unknown generated diagnostic param kind");

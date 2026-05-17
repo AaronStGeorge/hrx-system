@@ -196,6 +196,7 @@ _DIAGNOSTIC_PARAM_KIND_C_NAMES = {
     DiagnosticParamKind.U32_LITERAL: "LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_U32_LITERAL",
     DiagnosticParamKind.U64_LITERAL: "LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_U64_LITERAL",
     DiagnosticParamKind.BOOL_LITERAL: ("LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_BOOL_LITERAL"),
+    DiagnosticParamKind.SOURCE_MEMORY_MINIMUM_ALIGNMENT: ("LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_SOURCE_MEMORY_MINIMUM_ALIGNMENT"),
 }
 
 _ERROR_DOMAIN_C_NAMES = {
@@ -528,7 +529,7 @@ def _append_field(
     always: bool = False,
     default: str = "0",
 ) -> None:
-    value_string = str(value)
+    value_string = "INT64_MIN" if value == -(2**63) else str(value)
     if always or value_string != default:
         fields.append(f".{name} = {value_string}")
 
@@ -596,7 +597,12 @@ def _source_memory_row(row: LowerSourceMemory) -> list[str]:
         constraint.static_byte_offset_maximum,
         always=True,
     )
-    _append_field(fields, "dynamic_term_count", constraint.dynamic_term_count)
+    _append_field(fields, "minimum_alignment", constraint.minimum_alignment)
+    _append_field(
+        fields,
+        "dynamic_term_count",
+        ("LOOM_LOW_LOWER_SOURCE_MEMORY_DYNAMIC_TERM_COUNT_ANY" if constraint.dynamic_term_count is None else constraint.dynamic_term_count),
+    )
     _append_field(
         fields,
         "dynamic_index_source",

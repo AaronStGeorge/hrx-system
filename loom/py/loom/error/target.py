@@ -976,6 +976,26 @@ ERR_TARGET_049 = ErrorDef(
     fix_hint="Encode immediate '{immediate_name}' using {expected_kind}",
 )
 
+# ERR_TARGET_050: Target contract requires stronger source memory alignment.
+ERR_TARGET_050 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=50,
+    severity=Severity.ERROR,
+    summary="Target contract requires stronger source memory alignment.",
+    message=(
+        "target '{target_key}' export '{export_name}' config '{config_key}' "
+        "rejected '{op_name}' source memory access in '@{function_name}': "
+        "access to {value_type} requires {required_alignment}-byte alignment, "
+        "but source facts prove {known_alignment}-byte alignment"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("value_type", ParamKind.TYPE),
+        ErrorParam("required_alignment", ParamKind.U32),
+        ErrorParam("known_alignment", ParamKind.U32),
+    ),
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -1026,4 +1046,5 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_047,
     ERR_TARGET_048,
     ERR_TARGET_049,
+    ERR_TARGET_050,
 )

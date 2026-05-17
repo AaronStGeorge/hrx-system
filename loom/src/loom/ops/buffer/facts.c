@@ -72,6 +72,33 @@ iree_status_t loom_buffer_assume_memory_space_facts(
                                                 &result_facts[0]);
 }
 
+iree_status_t loom_buffer_assume_alignment_facts(
+    loom_fact_context_t* context, const loom_module_t* module,
+    const loom_op_t* op, const loom_value_facts_t* operand_facts,
+    loom_value_facts_t* result_facts) {
+  const uint64_t minimum_alignment =
+      (uint64_t)loom_buffer_assume_alignment_minimum_alignment(op);
+  loom_value_slice_t buffers = loom_buffer_assume_alignment_buffers(op);
+  loom_value_slice_t results = loom_buffer_assume_alignment_results(op);
+  const uint16_t fact_count =
+      buffers.count < results.count ? buffers.count : results.count;
+  for (uint16_t i = 0; i < fact_count; ++i) {
+    loom_value_fact_buffer_reference_t reference =
+        loom_buffer_default_reference(buffers.values[i]);
+    (void)loom_value_facts_query_buffer_reference(context, operand_facts[i],
+                                                  &reference);
+    if (reference.minimum_alignment < minimum_alignment) {
+      reference.minimum_alignment = minimum_alignment;
+    }
+    IREE_RETURN_IF_ERROR(loom_value_facts_make_buffer_reference(
+        context, reference, &result_facts[i]));
+  }
+  for (uint16_t i = fact_count; i < results.count; ++i) {
+    result_facts[i] = loom_value_facts_unknown();
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_buffer_assume_noalias_facts(
     loom_fact_context_t* context, const loom_module_t* module,
     const loom_op_t* op, const loom_value_facts_t* operand_facts,

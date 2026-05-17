@@ -270,6 +270,8 @@ enum loom_low_lower_diagnostic_param_kind_e {
   LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_U64_LITERAL = 9,
   // Boolean literal stored in bool_value.
   LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_BOOL_LITERAL = 10,
+  // Minimum source memory alignment proven for the source op.
+  LOOM_LOW_LOWER_DIAGNOSTIC_PARAM_SOURCE_MEMORY_MINIMUM_ALIGNMENT = 11,
 };
 
 typedef struct loom_low_lower_diagnostic_param_t {
@@ -334,6 +336,8 @@ typedef enum loom_low_lower_source_memory_root_kind_e {
   ((loom_low_lower_source_memory_space_mask_t)1u   \
    << LOOM_VALUE_FACT_MEMORY_SPACE_GENERIC)
 
+#define LOOM_LOW_LOWER_SOURCE_MEMORY_DYNAMIC_TERM_COUNT_ANY UINT8_MAX
+
 typedef struct loom_low_lower_source_memory_t {
   // Source memory operation category required by this row.
   loom_low_source_memory_operation_kind_t operation_kind;
@@ -351,6 +355,8 @@ typedef struct loom_low_lower_source_memory_t {
   int64_t static_byte_offset_minimum;
   // Maximum accepted static byte offset from the storage root.
   int64_t static_byte_offset_maximum;
+  // Minimum required final address byte alignment, or zero if unconstrained.
+  uint32_t minimum_alignment;
   // Required number of dynamic address terms.
   uint8_t dynamic_term_count;
   // Required provenance for each dynamic address term.

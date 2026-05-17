@@ -101,6 +101,44 @@ buffer_alloca = Op(
 )
 
 # ============================================================================
+# buffer.assume.alignment — refine buffer root alignment facts
+# ============================================================================
+
+buffer_assume_alignment = Op(
+    name="buffer.assume.alignment",
+    group=buffer_ops,
+    doc=(
+        "Refine existing buffer roots with an explicit minimum byte alignment "
+        "contract. The result preserves the same storage identity, extent, "
+        "memory-space, alias, and nullability facts while strengthening the "
+        "root base alignment fact."
+    ),
+    operands=[Operand("buffers", BUFFER, doc="Buffer roots to refine.", variadic=True)],
+    results=[Result("results", BUFFER, doc="Same buffer roots with refined alignment.", variadic=True)],
+    attrs=[
+        AttrDef(
+            "minimum_alignment",
+            ATTR_TYPE_I64,
+            doc="Minimum byte alignment guaranteed for each root storage base.",
+        ),
+    ],
+    constraints=[VariadicValuesMatch("buffers", "results")],
+    traits=[PURE, FACT_IDENTITY],
+    verify="loom_buffer_assume_alignment_verify",
+    facts="loom_buffer_assume_alignment_facts",
+    format=[
+        Refs("buffers"),
+        AttrDict(),
+        COLON,
+        TypesOf("results"),
+    ],
+    examples=[
+        "%aligned = buffer.assume.alignment %buffer {minimum_alignment = 16} : buffer",
+        ("%lhs_a, %rhs_a = buffer.assume.alignment %lhs, %rhs {minimum_alignment = 16} : buffer, buffer"),
+    ],
+)
+
+# ============================================================================
 # buffer.assume.memory_space — refine a buffer root memory-space fact
 # ============================================================================
 
@@ -235,6 +273,7 @@ buffer_view = Op(
 
 ALL_BUFFER_OPS: tuple[Op, ...] = (
     buffer_alloca,
+    buffer_assume_alignment,
     buffer_assume_memory_space,
     buffer_assume_noalias,
     buffer_assume_same_root,

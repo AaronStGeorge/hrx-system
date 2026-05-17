@@ -154,6 +154,19 @@ iree_status_t loom_buffer_assume_memory_space_verify(
                                                     memory_space);
 }
 
+iree_status_t loom_buffer_assume_alignment_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter) {
+  int64_t minimum_alignment =
+      loom_buffer_assume_alignment_minimum_alignment(op);
+  if (loom_is_power_of_two_i64(minimum_alignment)) {
+    return iree_ok_status();
+  }
+  return loom_buffer_emit_attribute_value_constraint(
+      emitter, op, IREE_SV("minimum_alignment"), minimum_alignment,
+      IREE_SV("positive power-of-two byte alignment"));
+}
+
 iree_status_t loom_buffer_view_verify(const loom_module_t* module,
                                       const loom_op_t* op,
                                       iree_diagnostic_emitter_t emitter) {

@@ -31,6 +31,7 @@ class DiagnosticParamKind(Enum):
     U32_LITERAL = "u32_literal"
     U64_LITERAL = "u64_literal"
     BOOL_LITERAL = "bool_literal"
+    SOURCE_MEMORY_MINIMUM_ALIGNMENT = "source_memory_minimum_alignment"
 
 
 _PARAM_KIND_BY_PROJECTION = {
@@ -45,6 +46,7 @@ _PARAM_KIND_BY_PROJECTION = {
     DiagnosticParamKind.U32_LITERAL: ParamKind.U32,
     DiagnosticParamKind.U64_LITERAL: ParamKind.U64,
     DiagnosticParamKind.BOOL_LITERAL: ParamKind.BOOL,
+    DiagnosticParamKind.SOURCE_MEMORY_MINIMUM_ALIGNMENT: ParamKind.U32,
 }
 
 
@@ -147,6 +149,10 @@ def u32_param(name: str, value: int) -> DiagnosticParam:
     if value < 0 or value > 0xFFFF_FFFF:
         raise ValueError(f"u32 diagnostic parameter '{name}' out of range: {value}")
     return DiagnosticParam(name, DiagnosticParamKind.U32_LITERAL, u32_value=value)
+
+
+def source_memory_minimum_alignment_param(name: str) -> DiagnosticParam:
+    return DiagnosticParam(name, DiagnosticParamKind.SOURCE_MEMORY_MINIMUM_ALIGNMENT)
 
 
 def u64_param(name: str, value: int) -> DiagnosticParam:
