@@ -50,6 +50,23 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    module_types
+  HDRS
+    "module_types.h"
+  SRCS
+    "module_types.c"
+  DEPS
+    ::binary_format
+    ::module_builder
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::target::arch::spirv::scalar_types
+    loom::src::loom::target::arch::spirv::value_types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     module_emitter
   HDRS
     "module_emitter.h"
@@ -58,6 +75,7 @@ loom_cc_library(
   DEPS
     ::binary_format
     ::module_builder
+    ::module_types
     ::packet_rows
     iree::base
     iree::base::internal::arena
