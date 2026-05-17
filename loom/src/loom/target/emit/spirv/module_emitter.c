@@ -27,6 +27,54 @@ typedef enum loom_spirv_emitted_type_kind_e {
   LOOM_SPIRV_EMITTED_TYPE_PTR_PHYSICAL_STORAGE_BUFFER_I32 = 3,
 } loom_spirv_emitted_type_kind_t;
 
+typedef enum loom_spirv_type_key_kind_e {
+  LOOM_SPIRV_TYPE_KEY_VOID = 1,
+  LOOM_SPIRV_TYPE_KEY_INT = 2,
+  LOOM_SPIRV_TYPE_KEY_POINTER = 3,
+  LOOM_SPIRV_TYPE_KEY_DESCRIPTOR_STRUCT = 4,
+  LOOM_SPIRV_TYPE_KEY_FUNCTION = 5,
+} loom_spirv_type_key_kind_t;
+
+enum {
+  LOOM_SPIRV_TYPE_CACHE_INITIAL_CAPACITY = 16,
+  LOOM_SPIRV_TYPE_KEY_MAX_OPERAND_COUNT = 8,
+  LOOM_SPIRV_INTEGER_CONSTANT_CACHE_INITIAL_CAPACITY = 16,
+};
+
+typedef struct loom_spirv_type_key_t {
+  // SPIR-V type declaration family.
+  loom_spirv_type_key_kind_t kind;
+  // Pointer ArrayStride decoration, or zero when the type is undecorated.
+  uint32_t pointer_array_stride;
+  // Number of entries in |operands|.
+  uint8_t operand_count;
+  // Kind-specific SPIR-V type operands following the result ID.
+  uint32_t operands[LOOM_SPIRV_TYPE_KEY_MAX_OPERAND_COUNT];
+} loom_spirv_type_key_t;
+
+typedef struct loom_spirv_type_cache_entry_t {
+  // Numeric type key.
+  loom_spirv_type_key_t key;
+  // SPIR-V result ID assigned to |key|.
+  uint32_t type_id;
+} loom_spirv_type_cache_entry_t;
+
+typedef struct loom_spirv_integer_constant_key_t {
+  // SPIR-V integer type ID of the constant.
+  uint32_t type_id;
+  // Number of literal words in |words|.
+  uint8_t word_count;
+  // Little-endian integer literal words following the result ID.
+  uint32_t words[2];
+} loom_spirv_integer_constant_key_t;
+
+typedef struct loom_spirv_integer_constant_cache_entry_t {
+  // Numeric integer constant key.
+  loom_spirv_integer_constant_key_t key;
+  // SPIR-V result ID assigned to |key|.
+  uint32_t id;
+} loom_spirv_integer_constant_cache_entry_t;
+
 typedef struct loom_spirv_abi_slot_type_info_t {
   // SPIR-V type ID used by packet emission after ABI materialization.
   uint32_t value_type_id;
@@ -86,30 +134,20 @@ typedef struct loom_spirv_emit_state_t {
   loom_local_value_domain_t value_domain;
   // SPIR-V value refs indexed by function-local value ordinal.
   loom_spirv_value_ref_t* value_refs;
+  // Cached SPIR-V type declaration rows.
+  loom_spirv_type_cache_entry_t* type_cache_entries;
+  // Number of entries in |type_cache_entries|.
+  iree_host_size_t type_cache_count;
+  // Allocated capacity of |type_cache_entries|.
+  iree_host_size_t type_cache_capacity;
+  // Cached emitter-owned integer constants.
+  loom_spirv_integer_constant_cache_entry_t* integer_constant_cache_entries;
+  // Number of entries in |integer_constant_cache_entries|.
+  iree_host_size_t integer_constant_cache_count;
+  // Allocated capacity of |integer_constant_cache_entries|.
+  iree_host_size_t integer_constant_cache_capacity;
   // SPIR-V ID assigned to the function.
   uint32_t function_id;
-  // Cached OpTypeVoid result ID.
-  uint32_t void_type_id;
-  // Cached signed OpTypeInt 32 result ID.
-  uint32_t i32_type_id;
-  // Cached unsigned OpTypeInt 64 result ID.
-  uint32_t u64_type_id;
-  // Cached OpTypeStruct {i32} storage-buffer descriptor block result ID.
-  uint32_t descriptor_i32_struct_type_id;
-  // Cached OpTypeStruct {u64} storage-buffer descriptor block result ID.
-  uint32_t descriptor_u64_struct_type_id;
-  // Cached StorageBuffer pointer-to-descriptor-i32-struct result ID.
-  uint32_t ptr_storage_buffer_descriptor_i32_struct_type_id;
-  // Cached StorageBuffer pointer-to-descriptor-u64-struct result ID.
-  uint32_t ptr_storage_buffer_descriptor_u64_struct_type_id;
-  // Cached StorageBuffer pointer-to-descriptor-i32-field result ID.
-  uint32_t ptr_storage_buffer_descriptor_i32_field_type_id;
-  // Cached StorageBuffer pointer-to-descriptor-u64-field result ID.
-  uint32_t ptr_storage_buffer_descriptor_u64_field_type_id;
-  // Cached byte-addressed PhysicalStorageBuffer pointer-to-i32 result ID.
-  uint32_t ptr_physical_storage_buffer_i32_type_id;
-  // Cached i32 zero constant used for descriptor-block field indexing.
-  uint32_t i32_zero_constant_id;
   // Shader-entry ABI plan for materialized resources.
   loom_spirv_abi_plan_t abi_plan;
 } loom_spirv_emit_state_t;
@@ -183,78 +221,210 @@ static iree_status_t loom_spirv_emit_value_name(loom_spirv_emit_state_t* state,
       loom_spirv_emit_string_or_empty(state->module, value->name_id));
 }
 
+static bool loom_spirv_type_key_equal(const loom_spirv_type_key_t* lhs,
+                                      const loom_spirv_type_key_t* rhs) {
+  if (lhs->kind != rhs->kind ||
+      lhs->pointer_array_stride != rhs->pointer_array_stride ||
+      lhs->operand_count != rhs->operand_count) {
+    return false;
+  }
+  for (uint8_t i = 0; i < lhs->operand_count; ++i) {
+    if (lhs->operands[i] != rhs->operands[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static iree_status_t loom_spirv_emit_type_cache_reserve(
+    loom_spirv_emit_state_t* state, iree_host_size_t minimum_capacity) {
+  if (minimum_capacity <= state->type_cache_capacity) {
+    return iree_ok_status();
+  }
+  if (state->type_cache_capacity == 0) {
+    minimum_capacity =
+        iree_max(minimum_capacity, LOOM_SPIRV_TYPE_CACHE_INITIAL_CAPACITY);
+  }
+  return iree_arena_grow_array(
+      state->scratch_arena, state->type_cache_count, minimum_capacity,
+      sizeof(*state->type_cache_entries), &state->type_cache_capacity,
+      (void**)&state->type_cache_entries);
+}
+
+static iree_status_t loom_spirv_emit_type_declaration(
+    loom_spirv_emit_state_t* state, const loom_spirv_type_key_t* key,
+    uint32_t type_id) {
+  switch (key->kind) {
+    case LOOM_SPIRV_TYPE_KEY_VOID: {
+      const uint32_t operands[] = {type_id};
+      return loom_spirv_binary_write_instruction(
+          loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_DECLARATION),
+          LOOM_SPIRV_OP_TYPE_VOID, operands, IREE_ARRAYSIZE(operands));
+    }
+    case LOOM_SPIRV_TYPE_KEY_INT: {
+      const uint32_t operands[] = {type_id, key->operands[0], key->operands[1]};
+      return loom_spirv_binary_write_instruction(
+          loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_DECLARATION),
+          LOOM_SPIRV_OP_TYPE_INT, operands, IREE_ARRAYSIZE(operands));
+    }
+    case LOOM_SPIRV_TYPE_KEY_POINTER: {
+      const uint32_t operands[] = {
+          type_id,
+          key->operands[0],
+          key->operands[1],
+      };
+      return loom_spirv_binary_write_instruction(
+          loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_DECLARATION),
+          LOOM_SPIRV_OP_TYPE_POINTER, operands, IREE_ARRAYSIZE(operands));
+    }
+    case LOOM_SPIRV_TYPE_KEY_DESCRIPTOR_STRUCT: {
+      const uint32_t operands[] = {type_id, key->operands[0]};
+      return loom_spirv_binary_write_instruction(
+          loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_DECLARATION),
+          LOOM_SPIRV_OP_TYPE_STRUCT, operands, IREE_ARRAYSIZE(operands));
+    }
+    case LOOM_SPIRV_TYPE_KEY_FUNCTION: {
+      uint32_t operands[1 + LOOM_SPIRV_TYPE_KEY_MAX_OPERAND_COUNT] = {0};
+      operands[0] = type_id;
+      for (uint8_t i = 0; i < key->operand_count; ++i) {
+        operands[1 + i] = key->operands[i];
+      }
+      return loom_spirv_binary_write_instruction(
+          loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_DECLARATION),
+          LOOM_SPIRV_OP_TYPE_FUNCTION, operands, 1 + key->operand_count);
+    }
+  }
+  return iree_make_status(IREE_STATUS_INTERNAL,
+                          "unknown SPIR-V type key kind %u",
+                          (uint32_t)key->kind);
+}
+
+static iree_status_t loom_spirv_emit_type_id(loom_spirv_emit_state_t* state,
+                                             const loom_spirv_type_key_t* key,
+                                             uint32_t* out_type_id,
+                                             bool* out_emitted) {
+  for (iree_host_size_t i = 0; i < state->type_cache_count; ++i) {
+    const loom_spirv_type_cache_entry_t* entry = &state->type_cache_entries[i];
+    if (loom_spirv_type_key_equal(key, &entry->key)) {
+      *out_type_id = entry->type_id;
+      if (out_emitted != NULL) {
+        *out_emitted = false;
+      }
+      return iree_ok_status();
+    }
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_spirv_emit_type_cache_reserve(state, state->type_cache_count + 1));
+
+  const uint32_t type_id = loom_spirv_emit_allocate_id(state);
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_type_declaration(state, key, type_id));
+  state->type_cache_entries[state->type_cache_count++] =
+      (loom_spirv_type_cache_entry_t){
+          .key = *key,
+          .type_id = type_id,
+      };
+  *out_type_id = type_id;
+  if (out_emitted != NULL) {
+    *out_emitted = true;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_spirv_emit_type_void(loom_spirv_emit_state_t* state,
                                                uint32_t* out_type_id) {
-  if (state->void_type_id == 0) {
-    state->void_type_id = loom_spirv_emit_allocate_id(state);
-    const uint32_t operands[] = {state->void_type_id};
-    IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
-        loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_DECLARATION),
-        LOOM_SPIRV_OP_TYPE_VOID, operands, IREE_ARRAYSIZE(operands)));
-  }
-  *out_type_id = state->void_type_id;
-  return iree_ok_status();
+  const loom_spirv_type_key_t key = {
+      .kind = LOOM_SPIRV_TYPE_KEY_VOID,
+  };
+  return loom_spirv_emit_type_id(state, &key, out_type_id,
+                                 /*out_emitted=*/NULL);
 }
 
 static iree_status_t loom_spirv_emit_type_int(loom_spirv_emit_state_t* state,
                                               uint32_t bit_width,
                                               uint32_t signedness,
-                                              uint32_t* inout_type_id) {
-  if (*inout_type_id == 0) {
-    *inout_type_id = loom_spirv_emit_allocate_id(state);
-    const uint32_t operands[] = {*inout_type_id, bit_width, signedness};
-    IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
-        loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_DECLARATION),
-        LOOM_SPIRV_OP_TYPE_INT, operands, IREE_ARRAYSIZE(operands)));
-  }
-  return iree_ok_status();
+                                              uint32_t* out_type_id) {
+  const loom_spirv_type_key_t key = {
+      .kind = LOOM_SPIRV_TYPE_KEY_INT,
+      .operand_count = 2,
+      .operands = {bit_width, signedness},
+  };
+  return loom_spirv_emit_type_id(state, &key, out_type_id,
+                                 /*out_emitted=*/NULL);
 }
 
 static iree_status_t loom_spirv_emit_type_i32(loom_spirv_emit_state_t* state,
                                               uint32_t* out_type_id) {
-  IREE_RETURN_IF_ERROR(
-      loom_spirv_emit_type_int(state, 32, 1, &state->i32_type_id));
-  *out_type_id = state->i32_type_id;
-  return iree_ok_status();
+  return loom_spirv_emit_type_int(state, 32, 1, out_type_id);
 }
 
 static iree_status_t loom_spirv_emit_type_u64(loom_spirv_emit_state_t* state,
                                               uint32_t* out_type_id) {
-  IREE_RETURN_IF_ERROR(
-      loom_spirv_emit_type_int(state, 64, 0, &state->u64_type_id));
-  *out_type_id = state->u64_type_id;
-  return iree_ok_status();
+  return loom_spirv_emit_type_int(state, 64, 0, out_type_id);
+}
+
+static iree_status_t loom_spirv_emit_type_function(
+    loom_spirv_emit_state_t* state, uint32_t result_type_id,
+    const uint32_t* parameter_type_ids, uint8_t parameter_count,
+    uint32_t* out_type_id) {
+  if ((iree_host_size_t)parameter_count + 1 >
+      LOOM_SPIRV_TYPE_KEY_MAX_OPERAND_COUNT) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "SPIR-V function type exceeds the emitter "
+                            "type-key operand capacity");
+  }
+  loom_spirv_type_key_t key = {
+      .kind = LOOM_SPIRV_TYPE_KEY_FUNCTION,
+      .operand_count = (uint8_t)(parameter_count + 1),
+      .operands = {result_type_id},
+  };
+  for (uint8_t i = 0; i < parameter_count; ++i) {
+    key.operands[1 + i] = parameter_type_ids[i];
+  }
+  return loom_spirv_emit_type_id(state, &key, out_type_id,
+                                 /*out_emitted=*/NULL);
 }
 
 static iree_status_t loom_spirv_emit_type_pointer(
     loom_spirv_emit_state_t* state, uint32_t storage_class,
-    uint32_t pointee_type_id, uint32_t* inout_type_id) {
-  if (*inout_type_id == 0) {
-    *inout_type_id = loom_spirv_emit_allocate_id(state);
-    const uint32_t operands[] = {
-        *inout_type_id,
-        storage_class,
-        pointee_type_id,
+    uint32_t pointee_type_id, uint32_t pointer_array_stride,
+    uint32_t* out_type_id) {
+  const loom_spirv_type_key_t key = {
+      .kind = LOOM_SPIRV_TYPE_KEY_POINTER,
+      .pointer_array_stride = pointer_array_stride,
+      .operand_count = 2,
+      .operands = {storage_class, pointee_type_id},
+  };
+  bool emitted = false;
+  IREE_RETURN_IF_ERROR(
+      loom_spirv_emit_type_id(state, &key, out_type_id, &emitted));
+  if (emitted && pointer_array_stride != 0) {
+    const uint32_t decoration_operands[] = {
+        *out_type_id,
+        LOOM_SPIRV_DECORATION_ARRAY_STRIDE,
+        pointer_array_stride,
     };
     IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
-        loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_DECLARATION),
-        LOOM_SPIRV_OP_TYPE_POINTER, operands, IREE_ARRAYSIZE(operands)));
+        loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_ANNOTATION),
+        LOOM_SPIRV_OP_DECORATE, decoration_operands,
+        IREE_ARRAYSIZE(decoration_operands)));
   }
   return iree_ok_status();
 }
 
 static iree_status_t loom_spirv_emit_type_descriptor_struct(
     loom_spirv_emit_state_t* state, uint32_t field_type_id,
-    uint32_t* inout_struct_type_id) {
-  if (*inout_struct_type_id == 0) {
-    *inout_struct_type_id = loom_spirv_emit_allocate_id(state);
-    const uint32_t type_operands[] = {*inout_struct_type_id, field_type_id};
-    IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
-        loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_DECLARATION),
-        LOOM_SPIRV_OP_TYPE_STRUCT, type_operands,
-        IREE_ARRAYSIZE(type_operands)));
+    uint32_t* out_type_id) {
+  const loom_spirv_type_key_t key = {
+      .kind = LOOM_SPIRV_TYPE_KEY_DESCRIPTOR_STRUCT,
+      .operand_count = 1,
+      .operands = {field_type_id},
+  };
+  bool emitted = false;
+  IREE_RETURN_IF_ERROR(
+      loom_spirv_emit_type_id(state, &key, out_type_id, &emitted));
+  if (emitted) {
     const uint32_t member_decoration_operands[] = {
-        *inout_struct_type_id,
+        *out_type_id,
         0,
         LOOM_SPIRV_DECORATION_OFFSET,
         0,
@@ -264,7 +434,7 @@ static iree_status_t loom_spirv_emit_type_descriptor_struct(
         LOOM_SPIRV_OP_MEMBER_DECORATE, member_decoration_operands,
         IREE_ARRAYSIZE(member_decoration_operands)));
     const uint32_t block_decoration_operands[] = {
-        *inout_struct_type_id,
+        *out_type_id,
         LOOM_SPIRV_DECORATION_BLOCK,
     };
     IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
@@ -279,20 +449,16 @@ static iree_status_t loom_spirv_emit_type_descriptor_i32_struct(
     loom_spirv_emit_state_t* state, uint32_t* out_type_id) {
   uint32_t i32_type_id = 0;
   IREE_RETURN_IF_ERROR(loom_spirv_emit_type_i32(state, &i32_type_id));
-  IREE_RETURN_IF_ERROR(loom_spirv_emit_type_descriptor_struct(
-      state, i32_type_id, &state->descriptor_i32_struct_type_id));
-  *out_type_id = state->descriptor_i32_struct_type_id;
-  return iree_ok_status();
+  return loom_spirv_emit_type_descriptor_struct(state, i32_type_id,
+                                                out_type_id);
 }
 
 static iree_status_t loom_spirv_emit_type_descriptor_u64_struct(
     loom_spirv_emit_state_t* state, uint32_t* out_type_id) {
   uint32_t u64_type_id = 0;
   IREE_RETURN_IF_ERROR(loom_spirv_emit_type_u64(state, &u64_type_id));
-  IREE_RETURN_IF_ERROR(loom_spirv_emit_type_descriptor_struct(
-      state, u64_type_id, &state->descriptor_u64_struct_type_id));
-  *out_type_id = state->descriptor_u64_struct_type_id;
-  return iree_ok_status();
+  return loom_spirv_emit_type_descriptor_struct(state, u64_type_id,
+                                                out_type_id);
 }
 
 static iree_status_t
@@ -301,11 +467,9 @@ loom_spirv_emit_type_ptr_storage_buffer_descriptor_i32_struct(
   uint32_t struct_type_id = 0;
   IREE_RETURN_IF_ERROR(
       loom_spirv_emit_type_descriptor_i32_struct(state, &struct_type_id));
-  IREE_RETURN_IF_ERROR(loom_spirv_emit_type_pointer(
+  return loom_spirv_emit_type_pointer(
       state, LOOM_SPIRV_STORAGE_CLASS_STORAGE_BUFFER, struct_type_id,
-      &state->ptr_storage_buffer_descriptor_i32_struct_type_id));
-  *out_type_id = state->ptr_storage_buffer_descriptor_i32_struct_type_id;
-  return iree_ok_status();
+      /*pointer_array_stride=*/0, out_type_id);
 }
 
 static iree_status_t
@@ -314,11 +478,9 @@ loom_spirv_emit_type_ptr_storage_buffer_descriptor_u64_struct(
   uint32_t struct_type_id = 0;
   IREE_RETURN_IF_ERROR(
       loom_spirv_emit_type_descriptor_u64_struct(state, &struct_type_id));
-  IREE_RETURN_IF_ERROR(loom_spirv_emit_type_pointer(
+  return loom_spirv_emit_type_pointer(
       state, LOOM_SPIRV_STORAGE_CLASS_STORAGE_BUFFER, struct_type_id,
-      &state->ptr_storage_buffer_descriptor_u64_struct_type_id));
-  *out_type_id = state->ptr_storage_buffer_descriptor_u64_struct_type_id;
-  return iree_ok_status();
+      /*pointer_array_stride=*/0, out_type_id);
 }
 
 static iree_status_t
@@ -326,11 +488,9 @@ loom_spirv_emit_type_ptr_storage_buffer_descriptor_i32_field(
     loom_spirv_emit_state_t* state, uint32_t* out_type_id) {
   uint32_t i32_type_id = 0;
   IREE_RETURN_IF_ERROR(loom_spirv_emit_type_i32(state, &i32_type_id));
-  IREE_RETURN_IF_ERROR(loom_spirv_emit_type_pointer(
+  return loom_spirv_emit_type_pointer(
       state, LOOM_SPIRV_STORAGE_CLASS_STORAGE_BUFFER, i32_type_id,
-      &state->ptr_storage_buffer_descriptor_i32_field_type_id));
-  *out_type_id = state->ptr_storage_buffer_descriptor_i32_field_type_id;
-  return iree_ok_status();
+      /*pointer_array_stride=*/0, out_type_id);
 }
 
 static iree_status_t
@@ -338,53 +498,95 @@ loom_spirv_emit_type_ptr_storage_buffer_descriptor_u64_field(
     loom_spirv_emit_state_t* state, uint32_t* out_type_id) {
   uint32_t u64_type_id = 0;
   IREE_RETURN_IF_ERROR(loom_spirv_emit_type_u64(state, &u64_type_id));
-  IREE_RETURN_IF_ERROR(loom_spirv_emit_type_pointer(
+  return loom_spirv_emit_type_pointer(
       state, LOOM_SPIRV_STORAGE_CLASS_STORAGE_BUFFER, u64_type_id,
-      &state->ptr_storage_buffer_descriptor_u64_field_type_id));
-  *out_type_id = state->ptr_storage_buffer_descriptor_u64_field_type_id;
-  return iree_ok_status();
+      /*pointer_array_stride=*/0, out_type_id);
 }
 
 static iree_status_t loom_spirv_emit_type_ptr_physical_storage_buffer_i32(
     loom_spirv_emit_state_t* state, uint32_t* out_type_id) {
   uint32_t i32_type_id = 0;
   IREE_RETURN_IF_ERROR(loom_spirv_emit_type_i32(state, &i32_type_id));
-  const bool emit_array_stride =
-      state->ptr_physical_storage_buffer_i32_type_id == 0;
-  IREE_RETURN_IF_ERROR(loom_spirv_emit_type_pointer(
+  // OpPtrAccessChain scales its element operand by the base pointer's
+  // ArrayStride. A stride of 1 preserves Loom's byte-offset register semantics.
+  return loom_spirv_emit_type_pointer(
       state, LOOM_SPIRV_STORAGE_CLASS_PHYSICAL_STORAGE_BUFFER, i32_type_id,
-      &state->ptr_physical_storage_buffer_i32_type_id));
-  if (emit_array_stride) {
-    // OpPtrAccessChain scales its element operand by the base pointer's
-    // ArrayStride. A stride of 1 preserves Loom's byte-offset register
-    // semantics.
-    const uint32_t decoration_operands[] = {
-        state->ptr_physical_storage_buffer_i32_type_id,
-        LOOM_SPIRV_DECORATION_ARRAY_STRIDE,
-        1,
-    };
-    IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
-        loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_ANNOTATION),
-        LOOM_SPIRV_OP_DECORATE, decoration_operands,
-        IREE_ARRAYSIZE(decoration_operands)));
+      /*pointer_array_stride=*/1, out_type_id);
+}
+
+static bool loom_spirv_integer_constant_key_equal(
+    const loom_spirv_integer_constant_key_t* lhs,
+    const loom_spirv_integer_constant_key_t* rhs) {
+  if (lhs->type_id != rhs->type_id || lhs->word_count != rhs->word_count) {
+    return false;
   }
-  *out_type_id = state->ptr_physical_storage_buffer_i32_type_id;
+  for (uint8_t i = 0; i < lhs->word_count; ++i) {
+    if (lhs->words[i] != rhs->words[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+static iree_status_t loom_spirv_emit_integer_constant_cache_reserve(
+    loom_spirv_emit_state_t* state, iree_host_size_t minimum_capacity) {
+  if (minimum_capacity <= state->integer_constant_cache_capacity) {
+    return iree_ok_status();
+  }
+  if (state->integer_constant_cache_capacity == 0) {
+    minimum_capacity = iree_max(
+        minimum_capacity, LOOM_SPIRV_INTEGER_CONSTANT_CACHE_INITIAL_CAPACITY);
+  }
+  return iree_arena_grow_array(
+      state->scratch_arena, state->integer_constant_cache_count,
+      minimum_capacity, sizeof(*state->integer_constant_cache_entries),
+      &state->integer_constant_cache_capacity,
+      (void**)&state->integer_constant_cache_entries);
+}
+
+static iree_status_t loom_spirv_emit_cached_integer_constant(
+    loom_spirv_emit_state_t* state,
+    const loom_spirv_integer_constant_key_t* key, uint32_t* out_constant_id) {
+  for (iree_host_size_t i = 0; i < state->integer_constant_cache_count; ++i) {
+    const loom_spirv_integer_constant_cache_entry_t* entry =
+        &state->integer_constant_cache_entries[i];
+    if (loom_spirv_integer_constant_key_equal(key, &entry->key)) {
+      *out_constant_id = entry->id;
+      return iree_ok_status();
+    }
+  }
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_integer_constant_cache_reserve(
+      state, state->integer_constant_cache_count + 1));
+
+  const uint32_t constant_id = loom_spirv_emit_allocate_id(state);
+  uint32_t operands[2 + IREE_ARRAYSIZE(key->words)] = {0};
+  operands[0] = key->type_id;
+  operands[1] = constant_id;
+  for (uint8_t i = 0; i < key->word_count; ++i) {
+    operands[2 + i] = key->words[i];
+  }
+  IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
+      loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_DECLARATION),
+      LOOM_SPIRV_OP_CONSTANT, operands, 2 + key->word_count));
+  state->integer_constant_cache_entries[state->integer_constant_cache_count++] =
+      (loom_spirv_integer_constant_cache_entry_t){
+          .key = *key,
+          .id = constant_id,
+      };
+  *out_constant_id = constant_id;
   return iree_ok_status();
 }
 
 static iree_status_t loom_spirv_emit_i32_zero_constant(
     loom_spirv_emit_state_t* state, uint32_t* out_constant_id) {
-  if (state->i32_zero_constant_id == 0) {
-    uint32_t i32_type_id = 0;
-    IREE_RETURN_IF_ERROR(loom_spirv_emit_type_i32(state, &i32_type_id));
-    state->i32_zero_constant_id = loom_spirv_emit_allocate_id(state);
-    const uint32_t operands[] = {i32_type_id, state->i32_zero_constant_id, 0};
-    IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
-        loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_DECLARATION),
-        LOOM_SPIRV_OP_CONSTANT, operands, IREE_ARRAYSIZE(operands)));
-  }
-  *out_constant_id = state->i32_zero_constant_id;
-  return iree_ok_status();
+  uint32_t i32_type_id = 0;
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_type_i32(state, &i32_type_id));
+  const loom_spirv_integer_constant_key_t key = {
+      .type_id = i32_type_id,
+      .word_count = 1,
+      .words = {0},
+  };
+  return loom_spirv_emit_cached_integer_constant(state, &key, out_constant_id);
 }
 
 static iree_status_t loom_spirv_emit_low_register_type_kind(
@@ -1069,15 +1271,10 @@ static iree_status_t loom_spirv_emit_function_signature(
     uint32_t* out_function_type_id) {
   uint32_t result_type_id = 0;
   IREE_RETURN_IF_ERROR(loom_spirv_emit_type_void(state, &result_type_id));
-  const uint32_t function_type_id = loom_spirv_emit_allocate_id(state);
-  const uint32_t function_type_operands[] = {
-      function_type_id,
-      result_type_id,
-  };
-  IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
-      loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_DECLARATION),
-      LOOM_SPIRV_OP_TYPE_FUNCTION, function_type_operands,
-      IREE_ARRAYSIZE(function_type_operands)));
+  uint32_t function_type_id = 0;
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_type_function(
+      state, result_type_id, /*parameter_type_ids=*/NULL,
+      /*parameter_count=*/0, &function_type_id));
   *out_result_type_id = result_type_id;
   *out_function_type_id = function_type_id;
   return iree_ok_status();
