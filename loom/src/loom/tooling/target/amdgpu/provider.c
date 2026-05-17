@@ -4,11 +4,11 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tooling/execution/hal/amdgpu/provider.h"
+#include "loom/tooling/target/amdgpu/provider.h"
 
 #include "loom/target/arch/amdgpu/provider.h"
-#include "loom/tooling/execution/hal/amdgpu/artifact_provider.h"
 #include "loom/tooling/execution/hal/execution_backend.h"
+#include "loom/tooling/target/amdgpu/artifact_provider.h"
 
 static const loom_run_hal_execution_backend_t kLoomAmdgpuHalExecutionBackend = {
     .base =

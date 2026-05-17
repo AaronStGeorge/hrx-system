@@ -80,10 +80,10 @@ if(LOOM_COMPILE_ENABLE_IREEVM)
   _loom_compile_enable_provider(
     ${_LOOM_COMPILE_TARGET}
     LOOM_COMPILE_HAVE_IREEVM
-    loom::src::loom::tooling::execution::ireevm::candidate
+    loom::src::loom::tooling::target::ireevm::candidate
   )
   target_link_libraries(${_LOOM_COMPILE_TARGET} PRIVATE
-    loom::src::loom::tooling::execution::ireevm::provider
+    loom::src::loom::tooling::target::ireevm::provider
   )
 endif()
 
@@ -94,7 +94,7 @@ if(LOOM_COMPILE_ENABLE_SPIRV)
     loom::src::loom::target::arch::spirv::provider
   )
   target_link_libraries(${_LOOM_COMPILE_TARGET} PRIVATE
-    loom::src::loom::tooling::execution::hal::spirv::artifact_provider
+    loom::src::loom::tooling::target::spirv::artifact_provider
   )
 endif()
 

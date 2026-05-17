@@ -49,7 +49,7 @@ _AMDGPU_COMPILE_COPTS = iree_select({
 _AMDGPU_COMPILE_DEPS = iree_select({
     ":amdgpu_provider_enabled": [
         "//loom/src/loom/target/arch/amdgpu:provider",
-        "//loom/src/loom/tooling/execution/hal/amdgpu:artifact_provider",
+        "//loom/src/loom/tooling/target/amdgpu:artifact_provider",
     ],
     "//conditions:default": [],
 })
@@ -63,8 +63,8 @@ _IREEVM_COMPILE_COPTS = iree_select({
 
 _IREEVM_COMPILE_DEPS = iree_select({
     ":ireevm_provider_enabled": [
-        "//loom/src/loom/tooling/execution/ireevm:candidate",
-        "//loom/src/loom/tooling/execution/ireevm:provider",
+        "//loom/src/loom/tooling/target/ireevm:candidate",
+        "//loom/src/loom/tooling/target/ireevm:provider",
     ],
     "//conditions:default": [],
 })
@@ -79,7 +79,7 @@ _SPIRV_COMPILE_COPTS = iree_select({
 _SPIRV_COMPILE_DEPS = iree_select({
     ":spirv_provider_enabled": [
         "//loom/src/loom/target/arch/spirv:provider",
-        "//loom/src/loom/tooling/execution/hal/spirv:artifact_provider",
+        "//loom/src/loom/tooling/target/spirv:artifact_provider",
     ],
     "//conditions:default": [],
 })

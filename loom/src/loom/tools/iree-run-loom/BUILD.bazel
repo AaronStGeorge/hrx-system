@@ -53,7 +53,7 @@ _AMDGPU_PROVIDER_COPTS = iree_select({
 
 _AMDGPU_PROVIDER_DEPS = iree_select({
     ":amdgpu_provider_enabled": [
-        "//loom/src/loom/tooling/execution/hal/amdgpu:provider",
+        "//loom/src/loom/tooling/target/amdgpu:provider",
     ],
     "//conditions:default": [],
 })
@@ -67,7 +67,7 @@ _IREEVM_EXECUTION_COPTS = iree_select({
 
 _IREEVM_EXECUTION_DEPS = iree_select({
     ":ireevm_provider_enabled": [
-        "//loom/src/loom/tooling/execution/ireevm:provider",
+        "//loom/src/loom/tooling/target/ireevm:provider",
     ],
     "//conditions:default": [],
 })
@@ -81,7 +81,7 @@ _SPIRV_PROVIDER_COPTS = iree_select({
 
 _SPIRV_PROVIDER_DEPS = iree_select({
     ":spirv_provider_enabled": [
-        "//loom/src/loom/tooling/execution/hal/spirv:provider",
+        "//loom/src/loom/tooling/target/spirv:provider",
     ],
     "//conditions:default": [],
 })

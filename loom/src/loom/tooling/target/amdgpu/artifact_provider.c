@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tooling/execution/hal/amdgpu/artifact_provider.h"
+#include "loom/tooling/target/amdgpu/artifact_provider.h"
 
 #include "loom/target/arch/amdgpu/target_id.h"
 #include "loom/target/arch/amdgpu/target_info.h"

@@ -145,7 +145,7 @@ if(IREE_TUNE_LOOM_ENABLE_AMDGPU)
     loom::src::loom::target::arch::amdgpu::provider
   )
   target_link_libraries(${_IREE_TUNE_LOOM_TARGET} PRIVATE
-    loom::src::loom::tooling::execution::hal::amdgpu::artifact_provider
+    loom::src::loom::tooling::target::amdgpu::artifact_provider
   )
 endif()
 
@@ -153,7 +153,7 @@ if(IREE_TUNE_LOOM_ENABLE_IREEVM)
   _iree_tune_loom_enable_provider(
     ${_IREE_TUNE_LOOM_TARGET}
     IREE_TUNE_LOOM_HAVE_IREEVM
-    loom::src::loom::tooling::execution::ireevm::provider
+    loom::src::loom::tooling::target::ireevm::provider
   )
 endif()
 
@@ -164,7 +164,7 @@ if(IREE_TUNE_LOOM_ENABLE_SPIRV)
     loom::src::loom::target::arch::spirv::provider
   )
   target_link_libraries(${_IREE_TUNE_LOOM_TARGET} PRIVATE
-    loom::src::loom::tooling::execution::hal::spirv::artifact_provider
+    loom::src::loom::tooling::target::spirv::artifact_provider
   )
 endif()
 

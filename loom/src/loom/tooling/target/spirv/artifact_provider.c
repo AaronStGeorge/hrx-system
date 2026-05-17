@@ -4,14 +4,14 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tooling/execution/hal/spirv/artifact_provider.h"
+#include "loom/tooling/target/spirv/artifact_provider.h"
 
 #include "loom/target/arch/spirv/low_registry.h"
 #include "loom/target/emit/spirv/module_builder.h"
 #include "loom/target/emit/spirv/module_emitter.h"
 #include "loom/target/entry_selection.h"
 #include "loom/tooling/execution/hal/runtime.h"
-#include "loom/tooling/execution/hal/spirv/vulkan_profile.h"
+#include "loom/tooling/target/spirv/vulkan_profile.h"
 
 typedef struct loom_spirv_hal_artifact_storage_t {
   // SPIR-V binary module bytes emitted for the selected low function.

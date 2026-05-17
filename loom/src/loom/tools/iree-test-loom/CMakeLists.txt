@@ -120,7 +120,7 @@ if(IREE_TEST_LOOM_ENABLE_AMDGPU)
   _iree_test_loom_enable_provider(
     ${_IREE_TEST_LOOM_TARGET}
     IREE_TEST_LOOM_HAVE_AMDGPU
-    loom::src::loom::tooling::execution::hal::amdgpu::provider
+    loom::src::loom::tooling::target::amdgpu::provider
   )
 endif()
 
@@ -128,7 +128,7 @@ if(IREE_TEST_LOOM_ENABLE_IREEVM)
   _iree_test_loom_enable_provider(
     ${_IREE_TEST_LOOM_TARGET}
     IREE_TEST_LOOM_HAVE_IREEVM
-    loom::src::loom::tooling::execution::ireevm::provider
+    loom::src::loom::tooling::target::ireevm::provider
   )
 endif()
 
@@ -136,10 +136,10 @@ if(IREE_TEST_LOOM_ENABLE_SPIRV)
   _iree_test_loom_enable_provider(
     ${_IREE_TEST_LOOM_TARGET}
     IREE_TEST_LOOM_HAVE_SPIRV
-    loom::src::loom::tooling::execution::hal::spirv::provider
+    loom::src::loom::tooling::target::spirv::provider
   )
   target_link_libraries(${_IREE_TEST_LOOM_TARGET} PRIVATE
-    loom::src::loom::tooling::execution::hal::spirv::testbench_requirements
+    loom::src::loom::tooling::target::spirv::testbench_requirements
   )
 endif()
 

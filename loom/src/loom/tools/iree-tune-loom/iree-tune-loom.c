@@ -31,14 +31,14 @@
 
 #if IREE_TUNE_LOOM_HAVE_AMDGPU
 #include "loom/target/arch/amdgpu/provider.h"
-#include "loom/tooling/execution/hal/amdgpu/artifact_provider.h"
+#include "loom/tooling/target/amdgpu/artifact_provider.h"
 #endif  // IREE_TUNE_LOOM_HAVE_AMDGPU
 #if IREE_TUNE_LOOM_HAVE_IREEVM
-#include "loom/tooling/execution/ireevm/provider.h"
+#include "loom/tooling/target/ireevm/provider.h"
 #endif  // IREE_TUNE_LOOM_HAVE_IREEVM
 #if IREE_TUNE_LOOM_HAVE_SPIRV
 #include "loom/target/arch/spirv/provider.h"
-#include "loom/tooling/execution/hal/spirv/artifact_provider.h"
+#include "loom/tooling/target/spirv/artifact_provider.h"
 #endif  // IREE_TUNE_LOOM_HAVE_SPIRV
 
 #if IREE_TUNE_LOOM_HAVE_AMDGPU

@@ -4,11 +4,11 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tooling/execution/hal/spirv/provider.h"
+#include "loom/tooling/target/spirv/provider.h"
 
 #include "loom/target/arch/spirv/provider.h"
 #include "loom/tooling/execution/hal/execution_backend.h"
-#include "loom/tooling/execution/hal/spirv/artifact_provider.h"
+#include "loom/tooling/target/spirv/artifact_provider.h"
 
 static const loom_run_hal_execution_backend_t kLoomSpirvHalExecutionBackend = {
     .base =

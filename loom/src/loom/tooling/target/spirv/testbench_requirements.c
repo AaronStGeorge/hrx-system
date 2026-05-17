@@ -4,10 +4,10 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tooling/execution/hal/spirv/testbench_requirements.h"
+#include "loom/tooling/target/spirv/testbench_requirements.h"
 
-#include "loom/tooling/execution/hal/spirv/vulkan_profile.h"
 #include "loom/tooling/execution/hal/testbench_actual.h"
+#include "loom/tooling/target/spirv/vulkan_profile.h"
 
 static const loom_spirv_cooperative_matrix_property_t*
 loom_spirv_vulkan_hal_testbench_find_matrix_row(

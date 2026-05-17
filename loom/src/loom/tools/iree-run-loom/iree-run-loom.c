@@ -27,13 +27,13 @@
    IREE_RUN_LOOM_HAVE_SPIRV)
 
 #if IREE_RUN_LOOM_HAVE_AMDGPU
-#include "loom/tooling/execution/hal/amdgpu/provider.h"
+#include "loom/tooling/target/amdgpu/provider.h"
 #endif  // IREE_RUN_LOOM_HAVE_AMDGPU
 #if IREE_RUN_LOOM_HAVE_IREEVM
-#include "loom/tooling/execution/ireevm/provider.h"
+#include "loom/tooling/target/ireevm/provider.h"
 #endif  // IREE_RUN_LOOM_HAVE_IREEVM
 #if IREE_RUN_LOOM_HAVE_SPIRV
-#include "loom/tooling/execution/hal/spirv/provider.h"
+#include "loom/tooling/target/spirv/provider.h"
 #endif  // IREE_RUN_LOOM_HAVE_SPIRV
 
 #if IREE_RUN_LOOM_HAVE_ANY_PROVIDER

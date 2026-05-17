@@ -4,12 +4,12 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tooling/execution/ireevm/backend.h"
+#include "loom/tooling/target/ireevm/backend.h"
 
 #include "loom/tooling/execution/compile_report_capture.h"
-#include "loom/tooling/execution/ireevm/candidate.h"
-#include "loom/tooling/execution/ireevm/invocation.h"
 #include "loom/tooling/execution/one_shot.h"
+#include "loom/tooling/target/ireevm/candidate.h"
+#include "loom/tooling/target/ireevm/invocation.h"
 
 static iree_status_t loom_ireevm_execution_backend_run_one_shot(
     const loom_run_execution_backend_t* backend,

@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tooling/execution/ireevm/candidate.h"
+#include "loom/tooling/target/ireevm/candidate.h"
 
 #include <algorithm>
 #include <cstring>
@@ -27,7 +27,7 @@
 #include "loom/target/emit/ireevm/function_bytecode.h"
 #include "loom/target/provider.h"
 #include "loom/tooling/compile/pipeline.h"
-#include "loom/tooling/execution/ireevm/invocation.h"
+#include "loom/tooling/target/ireevm/invocation.h"
 
 namespace loom {
 namespace {

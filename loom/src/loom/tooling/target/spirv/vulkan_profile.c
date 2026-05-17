@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tooling/execution/hal/spirv/vulkan_profile.h"
+#include "loom/tooling/target/spirv/vulkan_profile.h"
 
 #include <stdint.h>
 
