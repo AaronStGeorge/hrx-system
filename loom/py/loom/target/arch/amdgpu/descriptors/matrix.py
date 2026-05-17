@@ -232,60 +232,389 @@ def _v_wmma_i32_16x16x32_iu4_overlay() -> AmdgpuDescriptorOverlay:
     )
 
 
-def _v_mfma_f32_16x16x16_f16_overlay() -> AmdgpuDescriptorOverlay:
+def _v_mfma_overlay(
+    *,
+    instruction_name: str,
+    semantic_tag: str,
+    accumulator_units: int,
+    lhs_units: int,
+    rhs_units: int,
+    encoding_name: str = "VOP3P_MFMA",
+) -> AmdgpuDescriptorOverlay:
+    mnemonic = instruction_name.lower()
     return AmdgpuDescriptorOverlay(
-        descriptor_key="amdgpu.v_mfma_f32_16x16x16_f16",
-        instruction_name="V_MFMA_F32_16X16X16_F16",
-        mnemonic="v_mfma_f32_16x16x16_f16",
-        encoding_name="VOP3P_MFMA",
-        semantic_tag="matrix.mfma.f32.16x16x16.f16",
+        descriptor_key=f"amdgpu.{mnemonic}",
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name=encoding_name,
+        semantic_tag=semantic_tag,
         schedule_class=_SCHEDULE_MFMA,
         operands=(
-            AmdgpuOperandOverlay("VDST", _vgpr_agpr_result(units=4)),
-            AmdgpuOperandOverlay("SRC0", _vgpr_agpr_operand("a", units=2)),
-            AmdgpuOperandOverlay("SRC1", _vgpr_agpr_operand("b", units=2)),
-            AmdgpuOperandOverlay("SRC2", _vgpr_agpr_const_operand("acc", units=4)),
+            AmdgpuOperandOverlay("VDST", _vgpr_agpr_result(units=accumulator_units)),
+            AmdgpuOperandOverlay("SRC0", _vgpr_agpr_operand("a", units=lhs_units)),
+            AmdgpuOperandOverlay("SRC1", _vgpr_agpr_operand("b", units=rhs_units)),
+            AmdgpuOperandOverlay(
+                "SRC2", _vgpr_agpr_const_operand("acc", units=accumulator_units)
+            ),
         ),
         constraints=_destructive_accumulator_constraints(3),
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_mfma_scale_overlay(
+    *,
+    instruction_name: str,
+    semantic_tag: str,
+    accumulator_units: int,
+    lhs_units: int,
+    rhs_units: int,
+) -> AmdgpuDescriptorOverlay:
+    mnemonic = instruction_name.lower()
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=f"amdgpu.{mnemonic}",
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="ENC_VOP3PX2",
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_MFMA,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_agpr_result(units=accumulator_units)),
+            AmdgpuOperandOverlay("SRC0", _vgpr_agpr_operand("a", units=lhs_units)),
+            AmdgpuOperandOverlay("SRC1", _vgpr_agpr_operand("b", units=rhs_units)),
+            AmdgpuOperandOverlay(
+                "SRC2", _vgpr_agpr_const_operand("acc", units=accumulator_units)
+            ),
+            AmdgpuOperandOverlay("SCALE_SRC0", _sgpr_vgpr_operand("scale_a")),
+            AmdgpuOperandOverlay("SCALE_SRC1", _sgpr_vgpr_operand("scale_b")),
+        ),
+        constraints=_destructive_accumulator_constraints(3),
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _v_mfma_f32_16x16x16_f16_overlay() -> AmdgpuDescriptorOverlay:
+    return _v_mfma_overlay(
+        instruction_name="V_MFMA_F32_16X16X16_F16",
+        semantic_tag="matrix.mfma.f32.16x16x16.f16",
+        accumulator_units=4,
+        lhs_units=2,
+        rhs_units=2,
     )
 
 
 def _v_mfma_f32_16x16x16_bf16_overlay() -> AmdgpuDescriptorOverlay:
-    return AmdgpuDescriptorOverlay(
-        descriptor_key="amdgpu.v_mfma_f32_16x16x16_bf16",
+    return _v_mfma_overlay(
         instruction_name="V_MFMA_F32_16X16X16_BF16",
-        mnemonic="v_mfma_f32_16x16x16_bf16",
-        encoding_name="VOP3P_MFMA",
         semantic_tag="matrix.mfma.f32.16x16x16.bf16.1k",
-        schedule_class=_SCHEDULE_MFMA,
-        operands=(
-            AmdgpuOperandOverlay("VDST", _vgpr_agpr_result(units=4)),
-            AmdgpuOperandOverlay("SRC0", _vgpr_agpr_operand("a", units=2)),
-            AmdgpuOperandOverlay("SRC1", _vgpr_agpr_operand("b", units=2)),
-            AmdgpuOperandOverlay("SRC2", _vgpr_agpr_const_operand("acc", units=4)),
-        ),
-        constraints=_destructive_accumulator_constraints(3),
-        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        accumulator_units=4,
+        lhs_units=2,
+        rhs_units=2,
     )
 
 
 def _v_mfma_f32_16x16x4_f32_overlay() -> AmdgpuDescriptorOverlay:
-    return AmdgpuDescriptorOverlay(
-        descriptor_key="amdgpu.v_mfma_f32_16x16x4_f32",
+    return _v_mfma_overlay(
         instruction_name="V_MFMA_F32_16X16X4_F32",
-        mnemonic="v_mfma_f32_16x16x4_f32",
-        encoding_name="VOP3P_MFMA",
         semantic_tag="matrix.mfma.f32.16x16x4.f32",
-        schedule_class=_SCHEDULE_MFMA,
-        operands=(
-            AmdgpuOperandOverlay("VDST", _vgpr_agpr_result(units=4)),
-            AmdgpuOperandOverlay("SRC0", _vgpr_agpr_operand("a", units=1)),
-            AmdgpuOperandOverlay("SRC1", _vgpr_agpr_operand("b", units=1)),
-            AmdgpuOperandOverlay("SRC2", _vgpr_agpr_const_operand("acc", units=4)),
+        accumulator_units=4,
+        lhs_units=1,
+        rhs_units=1,
+    )
+
+
+def _cdna3_mfma_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_16X16X1_4B_F32",
+            semantic_tag="matrix.mfma.f32.16x16x1.f32",
+            accumulator_units=16,
+            lhs_units=1,
+            rhs_units=1,
         ),
-        constraints=_destructive_accumulator_constraints(3),
-        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_16X16X4_4B_F16",
+            semantic_tag="matrix.mfma.f32.16x16x4.f16",
+            accumulator_units=16,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_f32_16x16x4_f32_overlay(),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_16X16X4_4B_BF16",
+            semantic_tag="matrix.mfma.f32.16x16x4.bf16.1k",
+            accumulator_units=16,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_16X16X8_XF32",
+            semantic_tag="matrix.mfma.f32.16x16x8.xf32",
+            accumulator_units=4,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_f32_16x16x16_f16_overlay(),
+        _v_mfma_f32_16x16x16_bf16_overlay(),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_16X16X32_BF8_BF8",
+            semantic_tag="matrix.mfma.f32.16x16x32.bf8.bf8",
+            accumulator_units=4,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_16X16X32_BF8_FP8",
+            semantic_tag="matrix.mfma.f32.16x16x32.bf8.fp8",
+            accumulator_units=4,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_16X16X32_FP8_BF8",
+            semantic_tag="matrix.mfma.f32.16x16x32.fp8.bf8",
+            accumulator_units=4,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_16X16X32_FP8_FP8",
+            semantic_tag="matrix.mfma.f32.16x16x32.fp8.fp8",
+            accumulator_units=4,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_32X32X1_2B_F32",
+            semantic_tag="matrix.mfma.f32.32x32x1.f32",
+            accumulator_units=32,
+            lhs_units=1,
+            rhs_units=1,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_32X32X2_F32",
+            semantic_tag="matrix.mfma.f32.32x32x2.f32",
+            accumulator_units=16,
+            lhs_units=1,
+            rhs_units=1,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_32X32X4_XF32",
+            semantic_tag="matrix.mfma.f32.32x32x4.xf32",
+            accumulator_units=16,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_32X32X4_2B_F16",
+            semantic_tag="matrix.mfma.f32.32x32x4.f16",
+            accumulator_units=32,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_32X32X4_2B_BF16",
+            semantic_tag="matrix.mfma.f32.32x32x4.bf16.1k",
+            accumulator_units=32,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_32X32X8_F16",
+            semantic_tag="matrix.mfma.f32.32x32x8.f16",
+            accumulator_units=16,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_32X32X8_BF16",
+            semantic_tag="matrix.mfma.f32.32x32x8.bf16.1k",
+            accumulator_units=16,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_32X32X16_BF8_BF8",
+            semantic_tag="matrix.mfma.f32.32x32x16.bf8.bf8",
+            accumulator_units=16,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_32X32X16_BF8_FP8",
+            semantic_tag="matrix.mfma.f32.32x32x16.bf8.fp8",
+            accumulator_units=16,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_32X32X16_FP8_BF8",
+            semantic_tag="matrix.mfma.f32.32x32x16.fp8.bf8",
+            accumulator_units=16,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_32X32X16_FP8_FP8",
+            semantic_tag="matrix.mfma.f32.32x32x16.fp8.fp8",
+            accumulator_units=16,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_4X4X1_16B_F32",
+            semantic_tag="matrix.mfma.f32.4x4x1.f32",
+            accumulator_units=4,
+            lhs_units=1,
+            rhs_units=1,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_4X4X4_16B_F16",
+            semantic_tag="matrix.mfma.f32.4x4x4.f16",
+            accumulator_units=4,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_4X4X4_16B_BF16",
+            semantic_tag="matrix.mfma.f32.4x4x4.bf16.1k",
+            accumulator_units=4,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F64_16X16X4_F64",
+            semantic_tag="matrix.mfma.f64.16x16x4.f64",
+            accumulator_units=8,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F64_4X4X4_4B_F64",
+            semantic_tag="matrix.mfma.f64.4x4x4.f64",
+            accumulator_units=2,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_I32_16X16X4_4B_I8",
+            semantic_tag="matrix.mfma.i32.16x16x4.i8",
+            accumulator_units=16,
+            lhs_units=1,
+            rhs_units=1,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_I32_16X16X32_I8",
+            semantic_tag="matrix.mfma.i32.16x16x32.i8",
+            accumulator_units=4,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_I32_32X32X4_2B_I8",
+            semantic_tag="matrix.mfma.i32.32x32x4.i8",
+            accumulator_units=32,
+            lhs_units=1,
+            rhs_units=1,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_I32_32X32X16_I8",
+            semantic_tag="matrix.mfma.i32.32x32x16.i8",
+            accumulator_units=16,
+            lhs_units=2,
+            rhs_units=2,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_I32_4X4X4_16B_I8",
+            semantic_tag="matrix.mfma.i32.4x4x4.i8",
+            accumulator_units=4,
+            lhs_units=1,
+            rhs_units=1,
+        ),
+    )
+
+
+def _cdna4_mfma_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        *(
+            overlay
+            for overlay in _cdna3_mfma_overlays()
+            if overlay.instruction_name
+            not in (
+                "V_MFMA_F32_16X16X8_XF32",
+                "V_MFMA_F32_32X32X4_XF32",
+            )
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_16X16X32_F16",
+            semantic_tag="matrix.mfma.f32.16x16x32.f16",
+            accumulator_units=4,
+            lhs_units=4,
+            rhs_units=4,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_16X16X32_BF16",
+            semantic_tag="matrix.mfma.f32.16x16x32.bf16",
+            accumulator_units=4,
+            lhs_units=4,
+            rhs_units=4,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_32X32X16_F16",
+            semantic_tag="matrix.mfma.f32.32x32x16.f16",
+            accumulator_units=16,
+            lhs_units=4,
+            rhs_units=4,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_32X32X16_BF16",
+            semantic_tag="matrix.mfma.f32.32x32x16.bf16",
+            accumulator_units=16,
+            lhs_units=4,
+            rhs_units=4,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_I32_16X16X64_I8",
+            semantic_tag="matrix.mfma.i32.16x16x64.i8",
+            accumulator_units=4,
+            lhs_units=4,
+            rhs_units=4,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_I32_32X32X32_I8",
+            semantic_tag="matrix.mfma.i32.32x32x32.i8",
+            accumulator_units=16,
+            lhs_units=4,
+            rhs_units=4,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_16X16X128_F8F6F4",
+            semantic_tag="matrix.mfma.f32.16x16x128.f8f6f4",
+            accumulator_units=4,
+            lhs_units=8,
+            rhs_units=8,
+        ),
+        _v_mfma_overlay(
+            instruction_name="V_MFMA_F32_32X32X64_F8F6F4",
+            semantic_tag="matrix.mfma.f32.32x32x64.f8f6f4",
+            accumulator_units=16,
+            lhs_units=8,
+            rhs_units=8,
+        ),
+        _v_mfma_scale_overlay(
+            instruction_name="V_MFMA_SCALE_F32_16X16X128_F8F6F4",
+            semantic_tag="matrix.mfma.scale.f32.16x16x128.f8f6f4",
+            accumulator_units=4,
+            lhs_units=8,
+            rhs_units=8,
+        ),
+        _v_mfma_scale_overlay(
+            instruction_name="V_MFMA_SCALE_F32_32X32X64_F8F6F4",
+            semantic_tag="matrix.mfma.scale.f32.32x32x64.f8f6f4",
+            accumulator_units=16,
+            lhs_units=8,
+            rhs_units=8,
+        ),
     )
 
 
@@ -367,6 +696,323 @@ def _v_smfmac_f32_overlay(
         ),
         constraints=_DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS,
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _cdna_smfmac_overlay(
+    *,
+    instruction_name: str,
+    semantic_tag: str,
+    accumulator_units: int,
+    lhs_units: int,
+    rhs_units: int,
+) -> AmdgpuDescriptorOverlay:
+    mnemonic = instruction_name.lower()
+    return _v_smfmac_f32_overlay(
+        descriptor_key=f"amdgpu.{mnemonic}",
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        semantic_tag=semantic_tag,
+        accumulator_units=accumulator_units,
+        lhs_units=lhs_units,
+        rhs_units=rhs_units,
+    )
+
+
+def _cdna3_smfmac_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _v_smfmac_f32_16x16x32_f16_overlay(),
+        _v_smfmac_f32_16x16x32_bf16_overlay(),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_16X16X64_BF8_BF8",
+            semantic_tag="matrix.smfmac.f32.16x16x64.bf8.bf8",
+            accumulator_units=4,
+            lhs_units=2,
+            rhs_units=4,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_16X16X64_BF8_FP8",
+            semantic_tag="matrix.smfmac.f32.16x16x64.bf8.fp8",
+            accumulator_units=4,
+            lhs_units=2,
+            rhs_units=4,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_16X16X64_FP8_BF8",
+            semantic_tag="matrix.smfmac.f32.16x16x64.fp8.bf8",
+            accumulator_units=4,
+            lhs_units=2,
+            rhs_units=4,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_16X16X64_FP8_FP8",
+            semantic_tag="matrix.smfmac.f32.16x16x64.fp8.fp8",
+            accumulator_units=4,
+            lhs_units=2,
+            rhs_units=4,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_I32_16X16X64_I8",
+            semantic_tag="matrix.smfmac.i32.16x16x64.i8",
+            accumulator_units=4,
+            lhs_units=2,
+            rhs_units=4,
+        ),
+        _v_smfmac_f32_32x32x16_f16_overlay(),
+        _v_smfmac_f32_32x32x16_bf16_overlay(),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_32X32X32_BF8_BF8",
+            semantic_tag="matrix.smfmac.f32.32x32x32.bf8.bf8",
+            accumulator_units=16,
+            lhs_units=2,
+            rhs_units=4,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_32X32X32_BF8_FP8",
+            semantic_tag="matrix.smfmac.f32.32x32x32.bf8.fp8",
+            accumulator_units=16,
+            lhs_units=2,
+            rhs_units=4,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_32X32X32_FP8_BF8",
+            semantic_tag="matrix.smfmac.f32.32x32x32.fp8.bf8",
+            accumulator_units=16,
+            lhs_units=2,
+            rhs_units=4,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_32X32X32_FP8_FP8",
+            semantic_tag="matrix.smfmac.f32.32x32x32.fp8.fp8",
+            accumulator_units=16,
+            lhs_units=2,
+            rhs_units=4,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_I32_32X32X32_I8",
+            semantic_tag="matrix.smfmac.i32.32x32x32.i8",
+            accumulator_units=16,
+            lhs_units=2,
+            rhs_units=4,
+        ),
+    )
+
+
+def _cdna4_smfmac_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        *_cdna3_smfmac_overlays(),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_16X16X64_F16",
+            semantic_tag="matrix.smfmac.f32.16x16x64.f16",
+            accumulator_units=4,
+            lhs_units=4,
+            rhs_units=8,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_16X16X64_BF16",
+            semantic_tag="matrix.smfmac.f32.16x16x64.bf16",
+            accumulator_units=4,
+            lhs_units=4,
+            rhs_units=8,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_16X16X128_BF8_BF8",
+            semantic_tag="matrix.smfmac.f32.16x16x128.bf8.bf8",
+            accumulator_units=4,
+            lhs_units=4,
+            rhs_units=8,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_16X16X128_BF8_FP8",
+            semantic_tag="matrix.smfmac.f32.16x16x128.bf8.fp8",
+            accumulator_units=4,
+            lhs_units=4,
+            rhs_units=8,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_16X16X128_FP8_BF8",
+            semantic_tag="matrix.smfmac.f32.16x16x128.fp8.bf8",
+            accumulator_units=4,
+            lhs_units=4,
+            rhs_units=8,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_16X16X128_FP8_FP8",
+            semantic_tag="matrix.smfmac.f32.16x16x128.fp8.fp8",
+            accumulator_units=4,
+            lhs_units=4,
+            rhs_units=8,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_I32_16X16X128_I8",
+            semantic_tag="matrix.smfmac.i32.16x16x128.i8",
+            accumulator_units=4,
+            lhs_units=4,
+            rhs_units=8,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_32X32X32_F16",
+            semantic_tag="matrix.smfmac.f32.32x32x32.f16",
+            accumulator_units=16,
+            lhs_units=4,
+            rhs_units=8,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_32X32X32_BF16",
+            semantic_tag="matrix.smfmac.f32.32x32x32.bf16",
+            accumulator_units=16,
+            lhs_units=4,
+            rhs_units=8,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_32X32X64_BF8_BF8",
+            semantic_tag="matrix.smfmac.f32.32x32x64.bf8.bf8",
+            accumulator_units=16,
+            lhs_units=4,
+            rhs_units=8,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_32X32X64_BF8_FP8",
+            semantic_tag="matrix.smfmac.f32.32x32x64.bf8.fp8",
+            accumulator_units=16,
+            lhs_units=4,
+            rhs_units=8,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_32X32X64_FP8_BF8",
+            semantic_tag="matrix.smfmac.f32.32x32x64.fp8.bf8",
+            accumulator_units=16,
+            lhs_units=4,
+            rhs_units=8,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_F32_32X32X64_FP8_FP8",
+            semantic_tag="matrix.smfmac.f32.32x32x64.fp8.fp8",
+            accumulator_units=16,
+            lhs_units=4,
+            rhs_units=8,
+        ),
+        _cdna_smfmac_overlay(
+            instruction_name="V_SMFMAC_I32_32X32X64_I8",
+            semantic_tag="matrix.smfmac.i32.32x32x64.i8",
+            accumulator_units=16,
+            lhs_units=4,
+            rhs_units=8,
+        ),
+    )
+
+
+def _v_swmmac_overlay(
+    *,
+    instruction_name: str,
+    semantic_tag: str,
+    accumulator_units: int,
+    lhs_units: int,
+    rhs_units: int,
+) -> AmdgpuDescriptorOverlay:
+    mnemonic = instruction_name.lower()
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=f"amdgpu.{mnemonic}",
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name="ENC_VOP3P",
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_SWMMAC,
+        operands=(
+            AmdgpuOperandOverlay("VDST", _vgpr_result(units=accumulator_units)),
+            AmdgpuOperandOverlay(
+                "VDST",
+                _vgpr_operand("acc", units=accumulator_units),
+                role_exception_reason=_SMFMAC_VDST_ACCUMULATOR_REASON,
+            ),
+            AmdgpuOperandOverlay("SRC0", _vgpr_operand("a", units=lhs_units)),
+            AmdgpuOperandOverlay("SRC1", _vgpr_operand("b", units=rhs_units)),
+            AmdgpuOperandOverlay("SRC2", _vgpr_operand("index")),
+        ),
+        constraints=_DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _rdna4_swmmac_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return (
+        _v_swmmac_overlay(
+            instruction_name="V_SWMMAC_F32_16X16X32_F16",
+            semantic_tag="matrix.swmmac.f32.16x16x32.f16",
+            accumulator_units=8,
+            lhs_units=4,
+            rhs_units=8,
+        ),
+        _v_swmmac_overlay(
+            instruction_name="V_SWMMAC_F32_16X16X32_BF16",
+            semantic_tag="matrix.swmmac.f32.16x16x32.bf16",
+            accumulator_units=8,
+            lhs_units=4,
+            rhs_units=8,
+        ),
+        _v_swmmac_overlay(
+            instruction_name="V_SWMMAC_F16_16X16X32_F16",
+            semantic_tag="matrix.swmmac.f16.16x16x32.f16",
+            accumulator_units=4,
+            lhs_units=4,
+            rhs_units=8,
+        ),
+        _v_swmmac_overlay(
+            instruction_name="V_SWMMAC_BF16_16X16X32_BF16",
+            semantic_tag="matrix.swmmac.bf16.16x16x32.bf16",
+            accumulator_units=4,
+            lhs_units=4,
+            rhs_units=8,
+        ),
+        _v_swmmac_overlay(
+            instruction_name="V_SWMMAC_I32_16X16X32_IU8",
+            semantic_tag="matrix.swmmac.i32.16x16x32.iu8",
+            accumulator_units=8,
+            lhs_units=2,
+            rhs_units=4,
+        ),
+        _v_swmmac_overlay(
+            instruction_name="V_SWMMAC_I32_16X16X32_IU4",
+            semantic_tag="matrix.swmmac.i32.16x16x32.iu4",
+            accumulator_units=8,
+            lhs_units=1,
+            rhs_units=2,
+        ),
+        _v_swmmac_overlay(
+            instruction_name="V_SWMMAC_I32_16X16X64_IU4",
+            semantic_tag="matrix.swmmac.i32.16x16x64.iu4",
+            accumulator_units=8,
+            lhs_units=2,
+            rhs_units=4,
+        ),
+        _v_swmmac_overlay(
+            instruction_name="V_SWMMAC_F32_16X16X32_FP8_FP8",
+            semantic_tag="matrix.swmmac.f32.16x16x32.fp8.fp8",
+            accumulator_units=8,
+            lhs_units=2,
+            rhs_units=4,
+        ),
+        _v_swmmac_overlay(
+            instruction_name="V_SWMMAC_F32_16X16X32_FP8_BF8",
+            semantic_tag="matrix.swmmac.f32.16x16x32.fp8.bf8",
+            accumulator_units=8,
+            lhs_units=2,
+            rhs_units=4,
+        ),
+        _v_swmmac_overlay(
+            instruction_name="V_SWMMAC_F32_16X16X32_BF8_FP8",
+            semantic_tag="matrix.swmmac.f32.16x16x32.bf8.fp8",
+            accumulator_units=8,
+            lhs_units=2,
+            rhs_units=4,
+        ),
+        _v_swmmac_overlay(
+            instruction_name="V_SWMMAC_F32_16X16X32_BF8_BF8",
+            semantic_tag="matrix.swmmac.f32.16x16x32.bf8.bf8",
+            accumulator_units=8,
+            lhs_units=2,
+            rhs_units=4,
+        ),
     )
 
 
@@ -621,6 +1267,11 @@ def _v_dot8_u32_u4_overlay(
 
 
 __all__ = (
+    "_cdna3_mfma_overlays",
+    "_cdna3_smfmac_overlays",
+    "_cdna4_mfma_overlays",
+    "_cdna4_smfmac_overlays",
+    "_rdna4_swmmac_overlays",
     "_v_dot2_f32_bf16_overlay",
     "_v_dot2_f32_f16_overlay",
     "_v_dot2_f32_packed_float_overlay",

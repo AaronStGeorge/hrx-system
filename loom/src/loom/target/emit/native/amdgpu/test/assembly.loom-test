@@ -389,6 +389,45 @@ low.func.def target(@gfx11_target) @gfx11_branch_args(%resource: reg<amdgpu.sgpr
 
 // ====
 
+// RUN: emit amdgpu-native @gfx942_extended_mfma_native waits=none
+amdgpu.target<gfx942> @gfx942_target
+low.func.def target(@gfx942_target) @gfx942_extended_mfma_native(%lhs_f16: reg<amdgpu.vgpr x2>, %rhs_f16: reg<amdgpu.vgpr x2>, %acc_f16: reg<amdgpu.vgpr x16>, %lhs_i8: reg<amdgpu.vgpr x2>, %rhs_i8: reg<amdgpu.vgpr x2>, %acc_i8: reg<amdgpu.vgpr x4>, %lhs_sparse: reg<amdgpu.vgpr x2>, %rhs_sparse: reg<amdgpu.vgpr x4>, %index: reg<amdgpu.vgpr>) asm<amdgpu.cdna3.core> {
+  %f16 = v_mfma_f32_32x32x8_f16 %lhs_f16, %rhs_f16, %acc_f16
+  %i8 = v_mfma_i32_16x16x32_i8 %lhs_i8, %rhs_i8, %acc_i8
+  %sparse = v_smfmac_f32_16x16x64_bf8_bf8 %i8, %lhs_sparse, %rhs_sparse, %index
+  return
+}
+
+// ----
+
+// ====
+
+// RUN: emit amdgpu-native @gfx950_extended_mfma_native waits=none
+amdgpu.target<gfx950> @gfx950_target
+low.func.def target(@gfx950_target) @gfx950_extended_mfma_native(%lhs_f16: reg<amdgpu.vgpr x4>, %rhs_f16: reg<amdgpu.vgpr x4>, %acc_f16: reg<amdgpu.vgpr x4>, %lhs_i8: reg<amdgpu.vgpr x4>, %rhs_i8: reg<amdgpu.vgpr x4>, %acc_i8: reg<amdgpu.vgpr x16>, %lhs_scale: reg<amdgpu.vgpr x8>, %rhs_scale: reg<amdgpu.vgpr x8>, %scale_a: reg<amdgpu.vgpr>, %scale_b: reg<amdgpu.vgpr>, %lhs_sparse: reg<amdgpu.vgpr x4>, %rhs_sparse: reg<amdgpu.vgpr x8>, %index: reg<amdgpu.vgpr>) asm<amdgpu.cdna4.core> {
+  %f16 = v_mfma_f32_16x16x32_f16 %lhs_f16, %rhs_f16, %acc_f16
+  %i8 = v_mfma_i32_32x32x32_i8 %lhs_i8, %rhs_i8, %acc_i8
+  %scale = v_mfma_scale_f32_16x16x128_f8f6f4 %lhs_scale, %rhs_scale, %f16, %scale_a, %scale_b
+  %sparse = v_smfmac_f32_16x16x128_fp8_fp8 %scale, %lhs_sparse, %rhs_sparse, %index
+  return
+}
+
+// ----
+
+// ====
+
+// RUN: emit amdgpu-native @gfx1200_swmmac_native waits=none
+amdgpu.target<gfx1200> @gfx1200_target
+low.func.def target(@gfx1200_target) @gfx1200_swmmac_native(%lhs_f16: reg<amdgpu.vgpr x4>, %rhs_f16: reg<amdgpu.vgpr x8>, %acc_f32: reg<amdgpu.vgpr x8>, %lhs_iu4: reg<amdgpu.vgpr x2>, %rhs_iu4: reg<amdgpu.vgpr x4>, %index: reg<amdgpu.vgpr>) asm<amdgpu.rdna4.core> {
+  %f16 = v_swmmac_f32_16x16x32_f16 %acc_f32, %lhs_f16, %rhs_f16, %index
+  %iu4 = v_swmmac_i32_16x16x64_iu4 %f16, %lhs_iu4, %rhs_iu4, %index
+  return
+}
+
+// ----
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx1250_vgpr_msb_valu waits=none strategy=source fixed=%lhs:physical_register:512:1 fixed=%rhs:physical_register:768:1 fixed=%sum:physical_register:513:1
 amdgpu.target<gfx1250> @gfx1250_target
 low.func.def target(@gfx1250_target) @gfx1250_vgpr_msb_valu(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) asm<amdgpu.rdna4.gfx125x.core> {

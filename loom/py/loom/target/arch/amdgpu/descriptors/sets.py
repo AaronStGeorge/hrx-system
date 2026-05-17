@@ -26,6 +26,7 @@ def _cdna_core_overlays(
     include_v_dot2_f32_bf16: bool,
     include_v_cvt_pk_bf16_f32: bool,
     include_ds_transpose_reads: bool,
+    matrix_overlays: tuple[AmdgpuDescriptorOverlay, ...],
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     return (
         _s_add_u32_overlay(),
@@ -339,13 +340,7 @@ def _cdna_core_overlays(
         _v_dot8_i32_i4_overlay(signedness_modifiers=False),
         _v_dot8_u32_u4_overlay(),
         *(_gfx950_ds_transpose_read_overlays() if include_ds_transpose_reads else ()),
-        _v_mfma_f32_16x16x4_f32_overlay(),
-        _v_mfma_f32_16x16x16_f16_overlay(),
-        _v_mfma_f32_16x16x16_bf16_overlay(),
-        _v_smfmac_f32_16x16x32_f16_overlay(),
-        _v_smfmac_f32_16x16x32_bf16_overlay(),
-        _v_smfmac_f32_32x32x16_f16_overlay(),
-        _v_smfmac_f32_32x32x16_bf16_overlay(),
+        *matrix_overlays,
         _s_barrier_overlay(),
         *_gfx950_cache_control_overlays(),
         _s_waitcnt_overlay(
@@ -366,6 +361,7 @@ def _gfx940_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         include_v_dot2_f32_bf16=False,
         include_v_cvt_pk_bf16_f32=False,
         include_ds_transpose_reads=False,
+        matrix_overlays=(*_cdna3_mfma_overlays(), *_cdna3_smfmac_overlays()),
     )
 
 
@@ -375,6 +371,7 @@ def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         include_v_dot2_f32_bf16=True,
         include_v_cvt_pk_bf16_f32=True,
         include_ds_transpose_reads=True,
+        matrix_overlays=(*_cdna4_mfma_overlays(), *_cdna4_smfmac_overlays()),
     )
 
 
@@ -1088,6 +1085,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             _v_wmma_f32_16x16x16_packed8_overlay(lhs_type="bf8", rhs_type="bf8")
         ),
         *_with_zero_accumulator_form(_v_wmma_i32_16x16x32_iu4_overlay()),
+        *_rdna4_swmmac_overlays(),
         *_gfx12_cache_control_overlays(),
         *_gfx12_prefetch_overlays(),
         _s_wait_loadcnt_overlay(),
@@ -1458,6 +1456,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             _v_wmma_f32_16x16x16_packed8_overlay(lhs_type="bf8", rhs_type="bf8")
         ),
         *_with_zero_accumulator_form(_v_wmma_i32_16x16x32_iu4_overlay()),
+        *_rdna4_swmmac_overlays(),
         *_gfx12_cache_control_overlays(),
         *_gfx12_prefetch_overlays(),
         _s_wait_loadcnt_overlay(),
@@ -1773,6 +1772,7 @@ _AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
     resources=(
         *_common_scalar_vector_memory_resources(),
         Resource(_RESOURCE_WMMA, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
+        Resource(_RESOURCE_SWMMAC, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
         Resource(_RESOURCE_CONTROL, capacity_per_cycle=1, kind=ResourceKind.CONTROL),
     ),
     schedule_classes=(
@@ -1791,6 +1791,14 @@ _AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             latency_cycles=32,
             issue_uses=(IssueUse(_RESOURCE_WMMA, cycles=1, units=1),),
             hazards=_matrix_hazards(_RESOURCE_WMMA),
+            model_quality=ModelQuality.ESTIMATED,
+        ),
+        ScheduleClass(
+            _SCHEDULE_SWMMAC,
+            latency_kind=LatencyKind.ESTIMATE,
+            latency_cycles=32,
+            issue_uses=(IssueUse(_RESOURCE_SWMMAC, cycles=1, units=1),),
+            hazards=_matrix_hazards(_RESOURCE_SWMMAC),
             model_quality=ModelQuality.ESTIMATED,
         ),
         ScheduleClass(
@@ -1923,10 +1931,7 @@ _AMDGPU_RDNA4_GFX125X_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
     key="amdgpu.rdna4.gfx125x.core",
     reg_classes=_gfx125x_reg_classes(),
     register_parts=_AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE.register_parts,
-    resources=(
-        *_AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE.resources,
-        Resource(_RESOURCE_SWMMAC, capacity_per_cycle=1, kind=ResourceKind.MATRIX),
-    ),
+    resources=_AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE.resources,
     schedule_classes=(
         *_AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE.schedule_classes,
         ScheduleClass(
@@ -1935,14 +1940,6 @@ _AMDGPU_RDNA4_GFX125X_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
             latency_cycles=32,
             issue_uses=(IssueUse(_RESOURCE_WMMA, cycles=1, units=1),),
             hazards=_matrix_hazards(_RESOURCE_WMMA),
-            model_quality=ModelQuality.ESTIMATED,
-        ),
-        ScheduleClass(
-            _SCHEDULE_SWMMAC,
-            latency_kind=LatencyKind.ESTIMATE,
-            latency_cycles=32,
-            issue_uses=(IssueUse(_RESOURCE_SWMMAC, cycles=1, units=1),),
-            hazards=_matrix_hazards(_RESOURCE_SWMMAC),
             model_quality=ModelQuality.ESTIMATED,
         ),
         ScheduleClass(
