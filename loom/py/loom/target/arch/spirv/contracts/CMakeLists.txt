@@ -26,6 +26,7 @@ iree_py_library(
     iree::runtime::py::loom::dialect::view::view
     iree::runtime::py::loom::target::arch::spirv::descriptors
     iree::runtime::py::loom::target::arch::spirv::scalar_alu
+    iree::runtime::py::loom::target::arch::spirv::scalar_conversion
     iree::runtime::py::loom::target::arch::spirv::scalar_memory
     iree::runtime::py::loom::target::contracts::contracts
 )

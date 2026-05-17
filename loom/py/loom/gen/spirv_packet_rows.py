@@ -39,6 +39,10 @@ from loom.target.arch.spirv.scalar_alu import (  # noqa: E402
     ScalarAluType,
     ScalarBinaryOperation,
 )
+from loom.target.arch.spirv.scalar_conversion import (  # noqa: E402
+    SCALAR_CONVERSIONS,
+    ScalarConversion,
+)
 from loom.target.arch.spirv.scalar_memory import (  # noqa: E402
     STORAGE_BUFFER_SCALARS,
     StorageBufferScalar,
@@ -198,6 +202,21 @@ def _scalar_binary_rows() -> list[str]:
     return rows
 
 
+def _conversion_row(row: ScalarConversion) -> str:
+    return _row(
+        row.key,
+        opcode=row.opcode,
+        form="LOOM_SPIRV_PACKET_FORM_UNARY_CONVERT",
+        result_type=_alu_scalar_value(row.result_type),
+        operand_types=(_alu_scalar_value(row.source_type),),
+        result_count=1,
+    )
+
+
+def _conversion_rows() -> list[str]:
+    return [_conversion_row(row) for row in SCALAR_CONVERSIONS]
+
+
 def _coordinate_binary_rows() -> list[str]:
     offset64_value = _offset64_value()
     rows = [
@@ -315,6 +334,8 @@ def _validate_rows() -> None:
     for scalar in FLOAT_SCALAR_ALU_TYPES:
         for operation in FLOAT_BINARY_OPERATIONS:
             row_keys.add(f"spirv.op_{operation.descriptor_suffix}.{scalar.suffix}")
+    for conversion in SCALAR_CONVERSIONS:
+        row_keys.add(conversion.key)
     for scalar in SCALAR_ALU_TYPES:
         row_keys.add(f"spirv.op_select.{scalar.suffix}")
     for predicate in UNSIGNED_INTEGER_COMPARE_PREDICATES:
@@ -354,6 +375,7 @@ def generate_tables() -> str:
             literal_word_count=2,
         ),
         *_scalar_binary_rows(),
+        *_conversion_rows(),
         *_coordinate_binary_rows(),
         *_mul_add_rows(),
         *_integer_compare_rows(),

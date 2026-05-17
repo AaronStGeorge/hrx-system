@@ -54,6 +54,7 @@ typedef enum loom_spirv_packet_form_e {
   LOOM_SPIRV_PACKET_FORM_INTEGER_MUL_ADD = 6,
   LOOM_SPIRV_PACKET_FORM_COMPARE_SAME_TYPE = 7,
   LOOM_SPIRV_PACKET_FORM_SELECT = 8,
+  LOOM_SPIRV_PACKET_FORM_UNARY_CONVERT = 9,
 } loom_spirv_packet_form_t;
 
 typedef struct loom_spirv_packet_row_t {

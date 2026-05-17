@@ -2062,6 +2062,35 @@ static iree_status_t loom_spirv_emit_binary_same_type_packet(
                                       true);
 }
 
+static iree_status_t loom_spirv_emit_unary_convert_packet(
+    loom_spirv_emit_state_t* state,
+    const loom_low_resolved_descriptor_packet_t* packet,
+    const loom_spirv_packet_row_t* row) {
+  loom_spirv_value_ref_t operands[1] = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_spirv_emit_load_packet_operands(state, packet, row, operands));
+  uint32_t result_type_id = 0;
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_type_id_for_value_type(
+      state, row->result_type, &result_type_id));
+  const uint32_t result_id = loom_spirv_emit_allocate_id(state);
+  const uint32_t instruction_operands[] = {
+      result_type_id,
+      result_id,
+      operands[0].id,
+  };
+  IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
+      loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+      row->opcode, instruction_operands, IREE_ARRAYSIZE(instruction_operands)));
+  return loom_spirv_emit_define_value(state,
+                                      loom_op_const_results(packet->op)[0],
+                                      (loom_spirv_value_ref_t){
+                                          .id = result_id,
+                                          .type_id = result_type_id,
+                                          .value_type = row->result_type,
+                                      },
+                                      true);
+}
+
 static iree_status_t loom_spirv_emit_integer_mul_add_packet(
     loom_spirv_emit_state_t* state,
     const loom_low_resolved_descriptor_packet_t* packet,
@@ -2318,6 +2347,8 @@ static iree_status_t loom_spirv_emit_descriptor_packet(
       return loom_spirv_emit_integer_constant_packet(state, packet, row);
     case LOOM_SPIRV_PACKET_FORM_BINARY_SAME_TYPE:
       return loom_spirv_emit_binary_same_type_packet(state, packet, row);
+    case LOOM_SPIRV_PACKET_FORM_UNARY_CONVERT:
+      return loom_spirv_emit_unary_convert_packet(state, packet, row);
     case LOOM_SPIRV_PACKET_FORM_INTEGER_MUL_ADD:
       return loom_spirv_emit_integer_mul_add_packet(state, packet, row);
     case LOOM_SPIRV_PACKET_FORM_COMPARE_SAME_TYPE:

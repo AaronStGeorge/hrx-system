@@ -63,3 +63,16 @@ def test_generation_emits_integer_compare_and_select_rows() -> None:
     assert "LOOM_SPIRV_VALUE_CLASS_BOOL" in tables
     assert "LOOM_SPIRV_PACKET_FORM_COMPARE_SAME_TYPE" in tables
     assert "LOOM_SPIRV_PACKET_FORM_SELECT" in tables
+
+
+def test_generation_emits_scalar_conversion_rows() -> None:
+    tables = generate_tables()
+
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_S_CONVERT_I8_I32" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_S_CONVERT_I64_I32" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_CONVERT_S_TO_F_I16_F32" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_CONVERT_F_TO_S_F32_I16" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_F_CONVERT_F16_F32" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_F_CONVERT_F32_F16" in tables
+    assert "SPIRV_LOGICAL_CORE_DESCRIPTOR_REF_OP_BITCAST_I32_F32" in tables
+    assert "LOOM_SPIRV_PACKET_FORM_UNARY_CONVERT" in tables

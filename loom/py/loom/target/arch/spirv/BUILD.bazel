@@ -32,6 +32,7 @@ py_library(
     deps = [
         ":features",
         ":scalar_alu",
+        ":scalar_conversion",
         ":scalar_memory",
         "//loom/py/loom/target:low_descriptors",
         "//loom/py/loom/target/arch:package",
@@ -68,5 +69,16 @@ py_library(
     ],
     deps = [
         ":features",
+    ],
+)
+
+py_library(
+    name = "scalar_conversion",
+    srcs = [
+        "__init__.py",
+        "scalar_conversion.py",
+    ],
+    deps = [
+        ":scalar_alu",
     ],
 )

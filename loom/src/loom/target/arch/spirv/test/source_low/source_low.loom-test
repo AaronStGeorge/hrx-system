@@ -293,3 +293,93 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_hal_resource_s
   OpStore.storage_buffer.f64 %output_f64_view, %sum_f64
   return
 }
+
+// ====
+
+spirv.target<vulkan1_3> @hal_target {abi = hal_kernel, contract_feature_bits = 33278}
+
+kernel.def target(@hal_target) @spirv_hal_scalar_conversions(%input_i8: buffer, %output_ext_i32: buffer, %output_sitofp_f32: buffer, %input_i64: buffer, %output_trunc_i32: buffer, %input_f16: buffer, %output_extf_f32: buffer, %input_f32: buffer, %output_fptrunc_f16: buffer, %output_fptosi_i16: buffer, %input_i32_bits: buffer, %output_bitcast_f32: buffer, %byte_offset: offset) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch {
+  %input_i8_view = buffer.view %input_i8[%byte_offset] : buffer -> view<1xi8, #dense>
+  %loaded_i8 = view.load %input_i8_view[0] : view<1xi8, #dense> -> i8
+  %extended_i32 = scalar.extsi %loaded_i8 : i8 to i32
+  %output_ext_i32_view = buffer.view %output_ext_i32[%byte_offset] : buffer -> view<1xi32, #dense>
+  view.store %extended_i32, %output_ext_i32_view[0] : i32, view<1xi32, #dense>
+  %converted_f32 = scalar.sitofp %loaded_i8 : i8 to f32
+  %output_sitofp_f32_view = buffer.view %output_sitofp_f32[%byte_offset] : buffer -> view<1xf32, #dense>
+  view.store %converted_f32, %output_sitofp_f32_view[0] : f32, view<1xf32, #dense>
+  %input_i64_view = buffer.view %input_i64[%byte_offset] : buffer -> view<1xi64, #dense>
+  %loaded_i64 = view.load %input_i64_view[0] : view<1xi64, #dense> -> i64
+  %truncated_i32 = scalar.trunci %loaded_i64 : i64 to i32
+  %output_trunc_i32_view = buffer.view %output_trunc_i32[%byte_offset] : buffer -> view<1xi32, #dense>
+  view.store %truncated_i32, %output_trunc_i32_view[0] : i32, view<1xi32, #dense>
+  %input_f16_view = buffer.view %input_f16[%byte_offset] : buffer -> view<1xf16, #dense>
+  %loaded_f16 = view.load %input_f16_view[0] : view<1xf16, #dense> -> f16
+  %extended_f32 = scalar.extf %loaded_f16 : f16 to f32
+  %output_extf_f32_view = buffer.view %output_extf_f32[%byte_offset] : buffer -> view<1xf32, #dense>
+  view.store %extended_f32, %output_extf_f32_view[0] : f32, view<1xf32, #dense>
+  %input_f32_view = buffer.view %input_f32[%byte_offset] : buffer -> view<1xf32, #dense>
+  %loaded_f32 = view.load %input_f32_view[0] : view<1xf32, #dense> -> f32
+  %truncated_f16 = scalar.fptrunc %loaded_f32 : f32 to f16
+  %output_fptrunc_f16_view = buffer.view %output_fptrunc_f16[%byte_offset] : buffer -> view<1xf16, #dense>
+  view.store %truncated_f16, %output_fptrunc_f16_view[0] : f16, view<1xf16, #dense>
+  %converted_i16 = scalar.fptosi %loaded_f32 : f32 to i16
+  %output_fptosi_i16_view = buffer.view %output_fptosi_i16[%byte_offset] : buffer -> view<1xi16, #dense>
+  view.store %converted_i16, %output_fptosi_i16_view[0] : i16, view<1xi16, #dense>
+  %input_i32_bits_view = buffer.view %input_i32_bits[%byte_offset] : buffer -> view<1xi32, #dense>
+  %loaded_i32_bits = view.load %input_i32_bits_view[0] : view<1xi32, #dense> -> i32
+  %bitcast_f32 = scalar.bitcast %loaded_i32_bits : i32 to f32
+  %output_bitcast_f32_view = buffer.view %output_bitcast_f32[%byte_offset] : buffer -> view<1xf32, #dense>
+  view.store %bitcast_f32, %output_bitcast_f32_view[0] : f32, view<1xf32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_hal_scalar_conversions(%byte_offset: reg<spirv.offset64>) asm<spirv.logical.core> {
+  %input_i8 = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output_ext_i32 = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output_sitofp_f32 = resource<hal_binding> {index = 2, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %input_i64 = resource<hal_binding> {index = 3, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output_trunc_i32 = resource<hal_binding> {index = 4, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %input_f16 = resource<hal_binding> {index = 5, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output_extf_f32 = resource<hal_binding> {index = 6, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %input_f32 = resource<hal_binding> {index = 7, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output_fptrunc_f16 = resource<hal_binding> {index = 8, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output_fptosi_i16 = resource<hal_binding> {index = 9, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %input_i32_bits = resource<hal_binding> {index = 10, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output_bitcast_f32 = resource<hal_binding> {index = 11, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %input_i8_view = OpPtrAccessChain.storage_buffer.i8.byte_offset %input_i8, %byte_offset
+  %loaded_i8 = OpLoad.storage_buffer.i8 %input_i8_view
+  %extended_i32 = OpSConvert.i8.i32 %loaded_i8
+  %output_ext_i32_view = OpPtrAccessChain.storage_buffer.i32.byte_offset %output_ext_i32, %byte_offset
+  OpStore.storage_buffer.i32 %output_ext_i32_view, %extended_i32
+  %converted_f32 = OpConvertSToF.i8.f32 %loaded_i8
+  %output_sitofp_f32_view = OpPtrAccessChain.storage_buffer.f32.byte_offset %output_sitofp_f32, %byte_offset
+  OpStore.storage_buffer.f32 %output_sitofp_f32_view, %converted_f32
+  %input_i64_view = OpPtrAccessChain.storage_buffer.i64.byte_offset %input_i64, %byte_offset
+  %loaded_i64 = OpLoad.storage_buffer.i64 %input_i64_view
+  %truncated_i32 = OpSConvert.i64.i32 %loaded_i64
+  %output_trunc_i32_view = OpPtrAccessChain.storage_buffer.i32.byte_offset %output_trunc_i32, %byte_offset
+  OpStore.storage_buffer.i32 %output_trunc_i32_view, %truncated_i32
+  %input_f16_view = OpPtrAccessChain.storage_buffer.f16.byte_offset %input_f16, %byte_offset
+  %loaded_f16 = OpLoad.storage_buffer.f16 %input_f16_view
+  %extended_f32 = OpFConvert.f16.f32 %loaded_f16
+  %output_extf_f32_view = OpPtrAccessChain.storage_buffer.f32.byte_offset %output_extf_f32, %byte_offset
+  OpStore.storage_buffer.f32 %output_extf_f32_view, %extended_f32
+  %input_f32_view = OpPtrAccessChain.storage_buffer.f32.byte_offset %input_f32, %byte_offset
+  %loaded_f32 = OpLoad.storage_buffer.f32 %input_f32_view
+  %truncated_f16 = OpFConvert.f32.f16 %loaded_f32
+  %output_fptrunc_f16_view = OpPtrAccessChain.storage_buffer.f16.byte_offset %output_fptrunc_f16, %byte_offset
+  OpStore.storage_buffer.f16 %output_fptrunc_f16_view, %truncated_f16
+  %converted_i16 = OpConvertFToS.f32.i16 %loaded_f32
+  %output_fptosi_i16_view = OpPtrAccessChain.storage_buffer.i16.byte_offset %output_fptosi_i16, %byte_offset
+  OpStore.storage_buffer.i16 %output_fptosi_i16_view, %converted_i16
+  %input_i32_bits_view = OpPtrAccessChain.storage_buffer.i32.byte_offset %input_i32_bits, %byte_offset
+  %loaded_i32_bits = OpLoad.storage_buffer.i32 %input_i32_bits_view
+  %bitcast_f32 = OpBitcast.i32.f32 %loaded_i32_bits
+  %output_bitcast_f32_view = OpPtrAccessChain.storage_buffer.f32.byte_offset %output_bitcast_f32, %byte_offset
+  OpStore.storage_buffer.f32 %output_bitcast_f32_view, %bitcast_f32
+  return
+}

@@ -37,6 +37,10 @@ from loom.target.arch.spirv.scalar_alu import (
     ScalarAluType,
     ScalarBinaryOperation,
 )
+from loom.target.arch.spirv.scalar_conversion import (
+    SCALAR_CONVERSIONS,
+    ScalarConversion,
+)
 from loom.target.arch.spirv.scalar_memory import (
     STORAGE_BUFFER_SCALARS,
     StorageBufferScalar,
@@ -213,6 +217,26 @@ def _ternary_rule(
     )
 
 
+def _conversion_rule(row: ScalarConversion) -> DescriptorRule:
+    descriptor = _descriptor(row.key)
+    return DescriptorRule(
+        source_op=_CONVERSION_SOURCE_OPS[row.source_op_key],
+        descriptor=descriptor,
+        guards=(
+            Guard.value_type("input", Scalar(row.source_type.source_type)),
+            Guard.value_type("result", Scalar(row.result_type.source_type)),
+            *_feature_guards(descriptor),
+        ),
+        emit=(
+            _descriptor_emit(
+                descriptor=descriptor,
+                operands={"input": ValueRef.operand("input")},
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
 def _compare_rule(
     source_op: Op,
     predicate: IntegerComparePredicate,
@@ -369,6 +393,16 @@ _FLOAT_BINARY_SOURCE_OPS = {
     "remf": scalar_arithmetic.scalar_remf,
 }
 
+_CONVERSION_SOURCE_OPS = {
+    "sitofp": scalar_conversion.scalar_sitofp,
+    "fptosi": scalar_conversion.scalar_fptosi,
+    "extf": scalar_conversion.scalar_extf,
+    "fptrunc": scalar_conversion.scalar_fptrunc,
+    "extsi": scalar_conversion.scalar_extsi,
+    "trunci": scalar_conversion.scalar_trunci,
+    "bitcast": scalar_conversion.scalar_bitcast,
+}
+
 
 def _scalar_type_pattern(scalar: ScalarAluType) -> TypePattern:
     return Scalar(scalar.source_type)
@@ -398,6 +432,10 @@ def _scalar_binary_rules() -> tuple[DescriptorRule, ...]:
         for operation in FLOAT_BINARY_OPERATIONS
     )
     return tuple(rules)
+
+
+def _conversion_rules() -> tuple[DescriptorRule, ...]:
+    return tuple(_conversion_rule(row) for row in SCALAR_CONVERSIONS)
 
 
 def _compare_rules() -> tuple[DescriptorRule, ...]:
@@ -459,6 +497,7 @@ SPIRV_LOGICAL_CORE_CONTRACT_FRAGMENT = ContractFragment(
         _i32_constant_rule(scalar_conversion.scalar_constant),
         _i32_index_constant_rule(),
         _offset_constant_rule(),
+        *_conversion_rules(),
         *_scalar_binary_rules(),
         _binary_rule(index.index_add, _INDEX, "spirv.op_iadd.i32"),
         _binary_rule(index.index_sub, _INDEX, "spirv.op_isub.i32"),

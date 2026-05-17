@@ -23,6 +23,10 @@ from loom.target.arch.spirv.scalar_alu import (
     ScalarAluType,
     ScalarBinaryOperation,
 )
+from loom.target.arch.spirv.scalar_conversion import (
+    SCALAR_CONVERSIONS,
+    ScalarConversion,
+)
 from loom.target.arch.spirv.scalar_memory import (
     STORAGE_BUFFER_SCALARS,
     StorageBufferScalar,
@@ -203,6 +207,23 @@ def _select_descriptor(
         schedule_class=_SCHEDULE_ALU,
         flags=(DescriptorFlag.DEAD_REMOVABLE,),
     )
+
+
+def _conversion_descriptor(row: ScalarConversion) -> Descriptor:
+    return Descriptor(
+        key=row.key,
+        mnemonic=row.display_mnemonic,
+        semantic_tag=row.key,
+        operands=(_id_result(), _id_operand("input")),
+        feature_mask_words=(row.feature_bits,) if row.feature_bits else (),
+        asm_forms=_asm(results=("dst",), operands=("input",)),
+        schedule_class=_SCHEDULE_ALU,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _conversion_descriptors() -> tuple[Descriptor, ...]:
+    return tuple(_conversion_descriptor(row) for row in SCALAR_CONVERSIONS)
 
 
 def _ternary_same_type_descriptor(
@@ -491,6 +512,7 @@ SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
             flags=(DescriptorFlag.DEAD_REMOVABLE,),
         ),
         *_scalar_binary_descriptors(),
+        *_conversion_descriptors(),
         _ternary_same_type_descriptor(
             key="spirv.op_imul_add.i32",
             mnemonic="OpIMulAdd",
