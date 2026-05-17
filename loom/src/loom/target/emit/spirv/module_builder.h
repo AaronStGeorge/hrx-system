@@ -58,6 +58,8 @@ typedef struct loom_spirv_module_binary_t {
 typedef struct loom_spirv_module_builder_t {
   // Allocator used for section and final module storage.
   iree_allocator_t allocator;
+  // Export ABI selected for this module.
+  loom_target_abi_kind_t abi_kind;
   // Prepared target feature set emitted into the module preamble.
   loom_spirv_feature_set_t feature_set;
   // Upper bound for allocated result IDs, including the invalid zero ID.
@@ -80,7 +82,7 @@ void loom_spirv_module_binary_deinitialize(loom_spirv_module_binary_t* module,
 
 // Initializes a sectioned builder for |target| and emits target-selected
 // feature rows into the preamble sections. |target| must describe a SPIR-V
-// binary shader-entry-point bundle.
+// binary shader-entry-point or HAL-kernel bundle.
 iree_status_t loom_spirv_module_builder_initialize(
     const loom_target_bundle_t* target, iree_allocator_t allocator,
     loom_spirv_module_builder_t* out_builder);

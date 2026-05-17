@@ -36,16 +36,54 @@ static iree_status_t loom_spirv_module_builder_validate_target(
                             (int)target->name.size, target->name.data,
                             (int)actual.size, actual.data);
   }
-  if (target->export_plan->abi_kind != LOOM_TARGET_ABI_SHADER_ENTRY_POINT) {
+  if (target->export_plan->abi_kind != LOOM_TARGET_ABI_SHADER_ENTRY_POINT &&
+      target->export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
     iree_string_view_t actual =
         loom_target_abi_kind_name(target->export_plan->abi_kind);
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "target '%.*s' uses export ABI '%.*s', expected "
-                            "'shader_entry_point'",
+                            "'shader_entry_point' or 'hal_kernel'",
                             (int)target->name.size, target->name.data,
                             (int)actual.size, actual.data);
   }
   return iree_ok_status();
+}
+
+static bool loom_spirv_module_builder_uses_raw_bda_abi(
+    const loom_spirv_module_builder_t* builder) {
+  return builder->abi_kind == LOOM_TARGET_ABI_HAL_KERNEL;
+}
+
+static bool loom_spirv_module_builder_should_emit_capability(
+    const loom_spirv_module_builder_t* builder, uint32_t capability) {
+  if (loom_spirv_module_builder_uses_raw_bda_abi(builder) &&
+      capability == LOOM_SPIRV_CAPABILITY_VULKAN_MEMORY_MODEL) {
+    return false;
+  }
+  return true;
+}
+
+static bool loom_spirv_module_builder_should_emit_extension(
+    const loom_spirv_module_builder_t* builder, iree_string_view_t extension) {
+  if (loom_spirv_module_builder_uses_raw_bda_abi(builder) &&
+      iree_string_view_equal(extension,
+                             IREE_SV("SPV_KHR_vulkan_memory_model"))) {
+    return false;
+  }
+  return true;
+}
+
+static void loom_spirv_module_builder_select_memory_model(
+    const loom_spirv_module_builder_t* builder, uint32_t* out_addressing_model,
+    uint32_t* out_memory_model) {
+  if (loom_spirv_module_builder_uses_raw_bda_abi(builder)) {
+    *out_addressing_model =
+        LOOM_SPIRV_ADDRESSING_MODEL_PHYSICAL_STORAGE_BUFFER64;
+    *out_memory_model = LOOM_SPIRV_MEMORY_MODEL_GLSL450;
+    return;
+  }
+  *out_addressing_model = builder->feature_set.addressing_model;
+  *out_memory_model = builder->feature_set.memory_model;
 }
 
 static iree_status_t loom_spirv_module_builder_emit_feature_preamble(
@@ -60,6 +98,10 @@ static iree_status_t loom_spirv_module_builder_emit_feature_preamble(
   loom_spirv_binary_writer_t* capability_writer =
       &builder->sections[LOOM_SPIRV_MODULE_SECTION_CAPABILITY];
   for (uint8_t i = 0; i < builder->feature_set.capability_count; ++i) {
+    if (!loom_spirv_module_builder_should_emit_capability(
+            builder, builder->feature_set.capabilities[i])) {
+      continue;
+    }
     const uint32_t operands[] = {builder->feature_set.capabilities[i]};
     IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
         capability_writer, LOOM_SPIRV_OP_CAPABILITY, operands,
@@ -69,6 +111,10 @@ static iree_status_t loom_spirv_module_builder_emit_feature_preamble(
   loom_spirv_binary_writer_t* extension_writer =
       &builder->sections[LOOM_SPIRV_MODULE_SECTION_EXTENSION];
   for (uint8_t i = 0; i < builder->feature_set.extension_count; ++i) {
+    if (!loom_spirv_module_builder_should_emit_extension(
+            builder, builder->feature_set.extension_names[i])) {
+      continue;
+    }
     IREE_RETURN_IF_ERROR(loom_spirv_binary_write_string_instruction(
         extension_writer, LOOM_SPIRV_OP_EXTENSION, NULL, 0,
         builder->feature_set.extension_names[i], NULL, 0));
@@ -76,9 +122,13 @@ static iree_status_t loom_spirv_module_builder_emit_feature_preamble(
 
   loom_spirv_binary_writer_t* memory_model_writer =
       &builder->sections[LOOM_SPIRV_MODULE_SECTION_MEMORY_MODEL];
+  uint32_t addressing_model = LOOM_SPIRV_ADDRESSING_MODEL_LOGICAL;
+  uint32_t memory_model = LOOM_SPIRV_MEMORY_MODEL_GLSL450;
+  loom_spirv_module_builder_select_memory_model(builder, &addressing_model,
+                                                &memory_model);
   const uint32_t memory_model_operands[] = {
-      builder->feature_set.addressing_model,
-      builder->feature_set.memory_model,
+      addressing_model,
+      memory_model,
   };
   return loom_spirv_binary_write_instruction(
       memory_model_writer, LOOM_SPIRV_OP_MEMORY_MODEL, memory_model_operands,
@@ -95,6 +145,7 @@ iree_status_t loom_spirv_module_builder_initialize(
 
   *out_builder = (loom_spirv_module_builder_t){
       .allocator = allocator,
+      .abi_kind = target->export_plan->abi_kind,
       .id_bound = 1,
   };
   for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(out_builder->sections); ++i) {

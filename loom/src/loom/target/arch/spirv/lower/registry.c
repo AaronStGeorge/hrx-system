@@ -12,6 +12,17 @@
 #include "loom/target/arch/spirv/lower.h"
 #include "loom/target/arch/spirv/lower/matrix.h"
 
+static iree_status_t loom_spirv_make_hal_buffer_type(
+    loom_low_lower_context_t* context, loom_type_t* out_type) {
+  *out_type = loom_type_none();
+  loom_string_id_t hal_buffer_id = LOOM_STRING_ID_INVALID;
+  IREE_RETURN_IF_ERROR(
+      loom_module_intern_string(loom_low_lower_context_module(context),
+                                IREE_SV("hal.buffer"), &hal_buffer_id));
+  *out_type = loom_type_dialect_opaque(hal_buffer_id);
+  return iree_ok_status();
+}
+
 static iree_status_t loom_spirv_make_register_type(
     loom_low_lower_context_t* context, uint16_t register_class_id,
     loom_type_t* out_type) {
@@ -56,6 +67,60 @@ static iree_status_t loom_spirv_map_type(void* user_data,
       context, source_op, IREE_SV("source"), source_type);
 }
 
+static uint32_t loom_spirv_hal_binding_index(loom_low_lower_context_t* context,
+                                             uint16_t source_argument_index) {
+  uint16_t argument_count = 0;
+  const loom_value_id_t* argument_ids = loom_func_like_arg_ids(
+      loom_low_lower_context_source_function(context), &argument_count);
+  uint32_t resource_index = 0;
+  for (uint16_t i = 0; i < source_argument_index && i < argument_count; ++i) {
+    loom_type_t type = loom_module_value_type(
+        loom_low_lower_context_module(context), argument_ids[i]);
+    if (loom_type_is_buffer(type)) {
+      ++resource_index;
+    }
+  }
+  return resource_index;
+}
+
+static iree_status_t loom_spirv_map_argument(
+    void* user_data, loom_low_lower_context_t* context,
+    const loom_op_t* source_function_op, uint16_t source_argument_index,
+    loom_value_id_t source_argument_id,
+    loom_low_lower_abi_argument_t* out_argument) {
+  (void)user_data;
+  loom_type_t source_type = loom_module_value_type(
+      loom_low_lower_context_module(context), source_argument_id);
+  const loom_target_bundle_t* bundle = loom_low_lower_context_bundle(context);
+  if (bundle->export_plan->abi_kind == LOOM_TARGET_ABI_HAL_KERNEL &&
+      loom_type_is_buffer(source_type)) {
+    loom_type_t binding_type = loom_type_none();
+    IREE_RETURN_IF_ERROR(loom_spirv_make_register_type(
+        context, SPIRV_LOGICAL_CORE_REG_CLASS_ID_PTR_STORAGE_BUFFER,
+        &binding_type));
+    loom_type_t resource_source_type = loom_type_none();
+    IREE_RETURN_IF_ERROR(
+        loom_spirv_make_hal_buffer_type(context, &resource_source_type));
+    *out_argument = (loom_low_lower_abi_argument_t){
+        .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_RESOURCE,
+        .abi_type = binding_type,
+        .resource_import_kind = LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BINDING,
+        .resource_index =
+            loom_spirv_hal_binding_index(context, source_argument_index),
+        .resource_source_type = resource_source_type,
+    };
+    return iree_ok_status();
+  }
+
+  *out_argument = (loom_low_lower_abi_argument_t){
+      .kind = LOOM_LOW_LOWER_ABI_ARGUMENT_DIRECT,
+      .abi_type = loom_type_none(),
+      .resource_source_type = loom_type_none(),
+  };
+  return loom_spirv_map_type(user_data, context, source_function_op,
+                             source_type, &out_argument->abi_type);
+}
+
 static const loom_low_lower_rule_set_t* const kSpirvRuleSets[] = {
     &loom_spirv_logical_core_lower_rule_set,
 };
@@ -68,6 +133,7 @@ static const loom_low_lower_policy_t kSpirvLowLowerPolicy = {
     .name = IREE_SVL("spirv-logical-lower"),
     .error_catalog = &loom_error_catalog_core,
     .map_type = {.fn = loom_spirv_map_type, .user_data = NULL},
+    .map_argument = {.fn = loom_spirv_map_argument, .user_data = NULL},
     .rule_sets =
         {
             .count = IREE_ARRAYSIZE(kSpirvRuleSets),
