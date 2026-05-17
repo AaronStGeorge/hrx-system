@@ -101,6 +101,22 @@ iree_lit_test_suite(
     "hostonly"
 )
 
+iree_lit_test_suite(
+  NAME
+    amdgpu_lit_test
+  SRCS
+    "iree-tune-loom_amdgpu_test.txt"
+  TOOLS
+    ::iree-tune-loom
+    FileCheck
+  DATA
+    loom::src::loom::tools::iree-test-loom::testdata::amdgpu_hal_actual.loom
+  LABELS
+    "driver=amdgpu"
+    "manual"
+    "requires-gpu-amd"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
 
 option(IREE_TUNE_LOOM_ENABLE_AMDGPU

@@ -189,3 +189,21 @@ iree_lit_test_suite(
         "@llvm-project//llvm:FileCheck",
     ],
 )
+
+iree_lit_test_suite(
+    name = "amdgpu_lit_test",
+    srcs = ["iree-tune-loom_amdgpu_test.txt"],
+    cfg = "//runtime:lit.cfg.py",
+    data = [
+        "//loom/src/loom/tools/iree-test-loom:testdata/amdgpu_hal_actual.loom",
+    ],
+    tags = [
+        "driver=amdgpu",
+        "manual",
+        "requires-gpu-amd",
+    ],
+    tools = [
+        ":iree-tune-loom",
+        "@llvm-project//llvm:FileCheck",
+    ],
+)

@@ -20,3 +20,10 @@ check.case @store_i32_case {
   check.expect.equal actual(%output) expected(%expected) : tensor<1xi32>
   check.return
 }
+
+check.benchmark @store_i32_dispatch case(@store_i32_case) {
+  batch_size = 1,
+  iterations = 1,
+  measure = "dispatch_complete",
+  warmup_iterations = 0
+}
