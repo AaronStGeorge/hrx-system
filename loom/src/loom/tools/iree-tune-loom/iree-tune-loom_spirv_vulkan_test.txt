@@ -34,6 +34,13 @@
 // RUN:     --min_time_ms=0 --max_batches=1 --input_ring_count=1 \
 // RUN:     --artifact_bundle_dir=%t.spirv.narrow.bundle --artifact_bundle_policy=debug
 // RUN: FileCheck --check-prefix=NARROW %s < %t.spirv.narrow.bundle/results.jsonl
+// RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
+// RUN:   iree-tune-loom %S/../iree-test-loom/testdata/spirv_vulkan_coop_hal_actual.loom \
+// RUN:     --compare=@narrow_score_tiled_f16_128x16_m1_dispatch,@narrow_score_tiled_f16_128x16_m2_dispatch --device=vulkan \
+// RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
+// RUN:     --min_time_ms=0 --max_batches=1 --input_ring_count=1 --repetitions=1 \
+// RUN:     --artifact_bundle_dir=%t.spirv.narrow.compare.bundle --artifact_bundle_policy=minimal
+// RUN: FileCheck --check-prefix=NARROW-COMPARE %s < %t.spirv.narrow.compare.bundle/results.jsonl
 
 // SPIRV: "row":"run","run_id":"r
 // SPIRV: "artifact_bundle":{"dir":
@@ -115,3 +122,40 @@
 // NARROW: "benchmark_count":1
 // NARROW: "failure_count":0
 // NARROW: "failed_benchmark_count":0
+
+// NARROW-COMPARE: "row":"run","run_id":"r
+// NARROW-COMPARE: "row":"plan"
+// NARROW-COMPARE: "candidate_id":"c0","candidate_index":0,"benchmark":"narrow_score_tiled_f16_128x16_m1_dispatch","case":"narrow_score_tiled_f16_128x16_m1_case"
+// NARROW-COMPARE: "metadata":{"strategy":"cooperative_matrix_narrow_n_m1","knobs":{"m_tiles_per_workgroup":1},"problem":{"dtype":"f16xf16_f32","k":128,"m":128,"n":16,"tile_k":16,"tile_m":16,"tile_n":16}}
+// NARROW-COMPARE: "row":"plan"
+// NARROW-COMPARE: "candidate_id":"c1","candidate_index":1,"benchmark":"narrow_score_tiled_f16_128x16_m2_dispatch","case":"narrow_score_tiled_f16_128x16_m2_case"
+// NARROW-COMPARE: "metadata":{"strategy":"cooperative_matrix_narrow_n_m2","knobs":{"m_tiles_per_workgroup":2},"problem":{"dtype":"f16xf16_f32","k":128,"m":128,"n":16,"tile_k":16,"tile_m":16,"tile_n":16}}
+// NARROW-COMPARE: "row":"sample"
+// NARROW-COMPARE: "candidate_id":"c0","candidate_index":0
+// NARROW-COMPARE: "sample":{"case":"narrow_score_tiled_f16_128x16_m1_case","sample_ordinal":0,"passed":true
+// NARROW-COMPARE: "row":"sample"
+// NARROW-COMPARE: "candidate_id":"c1","candidate_index":1
+// NARROW-COMPARE: "sample":{"case":"narrow_score_tiled_f16_128x16_m2_case","sample_ordinal":0,"passed":true
+// NARROW-COMPARE: "row":"benchmark.repetition"
+// NARROW-COMPARE: "candidate_id":"c0","candidate_index":0
+// NARROW-COMPARE: "comparison_group":"narrow_score_tiled_f16_128x16_m1_dispatch","baseline_candidate_id":"c0","method":"ABABA","order_index":0,"repetition_index":0,"schedule_token":"A"
+// NARROW-COMPARE: "benchmark":"narrow_score_tiled_f16_128x16_m1_dispatch","case":"narrow_score_tiled_f16_128x16_m1_case","status":"ok"
+// NARROW-COMPARE: "row":"benchmark.repetition"
+// NARROW-COMPARE: "candidate_id":"c1","candidate_index":1
+// NARROW-COMPARE: "comparison_group":"narrow_score_tiled_f16_128x16_m1_dispatch","baseline_candidate_id":"c0","method":"ABABA","order_index":1,"repetition_index":0,"schedule_token":"B"
+// NARROW-COMPARE: "benchmark":"narrow_score_tiled_f16_128x16_m2_dispatch","case":"narrow_score_tiled_f16_128x16_m2_case","status":"ok"
+// NARROW-COMPARE: "row":"benchmark.repetition"
+// NARROW-COMPARE: "candidate_id":"c0","candidate_index":0
+// NARROW-COMPARE: "comparison_group":"narrow_score_tiled_f16_128x16_m1_dispatch","baseline_candidate_id":"c0","method":"ABABA","order_index":2,"repetition_index":1,"schedule_token":"A"
+// NARROW-COMPARE: "benchmark":"narrow_score_tiled_f16_128x16_m1_dispatch","case":"narrow_score_tiled_f16_128x16_m1_case","status":"ok"
+// NARROW-COMPARE: "row":"comparison"
+// NARROW-COMPARE: "comparison_group":"narrow_score_tiled_f16_128x16_m1_dispatch","method":"ABABA","baseline_candidate_id":"c0","candidate_id":"c1"
+// NARROW-COMPARE: "baseline_repetition_count":2,"candidate_repetition_count":1
+// NARROW-COMPARE: "ratio_p50":
+// NARROW-COMPARE: "speedup_p50":
+// NARROW-COMPARE: "row":"summary"
+// NARROW-COMPARE: "benchmark_count":2
+// NARROW-COMPARE: "failure_count":0
+// NARROW-COMPARE: "failed_benchmark_count":0
+// NARROW-COMPARE: "correctness_sample_count":2
+// NARROW-COMPARE: "correctness_failed_sample_count":0
