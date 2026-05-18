@@ -106,32 +106,14 @@ loom_cc_library(
 iree_genrule(
     name = "features_gen",
     srcs = ["isa.h"],
-    outs = [
-        "features.h",
-        "features_tables.inl",
-    ],
-    cmd = "$(location //loom/py/loom/gen:spirv_features) --isa-header=$(execpath isa.h) --header=$(execpath features.h) --tables=$(execpath features_tables.inl)",
+    outs = ["features_tables.inl"],
+    cmd = "$(location //loom/py/loom/gen:spirv_features) --isa-header=$(execpath isa.h) --tables=$(execpath features_tables.inl)",
     tags = ["skip-bazel_to_cmake"],
     tools = ["//loom/py/loom/gen:spirv_features"],
 )
 
 iree_cmake_extra_content(
     content = """
-loom_generated_textual_header(
-  NAME
-    features_header_gen
-  GENERATOR
-    iree::runtime::py::loom::gen::spirv_features
-  ARGS
-    "--isa-header=${CMAKE_CURRENT_SOURCE_DIR}/isa.h"
-  OUTPUT
-    "features.h"
-  OUTPUT_FLAG
-    "--header"
-  COMMENT
-    "Generating SPIR-V feature header"
-)
-
 loom_generated_textual_header(
   NAME
     features_tables_gen
@@ -153,7 +135,7 @@ loom_generated_textual_header(
 loom_cc_library(
     name = "features",
     srcs = ["features.c"],
-    hdrs = [":features.h"],
+    hdrs = ["features.h"],
     textual_hdrs = [":features_tables.inl"],
     deps = [
         ":isa",
@@ -166,7 +148,6 @@ iree_cmake_extra_content(
 iree_package_name(_PACKAGE_NAME)
 add_dependencies(
   "${_PACKAGE_NAME}_features.objects"
-  "${_PACKAGE_NAME}_features_header_gen"
   "${_PACKAGE_NAME}_features_tables_gen"
 )
 """,

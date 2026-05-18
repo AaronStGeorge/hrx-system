@@ -55,21 +55,6 @@ loom_cc_library(
 
 loom_generated_textual_header(
   NAME
-    features_header_gen
-  GENERATOR
-    iree::runtime::py::loom::gen::spirv_features
-  ARGS
-    "--isa-header=${CMAKE_CURRENT_SOURCE_DIR}/isa.h"
-  OUTPUT
-    "features.h"
-  OUTPUT_FLAG
-    "--header"
-  COMMENT
-    "Generating SPIR-V feature header"
-)
-
-loom_generated_textual_header(
-  NAME
     features_tables_gen
   GENERATOR
     iree::runtime::py::loom::gen::spirv_features
@@ -101,7 +86,6 @@ loom_cc_library(
 iree_package_name(_PACKAGE_NAME)
 add_dependencies(
   "${_PACKAGE_NAME}_features.objects"
-  "${_PACKAGE_NAME}_features_header_gen"
   "${_PACKAGE_NAME}_features_tables_gen"
 )
 

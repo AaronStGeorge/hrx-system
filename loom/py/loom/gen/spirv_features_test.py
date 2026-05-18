@@ -11,13 +11,12 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import replace
 
-from loom.gen.spirv_features import generate_header, generate_tables
+from loom.gen.spirv_features import generate_tables
 from loom.target.arch.spirv.features import (
     FEATURE_ATOMS,
     FEATURE_PROFILES,
     FeatureAtom,
     FeatureProfile,
-    feature_row_capacity,
     parse_isa_symbols,
     validate_feature_catalog,
 )
@@ -34,27 +33,18 @@ def _raises_value_error(pattern: str) -> Iterator[None]:
         raise AssertionError(f"expected ValueError matching {pattern!r}")
 
 
-def test_generation_emits_public_atoms_profiles_and_compact_tables() -> None:
-    header = generate_header()
+def test_generation_emits_compact_feature_tables() -> None:
     tables = generate_tables()
 
-    assert "LOOM_SPIRV_FEATURE_ATOM_FLOAT16" in header
-    assert "LOOM_SPIRV_FEATURE_ATOM_INT64" in header
-    assert "LOOM_SPIRV_FEATURE_ATOM_BFLOAT16_TYPE_KHR" in header
-    assert "typedef enum loom_spirv_feature_bit_e" in header
-    assert "LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR =\n      UINT64_C(1)" in header
-    assert "LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA =" in header
-    assert "#define LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR" not in header
-    assert "#define LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA" not in header
-    assert "#define LOOM_SPIRV_FEATURE_KNOWN_BITS" not in header
-    assert f"#define LOOM_SPIRV_FEATURE_MAX_EXTENSION_COUNT {feature_row_capacity('extensions')}" in header
-    assert f"#define LOOM_SPIRV_FEATURE_MAX_CAPABILITY_COUNT {feature_row_capacity('capabilities')}" in header
     assert "static const loom_spirv_feature_atom_descriptor_t kSpirvFeatureAtoms[]" in tables
     assert 'IREE_SVL("SPV_KHR_8bit_storage")' in tables
     assert 'IREE_SVL("SPV_KHR_16bit_storage")' in tables
     assert 'IREE_SVL("SPV_KHR_bfloat16")' in tables
     assert "LOOM_SPIRV_CAPABILITY_B_FLOAT16_COOPERATIVE_MATRIX_KHR" in tables
     assert "LOOM_SPIRV_OP_COOPERATIVE_VECTOR_MATRIX_MUL_ADD_NV" in tables
+    assert "#ifndef LOOM_TARGET_ARCH_SPIRV_FEATURES_H_" not in tables
+    assert "typedef enum loom_spirv_feature_bit_e" not in tables
+    assert "loom_spirv_feature_set_prepare" not in tables
 
 
 def test_validation_rejects_unknown_dependency() -> None:
