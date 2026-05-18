@@ -251,19 +251,20 @@ ERR_SPIRV_014 = ErrorDef(
     ),
 )
 
-# ERR_SPIRV_015: SPIR-V binary emission only supports one low block.
+# ERR_SPIRV_015: SPIR-V low control flow is not structurally supported.
 ERR_SPIRV_015 = ErrorDef(
     domain=ErrorDomain.SPIRV,
     code=15,
     severity=Severity.ERROR,
     summary="SPIR-V low function has unsupported control flow.",
     message=(
-        "SPIR-V binary emission for '@{function_name}' requires a single low "
-        "block, but the function has {block_count} block(s)"
+        "SPIR-V binary emission for '@{function_name}' cannot structure "
+        "conditional branch to ^{true_block} and ^{false_block}"
     ),
     params=(
         ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("block_count", ParamKind.U32),
+        ErrorParam("true_block", ParamKind.STRING),
+        ErrorParam("false_block", ParamKind.STRING),
     ),
 )
 
@@ -314,6 +315,60 @@ ERR_SPIRV_018 = ErrorDef(
     params=(ErrorParam("function_name", ParamKind.STRING),),
 )
 
+# ERR_SPIRV_019: SPIR-V low branch condition exact value type mismatch.
+ERR_SPIRV_019 = ErrorDef(
+    domain=ErrorDomain.SPIRV,
+    code=19,
+    severity=Severity.ERROR,
+    summary="SPIR-V branch condition value type mismatch.",
+    message=(
+        "SPIR-V conditional branch in '@{function_name}' expects condition "
+        "'{value_name}' to have value type 'bool', but it has "
+        "'{actual_value_type}'"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("actual_value_type", ParamKind.STRING),
+    ),
+)
+
+# ERR_SPIRV_020: SPIR-V low branch payload exact value type mismatch.
+ERR_SPIRV_020 = ErrorDef(
+    domain=ErrorDomain.SPIRV,
+    code=20,
+    severity=Severity.ERROR,
+    summary="SPIR-V branch payload value type mismatch.",
+    message=(
+        "SPIR-V branch in '@{function_name}' forwards '{source_value_name}' "
+        "to block argument '{target_value_name}', expected value type "
+        "'{expected_value_type}' but got '{actual_value_type}'"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("source_value_name", ParamKind.STRING),
+        ErrorParam("target_value_name", ParamKind.STRING),
+        ErrorParam("expected_value_type", ParamKind.STRING),
+        ErrorParam("actual_value_type", ParamKind.STRING),
+    ),
+)
+
+# ERR_SPIRV_021: SPIR-V low branch target is not forward structured.
+ERR_SPIRV_021 = ErrorDef(
+    domain=ErrorDomain.SPIRV,
+    code=21,
+    severity=Severity.ERROR,
+    summary="Unsupported SPIR-V branch target.",
+    message=(
+        "SPIR-V branch in '@{function_name}' targets ^{target_block}, but "
+        "only forward branches are supported by selection emission"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("target_block", ParamKind.STRING),
+    ),
+)
+
 ALL_SPIRV_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SPIRV_001,
     ERR_SPIRV_002,
@@ -333,4 +388,7 @@ ALL_SPIRV_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SPIRV_016,
     ERR_SPIRV_017,
     ERR_SPIRV_018,
+    ERR_SPIRV_019,
+    ERR_SPIRV_020,
+    ERR_SPIRV_021,
 )

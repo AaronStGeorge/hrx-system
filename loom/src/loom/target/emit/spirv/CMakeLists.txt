@@ -88,6 +88,7 @@ loom_cc_library(
     loom::src::loom::target::arch::spirv::features
     loom::src::loom::target::arch::spirv::packet_rows
     loom::src::loom::target::arch::spirv::scalar_types
+    loom::src::loom::target::arch::spirv::structured_control_flow
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::registers
     loom::src::loom::target::types

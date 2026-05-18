@@ -244,6 +244,19 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    structured_control_flow
+  HDRS
+    "structured_control_flow.h"
+  SRCS
+    "structured_control_flow.c"
+  DEPS
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     ops
   HDRS
     "ops/ops.h"
@@ -307,6 +320,7 @@ loom_cc_library(
     ::error_defs
     ::packet_rows
     ::scalar_types
+    ::structured_control_flow
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::diagnostics

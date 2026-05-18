@@ -98,6 +98,7 @@ loom_cc_library(
         "//loom/src/loom/target/arch/spirv:features",
         "//loom/src/loom/target/arch/spirv:packet_rows",
         "//loom/src/loom/target/arch/spirv:scalar_types",
+        "//loom/src/loom/target/arch/spirv:structured_control_flow",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
     ],

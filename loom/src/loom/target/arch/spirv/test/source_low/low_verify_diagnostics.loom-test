@@ -185,11 +185,76 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @raw_bda_resource_sou
 
 spirv.target<vulkan1_3> @target
 
-// ERROR@+1: SPIRV/015 {function_name="multiblock_function", block_count="2"}
-low.func.def target(@target) @multiblock_function() asm<spirv.logical.core> {
-  low.br ^exit
-^exit:
+low.func.def target(@target) abi_layout({spirv_arg_value_types = [23]}) @branch_condition_type_mismatch(%value: reg<spirv.id>) asm<spirv.logical.core> {
+  // ERROR@+1: SPIRV/019 {function_name="branch_condition_type_mismatch", value_name="value", actual_value_type="s32"}
+  low.cond_br %value, ^then, ^else : reg<spirv.id>
+^then:
+  low.br ^join
+^else:
+  low.br ^join
+^join:
   return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) abi_layout({spirv_arg_value_types = [1, 23, 18], spirv_result_value_types = [23]}) @branch_payload_type_mismatch(%condition: reg<spirv.id>, %lhs: reg<spirv.id>, %rhs: reg<spirv.id>) -> (reg<spirv.id>) asm<spirv.logical.core> {
+  low.cond_br %condition, ^then, ^else : reg<spirv.id>
+^then:
+  low.br ^join(%lhs: reg<spirv.id>)
+^else:
+  // ERROR@+1: SPIRV/020 {function_name="branch_payload_type_mismatch", source_value_name="rhs", target_value_name="result", expected_value_type="s32", actual_value_type="f32"}
+  low.br ^join(%rhs: reg<spirv.id>)
+^join(%result: reg<spirv.id>):
+  return %result
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) abi_layout({spirv_arg_value_types = [1]}) @unstructured_conditional(%condition: reg<spirv.id>) asm<spirv.logical.core> {
+  // ERROR@+1: SPIRV/015 {function_name="unstructured_conditional", true_block="then", false_block="else"}
+  low.cond_br %condition, ^then, ^else : reg<spirv.id>
+^then:
+  return
+^else:
+  return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) abi_layout({spirv_arg_value_types = [1]}) @backward_selection_merge(%condition: reg<spirv.id>) asm<spirv.logical.core> {
+  // ERROR@+1: SPIRV/015 {function_name="backward_selection_merge", true_block="merge", false_block="body"}
+  low.cond_br %condition, ^merge, ^body : reg<spirv.id>
+^merge:
+  return
+^body:
+  // ERROR@+1: SPIRV/021 {function_name="backward_selection_merge", target_block="merge"}
+  low.br ^merge
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) @backward_branch() asm<spirv.logical.core> {
+  low.br ^loop
+^loop:
+  // ERROR@+1: SPIRV/021 {function_name="backward_branch", target_block="loop"}
+  low.br ^loop
 }
 
 // ====
