@@ -158,6 +158,7 @@ class LowerGuard:
     diagnostic_index: int = 0xFFFF
     attr_kind: str | None = None
     u64: int = 0
+    u64_c_expression: str | None = None
     descriptor: Descriptor | None = None
     register_class_id: int = 0
     minimum_i64: int = 0
@@ -755,6 +756,7 @@ class _LowerRuleSetCompiler:
             GuardKind.VALUE_I64_RANGE_LE,
             GuardKind.VALUE_I64_RANGE_GE,
             GuardKind.VALUE_F64_EQUALS,
+            GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
         ):
             self._append_value_fact_guard(source_op, guard)
             return
@@ -956,6 +958,27 @@ class _LowerRuleSetCompiler:
                         ),
                     ),
                     u64=_f64_bits(guard.f64_value),
+                )
+            )
+            return
+        if guard.kind == GuardKind.VALUE_STORAGE_ELEMENT_FORMAT:
+            if guard.numeric_format_c_expression is None:
+                raise ValueError(
+                    f"{source_op.name}: storage element-format guard needs "
+                    "a numeric format C expression"
+                )
+            self._guards.append(
+                LowerGuard(
+                    kind=guard.kind,
+                    value_ref_index=value_ref_index,
+                    diagnostic_index=self._append_diagnostic_ref(
+                        source_op,
+                        _guard_diagnostic(
+                            guard,
+                            _storage_element_format_diagnostic(guard.field),
+                        ),
+                    ),
+                    u64_c_expression=guard.numeric_format_c_expression,
                 )
             )
             return
@@ -1828,6 +1851,10 @@ def _float_equals_diagnostic(field: str, value: float) -> DiagnosticRef:
     return _named_constraint_diagnostic(
         "value_fact", field, f"f64_equals.0x{_f64_bits(value):016x}"
     )
+
+
+def _storage_element_format_diagnostic(field: str) -> DiagnosticRef:
+    return _named_constraint_diagnostic("value", field, "storage_schema.element_format")
 
 
 def _instance_flags_diagnostic(field: str, enum_keyword: str) -> DiagnosticRef:

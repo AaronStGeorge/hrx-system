@@ -26,6 +26,24 @@ class StorageBufferScalar:
     def feature_bits(self) -> int:
         return feature_bits_value(self.feature_atoms)
 
+    @property
+    def numeric_format_c_expression(self) -> str | None:
+        return _NUMERIC_FORMAT_C_EXPRESSIONS.get(self.suffix)
+
+
+_NUMERIC_FORMAT_C_EXPRESSIONS = {
+    "i8": "LOOM_VALUE_FACT_NUMERIC_FORMAT_I8",
+    "u8": "LOOM_VALUE_FACT_NUMERIC_FORMAT_U8",
+    "i16": "LOOM_VALUE_FACT_NUMERIC_FORMAT_I16",
+    "u16": "LOOM_VALUE_FACT_NUMERIC_FORMAT_U16",
+    "i32": "LOOM_VALUE_FACT_NUMERIC_FORMAT_I32",
+    "u32": "LOOM_VALUE_FACT_NUMERIC_FORMAT_U32",
+    "f16": "LOOM_VALUE_FACT_NUMERIC_FORMAT_F16",
+    "bf16": "LOOM_VALUE_FACT_NUMERIC_FORMAT_BF16",
+    "f32": "LOOM_VALUE_FACT_NUMERIC_FORMAT_F32",
+    "f64": "LOOM_VALUE_FACT_NUMERIC_FORMAT_F64",
+}
+
 
 STORAGE_BUFFER_SCALARS = (
     StorageBufferScalar(

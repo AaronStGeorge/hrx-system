@@ -68,6 +68,44 @@ def test_generate_lower_rule_set_emits_value_ref_for_f64_equals_guard() -> None:
     assert ".u64 = UINT64_C(0)," in guard_text
 
 
+def test_generate_lower_rule_set_emits_storage_element_format_guard() -> None:
+    table = ContractFragment(
+        name="test.low.storage_schema",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            DescriptorRule(
+                source_op=vector.vector_fragment_load,
+                descriptor=TEST_LOW_ADD_F32_DESCRIPTOR,
+                guards=(
+                    Guard.value_storage_element_format(
+                        "view",
+                        "LOOM_VALUE_FACT_NUMERIC_FORMAT_U8",
+                    ),
+                    Guard.value_type("result", Vector("f32", lanes=4)),
+                ),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_ADD_F32_DESCRIPTOR,
+                        operands={
+                            "lhs": ValueRef.result("result"),
+                            "rhs": ValueRef.result("result"),
+                        },
+                        results={"dst": ValueRef.result("result")},
+                    ),
+                ),
+            )
+        ],
+    )
+
+    generated = generate_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    guard_start = generated.source.index("LOOM_LOW_LOWER_GUARD_VALUE_STORAGE_ELEMENT_FORMAT")
+    guard_end = generated.source.index("},", guard_start)
+    guard_text = generated.source[guard_start:guard_end]
+    assert ".value_ref_index = 0," in guard_text
+    assert ".u64 = LOOM_VALUE_FACT_NUMERIC_FORMAT_U8," in guard_text
+
+
 def test_generate_lower_rule_set_emits_balanced_accumulator_flag() -> None:
     table = ContractFragment(
         name="test.low.accumulate_tree",

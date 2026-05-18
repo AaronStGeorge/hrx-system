@@ -21,6 +21,7 @@
 #include "loom/ir/module.h"
 #include "loom/ops/combining.h"
 #include "loom/ops/encoding/numeric_transform.h"
+#include "loom/ops/encoding/storage.h"
 #include "loom/ops/scalar/compare.h"
 #include "loom/ops/vector/fragment.h"
 #include "loom/ops/vector/ops.h"
@@ -504,7 +505,6 @@ iree_status_t loom_vector_fragment_load_facts(
     loom_fact_context_t* context, const loom_module_t* module,
     const loom_op_t* op, const loom_value_facts_t* operand_facts,
     loom_value_facts_t* result_facts) {
-  (void)module;
   (void)operand_facts;
   loom_vector_fragment_fact_t fact;
   loom_vector_fragment_fact_initialize(&fact);
@@ -517,6 +517,21 @@ iree_status_t loom_vector_fragment_load_facts(
   fact.shape_rank = 2;
   fact.shape_value_ids[0] = loom_vector_fragment_load_rows(op);
   fact.shape_value_ids[1] = loom_vector_fragment_load_columns(op);
+
+  const loom_value_id_t view_value_id = loom_vector_fragment_load_view(op);
+  loom_value_fact_storage_schema_t storage_schema = {0};
+  if (loom_encoding_query_type_storage_schema(
+          context, module, loom_module_value_type(module, view_value_id),
+          &storage_schema) &&
+      !loom_value_fact_encoded_operand_schema_is_unknown(
+          storage_schema.encoded_operand)) {
+    fact.flags |= LOOM_VECTOR_FRAGMENT_FACT_FLAG_HAS_SCHEMA;
+    fact.encoded_operand = storage_schema.encoded_operand;
+    if (storage_schema.static_spec_encoding_id != 0) {
+      fact.flags |= LOOM_VECTOR_FRAGMENT_FACT_FLAG_HAS_STATIC_SCHEMA;
+      fact.static_schema_encoding_id = storage_schema.static_spec_encoding_id;
+    }
+  }
   return loom_vector_fragment_fact_make_value_facts(context, fact,
                                                     &result_facts[0]);
 }

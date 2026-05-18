@@ -61,6 +61,7 @@ from loom.target.arch.spirv.scalar_conversion import (
 )
 from loom.target.arch.spirv.scalar_memory import (
     SOURCE_STORAGE_BUFFER_SCALARS,
+    STORAGE_BUFFER_SCALARS,
     StorageBufferScalar,
 )
 from loom.target.contracts import (
@@ -578,7 +579,28 @@ def _select_rule(
     )
 
 
-def _buffer_view_rule(scalar: StorageBufferScalar) -> DescriptorRule:
+def _storage_element_format_guards(
+    field: str,
+    scalar: StorageBufferScalar,
+) -> tuple[Guard, ...]:
+    if not scalar.source_type.startswith("i"):
+        return ()
+    numeric_format = scalar.numeric_format_c_expression
+    if numeric_format is None:
+        return ()
+    return (
+        Guard.value_storage_element_format(
+            field,
+            numeric_format,
+        ),
+    )
+
+
+def _buffer_view_rule(
+    scalar: StorageBufferScalar,
+    *,
+    require_storage_element_format: bool = False,
+) -> DescriptorRule:
     view_type = View(scalar.source_type)
     descriptor = _descriptor(
         f"spirv.op_ptr_access_chain.storage_buffer.{scalar.suffix}.byte_offset"
@@ -588,6 +610,11 @@ def _buffer_view_rule(scalar: StorageBufferScalar) -> DescriptorRule:
         descriptor=descriptor,
         guards=(
             Guard.value_type("result", view_type),
+            *(
+                _storage_element_format_guards("result", scalar)
+                if require_storage_element_format
+                else ()
+            ),
             *_feature_guards(descriptor),
         ),
         emit=(
@@ -686,12 +713,11 @@ def _cooperative_matrix_load_rule(
     *,
     role: str,
     case: CooperativeMatrixCase,
-    view_element: str,
+    scalar: StorageBufferScalar,
     result_element: str,
     result_lanes: int,
     rows: int,
     columns: int,
-    element_byte_width: int,
 ) -> DescriptorRule:
     descriptor = _descriptor(
         case.descriptor_key(
@@ -705,7 +731,8 @@ def _cooperative_matrix_load_rule(
         descriptor=descriptor,
         guards=(
             Guard.enum_attr_equals("role", role),
-            Guard.value_type("view", View(view_element)),
+            Guard.value_type("view", View(scalar.source_type)),
+            *_storage_element_format_guards("view", scalar),
             Guard.value_type("result", Vector(result_element, lanes=result_lanes)),
             *_cooperative_matrix_shape_guards(rows=rows, columns=columns),
             *_cooperative_matrix_zero_indices_guards(),
@@ -718,7 +745,7 @@ def _cooperative_matrix_load_rule(
                 results={"dst": ValueRef.result("result")},
                 source_memory=_cooperative_matrix_memory(
                     SourceMemoryOperation.LOAD,
-                    element_byte_width=element_byte_width,
+                    element_byte_width=scalar.byte_width,
                     lane_count=result_lanes,
                     minimum_alignment=16,
                 ),
@@ -730,12 +757,11 @@ def _cooperative_matrix_load_rule(
 def _cooperative_matrix_store_rule(
     *,
     case: CooperativeMatrixCase,
-    view_element: str,
+    scalar: StorageBufferScalar,
     value_element: str,
     value_lanes: int,
     rows: int,
     columns: int,
-    element_byte_width: int,
 ) -> DescriptorRule:
     descriptor = _descriptor(
         case.descriptor_key(
@@ -749,7 +775,8 @@ def _cooperative_matrix_store_rule(
         descriptor=descriptor,
         guards=(
             Guard.enum_attr_equals("role", "result"),
-            Guard.value_type("view", View(view_element)),
+            Guard.value_type("view", View(scalar.source_type)),
+            *_storage_element_format_guards("view", scalar),
             Guard.value_type("value", Vector(value_element, lanes=value_lanes)),
             *_cooperative_matrix_shape_guards(rows=rows, columns=columns),
             *_cooperative_matrix_zero_indices_guards(),
@@ -764,7 +791,7 @@ def _cooperative_matrix_store_rule(
                 },
                 source_memory=_cooperative_matrix_memory(
                     SourceMemoryOperation.STORE,
-                    element_byte_width=element_byte_width,
+                    element_byte_width=scalar.byte_width,
                     lane_count=value_lanes,
                     minimum_alignment=16,
                 ),
@@ -780,41 +807,37 @@ def _cooperative_matrix_rules_for_case(
         _cooperative_matrix_load_rule(
             role="lhs",
             case=case,
-            view_element=case.lhs_source_type,
+            scalar=case.lhs_scalar,
             result_element=case.lhs_source_type,
             result_lanes=case.lhs_vector_lanes,
             rows=case.lhs_rows,
             columns=case.lhs_columns,
-            element_byte_width=case.lhs_scalar.byte_width,
         ),
         _cooperative_matrix_load_rule(
             role="rhs",
             case=case,
-            view_element=case.rhs_source_type,
+            scalar=case.rhs_scalar,
             result_element=case.rhs_source_type,
             result_lanes=case.rhs_vector_lanes,
             rows=case.rhs_rows,
             columns=case.rhs_columns,
-            element_byte_width=case.rhs_scalar.byte_width,
         ),
         _cooperative_matrix_load_rule(
             role="init",
             case=case,
-            view_element=case.accumulator_source_type,
+            scalar=case.accumulator_scalar,
             result_element=case.accumulator_source_type,
             result_lanes=case.accumulator_vector_lanes,
             rows=case.accumulator_rows,
             columns=case.accumulator_columns,
-            element_byte_width=case.accumulator_scalar.byte_width,
         ),
         _cooperative_matrix_store_rule(
             case=case,
-            view_element=case.result_source_type,
+            scalar=case.result_scalar,
             value_element=case.result_source_type,
             value_lanes=case.accumulator_vector_lanes,
             rows=case.accumulator_rows,
             columns=case.accumulator_columns,
-            element_byte_width=case.result_scalar.byte_width,
         ),
     )
 
@@ -886,6 +909,15 @@ def _view_store_rule(scalar: StorageBufferScalar) -> DescriptorRule:
 
 def _storage_buffer_rules() -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
+    for scalar in STORAGE_BUFFER_SCALARS:
+        if scalar.source_rule_enabled or scalar.numeric_format_c_expression is None:
+            continue
+        rules.append(
+            _buffer_view_rule(
+                scalar,
+                require_storage_element_format=True,
+            )
+        )
     for scalar in SOURCE_STORAGE_BUFFER_SCALARS:
         rules.append(_buffer_view_rule(scalar))
         rules.append(_view_load_rule(scalar))

@@ -274,6 +274,5 @@ COOPERATIVE_MATRIX_CASES = (
         accumulator_scalar_suffix="u32",
         result_scalar_suffix="u32",
         property_storage_flags="STORAGE_BUFFER_OR_BDA",
-        source_rule_enabled=False,
     ),
 )

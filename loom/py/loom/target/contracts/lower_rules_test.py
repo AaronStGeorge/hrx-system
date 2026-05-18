@@ -326,6 +326,42 @@ def test_compile_lower_rule_set_compiles_f64_equals_guard() -> None:
     assert compiled.guards[0].u64 == 0x3FF0000000000000
 
 
+def test_compile_lower_rule_set_compiles_storage_element_format_guard() -> None:
+    table = ContractFragment(
+        name="test.storage-schema",
+        descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+        cases=[
+            DescriptorRule(
+                source_op=vector.vector_fragment_load,
+                descriptor=TEST_LOW_ADD_I32_DESCRIPTOR,
+                guards=(
+                    Guard.value_storage_element_format(
+                        "view",
+                        "LOOM_VALUE_FACT_NUMERIC_FORMAT_U8",
+                    ),
+                    Guard.value_type("result", Vector("i32", lanes=4)),
+                ),
+                emit=(
+                    EmitDescriptorOp(
+                        descriptor=TEST_LOW_ADD_I32_DESCRIPTOR,
+                        operands={
+                            "lhs": ValueRef.result("result"),
+                            "rhs": ValueRef.result("result"),
+                        },
+                        results={"dst": ValueRef.result("result")},
+                    ),
+                ),
+            )
+        ],
+    )
+
+    compiled = compile_lower_rule_set(table, dialect_ops={"vector": ALL_VECTOR_OPS})
+
+    assert compiled.guards[0].kind == GuardKind.VALUE_STORAGE_ELEMENT_FORMAT
+    assert compiled.guards[0].value_ref_index == 0
+    assert compiled.guards[0].u64_c_expression == "LOOM_VALUE_FACT_NUMERIC_FORMAT_U8"
+
+
 def test_compile_lower_rule_set_compiles_value_range_relation_guard() -> None:
     table = ContractFragment(
         name="test.value-range-relation",

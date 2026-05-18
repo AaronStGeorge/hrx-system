@@ -113,6 +113,7 @@ _GUARD_KIND_C_NAMES = {
     GuardKind.VALUE_I64_RANGE_LE: "LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE_LE",
     GuardKind.VALUE_I64_RANGE_GE: "LOOM_LOW_LOWER_GUARD_VALUE_I64_RANGE_GE",
     GuardKind.VALUE_F64_EQUALS: "LOOM_LOW_LOWER_GUARD_VALUE_F64_EQUALS",
+    GuardKind.VALUE_STORAGE_ELEMENT_FORMAT: "LOOM_LOW_LOWER_GUARD_VALUE_STORAGE_ELEMENT_FORMAT",
     GuardKind.INSTANCE_FLAGS_HAS_ALL: "LOOM_LOW_LOWER_GUARD_INSTANCE_FLAGS_HAS_ALL",
 }
 
@@ -665,6 +666,7 @@ def _guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]
         GuardKind.VALUE_I64_RANGE_LE,
         GuardKind.VALUE_I64_RANGE_GE,
         GuardKind.VALUE_F64_EQUALS,
+        GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
     ):
         _append_field(fields, "value_ref_index", row.value_ref_index, always=True)
     if row.kind in (
@@ -714,6 +716,10 @@ def _guard_row(descriptor_refs: Mapping[str, int], row: LowerGuard) -> list[str]
         GuardKind.INSTANCE_FLAGS_HAS_ALL,
     ):
         _append_field(fields, "u64", _u64_c_literal(row.u64), always=True)
+    if row.kind == GuardKind.VALUE_STORAGE_ELEMENT_FORMAT:
+        if row.u64_c_expression is None:
+            raise ValueError("storage element-format guard is missing expression")
+        _append_field(fields, "u64", row.u64_c_expression, always=True)
     if row.kind == GuardKind.DESCRIPTOR_AVAILABLE:
         _append_field(
             fields,

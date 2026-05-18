@@ -13,6 +13,7 @@
 #include "loom/codegen/low/lower_internal.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
+#include "loom/ops/encoding/storage.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/registers.h"
 #include "loom/util/math.h"
@@ -735,6 +736,27 @@ static bool loom_low_lower_rule_value_facts_i64_range_ge(
   return facts.range_lo >= other_facts.range_hi;
 }
 
+static bool loom_low_lower_rule_value_storage_element_format(
+    const loom_low_lower_rule_match_context_t* match_context,
+    const loom_low_lower_rule_set_t* rule_set, const loom_op_t* source_op,
+    uint16_t value_ref_index,
+    loom_value_fact_numeric_format_flags_t expected_format) {
+  if (expected_format == LOOM_VALUE_FACT_NUMERIC_FORMAT_UNKNOWN) {
+    return false;
+  }
+  const loom_value_id_t value_id =
+      loom_low_lower_rule_source_value(rule_set, source_op, value_ref_index);
+  const loom_type_t type =
+      loom_module_value_type(match_context->module, value_id);
+  const loom_fact_context_t* fact_context =
+      match_context->fact_table != NULL ? &match_context->fact_table->context
+                                        : NULL;
+  loom_value_fact_storage_schema_t storage_schema = {0};
+  return loom_encoding_query_type_storage_schema(
+             fact_context, match_context->module, type, &storage_schema) &&
+         storage_schema.encoded_operand.element_format == expected_format;
+}
+
 static bool loom_low_lower_source_memory_space_matches(
     loom_low_lower_source_memory_space_mask_t memory_space_mask,
     loom_value_fact_memory_space_t memory_space) {
@@ -1064,6 +1086,11 @@ static iree_status_t loom_low_lower_rule_guard_matches(
       return iree_ok_status();
     case LOOM_LOW_LOWER_GUARD_VALUE_F64_EQUALS:
       *out_matches = loom_low_lower_rule_value_facts_f64_equals(
+          match_context, rule_set, source_op, guard->value_ref_index,
+          guard->u64);
+      return iree_ok_status();
+    case LOOM_LOW_LOWER_GUARD_VALUE_STORAGE_ELEMENT_FORMAT:
+      *out_matches = loom_low_lower_rule_value_storage_element_format(
           match_context, rule_set, source_op, guard->value_ref_index,
           guard->u64);
       return iree_ok_status();

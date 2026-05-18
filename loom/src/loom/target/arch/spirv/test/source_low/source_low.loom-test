@@ -639,3 +639,53 @@ low.kernel.def target(@hal_target_coop_bf16) workgroup_size(32, 1, 1) @spirv_hal
   OpCooperativeMatrixStoreKHR.result.bf16.16x16x16.f32.subgroup.row_major %out_view, %result
   return
 }
+
+// ====
+
+spirv.target<vulkan1_3> @hal_target_coop_u8 {abi = hal_kernel, contract_feature_bits = 2214}
+
+kernel.def target(@hal_target_coop_u8) @spirv_hal_cooperative_matrix_u8(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer, %byte_offset: offset) {
+  %unit = index.constant 1 : index
+  %subgroup_size = index.constant 32 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%subgroup_size, %unit, %unit) : index
+} launch {
+  %byte_offset_aligned = index.assume %byte_offset [mul(%byte_offset, 16)] : offset
+  %m = index.constant 16 : index
+  %n = index.constant 16 : index
+  %k = index.constant 32 : index
+  %lhs_storage = encoding.define #physical_storage<layout=#dense, schema=#matrix_operand<element_format=u8, payload_elements=32, payload_registers=8>> : encoding<storage>
+  %rhs_storage = encoding.define #physical_storage<layout=#dense, schema=#matrix_operand<element_format=u8, payload_elements=32, payload_registers=8>> : encoding<storage>
+  %acc_storage = encoding.define #physical_storage<layout=#dense, schema=#matrix_operand<element_format=u32, payload_elements=8, payload_registers=8>> : encoding<storage>
+  %lhs_aligned = buffer.assume.alignment %lhs_buffer {minimum_alignment = 16} : buffer
+  %rhs_aligned = buffer.assume.alignment %rhs_buffer {minimum_alignment = 16} : buffer
+  %init_aligned = buffer.assume.alignment %init_buffer {minimum_alignment = 16} : buffer
+  %out_aligned = buffer.assume.alignment %out_buffer {minimum_alignment = 16} : buffer
+  %lhs_view = buffer.view %lhs_aligned[%byte_offset_aligned] : buffer -> view<16x32xi8, %lhs_storage>
+  %rhs_view = buffer.view %rhs_aligned[%byte_offset_aligned] : buffer -> view<32x16xi8, %rhs_storage>
+  %init_view = buffer.view %init_aligned[%byte_offset_aligned] : buffer -> view<16x16xi32, %acc_storage>
+  %out_view = buffer.view %out_aligned[%byte_offset_aligned] : buffer -> view<16x16xi32, %acc_storage>
+  %lhs = vector.fragment.load<lhs> %lhs_view[0, 0] shape [%m, %k] : view<16x32xi8, %lhs_storage> -> vector<32xi8>
+  %rhs = vector.fragment.load<rhs> %rhs_view[0, 0] shape [%k, %n] : view<32x16xi8, %rhs_storage> -> vector<32xi8>
+  %init = vector.fragment.load<init> %init_view[0, 0] shape [%m, %n] : view<16x16xi32, %acc_storage> -> vector<8xi32>
+  %result = vector.mma %lhs, %rhs, %init : vector<32xi8>, vector<32xi8>, vector<8xi32>
+  vector.fragment.store<result> %result, %out_view[0, 0] shape [%m, %n] : vector<8xi32>, view<16x16xi32, %acc_storage>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@hal_target_coop_u8) workgroup_size(32, 1, 1) @spirv_hal_cooperative_matrix_u8(%byte_offset_aligned: reg<spirv.offset64>) asm<spirv.logical.core> {
+  %lhs_aligned = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %rhs_aligned = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %init_aligned = resource<hal_binding> {index = 2, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %out_aligned = resource<hal_binding> {index = 3, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %lhs_view = OpPtrAccessChain.storage_buffer.u8.byte_offset %lhs_aligned, %byte_offset_aligned
+  %rhs_view = OpPtrAccessChain.storage_buffer.u8.byte_offset %rhs_aligned, %byte_offset_aligned
+  %init_view = OpPtrAccessChain.storage_buffer.u32.byte_offset %init_aligned, %byte_offset_aligned
+  %out_view = OpPtrAccessChain.storage_buffer.u32.byte_offset %out_aligned, %byte_offset_aligned
+  %lhs = OpCooperativeMatrixLoadKHR.lhs.u8.16x16x32.u32.subgroup.row_major %lhs_view
+  %rhs = OpCooperativeMatrixLoadKHR.rhs.u8.16x16x32.u32.subgroup.row_major %rhs_view
+  %init = OpCooperativeMatrixLoadKHR.init.u8.16x16x32.u32.subgroup.row_major %init_view
+  %result = OpCooperativeMatrixMulAddKHR.u8.16x16x32.u32.subgroup %lhs, %rhs, %init
+  OpCooperativeMatrixStoreKHR.result.u8.16x16x32.u32.subgroup.row_major %out_view, %result
+  return
+}

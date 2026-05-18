@@ -63,6 +63,7 @@ class GuardKind(Enum):
     VALUE_I64_RANGE_LE = "value_i64_range_le"
     VALUE_I64_RANGE_GE = "value_i64_range_ge"
     VALUE_F64_EQUALS = "value_f64_equals"
+    VALUE_STORAGE_ELEMENT_FORMAT = "value_storage_element_format"
     INSTANCE_FLAGS_HAS_ALL = "instance_flags_has_all"
 
 
@@ -111,6 +112,7 @@ class Guard:
     minimum: int | None = None
     maximum: int | None = None
     f64_value: float | None = None
+    numeric_format_c_expression: str | None = None
     descriptor: Descriptor | None = None
     register_class: str | None = None
     materializer: str | None = None
@@ -438,6 +440,21 @@ class Guard:
         )
 
     @classmethod
+    def value_storage_element_format(
+        cls,
+        field: str,
+        numeric_format_c_expression: str,
+        *,
+        diagnostic: GuardDiagnostic | None = None,
+    ) -> Self:
+        return cls(
+            kind=GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
+            field=field,
+            numeric_format_c_expression=numeric_format_c_expression,
+            diagnostic=diagnostic,
+        )
+
+    @classmethod
     def instance_flags_has_all(
         cls,
         field: str,
@@ -478,6 +495,13 @@ class Guard:
             raise ValueError(f"{self.kind.value} materializer must be non-empty")
         if self.kind == GuardKind.VALUE_F64_EQUALS and self.f64_value is None:
             raise ValueError(f"{self.kind.value} guard needs an f64 value")
+        if (
+            self.kind == GuardKind.VALUE_STORAGE_ELEMENT_FORMAT
+            and not self.numeric_format_c_expression
+        ):
+            raise ValueError(
+                f"{self.kind.value} guard needs a numeric format C expression"
+            )
 
     def validate(self, source_op: Op) -> None:
         subject = f"guard {self.kind.value}"
@@ -570,6 +594,7 @@ class Guard:
             GuardKind.VALUE_I64_RANGE_LE,
             GuardKind.VALUE_I64_RANGE_GE,
             GuardKind.VALUE_F64_EQUALS,
+            GuardKind.VALUE_STORAGE_ELEMENT_FORMAT,
         ):
             _validate_value_fact_guard(self, source_op, subject)
             return
