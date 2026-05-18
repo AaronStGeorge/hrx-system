@@ -6,7 +6,6 @@
 
 #include "loom/target/emit/spirv/module_storage.h"
 
-#include <inttypes.h>
 #include <string.h>
 
 #include "loom/ops/low/ops.h"
@@ -54,22 +53,16 @@ iree_status_t loom_spirv_module_workgroup_storage_initialize(
   return iree_ok_status();
 }
 
-static iree_status_t loom_spirv_module_workgroup_storage_lookup_entry(
+static loom_spirv_module_workgroup_storage_entry_t*
+loom_spirv_module_workgroup_storage_lookup_entry(
     const loom_local_value_domain_t* value_domain,
     loom_spirv_module_workgroup_storage_state_t* state,
-    loom_value_id_t value_id,
-    loom_spirv_module_workgroup_storage_entry_t** out_entry) {
+    loom_value_id_t value_id) {
   const loom_value_ordinal_t value_ordinal =
       loom_local_value_domain_try_ordinal(value_domain, value_id);
-  if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID ||
-      value_ordinal >= state->entry_count) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "SPIR-V Workgroup storage value %" PRIu32
-                            " is outside the emitted function domain",
-                            value_id);
-  }
-  *out_entry = &state->entries[value_ordinal];
-  return iree_ok_status();
+  IREE_ASSERT_NE(value_ordinal, LOOM_VALUE_ORDINAL_INVALID);
+  IREE_ASSERT_LT(value_ordinal, state->entry_count);
+  return &state->entries[value_ordinal];
 }
 
 iree_status_t loom_spirv_module_workgroup_storage_emit_reserve(
@@ -79,59 +72,40 @@ iree_status_t loom_spirv_module_workgroup_storage_emit_reserve(
   IREE_ASSERT_ARGUMENT(state);
   IREE_ASSERT_ARGUMENT(op);
 
-  loom_spirv_module_workgroup_storage_entry_t* entry = NULL;
-  IREE_RETURN_IF_ERROR(loom_spirv_module_workgroup_storage_lookup_entry(
-      value_domain, state, loom_low_storage_reserve_storage(op), &entry));
-  if (entry->reserved) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "SPIR-V Workgroup storage reserve was already "
-                            "materialized");
-  }
+  loom_spirv_module_workgroup_storage_entry_t* entry =
+      loom_spirv_module_workgroup_storage_lookup_entry(
+          value_domain, state, loom_low_storage_reserve_storage(op));
+  IREE_ASSERT(!entry->reserved);
   entry->reserved = true;
   entry->byte_length = loom_low_storage_reserve_byte_length(op);
   entry->byte_alignment = loom_low_storage_reserve_byte_alignment(op);
   return iree_ok_status();
 }
 
-static iree_status_t loom_spirv_module_workgroup_storage_element_byte_count(
-    loom_spirv_scalar_type_t scalar_type, uint32_t* out_element_byte_count) {
-  *out_element_byte_count = 0;
+static uint32_t loom_spirv_module_workgroup_storage_element_byte_count(
+    loom_spirv_scalar_type_t scalar_type) {
   const loom_spirv_scalar_type_descriptor_t* scalar_descriptor =
       loom_spirv_scalar_type_descriptor(scalar_type);
-  if (scalar_descriptor == NULL || scalar_descriptor->bit_width == 0 ||
-      (scalar_descriptor->bit_width % 8) != 0) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "SPIR-V Workgroup storage address selected an "
-                            "unsupported scalar type");
-  }
-  *out_element_byte_count = scalar_descriptor->bit_width / 8;
-  return iree_ok_status();
+  IREE_ASSERT(scalar_descriptor != NULL);
+  IREE_ASSERT_NE(scalar_descriptor->bit_width, 0u);
+  IREE_ASSERT_EQ(scalar_descriptor->bit_width % 8, 0u);
+  return scalar_descriptor->bit_width / 8;
 }
 
 static iree_status_t loom_spirv_module_workgroup_storage_emit_type(
     const loom_spirv_module_workgroup_storage_entry_t* entry,
     loom_spirv_type_context_t* type_context, uint32_t* out_array_type_id,
     uint32_t* out_array_pointer_type_id) {
-  uint32_t element_byte_count = 0;
-  IREE_RETURN_IF_ERROR(loom_spirv_module_workgroup_storage_element_byte_count(
-      entry->scalar_type, &element_byte_count));
-  if (entry->byte_length <= 0 ||
-      entry->byte_length % (int64_t)element_byte_count != 0) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "SPIR-V Workgroup storage byte length does not "
-                            "match the selected scalar element type");
-  }
-  if (entry->byte_alignment < (int64_t)element_byte_count) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "SPIR-V Workgroup storage byte alignment does not "
-                            "cover the selected scalar element type");
-  }
+  const uint32_t element_byte_count =
+      loom_spirv_module_workgroup_storage_element_byte_count(
+          entry->scalar_type);
+  IREE_ASSERT_GT(entry->byte_length, 0);
+  IREE_ASSERT_EQ(entry->byte_length % (int64_t)element_byte_count, 0);
+  IREE_ASSERT_GE(entry->byte_alignment, (int64_t)element_byte_count);
   const uint64_t element_count =
       (uint64_t)entry->byte_length / element_byte_count;
   if (element_count == 0 || element_count > UINT32_MAX) {
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "SPIR-V Workgroup storage element count exceeds "
-                            "32-bit OpTypeArray length");
+    IREE_CHECK_UNREACHABLE("verified SPIR-V Workgroup storage element count");
   }
 
   uint32_t element_type_id = 0;
@@ -182,38 +156,25 @@ iree_status_t loom_spirv_module_workgroup_storage_emit_address(
   IREE_ASSERT_ARGUMENT(out_value_ref);
 
   *out_value_ref = (loom_spirv_module_value_ref_t){0};
-  if (loom_low_storage_address_offset(op) != 0) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "SPIR-V Workgroup storage addresses must use a "
-                            "zero byte offset");
-  }
-  loom_spirv_module_workgroup_storage_entry_t* entry = NULL;
-  IREE_RETURN_IF_ERROR(loom_spirv_module_workgroup_storage_lookup_entry(
-      value_domain, state, loom_low_storage_address_storage(op), &entry));
-  if (!entry->reserved) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "SPIR-V Workgroup storage address references "
-                            "storage without a reserve");
-  }
+  IREE_ASSERT_EQ(loom_low_storage_address_offset(op), 0);
+  loom_spirv_module_workgroup_storage_entry_t* entry =
+      loom_spirv_module_workgroup_storage_lookup_entry(
+          value_domain, state, loom_low_storage_address_storage(op));
+  IREE_ASSERT(entry->reserved);
 
   loom_spirv_value_type_t value_type = {0};
   const loom_type_t result_type = loom_module_value_type(
       value_domain->module, loom_low_storage_address_result(op));
-  if (!loom_low_type_is_register(result_type) ||
-      loom_low_register_type_descriptor_set_stable_id(result_type) !=
-          SPIRV_LOGICAL_CORE_DESCRIPTOR_SET_ID ||
-      !loom_spirv_value_type_from_reg_class_id(
-          loom_low_register_type_class_id(result_type), &value_type) ||
-      value_type.value_class != LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP_ARRAY) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "SPIR-V Workgroup storage address result must be "
-                            "a typed Workgroup array pointer register");
-  }
-  if (entry->variable_id != 0 && entry->scalar_type != value_type.scalar_type) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "SPIR-V Workgroup storage is addressed with "
-                            "multiple scalar element types");
-  }
+  IREE_ASSERT(loom_low_type_is_register(result_type));
+  IREE_ASSERT_EQ(loom_low_register_type_descriptor_set_stable_id(result_type),
+                 SPIRV_LOGICAL_CORE_DESCRIPTOR_SET_ID);
+  const bool resolved = loom_spirv_value_type_from_reg_class_id(
+      loom_low_register_type_class_id(result_type), &value_type);
+  IREE_ASSERT(resolved);
+  IREE_ASSERT_EQ(value_type.value_class,
+                 LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP_ARRAY);
+  IREE_ASSERT(entry->variable_id == 0 ||
+              entry->scalar_type == value_type.scalar_type);
   entry->scalar_type = value_type.scalar_type;
   if (entry->variable_id == 0) {
     IREE_RETURN_IF_ERROR(loom_spirv_module_workgroup_storage_emit_variable(

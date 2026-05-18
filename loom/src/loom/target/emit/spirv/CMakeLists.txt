@@ -67,6 +67,37 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    module_values
+  HDRS
+    "module_values.h"
+  SRCS
+    "module_values.c"
+  DEPS
+    ::module_builder
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::target::arch::spirv::value_types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    module_instructions
+  HDRS
+    "module_instructions.h"
+  SRCS
+    "module_instructions.c"
+  DEPS
+    ::binary_format
+    ::module_builder
+    iree::base
+    loom::src::loom::target::arch::spirv::isa
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     module_storage
   HDRS
     "module_storage.h"
@@ -76,6 +107,7 @@ loom_cc_library(
     ::binary_format
     ::module_builder
     ::module_types
+    ::module_values
     iree::base
     iree::base::internal::arena
     loom::src::loom::ir
@@ -99,8 +131,10 @@ loom_cc_library(
   DEPS
     ::binary_format
     ::module_builder
+    ::module_instructions
     ::module_storage
     ::module_types
+    ::module_values
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::function
@@ -159,6 +193,24 @@ loom_cc_test(
     ::binary_format
     ::module_builder
     loom::src::loom::target::arch::spirv::features
+    loom::src::loom::target::arch::spirv::target_records
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    module_values_test
+  SRCS
+    "module_values_test.cc"
+  DEPS
+    ::module_builder
+    ::module_values
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::test
+    loom::src::loom::target::arch::spirv::scalar_types
     loom::src::loom::target::arch::spirv::target_records
     iree::testing::gtest
     iree::testing::gtest_main

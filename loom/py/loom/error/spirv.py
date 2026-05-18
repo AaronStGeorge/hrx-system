@@ -369,6 +369,42 @@ ERR_SPIRV_021 = ErrorDef(
     ),
 )
 
+# ERR_SPIRV_022: SPIR-V shader-entry argument value is unsupported.
+ERR_SPIRV_022 = ErrorDef(
+    domain=ErrorDomain.SPIRV,
+    code=22,
+    severity=Severity.ERROR,
+    summary="Unsupported SPIR-V shader-entry argument value.",
+    message=(
+        "SPIR-V shader-entry function '@{function_name}' argument "
+        "'{value_name}' has SPIR-V value type '{actual_value_type}', but only "
+        "scalar, bool, offset64, and storage-buffer-address argument values "
+        "are supported"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("value_name", ParamKind.STRING),
+        ErrorParam("actual_value_type", ParamKind.STRING),
+    ),
+)
+
+# ERR_SPIRV_023: SPIR-V raw-BDA direct constants exceed the ABI range.
+ERR_SPIRV_023 = ErrorDef(
+    domain=ErrorDomain.SPIRV,
+    code=23,
+    severity=Severity.ERROR,
+    summary="SPIR-V raw-BDA direct constants out of range.",
+    message=(
+        "SPIR-V raw-BDA HAL kernel '@{function_name}' direct values require "
+        "{constant_word_count} 32-bit constant word(s), which exceeds the "
+        "16-bit ABI range"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("constant_word_count", ParamKind.U32),
+    ),
+)
+
 ALL_SPIRV_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SPIRV_001,
     ERR_SPIRV_002,
@@ -391,4 +427,6 @@ ALL_SPIRV_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SPIRV_019,
     ERR_SPIRV_020,
     ERR_SPIRV_021,
+    ERR_SPIRV_022,
+    ERR_SPIRV_023,
 )

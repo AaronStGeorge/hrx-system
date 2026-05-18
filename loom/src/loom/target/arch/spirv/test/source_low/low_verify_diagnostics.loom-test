@@ -291,6 +291,17 @@ low.func.def target(@target) @shader_entry_pointer_result(%result: reg<spirv.ptr
 
 spirv.target<vulkan1_3> @target
 
+// ERROR@+1: SPIRV/022 {function_name="shader_entry_workgroup_pointer_arg", value_name="value", actual_value_type="ptr.workgroup"}
+low.func.def target(@target) @shader_entry_workgroup_pointer_arg(%value: reg<spirv.ptr.workgroup.i32>) asm<spirv.logical.core> {
+  return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
 low.func.def target(@target) @unsupported_structural_op() asm<spirv.logical.core> {
   // ERROR@+1: SPIRV/017 {function_name="unsupported_structural_op", op_name="low.live_in"}
   %value = live_in<spirv.arg0> : reg<spirv.id>

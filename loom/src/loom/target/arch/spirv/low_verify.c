@@ -477,6 +477,50 @@ static bool loom_spirv_low_value_type_is_direct_scalar(
          value_type.value_class == LOOM_SPIRV_VALUE_CLASS_OFFSET64;
 }
 
+static bool loom_spirv_low_value_type_is_shader_entry_arg(
+    loom_spirv_value_type_t value_type) {
+  return loom_spirv_low_value_type_is_direct_scalar(value_type) ||
+         value_type.value_class ==
+             LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS;
+}
+
+static bool loom_spirv_low_direct_constant_word_count(
+    loom_spirv_value_type_t value_type, uint8_t* out_word_count) {
+  *out_word_count = 0;
+  switch (value_type.value_class) {
+    case LOOM_SPIRV_VALUE_CLASS_BOOL:
+      *out_word_count = 1;
+      return true;
+    case LOOM_SPIRV_VALUE_CLASS_SCALAR: {
+      const loom_spirv_scalar_type_descriptor_t* descriptor =
+          loom_spirv_scalar_type_descriptor(value_type.scalar_type);
+      if (descriptor == NULL) {
+        return false;
+      }
+      if (descriptor->bit_width <= 32) {
+        *out_word_count = 1;
+        return true;
+      }
+      if (descriptor->bit_width == 64) {
+        *out_word_count = 2;
+        return true;
+      }
+      return false;
+    }
+    case LOOM_SPIRV_VALUE_CLASS_OFFSET64:
+      *out_word_count = 2;
+      return true;
+    case LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS:
+    case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
+    case LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP:
+    case LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP_ARRAY:
+    case LOOM_SPIRV_VALUE_CLASS_COOPERATIVE_MATRIX:
+    case LOOM_SPIRV_VALUE_CLASS_UNKNOWN:
+      return false;
+  }
+  return false;
+}
+
 static iree_status_t loom_spirv_low_emit_raw_bda_returns(
     loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state) {
   loom_diagnostic_param_t params[] = {
@@ -499,6 +543,30 @@ static iree_status_t loom_spirv_low_emit_raw_bda_direct_value(
                              params, IREE_ARRAYSIZE(params));
 }
 
+static iree_status_t loom_spirv_low_emit_raw_bda_constant_count(
+    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
+    uint32_t constant_word_count) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(state->function_name),
+      loom_param_u32(constant_word_count),
+  };
+  return loom_spirv_low_emit(context, state->function_op, LOOM_ERR_SPIRV_023,
+                             params, IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_spirv_low_emit_shader_argument_value(
+    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
+    loom_value_id_t value_id, loom_spirv_value_type_t value_type) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(state->function_name),
+      loom_param_string(
+          loom_low_diagnostic_value_name(state->module, value_id)),
+      loom_param_string(loom_spirv_low_value_type_format(state, value_type)),
+  };
+  return loom_spirv_low_emit(context, state->function_op, LOOM_ERR_SPIRV_022,
+                             params, IREE_ARRAYSIZE(params));
+}
+
 static iree_status_t loom_spirv_low_emit_shader_result_value(
     loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
     loom_value_id_t value_id, loom_spirv_value_type_t value_type) {
@@ -518,6 +586,7 @@ static iree_status_t loom_spirv_low_verify_abi_shape(
     if (state->function_op->result_count != 0) {
       IREE_RETURN_IF_ERROR(loom_spirv_low_emit_raw_bda_returns(context, state));
     }
+    uint32_t constant_word_count = 0;
     if (state->entry_block != NULL) {
       for (uint16_t i = 0; i < state->entry_block->arg_count; ++i) {
         const loom_value_id_t value_id =
@@ -530,10 +599,39 @@ static iree_status_t loom_spirv_low_verify_abi_shape(
         if (!loom_spirv_low_value_type_is_direct_scalar(value_type)) {
           IREE_RETURN_IF_ERROR(loom_spirv_low_emit_raw_bda_direct_value(
               context, state, value_id, value_type));
+          continue;
         }
+        uint8_t word_count = 0;
+        if (!loom_spirv_low_direct_constant_word_count(value_type,
+                                                       &word_count)) {
+          IREE_RETURN_IF_ERROR(loom_spirv_low_emit_raw_bda_direct_value(
+              context, state, value_id, value_type));
+          continue;
+        }
+        if (constant_word_count > UINT16_MAX - word_count) {
+          IREE_RETURN_IF_ERROR(loom_spirv_low_emit_raw_bda_constant_count(
+              context, state, constant_word_count + word_count));
+          continue;
+        }
+        constant_word_count += word_count;
       }
     }
     return iree_ok_status();
+  }
+
+  if (state->entry_block != NULL) {
+    for (uint16_t i = 0; i < state->entry_block->arg_count; ++i) {
+      const loom_value_id_t value_id = loom_block_arg_id(state->entry_block, i);
+      loom_spirv_value_type_t value_type = {0};
+      if (!loom_spirv_low_value_type_table_lookup(&state->value_types, value_id,
+                                                  &value_type)) {
+        continue;
+      }
+      if (!loom_spirv_low_value_type_is_shader_entry_arg(value_type)) {
+        IREE_RETURN_IF_ERROR(loom_spirv_low_emit_shader_argument_value(
+            context, state, value_id, value_type));
+      }
+    }
   }
 
   const loom_value_id_t* results = loom_op_const_results(state->function_op);
@@ -738,7 +836,7 @@ static iree_status_t loom_spirv_low_verify_packet(
                                                  packet->descriptor);
   const loom_spirv_packet_row_t* row =
       loom_spirv_packet_row_for_descriptor_ordinal(descriptor_ordinal);
-  if (row == NULL) {
+  if (row == NULL || row->form == LOOM_SPIRV_PACKET_FORM_UNSUPPORTED) {
     return loom_spirv_low_emit_missing_packet_row(context, state, packet);
   }
   if (packet->op->operand_count != row->operand_count ||

@@ -21,19 +21,11 @@
 #include "loom/target/arch/spirv/value_types.h"
 #include "loom/target/emit/spirv/module_builder.h"
 #include "loom/target/emit/spirv/module_types.h"
+#include "loom/target/emit/spirv/module_values.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-typedef struct loom_spirv_module_value_ref_t {
-  // SPIR-V result ID carrying a low SSA value.
-  uint32_t id;
-  // SPIR-V type ID assigned to id.
-  uint32_t type_id;
-  // Target-local value type used by packet emitters.
-  loom_spirv_value_type_t value_type;
-} loom_spirv_module_value_ref_t;
 
 typedef struct loom_spirv_module_workgroup_storage_entry_t
     loom_spirv_module_workgroup_storage_entry_t;
