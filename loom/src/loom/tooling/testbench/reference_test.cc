@@ -230,6 +230,39 @@ TEST_F(ReferenceTest, ComputesF16MatmulWithF32Accumulator) {
   }
 }
 
+TEST_F(ReferenceTest, ComputesU8MatmulWithF32Accumulator) {
+  std::vector<int8_t> lhs_values = {-1, 2, -2, 3, 4, -3};
+  std::vector<int8_t> rhs_values = {1, 2, 3, 4, 5, 6};
+  std::vector<float> init_values = {0.5f, 1.0f, 1.5f, 2.0f};
+
+  iree_vm_variant_t inputs[3] = {
+      MakeBufferView<int8_t>({2, 3}, IREE_HAL_ELEMENT_TYPE_SINT_8, lhs_values),
+      MakeBufferView<int8_t>({3, 2}, IREE_HAL_ELEMENT_TYPE_SINT_8, rhs_values),
+      MakeBufferView<float>({2, 2}, IREE_HAL_ELEMENT_TYPE_FLOAT_32,
+                            init_values),
+  };
+
+  loom_testbench_oracle_provider_t provider = {};
+  loom_testbench_reference_matmul_oracle_provider_initialize(
+      &reference_options_, &provider);
+
+  iree_vm_variant_t results[1] = {iree_vm_variant_empty()};
+  loom_testbench_invocation_plan_t invocation = {
+      .module = module_,
+      .attrs = MakeMatmulContractAttrs(IREE_SV("u8"), IREE_SV("u8"),
+                                       IREE_SV("f32"), IREE_SV("f32")),
+  };
+  IREE_ASSERT_OK(provider.invoke.fn(provider.invoke.user_data, &invocation,
+                                    IREE_ARRAYSIZE(inputs), inputs,
+                                    IREE_ARRAYSIZE(results), results));
+  ExpectF32BufferView(results[0], {2, 2}, {1531.5f, 2043.0f, 1281.5f, 1542.0f});
+
+  iree_vm_variant_reset(&results[0]);
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(inputs); ++i) {
+    iree_vm_variant_reset(&inputs[i]);
+  }
+}
+
 TEST_F(ReferenceTest, ComputesTilePackedF16MatmulWithF32Accumulator) {
   std::vector<uint16_t> lhs_values = {
       iree_math_f32_to_f16(1.0f), iree_math_f32_to_f16(2.0f),

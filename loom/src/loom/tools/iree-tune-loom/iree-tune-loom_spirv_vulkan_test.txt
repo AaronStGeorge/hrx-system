@@ -21,6 +21,13 @@
 // RUN:     --artifact_bundle_dir=%t.spirv.coop.u8.bundle --artifact_bundle_policy=debug
 // RUN: FileCheck --check-prefix=COOP-U8 %s < %t.spirv.coop.u8.bundle/results.jsonl
 // RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
+// RUN:   iree-tune-loom %S/../iree-test-loom/testdata/spirv_vulkan_quantized_hal_actual.loom \
+// RUN:     --benchmark=@quantized_projection_u8_scalar_16_dispatch --device=vulkan \
+// RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
+// RUN:     --min_time_ms=0 --max_batches=1 --input_ring_count=1 \
+// RUN:     --artifact_bundle_dir=%t.spirv.quant.u8.bundle --artifact_bundle_policy=debug
+// RUN: FileCheck --check-prefix=QUANT-U8 %s < %t.spirv.quant.u8.bundle/results.jsonl
+// RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
 // RUN:   iree-tune-loom %S/../iree-test-loom/testdata/spirv_vulkan_coop_hal_actual.loom \
 // RUN:     --benchmark=@narrow_score_tiled_f16_128x16_m1_dispatch --device=vulkan \
 // RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
@@ -82,6 +89,20 @@
 // COOP-U8: "benchmark_count":1
 // COOP-U8: "failure_count":0
 // COOP-U8: "failed_benchmark_count":0
+
+// QUANT-U8: "row":"run","run_id":"r
+// QUANT-U8: "row":"plan"
+// QUANT-U8: "benchmark":"quantized_projection_u8_scalar_16_dispatch","case":"quantized_projection_u8_scalar_16_case"
+// QUANT-U8: "metadata":{"strategy":"scalar_unsigned_decode_gemm","problem":{"dtype":"u8xu8_f32","k":16,"m":16,"n":16}}
+// QUANT-U8: "measure":"dispatch_complete"
+// QUANT-U8: "row":"benchmark"
+// QUANT-U8: "benchmark":"quantized_projection_u8_scalar_16_dispatch","case":"quantized_projection_u8_scalar_16_case","status":"ok"
+// QUANT-U8: "correctness_failed_sample_count":0
+// QUANT-U8: "measured_dispatch_count":1
+// QUANT-U8: "row":"summary"
+// QUANT-U8: "benchmark_count":1
+// QUANT-U8: "failure_count":0
+// QUANT-U8: "failed_benchmark_count":0
 
 // NARROW: "row":"run","run_id":"r
 // NARROW: "row":"plan"

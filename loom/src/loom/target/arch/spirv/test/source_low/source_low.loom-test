@@ -547,14 +547,16 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_hal_resource_s
 
 spirv.target<vulkan1_3> @hal_target {abi = hal_kernel, contract_feature_bits = 33278}
 
-kernel.def target(@hal_target) @spirv_hal_scalar_conversions(%input_i8: buffer, %output_ext_i32: buffer, %output_sitofp_f32: buffer, %input_i64: buffer, %output_trunc_i32: buffer, %input_f16: buffer, %output_extf_f32: buffer, %input_f32: buffer, %output_fptrunc_f16: buffer, %output_fptosi_i16: buffer, %input_i32_bits: buffer, %output_bitcast_f32: buffer, %byte_offset: offset) {
+kernel.def target(@hal_target) @spirv_hal_scalar_conversions(%input_i8: buffer, %output_ext_i32: buffer, %output_extui_i32: buffer, %output_sitofp_f32: buffer, %output_uitofp_f32: buffer, %input_i64: buffer, %output_trunc_i32: buffer, %input_f16: buffer, %output_extf_f32: buffer, %input_f32: buffer, %output_fptrunc_f16: buffer, %output_fptosi_i16: buffer, %input_i32_bits: buffer, %output_bitcast_f32: buffer, %byte_offset: offset) {
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
 } launch {
   %byte_offset_aligned = index.assume %byte_offset [mul(%byte_offset, 8)] : offset
   %input_i8_aligned = buffer.assume.alignment %input_i8 {minimum_alignment = 8} : buffer
   %output_ext_i32_aligned = buffer.assume.alignment %output_ext_i32 {minimum_alignment = 8} : buffer
+  %output_extui_i32_aligned = buffer.assume.alignment %output_extui_i32 {minimum_alignment = 8} : buffer
   %output_sitofp_f32_aligned = buffer.assume.alignment %output_sitofp_f32 {minimum_alignment = 8} : buffer
+  %output_uitofp_f32_aligned = buffer.assume.alignment %output_uitofp_f32 {minimum_alignment = 8} : buffer
   %input_i64_aligned = buffer.assume.alignment %input_i64 {minimum_alignment = 8} : buffer
   %output_trunc_i32_aligned = buffer.assume.alignment %output_trunc_i32 {minimum_alignment = 8} : buffer
   %input_f16_aligned = buffer.assume.alignment %input_f16 {minimum_alignment = 8} : buffer
@@ -569,9 +571,15 @@ kernel.def target(@hal_target) @spirv_hal_scalar_conversions(%input_i8: buffer, 
   %extended_i32 = scalar.extsi %loaded_i8 : i8 to i32
   %output_ext_i32_view = buffer.view %output_ext_i32_aligned[%byte_offset_aligned] : buffer -> view<1xi32, #dense>
   view.store %extended_i32, %output_ext_i32_view[0] : i32, view<1xi32, #dense>
+  %extended_unsigned_i32 = scalar.extui %loaded_i8 : i8 to i32
+  %output_extui_i32_view = buffer.view %output_extui_i32_aligned[%byte_offset_aligned] : buffer -> view<1xi32, #dense>
+  view.store %extended_unsigned_i32, %output_extui_i32_view[0] : i32, view<1xi32, #dense>
   %converted_f32 = scalar.sitofp %loaded_i8 : i8 to f32
   %output_sitofp_f32_view = buffer.view %output_sitofp_f32_aligned[%byte_offset_aligned] : buffer -> view<1xf32, #dense>
   view.store %converted_f32, %output_sitofp_f32_view[0] : f32, view<1xf32, #dense>
+  %converted_unsigned_f32 = scalar.uitofp %extended_unsigned_i32 : i32 to f32
+  %output_uitofp_f32_view = buffer.view %output_uitofp_f32_aligned[%byte_offset_aligned] : buffer -> view<1xf32, #dense>
+  view.store %converted_unsigned_f32, %output_uitofp_f32_view[0] : f32, view<1xf32, #dense>
   %input_i64_view = buffer.view %input_i64_aligned[%byte_offset_aligned] : buffer -> view<1xi64, #dense>
   %loaded_i64 = view.load %input_i64_view[0] : view<1xi64, #dense> -> i64
   %truncated_i32 = scalar.trunci %loaded_i64 : i64 to i32
@@ -602,24 +610,35 @@ kernel.def target(@hal_target) @spirv_hal_scalar_conversions(%input_i8: buffer, 
 low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_hal_scalar_conversions(%byte_offset_aligned: reg<spirv.offset64>) asm<spirv.logical.core> {
   %input_i8_aligned = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
   %output_ext_i32_aligned = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
-  %output_sitofp_f32_aligned = resource<hal_binding> {index = 2, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
-  %input_i64_aligned = resource<hal_binding> {index = 3, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
-  %output_trunc_i32_aligned = resource<hal_binding> {index = 4, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
-  %input_f16_aligned = resource<hal_binding> {index = 5, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
-  %output_extf_f32_aligned = resource<hal_binding> {index = 6, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
-  %input_f32_aligned = resource<hal_binding> {index = 7, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
-  %output_fptrunc_f16_aligned = resource<hal_binding> {index = 8, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
-  %output_fptosi_i16_aligned = resource<hal_binding> {index = 9, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
-  %input_i32_bits_aligned = resource<hal_binding> {index = 10, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
-  %output_bitcast_f32_aligned = resource<hal_binding> {index = 11, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output_extui_i32_aligned = resource<hal_binding> {index = 2, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output_sitofp_f32_aligned = resource<hal_binding> {index = 3, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output_uitofp_f32_aligned = resource<hal_binding> {index = 4, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %input_i64_aligned = resource<hal_binding> {index = 5, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output_trunc_i32_aligned = resource<hal_binding> {index = 6, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %input_f16_aligned = resource<hal_binding> {index = 7, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output_extf_f32_aligned = resource<hal_binding> {index = 8, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %input_f32_aligned = resource<hal_binding> {index = 9, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output_fptrunc_f16_aligned = resource<hal_binding> {index = 10, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output_fptosi_i16_aligned = resource<hal_binding> {index = 11, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %input_i32_bits_aligned = resource<hal_binding> {index = 12, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output_bitcast_f32_aligned = resource<hal_binding> {index = 13, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
   %input_i8_view = OpPtrAccessChain.storage_buffer.i8.byte_offset %input_i8_aligned, %byte_offset_aligned
   %loaded_i8 = OpLoad.storage_buffer.i8 %input_i8_view
   %extended_i32 = OpSConvert.i8.i32 %loaded_i8
   %output_ext_i32_view = OpPtrAccessChain.storage_buffer.i32.byte_offset %output_ext_i32_aligned, %byte_offset_aligned
   OpStore.storage_buffer.i32 %output_ext_i32_view, %extended_i32
+  %93 = OpBitcast.i8.u8 %loaded_i8
+  %94 = OpUConvert.u8.u32 %93
+  %extended_unsigned_i32 = OpBitcast.u32.i32 %94
+  %output_extui_i32_view = OpPtrAccessChain.storage_buffer.i32.byte_offset %output_extui_i32_aligned, %byte_offset_aligned
+  OpStore.storage_buffer.i32 %output_extui_i32_view, %extended_unsigned_i32
   %converted_f32 = OpConvertSToF.i8.f32 %loaded_i8
   %output_sitofp_f32_view = OpPtrAccessChain.storage_buffer.f32.byte_offset %output_sitofp_f32_aligned, %byte_offset_aligned
   OpStore.storage_buffer.f32 %output_sitofp_f32_view, %converted_f32
+  %99 = OpBitcast.i32.u32 %extended_unsigned_i32
+  %converted_unsigned_f32 = OpConvertUToF.u32.f32 %99
+  %output_uitofp_f32_view = OpPtrAccessChain.storage_buffer.f32.byte_offset %output_uitofp_f32_aligned, %byte_offset_aligned
+  OpStore.storage_buffer.f32 %output_uitofp_f32_view, %converted_unsigned_f32
   %input_i64_view = OpPtrAccessChain.storage_buffer.i64.byte_offset %input_i64_aligned, %byte_offset_aligned
   %loaded_i64 = OpLoad.storage_buffer.i64 %input_i64_view
   %truncated_i32 = OpSConvert.i64.i32 %loaded_i64

@@ -222,6 +222,7 @@ iree_lit_test_suite(
         "//loom/src/loom/tools/iree-test-loom:testdata/spirv_vulkan_coop_hal_actual.loom",
         "//loom/src/loom/tools/iree-test-loom:testdata/spirv_vulkan_coop_u8_hal_actual.loom",
         "//loom/src/loom/tools/iree-test-loom:testdata/spirv_vulkan_hal_actual.loom",
+        "//loom/src/loom/tools/iree-test-loom:testdata/spirv_vulkan_quantized_hal_actual.loom",
     ],
     tags = [
         "driver=vulkan",

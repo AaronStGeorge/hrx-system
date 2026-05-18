@@ -90,6 +90,7 @@ iree_lit_test_suite(
     testdata::spirv_vulkan_coop_hal_actual.loom
     testdata::spirv_vulkan_coop_u8_hal_actual.loom
     testdata::spirv_vulkan_hal_actual.loom
+    testdata::spirv_vulkan_quantized_hal_actual.loom
   LABELS
     "driver=vulkan"
     "manual"

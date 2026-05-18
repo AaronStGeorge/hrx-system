@@ -576,24 +576,28 @@ def test_reduction_rule_validates_literal_immediates_and_temporaries() -> None:
                         descriptor=extract,
                         operands={"source": ValueRef.operand("input")},
                         results={"dst": ValueRef.temporary("lane0")},
+                        result_types={"dst": Scalar("i32")},
                         immediates={"lane": 0},
                     ),
                     EmitDescriptorOp(
                         descriptor=extract,
                         operands={"source": ValueRef.operand("input")},
                         results={"dst": ValueRef.temporary("lane1")},
+                        result_types={"dst": Scalar("i32")},
                         immediates={"lane": 1},
                     ),
                     EmitDescriptorOp(
                         descriptor=extract,
                         operands={"source": ValueRef.operand("input")},
                         results={"dst": ValueRef.temporary("lane2")},
+                        result_types={"dst": Scalar("i32")},
                         immediates={"lane": 2},
                     ),
                     EmitDescriptorOp(
                         descriptor=extract,
                         operands={"source": ValueRef.operand("input")},
                         results={"dst": ValueRef.temporary("lane3")},
+                        result_types={"dst": Scalar("i32")},
                         immediates={"lane": 3},
                     ),
                     EmitDescriptorOp(
@@ -603,6 +607,7 @@ def test_reduction_rule_validates_literal_immediates_and_temporaries() -> None:
                             "rhs": ValueRef.temporary("lane0"),
                         },
                         results={"dst": ValueRef.temporary("acc0")},
+                        result_types={"dst": Scalar("i32")},
                     ),
                     EmitDescriptorOp(
                         descriptor=add,
@@ -611,6 +616,7 @@ def test_reduction_rule_validates_literal_immediates_and_temporaries() -> None:
                             "rhs": ValueRef.temporary("lane1"),
                         },
                         results={"dst": ValueRef.temporary("acc1")},
+                        result_types={"dst": Scalar("i32")},
                     ),
                     EmitDescriptorOp(
                         descriptor=add,
@@ -619,6 +625,7 @@ def test_reduction_rule_validates_literal_immediates_and_temporaries() -> None:
                             "rhs": ValueRef.temporary("lane2"),
                         },
                         results={"dst": ValueRef.temporary("acc2")},
+                        result_types={"dst": Scalar("i32")},
                     ),
                     EmitDescriptorOp(
                         descriptor=add,
@@ -661,6 +668,38 @@ def test_descriptor_rule_rejects_undefined_temporary() -> None:
                                 "rhs": ValueRef.operand("init"),
                             },
                             results={"dst": ValueRef.result("result")},
+                        )
+                    ],
+                )
+            ],
+        )
+
+
+def test_descriptor_rule_rejects_temporary_result_without_type() -> None:
+    descriptor = TEST_LOW_ADD_I32_DESCRIPTOR
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            r"vector.reduce: descriptor result 'dst' temporary 'partial' "
+            r"needs an explicit result type binding"
+        ),
+    ):
+        ContractFragment(
+            name="bad.temporary.result",
+            descriptor_set=TEST_LOW_CORE_DESCRIPTOR_SET,
+            cases=[
+                DescriptorRule(
+                    source_op=vector.vector_reduce,
+                    descriptor=descriptor,
+                    emit=[
+                        EmitDescriptorOp(
+                            descriptor=descriptor,
+                            operands={
+                                "lhs": ValueRef.operand("init"),
+                                "rhs": ValueRef.operand("init"),
+                            },
+                            results={"dst": ValueRef.temporary("partial")},
                         )
                     ],
                 )

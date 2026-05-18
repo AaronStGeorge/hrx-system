@@ -117,6 +117,9 @@ class EmitDescriptorOp:
         _require_descriptor(descriptor_set, self.descriptor)
         operand_bindings = dict(self.operands) if self.operands is not None else {}
         result_bindings = dict(self.results) if self.results is not None else {}
+        result_type_bindings = (
+            dict(self.result_types) if self.result_types is not None else {}
+        )
         for descriptor_field, value_ref in operand_bindings.items():
             operand = _require_descriptor_operand(
                 self.descriptor, descriptor_field, "descriptor operand binding"
@@ -150,12 +153,15 @@ class EmitDescriptorOp:
                         f"{source_op.name}: descriptor result '{descriptor_field}' "
                         f"redefines temporary '{value_ref.field}'"
                     )
+                if descriptor_field not in result_type_bindings:
+                    raise ValueError(
+                        f"{source_op.name}: descriptor result "
+                        f"'{descriptor_field}' temporary '{value_ref.field}' "
+                        "needs an explicit result type binding"
+                    )
                 produced_temporaries.append(value_ref.field)
             else:
                 value_ref.validate(source_op, f"descriptor result '{descriptor_field}'")
-        result_type_bindings = (
-            dict(self.result_types) if self.result_types is not None else {}
-        )
         for descriptor_field, binding in result_type_bindings.items():
             _require_descriptor_operand(
                 self.descriptor, descriptor_field, "descriptor result type binding"

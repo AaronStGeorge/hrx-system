@@ -438,6 +438,17 @@ static int64_t loom_testbench_reference_load_integer_element_at(
   }
 }
 
+static double loom_testbench_reference_load_numeric_element_as_float_at(
+    loom_testbench_reference_numeric_kind_t kind, const uint8_t* data,
+    iree_host_size_t element_offset) {
+  if (loom_testbench_reference_numeric_kind_is_float(kind)) {
+    return loom_testbench_reference_load_float_element_at(kind, data,
+                                                          element_offset);
+  }
+  return (double)loom_testbench_reference_load_integer_element_at(
+      kind, data, element_offset);
+}
+
 static bool loom_testbench_reference_integer_kind_contains(
     loom_testbench_reference_numeric_kind_t kind, int64_t value) {
   switch (kind) {
@@ -698,10 +709,17 @@ static iree_status_t loom_testbench_reference_validate_matmul_contract_domains(
       loom_testbench_reference_numeric_kind_is_integer(contract->init) &&
       loom_testbench_reference_numeric_kind_is_integer(contract->accumulator) &&
       loom_testbench_reference_numeric_kind_is_integer(contract->result);
-  if (!floating_contract && !integer_contract) {
+  const bool quantized_float_contract =
+      loom_testbench_reference_numeric_kind_is_integer(contract->lhs) &&
+      loom_testbench_reference_numeric_kind_is_integer(contract->rhs) &&
+      loom_testbench_reference_numeric_kind_is_float(contract->init) &&
+      loom_testbench_reference_numeric_kind_is_float(contract->accumulator) &&
+      loom_testbench_reference_numeric_kind_is_float(contract->result);
+  if (!floating_contract && !integer_contract && !quantized_float_contract) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "%.*s contract must stay entirely in the floating or integer domain",
+        "%.*s contract must be all-floating, all-integer, or integer inputs "
+        "with floating init/accumulator/result",
         (int)oracle_name.size, oracle_name.data);
   }
   return iree_ok_status();
@@ -846,8 +864,9 @@ static iree_status_t loom_testbench_reference_compute_matmul(
         double floating_accumulator = 0.0;
         int64_t integer_accumulator = 0;
         if (floating_domain) {
-          floating_accumulator = loom_testbench_reference_load_float_element_at(
-              contract->init, init_mapping.contents.data, init_offset);
+          floating_accumulator =
+              loom_testbench_reference_load_numeric_element_as_float_at(
+                  contract->init, init_mapping.contents.data, init_offset);
         } else {
           integer_accumulator =
               loom_testbench_reference_load_integer_element_at(
@@ -867,10 +886,10 @@ static iree_status_t loom_testbench_reference_compute_matmul(
           const iree_host_size_t rhs_offset = k * rhs->columns + column;
           if (floating_domain) {
             const double lhs_value =
-                loom_testbench_reference_load_float_element_at(
+                loom_testbench_reference_load_numeric_element_as_float_at(
                     contract->lhs, lhs_mapping.contents.data, lhs_offset);
             const double rhs_value =
-                loom_testbench_reference_load_float_element_at(
+                loom_testbench_reference_load_numeric_element_as_float_at(
                     contract->rhs, rhs_mapping.contents.data, rhs_offset);
             floating_accumulator += lhs_value * rhs_value;
           } else {
@@ -959,7 +978,7 @@ static iree_status_t loom_testbench_reference_compute_tiled_matmul(
             int64_t integer_accumulator = 0;
             if (floating_domain) {
               floating_accumulator =
-                  loom_testbench_reference_load_float_element_at(
+                  loom_testbench_reference_load_numeric_element_as_float_at(
                       contract->init, init_mapping.contents.data, init_offset);
             } else {
               integer_accumulator =
@@ -987,10 +1006,10 @@ static iree_status_t loom_testbench_reference_compute_tiled_matmul(
                         rhs, outer_k, outer_column, inner_k, inner_column);
                 if (floating_domain) {
                   const double lhs_value =
-                      loom_testbench_reference_load_float_element_at(
+                      loom_testbench_reference_load_numeric_element_as_float_at(
                           contract->lhs, lhs_mapping.contents.data, lhs_offset);
                   const double rhs_value =
-                      loom_testbench_reference_load_float_element_at(
+                      loom_testbench_reference_load_numeric_element_as_float_at(
                           contract->rhs, rhs_mapping.contents.data, rhs_offset);
                   floating_accumulator += lhs_value * rhs_value;
                 } else {

@@ -45,6 +45,7 @@ from loom.target.contracts.emits import (
     DescriptorAccumulatorTree,
     DescriptorEmitForm,
     EmitDescriptorOp,
+    ResultTypeBinding,
 )
 from loom.target.contracts.fragments import (
     ContractFragment,
@@ -142,6 +143,7 @@ __all__ = [
     "DirectTypePatterns",
     "DotDescriptorCase",
     "EmitDescriptorOp",
+    "ResultTypeBinding",
     "Guard",
     "GuardDiagnostic",
     "GuardKind",
