@@ -12,6 +12,107 @@
 #include "loom/target/arch/spirv/features.h"
 #include "loom/target/arch/spirv/target_records.h"
 
+typedef struct loom_spirv_vulkan_hal_feature_row_t {
+  // HAL device-query key under the vulkan.feature category.
+  iree_string_view_t query_key;
+  // Compact fact flag set when the HAL reports the feature as available.
+  loom_spirv_vulkan_hal_profile_flag_bits_t flag;
+  // Additional fact flags required before projecting |feature_bits|.
+  loom_spirv_vulkan_hal_profile_flags_t required_flags;
+  // SPIR-V feature atoms implied by this Vulkan feature.
+  loom_spirv_feature_bits_t feature_bits;
+} loom_spirv_vulkan_hal_feature_row_t;
+
+static const loom_spirv_vulkan_hal_feature_row_t kVulkanFeatureRows[] = {
+    {
+        .query_key = IREE_SVL("buffer_device_address"),
+        .flag = LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_BUFFER_DEVICE_ADDRESS,
+        .feature_bits = 0,
+    },
+    {
+        .query_key = IREE_SVL("subgroup_size_control"),
+        .flag = LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SUBGROUP_SIZE_CONTROL,
+        .feature_bits = 0,
+    },
+    {
+        .query_key = IREE_SVL("cooperative_matrix_khr"),
+        .flag = LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_COOPERATIVE_MATRIX_KHR,
+        .feature_bits = LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR,
+    },
+    {
+        .query_key = IREE_SVL("storage_buffer_8bit_access"),
+        .flag = LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_STORAGE_BUFFER_8BIT_ACCESS,
+        .feature_bits = LOOM_SPIRV_FEATURE_STORAGE_BUFFER_8BIT_ACCESS,
+    },
+    {
+        .query_key = IREE_SVL("storage_buffer_16bit_access"),
+        .flag = LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_STORAGE_BUFFER_16BIT_ACCESS,
+        .feature_bits = LOOM_SPIRV_FEATURE_STORAGE_BUFFER_16BIT_ACCESS,
+    },
+    {
+        .query_key = IREE_SVL("shader_float16"),
+        .flag = LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_FLOAT16,
+        .feature_bits = LOOM_SPIRV_FEATURE_FLOAT16,
+    },
+    {
+        .query_key = IREE_SVL("shader_float64"),
+        .flag = LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_FLOAT64,
+        .feature_bits = LOOM_SPIRV_FEATURE_FLOAT64,
+    },
+    {
+        .query_key = IREE_SVL("shader_bfloat16_type"),
+        .flag = LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_BFLOAT16_TYPE,
+        .feature_bits = LOOM_SPIRV_FEATURE_BFLOAT16_TYPE_KHR,
+    },
+    {
+        .query_key = IREE_SVL("shader_bfloat16_dot_product"),
+        .flag = LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_BFLOAT16_DOT_PRODUCT,
+        .required_flags =
+            LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_BFLOAT16_TYPE,
+        .feature_bits = LOOM_SPIRV_FEATURE_BFLOAT16_DOT_PRODUCT_KHR,
+    },
+    {
+        .query_key = IREE_SVL("shader_bfloat16_cooperative_matrix"),
+        .flag =
+            LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_BFLOAT16_COOPERATIVE_MATRIX,
+        .required_flags =
+            LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_COOPERATIVE_MATRIX_KHR |
+            LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_BFLOAT16_TYPE,
+        .feature_bits = LOOM_SPIRV_FEATURE_BFLOAT16_COOPERATIVE_MATRIX_KHR,
+    },
+    {
+        .query_key = IREE_SVL("shader_int8"),
+        .flag = LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_INT8,
+        .feature_bits = LOOM_SPIRV_FEATURE_INT8,
+    },
+    {
+        .query_key = IREE_SVL("shader_int16"),
+        .flag = LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_INT16,
+        .feature_bits = LOOM_SPIRV_FEATURE_INT16,
+    },
+    {
+        .query_key = IREE_SVL("shader_int64"),
+        .flag = LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_INT64,
+        .feature_bits = LOOM_SPIRV_FEATURE_INT64,
+    },
+    {
+        .query_key = IREE_SVL("shader_integer_dot_product"),
+        .flag = LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_INTEGER_DOT_PRODUCT,
+        .feature_bits = 0,
+    },
+    {
+        .query_key = IREE_SVL("vulkan_memory_model"),
+        .flag = LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_VULKAN_MEMORY_MODEL,
+        .feature_bits = 0,
+    },
+    {
+        .query_key = IREE_SVL("vulkan_memory_model_device_scope"),
+        .flag =
+            LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_VULKAN_MEMORY_MODEL_DEVICE_SCOPE,
+        .feature_bits = 0,
+    },
+};
+
 static iree_status_t loom_spirv_vulkan_hal_profile_query_u32(
     iree_hal_device_t* device, iree_string_view_t category,
     iree_string_view_t key, uint32_t* out_value) {
@@ -30,14 +131,13 @@ static iree_status_t loom_spirv_vulkan_hal_profile_query_u32(
 }
 
 static iree_status_t loom_spirv_vulkan_hal_profile_query_feature_flag(
-    iree_hal_device_t* device, iree_string_view_t key,
-    loom_spirv_vulkan_hal_profile_flag_bits_t flag,
+    iree_hal_device_t* device, const loom_spirv_vulkan_hal_feature_row_t* row,
     loom_spirv_vulkan_hal_profile_facts_t* facts) {
   uint32_t value = 0;
   IREE_RETURN_IF_ERROR(loom_spirv_vulkan_hal_profile_query_u32(
-      device, IREE_SV("vulkan.feature"), key, &value));
+      device, IREE_SV("vulkan.feature"), row->query_key, &value));
   if (value != 0) {
-    facts->flags |= flag;
+    facts->flags |= row->flag;
   }
   return iree_ok_status();
 }
@@ -88,49 +188,10 @@ iree_status_t loom_spirv_vulkan_hal_profile_query(
       IREE_SV("max_compute_workgroup_count_z"),
       &out_facts->max_compute_workgroup_count.z));
 
-  IREE_RETURN_IF_ERROR(loom_spirv_vulkan_hal_profile_query_feature_flag(
-      device, IREE_SV("buffer_device_address"),
-      LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_BUFFER_DEVICE_ADDRESS, out_facts));
-  IREE_RETURN_IF_ERROR(loom_spirv_vulkan_hal_profile_query_feature_flag(
-      device, IREE_SV("subgroup_size_control"),
-      LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SUBGROUP_SIZE_CONTROL, out_facts));
-  IREE_RETURN_IF_ERROR(loom_spirv_vulkan_hal_profile_query_feature_flag(
-      device, IREE_SV("cooperative_matrix_khr"),
-      LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_COOPERATIVE_MATRIX_KHR, out_facts));
-  IREE_RETURN_IF_ERROR(loom_spirv_vulkan_hal_profile_query_feature_flag(
-      device, IREE_SV("storage_buffer_8bit_access"),
-      LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_STORAGE_BUFFER_8BIT_ACCESS,
-      out_facts));
-  IREE_RETURN_IF_ERROR(loom_spirv_vulkan_hal_profile_query_feature_flag(
-      device, IREE_SV("storage_buffer_16bit_access"),
-      LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_STORAGE_BUFFER_16BIT_ACCESS,
-      out_facts));
-  IREE_RETURN_IF_ERROR(loom_spirv_vulkan_hal_profile_query_feature_flag(
-      device, IREE_SV("shader_float16"),
-      LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_FLOAT16, out_facts));
-  IREE_RETURN_IF_ERROR(loom_spirv_vulkan_hal_profile_query_feature_flag(
-      device, IREE_SV("shader_float64"),
-      LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_FLOAT64, out_facts));
-  IREE_RETURN_IF_ERROR(loom_spirv_vulkan_hal_profile_query_feature_flag(
-      device, IREE_SV("shader_int8"),
-      LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_INT8, out_facts));
-  IREE_RETURN_IF_ERROR(loom_spirv_vulkan_hal_profile_query_feature_flag(
-      device, IREE_SV("shader_int16"),
-      LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_INT16, out_facts));
-  IREE_RETURN_IF_ERROR(loom_spirv_vulkan_hal_profile_query_feature_flag(
-      device, IREE_SV("shader_int64"),
-      LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_INT64, out_facts));
-  IREE_RETURN_IF_ERROR(loom_spirv_vulkan_hal_profile_query_feature_flag(
-      device, IREE_SV("shader_integer_dot_product"),
-      LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_INTEGER_DOT_PRODUCT,
-      out_facts));
-  IREE_RETURN_IF_ERROR(loom_spirv_vulkan_hal_profile_query_feature_flag(
-      device, IREE_SV("vulkan_memory_model"),
-      LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_VULKAN_MEMORY_MODEL, out_facts));
-  IREE_RETURN_IF_ERROR(loom_spirv_vulkan_hal_profile_query_feature_flag(
-      device, IREE_SV("vulkan_memory_model_device_scope"),
-      LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_VULKAN_MEMORY_MODEL_DEVICE_SCOPE,
-      out_facts));
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kVulkanFeatureRows); ++i) {
+    IREE_RETURN_IF_ERROR(loom_spirv_vulkan_hal_profile_query_feature_flag(
+        device, &kVulkanFeatureRows[i], out_facts));
+  }
 
   if (iree_any_bit_set(
           out_facts->flags,
@@ -195,36 +256,12 @@ static loom_spirv_feature_bits_t loom_spirv_vulkan_hal_profile_feature_bits(
     const loom_spirv_vulkan_hal_profile_facts_t* facts) {
   loom_spirv_feature_bits_t feature_bits =
       LOOM_SPIRV_FEATURE_PROFILE_VULKAN_1_3_BDA;
-  if (iree_any_bit_set(
-          facts->flags,
-          LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_COOPERATIVE_MATRIX_KHR)) {
-    feature_bits |= LOOM_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR;
-  }
-  if (iree_any_bit_set(facts->flags,
-                       LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_FLOAT16)) {
-    feature_bits |= LOOM_SPIRV_FEATURE_FLOAT16;
-  }
-  if (iree_any_bit_set(facts->flags,
-                       LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_FLOAT64)) {
-    feature_bits |= LOOM_SPIRV_FEATURE_FLOAT64;
-  }
-  if (iree_any_bit_set(facts->flags,
-                       LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_INT8)) {
-    feature_bits |= LOOM_SPIRV_FEATURE_INT8;
-  }
-  if (iree_any_bit_set(facts->flags,
-                       LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_INT16)) {
-    feature_bits |= LOOM_SPIRV_FEATURE_INT16;
-  }
-  if (iree_any_bit_set(
-          facts->flags,
-          LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_STORAGE_BUFFER_8BIT_ACCESS)) {
-    feature_bits |= LOOM_SPIRV_FEATURE_STORAGE_BUFFER_8BIT_ACCESS;
-  }
-  if (iree_any_bit_set(
-          facts->flags,
-          LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_STORAGE_BUFFER_16BIT_ACCESS)) {
-    feature_bits |= LOOM_SPIRV_FEATURE_STORAGE_BUFFER_16BIT_ACCESS;
+  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(kVulkanFeatureRows); ++i) {
+    const loom_spirv_vulkan_hal_feature_row_t* row = &kVulkanFeatureRows[i];
+    if (iree_any_bit_set(facts->flags, row->flag) &&
+        iree_all_bits_set(facts->flags, row->required_flags)) {
+      feature_bits |= row->feature_bits;
+    }
   }
   return feature_bits;
 }
@@ -404,6 +441,10 @@ iree_status_t loom_spirv_vulkan_hal_profile_initialize_target_bundle(
   IREE_RETURN_IF_ERROR(loom_spirv_vulkan_hal_profile_require_flag(
       facts, LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_BUFFER_DEVICE_ADDRESS,
       IREE_SV("Vulkan device does not expose buffer device addresses")));
+  IREE_RETURN_IF_ERROR(loom_spirv_vulkan_hal_profile_require_flag(
+      facts, LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_INT64,
+      IREE_SV("Vulkan device does not expose shaderInt64 required by raw BDA "
+              "SPIR-V")));
 
   *out_storage = (loom_target_bundle_storage_t){
       .snapshot = *loom_spirv_low_target_bundle_vulkan1_3.snapshot,

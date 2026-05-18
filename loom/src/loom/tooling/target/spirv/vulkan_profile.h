@@ -63,6 +63,13 @@ typedef enum loom_spirv_vulkan_hal_profile_flag_bits_e {
                                                                         << 12,
   // The logical device exposes storageBuffer16BitAccess.
   LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_STORAGE_BUFFER_16BIT_ACCESS = 1u << 13,
+  // The logical device exposes shaderBFloat16Type.
+  LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_BFLOAT16_TYPE = 1u << 14,
+  // The logical device exposes shaderBFloat16DotProduct.
+  LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_BFLOAT16_DOT_PRODUCT = 1u << 15,
+  // The logical device exposes shaderBFloat16CooperativeMatrix.
+  LOOM_SPIRV_VULKAN_HAL_PROFILE_FLAG_SHADER_BFLOAT16_COOPERATIVE_MATRIX = 1u
+                                                                          << 16,
 } loom_spirv_vulkan_hal_profile_flag_bits_t;
 
 typedef uint32_t loom_spirv_vulkan_hal_profile_flags_t;
