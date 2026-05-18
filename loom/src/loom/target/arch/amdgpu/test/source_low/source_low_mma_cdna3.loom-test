@@ -189,6 +189,85 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @f32_mfma_fragment_memor
 
 amdgpu.target<gfx942> @target
 
+kernel.def target(@target) @f32_fragment_memory_dynamic_lds_base(%input_buffer: buffer, %out_buffer: buffer) {
+  %unit = index.constant 1 : index
+  %threads = index.constant 256 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%threads, %unit, %unit) : index
+} launch {
+  %base = index.constant 0 : offset
+  %sixty_four = index.constant 64 : index
+  %wave_stride_bytes = index.constant 1024 : index
+  %scratch_bytes = index.constant 4096 : offset
+  %m = index.constant 16 : index
+  %n = index.constant 16 : index
+  %tid0 = kernel.workitem.id<x> : index
+  %tid = index.assume %tid0 [range(%tid0, 0, 255)] : index
+  %wave0 = index.div %tid, %sixty_four : index
+  %wave = index.assume %wave0 [range(%wave0, 0, 3)] : index
+  %wave_offset_index = index.mul %wave, %wave_stride_bytes : index
+  %wave_offset = index.cast %wave_offset_index : index to offset
+  %input_view = buffer.view %input_buffer[%base] : buffer -> view<16x16xf32, #dense>
+  %out_view = buffer.view %out_buffer[%base] : buffer -> view<16x16xf32, #dense>
+  %scratch = buffer.alloca %scratch_bytes {base_alignment = 16, memory_space = workgroup} : buffer
+  %scratch_view = buffer.view %scratch[%wave_offset] : buffer -> view<16x16xf32, #dense>
+  %input_fragment = vector.fragment.load<init> %input_view[0, 0] shape [%m, %n] : view<16x16xf32, #dense> -> vector<4xf32>
+  vector.fragment.store<result> %input_fragment, %scratch_view[0, 0] shape [%m, %n] : vector<4xf32>, view<16x16xf32, #dense>
+  kernel.barrier<workgroup> {ordering = acq_rel, scope = workgroup}
+  %scratch_fragment = vector.fragment.load<init> %scratch_view[0, 0] shape [%m, %n] : view<16x16xf32, #dense> -> vector<4xf32>
+  vector.fragment.store<result> %scratch_fragment, %out_view[0, 0] shape [%m, %n] : vector<4xf32>, view<16x16xf32, #dense>
+  kernel.return
+}
+
+// ----
+low.kernel.def target(@target) workgroup_size(256, 1, 1) @f32_fragment_memory_dynamic_lds_base() asm<amdgpu.cdna3.core> {
+  %tid = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
+  %input_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %out_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %wave = v_lshrrev_b32_lit %tid, 6
+  %wave_offset = v_lshlrev_b32_lit %wave, 10
+  %35 = storage {byte_alignment = 16, byte_length = 4096} : low.storage<workgroup>
+  %37 = v_and_b32_src0_inline %tid, 63
+  %38 = v_and_b32_src0_inline %37, 15
+  %39 = v_lshrrev_b32_src0_inline %37, 4
+  %40 = v_lshlrev_b32_src0_inline %39, 8
+  %41 = v_lshlrev_b32_src0_inline %38, 2
+  %42 = v_add_u32 %40, %41
+  %43 = s_mov_b32_m0_imm 0
+  %44 = global_load_dword_saddr %42, %input_view, %43
+  %49 = global_load_dword_saddr %42, %input_view, %43 {offset = 64}
+  %54 = global_load_dword_saddr %42, %input_view, %43 {offset = 128}
+  %59 = global_load_dword_saddr %42, %input_view, %43 {offset = 192}
+  %66 = v_add_u32 %wave_offset, %40
+  %68 = v_add_u32 %66, %41
+  ds_write_b32 %68, %44
+  ds_write_b32 %68, %49 {offset = 64}
+  ds_write_b32 %68, %54 {offset = 128}
+  ds_write_b32 %68, %59 {offset = 192}
+  s_barrier
+  %84 = v_and_b32_src0_inline %tid, 63
+  %85 = v_and_b32_src0_inline %84, 15
+  %86 = v_lshrrev_b32_src0_inline %84, 4
+  %87 = v_lshlrev_b32_src0_inline %86, 8
+  %88 = v_add_u32 %wave_offset, %87
+  %89 = v_lshlrev_b32_src0_inline %85, 2
+  %90 = v_add_u32 %88, %89
+  %91 = ds_read_b32 %90
+  %96 = ds_read_b32 %90 {offset = 64}
+  %101 = ds_read_b32 %90 {offset = 128}
+  %106 = ds_read_b32 %90 {offset = 192}
+  %114 = v_add_u32 %87, %89
+  %115 = s_mov_b32_m0_imm 0
+  global_store_dword_saddr %114, %91, %out_view, %115
+  global_store_dword_saddr %114, %96, %out_view, %115 {offset = 64}
+  global_store_dword_saddr %114, %101, %out_view, %115 {offset = 128}
+  global_store_dword_saddr %114, %106, %out_view, %115 {offset = 192}
+  return
+}
+
+// ====
+
+amdgpu.target<gfx942> @target
+
 kernel.def target(@target) @f16_mfma_fragment_memory(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer) {
   %unit = index.constant 1 : index
   %threads = index.constant 64 : index

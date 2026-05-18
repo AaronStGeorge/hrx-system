@@ -11,10 +11,12 @@
 #include "loom/ir/attribute.h"
 #include "loom/ir/scalar_type.h"
 #include "loom/ir/types.h"
+#include "loom/ops/buffer/ops.h"
 #include "loom/ops/kernel/ops.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/vector/memory.h"
 #include "loom/ops/vector/ops.h"
+#include "loom/ops/view/ops.h"
 #include "loom/target/arch/amdgpu/lower/constants.h"
 #include "loom/target/arch/amdgpu/lower/emit.h"
 #include "loom/target/arch/amdgpu/lower/legality.h"
@@ -458,6 +460,32 @@ static bool loom_amdgpu_fragment_memory_fill_origins(
   return dynamic_ordinal == dynamic_indices.count;
 }
 
+static bool loom_amdgpu_fragment_memory_view_base_value(
+    const loom_module_t* module, loom_value_id_t view_value_id,
+    loom_value_id_t* out_byte_offset) {
+  *out_byte_offset = LOOM_VALUE_ID_INVALID;
+  while (view_value_id < module->values.count) {
+    const loom_value_t* view_value = loom_module_value(module, view_value_id);
+    if (loom_value_is_block_arg(view_value)) {
+      return false;
+    }
+    const loom_op_t* defining_op = loom_value_def_op(view_value);
+    if (defining_op == NULL) {
+      return false;
+    }
+    if (loom_view_refine_isa(defining_op)) {
+      view_value_id = loom_view_refine_source(defining_op);
+      continue;
+    }
+    if (loom_buffer_view_isa(defining_op)) {
+      *out_byte_offset = loom_buffer_view_byte_offset(defining_op);
+      return true;
+    }
+    return false;
+  }
+  return false;
+}
+
 static bool loom_amdgpu_fragment_memory_descriptor_ref(
     loom_amdgpu_memory_operation_kind_t operation_kind,
     loom_value_fact_memory_space_t memory_space, uint16_t packet_register_count,
@@ -668,10 +696,14 @@ static bool loom_amdgpu_fragment_memory_analyze(
         diagnostic, IREE_SV("fragment_memory.view_reference"));
   }
   int64_t base_byte_offset = 0;
+  loom_value_id_t dynamic_base_byte_offset = LOOM_VALUE_ID_INVALID;
   if (!loom_amdgpu_value_facts_as_exact_non_negative_i64(
           view_reference.base_byte_offset, &base_byte_offset)) {
-    return loom_amdgpu_fragment_memory_reject(
-        diagnostic, IREE_SV("fragment_memory.base_offset"));
+    if (!loom_amdgpu_fragment_memory_view_base_value(
+            environment->module, source->view, &dynamic_base_byte_offset)) {
+      return loom_amdgpu_fragment_memory_reject(
+          diagnostic, IREE_SV("fragment_memory.base_offset"));
+    }
   }
   if (view_reference.memory_space == LOOM_VALUE_FACT_MEMORY_SPACE_WORKGROUP) {
     uint64_t root_byte_offset = 0;
@@ -721,6 +753,7 @@ static bool loom_amdgpu_fragment_memory_analyze(
         .root_value_id = view_reference.root_value_id,
         .alias_scope_id = view_reference.alias_scope_id,
         .base_byte_offset = (uint64_t)base_byte_offset,
+        .dynamic_base_byte_offset = dynamic_base_byte_offset,
         .view_rank = access.view_rank,
         .register_count = role_layout->register_count,
         .elements_per_register = role_layout->elements_per_register,
@@ -897,6 +930,26 @@ static iree_status_t loom_amdgpu_emit_fragment_memory_add_address_term(
   inout_accumulator->register_kind =
       LOOM_AMDGPU_FRAGMENT_MEMORY_ADDRESS_REGISTER_VGPR;
   return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_emit_fragment_memory_dynamic_base_term(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    const loom_amdgpu_fragment_memory_plan_t* plan, loom_type_t sgpr_type,
+    loom_type_t vgpr_type,
+    loom_amdgpu_fragment_memory_address_accumulator_t* inout_accumulator) {
+  if (plan->dynamic_base_byte_offset == LOOM_VALUE_ID_INVALID) {
+    return iree_ok_status();
+  }
+  loom_value_id_t low_base_offset = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_low_lower_lookup_value(
+      context, plan->dynamic_base_byte_offset, &low_base_offset));
+  loom_amdgpu_fragment_memory_address_register_kind_t register_kind =
+      LOOM_AMDGPU_FRAGMENT_MEMORY_ADDRESS_REGISTER_NONE;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_fragment_memory_low_register_kind(
+      context, low_base_offset, &register_kind));
+  return loom_amdgpu_emit_fragment_memory_add_address_term(
+      context, source_op, low_base_offset, register_kind, sgpr_type, vgpr_type,
+      inout_accumulator);
 }
 
 static iree_status_t loom_amdgpu_emit_fragment_memory_dynamic_origin_terms(
@@ -1245,6 +1298,8 @@ static iree_status_t loom_amdgpu_emit_fragment_memory_vaddr(
       .value = LOOM_VALUE_ID_INVALID,
       .register_kind = LOOM_AMDGPU_FRAGMENT_MEMORY_ADDRESS_REGISTER_NONE,
   };
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fragment_memory_dynamic_base_term(
+      context, source_op, plan, sgpr_type, vgpr_type, &accumulator));
   IREE_RETURN_IF_ERROR(loom_amdgpu_emit_fragment_memory_dynamic_origin_terms(
       context, source_op, plan, sgpr_type, vgpr_type, &accumulator));
 

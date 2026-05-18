@@ -697,6 +697,8 @@ typedef struct loom_amdgpu_fragment_memory_plan_t {
   loom_value_fact_alias_scope_id_t alias_scope_id;
   // Static view base byte offset relative to root_value_id.
   uint64_t base_byte_offset;
+  // Dynamic view base byte offset relative to root_value_id, or invalid.
+  loom_value_id_t dynamic_base_byte_offset;
   // Per-axis origin indices from source IR.
   loom_amdgpu_fragment_origin_plan_t
       origins[LOOM_ENCODING_ADDRESS_LAYOUT_MAX_RANK];
