@@ -47,6 +47,7 @@ loom_assert_no_dependencies(
         ":move_sequence",
         ":packet",
         ":packet_hazard_plan",
+        ":packet_hazard_plan_json",
         ":packet_progress",
         ":packet_asm",
         ":packet_json",
@@ -75,6 +76,7 @@ loom_assert_no_dependencies(
         ":move_sequence",
         ":packet",
         ":packet_hazard_plan",
+        ":packet_hazard_plan_json",
         ":packet_progress",
         ":packet_asm",
         ":packet_json",
@@ -444,6 +446,22 @@ loom_cc_library(
         "//loom/src/loom/codegen/low/schedule",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "packet_hazard_plan_json",
+    srcs = ["packet_hazard_plan_json.c"],
+    hdrs = ["packet_hazard_plan_json.h"],
+    deps = [
+        ":function",
+        ":packet_hazard_plan",
+        ":packet_progress",
+        "//loom/src/loom/codegen/low/schedule",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/util:json",
+        "//loom/src/loom/util:stream",
+        "//runtime/src/iree/base",
     ],
 )
 

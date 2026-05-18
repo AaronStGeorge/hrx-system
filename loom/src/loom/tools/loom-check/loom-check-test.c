@@ -12,11 +12,11 @@
 // target packages by accident. Test-only emit providers in this file exercise
 // common target-independent contracts using only that linked test target stack.
 
-#include <inttypes.h>
-
 #include "iree/base/api.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/packet_hazard_plan.h"
+#include "loom/codegen/low/packet_hazard_plan_json.h"
+#include "loom/codegen/low/packet_progress.h"
 #include "loom/ir/ir.h"
 #include "loom/ops/test/registry.h"
 #include "loom/pass/test/registry.h"
@@ -26,8 +26,6 @@
 #include "loom/tools/loom-check/execute.h"
 #include "loom/tools/loom-check/low_emit.h"
 #include "loom/tools/loom-check/main.h"
-#include "loom/util/json.h"
-#include "loom/util/stream.h"
 
 enum {
   LOOM_CHECK_TEST_SYNTHETIC_HAZARD_REASON_PHYSICAL_OVERLAP = 1,
@@ -79,7 +77,7 @@ static bool loom_check_test_synthetic_hazard_matches(
     iree_string_view_t target_name) {
   (void)provider;
   return iree_string_view_equal(target_name,
-                                IREE_SV("synthetic-hazard-plan-json"));
+                                IREE_SV("low-packet-hazard-plan-json"));
 }
 
 static iree_status_t loom_check_test_synthetic_hazard_parse_named_option(
@@ -279,120 +277,24 @@ static iree_status_t loom_check_test_synthetic_hazard_query(
   return emit(emit_user_data, &event);
 }
 
-static iree_string_view_t loom_check_test_synthetic_hazard_record_kind_name(
-    loom_low_packet_hazard_plan_record_kind_t kind) {
-  switch (kind) {
-    case LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION:
-      return IREE_SV("action");
-    case LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_MISSING_TARGET_DATA:
-      return IREE_SV("missing_target_data");
-    case LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_UNSUPPORTED_PRE_ALLOCATION:
-      return IREE_SV("unsupported_pre_allocation");
-    case LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_IMPOSSIBLE_SATISFACTION:
-      return IREE_SV("impossible_satisfaction");
-    default:
-      return IREE_SV("unknown");
+static iree_status_t loom_check_test_synthetic_hazard_progress_query(
+    void* user_data, const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_packet_view_t* packet,
+    loom_low_packet_progress_emit_fn_t emit, void* emit_user_data) {
+  (void)user_data;
+  (void)schedule;
+  (void)allocation;
+  if (packet->descriptor == NULL) {
+    return iree_ok_status();
   }
-}
-
-static iree_status_t loom_check_test_synthetic_hazard_write_nullable_host_size(
-    iree_host_size_t value, iree_host_size_t sentinel,
-    loom_output_stream_t* stream) {
-  if (value == sentinel) {
-    return loom_output_stream_write_cstring(stream, "null");
-  }
-  return loom_output_stream_write_format(stream, "%zu", value);
-}
-
-static iree_status_t loom_check_test_synthetic_hazard_write_nullable_u32(
-    uint32_t value, uint32_t sentinel, loom_output_stream_t* stream) {
-  if (value == sentinel) {
-    return loom_output_stream_write_cstring(stream, "null");
-  }
-  return loom_output_stream_write_format(stream, "%" PRIu32, value);
-}
-
-static iree_status_t loom_check_test_synthetic_hazard_write_record(
-    const loom_low_packet_hazard_plan_record_t* record,
-    iree_host_size_t record_index, loom_output_stream_t* stream) {
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, "{\"index\":%zu,\"kind\":", record_index));
-  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      stream, loom_check_test_synthetic_hazard_record_kind_name(record->kind)));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"reason\":{\"id\":%" PRIu16 ",\"name\":", record->reason_id));
-  IREE_RETURN_IF_ERROR(
-      loom_json_write_escaped_string(stream, record->reason_name));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, "},\"producer\":"));
-  if (record->producer_node_index == LOOM_LOW_SCHEDULE_NODE_NONE) {
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "null"));
-  } else {
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream,
-        "{\"node\":%" PRIu32 ",\"packet\":", record->producer_node_index));
-    IREE_RETURN_IF_ERROR(
-        loom_check_test_synthetic_hazard_write_nullable_host_size(
-            record->producer_packet_index,
-            LOOM_LOW_PACKET_HAZARD_PLAN_PACKET_NONE, stream));
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, ",\"scheduled_ordinal\":"));
-    IREE_RETURN_IF_ERROR(loom_check_test_synthetic_hazard_write_nullable_u32(
-        record->producer_scheduled_ordinal,
-        LOOM_LOW_PACKET_HAZARD_PLAN_ORDINAL_NONE, stream));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '}'));
-  }
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream,
-      ",\"consumer\":{\"node\":%" PRIu32 ",\"packet\":%zu,\"block\":%" PRIu32
-      ",\"scheduled_ordinal\":%" PRIu32 "},\"progress\":",
-      record->consumer_node_index, record->insertion_packet_index,
-      record->block_index, record->scheduled_ordinal));
-  if (record->progress_class_id == LOOM_LOW_PACKET_PROGRESS_CLASS_NONE) {
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "null"));
-  } else {
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream, "{\"class_id\":%" PRIu16 ",\"class_name\":",
-        record->progress_class_id));
-    IREE_RETURN_IF_ERROR(
-        loom_json_write_escaped_string(stream, record->progress_class_name));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream,
-        ",\"required\":%" PRIu32 ",\"observed\":%" PRIu32
-        ",\"residual\":%" PRIu32 "}",
-        record->required_progress, record->observed_progress,
-        record->residual_progress));
-  }
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, ",\"target_detail\":"));
-  if (iree_string_view_is_empty(record->target_detail)) {
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "null"));
-  } else {
-    IREE_RETURN_IF_ERROR(
-        loom_json_write_escaped_string(stream, record->target_detail));
-  }
-  return loom_output_stream_write_char(stream, '}');
-}
-
-static iree_status_t loom_check_test_synthetic_hazard_format_json(
-    const loom_low_packet_hazard_plan_t* plan, iree_string_view_t function_name,
-    iree_string_builder_t* builder) {
-  loom_output_stream_t stream;
-  loom_output_stream_for_builder(builder, &stream);
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
-      &stream,
-      "{\"format\":\"loom.low.synthetic_hazard_plan.v0\",\"function\":"));
-  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(&stream, function_name));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      &stream, ",\"record_count\":%zu,\"records\":[", plan->record_count));
-  for (iree_host_size_t i = 0; i < plan->record_count; ++i) {
-    if (i > 0) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(&stream, ','));
-    }
-    IREE_RETURN_IF_ERROR(loom_check_test_synthetic_hazard_write_record(
-        &plan->records[i], i, &stream));
-  }
-  return loom_output_stream_write_cstring(&stream, "]}");
+  const loom_low_packet_progress_event_t event = {
+      .progress_class_id = LOOM_CHECK_TEST_SYNTHETIC_PROGRESS_CLASS_ISSUE,
+      .progress_class_name = IREE_SV("synthetic.issue"),
+      .action = LOOM_LOW_PACKET_PROGRESS_ACTION_ADVANCE,
+      .units = 1,
+  };
+  return emit(emit_user_data, &event);
 }
 
 static iree_status_t loom_check_test_synthetic_hazard_execute(
@@ -424,18 +326,27 @@ static iree_status_t loom_check_test_synthetic_hazard_execute(
   loom_low_allocation_value_scratch_t scratch = {0};
   IREE_RETURN_IF_ERROR(
       loom_low_allocation_acquire_value_scratch(&frame.allocation, &scratch));
+  const loom_low_packet_progress_provider_t progress_provider = {
+      .query = loom_check_test_synthetic_hazard_progress_query,
+  };
+  loom_low_packet_progress_table_t progress = {0};
   const loom_low_packet_hazard_plan_provider_t hazard_provider = {
       .user_data = &context,
       .query = loom_check_test_synthetic_hazard_query,
   };
   loom_low_packet_hazard_plan_t plan = {0};
-  iree_status_t status = loom_low_packet_hazard_plan_build(
-      &frame.schedule, &frame.allocation, /*progress=*/NULL, &hazard_provider,
-      request->case_arena, &plan);
+  iree_status_t status = loom_low_packet_progress_build(
+      &frame.schedule, &frame.allocation, &progress_provider,
+      request->case_arena, &progress);
+  if (iree_status_is_ok(status)) {
+    status = loom_low_packet_hazard_plan_build(
+        &frame.schedule, &frame.allocation, &progress, &hazard_provider,
+        request->case_arena, &plan);
+  }
   loom_low_allocation_release_value_scratch(&scratch);
   IREE_RETURN_IF_ERROR(status);
-  return loom_check_test_synthetic_hazard_format_json(
-      &plan, options.function_symbol_name, &request->result->actual_output);
+  return loom_low_packet_hazard_plan_format_json(
+      &plan, &request->result->actual_output);
 }
 
 static iree_status_t loom_check_test_synthetic_hazard_append_names(
@@ -443,7 +354,7 @@ static iree_status_t loom_check_test_synthetic_hazard_append_names(
     iree_string_builder_t* builder) {
   (void)provider;
   return iree_string_builder_append_cstring(builder,
-                                            "synthetic-hazard-plan-json");
+                                            "low-packet-hazard-plan-json");
 }
 
 static const loom_check_emit_provider_t kLoomCheckTestSyntheticHazardProvider =

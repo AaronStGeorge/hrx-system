@@ -688,6 +688,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::move_sequence
     loom::src::loom::codegen::low::packet
     loom::src::loom::codegen::low::packet_hazard_plan
+    loom::src::loom::codegen::low::packet_hazard_plan_json
     loom::src::loom::codegen::low::packet_progress
     loom::src::loom::codegen::low::schedule
     loom::src::loom::ir

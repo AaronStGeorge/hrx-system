@@ -11,6 +11,7 @@
 
 #include "loom/codegen/low/move_sequence.h"
 #include "loom/codegen/low/packet.h"
+#include "loom/codegen/low/packet_hazard_plan_json.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/descriptor_semantics.h"
@@ -1070,36 +1071,6 @@ iree_status_t loom_amdgpu_wait_state_plan_build(
   return status;
 }
 
-static iree_string_view_t loom_amdgpu_wait_state_progress_action_name(
-    loom_low_packet_progress_action_t action) {
-  switch (action) {
-    case LOOM_LOW_PACKET_PROGRESS_ACTION_ADVANCE:
-      return IREE_SV("advance");
-    case LOOM_LOW_PACKET_PROGRESS_ACTION_RESET:
-      return IREE_SV("reset");
-    case LOOM_LOW_PACKET_PROGRESS_ACTION_UNKNOWN:
-    default:
-      return IREE_SV("unknown");
-  }
-}
-
-static iree_string_view_t loom_amdgpu_wait_state_hazard_kind_name(
-    loom_low_packet_hazard_plan_record_kind_t kind) {
-  switch (kind) {
-    case LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION:
-      return IREE_SV("action");
-    case LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_MISSING_TARGET_DATA:
-      return IREE_SV("missing_target_data");
-    case LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_UNSUPPORTED_PRE_ALLOCATION:
-      return IREE_SV("unsupported_pre_allocation");
-    case LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_IMPOSSIBLE_SATISFACTION:
-      return IREE_SV("impossible_satisfaction");
-    case LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_UNKNOWN:
-    default:
-      return IREE_SV("unknown");
-  }
-}
-
 static iree_status_t loom_amdgpu_wait_state_write_states_json(
     const loom_amdgpu_wait_state_plan_t* plan, loom_output_stream_t* stream) {
   IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '['));
@@ -1126,77 +1097,6 @@ static iree_status_t loom_amdgpu_wait_state_write_states_json(
   return loom_output_stream_write_char(stream, ']');
 }
 
-static iree_status_t loom_amdgpu_wait_state_write_progress_json(
-    const loom_low_packet_progress_table_t* progress,
-    loom_output_stream_t* stream) {
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '['));
-  for (iree_host_size_t i = 0; i < progress->record_count; ++i) {
-    if (i > 0) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ','));
-    }
-    const loom_low_packet_progress_record_t* record = &progress->records[i];
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream,
-        "{\"index\":%zu,\"packet\":%zu,\"node\":%" PRIu32 ",\"block\":%" PRIu32
-        ",\"scheduled_ordinal\":%" PRIu32 ",\"class_id\":%" PRIu16
-        ",\"class_name\":",
-        i, record->packet_index, record->node_index, record->block_index,
-        record->scheduled_ordinal, record->progress_class_id));
-    IREE_RETURN_IF_ERROR(
-        loom_json_write_escaped_string(stream, record->progress_class_name));
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, ",\"action\":"));
-    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-        stream, loom_amdgpu_wait_state_progress_action_name(record->action)));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream, ",\"units\":%" PRIu32 "}", record->units));
-  }
-  return loom_output_stream_write_char(stream, ']');
-}
-
-static iree_status_t loom_amdgpu_wait_state_write_hazards_json(
-    const loom_low_packet_hazard_plan_t* hazard_plan,
-    loom_output_stream_t* stream) {
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '['));
-  for (iree_host_size_t i = 0; i < hazard_plan->record_count; ++i) {
-    if (i > 0) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, ','));
-    }
-    const loom_low_packet_hazard_plan_record_t* record =
-        &hazard_plan->records[i];
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_format(stream, "{\"index\":%zu,\"kind\":", i));
-    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-        stream, loom_amdgpu_wait_state_hazard_kind_name(record->kind)));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream,
-        ",\"reason_id\":%" PRIu16 ",\"reason_name\":", record->reason_id));
-    IREE_RETURN_IF_ERROR(
-        loom_json_write_escaped_string(stream, record->reason_name));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream,
-        ",\"producer_node\":%" PRIu32
-        ",\"producer_packet\":%zu"
-        ",\"producer_scheduled_ordinal\":%" PRIu32 ",\"consumer_node\":%" PRIu32
-        ",\"insertion_packet\":%zu"
-        ",\"block\":%" PRIu32 ",\"scheduled_ordinal\":%" PRIu32
-        ",\"progress_class_id\":%" PRIu16 ",\"progress_class_name\":",
-        record->producer_node_index, record->producer_packet_index,
-        record->producer_scheduled_ordinal, record->consumer_node_index,
-        record->insertion_packet_index, record->block_index,
-        record->scheduled_ordinal, record->progress_class_id));
-    IREE_RETURN_IF_ERROR(
-        loom_json_write_escaped_string(stream, record->progress_class_name));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream,
-        ",\"required\":%" PRIu32 ",\"observed\":%" PRIu32
-        ",\"residual\":%" PRIu32 "}",
-        record->required_progress, record->observed_progress,
-        record->residual_progress));
-  }
-  return loom_output_stream_write_char(stream, ']');
-}
-
 iree_status_t loom_amdgpu_wait_state_plan_format_json(
     const loom_amdgpu_wait_state_plan_t* plan, iree_string_builder_t* builder) {
   if (plan == NULL || builder == NULL) {
@@ -1215,11 +1115,11 @@ iree_status_t loom_amdgpu_wait_state_plan_format_json(
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"progress\":"));
   IREE_RETURN_IF_ERROR(
-      loom_amdgpu_wait_state_write_progress_json(&plan->progress, &stream));
+      loom_low_packet_progress_write_json_array(&plan->progress, &stream));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"hazards\":"));
-  IREE_RETURN_IF_ERROR(
-      loom_amdgpu_wait_state_write_hazards_json(&plan->hazard_plan, &stream));
+  IREE_RETURN_IF_ERROR(loom_low_packet_hazard_plan_write_json_array(
+      &plan->hazard_plan, &stream));
   return loom_output_stream_write_char(&stream, '}');
 }
 

@@ -434,6 +434,25 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    packet_hazard_plan_json
+  HDRS
+    "packet_hazard_plan_json.h"
+  SRCS
+    "packet_hazard_plan_json.c"
+  DEPS
+    ::function
+    ::packet_hazard_plan
+    ::packet_progress
+    iree::base
+    loom::src::loom::codegen::low::schedule
+    loom::src::loom::ir
+    loom::src::loom::util::json
+    loom::src::loom::util::stream
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     addressability
   HDRS
     "addressability.h"
