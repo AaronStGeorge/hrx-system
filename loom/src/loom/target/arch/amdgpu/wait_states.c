@@ -326,6 +326,13 @@ static bool loom_amdgpu_wait_state_descriptor_uses_vector_alu(
       builder->schedule->target.descriptor_set, descriptor);
 }
 
+static bool loom_amdgpu_wait_state_descriptor_uses_vector_memory(
+    const loom_amdgpu_wait_state_builder_t* builder,
+    const loom_low_descriptor_t* descriptor) {
+  return loom_amdgpu_descriptor_uses_vector_memory(
+      builder->schedule->target.descriptor_set, descriptor);
+}
+
 static bool loom_amdgpu_wait_state_processor_has_trans_forwarding_hazard(
     const loom_amdgpu_processor_info_t* processor) {
   if (processor == NULL) {
@@ -834,12 +841,22 @@ static iree_status_t loom_amdgpu_wait_state_apply_packet(
       packet->descriptor != NULL &&
       loom_amdgpu_wait_state_descriptor_is_trans_forwarding_consumer(
           builder, packet->descriptor);
-  const bool valu_sgpr_read_hazard =
+  const bool descriptor_uses_vector_alu =
       packet->descriptor != NULL &&
-      loom_amdgpu_wait_state_processor_has_valu_sgpr_read_hazard(
-          builder->processor) &&
       loom_amdgpu_wait_state_descriptor_uses_vector_alu(builder,
                                                         packet->descriptor);
+  const bool descriptor_uses_vector_memory =
+      packet->descriptor != NULL &&
+      loom_amdgpu_wait_state_descriptor_uses_vector_memory(builder,
+                                                           packet->descriptor);
+  const bool processor_has_valu_sgpr_read_hazard =
+      loom_amdgpu_wait_state_processor_has_valu_sgpr_read_hazard(
+          builder->processor);
+  const bool valu_sgpr_read_consumer =
+      packet->descriptor != NULL && processor_has_valu_sgpr_read_hazard &&
+      (descriptor_uses_vector_alu || descriptor_uses_vector_memory);
+  const bool valu_sgpr_read_producer =
+      processor_has_valu_sgpr_read_hazard && descriptor_uses_vector_alu;
 
   loom_amdgpu_wait_state_match_t match = {0};
   if (matrix_reads_valu) {
@@ -854,7 +871,7 @@ static iree_status_t loom_amdgpu_wait_state_apply_packet(
     }
     loom_amdgpu_wait_state_match_descriptor_operands(builder, packet,
                                                      allowed_reasons, &match);
-    if (valu_sgpr_read_hazard) {
+    if (valu_sgpr_read_consumer) {
       loom_amdgpu_wait_state_match_descriptor_sgpr_operands(
           builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_VALU_SGPR_READ,
           &match);
@@ -876,9 +893,7 @@ static iree_status_t loom_amdgpu_wait_state_apply_packet(
     loom_amdgpu_wait_state_record_results(
         builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_MATRIX_RESULT_USE,
         matrix_wait_cycles, instruction_count);
-  } else if (packet->descriptor != NULL &&
-             loom_amdgpu_wait_state_descriptor_uses_vector_alu(
-                 builder, packet->descriptor)) {
+  } else if (descriptor_uses_vector_alu) {
     loom_amdgpu_wait_state_clear_results(builder, packet->node->op);
     loom_amdgpu_wait_state_record_results(
         builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_VALU_TO_MATRIX_USE,
@@ -888,7 +903,7 @@ static iree_status_t loom_amdgpu_wait_state_apply_packet(
           builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_TRANS_RESULT_USE,
           LOOM_AMDGPU_WAIT_STATE_TRANS_RESULT_USE_CYCLES, instruction_count);
     }
-    if (valu_sgpr_read_hazard) {
+    if (valu_sgpr_read_producer) {
       loom_amdgpu_wait_state_record_sgpr_results(
           builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_VALU_SGPR_READ,
           LOOM_AMDGPU_WAIT_STATE_VALU_SGPR_READ_CYCLES, instruction_count);

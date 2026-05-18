@@ -7,10 +7,8 @@
 // Shared AMDGPU descriptor semantic predicates.
 //
 // AMDGPU target-low descriptors carry compact target facts generated from the
-// Python descriptor tables. This layer centralizes the backend predicates that
-// need to be consistent across wait-state and wait-counter planning without
-// making each planner duplicate semantic-tag strings or schedule-resource
-// traversal.
+// Python descriptor tables. This layer centralizes backend predicates that need
+// to stay consistent across wait-state and wait-counter planning.
 
 #ifndef LOOM_TARGET_ARCH_AMDGPU_DESCRIPTOR_SEMANTICS_H_
 #define LOOM_TARGET_ARCH_AMDGPU_DESCRIPTOR_SEMANTICS_H_
@@ -21,6 +19,23 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+typedef enum loom_amdgpu_descriptor_trait_bit_e {
+  // Descriptor issues on an AMDGPU vector ALU pipeline.
+  LOOM_AMDGPU_DESCRIPTOR_TRAIT_VECTOR_ALU = 1u << 0,
+  // Descriptor issues on an AMDGPU scalar ALU pipeline.
+  LOOM_AMDGPU_DESCRIPTOR_TRAIT_SCALAR_ALU = 1u << 1,
+  // Descriptor issues on an AMDGPU vector-memory pipeline.
+  LOOM_AMDGPU_DESCRIPTOR_TRAIT_VECTOR_MEMORY = 1u << 2,
+  // Descriptor is a transcendental VALU packet.
+  LOOM_AMDGPU_DESCRIPTOR_TRAIT_TRANSCENDENTAL = 1u << 3,
+} loom_amdgpu_descriptor_trait_bit_t;
+typedef uint32_t loom_amdgpu_descriptor_traits_t;
+
+// Returns target-owned descriptor semantic facts as a compact bitfield.
+loom_amdgpu_descriptor_traits_t loom_amdgpu_descriptor_traits(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor);
 
 // Returns true when |descriptor| issues on a resource with |kind|.
 bool loom_amdgpu_descriptor_uses_resource_kind(
@@ -34,6 +49,11 @@ bool loom_amdgpu_descriptor_uses_vector_alu(
 
 // Returns true when |descriptor| issues on the scalar ALU.
 bool loom_amdgpu_descriptor_uses_scalar_alu(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor);
+
+// Returns true when |descriptor| issues on an AMDGPU vector-memory pipeline.
+bool loom_amdgpu_descriptor_uses_vector_memory(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor);
 

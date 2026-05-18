@@ -649,6 +649,8 @@ loom_cc_library(
   SRCS
     "descriptor_semantics.c"
   DEPS
+    ::encoding
+    ::target_refs
     iree::base
     loom::src::loom::codegen::low::descriptors
   PUBLIC

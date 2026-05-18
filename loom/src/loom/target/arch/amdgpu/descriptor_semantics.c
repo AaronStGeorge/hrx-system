@@ -6,16 +6,47 @@
 
 #include "loom/target/arch/amdgpu/descriptor_semantics.h"
 
-static bool loom_amdgpu_descriptor_has_semantic_tag(
+#include "loom/target/arch/amdgpu/encoding.h"
+#include "loom/target/arch/amdgpu/target_refs.h"
+
+static bool loom_amdgpu_descriptor_matches_ref(
     const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_descriptor_t* descriptor, iree_string_view_t expected) {
-  if (descriptor_set == NULL || descriptor == NULL ||
-      descriptor->semantic_tag_string_offset == LOOM_LOW_STRING_OFFSET_NONE) {
-    return false;
+    const loom_low_descriptor_t* descriptor,
+    loom_amdgpu_descriptor_ref_t descriptor_ref) {
+  return descriptor != NULL &&
+         descriptor == loom_amdgpu_descriptor_ref_descriptor(descriptor_set,
+                                                             descriptor_ref);
+}
+
+static bool loom_amdgpu_descriptor_matches_any_ref(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor,
+    const loom_amdgpu_descriptor_ref_t* descriptor_refs,
+    iree_host_size_t descriptor_ref_count) {
+  for (iree_host_size_t i = 0; i < descriptor_ref_count; ++i) {
+    if (loom_amdgpu_descriptor_matches_ref(descriptor_set, descriptor,
+                                           descriptor_refs[i])) {
+      return true;
+    }
   }
-  const iree_string_view_t semantic_tag = loom_low_descriptor_set_string(
-      descriptor_set, descriptor->semantic_tag_string_offset);
-  return iree_string_view_equal(semantic_tag, expected);
+  return false;
+}
+
+static bool loom_amdgpu_encoding_format_is_vector_memory(uint16_t format_id) {
+  switch (format_id) {
+    case LOOM_AMDGPU_ENCODING_FORMAT_MUBUF:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VBUFFER:
+    case LOOM_AMDGPU_ENCODING_FORMAT_FLAT:
+    case LOOM_AMDGPU_ENCODING_FORMAT_FLAT_GLBL:
+    case LOOM_AMDGPU_ENCODING_FORMAT_FLAT_GLOBAL:
+    case LOOM_AMDGPU_ENCODING_FORMAT_FLAT_SCRATCH:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VFLAT:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VGLOBAL:
+    case LOOM_AMDGPU_ENCODING_FORMAT_VSCRATCH:
+      return true;
+    default:
+      return false;
+  }
 }
 
 bool loom_amdgpu_descriptor_uses_resource_kind(
@@ -48,32 +79,67 @@ bool loom_amdgpu_descriptor_uses_resource_kind(
 bool loom_amdgpu_descriptor_uses_vector_alu(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor) {
-  return loom_amdgpu_descriptor_uses_resource_kind(
-      descriptor_set, descriptor, LOOM_LOW_RESOURCE_KIND_VECTOR_ALU);
+  return iree_any_bit_set(
+      loom_amdgpu_descriptor_traits(descriptor_set, descriptor),
+      LOOM_AMDGPU_DESCRIPTOR_TRAIT_VECTOR_ALU);
 }
 
 bool loom_amdgpu_descriptor_uses_scalar_alu(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor) {
-  return loom_amdgpu_descriptor_uses_resource_kind(
-      descriptor_set, descriptor, LOOM_LOW_RESOURCE_KIND_SCALAR_ALU);
+  return iree_any_bit_set(
+      loom_amdgpu_descriptor_traits(descriptor_set, descriptor),
+      LOOM_AMDGPU_DESCRIPTOR_TRAIT_SCALAR_ALU);
+}
+
+bool loom_amdgpu_descriptor_uses_vector_memory(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor) {
+  return iree_any_bit_set(
+      loom_amdgpu_descriptor_traits(descriptor_set, descriptor),
+      LOOM_AMDGPU_DESCRIPTOR_TRAIT_VECTOR_MEMORY);
 }
 
 bool loom_amdgpu_descriptor_is_transcendental(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor) {
-  return loom_amdgpu_descriptor_has_semantic_tag(descriptor_set, descriptor,
-                                                 IREE_SV("float.exp2.f32")) ||
-         loom_amdgpu_descriptor_has_semantic_tag(descriptor_set, descriptor,
-                                                 IREE_SV("float.log2.f32")) ||
-         loom_amdgpu_descriptor_has_semantic_tag(
-             descriptor_set, descriptor, IREE_SV("float.sin_turns.f32")) ||
-         loom_amdgpu_descriptor_has_semantic_tag(
-             descriptor_set, descriptor, IREE_SV("float.cos_turns.f32")) ||
-         loom_amdgpu_descriptor_has_semantic_tag(descriptor_set, descriptor,
-                                                 IREE_SV("float.sqrt.f32")) ||
-         loom_amdgpu_descriptor_has_semantic_tag(descriptor_set, descriptor,
-                                                 IREE_SV("float.rsqrt.f32")) ||
-         loom_amdgpu_descriptor_has_semantic_tag(
-             descriptor_set, descriptor, IREE_SV("float.reciprocal.f32"));
+  return iree_any_bit_set(
+      loom_amdgpu_descriptor_traits(descriptor_set, descriptor),
+      LOOM_AMDGPU_DESCRIPTOR_TRAIT_TRANSCENDENTAL);
+}
+
+loom_amdgpu_descriptor_traits_t loom_amdgpu_descriptor_traits(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor) {
+  if (descriptor_set == NULL || descriptor == NULL) {
+    return 0;
+  }
+  loom_amdgpu_descriptor_traits_t traits = 0;
+  if (loom_amdgpu_descriptor_uses_resource_kind(
+          descriptor_set, descriptor, LOOM_LOW_RESOURCE_KIND_VECTOR_ALU)) {
+    traits |= LOOM_AMDGPU_DESCRIPTOR_TRAIT_VECTOR_ALU;
+  }
+  if (loom_amdgpu_descriptor_uses_resource_kind(
+          descriptor_set, descriptor, LOOM_LOW_RESOURCE_KIND_SCALAR_ALU)) {
+    traits |= LOOM_AMDGPU_DESCRIPTOR_TRAIT_SCALAR_ALU;
+  }
+  if (loom_amdgpu_encoding_format_is_vector_memory(
+          descriptor->encoding_format_id)) {
+    traits |= LOOM_AMDGPU_DESCRIPTOR_TRAIT_VECTOR_MEMORY;
+  }
+  static const loom_amdgpu_descriptor_ref_t kTranscendentalDescriptorRefs[] = {
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_EXP_F32,
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_LOG_F32,
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_SIN_F32,
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_COS_F32,
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_SQRT_F32,
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_RSQ_F32,
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_RCP_F32,
+  };
+  if (loom_amdgpu_descriptor_matches_any_ref(
+          descriptor_set, descriptor, kTranscendentalDescriptorRefs,
+          IREE_ARRAYSIZE(kTranscendentalDescriptorRefs))) {
+    traits |= LOOM_AMDGPU_DESCRIPTOR_TRAIT_TRANSCENDENTAL;
+  }
+  return traits;
 }

@@ -731,6 +731,8 @@ loom_cc_library(
     srcs = ["descriptor_semantics.c"],
     hdrs = ["descriptor_semantics.h"],
     deps = [
+        ":encoding",
+        ":target_refs",
         "//loom/src/loom/codegen/low:descriptors",
         "//runtime/src/iree/base",
     ],
