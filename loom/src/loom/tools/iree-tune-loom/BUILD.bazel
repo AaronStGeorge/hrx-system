@@ -84,6 +84,7 @@ _SPIRV_PROVIDER_DEPS = iree_select({
     ":spirv_provider_enabled": [
         "//loom/src/loom/target/arch/spirv:provider",
         "//loom/src/loom/tooling/target/spirv:artifact_provider",
+        "//loom/src/loom/tooling/target/spirv:testbench_requirements",
     ],
     "//conditions:default": [],
 })
@@ -112,6 +113,7 @@ loom_cc_library(
         "output.c",
         "profile_report.c",
         "report.c",
+        "testbench.c",
     ],
     hdrs = [
         "diagnostics.h",
@@ -124,6 +126,7 @@ loom_cc_library(
         "output.h",
         "profile_report.h",
         "report.h",
+        "testbench.h",
     ],
     deps = [
         "//loom/src/loom/error:diagnostic",
@@ -147,6 +150,8 @@ loom_cc_library(
         "//loom/src/loom/tooling/io:file",
         "//loom/src/loom/tooling/testbench",
         "//loom/src/loom/tooling/testbench:executor",
+        "//loom/src/loom/tooling/testbench:reference",
+        "//loom/src/loom/tooling/testbench:requirements",
         "//loom/src/loom/util:json",
         "//loom/src/loom/util:stream",
         "//loom/src/loom/verify",
@@ -214,6 +219,7 @@ iree_lit_test_suite(
     cfg = "//runtime:lit.cfg.py",
     data = [
         "//build_tools/sanitizer:lsan_suppressions_vulkan.txt",
+        "//loom/src/loom/tools/iree-test-loom:testdata/spirv_vulkan_coop_hal_actual.loom",
         "//loom/src/loom/tools/iree-test-loom:testdata/spirv_vulkan_hal_actual.loom",
     ],
     tags = [

@@ -4,6 +4,9 @@
 // RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
 // RUN:   iree-test-loom %S/testdata/spirv_vulkan_coop_hal_actual.loom --case=@cooperative_matrix_f16_two_tiles_case --device=vulkan \
 // RUN:     | FileCheck --check-prefix=COOP %s
+// RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
+// RUN:   iree-test-loom %S/testdata/spirv_vulkan_coop_hal_actual.loom --case=@dense_projection_tiled_f16_128_case --device=vulkan \
+// RUN:     | FileCheck --check-prefix=DENSE %s
 
 // SPIRV: "format":"loom.test.v0"
 // SPIRV: "case_count":1
@@ -16,3 +19,8 @@
 // COOP: "case_count":1
 // COOP: "failed_sample_count":0
 // COOP: {{"case":"cooperative_matrix_f16_two_tiles_case"}}
+
+// DENSE: "format":"loom.test.v0"
+// DENSE: "case_count":1
+// DENSE: "failed_sample_count":0
+// DENSE: {{"case":"dense_projection_tiled_f16_128_case"}}

@@ -42,6 +42,7 @@
 #include "loom/tools/iree-tune-loom/output.h"
 #include "loom/tools/iree-tune-loom/profile_report.h"
 #include "loom/tools/iree-tune-loom/report.h"
+#include "loom/tools/iree-tune-loom/testbench.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
 #include "loom/verify/verify.h"
@@ -199,21 +200,6 @@ static iree_status_t iree_tune_loom_register_context(void* user_data,
   }
   return configuration->register_context.fn(
       configuration->register_context.user_data, context);
-}
-
-// Formats a borrowed status as JSON. The caller retains status ownership.
-static bool iree_tune_loom_case_matches_selection(
-    const loom_testbench_case_plan_t* case_plan,
-    iree_string_view_t selected_case_name) {
-  return iree_string_view_is_empty(selected_case_name) ||
-         iree_string_view_equal(case_plan->name, selected_case_name);
-}
-
-static bool iree_tune_loom_benchmark_matches_selection(
-    const loom_testbench_benchmark_plan_t* benchmark_plan,
-    iree_string_view_t selected_benchmark_name) {
-  return iree_string_view_is_empty(selected_benchmark_name) ||
-         iree_string_view_equal(benchmark_plan->name, selected_benchmark_name);
 }
 
 static iree_status_t iree_tune_loom_duration_ms_to_ns(
@@ -1549,12 +1535,29 @@ static iree_status_t iree_tune_loom_run_dispatch_complete_benchmark(
       *execution_options;
   loom_testbench_value_materializer_options_t benchmark_materializer =
       execution_options->materializer;
+  iree_tune_loom_reference_oracles_t reference_oracles = {0};
 
   iree_status_t status = loom_run_hal_testbench_select_actual_invocation(
       case_plan, &actual_invocation);
   if (iree_status_is_ok(status)) {
     status =
         loom_run_hal_testbench_context_ensure_runtime(&hal_context->execution);
+  }
+  loom_testbench_requirement_result_t requirement_result = {0};
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_evaluate_case_requirements(
+        hal_context->configuration, &hal_context->execution, module_plan,
+        case_plan, &requirement_result);
+  }
+  if (iree_status_is_ok(status) && requirement_result.skipped) {
+    iree_tune_loom_benchmark_result_t benchmark_result = {
+        .status = IREE_SV("skipped"),
+        .specialization = specialization,
+    };
+    return iree_tune_loom_append_dispatch_benchmark_result(
+        run, candidate, module_plan, benchmark_plan, case_plan, policy,
+        &benchmark_result, /*correctness_sample_count=*/0,
+        /*correctness_failed_sample_count=*/0, jsonl_sink, allocator);
   }
   if (iree_status_is_ok(status)) {
     status = iree_tune_loom_hal_actual_provider_initialize(
@@ -1577,6 +1580,10 @@ static iree_status_t iree_tune_loom_run_dispatch_complete_benchmark(
             .fn = loom_run_hal_testbench_actual_invoke,
             .user_data = &hal_provider.execution,
         };
+    iree_tune_loom_configure_reference_oracles(
+        &hal_context->execution,
+        benchmark_execution_options.materializer.host_allocator,
+        &reference_oracles, &benchmark_execution_options);
     benchmark_materializer = benchmark_execution_options.materializer;
     benchmark_materializer.buffer_params = (iree_hal_buffer_params_t){0};
     status = iree_tune_loom_hal_actual_provider_compile(&hal_provider);
@@ -2013,6 +2020,7 @@ static iree_status_t iree_tune_loom_prepare_dispatch_comparison_candidate(
   const loom_testbench_invocation_plan_t* actual_invocation = NULL;
   loom_testbench_case_execution_options_t candidate_execution_options =
       *execution_options;
+  iree_tune_loom_reference_oracles_t reference_oracles = {0};
 
   iree_status_t status = loom_run_hal_testbench_select_actual_invocation(
       selection->case_plan, &actual_invocation);
@@ -2042,6 +2050,10 @@ static iree_status_t iree_tune_loom_prepare_dispatch_comparison_candidate(
             .fn = loom_run_hal_testbench_actual_invoke,
             .user_data = &candidate->provider.execution,
         };
+    iree_tune_loom_configure_reference_oracles(
+        &hal_context->execution,
+        candidate_execution_options.materializer.host_allocator,
+        &reference_oracles, &candidate_execution_options);
     candidate->benchmark_materializer =
         candidate_execution_options.materializer;
     candidate->benchmark_materializer.buffer_params =

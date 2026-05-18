@@ -24,6 +24,7 @@ loom_cc_library(
     "output.h"
     "profile_report.h"
     "report.h"
+    "testbench.h"
   SRCS
     "diagnostics.c"
     "help.c"
@@ -34,6 +35,7 @@ loom_cc_library(
     "output.c"
     "profile_report.c"
     "report.c"
+    "testbench.c"
   DEPS
     iree::base
     iree::base::internal::json
@@ -62,6 +64,8 @@ loom_cc_library(
     loom::src::loom::tooling::io::file
     loom::src::loom::tooling::testbench
     loom::src::loom::tooling::testbench::executor
+    loom::src::loom::tooling::testbench::reference
+    loom::src::loom::tooling::testbench::requirements
     loom::src::loom::util::json
     loom::src::loom::util::stream
     loom::src::loom::verify
@@ -126,6 +130,7 @@ iree_lit_test_suite(
     ::iree-tune-loom
     FileCheck
   DATA
+    loom::src::loom::tools::iree-test-loom::testdata::spirv_vulkan_coop_hal_actual.loom
     loom::src::loom::tools::iree-test-loom::testdata::spirv_vulkan_hal_actual.loom
   LABELS
     "driver=vulkan"

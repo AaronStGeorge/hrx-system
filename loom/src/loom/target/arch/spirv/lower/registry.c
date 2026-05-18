@@ -9,7 +9,6 @@
 #include "loom/error/error_catalog.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
-#include "loom/ops/vector/ops.h"
 #include "loom/target/arch/spirv/abi.h"
 #include "loom/target/arch/spirv/contracts/logical_core.h"
 #include "loom/target/arch/spirv/contracts/logical_core_lower_rules.h"
@@ -106,44 +105,13 @@ static iree_status_t loom_spirv_map_type(void* user_data,
       context, source_op, IREE_SV("source"), source_type);
 }
 
-static bool loom_spirv_source_op_maps_vector_result_to_id(
-    const loom_op_t* source_op, loom_value_id_t source_value_id) {
-  if (loom_vector_fragment_load_isa(source_op)) {
-    return loom_vector_fragment_load_result(source_op) == source_value_id;
-  }
-  if (loom_vector_mma_isa(source_op)) {
-    return loom_vector_mma_result(source_op) == source_value_id;
-  }
-  return false;
-}
-
-static bool loom_spirv_value_def_maps_vector_result_to_id(
-    loom_low_lower_context_t* context, loom_value_id_t source_value_id) {
-  const loom_value_t* value = loom_module_value(
-      loom_low_lower_context_module(context), source_value_id);
-  const loom_op_t* defining_op = loom_value_def_op(value);
-  return defining_op != NULL && loom_spirv_source_op_maps_vector_result_to_id(
-                                    defining_op, source_value_id);
-}
-
-static bool loom_spirv_source_op_consumes_vector_id(
-    const loom_op_t* source_op, loom_value_id_t source_value_id) {
-  if (loom_vector_fragment_store_isa(source_op)) {
-    return loom_vector_fragment_store_value(source_op) == source_value_id;
-  }
-  return false;
-}
-
 static iree_status_t loom_spirv_map_value(void* user_data,
                                           loom_low_lower_context_t* context,
                                           const loom_op_t* source_op,
                                           loom_value_id_t source_value_id,
                                           loom_type_t source_type,
                                           loom_type_t* out_low_type) {
-  if (loom_type_is_vector(source_type) &&
-      (loom_spirv_value_def_maps_vector_result_to_id(context,
-                                                     source_value_id) ||
-       loom_spirv_source_op_consumes_vector_id(source_op, source_value_id))) {
+  if (loom_type_is_vector(source_type)) {
     return loom_spirv_make_register_type(
         context, SPIRV_LOGICAL_CORE_REG_CLASS_ID_ID, out_low_type);
   }

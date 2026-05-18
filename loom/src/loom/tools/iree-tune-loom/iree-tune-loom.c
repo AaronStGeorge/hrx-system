@@ -39,6 +39,7 @@
 #if IREE_TUNE_LOOM_HAVE_SPIRV
 #include "loom/target/arch/spirv/provider.h"
 #include "loom/tooling/target/spirv/artifact_provider.h"
+#include "loom/tooling/target/spirv/testbench_requirements.h"
 #endif  // IREE_TUNE_LOOM_HAVE_SPIRV
 
 #if IREE_TUNE_LOOM_HAVE_AMDGPU
@@ -102,6 +103,43 @@ static const loom_run_hal_artifact_provider_registry_t
 #endif  // IREE_TUNE_LOOM_HAVE_ANY_HAL_ARTIFACT_PROVIDER
 };
 
+#if IREE_TUNE_LOOM_HAVE_SPIRV
+static iree_status_t iree_tune_loom_append_requirement_provider(
+    iree_host_size_t provider_capacity,
+    loom_testbench_requirement_provider_t* providers,
+    iree_host_size_t* inout_provider_count,
+    loom_testbench_requirement_provider_t provider) {
+  if (*inout_provider_count >= provider_capacity) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "iree-tune-loom requirement provider capacity exceeded");
+  }
+  providers[(*inout_provider_count)++] = provider;
+  return iree_ok_status();
+}
+#endif  // IREE_TUNE_LOOM_HAVE_SPIRV
+
+static iree_status_t iree_tune_loom_populate_requirement_providers(
+    void* user_data, loom_run_hal_testbench_context_t* hal_context,
+    iree_host_size_t provider_capacity,
+    loom_testbench_requirement_provider_t* providers,
+    iree_host_size_t* inout_provider_count) {
+  (void)user_data;
+#if IREE_TUNE_LOOM_HAVE_SPIRV
+  loom_testbench_requirement_provider_t spirv_provider = {0};
+  loom_spirv_vulkan_hal_testbench_requirement_provider_initialize(
+      hal_context, &spirv_provider);
+  IREE_RETURN_IF_ERROR(iree_tune_loom_append_requirement_provider(
+      provider_capacity, providers, inout_provider_count, spirv_provider));
+#else
+  (void)hal_context;
+  (void)provider_capacity;
+  (void)providers;
+  (void)inout_provider_count;
+#endif  // IREE_TUNE_LOOM_HAVE_SPIRV
+  return iree_ok_status();
+}
+
 int main(int argc, char** argv) {
   loom_run_execution_environment_t environment;
   iree_status_t status = loom_run_execution_environment_initialize(
@@ -121,6 +159,10 @@ int main(int argc, char** argv) {
           loom_run_execution_environment_target_environment(&environment),
       .hal_artifact_provider_registry =
           &kIreeTuneLoomHalArtifactProviderRegistry,
+      .populate_requirement_providers =
+          {
+              .fn = iree_tune_loom_populate_requirement_providers,
+          },
       .initialize_low_descriptor_registry =
           loom_run_execution_environment_low_descriptor_registry_callback(
               &environment),

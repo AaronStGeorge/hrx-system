@@ -218,7 +218,7 @@ static iree_status_t iree_test_loom_run_case_samples(
       *base_execution_options;
   loom_run_hal_testbench_actual_provider_t hal_actual_provider = {0};
   loom_testbench_reference_matmul_oracle_options_t matmul_oracle_options = {0};
-  loom_testbench_oracle_provider_t oracle_providers[1] = {0};
+  loom_testbench_oracle_provider_t oracle_providers[2] = {0};
   bool hal_actual_provider_initialized = false;
   if (iree_test_loom_case_has_actual_invocation(case_plan)) {
     status = iree_test_loom_configure_hal_actual_provider(
@@ -237,6 +237,8 @@ static iree_status_t iree_test_loom_run_case_samples(
           };
       loom_testbench_reference_matmul_oracle_provider_initialize(
           &matmul_oracle_options, &oracle_providers[0]);
+      loom_testbench_reference_tiled_matmul_oracle_provider_initialize(
+          &matmul_oracle_options, &oracle_providers[1]);
       execution_options.invocation.oracle_providers =
           loom_make_testbench_oracle_provider_list(
               oracle_providers, IREE_ARRAYSIZE(oracle_providers));

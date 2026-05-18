@@ -37,6 +37,20 @@ iree_string_view_t iree_tune_loom_normalize_symbol_name(
   return symbol_name;
 }
 
+bool iree_tune_loom_case_matches_selection(
+    const loom_testbench_case_plan_t* case_plan,
+    iree_string_view_t selected_case_name) {
+  return iree_string_view_is_empty(selected_case_name) ||
+         iree_string_view_equal(case_plan->name, selected_case_name);
+}
+
+bool iree_tune_loom_benchmark_matches_selection(
+    const loom_testbench_benchmark_plan_t* benchmark_plan,
+    iree_string_view_t selected_benchmark_name) {
+  return iree_string_view_is_empty(selected_benchmark_name) ||
+         iree_string_view_equal(benchmark_plan->name, selected_benchmark_name);
+}
+
 iree_status_t iree_tune_loom_module_symbol_name_from_ref(
     const loom_module_t* module, loom_symbol_ref_t ref,
     iree_string_view_t* out_name) {
