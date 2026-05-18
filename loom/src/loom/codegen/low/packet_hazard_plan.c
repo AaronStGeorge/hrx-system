@@ -180,11 +180,6 @@ static iree_status_t loom_low_packet_hazard_plan_validate_event(
     }
     return iree_ok_status();
   }
-  if (event->producer_node_index == LOOM_LOW_SCHEDULE_NODE_NONE) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "hazard plan residual event must name a producer node");
-  }
   if (event->progress_class_id == LOOM_LOW_PACKET_PROGRESS_CLASS_NONE ||
       iree_string_view_is_empty(event->progress_class_name)) {
     return iree_make_status(
@@ -240,8 +235,8 @@ static iree_status_t loom_low_packet_hazard_plan_append_event(
       &producer_scheduled_ordinal));
   if (loom_low_packet_hazard_plan_record_kind_has_residual_progress(
           event->kind) &&
-      (producer_packet_index == LOOM_LOW_PACKET_HAZARD_PLAN_PACKET_NONE ||
-       producer_packet_index >= packet->packet_index)) {
+      producer_packet_index != LOOM_LOW_PACKET_HAZARD_PLAN_PACKET_NONE &&
+      producer_packet_index >= packet->packet_index) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "hazard plan residual producer must precede insertion packet");

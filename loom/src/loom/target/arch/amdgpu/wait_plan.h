@@ -19,6 +19,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/allocation.h"
+#include "loom/codegen/low/packet_hazard_plan.h"
 #include "loom/codegen/low/schedule/types.h"
 
 #ifdef __cplusplus
@@ -121,7 +122,13 @@ typedef struct loom_amdgpu_wait_plan_action_t {
 typedef struct loom_amdgpu_wait_plan_t {
   // Schedule table this plan was built from.
   const loom_low_schedule_table_t* schedule;
-  // Wait actions in scheduled packet order.
+  // Optional allocation table used for physical-assignment hazards.
+  const loom_low_allocation_table_t* allocation;
+  // Canonical counter-progress sidecar for explicit waits and producers.
+  loom_low_packet_progress_table_t progress;
+  // Canonical residual hazard sidecar for planned wait actions.
+  loom_low_packet_hazard_plan_t hazard_plan;
+  // AMDGPU implementation action rows in scheduled packet order.
   const loom_amdgpu_wait_plan_action_t* actions;
   // Number of action records.
   iree_host_size_t action_count;
@@ -134,14 +141,6 @@ iree_string_view_t loom_amdgpu_wait_counter_name(uint16_t counter_id);
 iree_status_t loom_amdgpu_wait_counter_mask(uint16_t counter_id,
                                             uint32_t* out_mask);
 
-// Returns the stable diagnostic spelling for a wait-plan action kind.
-iree_string_view_t loom_amdgpu_wait_plan_action_kind_name(
-    loom_amdgpu_wait_plan_action_kind_t kind);
-
-// Returns the stable diagnostic spelling for a wait-plan reason.
-iree_string_view_t loom_amdgpu_wait_plan_reason_name(
-    loom_amdgpu_wait_plan_reason_t reason);
-
 // Builds an AMDGPU wait-counter plan from a scheduled low function. When
 // |allocation| is provided, the plan also covers post-allocation physical
 // register reuse hazards such as outstanding memory reads whose destination
@@ -153,7 +152,7 @@ iree_status_t loom_amdgpu_wait_plan_build(
     const loom_low_allocation_table_t* allocation,
     iree_arena_allocator_t* arena, loom_amdgpu_wait_plan_t* out_plan);
 
-// Appends a compact JSON representation of |plan| to |builder|.
+// Appends the common packet hazard JSON representation of |plan| to |builder|.
 iree_status_t loom_amdgpu_wait_plan_format_json(
     const loom_amdgpu_wait_plan_t* plan, iree_string_builder_t* builder);
 

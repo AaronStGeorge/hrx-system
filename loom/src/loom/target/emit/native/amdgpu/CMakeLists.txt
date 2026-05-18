@@ -83,6 +83,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "test_wait_plan"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/wait_plan.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "test_wait_states"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/wait_states.loom-test"

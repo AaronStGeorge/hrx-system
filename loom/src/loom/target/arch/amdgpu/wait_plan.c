@@ -10,15 +10,13 @@
 #include <string.h>
 
 #include "loom/codegen/low/allocation.h"
-#include "loom/codegen/low/function.h"
 #include "loom/codegen/low/packet.h"
-#include "loom/ir/module.h"
+#include "loom/codegen/low/packet_hazard_plan_json.h"
+#include "loom/ir/ir.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/descriptor_semantics.h"
 #include "loom/target/arch/amdgpu/target_id.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
-#include "loom/util/json.h"
-#include "loom/util/stream.h"
 
 #define LOOM_AMDGPU_WAIT_COUNTER_COUNT 5
 #define LOOM_AMDGPU_WAIT_TRANS_RESULT_MAX_VALU_INTERVAL 5u
@@ -165,6 +163,10 @@ typedef struct loom_amdgpu_wait_plan_builder_t {
   iree_host_size_t action_count;
   // Allocated action row capacity.
   iree_host_size_t action_capacity;
+  // Canonical packet-progress table populated after wait actions are known.
+  loom_low_packet_progress_table_t progress;
+  // Canonical packet hazard table populated after wait actions are known.
+  loom_low_packet_hazard_plan_t hazard_plan;
   // Current epoch per wait counter.
   uint32_t counter_epochs[LOOM_AMDGPU_WAIT_COUNTER_COUNT];
   // Current block epoch for lazy invalidation of physical-register state.
@@ -213,39 +215,45 @@ iree_string_view_t loom_amdgpu_wait_counter_name(uint16_t counter_id) {
   }
 }
 
-iree_string_view_t loom_amdgpu_wait_plan_action_kind_name(
-    loom_amdgpu_wait_plan_action_kind_t kind) {
-  switch (kind) {
-    case LOOM_AMDGPU_WAIT_PLAN_ACTION_EXPLICIT:
-      return IREE_SV("explicit");
-    case LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED:
-      return IREE_SV("planned");
-    case LOOM_AMDGPU_WAIT_PLAN_ACTION_UNKNOWN:
+static iree_string_view_t loom_amdgpu_wait_counter_progress_class_name(
+    uint16_t counter_id) {
+  switch (counter_id) {
+    case LOOM_AMDGPU_WAIT_COUNTER_VMEM_LOAD:
+      return IREE_SV("amdgpu.vmem_load");
+    case LOOM_AMDGPU_WAIT_COUNTER_VMEM_STORE:
+      return IREE_SV("amdgpu.vmem_store");
+    case LOOM_AMDGPU_WAIT_COUNTER_LDS:
+      return IREE_SV("amdgpu.lds");
+    case LOOM_AMDGPU_WAIT_COUNTER_SMEM:
+      return IREE_SV("amdgpu.smem");
+    case LOOM_AMDGPU_WAIT_COUNTER_ALU:
+      return IREE_SV("amdgpu.alu");
+    case LOOM_AMDGPU_WAIT_COUNTER_NONE:
     default:
-      return IREE_SV("unknown");
+      return IREE_SV("amdgpu.unknown");
   }
 }
 
-iree_string_view_t loom_amdgpu_wait_plan_reason_name(
+static iree_string_view_t loom_amdgpu_wait_plan_hazard_reason_name(
     loom_amdgpu_wait_plan_reason_t reason) {
   switch (reason) {
     case LOOM_AMDGPU_WAIT_PLAN_REASON_EXPLICIT_PACKET:
-      return IREE_SV("explicit_packet");
+      return IREE_SV("amdgpu.explicit_packet");
     case LOOM_AMDGPU_WAIT_PLAN_REASON_SSA_USE:
-      return IREE_SV("ssa_use");
+      return IREE_SV("amdgpu.ssa_use");
     case LOOM_AMDGPU_WAIT_PLAN_REASON_BARRIER:
-      return IREE_SV("barrier");
+      return IREE_SV("amdgpu.barrier");
     case LOOM_AMDGPU_WAIT_PLAN_REASON_STORE_SOURCE_REUSE:
-      return IREE_SV("store_source_reuse");
+      return IREE_SV("amdgpu.store_source_reuse");
     case LOOM_AMDGPU_WAIT_PLAN_REASON_READ_RESULT_REUSE:
-      return IREE_SV("read_result_reuse");
+      return IREE_SV("amdgpu.read_result_reuse");
     case LOOM_AMDGPU_WAIT_PLAN_REASON_TRANS_RESULT_USE:
-      return IREE_SV("trans_result_use");
+      return IREE_SV("amdgpu.trans_result_use");
     case LOOM_AMDGPU_WAIT_PLAN_REASON_VALU_SGPR_READ:
-      return IREE_SV("valu_sgpr_read");
+      return IREE_SV("amdgpu.valu_sgpr_read");
     case LOOM_AMDGPU_WAIT_PLAN_REASON_UNKNOWN:
     default:
-      return IREE_SV("unknown");
+      return IREE_SV("amdgpu.unknown");
   }
 }
 
@@ -1940,11 +1948,153 @@ static iree_status_t loom_amdgpu_wait_plan_build_actions(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_wait_plan_emit_counter_progress(
+    loom_low_packet_progress_emit_fn_t emit, void* emit_user_data,
+    uint16_t counter_id, loom_low_packet_progress_action_t action,
+    uint32_t units) {
+  const loom_low_packet_progress_event_t event = {
+      .progress_class_id = counter_id,
+      .progress_class_name =
+          loom_amdgpu_wait_counter_progress_class_name(counter_id),
+      .action = action,
+      .units = units,
+  };
+  return emit(emit_user_data, &event);
+}
+
+static iree_status_t loom_amdgpu_wait_plan_emit_counter_progress_mask(
+    loom_low_packet_progress_emit_fn_t emit, void* emit_user_data,
+    uint32_t counter_mask, loom_low_packet_progress_action_t action,
+    uint32_t units) {
+  for (uint32_t slot = 0; slot < LOOM_AMDGPU_WAIT_COUNTER_COUNT; ++slot) {
+    if ((counter_mask & loom_amdgpu_wait_counter_mask_from_slot(slot)) == 0) {
+      continue;
+    }
+    const uint16_t counter_id = loom_amdgpu_wait_counter_id_from_slot(slot);
+    IREE_RETURN_IF_ERROR(loom_amdgpu_wait_plan_emit_counter_progress(
+        emit, emit_user_data, counter_id, action, units));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_wait_plan_progress_query(
+    void* user_data, const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_packet_view_t* packet,
+    loom_low_packet_progress_emit_fn_t emit, void* emit_user_data) {
+  (void)schedule;
+  (void)allocation;
+  const loom_amdgpu_wait_plan_builder_t* builder =
+      (const loom_amdgpu_wait_plan_builder_t*)user_data;
+  const loom_amdgpu_wait_node_state_t* node_state =
+      &builder->node_states[packet->node_index];
+  IREE_RETURN_IF_ERROR(loom_amdgpu_wait_plan_emit_counter_progress_mask(
+      emit, emit_user_data, node_state->explicit_wait_counter_mask,
+      LOOM_LOW_PACKET_PROGRESS_ACTION_RESET, 0));
+  const uint32_t producer_counter_mask = node_state->read_counter_mask |
+                                         node_state->write_counter_mask |
+                                         node_state->trans_result_counter_mask;
+  return loom_amdgpu_wait_plan_emit_counter_progress_mask(
+      emit, emit_user_data, producer_counter_mask,
+      LOOM_LOW_PACKET_PROGRESS_ACTION_ADVANCE, 1);
+}
+
+static bool loom_amdgpu_wait_plan_action_matches_packet(
+    const loom_amdgpu_wait_plan_action_t* action,
+    const loom_low_packet_view_t* packet) {
+  return action->node_index == packet->node_index &&
+         action->block_index == packet->node->block_index &&
+         action->scheduled_ordinal == packet->node->scheduled_ordinal;
+}
+
+static iree_status_t loom_amdgpu_wait_plan_emit_hazard_action(
+    const loom_amdgpu_wait_plan_action_t* action,
+    loom_low_packet_hazard_plan_emit_fn_t emit, void* emit_user_data) {
+  const uint32_t observed_progress = action->target_count;
+  uint32_t required_progress = action->outstanding_before;
+  if (required_progress <= observed_progress) {
+    // Some wait-counter predicates are epoch or control-flow hazards whose
+    // counted outstanding packets are block-local. Record the action as one
+    // unsatisfied target progress unit instead of losing the residual hazard.
+    required_progress = observed_progress + 1;
+  }
+  const uint32_t residual_progress = required_progress - observed_progress;
+  const loom_low_packet_hazard_plan_event_t event = {
+      .kind = LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION,
+      .reason_id = (uint16_t)action->reason,
+      .reason_name = loom_amdgpu_wait_plan_hazard_reason_name(action->reason),
+      .producer_node_index = action->producer_node,
+      .progress_class_id = action->counter_id,
+      .progress_class_name =
+          loom_amdgpu_wait_counter_progress_class_name(action->counter_id),
+      .required_progress = required_progress,
+      .observed_progress = observed_progress,
+      .residual_progress = residual_progress,
+      .target_detail = iree_string_view_empty(),
+  };
+  return emit(emit_user_data, &event);
+}
+
+static iree_status_t loom_amdgpu_wait_plan_hazard_query(
+    void* user_data, const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_packet_progress_table_t* progress,
+    const loom_low_packet_view_t* packet,
+    loom_low_packet_hazard_plan_emit_fn_t emit, void* emit_user_data) {
+  (void)schedule;
+  (void)allocation;
+  (void)progress;
+  const loom_amdgpu_wait_plan_builder_t* builder =
+      (const loom_amdgpu_wait_plan_builder_t*)user_data;
+  for (iree_host_size_t i = 0; i < builder->action_count; ++i) {
+    const loom_amdgpu_wait_plan_action_t* action = &builder->actions[i];
+    if (action->kind != LOOM_AMDGPU_WAIT_PLAN_ACTION_PLANNED ||
+        !loom_amdgpu_wait_plan_action_matches_packet(action, packet)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(
+        loom_amdgpu_wait_plan_emit_hazard_action(action, emit, emit_user_data));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_amdgpu_wait_plan_build_common_tables(
+    loom_amdgpu_wait_plan_builder_t* builder) {
+  const loom_low_packet_progress_table_t* progress = NULL;
+  if (builder->allocation != NULL) {
+    const loom_low_packet_progress_provider_t progress_provider = {
+        .user_data = builder,
+        .query = loom_amdgpu_wait_plan_progress_query,
+    };
+    IREE_RETURN_IF_ERROR(loom_low_packet_progress_build(
+        builder->schedule, builder->allocation, &progress_provider,
+        builder->arena, &builder->progress));
+    progress = &builder->progress;
+  }
+
+  const loom_low_packet_hazard_plan_provider_t hazard_provider = {
+      .user_data = builder,
+      .query = loom_amdgpu_wait_plan_hazard_query,
+  };
+  return loom_low_packet_hazard_plan_build(
+      builder->schedule, builder->allocation, progress, &hazard_provider,
+      builder->arena, &builder->hazard_plan);
+}
+
 iree_status_t loom_amdgpu_wait_plan_build(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
     iree_arena_allocator_t* arena, loom_amdgpu_wait_plan_t* out_plan) {
+  if (out_plan == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU wait-plan output is required");
+  }
   *out_plan = (loom_amdgpu_wait_plan_t){0};
+  if (schedule == NULL || arena == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "schedule and arena are required for AMDGPU "
+                            "wait-counter planning");
+  }
   if (allocation != NULL) {
     IREE_RETURN_IF_ERROR(loom_low_packet_validate_tables(schedule, allocation));
   }
@@ -1973,101 +2123,30 @@ iree_status_t loom_amdgpu_wait_plan_build(
     status = loom_amdgpu_wait_plan_build_actions(&builder);
   }
   if (iree_status_is_ok(status)) {
+    status = loom_amdgpu_wait_plan_build_common_tables(&builder);
+  }
+  if (iree_status_is_ok(status)) {
     *out_plan = (loom_amdgpu_wait_plan_t){
         .schedule = schedule,
+        .allocation = allocation,
+        .progress = builder.progress,
+        .hazard_plan = builder.hazard_plan,
         .actions = builder.actions,
         .action_count = builder.action_count,
     };
+    if (builder.hazard_plan.progress == &builder.progress) {
+      out_plan->hazard_plan.progress = &out_plan->progress;
+    }
   }
   loom_low_allocation_release_value_scratch(&scratch);
   return status;
 }
 
-static iree_string_view_t loom_amdgpu_wait_plan_json_symbol_name(
-    const loom_module_t* module, loom_symbol_ref_t symbol_ref) {
-  if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
-      symbol_ref.symbol_id >= module->symbols.count) {
-    return IREE_SV("<unnamed>");
-  }
-  const loom_symbol_t* symbol = &module->symbols.entries[symbol_ref.symbol_id];
-  if (symbol->name_id >= module->strings.count) {
-    return IREE_SV("<unnamed>");
-  }
-  return module->strings.entries[symbol->name_id];
-}
-
-static iree_string_view_t loom_amdgpu_wait_plan_json_function_name(
-    const loom_low_schedule_table_t* schedule) {
-  if (loom_low_function_def_isa(schedule->function_op)) {
-    return loom_amdgpu_wait_plan_json_symbol_name(
-        schedule->module, loom_low_function_callee(schedule->function_op));
-  }
-  return IREE_SV("<unnamed>");
-}
-
 iree_status_t loom_amdgpu_wait_plan_format_json(
     const loom_amdgpu_wait_plan_t* plan, iree_string_builder_t* builder) {
-  loom_output_stream_t stream;
-  loom_output_stream_for_builder(builder, &stream);
-  const loom_low_schedule_table_t* schedule = plan->schedule;
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "{"));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
-      &stream, "\"format\":\"loom.amdgpu.wait_plan.v0\""));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, ",\"function\":"));
-  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      &stream, loom_amdgpu_wait_plan_json_function_name(schedule)));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, ",\"target\":"));
-  IREE_RETURN_IF_ERROR(
-      loom_json_write_escaped_string(&stream, schedule->target.target_name));
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, ",\"descriptor_set\":"));
-  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      &stream, schedule->target.descriptor_set_key));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      &stream, ",\"action_count\":%zu,\"actions\":[", plan->action_count));
-  for (iree_host_size_t i = 0; i < plan->action_count; ++i) {
-    if (i > 0) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ","));
-    }
-    const loom_amdgpu_wait_plan_action_t* action = &plan->actions[i];
-    const iree_string_view_t kind_name =
-        loom_amdgpu_wait_plan_action_kind_name(action->kind);
-    const iree_string_view_t reason_name =
-        loom_amdgpu_wait_plan_reason_name(action->reason);
-    const iree_string_view_t counter_name =
-        loom_amdgpu_wait_counter_name(action->counter_id);
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        &stream,
-        "{\"kind\":%u,\"kind_name\":\"%.*s\",\"reason\":%u"
-        ",\"reason_name\":\"%.*s\",\"counter\":%" PRIu16
-        ",\"counter_name\":\"%.*s\",\"target_count\":%" PRIu16
-        ",\"block\":%" PRIu32 ",\"node\":%" PRIu32
-        ",\"scheduled_ordinal\":%" PRIu32 ",\"producer_node\":",
-        (unsigned)action->kind, (int)kind_name.size, kind_name.data,
-        (unsigned)action->reason, (int)reason_name.size, reason_name.data,
-        action->counter_id, (int)counter_name.size, counter_name.data,
-        action->target_count, action->block_index, action->node_index,
-        action->scheduled_ordinal));
-    if (action->producer_node == LOOM_LOW_SCHEDULE_NODE_NONE) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "null"));
-    } else {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-          &stream, "%" PRIu32, action->producer_node));
-    }
-    IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(&stream, ",\"consumer_node\":"));
-    if (action->consumer_node == LOOM_LOW_SCHEDULE_NODE_NONE) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "null"));
-    } else {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-          &stream, "%" PRIu32, action->consumer_node));
-    }
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        &stream, ",\"outstanding_before\":%" PRIu32 "}",
-        action->outstanding_before));
+  if (plan == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU wait-plan JSON requires a plan");
   }
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "]}"));
-  return iree_ok_status();
+  return loom_low_packet_hazard_plan_format_json(&plan->hazard_plan, builder);
 }

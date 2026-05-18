@@ -225,6 +225,70 @@ TEST_F(LowPacketHazardPlanTest, RecordsResidualActionsWithPacketIdentity) {
   EXPECT_EQ(record.residual_progress, 2u);
 }
 
+iree_status_t SyntheticAggregateResidualHazardQuery(
+    void* user_data, const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_packet_progress_table_t* progress,
+    const loom_low_packet_view_t* packet,
+    loom_low_packet_hazard_plan_emit_fn_t emit, void* emit_user_data) {
+  (void)user_data;
+  (void)schedule;
+  (void)allocation;
+  if (packet->node_index != 1) {
+    return iree_ok_status();
+  }
+  uint32_t observed_progress = 0;
+  for (iree_host_size_t i = 0; i < progress->record_count; ++i) {
+    const loom_low_packet_progress_record_t* record = &progress->records[i];
+    if (record->packet_index < packet->packet_index &&
+        record->progress_class_id == kSyntheticProgressPipe &&
+        record->action == LOOM_LOW_PACKET_PROGRESS_ACTION_ADVANCE) {
+      observed_progress += record->units;
+    }
+  }
+  const uint32_t required_progress = 3;
+  return EmitHazardEvent(
+      emit, emit_user_data, LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION,
+      kSyntheticHazardLatency, IREE_SV("synthetic.latency"),
+      LOOM_LOW_SCHEDULE_NODE_NONE, kSyntheticProgressPipe,
+      IREE_SV("synthetic.pipe"), required_progress, observed_progress,
+      required_progress - observed_progress, iree_string_view_empty());
+}
+
+TEST_F(LowPacketHazardPlanTest,
+       RecordsAggregateResidualActionsWithoutProducerIdentity) {
+  const loom_low_packet_progress_provider_t progress_provider = {
+      .query = SyntheticProgressQuery,
+  };
+  loom_low_packet_progress_table_t progress = {};
+  IREE_ASSERT_OK(
+      loom_low_packet_progress_build(&state_.schedule, &state_.allocation,
+                                     &progress_provider, &arena_, &progress));
+
+  const loom_low_packet_hazard_plan_provider_t hazard_provider = {
+      .query = SyntheticAggregateResidualHazardQuery,
+  };
+  loom_low_packet_hazard_plan_t plan = {};
+  IREE_ASSERT_OK(loom_low_packet_hazard_plan_build(
+      &state_.schedule, &state_.allocation, &progress, &hazard_provider,
+      &arena_, &plan));
+
+  ASSERT_EQ(plan.record_count, 1u);
+  const loom_low_packet_hazard_plan_record_t& record = plan.records[0];
+  EXPECT_EQ(record.kind, LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION);
+  EXPECT_EQ(record.producer_node_index, LOOM_LOW_SCHEDULE_NODE_NONE);
+  EXPECT_EQ(record.producer_packet_index,
+            LOOM_LOW_PACKET_HAZARD_PLAN_PACKET_NONE);
+  EXPECT_EQ(record.producer_scheduled_ordinal,
+            LOOM_LOW_PACKET_HAZARD_PLAN_ORDINAL_NONE);
+  EXPECT_EQ(record.consumer_node_index, 1u);
+  EXPECT_EQ(record.insertion_packet_index, 1u);
+  EXPECT_EQ(record.progress_class_id, kSyntheticProgressPipe);
+  EXPECT_EQ(record.required_progress, 3u);
+  EXPECT_EQ(record.observed_progress, 0u);
+  EXPECT_EQ(record.residual_progress, 3u);
+}
+
 iree_status_t SyntheticScheduleOnlyDiagnosticQuery(
     void* user_data, const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,

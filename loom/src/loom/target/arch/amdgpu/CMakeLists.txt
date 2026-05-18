@@ -1727,13 +1727,13 @@ loom_cc_library(
     iree::base::internal::arena
     loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::descriptors
-    loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::packet
+    loom::src::loom::codegen::low::packet_hazard_plan
+    loom::src::loom::codegen::low::packet_hazard_plan_json
+    loom::src::loom::codegen::low::packet_progress
     loom::src::loom::codegen::low::schedule
     loom::src::loom::ir
     loom::src::loom::ops::low
-    loom::src::loom::util::json
-    loom::src::loom::util::stream
   PUBLIC
 )
 

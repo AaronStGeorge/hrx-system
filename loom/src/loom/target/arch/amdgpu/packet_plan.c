@@ -48,10 +48,25 @@ iree_status_t loom_amdgpu_packet_plan_verify(
                             "AMDGPU packet plan must be derived from the "
                             "emitted schedule and allocation");
   }
-  if (plan->wait_plan.schedule != schedule) {
+  if (plan->wait_plan.schedule != schedule ||
+      plan->wait_plan.allocation != allocation) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "AMDGPU packet plan wait-counter table must use "
-                            "the emitted schedule");
+                            "the emitted schedule and allocation");
+  }
+  if (plan->wait_plan.progress.schedule != schedule ||
+      plan->wait_plan.progress.allocation != allocation) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU packet plan wait-counter progress table "
+                            "must use the emitted schedule and allocation");
+  }
+  if (plan->wait_plan.hazard_plan.schedule != schedule ||
+      plan->wait_plan.hazard_plan.allocation != allocation ||
+      plan->wait_plan.hazard_plan.progress != &plan->wait_plan.progress) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU packet plan wait-counter hazard plan must "
+                            "use the emitted schedule, allocation, and "
+                            "progress table");
   }
   if (plan->wait_packets.wait_plan != &plan->wait_plan) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

@@ -58,6 +58,8 @@ static bool loom_amdgpu_loom_check_emit_provider_matches(
   return iree_string_view_equal(target_name, IREE_SV("amdgpu-assembly")) ||
          iree_string_view_equal(target_name, IREE_SV("amdgpu-asm")) ||
          iree_string_view_equal(target_name,
+                                IREE_SV("amdgpu-wait-counter-plan-json")) ||
+         iree_string_view_equal(target_name,
                                 IREE_SV("amdgpu-wait-state-plan-json")) ||
          iree_string_view_equal(target_name, IREE_SV("amdgpu-native"));
 }
@@ -211,6 +213,15 @@ static iree_status_t loom_amdgpu_loom_check_emit_wait_state_plan_json(
                                                  builder);
 }
 
+static iree_status_t loom_amdgpu_loom_check_emit_wait_counter_plan_json(
+    const loom_low_emission_frame_t* frame, iree_string_builder_t* builder,
+    iree_arena_allocator_t* arena) {
+  loom_amdgpu_packet_plan_t packet_plan = {0};
+  IREE_RETURN_IF_ERROR(loom_amdgpu_packet_plan_build(
+      &frame->schedule, &frame->allocation, arena, &packet_plan));
+  return loom_amdgpu_wait_plan_format_json(&packet_plan.wait_plan, builder);
+}
+
 static iree_status_t loom_amdgpu_loom_check_materialize_address_state(
     void* user_data, loom_module_t* module, loom_op_t* low_function_op,
     const loom_low_emission_frame_t* frame, iree_arena_allocator_t* arena,
@@ -277,6 +288,11 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
     return loom_amdgpu_loom_check_emit_wait_state_plan_json(
         &frame, &request->result->actual_output, request->case_arena);
   }
+  if (iree_string_view_equal(request->target_name,
+                             IREE_SV("amdgpu-wait-counter-plan-json"))) {
+    return loom_amdgpu_loom_check_emit_wait_counter_plan_json(
+        &frame, &request->result->actual_output, request->case_arena);
+  }
   return loom_amdgpu_loom_check_emit_assembly(
       &frame, &options, &request->result->actual_output, request->case_arena);
 }
@@ -287,8 +303,8 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_append_names(
   (void)provider;
   return iree_string_builder_append_cstring(
       builder,
-      "amdgpu-assembly, amdgpu-asm, amdgpu-wait-state-plan-json, "
-      "amdgpu-native");
+      "amdgpu-assembly, amdgpu-asm, amdgpu-wait-counter-plan-json, "
+      "amdgpu-wait-state-plan-json, amdgpu-native");
 }
 
 const loom_check_emit_provider_t loom_amdgpu_native_loom_check_emit_provider = {
