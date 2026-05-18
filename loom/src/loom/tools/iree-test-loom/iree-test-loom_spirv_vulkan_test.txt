@@ -7,6 +7,12 @@
 // RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
 // RUN:   iree-test-loom %S/testdata/spirv_vulkan_coop_hal_actual.loom --case=@dense_projection_tiled_f16_128_case --device=vulkan \
 // RUN:     | FileCheck --check-prefix=DENSE %s
+// RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
+// RUN:   iree-test-loom %S/testdata/spirv_vulkan_coop_hal_actual.loom --case=@narrow_score_tiled_f16_128x16_m1_case --device=vulkan \
+// RUN:     | FileCheck --check-prefix=NARROW-M1 %s
+// RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
+// RUN:   iree-test-loom %S/testdata/spirv_vulkan_coop_hal_actual.loom --case=@narrow_score_tiled_f16_128x16_m2_case --device=vulkan \
+// RUN:     | FileCheck --check-prefix=NARROW-M2 %s
 
 // SPIRV: "format":"loom.test.v0"
 // SPIRV: "case_count":1
@@ -24,3 +30,13 @@
 // DENSE: "case_count":1
 // DENSE: "failed_sample_count":0
 // DENSE: {{"case":"dense_projection_tiled_f16_128_case"}}
+
+// NARROW-M1: "format":"loom.test.v0"
+// NARROW-M1: "case_count":1
+// NARROW-M1: "failed_sample_count":0
+// NARROW-M1: {{"case":"narrow_score_tiled_f16_128x16_m1_case"}}
+
+// NARROW-M2: "format":"loom.test.v0"
+// NARROW-M2: "case_count":1
+// NARROW-M2: "failed_sample_count":0
+// NARROW-M2: {{"case":"narrow_score_tiled_f16_128x16_m2_case"}}

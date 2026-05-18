@@ -13,6 +13,13 @@
 // RUN:     --min_time_ms=0 --max_batches=1 --input_ring_count=1 \
 // RUN:     --artifact_bundle_dir=%t.spirv.coop.bundle --artifact_bundle_policy=debug
 // RUN: FileCheck --check-prefix=COOP %s < %t.spirv.coop.bundle/results.jsonl
+// RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
+// RUN:   iree-tune-loom %S/../iree-test-loom/testdata/spirv_vulkan_coop_hal_actual.loom \
+// RUN:     --benchmark=@narrow_score_tiled_f16_128x16_m1_dispatch --device=vulkan \
+// RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
+// RUN:     --min_time_ms=0 --max_batches=1 --input_ring_count=1 \
+// RUN:     --artifact_bundle_dir=%t.spirv.narrow.bundle --artifact_bundle_policy=debug
+// RUN: FileCheck --check-prefix=NARROW %s < %t.spirv.narrow.bundle/results.jsonl
 
 // SPIRV: "row":"run","run_id":"r
 // SPIRV: "artifact_bundle":{"dir":
@@ -56,3 +63,15 @@
 // COOP: "benchmark_count":1
 // COOP: "failure_count":0
 // COOP: "failed_benchmark_count":0
+
+// NARROW: "row":"run","run_id":"r
+// NARROW: "row":"plan"
+// NARROW: "benchmark":"narrow_score_tiled_f16_128x16_m1_dispatch","case":"narrow_score_tiled_f16_128x16_m1_case"
+// NARROW: "metadata":{"strategy":"cooperative_matrix_narrow_n_m1","knobs":{"m_tiles_per_workgroup":1},"problem":{"dtype":"f16xf16_f32","k":128,"m":128,"n":16,"tile_k":16,"tile_m":16,"tile_n":16}}
+// NARROW: "measure":"dispatch_complete"
+// NARROW: "row":"benchmark"
+// NARROW: "benchmark":"narrow_score_tiled_f16_128x16_m1_dispatch","case":"narrow_score_tiled_f16_128x16_m1_case","status":{{"ok"|"skipped"}}
+// NARROW: "row":"summary"
+// NARROW: "benchmark_count":1
+// NARROW: "failure_count":0
+// NARROW: "failed_benchmark_count":0
