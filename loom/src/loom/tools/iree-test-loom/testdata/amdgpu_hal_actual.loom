@@ -13,6 +13,20 @@ kernel.def target(@target) @store_i32(%output: buffer) {
   kernel.return
 }
 
+kernel.def target(@target) @double_i32(%output: buffer) {
+  %unit = index.constant 1 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%unit, %unit, %unit) : index
+} launch {
+  %zero_offset = index.constant 0 : offset
+  %zero_index = index.constant 0 : index
+  %global = buffer.assume.memory_space %output {memory_space = global} : buffer
+  %view = buffer.view %global[%zero_offset] : buffer -> view<1xi32, #dense>
+  %loaded = view.load %view[%zero_index] : view<1xi32, #dense> -> i32
+  %doubled = scalar.addi %loaded, %loaded : i32
+  view.store %doubled, %view[%zero_index] : i32, view<1xi32, #dense>
+  kernel.return
+}
+
 check.case @store_i32_case {
   %output = check.generate.fill value(0) : tensor<1xi32>
   func.call @store_i32(%output) : (tensor<1xi32>)
@@ -21,7 +35,23 @@ check.case @store_i32_case {
   check.return
 }
 
+check.case @store_then_double_i32_case {
+  %output = check.generate.fill value(21) : tensor<1xi32>
+  func.call @store_i32(%output) : (tensor<1xi32>)
+  func.call @double_i32(%output) : (tensor<1xi32>)
+  %expected = check.generate.fill value(84) : tensor<1xi32>
+  check.expect.equal actual(%output) expected(%expected) : tensor<1xi32>
+  check.return
+}
+
 check.benchmark @store_i32_dispatch case(@store_i32_case) {
+  batch_size = 1,
+  iterations = 1,
+  measure = "dispatch_complete",
+  warmup_iterations = 0
+}
+
+check.benchmark @store_then_double_i32_dispatch case(@store_then_double_i32_case) {
   batch_size = 1,
   iterations = 1,
   measure = "dispatch_complete",

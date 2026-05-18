@@ -272,6 +272,68 @@ static iree_status_t loom_run_hal_record_dispatch_batch(
   return status;
 }
 
+static iree_status_t loom_run_hal_record_dispatch_sequence_batch(
+    iree_hal_device_t* device, iree_host_size_t sequence_count,
+    const loom_run_hal_prepared_candidate_t* const* candidates,
+    iree_host_size_t plan_ring_count,
+    const loom_run_hal_invocation_plan_t* const* plans,
+    iree_vm_list_t* const* binding_lists, iree_host_size_t plan_ring_offset,
+    const loom_run_hal_dispatch_batch_options_t* batch_options,
+    iree_hal_command_buffer_t** out_command_buffer) {
+  *out_command_buffer = NULL;
+
+  iree_hal_command_buffer_t* command_buffer = NULL;
+  iree_status_t status = iree_hal_command_buffer_create(
+      device, batch_options->command_buffer_mode,
+      IREE_HAL_COMMAND_CATEGORY_DISPATCH, IREE_HAL_QUEUE_AFFINITY_ANY,
+      /*binding_capacity=*/0, &command_buffer);
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_command_buffer_begin(command_buffer);
+  }
+  for (iree_host_size_t batch_index = 0;
+       iree_status_is_ok(status) && batch_index < batch_options->dispatch_count;
+       ++batch_index) {
+    const iree_host_size_t ring_index =
+        (plan_ring_offset + batch_index) % plan_ring_count;
+    for (iree_host_size_t step_index = 0;
+         iree_status_is_ok(status) && step_index < sequence_count;
+         ++step_index) {
+      const iree_host_size_t plan_index =
+          ring_index * sequence_count + step_index;
+      const loom_run_hal_invocation_plan_t* plan = plans[plan_index];
+      iree_vm_list_t* binding_list = binding_lists[plan_index];
+      iree_hal_buffer_ref_t binding_refs[LOOM_RUN_HAL_MAX_BINDING_COUNT];
+      status = loom_run_hal_binding_refs_from_list(
+          binding_list, binding_refs, IREE_ARRAYSIZE(binding_refs));
+      if (!iree_status_is_ok(status)) {
+        break;
+      }
+      iree_hal_buffer_ref_list_t bindings = {
+          .count = iree_vm_list_size(binding_list),
+          .values = binding_refs,
+      };
+      const loom_run_hal_invocation_options_t* options = &plan->options;
+      iree_hal_dispatch_config_t config = iree_hal_make_static_dispatch_config(
+          options->workgroup_count[0], options->workgroup_count[1],
+          options->workgroup_count[2]);
+      status = iree_hal_command_buffer_dispatch(
+          command_buffer, candidates[step_index]->executable,
+          options->entry_point, config,
+          loom_run_hal_dispatch_constants(options), bindings,
+          IREE_HAL_DISPATCH_FLAG_NONE);
+    }
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_command_buffer_end(command_buffer);
+  }
+  if (iree_status_is_ok(status)) {
+    *out_command_buffer = command_buffer;
+  } else {
+    iree_hal_command_buffer_release(command_buffer);
+  }
+  return status;
+}
+
 iree_status_t loom_run_hal_dispatch(
     iree_hal_device_t* device, iree_hal_executable_t* executable,
     iree_vm_list_t* binding_list,
@@ -605,6 +667,126 @@ iree_status_t loom_run_hal_dispatch_batch_prepare_from_binding_ring(
     out_batch->dispatch_count = batch_options->dispatch_count;
     out_batch->execute_flags = batch_options->execute_flags;
   } else {
+    loom_run_hal_dispatch_batch_deinitialize(out_batch);
+  }
+  return status;
+}
+
+static iree_status_t loom_run_hal_dispatch_sequence_plan_ring_validate(
+    const loom_run_hal_runtime_t* runtime, iree_host_size_t sequence_count,
+    const loom_run_hal_prepared_candidate_t* const* candidates,
+    iree_host_size_t plan_ring_count,
+    const loom_run_hal_invocation_plan_t* const* plans) {
+  if (sequence_count == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL dispatch sequence must contain at least one "
+                            "dispatch step");
+  }
+  if (plan_ring_count == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL dispatch sequence plan ring must contain at "
+                            "least one ring slot");
+  }
+  if (candidates == NULL || plans == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL dispatch sequence requires candidates and "
+                            "plans");
+  }
+  if (runtime->device == NULL) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL runtime is not initialized");
+  }
+  for (iree_host_size_t step_index = 0; step_index < sequence_count;
+       ++step_index) {
+    if (candidates[step_index] == NULL ||
+        candidates[step_index]->executable == NULL) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "HAL dispatch sequence step %" PRIhsz
+                              " requires a prepared executable",
+                              step_index);
+    }
+  }
+  for (iree_host_size_t ring_index = 0; ring_index < plan_ring_count;
+       ++ring_index) {
+    for (iree_host_size_t step_index = 0; step_index < sequence_count;
+         ++step_index) {
+      const iree_host_size_t plan_index =
+          ring_index * sequence_count + step_index;
+      const loom_run_hal_invocation_plan_t* plan = plans[plan_index];
+      if (plan == NULL) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "HAL dispatch sequence ring slot %" PRIhsz
+                                " step %" PRIhsz " has no invocation plan",
+                                ring_index, step_index);
+      }
+      IREE_RETURN_IF_ERROR(loom_run_hal_invocation_plan_validate(plan));
+      IREE_RETURN_IF_ERROR(loom_run_hal_prepared_candidate_validate_dispatch(
+          candidates[step_index], plan));
+    }
+  }
+  return iree_ok_status();
+}
+
+iree_status_t loom_run_hal_dispatch_sequence_batch_prepare_from_plan_ring(
+    const loom_run_hal_runtime_t* runtime, iree_host_size_t sequence_count,
+    const loom_run_hal_prepared_candidate_t* const* candidates,
+    iree_host_size_t plan_ring_count,
+    const loom_run_hal_invocation_plan_t* const* plans,
+    iree_host_size_t plan_ring_offset,
+    const loom_run_hal_dispatch_batch_options_t* batch_options,
+    iree_allocator_t allocator, loom_run_hal_dispatch_batch_t* out_batch) {
+  loom_run_hal_dispatch_batch_initialize(out_batch);
+  if (batch_options->dispatch_count == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "HAL dispatch batch must contain at least one "
+                            "dispatch sequence");
+  }
+  IREE_RETURN_IF_ERROR(loom_run_hal_dispatch_sequence_plan_ring_validate(
+      runtime, sequence_count, candidates, plan_ring_count, plans));
+
+  iree_host_size_t plan_count = 0;
+  if (!iree_host_size_checked_mul(plan_ring_count, sequence_count,
+                                  &plan_count)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "HAL dispatch sequence plan count overflowed host "
+                            "size limits");
+  }
+  out_batch->host_allocator = allocator;
+  iree_status_t status = iree_allocator_malloc_array(
+      allocator, plan_count, sizeof(*out_batch->binding_lists),
+      (void**)&out_batch->binding_lists);
+  if (iree_status_is_ok(status)) {
+    out_batch->binding_list_count = plan_count;
+  }
+  for (iree_host_size_t i = 0;
+       iree_status_is_ok(status) && i < out_batch->binding_list_count; ++i) {
+    status = iree_vm_list_clone(plans[i]->bindings, allocator,
+                                &out_batch->binding_lists[i]);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_run_hal_record_dispatch_sequence_batch(
+        runtime->device, sequence_count, candidates, plan_ring_count, plans,
+        out_batch->binding_lists, plan_ring_offset, batch_options,
+        &out_batch->command_buffer);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_semaphore_create(
+        runtime->device, IREE_HAL_QUEUE_AFFINITY_ANY, /*initial_value=*/0,
+        IREE_HAL_SEMAPHORE_FLAG_DEFAULT, &out_batch->semaphore);
+  }
+  if (iree_status_is_ok(status)) {
+    out_batch->next_signal_value = 1;
+    if (!iree_host_size_checked_mul(batch_options->dispatch_count,
+                                    sequence_count,
+                                    &out_batch->dispatch_count)) {
+      status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "HAL dispatch sequence batch count overflowed "
+                                "host size limits");
+    } else {
+      out_batch->execute_flags = batch_options->execute_flags;
+    }
+  }
+  if (!iree_status_is_ok(status)) {
     loom_run_hal_dispatch_batch_deinitialize(out_batch);
   }
   return status;

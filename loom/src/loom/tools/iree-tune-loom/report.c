@@ -1744,6 +1744,24 @@ iree_status_t iree_tune_loom_write_benchmark_result_json(
         stream, ",\"measured_batch_count\":%" PRIhsz,
         timing->measured_batch_count));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream, ",\"measured_operation_count\":%" PRIhsz,
+        timing->measured_operation_count));
+    iree_host_size_t measured_physical_dispatch_count =
+        timing->measured_operation_count;
+    if (benchmark_result->data_cache.populated) {
+      if (!iree_host_size_checked_mul(
+              timing->measured_batch_count,
+              benchmark_result->data_cache.dispatches_per_batch,
+              &measured_physical_dispatch_count)) {
+        return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "measured physical dispatch count overflowed "
+                                "host size limits");
+      }
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream, ",\"measured_physical_dispatch_count\":%" PRIhsz,
+        measured_physical_dispatch_count));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
         stream, ",\"measured_dispatch_count\":%" PRIhsz,
         timing->measured_operation_count));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
@@ -1759,6 +1777,10 @@ iree_status_t iree_tune_loom_write_benchmark_result_json(
         &timing->batch_timing, stream));
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_cstring(stream, ",\"dispatch_timing_ns\":"));
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_benchmark_timing_stats_json(
+        &timing->operation_timing, stream));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"operation_timing_ns\":"));
     IREE_RETURN_IF_ERROR(iree_tune_loom_write_benchmark_timing_stats_json(
         &timing->operation_timing, stream));
     IREE_RETURN_IF_ERROR(iree_tune_loom_write_data_cache_summary_json(

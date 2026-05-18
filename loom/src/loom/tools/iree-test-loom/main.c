@@ -124,17 +124,14 @@ static iree_status_t iree_test_loom_append_skipped_case(
   return iree_ok_status();
 }
 
-static iree_status_t iree_test_loom_configure_hal_actual_provider(
+static iree_status_t iree_test_loom_configure_hal_actual_sequence(
     const iree_test_loom_configuration_t* configuration,
     loom_run_session_t* session, const loom_run_module_t* run_module,
     const loom_testbench_module_plan_t* module_plan,
     const loom_testbench_case_plan_t* case_plan,
     loom_run_hal_testbench_context_t* hal_context,
     loom_testbench_case_execution_options_t* execution_options,
-    loom_run_hal_testbench_actual_provider_t* out_provider) {
-  const loom_testbench_invocation_plan_t* actual_invocation = NULL;
-  IREE_RETURN_IF_ERROR(loom_run_hal_testbench_select_actual_invocation(
-      case_plan, &actual_invocation));
+    loom_run_hal_testbench_actual_sequence_t* out_sequence) {
   IREE_RETURN_IF_ERROR(
       loom_run_hal_testbench_context_ensure_runtime(hal_context));
 
@@ -144,7 +141,7 @@ static iree_status_t iree_test_loom_configure_hal_actual_provider(
   execution_options->materializer.buffer_params =
       loom_run_hal_testbench_host_visible_buffer_params();
 
-  const loom_run_hal_testbench_actual_provider_options_t provider_options = {
+  const loom_run_hal_testbench_actual_sequence_options_t sequence_options = {
       .context = hal_context,
       .session = session,
       .target_environment = configuration->target_environment,
@@ -152,14 +149,14 @@ static iree_status_t iree_test_loom_configure_hal_actual_provider(
       .source = run_module->source,
       .pipeline = iree_make_cstring_view(FLAG_pipeline),
       .test_module = module_plan->module,
-      .actual_invocation = actual_invocation,
+      .case_plan = case_plan,
   };
-  loom_run_hal_testbench_actual_provider_initialize(&provider_options,
-                                                    out_provider);
+  IREE_RETURN_IF_ERROR(loom_run_hal_testbench_actual_sequence_initialize(
+      &sequence_options, out_sequence));
   execution_options->invocation.invoke_actual =
       (loom_testbench_invocation_callback_t){
-          .fn = loom_run_hal_testbench_actual_invoke,
-          .user_data = out_provider,
+          .fn = loom_run_hal_testbench_actual_sequence_invoke,
+          .user_data = out_sequence,
       };
   return iree_ok_status();
 }
@@ -216,15 +213,15 @@ static iree_status_t iree_test_loom_run_case_samples(
   iree_status_t status = iree_ok_status();
   loom_testbench_case_execution_options_t execution_options =
       *base_execution_options;
-  loom_run_hal_testbench_actual_provider_t hal_actual_provider = {0};
+  loom_run_hal_testbench_actual_sequence_t hal_actual_sequence = {0};
   loom_testbench_reference_matmul_oracle_options_t matmul_oracle_options = {0};
   loom_testbench_oracle_provider_t oracle_providers[2] = {0};
-  bool hal_actual_provider_initialized = false;
+  bool hal_actual_sequence_initialized = false;
   if (iree_test_loom_case_has_actual_invocation(case_plan)) {
-    status = iree_test_loom_configure_hal_actual_provider(
+    status = iree_test_loom_configure_hal_actual_sequence(
         configuration, session, run_module, module_plan, case_plan, hal_context,
-        &execution_options, &hal_actual_provider);
-    hal_actual_provider_initialized = iree_status_is_ok(status);
+        &execution_options, &hal_actual_sequence);
+    hal_actual_sequence_initialized = iree_status_is_ok(status);
     if (iree_status_is_ok(status)) {
       matmul_oracle_options =
           (loom_testbench_reference_matmul_oracle_options_t){
@@ -293,8 +290,8 @@ static iree_status_t iree_test_loom_run_case_samples(
   if (executor_initialized) {
     loom_testbench_case_executor_deinitialize(&executor);
   }
-  if (hal_actual_provider_initialized) {
-    loom_run_hal_testbench_actual_provider_deinitialize(&hal_actual_provider);
+  if (hal_actual_sequence_initialized) {
+    loom_run_hal_testbench_actual_sequence_deinitialize(&hal_actual_sequence);
   }
   iree_arena_reset(arena);
   return status;

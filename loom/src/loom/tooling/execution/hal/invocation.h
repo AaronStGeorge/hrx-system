@@ -220,6 +220,21 @@ iree_status_t loom_run_hal_dispatch_batch_prepare_from_binding_ring(
     const loom_run_hal_dispatch_batch_options_t* batch_options,
     iree_allocator_t allocator, loom_run_hal_dispatch_batch_t* out_batch);
 
+// Records a reusable command buffer containing a sequence of HAL dispatches for
+// each logical batch slot. |candidates| has |sequence_count| entries. |plans|
+// is a flattened row-major array with |plan_ring_count * sequence_count|
+// entries, indexed as ring slot first and sequence step second. Each logical
+// batch slot i records every sequence step using ring slot
+// |(plan_ring_offset + i) % plan_ring_count|.
+iree_status_t loom_run_hal_dispatch_sequence_batch_prepare_from_plan_ring(
+    const loom_run_hal_runtime_t* runtime, iree_host_size_t sequence_count,
+    const loom_run_hal_prepared_candidate_t* const* candidates,
+    iree_host_size_t plan_ring_count,
+    const loom_run_hal_invocation_plan_t* const* plans,
+    iree_host_size_t plan_ring_offset,
+    const loom_run_hal_dispatch_batch_options_t* batch_options,
+    iree_allocator_t allocator, loom_run_hal_dispatch_batch_t* out_batch);
+
 // Submits |batch| once and waits for completion.
 iree_status_t loom_run_hal_dispatch_batch_execute(
     const loom_run_hal_runtime_t* runtime,

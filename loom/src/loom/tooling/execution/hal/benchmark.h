@@ -186,6 +186,19 @@ iree_status_t loom_run_hal_benchmark_dispatch_binding_ring(
     const loom_run_hal_benchmark_options_t* options, iree_allocator_t allocator,
     loom_run_hal_benchmark_result_t* out_result);
 
+// Prepares and times reusable HAL command buffers whose logical operation is a
+// fixed sequence of dispatches. |candidates| has |sequence_count| entries.
+// |plans| is a flattened row-major array with
+// |plan_ring_count * sequence_count| entries, indexed as ring slot first and
+// sequence step second.
+iree_status_t loom_run_hal_benchmark_dispatch_sequence_plan_ring(
+    const loom_run_hal_runtime_t* runtime, iree_host_size_t sequence_count,
+    const loom_run_hal_prepared_candidate_t* const* candidates,
+    iree_host_size_t plan_ring_count,
+    const loom_run_hal_invocation_plan_t* const* plans,
+    const loom_run_hal_benchmark_options_t* options, iree_allocator_t allocator,
+    loom_run_hal_benchmark_result_t* out_result);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

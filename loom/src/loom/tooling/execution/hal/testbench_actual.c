@@ -187,6 +187,20 @@ iree_hal_buffer_params_t loom_run_hal_testbench_host_visible_buffer_params(
   };
 }
 
+static iree_status_t loom_run_hal_testbench_validate_actual_invocation(
+    const loom_testbench_case_plan_t* case_plan,
+    const loom_testbench_invocation_plan_t* invocation) {
+  if (invocation->result_count != 0) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "HAL actual invocations support in-place HAL buffer arguments only; "
+        "actual invocation in `%.*s` has %" PRIhsz " results",
+        (int)case_plan->name.size, case_plan->name.data,
+        invocation->result_count);
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_run_hal_testbench_select_actual_invocation(
     const loom_testbench_case_plan_t* case_plan,
     const loom_testbench_invocation_plan_t** out_invocation) {
@@ -209,13 +223,23 @@ iree_status_t loom_run_hal_testbench_select_actual_invocation(
         (int)case_plan->name.size, case_plan->name.data,
         actual_invocation_count);
   }
-  if ((*out_invocation)->result_count != 0) {
-    return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "HAL actual invocations support in-place HAL buffer arguments only; "
-        "actual invocation in `%.*s` has %" PRIhsz " results",
-        (int)case_plan->name.size, case_plan->name.data,
-        (*out_invocation)->result_count);
+  return loom_run_hal_testbench_validate_actual_invocation(case_plan,
+                                                           *out_invocation);
+}
+
+iree_status_t loom_run_hal_testbench_count_actual_invocations(
+    const loom_testbench_case_plan_t* case_plan,
+    iree_host_size_t* out_actual_invocation_count) {
+  *out_actual_invocation_count = 0;
+  for (iree_host_size_t i = 0; i < case_plan->invocation_count; ++i) {
+    const loom_testbench_invocation_plan_t* invocation =
+        &case_plan->invocations[i];
+    if (invocation->kind != LOOM_TESTBENCH_INVOCATION_ACTUAL) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_run_hal_testbench_validate_actual_invocation(
+        case_plan, invocation));
+    ++*out_actual_invocation_count;
   }
   return iree_ok_status();
 }
@@ -794,34 +818,122 @@ iree_status_t loom_run_hal_testbench_actual_invoke(
   return status;
 }
 
-iree_status_t loom_run_hal_testbench_create_invocation_inputs_for_sample(
-    const loom_module_t* module,
-    const loom_testbench_value_materializer_options_t* materializer_options,
-    const loom_testbench_case_plan_t* case_plan,
+iree_status_t loom_run_hal_testbench_actual_sequence_initialize(
+    const loom_run_hal_testbench_actual_sequence_options_t* options,
+    loom_run_hal_testbench_actual_sequence_t* out_sequence) {
+  IREE_ASSERT_ARGUMENT(options);
+  IREE_ASSERT_ARGUMENT(out_sequence);
+  *out_sequence = (loom_run_hal_testbench_actual_sequence_t){
+      .host_allocator = options->context->host_allocator,
+  };
+
+  iree_host_size_t actual_invocation_count = 0;
+  iree_status_t status = loom_run_hal_testbench_count_actual_invocations(
+      options->case_plan, &actual_invocation_count);
+  if (iree_status_is_ok(status) && actual_invocation_count == 0) {
+    status = iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "HAL actual sequence requires at least one actual invocation in "
+        "check.case `%.*s`",
+        (int)options->case_plan->name.size, options->case_plan->name.data);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_allocator_malloc_array(
+        out_sequence->host_allocator, actual_invocation_count,
+        sizeof(*out_sequence->providers), (void**)&out_sequence->providers);
+  }
+  if (iree_status_is_ok(status)) {
+    memset(out_sequence->providers, 0,
+           actual_invocation_count * sizeof(*out_sequence->providers));
+    out_sequence->provider_count = actual_invocation_count;
+  }
+
+  iree_host_size_t provider_index = 0;
+  for (iree_host_size_t i = 0;
+       iree_status_is_ok(status) && i < options->case_plan->invocation_count;
+       ++i) {
+    const loom_testbench_invocation_plan_t* invocation =
+        &options->case_plan->invocations[i];
+    if (invocation->kind != LOOM_TESTBENCH_INVOCATION_ACTUAL) {
+      continue;
+    }
+    const loom_run_hal_testbench_actual_provider_options_t provider_options = {
+        .context = options->context,
+        .session = options->session,
+        .target_environment = options->target_environment,
+        .filename = options->filename,
+        .source = options->source,
+        .pipeline = options->pipeline,
+        .test_module = options->test_module,
+        .actual_invocation = invocation,
+        .specialization_case_plan = options->specialization_case_plan,
+        .specialization_sample_ordinal = options->specialization_sample_ordinal,
+        .has_specialization_sample_ordinal =
+            options->has_specialization_sample_ordinal,
+        .diagnostic_sink = options->diagnostic_sink,
+        .max_errors = options->max_errors,
+        .artifact_flags = options->artifact_flags,
+    };
+    loom_run_hal_testbench_actual_provider_initialize(
+        &provider_options, &out_sequence->providers[provider_index++]);
+  }
+  if (!iree_status_is_ok(status)) {
+    loom_run_hal_testbench_actual_sequence_deinitialize(out_sequence);
+  }
+  return status;
+}
+
+void loom_run_hal_testbench_actual_sequence_deinitialize(
+    loom_run_hal_testbench_actual_sequence_t* sequence) {
+  if (sequence == NULL) {
+    return;
+  }
+  for (iree_host_size_t i = 0; i < sequence->provider_count; ++i) {
+    loom_run_hal_testbench_actual_provider_deinitialize(
+        &sequence->providers[i]);
+  }
+  if (sequence->providers != NULL) {
+    iree_allocator_free(sequence->host_allocator, sequence->providers);
+  }
+  *sequence = (loom_run_hal_testbench_actual_sequence_t){0};
+}
+
+iree_status_t loom_run_hal_testbench_actual_sequence_invoke(
+    void* user_data, const loom_testbench_invocation_plan_t* invocation,
+    iree_host_size_t input_count, const iree_vm_variant_t* inputs,
+    iree_host_size_t result_count, iree_vm_variant_t* out_results) {
+  loom_run_hal_testbench_actual_sequence_t* sequence =
+      (loom_run_hal_testbench_actual_sequence_t*)user_data;
+  for (iree_host_size_t i = 0; i < sequence->provider_count; ++i) {
+    loom_run_hal_testbench_actual_provider_t* provider =
+        &sequence->providers[i];
+    if (provider->actual_invocation == invocation) {
+      return loom_run_hal_testbench_actual_invoke(
+          provider, invocation, input_count, inputs, result_count, out_results);
+    }
+  }
+  return iree_make_status(
+      IREE_STATUS_FAILED_PRECONDITION,
+      "HAL actual sequence received an unexpected invocation");
+}
+
+iree_status_t loom_run_hal_testbench_create_invocation_inputs_from_table(
+    const loom_testbench_value_table_t* table,
     const loom_testbench_invocation_plan_t* invocation,
-    iree_host_size_t sample_ordinal,
     const loom_run_hal_invocation_options_t* base_options,
     iree_allocator_t allocator, loom_run_hal_invocation_options_t* out_options,
     iree_vm_list_t** out_bindings) {
   *out_bindings = NULL;
   *out_options = *base_options;
-  loom_testbench_value_table_t table = {0};
   iree_vm_list_t* bindings = NULL;
-  iree_status_t status = loom_testbench_value_table_initialize(
-      module, case_plan, allocator, &table);
-  if (iree_status_is_ok(status)) {
-    status = loom_testbench_materialize_case_sample(
-        materializer_options, case_plan, sample_ordinal, &table);
-  }
-  if (iree_status_is_ok(status)) {
-    status = iree_vm_list_create(iree_vm_make_undefined_type_def(),
-                                 invocation->input_count, allocator, &bindings);
-  }
+  iree_status_t status =
+      iree_vm_list_create(iree_vm_make_undefined_type_def(),
+                          invocation->input_count, allocator, &bindings);
   for (iree_host_size_t i = 0;
        iree_status_is_ok(status) && i < invocation->input_count; ++i) {
     iree_vm_variant_t variant = iree_vm_variant_empty();
     status = loom_testbench_value_table_lookup_retain(
-        &table, invocation->input_value_ids[i], &variant);
+        table, invocation->input_value_ids[i], &variant);
     if (iree_status_is_ok(status)) {
       status = loom_run_hal_testbench_owned_input_append(bindings, &variant,
                                                          out_options);
@@ -833,6 +945,29 @@ iree_status_t loom_run_hal_testbench_create_invocation_inputs_for_sample(
     bindings = NULL;
   }
   iree_vm_list_release(bindings);
+  return status;
+}
+
+iree_status_t loom_run_hal_testbench_create_invocation_inputs_for_sample(
+    const loom_module_t* module,
+    const loom_testbench_value_materializer_options_t* materializer_options,
+    const loom_testbench_case_plan_t* case_plan,
+    const loom_testbench_invocation_plan_t* invocation,
+    iree_host_size_t sample_ordinal,
+    const loom_run_hal_invocation_options_t* base_options,
+    iree_allocator_t allocator, loom_run_hal_invocation_options_t* out_options,
+    iree_vm_list_t** out_bindings) {
+  loom_testbench_value_table_t table = {0};
+  iree_status_t status = loom_testbench_value_table_initialize(
+      module, case_plan, allocator, &table);
+  if (iree_status_is_ok(status)) {
+    status = loom_testbench_materialize_case_sample(
+        materializer_options, case_plan, sample_ordinal, &table);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_run_hal_testbench_create_invocation_inputs_from_table(
+        &table, invocation, base_options, allocator, out_options, out_bindings);
+  }
   loom_testbench_value_table_deinitialize(&table);
   return status;
 }

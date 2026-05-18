@@ -79,6 +79,12 @@ iree_status_t loom_run_hal_testbench_select_actual_invocation(
     const loom_testbench_case_plan_t* case_plan,
     const loom_testbench_invocation_plan_t** out_invocation);
 
+// Counts actual invocations in |case_plan| and validates that each invocation
+// uses in-place HAL buffer outputs.
+iree_status_t loom_run_hal_testbench_count_actual_invocations(
+    const loom_testbench_case_plan_t* case_plan,
+    iree_host_size_t* out_actual_invocation_count);
+
 typedef struct loom_run_hal_testbench_actual_provider_options_t {
   // Shared HAL context used to prepare and dispatch the candidate.
   loom_run_hal_testbench_context_t* context;
@@ -188,6 +194,46 @@ typedef struct loom_run_hal_testbench_actual_provider_t {
   iree_host_size_t specialized_argument_count;
 } loom_run_hal_testbench_actual_provider_t;
 
+typedef struct loom_run_hal_testbench_actual_sequence_options_t {
+  // Shared HAL context used to prepare and dispatch all actual candidates.
+  loom_run_hal_testbench_context_t* context;
+  // Execution session used to parse each private compile copy.
+  loom_run_session_t* session;
+  // Target environment used by the source-to-low pipeline.
+  const loom_target_environment_t* target_environment;
+  // Source filename used for diagnostics.
+  iree_string_view_t filename;
+  // Source text used to parse each private compile copy.
+  iree_string_view_t source;
+  // User-selected pass pipeline.
+  iree_string_view_t pipeline;
+  // Module that owns |case_plan|.
+  const loom_module_t* test_module;
+  // Case plan whose actual invocations are executed by the sequence.
+  const loom_testbench_case_plan_t* case_plan;
+  // Optional case plan used for per-sample shape specialization.
+  const loom_testbench_case_plan_t* specialization_case_plan;
+  // Sample ordinal used when |has_specialization_sample_ordinal| is true.
+  iree_host_size_t specialization_sample_ordinal;
+  // True when per-sample shape specialization should be applied.
+  bool has_specialization_sample_ordinal;
+  // Diagnostic sink used while parsing, lowering, and emitting candidates.
+  loom_diagnostic_sink_t diagnostic_sink;
+  // Maximum diagnostics to emit before stopping. Zero uses the default.
+  uint32_t max_errors;
+  // Optional debug artifacts requested from the selected backend.
+  loom_run_candidate_artifact_flags_t artifact_flags;
+} loom_run_hal_testbench_actual_sequence_options_t;
+
+typedef struct loom_run_hal_testbench_actual_sequence_t {
+  // Host allocator used for sequence-owned provider storage.
+  iree_allocator_t host_allocator;
+  // Sequence-owned providers in check.case source order.
+  loom_run_hal_testbench_actual_provider_t* providers;
+  // Number of entries in |providers|.
+  iree_host_size_t provider_count;
+} loom_run_hal_testbench_actual_sequence_t;
+
 // Initializes a compile-on-first-use HAL actual provider.
 void loom_run_hal_testbench_actual_provider_initialize(
     const loom_run_hal_testbench_actual_provider_options_t* options,
@@ -207,10 +253,35 @@ iree_status_t loom_run_hal_testbench_actual_invoke(
     iree_host_size_t input_count, const iree_vm_variant_t* inputs,
     iree_host_size_t result_count, iree_vm_variant_t* out_results);
 
+// Initializes a compile-on-first-use provider sequence for every actual
+// invocation in a check.case.
+iree_status_t loom_run_hal_testbench_actual_sequence_initialize(
+    const loom_run_hal_testbench_actual_sequence_options_t* options,
+    loom_run_hal_testbench_actual_sequence_t* out_sequence);
+
+// Releases storage owned by |sequence|.
+void loom_run_hal_testbench_actual_sequence_deinitialize(
+    loom_run_hal_testbench_actual_sequence_t* sequence);
+
+// Testbench invocation callback for HAL actual invocation sequences.
+iree_status_t loom_run_hal_testbench_actual_sequence_invoke(
+    void* user_data, const loom_testbench_invocation_plan_t* invocation,
+    iree_host_size_t input_count, const iree_vm_variant_t* inputs,
+    iree_host_size_t result_count, iree_vm_variant_t* out_results);
+
 // Appends borrowed testbench input variants to HAL bindings/constants.
 iree_status_t loom_run_hal_testbench_invocation_inputs_from_variants(
     const iree_vm_variant_t* inputs, iree_host_size_t input_count,
     loom_run_hal_invocation_options_t* options, iree_allocator_t allocator,
+    iree_vm_list_t** out_bindings);
+
+// Extracts the selected actual invocation inputs from an already-materialized
+// case sample value table as HAL bindings/constants.
+iree_status_t loom_run_hal_testbench_create_invocation_inputs_from_table(
+    const loom_testbench_value_table_t* table,
+    const loom_testbench_invocation_plan_t* invocation,
+    const loom_run_hal_invocation_options_t* base_options,
+    iree_allocator_t allocator, loom_run_hal_invocation_options_t* out_options,
     iree_vm_list_t** out_bindings);
 
 // Materializes one case sample and extracts the selected actual invocation

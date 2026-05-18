@@ -893,6 +893,254 @@ static iree_status_t iree_tune_loom_hal_input_ring_prepare(
   return status;
 }
 
+typedef struct iree_tune_loom_hal_sequence_input_ring_t {
+  // Host allocator used for ring-owned arrays.
+  iree_allocator_t host_allocator;
+  // Ring-owned invocation plans in ring-slot, sequence-step order.
+  loom_run_hal_invocation_plan_t* plans;
+  // Borrowed plan pointers into |plans| for HAL benchmark setup.
+  const loom_run_hal_invocation_plan_t** plan_ptrs;
+  // Borrowed prepared candidates in sequence-step order.
+  const loom_run_hal_prepared_candidate_t** candidates;
+  // Number of logical ring slots in |plans|.
+  iree_host_size_t plan_ring_count;
+  // Number of actual dispatch invocations per logical ring slot.
+  iree_host_size_t sequence_count;
+  // Data/cache summary derived while materializing the ring.
+  iree_tune_loom_data_cache_summary_t summary;
+} iree_tune_loom_hal_sequence_input_ring_t;
+
+static iree_host_size_t iree_tune_loom_hal_sequence_input_ring_plan_count(
+    const iree_tune_loom_hal_sequence_input_ring_t* ring) {
+  return ring->plan_ring_count * ring->sequence_count;
+}
+
+static void iree_tune_loom_hal_sequence_input_ring_deinitialize(
+    iree_tune_loom_hal_sequence_input_ring_t* ring) {
+  if (ring == NULL) {
+    return;
+  }
+  const iree_host_size_t plan_count =
+      iree_tune_loom_hal_sequence_input_ring_plan_count(ring);
+  for (iree_host_size_t i = 0; i < plan_count; ++i) {
+    loom_run_hal_invocation_plan_deinitialize(&ring->plans[i]);
+  }
+  if (ring->candidates != NULL) {
+    iree_allocator_free(ring->host_allocator, ring->candidates);
+  }
+  if (ring->plan_ptrs != NULL) {
+    iree_allocator_free(ring->host_allocator, ring->plan_ptrs);
+  }
+  if (ring->plans != NULL) {
+    iree_allocator_free(ring->host_allocator, ring->plans);
+  }
+  *ring = (iree_tune_loom_hal_sequence_input_ring_t){0};
+}
+
+static iree_status_t iree_tune_loom_hal_sequence_plans_total_byte_length(
+    const loom_run_hal_invocation_plan_t* plans, iree_host_size_t plan_count,
+    uint64_t* out_byte_length) {
+  *out_byte_length = 0;
+  for (iree_host_size_t i = 0; i < plan_count; ++i) {
+    uint64_t plan_byte_length = 0;
+    IREE_RETURN_IF_ERROR(loom_run_hal_binding_list_total_byte_length(
+        plans[i].bindings, &plan_byte_length));
+    if (UINT64_MAX - *out_byte_length < plan_byte_length) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "HAL benchmark sequence binding byte count "
+                              "overflowed uint64");
+    }
+    *out_byte_length += plan_byte_length;
+  }
+  return iree_ok_status();
+}
+
+static iree_host_size_t iree_tune_loom_hal_sequence_binding_count(
+    const loom_run_hal_invocation_plan_t* plans, iree_host_size_t plan_count) {
+  iree_host_size_t binding_count = 0;
+  for (iree_host_size_t i = 0; i < plan_count; ++i) {
+    binding_count += iree_vm_list_size(plans[i].bindings);
+  }
+  return binding_count;
+}
+
+static iree_status_t iree_tune_loom_prepare_hal_sequence_plans_for_sample(
+    const loom_testbench_module_plan_t* module_plan,
+    const loom_testbench_case_plan_t* case_plan,
+    const loom_run_hal_testbench_actual_sequence_t* sequence,
+    const loom_testbench_value_materializer_options_t* materializer_options,
+    iree_host_size_t sample_ordinal, iree_allocator_t allocator,
+    loom_run_hal_invocation_plan_t* out_plans) {
+  loom_testbench_value_table_t table = {0};
+  iree_status_t status = loom_testbench_value_table_initialize(
+      module_plan->module, case_plan, allocator, &table);
+  if (iree_status_is_ok(status)) {
+    status = loom_testbench_materialize_case_sample(
+        materializer_options, case_plan, sample_ordinal, &table);
+  }
+  for (iree_host_size_t i = 0;
+       iree_status_is_ok(status) && i < sequence->provider_count; ++i) {
+    const loom_run_hal_testbench_actual_provider_t* provider =
+        &sequence->providers[i];
+    loom_run_hal_invocation_options_t invocation_options = {0};
+    iree_vm_list_t* bindings = NULL;
+    status = loom_run_hal_testbench_create_invocation_inputs_from_table(
+        &table, provider->actual_invocation, &provider->invocation_options,
+        allocator, &invocation_options, &bindings);
+    if (iree_status_is_ok(status)) {
+      status = loom_run_hal_invocation_plan_prepare_from_lists(
+          &invocation_options, bindings, /*expected_bindings=*/NULL,
+          /*max_output_element_count=*/0, &out_plans[i]);
+    }
+    iree_vm_list_release(bindings);
+  }
+  loom_testbench_value_table_deinitialize(&table);
+  return status;
+}
+
+static iree_status_t iree_tune_loom_hal_sequence_input_ring_prepare(
+    const loom_testbench_module_plan_t* module_plan,
+    const loom_testbench_case_plan_t* case_plan,
+    const iree_tune_loom_benchmark_policy_t* policy,
+    const loom_run_hal_testbench_actual_sequence_t* sequence,
+    const loom_testbench_value_materializer_options_t* materializer_options,
+    iree_host_size_t sample_ordinal, iree_allocator_t allocator,
+    iree_tune_loom_hal_sequence_input_ring_t* out_ring) {
+  *out_ring = (iree_tune_loom_hal_sequence_input_ring_t){
+      .host_allocator = allocator,
+      .sequence_count = sequence->provider_count,
+  };
+
+  loom_run_hal_invocation_plan_t* first_plans = NULL;
+  iree_status_t status =
+      iree_allocator_malloc_array(allocator, sequence->provider_count,
+                                  sizeof(*first_plans), (void**)&first_plans);
+  if (iree_status_is_ok(status)) {
+    memset(first_plans, 0, sequence->provider_count * sizeof(*first_plans));
+    status = iree_tune_loom_prepare_hal_sequence_plans_for_sample(
+        module_plan, case_plan, sequence, materializer_options, sample_ordinal,
+        allocator, first_plans);
+  }
+  uint64_t first_binding_set_bytes = 0;
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_hal_sequence_plans_total_byte_length(
+        first_plans, sequence->provider_count, &first_binding_set_bytes);
+  }
+
+  iree_host_size_t ring_count = 1;
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_hal_input_ring_count_for_sample(
+        first_binding_set_bytes, policy->hal_options.timing.batch_size,
+        &ring_count);
+  }
+  iree_host_size_t plan_count = 0;
+  if (iree_status_is_ok(status) &&
+      !iree_host_size_checked_mul(ring_count, sequence->provider_count,
+                                  &plan_count)) {
+    status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "HAL benchmark sequence input ring plan count "
+                              "overflowed host size limits");
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_allocator_malloc_array(allocator, plan_count,
+                                         sizeof(*out_ring->plans),
+                                         (void**)&out_ring->plans);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_allocator_malloc_array(allocator, plan_count,
+                                         sizeof(*out_ring->plan_ptrs),
+                                         (void**)&out_ring->plan_ptrs);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_allocator_malloc_array(allocator, sequence->provider_count,
+                                         sizeof(*out_ring->candidates),
+                                         (void**)&out_ring->candidates);
+  }
+  if (iree_status_is_ok(status)) {
+    memset(out_ring->plans, 0, plan_count * sizeof(*out_ring->plans));
+    out_ring->plan_ring_count = ring_count;
+    for (iree_host_size_t i = 0; i < sequence->provider_count; ++i) {
+      out_ring->plans[i] = first_plans[i];
+      first_plans[i] = (loom_run_hal_invocation_plan_t){0};
+      out_ring->plan_ptrs[i] = &out_ring->plans[i];
+      out_ring->candidates[i] = &sequence->providers[i].prepared_candidate;
+    }
+    iree_host_size_t dispatches_per_batch = 0;
+    if (!iree_host_size_checked_mul(policy->hal_options.timing.batch_size,
+                                    sequence->provider_count,
+                                    &dispatches_per_batch)) {
+      status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                "HAL benchmark sequence dispatch count "
+                                "overflowed host size limits");
+    } else {
+      out_ring->summary = (iree_tune_loom_data_cache_summary_t){
+          .populated = true,
+          .binding_count = iree_tune_loom_hal_sequence_binding_count(
+              out_ring->plans, sequence->provider_count),
+          .binding_ring_count = ring_count,
+          .dispatches_per_batch = dispatches_per_batch,
+          .requested_min_ring_bytes = (uint64_t)FLAG_input_ring_min_bytes,
+          .binding_set_bytes = first_binding_set_bytes,
+          .binding_ring_bytes = first_binding_set_bytes,
+      };
+    }
+  }
+  for (iree_host_size_t ring_index = 1;
+       iree_status_is_ok(status) && ring_index < ring_count; ++ring_index) {
+    loom_run_hal_invocation_plan_t* ring_plans =
+        &out_ring->plans[ring_index * sequence->provider_count];
+    status = iree_tune_loom_prepare_hal_sequence_plans_for_sample(
+        module_plan, case_plan, sequence, materializer_options, sample_ordinal,
+        allocator, ring_plans);
+    for (iree_host_size_t step_index = 0;
+         iree_status_is_ok(status) && step_index < sequence->provider_count;
+         ++step_index) {
+      if (!iree_tune_loom_hal_invocation_options_equal(
+              &out_ring->plans[step_index].options,
+              &ring_plans[step_index].options)) {
+        status = iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "HAL benchmark sequence input ring materialization changed "
+            "dispatch constants or geometry for sample %" PRIhsz
+            " step %" PRIhsz,
+            sample_ordinal, step_index);
+      }
+    }
+    uint64_t binding_set_bytes = 0;
+    if (iree_status_is_ok(status)) {
+      status = iree_tune_loom_hal_sequence_plans_total_byte_length(
+          ring_plans, sequence->provider_count, &binding_set_bytes);
+    }
+    if (iree_status_is_ok(status)) {
+      if (UINT64_MAX - out_ring->summary.binding_ring_bytes <
+          binding_set_bytes) {
+        status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                  "HAL benchmark sequence input ring byte "
+                                  "count overflowed uint64");
+      } else {
+        out_ring->summary.binding_ring_bytes += binding_set_bytes;
+      }
+    }
+    for (iree_host_size_t step_index = 0;
+         iree_status_is_ok(status) && step_index < sequence->provider_count;
+         ++step_index) {
+      const iree_host_size_t plan_index =
+          ring_index * sequence->provider_count + step_index;
+      out_ring->plan_ptrs[plan_index] = &out_ring->plans[plan_index];
+    }
+  }
+  if (!iree_status_is_ok(status)) {
+    iree_tune_loom_hal_sequence_input_ring_deinitialize(out_ring);
+  }
+  if (first_plans != NULL) {
+    for (iree_host_size_t i = 0; i < sequence->provider_count; ++i) {
+      loom_run_hal_invocation_plan_deinitialize(&first_plans[i]);
+    }
+    iree_allocator_free(allocator, first_plans);
+  }
+  return status;
+}
+
 static void iree_tune_loom_benchmark_result_set_compile_rejection(
     const iree_tune_loom_hal_actual_provider_t* provider,
     iree_tune_loom_benchmark_result_t* out_result) {
@@ -1063,6 +1311,122 @@ static iree_status_t iree_tune_loom_run_hal_benchmark_sample(
     out_result->passed = true;
   }
   iree_tune_loom_hal_input_ring_deinitialize(&input_ring);
+  return status;
+}
+
+static iree_status_t iree_tune_loom_hal_actual_sequence_compile(
+    loom_run_hal_testbench_actual_sequence_t* sequence) {
+  for (iree_host_size_t i = 0; i < sequence->provider_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_run_hal_testbench_actual_provider_compile(
+        &sequence->providers[i]));
+  }
+  return iree_ok_status();
+}
+
+static const loom_run_hal_testbench_actual_provider_t*
+iree_tune_loom_hal_actual_sequence_first_rejection(
+    const loom_run_hal_testbench_actual_sequence_t* sequence) {
+  for (iree_host_size_t i = 0; i < sequence->provider_count; ++i) {
+    const loom_run_hal_testbench_actual_provider_t* provider =
+        &sequence->providers[i];
+    if (provider->compile_rejected) {
+      return provider;
+    }
+  }
+  return NULL;
+}
+
+static void iree_tune_loom_benchmark_result_set_sequence_compile_rejection(
+    const loom_run_hal_testbench_actual_provider_t* provider,
+    iree_string_view_t specialization,
+    iree_tune_loom_benchmark_result_t* out_result) {
+  memset(out_result, 0, sizeof(*out_result));
+  out_result->status = IREE_SV("compile_failed");
+  out_result->has_failure = true;
+  out_result->failure_stage = provider->compile_failure_stage;
+  out_result->failure_kind = provider->compile_failure_kind;
+  out_result->failure_message = provider->compile_failure_message;
+  out_result->diagnostic_error_count = provider->diagnostic_error_count;
+  out_result->diagnostic_warning_count = provider->diagnostic_warning_count;
+  out_result->diagnostic_remark_count = provider->diagnostic_remark_count;
+  out_result->specialization = specialization;
+}
+
+static iree_status_t iree_tune_loom_run_hal_sequence_benchmark_sample(
+    const iree_tune_loom_run_identity_t* run,
+    const iree_tune_loom_candidate_identity_t* candidate,
+    const loom_testbench_module_plan_t* module_plan,
+    const loom_testbench_case_plan_t* case_plan,
+    const iree_tune_loom_benchmark_policy_t* policy,
+    iree_tune_loom_hal_context_t* hal_context,
+    loom_run_hal_testbench_actual_sequence_t* sequence,
+    const loom_testbench_value_materializer_options_t* materializer_options,
+    iree_string_view_t specialization, iree_host_size_t sample_ordinal,
+    iree_allocator_t allocator, iree_tune_loom_benchmark_result_t* out_result) {
+  memset(out_result, 0, sizeof(*out_result));
+  out_result->specialization = specialization;
+  out_result->has_sample_ordinal = true;
+  out_result->sample_ordinal = sample_ordinal;
+  out_result->samples_per_iteration = 1;
+
+  const loom_run_hal_testbench_actual_provider_t* rejected_provider =
+      iree_tune_loom_hal_actual_sequence_first_rejection(sequence);
+  if (rejected_provider != NULL) {
+    iree_tune_loom_benchmark_result_set_sequence_compile_rejection(
+        rejected_provider, specialization, out_result);
+    out_result->has_sample_ordinal = true;
+    out_result->sample_ordinal = sample_ordinal;
+    out_result->samples_per_iteration = 1;
+    return iree_ok_status();
+  }
+
+  iree_tune_loom_hal_sequence_input_ring_t input_ring = {0};
+  iree_status_t status = iree_tune_loom_hal_sequence_input_ring_prepare(
+      module_plan, case_plan, policy, sequence, materializer_options,
+      sample_ordinal, allocator, &input_ring);
+  if (iree_status_is_ok(status)) {
+    out_result->has_hal_benchmark = true;
+    out_result->data_cache = input_ring.summary;
+    loom_run_hal_benchmark_options_t hal_options = policy->hal_options;
+    iree_string_builder_t profile_artifact_path;
+    iree_string_builder_initialize(allocator, &profile_artifact_path);
+    status = iree_tune_loom_append_profile_artifact_path(
+        run, candidate, policy->hal_options.profile_data_families,
+        specialization, sample_ordinal, &profile_artifact_path);
+    if (iree_status_is_ok(status) &&
+        iree_string_builder_size(&profile_artifact_path) != 0) {
+      status = iree_tune_loom_create_parent_directory(
+          iree_string_builder_view(&profile_artifact_path), allocator);
+    }
+    if (iree_status_is_ok(status) &&
+        iree_string_builder_size(&profile_artifact_path) != 0) {
+      status = iree_tune_loom_artifact_bundle_record_file(
+          hal_context->artifact_bundle, IREE_TUNE_LOOM_BUNDLE_FILE_PROFILE,
+          iree_string_builder_view(&profile_artifact_path));
+    }
+    if (iree_status_is_ok(status) &&
+        iree_string_builder_size(&profile_artifact_path) != 0) {
+      hal_options.profile_artifact_path =
+          iree_string_builder_view(&profile_artifact_path);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_run_hal_benchmark_dispatch_sequence_plan_ring(
+          &hal_context->execution.runtime, sequence->provider_count,
+          input_ring.candidates, input_ring.plan_ring_count,
+          input_ring.plan_ptrs, &hal_options, allocator,
+          &out_result->hal_benchmark);
+    }
+    if (iree_status_is_ok(status)) {
+      out_result->data_cache.command_buffer_ring_count =
+          out_result->hal_benchmark.command_buffer_ring_count;
+    }
+    iree_string_builder_deinitialize(&profile_artifact_path);
+  }
+  if (iree_status_is_ok(status)) {
+    out_result->executed = true;
+    out_result->passed = true;
+  }
+  iree_tune_loom_hal_sequence_input_ring_deinitialize(&input_ring);
   return status;
 }
 
@@ -1471,6 +1835,185 @@ static iree_status_t iree_tune_loom_append_dispatch_benchmark_result(
                       iree_tune_loom_jsonl_sink_begin(jsonl_sink)));
 }
 
+static iree_status_t iree_tune_loom_run_dispatch_complete_sequence_benchmark(
+    const iree_tune_loom_run_identity_t* run,
+    const iree_tune_loom_candidate_identity_t* candidate,
+    const loom_testbench_module_plan_t* module_plan,
+    const loom_testbench_benchmark_plan_t* benchmark_plan,
+    const loom_testbench_case_plan_t* case_plan,
+    const iree_tune_loom_benchmark_policy_t* policy,
+    iree_tune_loom_hal_context_t* hal_context, loom_run_session_t* session,
+    iree_string_view_t filename, iree_string_view_t source,
+    const loom_testbench_case_execution_options_t* execution_options,
+    iree_string_view_t specialization, bool has_specialization_sample_ordinal,
+    iree_host_size_t specialization_sample_ordinal,
+    iree_tune_loom_device_row_state_t* device_row_state,
+    iree_arena_allocator_t* execution_arena, iree_allocator_t allocator,
+    iree_tune_loom_jsonl_sink_t* jsonl_sink,
+    iree_host_size_t* inout_correctness_sample_count,
+    iree_host_size_t* inout_correctness_failed_sample_count,
+    iree_host_size_t* inout_failed_benchmark_count) {
+  loom_run_hal_testbench_actual_sequence_t hal_sequence = {0};
+  bool hal_sequence_initialized = false;
+  loom_testbench_case_execution_options_t benchmark_execution_options =
+      *execution_options;
+  loom_testbench_value_materializer_options_t benchmark_materializer =
+      execution_options->materializer;
+  iree_tune_loom_reference_oracles_t reference_oracles = {0};
+
+  iree_status_t status =
+      loom_run_hal_testbench_context_ensure_runtime(&hal_context->execution);
+  loom_testbench_requirement_result_t requirement_result = {0};
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_evaluate_case_requirements(
+        hal_context->configuration, &hal_context->execution, module_plan,
+        case_plan, &requirement_result);
+  }
+  if (iree_status_is_ok(status) && requirement_result.skipped) {
+    iree_tune_loom_benchmark_result_t benchmark_result = {
+        .status = IREE_SV("skipped"),
+        .specialization = specialization,
+    };
+    return iree_tune_loom_append_dispatch_benchmark_result(
+        run, candidate, module_plan, benchmark_plan, case_plan, policy,
+        &benchmark_result, /*correctness_sample_count=*/0,
+        /*correctness_failed_sample_count=*/0, jsonl_sink, allocator);
+  }
+  if (iree_status_is_ok(status)) {
+    benchmark_execution_options.materializer.device =
+        hal_context->execution.runtime.device;
+    benchmark_execution_options.materializer.device_allocator =
+        iree_hal_device_allocator(hal_context->execution.runtime.device);
+    benchmark_execution_options.materializer.buffer_params =
+        loom_run_hal_testbench_host_visible_buffer_params();
+    const loom_run_hal_testbench_actual_sequence_options_t sequence_options = {
+        .context = &hal_context->execution,
+        .session = session,
+        .target_environment = hal_context->configuration->target_environment,
+        .filename = filename,
+        .source = source,
+        .pipeline = iree_make_cstring_view(FLAG_pipeline),
+        .test_module = module_plan->module,
+        .case_plan = case_plan,
+        .specialization_case_plan = case_plan,
+        .specialization_sample_ordinal = specialization_sample_ordinal,
+        .has_specialization_sample_ordinal = has_specialization_sample_ordinal,
+    };
+    status = loom_run_hal_testbench_actual_sequence_initialize(
+        &sequence_options, &hal_sequence);
+  }
+  if (iree_status_is_ok(status)) {
+    hal_sequence_initialized = true;
+    benchmark_execution_options.invocation.invoke_actual =
+        (loom_testbench_invocation_callback_t){
+            .fn = loom_run_hal_testbench_actual_sequence_invoke,
+            .user_data = &hal_sequence,
+        };
+    iree_tune_loom_configure_reference_oracles(
+        &hal_context->execution,
+        benchmark_execution_options.materializer.host_allocator,
+        &reference_oracles, &benchmark_execution_options);
+    benchmark_materializer = benchmark_execution_options.materializer;
+    benchmark_materializer.buffer_params = (iree_hal_buffer_params_t){0};
+    status = iree_tune_loom_hal_actual_sequence_compile(&hal_sequence);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_jsonl_sink_end(
+        jsonl_sink, iree_tune_loom_append_device_row(
+                        run, hal_context, device_row_state,
+                        iree_tune_loom_jsonl_sink_begin(jsonl_sink)));
+  }
+
+  const loom_run_hal_testbench_actual_provider_t* rejected_provider =
+      iree_status_is_ok(status)
+          ? iree_tune_loom_hal_actual_sequence_first_rejection(&hal_sequence)
+          : NULL;
+  if (iree_status_is_ok(status) && rejected_provider != NULL) {
+    iree_tune_loom_benchmark_result_t benchmark_result = {0};
+    iree_tune_loom_benchmark_result_set_sequence_compile_rejection(
+        rejected_provider, specialization, &benchmark_result);
+    ++*inout_failed_benchmark_count;
+    status = iree_tune_loom_append_dispatch_benchmark_result(
+        run, candidate, module_plan, benchmark_plan, case_plan, policy,
+        &benchmark_result, /*correctness_sample_count=*/0,
+        /*correctness_failed_sample_count=*/0, jsonl_sink, allocator);
+  }
+
+  iree_host_size_t begin_sample = 0;
+  iree_host_size_t end_sample = 0;
+  if (iree_status_is_ok(status) && rejected_provider == NULL &&
+      has_specialization_sample_ordinal) {
+    begin_sample = specialization_sample_ordinal;
+    end_sample = specialization_sample_ordinal + 1;
+  } else if (iree_status_is_ok(status) && rejected_provider == NULL) {
+    status = iree_tune_loom_validate_sample_flag(case_plan->sample_count,
+                                                 &begin_sample, &end_sample);
+  }
+
+  iree_host_size_t benchmark_correctness_sample_count = 0;
+  iree_host_size_t benchmark_correctness_failed_sample_count = 0;
+  if (iree_status_is_ok(status) && rejected_provider == NULL) {
+    status = iree_tune_loom_run_case_correctness_range(
+        run, candidate, module_plan, benchmark_plan, benchmark_plan->case_index,
+        &benchmark_execution_options, specialization, begin_sample, end_sample,
+        execution_arena, jsonl_sink, &benchmark_correctness_sample_count,
+        &benchmark_correctness_failed_sample_count);
+  }
+  if (iree_status_is_ok(status) && rejected_provider == NULL) {
+    *inout_correctness_sample_count += benchmark_correctness_sample_count;
+    *inout_correctness_failed_sample_count +=
+        benchmark_correctness_failed_sample_count;
+  }
+
+  if (iree_status_is_ok(status) && rejected_provider == NULL &&
+      benchmark_correctness_failed_sample_count != 0) {
+    iree_tune_loom_benchmark_result_t benchmark_result = {
+        .executed = false,
+        .passed = false,
+        .specialization = specialization,
+        .samples_per_iteration = benchmark_correctness_sample_count,
+        .failed_sample_count = benchmark_correctness_failed_sample_count,
+    };
+    if (has_specialization_sample_ordinal || FLAG_sample >= 0) {
+      benchmark_result.has_sample_ordinal = true;
+      benchmark_result.sample_ordinal = has_specialization_sample_ordinal
+                                            ? specialization_sample_ordinal
+                                            : (iree_host_size_t)FLAG_sample;
+    }
+    ++*inout_failed_benchmark_count;
+    status = iree_tune_loom_append_dispatch_benchmark_result(
+        run, candidate, module_plan, benchmark_plan, case_plan, policy,
+        &benchmark_result, benchmark_correctness_sample_count,
+        benchmark_correctness_failed_sample_count, jsonl_sink, allocator);
+  }
+
+  for (iree_host_size_t sample_ordinal = begin_sample;
+       iree_status_is_ok(status) && rejected_provider == NULL &&
+       benchmark_correctness_failed_sample_count == 0 &&
+       sample_ordinal < end_sample;
+       ++sample_ordinal) {
+    iree_tune_loom_benchmark_result_t benchmark_result = {0};
+    status = iree_tune_loom_run_hal_sequence_benchmark_sample(
+        run, candidate, module_plan, case_plan, policy, hal_context,
+        &hal_sequence, &benchmark_materializer, specialization, sample_ordinal,
+        allocator, &benchmark_result);
+    if (iree_status_is_ok(status)) {
+      if (!benchmark_result.executed || !benchmark_result.passed) {
+        ++*inout_failed_benchmark_count;
+      }
+      status = iree_tune_loom_append_dispatch_benchmark_result(
+          run, candidate, module_plan, benchmark_plan, case_plan, policy,
+          &benchmark_result, benchmark_correctness_sample_count,
+          benchmark_correctness_failed_sample_count, jsonl_sink, allocator);
+    }
+  }
+
+  if (hal_sequence_initialized) {
+    loom_run_hal_testbench_actual_sequence_deinitialize(&hal_sequence);
+  }
+  return status;
+}
+
 static iree_status_t iree_tune_loom_run_dispatch_complete_benchmark(
     const iree_tune_loom_run_identity_t* run,
     const iree_tune_loom_candidate_identity_t* candidate,
@@ -1490,6 +2033,19 @@ static iree_status_t iree_tune_loom_run_dispatch_complete_benchmark(
     iree_host_size_t* inout_correctness_sample_count,
     iree_host_size_t* inout_correctness_failed_sample_count,
     iree_host_size_t* inout_failed_benchmark_count) {
+  iree_host_size_t actual_invocation_count = 0;
+  IREE_RETURN_IF_ERROR(loom_run_hal_testbench_count_actual_invocations(
+      case_plan, &actual_invocation_count));
+  if (actual_invocation_count > 1) {
+    return iree_tune_loom_run_dispatch_complete_sequence_benchmark(
+        run, candidate, module_plan, benchmark_plan, case_plan, policy,
+        hal_context, session, filename, source, execution_options,
+        specialization, has_specialization_sample_ordinal,
+        specialization_sample_ordinal, device_row_state, execution_arena,
+        allocator, jsonl_sink, inout_correctness_sample_count,
+        inout_correctness_failed_sample_count, inout_failed_benchmark_count);
+  }
+
   const loom_testbench_invocation_plan_t* actual_invocation = NULL;
   iree_tune_loom_hal_actual_provider_t hal_provider = {0};
   bool hal_provider_initialized = false;
