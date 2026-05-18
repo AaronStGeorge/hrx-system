@@ -243,6 +243,16 @@ static void loom_cse_table_invalidate_reads(loom_cse_table_t* table) {
   table->non_pure_slot_count = 0;
 }
 
+// Evicts every entry from the table. This is used for execution-state barriers:
+// a pure value materialized under one dynamic participant set may not be
+// reusable after a later convergent operation changes that set.
+static void loom_cse_table_invalidate_all(loom_cse_table_t* table) {
+  if (table->count == 0) return;
+  memset(table->entries, 0, table->capacity * sizeof(*table->entries));
+  table->count = 0;
+  table->non_pure_slot_count = 0;
+}
+
 //===----------------------------------------------------------------------===//
 // Scope chain
 //===----------------------------------------------------------------------===//
@@ -302,6 +312,13 @@ static loom_op_t* loom_cse_scope_lookup(const loom_cse_scope_t* scope,
 static void loom_cse_scope_invalidate_reads(loom_cse_scope_t* scope) {
   for (loom_cse_scope_t* s = scope; s; s = s->parent) {
     loom_cse_table_invalidate_reads(&s->table);
+  }
+}
+
+// Propagates an execution-state barrier up the entire scope chain.
+static void loom_cse_scope_invalidate_all(loom_cse_scope_t* scope) {
+  for (loom_cse_scope_t* s = scope; s; s = s->parent) {
+    loom_cse_table_invalidate_all(&s->table);
   }
 }
 
@@ -621,13 +638,20 @@ iree_status_t loom_cse_run(loom_pass_t* pass, loom_module_t* module,
         continue;
       }
 
-      loom_trait_flags_t traits = op->traits;
+      loom_trait_flags_t traits = loom_op_effective_traits(module, op);
 
-      // Write barrier: a write or unknown-effect op invalidates all
-      // non-PURE entries up the scope chain. This must happen before
-      // any other checks because result-less writes still invalidate.
-      if (loom_traits_may_write(traits) ||
-          loom_op_regions_have_write_effects(op)) {
+      // Execution-state barrier: convergent operations can change which
+      // dynamic participants define later values. A pure materialization before
+      // the barrier may only be valid for the old participant set, so no
+      // candidate survives.
+      if (loom_traits_are_convergent(traits) ||
+          loom_op_regions_have_convergent_effects(op)) {
+        loom_cse_scope_invalidate_all(frame->scope);
+      } else if (loom_traits_may_write(traits) ||
+                 loom_op_regions_have_write_effects(op)) {
+        // Write barrier: a write or unknown-effect op invalidates all non-PURE
+        // entries up the scope chain. This must happen before any other checks
+        // because result-less writes still invalidate.
         loom_cse_scope_invalidate_reads(frame->scope);
       }
 
