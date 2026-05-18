@@ -14,6 +14,13 @@
 // RUN:     --artifact_bundle_dir=%t.spirv.coop.bundle --artifact_bundle_policy=debug
 // RUN: FileCheck --check-prefix=COOP %s < %t.spirv.coop.bundle/results.jsonl
 // RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
+// RUN:   iree-tune-loom %S/../iree-test-loom/testdata/spirv_vulkan_coop_u8_hal_actual.loom \
+// RUN:     --benchmark=@dense_projection_tiled_u8_128_dispatch --device=vulkan \
+// RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
+// RUN:     --min_time_ms=0 --max_batches=1 --input_ring_count=1 \
+// RUN:     --artifact_bundle_dir=%t.spirv.coop.u8.bundle --artifact_bundle_policy=debug
+// RUN: FileCheck --check-prefix=COOP-U8 %s < %t.spirv.coop.u8.bundle/results.jsonl
+// RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
 // RUN:   iree-tune-loom %S/../iree-test-loom/testdata/spirv_vulkan_coop_hal_actual.loom \
 // RUN:     --benchmark=@narrow_score_tiled_f16_128x16_m1_dispatch --device=vulkan \
 // RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
@@ -63,6 +70,18 @@
 // COOP: "benchmark_count":1
 // COOP: "failure_count":0
 // COOP: "failed_benchmark_count":0
+
+// COOP-U8: "row":"run","run_id":"r
+// COOP-U8: "row":"plan"
+// COOP-U8: "benchmark":"dense_projection_tiled_u8_128_dispatch","case":"dense_projection_tiled_u8_128_case"
+// COOP-U8: "metadata":{"strategy":"cooperative_matrix_tiled_gemm","problem":{"dtype":"u8xu8_i32","k":128,"m":128,"n":128,"tile_k":32,"tile_m":16,"tile_n":16}}
+// COOP-U8: "measure":"dispatch_complete"
+// COOP-U8: "row":"benchmark"
+// COOP-U8: "benchmark":"dense_projection_tiled_u8_128_dispatch","case":"dense_projection_tiled_u8_128_case","status":{{"ok"|"skipped"}}
+// COOP-U8: "row":"summary"
+// COOP-U8: "benchmark_count":1
+// COOP-U8: "failure_count":0
+// COOP-U8: "failed_benchmark_count":0
 
 // NARROW: "row":"run","run_id":"r
 // NARROW: "row":"plan"
