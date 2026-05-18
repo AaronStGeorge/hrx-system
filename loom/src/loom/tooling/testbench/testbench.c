@@ -401,11 +401,13 @@ static bool loom_testbench_plan_actual_invocation(
 
   memset(out_invocation, 0, sizeof(*out_invocation));
   out_invocation->kind = LOOM_TESTBENCH_INVOCATION_ACTUAL;
+  out_invocation->module = module;
   out_invocation->op = op;
   out_invocation->callee_ref = loom_attr_as_symbol(
       loom_op_const_attrs(op)[call_like->callee_attr_index]);
   out_invocation->provider_id = LOOM_STRING_ID_INVALID;
   out_invocation->provider = iree_string_view_empty();
+  out_invocation->attrs = loom_named_attr_slice_empty();
   out_invocation->input_value_ids =
       loom_op_const_operands(op) + call_like->operand_offset;
   out_invocation->input_count = op->operand_count - call_like->operand_offset;
@@ -432,11 +434,13 @@ static bool loom_testbench_plan_oracle_invocation(
   loom_value_slice_t results = loom_check_oracle_call_results(op);
   memset(out_invocation, 0, sizeof(*out_invocation));
   out_invocation->kind = LOOM_TESTBENCH_INVOCATION_ORACLE;
+  out_invocation->module = module;
   out_invocation->op = op;
   out_invocation->callee_ref = loom_check_oracle_call_callee(op);
   out_invocation->provider_id = loom_check_oracle_call_provider(op);
   out_invocation->provider =
       loom_testbench_string_from_id(module, out_invocation->provider_id);
+  out_invocation->attrs = loom_check_oracle_call_attrs(op);
   out_invocation->input_value_ids = inputs.values;
   out_invocation->input_count = inputs.count;
   out_invocation->result_value_ids = results.values;

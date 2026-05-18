@@ -140,6 +140,7 @@ class CheckBuilder(DialectBuilder):
         self,
         *,
         provider: str,
+        attrs: Mapping[str, Any] | None = ...,
         callee: str,
         inputs: list[ValueRef] = ...,
         results: list[Type | TiedResultSpec],

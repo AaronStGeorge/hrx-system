@@ -120,7 +120,7 @@ test.func @callee(%input: i32) -> (i32) {
 check.case @invoke {
   %input = check.literal value(5) : i32
   %actual = test.invoke @callee(%input) : (i32) -> (i32)
-  %expected = check.oracle.call<reference.scalar> callee(@callee) inputs(%input) : (i32) -> (i32)
+  %expected = check.oracle.call<reference.scalar> {delta = 20} callee(@callee) inputs(%input) : (i32) -> (i32)
   check.expect.equal actual(%actual) expected(%expected) : i32
   check.return
 }
@@ -137,6 +137,7 @@ check.case @invoke {
   EXPECT_EQ(case_plan.invocations[1].kind, LOOM_TESTBENCH_INVOCATION_ORACLE);
   EXPECT_TRUE(iree_string_view_equal(case_plan.invocations[1].provider,
                                      IREE_SV("reference.scalar")));
+  EXPECT_EQ(case_plan.invocations[1].attrs.count, 1u);
 
   loom_testbench_value_table_t table = {};
   IREE_ASSERT_OK(loom_testbench_value_table_initialize(

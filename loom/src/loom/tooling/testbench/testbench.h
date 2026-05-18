@@ -230,6 +230,8 @@ typedef struct loom_testbench_file_write_plan_t {
 typedef struct loom_testbench_invocation_plan_t {
   // Invocation kind and provider discriminator.
   loom_testbench_invocation_kind_t kind;
+  // Module owning |op|, symbol references, strings, and attributes.
+  const loom_module_t* module;
   // Operation that declared the invocation.
   const loom_op_t* op;
   // Function symbol passed to the execution or oracle provider.
@@ -238,6 +240,8 @@ typedef struct loom_testbench_invocation_plan_t {
   loom_string_id_t provider_id;
   // Borrowed provider name for oracle invocations, or empty otherwise.
   iree_string_view_t provider;
+  // Provider-specific attributes for oracle invocations.
+  loom_named_attr_slice_t attrs;
   // Borrowed SSA value IDs used as invocation inputs.
   const loom_value_id_t* input_value_ids;
   // Number of entries in |input_value_ids|.

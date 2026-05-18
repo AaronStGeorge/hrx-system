@@ -204,8 +204,10 @@ loom_cc_test(
     srcs = ["reference_test.cc"],
     deps = [
         ":reference",
+        "//loom/src/loom/ir",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/modules/hal:types",
         "//runtime/src/iree/testing:gtest",

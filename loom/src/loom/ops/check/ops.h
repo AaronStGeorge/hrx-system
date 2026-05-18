@@ -264,10 +264,12 @@ LOOM_DEFINE_ISA(loom_check_oracle_call_isa, LOOM_OP_CHECK_ORACLE_CALL)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_check_oracle_call_inputs, 0)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_check_oracle_call_results, 0)
 LOOM_DEFINE_ATTR_STRING(loom_check_oracle_call_provider, 0)
-LOOM_DEFINE_ATTR_SYMBOL(loom_check_oracle_call_callee, 1)
+LOOM_DEFINE_ATTR_DICT(loom_check_oracle_call_attrs, 1)
+LOOM_DEFINE_ATTR_SYMBOL(loom_check_oracle_call_callee, 2)
 iree_status_t loom_check_oracle_call_build(
     loom_builder_t* builder,
     loom_string_id_t provider,
+    loom_optional loom_named_attr_slice_t attrs,
     loom_symbol_ref_t callee,
     loom_may_consume const loom_value_id_t* inputs,
     iree_host_size_t inputs_count,

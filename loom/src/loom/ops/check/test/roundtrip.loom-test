@@ -9,7 +9,9 @@ check.case public @scale_case {
   %input = check.generate.random.uniform seed(%seed) range(-1.0 to 1.0) : tensor<4xf32>
   %actual = func.call @scale(%input) : (tensor<4xf32>) -> (tensor<4xf32>)
   %expected = check.oracle.call<reference.scalar> callee(@scale) inputs(%input) : (tensor<4xf32>) -> (tensor<4xf32>)
+  %expected_contract = check.oracle.call<reference.tiled_matmul> {accumulator = "i32", lhs = "u8", result = "i32", rhs = "u8"} callee(@scale) inputs(%input) : (tensor<4xf32>) -> (tensor<4xf32>)
   check.expect.close actual(%actual) expected(%expected) atol(0.0001) rtol(0.0001) nan(same) : tensor<4xf32>
+  test.use %expected_contract : tensor<4xf32>
   check.return
 }
 

@@ -227,8 +227,10 @@ loom_cc_test(
     ::reference
     iree::base
     iree::base::internal
+    iree::base::internal::arena
     iree::hal
     iree::modules::hal::types
+    loom::src::loom::ir
     iree::testing::gtest
     iree::testing::gtest_main
     iree::vm

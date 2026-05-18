@@ -42,9 +42,12 @@ void loom_testbench_reference_matmul_oracle_provider_initialize(
 //
 // The provider computes tile-packed C = A * B + C_init. Inputs must be three
 // rank-4 buffer views: lhs [Mtile, Ktile, M, K], rhs [Ktile, Ntile, K, N], and
-// init [Mtile, Ntile, M, N]. The returned result is a rank-4 f32 buffer view
-// [Mtile, Ntile, M, N]. |options| is borrowed by the provider and must outlive
-// any invocation using |out_provider|.
+// init [Mtile, Ntile, M, N]. Floating-point inputs default to f64 reference
+// accumulation and a rank-4 f32 result [Mtile, Ntile, M, N]. Integer or
+// packed-format inputs must provide an explicit oracle attribute contract with
+// lhs/rhs/accumulator/result string fields such as {lhs = "u8", rhs = "u8",
+// accumulator = "i32", result = "i32"}. |options| is borrowed by the provider
+// and must outlive any invocation using |out_provider|.
 void loom_testbench_reference_tiled_matmul_oracle_provider_initialize(
     const loom_testbench_reference_matmul_oracle_options_t* options,
     loom_testbench_oracle_provider_t* out_provider);

@@ -403,6 +403,7 @@ check_oracle_call = Op(
     operands=[Operand("inputs", ANY, variadic=True)],
     attrs=[
         AttrDef("provider", "string"),
+        AttrDef("attrs", "dict", optional=True),
         AttrDef(
             "callee",
             "symbol",
@@ -413,6 +414,7 @@ check_oracle_call = Op(
     traits=_CASE_BODY_TRAITS,
     format=[
         OpRef("provider"),
+        OptionalGroup([AttrDict("attrs")], anchor="attrs"),
         Clause("callee", SymbolRef("callee")),
         Clause("inputs", Refs("inputs")),
         COLON,
