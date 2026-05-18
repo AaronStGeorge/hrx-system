@@ -263,6 +263,23 @@ low.func.def target(@target) @backward_branch() asm<spirv.logical.core> {
 
 spirv.target<vulkan1_3> @target
 
+low.func.def target(@target) abi_layout({spirv_arg_value_types = [1, 23, 18]}) @loop_payload_type_mismatch(%condition: reg<spirv.id>, %initial: reg<spirv.id>, %wrong: reg<spirv.id>) asm<spirv.logical.core> {
+  low.br ^loop(%initial: reg<spirv.id>)
+^loop(%carried: reg<spirv.id>):
+  low.cond_br %condition, ^body, ^done : reg<spirv.id>
+^body:
+  // ERROR@+1: SPIRV/020 {function_name="loop_payload_type_mismatch", source_value_name="wrong", target_value_name="carried", expected_value_type="s32", actual_value_type="f32"}
+  low.br ^loop(%wrong: reg<spirv.id>)
+^done:
+  return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
 // ERROR@+1: SPIRV/016 {function_name="shader_entry_pointer_result", value_name="<unnamed>", actual_value_type="storage_buffer_address"}
 low.func.def target(@target) @shader_entry_pointer_result(%result: reg<spirv.ptr.storage_buffer>) -> (reg<spirv.ptr.storage_buffer>) asm<spirv.logical.core> {
   return %result

@@ -117,6 +117,100 @@ low.func.def target(@target) abi(shader_entry_point) abi_layout({spirv_arg_value
 
 // ====
 
+// RUN: emit spirv-dis @spirv_i32_counted_loop validate
+// REQUIRES: spirv-dis, spirv-val
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) abi(shader_entry_point) abi_layout({spirv_arg_value_types = [23, 23, 23, 23], spirv_result_value_types = [23]}) @spirv_i32_counted_loop(%start: reg<spirv.id>, %limit: reg<spirv.id>, %step: reg<spirv.id>, %seed: reg<spirv.id>) -> (reg<spirv.id>) asm<spirv.logical.core> {
+  low.br ^loop(%start: reg<spirv.id>, %seed: reg<spirv.id>)
+^loop(%i: reg<spirv.id>, %acc: reg<spirv.id>):
+  %inside = OpSLessThan %i, %limit
+  low.cond_br %inside, ^body, ^done : reg<spirv.id>
+^body:
+  %next_acc = OpIAdd %acc, %i
+  %next_i = OpIAdd %i, %step
+  low.br ^loop(%next_i: reg<spirv.id>, %next_acc: reg<spirv.id>)
+^done:
+  return %acc
+}
+
+// ----
+               OpCapability Shader
+               OpCapability VulkanMemoryModel
+               OpCapability PhysicalStorageBufferAddresses
+               OpCapability Int64
+               OpExtension "SPV_KHR_vulkan_memory_model"
+               OpExtension "SPV_KHR_physical_storage_buffer"
+               OpMemoryModel PhysicalStorageBuffer64 Vulkan
+               OpEntryPoint GLCompute %spirv_i32_counted_loop "spirv_i32_counted_loop"
+               OpExecutionMode %spirv_i32_counted_loop LocalSize 1 1 1
+               OpName %spirv_i32_counted_loop "spirv_i32_counted_loop"
+               OpName %start "start"
+               OpName %limit "limit"
+               OpName %step "step"
+               OpName %seed "seed"
+               OpName %i "i"
+               OpName %acc "acc"
+               OpName %inside "inside"
+               OpName %next_acc "next_acc"
+               OpName %next_i "next_i"
+               OpMemberDecorate %_struct_5 0 Offset 0
+               OpDecorate %_struct_5 Block
+               OpDecorate %4 DescriptorSet 0
+               OpDecorate %4 Binding 0
+               OpDecorate %8 DescriptorSet 0
+               OpDecorate %8 Binding 1
+               OpDecorate %9 DescriptorSet 0
+               OpDecorate %9 Binding 2
+               OpDecorate %10 DescriptorSet 0
+               OpDecorate %10 Binding 3
+               OpDecorate %11 DescriptorSet 0
+               OpDecorate %11 Binding 4
+        %int = OpTypeInt 32 1
+      %int_0 = OpConstant %int 0
+  %_struct_5 = OpTypeStruct %int
+%_ptr_StorageBuffer__struct_5 = OpTypePointer StorageBuffer %_struct_5
+%_ptr_StorageBuffer_int = OpTypePointer StorageBuffer %int
+          %4 = OpVariable %_ptr_StorageBuffer__struct_5 StorageBuffer
+          %8 = OpVariable %_ptr_StorageBuffer__struct_5 StorageBuffer
+          %9 = OpVariable %_ptr_StorageBuffer__struct_5 StorageBuffer
+         %10 = OpVariable %_ptr_StorageBuffer__struct_5 StorageBuffer
+         %11 = OpVariable %_ptr_StorageBuffer__struct_5 StorageBuffer
+       %void = OpTypeVoid
+         %13 = OpTypeFunction %void
+       %bool = OpTypeBool
+%spirv_i32_counted_loop = OpFunction %void None %13
+         %14 = OpLabel
+         %21 = OpAccessChain %_ptr_StorageBuffer_int %4 %int_0
+      %start = OpLoad %int %21 Aligned 4
+         %23 = OpAccessChain %_ptr_StorageBuffer_int %8 %int_0
+      %limit = OpLoad %int %23 Aligned 4
+         %25 = OpAccessChain %_ptr_StorageBuffer_int %9 %int_0
+       %step = OpLoad %int %25 Aligned 4
+         %27 = OpAccessChain %_ptr_StorageBuffer_int %10 %int_0
+       %seed = OpLoad %int %27 Aligned 4
+               OpBranch %15
+         %15 = OpLabel
+          %i = OpPhi %int %start %14 %next_i %18
+        %acc = OpPhi %int %seed %14 %next_acc %18
+     %inside = OpSLessThan %bool %i %limit
+               OpLoopMerge %17 %18 None
+               OpBranchConditional %inside %16 %17
+         %16 = OpLabel
+   %next_acc = OpIAdd %int %acc %i
+     %next_i = OpIAdd %int %i %step
+               OpBranch %18
+         %18 = OpLabel
+               OpBranch %15
+         %17 = OpLabel
+         %33 = OpAccessChain %_ptr_StorageBuffer_int %11 %int_0
+               OpStore %33 %acc Aligned 4
+               OpReturn
+               OpFunctionEnd
+
+// ====
+
 // RUN: emit spirv-dis @spirv_raw_bda_storage_buffer_i32_roundtrip validate
 // REQUIRES: spirv-dis, spirv-val
 

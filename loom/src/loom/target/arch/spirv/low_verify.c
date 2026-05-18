@@ -861,7 +861,8 @@ static iree_status_t loom_spirv_low_verify_br(
   loom_value_slice_t args = loom_low_br_args(op);
   const loom_block_t* dest = loom_low_br_dest(op);
   if (loom_block_region_index(dest) <=
-      loom_block_region_index(op->parent_block)) {
+          loom_block_region_index(op->parent_block) &&
+      !loom_spirv_low_br_is_loop_backedge(op)) {
     IREE_RETURN_IF_ERROR(
         loom_spirv_low_emit_non_forward_branch(context, state, op, dest));
   }
@@ -894,7 +895,9 @@ static iree_status_t loom_spirv_low_verify_cond_br(
   const loom_block_t* true_dest = loom_low_cond_br_true_dest(op);
   const loom_block_t* false_dest = loom_low_cond_br_false_dest(op);
   const loom_block_t* merge_block = NULL;
-  if (!loom_spirv_low_select_merge_block(op, &merge_block)) {
+  loom_spirv_low_loop_shape_t loop = {0};
+  if (!loom_spirv_low_select_merge_block(op, &merge_block) &&
+      !loom_spirv_low_loop_shape(op, &loop)) {
     IREE_RETURN_IF_ERROR(loom_spirv_low_emit_unstructured_cond_br(
         context, state, op, true_dest, false_dest));
   }
