@@ -380,24 +380,34 @@ static bool loom_amdgpu_wait_state_matrix_reads_valu_results(
   }
 }
 
-static loom_contract_operand_role_t loom_amdgpu_wait_state_matrix_operand_role(
+static loom_amdgpu_wait_state_matrix_result_use_t
+loom_amdgpu_wait_state_matrix_operand_result_use(
     const loom_amdgpu_matrix_contract_descriptor_t* contract,
     uint16_t packet_operand_index) {
   switch (contract->family) {
     case LOOM_AMDGPU_MATRIX_FAMILY_MFMA:
+      switch (packet_operand_index) {
+        case 0:
+        case 1:
+          return LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRC_AB;
+        case 2:
+          return LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC;
+        default:
+          return LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_UNKNOWN;
+      }
     case LOOM_AMDGPU_MATRIX_FAMILY_SMFMAC:
       switch (packet_operand_index) {
         case 0:
-          return LOOM_CONTRACT_OPERAND_ROLE_LHS;
+          return LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC;
         case 1:
-          return LOOM_CONTRACT_OPERAND_ROLE_RHS;
         case 2:
-          return LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR;
+        case 3:
+          return LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRC_AB;
         default:
-          return LOOM_CONTRACT_OPERAND_ROLE_UNKNOWN;
+          return LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_UNKNOWN;
       }
     default:
-      return LOOM_CONTRACT_OPERAND_ROLE_UNKNOWN;
+      return LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_UNKNOWN;
   }
 }
 
@@ -786,18 +796,7 @@ static void loom_amdgpu_wait_state_match_matrix_descriptor_operands(
   const loom_op_t* op = packet->node->op;
   for (uint16_t i = 0; i < op->operand_count; ++i) {
     loom_amdgpu_wait_state_matrix_result_use_t use =
-        LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_UNKNOWN;
-    switch (loom_amdgpu_wait_state_matrix_operand_role(contract, i)) {
-      case LOOM_CONTRACT_OPERAND_ROLE_LHS:
-      case LOOM_CONTRACT_OPERAND_ROLE_RHS:
-        use = LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRC_AB;
-        break;
-      case LOOM_CONTRACT_OPERAND_ROLE_ACCUMULATOR:
-        use = LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC;
-        break;
-      default:
-        break;
-    }
+        loom_amdgpu_wait_state_matrix_operand_result_use(contract, i);
     if (use == LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_UNKNOWN) {
       continue;
     }
