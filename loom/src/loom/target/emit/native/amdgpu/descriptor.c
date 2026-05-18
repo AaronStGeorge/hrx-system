@@ -401,6 +401,9 @@ iree_status_t loom_amdgpu_kernel_descriptor_initialize_from_metadata(
           (metadata_kernel->kernarg_segment_size != 0
                ? LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_SGPR_KERNARG_SEGMENT_PTR
                : 0) |
+          (metadata_kernel->private_segment_fixed_size != 0
+               ? LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_PRIVATE_SEGMENT
+               : 0) |
           (metadata_kernel->wavefront_size == 32
                ? LOOM_AMDGPU_KERNEL_DESCRIPTOR_ENABLE_WAVEFRONT_SIZE32
                : 0),

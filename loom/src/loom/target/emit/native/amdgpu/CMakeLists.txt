@@ -47,8 +47,10 @@ loom_cc_library(
   DEPS
     ::assembly
     ::encoding
+    ::spill_lowering
     iree::base
     loom::src::loom::codegen::low::frame
+    loom::src::loom::codegen::low::target_binding
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::target::arch::amdgpu::address_state
@@ -193,6 +195,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::target::arch::amdgpu::encoding
     loom::src::loom::target::arch::amdgpu::packet_plan
+    loom::src::loom::target::arch::amdgpu::register_class
     loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::arch::amdgpu::target_refs
     loom::src::loom::target::emit::native::fragment

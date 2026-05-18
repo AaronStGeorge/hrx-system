@@ -459,6 +459,7 @@ _ADDRESS_OFFSET_IMMEDIATE_ENCODING_IDS = frozenset(
 _ADDRESS_OFFSET_IMMEDIATE_FIELD_NAMES = frozenset(("offset", "offset0", "offset1"))
 _GLOBAL_SADDR_OFF = _predefined("NULL")
 _GLOBAL_GFX950_SADDR_OFF = AmdgpuEncodingFieldAllOnes()
+_SCRATCH_CDNA_SADDR_OFF = AmdgpuEncodingFieldAllOnes()
 _MUBUF_VADDR_OFFSET_ONLY_SIZE_REASON = "idxen-disabled-mubuf-vaddr-uses-one-offset-vgpr"
 _GLOBAL_SADDR_OFFSET_ONLY_SIZE_REASON = (
     "saddr-enabled-global-address-uses-one-offset-vgpr"
@@ -881,6 +882,16 @@ def _m0_implicit_resource(field_name: str = "m0") -> Operand:
     )
 
 
+def _m0_clobber(field_name: str = "m0") -> Operand:
+    return Operand(
+        field_name,
+        OperandRole.IMPLICIT,
+        _M0_ALT,
+        flags=(OperandFlag.IMPLICIT,),
+        unit_count=1,
+    )
+
+
 def _m0_result(field_name: str = "dst") -> Operand:
     return Operand(
         field_name,
@@ -1133,6 +1144,7 @@ _MANUAL_SCALAR_DESCRIPTOR_KEYS = (
     "amdgpu.s_mov_b32_m0",
     "amdgpu.s_mov_b32_m0.imm",
     "amdgpu.s_mov_b64_exec",
+    "amdgpu.s_mov_b64_exec.full",
     "amdgpu.s_mov_b64_exec_read",
     "amdgpu.s_xor_b64_exec",
 )
@@ -1240,6 +1252,28 @@ def _manual_scalar_descriptors(
                 ),
             ),
             asm_forms=_asm(mnemonic="s_mov_b64_exec", operands=("src",)),
+            effects=(_CONVERGENT_EFFECT,),
+            schedule_class=_SCHEDULE_SALU,
+            encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
+            encoding_id=s_mov_b64_opcode,
+            flags=(DescriptorFlag.SIDE_EFFECTING,),
+        ),
+        Descriptor(
+            key="amdgpu.s_mov_b64_exec.full",
+            mnemonic="s_mov_b64",
+            semantic_tag="control.exec.full",
+            operands=(_exec_clobber(),),
+            encoding_field_values=(
+                EncodingFieldValue(
+                    amdgpu_encoding_field_id("SDST"),
+                    spec.operand_predefined_value("OPR_SDST_EXEC", "EXEC_LO"),
+                ),
+                EncodingFieldValue(
+                    amdgpu_encoding_field_id("SSRC0"),
+                    spec.operand_predefined_value("OPR_SSRC", "-1"),
+                ),
+            ),
+            asm_forms=_asm(mnemonic="s_mov_b64_exec_full"),
             effects=(_CONVERGENT_EFFECT,),
             schedule_class=_SCHEDULE_SALU,
             encoding_format_id=AMDGPU_ENCODING_FORMAT_SOP1,
@@ -2140,6 +2174,17 @@ def _implicit_m0_input() -> AmdgpuImplicitOperandOverlay:
     )
 
 
+def _implicit_m0_clobber() -> AmdgpuImplicitOperandOverlay:
+    return AmdgpuImplicitOperandOverlay(
+        operand_type="OPR_SDST_M0",
+        descriptor_operand=_m0_clobber(),
+        data_format_name="FMT_NUM_B32",
+        size_bits=32,
+        is_input=True,
+        is_output=False,
+    )
+
+
 __all__ = (
     "AMDGPU_ATOMIC_DESCRIPTOR_CATEGORY",
     "AMDGPU_CACHE_DESCRIPTOR_CATEGORY",
@@ -2287,6 +2332,7 @@ __all__ = (
     "_GLOBAL_PREFETCH_EFFECT",
     "_GLOBAL_SADDR_OFF",
     "_GLOBAL_SADDR_OFFSET_ONLY_SIZE_REASON",
+    "_SCRATCH_CDNA_SADDR_OFF",
     "_GLOBAL_STORE_B128_EFFECT",
     "_GLOBAL_STORE_B16_EFFECT",
     "_GLOBAL_STORE_B8_EFFECT",
@@ -2459,11 +2505,13 @@ __all__ = (
     "_ignore_global_write_memory",
     "_ignore_scratch_memory",
     "_ignore_workgroup_memory",
+    "_implicit_m0_clobber",
     "_implicit_m0_input",
     "_instruction_encoding_opcode",
     "_is_exec_state_read",
     "_is_mode_state_read",
     "_literal_operand_form",
+    "_m0_clobber",
     "_m0_implicit_resource",
     "_m0_result",
     "_mode_state_read",

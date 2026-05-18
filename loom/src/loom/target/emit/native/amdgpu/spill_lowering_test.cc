@@ -26,6 +26,16 @@ struct LoweredSpillTraffic {
   int offset_only_packet_count = 0;
   // Number of vaddr scratch packet ops materialized by spill lowering.
   int vaddr_packet_count = 0;
+  // Number of SGPR-to-VGPR copy ops materialized before scratch stores.
+  int sgpr_to_vgpr_copy_count = 0;
+  // Number of VGPR-to-SGPR readfirstlane ops materialized after scratch loads.
+  int vgpr_to_sgpr_read_count = 0;
+  // Number of EXEC read ops materialized around SGPR scratch traffic.
+  int exec_read_count = 0;
+  // Number of full-EXEC write ops materialized around SGPR scratch traffic.
+  int exec_full_count = 0;
+  // Number of EXEC restore ops materialized around SGPR scratch traffic.
+  int exec_restore_count = 0;
   // Offset carried by the materialized low.storage.address op.
   int64_t storage_address_offset = 0;
   // Offset immediate carried by the materialized scratch packet.
@@ -37,6 +47,11 @@ struct LoweredSpillTraffic {
 enum class SpillTrafficOp {
   kSpill,
   kReload,
+};
+
+enum class SpillRegisterClass {
+  kSgpr,
+  kVgpr,
 };
 
 class AmdgpuSpillLoweringTest : public ::testing::Test {
@@ -86,23 +101,30 @@ class AmdgpuSpillLoweringTest : public ::testing::Test {
     };
   }
 
-  loom_type_t VgprType(uint32_t unit_count) {
+  loom_type_t RegisterType(SpillRegisterClass register_class,
+                           uint32_t unit_count) {
     loom_type_t type = loom_type_none();
+    const uint16_t register_class_id =
+        register_class == SpillRegisterClass::kSgpr
+            ? LOOM_AMDGPU_REG_CLASS_ID_SGPR
+            : LOOM_AMDGPU_REG_CLASS_ID_VGPR;
     IREE_CHECK_OK(loom_low_build_register_type(
-        descriptor_set_, LOOM_AMDGPU_REG_CLASS_ID_VGPR, unit_count, &type));
+        descriptor_set_, register_class_id, unit_count, &type));
     loom_type_t interned_type = loom_type_none();
     IREE_CHECK_OK(loom_module_intern_type(module_, type, &interned_type));
     return interned_type;
   }
 
-  loom_op_t* BuildFunction(iree_string_view_t name, int64_t byte_offset,
-                           SpillTrafficOp traffic_op) {
+  loom_op_t* BuildFunction(
+      iree_string_view_t name, int64_t byte_offset, SpillTrafficOp traffic_op,
+      SpillRegisterClass register_class = SpillRegisterClass::kVgpr,
+      uint32_t unit_count = 1) {
     loom_builder_t module_builder;
     loom_builder_initialize(module_, &module_->arena,
                             loom_module_block(module_), &module_builder);
     const loom_symbol_ref_t target_ref = AddSymbol(IREE_SV("target"));
     const loom_symbol_ref_t function_ref = AddSymbol(name);
-    const loom_type_t arg_type = VgprType(1);
+    const loom_type_t arg_type = RegisterType(register_class, unit_count);
     loom_op_t* function_op = nullptr;
     IREE_CHECK_OK(loom_low_func_def_build(
         &module_builder, 0, /*visibility=*/0, /*cc=*/0, /*purity=*/0,
@@ -155,6 +177,18 @@ class AmdgpuSpillLoweringTest : public ::testing::Test {
         loom_amdgpu_descriptor_ref_ordinal(descriptor_set_, offset_ref);
     const uint32_t vaddr_ordinal =
         loom_amdgpu_descriptor_ref_ordinal(descriptor_set_, vaddr_ref);
+    const uint32_t sgpr_to_vgpr_copy_ordinal =
+        loom_amdgpu_descriptor_ref_ordinal(
+            descriptor_set_, LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32_COPY);
+    const uint32_t vgpr_to_sgpr_read_ordinal =
+        loom_amdgpu_descriptor_ref_ordinal(
+            descriptor_set_, LOOM_AMDGPU_DESCRIPTOR_REF_V_READFIRSTLANE_B32);
+    const uint32_t exec_read_ordinal = loom_amdgpu_descriptor_ref_ordinal(
+        descriptor_set_, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC_READ);
+    const uint32_t exec_full_ordinal = loom_amdgpu_descriptor_ref_ordinal(
+        descriptor_set_, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC_FULL);
+    const uint32_t exec_restore_ordinal = loom_amdgpu_descriptor_ref_ordinal(
+        descriptor_set_, LOOM_AMDGPU_DESCRIPTOR_REF_S_MOV_B64_EXEC);
     const loom_region_t* body = loom_low_func_def_body(function_op);
     const loom_block_t* block = loom_region_const_entry_block(body);
     const loom_op_t* op = nullptr;
@@ -168,11 +202,23 @@ class AmdgpuSpillLoweringTest : public ::testing::Test {
         const int64_t descriptor_ordinal = loom_low_op_descriptor_ordinal(op);
         if (descriptor_ordinal == offset_only_ordinal) {
           ++traffic.offset_only_packet_count;
+          traffic.packet_offset = PacketOffset(op);
+          traffic.packet_operand_count = op->operand_count;
         } else if (descriptor_ordinal == vaddr_ordinal) {
           ++traffic.vaddr_packet_count;
+          traffic.packet_offset = PacketOffset(op);
+          traffic.packet_operand_count = op->operand_count;
+        } else if (descriptor_ordinal == sgpr_to_vgpr_copy_ordinal) {
+          ++traffic.sgpr_to_vgpr_copy_count;
+        } else if (descriptor_ordinal == vgpr_to_sgpr_read_ordinal) {
+          ++traffic.vgpr_to_sgpr_read_count;
+        } else if (descriptor_ordinal == exec_read_ordinal) {
+          ++traffic.exec_read_count;
+        } else if (descriptor_ordinal == exec_full_ordinal) {
+          ++traffic.exec_full_count;
+        } else if (descriptor_ordinal == exec_restore_ordinal) {
+          ++traffic.exec_restore_count;
         }
-        traffic.packet_offset = PacketOffset(op);
-        traffic.packet_operand_count = op->operand_count;
       }
     }
     return traffic;
@@ -198,6 +244,9 @@ TEST_F(AmdgpuSpillLoweringTest, KeepsOffsetOnlyStoreWhenOffsetFits) {
   EXPECT_EQ(traffic.storage_address_count, 0);
   EXPECT_EQ(traffic.offset_only_packet_count, 1);
   EXPECT_EQ(traffic.vaddr_packet_count, 0);
+  EXPECT_EQ(traffic.exec_read_count, 0);
+  EXPECT_EQ(traffic.exec_full_count, 0);
+  EXPECT_EQ(traffic.exec_restore_count, 0);
   EXPECT_EQ(traffic.packet_offset, 4092);
   EXPECT_EQ(traffic.packet_operand_count, 1);
 }
@@ -253,6 +302,52 @@ TEST_F(AmdgpuSpillLoweringTest, UsesVaddrReloadWhenOffsetExceedsImmediate) {
   EXPECT_EQ(traffic.vaddr_packet_count, 1);
   EXPECT_EQ(traffic.packet_offset, 0);
   EXPECT_EQ(traffic.packet_operand_count, 1);
+}
+
+TEST_F(AmdgpuSpillLoweringTest, LowersSgprSpillThroughVgprScratchValue) {
+  loom_op_t* function_op =
+      BuildFunction(IREE_SV("sgpr_spill"), 0, SpillTrafficOp::kSpill,
+                    SpillRegisterClass::kSgpr, 2);
+
+  IREE_ASSERT_OK(loom_amdgpu_lower_spill_traffic(
+      module_, function_op, descriptor_set_, &scratch_arena_));
+
+  LoweredSpillTraffic traffic = SummarizeLoweredTraffic(
+      function_op, LOOM_AMDGPU_DESCRIPTOR_REF_SCRATCH_STORE_B32_OFFSET_ONLY,
+      LOOM_AMDGPU_DESCRIPTOR_REF_SCRATCH_STORE_B32_VADDR);
+  EXPECT_EQ(traffic.storage_address_count, 0);
+  EXPECT_EQ(traffic.offset_only_packet_count, 2);
+  EXPECT_EQ(traffic.vaddr_packet_count, 0);
+  EXPECT_EQ(traffic.sgpr_to_vgpr_copy_count, 2);
+  EXPECT_EQ(traffic.vgpr_to_sgpr_read_count, 0);
+  EXPECT_EQ(traffic.exec_read_count, 1);
+  EXPECT_EQ(traffic.exec_full_count, 1);
+  EXPECT_EQ(traffic.exec_restore_count, 1);
+  EXPECT_EQ(traffic.packet_offset, 4);
+  EXPECT_EQ(traffic.packet_operand_count, 1);
+}
+
+TEST_F(AmdgpuSpillLoweringTest, LowersSgprReloadThroughReadfirstlane) {
+  loom_op_t* function_op =
+      BuildFunction(IREE_SV("sgpr_reload"), 0, SpillTrafficOp::kReload,
+                    SpillRegisterClass::kSgpr, 2);
+
+  IREE_ASSERT_OK(loom_amdgpu_lower_spill_traffic(
+      module_, function_op, descriptor_set_, &scratch_arena_));
+
+  LoweredSpillTraffic traffic = SummarizeLoweredTraffic(
+      function_op, LOOM_AMDGPU_DESCRIPTOR_REF_SCRATCH_LOAD_B32_OFFSET_ONLY,
+      LOOM_AMDGPU_DESCRIPTOR_REF_SCRATCH_LOAD_B32_VADDR);
+  EXPECT_EQ(traffic.storage_address_count, 0);
+  EXPECT_EQ(traffic.offset_only_packet_count, 2);
+  EXPECT_EQ(traffic.vaddr_packet_count, 0);
+  EXPECT_EQ(traffic.sgpr_to_vgpr_copy_count, 0);
+  EXPECT_EQ(traffic.vgpr_to_sgpr_read_count, 2);
+  EXPECT_EQ(traffic.exec_read_count, 1);
+  EXPECT_EQ(traffic.exec_full_count, 1);
+  EXPECT_EQ(traffic.exec_restore_count, 1);
+  EXPECT_EQ(traffic.packet_offset, 4);
+  EXPECT_EQ(traffic.packet_operand_count, 0);
 }
 
 }  // namespace

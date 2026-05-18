@@ -1202,6 +1202,7 @@ def _scratch_load_overlay(
     fixed_vaddr: AmdgpuFixedEncodingValue | None,
     fixed_saddr: AmdgpuFixedEncodingValue | None,
     implicit_flat_scratch: bool,
+    implicit_m0: bool,
     cache_fields: tuple[tuple[str, int], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     operands: tuple[AmdgpuOperandOverlay, ...] = (
@@ -1212,6 +1213,8 @@ def _scratch_load_overlay(
     )
     if implicit_flat_scratch:
         implicit_operands = (*implicit_operands, _IGNORE_FLAT_SCRATCH_INPUT)
+    if implicit_m0:
+        implicit_operands = (*implicit_operands, _implicit_m0_clobber())
     fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
         ("SVE", 1 if fixed_vaddr is None else 0),
     )
@@ -1281,6 +1284,7 @@ def _scratch_store_overlay(
     fixed_vaddr: AmdgpuFixedEncodingValue | None,
     fixed_saddr: AmdgpuFixedEncodingValue | None,
     implicit_flat_scratch: bool,
+    implicit_m0: bool,
     cache_fields: tuple[tuple[str, int], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     operands: tuple[AmdgpuOperandOverlay, ...] = ()
@@ -1289,6 +1293,8 @@ def _scratch_store_overlay(
     )
     if implicit_flat_scratch:
         implicit_operands = (*implicit_operands, _IGNORE_FLAT_SCRATCH_INPUT)
+    if implicit_m0:
+        implicit_operands = (*implicit_operands, _implicit_m0_clobber())
     fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (
         ("SVE", 1 if fixed_vaddr is None else 0),
     )
@@ -1357,6 +1363,7 @@ def _scratch_memory_overlays(
     fixed_vaddr: AmdgpuFixedEncodingValue | None,
     fixed_saddr: AmdgpuFixedEncodingValue | None,
     implicit_flat_scratch: bool = False,
+    implicit_m0: bool = False,
     descriptor_key_suffix: str = "",
     cache_fields: tuple[tuple[str, int], ...] = (),
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
@@ -1380,6 +1387,7 @@ def _scratch_memory_overlays(
                 fixed_vaddr=fixed_vaddr,
                 fixed_saddr=fixed_saddr,
                 implicit_flat_scratch=implicit_flat_scratch,
+                implicit_m0=implicit_m0,
                 cache_fields=cache_fields,
             )
             for (width_bits, units), instruction_suffix, mnemonic_suffix in zip(
@@ -1404,6 +1412,7 @@ def _scratch_memory_overlays(
                 fixed_vaddr=fixed_vaddr,
                 fixed_saddr=fixed_saddr,
                 implicit_flat_scratch=implicit_flat_scratch,
+                implicit_m0=implicit_m0,
                 cache_fields=cache_fields,
             )
             for (width_bits, units), instruction_suffix, mnemonic_suffix in zip(

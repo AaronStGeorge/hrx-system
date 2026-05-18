@@ -7,12 +7,14 @@
 #include "loom/target/emit/native/amdgpu/check/loom_check.h"
 
 #include "loom/codegen/low/frame.h"
+#include "loom/codegen/low/target_binding.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/address_state.h"
 #include "loom/target/arch/amdgpu/packet_plan.h"
 #include "loom/target/emit/native/amdgpu/assembly.h"
 #include "loom/target/emit/native/amdgpu/encoding.h"
+#include "loom/target/emit/native/amdgpu/spill_lowering.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/low_emit.h"
 
@@ -43,6 +45,11 @@ typedef struct loom_amdgpu_loom_check_emit_options_t {
   // Number of entries in |allocation_fixed_value_specs|.
   iree_host_size_t allocation_fixed_value_spec_count;
 } loom_amdgpu_loom_check_emit_options_t;
+
+typedef struct loom_amdgpu_loom_check_spill_lowering_context_t {
+  // Target-low descriptor registry visible to this check runner.
+  const loom_low_descriptor_registry_t* descriptor_registry;
+} loom_amdgpu_loom_check_spill_lowering_context_t;
 
 static bool loom_amdgpu_loom_check_emit_provider_matches(
     const loom_check_emit_provider_t* provider,
@@ -201,6 +208,22 @@ static iree_status_t loom_amdgpu_loom_check_materialize_address_state(
                                                arena, out_result);
 }
 
+static iree_status_t loom_amdgpu_loom_check_lower_spill_traffic(
+    void* user_data, loom_module_t* module, loom_op_t* low_function_op,
+    iree_arena_allocator_t* arena) {
+  const loom_amdgpu_loom_check_spill_lowering_context_t* context =
+      (const loom_amdgpu_loom_check_spill_lowering_context_t*)user_data;
+  loom_low_resolved_target_t target = {0};
+  IREE_RETURN_IF_ERROR(loom_low_resolve_function_target(
+      module, low_function_op, context->descriptor_registry,
+      (loom_target_selection_t){0}, (iree_diagnostic_emitter_t){0}, &target));
+  if (target.descriptor_set == NULL) {
+    return iree_ok_status();
+  }
+  return loom_amdgpu_lower_spill_traffic(module, low_function_op,
+                                         target.descriptor_set, arena);
+}
+
 static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
     const loom_check_emit_provider_t* provider,
     const loom_check_emit_provider_request_t* request) {
@@ -209,7 +232,18 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_loom_check_parse_emit_options(request, &options));
   loom_low_emission_frame_t frame = {0};
+  loom_amdgpu_loom_check_spill_lowering_context_t spill_lowering_context = {
+      .descriptor_registry = &request->low_registry->registry,
+  };
   const loom_low_emission_frame_spill_free_options_t spill_free_options = {
+      .materialization_options =
+          {
+              .has_supported_storage_spaces = true,
+              .supported_storage_spaces = LOOM_LOW_STORAGE_SPACE_SET_SCRATCH |
+                                          LOOM_LOW_STORAGE_SPACE_SET_PRIVATE,
+          },
+      .lower_spill_traffic = loom_amdgpu_loom_check_lower_spill_traffic,
+      .lower_spill_traffic_user_data = &spill_lowering_context,
       .materialize_address_state =
           loom_amdgpu_loom_check_materialize_address_state,
   };

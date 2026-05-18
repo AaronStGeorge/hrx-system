@@ -295,6 +295,7 @@ static bool loom_amdgpu_wait_effect_is_dependency_memory(
   switch (effect_use->memory_space) {
     case LOOM_LOW_MEMORY_SPACE_GENERIC:
     case LOOM_LOW_MEMORY_SPACE_GLOBAL:
+    case LOOM_LOW_MEMORY_SPACE_STACK:
     case LOOM_LOW_MEMORY_SPACE_WORKGROUP:
       return true;
     default:

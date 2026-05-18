@@ -134,7 +134,7 @@ TEST(AmdgpuDescriptorTest, EncodesResourceAndAbiFields) {
   EXPECT_EQ(LoadLeU32(bytes, 8), 24u);
   EXPECT_EQ(LoadLeI64(bytes, 16), 256);
   EXPECT_EQ(LoadLeU32(bytes, 48), 0xe0ac0001u);
-  EXPECT_EQ(LoadLeU32(bytes, 52), 0x00001084u);
+  EXPECT_EQ(LoadLeU32(bytes, 52), 0x00001085u);
   EXPECT_EQ(LoadLeU16(bytes, 56), 0x0c08u);
 }
 
@@ -170,7 +170,7 @@ TEST(AmdgpuDescriptorTest, EncodesGfx942ResourceAndAbiFields) {
   EXPECT_EQ(LoadLeI64(bytes, 16), 256);
   EXPECT_EQ(LoadLeU32(bytes, 44), 0x00000002u);
   EXPECT_EQ(LoadLeU32(bytes, 48), 0x00ac00c1u);
-  EXPECT_EQ(LoadLeU32(bytes, 52), 0x00001084u);
+  EXPECT_EQ(LoadLeU32(bytes, 52), 0x00001085u);
   EXPECT_EQ(LoadLeU16(bytes, 56), 0x0808u);
 }
 

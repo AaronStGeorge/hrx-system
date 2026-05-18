@@ -43,6 +43,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _gfx11_core_overlays,
     _gfx12_core_overlays,
     _gfx125x_reg_classes,
+    _gfx940_core_overlays,
     _gfx950_core_overlays,
     _gfx1250_core_overlays,
     _validate_address_immediate_units,
@@ -790,6 +791,54 @@ def test_gfx950_global_saddr_memory_asm_forms_include_m0() -> None:
     assert store_form.mnemonic == "global_store_dwordx4_saddr"
     assert store_form.results == ()
     assert store_form.operands == ("addr", "value", "saddr", "m0")
+    assert tuple(immediate.name for immediate in store_form.immediates) == (
+        "offset",
+        "nt",
+        "sc0",
+        "sc1",
+    )
+
+
+def test_gfx940_scratch_memory_forms_cover_spill_packets() -> None:
+    descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx940_core_overlays()
+    }
+
+    load_descriptor = descriptors["amdgpu.scratch_load_b32_offset_only"]
+    assert any(
+        operand.operand_type == "OPR_SDST_M0"
+        and operand.descriptor_operand is not None
+        and operand.descriptor_operand.field_name == "m0"
+        and operand.descriptor_operand.role is OperandRole.IMPLICIT
+        for operand in load_descriptor.implicit_operands
+    )
+    load_forms = load_descriptor.asm_forms
+    assert load_forms is not None
+    load_form = load_forms[0]
+    assert load_form.mnemonic == "scratch_load_b32_offset_only"
+    assert load_form.results == ("dst",)
+    assert load_form.operands == ()
+    assert tuple(immediate.name for immediate in load_form.immediates) == (
+        "offset",
+        "nt",
+        "sc0",
+        "sc1",
+    )
+
+    store_descriptor = descriptors["amdgpu.scratch_store_b32_offset_only"]
+    assert any(
+        operand.operand_type == "OPR_SDST_M0"
+        and operand.descriptor_operand is not None
+        and operand.descriptor_operand.field_name == "m0"
+        and operand.descriptor_operand.role is OperandRole.IMPLICIT
+        for operand in store_descriptor.implicit_operands
+    )
+    store_forms = store_descriptor.asm_forms
+    assert store_forms is not None
+    store_form = store_forms[0]
+    assert store_form.mnemonic == "scratch_store_b32_offset_only"
+    assert store_form.results == ()
+    assert store_form.operands == ("value",)
     assert tuple(immediate.name for immediate in store_form.immediates) == (
         "offset",
         "nt",
