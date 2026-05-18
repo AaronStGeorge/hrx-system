@@ -1,0 +1,39 @@
+// RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
+// RUN:   iree-tune-loom %S/../iree-test-loom/testdata/spirv_vulkan_hal_actual.loom \
+// RUN:     --benchmark=@double_i32_at_byte_offset_dispatch --device=vulkan \
+// RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
+// RUN:     --min_time_ms=0 --max_batches=1 --input_ring_count=1 \
+// RUN:     --artifact_bundle_dir=%t.spirv.bundle --artifact_bundle_policy=debug
+// RUN: FileCheck --check-prefix=SPIRV %s < %t.spirv.bundle/results.jsonl
+// RUN: FileCheck --check-prefix=SPIRV-MANIFEST %s < %t.spirv.bundle/manifest.json
+
+// SPIRV: "row":"run","run_id":"r
+// SPIRV: "artifact_bundle":{"dir":
+// SPIRV: "row":"plan"
+// SPIRV: "benchmark":"double_i32_at_byte_offset_dispatch","case":"double_i32_at_byte_offset_case"
+// SPIRV: "metadata":{"strategy":"bda_byte_offset_roundtrip","problem":{"dtype":"i32","element_count":2}}
+// SPIRV: "measure":"dispatch_complete"
+// SPIRV: "row":"device"
+// SPIRV: "driver":"vulkan","provider":"spirv-vulkan-hal"
+// SPIRV: "row":"compile"
+// SPIRV: "benchmark":"double_i32_at_byte_offset_dispatch","case":"double_i32_at_byte_offset_case"
+// SPIRV: "entry":"double_i32_at_byte_offset","status":"ok"
+// SPIRV: "compile_report_path":
+// SPIRV: "target_artifact_path":
+// SPIRV: "row":"sample"
+// SPIRV: "sample":{"case":"double_i32_at_byte_offset_case","sample_ordinal":0,"passed":true
+// SPIRV: "row":"benchmark"
+// SPIRV: "benchmark":"double_i32_at_byte_offset_dispatch","case":"double_i32_at_byte_offset_case","status":"ok"
+// SPIRV: "correctness_failed_sample_count":0
+// SPIRV: "measured_dispatch_count":1
+// SPIRV: "data_cache":{"validity":"check_ops","cache_policy":"binding_ring"
+// SPIRV: "row":"summary"
+// SPIRV: "benchmark_count":1
+// SPIRV: "failure_count":0
+// SPIRV: "failed_benchmark_count":0
+
+// SPIRV-MANIFEST: "tool":"iree-tune-loom"
+// SPIRV-MANIFEST: "policy":"debug"
+// SPIRV-MANIFEST: "files":{"results":{"path":
+// SPIRV-MANIFEST: "compile_reports":[{"path":
+// SPIRV-MANIFEST: "target_artifacts":[{"path":

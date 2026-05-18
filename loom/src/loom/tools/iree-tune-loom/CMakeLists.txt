@@ -117,6 +117,22 @@ iree_lit_test_suite(
     "requires-gpu-amd"
 )
 
+iree_lit_test_suite(
+  NAME
+    spirv_vulkan_lit_test
+  SRCS
+    "iree-tune-loom_spirv_vulkan_test.txt"
+  TOOLS
+    ::iree-tune-loom
+    FileCheck
+  DATA
+    loom::src::loom::tools::iree-test-loom::testdata::spirv_vulkan_hal_actual.loom
+  LABELS
+    "driver=vulkan"
+    "manual"
+    "requires-gpu-vulkan"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
 
 option(IREE_TUNE_LOOM_ENABLE_AMDGPU

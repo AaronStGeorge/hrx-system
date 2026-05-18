@@ -24,3 +24,12 @@ check.case @double_i32_at_byte_offset_case {
   check.expect.equal actual(%output) expected(%expected) : tensor<2xi32>
   check.return
 }
+
+check.benchmark @double_i32_at_byte_offset_dispatch case(@double_i32_at_byte_offset_case) {
+  batch_size = 1,
+  iterations = 1,
+  measure = "dispatch_complete",
+  problem = {dtype = "i32", element_count = 2},
+  strategy = "bda_byte_offset_roundtrip",
+  warmup_iterations = 0
+}

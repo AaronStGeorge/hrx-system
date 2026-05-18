@@ -207,3 +207,22 @@ iree_lit_test_suite(
         "@llvm-project//llvm:FileCheck",
     ],
 )
+
+iree_lit_test_suite(
+    name = "spirv_vulkan_lit_test",
+    srcs = ["iree-tune-loom_spirv_vulkan_test.txt"],
+    cfg = "//runtime:lit.cfg.py",
+    data = [
+        "//build_tools/sanitizer:lsan_suppressions_vulkan.txt",
+        "//loom/src/loom/tools/iree-test-loom:testdata/spirv_vulkan_hal_actual.loom",
+    ],
+    tags = [
+        "driver=vulkan",
+        "manual",
+        "requires-gpu-vulkan",
+    ],
+    tools = [
+        ":iree-tune-loom",
+        "@llvm-project//llvm:FileCheck",
+    ],
+)
