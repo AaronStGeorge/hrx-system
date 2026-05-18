@@ -61,6 +61,25 @@ static iree_status_t loom_vector_legalize_reduce_axes(
   return iree_ok_status();
 }
 
+static iree_status_t loom_vector_legalize_reduce(
+    const loom_target_legalizer_entry_t* entry,
+    loom_target_legalization_context_t* context, loom_op_t* op,
+    loom_target_legalizer_result_t* out_result) {
+  (void)entry;
+  *out_result = (loom_target_legalizer_result_t){
+      .action = LOOM_TARGET_LEGALIZER_ACTION_NO_COMMENT,
+  };
+  bool rewritten = false;
+  IREE_RETURN_IF_ERROR(loom_vector_reduce_to_scalar_rewrite_op(
+      context->pass, context->rewriter, op, &rewritten));
+  if (rewritten) {
+    *out_result = (loom_target_legalizer_result_t){
+        .action = LOOM_TARGET_LEGALIZER_ACTION_REWRITTEN,
+    };
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_vector_legalize_mma(
     const loom_target_legalizer_entry_t* entry,
     loom_target_legalization_context_t* context, loom_op_t* op,
@@ -187,6 +206,10 @@ static iree_status_t loom_vector_legalize_extract(
 }
 
 static const loom_target_legalizer_entry_t kVectorLegalizerEntries[] = {
+    {
+        .root_kind = LOOM_OP_VECTOR_REDUCE,
+        .legalize = loom_vector_legalize_reduce,
+    },
     {
         .root_kind = LOOM_OP_VECTOR_REDUCE_AXES,
         .legalize = loom_vector_legalize_reduce_axes,

@@ -44,6 +44,12 @@ iree_status_t loom_vector_reduce_axes_to_scalar_rewrite_op(
     loom_pass_t* pass, loom_rewriter_t* rewriter, loom_op_t* op,
     bool* out_rewritten);
 
+// Rewrites one vector.reduce op using scalar reference semantics.
+iree_status_t loom_vector_reduce_to_scalar_rewrite_op(loom_pass_t* pass,
+                                                      loom_rewriter_t* rewriter,
+                                                      loom_op_t* op,
+                                                      bool* out_rewritten);
+
 // Rewrites one vector.mma op using scalar reference semantics. Dense logical
 // fragments lower directly; target-shaped physical fragments require options
 // that provide the selected matrix-fragment layout and permit subgroup

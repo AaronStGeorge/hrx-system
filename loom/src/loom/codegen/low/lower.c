@@ -948,9 +948,16 @@ static iree_status_t loom_low_lower_query_target_contract_from_context(
     context->lowering.view_regions_initialized = false;
     context->lowering.view_regions_analyzed = false;
   }
+  iree_status_t status = iree_ok_status();
+  loom_target_contract_query_environment_t query_environment = *environment;
+  if (query_environment.view_regions == NULL) {
+    const loom_view_region_table_t* view_regions = NULL;
+    status = loom_low_lower_context_view_regions(context, &view_regions);
+    query_environment.view_regions = view_regions;
+  }
   loom_low_lower_contract_query_state_t state = {
       .context = context,
-      .environment = environment,
+      .environment = &query_environment,
   };
   const loom_low_lower_contract_query_options_t query_options = {
       .contract_index = &context->contract_index,
@@ -973,8 +980,10 @@ static iree_status_t loom_low_lower_query_target_contract_from_context(
       .descriptor_matrix = context->policy->descriptor_matrix,
   };
 
-  iree_status_t status = loom_low_lower_query_target_contract(
-      environment, &query_options, source_op, out_result);
+  if (iree_status_is_ok(status)) {
+    status = loom_low_lower_query_target_contract(
+        &query_environment, &query_options, source_op, out_result);
+  }
   context->descriptor_set = saved_descriptor_set;
   context->lowering.fact_table = saved_fact_table;
   if (fact_table_changed) {

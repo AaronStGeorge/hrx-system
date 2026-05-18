@@ -100,6 +100,7 @@ def _vector_reduce_rule(
         Guard.value_type("input", input_type),
         Guard.value_type("init", accumulator_type),
         Guard.value_type("result", accumulator_type),
+        Guard.low_value_register_class("input", "amdgpu.vgpr"),
         Guard.low_value_register_class("result", "amdgpu.vgpr"),
     ]
     guards.extend(extra_guards)
@@ -270,6 +271,7 @@ def _f32_literal_seed_rule(
             Guard.value_type("input", _VEC_F32),
             Guard.value_type("init", _F32),
             Guard.value_type("result", _F32),
+            Guard.low_value_register_class("input", "amdgpu.vgpr"),
             Guard.low_value_register_class("result", "amdgpu.vgpr"),
             Guard.value_exact_f64(
                 "init",

@@ -163,6 +163,8 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
       builder, LOOM_PASS_ANCHOR_FUNC,
       loom_target_pipeline_build_source_normalization_after_legalize, user_data,
       &for_op));
+  IREE_RETURN_IF_ERROR(
+      loom_target_pipeline_build_target_legalize(builder, IREE_SV("eager")));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_contribute_phase(
       builder, context, LOOM_TARGET_PIPELINE_PHASE_SOURCE_TO_LOW));
   IREE_RETURN_IF_ERROR(
