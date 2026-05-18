@@ -1055,6 +1055,22 @@ low.func.def target(@gfx942_target) @gfx942_smfmac_srcc_overlap_wait_state(%lhs:
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx942_mfma_result_to_valu_waw_wait_state fixed=%acc:physical_register:0:4 fixed=%overwrite:physical_register:2:1
+amdgpu.target<gfx942> @gfx942_target
+low.func.def target(@gfx942_target) @gfx942_mfma_result_to_valu_waw_wait_state(%lhs: reg<amdgpu.vgpr x2>, %rhs: reg<amdgpu.vgpr x2>, %acc: reg<amdgpu.vgpr x4>, %x: reg<amdgpu.vgpr>, %y: reg<amdgpu.vgpr>) asm<amdgpu.cdna3.core> {
+  %first = v_mfma_f32_16x16x16_bf16 %lhs, %rhs, %acc
+  %overwrite = v_add_u32 %x, %y
+  return
+}
+
+// ----
+  v_mfma_f32_16x16x16_bf16 v[0:3], v[4:5], v[6:7], v[0:3]
+  s_nop 6
+  v_add_u32 v2, v8, v9
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx942_mfma_f32_operand_wait_state
 amdgpu.target<gfx942> @gfx942_target
 low.func.def target(@gfx942_target) @gfx942_mfma_f32_operand_wait_state(%lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>, %acc: reg<amdgpu.vgpr x4>, %addr: reg<amdgpu.vgpr>, %base: reg<amdgpu.sgpr x2>, %m0: reg<amdgpu.m0>) {
