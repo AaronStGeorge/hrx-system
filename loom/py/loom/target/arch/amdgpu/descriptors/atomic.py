@@ -33,6 +33,7 @@ def _global_atomic_overlay(
     cache_immediate_field_names: tuple[str, ...],
     saddr_off: AmdgpuFixedEncodingValue | None,
     address_units: int,
+    implicit_m0: bool,
 ) -> AmdgpuDescriptorOverlay:
     schedule_class = (
         _SCHEDULE_VMEM_ATOMIC_RETURN
@@ -86,6 +87,12 @@ def _global_atomic_overlay(
         operands += (AmdgpuOperandOverlay("SADDR", _sgpr_operand("saddr", units=2)),)
     else:
         fixed_encoding_fields += (("SADDR", saddr_off),)
+    implicit_operands: tuple[AmdgpuImplicitOperandOverlay, ...] = (
+        _ignore_global_atomic_memory(data_format_name=data_format_name, is_input=False),
+        _ignore_global_atomic_memory(data_format_name=data_format_name, is_input=True),
+    )
+    if implicit_m0:
+        implicit_operands += (_implicit_m0_input(),)
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
         instruction_name=instruction_name,
@@ -95,14 +102,7 @@ def _global_atomic_overlay(
         schedule_class=schedule_class,
         operands=operands,
         ignored_operands=ignored_operands,
-        implicit_operands=(
-            _ignore_global_atomic_memory(
-                data_format_name=data_format_name, is_input=False
-            ),
-            _ignore_global_atomic_memory(
-                data_format_name=data_format_name, is_input=True
-            ),
-        ),
+        implicit_operands=implicit_operands,
         immediate_fields=(
             offset_field_name,
             *_cache_field_names(cache_immediate_fields),
@@ -134,6 +134,7 @@ def _global_atomic_cmpswap_overlay(
     saddr_off: AmdgpuFixedEncodingValue | None,
     address_units: int,
     descriptor_key_suffix: str,
+    implicit_m0: bool,
 ) -> AmdgpuDescriptorOverlay:
     cache_immediate_fields = tuple(
         (field_name, bit_width)
@@ -160,6 +161,12 @@ def _global_atomic_cmpswap_overlay(
         operands += (AmdgpuOperandOverlay("SADDR", _sgpr_operand("saddr", units=2)),)
     else:
         fixed_encoding_fields += (("SADDR", saddr_off),)
+    implicit_operands: tuple[AmdgpuImplicitOperandOverlay, ...] = (
+        _ignore_global_atomic_memory(data_format_name="FMT_NUM_U32", is_input=False),
+        _ignore_global_atomic_memory(data_format_name="FMT_NUM_U32", is_input=True),
+    )
+    if implicit_m0:
+        implicit_operands += (_implicit_m0_input(),)
     return AmdgpuDescriptorOverlay(
         descriptor_key=(f"amdgpu.global_atomic_cmpswap_b32_rtn{descriptor_key_suffix}"),
         instruction_name="GLOBAL_ATOMIC_CMPSWAP",
@@ -168,12 +175,7 @@ def _global_atomic_cmpswap_overlay(
         semantic_tag="memory.global.atomic.compare_exchange.b32.return",
         schedule_class=_SCHEDULE_VMEM_ATOMIC_RETURN,
         operands=operands,
-        implicit_operands=(
-            _ignore_global_atomic_memory(
-                data_format_name="FMT_NUM_U32", is_input=False
-            ),
-            _ignore_global_atomic_memory(data_format_name="FMT_NUM_U32", is_input=True),
-        ),
+        implicit_operands=implicit_operands,
         immediate_fields=(
             offset_field_name,
             *_cache_field_names(cache_immediate_fields),
@@ -191,6 +193,33 @@ def _global_atomic_cmpswap_overlay(
     )
 
 
+_GLOBAL_ATOMIC_DEFAULT_ROWS = (
+    ("add_u32", "GLOBAL_ATOMIC_ADD_U32", "add.u32", "FMT_NUM_U32", True),
+    ("sub_u32", "GLOBAL_ATOMIC_SUB_U32", "sub.u32", "FMT_NUM_U32", True),
+    ("min_i32", "GLOBAL_ATOMIC_MIN_I32", "min.i32", "FMT_NUM_I32", True),
+    ("max_i32", "GLOBAL_ATOMIC_MAX_I32", "max.i32", "FMT_NUM_I32", True),
+    ("min_u32", "GLOBAL_ATOMIC_MIN_U32", "min.u32", "FMT_NUM_U32", True),
+    ("max_u32", "GLOBAL_ATOMIC_MAX_U32", "max.u32", "FMT_NUM_U32", True),
+    ("and_b32", "GLOBAL_ATOMIC_AND_B32", "and.b32", "FMT_NUM_B32", True),
+    ("or_b32", "GLOBAL_ATOMIC_OR_B32", "or.b32", "FMT_NUM_B32", True),
+    ("xor_b32", "GLOBAL_ATOMIC_XOR_B32", "xor.b32", "FMT_NUM_B32", True),
+    (
+        "swap_b32",
+        "GLOBAL_ATOMIC_SWAP_B32",
+        "exchange.b32",
+        "FMT_NUM_B32",
+        False,
+    ),
+    ("add_f32", "GLOBAL_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32", True),
+    ("min_f32", "GLOBAL_ATOMIC_MIN_F32", "minnum.f32", "FMT_NUM_F32", True),
+    ("max_f32", "GLOBAL_ATOMIC_MAX_F32", "maxnum.f32", "FMT_NUM_F32", True),
+)
+
+_GLOBAL_ATOMIC_GFX940_ROWS = (
+    ("add_f32", "GLOBAL_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32", True),
+)
+
+
 def _global_atomic_overlays(
     *,
     encoding_name: str,
@@ -206,30 +235,12 @@ def _global_atomic_overlays(
     address_units: int,
     descriptor_key_suffix: str = "",
     include_packed_half_add: bool = False,
+    implicit_m0: bool = False,
+    rows: tuple[tuple[str, str, str, str, bool], ...] = _GLOBAL_ATOMIC_DEFAULT_ROWS,
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
-    rows = [
-        ("add_u32", "GLOBAL_ATOMIC_ADD_U32", "add.u32", "FMT_NUM_U32", True),
-        ("sub_u32", "GLOBAL_ATOMIC_SUB_U32", "sub.u32", "FMT_NUM_U32", True),
-        ("min_i32", "GLOBAL_ATOMIC_MIN_I32", "min.i32", "FMT_NUM_I32", True),
-        ("max_i32", "GLOBAL_ATOMIC_MAX_I32", "max.i32", "FMT_NUM_I32", True),
-        ("min_u32", "GLOBAL_ATOMIC_MIN_U32", "min.u32", "FMT_NUM_U32", True),
-        ("max_u32", "GLOBAL_ATOMIC_MAX_U32", "max.u32", "FMT_NUM_U32", True),
-        ("and_b32", "GLOBAL_ATOMIC_AND_B32", "and.b32", "FMT_NUM_B32", True),
-        ("or_b32", "GLOBAL_ATOMIC_OR_B32", "or.b32", "FMT_NUM_B32", True),
-        ("xor_b32", "GLOBAL_ATOMIC_XOR_B32", "xor.b32", "FMT_NUM_B32", True),
-        (
-            "swap_b32",
-            "GLOBAL_ATOMIC_SWAP_B32",
-            "exchange.b32",
-            "FMT_NUM_B32",
-            False,
-        ),
-        ("add_f32", "GLOBAL_ATOMIC_ADD_F32", "add.f32", "FMT_NUM_F32", True),
-        ("min_f32", "GLOBAL_ATOMIC_MIN_F32", "minnum.f32", "FMT_NUM_F32", True),
-        ("max_f32", "GLOBAL_ATOMIC_MAX_F32", "maxnum.f32", "FMT_NUM_F32", True),
-    ]
+    effective_rows = list(rows)
     if include_packed_half_add:
-        rows.extend(
+        effective_rows.extend(
             (
                 (
                     "pk_add_f16",
@@ -254,7 +265,7 @@ def _global_atomic_overlays(
         semantic_suffix,
         data_format_name,
         has_no_return_form,
-    ) in rows:
+    ) in effective_rows:
         if has_no_return_form:
             overlays.append(
                 _global_atomic_overlay(
@@ -277,6 +288,7 @@ def _global_atomic_overlays(
                     cache_immediate_field_names=cache_immediate_field_names,
                     saddr_off=saddr_off,
                     address_units=address_units,
+                    implicit_m0=implicit_m0,
                 )
             )
         overlays.append(
@@ -300,6 +312,7 @@ def _global_atomic_overlays(
                 cache_immediate_field_names=cache_immediate_field_names,
                 saddr_off=saddr_off,
                 address_units=address_units,
+                implicit_m0=implicit_m0,
             )
         )
     overlays.append(
@@ -316,6 +329,7 @@ def _global_atomic_overlays(
             saddr_off=saddr_off,
             address_units=address_units,
             descriptor_key_suffix=descriptor_key_suffix,
+            implicit_m0=implicit_m0,
         )
     )
     return tuple(overlays)
@@ -1008,6 +1022,8 @@ __all__ = (
     "_FLAT_ATOMIC_GFX11_ROWS",
     "_FLAT_ATOMIC_GFX12_ROWS",
     "_FLAT_ATOMIC_GFX950_ROWS",
+    "_GLOBAL_ATOMIC_DEFAULT_ROWS",
+    "_GLOBAL_ATOMIC_GFX940_ROWS",
     "_buffer_atomic_cmpswap_overlay",
     "_buffer_atomic_overlay",
     "_buffer_atomic_overlays",
