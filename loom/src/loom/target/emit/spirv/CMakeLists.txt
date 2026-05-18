@@ -98,6 +98,33 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    module_abi
+  HDRS
+    "module_abi.h"
+  SRCS
+    "module_abi.c"
+  DEPS
+    ::binary_format
+    ::module_builder
+    ::module_instructions
+    ::module_types
+    ::module_values
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::target_binding
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::arch::spirv::abi
+    loom::src::loom::target::arch::spirv::descriptors_ids
+    loom::src::loom::target::arch::spirv::registers
+    loom::src::loom::target::arch::spirv::scalar_types
+    loom::src::loom::target::arch::spirv::value_types
+    loom::src::loom::target::registers
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     module_storage
   HDRS
     "module_storage.h"
@@ -130,6 +157,7 @@ loom_cc_library(
     "module_emitter.c"
   DEPS
     ::binary_format
+    ::module_abi
     ::module_builder
     ::module_instructions
     ::module_storage
@@ -142,15 +170,11 @@ loom_cc_library(
     loom::src::loom::error::emitter
     loom::src::loom::ir
     loom::src::loom::ops::low
-    loom::src::loom::target::arch::spirv::abi
     loom::src::loom::target::arch::spirv::descriptors_ids
     loom::src::loom::target::arch::spirv::features
     loom::src::loom::target::arch::spirv::packet_rows
-    loom::src::loom::target::arch::spirv::registers
-    loom::src::loom::target::arch::spirv::scalar_types
     loom::src::loom::target::arch::spirv::structured_control_flow
     loom::src::loom::target::low_descriptor_registry
-    loom::src::loom::target::registers
     loom::src::loom::target::types
   PUBLIC
 )
