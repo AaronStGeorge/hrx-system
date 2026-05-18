@@ -25,6 +25,7 @@ loom_cc_library(
     "profile_report.h"
     "report.h"
     "testbench.h"
+    "timing.h"
   SRCS
     "diagnostics.c"
     "help.c"
@@ -36,6 +37,7 @@ loom_cc_library(
     "profile_report.c"
     "report.c"
     "testbench.c"
+    "timing.c"
   DEPS
     iree::base
     iree::base::internal::json

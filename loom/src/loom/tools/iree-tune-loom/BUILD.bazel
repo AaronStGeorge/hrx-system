@@ -114,6 +114,7 @@ loom_cc_library(
         "profile_report.c",
         "report.c",
         "testbench.c",
+        "timing.c",
     ],
     hdrs = [
         "diagnostics.h",
@@ -127,6 +128,7 @@ loom_cc_library(
         "profile_report.h",
         "report.h",
         "testbench.h",
+        "timing.h",
     ],
     deps = [
         "//loom/src/loom/error:diagnostic",

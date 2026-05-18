@@ -11,7 +11,6 @@
 #include <inttypes.h>
 #include <limits.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "iree/base/api.h"
@@ -43,6 +42,7 @@
 #include "loom/tools/iree-tune-loom/profile_report.h"
 #include "loom/tools/iree-tune-loom/report.h"
 #include "loom/tools/iree-tune-loom/testbench.h"
+#include "loom/tools/iree-tune-loom/timing.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
 #include "loom/verify/verify.h"
@@ -557,44 +557,6 @@ static iree_status_t iree_tune_loom_validate_sample_flag(
   *out_begin_sample = sample_ordinal;
   *out_end_sample = sample_ordinal + 1;
   return iree_ok_status();
-}
-
-static int iree_tune_loom_compare_duration(const void* lhs, const void* rhs) {
-  const iree_duration_t lhs_duration = *(const iree_duration_t*)lhs;
-  const iree_duration_t rhs_duration = *(const iree_duration_t*)rhs;
-  return (lhs_duration > rhs_duration) - (lhs_duration < rhs_duration);
-}
-
-static iree_duration_t iree_tune_loom_nearest_rank_percentile(
-    const iree_duration_t* sorted_durations, iree_host_size_t count,
-    iree_host_size_t percentile) {
-  IREE_ASSERT_ARGUMENT(sorted_durations);
-  IREE_ASSERT(count > 0);
-  const iree_host_size_t rank = (count * percentile + 99) / 100;
-  iree_host_size_t index = rank == 0 ? 0 : rank - 1;
-  if (index >= count) {
-    index = count - 1;
-  }
-  return sorted_durations[index];
-}
-
-static void iree_tune_loom_compute_timing_stats(
-    iree_duration_t* durations, iree_host_size_t count,
-    iree_tune_loom_timing_stats_t* out_stats) {
-  qsort(durations, count, sizeof(*durations), iree_tune_loom_compare_duration);
-  int64_t total_ns = 0;
-  for (iree_host_size_t i = 0; i < count; ++i) {
-    total_ns += durations[i];
-  }
-  *out_stats = (iree_tune_loom_timing_stats_t){
-      .count = count,
-      .total_ns = total_ns,
-      .minimum_ns = durations[0],
-      .maximum_ns = durations[count - 1],
-      .mean_ns = (double)total_ns / (double)count,
-      .p50_ns = iree_tune_loom_nearest_rank_percentile(durations, count, 50),
-      .p90_ns = iree_tune_loom_nearest_rank_percentile(durations, count, 90),
-  };
 }
 
 static void iree_tune_loom_hal_context_initialize(
@@ -2027,6 +1989,23 @@ static iree_status_t iree_tune_loom_prepare_dispatch_comparison_candidate(
   if (iree_status_is_ok(status)) {
     status =
         loom_run_hal_testbench_context_ensure_runtime(&hal_context->execution);
+  }
+  loom_testbench_requirement_result_t requirement_result = {0};
+  if (iree_status_is_ok(status)) {
+    status = iree_tune_loom_evaluate_case_requirements(
+        hal_context->configuration, &hal_context->execution, module_plan,
+        selection->case_plan, &requirement_result);
+  }
+  if (iree_status_is_ok(status) && requirement_result.skipped) {
+    iree_tune_loom_benchmark_result_t benchmark_result = {
+        .status = IREE_SV("skipped"),
+        .specialization = candidate->specialization,
+    };
+    return iree_tune_loom_append_dispatch_benchmark_result(
+        run, &selection->identity, module_plan, selection->benchmark_plan,
+        selection->case_plan, &selection->policy, &benchmark_result,
+        /*correctness_sample_count=*/0,
+        /*correctness_failed_sample_count=*/0, jsonl_sink, allocator);
   }
   if (iree_status_is_ok(status)) {
     status = iree_tune_loom_hal_actual_provider_initialize(
