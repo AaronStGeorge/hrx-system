@@ -1,15 +1,15 @@
 spirv.target<vulkan1_3> @target {abi = hal_kernel}
 
-kernel.def target(@target) @quantized_projection_u8_scalar_16(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer) {
-  %m_count = index.constant 16 : index
-  %n_count = index.constant 16 : index
+kernel.def target(@target) @quantized_projection_u8_scalar_128(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer) {
+  %m_count = index.constant 128 : index
+  %n_count = index.constant 128 : index
   %unit = index.constant 1 : index
   kernel.launch.config workgroups(%n_count, %m_count, %unit) workgroup_size(%unit, %unit, %unit) : index
 } launch {
   %column = kernel.workgroup.id<x> : index
   %row = kernel.workgroup.id<y> : index
-  %k_count = index.constant 16 : index
-  %n_count = index.constant 16 : index
+  %k_count = index.constant 128 : index
+  %n_count = index.constant 128 : index
   %unit = index.constant 1 : index
   %zero = index.constant 0 : index
   %f32_bytes = index.constant 4 : index
@@ -45,24 +45,24 @@ kernel.def target(@target) @quantized_projection_u8_scalar_16(%lhs_buffer: buffe
   kernel.return
 }
 
-check.case @quantized_projection_u8_scalar_16_case {
+check.case @quantized_projection_u8_scalar_128_case {
   check.requires<hal.device.i64> {category = "vulkan.feature", key = "shader_int8", equals = 1}
   check.requires<hal.device.i64> {category = "vulkan.feature", key = "storage_buffer_8bit_access", equals = 1}
-  %lhs = check.generate.fill value(1) : tensor<16x16xi8>
-  %rhs = check.generate.fill value(2) : tensor<16x16xi8>
-  %init = check.generate.fill value(5.0) : tensor<16x16xf32>
-  %output = check.generate.fill value(0.0) : tensor<16x16xf32>
-  func.call @quantized_projection_u8_scalar_16(%lhs, %rhs, %init, %output) : (tensor<16x16xi8>, tensor<16x16xi8>, tensor<16x16xf32>, tensor<16x16xf32>)
-  %expected = check.oracle.call<reference.matmul> {accumulator = "f32", lhs = "u8", result = "f32", rhs = "u8"} callee(@quantized_projection_u8_scalar_16) inputs(%lhs, %rhs, %init) : (tensor<16x16xi8>, tensor<16x16xi8>, tensor<16x16xf32>) -> (tensor<16x16xf32>)
-  check.expect.close actual(%output) expected(%expected) atol(0.0) rtol(0.0) nan(different) : tensor<16x16xf32>
+  %lhs = check.generate.fill value(1) : tensor<128x128xi8>
+  %rhs = check.generate.fill value(2) : tensor<128x128xi8>
+  %init = check.generate.fill value(5.0) : tensor<128x128xf32>
+  %output = check.generate.fill value(0.0) : tensor<128x128xf32>
+  func.call @quantized_projection_u8_scalar_128(%lhs, %rhs, %init, %output) : (tensor<128x128xi8>, tensor<128x128xi8>, tensor<128x128xf32>, tensor<128x128xf32>)
+  %expected = check.oracle.call<reference.matmul> {accumulator = "f32", lhs = "u8", result = "f32", rhs = "u8"} callee(@quantized_projection_u8_scalar_128) inputs(%lhs, %rhs, %init) : (tensor<128x128xi8>, tensor<128x128xi8>, tensor<128x128xf32>) -> (tensor<128x128xf32>)
+  check.expect.close actual(%output) expected(%expected) atol(0.0) rtol(0.0) nan(different) : tensor<128x128xf32>
   check.return
 }
 
-check.benchmark @quantized_projection_u8_scalar_16_dispatch case(@quantized_projection_u8_scalar_16_case) {
+check.benchmark @quantized_projection_u8_scalar_128_dispatch case(@quantized_projection_u8_scalar_128_case) {
   batch_size = 1,
   iterations = 1,
   measure = "dispatch_complete",
-  problem = {dtype = "u8xu8_f32", m = 16, n = 16, k = 16},
+  problem = {dtype = "u8xu8_f32", m = 128, n = 128, k = 128},
   strategy = "scalar_unsigned_decode_gemm",
   warmup_iterations = 0
 }
