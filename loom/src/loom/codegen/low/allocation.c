@@ -260,7 +260,8 @@ bool loom_low_allocation_assignments_share_target_storage(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs) {
-  return lhs->location_kind == rhs->location_kind &&
+  return lhs != NULL && rhs != NULL &&
+         lhs->location_kind == rhs->location_kind &&
          loom_low_allocation_reg_classes_share_storage(
              descriptor_set, lhs->descriptor_reg_class_id,
              rhs->descriptor_reg_class_id);
@@ -272,6 +273,35 @@ static bool loom_low_allocation_assignment_classes_share_storage(
     const loom_low_allocation_assignment_t* rhs) {
   return loom_low_allocation_assignments_share_target_storage(descriptor_set,
                                                               lhs, rhs);
+}
+
+bool loom_low_allocation_assignments_match_target_storage(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_allocation_assignment_t* lhs,
+    const loom_low_allocation_assignment_t* rhs) {
+  return lhs != NULL && rhs != NULL && lhs->location_count != 0 &&
+         rhs->location_count != 0 &&
+         loom_low_allocation_assignments_share_target_storage(descriptor_set,
+                                                              lhs, rhs) &&
+         lhs->location_base == rhs->location_base &&
+         lhs->location_count == rhs->location_count;
+}
+
+bool loom_low_allocation_assignments_overlap_target_storage(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_allocation_assignment_t* lhs,
+    const loom_low_allocation_assignment_t* rhs) {
+  if (lhs == NULL || rhs == NULL || lhs->location_count == 0 ||
+      rhs->location_count == 0 ||
+      !loom_low_allocation_assignments_share_target_storage(descriptor_set, lhs,
+                                                            rhs)) {
+    return false;
+  }
+  const uint64_t lhs_begin = lhs->location_base;
+  const uint64_t rhs_begin = rhs->location_base;
+  const uint64_t lhs_end = lhs_begin + lhs->location_count;
+  const uint64_t rhs_end = rhs_begin + rhs->location_count;
+  return lhs_begin < rhs_end && rhs_begin < lhs_end;
 }
 
 bool loom_low_allocation_assignment_subranges_match_target_storage(

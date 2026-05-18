@@ -46,6 +46,8 @@ loom_assert_no_dependencies(
         ":memory_access",
         ":move_sequence",
         ":packet",
+        ":packet_hazard_plan",
+        ":packet_progress",
         ":packet_asm",
         ":packet_json",
         ":placement",
@@ -72,6 +74,8 @@ loom_assert_no_dependencies(
         ":memory_access",
         ":move_sequence",
         ":packet",
+        ":packet_hazard_plan",
+        ":packet_progress",
         ":packet_asm",
         ":packet_json",
         ":placement",
@@ -417,6 +421,33 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "packet_progress",
+    srcs = ["packet_progress.c"],
+    hdrs = ["packet_progress.h"],
+    deps = [
+        ":allocation",
+        ":packet",
+        "//loom/src/loom/codegen/low/schedule",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "packet_hazard_plan",
+    srcs = ["packet_hazard_plan.c"],
+    hdrs = ["packet_hazard_plan.h"],
+    deps = [
+        ":allocation",
+        ":packet",
+        ":packet_progress",
+        "//loom/src/loom/codegen/low/schedule",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "addressability",
     srcs = ["addressability.c"],
     hdrs = ["addressability.h"],
@@ -702,6 +733,29 @@ loom_cc_test(
     srcs = ["packet_test.cc"],
     deps = [
         ":packet",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "packet_progress_test",
+    srcs = ["packet_progress_test.cc"],
+    deps = [
+        ":packet_progress",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "packet_hazard_plan_test",
+    srcs = ["packet_hazard_plan_test.cc"],
+    deps = [
+        ":packet_hazard_plan",
+        ":packet_progress",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

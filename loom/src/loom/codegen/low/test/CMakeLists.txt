@@ -23,6 +23,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "hazard_plan"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/hazard_plan.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "packet"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/packet.loom-test"

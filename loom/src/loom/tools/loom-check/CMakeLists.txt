@@ -354,12 +354,18 @@ loom_cc_binary(
   SRCS
     "loom-check-test.c"
   DEPS
+    ::execute
     ::main
     iree::base
+    loom::src::loom::codegen::low::allocation
+    loom::src::loom::codegen::low::packet_hazard_plan
+    loom::src::loom::ir
     loom::src::loom::ops::test
     loom::src::loom::pass::test::registry
     loom::src::loom::target::low_descriptor_registry_core_test
     loom::src::loom::target::test::lower
+    loom::src::loom::util::json
+    loom::src::loom::util::stream
   TESTONLY
 )
 

@@ -401,6 +401,39 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    packet_progress
+  HDRS
+    "packet_progress.h"
+  SRCS
+    "packet_progress.c"
+  DEPS
+    ::allocation
+    ::packet
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::schedule
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    packet_hazard_plan
+  HDRS
+    "packet_hazard_plan.h"
+  SRCS
+    "packet_hazard_plan.c"
+  DEPS
+    ::allocation
+    ::packet
+    ::packet_progress
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::schedule
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     addressability
   HDRS
     "addressability.h"
@@ -714,6 +747,31 @@ loom_cc_test(
     "packet_test.cc"
   DEPS
     ::packet
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    packet_progress_test
+  SRCS
+    "packet_progress_test.cc"
+  DEPS
+    ::packet_progress
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    packet_hazard_plan_test
+  SRCS
+    "packet_hazard_plan_test.cc"
+  DEPS
+    ::packet_hazard_plan
+    ::packet_progress
+    iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main
 )

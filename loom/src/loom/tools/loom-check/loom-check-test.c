@@ -9,14 +9,454 @@
 // This binary accepts the production dialects, the synthetic test dialect, and
 // the core/test target-low descriptor package. It intentionally does not link
 // real target providers so core loom-check tests cannot depend on optional
-// target packages by accident.
+// target packages by accident. Test-only emit providers in this file exercise
+// common target-independent contracts using only that linked test target stack.
+
+#include <inttypes.h>
 
 #include "iree/base/api.h"
+#include "loom/codegen/low/allocation.h"
+#include "loom/codegen/low/packet_hazard_plan.h"
+#include "loom/ir/ir.h"
 #include "loom/ops/test/registry.h"
 #include "loom/pass/test/registry.h"
 #include "loom/target/low_descriptor_registry_core_test.h"
 #include "loom/target/test/lower.h"
+#include "loom/tools/loom-check/diagnostics.h"
+#include "loom/tools/loom-check/execute.h"
+#include "loom/tools/loom-check/low_emit.h"
 #include "loom/tools/loom-check/main.h"
+#include "loom/util/json.h"
+#include "loom/util/stream.h"
+
+enum {
+  LOOM_CHECK_TEST_SYNTHETIC_HAZARD_REASON_PHYSICAL_OVERLAP = 1,
+  LOOM_CHECK_TEST_SYNTHETIC_HAZARD_REASON_MISSING_DATA = 2,
+  LOOM_CHECK_TEST_SYNTHETIC_PROGRESS_CLASS_ISSUE = 1,
+};
+
+typedef enum loom_check_test_synthetic_hazard_case_e {
+  LOOM_CHECK_TEST_SYNTHETIC_HAZARD_CASE_ACTION = 0,
+  LOOM_CHECK_TEST_SYNTHETIC_HAZARD_CASE_MISSING = 1,
+} loom_check_test_synthetic_hazard_case_t;
+
+typedef struct loom_check_test_synthetic_hazard_options_t {
+  // Module-local target-low function symbol selected by the RUN line.
+  iree_string_view_t function_symbol_name;
+  // Scenario selected by the test fixture.
+  loom_check_test_synthetic_hazard_case_t test_case;
+  // Candidate selection strategy used by low frame construction.
+  loom_low_schedule_strategy_t schedule_strategy;
+  // True once a strategy option has been parsed.
+  bool has_schedule_strategy_option;
+  // Low allocation budget overrides parsed from target options.
+  loom_low_allocation_budget_t
+      allocation_budgets[LOOM_CHECK_LOW_EMIT_MAX_ALLOCATION_BUDGETS];
+  // Number of entries in |allocation_budgets|.
+  iree_host_size_t allocation_budget_count;
+  // Fixed low allocation requests parsed from target options.
+  loom_check_low_emit_fixed_value_spec_t allocation_fixed_value_specs
+      [LOOM_CHECK_LOW_EMIT_MAX_ALLOCATION_FIXED_VALUES];
+  // Number of entries in |allocation_fixed_value_specs|.
+  iree_host_size_t allocation_fixed_value_spec_count;
+} loom_check_test_synthetic_hazard_options_t;
+
+typedef struct loom_check_test_synthetic_hazard_context_t {
+  // Scenario selected by the test fixture.
+  loom_check_test_synthetic_hazard_case_t test_case;
+  // Producer packet node found in the scheduled function.
+  uint32_t producer_node_index;
+  // Consumer packet node found in the scheduled function.
+  uint32_t consumer_node_index;
+  // SSA result defined by |producer_node_index|.
+  loom_value_id_t producer_value_id;
+  // SSA result defined by |consumer_node_index|.
+  loom_value_id_t consumer_value_id;
+} loom_check_test_synthetic_hazard_context_t;
+
+static bool loom_check_test_synthetic_hazard_matches(
+    const loom_check_emit_provider_t* provider,
+    iree_string_view_t target_name) {
+  (void)provider;
+  return iree_string_view_equal(target_name,
+                                IREE_SV("synthetic-hazard-plan-json"));
+}
+
+static iree_status_t loom_check_test_synthetic_hazard_parse_named_option(
+    iree_string_view_t name, iree_string_view_t value,
+    loom_check_test_synthetic_hazard_options_t* options, bool* out_matched) {
+  *out_matched = true;
+  if (iree_string_view_equal(name, IREE_SV("case"))) {
+    if (iree_string_view_equal(value, IREE_SV("action"))) {
+      options->test_case = LOOM_CHECK_TEST_SYNTHETIC_HAZARD_CASE_ACTION;
+      return iree_ok_status();
+    }
+    if (iree_string_view_equal(value, IREE_SV("missing"))) {
+      options->test_case = LOOM_CHECK_TEST_SYNTHETIC_HAZARD_CASE_MISSING;
+      return iree_ok_status();
+    }
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "synthetic hazard option 'case' expected 'action' or 'missing', got "
+        "'%.*s'",
+        (int)value.size, value.data);
+  }
+  if (iree_string_view_equal(name, IREE_SV("strategy"))) {
+    if (options->has_schedule_strategy_option) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "duplicate synthetic hazard option 'strategy'");
+    }
+    IREE_RETURN_IF_ERROR(loom_check_low_emit_parse_schedule_strategy(
+        value, IREE_SV("synthetic hazard"), &options->schedule_strategy));
+    options->has_schedule_strategy_option = true;
+    return iree_ok_status();
+  }
+  *out_matched = false;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_check_test_synthetic_hazard_parse_option(
+    iree_string_view_t token,
+    loom_check_test_synthetic_hazard_options_t* options) {
+  iree_string_view_t name = iree_string_view_empty();
+  iree_string_view_t value = iree_string_view_empty();
+  iree_string_view_split(token, '=', &name, &value);
+  name = iree_string_view_trim(name);
+  value = iree_string_view_trim(value);
+
+  bool matched = false;
+  IREE_RETURN_IF_ERROR(loom_check_test_synthetic_hazard_parse_named_option(
+      name, value, options, &matched));
+  if (matched) {
+    return iree_ok_status();
+  }
+  return loom_check_low_emit_parse_allocation_option(
+      token, IREE_SV("synthetic hazard"), options->allocation_budgets,
+      IREE_ARRAYSIZE(options->allocation_budgets),
+      &options->allocation_budget_count, options->allocation_fixed_value_specs,
+      IREE_ARRAYSIZE(options->allocation_fixed_value_specs),
+      &options->allocation_fixed_value_spec_count);
+}
+
+static iree_status_t loom_check_test_synthetic_hazard_parse_emit_options(
+    const loom_check_emit_provider_request_t* request,
+    loom_check_test_synthetic_hazard_options_t* out_options) {
+  *out_options = (loom_check_test_synthetic_hazard_options_t){
+      .test_case = LOOM_CHECK_TEST_SYNTHETIC_HAZARD_CASE_ACTION,
+      .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
+  };
+
+  iree_string_view_t symbol_name = iree_string_view_empty();
+  iree_string_view_t option_text = iree_string_view_empty();
+  iree_string_view_split(request->target_options, ' ', &symbol_name,
+                         &option_text);
+  symbol_name = iree_string_view_trim(symbol_name);
+  option_text = iree_string_view_trim(option_text);
+  if (!iree_string_view_starts_with(symbol_name, IREE_SV("@")) ||
+      symbol_name.size == 1) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "synthetic hazard plan requires a low function symbol name");
+  }
+  out_options->function_symbol_name =
+      iree_string_view_substr(symbol_name, 1, IREE_HOST_SIZE_MAX);
+
+  while (!iree_string_view_is_empty(option_text)) {
+    iree_string_view_t token = iree_string_view_empty();
+    iree_string_view_t remaining = iree_string_view_empty();
+    iree_string_view_split(option_text, ' ', &token, &remaining);
+    token = iree_string_view_trim(token);
+    if (!iree_string_view_is_empty(token)) {
+      IREE_RETURN_IF_ERROR(
+          loom_check_test_synthetic_hazard_parse_option(token, out_options));
+    }
+    option_text = iree_string_view_trim(remaining);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_check_test_synthetic_hazard_find_pair(
+    const loom_low_schedule_table_t* schedule,
+    loom_check_test_synthetic_hazard_context_t* context) {
+  context->producer_node_index = LOOM_LOW_SCHEDULE_NODE_NONE;
+  context->consumer_node_index = LOOM_LOW_SCHEDULE_NODE_NONE;
+  context->producer_value_id = LOOM_VALUE_ID_INVALID;
+  context->consumer_value_id = LOOM_VALUE_ID_INVALID;
+  for (iree_host_size_t packet_index = 0;
+       packet_index < loom_low_packet_count(schedule); ++packet_index) {
+    uint32_t node_index = LOOM_LOW_SCHEDULE_NODE_NONE;
+    IREE_RETURN_IF_ERROR(
+        loom_low_packet_node_index_at(schedule, packet_index, &node_index));
+    if (node_index >= schedule->node_count) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "synthetic hazard packet index %" PRIhsz
+                              " references out-of-range node %" PRIu32,
+                              packet_index, node_index);
+    }
+    const loom_low_schedule_node_t* node = &schedule->nodes[node_index];
+    if (node->kind != LOOM_LOW_SCHEDULE_NODE_DESCRIPTOR ||
+        node->op->result_count == 0) {
+      continue;
+    }
+    if (context->producer_node_index == LOOM_LOW_SCHEDULE_NODE_NONE) {
+      context->producer_node_index = node_index;
+      context->producer_value_id = loom_op_const_results(node->op)[0];
+      continue;
+    }
+    context->consumer_node_index = node_index;
+    context->consumer_value_id = loom_op_const_results(node->op)[0];
+    return iree_ok_status();
+  }
+  return iree_make_status(
+      IREE_STATUS_FAILED_PRECONDITION,
+      "synthetic hazard plan requires two descriptor packets with results");
+}
+
+static iree_status_t loom_check_test_synthetic_hazard_emit_missing(
+    loom_low_packet_hazard_plan_emit_fn_t emit, void* emit_user_data) {
+  const loom_low_packet_hazard_plan_event_t event = {
+      .kind = LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_MISSING_TARGET_DATA,
+      .reason_id = LOOM_CHECK_TEST_SYNTHETIC_HAZARD_REASON_MISSING_DATA,
+      .reason_name = IREE_SV("synthetic.missing-target-data"),
+      .producer_node_index = LOOM_LOW_SCHEDULE_NODE_NONE,
+      .progress_class_id = LOOM_LOW_PACKET_PROGRESS_CLASS_NONE,
+      .target_detail = IREE_SV("synthetic semantic tag unavailable"),
+  };
+  return emit(emit_user_data, &event);
+}
+
+static iree_status_t loom_check_test_synthetic_hazard_query(
+    void* user_data, const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_packet_progress_table_t* progress,
+    const loom_low_packet_view_t* packet,
+    loom_low_packet_hazard_plan_emit_fn_t emit, void* emit_user_data) {
+  (void)progress;
+  const loom_check_test_synthetic_hazard_context_t* context =
+      (const loom_check_test_synthetic_hazard_context_t*)user_data;
+  if (context->test_case == LOOM_CHECK_TEST_SYNTHETIC_HAZARD_CASE_MISSING) {
+    if (packet->packet_index == 0) {
+      return loom_check_test_synthetic_hazard_emit_missing(emit,
+                                                           emit_user_data);
+    }
+    return iree_ok_status();
+  }
+  if (packet->node_index != context->consumer_node_index) {
+    return iree_ok_status();
+  }
+  if (allocation == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "synthetic hazard physical-overlap predicate requires allocation");
+  }
+
+  const loom_low_allocation_assignment_t* producer_assignment =
+      loom_low_allocation_try_map_active_value_assignment(
+          allocation, context->producer_value_id,
+          /*out_assignment_index=*/NULL);
+  const loom_low_allocation_assignment_t* consumer_assignment =
+      loom_low_allocation_try_map_active_value_assignment(
+          allocation, context->consumer_value_id,
+          /*out_assignment_index=*/NULL);
+  const loom_low_descriptor_set_t* descriptor_set =
+      schedule->target.descriptor_set;
+  if (!loom_low_allocation_assignments_overlap_target_storage(
+          descriptor_set, producer_assignment, consumer_assignment)) {
+    return iree_ok_status();
+  }
+
+  const loom_low_packet_hazard_plan_event_t event = {
+      .kind = LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION,
+      .reason_id = LOOM_CHECK_TEST_SYNTHETIC_HAZARD_REASON_PHYSICAL_OVERLAP,
+      .reason_name = IREE_SV("synthetic.physical-overlap"),
+      .producer_node_index = context->producer_node_index,
+      .progress_class_id = LOOM_CHECK_TEST_SYNTHETIC_PROGRESS_CLASS_ISSUE,
+      .progress_class_name = IREE_SV("synthetic.issue"),
+      .required_progress = 2,
+      .observed_progress = 0,
+      .residual_progress = 2,
+  };
+  return emit(emit_user_data, &event);
+}
+
+static iree_string_view_t loom_check_test_synthetic_hazard_record_kind_name(
+    loom_low_packet_hazard_plan_record_kind_t kind) {
+  switch (kind) {
+    case LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION:
+      return IREE_SV("action");
+    case LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_MISSING_TARGET_DATA:
+      return IREE_SV("missing_target_data");
+    case LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_UNSUPPORTED_PRE_ALLOCATION:
+      return IREE_SV("unsupported_pre_allocation");
+    case LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_IMPOSSIBLE_SATISFACTION:
+      return IREE_SV("impossible_satisfaction");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static iree_status_t loom_check_test_synthetic_hazard_write_nullable_host_size(
+    iree_host_size_t value, iree_host_size_t sentinel,
+    loom_output_stream_t* stream) {
+  if (value == sentinel) {
+    return loom_output_stream_write_cstring(stream, "null");
+  }
+  return loom_output_stream_write_format(stream, "%zu", value);
+}
+
+static iree_status_t loom_check_test_synthetic_hazard_write_nullable_u32(
+    uint32_t value, uint32_t sentinel, loom_output_stream_t* stream) {
+  if (value == sentinel) {
+    return loom_output_stream_write_cstring(stream, "null");
+  }
+  return loom_output_stream_write_format(stream, "%" PRIu32, value);
+}
+
+static iree_status_t loom_check_test_synthetic_hazard_write_record(
+    const loom_low_packet_hazard_plan_record_t* record,
+    iree_host_size_t record_index, loom_output_stream_t* stream) {
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, "{\"index\":%zu,\"kind\":", record_index));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      stream, loom_check_test_synthetic_hazard_record_kind_name(record->kind)));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream, ",\"reason\":{\"id\":%" PRIu16 ",\"name\":", record->reason_id));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_string(stream, record->reason_name));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, "},\"producer\":"));
+  if (record->producer_node_index == LOOM_LOW_SCHEDULE_NODE_NONE) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "null"));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream,
+        "{\"node\":%" PRIu32 ",\"packet\":", record->producer_node_index));
+    IREE_RETURN_IF_ERROR(
+        loom_check_test_synthetic_hazard_write_nullable_host_size(
+            record->producer_packet_index,
+            LOOM_LOW_PACKET_HAZARD_PLAN_PACKET_NONE, stream));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"scheduled_ordinal\":"));
+    IREE_RETURN_IF_ERROR(loom_check_test_synthetic_hazard_write_nullable_u32(
+        record->producer_scheduled_ordinal,
+        LOOM_LOW_PACKET_HAZARD_PLAN_ORDINAL_NONE, stream));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '}'));
+  }
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      stream,
+      ",\"consumer\":{\"node\":%" PRIu32 ",\"packet\":%zu,\"block\":%" PRIu32
+      ",\"scheduled_ordinal\":%" PRIu32 "},\"progress\":",
+      record->consumer_node_index, record->insertion_packet_index,
+      record->block_index, record->scheduled_ordinal));
+  if (record->progress_class_id == LOOM_LOW_PACKET_PROGRESS_CLASS_NONE) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "null"));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream, "{\"class_id\":%" PRIu16 ",\"class_name\":",
+        record->progress_class_id));
+    IREE_RETURN_IF_ERROR(
+        loom_json_write_escaped_string(stream, record->progress_class_name));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream,
+        ",\"required\":%" PRIu32 ",\"observed\":%" PRIu32
+        ",\"residual\":%" PRIu32 "}",
+        record->required_progress, record->observed_progress,
+        record->residual_progress));
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"target_detail\":"));
+  if (iree_string_view_is_empty(record->target_detail)) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "null"));
+  } else {
+    IREE_RETURN_IF_ERROR(
+        loom_json_write_escaped_string(stream, record->target_detail));
+  }
+  return loom_output_stream_write_char(stream, '}');
+}
+
+static iree_status_t loom_check_test_synthetic_hazard_format_json(
+    const loom_low_packet_hazard_plan_t* plan, iree_string_view_t function_name,
+    iree_string_builder_t* builder) {
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(builder, &stream);
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+      &stream,
+      "{\"format\":\"loom.low.synthetic_hazard_plan.v0\",\"function\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(&stream, function_name));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"record_count\":%zu,\"records\":[", plan->record_count));
+  for (iree_host_size_t i = 0; i < plan->record_count; ++i) {
+    if (i > 0) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_char(&stream, ','));
+    }
+    IREE_RETURN_IF_ERROR(loom_check_test_synthetic_hazard_write_record(
+        &plan->records[i], i, &stream));
+  }
+  return loom_output_stream_write_cstring(&stream, "]}");
+}
+
+static iree_status_t loom_check_test_synthetic_hazard_execute(
+    const loom_check_emit_provider_t* provider,
+    const loom_check_emit_provider_request_t* request) {
+  (void)provider;
+  loom_check_test_synthetic_hazard_options_t options;
+  IREE_RETURN_IF_ERROR(
+      loom_check_test_synthetic_hazard_parse_emit_options(request, &options));
+
+  loom_low_emission_frame_t frame = {0};
+  IREE_RETURN_IF_ERROR(loom_check_low_emit_packetize_function(
+      request, options.function_symbol_name, options.schedule_strategy,
+      options.allocation_budgets, options.allocation_budget_count,
+      options.allocation_fixed_value_specs,
+      options.allocation_fixed_value_spec_count, /*spill_free_options=*/NULL,
+      &frame));
+  if (request->diagnostic_collector != NULL &&
+      request->diagnostic_collector->count != 0) {
+    return iree_ok_status();
+  }
+
+  loom_check_test_synthetic_hazard_context_t context = {
+      .test_case = options.test_case,
+  };
+  IREE_RETURN_IF_ERROR(
+      loom_check_test_synthetic_hazard_find_pair(&frame.schedule, &context));
+
+  loom_low_allocation_value_scratch_t scratch = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_acquire_value_scratch(&frame.allocation, &scratch));
+  const loom_low_packet_hazard_plan_provider_t hazard_provider = {
+      .user_data = &context,
+      .query = loom_check_test_synthetic_hazard_query,
+  };
+  loom_low_packet_hazard_plan_t plan = {0};
+  iree_status_t status = loom_low_packet_hazard_plan_build(
+      &frame.schedule, &frame.allocation, /*progress=*/NULL, &hazard_provider,
+      request->case_arena, &plan);
+  loom_low_allocation_release_value_scratch(&scratch);
+  IREE_RETURN_IF_ERROR(status);
+  return loom_check_test_synthetic_hazard_format_json(
+      &plan, options.function_symbol_name, &request->result->actual_output);
+}
+
+static iree_status_t loom_check_test_synthetic_hazard_append_names(
+    const loom_check_emit_provider_t* provider,
+    iree_string_builder_t* builder) {
+  (void)provider;
+  return iree_string_builder_append_cstring(builder,
+                                            "synthetic-hazard-plan-json");
+}
+
+static const loom_check_emit_provider_t kLoomCheckTestSyntheticHazardProvider =
+    {
+        .name = IREE_SVL("synthetic-hazard-plan"),
+        .match = loom_check_test_synthetic_hazard_matches,
+        .execute = loom_check_test_synthetic_hazard_execute,
+        .append_names = loom_check_test_synthetic_hazard_append_names,
+};
+
+static const loom_check_emit_provider_t* const kLoomCheckTestEmitProviders[] = {
+    &kLoomCheckTestSyntheticHazardProvider,
+};
 
 static iree_status_t loom_check_test_register_context(void* user_data,
                                                       loom_context_t* context) {
@@ -54,6 +494,11 @@ static const loom_check_environment_t kLoomCheckTestEnvironment = {
         {
             .fn = loom_check_test_initialize_low_lower_policy_registry,
             .user_data = NULL,
+        },
+    .emit_providers =
+        {
+            .providers = kLoomCheckTestEmitProviders,
+            .provider_count = IREE_ARRAYSIZE(kLoomCheckTestEmitProviders),
         },
 };
 

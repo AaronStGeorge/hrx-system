@@ -78,11 +78,28 @@ iree_status_t loom_low_packet_node_index_at(
     const loom_low_schedule_table_t* schedule, iree_host_size_t packet_index,
     uint32_t* out_node_index);
 
+// Returns the global packet index for |scheduled_ordinal| within
+// |block_index|.
+iree_status_t loom_low_packet_index_at_block_ordinal(
+    const loom_low_schedule_table_t* schedule, uint32_t block_index,
+    uint32_t scheduled_ordinal, iree_host_size_t* out_packet_index);
+
+// Returns the schedule-node index for |scheduled_ordinal| within |block_index|.
+iree_status_t loom_low_packet_node_index_at_block_ordinal(
+    const loom_low_schedule_table_t* schedule, uint32_t block_index,
+    uint32_t scheduled_ordinal, uint32_t* out_node_index);
+
 // Returns the packet view at |packet_index|.
 iree_status_t loom_low_packet_view_at(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
     iree_host_size_t packet_index, loom_low_packet_view_t* out_packet);
+
+// Returns the packet view for |scheduled_ordinal| within |block_index|.
+iree_status_t loom_low_packet_view_at_block_ordinal(
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation, uint32_t block_index,
+    uint32_t scheduled_ordinal, loom_low_packet_view_t* out_packet);
 
 // Resolves the asm form for |packet|. A selected asm-form table overrides the
 // descriptor canonical form when it names a valid form for the packet's

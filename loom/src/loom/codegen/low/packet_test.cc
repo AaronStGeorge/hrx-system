@@ -125,6 +125,70 @@ TEST(LowPacketTest, ViewsScheduledPackets) {
   EXPECT_EQ(packet.descriptor, &state.descriptors[1]);
 }
 
+TEST(LowPacketTest, ViewsBlockScheduledOrdinals) {
+  PacketTestState state;
+  InitializePacketTestState(&state);
+
+  iree_host_size_t packet_index = LOOM_LOW_PACKET_INDEX_NONE;
+  IREE_ASSERT_OK(loom_low_packet_index_at_block_ordinal(&state.schedule, 0, 0,
+                                                        &packet_index));
+  EXPECT_EQ(packet_index, 0u);
+
+  uint32_t node_index = LOOM_LOW_SCHEDULE_NODE_NONE;
+  IREE_ASSERT_OK(loom_low_packet_node_index_at_block_ordinal(&state.schedule, 0,
+                                                             0, &node_index));
+  EXPECT_EQ(node_index, 1u);
+
+  loom_low_packet_view_t packet;
+  IREE_ASSERT_OK(loom_low_packet_view_at_block_ordinal(
+      &state.schedule, &state.allocation, 0, 1, &packet));
+  EXPECT_EQ(packet.packet_index, 1u);
+  EXPECT_EQ(packet.node_index, 0u);
+  EXPECT_EQ(packet.node, &state.nodes[0]);
+  EXPECT_EQ(packet.descriptor, &state.descriptors[1]);
+}
+
+TEST(LowPacketTest, RejectsInvalidBlockScheduledOrdinal) {
+  PacketTestState state;
+  InitializePacketTestState(&state);
+
+  iree_host_size_t packet_index = LOOM_LOW_PACKET_INDEX_NONE;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        loom_low_packet_index_at_block_ordinal(
+                            &state.schedule, 1, 0, &packet_index));
+  EXPECT_EQ(packet_index, LOOM_LOW_PACKET_INDEX_NONE);
+
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        loom_low_packet_index_at_block_ordinal(
+                            &state.schedule, 0, 2, &packet_index));
+  EXPECT_EQ(packet_index, LOOM_LOW_PACKET_INDEX_NONE);
+}
+
+TEST(LowPacketTest, RejectsBlockOrdinalOutsidePacketStream) {
+  PacketTestState state;
+  InitializePacketTestState(&state);
+  state.blocks[0].scheduled_node_start = 1;
+  state.blocks[0].scheduled_node_count = 2;
+
+  iree_host_size_t packet_index = LOOM_LOW_PACKET_INDEX_NONE;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        loom_low_packet_index_at_block_ordinal(
+                            &state.schedule, 0, 1, &packet_index));
+  EXPECT_EQ(packet_index, LOOM_LOW_PACKET_INDEX_NONE);
+}
+
+TEST(LowPacketTest, RejectsBlockOrdinalReferencingInvalidNode) {
+  PacketTestState state;
+  InitializePacketTestState(&state);
+  state.scheduled_node_indices[0] = 2;
+
+  uint32_t node_index = LOOM_LOW_SCHEDULE_NODE_NONE;
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_OUT_OF_RANGE,
+                        loom_low_packet_node_index_at_block_ordinal(
+                            &state.schedule, 0, 0, &node_index));
+  EXPECT_EQ(node_index, LOOM_LOW_SCHEDULE_NODE_NONE);
+}
+
 TEST(LowPacketTest, ValidatesSelectedAsmForms) {
   PacketTestState state;
   InitializePacketTestState(&state);

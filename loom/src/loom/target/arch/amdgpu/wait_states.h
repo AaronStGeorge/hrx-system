@@ -20,7 +20,9 @@
 
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
+#include "iree/base/string_builder.h"
 #include "loom/codegen/low/allocation.h"
+#include "loom/codegen/low/packet_hazard_plan.h"
 #include "loom/codegen/low/schedule/types.h"
 
 #ifdef __cplusplus
@@ -59,7 +61,11 @@ typedef struct loom_amdgpu_wait_state_t {
   uint32_t producer_node;
   // Consumer node that needs the wait.
   uint32_t consumer_node;
-  // Number of cycles to wait before |consumer_node|.
+  // Required target progress before |consumer_node| may read the hazard.
+  uint16_t required_cycle_count;
+  // Target progress already supplied before the residual wait.
+  uint16_t observed_cycle_count;
+  // Residual cycles to wait before |consumer_node|.
   uint16_t cycle_count;
 } loom_amdgpu_wait_state_t;
 
@@ -69,6 +75,10 @@ typedef struct loom_amdgpu_wait_state_plan_t {
   const loom_low_schedule_table_t* schedule;
   // Allocation table this plan was built from.
   const loom_low_allocation_table_t* allocation;
+  // Target progress facts used to explain independent intervening instructions.
+  loom_low_packet_progress_table_t progress;
+  // Common residual hazard sidecar for fixed wait-state actions.
+  loom_low_packet_hazard_plan_t hazard_plan;
   // Wait states in scheduled packet order.
   const loom_amdgpu_wait_state_t* states;
   // Number of wait-state records.
@@ -86,6 +96,11 @@ iree_status_t loom_amdgpu_wait_state_plan_build(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
     iree_arena_allocator_t* arena, loom_amdgpu_wait_state_plan_t* out_plan);
+
+// Formats the wait-state plan, common progress table, and common hazard sidecar
+// as deterministic JSON for diagnostics and loom-check fixtures.
+iree_status_t loom_amdgpu_wait_state_plan_format_json(
+    const loom_amdgpu_wait_state_plan_t* plan, iree_string_builder_t* builder);
 
 // Returns the number of concrete `s_nop` instructions needed by |plan|.
 uint64_t loom_amdgpu_wait_state_plan_instruction_count(

@@ -159,6 +159,60 @@ iree_status_t loom_low_packet_node_index_at(
   return iree_ok_status();
 }
 
+iree_status_t loom_low_packet_index_at_block_ordinal(
+    const loom_low_schedule_table_t* schedule, uint32_t block_index,
+    uint32_t scheduled_ordinal, iree_host_size_t* out_packet_index) {
+  *out_packet_index = LOOM_LOW_PACKET_INDEX_NONE;
+  if (block_index >= schedule->block_count) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "block index %" PRIu32
+                            " is out of range for %" PRIhsz " block(s)",
+                            block_index, schedule->block_count);
+  }
+  const loom_low_schedule_block_t* block = &schedule->blocks[block_index];
+  if (scheduled_ordinal >= block->scheduled_node_count) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "scheduled ordinal %" PRIu32 " is out of range for block %" PRIu32
+        " with %" PRIu32 " packet(s)",
+        scheduled_ordinal, block_index, block->scheduled_node_count);
+  }
+  const uint64_t packet_index =
+      (uint64_t)block->scheduled_node_start + scheduled_ordinal;
+  if (packet_index >= schedule->scheduled_node_count) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "block %" PRIu32 " scheduled ordinal %" PRIu32
+                            " references packet %" PRIu64
+                            " but schedule has %" PRIhsz " packet(s)",
+                            block_index, scheduled_ordinal, packet_index,
+                            schedule->scheduled_node_count);
+  }
+  *out_packet_index = (iree_host_size_t)packet_index;
+  return iree_ok_status();
+}
+
+iree_status_t loom_low_packet_node_index_at_block_ordinal(
+    const loom_low_schedule_table_t* schedule, uint32_t block_index,
+    uint32_t scheduled_ordinal, uint32_t* out_node_index) {
+  *out_node_index = LOOM_LOW_SCHEDULE_NODE_NONE;
+  iree_host_size_t packet_index = LOOM_LOW_PACKET_INDEX_NONE;
+  IREE_RETURN_IF_ERROR(loom_low_packet_index_at_block_ordinal(
+      schedule, block_index, scheduled_ordinal, &packet_index));
+  IREE_RETURN_IF_ERROR(
+      loom_low_packet_node_index_at(schedule, packet_index, out_node_index));
+  if (*out_node_index >= schedule->node_count) {
+    const uint32_t invalid_node_index = *out_node_index;
+    *out_node_index = LOOM_LOW_SCHEDULE_NODE_NONE;
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "block %" PRIu32 " scheduled ordinal %" PRIu32
+                            " references node %" PRIu32
+                            " but schedule has %" PRIhsz " node(s)",
+                            block_index, scheduled_ordinal, invalid_node_index,
+                            schedule->node_count);
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_packet_view_at(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
@@ -202,6 +256,17 @@ iree_status_t loom_low_packet_view_at(
       .descriptor = descriptor,
   };
   return iree_ok_status();
+}
+
+iree_status_t loom_low_packet_view_at_block_ordinal(
+    const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation, uint32_t block_index,
+    uint32_t scheduled_ordinal, loom_low_packet_view_t* out_packet) {
+  iree_host_size_t packet_index = LOOM_LOW_PACKET_INDEX_NONE;
+  IREE_RETURN_IF_ERROR(loom_low_packet_index_at_block_ordinal(
+      schedule, block_index, scheduled_ordinal, &packet_index));
+  return loom_low_packet_view_at(schedule, allocation, packet_index,
+                                 out_packet);
 }
 
 iree_status_t loom_low_packet_lookup_asm_form(

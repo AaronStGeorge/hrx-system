@@ -16,6 +16,7 @@ loom_check_test_suite(
     name = "test",
     srcs = [
         "allocation.loom-test",
+        "hazard_plan.loom-test",
         "packet.loom-test",
     ],
     runner = "//loom/src/loom/tools/loom-check:loom-check-test",

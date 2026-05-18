@@ -48,13 +48,36 @@ iree_status_t loom_amdgpu_packet_plan_verify(
                             "AMDGPU packet plan must be derived from the "
                             "emitted schedule and allocation");
   }
-  if (plan->wait_plan.schedule != schedule ||
-      plan->wait_packets.wait_plan != &plan->wait_plan ||
-      plan->wait_states.schedule != schedule ||
+  if (plan->wait_plan.schedule != schedule) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU packet plan wait-counter table must use "
+                            "the emitted schedule");
+  }
+  if (plan->wait_packets.wait_plan != &plan->wait_plan) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU packet plan wait-packet table must be "
+                            "derived from its wait-counter table");
+  }
+  if (plan->wait_states.schedule != schedule ||
       plan->wait_states.allocation != allocation) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "AMDGPU packet plan contains tables from a "
-                            "different schedule or allocation");
+                            "AMDGPU packet plan fixed wait-state table must "
+                            "use the emitted schedule and allocation");
+  }
+  if (plan->wait_states.progress.schedule != schedule ||
+      plan->wait_states.progress.allocation != allocation) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU packet plan fixed wait-state progress "
+                            "table must use the emitted schedule and "
+                            "allocation");
+  }
+  if (plan->wait_states.hazard_plan.schedule != schedule ||
+      plan->wait_states.hazard_plan.allocation != allocation ||
+      plan->wait_states.hazard_plan.progress != &plan->wait_states.progress) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU packet plan fixed wait-state hazard plan "
+                            "must use the emitted schedule, allocation, and "
+                            "progress table");
   }
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_vopd_plan_verify(schedule, allocation, &plan->vopd_plan));

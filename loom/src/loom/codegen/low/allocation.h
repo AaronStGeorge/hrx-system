@@ -153,6 +153,61 @@ static inline bool loom_low_allocation_assignments_share_storage(
          lhs->descriptor_reg_class_id == rhs->descriptor_reg_class_id;
 }
 
+// Returns true when |assignment| names a non-empty physical register range in
+// |descriptor_reg_class_id|.
+static inline bool loom_low_allocation_assignment_is_physical_register_class(
+    const loom_low_allocation_assignment_t* assignment,
+    uint16_t descriptor_reg_class_id) {
+  return assignment != NULL &&
+         assignment->location_kind ==
+             LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER &&
+         assignment->descriptor_reg_class_id == descriptor_reg_class_id &&
+         assignment->location_count != 0;
+}
+
+// Returns the exclusive end of |assignment|'s concrete location range.
+static inline bool loom_low_allocation_assignment_location_exclusive_end(
+    const loom_low_allocation_assignment_t* assignment, uint64_t* out_end) {
+  if (out_end == NULL) {
+    return false;
+  }
+  *out_end = 0;
+  if (assignment == NULL || assignment->location_count == 0) {
+    return false;
+  }
+  *out_end = (uint64_t)assignment->location_base + assignment->location_count;
+  return true;
+}
+
+// Returns true when two assignments name the same non-empty concrete location
+// range.
+static inline bool loom_low_allocation_assignments_match(
+    const loom_low_allocation_assignment_t* lhs,
+    const loom_low_allocation_assignment_t* rhs) {
+  return lhs != NULL && rhs != NULL && lhs->location_count != 0 &&
+         rhs->location_count != 0 &&
+         loom_low_allocation_assignments_share_storage(lhs, rhs) &&
+         lhs->location_base == rhs->location_base &&
+         lhs->location_count == rhs->location_count;
+}
+
+// Returns true when two non-empty assignments overlap in concrete location
+// storage.
+static inline bool loom_low_allocation_assignments_overlap(
+    const loom_low_allocation_assignment_t* lhs,
+    const loom_low_allocation_assignment_t* rhs) {
+  if (lhs == NULL || rhs == NULL || lhs->location_count == 0 ||
+      rhs->location_count == 0 ||
+      !loom_low_allocation_assignments_share_storage(lhs, rhs)) {
+    return false;
+  }
+  const uint64_t lhs_begin = lhs->location_base;
+  const uint64_t rhs_begin = rhs->location_base;
+  const uint64_t lhs_end = lhs_begin + lhs->location_count;
+  const uint64_t rhs_end = rhs_begin + rhs->location_count;
+  return lhs_begin < rhs_end && rhs_begin < lhs_end;
+}
+
 // Returns true when two same-length assignment subranges name the same units.
 static inline bool loom_low_allocation_assignment_subranges_match(
     const loom_low_allocation_assignment_t* lhs, uint32_t lhs_start,
@@ -189,6 +244,20 @@ bool loom_low_allocation_reg_classes_share_storage(
 // Returns true when two assignments name the same target-visible storage space
 // under |descriptor_set|'s alias contracts.
 bool loom_low_allocation_assignments_share_target_storage(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_allocation_assignment_t* lhs,
+    const loom_low_allocation_assignment_t* rhs);
+
+// Returns true when two assignments name the same non-empty target storage
+// range under |descriptor_set|'s alias contracts.
+bool loom_low_allocation_assignments_match_target_storage(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_allocation_assignment_t* lhs,
+    const loom_low_allocation_assignment_t* rhs);
+
+// Returns true when two non-empty assignments overlap in target storage under
+// |descriptor_set|'s alias contracts.
+bool loom_low_allocation_assignments_overlap_target_storage(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs);

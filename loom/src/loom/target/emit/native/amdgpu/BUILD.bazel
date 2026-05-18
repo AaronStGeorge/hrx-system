@@ -135,6 +135,7 @@ loom_check_test_suite(
     srcs = [
         "test/assembly.loom-test",
         "test/assembly_wmma.loom-test",
+        "test/wait_states.loom-test",
     ],
 )
 

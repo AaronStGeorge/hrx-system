@@ -81,6 +81,17 @@ iree_executable_test(
     "loom-check"
 )
 
+iree_executable_test(
+  NAME
+    "test_wait_states"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/wait_states.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
 loom_cc_library(
   NAME
     metadata
