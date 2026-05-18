@@ -67,6 +67,30 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    module_storage
+  HDRS
+    "module_storage.h"
+  SRCS
+    "module_storage.c"
+  DEPS
+    ::binary_format
+    ::module_builder
+    ::module_types
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::arch::spirv::descriptors
+    loom::src::loom::target::arch::spirv::isa
+    loom::src::loom::target::arch::spirv::registers
+    loom::src::loom::target::arch::spirv::scalar_types
+    loom::src::loom::target::arch::spirv::value_types
+    loom::src::loom::target::registers
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     module_emitter
   HDRS
     "module_emitter.h"
@@ -75,6 +99,7 @@ loom_cc_library(
   DEPS
     ::binary_format
     ::module_builder
+    ::module_storage
     ::module_types
     iree::base
     iree::base::internal::arena
@@ -87,6 +112,7 @@ loom_cc_library(
     loom::src::loom::target::arch::spirv::descriptors_ids
     loom::src::loom::target::arch::spirv::features
     loom::src::loom::target::arch::spirv::packet_rows
+    loom::src::loom::target::arch::spirv::registers
     loom::src::loom::target::arch::spirv::scalar_types
     loom::src::loom::target::arch::spirv::structured_control_flow
     loom::src::loom::target::low_descriptor_registry
@@ -140,9 +166,31 @@ loom_cc_test(
 
 iree_executable_test(
   NAME
+    "barrier"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/barrier.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "emit"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/emit.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "workgroup_storage"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/workgroup_storage.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

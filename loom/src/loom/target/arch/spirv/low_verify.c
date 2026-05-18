@@ -18,6 +18,7 @@
 #include "loom/target/arch/spirv/descriptors.h"
 #include "loom/target/arch/spirv/error_catalog.h"
 #include "loom/target/arch/spirv/packet_rows.h"
+#include "loom/target/arch/spirv/registers.h"
 #include "loom/target/arch/spirv/structured_control_flow.h"
 #include "loom/target/registers.h"
 
@@ -211,21 +212,12 @@ static bool loom_spirv_low_register_value_type(
     return false;
   }
   switch (loom_low_register_type_class_id(type)) {
-    case SPIRV_LOGICAL_CORE_REG_CLASS_ID_OFFSET64:
-      *out_value_type = (loom_spirv_value_type_t){
-          .value_class = LOOM_SPIRV_VALUE_CLASS_OFFSET64,
-          .scalar_type = LOOM_SPIRV_SCALAR_TYPE_U64,
-      };
-      return true;
-    case SPIRV_LOGICAL_CORE_REG_CLASS_ID_PTR_STORAGE_BUFFER:
-      *out_value_type = (loom_spirv_value_type_t){
-          .value_class = LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS,
-      };
-      return true;
     case SPIRV_LOGICAL_CORE_REG_CLASS_ID_ID:
       return false;
+    default:
+      return loom_spirv_value_type_from_reg_class_id(
+          loom_low_register_type_class_id(type), out_value_type);
   }
-  return false;
 }
 
 static iree_string_view_t loom_spirv_low_value_type_format(
@@ -244,6 +236,10 @@ static iree_string_view_t loom_spirv_low_value_type_format(
       return loom_spirv_scalar_type_name(value_type.scalar_type);
     case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
       return IREE_SV("ptr.physical_storage_buffer");
+    case LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP_ARRAY:
+      return IREE_SV("ptr.workgroup.array");
+    case LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP:
+      return IREE_SV("ptr.workgroup");
     case LOOM_SPIRV_VALUE_CLASS_COOPERATIVE_MATRIX:
       return IREE_SV("cooperative_matrix");
   }
@@ -929,6 +925,106 @@ static iree_status_t loom_spirv_low_emit_unsupported_structural_op(
                              IREE_ARRAYSIZE(params));
 }
 
+static bool loom_spirv_low_value_is_workgroup_storage(
+    const loom_spirv_low_verify_state_t* state, loom_value_id_t value_id) {
+  const loom_type_t storage_type =
+      loom_module_value_type(state->module, value_id);
+  return loom_type_is_storage(storage_type) &&
+         loom_type_storage_space(storage_type) == LOOM_STORAGE_SPACE_WORKGROUP;
+}
+
+static const loom_op_t* loom_spirv_low_workgroup_storage_reserve_op(
+    const loom_spirv_low_verify_state_t* state, loom_value_id_t storage) {
+  const loom_value_t* value = loom_module_value(state->module, storage);
+  if (value == NULL || loom_value_is_block_arg(value)) {
+    return NULL;
+  }
+  const loom_op_t* defining_op = loom_value_def_op(value);
+  if (defining_op == NULL || !loom_low_storage_reserve_isa(defining_op)) {
+    return NULL;
+  }
+  return defining_op;
+}
+
+static bool loom_spirv_low_scalar_element_byte_count(
+    loom_spirv_scalar_type_t scalar_type, int64_t* out_element_byte_count) {
+  *out_element_byte_count = 0;
+  const loom_spirv_scalar_type_descriptor_t* descriptor =
+      loom_spirv_scalar_type_descriptor(scalar_type);
+  if (descriptor == NULL || descriptor->bit_width == 0 ||
+      (descriptor->bit_width % 8) != 0) {
+    return false;
+  }
+  *out_element_byte_count = descriptor->bit_width / 8;
+  return true;
+}
+
+static iree_status_t loom_spirv_low_verify_storage_reserve(
+    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
+    const loom_op_t* op) {
+  const loom_value_id_t storage = loom_low_storage_reserve_storage(op);
+  if (!loom_spirv_low_value_is_workgroup_storage(state, storage)) {
+    return loom_spirv_low_emit_unsupported_structural_op(context, state, op);
+  }
+  if (loom_low_storage_reserve_byte_length(op) <= 0 ||
+      loom_low_storage_reserve_byte_alignment(op) <= 0) {
+    return loom_spirv_low_emit_unsupported_structural_op(context, state, op);
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_spirv_low_verify_storage_address(
+    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
+    const loom_op_t* op) {
+  const loom_value_id_t storage = loom_low_storage_address_storage(op);
+  if (loom_low_storage_address_offset(op) != 0 ||
+      !loom_spirv_low_value_is_workgroup_storage(state, storage)) {
+    return loom_spirv_low_emit_unsupported_structural_op(context, state, op);
+  }
+  const loom_op_t* reserve_op =
+      loom_spirv_low_workgroup_storage_reserve_op(state, storage);
+  if (reserve_op == NULL) {
+    return loom_spirv_low_emit_unsupported_structural_op(context, state, op);
+  }
+  const loom_value_id_t result = loom_low_storage_address_result(op);
+  loom_spirv_value_type_t result_type = {0};
+  if (!loom_spirv_low_register_value_type(
+          loom_module_value_type(state->module, result), &result_type)) {
+    return loom_spirv_low_emit_unsupported_register_type(
+        context, state, op, result,
+        loom_module_value_type(state->module, result));
+  }
+  if (result_type.value_class != LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP_ARRAY) {
+    return loom_spirv_low_emit_unsupported_register_type(
+        context, state, op, result,
+        loom_module_value_type(state->module, result));
+  }
+  int64_t element_byte_count = 0;
+  if (!loom_spirv_low_scalar_element_byte_count(result_type.scalar_type,
+                                                &element_byte_count) ||
+      loom_low_storage_reserve_byte_length(reserve_op) % element_byte_count !=
+          0 ||
+      loom_low_storage_reserve_byte_alignment(reserve_op) <
+          element_byte_count) {
+    return loom_spirv_low_emit_unsupported_structural_op(context, state, op);
+  }
+  const int64_t element_count =
+      loom_low_storage_reserve_byte_length(reserve_op) / element_byte_count;
+  if (element_count <= 0 || element_count > UINT32_MAX) {
+    return loom_spirv_low_emit_unsupported_structural_op(context, state, op);
+  }
+  loom_spirv_value_type_t storage_type = {0};
+  if (loom_spirv_low_value_type_table_lookup(&state->value_types, storage,
+                                             &storage_type) &&
+      !loom_spirv_value_type_equal(storage_type, result_type)) {
+    return loom_spirv_low_emit_unsupported_structural_op(context, state, op);
+  }
+  IREE_RETURN_IF_ERROR(loom_spirv_low_value_type_table_define(
+      &state->value_types, storage, result_type, state->arena));
+  return loom_spirv_low_value_type_table_define(&state->value_types, result,
+                                                result_type, state->arena);
+}
+
 static iree_status_t loom_spirv_low_begin_function(
     const loom_low_verify_provider_t* provider,
     loom_low_verify_context_t* context, void** out_provider_state) {
@@ -995,6 +1091,12 @@ static iree_status_t loom_spirv_low_verify_op(
   }
   if (loom_low_resource_isa(op)) {
     return loom_spirv_low_verify_resource(context, state, op);
+  }
+  if (loom_low_storage_reserve_isa(op)) {
+    return loom_spirv_low_verify_storage_reserve(context, state, op);
+  }
+  if (loom_low_storage_address_isa(op)) {
+    return loom_spirv_low_verify_storage_address(context, state, op);
   }
   if (loom_low_copy_isa(op)) {
     return loom_spirv_low_verify_copy(state, op);

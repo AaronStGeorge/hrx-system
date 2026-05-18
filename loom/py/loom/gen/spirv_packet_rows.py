@@ -115,6 +115,14 @@ def _physical_storage_buffer_pointer_value(scalar: StorageBufferScalar) -> str:
     return _value_type("LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER", scalar.scalar_enum)
 
 
+def _workgroup_pointer_value(scalar: StorageBufferScalar) -> str:
+    return _value_type("LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP", scalar.scalar_enum)
+
+
+def _workgroup_array_pointer_value(scalar: StorageBufferScalar) -> str:
+    return _value_type("LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP_ARRAY", scalar.scalar_enum)
+
+
 def _offset64_value() -> str:
     return _value_type("LOOM_SPIRV_VALUE_CLASS_OFFSET64", "LOOM_SPIRV_SCALAR_TYPE_U64")
 
@@ -140,6 +148,9 @@ def _row(
     memory_alignment: int = 0,
     builtin: str | None = None,
     component_index: int | None = None,
+    execution_scope: str | None = None,
+    memory_scope: str | None = None,
+    memory_semantics: str | None = None,
     cooperative_matrix_layout: str | None = None,
     cooperative_matrix_stride: int = 0,
     cooperative_matrix_operands: str | None = None,
@@ -171,6 +182,12 @@ def _row(
         lines.append(f"            .builtin = {builtin},")
     if component_index is not None:
         lines.append(f"            .component_index = {component_index},")
+    if execution_scope is not None:
+        lines.append(f"            .execution_scope = {execution_scope},")
+    if memory_scope is not None:
+        lines.append(f"            .memory_scope = {memory_scope},")
+    if memory_semantics is not None:
+        lines.append(f"            .memory_semantics = {memory_semantics},")
     if cooperative_matrix_layout is not None:
         lines.append(f"            .cooperative_matrix_layout = {cooperative_matrix_layout},")
     if cooperative_matrix_stride:
@@ -183,6 +200,24 @@ def _row(
         ]
     )
     return "\n".join(lines)
+
+
+def _control_barrier_rows() -> list[str]:
+    memory_semantics = "LOOM_SPIRV_MEMORY_SEMANTICS_ACQUIRE_RELEASE_MASK | LOOM_SPIRV_MEMORY_SEMANTICS_WORKGROUP_MEMORY_MASK"
+    return [
+        _row(
+            f"spirv.op_control_barrier.{scope}.workgroup.acq_rel",
+            opcode="LOOM_SPIRV_OP_CONTROL_BARRIER",
+            form="LOOM_SPIRV_PACKET_FORM_CONTROL_BARRIER",
+            execution_scope=scope_enum,
+            memory_scope="LOOM_SPIRV_SCOPE_WORKGROUP",
+            memory_semantics=memory_semantics,
+        )
+        for scope, scope_enum in (
+            ("subgroup", "LOOM_SPIRV_SCOPE_SUBGROUP"),
+            ("workgroup", "LOOM_SPIRV_SCOPE_WORKGROUP"),
+        )
+    ]
 
 
 def _storage_buffer_rows() -> list[str]:
@@ -219,6 +254,51 @@ def _storage_buffer_rows() -> list[str]:
                 form="LOOM_SPIRV_PACKET_FORM_STORE_ALIGNED",
                 operand_types=(
                     _physical_storage_buffer_pointer_value(scalar),
+                    _scalar_value(scalar),
+                ),
+                memory_alignment=scalar.byte_width,
+            )
+        )
+    return rows
+
+
+def _workgroup_rows() -> list[str]:
+    rows: list[str] = []
+    for scalar in STORAGE_BUFFER_SCALARS:
+        rows.append(
+            _row(
+                f"spirv.op_access_chain.workgroup.{scalar.suffix}.element_index",
+                opcode="LOOM_SPIRV_OP_ACCESS_CHAIN",
+                form="LOOM_SPIRV_PACKET_FORM_ACCESS_CHAIN",
+                result_type=_workgroup_pointer_value(scalar),
+                operand_types=(
+                    _workgroup_array_pointer_value(scalar),
+                    _value_type(
+                        "LOOM_SPIRV_VALUE_CLASS_SCALAR",
+                        "LOOM_SPIRV_SCALAR_TYPE_S32",
+                    ),
+                ),
+                result_count=1,
+            )
+        )
+        rows.append(
+            _row(
+                f"spirv.op_load.workgroup.{scalar.suffix}",
+                opcode="LOOM_SPIRV_OP_LOAD",
+                form="LOOM_SPIRV_PACKET_FORM_LOAD_ALIGNED",
+                result_type=_scalar_value(scalar),
+                operand_types=(_workgroup_pointer_value(scalar),),
+                result_count=1,
+                memory_alignment=scalar.byte_width,
+            )
+        )
+        rows.append(
+            _row(
+                f"spirv.op_store.workgroup.{scalar.suffix}",
+                opcode="LOOM_SPIRV_OP_STORE",
+                form="LOOM_SPIRV_PACKET_FORM_STORE_ALIGNED",
+                operand_types=(
+                    _workgroup_pointer_value(scalar),
                     _scalar_value(scalar),
                 ),
                 memory_alignment=scalar.byte_width,
@@ -596,6 +676,11 @@ def _validate_rows() -> None:
         row_keys.add(f"spirv.op_ptr_access_chain.storage_buffer.{storage_scalar.suffix}.byte_offset")
         row_keys.add(f"spirv.op_load.storage_buffer.{storage_scalar.suffix}")
         row_keys.add(f"spirv.op_store.storage_buffer.{storage_scalar.suffix}")
+        row_keys.add(f"spirv.op_access_chain.workgroup.{storage_scalar.suffix}.element_index")
+        row_keys.add(f"spirv.op_load.workgroup.{storage_scalar.suffix}")
+        row_keys.add(f"spirv.op_store.workgroup.{storage_scalar.suffix}")
+    row_keys.add("spirv.op_control_barrier.subgroup.workgroup.acq_rel")
+    row_keys.add("spirv.op_control_barrier.workgroup.workgroup.acq_rel")
     for case in COOPERATIVE_MATRIX_CASES:
         for role in ("lhs", "rhs", "init"):
             row_keys.add(
@@ -657,6 +742,8 @@ def generate_tables() -> str:
         *_integer_compare_rows(),
         *_select_rows(),
         *_storage_buffer_rows(),
+        *_workgroup_rows(),
+        *_control_barrier_rows(),
         *_cooperative_matrix_rows(),
     ]
     lines = [

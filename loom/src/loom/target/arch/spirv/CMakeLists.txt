@@ -173,6 +173,22 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    registers
+  HDRS
+    "registers.h"
+  SRCS
+    "registers.c"
+  DEPS
+    ::descriptors_ids
+    ::scalar_types
+    ::value_types
+    iree::base
+    loom::src::loom::codegen::low::descriptors
+  PUBLIC
+)
+
 iree_package_name(_PACKAGE_NAME)
 add_dependencies(
   "${_PACKAGE_NAME}_packet_rows.objects"
@@ -319,6 +335,7 @@ loom_cc_library(
     ::descriptors
     ::error_defs
     ::packet_rows
+    ::registers
     ::scalar_types
     ::structured_control_flow
     iree::base
@@ -338,25 +355,37 @@ loom_cc_library(
   HDRS
     "lower.h"
     "lower/matrix.h"
+    "lower/workgroup.h"
   SRCS
     "lower/matrix.c"
     "lower/registry.c"
+    "lower/workgroup.c"
   DEPS
     ::abi
     ::cooperative_properties
+    ::descriptors
     ::descriptors_ids
     ::profile
+    ::registers
+    ::scalar_types
     iree::base
     loom::src::loom::analysis::contract_vector
+    loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::lower
+    loom::src::loom::codegen::low::source_memory_plan
     loom::src::loom::error::error_defs
     loom::src::loom::ir
+    loom::src::loom::ir::facts
+    loom::src::loom::ops::buffer
     loom::src::loom::ops::func
     loom::src::loom::ops::kernel
+    loom::src::loom::ops::low
     loom::src::loom::ops::vector
     loom::src::loom::target::arch::spirv::contracts::logical_core
     loom::src::loom::target::arch::spirv::contracts::logical_core_lower_rules
     loom::src::loom::target::registers
+    loom::src::loom::util::fact_table
+    loom::src::loom::util::math
   PUBLIC
 )
 
@@ -435,10 +464,22 @@ loom_cc_test(
     "registers_test.cc"
   DEPS
     ::descriptors
+    ::registers
     ::target_records
     loom::src::loom::codegen::low::descriptors
     iree::testing::gtest
     iree::testing::gtest_main
+)
+
+iree_executable_test(
+  NAME
+    "barrier"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/barrier.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
 )
 
 iree_executable_test(
@@ -490,6 +531,17 @@ iree_executable_test(
     "target_legalize"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/target_legalize.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "workgroup_storage"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/workgroup_storage.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loom/target/arch/spirv/registers.h"
+
 #include <string>
 
 #include "iree/testing/gtest.h"
@@ -85,15 +87,6 @@ TEST(SpirvRegistersTest, LogicalIdsAndPointerValuesUseSeparateWidths) {
   EXPECT_EQ(function_ptr_class->spill_slot_space,
             LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE);
 
-  const loom_low_reg_class_t* workgroup_ptr_class =
-      LookupRegisterClass(descriptor_set, IREE_SV("spirv.ptr.workgroup"));
-  ASSERT_NE(workgroup_ptr_class, nullptr);
-  EXPECT_EQ(workgroup_ptr_class->alloc_unit_bits, 32);
-  EXPECT_TRUE(iree_all_bits_set(workgroup_ptr_class->flags,
-                                LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY));
-  EXPECT_TRUE(iree_all_bits_set(workgroup_ptr_class->flags,
-                                LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE));
-
   const loom_low_reg_class_t* storage_buffer_ptr_class =
       LookupRegisterClass(descriptor_set, IREE_SV("spirv.ptr.storage_buffer"));
   ASSERT_NE(storage_buffer_ptr_class, nullptr);
@@ -102,6 +95,47 @@ TEST(SpirvRegistersTest, LogicalIdsAndPointerValuesUseSeparateWidths) {
                                 LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY));
   EXPECT_EQ(storage_buffer_ptr_class->spill_slot_space,
             LOOM_LOW_SPILL_SLOT_SPACE_PRIVATE);
+}
+
+TEST(SpirvRegistersTest, TypedWorkgroupPointersCarryScalarValueTypes) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_spirv_logical_core_descriptor_set();
+  ASSERT_NE(descriptor_set, nullptr);
+
+  const uint16_t workgroup_array_class_id =
+      loom_spirv_ptr_workgroup_array_reg_class_id(LOOM_SPIRV_SCALAR_TYPE_S32);
+  EXPECT_NE(workgroup_array_class_id, LOOM_LOW_REG_CLASS_NONE);
+  const loom_low_reg_class_t* workgroup_array_class = LookupRegisterClass(
+      descriptor_set, IREE_SV("spirv.ptr.workgroup.array.i32"));
+  ASSERT_NE(workgroup_array_class, nullptr);
+  EXPECT_EQ(workgroup_array_class->alloc_unit_bits, 32);
+  EXPECT_TRUE(iree_all_bits_set(workgroup_array_class->flags,
+                                LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY));
+  EXPECT_TRUE(iree_all_bits_set(workgroup_array_class->flags,
+                                LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE));
+
+  loom_spirv_value_type_t value_type = {};
+  ASSERT_TRUE(loom_spirv_value_type_from_reg_class_id(workgroup_array_class_id,
+                                                      &value_type));
+  EXPECT_EQ(value_type.value_class, LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP_ARRAY);
+  EXPECT_EQ(value_type.scalar_type, LOOM_SPIRV_SCALAR_TYPE_S32);
+
+  const uint16_t workgroup_scalar_class_id =
+      loom_spirv_ptr_workgroup_reg_class_id(LOOM_SPIRV_SCALAR_TYPE_S32);
+  EXPECT_NE(workgroup_scalar_class_id, LOOM_LOW_REG_CLASS_NONE);
+  const loom_low_reg_class_t* workgroup_scalar_class =
+      LookupRegisterClass(descriptor_set, IREE_SV("spirv.ptr.workgroup.i32"));
+  ASSERT_NE(workgroup_scalar_class, nullptr);
+  EXPECT_EQ(workgroup_scalar_class->alloc_unit_bits, 32);
+  EXPECT_TRUE(iree_all_bits_set(workgroup_scalar_class->flags,
+                                LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY));
+  EXPECT_TRUE(iree_all_bits_set(workgroup_scalar_class->flags,
+                                LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE));
+
+  ASSERT_TRUE(loom_spirv_value_type_from_reg_class_id(workgroup_scalar_class_id,
+                                                      &value_type));
+  EXPECT_EQ(value_type.value_class, LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP);
+  EXPECT_EQ(value_type.scalar_type, LOOM_SPIRV_SCALAR_TYPE_S32);
 }
 
 TEST(SpirvRegistersTest, VulkanTargetUsesBufferDeviceAddressWidths) {
@@ -174,6 +208,37 @@ TEST(SpirvRegistersTest, StorageBufferAddressArithmeticUsesBdaRegisters) {
   EXPECT_EQ(OperandRegisterClass(descriptor_set, operands[1]),
             storage_buffer_ptr_class);
   EXPECT_EQ(OperandRegisterClass(descriptor_set, operands[2]), offset_class);
+  EXPECT_EQ(operands[1].role, LOOM_LOW_OPERAND_ROLE_RESOURCE);
+  EXPECT_EQ(operands[2].role, LOOM_LOW_OPERAND_ROLE_OPERAND);
+}
+
+TEST(SpirvRegistersTest, WorkgroupAccessChainUsesTypedArrayBase) {
+  const loom_low_descriptor_set_t* descriptor_set =
+      loom_spirv_logical_core_descriptor_set();
+  ASSERT_NE(descriptor_set, nullptr);
+
+  const loom_low_descriptor_t* access_chain = LookupDescriptor(
+      descriptor_set,
+      IREE_SV("spirv.op_access_chain.workgroup.i32.element_index"));
+  ASSERT_NE(access_chain, nullptr);
+  const loom_low_reg_class_t* workgroup_array_class = LookupRegisterClass(
+      descriptor_set, IREE_SV("spirv.ptr.workgroup.array.i32"));
+  ASSERT_NE(workgroup_array_class, nullptr);
+  const loom_low_reg_class_t* workgroup_scalar_class =
+      LookupRegisterClass(descriptor_set, IREE_SV("spirv.ptr.workgroup.i32"));
+  ASSERT_NE(workgroup_scalar_class, nullptr);
+  const loom_low_reg_class_t* id_class =
+      LookupRegisterClass(descriptor_set, IREE_SV("spirv.id"));
+  ASSERT_NE(id_class, nullptr);
+
+  ASSERT_EQ(access_chain->operand_count, 3);
+  const loom_low_operand_t* operands =
+      &descriptor_set->operands[access_chain->operand_start];
+  EXPECT_EQ(OperandRegisterClass(descriptor_set, operands[0]),
+            workgroup_scalar_class);
+  EXPECT_EQ(OperandRegisterClass(descriptor_set, operands[1]),
+            workgroup_array_class);
+  EXPECT_EQ(OperandRegisterClass(descriptor_set, operands[2]), id_class);
   EXPECT_EQ(operands[1].role, LOOM_LOW_OPERAND_ROLE_RESOURCE);
   EXPECT_EQ(operands[2].role, LOOM_LOW_OPERAND_ROLE_OPERAND);
 }

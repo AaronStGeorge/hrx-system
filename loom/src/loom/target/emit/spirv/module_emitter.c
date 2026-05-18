@@ -19,9 +19,11 @@
 #include "loom/target/arch/spirv/abi.h"
 #include "loom/target/arch/spirv/descriptors.h"
 #include "loom/target/arch/spirv/packet_rows.h"
+#include "loom/target/arch/spirv/registers.h"
 #include "loom/target/arch/spirv/scalar_types.h"
 #include "loom/target/arch/spirv/structured_control_flow.h"
 #include "loom/target/emit/spirv/binary_format.h"
+#include "loom/target/emit/spirv/module_storage.h"
 #include "loom/target/emit/spirv/module_types.h"
 #include "loom/target/registers.h"
 #include "loom/target/types.h"
@@ -94,14 +96,7 @@ typedef struct loom_spirv_abi_plan_t {
   loom_spirv_bda_root_t bda_root;
 } loom_spirv_abi_plan_t;
 
-typedef struct loom_spirv_value_ref_t {
-  // SPIR-V result ID carrying this low SSA value.
-  uint32_t id;
-  // SPIR-V type ID assigned to |id|.
-  uint32_t type_id;
-  // Target-local value type used by packet emitters.
-  loom_spirv_value_type_t value_type;
-} loom_spirv_value_ref_t;
+typedef loom_spirv_module_value_ref_t loom_spirv_value_ref_t;
 
 typedef struct loom_spirv_phi_incoming_t {
   // Low branch payload value forwarded into a block argument.
@@ -154,6 +149,8 @@ typedef struct loom_spirv_emit_state_t {
   uint32_t function_id;
   // Selected ABI plan for entry materialization.
   loom_spirv_abi_plan_t abi_plan;
+  // Function-local Workgroup storage materialization state.
+  loom_spirv_module_workgroup_storage_state_t workgroup_storage;
   // Per-block function emission plan, indexed by region block index.
   loom_spirv_block_plan_t* block_plans;
   // Branch payload records consumed by block-argument OpPhi emission.
@@ -281,27 +278,20 @@ static iree_status_t loom_spirv_emit_low_register_value_type(
                             "SPIR-V ABI value must be a "
                             "spirv.logical.core register type");
   }
-  switch (loom_low_register_type_class_id(type)) {
-    case SPIRV_LOGICAL_CORE_REG_CLASS_ID_ID:
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "SPIR-V ABI value type metadata is required for "
-                              "spirv.id register values");
-    case SPIRV_LOGICAL_CORE_REG_CLASS_ID_OFFSET64:
-      *out_value_type = (loom_spirv_value_type_t){
-          .value_class = LOOM_SPIRV_VALUE_CLASS_OFFSET64,
-          .scalar_type = LOOM_SPIRV_SCALAR_TYPE_U64,
-      };
-      return iree_ok_status();
-    case SPIRV_LOGICAL_CORE_REG_CLASS_ID_PTR_STORAGE_BUFFER:
-      *out_value_type = (loom_spirv_value_type_t){
-          .value_class = LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS,
-      };
-      return iree_ok_status();
+  const uint16_t register_class_id = loom_low_register_type_class_id(type);
+  if (register_class_id == SPIRV_LOGICAL_CORE_REG_CLASS_ID_ID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "SPIR-V ABI value type metadata is required for "
+                            "spirv.id register values");
+  }
+  if (loom_spirv_value_type_from_reg_class_id(register_class_id,
+                                              out_value_type)) {
+    return iree_ok_status();
   }
   return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
                           "SPIR-V ABI register class %u is not "
                           "supported by binary emission",
-                          loom_low_register_type_class_id(type));
+                          register_class_id);
 }
 
 static iree_status_t loom_spirv_emit_define_value(
@@ -738,6 +728,8 @@ static iree_status_t loom_spirv_emit_abi_slot_type_info(
       return iree_ok_status();
     }
     case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
+    case LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP:
+    case LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP_ARRAY:
     case LOOM_SPIRV_VALUE_CLASS_COOPERATIVE_MATRIX:
     case LOOM_SPIRV_VALUE_CLASS_UNKNOWN:
       break;
@@ -815,6 +807,8 @@ static iree_status_t loom_spirv_emit_abi_slot_constant_word_count(
       return iree_ok_status();
     case LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS:
     case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
+    case LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP:
+    case LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP_ARRAY:
     case LOOM_SPIRV_VALUE_CLASS_COOPERATIVE_MATRIX:
     case LOOM_SPIRV_VALUE_CLASS_UNKNOWN:
       break;
@@ -913,6 +907,8 @@ static iree_status_t loom_spirv_emit_build_raw_bda_abi_plan(
       }
       case LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS:
       case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
+      case LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP:
+      case LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP_ARRAY:
       case LOOM_SPIRV_VALUE_CLASS_COOPERATIVE_MATRIX:
       case LOOM_SPIRV_VALUE_CLASS_UNKNOWN:
         return iree_make_status(
@@ -1299,6 +1295,8 @@ static iree_status_t loom_spirv_emit_materialize_bda_arg(
       return loom_spirv_emit_materialize_bda_u64_arg(state, slot);
     case LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS:
     case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
+    case LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP:
+    case LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP_ARRAY:
     case LOOM_SPIRV_VALUE_CLASS_COOPERATIVE_MATRIX:
     case LOOM_SPIRV_VALUE_CLASS_UNKNOWN:
       break;
@@ -1992,6 +1990,32 @@ static iree_status_t loom_spirv_emit_ptr_access_chain_packet(
                                               result_type_id, row->result_type);
 }
 
+static iree_status_t loom_spirv_emit_access_chain_packet(
+    loom_spirv_emit_state_t* state,
+    const loom_low_resolved_descriptor_packet_t* packet,
+    const loom_spirv_packet_row_t* row) {
+  loom_spirv_value_ref_t operands[2] = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_spirv_emit_load_packet_operands(state, packet, row, operands));
+  uint32_t result_type_id = 0;
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_type_id_for_value_type(
+      &state->type_context, row->result_type, &result_type_id));
+  uint32_t result_id = 0;
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_prepare_packet_result(
+      state, packet, result_type_id, row->result_type, &result_id));
+  const uint32_t instruction_operands[] = {
+      result_type_id,
+      result_id,
+      operands[0].id,
+      operands[1].id,
+  };
+  IREE_RETURN_IF_ERROR(loom_spirv_binary_write_instruction(
+      loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+      row->opcode, instruction_operands, IREE_ARRAYSIZE(instruction_operands)));
+  return loom_spirv_emit_define_packet_result(state, packet, result_id,
+                                              result_type_id, row->result_type);
+}
+
 static iree_status_t loom_spirv_emit_load_aligned_packet(
     loom_spirv_emit_state_t* state,
     const loom_low_resolved_descriptor_packet_t* packet,
@@ -2128,6 +2152,27 @@ static iree_status_t loom_spirv_emit_cooperative_matrix_mul_add_packet(
                                               result_type_id, row->result_type);
 }
 
+static iree_status_t loom_spirv_emit_control_barrier_packet(
+    loom_spirv_emit_state_t* state, const loom_spirv_packet_row_t* row) {
+  uint32_t execution_scope_id = 0;
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_u32_constant(
+      &state->type_context, row->execution_scope, &execution_scope_id));
+  uint32_t memory_scope_id = 0;
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_u32_constant(
+      &state->type_context, row->memory_scope, &memory_scope_id));
+  uint32_t memory_semantics_id = 0;
+  IREE_RETURN_IF_ERROR(loom_spirv_emit_u32_constant(
+      &state->type_context, row->memory_semantics, &memory_semantics_id));
+  const uint32_t instruction_operands[] = {
+      execution_scope_id,
+      memory_scope_id,
+      memory_semantics_id,
+  };
+  return loom_spirv_binary_write_instruction(
+      loom_spirv_emit_section(state, LOOM_SPIRV_MODULE_SECTION_FUNCTION),
+      row->opcode, instruction_operands, IREE_ARRAYSIZE(instruction_operands));
+}
+
 static iree_status_t loom_spirv_emit_copy(loom_spirv_emit_state_t* state,
                                           const loom_op_t* op) {
   loom_spirv_value_ref_t source = {0};
@@ -2183,6 +2228,8 @@ static iree_status_t loom_spirv_emit_descriptor_packet(
       return loom_spirv_emit_select_packet(state, packet, row);
     case LOOM_SPIRV_PACKET_FORM_PTR_ACCESS_CHAIN:
       return loom_spirv_emit_ptr_access_chain_packet(state, packet, row);
+    case LOOM_SPIRV_PACKET_FORM_ACCESS_CHAIN:
+      return loom_spirv_emit_access_chain_packet(state, packet, row);
     case LOOM_SPIRV_PACKET_FORM_LOAD_ALIGNED:
       return loom_spirv_emit_load_aligned_packet(state, packet, row);
     case LOOM_SPIRV_PACKET_FORM_STORE_ALIGNED:
@@ -2195,6 +2242,8 @@ static iree_status_t loom_spirv_emit_descriptor_packet(
     case LOOM_SPIRV_PACKET_FORM_COOPERATIVE_MATRIX_MUL_ADD:
       return loom_spirv_emit_cooperative_matrix_mul_add_packet(state, packet,
                                                                row);
+    case LOOM_SPIRV_PACKET_FORM_CONTROL_BARRIER:
+      return loom_spirv_emit_control_barrier_packet(state, row);
     case LOOM_SPIRV_PACKET_FORM_UNSUPPORTED:
       break;
   }
@@ -2213,6 +2262,18 @@ static iree_status_t loom_spirv_emit_low_op(loom_spirv_emit_state_t* state,
           "SPIR-V low.resource emission requires a raw-BDA HAL ABI plan");
     }
     return loom_spirv_emit_materialize_bda_resource(state, op);
+  }
+  if (loom_low_storage_reserve_isa(op)) {
+    return loom_spirv_module_workgroup_storage_emit_reserve(
+        &state->value_domain, &state->workgroup_storage, op);
+  }
+  if (loom_low_storage_address_isa(op)) {
+    loom_spirv_value_ref_t value_ref = {0};
+    IREE_RETURN_IF_ERROR(loom_spirv_module_workgroup_storage_emit_address(
+        &state->value_domain, &state->workgroup_storage, op,
+        &state->type_context, state->builder, &value_ref));
+    return loom_spirv_emit_define_value(
+        state, loom_low_storage_address_result(op), value_ref, true);
   }
   if (loom_low_copy_isa(op)) {
     return loom_spirv_emit_copy(state, op);
@@ -2671,7 +2732,7 @@ static iree_status_t loom_spirv_emit_entry_point(
   };
   uint32_t interface_operands[LOOM_SPIRV_BUILTIN_VARIABLE_COUNT] = {0};
   iree_host_size_t interface_operand_count = 0;
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(interface_operands); ++i) {
+  for (iree_host_size_t i = 0; i < LOOM_SPIRV_BUILTIN_VARIABLE_COUNT; ++i) {
     if (state->builtin_variable_ids[i] != 0) {
       interface_operands[interface_operand_count++] =
           state->builtin_variable_ids[i];
@@ -2862,6 +2923,10 @@ iree_status_t loom_spirv_emit_low_function_module(
   if (iree_status_is_ok(status)) {
     status = loom_local_value_domain_acquire_for_region(
         module, body, scratch_arena, &state.value_domain);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_spirv_module_workgroup_storage_initialize(
+        &state.value_domain, &state.workgroup_storage, scratch_arena);
   }
   if (iree_status_is_ok(status)) {
     status = iree_arena_allocate_array(

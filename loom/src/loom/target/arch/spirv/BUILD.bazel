@@ -43,6 +43,7 @@ loom_assert_no_dependencies(
         ":math_policy",
         ":packet_rows",
         ":provider",
+        ":registers",
         ":scalar_types",
         ":structured_control_flow",
         ":target_records",
@@ -245,6 +246,19 @@ loom_cc_library(
     ],
 )
 
+loom_cc_library(
+    name = "registers",
+    srcs = ["registers.c"],
+    hdrs = ["registers.h"],
+    deps = [
+        ":descriptors_ids",
+        ":scalar_types",
+        ":value_types",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//runtime/src/iree/base",
+    ],
+)
+
 iree_cmake_extra_content(
     content = """
 iree_package_name(_PACKAGE_NAME)
@@ -396,6 +410,7 @@ loom_cc_library(
         ":descriptors",
         ":error_defs",
         ":packet_rows",
+        ":registers",
         ":scalar_types",
         ":structured_control_flow",
         "//loom/src/loom/codegen/low:diagnostics",
@@ -414,26 +429,38 @@ loom_cc_library(
     srcs = [
         "lower/matrix.c",
         "lower/registry.c",
+        "lower/workgroup.c",
     ],
     hdrs = [
         "lower.h",
         "lower/matrix.h",
+        "lower/workgroup.h",
     ],
     deps = [
         ":abi",
         ":cooperative_properties",
+        ":descriptors",
         ":descriptors_ids",
         ":profile",
+        ":registers",
+        ":scalar_types",
         "//loom/src/loom/analysis:contract_vector",
+        "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/codegen/low:lower",
+        "//loom/src/loom/codegen/low:source_memory_plan",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
+        "//loom/src/loom/ir:facts",
+        "//loom/src/loom/ops/buffer",
         "//loom/src/loom/ops/func",
         "//loom/src/loom/ops/kernel",
+        "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/vector",
         "//loom/src/loom/target:registers",
         "//loom/src/loom/target/arch/spirv/contracts:logical_core",
         "//loom/src/loom/target/arch/spirv/contracts:logical_core_lower_rules",
+        "//loom/src/loom/util:fact_table",
+        "//loom/src/loom/util:math",
         "//runtime/src/iree/base",
     ],
 )
@@ -502,6 +529,7 @@ loom_cc_test(
     srcs = ["registers_test.cc"],
     deps = [
         ":descriptors",
+        ":registers",
         ":target_records",
         "//loom/src/loom/codegen/low:descriptors",
         "//runtime/src/iree/testing:gtest",
@@ -512,11 +540,13 @@ loom_cc_test(
 loom_check_test_suite(
     name = "loom_check_file_test",
     srcs = [
+        "test/source_low/barrier.loom-test",
         "test/source_low/baseline.loom-test",
         "test/source_low/low_verify_diagnostics.loom-test",
         "test/source_low/source_low.loom-test",
         "test/source_low/source_low_diagnostics.loom-test",
         "test/source_low/target_legalize.loom-test",
+        "test/source_low/workgroup_storage.loom-test",
     ],
     test_name_prefix_to_strip = "test/source_low/",
 )

@@ -38,6 +38,8 @@ typedef enum loom_spirv_packet_form_e {
   LOOM_SPIRV_PACKET_FORM_COOPERATIVE_MATRIX_LOAD = 11,
   LOOM_SPIRV_PACKET_FORM_COOPERATIVE_MATRIX_STORE = 12,
   LOOM_SPIRV_PACKET_FORM_COOPERATIVE_MATRIX_MUL_ADD = 13,
+  LOOM_SPIRV_PACKET_FORM_CONTROL_BARRIER = 14,
+  LOOM_SPIRV_PACKET_FORM_ACCESS_CHAIN = 15,
 } loom_spirv_packet_form_t;
 
 typedef struct loom_spirv_packet_row_t {
@@ -63,6 +65,12 @@ typedef struct loom_spirv_packet_row_t {
   uint32_t builtin;
   // Vector component extracted from built-in input rows.
   uint8_t component_index;
+  // SPIR-V execution scope literal for barrier rows.
+  uint32_t execution_scope;
+  // SPIR-V memory scope literal for barrier rows.
+  uint32_t memory_scope;
+  // SPIR-V memory semantics mask literal for barrier rows.
+  uint32_t memory_semantics;
   // Cooperative matrix layout literal for load/store rows.
   uint32_t cooperative_matrix_layout;
   // Cooperative matrix stride literal for load/store rows.

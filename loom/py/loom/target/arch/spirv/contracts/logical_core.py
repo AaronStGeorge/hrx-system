@@ -631,6 +631,7 @@ def _buffer_view_rule(
 
 
 _STORAGE_BUFFER_MEMORY_SPACES = ("unknown", "generic", "global", "descriptor")
+_WORKGROUP_MEMORY_SPACES = ("workgroup",)
 
 
 def _storage_buffer_alignment_diagnostic(
@@ -654,6 +655,26 @@ def _storage_buffer_source_memory(
         operation=operation,
         root_kind=SourceMemoryRootKind.ANY,
         memory_spaces=_STORAGE_BUFFER_MEMORY_SPACES,
+        element_byte_count=scalar.byte_width,
+        vector_lane_count=1,
+        vector_lane_byte_stride=scalar.byte_width,
+        static_byte_offset_minimum=-(2**63),
+        static_byte_offset_maximum=(2**63) - 1,
+        minimum_alignment=scalar.byte_width,
+        dynamic_term_count=None,
+        dynamic_index_source=SourceMemoryDynamicIndexSource.NONE,
+        diagnostic=_storage_buffer_alignment_diagnostic(scalar.byte_width),
+    )
+
+
+def _workgroup_source_memory(
+    operation: SourceMemoryOperation,
+    scalar: StorageBufferScalar,
+) -> SourceMemoryConstraint:
+    return SourceMemoryConstraint(
+        operation=operation,
+        root_kind=SourceMemoryRootKind.ANY,
+        memory_spaces=_WORKGROUP_MEMORY_SPACES,
         element_byte_count=scalar.byte_width,
         vector_lane_count=1,
         vector_lane_byte_stride=scalar.byte_width,
@@ -907,6 +928,62 @@ def _view_store_rule(scalar: StorageBufferScalar) -> DescriptorRule:
     )
 
 
+def _view_load_workgroup_rule(scalar: StorageBufferScalar) -> DescriptorRule:
+    scalar_type = Scalar(scalar.source_type)
+    view_type = View(scalar.source_type)
+    descriptor = _descriptor(f"spirv.op_load.workgroup.{scalar.suffix}")
+    return DescriptorRule(
+        source_op=view.view_load,
+        descriptor=descriptor,
+        guards=(
+            Guard.operand_segment_count("indices", 0),
+            Guard.value_type("view", view_type),
+            Guard.value_type("result", scalar_type),
+            *_feature_guards(descriptor),
+        ),
+        emit=(
+            _descriptor_emit(
+                descriptor=descriptor,
+                operands={"ptr": ValueRef.operand("view")},
+                results={"dst": ValueRef.result("result")},
+                source_memory=_workgroup_source_memory(
+                    SourceMemoryOperation.LOAD,
+                    scalar,
+                ),
+            ),
+        ),
+    )
+
+
+def _view_store_workgroup_rule(scalar: StorageBufferScalar) -> DescriptorRule:
+    scalar_type = Scalar(scalar.source_type)
+    view_type = View(scalar.source_type)
+    descriptor = _descriptor(f"spirv.op_store.workgroup.{scalar.suffix}")
+    return DescriptorRule(
+        source_op=view.view_store,
+        descriptor=descriptor,
+        guards=(
+            Guard.operand_segment_count("indices", 0),
+            Guard.value_type("view", view_type),
+            Guard.value_type("value", scalar_type),
+            *_feature_guards(descriptor),
+        ),
+        emit=(
+            _descriptor_emit(
+                descriptor=descriptor,
+                operands={
+                    "ptr": ValueRef.operand("view"),
+                    "value": ValueRef.operand("value"),
+                },
+                source_memory=_workgroup_source_memory(
+                    SourceMemoryOperation.STORE,
+                    scalar,
+                ),
+            ),
+        ),
+    )
+
+
 def _storage_buffer_rules() -> tuple[DescriptorRule, ...]:
     rules: list[DescriptorRule] = []
     for scalar in STORAGE_BUFFER_SCALARS:
@@ -922,7 +999,30 @@ def _storage_buffer_rules() -> tuple[DescriptorRule, ...]:
         rules.append(_buffer_view_rule(scalar))
         rules.append(_view_load_rule(scalar))
         rules.append(_view_store_rule(scalar))
+        rules.append(_view_load_workgroup_rule(scalar))
+        rules.append(_view_store_workgroup_rule(scalar))
     return tuple(rules)
+
+
+def _control_barrier_rule(scope: str) -> DescriptorRule:
+    descriptor = _descriptor(f"spirv.op_control_barrier.{scope}.workgroup.acq_rel")
+    return DescriptorRule(
+        source_op=kernel.kernel_barrier,
+        descriptor=descriptor,
+        guards=(
+            Guard.enum_attr_equals("memory_space", "workgroup"),
+            Guard.enum_attr_equals("ordering", "acq_rel"),
+            Guard.enum_attr_equals("scope", scope),
+        ),
+        emit=(_descriptor_emit(descriptor=descriptor),),
+    )
+
+
+def _control_barrier_rules() -> tuple[DescriptorRule, ...]:
+    return (
+        _control_barrier_rule("subgroup"),
+        _control_barrier_rule("workgroup"),
+    )
 
 
 _INTEGER_BINARY_SOURCE_OPS = {
@@ -1107,6 +1207,7 @@ SPIRV_LOGICAL_CORE_CONTRACT_FRAGMENT = ContractFragment(
         *_compare_rules(),
         *_select_rules(),
         *_storage_buffer_rules(),
+        *_control_barrier_rules(),
         *_cooperative_matrix_rules(),
         DescriptorMatrixRule(
             source_op=vector.vector_mma,

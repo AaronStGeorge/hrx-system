@@ -37,6 +37,10 @@ typedef enum loom_spirv_value_class_e {
   LOOM_SPIRV_VALUE_CLASS_BOOL = 5,
   // KHR cooperative matrix SSA ID with concrete component and use operands.
   LOOM_SPIRV_VALUE_CLASS_COOPERATIVE_MATRIX = 6,
+  // Workgroup pointer with a concrete scalar pointee type.
+  LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP = 7,
+  // Workgroup array pointer with a concrete scalar element type.
+  LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP_ARRAY = 8,
 } loom_spirv_value_class_t;
 
 typedef struct loom_spirv_value_type_t {
@@ -88,6 +92,8 @@ static inline bool loom_spirv_abi_value_type_encode(
     case LOOM_SPIRV_VALUE_CLASS_STORAGE_BUFFER_ADDRESS:
     case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
     case LOOM_SPIRV_VALUE_CLASS_COOPERATIVE_MATRIX:
+    case LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP:
+    case LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP_ARRAY:
       return true;
   }
   return false;
@@ -95,7 +101,9 @@ static inline bool loom_spirv_abi_value_type_encode(
 
 static inline bool loom_spirv_abi_value_type_decode(
     int64_t code, loom_spirv_value_type_t* out_value_type) {
-  *out_value_type = (loom_spirv_value_type_t){0};
+  *out_value_type = (loom_spirv_value_type_t){
+      .value_class = LOOM_SPIRV_VALUE_CLASS_UNKNOWN,
+  };
   if (code == LOOM_SPIRV_ABI_VALUE_TYPE_NONE) {
     return true;
   }
@@ -134,6 +142,8 @@ static inline bool loom_spirv_value_type_equal(loom_spirv_value_type_t lhs,
   switch (lhs.value_class) {
     case LOOM_SPIRV_VALUE_CLASS_SCALAR:
     case LOOM_SPIRV_VALUE_CLASS_PTR_PHYSICAL_STORAGE_BUFFER:
+    case LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP:
+    case LOOM_SPIRV_VALUE_CLASS_PTR_WORKGROUP_ARRAY:
       return lhs.scalar_type == rhs.scalar_type;
     case LOOM_SPIRV_VALUE_CLASS_COOPERATIVE_MATRIX:
       return lhs.scalar_type == rhs.scalar_type && lhs.rows == rhs.rows &&

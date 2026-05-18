@@ -607,6 +607,19 @@ static bool loom_low_source_memory_access_scaled_index_from_value(
     return true;
   }
 
+  if (loom_index_cast_isa(defining_op)) {
+    const loom_type_t input_type =
+        loom_module_value_type(module, loom_index_cast_input(defining_op));
+    const loom_type_t result_type = loom_module_value_type(module, value_id);
+    if (loom_type_is_scalar(input_type) && loom_type_is_scalar(result_type) &&
+        loom_type_element_type(input_type) == LOOM_SCALAR_TYPE_INDEX &&
+        loom_type_element_type(result_type) == LOOM_SCALAR_TYPE_OFFSET) {
+      return loom_low_source_memory_access_scaled_index_from_value(
+          module, fact_table, loom_index_cast_input(defining_op),
+          recursion_depth + 1, out_scaled_index);
+    }
+  }
+
   if (loom_index_mul_isa(defining_op)) {
     loom_value_id_t lhs = loom_index_mul_lhs(defining_op);
     loom_value_id_t rhs = loom_index_mul_rhs(defining_op);

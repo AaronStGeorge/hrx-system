@@ -75,7 +75,6 @@ from loom.target.low_descriptors import (
 _REG_ID = "spirv.id"
 _REG_OFFSET64 = "spirv.offset64"
 _REG_PTR_FUNCTION = "spirv.ptr.function"
-_REG_PTR_WORKGROUP = "spirv.ptr.workgroup"
 _REG_PTR_STORAGE_BUFFER = "spirv.ptr.storage_buffer"
 
 _RESOURCE_ALU = "spirv.alu"
@@ -93,7 +92,6 @@ _SCHEDULE_VARIABLE = "spirv.variable"
 _ID_ALT = (RegClassAlt(_REG_ID),)
 _OFFSET64_ALT = (RegClassAlt(_REG_OFFSET64),)
 _PTR_FUNCTION_ALT = (RegClassAlt(_REG_PTR_FUNCTION),)
-_PTR_WORKGROUP_ALT = (RegClassAlt(_REG_PTR_WORKGROUP),)
 _PTR_STORAGE_BUFFER_ALT = (RegClassAlt(_REG_PTR_STORAGE_BUFFER),)
 
 _I32_VALUE_IMMEDIATE = Immediate(
@@ -148,8 +146,43 @@ def _ptr_function_result(field_name: str = "ptr") -> Operand:
     return Operand(field_name, OperandRole.RESULT, _PTR_FUNCTION_ALT)
 
 
-def _ptr_workgroup_result(field_name: str = "ptr") -> Operand:
-    return Operand(field_name, OperandRole.RESULT, _PTR_WORKGROUP_ALT)
+def _ptr_workgroup_reg_class_name(scalar: StorageBufferScalar) -> str:
+    return f"spirv.ptr.workgroup.{scalar.suffix}"
+
+
+def _ptr_workgroup_array_reg_class_name(scalar: StorageBufferScalar) -> str:
+    return f"spirv.ptr.workgroup.array.{scalar.suffix}"
+
+
+def _ptr_workgroup_alt(scalar: StorageBufferScalar) -> tuple[RegClassAlt, ...]:
+    return (RegClassAlt(_ptr_workgroup_reg_class_name(scalar)),)
+
+
+def _ptr_workgroup_array_alt(
+    scalar: StorageBufferScalar,
+) -> tuple[RegClassAlt, ...]:
+    return (RegClassAlt(_ptr_workgroup_array_reg_class_name(scalar)),)
+
+
+def _ptr_workgroup_scalar_result(
+    scalar: StorageBufferScalar,
+    field_name: str = "ptr",
+) -> Operand:
+    return Operand(field_name, OperandRole.RESULT, _ptr_workgroup_alt(scalar))
+
+
+def _ptr_workgroup_scalar_operand(
+    scalar: StorageBufferScalar,
+    field_name: str,
+) -> Operand:
+    return Operand(field_name, OperandRole.RESOURCE, _ptr_workgroup_alt(scalar))
+
+
+def _ptr_workgroup_array_operand(
+    scalar: StorageBufferScalar,
+    field_name: str,
+) -> Operand:
+    return Operand(field_name, OperandRole.RESOURCE, _ptr_workgroup_array_alt(scalar))
 
 
 def _ptr_storage_buffer_result(field_name: str = "ptr") -> Operand:
@@ -322,6 +355,18 @@ def _storage_buffer_effect(
     )
 
 
+def _workgroup_effect(
+    kind: EffectKind,
+    scalar: StorageBufferScalar,
+) -> Effect:
+    return Effect(
+        kind,
+        memory_space=MemorySpace.WORKGROUP,
+        flags=(EffectFlag.DEPENDENCY,),
+        width_bits=scalar.byte_width * 8,
+    )
+
+
 def _cooperative_matrix_effect(
     kind: EffectKind,
     *,
@@ -391,6 +436,96 @@ def _storage_buffer_descriptors() -> tuple[Descriptor, ...]:
         descriptors.append(_load_storage_buffer_descriptor(scalar))
         descriptors.append(_store_storage_buffer_descriptor(scalar))
     return tuple(descriptors)
+
+
+def _access_chain_workgroup_descriptor(
+    scalar: StorageBufferScalar,
+) -> Descriptor:
+    return Descriptor(
+        key=f"spirv.op_access_chain.workgroup.{scalar.suffix}.element_index",
+        mnemonic=f"OpAccessChain.workgroup.{scalar.suffix}.element_index",
+        semantic_tag=f"spirv.op_access_chain.workgroup.{scalar.suffix}.element_index",
+        operands=(
+            _ptr_workgroup_scalar_result(scalar),
+            _ptr_workgroup_array_operand(scalar, "base"),
+            _id_operand("element_index"),
+        ),
+        feature_mask_words=(scalar.feature_bits,) if scalar.feature_bits else (),
+        asm_forms=_asm(results=("ptr",), operands=("base", "element_index")),
+        schedule_class=_SCHEDULE_VARIABLE,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _load_workgroup_descriptor(scalar: StorageBufferScalar) -> Descriptor:
+    return Descriptor(
+        key=f"spirv.op_load.workgroup.{scalar.suffix}",
+        mnemonic=f"OpLoad.workgroup.{scalar.suffix}",
+        semantic_tag=f"spirv.op_load.workgroup.{scalar.suffix}",
+        operands=(_id_result(), _ptr_workgroup_scalar_operand(scalar, "ptr")),
+        effects=(_workgroup_effect(EffectKind.READ, scalar),),
+        feature_mask_words=(scalar.feature_bits,) if scalar.feature_bits else (),
+        asm_forms=_asm(results=("dst",), operands=("ptr",)),
+        schedule_class=_SCHEDULE_LOAD,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _store_workgroup_descriptor(scalar: StorageBufferScalar) -> Descriptor:
+    return Descriptor(
+        key=f"spirv.op_store.workgroup.{scalar.suffix}",
+        mnemonic=f"OpStore.workgroup.{scalar.suffix}",
+        semantic_tag=f"spirv.op_store.workgroup.{scalar.suffix}",
+        operands=(
+            _ptr_workgroup_scalar_operand(scalar, "ptr"),
+            _id_operand("value"),
+        ),
+        effects=(_workgroup_effect(EffectKind.WRITE, scalar),),
+        feature_mask_words=(scalar.feature_bits,) if scalar.feature_bits else (),
+        asm_forms=_asm(operands=("ptr", "value")),
+        schedule_class=_SCHEDULE_STORE,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _workgroup_descriptors() -> tuple[Descriptor, ...]:
+    descriptors: list[Descriptor] = []
+    for scalar in STORAGE_BUFFER_SCALARS:
+        descriptors.append(_access_chain_workgroup_descriptor(scalar))
+        descriptors.append(_load_workgroup_descriptor(scalar))
+        descriptors.append(_store_workgroup_descriptor(scalar))
+    return tuple(descriptors)
+
+
+def _control_barrier_descriptor(execution_scope: str) -> Descriptor:
+    key = f"spirv.op_control_barrier.{execution_scope}.workgroup.acq_rel"
+    return Descriptor(
+        key=key,
+        mnemonic=f"OpControlBarrier.{execution_scope}.workgroup.acq_rel",
+        semantic_tag=key,
+        operands=(),
+        effects=(
+            Effect(
+                EffectKind.BARRIER,
+                memory_space=MemorySpace.WORKGROUP,
+                flags=(EffectFlag.ORDERED, EffectFlag.DEPENDENCY),
+            ),
+            Effect(
+                EffectKind.CONVERGENT,
+                flags=(EffectFlag.ORDERED,),
+            ),
+        ),
+        asm_forms=_asm(),
+        schedule_class=_SCHEDULE_VARIABLE,
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _control_barrier_descriptors() -> tuple[Descriptor, ...]:
+    return (
+        _control_barrier_descriptor("subgroup"),
+        _control_barrier_descriptor("workgroup"),
+    )
 
 
 def _cooperative_matrix_load_descriptor(
@@ -679,6 +814,28 @@ def _select_descriptors() -> tuple[Descriptor, ...]:
     return tuple(descriptors)
 
 
+def _ptr_workgroup_reg_classes() -> tuple[RegClass, ...]:
+    classes: list[RegClass] = []
+    for scalar in STORAGE_BUFFER_SCALARS:
+        classes.append(
+            RegClass(
+                _ptr_workgroup_array_reg_class_name(scalar),
+                32,
+                SpillSlotSpace.PRIVATE,
+                flags=(RegClassFlag.VIRTUAL_ONLY, RegClassFlag.UNSPILLABLE),
+            )
+        )
+        classes.append(
+            RegClass(
+                _ptr_workgroup_reg_class_name(scalar),
+                32,
+                SpillSlotSpace.PRIVATE,
+                flags=(RegClassFlag.VIRTUAL_ONLY, RegClassFlag.UNSPILLABLE),
+            )
+        )
+    return tuple(classes)
+
+
 SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
     key="spirv.logical.core",
     target_key="spirv",
@@ -711,17 +868,12 @@ SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
             flags=(RegClassFlag.VIRTUAL_ONLY,),
         ),
         RegClass(
-            _REG_PTR_WORKGROUP,
-            32,
-            SpillSlotSpace.PRIVATE,
-            flags=(RegClassFlag.VIRTUAL_ONLY, RegClassFlag.UNSPILLABLE),
-        ),
-        RegClass(
             _REG_PTR_STORAGE_BUFFER,
             64,
             SpillSlotSpace.PRIVATE,
             flags=(RegClassFlag.VIRTUAL_ONLY,),
         ),
+        *_ptr_workgroup_reg_classes(),
     ),
     resources=(
         Resource(_RESOURCE_ALU, capacity_per_cycle=1, kind=ResourceKind.SCALAR_ALU),
@@ -845,20 +997,14 @@ SPIRV_LOGICAL_CORE_DESCRIPTOR_SET = DescriptorSet(
         *_compare_descriptors(),
         *_select_descriptors(),
         *_storage_buffer_descriptors(),
+        *_workgroup_descriptors(),
+        *_control_barrier_descriptors(),
         *_cooperative_matrix_descriptors(),
         Descriptor(
             key="spirv.op_variable.function.ptr",
             mnemonic="OpVariable.function.ptr",
             semantic_tag="spirv.op_variable.function.ptr",
             operands=(_ptr_function_result(),),
-            asm_forms=_asm(results=("ptr",)),
-            schedule_class=_SCHEDULE_VARIABLE,
-        ),
-        Descriptor(
-            key="spirv.op_variable.workgroup.ptr",
-            mnemonic="OpVariable.workgroup.ptr",
-            semantic_tag="spirv.op_variable.workgroup.ptr",
-            operands=(_ptr_workgroup_result(),),
             asm_forms=_asm(results=("ptr",)),
             schedule_class=_SCHEDULE_VARIABLE,
         ),

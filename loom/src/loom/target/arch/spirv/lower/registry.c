@@ -16,6 +16,7 @@
 #include "loom/target/arch/spirv/descriptors.h"
 #include "loom/target/arch/spirv/lower.h"
 #include "loom/target/arch/spirv/lower/matrix.h"
+#include "loom/target/arch/spirv/lower/workgroup.h"
 #include "loom/target/registers.h"
 
 static iree_status_t loom_spirv_make_hal_buffer_type(
@@ -384,6 +385,22 @@ static const loom_target_contract_binding_t kSpirvContractBindings[] = {
     {&loom_spirv_logical_core_contract_fragment, 0},
 };
 
+static iree_status_t loom_spirv_preselect_op(void* user_data,
+                                             loom_low_lower_context_t* context,
+                                             const loom_op_t* source_op,
+                                             loom_low_lower_plan_t* out_plan) {
+  (void)user_data;
+  return loom_spirv_select_workgroup_plan(context, source_op, out_plan);
+}
+
+static iree_status_t loom_spirv_emit_op(void* user_data,
+                                        loom_low_lower_context_t* context,
+                                        const loom_op_t* source_op,
+                                        loom_low_lower_plan_t plan) {
+  (void)user_data;
+  return loom_spirv_lower_workgroup_op(context, source_op, plan);
+}
+
 static const loom_low_lower_policy_t kSpirvLowLowerPolicy = {
     .name = IREE_SVL("spirv-logical-lower"),
     .error_catalog = &loom_error_catalog_core,
@@ -405,6 +422,8 @@ static const loom_low_lower_policy_t kSpirvLowLowerPolicy = {
             .attrs = NULL,
             .user_data = NULL,
         },
+    .preselect_op = {.fn = loom_spirv_preselect_op, .user_data = NULL},
+    .emit_op = {.fn = loom_spirv_emit_op, .user_data = NULL},
 };
 
 const loom_low_lower_policy_t* loom_spirv_low_lower_policy(void) {
