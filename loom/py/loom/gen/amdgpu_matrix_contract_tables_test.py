@@ -40,9 +40,13 @@ def test_generation_derives_semantic_tag_descriptor_ref() -> None:
 
 
 def test_generation_accepts_one_matching_descriptor_shape_variant() -> None:
-    initializer = _contract_initializer(_contract("wmma.f32.16x16x16.f16"))
+    contract = replace(
+        _contract("wmma.f32.16x16x16.f16"),
+        low_descriptor_key=None,
+    )
+    initializer = _contract_initializer(contract)
 
-    assert ".lhs_payload" in initializer
+    assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_F32_16X16X16_F16" in initializer
 
 
 def test_generation_rejects_low_descriptor_payload_shape_drift() -> None:
@@ -57,6 +61,36 @@ def test_generation_rejects_low_descriptor_payload_shape_drift() -> None:
         message = str(exc)
         assert "AMDGPU matrix contract 'swmmac.f32.16x16x32.f16'" in message
         assert "payload shape" in message
-        assert "low descriptor 'amdgpu.v_swmmac_f32_16x16x32_f16'" in message
+        assert "descriptor key(s) amdgpu.v_swmmac_f32_16x16x32_f16" in message
     else:
         raise AssertionError("expected payload shape validation to fail")
+
+
+def test_generation_rejects_ambiguous_shape_matched_descriptor_keys() -> None:
+    contract = replace(
+        _contract("swmmac.f32.16x16x32.f16"),
+        low_descriptor_key=None,
+    )
+    descriptor_shapes_by_key = {
+        "amdgpu.first": (amdgpu_matrix_contract_tables._contract_matrix_descriptor_shape(contract),),
+        "amdgpu.second": (amdgpu_matrix_contract_tables._contract_matrix_descriptor_shape(contract),),
+    }
+
+    try:
+        amdgpu_matrix_contract_tables._contract_low_descriptor_key(
+            contract,
+            descriptor_ref_key_set={"amdgpu.first", "amdgpu.second"},
+            keys_by_semantic_tag={
+                "matrix.swmmac.f32.16x16x32.f16": (
+                    "amdgpu.first",
+                    "amdgpu.second",
+                ),
+            },
+            descriptor_shapes_by_key=descriptor_shapes_by_key,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        assert "AMDGPU matrix contract 'swmmac.f32.16x16x32.f16'" in message
+        assert "ambiguously matches descriptor key(s) amdgpu.first, amdgpu.second" in message
+    else:
+        raise AssertionError("expected ambiguous descriptor resolution to fail")

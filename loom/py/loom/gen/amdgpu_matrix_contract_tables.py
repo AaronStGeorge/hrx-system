@@ -290,6 +290,7 @@ def _contract_low_descriptor_key(
     *,
     descriptor_ref_key_set: set[str],
     keys_by_semantic_tag: Mapping[str, tuple[str, ...]],
+    descriptor_shapes_by_key: Mapping[str, tuple[_MatrixDescriptorShape, ...]],
 ) -> str | None:
     if contract.low_descriptor_key is not None:
         if contract.low_descriptor_key not in descriptor_ref_key_set:
@@ -297,9 +298,23 @@ def _contract_low_descriptor_key(
         return contract.low_descriptor_key
 
     descriptor_keys = keys_by_semantic_tag.get(_contract_semantic_tag(contract), ())
-    if len(descriptor_keys) == 1:
-        return descriptor_keys[0]
-    return None
+    if not descriptor_keys:
+        return None
+
+    contract_shape = _contract_matrix_descriptor_shape(contract)
+    matching_keys = tuple(descriptor_key for descriptor_key in descriptor_keys if contract_shape in descriptor_shapes_by_key.get(descriptor_key, ()))
+    if len(matching_keys) == 1:
+        return matching_keys[0]
+    if not matching_keys:
+        descriptor_key_list = ", ".join(descriptor_keys)
+        raise ValueError(
+            f"AMDGPU matrix contract '{contract.name}' semantic tag "
+            f"'{_contract_semantic_tag(contract)}' matches descriptor key(s) "
+            f"{descriptor_key_list}, but none have payload shape "
+            f"{_format_matrix_descriptor_shape(contract_shape)}"
+        )
+    descriptor_key_list = ", ".join(matching_keys)
+    raise ValueError(f"AMDGPU matrix contract '{contract.name}' semantic tag '{_contract_semantic_tag(contract)}' ambiguously matches descriptor key(s) {descriptor_key_list}")
 
 
 def _contract_matrix_descriptor_shape(
@@ -378,6 +393,7 @@ def _contract_initializer(
         contract,
         descriptor_ref_key_set=descriptor_ref_key_set,
         keys_by_semantic_tag=keys_by_semantic_tag,
+        descriptor_shapes_by_key=descriptor_shapes_by_key,
     )
     if low_descriptor_key is not None:
         _validate_contract_low_descriptor_shape(
