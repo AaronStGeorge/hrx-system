@@ -51,7 +51,6 @@ loom_assert_no_dependencies(
         ":target_constraints",
         ":unit_location",
         ":unit_liveness",
-        ":verification",
     ],
 )
 
@@ -623,26 +622,6 @@ loom_cc_test(
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
-loom_cc_library(
-    name = "verification",
-    srcs = ["verification.c"],
-    hdrs = ["verification.h"],
-    deps = [
-        ":assignment",
-        ":live_range",
-        ":move_topology",
-        ":storage",
-        ":table",
-        "//loom/src/loom/codegen/low:function",
-        "//loom/src/loom/codegen/low:placement",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-        "//loom/src/loom/target:registers",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base:core_headers",
     ],
 )
 

@@ -331,36 +331,12 @@ loom_cc_library(
     loom::src::loom::codegen::low::allocation::target_constraints
     loom::src::loom::codegen::low::allocation::unit_liveness
     loom::src::loom::codegen::low::allocation::unit_location
-    loom::src::loom::codegen::low::allocation::verification
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::target::registers
   PUBLIC
-)
-
-loom_cc_test(
-  NAME
-    allocation_test
-  SRCS
-    "allocation_test.cc"
-  DEPS
-    ::allocation
-    ::diagnostics
-    ::storage_lease
-    ::text_asm
-    iree::base::internal::arena
-    loom::src::loom::codegen::low::schedule
-    loom::src::loom::format::text::parser
-    loom::src::loom::ir
-    loom::src::loom::ops::low
-    loom::src::loom::ops::op_defs
-    loom::src::loom::ops::test
-    loom::src::loom::target::test::descriptors
-    loom::src::loom::testing::module_ptr
-    iree::testing::gtest
-    iree::testing::gtest_main
 )
 
 loom_cc_library(

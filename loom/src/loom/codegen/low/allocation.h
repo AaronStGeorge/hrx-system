@@ -24,7 +24,6 @@
 #include "loom/codegen/low/allocation/storage.h"
 #include "loom/codegen/low/allocation/table.h"
 #include "loom/codegen/low/allocation/target_constraints.h"
-#include "loom/codegen/low/allocation/verification.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/low/storage_lease.h"
 #include "loom/codegen/low/target_binding.h"

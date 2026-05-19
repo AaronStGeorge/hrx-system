@@ -331,6 +331,23 @@ static bool loom_check_case_has_expected_output(
   return !iree_string_view_is_empty(iree_string_view_trim(test_case->expected));
 }
 
+static iree_status_t loom_check_execute_finish_status_failure(
+    iree_status_t failure_status, iree_string_view_t operation_name,
+    loom_check_result_t* result) {
+  result->raw_outcome = LOOM_CHECK_FAIL;
+  iree_status_t status = iree_string_builder_append_format(
+      &result->detail, "%.*s returned status: ", (int)operation_name.size,
+      operation_name.data);
+  if (iree_status_is_ok(status)) {
+    status = iree_string_builder_append_status(&result->detail, failure_status);
+  }
+  if (iree_status_is_ok(status)) {
+    status = iree_string_builder_append_cstring(&result->detail, "\n");
+  }
+  iree_status_free(failure_status);
+  return status;
+}
+
 iree_status_t loom_check_execute_pass(
     const loom_check_case_t* test_case, iree_host_size_t case_index,
     loom_check_file_report_t* report, iree_string_view_t filename,
@@ -463,13 +480,8 @@ iree_status_t loom_check_execute_pass(
     }
   }
   if (!iree_status_is_ok(status)) {
-    if (pass_diagnostic_capture.emission_count > 0 ||
-        diagnostic_collector.count > 0 || test_case->annotation_count > 0) {
-      iree_status_free(status);
-      status = loom_check_diagnostic_collector_finish(
-          &diagnostic_collector, test_case, case_index, report, allocator,
-          result);
-    }
+    status = loom_check_execute_finish_status_failure(
+        status, IREE_SV("pass pipeline"), result);
     loom_module_free(module);
     iree_arena_deinitialize(&diagnostic_arena);
     return status;

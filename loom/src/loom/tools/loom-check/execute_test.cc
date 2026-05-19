@@ -11,12 +11,14 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/error/error_defs.h"
 #include "loom/ir/context.h"
 #include "loom/target/low_descriptor_registry_core_test.h"
 #include "loom/target/provider.h"
 #include "loom/target/test/lower.h"
 #include "loom/testing/context.h"
 #include "loom/tools/loom-check/check.h"
+#include "loom/tools/loom-check/diagnostics.h"
 
 namespace loom {
 namespace {
@@ -115,6 +117,23 @@ iree_status_t TestEmitProviderExecute(
     const loom_check_emit_provider_t* provider,
     const loom_check_emit_provider_request_t* request) {
   (void)provider;
+  if (iree_string_view_equal(request->target_options,
+                             IREE_SV("status-after-diagnostic"))) {
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(IREE_SV("fake.emit")),
+    };
+    loom_diagnostic_t diagnostic = {
+        .severity = LOOM_DIAGNOSTIC_ERROR,
+        .error = loom_error_def_lookup(LOOM_ERROR_DOMAIN_PARSE, 6),
+        .params = params,
+        .param_count = IREE_ARRAYSIZE(params),
+        .emitter = LOOM_EMITTER_PASS,
+    };
+    IREE_RETURN_IF_ERROR(loom_check_diagnostic_collector_sink(
+        request->diagnostic_collector, &diagnostic));
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "synthetic provider status");
+  }
   return iree_string_builder_append_cstring(&request->result->actual_output,
                                             "fake emit\n");
 }
@@ -991,37 +1010,52 @@ TEST_F(ExecuteTest, PassModePassesOptionsToPassCreate) {
 
 TEST_F(ExecuteTest, PassModeRejectsOptionsForUnsupportedPass) {
   loom_check_result_t result;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        ExecuteFirst("// RUN: pass dce{max-iterations=1}\n"
-                                     "func.def @f() {\n"
-                                     "  func.return\n"
-                                     "}\n",
-                                     &result));
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: pass dce{max-iterations=1}\n"
+                   "func.def @f() {\n"
+                   "  func.return\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(DetailString(result).find("INVALID_ARGUMENT"), std::string::npos);
+  loom_check_result_deinitialize(&result);
 }
 
 TEST_F(ExecuteTest, PassModeRejectsMalformedOptions) {
   loom_check_result_t result;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
-                        ExecuteFirst("// RUN: pass canonicalize{bogus=1}\n"
-                                     "func.def @f() {\n"
-                                     "  func.return\n"
-                                     "}\n",
-                                     &result));
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
+  IREE_ASSERT_OK(
+      ExecuteFirst("// RUN: pass canonicalize{bogus=1}\n"
+                   "func.def @f() {\n"
+                   "  func.return\n"
+                   "}\n",
+                   &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(DetailString(result).find("INVALID_ARGUMENT"), std::string::npos);
+  loom_check_result_deinitialize(&result);
+
+  IREE_ASSERT_OK(
       ExecuteFirst("// RUN: pass canonicalize{max-iterations=1\n"
                    "func.def @f() {\n"
                    "  func.return\n"
                    "}\n",
                    &result));
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_INVALID_ARGUMENT,
-      ExecuteFirst(
-          "// RUN: pass canonicalize{max-iterations=1,max-iterations=2}\n"
-          "func.def @f() {\n"
-          "  func.return\n"
-          "}\n",
-          &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(DetailString(result).find("INVALID_ARGUMENT"), std::string::npos);
+  loom_check_result_deinitialize(&result);
+
+  IREE_ASSERT_OK(ExecuteFirst(
+      "// RUN: pass canonicalize{max-iterations=1,max-iterations=2}\n"
+      "func.def @f() {\n"
+      "  func.return\n"
+      "}\n",
+      &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(DetailString(result).find("INVALID_ARGUMENT"), std::string::npos);
+  loom_check_result_deinitialize(&result);
 }
 
 TEST_F(ExecuteTest, RequiresUnavailableSkipsCaseBeforeParsingIr) {
@@ -1097,6 +1131,21 @@ TEST_F(ExecuteTest, EmitProviderCanOwnTarget) {
                                   &provider_environment_, &result));
   EXPECT_EQ(result.raw_outcome, LOOM_CHECK_PASS);
   EXPECT_EQ(result.final_outcome, LOOM_CHECK_PASS);
+  loom_check_result_deinitialize(&result);
+}
+
+TEST_F(ExecuteTest, EmitProviderStatusIsNotMaskedByMatchedDiagnostic) {
+  loom_check_result_t result;
+  IREE_ASSERT_OK(ExecuteFirstWithEnvironment(
+      "// RUN: emit fake-emit status-after-diagnostic\n"
+      "// ERROR: PARSE/006\n"
+      "func.def @f() {\n"
+      "  func.return\n"
+      "}\n",
+      &provider_environment_, &result));
+  EXPECT_EQ(result.raw_outcome, LOOM_CHECK_FAIL);
+  EXPECT_EQ(result.final_outcome, LOOM_CHECK_FAIL);
+  EXPECT_NE(DetailString(result).find("INVALID_ARGUMENT"), std::string::npos);
   loom_check_result_deinitialize(&result);
 }
 

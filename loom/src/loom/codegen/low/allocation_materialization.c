@@ -730,7 +730,6 @@ iree_status_t loom_low_allocation_materialize_spills(
   loom_low_allocation_materialization_result_t result = {0};
   if (out_result) *out_result = result;
 
-  IREE_RETURN_IF_ERROR(loom_low_allocation_verify_table(table));
   if (table->module != module) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "allocation table belongs to a different module");

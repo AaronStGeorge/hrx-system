@@ -296,6 +296,7 @@ loom_cc_test(
         ":check",
         ":execute",
         ":report",
+        "//loom/src/loom/error:error_defs",
         "//loom/src/loom/ir",
         "//loom/src/loom/target:low_descriptor_registry_core_test",
         "//loom/src/loom/target:provider",

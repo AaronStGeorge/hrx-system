@@ -33,8 +33,8 @@ typedef struct loom_low_allocation_packet_move_context_t {
   const loom_low_descriptor_set_t* descriptor_set;
   // Liveness ordering used by allocation.
   loom_liveness_order_t liveness_order;
-  // Resolved target storage constraints.
-  const loom_low_allocation_target_constraints_t* target_constraints;
+  // Mutable target storage constraints and diagnostic state.
+  loom_low_allocation_target_constraints_t* target_constraints;
   // Per-allocation-unit live end points.
   const loom_low_allocation_unit_liveness_t* unit_liveness;
   // Completed assignment lookup map.

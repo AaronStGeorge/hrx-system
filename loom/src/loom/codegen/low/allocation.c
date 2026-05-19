@@ -112,44 +112,46 @@ iree_status_t loom_low_allocate_function(
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "low function target did not resolve");
   }
-  IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_initialize(
+  iree_status_t status = loom_low_allocation_target_constraints_initialize(
       module, low_func_op, &state.target, options->budgets,
       options->budget_count, options->reserved_ranges,
       options->reserved_range_count, options->emitter, arena,
-      &state.target_constraints));
+      &state.target_constraints);
 
   loom_local_value_domain_t value_domain = {0};
-  iree_status_t status = loom_local_value_domain_acquire_for_region(
-      module, state.body, arena, &value_domain);
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
+    status = loom_local_value_domain_acquire_for_region(module, state.body,
+                                                        arena, &value_domain);
+  }
+  if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     status = loom_liveness_analyze_local_value_domain(
         &value_domain, options->liveness_order, arena, &state.liveness);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     status = loom_low_placement_analyze_region(module, state.body,
                                                &value_domain, &state.liveness,
                                                arena, &state.placement);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     status = loom_low_allocation_unit_liveness_initialize(
         module, state.body, &state.target, options->liveness_order,
         &state.liveness, arena, &state.unit_liveness);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     status = loom_low_allocation_unit_liveness_extend_for_tied_results(
         &state.unit_liveness, &state.liveness, &state.placement);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     status = loom_low_allocation_target_constraints_resolve_fixed_values(
         &state.target_constraints, &state.liveness, &value_domain,
         options->fixed_values, options->fixed_value_count, arena);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     status = loom_low_allocation_storage_lease_state_initialize(
         &options->storage_leases, module, low_func_op, &state.liveness, arena,
         &state.storage_leases);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     const loom_low_allocation_interval_assignment_context_t
         interval_assignment_context = {
             .module = state.module,
@@ -166,11 +168,11 @@ iree_status_t loom_low_allocate_function(
     status = loom_low_allocation_interval_assignment_build(
         &interval_assignment_context, &state.interval_assignment);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     status =
         loom_low_allocation_storage_lease_state_finalize(&state.storage_leases);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     const loom_low_allocation_copy_decision_context_t copy_decision_context = {
         .body = state.body,
         .descriptor_set = state.target.descriptor_set,
@@ -179,7 +181,7 @@ iree_status_t loom_low_allocate_function(
     status = loom_low_allocation_copy_decision_plan_build(
         &copy_decision_context, arena, &state.copy_decision_plan);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     const loom_low_allocation_edge_copy_context_t edge_copy_context = {
         .module = state.module,
         .body = state.body,
@@ -192,7 +194,7 @@ iree_status_t loom_low_allocate_function(
     status = loom_low_allocation_edge_copy_plan_build(&edge_copy_context, arena,
                                                       &state.edge_copy_plan);
   }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     const loom_low_allocation_packet_move_context_t packet_move_context = {
         .module = state.module,
         .body = state.body,
@@ -215,6 +217,7 @@ iree_status_t loom_low_allocate_function(
         .liveness = state.liveness,
         .placement = state.placement,
         .allocation_mode = loom_low_function_allocation(low_func_op),
+        .error_count = state.target_constraints.error_count,
         .assignments = state.interval_assignment.assignments,
         .assignment_count = state.interval_assignment.assignment_count,
         .assignment_indices_by_value_ordinal =
@@ -250,10 +253,7 @@ iree_status_t loom_low_allocate_function(
     loom_target_bundle_storage_rebind(&table.target.bundle_storage);
   }
   loom_local_value_domain_release(&value_domain);
-  if (iree_status_is_ok(status)) {
-    status = loom_low_allocation_verify_table(&table);
-  }
-  if (iree_status_is_ok(status)) {
+  if (iree_status_is_ok(status) && table.error_count == 0) {
     status = loom_low_allocation_diagnostics_emit(
         &table, options->diagnostic_flags, options->emitter);
   }

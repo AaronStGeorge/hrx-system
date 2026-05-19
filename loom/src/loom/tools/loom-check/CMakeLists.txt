@@ -155,6 +155,7 @@ loom_cc_test(
     ::report
     iree::base
     iree::base::internal::arena
+    loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::target::low_descriptor_registry_core_test
     loom::src::loom::target::provider

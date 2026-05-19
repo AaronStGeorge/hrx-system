@@ -243,10 +243,9 @@ bool loom_low_allocation_target_constraints_location_range_fits_capacity(
 
 static iree_status_t
 loom_low_allocation_target_constraints_emit_capacity_failure(
-    const loom_low_allocation_target_constraints_t* constraints,
-    const loom_op_t* op, uint16_t reg_class_id, iree_string_view_t subject,
-    uint32_t location_base, uint32_t location_count, uint64_t location_end,
-    uint32_t max_units) {
+    loom_low_allocation_target_constraints_t* constraints, const loom_op_t* op,
+    uint16_t reg_class_id, iree_string_view_t subject, uint32_t location_base,
+    uint32_t location_count, uint64_t location_end, uint32_t max_units) {
   const loom_low_descriptor_set_t* descriptor_set =
       constraints->target->descriptor_set;
   const loom_low_reg_class_t* reg_class =
@@ -273,16 +272,20 @@ loom_low_allocation_target_constraints_emit_capacity_failure(
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };
-  return iree_diagnostic_emit(constraints->emitter, &emission);
+  IREE_RETURN_IF_ERROR(iree_diagnostic_emit(constraints->emitter, &emission));
+  ++constraints->error_count;
+  return iree_ok_status();
 }
 
 iree_status_t
 loom_low_allocation_target_constraints_validate_register_location_capacity(
-    const loom_low_allocation_target_constraints_t* constraints,
+    loom_low_allocation_target_constraints_t* constraints,
     uint16_t reg_class_id, loom_low_allocation_location_kind_t location_kind,
     uint32_t location_base, uint32_t location_count, iree_string_view_t subject,
-    const loom_op_t* diagnostic_op) {
+    const loom_op_t* diagnostic_op, bool* out_valid) {
   IREE_ASSERT_ARGUMENT(constraints);
+  IREE_ASSERT_ARGUMENT(out_valid);
+  *out_valid = false;
   IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_validate_range(
       location_kind, location_base, location_count, subject));
 
@@ -304,20 +307,9 @@ loom_low_allocation_target_constraints_validate_register_location_capacity(
         loom_low_allocation_target_constraints_emit_capacity_failure(
             constraints, diagnostic_op, reg_class_id, subject, location_base,
             location_count, location_end, capacity.max_units));
-    const loom_low_descriptor_set_t* descriptor_set =
-        constraints->target->descriptor_set;
-    const loom_low_reg_class_t* reg_class =
-        loom_low_allocation_target_constraints_reg_class_at(descriptor_set,
-                                                            reg_class_id);
-    const iree_string_view_t register_class = loom_low_descriptor_set_string(
-        descriptor_set, reg_class->name_string_offset);
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "low allocation %.*s location range [%" PRIu32 ", %" PRIu64
-        ") exceeds register-class '%.*s' capacity %" PRIu32,
-        (int)subject.size, subject.data, location_base, location_end,
-        (int)register_class.size, register_class.data, capacity.max_units);
+    return iree_ok_status();
   }
+  *out_valid = true;
   return iree_ok_status();
 }
 
@@ -355,11 +347,15 @@ loom_low_allocation_target_constraints_resolve_reserved_ranges(
           (int)constraints->target->descriptor_set_key.size,
           constraints->target->descriptor_set_key.data);
     }
+    bool valid_range = false;
     IREE_RETURN_IF_ERROR(
         loom_low_allocation_target_constraints_validate_register_location_capacity(
             constraints, reg_class_id, reserved_range->location_kind,
             reserved_range->location_base, reserved_range->location_count,
-            IREE_SV("reserved range"), constraints->function_op));
+            IREE_SV("reserved range"), constraints->function_op, &valid_range));
+    if (!valid_range) {
+      continue;
+    }
     for (iree_host_size_t j = 0; j < constraints->reserved_range_count; ++j) {
       const loom_low_allocation_resolved_reserved_range_t* existing =
           &constraints->reserved_ranges[j];
@@ -484,6 +480,7 @@ iree_status_t loom_low_allocation_target_constraints_resolve_fixed_values(
     IREE_RETURN_IF_ERROR(
         loom_low_allocation_target_constraints_resolve_reg_class(
             constraints, interval->value_class, &reg_class_id, NULL));
+    bool valid_range = false;
     IREE_RETURN_IF_ERROR(
         loom_low_allocation_target_constraints_validate_register_location_capacity(
             constraints, reg_class_id, fixed_value->location_kind,
@@ -491,7 +488,11 @@ iree_status_t loom_low_allocation_target_constraints_resolve_fixed_values(
             IREE_SV("fixed value"),
             loom_low_diagnostic_value_origin_op(constraints->module,
                                                 fixed_value->value_id,
-                                                constraints->function_op)));
+                                                constraints->function_op),
+            &valid_range));
+    if (!valid_range) {
+      continue;
+    }
     for (iree_host_size_t j = 0; j < i; ++j) {
       if (fixed_values[j].value_id == fixed_value->value_id) {
         return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
@@ -514,10 +515,9 @@ iree_status_t loom_low_allocation_target_constraints_resolve_fixed_values(
 }
 
 iree_status_t loom_low_allocation_target_constraints_emit_failure(
-    const loom_low_allocation_target_constraints_t* constraints,
-    const loom_op_t* op, loom_liveness_value_class_t value_class,
-    uint32_t budget_units, uint32_t peak_units,
-    iree_string_view_t failure_kind) {
+    loom_low_allocation_target_constraints_t* constraints, const loom_op_t* op,
+    loom_liveness_value_class_t value_class, uint32_t budget_units,
+    uint32_t peak_units, iree_string_view_t failure_kind) {
   IREE_ASSERT_ARGUMENT(constraints);
   loom_diagnostic_param_t params[] = {
       loom_param_string(loom_low_diagnostic_target_key(constraints->target)),
@@ -537,7 +537,9 @@ iree_status_t loom_low_allocation_target_constraints_emit_failure(
       .params = params,
       .param_count = IREE_ARRAYSIZE(params),
   };
-  return iree_diagnostic_emit(constraints->emitter, &emission);
+  IREE_RETURN_IF_ERROR(iree_diagnostic_emit(constraints->emitter, &emission));
+  ++constraints->error_count;
+  return iree_ok_status();
 }
 
 const loom_low_allocation_resolved_fixed_value_t*

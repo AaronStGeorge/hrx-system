@@ -130,6 +130,8 @@ typedef struct loom_low_allocation_target_constraints_t {
   const loom_low_resolved_target_t* target;
   // Structured diagnostic emitter for allocation failures and feedback.
   iree_diagnostic_emitter_t emitter;
+  // Number of error diagnostics emitted while resolving target constraints.
+  uint32_t error_count;
   // Resolved explicit per-class register budgets.
   loom_low_allocation_resolved_budget_t* budgets;
   // Number of entries in |budgets|.
@@ -191,17 +193,16 @@ bool loom_low_allocation_target_constraints_location_range_fits_capacity(
 // Validates that a register-like location range is legal for |reg_class_id|.
 iree_status_t
 loom_low_allocation_target_constraints_validate_register_location_capacity(
-    const loom_low_allocation_target_constraints_t* constraints,
+    loom_low_allocation_target_constraints_t* constraints,
     uint16_t reg_class_id, loom_low_allocation_location_kind_t location_kind,
     uint32_t location_base, uint32_t location_count, iree_string_view_t subject,
-    const loom_op_t* diagnostic_op);
+    const loom_op_t* diagnostic_op, bool* out_valid);
 
 // Emits a structured allocation-capacity failure for |value_class|.
 iree_status_t loom_low_allocation_target_constraints_emit_failure(
-    const loom_low_allocation_target_constraints_t* constraints,
-    const loom_op_t* op, loom_liveness_value_class_t value_class,
-    uint32_t budget_units, uint32_t peak_units,
-    iree_string_view_t failure_kind);
+    loom_low_allocation_target_constraints_t* constraints, const loom_op_t* op,
+    loom_liveness_value_class_t value_class, uint32_t budget_units,
+    uint32_t peak_units, iree_string_view_t failure_kind);
 
 // Returns the fixed value record for |value_id|, or NULL when the value is not
 // fixed.

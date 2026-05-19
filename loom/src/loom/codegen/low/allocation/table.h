@@ -215,6 +215,8 @@ typedef struct loom_low_allocation_table_t {
   loom_low_placement_table_t placement;
   // Allocation mode requested on the low function, or 0 for the default.
   uint8_t allocation_mode;
+  // Number of error diagnostics emitted while attempting allocation.
+  uint32_t error_count;
   // Per-interval assignments in allocation order.
   const loom_low_allocation_assignment_t* assignments;
   // Number of records in |assignments|.
