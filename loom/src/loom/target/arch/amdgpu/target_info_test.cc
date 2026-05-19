@@ -13,6 +13,13 @@
 
 namespace {
 
+using SchedulingBits = loom_amdgpu_processor_scheduling_bits_t;
+
+static void ExpectSchedulingBits(const loom_amdgpu_processor_info_t* processor,
+                                 SchedulingBits expected_scheduling_bits) {
+  EXPECT_EQ(processor->scheduling_bits, expected_scheduling_bits);
+}
+
 TEST(AmdgpuTargetInfoTest, LooksUpGfx11Processor) {
   const loom_amdgpu_processor_info_t* processor = nullptr;
   IREE_ASSERT_OK(
@@ -31,9 +38,8 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx11Processor) {
   EXPECT_FALSE(processor->kernel_descriptor_has_accum_offset);
   EXPECT_TRUE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
   EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
-  EXPECT_TRUE(processor->has_valu_trans_use_hazard);
-  EXPECT_FALSE(processor->has_valu_sgpr_read_wait_states);
-  EXPECT_FALSE(processor->has_valu_sgpr_read_depctr_hazard);
+  ExpectSchedulingBits(processor,
+                       LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpGfx1150Processor) {
@@ -45,9 +51,7 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx1150Processor) {
                                      IREE_SV("amdgpu.rdna3.core")));
   EXPECT_EQ(processor->kernel_descriptor_profile,
             LOOM_AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11);
-  EXPECT_FALSE(processor->has_valu_trans_use_hazard);
-  EXPECT_FALSE(processor->has_valu_sgpr_read_wait_states);
-  EXPECT_FALSE(processor->has_valu_sgpr_read_depctr_hazard);
+  ExpectSchedulingBits(processor, 0);
 }
 
 TEST(AmdgpuTargetInfoTest, IteratesProcessors) {
@@ -110,9 +114,11 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx942Processor) {
   EXPECT_TRUE(processor->kernel_descriptor_has_accum_offset);
   EXPECT_TRUE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
   EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
-  EXPECT_FALSE(processor->has_valu_trans_use_hazard);
-  EXPECT_TRUE(processor->has_valu_sgpr_read_wait_states);
-  EXPECT_FALSE(processor->has_valu_sgpr_read_depctr_hazard);
+  ExpectSchedulingBits(
+      processor,
+      LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES |
+          LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_WAIT_STATES |
+          LOOM_AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpGfx950Processor) {
@@ -135,9 +141,11 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx950Processor) {
   EXPECT_TRUE(processor->kernel_descriptor_has_accum_offset);
   EXPECT_TRUE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
   EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
-  EXPECT_FALSE(processor->has_valu_trans_use_hazard);
-  EXPECT_TRUE(processor->has_valu_sgpr_read_wait_states);
-  EXPECT_FALSE(processor->has_valu_sgpr_read_depctr_hazard);
+  ExpectSchedulingBits(
+      processor,
+      LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES |
+          LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_WAIT_STATES |
+          LOOM_AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES);
 }
 
 TEST(AmdgpuTargetInfoTest, WavefrontSizeSupportMatchesGfxFamilies) {
@@ -186,9 +194,8 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx1200Processor) {
   EXPECT_FALSE(processor->kernel_descriptor_has_accum_offset);
   EXPECT_FALSE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
   EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
-  EXPECT_FALSE(processor->has_valu_trans_use_hazard);
-  EXPECT_FALSE(processor->has_valu_sgpr_read_wait_states);
-  EXPECT_TRUE(processor->has_valu_sgpr_read_depctr_hazard);
+  ExpectSchedulingBits(processor,
+                       LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR);
 }
 
 TEST(AmdgpuTargetInfoTest, LooksUpGfx1250Processor) {
@@ -211,8 +218,7 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx1250Processor) {
   EXPECT_FALSE(processor->kernel_descriptor_has_accum_offset);
   EXPECT_FALSE(processor->kernel_descriptor_has_dx10_clamp_and_ieee_mode);
   EXPECT_TRUE(processor->kernel_descriptor_has_packed_workitem_id);
-  EXPECT_FALSE(processor->has_valu_sgpr_read_wait_states);
-  EXPECT_FALSE(processor->has_valu_sgpr_read_depctr_hazard);
+  ExpectSchedulingBits(processor, 0);
 }
 
 TEST(AmdgpuTargetInfoTest, MatchesAmdhsaGfx9PlusProcessorElfFlags) {
@@ -288,6 +294,23 @@ TEST(AmdgpuTargetInfoTest, LooksUpGfx1170AsMatrixOnlyProcessor) {
   EXPECT_EQ(processor->default_wavefront_size, 32u);
   EXPECT_EQ(processor->matrix_feature_profile,
             LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12);
+}
+
+TEST(AmdgpuTargetInfoTest, LooksUpGfx94GenericSchedulingFacts) {
+  const loom_amdgpu_processor_info_t* processor = nullptr;
+  IREE_ASSERT_OK(loom_amdgpu_target_info_lookup_processor(
+      IREE_SV("gfx9-4-generic"), &processor));
+  ASSERT_NE(processor, nullptr);
+  EXPECT_TRUE(iree_string_view_is_empty(processor->descriptor_set_key));
+  EXPECT_EQ(processor->descriptor_set_ordinal,
+            LOOM_AMDGPU_DESCRIPTOR_SET_ORDINAL_NONE);
+  EXPECT_EQ(processor->matrix_feature_profile,
+            LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940);
+  ExpectSchedulingBits(
+      processor,
+      LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES |
+          LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_WAIT_STATES |
+          LOOM_AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES);
 }
 
 TEST(AmdgpuTargetInfoTest, ParsesAmdhsaTargetIdWithFeatureSuffix) {

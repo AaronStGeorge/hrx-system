@@ -466,35 +466,26 @@ static bool loom_amdgpu_wait_state_descriptor_uses_vector_memory(
 
 static bool loom_amdgpu_wait_state_processor_has_trans_forwarding_hazard(
     const loom_amdgpu_processor_info_t* processor) {
-  if (processor == NULL) {
-    return false;
-  }
-  switch (processor->matrix_feature_profile) {
-    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940:
-    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950:
-      return true;
-    default:
-      return false;
-  }
+  return processor != NULL &&
+         iree_any_bit_set(
+             processor->scheduling_bits,
+             LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES);
 }
 
 static bool loom_amdgpu_wait_state_processor_has_valu_sgpr_read_hazard(
     const loom_amdgpu_processor_info_t* processor) {
-  return processor != NULL && processor->has_valu_sgpr_read_wait_states;
+  return processor != NULL &&
+         iree_any_bit_set(
+             processor->scheduling_bits,
+             LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_WAIT_STATES);
 }
 
 static bool loom_amdgpu_wait_state_processor_has_dst_sel_forwarding_hazard(
     const loom_amdgpu_processor_info_t* processor) {
-  if (processor == NULL) {
-    return false;
-  }
-  switch (processor->matrix_feature_profile) {
-    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940:
-    case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950:
-      return true;
-    default:
-      return false;
-  }
+  return processor != NULL &&
+         iree_any_bit_set(
+             processor->scheduling_bits,
+             LOOM_AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES);
 }
 
 static bool loom_amdgpu_wait_state_descriptor_is_transcendental(

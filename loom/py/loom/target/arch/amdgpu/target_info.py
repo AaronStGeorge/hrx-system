@@ -42,6 +42,24 @@ AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX9_11_GLC_SLC_DLC = "gfx9_11_glc_sl
 AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX12_NV_SCOPE_TH = "gfx12_nv_scope_th"
 AMDGPU_VECTOR_MEMORY_CACHE_POLICY_ENCODING_GFX950_NT_SC0_SC1 = "gfx950_nt_sc0_sc1"
 
+AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR = 1 << 0
+AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES = 1 << 1
+AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_WAIT_STATES = 1 << 2
+AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES = 1 << 3
+AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR = 1 << 4
+AMDGPU_PROCESSOR_SCHEDULING_KNOWN_BITS = (
+    AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR
+    | AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES
+    | AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_WAIT_STATES
+    | AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES
+    | AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR
+)
+AMDGPU_PROCESSOR_SCHEDULING_CDNA_FIXED_WAIT_STATES = (
+    AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES
+    | AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_WAIT_STATES
+    | AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES
+)
+
 AMDGPU_ELF_FEATURE_XNACK_ANY_V4 = 0x100
 AMDGPU_ELF_FEATURE_SRAMECC_ANY_V4 = 0x400
 AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4 = (
@@ -90,6 +108,7 @@ class AmdgpuProcessorInfo:
     default_wavefront_size: int
     kernel_descriptor_profile: str
     matrix_feature_profile: str = AMDGPU_MATRIX_FEATURE_PROFILE_NONE
+    scheduling_bits: int = 0
     kernel_descriptor_vgpr_encoding_granule_wave32: int = 0
     kernel_descriptor_vgpr_encoding_granule_wave64: int = 0
     kernel_descriptor_has_architected_flat_scratch: bool = False
@@ -97,9 +116,6 @@ class AmdgpuProcessorInfo:
     kernel_descriptor_has_accum_offset: bool = False
     kernel_descriptor_has_dx10_clamp_and_ieee_mode: bool = False
     kernel_descriptor_has_packed_workitem_id: bool = False
-    has_valu_trans_use_hazard: bool = False
-    has_valu_sgpr_read_wait_states: bool = False
-    has_valu_sgpr_read_depctr_hazard: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,6 +168,7 @@ def processor_info(
     descriptor_set_key: str = "",
     kernel_descriptor_profile: str = AMDGPU_KERNEL_DESCRIPTOR_PROFILE_NONE,
     matrix_feature_profile: str = AMDGPU_MATRIX_FEATURE_PROFILE_NONE,
+    scheduling_bits: int = 0,
     kernel_descriptor_vgpr_encoding_granule_wave32: int = 0,
     kernel_descriptor_vgpr_encoding_granule_wave64: int = 0,
     kernel_descriptor_has_architected_flat_scratch: bool = False,
@@ -159,20 +176,7 @@ def processor_info(
     kernel_descriptor_has_accum_offset: bool = False,
     kernel_descriptor_has_dx10_clamp_and_ieee_mode: bool = False,
     kernel_descriptor_has_packed_workitem_id: bool = False,
-    has_valu_trans_use_hazard: bool = False,
-    has_valu_sgpr_read_wait_states: bool | None = None,
-    has_valu_sgpr_read_depctr_hazard: bool | None = None,
 ) -> AmdgpuProcessorInfo:
-    if has_valu_sgpr_read_wait_states is None:
-        has_valu_sgpr_read_wait_states = matrix_feature_profile in (
-            AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940,
-            AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950,
-        )
-    if has_valu_sgpr_read_depctr_hazard is None:
-        has_valu_sgpr_read_depctr_hazard = (
-            kernel_descriptor_profile == AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12
-            and matrix_feature_profile == AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12
-        )
     return AmdgpuProcessorInfo(
         processor=processor,
         descriptor_set_key=descriptor_set_key,
@@ -181,6 +185,7 @@ def processor_info(
         default_wavefront_size=default_wavefront_size,
         kernel_descriptor_profile=kernel_descriptor_profile,
         matrix_feature_profile=matrix_feature_profile,
+        scheduling_bits=scheduling_bits,
         kernel_descriptor_vgpr_encoding_granule_wave32=kernel_descriptor_vgpr_encoding_granule_wave32,
         kernel_descriptor_vgpr_encoding_granule_wave64=kernel_descriptor_vgpr_encoding_granule_wave64,
         kernel_descriptor_has_architected_flat_scratch=kernel_descriptor_has_architected_flat_scratch,
@@ -188,9 +193,6 @@ def processor_info(
         kernel_descriptor_has_accum_offset=kernel_descriptor_has_accum_offset,
         kernel_descriptor_has_dx10_clamp_and_ieee_mode=kernel_descriptor_has_dx10_clamp_and_ieee_mode,
         kernel_descriptor_has_packed_workitem_id=kernel_descriptor_has_packed_workitem_id,
-        has_valu_trans_use_hazard=has_valu_trans_use_hazard,
-        has_valu_sgpr_read_wait_states=has_valu_sgpr_read_wait_states,
-        has_valu_sgpr_read_depctr_hazard=has_valu_sgpr_read_depctr_hazard,
     )
 
 
@@ -198,7 +200,7 @@ def rdna3_processor_info(
     processor: str,
     elf_machine_flags: int,
     *,
-    has_valu_trans_use_hazard: bool = False,
+    scheduling_bits: int = 0,
 ) -> AmdgpuProcessorInfo:
     return AmdgpuProcessorInfo(
         processor=processor,
@@ -208,13 +210,13 @@ def rdna3_processor_info(
         default_wavefront_size=32,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX11,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11,
+        scheduling_bits=scheduling_bits,
         kernel_descriptor_vgpr_encoding_granule_wave32=8,
         kernel_descriptor_vgpr_encoding_granule_wave64=4,
         kernel_descriptor_has_architected_flat_scratch=True,
         kernel_descriptor_uses_gfx10_sgpr_encoding=True,
         kernel_descriptor_has_dx10_clamp_and_ieee_mode=True,
         kernel_descriptor_has_packed_workitem_id=True,
-        has_valu_trans_use_hazard=has_valu_trans_use_hazard,
     )
 
 
@@ -312,6 +314,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940,
+        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_CDNA_FIXED_WAIT_STATES,
         kernel_descriptor_vgpr_encoding_granule_wave32=8,
         kernel_descriptor_vgpr_encoding_granule_wave64=8,
         kernel_descriptor_has_architected_flat_scratch=True,
@@ -326,6 +329,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX9,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950,
+        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_CDNA_FIXED_WAIT_STATES,
         kernel_descriptor_vgpr_encoding_granule_wave32=8,
         kernel_descriptor_vgpr_encoding_granule_wave64=8,
         kernel_descriptor_has_architected_flat_scratch=True,
@@ -367,22 +371,22 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
     rdna3_processor_info(
         processor="gfx1100",
         elf_machine_flags=0x041,
-        has_valu_trans_use_hazard=True,
+        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR,
     ),
     rdna3_processor_info(
         processor="gfx1101",
         elf_machine_flags=0x046,
-        has_valu_trans_use_hazard=True,
+        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR,
     ),
     rdna3_processor_info(
         processor="gfx1102",
         elf_machine_flags=0x047,
-        has_valu_trans_use_hazard=True,
+        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR,
     ),
     rdna3_processor_info(
         processor="gfx1103",
         elf_machine_flags=0x044,
-        has_valu_trans_use_hazard=True,
+        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR,
     ),
     rdna3_processor_info(processor="gfx1150", elf_machine_flags=0x043),
     rdna3_processor_info(processor="gfx1151", elf_machine_flags=0x04A),
@@ -398,6 +402,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         default_wavefront_size=32,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
+        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR,
         kernel_descriptor_vgpr_encoding_granule_wave32=8,
         kernel_descriptor_vgpr_encoding_granule_wave64=4,
         kernel_descriptor_has_architected_flat_scratch=True,
@@ -411,6 +416,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         default_wavefront_size=32,
         kernel_descriptor_profile=AMDGPU_KERNEL_DESCRIPTOR_PROFILE_GFX12,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
+        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR,
         kernel_descriptor_vgpr_encoding_granule_wave32=8,
         kernel_descriptor_vgpr_encoding_granule_wave64=4,
         kernel_descriptor_has_architected_flat_scratch=True,
@@ -476,7 +482,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         elf_feature_flags=AMDGPU_ELF_FEATURE_GENERIC_VERSION_1_V6,
         default_wavefront_size=32,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX11,
-        has_valu_trans_use_hazard=True,
+        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR,
     ),
     processor_info(
         "gfx12-generic",
@@ -484,7 +490,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         elf_feature_flags=AMDGPU_ELF_FEATURE_GENERIC_VERSION_1_V6,
         default_wavefront_size=32,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX12,
-        has_valu_sgpr_read_depctr_hazard=True,
+        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR,
     ),
     processor_info(
         "gfx9-4-generic",
@@ -492,6 +498,7 @@ AMDGPU_PROCESSOR_INFOS: tuple[AmdgpuProcessorInfo, ...] = (
         elf_feature_flags=AMDGPU_ELF_FEATURE_XNACK_SRAMECC_ANY_V4
         | AMDGPU_ELF_FEATURE_GENERIC_VERSION_1_V6,
         matrix_feature_profile=AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940,
+        scheduling_bits=AMDGPU_PROCESSOR_SCHEDULING_CDNA_FIXED_WAIT_STATES,
     ),
     processor_info(
         "gfx12-5-generic",

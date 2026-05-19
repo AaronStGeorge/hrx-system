@@ -69,6 +69,29 @@ typedef enum loom_amdgpu_matrix_feature_profile_e {
   LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_WMMA_GFX1250 = 7,
 } loom_amdgpu_matrix_feature_profile_t;
 
+typedef enum loom_amdgpu_processor_scheduling_bit_e {
+  // Nearby VALU uses of TRANS results require va_vdst depctr drains.
+  LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR = 1u << 0,
+  // Nearby VALU uses of TRANS results require fixed wait states.
+  LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES = 1u << 1,
+  // Nearby VALU reads of SGPRs written by VALU require fixed wait states.
+  LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_WAIT_STATES = 1u << 2,
+  // Sub-DWORD SDWA dst_sel writes require fixed wait states.
+  LOOM_AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES = 1u << 3,
+  // Nearby VALU reads of SGPRs written by VALU require depctr drains.
+  LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR = 1u << 4,
+  // Processor scheduling bits known by the AMDGPU target package.
+  LOOM_AMDGPU_PROCESSOR_SCHEDULING_KNOWN_BITS =
+      LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_DEPCTR |
+      LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_TRANS_USE_WAIT_STATES |
+      LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_WAIT_STATES |
+      LOOM_AMDGPU_PROCESSOR_SCHEDULING_SDWA_DST_SEL_WAIT_STATES |
+      LOOM_AMDGPU_PROCESSOR_SCHEDULING_VALU_SGPR_READ_DEPCTR,
+} loom_amdgpu_processor_scheduling_bit_t;
+
+// Bitset of loom_amdgpu_processor_scheduling_bit_t values.
+typedef uint32_t loom_amdgpu_processor_scheduling_bits_t;
+
 typedef enum loom_amdgpu_buffer_resource_cache_swizzle_e {
   // Buffer resource descriptors do not support cache swizzle.
   LOOM_AMDGPU_BUFFER_RESOURCE_CACHE_SWIZZLE_NONE = 0,
@@ -128,6 +151,8 @@ typedef struct loom_amdgpu_processor_info_t {
   loom_amdgpu_kernel_descriptor_profile_t kernel_descriptor_profile;
   // Matrix instruction feature profile implemented for this processor.
   loom_amdgpu_matrix_feature_profile_t matrix_feature_profile;
+  // Target-local scheduling and hazard facts for this processor.
+  loom_amdgpu_processor_scheduling_bits_t scheduling_bits;
   // VGPR encoding granule when wavefront-size-32 mode is enabled.
   uint32_t kernel_descriptor_vgpr_encoding_granule_wave32;
   // VGPR encoding granule when wavefront-size-64 mode is enabled.
@@ -142,12 +167,6 @@ typedef struct loom_amdgpu_processor_info_t {
   bool kernel_descriptor_has_dx10_clamp_and_ieee_mode;
   // True when workitem IDs are packed into v0 instead of separate VGPRs.
   bool kernel_descriptor_has_packed_workitem_id;
-  // True when a nearby VALU use of a TRANS result requires va_vdst depctr.
-  bool has_valu_trans_use_hazard;
-  // True when a nearby VALU read of an SGPR written by VALU needs fixed waits.
-  bool has_valu_sgpr_read_wait_states;
-  // True when SGPR read hazards are drained with s_wait_alu/depctr packets.
-  bool has_valu_sgpr_read_depctr_hazard;
 } loom_amdgpu_processor_info_t;
 
 typedef struct loom_amdgpu_amdhsa_target_id_t {
