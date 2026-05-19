@@ -41,6 +41,7 @@ loom_assert_no_dependencies(
         ":occupancy_tables",
         ":packet_plan",
         ":packet_diagnostics",
+        ":storage_lease",
         ":target_info",
         ":vopd_plan",
         ":wait_packets",
@@ -905,6 +906,7 @@ loom_cc_library(
     deps = [
         ":occupancy",
         ":provider",
+        ":storage_lease",
         "//loom/src/loom/target/emit/native/amdgpu:loom_check",
         "//loom/src/loom/tools/loom-check:execute",
         "//loom/src/loom/tools/loom-check:provider",
@@ -1141,6 +1143,36 @@ loom_cc_library(
         "//loom/src/loom/util:stream",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "storage_lease",
+    srcs = ["storage_lease.c"],
+    hdrs = ["storage_lease.h"],
+    deps = [
+        ":target_info_defs",
+        ":target_refs",
+        ":wait_plan",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:storage_lease",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "storage_lease_test",
+    srcs = ["storage_lease_test.cc"],
+    deps = [
+        ":cdna3_descriptors",
+        ":storage_lease",
+        ":target_refs",
+        ":wait_plan",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:storage_lease",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

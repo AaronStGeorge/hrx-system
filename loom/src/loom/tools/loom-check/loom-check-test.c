@@ -313,8 +313,8 @@ static iree_status_t loom_check_test_synthetic_hazard_execute(
       request, options.function_symbol_name, options.schedule_strategy,
       options.allocation_budgets, options.allocation_budget_count,
       options.allocation_fixed_value_specs,
-      options.allocation_fixed_value_spec_count, /*spill_free_options=*/NULL,
-      &frame));
+      options.allocation_fixed_value_spec_count,
+      /*storage_lease_provider=*/NULL, /*spill_free_options=*/NULL, &frame));
   if (request->diagnostic_collector != NULL &&
       request->diagnostic_collector->count != 0) {
     return iree_ok_status();

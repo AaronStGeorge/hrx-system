@@ -844,6 +844,7 @@ loom_cc_library(
   DEPS
     ::occupancy
     ::provider
+    ::storage_lease
     iree::base
     loom::src::loom::target::emit::native::amdgpu::loom_check
     loom::src::loom::tools::loom-check::execute
@@ -1796,6 +1797,40 @@ loom_cc_library(
     loom::src::loom::util::json
     loom::src::loom::util::stream
   PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    storage_lease
+  HDRS
+    "storage_lease.h"
+  SRCS
+    "storage_lease.c"
+  DEPS
+    ::target_info_defs
+    ::target_refs
+    ::wait_plan
+    iree::base
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::storage_lease
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    storage_lease_test
+  SRCS
+    "storage_lease_test.cc"
+  DEPS
+    ::cdna3_descriptors
+    ::storage_lease
+    ::target_refs
+    ::wait_plan
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::storage_lease
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_target_table_cc_library(

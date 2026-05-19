@@ -7,6 +7,7 @@
 #include "loom/target/arch/amdgpu/check/occupancy.h"
 
 #include "loom/target/arch/amdgpu/occupancy.h"
+#include "loom/target/arch/amdgpu/storage_lease.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/low_emit.h"
 
@@ -155,12 +156,14 @@ static iree_status_t loom_amdgpu_occupancy_check_emit_provider_execute(
       loom_amdgpu_occupancy_check_parse_emit_options(request, &options));
 
   loom_low_emission_frame_t frame = {0};
+  loom_low_storage_lease_provider_t storage_lease_provider = {0};
+  loom_amdgpu_storage_lease_provider(&storage_lease_provider);
   IREE_RETURN_IF_ERROR(loom_check_low_emit_packetize_function(
       request, options.function_symbol_name, options.schedule_strategy,
       options.allocation_budgets, options.allocation_budget_count,
       options.allocation_fixed_value_specs,
-      options.allocation_fixed_value_spec_count, /*spill_free_options=*/NULL,
-      &frame));
+      options.allocation_fixed_value_spec_count, &storage_lease_provider,
+      /*spill_free_options=*/NULL, &frame));
 
   loom_check_diagnostic_emitter_capture_t diagnostic_capture = {
       .diagnostic_collector = request->diagnostic_collector,

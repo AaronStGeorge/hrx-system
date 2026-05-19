@@ -321,6 +321,20 @@ static bool loom_low_allocation_storage_lease_instance_conflicts(
   return lease_begin < candidate_end && candidate_begin < lease_end;
 }
 
+static bool loom_low_allocation_storage_lease_value_is_ignored(
+    const loom_low_allocation_storage_lease_t* lease,
+    const loom_value_id_t* ignored_value_ids, uint16_t ignored_value_count) {
+  if (ignored_value_ids == NULL) {
+    return false;
+  }
+  for (uint16_t i = 0; i < ignored_value_count; ++i) {
+    if (lease->value_id == ignored_value_ids[i]) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool loom_low_allocation_try_packet_at_program_point(
     const loom_low_allocation_storage_lease_state_t* state,
     const loom_liveness_analysis_t* liveness, uint32_t program_point,
@@ -504,6 +518,7 @@ bool loom_low_allocation_storage_lease_state_conflicts(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_liveness_analysis_t* liveness,
     const loom_low_allocation_assignment_t* candidate,
+    const loom_value_id_t* ignored_value_ids, uint16_t ignored_value_count,
     loom_low_allocation_storage_release_policy_t policy) {
   IREE_ASSERT_ARGUMENT(state);
   IREE_ASSERT_ARGUMENT(descriptor_set);
@@ -519,6 +534,10 @@ bool loom_low_allocation_storage_lease_state_conflicts(
         continue;
       }
       const loom_low_allocation_storage_lease_t* lease = &state->instances[i];
+      if (loom_low_allocation_storage_lease_value_is_ignored(
+              lease, ignored_value_ids, ignored_value_count)) {
+        continue;
+      }
       if (!loom_low_allocation_storage_lease_instance_conflicts(
               descriptor_set, lease, candidate)) {
         continue;
@@ -555,6 +574,11 @@ bool loom_low_allocation_storage_lease_state_conflicts(
           &state->units.entries[entry_index];
       const loom_low_allocation_storage_lease_t* lease =
           &state->instances[entry->storage_lease_index];
+      if (loom_low_allocation_storage_lease_value_is_ignored(
+              lease, ignored_value_ids, ignored_value_count)) {
+        entry_index = entry->next_entry;
+        continue;
+      }
       if (entry->location_kind == candidate->location_kind &&
           entry->storage_key == storage_key && entry->location == location &&
           lease->release_action_index ==
@@ -573,7 +597,8 @@ iree_status_t loom_low_allocation_storage_lease_state_record_release_actions(
     loom_low_allocation_storage_lease_state_t* state,
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_liveness_analysis_t* liveness,
-    const loom_low_allocation_assignment_t* candidate) {
+    const loom_low_allocation_assignment_t* candidate,
+    const loom_value_id_t* ignored_value_ids, uint16_t ignored_value_count) {
   IREE_ASSERT_ARGUMENT(state);
   IREE_ASSERT_ARGUMENT(descriptor_set);
   IREE_ASSERT_ARGUMENT(liveness);
@@ -587,6 +612,10 @@ iree_status_t loom_low_allocation_storage_lease_state_record_release_actions(
       continue;
     }
     loom_low_allocation_storage_lease_t* lease = &state->instances[i];
+    if (loom_low_allocation_storage_lease_value_is_ignored(
+            lease, ignored_value_ids, ignored_value_count)) {
+      continue;
+    }
     if (!loom_low_allocation_storage_lease_instance_conflicts(
             descriptor_set, lease, candidate)) {
       continue;

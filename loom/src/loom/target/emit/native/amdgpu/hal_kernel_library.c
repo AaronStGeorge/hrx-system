@@ -28,6 +28,7 @@
 #include "loom/target/arch/amdgpu/ops/target.h"
 #include "loom/target/arch/amdgpu/packet_plan.h"
 #include "loom/target/arch/amdgpu/provider.h"
+#include "loom/target/arch/amdgpu/storage_lease.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/compile_report_low.h"
 #include "loom/target/emit/native/amdgpu/kernel_assembly.h"
@@ -502,6 +503,8 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
       descriptor_set, table_arena, &schedule_pressure_cliffs));
 
   loom_low_emission_frame_t frame = {0};
+  loom_low_storage_lease_provider_t storage_lease_provider = {0};
+  loom_amdgpu_storage_lease_provider(&storage_lease_provider);
   const loom_low_emission_frame_options_t frame_options = {
       .descriptor_registry = &low_registry->registry,
       .schedule_pressure_cliffs = schedule_pressure_cliffs,
@@ -509,6 +512,7 @@ static iree_status_t loom_amdgpu_hal_kernel_library_build_kernel_contribution(
       .memory_access_table = loom_low_memory_access_table_empty(),
       .allocation_fixed_values = plan->fixed_values,
       .allocation_fixed_value_count = plan->fixed_value_count,
+      .storage_lease_provider = &storage_lease_provider,
       .emitter = loom_target_entry_emitter(diagnostic_emitter),
   };
   loom_amdgpu_native_preflight_t preflight = {0};

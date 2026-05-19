@@ -29,7 +29,8 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_i32_
   %value = global_load_b32_saddr %21, %input_view
   %24 = v_mov_b32 28
   %result = ds_bpermute_b32 %24, %value
-  global_store_b32_saddr %21, %result, %output_view
+  %26 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %26, %result, %output_view
   return
 }
 
@@ -67,7 +68,8 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_dyna
   %value = global_load_b32_saddr %23, %input_view
   %25 = v_lshlrev_b32_src0_inline %lane, 2
   %result = ds_bpermute_b32 %25, %value
-  global_store_b32_saddr %23, %result, %output_view
+  %27 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %27, %result, %output_view
   return
 }
 
@@ -102,7 +104,8 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_firs
   %value = global_load_b32_saddr %20, %input_view
   %22 = v_readfirstlane_b32 %value
   %result = v_mov_b32_copy %22
-  global_store_b32_saddr %20, %result, %output_view
+  %24 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %24, %result, %output_view
   return
 }
 
@@ -139,7 +142,8 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_index_
   %value = global_load_b32_saddr %23, %input_view
   %29 = v_mov_b32 20
   %result = ds_bpermute_b32 %29, %value
-  global_store_b32_saddr %23, %result, %output_view
+  %31 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %31, %result, %output_view
   return
 }
 
@@ -179,7 +183,8 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_up_i32
   %29 = v_sub_nc_u32 %27, %28
   %31 = v_lshlrev_b32_src0_inline %29, 2
   %result = ds_bpermute_b32 %31, %value
-  global_store_b32_saddr %23, %result, %output_view
+  %33 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %33, %result, %output_view
   return
 }
 
@@ -221,7 +226,8 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_f32_
   %39 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %40 = ds_bpermute_b32 %32, %39
   %broadcast = concat(%34, %36, %38, %40) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128_saddr %29, %broadcast, %output_view
+  %43 = v_lshlrev_b32_src0_inline %tid, 4
+  global_store_b128_saddr %43, %broadcast, %output_view
   return
 }
 
@@ -267,7 +273,8 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_down_f
   %47 = slice %loaded[3] : reg<amdgpu.vgpr x4> -> reg<amdgpu.vgpr>
   %48 = ds_bpermute_b32 %40, %47
   %shuffle = concat(%42, %44, %46, %48) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128_saddr %31, %shuffle, %output_view
+  %51 = v_lshlrev_b32_src0_inline %tid, 4
+  global_store_b128_saddr %51, %shuffle, %output_view
   return
 }
 
@@ -313,7 +320,8 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_reduce_addi_i3
   %32 = v_lshlrev_b32_src0_inline %31, 2
   %33 = ds_bpermute_b32 %32, %30
   %result = v_add_u32 %30, %33
-  global_store_b32_saddr %20, %result, %output_view
+  %35 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %35, %result, %output_view
   return
 }
 
@@ -358,7 +366,8 @@ low.kernel.def target(@target) workgroup_size(8, 1, 1) @subgroup_reduce_addi_i32
   %31 = v_lshlrev_b32_src0_inline %30, 2
   %32 = ds_bpermute_b32 %31, %29
   %result = v_add_u32 %29, %32
-  global_store_b32_saddr %20, %result, %output_view
+  %34 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %34, %result, %output_view
   return
 }
 
@@ -403,7 +412,8 @@ low.kernel.def target(@target) workgroup_size(32, 1, 1) @subgroup_reduce_minsi_i
   %31 = v_lshlrev_b32_src0_inline %30, 2
   %32 = ds_bpermute_b32 %31, %29
   %result = v_min_i32 %29, %32
-  global_store_b32_saddr %20, %result, %output_view
+  %34 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %34, %result, %output_view
   return
 }
 
@@ -448,7 +458,8 @@ low.kernel.def target(@target) workgroup_size(32, 1, 1) @workgroup_reduce_minsi_
   %31 = v_lshlrev_b32_src0_inline %30, 2
   %32 = ds_bpermute_b32 %31, %29
   %result = v_min_i32 %29, %32
-  global_store_b32_saddr %20, %result, %output_view
+  %34 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %34, %result, %output_view
   return
 }
 
@@ -493,7 +504,8 @@ low.kernel.def target(@target) workgroup_size(8, 1, 1) @workgroup_reduce_addf_su
   %31 = v_lshlrev_b32_src0_inline %30, 2
   %32 = ds_bpermute_b32 %31, %29
   %result = v_add_f32 %29, %32
-  global_store_b32_saddr %20, %result, %output_view
+  %34 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %34, %result, %output_view
   return
 }
 
@@ -559,7 +571,8 @@ low.kernel.def target(@target) workgroup_size(24, 1, 1) @workgroup_reduce_addf_s
   %53 = v_cndmask_b32 %23, %52, %51
   %54 = v_add_f32 %48, %53
   %result = ds_bpermute_b32 %23, %54
-  global_store_b32_saddr %20, %result, %output_view
+  %56 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %56, %result, %output_view
   return
 }
 
@@ -627,12 +640,14 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_reduce_addf_f
   %53 = ds_bpermute_b32 %52, %50
   %54 = v_add_f32 %50, %53
   %55, %56 = s_and_saveexec_b64 %40
-  ds_write_b32 %49, %54
+  %57 = v_add_u32 %24, %48
+  ds_write_b32 %57, %54
   s_mov_b64_exec %55
   s_mov_b64_exec %46
   s_barrier
   %result = ds_read_b32 %24
-  global_store_b32_saddr %20, %result, %output_view
+  %59 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %59, %result, %output_view
   return
 }
 
@@ -695,39 +710,42 @@ low.kernel.def target(@target) workgroup_size(448, 1, 1) @workgroup_reduce_addf_
   %48 = v_lshlrev_b32_src0_inline %22, 2
   %49 = v_add_u32 %24, %48
   %50 = ds_read_b32 %49
+  %51 = v_mov_b32 14
   %52 = v_mov_b32 0
   %54 = v_add_u32_src0_inline %22, 8
   %55 = v_lshlrev_b32_src0_inline %54, 2
-  %56 = v_cmp_lt_u32 %54, %44
+  %56 = v_cmp_lt_u32 %54, %51
   %57 = ds_bpermute_b32 %55, %50
   %58 = v_cndmask_b32 %52, %57, %56
   %59 = v_add_f32 %50, %58
   %60 = v_add_u32_src0_inline %22, 4
   %61 = v_lshlrev_b32_src0_inline %60, 2
-  %62 = v_cmp_lt_u32 %60, %44
+  %62 = v_cmp_lt_u32 %60, %51
   %63 = ds_bpermute_b32 %61, %59
   %64 = v_cndmask_b32 %52, %63, %62
   %65 = v_add_f32 %59, %64
   %66 = v_add_u32_src0_inline %22, 2
   %67 = v_lshlrev_b32_src0_inline %66, 2
-  %68 = v_cmp_lt_u32 %66, %44
+  %68 = v_cmp_lt_u32 %66, %51
   %69 = ds_bpermute_b32 %67, %65
   %70 = v_cndmask_b32 %52, %69, %68
   %71 = v_add_f32 %65, %70
   %72 = v_add_u32_src0_inline %22, 1
   %73 = v_lshlrev_b32_src0_inline %72, 2
-  %74 = v_cmp_lt_u32 %72, %44
+  %74 = v_cmp_lt_u32 %72, %51
   %75 = ds_bpermute_b32 %73, %71
   %76 = v_cndmask_b32 %52, %75, %74
   %77 = v_add_f32 %71, %76
   %78 = ds_bpermute_b32 %52, %77
   %79, %80 = s_and_saveexec_b64 %40
-  ds_write_b32 %49, %78
+  %81 = v_add_u32 %24, %48
+  ds_write_b32 %81, %78
   s_mov_b64_exec %79
   s_mov_b64_exec %46
   s_barrier
   %result = ds_read_b32 %24
-  global_store_b32_saddr %20, %result, %output_view
+  %83 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %83, %result, %output_view
   return
 }
 
@@ -819,12 +837,14 @@ low.kernel.def target(@target) workgroup_size(48, 1, 1) @workgroup_reduce_addf_f
   %79 = ds_bpermute_b32 %78, %76
   %80 = v_add_f32 %76, %79
   %81, %82 = s_and_saveexec_b64 %66
-  ds_write_b32 %75, %80
+  %83 = v_add_u32 %24, %74
+  ds_write_b32 %83, %80
   s_mov_b64_exec %81
   s_mov_b64_exec %72
   s_barrier
   %result = ds_read_b32 %24
-  global_store_b32_saddr %20, %result, %output_view
+  %85 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %85, %result, %output_view
   return
 }
 
@@ -939,8 +959,10 @@ low.kernel.def target(@target) workgroup_size(48, 1, 1) @workgroup_reduce_minsi_
   %112 = ds_bpermute_b32 %109, %107
   %113 = v_min_i32 %107, %112
   %114, %115 = s_and_saveexec_b64 %92
-  ds_write_b32 %103, %111
-  ds_write_b32 %106, %113
+  %116 = v_add_u32 %32, %102
+  ds_write_b32 %116, %111
+  %118 = v_add_u32_src0_inline %116, 8
+  ds_write_b32 %118, %113
   s_mov_b64_exec %114
   s_mov_b64_exec %100
   s_barrier
@@ -948,7 +970,8 @@ low.kernel.def target(@target) workgroup_size(48, 1, 1) @workgroup_reduce_minsi_
   %120 = v_add_u32_src0_inline %32, 8
   %121 = ds_read_b32 %120
   %min = concat(%119, %121) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  global_store_b64_saddr %28, %min, %output_view
+  %124 = v_lshlrev_b32_src0_inline %tid, 3
+  global_store_b64_saddr %124, %min, %output_view
   return
 }
 
@@ -1066,10 +1089,14 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_reduce_addf_f
   %116 = ds_bpermute_b32 %109, %107
   %117 = v_add_f32 %107, %116
   %118, %119 = s_and_saveexec_b64 %82
-  ds_write_b32 %97, %111
-  ds_write_b32 %100, %113
-  ds_write_b32 %103, %115
-  ds_write_b32 %106, %117
+  %120 = v_add_u32 %32, %96
+  ds_write_b32 %120, %111
+  %122 = v_add_u32_src0_inline %120, 8
+  ds_write_b32 %122, %113
+  %124 = v_add_u32_src0_inline %120, 16
+  ds_write_b32 %124, %115
+  %126 = v_add_u32_src0_inline %120, 24
+  ds_write_b32 %126, %117
   s_mov_b64_exec %118
   s_mov_b64_exec %94
   s_barrier
@@ -1081,7 +1108,8 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_reduce_addf_f
   %132 = v_add_u32_src0_inline %32, 24
   %133 = ds_read_b32 %132
   %sum = concat(%127, %129, %131, %133) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x4>
-  global_store_b128_saddr %28, %sum, %output_view
+  %136 = v_lshlrev_b32_src0_inline %tid, 4
+  global_store_b128_saddr %136, %sum, %output_view
   return
 }
 
@@ -1150,7 +1178,8 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_scan_inclusive
   %55 = ds_bpermute_b32 %42, %54
   %56 = v_add_u32 %54, %55
   %result = v_cndmask_b32 %54, %56, %41
-  global_store_b32_saddr %20, %result, %output_view
+  %58 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %58, %result, %output_view
   return
 }
 
@@ -1223,7 +1252,8 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_scan_exclusive
   %59 = ds_bpermute_b32 %27, %58
   %60 = v_mov_b32 0
   %result = v_cndmask_b32 %60, %59, %26
-  global_store_b32_saddr %20, %result, %output_view
+  %62 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %62, %result, %output_view
   return
 }
 
@@ -1284,7 +1314,8 @@ low.kernel.def target(@target) workgroup_size(16, 1, 1) @workgroup_scan_inclusiv
   %47 = ds_bpermute_b32 %37, %46
   %48 = v_add_u32 %46, %47
   %result = v_cndmask_b32 %46, %48, %36
-  global_store_b32_saddr %20, %result, %output_view
+  %50 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %50, %result, %output_view
   return
 }
 
@@ -1371,7 +1402,8 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_scan_inclusiv
   %72 = ds_read_b32 %71
   %73 = v_cndmask_b32 %72, %69, %68
   %result = v_add_u32 %59, %73
-  global_store_b32_saddr %20, %result, %output_view
+  %75 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %75, %result, %output_view
   return
 }
 
@@ -1460,7 +1492,8 @@ low.kernel.def target(@target) workgroup_size(48, 1, 1) @workgroup_scan_inclusiv
   %74 = ds_read_b32 %73
   %75 = v_cndmask_b32 %71, %74, %26
   %result = v_add_u32 %61, %75
-  global_store_b32_saddr %20, %result, %output_view
+  %77 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %77, %result, %output_view
   return
 }
 
@@ -1540,18 +1573,21 @@ low.kernel.def target(@target) workgroup_size(48, 1, 1) @workgroup_scan_reverse_
   %68 = v_add_u32 %67, %value
   %69 = v_lshrrev_b32_src0_inline %tid, 5
   %70 = v_lshlrev_b32_src0_inline %69, 2
-  %72 = v_cmp_lt_u32 %22, %30
+  %71 = v_mov_b32 1
+  %72 = v_cmp_lt_u32 %22, %71
   %73, %74 = s_and_saveexec_b64 %72
   %75 = v_add_u32 %24, %70
   ds_write_b32 %75, %68
   s_mov_b64_exec %73
   s_barrier
-  %78 = v_add_u32 %24, %66
+  %76 = v_mov_b32 0
+  %78 = v_add_u32 %24, %76
   %79 = v_add_u32_src0_inline %78, 4
   %80 = ds_read_b32 %79
-  %81 = v_cndmask_b32 %80, %66, %26
+  %81 = v_cndmask_b32 %80, %76, %26
   %result = v_add_u32 %67, %81
-  global_store_b32_saddr %20, %result, %output_view
+  %83 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %83, %result, %output_view
   return
 }
 
@@ -1632,7 +1668,8 @@ low.kernel.def target(@target) workgroup_size(80, 1, 1) @workgroup_scan_reverse_
   %68 = v_add_u32 %67, %value
   %69 = v_lshrrev_b32_src0_inline %tid, 5
   %70 = v_lshlrev_b32_src0_inline %69, 2
-  %72 = v_cmp_lt_u32 %22, %30
+  %71 = v_mov_b32 1
+  %72 = v_cmp_lt_u32 %22, %71
   %73, %74 = s_and_saveexec_b64 %72
   %75 = v_add_u32 %24, %70
   ds_write_b32 %75, %68
@@ -1644,22 +1681,33 @@ low.kernel.def target(@target) workgroup_size(80, 1, 1) @workgroup_scan_reverse_
   %80 = v_lshlrev_b32_src0_inline %22, 2
   %81 = v_add_u32 %24, %80
   %82 = ds_read_b32 %81
-  %86 = v_cmp_lt_u32 %31, %76
-  %90 = v_cmp_lt_u32 %35, %76
-  %92 = ds_bpermute_b32 %33, %82
+  %83 = v_mov_b32 3
+  %84 = v_mov_b32 1
+  %85 = v_add_u32 %22, %84
+  %86 = v_cmp_lt_u32 %85, %83
+  %87 = v_lshlrev_b32_src0_inline %85, 2
+  %88 = v_mov_b32 2
+  %89 = v_add_u32 %22, %88
+  %90 = v_cmp_lt_u32 %89, %83
+  %91 = v_lshlrev_b32_src0_inline %89, 2
+  %92 = ds_bpermute_b32 %87, %82
   %93 = v_add_u32 %82, %92
   %94 = v_cndmask_b32 %82, %93, %86
-  %95 = ds_bpermute_b32 %37, %94
+  %95 = ds_bpermute_b32 %91, %94
   %96 = v_add_u32 %94, %95
   %97 = v_cndmask_b32 %94, %96, %90
-  %98 = ds_bpermute_b32 %33, %97
-  %100 = v_cndmask_b32 %66, %98, %86
-  ds_write_b32 %81, %100
+  %98 = ds_bpermute_b32 %87, %97
+  %99 = v_mov_b32 0
+  %100 = v_cndmask_b32 %99, %98, %86
+  %101 = v_add_u32 %24, %80
+  ds_write_b32 %101, %100
   s_mov_b64_exec %78
   s_barrier
-  %103 = ds_read_b32 %75
+  %102 = v_add_u32 %24, %70
+  %103 = ds_read_b32 %102
   %result = v_add_u32 %67, %103
-  global_store_b32_saddr %20, %result, %output_view
+  %105 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %105, %result, %output_view
   return
 }
 
@@ -1737,19 +1785,23 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @workgroup_scan_reverse_
   %64 = v_add_u32 %63, %value
   %65 = v_lshrrev_b32_src0_inline %tid, 5
   %66 = v_lshlrev_b32_src0_inline %65, 2
-  %68 = v_cmp_lt_u32 %22, %26
+  %67 = v_mov_b32 1
+  %68 = v_cmp_lt_u32 %22, %67
   %69, %70 = s_and_saveexec_b64 %68
   %71 = v_add_u32 %24, %66
   ds_write_b32 %71, %64
   s_mov_b64_exec %69
   s_barrier
-  %73 = v_cmp_lt_u32 %tid, %25
-  %76 = v_add_u32 %24, %62
+  %72 = v_mov_b32 32
+  %73 = v_cmp_lt_u32 %tid, %72
+  %74 = v_mov_b32 0
+  %76 = v_add_u32 %24, %74
   %77 = v_add_u32_src0_inline %76, 4
   %78 = ds_read_b32 %77
-  %79 = v_cndmask_b32 %62, %78, %73
+  %79 = v_cndmask_b32 %74, %78, %73
   %result = v_add_u32 %63, %79
-  global_store_b32_saddr %20, %result, %output_view
+  %81 = v_lshlrev_b32_src0_inline %tid, 2
+  global_store_b32_saddr %81, %result, %output_view
   return
 }
 
@@ -3053,7 +3105,9 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_broadcast_i32_
   %value = global_load_dword_saddr %21, %input_view, %22
   %25 = v_mov_b32 252
   %result = ds_bpermute_b32 %25, %value
-  global_store_dword_saddr %21, %result, %output_view, %22
+  %27 = v_lshlrev_b32_src0_inline %tid, 2
+  %28 = s_mov_b32_m0_imm 0
+  global_store_dword_saddr %27, %result, %output_view, %28
   return
 }
 
@@ -3111,7 +3165,9 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_reduce_addf_f3
   %44 = v_lshlrev_b32_src0_inline %43, 2
   %45 = ds_bpermute_b32 %44, %42
   %result = v_add_f32 %42, %45
-  global_store_dword_saddr %20, %result, %output_view, %21
+  %47 = v_lshlrev_b32_src0_inline %tid, 2
+  %48 = s_mov_b32_m0_imm 0
+  global_store_dword_saddr %47, %result, %output_view, %48
   return
 }
 
@@ -3150,6 +3206,8 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_shuffle_xor_i3
   %28 = v_xor_b32_src0_inline %tid, 32
   %31 = v_lshlrev_b32_src0_inline %28, 2
   %result = ds_bpermute_b32 %31, %value
-  global_store_dword_saddr %23, %result, %output_view, %24
+  %33 = v_lshlrev_b32_src0_inline %tid, 2
+  %34 = s_mov_b32_m0_imm 0
+  global_store_dword_saddr %33, %result, %output_view, %34
   return
 }

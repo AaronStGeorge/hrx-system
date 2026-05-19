@@ -93,6 +93,13 @@ typedef enum loom_amdgpu_wait_plan_reason_e {
   LOOM_AMDGPU_WAIT_PLAN_REASON_VALU_SGPR_READ = 7,
 } loom_amdgpu_wait_plan_reason_t;
 
+typedef enum loom_amdgpu_wait_plan_residual_action_e {
+  // Unknown or uninitialized residual action id.
+  LOOM_AMDGPU_WAIT_PLAN_RESIDUAL_ACTION_UNKNOWN = 0,
+  // Insert an AMDGPU wait packet before the affected packet.
+  LOOM_AMDGPU_WAIT_PLAN_RESIDUAL_ACTION_WAIT_PACKET = 1,
+} loom_amdgpu_wait_plan_residual_action_t;
+
 // One AMDGPU wait-counter action in scheduled packet order.
 typedef struct loom_amdgpu_wait_plan_action_t {
   // Whether the action is present in the IR or must be inserted.
@@ -137,16 +144,29 @@ typedef struct loom_amdgpu_wait_plan_t {
 // Returns the stable diagnostic spelling for an AMDGPU wait counter id.
 iree_string_view_t loom_amdgpu_wait_counter_name(uint16_t counter_id);
 
+// Returns the stable progress-class spelling for an AMDGPU wait counter id.
+iree_string_view_t loom_amdgpu_wait_counter_progress_class_name(
+    uint16_t counter_id);
+
 // Returns the bit mask for one AMDGPU wait counter id.
 iree_status_t loom_amdgpu_wait_counter_mask(uint16_t counter_id,
                                             uint32_t* out_mask);
 
+// Returns the stable diagnostic spelling for an AMDGPU wait-plan reason.
+iree_string_view_t loom_amdgpu_wait_plan_reason_name(
+    loom_amdgpu_wait_plan_reason_t reason);
+
+// Returns the stable diagnostic spelling for an AMDGPU residual action id.
+iree_string_view_t loom_amdgpu_wait_plan_residual_action_name(
+    uint16_t action_id);
+
 // Builds an AMDGPU wait-counter plan from a scheduled low function. When
-// |allocation| is provided, the plan also covers post-allocation physical
-// register reuse hazards such as outstanding memory reads whose destination
-// registers have not yet been written and VMEM stores whose VGPR sources have
-// not yet been consumed by the memory pipe. The caller must keep |schedule|,
-// |allocation|, and |arena| immutable/alive for as long as |out_plan| is used.
+// |allocation| is provided, the plan also materializes target storage-release
+// actions requested by allocation, such as outstanding memory reads whose
+// destination registers have not yet been written and VMEM stores whose VGPR
+// sources have not yet been consumed by the memory pipe. The caller must keep
+// |schedule|, |allocation|, and |arena| immutable/alive for as long as
+// |out_plan| is used.
 iree_status_t loom_amdgpu_wait_plan_build(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,

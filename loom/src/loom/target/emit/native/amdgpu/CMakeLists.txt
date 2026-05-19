@@ -55,6 +55,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::target::arch::amdgpu::address_state
     loom::src::loom::target::arch::amdgpu::packet_plan
+    loom::src::loom::target::arch::amdgpu::storage_lease
     loom::src::loom::tools::loom-check::execute
   PUBLIC
 )
@@ -385,6 +386,7 @@ loom_cc_library(
     loom::src::loom::target::arch::amdgpu::ops
     loom::src::loom::target::arch::amdgpu::packet_plan
     loom::src::loom::target::arch::amdgpu::provider
+    loom::src::loom::target::arch::amdgpu::storage_lease
     loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::compile_report
     loom::src::loom::target::compile_report_low
@@ -517,6 +519,7 @@ loom_cc_test(
     loom::src::loom::target::arch::amdgpu::low_registry
     loom::src::loom::target::arch::amdgpu::ops
     loom::src::loom::target::arch::amdgpu::packet_plan
+    loom::src::loom::target::arch::amdgpu::storage_lease
     loom::src::loom::target::arch::amdgpu::target_info
     loom::src::loom::target::arch::amdgpu::target_record_table
     loom::src::loom::target::low_descriptor_registry

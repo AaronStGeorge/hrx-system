@@ -241,7 +241,8 @@ low.func.def target(@target) abi(hal_kernel) @divergent_if_else(%values: reg<amd
   global_store_b32_saddr %22, %then, %output_view
   low.br ^_bb4
 ^else:
-  %else = v_sub_nc_u32 %17, %then
+  %23 = v_mov_b32_copy %limit
+  %else = v_sub_nc_u32 %23, %then
   %25 = v_mov_b32 0
   global_store_b32_saddr %25, %else, %output_view
   low.br ^_bb5
@@ -304,17 +305,20 @@ low.func.def target(@target) abi(hal_kernel) @divergent_nested_if_else_stores(%v
   %30, %31 = s_and_saveexec_b64 %before_upper
   low.cond_br %31, ^inside, ^_bb7 : reg<amdgpu.scc>
 ^inside:
-  %inside_stored = v_add_u32 %lane, %28
+  %33 = v_mov_b32_copy %upper
+  %inside_stored = v_add_u32 %lane, %33
   %35 = v_mov_b32 0
   global_store_b32_saddr %35, %inside_stored, %output_view
   low.br ^_bb7
 ^outside_high:
-  %high_stored = v_sub_nc_u32 %lane, %28
+  %36 = v_mov_b32_copy %upper
+  %high_stored = v_sub_nc_u32 %lane, %36
   %38 = v_mov_b32 0
   global_store_b32_saddr %38, %high_stored, %output_view {offset = 4}
   low.br ^_bb8
 ^before:
-  %low_stored = v_sub_nc_u32 %23, %lane
+  %39 = v_mov_b32_copy %lower
+  %low_stored = v_sub_nc_u32 %39, %lane
   %41 = v_mov_b32 0
   global_store_b32_saddr %41, %low_stored, %output_view {offset = 8}
   low.br ^_bb6
@@ -472,7 +476,8 @@ low.func.def target(@target) abi(hal_kernel) @divergent_if_else_vector_result(%v
   %then = concat(%lane, %34) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   low.br ^_bb4(%then: reg<amdgpu.vgpr x2>)
 ^else:
-  %biased = v_sub_nc_u32 %18, %lane
+  %36 = v_mov_b32_copy %limit
+  %biased = v_sub_nc_u32 %36, %lane
   %38 = slice %state[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   low.br ^_bb7
 ^join(%result$14: reg<amdgpu.vgpr x2>):
@@ -531,7 +536,8 @@ low.func.def target(@target) abi(hal_kernel) @divergent_if_else_two_vector_resul
   %then = concat(%lane, %47) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   low.br ^_bb4(%then: reg<amdgpu.vgpr x2>, %state: reg<amdgpu.vgpr x2>)
 ^else:
-  %biased = v_sub_nc_u32 %24, %lane
+  %49 = v_mov_b32_copy %limit
+  %biased = v_sub_nc_u32 %49, %lane
   %51 = slice %state[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   low.br ^_bb7
 ^join(%positive$17: reg<amdgpu.vgpr x2>, %negative$18: reg<amdgpu.vgpr x2>):
@@ -604,16 +610,19 @@ low.func.def target(@target) abi(hal_kernel) @divergent_nested_if_else_vector_re
   %43, %44 = s_and_saveexec_b64 %before_upper
   low.cond_br %44, ^inside, ^_bb11 : reg<amdgpu.scc>
 ^inside:
-  %inside_value = v_add_u32 %lane, %41
+  %56 = v_mov_b32_copy %upper
+  %inside_value = v_add_u32 %lane, %56
   %59 = slice %state[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %inside = concat(%inside_value, %59) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   low.br ^_bb10(%inside: reg<amdgpu.vgpr x2>)
 ^outside_high:
-  %high_value = v_sub_nc_u32 %lane, %41
+  %61 = v_mov_b32_copy %upper
+  %high_value = v_sub_nc_u32 %lane, %61
   %63 = slice %state[0] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   low.br ^_bb13
 ^before:
-  %low_value = v_sub_nc_u32 %26, %lane
+  %66 = v_mov_b32_copy %lower
+  %low_value = v_sub_nc_u32 %66, %lane
   %69 = slice %state[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   low.br ^_bb9
 ^join(%result$20: reg<amdgpu.vgpr x2>):
@@ -709,7 +718,8 @@ low.func.def target(@target) abi(hal_kernel) @uniform_prefix_guarded_divergent_n
   %49, %50 = s_and_saveexec_b64 %before_upper
   low.cond_br %50, ^_bb3, ^_bb12 : reg<amdgpu.scc>
 ^_bb3:
-  %inside_value = v_add_u32 %lane, %47
+  %62 = v_mov_b32_copy %upper
+  %inside_value = v_add_u32 %lane, %62
   %65 = slice %state[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %inside = concat(%inside_value, %65) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   low.br ^_bb11(%inside: reg<amdgpu.vgpr x2>)
@@ -795,7 +805,8 @@ low.func.def target(@target) abi(hal_kernel) @divergent_nested_shared_fallback_v
   %34, %35 = s_and_saveexec_b64 %before_upper
   low.cond_br %35, ^inside, ^_bb8 : reg<amdgpu.scc>
 ^inside:
-  %inside_value = v_add_u32 %lane, %32
+  %47 = v_mov_b32_copy %upper
+  %inside_value = v_add_u32 %lane, %47
   %50 = slice %state[1] : reg<amdgpu.vgpr x2> -> reg<amdgpu.vgpr>
   %updated = concat(%inside_value, %50) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
   low.br ^_bb7(%updated: reg<amdgpu.vgpr x2>)
@@ -871,7 +882,8 @@ low.func.def target(@target) abi(hal_kernel) @divergent_then_only(%values: reg<a
   %17, %18 = s_and_saveexec_b64 %cond
   low.cond_br %18, ^then, ^_bb3 : reg<amdgpu.scc>
 ^then:
-  %stored = v_add_u32 %lane, %15
+  %19 = v_mov_b32_copy %limit
+  %stored = v_add_u32 %lane, %19
   %21 = v_mov_b32 0
   global_store_b32_saddr %21, %stored, %output_view
   low.br ^_bb3

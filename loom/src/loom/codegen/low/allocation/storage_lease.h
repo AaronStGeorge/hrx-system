@@ -83,6 +83,7 @@ bool loom_low_allocation_storage_lease_state_conflicts(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_liveness_analysis_t* liveness,
     const loom_low_allocation_assignment_t* candidate,
+    const loom_value_id_t* ignored_value_ids, uint16_t ignored_value_count,
     loom_low_allocation_storage_release_policy_t policy);
 
 // Appends release actions for every materialized lease conflicting with
@@ -91,7 +92,8 @@ iree_status_t loom_low_allocation_storage_lease_state_record_release_actions(
     loom_low_allocation_storage_lease_state_t* state,
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_liveness_analysis_t* liveness,
-    const loom_low_allocation_assignment_t* candidate);
+    const loom_low_allocation_assignment_t* candidate,
+    const loom_value_id_t* ignored_value_ids, uint16_t ignored_value_count);
 
 // Materializes every storage lease attached to |value_ordinal| using
 // |assignment_index|'s concrete physical storage.

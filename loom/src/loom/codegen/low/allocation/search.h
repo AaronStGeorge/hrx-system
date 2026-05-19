@@ -65,6 +65,8 @@ bool loom_low_allocation_search_location_conflicts(
     loom_low_allocation_location_kind_t location_kind, uint32_t location_base,
     uint32_t location_count, const loom_value_id_t* ignored_value_ids,
     uint16_t ignored_value_count,
+    const loom_value_id_t* ignored_storage_lease_value_ids,
+    uint16_t ignored_storage_lease_value_count,
     loom_low_allocation_storage_release_policy_t release_policy);
 
 // Finds the first concrete location for |interval| under |capacity|.

@@ -430,6 +430,7 @@ loom_cc_library(
     ::search
     ::spill_plan
     ::spill_traffic
+    ::storage
     ::storage_lease
     ::table
     ::target_constraints

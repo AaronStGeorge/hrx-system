@@ -26,7 +26,8 @@ extern "C" {
 
 typedef iree_status_t (*loom_low_allocation_coalescing_append_assignment_fn_t)(
     void* user_data, const loom_low_allocation_assignment_t* assignment,
-    uint32_t* out_assignment_index);
+    const loom_value_id_t* ignored_storage_lease_value_ids,
+    uint16_t ignored_storage_lease_value_count, uint32_t* out_assignment_index);
 
 typedef iree_status_t (*loom_low_allocation_coalescing_consumption_query_fn_t)(
     void* user_data, loom_consumption_region_query_t** out_query);

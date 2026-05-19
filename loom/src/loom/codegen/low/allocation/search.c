@@ -49,6 +49,8 @@ bool loom_low_allocation_search_location_conflicts(
     loom_low_allocation_location_kind_t location_kind, uint32_t location_base,
     uint32_t location_count, const loom_value_id_t* ignored_value_ids,
     uint16_t ignored_value_count,
+    const loom_value_id_t* ignored_storage_lease_value_ids,
+    uint16_t ignored_storage_lease_value_count,
     loom_low_allocation_storage_release_policy_t release_policy) {
   loom_low_allocation_assignment_t candidate = {
       .value_id = interval->value_id,
@@ -87,7 +89,8 @@ bool loom_low_allocation_search_location_conflicts(
   }
   if (loom_low_allocation_storage_lease_state_conflicts(
           context->storage_leases, context->descriptor_set, context->liveness,
-          &candidate, release_policy)) {
+          &candidate, ignored_storage_lease_value_ids,
+          ignored_storage_lease_value_count, release_policy)) {
     return true;
   }
   return false;
@@ -122,6 +125,8 @@ bool loom_low_allocation_search_find_free_location(
             context, interval, capacity.descriptor_reg_class_id,
             capacity.location_kind, base, interval->unit_count,
             /*ignored_value_ids=*/NULL, /*ignored_value_count=*/0,
+            /*ignored_storage_lease_value_ids=*/NULL,
+            /*ignored_storage_lease_value_count=*/0,
             LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
       *out_base = base;
       return true;
@@ -136,6 +141,8 @@ bool loom_low_allocation_search_find_free_location(
             context, interval, capacity.descriptor_reg_class_id,
             capacity.location_kind, base, interval->unit_count,
             /*ignored_value_ids=*/NULL, /*ignored_value_count=*/0,
+            /*ignored_storage_lease_value_ids=*/NULL,
+            /*ignored_storage_lease_value_count=*/0,
             LOOM_LOW_ALLOCATION_STORAGE_RELEASE_ALLOWED)) {
       *out_base = base;
       return true;
@@ -279,6 +286,8 @@ static iree_status_t loom_low_allocation_search_collect_active_spill_victim_set(
           context, interval, capacity->descriptor_reg_class_id,
           capacity->location_kind, location_base, interval->unit_count,
           ignored_value_ids, assignment_count,
+          /*ignored_storage_lease_value_ids=*/NULL,
+          /*ignored_storage_lease_value_count=*/0,
           LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
     *out_blocked = true;
     return iree_ok_status();

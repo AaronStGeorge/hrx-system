@@ -34,6 +34,7 @@
 #include "loom/target/arch/amdgpu/low_registry.h"
 #include "loom/target/arch/amdgpu/ops/ops.h"
 #include "loom/target/arch/amdgpu/packet_plan.h"
+#include "loom/target/arch/amdgpu/storage_lease.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/arch/amdgpu/target_records.h"
 #include "loom/target/emit/native/amdgpu/kernel_hsaco.h"
@@ -744,10 +745,13 @@ class LowKernelEmitter {
                               "AMDGPU HSA low kernel failed low verification");
     }
 
+    loom_low_storage_lease_provider_t storage_lease_provider = {};
+    loom_amdgpu_storage_lease_provider(&storage_lease_provider);
     loom_low_emission_frame_options_t frame_options = {
         .descriptor_registry = &target_registry_.registry,
         .allocation_fixed_values = fixed_values,
         .allocation_fixed_value_count = fixed_value_count,
+        .storage_lease_provider = &storage_lease_provider,
     };
     loom_low_emission_frame_t frame = {};
     IREE_RETURN_IF_ERROR(loom_low_emission_frame_build(

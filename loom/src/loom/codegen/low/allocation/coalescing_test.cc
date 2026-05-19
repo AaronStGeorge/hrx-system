@@ -62,7 +62,11 @@ struct AppendState {
 
 static iree_status_t AppendAssignment(
     void* user_data, const loom_low_allocation_assignment_t* assignment,
+    const loom_value_id_t* ignored_storage_lease_value_ids,
+    uint16_t ignored_storage_lease_value_count,
     uint32_t* out_assignment_index) {
+  (void)ignored_storage_lease_value_ids;
+  (void)ignored_storage_lease_value_count;
   AppendState* state = (AppendState*)user_data;
   if (state->assignment_count >= state->assignment_capacity) {
     return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,

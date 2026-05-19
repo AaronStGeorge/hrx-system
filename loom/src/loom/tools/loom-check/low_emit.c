@@ -338,6 +338,7 @@ iree_status_t loom_check_low_emit_packetize_function(
     iree_host_size_t allocation_budget_count,
     const loom_check_low_emit_fixed_value_spec_t* allocation_fixed_specs,
     iree_host_size_t allocation_fixed_spec_count,
+    const loom_low_storage_lease_provider_t* storage_lease_provider,
     const loom_low_emission_frame_spill_free_options_t* spill_free_options,
     loom_low_emission_frame_t* out_frame) {
   loom_op_t* low_function = NULL;
@@ -357,6 +358,7 @@ iree_status_t loom_check_low_emit_packetize_function(
       .allocation_budget_count = allocation_budget_count,
       .allocation_fixed_values = fixed_values,
       .allocation_fixed_value_count = fixed_value_count,
+      .storage_lease_provider = storage_lease_provider,
   };
   loom_check_diagnostic_emitter_capture_t diagnostic_capture = {
       .diagnostic_collector = request->diagnostic_collector,

@@ -207,13 +207,16 @@ TEST(LowAllocationStorageLeaseTest, MaterializesAndReleasesConflictingLease) {
       /*end_point=*/2, /*location_base=*/11, /*location_count=*/2);
   EXPECT_TRUE(loom_low_allocation_storage_lease_state_conflicts(
       &state, &descriptor_set, &liveness, &candidate,
+      /*ignored_value_ids=*/NULL, /*ignored_value_count=*/0,
       LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN));
   EXPECT_FALSE(loom_low_allocation_storage_lease_state_conflicts(
       &state, &descriptor_set, &liveness, &candidate,
+      /*ignored_value_ids=*/NULL, /*ignored_value_count=*/0,
       LOOM_LOW_ALLOCATION_STORAGE_RELEASE_ALLOWED));
 
   IREE_ASSERT_OK(loom_low_allocation_storage_lease_state_record_release_actions(
-      &state, &descriptor_set, &liveness, &candidate));
+      &state, &descriptor_set, &liveness, &candidate,
+      /*ignored_value_ids=*/NULL, /*ignored_value_count=*/0));
   ASSERT_EQ(state.release_action_count, 1u);
   EXPECT_EQ(lease->release_action_index, 0u);
   EXPECT_EQ(lease->end_point, 1u);

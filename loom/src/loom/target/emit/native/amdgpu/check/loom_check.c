@@ -12,6 +12,7 @@
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/amdgpu/address_state.h"
 #include "loom/target/arch/amdgpu/packet_plan.h"
+#include "loom/target/arch/amdgpu/storage_lease.h"
 #include "loom/target/emit/native/amdgpu/assembly.h"
 #include "loom/target/emit/native/amdgpu/encoding.h"
 #include "loom/target/emit/native/amdgpu/spill_lowering.h"
@@ -234,6 +235,19 @@ static iree_status_t loom_amdgpu_loom_check_emit_wait_counter_plan_json(
   return loom_amdgpu_wait_plan_format_json(&packet_plan.wait_plan, builder);
 }
 
+static bool loom_amdgpu_loom_check_needs_storage_leases(
+    iree_string_view_t target_name,
+    const loom_amdgpu_loom_check_emit_options_t* options) {
+  if (iree_string_view_equal(target_name,
+                             IREE_SV("amdgpu-wait-counter-plan-json")) ||
+      iree_string_view_equal(target_name, IREE_SV("amdgpu-wait-state-plan")) ||
+      iree_string_view_equal(target_name,
+                             IREE_SV("amdgpu-wait-state-plan-json"))) {
+    return true;
+  }
+  return options->wait_mode == LOOM_AMDGPU_LOOM_CHECK_WAIT_MODE_AUTO;
+}
+
 static iree_status_t loom_amdgpu_loom_check_materialize_address_state(
     void* user_data, loom_module_t* module, loom_op_t* low_function_op,
     const loom_low_emission_frame_t* frame, iree_arena_allocator_t* arena,
@@ -282,11 +296,19 @@ static iree_status_t loom_amdgpu_loom_check_emit_provider_execute(
       .materialize_address_state =
           loom_amdgpu_loom_check_materialize_address_state,
   };
+  loom_low_storage_lease_provider_t storage_lease_provider = {0};
+  loom_amdgpu_storage_lease_provider(&storage_lease_provider);
+  const loom_low_storage_lease_provider_t* selected_storage_lease_provider =
+      loom_amdgpu_loom_check_needs_storage_leases(request->target_name,
+                                                  &options)
+          ? &storage_lease_provider
+          : NULL;
   IREE_RETURN_IF_ERROR(loom_check_low_emit_packetize_function(
       request, options.function_symbol_name, options.schedule_strategy,
       options.allocation_budgets, options.allocation_budget_count,
       options.allocation_fixed_value_specs,
-      options.allocation_fixed_value_spec_count, &spill_free_options, &frame));
+      options.allocation_fixed_value_spec_count,
+      selected_storage_lease_provider, &spill_free_options, &frame));
   if (request->diagnostic_collector != NULL &&
       request->diagnostic_collector->count != 0) {
     return iree_ok_status();

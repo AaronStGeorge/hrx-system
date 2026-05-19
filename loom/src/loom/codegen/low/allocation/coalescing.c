@@ -118,6 +118,81 @@ loom_low_allocation_coalescing_copy_source_used_after_tied_consume(
       query, tied_relation->op, *out_copy_source_id, &use, out_used_after);
 }
 
+static bool loom_low_allocation_coalescing_storage_alias_cause(
+    loom_low_placement_cause_t cause) {
+  switch (cause) {
+    case LOOM_LOW_PLACEMENT_CAUSE_LOW_COPY:
+    case LOOM_LOW_PLACEMENT_CAUSE_LOW_SLICE:
+    case LOOM_LOW_PLACEMENT_CAUSE_LOW_CONCAT:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static bool loom_low_allocation_coalescing_value_id_is_listed(
+    const loom_value_id_t* value_ids, uint16_t value_count,
+    loom_value_id_t value_id) {
+  for (uint16_t i = 0; i < value_count; ++i) {
+    if (value_ids[i] == value_id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static iree_status_t loom_low_allocation_coalescing_append_unique_value_id(
+    loom_value_id_t* value_ids, uint16_t value_capacity, uint16_t* value_count,
+    loom_value_id_t value_id) {
+  if (loom_low_allocation_coalescing_value_id_is_listed(value_ids, *value_count,
+                                                        value_id)) {
+    return iree_ok_status();
+  }
+  if (*value_count >= value_capacity) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "low allocation ignored-value list exhausted");
+  }
+  value_ids[(*value_count)++] = value_id;
+  return iree_ok_status();
+}
+
+static iree_status_t
+loom_low_allocation_coalescing_collect_tied_storage_aliases(
+    loom_low_allocation_coalescing_context_t* context,
+    const loom_low_placement_relation_t* tied_relation,
+    loom_value_ordinal_t tied_operand_ordinal,
+    loom_value_id_t* ignored_value_ids, uint16_t ignored_value_capacity,
+    uint16_t* ignored_value_count) {
+  const loom_low_placement_relation_range_t range =
+      loom_low_placement_relation_range_for_value_ordinal(context->placement,
+                                                          tied_operand_ordinal);
+  loom_consumption_region_query_t* query = NULL;
+  for (uint32_t i = 0; i < range.count; ++i) {
+    const loom_low_placement_relation_t* relation =
+        &context->placement->relations[range.start + i];
+    if (!loom_low_allocation_coalescing_storage_alias_cause(relation->cause)) {
+      continue;
+    }
+    const loom_value_id_t source_value_id = loom_low_placement_value_id(
+        context->placement, relation->source_ordinal);
+    if (query == NULL) {
+      IREE_RETURN_IF_ERROR(
+          context->consumption_query(context->user_data, &query));
+    }
+    loom_consumption_use_t use = {0};
+    bool used_after = false;
+    IREE_RETURN_IF_ERROR(loom_consumption_find_use_after(
+        query, tied_relation->op, source_value_id, &use, &used_after));
+    if (!used_after) {
+      IREE_RETURN_IF_ERROR(
+          loom_low_allocation_coalescing_append_unique_value_id(
+              ignored_value_ids, ignored_value_capacity, ignored_value_count,
+              source_value_id));
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t
 loom_low_allocation_coalescing_copy_relation_requires_materialized_storage(
     loom_low_allocation_coalescing_context_t* context,
@@ -185,7 +260,9 @@ static iree_status_t loom_low_allocation_coalescing_append_interval_at_location(
     const loom_liveness_interval_t* interval, uint16_t descriptor_reg_class_id,
     loom_low_allocation_location_kind_t location_kind, uint32_t location_base,
     uint32_t unit_count, const loom_value_id_t* ignored_value_ids,
-    uint16_t ignored_value_count, bool* out_assigned) {
+    uint16_t ignored_value_count,
+    const loom_value_id_t* ignored_storage_lease_value_ids,
+    uint16_t ignored_storage_lease_value_count, bool* out_assigned) {
   *out_assigned = false;
   if (location_base > UINT32_MAX - unit_count) {
     return iree_ok_status();
@@ -206,7 +283,9 @@ static iree_status_t loom_low_allocation_coalescing_append_interval_at_location(
   if (loom_low_allocation_search_location_conflicts(
           context->search_context, interval, descriptor_reg_class_id,
           location_kind, location_base, unit_count, ignored_value_ids,
-          ignored_value_count, LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
+          ignored_value_count, ignored_storage_lease_value_ids,
+          ignored_storage_lease_value_count,
+          LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
     return iree_ok_status();
   }
 
@@ -222,8 +301,9 @@ static iree_status_t loom_low_allocation_coalescing_append_interval_at_location(
       .location_base = location_base,
       .location_count = unit_count,
   };
-  IREE_RETURN_IF_ERROR(
-      context->append_assignment(context->user_data, &assignment, NULL));
+  IREE_RETURN_IF_ERROR(context->append_assignment(
+      context->user_data, &assignment, ignored_storage_lease_value_ids,
+      ignored_storage_lease_value_count, NULL));
   *out_assigned = true;
   return iree_ok_status();
 }
@@ -271,10 +351,17 @@ static iree_status_t loom_low_allocation_coalescing_append_relation_interval(
   IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_resolve_reg_class(
       context->target_constraints, interval->value_class,
       &interval_reg_class_id, NULL));
+  const loom_value_id_t* ignored_storage_lease_value_ids = NULL;
+  uint16_t ignored_storage_lease_value_count = 0;
+  if (relation->cause == LOOM_LOW_PLACEMENT_CAUSE_LOW_SLICE) {
+    ignored_storage_lease_value_ids = ignored_value_ids;
+    ignored_storage_lease_value_count = ignored_value_count;
+  }
   return loom_low_allocation_coalescing_append_interval_at_location(
       context, interval, interval_reg_class_id,
       source_assignment->location_kind, result_location_base,
       interval->unit_count, ignored_value_ids, ignored_value_count,
+      ignored_storage_lease_value_ids, ignored_storage_lease_value_count,
       out_assigned);
 }
 
@@ -330,7 +417,8 @@ loom_low_allocation_coalescing_append_relation_interval_if_source_assigned(
       context, interval, interval_reg_class_id,
       source_assignment->location_kind, result_location_base,
       interval->unit_count, ignored_value_ids, ignored_value_count,
-      out_assigned);
+      /*ignored_storage_lease_value_ids=*/NULL,
+      /*ignored_storage_lease_value_count=*/0, out_assigned);
 }
 
 static iree_status_t loom_low_allocation_coalescing_assign_relation_interval(
@@ -455,7 +543,8 @@ static iree_status_t loom_low_allocation_coalescing_assign_concat_interval(
   return loom_low_allocation_coalescing_append_interval_at_location(
       context, interval, interval_reg_class_id, first_assignment->location_kind,
       result_location_base, interval->unit_count, ignored_value_ids,
-      ignored_value_count, out_assigned);
+      ignored_value_count, ignored_value_ids, ignored_value_count,
+      out_assigned);
 }
 
 static bool loom_low_allocation_coalescing_relation_source_matches_interval(
@@ -547,7 +636,8 @@ loom_low_allocation_coalescing_assign_concat_source_from_result(
       context, interval, interval_reg_class_id,
       result_assignment->location_kind, location_base, interval->unit_count,
       &result_value_id,
-      /*ignored_value_count=*/1, out_assigned);
+      /*ignored_value_count=*/1, &result_value_id,
+      /*ignored_storage_lease_value_count=*/1, out_assigned);
 }
 
 static iree_status_t loom_low_allocation_coalescing_concat_ignored_sources(
@@ -633,6 +723,7 @@ loom_low_allocation_coalescing_find_concat_result_location_for_source(
             context->search_context, result_interval,
             capacity.descriptor_reg_class_id, capacity.location_kind, base,
             result_interval->unit_count, ignored_value_ids, ignored_value_count,
+            ignored_value_ids, ignored_value_count,
             LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
       bool source_location_ok = false;
       uint32_t source_location_base = 0;
@@ -657,6 +748,8 @@ loom_low_allocation_coalescing_find_concat_result_location_for_source(
               source_location_base, source_interval->unit_count,
               /*ignored_value_ids=*/NULL,
               /*ignored_value_count=*/0,
+              /*ignored_storage_lease_value_ids=*/NULL,
+              /*ignored_storage_lease_value_count=*/0,
               LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
         *out_result_location_base = base;
         return true;
@@ -704,7 +797,8 @@ loom_low_allocation_coalescing_assign_concat_result_reservation(
   return loom_low_allocation_coalescing_append_interval_at_location(
       context, result_interval, capacity.descriptor_reg_class_id,
       capacity.location_kind, result_location_base, result_interval->unit_count,
-      ignored_value_ids, ignored_value_count, out_assigned);
+      ignored_value_ids, ignored_value_count, ignored_value_ids,
+      ignored_value_count, out_assigned);
 }
 
 static bool loom_low_allocation_coalescing_branch_relation_covers_concat_source(
@@ -804,7 +898,8 @@ loom_low_allocation_coalescing_assign_concat_source_from_branch_destination(
             context, interval, interval_reg_class_id,
             destination_assignment->location_kind, source_location_base,
             interval->unit_count, ignored_value_ids, ignored_value_count,
-            out_assigned));
+            /*ignored_storage_lease_value_ids=*/NULL,
+            /*ignored_storage_lease_value_count=*/0, out_assigned));
     if (*out_assigned) {
       return iree_ok_status();
     }
@@ -861,6 +956,7 @@ iree_status_t loom_low_allocation_coalescing_assign_tied_interval(
         IREE_STATUS_FAILED_PRECONDITION,
         "low tied result does not match operand allocation class");
   }
+
   loom_value_id_t ignored_value_ids[2] = {tied_operand_id,
                                           LOOM_VALUE_ID_INVALID};
   uint16_t ignored_value_count = 1;
@@ -873,11 +969,52 @@ iree_status_t loom_low_allocation_coalescing_assign_tied_interval(
   if (copy_source_id != LOOM_VALUE_ID_INVALID && !copy_source_used_after) {
     ignored_value_ids[ignored_value_count++] = copy_source_id;
   }
+
+  loom_value_id_t inline_storage_lease_ignored_value_ids[16];
+  loom_value_id_t* storage_lease_ignored_value_ids =
+      inline_storage_lease_ignored_value_ids;
+  uint16_t storage_lease_ignored_value_capacity =
+      (uint16_t)IREE_ARRAYSIZE(inline_storage_lease_ignored_value_ids);
+  uint16_t storage_lease_ignored_value_count = 0;
+  for (uint16_t i = 0; i < ignored_value_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_allocation_coalescing_append_unique_value_id(
+        storage_lease_ignored_value_ids, storage_lease_ignored_value_capacity,
+        &storage_lease_ignored_value_count, ignored_value_ids[i]));
+  }
+  const loom_low_placement_relation_range_t tied_operand_relation_range =
+      loom_low_placement_relation_range_for_value_ordinal(
+          context->placement, relation->source_ordinal);
+  if (tied_operand_relation_range.count >
+      storage_lease_ignored_value_capacity -
+          storage_lease_ignored_value_count) {
+    const uint32_t required_capacity =
+        tied_operand_relation_range.count + storage_lease_ignored_value_count;
+    if (required_capacity > UINT16_MAX) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "low tied operand alias count exceeds uint16_t");
+    }
+    storage_lease_ignored_value_capacity = (uint16_t)required_capacity;
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        context->arena, storage_lease_ignored_value_capacity,
+        sizeof(*storage_lease_ignored_value_ids),
+        (void**)&storage_lease_ignored_value_ids));
+    for (uint16_t i = 0; i < ignored_value_count; ++i) {
+      storage_lease_ignored_value_ids[i] = ignored_value_ids[i];
+    }
+    storage_lease_ignored_value_count = ignored_value_count;
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_coalescing_collect_tied_storage_aliases(
+          context, relation, relation->source_ordinal,
+          storage_lease_ignored_value_ids, storage_lease_ignored_value_capacity,
+          &storage_lease_ignored_value_count));
   if (loom_low_allocation_search_location_conflicts(
           context->search_context, interval, interval_reg_class_id,
           operand_assignment->location_kind, operand_assignment->location_base,
           operand_assignment->location_count, ignored_value_ids,
-          ignored_value_count, LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
+          ignored_value_count, storage_lease_ignored_value_ids,
+          storage_lease_ignored_value_count,
+          LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "low tied result cannot share the operand location without "
@@ -896,8 +1033,9 @@ iree_status_t loom_low_allocation_coalescing_assign_tied_interval(
       .location_base = operand_assignment->location_base,
       .location_count = operand_assignment->location_count,
   };
-  IREE_RETURN_IF_ERROR(
-      context->append_assignment(context->user_data, &assignment, NULL));
+  IREE_RETURN_IF_ERROR(context->append_assignment(
+      context->user_data, &assignment, storage_lease_ignored_value_ids,
+      storage_lease_ignored_value_count, NULL));
   *out_assigned = true;
   return iree_ok_status();
 }
@@ -996,7 +1134,9 @@ iree_status_t loom_low_allocation_coalescing_assign_concat_source_interval(
               context, interval, interval_reg_class_id,
               sibling_assignment->location_kind, location_base,
               interval->unit_count, /*ignored_value_ids=*/NULL,
-              /*ignored_value_count=*/0, out_assigned));
+              /*ignored_value_count=*/0,
+              /*ignored_storage_lease_value_ids=*/NULL,
+              /*ignored_storage_lease_value_count=*/0, out_assigned));
       if (*out_assigned) {
         return iree_ok_status();
       }
@@ -1149,7 +1289,8 @@ iree_status_t loom_low_allocation_coalescing_assign_branch_source_interval(
             context, interval, interval_reg_class_id,
             destination_assignment->location_kind, source_location_base,
             interval->unit_count, ignored_value_ids, ignored_value_count,
-            out_assigned));
+            /*ignored_storage_lease_value_ids=*/NULL,
+            /*ignored_storage_lease_value_count=*/0, out_assigned));
     if (*out_assigned) {
       return iree_ok_status();
     }
