@@ -17,7 +17,6 @@
 #include "loom/codegen/low/allocation/unit_location.h"
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
-#include "loom/error/error_catalog.h"
 #include "loom/ir/local_value_domain.h"
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
@@ -2361,31 +2360,6 @@ static iree_status_t loom_low_allocation_edge_copy_group_uses_location(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_allocation_emit_failure(
-    const loom_low_allocation_build_state_t* state, const loom_op_t* op,
-    loom_liveness_value_class_t value_class, uint32_t budget_units,
-    uint32_t peak_units, iree_string_view_t failure_kind) {
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(loom_low_diagnostic_target_key(&state->target)),
-      loom_param_string(loom_low_diagnostic_export_name(&state->target)),
-      loom_param_string(loom_low_diagnostic_config_key(&state->target)),
-      loom_param_string(
-          loom_low_diagnostic_function_name(state->module, state->function_op)),
-      loom_param_string(loom_low_diagnostic_value_class_name(
-          state->target.descriptor_set, value_class)),
-      loom_param_u32(budget_units),
-      loom_param_u32(peak_units),
-      loom_param_string(failure_kind),
-  };
-  loom_diagnostic_emission_t emission = {
-      .op = op,
-      .error = LOOM_ERR_BACKEND_005,
-      .params = params,
-      .param_count = IREE_ARRAYSIZE(params),
-  };
-  return iree_diagnostic_emit(state->options->emitter, &emission);
-}
-
 static iree_status_t loom_low_allocation_find_edge_copy_temporary(
     const loom_low_allocation_build_state_t* state,
     const loom_low_allocation_edge_copy_group_t* group,
@@ -2394,8 +2368,9 @@ static iree_status_t loom_low_allocation_find_edge_copy_temporary(
   *out_temporary = (loom_low_allocation_unit_location_t){0};
   if (!loom_low_allocation_location_kind_is_register_like(
           storage_class->location_kind)) {
-    IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
-        state, group->terminator_op, storage_class->value_class, 0, 1,
+    IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_emit_failure(
+        &state->target_constraints, group->terminator_op,
+        storage_class->value_class, 0, 1,
         IREE_SV("edge-copy-non-register-storage")));
     return iree_make_status(
         IREE_STATUS_RESOURCE_EXHAUSTED,
@@ -2407,8 +2382,9 @@ static iree_status_t loom_low_allocation_find_edge_copy_temporary(
   IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_class_capacity(
       &state->target_constraints, storage_class->value_class, &capacity));
   if (capacity.location_kind != storage_class->location_kind) {
-    IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
-        state, group->terminator_op, storage_class->value_class,
+    IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_emit_failure(
+        &state->target_constraints, group->terminator_op,
+        storage_class->value_class,
         capacity.is_bounded ? capacity.max_units : UINT32_MAX, 1,
         IREE_SV("edge-copy-storage-kind-mismatch")));
     return iree_make_status(
@@ -2420,9 +2396,10 @@ static iree_status_t loom_low_allocation_find_edge_copy_temporary(
   uint32_t last_location = 0;
   if (capacity.is_bounded) {
     if (capacity.max_units == 0) {
-      IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
-          state, group->terminator_op, storage_class->value_class,
-          capacity.max_units, 1, IREE_SV("edge-copy-empty-budget")));
+      IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_emit_failure(
+          &state->target_constraints, group->terminator_op,
+          storage_class->value_class, capacity.max_units, 1,
+          IREE_SV("edge-copy-empty-budget")));
       return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                               "low allocation cannot reserve a branch "
                               "edge-copy temporary from an empty budget");
@@ -2434,9 +2411,10 @@ static iree_status_t loom_low_allocation_find_edge_copy_temporary(
             &state->target_constraints, storage_class->descriptor_reg_class_id,
             storage_class->location_kind);
     if (last_location == UINT32_MAX) {
-      IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
-          state, group->terminator_op, storage_class->value_class, UINT32_MAX,
-          1, IREE_SV("edge-copy-location-range-overflow")));
+      IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_emit_failure(
+          &state->target_constraints, group->terminator_op,
+          storage_class->value_class, UINT32_MAX, 1,
+          IREE_SV("edge-copy-location-range-overflow")));
       return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
                               "low allocation cannot reserve a branch "
                               "edge-copy temporary in uint32 range");
@@ -2471,8 +2449,9 @@ static iree_status_t loom_low_allocation_find_edge_copy_temporary(
     return iree_ok_status();
   }
 
-  IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
-      state, group->terminator_op, storage_class->value_class,
+  IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_emit_failure(
+      &state->target_constraints, group->terminator_op,
+      storage_class->value_class,
       capacity.is_bounded ? capacity.max_units : UINT32_MAX, 1,
       IREE_SV("edge-copy-no-scratch-unit")));
   return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
@@ -2871,8 +2850,8 @@ static iree_status_t loom_low_allocation_find_packet_move_temporary(
   *out_temporary = (loom_low_allocation_unit_location_t){0};
   if (!loom_low_allocation_location_kind_is_register_like(
           storage_class->location_kind)) {
-    IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
-        state, op, storage_class->value_class, 0, 1,
+    IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_emit_failure(
+        &state->target_constraints, op, storage_class->value_class, 0, 1,
         IREE_SV("packet-move-non-register-storage")));
     return iree_make_status(
         IREE_STATUS_RESOURCE_EXHAUSTED,
@@ -2884,8 +2863,8 @@ static iree_status_t loom_low_allocation_find_packet_move_temporary(
   IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_class_capacity(
       &state->target_constraints, storage_class->value_class, &capacity));
   if (capacity.location_kind != storage_class->location_kind) {
-    IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
-        state, op, storage_class->value_class,
+    IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_emit_failure(
+        &state->target_constraints, op, storage_class->value_class,
         capacity.is_bounded ? capacity.max_units : UINT32_MAX, 1,
         IREE_SV("packet-move-storage-kind-mismatch")));
     return iree_make_status(
@@ -2897,9 +2876,9 @@ static iree_status_t loom_low_allocation_find_packet_move_temporary(
   uint32_t last_location = 0;
   if (capacity.is_bounded) {
     if (capacity.max_units == 0) {
-      IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
-          state, op, storage_class->value_class, capacity.max_units, 1,
-          IREE_SV("packet-move-empty-budget")));
+      IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_emit_failure(
+          &state->target_constraints, op, storage_class->value_class,
+          capacity.max_units, 1, IREE_SV("packet-move-empty-budget")));
       return iree_make_status(
           IREE_STATUS_RESOURCE_EXHAUSTED,
           "low allocation cannot reserve a packet-local move temporary from "
@@ -2912,9 +2891,9 @@ static iree_status_t loom_low_allocation_find_packet_move_temporary(
             &state->target_constraints, storage_class->descriptor_reg_class_id,
             storage_class->location_kind);
     if (last_location == UINT32_MAX) {
-      IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
-          state, op, storage_class->value_class, UINT32_MAX, 1,
-          IREE_SV("packet-move-location-range-overflow")));
+      IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_emit_failure(
+          &state->target_constraints, op, storage_class->value_class,
+          UINT32_MAX, 1, IREE_SV("packet-move-location-range-overflow")));
       return iree_make_status(
           IREE_STATUS_RESOURCE_EXHAUSTED,
           "low allocation cannot reserve a packet-local move temporary in "
@@ -2947,8 +2926,8 @@ static iree_status_t loom_low_allocation_find_packet_move_temporary(
     return iree_ok_status();
   }
 
-  IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
-      state, op, storage_class->value_class,
+  IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_emit_failure(
+      &state->target_constraints, op, storage_class->value_class,
       capacity.is_bounded ? capacity.max_units : UINT32_MAX, 1,
       IREE_SV("packet-move-no-scratch-unit")));
   return iree_make_status(
@@ -3209,12 +3188,13 @@ static iree_status_t loom_low_allocation_assign_intervals(
       if (requires_register) {
         iree_string_view_t value_name =
             loom_low_diagnostic_value_name(state->module, interval->value_id);
-        IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
-            state,
-            loom_low_diagnostic_value_origin_op(
-                state->module, interval->value_id, state->function_op),
-            interval->value_class, budget_units, interval->unit_count,
-            IREE_SV("spill-traffic-register-exhausted")));
+        IREE_RETURN_IF_ERROR(
+            loom_low_allocation_target_constraints_emit_failure(
+                &state->target_constraints,
+                loom_low_diagnostic_value_origin_op(
+                    state->module, interval->value_id, state->function_op),
+                interval->value_class, budget_units, interval->unit_count,
+                IREE_SV("spill-traffic-register-exhausted")));
         return iree_make_status(
             IREE_STATUS_FAILED_PRECONDITION,
             "allocation exhausted register class '%.*s' for materialized "
@@ -3222,9 +3202,10 @@ static iree_status_t loom_low_allocation_assign_intervals(
             (int)reg_class_name.size, reg_class_name.data, (int)value_name.size,
             value_name.data);
       }
-      IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
-          state, state->function_op, interval->value_class, budget_units,
-          interval->unit_count, IREE_SV("unspillable-register-exhausted")));
+      IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_emit_failure(
+          &state->target_constraints, state->function_op, interval->value_class,
+          budget_units, interval->unit_count,
+          IREE_SV("unspillable-register-exhausted")));
       return iree_make_status(
           IREE_STATUS_FAILED_PRECONDITION,
           "allocation exhausted unspillable register class '%.*s'",

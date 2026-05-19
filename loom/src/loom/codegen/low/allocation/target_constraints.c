@@ -513,6 +513,33 @@ iree_status_t loom_low_allocation_target_constraints_resolve_fixed_values(
   return iree_ok_status();
 }
 
+iree_status_t loom_low_allocation_target_constraints_emit_failure(
+    const loom_low_allocation_target_constraints_t* constraints,
+    const loom_op_t* op, loom_liveness_value_class_t value_class,
+    uint32_t budget_units, uint32_t peak_units,
+    iree_string_view_t failure_kind) {
+  IREE_ASSERT_ARGUMENT(constraints);
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(loom_low_diagnostic_target_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_export_name(constraints->target)),
+      loom_param_string(loom_low_diagnostic_config_key(constraints->target)),
+      loom_param_string(loom_low_diagnostic_function_name(
+          constraints->module, constraints->function_op)),
+      loom_param_string(loom_low_diagnostic_value_class_name(
+          constraints->target->descriptor_set, value_class)),
+      loom_param_u32(budget_units),
+      loom_param_u32(peak_units),
+      loom_param_string(failure_kind),
+  };
+  loom_diagnostic_emission_t emission = {
+      .op = op ? op : constraints->function_op,
+      .error = LOOM_ERR_BACKEND_005,
+      .params = params,
+      .param_count = IREE_ARRAYSIZE(params),
+  };
+  return iree_diagnostic_emit(constraints->emitter, &emission);
+}
+
 const loom_low_allocation_resolved_fixed_value_t*
 loom_low_allocation_target_constraints_fixed_value_for_value(
     const loom_low_allocation_target_constraints_t* constraints,
