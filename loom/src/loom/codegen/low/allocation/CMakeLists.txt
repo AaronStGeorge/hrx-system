@@ -93,6 +93,42 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    move_topology
+  HDRS
+    "move_topology.h"
+  SRCS
+    "move_topology.c"
+  DEPS
+    ::table
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    move_topology_test
+  SRCS
+    "move_topology_test.cc"
+  DEPS
+    ::move_topology
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::text_asm
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::test
+    loom::src::loom::target::test::descriptors
+    loom::src::loom::testing::module_ptr
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     table
   HDRS
     "table.h"

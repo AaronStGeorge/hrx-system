@@ -9,6 +9,7 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "loom/codegen/low/allocation/move_topology.h"
 #include "loom/ops/low/ops.h"
 
 bool loom_low_move_locations_equal(const loom_low_move_location_t* lhs,
@@ -434,8 +435,8 @@ static iree_status_t loom_low_move_sequence_concat_assignments(
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "expected low.concat");
   }
-  if (!loom_low_allocation_concat_requires_packet_materialization(allocation,
-                                                                  op)) {
+  if (!loom_low_allocation_move_topology_concat_requires_packet_materialization(
+          allocation, op)) {
     return iree_ok_status();
   }
   *out_result_assignment =

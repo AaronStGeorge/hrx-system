@@ -356,8 +356,8 @@ static uint64_t loom_target_compile_report_slice_move_unit_count(
 
 static uint64_t loom_target_compile_report_concat_move_unit_count(
     const loom_low_allocation_table_t* allocation, const loom_op_t* op) {
-  if (!loom_low_allocation_concat_requires_packet_materialization(allocation,
-                                                                  op)) {
+  if (!loom_low_allocation_move_topology_concat_requires_packet_materialization(
+          allocation, op)) {
     return 0;
   }
   uint64_t unit_count = 0;

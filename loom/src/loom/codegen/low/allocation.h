@@ -20,6 +20,7 @@
 #include "loom/codegen/low/allocation/assignment.h"
 #include "loom/codegen/low/allocation/diagnostics.h"
 #include "loom/codegen/low/allocation/live_range.h"
+#include "loom/codegen/low/allocation/move_topology.h"
 #include "loom/codegen/low/allocation/storage.h"
 #include "loom/codegen/low/allocation/table.h"
 #include "loom/codegen/low/descriptors.h"
@@ -124,12 +125,6 @@ iree_status_t loom_low_allocate_function(
 // and final allocation runs on the materialized IR.
 iree_status_t loom_low_allocation_verify_table(
     const loom_low_allocation_table_t* table);
-
-// Returns true when |op| must materialize its low.concat result as a packet.
-// Branch-edge copies can decompose low.concat payloads directly into block
-// arguments, so branch-only concats do not require packet-local moves.
-bool loom_low_allocation_concat_requires_packet_materialization(
-    const loom_low_allocation_table_t* table, const loom_op_t* op);
 
 #ifdef __cplusplus
 }  // extern "C"

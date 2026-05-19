@@ -32,6 +32,7 @@ loom_assert_no_dependencies(
         ":assignment",
         ":diagnostics",
         ":live_range",
+        ":move_topology",
         ":storage",
         ":table",
     ],
@@ -101,6 +102,38 @@ loom_cc_test(
     deps = [
         ":live_range",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "move_topology",
+    srcs = ["move_topology.c"],
+    hdrs = ["move_topology.h"],
+    deps = [
+        ":table",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "move_topology_test",
+    srcs = ["move_topology_test.cc"],
+    deps = [
+        ":move_topology",
+        "//loom/src/loom/codegen/low:text_asm",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/target/test:descriptors",
+        "//loom/src/loom/testing:module_ptr",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

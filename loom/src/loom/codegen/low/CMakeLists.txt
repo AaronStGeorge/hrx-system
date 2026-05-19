@@ -301,6 +301,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::allocation::assignment
     loom::src::loom::codegen::low::allocation::diagnostics
     loom::src::loom::codegen::low::allocation::live_range
+    loom::src::loom::codegen::low::allocation::move_topology
     loom::src::loom::codegen::low::allocation::storage
     loom::src::loom::codegen::low::allocation::table
     loom::src::loom::error::emitter
@@ -344,6 +345,7 @@ loom_cc_library(
     ::allocation
     iree::base
     iree::base::internal::arena
+    loom::src::loom::codegen::low::allocation::move_topology
     loom::src::loom::ops::low
   PUBLIC
 )
