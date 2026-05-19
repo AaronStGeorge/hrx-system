@@ -12,6 +12,36 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    active_set
+  HDRS
+    "active_set.h"
+  SRCS
+    "active_set.c"
+  DEPS
+    ::active_unit
+    ::assignment
+    ::live_range
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::liveness
+    loom::src::loom::codegen::low::descriptors
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    active_set_test
+  SRCS
+    "active_set_test.cc"
+  DEPS
+    ::active_set
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     active_unit
   HDRS
     "active_unit.h"

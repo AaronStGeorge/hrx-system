@@ -29,6 +29,7 @@ loom_assert_no_dependencies(
         "//loom/src/loom/target/test:low_registry",
     ],
     targets = [
+        ":active_set",
         ":active_unit",
         ":assignment",
         ":diagnostics",
@@ -38,6 +39,32 @@ loom_assert_no_dependencies(
         ":storage_lease",
         ":table",
         ":verification",
+    ],
+)
+
+loom_cc_library(
+    name = "active_set",
+    srcs = ["active_set.c"],
+    hdrs = ["active_set.h"],
+    deps = [
+        ":active_unit",
+        ":assignment",
+        ":live_range",
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "active_set_test",
+    srcs = ["active_set_test.cc"],
+    deps = [
+        ":active_set",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

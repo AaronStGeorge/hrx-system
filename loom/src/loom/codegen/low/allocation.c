@@ -10,7 +10,7 @@
 #include <string.h>
 
 #include "loom/analysis/consumption.h"
-#include "loom/codegen/low/allocation/active_unit.h"
+#include "loom/codegen/low/allocation/active_set.h"
 #include "loom/codegen/low/allocation/storage_lease.h"
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
@@ -67,16 +67,7 @@ typedef struct loom_low_allocation_build_state_t {
   // UINT32_MAX.
   uint32_t* assignment_indices_by_value_ordinal;
   // Assignment-index window still live at the current interval start.
-  struct {
-    // Assignment indices sorted by increasing assignment end point.
-    uint32_t* assignment_indices;
-    // First active entry in |assignment_indices|.
-    iree_host_size_t start;
-    // Number of active entries in |assignment_indices|.
-    iree_host_size_t count;
-  } active;
-  // Hash index for active register-like assignment units.
-  loom_low_allocation_active_unit_index_t active_units;
+  loom_low_allocation_active_set_t active;
   // Maximum assigned location end indexed by descriptor register class ID.
   uint32_t* max_assigned_location_end_by_reg_class;
   // Mutable spill materialization plan records being built.
@@ -881,49 +872,6 @@ static bool loom_low_allocation_reserved_range_conflicts(
   return false;
 }
 
-static bool loom_low_allocation_active_assignment_conflicts(
-    const loom_low_allocation_build_state_t* state,
-    const loom_low_allocation_assignment_t* existing,
-    const loom_low_allocation_assignment_t* candidate,
-    const loom_value_id_t* ignored_value_ids, uint16_t ignored_value_count) {
-  if (loom_low_allocation_value_id_is_ignored(
-          existing->value_id, ignored_value_ids, ignored_value_count)) {
-    return false;
-  }
-  if (existing->location_kind != candidate->location_kind) {
-    return false;
-  }
-  return loom_low_allocation_live_range_assignments_conflict(
-      state->target.descriptor_set, &state->liveness, state->unit_end_points,
-      state->unit_end_point_count, existing, candidate);
-}
-
-static bool loom_low_allocation_active_scan_conflicts(
-    const loom_low_allocation_build_state_t* state,
-    const loom_low_allocation_assignment_t* candidate,
-    const loom_value_id_t* ignored_value_ids, uint16_t ignored_value_count,
-    bool unindexed_only) {
-  for (iree_host_size_t i = 0; i < state->active.count; ++i) {
-    const uint32_t assignment_index =
-        state->active.assignment_indices[state->active.start + i];
-    IREE_ASSERT_LT(assignment_index, state->assignment_count);
-    const loom_low_allocation_assignment_t* existing =
-        &state->assignments[assignment_index];
-    const bool assignment_is_indexed =
-        loom_low_allocation_active_unit_index_contains_assignment(
-            &state->active_units, assignment_index);
-    if (unindexed_only && assignment_is_indexed) {
-      continue;
-    }
-    if (loom_low_allocation_active_assignment_conflicts(
-            state, existing, candidate, ignored_value_ids,
-            ignored_value_count)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 static bool loom_low_allocation_candidate_conflicts(
     loom_low_allocation_build_state_t* state,
     const loom_liveness_interval_t* interval, uint16_t reg_class_id,
@@ -945,25 +893,11 @@ static bool loom_low_allocation_candidate_conflicts(
           loom_low_allocation_unit_end_point_start_for_value(
               state, interval->value_id),
   };
-  if (loom_low_allocation_active_unit_index_is_enabled(&state->active_units)) {
-    if (loom_low_allocation_active_unit_index_conflicts(
-            &state->active_units, state->target.descriptor_set,
-            &state->liveness, state->unit_end_points,
-            state->unit_end_point_count, state->assignments,
-            state->assignment_count, &candidate, ignored_value_ids,
-            ignored_value_count)) {
-      return true;
-    }
-    if (loom_low_allocation_active_unit_index_unindexed_count(
-            &state->active_units) != 0 &&
-        loom_low_allocation_active_scan_conflicts(
-            state, &candidate, ignored_value_ids, ignored_value_count,
-            /*unindexed_only=*/true)) {
-      return true;
-    }
-  } else if (loom_low_allocation_active_scan_conflicts(
-                 state, &candidate, ignored_value_ids, ignored_value_count,
-                 /*unindexed_only=*/false)) {
+  if (loom_low_allocation_active_set_conflicts(
+          &state->active, state->target.descriptor_set, &state->liveness,
+          state->unit_end_points, state->unit_end_point_count,
+          state->assignments, state->assignment_count, &candidate,
+          ignored_value_ids, ignored_value_count)) {
     return true;
   }
   if (loom_low_allocation_fixed_value_conflicts(
@@ -1564,8 +1498,8 @@ static iree_status_t loom_low_allocation_spill_active_assignment(
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "allocation table exceeds uint32_t range");
   }
-  loom_low_allocation_active_unit_index_remove_assignment(
-      &state->active_units, state->assignments, state->assignment_count,
+  loom_low_allocation_active_set_remove_assignment_units(
+      &state->active, state->assignments, state->assignment_count,
       assignment_index);
   loom_low_allocation_assignment_t* assignment =
       &state->assignments[assignment_index];
@@ -1643,7 +1577,9 @@ static iree_status_t loom_low_allocation_collect_active_spill_victim_set(
     const loom_low_allocation_assignment_t* assignment =
         &state->assignments[assignment_index];
     if (!loom_low_allocation_active_assignment_conflicts(
-            state, assignment, &candidate, /*ignored_value_ids=*/NULL,
+            state->target.descriptor_set, &state->liveness,
+            state->unit_end_points, state->unit_end_point_count, assignment,
+            &candidate, /*ignored_value_ids=*/NULL,
             /*ignored_value_count=*/0)) {
       continue;
     }
@@ -1800,58 +1736,6 @@ static iree_status_t loom_low_allocation_find_active_spill_victim_set(
   return iree_ok_status();
 }
 
-static void loom_low_allocation_expire_active_assignments(
-    loom_low_allocation_build_state_t* state, uint32_t start_point) {
-  while (state->active.count > 0) {
-    const uint32_t assignment_index =
-        state->active.assignment_indices[state->active.start];
-    IREE_ASSERT_LT(assignment_index, state->assignment_count);
-    const loom_low_allocation_assignment_t* assignment =
-        &state->assignments[assignment_index];
-    if (assignment->end_point > start_point) {
-      break;
-    }
-    loom_low_allocation_active_unit_index_remove_assignment(
-        &state->active_units, state->assignments, state->assignment_count,
-        assignment_index);
-    ++state->active.start;
-    --state->active.count;
-  }
-}
-
-static bool loom_low_allocation_active_assignment_less(
-    const loom_low_allocation_build_state_t* state, uint32_t lhs_index,
-    uint32_t rhs_index) {
-  const loom_low_allocation_assignment_t* lhs = &state->assignments[lhs_index];
-  const loom_low_allocation_assignment_t* rhs = &state->assignments[rhs_index];
-  if (lhs->end_point != rhs->end_point) {
-    return lhs->end_point < rhs->end_point;
-  }
-  return lhs_index < rhs_index;
-}
-
-static void loom_low_allocation_activate_assignment(
-    loom_low_allocation_build_state_t* state, uint32_t assignment_index) {
-  IREE_ASSERT(state->active.assignment_indices != NULL);
-  IREE_ASSERT_LT(assignment_index, state->assignment_count);
-  iree_host_size_t insert_index = state->active.start + state->active.count;
-  while (insert_index > state->active.start) {
-    const uint32_t previous_assignment_index =
-        state->active.assignment_indices[insert_index - 1];
-    if (loom_low_allocation_active_assignment_less(
-            state, previous_assignment_index, assignment_index)) {
-      break;
-    }
-    state->active.assignment_indices[insert_index] = previous_assignment_index;
-    --insert_index;
-  }
-  state->active.assignment_indices[insert_index] = assignment_index;
-  ++state->active.count;
-  loom_low_allocation_active_unit_index_insert_assignment(
-      &state->active_units, state->target.descriptor_set, state->assignments,
-      state->assignment_count, assignment_index);
-}
-
 static iree_status_t loom_low_allocation_append_assignment(
     loom_low_allocation_build_state_t* state,
     const loom_low_allocation_assignment_t* assignment,
@@ -1905,7 +1789,9 @@ static iree_status_t loom_low_allocation_append_assignment(
           &state->storage_leases, state->target.descriptor_set,
           &state->liveness, &stored_assignment, assignment_index,
           value_ordinal));
-  loom_low_allocation_activate_assignment(state, assignment_index);
+  loom_low_allocation_active_set_insert(
+      &state->active, state->target.descriptor_set, state->assignments,
+      state->assignment_count, assignment_index);
   if (out_assignment_index) {
     *out_assignment_index = assignment_index;
   }
@@ -4568,14 +4454,8 @@ static iree_status_t loom_low_allocation_assign_intervals(
   for (iree_host_size_t i = 0; i < state->liveness.value_count; ++i) {
     state->assignment_indices_by_value_ordinal[i] = UINT32_MAX;
   }
-  state->active.assignment_indices = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_arena_allocate_array(state->arena, allocatable_count,
-                                sizeof(*state->active.assignment_indices),
-                                (void**)&state->active.assignment_indices));
-  IREE_RETURN_IF_ERROR(loom_low_allocation_active_unit_index_initialize(
-      allocatable_count, allocatable_unit_count, state->arena,
-      &state->active_units));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_active_set_initialize(
+      allocatable_count, allocatable_unit_count, state->arena, &state->active));
   state->max_assigned_location_end_by_reg_class = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       state->arena, state->target.descriptor_set->reg_class_count,
@@ -4607,7 +4487,9 @@ static iree_status_t loom_low_allocation_assign_intervals(
 
   for (iree_host_size_t i = 0; i < allocatable_count; ++i) {
     const loom_liveness_interval_t* interval = intervals[i];
-    loom_low_allocation_expire_active_assignments(state, interval->start_point);
+    loom_low_allocation_active_set_expire(&state->active, state->assignments,
+                                          state->assignment_count,
+                                          interval->start_point);
 
     loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
     IREE_RETURN_IF_ERROR(loom_low_allocation_value_ordinal_for_interval(
