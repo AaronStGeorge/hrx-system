@@ -309,6 +309,7 @@ loom_cc_library(
     iree::base::internal::arena
     loom::src::loom::analysis::consumption
     loom::src::loom::analysis::liveness
+    loom::src::loom::codegen::low::allocation::active_unit
     loom::src::loom::codegen::low::allocation::assignment
     loom::src::loom::codegen::low::allocation::diagnostics
     loom::src::loom::codegen::low::allocation::live_range

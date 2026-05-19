@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "loom/analysis/consumption.h"
+#include "loom/codegen/low/allocation/active_unit.h"
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
 #include "loom/error/error_catalog.h"
@@ -17,23 +18,6 @@
 #include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/registers.h"
-
-typedef struct loom_low_allocation_active_unit_entry_t {
-  // Assignment occupying this active unit.
-  uint32_t assignment_index;
-  // Next entry in the hashed unit bucket.
-  uint32_t next_entry;
-  // Previous entry in the hashed unit bucket.
-  uint32_t previous_entry;
-  // Hash bucket containing this entry.
-  uint32_t bucket_index;
-  // Target-storage identity key for the register class owning this unit.
-  uint32_t storage_key;
-  // Target-visible storage kind for this unit.
-  loom_low_allocation_location_kind_t location_kind;
-  // Physical register or target ID for this unit.
-  uint32_t location;
-} loom_low_allocation_active_unit_entry_t;
 
 typedef struct loom_low_allocation_storage_lease_unit_entry_t {
   // Storage-lease instance occupying this leased unit.
@@ -104,29 +88,7 @@ typedef struct loom_low_allocation_build_state_t {
     iree_host_size_t count;
   } active;
   // Hash index for active register-like assignment units.
-  struct {
-    // Bucket heads into |entries|. Missing buckets contain UINT32_MAX.
-    uint32_t* bucket_heads;
-    // Power-of-two number of entries in |bucket_heads|.
-    uint32_t bucket_count;
-    // Unit entries stored for active and previously-active assignments.
-    loom_low_allocation_active_unit_entry_t* entries;
-    // Maximum number of entries that can be appended to |entries|.
-    iree_host_size_t entry_capacity;
-    // Number of initialized entries in |entries|.
-    iree_host_size_t entry_count;
-    // First entry for each assignment index. Unindexed assignments contain
-    // UINT32_MAX.
-    uint32_t* entry_starts_by_assignment_index;
-    // Number of assignment-index entries tracked by this index.
-    iree_host_size_t assignment_capacity;
-    // Currently active register-like assignments not represented in |entries|.
-    iree_host_size_t unindexed_count;
-    // Per-assignment query generations used to skip duplicate range hits.
-    uint32_t* seen_generations_by_assignment_index;
-    // Current non-zero query generation.
-    uint32_t seen_generation;
-  } active_units;
+  loom_low_allocation_active_unit_index_t active_units;
   // Maximum assigned location end indexed by descriptor register class ID.
   uint32_t* max_assigned_location_end_by_reg_class;
   // Mutable spill materialization plan records being built.
@@ -233,11 +195,6 @@ typedef struct loom_low_allocation_resolved_fixed_value_t {
   // Number of contiguous units fixed at |location_base|.
   uint32_t location_count;
 } loom_low_allocation_resolved_fixed_value_t;
-
-enum {
-  // Tiny functions are cheaper to scan linearly than to index.
-  LOOM_LOW_ALLOCATION_ACTIVE_UNIT_INDEX_MIN_CAPACITY = 32,
-};
 
 typedef enum loom_low_allocation_storage_release_policy_e {
   // Active storage leases are hard conflicts.
@@ -968,15 +925,7 @@ static bool loom_low_allocation_reserved_range_conflicts(
   return false;
 }
 
-static bool loom_low_allocation_active_unit_index_is_enabled(
-    const loom_low_allocation_build_state_t* state) {
-  return state->active_units.bucket_heads != NULL &&
-         state->active_units.bucket_count != 0 &&
-         state->active_units.entries != NULL &&
-         state->active_units.entry_starts_by_assignment_index != NULL;
-}
-
-static uint32_t loom_low_allocation_active_unit_hash(
+static uint32_t loom_low_allocation_unit_location_hash(
     loom_low_allocation_location_kind_t location_kind, uint32_t storage_key,
     uint32_t location) {
   uint32_t hash = location ^ ((uint32_t)location_kind * 0x9E3779B9u);
@@ -987,48 +936,6 @@ static uint32_t loom_low_allocation_active_unit_hash(
   hash *= 0xC2B2AE35u;
   hash ^= hash >> 16;
   return hash;
-}
-
-static uint32_t loom_low_allocation_active_unit_bucket_index(
-    const loom_low_allocation_build_state_t* state,
-    loom_low_allocation_location_kind_t location_kind, uint32_t storage_key,
-    uint32_t location) {
-  IREE_ASSERT(loom_low_allocation_active_unit_index_is_enabled(state));
-  return loom_low_allocation_active_unit_hash(location_kind, storage_key,
-                                              location) &
-         (state->active_units.bucket_count - 1u);
-}
-
-static uint32_t loom_low_allocation_active_unit_next_seen_generation(
-    loom_low_allocation_build_state_t* state) {
-  if (state->active_units.seen_generations_by_assignment_index == NULL) {
-    return 0;
-  }
-  if (state->active_units.seen_generation == UINT32_MAX) {
-    memset(
-        state->active_units.seen_generations_by_assignment_index, 0,
-        state->active_units.assignment_capacity *
-            sizeof(*state->active_units.seen_generations_by_assignment_index));
-    state->active_units.seen_generation = 0;
-  }
-  return ++state->active_units.seen_generation;
-}
-
-static bool loom_low_allocation_active_unit_mark_assignment_seen(
-    loom_low_allocation_build_state_t* state, uint32_t assignment_index,
-    uint32_t generation) {
-  if (generation == 0) {
-    return false;
-  }
-  IREE_ASSERT_LT(assignment_index, state->active_units.assignment_capacity);
-  uint32_t* seen_generations =
-      state->active_units.seen_generations_by_assignment_index;
-  uint32_t* assignment_generation = &seen_generations[assignment_index];
-  if (*assignment_generation == generation) {
-    return true;
-  }
-  *assignment_generation = generation;
-  return false;
 }
 
 static bool loom_low_allocation_active_assignment_conflicts(
@@ -1060,64 +967,15 @@ static bool loom_low_allocation_active_scan_conflicts(
     const loom_low_allocation_assignment_t* existing =
         &state->assignments[assignment_index];
     const bool assignment_is_indexed =
-        assignment_index < state->active_units.assignment_capacity &&
-        state->active_units
-                .entry_starts_by_assignment_index[assignment_index] !=
-            UINT32_MAX;
-    if (unindexed_only &&
-        (assignment_index >= state->active_units.assignment_capacity ||
-         assignment_is_indexed)) {
+        loom_low_allocation_active_unit_index_contains_assignment(
+            &state->active_units, assignment_index);
+    if (unindexed_only && assignment_is_indexed) {
       continue;
     }
     if (loom_low_allocation_active_assignment_conflicts(
             state, existing, candidate, ignored_value_ids,
             ignored_value_count)) {
       return true;
-    }
-  }
-  return false;
-}
-
-static bool loom_low_allocation_active_unit_index_conflicts(
-    loom_low_allocation_build_state_t* state,
-    const loom_low_allocation_assignment_t* candidate,
-    const loom_value_id_t* ignored_value_ids, uint16_t ignored_value_count) {
-  if (!loom_low_allocation_location_kind_is_register_like(
-          candidate->location_kind)) {
-    return false;
-  }
-  const uint32_t storage_key = loom_low_reg_class_storage_key(
-      state->target.descriptor_set, candidate->descriptor_reg_class_id);
-  const uint32_t generation =
-      loom_low_allocation_active_unit_next_seen_generation(state);
-  for (uint32_t unit_offset = 0; unit_offset < candidate->location_count;
-       ++unit_offset) {
-    if (candidate->location_base > UINT32_MAX - unit_offset) {
-      break;
-    }
-    const uint32_t location = candidate->location_base + unit_offset;
-    const uint32_t bucket_index = loom_low_allocation_active_unit_bucket_index(
-        state, candidate->location_kind, storage_key, location);
-    uint32_t entry_index = state->active_units.bucket_heads[bucket_index];
-    while (entry_index != UINT32_MAX) {
-      IREE_ASSERT_LT(entry_index, state->active_units.entry_count);
-      const loom_low_allocation_active_unit_entry_t* entry =
-          &state->active_units.entries[entry_index];
-      const uint32_t assignment_index = entry->assignment_index;
-      IREE_ASSERT_LT(assignment_index, state->assignment_count);
-      const loom_low_allocation_assignment_t* existing =
-          &state->assignments[assignment_index];
-      if (entry->location_kind == candidate->location_kind &&
-          entry->storage_key == storage_key && entry->location == location &&
-          existing->end_point > candidate->start_point &&
-          !loom_low_allocation_active_unit_mark_assignment_seen(
-              state, assignment_index, generation) &&
-          loom_low_allocation_active_assignment_conflicts(
-              state, existing, candidate, ignored_value_ids,
-              ignored_value_count)) {
-        return true;
-      }
-      entry_index = entry->next_entry;
     }
   }
   return false;
@@ -1134,8 +992,8 @@ static uint32_t loom_low_allocation_storage_lease_unit_bucket_index(
     const loom_low_allocation_build_state_t* state,
     loom_low_allocation_location_kind_t location_kind, uint32_t storage_key,
     uint32_t location) {
-  return loom_low_allocation_active_unit_hash(location_kind, storage_key,
-                                              location) &
+  return loom_low_allocation_unit_location_hash(location_kind, storage_key,
+                                                location) &
          (state->storage_lease_units.bucket_count - 1u);
 }
 
@@ -1346,12 +1204,17 @@ static bool loom_low_allocation_candidate_conflicts(
           loom_low_allocation_unit_end_point_start_for_value(
               state, interval->value_id),
   };
-  if (loom_low_allocation_active_unit_index_is_enabled(state)) {
+  if (loom_low_allocation_active_unit_index_is_enabled(&state->active_units)) {
     if (loom_low_allocation_active_unit_index_conflicts(
-            state, &candidate, ignored_value_ids, ignored_value_count)) {
+            &state->active_units, state->target.descriptor_set,
+            &state->liveness, state->unit_end_points,
+            state->unit_end_point_count, state->assignments,
+            state->assignment_count, &candidate, ignored_value_ids,
+            ignored_value_count)) {
       return true;
     }
-    if (state->active_units.unindexed_count != 0 &&
+    if (loom_low_allocation_active_unit_index_unindexed_count(
+            &state->active_units) != 0 &&
         loom_low_allocation_active_scan_conflicts(
             state, &candidate, ignored_value_ids, ignored_value_count,
             /*unindexed_only=*/true)) {
@@ -1924,56 +1787,6 @@ loom_low_allocation_copy_relation_requires_materialized_storage(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_allocation_initialize_active_unit_index(
-    loom_low_allocation_build_state_t* state, iree_host_size_t assignment_count,
-    iree_host_size_t unit_capacity) {
-  if (unit_capacity < LOOM_LOW_ALLOCATION_ACTIVE_UNIT_INDEX_MIN_CAPACITY ||
-      unit_capacity > UINT32_MAX / 2u) {
-    return iree_ok_status();
-  }
-
-  const uint32_t bucket_count =
-      loom_low_allocation_round_up_to_power_of_two_u32((uint32_t)unit_capacity *
-                                                       2u);
-  if (bucket_count == 0) {
-    return iree_ok_status();
-  }
-
-  state->active_units.bucket_count = bucket_count;
-  state->active_units.entry_capacity = unit_capacity;
-  state->active_units.assignment_capacity = assignment_count;
-
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      state->arena, bucket_count, sizeof(*state->active_units.bucket_heads),
-      (void**)&state->active_units.bucket_heads));
-  for (uint32_t i = 0; i < bucket_count; ++i) {
-    state->active_units.bucket_heads[i] = UINT32_MAX;
-  }
-
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      state->arena, unit_capacity, sizeof(*state->active_units.entries),
-      (void**)&state->active_units.entries));
-  memset(state->active_units.entries, 0,
-         unit_capacity * sizeof(*state->active_units.entries));
-
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      state->arena, assignment_count,
-      sizeof(*state->active_units.entry_starts_by_assignment_index),
-      (void**)&state->active_units.entry_starts_by_assignment_index));
-  for (iree_host_size_t i = 0; i < assignment_count; ++i) {
-    state->active_units.entry_starts_by_assignment_index[i] = UINT32_MAX;
-  }
-
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      state->arena, assignment_count,
-      sizeof(*state->active_units.seen_generations_by_assignment_index),
-      (void**)&state->active_units.seen_generations_by_assignment_index));
-  memset(state->active_units.seen_generations_by_assignment_index, 0,
-         assignment_count *
-             sizeof(*state->active_units.seen_generations_by_assignment_index));
-  return iree_ok_status();
-}
-
 static iree_status_t loom_low_allocation_initialize_storage_lease_unit_index(
     loom_low_allocation_build_state_t* state,
     iree_host_size_t lease_unit_capacity) {
@@ -2013,71 +1826,6 @@ static iree_status_t loom_low_allocation_initialize_storage_lease_unit_index(
   memset(state->storage_lease_units.entries, 0,
          lease_unit_capacity * sizeof(*state->storage_lease_units.entries));
   return iree_ok_status();
-}
-
-static bool loom_low_allocation_active_unit_index_can_insert_assignment(
-    const loom_low_allocation_build_state_t* state,
-    const loom_low_allocation_assignment_t* assignment) {
-  if (!loom_low_allocation_active_unit_index_is_enabled(state) ||
-      !loom_low_allocation_location_kind_is_register_like(
-          assignment->location_kind) ||
-      assignment->location_count == 0 ||
-      assignment->location_base > UINT32_MAX - assignment->location_count) {
-    return false;
-  }
-  return assignment->location_count <=
-         state->active_units.entry_capacity - state->active_units.entry_count;
-}
-
-static void loom_low_allocation_active_unit_index_insert_assignment(
-    loom_low_allocation_build_state_t* state, uint32_t assignment_index) {
-  if (!loom_low_allocation_active_unit_index_is_enabled(state)) {
-    return;
-  }
-  IREE_ASSERT_LT(assignment_index, state->assignment_count);
-  IREE_ASSERT_LT(assignment_index, state->active_units.assignment_capacity);
-  const loom_low_allocation_assignment_t* assignment =
-      &state->assignments[assignment_index];
-  if (!loom_low_allocation_location_kind_is_register_like(
-          assignment->location_kind)) {
-    return;
-  }
-  if (!loom_low_allocation_active_unit_index_can_insert_assignment(
-          state, assignment)) {
-    ++state->active_units.unindexed_count;
-    return;
-  }
-
-  const iree_host_size_t entry_start = state->active_units.entry_count;
-  IREE_ASSERT(entry_start <= UINT32_MAX);
-  state->active_units.entry_starts_by_assignment_index[assignment_index] =
-      (uint32_t)entry_start;
-  const uint32_t storage_key = loom_low_reg_class_storage_key(
-      state->target.descriptor_set, assignment->descriptor_reg_class_id);
-  for (uint32_t unit_offset = 0; unit_offset < assignment->location_count;
-       ++unit_offset) {
-    const uint32_t location = assignment->location_base + unit_offset;
-    const uint32_t bucket_index = loom_low_allocation_active_unit_bucket_index(
-        state, assignment->location_kind, storage_key, location);
-    const uint32_t entry_index = (uint32_t)state->active_units.entry_count++;
-    loom_low_allocation_active_unit_entry_t* entry =
-        &state->active_units.entries[entry_index];
-    *entry = (loom_low_allocation_active_unit_entry_t){
-        .assignment_index = assignment_index,
-        .next_entry = state->active_units.bucket_heads[bucket_index],
-        .previous_entry = UINT32_MAX,
-        .bucket_index = bucket_index,
-        .storage_key = storage_key,
-        .location_kind = assignment->location_kind,
-        .location = location,
-    };
-    if (entry->next_entry != UINT32_MAX) {
-      IREE_ASSERT_LT(entry->next_entry, state->active_units.entry_count);
-      state->active_units.entries[entry->next_entry].previous_entry =
-          entry_index;
-    }
-    state->active_units.bucket_heads[bucket_index] = entry_index;
-  }
 }
 
 static iree_status_t loom_low_allocation_storage_lease_unit_index_insert(
@@ -2125,53 +1873,6 @@ static iree_status_t loom_low_allocation_storage_lease_unit_index_insert(
     state->storage_lease_units.bucket_heads[bucket_index] = entry_index;
   }
   return iree_ok_status();
-}
-
-static void loom_low_allocation_active_unit_index_remove_assignment(
-    loom_low_allocation_build_state_t* state, uint32_t assignment_index) {
-  if (!loom_low_allocation_active_unit_index_is_enabled(state)) {
-    return;
-  }
-  IREE_ASSERT_LT(assignment_index, state->assignment_count);
-  IREE_ASSERT_LT(assignment_index, state->active_units.assignment_capacity);
-  const loom_low_allocation_assignment_t* assignment =
-      &state->assignments[assignment_index];
-  if (!loom_low_allocation_location_kind_is_register_like(
-          assignment->location_kind)) {
-    return;
-  }
-  const uint32_t entry_start =
-      state->active_units.entry_starts_by_assignment_index[assignment_index];
-  if (entry_start == UINT32_MAX) {
-    IREE_ASSERT_GT(state->active_units.unindexed_count, 0);
-    --state->active_units.unindexed_count;
-    return;
-  }
-  for (uint32_t unit_offset = 0; unit_offset < assignment->location_count;
-       ++unit_offset) {
-    const uint32_t entry_index = entry_start + unit_offset;
-    IREE_ASSERT_LT(entry_index, state->active_units.entry_count);
-    loom_low_allocation_active_unit_entry_t* entry =
-        &state->active_units.entries[entry_index];
-    if (entry->previous_entry != UINT32_MAX) {
-      IREE_ASSERT_LT(entry->previous_entry, state->active_units.entry_count);
-      state->active_units.entries[entry->previous_entry].next_entry =
-          entry->next_entry;
-    } else {
-      IREE_ASSERT_EQ(state->active_units.bucket_heads[entry->bucket_index],
-                     entry_index);
-      state->active_units.bucket_heads[entry->bucket_index] = entry->next_entry;
-    }
-    if (entry->next_entry != UINT32_MAX) {
-      IREE_ASSERT_LT(entry->next_entry, state->active_units.entry_count);
-      state->active_units.entries[entry->next_entry].previous_entry =
-          entry->previous_entry;
-    }
-    entry->next_entry = UINT32_MAX;
-    entry->previous_entry = UINT32_MAX;
-  }
-  state->active_units.entry_starts_by_assignment_index[assignment_index] =
-      UINT32_MAX;
 }
 
 static iree_status_t loom_low_allocation_validate_storage_lease_table(
@@ -2614,8 +2315,9 @@ static iree_status_t loom_low_allocation_spill_active_assignment(
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                             "allocation table exceeds uint32_t range");
   }
-  loom_low_allocation_active_unit_index_remove_assignment(state,
-                                                          assignment_index);
+  loom_low_allocation_active_unit_index_remove_assignment(
+      &state->active_units, state->assignments, state->assignment_count,
+      assignment_index);
   loom_low_allocation_assignment_t* assignment =
       &state->assignments[assignment_index];
   assignment->location_kind = LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT;
@@ -2860,8 +2562,9 @@ static void loom_low_allocation_expire_active_assignments(
     if (assignment->end_point > start_point) {
       break;
     }
-    loom_low_allocation_active_unit_index_remove_assignment(state,
-                                                            assignment_index);
+    loom_low_allocation_active_unit_index_remove_assignment(
+        &state->active_units, state->assignments, state->assignment_count,
+        assignment_index);
     ++state->active.start;
     --state->active.count;
   }
@@ -2895,8 +2598,9 @@ static void loom_low_allocation_activate_assignment(
   }
   state->active.assignment_indices[insert_index] = assignment_index;
   ++state->active.count;
-  loom_low_allocation_active_unit_index_insert_assignment(state,
-                                                          assignment_index);
+  loom_low_allocation_active_unit_index_insert_assignment(
+      &state->active_units, state->target.descriptor_set, state->assignments,
+      state->assignment_count, assignment_index);
 }
 
 static iree_status_t loom_low_allocation_append_assignment(
@@ -5616,8 +5320,9 @@ static iree_status_t loom_low_allocation_assign_intervals(
       iree_arena_allocate_array(state->arena, allocatable_count,
                                 sizeof(*state->active.assignment_indices),
                                 (void**)&state->active.assignment_indices));
-  IREE_RETURN_IF_ERROR(loom_low_allocation_initialize_active_unit_index(
-      state, allocatable_count, allocatable_unit_count));
+  IREE_RETURN_IF_ERROR(loom_low_allocation_active_unit_index_initialize(
+      allocatable_count, allocatable_unit_count, state->arena,
+      &state->active_units));
   state->max_assigned_location_end_by_reg_class = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       state->arena, state->target.descriptor_set->reg_class_count,
