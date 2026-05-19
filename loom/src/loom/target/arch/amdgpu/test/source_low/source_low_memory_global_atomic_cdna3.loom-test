@@ -32,35 +32,51 @@ amdgpu.target<gfx942> @target
 kernel.def target(@target) @intermediate_block_atomic_output_f32(%partial: buffer, %output: buffer) {
   %c1 = index.constant 1 : index
   %c2 = index.constant 2 : index
+  %c4 = index.constant 4 : index
   %c64 = index.constant 64 : index
-  kernel.launch.config workgroups(%c2, %c1, %c1) workgroup_size(%c64, %c1, %c1) : index
+  kernel.launch.config workgroups(%c2, %c4, %c1) workgroup_size(%c64, %c1, %c1) : index
 } launch {
   %intermediate_block0 = kernel.workgroup.id<x> : index
   %intermediate_block = index.assume %intermediate_block0 [range(%intermediate_block0, 0, 1)] : index
+  %row0 = kernel.workgroup.id<y> : index
+  %row = index.assume %row0 [range(%row0, 0, 3)] : index
   %lane0 = kernel.workitem.id<x> : index
   %lane = index.assume %lane0 [range(%lane0, 0, 63)] : index
   %zero = index.constant 0 : offset
   %partial_global = buffer.assume.memory_space %partial {memory_space = global} : buffer
   %output_global = buffer.assume.memory_space %output {memory_space = global} : buffer
   %partial_noalias, %output_noalias = buffer.assume.noalias %partial_global, %output_global : buffer, buffer
-  %partial_view = buffer.view %partial_noalias[%zero] : buffer -> view<2x64xf32, #dense>
-  %output_view = buffer.view %output_noalias[%zero] : buffer -> view<64xf32, #dense>
-  %contribution = view.load %partial_view[%intermediate_block, %lane] : view<2x64xf32, #dense> -> f32
-  view.atomic.reduce<addf> %contribution, %output_view[%lane] {ordering = relaxed, scope = device} : f32, view<64xf32, #dense>
+  %partial_view = buffer.view %partial_noalias[%zero] : buffer -> view<2x4x64xf32, #dense>
+  %output_view = buffer.view %output_noalias[%zero] : buffer -> view<4x64xf32, #dense>
+  %contribution = view.load %partial_view[%intermediate_block, %row, %lane] : view<2x4x64xf32, #dense> -> f32
+  view.atomic.reduce<addf> %contribution, %output_view[%row, %lane] {ordering = relaxed, scope = device} : f32, view<4x64xf32, #dense>
   kernel.return
 }
 
 // ----
 low.kernel.def target(@target) workgroup_size(64, 1, 1) @intermediate_block_atomic_output_f32() asm<amdgpu.cdna3.core> {
   %intermediate_block = live_in<amdgpu.workgroup_id.x> : reg<amdgpu.sgpr>
+  %row = live_in<amdgpu.workgroup_id.y> : reg<amdgpu.sgpr>
   %lane = live_in<amdgpu.workitem_id.x> : reg<amdgpu.vgpr>
-  %partial_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 512} : reg<amdgpu.sgpr x2>
-  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
-  %27 = v_lshl_add_u32_shift_imm %intermediate_block, %lane, 6
-  %28 = v_lshlrev_b32_src0_inline %27, 2
-  %29 = s_mov_b32_m0_imm 0
-  %contribution = global_load_dword_saddr %28, %partial_view, %29
-  %31 = v_lshlrev_b32_src0_inline %lane, 2
-  global_atomic_add_f32_saddr %31, %contribution, %output_view, %29
+  %partial_view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 2048} : reg<amdgpu.sgpr x2>
+  %output_view = resource<hal_binding> {index = 1, source_type = hal.buffer, extent = 1024} : reg<amdgpu.sgpr x2>
+  %33 = v_lshl_add_u32_shift_imm %row, %lane, 6
+  %34 = v_lshl_add_u32_shift_imm %intermediate_block, %33, 8
+  %35 = v_lshlrev_b32_src0_inline %34, 2
+  %36 = s_mov_b32_m0_imm 0
+  %contribution = global_load_dword_saddr %35, %partial_view, %36
+  %38 = v_lshlrev_b32_src0_inline %lane, 2
+  %39 = s_mov_b32 0
+  %40 = concat(%row, %39) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  %41 = s_mov_b32 8
+  %42 = s_lshl_b64 %40, %41
+  %43 = slice %output_view[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %44 = slice %output_view[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %45 = slice %42[0] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %46 = slice %42[1] : reg<amdgpu.sgpr x2> -> reg<amdgpu.sgpr>
+  %47 = s_add_u32 %43, %45
+  %48 = s_addc_u32 %44, %46
+  %49 = concat(%47, %48) : (reg<amdgpu.sgpr>, reg<amdgpu.sgpr>) -> reg<amdgpu.sgpr x2>
+  global_atomic_add_f32_saddr %38, %contribution, %49, %36
   return
 }

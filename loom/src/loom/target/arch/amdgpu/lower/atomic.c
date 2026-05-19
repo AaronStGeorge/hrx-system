@@ -966,18 +966,6 @@ static bool loom_amdgpu_atomic_select(
     return false;
   }
   loom_amdgpu_atomic_select_packet_attrs(descriptor_set, out_selection);
-  if (out_selection->address_form ==
-      LOOM_AMDGPU_MEMORY_ADDRESS_FORM_GLOBAL_SADDR) {
-    for (uint8_t i = 0; i < out_selection->source.dynamic_term_count; ++i) {
-      if (out_selection->dynamic_term_kinds[i] !=
-          LOOM_AMDGPU_MEMORY_DYNAMIC_INDEX_SOFFSET) {
-        continue;
-      }
-      memory_diagnostic->rejection_bits |=
-          LOOM_AMDGPU_MEMORY_ACCESS_REJECTION_GLOBAL_FALLBACK_ADDRESS;
-      return false;
-    }
-  }
   if (!loom_amdgpu_atomic_select_global_ordering(descriptor_set, out_selection,
                                                  source_op, diagnostic)) {
     return false;
