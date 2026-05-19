@@ -12,7 +12,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/analysis/liveness.h"
-#include "loom/codegen/low/allocation/assignment.h"
+#include "loom/codegen/low/allocation/assignment_map.h"
 #include "loom/codegen/low/allocation/table.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/ir/ir.h"
@@ -29,12 +29,8 @@ typedef struct loom_low_allocation_copy_decision_context_t {
   loom_region_t* body;
   // Descriptor set selected by the low function target.
   const loom_low_descriptor_set_t* descriptor_set;
-  // Liveness analysis for |body|.
-  const loom_liveness_analysis_t* liveness;
-  // Completed assignment records.
-  const loom_low_allocation_assignment_t* assignments;
-  // Assignment indices by liveness local value ordinal.
-  const uint32_t* assignment_indices_by_value_ordinal;
+  // Completed assignment lookup map.
+  loom_low_allocation_assignment_map_t assignment_map;
 } loom_low_allocation_copy_decision_context_t;
 
 // low.copy decision table rows and aggregate counts.

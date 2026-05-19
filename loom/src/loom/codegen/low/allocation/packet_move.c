@@ -21,44 +21,6 @@ typedef struct loom_low_allocation_packet_unit_move_t {
   loom_low_allocation_unit_location_t source;
 } loom_low_allocation_packet_unit_move_t;
 
-static bool loom_low_allocation_packet_move_value_ordinal_for_value(
-    const loom_low_allocation_packet_move_context_t* context,
-    loom_value_id_t value_id, loom_value_ordinal_t* out_value_ordinal) {
-  const loom_value_ordinal_t value_ordinal =
-      loom_module_value_ordinal_scratch_lookup(context->module, value_id);
-  if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID ||
-      value_ordinal >= context->liveness->value_count) {
-    return false;
-  }
-  IREE_ASSERT_EQ(context->liveness->value_ids[value_ordinal], value_id);
-  *out_value_ordinal = value_ordinal;
-  return true;
-}
-
-static iree_status_t loom_low_allocation_packet_move_assignment_for_value(
-    const loom_low_allocation_packet_move_context_t* context,
-    loom_value_id_t value_id,
-    const loom_low_allocation_assignment_t** out_assignment) {
-  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-  if (loom_low_allocation_packet_move_value_ordinal_for_value(context, value_id,
-                                                              &value_ordinal)) {
-    const uint32_t assignment_index =
-        context->assignment_indices_by_value_ordinal[value_ordinal];
-    if (assignment_index != UINT32_MAX) {
-      IREE_ASSERT(assignment_index < context->assignment_count,
-                  "assignment index exceeds initialized assignment count");
-      IREE_ASSERT(context->assignments[assignment_index].value_id == value_id,
-                  "assignment index table points at the wrong value");
-      *out_assignment = &context->assignments[assignment_index];
-      return iree_ok_status();
-    }
-  }
-  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                          "low allocation references value %u without an "
-                          "assignment",
-                          (unsigned)value_id);
-}
-
 static iree_status_t loom_low_allocation_packet_move_append_unit_move(
     const loom_low_allocation_assignment_t* source_assignment,
     uint32_t source_unit_index,
@@ -89,11 +51,15 @@ static iree_status_t loom_low_allocation_packet_moves_for_copy(
     iree_host_size_t move_capacity, iree_host_size_t* out_move_count) {
   *out_move_count = 0;
   const loom_low_allocation_assignment_t* source_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_allocation_packet_move_assignment_for_value(
-      context, loom_low_copy_source(op), &source_assignment));
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_assignment_map_require_assignment_for_value(
+          &context->assignment_map, loom_low_copy_source(op), NULL,
+          &source_assignment));
   const loom_low_allocation_assignment_t* result_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_allocation_packet_move_assignment_for_value(
-      context, loom_low_copy_result(op), &result_assignment));
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_assignment_map_require_assignment_for_value(
+          &context->assignment_map, loom_low_copy_result(op), NULL,
+          &result_assignment));
   if (source_assignment->location_count != result_assignment->location_count) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
@@ -118,11 +84,15 @@ static iree_status_t loom_low_allocation_packet_moves_for_slice(
                             "low.slice offset is outside uint32_t range");
   }
   const loom_low_allocation_assignment_t* source_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_allocation_packet_move_assignment_for_value(
-      context, loom_low_slice_source(op), &source_assignment));
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_assignment_map_require_assignment_for_value(
+          &context->assignment_map, loom_low_slice_source(op), NULL,
+          &source_assignment));
   const loom_low_allocation_assignment_t* result_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_allocation_packet_move_assignment_for_value(
-      context, loom_low_slice_result(op), &result_assignment));
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_assignment_map_require_assignment_for_value(
+          &context->assignment_map, loom_low_slice_result(op), NULL,
+          &result_assignment));
   const uint32_t source_offset = (uint32_t)offset;
   if (source_offset > source_assignment->location_count ||
       result_assignment->location_count >
@@ -149,14 +119,18 @@ static iree_status_t loom_low_allocation_packet_moves_for_concat(
     return iree_ok_status();
   }
   const loom_low_allocation_assignment_t* result_assignment = NULL;
-  IREE_RETURN_IF_ERROR(loom_low_allocation_packet_move_assignment_for_value(
-      context, loom_low_concat_result(op), &result_assignment));
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_assignment_map_require_assignment_for_value(
+          &context->assignment_map, loom_low_concat_result(op), NULL,
+          &result_assignment));
   uint32_t result_offset = 0;
   loom_value_slice_t sources = loom_low_concat_sources(op);
   for (uint16_t i = 0; i < sources.count; ++i) {
     const loom_low_allocation_assignment_t* source_assignment = NULL;
-    IREE_RETURN_IF_ERROR(loom_low_allocation_packet_move_assignment_for_value(
-        context, sources.values[i], &source_assignment));
+    IREE_RETURN_IF_ERROR(
+        loom_low_allocation_assignment_map_require_assignment_for_value(
+            &context->assignment_map, sources.values[i], NULL,
+            &source_assignment));
     if (result_offset > result_assignment->location_count ||
         source_assignment->location_count >
             result_assignment->location_count - result_offset) {
@@ -422,8 +396,9 @@ static iree_status_t loom_low_allocation_packet_move_find_temporary(
             context->target_constraints, temporary.descriptor_reg_class_id,
             temporary.location_kind, temporary.location, 1) ||
         loom_low_allocation_unit_location_is_live_at_point(
-            context->descriptor_set, context->assignments,
-            context->assignment_count, context->unit_liveness->end_points,
+            context->descriptor_set, context->assignment_map.assignments,
+            context->assignment_map.assignment_count,
+            context->unit_liveness->end_points,
             context->unit_liveness->end_point_count, &temporary,
             program_point) ||
         loom_low_allocation_packet_move_uses_location(moves, move_count,
@@ -450,8 +425,8 @@ static iree_status_t loom_low_allocation_packet_move_op_program_point(
     const loom_low_allocation_packet_move_context_t* context,
     const loom_op_t* op, uint32_t* out_program_point) {
   return loom_low_allocation_live_range_ordered_op_program_point(
-      context->liveness, context->body, context->liveness_order, op,
-      out_program_point);
+      context->assignment_map.liveness, context->body, context->liveness_order,
+      op, out_program_point);
 }
 
 static iree_status_t

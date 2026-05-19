@@ -12,7 +12,7 @@
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "loom/analysis/liveness.h"
-#include "loom/codegen/low/allocation/assignment.h"
+#include "loom/codegen/low/allocation/assignment_map.h"
 #include "loom/codegen/low/allocation/table.h"
 #include "loom/codegen/low/allocation/target_constraints.h"
 #include "loom/codegen/low/allocation/unit_liveness.h"
@@ -33,18 +33,12 @@ typedef struct loom_low_allocation_packet_move_context_t {
   const loom_low_descriptor_set_t* descriptor_set;
   // Liveness ordering used by allocation.
   loom_liveness_order_t liveness_order;
-  // Liveness analysis for |body|.
-  const loom_liveness_analysis_t* liveness;
   // Resolved target storage constraints.
   const loom_low_allocation_target_constraints_t* target_constraints;
   // Per-allocation-unit live end points.
   const loom_low_allocation_unit_liveness_t* unit_liveness;
-  // Completed assignment records.
-  const loom_low_allocation_assignment_t* assignments;
-  // Number of records in |assignments|.
-  iree_host_size_t assignment_count;
-  // Assignment indices by liveness local value ordinal.
-  const uint32_t* assignment_indices_by_value_ordinal;
+  // Completed assignment lookup map.
+  loom_low_allocation_assignment_map_t assignment_map;
 } loom_low_allocation_packet_move_context_t;
 
 // Packet-local move temporary table rows.

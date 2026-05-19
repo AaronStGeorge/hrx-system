@@ -78,6 +78,7 @@ loom_cc_library(
     "copy_decision.c"
   DEPS
     ::assignment
+    ::assignment_map
     ::move_topology
     ::storage
     ::table
@@ -99,6 +100,7 @@ loom_cc_library(
     "edge_copy.c"
   DEPS
     ::assignment
+    ::assignment_map
     ::live_range
     ::move_topology
     ::table
@@ -153,6 +155,34 @@ loom_cc_library(
     loom::src::loom::analysis::liveness
     loom::src::loom::ir
   PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    assignment_map
+  HDRS
+    "assignment_map.h"
+  SRCS
+    "assignment_map.c"
+  DEPS
+    ::assignment
+    iree::base
+    loom::src::loom::analysis::liveness
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    assignment_map_test
+  SRCS
+    "assignment_map_test.cc"
+  DEPS
+    ::assignment_map
+    iree::base::internal::arena
+    loom::src::loom::ir
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(
@@ -398,6 +428,7 @@ loom_cc_library(
     "packet_move.c"
   DEPS
     ::assignment
+    ::assignment_map
     ::live_range
     ::move_topology
     ::table

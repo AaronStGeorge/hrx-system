@@ -10,58 +10,23 @@
 
 #include "loom/codegen/low/allocation/move_topology.h"
 #include "loom/codegen/low/allocation/storage.h"
-#include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
-
-static bool loom_low_allocation_copy_decision_value_ordinal_for_value(
-    const loom_low_allocation_copy_decision_context_t* context,
-    loom_value_id_t value_id, loom_value_ordinal_t* out_value_ordinal) {
-  const loom_value_ordinal_t value_ordinal =
-      loom_module_value_ordinal_scratch_lookup(context->module, value_id);
-  if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID ||
-      value_ordinal >= context->liveness->value_count) {
-    return false;
-  }
-  *out_value_ordinal = value_ordinal;
-  return true;
-}
-
-static iree_status_t
-loom_low_allocation_copy_decision_assignment_index_for_value(
-    const loom_low_allocation_copy_decision_context_t* context,
-    loom_value_id_t value_id, uint32_t* out_assignment_index) {
-  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-  if (loom_low_allocation_copy_decision_value_ordinal_for_value(
-          context, value_id, &value_ordinal)) {
-    const uint32_t assignment_index =
-        context->assignment_indices_by_value_ordinal[value_ordinal];
-    if (assignment_index != UINT32_MAX) {
-      *out_assignment_index = assignment_index;
-      return iree_ok_status();
-    }
-  }
-  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                          "low allocation references value %u without an "
-                          "assignment",
-                          (unsigned)value_id);
-}
 
 static iree_status_t loom_low_allocation_copy_decision_plan_record(
     const loom_low_allocation_copy_decision_context_t* context,
     loom_low_allocation_copy_decision_plan_t* plan, const loom_op_t* op) {
   uint32_t source_assignment_index = 0;
+  const loom_low_allocation_assignment_t* source_assignment = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_low_allocation_copy_decision_assignment_index_for_value(
-          context, loom_low_copy_source(op), &source_assignment_index));
+      loom_low_allocation_assignment_map_require_assignment_for_value(
+          &context->assignment_map, loom_low_copy_source(op),
+          &source_assignment_index, &source_assignment));
   uint32_t result_assignment_index = 0;
+  const loom_low_allocation_assignment_t* result_assignment = NULL;
   IREE_RETURN_IF_ERROR(
-      loom_low_allocation_copy_decision_assignment_index_for_value(
-          context, loom_low_copy_result(op), &result_assignment_index));
-
-  const loom_low_allocation_assignment_t* source_assignment =
-      &context->assignments[source_assignment_index];
-  const loom_low_allocation_assignment_t* result_assignment =
-      &context->assignments[result_assignment_index];
+      loom_low_allocation_assignment_map_require_assignment_for_value(
+          &context->assignment_map, loom_low_copy_result(op),
+          &result_assignment_index, &result_assignment));
   const bool coalesced =
       loom_low_allocation_assignment_is_register_like(source_assignment) &&
       loom_low_allocation_assignment_is_register_like(result_assignment) &&

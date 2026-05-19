@@ -32,6 +32,7 @@ loom_assert_no_dependencies(
         ":active_set",
         ":active_unit",
         ":assignment",
+        ":assignment_map",
         ":copy_decision",
         ":diagnostics",
         ":edge_copy",
@@ -106,6 +107,7 @@ loom_cc_library(
     hdrs = ["copy_decision.h"],
     deps = [
         ":assignment",
+        ":assignment_map",
         ":move_topology",
         ":storage",
         ":table",
@@ -124,6 +126,7 @@ loom_cc_library(
     hdrs = ["edge_copy.h"],
     deps = [
         ":assignment",
+        ":assignment_map",
         ":live_range",
         ":move_topology",
         ":table",
@@ -170,6 +173,30 @@ loom_cc_library(
         "//loom/src/loom/analysis:liveness",
         "//loom/src/loom/ir",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "assignment_map",
+    srcs = ["assignment_map.c"],
+    hdrs = ["assignment_map.h"],
+    deps = [
+        ":assignment",
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "assignment_map_test",
+    srcs = ["assignment_map_test.cc"],
+    deps = [
+        ":assignment_map",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
@@ -384,6 +411,7 @@ loom_cc_library(
     hdrs = ["packet_move.h"],
     deps = [
         ":assignment",
+        ":assignment_map",
         ":live_range",
         ":move_topology",
         ":table",

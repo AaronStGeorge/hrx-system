@@ -10,6 +10,7 @@
 
 #include "loom/analysis/consumption.h"
 #include "loom/codegen/low/allocation/active_set.h"
+#include "loom/codegen/low/allocation/assignment_map.h"
 #include "loom/codegen/low/allocation/copy_decision.h"
 #include "loom/codegen/low/allocation/edge_copy.h"
 #include "loom/codegen/low/allocation/packet_move.h"
@@ -48,8 +49,6 @@ typedef struct loom_low_allocation_build_state_t {
   loom_consumption_region_query_t consumption_query;
   // True once |consumption_query| has been initialized.
   bool consumption_query_initialized;
-  // Active function-local value domain shared with liveness/allocation.
-  const loom_local_value_domain_t* value_domain;
   // Mutable per-allocation-unit live end points.
   loom_low_allocation_unit_liveness_t unit_liveness;
   // Mutable assignment records being built.
@@ -57,6 +56,8 @@ typedef struct loom_low_allocation_build_state_t {
   // Assignment indices by liveness local value ordinal. Missing entries contain
   // UINT32_MAX.
   uint32_t* assignment_indices_by_value_ordinal;
+  // Lookup table over assignments and liveness-local value ordinals.
+  loom_low_allocation_assignment_map_t assignment_map;
   // Assignment-index window still live at the current interval start.
   loom_low_allocation_active_set_t active;
   // Mutable spill materialization plan records being built.
@@ -101,16 +102,8 @@ static bool loom_low_allocation_can_ignore_branch_counterpart_conflict(
 static bool loom_low_allocation_value_ordinal_for_value(
     const loom_low_allocation_build_state_t* state, loom_value_id_t value_id,
     loom_value_ordinal_t* out_value_ordinal) {
-  IREE_ASSERT(loom_local_value_domain_is_acquired(state->value_domain));
-  const loom_value_ordinal_t value_ordinal =
-      loom_module_value_ordinal_scratch_lookup(state->module, value_id);
-  if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID ||
-      value_ordinal >= state->liveness.value_count) {
-    return false;
-  }
-  IREE_ASSERT_EQ(state->liveness.value_ids[value_ordinal], value_id);
-  *out_value_ordinal = value_ordinal;
-  return true;
+  return loom_low_allocation_assignment_map_value_ordinal_for_value(
+      &state->assignment_map, value_id, out_value_ordinal);
 }
 
 static uint32_t loom_low_allocation_unit_end_point_start_for_value_ordinal(
@@ -339,43 +332,16 @@ static bool loom_low_allocation_interval_requires_register_location(
 static iree_status_t loom_low_allocation_assignment_index_for_value(
     const loom_low_allocation_build_state_t* state, loom_value_id_t value_id,
     uint32_t* out_assignment_index) {
-  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-  if (loom_low_allocation_value_ordinal_for_value(state, value_id,
-                                                  &value_ordinal)) {
-    const uint32_t assignment_index =
-        state->assignment_indices_by_value_ordinal[value_ordinal];
-    if (assignment_index != UINT32_MAX) {
-      IREE_ASSERT(assignment_index < state->assignment_count,
-                  "assignment index exceeds initialized assignment count");
-      IREE_ASSERT(state->assignments[assignment_index].value_id == value_id,
-                  "assignment index table points at the wrong value");
-      *out_assignment_index = assignment_index;
-      return iree_ok_status();
-    }
-  }
-  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                          "low allocation references value %u without an "
-                          "assignment",
-                          (unsigned)value_id);
+  return loom_low_allocation_assignment_map_require_assignment_for_value(
+      &state->assignment_map, value_id, out_assignment_index, NULL);
 }
 
 static const loom_low_allocation_assignment_t*
 loom_low_allocation_current_assignment_for_value_ordinal(
     const loom_low_allocation_build_state_t* state,
     loom_value_ordinal_t value_ordinal) {
-  IREE_ASSERT_LT(value_ordinal, state->liveness.value_count);
-  IREE_ASSERT(state->assignment_indices_by_value_ordinal != NULL);
-  const uint32_t assignment_index =
-      state->assignment_indices_by_value_ordinal[value_ordinal];
-  if (assignment_index == UINT32_MAX) {
-    return NULL;
-  }
-  IREE_ASSERT_LT(assignment_index, state->assignment_count);
-  const loom_low_allocation_assignment_t* assignment =
-      &state->assignments[assignment_index];
-  IREE_ASSERT_EQ(assignment->value_id,
-                 state->liveness.value_ids[value_ordinal]);
-  return assignment;
+  return loom_low_allocation_assignment_map_assignment_for_value_ordinal(
+      &state->assignment_map, value_ordinal, NULL);
 }
 
 static iree_status_t loom_low_allocation_value_ordinal_for_interval(
@@ -820,6 +786,7 @@ static iree_status_t loom_low_allocation_append_assignment(
           &state->storage_leases, state->target.descriptor_set,
           &state->liveness, &stored_assignment));
   state->assignments[state->assignment_count++] = stored_assignment;
+  state->assignment_map.assignment_count = state->assignment_count;
   state->assignment_indices_by_value_ordinal[value_ordinal] = assignment_index;
   loom_low_allocation_target_constraints_record_assignment_location_end(
       &state->target_constraints, &stored_assignment);
@@ -1873,6 +1840,14 @@ static iree_status_t loom_low_allocation_assign_intervals(
   for (iree_host_size_t i = 0; i < state->liveness.value_count; ++i) {
     state->assignment_indices_by_value_ordinal[i] = UINT32_MAX;
   }
+  state->assignment_map = (loom_low_allocation_assignment_map_t){
+      .module = state->module,
+      .liveness = &state->liveness,
+      .assignments = state->assignments,
+      .assignment_count = 0,
+      .assignment_indices_by_value_ordinal =
+          state->assignment_indices_by_value_ordinal,
+  };
   IREE_RETURN_IF_ERROR(loom_low_allocation_active_set_initialize(
       allocatable_count, allocatable_unit_count, state->arena, &state->active));
   state->spill_plans = NULL;
@@ -2070,7 +2045,6 @@ iree_status_t loom_low_allocate_function(
   iree_status_t status = loom_local_value_domain_acquire_for_region(
       module, state.body, arena, &value_domain);
   if (iree_status_is_ok(status)) {
-    state.value_domain = &value_domain;
     status = loom_liveness_analyze_local_value_domain(
         &value_domain, options->liveness_order, arena, &state.liveness);
   }
@@ -2107,13 +2081,9 @@ iree_status_t loom_low_allocate_function(
   }
   if (iree_status_is_ok(status)) {
     const loom_low_allocation_copy_decision_context_t copy_decision_context = {
-        .module = state.module,
         .body = state.body,
         .descriptor_set = state.target.descriptor_set,
-        .liveness = &state.liveness,
-        .assignments = state.assignments,
-        .assignment_indices_by_value_ordinal =
-            state.assignment_indices_by_value_ordinal,
+        .assignment_map = state.assignment_map,
     };
     status = loom_low_allocation_copy_decision_plan_build(
         &copy_decision_context, arena, &state.copy_decision_plan);
@@ -2124,13 +2094,9 @@ iree_status_t loom_low_allocate_function(
         .body = state.body,
         .descriptor_set = state.target.descriptor_set,
         .liveness_order = options->liveness_order,
-        .liveness = &state.liveness,
         .target_constraints = &state.target_constraints,
         .unit_liveness = &state.unit_liveness,
-        .assignments = state.assignments,
-        .assignment_count = state.assignment_count,
-        .assignment_indices_by_value_ordinal =
-            state.assignment_indices_by_value_ordinal,
+        .assignment_map = state.assignment_map,
     };
     status = loom_low_allocation_edge_copy_plan_build(&edge_copy_context, arena,
                                                       &state.edge_copy_plan);
@@ -2141,13 +2107,9 @@ iree_status_t loom_low_allocate_function(
         .body = state.body,
         .descriptor_set = state.target.descriptor_set,
         .liveness_order = options->liveness_order,
-        .liveness = &state.liveness,
         .target_constraints = &state.target_constraints,
         .unit_liveness = &state.unit_liveness,
-        .assignments = state.assignments,
-        .assignment_count = state.assignment_count,
-        .assignment_indices_by_value_ordinal =
-            state.assignment_indices_by_value_ordinal,
+        .assignment_map = state.assignment_map,
     };
     status = loom_low_allocation_packet_move_plan_build(
         &packet_move_context, arena, &state.packet_move_plan);
