@@ -116,7 +116,20 @@ def _global_atomic_overlay(
         fixed_encoding_fields=fixed_encoding_fields,
         effects=_global_atomic_effects(32, counter_id=counter_id),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=(),
+        asm_forms=_global_saddr_asm(
+            mnemonic=f"{mnemonic}_rtn" if returns_old_value else mnemonic,
+            results=("dst",) if returns_old_value else (),
+            operands=("addr", "value", "saddr"),
+            implicit_m0=implicit_m0,
+            immediates=_memory_asm_immediate_names(cache_immediate_fields),
+        )
+        if saddr_off is None
+        else _global_vaddr_asm(
+            mnemonic=f"{mnemonic}_rtn" if returns_old_value else mnemonic,
+            results=("dst",) if returns_old_value else (),
+            operands=("addr", "value"),
+            immediates=_memory_asm_immediate_names(cache_immediate_fields),
+        ),
     )
 
 
@@ -189,7 +202,20 @@ def _global_atomic_cmpswap_overlay(
         fixed_encoding_fields=fixed_encoding_fields,
         effects=_global_atomic_effects(32, counter_id=_COUNTER_VMEM_LOAD),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=(),
+        asm_forms=_global_saddr_asm(
+            mnemonic="global_atomic_cmpswap_b32_rtn",
+            results=("dst",),
+            operands=("addr", "value", "saddr"),
+            implicit_m0=implicit_m0,
+            immediates=_memory_asm_immediate_names(cache_immediate_fields),
+        )
+        if saddr_off is None
+        else _global_vaddr_asm(
+            mnemonic="global_atomic_cmpswap_b32_rtn",
+            results=("dst",),
+            operands=("addr", "value"),
+            immediates=_memory_asm_immediate_names(cache_immediate_fields),
+        ),
     )
 
 

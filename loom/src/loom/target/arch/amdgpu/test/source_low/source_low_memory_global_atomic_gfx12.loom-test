@@ -17,13 +17,13 @@ kernel.def target(@target) @global_atomic_add_i32(%input: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_add_i32() {
-  %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %13 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
-  %14 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
-  low.op<amdgpu.global_atomic_add_u32_saddr>(%13, %14, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
-  %old = low.op<amdgpu.global_atomic_add_u32_rtn_saddr>(%13, %14, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  low.return
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_add_i32() asm<amdgpu.rdna4.core> {
+  %view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %13 = v_mov_b32 0
+  %14 = v_mov_b32 1
+  global_atomic_add_u32_saddr %13, %14, %view {scope = 2}
+  %old = global_atomic_add_u32_rtn_saddr %13, %14, %view {scope = 2}
+  return
 }
 
 // ====
@@ -44,13 +44,13 @@ kernel.def target(@target) @global_atomic_add_f32(%input: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_add_f32() {
-  %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %one = low.const<amdgpu.v_mov_b32> {imm32 = 1065353216} : reg<amdgpu.vgpr>
-  %13 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
-  low.op<amdgpu.global_atomic_add_f32_saddr>(%13, %one, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
-  %old = low.op<amdgpu.global_atomic_add_f32_rtn_saddr>(%13, %one, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  low.return
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_add_f32() asm<amdgpu.rdna4.core> {
+  %view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %one = v_mov_b32 1065353216
+  %13 = v_mov_b32 0
+  global_atomic_add_f32_saddr %13, %one, %view {scope = 2}
+  %old = global_atomic_add_f32_rtn_saddr %13, %one, %view {scope = 2}
+  return
 }
 
 // ====
@@ -73,15 +73,15 @@ kernel.def target(@target) @global_atomic_minnum_maxnum_f32(%input: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_minnum_maxnum_f32() {
-  %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %limit = low.const<amdgpu.v_mov_b32> {imm32 = 1065353216} : reg<amdgpu.vgpr>
-  %14 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
-  low.op<amdgpu.global_atomic_min_f32_saddr>(%14, %limit, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
-  low.op<amdgpu.global_atomic_max_f32_saddr>(%14, %limit, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
-  %old_min = low.op<amdgpu.global_atomic_min_f32_rtn_saddr>(%14, %limit, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  %old_max = low.op<amdgpu.global_atomic_max_f32_rtn_saddr>(%14, %limit, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  low.return
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_minnum_maxnum_f32() asm<amdgpu.rdna4.core> {
+  %view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %limit = v_mov_b32 1065353216
+  %14 = v_mov_b32 0
+  global_atomic_min_f32_saddr %14, %limit, %view {scope = 2}
+  global_atomic_max_f32_saddr %14, %limit, %view {scope = 2}
+  %old_min = global_atomic_min_f32_rtn_saddr %14, %limit, %view {scope = 2}
+  %old_max = global_atomic_max_f32_rtn_saddr %14, %limit, %view {scope = 2}
+  return
 }
 
 // ====
@@ -101,13 +101,13 @@ kernel.def target(@target) @global_atomic_dynamic_minnum_f32(%input: buffer, %va
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_dynamic_minnum_f32(%value: reg<amdgpu.sgpr>) {
-  %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %15 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
-  %16 = low.op<amdgpu.v_mov_b32_copy>(%value) : (reg<amdgpu.sgpr>) -> reg<amdgpu.vgpr>
-  %old_min = low.op<amdgpu.global_atomic_min_f32_rtn_saddr>(%15, %16, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  %old_max = low.op<amdgpu.global_atomic_max_f32_rtn_saddr>(%15, %16, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  low.return
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_dynamic_minnum_f32(%value: reg<amdgpu.sgpr>) asm<amdgpu.rdna4.core> {
+  %view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %15 = v_mov_b32 0
+  %16 = v_mov_b32_copy %value
+  %old_min = global_atomic_min_f32_rtn_saddr %15, %16, %view {scope = 2}
+  %old_max = global_atomic_max_f32_rtn_saddr %15, %16, %view {scope = 2}
+  return
 }
 
 // ====
@@ -132,17 +132,17 @@ kernel.def target(@target) @global_atomic_bitwise_i32(%input: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_bitwise_i32() {
-  %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %15 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
-  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 255} : reg<amdgpu.vgpr>
-  low.op<amdgpu.global_atomic_and_b32_saddr>(%15, %16, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
-  low.op<amdgpu.global_atomic_or_b32_saddr>(%15, %16, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
-  low.op<amdgpu.global_atomic_xor_b32_saddr>(%15, %16, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
-  %old_and = low.op<amdgpu.global_atomic_and_b32_rtn_saddr>(%15, %16, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  %old_or = low.op<amdgpu.global_atomic_or_b32_rtn_saddr>(%15, %16, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  %old_xor = low.op<amdgpu.global_atomic_xor_b32_rtn_saddr>(%15, %16, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  low.return
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_bitwise_i32() asm<amdgpu.rdna4.core> {
+  %view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %15 = v_mov_b32 0
+  %16 = v_mov_b32 255
+  global_atomic_and_b32_saddr %15, %16, %view {scope = 2}
+  global_atomic_or_b32_saddr %15, %16, %view {scope = 2}
+  global_atomic_xor_b32_saddr %15, %16, %view {scope = 2}
+  %old_and = global_atomic_and_b32_rtn_saddr %15, %16, %view {scope = 2}
+  %old_or = global_atomic_or_b32_rtn_saddr %15, %16, %view {scope = 2}
+  %old_xor = global_atomic_xor_b32_rtn_saddr %15, %16, %view {scope = 2}
+  return
 }
 
 // ====
@@ -163,13 +163,13 @@ kernel.def target(@target) @global_atomic_sub_i32(%input: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_sub_i32() {
-  %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %13 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
-  %14 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
-  low.op<amdgpu.global_atomic_sub_u32_saddr>(%13, %14, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
-  %old_sub = low.op<amdgpu.global_atomic_sub_u32_rtn_saddr>(%13, %14, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  low.return
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_sub_i32() asm<amdgpu.rdna4.core> {
+  %view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %13 = v_mov_b32 0
+  %14 = v_mov_b32 1
+  global_atomic_sub_u32_saddr %13, %14, %view {scope = 2}
+  %old_sub = global_atomic_sub_u32_rtn_saddr %13, %14, %view {scope = 2}
+  return
 }
 
 // ====
@@ -189,12 +189,12 @@ kernel.def target(@target) @global_atomic_exchange_i32(%input: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_exchange_i32() {
-  %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %13 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
-  %14 = low.const<amdgpu.v_mov_b32> {imm32 = 7} : reg<amdgpu.vgpr>
-  %old = low.op<amdgpu.global_atomic_swap_b32_rtn_saddr>(%13, %14, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  low.return
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_exchange_i32() asm<amdgpu.rdna4.core> {
+  %view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %13 = v_mov_b32 0
+  %14 = v_mov_b32 7
+  %old = global_atomic_swap_b32_rtn_saddr %13, %14, %view {scope = 2}
+  return
 }
 
 // ====
@@ -215,14 +215,14 @@ kernel.def target(@target) @global_atomic_cmpxchg_i32(%input: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_cmpxchg_i32() {
-  %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %15 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
-  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 7} : reg<amdgpu.vgpr>
-  %17 = low.const<amdgpu.v_mov_b32> {imm32 = 9} : reg<amdgpu.vgpr>
-  %18 = low.concat(%16, %17) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
-  %old = low.op<amdgpu.global_atomic_cmpswap_b32_rtn_saddr>(%15, %18, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr x2>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  low.return
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_cmpxchg_i32() asm<amdgpu.rdna4.core> {
+  %view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %15 = v_mov_b32 0
+  %16 = v_mov_b32 7
+  %17 = v_mov_b32 9
+  %18 = concat(%16, %17) : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>) -> reg<amdgpu.vgpr x2>
+  %old = global_atomic_cmpswap_b32_rtn_saddr %15, %18, %view {scope = 2}
+  return
 }
 
 // ====
@@ -249,17 +249,17 @@ kernel.def target(@target) @global_atomic_minmax_i32(%input: buffer) {
 }
 
 // ----
-low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_minmax_i32() {
-  %view = low.resource<hal_binding> {extent = 256, index = 0, source_type = hal.buffer} : reg<amdgpu.sgpr x2>
-  %16 = low.const<amdgpu.v_mov_b32> {imm32 = 0} : reg<amdgpu.vgpr>
-  %17 = low.const<amdgpu.v_mov_b32> {imm32 = 1} : reg<amdgpu.vgpr>
-  low.op<amdgpu.global_atomic_min_i32_saddr>(%16, %17, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
-  low.op<amdgpu.global_atomic_max_i32_saddr>(%16, %17, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
-  low.op<amdgpu.global_atomic_min_u32_saddr>(%16, %17, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
-  low.op<amdgpu.global_atomic_max_u32_saddr>(%16, %17, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>)
-  %old_minsi = low.op<amdgpu.global_atomic_min_i32_rtn_saddr>(%16, %17, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  %old_maxsi = low.op<amdgpu.global_atomic_max_i32_rtn_saddr>(%16, %17, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  %old_minui = low.op<amdgpu.global_atomic_min_u32_rtn_saddr>(%16, %17, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  %old_maxui = low.op<amdgpu.global_atomic_max_u32_rtn_saddr>(%16, %17, %view) {offset = 0, scope = 2} : (reg<amdgpu.vgpr>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>) -> reg<amdgpu.vgpr>
-  low.return
+low.kernel.def target(@target) workgroup_size(1, 1, 1) @global_atomic_minmax_i32() asm<amdgpu.rdna4.core> {
+  %view = resource<hal_binding> {index = 0, source_type = hal.buffer, extent = 256} : reg<amdgpu.sgpr x2>
+  %16 = v_mov_b32 0
+  %17 = v_mov_b32 1
+  global_atomic_min_i32_saddr %16, %17, %view {scope = 2}
+  global_atomic_max_i32_saddr %16, %17, %view {scope = 2}
+  global_atomic_min_u32_saddr %16, %17, %view {scope = 2}
+  global_atomic_max_u32_saddr %16, %17, %view {scope = 2}
+  %old_minsi = global_atomic_min_i32_rtn_saddr %16, %17, %view {scope = 2}
+  %old_maxsi = global_atomic_max_i32_rtn_saddr %16, %17, %view {scope = 2}
+  %old_minui = global_atomic_min_u32_rtn_saddr %16, %17, %view {scope = 2}
+  %old_maxui = global_atomic_max_u32_rtn_saddr %16, %17, %view {scope = 2}
+  return
 }
