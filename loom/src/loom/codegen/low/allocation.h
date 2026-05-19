@@ -23,6 +23,7 @@
 #include "loom/codegen/low/allocation/move_topology.h"
 #include "loom/codegen/low/allocation/storage.h"
 #include "loom/codegen/low/allocation/table.h"
+#include "loom/codegen/low/allocation/target_constraints.h"
 #include "loom/codegen/low/allocation/verification.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/low/storage_lease.h"
@@ -33,49 +34,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-// Optional fixed register budget used by tests, tuning loops, and target
-// overlays. A missing budget uses the descriptor set's allocatable unit count;
-// a descriptor class with allocatable_count == 0 is treated as unbounded.
-typedef struct loom_low_allocation_budget_t {
-  // Stable register-class name such as "vm.i32" or "amdgpu.vgpr".
-  iree_string_view_t register_class;
-  // Maximum allocation units available for |register_class|.
-  uint32_t max_units;
-} loom_low_allocation_budget_t;
-
-// Fixed physical location for one SSA value.
-//
-// Fixed values model ABI or target live-ins/outs that enter allocation as
-// ordinary SSA values but must occupy a specific target-visible location while
-// live. The location is reusable outside the value's live interval.
-typedef struct loom_low_allocation_fixed_value_t {
-  // SSA value forced to the fixed location.
-  loom_value_id_t value_id;
-  // Target-visible fixed location kind.
-  loom_low_allocation_location_kind_t location_kind;
-  // Base physical register or target ID.
-  uint32_t location_base;
-  // Number of contiguous units fixed at |location_base|.
-  uint32_t location_count;
-} loom_low_allocation_fixed_value_t;
-
-// Whole-function location range owned by target machinery.
-//
-// Reserved ranges model architectural state that is never allocatable for
-// ordinary values in the current low function, such as special registers or
-// permanently reserved target IDs. Use fixed values instead for ABI live-ins
-// whose registers can be reused after their last use.
-typedef struct loom_low_allocation_reserved_range_t {
-  // Stable register-class name such as "amdgpu.sgpr" or "x86.gpr".
-  iree_string_view_t register_class;
-  // Target-visible reserved location kind.
-  loom_low_allocation_location_kind_t location_kind;
-  // First physical register or target ID in the reserved range.
-  uint32_t location_base;
-  // Number of contiguous units reserved at |location_base|.
-  uint32_t location_count;
-} loom_low_allocation_reserved_range_t;
 
 // Options controlling allocation table construction.
 typedef struct loom_low_allocation_options_t {

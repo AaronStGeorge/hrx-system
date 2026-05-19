@@ -217,6 +217,45 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    target_constraints
+  HDRS
+    "target_constraints.h"
+  SRCS
+    "target_constraints.c"
+  DEPS
+    ::assignment
+    ::live_range
+    ::storage
+    ::unit_liveness
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::liveness
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::diagnostics
+    loom::src::loom::codegen::low::function
+    loom::src::loom::codegen::low::target_binding
+    loom::src::loom::error::emitter
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::target::registers
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    target_constraints_test
+  SRCS
+    "target_constraints_test.cc"
+  DEPS
+    ::target_constraints
+    iree::base::internal::arena
+    loom::src::loom::target::test::descriptors
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     move_topology
   HDRS
     "move_topology.h"

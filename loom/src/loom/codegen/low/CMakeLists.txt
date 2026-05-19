@@ -318,6 +318,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::allocation::storage
     loom::src::loom::codegen::low::allocation::storage_lease
     loom::src::loom::codegen::low::allocation::table
+    loom::src::loom::codegen::low::allocation::target_constraints
     loom::src::loom::codegen::low::allocation::unit_liveness
     loom::src::loom::codegen::low::allocation::verification
     loom::src::loom::error::emitter

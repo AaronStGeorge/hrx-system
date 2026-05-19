@@ -43,6 +43,21 @@ uint32_t loom_low_allocation_live_range_interval_initial_unit_end_point(
   return interval->start_point;
 }
 
+static bool loom_low_allocation_live_range_is_power_of_two_u32(uint32_t value) {
+  return value != 0 && (value & (value - 1u)) == 0;
+}
+
+uint32_t loom_low_allocation_live_range_interval_alignment(
+    const loom_liveness_interval_t* interval) {
+  IREE_ASSERT_ARGUMENT(interval);
+  if (interval->unit_count <= 1 ||
+      !loom_low_allocation_live_range_is_power_of_two_u32(
+          interval->unit_count)) {
+    return 1;
+  }
+  return interval->unit_count;
+}
+
 uint32_t loom_low_allocation_live_range_assignment_unit_end_point(
     const uint32_t* unit_end_points, iree_host_size_t unit_end_point_count,
     const loom_low_allocation_assignment_t* assignment, uint32_t unit_offset) {

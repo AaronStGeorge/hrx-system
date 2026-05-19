@@ -38,6 +38,7 @@ loom_assert_no_dependencies(
         ":storage",
         ":storage_lease",
         ":table",
+        ":target_constraints",
         ":unit_liveness",
         ":verification",
     ],
@@ -214,6 +215,41 @@ loom_cc_test(
     srcs = ["unit_liveness_test.cc"],
     deps = [
         ":unit_liveness",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "target_constraints",
+    srcs = ["target_constraints.c"],
+    hdrs = ["target_constraints.h"],
+    deps = [
+        ":assignment",
+        ":live_range",
+        ":storage",
+        ":unit_liveness",
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:diagnostics",
+        "//loom/src/loom/codegen/low:function",
+        "//loom/src/loom/codegen/low:target_binding",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/target:registers",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "target_constraints_test",
+    srcs = ["target_constraints_test.cc"],
+    deps = [
+        ":target_constraints",
+        "//loom/src/loom/target/test:descriptors",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

@@ -132,6 +132,24 @@ TEST(LowAllocationLiveRangeTest, ComputesIntervalStorageEndPoints) {
             UINT32_MAX);
 }
 
+TEST(LowAllocationLiveRangeTest, ComputesIntervalAlignment) {
+  loom_liveness_interval_t scalar_interval = {};
+  scalar_interval.unit_count = 1;
+
+  loom_liveness_interval_t vector_interval = {};
+  vector_interval.unit_count = 4;
+
+  loom_liveness_interval_t odd_interval = {};
+  odd_interval.unit_count = 3;
+
+  EXPECT_EQ(loom_low_allocation_live_range_interval_alignment(&scalar_interval),
+            1u);
+  EXPECT_EQ(loom_low_allocation_live_range_interval_alignment(&vector_interval),
+            4u);
+  EXPECT_EQ(loom_low_allocation_live_range_interval_alignment(&odd_interval),
+            1u);
+}
+
 TEST(LowAllocationLiveRangeTest, ChecksBlockObservableOverlap) {
   const loom_value_id_t live_in_values[] = {1};
   const loom_liveness_block_info_t blocks[] = {
