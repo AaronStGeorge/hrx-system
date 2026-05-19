@@ -712,6 +712,10 @@ typedef struct loom_amdgpu_fragment_memory_plan_t {
   uint16_t elements_per_register;
   // Byte count of one logical fragment element.
   uint16_t element_byte_count;
+  // True when a f32 result fragment is stored into 16-bit memory.
+  bool narrowed_result_store;
+  // Optional f32 fragment source to round directly for narrowed stores.
+  loom_value_id_t narrowed_result_round_source;
 } loom_amdgpu_fragment_memory_plan_t;
 
 #define LOOM_AMDGPU_EXPLICIT_PACKET_IMMEDIATE_CAPACITY 4

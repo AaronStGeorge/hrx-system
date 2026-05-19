@@ -1892,7 +1892,7 @@ static iree_status_t loom_amdgpu_extract_16bit_float_lane(
       source_register, UINT32_C(0xFFFF0000), result_lane_type, out_lane);
 }
 
-static iree_status_t loom_amdgpu_emit_f32_to_bf16_lane(
+iree_status_t loom_amdgpu_emit_f32_to_bf16_lane(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     loom_value_id_t source_lane, loom_type_t lane_type,
     loom_value_id_t* out_lane) {

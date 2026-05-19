@@ -165,6 +165,13 @@ iree_status_t loom_amdgpu_emit_vgpr_shift(
     loom_amdgpu_descriptor_ref_t descriptor_ref, uint32_t shift,
     loom_value_id_t value, loom_type_t lane_type, loom_value_id_t* out_value);
 
+// Emits round-to-nearest-even conversion from one f32 lane to one BF16 lane.
+// The result is held in the low 16 bits of a one-unit VGPR.
+iree_status_t loom_amdgpu_emit_f32_to_bf16_lane(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t source_lane, loom_type_t lane_type,
+    loom_value_id_t* out_lane);
+
 typedef enum loom_amdgpu_vgpr_sdwa_extract_flag_bits_e {
   // No additional source selection modifiers are applied.
   LOOM_AMDGPU_VGPR_SDWA_EXTRACT_FLAG_NONE = 0u,

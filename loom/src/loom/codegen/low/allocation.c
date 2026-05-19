@@ -4062,6 +4062,75 @@ static iree_status_t loom_low_allocation_initialize_unit_liveness(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_allocation_extend_unit_liveness_for_tied_results(
+    loom_low_allocation_build_state_t* state) {
+  if (state->unit_end_points == NULL) {
+    return iree_ok_status();
+  }
+  for (iree_host_size_t i = 0; i < state->placement.relation_count; ++i) {
+    const loom_low_placement_relation_t* relation =
+        &state->placement.relations[i];
+    if (relation->cause != LOOM_LOW_PLACEMENT_CAUSE_TIED_RESULT) {
+      continue;
+    }
+
+    const loom_liveness_interval_t* source_interval =
+        loom_liveness_interval_for_value_ordinal(&state->liveness,
+                                                 relation->source_ordinal);
+    const loom_liveness_interval_t* result_interval =
+        loom_liveness_interval_for_value_ordinal(&state->liveness,
+                                                 relation->result_ordinal);
+    if (!source_interval || !result_interval ||
+        !loom_low_allocation_interval_is_allocatable(source_interval) ||
+        !loom_low_allocation_interval_is_allocatable(result_interval)) {
+      continue;
+    }
+    if (relation->source_unit_offset > source_interval->unit_count ||
+        relation->unit_count >
+            source_interval->unit_count - relation->source_unit_offset ||
+        relation->result_unit_offset > result_interval->unit_count ||
+        relation->unit_count >
+            result_interval->unit_count - relation->result_unit_offset) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "low tied-result placement relation exceeds allocation units");
+    }
+
+    const uint32_t source_unit_end_point_start =
+        loom_low_allocation_unit_end_point_start_for_value_ordinal(
+            state, relation->source_ordinal);
+    const uint32_t result_unit_end_point_start =
+        loom_low_allocation_unit_end_point_start_for_value_ordinal(
+            state, relation->result_ordinal);
+    if (source_unit_end_point_start == UINT32_MAX ||
+        result_unit_end_point_start == UINT32_MAX) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "low tied-result placement relation references a value without "
+          "allocation unit liveness");
+    }
+
+    for (uint32_t unit_index = 0; unit_index < relation->unit_count;
+         ++unit_index) {
+      const uint32_t source_unit_index = source_unit_end_point_start +
+                                         relation->source_unit_offset +
+                                         unit_index;
+      const uint32_t result_unit_index = result_unit_end_point_start +
+                                         relation->result_unit_offset +
+                                         unit_index;
+      IREE_ASSERT_LT(source_unit_index, state->unit_end_point_count);
+      IREE_ASSERT_LT(result_unit_index, state->unit_end_point_count);
+      uint32_t* source_end_point = &state->unit_end_points[source_unit_index];
+      const uint32_t result_end_point =
+          state->unit_end_points[result_unit_index];
+      if (*source_end_point < result_end_point) {
+        *source_end_point = result_end_point;
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_allocation_record_edge_copy_group(
     loom_low_allocation_build_state_t* state, const loom_op_t* op,
     uint32_t source_ordinal) {
@@ -6712,6 +6781,9 @@ iree_status_t loom_low_allocate_function(
   }
   if (iree_status_is_ok(status)) {
     status = loom_low_allocation_initialize_unit_liveness(&state);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_low_allocation_extend_unit_liveness_for_tied_results(&state);
   }
   if (iree_status_is_ok(status)) {
     status = loom_low_allocation_resolve_fixed_values(&state);
