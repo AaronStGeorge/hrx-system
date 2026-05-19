@@ -35,6 +35,7 @@ loom_assert_no_dependencies(
         ":diagnostics",
         ":live_range",
         ":move_topology",
+        ":packet_move",
         ":spill_plan",
         ":storage",
         ":storage_lease",
@@ -333,6 +334,27 @@ loom_cc_test(
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "packet_move",
+    srcs = ["packet_move.c"],
+    hdrs = ["packet_move.h"],
+    deps = [
+        ":assignment",
+        ":live_range",
+        ":move_topology",
+        ":table",
+        ":target_constraints",
+        ":unit_liveness",
+        ":unit_location",
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 

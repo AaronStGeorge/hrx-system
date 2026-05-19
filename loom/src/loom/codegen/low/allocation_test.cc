@@ -11,6 +11,7 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/schedule/run.h"
 #include "loom/codegen/low/storage_lease.h"
 #include "loom/codegen/low/text_asm.h"
@@ -195,6 +196,19 @@ class LowAllocationTest : public ::testing::Test {
     return op;
   }
 
+  loom_value_id_t FindValueByName(loom_module_t* module,
+                                  iree_string_view_t name) {
+    for (iree_host_size_t i = 0; i < module->values.count; ++i) {
+      if (iree_string_view_equal(
+              loom_low_diagnostic_value_name(module, (loom_value_id_t)i),
+              name)) {
+        return (loom_value_id_t)i;
+      }
+    }
+    IREE_ASSERT(false, "value name not found");
+    return LOOM_VALUE_ID_INVALID;
+  }
+
   iree_status_t Allocate(
       loom_module_t* module, loom_op_t* function_op,
       const loom_low_allocation_reserved_range_t* reserved_ranges,
@@ -241,6 +255,22 @@ class LowAllocationTest : public ::testing::Test {
         module, function_op, storage_leases, NULL, 0, out_table);
   }
 
+  iree_status_t AllocateWithFixedValuesAndBudgets(
+      loom_module_t* module, loom_op_t* function_op,
+      const loom_low_allocation_fixed_value_t* fixed_values,
+      iree_host_size_t fixed_value_count,
+      const loom_low_allocation_budget_t* budgets,
+      iree_host_size_t budget_count, loom_low_allocation_table_t* out_table) {
+    loom_low_allocation_options_t options = {};
+    options.descriptor_registry = &descriptor_registry_;
+    options.budgets = budgets;
+    options.budget_count = budget_count;
+    options.fixed_values = fixed_values;
+    options.fixed_value_count = fixed_value_count;
+    return loom_low_allocate_function(module, function_op, &options,
+                                      &analysis_arena_, out_table);
+  }
+
   iree_status_t AllocateWithStorageLeasesAndBudgets(
       loom_module_t* module, loom_op_t* function_op,
       loom_low_storage_lease_table_t storage_leases,
@@ -285,6 +315,15 @@ test.target<low_core> @test_target
 low.func.def target(@test_target) @dead_result_clobber_window(%leader: reg<test.phys>, %lhs: reg<test.phys>, %rhs: reg<test.phys>) -> (reg<test.phys>) asm<test.low.core> {
   %dead = test.add.phys %lhs, %rhs
   return %leader
+}
+)";
+
+static const char kPacketMoveConcatCycleFunction[] = R"(
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @packet_move_concat_cycle(%lhs: reg<test.phys>, %rhs: reg<test.phys>) -> (reg<test.phys x2>) asm<test.low.core> {
+  %pair = concat(%rhs, %lhs) : (reg<test.phys>, reg<test.phys>) -> reg<test.phys x2>
+  return %pair
 }
 )";
 
@@ -380,6 +419,54 @@ TEST_F(LowAllocationTest, StorageLeaseBlocksPhysicalReuse) {
       &table.assignments[copy_decision->result_assignment_index];
   EXPECT_FALSE(loom_low_allocation_storage_assignment_ranges_equal(
       table.target.descriptor_set, source_assignment, result_assignment));
+}
+
+TEST_F(LowAllocationTest, ReservesPacketMoveTemporaryForConcatCycle) {
+  ModulePtr module = ParseModule(kPacketMoveConcatCycleFunction);
+  loom_op_t* function_op =
+      FindLowFunction(module.get(), IREE_SV("packet_move_concat_cycle"));
+
+  loom_low_allocation_fixed_value_t fixed_values[3] = {};
+  fixed_values[0].value_id = FindValueByName(module.get(), IREE_SV("lhs"));
+  fixed_values[0].location_kind =
+      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER;
+  fixed_values[0].location_base = 0;
+  fixed_values[0].location_count = 1;
+  fixed_values[1].value_id = FindValueByName(module.get(), IREE_SV("rhs"));
+  fixed_values[1].location_kind =
+      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER;
+  fixed_values[1].location_base = 1;
+  fixed_values[1].location_count = 1;
+  fixed_values[2].value_id = FindValueByName(module.get(), IREE_SV("pair"));
+  fixed_values[2].location_kind =
+      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER;
+  fixed_values[2].location_base = 0;
+  fixed_values[2].location_count = 2;
+
+  loom_low_allocation_budget_t budget = {};
+  budget.register_class = IREE_SV("test.phys");
+  budget.max_units = 3;
+
+  loom_low_allocation_table_t table = {};
+  IREE_ASSERT_OK(AllocateWithFixedValuesAndBudgets(
+      module.get(), function_op, fixed_values, IREE_ARRAYSIZE(fixed_values),
+      &budget, 1, &table));
+
+  ASSERT_EQ(table.packet_move_temporary_group_count, 1u);
+  const loom_low_allocation_packet_move_temporary_group_t* group =
+      &table.packet_move_temporary_groups[0];
+  EXPECT_EQ(group->source_ordinal, 0u);
+  EXPECT_EQ(group->temporary_start, 0u);
+  EXPECT_EQ(group->temporary_count, 1u);
+
+  ASSERT_EQ(table.packet_move_temporary_count, 1u);
+  const loom_low_allocation_packet_move_temporary_t* temporary =
+      &table.packet_move_temporaries[0];
+  EXPECT_EQ(temporary->location_kind,
+            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER);
+  EXPECT_EQ(temporary->descriptor_reg_class_id,
+            table.assignments[0].descriptor_reg_class_id);
+  EXPECT_EQ(temporary->location, 2u);
 }
 
 TEST_F(LowAllocationTest, RecordsStorageReleaseActionForForcedReuse) {

@@ -315,6 +315,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::allocation::diagnostics
     loom::src::loom::codegen::low::allocation::live_range
     loom::src::loom::codegen::low::allocation::move_topology
+    loom::src::loom::codegen::low::allocation::packet_move
     loom::src::loom::codegen::low::allocation::spill_plan
     loom::src::loom::codegen::low::allocation::storage
     loom::src::loom::codegen::low::allocation::storage_lease
@@ -338,6 +339,7 @@ loom_cc_test(
     "allocation_test.cc"
   DEPS
     ::allocation
+    ::diagnostics
     ::storage_lease
     ::text_asm
     iree::base::internal::arena

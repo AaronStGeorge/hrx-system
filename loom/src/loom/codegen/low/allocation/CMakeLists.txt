@@ -346,6 +346,30 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    packet_move
+  HDRS
+    "packet_move.h"
+  SRCS
+    "packet_move.c"
+  DEPS
+    ::assignment
+    ::live_range
+    ::move_topology
+    ::table
+    ::target_constraints
+    ::unit_liveness
+    ::unit_location
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::liveness
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     table
   HDRS
     "table.h"
