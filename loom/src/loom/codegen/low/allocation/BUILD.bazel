@@ -35,6 +35,7 @@ loom_assert_no_dependencies(
         ":diagnostics",
         ":live_range",
         ":move_topology",
+        ":spill_plan",
         ":storage",
         ":storage_lease",
         ":table",
@@ -91,6 +92,29 @@ loom_cc_test(
     deps = [
         ":active_unit",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "spill_plan",
+    srcs = ["spill_plan.c"],
+    hdrs = ["spill_plan.h"],
+    deps = [
+        ":assignment",
+        ":table",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "spill_plan_test",
+    srcs = ["spill_plan_test.cc"],
+    deps = [
+        ":spill_plan",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

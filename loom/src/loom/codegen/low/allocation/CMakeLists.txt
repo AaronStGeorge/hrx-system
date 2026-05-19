@@ -71,6 +71,33 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    spill_plan
+  HDRS
+    "spill_plan.h"
+  SRCS
+    "spill_plan.c"
+  DEPS
+    ::assignment
+    ::table
+    iree::base
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    spill_plan_test
+  SRCS
+    "spill_plan_test.cc"
+  DEPS
+    ::spill_plan
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     assignment
   HDRS
     "assignment.h"
