@@ -111,6 +111,34 @@ bool loom_low_allocation_live_range_values_overlap(
   return false;
 }
 
+iree_status_t loom_low_allocation_live_range_op_program_point(
+    const loom_liveness_analysis_t* liveness, const loom_op_t* op,
+    uint32_t* out_program_point) {
+  IREE_ASSERT_ARGUMENT(liveness);
+  IREE_ASSERT_ARGUMENT(op);
+  IREE_ASSERT_ARGUMENT(out_program_point);
+  *out_program_point = UINT32_MAX;
+  const loom_liveness_block_info_t* block_info =
+      loom_liveness_block_info_for_block(liveness, op->parent_block);
+  if (!block_info) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "low allocation cannot find liveness block for low operation");
+  }
+  uint32_t program_point = block_info->start_point;
+  const loom_op_t* block_op = op->parent_block->first_op;
+  while (block_op && block_op != op) {
+    ++program_point;
+    block_op = block_op->next_op;
+  }
+  if (block_op != op) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "low operation is not linked in its parent block");
+  }
+  *out_program_point = program_point;
+  return iree_ok_status();
+}
+
 bool loom_low_allocation_live_range_assignments_conflict(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_liveness_analysis_t* liveness, const uint32_t* unit_end_points,

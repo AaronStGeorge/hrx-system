@@ -13,6 +13,7 @@
 #include "loom/analysis/liveness.h"
 #include "loom/codegen/low/allocation/assignment.h"
 #include "loom/codegen/low/descriptors.h"
+#include "loom/ir/ir.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -48,6 +49,12 @@ bool loom_low_allocation_live_range_values_overlap(
     uint32_t lhs_start_point, uint32_t lhs_end_point,
     loom_value_id_t rhs_value_id, uint32_t rhs_start_point,
     uint32_t rhs_end_point);
+
+// Returns |op|'s liveness program point by walking its parent block from the
+// block start point. This is only valid for source-order liveness.
+iree_status_t loom_low_allocation_live_range_op_program_point(
+    const loom_liveness_analysis_t* liveness, const loom_op_t* op,
+    uint32_t* out_program_point);
 
 // Returns true when two assignments have overlapping live target-visible
 // storage units under descriptor aliasing and per-unit end points.

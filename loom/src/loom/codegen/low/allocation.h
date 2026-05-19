@@ -23,6 +23,7 @@
 #include "loom/codegen/low/allocation/move_topology.h"
 #include "loom/codegen/low/allocation/storage.h"
 #include "loom/codegen/low/allocation/table.h"
+#include "loom/codegen/low/allocation/verification.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/low/storage_lease.h"
 #include "loom/codegen/low/target_binding.h"
@@ -115,16 +116,6 @@ iree_status_t loom_low_allocate_function(
     loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_allocation_options_t* options, iree_arena_allocator_t* arena,
     loom_low_allocation_table_t* out_table);
-
-// Verifies allocation-table consistency. Register-like assignments must not
-// overlap on the same physical register or target ID range. Spill slots are not
-// treated as registers by this verifier because materialized
-// low.spill/low.reload insertion owns their eventual storage reuse policy.
-// Tied-result placement is enforced only when both sides are register-like; a
-// spill-slot side defers the tie until spill materialization inserts reloads
-// and final allocation runs on the materialized IR.
-iree_status_t loom_low_allocation_verify_table(
-    const loom_low_allocation_table_t* table);
 
 #ifdef __cplusplus
 }  // extern "C"

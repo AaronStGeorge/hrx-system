@@ -7,6 +7,7 @@
 #include "loom/codegen/low/allocation/live_range.h"
 
 #include "iree/testing/gtest.h"
+#include "iree/testing/status_matchers.h"
 
 namespace loom {
 namespace {
@@ -106,6 +107,41 @@ TEST(LowAllocationLiveRangeTest, ChecksBlockObservableOverlap) {
       &liveness, /*lhs_value_id=*/1, /*lhs_start_point=*/0,
       /*lhs_end_point=*/4, /*rhs_value_id=*/2, /*rhs_start_point=*/4,
       /*rhs_end_point=*/9));
+}
+
+TEST(LowAllocationLiveRangeTest, MapsOperationProgramPoints) {
+  loom_block_t block = {};
+  loom_op_t first_op = {};
+  loom_op_t second_op = {};
+  block.first_op = &first_op;
+  block.last_op = &second_op;
+  block.op_count = 2;
+  first_op.parent_block = &block;
+  first_op.next_op = &second_op;
+  second_op.parent_block = &block;
+  second_op.prev_op = &first_op;
+
+  const loom_liveness_block_info_t blocks[] = {
+      {
+          /*.block=*/&block,
+          /*.start_point=*/10,
+          /*.end_point=*/12,
+          /*.live_in_values=*/nullptr,
+          /*.live_in_count=*/0,
+          /*.live_out_values=*/nullptr,
+          /*.live_out_count=*/0,
+      },
+  };
+  const loom_liveness_analysis_t liveness =
+      Liveness(blocks, IREE_ARRAYSIZE(blocks));
+
+  uint32_t program_point = UINT32_MAX;
+  IREE_ASSERT_OK(loom_low_allocation_live_range_op_program_point(
+      &liveness, &first_op, &program_point));
+  EXPECT_EQ(program_point, 10u);
+  IREE_ASSERT_OK(loom_low_allocation_live_range_op_program_point(
+      &liveness, &second_op, &program_point));
+  EXPECT_EQ(program_point, 11u);
 }
 
 TEST(LowAllocationLiveRangeTest, ChecksAssignmentConflicts) {

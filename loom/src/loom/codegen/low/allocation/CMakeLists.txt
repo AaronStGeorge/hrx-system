@@ -76,6 +76,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::analysis::liveness
     loom::src::loom::codegen::low::descriptors
+    loom::src::loom::ir
   PUBLIC
 )
 
@@ -156,6 +157,29 @@ loom_cc_test(
     iree::base
     iree::testing::gtest
     iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
+    verification
+  HDRS
+    "verification.h"
+  SRCS
+    "verification.c"
+  DEPS
+    ::assignment
+    ::live_range
+    ::move_topology
+    ::storage
+    ::table
+    iree::base
+    iree::base::core_headers
+    loom::src::loom::codegen::low::function
+    loom::src::loom::codegen::low::placement
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::registers
+  PUBLIC
 )
 
 loom_cc_library(
