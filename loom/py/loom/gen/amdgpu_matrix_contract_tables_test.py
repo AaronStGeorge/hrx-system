@@ -53,6 +53,16 @@ def test_generation_resolves_gfx1250_supplemental_matrix_descriptors() -> None:
     assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_SCALE16_F32_32X16X128_F4" in scaled_f4
 
 
+def test_generation_resolves_gfx12_wmma_abi_shape_variants() -> None:
+    f16 = _contract_initializer(_contract("wmma.f32.16x16x16.f16.gfx12"))
+    bf16 = _contract_initializer(_contract("wmma.bf16.16x16x16.bf16.gfx12"))
+    iu4 = _contract_initializer(_contract("wmma.i32.16x16x16.iu4.gfx12"))
+
+    assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_F32_16X16X16_F16" in f16
+    assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_BF16_16X16X16_BF16" in bf16
+    assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_I32_16X16X16_IU4" in iu4
+
+
 def test_generation_rejects_low_descriptor_payload_shape_drift() -> None:
     contract = _contract("swmmac.f32.16x16x32.f16")
     drifted_contract = replace(contract, lhs=payload("f16", 0, 0))

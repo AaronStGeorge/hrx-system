@@ -1079,7 +1079,7 @@ TEST(MatrixContractTest, MatcherSelectedCdnaMfmaDescriptorCarriesLayoutFacts) {
             LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_CDNA_MFMA_F32_16X16X16_BF16);
 }
 
-TEST(MatrixContractTest, MatcherRejectsWrongWmmar3PayloadShape) {
+TEST(MatrixContractTest, MatcherRejectsGfx12WmmaPayloadWithoutGfx12Feature) {
   loom_amdgpu_matrix_contract_match_request_t request = MatchRequest(
       LOOM_AMDGPU_MATRIX_FAMILY_WMMA, 16, 16, 16,
       LOOM_AMDGPU_MATRIX_NUMERIC_F16, LOOM_AMDGPU_MATRIX_NUMERIC_F16,
@@ -1099,10 +1099,8 @@ TEST(MatrixContractTest, MatcherRejectsWrongWmmar3PayloadShape) {
   const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
       loom_amdgpu_matrix_contract_select(&request, &diagnostic);
   EXPECT_EQ(descriptor, nullptr);
-  EXPECT_TRUE(
-      iree_all_bits_set(diagnostic.rejection_bits,
-                        LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_LHS_PAYLOAD |
-                            LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_RHS_PAYLOAD));
+  EXPECT_EQ(diagnostic.rejection_bits,
+            LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_FEATURES);
 }
 
 TEST(MatrixContractTest, MatcherSelectsMatchingDescriptor) {
