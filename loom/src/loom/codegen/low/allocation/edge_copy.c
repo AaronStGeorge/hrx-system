@@ -444,10 +444,7 @@ static iree_status_t loom_low_allocation_edge_copy_find_temporary(
         context->target_constraints, group->terminator_op,
         storage_class->value_class, 0, 1,
         IREE_SV("edge-copy-non-register-storage")));
-    return iree_make_status(
-        IREE_STATUS_RESOURCE_EXHAUSTED,
-        "low allocation cannot reserve a branch edge-copy temporary for "
-        "non-register storage");
+    return iree_ok_status();
   }
 
   loom_low_allocation_class_capacity_t capacity = {0};
@@ -459,10 +456,7 @@ static iree_status_t loom_low_allocation_edge_copy_find_temporary(
         storage_class->value_class,
         capacity.is_bounded ? capacity.max_units : UINT32_MAX, 1,
         IREE_SV("edge-copy-storage-kind-mismatch")));
-    return iree_make_status(
-        IREE_STATUS_RESOURCE_EXHAUSTED,
-        "low allocation cannot reserve a branch edge-copy temporary for a "
-        "different storage kind");
+    return iree_ok_status();
   }
 
   uint32_t last_location = 0;
@@ -472,9 +466,7 @@ static iree_status_t loom_low_allocation_edge_copy_find_temporary(
           context->target_constraints, group->terminator_op,
           storage_class->value_class, capacity.max_units, 1,
           IREE_SV("edge-copy-empty-budget")));
-      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                              "low allocation cannot reserve a branch "
-                              "edge-copy temporary from an empty budget");
+      return iree_ok_status();
     }
     last_location = capacity.max_units - 1u;
   } else {
@@ -487,9 +479,7 @@ static iree_status_t loom_low_allocation_edge_copy_find_temporary(
           context->target_constraints, group->terminator_op,
           storage_class->value_class, UINT32_MAX, 1,
           IREE_SV("edge-copy-location-range-overflow")));
-      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                              "low allocation cannot reserve a branch "
-                              "edge-copy temporary in uint32 range");
+      return iree_ok_status();
     }
   }
 
@@ -527,9 +517,7 @@ static iree_status_t loom_low_allocation_edge_copy_find_temporary(
       storage_class->value_class,
       capacity.is_bounded ? capacity.max_units : UINT32_MAX, 1,
       IREE_SV("edge-copy-no-scratch-unit")));
-  return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                          "low allocation cannot reserve a branch edge-copy "
-                          "temporary");
+  return iree_ok_status();
 }
 
 static iree_status_t
@@ -571,6 +559,9 @@ loom_low_allocation_edge_copy_plan_record_temporaries_for_group(
       loom_low_allocation_unit_location_t temporary = {0};
       IREE_RETURN_IF_ERROR(loom_low_allocation_edge_copy_find_temporary(
           context, plan, group, &destination, &temporary));
+      if (context->target_constraints->error_count != 0) {
+        return iree_ok_status();
+      }
       if (plan->temporary_count > UINT32_MAX) {
         return iree_make_status(
             IREE_STATUS_OUT_OF_RANGE,
@@ -610,6 +601,9 @@ static iree_status_t loom_low_allocation_edge_copy_record_temporaries(
     IREE_RETURN_IF_ERROR(
         loom_low_allocation_edge_copy_plan_record_temporaries_for_group(
             context, plan, &plan->groups[i]));
+    if (context->target_constraints->error_count != 0) {
+      return iree_ok_status();
+    }
   }
   return iree_ok_status();
 }

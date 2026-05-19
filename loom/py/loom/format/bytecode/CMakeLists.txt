@@ -22,6 +22,7 @@ iree_py_library(
   DEPS
     iree::runtime::py::loom::core
     iree::runtime::py::loom::format::package
+    iree::runtime::py::loom::target::descriptor_sets
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

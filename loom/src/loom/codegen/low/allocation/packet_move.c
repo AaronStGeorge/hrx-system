@@ -337,10 +337,7 @@ static iree_status_t loom_low_allocation_packet_move_find_temporary(
     IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_emit_failure(
         context->target_constraints, op, storage_class->value_class, 0, 1,
         IREE_SV("packet-move-non-register-storage")));
-    return iree_make_status(
-        IREE_STATUS_RESOURCE_EXHAUSTED,
-        "low allocation cannot reserve a packet-local move temporary for "
-        "non-register storage");
+    return iree_ok_status();
   }
 
   loom_low_allocation_class_capacity_t capacity = {0};
@@ -351,10 +348,7 @@ static iree_status_t loom_low_allocation_packet_move_find_temporary(
         context->target_constraints, op, storage_class->value_class,
         capacity.is_bounded ? capacity.max_units : UINT32_MAX, 1,
         IREE_SV("packet-move-storage-kind-mismatch")));
-    return iree_make_status(
-        IREE_STATUS_RESOURCE_EXHAUSTED,
-        "low allocation cannot reserve a packet-local move temporary for a "
-        "different storage kind");
+    return iree_ok_status();
   }
 
   uint32_t last_location = 0;
@@ -363,10 +357,7 @@ static iree_status_t loom_low_allocation_packet_move_find_temporary(
       IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_emit_failure(
           context->target_constraints, op, storage_class->value_class,
           capacity.max_units, 1, IREE_SV("packet-move-empty-budget")));
-      return iree_make_status(
-          IREE_STATUS_RESOURCE_EXHAUSTED,
-          "low allocation cannot reserve a packet-local move temporary from "
-          "an empty budget");
+      return iree_ok_status();
     }
     last_location = capacity.max_units - 1u;
   } else {
@@ -378,10 +369,7 @@ static iree_status_t loom_low_allocation_packet_move_find_temporary(
       IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_emit_failure(
           context->target_constraints, op, storage_class->value_class,
           UINT32_MAX, 1, IREE_SV("packet-move-location-range-overflow")));
-      return iree_make_status(
-          IREE_STATUS_RESOURCE_EXHAUSTED,
-          "low allocation cannot reserve a packet-local move temporary in "
-          "uint32 range");
+      return iree_ok_status();
     }
   }
 
@@ -416,9 +404,7 @@ static iree_status_t loom_low_allocation_packet_move_find_temporary(
       context->target_constraints, op, storage_class->value_class,
       capacity.is_bounded ? capacity.max_units : UINT32_MAX, 1,
       IREE_SV("packet-move-no-scratch-unit")));
-  return iree_make_status(
-      IREE_STATUS_RESOURCE_EXHAUSTED,
-      "low allocation cannot reserve a packet-local move temporary");
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_allocation_packet_move_op_program_point(
@@ -475,6 +461,9 @@ loom_low_allocation_packet_move_plan_record_temporaries_for_op(
     IREE_RETURN_IF_ERROR(loom_low_allocation_packet_move_find_temporary(
         context, op, program_point, &move->destination, moves, move_count,
         &temporary));
+    if (context->target_constraints->error_count != 0) {
+      return iree_ok_status();
+    }
     plan->temporaries[plan->temporary_count++] =
         (loom_low_allocation_packet_move_temporary_t){
             .value_class = temporary.value_class,
@@ -539,6 +528,10 @@ iree_status_t loom_low_allocation_packet_move_plan_build(
         IREE_RETURN_IF_ERROR(
             loom_low_allocation_packet_move_plan_record_temporaries_for_op(
                 context, arena, op, source_ordinal, &plan));
+        if (context->target_constraints->error_count != 0) {
+          *out_plan = plan;
+          return iree_ok_status();
+        }
       }
       ++source_ordinal;
     }

@@ -696,17 +696,9 @@ iree_status_t loom_low_allocation_interval_assignment_build(
       }
     }
     if (!assigned && (!capacity.is_spillable || requires_register)) {
-      const loom_low_descriptor_set_t* descriptor_set =
-          context->target->descriptor_set;
-      const loom_low_reg_class_t* reg_class =
-          &descriptor_set->reg_classes[capacity.descriptor_reg_class_id];
-      iree_string_view_t reg_class_name = loom_low_descriptor_set_string(
-          descriptor_set, reg_class->name_string_offset);
       const uint32_t budget_units =
           capacity.is_bounded ? capacity.max_units : UINT32_MAX;
       if (requires_register) {
-        iree_string_view_t value_name =
-            loom_low_diagnostic_value_name(context->module, interval->value_id);
         IREE_RETURN_IF_ERROR(
             loom_low_allocation_target_constraints_emit_failure(
                 context->target_constraints,
@@ -714,21 +706,15 @@ iree_status_t loom_low_allocation_interval_assignment_build(
                     context->module, interval->value_id, context->function_op),
                 interval->value_class, budget_units, interval->unit_count,
                 IREE_SV("spill-traffic-register-exhausted")));
-        return iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
-            "allocation exhausted register class '%.*s' for materialized "
-            "spill traffic value '%.*s'",
-            (int)reg_class_name.size, reg_class_name.data, (int)value_name.size,
-            value_name.data);
+        *out_result = state.result;
+        return iree_ok_status();
       }
       IREE_RETURN_IF_ERROR(loom_low_allocation_target_constraints_emit_failure(
           context->target_constraints, context->function_op,
           interval->value_class, budget_units, interval->unit_count,
           IREE_SV("unspillable-register-exhausted")));
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "allocation exhausted unspillable register class '%.*s'",
-          (int)reg_class_name.size, reg_class_name.data);
+      *out_result = state.result;
+      return iree_ok_status();
     }
 
     const loom_low_allocation_assignment_t assignment = {

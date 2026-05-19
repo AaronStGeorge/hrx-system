@@ -23,5 +23,6 @@ py_library(
     deps = [
         "//loom/py/loom:core",
         "//loom/py/loom/format:package",
+        "//loom/py/loom/target:descriptor_sets",
     ],
 )
