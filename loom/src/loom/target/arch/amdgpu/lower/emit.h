@@ -172,6 +172,13 @@ iree_status_t loom_amdgpu_emit_f32_to_bf16_lane(
     loom_value_id_t source_lane, loom_type_t lane_type,
     loom_value_id_t* out_lane);
 
+// Emits round-to-nearest-even conversion from two f32 lanes to one packed BF16
+// register. The low source becomes the low 16 bits of the result.
+iree_status_t loom_amdgpu_emit_f32_pair_to_packed_bf16(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t low_source_lane, loom_value_id_t high_source_lane,
+    loom_type_t lane_type, loom_value_id_t* out_packed);
+
 typedef enum loom_amdgpu_vgpr_sdwa_extract_flag_bits_e {
   // No additional source selection modifiers are applied.
   LOOM_AMDGPU_VGPR_SDWA_EXTRACT_FLAG_NONE = 0u,

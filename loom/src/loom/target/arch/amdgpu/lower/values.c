@@ -1953,6 +1953,49 @@ static iree_status_t loom_amdgpu_emit_native_f32_to_packed_bf16(
       lane_type, out_packed);
 }
 
+iree_status_t loom_amdgpu_emit_f32_pair_to_packed_bf16(
+    loom_low_lower_context_t* context, const loom_op_t* source_op,
+    loom_value_id_t low_source_lane, loom_value_id_t high_source_lane,
+    loom_type_t lane_type, loom_value_id_t* out_packed) {
+  *out_packed = LOOM_VALUE_ID_INVALID;
+  loom_low_lower_resolved_descriptor_t native_descriptor = {0};
+  bool has_native_descriptor = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_PK_BF16_F32, &native_descriptor,
+      &has_native_descriptor));
+  if (has_native_descriptor) {
+    return loom_amdgpu_emit_native_f32_to_packed_bf16(
+        context, source_op, &native_descriptor, low_source_lane,
+        high_source_lane, lane_type, out_packed);
+  }
+
+  loom_low_lower_resolved_descriptor_t pack_descriptor = {0};
+  bool has_pack_descriptor = false;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_resolve_descriptor_ref_if_present(
+      context, LOOM_AMDGPU_DESCRIPTOR_REF_V_CVT_PK_U16_U32, &pack_descriptor,
+      &has_pack_descriptor));
+
+  loom_value_id_t low_lane = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_f32_to_bf16_lane(
+      context, source_op, low_source_lane, lane_type, &low_lane));
+  loom_value_id_t high_lane = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_f32_to_bf16_lane(
+      context, source_op, high_source_lane, lane_type, &high_lane));
+  if (has_pack_descriptor) {
+    return loom_amdgpu_emit_bf16_pack_descriptor(
+        context, source_op, &pack_descriptor, low_lane, high_lane, lane_type,
+        out_packed);
+  }
+
+  loom_value_id_t high_bits = LOOM_VALUE_ID_INVALID;
+  IREE_RETURN_IF_ERROR(loom_amdgpu_emit_vgpr_shift(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_LSHLREV_B32_LIT, 16,
+      high_lane, lane_type, &high_bits));
+  return loom_amdgpu_emit_vgpr_binary(
+      context, source_op, LOOM_AMDGPU_DESCRIPTOR_REF_V_OR_B32, low_lane,
+      high_bits, lane_type, out_packed);
+}
+
 static iree_status_t loom_amdgpu_lower_vector_bf16_extf(
     loom_low_lower_context_t* context, const loom_op_t* source_op,
     const loom_amdgpu_vector_bf16_conversion_plan_t* plan) {
