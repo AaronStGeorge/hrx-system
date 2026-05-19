@@ -9,10 +9,11 @@
 // AMDGPU has hazards that are not modeled by wait counters. CDNA MFMA/SMFMAC
 // packets need fixed scalar no-op cycles both after matrix results before
 // ordinary VGPR consumers and after legacy VALU writes before matrix source,
-// DPP, or readfirstlane reads. GFX940-family transcendental VALU results also
-// need a fixed wait before dependent non-transcendental VALU consumers, and
-// nearby VALU or VMEM reads of VALU-written SGPRs need fixed waits because the
-// hardware does not interlock those dependencies. This table records
+// DPP, or readfirstlane reads. GFX940-family transcendental VALU results and
+// sub-DWORD SDWA destination writes also need fixed waits before dependent
+// VALU consumers, and nearby VALU or VMEM reads of VALU-written SGPRs need
+// fixed waits because the hardware does not interlock those dependencies. This
+// table records
 // target-owned insertion points after scheduling and allocation, where physical
 // register identity is known.
 
@@ -52,6 +53,9 @@ typedef enum loom_amdgpu_wait_state_reason_e {
   // A readfirstlane packet consumes VGPR storage written by a recent VALU
   // packet.
   LOOM_AMDGPU_WAIT_STATE_REASON_READFIRSTLANE_VGPR_READ = 6,
+  // A VALU packet consumes VGPR storage written by a recent destination
+  // selector forwarding producer.
+  LOOM_AMDGPU_WAIT_STATE_REASON_DST_SEL_FORWARDING_USE = 7,
 } loom_amdgpu_wait_state_reason_t;
 
 typedef enum loom_amdgpu_wait_state_action_e {
@@ -117,8 +121,13 @@ iree_status_t loom_amdgpu_wait_state_plan_build(
     const loom_low_allocation_table_t* allocation,
     iree_arena_allocator_t* arena, loom_amdgpu_wait_state_plan_t* out_plan);
 
+// Formats the wait-state plan as compact deterministic text for loom-check
+// fixtures.
+iree_status_t loom_amdgpu_wait_state_plan_format_text(
+    const loom_amdgpu_wait_state_plan_t* plan, iree_string_builder_t* builder);
+
 // Formats the wait-state plan, common progress table, and common hazard sidecar
-// as deterministic JSON for diagnostics and loom-check fixtures.
+// as deterministic JSON for diagnostics and structured tooling.
 iree_status_t loom_amdgpu_wait_state_plan_format_json(
     const loom_amdgpu_wait_state_plan_t* plan, iree_string_builder_t* builder);
 

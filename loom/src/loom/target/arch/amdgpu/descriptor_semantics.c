@@ -124,6 +124,14 @@ bool loom_amdgpu_descriptor_is_readfirstlane(
       LOOM_AMDGPU_DESCRIPTOR_TRAIT_READFIRSTLANE);
 }
 
+bool loom_amdgpu_descriptor_is_sdwa(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor) {
+  return iree_any_bit_set(
+      loom_amdgpu_descriptor_traits(descriptor_set, descriptor),
+      LOOM_AMDGPU_DESCRIPTOR_TRAIT_SDWA);
+}
+
 loom_amdgpu_descriptor_traits_t loom_amdgpu_descriptor_traits(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor) {
@@ -142,6 +150,13 @@ loom_amdgpu_descriptor_traits_t loom_amdgpu_descriptor_traits(
   if (loom_amdgpu_encoding_format_is_vector_memory(
           descriptor->encoding_format_id)) {
     traits |= LOOM_AMDGPU_DESCRIPTOR_TRAIT_VECTOR_MEMORY;
+  }
+  switch (descriptor->encoding_format_id) {
+    case LOOM_AMDGPU_ENCODING_FORMAT_VOP1_SDWA:
+      traits |= LOOM_AMDGPU_DESCRIPTOR_TRAIT_SDWA;
+      break;
+    default:
+      break;
   }
   static const loom_amdgpu_descriptor_ref_t kTranscendentalDescriptorRefs[] = {
       LOOM_AMDGPU_DESCRIPTOR_REF_V_EXP_F32,

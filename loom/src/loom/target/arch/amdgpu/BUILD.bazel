@@ -755,6 +755,7 @@ loom_cc_library(
     hdrs = ["wait_states.h"],
     deps = [
         ":descriptor_semantics",
+        ":encoding",
         ":matrix_contract",
         ":target_id",
         ":target_info",

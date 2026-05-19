@@ -680,6 +680,7 @@ loom_cc_library(
     "wait_states.c"
   DEPS
     ::descriptor_semantics
+    ::encoding
     ::matrix_contract
     ::target_id
     ::target_info

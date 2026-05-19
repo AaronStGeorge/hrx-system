@@ -250,8 +250,14 @@ bool loom_amdgpu_encoding_field_uses_unified_source(uint16_t field_id);
 // Returns true when |field_id| is the first vector source selector.
 bool loom_amdgpu_encoding_field_is_src0(uint16_t field_id);
 
+// Returns true when |field_id| is the SDWA destination selector field.
+bool loom_amdgpu_encoding_field_is_dst_sel(uint16_t field_id);
+
 // Returns true when |field_id| is the literal payload field.
 bool loom_amdgpu_encoding_field_is_literal(uint16_t field_id);
+
+// Returns true when |selector| writes a sub-DWORD destination through SDWA.
+bool loom_amdgpu_sdwa_dst_selector_writes_subdword(uint32_t selector);
 
 // Returns the S_SET_VGPR_MSB selector slot controlling |encoding_field_id| in
 // |encoding_format_id|, or NONE when the field does not read the MODE VGPR-MSB

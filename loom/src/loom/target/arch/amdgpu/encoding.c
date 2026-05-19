@@ -237,8 +237,19 @@ bool loom_amdgpu_encoding_field_is_src0(uint16_t field_id) {
   return field_id == LOOM_AMDGPU_ENCODING_FIELD_SRC0;
 }
 
+bool loom_amdgpu_encoding_field_is_dst_sel(uint16_t field_id) {
+  return field_id == LOOM_AMDGPU_ENCODING_FIELD_DST_SEL;
+}
+
 bool loom_amdgpu_encoding_field_is_literal(uint16_t field_id) {
   return field_id == LOOM_AMDGPU_ENCODING_FIELD_LITERAL;
+}
+
+bool loom_amdgpu_sdwa_dst_selector_writes_subdword(uint32_t selector) {
+  enum {
+    LOOM_AMDGPU_SDWA_SELECTOR_DWORD = 6,
+  };
+  return selector != LOOM_AMDGPU_SDWA_SELECTOR_DWORD;
 }
 
 static bool loom_amdgpu_encoding_format_uses_vop_vgpr_msb_slots(

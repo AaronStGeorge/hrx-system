@@ -1,4 +1,4 @@
-// RUN: emit amdgpu-wait-state-plan-json @gfx942_mfma_result_wait_state
+// RUN: emit amdgpu-wait-state-plan @gfx942_mfma_result_wait_state
 
 amdgpu.target<gfx942> @gfx942_target
 
@@ -10,11 +10,12 @@ low.func.def target(@gfx942_target) @gfx942_mfma_result_wait_state(%lhs: reg<amd
 }
 
 // ----
-{"format":"loom.amdgpu.wait_state_plan.v1","state_count":1,"progress_count":3,"hazard_count":1,"states":[{"index":0,"reason":1,"reason_name":"matrix_result_use","action":1,"action_name":"amdgpu.s_nop","block":0,"node":2,"scheduled_ordinal":2,"producer_node":0,"consumer_node":2,"required":7,"observed":0,"residual":7}],"progress":[{"index":0,"packet":0,"node":0,"block":0,"scheduled_ordinal":0,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":1,"packet":2,"node":2,"block":0,"scheduled_ordinal":2,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":2,"packet":3,"node":3,"block":0,"scheduled_ordinal":3,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1}],"hazards":[{"index":0,"kind":"action","action_id":1,"action_name":"amdgpu.s_nop","reason_id":1,"reason_name":"matrix_result_use","producer_node":0,"producer_packet":0,"producer_scheduled_ordinal":0,"consumer_node":2,"insertion_packet":2,"block":0,"scheduled_ordinal":2,"progress_class_id":1,"progress_class_name":"amdgpu.instruction_slot","required":7,"observed":0,"residual":7}]}
+amdgpu.wait_state_plan states=1 progress=3 hazards=1
+state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n2/o2 producer=n0 consumer=n2 required=7 observed=0 residual=7
 
 // ====
 
-// RUN: emit amdgpu-wait-state-plan-json @gfx942_mfma_valu_operand_wait_state
+// RUN: emit amdgpu-wait-state-plan @gfx942_mfma_valu_operand_wait_state
 
 amdgpu.target<gfx942> @gfx942_target
 
@@ -26,11 +27,12 @@ low.func.def target(@gfx942_target) @gfx942_mfma_valu_operand_wait_state(%lhs: r
 }
 
 // ----
-{"format":"loom.amdgpu.wait_state_plan.v1","state_count":1,"progress_count":3,"hazard_count":1,"states":[{"index":0,"reason":2,"reason_name":"valu_to_matrix_use","action":1,"action_name":"amdgpu.s_nop","block":0,"node":2,"scheduled_ordinal":2,"producer_node":0,"consumer_node":2,"required":2,"observed":0,"residual":2}],"progress":[{"index":0,"packet":0,"node":0,"block":0,"scheduled_ordinal":0,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":1,"packet":2,"node":2,"block":0,"scheduled_ordinal":2,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":2,"packet":3,"node":3,"block":0,"scheduled_ordinal":3,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1}],"hazards":[{"index":0,"kind":"action","action_id":1,"action_name":"amdgpu.s_nop","reason_id":2,"reason_name":"valu_to_matrix_use","producer_node":0,"producer_packet":0,"producer_scheduled_ordinal":0,"consumer_node":2,"insertion_packet":2,"block":0,"scheduled_ordinal":2,"progress_class_id":1,"progress_class_name":"amdgpu.instruction_slot","required":2,"observed":0,"residual":2}]}
+amdgpu.wait_state_plan states=1 progress=3 hazards=1
+state[0] reason=valu_to_matrix_use action=amdgpu.s_nop at=b0:n2/o2 producer=n0 consumer=n2 required=2 observed=0 residual=2
 
 // ====
 
-// RUN: emit amdgpu-wait-state-plan-json @gfx942_mfma_result_wait_state_observed_progress strategy=source
+// RUN: emit amdgpu-wait-state-plan @gfx942_mfma_result_wait_state_observed_progress strategy=source
 
 amdgpu.target<gfx942> @gfx942_target
 
@@ -43,11 +45,12 @@ low.func.def target(@gfx942_target) @gfx942_mfma_result_wait_state_observed_prog
 }
 
 // ----
-{"format":"loom.amdgpu.wait_state_plan.v1","state_count":1,"progress_count":4,"hazard_count":1,"states":[{"index":0,"reason":1,"reason_name":"matrix_result_use","action":1,"action_name":"amdgpu.s_nop","block":0,"node":3,"scheduled_ordinal":3,"producer_node":0,"consumer_node":3,"required":7,"observed":1,"residual":6}],"progress":[{"index":0,"packet":0,"node":0,"block":0,"scheduled_ordinal":0,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":1,"packet":1,"node":1,"block":0,"scheduled_ordinal":1,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":2,"packet":3,"node":3,"block":0,"scheduled_ordinal":3,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":3,"packet":4,"node":4,"block":0,"scheduled_ordinal":4,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1}],"hazards":[{"index":0,"kind":"action","action_id":1,"action_name":"amdgpu.s_nop","reason_id":1,"reason_name":"matrix_result_use","producer_node":0,"producer_packet":0,"producer_scheduled_ordinal":0,"consumer_node":3,"insertion_packet":3,"block":0,"scheduled_ordinal":3,"progress_class_id":1,"progress_class_name":"amdgpu.instruction_slot","required":7,"observed":1,"residual":6}]}
+amdgpu.wait_state_plan states=1 progress=4 hazards=1
+state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n3/o3 producer=n0 consumer=n3 required=7 observed=1 residual=6
 
 // ====
 
-// RUN: emit amdgpu-wait-state-plan-json @gfx942_mfma_result_to_mfma_srcc_exact_no_wait_state
+// RUN: emit amdgpu-wait-state-plan @gfx942_mfma_result_to_mfma_srcc_exact_no_wait_state
 
 amdgpu.target<gfx942> @gfx942_target
 
@@ -58,11 +61,11 @@ low.func.def target(@gfx942_target) @gfx942_mfma_result_to_mfma_srcc_exact_no_wa
 }
 
 // ----
-{"format":"loom.amdgpu.wait_state_plan.v1","state_count":0,"progress_count":3,"hazard_count":0,"states":[],"progress":[{"index":0,"packet":0,"node":0,"block":0,"scheduled_ordinal":0,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":1,"packet":1,"node":1,"block":0,"scheduled_ordinal":1,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":2,"packet":2,"node":2,"block":0,"scheduled_ordinal":2,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1}],"hazards":[]}
+amdgpu.wait_state_plan states=0 progress=3 hazards=0
 
 // ====
 
-// RUN: emit amdgpu-wait-state-plan-json @gfx942_mfma_result_to_smfmac_srcc_exact_no_wait_state
+// RUN: emit amdgpu-wait-state-plan @gfx942_mfma_result_to_smfmac_srcc_exact_no_wait_state
 
 amdgpu.target<gfx942> @gfx942_target
 
@@ -73,11 +76,11 @@ low.func.def target(@gfx942_target) @gfx942_mfma_result_to_smfmac_srcc_exact_no_
 }
 
 // ----
-{"format":"loom.amdgpu.wait_state_plan.v1","state_count":0,"progress_count":3,"hazard_count":0,"states":[],"progress":[{"index":0,"packet":0,"node":0,"block":0,"scheduled_ordinal":0,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":1,"packet":1,"node":1,"block":0,"scheduled_ordinal":1,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":2,"packet":2,"node":2,"block":0,"scheduled_ordinal":2,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1}],"hazards":[]}
+amdgpu.wait_state_plan states=0 progress=3 hazards=0
 
 // ====
 
-// RUN: emit amdgpu-wait-state-plan-json @gfx942_smfmac_result_to_smfmac_srcc_overlap_wait_state fixed=%acc16:physical_register:0:16 fixed=%overlap_acc:physical_register:4:4
+// RUN: emit amdgpu-wait-state-plan @gfx942_smfmac_result_to_smfmac_srcc_overlap_wait_state fixed=%acc16:physical_register:0:16 fixed=%overlap_acc:physical_register:4:4
 
 amdgpu.target<gfx942> @gfx942_target
 
@@ -89,11 +92,12 @@ low.func.def target(@gfx942_target) @gfx942_smfmac_result_to_smfmac_srcc_overlap
 }
 
 // ----
-{"format":"loom.amdgpu.wait_state_plan.v1","state_count":1,"progress_count":3,"hazard_count":1,"states":[{"index":0,"reason":1,"reason_name":"matrix_result_use","action":1,"action_name":"amdgpu.s_nop","block":0,"node":2,"scheduled_ordinal":2,"producer_node":0,"consumer_node":2,"required":17,"observed":0,"residual":17}],"progress":[{"index":0,"packet":0,"node":0,"block":0,"scheduled_ordinal":0,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":1,"packet":2,"node":2,"block":0,"scheduled_ordinal":2,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":2,"packet":3,"node":3,"block":0,"scheduled_ordinal":3,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1}],"hazards":[{"index":0,"kind":"action","action_id":1,"action_name":"amdgpu.s_nop","reason_id":1,"reason_name":"matrix_result_use","producer_node":0,"producer_packet":0,"producer_scheduled_ordinal":0,"consumer_node":2,"insertion_packet":2,"block":0,"scheduled_ordinal":2,"progress_class_id":1,"progress_class_name":"amdgpu.instruction_slot","required":17,"observed":0,"residual":17}]}
+amdgpu.wait_state_plan states=1 progress=3 hazards=1
+state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n2/o2 producer=n0 consumer=n2 required=17 observed=0 residual=17
 
 // ====
 
-// RUN: emit amdgpu-wait-state-plan-json @gfx942_mfma_result_to_valu_waw_wait_state fixed=%acc:physical_register:0:4 fixed=%overwrite:physical_register:2:1
+// RUN: emit amdgpu-wait-state-plan @gfx942_mfma_result_to_valu_waw_wait_state fixed=%acc:physical_register:0:4 fixed=%overwrite:physical_register:2:1
 
 amdgpu.target<gfx942> @gfx942_target
 
@@ -104,11 +108,12 @@ low.func.def target(@gfx942_target) @gfx942_mfma_result_to_valu_waw_wait_state(%
 }
 
 // ----
-{"format":"loom.amdgpu.wait_state_plan.v1","state_count":1,"progress_count":3,"hazard_count":1,"states":[{"index":0,"reason":1,"reason_name":"matrix_result_use","action":1,"action_name":"amdgpu.s_nop","block":0,"node":1,"scheduled_ordinal":1,"producer_node":0,"consumer_node":1,"required":7,"observed":0,"residual":7}],"progress":[{"index":0,"packet":0,"node":0,"block":0,"scheduled_ordinal":0,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":1,"packet":1,"node":1,"block":0,"scheduled_ordinal":1,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":2,"packet":2,"node":2,"block":0,"scheduled_ordinal":2,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1}],"hazards":[{"index":0,"kind":"action","action_id":1,"action_name":"amdgpu.s_nop","reason_id":1,"reason_name":"matrix_result_use","producer_node":0,"producer_packet":0,"producer_scheduled_ordinal":0,"consumer_node":1,"insertion_packet":1,"block":0,"scheduled_ordinal":1,"progress_class_id":1,"progress_class_name":"amdgpu.instruction_slot","required":7,"observed":0,"residual":7}]}
+amdgpu.wait_state_plan states=1 progress=3 hazards=1
+state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n1/o1 producer=n0 consumer=n1 required=7 observed=0 residual=7
 
 // ====
 
-// RUN: emit amdgpu-wait-state-plan-json @gfx942_mfma_result_to_mfma_srcab_wait_state
+// RUN: emit amdgpu-wait-state-plan @gfx942_mfma_result_to_mfma_srcab_wait_state
 
 amdgpu.target<gfx942> @gfx942_target
 
@@ -120,11 +125,12 @@ low.func.def target(@gfx942_target) @gfx942_mfma_result_to_mfma_srcab_wait_state
 }
 
 // ----
-{"format":"loom.amdgpu.wait_state_plan.v1","state_count":1,"progress_count":3,"hazard_count":1,"states":[{"index":0,"reason":1,"reason_name":"matrix_result_use","action":1,"action_name":"amdgpu.s_nop","block":0,"node":2,"scheduled_ordinal":2,"producer_node":0,"consumer_node":2,"required":7,"observed":0,"residual":7}],"progress":[{"index":0,"packet":0,"node":0,"block":0,"scheduled_ordinal":0,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":1,"packet":2,"node":2,"block":0,"scheduled_ordinal":2,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":2,"packet":3,"node":3,"block":0,"scheduled_ordinal":3,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1}],"hazards":[{"index":0,"kind":"action","action_id":1,"action_name":"amdgpu.s_nop","reason_id":1,"reason_name":"matrix_result_use","producer_node":0,"producer_packet":0,"producer_scheduled_ordinal":0,"consumer_node":2,"insertion_packet":2,"block":0,"scheduled_ordinal":2,"progress_class_id":1,"progress_class_name":"amdgpu.instruction_slot","required":7,"observed":0,"residual":7}]}
+amdgpu.wait_state_plan states=1 progress=3 hazards=1
+state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n2/o2 producer=n0 consumer=n2 required=7 observed=0 residual=7
 
 // ====
 
-// RUN: emit amdgpu-wait-state-plan-json @gfx950_mfma_result_to_mfma_srcab_wait_state
+// RUN: emit amdgpu-wait-state-plan @gfx950_mfma_result_to_mfma_srcab_wait_state
 
 amdgpu.target<gfx950> @gfx950_target
 
@@ -136,11 +142,12 @@ low.func.def target(@gfx950_target) @gfx950_mfma_result_to_mfma_srcab_wait_state
 }
 
 // ----
-{"format":"loom.amdgpu.wait_state_plan.v1","state_count":1,"progress_count":3,"hazard_count":1,"states":[{"index":0,"reason":1,"reason_name":"matrix_result_use","action":1,"action_name":"amdgpu.s_nop","block":0,"node":2,"scheduled_ordinal":2,"producer_node":0,"consumer_node":2,"required":8,"observed":0,"residual":8}],"progress":[{"index":0,"packet":0,"node":0,"block":0,"scheduled_ordinal":0,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":1,"packet":2,"node":2,"block":0,"scheduled_ordinal":2,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":2,"packet":3,"node":3,"block":0,"scheduled_ordinal":3,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1}],"hazards":[{"index":0,"kind":"action","action_id":1,"action_name":"amdgpu.s_nop","reason_id":1,"reason_name":"matrix_result_use","producer_node":0,"producer_packet":0,"producer_scheduled_ordinal":0,"consumer_node":2,"insertion_packet":2,"block":0,"scheduled_ordinal":2,"progress_class_id":1,"progress_class_name":"amdgpu.instruction_slot","required":8,"observed":0,"residual":8}]}
+amdgpu.wait_state_plan states=1 progress=3 hazards=1
+state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n2/o2 producer=n0 consumer=n2 required=8 observed=0 residual=8
 
 // ====
 
-// RUN: emit amdgpu-wait-state-plan-json @gfx942_valu_sgpr_to_vmem_wait_state
+// RUN: emit amdgpu-wait-state-plan @gfx942_valu_sgpr_to_vmem_wait_state
 
 amdgpu.target<gfx942> @gfx942_target
 
@@ -151,11 +158,12 @@ low.func.def target(@gfx942_target) @gfx942_valu_sgpr_to_vmem_wait_state(%resour
 }
 
 // ----
-{"format":"loom.amdgpu.wait_state_plan.v1","state_count":1,"progress_count":3,"hazard_count":1,"states":[{"index":0,"reason":4,"reason_name":"valu_sgpr_read","action":1,"action_name":"amdgpu.s_nop","block":0,"node":1,"scheduled_ordinal":1,"producer_node":0,"consumer_node":1,"required":2,"observed":0,"residual":2}],"progress":[{"index":0,"packet":0,"node":0,"block":0,"scheduled_ordinal":0,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":1,"packet":1,"node":1,"block":0,"scheduled_ordinal":1,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":2,"packet":2,"node":2,"block":0,"scheduled_ordinal":2,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1}],"hazards":[{"index":0,"kind":"action","action_id":1,"action_name":"amdgpu.s_nop","reason_id":4,"reason_name":"valu_sgpr_read","producer_node":0,"producer_packet":0,"producer_scheduled_ordinal":0,"consumer_node":1,"insertion_packet":1,"block":0,"scheduled_ordinal":1,"progress_class_id":1,"progress_class_name":"amdgpu.instruction_slot","required":2,"observed":0,"residual":2}]}
+amdgpu.wait_state_plan states=1 progress=3 hazards=1
+state[0] reason=valu_sgpr_read action=amdgpu.s_nop at=b0:n1/o1 producer=n0 consumer=n1 required=2 observed=0 residual=2
 
 // ====
 
-// RUN: emit amdgpu-wait-state-plan-json @gfx942_valu_sgpr_to_vmem_wait_state_observed_progress strategy=source
+// RUN: emit amdgpu-wait-state-plan @gfx942_valu_sgpr_to_vmem_wait_state_observed_progress strategy=source
 
 amdgpu.target<gfx942> @gfx942_target
 
@@ -167,11 +175,12 @@ low.func.def target(@gfx942_target) @gfx942_valu_sgpr_to_vmem_wait_state_observe
 }
 
 // ----
-{"format":"loom.amdgpu.wait_state_plan.v1","state_count":1,"progress_count":4,"hazard_count":1,"states":[{"index":0,"reason":4,"reason_name":"valu_sgpr_read","action":1,"action_name":"amdgpu.s_nop","block":0,"node":2,"scheduled_ordinal":2,"producer_node":0,"consumer_node":2,"required":2,"observed":1,"residual":1}],"progress":[{"index":0,"packet":0,"node":0,"block":0,"scheduled_ordinal":0,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":1,"packet":1,"node":1,"block":0,"scheduled_ordinal":1,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":2,"packet":2,"node":2,"block":0,"scheduled_ordinal":2,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":3,"packet":3,"node":3,"block":0,"scheduled_ordinal":3,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1}],"hazards":[{"index":0,"kind":"action","action_id":1,"action_name":"amdgpu.s_nop","reason_id":4,"reason_name":"valu_sgpr_read","producer_node":0,"producer_packet":0,"producer_scheduled_ordinal":0,"consumer_node":2,"insertion_packet":2,"block":0,"scheduled_ordinal":2,"progress_class_id":1,"progress_class_name":"amdgpu.instruction_slot","required":2,"observed":1,"residual":1}]}
+amdgpu.wait_state_plan states=1 progress=4 hazards=1
+state[0] reason=valu_sgpr_read action=amdgpu.s_nop at=b0:n2/o2 producer=n0 consumer=n2 required=2 observed=1 residual=1
 
 // ====
 
-// RUN: emit amdgpu-wait-state-plan-json @gfx11_dpp_vgpr_read_wait_state strategy=source
+// RUN: emit amdgpu-wait-state-plan @gfx11_dpp_vgpr_read_wait_state strategy=source
 
 amdgpu.target<gfx1100> @gfx11_target
 
@@ -182,11 +191,12 @@ low.func.def target(@gfx11_target) @gfx11_dpp_vgpr_read_wait_state(%lhs: reg<amd
 }
 
 // ----
-{"format":"loom.amdgpu.wait_state_plan.v1","state_count":1,"progress_count":3,"hazard_count":1,"states":[{"index":0,"reason":5,"reason_name":"dpp_vgpr_read","action":1,"action_name":"amdgpu.s_nop","block":0,"node":1,"scheduled_ordinal":1,"producer_node":0,"consumer_node":1,"required":2,"observed":0,"residual":2}],"progress":[{"index":0,"packet":0,"node":0,"block":0,"scheduled_ordinal":0,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":1,"packet":1,"node":1,"block":0,"scheduled_ordinal":1,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":2,"packet":2,"node":2,"block":0,"scheduled_ordinal":2,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1}],"hazards":[{"index":0,"kind":"action","action_id":1,"action_name":"amdgpu.s_nop","reason_id":5,"reason_name":"dpp_vgpr_read","producer_node":0,"producer_packet":0,"producer_scheduled_ordinal":0,"consumer_node":1,"insertion_packet":1,"block":0,"scheduled_ordinal":1,"progress_class_id":1,"progress_class_name":"amdgpu.instruction_slot","required":2,"observed":0,"residual":2}]}
+amdgpu.wait_state_plan states=1 progress=3 hazards=1
+state[0] reason=dpp_vgpr_read action=amdgpu.s_nop at=b0:n1/o1 producer=n0 consumer=n1 required=2 observed=0 residual=2
 
 // ====
 
-// RUN: emit amdgpu-wait-state-plan-json @gfx11_dpp_vgpr_read_wait_state_observed_progress strategy=source
+// RUN: emit amdgpu-wait-state-plan @gfx11_dpp_vgpr_read_wait_state_observed_progress strategy=source
 
 amdgpu.target<gfx1100> @gfx11_target
 
@@ -199,11 +209,12 @@ low.func.def target(@gfx11_target) @gfx11_dpp_vgpr_read_wait_state_observed_prog
 }
 
 // ----
-{"format":"loom.amdgpu.wait_state_plan.v1","state_count":1,"progress_count":5,"hazard_count":1,"states":[{"index":0,"reason":5,"reason_name":"dpp_vgpr_read","action":1,"action_name":"amdgpu.s_nop","block":0,"node":2,"scheduled_ordinal":2,"producer_node":0,"consumer_node":2,"required":2,"observed":1,"residual":1}],"progress":[{"index":0,"packet":0,"node":0,"block":0,"scheduled_ordinal":0,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":1,"packet":1,"node":1,"block":0,"scheduled_ordinal":1,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":2,"packet":2,"node":2,"block":0,"scheduled_ordinal":2,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":3,"packet":3,"node":3,"block":0,"scheduled_ordinal":3,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":4,"packet":4,"node":4,"block":0,"scheduled_ordinal":4,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1}],"hazards":[{"index":0,"kind":"action","action_id":1,"action_name":"amdgpu.s_nop","reason_id":5,"reason_name":"dpp_vgpr_read","producer_node":0,"producer_packet":0,"producer_scheduled_ordinal":0,"consumer_node":2,"insertion_packet":2,"block":0,"scheduled_ordinal":2,"progress_class_id":1,"progress_class_name":"amdgpu.instruction_slot","required":2,"observed":1,"residual":1}]}
+amdgpu.wait_state_plan states=1 progress=5 hazards=1
+state[0] reason=dpp_vgpr_read action=amdgpu.s_nop at=b0:n2/o2 producer=n0 consumer=n2 required=2 observed=1 residual=1
 
 // ====
 
-// RUN: emit amdgpu-wait-state-plan-json @gfx942_readfirstlane_vgpr_read_wait_state strategy=source
+// RUN: emit amdgpu-wait-state-plan @gfx942_readfirstlane_vgpr_read_wait_state strategy=source
 
 amdgpu.target<gfx942> @gfx942_target
 
@@ -214,4 +225,52 @@ low.func.def target(@gfx942_target) @gfx942_readfirstlane_vgpr_read_wait_state(%
 }
 
 // ----
-{"format":"loom.amdgpu.wait_state_plan.v1","state_count":1,"progress_count":3,"hazard_count":1,"states":[{"index":0,"reason":6,"reason_name":"readfirstlane_vgpr_read","action":1,"action_name":"amdgpu.s_nop","block":0,"node":1,"scheduled_ordinal":1,"producer_node":0,"consumer_node":1,"required":1,"observed":0,"residual":1}],"progress":[{"index":0,"packet":0,"node":0,"block":0,"scheduled_ordinal":0,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":1,"packet":1,"node":1,"block":0,"scheduled_ordinal":1,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1},{"index":2,"packet":2,"node":2,"block":0,"scheduled_ordinal":2,"class_id":1,"class_name":"amdgpu.instruction_slot","action":"advance","units":1}],"hazards":[{"index":0,"kind":"action","action_id":1,"action_name":"amdgpu.s_nop","reason_id":6,"reason_name":"readfirstlane_vgpr_read","producer_node":0,"producer_packet":0,"producer_scheduled_ordinal":0,"consumer_node":1,"insertion_packet":1,"block":0,"scheduled_ordinal":1,"progress_class_id":1,"progress_class_name":"amdgpu.instruction_slot","required":1,"observed":0,"residual":1}]}
+amdgpu.wait_state_plan states=1 progress=3 hazards=1
+state[0] reason=readfirstlane_vgpr_read action=amdgpu.s_nop at=b0:n1/o1 producer=n0 consumer=n1 required=1 observed=0 residual=1
+
+// ====
+
+// RUN: emit amdgpu-wait-state-plan @gfx950_sdwa_dst_sel_forwarding_wait_state strategy=source
+
+amdgpu.target<gfx950> @gfx950_target
+
+low.func.def target(@gfx950_target) @gfx950_sdwa_dst_sel_forwarding_wait_state(%source: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.cdna4.core> {
+  %packed = v_mov_b32_sdwa %source {dst_sel = 0, dst_unused = 0, src0_sel = 6, src0_sext = 0}
+  %sum = v_add_u32 %packed, %rhs
+  return %sum
+}
+
+// ----
+amdgpu.wait_state_plan states=1 progress=3 hazards=1
+state[0] reason=dst_sel_forwarding_use action=amdgpu.s_nop at=b0:n1/o1 producer=n0 consumer=n1 required=1 observed=0 residual=1
+
+// ====
+
+// RUN: emit amdgpu-wait-state-plan @gfx950_sdwa_dword_dst_sel_no_wait_state strategy=source
+
+amdgpu.target<gfx950> @gfx950_target
+
+low.func.def target(@gfx950_target) @gfx950_sdwa_dword_dst_sel_no_wait_state(%source: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.cdna4.core> {
+  %extracted = v_mov_b32_sdwa %source {dst_sel = 6, dst_unused = 0, src0_sel = 0, src0_sext = 0}
+  %sum = v_add_u32 %extracted, %rhs
+  return %sum
+}
+
+// ----
+amdgpu.wait_state_plan states=0 progress=3 hazards=0
+
+// ====
+
+// RUN: emit amdgpu-wait-state-plan @gfx950_sdwa_dst_sel_waw_wait_state strategy=source fixed=%packed:physical_register:0:1 fixed=%overwrite:physical_register:0:1
+
+amdgpu.target<gfx950> @gfx950_target
+
+low.func.def target(@gfx950_target) @gfx950_sdwa_dst_sel_waw_wait_state(%source: reg<amdgpu.vgpr>, %lhs: reg<amdgpu.vgpr>, %rhs: reg<amdgpu.vgpr>) -> (reg<amdgpu.vgpr>) asm<amdgpu.cdna4.core> {
+  %packed = v_mov_b32_sdwa %source {dst_sel = 0, dst_unused = 0, src0_sel = 6, src0_sext = 0}
+  %overwrite = v_add_u32 %lhs, %rhs
+  return %overwrite
+}
+
+// ----
+amdgpu.wait_state_plan states=1 progress=3 hazards=1
+state[0] reason=dst_sel_forwarding_use action=amdgpu.s_nop at=b0:n1/o1 producer=n0 consumer=n1 required=1 observed=0 residual=1
