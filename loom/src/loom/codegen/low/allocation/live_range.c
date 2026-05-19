@@ -17,6 +17,32 @@ bool loom_low_allocation_live_range_assignment_overlaps_interval(
          interval->start_point < assignment->end_point;
 }
 
+bool loom_low_allocation_live_range_interval_is_allocatable(
+    const loom_liveness_interval_t* interval) {
+  IREE_ASSERT_ARGUMENT(interval);
+  return interval->value_class.type_kind == LOOM_TYPE_REGISTER &&
+         interval->unit_count > 0;
+}
+
+uint32_t loom_low_allocation_live_range_interval_storage_end_point(
+    const loom_liveness_interval_t* interval) {
+  IREE_ASSERT_ARGUMENT(interval);
+  if (interval->end_point > interval->start_point) {
+    return interval->end_point;
+  }
+  return interval->start_point == UINT32_MAX ? UINT32_MAX
+                                             : interval->start_point + 1u;
+}
+
+uint32_t loom_low_allocation_live_range_interval_initial_unit_end_point(
+    const loom_liveness_interval_t* interval) {
+  IREE_ASSERT_ARGUMENT(interval);
+  if (interval->end_point == interval->start_point) {
+    return loom_low_allocation_live_range_interval_storage_end_point(interval);
+  }
+  return interval->start_point;
+}
+
 uint32_t loom_low_allocation_live_range_assignment_unit_end_point(
     const uint32_t* unit_end_points, iree_host_size_t unit_end_point_count,
     const loom_low_allocation_assignment_t* assignment, uint32_t unit_offset) {
@@ -137,6 +163,50 @@ iree_status_t loom_low_allocation_live_range_op_program_point(
   }
   *out_program_point = program_point;
   return iree_ok_status();
+}
+
+iree_status_t loom_low_allocation_live_range_ordered_op_program_point(
+    const loom_liveness_analysis_t* liveness, const loom_region_t* body,
+    loom_liveness_order_t liveness_order, const loom_op_t* op,
+    uint32_t* out_program_point) {
+  IREE_ASSERT_ARGUMENT(liveness);
+  IREE_ASSERT_ARGUMENT(body);
+  IREE_ASSERT_ARGUMENT(op);
+  IREE_ASSERT_ARGUMENT(out_program_point);
+  if (loom_liveness_order_is_empty(liveness_order)) {
+    return loom_low_allocation_live_range_op_program_point(liveness, op,
+                                                           out_program_point);
+  }
+  uint16_t block_index = 0;
+  if (!loom_region_try_block_index(body, op->parent_block, &block_index) ||
+      block_index >= liveness_order.block_count) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "low allocation cannot find ordered block for low operation");
+  }
+  const loom_liveness_block_info_t* block_info =
+      loom_liveness_block_info_for_block(liveness, op->parent_block);
+  if (!block_info) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "low allocation cannot find ordered liveness block for low operation");
+  }
+  const loom_liveness_block_order_t* block_order =
+      &liveness_order.blocks[block_index];
+  for (iree_host_size_t i = 0; i < block_order->op_count; ++i) {
+    if (block_order->ops[i] != op) {
+      continue;
+    }
+    if (i > UINT32_MAX - block_info->start_point) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "ordered low operation program point exceeds uint32_t");
+    }
+    *out_program_point = block_info->start_point + (uint32_t)i;
+    return iree_ok_status();
+  }
+  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                          "ordered low operation has no operation order entry");
 }
 
 bool loom_low_allocation_live_range_assignments_conflict(

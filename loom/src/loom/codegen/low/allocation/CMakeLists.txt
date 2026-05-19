@@ -185,6 +185,38 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    unit_liveness
+  HDRS
+    "unit_liveness.h"
+  SRCS
+    "unit_liveness.c"
+  DEPS
+    ::live_range
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::liveness
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::placement
+    loom::src::loom::codegen::low::target_binding
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    unit_liveness_test
+  SRCS
+    "unit_liveness_test.cc"
+  DEPS
+    ::unit_liveness
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     move_topology
   HDRS
     "move_topology.h"

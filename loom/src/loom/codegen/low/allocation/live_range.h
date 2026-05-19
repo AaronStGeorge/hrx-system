@@ -25,6 +25,20 @@ bool loom_low_allocation_live_range_assignment_overlaps_interval(
     const loom_low_allocation_assignment_t* assignment,
     const loom_liveness_interval_t* interval);
 
+// Returns true when |interval| needs target-visible allocation storage.
+bool loom_low_allocation_live_range_interval_is_allocatable(
+    const loom_liveness_interval_t* interval);
+
+// Returns the one-past-last storage point for |interval|. A semantic dead
+// result still writes a physical destination at its definition boundary, so it
+// occupies storage until the next program boundary.
+uint32_t loom_low_allocation_live_range_interval_storage_end_point(
+    const loom_liveness_interval_t* interval);
+
+// Returns the initial per-unit end point for |interval| before use refinement.
+uint32_t loom_low_allocation_live_range_interval_initial_unit_end_point(
+    const loom_liveness_interval_t* interval);
+
 // Returns the one-past-last live program point for one assigned unit. Unit
 // offsets outside |assignment|'s unit-count domain fall back to the assignment
 // end point, matching whole-assignment lifetime semantics. |unit_end_points|
@@ -54,6 +68,13 @@ bool loom_low_allocation_live_range_values_overlap(
 // block start point. This is only valid for source-order liveness.
 iree_status_t loom_low_allocation_live_range_op_program_point(
     const loom_liveness_analysis_t* liveness, const loom_op_t* op,
+    uint32_t* out_program_point);
+
+// Returns |op|'s liveness program point under an optional explicit operation
+// order. Empty orders fall back to source order.
+iree_status_t loom_low_allocation_live_range_ordered_op_program_point(
+    const loom_liveness_analysis_t* liveness, const loom_region_t* body,
+    loom_liveness_order_t liveness_order, const loom_op_t* op,
     uint32_t* out_program_point);
 
 // Returns true when two assignments have overlapping live target-visible

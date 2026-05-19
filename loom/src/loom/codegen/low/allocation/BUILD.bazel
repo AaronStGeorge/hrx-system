@@ -38,6 +38,7 @@ loom_assert_no_dependencies(
         ":storage",
         ":storage_lease",
         ":table",
+        ":unit_liveness",
         ":verification",
     ],
 )
@@ -186,6 +187,34 @@ loom_cc_test(
     deps = [
         ":live_range",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "unit_liveness",
+    srcs = ["unit_liveness.c"],
+    hdrs = ["unit_liveness.h"],
+    deps = [
+        ":live_range",
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:placement",
+        "//loom/src/loom/codegen/low:target_binding",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "unit_liveness_test",
+    srcs = ["unit_liveness_test.cc"],
+    deps = [
+        ":unit_liveness",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

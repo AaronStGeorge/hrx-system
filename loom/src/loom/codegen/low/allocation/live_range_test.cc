@@ -83,6 +83,55 @@ TEST(LowAllocationLiveRangeTest, ZeroUnitAssignmentsUseWholeAssignmentEnd) {
             5u);
 }
 
+TEST(LowAllocationLiveRangeTest, ClassifiesAllocatableIntervals) {
+  loom_liveness_interval_t register_interval = {};
+  register_interval.value_class.type_kind = LOOM_TYPE_REGISTER;
+  register_interval.unit_count = 2;
+
+  loom_liveness_interval_t zero_unit_interval = register_interval;
+  zero_unit_interval.unit_count = 0;
+
+  loom_liveness_interval_t non_register_interval = register_interval;
+  non_register_interval.value_class.type_kind = LOOM_TYPE_SCALAR;
+
+  EXPECT_TRUE(loom_low_allocation_live_range_interval_is_allocatable(
+      &register_interval));
+  EXPECT_FALSE(loom_low_allocation_live_range_interval_is_allocatable(
+      &zero_unit_interval));
+  EXPECT_FALSE(loom_low_allocation_live_range_interval_is_allocatable(
+      &non_register_interval));
+}
+
+TEST(LowAllocationLiveRangeTest, ComputesIntervalStorageEndPoints) {
+  loom_liveness_interval_t live_interval = {};
+  live_interval.start_point = 3;
+  live_interval.end_point = 7;
+
+  loom_liveness_interval_t dead_result_interval = {};
+  dead_result_interval.start_point = 3;
+  dead_result_interval.end_point = 3;
+
+  loom_liveness_interval_t saturated_interval = {};
+  saturated_interval.start_point = UINT32_MAX;
+  saturated_interval.end_point = UINT32_MAX;
+
+  EXPECT_EQ(
+      loom_low_allocation_live_range_interval_storage_end_point(&live_interval),
+      7u);
+  EXPECT_EQ(loom_low_allocation_live_range_interval_initial_unit_end_point(
+                &live_interval),
+            3u);
+  EXPECT_EQ(loom_low_allocation_live_range_interval_storage_end_point(
+                &dead_result_interval),
+            4u);
+  EXPECT_EQ(loom_low_allocation_live_range_interval_initial_unit_end_point(
+                &dead_result_interval),
+            4u);
+  EXPECT_EQ(loom_low_allocation_live_range_interval_storage_end_point(
+                &saturated_interval),
+            UINT32_MAX);
+}
+
 TEST(LowAllocationLiveRangeTest, ChecksBlockObservableOverlap) {
   const loom_value_id_t live_in_values[] = {1};
   const loom_liveness_block_info_t blocks[] = {
@@ -142,6 +191,59 @@ TEST(LowAllocationLiveRangeTest, MapsOperationProgramPoints) {
   IREE_ASSERT_OK(loom_low_allocation_live_range_op_program_point(
       &liveness, &second_op, &program_point));
   EXPECT_EQ(program_point, 11u);
+}
+
+TEST(LowAllocationLiveRangeTest, MapsExplicitOperationProgramPoints) {
+  loom_region_t region = {};
+  loom_block_t block = {};
+  loom_op_t first_op = {};
+  loom_op_t second_op = {};
+  region.block_count = 1;
+  region.blocks = region.inline_blocks;
+  region.inline_blocks[0] = &block;
+  block.parent_region = &region;
+  block.region_index = 0;
+  block.first_op = &first_op;
+  block.last_op = &second_op;
+  block.op_count = 2;
+  first_op.parent_block = &block;
+  first_op.next_op = &second_op;
+  second_op.parent_block = &block;
+  second_op.prev_op = &first_op;
+
+  const loom_liveness_block_info_t blocks[] = {
+      {
+          /*.block=*/&block,
+          /*.start_point=*/20,
+          /*.end_point=*/22,
+          /*.live_in_values=*/nullptr,
+          /*.live_in_count=*/0,
+          /*.live_out_values=*/nullptr,
+          /*.live_out_count=*/0,
+      },
+  };
+  const loom_liveness_analysis_t liveness =
+      Liveness(blocks, IREE_ARRAYSIZE(blocks));
+  const loom_op_t* ordered_ops[] = {&second_op, &first_op};
+  const loom_liveness_block_order_t block_orders[] = {
+      {
+          /*.block=*/&block,
+          /*.ops=*/ordered_ops,
+          /*.op_count=*/IREE_ARRAYSIZE(ordered_ops),
+      },
+  };
+  const loom_liveness_order_t order = {
+      /*.blocks=*/block_orders,
+      /*.block_count=*/IREE_ARRAYSIZE(block_orders),
+  };
+
+  uint32_t program_point = UINT32_MAX;
+  IREE_ASSERT_OK(loom_low_allocation_live_range_ordered_op_program_point(
+      &liveness, &region, order, &second_op, &program_point));
+  EXPECT_EQ(program_point, 20u);
+  IREE_ASSERT_OK(loom_low_allocation_live_range_ordered_op_program_point(
+      &liveness, &region, order, &first_op, &program_point));
+  EXPECT_EQ(program_point, 21u);
 }
 
 TEST(LowAllocationLiveRangeTest, ChecksAssignmentConflicts) {
