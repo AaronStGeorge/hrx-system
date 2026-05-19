@@ -35,6 +35,13 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    matrix_contracts
+  SRCS
+    "matrix_contracts.py"
+)
+
+iree_py_library(
+  NAME
     descriptors
   SRCS
     "__init__.py"

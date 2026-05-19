@@ -500,6 +500,18 @@ py_binary(
 )
 
 py_binary(
+    name = "amdgpu_matrix_contract_tables",
+    srcs = ["amdgpu_matrix_contract_tables.py"],
+    main = "amdgpu_matrix_contract_tables.py",
+    deps = [
+        ":generated_file",
+        "//loom/py/loom/target:low_descriptors",
+        "//loom/py/loom/target/arch/amdgpu:descriptors",
+        "//loom/py/loom/target/arch/amdgpu:matrix_contracts",
+    ],
+)
+
+py_binary(
     name = "amdgpu_encoding_tables",
     srcs = ["amdgpu_encoding_tables.py"],
     main = "amdgpu_encoding_tables.py",

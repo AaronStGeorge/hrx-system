@@ -623,6 +623,34 @@ TEST(MatrixContractTest, WmmaFp8CrossProductDescriptors) {
             LOOM_AMDGPU_MATRIX_NUMERIC_FP8);
 }
 
+TEST(MatrixContractTest, MatrixSemanticTagsDeriveTargetLowIds) {
+  struct Case {
+    const char* descriptor_name;
+    loom_amdgpu_descriptor_ref_t low_descriptor_ref;
+  };
+  const Case cases[] = {
+      {
+          "mfma.f32.16x16x32.bf8.bf8",
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_MFMA_F32_16X16X32_BF8_BF8,
+      },
+      {
+          "smfmac.f32.16x16x64.bf8.bf8",
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_SMFMAC_F32_16X16X64_BF8_BF8,
+      },
+      {
+          "swmmac.f32.16x16x32.f16",
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_SWMMAC_F32_16X16X32_F16,
+      },
+  };
+  for (const Case& test_case : cases) {
+    const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
+        FindDescriptor(test_case.descriptor_name);
+    ASSERT_NE(descriptor, nullptr) << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->low_descriptor_ref, test_case.low_descriptor_ref)
+        << test_case.descriptor_name;
+  }
+}
+
 TEST(MatrixContractTest, WmmaDescriptorsExposeTargetLowIds) {
   const loom_amdgpu_matrix_contract_descriptor_t* f32_f16 =
       FindDescriptor("wmma.f32.16x16x16.f16");

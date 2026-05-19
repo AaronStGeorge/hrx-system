@@ -311,6 +311,8 @@ _AMDGPU_ATOMIC_CANDIDATE_GENERATOR = "//loom/py/loom/gen:amdgpu_atomic_candidate
 
 _AMDGPU_COMPARE_CANDIDATE_GENERATOR = "//loom/py/loom/gen:amdgpu_compare_candidates"
 
+_AMDGPU_MATRIX_CONTRACT_TABLE_GENERATOR = "//loom/py/loom/gen:amdgpu_matrix_contract_tables"
+
 _AMDGPU_ENCODING_TABLE_GENERATOR = "//loom/py/loom/gen:amdgpu_encoding_tables"
 
 _AMDGPU_OCCUPANCY_TABLE_GENERATOR = "//loom/py/loom/gen:amdgpu_occupancy_tables"
@@ -1192,10 +1194,10 @@ loom_cc_library(
     ],
 )
 
-loom_cc_library(
+loom_target_table_cc_library(
     name = "matrix_contract_tables",
-    srcs = ["matrix_contract_tables.c"],
-    hdrs = ["matrix_contract_tables.h"],
+    args = ["--public-header=loom/target/arch/amdgpu/matrix_contract_tables.h"],
+    generator = _AMDGPU_MATRIX_CONTRACT_TABLE_GENERATOR,
     deps = [
         ":matrix_contract_types",
         "//runtime/src/iree/base",

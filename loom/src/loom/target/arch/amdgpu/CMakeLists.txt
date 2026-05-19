@@ -1851,17 +1851,16 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_cc_library(
+loom_target_table_cc_library(
   NAME
     matrix_contract_tables
-  HDRS
-    "matrix_contract_tables.h"
-  SRCS
-    "matrix_contract_tables.c"
+  GENERATOR
+    iree::runtime::py::loom::gen::amdgpu_matrix_contract_tables
+  ARGS
+    "--public-header=loom/target/arch/amdgpu/matrix_contract_tables.h"
   DEPS
     ::matrix_contract_types
     iree::base
-  PUBLIC
 )
 
 loom_cc_library(

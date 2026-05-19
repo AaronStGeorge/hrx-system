@@ -531,6 +531,20 @@ iree_py_library(
 
 iree_py_library(
   NAME
+    amdgpu_matrix_contract_tables
+  MAIN
+    "amdgpu_matrix_contract_tables.py"
+  SRCS
+    "amdgpu_matrix_contract_tables.py"
+  DEPS
+    iree::runtime::py::loom::gen::generated_file
+    iree::runtime::py::loom::target::low_descriptors
+    iree::runtime::py::loom::target::arch::amdgpu::descriptors
+    iree::runtime::py::loom::target::arch::amdgpu::matrix_contracts
+)
+
+iree_py_library(
+  NAME
     amdgpu_encoding_tables
   MAIN
     "amdgpu_encoding_tables.py"

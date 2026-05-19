@@ -37,6 +37,11 @@ py_library(
 )
 
 py_library(
+    name = "matrix_contracts",
+    srcs = ["matrix_contracts.py"],
+)
+
+py_library(
     name = "descriptors",
     srcs = [
         "__init__.py",
