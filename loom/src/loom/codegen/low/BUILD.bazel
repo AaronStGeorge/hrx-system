@@ -356,6 +356,7 @@ loom_cc_library(
         "//loom/src/loom/codegen/low/allocation:move_topology",
         "//loom/src/loom/codegen/low/allocation:packet_move",
         "//loom/src/loom/codegen/low/allocation:spill_plan",
+        "//loom/src/loom/codegen/low/allocation:spill_traffic",
         "//loom/src/loom/codegen/low/allocation:storage",
         "//loom/src/loom/codegen/low/allocation:storage_lease",
         "//loom/src/loom/codegen/low/allocation:table",

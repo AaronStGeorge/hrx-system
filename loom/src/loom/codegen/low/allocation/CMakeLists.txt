@@ -132,6 +132,42 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    spill_traffic
+  HDRS
+    "spill_traffic.h"
+  SRCS
+    "spill_traffic.c"
+  DEPS
+    iree::base
+    loom::src::loom::analysis::liveness
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    spill_traffic_test
+  SRCS
+    "spill_traffic_test.cc"
+  DEPS
+    ::spill_traffic
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::diagnostics
+    loom::src::loom::codegen::low::text_asm
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::ops::op_defs
+    loom::src::loom::ops::test
+    loom::src::loom::target::test::descriptors
+    loom::src::loom::testing::module_ptr
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_test(
   NAME
     spill_plan_test

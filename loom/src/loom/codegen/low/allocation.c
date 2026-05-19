@@ -16,6 +16,7 @@
 #include "loom/codegen/low/allocation/interval_order.h"
 #include "loom/codegen/low/allocation/packet_move.h"
 #include "loom/codegen/low/allocation/spill_plan.h"
+#include "loom/codegen/low/allocation/spill_traffic.h"
 #include "loom/codegen/low/allocation/storage_lease.h"
 #include "loom/codegen/low/allocation/target_constraints.h"
 #include "loom/codegen/low/allocation/unit_liveness.h"
@@ -277,34 +278,6 @@ static bool loom_low_allocation_find_location(
   return false;
 }
 
-static bool loom_low_allocation_value_requires_register_location(
-    const loom_low_allocation_build_state_t* state, loom_value_id_t value_id) {
-  if (value_id >= state->module->values.count) {
-    return false;
-  }
-  const loom_value_t* value = loom_module_value(state->module, value_id);
-  const loom_op_t* defining_op = loom_def_op(value->def);
-  if (defining_op && loom_low_reload_isa(defining_op)) {
-    return true;
-  }
-  const loom_use_t* uses = loom_value_uses(value);
-  for (uint32_t i = 0; i < value->use_count; ++i) {
-    const loom_op_t* user_op = loom_use_user_op(uses[i]);
-    if (user_op && loom_low_spill_isa(user_op) &&
-        loom_use_operand_index(uses[i]) == 0) {
-      return true;
-    }
-  }
-  return false;
-}
-
-static bool loom_low_allocation_interval_requires_register_location(
-    const loom_low_allocation_build_state_t* state,
-    const loom_liveness_interval_t* interval) {
-  return loom_low_allocation_value_requires_register_location(
-      state, interval->value_id);
-}
-
 static iree_status_t loom_low_allocation_assignment_index_for_value(
     const loom_low_allocation_build_state_t* state, loom_value_id_t value_id,
     uint32_t* out_assignment_index) {
@@ -446,8 +419,8 @@ static bool loom_low_allocation_assignment_can_spill(
           &state->target_constraints, assignment->value_id)) {
     return false;
   }
-  if (loom_low_allocation_value_requires_register_location(
-          state, assignment->value_id)) {
+  if (loom_low_allocation_spill_traffic_value_requires_register_location(
+          state->module, assignment->value_id)) {
     return false;
   }
   loom_low_allocation_class_capacity_t capacity = {0};
@@ -1885,8 +1858,8 @@ static iree_status_t loom_low_allocation_assign_intervals(
     bool assigned = loom_low_allocation_find_location(state, interval, capacity,
                                                       &location_base);
     const bool requires_register =
-        loom_low_allocation_interval_requires_register_location(state,
-                                                                interval);
+        loom_low_allocation_spill_traffic_interval_requires_register_location(
+            state->module, interval);
     if (!assigned && (capacity.is_spillable || requires_register)) {
       IREE_RETURN_IF_ERROR(loom_low_allocation_find_active_spill_victim_set(
           state, interval, &capacity, requires_register, &location_base,

@@ -41,6 +41,7 @@ loom_assert_no_dependencies(
         ":move_topology",
         ":packet_move",
         ":spill_plan",
+        ":spill_traffic",
         ":storage",
         ":storage_lease",
         ":table",
@@ -153,6 +154,38 @@ loom_cc_library(
         "//loom/src/loom/ir",
         "//loom/src/loom/ops/low",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "spill_traffic",
+    srcs = ["spill_traffic.c"],
+    hdrs = ["spill_traffic.h"],
+    deps = [
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "spill_traffic_test",
+    srcs = ["spill_traffic_test.cc"],
+    deps = [
+        ":spill_traffic",
+        "//loom/src/loom/codegen/low:diagnostics",
+        "//loom/src/loom/codegen/low:text_asm",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/ops/test",
+        "//loom/src/loom/target/test:descriptors",
+        "//loom/src/loom/testing:module_ptr",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
