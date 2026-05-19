@@ -240,6 +240,175 @@ TEST(MatrixContractTest, Gfx90aDoubleMfmaDescriptor) {
   EXPECT_EQ(descriptor->result_payload.element_count, 4);
 }
 
+TEST(MatrixContractTest, Gfx950DenseMfmaDescriptorsExposeTargetLowIds) {
+  struct Case {
+    const char* descriptor_name;
+    loom_amdgpu_descriptor_ref_t low_descriptor_ref;
+    loom_amdgpu_matrix_numeric_type_t input_numeric_type;
+    loom_amdgpu_matrix_numeric_type_t accumulator_numeric_type;
+    uint16_t result_row_count;
+    uint16_t result_column_count;
+    uint16_t reduction_count;
+    uint16_t input_register_count;
+    uint16_t input_element_count;
+    uint16_t accumulator_register_count;
+    uint16_t accumulator_element_count;
+  };
+  const Case cases[] = {
+      {
+          "mfma.f32.16x16x32.f16",
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_MFMA_F32_16X16X32_F16,
+          LOOM_AMDGPU_MATRIX_NUMERIC_F16,
+          LOOM_AMDGPU_MATRIX_NUMERIC_F32,
+          16,
+          16,
+          32,
+          4,
+          8,
+          4,
+          4,
+      },
+      {
+          "mfma.f32.16x16x32.bf16",
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_MFMA_F32_16X16X32_BF16,
+          LOOM_AMDGPU_MATRIX_NUMERIC_BF16,
+          LOOM_AMDGPU_MATRIX_NUMERIC_F32,
+          16,
+          16,
+          32,
+          4,
+          8,
+          4,
+          4,
+      },
+      {
+          "mfma.f32.32x32x16.f16",
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_MFMA_F32_32X32X16_F16,
+          LOOM_AMDGPU_MATRIX_NUMERIC_F16,
+          LOOM_AMDGPU_MATRIX_NUMERIC_F32,
+          32,
+          32,
+          16,
+          4,
+          8,
+          16,
+          16,
+      },
+      {
+          "mfma.f32.32x32x16.bf16",
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_MFMA_F32_32X32X16_BF16,
+          LOOM_AMDGPU_MATRIX_NUMERIC_BF16,
+          LOOM_AMDGPU_MATRIX_NUMERIC_F32,
+          32,
+          32,
+          16,
+          4,
+          8,
+          16,
+          16,
+      },
+      {
+          "mfma.i32.16x16x64.i8",
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_MFMA_I32_16X16X64_I8,
+          LOOM_AMDGPU_MATRIX_NUMERIC_I8,
+          LOOM_AMDGPU_MATRIX_NUMERIC_I32,
+          16,
+          16,
+          64,
+          4,
+          16,
+          4,
+          4,
+      },
+      {
+          "mfma.i32.32x32x32.i8",
+          LOOM_AMDGPU_DESCRIPTOR_REF_V_MFMA_I32_32X32X32_I8,
+          LOOM_AMDGPU_MATRIX_NUMERIC_I8,
+          LOOM_AMDGPU_MATRIX_NUMERIC_I32,
+          32,
+          32,
+          32,
+          4,
+          16,
+          16,
+          16,
+      },
+  };
+  for (const Case& test_case : cases) {
+    const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
+        FindDescriptor(test_case.descriptor_name);
+    ASSERT_NE(descriptor, nullptr) << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->low_descriptor_ref, test_case.low_descriptor_ref)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->required_feature_bits,
+              LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX950)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->family, LOOM_AMDGPU_MATRIX_FAMILY_MFMA)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->tile_shape.result_row_count,
+              test_case.result_row_count)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->tile_shape.result_column_count,
+              test_case.result_column_count)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->tile_shape.reduction_count, test_case.reduction_count)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->lhs_payload.numeric_type,
+              test_case.input_numeric_type)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->lhs_payload.register_count,
+              test_case.input_register_count)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->lhs_payload.element_count,
+              test_case.input_element_count)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->rhs_payload.numeric_type,
+              test_case.input_numeric_type)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->rhs_payload.register_count,
+              test_case.input_register_count)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->rhs_payload.element_count,
+              test_case.input_element_count)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->accumulator_payload.numeric_type,
+              test_case.accumulator_numeric_type)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->accumulator_payload.register_count,
+              test_case.accumulator_register_count)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->accumulator_payload.element_count,
+              test_case.accumulator_element_count)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->result_payload.numeric_type,
+              test_case.accumulator_numeric_type)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->result_payload.register_count,
+              test_case.accumulator_register_count)
+        << test_case.descriptor_name;
+    EXPECT_EQ(descriptor->result_payload.element_count,
+              test_case.accumulator_element_count)
+        << test_case.descriptor_name;
+  }
+}
+
+TEST(MatrixContractTest, MatcherSelectedGfx950MfmaDescriptorCarriesLowId) {
+  loom_amdgpu_matrix_contract_match_request_t request = MatchRequest(
+      LOOM_AMDGPU_MATRIX_FAMILY_MFMA, 16, 16, 32,
+      LOOM_AMDGPU_MATRIX_NUMERIC_F16, LOOM_AMDGPU_MATRIX_NUMERIC_F16,
+      LOOM_AMDGPU_MATRIX_NUMERIC_F32, LOOM_AMDGPU_MATRIX_NUMERIC_F32,
+      LOOM_AMDGPU_MATRIX_SCALE_NONE, LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX950, 64,
+      0, 0);
+  loom_amdgpu_matrix_contract_match_diagnostic_t diagnostic = {};
+  const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
+      loom_amdgpu_matrix_contract_select(&request, &diagnostic);
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(descriptor->low_descriptor_ref,
+            LOOM_AMDGPU_DESCRIPTOR_REF_V_MFMA_F32_16X16X32_F16);
+  EXPECT_EQ(diagnostic.rejection_bits,
+            LOOM_AMDGPU_MATRIX_CONTRACT_REJECTION_NONE);
+}
+
 TEST(MatrixContractTest, Gfx950ScaledMfmaDescriptor) {
   const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
       FindDescriptor("mfma.scale.f32.32x32x64.f8f6f4");
@@ -259,6 +428,14 @@ TEST(MatrixContractTest, Gfx950ScaledMfmaDescriptor) {
       descriptor->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_ZERO_SCALE_FALLBACK,
       LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_ZERO_SCALE_FALLBACK);
   EXPECT_EQ(descriptor->scale_kind, LOOM_AMDGPU_MATRIX_SCALE_32);
+  EXPECT_EQ(descriptor->low_descriptor_ref,
+            LOOM_AMDGPU_DESCRIPTOR_REF_V_MFMA_SCALE_F32_32X32X64_F8F6F4);
+
+  const loom_amdgpu_matrix_contract_descriptor_t* compact_descriptor =
+      FindDescriptor("mfma.scale.f32.16x16x128.f8f6f4");
+  ASSERT_NE(compact_descriptor, nullptr);
+  EXPECT_EQ(compact_descriptor->low_descriptor_ref,
+            LOOM_AMDGPU_DESCRIPTOR_REF_V_MFMA_SCALE_F32_16X16X128_F8F6F4);
 }
 
 TEST(MatrixContractTest, Gfx1250WmmaScale16Descriptor) {
