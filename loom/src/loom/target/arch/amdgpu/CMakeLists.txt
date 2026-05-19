@@ -1839,12 +1839,41 @@ loom_low_descriptor_exclude_from_all(
 
 loom_cc_library(
   NAME
+    matrix_contract_types
+  HDRS
+    "matrix_contract_types.h"
+  DEPS
+    ::target_info_defs
+    ::target_refs
+    iree::base
+    loom::src::loom::analysis::contract_roles
+    loom::src::loom::analysis::matrix_fragment_layout
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    matrix_contract_tables
+  HDRS
+    "matrix_contract_tables.h"
+  SRCS
+    "matrix_contract_tables.c"
+  DEPS
+    ::matrix_contract_types
+    iree::base
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     matrix_contract
   HDRS
     "matrix_contract.h"
   SRCS
     "matrix_contract.c"
   DEPS
+    ::matrix_contract_tables
+    ::matrix_contract_types
     ::target_info
     ::target_info_defs
     ::target_refs

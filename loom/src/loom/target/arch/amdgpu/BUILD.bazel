@@ -1181,10 +1181,34 @@ loom_low_descriptor_exclude_from_cmake_all(
 #===------------------------------------------------------------------------===#
 
 loom_cc_library(
+    name = "matrix_contract_types",
+    hdrs = ["matrix_contract_types.h"],
+    deps = [
+        ":target_info_defs",
+        ":target_refs",
+        "//loom/src/loom/analysis:contract_roles",
+        "//loom/src/loom/analysis:matrix_fragment_layout",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "matrix_contract_tables",
+    srcs = ["matrix_contract_tables.c"],
+    hdrs = ["matrix_contract_tables.h"],
+    deps = [
+        ":matrix_contract_types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "matrix_contract",
     srcs = ["matrix_contract.c"],
     hdrs = ["matrix_contract.h"],
     deps = [
+        ":matrix_contract_tables",
+        ":matrix_contract_types",
         ":target_info",
         ":target_info_defs",
         ":target_refs",
