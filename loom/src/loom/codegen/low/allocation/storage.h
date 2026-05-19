@@ -38,6 +38,15 @@ bool loom_low_allocation_storage_assignment_ranges_equal(
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs);
 
+// Returns true when two assignments cover the same target-visible storage
+// location under |descriptor_set|'s alias contracts. Unlike range equality,
+// this mirrors allocation coalescing semantics and does not require a non-empty
+// location range.
+bool loom_low_allocation_storage_assignment_locations_share(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_allocation_assignment_t* lhs,
+    const loom_low_allocation_assignment_t* rhs);
+
 // Returns true when two non-empty assignments overlap in target storage under
 // |descriptor_set|'s alias contracts.
 bool loom_low_allocation_storage_assignment_ranges_overlap(

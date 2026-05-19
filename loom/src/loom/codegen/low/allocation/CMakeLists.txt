@@ -94,4 +94,34 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_library(
+  NAME
+    diagnostics
+  HDRS
+    "diagnostics.h"
+  SRCS
+    "diagnostics.c"
+  DEPS
+    ::assignment
+    ::storage
+    ::table
+    iree::base
+    loom::src::loom::codegen::low::diagnostics
+    loom::src::loom::error::emitter
+    loom::src::loom::error::error_defs
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    diagnostics_test
+  SRCS
+    "diagnostics_test.cc"
+  DEPS
+    ::diagnostics
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

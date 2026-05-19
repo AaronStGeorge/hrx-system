@@ -30,6 +30,7 @@ loom_assert_no_dependencies(
     ],
     targets = [
         ":assignment",
+        ":diagnostics",
         ":storage",
         ":table",
     ],
@@ -101,6 +102,32 @@ loom_cc_test(
     srcs = ["table_test.cc"],
     deps = [
         ":table",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "diagnostics",
+    srcs = ["diagnostics.c"],
+    hdrs = ["diagnostics.h"],
+    deps = [
+        ":assignment",
+        ":storage",
+        ":table",
+        "//loom/src/loom/codegen/low:diagnostics",
+        "//loom/src/loom/error:emitter",
+        "//loom/src/loom/error:error_defs",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "diagnostics_test",
+    srcs = ["diagnostics_test.cc"],
+    deps = [
+        ":diagnostics",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

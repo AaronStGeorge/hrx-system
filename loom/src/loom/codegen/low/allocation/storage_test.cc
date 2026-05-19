@@ -69,12 +69,29 @@ TEST(LowAllocationStorageTest, MatchesConcreteAndAliasRanges) {
       loom_low_allocation_assignment_location_range_equal(&lhs, &alias_same));
   EXPECT_TRUE(loom_low_allocation_storage_assignment_ranges_equal(
       &descriptor_set, &lhs, &alias_same));
+  EXPECT_TRUE(loom_low_allocation_storage_assignment_locations_share(
+      &descriptor_set, &lhs, &alias_same));
   EXPECT_TRUE(loom_low_allocation_storage_assignment_ranges_overlap(
+      &descriptor_set, &lhs, &alias_overlap));
+  EXPECT_FALSE(loom_low_allocation_storage_assignment_locations_share(
       &descriptor_set, &lhs, &alias_overlap));
   EXPECT_FALSE(loom_low_allocation_storage_assignment_ranges_equal(
       &descriptor_set, &lhs, &different_class));
   EXPECT_FALSE(loom_low_allocation_storage_assignment_classes_share(
       &descriptor_set, &lhs, &different_kind));
+
+  const loom_low_allocation_assignment_t empty_lhs = Assignment(
+      /*descriptor_reg_class_id=*/0,
+      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER, /*location_base=*/4,
+      /*location_count=*/0);
+  const loom_low_allocation_assignment_t empty_alias_same = Assignment(
+      /*descriptor_reg_class_id=*/1,
+      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER, /*location_base=*/4,
+      /*location_count=*/0);
+  EXPECT_FALSE(loom_low_allocation_storage_assignment_ranges_equal(
+      &descriptor_set, &empty_lhs, &empty_alias_same));
+  EXPECT_TRUE(loom_low_allocation_storage_assignment_locations_share(
+      &descriptor_set, &empty_lhs, &empty_alias_same));
 }
 
 TEST(LowAllocationStorageTest, MatchesAndOverlapsAliasSubranges) {

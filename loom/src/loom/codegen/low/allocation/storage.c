@@ -48,6 +48,19 @@ bool loom_low_allocation_storage_assignment_ranges_equal(
          lhs->location_count == rhs->location_count;
 }
 
+bool loom_low_allocation_storage_assignment_locations_share(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_allocation_assignment_t* lhs,
+    const loom_low_allocation_assignment_t* rhs) {
+  IREE_ASSERT_ARGUMENT(descriptor_set);
+  IREE_ASSERT_ARGUMENT(lhs);
+  IREE_ASSERT_ARGUMENT(rhs);
+  return lhs->location_base == rhs->location_base &&
+         lhs->location_count == rhs->location_count &&
+         loom_low_allocation_storage_assignment_classes_share(descriptor_set,
+                                                              lhs, rhs);
+}
+
 bool loom_low_allocation_storage_assignment_ranges_overlap(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_allocation_assignment_t* lhs,

@@ -24,10 +24,25 @@ loom_low_allocation_assignment_t Assignment(
 }
 
 TEST(LowAllocationAssignmentRangeTest, MatchesPhysicalRegisterClass) {
+  EXPECT_TRUE(loom_low_allocation_location_kind_is_known(
+      LOOM_LOW_ALLOCATION_LOCATION_UNASSIGNED));
+  EXPECT_TRUE(loom_low_allocation_location_kind_is_known(
+      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER));
+  EXPECT_TRUE(loom_low_allocation_location_kind_is_known(
+      LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID));
+  EXPECT_TRUE(loom_low_allocation_location_kind_is_known(
+      LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT));
+  EXPECT_FALSE(loom_low_allocation_location_kind_is_known(
+      (loom_low_allocation_location_kind_t)99));
+
   const loom_low_allocation_assignment_t assignment = Assignment(
       /*descriptor_reg_class_id=*/3,
       LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER, /*location_base=*/4,
       /*location_count=*/2);
+  EXPECT_TRUE(loom_low_allocation_location_kind_is_register_like(
+      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER));
+  EXPECT_TRUE(loom_low_allocation_assignment_is_register_like(&assignment));
+  EXPECT_FALSE(loom_low_allocation_assignment_is_spill_slot(&assignment));
   EXPECT_TRUE(loom_low_allocation_assignment_is_physical_register_class(
       &assignment, 3));
   EXPECT_FALSE(loom_low_allocation_assignment_is_physical_register_class(
@@ -36,8 +51,23 @@ TEST(LowAllocationAssignmentRangeTest, MatchesPhysicalRegisterClass) {
   const loom_low_allocation_assignment_t target_id_assignment = Assignment(
       /*descriptor_reg_class_id=*/3, LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID,
       /*location_base=*/4, /*location_count=*/2);
+  EXPECT_TRUE(loom_low_allocation_location_kind_is_register_like(
+      LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID));
+  EXPECT_TRUE(
+      loom_low_allocation_assignment_is_register_like(&target_id_assignment));
+  EXPECT_FALSE(
+      loom_low_allocation_assignment_is_spill_slot(&target_id_assignment));
   EXPECT_FALSE(loom_low_allocation_assignment_is_physical_register_class(
       &target_id_assignment, 3));
+
+  const loom_low_allocation_assignment_t spill_assignment = Assignment(
+      /*descriptor_reg_class_id=*/3, LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT,
+      /*location_base=*/4, /*location_count=*/2);
+  EXPECT_FALSE(loom_low_allocation_location_kind_is_register_like(
+      LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT));
+  EXPECT_FALSE(
+      loom_low_allocation_assignment_is_register_like(&spill_assignment));
+  EXPECT_TRUE(loom_low_allocation_assignment_is_spill_slot(&spill_assignment));
 
   const loom_low_allocation_assignment_t empty_assignment = Assignment(
       /*descriptor_reg_class_id=*/3,

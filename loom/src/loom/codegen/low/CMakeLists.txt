@@ -299,6 +299,7 @@ loom_cc_library(
     loom::src::loom::analysis::consumption
     loom::src::loom::analysis::liveness
     loom::src::loom::codegen::low::allocation::assignment
+    loom::src::loom::codegen::low::allocation::diagnostics
     loom::src::loom::codegen::low::allocation::storage
     loom::src::loom::codegen::low::allocation::table
     loom::src::loom::error::emitter

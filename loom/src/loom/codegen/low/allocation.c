@@ -451,12 +451,6 @@ static uint32_t loom_low_allocation_unit_end_point_start_for_value(
       state, value_ordinal);
 }
 
-static bool loom_low_allocation_location_is_register_like(
-    loom_low_allocation_location_kind_t location_kind) {
-  return location_kind == LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
-         location_kind == LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID;
-}
-
 static bool loom_low_allocation_is_power_of_two_u32(uint32_t value) {
   return value != 0 && (value & (value - 1u)) == 0;
 }
@@ -482,19 +476,6 @@ static uint32_t loom_low_allocation_interval_alignment(
     return 1;
   }
   return interval->unit_count;
-}
-
-static bool loom_low_allocation_location_kind_is_known(
-    loom_low_allocation_location_kind_t location_kind) {
-  switch (location_kind) {
-    case LOOM_LOW_ALLOCATION_LOCATION_UNASSIGNED:
-    case LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER:
-    case LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID:
-    case LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT:
-      return true;
-    default:
-      return false;
-  }
 }
 
 static bool loom_low_allocation_remark_kind_is_known(
@@ -1297,7 +1278,7 @@ static bool loom_low_allocation_active_unit_index_conflicts(
     loom_low_allocation_build_state_t* state,
     const loom_low_allocation_assignment_t* candidate,
     const loom_value_id_t* ignored_value_ids, uint16_t ignored_value_count) {
-  if (!loom_low_allocation_location_is_register_like(
+  if (!loom_low_allocation_location_kind_is_register_like(
           candidate->location_kind)) {
     return false;
   }
@@ -1501,7 +1482,7 @@ static bool loom_low_allocation_storage_lease_unit_index_conflicts(
     }
     return false;
   }
-  if (!loom_low_allocation_location_is_register_like(
+  if (!loom_low_allocation_location_kind_is_register_like(
           candidate->location_kind)) {
     return false;
   }
@@ -1918,16 +1899,6 @@ static iree_status_t loom_low_allocation_record_spill_plan(
   return iree_ok_status();
 }
 
-static bool loom_low_allocation_assignment_locations_share_target_storage(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_allocation_assignment_t* lhs,
-    const loom_low_allocation_assignment_t* rhs) {
-  return lhs->location_base == rhs->location_base &&
-         lhs->location_count == rhs->location_count &&
-         loom_low_allocation_storage_assignment_classes_share(descriptor_set,
-                                                              lhs, rhs);
-}
-
 static bool loom_low_allocation_unit_locations_equal(
     const loom_low_allocation_unit_location_t* lhs,
     const loom_low_allocation_unit_location_t* rhs) {
@@ -1962,17 +1933,6 @@ static iree_status_t loom_low_allocation_assignment_unit_location(
       .location = assignment->location_base + unit_index,
   };
   return iree_ok_status();
-}
-
-static bool loom_low_allocation_assignment_is_coalescable(
-    const loom_low_allocation_assignment_t* assignment) {
-  return loom_low_allocation_location_is_register_like(
-      assignment->location_kind);
-}
-
-static bool loom_low_allocation_assignment_is_spill_slot(
-    const loom_low_allocation_assignment_t* assignment) {
-  return assignment->location_kind == LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT;
 }
 
 static bool loom_low_allocation_value_requires_register_location(
@@ -2255,7 +2215,7 @@ static bool loom_low_allocation_active_unit_index_can_insert_assignment(
     const loom_low_allocation_build_state_t* state,
     const loom_low_allocation_assignment_t* assignment) {
   if (!loom_low_allocation_active_unit_index_is_enabled(state) ||
-      !loom_low_allocation_location_is_register_like(
+      !loom_low_allocation_location_kind_is_register_like(
           assignment->location_kind) ||
       assignment->location_count == 0 ||
       assignment->location_base > UINT32_MAX - assignment->location_count) {
@@ -2274,7 +2234,7 @@ static void loom_low_allocation_active_unit_index_insert_assignment(
   IREE_ASSERT_LT(assignment_index, state->active_units.assignment_capacity);
   const loom_low_allocation_assignment_t* assignment =
       &state->assignments[assignment_index];
-  if (!loom_low_allocation_location_is_register_like(
+  if (!loom_low_allocation_location_kind_is_register_like(
           assignment->location_kind)) {
     return;
   }
@@ -2323,7 +2283,8 @@ static iree_status_t loom_low_allocation_storage_lease_unit_index_insert(
   }
   const loom_low_allocation_storage_lease_t* lease =
       &state->storage_lease_instances[storage_lease_index];
-  if (!loom_low_allocation_location_is_register_like(lease->location_kind)) {
+  if (!loom_low_allocation_location_kind_is_register_like(
+          lease->location_kind)) {
     return iree_ok_status();
   }
   if (lease->location_count > state->storage_lease_units.entry_capacity -
@@ -2371,7 +2332,7 @@ static void loom_low_allocation_active_unit_index_remove_assignment(
   IREE_ASSERT_LT(assignment_index, state->active_units.assignment_capacity);
   const loom_low_allocation_assignment_t* assignment =
       &state->assignments[assignment_index];
-  if (!loom_low_allocation_location_is_register_like(
+  if (!loom_low_allocation_location_kind_is_register_like(
           assignment->location_kind)) {
     return;
   }
@@ -2554,7 +2515,7 @@ static iree_status_t loom_low_allocation_record_storage_lease_instance(
                             "storage lease record does not match assigned "
                             "value");
   }
-  if (!loom_low_allocation_location_is_register_like(
+  if (!loom_low_allocation_location_kind_is_register_like(
           assignment->location_kind)) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "storage lease references value %u assigned to "
@@ -2818,7 +2779,7 @@ static bool loom_low_allocation_assignment_can_spill(
     loom_low_allocation_build_state_t* state,
     const loom_low_allocation_assignment_t* assignment,
     loom_low_allocation_class_capacity_t* out_capacity) {
-  if (!loom_low_allocation_assignment_is_coalescable(assignment)) {
+  if (!loom_low_allocation_assignment_is_register_like(assignment)) {
     return false;
   }
   if (loom_low_allocation_fixed_value_for_value(state, assignment->value_id)) {
@@ -3211,7 +3172,7 @@ static iree_status_t loom_low_allocation_assign_tied_interval(
       state, tied_operand_id, &operand_assignment_index));
   const loom_low_allocation_assignment_t* operand_assignment =
       &state->assignments[operand_assignment_index];
-  if (!loom_low_allocation_assignment_is_coalescable(operand_assignment)) {
+  if (!loom_low_allocation_assignment_is_register_like(operand_assignment)) {
     return iree_ok_status();
   }
   uint16_t interval_reg_class_id = LOOM_LOW_REG_CLASS_NONE;
@@ -3375,7 +3336,7 @@ static iree_status_t loom_low_allocation_append_relation_interval(
       state, source_value_id, &source_assignment_index));
   const loom_low_allocation_assignment_t* source_assignment =
       &state->assignments[source_assignment_index];
-  if (!loom_low_allocation_assignment_is_coalescable(source_assignment)) {
+  if (!loom_low_allocation_assignment_is_register_like(source_assignment)) {
     return iree_ok_status();
   }
   if (!loom_low_allocation_assignment_unit_span_fits(
@@ -3420,7 +3381,7 @@ loom_low_allocation_append_relation_interval_if_source_assigned(
   if (!source_assignment) {
     return iree_ok_status();
   }
-  if (!loom_low_allocation_assignment_is_coalescable(source_assignment)) {
+  if (!loom_low_allocation_assignment_is_register_like(source_assignment)) {
     return iree_ok_status();
   }
   if (!loom_low_allocation_assignment_unit_span_fits(
@@ -3526,7 +3487,7 @@ static iree_status_t loom_low_allocation_assign_concat_interval(
         state, source_value_id, &source_assignment_index));
     const loom_low_allocation_assignment_t* source_assignment =
         &state->assignments[source_assignment_index];
-    if (!loom_low_allocation_assignment_is_coalescable(source_assignment)) {
+    if (!loom_low_allocation_assignment_is_register_like(source_assignment)) {
       return iree_ok_status();
     }
     if (!loom_low_allocation_assignment_unit_span_fits(
@@ -3643,7 +3604,7 @@ static iree_status_t loom_low_allocation_assign_concat_source_from_result(
     const loom_low_allocation_assignment_t* result_assignment,
     bool* out_assigned) {
   *out_assigned = false;
-  if (!loom_low_allocation_assignment_is_coalescable(result_assignment) ||
+  if (!loom_low_allocation_assignment_is_register_like(result_assignment) ||
       !loom_liveness_value_class_equal(result_assignment->value_class,
                                        interval->value_class)) {
     return iree_ok_status();
@@ -3868,7 +3829,7 @@ loom_low_allocation_assign_concat_source_from_branch_destination(
         loom_low_allocation_current_assignment_for_value_ordinal(
             state, branch_relation->result_ordinal);
     if (!destination_assignment ||
-        !loom_low_allocation_assignment_is_coalescable(
+        !loom_low_allocation_assignment_is_register_like(
             destination_assignment) ||
         !loom_liveness_value_class_equal(destination_assignment->value_class,
                                          interval->value_class)) {
@@ -3958,7 +3919,7 @@ static iree_status_t loom_low_allocation_assign_branch_source_interval(
         loom_low_allocation_current_assignment_for_value_ordinal(
             state, relation->result_ordinal);
     if (!destination_assignment ||
-        !loom_low_allocation_assignment_is_coalescable(
+        !loom_low_allocation_assignment_is_register_like(
             destination_assignment) ||
         !loom_liveness_value_class_equal(destination_assignment->value_class,
                                          interval->value_class) ||
@@ -4066,7 +4027,8 @@ static iree_status_t loom_low_allocation_assign_concat_source_interval(
           loom_low_allocation_current_assignment_for_value_ordinal(
               state, sibling_relation->source_ordinal);
       if (!sibling_assignment ||
-          !loom_low_allocation_assignment_is_coalescable(sibling_assignment) ||
+          !loom_low_allocation_assignment_is_register_like(
+              sibling_assignment) ||
           !loom_liveness_value_class_equal(sibling_assignment->value_class,
                                            interval->value_class) ||
           !loom_low_allocation_assignment_unit_span_fits(
@@ -4200,9 +4162,9 @@ static iree_status_t loom_low_allocation_record_copy_decision(
   const loom_low_allocation_assignment_t* result_assignment =
       &state->assignments[result_assignment_index];
   const bool coalesced =
-      loom_low_allocation_assignment_is_coalescable(source_assignment) &&
-      loom_low_allocation_assignment_is_coalescable(result_assignment) &&
-      loom_low_allocation_assignment_locations_share_target_storage(
+      loom_low_allocation_assignment_is_register_like(source_assignment) &&
+      loom_low_allocation_assignment_is_register_like(result_assignment) &&
+      loom_low_allocation_storage_assignment_locations_share(
           state->target.descriptor_set, source_assignment, result_assignment);
   state->copy_decisions[state->copy_decision_count++] =
       (loom_low_allocation_copy_decision_t){
@@ -4938,8 +4900,9 @@ static iree_status_t loom_low_allocation_edge_copy_unit_locations(
 static bool loom_low_allocation_unit_locations_form_register_move(
     const loom_low_allocation_unit_location_t* source,
     const loom_low_allocation_unit_location_t* destination) {
-  return loom_low_allocation_location_is_register_like(source->location_kind) &&
-         loom_low_allocation_location_is_register_like(
+  return loom_low_allocation_location_kind_is_register_like(
+             source->location_kind) &&
+         loom_low_allocation_location_kind_is_register_like(
              destination->location_kind) &&
          !loom_low_allocation_unit_locations_equal(source, destination);
 }
@@ -5233,7 +5196,7 @@ static iree_status_t loom_low_allocation_find_edge_copy_temporary(
     const loom_low_allocation_unit_location_t* storage_class,
     loom_low_allocation_unit_location_t* out_temporary) {
   *out_temporary = (loom_low_allocation_unit_location_t){0};
-  if (!loom_low_allocation_location_is_register_like(
+  if (!loom_low_allocation_location_kind_is_register_like(
           storage_class->location_kind)) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
         state, group->terminator_op, storage_class->value_class, 0, 1,
@@ -5734,7 +5697,7 @@ static iree_status_t loom_low_allocation_find_packet_move_temporary(
     iree_host_size_t move_count,
     loom_low_allocation_unit_location_t* out_temporary) {
   *out_temporary = (loom_low_allocation_unit_location_t){0};
-  if (!loom_low_allocation_location_is_register_like(
+  if (!loom_low_allocation_location_kind_is_register_like(
           storage_class->location_kind)) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_emit_failure(
         state, op, storage_class->value_class, 0, 1,
@@ -6367,13 +6330,13 @@ static iree_status_t loom_low_allocation_verify_tied_result_assignments(
     if (result_spilled || operand_spilled) {
       continue;
     }
-    if (!loom_low_allocation_assignment_is_coalescable(result_assignment) ||
-        !loom_low_allocation_assignment_is_coalescable(operand_assignment)) {
+    if (!loom_low_allocation_assignment_is_register_like(result_assignment) ||
+        !loom_low_allocation_assignment_is_register_like(operand_assignment)) {
       return iree_make_status(
           IREE_STATUS_FAILED_PRECONDITION,
           "allocation tied result has a non-register-like non-spill location");
     }
-    if (!loom_low_allocation_assignment_locations_share_target_storage(
+    if (!loom_low_allocation_storage_assignment_locations_share(
             table->target.descriptor_set, result_assignment,
             operand_assignment)) {
       return iree_make_status(
@@ -6611,11 +6574,11 @@ static iree_status_t loom_low_allocation_verify_copy_decision(
         copy_decision_index);
   }
   const bool locations_equal =
-      loom_low_allocation_assignment_locations_share_target_storage(
+      loom_low_allocation_storage_assignment_locations_share(
           table->target.descriptor_set, source_assignment, result_assignment);
   if (copy_decision->kind == LOOM_LOW_ALLOCATION_COPY_COALESCED &&
-      (!loom_low_allocation_assignment_is_coalescable(source_assignment) ||
-       !loom_low_allocation_assignment_is_coalescable(result_assignment) ||
+      (!loom_low_allocation_assignment_is_register_like(source_assignment) ||
+       !loom_low_allocation_assignment_is_register_like(result_assignment) ||
        !locations_equal)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
@@ -6866,7 +6829,7 @@ static iree_status_t loom_low_allocation_verify_edge_copy_temporary(
     const loom_low_allocation_edge_copy_temporary_t* temporary,
     iree_host_size_t temporary_index) {
   if (!loom_low_allocation_location_kind_is_known(temporary->location_kind) ||
-      !loom_low_allocation_location_is_register_like(
+      !loom_low_allocation_location_kind_is_register_like(
           temporary->location_kind)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
@@ -6923,7 +6886,7 @@ static iree_status_t loom_low_allocation_verify_packet_move_temporary(
     const loom_low_allocation_packet_move_temporary_t* temporary,
     iree_host_size_t temporary_index) {
   if (!loom_low_allocation_location_kind_is_known(temporary->location_kind) ||
-      !loom_low_allocation_location_is_register_like(
+      !loom_low_allocation_location_kind_is_register_like(
           temporary->location_kind)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
@@ -7301,105 +7264,6 @@ iree_status_t loom_low_allocation_verify_table(
   return status;
 }
 
-static iree_status_t loom_low_allocation_emit_predicted_spills(
-    const loom_low_allocation_table_t* table,
-    iree_diagnostic_emitter_t emitter) {
-  for (iree_host_size_t i = 0; i < table->spill_plan_count; ++i) {
-    const loom_low_allocation_spill_plan_t* spill_plan = &table->spill_plans[i];
-    const loom_low_allocation_assignment_t* assignment =
-        &table->assignments[spill_plan->assignment_index];
-    loom_diagnostic_param_t params[] = {
-        loom_param_string(loom_low_diagnostic_target_key(&table->target)),
-        loom_param_string(loom_low_diagnostic_export_name(&table->target)),
-        loom_param_string(loom_low_diagnostic_config_key(&table->target)),
-        loom_param_string(loom_low_diagnostic_function_name(
-            table->module, table->function_op)),
-        loom_param_string(loom_low_diagnostic_value_name(table->module,
-                                                         spill_plan->value_id)),
-        loom_param_string(loom_low_diagnostic_value_class_name(
-            table->target.descriptor_set, assignment->value_class)),
-        loom_param_u32(spill_plan->byte_size),
-        loom_param_u32(spill_plan->store_count),
-        loom_param_u32(spill_plan->reload_count),
-        loom_param_string(IREE_SV("register-budget-conflict")),
-    };
-    loom_diagnostic_emission_t emission = {
-        .op = loom_low_diagnostic_value_origin_op(
-            table->module, spill_plan->value_id, table->function_op),
-        .error = LOOM_ERR_BACKEND_008,
-        .params = params,
-        .param_count = IREE_ARRAYSIZE(params),
-    };
-    IREE_RETURN_IF_ERROR(iree_diagnostic_emit(emitter, &emission));
-  }
-  return iree_ok_status();
-}
-
-static iree_string_view_t loom_low_allocation_copy_decision_name(
-    loom_low_allocation_copy_kind_t kind) {
-  switch (kind) {
-    case LOOM_LOW_ALLOCATION_COPY_COALESCED:
-      return IREE_SV("accepted");
-    case LOOM_LOW_ALLOCATION_COPY_MATERIALIZED:
-      return IREE_SV("rejected");
-    default:
-      return IREE_SV("unknown");
-  }
-}
-
-static iree_string_view_t loom_low_allocation_coalescing_constraint(
-    const loom_low_allocation_table_t* table,
-    const loom_low_allocation_copy_decision_t* copy_decision) {
-  const loom_low_allocation_assignment_t* source_assignment =
-      &table->assignments[copy_decision->source_assignment_index];
-  const loom_low_allocation_assignment_t* result_assignment =
-      &table->assignments[copy_decision->result_assignment_index];
-  if (!loom_low_allocation_assignment_is_coalescable(source_assignment)) {
-    return IREE_SV("source-not-register-like");
-  }
-  if (!loom_low_allocation_assignment_is_coalescable(result_assignment)) {
-    return IREE_SV("result-not-register-like");
-  }
-  if (loom_low_allocation_assignment_locations_share_target_storage(
-          table->target.descriptor_set, source_assignment, result_assignment)) {
-    return IREE_SV("assigned-locations-match");
-  }
-  return IREE_SV("assigned-locations-differ");
-}
-
-static iree_status_t loom_low_allocation_emit_copy_decisions(
-    const loom_low_allocation_table_t* table,
-    iree_diagnostic_emitter_t emitter) {
-  for (iree_host_size_t i = 0; i < table->copy_decision_count; ++i) {
-    const loom_low_allocation_copy_decision_t* copy_decision =
-        &table->copy_decisions[i];
-    loom_diagnostic_param_t params[] = {
-        loom_param_string(loom_low_diagnostic_target_key(&table->target)),
-        loom_param_string(loom_low_diagnostic_export_name(&table->target)),
-        loom_param_string(loom_low_diagnostic_config_key(&table->target)),
-        loom_param_string(loom_low_diagnostic_function_name(
-            table->module, table->function_op)),
-        loom_param_string(loom_low_diagnostic_value_name(
-            table->module, copy_decision->source_value_id)),
-        loom_param_string(loom_low_diagnostic_value_name(
-            table->module, copy_decision->result_value_id)),
-        loom_param_string(
-            loom_low_allocation_copy_decision_name(copy_decision->kind)),
-        loom_param_string(
-            loom_low_allocation_coalescing_constraint(table, copy_decision)),
-    };
-    loom_diagnostic_emission_t emission = {
-        .op = loom_low_diagnostic_value_origin_op(
-            table->module, copy_decision->result_value_id, table->function_op),
-        .error = LOOM_ERR_BACKEND_006,
-        .params = params,
-        .param_count = IREE_ARRAYSIZE(params),
-    };
-    IREE_RETURN_IF_ERROR(iree_diagnostic_emit(emitter, &emission));
-  }
-  return iree_ok_status();
-}
-
 iree_status_t loom_low_allocate_function(
     loom_module_t* module, const loom_op_t* low_func_op,
     const loom_low_allocation_options_t* options, iree_arena_allocator_t* arena,
@@ -7521,16 +7385,9 @@ iree_status_t loom_low_allocate_function(
   if (iree_status_is_ok(status)) {
     status = loom_low_allocation_verify_table(&table);
   }
-  if (iree_status_is_ok(status) &&
-      iree_any_bit_set(options->diagnostic_flags,
-                       LOOM_LOW_ALLOCATION_DIAGNOSTIC_PREDICTED_SPILLS)) {
-    status =
-        loom_low_allocation_emit_predicted_spills(&table, options->emitter);
-  }
-  if (iree_status_is_ok(status) &&
-      iree_any_bit_set(options->diagnostic_flags,
-                       LOOM_LOW_ALLOCATION_DIAGNOSTIC_COPY_DECISIONS)) {
-    status = loom_low_allocation_emit_copy_decisions(&table, options->emitter);
+  if (iree_status_is_ok(status)) {
+    status = loom_low_allocation_diagnostics_emit(
+        &table, options->diagnostic_flags, options->emitter);
   }
   if (iree_status_is_ok(status)) {
     *out_table = table;

@@ -55,6 +55,15 @@ typedef struct loom_low_allocation_assignment_t {
   uint32_t unit_end_point_start;
 } loom_low_allocation_assignment_t;
 
+// Returns true when |location_kind| is one of the defined allocation location
+// kinds.
+bool loom_low_allocation_location_kind_is_known(
+    loom_low_allocation_location_kind_t location_kind);
+
+// Returns true when |location_kind| names target-visible register-like storage.
+bool loom_low_allocation_location_kind_is_register_like(
+    loom_low_allocation_location_kind_t location_kind);
+
 // Returns true when two assignments have the same concrete location kind and
 // descriptor register class. Alias-set-aware storage checks require a
 // descriptor set and are performed by allocation storage helpers.
@@ -67,6 +76,14 @@ bool loom_low_allocation_assignment_storage_class_equal(
 bool loom_low_allocation_assignment_is_physical_register_class(
     const loom_low_allocation_assignment_t* assignment,
     uint16_t descriptor_reg_class_id);
+
+// Returns true when |assignment| names target-visible register-like storage.
+bool loom_low_allocation_assignment_is_register_like(
+    const loom_low_allocation_assignment_t* assignment);
+
+// Returns true when |assignment| names a spill slot.
+bool loom_low_allocation_assignment_is_spill_slot(
+    const loom_low_allocation_assignment_t* assignment);
 
 // Returns the exclusive end of |assignment|'s concrete location range.
 bool loom_low_allocation_assignment_location_exclusive_end(

@@ -18,6 +18,7 @@
 #include "iree/base/internal/arena.h"
 #include "loom/analysis/liveness.h"
 #include "loom/codegen/low/allocation/assignment.h"
+#include "loom/codegen/low/allocation/diagnostics.h"
 #include "loom/codegen/low/allocation/storage.h"
 #include "loom/codegen/low/allocation/table.h"
 #include "loom/codegen/low/descriptors.h"
@@ -29,16 +30,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-typedef enum loom_low_allocation_diagnostic_bits_e {
-  // Emits BACKEND/008 warnings for spill plans predicted by allocation.
-  LOOM_LOW_ALLOCATION_DIAGNOSTIC_PREDICTED_SPILLS = 1u << 0,
-  // Emits BACKEND/006 remarks for low.copy coalescing decisions.
-  LOOM_LOW_ALLOCATION_DIAGNOSTIC_COPY_DECISIONS = 1u << 1,
-} loom_low_allocation_diagnostic_bits_t;
-
-// Bitset of loom_low_allocation_diagnostic_bits_t values.
-typedef uint32_t loom_low_allocation_diagnostic_flags_t;
 
 // Optional fixed register budget used by tests, tuning loops, and target
 // overlays. A missing budget uses the descriptor set's allocatable unit count;

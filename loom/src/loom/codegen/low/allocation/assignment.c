@@ -6,6 +6,25 @@
 
 #include "loom/codegen/low/allocation/assignment.h"
 
+bool loom_low_allocation_location_kind_is_known(
+    loom_low_allocation_location_kind_t location_kind) {
+  switch (location_kind) {
+    case LOOM_LOW_ALLOCATION_LOCATION_UNASSIGNED:
+    case LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER:
+    case LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID:
+    case LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool loom_low_allocation_location_kind_is_register_like(
+    loom_low_allocation_location_kind_t location_kind) {
+  return location_kind == LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
+         location_kind == LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID;
+}
+
 bool loom_low_allocation_assignment_storage_class_equal(
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs) {
@@ -23,6 +42,19 @@ bool loom_low_allocation_assignment_is_physical_register_class(
              LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER &&
          assignment->descriptor_reg_class_id == descriptor_reg_class_id &&
          assignment->location_count != 0;
+}
+
+bool loom_low_allocation_assignment_is_register_like(
+    const loom_low_allocation_assignment_t* assignment) {
+  IREE_ASSERT_ARGUMENT(assignment);
+  return loom_low_allocation_location_kind_is_register_like(
+      assignment->location_kind);
+}
+
+bool loom_low_allocation_assignment_is_spill_slot(
+    const loom_low_allocation_assignment_t* assignment) {
+  IREE_ASSERT_ARGUMENT(assignment);
+  return assignment->location_kind == LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT;
 }
 
 bool loom_low_allocation_assignment_location_exclusive_end(
