@@ -31,6 +31,7 @@ enum {
   LOOM_CHECK_TEST_SYNTHETIC_HAZARD_REASON_PHYSICAL_OVERLAP = 1,
   LOOM_CHECK_TEST_SYNTHETIC_HAZARD_REASON_MISSING_DATA = 2,
   LOOM_CHECK_TEST_SYNTHETIC_PROGRESS_CLASS_ISSUE = 1,
+  LOOM_CHECK_TEST_SYNTHETIC_HAZARD_ACTION_PADDING = 1,
 };
 
 typedef enum loom_check_test_synthetic_hazard_case_e {
@@ -265,6 +266,8 @@ static iree_status_t loom_check_test_synthetic_hazard_query(
 
   const loom_low_packet_hazard_plan_event_t event = {
       .kind = LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION,
+      .action_id = LOOM_CHECK_TEST_SYNTHETIC_HAZARD_ACTION_PADDING,
+      .action_name = IREE_SV("synthetic.padding"),
       .reason_id = LOOM_CHECK_TEST_SYNTHETIC_HAZARD_REASON_PHYSICAL_OVERLAP,
       .reason_name = IREE_SV("synthetic.physical-overlap"),
       .producer_node_index = context->producer_node_index,

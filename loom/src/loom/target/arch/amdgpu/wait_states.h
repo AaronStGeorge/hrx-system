@@ -49,15 +49,24 @@ typedef enum loom_amdgpu_wait_state_reason_e {
   LOOM_AMDGPU_WAIT_STATE_REASON_VALU_SGPR_READ = 4,
 } loom_amdgpu_wait_state_reason_t;
 
+typedef enum loom_amdgpu_wait_state_action_e {
+  // Unknown or uninitialized wait-state action.
+  LOOM_AMDGPU_WAIT_STATE_ACTION_UNKNOWN = 0,
+  // Scalar no-op packet that waits one or more cycles.
+  LOOM_AMDGPU_WAIT_STATE_ACTION_S_NOP = 1,
+} loom_amdgpu_wait_state_action_t;
+
 // One fixed wait-state action in scheduled packet order.
 typedef struct loom_amdgpu_wait_state_t {
   // Why this wait state exists.
   loom_amdgpu_wait_state_reason_t reason;
+  // Concrete residual packet kind used to satisfy the wait.
+  loom_amdgpu_wait_state_action_t action;
   // Region block containing the insertion point.
   uint32_t block_index;
-  // Schedule node before which the no-op wait is inserted.
+  // Schedule node before which the residual action is inserted.
   uint32_t node_index;
-  // Scheduled ordinal before which the no-op wait is inserted.
+  // Scheduled ordinal before which the residual action is inserted.
   uint32_t scheduled_ordinal;
   // Producer node that forced the wait.
   uint32_t producer_node;
@@ -91,6 +100,10 @@ typedef struct loom_amdgpu_wait_state_plan_t {
 iree_string_view_t loom_amdgpu_wait_state_reason_name(
     loom_amdgpu_wait_state_reason_t reason);
 
+// Returns the stable spelling for a wait-state residual action.
+iree_string_view_t loom_amdgpu_wait_state_action_name(
+    loom_amdgpu_wait_state_action_t action);
+
 // Builds fixed AMDGPU wait-state insertions from a scheduled and allocated low
 // function. The caller must keep |schedule| and |allocation| immutable and
 // |arena| alive for as long as |out_plan| is used.
@@ -104,7 +117,7 @@ iree_status_t loom_amdgpu_wait_state_plan_build(
 iree_status_t loom_amdgpu_wait_state_plan_format_json(
     const loom_amdgpu_wait_state_plan_t* plan, iree_string_builder_t* builder);
 
-// Returns the number of concrete `s_nop` instructions needed by |plan|.
+// Returns the number of concrete wait-state instructions needed by |plan|.
 uint64_t loom_amdgpu_wait_state_plan_instruction_count(
     const loom_amdgpu_wait_state_plan_t* plan);
 

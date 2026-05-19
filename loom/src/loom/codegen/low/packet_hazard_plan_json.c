@@ -175,6 +175,14 @@ iree_status_t loom_low_packet_hazard_plan_write_json_array(
         loom_output_stream_write_format(stream, "{\"index\":%zu,\"kind\":", i));
     IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
         stream, loom_low_packet_hazard_plan_record_kind_name(record->kind)));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"action_id\":"));
+    IREE_RETURN_IF_ERROR(loom_low_packet_hazard_plan_write_nullable_u16(
+        record->action_id, LOOM_LOW_PACKET_HAZARD_PLAN_ACTION_NONE, stream));
+    IREE_RETURN_IF_ERROR(
+        loom_output_stream_write_cstring(stream, ",\"action_name\":"));
+    IREE_RETURN_IF_ERROR(loom_low_packet_hazard_plan_write_nullable_string(
+        record->action_name, stream));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
         stream,
         ",\"reason_id\":%" PRIu16 ",\"reason_name\":", record->reason_id));
@@ -262,7 +270,7 @@ iree_status_t loom_low_packet_hazard_plan_format_json(
   loom_output_stream_for_builder(builder, &stream);
   const loom_low_schedule_table_t* schedule = plan->schedule;
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
-      &stream, "{\"format\":\"loom.low.packet_hazard_plan.v0\""));
+      &stream, "{\"format\":\"loom.low.packet_hazard_plan.v1\""));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"function\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(

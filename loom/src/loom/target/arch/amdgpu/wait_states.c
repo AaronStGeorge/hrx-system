@@ -152,6 +152,17 @@ iree_string_view_t loom_amdgpu_wait_state_reason_name(
   }
 }
 
+iree_string_view_t loom_amdgpu_wait_state_action_name(
+    loom_amdgpu_wait_state_action_t action) {
+  switch (action) {
+    case LOOM_AMDGPU_WAIT_STATE_ACTION_S_NOP:
+      return IREE_SV("amdgpu.s_nop");
+    case LOOM_AMDGPU_WAIT_STATE_ACTION_UNKNOWN:
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
 static loom_amdgpu_wait_state_reason_flags_t loom_amdgpu_wait_state_reason_flag(
     loom_amdgpu_wait_state_reason_t reason) {
   switch (reason) {
@@ -751,6 +762,7 @@ static iree_status_t loom_amdgpu_wait_state_append(
   }
   builder->states[builder->state_count++] = (loom_amdgpu_wait_state_t){
       .reason = match->reason,
+      .action = LOOM_AMDGPU_WAIT_STATE_ACTION_S_NOP,
       .block_index = packet->node->block_index,
       .node_index = packet->node_index,
       .scheduled_ordinal = packet->node->scheduled_ordinal,
@@ -1202,6 +1214,8 @@ static iree_status_t loom_amdgpu_wait_state_hazard_query(
     }
     const loom_low_packet_hazard_plan_event_t event = {
         .kind = LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION,
+        .action_id = (uint16_t)wait_state->action,
+        .action_name = loom_amdgpu_wait_state_action_name(wait_state->action),
         .reason_id = (uint16_t)wait_state->reason,
         .reason_name = loom_amdgpu_wait_state_reason_name(wait_state->reason),
         .producer_node_index = wait_state->producer_node,
@@ -1311,6 +1325,11 @@ static iree_status_t loom_amdgpu_wait_state_write_states_json(
         stream, loom_amdgpu_wait_state_reason_name(state->reason)));
     IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
         stream,
+        ",\"action\":%" PRIu32 ",\"action_name\":", (uint32_t)state->action));
+    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+        stream, loom_amdgpu_wait_state_action_name(state->action)));
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream,
         ",\"block\":%" PRIu32 ",\"node\":%" PRIu32
         ",\"scheduled_ordinal\":%" PRIu32 ",\"producer_node\":%" PRIu32
         ",\"consumer_node\":%" PRIu32 ",\"required\":%" PRIu16
@@ -1332,7 +1351,7 @@ iree_status_t loom_amdgpu_wait_state_plan_format_json(
   loom_output_stream_for_builder(builder, &stream);
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream,
-      "{\"format\":\"loom.amdgpu.wait_state_plan.v0\",\"state_count\":%zu"
+      "{\"format\":\"loom.amdgpu.wait_state_plan.v1\",\"state_count\":%zu"
       ",\"progress_count\":%zu,\"hazard_count\":%zu,\"states\":",
       plan->state_count, plan->progress.record_count,
       plan->hazard_plan.record_count));
@@ -1355,10 +1374,18 @@ uint64_t loom_amdgpu_wait_state_plan_instruction_count(
   }
   uint64_t instruction_count = 0;
   for (iree_host_size_t i = 0; i < plan->state_count; ++i) {
-    const uint16_t cycle_count = plan->states[i].cycle_count;
-    instruction_count +=
-        (cycle_count + LOOM_AMDGPU_WAIT_STATE_MAX_S_NOP_CYCLES - 1u) /
-        LOOM_AMDGPU_WAIT_STATE_MAX_S_NOP_CYCLES;
+    const loom_amdgpu_wait_state_t* state = &plan->states[i];
+    switch (state->action) {
+      case LOOM_AMDGPU_WAIT_STATE_ACTION_S_NOP:
+        instruction_count += (state->cycle_count +
+                              LOOM_AMDGPU_WAIT_STATE_MAX_S_NOP_CYCLES - 1u) /
+                             LOOM_AMDGPU_WAIT_STATE_MAX_S_NOP_CYCLES;
+        break;
+      case LOOM_AMDGPU_WAIT_STATE_ACTION_UNKNOWN:
+      default:
+        IREE_ASSERT(false && "unsupported AMDGPU wait-state action");
+        break;
+    }
   }
   return instruction_count;
 }

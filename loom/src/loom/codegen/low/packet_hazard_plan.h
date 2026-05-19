@@ -24,6 +24,8 @@ extern "C" {
 
 // Sentinel for absent target hazard reason identifiers.
 #define LOOM_LOW_PACKET_HAZARD_PLAN_REASON_NONE UINT16_MAX
+// Sentinel for absent target residual action identifiers.
+#define LOOM_LOW_PACKET_HAZARD_PLAN_ACTION_NONE 0
 // Sentinel for absent packet indices in hazard-plan records.
 #define LOOM_LOW_PACKET_HAZARD_PLAN_PACKET_NONE IREE_HOST_SIZE_MAX
 // Sentinel for absent scheduled ordinals in hazard-plan records.
@@ -46,6 +48,10 @@ typedef enum loom_low_packet_hazard_plan_record_kind_e {
 typedef struct loom_low_packet_hazard_plan_event_t {
   // Kind of hazard-plan record to emit.
   loom_low_packet_hazard_plan_record_kind_t kind;
+  // Target-owned residual action identifier, or ACTION_NONE for diagnostics.
+  uint16_t action_id;
+  // Borrowed stable target residual action name. Empty for diagnostics.
+  iree_string_view_t action_name;
   // Target-owned reason identifier.
   uint16_t reason_id;
   // Borrowed stable target reason name.
@@ -96,6 +102,10 @@ typedef struct loom_low_packet_hazard_plan_provider_t {
 typedef struct loom_low_packet_hazard_plan_record_t {
   // Kind of hazard-plan record.
   loom_low_packet_hazard_plan_record_kind_t kind;
+  // Target-owned residual action identifier, or ACTION_NONE for diagnostics.
+  uint16_t action_id;
+  // Borrowed stable target residual action name. Empty for diagnostics.
+  iree_string_view_t action_name;
   // Target-owned reason identifier.
   uint16_t reason_id;
   // Borrowed stable target reason name.

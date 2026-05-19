@@ -22,6 +22,10 @@
 #define LOOM_AMDGPU_WAIT_TRANS_RESULT_MAX_VALU_INTERVAL 5u
 #define LOOM_AMDGPU_WAIT_TRANS_RESULT_MAX_TRANS_INTERVAL 1u
 
+enum {
+  LOOM_AMDGPU_WAIT_PLAN_RESIDUAL_ACTION_WAIT_PACKET = 1,
+};
+
 typedef struct loom_amdgpu_wait_node_state_t {
   // Counters observed on WAIT_COUNTER hazard rows for this node.
   uint32_t hazard_counter_mask;
@@ -254,6 +258,16 @@ static iree_string_view_t loom_amdgpu_wait_plan_hazard_reason_name(
     case LOOM_AMDGPU_WAIT_PLAN_REASON_UNKNOWN:
     default:
       return IREE_SV("amdgpu.unknown");
+  }
+}
+
+static iree_string_view_t loom_amdgpu_wait_plan_residual_action_name(
+    uint16_t action_id) {
+  switch (action_id) {
+    case LOOM_AMDGPU_WAIT_PLAN_RESIDUAL_ACTION_WAIT_PACKET:
+      return IREE_SV("amdgpu.wait_packet");
+    default:
+      return IREE_SV("unknown");
   }
 }
 
@@ -2021,6 +2035,9 @@ static iree_status_t loom_amdgpu_wait_plan_emit_hazard_action(
   const uint32_t residual_progress = required_progress - observed_progress;
   const loom_low_packet_hazard_plan_event_t event = {
       .kind = LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION,
+      .action_id = LOOM_AMDGPU_WAIT_PLAN_RESIDUAL_ACTION_WAIT_PACKET,
+      .action_name = loom_amdgpu_wait_plan_residual_action_name(
+          LOOM_AMDGPU_WAIT_PLAN_RESIDUAL_ACTION_WAIT_PACKET),
       .reason_id = (uint16_t)action->reason,
       .reason_name = loom_amdgpu_wait_plan_hazard_reason_name(action->reason),
       .producer_node_index = action->producer_node,

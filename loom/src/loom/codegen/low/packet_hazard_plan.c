@@ -155,6 +155,21 @@ static iree_status_t loom_low_packet_hazard_plan_validate_event(
         IREE_STATUS_INVALID_ARGUMENT,
         "hazard plan event must have a target reason id and name");
   }
+  const bool has_action =
+      event->action_id != LOOM_LOW_PACKET_HAZARD_PLAN_ACTION_NONE ||
+      !iree_string_view_is_empty(event->action_name);
+  if (event->kind == LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION) {
+    if (event->action_id == LOOM_LOW_PACKET_HAZARD_PLAN_ACTION_NONE ||
+        iree_string_view_is_empty(event->action_name)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "hazard plan action event must have a target action id and name");
+    }
+  } else if (has_action) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "hazard plan diagnostic event cannot have a target action");
+  }
   if (loom_low_packet_hazard_plan_record_kind_is_diagnostic(event->kind) &&
       iree_string_view_is_empty(event->target_detail)) {
     return iree_make_status(
@@ -244,6 +259,8 @@ static iree_status_t loom_low_packet_hazard_plan_append_event(
   state->records[state->record_count++] =
       (loom_low_packet_hazard_plan_record_t){
           .kind = event->kind,
+          .action_id = event->action_id,
+          .action_name = event->action_name,
           .reason_id = event->reason_id,
           .reason_name = event->reason_name,
           .producer_node_index = event->producer_node_index,

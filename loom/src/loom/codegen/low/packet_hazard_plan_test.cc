@@ -24,6 +24,10 @@ enum SyntheticHazardReason {
   kSyntheticHazardImpossible = 6,
 };
 
+enum SyntheticHazardAction {
+  kSyntheticHazardActionPadding = 1,
+};
+
 struct PacketHazardPlanTestState {
   loom_low_descriptor_t descriptors[2] = {};
   loom_low_descriptor_set_t descriptor_set = {};
@@ -113,8 +117,18 @@ iree_status_t EmitHazardEvent(
     uint16_t progress_class_id, iree_string_view_t progress_class_name,
     uint32_t required_progress, uint32_t observed_progress,
     uint32_t residual_progress, iree_string_view_t target_detail) {
+  const uint16_t action_id =
+      kind == LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION
+          ? static_cast<uint16_t>(kSyntheticHazardActionPadding)
+          : LOOM_LOW_PACKET_HAZARD_PLAN_ACTION_NONE;
+  const iree_string_view_t action_name =
+      kind == LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION
+          ? IREE_SV("synthetic.padding")
+          : iree_string_view_empty();
   const loom_low_packet_hazard_plan_event_t event = {
       .kind = kind,
+      .action_id = action_id,
+      .action_name = action_name,
       .reason_id = reason_id,
       .reason_name = reason_name,
       .producer_node_index = producer_node_index,
@@ -207,6 +221,9 @@ TEST_F(LowPacketHazardPlanTest, RecordsResidualActionsWithPacketIdentity) {
   ASSERT_EQ(plan.record_count, 1u);
   const loom_low_packet_hazard_plan_record_t& record = plan.records[0];
   EXPECT_EQ(record.kind, LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION);
+  EXPECT_EQ(record.action_id, kSyntheticHazardActionPadding);
+  EXPECT_TRUE(
+      iree_string_view_equal(record.action_name, IREE_SV("synthetic.padding")));
   EXPECT_EQ(record.reason_id, kSyntheticHazardLatency);
   EXPECT_TRUE(
       iree_string_view_equal(record.reason_name, IREE_SV("synthetic.latency")));
@@ -276,6 +293,9 @@ TEST_F(LowPacketHazardPlanTest,
   ASSERT_EQ(plan.record_count, 1u);
   const loom_low_packet_hazard_plan_record_t& record = plan.records[0];
   EXPECT_EQ(record.kind, LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION);
+  EXPECT_EQ(record.action_id, kSyntheticHazardActionPadding);
+  EXPECT_TRUE(
+      iree_string_view_equal(record.action_name, IREE_SV("synthetic.padding")));
   EXPECT_EQ(record.producer_node_index, LOOM_LOW_SCHEDULE_NODE_NONE);
   EXPECT_EQ(record.producer_packet_index,
             LOOM_LOW_PACKET_HAZARD_PLAN_PACKET_NONE);
@@ -434,6 +454,79 @@ iree_status_t InvalidActionDetailHazardQuery(
 TEST_F(LowPacketHazardPlanTest, RejectsActionDetail) {
   const loom_low_packet_hazard_plan_provider_t hazard_provider = {
       .query = InvalidActionDetailHazardQuery,
+  };
+  loom_low_packet_hazard_plan_t plan = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_low_packet_hazard_plan_build(&state_.schedule, &state_.allocation,
+                                        /*progress=*/nullptr, &hazard_provider,
+                                        &arena_, &plan));
+}
+
+iree_status_t MissingActionIdentityHazardQuery(
+    void* user_data, const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_packet_progress_table_t* progress,
+    const loom_low_packet_view_t* packet,
+    loom_low_packet_hazard_plan_emit_fn_t emit, void* emit_user_data) {
+  (void)user_data;
+  (void)schedule;
+  (void)allocation;
+  (void)progress;
+  (void)packet;
+  const loom_low_packet_hazard_plan_event_t event = {
+      .kind = LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION,
+      .reason_id = kSyntheticHazardLatency,
+      .reason_name = IREE_SV("synthetic.latency"),
+      .producer_node_index = 0,
+      .progress_class_id = kSyntheticProgressPipe,
+      .progress_class_name = IREE_SV("synthetic.pipe"),
+      .required_progress = 3,
+      .observed_progress = 1,
+      .residual_progress = 2,
+  };
+  return emit(emit_user_data, &event);
+}
+
+TEST_F(LowPacketHazardPlanTest, RejectsMissingActionIdentity) {
+  const loom_low_packet_hazard_plan_provider_t hazard_provider = {
+      .query = MissingActionIdentityHazardQuery,
+  };
+  loom_low_packet_hazard_plan_t plan = {};
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      loom_low_packet_hazard_plan_build(&state_.schedule, &state_.allocation,
+                                        /*progress=*/nullptr, &hazard_provider,
+                                        &arena_, &plan));
+}
+
+iree_status_t InvalidDiagnosticActionHazardQuery(
+    void* user_data, const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_packet_progress_table_t* progress,
+    const loom_low_packet_view_t* packet,
+    loom_low_packet_hazard_plan_emit_fn_t emit, void* emit_user_data) {
+  (void)user_data;
+  (void)schedule;
+  (void)allocation;
+  (void)progress;
+  (void)packet;
+  const loom_low_packet_hazard_plan_event_t event = {
+      .kind = LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_MISSING_TARGET_DATA,
+      .action_id = kSyntheticHazardActionPadding,
+      .action_name = IREE_SV("synthetic.padding"),
+      .reason_id = kSyntheticHazardMissingData,
+      .reason_name = IREE_SV("synthetic.missing-data"),
+      .producer_node_index = LOOM_LOW_SCHEDULE_NODE_NONE,
+      .progress_class_id = LOOM_LOW_PACKET_PROGRESS_CLASS_NONE,
+      .target_detail = IREE_SV("missing tag"),
+  };
+  return emit(emit_user_data, &event);
+}
+
+TEST_F(LowPacketHazardPlanTest, RejectsDiagnosticActionIdentity) {
+  const loom_low_packet_hazard_plan_provider_t hazard_provider = {
+      .query = InvalidDiagnosticActionHazardQuery,
   };
   loom_low_packet_hazard_plan_t plan = {};
   IREE_EXPECT_STATUS_IS(

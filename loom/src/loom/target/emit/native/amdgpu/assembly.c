@@ -1316,6 +1316,23 @@ static iree_status_t loom_amdgpu_append_s_nop_cycles(
   return iree_ok_status();
 }
 
+static iree_status_t loom_amdgpu_append_wait_state_action(
+    const loom_native_assembly_packet_context_t* context,
+    const loom_amdgpu_wait_state_t* wait_state) {
+  switch (wait_state->action) {
+    case LOOM_AMDGPU_WAIT_STATE_ACTION_S_NOP:
+      return loom_amdgpu_append_s_nop_cycles(context, wait_state->cycle_count);
+    case LOOM_AMDGPU_WAIT_STATE_ACTION_UNKNOWN:
+    default: {
+      iree_string_view_t action_name =
+          loom_amdgpu_wait_state_action_name(wait_state->action);
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "unsupported AMDGPU wait-state action '%.*s'",
+                              (int)action_name.size, action_name.data);
+    }
+  }
+}
+
 static iree_status_t loom_amdgpu_append_wait_states_before_packet(
     void* user_data, const loom_native_assembly_packet_context_t* context) {
   loom_amdgpu_assembly_emit_state_t* state =
@@ -1337,7 +1354,7 @@ static iree_status_t loom_amdgpu_append_wait_states_before_packet(
       return iree_ok_status();
     }
     IREE_RETURN_IF_ERROR(
-        loom_amdgpu_append_s_nop_cycles(context, wait_state->cycle_count));
+        loom_amdgpu_append_wait_state_action(context, wait_state));
     ++state->next_wait_state_index;
   }
   return iree_ok_status();
