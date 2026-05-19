@@ -40,6 +40,7 @@ loom_assert_no_dependencies(
         ":live_range",
         ":move_topology",
         ":packet_move",
+        ":search",
         ":spill_plan",
         ":spill_traffic",
         ":storage",
@@ -141,6 +142,39 @@ loom_cc_library(
         "//loom/src/loom/ops/low",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "search",
+    srcs = ["search.c"],
+    hdrs = ["search.h"],
+    deps = [
+        ":active_set",
+        ":assignment",
+        ":assignment_map",
+        ":live_range",
+        ":spill_traffic",
+        ":storage_lease",
+        ":target_constraints",
+        ":unit_liveness",
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "search_test",
+    srcs = ["search_test.cc"],
+    deps = [
+        ":search",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

@@ -15,6 +15,7 @@
 #include "loom/codegen/low/allocation/edge_copy.h"
 #include "loom/codegen/low/allocation/interval_order.h"
 #include "loom/codegen/low/allocation/packet_move.h"
+#include "loom/codegen/low/allocation/search.h"
 #include "loom/codegen/low/allocation/spill_plan.h"
 #include "loom/codegen/low/allocation/spill_traffic.h"
 #include "loom/codegen/low/allocation/storage_lease.h"
@@ -115,15 +116,18 @@ static uint32_t loom_low_allocation_unit_end_point_start_for_value_ordinal(
       &state->unit_liveness, &state->liveness, value_ordinal);
 }
 
-static uint32_t loom_low_allocation_unit_end_point_start_for_value(
-    const loom_low_allocation_build_state_t* state, loom_value_id_t value_id) {
-  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-  if (!loom_low_allocation_value_ordinal_for_value(state, value_id,
-                                                   &value_ordinal)) {
-    return UINT32_MAX;
-  }
-  return loom_low_allocation_unit_end_point_start_for_value_ordinal(
-      state, value_ordinal);
+static loom_low_allocation_search_context_t loom_low_allocation_search_context(
+    loom_low_allocation_build_state_t* state) {
+  return (loom_low_allocation_search_context_t){
+      .module = state->module,
+      .descriptor_set = state->target.descriptor_set,
+      .liveness = &state->liveness,
+      .unit_liveness = &state->unit_liveness,
+      .target_constraints = &state->target_constraints,
+      .assignment_map = state->assignment_map,
+      .active_set = &state->active,
+      .storage_leases = &state->storage_leases,
+  };
 }
 
 static bool loom_low_allocation_mode_can_synthesize(uint8_t allocation_mode) {
@@ -155,127 +159,6 @@ static iree_status_t loom_low_allocation_validate_synthesis_mode(
       "low allocation synthesis requires allocation(virtual), but function has "
       "allocation(%s)",
       loom_low_allocation_mode_name(allocation_mode));
-}
-
-static bool loom_low_allocation_candidate_conflicts(
-    loom_low_allocation_build_state_t* state,
-    const loom_liveness_interval_t* interval, uint16_t reg_class_id,
-    loom_low_allocation_location_kind_t location_kind, uint32_t location_base,
-    uint32_t location_count, const loom_value_id_t* ignored_value_ids,
-    uint16_t ignored_value_count,
-    loom_low_allocation_storage_release_policy_t release_policy) {
-  loom_low_allocation_assignment_t candidate = {
-      .value_id = interval->value_id,
-      .value_class = interval->value_class,
-      .descriptor_reg_class_id = reg_class_id,
-      .start_point = interval->start_point,
-      .end_point =
-          loom_low_allocation_live_range_interval_storage_end_point(interval),
-      .unit_count = interval->unit_count,
-      .location_kind = location_kind,
-      .location_base = location_base,
-      .location_count = location_count,
-      .unit_end_point_start =
-          loom_low_allocation_unit_end_point_start_for_value(
-              state, interval->value_id),
-  };
-  if (loom_low_allocation_active_set_conflicts(
-          &state->active, state->target.descriptor_set, &state->liveness,
-          state->unit_liveness.end_points, state->unit_liveness.end_point_count,
-          state->assignments, state->assignment_count, &candidate,
-          ignored_value_ids, ignored_value_count)) {
-    return true;
-  }
-  if (loom_low_allocation_target_constraints_fixed_value_conflicts(
-          &state->target_constraints, &state->liveness, &state->unit_liveness,
-          &candidate, ignored_value_ids, ignored_value_count)) {
-    return true;
-  }
-  if (loom_low_allocation_target_constraints_reserved_range_conflicts(
-          &state->target_constraints, reg_class_id, location_kind,
-          location_base, location_count)) {
-    return true;
-  }
-  if (loom_low_allocation_storage_lease_state_conflicts(
-          &state->storage_leases, state->target.descriptor_set,
-          &state->liveness, &candidate, release_policy)) {
-    return true;
-  }
-  return false;
-}
-
-static bool loom_low_allocation_align_up_u32(uint32_t value, uint32_t alignment,
-                                             uint32_t* out_value) {
-  if (alignment <= 1) {
-    *out_value = value;
-    return true;
-  }
-  const uint32_t remainder = value % alignment;
-  if (remainder == 0) {
-    *out_value = value;
-    return true;
-  }
-  const uint32_t increment = alignment - remainder;
-  if (value > UINT32_MAX - increment) {
-    return false;
-  }
-  *out_value = value + increment;
-  return true;
-}
-
-static bool loom_low_allocation_find_location(
-    loom_low_allocation_build_state_t* state,
-    const loom_liveness_interval_t* interval,
-    loom_low_allocation_class_capacity_t capacity, uint32_t* out_base) {
-  if (capacity.is_bounded && interval->unit_count > capacity.max_units) {
-    return false;
-  }
-
-  const uint32_t alignment =
-      loom_low_allocation_live_range_interval_alignment(interval);
-  uint32_t last_base = 0;
-  if (capacity.is_bounded) {
-    last_base = capacity.max_units - interval->unit_count;
-  } else {
-    const uint32_t search_limit =
-        loom_low_allocation_target_constraints_assigned_location_search_limit(
-            &state->target_constraints, capacity.descriptor_reg_class_id,
-            capacity.location_kind);
-    if (!loom_low_allocation_align_up_u32(search_limit, alignment,
-                                          &last_base)) {
-      return false;
-    }
-  }
-
-  for (uint32_t base = 0; base <= last_base;) {
-    if (!loom_low_allocation_candidate_conflicts(
-            state, interval, capacity.descriptor_reg_class_id,
-            capacity.location_kind, base, interval->unit_count,
-            /*ignored_value_ids=*/NULL, /*ignored_value_count=*/0,
-            LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
-      *out_base = base;
-      return true;
-    }
-    if (base > UINT32_MAX - alignment) {
-      break;
-    }
-    base += alignment;
-  }
-  for (uint32_t base = 0; base <= last_base;) {
-    if (!loom_low_allocation_candidate_conflicts(
-            state, interval, capacity.descriptor_reg_class_id,
-            capacity.location_kind, base, interval->unit_count,
-            /*ignored_value_ids=*/NULL, /*ignored_value_count=*/0,
-            LOOM_LOW_ALLOCATION_STORAGE_RELEASE_ALLOWED)) {
-      *out_base = base;
-      return true;
-    }
-    if (base > UINT32_MAX - alignment) {
-      break;
-    }
-    base += alignment;
-  }
-  return false;
 }
 
 static iree_status_t loom_low_allocation_assignment_index_for_value(
@@ -408,37 +291,6 @@ loom_low_allocation_copy_relation_requires_materialized_storage(
   return iree_ok_status();
 }
 
-static bool loom_low_allocation_assignment_can_spill(
-    loom_low_allocation_build_state_t* state,
-    const loom_low_allocation_assignment_t* assignment,
-    loom_low_allocation_class_capacity_t* out_capacity) {
-  if (!loom_low_allocation_assignment_is_register_like(assignment)) {
-    return false;
-  }
-  if (loom_low_allocation_target_constraints_fixed_value_for_value(
-          &state->target_constraints, assignment->value_id)) {
-    return false;
-  }
-  if (loom_low_allocation_spill_traffic_value_requires_register_location(
-          state->module, assignment->value_id)) {
-    return false;
-  }
-  loom_low_allocation_class_capacity_t capacity = {0};
-  if (!iree_status_is_ok(
-          loom_low_allocation_target_constraints_reg_class_capacity(
-              &state->target_constraints, assignment->descriptor_reg_class_id,
-              &capacity))) {
-    return false;
-  }
-  if (!capacity.is_spillable) {
-    return false;
-  }
-  if (out_capacity) {
-    *out_capacity = capacity;
-  }
-  return true;
-}
-
 static iree_status_t loom_low_allocation_spill_active_assignment(
     loom_low_allocation_build_state_t* state, uint32_t assignment_index,
     const loom_low_allocation_class_capacity_t* capacity) {
@@ -466,125 +318,21 @@ static iree_status_t loom_low_allocation_spill_active_assignment(
   return iree_ok_status();
 }
 
-static bool loom_low_allocation_active_spill_victim_set_is_better(
-    uint16_t candidate_count, uint32_t candidate_unit_count,
-    uint32_t candidate_latest_end_point, uint32_t candidate_location_base,
-    uint16_t best_count, uint32_t best_unit_count,
-    uint32_t best_latest_end_point, uint32_t best_location_base) {
-  if (best_count == 0) {
-    return true;
-  }
-  if (candidate_count != best_count) {
-    return candidate_count < best_count;
-  }
-  if (candidate_unit_count != best_unit_count) {
-    return candidate_unit_count < best_unit_count;
-  }
-  if (candidate_latest_end_point != best_latest_end_point) {
-    return candidate_latest_end_point > best_latest_end_point;
-  }
-  return candidate_location_base < best_location_base;
-}
-
-static iree_status_t loom_low_allocation_collect_active_spill_victim_set(
-    loom_low_allocation_build_state_t* state,
-    const loom_liveness_interval_t* interval,
-    const loom_low_allocation_class_capacity_t* capacity,
-    uint32_t location_base, bool interval_requires_register,
-    uint32_t* assignment_indices, loom_value_id_t* ignored_value_ids,
-    uint16_t* out_assignment_count, uint32_t* out_unit_count,
-    uint32_t* out_latest_end_point, bool* out_blocked) {
-  *out_assignment_count = 0;
-  *out_unit_count = 0;
-  *out_latest_end_point = 0;
-  *out_blocked = false;
-  const uint32_t interval_end =
-      loom_low_allocation_live_range_interval_storage_end_point(interval);
-
-  const loom_low_allocation_assignment_t candidate = {
-      .value_id = interval->value_id,
-      .value_class = interval->value_class,
-      .descriptor_reg_class_id = capacity->descriptor_reg_class_id,
-      .start_point = interval->start_point,
-      .end_point = interval_end,
-      .unit_count = interval->unit_count,
-      .location_kind = capacity->location_kind,
-      .location_base = location_base,
-      .location_count = interval->unit_count,
-      .unit_end_point_start =
-          loom_low_allocation_unit_end_point_start_for_value(
-              state, interval->value_id),
-  };
-
-  uint16_t assignment_count = 0;
-  uint32_t unit_count = 0;
-  uint32_t latest_end_point = 0;
-  for (iree_host_size_t i = 0; i < state->active.count; ++i) {
-    const uint32_t assignment_index =
-        state->active.assignment_indices[state->active.start + i];
-    IREE_ASSERT_LT(assignment_index, state->assignment_count);
-    const loom_low_allocation_assignment_t* assignment =
-        &state->assignments[assignment_index];
-    if (!loom_low_allocation_active_assignment_conflicts(
-            state->target.descriptor_set, &state->liveness,
-            state->unit_liveness.end_points,
-            state->unit_liveness.end_point_count, assignment, &candidate,
-            /*ignored_value_ids=*/NULL,
-            /*ignored_value_count=*/0)) {
-      continue;
-    }
-    if (!loom_low_allocation_assignment_can_spill(state, assignment, NULL)) {
-      *out_blocked = true;
-      return iree_ok_status();
-    }
-    if (!interval_requires_register && assignment->end_point <= interval_end) {
-      *out_blocked = true;
-      return iree_ok_status();
-    }
-    if (assignment_count == UINT16_MAX) {
-      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                              "active spill victim set exceeds uint16_t");
-    }
-    if (unit_count > UINT32_MAX - assignment->unit_count) {
-      return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                              "active spill victim unit count overflow");
-    }
-    assignment_indices[assignment_count] = assignment_index;
-    ignored_value_ids[assignment_count] = assignment->value_id;
-    ++assignment_count;
-    unit_count += assignment->unit_count;
-    if (latest_end_point < assignment->end_point) {
-      latest_end_point = assignment->end_point;
-    }
-  }
-
-  if (assignment_count == 0 ||
-      loom_low_allocation_candidate_conflicts(
-          state, interval, capacity->descriptor_reg_class_id,
-          capacity->location_kind, location_base, interval->unit_count,
-          ignored_value_ids, assignment_count,
-          LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
-    *out_blocked = true;
-    return iree_ok_status();
-  }
-
-  *out_assignment_count = assignment_count;
-  *out_unit_count = unit_count;
-  *out_latest_end_point = latest_end_point;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_low_allocation_spill_active_assignment_set(
     loom_low_allocation_build_state_t* state,
     const uint32_t* assignment_indices, uint16_t assignment_count) {
+  loom_low_allocation_search_context_t search_context =
+      loom_low_allocation_search_context(state);
   for (uint16_t i = 0; i < assignment_count; ++i) {
     const uint32_t assignment_index = assignment_indices[i];
     IREE_ASSERT_LT(assignment_index, state->assignment_count);
     const loom_low_allocation_assignment_t* assignment =
         &state->assignments[assignment_index];
     loom_low_allocation_class_capacity_t assignment_capacity = {0};
-    if (!loom_low_allocation_assignment_can_spill(state, assignment,
-                                                  &assignment_capacity)) {
+    bool can_spill = false;
+    IREE_RETURN_IF_ERROR(loom_low_allocation_search_assignment_spill_capacity(
+        &search_context, assignment, &can_spill, &assignment_capacity));
+    if (!can_spill) {
       return iree_make_status(
           IREE_STATUS_FAILED_PRECONDITION,
           "active spill victim set became stale while assigning value %u",
@@ -593,99 +341,6 @@ static iree_status_t loom_low_allocation_spill_active_assignment_set(
     IREE_RETURN_IF_ERROR(loom_low_allocation_spill_active_assignment(
         state, assignment_index, &assignment_capacity));
   }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_allocation_find_active_spill_victim_set(
-    loom_low_allocation_build_state_t* state,
-    const loom_liveness_interval_t* interval,
-    const loom_low_allocation_class_capacity_t* capacity,
-    bool interval_requires_register, uint32_t* out_location_base,
-    bool* out_found) {
-  *out_location_base = 0;
-  *out_found = false;
-  if (capacity->is_bounded && interval->unit_count > capacity->max_units) {
-    return iree_ok_status();
-  }
-  if (state->active.count > UINT16_MAX) {
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "active allocation set exceeds uint16_t");
-  }
-
-  uint32_t last_base = 0;
-  if (capacity->is_bounded) {
-    last_base = capacity->max_units - interval->unit_count;
-  } else {
-    const uint32_t search_limit =
-        loom_low_allocation_target_constraints_assigned_location_search_limit(
-            &state->target_constraints, capacity->descriptor_reg_class_id,
-            capacity->location_kind);
-    if (!loom_low_allocation_align_up_u32(
-            search_limit,
-            loom_low_allocation_live_range_interval_alignment(interval),
-            &last_base)) {
-      return iree_ok_status();
-    }
-  }
-
-  uint32_t* candidate_assignment_indices = NULL;
-  uint32_t* best_assignment_indices = NULL;
-  loom_value_id_t* ignored_value_ids = NULL;
-  if (state->active.count > 0) {
-    IREE_RETURN_IF_ERROR(
-        iree_arena_allocate_array(state->arena, state->active.count,
-                                  sizeof(*candidate_assignment_indices),
-                                  (void**)&candidate_assignment_indices));
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        state->arena, state->active.count, sizeof(*best_assignment_indices),
-        (void**)&best_assignment_indices));
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        state->arena, state->active.count, sizeof(*ignored_value_ids),
-        (void**)&ignored_value_ids));
-  }
-
-  const uint32_t alignment =
-      loom_low_allocation_live_range_interval_alignment(interval);
-  uint16_t best_assignment_count = 0;
-  uint32_t best_unit_count = 0;
-  uint32_t best_latest_end_point = 0;
-  uint32_t best_location_base = 0;
-  for (uint32_t base = 0; base <= last_base;) {
-    uint16_t candidate_assignment_count = 0;
-    uint32_t candidate_unit_count = 0;
-    uint32_t candidate_latest_end_point = 0;
-    bool blocked = false;
-    IREE_RETURN_IF_ERROR(loom_low_allocation_collect_active_spill_victim_set(
-        state, interval, capacity, base, interval_requires_register,
-        candidate_assignment_indices, ignored_value_ids,
-        &candidate_assignment_count, &candidate_unit_count,
-        &candidate_latest_end_point, &blocked));
-    if (!blocked &&
-        loom_low_allocation_active_spill_victim_set_is_better(
-            candidate_assignment_count, candidate_unit_count,
-            candidate_latest_end_point, base, best_assignment_count,
-            best_unit_count, best_latest_end_point, best_location_base)) {
-      best_assignment_count = candidate_assignment_count;
-      best_unit_count = candidate_unit_count;
-      best_latest_end_point = candidate_latest_end_point;
-      best_location_base = base;
-      memcpy(best_assignment_indices, candidate_assignment_indices,
-             (iree_host_size_t)candidate_assignment_count *
-                 sizeof(*best_assignment_indices));
-    }
-    if (base > UINT32_MAX - alignment) {
-      break;
-    }
-    base += alignment;
-  }
-
-  if (best_assignment_count == 0) {
-    return iree_ok_status();
-  }
-  IREE_RETURN_IF_ERROR(loom_low_allocation_spill_active_assignment_set(
-      state, best_assignment_indices, best_assignment_count));
-  *out_location_base = best_location_base;
-  *out_found = true;
   return iree_ok_status();
 }
 
@@ -799,8 +454,10 @@ static iree_status_t loom_low_allocation_assign_tied_interval(
   if (copy_source_id != LOOM_VALUE_ID_INVALID && !copy_source_used_after) {
     ignored_value_ids[ignored_value_count++] = copy_source_id;
   }
-  if (loom_low_allocation_candidate_conflicts(
-          state, interval, interval_reg_class_id,
+  loom_low_allocation_search_context_t search_context =
+      loom_low_allocation_search_context(state);
+  if (loom_low_allocation_search_location_conflicts(
+          &search_context, interval, interval_reg_class_id,
           operand_assignment->location_kind, operand_assignment->location_base,
           operand_assignment->location_count, ignored_value_ids,
           ignored_value_count, LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
@@ -838,8 +495,10 @@ static iree_status_t loom_low_allocation_assign_fixed_interval(
   if (!fixed_value) {
     return iree_ok_status();
   }
-  if (loom_low_allocation_candidate_conflicts(
-          state, interval, fixed_value->descriptor_reg_class_id,
+  loom_low_allocation_search_context_t search_context =
+      loom_low_allocation_search_context(state);
+  if (loom_low_allocation_search_location_conflicts(
+          &search_context, interval, fixed_value->descriptor_reg_class_id,
           fixed_value->location_kind, fixed_value->location_base,
           fixed_value->location_count, &interval->value_id,
           /*ignored_value_count=*/1,
@@ -876,6 +535,25 @@ static bool loom_low_allocation_assignment_unit_span_fits(
          assignment->location_base <= UINT32_MAX - unit_offset;
 }
 
+static bool loom_low_allocation_align_up_u32(uint32_t value, uint32_t alignment,
+                                             uint32_t* out_value) {
+  if (alignment <= 1) {
+    *out_value = value;
+    return true;
+  }
+  const uint32_t remainder = value % alignment;
+  if (remainder == 0) {
+    *out_value = value;
+    return true;
+  }
+  const uint32_t increment = alignment - remainder;
+  if (value > UINT32_MAX - increment) {
+    return false;
+  }
+  *out_value = value + increment;
+  return true;
+}
+
 static iree_status_t loom_low_allocation_append_interval_at_location(
     loom_low_allocation_build_state_t* state,
     const loom_liveness_interval_t* interval, uint16_t descriptor_reg_class_id,
@@ -899,8 +577,10 @@ static iree_status_t loom_low_allocation_append_interval_at_location(
   if (location_base % alignment != 0) {
     return iree_ok_status();
   }
-  if (loom_low_allocation_candidate_conflicts(
-          state, interval, descriptor_reg_class_id, location_kind,
+  loom_low_allocation_search_context_t search_context =
+      loom_low_allocation_search_context(state);
+  if (loom_low_allocation_search_location_conflicts(
+          &search_context, interval, descriptor_reg_class_id, location_kind,
           location_base, unit_count, ignored_value_ids, ignored_value_count,
           LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
     return iree_ok_status();
@@ -1315,9 +995,11 @@ static bool loom_low_allocation_find_concat_result_location_for_source(
     return false;
   }
 
+  loom_low_allocation_search_context_t search_context =
+      loom_low_allocation_search_context(state);
   for (uint32_t base = 0; base <= last_base;) {
-    if (!loom_low_allocation_candidate_conflicts(
-            state, result_interval, capacity.descriptor_reg_class_id,
+    if (!loom_low_allocation_search_location_conflicts(
+            &search_context, result_interval, capacity.descriptor_reg_class_id,
             capacity.location_kind, base, result_interval->unit_count,
             ignored_value_ids, ignored_value_count,
             LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
@@ -1338,10 +1020,11 @@ static bool loom_low_allocation_find_concat_result_location_for_source(
           !(capacity.is_bounded &&
             source_location_base + source_interval->unit_count >
                 capacity.max_units) &&
-          !loom_low_allocation_candidate_conflicts(
-              state, source_interval, capacity.descriptor_reg_class_id,
-              capacity.location_kind, source_location_base,
-              source_interval->unit_count, /*ignored_value_ids=*/NULL,
+          !loom_low_allocation_search_location_conflicts(
+              &search_context, source_interval,
+              capacity.descriptor_reg_class_id, capacity.location_kind,
+              source_location_base, source_interval->unit_count,
+              /*ignored_value_ids=*/NULL,
               /*ignored_value_count=*/0,
               LOOM_LOW_ALLOCATION_STORAGE_RELEASE_FORBIDDEN)) {
         *out_result_location_base = base;
@@ -1854,16 +1537,26 @@ static iree_status_t loom_low_allocation_assign_intervals(
                               "allocation table exceeds uint32_t range");
     }
 
+    loom_low_allocation_search_context_t search_context =
+        loom_low_allocation_search_context(state);
     uint32_t location_base = 0;
-    bool assigned = loom_low_allocation_find_location(state, interval, capacity,
-                                                      &location_base);
+    bool assigned = loom_low_allocation_search_find_free_location(
+        &search_context, interval, capacity, &location_base);
     const bool requires_register =
         loom_low_allocation_spill_traffic_interval_requires_register_location(
             state->module, interval);
     if (!assigned && (capacity.is_spillable || requires_register)) {
-      IREE_RETURN_IF_ERROR(loom_low_allocation_find_active_spill_victim_set(
-          state, interval, &capacity, requires_register, &location_base,
-          &assigned));
+      loom_low_allocation_search_spill_victim_set_t victim_set = {0};
+      IREE_RETURN_IF_ERROR(
+          loom_low_allocation_search_find_active_spill_victim_set(
+              &search_context, interval, &capacity, requires_register,
+              state->arena, &victim_set));
+      if (victim_set.found) {
+        IREE_RETURN_IF_ERROR(loom_low_allocation_spill_active_assignment_set(
+            state, victim_set.assignment_indices, victim_set.assignment_count));
+        location_base = victim_set.location_base;
+        assigned = true;
+      }
     }
     if (!assigned && (!capacity.is_spillable || requires_register)) {
       const loom_low_descriptor_set_t* descriptor_set =

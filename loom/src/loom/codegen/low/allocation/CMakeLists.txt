@@ -118,6 +118,43 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    search
+  HDRS
+    "search.h"
+  SRCS
+    "search.c"
+  DEPS
+    ::active_set
+    ::assignment
+    ::assignment_map
+    ::live_range
+    ::spill_traffic
+    ::storage_lease
+    ::target_constraints
+    ::unit_liveness
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::liveness
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    search_test
+  SRCS
+    "search_test.cc"
+  DEPS
+    ::search
+    iree::base::internal::arena
+    loom::src::loom::ir
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     spill_plan
   HDRS
     "spill_plan.h"

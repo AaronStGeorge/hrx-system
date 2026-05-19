@@ -320,6 +320,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::allocation::live_range
     loom::src::loom::codegen::low::allocation::move_topology
     loom::src::loom::codegen::low::allocation::packet_move
+    loom::src::loom::codegen::low::allocation::search
     loom::src::loom::codegen::low::allocation::spill_plan
     loom::src::loom::codegen::low::allocation::spill_traffic
     loom::src::loom::codegen::low::allocation::storage
