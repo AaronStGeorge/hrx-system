@@ -16,7 +16,7 @@ static uint32_t loom_low_allocation_search_unit_end_point_start_for_value(
     loom_value_id_t value_id) {
   loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
   if (!loom_low_allocation_assignment_map_value_ordinal_for_value(
-          &context->assignment_map, value_id, &value_ordinal)) {
+          context->assignment_map, value_id, &value_ordinal)) {
     return UINT32_MAX;
   }
   return loom_low_allocation_unit_liveness_end_point_start_for_value_ordinal(
@@ -69,8 +69,8 @@ bool loom_low_allocation_search_location_conflicts(
           context->active_set, context->descriptor_set, context->liveness,
           context->unit_liveness->end_points,
           context->unit_liveness->end_point_count,
-          context->assignment_map.assignments,
-          context->assignment_map.assignment_count, &candidate,
+          context->assignment_map->assignments,
+          context->assignment_map->assignment_count, &candidate,
           ignored_value_ids, ignored_value_count)) {
     return true;
   }
@@ -235,9 +235,9 @@ static iree_status_t loom_low_allocation_search_collect_active_spill_victim_set(
   for (iree_host_size_t i = 0; i < context->active_set->count; ++i) {
     const uint32_t assignment_index =
         context->active_set->assignment_indices[context->active_set->start + i];
-    IREE_ASSERT_LT(assignment_index, context->assignment_map.assignment_count);
+    IREE_ASSERT_LT(assignment_index, context->assignment_map->assignment_count);
     const loom_low_allocation_assignment_t* assignment =
-        &context->assignment_map.assignments[assignment_index];
+        &context->assignment_map->assignments[assignment_index];
     if (!loom_low_allocation_active_assignment_conflicts(
             context->descriptor_set, context->liveness,
             context->unit_liveness->end_points,

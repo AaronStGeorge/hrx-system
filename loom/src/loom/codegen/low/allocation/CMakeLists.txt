@@ -155,6 +155,46 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    coalescing
+  HDRS
+    "coalescing.h"
+  SRCS
+    "coalescing.c"
+  DEPS
+    ::assignment
+    ::assignment_map
+    ::live_range
+    ::search
+    ::target_constraints
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::consumption
+    loom::src::loom::analysis::liveness
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::placement
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    coalescing_test
+  SRCS
+    "coalescing_test.cc"
+  DEPS
+    ::active_set
+    ::assignment_map
+    ::coalescing
+    ::storage_lease
+    iree::base::internal::arena
+    loom::src::loom::ir
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     spill_plan
   HDRS
     "spill_plan.h"

@@ -33,6 +33,7 @@ loom_assert_no_dependencies(
         ":active_unit",
         ":assignment",
         ":assignment_map",
+        ":coalescing",
         ":copy_decision",
         ":diagnostics",
         ":edge_copy",
@@ -171,6 +172,42 @@ loom_cc_test(
     srcs = ["search_test.cc"],
     deps = [
         ":search",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "coalescing",
+    srcs = ["coalescing.c"],
+    hdrs = ["coalescing.h"],
+    deps = [
+        ":assignment",
+        ":assignment_map",
+        ":live_range",
+        ":search",
+        ":target_constraints",
+        "//loom/src/loom/analysis:consumption",
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:placement",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "coalescing_test",
+    srcs = ["coalescing_test.cc"],
+    deps = [
+        ":active_set",
+        ":assignment_map",
+        ":coalescing",
+        ":storage_lease",
         "//loom/src/loom/ir",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",

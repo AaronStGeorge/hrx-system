@@ -38,7 +38,7 @@ typedef struct loom_low_allocation_search_context_t {
   // Target storage budgets, fixed values, and reserved ranges.
   const loom_low_allocation_target_constraints_t* target_constraints;
   // Current assignment lookup table.
-  loom_low_allocation_assignment_map_t assignment_map;
+  const loom_low_allocation_assignment_map_t* assignment_map;
   // Active assignment window at the interval currently being assigned.
   loom_low_allocation_active_set_t* active_set;
   // Materialized storage leases and release eligibility.

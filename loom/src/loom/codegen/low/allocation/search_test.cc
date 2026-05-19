@@ -225,7 +225,7 @@ TEST_F(LowAllocationSearchTest, FindsFreeLocationAfterActiveAndReservedRanges) {
   context.liveness = &liveness;
   context.unit_liveness = &unit_liveness;
   context.target_constraints = &target_constraints;
-  context.assignment_map = assignment_map;
+  context.assignment_map = &assignment_map;
   context.active_set = &active_set;
   context.storage_leases = &storage_leases;
 
@@ -318,7 +318,7 @@ TEST_F(LowAllocationSearchTest, SelectsActiveSpillVictimSet) {
   context.liveness = &liveness;
   context.unit_liveness = &unit_liveness;
   context.target_constraints = &target_constraints;
-  context.assignment_map = assignment_map;
+  context.assignment_map = &assignment_map;
   context.active_set = &active_set;
   context.storage_leases = &storage_leases;
 

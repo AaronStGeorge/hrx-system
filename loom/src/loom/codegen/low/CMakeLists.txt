@@ -313,6 +313,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::allocation::active_unit
     loom::src::loom::codegen::low::allocation::assignment
     loom::src::loom::codegen::low::allocation::assignment_map
+    loom::src::loom::codegen::low::allocation::coalescing
     loom::src::loom::codegen::low::allocation::copy_decision
     loom::src::loom::codegen::low::allocation::diagnostics
     loom::src::loom::codegen::low::allocation::edge_copy
