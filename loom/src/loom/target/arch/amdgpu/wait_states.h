@@ -8,13 +8,13 @@
 //
 // AMDGPU has hazards that are not modeled by wait counters. CDNA MFMA/SMFMAC
 // packets need fixed scalar no-op cycles both after matrix results before
-// ordinary VGPR consumers and after legacy VALU writes before matrix source
-// reads. GFX940-family transcendental VALU results also need a fixed wait
-// before dependent non-transcendental VALU consumers, and nearby VALU or VMEM
-// reads of VALU-written SGPRs need fixed waits because the hardware does not
-// interlock those dependencies. This table records target-owned insertion
-// points after scheduling and allocation, where physical register identity is
-// known.
+// ordinary VGPR consumers and after legacy VALU writes before matrix source,
+// DPP, or readfirstlane reads. GFX940-family transcendental VALU results also
+// need a fixed wait before dependent non-transcendental VALU consumers, and
+// nearby VALU or VMEM reads of VALU-written SGPRs need fixed waits because the
+// hardware does not interlock those dependencies. This table records
+// target-owned insertion points after scheduling and allocation, where physical
+// register identity is known.
 
 #ifndef LOOM_TARGET_ARCH_AMDGPU_WAIT_STATES_H_
 #define LOOM_TARGET_ARCH_AMDGPU_WAIT_STATES_H_
@@ -47,6 +47,11 @@ typedef enum loom_amdgpu_wait_state_reason_e {
   // A VALU or VMEM packet consumes SGPR storage written by a recent VALU
   // packet.
   LOOM_AMDGPU_WAIT_STATE_REASON_VALU_SGPR_READ = 4,
+  // A DPP packet consumes VGPR storage written by a recent VALU packet.
+  LOOM_AMDGPU_WAIT_STATE_REASON_DPP_VGPR_READ = 5,
+  // A readfirstlane packet consumes VGPR storage written by a recent VALU
+  // packet.
+  LOOM_AMDGPU_WAIT_STATE_REASON_READFIRSTLANE_VGPR_READ = 6,
 } loom_amdgpu_wait_state_reason_t;
 
 typedef enum loom_amdgpu_wait_state_action_e {

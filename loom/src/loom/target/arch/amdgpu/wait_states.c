@@ -25,7 +25,9 @@
 #define LOOM_AMDGPU_WAIT_STATE_VALU_TO_MATRIX_CYCLES 2u
 #define LOOM_AMDGPU_WAIT_STATE_TRANS_RESULT_USE_CYCLES 1u
 #define LOOM_AMDGPU_WAIT_STATE_VALU_SGPR_READ_CYCLES 2u
-#define LOOM_AMDGPU_WAIT_STATE_REASON_COUNT 5u
+#define LOOM_AMDGPU_WAIT_STATE_DPP_VGPR_READ_CYCLES 2u
+#define LOOM_AMDGPU_WAIT_STATE_READFIRSTLANE_VGPR_READ_CYCLES 1u
+#define LOOM_AMDGPU_WAIT_STATE_REASON_COUNT 7u
 
 enum {
   LOOM_AMDGPU_WAIT_STATE_PROGRESS_CLASS_INSTRUCTION_SLOT = 1,
@@ -50,6 +52,10 @@ typedef enum loom_amdgpu_wait_state_reason_flag_bits_e {
       1u << LOOM_AMDGPU_WAIT_STATE_REASON_TRANS_RESULT_USE,
   LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_VALU_SGPR_READ =
       1u << LOOM_AMDGPU_WAIT_STATE_REASON_VALU_SGPR_READ,
+  LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_DPP_VGPR_READ =
+      1u << LOOM_AMDGPU_WAIT_STATE_REASON_DPP_VGPR_READ,
+  LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_READFIRSTLANE_VGPR_READ =
+      1u << LOOM_AMDGPU_WAIT_STATE_REASON_READFIRSTLANE_VGPR_READ,
 } loom_amdgpu_wait_state_reason_flag_bits_t;
 typedef uint32_t loom_amdgpu_wait_state_reason_flags_t;
 
@@ -146,6 +152,10 @@ iree_string_view_t loom_amdgpu_wait_state_reason_name(
       return IREE_SV("trans_result_use");
     case LOOM_AMDGPU_WAIT_STATE_REASON_VALU_SGPR_READ:
       return IREE_SV("valu_sgpr_read");
+    case LOOM_AMDGPU_WAIT_STATE_REASON_DPP_VGPR_READ:
+      return IREE_SV("dpp_vgpr_read");
+    case LOOM_AMDGPU_WAIT_STATE_REASON_READFIRSTLANE_VGPR_READ:
+      return IREE_SV("readfirstlane_vgpr_read");
     case LOOM_AMDGPU_WAIT_STATE_REASON_UNKNOWN:
     default:
       return IREE_SV("unknown");
@@ -174,6 +184,10 @@ static loom_amdgpu_wait_state_reason_flags_t loom_amdgpu_wait_state_reason_flag(
       return LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_TRANS_RESULT_USE;
     case LOOM_AMDGPU_WAIT_STATE_REASON_VALU_SGPR_READ:
       return LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_VALU_SGPR_READ;
+    case LOOM_AMDGPU_WAIT_STATE_REASON_DPP_VGPR_READ:
+      return LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_DPP_VGPR_READ;
+    case LOOM_AMDGPU_WAIT_STATE_REASON_READFIRSTLANE_VGPR_READ:
+      return LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_READFIRSTLANE_VGPR_READ;
     case LOOM_AMDGPU_WAIT_STATE_REASON_UNKNOWN:
     default:
       return 0;
@@ -459,6 +473,20 @@ static bool loom_amdgpu_wait_state_descriptor_is_transcendental(
     const loom_amdgpu_wait_state_builder_t* builder,
     const loom_low_descriptor_t* descriptor) {
   return loom_amdgpu_descriptor_is_transcendental(
+      builder->schedule->target.descriptor_set, descriptor);
+}
+
+static bool loom_amdgpu_wait_state_descriptor_is_dpp(
+    const loom_amdgpu_wait_state_builder_t* builder,
+    const loom_low_descriptor_t* descriptor) {
+  return loom_amdgpu_descriptor_is_dpp(builder->schedule->target.descriptor_set,
+                                       descriptor);
+}
+
+static bool loom_amdgpu_wait_state_descriptor_is_readfirstlane(
+    const loom_amdgpu_wait_state_builder_t* builder,
+    const loom_low_descriptor_t* descriptor) {
+  return loom_amdgpu_descriptor_is_readfirstlane(
       builder->schedule->target.descriptor_set, descriptor);
 }
 
@@ -1061,6 +1089,13 @@ static iree_status_t loom_amdgpu_wait_state_apply_packet(
       packet->descriptor != NULL &&
       loom_amdgpu_wait_state_descriptor_uses_vector_memory(builder,
                                                            packet->descriptor);
+  const bool dpp_consumer =
+      packet->descriptor != NULL &&
+      loom_amdgpu_wait_state_descriptor_is_dpp(builder, packet->descriptor);
+  const bool readfirstlane_consumer =
+      packet->descriptor != NULL &&
+      loom_amdgpu_wait_state_descriptor_is_readfirstlane(builder,
+                                                         packet->descriptor);
   const bool processor_has_valu_sgpr_read_hazard =
       loom_amdgpu_wait_state_processor_has_valu_sgpr_read_hazard(
           builder->processor);
@@ -1089,6 +1124,13 @@ static iree_status_t loom_amdgpu_wait_state_apply_packet(
         LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_MATRIX_RESULT_USE;
     if (trans_forwarding_consumer) {
       allowed_reasons |= LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_TRANS_RESULT_USE;
+    }
+    if (dpp_consumer) {
+      allowed_reasons |= LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_DPP_VGPR_READ;
+    }
+    if (readfirstlane_consumer && processor_has_valu_sgpr_read_hazard) {
+      allowed_reasons |=
+          LOOM_AMDGPU_WAIT_STATE_REASON_FLAG_READFIRSTLANE_VGPR_READ;
     }
     loom_amdgpu_wait_state_match_descriptor_operands(builder, packet,
                                                      allowed_reasons, &match);
@@ -1121,6 +1163,16 @@ static iree_status_t loom_amdgpu_wait_state_apply_packet(
     loom_amdgpu_wait_state_record_results(
         builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_VALU_TO_MATRIX_USE,
         LOOM_AMDGPU_WAIT_STATE_VALU_TO_MATRIX_CYCLES, 0, instruction_count);
+    loom_amdgpu_wait_state_record_results(
+        builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_DPP_VGPR_READ,
+        LOOM_AMDGPU_WAIT_STATE_DPP_VGPR_READ_CYCLES, 0, instruction_count);
+    if (processor_has_valu_sgpr_read_hazard) {
+      loom_amdgpu_wait_state_record_results(
+          builder, packet,
+          LOOM_AMDGPU_WAIT_STATE_REASON_READFIRSTLANE_VGPR_READ,
+          LOOM_AMDGPU_WAIT_STATE_READFIRSTLANE_VGPR_READ_CYCLES, 0,
+          instruction_count);
+    }
     if (trans_producer) {
       loom_amdgpu_wait_state_record_results(
           builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_TRANS_RESULT_USE,
@@ -1139,6 +1191,16 @@ static iree_status_t loom_amdgpu_wait_state_apply_packet(
       loom_amdgpu_wait_state_record_results(
           builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_VALU_TO_MATRIX_USE,
           LOOM_AMDGPU_WAIT_STATE_VALU_TO_MATRIX_CYCLES, 0, instruction_count);
+      loom_amdgpu_wait_state_record_results(
+          builder, packet, LOOM_AMDGPU_WAIT_STATE_REASON_DPP_VGPR_READ,
+          LOOM_AMDGPU_WAIT_STATE_DPP_VGPR_READ_CYCLES, 0, instruction_count);
+      if (processor_has_valu_sgpr_read_hazard) {
+        loom_amdgpu_wait_state_record_results(
+            builder, packet,
+            LOOM_AMDGPU_WAIT_STATE_REASON_READFIRSTLANE_VGPR_READ,
+            LOOM_AMDGPU_WAIT_STATE_READFIRSTLANE_VGPR_READ_CYCLES, 0,
+            instruction_count);
+      }
     } else if (instruction_count != 0) {
       loom_amdgpu_wait_state_clear_results(builder, packet->node->op);
     }

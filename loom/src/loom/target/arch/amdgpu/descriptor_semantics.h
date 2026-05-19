@@ -29,6 +29,10 @@ typedef enum loom_amdgpu_descriptor_trait_bit_e {
   LOOM_AMDGPU_DESCRIPTOR_TRAIT_VECTOR_MEMORY = 1u << 2,
   // Descriptor is a transcendental VALU packet.
   LOOM_AMDGPU_DESCRIPTOR_TRAIT_TRANSCENDENTAL = 1u << 3,
+  // Descriptor is a DPP lane-crossing packet.
+  LOOM_AMDGPU_DESCRIPTOR_TRAIT_DPP = 1u << 4,
+  // Descriptor reads the first active lane of a VGPR into an SGPR.
+  LOOM_AMDGPU_DESCRIPTOR_TRAIT_READFIRSTLANE = 1u << 5,
 } loom_amdgpu_descriptor_trait_bit_t;
 typedef uint32_t loom_amdgpu_descriptor_traits_t;
 
@@ -59,6 +63,16 @@ bool loom_amdgpu_descriptor_uses_vector_memory(
 
 // Returns true when |descriptor| is a transcendental VALU packet.
 bool loom_amdgpu_descriptor_is_transcendental(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor);
+
+// Returns true when |descriptor| is a DPP lane-crossing packet.
+bool loom_amdgpu_descriptor_is_dpp(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor);
+
+// Returns true when |descriptor| is a readfirstlane packet.
+bool loom_amdgpu_descriptor_is_readfirstlane(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor);
 

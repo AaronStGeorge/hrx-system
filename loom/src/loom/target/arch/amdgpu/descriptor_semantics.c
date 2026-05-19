@@ -108,6 +108,22 @@ bool loom_amdgpu_descriptor_is_transcendental(
       LOOM_AMDGPU_DESCRIPTOR_TRAIT_TRANSCENDENTAL);
 }
 
+bool loom_amdgpu_descriptor_is_dpp(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor) {
+  return iree_any_bit_set(
+      loom_amdgpu_descriptor_traits(descriptor_set, descriptor),
+      LOOM_AMDGPU_DESCRIPTOR_TRAIT_DPP);
+}
+
+bool loom_amdgpu_descriptor_is_readfirstlane(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor) {
+  return iree_any_bit_set(
+      loom_amdgpu_descriptor_traits(descriptor_set, descriptor),
+      LOOM_AMDGPU_DESCRIPTOR_TRAIT_READFIRSTLANE);
+}
+
 loom_amdgpu_descriptor_traits_t loom_amdgpu_descriptor_traits(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_descriptor_t* descriptor) {
@@ -140,6 +156,23 @@ loom_amdgpu_descriptor_traits_t loom_amdgpu_descriptor_traits(
           descriptor_set, descriptor, kTranscendentalDescriptorRefs,
           IREE_ARRAYSIZE(kTranscendentalDescriptorRefs))) {
     traits |= LOOM_AMDGPU_DESCRIPTOR_TRAIT_TRANSCENDENTAL;
+  }
+  static const loom_amdgpu_descriptor_ref_t kDppDescriptorRefs[] = {
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32_DPP,
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_MOV_B32_DPP16,
+  };
+  if (loom_amdgpu_descriptor_matches_any_ref(
+          descriptor_set, descriptor, kDppDescriptorRefs,
+          IREE_ARRAYSIZE(kDppDescriptorRefs))) {
+    traits |= LOOM_AMDGPU_DESCRIPTOR_TRAIT_DPP;
+  }
+  static const loom_amdgpu_descriptor_ref_t kReadfirstlaneDescriptorRefs[] = {
+      LOOM_AMDGPU_DESCRIPTOR_REF_V_READFIRSTLANE_B32,
+  };
+  if (loom_amdgpu_descriptor_matches_any_ref(
+          descriptor_set, descriptor, kReadfirstlaneDescriptorRefs,
+          IREE_ARRAYSIZE(kReadfirstlaneDescriptorRefs))) {
+    traits |= LOOM_AMDGPU_DESCRIPTOR_TRAIT_READFIRSTLANE;
   }
   return traits;
 }
