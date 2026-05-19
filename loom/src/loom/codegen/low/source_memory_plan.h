@@ -98,7 +98,8 @@ typedef struct loom_low_source_memory_dynamic_term_t {
   loom_low_source_memory_dynamic_index_source_t source;
   // Workitem/workgroup dimension when |source| is a coordinate.
   loom_kernel_dimension_t dimension;
-  // View axis represented by |index|, or AXIS_NONE for a dynamic view base.
+  // View axis represented by |index|, or AXIS_NONE for a dynamic view base or
+  // a recovered term from an already-linearized index expression.
   uint8_t axis;
   // Static byte stride multiplied by |index| and each stride value before
   // adding the term to the address.

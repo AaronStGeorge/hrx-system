@@ -113,6 +113,26 @@ kernel.def target(@target) @i32_workgroup_global_saddr(%input: buffer, %output: 
 
 // ====
 
+kernel.def target(@target) @i32_zero_workgroup_saddr_term(%input: buffer, %output: buffer) {
+  %unit = index.constant 1 : index
+  %workgroup_size = index.constant 64 : index
+  kernel.launch.config workgroups(%unit, %unit, %unit) workgroup_size(%workgroup_size, %unit, %unit) : index
+} launch {
+  %workgroup0 = kernel.workgroup.id<x> : index
+  %workgroup = index.assume %workgroup0 [range(%workgroup0, 0, 0)] : index
+  %column = kernel.workitem.id<x> : index
+  %row_width = index.constant 64 : index
+  %linear = index.madd %workgroup, %row_width, %column : index
+  %base = index.constant 0 : offset
+  %input_view = buffer.view %input[%base] : buffer -> view<64xi32, #dense>
+  %output_view = buffer.view %output[%base] : buffer -> view<64xi32, #dense>
+  %loaded = view.load %input_view[%linear] : view<64xi32, #dense> -> i32
+  view.store %loaded, %output_view[%column] : i32, view<64xi32, #dense>
+  kernel.return
+}
+
+// ====
+
 kernel.def target(@target) @i32_dynamic_leading_dim_global_saddr(%output: buffer, %columns_i32: i32) {
   %unit = index.constant 1 : index
   %workgroups_x = index.constant 2 : index

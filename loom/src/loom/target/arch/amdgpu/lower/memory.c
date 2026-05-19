@@ -199,8 +199,18 @@ static bool loom_amdgpu_memory_dynamic_term_can_materialize_soffset(
     const loom_module_t* module, const loom_value_fact_table_t* fact_table,
     const loom_view_region_table_t* view_regions,
     const loom_low_source_memory_dynamic_term_t* term) {
-  if (!loom_amdgpu_memory_dynamic_index_can_materialize_soffset(
-          module, fact_table, view_regions, term->index)) {
+  if (term->index >= module->values.count) {
+    return false;
+  }
+  const loom_type_t type = loom_module_value_type(module, term->index);
+  if (!loom_amdgpu_type_is_address_scalar(type) &&
+      !loom_amdgpu_type_is_i32(type)) {
+    return false;
+  }
+  if (term->source !=
+          LOOM_LOW_SOURCE_MEMORY_DYNAMIC_INDEX_SOURCE_WORKGROUP_ID &&
+      loom_amdgpu_source_value_prefers_vgpr(module, fact_table, view_regions,
+                                            term->index)) {
     return false;
   }
   for (uint8_t i = 0; i < term->stride_value_count; ++i) {
