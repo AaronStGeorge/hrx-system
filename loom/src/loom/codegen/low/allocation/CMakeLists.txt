@@ -65,6 +65,34 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    live_range
+  HDRS
+    "live_range.h"
+  SRCS
+    "live_range.c"
+  DEPS
+    ::assignment
+    ::storage
+    iree::base
+    loom::src::loom::analysis::liveness
+    loom::src::loom::codegen::low::descriptors
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    live_range_test
+  SRCS
+    "live_range_test.cc"
+  DEPS
+    ::live_range
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     table
   HDRS
     "table.h"

@@ -289,103 +289,6 @@ static const loom_low_reg_class_t* loom_low_allocation_reg_class_at(
   return &descriptor_set->reg_classes[reg_class_id];
 }
 
-static bool loom_low_allocation_assignment_overlaps_liveness_interval(
-    const loom_low_allocation_assignment_t* assignment,
-    const loom_liveness_interval_t* interval) {
-  return assignment->start_point < interval->end_point &&
-         interval->start_point < assignment->end_point;
-}
-
-static uint32_t loom_low_allocation_assignment_unit_end_point(
-    const uint32_t* unit_end_points, iree_host_size_t unit_end_point_count,
-    const loom_low_allocation_assignment_t* assignment, uint32_t unit_offset) {
-  if (unit_offset >= assignment->unit_count) {
-    return assignment->end_point;
-  }
-  const uint64_t unit_index =
-      (uint64_t)assignment->unit_end_point_start + unit_offset;
-  IREE_ASSERT(unit_index < unit_end_point_count,
-              "allocation unit end point must be in range");
-  return unit_end_points[(iree_host_size_t)unit_index];
-}
-
-static uint32_t loom_low_allocation_assignment_max_unit_end_point(
-    const uint32_t* unit_end_points, iree_host_size_t unit_end_point_count,
-    const loom_low_allocation_assignment_t* assignment) {
-  uint32_t end_point = assignment->end_point;
-  for (uint32_t unit_offset = 0; unit_offset < assignment->unit_count;
-       ++unit_offset) {
-    const uint32_t unit_end_point =
-        loom_low_allocation_assignment_unit_end_point(
-            unit_end_points, unit_end_point_count, assignment, unit_offset);
-    if (end_point < unit_end_point) {
-      end_point = unit_end_point;
-    }
-  }
-  return end_point;
-}
-
-static bool loom_low_allocation_value_list_contains(
-    const loom_value_id_t* values, iree_host_size_t count,
-    loom_value_id_t value_id) {
-  for (iree_host_size_t i = 0; i < count; ++i) {
-    if (values[i] == value_id) {
-      return true;
-    }
-  }
-  return false;
-}
-
-static bool loom_low_allocation_value_range_may_be_live_in_block(
-    loom_value_id_t value_id, uint32_t start_point, uint32_t end_point,
-    const loom_liveness_block_info_t* block_info) {
-  if (loom_low_allocation_value_list_contains(
-          block_info->live_in_values, block_info->live_in_count, value_id) ||
-      loom_low_allocation_value_list_contains(
-          block_info->live_out_values, block_info->live_out_count, value_id)) {
-    return true;
-  }
-  if (block_info->start_point <= start_point &&
-      start_point < block_info->end_point) {
-    return true;
-  }
-  return block_info->start_point < end_point &&
-         end_point <= block_info->end_point;
-}
-
-static bool loom_low_allocation_value_ranges_overlap_in_block(
-    const loom_liveness_analysis_t* liveness, loom_value_id_t lhs_value_id,
-    uint32_t lhs_start_point, uint32_t lhs_end_point,
-    loom_value_id_t rhs_value_id, uint32_t rhs_start_point,
-    uint32_t rhs_end_point) {
-  const uint32_t overlap_start =
-      lhs_start_point > rhs_start_point ? lhs_start_point : rhs_start_point;
-  const uint32_t overlap_end =
-      lhs_end_point < rhs_end_point ? lhs_end_point : rhs_end_point;
-  if (overlap_start >= overlap_end) {
-    return false;
-  }
-  for (iree_host_size_t i = 0; i < liveness->block_count; ++i) {
-    const loom_liveness_block_info_t* block_info = &liveness->blocks[i];
-    const uint32_t block_overlap_start = overlap_start > block_info->start_point
-                                             ? overlap_start
-                                             : block_info->start_point;
-    const uint32_t block_overlap_end = overlap_end < block_info->end_point
-                                           ? overlap_end
-                                           : block_info->end_point;
-    if (block_overlap_start >= block_overlap_end) {
-      continue;
-    }
-    if (loom_low_allocation_value_range_may_be_live_in_block(
-            lhs_value_id, lhs_start_point, lhs_end_point, block_info) &&
-        loom_low_allocation_value_range_may_be_live_in_block(
-            rhs_value_id, rhs_start_point, rhs_end_point, block_info)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 // Branch placement may make two values overlap in the linear interval space
 // even when no block can observe both values live at once. Only those
 // CFG-induced overlaps are safe to ignore during phi-style coalescing.
@@ -393,11 +296,11 @@ static bool loom_low_allocation_can_ignore_branch_counterpart_conflict(
     const loom_low_allocation_build_state_t* state,
     const loom_liveness_interval_t* interval,
     const loom_low_allocation_assignment_t* counterpart) {
-  if (!loom_low_allocation_assignment_overlaps_liveness_interval(counterpart,
-                                                                 interval)) {
+  if (!loom_low_allocation_live_range_assignment_overlaps_interval(counterpart,
+                                                                   interval)) {
     return false;
   }
-  return !loom_low_allocation_value_ranges_overlap_in_block(
+  return !loom_low_allocation_live_range_values_overlap(
       &state->liveness, interval->value_id, interval->start_point,
       interval->end_point, counterpart->value_id, counterpart->start_point,
       counterpart->end_point);
@@ -499,53 +402,6 @@ static bool loom_low_allocation_copy_kind_is_known(
     default:
       return false;
   }
-}
-
-static bool loom_low_allocation_assignments_have_conflicting_live_location(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_liveness_analysis_t* liveness, const uint32_t* unit_end_points,
-    iree_host_size_t unit_end_point_count,
-    const loom_low_allocation_assignment_t* lhs,
-    const loom_low_allocation_assignment_t* rhs) {
-  if ((lhs->location_kind != LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER &&
-       lhs->location_kind != LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID) ||
-      (rhs->location_kind != LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER &&
-       rhs->location_kind != LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID)) {
-    return false;
-  }
-  if (!loom_low_allocation_storage_assignment_classes_share(descriptor_set, lhs,
-                                                            rhs)) {
-    return false;
-  }
-  const uint64_t lhs_end = (uint64_t)lhs->location_base + lhs->location_count;
-  const uint64_t rhs_end = (uint64_t)rhs->location_base + rhs->location_count;
-  const uint64_t overlap_begin = lhs->location_base > rhs->location_base
-                                     ? lhs->location_base
-                                     : rhs->location_base;
-  const uint64_t overlap_end = lhs_end < rhs_end ? lhs_end : rhs_end;
-  if (overlap_begin >= overlap_end) {
-    return false;
-  }
-  for (uint64_t location = overlap_begin; location < overlap_end; ++location) {
-    const uint32_t lhs_unit_offset = (uint32_t)(location - lhs->location_base);
-    const uint32_t rhs_unit_offset = (uint32_t)(location - rhs->location_base);
-    const uint32_t lhs_unit_end_point =
-        loom_low_allocation_assignment_unit_end_point(
-            unit_end_points, unit_end_point_count, lhs, lhs_unit_offset);
-    const uint32_t rhs_unit_end_point =
-        loom_low_allocation_assignment_unit_end_point(
-            unit_end_points, unit_end_point_count, rhs, rhs_unit_offset);
-    if (lhs->start_point >= rhs_unit_end_point ||
-        rhs->start_point >= lhs_unit_end_point) {
-      continue;
-    }
-    if (loom_low_allocation_value_ranges_overlap_in_block(
-            liveness, lhs->value_id, lhs->start_point, lhs_unit_end_point,
-            rhs->value_id, rhs->start_point, rhs_unit_end_point)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 static bool loom_low_allocation_location_range_overlaps(uint32_t lhs_base,
@@ -1130,7 +986,7 @@ static bool loom_low_allocation_fixed_value_conflicts(
             loom_low_allocation_unit_end_point_start_for_value(
                 state, fixed_value->value_id),
     };
-    if (loom_low_allocation_assignments_have_conflicting_live_location(
+    if (loom_low_allocation_live_range_assignments_conflict(
             state->target.descriptor_set, &state->liveness,
             state->unit_end_points, state->unit_end_point_count,
             &fixed_assignment, &candidate)) {
@@ -1239,7 +1095,7 @@ static bool loom_low_allocation_active_assignment_conflicts(
   if (existing->location_kind != candidate->location_kind) {
     return false;
   }
-  return loom_low_allocation_assignments_have_conflicting_live_location(
+  return loom_low_allocation_live_range_assignments_conflict(
       state->target.descriptor_set, &state->liveness, state->unit_end_points,
       state->unit_end_point_count, existing, candidate);
 }
@@ -3133,7 +2989,7 @@ static iree_status_t loom_low_allocation_append_assignment(
       loom_low_allocation_unit_end_point_start_for_value_ordinal(state,
                                                                  value_ordinal);
   stored_assignment.end_point =
-      loom_low_allocation_assignment_max_unit_end_point(
+      loom_low_allocation_live_range_assignment_max_unit_end_point(
           state->unit_end_points, state->unit_end_point_count,
           &stored_assignment);
   IREE_RETURN_IF_ERROR(loom_low_allocation_record_storage_release_actions(
@@ -5127,7 +4983,7 @@ static bool loom_low_allocation_location_is_live_at_point(
         location->location < assignment_end) {
       const uint32_t unit_offset =
           (uint32_t)(location->location - assignment->location_base);
-      if (point < loom_low_allocation_assignment_unit_end_point(
+      if (point < loom_low_allocation_live_range_assignment_unit_end_point(
                       state->unit_end_points, state->unit_end_point_count,
                       assignment, unit_offset)) {
         return true;
@@ -6104,7 +5960,7 @@ static bool loom_low_allocation_assignment_pair_conflicts(
     iree_host_size_t unit_end_point_count,
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs) {
-  return loom_low_allocation_assignments_have_conflicting_live_location(
+  return loom_low_allocation_live_range_assignments_conflict(
       descriptor_set, liveness, unit_end_points, unit_end_point_count, lhs,
       rhs);
 }

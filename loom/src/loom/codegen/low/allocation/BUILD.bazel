@@ -31,6 +31,7 @@ loom_assert_no_dependencies(
     targets = [
         ":assignment",
         ":diagnostics",
+        ":live_range",
         ":storage",
         ":table",
     ],
@@ -75,6 +76,30 @@ loom_cc_test(
     deps = [
         ":assignment",
         ":storage",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "live_range",
+    srcs = ["live_range.c"],
+    hdrs = ["live_range.h"],
+    deps = [
+        ":assignment",
+        ":storage",
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "live_range_test",
+    srcs = ["live_range_test.cc"],
+    deps = [
+        ":live_range",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
