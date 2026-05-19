@@ -37,6 +37,7 @@ loom_assert_no_dependencies(
         ":copy_decision",
         ":diagnostics",
         ":edge_copy",
+        ":interval_assignment",
         ":interval_order",
         ":live_range",
         ":move_topology",
@@ -398,6 +399,48 @@ loom_cc_test(
     srcs = ["interval_order_test.cc"],
     deps = [
         ":interval_order",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "interval_assignment",
+    srcs = ["interval_assignment.c"],
+    hdrs = ["interval_assignment.h"],
+    deps = [
+        ":active_set",
+        ":assignment",
+        ":assignment_map",
+        ":coalescing",
+        ":interval_order",
+        ":live_range",
+        ":search",
+        ":spill_plan",
+        ":spill_traffic",
+        ":storage_lease",
+        ":table",
+        ":target_constraints",
+        ":unit_liveness",
+        "//loom/src/loom/analysis:consumption",
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:diagnostics",
+        "//loom/src/loom/codegen/low:placement",
+        "//loom/src/loom/codegen/low:target_binding",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "interval_assignment_test",
+    srcs = ["interval_assignment_test.cc"],
+    deps = [
+        ":interval_assignment",
+        "//loom/src/loom/ir",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

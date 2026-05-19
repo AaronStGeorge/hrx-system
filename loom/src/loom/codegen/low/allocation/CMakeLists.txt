@@ -413,6 +413,52 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_library(
+  NAME
+    interval_assignment
+  HDRS
+    "interval_assignment.h"
+  SRCS
+    "interval_assignment.c"
+  DEPS
+    ::active_set
+    ::assignment
+    ::assignment_map
+    ::coalescing
+    ::interval_order
+    ::live_range
+    ::search
+    ::spill_plan
+    ::spill_traffic
+    ::storage_lease
+    ::table
+    ::target_constraints
+    ::unit_liveness
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::consumption
+    loom::src::loom::analysis::liveness
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::diagnostics
+    loom::src::loom::codegen::low::placement
+    loom::src::loom::codegen::low::target_binding
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    interval_assignment_test
+  SRCS
+    "interval_assignment_test.cc"
+  DEPS
+    ::interval_assignment
+    iree::base::internal::arena
+    loom::src::loom::ir
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_test(
   NAME
     live_range_test
