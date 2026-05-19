@@ -33,6 +33,7 @@ loom_assert_no_dependencies(
         ":active_unit",
         ":assignment",
         ":diagnostics",
+        ":edge_copy",
         ":live_range",
         ":move_topology",
         ":packet_move",
@@ -95,6 +96,27 @@ loom_cc_test(
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "edge_copy",
+    srcs = ["edge_copy.c"],
+    hdrs = ["edge_copy.h"],
+    deps = [
+        ":assignment",
+        ":live_range",
+        ":move_topology",
+        ":table",
+        ":target_constraints",
+        ":unit_liveness",
+        ":unit_location",
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 

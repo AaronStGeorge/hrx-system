@@ -313,6 +313,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::allocation::active_unit
     loom::src::loom::codegen::low::allocation::assignment
     loom::src::loom::codegen::low::allocation::diagnostics
+    loom::src::loom::codegen::low::allocation::edge_copy
     loom::src::loom::codegen::low::allocation::live_range
     loom::src::loom::codegen::low::allocation::move_topology
     loom::src::loom::codegen::low::allocation::packet_move

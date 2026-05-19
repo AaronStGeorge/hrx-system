@@ -71,6 +71,30 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    edge_copy
+  HDRS
+    "edge_copy.h"
+  SRCS
+    "edge_copy.c"
+  DEPS
+    ::assignment
+    ::live_range
+    ::move_topology
+    ::table
+    ::target_constraints
+    ::unit_liveness
+    ::unit_location
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::liveness
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     spill_plan
   HDRS
     "spill_plan.h"

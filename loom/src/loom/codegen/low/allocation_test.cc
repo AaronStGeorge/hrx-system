@@ -327,6 +327,21 @@ low.func.def target(@test_target) @packet_move_concat_cycle(%lhs: reg<test.phys>
 }
 )";
 
+static const char kEdgeCopyBranchCycleFunction[] = R"(
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @edge_copy_branch_cycle(%cond: reg<test.i32>, %lhs: reg<test.phys>, %rhs: reg<test.phys>) -> (reg<test.phys x2>) asm<test.low.core> {
+  low.cond_br %cond, ^then, ^else : reg<test.i32>
+^then:
+  low.br ^join(%rhs: reg<test.phys>, %lhs: reg<test.phys>)
+^else:
+  low.br ^join(%lhs: reg<test.phys>, %rhs: reg<test.phys>)
+^join(%a: reg<test.phys>, %b: reg<test.phys>):
+  %pair = concat(%a, %b) : (reg<test.phys>, reg<test.phys>) -> reg<test.phys x2>
+  return %pair
+}
+)";
+
 TEST_F(LowAllocationTest, EmitsDiagnosticForReservedRangeBeyondCapacity) {
   ModulePtr module = ParseModule(kSinglePhysFunction);
   loom_op_t* function_op = FindLowFunction(module.get(), IREE_SV("single"));
@@ -466,6 +481,65 @@ TEST_F(LowAllocationTest, ReservesPacketMoveTemporaryForConcatCycle) {
             LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER);
   EXPECT_EQ(temporary->descriptor_reg_class_id,
             table.assignments[0].descriptor_reg_class_id);
+  EXPECT_EQ(temporary->location, 2u);
+}
+
+TEST_F(LowAllocationTest, ReservesEdgeCopyTemporaryForBranchCycle) {
+  ModulePtr module = ParseModule(kEdgeCopyBranchCycleFunction);
+  loom_op_t* function_op =
+      FindLowFunction(module.get(), IREE_SV("edge_copy_branch_cycle"));
+
+  loom_low_allocation_fixed_value_t fixed_values[5] = {};
+  fixed_values[0].value_id = FindValueByName(module.get(), IREE_SV("lhs"));
+  fixed_values[0].location_kind =
+      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER;
+  fixed_values[0].location_base = 0;
+  fixed_values[0].location_count = 1;
+  fixed_values[1].value_id = FindValueByName(module.get(), IREE_SV("rhs"));
+  fixed_values[1].location_kind =
+      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER;
+  fixed_values[1].location_base = 1;
+  fixed_values[1].location_count = 1;
+  fixed_values[2].value_id = FindValueByName(module.get(), IREE_SV("a"));
+  fixed_values[2].location_kind =
+      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER;
+  fixed_values[2].location_base = 0;
+  fixed_values[2].location_count = 1;
+  fixed_values[3].value_id = FindValueByName(module.get(), IREE_SV("b"));
+  fixed_values[3].location_kind =
+      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER;
+  fixed_values[3].location_base = 1;
+  fixed_values[3].location_count = 1;
+  fixed_values[4].value_id = FindValueByName(module.get(), IREE_SV("pair"));
+  fixed_values[4].location_kind =
+      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER;
+  fixed_values[4].location_base = 0;
+  fixed_values[4].location_count = 2;
+
+  loom_low_allocation_budget_t budget = {};
+  budget.register_class = IREE_SV("test.phys");
+  budget.max_units = 3;
+
+  loom_low_allocation_table_t table = {};
+  IREE_ASSERT_OK(AllocateWithFixedValuesAndBudgets(
+      module.get(), function_op, fixed_values, IREE_ARRAYSIZE(fixed_values),
+      &budget, 1, &table));
+
+  ASSERT_EQ(table.edge_copy_group_count, 2u);
+  ASSERT_EQ(table.edge_copy_count, 4u);
+  EXPECT_EQ(table.edge_copy_groups[0].temporary_start, 0u);
+  EXPECT_EQ(table.edge_copy_groups[0].temporary_count, 1u);
+  EXPECT_EQ(table.edge_copy_groups[1].temporary_start, 1u);
+  EXPECT_EQ(table.edge_copy_groups[1].temporary_count, 0u);
+
+  ASSERT_EQ(table.edge_copy_temporary_count, 1u);
+  const loom_low_allocation_edge_copy_temporary_t* temporary =
+      &table.edge_copy_temporaries[0];
+  EXPECT_EQ(temporary->location_kind,
+            LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER);
+  EXPECT_EQ(temporary->descriptor_reg_class_id,
+            table.assignments[table.edge_copies[0].source_assignment_index]
+                .descriptor_reg_class_id);
   EXPECT_EQ(temporary->location, 2u);
 }
 
