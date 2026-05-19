@@ -259,7 +259,7 @@ static iree_status_t loom_check_test_synthetic_hazard_query(
           /*out_assignment_index=*/NULL);
   const loom_low_descriptor_set_t* descriptor_set =
       schedule->target.descriptor_set;
-  if (!loom_low_allocation_assignments_overlap_target_storage(
+  if (!loom_low_allocation_storage_assignment_ranges_overlap(
           descriptor_set, producer_assignment, consumer_assignment)) {
     return iree_ok_status();
   }

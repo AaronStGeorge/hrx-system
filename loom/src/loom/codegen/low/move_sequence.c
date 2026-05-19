@@ -28,7 +28,7 @@ static bool loom_low_move_locations_share_target_storage(
   if (descriptor_set == NULL) {
     return lhs->descriptor_reg_class_id == rhs->descriptor_reg_class_id;
   }
-  return loom_low_allocation_reg_classes_share_storage(
+  return loom_low_allocation_storage_reg_classes_share(
       descriptor_set, lhs->descriptor_reg_class_id,
       rhs->descriptor_reg_class_id);
 }
@@ -42,7 +42,7 @@ static bool loom_low_move_locations_share_storage_class(
   const bool classes_share_storage =
       descriptor_set == NULL
           ? lhs->descriptor_reg_class_id == rhs->descriptor_reg_class_id
-          : loom_low_allocation_reg_classes_share_storage(
+          : loom_low_allocation_storage_reg_classes_share(
                 descriptor_set, lhs->descriptor_reg_class_id,
                 rhs->descriptor_reg_class_id);
   return classes_share_storage &&
@@ -196,7 +196,7 @@ static iree_status_t loom_low_move_sequence_require_same_storage_class(
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs,
     iree_string_view_t structural_op) {
-  if (!loom_low_allocation_assignments_share_target_storage(descriptor_set, lhs,
+  if (!loom_low_allocation_storage_assignment_classes_share(descriptor_set, lhs,
                                                             rhs)) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
@@ -382,7 +382,7 @@ iree_status_t loom_low_move_sequence_count_slice_units(
   uint32_t source_offset = 0;
   IREE_RETURN_IF_ERROR(loom_low_move_sequence_slice_assignments(
       allocation, op, &source_assignment, &result_assignment, &source_offset));
-  if (loom_low_allocation_assignment_subranges_match_target_storage(
+  if (loom_low_allocation_storage_assignment_subranges_equal(
           allocation->target.descriptor_set, result_assignment, /*lhs_start=*/0,
           source_assignment, source_offset,
           result_assignment->location_count)) {
@@ -400,10 +400,9 @@ iree_status_t loom_low_move_sequence_populate_slice_units(
   uint32_t source_offset = 0;
   IREE_RETURN_IF_ERROR(loom_low_move_sequence_slice_assignments(
       allocation, op, &source_assignment, &result_assignment, &source_offset));
-  const bool coalesced =
-      loom_low_allocation_assignment_subranges_match_target_storage(
-          allocation->target.descriptor_set, result_assignment, /*lhs_start=*/0,
-          source_assignment, source_offset, result_assignment->location_count);
+  const bool coalesced = loom_low_allocation_storage_assignment_subranges_equal(
+      allocation->target.descriptor_set, result_assignment, /*lhs_start=*/0,
+      source_assignment, source_offset, result_assignment->location_count);
   const iree_host_size_t expected_move_count =
       coalesced ? 0 : result_assignment->location_count;
   if (move_count != expected_move_count) {
@@ -457,7 +456,7 @@ static iree_status_t loom_low_move_sequence_concat_assignments(
           IREE_STATUS_FAILED_PRECONDITION,
           "low.concat structural move source ranges exceed result assignment");
     }
-    if (!loom_low_allocation_assignment_subranges_match_target_storage(
+    if (!loom_low_allocation_storage_assignment_subranges_equal(
             allocation->target.descriptor_set, *out_result_assignment,
             result_offset, source_assignment, /*rhs_start=*/0,
             source_assignment->location_count)) {

@@ -289,96 +289,6 @@ static const loom_low_reg_class_t* loom_low_allocation_reg_class_at(
   return &descriptor_set->reg_classes[reg_class_id];
 }
 
-bool loom_low_allocation_reg_classes_share_storage(
-    const loom_low_descriptor_set_t* descriptor_set, uint16_t lhs_reg_class_id,
-    uint16_t rhs_reg_class_id) {
-  if (lhs_reg_class_id == rhs_reg_class_id) {
-    return true;
-  }
-  if (!descriptor_set || lhs_reg_class_id >= descriptor_set->reg_class_count ||
-      rhs_reg_class_id >= descriptor_set->reg_class_count) {
-    return false;
-  }
-  return loom_low_reg_class_storage_key(descriptor_set, lhs_reg_class_id) ==
-         loom_low_reg_class_storage_key(descriptor_set, rhs_reg_class_id);
-}
-
-bool loom_low_allocation_assignments_share_target_storage(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_allocation_assignment_t* lhs,
-    const loom_low_allocation_assignment_t* rhs) {
-  return lhs != NULL && rhs != NULL &&
-         lhs->location_kind == rhs->location_kind &&
-         loom_low_allocation_reg_classes_share_storage(
-             descriptor_set, lhs->descriptor_reg_class_id,
-             rhs->descriptor_reg_class_id);
-}
-
-static bool loom_low_allocation_assignment_classes_share_storage(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_allocation_assignment_t* lhs,
-    const loom_low_allocation_assignment_t* rhs) {
-  return loom_low_allocation_assignments_share_target_storage(descriptor_set,
-                                                              lhs, rhs);
-}
-
-bool loom_low_allocation_assignments_match_target_storage(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_allocation_assignment_t* lhs,
-    const loom_low_allocation_assignment_t* rhs) {
-  return lhs != NULL && rhs != NULL && lhs->location_count != 0 &&
-         rhs->location_count != 0 &&
-         loom_low_allocation_assignments_share_target_storage(descriptor_set,
-                                                              lhs, rhs) &&
-         lhs->location_base == rhs->location_base &&
-         lhs->location_count == rhs->location_count;
-}
-
-bool loom_low_allocation_assignments_overlap_target_storage(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_allocation_assignment_t* lhs,
-    const loom_low_allocation_assignment_t* rhs) {
-  if (lhs == NULL || rhs == NULL || lhs->location_count == 0 ||
-      rhs->location_count == 0 ||
-      !loom_low_allocation_assignments_share_target_storage(descriptor_set, lhs,
-                                                            rhs)) {
-    return false;
-  }
-  const uint64_t lhs_begin = lhs->location_base;
-  const uint64_t rhs_begin = rhs->location_base;
-  const uint64_t lhs_end = lhs_begin + lhs->location_count;
-  const uint64_t rhs_end = rhs_begin + rhs->location_count;
-  return lhs_begin < rhs_end && rhs_begin < lhs_end;
-}
-
-bool loom_low_allocation_assignment_subranges_match_target_storage(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_allocation_assignment_t* lhs, uint32_t lhs_start,
-    const loom_low_allocation_assignment_t* rhs, uint32_t rhs_start,
-    uint32_t unit_count) {
-  return unit_count != 0 &&
-         loom_low_allocation_assignments_share_target_storage(descriptor_set,
-                                                              lhs, rhs) &&
-         (uint64_t)lhs->location_base + lhs_start ==
-             (uint64_t)rhs->location_base + rhs_start;
-}
-
-bool loom_low_allocation_assignment_subranges_overlap_target_storage(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_allocation_assignment_t* lhs, uint32_t lhs_start,
-    const loom_low_allocation_assignment_t* rhs, uint32_t rhs_start,
-    uint32_t unit_count) {
-  if (!loom_low_allocation_assignments_share_target_storage(descriptor_set, lhs,
-                                                            rhs)) {
-    return false;
-  }
-  const uint64_t lhs_begin = (uint64_t)lhs->location_base + lhs_start;
-  const uint64_t rhs_begin = (uint64_t)rhs->location_base + rhs_start;
-  const uint64_t lhs_end = lhs_begin + unit_count;
-  const uint64_t rhs_end = rhs_begin + unit_count;
-  return lhs_begin < rhs_end && rhs_begin < lhs_end;
-}
-
 static bool loom_low_allocation_assignment_overlaps_liveness_interval(
     const loom_low_allocation_assignment_t* assignment,
     const loom_liveness_interval_t* interval) {
@@ -622,7 +532,7 @@ static bool loom_low_allocation_assignments_have_conflicting_live_location(
        rhs->location_kind != LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID)) {
     return false;
   }
-  if (!loom_low_allocation_assignment_classes_share_storage(descriptor_set, lhs,
+  if (!loom_low_allocation_storage_assignment_classes_share(descriptor_set, lhs,
                                                             rhs)) {
     return false;
   }
@@ -765,7 +675,7 @@ static bool loom_low_allocation_lookup_budget(
   for (iree_host_size_t i = 0; i < state->resolved_budget_count; ++i) {
     const loom_low_allocation_resolved_budget_t* budget =
         &state->resolved_budgets[i];
-    if (!loom_low_allocation_reg_classes_share_storage(
+    if (!loom_low_allocation_storage_reg_classes_share(
             state->target.descriptor_set, budget->descriptor_reg_class_id,
             reg_class_id)) {
       continue;
@@ -890,7 +800,7 @@ static iree_status_t loom_low_allocation_resolve_budgets(
           state->target.descriptor_set_key.data);
     }
     for (iree_host_size_t j = 0; j < state->resolved_budget_count; ++j) {
-      if (!loom_low_allocation_reg_classes_share_storage(
+      if (!loom_low_allocation_storage_reg_classes_share(
               state->target.descriptor_set,
               state->resolved_budgets[j].descriptor_reg_class_id,
               reg_class_id)) {
@@ -1071,7 +981,7 @@ static iree_status_t loom_low_allocation_resolve_reserved_ranges(
       const loom_low_allocation_resolved_reserved_range_t* existing =
           &state->resolved_reserved_ranges[j];
       if (reserved_range->location_kind != existing->location_kind ||
-          !loom_low_allocation_reg_classes_share_storage(
+          !loom_low_allocation_storage_reg_classes_share(
               state->target.descriptor_set, reg_class_id,
               existing->descriptor_reg_class_id)) {
         continue;
@@ -1219,7 +1129,7 @@ static bool loom_low_allocation_fixed_value_conflicts(
     if (fixed_value->location_kind != location_kind) {
       continue;
     }
-    if (!loom_low_allocation_reg_classes_share_storage(
+    if (!loom_low_allocation_storage_reg_classes_share(
             state->target.descriptor_set, fixed_value->descriptor_reg_class_id,
             reg_class_id)) {
       continue;
@@ -1259,7 +1169,7 @@ static bool loom_low_allocation_reserved_range_conflicts(
     if (reserved_range->location_kind != location_kind) {
       continue;
     }
-    if (!loom_low_allocation_reg_classes_share_storage(
+    if (!loom_low_allocation_storage_reg_classes_share(
             state->target.descriptor_set,
             reserved_range->descriptor_reg_class_id, reg_class_id)) {
       continue;
@@ -1459,7 +1369,7 @@ static bool loom_low_allocation_storage_lease_instance_conflicts(
   if (lease->location_kind != candidate->location_kind) {
     return false;
   }
-  if (!loom_low_allocation_reg_classes_share_storage(
+  if (!loom_low_allocation_storage_reg_classes_share(
           state->target.descriptor_set, lease->descriptor_reg_class_id,
           candidate->descriptor_reg_class_id)) {
     return false;
@@ -1716,7 +1626,7 @@ static uint32_t loom_low_allocation_assigned_location_search_limit(
     loom_low_allocation_location_kind_t location_kind) {
   uint32_t max_end = 0;
   for (uint16_t i = 0; i < state->target.descriptor_set->reg_class_count; ++i) {
-    if (!loom_low_allocation_reg_classes_share_storage(
+    if (!loom_low_allocation_storage_reg_classes_share(
             state->target.descriptor_set, i, reg_class_id)) {
       continue;
     }
@@ -1738,7 +1648,7 @@ static uint32_t loom_low_allocation_assigned_location_search_limit(
     if (fixed_value->location_kind != location_kind) {
       continue;
     }
-    if (!loom_low_allocation_reg_classes_share_storage(
+    if (!loom_low_allocation_storage_reg_classes_share(
             state->target.descriptor_set, fixed_value->descriptor_reg_class_id,
             reg_class_id)) {
       continue;
@@ -1758,7 +1668,7 @@ static uint32_t loom_low_allocation_assigned_location_search_limit(
     if (reserved_range->location_kind != location_kind) {
       continue;
     }
-    if (!loom_low_allocation_reg_classes_share_storage(
+    if (!loom_low_allocation_storage_reg_classes_share(
             state->target.descriptor_set,
             reserved_range->descriptor_reg_class_id, reg_class_id)) {
       continue;
@@ -2014,7 +1924,7 @@ static bool loom_low_allocation_assignment_locations_share_target_storage(
     const loom_low_allocation_assignment_t* rhs) {
   return lhs->location_base == rhs->location_base &&
          lhs->location_count == rhs->location_count &&
-         loom_low_allocation_assignments_share_target_storage(descriptor_set,
+         loom_low_allocation_storage_assignment_classes_share(descriptor_set,
                                                               lhs, rhs);
 }
 
@@ -5243,7 +5153,7 @@ static bool loom_low_allocation_location_is_live_at_point(
         point < assignment->start_point) {
       continue;
     }
-    if (!loom_low_allocation_reg_classes_share_storage(
+    if (!loom_low_allocation_storage_reg_classes_share(
             state->target.descriptor_set, assignment->descriptor_reg_class_id,
             location->descriptor_reg_class_id)) {
       continue;
@@ -6260,7 +6170,7 @@ static bool loom_low_allocation_assignment_units_share_location(
       rhs_unit_offset >= rhs->location_count) {
     return false;
   }
-  if (!loom_low_allocation_assignment_classes_share_storage(
+  if (!loom_low_allocation_storage_assignment_classes_share(
           table->target.descriptor_set, lhs, rhs)) {
     return false;
   }

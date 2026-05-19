@@ -339,13 +339,13 @@ static uint64_t loom_target_compile_report_slice_move_unit_count(
                   result_assignment->location_count <=
                       source_assignment->location_count - source_offset,
               "verified low.slice range must fit source assignment");
-  IREE_ASSERT(loom_low_allocation_assignments_share_target_storage(
+  IREE_ASSERT(loom_low_allocation_storage_assignment_classes_share(
                   allocation->target.descriptor_set, source_assignment,
                   result_assignment),
               "allocated low.slice values must share one target storage class");
   for (uint32_t unit_index = 0; unit_index < result_assignment->location_count;
        ++unit_index) {
-    if (!loom_low_allocation_assignment_subranges_match_target_storage(
+    if (!loom_low_allocation_storage_assignment_subranges_equal(
             allocation->target.descriptor_set, result_assignment, unit_index,
             source_assignment, source_offset + unit_index, /*unit_count=*/1)) {
       ++unit_count;
@@ -370,7 +370,7 @@ static uint64_t loom_target_compile_report_concat_move_unit_count(
     const loom_low_allocation_assignment_t* source_assignment =
         loom_target_compile_report_map_assignment(allocation,
                                                   sources.values[i]);
-    IREE_ASSERT(loom_low_allocation_assignments_share_target_storage(
+    IREE_ASSERT(loom_low_allocation_storage_assignment_classes_share(
                     allocation->target.descriptor_set, result_assignment,
                     source_assignment),
                 "allocated low.concat values must share one target storage "
@@ -381,7 +381,7 @@ static uint64_t loom_target_compile_report_concat_move_unit_count(
                 "verified low.concat range must fit result");
     for (uint32_t source_unit = 0;
          source_unit < source_assignment->location_count; ++source_unit) {
-      if (!loom_low_allocation_assignment_subranges_match_target_storage(
+      if (!loom_low_allocation_storage_assignment_subranges_equal(
               allocation->target.descriptor_set, result_assignment,
               result_offset + source_unit, source_assignment, source_unit,
               /*unit_count=*/1)) {
@@ -445,7 +445,7 @@ static void loom_target_compile_report_record_edge_copy_moves(
           &allocation->assignments[edge_copy->destination_assignment_index];
       for (uint32_t unit_index = 0; unit_index < edge_copy->unit_count;
            ++unit_index) {
-        if (!loom_low_allocation_assignment_subranges_match_target_storage(
+        if (!loom_low_allocation_storage_assignment_subranges_equal(
                 allocation->target.descriptor_set, destination_assignment,
                 edge_copy->destination_unit_offset + unit_index,
                 source_assignment, edge_copy->source_unit_offset + unit_index,

@@ -210,12 +210,18 @@ static bool loom_amdgpu_wait_state_reason_is_valid(
 
 static bool loom_amdgpu_wait_state_assignment_is_physical_vgpr(
     const loom_low_allocation_assignment_t* assignment) {
+  if (assignment == NULL) {
+    return false;
+  }
   return loom_low_allocation_assignment_is_physical_register_class(
       assignment, LOOM_AMDGPU_REG_CLASS_ID_VGPR);
 }
 
 static bool loom_amdgpu_wait_state_assignment_is_physical_sgpr(
     const loom_low_allocation_assignment_t* assignment) {
+  if (assignment == NULL) {
+    return false;
+  }
   return loom_low_allocation_assignment_is_physical_register_class(
       assignment, LOOM_AMDGPU_REG_CLASS_ID_SGPR);
 }
@@ -223,7 +229,7 @@ static bool loom_amdgpu_wait_state_assignment_is_physical_sgpr(
 static bool loom_amdgpu_wait_state_assignments_match(
     const loom_low_allocation_assignment_t* lhs,
     const loom_low_allocation_assignment_t* rhs) {
-  return loom_low_allocation_assignments_match(lhs, rhs);
+  return loom_low_allocation_assignment_location_range_equal(lhs, rhs);
 }
 
 static const loom_low_allocation_assignment_t*
@@ -647,6 +653,9 @@ loom_amdgpu_wait_state_packet_has_dst_sel_forwarding_hazard(
 static void loom_amdgpu_wait_state_clear_assignment(
     loom_amdgpu_wait_state_builder_t* builder,
     const loom_low_allocation_assignment_t* assignment) {
+  if (assignment == NULL) {
+    return;
+  }
   uint64_t end = 0;
   if (!loom_low_allocation_assignment_location_exclusive_end(assignment,
                                                              &end)) {

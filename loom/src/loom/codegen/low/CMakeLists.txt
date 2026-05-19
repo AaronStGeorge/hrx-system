@@ -298,6 +298,8 @@ loom_cc_library(
     iree::base::internal::arena
     loom::src::loom::analysis::consumption
     loom::src::loom::analysis::liveness
+    loom::src::loom::codegen::low::allocation::assignment
+    loom::src::loom::codegen::low::allocation::storage
     loom::src::loom::error::emitter
     loom::src::loom::error::error_defs
     loom::src::loom::ir

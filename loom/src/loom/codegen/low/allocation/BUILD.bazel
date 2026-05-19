@@ -1,0 +1,80 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_assert_no_dependencies",
+    "loom_cc_library",
+    "loom_cc_test",
+)
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+loom_assert_no_dependencies(
+    name = "allocation_no_target_implementation_deps",
+    dependencies = [
+        "//loom/src/loom/target/arch/amdgpu:matrix_contract",
+        "//loom/src/loom/target/arch/spirv:descriptors",
+        "//loom/src/loom/target/arch/wasm:descriptors",
+        "//loom/src/loom/target/arch/x86:packed_dot_contract",
+        "//loom/src/loom/target/arch/ireevm:descriptors",
+        "//loom/src/loom/target/emit/llvmir:llvmir",
+        "//loom/src/loom/target/test:low_registry",
+    ],
+    targets = [
+        ":assignment",
+        ":storage",
+    ],
+)
+
+loom_cc_library(
+    name = "assignment",
+    srcs = ["assignment.c"],
+    hdrs = ["assignment.h"],
+    deps = [
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "assignment_test",
+    srcs = ["assignment_test.cc"],
+    deps = [
+        ":assignment",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "storage",
+    srcs = ["storage.c"],
+    hdrs = ["storage.h"],
+    deps = [
+        ":assignment",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "storage_test",
+    srcs = ["storage_test.cc"],
+    deps = [
+        ":assignment",
+        ":storage",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
