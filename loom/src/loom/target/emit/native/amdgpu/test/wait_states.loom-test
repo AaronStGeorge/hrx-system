@@ -11,7 +11,7 @@ low.func.def target(@gfx942_target) @gfx942_mfma_result_wait_state(%lhs: reg<amd
 
 // ----
 amdgpu.wait_state_plan states=1 progress=3 hazards=1
-state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n2/o2 producer=n0 consumer=n2 required=7 observed=0 residual=7
+state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n2/o2 producer=n0 consumer=n2 required=7 observed=0 residual=7 matrix=mfma_pre_gfx950/non_matrix/pass4
 
 // ====
 
@@ -46,7 +46,7 @@ low.func.def target(@gfx942_target) @gfx942_mfma_result_wait_state_observed_prog
 
 // ----
 amdgpu.wait_state_plan states=1 progress=4 hazards=1
-state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n3/o3 producer=n0 consumer=n3 required=7 observed=1 residual=6
+state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n3/o3 producer=n0 consumer=n3 required=7 observed=1 residual=6 matrix=mfma_pre_gfx950/non_matrix/pass4
 
 // ====
 
@@ -93,7 +93,7 @@ low.func.def target(@gfx942_target) @gfx942_smfmac_result_to_smfmac_srcc_overlap
 
 // ----
 amdgpu.wait_state_plan states=1 progress=3 hazards=1
-state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n2/o2 producer=n0 consumer=n2 required=17 observed=0 residual=17
+state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n2/o2 producer=n0 consumer=n2 required=17 observed=0 residual=17 matrix=mfma_pre_gfx950/matrix_srcc_overlap/pass16
 
 // ====
 
@@ -109,7 +109,7 @@ low.func.def target(@gfx942_target) @gfx942_mfma_result_to_valu_waw_wait_state(%
 
 // ----
 amdgpu.wait_state_plan states=1 progress=3 hazards=1
-state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n1/o1 producer=n0 consumer=n1 required=7 observed=0 residual=7
+state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n1/o1 producer=n0 consumer=n1 required=7 observed=0 residual=7 matrix=mfma_pre_gfx950/non_matrix/pass4
 
 // ====
 
@@ -126,7 +126,7 @@ low.func.def target(@gfx942_target) @gfx942_mfma_result_to_mfma_srcab_wait_state
 
 // ----
 amdgpu.wait_state_plan states=1 progress=3 hazards=1
-state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n2/o2 producer=n0 consumer=n2 required=7 observed=0 residual=7
+state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n2/o2 producer=n0 consumer=n2 required=7 observed=0 residual=7 matrix=mfma_pre_gfx950/matrix_src_ab/pass4
 
 // ====
 
@@ -143,7 +143,7 @@ low.func.def target(@gfx950_target) @gfx950_mfma_result_to_mfma_srcab_wait_state
 
 // ----
 amdgpu.wait_state_plan states=1 progress=3 hazards=1
-state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n2/o2 producer=n0 consumer=n2 required=8 observed=0 residual=8
+state[0] reason=matrix_result_use action=amdgpu.s_nop at=b0:n2/o2 producer=n0 consumer=n2 required=8 observed=0 residual=8 matrix=mfma_gfx950/matrix_src_ab/pass4
 
 // ====
 

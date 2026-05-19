@@ -113,6 +113,12 @@ typedef struct loom_amdgpu_wait_state_match_t {
   uint16_t observed_cycle_count;
   // Additional cycles required before the current consumer.
   uint16_t cycle_count;
+  // Matrix result wait table profile, or UNKNOWN for non-matrix reasons.
+  loom_amdgpu_matrix_wait_profile_t matrix_wait_profile;
+  // Matrix result use table key, or UNKNOWN for non-matrix reasons.
+  loom_amdgpu_matrix_wait_result_use_t matrix_result_use;
+  // Matrix result pass count used for the wait table lookup.
+  uint16_t matrix_pass_count;
 } loom_amdgpu_wait_state_match_t;
 
 typedef struct loom_amdgpu_wait_state_builder_t {
@@ -356,37 +362,54 @@ static iree_status_t loom_amdgpu_wait_state_matrix_result_pass_count(
   }
 }
 
+static bool loom_amdgpu_wait_state_matrix_result_table_use(
+    loom_amdgpu_wait_state_matrix_result_use_t use,
+    loom_amdgpu_matrix_wait_result_use_t* out_table_use) {
+  *out_table_use = LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN;
+  switch (use) {
+    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_NON_MATRIX:
+      *out_table_use = LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX;
+      return true;
+    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC_EXACT:
+      *out_table_use = LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT;
+      return true;
+    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC_OVERLAP:
+      *out_table_use = LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP;
+      return true;
+    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRC_AB:
+      *out_table_use = LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB;
+      return true;
+    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC:
+    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_UNKNOWN:
+    default:
+      return false;
+  }
+}
+
+static loom_amdgpu_matrix_wait_profile_t
+loom_amdgpu_wait_state_matrix_wait_profile(
+    const loom_amdgpu_wait_state_builder_t* builder) {
+  loom_amdgpu_matrix_wait_profile_t wait_profile =
+      LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950;
+  if (builder->processor != NULL &&
+      !loom_amdgpu_matrix_wait_profile_from_feature_profile(
+          builder->processor->matrix_feature_profile, &wait_profile)) {
+    return LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN;
+  }
+  return wait_profile;
+}
+
 static bool loom_amdgpu_wait_state_matrix_result_wait_cycles(
     const loom_amdgpu_wait_state_builder_t* builder, uint16_t pass_count,
     loom_amdgpu_wait_state_matrix_result_use_t use, uint16_t* out_cycle_count) {
   *out_cycle_count = 0;
   loom_amdgpu_matrix_wait_result_use_t table_use =
       LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN;
-  switch (use) {
-    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_NON_MATRIX:
-      table_use = LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX;
-      break;
-    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC_EXACT:
-      table_use = LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT;
-      break;
-    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC_OVERLAP:
-      table_use = LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP;
-      break;
-    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRC_AB:
-      table_use = LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB;
-      break;
-    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC:
-    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_UNKNOWN:
-    default:
-      return false;
-  }
-  loom_amdgpu_matrix_wait_profile_t wait_profile =
-      LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950;
-  if (builder->processor != NULL &&
-      !loom_amdgpu_matrix_wait_profile_from_feature_profile(
-          builder->processor->matrix_feature_profile, &wait_profile)) {
+  if (!loom_amdgpu_wait_state_matrix_result_table_use(use, &table_use)) {
     return false;
   }
+  const loom_amdgpu_matrix_wait_profile_t wait_profile =
+      loom_amdgpu_wait_state_matrix_wait_profile(builder);
   return loom_amdgpu_matrix_wait_result_cycle_count(wait_profile, pass_count,
                                                     table_use, out_cycle_count);
 }
@@ -729,7 +752,9 @@ static void loom_amdgpu_wait_state_record_sgpr_assignment(
 static void loom_amdgpu_wait_state_match_active_hazard(
     const loom_amdgpu_wait_state_builder_t* builder,
     const loom_amdgpu_wait_state_hazard_t* hazard,
-    uint16_t required_cycle_count, loom_amdgpu_wait_state_match_t* match) {
+    uint16_t required_cycle_count,
+    loom_amdgpu_matrix_wait_result_use_t matrix_result_use,
+    loom_amdgpu_wait_state_match_t* match) {
   const uint64_t elapsed =
       builder->current_position >= hazard->producer_end_position
           ? builder->current_position - hazard->producer_end_position
@@ -739,12 +764,23 @@ static void loom_amdgpu_wait_state_match_active_hazard(
   }
   const uint16_t remaining = (uint16_t)(required_cycle_count - elapsed);
   if (remaining > match->cycle_count) {
+    loom_amdgpu_matrix_wait_profile_t matrix_wait_profile =
+        LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN;
+    uint16_t matrix_pass_count = 0;
+    if (hazard->reason == LOOM_AMDGPU_WAIT_STATE_REASON_MATRIX_RESULT_USE &&
+        matrix_result_use != LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN) {
+      matrix_wait_profile = loom_amdgpu_wait_state_matrix_wait_profile(builder);
+      matrix_pass_count = hazard->matrix_pass_count;
+    }
     *match = (loom_amdgpu_wait_state_match_t){
         .reason = hazard->reason,
         .producer_node = hazard->producer_node,
         .required_cycle_count = required_cycle_count,
         .observed_cycle_count = (uint16_t)elapsed,
         .cycle_count = remaining,
+        .matrix_wait_profile = matrix_wait_profile,
+        .matrix_result_use = matrix_result_use,
+        .matrix_pass_count = matrix_pass_count,
     };
   }
 }
@@ -780,8 +816,13 @@ static void loom_amdgpu_wait_state_match_assignment(
                                                  hazard->reason))) {
         continue;
       }
-      loom_amdgpu_wait_state_match_active_hazard(
-          builder, hazard, hazard->required_cycle_count, match);
+      const loom_amdgpu_matrix_wait_result_use_t matrix_result_use =
+          hazard->reason == LOOM_AMDGPU_WAIT_STATE_REASON_MATRIX_RESULT_USE
+              ? LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX
+              : LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN;
+      loom_amdgpu_wait_state_match_active_hazard(builder, hazard,
+                                                 hazard->required_cycle_count,
+                                                 matrix_result_use, match);
     }
   }
 }
@@ -818,7 +859,8 @@ static void loom_amdgpu_wait_state_match_sgpr_assignment(
         continue;
       }
       loom_amdgpu_wait_state_match_active_hazard(
-          builder, hazard, hazard->required_cycle_count, match);
+          builder, hazard, hazard->required_cycle_count,
+          LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN, match);
     }
   }
 }
@@ -878,8 +920,14 @@ static void loom_amdgpu_wait_state_match_matrix_result_assignment(
             &required_cycle_count)) {
       continue;
     }
-    loom_amdgpu_wait_state_match_active_hazard(builder, hazard,
-                                               required_cycle_count, match);
+    loom_amdgpu_matrix_wait_result_use_t table_use =
+        LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN;
+    if (!loom_amdgpu_wait_state_matrix_result_table_use(actual_use,
+                                                        &table_use)) {
+      continue;
+    }
+    loom_amdgpu_wait_state_match_active_hazard(
+        builder, hazard, required_cycle_count, table_use, match);
   }
 }
 
@@ -925,6 +973,9 @@ static iree_status_t loom_amdgpu_wait_state_append(
       .required_cycle_count = match->required_cycle_count,
       .observed_cycle_count = match->observed_cycle_count,
       .cycle_count = match->cycle_count,
+      .matrix_wait_profile = match->matrix_wait_profile,
+      .matrix_result_use = match->matrix_result_use,
+      .matrix_pass_count = match->matrix_pass_count,
   };
   builder->current_position += match->cycle_count;
   return iree_ok_status();
@@ -1548,10 +1599,30 @@ static iree_status_t loom_amdgpu_wait_state_write_states_json(
         ",\"block\":%" PRIu32 ",\"node\":%" PRIu32
         ",\"scheduled_ordinal\":%" PRIu32 ",\"producer_node\":%" PRIu32
         ",\"consumer_node\":%" PRIu32 ",\"required\":%" PRIu16
-        ",\"observed\":%" PRIu16 ",\"residual\":%" PRIu16 "}",
+        ",\"observed\":%" PRIu16 ",\"residual\":%" PRIu16,
         state->block_index, state->node_index, state->scheduled_ordinal,
         state->producer_node, state->consumer_node, state->required_cycle_count,
         state->observed_cycle_count, state->cycle_count));
+    if (state->matrix_result_use !=
+        LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN) {
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          stream,
+          ",\"matrix_wait_profile\":%" PRIu32 ",\"matrix_wait_profile_name\":",
+          (uint32_t)state->matrix_wait_profile));
+      IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+          stream,
+          loom_amdgpu_matrix_wait_profile_name(state->matrix_wait_profile)));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          stream,
+          ",\"matrix_result_use\":%" PRIu32 ",\"matrix_result_use_name\":",
+          (uint32_t)state->matrix_result_use));
+      IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+          stream,
+          loom_amdgpu_matrix_wait_result_use_name(state->matrix_result_use)));
+      IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+          stream, ",\"matrix_pass_count\":%" PRIu16, state->matrix_pass_count));
+    }
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_char(stream, '}'));
   }
   return loom_output_stream_write_char(stream, ']');
 }
@@ -1578,12 +1649,24 @@ iree_status_t loom_amdgpu_wait_state_plan_format_text(
         builder,
         "state[%" PRIhsz "] reason=%.*s action=%.*s at=b%" PRIu32 ":n%" PRIu32
         "/o%" PRIu32 " producer=n%" PRIu32 " consumer=n%" PRIu32
-        " required=%" PRIu16 " observed=%" PRIu16 " residual=%" PRIu16 "\n",
+        " required=%" PRIu16 " observed=%" PRIu16 " residual=%" PRIu16,
         i, (int)reason_name.size, reason_name.data, (int)action_name.size,
         action_name.data, state->block_index, state->node_index,
         state->scheduled_ordinal, state->producer_node, state->consumer_node,
         state->required_cycle_count, state->observed_cycle_count,
         state->cycle_count));
+    if (state->matrix_result_use !=
+        LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN) {
+      const iree_string_view_t profile_name =
+          loom_amdgpu_matrix_wait_profile_name(state->matrix_wait_profile);
+      const iree_string_view_t result_use_name =
+          loom_amdgpu_matrix_wait_result_use_name(state->matrix_result_use);
+      IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+          builder, " matrix=%.*s/%.*s/pass%" PRIu16, (int)profile_name.size,
+          profile_name.data, (int)result_use_name.size, result_use_name.data,
+          state->matrix_pass_count));
+    }
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(builder, "\n"));
   }
   return iree_ok_status();
 }

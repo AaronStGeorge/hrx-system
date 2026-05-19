@@ -116,6 +116,36 @@ static const loom_amdgpu_matrix_wait_result_row_t
 
 #undef LOOM_AMDGPU_MATRIX_WAIT_RESULT_ROW
 
+iree_string_view_t loom_amdgpu_matrix_wait_profile_name(
+    loom_amdgpu_matrix_wait_profile_t profile) {
+  switch (profile) {
+    case LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950:
+      return IREE_SV("mfma_pre_gfx950");
+    case LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950:
+      return IREE_SV("mfma_gfx950");
+    case LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN:
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+iree_string_view_t loom_amdgpu_matrix_wait_result_use_name(
+    loom_amdgpu_matrix_wait_result_use_t use) {
+  switch (use) {
+    case LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX:
+      return IREE_SV("non_matrix");
+    case LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT:
+      return IREE_SV("matrix_srcc_exact");
+    case LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP:
+      return IREE_SV("matrix_srcc_overlap");
+    case LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB:
+      return IREE_SV("matrix_src_ab");
+    case LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN:
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
 bool loom_amdgpu_matrix_wait_profile_from_feature_profile(
     loom_amdgpu_matrix_feature_profile_t feature_profile,
     loom_amdgpu_matrix_wait_profile_t* out_profile) {

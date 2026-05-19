@@ -26,6 +26,7 @@
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/packet_hazard_plan.h"
 #include "loom/codegen/low/schedule/types.h"
+#include "loom/target/arch/amdgpu/matrix_wait_states.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -87,6 +88,12 @@ typedef struct loom_amdgpu_wait_state_t {
   uint16_t observed_cycle_count;
   // Residual cycles to wait before |consumer_node|.
   uint16_t cycle_count;
+  // Matrix result wait table profile, or UNKNOWN for non-matrix reasons.
+  loom_amdgpu_matrix_wait_profile_t matrix_wait_profile;
+  // Matrix result use table key, or UNKNOWN for non-matrix reasons.
+  loom_amdgpu_matrix_wait_result_use_t matrix_result_use;
+  // Matrix result pass count used for the wait table lookup.
+  uint16_t matrix_pass_count;
 } loom_amdgpu_wait_state_t;
 
 // AMDGPU fixed wait-state table for one scheduled and allocated low function.

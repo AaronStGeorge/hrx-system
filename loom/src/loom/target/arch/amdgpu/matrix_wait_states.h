@@ -55,6 +55,14 @@ typedef struct loom_amdgpu_matrix_wait_result_row_t {
   uint16_t cycle_count;
 } loom_amdgpu_matrix_wait_result_row_t;
 
+// Returns the stable spelling for a matrix wait profile.
+iree_string_view_t loom_amdgpu_matrix_wait_profile_name(
+    loom_amdgpu_matrix_wait_profile_t profile);
+
+// Returns the stable spelling for a matrix result use.
+iree_string_view_t loom_amdgpu_matrix_wait_result_use_name(
+    loom_amdgpu_matrix_wait_result_use_t use);
+
 // Maps a processor matrix feature profile to the matrix wait table profile.
 bool loom_amdgpu_matrix_wait_profile_from_feature_profile(
     loom_amdgpu_matrix_feature_profile_t feature_profile,

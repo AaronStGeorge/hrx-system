@@ -24,6 +24,21 @@ TEST(AmdgpuMatrixWaitStatesTest, MapsFeatureProfiles) {
   EXPECT_EQ(wait_profile, LOOM_AMDGPU_MATRIX_WAIT_PROFILE_UNKNOWN);
 }
 
+TEST(AmdgpuMatrixWaitStatesTest, NamesTableIds) {
+  EXPECT_TRUE(iree_string_view_equal(
+      loom_amdgpu_matrix_wait_profile_name(
+          LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950),
+      IREE_SV("mfma_pre_gfx950")));
+  EXPECT_TRUE(
+      iree_string_view_equal(loom_amdgpu_matrix_wait_profile_name(
+                                 LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_GFX950),
+                             IREE_SV("mfma_gfx950")));
+  EXPECT_TRUE(iree_string_view_equal(
+      loom_amdgpu_matrix_wait_result_use_name(
+          LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP),
+      IREE_SV("matrix_srcc_overlap")));
+}
+
 TEST(AmdgpuMatrixWaitStatesTest, LooksUpMatrixResultRows) {
   uint16_t cycle_count = 0;
   EXPECT_TRUE(loom_amdgpu_matrix_wait_result_cycle_count(
