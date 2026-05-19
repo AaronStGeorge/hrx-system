@@ -31,6 +31,7 @@ loom_assert_no_dependencies(
     targets = [
         ":assignment",
         ":storage",
+        ":table",
     ],
 )
 
@@ -73,6 +74,33 @@ loom_cc_test(
     deps = [
         ":assignment",
         ":storage",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "table",
+    srcs = ["table.c"],
+    hdrs = ["table.h"],
+    deps = [
+        ":assignment",
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:placement",
+        "//loom/src/loom/codegen/low:storage_lease",
+        "//loom/src/loom/codegen/low:target_binding",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "table_test",
+    srcs = ["table_test.cc"],
+    deps = [
+        ":table",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

@@ -63,4 +63,35 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_library(
+  NAME
+    table
+  HDRS
+    "table.h"
+  SRCS
+    "table.c"
+  DEPS
+    ::assignment
+    iree::base
+    loom::src::loom::analysis::liveness
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::placement
+    loom::src::loom::codegen::low::storage_lease
+    loom::src::loom::codegen::low::target_binding
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    table_test
+  SRCS
+    "table_test.cc"
+  DEPS
+    ::table
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
