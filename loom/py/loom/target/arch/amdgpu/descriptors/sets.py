@@ -1918,12 +1918,20 @@ def _encoded_immediate(
     *,
     bit_width: int | None = None,
     unsigned_max: int | None = None,
+    default_value: int | None = None,
 ) -> Immediate:
+    flags = immediate.flags
+    if default_value is not None and ImmediateFlag.DEFAULT_VALUE not in flags:
+        flags = (*flags, ImmediateFlag.DEFAULT_VALUE)
     return replace(
         immediate,
+        flags=flags,
         encoding_field_id=amdgpu_encoding_field_id(field_name),
         bit_width=immediate.bit_width if bit_width is None else bit_width,
         unsigned_max=immediate.unsigned_max if unsigned_max is None else unsigned_max,
+        default_value=immediate.default_value
+        if default_value is None
+        else default_value,
     )
 
 
@@ -1956,6 +1964,246 @@ def _gfx1250_wmma_scale_immediates() -> tuple[Immediate, ...]:
         _encoded_immediate(_MATRIX_A_REUSE_IMMEDIATE, "MATRIX_A_REUSE"),
         _encoded_immediate(_MATRIX_B_REUSE_IMMEDIATE, "MATRIX_B_REUSE"),
     )
+
+
+def _gfx1250_matrix_reuse_immediates() -> tuple[Immediate, ...]:
+    return (
+        _encoded_immediate(
+            _MATRIX_A_REUSE_IMMEDIATE, "MATRIX_A_REUSE", default_value=0
+        ),
+        _encoded_immediate(
+            _MATRIX_B_REUSE_IMMEDIATE, "MATRIX_B_REUSE", default_value=0
+        ),
+    )
+
+
+def _gfx1250_swmmac_index_immediate(field_name: str) -> Immediate:
+    # gfx1250 SWMMAC index-key variants share encoding bit 11.
+    return _encoded_immediate(
+        Immediate(
+            field_name,
+            ImmediateKind.UNSIGNED,
+            bit_width=32,
+            unsigned_max=(2**32) - 1,
+        ),
+        "INDEX_KEY_16BIT",
+        bit_width=1,
+        unsigned_max=1,
+        default_value=0,
+    )
+
+
+_GFX1250_MATRIX_REUSE_IMMEDIATE_FIELDS = ("matrix_a_reuse", "matrix_b_reuse")
+
+_GFX1250_WMMA_ROWS = (
+    ("f32.16x16x4.f32", 0x5D, 2, 2, 8, 8, True),
+    ("f32.16x16x32.f16", 0x60, 8, 8, 8, 8, True),
+    ("f16.16x16x32.f16", 0x61, 8, 8, 4, 4, True),
+    ("f32.16x16x32.bf16", 0x62, 8, 8, 8, 8, True),
+    ("bf16.16x16x32.bf16", 0x63, 8, 8, 4, 4, True),
+    ("bf16f32.16x16x32.bf16", 0x64, 8, 8, 8, 4, True),
+    ("f32.16x16x64.fp8.fp8", 0x6A, 8, 8, 8, 8, True),
+    ("f32.16x16x64.fp8.bf8", 0x6B, 8, 8, 8, 8, True),
+    ("f32.16x16x64.bf8.fp8", 0x6C, 8, 8, 8, 8, True),
+    ("f32.16x16x64.bf8.bf8", 0x6D, 8, 8, 8, 8, True),
+    ("f16.16x16x64.fp8.fp8", 0x6E, 8, 8, 4, 4, True),
+    ("f16.16x16x64.fp8.bf8", 0x6F, 8, 8, 4, 4, True),
+    ("f16.16x16x64.bf8.fp8", 0x70, 8, 8, 4, 4, True),
+    ("f16.16x16x64.bf8.bf8", 0x71, 8, 8, 4, 4, True),
+    ("i32.16x16x64.iu8", 0x72, 8, 8, 8, 8, True),
+    ("f32.16x16x128.fp8.fp8", 0x80, 16, 16, 8, 8, True),
+    ("f32.16x16x128.fp8.bf8", 0x81, 16, 16, 8, 8, True),
+    ("f32.16x16x128.bf8.fp8", 0x82, 16, 16, 8, 8, True),
+    ("f32.16x16x128.bf8.bf8", 0x83, 16, 16, 8, 8, True),
+    ("f16.16x16x128.fp8.fp8", 0x84, 16, 16, 4, 4, True),
+    ("f16.16x16x128.fp8.bf8", 0x85, 16, 16, 4, 4, True),
+    ("f16.16x16x128.bf8.fp8", 0x86, 16, 16, 4, 4, True),
+    ("f16.16x16x128.bf8.bf8", 0x87, 16, 16, 4, 4, True),
+    ("f32.32x16x128.f4", 0x88, 16, 8, 16, 16, False),
+)
+
+
+def _gfx1250_wmma_descriptor(
+    name: str,
+    encoding_id: int,
+    lhs_units: int,
+    rhs_units: int,
+    accumulator_units: int,
+    result_units: int,
+    has_reuse_immediates: bool,
+) -> Descriptor:
+    suffix = name.replace(".", "_")
+    immediates = _gfx1250_matrix_reuse_immediates() if has_reuse_immediates else ()
+    immediate_fields = (
+        _GFX1250_MATRIX_REUSE_IMMEDIATE_FIELDS if has_reuse_immediates else ()
+    )
+    return Descriptor(
+        key=f"amdgpu.v_wmma_{suffix}",
+        mnemonic=f"v_wmma_{suffix}",
+        semantic_tag=f"matrix.wmma.{name}",
+        operands=(
+            _encoded_operand(_vgpr_result(units=result_units), "VDST"),
+            _encoded_operand(_vgpr_operand("a", units=lhs_units), "SRC0"),
+            _encoded_operand(_vgpr_operand("b", units=rhs_units), "SRC1"),
+            _encoded_operand(
+                _vgpr_const_operand("acc", units=accumulator_units), "SRC2"
+            ),
+        ),
+        immediates=immediates,
+        constraints=_destructive_accumulator_constraints(3),
+        encoding_field_values=(
+            EncodingFieldValue(amdgpu_encoding_field_id("OPSEL_HI"), 3),
+        ),
+        asm_forms=_asm(
+            results=("dst",),
+            operands=("a", "b", "acc"),
+            immediates=immediate_fields,
+            named_immediates=True,
+        ),
+        schedule_class=_SCHEDULE_WMMA,
+        encoding_format_id=AMDGPU_ENCODING_FORMAT_VOP3P,
+        encoding_id=encoding_id,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _gfx1250_wmma_descriptors() -> tuple[Descriptor, ...]:
+    return tuple(_gfx1250_wmma_descriptor(*row) for row in _GFX1250_WMMA_ROWS)
+
+
+_GFX1250_WMMA_SCALE_ROWS = (
+    ("scale.f32.16x16x128.f8f6f4.f8.f8", 0x33, 0x35, 16, 16, 8, 8, 1),
+    ("scale16.f32.16x16x128.f8f6f4.f8.f8", 0x33, 0x3A, 16, 16, 8, 8, 2),
+    ("scale.f32.32x16x128.f4", 0x88, 0x35, 16, 8, 16, 16, 1),
+    ("scale16.f32.32x16x128.f4", 0x88, 0x3A, 16, 8, 16, 16, 2),
+)
+
+
+def _gfx1250_wmma_scale_descriptor(
+    name: str,
+    encoding_id: int,
+    x2_encoding: int,
+    lhs_units: int,
+    rhs_units: int,
+    accumulator_units: int,
+    result_units: int,
+    scale_units: int,
+) -> Descriptor:
+    suffix = name.replace(".", "_")
+    return Descriptor(
+        key=f"amdgpu.v_wmma_{suffix}",
+        mnemonic=f"v_wmma_{suffix}",
+        semantic_tag=f"matrix.wmma.{name}",
+        operands=(
+            _encoded_operand(_vgpr_result(units=result_units), "VDST"),
+            _encoded_operand(_vgpr_operand("a", units=lhs_units), "SRC0"),
+            _encoded_operand(_vgpr_operand("b", units=rhs_units), "SRC1"),
+            _encoded_operand(
+                _vgpr_const_operand("acc", units=accumulator_units), "SRC2"
+            ),
+            _encoded_operand(
+                _sgpr_vgpr_operand("scale_src0", units=scale_units), "SCALE_SRC0"
+            ),
+            _encoded_operand(
+                _sgpr_vgpr_operand("scale_src1", units=scale_units), "SCALE_SRC1"
+            ),
+        ),
+        immediates=_gfx1250_wmma_scale_immediates(),
+        encoding_field_values=(
+            EncodingFieldValue(amdgpu_encoding_field_id("X2ENCODING"), x2_encoding),
+        ),
+        constraints=_destructive_accumulator_constraints(3),
+        asm_forms=_asm(
+            results=("dst",),
+            operands=("a", "b", "acc", "scale_src0", "scale_src1"),
+            immediates=(
+                "matrix_a_fmt",
+                "matrix_b_fmt",
+                "matrix_a_scale",
+                "matrix_b_scale",
+                "matrix_a_scale_fmt",
+                "matrix_b_scale_fmt",
+                "matrix_a_reuse",
+                "matrix_b_reuse",
+            ),
+            named_immediates=True,
+        ),
+        schedule_class=_SCHEDULE_WMMA_SCALE,
+        encoding_format_id=AMDGPU_ENCODING_FORMAT_VOP3PX2,
+        encoding_id=encoding_id,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _gfx1250_wmma_scale_descriptors() -> tuple[Descriptor, ...]:
+    return tuple(
+        _gfx1250_wmma_scale_descriptor(*row) for row in _GFX1250_WMMA_SCALE_ROWS
+    )
+
+
+_GFX1250_SWMMAC_ROWS = (
+    ("f32.16x16x64.f16", 0x65, 8, 16, 8, 8, "index_key_16bit", 1),
+    ("f32.16x16x64.bf16", 0x66, 8, 16, 8, 8, "index_key_16bit", 1),
+    ("f16.16x16x64.f16", 0x67, 8, 16, 4, 4, "index_key_16bit", 1),
+    ("bf16.16x16x64.bf16", 0x68, 8, 16, 4, 4, "index_key_16bit", 1),
+    ("bf16f32.16x16x64.bf16", 0x69, 8, 16, 8, 8, "index_key_16bit", 1),
+    ("f32.16x16x128.fp8.fp8", 0x73, 8, 16, 8, 8, "index_key_32bit", 2),
+    ("f32.16x16x128.fp8.bf8", 0x74, 8, 16, 8, 8, "index_key_32bit", 2),
+    ("f32.16x16x128.bf8.fp8", 0x75, 8, 16, 8, 8, "index_key_32bit", 2),
+    ("f32.16x16x128.bf8.bf8", 0x76, 8, 16, 8, 8, "index_key_32bit", 2),
+    ("f16.16x16x128.fp8.fp8", 0x77, 8, 16, 4, 4, "index_key_32bit", 2),
+    ("f16.16x16x128.fp8.bf8", 0x78, 8, 16, 4, 4, "index_key_32bit", 2),
+    ("f16.16x16x128.bf8.fp8", 0x79, 8, 16, 4, 4, "index_key_32bit", 2),
+    ("f16.16x16x128.bf8.bf8", 0x7A, 8, 16, 4, 4, "index_key_32bit", 2),
+    ("i32.16x16x128.iu8", 0x7B, 8, 16, 8, 8, "index_key_32bit", 2),
+)
+
+
+def _gfx1250_swmmac_descriptor(
+    name: str,
+    encoding_id: int,
+    lhs_units: int,
+    rhs_units: int,
+    accumulator_units: int,
+    result_units: int,
+    index_immediate: str,
+    index_units: int,
+) -> Descriptor:
+    suffix = name.replace(".", "_")
+    return Descriptor(
+        key=f"amdgpu.v_swmmac_{suffix}",
+        mnemonic=f"v_swmmac_{suffix}",
+        semantic_tag=f"matrix.swmmac.{name}",
+        operands=(
+            _encoded_operand(_vgpr_result(units=result_units), "VDST"),
+            _encoded_operand(_vgpr_operand("acc", units=accumulator_units), "VDST"),
+            _encoded_operand(_vgpr_operand("a", units=lhs_units), "SRC0"),
+            _encoded_operand(_vgpr_operand("b", units=rhs_units), "SRC1"),
+            _encoded_operand(_sgpr_vgpr_operand("index", units=index_units), "SRC2"),
+        ),
+        immediates=(
+            _gfx1250_swmmac_index_immediate(index_immediate),
+            *_gfx1250_matrix_reuse_immediates(),
+        ),
+        constraints=_DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS,
+        encoding_field_values=(
+            EncodingFieldValue(amdgpu_encoding_field_id("OPSEL_HI"), 3),
+        ),
+        asm_forms=_asm(
+            results=("dst",),
+            operands=("acc", "a", "b", "index"),
+            immediates=(index_immediate, *_GFX1250_MATRIX_REUSE_IMMEDIATE_FIELDS),
+            named_immediates=True,
+        ),
+        schedule_class=_SCHEDULE_SWMMAC,
+        encoding_format_id=AMDGPU_ENCODING_FORMAT_VOP3P,
+        encoding_id=encoding_id,
+        flags=(DescriptorFlag.DEAD_REMOVABLE,),
+    )
+
+
+def _gfx1250_swmmac_descriptors() -> tuple[Descriptor, ...]:
+    return tuple(_gfx1250_swmmac_descriptor(*row) for row in _GFX1250_SWMMAC_ROWS)
 
 
 def _gfx125x_reg_classes() -> tuple[RegClass, ...]:
@@ -2002,144 +2250,9 @@ _AMDGPU_RDNA4_GFX125X_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
     ),
     descriptors=(
         _s_set_vgpr_msb_descriptor(),
-        Descriptor(
-            key="amdgpu.v_wmma_f32_16x16x32_f16",
-            mnemonic="v_wmma_f32_16x16x32_f16",
-            semantic_tag="matrix.wmma.f32.16x16x32.f16",
-            operands=(
-                _encoded_operand(_vgpr_result(units=8), "VDST"),
-                _encoded_operand(_vgpr_operand("a", units=8), "SRC0"),
-                _encoded_operand(_vgpr_operand("b", units=8), "SRC1"),
-                _encoded_operand(_vgpr_const_operand("acc", units=8), "SRC2"),
-            ),
-            constraints=_destructive_accumulator_constraints(3),
-            encoding_field_values=(
-                EncodingFieldValue(amdgpu_encoding_field_id("OPSEL_HI"), 3),
-            ),
-            asm_forms=_asm(results=("dst",), operands=("a", "b", "acc")),
-            schedule_class=_SCHEDULE_WMMA,
-            encoding_format_id=AMDGPU_ENCODING_FORMAT_VOP3P,
-            encoding_id=0x60,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="amdgpu.v_wmma_scale_f32_16x16x128_f8f6f4_f8_f8",
-            mnemonic="v_wmma_scale_f32_16x16x128_f8f6f4_f8_f8",
-            semantic_tag="matrix.wmma.scale.f32.16x16x128.f8f6f4.f8.f8",
-            operands=(
-                _encoded_operand(_vgpr_result(units=8), "VDST"),
-                _encoded_operand(_vgpr_operand("a", units=16), "SRC0"),
-                _encoded_operand(_vgpr_operand("b", units=16), "SRC1"),
-                _encoded_operand(_vgpr_const_operand("acc", units=8), "SRC2"),
-                _encoded_operand(_sgpr_vgpr_operand("scale_src0"), "SCALE_SRC0"),
-                _encoded_operand(_sgpr_vgpr_operand("scale_src1"), "SCALE_SRC1"),
-            ),
-            immediates=_gfx1250_wmma_scale_immediates(),
-            encoding_field_values=(
-                EncodingFieldValue(amdgpu_encoding_field_id("X2ENCODING"), 0x35),
-            ),
-            constraints=_destructive_accumulator_constraints(3),
-            asm_forms=_asm(
-                results=("dst",),
-                operands=("a", "b", "acc", "scale_src0", "scale_src1"),
-                immediates=(
-                    "matrix_a_fmt",
-                    "matrix_b_fmt",
-                    "matrix_a_scale",
-                    "matrix_b_scale",
-                    "matrix_a_scale_fmt",
-                    "matrix_b_scale_fmt",
-                    "matrix_a_reuse",
-                    "matrix_b_reuse",
-                ),
-                named_immediates=True,
-            ),
-            schedule_class=_SCHEDULE_WMMA_SCALE,
-            encoding_format_id=AMDGPU_ENCODING_FORMAT_VOP3PX2,
-            encoding_id=0x33,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="amdgpu.v_wmma_scale16_f32_16x16x128_f8f6f4_f8_f8",
-            mnemonic="v_wmma_scale16_f32_16x16x128_f8f6f4_f8_f8",
-            semantic_tag="matrix.wmma.scale16.f32.16x16x128.f8f6f4.f8.f8",
-            operands=(
-                _encoded_operand(_vgpr_result(units=8), "VDST"),
-                _encoded_operand(_vgpr_operand("a", units=16), "SRC0"),
-                _encoded_operand(_vgpr_operand("b", units=16), "SRC1"),
-                _encoded_operand(_vgpr_const_operand("acc", units=8), "SRC2"),
-                _encoded_operand(
-                    _sgpr_vgpr_operand("scale_src0", units=2), "SCALE_SRC0"
-                ),
-                _encoded_operand(
-                    _sgpr_vgpr_operand("scale_src1", units=2), "SCALE_SRC1"
-                ),
-            ),
-            immediates=_gfx1250_wmma_scale_immediates(),
-            encoding_field_values=(
-                EncodingFieldValue(amdgpu_encoding_field_id("X2ENCODING"), 0x3A),
-            ),
-            constraints=_destructive_accumulator_constraints(3),
-            asm_forms=_asm(
-                results=("dst",),
-                operands=("a", "b", "acc", "scale_src0", "scale_src1"),
-                immediates=(
-                    "matrix_a_fmt",
-                    "matrix_b_fmt",
-                    "matrix_a_scale",
-                    "matrix_b_scale",
-                    "matrix_a_scale_fmt",
-                    "matrix_b_scale_fmt",
-                    "matrix_a_reuse",
-                    "matrix_b_reuse",
-                ),
-                named_immediates=True,
-            ),
-            schedule_class=_SCHEDULE_WMMA_SCALE,
-            encoding_format_id=AMDGPU_ENCODING_FORMAT_VOP3PX2,
-            encoding_id=0x33,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
-        Descriptor(
-            key="amdgpu.v_swmmac_f32_16x16x64_f16",
-            mnemonic="v_swmmac_f32_16x16x64_f16",
-            semantic_tag="matrix.swmmac.f32.16x16x64.f16",
-            operands=(
-                _encoded_operand(_vgpr_result(units=8), "VDST"),
-                _encoded_operand(_vgpr_operand("acc", units=8), "VDST"),
-                _encoded_operand(_vgpr_operand("a", units=8), "SRC0"),
-                _encoded_operand(_vgpr_operand("b", units=16), "SRC1"),
-                _encoded_operand(_sgpr_vgpr_operand("index"), "SRC2"),
-            ),
-            immediates=(
-                _encoded_immediate(
-                    _INDEX_KEY_16_IMMEDIATE,
-                    "INDEX_KEY_16BIT",
-                    bit_width=1,
-                    unsigned_max=1,
-                ),
-                _encoded_immediate(_MATRIX_A_REUSE_IMMEDIATE, "MATRIX_A_REUSE"),
-                _encoded_immediate(_MATRIX_B_REUSE_IMMEDIATE, "MATRIX_B_REUSE"),
-            ),
-            constraints=_DESTRUCTIVE_ACCUMULATOR_CONSTRAINTS,
-            encoding_field_values=(
-                EncodingFieldValue(amdgpu_encoding_field_id("OPSEL_HI"), 3),
-            ),
-            asm_forms=_asm(
-                results=("dst",),
-                operands=("acc", "a", "b", "index"),
-                immediates=(
-                    "index_key_16bit",
-                    "matrix_a_reuse",
-                    "matrix_b_reuse",
-                ),
-                named_immediates=True,
-            ),
-            schedule_class=_SCHEDULE_SWMMAC,
-            encoding_format_id=AMDGPU_ENCODING_FORMAT_VOP3P,
-            encoding_id=0x65,
-            flags=(DescriptorFlag.DEAD_REMOVABLE,),
-        ),
+        *_gfx1250_wmma_descriptors(),
+        *_gfx1250_wmma_scale_descriptors(),
+        *_gfx1250_swmmac_descriptors(),
     ),
 )
 

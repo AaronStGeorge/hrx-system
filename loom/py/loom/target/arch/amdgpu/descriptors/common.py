@@ -1497,13 +1497,6 @@ _MATRIX_B_REUSE_IMMEDIATE = Immediate(
     unsigned_max=1,
 )
 
-_INDEX_KEY_16_IMMEDIATE = Immediate(
-    "index_key_16bit",
-    ImmediateKind.UNSIGNED,
-    bit_width=32,
-    unsigned_max=(2**32) - 1,
-)
-
 _GLOBAL_LOAD_EFFECT = Effect(
     EffectKind.READ,
     memory_space=MemorySpace.GLOBAL,
@@ -2364,7 +2357,6 @@ __all__ = (
     "_IGNORE_GLOBAL_WRITE_MEMORY_B16",
     "_IGNORE_GLOBAL_WRITE_MEMORY_B8",
     "_IGNORE_GLOBAL_WRITE_MEMORY_B64",
-    "_INDEX_KEY_16_IMMEDIATE",
     "_INSTRUCTION_PREFETCH_EFFECT",
     "_KMCNT_IMMEDIATE",
     "_LDS_COUNTER_HAZARD",
