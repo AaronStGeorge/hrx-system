@@ -273,6 +273,33 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_library(
+  NAME
+    interval_order
+  HDRS
+    "interval_order.h"
+  SRCS
+    "interval_order.c"
+  DEPS
+    ::live_range
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::liveness
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    interval_order_test
+  SRCS
+    "interval_order_test.cc"
+  DEPS
+    ::interval_order
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_test(
   NAME
     live_range_test

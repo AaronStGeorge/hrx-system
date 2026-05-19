@@ -13,6 +13,7 @@
 #include "loom/codegen/low/allocation/assignment_map.h"
 #include "loom/codegen/low/allocation/copy_decision.h"
 #include "loom/codegen/low/allocation/edge_copy.h"
+#include "loom/codegen/low/allocation/interval_order.h"
 #include "loom/codegen/low/allocation/packet_move.h"
 #include "loom/codegen/low/allocation/spill_plan.h"
 #include "loom/codegen/low/allocation/storage_lease.h"
@@ -153,31 +154,6 @@ static iree_status_t loom_low_allocation_validate_synthesis_mode(
       "low allocation synthesis requires allocation(virtual), but function has "
       "allocation(%s)",
       loom_low_allocation_mode_name(allocation_mode));
-}
-
-static bool loom_low_allocation_interval_less(
-    const loom_liveness_interval_t* lhs, const loom_liveness_interval_t* rhs) {
-  if (lhs->start_point != rhs->start_point) {
-    return lhs->start_point < rhs->start_point;
-  }
-  if (lhs->end_point != rhs->end_point) {
-    return lhs->end_point < rhs->end_point;
-  }
-  return lhs->value_id < rhs->value_id;
-}
-
-static void loom_low_allocation_sort_intervals(
-    const loom_liveness_interval_t** intervals, iree_host_size_t count) {
-  for (iree_host_size_t i = 1; i < count; ++i) {
-    const loom_liveness_interval_t* value = intervals[i];
-    iree_host_size_t j = i;
-    while (j > 0 &&
-           loom_low_allocation_interval_less(value, intervals[j - 1])) {
-      intervals[j] = intervals[j - 1];
-      --j;
-    }
-    intervals[j] = value;
-  }
 }
 
 static bool loom_low_allocation_candidate_conflicts(
@@ -1805,33 +1781,19 @@ static iree_status_t loom_low_allocation_assign_structural_interval(
 
 static iree_status_t loom_low_allocation_assign_intervals(
     loom_low_allocation_build_state_t* state) {
-  iree_host_size_t allocatable_count = 0;
-  iree_host_size_t allocatable_unit_count = 0;
-  for (iree_host_size_t i = 0; i < state->liveness.interval_count; ++i) {
-    if (loom_low_allocation_live_range_interval_is_allocatable(
-            &state->liveness.intervals[i])) {
-      ++allocatable_count;
-      if (state->liveness.intervals[i].unit_count >
-          IREE_HOST_SIZE_MAX - allocatable_unit_count) {
-        return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                "allocation unit count exceeds host size");
-      }
-      allocatable_unit_count += state->liveness.intervals[i].unit_count;
-    }
-  }
-  if (allocatable_count == 0) {
+  loom_low_allocation_interval_order_t order = {0};
+  IREE_RETURN_IF_ERROR(loom_low_allocation_interval_order_build(
+      &state->liveness, state->arena, &order));
+  if (order.interval_count == 0) {
     return iree_ok_status();
   }
 
-  const loom_liveness_interval_t** intervals = NULL;
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      state->arena, allocatable_count, sizeof(*intervals), (void**)&intervals));
   state->assignments = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      state->arena, allocatable_count, sizeof(*state->assignments),
+      state->arena, order.interval_count, sizeof(*state->assignments),
       (void**)&state->assignments));
   memset(state->assignments, 0,
-         allocatable_count * sizeof(*state->assignments));
+         order.interval_count * sizeof(*state->assignments));
   state->assignment_indices_by_value_ordinal = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
       state->arena, state->liveness.value_count,
@@ -1849,30 +1811,21 @@ static iree_status_t loom_low_allocation_assign_intervals(
           state->assignment_indices_by_value_ordinal,
   };
   IREE_RETURN_IF_ERROR(loom_low_allocation_active_set_initialize(
-      allocatable_count, allocatable_unit_count, state->arena, &state->active));
+      order.interval_count, order.unit_count, state->arena, &state->active));
   state->spill_plans = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      state->arena, allocatable_count, sizeof(*state->spill_plans),
+      state->arena, order.interval_count, sizeof(*state->spill_plans),
       (void**)&state->spill_plans));
   memset(state->spill_plans, 0,
-         allocatable_count * sizeof(*state->spill_plans));
+         order.interval_count * sizeof(*state->spill_plans));
   state->remarks = NULL;
   IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      state->arena, allocatable_count, sizeof(*state->remarks),
+      state->arena, order.interval_count, sizeof(*state->remarks),
       (void**)&state->remarks));
-  memset(state->remarks, 0, allocatable_count * sizeof(*state->remarks));
+  memset(state->remarks, 0, order.interval_count * sizeof(*state->remarks));
 
-  iree_host_size_t interval_index = 0;
-  for (iree_host_size_t i = 0; i < state->liveness.interval_count; ++i) {
-    const loom_liveness_interval_t* interval = &state->liveness.intervals[i];
-    if (loom_low_allocation_live_range_interval_is_allocatable(interval)) {
-      intervals[interval_index++] = interval;
-    }
-  }
-  loom_low_allocation_sort_intervals(intervals, allocatable_count);
-
-  for (iree_host_size_t i = 0; i < allocatable_count; ++i) {
-    const loom_liveness_interval_t* interval = intervals[i];
+  for (iree_host_size_t i = 0; i < order.interval_count; ++i) {
+    const loom_liveness_interval_t* interval = order.intervals[i];
     loom_low_allocation_active_set_expire(&state->active, state->assignments,
                                           state->assignment_count,
                                           interval->start_point);

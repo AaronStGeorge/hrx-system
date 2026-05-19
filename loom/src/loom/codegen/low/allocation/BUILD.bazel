@@ -36,6 +36,7 @@ loom_assert_no_dependencies(
         ":copy_decision",
         ":diagnostics",
         ":edge_copy",
+        ":interval_order",
         ":live_range",
         ":move_topology",
         ":packet_move",
@@ -273,6 +274,29 @@ loom_cc_library(
         "//loom/src/loom/codegen/low:descriptors",
         "//loom/src/loom/ir",
         "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "interval_order",
+    srcs = ["interval_order.c"],
+    hdrs = ["interval_order.h"],
+    deps = [
+        ":live_range",
+        "//loom/src/loom/analysis:liveness",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "interval_order_test",
+    srcs = ["interval_order_test.cc"],
+    deps = [
+        ":interval_order",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 
