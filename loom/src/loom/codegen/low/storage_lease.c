@@ -178,6 +178,53 @@ static iree_status_t loom_low_storage_lease_append_event(
   return iree_ok_status();
 }
 
+iree_status_t loom_low_storage_lease_query_descriptor_rows(
+    void* user_data, const loom_low_schedule_table_t* schedule,
+    const loom_low_schedule_node_t* node, loom_low_storage_lease_emit_fn_t emit,
+    void* emit_user_data) {
+  (void)user_data;
+  if (schedule == NULL || node == NULL || node->descriptor == NULL ||
+      schedule->target.descriptor_set == NULL) {
+    return iree_ok_status();
+  }
+  const loom_low_descriptor_set_t* descriptor_set =
+      schedule->target.descriptor_set;
+  const loom_low_descriptor_t* descriptor = node->descriptor;
+  if (descriptor->storage_lease_count == 0) {
+    return iree_ok_status();
+  }
+  if (descriptor->storage_lease_start > descriptor_set->storage_lease_count ||
+      descriptor->storage_lease_count > descriptor_set->storage_lease_count -
+                                            descriptor->storage_lease_start) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "descriptor storage-lease range is out of bounds");
+  }
+  for (uint16_t i = 0; i < descriptor->storage_lease_count; ++i) {
+    const loom_low_descriptor_storage_lease_t* row =
+        &descriptor_set->storage_leases[descriptor->storage_lease_start + i];
+    const loom_low_storage_lease_event_t event = {
+        .kind = row->kind,
+        .attachment = row->attachment,
+        .attachment_index = row->attachment_index,
+        .unit_offset = row->unit_offset,
+        .unit_count = row->unit_count,
+        .release_scope = row->release_scope,
+        .release_class_id = row->release_class_id,
+        .release_class_name = loom_low_descriptor_set_string(
+            descriptor_set, row->release_class_name_string_offset),
+        .release_action_id = row->release_action_id,
+        .release_action_name = loom_low_descriptor_set_string(
+            descriptor_set, row->release_action_name_string_offset),
+        .release_reason_id = row->release_reason_id,
+        .release_reason_name = loom_low_descriptor_set_string(
+            descriptor_set, row->release_reason_name_string_offset),
+        .flags = row->flags,
+    };
+    IREE_RETURN_IF_ERROR(emit(emit_user_data, &event));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_storage_lease_run_pass(
     loom_low_storage_lease_build_state_t* state,
     loom_low_storage_lease_emit_fn_t emit) {

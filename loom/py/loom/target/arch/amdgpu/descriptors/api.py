@@ -310,6 +310,262 @@ def _validate_gfx125x_vgpr_msb_address_state(descriptor_set: DescriptorSet) -> N
             )
 
 
+_AMDGPU_WAIT_COUNTER_MASKS = {
+    _COUNTER_VMEM_LOAD: 1 << 0,
+    _COUNTER_VMEM_STORE: 1 << 1,
+    _COUNTER_LDS: 1 << 2,
+    _COUNTER_SMEM: 1 << 3,
+    _COUNTER_ALU: 1 << 4,
+}
+
+_AMDGPU_READ_COUNTER_MASK = (
+    _AMDGPU_WAIT_COUNTER_MASKS[_COUNTER_VMEM_LOAD]
+    | _AMDGPU_WAIT_COUNTER_MASKS[_COUNTER_LDS]
+    | _AMDGPU_WAIT_COUNTER_MASKS[_COUNTER_SMEM]
+)
+
+_AMDGPU_WRITE_COUNTER_MASK = (
+    _AMDGPU_WAIT_COUNTER_MASKS[_COUNTER_VMEM_STORE]
+    | _AMDGPU_WAIT_COUNTER_MASKS[_COUNTER_LDS]
+)
+
+_AMDGPU_STORAGE_LEASE_MEMORY_SPACES = frozenset(
+    (
+        MemorySpace.GENERIC,
+        MemorySpace.GLOBAL,
+        MemorySpace.STACK,
+        MemorySpace.WORKGROUP,
+    )
+)
+
+_AMDGPU_WAIT_COUNTER_PROGRESS_CLASS_NAMES = {
+    _COUNTER_VMEM_LOAD: "amdgpu.vmem_load",
+    _COUNTER_VMEM_STORE: "amdgpu.vmem_store",
+    _COUNTER_LDS: "amdgpu.lds",
+    _COUNTER_SMEM: "amdgpu.smem",
+    _COUNTER_ALU: "amdgpu.alu",
+}
+
+_AMDGPU_WAIT_PLAN_RESIDUAL_ACTION_WAIT_PACKET = 1
+_AMDGPU_WAIT_PLAN_RESIDUAL_ACTION_WAIT_PACKET_NAME = "amdgpu.wait_packet"
+_AMDGPU_WAIT_PLAN_REASON_STORE_SOURCE_REUSE = 4
+_AMDGPU_WAIT_PLAN_REASON_STORE_SOURCE_REUSE_NAME = "amdgpu.store_source_reuse"
+_AMDGPU_WAIT_PLAN_REASON_READ_RESULT_REUSE = 5
+_AMDGPU_WAIT_PLAN_REASON_READ_RESULT_REUSE_NAME = "amdgpu.read_result_reuse"
+_AMDGPU_STORAGE_LEASE_FLAGS = (
+    StorageLeaseFlag.STARTS_AT_ISSUE,
+    StorageLeaseFlag.RELEASE_BEFORE_BOUNDARY,
+)
+
+
+def _amdgpu_wait_counter_mask(counter_id: int) -> int:
+    try:
+        return _AMDGPU_WAIT_COUNTER_MASKS[counter_id]
+    except KeyError as exc:
+        raise ValueError(f"unknown AMDGPU wait counter id {counter_id}") from exc
+
+
+def _amdgpu_descriptor_hazard_counter_mask(
+    schedule_classes: dict[str, ScheduleClass],
+    descriptor: Descriptor,
+) -> int:
+    schedule_class = schedule_classes[descriptor.schedule_class]
+    counter_mask = 0
+    for hazard in schedule_class.hazards:
+        if hazard.kind is not HazardKind.WAIT_COUNTER:
+            continue
+        if hazard.counter_id is None:
+            raise ValueError(
+                f"AMDGPU descriptor '{descriptor.key}' schedule class "
+                f"'{schedule_class.name}' has a wait-counter hazard without a "
+                "counter id"
+            )
+        counter_mask |= _amdgpu_wait_counter_mask(hazard.counter_id)
+    return counter_mask
+
+
+def _amdgpu_storage_lease_effect_is_dependency_memory(effect: Effect) -> bool:
+    return (
+        EffectFlag.DEPENDENCY in effect.flags
+        and effect.memory_space in _AMDGPU_STORAGE_LEASE_MEMORY_SPACES
+    )
+
+
+def _amdgpu_effect_counter_mask(
+    descriptor: Descriptor,
+    effect: Effect,
+    default_counter_mask: int,
+    allowed_counter_mask: int,
+) -> int:
+    if effect.counter_id == 0:
+        counter_mask = default_counter_mask & allowed_counter_mask
+        if counter_mask == 0:
+            raise ValueError(
+                f"AMDGPU dependency memory effect on descriptor "
+                f"'{descriptor.key}' has no matching wait-counter hazard"
+            )
+        return counter_mask
+    return _amdgpu_wait_counter_mask(effect.counter_id)
+
+
+def _amdgpu_storage_lease_counter_masks(
+    schedule_classes: dict[str, ScheduleClass],
+    descriptor: Descriptor,
+) -> tuple[int, int]:
+    hazard_counter_mask = _amdgpu_descriptor_hazard_counter_mask(
+        schedule_classes, descriptor
+    )
+    read_counter_mask = 0
+    write_counter_mask = 0
+    for effect in descriptor.effects:
+        if not _amdgpu_storage_lease_effect_is_dependency_memory(effect):
+            continue
+        if effect.kind is EffectKind.READ:
+            read_counter_mask |= _amdgpu_effect_counter_mask(
+                descriptor,
+                effect,
+                hazard_counter_mask,
+                _AMDGPU_READ_COUNTER_MASK,
+            )
+        elif effect.kind is EffectKind.WRITE:
+            write_counter_mask |= _amdgpu_effect_counter_mask(
+                descriptor,
+                effect,
+                hazard_counter_mask,
+                _AMDGPU_WRITE_COUNTER_MASK,
+            )
+    return read_counter_mask, write_counter_mask
+
+
+def _amdgpu_storage_lease(
+    *,
+    kind: StorageLeaseKind,
+    attachment: StorageLeaseAttachment,
+    attachment_index: int,
+    unit_count: int,
+    release_class_id: int,
+    release_reason_id: int,
+    release_reason_name: str,
+) -> StorageLease:
+    return StorageLease(
+        kind=kind,
+        attachment=attachment,
+        attachment_index=attachment_index,
+        unit_offset=0,
+        unit_count=unit_count,
+        release_scope=StorageLeaseReleaseScope.PROGRESS_CLASS,
+        release_class_id=release_class_id,
+        release_class_name=_AMDGPU_WAIT_COUNTER_PROGRESS_CLASS_NAMES[release_class_id],
+        release_action_id=_AMDGPU_WAIT_PLAN_RESIDUAL_ACTION_WAIT_PACKET,
+        release_action_name=_AMDGPU_WAIT_PLAN_RESIDUAL_ACTION_WAIT_PACKET_NAME,
+        release_reason_id=release_reason_id,
+        release_reason_name=release_reason_name,
+        flags=_AMDGPU_STORAGE_LEASE_FLAGS,
+    )
+
+
+def _amdgpu_operand_is_packet_input(operand: Operand) -> bool:
+    return OperandFlag.IMPLICIT not in operand.flags and operand.role in (
+        OperandRole.OPERAND,
+        OperandRole.PREDICATE,
+        OperandRole.RESOURCE,
+    )
+
+
+def _amdgpu_operand_accepts_vgpr(operand: Operand) -> bool:
+    return any(
+        reg_alt.reg_class == _REG_VGPR
+        and RegClassAltFlag.IMMEDIATE not in reg_alt.flags
+        for reg_alt in operand.reg_alts
+    )
+
+
+def _amdgpu_descriptor_storage_leases(
+    schedule_classes: dict[str, ScheduleClass],
+    descriptor: Descriptor,
+) -> tuple[StorageLease, ...]:
+    if descriptor.storage_leases:
+        raise ValueError(
+            f"AMDGPU descriptor '{descriptor.key}' already has storage lease rows"
+        )
+    read_counter_mask, write_counter_mask = _amdgpu_storage_lease_counter_masks(
+        schedule_classes, descriptor
+    )
+    storage_leases: list[StorageLease] = []
+    for result_index, result in enumerate(
+        descriptor.operands[: _descriptor_result_count(descriptor)]
+    ):
+        if result.unit_count == 0:
+            continue
+        for counter_id, counter_mask in _AMDGPU_WAIT_COUNTER_MASKS.items():
+            if (read_counter_mask & counter_mask) == 0:
+                continue
+            storage_leases.append(
+                _amdgpu_storage_lease(
+                    kind=StorageLeaseKind.RESULT_WRITE,
+                    attachment=StorageLeaseAttachment.RESULT,
+                    attachment_index=result_index,
+                    unit_count=result.unit_count,
+                    release_class_id=counter_id,
+                    release_reason_id=_AMDGPU_WAIT_PLAN_REASON_READ_RESULT_REUSE,
+                    release_reason_name=(
+                        _AMDGPU_WAIT_PLAN_REASON_READ_RESULT_REUSE_NAME
+                    ),
+                )
+            )
+    if (write_counter_mask & _AMDGPU_WAIT_COUNTER_MASKS[_COUNTER_VMEM_STORE]) != 0:
+        packet_operand_index = 0
+        for operand in descriptor.operands[_descriptor_result_count(descriptor) :]:
+            if not _amdgpu_operand_is_packet_input(operand):
+                continue
+            current_packet_operand_index = packet_operand_index
+            packet_operand_index += 1
+            if not _amdgpu_operand_accepts_vgpr(operand) or operand.unit_count == 0:
+                continue
+            storage_leases.append(
+                _amdgpu_storage_lease(
+                    kind=StorageLeaseKind.SOURCE_READ,
+                    attachment=StorageLeaseAttachment.OPERAND,
+                    attachment_index=current_packet_operand_index,
+                    unit_count=operand.unit_count,
+                    release_class_id=_COUNTER_VMEM_STORE,
+                    release_reason_id=_AMDGPU_WAIT_PLAN_REASON_STORE_SOURCE_REUSE,
+                    release_reason_name=(
+                        _AMDGPU_WAIT_PLAN_REASON_STORE_SOURCE_REUSE_NAME
+                    ),
+                )
+            )
+    return tuple(storage_leases)
+
+
+def _descriptor_result_count(descriptor: Descriptor) -> int:
+    result_count = 0
+    for operand in descriptor.operands:
+        if operand.role is not OperandRole.RESULT:
+            break
+        result_count += 1
+    return result_count
+
+
+def _with_storage_lease_rows(descriptor_set: DescriptorSet) -> DescriptorSet:
+    schedule_classes = {
+        schedule_class.name: schedule_class
+        for schedule_class in descriptor_set.schedule_classes
+    }
+    return replace(
+        descriptor_set,
+        descriptors=tuple(
+            replace(
+                descriptor,
+                storage_leases=_amdgpu_descriptor_storage_leases(
+                    schedule_classes, descriptor
+                ),
+            )
+            for descriptor in descriptor_set.descriptors
+        ),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class _AmdgpuCoreDescriptorSetBuilder:
     base: DescriptorSet
@@ -366,6 +622,7 @@ def build_amdgpu_core_descriptor_set_from_spec(
     )
     if target == "rdna4_gfx125x":
         descriptor_set = _with_gfx125x_vgpr_msb_address_states(descriptor_set)
+    descriptor_set = _with_storage_lease_rows(descriptor_set)
     return descriptor_set
 
 

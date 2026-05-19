@@ -58,6 +58,8 @@ from loom.target.low_descriptors import (
     RegisterPart,
     Resource,
     ScheduleClass,
+    StorageLease,
+    StorageLeaseAttachment,
     descriptor_set_relative_name,
     descriptor_stable_id,
 )
@@ -148,6 +150,8 @@ class _CompiledDescriptorSet:
     immediate_enum_domain_ids: list[int | None]
     effects: list[Effect]
     constraints: list[Constraint]
+    storage_leases: list[StorageLease]
+    storage_lease_labels: list[tuple[str, int]]
     issue_uses: list[IssueUse]
     hazards: list[Hazard]
     pressure_deltas: list[PressureDelta]
@@ -349,6 +353,11 @@ def _hazard_reference_id(hazard: Hazard, resource_ids: dict[str, int]) -> int:
 def _validate_u16(value: int, description: str) -> None:
     if value < 0 or value > 0xFFFF:
         raise ValueError(f"{description} does not fit u16")
+
+
+def _validate_u32(value: int, description: str) -> None:
+    if value < 0 or value > 0xFFFFFFFF:
+        raise ValueError(f"{description} does not fit u32")
 
 
 def _validate_u16_table_count(count: int, description: str) -> None:
@@ -647,6 +656,49 @@ def _descriptor_packet_operand_indices(descriptor: Descriptor) -> tuple[int, ...
     return tuple(i for i, operand in enumerate(descriptor.operands) if _operand_role_is_packet_input(operand.role) and OperandFlag.IMPLICIT not in operand.flags)
 
 
+def _validate_storage_lease_name(value: str, description: str) -> None:
+    if not value:
+        raise ValueError(f"{description} must not be empty")
+    if len(value.encode()) > 255:
+        raise ValueError(f"{description} exceeds 255 bytes")
+
+
+def _validate_descriptor_storage_leases(
+    descriptor: Descriptor,
+    result_count: int,
+) -> None:
+    packet_operand_indices = _descriptor_packet_operand_indices(descriptor)
+    attachment_unit_counts: dict[tuple[StorageLeaseAttachment, int], int] = {}
+    for result_index in range(result_count):
+        attachment_unit_counts[(StorageLeaseAttachment.RESULT, result_index)] = descriptor.operands[result_index].unit_count
+    for packet_index, descriptor_operand_index in enumerate(packet_operand_indices):
+        attachment_unit_counts[(StorageLeaseAttachment.OPERAND, packet_index)] = descriptor.operands[descriptor_operand_index].unit_count
+    for lease_index, lease in enumerate(descriptor.storage_leases):
+        description = f"descriptor '{descriptor.key}' storage lease {lease_index}"
+        _validate_u16(lease.attachment_index, f"{description} attachment index")
+        _validate_u32(lease.unit_offset, f"{description} unit offset")
+        _validate_u32(lease.unit_count, f"{description} unit count")
+        _validate_u16(lease.release_class_id, f"{description} release class id")
+        _validate_u16(lease.release_action_id, f"{description} release action id")
+        _validate_u16(lease.release_reason_id, f"{description} release reason id")
+        _validate_storage_lease_name(lease.release_class_name, f"{description} release class name")
+        _validate_storage_lease_name(lease.release_action_name, f"{description} release action name")
+        _validate_storage_lease_name(lease.release_reason_name, f"{description} release reason name")
+        if lease.unit_count == 0:
+            raise ValueError(f"{description} has zero unit count")
+        if lease.release_class_id == LOW_DESCRIPTOR_ENCODING_ID_NONE:
+            raise ValueError(f"{description} has no release class id")
+        if lease.release_action_id == 0:
+            raise ValueError(f"{description} has zero release action id")
+        if lease.release_reason_id == LOW_DESCRIPTOR_ENCODING_ID_NONE:
+            raise ValueError(f"{description} has no release reason id")
+        unit_count = attachment_unit_counts.get((lease.attachment, lease.attachment_index))
+        if unit_count is None:
+            raise ValueError(f"{description} references {lease.attachment.name.lower()} {lease.attachment_index}, which is not attached to the packet")
+        if lease.unit_offset > unit_count or lease.unit_count > unit_count - lease.unit_offset:
+            raise ValueError(f"{description} unit range [{lease.unit_offset}, {lease.unit_offset + lease.unit_count}) exceeds attached value unit count {unit_count}")
+
+
 def _immediate_accepts_i64_assignment(immediate: Immediate) -> bool:
     return immediate.kind in (
         ImmediateKind.SIGNED,
@@ -931,8 +983,9 @@ def _compile_descriptor_set(
     used_enum_domain_names: set[str] = set()
 
     for descriptor in selected_descriptors:
-        _validate_descriptor_operands(descriptor)
+        result_count = _validate_descriptor_operands(descriptor)
         _validate_descriptor_encoding_fields(descriptor)
+        _validate_descriptor_storage_leases(descriptor, result_count)
         if descriptor.encoding_id < 0 or descriptor.encoding_id > LOW_DESCRIPTOR_ENCODING_ID_NONE:
             raise ValueError(f"descriptor '{descriptor.key}' encoding id does not fit u16")
         if descriptor.encoding_id == LOW_DESCRIPTOR_ENCODING_ID_NONE and DescriptorFlag.PSEUDO not in descriptor.flags:
@@ -1112,6 +1165,19 @@ def _compile_descriptor_set(
             string_pool.intern(f"field_{operand.field_name}", operand.field_name)
         for immediate in descriptor.immediates:
             string_pool.intern(f"immediate_{immediate.field_name}", immediate.field_name)
+        for lease_index, lease in enumerate(descriptor.storage_leases):
+            string_pool.intern(
+                f"storage_lease_{descriptor.key}_{lease_index}_class",
+                lease.release_class_name,
+            )
+            string_pool.intern(
+                f"storage_lease_{descriptor.key}_{lease_index}_action",
+                lease.release_action_name,
+            )
+            string_pool.intern(
+                f"storage_lease_{descriptor.key}_{lease_index}_reason",
+                lease.release_reason_name,
+            )
 
     asm_forms = _compile_asm_forms(
         string_pool,
@@ -1142,6 +1208,7 @@ def _compile_descriptor_set(
     reg_alt_group_starts: dict[tuple[tuple[int | None, tuple[RegClassAltFlag, ...]], ...], int] = {}
     immediate_encoding_slice_group_starts: dict[tuple[ImmediateEncodingSlice, ...], int] = {}
     effect_group_starts: dict[tuple[Effect, ...], int] = {}
+    storage_lease_group_starts: dict[tuple[StorageLease, ...], int] = {}
     operands: list[Operand] = []
     operand_alt_starts: list[int] = []
     immediates: list[Immediate] = []
@@ -1151,6 +1218,8 @@ def _compile_descriptor_set(
     immediate_enum_domain_ids: list[int | None] = []
     effects: list[Effect] = []
     constraints: list[Constraint] = []
+    storage_leases: list[StorageLease] = []
+    storage_lease_labels: list[tuple[str, int]] = []
     issue_uses: list[IssueUse] = []
     hazards: list[Hazard] = []
     pressure_deltas: list[PressureDelta] = []
@@ -1232,6 +1301,15 @@ def _compile_descriptor_set(
             effect_start = 0
         constraint_start = len(constraints)
         constraints.extend(descriptor.constraints)
+        if descriptor.storage_leases:
+            storage_lease_start = storage_lease_group_starts.get(descriptor.storage_leases)
+            if storage_lease_start is None:
+                storage_lease_start = len(storage_leases)
+                storage_lease_group_starts[descriptor.storage_leases] = storage_lease_start
+                storage_leases.extend(descriptor.storage_leases)
+                storage_lease_labels.extend((descriptor.key, i) for i in range(len(descriptor.storage_leases)))
+        else:
+            storage_lease_start = 0
         feature_mask_word_start = len(feature_mask_words)
         feature_mask_words.extend(descriptor.feature_mask_words)
         encoding_field_value_start = len(encoding_field_values)
@@ -1262,6 +1340,8 @@ def _compile_descriptor_set(
                 "effect_count": len(descriptor.effects),
                 "constraint_start": constraint_start,
                 "constraint_count": len(descriptor.constraints),
+                "storage_lease_start": storage_lease_start,
+                "storage_lease_count": len(descriptor.storage_leases),
                 "feature_mask_word_start": feature_mask_word_start,
                 "feature_mask_word_count": len(descriptor.feature_mask_words),
                 "encoding_field_value_start": encoding_field_value_start,
@@ -1304,6 +1384,8 @@ def _compile_descriptor_set(
         immediate_enum_domain_ids=immediate_enum_domain_ids,
         effects=effects,
         constraints=constraints,
+        storage_leases=storage_leases,
+        storage_lease_labels=storage_lease_labels,
         issue_uses=issue_uses,
         hazards=hazards,
         pressure_deltas=pressure_deltas,
@@ -1702,6 +1784,8 @@ def _descriptor_row_lines(
             f".effect_count = {descriptor_rows[i]['effect_count']},",
             f".constraint_start = {descriptor_rows[i]['constraint_start']},",
             f".constraint_count = {descriptor_rows[i]['constraint_count']},",
+            f".storage_lease_start = {descriptor_rows[i]['storage_lease_start']},",
+            f".storage_lease_count = {descriptor_rows[i]['storage_lease_count']},",
             f".operand_form_start = {descriptor_rows[i]['operand_form_start']},",
             f".operand_form_count = {descriptor_rows[i]['operand_form_count']},",
             f".schedule_class_id = {compiled.schedule_class_ids[descriptor.schedule_class]},",
@@ -1709,6 +1793,28 @@ def _descriptor_row_lines(
             f".canonical_asm_form_ordinal = {_canonical_asm_form_ordinal_expr(canonical_asm_form_ordinals[i])},",
         ]
         for i, descriptor in enumerate(descriptors)
+    ]
+
+
+def _storage_lease_row_lines(compiled: _CompiledDescriptorSet) -> list[list[str]]:
+    pool = compiled.string_pool
+    return [
+        [
+            f".kind = {lease.kind.c_name},",
+            f".attachment = {lease.attachment.c_name},",
+            f".attachment_index = {lease.attachment_index},",
+            f".unit_offset = {lease.unit_offset},",
+            f".unit_count = {lease.unit_count},",
+            f".release_scope = {lease.release_scope.c_name},",
+            f".release_class_id = {lease.release_class_id},",
+            f".release_class_name_string_offset = {pool.ref(f'storage_lease_{descriptor_key}_{lease_index}_class')},",
+            f".release_action_id = {lease.release_action_id},",
+            f".release_action_name_string_offset = {pool.ref(f'storage_lease_{descriptor_key}_{lease_index}_action')},",
+            f".release_reason_id = {lease.release_reason_id},",
+            f".release_reason_name_string_offset = {pool.ref(f'storage_lease_{descriptor_key}_{lease_index}_reason')},",
+            f".flags = {_flag_expr(lease.flags)},",
+        ]
+        for (descriptor_key, lease_index), lease in zip(compiled.storage_lease_labels, compiled.storage_leases, strict=True)
     ]
 
 
@@ -1954,6 +2060,13 @@ def _emit_source_for_views(
     )
     _emit_array(
         lines,
+        "loom_low_descriptor_storage_lease_t",
+        spec.c_table_prefix,
+        "StorageLeases",
+        _storage_lease_row_lines(compiled),
+    )
+    _emit_array(
+        lines,
         "loom_low_resource_t",
         spec.c_table_prefix,
         "Resources",
@@ -2175,6 +2288,7 @@ def _emit_source_for_views(
         "enum_values": "enum_value_count",
         "effects": "effect_count",
         "constraints": "constraint_count",
+        "storage_leases": "storage_lease_count",
         "reg_classes": "reg_class_count",
         "register_parts": "register_part_count",
         "reg_class_alts": "reg_class_alt_count",
@@ -2231,6 +2345,7 @@ def _emit_source_for_views(
         append_optional_table("enum_values", "EnumValues", view_lines)
         append_optional_table("effects", "Effects", view_lines)
         append_optional_table("constraints", "Constraints", view_lines)
+        append_optional_table("storage_leases", "StorageLeases", view_lines)
         append_optional_table("reg_classes", "RegClasses", view_lines)
         append_optional_table("register_parts", "RegisterParts", view_lines)
         append_optional_table("reg_class_alts", "RegClassAlts", view_lines)
@@ -2320,6 +2435,7 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
                     for field_value in descriptor.encoding_field_values
                 ],
                 "effects": compiled.descriptor_rows[i]["effect_count"],
+                "storage_leases": compiled.descriptor_rows[i]["storage_lease_count"],
                 "operand_forms": compiled.descriptor_rows[i]["operand_form_count"],
                 "asm_forms": sum(1 for asm_form in compiled.asm_forms if asm_form.descriptor_ordinal == i),
                 "flags": [flag.c_name for flag in descriptor.flags],
@@ -2363,6 +2479,7 @@ def _emit_manifest_json(compiled: _CompiledDescriptorSet) -> str:
             "enum_values": len(compiled.enum_values),
             "effects": len(compiled.effects),
             "constraints": len(compiled.constraints),
+            "storage_leases": len(compiled.storage_leases),
             "reg_classes": len(compiled.reg_classes),
             "register_parts": len(compiled.register_parts),
             "reg_class_alts": len(compiled.reg_class_alts),

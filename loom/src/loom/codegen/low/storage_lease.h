@@ -39,41 +39,6 @@ extern "C" {
 // Sentinel for absent storage-lease scheduled ordinals.
 #define LOOM_LOW_STORAGE_LEASE_ORDINAL_NONE UINT32_MAX
 
-typedef enum loom_low_storage_lease_kind_e {
-  // Unknown or uninitialized lease kind.
-  LOOM_LOW_STORAGE_LEASE_UNKNOWN = 0,
-  // Packet may read an operand's physical storage after issue.
-  LOOM_LOW_STORAGE_LEASE_SOURCE_READ = 1,
-  // Packet owns a result's physical storage until the result retires.
-  LOOM_LOW_STORAGE_LEASE_RESULT_WRITE = 2,
-} loom_low_storage_lease_kind_t;
-
-typedef enum loom_low_storage_lease_attachment_e {
-  // Unknown or uninitialized lease attachment.
-  LOOM_LOW_STORAGE_LEASE_ATTACHMENT_UNKNOWN = 0,
-  // Lease attaches to a packet operand.
-  LOOM_LOW_STORAGE_LEASE_ATTACHMENT_OPERAND = 1,
-  // Lease attaches to a packet result.
-  LOOM_LOW_STORAGE_LEASE_ATTACHMENT_RESULT = 2,
-} loom_low_storage_lease_attachment_t;
-
-typedef enum loom_low_storage_lease_release_scope_e {
-  // Unknown or uninitialized release scope.
-  LOOM_LOW_STORAGE_LEASE_RELEASE_SCOPE_UNKNOWN = 0,
-  // Release is controlled by a target progress class.
-  LOOM_LOW_STORAGE_LEASE_RELEASE_SCOPE_PROGRESS_CLASS = 1,
-} loom_low_storage_lease_release_scope_t;
-
-enum loom_low_storage_lease_flag_bits_e {
-  // The lease becomes active when its packet issues.
-  LOOM_LOW_STORAGE_LEASE_FLAG_STARTS_AT_ISSUE = 1u << 0,
-  // The lease must be released before leaving its block.
-  LOOM_LOW_STORAGE_LEASE_FLAG_RELEASE_BEFORE_BOUNDARY = 1u << 1,
-  // The lease may be represented as carried state across block edges.
-  LOOM_LOW_STORAGE_LEASE_FLAG_MAY_CARRY_ACROSS_BOUNDARY = 1u << 2,
-};
-typedef uint16_t loom_low_storage_lease_flags_t;
-
 // Storage-lease fact emitted by a target provider for the current scheduled
 // node.
 typedef struct loom_low_storage_lease_event_t {
@@ -127,6 +92,14 @@ typedef struct loom_low_storage_lease_provider_t {
   // Storage-lease query callback.
   loom_low_storage_lease_query_fn_t query;
 } loom_low_storage_lease_provider_t;
+
+// Queries descriptor-attached storage-lease rows for |node|. This is a
+// provider callback; targets may use it directly or wrap it to apply a target
+// identity check before consuming descriptor rows.
+iree_status_t loom_low_storage_lease_query_descriptor_rows(
+    void* user_data, const loom_low_schedule_table_t* schedule,
+    const loom_low_schedule_node_t* node, loom_low_storage_lease_emit_fn_t emit,
+    void* emit_user_data);
 
 // One target storage lease attached to a scheduled packet.
 typedef struct loom_low_storage_lease_record_t {

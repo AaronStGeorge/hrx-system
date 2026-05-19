@@ -25,7 +25,7 @@ extern "C" {
 #endif
 
 // ABI version for descriptor sets consumed by this header.
-#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 23u
+#define LOOM_LOW_DESCRIPTOR_SET_ABI_VERSION 24u
 
 // Sentinel for absent string-table offsets.
 #define LOOM_LOW_STRING_OFFSET_NONE LOOM_BSTRING_TABLE_OFFSET_NONE
@@ -207,6 +207,41 @@ typedef uint16_t loom_low_effect_flags_t;
 #define LOOM_LOW_EFFECT_FLAG_ORDERED ((uint16_t)1u << 0)
 // Effect participates in alias-like dependency construction.
 #define LOOM_LOW_EFFECT_FLAG_DEPENDENCY ((uint16_t)1u << 1)
+
+typedef enum loom_low_storage_lease_kind_e {
+  // Unknown or uninitialized lease kind.
+  LOOM_LOW_STORAGE_LEASE_UNKNOWN = 0,
+  // Packet may read an operand's physical storage after issue.
+  LOOM_LOW_STORAGE_LEASE_SOURCE_READ = 1,
+  // Packet owns a result's physical storage until the result retires.
+  LOOM_LOW_STORAGE_LEASE_RESULT_WRITE = 2,
+} loom_low_storage_lease_kind_t;
+
+typedef enum loom_low_storage_lease_attachment_e {
+  // Unknown or uninitialized lease attachment.
+  LOOM_LOW_STORAGE_LEASE_ATTACHMENT_UNKNOWN = 0,
+  // Lease attaches to a packet operand.
+  LOOM_LOW_STORAGE_LEASE_ATTACHMENT_OPERAND = 1,
+  // Lease attaches to a packet result.
+  LOOM_LOW_STORAGE_LEASE_ATTACHMENT_RESULT = 2,
+} loom_low_storage_lease_attachment_t;
+
+typedef enum loom_low_storage_lease_release_scope_e {
+  // Unknown or uninitialized release scope.
+  LOOM_LOW_STORAGE_LEASE_RELEASE_SCOPE_UNKNOWN = 0,
+  // Release is controlled by a target progress class.
+  LOOM_LOW_STORAGE_LEASE_RELEASE_SCOPE_PROGRESS_CLASS = 1,
+} loom_low_storage_lease_release_scope_t;
+
+enum loom_low_storage_lease_flag_bits_e {
+  // The lease becomes active when its packet issues.
+  LOOM_LOW_STORAGE_LEASE_FLAG_STARTS_AT_ISSUE = 1u << 0,
+  // The lease must be released before leaving its block.
+  LOOM_LOW_STORAGE_LEASE_FLAG_RELEASE_BEFORE_BOUNDARY = 1u << 1,
+  // The lease may be represented as carried state across block edges.
+  LOOM_LOW_STORAGE_LEASE_FLAG_MAY_CARRY_ACROSS_BOUNDARY = 1u << 2,
+};
+typedef uint16_t loom_low_storage_lease_flags_t;
 
 typedef enum loom_low_constraint_kind_e {
   // Unknown or uninitialized constraint kind.
@@ -494,6 +529,36 @@ typedef struct loom_low_effect_t {
   uint16_t width_bits;
 } loom_low_effect_t;
 
+typedef struct loom_low_descriptor_storage_lease_t {
+  // Target-visible lease kind.
+  loom_low_storage_lease_kind_t kind;
+  // Scheduled-node attachment kind.
+  loom_low_storage_lease_attachment_t attachment;
+  // Packet operand or result index within the scheduled node.
+  uint16_t attachment_index;
+  // First allocation unit leased within the attached value.
+  uint32_t unit_offset;
+  // Number of allocation units leased.
+  uint32_t unit_count;
+  // Target progress model used to release the lease.
+  loom_low_storage_lease_release_scope_t release_scope;
+  // Target-owned release class identifier.
+  uint16_t release_class_id;
+  // String-table offset for the stable release-class name.
+  loom_bstring_table_offset_t release_class_name_string_offset;
+  // Target-owned residual action identifier used when allocation requests a
+  // release.
+  uint16_t release_action_id;
+  // String-table offset for the stable residual action name.
+  loom_bstring_table_offset_t release_action_name_string_offset;
+  // Target-owned hazard reason identifier used for release diagnostics.
+  uint16_t release_reason_id;
+  // String-table offset for the stable release reason name.
+  loom_bstring_table_offset_t release_reason_name_string_offset;
+  // Lease flags.
+  loom_low_storage_lease_flags_t flags;
+} loom_low_descriptor_storage_lease_t;
+
 typedef struct loom_low_constraint_t {
   // Constraint kind used by verification and allocation.
   loom_low_constraint_kind_t kind;
@@ -620,6 +685,10 @@ typedef struct loom_low_descriptor_t {
   uint32_t constraint_start;
   // Number of constraint rows for this descriptor.
   uint16_t constraint_count;
+  // First storage-lease row for this descriptor.
+  uint32_t storage_lease_start;
+  // Number of storage-lease rows for this descriptor.
+  uint16_t storage_lease_count;
   // First operand-form row for descriptor-family packet selection.
   uint32_t operand_form_start;
   // Number of operand-form rows for this descriptor.
@@ -769,6 +838,10 @@ typedef struct loom_low_descriptor_set_t {
   const loom_low_constraint_t* constraints;
   // Number of constraint rows owned by this set.
   uint32_t constraint_count;
+  // Dense storage-lease rows referenced by descriptors.
+  const loom_low_descriptor_storage_lease_t* storage_leases;
+  // Number of storage-lease rows owned by this set.
+  uint32_t storage_lease_count;
   // Dense operand-form rows referenced by descriptors.
   const loom_low_operand_form_t* operand_forms;
   // Number of operand-form rows owned by this set.

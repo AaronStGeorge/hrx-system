@@ -201,6 +201,9 @@ static iree_status_t loom_low_verify_tables_present(
       descriptor_set->constraints, descriptor_set->constraint_count,
       "constraints"));
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
+      descriptor_set->storage_leases, descriptor_set->storage_lease_count,
+      "storage_leases"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
       descriptor_set->reg_classes, descriptor_set->reg_class_count,
       "reg_classes"));
   IREE_RETURN_IF_ERROR(loom_low_verify_pointer_for_count(
@@ -873,6 +876,23 @@ static bool loom_low_memory_space_is_valid(loom_low_memory_space_t space) {
   }
 }
 
+static bool loom_low_storage_lease_kind_is_valid(
+    loom_low_storage_lease_kind_t kind) {
+  return kind == LOOM_LOW_STORAGE_LEASE_SOURCE_READ ||
+         kind == LOOM_LOW_STORAGE_LEASE_RESULT_WRITE;
+}
+
+static bool loom_low_storage_lease_attachment_is_valid(
+    loom_low_storage_lease_attachment_t attachment) {
+  return attachment == LOOM_LOW_STORAGE_LEASE_ATTACHMENT_OPERAND ||
+         attachment == LOOM_LOW_STORAGE_LEASE_ATTACHMENT_RESULT;
+}
+
+static bool loom_low_storage_lease_release_scope_is_valid(
+    loom_low_storage_lease_release_scope_t scope) {
+  return scope == LOOM_LOW_STORAGE_LEASE_RELEASE_SCOPE_PROGRESS_CLASS;
+}
+
 static bool loom_low_constraint_kind_is_valid(loom_low_constraint_kind_t kind) {
   switch (kind) {
     case LOOM_LOW_CONSTRAINT_KIND_TIED:
@@ -1297,6 +1317,152 @@ static iree_status_t loom_low_verify_descriptor_state_operands(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_verify_storage_lease_attachment_unit_count(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint32_t descriptor_index,
+    const loom_low_descriptor_storage_lease_t* lease,
+    uint16_t* out_unit_count) {
+  *out_unit_count = 0;
+  if (lease->attachment == LOOM_LOW_STORAGE_LEASE_ATTACHMENT_RESULT) {
+    if (lease->attachment_index >= descriptor->result_count) {
+      return iree_make_status(
+          IREE_STATUS_OUT_OF_RANGE,
+          "low descriptor %" PRIu32 " storage lease references result %" PRIu16
+          " but descriptor has only %" PRIu16 " results",
+          descriptor_index, lease->attachment_index, descriptor->result_count);
+    }
+    const loom_low_operand_t* result =
+        &descriptor_set
+             ->operands[descriptor->operand_start + lease->attachment_index];
+    *out_unit_count = result->unit_count;
+    return iree_ok_status();
+  }
+
+  uint16_t packet_operand_index = 0;
+  for (uint16_t operand_index = descriptor->result_count;
+       operand_index < descriptor->operand_count; ++operand_index) {
+    const loom_low_operand_t* operand =
+        &descriptor_set->operands[descriptor->operand_start + operand_index];
+    if (!loom_low_operand_role_is_packet_operand(operand->role)) {
+      continue;
+    }
+    if (packet_operand_index == lease->attachment_index) {
+      *out_unit_count = operand->unit_count;
+      return iree_ok_status();
+    }
+    ++packet_operand_index;
+  }
+  return iree_make_status(
+      IREE_STATUS_OUT_OF_RANGE,
+      "low descriptor %" PRIu32
+      " storage lease references packet operand %" PRIu16
+      " but descriptor has only %" PRIu16 " packet operands",
+      descriptor_index, lease->attachment_index, packet_operand_index);
+}
+
+static iree_status_t loom_low_verify_storage_lease(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor, uint32_t descriptor_index,
+    uint16_t descriptor_lease_index) {
+  const uint32_t lease_index =
+      descriptor->storage_lease_start + descriptor_lease_index;
+  const loom_low_descriptor_storage_lease_t* lease =
+      &descriptor_set->storage_leases[lease_index];
+  if (lease->kind == LOOM_LOW_STORAGE_LEASE_UNKNOWN) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low storage lease %" PRIu32 " has unknown kind",
+                            lease_index);
+  }
+  if (!loom_low_storage_lease_kind_is_valid(lease->kind)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low storage lease %" PRIu32 " has invalid kind %u",
+                            lease_index, (unsigned)lease->kind);
+  }
+  if (lease->attachment == LOOM_LOW_STORAGE_LEASE_ATTACHMENT_UNKNOWN) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low storage lease %" PRIu32 " has unknown attachment", lease_index);
+  }
+  if (!loom_low_storage_lease_attachment_is_valid(lease->attachment)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low storage lease %" PRIu32
+                            " has invalid attachment %u",
+                            lease_index, (unsigned)lease->attachment);
+  }
+  if (lease->release_scope == LOOM_LOW_STORAGE_LEASE_RELEASE_SCOPE_UNKNOWN) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low storage lease %" PRIu32 " has unknown release scope", lease_index);
+  }
+  if (!loom_low_storage_lease_release_scope_is_valid(lease->release_scope)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low storage lease %" PRIu32
+                            " has invalid release scope %u",
+                            lease_index, (unsigned)lease->release_scope);
+  }
+  IREE_RETURN_IF_ERROR(loom_low_verify_known_flags(
+      lease->flags,
+      LOOM_LOW_STORAGE_LEASE_FLAG_STARTS_AT_ISSUE |
+          LOOM_LOW_STORAGE_LEASE_FLAG_RELEASE_BEFORE_BOUNDARY |
+          LOOM_LOW_STORAGE_LEASE_FLAG_MAY_CARRY_ACROSS_BOUNDARY,
+      "storage lease", lease_index));
+  if (iree_all_bits_set(
+          lease->flags,
+          LOOM_LOW_STORAGE_LEASE_FLAG_RELEASE_BEFORE_BOUNDARY |
+              LOOM_LOW_STORAGE_LEASE_FLAG_MAY_CARRY_ACROSS_BOUNDARY)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low storage lease %" PRIu32
+        " both releases before and carries across a block boundary",
+        lease_index);
+  }
+  if (lease->unit_count == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "low storage lease %" PRIu32 " has zero unit count",
+                            lease_index);
+  }
+  if (lease->release_class_id == UINT16_MAX) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low storage lease %" PRIu32 " has no release class", lease_index);
+  }
+  if (lease->release_action_id == 0) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low storage lease %" PRIu32 " has no release action", lease_index);
+  }
+  if (lease->release_reason_id == UINT16_MAX) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "low storage lease %" PRIu32 " has no release reason", lease_index);
+  }
+  IREE_RETURN_IF_ERROR(loom_low_verify_non_empty_required_string(
+      descriptor_set, lease->release_class_name_string_offset,
+      "storage_lease.release_class", NULL));
+  IREE_RETURN_IF_ERROR(loom_low_verify_non_empty_required_string(
+      descriptor_set, lease->release_action_name_string_offset,
+      "storage_lease.release_action", NULL));
+  IREE_RETURN_IF_ERROR(loom_low_verify_non_empty_required_string(
+      descriptor_set, lease->release_reason_name_string_offset,
+      "storage_lease.release_reason", NULL));
+
+  uint16_t attachment_unit_count = 0;
+  IREE_RETURN_IF_ERROR(loom_low_verify_storage_lease_attachment_unit_count(
+      descriptor_set, descriptor, descriptor_index, lease,
+      &attachment_unit_count));
+  if (lease->unit_offset > attachment_unit_count ||
+      lease->unit_count > attachment_unit_count - lease->unit_offset) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "low descriptor %" PRIu32 " storage lease %" PRIu16
+        " unit range [%" PRIu32 ", %" PRIu32
+        ") exceeds attached value unit count %" PRIu16,
+        descriptor_index, descriptor_lease_index, lease->unit_offset,
+        lease->unit_offset + lease->unit_count, attachment_unit_count);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_descriptor(
     const loom_low_descriptor_set_t* descriptor_set,
     uint32_t descriptor_index) {
@@ -1359,6 +1525,9 @@ static iree_status_t loom_low_verify_descriptor(
       descriptor->constraint_start, descriptor->constraint_count,
       descriptor_set->constraint_count, "constraints"));
   IREE_RETURN_IF_ERROR(loom_low_verify_span(
+      descriptor->storage_lease_start, descriptor->storage_lease_count,
+      descriptor_set->storage_lease_count, "storage_leases"));
+  IREE_RETURN_IF_ERROR(loom_low_verify_span(
       descriptor->operand_form_start, descriptor->operand_form_count,
       descriptor_set->operand_form_count, "operand_forms"));
   if (descriptor->schedule_class_id != LOOM_LOW_SCHEDULE_CLASS_NONE &&
@@ -1387,6 +1556,10 @@ static iree_status_t loom_low_verify_descriptor(
       descriptor_set, descriptor, descriptor_index));
   IREE_RETURN_IF_ERROR(
       loom_low_verify_descriptor_constraints(descriptor_set, descriptor));
+  for (uint16_t i = 0; i < descriptor->storage_lease_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_storage_lease(
+        descriptor_set, descriptor, descriptor_index, i));
+  }
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_operand_forms(
       descriptor_set, descriptor, descriptor_index));
   IREE_RETURN_IF_ERROR(loom_low_verify_descriptor_operand_encoding_fields(

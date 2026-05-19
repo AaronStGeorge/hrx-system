@@ -1808,10 +1808,7 @@ loom_cc_library(
     "storage_lease.c"
   DEPS
     ::target_info_defs
-    ::target_refs
-    ::wait_plan
     iree::base
-    loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::storage_lease
   PUBLIC
 )

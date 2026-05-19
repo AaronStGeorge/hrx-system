@@ -480,6 +480,7 @@ loom_cc_library(
     srcs = ["storage_lease.c"],
     hdrs = ["storage_lease.h"],
     deps = [
+        ":descriptors",
         "//loom/src/loom/codegen/low/schedule",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",

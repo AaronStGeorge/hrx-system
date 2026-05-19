@@ -105,6 +105,11 @@ from loom.target.low_descriptors import (
     ScheduleClass,
     ScheduleClassFlag,
     SpillSlotSpace,
+    StorageLease,
+    StorageLeaseAttachment,
+    StorageLeaseFlag,
+    StorageLeaseKind,
+    StorageLeaseReleaseScope,
 )
 
 _REG_SGPR = "amdgpu.sgpr"
@@ -2281,6 +2286,11 @@ __all__ = (
     "ScheduleClassFlag",
     "Sequence",
     "SpillSlotSpace",
+    "StorageLease",
+    "StorageLeaseAttachment",
+    "StorageLeaseFlag",
+    "StorageLeaseKind",
+    "StorageLeaseReleaseScope",
     "_ADDRESS_OFFSET_BYTE_ENCODING_ID",
     "_ADDRESS_OFFSET_DS16_ENCODING_ID",
     "_ADDRESS_OFFSET_DWORD_ENCODING_ID",

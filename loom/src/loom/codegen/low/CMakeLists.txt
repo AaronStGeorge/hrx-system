@@ -462,6 +462,7 @@ loom_cc_library(
   SRCS
     "storage_lease.c"
   DEPS
+    ::descriptors
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::schedule

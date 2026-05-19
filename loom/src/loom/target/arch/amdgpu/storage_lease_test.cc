@@ -103,6 +103,7 @@ TEST_F(AmdgpuStorageLeaseTest, LeasesBufferStoreVgprSources) {
       loom_amdgpu_descriptor_ref_descriptor(
           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_BUFFER_STORE_DWORD);
   ASSERT_NE(descriptor, nullptr);
+  ASSERT_EQ(descriptor->storage_lease_count, 2u);
 
   loom_low_storage_lease_table_t table = {};
   IREE_ASSERT_OK(BuildLeaseTable(descriptor, &table));
@@ -138,6 +139,7 @@ TEST_F(AmdgpuStorageLeaseTest, LeasesGlobalLoadResult) {
       loom_amdgpu_descriptor_ref_descriptor(
           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_GLOBAL_LOAD_B32);
   ASSERT_NE(descriptor, nullptr);
+  ASSERT_EQ(descriptor->storage_lease_count, 1u);
 
   loom_low_storage_lease_table_t table = {};
   IREE_ASSERT_OK(BuildLeaseTable(descriptor, &table));
@@ -161,6 +163,7 @@ TEST_F(AmdgpuStorageLeaseTest, LeasesScalarLoadResult) {
       loom_amdgpu_descriptor_ref_descriptor(
           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_S_BUFFER_LOAD_DWORD);
   ASSERT_NE(descriptor, nullptr);
+  ASSERT_EQ(descriptor->storage_lease_count, 1u);
 
   loom_low_storage_lease_table_t table = {};
   IREE_ASSERT_OK(BuildLeaseTable(descriptor, &table));
@@ -183,6 +186,7 @@ TEST_F(AmdgpuStorageLeaseTest, DoesNotLeaseLdsStoreSourcesAsVmem) {
       loom_amdgpu_descriptor_ref_descriptor(
           descriptor_set, LOOM_AMDGPU_DESCRIPTOR_REF_DS_WRITE_B32);
   ASSERT_NE(descriptor, nullptr);
+  ASSERT_EQ(descriptor->storage_lease_count, 0u);
 
   loom_low_storage_lease_table_t table = {};
   IREE_ASSERT_OK(BuildLeaseTable(descriptor, &table));

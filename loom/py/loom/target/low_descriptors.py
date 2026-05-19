@@ -14,7 +14,7 @@ from pathlib import Path
 
 from loom.stable_id import stable_id_from_string
 
-LOW_DESCRIPTOR_SET_ABI_VERSION = 23
+LOW_DESCRIPTOR_SET_ABI_VERSION = 24
 LOW_DESCRIPTOR_ENCODING_ID_NONE = (2**16) - 1
 LOW_DESCRIPTOR_SET_ORDINAL_NONE = (2**16) - 1
 
@@ -121,6 +121,26 @@ class MemorySpace(CEnum):
 class EffectFlag(CEnum):
     ORDERED = "LOOM_LOW_EFFECT_FLAG_ORDERED"
     DEPENDENCY = "LOOM_LOW_EFFECT_FLAG_DEPENDENCY"
+
+
+class StorageLeaseKind(CEnum):
+    SOURCE_READ = "LOOM_LOW_STORAGE_LEASE_SOURCE_READ"
+    RESULT_WRITE = "LOOM_LOW_STORAGE_LEASE_RESULT_WRITE"
+
+
+class StorageLeaseAttachment(CEnum):
+    OPERAND = "LOOM_LOW_STORAGE_LEASE_ATTACHMENT_OPERAND"
+    RESULT = "LOOM_LOW_STORAGE_LEASE_ATTACHMENT_RESULT"
+
+
+class StorageLeaseReleaseScope(CEnum):
+    PROGRESS_CLASS = "LOOM_LOW_STORAGE_LEASE_RELEASE_SCOPE_PROGRESS_CLASS"
+
+
+class StorageLeaseFlag(CEnum):
+    STARTS_AT_ISSUE = "LOOM_LOW_STORAGE_LEASE_FLAG_STARTS_AT_ISSUE"
+    RELEASE_BEFORE_BOUNDARY = "LOOM_LOW_STORAGE_LEASE_FLAG_RELEASE_BEFORE_BOUNDARY"
+    MAY_CARRY_ACROSS_BOUNDARY = "LOOM_LOW_STORAGE_LEASE_FLAG_MAY_CARRY_ACROSS_BOUNDARY"
 
 
 class ConstraintKind(CEnum):
@@ -316,6 +336,23 @@ class Effect:
 
 
 @dataclass(frozen=True, slots=True)
+class StorageLease:
+    kind: StorageLeaseKind
+    attachment: StorageLeaseAttachment
+    attachment_index: int
+    unit_offset: int
+    unit_count: int
+    release_scope: StorageLeaseReleaseScope
+    release_class_id: int
+    release_class_name: str
+    release_action_id: int
+    release_action_name: str
+    release_reason_id: int
+    release_reason_name: str
+    flags: tuple[StorageLeaseFlag, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class Constraint:
     kind: ConstraintKind
     lhs_operand_index: int
@@ -425,6 +462,7 @@ class Descriptor:
     asm_forms: tuple[AsmForm, ...] = ()
     effects: tuple[Effect, ...] = ()
     constraints: tuple[Constraint, ...] = ()
+    storage_leases: tuple[StorageLease, ...] = ()
     feature_mask_words: tuple[int, ...] = ()
     encoding_format_id: int = 0
     encoding_id: int = 0
