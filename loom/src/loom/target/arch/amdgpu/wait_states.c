@@ -17,6 +17,7 @@
 #include "loom/target/arch/amdgpu/descriptor_semantics.h"
 #include "loom/target/arch/amdgpu/encoding.h"
 #include "loom/target/arch/amdgpu/matrix_contract.h"
+#include "loom/target/arch/amdgpu/matrix_wait_states.h"
 #include "loom/target/arch/amdgpu/target_id.h"
 #include "loom/target/arch/amdgpu/target_info.h"
 #include "loom/target/arch/amdgpu/target_refs.h"
@@ -359,53 +360,35 @@ static bool loom_amdgpu_wait_state_matrix_result_wait_cycles(
     const loom_amdgpu_wait_state_builder_t* builder, uint16_t pass_count,
     loom_amdgpu_wait_state_matrix_result_use_t use, uint16_t* out_cycle_count) {
   *out_cycle_count = 0;
-  uint32_t pass_index = 0;
-  switch (pass_count) {
-    case 2:
-      pass_index = 0;
-      break;
-    case 4:
-      pass_index = 1;
-      break;
-    case 8:
-      pass_index = 2;
-      break;
-    case 16:
-      pass_index = 3;
-      break;
-    default:
-      return false;
-  }
-
-  static const uint16_t kSrcCExactCycles[] = {2, 0, 0, 0};
-  static const uint16_t kSrcCOverlapCycles[] = {3, 5, 9, 17};
-  static const uint16_t kCdna3ResultUseCycles[] = {5, 7, 11, 19};
-  static const uint16_t kCdna4ResultUseCycles[] = {5, 8, 12, 20};
-
+  loom_amdgpu_matrix_wait_result_use_t table_use =
+      LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_UNKNOWN;
   switch (use) {
-    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC_EXACT:
-      *out_cycle_count = kSrcCExactCycles[pass_index];
-      return true;
-    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC_OVERLAP:
-      *out_cycle_count = kSrcCOverlapCycles[pass_index];
-      return true;
     case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_NON_MATRIX:
+      table_use = LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_NON_MATRIX;
+      break;
+    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC_EXACT:
+      table_use = LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_EXACT;
+      break;
+    case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC_OVERLAP:
+      table_use = LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRCC_OVERLAP;
+      break;
     case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRC_AB:
+      table_use = LOOM_AMDGPU_MATRIX_WAIT_RESULT_USE_MATRIX_SRC_AB;
       break;
     case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_MATRIX_SRCC:
     case LOOM_AMDGPU_WAIT_STATE_MATRIX_RESULT_USE_UNKNOWN:
     default:
       return false;
   }
-
-  const uint16_t* result_use_cycles = kCdna3ResultUseCycles;
+  loom_amdgpu_matrix_wait_profile_t wait_profile =
+      LOOM_AMDGPU_MATRIX_WAIT_PROFILE_MFMA_PRE_GFX950;
   if (builder->processor != NULL &&
-      builder->processor->matrix_feature_profile ==
-          LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950) {
-    result_use_cycles = kCdna4ResultUseCycles;
+      !loom_amdgpu_matrix_wait_profile_from_feature_profile(
+          builder->processor->matrix_feature_profile, &wait_profile)) {
+    return false;
   }
-  *out_cycle_count = result_use_cycles[pass_index];
-  return true;
+  return loom_amdgpu_matrix_wait_result_cycle_count(wait_profile, pass_count,
+                                                    table_use, out_cycle_count);
 }
 
 static bool loom_amdgpu_wait_state_matrix_reads_valu_results(

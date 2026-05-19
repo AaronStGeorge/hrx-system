@@ -225,6 +225,16 @@ loom_cc_test(
 )
 
 loom_cc_test(
+    name = "matrix_wait_states_test",
+    srcs = ["matrix_wait_states_test.cc"],
+    deps = [
+        ":matrix_wait_states",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
     name = "encoding_test",
     srcs = ["encoding_test.cc"],
     deps = [
@@ -750,6 +760,16 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "matrix_wait_states",
+    srcs = ["matrix_wait_states.c"],
+    hdrs = ["matrix_wait_states.h"],
+    deps = [
+        ":target_info_defs",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "wait_states",
     srcs = ["wait_states.c"],
     hdrs = ["wait_states.h"],
@@ -757,6 +777,7 @@ loom_cc_library(
         ":descriptor_semantics",
         ":encoding",
         ":matrix_contract",
+        ":matrix_wait_states",
         ":target_id",
         ":target_info",
         ":target_refs",
