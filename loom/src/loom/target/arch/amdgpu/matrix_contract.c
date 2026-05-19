@@ -256,10 +256,12 @@ bool loom_amdgpu_matrix_feature_bits_from_profile(
   *out_feature_bits = 0;
   switch (profile) {
     case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX908:
-      *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908;
+      *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908 |
+                          LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908_GFX90A;
       return true;
     case LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A:
       *out_feature_bits = LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908 |
+                          LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908_GFX90A |
                           LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_BF16_1K |
                           LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX90A_F64;
       return true;

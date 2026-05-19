@@ -62,7 +62,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
     AmdgpuMatrixContract(
         name="mfma.f32.16x16x2.bf16",
         family="mfma",
-        features=("mfma_gfx908",),
+        features=("mfma_gfx908_gfx90a",),
         flags=(),
         tile_shape=(16, 16, 2),
         lhs=payload("bf16", 1, 2),
@@ -99,7 +99,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
     AmdgpuMatrixContract(
         name="mfma.f32.16x16x8.bf16",
         family="mfma",
-        features=("mfma_gfx908",),
+        features=("mfma_gfx908_gfx90a",),
         flags=(),
         tile_shape=(16, 16, 8),
         lhs=payload("bf16", 1, 2),
@@ -245,7 +245,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
     AmdgpuMatrixContract(
         name="mfma.f32.32x32x2.bf16",
         family="mfma",
-        features=("mfma_gfx908",),
+        features=("mfma_gfx908_gfx90a",),
         flags=(),
         tile_shape=(32, 32, 2),
         lhs=payload("bf16", 1, 2),
@@ -269,7 +269,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
     AmdgpuMatrixContract(
         name="mfma.f32.32x32x4.bf16",
         family="mfma",
-        features=("mfma_gfx908",),
+        features=("mfma_gfx908_gfx90a",),
         flags=(),
         tile_shape=(32, 32, 4),
         lhs=payload("bf16", 1, 2),
@@ -425,7 +425,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
     AmdgpuMatrixContract(
         name="mfma.f32.4x4x2.bf16",
         family="mfma",
-        features=("mfma_gfx908",),
+        features=("mfma_gfx908_gfx90a",),
         flags=(),
         tile_shape=(4, 4, 2),
         lhs=payload("bf16", 1, 2),
@@ -509,7 +509,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
     AmdgpuMatrixContract(
         name="mfma.i32.16x16x16.i8",
         family="mfma",
-        features=("mfma_gfx908",),
+        features=("mfma_gfx908_gfx90a",),
         flags=(),
         tile_shape=(16, 16, 16),
         lhs=payload("i8", 1, 4),
@@ -557,7 +557,7 @@ AMDGPU_MATRIX_CONTRACTS: tuple[AmdgpuMatrixContract, ...] = (
     AmdgpuMatrixContract(
         name="mfma.i32.32x32x8.i8",
         family="mfma",
-        features=("mfma_gfx908",),
+        features=("mfma_gfx908_gfx90a",),
         flags=(),
         tile_shape=(32, 32, 8),
         lhs=payload("i8", 1, 4),

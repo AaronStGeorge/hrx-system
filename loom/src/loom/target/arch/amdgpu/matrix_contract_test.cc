@@ -170,13 +170,36 @@ TEST(MatrixContractTest, Gfx908LegacyMfmaDescriptor) {
   EXPECT_EQ(descriptor->result_payload.register_count, 16);
 }
 
+TEST(MatrixContractTest, Gfx908AndGfx90aOnlyMfmaFeatureProfiles) {
+  loom_amdgpu_matrix_feature_bits_t feature_bits = 0;
+  ASSERT_TRUE(loom_amdgpu_matrix_feature_bits_from_profile(
+      LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX908, &feature_bits));
+  EXPECT_TRUE(iree_all_bits_set(feature_bits,
+                                LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908_GFX90A));
+
+  ASSERT_TRUE(loom_amdgpu_matrix_feature_bits_from_profile(
+      LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX90A, &feature_bits));
+  EXPECT_TRUE(iree_all_bits_set(feature_bits,
+                                LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908_GFX90A));
+
+  ASSERT_TRUE(loom_amdgpu_matrix_feature_bits_from_profile(
+      LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX940, &feature_bits));
+  EXPECT_FALSE(iree_any_bit_set(feature_bits,
+                                LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908_GFX90A));
+
+  ASSERT_TRUE(loom_amdgpu_matrix_feature_bits_from_profile(
+      LOOM_AMDGPU_MATRIX_FEATURE_PROFILE_MFMA_GFX950, &feature_bits));
+  EXPECT_FALSE(iree_any_bit_set(feature_bits,
+                                LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908_GFX90A));
+}
+
 TEST(MatrixContractTest, Gfx908SmallLegacyMfmaDescriptor) {
   const loom_amdgpu_matrix_contract_descriptor_t* descriptor =
       FindDescriptor("mfma.f32.4x4x2.bf16");
   ASSERT_NE(descriptor, nullptr);
   EXPECT_EQ(descriptor->family, LOOM_AMDGPU_MATRIX_FAMILY_MFMA);
   EXPECT_EQ(descriptor->required_feature_bits,
-            LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908);
+            LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908_GFX90A);
   EXPECT_EQ(ToString(descriptor->llvm_intrinsic_name),
             "llvm.amdgcn.mfma.f32.4x4x2.bf16");
   EXPECT_EQ(descriptor->tile_shape.result_row_count, 4);
@@ -207,7 +230,7 @@ TEST(MatrixContractTest, Gfx908LegacyIntegerMfmaDescriptor) {
   ASSERT_NE(descriptor, nullptr);
   EXPECT_EQ(descriptor->family, LOOM_AMDGPU_MATRIX_FAMILY_MFMA);
   EXPECT_EQ(descriptor->required_feature_bits,
-            LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908);
+            LOOM_AMDGPU_MATRIX_FEATURE_MFMA_GFX908_GFX90A);
   EXPECT_EQ(descriptor->tile_shape.result_row_count, 16);
   EXPECT_EQ(descriptor->tile_shape.result_column_count, 16);
   EXPECT_EQ(descriptor->tile_shape.reduction_count, 16);
