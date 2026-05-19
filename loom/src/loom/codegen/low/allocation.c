@@ -14,6 +14,7 @@
 #include "loom/codegen/low/allocation/storage_lease.h"
 #include "loom/codegen/low/allocation/target_constraints.h"
 #include "loom/codegen/low/allocation/unit_liveness.h"
+#include "loom/codegen/low/allocation/unit_location.h"
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/codegen/low/function.h"
 #include "loom/error/error_catalog.h"
@@ -100,17 +101,6 @@ typedef struct loom_low_allocation_build_state_t {
   // Number of materialized copy decisions.
   iree_host_size_t materialized_copy_count;
 } loom_low_allocation_build_state_t;
-
-typedef struct loom_low_allocation_unit_location_t {
-  // Target-visible storage kind.
-  loom_low_allocation_location_kind_t location_kind;
-  // Storage class for the unit.
-  loom_liveness_value_class_t value_class;
-  // Descriptor-set-local register class ID for |value_class|.
-  uint16_t descriptor_reg_class_id;
-  // Physical register, target ID, or spill slot ordinal.
-  uint32_t location;
-} loom_low_allocation_unit_location_t;
 
 typedef struct loom_low_allocation_packet_unit_move_t {
   // Unit overwritten by the packet-local move.
@@ -518,42 +508,6 @@ static iree_status_t loom_low_allocation_record_spill_plan(
           .store_count = store_count,
           .reload_count = reload_count,
       };
-  return iree_ok_status();
-}
-
-static bool loom_low_allocation_unit_locations_equal(
-    const loom_low_allocation_unit_location_t* lhs,
-    const loom_low_allocation_unit_location_t* rhs) {
-  return lhs->location_kind == rhs->location_kind &&
-         lhs->descriptor_reg_class_id == rhs->descriptor_reg_class_id &&
-         lhs->location == rhs->location;
-}
-
-static bool loom_low_allocation_unit_storage_classes_equal(
-    const loom_low_allocation_unit_location_t* lhs,
-    const loom_low_allocation_unit_location_t* rhs) {
-  return lhs->location_kind == rhs->location_kind &&
-         lhs->descriptor_reg_class_id == rhs->descriptor_reg_class_id &&
-         loom_liveness_value_class_equal(lhs->value_class, rhs->value_class);
-}
-
-static iree_status_t loom_low_allocation_assignment_unit_location(
-    const loom_low_allocation_assignment_t* assignment, uint32_t unit_index,
-    loom_low_allocation_unit_location_t* out_location) {
-  if (unit_index >= assignment->location_count) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "allocation unit index exceeds assignment range");
-  }
-  if (assignment->location_base > UINT32_MAX - unit_index) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "allocation unit location exceeds uint32_t");
-  }
-  *out_location = (loom_low_allocation_unit_location_t){
-      .location_kind = assignment->location_kind,
-      .value_class = assignment->value_class,
-      .descriptor_reg_class_id = assignment->descriptor_reg_class_id,
-      .location = assignment->location_base + unit_index,
-  };
   return iree_ok_status();
 }
 
@@ -2353,16 +2307,6 @@ static iree_status_t loom_low_allocation_edge_copy_unit_locations(
   return iree_ok_status();
 }
 
-static bool loom_low_allocation_unit_locations_form_register_move(
-    const loom_low_allocation_unit_location_t* source,
-    const loom_low_allocation_unit_location_t* destination) {
-  return loom_low_allocation_location_kind_is_register_like(
-             source->location_kind) &&
-         loom_low_allocation_location_kind_is_register_like(
-             destination->location_kind) &&
-         !loom_low_allocation_unit_locations_equal(source, destination);
-}
-
 static iree_status_t loom_low_allocation_edge_copy_group_unit_count(
     const loom_low_allocation_build_state_t* state,
     const loom_low_allocation_edge_copy_group_t* group,
@@ -2563,37 +2507,6 @@ static iree_status_t loom_low_allocation_count_edge_copy_temporaries_for_group(
   return iree_ok_status();
 }
 
-static bool loom_low_allocation_location_is_live_at_point(
-    const loom_low_allocation_build_state_t* state,
-    const loom_low_allocation_unit_location_t* location, uint32_t point) {
-  for (iree_host_size_t i = 0; i < state->assignment_count; ++i) {
-    const loom_low_allocation_assignment_t* assignment = &state->assignments[i];
-    if (assignment->location_kind != location->location_kind ||
-        point < assignment->start_point) {
-      continue;
-    }
-    if (!loom_low_allocation_storage_reg_classes_share(
-            state->target.descriptor_set, assignment->descriptor_reg_class_id,
-            location->descriptor_reg_class_id)) {
-      continue;
-    }
-    const uint64_t assignment_end =
-        (uint64_t)assignment->location_base + assignment->location_count;
-    if (location->location >= assignment->location_base &&
-        location->location < assignment_end) {
-      const uint32_t unit_offset =
-          (uint32_t)(location->location - assignment->location_base);
-      if (point < loom_low_allocation_live_range_assignment_unit_end_point(
-                      state->unit_liveness.end_points,
-                      state->unit_liveness.end_point_count, assignment,
-                      unit_offset)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 static iree_status_t loom_low_allocation_edge_copy_group_uses_location(
     const loom_low_allocation_build_state_t* state,
     const loom_low_allocation_edge_copy_group_t* group,
@@ -2717,8 +2630,11 @@ static iree_status_t loom_low_allocation_find_edge_copy_temporary(
     if (loom_low_allocation_target_constraints_reserved_range_conflicts(
             &state->target_constraints, temporary.descriptor_reg_class_id,
             temporary.location_kind, temporary.location, 1) ||
-        loom_low_allocation_location_is_live_at_point(state, &temporary,
-                                                      group->program_point) ||
+        loom_low_allocation_unit_location_is_live_at_point(
+            state->target.descriptor_set, state->assignments,
+            state->assignment_count, state->unit_liveness.end_points,
+            state->unit_liveness.end_point_count, &temporary,
+            group->program_point) ||
         group_uses_location) {
       if (location == UINT32_MAX) {
         break;
@@ -3190,8 +3106,10 @@ static iree_status_t loom_low_allocation_find_packet_move_temporary(
     if (loom_low_allocation_target_constraints_reserved_range_conflicts(
             &state->target_constraints, temporary.descriptor_reg_class_id,
             temporary.location_kind, temporary.location, 1) ||
-        loom_low_allocation_location_is_live_at_point(state, &temporary,
-                                                      program_point) ||
+        loom_low_allocation_unit_location_is_live_at_point(
+            state->target.descriptor_set, state->assignments,
+            state->assignment_count, state->unit_liveness.end_points,
+            state->unit_liveness.end_point_count, &temporary, program_point) ||
         loom_low_allocation_packet_move_uses_location(moves, move_count,
                                                       &temporary)) {
       if (location == UINT32_MAX) {

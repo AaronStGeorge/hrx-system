@@ -256,6 +256,33 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    unit_location
+  HDRS
+    "unit_location.h"
+  SRCS
+    "unit_location.c"
+  DEPS
+    ::assignment
+    ::live_range
+    ::storage
+    iree::base
+    loom::src::loom::codegen::low::descriptors
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    unit_location_test
+  SRCS
+    "unit_location_test.cc"
+  DEPS
+    ::unit_location
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     move_topology
   HDRS
     "move_topology.h"

@@ -39,6 +39,7 @@ loom_assert_no_dependencies(
         ":storage_lease",
         ":table",
         ":target_constraints",
+        ":unit_location",
         ":unit_liveness",
         ":verification",
     ],
@@ -251,6 +252,29 @@ loom_cc_test(
         ":target_constraints",
         "//loom/src/loom/target/test:descriptors",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "unit_location",
+    srcs = ["unit_location.c"],
+    hdrs = ["unit_location.h"],
+    deps = [
+        ":assignment",
+        ":live_range",
+        ":storage",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_test(
+    name = "unit_location_test",
+    srcs = ["unit_location_test.cc"],
+    deps = [
+        ":unit_location",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
