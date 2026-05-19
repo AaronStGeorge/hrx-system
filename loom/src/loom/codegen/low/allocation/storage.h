@@ -17,6 +17,11 @@
 extern "C" {
 #endif
 
+// Returns the allocation location kind used for values in |reg_class|.
+loom_low_allocation_location_kind_t
+loom_low_allocation_storage_reg_class_location_kind(
+    const loom_low_reg_class_t* reg_class);
+
 // Returns true when the two descriptor register classes address the same
 // backing storage space. Classes share storage when they are the same class or
 // when both opt into the same non-zero alias set.

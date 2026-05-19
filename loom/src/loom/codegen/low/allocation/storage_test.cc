@@ -11,9 +11,13 @@
 namespace loom {
 namespace {
 
-loom_low_reg_class_t RegClass(uint16_t alias_set_id) {
+loom_low_reg_class_t RegClass(uint16_t alias_set_id,
+                              uint16_t allocatable_count = 0,
+                              loom_low_reg_class_flags_t flags = 0) {
   loom_low_reg_class_t reg_class = {};
   reg_class.alias_set_id = alias_set_id;
+  reg_class.allocatable_count = allocatable_count;
+  reg_class.flags = flags;
   return reg_class;
 }
 
@@ -133,6 +137,25 @@ TEST(LowAllocationStorageTest, SharesRegisterClassAliasSets) {
       loom_low_allocation_storage_reg_classes_share(&descriptor_set, 0, 1));
   EXPECT_FALSE(
       loom_low_allocation_storage_reg_classes_share(&descriptor_set, 0, 2));
+}
+
+TEST(LowAllocationStorageTest, MapsRegisterClassToLocationKind) {
+  const loom_low_reg_class_t allocatable_reg_class =
+      RegClass(/*alias_set_id=*/0, /*allocatable_count=*/16);
+  const loom_low_reg_class_t physical_reg_class =
+      RegClass(/*alias_set_id=*/0, /*allocatable_count=*/0,
+               LOOM_LOW_REG_CLASS_FLAG_PHYSICAL);
+  const loom_low_reg_class_t target_id_reg_class = RegClass(/*alias_set_id=*/0);
+
+  EXPECT_EQ(LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+            loom_low_allocation_storage_reg_class_location_kind(
+                &allocatable_reg_class));
+  EXPECT_EQ(
+      LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER,
+      loom_low_allocation_storage_reg_class_location_kind(&physical_reg_class));
+  EXPECT_EQ(LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID,
+            loom_low_allocation_storage_reg_class_location_kind(
+                &target_id_reg_class));
 }
 
 }  // namespace

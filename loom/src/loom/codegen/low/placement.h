@@ -115,6 +115,10 @@ typedef struct loom_low_placement_table_t {
   const loom_low_placement_relation_range_t* ranges_by_source_ordinal;
 } loom_low_placement_table_t;
 
+// Returns true when relations with |cause| can justify two otherwise
+// conflicting allocation assignments sharing target-visible storage.
+bool loom_low_placement_cause_can_alias(loom_low_placement_cause_t cause);
+
 // Builds a function-local placement relation table over an acquired value
 // domain and its liveness analysis.
 iree_status_t loom_low_placement_analyze_region(

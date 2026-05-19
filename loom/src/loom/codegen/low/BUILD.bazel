@@ -321,6 +321,16 @@ loom_cc_library(
     ],
 )
 
+loom_cc_test(
+    name = "placement_test",
+    srcs = ["placement_test.cc"],
+    deps = [
+        ":placement",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
 loom_cc_library(
     name = "allocation",
     srcs = ["allocation.c"],

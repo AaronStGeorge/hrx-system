@@ -6,6 +6,17 @@
 
 #include "loom/codegen/low/allocation/storage.h"
 
+loom_low_allocation_location_kind_t
+loom_low_allocation_storage_reg_class_location_kind(
+    const loom_low_reg_class_t* reg_class) {
+  IREE_ASSERT_ARGUMENT(reg_class);
+  if (reg_class->allocatable_count > 0 ||
+      iree_any_bit_set(reg_class->flags, LOOM_LOW_REG_CLASS_FLAG_PHYSICAL)) {
+    return LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER;
+  }
+  return LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID;
+}
+
 bool loom_low_allocation_storage_reg_classes_share(
     const loom_low_descriptor_set_t* descriptor_set, uint16_t lhs_reg_class_id,
     uint16_t rhs_reg_class_id) {

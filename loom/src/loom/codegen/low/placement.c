@@ -37,6 +37,19 @@ typedef struct loom_low_placement_build_state_t {
   iree_host_size_t appended_source_relation_count;
 } loom_low_placement_build_state_t;
 
+bool loom_low_placement_cause_can_alias(loom_low_placement_cause_t cause) {
+  switch (cause) {
+    case LOOM_LOW_PLACEMENT_CAUSE_TIED_RESULT:
+    case LOOM_LOW_PLACEMENT_CAUSE_LOW_COPY:
+    case LOOM_LOW_PLACEMENT_CAUSE_LOW_SLICE:
+    case LOOM_LOW_PLACEMENT_CAUSE_LOW_CONCAT:
+    case LOOM_LOW_PLACEMENT_CAUSE_LOW_BRANCH:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static iree_status_t loom_low_placement_value_ordinal(
     const loom_low_placement_build_state_t* state, loom_value_id_t value_id,
     loom_value_ordinal_t* out_value_ordinal) {

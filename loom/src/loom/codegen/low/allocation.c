@@ -321,20 +321,6 @@ static bool loom_low_allocation_value_ordinal_for_value(
   return true;
 }
 
-static bool loom_low_allocation_relation_cause_can_alias(
-    loom_low_placement_cause_t cause) {
-  switch (cause) {
-    case LOOM_LOW_PLACEMENT_CAUSE_TIED_RESULT:
-    case LOOM_LOW_PLACEMENT_CAUSE_LOW_COPY:
-    case LOOM_LOW_PLACEMENT_CAUSE_LOW_SLICE:
-    case LOOM_LOW_PLACEMENT_CAUSE_LOW_CONCAT:
-    case LOOM_LOW_PLACEMENT_CAUSE_LOW_BRANCH:
-      return true;
-    default:
-      return false;
-  }
-}
-
 static uint32_t loom_low_allocation_unit_end_point_start_for_value_ordinal(
     const loom_low_allocation_build_state_t* state,
     loom_value_ordinal_t value_ordinal) {
@@ -556,16 +542,6 @@ static iree_status_t loom_low_allocation_resolve_descriptor_register_class(
   return iree_ok_status();
 }
 
-static loom_low_allocation_location_kind_t
-loom_low_allocation_reg_class_location_kind(
-    const loom_low_reg_class_t* reg_class) {
-  if (reg_class->allocatable_count > 0 ||
-      iree_any_bit_set(reg_class->flags, LOOM_LOW_REG_CLASS_FLAG_PHYSICAL)) {
-    return LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER;
-  }
-  return LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID;
-}
-
 static iree_status_t loom_low_allocation_reg_class_capacity(
     const loom_low_allocation_build_state_t* state, uint16_t reg_class_id,
     loom_low_allocation_class_capacity_t* out_capacity) {
@@ -602,7 +578,8 @@ static iree_status_t loom_low_allocation_reg_class_capacity(
       !iree_any_bit_set(reg_class->flags, LOOM_LOW_REG_CLASS_FLAG_UNSPILLABLE);
   *out_capacity = (loom_low_allocation_class_capacity_t){
       .descriptor_reg_class_id = reg_class_id,
-      .location_kind = loom_low_allocation_reg_class_location_kind(reg_class),
+      .location_kind =
+          loom_low_allocation_storage_reg_class_location_kind(reg_class),
       .max_units = max_units,
       .alloc_unit_bits = reg_class->alloc_unit_bits,
       .spill_slot_space =
@@ -668,16 +645,10 @@ static iree_status_t loom_low_allocation_class_capacity(
                                                 out_capacity);
 }
 
-static bool loom_low_allocation_location_kind_is_register_owned(
-    loom_low_allocation_location_kind_t location_kind) {
-  return location_kind == LOOM_LOW_ALLOCATION_LOCATION_PHYSICAL_REGISTER ||
-         location_kind == LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID;
-}
-
 static iree_status_t loom_low_allocation_validate_location_range(
     loom_low_allocation_location_kind_t location_kind, uint32_t location_base,
     uint32_t location_count, iree_string_view_t subject) {
-  if (!loom_low_allocation_location_kind_is_register_owned(location_kind)) {
+  if (!loom_low_allocation_location_kind_is_register_like(location_kind)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "low allocation %.*s uses unsupported location kind %u",
@@ -1447,7 +1418,7 @@ static void loom_low_allocation_record_assignment_location_end(
   const loom_low_reg_class_t* reg_class = loom_low_allocation_reg_class_at(
       state->target.descriptor_set, reg_class_id);
   if (assignment->location_kind !=
-      loom_low_allocation_reg_class_location_kind(reg_class)) {
+      loom_low_allocation_storage_reg_class_location_kind(reg_class)) {
     return;
   }
   const uint32_t location_end =
@@ -1469,7 +1440,7 @@ static uint32_t loom_low_allocation_assigned_location_search_limit(
     }
     const loom_low_reg_class_t* reg_class =
         loom_low_allocation_reg_class_at(state->target.descriptor_set, i);
-    if (loom_low_allocation_reg_class_location_kind(reg_class) !=
+    if (loom_low_allocation_storage_reg_class_location_kind(reg_class) !=
         location_kind) {
       continue;
     }
@@ -2974,7 +2945,7 @@ static iree_status_t loom_low_allocation_append_assignment(
                             "%u",
                             (unsigned)assignment->value_id);
   }
-  if (loom_low_allocation_location_kind_is_register_owned(
+  if (loom_low_allocation_location_kind_is_register_like(
           assignment->location_kind)) {
     IREE_RETURN_IF_ERROR(
         loom_low_allocation_validate_register_location_capacity(
@@ -5945,7 +5916,7 @@ static iree_status_t loom_low_allocation_pair_is_placement_alias(
   for (uint32_t i = 0; i < result_range.count; ++i) {
     const loom_low_placement_relation_t* relation =
         &table->placement.relations[result_range.start + i];
-    if (!loom_low_allocation_relation_cause_can_alias(relation->cause)) {
+    if (!loom_low_placement_cause_can_alias(relation->cause)) {
       continue;
     }
     const loom_value_id_t source_value_id = loom_low_placement_value_id(
@@ -5991,7 +5962,7 @@ static iree_status_t loom_low_allocation_pair_is_placement_alias(
     IREE_ASSERT_LT(relation_index, table->placement.relation_count);
     const loom_low_placement_relation_t* relation =
         &table->placement.relations[relation_index];
-    if (!loom_low_allocation_relation_cause_can_alias(relation->cause)) {
+    if (!loom_low_placement_cause_can_alias(relation->cause)) {
       continue;
     }
     const loom_value_id_t result_value_id = loom_low_placement_value_id(
@@ -6119,7 +6090,7 @@ static iree_status_t loom_low_allocation_verify_register_location_capacity(
   const loom_low_reg_class_t* reg_class =
       &table->target.descriptor_set->reg_classes[reg_class_id];
   const loom_low_allocation_location_kind_t expected_location_kind =
-      loom_low_allocation_reg_class_location_kind(reg_class);
+      loom_low_allocation_storage_reg_class_location_kind(reg_class);
   if (location_kind != expected_location_kind) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
@@ -6196,7 +6167,7 @@ static iree_status_t loom_low_allocation_verify_assignment(
         assignment->value_class.register_descriptor_set_stable_id,
         assignment->value_class.register_class_id);
   }
-  if (loom_low_allocation_location_kind_is_register_owned(
+  if (loom_low_allocation_location_kind_is_register_like(
           assignment->location_kind)) {
     IREE_RETURN_IF_ERROR(loom_low_allocation_verify_register_location_capacity(
         table, assignment->descriptor_reg_class_id, assignment->location_kind,

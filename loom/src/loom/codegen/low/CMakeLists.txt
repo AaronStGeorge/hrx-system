@@ -280,6 +280,17 @@ loom_cc_library(
   PUBLIC
 )
 
+loom_cc_test(
+  NAME
+    placement_test
+  SRCS
+    "placement_test.cc"
+  DEPS
+    ::placement
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
 loom_cc_library(
   NAME
     allocation
