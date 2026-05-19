@@ -32,6 +32,7 @@ loom_assert_no_dependencies(
         ":active_set",
         ":active_unit",
         ":assignment",
+        ":copy_decision",
         ":diagnostics",
         ":edge_copy",
         ":live_range",
@@ -96,6 +97,24 @@ loom_cc_test(
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "copy_decision",
+    srcs = ["copy_decision.c"],
+    hdrs = ["copy_decision.h"],
+    deps = [
+        ":assignment",
+        ":move_topology",
+        ":storage",
+        ":table",
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 

@@ -71,6 +71,27 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    copy_decision
+  HDRS
+    "copy_decision.h"
+  SRCS
+    "copy_decision.c"
+  DEPS
+    ::assignment
+    ::move_topology
+    ::storage
+    ::table
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::liveness
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     edge_copy
   HDRS
     "edge_copy.h"

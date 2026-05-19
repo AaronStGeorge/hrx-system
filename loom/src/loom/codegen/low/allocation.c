@@ -10,6 +10,7 @@
 
 #include "loom/analysis/consumption.h"
 #include "loom/codegen/low/allocation/active_set.h"
+#include "loom/codegen/low/allocation/copy_decision.h"
 #include "loom/codegen/low/allocation/edge_copy.h"
 #include "loom/codegen/low/allocation/packet_move.h"
 #include "loom/codegen/low/allocation/spill_plan.h"
@@ -62,8 +63,8 @@ typedef struct loom_low_allocation_build_state_t {
   loom_low_allocation_spill_plan_t* spill_plans;
   // Mutable remark records being built.
   loom_low_allocation_remark_t* remarks;
-  // Mutable copy/coalescing decision records being built.
-  loom_low_allocation_copy_decision_t* copy_decisions;
+  // Mutable low.copy decision plan being built.
+  loom_low_allocation_copy_decision_plan_t copy_decision_plan;
   // Mutable branch edge-copy plan being built.
   loom_low_allocation_edge_copy_plan_t edge_copy_plan;
   // Mutable packet-local move scratch plan being built.
@@ -76,14 +77,8 @@ typedef struct loom_low_allocation_build_state_t {
   iree_host_size_t spill_plan_count;
   // Number of initialized remark records.
   iree_host_size_t remark_count;
-  // Number of initialized copy/coalescing decision records.
-  iree_host_size_t copy_decision_count;
   // Number of spill-slot assignments.
   iree_host_size_t spill_count;
-  // Number of coalesced copy decisions.
-  iree_host_size_t coalesced_copy_count;
-  // Number of materialized copy decisions.
-  iree_host_size_t materialized_copy_count;
 } loom_low_allocation_build_state_t;
 
 // Branch placement may make two values overlap in the linear interval space
@@ -1841,67 +1836,6 @@ static iree_status_t loom_low_allocation_assign_structural_interval(
   return iree_ok_status();
 }
 
-static iree_status_t loom_low_allocation_record_copy_decision(
-    loom_low_allocation_build_state_t* state, const loom_op_t* op) {
-  uint32_t source_assignment_index = 0;
-  IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
-      state, loom_low_copy_source(op), &source_assignment_index));
-  uint32_t result_assignment_index = 0;
-  IREE_RETURN_IF_ERROR(loom_low_allocation_assignment_index_for_value(
-      state, loom_low_copy_result(op), &result_assignment_index));
-
-  const loom_low_allocation_assignment_t* source_assignment =
-      &state->assignments[source_assignment_index];
-  const loom_low_allocation_assignment_t* result_assignment =
-      &state->assignments[result_assignment_index];
-  const bool coalesced =
-      loom_low_allocation_assignment_is_register_like(source_assignment) &&
-      loom_low_allocation_assignment_is_register_like(result_assignment) &&
-      loom_low_allocation_storage_assignment_locations_share(
-          state->target.descriptor_set, source_assignment, result_assignment);
-  state->copy_decisions[state->copy_decision_count++] =
-      (loom_low_allocation_copy_decision_t){
-          .source_value_id = loom_low_copy_source(op),
-          .result_value_id = loom_low_copy_result(op),
-          .source_assignment_index = source_assignment_index,
-          .result_assignment_index = result_assignment_index,
-          .kind = coalesced ? LOOM_LOW_ALLOCATION_COPY_COALESCED
-                            : LOOM_LOW_ALLOCATION_COPY_MATERIALIZED,
-      };
-  if (coalesced) {
-    ++state->coalesced_copy_count;
-  } else {
-    ++state->materialized_copy_count;
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_low_allocation_record_copy_decisions(
-    loom_low_allocation_build_state_t* state) {
-  iree_host_size_t copy_count =
-      loom_low_allocation_move_topology_count_copy_ops(state->body);
-  if (copy_count == 0) {
-    return iree_ok_status();
-  }
-
-  IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-      state->arena, copy_count, sizeof(*state->copy_decisions),
-      (void**)&state->copy_decisions));
-  memset(state->copy_decisions, 0, copy_count * sizeof(*state->copy_decisions));
-
-  loom_block_t* block = NULL;
-  loom_region_for_each_block(state->body, block) {
-    loom_op_t* op = NULL;
-    loom_block_for_each_op(block, op) {
-      if (!loom_low_copy_isa(op)) {
-        continue;
-      }
-      IREE_RETURN_IF_ERROR(loom_low_allocation_record_copy_decision(state, op));
-    }
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_low_allocation_assign_intervals(
     loom_low_allocation_build_state_t* state) {
   iree_host_size_t allocatable_count = 0;
@@ -2172,7 +2106,17 @@ iree_status_t loom_low_allocate_function(
         loom_low_allocation_storage_lease_state_finalize(&state.storage_leases);
   }
   if (iree_status_is_ok(status)) {
-    status = loom_low_allocation_record_copy_decisions(&state);
+    const loom_low_allocation_copy_decision_context_t copy_decision_context = {
+        .module = state.module,
+        .body = state.body,
+        .descriptor_set = state.target.descriptor_set,
+        .liveness = &state.liveness,
+        .assignments = state.assignments,
+        .assignment_indices_by_value_ordinal =
+            state.assignment_indices_by_value_ordinal,
+    };
+    status = loom_low_allocation_copy_decision_plan_build(
+        &copy_decision_context, arena, &state.copy_decision_plan);
   }
   if (iree_status_is_ok(status)) {
     const loom_low_allocation_edge_copy_context_t edge_copy_context = {
@@ -2228,8 +2172,8 @@ iree_status_t loom_low_allocate_function(
         .spill_plan_count = state.spill_plan_count,
         .remarks = state.remarks,
         .remark_count = state.remark_count,
-        .copy_decisions = state.copy_decisions,
-        .copy_decision_count = state.copy_decision_count,
+        .copy_decisions = state.copy_decision_plan.decisions,
+        .copy_decision_count = state.copy_decision_plan.decision_count,
         .edge_copies = state.edge_copy_plan.copies,
         .edge_copy_count = state.edge_copy_plan.copy_count,
         .edge_copy_groups = state.edge_copy_plan.groups,
@@ -2247,8 +2191,8 @@ iree_status_t loom_low_allocate_function(
         .storage_release_action_count =
             state.storage_leases.release_action_count,
         .spill_count = state.spill_count,
-        .coalesced_copy_count = state.coalesced_copy_count,
-        .materialized_copy_count = state.materialized_copy_count,
+        .coalesced_copy_count = state.copy_decision_plan.coalesced_count,
+        .materialized_copy_count = state.copy_decision_plan.materialized_count,
     };
     loom_target_bundle_storage_rebind(&table.target.bundle_storage);
   }
