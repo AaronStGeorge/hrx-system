@@ -419,7 +419,10 @@ TEST(MatrixContractTest, Gfx950ScaledMfmaDescriptor) {
   EXPECT_EQ(descriptor->tile_shape.reduction_count, 64);
   EXPECT_EQ(descriptor->lhs_payload.numeric_type,
             LOOM_AMDGPU_MATRIX_NUMERIC_F8F6F4);
-  EXPECT_EQ(descriptor->rhs_payload.register_count, 0);
+  EXPECT_EQ(descriptor->lhs_payload.register_count, 8);
+  EXPECT_EQ(descriptor->lhs_payload.element_count, 32);
+  EXPECT_EQ(descriptor->rhs_payload.register_count, 8);
+  EXPECT_EQ(descriptor->rhs_payload.element_count, 32);
   EXPECT_EQ(descriptor->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALED,
             LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SCALED);
   EXPECT_EQ(descriptor->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_MATRIX_FORMATS,
@@ -517,9 +520,13 @@ TEST(MatrixContractTest, Gfx12SwmmacBaseDescriptors) {
   EXPECT_EQ(f16_descriptor->tile_shape.reduction_count, 32);
   EXPECT_EQ(f16_descriptor->lhs_payload.numeric_type,
             LOOM_AMDGPU_MATRIX_NUMERIC_F16);
-  EXPECT_EQ(f16_descriptor->lhs_payload.register_count, 0);
+  EXPECT_EQ(f16_descriptor->lhs_payload.register_count, 4);
+  EXPECT_EQ(f16_descriptor->lhs_payload.element_count, 8);
+  EXPECT_EQ(f16_descriptor->rhs_payload.register_count, 8);
+  EXPECT_EQ(f16_descriptor->rhs_payload.element_count, 16);
   EXPECT_EQ(f16_descriptor->result_payload.numeric_type,
             LOOM_AMDGPU_MATRIX_NUMERIC_F32);
+  EXPECT_EQ(f16_descriptor->result_payload.register_count, 8);
   EXPECT_EQ(f16_descriptor->flags & LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE,
             LOOM_AMDGPU_MATRIX_CONTRACT_FLAG_SPARSE);
 

@@ -543,6 +543,18 @@ iree_py_library(
     iree::runtime::py::loom::target::arch::amdgpu::matrix_contracts
 )
 
+iree_py_test(
+  NAME
+    amdgpu_matrix_contract_tables_test
+  SRCS
+    "../tools/pytest_style_runner.py"
+  ARGS
+    "loom.gen.amdgpu_matrix_contract_tables_test"
+  PACKAGE_DIRS
+    "${IREE_SOURCE_DIR}/runtime/py"
+    "${IREE_BINARY_DIR}/runtime/py"
+)
+
 iree_py_library(
   NAME
     amdgpu_encoding_tables

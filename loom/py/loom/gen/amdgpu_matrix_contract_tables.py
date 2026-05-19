@@ -13,6 +13,7 @@ import re
 import subprocess
 import sys
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -40,7 +41,10 @@ from loom.target.arch.amdgpu.matrix_contracts import (  # noqa: E402
     AmdgpuMatrixContract,
     AmdgpuMatrixPayload,
 )
-from loom.target.low_descriptors import target_relative_name  # noqa: E402
+from loom.target.low_descriptors import (  # noqa: E402
+    Operand,
+    target_relative_name,
+)
 
 _FAMILY_C_NAMES = {
     "mfma": "LOOM_AMDGPU_MATRIX_FAMILY_MFMA",
@@ -119,6 +123,16 @@ _FRAGMENT_LAYOUT_C_NAMES = {
     "cdna_mfma_f32_16x16x16_bf16": ("LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_CDNA_MFMA_F32_16X16X16_BF16"),
     "cdna_mfma_f32_16x16x4_f32": ("LOOM_AMDGPU_MATRIX_FRAGMENT_LAYOUT_CDNA_MFMA_F32_16X16X4_F32"),
 }
+
+
+@dataclass(frozen=True, slots=True)
+class _MatrixDescriptorShape:
+    lhs_register_count: int
+    rhs_register_count: int
+    accumulator_register_count: int
+    result_register_count: int
+    has_sparse_index: bool
+    has_scale_operands: bool
 
 
 def _clang_format_source(source: str, assume_filename: Path) -> str:
@@ -204,6 +218,73 @@ def _matrix_descriptor_keys_by_semantic_tag() -> dict[str, tuple[str, ...]]:
     return {semantic_tag: tuple(sorted(descriptor_keys)) for semantic_tag, descriptor_keys in keys_by_semantic_tag.items()}
 
 
+def _matrix_descriptor_shape_from_operands(
+    operands: Iterable[Operand],
+) -> _MatrixDescriptorShape | None:
+    operand_units = {operand.field_name: operand.unit_count for operand in operands}
+    if any(field_name not in operand_units for field_name in ("a", "b", "acc", "dst")):
+        return None
+    has_scale_a_pair = "scale_a" in operand_units or "scale_b" in operand_units
+    has_scale_src_pair = "scale_src0" in operand_units or "scale_src1" in operand_units
+    if has_scale_a_pair and ("scale_a" not in operand_units or "scale_b" not in operand_units):
+        raise ValueError("AMDGPU matrix descriptor has incomplete scale_a/scale_b operands")
+    if has_scale_src_pair and ("scale_src0" not in operand_units or "scale_src1" not in operand_units):
+        raise ValueError("AMDGPU matrix descriptor has incomplete scale_src0/scale_src1 operands")
+    return _MatrixDescriptorShape(
+        lhs_register_count=operand_units["a"],
+        rhs_register_count=operand_units["b"],
+        accumulator_register_count=operand_units["acc"],
+        result_register_count=operand_units["dst"],
+        has_sparse_index="index" in operand_units,
+        has_scale_operands=has_scale_a_pair or has_scale_src_pair,
+    )
+
+
+def _matrix_descriptor_shapes_by_key() -> dict[str, tuple[_MatrixDescriptorShape, ...]]:
+    shapes_by_key: dict[str, set[_MatrixDescriptorShape]] = {}
+
+    def add_descriptor_shape(
+        descriptor_key: str,
+        operands: Iterable[Operand],
+    ) -> None:
+        shape = _matrix_descriptor_shape_from_operands(operands)
+        if shape is None:
+            return
+        shapes_by_key.setdefault(descriptor_key, set()).add(shape)
+
+    for descriptor_set in _amdgpu_core_descriptor_set_bases():
+        for descriptor in descriptor_set.descriptors:
+            add_descriptor_shape(descriptor.key, descriptor.operands)
+
+    for overlays in (
+        _gfx940_core_overlays(),
+        _gfx950_core_overlays(),
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        for overlay in overlays:
+            add_descriptor_shape(
+                overlay.descriptor_key,
+                (operand_overlay.descriptor_operand for operand_overlay in overlay.operands),
+            )
+
+    return {descriptor_key: tuple(sorted(shapes, key=_matrix_descriptor_shape_sort_key)) for descriptor_key, shapes in shapes_by_key.items()}
+
+
+def _matrix_descriptor_shape_sort_key(
+    shape: _MatrixDescriptorShape,
+) -> tuple[int, int, int, int, bool, bool]:
+    return (
+        shape.lhs_register_count,
+        shape.rhs_register_count,
+        shape.accumulator_register_count,
+        shape.result_register_count,
+        shape.has_sparse_index,
+        shape.has_scale_operands,
+    )
+
+
 def _contract_low_descriptor_key(
     contract: AmdgpuMatrixContract,
     *,
@@ -219,6 +300,49 @@ def _contract_low_descriptor_key(
     if len(descriptor_keys) == 1:
         return descriptor_keys[0]
     return None
+
+
+def _contract_matrix_descriptor_shape(
+    contract: AmdgpuMatrixContract,
+) -> _MatrixDescriptorShape:
+    has_scale_operands = contract.scale_kind != "none" or "scaled" in contract.flags
+    if has_scale_operands != ("scaled" in contract.flags):
+        raise ValueError(f"AMDGPU matrix contract '{contract.name}' has inconsistent scaled flag and scale kind")
+    return _MatrixDescriptorShape(
+        lhs_register_count=contract.lhs.register_count,
+        rhs_register_count=contract.rhs.register_count,
+        accumulator_register_count=contract.accumulator.register_count,
+        result_register_count=contract.result.register_count,
+        has_sparse_index="sparse" in contract.flags,
+        has_scale_operands=has_scale_operands,
+    )
+
+
+def _format_matrix_descriptor_shape(shape: _MatrixDescriptorShape) -> str:
+    sparse_suffix = ", sparse" if shape.has_sparse_index else ""
+    scale_suffix = ", scaled" if shape.has_scale_operands else ""
+    return f"a={shape.lhs_register_count}, b={shape.rhs_register_count}, acc={shape.accumulator_register_count}, dst={shape.result_register_count}{sparse_suffix}{scale_suffix}"
+
+
+def _validate_contract_low_descriptor_shape(
+    contract: AmdgpuMatrixContract,
+    low_descriptor_key: str,
+    *,
+    descriptor_shapes_by_key: Mapping[str, tuple[_MatrixDescriptorShape, ...]],
+) -> None:
+    descriptor_shapes = descriptor_shapes_by_key.get(low_descriptor_key)
+    if descriptor_shapes is None:
+        raise ValueError(f"AMDGPU matrix contract '{contract.name}' references low descriptor '{low_descriptor_key}' without matrix operand shape metadata")
+    contract_shape = _contract_matrix_descriptor_shape(contract)
+    if contract_shape in descriptor_shapes:
+        return
+    descriptor_shape_list = ", ".join(_format_matrix_descriptor_shape(shape) for shape in descriptor_shapes)
+    raise ValueError(
+        f"AMDGPU matrix contract '{contract.name}' payload shape "
+        f"{_format_matrix_descriptor_shape(contract_shape)} does not match "
+        f"low descriptor '{low_descriptor_key}' operand shape(s): "
+        f"{descriptor_shape_list}"
+    )
 
 
 def _payload_initializer(payload: AmdgpuMatrixPayload) -> str:
@@ -241,6 +365,7 @@ def _contract_initializer(
     *,
     descriptor_ref_key_set: set[str],
     keys_by_semantic_tag: Mapping[str, tuple[str, ...]],
+    descriptor_shapes_by_key: Mapping[str, tuple[_MatrixDescriptorShape, ...]],
 ) -> str:
     _validate_known_values(
         contract.features,
@@ -254,6 +379,12 @@ def _contract_initializer(
         descriptor_ref_key_set=descriptor_ref_key_set,
         keys_by_semantic_tag=keys_by_semantic_tag,
     )
+    if low_descriptor_key is not None:
+        _validate_contract_low_descriptor_shape(
+            contract,
+            low_descriptor_key,
+            descriptor_shapes_by_key=descriptor_shapes_by_key,
+        )
     low_descriptor_ref = "LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_REF_NONE" if low_descriptor_key is None else _descriptor_ref_constant_name(low_descriptor_key)
     family = _FAMILY_C_NAMES.get(contract.family)
     if family is None:
@@ -334,6 +465,7 @@ def _emit_header(*, header_path: Path, format_output: bool) -> str:
 def _emit_source(*, public_header: str, source_path: Path, format_output: bool) -> str:
     descriptor_ref_key_set = set(amdgpu_descriptor_ref_keys())
     keys_by_semantic_tag = _matrix_descriptor_keys_by_semantic_tag()
+    descriptor_shapes_by_key = _matrix_descriptor_shapes_by_key()
     lines = [
         "// Copyright 2026 The IREE Authors",
         "//",
@@ -353,6 +485,7 @@ def _emit_source(*, public_header: str, source_path: Path, format_output: bool) 
             contract,
             descriptor_ref_key_set=descriptor_ref_key_set,
             keys_by_semantic_tag=keys_by_semantic_tag,
+            descriptor_shapes_by_key=descriptor_shapes_by_key,
         )
         for contract in AMDGPU_MATRIX_CONTRACTS
     )
