@@ -493,6 +493,15 @@ void loom_value_facts_shrsi(const loom_value_facts_t* lhs,
 // Transfer functions: bitwise
 //===----------------------------------------------------------------------===//
 
+static int64_t loom_value_facts_non_negative_bitwise_upper_bound(
+    int64_t lhs_hi, int64_t rhs_hi) {
+  uint64_t maximum_operand = (uint64_t)loom_max_i64(lhs_hi, rhs_hi);
+  if (maximum_operand == 0) return 0;
+  uint32_t bit_count =
+      64u - (uint32_t)iree_math_count_leading_zeros_u64(maximum_operand);
+  return (int64_t)((UINT64_C(1) << bit_count) - 1);
+}
+
 void loom_value_facts_andi(const loom_value_facts_t* lhs,
                            const loom_value_facts_t* rhs,
                            loom_value_facts_t* out) {
@@ -585,9 +594,10 @@ void loom_value_facts_xori(const loom_value_facts_t* lhs,
     *out = loom_value_facts_exact_i64(lhs_lo ^ rhs_lo);
     return;
   }
-  // Both non-negative: result is non-negative.
   if (lhs_lo >= 0 && rhs_lo >= 0) {
-    *out = loom_value_facts_make(0, INT64_MAX, 1);
+    *out = loom_value_facts_make(
+        0, loom_value_facts_non_negative_bitwise_upper_bound(lhs_hi, rhs_hi),
+        1);
     return;
   }
   *out = loom_value_facts_unknown();

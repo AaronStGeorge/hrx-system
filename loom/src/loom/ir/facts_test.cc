@@ -810,6 +810,16 @@ TEST(XoriTransfer, SelfCancel) {
   EXPECT_EQ(out.range_lo, 0);
 }
 
+TEST(XoriTransfer, NonNegativeRangeStaysWithinOperandBitWidth) {
+  loom_value_facts_t a = loom_value_facts_make(0, 63, 1);
+  loom_value_facts_t b = loom_value_facts_make(0, 3, 1);
+  loom_value_facts_t out;
+  loom_value_facts_xori(&a, &b, &out);
+  EXPECT_EQ(out.range_lo, 0);
+  EXPECT_EQ(out.range_hi, 63);
+  EXPECT_TRUE(loom_value_facts_fit_unsigned_bit_count(out, 6));
+}
+
 //===----------------------------------------------------------------------===//
 // Shaped type helpers
 //===----------------------------------------------------------------------===//
