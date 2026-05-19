@@ -315,6 +315,7 @@ loom_cc_library(
     loom::src::loom::codegen::low::allocation::live_range
     loom::src::loom::codegen::low::allocation::move_topology
     loom::src::loom::codegen::low::allocation::storage
+    loom::src::loom::codegen::low::allocation::storage_lease
     loom::src::loom::codegen::low::allocation::table
     loom::src::loom::codegen::low::allocation::verification
     loom::src::loom::error::emitter

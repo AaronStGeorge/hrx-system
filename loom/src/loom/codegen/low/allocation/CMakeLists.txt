@@ -94,6 +94,38 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    storage_lease
+  HDRS
+    "storage_lease.h"
+  SRCS
+    "storage_lease.c"
+  DEPS
+    ::assignment
+    ::storage
+    ::table
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::liveness
+    loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::storage_lease
+    loom::src::loom::ir
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    storage_lease_test
+  SRCS
+    "storage_lease_test.cc"
+  DEPS
+    ::storage_lease
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     live_range
   HDRS
     "live_range.h"

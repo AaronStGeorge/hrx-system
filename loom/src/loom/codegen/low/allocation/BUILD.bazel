@@ -35,6 +35,7 @@ loom_assert_no_dependencies(
         ":live_range",
         ":move_topology",
         ":storage",
+        ":storage_lease",
         ":table",
         ":verification",
     ],
@@ -105,6 +106,34 @@ loom_cc_test(
         ":assignment",
         ":storage",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
+    name = "storage_lease",
+    srcs = ["storage_lease.c"],
+    hdrs = ["storage_lease.h"],
+    deps = [
+        ":assignment",
+        ":storage",
+        ":table",
+        "//loom/src/loom/analysis:liveness",
+        "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:storage_lease",
+        "//loom/src/loom/ir",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "storage_lease_test",
+    srcs = ["storage_lease_test.cc"],
+    deps = [
+        ":storage_lease",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
