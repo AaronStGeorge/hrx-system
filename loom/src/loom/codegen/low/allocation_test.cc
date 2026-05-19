@@ -11,6 +11,8 @@
 #include "iree/base/internal/arena.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "loom/codegen/low/schedule/run.h"
+#include "loom/codegen/low/storage_lease.h"
 #include "loom/codegen/low/text_asm.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
@@ -219,6 +221,68 @@ iree_status_t CaptureAllocationDiagnostic(
   return iree_ok_status();
 }
 
+struct TestStorageLeaseConfig {
+  // First leased unit within the matched operand assignment.
+  uint32_t unit_offset = 0;
+  // Number of leased units within the matched operand assignment.
+  uint32_t unit_count = 1;
+  // Number of leading operands to lease on each matched node.
+  uint16_t operand_count = 1;
+  // Source-order ordinal to match, or UINT32_MAX to match any node.
+  uint32_t source_ordinal = UINT32_MAX;
+  // True when only terminator nodes should be matched.
+  bool require_terminator = true;
+};
+
+enum TestStorageLeaseIdentity {
+  kTestStorageLeaseReleaseClass = 7,
+  kTestStorageLeaseReleaseAction = 1,
+  kTestStorageLeaseReleaseReason = 8,
+};
+
+iree_status_t EmitOperandStorageLease(void* user_data,
+                                      const loom_low_schedule_table_t* schedule,
+                                      const loom_low_schedule_node_t* node,
+                                      loom_low_storage_lease_emit_fn_t emit,
+                                      void* emit_user_data) {
+  (void)schedule;
+  const TestStorageLeaseConfig* config =
+      static_cast<const TestStorageLeaseConfig*>(user_data);
+  if (config->require_terminator &&
+      node->kind != LOOM_LOW_SCHEDULE_NODE_TERMINATOR) {
+    return iree_ok_status();
+  }
+  if (config->source_ordinal != UINT32_MAX &&
+      node->source_ordinal != config->source_ordinal) {
+    return iree_ok_status();
+  }
+  if (node->operand_count == 0) {
+    return iree_ok_status();
+  }
+  const uint16_t operand_count = config->operand_count < node->operand_count
+                                     ? config->operand_count
+                                     : node->operand_count;
+  for (uint16_t i = 0; i < operand_count; ++i) {
+    const loom_low_storage_lease_event_t event = {
+        .kind = LOOM_LOW_STORAGE_LEASE_SOURCE_READ,
+        .attachment = LOOM_LOW_STORAGE_LEASE_ATTACHMENT_OPERAND,
+        .attachment_index = i,
+        .unit_offset = config->unit_offset,
+        .unit_count = config->unit_count,
+        .release_scope = LOOM_LOW_STORAGE_LEASE_RELEASE_SCOPE_PROGRESS_CLASS,
+        .release_class_id = kTestStorageLeaseReleaseClass,
+        .release_class_name = IREE_SV("test.return"),
+        .release_action_id = kTestStorageLeaseReleaseAction,
+        .release_action_name = IREE_SV("test.release-storage"),
+        .release_reason_id = kTestStorageLeaseReleaseReason,
+        .release_reason_name = IREE_SV("test.storage-release"),
+        .flags = LOOM_LOW_STORAGE_LEASE_FLAG_STARTS_AT_ISSUE,
+    };
+    IREE_RETURN_IF_ERROR(emit(emit_user_data, &event));
+  }
+  return iree_ok_status();
+}
+
 class LowAllocationTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -294,6 +358,47 @@ class LowAllocationTest : public ::testing::Test {
                                       &analysis_arena_, &table);
   }
 
+  iree_status_t ScheduleStorageLeases(
+      loom_module_t* module, loom_op_t* function_op,
+      TestStorageLeaseConfig* config, loom_low_schedule_table_t* out_schedule,
+      loom_low_storage_lease_table_t* out_storage_leases) {
+    loom_low_schedule_options_t schedule_options = {
+        .descriptor_registry = &descriptor_registry_,
+    };
+    IREE_RETURN_IF_ERROR(
+        loom_low_schedule_function(module, function_op, &schedule_options,
+                                   &analysis_arena_, out_schedule));
+    const loom_low_storage_lease_provider_t provider = {
+        .user_data = config,
+        .query = EmitOperandStorageLease,
+    };
+    return loom_low_storage_lease_build(out_schedule, &provider,
+                                        &analysis_arena_, out_storage_leases);
+  }
+
+  iree_status_t AllocateWithStorageLeases(
+      loom_module_t* module, loom_op_t* function_op,
+      loom_low_storage_lease_table_t storage_leases,
+      loom_low_allocation_table_t* out_table) {
+    return AllocateWithStorageLeasesAndBudgets(
+        module, function_op, storage_leases, NULL, 0, out_table);
+  }
+
+  iree_status_t AllocateWithStorageLeasesAndBudgets(
+      loom_module_t* module, loom_op_t* function_op,
+      loom_low_storage_lease_table_t storage_leases,
+      const loom_low_allocation_budget_t* budgets,
+      iree_host_size_t budget_count, loom_low_allocation_table_t* out_table) {
+    loom_low_allocation_options_t options = {
+        .descriptor_registry = &descriptor_registry_,
+        .budgets = budgets,
+        .budget_count = budget_count,
+        .storage_leases = storage_leases,
+    };
+    return loom_low_allocate_function(module, function_op, &options,
+                                      &analysis_arena_, out_table);
+  }
+
   iree_arena_block_pool_t block_pool_;
   loom_context_t context_;
   iree_arena_allocator_t analysis_arena_;
@@ -305,6 +410,24 @@ test.target<low_core> @test_target
 
 low.func.def target(@test_target) @single(%value: reg<test.phys>) -> (reg<test.phys>) {
   low.return %value : reg<test.phys>
+}
+)";
+
+static const char kCopyReuseFunction[] = R"(
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @copy_reuse(%value: reg<test.phys>) -> (reg<test.phys>) {
+  %copy = low.copy %value : reg<test.phys> -> reg<test.phys>
+  low.return %copy : reg<test.phys>
+}
+)";
+
+static const char kDeadResultClobberWindowFunction[] = R"(
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @dead_result_clobber_window(%leader: reg<test.phys>, %lhs: reg<test.phys>, %rhs: reg<test.phys>) -> (reg<test.phys>) asm<test.low.core> {
+  %dead = test.add.phys %lhs, %rhs
+  return %leader
 }
 )";
 
@@ -332,6 +455,141 @@ TEST_F(LowAllocationTest, EmitsDiagnosticForReservedRangeBeyondCapacity) {
   EXPECT_EQ(captured.location_count, 1u);
   EXPECT_EQ(captured.location_end, 33u);
   EXPECT_EQ(captured.allocation_capacity, 32u);
+}
+
+TEST_F(LowAllocationTest, RecordsStorageLeaseInstances) {
+  ModulePtr module = ParseModule(kSinglePhysFunction);
+  loom_op_t* function_op = FindLowFunction(module.get(), IREE_SV("single"));
+
+  TestStorageLeaseConfig config = {};
+  loom_low_schedule_table_t schedule = {};
+  loom_low_storage_lease_table_t storage_leases = {};
+  IREE_ASSERT_OK(ScheduleStorageLeases(module.get(), function_op, &config,
+                                       &schedule, &storage_leases));
+  ASSERT_EQ(storage_leases.record_count, 1u);
+
+  loom_low_allocation_table_t table = {};
+  IREE_ASSERT_OK(AllocateWithStorageLeases(module.get(), function_op,
+                                           storage_leases, &table));
+
+  ASSERT_EQ(table.storage_leases.record_count, 1u);
+  ASSERT_EQ(table.storage_lease_instance_count, 1u);
+  const loom_low_allocation_storage_lease_t* instance =
+      &table.storage_lease_instances[0];
+  EXPECT_EQ(instance->lease_record_index, 0u);
+  ASSERT_LT(instance->assignment_index, table.assignment_count);
+  const loom_low_allocation_assignment_t* assignment =
+      &table.assignments[instance->assignment_index];
+  EXPECT_EQ(instance->value_id, assignment->value_id);
+  EXPECT_EQ(instance->descriptor_reg_class_id,
+            assignment->descriptor_reg_class_id);
+  EXPECT_EQ(instance->location_kind, assignment->location_kind);
+  EXPECT_EQ(instance->location_base, assignment->location_base);
+  EXPECT_EQ(instance->location_count, 1u);
+  EXPECT_EQ(instance->start_point, table.liveness.blocks[0].start_point);
+  EXPECT_EQ(instance->end_point, table.liveness.blocks[0].end_point);
+}
+
+TEST_F(LowAllocationTest, StorageLeaseBlocksPhysicalReuse) {
+  ModulePtr module = ParseModule(kCopyReuseFunction);
+  loom_op_t* function_op = FindLowFunction(module.get(), IREE_SV("copy_reuse"));
+
+  TestStorageLeaseConfig config = {
+      .source_ordinal = 0,
+      .require_terminator = false,
+  };
+  loom_low_schedule_table_t schedule = {};
+  loom_low_storage_lease_table_t storage_leases = {};
+  IREE_ASSERT_OK(ScheduleStorageLeases(module.get(), function_op, &config,
+                                       &schedule, &storage_leases));
+  ASSERT_EQ(storage_leases.record_count, 1u);
+
+  const loom_low_allocation_budget_t budget = {
+      .register_class = IREE_SV("test.phys"),
+      .max_units = 2,
+  };
+  loom_low_allocation_table_t table = {};
+  IREE_ASSERT_OK(AllocateWithStorageLeasesAndBudgets(
+      module.get(), function_op, storage_leases, &budget, 1, &table));
+
+  ASSERT_EQ(table.storage_lease_instance_count, 1u);
+  ASSERT_EQ(table.copy_decision_count, 1u);
+  const loom_low_allocation_copy_decision_t* copy_decision =
+      &table.copy_decisions[0];
+  EXPECT_EQ(copy_decision->kind, LOOM_LOW_ALLOCATION_COPY_MATERIALIZED);
+  const loom_low_allocation_assignment_t* source_assignment =
+      &table.assignments[copy_decision->source_assignment_index];
+  const loom_low_allocation_assignment_t* result_assignment =
+      &table.assignments[copy_decision->result_assignment_index];
+  EXPECT_FALSE(loom_low_allocation_assignments_match_target_storage(
+      table.target.descriptor_set, source_assignment, result_assignment));
+}
+
+TEST_F(LowAllocationTest, RecordsStorageReleaseActionForForcedReuse) {
+  ModulePtr module = ParseModule(kDeadResultClobberWindowFunction);
+  loom_op_t* function_op =
+      FindLowFunction(module.get(), IREE_SV("dead_result_clobber_window"));
+
+  TestStorageLeaseConfig config = {
+      .operand_count = 2,
+      .source_ordinal = 0,
+      .require_terminator = false,
+  };
+  loom_low_schedule_table_t schedule = {};
+  loom_low_storage_lease_table_t storage_leases = {};
+  IREE_ASSERT_OK(ScheduleStorageLeases(module.get(), function_op, &config,
+                                       &schedule, &storage_leases));
+  ASSERT_EQ(storage_leases.record_count, 2u);
+
+  const loom_low_allocation_budget_t budget = {
+      .register_class = IREE_SV("test.phys"),
+      .max_units = 3,
+  };
+  loom_low_allocation_table_t table = {};
+  IREE_ASSERT_OK(AllocateWithStorageLeasesAndBudgets(
+      module.get(), function_op, storage_leases, &budget, 1, &table));
+
+  ASSERT_EQ(table.storage_lease_instance_count, 2u);
+  ASSERT_EQ(table.storage_release_action_count, 1u);
+  const loom_low_allocation_storage_lease_t* lease =
+      &table.storage_lease_instances[0];
+  EXPECT_EQ(lease->release_action_index, 0u);
+  EXPECT_EQ(lease->end_point, 1u);
+
+  const loom_low_storage_release_action_t* action =
+      &table.storage_release_actions[0];
+  EXPECT_EQ(action->insertion_packet_index, 1u);
+  EXPECT_EQ(action->insertion_node_index, 1u);
+  EXPECT_EQ(action->release_class_id, kTestStorageLeaseReleaseClass);
+  EXPECT_TRUE(iree_string_view_equal(action->release_class_name,
+                                     IREE_SV("test.return")));
+  EXPECT_EQ(action->release_action_id, kTestStorageLeaseReleaseAction);
+  EXPECT_TRUE(iree_string_view_equal(action->release_action_name,
+                                     IREE_SV("test.release-storage")));
+  EXPECT_EQ(action->release_reason_id, kTestStorageLeaseReleaseReason);
+  EXPECT_TRUE(iree_string_view_equal(action->release_reason_name,
+                                     IREE_SV("test.storage-release")));
+  EXPECT_EQ(action->required_progress, 1u);
+  EXPECT_EQ(action->lease_record_index, 0u);
+}
+
+TEST_F(LowAllocationTest, RejectsStorageLeaseBeyondAssignedUnits) {
+  ModulePtr module = ParseModule(kSinglePhysFunction);
+  loom_op_t* function_op = FindLowFunction(module.get(), IREE_SV("single"));
+
+  TestStorageLeaseConfig config = {
+      .unit_offset = 1,
+      .unit_count = 1,
+  };
+  loom_low_schedule_table_t schedule = {};
+  loom_low_storage_lease_table_t storage_leases = {};
+  IREE_ASSERT_OK(ScheduleStorageLeases(module.get(), function_op, &config,
+                                       &schedule, &storage_leases));
+
+  loom_low_allocation_table_t table = {};
+  IREE_EXPECT_STATUS_IS(StatusCode::kOutOfRange,
+                        AllocateWithStorageLeases(module.get(), function_op,
+                                                  storage_leases, &table));
 }
 
 }  // namespace

@@ -19,6 +19,7 @@
 #include "loom/analysis/liveness.h"
 #include "loom/codegen/low/descriptors.h"
 #include "loom/codegen/low/placement.h"
+#include "loom/codegen/low/storage_lease.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
@@ -401,6 +402,35 @@ typedef struct loom_low_allocation_packet_move_temporary_group_t {
   uint32_t temporary_count;
 } loom_low_allocation_packet_move_temporary_group_t;
 
+// Assignment-backed storage lease over target-visible physical units.
+//
+// Each record corresponds to one entry in |storage_leases.records|. The lease
+// record names the scheduled packet attachment and target release class; this
+// allocation-side record names the concrete assignment subrange that must
+// remain unavailable for incompatible reuse while the lease is active.
+typedef struct loom_low_allocation_storage_lease_t {
+  // Index into |storage_leases.records|.
+  uint32_t lease_record_index;
+  // Assignment carrying the leased value.
+  uint32_t assignment_index;
+  // SSA value whose assignment owns the leased units.
+  loom_value_id_t value_id;
+  // Program point where the lease becomes active.
+  uint32_t start_point;
+  // Program point where allocation may reuse the leased units.
+  uint32_t end_point;
+  // Release action covering this lease, or STORAGE_RELEASE_ACTION_INDEX_NONE.
+  uint32_t release_action_index;
+  // Descriptor-set-local register class owning the leased units.
+  uint16_t descriptor_reg_class_id;
+  // Target-visible storage kind for the leased units.
+  loom_low_allocation_location_kind_t location_kind;
+  // First physical register or target ID leased.
+  uint32_t location_base;
+  // Number of contiguous physical units leased.
+  uint32_t location_count;
+} loom_low_allocation_storage_lease_t;
+
 // Options controlling allocation table construction.
 typedef struct loom_low_allocation_options_t {
   // Optional operation order used for live intervals.
@@ -422,6 +452,9 @@ typedef struct loom_low_allocation_options_t {
   const loom_low_allocation_reserved_range_t* reserved_ranges;
   // Number of entries in |reserved_ranges|.
   iree_host_size_t reserved_range_count;
+  // Optional target storage leases built over the same scheduled low function
+  // represented by |liveness_order|.
+  loom_low_storage_lease_table_t storage_leases;
   // Structured diagnostic emitter for allocation failures and feedback.
   iree_diagnostic_emitter_t emitter;
   // Optional structured allocation feedback to emit.
@@ -488,6 +521,16 @@ typedef struct loom_low_allocation_table_t {
   const loom_low_allocation_packet_move_temporary_t* packet_move_temporaries;
   // Number of records in |packet_move_temporaries|.
   iree_host_size_t packet_move_temporary_count;
+  // Target storage-lease facts consumed by this allocation.
+  loom_low_storage_lease_table_t storage_leases;
+  // Assignment-backed storage-lease records in storage-lease table order.
+  const loom_low_allocation_storage_lease_t* storage_lease_instances;
+  // Number of records in |storage_lease_instances|.
+  iree_host_size_t storage_lease_instance_count;
+  // Allocator-requested storage release actions in allocation order.
+  const loom_low_storage_release_action_t* storage_release_actions;
+  // Number of records in |storage_release_actions|.
+  iree_host_size_t storage_release_action_count;
   // Number of assignments whose location kind is SPILL_SLOT.
   iree_host_size_t spill_count;
   // Number of low.copy ops coalesced into one location.

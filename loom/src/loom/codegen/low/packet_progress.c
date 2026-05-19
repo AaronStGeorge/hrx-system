@@ -34,10 +34,6 @@ static bool loom_low_packet_progress_action_is_valid(
 
 static iree_status_t loom_low_packet_progress_validate_event(
     const loom_low_packet_progress_event_t* event) {
-  if (event == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "packet progress event is required");
-  }
   if (event->progress_class_id == LOOM_LOW_PACKET_PROGRESS_CLASS_NONE) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "packet progress event has no progress class");
@@ -127,24 +123,7 @@ iree_status_t loom_low_packet_progress_build(
     const loom_low_packet_progress_provider_t* provider,
     iree_arena_allocator_t* arena,
     loom_low_packet_progress_table_t* out_table) {
-  if (out_table == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "packet progress output table is required");
-  }
   memset(out_table, 0, sizeof(*out_table));
-  if (schedule == NULL || allocation == NULL) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "packet progress requires schedule and allocation tables");
-  }
-  if (provider == NULL || provider->query == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "packet progress provider query is required");
-  }
-  if (arena == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "packet progress arena is required");
-  }
   IREE_RETURN_IF_ERROR(loom_low_packet_validate_tables(schedule, allocation));
 
   loom_low_packet_progress_build_state_t state = {

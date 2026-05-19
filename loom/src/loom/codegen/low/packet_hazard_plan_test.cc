@@ -22,10 +22,12 @@ enum SyntheticHazardReason {
   kSyntheticHazardMissingData = 4,
   kSyntheticHazardRequiresAllocation = 5,
   kSyntheticHazardImpossible = 6,
+  kSyntheticHazardStorageRelease = 7,
 };
 
 enum SyntheticHazardAction {
   kSyntheticHazardActionPadding = 1,
+  kSyntheticHazardActionReleaseStorage = 2,
 };
 
 struct PacketHazardPlanTestState {
@@ -167,6 +169,22 @@ iree_status_t SyntheticProgressQuery(
   return iree_ok_status();
 }
 
+iree_status_t EmptyResidualHazardQuery(
+    void* user_data, const loom_low_schedule_table_t* schedule,
+    const loom_low_allocation_table_t* allocation,
+    const loom_low_packet_progress_table_t* progress,
+    const loom_low_packet_view_t* packet,
+    loom_low_packet_hazard_plan_emit_fn_t emit, void* emit_user_data) {
+  (void)user_data;
+  (void)schedule;
+  (void)allocation;
+  (void)progress;
+  (void)packet;
+  (void)emit;
+  (void)emit_user_data;
+  return iree_ok_status();
+}
+
 iree_status_t SyntheticResidualHazardQuery(
     void* user_data, const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
@@ -237,6 +255,82 @@ TEST_F(LowPacketHazardPlanTest, RecordsResidualActionsWithPacketIdentity) {
   EXPECT_EQ(record.progress_class_id, kSyntheticProgressPipe);
   EXPECT_TRUE(iree_string_view_equal(record.progress_class_name,
                                      IREE_SV("synthetic.pipe")));
+  EXPECT_EQ(record.required_progress, 3u);
+  EXPECT_EQ(record.observed_progress, 1u);
+  EXPECT_EQ(record.residual_progress, 2u);
+}
+
+TEST_F(LowPacketHazardPlanTest,
+       EmitsAllocatorStorageReleaseActionsWithObservedProgress) {
+  const loom_low_packet_progress_provider_t progress_provider = {
+      .query = SyntheticProgressQuery,
+  };
+  loom_low_packet_progress_table_t progress = {};
+  IREE_ASSERT_OK(
+      loom_low_packet_progress_build(&state_.schedule, &state_.allocation,
+                                     &progress_provider, &arena_, &progress));
+
+  const loom_low_storage_lease_record_t storage_leases[1] = {
+      {
+          .packet_index = 0,
+          .node_index = 0,
+          .block_index = 0,
+          .scheduled_ordinal = 0,
+          .release_class_id = kSyntheticProgressPipe,
+          .release_class_name = IREE_SV("synthetic.pipe"),
+          .release_action_id = kSyntheticHazardActionReleaseStorage,
+          .release_action_name = IREE_SV("synthetic.release-storage"),
+          .release_reason_id = kSyntheticHazardStorageRelease,
+          .release_reason_name = IREE_SV("synthetic.storage-release"),
+      },
+  };
+  const loom_low_storage_release_action_t storage_release_actions[1] = {
+      {
+          .insertion_packet_index = 2,
+          .insertion_node_index = 2,
+          .block_index = 0,
+          .scheduled_ordinal = 2,
+          .release_class_id = kSyntheticProgressPipe,
+          .release_class_name = IREE_SV("synthetic.pipe"),
+          .release_action_id = kSyntheticHazardActionReleaseStorage,
+          .release_action_name = IREE_SV("synthetic.release-storage"),
+          .release_reason_id = kSyntheticHazardStorageRelease,
+          .release_reason_name = IREE_SV("synthetic.storage-release"),
+          .required_progress = 3,
+          .lease_record_index = 0,
+      },
+  };
+  state_.allocation.storage_leases = {
+      .schedule = &state_.schedule,
+      .records = storage_leases,
+      .record_count = IREE_ARRAYSIZE(storage_leases),
+  };
+  state_.allocation.storage_release_actions = storage_release_actions;
+  state_.allocation.storage_release_action_count =
+      IREE_ARRAYSIZE(storage_release_actions);
+
+  const loom_low_packet_hazard_plan_provider_t hazard_provider = {
+      .query = EmptyResidualHazardQuery,
+  };
+  loom_low_packet_hazard_plan_t plan = {};
+  IREE_ASSERT_OK(loom_low_packet_hazard_plan_build(
+      &state_.schedule, &state_.allocation, &progress, &hazard_provider,
+      &arena_, &plan));
+
+  ASSERT_EQ(plan.record_count, 1u);
+  const loom_low_packet_hazard_plan_record_t& record = plan.records[0];
+  EXPECT_EQ(record.kind, LOOM_LOW_PACKET_HAZARD_PLAN_RECORD_ACTION);
+  EXPECT_EQ(record.action_id, kSyntheticHazardActionReleaseStorage);
+  EXPECT_TRUE(iree_string_view_equal(record.action_name,
+                                     IREE_SV("synthetic.release-storage")));
+  EXPECT_EQ(record.reason_id, kSyntheticHazardStorageRelease);
+  EXPECT_TRUE(iree_string_view_equal(record.reason_name,
+                                     IREE_SV("synthetic.storage-release")));
+  EXPECT_EQ(record.producer_node_index, 0u);
+  EXPECT_EQ(record.producer_packet_index, 0u);
+  EXPECT_EQ(record.consumer_node_index, 2u);
+  EXPECT_EQ(record.insertion_packet_index, 2u);
+  EXPECT_EQ(record.progress_class_id, kSyntheticProgressPipe);
   EXPECT_EQ(record.required_progress, 3u);
   EXPECT_EQ(record.observed_progress, 1u);
   EXPECT_EQ(record.residual_progress, 2u);

@@ -57,6 +57,7 @@ loom_assert_no_dependencies(
         ":pass_environment",
         ":source_memory_plan",
         ":source_selection",
+        ":storage_lease",
         ":storage_layout",
         ":text_asm",
     ],
@@ -84,6 +85,7 @@ loom_assert_no_dependencies(
         ":pipeline",
         ":frame",
         ":source_memory_plan",
+        ":storage_lease",
         ":storage_layout",
     ],
 )
@@ -328,6 +330,7 @@ loom_cc_library(
         ":diagnostics",
         ":function",
         ":placement",
+        ":storage_lease",
         ":target_binding",
         "//loom/src/loom/analysis:consumption",
         "//loom/src/loom/analysis:liveness",
@@ -346,7 +349,9 @@ loom_cc_test(
     srcs = ["allocation_test.cc"],
     deps = [
         ":allocation",
+        ":storage_lease",
         ":text_asm",
+        "//loom/src/loom/codegen/low/schedule",
         "//loom/src/loom/format/text:parser",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
@@ -429,6 +434,17 @@ loom_cc_library(
     deps = [
         ":allocation",
         ":packet",
+        "//loom/src/loom/codegen/low/schedule",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "storage_lease",
+    srcs = ["storage_lease.c"],
+    hdrs = ["storage_lease.h"],
+    deps = [
         "//loom/src/loom/codegen/low/schedule",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
@@ -521,6 +537,7 @@ loom_cc_library(
         ":function",
         ":memory_access",
         ":packet",
+        ":storage_lease",
         "//loom/src/loom/codegen/low/schedule",
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",
@@ -761,6 +778,17 @@ loom_cc_test(
     srcs = ["packet_progress_test.cc"],
     deps = [
         ":packet_progress",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "storage_lease_test",
+    srcs = ["storage_lease_test.cc"],
+    deps = [
+        ":storage_lease",
         "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

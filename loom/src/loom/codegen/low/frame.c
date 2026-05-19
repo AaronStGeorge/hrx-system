@@ -139,6 +139,13 @@ iree_status_t loom_low_emission_frame_build(
   IREE_RETURN_IF_ERROR(loom_low_schedule_function(
       module, low_func_op, &schedule_options, arena, &out_frame->schedule));
 
+  loom_low_storage_lease_table_t storage_leases = {0};
+  if (options->storage_lease_provider != NULL) {
+    IREE_RETURN_IF_ERROR(loom_low_storage_lease_build(
+        &out_frame->schedule, options->storage_lease_provider, arena,
+        &storage_leases));
+  }
+
   loom_liveness_order_t liveness_order = loom_liveness_order_empty();
   IREE_RETURN_IF_ERROR(loom_low_emission_frame_liveness_order_from_schedule(
       low_func_op, &out_frame->schedule, arena, &liveness_order));
@@ -152,6 +159,7 @@ iree_status_t loom_low_emission_frame_build(
       .fixed_value_count = options->allocation_fixed_value_count,
       .reserved_ranges = options->allocation_reserved_ranges,
       .reserved_range_count = options->allocation_reserved_range_count,
+      .storage_leases = storage_leases,
       .emitter = options->emitter,
       .diagnostic_flags = options->allocation_diagnostic_flags,
   };

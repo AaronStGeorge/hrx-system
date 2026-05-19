@@ -292,6 +292,7 @@ loom_cc_library(
     ::diagnostics
     ::function
     ::placement
+    ::storage_lease
     ::target_binding
     iree::base
     iree::base::internal::arena
@@ -312,8 +313,10 @@ loom_cc_test(
     "allocation_test.cc"
   DEPS
     ::allocation
+    ::storage_lease
     ::text_asm
     iree::base::internal::arena
+    loom::src::loom::codegen::low::schedule
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::low
@@ -409,6 +412,20 @@ loom_cc_library(
   DEPS
     ::allocation
     ::packet
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::schedule
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    storage_lease
+  HDRS
+    "storage_lease.h"
+  SRCS
+    "storage_lease.c"
+  DEPS
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::schedule
@@ -517,6 +534,7 @@ loom_cc_library(
     ::function
     ::memory_access
     ::packet
+    ::storage_lease
     iree::base
     iree::base::internal::arena
     loom::src::loom::codegen::low::schedule
@@ -777,6 +795,18 @@ loom_cc_test(
     "packet_progress_test.cc"
   DEPS
     ::packet_progress
+    iree::base::internal::arena
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    storage_lease_test
+  SRCS
+    "storage_lease_test.cc"
+  DEPS
+    ::storage_lease
     iree::base::internal::arena
     iree::testing::gtest
     iree::testing::gtest_main

@@ -23,6 +23,7 @@
 #include "loom/codegen/low/allocation_materialization.h"
 #include "loom/codegen/low/memory_access.h"
 #include "loom/codegen/low/schedule/types.h"
+#include "loom/codegen/low/storage_lease.h"
 #include "loom/error/emitter.h"
 #include "loom/ir/ir.h"
 
@@ -57,6 +58,9 @@ typedef struct loom_low_emission_frame_options_t {
   const loom_low_allocation_reserved_range_t* allocation_reserved_ranges;
   // Number of entries in |allocation_reserved_ranges|.
   iree_host_size_t allocation_reserved_range_count;
+  // Optional target storage-lease provider queried over the final schedule
+  // before allocation.
+  const loom_low_storage_lease_provider_t* storage_lease_provider;
   // Optional structured allocation feedback to emit.
   loom_low_allocation_diagnostic_flags_t allocation_diagnostic_flags;
   // Structured diagnostic emitter shared by scheduling and allocation.
