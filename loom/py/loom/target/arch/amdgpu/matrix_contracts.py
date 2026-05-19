@@ -35,7 +35,6 @@ class AmdgpuMatrixContract:
     result: AmdgpuMatrixPayload
     scale_kind: str
     wave_size: str = "any"
-    low_descriptor_key: str | None = None
     intrinsic_name: str | None = None
     semantic_tag: str | None = None
     fragment_layout: str | None = None

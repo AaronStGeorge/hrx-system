@@ -285,18 +285,12 @@ def _matrix_descriptor_shape_sort_key(
     )
 
 
-def _contract_low_descriptor_key(
+def _resolve_contract_descriptor_key(
     contract: AmdgpuMatrixContract,
     *,
-    descriptor_ref_key_set: set[str],
     keys_by_semantic_tag: Mapping[str, tuple[str, ...]],
     descriptor_shapes_by_key: Mapping[str, tuple[_MatrixDescriptorShape, ...]],
 ) -> str | None:
-    if contract.low_descriptor_key is not None:
-        if contract.low_descriptor_key not in descriptor_ref_key_set:
-            raise ValueError(f"AMDGPU matrix contract '{contract.name}' references unknown descriptor key '{contract.low_descriptor_key}'")
-        return contract.low_descriptor_key
-
     descriptor_keys = keys_by_semantic_tag.get(_contract_semantic_tag(contract), ())
     if not descriptor_keys:
         return None
@@ -339,15 +333,15 @@ def _format_matrix_descriptor_shape(shape: _MatrixDescriptorShape) -> str:
     return f"a={shape.lhs_register_count}, b={shape.rhs_register_count}, acc={shape.accumulator_register_count}, dst={shape.result_register_count}{sparse_suffix}{scale_suffix}"
 
 
-def _validate_contract_low_descriptor_shape(
+def _validate_contract_descriptor_shape(
     contract: AmdgpuMatrixContract,
-    low_descriptor_key: str,
+    descriptor_key: str,
     *,
     descriptor_shapes_by_key: Mapping[str, tuple[_MatrixDescriptorShape, ...]],
 ) -> None:
-    descriptor_shapes = descriptor_shapes_by_key.get(low_descriptor_key)
+    descriptor_shapes = descriptor_shapes_by_key.get(descriptor_key)
     if descriptor_shapes is None:
-        raise ValueError(f"AMDGPU matrix contract '{contract.name}' references low descriptor '{low_descriptor_key}' without matrix operand shape metadata")
+        raise ValueError(f"AMDGPU matrix contract '{contract.name}' references low descriptor '{descriptor_key}' without matrix operand shape metadata")
     contract_shape = _contract_matrix_descriptor_shape(contract)
     if contract_shape in descriptor_shapes:
         return
@@ -355,7 +349,7 @@ def _validate_contract_low_descriptor_shape(
     raise ValueError(
         f"AMDGPU matrix contract '{contract.name}' payload shape "
         f"{_format_matrix_descriptor_shape(contract_shape)} does not match "
-        f"low descriptor '{low_descriptor_key}' operand shape(s): "
+        f"low descriptor '{descriptor_key}' operand shape(s): "
         f"{descriptor_shape_list}"
     )
 
@@ -378,7 +372,6 @@ def _payload_initializer(payload: AmdgpuMatrixPayload) -> str:
 def _contract_initializer(
     contract: AmdgpuMatrixContract,
     *,
-    descriptor_ref_key_set: set[str],
     keys_by_semantic_tag: Mapping[str, tuple[str, ...]],
     descriptor_shapes_by_key: Mapping[str, tuple[_MatrixDescriptorShape, ...]],
 ) -> str:
@@ -389,19 +382,18 @@ def _contract_initializer(
         contract=contract,
     )
     _validate_known_values(contract.flags, _FLAG_C_NAMES, field_name="flag", contract=contract)
-    low_descriptor_key = _contract_low_descriptor_key(
+    descriptor_key = _resolve_contract_descriptor_key(
         contract,
-        descriptor_ref_key_set=descriptor_ref_key_set,
         keys_by_semantic_tag=keys_by_semantic_tag,
         descriptor_shapes_by_key=descriptor_shapes_by_key,
     )
-    if low_descriptor_key is not None:
-        _validate_contract_low_descriptor_shape(
+    if descriptor_key is not None:
+        _validate_contract_descriptor_shape(
             contract,
-            low_descriptor_key,
+            descriptor_key,
             descriptor_shapes_by_key=descriptor_shapes_by_key,
         )
-    low_descriptor_ref = "LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_REF_NONE" if low_descriptor_key is None else _descriptor_ref_constant_name(low_descriptor_key)
+    low_descriptor_ref = "LOOM_AMDGPU_MATRIX_LOW_DESCRIPTOR_REF_NONE" if descriptor_key is None else _descriptor_ref_constant_name(descriptor_key)
     family = _FAMILY_C_NAMES.get(contract.family)
     if family is None:
         raise ValueError(f"AMDGPU matrix contract '{contract.name}' has unknown family '{contract.family}'")
@@ -479,7 +471,6 @@ def _emit_header(*, header_path: Path, format_output: bool) -> str:
 
 
 def _emit_source(*, public_header: str, source_path: Path, format_output: bool) -> str:
-    descriptor_ref_key_set = set(amdgpu_descriptor_ref_keys())
     keys_by_semantic_tag = _matrix_descriptor_keys_by_semantic_tag()
     descriptor_shapes_by_key = _matrix_descriptor_shapes_by_key()
     lines = [
@@ -499,7 +490,6 @@ def _emit_source(*, public_header: str, source_path: Path, format_output: bool) 
     lines.extend(
         _contract_initializer(
             contract,
-            descriptor_ref_key_set=descriptor_ref_key_set,
             keys_by_semantic_tag=keys_by_semantic_tag,
             descriptor_shapes_by_key=descriptor_shapes_by_key,
         )

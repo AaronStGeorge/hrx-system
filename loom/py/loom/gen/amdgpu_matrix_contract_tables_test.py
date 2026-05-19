@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import replace
 
 from loom.gen import amdgpu_matrix_contract_tables
-from loom.target.arch.amdgpu.descriptors import amdgpu_descriptor_ref_keys
 from loom.target.arch.amdgpu.matrix_contracts import (
     AMDGPU_MATRIX_CONTRACTS,
     AmdgpuMatrixContract,
@@ -27,7 +26,6 @@ def _contract(name: str) -> AmdgpuMatrixContract:
 def _contract_initializer(contract: AmdgpuMatrixContract) -> str:
     return amdgpu_matrix_contract_tables._contract_initializer(
         contract,
-        descriptor_ref_key_set=set(amdgpu_descriptor_ref_keys()),
         keys_by_semantic_tag=(amdgpu_matrix_contract_tables._matrix_descriptor_keys_by_semantic_tag()),
         descriptor_shapes_by_key=(amdgpu_matrix_contract_tables._matrix_descriptor_shapes_by_key()),
     )
@@ -40,23 +38,17 @@ def test_generation_derives_semantic_tag_descriptor_ref() -> None:
 
 
 def test_generation_accepts_one_matching_descriptor_shape_variant() -> None:
-    contract = replace(
-        _contract("wmma.f32.16x16x16.f16"),
-        low_descriptor_key=None,
-    )
-    initializer = _contract_initializer(contract)
+    initializer = _contract_initializer(_contract("wmma.f32.16x16x16.f16"))
 
     assert ".low_descriptor_ref = LOOM_AMDGPU_DESCRIPTOR_REF_V_WMMA_F32_16X16X16_F16" in initializer
 
 
 def test_generation_rejects_low_descriptor_payload_shape_drift() -> None:
-    contract = replace(
-        _contract("swmmac.f32.16x16x32.f16"),
-        lhs=payload("f16", 0, 0),
-    )
+    contract = _contract("swmmac.f32.16x16x32.f16")
+    drifted_contract = replace(contract, lhs=payload("f16", 0, 0))
 
     try:
-        _contract_initializer(contract)
+        _contract_initializer(drifted_contract)
     except ValueError as exc:
         message = str(exc)
         assert "AMDGPU matrix contract 'swmmac.f32.16x16x32.f16'" in message
@@ -67,19 +59,15 @@ def test_generation_rejects_low_descriptor_payload_shape_drift() -> None:
 
 
 def test_generation_rejects_ambiguous_shape_matched_descriptor_keys() -> None:
-    contract = replace(
-        _contract("swmmac.f32.16x16x32.f16"),
-        low_descriptor_key=None,
-    )
+    contract = _contract("swmmac.f32.16x16x32.f16")
     descriptor_shapes_by_key = {
         "amdgpu.first": (amdgpu_matrix_contract_tables._contract_matrix_descriptor_shape(contract),),
         "amdgpu.second": (amdgpu_matrix_contract_tables._contract_matrix_descriptor_shape(contract),),
     }
 
     try:
-        amdgpu_matrix_contract_tables._contract_low_descriptor_key(
+        amdgpu_matrix_contract_tables._resolve_contract_descriptor_key(
             contract,
-            descriptor_ref_key_set={"amdgpu.first", "amdgpu.second"},
             keys_by_semantic_tag={
                 "matrix.swmmac.f32.16x16x32.f16": (
                     "amdgpu.first",
