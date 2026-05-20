@@ -2898,6 +2898,35 @@ def _generate_builder_implementation(
     # Fill in fixed successors.
     lines.extend(f"  loom_op_successors(*out_op)[{param['index']}] = {param['name']};" for param in params if param["kind"] == "successor")
 
+    def implicit_block_arg_type_expr(arg_type_kw: str) -> str:
+        scalar_type = _IMPLICIT_ARG_TYPE_MAP.get(arg_type_kw)
+        if scalar_type is not None:
+            return f"loom_type_scalar({scalar_type})"
+        if arg_type_kw.startswith("type_of:"):
+            source_field = arg_type_kw.removeprefix("type_of:")
+            source_desc = layout.fields.get(source_field)
+            if source_desc is None or source_desc.kind != FieldKind.OPERAND:
+                raise ValueError(f"Op '{op.name}': implicit arg type source '{source_field}' must be an operand field")
+            if source_desc.variadic or source_desc.optional:
+                raise ValueError(f"Op '{op.name}': implicit arg type source '{source_field}' must be a required fixed operand")
+            source_param = params_by_name.get(source_field)
+            if source_param is None or source_param.get("kind") != "operand":
+                raise ValueError(f"Op '{op.name}': implicit arg type source '{source_field}' must be a fixed operand")
+            return f"loom_module_value_type(builder->module, {source_field})"
+        raise ValueError(f"Unknown implicit arg type: {arg_type_kw}")
+
+    def emit_define_implicit_block_arg(indent: str, arg_type_kw: str) -> None:
+        scalar_type = _IMPLICIT_ARG_TYPE_MAP.get(arg_type_kw)
+        lines.append(f"{indent}{{")
+        lines.append(f"{indent}  loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
+        lines.append(f"{indent}  IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
+        lines.append(f"{indent}      builder, _block,")
+        if scalar_type is not None:
+            lines.append(f"{indent}      loom_type_scalar({scalar_type}), &_arg_id));")
+        else:
+            lines.append(f"{indent}      {implicit_block_arg_type_expr(arg_type_kw)}, &_arg_id));")
+        lines.append(f"{indent}}}")
+
     def emit_auto_region(slot_expr: str, name: str, implicit_args: tuple[tuple[str, str], ...]) -> None:
         has_block_args = bool(implicit_args)
         lines.append(f"  // Auto-create {name} region with entry block.")
@@ -2908,15 +2937,7 @@ def _generate_builder_implementation(
         if has_block_args:
             lines.append("    loom_block_t* _block = loom_region_entry_block(_region);")
         for _arg_name, arg_type_kw in implicit_args:
-            scalar_type = _IMPLICIT_ARG_TYPE_MAP.get(arg_type_kw)
-            if scalar_type is None:
-                raise ValueError(f"Unknown implicit arg type: {arg_type_kw}")
-            lines.append("    {")
-            lines.append("      loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
-            lines.append("      IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
-            lines.append("          builder, _block,")
-            lines.append(f"          loom_type_scalar({scalar_type}), &_arg_id));")
-            lines.append("    }")
+            emit_define_implicit_block_arg("    ", arg_type_kw)
         lines.append(f"    loom_op_regions(*out_op)[{slot_expr}] = _region;")
         lines.append("  }")
 
@@ -2943,15 +2964,7 @@ def _generate_builder_implementation(
 
         # Implicit args (e.g., loop IV).
         for _arg_name, arg_type_kw in param.get("implicit_args", ()):
-            scalar_type = _IMPLICIT_ARG_TYPE_MAP.get(arg_type_kw)
-            if scalar_type is None:
-                raise ValueError(f"Unknown implicit arg type: {arg_type_kw}")
-            lines.append(f"{inner_indent}{{")
-            lines.append(f"{inner_indent}  loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
-            lines.append(f"{inner_indent}  IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
-            lines.append(f"{inner_indent}      builder, _block,")
-            lines.append(f"{inner_indent}      loom_type_scalar({scalar_type}), &_arg_id));")
-            lines.append(f"{inner_indent}}}")
+            emit_define_implicit_block_arg(inner_indent, arg_type_kw)
 
         # Binding list args (capture or element).
         binding = param.get("binding")
@@ -3019,15 +3032,7 @@ def _generate_builder_implementation(
         if param["case_implicit_args"]:
             lines.append("    loom_block_t* _block = loom_region_entry_block(_region);")
             for _arg_name, arg_type_kw in param["case_implicit_args"]:
-                scalar_type = _IMPLICIT_ARG_TYPE_MAP.get(arg_type_kw)
-                if scalar_type is None:
-                    raise ValueError(f"Unknown implicit arg type: {arg_type_kw}")
-                lines.append("    {")
-                lines.append("      loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
-                lines.append("      IREE_RETURN_IF_ERROR(loom_builder_define_block_arg(")
-                lines.append("          builder, _block,")
-                lines.append(f"          loom_type_scalar({scalar_type}), &_arg_id));")
-                lines.append("    }")
+                emit_define_implicit_block_arg("    ", arg_type_kw)
         lines.append(f"    loom_op_regions(*out_op)[{param['case_region_index']} + _case] = _region;")
         lines.append("  }")
 

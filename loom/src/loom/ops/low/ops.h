@@ -40,7 +40,10 @@ enum {
   LOOM_OP_LOW_COND_BR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 17),
   LOOM_OP_LOW_RESOURCE = LOOM_OP_KIND(LOOM_DIALECT_LOW, 18),
   LOOM_OP_LOW_LIVE_IN = LOOM_OP_KIND(LOOM_DIALECT_LOW, 19),
-  LOOM_OP_LOW_COUNT_ = 20,
+  LOOM_OP_LOW_SCF_YIELD = LOOM_OP_KIND(LOOM_DIALECT_LOW, 20),
+  LOOM_OP_LOW_SCF_IF = LOOM_OP_KIND(LOOM_DIALECT_LOW, 21),
+  LOOM_OP_LOW_SCF_FOR = LOOM_OP_KIND(LOOM_DIALECT_LOW, 22),
+  LOOM_OP_LOW_COUNT_ = 23,
 };
 
 // Function visibility. Absent (0) means private (module-internal).
@@ -97,6 +100,12 @@ typedef enum loom_low_resource_import_kind_e {
   LOOM_LOW_RESOURCE_IMPORT_KIND_HAL_BINDING = 4,
   LOOM_LOW_RESOURCE_IMPORT_KIND_COUNT_ = 5,
 } loom_low_resource_import_kind_t;
+
+// Local low.scf.for unroll policy.
+typedef enum loom_low_scf_for_unroll_policy_e {
+  LOOM_LOW_SCF_FOR_UNROLL_POLICY_UNROLL = 1,
+  LOOM_LOW_SCF_FOR_UNROLL_POLICY_COUNT_ = 2,
+} loom_low_scf_for_unroll_policy_t;
 
 // LOOM_OP_LOW_FUNC_DEF: Target-bound low function definition with register-typed signature values.
 // low.func.def target(@gfx1100) @add(%lhs: reg<amdgpu.vgpr x1>, %rhs: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) {
@@ -628,6 +637,82 @@ iree_status_t loom_low_live_in_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_low_live_in_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_SCF_YIELD: Forward register values from a low structured-control region.
+// low.scf.yield
+LOOM_DEFINE_ISA(loom_low_scf_yield_isa, LOOM_OP_LOW_SCF_YIELD)
+LOOM_DEFINE_VARIADIC_OPERANDS(loom_low_scf_yield_values, 0)
+iree_status_t loom_low_scf_yield_build(
+    loom_builder_t* builder,
+    const loom_value_id_t* values,
+    iree_host_size_t values_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_LOW_SCF_IF: Conditional execution over target-low register values.
+// low.scf.if %cond {
+//   low.scf.yield
+// }
+LOOM_DEFINE_ISA(loom_low_scf_if_isa, LOOM_OP_LOW_SCF_IF)
+LOOM_DEFINE_OPERAND(loom_low_scf_if_condition, 0)
+LOOM_DEFINE_VARIADIC_RESULTS(loom_low_scf_if_results, 0)
+LOOM_DEFINE_REGION(loom_low_scf_if_then_region, 0)
+LOOM_DEFINE_OPTIONAL_REGION(loom_low_scf_if_else_region, 1)
+enum loom_low_scf_if_build_flag_bits_e {
+  LOOM_LOW_SCF_IF_BUILD_FLAG_HAS_ELSE_REGION = 1u << 0,
+};
+typedef uint32_t loom_low_scf_if_build_flags_t;
+iree_status_t loom_low_scf_if_build(
+    loom_builder_t* builder,
+    loom_low_scf_if_build_flags_t build_flags,
+    loom_may_consume loom_value_id_t condition,
+    const loom_type_t* result_types,
+    iree_host_size_t result_count,
+    const loom_tied_result_t* tied_results,
+    iree_host_size_t tied_result_count,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_scf_if_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
+
+// LOOM_OP_LOW_SCF_FOR: Bounded counted target-low loop with optional loop-carried register state.
+// low.scf.for [%lo to %hi step %step] do(%iv: reg<amdgpu.sgpr x1>) {
+//   low.scf.yield
+// }
+LOOM_DEFINE_ISA(loom_low_scf_for_isa, LOOM_OP_LOW_SCF_FOR)
+LOOM_DEFINE_SEGMENTED_OPERAND(loom_low_scf_for_lower_bound, 0)
+LOOM_DEFINE_SEGMENTED_OPERAND(loom_low_scf_for_upper_bound, 1)
+LOOM_DEFINE_SEGMENTED_OPERAND(loom_low_scf_for_step, 2)
+LOOM_DEFINE_SEGMENTED_OPERANDS(loom_low_scf_for_iter_args, 3)
+LOOM_DEFINE_SEGMENTED_OPTIONAL_OPERAND(loom_low_scf_for_unroll_factor, 4)
+LOOM_DEFINE_VARIADIC_RESULTS(loom_low_scf_for_results, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_low_scf_for_unroll_policy, 0, loom_low_scf_for_unroll_policy_t)
+LOOM_DEFINE_REGION(loom_low_scf_for_body, 0)
+enum loom_low_scf_for_build_flag_bits_e {
+  LOOM_LOW_SCF_FOR_BUILD_FLAG_HAS_UNROLL_FACTOR = 1u << 0,
+  LOOM_LOW_SCF_FOR_BUILD_FLAG_HAS_UNROLL_POLICY = 1u << 1,
+};
+typedef uint32_t loom_low_scf_for_build_flags_t;
+iree_status_t loom_low_scf_for_build(
+    loom_builder_t* builder,
+    loom_low_scf_for_build_flags_t build_flags,
+    loom_may_consume loom_value_id_t lower_bound,
+    loom_may_consume loom_value_id_t upper_bound,
+    loom_may_consume loom_value_id_t step,
+    loom_may_consume const loom_value_id_t* iter_args,
+    iree_host_size_t iter_args_count,
+    const loom_type_t* result_types,
+    iree_host_size_t result_count,
+    const loom_tied_result_t* tied_results,
+    iree_host_size_t tied_result_count,
+    loom_optional loom_may_consume loom_value_id_t unroll_factor,
+    loom_optional uint8_t unroll_policy,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+iree_status_t loom_low_scf_for_verify(
     const loom_module_t* module, const loom_op_t* op,
     iree_diagnostic_emitter_t emitter);
 

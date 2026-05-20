@@ -26,6 +26,7 @@ from loom.assembly import (
     RPAREN,
     Attr,
     AttrDict,
+    BlockArgs,
     BlockRef,
     DescriptorRef,
     FormatElement,
@@ -68,10 +69,14 @@ from loom.dsl import (
     EnumCase,
     EnumDef,
     FuncLikeInterface,
+    ImplicitTerminator,
+    IterArgsMatchResults,
+    LoopLikeInterface,
     NoAncestor,
     Op,
     Operand,
     OpPhase,
+    RegionBranchInterface,
     RegionDef,
     RegisterUnitsSumTo,
     Result,
@@ -163,6 +168,18 @@ LowScheduleMode = EnumDef(
         ),
     ],
     doc="Instruction scheduling exactness mode for a low function. Absent means free.",
+)
+
+LowScfForUnrollPolicy = EnumDef(
+    "LowScfForUnrollPolicy",
+    [
+        EnumCase(
+            "unroll",
+            1,
+            doc="Require full unrolling when the consuming target transform runs.",
+        ),
+    ],
+    doc="Local low.scf.for unroll policy.",
 )
 
 LowCodeImportKind = EnumDef(
@@ -670,6 +687,187 @@ low_cond_br = Op(
 )
 
 # ============================================================================
+# low.scf.yield — low structured-control region terminator
+# ============================================================================
+
+low_scf_yield = Op(
+    "low.scf.yield",
+    group=low_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc="Forward register values from a low structured-control region.",
+    operands=[Operand("values", REGISTER, variadic=True)],
+    traits=[TERMINATOR],
+    format=[
+        OptionalGroup(
+            [Refs("values"), COLON, TypesOf("values")],
+            anchor="values",
+        ),
+    ],
+    examples=[
+        "low.scf.yield",
+        "low.scf.yield %value : reg<amdgpu.vgpr x1>",
+    ],
+)
+
+# ============================================================================
+# low.scf.if — low conditional structured control flow
+# ============================================================================
+
+low_scf_if = Op(
+    "low.scf.if",
+    group=low_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc="Conditional execution over target-low register values.",
+    verify="loom_low_scf_if_verify",
+    operands=[Operand("condition", REGISTER, doc="Register predicate controlling the branch.")],
+    results=[Result("results", REGISTER, variadic=True)],
+    regions=[
+        RegionDef(
+            "then_region",
+            doc="Executed when condition is true. Terminated by low.scf.yield.",
+            single_block=True,
+            terminator="low.scf.yield",
+        ),
+        RegionDef(
+            "else_region",
+            doc="Executed when condition is false. Terminated by low.scf.yield.",
+            single_block=True,
+            optional=True,
+            terminator="low.scf.yield",
+        ),
+    ],
+    interfaces=[
+        RegionBranchInterface(selector="condition"),
+    ],
+    constraints=[
+        BlockArgsSatisfy("then_region", REGISTER),
+        BlockArgsSatisfy("else_region", REGISTER),
+        YieldCountMatchesResults("then_region", "results"),
+        YieldTypesMatchResults("then_region", "results"),
+        YieldCountMatchesResults("else_region", "results"),
+        YieldTypesMatchResults("else_region", "results"),
+    ],
+    traits=[ImplicitTerminator("low.scf.yield")],
+    format=[
+        Ref("condition"),
+        OptionalGroup(
+            [ARROW, ResultTypeList("results")],
+            anchor="results",
+        ),
+        Region("then_region"),
+        OptionalGroup(
+            [kw("else"), Region("else_region")],
+            anchor="else_region",
+        ),
+    ],
+    examples=[
+        "low.scf.if %cond {\n  low.scf.yield\n}",
+        "low.scf.if %cond {\n  low.scf.yield\n} else {\n  low.scf.yield\n}",
+        "%result = low.scf.if %cond -> (reg<amdgpu.vgpr x1>) {\n  low.scf.yield %a : reg<amdgpu.vgpr x1>\n} else {\n  low.scf.yield %b : reg<amdgpu.vgpr x1>\n}",
+    ],
+)
+
+# ============================================================================
+# low.scf.for — low counted structured loop
+# ============================================================================
+
+low_scf_for = Op(
+    "low.scf.for",
+    group=low_ops,
+    phase=OpPhase.EXECUTABLE,
+    doc="Bounded counted target-low loop with optional loop-carried register state.",
+    verify="loom_low_scf_for_verify",
+    operands=[
+        Operand("lower_bound", REGISTER, doc="Inclusive lower bound register."),
+        Operand("upper_bound", REGISTER, doc="Exclusive upper bound register."),
+        Operand("step", REGISTER, doc="Positive step register."),
+        Operand(
+            "iter_args",
+            REGISTER,
+            variadic=True,
+            doc="Initial loop-carried register values.",
+        ),
+        Operand(
+            "unroll_factor",
+            REGISTER,
+            optional=True,
+            doc="Optional dynamic target-domain unroll factor.",
+        ),
+    ],
+    attrs=[
+        AttrDef(
+            "unroll_policy",
+            ATTR_TYPE_ENUM,
+            enum_def=LowScfForUnrollPolicy,
+            optional=True,
+            doc="Optional bare unroll policy for required full unroll.",
+        ),
+    ],
+    results=[Result("results", REGISTER, variadic=True)],
+    regions=[
+        RegionDef(
+            "body",
+            doc="Loop body. Terminated by low.scf.yield.",
+            single_block=True,
+            terminator="low.scf.yield",
+            implicit_args=(("iv", "type_of:lower_bound"),),
+            arg_source="iter_args",
+        ),
+    ],
+    interfaces=[
+        LoopLikeInterface(
+            body="body",
+            iter_args="iter_args",
+            iv="iv",
+            lower_bound="lower_bound",
+            upper_bound="upper_bound",
+            step="step",
+        ),
+    ],
+    constraints=[
+        SameType("lower_bound", "upper_bound"),
+        SameType("lower_bound", "step"),
+        IterArgsMatchResults("iter_args", "results"),
+        BlockArgsSatisfy("body", REGISTER),
+        YieldCountMatchesResults("body", "results"),
+        YieldTypesMatchResults("body", "results"),
+    ],
+    traits=[ImplicitTerminator("low.scf.yield")],
+    format=[
+        LBRACKET,
+        Ref("lower_bound"),
+        kw("to"),
+        Ref("upper_bound"),
+        kw("step"),
+        Ref("step"),
+        RBRACKET,
+        OptionalGroup(
+            [kw("iter_args"), GLUE, LPAREN, TypedRefs("iter_args"), RPAREN],
+            anchor="iter_args",
+        ),
+        OptionalGroup(
+            [ARROW, ResultTypeList("results")],
+            anchor="results",
+        ),
+        OptionalGroup(
+            [kw("unroll"), GLUE, LPAREN, Ref("unroll_factor"), GLUE, RPAREN],
+            anchor="unroll_factor",
+        ),
+        OptionalGroup(
+            [Attr("unroll_policy")],
+            anchor="unroll_policy",
+        ),
+        kw("do"),
+        BlockArgs("body"),
+        Region("body"),
+    ],
+    examples=[
+        "low.scf.for [%lo to %hi step %step] do(%iv: reg<amdgpu.sgpr x1>) {\n  low.scf.yield\n}",
+        "%result = low.scf.for [%lo to %hi step %step] iter_args(%acc0: reg<amdgpu.vgpr x1>) -> (reg<amdgpu.vgpr x1>) do(%iv: reg<amdgpu.sgpr x1>, %acc: reg<amdgpu.vgpr x1>) {\n  low.scf.yield %acc : reg<amdgpu.vgpr x1>\n}",
+    ],
+)
+
+# ============================================================================
 # low.op — descriptor-backed target instruction
 # ============================================================================
 
@@ -1149,4 +1347,7 @@ ALL_LOW_OPS: tuple[Op, ...] = (
     low_cond_br,
     low_resource,
     low_live_in,
+    low_scf_yield,
+    low_scf_if,
+    low_scf_for,
 )

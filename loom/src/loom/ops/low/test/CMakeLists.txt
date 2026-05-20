@@ -45,6 +45,28 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "structured_control"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/structured_control.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "structured_control_bytecode"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/structured_control_bytecode.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "target_verify"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/target_verify.loom-test"

@@ -260,3 +260,37 @@ class LowBuilder(DialectBuilder):
         result_names: Sequence[str] | None = ...,
         location_id: int | None = ...,
     ) -> ValueRef: ...
+    def yield_(
+        self,
+        *,
+        values: list[ValueRef] = ...,
+        location_id: int | None = ...,
+    ) -> None: ...
+    def if_(
+        self,
+        *,
+        condition: ValueRef,
+        results: list[Type | TiedResultSpec],
+        then_region: Region | None = ...,
+        else_region: Region | None = ...,
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
+    ) -> list[ValueRef]: ...
+    def for_(
+        self,
+        *,
+        lower_bound: ValueRef,
+        upper_bound: ValueRef,
+        step: ValueRef,
+        iter_args: list[ValueRef] = ...,
+        results: list[Type | TiedResultSpec],
+        unroll_factor: ValueRef | None = ...,
+        unroll_policy: str | None = ...,
+        body: Region | None = ...,
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
+    ) -> list[ValueRef]: ...

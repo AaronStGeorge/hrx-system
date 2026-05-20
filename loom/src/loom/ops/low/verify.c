@@ -528,6 +528,65 @@ static iree_status_t loom_low_emit_subrange_error(
                        IREE_ARRAYSIZE(params));
 }
 
+static uint32_t loom_low_saturating_u32(iree_host_size_t value) {
+  if (value > UINT32_MAX) return UINT32_MAX;
+  return (uint32_t)value;
+}
+
+static iree_status_t loom_low_emit_count_mismatch(
+    iree_diagnostic_emitter_t emitter, const loom_op_t* op,
+    iree_string_view_t field_name, iree_host_size_t actual_count,
+    iree_string_view_t expected_field_name, iree_host_size_t expected_count) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(field_name),
+      loom_param_u32(loom_low_saturating_u32(actual_count)),
+      loom_param_string(expected_field_name),
+      loom_param_u32(loom_low_saturating_u32(expected_count)),
+  };
+  return loom_low_emit(emitter, op, LOOM_ERR_STRUCTURE_013, params,
+                       IREE_ARRAYSIZE(params));
+}
+
+static void loom_low_format_indexed_field_name(char* buffer,
+                                               iree_host_size_t buffer_capacity,
+                                               const char* prefix,
+                                               uint16_t index) {
+  iree_snprintf(buffer, buffer_capacity, "%s[%u]", prefix, index);
+}
+
+static iree_status_t loom_low_emit_value_type_mismatch(
+    const loom_module_t* module, iree_diagnostic_emitter_t emitter,
+    const loom_op_t* op, iree_string_view_t value_field_name,
+    loom_value_id_t value_id, iree_string_view_t expected_field_name,
+    loom_value_id_t expected_value_id) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(value_field_name),
+      loom_param_type(loom_module_value_type(module, value_id)),
+      loom_param_string(expected_field_name),
+      loom_param_type(loom_module_value_type(module, expected_value_id)),
+  };
+  return loom_low_emit(emitter, op, LOOM_ERR_TYPE_001, params,
+                       IREE_ARRAYSIZE(params));
+}
+
+static const loom_block_t* loom_low_region_entry_block_or_null(
+    const loom_region_t* region) {
+  if (!region || region->block_count == 0) return NULL;
+  return loom_region_const_entry_block(region);
+}
+
+static iree_status_t loom_low_verify_region_has_no_entry_args(
+    const loom_region_t* region, iree_string_view_t region_name,
+    const loom_op_t* op, iree_diagnostic_emitter_t emitter) {
+  const loom_block_t* entry = loom_low_region_entry_block_or_null(region);
+  iree_host_size_t actual_count = entry ? entry->arg_count : 0;
+  if (actual_count == 0) {
+    return iree_ok_status();
+  }
+  return loom_low_emit_count_mismatch(emitter, op, region_name, actual_count,
+                                      IREE_SV("0 branch arguments"), 0);
+}
+
 static iree_string_view_t loom_low_actual_ancestor_name(
     const loom_module_t* module, const loom_op_t* nested_op) {
   const loom_op_t* parent = nested_op->parent_op;
@@ -1392,6 +1451,85 @@ iree_status_t loom_low_cond_br_verify(const loom_module_t* module,
   return loom_ops_verify_successor_args(
       module, emitter, op, IREE_SV("low.cond_br"), 1,
       loom_low_cond_br_false_dest(op), NULL, 0);
+}
+
+iree_status_t loom_low_scf_if_verify(const loom_module_t* module,
+                                     const loom_op_t* op,
+                                     iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(loom_low_verify_nested_under_low_entry(
+      module, op, IREE_SV("low executable"), emitter, NULL));
+  IREE_RETURN_IF_ERROR(loom_low_verify_region_has_no_entry_args(
+      loom_low_scf_if_then_region(op), IREE_SV("then_region"), op, emitter));
+  if (loom_low_scf_if_else_region(op)) {
+    IREE_RETURN_IF_ERROR(loom_low_verify_region_has_no_entry_args(
+        loom_low_scf_if_else_region(op), IREE_SV("else_region"), op, emitter));
+  }
+  if (op->result_count == 0 || loom_low_scf_if_else_region(op)) {
+    return iree_ok_status();
+  }
+  return loom_low_emit_count_mismatch(
+      emitter, op, IREE_SV("else_region"), 0,
+      IREE_SV("present when low.scf.if has results"), op->result_count);
+}
+
+iree_status_t loom_low_scf_for_verify(const loom_module_t* module,
+                                      const loom_op_t* op,
+                                      iree_diagnostic_emitter_t emitter) {
+  IREE_RETURN_IF_ERROR(loom_low_verify_nested_under_low_entry(
+      module, op, IREE_SV("low executable"), emitter, NULL));
+
+  const bool has_unroll_factor = loom_low_scf_for_unroll_factor_is_present(op);
+  const bool has_unroll_policy = loom_low_optional_attr_is_present(
+      op, loom_low_scf_for_unroll_policy_ATTR_INDEX);
+  if (has_unroll_factor && has_unroll_policy) {
+    return loom_low_emit_attr_value_error(
+        op, loom_low_scf_for_unroll_policy_ATTR_INDEX, IREE_SV("unroll"), 2,
+        IREE_SV("either bare unroll or unroll factor, not both"), emitter);
+  }
+
+  const loom_block_t* body_entry =
+      loom_low_region_entry_block_or_null(loom_low_scf_for_body(op));
+  if (!body_entry) {
+    return iree_ok_status();
+  }
+
+  loom_value_slice_t iter_args = loom_low_scf_for_iter_args(op);
+  const iree_host_size_t expected_arg_count =
+      (iree_host_size_t)iter_args.count + 1;
+  if (body_entry->arg_count != expected_arg_count) {
+    return loom_low_emit_count_mismatch(
+        emitter, op, IREE_SV("body"), body_entry->arg_count,
+        IREE_SV("1 + iter_args"), expected_arg_count);
+  }
+
+  loom_value_id_t iv_arg = loom_block_arg_id(body_entry, 0);
+  if (!loom_type_equal(
+          loom_module_value_type(module, iv_arg),
+          loom_module_value_type(module, loom_low_scf_for_lower_bound(op)))) {
+    return loom_low_emit_value_type_mismatch(
+        module, emitter, op, IREE_SV("body[0]"), iv_arg, IREE_SV("lower_bound"),
+        loom_low_scf_for_lower_bound(op));
+  }
+
+  for (uint16_t i = 0; i < iter_args.count; ++i) {
+    loom_value_id_t body_arg = loom_block_arg_id(body_entry, (uint16_t)(i + 1));
+    loom_value_id_t iter_arg = iter_args.values[i];
+    if (loom_type_equal(loom_module_value_type(module, body_arg),
+                        loom_module_value_type(module, iter_arg))) {
+      continue;
+    }
+    char body_arg_name[32];
+    char iter_arg_name[32];
+    loom_low_format_indexed_field_name(body_arg_name, sizeof(body_arg_name),
+                                       "body", (uint16_t)(i + 1));
+    loom_low_format_indexed_field_name(iter_arg_name, sizeof(iter_arg_name),
+                                       "iter_args", i);
+    return loom_low_emit_value_type_mismatch(
+        module, emitter, op, iree_make_cstring_view(body_arg_name), body_arg,
+        iree_make_cstring_view(iter_arg_name), iter_arg);
+  }
+
+  return iree_ok_status();
 }
 
 iree_status_t loom_low_func_def_verify(const loom_module_t* module,
