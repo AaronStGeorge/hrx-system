@@ -9,6 +9,7 @@
 *.bzl text eol=lf
 BUILD.bazel text eol=lf
 MODULE.bazel text eol=lf
+MODULE.bazel.lock text eol=lf merge=bazel-lockfile-merge
 
 # Common source, script, config, and documentation formats.
 *.c text eol=lf

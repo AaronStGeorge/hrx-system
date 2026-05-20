@@ -1,0 +1,27 @@
+# Copyright 2026 The IREE Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Keep Bazel module behavior explicit even when running older compatible tools.
+common --enable_bzlmod
+
+# Treat stale direct dependency pins as errors instead of background warnings.
+common --check_direct_dependencies=error
+
+# Opt-in configuration for CI/hooks that must not rewrite dependency state.
+common:locked --lockfile_mode=error
+
+# Build actions should not implicitly inherit host environment state.
+build --incompatible_strict_action_env
+
+# Fail loudly if source files change during a build.
+build --guard_against_concurrent_changes
+
+# Preserve runfiles trees on Windows and Unix-like hosts.
+startup --windows_enable_symlinks
+build --enable_runfiles
+
+# Keep successful test output quiet while preserving failure logs.
+test --test_output=errors
+
+# Local machine overrides stay out of version control.
+try-import %workspace%/.bazelrc.local
