@@ -996,3 +996,16 @@ class TestBuilder(DialectBuilder):
         result_names: Sequence[str] | None = ...,
         location_id: int | None = ...,
     ) -> ValueRef: ...
+    def template_param_symbol(
+        self,
+        *,
+        target: str,
+        location_id: int | None = ...,
+    ) -> None: ...
+    def template_param_symbol_flags(
+        self,
+        *,
+        target: str,
+        flags: str = ...,
+        location_id: int | None = ...,
+    ) -> None: ...

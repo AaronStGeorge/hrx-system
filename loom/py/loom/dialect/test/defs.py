@@ -48,6 +48,7 @@ from loom.assembly import (
     Scope,
     SymbolRef,
     TemplateParam,
+    TemplateParamFlags,
     TypedRefs,
     TypeOf,
     TypesOf,
@@ -57,6 +58,7 @@ from loom.dialect.target import target_record_attrs
 from loom.dsl import (
     ANY,
     ANY_ENCODING,
+    ATTR_TYPE_FLAGS,
     ATTR_TYPE_I64_ARRAY,
     BY_REFERENCE,
     CONSTANT_LIKE,
@@ -169,6 +171,15 @@ _TargetKind = EnumDef(
         EnumCase("quirky", 2, doc="Synthetic edge-case target."),
     ],
     doc="Synthetic target kind for target-like interface tests.",
+)
+
+_TemplateFlags = EnumDef(
+    "TemplateFlags",
+    [
+        EnumCase("debug", 1, doc="Synthetic debug flag."),
+        EnumCase("trace", 2, doc="Synthetic trace flag."),
+    ],
+    doc="Synthetic flags for TemplateParamFlags parser/printer coverage.",
 )
 
 cmp_predicates = EnumDef(
@@ -1629,6 +1640,49 @@ test_record = Op(
 )
 
 # ============================================================================
+# test.template_param_symbol — symbol-valued TemplateParam coverage
+# ============================================================================
+
+test_template_param_symbol = Op(
+    "test.template_param_symbol",
+    group=test_ops,
+    doc="Test op with a real symbol reference spelled as an angle parameter.",
+    attrs=[
+        AttrDef(
+            "target",
+            "symbol",
+            symbol_ref=SymbolReference("record", ["record"]),
+        ),
+    ],
+    format=[
+        TemplateParam("target"),
+    ],
+    examples=[
+        "test.template_param_symbol<@target>",
+    ],
+)
+
+test_template_param_symbol_flags = Op(
+    "test.template_param_symbol_flags",
+    group=test_ops,
+    doc="Test op with a symbol angle parameter followed by instance flags.",
+    attrs=[
+        AttrDef(
+            "target",
+            "symbol",
+            symbol_ref=SymbolReference("record", ["record"]),
+        ),
+        AttrDef("flags", ATTR_TYPE_FLAGS, optional=True, enum_def=_TemplateFlags),
+    ],
+    format=[
+        TemplateParamFlags("target", "flags"),
+    ],
+    examples=[
+        "test.template_param_symbol_flags<@target, debug|trace>",
+    ],
+)
+
+# ============================================================================
 # test.attrs — op with attribute dictionary
 # ============================================================================
 
@@ -2378,4 +2432,6 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_resource_alias,
     test_resource_borrowed,
     test_segmented,
+    test_template_param_symbol,
+    test_template_param_symbol_flags,
 )

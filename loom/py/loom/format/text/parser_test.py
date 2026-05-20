@@ -898,6 +898,21 @@ class TestParseAttrDictOp:
         assert isinstance(d["target"], SymbolName)
         assert _op_printer().print_operation(op, module) == source
 
+    def test_symbol_template_param_roundtrip(self) -> None:
+        source = "test.template_param_symbol<@target>"
+        module = Module()
+        op = _parse_op(source, module=module, scope=NameScope())
+        assert op.attributes["target"] == "target"
+        assert _op_printer().print_operation(op, module) == source
+
+    def test_symbol_template_param_flags_roundtrip(self) -> None:
+        source = "test.template_param_symbol_flags<@target, debug|trace>"
+        module = Module()
+        op = _parse_op(source, module=module, scope=NameScope())
+        assert op.attributes["target"] == "target"
+        assert op.attributes["flags"] == "debug|trace"
+        assert _op_printer().print_operation(op, module) == source
+
     def test_string_that_looks_like_symbol_stays_string(self) -> None:
         source = '%r = test.attrs %x {target = "@target"} : f32'
         module, scope = _setup_scope(("x", F32))

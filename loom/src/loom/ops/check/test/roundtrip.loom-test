@@ -5,7 +5,7 @@
 func.decl @scale(%input: tensor<4xf32>) -> (tensor<4xf32>)
 
 check.case public @scale_case {
-  %seed = check.param.seed base(1282371437) count(4) : i64
+  %seed = check.param.seed base(1282371437) count(4) name("seed") : i64
   %input = check.generate.random.uniform seed(%seed) range(-1.0 to 1.0) : tensor<4xf32>
   %actual = func.call @scale(%input) : (tensor<4xf32>) -> (tensor<4xf32>)
   %expected = check.oracle.call<reference.scalar> callee(@scale) inputs(%input) : (tensor<4xf32>) -> (tensor<4xf32>)
@@ -15,15 +15,15 @@ check.case public @scale_case {
   check.return
 }
 
-check.benchmark @scale_latency case(@scale_case) {iterations = 100, measure = "dispatch_complete"}
+check.benchmark<@scale_case> @scale_latency {seed = 1282371438}
 
 // ====
 
 // Standard generator/file/expectation ops use fixed clauses, not generic bags.
 check.case @fixture_case {
-  %m = check.param.range po2 bounds(1 to 64) : index
-  %n = check.param.choice values([16, 24, 32, 64]) : index
-  %seed = check.param.seed base(4660) count(8) : i64
+  %m = check.param.range po2 bounds(1 to 64) name("m") : index
+  %n = check.param.choice values([16, 24, 32, 64]) name("n") : index
+  %seed = check.param.seed base(4660) count(8) name("seed") : i64
   %scalar = check.literal value(42) : i32
   %iota = check.generate.iota offset(0) step(1) : tensor<[%m]x4xi32>
   %fill = check.generate.fill value(17) : tensor<[%m]x4xi32>
@@ -36,6 +36,10 @@ check.case @fixture_case {
   test.use %fill : tensor<[%m]x4xi32>
   check.return
 }
+
+check.benchmark<@fixture_case>
+
+check.benchmark<@fixture_case> @fixture_m16_n24 {m = 16, n = 24}
 
 // ====
 

@@ -44,16 +44,6 @@ check.case @store_then_double_i32_case {
   check.return
 }
 
-check.benchmark @store_i32_dispatch case(@store_i32_case) {
-  batch_size = 1,
-  iterations = 1,
-  measure = "dispatch_complete",
-  warmup_iterations = 0
-}
+check.benchmark<@store_i32_case>
 
-check.benchmark @store_then_double_i32_dispatch case(@store_then_double_i32_case) {
-  batch_size = 1,
-  iterations = 1,
-  measure = "dispatch_complete",
-  warmup_iterations = 0
-}
+check.benchmark<@store_then_double_i32_case>

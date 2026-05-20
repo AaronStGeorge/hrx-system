@@ -286,6 +286,16 @@ static iree_status_t loom_parse_format_optional_group(
                      peek.kind == LOOM_TOKEN_LBRACKET ||
                      peek.kind == LOOM_TOKEN_LBRACE);
         }
+      } else if (first_inner &&
+                 first_inner->kind == LOOM_FORMAT_KIND_SYMBOL_REF) {
+        present = peek.kind == LOOM_TOKEN_SYMBOL;
+      } else if (first_inner &&
+                 (first_inner->kind == LOOM_FORMAT_KIND_OP_REF ||
+                  first_inner->kind == LOOM_FORMAT_KIND_DESCRIPTOR_REF ||
+                  first_inner->kind == LOOM_FORMAT_KIND_STABLE_KEY_REF ||
+                  first_inner->kind == LOOM_FORMAT_KIND_TEMPLATE_PARAM ||
+                  first_inner->kind == LOOM_FORMAT_KIND_TEMPLATE_PARAM_FLAGS)) {
+        present = peek.kind == LOOM_TOKEN_LANGLE;
       } else {
         present =
             (peek.kind == LOOM_TOKEN_INTEGER || peek.kind == LOOM_TOKEN_FLOAT ||

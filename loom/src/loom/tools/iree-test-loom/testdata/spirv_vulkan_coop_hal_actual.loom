@@ -116,14 +116,7 @@ check.case @dense_projection_tiled_f16_128_case {
   check.return
 }
 
-check.benchmark @dense_projection_tiled_f16_128_dispatch case(@dense_projection_tiled_f16_128_case) {
-  batch_size = 1,
-  iterations = 1,
-  measure = "dispatch_complete",
-  problem = {dtype = "f16xf16_f32", m = 128, n = 128, k = 128, tile_m = 16, tile_n = 16, tile_k = 16},
-  strategy = "cooperative_matrix_tiled_gemm",
-  warmup_iterations = 0
-}
+check.benchmark<@dense_projection_tiled_f16_128_case>
 
 kernel.def target(@target) @narrow_score_tiled_f16_128x16_m1(%lhs_buffer: buffer, %rhs_buffer: buffer, %init_buffer: buffer, %out_buffer: buffer) {
   %m_tiles = index.constant 8 : index
@@ -278,22 +271,6 @@ check.case @narrow_score_tiled_f16_128x16_m2_case {
   check.return
 }
 
-check.benchmark @narrow_score_tiled_f16_128x16_m1_dispatch case(@narrow_score_tiled_f16_128x16_m1_case) {
-  batch_size = 1,
-  iterations = 1,
-  measure = "dispatch_complete",
-  problem = {dtype = "f16xf16_f32", m = 128, n = 16, k = 128, tile_m = 16, tile_n = 16, tile_k = 16},
-  strategy = "cooperative_matrix_narrow_n_m1",
-  knobs = {m_tiles_per_workgroup = 1},
-  warmup_iterations = 0
-}
+check.benchmark<@narrow_score_tiled_f16_128x16_m1_case>
 
-check.benchmark @narrow_score_tiled_f16_128x16_m2_dispatch case(@narrow_score_tiled_f16_128x16_m2_case) {
-  batch_size = 1,
-  iterations = 1,
-  measure = "dispatch_complete",
-  problem = {dtype = "f16xf16_f32", m = 128, n = 16, k = 128, tile_m = 16, tile_n = 16, tile_k = 16},
-  strategy = "cooperative_matrix_narrow_n_m2",
-  knobs = {m_tiles_per_workgroup = 2},
-  warmup_iterations = 0
-}
+check.benchmark<@narrow_score_tiled_f16_128x16_m2_case>

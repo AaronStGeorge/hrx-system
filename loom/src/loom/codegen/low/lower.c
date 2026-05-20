@@ -672,12 +672,10 @@ static void loom_low_lower_analyze_storage_demands(
 
 static iree_status_t loom_low_lowering_frame_initialize_value_ordinals(
     loom_low_lower_context_t* context, loom_region_t* source_body) {
-  if (loom_low_lower_structured_low_enabled(context)) {
-    return loom_local_value_domain_acquire_for_region_tree(
-        context->module, source_body, &context->arena,
-        &context->lowering.value_domain);
-  }
-  return loom_local_value_domain_acquire_for_region(
+  // Target-legalization query scopes can inspect source ops before CFG
+  // conversion, so nested source-region values must be ordinal-addressable even
+  // when the final source-to-low boundary expects CFG.
+  return loom_local_value_domain_acquire_for_region_tree(
       context->module, source_body, &context->arena,
       &context->lowering.value_domain);
 }

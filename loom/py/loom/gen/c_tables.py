@@ -173,6 +173,7 @@ KEYWORD_MAP: dict[str, str] = {
     "module": "LOOM_KW_MODULE",
     "symbol": "LOOM_KW_SYMBOL",
     "unroll": "LOOM_KW_UNROLL",
+    "name": "LOOM_KW_NAME",
 }
 
 # Maps Region(..., syntax=...) names to C parser/printer selector IDs. The

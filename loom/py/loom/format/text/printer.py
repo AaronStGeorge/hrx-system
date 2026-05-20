@@ -1522,18 +1522,21 @@ class Printer:
 
                 case TemplateParam(field=name):
                     covered_attrs.add(name)
+                    attr_def = op_decl.attr(name)
                     value = fields.attr(name)
-                    stream.emit(f"<{value}>", glue=True)
+                    stream.emit(f"<{_format_attr_value(value, attr_def)}>", glue=True)
 
                 case TemplateParamFlags(param=param_name, flags=flags_name):
                     covered_attrs.add(param_name)
                     covered_attrs.add(flags_name)
+                    param_attr_def = op_decl.attr(param_name)
                     param_value = fields.attr(param_name)
                     flags_value = fields.attr(flags_name)
+                    param_text = _format_attr_value(param_value, param_attr_def)
                     if flags_value:
-                        stream.emit(f"<{param_value}, {flags_value}>", glue=True)
+                        stream.emit(f"<{param_text}, {flags_value}>", glue=True)
                     else:
-                        stream.emit(f"<{param_value}>", glue=True)
+                        stream.emit(f"<{param_text}>", glue=True)
 
                 case Glue():
                     stream.set_glue()

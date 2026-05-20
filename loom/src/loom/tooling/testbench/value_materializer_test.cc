@@ -279,6 +279,57 @@ check.case @generated {
   loom_module_free(module);
 }
 
+TEST_F(ValueMaterializerTest,
+       MaterializesExplicitCartesianSamplePastRetainedPrefix) {
+  loom_module_t* module = ParseModule(R"(
+check.case @sweep {
+  %m = check.param.range linear bounds(1 to 3) step(1) : i32
+  %n = check.param.choice values([10, 20]) : i32
+  check.return
+}
+)");
+  ASSERT_NE(module, nullptr);
+
+  loom_testbench_plan_options_t plan_options = {};
+  loom_testbench_plan_options_initialize(&plan_options);
+  plan_options.max_samples_per_case = 3;
+  loom_testbench_module_plan_t plan = {};
+  IREE_ASSERT_OK(
+      loom_testbench_plan_module(module, &plan_options, &plan_arena_, &plan));
+
+  ASSERT_EQ(plan.case_count, 1u);
+  const loom_testbench_case_plan_t& case_plan = plan.cases[0];
+  EXPECT_EQ(case_plan.cartesian_sample_count, 6u);
+  EXPECT_EQ(case_plan.sample_count, 3u);
+  EXPECT_TRUE(case_plan.sample_count_truncated);
+
+  loom_testbench_value_table_t table = {};
+  IREE_ASSERT_OK(loom_testbench_value_table_initialize(
+      module, &case_plan, host_allocator_, &table));
+  loom_testbench_value_materializer_options_t options = MaterializerOptions();
+  IREE_ASSERT_OK(loom_testbench_materialize_case_sample(
+      &options, &case_plan, /*sample_ordinal=*/5, &table));
+
+  iree_vm_variant_t m = iree_vm_variant_empty();
+  IREE_ASSERT_OK(loom_testbench_value_table_lookup_retain(
+      &table, case_plan.parameters[0].value_id, &m));
+  ASSERT_TRUE(iree_vm_variant_is_value(m));
+  EXPECT_EQ(iree_vm_variant_value(m).type, IREE_VM_VALUE_TYPE_I32);
+  EXPECT_EQ(iree_vm_variant_value(m).i32, 3);
+  iree_vm_variant_reset(&m);
+
+  iree_vm_variant_t n = iree_vm_variant_empty();
+  IREE_ASSERT_OK(loom_testbench_value_table_lookup_retain(
+      &table, case_plan.parameters[1].value_id, &n));
+  ASSERT_TRUE(iree_vm_variant_is_value(n));
+  EXPECT_EQ(iree_vm_variant_value(n).type, IREE_VM_VALUE_TYPE_I32);
+  EXPECT_EQ(iree_vm_variant_value(n).i32, 20);
+  iree_vm_variant_reset(&n);
+
+  loom_testbench_value_table_deinitialize(&table);
+  loom_module_free(module);
+}
+
 TEST_F(ValueMaterializerTest, ReadsAndWritesNpyFiles) {
   loom_module_t* module = ParseModule(R"(
 check.case @file_io {

@@ -726,8 +726,9 @@ check.case public @kernel_case {
   check.return
 }
 
-check.benchmark @kernel_bench case(@kernel_case) {iterations = 100}
+check.benchmark<@kernel_case> @kernel_bench
 )"));
+  ASSERT_NE(module, nullptr);
   std::vector<uint8_t> bytes = WriteModule(module);
 
   IndexPtr index = CreateIndex();

@@ -1112,10 +1112,11 @@ iree_status_t loom_testbench_materialize_case_sample(
     const loom_testbench_value_materializer_options_t* options,
     const loom_testbench_case_plan_t* case_plan,
     iree_host_size_t sample_ordinal, loom_testbench_value_table_t* table) {
-  if (sample_ordinal >= case_plan->sample_count) {
+  if (sample_ordinal >= case_plan->cartesian_sample_count) {
     return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "sample ordinal %zu exceeds case sample count %zu",
-                            sample_ordinal, case_plan->sample_count);
+                            "sample ordinal %zu exceeds case cartesian sample "
+                            "count %zu",
+                            sample_ordinal, case_plan->cartesian_sample_count);
   }
   for (iree_host_size_t parameter_index = 0;
        parameter_index < case_plan->parameter_count; ++parameter_index) {

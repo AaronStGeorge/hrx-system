@@ -245,6 +245,11 @@ const loom_run_hal_artifact_provider_t loom_spirv_vulkan_hal_artifact_provider =
         .name = IREE_SVL("spirv-vulkan-hal"),
         .hal_driver_name = IREE_SVL("vulkan"),
         .target_family_name = IREE_SVL("SPIR-V/Vulkan"),
+        .default_pipeline_options =
+            {
+                .control_flow_lowering =
+                    LOOM_TARGET_CONTROL_FLOW_LOWERING_STRUCTURED_LOW,
+            },
         .select_device_target =
             loom_spirv_hal_artifact_provider_select_device_target,
         .deinitialize_device_target =

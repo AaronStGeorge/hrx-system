@@ -136,12 +136,19 @@ LOOM_DEFINE_ATTR_ENUM_TYPED(loom_check_param_range_policy, 0, loom_check_param_r
 LOOM_DEFINE_ATTR_ANY(loom_check_param_range_lower, 1)
 LOOM_DEFINE_ATTR_ANY(loom_check_param_range_upper, 2)
 LOOM_DEFINE_ATTR_ANY(loom_check_param_range_step, 3)
+LOOM_DEFINE_ATTR_STRING(loom_check_param_range_param_name, 4)
+enum loom_check_param_range_build_flag_bits_e {
+  LOOM_CHECK_PARAM_RANGE_BUILD_FLAG_HAS_PARAM_NAME = 1u << 0,
+};
+typedef uint32_t loom_check_param_range_build_flags_t;
 iree_status_t loom_check_param_range_build(
     loom_builder_t* builder,
+    loom_check_param_range_build_flags_t build_flags,
     loom_check_param_range_policy_t policy,
     loom_attribute_t lower,
     loom_attribute_t upper,
     loom_optional loom_attribute_t step,
+    loom_optional loom_string_id_t param_name,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -151,10 +158,17 @@ iree_status_t loom_check_param_range_build(
 LOOM_DEFINE_ISA(loom_check_param_choice_isa, LOOM_OP_CHECK_PARAM_CHOICE)
 LOOM_DEFINE_RESULT(loom_check_param_choice_result, 0)
 LOOM_DEFINE_ATTR_I64_ARRAY(loom_check_param_choice_values, 0)
+LOOM_DEFINE_ATTR_STRING(loom_check_param_choice_param_name, 1)
+enum loom_check_param_choice_build_flag_bits_e {
+  LOOM_CHECK_PARAM_CHOICE_BUILD_FLAG_HAS_PARAM_NAME = 1u << 0,
+};
+typedef uint32_t loom_check_param_choice_build_flags_t;
 iree_status_t loom_check_param_choice_build(
     loom_builder_t* builder,
+    loom_check_param_choice_build_flags_t build_flags,
     const int64_t* values,
     iree_host_size_t values_count,
+    loom_optional loom_string_id_t param_name,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -165,10 +179,17 @@ LOOM_DEFINE_ISA(loom_check_param_seed_isa, LOOM_OP_CHECK_PARAM_SEED)
 LOOM_DEFINE_RESULT(loom_check_param_seed_result, 0)
 LOOM_DEFINE_ATTR_I64(loom_check_param_seed_base, 0)
 LOOM_DEFINE_ATTR_I64(loom_check_param_seed_count, 1)
+LOOM_DEFINE_ATTR_STRING(loom_check_param_seed_param_name, 2)
+enum loom_check_param_seed_build_flag_bits_e {
+  LOOM_CHECK_PARAM_SEED_BUILD_FLAG_HAS_PARAM_NAME = 1u << 0,
+};
+typedef uint32_t loom_check_param_seed_build_flags_t;
 iree_status_t loom_check_param_seed_build(
     loom_builder_t* builder,
+    loom_check_param_seed_build_flags_t build_flags,
     int64_t base,
     int64_t count,
+    loom_optional loom_string_id_t param_name,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);
@@ -354,17 +375,22 @@ iree_status_t loom_check_expect_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 
-// LOOM_OP_CHECK_BENCHMARK: Declarative benchmark/tuning policy over a check.case.
-// check.benchmark @gemv_latency case(@gemv_sweep) {measure = "dispatch_complete", iterations = 100}
+// LOOM_OP_CHECK_BENCHMARK: Declares a benchmark slice over a check.case.
+// check.benchmark<@gemv_sweep> @gemv_latency {m = 8, n = 96}
 LOOM_DEFINE_ISA(loom_check_benchmark_isa, LOOM_OP_CHECK_BENCHMARK)
 LOOM_DEFINE_ATTR_SYMBOL(loom_check_benchmark_benchmark, 0)
 LOOM_DEFINE_ATTR_SYMBOL(loom_check_benchmark_case_ref, 1)
 LOOM_DEFINE_ATTR_DICT(loom_check_benchmark_attrs, 2)
+enum loom_check_benchmark_build_flag_bits_e {
+  LOOM_CHECK_BENCHMARK_BUILD_FLAG_HAS_BENCHMARK = 1u << 0,
+};
+typedef uint32_t loom_check_benchmark_build_flags_t;
 iree_status_t loom_check_benchmark_build(
     loom_builder_t* builder,
-    loom_symbol_ref_t benchmark,
+    loom_check_benchmark_build_flags_t build_flags,
     loom_symbol_ref_t case_ref,
-    loom_named_attr_slice_t attrs,
+    loom_optional loom_symbol_ref_t benchmark,
+    loom_optional loom_named_attr_slice_t attrs,
     loom_location_id_t location,
     loom_op_t** out_op);
 

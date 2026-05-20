@@ -16,6 +16,18 @@ test.split_func @projected(%arg: i32, %other: index) {
 
 // ====
 
+// TemplateParam is an ordinary attribute value in angle brackets, so symbol
+// attributes keep their @ spelling and symbol-reference semantics.
+test.record @template_param_target
+
+test.func @template_param_symbol() {
+  test.template_param_symbol<@template_param_target>
+  test.template_param_symbol_flags<@template_param_target, debug|trace>
+  test.yield
+}
+
+// ====
+
 // Owned-resource operations model generic lifetime effects without depending
 // on a target dialect.
 test.func @owned_resources(%size: index) {

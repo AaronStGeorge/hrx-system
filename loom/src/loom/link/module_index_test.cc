@@ -304,8 +304,10 @@ check.case public @kernel_case {
   check.return
 }
 
-check.benchmark @kernel_bench case(@kernel_case) {}
+check.benchmark<@kernel_case>
+check.benchmark<@kernel_case> @kernel_bench {}
 )"));
+  ASSERT_NE(module, nullptr);
   std::vector<uint8_t> bytes = WriteModule(module);
 
   IndexPtr index = CreateIndex();
@@ -318,6 +320,7 @@ check.benchmark @kernel_bench case(@kernel_case) {}
       IREE_SV("checks.loombc"), /*read_options=*/nullptr, &options,
       /*out_provider_ordinal=*/nullptr));
 
+  EXPECT_EQ(loom_link_module_index_symbol_count(index.get()), 2u);
   const loom_link_module_index_symbol_t* check_case =
       loom_link_module_index_lookup_global(index.get(), IREE_SV("kernel_case"));
   ASSERT_NE(check_case, nullptr);

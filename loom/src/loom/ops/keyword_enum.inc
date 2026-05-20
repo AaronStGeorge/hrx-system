@@ -76,3 +76,4 @@
   LOOM_KW_MODULE = 67,  // "module"
   LOOM_KW_SYMBOL = 68,  // "symbol"
   LOOM_KW_UNROLL = 69,  // "unroll"
+  LOOM_KW_NAME = 70,  // "name"

@@ -145,6 +145,9 @@ static iree_status_t iree_tune_loom_write_parameter_name_json(
     const loom_module_t* module,
     const loom_testbench_parameter_plan_t* parameter,
     iree_host_size_t parameter_index, loom_output_stream_t* stream) {
+  if (!iree_string_view_is_empty(parameter->name)) {
+    return loom_json_write_escaped_string(stream, parameter->name);
+  }
   iree_string_view_t name =
       iree_tune_loom_value_name(module, parameter->value_id);
   if (!iree_string_view_is_empty(name)) {
@@ -432,229 +435,6 @@ iree_status_t iree_tune_loom_append_device_row(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}\n"));
   row_state->appended = true;
   return iree_ok_status();
-}
-
-static iree_status_t iree_tune_loom_write_f64_json(
-    double value, loom_output_stream_t* stream) {
-  if (!isfinite(value)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "metadata f64 value is not finite");
-  }
-  char buffer[64];
-  const int length = iree_snprintf(buffer, sizeof(buffer), "%.17g", value);
-  if (length <= 0 || (iree_host_size_t)length >= sizeof(buffer)) {
-    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
-                            "failed to format f64 attribute value");
-  }
-  return loom_output_stream_write(stream,
-                                  iree_make_string_view(buffer, length));
-}
-
-static iree_status_t iree_tune_loom_write_string_id_json(
-    const loom_module_t* module, loom_string_id_t string_id,
-    loom_output_stream_t* stream) {
-  if (string_id == LOOM_STRING_ID_INVALID ||
-      string_id >= module->strings.count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "metadata string id %u is outside the module "
-                            "string table",
-                            string_id);
-  }
-  return loom_json_write_escaped_string(stream,
-                                        module->strings.entries[string_id]);
-}
-
-static iree_status_t iree_tune_loom_write_symbol_ref_json(
-    const loom_module_t* module, loom_symbol_ref_t symbol_ref,
-    loom_output_stream_t* stream) {
-  if (!loom_symbol_ref_is_valid(symbol_ref) || symbol_ref.module_id != 0 ||
-      symbol_ref.symbol_id >= module->symbols.count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "metadata symbol reference is outside the source "
-                            "module symbol table");
-  }
-  const loom_symbol_t* symbol = &module->symbols.entries[symbol_ref.symbol_id];
-  if (symbol->name_id >= module->strings.count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "metadata symbol name id %u is outside the module "
-                            "string table",
-                            symbol->name_id);
-  }
-  return loom_json_write_escaped_string(
-      stream, module->strings.entries[symbol->name_id]);
-}
-
-static iree_status_t iree_tune_loom_write_predicate_arg_tag_json(
-    uint8_t arg_tag, loom_output_stream_t* stream) {
-  switch ((loom_predicate_arg_tag_t)arg_tag) {
-    case LOOM_PRED_ARG_NONE:
-      return loom_json_write_escaped_cstring(stream, "none");
-    case LOOM_PRED_ARG_VALUE:
-      return loom_json_write_escaped_cstring(stream, "value");
-    case LOOM_PRED_ARG_CONST:
-      return loom_json_write_escaped_cstring(stream, "const");
-    case LOOM_PRED_ARG_COUNT_:
-      break;
-  }
-  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                          "unsupported predicate argument tag %u",
-                          (unsigned)arg_tag);
-}
-
-static iree_status_t iree_tune_loom_write_predicate_json(
-    const loom_predicate_t* predicate, loom_output_stream_t* stream) {
-  const char* kind_name = loom_predicate_kind_name(predicate->kind);
-  if (kind_name == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "unsupported predicate kind %u",
-                            (unsigned)predicate->kind);
-  }
-  const uint8_t expected_arg_count =
-      loom_predicate_kind_argument_count(predicate->kind);
-  if (predicate->arg_count != expected_arg_count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "predicate `%s` expected %u arguments but found %u",
-                            kind_name, (unsigned)expected_arg_count,
-                            (unsigned)predicate->arg_count);
-  }
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{\"kind\":"));
-  IREE_RETURN_IF_ERROR(loom_json_write_escaped_cstring(stream, kind_name));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\"args\":["));
-  for (uint8_t i = 0; i < predicate->arg_count; ++i) {
-    if (i != 0) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
-    }
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{\"tag\":"));
-    IREE_RETURN_IF_ERROR(iree_tune_loom_write_predicate_arg_tag_json(
-        predicate->arg_tags[i], stream));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-        stream, ",\"value\":%" PRId64 "}", predicate->args[i]));
-  }
-  return loom_output_stream_write_cstring(stream, "]}");
-}
-
-static iree_status_t iree_tune_loom_write_attr_json(
-    const loom_module_t* module, const loom_attribute_t* attr,
-    loom_output_stream_t* stream, uint8_t depth) {
-  if (depth >= LOOM_ATTR_DICT_MAX_NESTING_DEPTH) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "attribute nesting exceeds %u",
-                            (unsigned)LOOM_ATTR_DICT_MAX_NESTING_DEPTH);
-  }
-  switch ((loom_attr_kind_t)attr->kind) {
-    case LOOM_ATTR_ABSENT:
-      return loom_output_stream_write_cstring(stream, "null");
-    case LOOM_ATTR_I64:
-      return loom_output_stream_write_format(stream, "%" PRId64, attr->i64);
-    case LOOM_ATTR_F64:
-      return iree_tune_loom_write_f64_json(attr->f64, stream);
-    case LOOM_ATTR_STRING:
-      return iree_tune_loom_write_string_id_json(module, attr->string_id,
-                                                 stream);
-    case LOOM_ATTR_BOOL:
-      return loom_output_stream_write_cstring(stream,
-                                              attr->raw ? "true" : "false");
-    case LOOM_ATTR_ENUM:
-      return loom_output_stream_write_format(stream, "%" PRIu64, attr->raw);
-    case LOOM_ATTR_I64_ARRAY: {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
-      for (uint16_t i = 0; i < attr->count; ++i) {
-        if (i != 0) {
-          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
-        }
-        IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-            stream, "%" PRId64, attr->i64_array[i]));
-      }
-      return loom_output_stream_write_cstring(stream, "]");
-    }
-    case LOOM_ATTR_SYMBOL:
-      return iree_tune_loom_write_symbol_ref_json(module, attr->symbol, stream);
-    case LOOM_ATTR_TYPE:
-      return loom_output_stream_write_format(stream, "%" PRIu32, attr->type_id);
-    case LOOM_ATTR_PREDICATE_LIST: {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
-      for (uint16_t i = 0; i < attr->count; ++i) {
-        if (i != 0) {
-          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
-        }
-        IREE_RETURN_IF_ERROR(iree_tune_loom_write_predicate_json(
-            &attr->predicate_list[i], stream));
-      }
-      return loom_output_stream_write_cstring(stream, "]");
-    }
-    case LOOM_ATTR_DICT: {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
-      for (uint16_t i = 0; i < attr->count; ++i) {
-        if (i != 0) {
-          IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
-        }
-        const loom_named_attr_t* entry = &attr->dict_entries[i];
-        IREE_RETURN_IF_ERROR(iree_tune_loom_write_string_id_json(
-            module, entry->name_id, stream));
-        IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ":"));
-        IREE_RETURN_IF_ERROR(iree_tune_loom_write_attr_json(
-            module, &entry->value, stream, (uint8_t)(depth + 1)));
-      }
-      return loom_output_stream_write_cstring(stream, "}");
-    }
-    case LOOM_ATTR_ENCODING:
-      return loom_output_stream_write_format(stream, "%" PRIu32,
-                                             attr->encoding_id);
-    default:
-      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "unsupported metadata attribute kind %u",
-                              (unsigned)attr->kind);
-  }
-}
-
-static bool iree_tune_loom_benchmark_metadata_has_any(
-    const loom_module_t* module,
-    const loom_testbench_benchmark_plan_t* benchmark_plan) {
-  static const char* metadata_keys[] = {
-      "family", "phase", "strategy", "knobs", "problem", "reference_id",
-  };
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(metadata_keys); ++i) {
-    const iree_string_view_t metadata_key =
-        iree_make_cstring_view(metadata_keys[i]);
-    if (iree_tune_loom_find_named_attr(module, benchmark_plan->attrs,
-                                       metadata_key) != NULL) {
-      return true;
-    }
-  }
-  return false;
-}
-
-iree_status_t iree_tune_loom_write_benchmark_metadata_json(
-    const loom_module_t* module,
-    const loom_testbench_benchmark_plan_t* benchmark_plan,
-    loom_output_stream_t* stream) {
-  static const char* metadata_keys[] = {
-      "family", "phase", "strategy", "knobs", "problem", "reference_id",
-  };
-  if (!iree_tune_loom_benchmark_metadata_has_any(module, benchmark_plan)) {
-    return iree_ok_status();
-  }
-  IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, ",\"metadata\":{"));
-  bool first = true;
-  for (iree_host_size_t i = 0; i < IREE_ARRAYSIZE(metadata_keys); ++i) {
-    const iree_string_view_t metadata_key =
-        iree_make_cstring_view(metadata_keys[i]);
-    const loom_named_attr_t* attr = iree_tune_loom_find_named_attr(
-        module, benchmark_plan->attrs, metadata_key);
-    if (attr == NULL) {
-      continue;
-    }
-    if (!first) {
-      IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ","));
-    }
-    IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(stream, metadata_key));
-    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ":"));
-    IREE_RETURN_IF_ERROR(
-        iree_tune_loom_write_attr_json(module, &attr->value, stream, 0));
-    first = false;
-  }
-  return loom_output_stream_write_cstring(stream, "}");
 }
 
 static iree_status_t iree_tune_loom_write_timing_stats_json(
@@ -1837,8 +1617,6 @@ iree_status_t iree_tune_loom_append_compile_row(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ",\"case\":"));
   IREE_RETURN_IF_ERROR(
       loom_json_write_escaped_string(&stream, case_plan->name));
-  IREE_RETURN_IF_ERROR(iree_tune_loom_write_benchmark_metadata_json(
-      provider->execution.test_module, benchmark_plan, &stream));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"entry\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(&stream, entry_symbol));
@@ -1937,8 +1715,6 @@ iree_status_t iree_tune_loom_append_benchmark_result(
     IREE_RETURN_IF_ERROR(iree_tune_loom_write_shape_point_fields_json(
         module, case_plan, benchmark_result->sample_ordinal, &stream));
   }
-  IREE_RETURN_IF_ERROR(iree_tune_loom_write_benchmark_metadata_json(
-      module, benchmark_plan, &stream));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"benchmark_result\":"));
   IREE_RETURN_IF_ERROR(iree_tune_loom_write_benchmark_result_json(

@@ -22,6 +22,7 @@ loom_cc_library(
     loom::src::loom::error::diagnostic
     loom::src::loom::ir
     loom::src::loom::target::compile_report
+    loom::src::loom::target::pipeline_options
     loom::src::loom::target::types
     loom::src::loom::tooling::execution::compile_options
     loom::src::loom::verify

@@ -2353,6 +2353,16 @@ class Parser:
                     ):
                         return tok.peek().text in attr_def.enum_def.keywords
                 return True
+            case SymbolRef():
+                return tok.at(TokenKind.SYMBOL)
+            case (
+                OpRef()
+                | DescriptorRef()
+                | StableKeyRef()
+                | TemplateParam()
+                | TemplateParamFlags()
+            ):
+                return tok.at(TokenKind.LANGLE)
             case Ref() | Refs():
                 return tok.at(TokenKind.SSA_VALUE)
             case BindingList() | BlockArgs():

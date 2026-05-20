@@ -46,12 +46,6 @@ iree_status_t iree_tune_loom_write_shape_plan_fields_json(
     const loom_module_t* module, const loom_testbench_case_plan_t* case_plan,
     loom_output_stream_t* stream);
 
-// Writes benchmark metadata attributes selected for result joins.
-iree_status_t iree_tune_loom_write_benchmark_metadata_json(
-    const loom_module_t* module,
-    const loom_testbench_benchmark_plan_t* benchmark_plan,
-    loom_output_stream_t* stream);
-
 // Writes selected HAL context identity fields into an open JSON object.
 iree_status_t iree_tune_loom_write_hal_context_identity_fields_json(
     const iree_tune_loom_hal_context_t* context, loom_output_stream_t* stream);

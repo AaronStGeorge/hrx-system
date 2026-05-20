@@ -580,6 +580,8 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
   loom_compile_pipeline_options_t pipeline_options = {0};
   loom_compile_pipeline_options_initialize(&pipeline_options);
   pipeline_options.pipeline = provider->pipeline;
+  pipeline_options.target_pipeline_options =
+      provider->context->artifact_provider->default_pipeline_options;
   pipeline_options.entry_symbol = entry_symbol;
   pipeline_options.target_environment = provider->target_environment;
   pipeline_options.target_selection = (loom_target_selection_t){

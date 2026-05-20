@@ -58,11 +58,4 @@ check.case @quantized_projection_u8_scalar_128_case {
   check.return
 }
 
-check.benchmark @quantized_projection_u8_scalar_128_dispatch case(@quantized_projection_u8_scalar_128_case) {
-  batch_size = 1,
-  iterations = 1,
-  measure = "dispatch_complete",
-  problem = {dtype = "u8xu8_f32", m = 128, n = 128, k = 128},
-  strategy = "scalar_unsigned_decode_gemm",
-  warmup_iterations = 0
-}
+check.benchmark<@quantized_projection_u8_scalar_128_case>

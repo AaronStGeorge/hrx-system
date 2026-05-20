@@ -119,8 +119,14 @@ enum {
   LOOM_OP_TEST_RESOURCE_ALIAS = LOOM_OP_KIND(LOOM_DIALECT_TEST, 96),
   LOOM_OP_TEST_RESOURCE_BORROWED = LOOM_OP_KIND(LOOM_DIALECT_TEST, 97),
   LOOM_OP_TEST_SEGMENTED = LOOM_OP_KIND(LOOM_DIALECT_TEST, 98),
-  LOOM_OP_TEST_COUNT_ = 99,
+  LOOM_OP_TEST_TEMPLATE_PARAM_SYMBOL = LOOM_OP_KIND(LOOM_DIALECT_TEST, 99),
+  LOOM_OP_TEST_TEMPLATE_PARAM_SYMBOL_FLAGS = LOOM_OP_KIND(LOOM_DIALECT_TEST, 100),
+  LOOM_OP_TEST_COUNT_ = 101,
 };
+
+// Synthetic flags for TemplateParamFlags parser/printer coverage.
+#define LOOM_TEST_TEMPLATEFLAGS_DEBUG ((uint8_t)1)
+#define LOOM_TEST_TEMPLATEFLAGS_TRACE ((uint8_t)2)
 
 // Function visibility. Absent (0) means private.
 typedef enum loom_test_visibility_e {
@@ -1828,6 +1834,28 @@ iree_status_t loom_test_segmented_build(
     loom_may_consume const loom_value_id_t* rhs,
     iree_host_size_t rhs_count,
     loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_TEST_TEMPLATE_PARAM_SYMBOL: Test op with a real symbol reference spelled as an angle parameter.
+// test.template_param_symbol<@target>
+LOOM_DEFINE_ISA(loom_test_template_param_symbol_isa, LOOM_OP_TEST_TEMPLATE_PARAM_SYMBOL)
+LOOM_DEFINE_ATTR_SYMBOL(loom_test_template_param_symbol_target, 0)
+iree_status_t loom_test_template_param_symbol_build(
+    loom_builder_t* builder,
+    loom_symbol_ref_t target,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_TEST_TEMPLATE_PARAM_SYMBOL_FLAGS: Test op with a symbol angle parameter followed by instance flags.
+// test.template_param_symbol_flags<@target, debug|trace>
+LOOM_DEFINE_ISA(loom_test_template_param_symbol_flags_isa, LOOM_OP_TEST_TEMPLATE_PARAM_SYMBOL_FLAGS)
+LOOM_DEFINE_ATTR_SYMBOL(loom_test_template_param_symbol_flags_target, 0)
+LOOM_DEFINE_INSTANCE_FLAGS(loom_test_template_param_symbol_flags_flags)
+iree_status_t loom_test_template_param_symbol_flags_build(
+    loom_builder_t* builder,
+    loom_symbol_ref_t target,
+    uint8_t instance_flags,
     loom_location_id_t location,
     loom_op_t** out_op);
 

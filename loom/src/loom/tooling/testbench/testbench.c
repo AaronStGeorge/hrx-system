@@ -52,6 +52,15 @@ static iree_string_view_t loom_testbench_symbol_name(
   return module->strings.entries[symbol->name_id];
 }
 
+static const loom_symbol_t* loom_testbench_symbol_from_ref(
+    const loom_module_t* module, loom_symbol_ref_t ref) {
+  if (!loom_symbol_ref_is_valid(ref) || ref.module_id != 0 ||
+      ref.symbol_id >= module->symbols.count) {
+    return NULL;
+  }
+  return &module->symbols.entries[ref.symbol_id];
+}
+
 static iree_string_view_t loom_testbench_string_from_id(
     const loom_module_t* module, loom_string_id_t string_id) {
   if (string_id >= module->strings.count) return iree_string_view_empty();
@@ -272,18 +281,48 @@ static bool loom_testbench_plan_seed_parameter(
   return true;
 }
 
+static bool loom_testbench_plan_parameter_name(
+    const loom_module_t* module, const loom_op_t* op, uint8_t name_attr_index,
+    loom_testbench_parameter_plan_t* parameter) {
+  parameter->name_id = LOOM_STRING_ID_INVALID;
+  parameter->name = iree_string_view_empty();
+  if (name_attr_index >= op->attribute_count) return true;
+
+  loom_attribute_t name_attr = loom_op_const_attrs(op)[name_attr_index];
+  if (loom_attr_is_absent(name_attr)) return true;
+  if (name_attr.kind != LOOM_ATTR_STRING ||
+      name_attr.string_id >= module->strings.count) {
+    return false;
+  }
+
+  iree_string_view_t name = module->strings.entries[name_attr.string_id];
+  if (iree_string_view_is_empty(name)) return false;
+  parameter->name_id = name_attr.string_id;
+  parameter->name = name;
+  return true;
+}
+
 static bool loom_testbench_plan_parameter(
     const loom_module_t* module, const loom_op_t* op,
     loom_testbench_parameter_plan_t* out_parameter) {
   memset(out_parameter, 0, sizeof(*out_parameter));
   if (loom_check_param_range_isa(op)) {
-    return loom_testbench_plan_range_parameter(module, op, out_parameter);
+    return loom_testbench_plan_range_parameter(module, op, out_parameter) &&
+           loom_testbench_plan_parameter_name(
+               module, op, loom_check_param_range_param_name_ATTR_INDEX,
+               out_parameter);
   }
   if (loom_check_param_choice_isa(op)) {
-    return loom_testbench_plan_choice_parameter(module, op, out_parameter);
+    return loom_testbench_plan_choice_parameter(module, op, out_parameter) &&
+           loom_testbench_plan_parameter_name(
+               module, op, loom_check_param_choice_param_name_ATTR_INDEX,
+               out_parameter);
   }
   if (loom_check_param_seed_isa(op)) {
-    return loom_testbench_plan_seed_parameter(module, op, out_parameter);
+    return loom_testbench_plan_seed_parameter(module, op, out_parameter) &&
+           loom_testbench_plan_parameter_name(
+               module, op, loom_check_param_seed_param_name_ATTR_INDEX,
+               out_parameter);
   }
   return false;
 }
@@ -630,16 +669,17 @@ static void loom_testbench_count_case_body(
 static void loom_testbench_count_module(const loom_module_t* module,
                                         loom_testbench_plan_counts_t* counts) {
   memset(counts, 0, sizeof(*counts));
-  const loom_symbol_t* symbol = NULL;
-  loom_module_for_each_symbol(module, symbol) {
-    const loom_op_t* op = symbol->defining_op;
-    if (!op) continue;
+  if (!module->body || module->body->block_count == 0) return;
+  const loom_block_t* block = loom_region_const_entry_block(module->body);
+  const loom_op_t* op = NULL;
+  loom_block_for_each_op(block, op) {
     if (loom_check_case_isa(op)) {
       ++counts->case_count;
       loom_testbench_count_case_body(module, op, counts);
     } else if (loom_check_benchmark_isa(op)) {
       ++counts->benchmark_count;
       ++counts->issue_capacity;
+      counts->issue_capacity += loom_check_benchmark_attrs(op).count;
     }
   }
 }
@@ -700,6 +740,21 @@ static void loom_testbench_multiply_sample_count(
 
   *inout_cartesian_count = cartesian_count;
   *inout_sample_count = sample_count;
+}
+
+static bool loom_testbench_parameter_names_have_duplicate(
+    const loom_testbench_case_plan_t* case_plan,
+    iree_host_size_t parameter_index) {
+  const loom_testbench_parameter_plan_t* parameter =
+      &case_plan->parameters[parameter_index];
+  if (iree_string_view_is_empty(parameter->name)) return false;
+  for (iree_host_size_t i = 0; i < parameter_index; ++i) {
+    if (iree_string_view_equal(case_plan->parameters[i].name,
+                               parameter->name)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 static void loom_testbench_plan_case_body(
@@ -832,6 +887,20 @@ static void loom_testbench_plan_case_body(
           : 0;
   case_plan->issue_count =
       case_plan->issues ? (issues + *inout_issue_count) - case_plan->issues : 0;
+  for (iree_host_size_t parameter_index = 0;
+       parameter_index < case_plan->parameter_count; ++parameter_index) {
+    if (!loom_testbench_parameter_names_have_duplicate(case_plan,
+                                                       parameter_index)) {
+      continue;
+    }
+    loom_testbench_append_issue(
+        issues, issue_capacity, inout_issue_count,
+        LOOM_TESTBENCH_ISSUE_DUPLICATE_PARAMETER_NAME, case_index,
+        LOOM_TESTBENCH_BENCHMARK_INDEX_INVALID,
+        case_plan->parameters[parameter_index].op, case_plan->ref);
+  }
+  case_plan->issue_count =
+      case_plan->issues ? (issues + *inout_issue_count) - case_plan->issues : 0;
   if (case_plan->issue_count != 0) {
     case_plan->sample_count = 0;
   }
@@ -841,6 +910,7 @@ static void loom_testbench_fill_case_index_map(
     const loom_testbench_case_plan_t* cases, iree_host_size_t case_count,
     uint32_t* symbol_to_case_index) {
   for (iree_host_size_t i = 0; i < case_count; ++i) {
+    if (!loom_symbol_ref_is_valid(cases[i].ref)) continue;
     symbol_to_case_index[cases[i].ref.symbol_id] = (uint32_t)i;
   }
 }
@@ -857,6 +927,246 @@ static iree_host_size_t loom_testbench_case_index_from_ref(
     return LOOM_TESTBENCH_CASE_INDEX_INVALID;
   }
   return case_index;
+}
+
+static iree_string_view_t loom_testbench_default_benchmark_name(
+    const loom_testbench_case_plan_t* case_plan) {
+  iree_string_view_t name =
+      iree_string_view_strip_suffix(case_plan->name, IREE_SV("_case"));
+  return iree_string_view_is_empty(name) ? case_plan->name : name;
+}
+
+static bool loom_testbench_range_parameter_sample_ordinal(
+    const loom_testbench_parameter_plan_t* parameter, loom_attribute_t value,
+    iree_host_size_t* out_sample_ordinal) {
+  const loom_testbench_range_plan_t* range = &parameter->range;
+  *out_sample_ordinal = IREE_HOST_SIZE_MAX;
+
+  if (range->policy == LOOM_CHECK_PARAM_RANGE_POLICY_PO2) {
+    int64_t target_value = 0;
+    int64_t lower_value = 0;
+    int64_t upper_value = 0;
+    int64_t sample_value = 0;
+    if (!loom_testbench_attr_as_i64_checked(value, &target_value) ||
+        !loom_testbench_attr_as_i64_checked(range->lower, &lower_value) ||
+        !loom_testbench_attr_as_i64_checked(range->upper, &upper_value) ||
+        !loom_testbench_next_power_of_two(lower_value, &sample_value) ||
+        target_value < sample_value || target_value > upper_value) {
+      return false;
+    }
+    for (iree_host_size_t ordinal = 0; ordinal < parameter->sample_count;
+         ++ordinal) {
+      if (sample_value == target_value) {
+        *out_sample_ordinal = ordinal;
+        return true;
+      }
+      if (sample_value > INT64_MAX / 2) break;
+      sample_value *= 2;
+    }
+    return false;
+  }
+
+  if (range->policy == LOOM_CHECK_PARAM_RANGE_POLICY_LINEAR &&
+      loom_testbench_scalar_type_is_integral_sample(range->scalar_type)) {
+    int64_t target_value = 0;
+    int64_t lower_value = 0;
+    int64_t upper_value = 0;
+    int64_t step_value = 1;
+    if (!loom_testbench_attr_as_i64_checked(value, &target_value) ||
+        !loom_testbench_attr_as_i64_checked(range->lower, &lower_value) ||
+        !loom_testbench_attr_as_i64_checked(range->upper, &upper_value) ||
+        (!loom_attr_is_absent(range->step) &&
+         !loom_testbench_attr_as_i64_checked(range->step, &step_value)) ||
+        step_value <= 0 || target_value < lower_value ||
+        target_value > upper_value) {
+      return false;
+    }
+    int64_t offset = target_value - lower_value;
+    if (offset % step_value != 0) return false;
+    int64_t ordinal = offset / step_value;
+    if (ordinal < 0 || (uint64_t)ordinal >= parameter->sample_count) {
+      return false;
+    }
+    *out_sample_ordinal = (iree_host_size_t)ordinal;
+    return true;
+  }
+
+  if (range->policy == LOOM_CHECK_PARAM_RANGE_POLICY_LINEAR &&
+      loom_scalar_type_is_float(range->scalar_type)) {
+    double target_value = 0.0;
+    double lower_value = 0.0;
+    double step_value = 0.0;
+    if (!loom_testbench_attr_as_f64_checked(value, &target_value) ||
+        !loom_testbench_attr_as_f64_checked(range->lower, &lower_value) ||
+        !loom_testbench_attr_as_f64_checked(range->step, &step_value) ||
+        !(step_value > 0.0)) {
+      return false;
+    }
+    double ordinal_value = (target_value - lower_value) / step_value;
+    double rounded_ordinal = floor(ordinal_value + 0.5);
+    double ordinal_delta = fabs(ordinal_value - rounded_ordinal);
+    if (!(rounded_ordinal >= 0.0) || ordinal_delta > 1e-9 ||
+        rounded_ordinal > (double)IREE_HOST_SIZE_MAX) {
+      return false;
+    }
+    iree_host_size_t ordinal = (iree_host_size_t)rounded_ordinal;
+    if (ordinal >= parameter->sample_count) return false;
+    double sample_value = lower_value + (double)ordinal * step_value;
+    double sample_delta = fabs(sample_value - target_value);
+    double tolerance = fabs(step_value) * 1e-9 + 1e-12;
+    if (sample_delta > tolerance) return false;
+    *out_sample_ordinal = ordinal;
+    return true;
+  }
+
+  return false;
+}
+
+static bool loom_testbench_parameter_sample_ordinal_from_value(
+    const loom_testbench_parameter_plan_t* parameter, loom_attribute_t value,
+    iree_host_size_t* out_sample_ordinal) {
+  *out_sample_ordinal = IREE_HOST_SIZE_MAX;
+  switch (parameter->kind) {
+    case LOOM_TESTBENCH_PARAMETER_RANGE:
+      return loom_testbench_range_parameter_sample_ordinal(parameter, value,
+                                                           out_sample_ordinal);
+    case LOOM_TESTBENCH_PARAMETER_CHOICE: {
+      int64_t target_value = 0;
+      if (!loom_testbench_attr_as_i64_checked(value, &target_value)) {
+        return false;
+      }
+      for (iree_host_size_t i = 0; i < parameter->choice.count; ++i) {
+        if (parameter->choice.values[i] == target_value) {
+          *out_sample_ordinal = i;
+          return true;
+        }
+      }
+      return false;
+    }
+    case LOOM_TESTBENCH_PARAMETER_SEED: {
+      int64_t target_value = 0;
+      if (!loom_testbench_attr_as_i64_checked(value, &target_value) ||
+          target_value < parameter->seed.base) {
+        return false;
+      }
+      uint64_t ordinal = (uint64_t)(target_value - parameter->seed.base);
+      if (ordinal >= parameter->seed.count) return false;
+      *out_sample_ordinal = (iree_host_size_t)ordinal;
+      return true;
+    }
+    default:
+      return false;
+  }
+}
+
+static iree_host_size_t loom_testbench_case_parameter_index_by_name(
+    const loom_module_t* module, const loom_testbench_case_plan_t* case_plan,
+    loom_string_id_t name_id) {
+  if (name_id >= module->strings.count) return IREE_HOST_SIZE_MAX;
+  iree_string_view_t name = module->strings.entries[name_id];
+  for (iree_host_size_t i = 0; i < case_plan->parameter_count; ++i) {
+    if (iree_string_view_equal(case_plan->parameters[i].name, name)) return i;
+  }
+  return IREE_HOST_SIZE_MAX;
+}
+
+static bool loom_testbench_benchmark_assignment_has_duplicate_key(
+    const loom_module_t* module, loom_named_attr_slice_t attrs,
+    iree_host_size_t assignment_index) {
+  if (assignment_index >= attrs.count ||
+      attrs.entries[assignment_index].name_id >= module->strings.count) {
+    return false;
+  }
+  iree_string_view_t name =
+      module->strings.entries[attrs.entries[assignment_index].name_id];
+  for (iree_host_size_t i = 0; i < assignment_index; ++i) {
+    if (attrs.entries[i].name_id >= module->strings.count) continue;
+    if (iree_string_view_equal(
+            module->strings.entries[attrs.entries[i].name_id], name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static iree_status_t loom_testbench_plan_benchmark_assignments(
+    const loom_module_t* module, iree_host_size_t benchmark_index,
+    iree_host_size_t max_samples_per_case,
+    loom_testbench_benchmark_plan_t* benchmark,
+    const loom_testbench_case_plan_t* case_plan, iree_arena_allocator_t* arena,
+    loom_testbench_issue_t* issues, iree_host_size_t issue_capacity,
+    iree_host_size_t* inout_issue_count) {
+  benchmark->cartesian_sample_count = 1;
+  benchmark->sample_count = 1;
+  benchmark->sample_count_truncated = false;
+  benchmark->parameter_sample_ordinal_count = case_plan->parameter_count;
+
+  iree_host_size_t* parameter_sample_ordinals = NULL;
+  iree_host_size_t issue_count_before = *inout_issue_count;
+  if (case_plan->parameter_count != 0) {
+    IREE_RETURN_IF_ERROR(loom_testbench_allocate_array(
+        arena, case_plan->parameter_count, sizeof(*parameter_sample_ordinals),
+        (void**)&parameter_sample_ordinals));
+    for (iree_host_size_t i = 0; i < case_plan->parameter_count; ++i) {
+      parameter_sample_ordinals[i] =
+          LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL;
+    }
+    benchmark->parameter_sample_ordinals = parameter_sample_ordinals;
+  }
+
+  for (iree_host_size_t i = 0; i < benchmark->attrs.count; ++i) {
+    const loom_named_attr_t* assignment = &benchmark->attrs.entries[i];
+    if (loom_testbench_benchmark_assignment_has_duplicate_key(
+            module, benchmark->attrs, i)) {
+      loom_testbench_append_issue(
+          issues, issue_capacity, inout_issue_count,
+          LOOM_TESTBENCH_ISSUE_INVALID_BENCHMARK_ASSIGNMENT,
+          benchmark->case_index, benchmark_index, benchmark->op,
+          benchmark->case_ref);
+      continue;
+    }
+    iree_host_size_t parameter_index =
+        loom_testbench_case_parameter_index_by_name(module, case_plan,
+                                                    assignment->name_id);
+    if (parameter_index == IREE_HOST_SIZE_MAX) {
+      loom_testbench_append_issue(
+          issues, issue_capacity, inout_issue_count,
+          LOOM_TESTBENCH_ISSUE_INVALID_BENCHMARK_ASSIGNMENT,
+          benchmark->case_index, benchmark_index, benchmark->op,
+          benchmark->case_ref);
+      continue;
+    }
+
+    iree_host_size_t sample_ordinal = IREE_HOST_SIZE_MAX;
+    if (!loom_testbench_parameter_sample_ordinal_from_value(
+            &case_plan->parameters[parameter_index], assignment->value,
+            &sample_ordinal)) {
+      loom_testbench_append_issue(
+          issues, issue_capacity, inout_issue_count,
+          LOOM_TESTBENCH_ISSUE_INVALID_BENCHMARK_ASSIGNMENT,
+          benchmark->case_index, benchmark_index, benchmark->op,
+          benchmark->case_ref);
+      continue;
+    }
+    parameter_sample_ordinals[parameter_index] = sample_ordinal;
+  }
+
+  for (iree_host_size_t parameter_index = 0;
+       parameter_index < case_plan->parameter_count; ++parameter_index) {
+    if (benchmark->parameter_sample_ordinals[parameter_index] !=
+        LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL) {
+      continue;
+    }
+    loom_testbench_multiply_sample_count(
+        case_plan->parameters[parameter_index].sample_count,
+        max_samples_per_case, &benchmark->cartesian_sample_count,
+        &benchmark->sample_count, &benchmark->sample_count_truncated);
+  }
+
+  if (*inout_issue_count != issue_count_before || case_plan->issue_count != 0) {
+    benchmark->sample_count = 0;
+  }
+  return iree_ok_status();
 }
 
 iree_status_t loom_testbench_plan_module(
@@ -921,29 +1231,38 @@ iree_status_t loom_testbench_plan_module(
 
   iree_host_size_t case_count = 0;
   iree_host_size_t benchmark_count = 0;
-  const loom_symbol_t* symbol = NULL;
-  loom_module_for_each_symbol(module, symbol) {
-    const loom_op_t* op = symbol->defining_op;
-    if (!op) continue;
-    if (loom_check_case_isa(op)) {
-      loom_testbench_case_plan_t* case_plan = &cases[case_count];
-      case_plan->ref = loom_check_case_case_symbol(op);
-      case_plan->symbol = symbol;
-      case_plan->op = op;
-      case_plan->name = loom_testbench_symbol_name(module, symbol);
-      case_plan->is_public =
-          loom_check_case_visibility(op) == LOOM_CHECK_CASE_VISIBILITY_PUBLIC;
-      ++case_count;
-    } else if (loom_check_benchmark_isa(op)) {
-      loom_testbench_benchmark_plan_t* benchmark = &benchmarks[benchmark_count];
-      benchmark->ref = loom_check_benchmark_benchmark(op);
-      benchmark->symbol = symbol;
-      benchmark->op = op;
-      benchmark->name = loom_testbench_symbol_name(module, symbol);
-      benchmark->case_ref = loom_check_benchmark_case_ref(op);
-      benchmark->case_index = LOOM_TESTBENCH_CASE_INDEX_INVALID;
-      benchmark->attrs = loom_check_benchmark_attrs(op);
-      ++benchmark_count;
+  const loom_block_t* module_block =
+      module->body && module->body->block_count != 0
+          ? loom_region_const_entry_block(module->body)
+          : NULL;
+  const loom_op_t* op = NULL;
+  if (module_block) {
+    loom_block_for_each_op(module_block, op) {
+      if (loom_check_case_isa(op)) {
+        loom_testbench_case_plan_t* case_plan = &cases[case_count];
+        case_plan->ref = loom_check_case_case_symbol(op);
+        case_plan->symbol =
+            loom_testbench_symbol_from_ref(module, case_plan->ref);
+        case_plan->op = op;
+        case_plan->name = loom_testbench_symbol_name(module, case_plan->symbol);
+        case_plan->is_public =
+            loom_check_case_visibility(op) == LOOM_CHECK_CASE_VISIBILITY_PUBLIC;
+        ++case_count;
+      } else if (loom_check_benchmark_isa(op)) {
+        loom_testbench_benchmark_plan_t* benchmark =
+            &benchmarks[benchmark_count];
+        benchmark->ref = loom_check_benchmark_benchmark(op);
+        benchmark->symbol =
+            loom_testbench_symbol_from_ref(module, benchmark->ref);
+        benchmark->op = op;
+        benchmark->name = loom_testbench_symbol_name(module, benchmark->symbol);
+        benchmark->case_ref = loom_check_benchmark_case_ref(op);
+        benchmark->case_index = LOOM_TESTBENCH_CASE_INDEX_INVALID;
+        benchmark->attrs = loom_check_benchmark_attrs(op);
+        benchmark->cartesian_sample_count = 1;
+        benchmark->sample_count = 1;
+        ++benchmark_count;
+      }
     }
   }
 
@@ -972,7 +1291,17 @@ iree_status_t loom_testbench_plan_module(
                                   LOOM_TESTBENCH_ISSUE_INVALID_BENCHMARK_CASE,
                                   LOOM_TESTBENCH_CASE_INDEX_INVALID, i,
                                   benchmark->op, benchmark->case_ref);
+      benchmark->sample_count = 0;
+      continue;
     }
+    if (iree_string_view_is_empty(benchmark->name)) {
+      benchmark->name =
+          loom_testbench_default_benchmark_name(&cases[benchmark->case_index]);
+    }
+    IREE_RETURN_IF_ERROR(loom_testbench_plan_benchmark_assignments(
+        module, i, max_samples_per_case, benchmark,
+        &cases[benchmark->case_index], arena, issues, counts.issue_capacity,
+        &issue_count));
   }
 
   out_plan->module = module;
@@ -994,6 +1323,35 @@ iree_host_size_t loom_testbench_case_sample_parameter_ordinal(
     ordinal /= case_plan->parameters[i].sample_count;
   }
   return ordinal % case_plan->parameters[parameter_index].sample_count;
+}
+
+iree_host_size_t loom_testbench_benchmark_sample_case_ordinal(
+    const loom_testbench_case_plan_t* case_plan,
+    const loom_testbench_benchmark_plan_t* benchmark_plan,
+    iree_host_size_t benchmark_sample_ordinal) {
+  IREE_ASSERT(benchmark_sample_ordinal < benchmark_plan->sample_count);
+  iree_host_size_t case_sample_ordinal = 0;
+  iree_host_size_t case_stride = 1;
+  iree_host_size_t benchmark_ordinal = benchmark_sample_ordinal;
+  for (iree_host_size_t parameter_index = 0;
+       parameter_index < case_plan->parameter_count; ++parameter_index) {
+    const loom_testbench_parameter_plan_t* parameter =
+        &case_plan->parameters[parameter_index];
+    iree_host_size_t parameter_sample_ordinal =
+        LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL;
+    if (parameter_index < benchmark_plan->parameter_sample_ordinal_count) {
+      parameter_sample_ordinal =
+          benchmark_plan->parameter_sample_ordinals[parameter_index];
+    }
+    if (parameter_sample_ordinal ==
+        LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL) {
+      parameter_sample_ordinal = benchmark_ordinal % parameter->sample_count;
+      benchmark_ordinal /= parameter->sample_count;
+    }
+    case_sample_ordinal += parameter_sample_ordinal * case_stride;
+    case_stride *= parameter->sample_count;
+  }
+  return case_sample_ordinal;
 }
 
 static iree_status_t loom_testbench_range_sample_value(

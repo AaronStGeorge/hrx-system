@@ -160,7 +160,7 @@ typedef struct iree_tune_loom_benchmark_result_t {
   iree_string_view_t specialization;
   // True when |sample_ordinal| identifies the measured sample.
   bool has_sample_ordinal;
-  // Concrete sample ordinal measured by dispatch_complete.
+  // Concrete case sample ordinal measured by dispatch_complete.
   iree_host_size_t sample_ordinal;
   // Number of case samples run per benchmark iteration.
   iree_host_size_t samples_per_iteration;
@@ -223,11 +223,12 @@ typedef struct iree_tune_loom_dispatch_comparison_candidate_t {
   iree_string_view_t specialization;
   // True when |specialization_sample_ordinal| is the only comparable shape.
   bool has_specialization_sample_ordinal;
-  // Concrete sample ordinal used for per-sample specialization.
+  // Benchmark-local sample ordinal used for per-sample specialization.
   iree_host_size_t specialization_sample_ordinal;
-  // First sample ordinal included in the comparison window.
+  // First benchmark-local sample ordinal included in the comparison window.
   iree_host_size_t begin_sample;
-  // One-past-end sample ordinal included in the comparison window.
+  // One-past-end benchmark-local sample ordinal included in the comparison
+  // window.
   iree_host_size_t end_sample;
   // HAL provider owning the compiled executable and prepared candidate.
   iree_tune_loom_hal_actual_provider_t provider;

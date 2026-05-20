@@ -317,12 +317,23 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    pipeline_options
+  HDRS
+    "pipeline_options.h"
+  DEPS
+    iree::base::core_headers
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     pipeline
   HDRS
     "pipeline.h"
   SRCS
     "pipeline.c"
   DEPS
+    ::pipeline_options
     ::provider
     iree::base
     loom::src::loom::codegen::low::pipeline

@@ -24,6 +24,7 @@ extern "C" {
 
 #define LOOM_TESTBENCH_CASE_INDEX_INVALID IREE_HOST_SIZE_MAX
 #define LOOM_TESTBENCH_BENCHMARK_INDEX_INVALID IREE_HOST_SIZE_MAX
+#define LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL IREE_HOST_SIZE_MAX
 
 enum {
   // Default cap for the number of concrete samples executed per check.case.
@@ -50,14 +51,19 @@ typedef enum loom_testbench_issue_kind_e {
   LOOM_TESTBENCH_ISSUE_INVALID_PARAMETER = 2,
   // A check.benchmark does not reference a discovered check.case.
   LOOM_TESTBENCH_ISSUE_INVALID_BENCHMARK_CASE = 3,
+  // A named parameter collides with another parameter in the same check.case.
+  LOOM_TESTBENCH_ISSUE_DUPLICATE_PARAMETER_NAME = 4,
+  // A check.benchmark assignment key or value does not match the referenced
+  // check.case parameter domain.
+  LOOM_TESTBENCH_ISSUE_INVALID_BENCHMARK_ASSIGNMENT = 5,
   // A value source op cannot be planned as a deterministic input.
-  LOOM_TESTBENCH_ISSUE_INVALID_VALUE_SOURCE = 4,
+  LOOM_TESTBENCH_ISSUE_INVALID_VALUE_SOURCE = 6,
   // A file output op cannot be planned as a deterministic sink.
-  LOOM_TESTBENCH_ISSUE_INVALID_FILE_WRITE = 5,
+  LOOM_TESTBENCH_ISSUE_INVALID_FILE_WRITE = 7,
   // An actual or oracle invocation op cannot be planned for execution.
-  LOOM_TESTBENCH_ISSUE_INVALID_INVOCATION = 6,
+  LOOM_TESTBENCH_ISSUE_INVALID_INVOCATION = 8,
   // A check.expect.* op cannot be planned for evaluation.
-  LOOM_TESTBENCH_ISSUE_INVALID_EXPECTATION = 7,
+  LOOM_TESTBENCH_ISSUE_INVALID_EXPECTATION = 9,
 } loom_testbench_issue_kind_t;
 
 typedef enum loom_testbench_value_source_kind_e {
@@ -177,6 +183,10 @@ typedef struct loom_testbench_parameter_plan_t {
   loom_value_id_t value_id;
   // Type of |value_id| at planning time.
   loom_type_t type;
+  // Optional case-local parameter name, or INVALID when unnamed.
+  loom_string_id_t name_id;
+  // Borrowed case-local parameter name text, or empty when unnamed.
+  iree_string_view_t name;
   // Number of valid samples for this parameter.
   iree_host_size_t sample_count;
   union {
@@ -359,20 +369,31 @@ typedef struct loom_testbench_case_plan_t {
 } loom_testbench_case_plan_t;
 
 typedef struct loom_testbench_benchmark_plan_t {
-  // Module-local symbol reference naming this benchmark policy.
+  // Optional module-local symbol reference naming this benchmark policy.
   loom_symbol_ref_t ref;
-  // Symbol table entry for |ref|.
+  // Symbol table entry for |ref|, or NULL when the benchmark is anonymous.
   const loom_symbol_t* symbol;
   // Defining check.benchmark operation.
   const loom_op_t* op;
-  // Borrowed benchmark name from the module string table.
+  // Explicit symbol name or stable case-derived anonymous name.
   iree_string_view_t name;
   // Referenced check.case symbol.
   loom_symbol_ref_t case_ref;
   // Ordinal of the referenced case in the module plan.
   iree_host_size_t case_index;
-  // Borrowed benchmark attribute dictionary.
+  // Borrowed benchmark assignment dictionary.
   loom_named_attr_slice_t attrs;
+  // Per-parameter fixed sample ordinals selected by this benchmark. Entries are
+  // LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL for unassigned parameters.
+  const iree_host_size_t* parameter_sample_ordinals;
+  // Number of entries in |parameter_sample_ordinals|.
+  iree_host_size_t parameter_sample_ordinal_count;
+  // Full cartesian sample count after benchmark assignments are applied.
+  iree_host_size_t cartesian_sample_count;
+  // Number of benchmark samples retained for execution after budget capping.
+  iree_host_size_t sample_count;
+  // True when |sample_count| is smaller than |cartesian_sample_count|.
+  bool sample_count_truncated;
 } loom_testbench_benchmark_plan_t;
 
 typedef struct loom_testbench_module_plan_t {
@@ -408,6 +429,16 @@ iree_status_t loom_testbench_plan_module(
 iree_host_size_t loom_testbench_case_sample_parameter_ordinal(
     const loom_testbench_case_plan_t* case_plan,
     iree_host_size_t sample_ordinal, iree_host_size_t parameter_index);
+
+// Maps a benchmark-local sample ordinal to the referenced case sample ordinal.
+//
+// Assigned benchmark parameters use their fixed parameter-local ordinals.
+// Unassigned parameters use mixed-radix expansion in source order over the
+// reduced benchmark sample domain.
+iree_host_size_t loom_testbench_benchmark_sample_case_ordinal(
+    const loom_testbench_case_plan_t* case_plan,
+    const loom_testbench_benchmark_plan_t* benchmark_plan,
+    iree_host_size_t benchmark_sample_ordinal);
 
 // Materializes one static scalar parameter sample as an attribute payload.
 iree_status_t loom_testbench_parameter_sample_value(

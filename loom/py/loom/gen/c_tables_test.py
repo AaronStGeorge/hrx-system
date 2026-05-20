@@ -30,6 +30,7 @@ from loom.assembly import (
 )
 from loom.dsl import (
     ANY,
+    ATTR_TYPE_FLAGS,
     ATTR_TYPE_I64_ARRAY,
     ATTR_TYPE_PREDICATE_LIST,
     ATTR_TYPE_SYMBOL,
@@ -428,6 +429,39 @@ def test_generate_builders_use_explicit_flags_for_optional_symbol_refs() -> None
     assert "loom_test_targeted_build_flags_t build_flags" in builders_c
     assert ("iree_any_bit_set(build_flags, LOOM_TEST_TARGETED_BUILD_FLAG_HAS_TARGET)") in builders_c
     assert "loom_op_attrs(*out_op)[0] = loom_attr_symbol(target);" in builders_c
+
+
+def test_generate_tables_uses_template_param_for_symbol_attrs() -> None:
+    op = Op(
+        "test.targeted",
+        group=Dialect("test"),
+        attrs=[AttrDef("target", "symbol")],
+        format=[TemplateParam("target")],
+    )
+
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "{LOOM_FORMAT_KIND_TEMPLATE_PARAM, 0, 0}" in tables_c
+    assert "{LOOM_FORMAT_KIND_SYMBOL_REF, 0, 0}" not in tables_c
+
+
+def test_generate_tables_uses_template_param_flags_for_symbol_attrs() -> None:
+    flags = EnumDef("Flags", [EnumCase("debug", 1), EnumCase("trace", 2)])
+    op = Op(
+        "test.targeted",
+        group=Dialect("test"),
+        attrs=[
+            AttrDef("target", "symbol"),
+            AttrDef("flags", ATTR_TYPE_FLAGS, optional=True, enum_def=flags),
+        ],
+        format=[TemplateParamFlags("target", "flags")],
+    )
+
+    tables_c = generate_tables_c("test", 0, [op])
+
+    assert "{LOOM_FORMAT_KIND_TEMPLATE_PARAM_FLAGS, 0, 0}" in tables_c
+    assert "test_targeted_instance_flags_names" in tables_c
+    assert "{LOOM_FORMAT_KIND_SYMBOL_REF, 0, 0}" not in tables_c
 
 
 def test_generate_builders_use_explicit_flags_for_optional_operands() -> None:

@@ -1,12 +1,13 @@
 // RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency | FileCheck --check-prefix=BENCH %s
 // RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@sampled_choice_latency --sample=1 --iterations=2 --warmup_iterations=0 | FileCheck --check-prefix=SAMPLE %s
+// RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@sampled_choice_value7 --sample=0 --iterations=1 --warmup_iterations=0 | FileCheck --check-prefix=SLICE %s
 // RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --iterations=2 --warmup_iterations=0 | FileCheck --check-prefix=CLI-OVERRIDE %s
 // RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --dry_run --output=%t.tune.jsonl
 // RUN: FileCheck --check-prefix=DRY %s < %t.tune.jsonl
 // RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --dry_run --artifact_bundle_dir=%t.bundle
 // RUN: FileCheck --check-prefix=BUNDLE %s < %t.bundle/results.jsonl
 // RUN: FileCheck --check-prefix=BUNDLE-MANIFEST %s < %t.bundle/manifest.json
-// RUN: ( iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_dispatch_latency 2>&1 || true ) | FileCheck --check-prefix=DISPATCH-NO-ACTUAL %s
+// RUN: ( iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_dispatch_latency --measure=dispatch_complete 2>&1 || true ) | FileCheck --check-prefix=DISPATCH-NO-ACTUAL %s
 // RUN: ( iree-tune-loom %S/testdata/duplicate_symbol.loom --benchmark=@duplicate_symbol_latency || true ) | FileCheck --check-prefix=DUPLICATE %s
 // RUN: iree-tune-loom --agents_md | FileCheck --check-prefix=AGENTS %s
 // RUN: iree-tune-loom --help 2>&1 | FileCheck --check-prefix=HELP %s
@@ -16,7 +17,6 @@
 // BENCH: "row":"plan"
 // BENCH: "candidate_id":"c0","candidate_index":0
 // BENCH: "benchmark":"scalar_equal_latency","case":"scalar_equal"
-// BENCH: "metadata":{"family":"scalar_equal"
 // BENCH: "measure":"case_end_to_end"
 // BENCH: "cli_overrides":{"iterations":false,"warmup_iterations":false}
 // BENCH: "row":"sample"
@@ -27,20 +27,20 @@
 // BENCH: "benchmark":"scalar_equal_latency","case":"scalar_equal","status":"ok"
 // BENCH: "measure":"case_end_to_end"
 // BENCH: "warmup_iterations":1
-// BENCH: "iterations":3
+// BENCH: "iterations":10
 // BENCH: "samples_per_iteration":1
-// BENCH: "timing_ns":{"count":3
+// BENCH: "timing_ns":{"count":10
 // BENCH: "p50":
 // BENCH: "p90":
 // BENCH: "row":"summary"
 // BENCH: "planned_case_count":2
-// BENCH: "planned_benchmark_count":3
+// BENCH: "planned_benchmark_count":4
 // BENCH: "benchmark_count":1
 // BENCH: "failure_count":0
 // BENCH: "failed_benchmark_count":0
 // BENCH: "correctness_sample_count":1
 // BENCH: "correctness_failed_sample_count":0
-// BENCH: "summary":{"planned":{"case_count":2,"benchmark_count":3,"selected_benchmark_count":1},"failures":{"row_count":0,"failed_benchmark_count":0},"correctness":{"sample_count":1,"failed_sample_count":0},"artifacts":{"bundle_enabled":false
+// BENCH: "summary":{"planned":{"case_count":2,"benchmark_count":4,"selected_benchmark_count":1},"failures":{"row_count":0,"failed_benchmark_count":0},"correctness":{"sample_count":1,"failed_sample_count":0},"artifacts":{"bundle_enabled":false
 
 // SAMPLE: "row":"plan"
 // SAMPLE: "candidate_id":"c0","candidate_index":0
@@ -62,6 +62,21 @@
 // SAMPLE: "benchmark_count":1
 // SAMPLE: "correctness_sample_count":1
 
+// SLICE: "row":"plan"
+// SLICE: "benchmark":"sampled_choice_value7","case":"sampled_choice"
+// SLICE: "benchmark_sample_count":1
+// SLICE: "selected_sample":0
+// SLICE: "shape_sample_count":2
+// SLICE: "row":"sample"
+// SLICE: "shape_id":"s1","shape_index":1
+// SLICE: "benchmark_sample_ordinal":0
+// SLICE: "sample":{"case":"sampled_choice","sample_ordinal":1,"passed":true
+// SLICE: "row":"benchmark"
+// SLICE: "shape_id":"s1","shape_index":1
+// SLICE: "benchmark":"sampled_choice_value7","case":"sampled_choice","status":"ok"
+// SLICE: "sample_ordinal":1
+// SLICE: "samples_per_iteration":1
+
 // CLI-OVERRIDE: "row":"plan"
 // CLI-OVERRIDE: "cli_overrides":{"iterations":true,"warmup_iterations":true}
 // CLI-OVERRIDE: "row":"benchmark"
@@ -72,7 +87,6 @@
 // DRY: "row":"plan"
 // DRY: "candidate_id":"c0","candidate_index":0
 // DRY: "benchmark":"scalar_equal_latency","case":"scalar_equal"
-// DRY: "metadata":{"family":"scalar_equal"
 // DRY: "measure":"case_end_to_end"
 // DRY-NOT: "row":"sample"
 // DRY-NOT: "row":"benchmark"
@@ -84,7 +98,6 @@
 // BUNDLE: "row":"run"
 // BUNDLE: "artifact_bundle":{"dir":
 // BUNDLE: "row":"plan"
-// BUNDLE: "metadata":{"family":"scalar_equal"
 // BUNDLE: "row":"summary"
 // BUNDLE: "artifacts":{"bundle_enabled":true
 

@@ -169,7 +169,7 @@
 // RUN:   '  check.return' \
 // RUN:   '}' \
 // RUN:   '' \
-// RUN:   'check.benchmark @kernel_bench case(@kernel_case) {iterations = 100}' \
+// RUN:   'check.benchmark<@kernel_case> @kernel_bench' \
 // RUN:   > %t.checks.loom
 // RUN: loom-link %t.checks.loom --strip_check \
 // RUN:   | FileCheck --check-prefix=STRIP-CHECK %s

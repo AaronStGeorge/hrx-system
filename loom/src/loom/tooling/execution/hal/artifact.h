@@ -20,6 +20,7 @@
 #include "loom/error/diagnostic.h"
 #include "loom/ir/module.h"
 #include "loom/target/compile_report.h"
+#include "loom/target/pipeline_options.h"
 #include "loom/target/types.h"
 #include "loom/tooling/execution/compile_options.h"
 #include "loom/verify/verify.h"
@@ -98,6 +99,9 @@ struct loom_run_hal_artifact_provider_t {
   iree_string_view_t hal_driver_name;
   // Human-readable target-family name used in status messages.
   iree_string_view_t target_family_name;
+  // Target-owned defaults used when the shared HAL testbench builds the
+  // prepared-low compile pipeline before artifact emission.
+  loom_target_pipeline_options_t default_pipeline_options;
   // Selects a concrete target supported by the active HAL executable cache.
   loom_run_hal_select_device_target_fn_t select_device_target;
   // Releases storage owned by a target returned from |select_device_target|.

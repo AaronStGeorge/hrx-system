@@ -80,7 +80,8 @@ check.case @private_case {
   check.return
 }
 
-check.benchmark @scale_latency case(@scale_case) {iterations = 100}
+check.benchmark<@scale_case> @scale_latency
+check.benchmark<@private_case>
 )");
   ASSERT_NE(module, nullptr);
 
@@ -111,11 +112,17 @@ check.benchmark @scale_latency case(@scale_case) {iterations = 100}
       iree_string_view_equal(plan.cases[1].name, IREE_SV("private_case")));
   EXPECT_FALSE(plan.cases[1].is_public);
 
-  ASSERT_EQ(plan.benchmark_count, 1u);
+  ASSERT_EQ(plan.benchmark_count, 2u);
   EXPECT_TRUE(iree_string_view_equal(plan.benchmarks[0].name,
                                      IREE_SV("scale_latency")));
   EXPECT_EQ(plan.benchmarks[0].case_index, 0u);
-  EXPECT_EQ(plan.benchmarks[0].attrs.count, 1u);
+  EXPECT_EQ(plan.benchmarks[0].attrs.count, 0u);
+  EXPECT_EQ(plan.benchmarks[0].sample_count, 1u);
+  EXPECT_TRUE(
+      iree_string_view_equal(plan.benchmarks[1].name, IREE_SV("private")));
+  EXPECT_EQ(plan.benchmarks[1].symbol, nullptr);
+  EXPECT_EQ(plan.benchmarks[1].case_index, 1u);
+  EXPECT_EQ(plan.benchmarks[1].sample_count, 1u);
   EXPECT_EQ(plan.issue_count, 0u);
 
   loom_module_free(module);
@@ -179,9 +186,9 @@ check.case @sources {
 TEST_F(TestbenchTest, PlansDeterministicParameterSamples) {
   loom_module_t* module = ParseModule(R"(
 check.case @sweep {
-  %m = check.param.range po2 bounds(1 to 16) : index
-  %n = check.param.choice values([3, 5]) : i32
-  %seed = check.param.seed base(10) count(4) : i64
+  %m = check.param.range po2 bounds(1 to 16) name("m") : index
+  %n = check.param.choice values([3, 5]) name("n") : i32
+  %seed = check.param.seed base(10) count(4) name("seed") : i64
   check.return
 }
 )");
@@ -203,10 +210,16 @@ check.case @sweep {
   EXPECT_EQ(case_plan.issue_count, 0u);
 
   EXPECT_EQ(case_plan.parameters[0].kind, LOOM_TESTBENCH_PARAMETER_RANGE);
+  EXPECT_TRUE(
+      iree_string_view_equal(case_plan.parameters[0].name, IREE_SV("m")));
   EXPECT_EQ(case_plan.parameters[0].sample_count, 5u);
   EXPECT_EQ(case_plan.parameters[1].kind, LOOM_TESTBENCH_PARAMETER_CHOICE);
+  EXPECT_TRUE(
+      iree_string_view_equal(case_plan.parameters[1].name, IREE_SV("n")));
   EXPECT_EQ(case_plan.parameters[1].sample_count, 2u);
   EXPECT_EQ(case_plan.parameters[2].kind, LOOM_TESTBENCH_PARAMETER_SEED);
+  EXPECT_TRUE(
+      iree_string_view_equal(case_plan.parameters[2].name, IREE_SV("seed")));
   EXPECT_EQ(case_plan.parameters[2].sample_count, 4u);
 
   EXPECT_EQ(loom_testbench_case_sample_parameter_ordinal(&case_plan, 5, 0), 0u);
@@ -226,6 +239,116 @@ check.case @sweep {
                                                        2, &value));
   EXPECT_EQ(value.kind, LOOM_ATTR_I64);
   EXPECT_EQ(loom_attr_as_i64(value), 12);
+
+  loom_module_free(module);
+}
+
+TEST_F(TestbenchTest, PlansBenchmarkParameterAssignments) {
+  loom_module_t* module = ParseModule(R"(
+check.case @sweep {
+  %m = check.param.range po2 bounds(1 to 16) name("m") : index
+  %n = check.param.choice values([3, 5]) name("n") : i32
+  %seed = check.param.seed base(10) count(4) name("seed") : i64
+  check.return
+}
+
+check.benchmark<@sweep> @only_m {m = 8}
+check.benchmark<@sweep> @m_and_seed {m = 8, seed = 12}
+)");
+  ASSERT_NE(module, nullptr);
+
+  loom_testbench_module_plan_t plan = {};
+  IREE_ASSERT_OK(
+      loom_testbench_plan_module(module, nullptr, &plan_arena_, &plan));
+
+  ASSERT_EQ(plan.case_count, 1u);
+  ASSERT_EQ(plan.benchmark_count, 2u);
+  ASSERT_EQ(plan.issue_count, 0u);
+  const loom_testbench_case_plan_t& case_plan = plan.cases[0];
+
+  const loom_testbench_benchmark_plan_t& only_m = plan.benchmarks[0];
+  EXPECT_EQ(only_m.sample_count, 8u);
+  EXPECT_EQ(only_m.cartesian_sample_count, 8u);
+  ASSERT_EQ(only_m.parameter_sample_ordinal_count, 3u);
+  EXPECT_EQ(only_m.parameter_sample_ordinals[0], 3u);
+  EXPECT_EQ(only_m.parameter_sample_ordinals[1],
+            LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL);
+  EXPECT_EQ(only_m.parameter_sample_ordinals[2],
+            LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL);
+  EXPECT_EQ(
+      loom_testbench_benchmark_sample_case_ordinal(&case_plan, &only_m, 0), 3u);
+  EXPECT_EQ(
+      loom_testbench_benchmark_sample_case_ordinal(&case_plan, &only_m, 7),
+      38u);
+
+  const loom_testbench_benchmark_plan_t& m_and_seed = plan.benchmarks[1];
+  EXPECT_EQ(m_and_seed.sample_count, 2u);
+  EXPECT_EQ(m_and_seed.cartesian_sample_count, 2u);
+  ASSERT_EQ(m_and_seed.parameter_sample_ordinal_count, 3u);
+  EXPECT_EQ(m_and_seed.parameter_sample_ordinals[0], 3u);
+  EXPECT_EQ(m_and_seed.parameter_sample_ordinals[1],
+            LOOM_TESTBENCH_PARAMETER_SAMPLE_ORDINAL_ALL);
+  EXPECT_EQ(m_and_seed.parameter_sample_ordinals[2], 2u);
+  EXPECT_EQ(
+      loom_testbench_benchmark_sample_case_ordinal(&case_plan, &m_and_seed, 0),
+      23u);
+  EXPECT_EQ(
+      loom_testbench_benchmark_sample_case_ordinal(&case_plan, &m_and_seed, 1),
+      28u);
+
+  loom_module_free(module);
+}
+
+TEST_F(TestbenchTest, ReportsInvalidBenchmarkAssignments) {
+  loom_module_t* module = ParseModule(R"(
+check.case @sweep {
+  %m = check.param.range po2 bounds(1 to 16) name("m") : index
+  %n = check.param.choice values([3, 5]) name("n") : i32
+  check.return
+}
+
+check.benchmark<@sweep> @bad_key {missing = 8}
+check.benchmark<@sweep> @bad_value {n = 7}
+)");
+  ASSERT_NE(module, nullptr);
+
+  loom_testbench_module_plan_t plan = {};
+  IREE_ASSERT_OK(
+      loom_testbench_plan_module(module, nullptr, &plan_arena_, &plan));
+
+  ASSERT_EQ(plan.benchmark_count, 2u);
+  ASSERT_EQ(plan.issue_count, 2u);
+  EXPECT_EQ(plan.issues[0].kind,
+            LOOM_TESTBENCH_ISSUE_INVALID_BENCHMARK_ASSIGNMENT);
+  EXPECT_EQ(plan.issues[0].benchmark_index, 0u);
+  EXPECT_EQ(plan.issues[1].kind,
+            LOOM_TESTBENCH_ISSUE_INVALID_BENCHMARK_ASSIGNMENT);
+  EXPECT_EQ(plan.issues[1].benchmark_index, 1u);
+  EXPECT_EQ(plan.benchmarks[0].sample_count, 0u);
+  EXPECT_EQ(plan.benchmarks[1].sample_count, 0u);
+
+  loom_module_free(module);
+}
+
+TEST_F(TestbenchTest, ReportsDuplicateParameterNames) {
+  loom_module_t* module = ParseModule(R"(
+check.case @bad {
+  %m0 = check.param.range po2 bounds(1 to 16) name("m") : index
+  %m1 = check.param.choice values([3, 5]) name("m") : i32
+  check.return
+}
+)");
+  ASSERT_NE(module, nullptr);
+
+  loom_testbench_module_plan_t plan = {};
+  IREE_ASSERT_OK(
+      loom_testbench_plan_module(module, nullptr, &plan_arena_, &plan));
+
+  ASSERT_EQ(plan.case_count, 1u);
+  ASSERT_EQ(plan.issue_count, 1u);
+  EXPECT_EQ(plan.issues[0].kind, LOOM_TESTBENCH_ISSUE_DUPLICATE_PARAMETER_NAME);
+  EXPECT_EQ(plan.issues[0].case_index, 0u);
+  EXPECT_EQ(plan.cases[0].sample_count, 0u);
 
   loom_module_free(module);
 }

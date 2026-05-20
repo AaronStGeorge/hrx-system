@@ -135,8 +135,6 @@ static iree_status_t iree_tune_loom_write_profile_artifact_identity_json(
       loom_json_write_escaped_string(stream, benchmark_plan->name));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\"case\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(stream, case_plan->name));
-  IREE_RETURN_IF_ERROR(iree_tune_loom_write_benchmark_metadata_json(
-      module, benchmark_plan, stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream, ",\"batch_size\":%" PRIhsz,
       benchmark_result->hal_benchmark.timing.batch_size));
@@ -840,8 +838,6 @@ iree_status_t iree_tune_loom_append_profile_row(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, ",\"case\":"));
   IREE_RETURN_IF_ERROR(
       loom_json_write_escaped_string(&stream, case_plan->name));
-  IREE_RETURN_IF_ERROR(iree_tune_loom_write_benchmark_metadata_json(
-      module, benchmark_plan, &stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream, ",\"batch_size\":%" PRIhsz,
       benchmark_result->hal_benchmark.timing.batch_size));

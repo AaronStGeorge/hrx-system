@@ -29,6 +29,7 @@ from loom.assembly import (
     Region,
     ResultTypeList,
     SymbolRef,
+    TemplateParam,
     TypeOf,
     TypesOf,
 )
@@ -200,6 +201,7 @@ check_param_range = Op(
         AttrDef("lower", "any"),
         AttrDef("upper", "any"),
         AttrDef("step", "any", optional=True),
+        AttrDef("param_name", "string", optional=True),
     ],
     constraints=[
         LiteralMatchesElementType("lower", "result"),
@@ -211,6 +213,7 @@ check_param_range = Op(
         Attr("policy"),
         Clause("bounds", Attr("lower"), TO, Attr("upper")),
         OptionalGroup([Clause("step", Attr("step"))], anchor="step"),
+        OptionalGroup([Clause("name", Attr("param_name"))], anchor="param_name"),
         COLON,
         TypeOf("result"),
     ],
@@ -227,10 +230,12 @@ check_param_choice = Op(
     results=[Result("result", INDEX_OR_NON_I1_INTEGER_SCALAR)],
     attrs=[
         AttrDef("values", "i64_array"),
+        AttrDef("param_name", "string", optional=True),
     ],
     traits=_CASE_BODY_TRAITS,
     format=[
         Clause("values", Attr("values")),
+        OptionalGroup([Clause("name", Attr("param_name"))], anchor="param_name"),
         COLON,
         TypeOf("result"),
     ],
@@ -247,11 +252,13 @@ check_param_seed = Op(
     attrs=[
         AttrDef("base", "i64"),
         AttrDef("count", "i64"),
+        AttrDef("param_name", "string", optional=True),
     ],
     traits=_CASE_BODY_TRAITS,
     format=[
         Clause("base", Attr("base")),
         Clause("count", Attr("count")),
+        OptionalGroup([Clause("name", Attr("param_name"))], anchor="param_name"),
         COLON,
         TypeOf("result"),
     ],
@@ -548,22 +555,22 @@ check_expect = Op(
 
 
 # ============================================================================
-# Benchmark policy
+# Benchmark records
 # ============================================================================
 
 check_benchmark = Op(
     "check.benchmark",
     group=check_ops,
-    doc="Declarative benchmark/tuning policy over a check.case.",
+    doc="Declares a benchmark slice over a check.case.",
     traits=[SYMBOL_DEFINE],
     attrs=[
-        AttrDef("benchmark", "symbol"),
+        AttrDef("benchmark", "symbol", optional=True),
         AttrDef(
             "case_ref",
             "symbol",
             symbol_ref=SymbolReference("check case", ["record"]),
         ),
-        AttrDef("attrs", "dict"),
+        AttrDef("attrs", "dict", optional=True),
     ],
     symbol_def=SymbolDefinition(
         field="benchmark",
@@ -572,12 +579,12 @@ check_benchmark = Op(
         bytecode_kind="LOOM_SYMBOL_RECORD",
     ),
     format=[
-        SymbolRef("benchmark"),
-        Clause("case", SymbolRef("case_ref")),
+        TemplateParam("case_ref"),
+        OptionalGroup([SymbolRef("benchmark")], anchor="benchmark"),
         AttrDict("attrs"),
     ],
     examples=[
-        'check.benchmark @gemv_latency case(@gemv_sweep) {measure = "dispatch_complete", iterations = 100}',
+        "check.benchmark<@gemv_sweep> @gemv_latency {m = 8, n = 96}",
     ],
 )
 
