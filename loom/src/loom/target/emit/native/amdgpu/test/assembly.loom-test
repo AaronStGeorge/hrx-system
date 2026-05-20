@@ -969,6 +969,10 @@ low.func.def target(@gfx12_target) @gfx12_smem_wide_loads(%base: reg<amdgpu.sgpr
   %scalar_b96 = s_load_b96 %base, %soffset {offset = 4}
   %buffer_b96 = s_buffer_load_b96 %resource, %soffset {offset = 8}
   %buffer_b512 = s_buffer_load_b512 %resource, %soffset {offset = 16}
+  %scalar_i8 = s_load_i8 %base, %soffset {offset = 20}
+  %scalar_u16 = s_load_u16 %base, %soffset {offset = 24}
+  %buffer_u8 = s_buffer_load_u8 %resource, %soffset {offset = 28}
+  %buffer_i16 = s_buffer_load_i16 %resource, %soffset {offset = 32}
   return
 }
 
@@ -976,6 +980,10 @@ low.func.def target(@gfx12_target) @gfx12_smem_wide_loads(%base: reg<amdgpu.sgpr
   s_load_b96 s[8:10], s[0:1], s2 offset:4
   s_buffer_load_b96 s[8:10], s[4:7], s2 offset:8
   s_buffer_load_b512 s[16:31], s[4:7], s2 offset:16
+  s_load_i8 s3, s[0:1], s2 offset:20
+  s_load_u16 s3, s[0:1], s2 offset:24
+  s_buffer_load_u8 s0, s[4:7], s2 offset:28
+  s_buffer_load_i16 s0, s[4:7], s2 offset:32
   s_endpgm
 
 // ====

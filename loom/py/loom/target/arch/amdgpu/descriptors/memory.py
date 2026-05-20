@@ -15,6 +15,21 @@ from .common import *
 
 _MEMORY_DWORD_VECTOR_WIDTHS = ((32, 1), (64, 2), (96, 3), (128, 4))
 
+_SMEM_NARROW_LOAD_ROWS: tuple[
+    tuple[str, str, int, str, AmdgpuImplicitOperandOverlay], ...
+] = (
+    ("i8", "I8", 8, "memory.load.i8.sign_extend", _IGNORE_GLOBAL_READ_MEMORY_I8),
+    ("u8", "U8", 8, "memory.load.u8.zero_extend", _IGNORE_GLOBAL_READ_MEMORY_U8),
+    ("i16", "I16", 16, "memory.load.i16.sign_extend", _IGNORE_GLOBAL_READ_MEMORY_I16),
+    (
+        "u16",
+        "U16",
+        16,
+        "memory.load.u16.zero_extend",
+        _IGNORE_GLOBAL_READ_MEMORY_U16,
+    ),
+)
+
 
 def _s_buffer_load_sized_overlay(
     *,
@@ -23,6 +38,8 @@ def _s_buffer_load_sized_overlay(
     mnemonic: str,
     width_bits: int,
     payload_units: int,
+    semantic_tag: str | None = None,
+    implicit_memory: AmdgpuImplicitOperandOverlay | None = None,
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 21,
     fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
@@ -32,20 +49,49 @@ def _s_buffer_load_sized_overlay(
         instruction_name=instruction_name,
         mnemonic=mnemonic,
         encoding_name="ENC_SMEM",
-        semantic_tag=f"memory.load.u{width_bits}",
+        semantic_tag=semantic_tag or f"memory.load.u{width_bits}",
         schedule_class=_SCHEDULE_SMEM_LOAD,
         operands=(
             AmdgpuOperandOverlay("SDATA", _sgpr_result(units=payload_units)),
             AmdgpuOperandOverlay("SBASE", _sgpr_resource("resource", units=4)),
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
         ),
-        implicit_operands=(_ignore_global_read_memory(width_bits),),
+        implicit_operands=(implicit_memory or _ignore_global_read_memory(width_bits),),
         immediate_fields=(offset_field_name,),
         immediates=(_offset_immediate(offset_bit_width),),
         fixed_encoding_fields=fixed_encoding_fields,
         effects=(_global_read_effect(width_bits),),
         constraints=_EARLY_CLOBBER_RESULT_CONSTRAINTS,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _s_buffer_load_narrow_overlays(
+    offset_field_name: str = "OFFSET",
+    *,
+    offset_bit_width: int = 21,
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return tuple(
+        _s_buffer_load_sized_overlay(
+            descriptor_key=f"amdgpu.s_buffer_load_{mnemonic_suffix}",
+            instruction_name=f"S_BUFFER_LOAD_{instruction_suffix}",
+            mnemonic=f"s_buffer_load_{mnemonic_suffix}",
+            width_bits=width_bits,
+            payload_units=1,
+            semantic_tag=semantic_tag,
+            implicit_memory=implicit_memory,
+            offset_field_name=offset_field_name,
+            offset_bit_width=offset_bit_width,
+            fixed_encoding_fields=fixed_encoding_fields,
+        )
+        for (
+            mnemonic_suffix,
+            instruction_suffix,
+            width_bits,
+            semantic_tag,
+            implicit_memory,
+        ) in _SMEM_NARROW_LOAD_ROWS
     )
 
 
@@ -182,6 +228,8 @@ def _s_load_sized_overlay(
     width_bits: int,
     payload_units: int,
     offset_only_descriptor_key: str,
+    semantic_tag: str | None = None,
+    implicit_memory: AmdgpuImplicitOperandOverlay | None = None,
     fixed_soffset: AmdgpuFixedEncodingValue | None = None,
 ) -> AmdgpuDescriptorOverlay:
     operands: tuple[AmdgpuOperandOverlay, ...] = (
@@ -210,10 +258,10 @@ def _s_load_sized_overlay(
         instruction_name=instruction_name,
         mnemonic=mnemonic,
         encoding_name="ENC_SMEM",
-        semantic_tag=f"memory.load.u{width_bits}",
+        semantic_tag=semantic_tag or f"memory.load.u{width_bits}",
         schedule_class=_SCHEDULE_SMEM_LOAD,
         operands=operands,
-        implicit_operands=(_ignore_global_read_memory(width_bits),),
+        implicit_operands=(implicit_memory or _ignore_global_read_memory(width_bits),),
         immediate_fields=(offset_field_name,),
         immediates=(_offset_immediate(offset_bit_width),),
         fixed_encoding_fields=fixed_encoding_fields,
@@ -222,6 +270,42 @@ def _s_load_sized_overlay(
         constraints=_EARLY_CLOBBER_RESULT_CONSTRAINTS,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=() if fixed_soffset is not None else None,
+    )
+
+
+def _s_load_narrow_overlays(
+    offset_field_name: str = "OFFSET",
+    *,
+    offset_bit_width: int = 21,
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
+    fixed_soffset: AmdgpuFixedEncodingValue | None = None,
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return tuple(
+        _s_load_sized_overlay(
+            descriptor_key=(
+                f"amdgpu.s_load_{mnemonic_suffix}"
+                if fixed_soffset is None
+                else f"amdgpu.s_load_{mnemonic_suffix}_offset_only"
+            ),
+            instruction_name=f"S_LOAD_{instruction_suffix}",
+            mnemonic=f"s_load_{mnemonic_suffix}",
+            width_bits=width_bits,
+            payload_units=1,
+            offset_only_descriptor_key=f"amdgpu.s_load_{mnemonic_suffix}_offset_only",
+            semantic_tag=semantic_tag,
+            implicit_memory=implicit_memory,
+            offset_field_name=offset_field_name,
+            offset_bit_width=offset_bit_width,
+            fixed_encoding_fields=fixed_encoding_fields,
+            fixed_soffset=fixed_soffset,
+        )
+        for (
+            mnemonic_suffix,
+            instruction_suffix,
+            width_bits,
+            semantic_tag,
+            implicit_memory,
+        ) in _SMEM_NARROW_LOAD_ROWS
     )
 
 
@@ -2120,11 +2204,13 @@ __all__ = (
     "_s_buffer_load_64_overlay",
     "_s_buffer_load_96_overlay",
     "_s_buffer_load_dword_overlay",
+    "_s_buffer_load_narrow_overlays",
     "_s_load_96_overlay",
     "_s_load_dword_overlay",
     "_s_load_dwordx16_overlay",
     "_s_load_dwordx2_overlay",
     "_s_load_dwordx4_overlay",
     "_s_load_dwordx8_overlay",
+    "_s_load_narrow_overlays",
     "_scratch_memory_overlays",
 )

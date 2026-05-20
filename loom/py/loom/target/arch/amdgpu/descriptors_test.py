@@ -811,6 +811,7 @@ def _assert_memory_width_overlay(
     payload_field_name: str,
     effect_kind: EffectKind,
     memory_space: MemorySpace,
+    implicit_data_format: str | None = None,
 ) -> None:
     assert descriptor.semantic_tag == semantic_tag
     assert descriptor.mnemonic == mnemonic
@@ -830,7 +831,8 @@ def _assert_memory_width_overlay(
     )
     assert any(
         operand.operand_type == "OPR_GPUMEM"
-        and operand.data_format_name == f"FMT_NUM_B{width_bits}"
+        and operand.data_format_name
+        == (implicit_data_format or f"FMT_NUM_B{width_bits}")
         and operand.size_bits == width_bits
         for operand in descriptor.implicit_operands
     )
@@ -1093,6 +1095,67 @@ def test_smem_dword_width_descriptors_cover_active_xml_families() -> None:
                 payload_field_name="dst",
                 effect_kind=EffectKind.READ,
                 memory_space=MemorySpace.GLOBAL,
+            )
+
+
+def test_rdna4_smem_narrow_load_descriptors_have_extension_semantics() -> None:
+    gfx11_descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx11_core_overlays()
+    }
+    rows = (
+        ("i8", 8, "memory.load.i8.sign_extend", "FMT_NUM_I8"),
+        ("u8", 8, "memory.load.u8.zero_extend", "FMT_NUM_U8"),
+        ("i16", 16, "memory.load.i16.sign_extend", "FMT_NUM_I16"),
+        ("u16", 16, "memory.load.u16.zero_extend", "FMT_NUM_U16"),
+    )
+    for suffix, _width_bits, _semantic_tag, _implicit_data_format in rows:
+        assert f"amdgpu.s_load_{suffix}" not in gfx11_descriptors
+        assert f"amdgpu.s_buffer_load_{suffix}" not in gfx11_descriptors
+
+    for descriptors in (
+        {
+            descriptor.descriptor_key: descriptor
+            for descriptor in _gfx12_core_overlays()
+        },
+        {
+            descriptor.descriptor_key: descriptor
+            for descriptor in _gfx1250_core_overlays()
+        },
+    ):
+        for suffix, width_bits, semantic_tag, implicit_data_format in rows:
+            scalar_load_key = f"amdgpu.s_load_{suffix}"
+            _assert_memory_width_overlay(
+                descriptors[scalar_load_key],
+                width_bits=width_bits,
+                semantic_tag=semantic_tag,
+                mnemonic=f"s_load_{suffix}",
+                operand_units=1,
+                payload_field_name="dst",
+                effect_kind=EffectKind.READ,
+                memory_space=MemorySpace.GLOBAL,
+                implicit_data_format=implicit_data_format,
+            )
+            _assert_memory_width_overlay(
+                descriptors[f"{scalar_load_key}_offset_only"],
+                width_bits=width_bits,
+                semantic_tag=semantic_tag,
+                mnemonic=f"s_load_{suffix}",
+                operand_units=1,
+                payload_field_name="dst",
+                effect_kind=EffectKind.READ,
+                memory_space=MemorySpace.GLOBAL,
+                implicit_data_format=implicit_data_format,
+            )
+            _assert_memory_width_overlay(
+                descriptors[f"amdgpu.s_buffer_load_{suffix}"],
+                width_bits=width_bits,
+                semantic_tag=semantic_tag,
+                mnemonic=f"s_buffer_load_{suffix}",
+                operand_units=1,
+                payload_field_name="dst",
+                effect_kind=EffectKind.READ,
+                memory_space=MemorySpace.GLOBAL,
+                implicit_data_format=implicit_data_format,
             )
 
 

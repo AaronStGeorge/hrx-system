@@ -1922,6 +1922,24 @@ _IGNORE_GLOBAL_READ_MEMORY_I8 = AmdgpuImplicitOperandOverlay(
     ignore_reason="modeled-by-global-read-effect",
 )
 
+_IGNORE_GLOBAL_READ_MEMORY_U8 = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_GPUMEM",
+    data_format_name="FMT_NUM_U8",
+    size_bits=8,
+    is_input=True,
+    is_output=False,
+    ignore_reason="modeled-by-global-read-effect",
+)
+
+_IGNORE_GLOBAL_READ_MEMORY_I16 = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_GPUMEM",
+    data_format_name="FMT_NUM_I16",
+    size_bits=16,
+    is_input=True,
+    is_output=False,
+    ignore_reason="modeled-by-global-read-effect",
+)
+
 _IGNORE_GLOBAL_READ_MEMORY_U16 = AmdgpuImplicitOperandOverlay(
     operand_type="OPR_GPUMEM",
     data_format_name="FMT_NUM_U16",
@@ -2437,7 +2455,9 @@ __all__ = (
     "_IGNORE_GLOBAL_READ_MEMORY_B8",
     "_IGNORE_GLOBAL_READ_MEMORY_B64",
     "_IGNORE_GLOBAL_READ_MEMORY_B96",
+    "_IGNORE_GLOBAL_READ_MEMORY_I16",
     "_IGNORE_GLOBAL_READ_MEMORY_I8",
+    "_IGNORE_GLOBAL_READ_MEMORY_U8",
     "_IGNORE_GLOBAL_READ_MEMORY_U16",
     "_IGNORE_GLOBAL_WRITE_MEMORY",
     "_IGNORE_GLOBAL_WRITE_MEMORY_B128",

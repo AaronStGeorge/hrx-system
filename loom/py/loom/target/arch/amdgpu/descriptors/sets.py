@@ -1079,15 +1079,20 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         *_v_cmp_overlays(),
         *_v_cndmask_b32_overlays(),
         *_s_load_dword_width_overlays("IOFFSET", offset_bit_width=24, include_b96=True),
+        *_s_load_narrow_overlays("IOFFSET", offset_bit_width=24),
         *_s_load_dword_offset_only_overlays(
             "IOFFSET",
             offset_bit_width=24,
             fixed_soffset=_predefined("NULL"),
             include_b96=True,
         ),
+        *_s_load_narrow_overlays(
+            "IOFFSET", offset_bit_width=24, fixed_soffset=_predefined("NULL")
+        ),
         *_s_buffer_load_width_overlays(
             "IOFFSET", offset_bit_width=24, include_b96=True
         ),
+        *_s_buffer_load_narrow_overlays("IOFFSET", offset_bit_width=24),
         _buffer_load_dword_overlay(
             encoding_name="ENC_VBUFFER",
             resource_field_name="RSRC",
@@ -1453,15 +1458,20 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
         *_v_cmp_overlays(),
         *_v_cndmask_b32_overlays(),
         *_s_load_dword_width_overlays("IOFFSET", offset_bit_width=24, include_b96=True),
+        *_s_load_narrow_overlays("IOFFSET", offset_bit_width=24),
         *_s_load_dword_offset_only_overlays(
             "IOFFSET",
             offset_bit_width=24,
             fixed_soffset=_predefined("NULL"),
             include_b96=True,
         ),
+        *_s_load_narrow_overlays(
+            "IOFFSET", offset_bit_width=24, fixed_soffset=_predefined("NULL")
+        ),
         *_s_buffer_load_width_overlays(
             "IOFFSET", offset_bit_width=24, include_b96=True
         ),
+        *_s_buffer_load_narrow_overlays("IOFFSET", offset_bit_width=24),
         _buffer_load_dword_overlay(
             encoding_name="ENC_VBUFFER",
             resource_field_name="RSRC",
