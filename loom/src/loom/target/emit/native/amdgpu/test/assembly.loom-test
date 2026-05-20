@@ -895,6 +895,21 @@ low.func.def target(@gfx942_target) @gfx942_global_load_lds(%addr64: reg<amdgpu.
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx942_buffer_load_lds waits=none
+amdgpu.target<gfx942> @gfx942_target
+low.func.def target(@gfx942_target) @gfx942_buffer_load_lds(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %m0: reg<amdgpu.m0>) {
+  low.op<amdgpu.buffer_load_lds_ubyte>(%resource, %vaddr, %soffset, %m0) {offset = 4} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>, reg<amdgpu.m0>)
+  low.op<amdgpu.buffer_load_lds_dword_off_zero>(%resource, %m0) {offset = 8} : (reg<amdgpu.sgpr x4>, reg<amdgpu.m0>)
+  low.return
+}
+
+// ----
+  buffer_load_ubyte v0, s[4:7], s0 offen offset:4 lds
+  buffer_load_dword off, s[4:7], 0 offset:8 lds
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx942_m0_state_reuse strategy=resource-stall waits=none
 amdgpu.target<gfx942> @gfx942_target
 low.func.def target(@gfx942_target) @gfx942_m0_state_reuse(%value0: reg<amdgpu.vgpr>, %value1: reg<amdgpu.vgpr>) {
@@ -931,6 +946,21 @@ low.func.def target(@gfx950_target) @gfx950_global_load_lds(%addr64: reg<amdgpu.
   global_load_lds_dwordx4 v0, s[0:1] offset:16
   global_load_lds_ushort v0, s[0:1] offset:20
   global_load_lds_dwordx3 v[2:3], off offset:24
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx950_buffer_load_lds waits=none
+amdgpu.target<gfx950> @gfx950_target
+low.func.def target(@gfx950_target) @gfx950_buffer_load_lds(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %m0: reg<amdgpu.m0>) {
+  low.op<amdgpu.buffer_load_lds_dwordx3>(%resource, %vaddr, %soffset, %m0) {offset = 12} : (reg<amdgpu.sgpr x4>, reg<amdgpu.vgpr>, reg<amdgpu.sgpr>, reg<amdgpu.m0>)
+  low.op<amdgpu.buffer_load_lds_dwordx4_off_zero>(%resource, %m0) {offset = 16} : (reg<amdgpu.sgpr x4>, reg<amdgpu.m0>)
+  low.return
+}
+
+// ----
+  buffer_load_dwordx3 v0, s[4:7], s0 offen offset:12 lds
+  buffer_load_dwordx4 off, s[4:7], 0 offset:16 lds
   s_endpgm
 
 // ====

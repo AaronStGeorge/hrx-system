@@ -1013,6 +1013,34 @@ static iree_host_size_t loom_amdgpu_explicit_packet_operand_count(
   return explicit_operand_count;
 }
 
+static iree_status_t loom_amdgpu_append_mubuf_load_lds_packet(
+    const loom_native_assembly_packet_context_t* context) {
+  const iree_host_size_t explicit_operand_count =
+      loom_amdgpu_explicit_packet_operand_count(context);
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_mnemonic(context));
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_cstring(context->builder, " "));
+  if (explicit_operand_count == 1) {
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, "off"));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_descriptor_operand(context, 0));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, "0"));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_descriptor_operand(context, 1));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_descriptor_operand(context, 0));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_comma(context));
+    IREE_RETURN_IF_ERROR(loom_amdgpu_append_descriptor_operand(context, 2));
+    IREE_RETURN_IF_ERROR(
+        iree_string_builder_append_cstring(context->builder, " offen"));
+  }
+  IREE_RETURN_IF_ERROR(loom_amdgpu_append_offset_suffix(context));
+  return iree_string_builder_append_cstring(context->builder, " lds");
+}
+
 static bool loom_amdgpu_descriptor_operand_uses_m0(
     const loom_low_descriptor_set_t* descriptor_set,
     const loom_low_operand_t* operand) {
@@ -1985,6 +2013,12 @@ static iree_status_t loom_amdgpu_append_descriptor_packet(
     if (is_global_to_lds &&
         loom_amdgpu_descriptor_uses_global_pointer_format(descriptor)) {
       return loom_amdgpu_append_global_load_lds_packet(context);
+    }
+    if (is_global_to_lds &&
+        (descriptor->encoding_format_id == LOOM_AMDGPU_ENCODING_FORMAT_MUBUF ||
+         descriptor->encoding_format_id ==
+             LOOM_AMDGPU_ENCODING_FORMAT_VBUFFER)) {
+      return loom_amdgpu_append_mubuf_load_lds_packet(context);
     }
     if (descriptor->encoding_format_id == LOOM_AMDGPU_ENCODING_FORMAT_MUBUF ||
         descriptor->encoding_format_id == LOOM_AMDGPU_ENCODING_FORMAT_VBUFFER) {

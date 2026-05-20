@@ -1112,6 +1112,244 @@ def _buffer_load_128_off_zero_overlay(
     )
 
 
+def _buffer_load_lds_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+    global_width_bits: int,
+    workgroup_width_bits: int,
+    implicit_memory: AmdgpuImplicitOperandOverlay,
+    encoding_name: str,
+    resource_field_name: str,
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 12,
+    cache_fields: tuple[tuple[str, int], ...] = (),
+    off_zero_descriptor_key: str | None = None,
+) -> AmdgpuDescriptorOverlay:
+    operand_forms: tuple[OperandForm, ...] = ()
+    if off_zero_descriptor_key is not None:
+        operand_forms = (
+            _buffer_off_zero_operand_form(
+                replacement_descriptor=off_zero_descriptor_key
+            ),
+        )
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name=encoding_name,
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_VMEM_LOAD_LDS,
+        operands=(
+            AmdgpuOperandOverlay(
+                resource_field_name, _sgpr_resource("resource", units=4)
+            ),
+            _mubuf_vaddr_operand(),
+            AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+        ),
+        ignored_operands=(
+            AmdgpuIgnoredOperandOverlay(
+                "VDATA",
+                ignore_reason="lds-bit-has-no-vgpr-result",
+                fixed_encoding_value=_predefined("v0", "OPR_VGPR"),
+            ),
+        ),
+        implicit_operands=(
+            implicit_memory,
+            _implicit_m0_input(xml_operand_required=False),
+        ),
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
+        fixed_encoding_fields=(("IDXEN", 0), ("OFFEN", 1), ("LDS", 1)),
+        effects=_global_to_lds_effects(
+            global_width_bits,
+            workgroup_width_bits=workgroup_width_bits,
+        ),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        operand_forms=operand_forms,
+        asm_forms=(),
+    )
+
+
+def _buffer_load_lds_off_zero_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    semantic_tag: str,
+    global_width_bits: int,
+    workgroup_width_bits: int,
+    implicit_memory: AmdgpuImplicitOperandOverlay,
+    encoding_name: str,
+    resource_field_name: str,
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 12,
+    cache_fields: tuple[tuple[str, int], ...] = (),
+) -> AmdgpuDescriptorOverlay:
+    return AmdgpuDescriptorOverlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        encoding_name=encoding_name,
+        semantic_tag=semantic_tag,
+        schedule_class=_SCHEDULE_VMEM_LOAD_LDS,
+        operands=(
+            AmdgpuOperandOverlay(
+                resource_field_name, _sgpr_resource("resource", units=4)
+            ),
+        ),
+        ignored_operands=(
+            AmdgpuIgnoredOperandOverlay(
+                "VDATA",
+                ignore_reason="lds-bit-has-no-vgpr-result",
+                fixed_encoding_value=_predefined("v0", "OPR_VGPR"),
+            ),
+        ),
+        implicit_operands=(
+            implicit_memory,
+            _implicit_m0_input(xml_operand_required=False),
+        ),
+        immediate_fields=(offset_field_name, *_cache_field_names(cache_fields)),
+        immediates=(
+            _offset_immediate(offset_bit_width),
+            *_cache_immediates(cache_fields),
+        ),
+        fixed_encoding_fields=(
+            ("VADDR", _predefined("v0")),
+            ("SOFFSET", _MUBUF_SOFFSET_INLINE_ZERO),
+            ("IDXEN", 0),
+            ("OFFEN", 0),
+            ("LDS", 1),
+        ),
+        effects=_global_to_lds_effects(
+            global_width_bits,
+            workgroup_width_bits=workgroup_width_bits,
+        ),
+        flags=(DescriptorFlag.SIDE_EFFECTING,),
+        asm_forms=(),
+    )
+
+
+_BUFFER_LOAD_LDS_CDNA3_VARIANTS = (
+    (
+        "UBYTE",
+        "ubyte",
+        "memory.global_to_workgroup.u8.zero_extend",
+        8,
+        8,
+        _IGNORE_GLOBAL_READ_MEMORY_U8,
+    ),
+    (
+        "SBYTE",
+        "sbyte",
+        "memory.global_to_workgroup.i8.sign_extend",
+        8,
+        8,
+        _IGNORE_GLOBAL_READ_MEMORY_I8,
+    ),
+    (
+        "USHORT",
+        "ushort",
+        "memory.global_to_workgroup.u16.zero_extend",
+        16,
+        16,
+        _IGNORE_GLOBAL_READ_MEMORY_U16,
+    ),
+    (
+        "SSHORT",
+        "sshort",
+        "memory.global_to_workgroup.i16.sign_extend",
+        16,
+        16,
+        _IGNORE_GLOBAL_READ_MEMORY_I16,
+    ),
+    (
+        "DWORD",
+        "dword",
+        "memory.global_to_workgroup.u32",
+        32,
+        32,
+        _IGNORE_GLOBAL_READ_MEMORY,
+    ),
+)
+
+_BUFFER_LOAD_LDS_GFX950_VARIANTS = (
+    *_BUFFER_LOAD_LDS_CDNA3_VARIANTS,
+    (
+        "DWORDX3",
+        "dwordx3",
+        "memory.global_to_workgroup.u96",
+        96,
+        96,
+        _IGNORE_GLOBAL_READ_MEMORY_B96,
+    ),
+    (
+        "DWORDX4",
+        "dwordx4",
+        "memory.global_to_workgroup.u128",
+        128,
+        128,
+        _IGNORE_GLOBAL_READ_MEMORY_B128,
+    ),
+)
+
+
+def _buffer_load_lds_overlays(
+    *,
+    encoding_name: str,
+    resource_field_name: str,
+    cache_fields: tuple[tuple[str, int], ...] = (),
+    variants: tuple[
+        tuple[str, str, str, int, int, AmdgpuImplicitOperandOverlay], ...
+    ] = (_BUFFER_LOAD_LDS_GFX950_VARIANTS),
+) -> tuple[AmdgpuDescriptorOverlay, ...]:
+    return tuple(
+        overlay
+        for (
+            instruction_suffix,
+            mnemonic_suffix,
+            semantic_tag,
+            global_width_bits,
+            workgroup_width_bits,
+            implicit_memory,
+        ) in variants
+        for overlay in (
+            _buffer_load_lds_overlay(
+                descriptor_key=f"amdgpu.buffer_load_lds_{mnemonic_suffix}",
+                instruction_name=f"BUFFER_LOAD_{instruction_suffix}",
+                mnemonic=f"buffer_load_{mnemonic_suffix}",
+                semantic_tag=semantic_tag,
+                global_width_bits=global_width_bits,
+                workgroup_width_bits=workgroup_width_bits,
+                implicit_memory=implicit_memory,
+                encoding_name=encoding_name,
+                resource_field_name=resource_field_name,
+                cache_fields=cache_fields,
+                off_zero_descriptor_key=(
+                    f"amdgpu.buffer_load_lds_{mnemonic_suffix}_off_zero"
+                ),
+            ),
+            _buffer_load_lds_off_zero_overlay(
+                descriptor_key=f"amdgpu.buffer_load_lds_{mnemonic_suffix}_off_zero",
+                instruction_name=f"BUFFER_LOAD_{instruction_suffix}",
+                mnemonic=f"buffer_load_{mnemonic_suffix}",
+                semantic_tag=semantic_tag,
+                global_width_bits=global_width_bits,
+                workgroup_width_bits=workgroup_width_bits,
+                implicit_memory=implicit_memory,
+                encoding_name=encoding_name,
+                resource_field_name=resource_field_name,
+                cache_fields=cache_fields,
+            ),
+        )
+    )
+
+
 def _buffer_store_dword_overlay(
     *,
     encoding_name: str,
@@ -2443,6 +2681,8 @@ def _global_memory_overlays(
 
 
 __all__ = (
+    "_BUFFER_LOAD_LDS_CDNA3_VARIANTS",
+    "_BUFFER_LOAD_LDS_GFX950_VARIANTS",
     "_GLOBAL_LOAD_LDS_CDNA3_VARIANTS",
     "_GLOBAL_LOAD_LDS_GFX950_VARIANTS",
     "_MEMORY_DWORD_VECTOR_WIDTHS",
@@ -2459,6 +2699,9 @@ __all__ = (
     "_buffer_load_dword_off_zero_overlay",
     "_buffer_load_dword_overlay",
     "_buffer_load_i8_overlay",
+    "_buffer_load_lds_off_zero_overlay",
+    "_buffer_load_lds_overlay",
+    "_buffer_load_lds_overlays",
     "_buffer_load_off_zero_overlay",
     "_buffer_load_u16_overlay",
     "_buffer_store_128_off_zero_overlay",

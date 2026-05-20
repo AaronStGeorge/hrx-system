@@ -108,6 +108,7 @@ class AmdgpuImplicitOperandOverlay:
     size_bits: int | None = None
     is_input: bool | None = None
     is_output: bool | None = None
+    xml_operand_required: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -589,11 +590,16 @@ def _validate_implicit_operand_overlays(
     instruction: AmdgpuIsaInstruction,
     encoding: AmdgpuIsaInstructionEncoding,
 ) -> None:
+    xml_backed_overlays = tuple(
+        implicit_overlay
+        for implicit_overlay in overlay.implicit_operands
+        if implicit_overlay.xml_operand_required
+    )
     implicit_xml_operands = tuple(
         xml_operand for xml_operand in encoding.operands if xml_operand.is_implicit
     )
     if not implicit_xml_operands:
-        if overlay.implicit_operands:
+        if xml_backed_overlays:
             raise AmdgpuDescriptorOverlayError(
                 f"descriptor overlay '{overlay.descriptor_key}' has implicit "
                 f"operand decision(s), but instruction '{instruction.name}' "
@@ -602,7 +608,7 @@ def _validate_implicit_operand_overlays(
         return
 
     covered_orders: set[int] = set()
-    for implicit_overlay in overlay.implicit_operands:
+    for implicit_overlay in xml_backed_overlays:
         matches = tuple(
             xml_operand
             for xml_operand in implicit_xml_operands

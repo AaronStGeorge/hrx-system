@@ -2275,7 +2275,9 @@ def _global_to_lds_effects(
     )
 
 
-def _implicit_m0_input() -> AmdgpuImplicitOperandOverlay:
+def _implicit_m0_input(
+    *, xml_operand_required: bool = True
+) -> AmdgpuImplicitOperandOverlay:
     return AmdgpuImplicitOperandOverlay(
         operand_type="OPR_SDST_M0",
         descriptor_operand=_m0_implicit_resource(),
@@ -2283,6 +2285,7 @@ def _implicit_m0_input() -> AmdgpuImplicitOperandOverlay:
         size_bits=32,
         is_input=True,
         is_output=False,
+        xml_operand_required=xml_operand_required,
     )
 
 

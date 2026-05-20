@@ -225,6 +225,9 @@ def _cdna_s_buffer_load_width_overlays(
 def _cdna_core_overlays(
     *,
     global_load_lds_variants: tuple[tuple[str, str, str, int, int], ...],
+    buffer_load_lds_variants: tuple[
+        tuple[str, str, str, int, int, AmdgpuImplicitOperandOverlay], ...
+    ],
     include_v_dot2_f32_bf16: bool,
     include_v_cvt_pk_bf16_f32: bool,
     include_ds_transpose_reads: bool,
@@ -466,6 +469,12 @@ def _cdna_core_overlays(
             resource_field_name="SRSRC",
             cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
+        *_buffer_load_lds_overlays(
+            encoding_name="ENC_MUBUF",
+            resource_field_name="SRSRC",
+            cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
+            variants=buffer_load_lds_variants,
+        ),
         *_global_memory_overlays(
             instruction_suffixes=_CDNA_DWORD_MEMORY_INSTRUCTION_SUFFIXES,
             mnemonic_suffixes=_CDNA_DWORD_MEMORY_MNEMONIC_SUFFIXES,
@@ -650,6 +659,7 @@ def _cdna_core_overlays(
 def _gfx940_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return _cdna_core_overlays(
         global_load_lds_variants=_GLOBAL_LOAD_LDS_CDNA3_VARIANTS,
+        buffer_load_lds_variants=_BUFFER_LOAD_LDS_CDNA3_VARIANTS,
         include_v_dot2_f32_bf16=False,
         include_v_cvt_pk_bf16_f32=False,
         include_ds_transpose_reads=False,
@@ -660,6 +670,7 @@ def _gfx940_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
 def _gfx950_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return _cdna_core_overlays(
         global_load_lds_variants=_GLOBAL_LOAD_LDS_GFX950_VARIANTS,
+        buffer_load_lds_variants=_BUFFER_LOAD_LDS_GFX950_VARIANTS,
         include_v_dot2_f32_bf16=True,
         include_v_cvt_pk_bf16_f32=True,
         include_ds_transpose_reads=True,
