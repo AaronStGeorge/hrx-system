@@ -16,6 +16,7 @@ from loom.dialect.index import ALL_INDEX_OPS
 from loom.dialect.index import defs as index
 from loom.dialect.scalar import ALL_SCALAR_OPS
 from loom.dialect.scalar import arithmetic as scalar_arithmetic
+from loom.dialect.scalar import comparison as scalar_comparison
 from loom.dialect.scalar import conversion as scalar_conversion
 from loom.dialect.vector import ALL_VECTOR_OPS
 from loom.dialect.vector import defs as vector
@@ -59,6 +60,7 @@ from loom.target.low_descriptors import Descriptor
 
 _I32 = Scalar("i32")
 _F32 = Scalar("f32")
+_I1 = Scalar("i1")
 _INDEX = Scalar("index")
 _OFFSET = Scalar("offset")
 _V4I1 = Vector("i1", lanes=4)
@@ -99,6 +101,8 @@ def _type_text(type_pattern: TypePattern) -> str:
         return "i32 scalar"
     if type_pattern == _F32:
         return "f32 scalar"
+    if type_pattern == _I1:
+        return "i1 scalar"
     if type_pattern in (_INDEX, _OFFSET):
         return "index or offset scalar"
     if type_pattern == _V4I1:
@@ -244,6 +248,35 @@ def _compare_rule(
             _value_type("lhs", operand_type),
             _value_type("rhs", operand_type),
             _value_type("result", _V4I1),
+        ),
+        emit=(
+            EmitDescriptorOp(
+                descriptor=descriptor,
+                operands={
+                    "lhs": ValueRef.operand("lhs"),
+                    "rhs": ValueRef.operand("rhs"),
+                },
+                results={"dst": ValueRef.result("result")},
+            ),
+        ),
+    )
+
+
+def _scalar_compare_rule(
+    source_op: Op,
+    predicate: str,
+    operand_type: TypePattern,
+    descriptor_key: str,
+) -> DescriptorRule:
+    descriptor = _descriptor(descriptor_key)
+    return DescriptorRule(
+        source_op=source_op,
+        descriptor=descriptor,
+        guards=(
+            Guard.enum_attr_equals("predicate", predicate),
+            _value_type("lhs", operand_type),
+            _value_type("rhs", operand_type),
+            _value_type("result", _I1),
         ),
         emit=(
             EmitDescriptorOp(
@@ -514,6 +547,9 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
         _binary_rule(scalar_arithmetic.scalar_addi, _I32, "wasm.i32.add"),
         _binary_rule(scalar_arithmetic.scalar_subi, _I32, "wasm.i32.sub"),
         _binary_rule(scalar_arithmetic.scalar_addf, _F32, "wasm.f32.add"),
+        _scalar_compare_rule(
+            scalar_comparison.scalar_cmpi, "ult", _I32, "wasm.i32.lt_u"
+        ),
         _const_i32_rule(scalar_conversion.scalar_constant, _I32),
         _splat_rule(),
         _select_rule(_V4I32),
@@ -540,6 +576,7 @@ WASM_CORE_SIMD128_CONTRACT_FRAGMENT = ContractFragment(
         _binary_rule(vector.vector_muli, _V4I32, "wasm.i32x4.mul"),
         _const_i32_rule(index.index_constant, _INDEX),
         _const_i32_rule(index.index_constant, _OFFSET),
+        _scalar_compare_rule(index.index_cmp, "ult", _INDEX, "wasm.i32.lt_u"),
         _binary_rule(index.index_add, _INDEX, "wasm.i32.add"),
         _binary_rule(index.index_add, _OFFSET, "wasm.i32.add"),
         _binary_rule(index.index_sub, _INDEX, "wasm.i32.sub"),

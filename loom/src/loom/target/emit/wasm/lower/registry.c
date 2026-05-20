@@ -11,11 +11,12 @@
 #include "loom/target/emit/wasm/error_catalog.h"
 #include "loom/target/emit/wasm/lower.h"
 
-static bool loom_wasm_type_is_address_i32(loom_type_t type) {
+static bool loom_wasm_type_is_i32_register(loom_type_t type) {
   if (!loom_type_is_scalar(type)) {
     return false;
   }
   switch (loom_type_element_type(type)) {
+    case LOOM_SCALAR_TYPE_I1:
     case LOOM_SCALAR_TYPE_INDEX:
     case LOOM_SCALAR_TYPE_OFFSET:
     case LOOM_SCALAR_TYPE_I32:
@@ -75,7 +76,7 @@ static iree_status_t loom_wasm_map_type(void* user_data,
                                         loom_type_t source_type,
                                         loom_type_t* out_low_type) {
   (void)user_data;
-  if (loom_wasm_type_is_address_i32(source_type)) {
+  if (loom_wasm_type_is_i32_register(source_type)) {
     return loom_wasm_make_i32_register_type(context, out_low_type);
   }
   if (loom_wasm_type_is_scalar_f32(source_type)) {
