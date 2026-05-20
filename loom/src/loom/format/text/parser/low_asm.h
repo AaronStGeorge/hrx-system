@@ -85,6 +85,11 @@ iree_status_t loom_parse_low_asm_prefixed_region(
     loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
     loom_region_t** out_region);
 
+// Parses a braced low-asm region inheriting the active descriptor set.
+iree_status_t loom_parse_low_asm_inherited_region(
+    loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
+    loom_region_t** out_region);
+
 // Returns true when |token| names a low-asm structural intrinsic.
 bool loom_low_asm_structural_kind_from_token(
     loom_token_t token, loom_text_low_asm_structural_kind_t* out_kind);

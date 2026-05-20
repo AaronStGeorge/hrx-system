@@ -764,7 +764,33 @@ static iree_status_t loom_parse_low_asm_packet(
 static bool loom_low_asm_token_is_canonical_control_op(loom_token_t token) {
   return token.kind == LOOM_TOKEN_OP_NAME &&
          (iree_string_view_equal(token.text, IREE_SV("low.br")) ||
-          iree_string_view_equal(token.text, IREE_SV("low.cond_br")));
+          iree_string_view_equal(token.text, IREE_SV("low.cond_br")) ||
+          iree_string_view_equal(token.text, IREE_SV("low.scf.yield")) ||
+          iree_string_view_equal(token.text, IREE_SV("low.scf.if")) ||
+          iree_string_view_equal(token.text, IREE_SV("low.scf.for")));
+}
+
+static iree_status_t loom_low_asm_next_statement_is_canonical_control_op(
+    loom_parser_t* parser, bool* out_canonical) {
+  *out_canonical = false;
+  loom_tokenizer_t lookahead = parser->tokenizer;
+  if (loom_tokenizer_at(&lookahead, LOOM_TOKEN_SSA_VALUE)) {
+    for (;;) {
+      (void)loom_tokenizer_next(&lookahead);
+      if (!loom_tokenizer_try_consume(&lookahead, LOOM_TOKEN_COMMA)) {
+        break;
+      }
+      if (!loom_tokenizer_at(&lookahead, LOOM_TOKEN_SSA_VALUE)) {
+        break;
+      }
+    }
+    if (!loom_tokenizer_try_consume(&lookahead, LOOM_TOKEN_EQUALS)) {
+      return loom_tokenizer_consume_status(&lookahead);
+    }
+  }
+  *out_canonical = loom_low_asm_token_is_canonical_control_op(
+      loom_tokenizer_peek(&lookahead));
+  return loom_tokenizer_consume_status(&lookahead);
 }
 
 static iree_status_t loom_parse_low_asm_block_body(
@@ -779,8 +805,10 @@ static iree_status_t loom_parse_low_asm_block_body(
       break;
     }
     uint32_t errors_before = parser->error_count;
-    if (loom_low_asm_token_is_canonical_control_op(
-            loom_tokenizer_peek(&parser->tokenizer))) {
+    bool canonical_control = false;
+    IREE_RETURN_IF_ERROR(loom_low_asm_next_statement_is_canonical_control_op(
+        parser, &canonical_control));
+    if (canonical_control) {
       IREE_RETURN_IF_ERROR(loom_parse_op(parser));
     } else {
       IREE_RETURN_IF_ERROR(loom_parse_low_asm_packet(parser, descriptor_set));
@@ -846,6 +874,30 @@ static iree_status_t loom_parse_low_asm_region_body(
 // Target-low asm region parsing
 //===----------------------------------------------------------------------===//
 
+static iree_status_t loom_parse_low_asm_braced_region(
+    loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
+    const loom_text_low_asm_descriptor_set_t* descriptor_set,
+    loom_region_t** out_region) {
+  loom_parse_region_body_callback_t body = {
+      .fn = loom_parse_low_asm_region_body,
+      .user_data = descriptor_set,
+  };
+  const loom_text_low_asm_descriptor_set_t* previous_descriptor_set =
+      parser->low_register_descriptor_set;
+  const uint16_t previous_depth = parser->low_asm_region_depth;
+  if (previous_depth == UINT16_MAX) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "low asm region nesting exceeds uint16_t range");
+  }
+  parser->low_register_descriptor_set = descriptor_set;
+  parser->low_asm_region_depth = (uint16_t)(previous_depth + 1);
+  iree_status_t status = loom_parse_braced_region_with_body(
+      parser, region_descriptor, body, out_region);
+  parser->low_register_descriptor_set = previous_descriptor_set;
+  parser->low_asm_region_depth = previous_depth;
+  return status;
+}
+
 iree_status_t loom_parse_low_asm_prefixed_region(
     loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
     loom_region_t** out_region) {
@@ -858,15 +910,19 @@ iree_status_t loom_parse_low_asm_prefixed_region(
     return iree_ok_status();
   }
 
-  loom_parse_region_body_callback_t body = {
-      .fn = loom_parse_low_asm_region_body,
-      .user_data = descriptor_set,
-  };
-  const loom_text_low_asm_descriptor_set_t* previous_descriptor_set =
-      parser->low_register_descriptor_set;
-  parser->low_register_descriptor_set = descriptor_set;
-  iree_status_t status = loom_parse_braced_region_with_body(
-      parser, region_descriptor, body, out_region);
-  parser->low_register_descriptor_set = previous_descriptor_set;
-  return status;
+  return loom_parse_low_asm_braced_region(parser, region_descriptor,
+                                          descriptor_set, out_region);
+}
+
+iree_status_t loom_parse_low_asm_inherited_region(
+    loom_parser_t* parser, const loom_region_descriptor_t* region_descriptor,
+    loom_region_t** out_region) {
+  if (parser->low_register_descriptor_set == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "inherited low asm region requires an active descriptor set");
+  }
+  return loom_parse_low_asm_braced_region(parser, region_descriptor,
+                                          parser->low_register_descriptor_set,
+                                          out_region);
 }

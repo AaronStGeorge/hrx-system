@@ -754,9 +754,9 @@ low_scf_if = Op(
             [ARROW, ResultTypeList("results")],
             anchor="results",
         ),
-        Region("then_region"),
+        Region("then_region", syntax="low.asm.optional"),
         OptionalGroup(
-            [kw("else"), Region("else_region")],
+            [kw("else"), Region("else_region", syntax="low.asm.optional")],
             anchor="else_region",
         ),
     ],
@@ -859,7 +859,7 @@ low_scf_for = Op(
         ),
         kw("do"),
         BlockArgs("body"),
-        Region("body"),
+        Region("body", syntax="low.asm.optional"),
     ],
     examples=[
         "low.scf.for [%lo to %hi step %step] do(%iv: reg<amdgpu.sgpr x1>) {\n  low.scf.yield\n}",

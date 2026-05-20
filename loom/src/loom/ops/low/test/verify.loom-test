@@ -540,3 +540,13 @@ low.func.def target(@test_target) @if_wrong_terminator(%condition: reg<test.i32>
   }
   low.return
 }
+
+// ====
+
+test.target<low_core> @test_target
+
+low.func.def target(@test_target) @asm_nested_if_malformed(%condition: reg<test.i32>) asm<test.low.core> {
+  // ERROR@+1: PARSE/003 "expected '{'"
+  low.scf.if %condition bogus
+  return
+}

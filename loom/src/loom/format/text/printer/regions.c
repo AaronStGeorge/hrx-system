@@ -244,7 +244,7 @@ iree_status_t loom_print_op(loom_print_context_t* ctx, const loom_op_t* op) {
   return status;
 }
 
-static bool loom_print_should_elide_implicit_terminator(
+bool loom_print_should_elide_implicit_terminator(
     const loom_region_descriptor_t* region_descriptor, const loom_op_t* op) {
   if (region_descriptor->implicit_terminator == LOOM_OP_KIND_UNKNOWN) {
     return false;

@@ -50,7 +50,48 @@ static bool loom_print_low_asm_allows_canonical_control_op(
     loom_print_context_t* ctx, const loom_op_t* op) {
   iree_string_view_t op_name = loom_op_name(ctx->module, op);
   return iree_string_view_equal(op_name, IREE_SV("low.br")) ||
-         iree_string_view_equal(op_name, IREE_SV("low.cond_br"));
+         iree_string_view_equal(op_name, IREE_SV("low.cond_br")) ||
+         iree_string_view_equal(op_name, IREE_SV("low.scf.yield")) ||
+         iree_string_view_equal(op_name, IREE_SV("low.scf.if")) ||
+         iree_string_view_equal(op_name, IREE_SV("low.scf.for"));
+}
+
+static iree_status_t loom_print_low_asm_region_preflight(
+    loom_print_context_t* ctx, const loom_region_t* region,
+    const loom_text_low_asm_descriptor_set_t* descriptor_set,
+    bool entry_args_declared_by_parent, bool* out_available);
+
+static iree_status_t loom_print_low_asm_preflight_canonical_control_op(
+    loom_print_context_t* ctx,
+    const loom_text_low_asm_descriptor_set_t* descriptor_set,
+    const loom_op_t* op, bool* out_available) {
+  iree_string_view_t op_name = loom_op_name(ctx->module, op);
+  if (iree_string_view_equal(op_name, IREE_SV("low.scf.if"))) {
+    if (op->region_count < 1 || loom_op_regions(op)[0] == NULL) {
+      *out_available = false;
+      return iree_ok_status();
+    }
+    IREE_RETURN_IF_ERROR(loom_print_low_asm_region_preflight(
+        ctx, loom_op_regions(op)[0], descriptor_set,
+        /*entry_args_declared_by_parent=*/false, out_available));
+    if (!*out_available) {
+      return iree_ok_status();
+    }
+    if (op->region_count > 1 && loom_op_regions(op)[1] != NULL) {
+      IREE_RETURN_IF_ERROR(loom_print_low_asm_region_preflight(
+          ctx, loom_op_regions(op)[1], descriptor_set,
+          /*entry_args_declared_by_parent=*/false, out_available));
+    }
+  } else if (iree_string_view_equal(op_name, IREE_SV("low.scf.for"))) {
+    if (op->region_count < 1 || loom_op_regions(op)[0] == NULL) {
+      *out_available = false;
+      return iree_ok_status();
+    }
+    IREE_RETURN_IF_ERROR(loom_print_low_asm_region_preflight(
+        ctx, loom_op_regions(op)[0], descriptor_set,
+        /*entry_args_declared_by_parent=*/true, out_available));
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_print_low_asm_describe_operation(
@@ -180,6 +221,11 @@ static iree_status_t loom_print_low_asm_region_preflight(
       if (statement.kind == LOOM_TEXT_LOW_ASM_STATEMENT_UNKNOWN) {
         if (!loom_print_low_asm_allows_canonical_control_op(ctx, current_op)) {
           *out_available = false;
+          return iree_ok_status();
+        }
+        IREE_RETURN_IF_ERROR(loom_print_low_asm_preflight_canonical_control_op(
+            ctx, descriptor_set, current_op, out_available));
+        if (!*out_available) {
           return iree_ok_status();
         }
         continue;
@@ -614,6 +660,7 @@ static iree_status_t loom_print_low_asm_statement(
 
 static iree_status_t loom_print_low_asm_region_body(
     loom_print_context_t* ctx, const loom_region_t* region,
+    const loom_region_descriptor_t* region_descriptor,
     const loom_text_low_asm_descriptor_set_t* descriptor_set,
     bool entry_args_declared_by_parent) {
   if (!region || region->block_count == 0) {
@@ -633,8 +680,14 @@ static iree_status_t loom_print_low_asm_region_body(
       IREE_RETURN_IF_ERROR(loom_print_block_label_line_with_options(
           ctx, region, block, !block_args_declared_by_parent));
     }
+    const loom_op_t* last_live_op = block->last_op;
     const loom_op_t* current_op = NULL;
     loom_block_for_each_op(block, current_op) {
+      if (current_op == last_live_op &&
+          loom_print_should_elide_implicit_terminator(region_descriptor,
+                                                      current_op)) {
+        continue;
+      }
       IREE_RETURN_IF_ERROR(loom_print_op_comments(ctx, current_op));
       loom_text_low_asm_statement_t statement = {0};
       IREE_RETURN_IF_ERROR(loom_print_low_asm_describe_operation(
@@ -680,21 +733,31 @@ static iree_status_t loom_print_low_asm_prepare_region(
 
 static iree_status_t loom_print_low_asm_region_with_descriptor_set(
     loom_print_context_t* ctx, const loom_region_t* region,
+    const loom_region_descriptor_t* region_descriptor,
     iree_string_view_t descriptor_set_key, bool entry_args_declared_by_parent,
-    const loom_text_low_asm_descriptor_set_t* descriptor_set) {
+    const loom_text_low_asm_descriptor_set_t* descriptor_set,
+    bool print_descriptor_set_prefix) {
   const loom_text_low_asm_descriptor_set_t* previous_descriptor_set =
       ctx->low_register_descriptor_set;
+  const uint16_t previous_depth = ctx->low_asm_region_depth;
+  if (previous_depth == UINT16_MAX) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "low asm region nesting exceeds uint16_t range");
+  }
   ctx->low_register_descriptor_set = descriptor_set;
+  ctx->low_asm_region_depth = (uint16_t)(previous_depth + 1);
   iree_status_t status = iree_ok_status();
-  status = loom_print_emit_cstr(ctx, "asm", false);
-  if (iree_status_is_ok(status)) {
-    status = loom_print_emit_cstr(ctx, "<", true);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_print_emit(ctx, descriptor_set_key, true);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_print_emit_cstr(ctx, ">", true);
+  if (print_descriptor_set_prefix) {
+    status = loom_print_emit_cstr(ctx, "asm", false);
+    if (iree_status_is_ok(status)) {
+      status = loom_print_emit_cstr(ctx, "<", true);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_print_emit(ctx, descriptor_set_key, true);
+    }
+    if (iree_status_is_ok(status)) {
+      status = loom_print_emit_cstr(ctx, ">", true);
+    }
   }
   if (iree_status_is_ok(status)) {
     status = loom_print_space_if_needed(ctx);
@@ -706,7 +769,8 @@ static iree_status_t loom_print_low_asm_region_with_descriptor_set(
     status = loom_output_stream_write_cstring(ctx->stream, "{\n");
     ++ctx->indent;
     if (iree_status_is_ok(status)) {
-      status = loom_print_low_asm_region_body(ctx, region, descriptor_set,
+      status = loom_print_low_asm_region_body(ctx, region, region_descriptor,
+                                              descriptor_set,
                                               entry_args_declared_by_parent);
     }
     --ctx->indent;
@@ -718,6 +782,7 @@ static iree_status_t loom_print_low_asm_region_with_descriptor_set(
     }
   }
   ctx->low_register_descriptor_set = previous_descriptor_set;
+  ctx->low_asm_region_depth = previous_depth;
   IREE_RETURN_IF_ERROR(status);
   ctx->has_previous_token = true;
   ctx->last_char = '}';
@@ -742,8 +807,9 @@ iree_status_t loom_print_low_asm_region(
         ctx->low_asm_descriptor_set_key.data);
   }
   return loom_print_low_asm_region_with_descriptor_set(
-      ctx, region, ctx->low_asm_descriptor_set_key,
-      entry_args_declared_by_parent, descriptor_set);
+      ctx, region, region_descriptor, ctx->low_asm_descriptor_set_key,
+      entry_args_declared_by_parent, descriptor_set,
+      /*print_descriptor_set_prefix=*/true);
 }
 
 iree_status_t loom_print_low_asm_optional_region(
@@ -761,6 +827,7 @@ iree_status_t loom_print_low_asm_optional_region(
   }
   *out_printed = true;
   return loom_print_low_asm_region_with_descriptor_set(
-      ctx, region, ctx->low_asm_descriptor_set_key,
-      entry_args_declared_by_parent, descriptor_set);
+      ctx, region, region_descriptor, ctx->low_asm_descriptor_set_key,
+      entry_args_declared_by_parent, descriptor_set,
+      /*print_descriptor_set_prefix=*/ctx->low_asm_region_depth == 0);
 }

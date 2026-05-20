@@ -990,6 +990,10 @@ iree_status_t loom_parse_region_with_syntax(
         return loom_parse_low_asm_prefixed_region(parser, region_descriptor,
                                                   out_region);
       }
+      if (parser->low_asm_region_depth != 0) {
+        return loom_parse_low_asm_inherited_region(parser, region_descriptor,
+                                                   out_region);
+      }
       return loom_parse_braced_region(parser, region_descriptor, out_region);
     }
     case LOOM_REGION_SYNTAX_PIPELINE: {

@@ -29,6 +29,8 @@ typedef struct loom_print_context_t {
   const loom_text_low_asm_descriptor_set_t* low_register_descriptor_set;
   // Descriptor-set key selected for low asm region syntax.
   iree_string_view_t low_asm_descriptor_set_key;
+  // Nesting depth of active descriptor-backed low asm region bodies.
+  uint16_t low_asm_region_depth;
   // True when the current logical line already contains a printed token.
   bool has_previous_token;
   // True when the next token should be glued to the previous token.

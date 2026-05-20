@@ -43,6 +43,11 @@ iree_status_t loom_print_successor_ref(loom_print_context_t* ctx,
 // Prints one ordinary operation at the current indentation level.
 iree_status_t loom_print_op(loom_print_context_t* ctx, const loom_op_t* op);
 
+// Returns true when |op| is the region's default terminator and has no payload
+// that must be preserved textually.
+bool loom_print_should_elide_implicit_terminator(
+    const loom_region_descriptor_t* region_descriptor, const loom_op_t* op);
+
 // Prints the body of |region| using canonical block/op traversal. When
 // |entry_args_declared_by_parent| is true, the entry block arguments are part
 // of the parent op signature and are not repeated on an entry block label.
