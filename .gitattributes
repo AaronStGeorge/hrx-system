@@ -1,0 +1,52 @@
+# Copyright 2026 The IREE Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Normalize text files to LF so formatter output is stable across platforms.
+* text=auto eol=lf
+
+# Bazel/Starlark tools should never fight platform autocrlf settings.
+*.bazel text eol=lf
+*.bzl text eol=lf
+BUILD.bazel text eol=lf
+MODULE.bazel text eol=lf
+
+# Common source, script, config, and documentation formats.
+*.c text eol=lf
+*.cc text eol=lf
+*.cmake text eol=lf
+*.cpp text eol=lf
+*.cxx text eol=lf
+*.h text eol=lf
+*.hh text eol=lf
+*.hpp text eol=lf
+*.hxx text eol=lf
+*.json text eol=lf
+*.jsonl text eol=lf
+*.loom text eol=lf
+*.loom-test text eol=lf
+*.m text eol=lf
+*.md text eol=lf
+*.mm text eol=lf
+*.py text eol=lf
+*.sh text eol=lf
+*.txt text eol=lf
+*.vmasm text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+CMakeLists.txt text eol=lf
+
+# Checked-in binary artifacts used by runtime tests or embedded kernels.
+*.bc binary -eol
+*.dll binary -eol
+*.dylib binary -eol
+*.gif binary -eol
+*.ico binary -eol
+*.jpg binary -eol
+*.jpeg binary -eol
+*.npy binary -eol
+*.pdf binary -eol
+*.png binary -eol
+*.so binary -eol
+*.spv binary -eol
+*.vmfb binary -eol
+*.wasm binary -eol

@@ -1,0 +1,88 @@
+# Copyright 2026 The IREE Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Local agent and planning scratch.
+/.notes/
+/AGENTS.override.md
+/.claude/
+/.cursor/
+/history
+/.history/
+
+# Local workstream tracking.
+/.beads/
+/.bv/
+
+# Bazel output symlinks and local experiment output.
+/bazel-*
+/.iree-bazel-try/
+
+# CMake and other local build trees.
+/build/
+/build-*/
+/runtime/build/
+CMakeUserPresets.json
+
+# Local Bazel overrides. MODULE.bazel.lock is intentionally tracked once the
+# module graph exists.
+/.bazelrc.local
+/configured.bazelrc
+/user.bazelrc
+
+# Python caches, virtual environments, and packaging output.
+/.venv/
+/venv/
+*.egg-info/
+*.pyc
+*.venv/
+*.whl
+**/__pycache__/
+**/.ipynb_checkpoints/
+
+# Source indexing and language-server output.
+/.cache/
+/.clangd
+compile_commands.json
+
+# Local run artifacts.
+/.tracy/
+artifacts/
+coverage.*
+*.cover
+*.log
+*.out
+*.prof
+tmp/
+
+# Local environment and secret material.
+/.env
+/.env.*
+/.envrc
+/.envrc.local
+/secrets/
+/.secrets/
+*.crt
+*.key
+*.pem
+
+# Editor and IDE state.
+/.idea/
+/.vscode/
+*.code-workspace
+*.suo
+*.sdf
+*.swp
+*.swo
+*.user
+*.VC.opendb
+*.vs
+*~
+\#*\#
+
+# OS metadata.
+.DS_Store
+Thumbs.db
+
+# Side effects of local patching or failed merges.
+*.orig
+*.rej

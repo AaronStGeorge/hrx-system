@@ -1,0 +1,43 @@
+# Copyright 2026 The IREE Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# EditorConfig keeps basic formatting stable across editors.
+# https://editorconfig.org
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Bazel/Starlark uses buildifier's four-space convention.
+[*.bazel]
+indent_size = 4
+
+[*.bzl]
+indent_size = 4
+
+[BUILD.bazel]
+indent_size = 4
+
+[MODULE.bazel]
+indent_size = 4
+
+# Python follows Black's four-space convention.
+[*.py]
+indent_size = 4
+
+# Markdown may use trailing whitespace for hard line breaks.
+[*.md]
+trim_trailing_whitespace = false
+
+# Makefiles require tabs.
+[Makefile]
+indent_style = tab
+
+[*.mk]
+indent_style = tab

@@ -1,0 +1,9 @@
+# Copyright 2026 The IREE Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Runtime code follows Google C/C++ formatting.
+BasedOnStyle: Google
+
+---
+Language: Json
+DisableFormat: true
