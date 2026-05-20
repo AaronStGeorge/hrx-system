@@ -45,6 +45,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "source_to_low_structured_control"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/source_to_low_structured_control.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "target_legalize"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/target_legalize.loom-test"

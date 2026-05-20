@@ -1708,10 +1708,10 @@ static iree_status_t loom_low_verify_walk_op(void* user_data, loom_op_t* op,
 }
 
 static iree_status_t loom_low_verify_initialize_block_arg_masks(
-    loom_low_function_verify_state_t* function_state, loom_region_t* body) {
+    loom_low_function_verify_state_t* function_state, loom_region_t* region) {
   const loom_module_t* module = function_state->state->module;
   loom_block_t* block = NULL;
-  loom_region_for_each_block(body, block) {
+  loom_region_for_each_block(region, block) {
     for (uint16_t i = 0; i < block->arg_count; ++i) {
       const loom_value_id_t value_id = block->arg_ids[i];
       const loom_type_t type = loom_module_value_type(module, value_id);
@@ -1720,6 +1720,16 @@ static iree_status_t loom_low_verify_initialize_block_arg_masks(
           function_state, type, &mask));
       if (mask != 0) {
         loom_low_verify_set_value_defined_mask(function_state, value_id, mask);
+      }
+    }
+    loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      loom_region_t* const* regions = loom_op_regions(op);
+      for (uint8_t i = 0; i < op->region_count; ++i) {
+        if (regions[i] != NULL) {
+          IREE_RETURN_IF_ERROR(loom_low_verify_initialize_block_arg_masks(
+              function_state, regions[i]));
+        }
       }
     }
   }

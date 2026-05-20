@@ -618,6 +618,7 @@ loom_cc_library(
     loom::src::loom::ops::kernel
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
+    loom::src::loom::ops::scf
     loom::src::loom::ops::target
     loom::src::loom::ops::vector
     loom::src::loom::target::contract
