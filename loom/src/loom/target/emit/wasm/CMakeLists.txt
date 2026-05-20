@@ -91,13 +91,47 @@ loom_cc_library(
     ::function_body
     ::types
     iree::base
+    iree::base::internal::arena
     loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::frame
+    loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::packet
     loom::src::loom::codegen::low::schedule
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
+    loom::src::loom::target::arch::wasm::descriptors
+    loom::src::loom::target::registers
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    loom_check
+  HDRS
+    "check/loom_check.h"
+  SRCS
+    "check/loom_check.c"
+  DEPS
+    ::module_binary
+    iree::base
+    loom::src::loom::target::tool::wasm
+    loom::src::loom::tools::loom-check::execute
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    check_provider
+  HDRS
+    "check/provider.h"
+  SRCS
+    "check/provider.c"
+  DEPS
+    ::loom_check
+    iree::base
+    loom::src::loom::tools::loom-check::provider
   PUBLIC
 )
 
@@ -117,6 +151,17 @@ loom_cc_library(
     loom::src::loom::target::emit::wasm::contracts::core_simd128
     loom::src::loom::target::emit::wasm::contracts::core_simd128_lower_rules
   PUBLIC
+)
+
+iree_executable_test(
+  NAME
+    "module_disassembly"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/module_disassembly.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

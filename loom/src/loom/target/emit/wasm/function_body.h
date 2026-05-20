@@ -17,6 +17,7 @@
 #include "iree/base/api.h"
 #include "loom/codegen/low/allocation.h"
 #include "loom/codegen/low/schedule/types.h"
+#include "loom/ir/attribute.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,6 +36,18 @@ typedef struct loom_wasm_function_body_t {
   uint32_t local_count;
 } loom_wasm_function_body_t;
 
+// Resolves a direct low.func.call callee to a Wasm function index owned by the
+// enclosing module emitter.
+typedef iree_status_t (*loom_wasm_resolve_function_index_fn_t)(
+    void* user_data, loom_symbol_ref_t callee, uint32_t* out_function_index);
+
+typedef struct loom_wasm_function_body_options_t {
+  // Optional callback used to resolve low.func.call callees.
+  loom_wasm_resolve_function_index_fn_t resolve_function_index;
+  // Caller-owned data passed to |resolve_function_index|.
+  void* resolve_function_index_user_data;
+} loom_wasm_function_body_options_t;
+
 // Releases storage owned by |body|. Safe to call on a zero-initialized body.
 void loom_wasm_function_body_deinitialize(loom_wasm_function_body_t* body,
                                           iree_allocator_t allocator);
@@ -46,8 +59,9 @@ void loom_wasm_function_body_deinitialize(loom_wasm_function_body_t* body,
 // unsupported packets fail loud instead of producing partial Wasm.
 iree_status_t loom_wasm_emit_function_body(
     const loom_low_schedule_table_t* schedule,
-    const loom_low_allocation_table_t* allocation, iree_allocator_t allocator,
-    loom_wasm_function_body_t* out_body);
+    const loom_low_allocation_table_t* allocation,
+    const loom_wasm_function_body_options_t* options,
+    iree_allocator_t allocator, loom_wasm_function_body_t* out_body);
 
 #ifdef __cplusplus
 }  // extern "C"

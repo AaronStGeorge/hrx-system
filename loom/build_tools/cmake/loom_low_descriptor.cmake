@@ -180,7 +180,7 @@ endfunction()
 function(loom_low_descriptor_cc_library)
   cmake_parse_arguments(
     _RULE
-    "EXCLUDE_FROM_ALL"
+    "EXCLUDE_FROM_ALL;HEADER_ONLY"
     "NAME;HEADER"
     "DEPS;IDS_DEPS"
     ${ARGN}

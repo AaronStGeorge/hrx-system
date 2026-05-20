@@ -18,6 +18,7 @@
 
 enum {
   LOOM_WASM_OPCODE_END = 0x0B,
+  LOOM_WASM_OPCODE_CALL = 0x10,
   LOOM_WASM_OPCODE_RETURN = 0x0F,
   LOOM_WASM_OPCODE_LOCAL_GET = 0x20,
   LOOM_WASM_OPCODE_LOCAL_SET = 0x21,
@@ -178,6 +179,8 @@ typedef struct loom_wasm_emit_state_t {
   const loom_low_schedule_table_t* schedule;
   // Allocation table supplying class-local target ids.
   const loom_low_allocation_table_t* allocation;
+  // Module-owned options used by structural instructions such as calls.
+  const loom_wasm_function_body_options_t* options;
   // Cached module attr-name IDs used to decode low packet immediates.
   loom_wasm_attr_name_ids_t attr_names;
   // Derived Wasm local namespace layout.
@@ -808,6 +811,42 @@ static iree_status_t loom_wasm_emit_low_copy(loom_wasm_emit_state_t* state,
   return loom_wasm_emit_local_set(state, loom_low_copy_result(op));
 }
 
+static iree_status_t loom_wasm_emit_low_func_call(loom_wasm_emit_state_t* state,
+                                                  const loom_op_t* op) {
+  if (!loom_low_func_call_isa(op)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "Wasm call emission requires low.func.call");
+  }
+  if (state->options == NULL ||
+      state->options->resolve_function_index == NULL) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "Wasm function-body emission requires a module function-index resolver "
+        "for low.func.call");
+  }
+
+  loom_value_slice_t operands = loom_low_func_call_operands(op);
+  for (iree_host_size_t i = 0; i < operands.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_wasm_emit_local_get(state, operands.values[i]));
+  }
+
+  uint32_t function_index = 0;
+  IREE_RETURN_IF_ERROR(state->options->resolve_function_index(
+      state->options->resolve_function_index_user_data,
+      loom_low_func_call_callee(op), &function_index));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_CALL));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_binary_write_u32_leb(&state->writer, function_index));
+
+  loom_value_slice_t results = loom_low_func_call_results(op);
+  for (iree_host_size_t i = results.count; i > 0; --i) {
+    IREE_RETURN_IF_ERROR(
+        loom_wasm_emit_local_set(state, results.values[i - 1]));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_wasm_emit_low_return(loom_wasm_emit_state_t* state,
                                                const loom_op_t* op) {
   loom_value_slice_t values = loom_low_return_values(op);
@@ -821,6 +860,9 @@ static iree_status_t loom_wasm_emit_structural_packet(
     loom_wasm_emit_state_t* state, const loom_op_t* op) {
   if (loom_low_copy_isa(op)) {
     return loom_wasm_emit_low_copy(state, op);
+  }
+  if (loom_low_func_call_isa(op)) {
+    return loom_wasm_emit_low_func_call(state, op);
   }
   if (loom_low_return_isa(op)) {
     return loom_wasm_emit_low_return(state, op);
@@ -916,14 +958,16 @@ void loom_wasm_function_body_deinitialize(loom_wasm_function_body_t* body,
 
 iree_status_t loom_wasm_emit_function_body(
     const loom_low_schedule_table_t* schedule,
-    const loom_low_allocation_table_t* allocation, iree_allocator_t allocator,
-    loom_wasm_function_body_t* out_body) {
+    const loom_low_allocation_table_t* allocation,
+    const loom_wasm_function_body_options_t* options,
+    iree_allocator_t allocator, loom_wasm_function_body_t* out_body) {
   *out_body = (loom_wasm_function_body_t){0};
   IREE_RETURN_IF_ERROR(loom_wasm_validate_tables(schedule, allocation));
 
   loom_wasm_emit_state_t state = {
       .schedule = schedule,
       .allocation = allocation,
+      .options = options,
   };
   loom_wasm_attr_name_ids_initialize(schedule->module, &state.attr_names);
   loom_wasm_binary_writer_initialize(allocator, &state.writer);

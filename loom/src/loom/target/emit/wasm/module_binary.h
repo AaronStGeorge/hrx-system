@@ -4,19 +4,21 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Minimal WebAssembly module binary emission from target-low packet tables.
+// WebAssembly binary module emission from prepared target-low modules.
 //
-// This target-owned layer wraps one emitted Wasm function body in the real Wasm
-// binary module envelope: type, function, optional memory, export, and code
-// sections. It intentionally stops at artifact construction; disassembly,
-// validation, and execution stay external target tooling concerns.
+// This target-owned layer is the Wasm artifact boundary: it walks the input
+// module, assigns Wasm function/type/export indices, builds low emission frames
+// for each wasm.core.simd128 low.func.def, and writes one binary module. Tool
+// validation, disassembly, and execution remain outside this production
+// emitter.
 
 #ifndef LOOM_TARGET_EMIT_WASM_MODULE_BINARY_H_
 #define LOOM_TARGET_EMIT_WASM_MODULE_BINARY_H_
 
 #include "iree/base/api.h"
-#include "loom/codegen/low/allocation.h"
-#include "loom/codegen/low/schedule/types.h"
+#include "iree/base/internal/arena.h"
+#include "loom/codegen/low/frame.h"
+#include "loom/ir/module.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,15 +38,17 @@ typedef struct loom_wasm_module_binary_t {
 void loom_wasm_module_binary_deinitialize(loom_wasm_module_binary_t* module,
                                           iree_allocator_t allocator);
 
-// Emits a complete Wasm binary module containing one exported function lowered
-// from the provided target-low tables. The tables must describe one
-// wasm.core.simd128 low.func.def supported by loom_wasm_emit_function_body.
-// Memory is defined only when scheduled descriptor packets carry load/store
-// schedule-class flags.
-iree_status_t loom_wasm_emit_single_function_module(
-    const loom_low_schedule_table_t* schedule,
-    const loom_low_allocation_table_t* allocation,
-    iree_string_view_t export_name, iree_allocator_t allocator,
+// Emits a complete Wasm binary module for every wasm.core.simd128 low.func.def
+// in |module|. The emitter preserves module symbol order for Wasm function
+// indices, emits direct low.func.call instructions against those indices, and
+// exports low functions marked public or carrying an explicit export symbol.
+//
+// Imports, kernel entries, and non-wasm low functions currently fail loud. The
+// caller owns source-to-low lowering, target verification, and the frame
+// options used by the scheduler/allocator.
+iree_status_t loom_wasm_emit_module(
+    loom_module_t* module, const loom_low_emission_frame_options_t* options,
+    iree_arena_allocator_t* arena, iree_allocator_t allocator,
     loom_wasm_module_binary_t* out_module);
 
 #ifdef __cplusplus

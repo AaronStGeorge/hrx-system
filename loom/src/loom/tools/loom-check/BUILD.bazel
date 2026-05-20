@@ -128,6 +128,7 @@ _WASM_CHECK_COPTS = iree_select({
 _WASM_CHECK_DEPS = iree_select({
     ":wasm_provider_enabled": [
         "//loom/src/loom/target/arch/wasm:check_provider",
+        "//loom/src/loom/target/emit/wasm:check_provider",
     ],
     "//conditions:default": [],
 })

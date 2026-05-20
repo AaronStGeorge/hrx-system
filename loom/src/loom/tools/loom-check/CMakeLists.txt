@@ -389,12 +389,12 @@ endforeach()
 iree_package_name(_LOOM_CHECK_PACKAGE_NAME)
 set(_LOOM_CHECK_TARGET "${_LOOM_CHECK_PACKAGE_NAME}_loom-check")
 
-function(_loom_check_enable_provider _target _definition _library)
+function(_loom_check_enable_provider _target _definition)
   target_compile_definitions(${_target} PRIVATE
     ${_definition}=1
   )
   target_link_libraries(${_target} PRIVATE
-    ${_library}
+    ${ARGN}
   )
 endfunction()
 
@@ -427,6 +427,7 @@ if("wasm" IN_LIST IREE_LOOM_CHECK_PROVIDERS)
     ${_LOOM_CHECK_TARGET}
     LOOM_CHECK_HAVE_WASM
     loom::src::loom::target::arch::wasm::check_provider
+    loom::src::loom::target::emit::wasm::check_provider
   )
 endif()
 

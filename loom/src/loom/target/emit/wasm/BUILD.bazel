@@ -11,6 +11,10 @@ load(
     "loom_cc_test",
     "loom_generated_cc_library",
 )
+load(
+    "//loom/build_tools/bazel:loom_check.bzl",
+    "loom_check_test_suite",
+)
 
 package(
     default_visibility = ["//visibility:public"],
@@ -101,11 +105,39 @@ loom_cc_library(
         ":types",
         "//loom/src/loom/codegen/low:allocation",
         "//loom/src/loom/codegen/low:descriptors",
+        "//loom/src/loom/codegen/low:frame",
+        "//loom/src/loom/codegen/low:function",
         "//loom/src/loom/codegen/low:packet",
         "//loom/src/loom/codegen/low/schedule",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:registers",
+        "//loom/src/loom/target/arch/wasm:descriptors",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
+    name = "loom_check",
+    srcs = ["check/loom_check.c"],
+    hdrs = ["check/loom_check.h"],
+    deps = [
+        ":module_binary",
+        "//loom/src/loom/target/tool:wasm",
+        "//loom/src/loom/tools/loom-check:execute",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
+    name = "check_provider",
+    srcs = ["check/provider.c"],
+    hdrs = ["check/provider.h"],
+    deps = [
+        ":loom_check",
+        "//loom/src/loom/tools/loom-check:provider",
         "//runtime/src/iree/base",
     ],
 )
@@ -123,4 +155,18 @@ loom_cc_library(
         "//loom/src/loom/target/emit/wasm/contracts:core_simd128_lower_rules",
         "//runtime/src/iree/base",
     ],
+)
+
+loom_check_test_suite(
+    name = "loom_check_file_test",
+    srcs = [
+        "test/module_disassembly.loom-test",
+    ],
+    data = [
+        "@wasi_sdk//:llvm-objdump",
+    ],
+    env = {
+        "LOOM_WASM_LLVM_OBJDUMP": "$(rootpath @wasi_sdk//:llvm-objdump)",
+    },
+    test_name_prefix_to_strip = "test/",
 )
