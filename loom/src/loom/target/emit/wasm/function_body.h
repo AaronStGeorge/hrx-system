@@ -52,11 +52,11 @@ typedef struct loom_wasm_function_body_options_t {
 void loom_wasm_function_body_deinitialize(loom_wasm_function_body_t* body,
                                           iree_allocator_t allocator);
 
-// Emits a size-prefixed Wasm code-section function body for one scheduled and
-// allocated low.func.def. The tables must describe the same function and the
-// wasm.core.simd128 descriptor set. The current emitter supports the straight-
-// line scalar i32 and SIMD128 subset with unspilled target-id allocation;
-// unsupported packets fail loud instead of producing partial Wasm.
+// Emits a size-prefixed Wasm code-section function body for one allocated
+// low.func.def. The schedule and allocation tables must describe the same
+// function, use the wasm.core.simd128 descriptor set, and carry source-order
+// packet scheduling so allocation lifetimes match the structured low-region
+// walk. Unsupported packets fail loud instead of producing partial Wasm.
 iree_status_t loom_wasm_emit_function_body(
     const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,

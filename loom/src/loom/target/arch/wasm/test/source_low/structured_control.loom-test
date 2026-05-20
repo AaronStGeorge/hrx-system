@@ -132,6 +132,19 @@ low.func.def target(@target) abi(wasm_function) @nested_if_inside_for(%lo: reg<w
 }
 
 // ====
+
+// RUN: verify
+
+wasm.target<simd128> @target
+
+low.func.def target(@target) @scf_if_condition_requires_i32(%condition: reg<wasm.v128>) asm<wasm.core.simd128> {
+  // ERROR@+1: TARGET/035 {target_key="target", export_name="scf_if_condition_requires_i32", config_key="target", function_name="scf_if_condition_requires_i32", op_name="low.scf.if", actual_type="reg<wasm.v128>", type_constraint="reg<wasm.i32>"}
+  low.scf.if %condition {
+  }
+  return
+}
+
+// ====
 // RUN: pass source-to-low{control-flow=structured-low}
 
 wasm.target<simd128> @target

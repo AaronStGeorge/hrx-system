@@ -89,6 +89,26 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    low_verify
+  HDRS
+    "low_verify.h"
+  SRCS
+    "low_verify.c"
+  DEPS
+    ::descriptors_ids
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::codegen::low::diagnostics
+    loom::src::loom::codegen::low::verify
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::ops::low
+    loom::src::loom::target::registers
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     provider
   HDRS
     "provider.h"
@@ -96,6 +116,7 @@ loom_cc_library(
     "provider.c"
   DEPS
     ::low_registry
+    ::low_verify
     ::math_policy
     ::ops
     iree::base

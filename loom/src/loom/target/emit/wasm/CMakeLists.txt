@@ -70,8 +70,10 @@ loom_cc_library(
     iree::base
     loom::src::loom::codegen::low::allocation
     loom::src::loom::codegen::low::descriptors
+    loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::packet
     loom::src::loom::codegen::low::schedule
+    loom::src::loom::codegen::low::target_binding
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
@@ -156,9 +158,9 @@ loom_cc_library(
 
 iree_executable_test(
   NAME
-    "module_disassembly"
+    "assembly"
   ARGS
-    "${CMAKE_CURRENT_SOURCE_DIR}/test/module_disassembly.loom-test"
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/assembly.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

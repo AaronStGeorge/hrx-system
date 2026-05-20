@@ -30,6 +30,7 @@ loom_assert_no_dependencies(
     name = "core_target_interfaces_no_wasm_target_deps",
     dependencies = [
         ":descriptors",
+        ":low_verify",
         ":low_registry",
         ":math_policy",
         ":provider",
@@ -126,11 +127,29 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "low_verify",
+    srcs = ["low_verify.c"],
+    hdrs = ["low_verify.h"],
+    deps = [
+        ":descriptors_ids",
+        "//loom/src/loom/codegen/low:diagnostics",
+        "//loom/src/loom/codegen/low:verify",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/low",
+        "//loom/src/loom/target:registers",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "provider",
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
     deps = [
         ":low_registry",
+        ":low_verify",
         ":math_policy",
         ":ops",
         "//loom/src/loom/target:provider",

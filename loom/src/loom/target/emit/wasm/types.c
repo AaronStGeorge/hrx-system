@@ -30,7 +30,7 @@ iree_status_t loom_wasm_value_type_from_descriptor_register_class(
       return iree_ok_status();
     default:
       return iree_make_status(
-          IREE_STATUS_UNIMPLEMENTED,
+          IREE_STATUS_FAILED_PRECONDITION,
           "unsupported Wasm descriptor register class ID %" PRIu16,
           descriptor_reg_class_id);
   }

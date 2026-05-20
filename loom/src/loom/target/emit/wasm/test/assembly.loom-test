@@ -1,0 +1,104 @@
+// RUN: emit wasm-dis
+// REQUIRES: wasm-objdump
+
+wasm.target<simd128> @target
+
+low.func.def target(@target) abi(wasm_function) @double(%value: reg<wasm.v128>) -> (reg<wasm.v128>) {
+  %sum = low.op<wasm.i32x4.add>(%value, %value) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+  low.return %sum : reg<wasm.v128>
+}
+
+low.func.def public target(@target) abi(wasm_function) @entry(%value: reg<wasm.v128>) -> (reg<wasm.v128>) {
+  %doubled = low.func.call @double(%value) : (reg<wasm.v128>) -> (reg<wasm.v128>)
+  %quad = low.func.call @double(%doubled) : (reg<wasm.v128>) -> (reg<wasm.v128>)
+  low.return %quad : reg<wasm.v128>
+}
+
+// ----
+Disassembly of section CODE:
+
+<CODE>:
+        # 2 functions in section.
+
+<double>:
+
+  local.get  0
+  local.get  0
+  i32x4.add
+  local.set  0
+  local.get  0
+  return
+  end
+
+<entry>:
+
+  local.get  0
+  call  0
+  local.set  0
+  local.get  0
+  call  0
+  local.set  0
+  local.get  0
+  return
+  end
+
+// ====
+
+// RUN: emit wasm-dis
+// REQUIRES: wasm-objdump
+
+wasm.target<simd128> @target
+
+low.func.def target(@target) abi(wasm_function) @if_without_results(%cond: reg<wasm.i32>, %lhs: reg<wasm.v128>, %rhs: reg<wasm.v128>) {
+  low.scf.if %cond {
+    %sum = low.op<wasm.i32x4.add>(%lhs, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+  }
+  low.return
+}
+
+low.func.def public target(@target) abi(wasm_function) @if_with_results(%cond: reg<wasm.i32>, %lhs: reg<wasm.v128>, %rhs: reg<wasm.v128>, %fallback: reg<wasm.v128>) -> (reg<wasm.v128>) {
+  %result = low.scf.if %cond -> (reg<wasm.v128>) {
+    %then = low.op<wasm.i32x4.add>(%lhs, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+    low.scf.yield %then : reg<wasm.v128>
+  } else {
+    %else = low.op<wasm.i32x4.sub>(%fallback, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>
+    low.scf.yield %else : reg<wasm.v128>
+  }
+  low.return %result : reg<wasm.v128>
+}
+
+// ----
+Disassembly of section CODE:
+
+<CODE>:
+        # 2 functions in section.
+
+<if_without_results>:
+
+  local.get  0
+  if
+  local.get  1
+  local.get  2
+  i32x4.add
+  local.set  1
+  end
+  return
+  end
+
+<if_with_results>:
+
+  local.get  0
+  if
+  local.get  1
+  local.get  2
+  i32x4.add
+  local.set  1
+  else
+  local.get  3
+  local.get  2
+  i32x4.sub
+  local.set  1
+  end
+  local.get  1
+  return
+  end
