@@ -6,16 +6,35 @@
 
 #include "loom/target/emit/spirv/check/loom_check.h"
 
+#include <stdint.h>
+
 #include "loom/target/emit/spirv/module_emitter.h"
+#include "loom/target/entry_selection.h"
 #include "loom/target/tool/spirv.h"
+#include "loom/tooling/compile/pipeline.h"
 #include "loom/tools/loom-check/diagnostics.h"
 #include "loom/tools/loom-check/low_emit.h"
+
+typedef enum loom_spirv_loom_check_input_e {
+  LOOM_SPIRV_LOOM_CHECK_INPUT_LOW = 0,
+  LOOM_SPIRV_LOOM_CHECK_INPUT_SOURCE_LOW = 1,
+} loom_spirv_loom_check_input_t;
+
+typedef enum loom_spirv_loom_check_emit_flag_bits_e {
+  LOOM_SPIRV_LOOM_CHECK_EMIT_FLAG_NONE = 0u,
+  LOOM_SPIRV_LOOM_CHECK_EMIT_FLAG_VALIDATE = 1u << 0,
+} loom_spirv_loom_check_emit_flag_bits_t;
+typedef uint32_t loom_spirv_loom_check_emit_flags_t;
 
 typedef struct loom_spirv_loom_check_emit_request_t {
   // Module-local low function symbol name without the leading '@'.
   iree_string_view_t function_symbol_name;
-  // Whether to run spirv-val before disassembly.
-  bool validate;
+  // Input form consumed by SPIR-V emission.
+  loom_spirv_loom_check_input_t input;
+  // Source-to-low control-flow shape when |input| is source-low.
+  loom_target_control_flow_lowering_t control_flow_lowering;
+  // Additional emit behavior requested by the RUN line.
+  loom_spirv_loom_check_emit_flags_t flags;
 } loom_spirv_loom_check_emit_request_t;
 
 static bool loom_spirv_loom_check_case_has_requirement(
@@ -73,7 +92,11 @@ static iree_status_t loom_spirv_loom_check_consume_token(
 static iree_status_t loom_spirv_loom_check_parse_emit_request(
     iree_string_view_t target_options,
     loom_spirv_loom_check_emit_request_t* out_request) {
-  *out_request = (loom_spirv_loom_check_emit_request_t){0};
+  *out_request = (loom_spirv_loom_check_emit_request_t){
+      .input = LOOM_SPIRV_LOOM_CHECK_INPUT_LOW,
+      .control_flow_lowering = LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG,
+      .flags = LOOM_SPIRV_LOOM_CHECK_EMIT_FLAG_NONE,
+  };
 
   iree_string_view_t token = iree_string_view_empty();
   IREE_RETURN_IF_ERROR(
@@ -86,6 +109,11 @@ static iree_status_t loom_spirv_loom_check_parse_emit_request(
   out_request->function_symbol_name =
       iree_string_view_substr(token, 1, IREE_HOST_SIZE_MAX);
 
+  enum {
+    LOOM_SPIRV_LOOM_CHECK_PARSE_OPTION_INPUT = 1u << 0,
+    LOOM_SPIRV_LOOM_CHECK_PARSE_OPTION_CONTROL_FLOW = 1u << 1,
+  };
+  uint32_t parse_options = 0;
   while (!iree_string_view_is_empty(target_options)) {
     IREE_RETURN_IF_ERROR(
         loom_spirv_loom_check_consume_token(&target_options, &token));
@@ -93,12 +121,67 @@ static iree_status_t loom_spirv_loom_check_parse_emit_request(
       continue;
     }
     if (iree_string_view_equal(token, IREE_SV("validate"))) {
-      out_request->validate = true;
+      out_request->flags |= LOOM_SPIRV_LOOM_CHECK_EMIT_FLAG_VALIDATE;
+      continue;
+    }
+    iree_string_view_t option_name = iree_string_view_empty();
+    iree_string_view_t option_value = iree_string_view_empty();
+    iree_string_view_split(token, '=', &option_name, &option_value);
+    option_name = iree_string_view_trim(option_name);
+    option_value = iree_string_view_trim(option_value);
+    if (iree_string_view_equal(option_name, IREE_SV("input"))) {
+      if (iree_any_bit_set(parse_options,
+                           LOOM_SPIRV_LOOM_CHECK_PARSE_OPTION_INPUT)) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "duplicate spirv-dis option 'input'");
+      }
+      if (iree_string_view_equal(option_value, IREE_SV("low"))) {
+        out_request->input = LOOM_SPIRV_LOOM_CHECK_INPUT_LOW;
+      } else if (iree_string_view_equal(option_value, IREE_SV("source-low"))) {
+        out_request->input = LOOM_SPIRV_LOOM_CHECK_INPUT_SOURCE_LOW;
+      } else {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "spirv-dis option 'input' expected 'low' or 'source-low', got "
+            "'%.*s'",
+            (int)option_value.size, option_value.data);
+      }
+      parse_options |= LOOM_SPIRV_LOOM_CHECK_PARSE_OPTION_INPUT;
+      continue;
+    }
+    if (iree_string_view_equal(option_name, IREE_SV("control-flow"))) {
+      if (iree_any_bit_set(parse_options,
+                           LOOM_SPIRV_LOOM_CHECK_PARSE_OPTION_CONTROL_FLOW)) {
+        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                "duplicate spirv-dis option 'control-flow'");
+      }
+      if (iree_string_view_equal(option_value, IREE_SV("cfg"))) {
+        out_request->control_flow_lowering =
+            LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG;
+      } else if (iree_string_view_equal(option_value,
+                                        IREE_SV("structured-low"))) {
+        out_request->control_flow_lowering =
+            LOOM_TARGET_CONTROL_FLOW_LOWERING_STRUCTURED_LOW;
+      } else {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "spirv-dis option 'control-flow' expected 'cfg' or "
+            "'structured-low', got '%.*s'",
+            (int)option_value.size, option_value.data);
+      }
+      parse_options |= LOOM_SPIRV_LOOM_CHECK_PARSE_OPTION_CONTROL_FLOW;
       continue;
     }
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "unknown spirv-dis option '%.*s'", (int)token.size,
                             token.data);
+  }
+  if (out_request->input == LOOM_SPIRV_LOOM_CHECK_INPUT_LOW &&
+      out_request->control_flow_lowering !=
+          LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "spirv-dis option 'control-flow' requires input=source-low");
   }
   return iree_ok_status();
 }
@@ -127,7 +210,8 @@ static iree_status_t loom_spirv_loom_check_emit_provider_check_requirements(
   loom_spirv_loom_check_emit_request_t request = {0};
   IREE_RETURN_IF_ERROR(
       loom_spirv_loom_check_parse_emit_request(target_options, &request));
-  if (request.validate) {
+  if (iree_any_bit_set(request.flags,
+                       LOOM_SPIRV_LOOM_CHECK_EMIT_FLAG_VALIDATE)) {
     IREE_RETURN_IF_ERROR(loom_spirv_loom_check_require_declared_requirement(
         test_case, IREE_SV("spirv-val"), result, out_continue_execution));
   }
@@ -165,16 +249,91 @@ static iree_status_t loom_spirv_loom_check_strip_disassembly_comments(
   return iree_ok_status();
 }
 
+static iree_status_t loom_spirv_loom_check_run_source_low_pipeline(
+    const loom_check_emit_provider_request_t* request,
+    const loom_spirv_loom_check_emit_request_t* emit_request) {
+  if (request->environment->target_environment == NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "spirv-dis input=source-low requires a target "
+                            "environment");
+  }
+
+  loom_compile_pipeline_options_t compile_options = {0};
+  loom_compile_pipeline_options_initialize(&compile_options);
+  compile_options.pipeline = IREE_SV("default");
+  compile_options.default_pipeline = LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW;
+  compile_options.target_pipeline_options.control_flow_lowering =
+      emit_request->control_flow_lowering;
+  compile_options.entry_symbol = emit_request->function_symbol_name;
+  compile_options.target_environment = request->environment->target_environment;
+  compile_options.low_descriptor_registry = request->low_registry;
+  compile_options.diagnostic_sink =
+      (loom_diagnostic_sink_t){.fn = loom_check_diagnostic_collector_sink,
+                               .user_data = request->diagnostic_collector};
+  compile_options.source_resolver = request->source_resolver;
+  compile_options.max_errors = 20;
+
+  loom_pass_run_result_t run_result = {0};
+  IREE_RETURN_IF_ERROR(
+      loom_compile_run_pipeline(request->module, &compile_options,
+                                request->case_arena->block_pool, &run_result));
+  if (run_result.error_count != 0 &&
+      request->diagnostic_collector->count == 0) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "source-low pipeline reported errors without diagnostics");
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_spirv_loom_check_verify_low_module(
+    const loom_check_emit_provider_request_t* request) {
+  const loom_target_entry_options_t entry_options = {
+      .diagnostic_sink = {.fn = loom_check_diagnostic_collector_sink,
+                          .user_data = request->diagnostic_collector},
+      .source_resolver = request->source_resolver,
+      .max_errors = 20,
+  };
+  loom_verify_result_t verify_result = {0};
+  IREE_RETURN_IF_ERROR(loom_target_entry_verify_module(
+      request->module, &entry_options, 20, &verify_result));
+  if (verify_result.error_count != 0 &&
+      request->diagnostic_collector->count == 0) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "lowered module verifier reported errors without diagnostics");
+  }
+  if (verify_result.error_count != 0) {
+    return iree_ok_status();
+  }
+
+  loom_target_entry_diagnostic_emitter_t verifier_emitter = {0};
+  loom_target_entry_diagnostic_emitter_initialize(
+      request->module, &entry_options, LOOM_EMITTER_VERIFIER,
+      &verifier_emitter);
+  loom_low_verify_result_t low_verify_result = {0};
+  loom_low_verify_scratch_t low_verify_scratch =
+      loom_low_verify_scratch_for_module(request->module);
+  IREE_RETURN_IF_ERROR(loom_target_entry_verify_low_module(
+      request->module, request->low_registry, &verifier_emitter,
+      loom_target_selection_empty(), 20,
+      request->environment->low_verify_provider_list, &low_verify_scratch,
+      &low_verify_result));
+  if (low_verify_result.error_count != 0 &&
+      request->diagnostic_collector->count == 0) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "lowered low verifier reported errors without diagnostics");
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_spirv_loom_check_emit_provider_execute(
     const loom_check_emit_provider_t* provider,
     const loom_check_emit_provider_request_t* request) {
   loom_spirv_loom_check_emit_request_t emit_request = {0};
   IREE_RETURN_IF_ERROR(loom_spirv_loom_check_parse_emit_request(
       request->target_options, &emit_request));
-
-  loom_op_t* low_function = NULL;
-  IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_function_def(
-      request->module, emit_request.function_symbol_name, &low_function));
 
   loom_check_diagnostic_emitter_capture_t capture = {
       .diagnostic_collector = request->diagnostic_collector,
@@ -187,6 +346,22 @@ static iree_status_t loom_spirv_loom_check_emit_provider_execute(
       .user_data = &capture,
   };
 
+  if (emit_request.input == LOOM_SPIRV_LOOM_CHECK_INPUT_SOURCE_LOW) {
+    IREE_RETURN_IF_ERROR(
+        loom_spirv_loom_check_run_source_low_pipeline(request, &emit_request));
+    if (request->diagnostic_collector->count != 0) {
+      return iree_ok_status();
+    }
+    IREE_RETURN_IF_ERROR(loom_spirv_loom_check_verify_low_module(request));
+    if (request->diagnostic_collector->count != 0) {
+      return iree_ok_status();
+    }
+  }
+
+  loom_op_t* low_function = NULL;
+  IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_function_def(
+      request->module, emit_request.function_symbol_name, &low_function));
+
   loom_spirv_module_binary_t module = {0};
   iree_status_t status = loom_spirv_emit_low_function_module(
       request->module, low_function, &request->low_registry->registry,
@@ -195,7 +370,9 @@ static iree_status_t loom_spirv_loom_check_emit_provider_execute(
 
   loom_spirv_toolchain_t toolchain;
   loom_spirv_toolchain_initialize_from_environment(&toolchain);
-  if (iree_status_is_ok(status) && emit_request.validate) {
+  if (iree_status_is_ok(status) &&
+      iree_any_bit_set(emit_request.flags,
+                       LOOM_SPIRV_LOOM_CHECK_EMIT_FLAG_VALIDATE)) {
     status = loom_spirv_tool_validate_binary(
         &toolchain, loom_spirv_module_binary_byte_span(&module),
         request->host_allocator);

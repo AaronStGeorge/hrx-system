@@ -189,7 +189,9 @@ loom_cc_library(
   DEPS
     ::module_emitter
     iree::base
+    loom::src::loom::target::entry_selection
     loom::src::loom::target::tool::spirv
+    loom::src::loom::tooling::compile::pipeline
     loom::src::loom::tools::loom-check::execute
   PUBLIC
 )
@@ -256,6 +258,17 @@ iree_executable_test(
     "emit"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/emit.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "source_structured_control"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_structured_control.loom-test"
   SRC
     loom::src::loom::tools::loom-check
   LABELS

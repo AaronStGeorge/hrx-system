@@ -182,7 +182,9 @@ loom_cc_library(
     hdrs = ["check/loom_check.h"],
     deps = [
         ":module_emitter",
+        "//loom/src/loom/target:entry_selection",
         "//loom/src/loom/target/tool:spirv",
+        "//loom/src/loom/tooling/compile:pipeline",
         "//loom/src/loom/tools/loom-check:execute",
         "//runtime/src/iree/base",
     ],
@@ -234,6 +236,7 @@ loom_check_test_suite(
     srcs = [
         "test/barrier.loom-test",
         "test/emit.loom-test",
+        "test/source_structured_control.loom-test",
         "test/workgroup_storage.loom-test",
     ],
     test_name_prefix_to_strip = "test/",

@@ -20,6 +20,7 @@
 #include "loom/pass/interpreter.h"
 #include "loom/target/compile_report.h"
 #include "loom/target/low_descriptor_registry.h"
+#include "loom/target/pipeline.h"
 #include "loom/target/types.h"
 #include "loom/verify/verify.h"
 
@@ -45,6 +46,8 @@ typedef struct loom_compile_pipeline_options_t {
   iree_string_view_t pipeline;
   // Default pipeline used when |pipeline| is empty or "default".
   loom_compile_default_pipeline_t default_pipeline;
+  // Options used when constructing the selected default target pipeline.
+  loom_target_pipeline_options_t target_pipeline_options;
   // Optional function symbol used for target-aware pass predicates and
   // diagnostics. A leading '@' is accepted.
   iree_string_view_t entry_symbol;
