@@ -1,4 +1,4 @@
-// RUN: emit spirv-dis @source_if input=source-low control-flow=structured-low validate
+// RUN: emit spirv-dis input=source-low control-flow=structured-low validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @target
@@ -87,7 +87,7 @@ func.def target(@target) @source_if(%lhs: i32, %rhs: i32, %a: i32, %b: i32) -> (
 
 // ====
 
-// RUN: emit spirv-dis @source_for input=source-low control-flow=structured-low validate
+// RUN: emit spirv-dis input=source-low control-flow=structured-low validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @target

@@ -1,4 +1,4 @@
-// RUN: emit spirv-dis @empty_entry validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @target
@@ -27,7 +27,47 @@ low.func.def target(@target) abi(shader_entry_point) @empty_entry() asm<spirv.lo
 
 // ====
 
-// RUN: emit spirv-dis @spirv_i32_structured_if_else validate
+// RUN: emit spirv-dis validate
+// REQUIRES: spirv-dis, spirv-val
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) abi(shader_entry_point) @first_empty_entry() asm<spirv.logical.core> {
+  return
+}
+
+low.func.def target(@target) abi(shader_entry_point) @second_empty_entry() asm<spirv.logical.core> {
+  return
+}
+
+// ----
+               OpCapability Shader
+               OpCapability VulkanMemoryModel
+               OpCapability PhysicalStorageBufferAddresses
+               OpCapability Int64
+               OpExtension "SPV_KHR_vulkan_memory_model"
+               OpExtension "SPV_KHR_physical_storage_buffer"
+               OpMemoryModel PhysicalStorageBuffer64 Vulkan
+               OpEntryPoint GLCompute %first_empty_entry "first_empty_entry"
+               OpEntryPoint GLCompute %second_empty_entry "second_empty_entry"
+               OpExecutionMode %first_empty_entry LocalSize 1 1 1
+               OpExecutionMode %second_empty_entry LocalSize 1 1 1
+               OpName %first_empty_entry "first_empty_entry"
+               OpName %second_empty_entry "second_empty_entry"
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+%first_empty_entry = OpFunction %void None %3
+          %4 = OpLabel
+               OpReturn
+               OpFunctionEnd
+%second_empty_entry = OpFunction %void None %3
+          %6 = OpLabel
+               OpReturn
+               OpFunctionEnd
+
+// ====
+
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @target
@@ -116,7 +156,7 @@ low.func.def target(@target) abi(shader_entry_point) abi_layout({spirv_arg_value
 
 // ====
 
-// RUN: emit spirv-dis @spirv_i32_structured_counted_loop validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @target
@@ -205,7 +245,7 @@ low.func.def target(@target) abi(shader_entry_point) abi_layout({spirv_arg_value
 
 // ====
 
-// RUN: emit spirv-dis @spirv_i32_structured_nested_loop_result validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @target
@@ -314,7 +354,7 @@ low.func.def target(@target) abi(shader_entry_point) abi_layout({spirv_arg_value
 
 // ====
 
-// RUN: emit spirv-dis @spirv_raw_bda_storage_buffer_i32_roundtrip validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}
@@ -419,7 +459,7 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
 
 // ====
 
-// RUN: emit spirv-dis @spirv_raw_bda_builtin_storage_buffer_i32 validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}
@@ -546,7 +586,7 @@ low.kernel.def target(@hal_target) workgroup_size(1, 2, 1) @spirv_raw_bda_builti
 
 // ====
 
-// RUN: emit spirv-dis @spirv_raw_bda_storage_buffer_i32_select validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}
@@ -686,7 +726,7 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
 
 // ====
 
-// RUN: emit spirv-dis @spirv_raw_bda_storage_buffer_i32_guard validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}
@@ -813,7 +853,7 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
 
 // ====
 
-// RUN: emit spirv-dis @spirv_unsigned_integer_views validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @target
@@ -876,7 +916,7 @@ low.func.def target(@target) abi(shader_entry_point) @spirv_unsigned_integer_vie
 
 // ====
 
-// RUN: emit spirv-dis @spirv_raw_bda_storage_buffer_f32_copy validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}
@@ -991,7 +1031,7 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
 
 // ====
 
-// RUN: emit spirv-dis @spirv_raw_bda_storage_buffer_i64_copy validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @hal_target {abi = hal_kernel}
@@ -1104,7 +1144,7 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
 
 // ====
 
-// RUN: emit spirv-dis @spirv_raw_bda_storage_buffer_feature_widths validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @hal_target {abi = hal_kernel, contract_feature_bits = 37374}
@@ -1341,7 +1381,7 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_storag
 
 // ====
 
-// RUN: emit spirv-dis @spirv_i32_arithmetic validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @target
@@ -1413,7 +1453,7 @@ low.func.def target(@target) abi(shader_entry_point) abi_layout({spirv_arg_value
 
 // ====
 
-// RUN: emit spirv-dis @spirv_scalar_payload_abi validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @target_scalar_payloads {contract_feature_bits = 37374}
@@ -1604,7 +1644,7 @@ low.func.def target(@target_scalar_payloads) abi(shader_entry_point) abi_layout(
 
 // ====
 
-// RUN: emit spirv-dis @spirv_storage_buffer_i32_roundtrip validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @target
@@ -1687,7 +1727,7 @@ low.func.def target(@target) abi(shader_entry_point) abi_layout({spirv_result_va
 
 // ====
 
-// RUN: emit spirv-dis @spirv_raw_bda_direct_scalar_payloads validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @hal_target_scalar_payloads {abi = hal_kernel, contract_feature_bits = 37374}
@@ -1968,7 +2008,7 @@ low.kernel.def target(@hal_target_scalar_payloads) abi_layout({spirv_arg_value_t
 
 // ====
 
-// RUN: emit spirv-dis @spirv_raw_bda_scalar_conversions validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @hal_target {abi = hal_kernel, contract_feature_bits = 33278}
@@ -2237,7 +2277,7 @@ low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_raw_bda_scalar
 
 // ====
 
-// RUN: emit spirv-dis @spirv_raw_bda_cooperative_matrix_f16 validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @hal_target_coop_f16 {abi = hal_kernel, contract_feature_bits = 2318}
@@ -2386,7 +2426,7 @@ low.kernel.def target(@hal_target_coop_f16) workgroup_size(32, 1, 1) @spirv_raw_
 
 // ====
 
-// RUN: emit spirv-dis @spirv_raw_bda_cooperative_matrix_s8_signed_saturating validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @hal_target_coop_s8 {abi = hal_kernel, contract_feature_bits = 2214}
@@ -2534,7 +2574,7 @@ low.kernel.def target(@hal_target_coop_s8) workgroup_size(32, 1, 1) @spirv_raw_b
 
 // ====
 
-// RUN: emit spirv-dis @spirv_raw_bda_cooperative_matrix_u8 validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @hal_target_coop_u8 {abi = hal_kernel, contract_feature_bits = 2214}
@@ -2682,7 +2722,7 @@ low.kernel.def target(@hal_target_coop_u8) workgroup_size(32, 1, 1) @spirv_raw_b
 
 // ====
 
-// RUN: emit spirv-dis @spirv_raw_bda_cooperative_matrix_bf16 validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @hal_target_coop_bf16 {abi = hal_kernel, contract_feature_bits = 22790}

@@ -165,6 +165,7 @@ loom_cc_library(
     ::module_values
     iree::base
     iree::base::internal::arena
+    loom::src::loom::analysis::symbol_facts
     loom::src::loom::codegen::low::function
     loom::src::loom::codegen::low::target_binding
     loom::src::loom::error::emitter

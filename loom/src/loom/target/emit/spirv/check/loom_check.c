@@ -13,7 +13,6 @@
 #include "loom/target/tool/spirv.h"
 #include "loom/tooling/compile/pipeline.h"
 #include "loom/tools/loom-check/diagnostics.h"
-#include "loom/tools/loom-check/low_emit.h"
 
 typedef enum loom_spirv_loom_check_input_e {
   LOOM_SPIRV_LOOM_CHECK_INPUT_LOW = 0,
@@ -27,8 +26,6 @@ typedef enum loom_spirv_loom_check_emit_flag_bits_e {
 typedef uint32_t loom_spirv_loom_check_emit_flags_t;
 
 typedef struct loom_spirv_loom_check_emit_request_t {
-  // Module-local low function symbol name without the leading '@'.
-  iree_string_view_t function_symbol_name;
   // Input form consumed by SPIR-V emission.
   loom_spirv_loom_check_input_t input;
   // Source-to-low control-flow shape when |input| is source-low.
@@ -98,22 +95,12 @@ static iree_status_t loom_spirv_loom_check_parse_emit_request(
       .flags = LOOM_SPIRV_LOOM_CHECK_EMIT_FLAG_NONE,
   };
 
-  iree_string_view_t token = iree_string_view_empty();
-  IREE_RETURN_IF_ERROR(
-      loom_spirv_loom_check_consume_token(&target_options, &token));
-  if (!iree_string_view_starts_with(token, IREE_SV("@")) || token.size == 1) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "spirv-dis requires a low function symbol as "
-                            "'@name'");
-  }
-  out_request->function_symbol_name =
-      iree_string_view_substr(token, 1, IREE_HOST_SIZE_MAX);
-
   enum {
     LOOM_SPIRV_LOOM_CHECK_PARSE_OPTION_INPUT = 1u << 0,
     LOOM_SPIRV_LOOM_CHECK_PARSE_OPTION_CONTROL_FLOW = 1u << 1,
   };
   uint32_t parse_options = 0;
+  iree_string_view_t token = iree_string_view_empty();
   while (!iree_string_view_is_empty(target_options)) {
     IREE_RETURN_IF_ERROR(
         loom_spirv_loom_check_consume_token(&target_options, &token));
@@ -123,6 +110,12 @@ static iree_status_t loom_spirv_loom_check_parse_emit_request(
     if (iree_string_view_equal(token, IREE_SV("validate"))) {
       out_request->flags |= LOOM_SPIRV_LOOM_CHECK_EMIT_FLAG_VALIDATE;
       continue;
+    }
+    if (iree_string_view_starts_with(token, IREE_SV("@"))) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "spirv-dis emits the whole split test-case module; RUN lines must "
+          "not select a function symbol");
     }
     iree_string_view_t option_name = iree_string_view_empty();
     iree_string_view_t option_value = iree_string_view_empty();
@@ -264,7 +257,6 @@ static iree_status_t loom_spirv_loom_check_run_source_low_pipeline(
   compile_options.default_pipeline = LOOM_COMPILE_DEFAULT_PIPELINE_SOURCE_LOW;
   compile_options.target_pipeline_options.control_flow_lowering =
       emit_request->control_flow_lowering;
-  compile_options.entry_symbol = emit_request->function_symbol_name;
   compile_options.target_environment = request->environment->target_environment;
   compile_options.low_descriptor_registry = request->low_registry;
   compile_options.diagnostic_sink =
@@ -358,13 +350,9 @@ static iree_status_t loom_spirv_loom_check_emit_provider_execute(
     }
   }
 
-  loom_op_t* low_function = NULL;
-  IREE_RETURN_IF_ERROR(loom_check_low_emit_find_low_function_def(
-      request->module, emit_request.function_symbol_name, &low_function));
-
   loom_spirv_module_binary_t module = {0};
-  iree_status_t status = loom_spirv_emit_low_function_module(
-      request->module, low_function, &request->low_registry->registry,
+  iree_status_t status = loom_spirv_emit_low_module(
+      request->module, &request->low_registry->registry,
       loom_target_selection_empty(), diagnostic_emitter, request->case_arena,
       &module, request->host_allocator);
 

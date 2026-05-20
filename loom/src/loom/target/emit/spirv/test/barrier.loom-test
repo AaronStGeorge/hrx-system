@@ -1,4 +1,4 @@
-// RUN: emit spirv-dis @spirv_barriers validate
+// RUN: emit spirv-dis validate
 // REQUIRES: spirv-dis, spirv-val
 
 spirv.target<vulkan1_3> @target

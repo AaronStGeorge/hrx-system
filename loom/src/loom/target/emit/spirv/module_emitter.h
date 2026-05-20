@@ -26,13 +26,14 @@
 extern "C" {
 #endif
 
-// Emits one target-low function body as a standalone SPIR-V module.
+// Emits every target-low function body in |module| as one SPIR-V module.
 //
-// |low_function_op| must be a low.func.def or low.kernel.def with a
-// target-bound body. The output module owns allocator-backed word storage and
-// must be deinitialized by the caller.
-iree_status_t loom_spirv_emit_low_function_module(
-    loom_module_t* module, loom_op_t* low_function_op,
+// Each emitted low.func.def/low.kernel.def must resolve to the same SPIR-V
+// module contract: target snapshot, artifact format, ABI kind, descriptor set,
+// and feature contract. The output module owns allocator-backed word storage
+// and must be deinitialized by the caller.
+iree_status_t loom_spirv_emit_low_module(
+    loom_module_t* module,
     const loom_low_descriptor_registry_t* descriptor_registry,
     loom_target_selection_t target_selection,
     iree_diagnostic_emitter_t diagnostic_emitter,
