@@ -801,9 +801,10 @@ def test_gfx950_global_saddr_memory_asm_forms_include_m0() -> None:
     )
 
 
-def _assert_memory_96_overlay(
+def _assert_memory_width_overlay(
     descriptor: AmdgpuDescriptorOverlay,
     *,
+    width_bits: int,
     semantic_tag: str,
     mnemonic: str,
     operand_units: int,
@@ -824,13 +825,13 @@ def _assert_memory_96_overlay(
             effect_kind,
             memory_space=memory_space,
             flags=(EffectFlag.DEPENDENCY,),
-            width_bits=96,
+            width_bits=width_bits,
         ),
     )
     assert any(
         operand.operand_type == "OPR_GPUMEM"
-        and operand.data_format_name == "FMT_NUM_B96"
-        and operand.size_bits == 96
+        and operand.data_format_name == f"FMT_NUM_B{width_bits}"
+        and operand.size_bits == width_bits
         for operand in descriptor.implicit_operands
     )
 
@@ -894,8 +895,9 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
             "global_load_b96_saddr",
         ),
     ):
-        _assert_memory_96_overlay(
+        _assert_memory_width_overlay(
             descriptors[buffer_load_key],
+            width_bits=96,
             semantic_tag="memory.load.u96",
             mnemonic=buffer_mnemonic,
             operand_units=3,
@@ -903,8 +905,9 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
             effect_kind=EffectKind.READ,
             memory_space=MemorySpace.GLOBAL,
         )
-        _assert_memory_96_overlay(
+        _assert_memory_width_overlay(
             descriptors[buffer_store_key],
+            width_bits=96,
             semantic_tag="memory.store.u96",
             mnemonic=buffer_mnemonic.replace("load", "store"),
             operand_units=3,
@@ -914,8 +917,9 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
         )
 
         global_load = descriptors["amdgpu.global_load_b96_saddr"]
-        _assert_memory_96_overlay(
+        _assert_memory_width_overlay(
             global_load,
+            width_bits=96,
             semantic_tag="memory.load.u96",
             mnemonic=global_mnemonic.removesuffix("_saddr"),
             operand_units=3,
@@ -927,8 +931,9 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
         assert global_load.asm_forms[0].mnemonic == global_mnemonic
 
         global_store = descriptors["amdgpu.global_store_b96_saddr"]
-        _assert_memory_96_overlay(
+        _assert_memory_width_overlay(
             global_store,
+            width_bits=96,
             semantic_tag="memory.store.u96",
             mnemonic=global_mnemonic.removesuffix("_saddr").replace("load", "store"),
             operand_units=3,
@@ -942,8 +947,9 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
         )
 
         scratch_load = descriptors["amdgpu.scratch_load_b96_vaddr"]
-        _assert_memory_96_overlay(
+        _assert_memory_width_overlay(
             scratch_load,
+            width_bits=96,
             semantic_tag="memory.stack.load.u96",
             mnemonic="scratch_load_b96",
             operand_units=3,
@@ -955,8 +961,9 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
         assert scratch_load.asm_forms[0].mnemonic == "scratch_load_b96_vaddr"
 
         scratch_store = descriptors["amdgpu.scratch_store_b96_vaddr"]
-        _assert_memory_96_overlay(
+        _assert_memory_width_overlay(
             scratch_store,
+            width_bits=96,
             semantic_tag="memory.stack.store.u96",
             mnemonic="scratch_store_b96",
             operand_units=3,
@@ -966,6 +973,127 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
         )
         assert scratch_store.asm_forms is not None
         assert scratch_store.asm_forms[0].mnemonic == "scratch_store_b96_vaddr"
+
+
+def test_smem_dword_width_descriptors_cover_active_xml_families() -> None:
+    for descriptors in (
+        {
+            descriptor.descriptor_key: descriptor
+            for descriptor in _gfx940_core_overlays()
+        },
+        {
+            descriptor.descriptor_key: descriptor
+            for descriptor in _gfx950_core_overlays()
+        },
+        {
+            descriptor.descriptor_key: descriptor
+            for descriptor in _gfx11_core_overlays()
+        },
+        {
+            descriptor.descriptor_key: descriptor
+            for descriptor in _gfx12_core_overlays()
+        },
+        {
+            descriptor.descriptor_key: descriptor
+            for descriptor in _gfx1250_core_overlays()
+        },
+    ):
+        for width_bits, units, descriptor_key, mnemonic in (
+            (256, 8, "amdgpu.s_load_dwordx8", "s_load_dwordx8"),
+            (512, 16, "amdgpu.s_load_dwordx16", "s_load_dwordx16"),
+        ):
+            _assert_memory_width_overlay(
+                descriptors[descriptor_key],
+                width_bits=width_bits,
+                semantic_tag=f"memory.load.u{width_bits}",
+                mnemonic=mnemonic,
+                operand_units=units,
+                payload_field_name="dst",
+                effect_kind=EffectKind.READ,
+                memory_space=MemorySpace.GLOBAL,
+            )
+            assert f"{descriptor_key}_offset_only" in descriptors
+
+    for descriptors in (
+        {
+            descriptor.descriptor_key: descriptor
+            for descriptor in _gfx940_core_overlays()
+        },
+        {
+            descriptor.descriptor_key: descriptor
+            for descriptor in _gfx950_core_overlays()
+        },
+    ):
+        for width_bits, units, descriptor_key, mnemonic in (
+            (128, 4, "amdgpu.s_buffer_load_dwordx4", "s_buffer_load_dwordx4"),
+            (256, 8, "amdgpu.s_buffer_load_dwordx8", "s_buffer_load_dwordx8"),
+            (512, 16, "amdgpu.s_buffer_load_dwordx16", "s_buffer_load_dwordx16"),
+        ):
+            _assert_memory_width_overlay(
+                descriptors[descriptor_key],
+                width_bits=width_bits,
+                semantic_tag=f"memory.load.u{width_bits}",
+                mnemonic=mnemonic,
+                operand_units=units,
+                payload_field_name="dst",
+                effect_kind=EffectKind.READ,
+                memory_space=MemorySpace.GLOBAL,
+            )
+
+    for descriptors in (
+        {
+            descriptor.descriptor_key: descriptor
+            for descriptor in _gfx11_core_overlays()
+        },
+        {
+            descriptor.descriptor_key: descriptor
+            for descriptor in _gfx12_core_overlays()
+        },
+        {
+            descriptor.descriptor_key: descriptor
+            for descriptor in _gfx1250_core_overlays()
+        },
+    ):
+        for width_bits, units, descriptor_key, mnemonic in (
+            (128, 4, "amdgpu.s_buffer_load_b128", "s_buffer_load_b128"),
+            (256, 8, "amdgpu.s_buffer_load_b256", "s_buffer_load_b256"),
+            (512, 16, "amdgpu.s_buffer_load_b512", "s_buffer_load_b512"),
+        ):
+            _assert_memory_width_overlay(
+                descriptors[descriptor_key],
+                width_bits=width_bits,
+                semantic_tag=f"memory.load.u{width_bits}",
+                mnemonic=mnemonic,
+                operand_units=units,
+                payload_field_name="dst",
+                effect_kind=EffectKind.READ,
+                memory_space=MemorySpace.GLOBAL,
+            )
+
+    for descriptors in (
+        {
+            descriptor.descriptor_key: descriptor
+            for descriptor in _gfx12_core_overlays()
+        },
+        {
+            descriptor.descriptor_key: descriptor
+            for descriptor in _gfx1250_core_overlays()
+        },
+    ):
+        for descriptor_key, mnemonic in (
+            ("amdgpu.s_load_b96", "s_load_b96"),
+            ("amdgpu.s_buffer_load_b96", "s_buffer_load_b96"),
+        ):
+            _assert_memory_width_overlay(
+                descriptors[descriptor_key],
+                width_bits=96,
+                semantic_tag="memory.load.u96",
+                mnemonic=mnemonic,
+                operand_units=3,
+                payload_field_name="dst",
+                effect_kind=EffectKind.READ,
+                memory_space=MemorySpace.GLOBAL,
+            )
 
 
 def test_gfx940_scratch_memory_forms_cover_spill_packets() -> None:

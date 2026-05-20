@@ -963,6 +963,23 @@ low.func.def target(@gfx12_target) @gfx12_packed_half_atomics(%resource: reg<amd
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx12_smem_wide_loads waits=none
+amdgpu.target<gfx1200> @gfx12_target
+low.func.def target(@gfx12_target) @gfx12_smem_wide_loads(%base: reg<amdgpu.sgpr x2>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>) asm<amdgpu.rdna4.core> {
+  %scalar_b96 = s_load_b96 %base, %soffset {offset = 4}
+  %buffer_b96 = s_buffer_load_b96 %resource, %soffset {offset = 8}
+  %buffer_b512 = s_buffer_load_b512 %resource, %soffset {offset = 16}
+  return
+}
+
+// ----
+  s_load_b96 s[8:10], s[0:1], s2 offset:4
+  s_buffer_load_b96 s[8:10], s[4:7], s2 offset:8
+  s_buffer_load_b512 s[16:31], s[4:7], s2 offset:16
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx950_packed_half_atomics waits=none
 amdgpu.target<gfx950> @gfx950_target
 low.func.def target(@gfx950_target) @gfx950_packed_half_atomics(%addr64: reg<amdgpu.vgpr x2>, %addr32: reg<amdgpu.vgpr>, %m0: reg<amdgpu.m0>, %value0: reg<amdgpu.vgpr>, %value1: reg<amdgpu.vgpr>, %value2: reg<amdgpu.vgpr>) {

@@ -16,30 +16,53 @@ from .common import *
 _MEMORY_DWORD_VECTOR_WIDTHS = ((32, 1), (64, 2), (96, 3), (128, 4))
 
 
-def _s_buffer_load_dword_overlay(
+def _s_buffer_load_sized_overlay(
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    width_bits: int,
+    payload_units: int,
     offset_field_name: str = "OFFSET",
     offset_bit_width: int = 21,
     fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
     return AmdgpuDescriptorOverlay(
-        descriptor_key="amdgpu.s_buffer_load_dword",
-        instruction_name="S_BUFFER_LOAD_DWORD",
-        mnemonic="s_buffer_load_dword",
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
         encoding_name="ENC_SMEM",
-        semantic_tag="memory.load.u32",
+        semantic_tag=f"memory.load.u{width_bits}",
         schedule_class=_SCHEDULE_SMEM_LOAD,
         operands=(
-            AmdgpuOperandOverlay("SDATA", _sgpr_result()),
+            AmdgpuOperandOverlay("SDATA", _sgpr_result(units=payload_units)),
             AmdgpuOperandOverlay("SBASE", _sgpr_resource("resource", units=4)),
             AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
         ),
-        implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
+        implicit_operands=(_ignore_global_read_memory(width_bits),),
         immediate_fields=(offset_field_name,),
         immediates=(_offset_immediate(offset_bit_width),),
         fixed_encoding_fields=fixed_encoding_fields,
-        effects=(_GLOBAL_LOAD_EFFECT,),
+        effects=(_global_read_effect(width_bits),),
         constraints=_EARLY_CLOBBER_RESULT_CONSTRAINTS,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
+    )
+
+
+def _s_buffer_load_dword_overlay(
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 21,
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
+) -> AmdgpuDescriptorOverlay:
+    return _s_buffer_load_sized_overlay(
+        descriptor_key="amdgpu.s_buffer_load_dword",
+        instruction_name="S_BUFFER_LOAD_DWORD",
+        mnemonic="s_buffer_load_dword",
+        width_bits=32,
+        payload_units=1,
+        offset_field_name=offset_field_name,
+        offset_bit_width=offset_bit_width,
+        fixed_encoding_fields=fixed_encoding_fields,
     )
 
 
@@ -52,119 +75,149 @@ def _s_buffer_load_64_overlay(
     offset_bit_width: int = 21,
     fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
 ) -> AmdgpuDescriptorOverlay:
+    return _s_buffer_load_sized_overlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        width_bits=64,
+        payload_units=2,
+        offset_field_name=offset_field_name,
+        offset_bit_width=offset_bit_width,
+        fixed_encoding_fields=fixed_encoding_fields,
+    )
+
+
+def _s_buffer_load_96_overlay(
+    *,
+    descriptor_key: str = "amdgpu.s_buffer_load_b96",
+    instruction_name: str = "S_BUFFER_LOAD_B96",
+    mnemonic: str = "s_buffer_load_b96",
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 21,
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
+) -> AmdgpuDescriptorOverlay:
+    return _s_buffer_load_sized_overlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        width_bits=96,
+        payload_units=3,
+        offset_field_name=offset_field_name,
+        offset_bit_width=offset_bit_width,
+        fixed_encoding_fields=fixed_encoding_fields,
+    )
+
+
+def _s_buffer_load_128_overlay(
+    *,
+    descriptor_key: str = "amdgpu.s_buffer_load_b128",
+    instruction_name: str = "S_BUFFER_LOAD_B128",
+    mnemonic: str = "s_buffer_load_b128",
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 21,
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
+) -> AmdgpuDescriptorOverlay:
+    return _s_buffer_load_sized_overlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        width_bits=128,
+        payload_units=4,
+        offset_field_name=offset_field_name,
+        offset_bit_width=offset_bit_width,
+        fixed_encoding_fields=fixed_encoding_fields,
+    )
+
+
+def _s_buffer_load_256_overlay(
+    *,
+    descriptor_key: str = "amdgpu.s_buffer_load_b256",
+    instruction_name: str = "S_BUFFER_LOAD_B256",
+    mnemonic: str = "s_buffer_load_b256",
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 21,
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
+) -> AmdgpuDescriptorOverlay:
+    return _s_buffer_load_sized_overlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        width_bits=256,
+        payload_units=8,
+        offset_field_name=offset_field_name,
+        offset_bit_width=offset_bit_width,
+        fixed_encoding_fields=fixed_encoding_fields,
+    )
+
+
+def _s_buffer_load_512_overlay(
+    *,
+    descriptor_key: str = "amdgpu.s_buffer_load_b512",
+    instruction_name: str = "S_BUFFER_LOAD_B512",
+    mnemonic: str = "s_buffer_load_b512",
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 21,
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
+) -> AmdgpuDescriptorOverlay:
+    return _s_buffer_load_sized_overlay(
+        descriptor_key=descriptor_key,
+        instruction_name=instruction_name,
+        mnemonic=mnemonic,
+        width_bits=512,
+        payload_units=16,
+        offset_field_name=offset_field_name,
+        offset_bit_width=offset_bit_width,
+        fixed_encoding_fields=fixed_encoding_fields,
+    )
+
+
+def _s_load_sized_overlay(
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 21,
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
+    *,
+    descriptor_key: str,
+    instruction_name: str,
+    mnemonic: str,
+    width_bits: int,
+    payload_units: int,
+    offset_only_descriptor_key: str,
+    fixed_soffset: AmdgpuFixedEncodingValue | None = None,
+) -> AmdgpuDescriptorOverlay:
+    operands: tuple[AmdgpuOperandOverlay, ...] = (
+        AmdgpuOperandOverlay("SDATA", _sgpr_result(units=payload_units)),
+        AmdgpuOperandOverlay("SBASE", _sgpr_operand("base", units=2)),
+    )
+    operand_forms: tuple[OperandForm, ...]
+    if fixed_soffset is not None:
+        fixed_encoding_fields = (*fixed_encoding_fields, ("SOFFSET", fixed_soffset))
+        operand_forms = ()
+    else:
+        operands = (
+            *operands,
+            AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
+        )
+        operand_forms = (
+            _soffset_zero_operand_form(
+                replacement_descriptor=offset_only_descriptor_key
+            ),
+            _soffset_offset_operand_form(
+                replacement_descriptor=offset_only_descriptor_key
+            ),
+        )
     return AmdgpuDescriptorOverlay(
         descriptor_key=descriptor_key,
         instruction_name=instruction_name,
         mnemonic=mnemonic,
         encoding_name="ENC_SMEM",
-        semantic_tag="memory.load.u64",
-        schedule_class=_SCHEDULE_SMEM_LOAD,
-        operands=(
-            AmdgpuOperandOverlay("SDATA", _sgpr_result(units=2)),
-            AmdgpuOperandOverlay("SBASE", _sgpr_resource("resource", units=4)),
-            AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
-        ),
-        implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY_B64,),
-        immediate_fields=(offset_field_name,),
-        immediates=(_offset_immediate(offset_bit_width),),
-        fixed_encoding_fields=fixed_encoding_fields,
-        effects=(_GLOBAL_LOAD_B64_EFFECT,),
-        constraints=_EARLY_CLOBBER_RESULT_CONSTRAINTS,
-        flags=(DescriptorFlag.SIDE_EFFECTING,),
-    )
-
-
-def _s_load_dwordx2_overlay(
-    offset_field_name: str = "OFFSET",
-    offset_bit_width: int = 21,
-    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
-    *,
-    descriptor_key: str = "amdgpu.s_load_dwordx2",
-    fixed_soffset: AmdgpuFixedEncodingValue | None = None,
-) -> AmdgpuDescriptorOverlay:
-    operands: tuple[AmdgpuOperandOverlay, ...] = (
-        AmdgpuOperandOverlay("SDATA", _sgpr_result(units=2)),
-        AmdgpuOperandOverlay("SBASE", _sgpr_operand("base", units=2)),
-    )
-    operand_forms: tuple[OperandForm, ...]
-    if fixed_soffset is not None:
-        fixed_encoding_fields = (*fixed_encoding_fields, ("SOFFSET", fixed_soffset))
-        operand_forms = ()
-    else:
-        operands = (
-            *operands,
-            AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
-        )
-        operand_forms = (
-            _soffset_zero_operand_form(
-                replacement_descriptor="amdgpu.s_load_dwordx2_offset_only"
-            ),
-            _soffset_offset_operand_form(
-                replacement_descriptor="amdgpu.s_load_dwordx2_offset_only"
-            ),
-        )
-    return AmdgpuDescriptorOverlay(
-        descriptor_key=descriptor_key,
-        instruction_name="S_LOAD_DWORDX2",
-        mnemonic="s_load_dwordx2",
-        encoding_name="ENC_SMEM",
-        semantic_tag="memory.load.u64",
+        semantic_tag=f"memory.load.u{width_bits}",
         schedule_class=_SCHEDULE_SMEM_LOAD,
         operands=operands,
-        implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY_B64,),
+        implicit_operands=(_ignore_global_read_memory(width_bits),),
         immediate_fields=(offset_field_name,),
         immediates=(_offset_immediate(offset_bit_width),),
         fixed_encoding_fields=fixed_encoding_fields,
-        effects=(_GLOBAL_LOAD_B64_EFFECT,),
-        operand_forms=operand_forms,
-        constraints=_EARLY_CLOBBER_RESULT_CONSTRAINTS,
-        flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=() if fixed_soffset is not None else None,
-    )
-
-
-def _s_load_dwordx4_overlay(
-    offset_field_name: str = "OFFSET",
-    offset_bit_width: int = 21,
-    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
-    *,
-    descriptor_key: str = "amdgpu.s_load_dwordx4",
-    fixed_soffset: AmdgpuFixedEncodingValue | None = None,
-) -> AmdgpuDescriptorOverlay:
-    operands: tuple[AmdgpuOperandOverlay, ...] = (
-        AmdgpuOperandOverlay("SDATA", _sgpr_result(units=4)),
-        AmdgpuOperandOverlay("SBASE", _sgpr_operand("base", units=2)),
-    )
-    operand_forms: tuple[OperandForm, ...]
-    if fixed_soffset is not None:
-        fixed_encoding_fields = (*fixed_encoding_fields, ("SOFFSET", fixed_soffset))
-        operand_forms = ()
-    else:
-        operands = (
-            *operands,
-            AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
-        )
-        operand_forms = (
-            _soffset_zero_operand_form(
-                replacement_descriptor="amdgpu.s_load_dwordx4_offset_only"
-            ),
-            _soffset_offset_operand_form(
-                replacement_descriptor="amdgpu.s_load_dwordx4_offset_only"
-            ),
-        )
-    return AmdgpuDescriptorOverlay(
-        descriptor_key=descriptor_key,
-        instruction_name="S_LOAD_DWORDX4",
-        mnemonic="s_load_dwordx4",
-        encoding_name="ENC_SMEM",
-        semantic_tag="memory.load.u128",
-        schedule_class=_SCHEDULE_SMEM_LOAD,
-        operands=operands,
-        implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY_B128,),
-        immediate_fields=(offset_field_name,),
-        immediates=(_offset_immediate(offset_bit_width),),
-        fixed_encoding_fields=fixed_encoding_fields,
-        effects=(_GLOBAL_LOAD_B128_EFFECT,),
+        effects=(_global_read_effect(width_bits),),
         operand_forms=operand_forms,
         constraints=_EARLY_CLOBBER_RESULT_CONSTRAINTS,
         flags=(DescriptorFlag.SIDE_EFFECTING,),
@@ -180,44 +233,127 @@ def _s_load_dword_overlay(
     descriptor_key: str = "amdgpu.s_load_dword",
     fixed_soffset: AmdgpuFixedEncodingValue | None = None,
 ) -> AmdgpuDescriptorOverlay:
-    operands: tuple[AmdgpuOperandOverlay, ...] = (
-        AmdgpuOperandOverlay("SDATA", _sgpr_result()),
-        AmdgpuOperandOverlay("SBASE", _sgpr_operand("base", units=2)),
-    )
-    operand_forms: tuple[OperandForm, ...]
-    if fixed_soffset is not None:
-        fixed_encoding_fields = (*fixed_encoding_fields, ("SOFFSET", fixed_soffset))
-        operand_forms = ()
-    else:
-        operands = (
-            *operands,
-            AmdgpuOperandOverlay("SOFFSET", _sgpr_operand("soffset")),
-        )
-        operand_forms = (
-            _soffset_zero_operand_form(
-                replacement_descriptor="amdgpu.s_load_dword_offset_only"
-            ),
-            _soffset_offset_operand_form(
-                replacement_descriptor="amdgpu.s_load_dword_offset_only"
-            ),
-        )
-    return AmdgpuDescriptorOverlay(
+    return _s_load_sized_overlay(
         descriptor_key=descriptor_key,
         instruction_name="S_LOAD_DWORD",
         mnemonic="s_load_dword",
-        encoding_name="ENC_SMEM",
-        semantic_tag="memory.load.u32",
-        schedule_class=_SCHEDULE_SMEM_LOAD,
-        operands=operands,
-        implicit_operands=(_IGNORE_GLOBAL_READ_MEMORY,),
-        immediate_fields=(offset_field_name,),
-        immediates=(_offset_immediate(offset_bit_width),),
+        width_bits=32,
+        payload_units=1,
+        offset_only_descriptor_key="amdgpu.s_load_dword_offset_only",
+        offset_field_name=offset_field_name,
+        offset_bit_width=offset_bit_width,
         fixed_encoding_fields=fixed_encoding_fields,
-        effects=(_GLOBAL_LOAD_EFFECT,),
-        operand_forms=operand_forms,
-        constraints=_EARLY_CLOBBER_RESULT_CONSTRAINTS,
-        flags=(DescriptorFlag.SIDE_EFFECTING,),
-        asm_forms=() if fixed_soffset is not None else None,
+        fixed_soffset=fixed_soffset,
+    )
+
+
+def _s_load_dwordx2_overlay(
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 21,
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
+    *,
+    descriptor_key: str = "amdgpu.s_load_dwordx2",
+    fixed_soffset: AmdgpuFixedEncodingValue | None = None,
+) -> AmdgpuDescriptorOverlay:
+    return _s_load_sized_overlay(
+        descriptor_key=descriptor_key,
+        instruction_name="S_LOAD_DWORDX2",
+        mnemonic="s_load_dwordx2",
+        width_bits=64,
+        payload_units=2,
+        offset_only_descriptor_key="amdgpu.s_load_dwordx2_offset_only",
+        offset_field_name=offset_field_name,
+        offset_bit_width=offset_bit_width,
+        fixed_encoding_fields=fixed_encoding_fields,
+        fixed_soffset=fixed_soffset,
+    )
+
+
+def _s_load_96_overlay(
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 21,
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
+    *,
+    descriptor_key: str = "amdgpu.s_load_b96",
+    fixed_soffset: AmdgpuFixedEncodingValue | None = None,
+) -> AmdgpuDescriptorOverlay:
+    return _s_load_sized_overlay(
+        descriptor_key=descriptor_key,
+        instruction_name="S_LOAD_B96",
+        mnemonic="s_load_b96",
+        width_bits=96,
+        payload_units=3,
+        offset_only_descriptor_key="amdgpu.s_load_b96_offset_only",
+        offset_field_name=offset_field_name,
+        offset_bit_width=offset_bit_width,
+        fixed_encoding_fields=fixed_encoding_fields,
+        fixed_soffset=fixed_soffset,
+    )
+
+
+def _s_load_dwordx4_overlay(
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 21,
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
+    *,
+    descriptor_key: str = "amdgpu.s_load_dwordx4",
+    fixed_soffset: AmdgpuFixedEncodingValue | None = None,
+) -> AmdgpuDescriptorOverlay:
+    return _s_load_sized_overlay(
+        descriptor_key=descriptor_key,
+        instruction_name="S_LOAD_DWORDX4",
+        mnemonic="s_load_dwordx4",
+        width_bits=128,
+        payload_units=4,
+        offset_only_descriptor_key="amdgpu.s_load_dwordx4_offset_only",
+        offset_field_name=offset_field_name,
+        offset_bit_width=offset_bit_width,
+        fixed_encoding_fields=fixed_encoding_fields,
+        fixed_soffset=fixed_soffset,
+    )
+
+
+def _s_load_dwordx8_overlay(
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 21,
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
+    *,
+    descriptor_key: str = "amdgpu.s_load_dwordx8",
+    fixed_soffset: AmdgpuFixedEncodingValue | None = None,
+) -> AmdgpuDescriptorOverlay:
+    return _s_load_sized_overlay(
+        descriptor_key=descriptor_key,
+        instruction_name="S_LOAD_DWORDX8",
+        mnemonic="s_load_dwordx8",
+        width_bits=256,
+        payload_units=8,
+        offset_only_descriptor_key="amdgpu.s_load_dwordx8_offset_only",
+        offset_field_name=offset_field_name,
+        offset_bit_width=offset_bit_width,
+        fixed_encoding_fields=fixed_encoding_fields,
+        fixed_soffset=fixed_soffset,
+    )
+
+
+def _s_load_dwordx16_overlay(
+    offset_field_name: str = "OFFSET",
+    offset_bit_width: int = 21,
+    fixed_encoding_fields: tuple[tuple[str, AmdgpuFixedEncodingValue], ...] = (),
+    *,
+    descriptor_key: str = "amdgpu.s_load_dwordx16",
+    fixed_soffset: AmdgpuFixedEncodingValue | None = None,
+) -> AmdgpuDescriptorOverlay:
+    return _s_load_sized_overlay(
+        descriptor_key=descriptor_key,
+        instruction_name="S_LOAD_DWORDX16",
+        mnemonic="s_load_dwordx16",
+        width_bits=512,
+        payload_units=16,
+        offset_only_descriptor_key="amdgpu.s_load_dwordx16_offset_only",
+        offset_field_name=offset_field_name,
+        offset_bit_width=offset_bit_width,
+        fixed_encoding_fields=fixed_encoding_fields,
+        fixed_soffset=fixed_soffset,
     )
 
 
@@ -1978,10 +2114,17 @@ __all__ = (
     "_global_memory_overlays",
     "_global_store_b16_overlay",
     "_global_store_overlay",
+    "_s_buffer_load_128_overlay",
+    "_s_buffer_load_256_overlay",
+    "_s_buffer_load_512_overlay",
     "_s_buffer_load_64_overlay",
+    "_s_buffer_load_96_overlay",
     "_s_buffer_load_dword_overlay",
+    "_s_load_96_overlay",
     "_s_load_dword_overlay",
+    "_s_load_dwordx16_overlay",
     "_s_load_dwordx2_overlay",
     "_s_load_dwordx4_overlay",
+    "_s_load_dwordx8_overlay",
     "_scratch_memory_overlays",
 )

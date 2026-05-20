@@ -1539,6 +1539,20 @@ _GLOBAL_LOAD_B128_EFFECT = Effect(
     width_bits=128,
 )
 
+_GLOBAL_LOAD_B256_EFFECT = Effect(
+    EffectKind.READ,
+    memory_space=MemorySpace.GLOBAL,
+    flags=(EffectFlag.DEPENDENCY,),
+    width_bits=256,
+)
+
+_GLOBAL_LOAD_B512_EFFECT = Effect(
+    EffectKind.READ,
+    memory_space=MemorySpace.GLOBAL,
+    flags=(EffectFlag.DEPENDENCY,),
+    width_bits=512,
+)
+
 _GLOBAL_STORE_EFFECT = Effect(
     EffectKind.WRITE,
     memory_space=MemorySpace.GLOBAL,
@@ -1944,6 +1958,24 @@ _IGNORE_GLOBAL_READ_MEMORY_B128 = AmdgpuImplicitOperandOverlay(
     ignore_reason="modeled-by-global-read-effect",
 )
 
+_IGNORE_GLOBAL_READ_MEMORY_B256 = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_GPUMEM",
+    data_format_name="FMT_NUM_B256",
+    size_bits=256,
+    is_input=True,
+    is_output=False,
+    ignore_reason="modeled-by-global-read-effect",
+)
+
+_IGNORE_GLOBAL_READ_MEMORY_B512 = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_GPUMEM",
+    data_format_name="FMT_NUM_B512",
+    size_bits=512,
+    is_input=True,
+    is_output=False,
+    ignore_reason="modeled-by-global-read-effect",
+)
+
 _IGNORE_GLOBAL_WRITE_MEMORY = AmdgpuImplicitOperandOverlay(
     operand_type="OPR_GPUMEM",
     data_format_name="FMT_NUM_B32",
@@ -2030,6 +2062,10 @@ def _ignore_global_read_memory(width_bits: int) -> AmdgpuImplicitOperandOverlay:
             return _IGNORE_GLOBAL_READ_MEMORY_B96
         case 128:
             return _IGNORE_GLOBAL_READ_MEMORY_B128
+        case 256:
+            return _IGNORE_GLOBAL_READ_MEMORY_B256
+        case 512:
+            return _IGNORE_GLOBAL_READ_MEMORY_B512
         case _:
             raise ValueError(f"unsupported global read width {width_bits}")
 
@@ -2066,6 +2102,10 @@ def _global_read_effect(width_bits: int) -> Effect:
             return _GLOBAL_LOAD_B96_EFFECT
         case 128:
             return _GLOBAL_LOAD_B128_EFFECT
+        case 256:
+            return _GLOBAL_LOAD_B256_EFFECT
+        case 512:
+            return _GLOBAL_LOAD_B512_EFFECT
         case _:
             raise ValueError(f"unsupported global read width {width_bits}")
 
@@ -2367,8 +2407,10 @@ __all__ = (
     "_GFX950_VECTOR_CACHE_FIELDS",
     "_GFX9_11_VECTOR_CACHE_FIELDS",
     "_GLOBAL_GFX950_SADDR_OFF",
-    "_GLOBAL_LOAD_B128_EFFECT",
     "_GLOBAL_LOAD_B16_EFFECT",
+    "_GLOBAL_LOAD_B128_EFFECT",
+    "_GLOBAL_LOAD_B256_EFFECT",
+    "_GLOBAL_LOAD_B512_EFFECT",
     "_GLOBAL_LOAD_B8_EFFECT",
     "_GLOBAL_LOAD_B64_EFFECT",
     "_GLOBAL_LOAD_B96_EFFECT",
@@ -2388,8 +2430,10 @@ __all__ = (
     "_IDLE_WAIT_HAZARDS",
     "_IGNORE_FLAT_SCRATCH_INPUT",
     "_IGNORE_GLOBAL_READ_MEMORY",
-    "_IGNORE_GLOBAL_READ_MEMORY_B128",
     "_IGNORE_GLOBAL_READ_MEMORY_B16",
+    "_IGNORE_GLOBAL_READ_MEMORY_B128",
+    "_IGNORE_GLOBAL_READ_MEMORY_B256",
+    "_IGNORE_GLOBAL_READ_MEMORY_B512",
     "_IGNORE_GLOBAL_READ_MEMORY_B8",
     "_IGNORE_GLOBAL_READ_MEMORY_B64",
     "_IGNORE_GLOBAL_READ_MEMORY_B96",
