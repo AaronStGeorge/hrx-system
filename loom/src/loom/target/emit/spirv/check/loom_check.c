@@ -344,10 +344,10 @@ static iree_status_t loom_spirv_loom_check_emit_provider_execute(
     if (request->diagnostic_collector->count != 0) {
       return iree_ok_status();
     }
-    IREE_RETURN_IF_ERROR(loom_spirv_loom_check_verify_low_module(request));
-    if (request->diagnostic_collector->count != 0) {
-      return iree_ok_status();
-    }
+  }
+  IREE_RETURN_IF_ERROR(loom_spirv_loom_check_verify_low_module(request));
+  if (request->diagnostic_collector->count != 0) {
+    return iree_ok_status();
   }
 
   loom_spirv_module_binary_t module = {0};

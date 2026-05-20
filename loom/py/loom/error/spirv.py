@@ -388,6 +388,22 @@ ERR_SPIRV_023 = ErrorDef(
     ),
 )
 
+# ERR_SPIRV_024: SPIR-V target-low function body is not structured.
+ERR_SPIRV_024 = ErrorDef(
+    domain=ErrorDomain.SPIRV,
+    code=24,
+    severity=Severity.ERROR,
+    summary="SPIR-V target-low function body is not structured.",
+    message=(
+        "SPIR-V emission for '@{function_name}' requires exactly one "
+        "top-level low function block, but the body has {block_count}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("block_count", ParamKind.U32),
+    ),
+)
+
 ALL_SPIRV_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SPIRV_001,
     ERR_SPIRV_002,
@@ -411,4 +427,5 @@ ALL_SPIRV_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SPIRV_020,
     ERR_SPIRV_022,
     ERR_SPIRV_023,
+    ERR_SPIRV_024,
 )

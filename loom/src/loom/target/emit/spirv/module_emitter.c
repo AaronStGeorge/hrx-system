@@ -262,56 +262,6 @@ static bool loom_spirv_emit_value_ref_exists(loom_spirv_emit_state_t* state,
   return loom_spirv_module_value_table_exists(&state->value_table, value_id);
 }
 
-static iree_status_t loom_spirv_emit_register_type_ref_value(
-    loom_value_id_t value_id, void* user_data) {
-  loom_spirv_emit_state_t* state = (loom_spirv_emit_state_t*)user_data;
-  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-  return loom_local_value_domain_register_value(
-      &state->value_domain, state->scratch_arena, value_id, &value_ordinal);
-}
-
-static iree_status_t loom_spirv_emit_register_value_domain_value(
-    loom_spirv_emit_state_t* state, loom_value_id_t value_id) {
-  IREE_RETURN_IF_ERROR(
-      loom_spirv_emit_register_type_ref_value(value_id, state));
-  return loom_type_walk_value_refs(
-      loom_module_value_type(state->module, value_id),
-      loom_spirv_emit_register_type_ref_value, state);
-}
-
-static iree_status_t loom_spirv_emit_register_region_tree_values(
-    loom_spirv_emit_state_t* state, const loom_region_t* region) {
-  if (region == NULL) {
-    return iree_ok_status();
-  }
-  const loom_block_t* block = NULL;
-  loom_region_for_each_block(region, block) {
-    for (uint16_t i = 0; i < block->arg_count; ++i) {
-      IREE_RETURN_IF_ERROR(loom_spirv_emit_register_value_domain_value(
-          state, loom_block_arg_id(block, i)));
-    }
-    const loom_op_t* op = NULL;
-    loom_block_for_each_op(block, op) {
-      const loom_value_id_t* operands = loom_op_const_operands(op);
-      for (uint16_t i = 0; i < op->operand_count; ++i) {
-        IREE_RETURN_IF_ERROR(
-            loom_spirv_emit_register_value_domain_value(state, operands[i]));
-      }
-      const loom_value_id_t* results = loom_op_const_results(op);
-      for (uint16_t i = 0; i < op->result_count; ++i) {
-        IREE_RETURN_IF_ERROR(
-            loom_spirv_emit_register_value_domain_value(state, results[i]));
-      }
-      loom_region_t* const* regions = loom_op_regions(op);
-      for (uint8_t i = 0; i < op->region_count; ++i) {
-        IREE_RETURN_IF_ERROR(
-            loom_spirv_emit_register_region_tree_values(state, regions[i]));
-      }
-    }
-  }
-  return iree_ok_status();
-}
-
 static loom_spirv_module_abi_context_t loom_spirv_emit_abi_context(
     loom_spirv_emit_state_t* state) {
   return (loom_spirv_module_abi_context_t){
@@ -1557,8 +1507,8 @@ static iree_status_t loom_spirv_emit_cfg_op_error(
   const iree_string_view_t op_name =
       vtable != NULL ? loom_op_vtable_name(vtable) : IREE_SV("<unknown>");
   return iree_make_status(
-      IREE_STATUS_INVALID_ARGUMENT,
-      "SPIR-V emission requires low.scf control flow; '%.*s' is CFG input",
+      IREE_STATUS_FAILED_PRECONDITION,
+      "verified SPIR-V low function still contains CFG op '%.*s'",
       (int)op_name.size, op_name.data);
 }
 
@@ -1585,9 +1535,8 @@ static iree_status_t loom_spirv_emit_function_body(
     loom_spirv_emit_state_t* state) {
   if (state->body->block_count != 1) {
     return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "SPIR-V emission requires low.scf control flow in one top-level "
-        "block; found %u blocks",
+        IREE_STATUS_FAILED_PRECONDITION,
+        "verified SPIR-V low function has %u top-level blocks; expected one",
         (unsigned)state->body->block_count);
   }
   const loom_block_t* block = loom_region_const_entry_block(state->body);
@@ -1724,16 +1673,14 @@ static iree_status_t loom_spirv_emit_function_state_initialize(
   const loom_region_t* body = loom_low_function_const_body(low_function_op);
   iree_status_t status = iree_ok_status();
   if (body == NULL || body->block_count == 0) {
-    status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                              "SPIR-V emission requires a low function body");
+    status =
+        iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                         "verified SPIR-V low function has no function body");
   }
   if (iree_status_is_ok(status)) {
-    status = loom_local_value_domain_acquire_for_region(
+    status = loom_local_value_domain_acquire_for_region_tree(
         module_state->module, body, module_state->scratch_arena,
         &out_state->value_domain);
-  }
-  if (iree_status_is_ok(status)) {
-    status = loom_spirv_emit_register_region_tree_values(out_state, body);
   }
   if (iree_status_is_ok(status)) {
     status = loom_spirv_module_workgroup_storage_initialize(

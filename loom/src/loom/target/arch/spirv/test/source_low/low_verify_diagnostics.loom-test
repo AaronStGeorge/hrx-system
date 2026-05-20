@@ -293,6 +293,19 @@ low.func.def target(@target) @shader_entry_workgroup_pointer_arg(%value: reg<spi
 
 spirv.target<vulkan1_3> @target
 
+// ERROR@+1: SPIRV/024 {function_name="multiblock_requires_low_scf", block_count="2"}
+low.func.def target(@target) @multiblock_requires_low_scf() asm<spirv.logical.core> {
+  return
+^dead:
+  return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
 low.func.def target(@target) @unsupported_structural_op() asm<spirv.logical.core> {
   // ERROR@+1: SPIRV/017 {function_name="unsupported_structural_op", op_name="low.live_in"}
   %value = live_in<spirv.arg0> : reg<spirv.id>

@@ -34,6 +34,12 @@ typedef struct loom_spirv_low_value_type_table_t {
   iree_host_size_t count;
 } loom_spirv_low_value_type_table_t;
 
+typedef enum loom_spirv_low_verify_structure_flag_bits_e {
+  LOOM_SPIRV_LOW_VERIFY_STRUCTURE_FLAG_NONE = 0u,
+  LOOM_SPIRV_LOW_VERIFY_STRUCTURE_FLAG_CFG_TERMINATOR_DIAGNOSED = 1u << 0,
+} loom_spirv_low_verify_structure_flag_bits_t;
+typedef uint32_t loom_spirv_low_verify_structure_flags_t;
+
 typedef struct loom_spirv_low_verify_state_t {
   // Module being verified.
   const loom_module_t* module;
@@ -59,6 +65,8 @@ typedef struct loom_spirv_low_verify_state_t {
   bool raw_bda_hal_kernel;
   // True after a function-level diagnostic makes body-local checks unreliable.
   bool skip_body_checks;
+  // Structural-control diagnostics already emitted for this function.
+  loom_spirv_low_verify_structure_flags_t structure_flags;
 } loom_spirv_low_verify_state_t;
 
 static uint64_t loom_spirv_low_hash_value_id(loom_value_id_t value_id) {
@@ -653,6 +661,16 @@ static iree_status_t loom_spirv_low_emit_structured_control_required(
   };
   return loom_spirv_low_emit(context, op, LOOM_ERR_SPIRV_015, params,
                              IREE_ARRAYSIZE(params));
+}
+
+static iree_status_t loom_spirv_low_emit_single_block_required(
+    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(state->function_name),
+      loom_param_u32((uint32_t)state->body->block_count),
+  };
+  return loom_spirv_low_emit(context, state->function_op, LOOM_ERR_SPIRV_024,
+                             params, IREE_ARRAYSIZE(params));
 }
 
 static iree_status_t loom_spirv_low_emit_resource_import_kind(
@@ -1314,6 +1332,8 @@ static iree_status_t loom_spirv_low_verify_op(
     return loom_spirv_low_verify_return(context, state, op);
   }
   if (loom_low_br_isa(op) || loom_low_cond_br_isa(op)) {
+    state->structure_flags |=
+        LOOM_SPIRV_LOW_VERIFY_STRUCTURE_FLAG_CFG_TERMINATOR_DIAGNOSED;
     return loom_spirv_low_emit_structured_control_required(context, state, op);
   }
   if (loom_low_scf_if_isa(op)) {
@@ -1343,10 +1363,30 @@ static iree_status_t loom_spirv_low_verify_op(
   return loom_spirv_low_emit_unsupported_structural_op(context, state, op);
 }
 
+static iree_status_t loom_spirv_low_end_function(
+    const loom_low_verify_provider_t* provider,
+    loom_low_verify_context_t* context, void* provider_state) {
+  (void)provider;
+  loom_spirv_low_verify_state_t* state =
+      (loom_spirv_low_verify_state_t*)provider_state;
+  if (state == NULL || state->skip_body_checks ||
+      loom_low_verify_context_should_stop(context)) {
+    return iree_ok_status();
+  }
+  if (state->body != NULL && state->body->block_count != 1 &&
+      !iree_any_bit_set(
+          state->structure_flags,
+          LOOM_SPIRV_LOW_VERIFY_STRUCTURE_FLAG_CFG_TERMINATOR_DIAGNOSED)) {
+    return loom_spirv_low_emit_single_block_required(context, state);
+  }
+  return iree_ok_status();
+}
+
 const loom_low_verify_provider_t loom_spirv_low_verify_provider = {
     .name = IREE_SVL("spirv"),
     .begin_function = loom_spirv_low_begin_function,
     .verify_op = loom_spirv_low_verify_op,
+    .end_function = loom_spirv_low_end_function,
 };
 
 static const loom_low_verify_provider_t* const kLoomSpirvLowVerifyProviders[] =
