@@ -195,6 +195,7 @@ loom_cc_library(
 
 loom_cc_library(
     name = "check_provider",
+    testonly = True,
     srcs = ["check/provider.c"],
     hdrs = ["check/provider.h"],
     deps = [

@@ -192,6 +192,7 @@ loom_cc_library(
     loom::src::loom::target::tool::spirv
     loom::src::loom::tooling::compile::pipeline
     loom::src::loom::tools::loom-check::execute
+  TESTONLY
   PUBLIC
 )
 
@@ -206,6 +207,7 @@ loom_cc_library(
     ::loom_check
     iree::base
     loom::src::loom::tools::loom-check::provider
+  TESTONLY
   PUBLIC
 )
 

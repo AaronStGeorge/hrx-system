@@ -57,6 +57,7 @@ loom_cc_library(
     loom::src::loom::target::arch::amdgpu::packet_plan
     loom::src::loom::target::arch::amdgpu::storage_lease
     loom::src::loom::tools::loom-check::execute
+  TESTONLY
   PUBLIC
 )
 

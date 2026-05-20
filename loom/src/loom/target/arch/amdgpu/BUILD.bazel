@@ -895,6 +895,7 @@ loom_cc_test(
 
 loom_cc_library(
     name = "check_provider",
+    testonly = True,
     srcs = [
         "check/occupancy.c",
         "check/provider.c",

@@ -849,6 +849,7 @@ loom_cc_library(
     loom::src::loom::target::emit::native::amdgpu::loom_check
     loom::src::loom::tools::loom-check::execute
     loom::src::loom::tools::loom-check::provider
+  TESTONLY
   PUBLIC
 )
 

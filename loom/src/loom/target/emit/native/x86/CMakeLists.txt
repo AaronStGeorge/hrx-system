@@ -48,6 +48,7 @@ loom_cc_library(
     ::assembly
     iree::base
     loom::src::loom::tools::loom-check::execute
+  TESTONLY
   PUBLIC
 )
 

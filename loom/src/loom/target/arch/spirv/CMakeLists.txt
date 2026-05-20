@@ -388,6 +388,7 @@ loom_cc_library(
     ::provider
     iree::base
     loom::src::loom::tools::loom-check::provider
+  TESTONLY
   PUBLIC
 )
 

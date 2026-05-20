@@ -167,6 +167,7 @@ _LOOM_CHECK_PROVIDER_DEPS = (
 
 loom_cc_library(
     name = "check",
+    testonly = True,
     srcs = ["check.c"],
     hdrs = ["check.h"],
     deps = [
@@ -178,6 +179,7 @@ loom_cc_library(
 
 loom_cc_library(
     name = "execute",
+    testonly = True,
     srcs = [
         "diagnostics.c",
         "emit.c",
@@ -270,6 +272,7 @@ loom_cc_library(
 
 loom_cc_library(
     name = "report",
+    testonly = True,
     srcs = ["report.c"],
     hdrs = ["report.h"],
     deps = [
@@ -313,6 +316,7 @@ loom_cc_test(
 
 loom_cc_library(
     name = "update",
+    testonly = True,
     srcs = ["update.c"],
     hdrs = ["update.h"],
     deps = [
@@ -323,6 +327,7 @@ loom_cc_library(
 
 loom_cc_library(
     name = "template_sync",
+    testonly = True,
     srcs = ["template_sync.c"],
     hdrs = ["template_sync.h"],
     deps = [
@@ -368,6 +373,7 @@ loom_cc_test(
 
 loom_cc_library(
     name = "json_output",
+    testonly = True,
     srcs = ["json_output.c"],
     hdrs = ["json_output.h"],
     deps = [
@@ -383,6 +389,7 @@ loom_cc_library(
 
 loom_cc_library(
     name = "output",
+    testonly = True,
     srcs = ["output.c"],
     hdrs = ["output.h"],
     deps = [
@@ -395,6 +402,7 @@ loom_cc_library(
 
 loom_cc_library(
     name = "file",
+    testonly = True,
     srcs = ["file.c"],
     hdrs = ["file.h"],
     deps = [
@@ -416,6 +424,7 @@ loom_cc_library(
 
 loom_cc_library(
     name = "main",
+    testonly = True,
     srcs = ["main.c"],
     hdrs = ["main.h"],
     deps = [
@@ -432,6 +441,7 @@ loom_cc_library(
 
 loom_cc_library(
     name = "provider",
+    testonly = True,
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
     deps = [
@@ -462,6 +472,7 @@ loom_cc_test(
 
 loom_cc_binary(
     name = "loom-check",
+    testonly = True,
     srcs = ["loom-check.c"],
     copts = _LOOM_CHECK_PROVIDER_COPTS,
     deps = [

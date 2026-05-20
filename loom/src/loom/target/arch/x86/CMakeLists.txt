@@ -368,6 +368,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::target::emit::native::x86::loom_check
     loom::src::loom::tools::loom-check::provider
+  TESTONLY
   PUBLIC
 )
 

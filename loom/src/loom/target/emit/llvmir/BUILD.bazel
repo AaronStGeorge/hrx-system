@@ -287,6 +287,7 @@ loom_cc_library(
 
 loom_cc_library(
     name = "loom_check",
+    testonly = True,
     srcs = ["check/loom_check.c"],
     hdrs = ["check/loom_check.h"],
     deps = [
@@ -309,6 +310,7 @@ loom_cc_library(
 
 loom_cc_library(
     name = "check_provider",
+    testonly = True,
     srcs = ["check/provider.c"],
     hdrs = ["check/provider.h"],
     deps = [

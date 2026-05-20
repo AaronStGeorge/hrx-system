@@ -21,6 +21,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::arena
     loom::src::loom::error::error_defs
+  TESTONLY
   PUBLIC
 )
 
@@ -96,6 +97,7 @@ loom_cc_library(
     loom::src::loom::util::json
     loom::src::loom::util::stream
     loom::src::loom::verify
+  TESTONLY
   PUBLIC
 )
 
@@ -129,6 +131,7 @@ loom_cc_library(
     ::check
     iree::base
     iree::base::internal::arena
+  TESTONLY
   PUBLIC
 )
 
@@ -176,6 +179,7 @@ loom_cc_library(
   DEPS
     ::check
     iree::base
+  TESTONLY
   PUBLIC
 )
 
@@ -193,6 +197,7 @@ loom_cc_library(
     loom::src::loom::format::text::parser
     loom::src::loom::ir
     loom::src::loom::ops::op_defs
+  TESTONLY
   PUBLIC
 )
 
@@ -244,6 +249,7 @@ loom_cc_library(
     iree::base
     loom::src::loom::util::json
     loom::src::loom::util::stream
+  TESTONLY
   PUBLIC
 )
 
@@ -259,6 +265,7 @@ loom_cc_library(
     ::execute
     iree::base
     iree::base::core_headers
+  TESTONLY
   PUBLIC
 )
 
@@ -283,6 +290,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::tooling::io::file
     loom::src::loom::util::stream
+  TESTONLY
   PUBLIC
 )
 
@@ -302,6 +310,7 @@ loom_cc_library(
     iree::base::internal::arena
     iree::base::tooling::flags
     loom::src::loom::ops::op_registry
+  TESTONLY
   PUBLIC
 )
 
@@ -319,6 +328,7 @@ loom_cc_library(
     loom::src::loom::ir
     loom::src::loom::target::math_policy
     loom::src::loom::target::provider
+  TESTONLY
   PUBLIC
 )
 
@@ -348,6 +358,7 @@ loom_cc_binary(
 
   DEPS
     ::provider
+  TESTONLY
 )
 
 loom_cc_binary(

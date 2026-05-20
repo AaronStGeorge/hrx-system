@@ -244,6 +244,7 @@ loom_cc_library(
     loom::src::loom::target::tool::llvm
     loom::src::loom::tools::loom-check::execute
     loom::src::loom::util::stream
+  TESTONLY
   PUBLIC
 )
 
@@ -258,6 +259,7 @@ loom_cc_library(
     ::loom_check
     iree::base
     loom::src::loom::tools::loom-check::provider
+  TESTONLY
   PUBLIC
 )
 
