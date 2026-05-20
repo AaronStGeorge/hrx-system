@@ -880,13 +880,17 @@ low.func.def target(@gfx11_target) @gfx11_ds_load_u16_d16_pair(%addr: reg<amdgpu
 amdgpu.target<gfx942> @gfx942_target
 low.func.def target(@gfx942_target) @gfx942_global_load_lds(%addr64: reg<amdgpu.vgpr x2>, %addr32: reg<amdgpu.vgpr>, %saddr: reg<amdgpu.sgpr x2>, %m0: reg<amdgpu.m0>) {
   low.op<amdgpu.global_load_lds_dword>(%addr64, %m0) {offset = 4} : (reg<amdgpu.vgpr x2>, reg<amdgpu.m0>)
+  low.op<amdgpu.global_load_lds_ubyte>(%addr64, %m0) {offset = 8} : (reg<amdgpu.vgpr x2>, reg<amdgpu.m0>)
   low.op<amdgpu.global_load_lds_dword_saddr>(%addr32, %saddr, %m0) {offset = 16} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.op<amdgpu.global_load_lds_sshort_saddr>(%addr32, %saddr, %m0) {offset = 20} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
   low.return
 }
 
 // ----
   global_load_lds_dword v[0:1], off offset:4
+  global_load_lds_ubyte v[0:1], off offset:8
   global_load_lds_dword v2, s[0:1] offset:16
+  global_load_lds_sshort v2, s[0:1] offset:20
   s_endpgm
 
 // ====
@@ -914,13 +918,19 @@ low.func.def target(@gfx942_target) @gfx942_m0_state_reuse(%value0: reg<amdgpu.v
 amdgpu.target<gfx950> @gfx950_target
 low.func.def target(@gfx950_target) @gfx950_global_load_lds(%addr64: reg<amdgpu.vgpr x2>, %addr32: reg<amdgpu.vgpr>, %saddr: reg<amdgpu.sgpr x2>, %m0: reg<amdgpu.m0>) {
   low.op<amdgpu.global_load_lds_dword>(%addr64, %m0) {offset = 4} : (reg<amdgpu.vgpr x2>, reg<amdgpu.m0>)
+  low.op<amdgpu.global_load_lds_ubyte>(%addr64, %m0) {offset = 8} : (reg<amdgpu.vgpr x2>, reg<amdgpu.m0>)
   low.op<amdgpu.global_load_lds_dwordx4_saddr>(%addr32, %saddr, %m0) {offset = 16} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.op<amdgpu.global_load_lds_ushort_saddr>(%addr32, %saddr, %m0) {offset = 20} : (reg<amdgpu.vgpr>, reg<amdgpu.sgpr x2>, reg<amdgpu.m0>)
+  low.op<amdgpu.global_load_lds_dwordx3>(%addr64, %m0) {offset = 24} : (reg<amdgpu.vgpr x2>, reg<amdgpu.m0>)
   low.return
 }
 
 // ----
-  global_load_lds_dword v[0:1], off offset:4
-  global_load_lds_dwordx4 v2, s[0:1] offset:16
+  global_load_lds_dword v[2:3], off offset:4
+  global_load_lds_ubyte v[2:3], off offset:8
+  global_load_lds_dwordx4 v0, s[0:1] offset:16
+  global_load_lds_ushort v0, s[0:1] offset:20
+  global_load_lds_dwordx3 v[2:3], off offset:24
   s_endpgm
 
 // ====

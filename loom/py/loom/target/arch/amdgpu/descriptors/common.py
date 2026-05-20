@@ -2251,21 +2251,26 @@ def _generic_atomic_effects(
     return _atomic_effects(MemorySpace.GENERIC, width_bits, counter_id=counter_id)
 
 
-def _global_to_lds_effects(width_bits: int) -> tuple[Effect, Effect]:
+def _global_to_lds_effects(
+    global_width_bits: int,
+    *,
+    workgroup_width_bits: int | None = None,
+) -> tuple[Effect, Effect]:
+    workgroup_width_bits = workgroup_width_bits or global_width_bits
     return (
         Effect(
             EffectKind.READ,
             memory_space=MemorySpace.GLOBAL,
             flags=(EffectFlag.DEPENDENCY,),
             counter_id=_COUNTER_VMEM_LOAD,
-            width_bits=width_bits,
+            width_bits=global_width_bits,
         ),
         Effect(
             EffectKind.WRITE,
             memory_space=MemorySpace.WORKGROUP,
             flags=(EffectFlag.DEPENDENCY,),
             counter_id=_COUNTER_VMEM_LOAD,
-            width_bits=width_bits,
+            width_bits=workgroup_width_bits,
         ),
     )
 

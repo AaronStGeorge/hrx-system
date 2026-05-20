@@ -2147,7 +2147,9 @@ def _global_load_lds_overlay(
     descriptor_key: str,
     instruction_name: str,
     mnemonic: str,
-    width_bits: int,
+    semantic_tag: str,
+    global_width_bits: int,
+    workgroup_width_bits: int,
     address_units: int,
     saddr_off: AmdgpuFixedEncodingValue | None,
     offset_field_name: str = "OFFSET",
@@ -2167,7 +2169,7 @@ def _global_load_lds_overlay(
         instruction_name=instruction_name,
         mnemonic=mnemonic,
         encoding_name="ENC_FLAT_GLBL",
-        semantic_tag=f"memory.global_to_workgroup.u{width_bits}",
+        semantic_tag=semantic_tag,
         schedule_class=_SCHEDULE_VMEM_LOAD_LDS,
         operands=operands,
         ignored_operands=(
@@ -2184,18 +2186,53 @@ def _global_load_lds_overlay(
             *_cache_immediates(cache_fields),
         ),
         fixed_encoding_fields=fixed_encoding_fields,
-        effects=_global_to_lds_effects(width_bits),
+        effects=_global_to_lds_effects(
+            global_width_bits,
+            workgroup_width_bits=workgroup_width_bits,
+        ),
         flags=(DescriptorFlag.SIDE_EFFECTING,),
         asm_forms=(),
     )
 
 
-_GLOBAL_LOAD_LDS_DWORD_VARIANTS = (("DWORD", "dword", 32),)
+_GLOBAL_LOAD_LDS_BASE_VARIANTS = (
+    (
+        "UBYTE",
+        "ubyte",
+        "memory.global_to_workgroup.u8.zero_extend",
+        8,
+        32,
+    ),
+    (
+        "SBYTE",
+        "sbyte",
+        "memory.global_to_workgroup.i8.sign_extend",
+        8,
+        32,
+    ),
+    (
+        "USHORT",
+        "ushort",
+        "memory.global_to_workgroup.u16.zero_extend",
+        16,
+        32,
+    ),
+    (
+        "SSHORT",
+        "sshort",
+        "memory.global_to_workgroup.i16.sign_extend",
+        16,
+        32,
+    ),
+    ("DWORD", "dword", "memory.global_to_workgroup.u32", 32, 32),
+)
+
+_GLOBAL_LOAD_LDS_CDNA3_VARIANTS = _GLOBAL_LOAD_LDS_BASE_VARIANTS
 
 _GLOBAL_LOAD_LDS_GFX950_VARIANTS = (
-    ("DWORD", "dword", 32),
-    ("DWORDX3", "dwordx3", 96),
-    ("DWORDX4", "dwordx4", 128),
+    *_GLOBAL_LOAD_LDS_BASE_VARIANTS,
+    ("DWORDX3", "dwordx3", "memory.global_to_workgroup.u96", 96, 96),
+    ("DWORDX4", "dwordx4", "memory.global_to_workgroup.u128", 128, 128),
 )
 
 
@@ -2205,7 +2242,9 @@ def _global_load_lds_overlays(
     address_units: int,
     saddr_off: AmdgpuFixedEncodingValue | None,
     cache_fields: tuple[tuple[str, int], ...] = (),
-    variants: tuple[tuple[str, str, int], ...] = _GLOBAL_LOAD_LDS_GFX950_VARIANTS,
+    variants: tuple[tuple[str, str, str, int, int], ...] = (
+        _GLOBAL_LOAD_LDS_GFX950_VARIANTS
+    ),
 ) -> tuple[AmdgpuDescriptorOverlay, ...]:
     return tuple(
         _global_load_lds_overlay(
@@ -2214,12 +2253,20 @@ def _global_load_lds_overlays(
             ),
             instruction_name=f"GLOBAL_LOAD_LDS_{instruction_suffix}",
             mnemonic=f"global_load_lds_{mnemonic_suffix}",
-            width_bits=width_bits,
+            semantic_tag=semantic_tag,
+            global_width_bits=global_width_bits,
+            workgroup_width_bits=workgroup_width_bits,
             address_units=address_units,
             saddr_off=saddr_off,
             cache_fields=cache_fields,
         )
-        for instruction_suffix, mnemonic_suffix, width_bits in variants
+        for (
+            instruction_suffix,
+            mnemonic_suffix,
+            semantic_tag,
+            global_width_bits,
+            workgroup_width_bits,
+        ) in variants
     )
 
 
@@ -2396,7 +2443,7 @@ def _global_memory_overlays(
 
 
 __all__ = (
-    "_GLOBAL_LOAD_LDS_DWORD_VARIANTS",
+    "_GLOBAL_LOAD_LDS_CDNA3_VARIANTS",
     "_GLOBAL_LOAD_LDS_GFX950_VARIANTS",
     "_MEMORY_DWORD_VECTOR_WIDTHS",
     "_SMEM_DWORDX4_WIDTHS",

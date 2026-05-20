@@ -16,6 +16,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _ADDRESS_OFFSET_DWORD_STRIDE64_ENCODING_ID,
     _AMDGPU_TRANS_DESCRIPTOR_KEYS,
     _AMDGPU_TRANS_PROXY_LATENCY_CYCLES,
+    _COUNTER_VMEM_LOAD,
     _GFX12_TH_ATOMIC_RETURN_VALUE,
     _REG_EXEC,
     _REG_MODE,
@@ -23,6 +24,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _SCHEDULE_SALU,
     _SCHEDULE_SMEM_STORE,
     _SCHEDULE_VALU,
+    _SCHEDULE_VMEM_LOAD_LDS,
     _SOURCE_INLINE_F32_ENCODING_ID,
     _SOURCE_INLINE_U32_ENCODING_ID,
     AMDGPU_ATOMIC_DESCRIPTOR_CATEGORY,
@@ -844,6 +846,48 @@ def _assert_memory_width_overlay(
     )
 
 
+def _assert_global_load_lds_overlay(
+    descriptor: AmdgpuDescriptorOverlay,
+    *,
+    global_width_bits: int,
+    workgroup_width_bits: int,
+    semantic_tag: str,
+    mnemonic: str,
+) -> None:
+    assert descriptor.semantic_tag == semantic_tag
+    assert descriptor.mnemonic == mnemonic
+    assert descriptor.schedule_class == _SCHEDULE_VMEM_LOAD_LDS
+    assert descriptor.effects == (
+        Effect(
+            EffectKind.READ,
+            memory_space=MemorySpace.GLOBAL,
+            flags=(EffectFlag.DEPENDENCY,),
+            counter_id=_COUNTER_VMEM_LOAD,
+            width_bits=global_width_bits,
+        ),
+        Effect(
+            EffectKind.WRITE,
+            memory_space=MemorySpace.WORKGROUP,
+            flags=(EffectFlag.DEPENDENCY,),
+            counter_id=_COUNTER_VMEM_LOAD,
+            width_bits=workgroup_width_bits,
+        ),
+    )
+    assert any(
+        operand.xml_field_name == "VDST"
+        and operand.ignore_reason == "legacy-lds-dma-has-no-vgpr-result"
+        for operand in descriptor.ignored_operands
+    )
+    assert any(
+        operand.operand_type == "OPR_SDST_M0"
+        and operand.descriptor_operand is not None
+        and operand.descriptor_operand.field_name == "m0"
+        and OperandFlag.IMPLICIT in operand.descriptor_operand.flags
+        and OperandFlag.STATE_READ in operand.descriptor_operand.flags
+        for operand in descriptor.implicit_operands
+    )
+
+
 def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
     for (
         descriptors,
@@ -981,6 +1025,65 @@ def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
         )
         assert scratch_store.asm_forms is not None
         assert scratch_store.asm_forms[0].mnemonic == "scratch_store_b96_vaddr"
+
+
+def test_cdna_global_load_lds_descriptors_cover_extension_rows() -> None:
+    cdna3_descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx940_core_overlays()
+    }
+    cdna4_descriptors = {
+        descriptor.descriptor_key: descriptor for descriptor in _gfx950_core_overlays()
+    }
+    base_rows = (
+        (
+            "ubyte",
+            "memory.global_to_workgroup.u8.zero_extend",
+            8,
+            32,
+        ),
+        (
+            "sbyte",
+            "memory.global_to_workgroup.i8.sign_extend",
+            8,
+            32,
+        ),
+        (
+            "ushort",
+            "memory.global_to_workgroup.u16.zero_extend",
+            16,
+            32,
+        ),
+        (
+            "sshort",
+            "memory.global_to_workgroup.i16.sign_extend",
+            16,
+            32,
+        ),
+        ("dword", "memory.global_to_workgroup.u32", 32, 32),
+    )
+    for descriptors in (cdna3_descriptors, cdna4_descriptors):
+        for suffix, semantic_tag, global_width_bits, workgroup_width_bits in base_rows:
+            for descriptor_key_suffix in ("", "_saddr"):
+                descriptor_key = f"amdgpu.global_load_lds_{suffix}"
+                _assert_global_load_lds_overlay(
+                    descriptors[f"{descriptor_key}{descriptor_key_suffix}"],
+                    global_width_bits=global_width_bits,
+                    workgroup_width_bits=workgroup_width_bits,
+                    semantic_tag=semantic_tag,
+                    mnemonic=f"global_load_lds_{suffix}",
+                )
+
+    for suffix, width_bits in (("dwordx3", 96), ("dwordx4", 128)):
+        for descriptor_key_suffix in ("", "_saddr"):
+            descriptor_key = f"amdgpu.global_load_lds_{suffix}"
+            assert f"{descriptor_key}{descriptor_key_suffix}" not in cdna3_descriptors
+            _assert_global_load_lds_overlay(
+                cdna4_descriptors[f"{descriptor_key}{descriptor_key_suffix}"],
+                global_width_bits=width_bits,
+                workgroup_width_bits=width_bits,
+                semantic_tag=f"memory.global_to_workgroup.u{width_bits}",
+                mnemonic=f"global_load_lds_{suffix}",
+            )
 
 
 def test_smem_dword_width_descriptors_cover_active_xml_families() -> None:

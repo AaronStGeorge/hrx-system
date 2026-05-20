@@ -224,7 +224,7 @@ def _cdna_s_buffer_load_width_overlays(
 
 def _cdna_core_overlays(
     *,
-    global_load_lds_variants: tuple[tuple[str, str, int], ...],
+    global_load_lds_variants: tuple[tuple[str, str, str, int, int], ...],
     include_v_dot2_f32_bf16: bool,
     include_v_cvt_pk_bf16_f32: bool,
     include_ds_transpose_reads: bool,
@@ -649,7 +649,7 @@ def _cdna_core_overlays(
 
 def _gfx940_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
     return _cdna_core_overlays(
-        global_load_lds_variants=_GLOBAL_LOAD_LDS_DWORD_VARIANTS,
+        global_load_lds_variants=_GLOBAL_LOAD_LDS_CDNA3_VARIANTS,
         include_v_dot2_f32_bf16=False,
         include_v_cvt_pk_bf16_f32=False,
         include_ds_transpose_reads=False,
