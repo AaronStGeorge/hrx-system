@@ -1312,10 +1312,9 @@ loom_region_t* loom_loop_like_condition_region(loom_loop_like_t loop);
 // on the body region's entry block.
 loom_value_id_t loom_loop_like_iv(loom_loop_like_t loop);
 
-// Returns the initial values for loop-carried state as a variadic
-// operand slice. The slice starts at iter_args_operand_offset and
-// extends to the end of the op's operand list. Returns an empty
-// slice for loops with no iter_args or if |loop| is not valid.
+// Returns the initial values for loop-carried state. The LoopLike vtable names
+// the author-facing operand field; this accessor resolves that field through
+// the op layout so segmented policy operands do not leak into analyses.
 loom_value_slice_t loom_loop_like_iter_args(loom_loop_like_t loop);
 
 // Returns the lower-bound operand value ID for counted loops, or

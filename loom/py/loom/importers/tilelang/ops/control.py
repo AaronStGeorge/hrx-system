@@ -126,7 +126,14 @@ def convert_for(
     record_name = (
         "tir.For unrolled<scf.for>" if loop_kind == TIR_FOR_UNROLLED else "scf.for"
     )
-    _convert_counted_for(stmt, context, converter, record_name=record_name)
+    unroll_policy = "unroll" if loop_kind == TIR_FOR_UNROLLED else None
+    _convert_counted_for(
+        stmt,
+        context,
+        converter,
+        record_name=record_name,
+        unroll_policy=unroll_policy,
+    )
 
 
 def _convert_counted_for(
@@ -135,6 +142,7 @@ def _convert_counted_for(
     converter: TileLangConverter,
     *,
     record_name: str,
+    unroll_policy: str | None,
 ) -> None:
     """Import a TileLang/TIR counted loop as structured scf.for."""
 
@@ -220,6 +228,7 @@ def _convert_counted_for(
         lower_bound=lower,
         upper_bound=upper,
         step=step,
+        unroll_policy=unroll_policy,
         iter_args=[
             *(slot.initial.value for slot in state_slots),
             *(slot.initial for slot in buffer_slots),
@@ -270,7 +279,11 @@ def _convert_parallel_for(
         return
 
     _convert_counted_for(
-        stmt, context, converter, record_name="tir.For parallel<scf.for>"
+        stmt,
+        context,
+        converter,
+        record_name="tir.For parallel<scf.for>",
+        unroll_policy=None,
     )
 
 

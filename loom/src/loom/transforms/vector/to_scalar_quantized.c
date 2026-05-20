@@ -667,10 +667,10 @@ static iree_status_t loom_vector_to_scalar_build_bitpack_bitstream_lane(
       state, storage_scalar_type, &initial_accumulator));
 
   loom_op_t* loop = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_scf_for_build(&state->rewriter->builder, lower_bound, upper_bound,
-                         step, &initial_accumulator, 1, &storage_scalar_type, 1,
-                         NULL, 0, state->location, &loop));
+  IREE_RETURN_IF_ERROR(loom_scf_for_build(
+      &state->rewriter->builder, /*build_flags=*/0, lower_bound, upper_bound,
+      step, &initial_accumulator, 1, &storage_scalar_type, 1, NULL, 0,
+      LOOM_VALUE_ID_INVALID, /*unroll_policy=*/0, state->location, &loop));
   if (state->pass->statistics) {
     loom_pass_statistic_add(state->pass,
                             LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
@@ -949,10 +949,10 @@ static iree_status_t loom_vector_to_scalar_build_bitunpack_bitstream_lane(
       state, result_scalar_type, &initial_accumulator));
 
   loom_op_t* loop = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_scf_for_build(&state->rewriter->builder, lower_bound, upper_bound,
-                         step, &initial_accumulator, 1, &result_scalar_type, 1,
-                         NULL, 0, state->location, &loop));
+  IREE_RETURN_IF_ERROR(loom_scf_for_build(
+      &state->rewriter->builder, /*build_flags=*/0, lower_bound, upper_bound,
+      step, &initial_accumulator, 1, &result_scalar_type, 1, NULL, 0,
+      LOOM_VALUE_ID_INVALID, /*unroll_policy=*/0, state->location, &loop));
   if (state->pass->statistics) {
     loom_pass_statistic_add(state->pass,
                             LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);

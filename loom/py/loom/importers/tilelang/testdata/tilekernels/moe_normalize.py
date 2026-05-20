@@ -114,7 +114,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("normalize_weight_kernel") @normaliz
       %load = view.load %topk_weights[%madd, %i] : view<[%num_tokens_idx]x2xf32, %layout> -> f32
       view.store %load, %weights_local[%i] : f32, view<2xf32, %layout>
     }
-    %total_state_next = scf.for %i = [%c0 to %c2 step %c1](%total_state_iter = %const : f32) -> (f32) {
+    %total_state_next = scf.for %i = [%c0 to %c2 step %c1](%total_state_iter = %const : f32) -> (f32) unroll {
       %load_2 = view.load %weights_local[%i] : view<2xf32, %layout> -> f32
       %addf = scalar.addf %total_state_iter, %load_2 : f32
       scf.yield %addf : f32

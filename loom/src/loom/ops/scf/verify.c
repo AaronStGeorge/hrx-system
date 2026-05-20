@@ -189,6 +189,21 @@ iree_status_t loom_scf_lookup_verify(const loom_module_t* module,
   return iree_ok_status();
 }
 
+iree_status_t loom_scf_for_verify(const loom_module_t* module,
+                                  const loom_op_t* op,
+                                  iree_diagnostic_emitter_t emitter) {
+  (void)module;
+  bool has_unroll_factor = loom_scf_for_unroll_factor_is_present(op);
+  bool has_unroll_policy = !loom_attr_is_absent(
+      loom_op_attrs(op)[loom_scf_for_unroll_policy_ATTR_INDEX]);
+  if (!has_unroll_factor || !has_unroll_policy) {
+    return iree_ok_status();
+  }
+  return loom_scf_emit_attribute_value_constraint(
+      emitter, op, IREE_SV("unroll"), 2,
+      IREE_SV("either bare unroll or unroll factor, not both"));
+}
+
 iree_status_t loom_scf_while_verify(const loom_module_t* module,
                                     const loom_op_t* op,
                                     iree_diagnostic_emitter_t emitter) {

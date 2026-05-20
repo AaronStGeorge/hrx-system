@@ -124,7 +124,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("reduce_fused_kernel") @reduce_fused
   %c2 = index.constant 2 : index
   %copy = vector.load %topk_weights[%bx, %c0] : view<[%num_tokens_idx]x2xf32, %layout> -> vector<2xf32>
   %copy_2 = vector.load %token_topk_to_pos[%bx, %c0] : view<[%num_tokens_idx]x2xi32, %layout> -> vector<2xi32>
-  %reduced_fragment_state_next = scf.for %k = [%c0 to %c2 step %c1](%reduced_fragment_state_iter = %fill : vector<8xf32>) -> (vector<8xf32>) {
+  %reduced_fragment_state_next = scf.for %k = [%c0 to %c2 step %c1](%reduced_fragment_state_iter = %fill : vector<8xf32>) -> (vector<8xf32>) unroll {
     %load = vector.extract %copy_2[%k] : vector<2xi32> -> i32
     %pos_assumed, %num_expanded_tokens_assumed = scalar.assume %load, %num_expanded_tokens [lt(%load, %num_expanded_tokens)] : i32, i32
     %cmp = scalar.cmpi sge, %pos_assumed, %i32_zero : i32

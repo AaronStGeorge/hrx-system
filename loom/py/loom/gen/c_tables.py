@@ -172,6 +172,7 @@ KEYWORD_MAP: dict[str, str] = {
     "extent": "LOOM_KW_EXTENT",
     "module": "LOOM_KW_MODULE",
     "symbol": "LOOM_KW_SYMBOL",
+    "unroll": "LOOM_KW_UNROLL",
 }
 
 # Maps Region(..., syntax=...) names to C parser/printer selector IDs. The
@@ -966,7 +967,7 @@ _INTERFACES: tuple[InterfaceSpec, ...] = (
             InterfaceFieldSpec("body", "body_region_index", "region"),
             InterfaceFieldSpec("condition_region", "condition_region_index", "region"),
             InterfaceFieldSpec("iv", "iv_block_arg_index", "block_arg", region_field="body"),
-            InterfaceFieldSpec("iter_args", "iter_args_operand_offset", "operand"),
+            InterfaceFieldSpec("iter_args", "iter_args_operand_field_index", "operand"),
             InterfaceFieldSpec("lower_bound", "lower_bound_operand_index", "operand"),
             InterfaceFieldSpec("upper_bound", "upper_bound_operand_index", "operand"),
             InterfaceFieldSpec("step", "step_operand_index", "operand"),
@@ -1250,6 +1251,10 @@ def _emit_interface_vtable(op: Op, spec: InterfaceSpec, lines: list[str]) -> Non
     for field_spec in spec.fields:
         value_str = _resolve_interface_field(op, iface, field_spec, spec.name)
         lines.append(f"    .{field_spec.c_field} = {value_str},")
+    if isinstance(iface, LoopLikeInterface):
+        layout = compute_layout(op)
+        lines.append(f"    .operand_field_count = {len(op.operands)},")
+        lines.append(f"    .segmented_operands = {'true' if layout.segmented_operands else 'false'},")
     lines.append("};")
     lines.append("")
 

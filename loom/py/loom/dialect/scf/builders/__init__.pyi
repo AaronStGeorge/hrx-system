@@ -21,6 +21,8 @@ class ScfBuilder(DialectBuilder):
         step: ValueRef,
         iter_args: list[ValueRef] = ...,
         results: list[Type | TiedResultSpec],
+        unroll_factor: ValueRef | None = ...,
+        unroll_policy: str | None = ...,
         body: Region | None = ...,
         name: str | None = ...,
         names: Sequence[str] | None = ...,

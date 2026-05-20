@@ -249,8 +249,9 @@ static iree_status_t loom_vector_to_scalar_build_dynamic_active_prefix(
 
   loom_op_t* loop = NULL;
   IREE_RETURN_IF_ERROR(loom_scf_for_build(
-      &state->rewriter->builder, lower_bound, lane_index, step, &lower_bound, 1,
-      &index_type, 1, NULL, 0, state->location, &loop));
+      &state->rewriter->builder, /*build_flags=*/0, lower_bound, lane_index,
+      step, &lower_bound, 1, &index_type, 1, NULL, 0, LOOM_VALUE_ID_INVALID,
+      /*unroll_policy=*/0, state->location, &loop));
   if (state->pass->statistics) {
     loom_pass_statistic_add(state->pass,
                             LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
@@ -644,8 +645,9 @@ static iree_status_t loom_vector_to_scalar_lower_memory_store_loop_axis(
 
   loom_op_t* loop = NULL;
   IREE_RETURN_IF_ERROR(loom_scf_for_build(
-      &state->rewriter->builder, lower_bound, upper_bound, step, NULL, 0, NULL,
-      0, NULL, 0, state->location, &loop));
+      &state->rewriter->builder, /*build_flags=*/0, lower_bound, upper_bound,
+      step, NULL, 0, NULL, 0, NULL, 0, LOOM_VALUE_ID_INVALID,
+      /*unroll_policy=*/0, state->location, &loop));
   if (state->pass->statistics) {
     loom_pass_statistic_add(state->pass,
                             LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
@@ -831,8 +833,9 @@ static iree_status_t loom_vector_to_scalar_lower_fragment_store_columns(
 
   loom_op_t* loop = NULL;
   IREE_RETURN_IF_ERROR(loom_scf_for_build(
-      &state->rewriter->builder, lower_bound, upper_bound, step, NULL, 0, NULL,
-      0, NULL, 0, state->location, &loop));
+      &state->rewriter->builder, /*build_flags=*/0, lower_bound, upper_bound,
+      step, NULL, 0, NULL, 0, NULL, 0, LOOM_VALUE_ID_INVALID,
+      /*unroll_policy=*/0, state->location, &loop));
   if (state->pass->statistics) {
     loom_pass_statistic_add(state->pass,
                             LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
@@ -874,8 +877,9 @@ iree_status_t loom_vector_to_scalar_lower_fragment_store(
 
   loom_op_t* loop = NULL;
   IREE_RETURN_IF_ERROR(loom_scf_for_build(
-      &state->rewriter->builder, lower_bound, upper_bound, step, NULL, 0, NULL,
-      0, NULL, 0, state->location, &loop));
+      &state->rewriter->builder, /*build_flags=*/0, lower_bound, upper_bound,
+      step, NULL, 0, NULL, 0, NULL, 0, LOOM_VALUE_ID_INVALID,
+      /*unroll_policy=*/0, state->location, &loop));
   if (state->pass->statistics) {
     loom_pass_statistic_add(state->pass,
                             LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
@@ -928,8 +932,9 @@ static iree_status_t loom_vector_to_scalar_lower_dynamic_store_compress(
 
   loom_op_t* loop = NULL;
   IREE_RETURN_IF_ERROR(loom_scf_for_build(
-      &state->rewriter->builder, lower_bound, upper_bound, step, NULL, 0, NULL,
-      0, NULL, 0, state->location, &loop));
+      &state->rewriter->builder, /*build_flags=*/0, lower_bound, upper_bound,
+      step, NULL, 0, NULL, 0, NULL, 0, LOOM_VALUE_ID_INVALID,
+      /*unroll_policy=*/0, state->location, &loop));
   if (state->pass->statistics) {
     loom_pass_statistic_add(state->pass,
                             LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
@@ -1115,8 +1120,9 @@ static iree_status_t loom_vector_to_scalar_lower_atomic_reduce_loop_axis(
 
   loom_op_t* loop = NULL;
   IREE_RETURN_IF_ERROR(loom_scf_for_build(
-      &state->rewriter->builder, lower_bound, upper_bound, step, NULL, 0, NULL,
-      0, NULL, 0, state->location, &loop));
+      &state->rewriter->builder, /*build_flags=*/0, lower_bound, upper_bound,
+      step, NULL, 0, NULL, 0, NULL, 0, LOOM_VALUE_ID_INVALID,
+      /*unroll_policy=*/0, state->location, &loop));
   if (state->pass->statistics) {
     loom_pass_statistic_add(state->pass,
                             LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
@@ -1359,10 +1365,10 @@ static iree_status_t loom_vector_to_scalar_atomic_rmw_loop_axis(
       state, state->vector_type, axis, &upper_bound));
 
   loom_op_t* loop = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_scf_for_build(&state->rewriter->builder, lower_bound, upper_bound,
-                         step, &current_aggregate, 1, &state->vector_type, 1,
-                         NULL, 0, state->location, &loop));
+  IREE_RETURN_IF_ERROR(loom_scf_for_build(
+      &state->rewriter->builder, /*build_flags=*/0, lower_bound, upper_bound,
+      step, &current_aggregate, 1, &state->vector_type, 1, NULL, 0,
+      LOOM_VALUE_ID_INVALID, /*unroll_policy=*/0, state->location, &loop));
   if (state->pass->statistics) {
     loom_pass_statistic_add(state->pass,
                             LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);
@@ -1521,10 +1527,10 @@ static iree_status_t loom_vector_to_scalar_atomic_cmpxchg_loop_axis(
       state, state->vector_type, axis, &upper_bound));
 
   loom_op_t* loop = NULL;
-  IREE_RETURN_IF_ERROR(
-      loom_scf_for_build(&state->rewriter->builder, lower_bound, upper_bound,
-                         step, &current_aggregate, 1, &state->vector_type, 1,
-                         NULL, 0, state->location, &loop));
+  IREE_RETURN_IF_ERROR(loom_scf_for_build(
+      &state->rewriter->builder, /*build_flags=*/0, lower_bound, upper_bound,
+      step, &current_aggregate, 1, &state->vector_type, 1, NULL, 0,
+      LOOM_VALUE_ID_INVALID, /*unroll_policy=*/0, state->location, &loop));
   if (state->pass->statistics) {
     loom_pass_statistic_add(state->pass,
                             LOOM_VECTOR_TO_SCALAR_STAT_LOOPS_CREATED, 1);

@@ -25,6 +25,7 @@ iree_status_t loom_print_result_type_list(loom_print_context_t* ctx,
 // Prints a region binding list.
 iree_status_t loom_print_binding_list(loom_print_context_t* ctx,
                                       const loom_op_t* op,
+                                      const loom_op_vtable_t* vtable,
                                       const loom_format_element_t* element);
 
 // Prints explicit region block arguments.

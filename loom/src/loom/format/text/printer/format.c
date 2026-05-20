@@ -441,7 +441,7 @@ iree_status_t loom_print_format_elements(loom_print_context_t* ctx,
         break;
       }
       case LOOM_FORMAT_KIND_BINDING_LIST: {
-        IREE_RETURN_IF_ERROR(loom_print_binding_list(ctx, op, element));
+        IREE_RETURN_IF_ERROR(loom_print_binding_list(ctx, op, vtable, element));
         break;
       }
       case LOOM_FORMAT_KIND_BLOCK_ARGS: {

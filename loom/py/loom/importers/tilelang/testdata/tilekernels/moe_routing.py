@@ -278,12 +278,12 @@ kernel.def target(@hip_mcpu_gfx1100) export("inplace_unique_group_indices_kernel
   %c1 = index.constant 1 : index
   scf.for %tmp = [%c0 to %div step %c1] {
     %madd_2 = index.madd %tmp, %c1024, %madd : index
-    scf.for %j = [%c0 to %c1 step %c1] {
+    scf.for %j = [%c0 to %c1 step %c1] unroll {
       %const = scalar.constant 0 : i64
       view.store %const, %group_sel[%j] : i64, view<2xi64, %layout>
     }
     %c4 = index.constant 4 : index
-    scf.for %j = [%c0 to %c4 step %c1] {
+    scf.for %j = [%c0 to %c4 step %c1] unroll {
       %load = view.load %group_indices[%madd_2, %j] : view<[%num_tokens_idx]x4xi64, %layout> -> i64
       %group_idx_assumed = scalar.assume %load [lt(%load, 64)] : i64
       %const_2 = scalar.constant 0 : i64

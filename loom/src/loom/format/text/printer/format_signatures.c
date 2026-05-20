@@ -146,13 +146,11 @@ iree_status_t loom_print_result_type_list(
 
 iree_status_t loom_print_binding_list(loom_print_context_t* ctx,
                                       const loom_op_t* op,
+                                      const loom_op_vtable_t* vtable,
                                       const loom_format_element_t* element) {
-  const loom_value_id_t* operands = loom_op_const_operands(op);
-  uint16_t start = element->field_index;
-  uint16_t binding_count = 0;
-  if (op->operand_count > start) {
-    binding_count = op->operand_count - start;
-  }
+  loom_value_slice_t operands =
+      loom_op_operand_field_span(vtable, op, element->field_index);
+  uint16_t binding_count = operands.count;
   loom_region_t** regions = loom_op_regions(op);
   const loom_block_t* block = NULL;
   if (op->region_count > 0 && regions[0] && regions[0]->block_count > 0) {
@@ -172,12 +170,15 @@ iree_status_t loom_print_binding_list(loom_print_context_t* ctx,
           ctx, loom_block_arg_id(block, (uint16_t)(block_arg_offset + j))));
     }
     IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, "=", false));
+    const loom_value_id_t* operand_ptr = &operands.values[j];
+    uint16_t operand_index =
+        (uint16_t)(operand_ptr - loom_op_const_operands(op));
     IREE_RETURN_IF_ERROR(loom_print_value_name_with_field(
-        ctx, operands[start + j],
-        loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND, (uint16_t)(start + j))));
+        ctx, *operand_ptr,
+        loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND, operand_index)));
     IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ":", false));
     IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
-    IREE_RETURN_IF_ERROR(loom_print_value_type(ctx, operands[start + j]));
+    IREE_RETURN_IF_ERROR(loom_print_value_type(ctx, *operand_ptr));
     loom_print_did_write(ctx);
   }
   return loom_print_emit_cstr(ctx, ")", false);

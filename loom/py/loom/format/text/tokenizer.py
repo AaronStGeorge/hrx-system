@@ -221,6 +221,29 @@ class Tokenizer:
             self._peeked = self._scan_token()
         return self._peeked
 
+    def peek_n(self, offset: int) -> Token:
+        """Return the token at |offset| without consuming scanner state."""
+        if offset < 0:
+            raise ValueError("offset must be non-negative")
+        saved_position = self._position
+        saved_line = self._line
+        saved_column = self._column
+        saved_peeked = self._peeked
+        saved_comments = list(self._comments)
+        saved_in_dim_list = self.in_dim_list
+        token = self.peek()
+        try:
+            for _ in range(offset + 1):
+                token = self.next()
+            return token
+        finally:
+            self._position = saved_position
+            self._line = saved_line
+            self._column = saved_column
+            self._peeked = saved_peeked
+            self._comments = saved_comments
+            self.in_dim_list = saved_in_dim_list
+
     def next(self) -> Token:
         """Consume and return the next token."""
         if self._peeked is not None:

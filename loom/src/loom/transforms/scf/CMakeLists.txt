@@ -42,13 +42,13 @@ loom_cc_library(
     "scf_unroll.c"
   DEPS
     iree::base
+    loom::src::loom::error::emitter
+    loom::src::loom::error::error_defs
     loom::src::loom::ir
     loom::src::loom::ir::facts
     loom::src::loom::ops::index
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::scf
-    loom::src::loom::pass::pipeline
-    loom::src::loom::pass::registry
     loom::src::loom::pass::types
     loom::src::loom::pass::value_facts
     loom::src::loom::rewrite::materialize

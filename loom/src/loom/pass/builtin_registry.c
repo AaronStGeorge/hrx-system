@@ -213,15 +213,6 @@ static const loom_pass_option_schema_t kRefineBoundariesOptionSchema[] = {
     },
 };
 
-static const loom_pass_option_schema_t kScfUnrollOptionSchema[] = {
-    {
-        .name = IREE_SVL("max-trip-count"),
-        .kind = LOOM_PASS_OPTION_SCHEMA_UINT32,
-        .minimum_uint32 = 1,
-        .maximum_uint32 = UINT32_MAX,
-    },
-};
-
 static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
     {
         .key = IREE_SVL("branch-fusion"),
@@ -373,8 +364,6 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .info = loom_scf_unroll_pass_info,
         .function_run = loom_scf_unroll_run,
         .create = loom_scf_unroll_create,
-        .option_schema = kScfUnrollOptionSchema,
-        .option_schema_count = IREE_ARRAYSIZE(kScfUnrollOptionSchema),
     },
     {
         .key = IREE_SVL("vector-gather-to-scalar"),

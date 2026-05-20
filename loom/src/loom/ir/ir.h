@@ -1042,12 +1042,16 @@ typedef struct loom_loop_like_vtable_t {
   // For scf.while: NONE (no induction variable).
   uint8_t iv_block_arg_index;
 
-  // Index of the first operand that carries loop state (iter_args).
-  // Operands at [iter_args_operand_offset, fixed_operand_count) and
-  // the trailing variadic operands are the initial values for
-  // loop-carried state. For scf.for this follows lower_bound,
-  // upper_bound, step; for scf.while iter_args start at operand 0.
-  uint8_t iter_args_operand_offset;
+  // Operand field index carrying loop state (iter_args). Accessors resolve the
+  // field to the current flat operand span so segmented operands stay hidden
+  // from analyses using the LoopLike interface.
+  uint8_t iter_args_operand_field_index;
+
+  // Number of author-facing operand fields on the implementing op.
+  uint8_t operand_field_count;
+
+  // True when operand fields are backed by per-instance segment counts.
+  bool segmented_operands;
 
   // Index of the inclusive lower-bound operand for counted loops.
   // LOOM_OPERAND_INDEX_NONE for non-counted loop forms.

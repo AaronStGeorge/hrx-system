@@ -176,10 +176,10 @@ kernel.def target(@hip_mcpu_gfx942) export("batched_transpose_kernel") @batched_
   %c0 = index.constant 0 : index
   %c4 = index.constant 4 : index
   %c1 = index.constant 1 : index
-  scf.for %i_outer = [%c0 to %c4 step %c1] {
+  scf.for %i_outer = [%c0 to %c4 step %c1] unroll {
     %c8 = index.constant 8 : index
     %madd = index.madd %i_outer, %c8, %div : index
-    scf.for %j = [%c0 to %c4 step %c1] {
+    scf.for %j = [%c0 to %c4 step %c1] unroll {
       scf.for %k = [%c0 to %c4 step %c1] {
         %c128 = index.constant 128 : index
         %mul = index.mul %madd, %c4 : index
@@ -191,12 +191,12 @@ kernel.def target(@hip_mcpu_gfx942) export("batched_transpose_kernel") @batched_
         %load = view.load %x[%bz, %add, %add_2] : view<[%num_batches_idx]x[%shape_x_idx]x[%shape_y_idx]xf16, %layout> -> f16
         view.store %load, %tmp_row[%k] : f16, view<4xf16, %layout>
       }
-      scf.for %k = [%c0 to %c4 step %c1] {
+      scf.for %k = [%c0 to %c4 step %c1] unroll {
         %load_2 = view.load %tmp_row[%k] : view<4xf16, %layout> -> f16
         view.store %load_2, %tmp[%k, %j] : f16, view<4x4xf16, %layout>
       }
     }
-    scf.for %j = [%c0 to %c4 step %c1] {
+    scf.for %j = [%c0 to %c4 step %c1] unroll {
       %div_2 = index.div %thread_id, %c4 : index
       %add_3 = index.add %j, %div_2 : index
       %rem_2 = index.rem %add_3, %c4 : index

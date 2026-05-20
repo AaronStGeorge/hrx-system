@@ -148,7 +148,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") @engram_hash_k
   kernel.exit %cmp : i1
   %c3 = index.constant 3 : index
   %c1 = index.constant 1 : index
-  %hash_local_state_next = scf.for %ngram_idx = [%c0 to %c3 step %c1](%hash_local_state_iter = %const : i64) -> (i64) {
+  %hash_local_state_next = scf.for %ngram_idx = [%c0 to %c3 step %c1](%hash_local_state_iter = %const : i64) -> (i64) unroll {
     %load = view.load %ngram_token_ids[%madd, %ngram_idx] : view<[%num_tokens_idx]x3xi32, %layout> -> i32
     %extsi = scalar.extsi %load : i32 to i64
     %load_2 = view.load %multipliers[%bx, %ngram_idx] : view<2x3xi64, %layout> -> i64
@@ -157,7 +157,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("engram_hash_kernel") @engram_hash_k
     %cmp_2 = index.cmp sgt, %ngram_idx, %c0 : index
     scf.if %cmp_2 {
       %c4 = index.constant 4 : index
-      scf.for %j = [%c0 to %c4 step %c1] {
+      scf.for %j = [%c0 to %c4 step %c1] unroll {
         %sub = index.sub %ngram_idx, %c1 : index
         %madd_2 = index.madd %sub, %c4, %j : index
         %sub_2 = index.sub %ngram_idx, %c1 : index

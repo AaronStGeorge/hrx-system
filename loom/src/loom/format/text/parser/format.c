@@ -147,6 +147,38 @@ static iree_status_t loom_parse_format_keyword_is_present(
   return iree_ok_status();
 }
 
+static const loom_format_element_t* loom_format_next_non_glue(
+    const loom_op_vtable_t* vtable, uint16_t start_index) {
+  uint16_t index = start_index;
+  while (index < vtable->format_element_count &&
+         vtable->format_elements[index].kind == LOOM_FORMAT_KIND_GLUE) {
+    ++index;
+  }
+  return index < vtable->format_element_count ? &vtable->format_elements[index]
+                                              : NULL;
+}
+
+static bool loom_format_keyword_starts_clause(const loom_op_vtable_t* vtable,
+                                              uint16_t keyword_index) {
+  const loom_format_element_t* next =
+      loom_format_next_non_glue(vtable, (uint16_t)(keyword_index + 1));
+  return next && next->kind == LOOM_FORMAT_KIND_KEYWORD &&
+         next->data == LOOM_KW_LPAREN;
+}
+
+static iree_status_t loom_parse_format_keyword_clause_is_present(
+    loom_parser_t* parser, const loom_format_element_t* keyword_element,
+    bool* out_present) {
+  IREE_RETURN_IF_ERROR(loom_parse_format_keyword_is_present(
+      parser, keyword_element, out_present));
+  if (!*out_present) return iree_ok_status();
+
+  loom_tokenizer_t lookahead = parser->tokenizer;
+  (void)loom_tokenizer_next(&lookahead);
+  *out_present = loom_tokenizer_at(&lookahead, LOOM_TOKEN_LPAREN);
+  return loom_tokenizer_consume_status(&lookahead);
+}
+
 // Evaluates an optional group anchor and returns the number of
 // format elements to skip if the group is absent. When the group
 // is present, |*out_skip_count| is set to 0.
@@ -181,8 +213,13 @@ static iree_status_t loom_parse_format_optional_group(
               ? &vtable->format_elements[first_inner_index]
               : NULL;
       if (first_inner && first_inner->kind == LOOM_FORMAT_KIND_KEYWORD) {
-        IREE_RETURN_IF_ERROR(loom_parse_format_keyword_is_present(
-            parser, first_inner, &present));
+        if (loom_format_keyword_starts_clause(vtable, first_inner_index)) {
+          IREE_RETURN_IF_ERROR(loom_parse_format_keyword_clause_is_present(
+              parser, first_inner, &present));
+        } else {
+          IREE_RETURN_IF_ERROR(loom_parse_format_keyword_is_present(
+              parser, first_inner, &present));
+        }
       } else if (first_inner &&
                  (first_inner->kind == LOOM_FORMAT_KIND_BINDING_LIST ||
                   first_inner->kind == LOOM_FORMAT_KIND_BLOCK_ARGS)) {
@@ -205,31 +242,49 @@ static iree_status_t loom_parse_format_optional_group(
       // all probe positive on any bare ident and the wrong group
       // consumes the token.
       loom_token_t peek = loom_tokenizer_peek(&parser->tokenizer);
+      uint16_t first_inner_index = element_index + 1;
+      while (first_inner_index < vtable->format_element_count &&
+             vtable->format_elements[first_inner_index].kind ==
+                 LOOM_FORMAT_KIND_GLUE) {
+        ++first_inner_index;
+      }
       const loom_format_element_t* first_inner =
-          (element_index + 1 < vtable->format_element_count)
-              ? &vtable->format_elements[element_index + 1]
+          (first_inner_index < vtable->format_element_count)
+              ? &vtable->format_elements[first_inner_index]
               : NULL;
       if (first_inner && first_inner->kind == LOOM_FORMAT_KIND_KEYWORD) {
-        IREE_RETURN_IF_ERROR(loom_parse_format_keyword_is_present(
-            parser, first_inner, &present));
+        if (loom_format_keyword_starts_clause(vtable, first_inner_index)) {
+          IREE_RETURN_IF_ERROR(loom_parse_format_keyword_clause_is_present(
+              parser, first_inner, &present));
+        } else {
+          IREE_RETURN_IF_ERROR(loom_parse_format_keyword_is_present(
+              parser, first_inner, &present));
+        }
       } else if (first_inner &&
-                 first_inner->kind == LOOM_FORMAT_KIND_ATTR_VALUE &&
-                 (peek.kind == LOOM_TOKEN_BARE_IDENT ||
-                  peek.kind == LOOM_TOKEN_OP_NAME)) {
+                 first_inner->kind == LOOM_FORMAT_KIND_ATTR_VALUE) {
         const loom_attr_descriptor_t* descriptor =
             &vtable->attr_descriptors[first_inner->field_index];
         if (descriptor->attr_kind == LOOM_ATTR_ENUM &&
             descriptor->enum_case_names) {
           present = false;
-          for (uint8_t c = 0; c < descriptor->enum_case_count; ++c) {
-            if (descriptor->enum_case_names[c] &&
-                loom_bstring_equal(descriptor->enum_case_names[c], peek.text)) {
-              present = true;
-              break;
+          if (peek.kind == LOOM_TOKEN_BARE_IDENT ||
+              peek.kind == LOOM_TOKEN_OP_NAME) {
+            for (uint8_t c = 0; c < descriptor->enum_case_count; ++c) {
+              if (descriptor->enum_case_names[c] &&
+                  loom_bstring_equal(descriptor->enum_case_names[c],
+                                     peek.text)) {
+                present = true;
+                break;
+              }
             }
           }
         } else {
-          present = true;
+          present = (peek.kind == LOOM_TOKEN_INTEGER ||
+                     peek.kind == LOOM_TOKEN_FLOAT ||
+                     peek.kind == LOOM_TOKEN_STRING ||
+                     peek.kind == LOOM_TOKEN_BARE_IDENT ||
+                     peek.kind == LOOM_TOKEN_LBRACKET ||
+                     peek.kind == LOOM_TOKEN_LBRACE);
         }
       } else {
         present =
@@ -253,8 +308,13 @@ static iree_status_t loom_parse_format_optional_group(
               ? &vtable->format_elements[first_inner_index]
               : NULL;
       if (first_inner && first_inner->kind == LOOM_FORMAT_KIND_KEYWORD) {
-        IREE_RETURN_IF_ERROR(loom_parse_format_keyword_is_present(
-            parser, first_inner, &present));
+        if (loom_format_keyword_starts_clause(vtable, first_inner_index)) {
+          IREE_RETURN_IF_ERROR(loom_parse_format_keyword_clause_is_present(
+              parser, first_inner, &present));
+        } else {
+          IREE_RETURN_IF_ERROR(loom_parse_format_keyword_is_present(
+              parser, first_inner, &present));
+        }
       } else {
         present = loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_LBRACE);
       }

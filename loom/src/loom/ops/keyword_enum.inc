@@ -75,3 +75,4 @@
   LOOM_KW_EXTENT = 66,  // "extent"
   LOOM_KW_MODULE = 67,  // "module"
   LOOM_KW_SYMBOL = 68,  // "symbol"
+  LOOM_KW_UNROLL = 69,  // "unroll"

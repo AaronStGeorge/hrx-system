@@ -75,3 +75,4 @@
     [LOOM_KW_EXTENT] = (const uint8_t*)"\x06" "extent",
     [LOOM_KW_MODULE] = (const uint8_t*)"\x06" "module",
     [LOOM_KW_SYMBOL] = (const uint8_t*)"\x06" "symbol",
+    [LOOM_KW_UNROLL] = (const uint8_t*)"\x06" "unroll",

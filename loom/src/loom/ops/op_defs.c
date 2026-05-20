@@ -930,42 +930,85 @@ loom_value_id_t loom_loop_like_iv(loom_loop_like_t loop) {
   return loom_region_entry_arg_id(body, loop.vtable->iv_block_arg_index);
 }
 
+static loom_value_slice_t loom_loop_like_segmented_operand_field_span(
+    loom_loop_like_t loop, uint8_t field_index) {
+  if (!loop.op || !loop.vtable || !loop.vtable->segmented_operands ||
+      field_index >= loop.vtable->operand_field_count) {
+    return (loom_value_slice_t){0};
+  }
+  const uint16_t* counts = loom_op_const_operand_segment_counts(loop.op);
+  uint32_t start = 0;
+  for (uint8_t i = 0; i < field_index; ++i) {
+    start += counts[i];
+  }
+  uint32_t count = counts[field_index];
+  if (start > loop.op->operand_count ||
+      count > loop.op->operand_count - start) {
+    return (loom_value_slice_t){0};
+  }
+  return (loom_value_slice_t){
+      .values = loom_op_operands(loop.op) + start,
+      .count = (uint16_t)count,
+  };
+}
+
 loom_value_slice_t loom_loop_like_iter_args(loom_loop_like_t loop) {
   if (!loop.vtable) return (loom_value_slice_t){.values = NULL, .count = 0};
-  uint8_t offset = loop.vtable->iter_args_operand_offset;
-  if (offset >= loop.op->operand_count) {
+  uint8_t field_index = loop.vtable->iter_args_operand_field_index;
+  if (loop.vtable->segmented_operands) {
+    return loom_loop_like_segmented_operand_field_span(loop, field_index);
+  }
+  if (field_index >= loop.op->operand_count) {
     return (loom_value_slice_t){.values = NULL, .count = 0};
   }
-  loom_value_slice_t slice;
-  slice.values = loom_op_operands(loop.op) + offset;
-  slice.count = (uint16_t)(loop.op->operand_count - offset);
-  return slice;
+  return (loom_value_slice_t){
+      .values = loom_op_operands(loop.op) + field_index,
+      .count = (uint16_t)(loop.op->operand_count - field_index),
+  };
 }
 
 loom_value_id_t loom_loop_like_lower_bound(loom_loop_like_t loop) {
   if (!loop.vtable) return LOOM_VALUE_ID_INVALID;
   uint8_t index = loop.vtable->lower_bound_operand_index;
-  if (index == LOOM_OPERAND_INDEX_NONE || index >= loop.op->operand_count) {
+  if (index == LOOM_OPERAND_INDEX_NONE) {
     return LOOM_VALUE_ID_INVALID;
   }
+  if (loop.vtable->segmented_operands) {
+    loom_value_slice_t slice =
+        loom_loop_like_segmented_operand_field_span(loop, index);
+    return slice.count == 1 ? slice.values[0] : LOOM_VALUE_ID_INVALID;
+  }
+  if (index >= loop.op->operand_count) return LOOM_VALUE_ID_INVALID;
   return loom_op_operands(loop.op)[index];
 }
 
 loom_value_id_t loom_loop_like_upper_bound(loom_loop_like_t loop) {
   if (!loop.vtable) return LOOM_VALUE_ID_INVALID;
   uint8_t index = loop.vtable->upper_bound_operand_index;
-  if (index == LOOM_OPERAND_INDEX_NONE || index >= loop.op->operand_count) {
+  if (index == LOOM_OPERAND_INDEX_NONE) {
     return LOOM_VALUE_ID_INVALID;
   }
+  if (loop.vtable->segmented_operands) {
+    loom_value_slice_t slice =
+        loom_loop_like_segmented_operand_field_span(loop, index);
+    return slice.count == 1 ? slice.values[0] : LOOM_VALUE_ID_INVALID;
+  }
+  if (index >= loop.op->operand_count) return LOOM_VALUE_ID_INVALID;
   return loom_op_operands(loop.op)[index];
 }
 
 loom_value_id_t loom_loop_like_step(loom_loop_like_t loop) {
   if (!loop.vtable) return LOOM_VALUE_ID_INVALID;
   uint8_t index = loop.vtable->step_operand_index;
-  if (index == LOOM_OPERAND_INDEX_NONE || index >= loop.op->operand_count) {
+  if (index == LOOM_OPERAND_INDEX_NONE) {
     return LOOM_VALUE_ID_INVALID;
   }
+  if (loop.vtable->segmented_operands) {
+    loom_value_slice_t slice =
+        loom_loop_like_segmented_operand_field_span(loop, index);
+    return slice.count == 1 ? slice.values[0] : LOOM_VALUE_ID_INVALID;
+  }
+  if (index >= loop.op->operand_count) return LOOM_VALUE_ID_INVALID;
   return loom_op_operands(loop.op)[index];
 }
 

@@ -132,7 +132,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("group_count_kernel") @group_count_k
   scf.for %tmp = [%c0 to %div_2 step %c1] {
     %madd_3 = index.madd %tmp, %c1024, %madd : index
     %c2 = index.constant 2 : index
-    scf.for %j = [%c0 to %c2 step %c1] {
+    scf.for %j = [%c0 to %c2 step %c1] unroll {
       %load = view.load %group_idx[%madd_3, %j] : view<[%num_tokens_idx]x2xi64, %layout> -> i64
       %trunci = scalar.trunci %load : i64 to i32
       %group_assumed = scalar.assume %trunci [lt(%trunci, 8)] : i32
@@ -289,7 +289,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("aux_fi_kernel") @aux_fi_kernel(%top
   scf.for %tmp = [%c0 to %div_2 step %c1] {
     %madd_3 = index.madd %tmp, %c1024, %madd : index
     %c2 = index.constant 2 : index
-    scf.for %j = [%c0 to %c2 step %c1] {
+    scf.for %j = [%c0 to %c2 step %c1] unroll {
       %load = view.load %topk_idx[%madd_3, %j] : view<[%num_tokens_idx]x2xi64, %layout> -> i64
       %trunci = scalar.trunci %load : i64 to i32
       %expert_idx_assumed = scalar.assume %trunci [lt(%trunci, 8)] : i32

@@ -37,6 +37,33 @@ func.def @multi_iter(%lo: index, %hi: index, %step: index, %a: f32, %b: i32) -> 
 
 // ====
 
+// scf.for with bare local unroll policy.
+func.def @bare_unroll_policy(%lo: index, %hi: index, %step: index) {
+  scf.for %iv = [%lo to %hi step %step] unroll {
+    scf.yield
+  }
+  func.return
+}
+
+// ----
+func.def @bare_unroll_policy(%lo: index, %hi: index, %step: index) {
+  scf.for %iv = [%lo to %hi step %step] unroll {
+  }
+  func.return
+}
+
+// ====
+
+// scf.for with an SSA unroll factor policy after the loop signature.
+func.def @dynamic_unroll_policy(%lo: index, %hi: index, %step: index, %factor: index, %init: f32) -> (f32) {
+  %result = scf.for %iv = [%lo to %hi step %step](%acc = %init : f32) -> (f32) unroll(%factor) {
+    scf.yield %acc : f32
+  }
+  func.return %result : f32
+}
+
+// ====
+
 // scf.for also accepts grouped iter_arg type lists, then prints the canonical
 // per-binding type form.
 func.def @multi_vector_iter_grouped_types(%lo: index, %hi: index, %step: index, %gate_zero: vector<1xf32>, %up_zero: vector<1xf32>) -> (vector<1xf32>, vector<1xf32>) {

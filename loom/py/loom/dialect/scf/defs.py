@@ -29,9 +29,11 @@ from loom.assembly import (
     EQUALS,
     LBRACKET,
     RBRACKET,
+    Attr,
     AttrTable,
     BindingList,
     BlockArgs,
+    Clause,
     OptionalGroup,
     Ref,
     Refs,
@@ -45,6 +47,7 @@ from loom.assembly import (
 )
 from loom.dsl import (
     ANY,
+    ATTR_TYPE_ENUM,
     ATTR_TYPE_I64_ARRAY,
     I1,
     INDEX,
@@ -55,6 +58,8 @@ from loom.dsl import (
     BlockArgCount,
     BlockArgsMatchTypes,
     Dialect,
+    EnumCase,
+    EnumDef,
     ImplicitTerminator,
     IterArgsMatchResults,
     LoopLikeInterface,
@@ -78,6 +83,18 @@ scf_ops = Dialect(
     dialect_id=0x05,
     doc="Structured control flow operations.",
     default_phase=OpPhase.SOURCE_STRUCTURE,
+)
+
+ScfForUnrollPolicy = EnumDef(
+    "ScfForUnrollPolicy",
+    [
+        EnumCase(
+            "unroll",
+            1,
+            doc="Require full unrolling when the consuming transform runs.",
+        ),
+    ],
+    doc="Local scf.for unroll policy.",
 )
 
 # ============================================================================
@@ -263,11 +280,27 @@ scf_for = Op(
     group=scf_ops,
     doc="Bounded counted loop with optional loop-carried state.",
     canonicalize="loom_scf_for_canonicalize",
+    verify="loom_scf_for_verify",
     operands=[
         Operand("lower_bound", INDEX),
         Operand("upper_bound", INDEX),
         Operand("step", INDEX),
         Operand("iter_args", ANY, variadic=True),
+        Operand(
+            "unroll_factor",
+            INDEX,
+            optional=True,
+            doc="Optional SSA unroll factor policy consumed by unroll transforms.",
+        ),
+    ],
+    attrs=[
+        AttrDef(
+            "unroll_policy",
+            ATTR_TYPE_ENUM,
+            enum_def=ScfForUnrollPolicy,
+            optional=True,
+            doc="Optional bare unroll policy for required full unroll.",
+        ),
     ],
     results=[Result("results", ANY, variadic=True)],
     regions=[
@@ -312,6 +345,14 @@ scf_for = Op(
         OptionalGroup(
             [ARROW, ResultTypeList("results")],
             anchor="results",
+        ),
+        OptionalGroup(
+            [Clause("unroll", Ref("unroll_factor"))],
+            anchor="unroll_factor",
+        ),
+        OptionalGroup(
+            [Attr("unroll_policy")],
+            anchor="unroll_policy",
         ),
         Region("body"),
     ],

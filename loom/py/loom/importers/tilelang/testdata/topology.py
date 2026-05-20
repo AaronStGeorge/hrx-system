@@ -470,7 +470,7 @@ kernel.def target(@hip_mcpu_gfx1100) export("warp_shuffle_loop_offsets_kernel") 
   %c0 = index.constant 0 : index
   %c2 = index.constant 2 : index
   %c1 = index.constant 1 : index
-  scf.for %i = [%c0 to %c2 step %c1] {
+  scf.for %i = [%c0 to %c2 step %c1] unroll {
     %const = scalar.constant 32 : i32
     %shuffle_offset = index.cast %i : index to i32
     %shuffle, %shuffle_valid = kernel.subgroup.shuffle<index> %load, %shuffle_offset, %const : f32, i32, i32

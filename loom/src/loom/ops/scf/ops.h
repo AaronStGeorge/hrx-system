@@ -30,19 +30,33 @@ enum {
   LOOM_OP_SCF_COUNT_ = 8,
 };
 
+// Local scf.for unroll policy.
+typedef enum loom_scf_for_unroll_policy_e {
+  LOOM_SCF_FOR_UNROLL_POLICY_UNROLL = 1,
+  LOOM_SCF_FOR_UNROLL_POLICY_COUNT_ = 2,
+} loom_scf_for_unroll_policy_t;
+
 // LOOM_OP_SCF_FOR: Bounded counted loop with optional loop-carried state.
 // scf.for %iv = [%c0 to %n step %c1] {
 //   scf.yield
 // }
 LOOM_DEFINE_ISA(loom_scf_for_isa, LOOM_OP_SCF_FOR)
-LOOM_DEFINE_OPERAND(loom_scf_for_lower_bound, 0)
-LOOM_DEFINE_OPERAND(loom_scf_for_upper_bound, 1)
-LOOM_DEFINE_OPERAND(loom_scf_for_step, 2)
-LOOM_DEFINE_VARIADIC_OPERANDS(loom_scf_for_iter_args, 3)
+LOOM_DEFINE_SEGMENTED_OPERAND(loom_scf_for_lower_bound, 0)
+LOOM_DEFINE_SEGMENTED_OPERAND(loom_scf_for_upper_bound, 1)
+LOOM_DEFINE_SEGMENTED_OPERAND(loom_scf_for_step, 2)
+LOOM_DEFINE_SEGMENTED_OPERANDS(loom_scf_for_iter_args, 3)
+LOOM_DEFINE_SEGMENTED_OPTIONAL_OPERAND(loom_scf_for_unroll_factor, 4)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_scf_for_results, 0)
+LOOM_DEFINE_ATTR_ENUM_TYPED(loom_scf_for_unroll_policy, 0, loom_scf_for_unroll_policy_t)
 LOOM_DEFINE_REGION(loom_scf_for_body, 0)
+enum loom_scf_for_build_flag_bits_e {
+  LOOM_SCF_FOR_BUILD_FLAG_HAS_UNROLL_FACTOR = 1u << 0,
+  LOOM_SCF_FOR_BUILD_FLAG_HAS_UNROLL_POLICY = 1u << 1,
+};
+typedef uint32_t loom_scf_for_build_flags_t;
 iree_status_t loom_scf_for_build(
     loom_builder_t* builder,
+    loom_scf_for_build_flags_t build_flags,
     loom_may_consume loom_value_id_t lower_bound,
     loom_may_consume loom_value_id_t upper_bound,
     loom_may_consume loom_value_id_t step,
@@ -52,9 +66,14 @@ iree_status_t loom_scf_for_build(
     iree_host_size_t result_count,
     const loom_tied_result_t* tied_results,
     iree_host_size_t tied_result_count,
+    loom_optional loom_may_consume loom_value_id_t unroll_factor,
+    loom_optional uint8_t unroll_policy,
     loom_location_id_t location,
     loom_op_t** out_op);
 iree_status_t loom_scf_for_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
+iree_status_t loom_scf_for_verify(
+    const loom_module_t* module, const loom_op_t* op,
+    iree_diagnostic_emitter_t emitter);
 
 // LOOM_OP_SCF_IF: Conditional execution with optional else region for resultless conditionals.
 // scf.if %cond {

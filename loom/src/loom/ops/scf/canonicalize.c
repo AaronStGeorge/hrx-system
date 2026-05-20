@@ -1384,6 +1384,7 @@ static iree_status_t loom_scf_for_inline_single_trip(
 
 static iree_status_t loom_scf_for_adjust_tied_results(
     loom_op_t* op, const uint16_t* result_map, const uint16_t* iter_arg_map,
+    uint16_t old_iter_arg_offset, uint16_t new_iter_arg_offset,
     loom_rewriter_t* rewriter, loom_tied_result_t** out_tied_results,
     uint16_t* out_tied_result_count, bool* out_supported) {
   *out_tied_results = NULL;
@@ -1412,8 +1413,9 @@ static iree_status_t loom_scf_for_adjust_tied_results(
     if (new_result_index == UINT16_MAX) continue;
 
     uint16_t new_operand_index = tied_result.operand_index;
-    if (new_operand_index >= 3) {
-      uint16_t old_iter_arg_index = (uint16_t)(new_operand_index - 3);
+    if (new_operand_index >= old_iter_arg_offset) {
+      uint16_t old_iter_arg_index =
+          (uint16_t)(new_operand_index - old_iter_arg_offset);
       if (old_iter_arg_index >= op->result_count) {
         *out_supported = false;
         return iree_ok_status();
@@ -1423,7 +1425,7 @@ static iree_status_t loom_scf_for_adjust_tied_results(
         *out_supported = false;
         return iree_ok_status();
       }
-      new_operand_index = (uint16_t)(3 + new_iter_arg_index);
+      new_operand_index = (uint16_t)(new_iter_arg_offset + new_iter_arg_index);
     }
 
     tied_results[tied_result_count++] = (loom_tied_result_t){
@@ -1458,6 +1460,23 @@ static iree_status_t loom_scf_for_forward_loop_carried_results(
       yielded_values.count != op->result_count) {
     return iree_ok_status();
   }
+
+  loom_scf_for_build_flags_t build_flags = 0;
+  loom_value_id_t unroll_factor = LOOM_VALUE_ID_INVALID;
+  bool has_unroll_factor = loom_scf_for_unroll_factor_is_present(op);
+  if (has_unroll_factor) {
+    build_flags |= LOOM_SCF_FOR_BUILD_FLAG_HAS_UNROLL_FACTOR;
+    unroll_factor = loom_scf_for_unroll_factor(op);
+  }
+  loom_scf_for_unroll_policy_t unroll_policy = 0;
+  if (!loom_attr_is_absent(
+          loom_op_attrs(op)[loom_scf_for_unroll_policy_ATTR_INDEX])) {
+    build_flags |= LOOM_SCF_FOR_BUILD_FLAG_HAS_UNROLL_POLICY;
+    unroll_policy = loom_scf_for_unroll_policy(op);
+  }
+  uint16_t old_iter_arg_offset =
+      (uint16_t)(iter_args.values - loom_op_const_operands(op));
+  uint16_t new_iter_arg_offset = 3;
 
   loom_block_t* old_block = loom_region_entry_block(body);
   if (old_block->arg_count < 1 + op->result_count) return iree_ok_status();
@@ -1521,18 +1540,19 @@ static iree_status_t loom_scf_for_forward_loop_carried_results(
   uint16_t tied_result_count = 0;
   bool tied_results_supported = false;
   IREE_RETURN_IF_ERROR(loom_scf_for_adjust_tied_results(
-      op, result_map, iter_arg_map, rewriter, &tied_results, &tied_result_count,
-      &tied_results_supported));
+      op, result_map, iter_arg_map, old_iter_arg_offset, new_iter_arg_offset,
+      rewriter, &tied_results, &tied_result_count, &tied_results_supported));
   if (!tied_results_supported) return iree_ok_status();
 
   loom_builder_set_before(&rewriter->builder, op);
   loom_value_id_t value_checkpoint = loom_rewriter_value_checkpoint(rewriter);
   loom_op_t* new_loop = NULL;
   IREE_RETURN_IF_ERROR(loom_scf_for_build(
-      &rewriter->builder, loom_scf_for_lower_bound(op),
+      &rewriter->builder, build_flags, loom_scf_for_lower_bound(op),
       loom_scf_for_upper_bound(op), loom_scf_for_step(op), kept_iter_args,
       kept_count, kept_result_types, kept_count, tied_results,
-      tied_result_count, op->location, &new_loop));
+      tied_result_count, unroll_factor, unroll_policy, op->location,
+      &new_loop));
 
   loom_region_t* new_body = loom_scf_for_body(new_loop);
   loom_builder_ip_t saved_ip =

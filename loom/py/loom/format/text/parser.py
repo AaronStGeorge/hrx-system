@@ -866,7 +866,10 @@ def _type_optional_present(
             result = tokenizer.at(TokenKind.BARE_IDENT, text)
             return result
         case Clause(name=name):
-            return tokenizer.at(TokenKind.BARE_IDENT, name)
+            return (
+                tokenizer.at(TokenKind.BARE_IDENT, name)
+                and tokenizer.peek_n(1).kind == TokenKind.LPAREN
+            )
         case TypeOf() | TypesOf():
             return _is_type_start(tokenizer.peek(), type_registry)
         case _:
@@ -2327,7 +2330,10 @@ class Parser:
                 result = tok.at(TokenKind.BARE_IDENT, text)
                 return result
             case Clause(name=name):
-                return tok.at(TokenKind.BARE_IDENT, name)
+                return (
+                    tok.at(TokenKind.BARE_IDENT, name)
+                    and tok.peek_n(1).kind == TokenKind.LPAREN
+                )
             case RegionFmt():
                 result = tok.at(TokenKind.LBRACE)
                 return result
