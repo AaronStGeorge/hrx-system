@@ -404,6 +404,24 @@ ERR_SPIRV_024 = ErrorDef(
     ),
 )
 
+# ERR_SPIRV_025: SPIR-V target-low module mixes target contracts.
+ERR_SPIRV_025 = ErrorDef(
+    domain=ErrorDomain.SPIRV,
+    code=25,
+    severity=Severity.ERROR,
+    summary="SPIR-V target-low module mixes target contracts.",
+    message=(
+        "SPIR-V module emission for '@{function_name}' selects target "
+        "'@{target_name}', but the module already selected incompatible "
+        "target '@{first_target_name}'"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("target_name", ParamKind.STRING),
+        ErrorParam("first_target_name", ParamKind.STRING),
+    ),
+)
+
 ALL_SPIRV_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SPIRV_001,
     ERR_SPIRV_002,
@@ -428,4 +446,5 @@ ALL_SPIRV_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SPIRV_022,
     ERR_SPIRV_023,
     ERR_SPIRV_024,
+    ERR_SPIRV_025,
 )

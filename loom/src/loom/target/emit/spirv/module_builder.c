@@ -20,7 +20,7 @@ static iree_status_t loom_spirv_module_builder_validate_target(
   if (target->snapshot->codegen_format != LOOM_TARGET_CODEGEN_FORMAT_SPIRV) {
     iree_string_view_t actual =
         loom_target_codegen_format_name(target->snapshot->codegen_format);
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "target '%.*s' uses codegen format '%.*s', "
                             "expected 'spirv'",
                             (int)target->name.size, target->name.data,
@@ -30,7 +30,7 @@ static iree_status_t loom_spirv_module_builder_validate_target(
       LOOM_TARGET_ARTIFACT_FORMAT_SPIRV_BINARY) {
     iree_string_view_t actual =
         loom_target_artifact_format_name(target->snapshot->artifact_format);
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "target '%.*s' emits artifact format '%.*s', "
                             "expected 'spirv_binary'",
                             (int)target->name.size, target->name.data,
@@ -40,7 +40,7 @@ static iree_status_t loom_spirv_module_builder_validate_target(
       target->export_plan->abi_kind != LOOM_TARGET_ABI_HAL_KERNEL) {
     iree_string_view_t actual =
         loom_target_abi_kind_name(target->export_plan->abi_kind);
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "target '%.*s' uses export ABI '%.*s', expected "
                             "'shader_entry_point' or 'hal_kernel'",
                             (int)target->name.size, target->name.data,
@@ -111,7 +111,7 @@ static iree_status_t loom_spirv_module_builder_emit_feature_preamble(
   if (!loom_spirv_feature_set_has_atom(&builder->feature_set,
                                        LOOM_SPIRV_FEATURE_ATOM_VULKAN_SHADER)) {
     return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
+        IREE_STATUS_FAILED_PRECONDITION,
         "SPIR-V shader module emission requires the Vulkan shader feature");
   }
 

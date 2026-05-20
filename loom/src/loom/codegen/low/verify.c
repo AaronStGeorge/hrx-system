@@ -29,6 +29,8 @@ typedef struct loom_low_verify_state_t {
   iree_arena_allocator_t arena;
   iree_arena_allocator_t walk_arena;
   loom_symbol_fact_table_t symbol_facts;
+  // Per-provider state retained for the full module verification run.
+  void** provider_module_states;
 } loom_low_verify_state_t;
 
 typedef struct loom_low_function_verify_state_t {
@@ -42,7 +44,15 @@ typedef struct loom_low_function_verify_state_t {
 } loom_low_function_verify_state_t;
 
 struct loom_low_verify_context_t {
+  // Function currently being verified.
   loom_low_function_verify_state_t* function_state;
+  // Module-level state for the provider receiving this callback.
+  void* provider_module_state;
+};
+
+struct loom_low_verify_module_context_t {
+  // Module verification state shared by all functions in this run.
+  loom_low_verify_state_t* state;
 };
 
 typedef struct loom_low_packet_field_t {
@@ -95,6 +105,21 @@ const loom_module_t* loom_low_verify_context_module(
   return context->function_state->state->module;
 }
 
+const loom_module_t* loom_low_verify_module_context_module(
+    const loom_low_verify_module_context_t* context) {
+  return context->state->module;
+}
+
+iree_arena_allocator_t* loom_low_verify_module_context_arena(
+    loom_low_verify_module_context_t* context) {
+  return &context->state->arena;
+}
+
+bool loom_low_verify_module_context_should_stop(
+    const loom_low_verify_module_context_t* context) {
+  return loom_low_verify_should_stop(context->state);
+}
+
 const loom_op_t* loom_low_verify_context_function_op(
     const loom_low_verify_context_t* context) {
   return context->function_state->function_op;
@@ -113,6 +138,11 @@ const loom_low_resolved_target_t* loom_low_verify_context_target(
 iree_arena_allocator_t* loom_low_verify_context_arena(
     loom_low_verify_context_t* context) {
   return &context->function_state->state->walk_arena;
+}
+
+void* loom_low_verify_context_provider_module_state(
+    const loom_low_verify_context_t* context) {
+  return context->provider_module_state;
 }
 
 bool loom_low_verify_context_should_stop(
@@ -1599,6 +1629,52 @@ static iree_status_t loom_low_verify_packet(
                                              opcode_attr_index, descriptor);
 }
 
+static iree_status_t loom_low_verify_begin_module_providers(
+    loom_low_verify_state_t* state) {
+  loom_low_verify_provider_list_t provider_list = state->provider_list;
+  if (loom_low_verify_provider_list_is_empty(provider_list)) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate_array(&state->arena, provider_list.count,
+                                sizeof(*state->provider_module_states),
+                                (void**)&state->provider_module_states));
+  memset(state->provider_module_states, 0,
+         provider_list.count * sizeof(*state->provider_module_states));
+  loom_low_verify_module_context_t context = {
+      .state = state,
+  };
+  for (iree_host_size_t i = 0; i < provider_list.count; ++i) {
+    const loom_low_verify_provider_t* provider = provider_list.values[i];
+    if (provider->begin_module != NULL) {
+      IREE_RETURN_IF_ERROR(provider->begin_module(
+          provider, &context, &state->provider_module_states[i]));
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_verify_end_module_providers(
+    loom_low_verify_state_t* state) {
+  loom_low_verify_provider_list_t provider_list = state->provider_list;
+  if (loom_low_verify_provider_list_is_empty(provider_list) ||
+      state->provider_module_states == NULL ||
+      loom_low_verify_should_stop(state)) {
+    return iree_ok_status();
+  }
+  loom_low_verify_module_context_t context = {
+      .state = state,
+  };
+  for (iree_host_size_t i = 0; i < provider_list.count; ++i) {
+    const loom_low_verify_provider_t* provider = provider_list.values[i];
+    if (provider->end_module != NULL) {
+      IREE_RETURN_IF_ERROR(provider->end_module(
+          provider, &context, state->provider_module_states[i]));
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_verify_begin_function_providers(
     loom_low_function_verify_state_t* function_state) {
   loom_low_verify_provider_list_t provider_list =
@@ -1618,6 +1694,8 @@ static iree_status_t loom_low_verify_begin_function_providers(
   for (iree_host_size_t i = 0; i < provider_list.count; ++i) {
     const loom_low_verify_provider_t* provider = provider_list.values[i];
     if (provider->begin_function != NULL) {
+      context.provider_module_state =
+          function_state->state->provider_module_states[i];
       IREE_RETURN_IF_ERROR(provider->begin_function(
           provider, &context, &function_state->provider_states[i]));
     }
@@ -1640,6 +1718,8 @@ static iree_status_t loom_low_verify_run_op_providers(
   for (iree_host_size_t i = 0; i < provider_list.count; ++i) {
     const loom_low_verify_provider_t* provider = provider_list.values[i];
     if (provider->verify_op != NULL) {
+      context.provider_module_state =
+          function_state->state->provider_module_states[i];
       IREE_RETURN_IF_ERROR(provider->verify_op(
           provider, &context, function_state->provider_states[i], packet));
     }
@@ -1663,6 +1743,8 @@ static iree_status_t loom_low_verify_end_function_providers(
   for (iree_host_size_t i = 0; i < provider_list.count; ++i) {
     const loom_low_verify_provider_t* provider = provider_list.values[i];
     if (provider->end_function != NULL) {
+      context.provider_module_state =
+          function_state->state->provider_module_states[i];
       IREE_RETURN_IF_ERROR(provider->end_function(
           provider, &context, function_state->provider_states[i]));
     }
@@ -1824,7 +1906,7 @@ iree_status_t loom_low_verify_module(const loom_module_t* module,
   loom_value_u32_scratch_acquire_zeroed(scratch->value_scratch,
                                         module->values.count);
 
-  iree_status_t status = iree_ok_status();
+  iree_status_t status = loom_low_verify_begin_module_providers(&state);
   if (iree_status_is_ok(status) && module->body &&
       module->body->block_count > 0) {
     loom_block_t* entry_block = loom_region_entry_block(module->body);
@@ -1840,6 +1922,9 @@ iree_status_t loom_low_verify_module(const loom_module_t* module,
         break;
       }
     }
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_low_verify_end_module_providers(&state);
   }
 
   loom_value_u32_scratch_release_zeroed(scratch->value_scratch);

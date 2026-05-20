@@ -305,6 +305,22 @@ low.func.def target(@target) @multiblock_requires_low_scf() asm<spirv.logical.co
 // RUN: verify
 
 spirv.target<vulkan1_3> @target
+spirv.target<vulkan1_3> @target_scalar_payloads {contract_feature_bits = 37374}
+
+low.func.def target(@target) @first_module_contract() asm<spirv.logical.core> {
+  return
+}
+
+// ERROR@+1: SPIRV/025 {function_name="mixed_module_contract", target_name="target_scalar_payloads", first_target_name="target"}
+low.func.def target(@target_scalar_payloads) @mixed_module_contract() asm<spirv.logical.core> {
+  return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
 
 low.func.def target(@target) @unsupported_structural_op() asm<spirv.logical.core> {
   // ERROR@+1: SPIRV/017 {function_name="unsupported_structural_op", op_name="low.live_in"}

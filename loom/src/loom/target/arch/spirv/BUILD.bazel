@@ -41,6 +41,7 @@ loom_assert_no_dependencies(
         ":low_verify",
         ":low_registry",
         ":math_policy",
+        ":module_contract",
         ":packet_rows",
         ":provider",
         ":registers",
@@ -372,6 +373,17 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "module_contract",
+    srcs = ["module_contract.c"],
+    hdrs = ["module_contract.h"],
+    deps = [
+        "//loom/src/loom/codegen/low:target_binding",
+        "//loom/src/loom/target:types",
+        "//runtime/src/iree/base",
+    ],
+)
+
+loom_cc_library(
     name = "low_verify",
     srcs = ["low_verify.c"],
     hdrs = ["low_verify.h"],
@@ -379,6 +391,7 @@ loom_cc_library(
         ":abi",
         ":descriptors",
         ":error_defs",
+        ":module_contract",
         ":packet_rows",
         ":registers",
         ":scalar_types",

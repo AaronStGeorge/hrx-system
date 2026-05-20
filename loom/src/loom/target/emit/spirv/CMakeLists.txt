@@ -173,6 +173,7 @@ loom_cc_library(
     loom::src::loom::ops::low
     loom::src::loom::target::arch::spirv::descriptors_ids
     loom::src::loom::target::arch::spirv::features
+    loom::src::loom::target::arch::spirv::module_contract
     loom::src::loom::target::arch::spirv::packet_rows
     loom::src::loom::target::low_descriptor_registry
     loom::src::loom::target::types

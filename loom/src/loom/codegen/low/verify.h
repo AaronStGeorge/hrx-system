@@ -23,8 +23,13 @@ extern "C" {
 #endif
 
 typedef struct loom_low_verify_context_t loom_low_verify_context_t;
+typedef struct loom_low_verify_module_context_t
+    loom_low_verify_module_context_t;
 typedef struct loom_low_verify_provider_t loom_low_verify_provider_t;
 
+typedef iree_status_t (*loom_low_verify_provider_begin_module_fn_t)(
+    const loom_low_verify_provider_t* provider,
+    loom_low_verify_module_context_t* context, void** out_provider_state);
 typedef iree_status_t (*loom_low_verify_provider_begin_function_fn_t)(
     const loom_low_verify_provider_t* provider,
     loom_low_verify_context_t* context, void** out_provider_state);
@@ -35,16 +40,23 @@ typedef iree_status_t (*loom_low_verify_provider_verify_op_fn_t)(
 typedef iree_status_t (*loom_low_verify_provider_end_function_fn_t)(
     const loom_low_verify_provider_t* provider,
     loom_low_verify_context_t* context, void* provider_state);
+typedef iree_status_t (*loom_low_verify_provider_end_module_fn_t)(
+    const loom_low_verify_provider_t* provider,
+    loom_low_verify_module_context_t* context, void* provider_state);
 
 struct loom_low_verify_provider_t {
   // Stable provider name available to callbacks.
   iree_string_view_t name;
+  // Initializes target-owned module-level verification state.
+  loom_low_verify_provider_begin_module_fn_t begin_module;
   // Initializes target-owned function-local verification state.
   loom_low_verify_provider_begin_function_fn_t begin_function;
   // Verifies one op as part of the generic low verifier's body walk.
   loom_low_verify_provider_verify_op_fn_t verify_op;
   // Finalizes target-owned function-local verification state.
   loom_low_verify_provider_end_function_fn_t end_function;
+  // Finalizes target-owned module-level verification state.
+  loom_low_verify_provider_end_module_fn_t end_module;
 };
 
 typedef struct loom_low_verify_provider_list_t {
@@ -123,6 +135,18 @@ iree_status_t loom_low_verify_module(const loom_module_t* module,
                                      loom_low_verify_result_t* out_result);
 
 // Returns the module being verified.
+const loom_module_t* loom_low_verify_module_context_module(
+    const loom_low_verify_module_context_t* context);
+
+// Returns the scratch arena retained for the full low verification run.
+iree_arena_allocator_t* loom_low_verify_module_context_arena(
+    loom_low_verify_module_context_t* context);
+
+// Returns true when the shared diagnostic limit has been reached.
+bool loom_low_verify_module_context_should_stop(
+    const loom_low_verify_module_context_t* context);
+
+// Returns the module being verified.
 const loom_module_t* loom_low_verify_context_module(
     const loom_low_verify_context_t* context);
 
@@ -142,6 +166,10 @@ const loom_low_resolved_target_t* loom_low_verify_context_target(
 // Returns the scratch arena reset after the current function verification.
 iree_arena_allocator_t* loom_low_verify_context_arena(
     loom_low_verify_context_t* context);
+
+// Returns the module-level state produced by this provider's begin_module hook.
+void* loom_low_verify_context_provider_module_state(
+    const loom_low_verify_context_t* context);
 
 // Returns true when the shared diagnostic limit has been reached.
 bool loom_low_verify_context_should_stop(

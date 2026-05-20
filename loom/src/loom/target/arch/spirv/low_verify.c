@@ -14,6 +14,7 @@
 #include "loom/target/arch/spirv/abi.h"
 #include "loom/target/arch/spirv/descriptors.h"
 #include "loom/target/arch/spirv/error_catalog.h"
+#include "loom/target/arch/spirv/module_contract.h"
 #include "loom/target/arch/spirv/packet_rows.h"
 #include "loom/target/arch/spirv/registers.h"
 #include "loom/target/registers.h"
@@ -39,6 +40,19 @@ typedef enum loom_spirv_low_verify_structure_flag_bits_e {
   LOOM_SPIRV_LOW_VERIFY_STRUCTURE_FLAG_CFG_TERMINATOR_DIAGNOSED = 1u << 0,
 } loom_spirv_low_verify_structure_flag_bits_t;
 typedef uint32_t loom_spirv_low_verify_structure_flags_t;
+
+typedef enum loom_spirv_low_verify_module_flag_bits_e {
+  LOOM_SPIRV_LOW_VERIFY_MODULE_FLAG_NONE = 0u,
+  LOOM_SPIRV_LOW_VERIFY_MODULE_FLAG_HAS_CONTRACT = 1u << 0,
+} loom_spirv_low_verify_module_flag_bits_t;
+typedef uint32_t loom_spirv_low_verify_module_flags_t;
+
+typedef struct loom_spirv_low_verify_module_state_t {
+  // First SPIR-V function contract selected for this module.
+  loom_spirv_module_contract_t contract;
+  // Module-scope verifier state flags.
+  loom_spirv_low_verify_module_flags_t flags;
+} loom_spirv_low_verify_module_state_t;
 
 typedef struct loom_spirv_low_verify_state_t {
   // Module being verified.
@@ -673,6 +687,19 @@ static iree_status_t loom_spirv_low_emit_single_block_required(
                              params, IREE_ARRAYSIZE(params));
 }
 
+static iree_status_t loom_spirv_low_emit_mixed_module_contract(
+    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
+    const loom_spirv_module_contract_t* first_contract,
+    const loom_spirv_module_contract_t* contract) {
+  loom_diagnostic_param_t params[] = {
+      loom_param_string(state->function_name),
+      loom_param_string(contract->target_name),
+      loom_param_string(first_contract->target_name),
+  };
+  return loom_spirv_low_emit(context, state->function_op, LOOM_ERR_SPIRV_025,
+                             params, IREE_ARRAYSIZE(params));
+}
+
 static iree_status_t loom_spirv_low_emit_resource_import_kind(
     loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
     const loom_op_t* op) {
@@ -1273,6 +1300,42 @@ static iree_status_t loom_spirv_low_verify_storage_address(
                                                 result_type, state->arena);
 }
 
+static iree_status_t loom_spirv_low_begin_module(
+    const loom_low_verify_provider_t* provider,
+    loom_low_verify_module_context_t* context, void** out_provider_state) {
+  (void)provider;
+  *out_provider_state = NULL;
+  loom_spirv_low_verify_module_state_t* state = NULL;
+  IREE_RETURN_IF_ERROR(
+      iree_arena_allocate(loom_low_verify_module_context_arena(context),
+                          sizeof(*state), (void**)&state));
+  *state = (loom_spirv_low_verify_module_state_t){0};
+  *out_provider_state = state;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_spirv_low_verify_module_contract(
+    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state) {
+  loom_spirv_low_verify_module_state_t* module_state =
+      (loom_spirv_low_verify_module_state_t*)
+          loom_low_verify_context_provider_module_state(context);
+  IREE_ASSERT_ARGUMENT(module_state);
+
+  const loom_spirv_module_contract_t contract =
+      loom_spirv_module_contract_from_target(state->target);
+  if (!iree_any_bit_set(module_state->flags,
+                        LOOM_SPIRV_LOW_VERIFY_MODULE_FLAG_HAS_CONTRACT)) {
+    module_state->contract = contract;
+    module_state->flags |= LOOM_SPIRV_LOW_VERIFY_MODULE_FLAG_HAS_CONTRACT;
+    return iree_ok_status();
+  }
+  if (loom_spirv_module_contract_equal(&module_state->contract, &contract)) {
+    return iree_ok_status();
+  }
+  return loom_spirv_low_emit_mixed_module_contract(
+      context, state, &module_state->contract, &contract);
+}
+
 static iree_status_t loom_spirv_low_begin_function(
     const loom_low_verify_provider_t* provider,
     loom_low_verify_context_t* context, void** out_provider_state) {
@@ -1304,6 +1367,10 @@ static iree_status_t loom_spirv_low_begin_function(
   };
   *out_provider_state = state;
 
+  IREE_RETURN_IF_ERROR(loom_spirv_low_verify_module_contract(context, state));
+  if (loom_low_verify_context_should_stop(context)) {
+    return iree_ok_status();
+  }
   if (state->body != NULL && state->body->block_count > 0) {
     state->entry_block = loom_region_const_entry_block(state->body);
   }
@@ -1384,6 +1451,7 @@ static iree_status_t loom_spirv_low_end_function(
 
 const loom_low_verify_provider_t loom_spirv_low_verify_provider = {
     .name = IREE_SVL("spirv"),
+    .begin_module = loom_spirv_low_begin_module,
     .begin_function = loom_spirv_low_begin_function,
     .verify_op = loom_spirv_low_verify_op,
     .end_function = loom_spirv_low_end_function,

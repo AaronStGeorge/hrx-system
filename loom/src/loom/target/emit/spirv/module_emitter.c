@@ -17,6 +17,7 @@
 #include "loom/ir/types.h"
 #include "loom/ops/low/ops.h"
 #include "loom/target/arch/spirv/descriptors.h"
+#include "loom/target/arch/spirv/module_contract.h"
 #include "loom/target/arch/spirv/packet_rows.h"
 #include "loom/target/emit/spirv/binary_format.h"
 #include "loom/target/emit/spirv/module_abi.h"
@@ -35,25 +36,6 @@ typedef enum loom_spirv_emit_module_state_flag_bits_e {
   LOOM_SPIRV_EMIT_MODULE_STATE_FLAG_BUILDER_INITIALIZED = 1u << 0,
 } loom_spirv_emit_module_state_flag_bits_t;
 typedef uint32_t loom_spirv_emit_module_state_flags_t;
-
-typedef struct loom_spirv_emit_module_contract_t {
-  // Borrowed target-record symbol name selected by the first emitted function.
-  iree_string_view_t target_name;
-  // Borrowed target snapshot name selected by the first emitted function.
-  iree_string_view_t snapshot_name;
-  // Target codegen format selected by the first emitted function.
-  loom_target_codegen_format_t codegen_format;
-  // Target artifact format selected by the first emitted function.
-  loom_target_artifact_format_t artifact_format;
-  // Export ABI kind selected by the first emitted function.
-  loom_target_abi_kind_t abi_kind;
-  // Descriptor set stable ID selected by the first emitted function.
-  uint64_t descriptor_set_stable_id;
-  // Borrowed target-contract descriptor-set key.
-  iree_string_view_t contract_set_key;
-  // Target-contract feature bits selected by the first emitted function.
-  uint64_t contract_feature_bits;
-} loom_spirv_emit_module_contract_t;
 
 typedef struct loom_spirv_emit_module_state_t {
   // Module containing the emitted low functions.
@@ -75,7 +57,7 @@ typedef struct loom_spirv_emit_module_state_t {
   // Shared Input variables for workgroup/local/global invocation builtins.
   uint32_t builtin_variable_ids[LOOM_SPIRV_BUILTIN_VARIABLE_COUNT];
   // First function's module-level target contract.
-  loom_spirv_emit_module_contract_t contract;
+  loom_spirv_module_contract_t contract;
   // Module-emission state flags.
   loom_spirv_emit_module_state_flags_t flags;
   // Number of functions emitted into the current module.
@@ -1579,33 +1561,6 @@ static iree_status_t loom_spirv_emit_function(loom_spirv_emit_state_t* state) {
   return loom_spirv_module_abi_emit_metadata(&context, &state->abi_plan);
 }
 
-static loom_spirv_emit_module_contract_t
-loom_spirv_emit_module_contract_from_target(
-    const loom_low_resolved_target_t* target) {
-  return (loom_spirv_emit_module_contract_t){
-      .target_name = target->target_name,
-      .snapshot_name = target->bundle_storage.snapshot.name,
-      .codegen_format = target->bundle_storage.snapshot.codegen_format,
-      .artifact_format = target->bundle_storage.snapshot.artifact_format,
-      .abi_kind = target->bundle_storage.export_plan.abi_kind,
-      .descriptor_set_stable_id = target->descriptor_set->stable_id,
-      .contract_set_key = target->descriptor_set_key,
-      .contract_feature_bits = target->feature_bits,
-  };
-}
-
-static bool loom_spirv_emit_module_contracts_equal(
-    const loom_spirv_emit_module_contract_t* lhs,
-    const loom_spirv_emit_module_contract_t* rhs) {
-  return iree_string_view_equal(lhs->snapshot_name, rhs->snapshot_name) &&
-         lhs->codegen_format == rhs->codegen_format &&
-         lhs->artifact_format == rhs->artifact_format &&
-         lhs->abi_kind == rhs->abi_kind &&
-         lhs->descriptor_set_stable_id == rhs->descriptor_set_stable_id &&
-         iree_string_view_equal(lhs->contract_set_key, rhs->contract_set_key) &&
-         lhs->contract_feature_bits == rhs->contract_feature_bits;
-}
-
 static iree_status_t loom_spirv_emit_validate_target(
     const loom_low_resolved_target_t* target) {
   if (target->descriptor_set == NULL) {
@@ -1615,9 +1570,14 @@ static iree_status_t loom_spirv_emit_validate_target(
   }
   if (target->descriptor_set->stable_id !=
       SPIRV_LOGICAL_CORE_DESCRIPTOR_SET_ID) {
+    const iree_string_view_t descriptor_set_key =
+        loom_low_descriptor_set_string(
+            target->descriptor_set, target->descriptor_set->key_string_offset);
     return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "SPIR-V emission requires descriptor set 'spirv.logical.core'");
+        IREE_STATUS_FAILED_PRECONDITION,
+        "verified SPIR-V low function selected descriptor set '%.*s'; "
+        "expected 'spirv.logical.core'",
+        (int)descriptor_set_key.size, descriptor_set_key.data);
   }
   return iree_ok_status();
 }
@@ -1625,8 +1585,8 @@ static iree_status_t loom_spirv_emit_validate_target(
 static iree_status_t loom_spirv_emit_module_prepare_contract(
     loom_spirv_emit_module_state_t* state,
     const loom_low_resolved_target_t* target, iree_allocator_t allocator) {
-  const loom_spirv_emit_module_contract_t contract =
-      loom_spirv_emit_module_contract_from_target(target);
+  const loom_spirv_module_contract_t contract =
+      loom_spirv_module_contract_from_target(target);
   if (!iree_any_bit_set(
           state->flags,
           LOOM_SPIRV_EMIT_MODULE_STATE_FLAG_BUILDER_INITIALIZED)) {
@@ -1638,10 +1598,10 @@ static iree_status_t loom_spirv_emit_module_prepare_contract(
     state->flags |= LOOM_SPIRV_EMIT_MODULE_STATE_FLAG_BUILDER_INITIALIZED;
     return iree_ok_status();
   }
-  if (!loom_spirv_emit_module_contracts_equal(&state->contract, &contract)) {
+  if (!loom_spirv_module_contract_equal(&state->contract, &contract)) {
     return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "SPIR-V module emission cannot mix target contract '%.*s' with "
+        IREE_STATUS_FAILED_PRECONDITION,
+        "verified SPIR-V low module mixes target contract '%.*s' with "
         "target contract '%.*s'",
         (int)state->contract.target_name.size, state->contract.target_name.data,
         (int)contract.target_name.size, contract.target_name.data);
@@ -1711,7 +1671,7 @@ static iree_status_t loom_spirv_emit_low_function_into_module(
     loom_spirv_emit_module_state_t* module_state, loom_op_t* low_function_op,
     iree_allocator_t allocator) {
   if (!loom_low_function_def_isa(low_function_op)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "SPIR-V emission requires a low function "
                             "definition");
   }
@@ -1772,8 +1732,8 @@ static iree_status_t loom_spirv_emit_module_state_finalize(
     loom_spirv_module_binary_t* out_module) {
   if (state->function_count == 0) {
     return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "SPIR-V module emission requires at least one low function definition");
+        IREE_STATUS_FAILED_PRECONDITION,
+        "SPIR-V low module has no low function definitions");
   }
   return loom_spirv_module_builder_finalize(&state->builder, out_module);
 }

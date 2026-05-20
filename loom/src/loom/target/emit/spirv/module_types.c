@@ -308,7 +308,7 @@ iree_status_t loom_spirv_emit_type_scalar(loom_spirv_type_context_t* context,
   const loom_spirv_scalar_type_descriptor_t* descriptor =
       loom_spirv_scalar_type_descriptor(scalar_type);
   if (descriptor == NULL) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "unknown SPIR-V scalar type %u",
                             (uint32_t)scalar_type);
   }
@@ -325,7 +325,7 @@ iree_status_t loom_spirv_emit_type_scalar(loom_spirv_type_context_t* context,
     case LOOM_SPIRV_SCALAR_TYPE_KIND_UNKNOWN:
       break;
   }
-  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                           "unknown SPIR-V scalar type kind %u",
                           (uint32_t)descriptor->kind);
 }
@@ -869,6 +869,6 @@ iree_status_t loom_spirv_emit_type_id_for_value_type(
     case LOOM_SPIRV_VALUE_CLASS_UNKNOWN:
       break;
   }
-  return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                           "SPIR-V packet row does not select a result type");
 }

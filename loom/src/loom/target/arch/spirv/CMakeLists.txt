@@ -296,6 +296,20 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    module_contract
+  HDRS
+    "module_contract.h"
+  SRCS
+    "module_contract.c"
+  DEPS
+    iree::base
+    loom::src::loom::codegen::low::target_binding
+    loom::src::loom::target::types
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     low_verify
   HDRS
     "low_verify.h"
@@ -305,6 +319,7 @@ loom_cc_library(
     ::abi
     ::descriptors
     ::error_defs
+    ::module_contract
     ::packet_rows
     ::registers
     ::scalar_types
