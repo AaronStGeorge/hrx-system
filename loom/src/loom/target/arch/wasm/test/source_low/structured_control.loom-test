@@ -145,6 +145,19 @@ low.func.def target(@target) @scf_if_condition_requires_i32(%condition: reg<wasm
 }
 
 // ====
+
+// RUN: verify
+
+wasm.target<simd128> @target
+
+low.func.def target(@target) @scf_for_counter_requires_i32(%lo: reg<wasm.v128>, %hi: reg<wasm.v128>, %step: reg<wasm.v128>) asm<wasm.core.simd128> {
+  // ERROR@+1: TARGET/031 {target_key="target", export_name="scf_for_counter_requires_i32", config_key="target", function_name="scf_for_counter_requires_i32", op_name="low.scf.for", actual_type="reg<wasm.v128>", type_constraint="reg<wasm.i32>"}
+  low.scf.for [%lo to %hi step %step] do(%iv: reg<wasm.v128>) {
+  }
+  return
+}
+
+// ====
 // RUN: pass source-to-low{control-flow=structured-low}
 
 wasm.target<simd128> @target

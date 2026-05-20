@@ -20,17 +20,23 @@
 #include "loom/target/emit/wasm/types.h"
 
 enum {
+  LOOM_WASM_OPCODE_BLOCK = 0x02,
+  LOOM_WASM_OPCODE_LOOP = 0x03,
   LOOM_WASM_OPCODE_END = 0x0B,
   LOOM_WASM_OPCODE_ELSE = 0x05,
   LOOM_WASM_OPCODE_IF = 0x04,
+  LOOM_WASM_OPCODE_BR = 0x0C,
+  LOOM_WASM_OPCODE_BR_IF = 0x0D,
   LOOM_WASM_OPCODE_CALL = 0x10,
   LOOM_WASM_OPCODE_RETURN = 0x0F,
   LOOM_WASM_OPCODE_LOCAL_GET = 0x20,
   LOOM_WASM_OPCODE_LOCAL_SET = 0x21,
   LOOM_WASM_OPCODE_I32_CONST = 0x41,
+  LOOM_WASM_OPCODE_I32_EQZ = 0x45,
   LOOM_WASM_OPCODE_I32_ADD = 0x6A,
   LOOM_WASM_OPCODE_I32_SUB = 0x6B,
   LOOM_WASM_OPCODE_I32_MUL = 0x6C,
+  LOOM_WASM_OPCODE_I32_LT_S = 0x48,
   LOOM_WASM_OPCODE_I32_LT_U = 0x49,
   LOOM_WASM_OPCODE_F32_ADD = 0x92,
   LOOM_WASM_OPCODE_SIMD_PREFIX = 0xFD,
@@ -895,6 +901,43 @@ static iree_status_t loom_wasm_emit_structured_region_before_terminator(
   return iree_ok_status();
 }
 
+static iree_status_t loom_wasm_emit_value_move(loom_wasm_emit_state_t* state,
+                                               loom_value_id_t source_value,
+                                               loom_value_id_t target_value) {
+  uint32_t source_local_index = 0;
+  uint32_t target_local_index = 0;
+  loom_wasm_value_type_t source_type = 0;
+  loom_wasm_value_type_t target_type = 0;
+  IREE_RETURN_IF_ERROR(loom_wasm_lookup_local(
+      state, source_value, &source_local_index, &source_type));
+  IREE_RETURN_IF_ERROR(loom_wasm_lookup_local(
+      state, target_value, &target_local_index, &target_type));
+  if (source_type != target_type) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "Wasm low value move type mismatch");
+  }
+  if (source_local_index == target_local_index) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_LOCAL_GET));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_binary_write_u32_leb(&state->writer, source_local_index));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_LOCAL_SET));
+  return loom_wasm_binary_write_u32_leb(&state->writer, target_local_index);
+}
+
+static iree_status_t loom_wasm_emit_value_moves(
+    loom_wasm_emit_state_t* state, const loom_value_id_t* source_values,
+    const loom_value_id_t* target_values, iree_host_size_t value_count) {
+  for (iree_host_size_t i = 0; i < value_count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_wasm_emit_value_move(state, source_values[i], target_values[i]));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_wasm_emit_low_scf_yield_to_results(
     loom_wasm_emit_state_t* state, const loom_op_t* yield,
     const loom_value_id_t* result_values, iree_host_size_t result_count) {
@@ -912,33 +955,8 @@ static iree_status_t loom_wasm_emit_low_scf_yield_to_results(
         IREE_STATUS_FAILED_PRECONDITION,
         "resultful low.scf.yield operand count does not match parent results");
   }
-  for (iree_host_size_t i = 0; i < result_count; ++i) {
-    uint32_t yielded_local_index = 0;
-    uint32_t result_local_index = 0;
-    loom_wasm_value_type_t yielded_type = 0;
-    loom_wasm_value_type_t result_type = 0;
-    IREE_RETURN_IF_ERROR(loom_wasm_lookup_local(
-        state, yielded_values.values[i], &yielded_local_index, &yielded_type));
-    IREE_RETURN_IF_ERROR(loom_wasm_lookup_local(
-        state, result_values[i], &result_local_index, &result_type));
-    if (yielded_type != result_type) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "resultful low.scf.yield operand type does not match parent result");
-    }
-    if (yielded_local_index == result_local_index) {
-      continue;
-    }
-    IREE_RETURN_IF_ERROR(
-        loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_LOCAL_GET));
-    IREE_RETURN_IF_ERROR(
-        loom_wasm_binary_write_u32_leb(&state->writer, yielded_local_index));
-    IREE_RETURN_IF_ERROR(
-        loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_LOCAL_SET));
-    IREE_RETURN_IF_ERROR(
-        loom_wasm_binary_write_u32_leb(&state->writer, result_local_index));
-  }
-  return iree_ok_status();
+  return loom_wasm_emit_value_moves(state, yielded_values.values, result_values,
+                                    result_count);
 }
 
 static iree_status_t loom_wasm_emit_low_scf_if(loom_wasm_emit_state_t* state,
@@ -982,6 +1000,92 @@ static iree_status_t loom_wasm_emit_low_scf_if(loom_wasm_emit_state_t* state,
   return loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_END);
 }
 
+static iree_status_t loom_wasm_emit_branch_depth(loom_wasm_emit_state_t* state,
+                                                 uint8_t opcode,
+                                                 uint32_t depth) {
+  IREE_RETURN_IF_ERROR(loom_wasm_binary_write_u8(&state->writer, opcode));
+  return loom_wasm_binary_write_u32_leb(&state->writer, depth);
+}
+
+static iree_status_t loom_wasm_emit_low_scf_for(loom_wasm_emit_state_t* state,
+                                                const loom_op_t* op) {
+  const loom_region_t* body_region = loom_low_scf_for_body(op);
+  const loom_block_t* body_block = loom_region_const_entry_block(body_region);
+  if (body_block == NULL || body_block->arg_count == 0) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "Wasm low.scf.for requires a verified body entry block");
+  }
+  const loom_op_t* yield = body_block->last_op;
+  if (yield == NULL || !loom_low_scf_yield_isa(yield)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "Wasm low.scf.for requires a verified low.scf.yield terminator");
+  }
+
+  const loom_value_slice_t iter_args = loom_low_scf_for_iter_args(op);
+  const loom_value_slice_t results = loom_low_scf_for_results(op);
+  const loom_value_slice_t yielded_values = loom_low_scf_yield_values(yield);
+  if (body_block->arg_count != iter_args.count + 1 ||
+      results.count != iter_args.count ||
+      yielded_values.count != iter_args.count) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "Wasm low.scf.for verified shape mismatch");
+  }
+
+  const loom_value_id_t iv_value = loom_block_arg_id(body_block, 0);
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_value_move(
+      state, loom_low_scf_for_lower_bound(op), iv_value));
+  for (iree_host_size_t i = 0; i < iter_args.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_wasm_emit_value_move(
+        state, iter_args.values[i], loom_block_arg_id(body_block, i + 1)));
+  }
+
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_BLOCK));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_BLOCK_TYPE_EMPTY));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_LOOP));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_BLOCK_TYPE_EMPTY));
+
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_local_get(state, iv_value));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_emit_local_get(state, loom_low_scf_for_upper_bound(op)));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_I32_LT_S));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_I32_EQZ));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_emit_branch_depth(state, LOOM_WASM_OPCODE_BR_IF, /*depth=*/1));
+
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_structured_region_before_terminator(
+      state, body_region, yield));
+  for (iree_host_size_t i = 0; i < yielded_values.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_wasm_emit_value_move(
+        state, yielded_values.values[i], loom_block_arg_id(body_block, i + 1)));
+  }
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_local_get(state, iv_value));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_emit_local_get(state, loom_low_scf_for_step(op)));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_I32_ADD));
+  IREE_RETURN_IF_ERROR(loom_wasm_emit_local_set(state, iv_value));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_emit_branch_depth(state, LOOM_WASM_OPCODE_BR, /*depth=*/0));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_END));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_END));
+
+  for (iree_host_size_t i = 0; i < results.count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_wasm_emit_value_move(
+        state, loom_block_arg_id(body_block, i + 1), results.values[i]));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_wasm_emit_structural_op(loom_wasm_emit_state_t* state,
                                                   const loom_op_t* op) {
   if (loom_low_copy_isa(op)) {
@@ -997,8 +1101,7 @@ static iree_status_t loom_wasm_emit_structural_op(loom_wasm_emit_state_t* state,
     return loom_wasm_emit_low_scf_if(state, op);
   }
   if (loom_low_scf_for_isa(op)) {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "Wasm low.scf.for emission is not implemented");
+    return loom_wasm_emit_low_scf_for(state, op);
   }
   iree_string_view_t op_name = loom_op_name(state->allocation->module, op);
   return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,

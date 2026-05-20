@@ -75,6 +75,18 @@ static iree_status_t loom_wasm_low_emit_branch_condition_type_mismatch(
       IREE_ARRAYSIZE(extra_params));
 }
 
+static iree_status_t loom_wasm_low_emit_type_constraint_mismatch(
+    loom_low_verify_context_t* context, loom_wasm_low_verify_state_t* state,
+    const loom_op_t* op, loom_type_t actual_type) {
+  const loom_diagnostic_param_t extra_params[] = {
+      loom_param_type(actual_type),
+      loom_param_string(IREE_SV("reg<wasm.i32>")),
+  };
+  return loom_wasm_low_emit_target_context_error(
+      context, state, op, LOOM_ERR_TARGET_031, extra_params,
+      IREE_ARRAYSIZE(extra_params));
+}
+
 static iree_status_t loom_wasm_low_verify_scf_if(
     loom_low_verify_context_t* context, loom_wasm_low_verify_state_t* state,
     const loom_op_t* op) {
@@ -85,6 +97,18 @@ static iree_status_t loom_wasm_low_verify_scf_if(
   }
   return loom_wasm_low_emit_branch_condition_type_mismatch(context, state, op,
                                                            condition_type);
+}
+
+static iree_status_t loom_wasm_low_verify_scf_for(
+    loom_low_verify_context_t* context, loom_wasm_low_verify_state_t* state,
+    const loom_op_t* op) {
+  const loom_type_t lower_bound_type =
+      loom_module_value_type(state->module, loom_low_scf_for_lower_bound(op));
+  if (!loom_wasm_low_type_is_i32(lower_bound_type)) {
+    return loom_wasm_low_emit_type_constraint_mismatch(context, state, op,
+                                                       lower_bound_type);
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_wasm_low_begin_function(
@@ -126,6 +150,9 @@ static iree_status_t loom_wasm_low_verify_op(
   }
   if (loom_low_scf_if_isa(packet->op)) {
     return loom_wasm_low_verify_scf_if(context, state, packet->op);
+  }
+  if (loom_low_scf_for_isa(packet->op)) {
+    return loom_wasm_low_verify_scf_for(context, state, packet->op);
   }
   return iree_ok_status();
 }

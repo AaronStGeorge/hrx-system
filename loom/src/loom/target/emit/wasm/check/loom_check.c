@@ -218,6 +218,13 @@ static iree_status_t loom_wasm_loom_check_append_objdump_line(
     iree_string_view_t line, iree_string_builder_t* output) {
   bool instruction = false;
   line = loom_wasm_loom_check_strip_objdump_byte_marker(line, &instruction);
+  if (instruction) {
+    const iree_host_size_t comment_position =
+        iree_string_view_find(line, IREE_SV("#"), 0);
+    if (comment_position != IREE_STRING_VIEW_NPOS) {
+      line = iree_string_view_substr(line, 0, comment_position);
+    }
+  }
   line = loom_wasm_loom_check_trim_trailing_ascii_whitespace(line);
   if (instruction && !iree_string_view_is_empty(line)) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(output, "  "));
