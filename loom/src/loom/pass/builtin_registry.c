@@ -114,7 +114,19 @@ static const loom_pass_option_enum_value_t kLowSourceToLowDiagnosticsValues[] =
         {.value = IREE_SVL("none")},
 };
 
+static const loom_pass_option_enum_value_t kLowSourceToLowControlFlowValues[] =
+    {
+        {.value = IREE_SVL("cfg")},
+        {.value = IREE_SVL("structured-low")},
+};
+
 static const loom_pass_option_schema_t kLowSourceToLowOptionSchema[] = {
+    {
+        .name = IREE_SVL("control-flow"),
+        .kind = LOOM_PASS_OPTION_SCHEMA_ENUM,
+        .enum_values = kLowSourceToLowControlFlowValues,
+        .enum_value_count = IREE_ARRAYSIZE(kLowSourceToLowControlFlowValues),
+    },
     {
         .name = IREE_SVL("diagnostics"),
         .kind = LOOM_PASS_OPTION_SCHEMA_ENUM,

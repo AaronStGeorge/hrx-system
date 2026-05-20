@@ -22,9 +22,18 @@
 extern "C" {
 #endif
 
+typedef enum loom_target_control_flow_lowering_e {
+  // Lower source SCF to explicit CFG before source-to-low.
+  LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG = 0,
+  // Preserve supported source SCF through source-to-low as executable low SCF.
+  LOOM_TARGET_CONTROL_FLOW_LOWERING_STRUCTURED_LOW = 1,
+} loom_target_control_flow_lowering_t;
+
 typedef struct loom_target_pipeline_options_t {
   // Maximum source-to-low diagnostics. Zero uses source-to-low's default.
   uint32_t source_to_low_max_errors;
+  // Control-flow shape selected for the source-to-low boundary.
+  loom_target_control_flow_lowering_t control_flow_lowering;
 } loom_target_pipeline_options_t;
 
 // Builds a module-root pipeline that lowers source/kernel IR to target-low IR.

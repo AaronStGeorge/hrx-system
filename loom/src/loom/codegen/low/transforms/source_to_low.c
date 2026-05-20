@@ -16,6 +16,10 @@
 #include "loom/target/low_legality.h"
 
 typedef struct loom_low_source_to_low_pass_state_t {
+  // Control-flow shape expected by source-to-low.
+  loom_low_control_flow_lowering_t control_flow_lowering;
+  // True when control-flow was explicitly provided.
+  bool has_control_flow_option;
   // Maximum number of lowering diagnostics emitted before stopping.
   uint32_t max_errors;
   // True when max_errors was explicitly provided.
@@ -32,6 +36,9 @@ typedef struct loom_low_source_to_low_parse_context_t {
 } loom_low_source_to_low_parse_context_t;
 
 static const loom_pass_option_def_t kLowSourceToLowOptions[] = {
+    {IREE_SVL("control-flow"),
+     IREE_SVL("Control-flow shape expected at the source-to-low boundary: cfg "
+              "or structured-low.")},
     {IREE_SVL("diagnostics"),
      IREE_SVL("Target-low legality diagnostics to emit: none, memory, or "
               "all.")},
@@ -67,6 +74,29 @@ static const loom_pass_info_t loom_low_source_to_low_pass_info_storage = {
 
 const loom_pass_info_t* loom_low_source_to_low_pass_info(void) {
   return &loom_low_source_to_low_pass_info_storage;
+}
+
+static iree_status_t loom_low_source_to_low_parse_control_flow(
+    iree_string_view_t value, loom_low_source_to_low_parse_context_t* context) {
+  if (context->state->has_control_flow_option) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "duplicate option 'control-flow' for pass 'source-to-low'");
+  }
+  if (iree_string_view_equal(value, IREE_SV("cfg"))) {
+    context->state->control_flow_lowering = LOOM_LOW_CONTROL_FLOW_LOWERING_CFG;
+  } else if (iree_string_view_equal(value, IREE_SV("structured-low"))) {
+    context->state->control_flow_lowering =
+        LOOM_LOW_CONTROL_FLOW_LOWERING_STRUCTURED_LOW;
+  } else {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "source-to-low option 'control-flow' expected 'cfg' or "
+        "'structured-low', got '%.*s'",
+        (int)value.size, value.data);
+  }
+  context->state->has_control_flow_option = true;
+  return iree_ok_status();
 }
 
 static iree_status_t loom_low_source_to_low_parse_max_errors(
@@ -111,6 +141,9 @@ static iree_status_t loom_low_source_to_low_parse_option(
     void* user_data, iree_string_view_t name, iree_string_view_t value) {
   loom_low_source_to_low_parse_context_t* context =
       (loom_low_source_to_low_parse_context_t*)user_data;
+  if (iree_string_view_equal(name, IREE_SV("control-flow"))) {
+    return loom_low_source_to_low_parse_control_flow(value, context);
+  }
   if (iree_string_view_equal(name, IREE_SV("diagnostics"))) {
     return loom_low_source_to_low_parse_diagnostics(value, context);
   }
@@ -131,6 +164,7 @@ iree_status_t loom_low_source_to_low_create(loom_pass_t* pass,
   IREE_RETURN_IF_ERROR(iree_arena_allocate(pass->instance_arena, sizeof(*state),
                                            (void**)&state));
   memset(state, 0, sizeof(*state));
+  state->control_flow_lowering = LOOM_LOW_CONTROL_FLOW_LOWERING_CFG;
   state->max_errors = 20;
 
   loom_low_source_to_low_parse_context_t context = {
@@ -141,6 +175,13 @@ iree_status_t loom_low_source_to_low_create(loom_pass_t* pass,
       const loom_pass_decoded_option_t* option =
           &pass->decoded_options->options[i];
       if (!option->present) {
+        continue;
+      }
+      if (iree_string_view_equal(option->schema->name,
+                                 IREE_SV("control-flow"))) {
+        IREE_RETURN_IF_ERROR(loom_low_source_to_low_parse_control_flow(
+            option->schema->enum_values[option->enum_value_index].value,
+            &context));
         continue;
       }
       if (iree_string_view_equal(option->schema->name,
@@ -215,6 +256,8 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
         .policy = selection->policy,
         .emitter = pass->diagnostic_emitter,
         .max_errors = state ? state->max_errors : 20,
+        .control_flow_lowering = state ? state->control_flow_lowering
+                                       : LOOM_LOW_CONTROL_FLOW_LOWERING_CFG,
     };
     loom_low_lower_result_t lower_result = {0};
     status = loom_low_lower_import_declaration(module, selection->func,
@@ -265,6 +308,8 @@ iree_status_t loom_low_source_to_low_run(loom_pass_t* pass,
         .fact_table = fact_table,
         .emitter = pass->diagnostic_emitter,
         .max_errors = state ? state->max_errors : 20,
+        .control_flow_lowering = state ? state->control_flow_lowering
+                                       : LOOM_LOW_CONTROL_FLOW_LOWERING_CFG,
     };
     loom_low_lower_result_t lower_result = {0};
     status = loom_low_lower_function(module, selection->func, &lower_options,

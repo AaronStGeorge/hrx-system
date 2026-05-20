@@ -226,6 +226,81 @@ TEST_F(TargetPipelineTest, BuildsVisibleSourceLowPipeline) {
   EXPECT_TRUE(loom_pass_yield_isa(pipeline_body->last_op));
 }
 
+TEST_F(TargetPipelineTest, BuildsStructuredSourceLowPipeline) {
+  ModulePtr module;
+  IREE_ASSERT_OK(AllocateModule(IREE_SV("pipeline"), &module));
+
+  const loom_target_pipeline_options_t options = {
+      .control_flow_lowering = LOOM_TARGET_CONTROL_FLOW_LOWERING_STRUCTURED_LOW,
+  };
+  loom_op_t* pipeline_op = nullptr;
+  IREE_ASSERT_OK(loom_target_pipeline_build_to_source_low(
+      module.get(), IREE_SV("source_low_structured"), &options,
+      &target_environment_, loom_pass_environment_empty(), &pipeline_op));
+
+  loom_block_t* pipeline_body =
+      loom_region_entry_block(loom_pass_pipeline_body(pipeline_op));
+  ASSERT_NE(pipeline_body, nullptr);
+  ASSERT_EQ(pipeline_body->op_count, 8u);
+
+  loom_op_t* source_for = pipeline_body->first_op;
+  ASSERT_TRUE(loom_pass_for_isa(source_for));
+  loom_block_t* source_body =
+      loom_region_entry_block(loom_pass_for_body(source_for));
+  const iree_string_view_t source_keys[] = {
+      IREE_SV("mock-source-normalization"),
+      IREE_SV("legalize-math"),
+      IREE_SV("normalize-kernel-resources"),
+      IREE_SV("promote-private-fragments"),
+  };
+  ExpectRunKeySequence(module.get(), source_body, source_keys,
+                       IREE_ARRAYSIZE(source_keys));
+
+  loom_op_t* target_legalize = source_for->next_op;
+  ExpectRunKey(module.get(), target_legalize, IREE_SV("target-legalize"));
+  ExpectRunStringOption(module.get(), target_legalize, IREE_SV("mode"),
+                        IREE_SV("eager"));
+
+  loom_op_t* source_finish_for = target_legalize->next_op;
+  ASSERT_TRUE(loom_pass_for_isa(source_finish_for));
+  loom_block_t* source_finish_body =
+      loom_region_entry_block(loom_pass_for_body(source_finish_for));
+  const iree_string_view_t source_finish_keys[] = {
+      IREE_SV("vector-gather-to-scalar"),
+      IREE_SV("linearize-view-accesses"),
+      IREE_SV("canonicalize"),
+      IREE_SV("cse"),
+  };
+  ExpectRunKeySequence(module.get(), source_finish_body, source_finish_keys,
+                       IREE_ARRAYSIZE(source_finish_keys));
+
+  loom_op_t* final_target_legalize = source_finish_for->next_op;
+  ExpectRunKey(module.get(), final_target_legalize, IREE_SV("target-legalize"));
+  ExpectRunStringOption(module.get(), final_target_legalize, IREE_SV("mode"),
+                        IREE_SV("eager"));
+
+  loom_op_t* source_to_low_hook = final_target_legalize->next_op;
+  ExpectRunKey(module.get(), source_to_low_hook, IREE_SV("mock-source-to-low"));
+
+  loom_op_t* source_to_low = source_to_low_hook->next_op;
+  ExpectRunKey(module.get(), source_to_low, IREE_SV("source-to-low"));
+  ExpectRunStringOption(module.get(), source_to_low, IREE_SV("control-flow"),
+                        IREE_SV("structured-low"));
+
+  loom_op_t* source_low_cleanup_for = source_to_low->next_op;
+  ASSERT_TRUE(loom_pass_for_isa(source_low_cleanup_for));
+  loom_block_t* source_low_cleanup_body =
+      loom_region_entry_block(loom_pass_for_body(source_low_cleanup_for));
+  const iree_string_view_t cleanup_keys[] = {
+      IREE_SV("canonicalize"),
+      IREE_SV("cse"),
+      IREE_SV("low-dce"),
+  };
+  ExpectRunKeySequence(module.get(), source_low_cleanup_body, cleanup_keys,
+                       IREE_ARRAYSIZE(cleanup_keys));
+  EXPECT_TRUE(loom_pass_yield_isa(pipeline_body->last_op));
+}
+
 TEST_F(TargetPipelineTest, BuildsVisiblePreparedLowPipeline) {
   ModulePtr module;
   IREE_ASSERT_OK(AllocateModule(IREE_SV("pipeline"), &module));

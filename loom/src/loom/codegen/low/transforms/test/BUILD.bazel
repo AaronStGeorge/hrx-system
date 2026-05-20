@@ -17,6 +17,7 @@ loom_check_test_suite(
     srcs = [
         "allocation_materialization.loom-test",
         "dce.loom-test",
+        "source_to_low_options.loom-test",
         "target_legalize.loom-test",
         "target_legalize_diagnostics.loom-test",
         "target_legalize_matrix.loom-test",

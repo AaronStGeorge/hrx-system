@@ -478,6 +478,13 @@ const loom_low_lower_policy_t* loom_low_lower_policy_registry_lookup_for_bundle(
     const loom_low_lower_policy_registry_t* registry,
     const loom_target_bundle_t* bundle);
 
+typedef enum loom_low_control_flow_lowering_e {
+  // Source control flow has already been lowered to CFG before source-to-low.
+  LOOM_LOW_CONTROL_FLOW_LOWERING_CFG = 0,
+  // Source-to-low preserves supported structured control as low structured ops.
+  LOOM_LOW_CONTROL_FLOW_LOWERING_STRUCTURED_LOW = 1,
+} loom_low_control_flow_lowering_t;
+
 typedef struct loom_low_lower_options_t {
   // Module-local target record symbol used by the emitted low function.
   loom_symbol_ref_t target_ref;
@@ -500,6 +507,8 @@ typedef struct loom_low_lower_options_t {
   iree_diagnostic_emitter_t emitter;
   // Maximum number of errors to emit before aborting. Zero means no limit.
   uint32_t max_errors;
+  // Control-flow shape expected at the source-to-low boundary.
+  loom_low_control_flow_lowering_t control_flow_lowering;
   // Optional arena receiving production tables that must outlive lowering,
   // such as source-derived memory access summaries consumed by packetization.
   iree_arena_allocator_t* table_arena;

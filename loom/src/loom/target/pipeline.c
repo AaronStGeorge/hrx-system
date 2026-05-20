@@ -18,6 +18,25 @@ typedef struct loom_target_pipeline_build_context_t {
   const loom_target_pipeline_options_t* options;
 } loom_target_pipeline_build_context_t;
 
+static iree_status_t loom_target_pipeline_resolve_control_flow_lowering(
+    const loom_target_pipeline_options_t* options,
+    loom_target_control_flow_lowering_t* out_lowering) {
+  if (options == NULL) {
+    *out_lowering = LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG;
+    return iree_ok_status();
+  }
+  switch (options->control_flow_lowering) {
+    case LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG:
+    case LOOM_TARGET_CONTROL_FLOW_LOWERING_STRUCTURED_LOW:
+      *out_lowering = options->control_flow_lowering;
+      return iree_ok_status();
+    default:
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "unknown target control-flow lowering mode %d",
+                              (int)options->control_flow_lowering);
+  }
+}
+
 static iree_status_t loom_target_pipeline_build_run(loom_builder_t* builder,
                                                     iree_string_view_t key) {
   loom_op_t* run_op = NULL;
@@ -54,17 +73,30 @@ static iree_status_t loom_target_pipeline_build_target_legalize(
 
 static iree_status_t loom_target_pipeline_build_source_to_low(
     loom_builder_t* builder, const loom_target_pipeline_options_t* options) {
-  loom_named_attr_t option_attrs[1] = {0};
+  loom_named_attr_t option_attrs[2] = {0};
   loom_named_attr_slice_t option_slice = loom_named_attr_slice_empty();
+  iree_host_size_t option_count = 0;
+  loom_target_control_flow_lowering_t control_flow_lowering =
+      LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG;
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_resolve_control_flow_lowering(
+      options, &control_flow_lowering));
+  if (control_flow_lowering ==
+      LOOM_TARGET_CONTROL_FLOW_LOWERING_STRUCTURED_LOW) {
+    IREE_RETURN_IF_ERROR(loom_target_pipeline_build_string_attr(
+        builder, IREE_SV("control-flow"), IREE_SV("structured-low"),
+        &option_attrs[option_count++]));
+  }
   if (options != NULL && options->source_to_low_max_errors != 0) {
     loom_string_id_t option_name_id = LOOM_STRING_ID_INVALID;
     IREE_RETURN_IF_ERROR(loom_module_intern_string(
         builder->module, IREE_SV("max-errors"), &option_name_id));
-    option_attrs[0] = (loom_named_attr_t){
+    option_attrs[option_count++] = (loom_named_attr_t){
         .name_id = option_name_id,
         .value = loom_attr_i64(options->source_to_low_max_errors),
     };
-    option_slice = loom_make_named_attr_slice(option_attrs, 1);
+  }
+  if (option_count != 0) {
+    option_slice = loom_make_named_attr_slice(option_attrs, option_count);
   }
 
   loom_op_t* run_op = NULL;
@@ -87,19 +119,6 @@ static iree_status_t loom_target_pipeline_build_cleanup(
   return loom_target_pipeline_build_run(builder, IREE_SV("cse"));
 }
 
-static iree_status_t loom_target_pipeline_build_cleanup_body(
-    loom_builder_t* builder, void* user_data) {
-  return loom_target_pipeline_build_cleanup(builder);
-}
-
-static iree_status_t loom_target_pipeline_build_low_cleanup_body(
-    loom_builder_t* builder, void* user_data) {
-  IREE_RETURN_IF_ERROR(
-      loom_target_pipeline_build_run(builder, IREE_SV("cfg-simplify")));
-  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_cleanup(builder));
-  return loom_target_pipeline_build_run(builder, IREE_SV("low-dce"));
-}
-
 static iree_status_t
 loom_target_pipeline_build_source_normalization_before_legalize(
     loom_builder_t* builder, void* user_data) {
@@ -117,14 +136,22 @@ loom_target_pipeline_build_source_normalization_before_legalize(
 }
 
 static iree_status_t
-loom_target_pipeline_build_source_normalization_after_legalize(
+loom_target_pipeline_build_source_safe_normalization_after_legalize(
     loom_builder_t* builder, void* user_data) {
   (void)user_data;
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
       builder, IREE_SV("vector-gather-to-scalar")));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run(
       builder, IREE_SV("linearize-view-accesses")));
-  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_cleanup(builder));
+  return loom_target_pipeline_build_cleanup(builder);
+}
+
+static iree_status_t
+loom_target_pipeline_build_cfg_source_normalization_after_legalize(
+    loom_builder_t* builder, void* user_data) {
+  IREE_RETURN_IF_ERROR(
+      loom_target_pipeline_build_source_safe_normalization_after_legalize(
+          builder, user_data));
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_run(builder, IREE_SV("unroll-scf-for")));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_cleanup(builder));
@@ -134,6 +161,22 @@ loom_target_pipeline_build_source_normalization_after_legalize(
       loom_target_pipeline_build_run(builder, IREE_SV("cfg-simplify")));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_cleanup(builder));
   return loom_target_pipeline_build_run(builder, IREE_SV("branch-sink"));
+}
+
+static iree_status_t loom_target_pipeline_build_low_cleanup_body(
+    loom_builder_t* builder, void* user_data) {
+  const loom_target_pipeline_build_context_t* context =
+      (const loom_target_pipeline_build_context_t*)user_data;
+  loom_target_control_flow_lowering_t control_flow_lowering =
+      LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG;
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_resolve_control_flow_lowering(
+      context->options, &control_flow_lowering));
+  if (control_flow_lowering == LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG) {
+    IREE_RETURN_IF_ERROR(
+        loom_target_pipeline_build_run(builder, IREE_SV("cfg-simplify")));
+  }
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_cleanup(builder));
+  return loom_target_pipeline_build_run(builder, IREE_SV("low-dce"));
 }
 
 static iree_status_t loom_target_pipeline_build_low_preparation(
@@ -152,6 +195,10 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
     loom_builder_t* builder, void* user_data) {
   const loom_target_pipeline_build_context_t* context =
       (const loom_target_pipeline_build_context_t*)user_data;
+  loom_target_control_flow_lowering_t control_flow_lowering =
+      LOOM_TARGET_CONTROL_FLOW_LOWERING_CFG;
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_resolve_control_flow_lowering(
+      context->options, &control_flow_lowering));
   loom_op_t* for_op = NULL;
   IREE_RETURN_IF_ERROR(loom_pass_ir_build_for(
       builder, LOOM_PASS_ANCHOR_FUNC,
@@ -159,10 +206,12 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
       user_data, &for_op));
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_target_legalize(builder, IREE_SV("eager")));
+  loom_pass_ir_body_build_fn_t source_finish_body =
+      control_flow_lowering == LOOM_TARGET_CONTROL_FLOW_LOWERING_STRUCTURED_LOW
+          ? loom_target_pipeline_build_source_safe_normalization_after_legalize
+          : loom_target_pipeline_build_cfg_source_normalization_after_legalize;
   IREE_RETURN_IF_ERROR(loom_pass_ir_build_for(
-      builder, LOOM_PASS_ANCHOR_FUNC,
-      loom_target_pipeline_build_source_normalization_after_legalize, user_data,
-      &for_op));
+      builder, LOOM_PASS_ANCHOR_FUNC, source_finish_body, user_data, &for_op));
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_target_legalize(builder, IREE_SV("eager")));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_contribute_phase(
@@ -171,7 +220,7 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
       loom_target_pipeline_build_source_to_low(builder, context->options));
   return loom_pass_ir_build_for(builder, LOOM_PASS_ANCHOR_FUNC,
                                 loom_target_pipeline_build_low_cleanup_body,
-                                NULL, &for_op);
+                                user_data, &for_op);
 }
 
 static iree_status_t loom_target_pipeline_build_prepared_low_body(
