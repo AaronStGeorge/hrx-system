@@ -2202,11 +2202,11 @@ _IGNORE_FLAT_SCRATCH_INPUT = AmdgpuImplicitOperandOverlay(
 
 
 def _ignore_scratch_memory(
-    *, width_bits: int, is_input: bool
+    *, width_bits: int, is_input: bool, data_format_name: str | None = None
 ) -> AmdgpuImplicitOperandOverlay:
     return AmdgpuImplicitOperandOverlay(
         operand_type="OPR_GPUMEM",
-        data_format_name=f"FMT_NUM_B{width_bits}",
+        data_format_name=data_format_name or f"FMT_NUM_B{width_bits}",
         size_bits=width_bits,
         is_input=is_input,
         is_output=not is_input,

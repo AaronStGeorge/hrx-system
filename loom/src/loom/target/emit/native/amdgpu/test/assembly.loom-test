@@ -984,6 +984,25 @@ low.func.def target(@gfx950_target) @gfx950_dwordx3_memory(%resource: reg<amdgpu
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx950_narrow_vmem_loads waits=none
+amdgpu.target<gfx950> @gfx950_target
+low.func.def target(@gfx950_target) @gfx950_narrow_vmem_loads(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %saddr: reg<amdgpu.sgpr x2>, %m0: reg<amdgpu.m0>) asm<amdgpu.cdna4.core> {
+  %buffer_u8 = buffer_load_u8 %resource, %vaddr, %soffset {offset = 4}
+  %buffer_i16 = buffer_load_i16 %resource, %vaddr, %soffset {offset = 8}
+  %global_u8 = global_load_ubyte_saddr %vaddr, %saddr, %m0 {offset = 12}
+  %global_i16 = global_load_sshort_saddr %vaddr, %saddr, %m0 {offset = 16}
+  return
+}
+
+// ----
+  buffer_load_u8 v1, v0, s[0:3], s4 offen offset:4
+  buffer_load_i16 v1, v0, s[0:3], s4 offen offset:8
+  global_load_ubyte v1, v0, s[6:7] offset:12
+  global_load_sshort v0, v0, s[6:7] offset:16
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx950_v_mov_b32_sdwa waits=none
 amdgpu.target<gfx950> @gfx950_target
 low.func.def target(@gfx950_target) @gfx950_v_mov_b32_sdwa(%value: reg<amdgpu.vgpr>) asm<amdgpu.cdna4.core> {
@@ -1047,6 +1066,25 @@ low.func.def target(@gfx12_target) @gfx12_smem_wide_loads(%base: reg<amdgpu.sgpr
   s_load_u16 s3, s[0:1], s2 offset:24
   s_buffer_load_u8 s0, s[4:7], s2 offset:28
   s_buffer_load_i16 s0, s[4:7], s2 offset:32
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx12_narrow_vmem_loads waits=none
+amdgpu.target<gfx1200> @gfx12_target
+low.func.def target(@gfx12_target) @gfx12_narrow_vmem_loads(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %saddr: reg<amdgpu.sgpr x2>) asm<amdgpu.rdna4.core> {
+  %buffer_u8 = buffer_load_u8 %resource, %vaddr, %soffset {offset = 4}
+  %buffer_i16 = buffer_load_i16 %resource, %vaddr, %soffset {offset = 8}
+  %global_u8 = global_load_u8_saddr %vaddr, %saddr {offset = 12}
+  %global_i16 = global_load_i16_saddr %vaddr, %saddr {offset = 16}
+  return
+}
+
+// ----
+  buffer_load_u8 v1, v0, s[0:3], s4 offen offset:4
+  buffer_load_i16 v1, v0, s[0:3], s4 offen offset:8
+  global_load_u8 v1, v0, s[6:7] offset:12
+  global_load_i16 v0, v0, s[6:7] offset:16
   s_endpgm
 
 // ====

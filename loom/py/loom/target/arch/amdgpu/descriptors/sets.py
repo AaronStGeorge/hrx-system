@@ -499,6 +499,7 @@ def _cdna_core_overlays(
             saddr_off=_GLOBAL_GFX950_SADDR_OFF,
             address_units=2,
             implicit_m0=True,
+            load_mnemonic_suffixes=("ubyte", "sbyte"),
             cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
         *_global_b16_memory_overlays(
@@ -511,6 +512,7 @@ def _cdna_core_overlays(
             saddr_off=_GLOBAL_GFX950_SADDR_OFF,
             address_units=2,
             implicit_m0=True,
+            load_mnemonic_suffixes=("ushort", "sshort"),
             cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
         *_global_memory_overlays(
@@ -539,6 +541,7 @@ def _cdna_core_overlays(
             address_units=1,
             descriptor_key_suffix="_saddr",
             implicit_m0=True,
+            load_mnemonic_suffixes=("ubyte", "sbyte"),
             cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
         *_global_b16_memory_overlays(
@@ -552,6 +555,7 @@ def _cdna_core_overlays(
             address_units=1,
             descriptor_key_suffix="_saddr",
             implicit_m0=True,
+            load_mnemonic_suffixes=("ushort", "sshort"),
             cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
         *_scratch_memory_overlays(
@@ -569,6 +573,8 @@ def _cdna_core_overlays(
             implicit_flat_scratch=True,
             implicit_m0=True,
             descriptor_key_suffix="_vaddr",
+            narrow_byte_load_mnemonic_suffixes=("ubyte", "sbyte"),
+            narrow_b16_load_mnemonic_suffixes=("ushort", "sshort"),
             cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
         *_scratch_memory_overlays(
@@ -586,6 +592,8 @@ def _cdna_core_overlays(
             implicit_flat_scratch=True,
             implicit_m0=True,
             descriptor_key_suffix="_offset_only",
+            narrow_byte_load_mnemonic_suffixes=("ubyte", "sbyte"),
+            narrow_b16_load_mnemonic_suffixes=("ushort", "sshort"),
             cache_fields=_GFX950_VECTOR_CACHE_FIELDS,
         ),
         *_global_load_lds_overlays(
@@ -1198,6 +1206,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             offset_field_name="IOFFSET",
             offset_bit_width=24,
             cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+            include_off_zero=False,
         ),
         *_buffer_b16_memory_overlays(
             encoding_name="ENC_VBUFFER",
@@ -1205,6 +1214,7 @@ def _gfx12_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             offset_field_name="IOFFSET",
             offset_bit_width=24,
             cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+            include_off_zero=False,
         ),
         *_buffer_atomic_overlays(
             encoding_name="ENC_VBUFFER",
@@ -1577,6 +1587,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             offset_field_name="IOFFSET",
             offset_bit_width=24,
             cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+            include_off_zero=False,
         ),
         *_buffer_b16_memory_overlays(
             encoding_name="ENC_VBUFFER",
@@ -1584,6 +1595,7 @@ def _gfx1250_core_overlays() -> tuple[AmdgpuDescriptorOverlay, ...]:
             offset_field_name="IOFFSET",
             offset_bit_width=24,
             cache_fields=_GFX12_VECTOR_CACHE_FIELDS,
+            include_off_zero=False,
         ),
         *_buffer_atomic_overlays(
             encoding_name="ENC_VBUFFER",

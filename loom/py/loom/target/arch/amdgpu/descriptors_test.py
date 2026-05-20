@@ -1435,6 +1435,173 @@ def test_rdna4_smem_narrow_load_descriptors_have_extension_semantics() -> None:
             )
 
 
+def test_vmem_narrow_load_descriptors_cover_active_xml_families() -> None:
+    rows = (
+        (
+            "u8",
+            8,
+            "memory.load.u8.zero_extend",
+            "memory.stack.load.u8.zero_extend",
+            "FMT_NUM_U8",
+        ),
+        (
+            "i8",
+            8,
+            "memory.load.i8.sign_extend",
+            "memory.stack.load.i8.sign_extend",
+            "FMT_NUM_I8",
+        ),
+        (
+            "u16",
+            16,
+            "memory.load.u16.zero_extend",
+            "memory.stack.load.u16.zero_extend",
+            "FMT_NUM_U16",
+        ),
+        (
+            "i16",
+            16,
+            "memory.load.i16.sign_extend",
+            "memory.stack.load.i16.sign_extend",
+            "FMT_NUM_I16",
+        ),
+    )
+    cdna_mnemonic_suffixes = {
+        "u8": "ubyte",
+        "i8": "sbyte",
+        "u16": "ushort",
+        "i16": "sshort",
+    }
+    rdna_mnemonic_suffixes = {suffix: suffix for suffix, *_ in rows}
+
+    for (
+        overlays,
+        global_mnemonic_suffixes,
+        scratch_mnemonic_suffixes,
+        buffer_has_off_zero,
+    ) in (
+        (
+            _gfx940_core_overlays(),
+            cdna_mnemonic_suffixes,
+            cdna_mnemonic_suffixes,
+            True,
+        ),
+        (
+            _gfx950_core_overlays(),
+            cdna_mnemonic_suffixes,
+            cdna_mnemonic_suffixes,
+            True,
+        ),
+        (_gfx11_core_overlays(), rdna_mnemonic_suffixes, rdna_mnemonic_suffixes, True),
+        (
+            _gfx12_core_overlays(),
+            rdna_mnemonic_suffixes,
+            rdna_mnemonic_suffixes,
+            False,
+        ),
+        (
+            _gfx1250_core_overlays(),
+            rdna_mnemonic_suffixes,
+            rdna_mnemonic_suffixes,
+            False,
+        ),
+    ):
+        descriptors = {descriptor.descriptor_key: descriptor for descriptor in overlays}
+        for (
+            suffix,
+            width_bits,
+            global_semantic_tag,
+            scratch_semantic_tag,
+            implicit_data_format,
+        ) in rows:
+            buffer_load_key = f"amdgpu.buffer_load_{suffix}"
+            _assert_memory_width_overlay(
+                descriptors[buffer_load_key],
+                width_bits=width_bits,
+                semantic_tag=global_semantic_tag,
+                mnemonic=f"buffer_load_{suffix}",
+                operand_units=1,
+                payload_field_name="dst",
+                effect_kind=EffectKind.READ,
+                memory_space=MemorySpace.GLOBAL,
+                implicit_data_format=implicit_data_format,
+            )
+            buffer_load_off_zero_key = f"{buffer_load_key}_off_zero"
+            if buffer_has_off_zero:
+                assert tuple(
+                    form.replacement_descriptor
+                    for form in descriptors[buffer_load_key].operand_forms
+                ) == (buffer_load_off_zero_key,)
+                _assert_memory_width_overlay(
+                    descriptors[buffer_load_off_zero_key],
+                    width_bits=width_bits,
+                    semantic_tag=global_semantic_tag,
+                    mnemonic=f"buffer_load_{suffix}",
+                    operand_units=1,
+                    payload_field_name="dst",
+                    effect_kind=EffectKind.READ,
+                    memory_space=MemorySpace.GLOBAL,
+                    implicit_data_format=implicit_data_format,
+                )
+                assert descriptors[buffer_load_off_zero_key].asm_forms == ()
+            else:
+                assert descriptors[buffer_load_key].operand_forms == ()
+                assert buffer_load_off_zero_key not in descriptors
+
+            for descriptor_key_suffix, asm_suffix in (
+                ("", "_vaddr"),
+                ("_saddr", "_saddr"),
+            ):
+                global_load = descriptors[
+                    f"amdgpu.global_load_{suffix}{descriptor_key_suffix}"
+                ]
+                global_mnemonic = f"global_load_{global_mnemonic_suffixes[suffix]}"
+                _assert_memory_width_overlay(
+                    global_load,
+                    width_bits=width_bits,
+                    semantic_tag=global_semantic_tag,
+                    mnemonic=global_mnemonic,
+                    operand_units=1,
+                    payload_field_name="dst",
+                    effect_kind=EffectKind.READ,
+                    memory_space=MemorySpace.GLOBAL,
+                    implicit_data_format=implicit_data_format,
+                )
+                assert global_load.asm_forms is not None
+                assert global_load.asm_forms[0].mnemonic == (
+                    f"{global_mnemonic}{asm_suffix}"
+                ), (
+                    global_load.descriptor_key,
+                    global_load.asm_forms[0].mnemonic,
+                    f"{global_mnemonic}{asm_suffix}",
+                )
+
+            scratch_mnemonic = f"scratch_load_{scratch_mnemonic_suffixes[suffix]}"
+            for descriptor_key_suffix, asm_suffix in (
+                ("_vaddr", "_vaddr"),
+                ("_offset_only", "_offset_only"),
+            ):
+                scratch_load = descriptors[
+                    f"amdgpu.scratch_load_{suffix}{descriptor_key_suffix}"
+                ]
+                _assert_memory_width_overlay(
+                    scratch_load,
+                    width_bits=width_bits,
+                    semantic_tag=scratch_semantic_tag,
+                    mnemonic=scratch_mnemonic,
+                    operand_units=1,
+                    payload_field_name="dst",
+                    effect_kind=EffectKind.READ,
+                    memory_space=MemorySpace.STACK,
+                    implicit_data_format=implicit_data_format,
+                    implicit_ignore_reason="modeled-by-stack-read-effect",
+                )
+                assert scratch_load.asm_forms is not None
+                assert scratch_load.asm_forms[0].mnemonic == (
+                    f"{scratch_mnemonic}{asm_suffix}"
+                )
+
+
 def test_cdna_smem_dwordx4_store_and_scratch_descriptors_cover_xml() -> None:
     rows = (
         (32, 1, "dword"),

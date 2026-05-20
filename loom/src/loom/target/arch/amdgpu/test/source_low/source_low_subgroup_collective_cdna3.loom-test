@@ -155,7 +155,7 @@ low.kernel.def target(@target) workgroup_size(128, 1, 1) @workgroup_reduce_then_
   %sum1 = ds_read_b32 %90
   %137 = v_mov_b32 0
   %138 = s_mov_b32_m0_imm 0
-  %bias_bf16 = global_load_u16_saddr %137, %bias_view, %138
+  %bias_bf16 = global_load_ushort_saddr %137, %bias_view, %138
   %bias_f32 = v_lshlrev_b32_lit %bias_bf16, 16
   %result0 = v_add_f32 %sum0, %bias_f32
   %result1 = v_add_f32 %sum1, %bias_f32
