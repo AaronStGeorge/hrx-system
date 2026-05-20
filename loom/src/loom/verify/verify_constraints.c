@@ -223,7 +223,7 @@ static void loom_verify_relation_pairwise_eq(
     const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
   if (constraint->arg_count < 2) return;
   loom_value_id_t first_id =
-      loom_verify_resolve_value_field(op, constraint->args[0]);
+      loom_verify_resolve_value_field(op, vtable, constraint->args[0]);
   if (first_id == LOOM_VALUE_ID_INVALID) return;
   loom_type_t first_type = loom_verify_value_type(state, first_id);
   uint8_t first_ref = constraint->args[0];
@@ -240,7 +240,7 @@ static void loom_verify_relation_pairwise_eq(
   if (first_is_variadic) {
     uint16_t count = 0;
     const loom_value_id_t* values =
-        loom_verify_resolve_variadic_field(op, first_ref, &count);
+        loom_verify_resolve_variadic_field(op, vtable, first_ref, &count);
     for (uint16_t i = 1; i < count; ++i) {
       loom_type_t other_type = loom_verify_value_type(state, values[i]);
       if (loom_constraint_property_equals(first_type, other_type,
@@ -258,7 +258,8 @@ static void loom_verify_relation_pairwise_eq(
   for (uint8_t i = 1; i < constraint->arg_count; ++i) {
     uint8_t arg_ref = constraint->args[i];
     if (!loom_verify_is_variadic_field(vtable, arg_ref)) {
-      loom_value_id_t other_id = loom_verify_resolve_value_field(op, arg_ref);
+      loom_value_id_t other_id =
+          loom_verify_resolve_value_field(op, vtable, arg_ref);
       loom_type_t other_type = loom_verify_value_type(state, other_id);
       if (loom_constraint_property_equals(first_type, other_type,
                                           constraint->property)) {
@@ -271,7 +272,7 @@ static void loom_verify_relation_pairwise_eq(
     }
     uint16_t count = 0;
     const loom_value_id_t* values =
-        loom_verify_resolve_variadic_field(op, arg_ref, &count);
+        loom_verify_resolve_variadic_field(op, vtable, arg_ref, &count);
     for (uint16_t j = 0; j < count; ++j) {
       loom_type_t other_type = loom_verify_value_type(state, values[j]);
       if (loom_constraint_property_equals(first_type, other_type,
@@ -296,8 +297,8 @@ static void loom_verify_relation_all_same(loom_verify_state_t* state,
                                           const loom_constraint_t* constraint) {
   if (constraint->arg_count < 1) return;
   uint16_t count = 0;
-  const loom_value_id_t* values =
-      loom_verify_resolve_variadic_field(op, constraint->args[0], &count);
+  const loom_value_id_t* values = loom_verify_resolve_variadic_field(
+      op, vtable, constraint->args[0], &count);
   if (count <= 1) return;
   loom_type_t first_type = loom_verify_value_type(state, values[0]);
   for (uint16_t i = 1; i < count; ++i) {
@@ -334,7 +335,8 @@ static void loom_verify_relation_field_satisfies(
   for (uint8_t i = 0; i < constraint->arg_count; ++i) {
     uint8_t field_ref = constraint->args[i];
     if (!loom_verify_is_variadic_field(vtable, field_ref)) {
-      loom_value_id_t value_id = loom_verify_resolve_value_field(op, field_ref);
+      loom_value_id_t value_id =
+          loom_verify_resolve_value_field(op, vtable, field_ref);
       if (value_id == LOOM_VALUE_ID_INVALID) continue;
       loom_type_t value_type = loom_verify_value_type(state, value_id);
       if (loom_type_satisfies_constraint(value_type, expected)) continue;
@@ -360,7 +362,7 @@ static void loom_verify_relation_field_satisfies(
 
     uint16_t count = 0;
     const loom_value_id_t* values =
-        loom_verify_resolve_variadic_field(op, field_ref, &count);
+        loom_verify_resolve_variadic_field(op, vtable, field_ref, &count);
     for (uint16_t j = 0; j < count; ++j) {
       loom_type_t value_type = loom_verify_value_type(state, values[j]);
       if (loom_type_satisfies_constraint(value_type, expected)) continue;
@@ -565,7 +567,8 @@ static void loom_verify_relation_attr_matches_element_type(
   if (loom_verify_is_variadic_field(vtable, field_ref)) return;
 
   loom_attribute_t attr = {0};
-  loom_value_id_t value_id = loom_verify_resolve_value_field(op, field_ref);
+  loom_value_id_t value_id =
+      loom_verify_resolve_value_field(op, vtable, field_ref);
   if (!loom_verify_resolve_attr_field(op, attr_ref, &attr) ||
       value_id == LOOM_VALUE_ID_INVALID || loom_attr_is_absent(attr)) {
     return;
@@ -630,9 +633,10 @@ static void loom_verify_relation_element_width_order(
     return;
   }
 
-  loom_value_id_t value_id = loom_verify_resolve_value_field(op, field_ref);
+  loom_value_id_t value_id =
+      loom_verify_resolve_value_field(op, vtable, field_ref);
   loom_value_id_t reference_id =
-      loom_verify_resolve_value_field(op, reference_ref);
+      loom_verify_resolve_value_field(op, vtable, reference_ref);
   if (value_id == LOOM_VALUE_ID_INVALID ||
       reference_id == LOOM_VALUE_ID_INVALID) {
     return;
@@ -700,7 +704,8 @@ static void loom_verify_relation_element_width_at_least_attr(
   uint8_t attr_ref = constraint->args[1];
   if (loom_verify_is_variadic_field(vtable, field_ref)) return;
 
-  loom_value_id_t value_id = loom_verify_resolve_value_field(op, field_ref);
+  loom_value_id_t value_id =
+      loom_verify_resolve_value_field(op, vtable, field_ref);
   int64_t required_bit_width = 0;
   if (value_id == LOOM_VALUE_ID_INVALID ||
       !loom_verify_resolve_i64_attr_field(op, attr_ref, &required_bit_width) ||
@@ -750,7 +755,8 @@ static void loom_verify_relation_bit_range_within_element_width(
   uint8_t width_ref = constraint->args[2];
   if (loom_verify_is_variadic_field(vtable, field_ref)) return;
 
-  loom_value_id_t value_id = loom_verify_resolve_value_field(op, field_ref);
+  loom_value_id_t value_id =
+      loom_verify_resolve_value_field(op, vtable, field_ref);
   int64_t offset = 0;
   int64_t width = 0;
   if (value_id == LOOM_VALUE_ID_INVALID ||
@@ -877,8 +883,10 @@ static void loom_verify_relation_total_bit_count_equal(
     return;
   }
 
-  loom_value_id_t lhs_value_id = loom_verify_resolve_value_field(op, lhs_ref);
-  loom_value_id_t rhs_value_id = loom_verify_resolve_value_field(op, rhs_ref);
+  loom_value_id_t lhs_value_id =
+      loom_verify_resolve_value_field(op, vtable, lhs_ref);
+  loom_value_id_t rhs_value_id =
+      loom_verify_resolve_value_field(op, vtable, rhs_ref);
   if (lhs_value_id == LOOM_VALUE_ID_INVALID ||
       rhs_value_id == LOOM_VALUE_ID_INVALID) {
     return;
@@ -975,11 +983,11 @@ static void loom_verify_relation_payload_bit_count_matches_storage(
   }
 
   loom_value_id_t payload_value_id =
-      loom_verify_resolve_value_field(op, payload_ref);
+      loom_verify_resolve_value_field(op, vtable, payload_ref);
   loom_value_id_t storage_value_id =
-      loom_verify_resolve_value_field(op, storage_ref);
+      loom_verify_resolve_value_field(op, vtable, storage_ref);
   loom_value_id_t diagnostic_value_id =
-      loom_verify_resolve_value_field(op, diagnostic_ref);
+      loom_verify_resolve_value_field(op, vtable, diagnostic_ref);
   int64_t payload_width = 0;
   if (payload_value_id == LOOM_VALUE_ID_INVALID ||
       storage_value_id == LOOM_VALUE_ID_INVALID ||
@@ -1070,8 +1078,10 @@ static void loom_verify_relation_last_axis_grouped_by(
   if (constraint->arg_count < 2 || constraint->property == 0) return;
   uint8_t source_ref = constraint->args[0];
   uint8_t result_ref = constraint->args[1];
-  loom_value_id_t source_id = loom_verify_resolve_value_field(op, source_ref);
-  loom_value_id_t result_id = loom_verify_resolve_value_field(op, result_ref);
+  loom_value_id_t source_id =
+      loom_verify_resolve_value_field(op, vtable, source_ref);
+  loom_value_id_t result_id =
+      loom_verify_resolve_value_field(op, vtable, result_ref);
   if (source_id == LOOM_VALUE_ID_INVALID ||
       result_id == LOOM_VALUE_ID_INVALID) {
     return;
@@ -1160,7 +1170,7 @@ static void loom_verify_relation_count_matches_rank(
     const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
   if (constraint->arg_count < 2) return;
   loom_type_t shaped_type = loom_verify_value_type(
-      state, loom_verify_resolve_value_field(op, constraint->args[0]));
+      state, loom_verify_resolve_value_field(op, vtable, constraint->args[0]));
   uint16_t variadic_count =
       loom_verify_variadic_count(op, vtable, constraint->args[1]);
   uint8_t rank = loom_type_rank(shaped_type);
@@ -1189,7 +1199,7 @@ static void loom_verify_relation_count_matches_static_element_count(
   uint8_t shaped_ref = constraint->args[0];
   uint8_t values_ref = constraint->args[1];
   loom_type_t shaped_type = loom_verify_value_type(
-      state, loom_verify_resolve_value_field(op, shaped_ref));
+      state, loom_verify_resolve_value_field(op, vtable, shaped_ref));
   if (!loom_type_is_shaped(shaped_type) ||
       !loom_type_is_all_static(shaped_type)) {
     return;
@@ -1251,7 +1261,7 @@ static void loom_verify_relation_attr_in_range_rank(
     const loom_op_vtable_t* vtable, const loom_constraint_t* constraint) {
   if (constraint->arg_count < 2) return;
   loom_type_t shaped_type = loom_verify_value_type(
-      state, loom_verify_resolve_value_field(op, constraint->args[0]));
+      state, loom_verify_resolve_value_field(op, vtable, constraint->args[0]));
   uint8_t attr_index = LOOM_FIELD_REF_INDEX(constraint->args[1]);
   if (attr_index >= op->attribute_count) return;
   int64_t dim_index = loom_attr_as_i64(loom_op_attrs(op)[attr_index]);
@@ -1318,8 +1328,8 @@ static void loom_verify_relation_region_arg_match(
       return;
     }
   } else {
-    inputs.values = loom_verify_resolve_variadic_field(op, constraint->args[1],
-                                                       &inputs.count);
+    inputs.values = loom_verify_resolve_variadic_field(
+        op, vtable, constraint->args[1], &inputs.count);
     if (!inputs.values) return;
   }
   uint16_t check_count = args.count < inputs.count ? args.count : inputs.count;
@@ -1400,7 +1410,7 @@ static void loom_verify_relation_yield_match(
   }
   uint16_t result_count = 0;
   const loom_value_id_t* result_values = loom_verify_resolve_variadic_field(
-      op, constraint->args[1], &result_count);
+      op, vtable, constraint->args[1], &result_count);
   if (!result_values) return;
   uint16_t check_count =
       yield_count < result_count ? yield_count : result_count;
@@ -1447,9 +1457,9 @@ static void loom_verify_relation_variadic_match(
   uint16_t count_a = 0;
   uint16_t count_b = 0;
   const loom_value_id_t* values_a =
-      loom_verify_resolve_variadic_field(op, ref_a, &count_a);
+      loom_verify_resolve_variadic_field(op, vtable, ref_a, &count_a);
   const loom_value_id_t* values_b =
-      loom_verify_resolve_variadic_field(op, ref_b, &count_b);
+      loom_verify_resolve_variadic_field(op, vtable, ref_b, &count_b);
   if (!values_a || !values_b) return;
 
   if (count_a != count_b) {
@@ -1518,10 +1528,10 @@ static void loom_verify_relation_register_unit_count_sum(
   }
 
   uint16_t source_count = 0;
-  const loom_value_id_t* source_values =
-      loom_verify_resolve_variadic_field(op, sources_ref, &source_count);
+  const loom_value_id_t* source_values = loom_verify_resolve_variadic_field(
+      op, vtable, sources_ref, &source_count);
   loom_value_id_t result_value =
-      loom_verify_resolve_value_field(op, result_ref);
+      loom_verify_resolve_value_field(op, vtable, result_ref);
   if (!source_values || result_value == LOOM_VALUE_ID_INVALID) {
     return;
   }

@@ -1116,6 +1116,33 @@ class TestOpPatterns:
         assert len(add_op.operands) == 2
         assert len(add_op.results) == 1
 
+    def test_segmented_operands(self) -> None:
+        module = Module(name="test")
+        root = module.add_value(Value(name="root", type=I32))
+        guard = module.add_value(Value(name="guard", type=I32))
+        lhs = module.add_value(Value(name="lhs", type=I32))
+        rhs = module.add_value(Value(name="rhs", type=I32))
+        result = module.add_value(Value(name="result", type=I32))
+        segmented = Operation(
+            name="test.segmented",
+            operands=[root, guard, lhs, rhs],
+            operand_segment_counts=(1, 1, 1, 1),
+            results=[result],
+        )
+        yield_op = Operation(name="test.yield", operands=[result])
+        block = Block(arg_ids=[root, guard, lhs, rhs], ops=[segmented, yield_op])
+        body = Region(blocks=[block])
+        func_op = Operation(name="func.def", attributes={"callee": "f"}, regions=[body])
+        module.add_symbol(Symbol(name="f", kind=SymbolKind.FUNC_DEF, op=func_op))
+
+        loaded = self._roundtrip_ops(module)
+        loaded_op = loaded.symbols[0].op
+        assert loaded_op is not None
+        segmented_op = loaded_op.regions[0].blocks[0].ops[0]
+        assert segmented_op.name == "test.segmented"
+        assert segmented_op.operand_segment_counts == (1, 1, 1, 1)
+        assert len(segmented_op.operands) == 4
+
     def test_tied_result(self) -> None:
         tile_t = ShapedType(TypeKind.TILE, F32, (StaticDim(4),))
         tensor_t = ShapedType(TypeKind.TENSOR, F32, (StaticDim(4),))

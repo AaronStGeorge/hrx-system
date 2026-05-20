@@ -68,6 +68,13 @@ static uint32_t loom_cse_hash_op(const loom_module_t* module,
   hash = loom_cse_hash_bytes(
       operands, (iree_host_size_t)op->operand_count * sizeof(loom_value_id_t),
       hash);
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+  uint8_t operand_segment_count = loom_op_vtable_operand_segment_count(vtable);
+  if (operand_segment_count > 0) {
+    hash = loom_cse_hash_bytes(
+        loom_op_const_operand_segment_counts(op),
+        (iree_host_size_t)operand_segment_count * sizeof(uint16_t), hash);
+  }
   const loom_value_id_t* results = loom_op_results((loom_op_t*)op);
   for (uint16_t i = 0; i < op->result_count; ++i) {
     if (results[i] != LOOM_VALUE_ID_INVALID) {
@@ -104,6 +111,14 @@ static bool loom_cse_ops_equal(const loom_module_t* module, const loom_op_t* a,
   if (memcmp(a_operands, b_operands,
              (iree_host_size_t)a->operand_count * sizeof(loom_value_id_t)) !=
       0) {
+    return false;
+  }
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, a);
+  uint8_t operand_segment_count = loom_op_vtable_operand_segment_count(vtable);
+  if (operand_segment_count > 0 &&
+      memcmp(loom_op_const_operand_segment_counts(a),
+             loom_op_const_operand_segment_counts(b),
+             (iree_host_size_t)operand_segment_count * sizeof(uint16_t)) != 0) {
     return false;
   }
   const loom_value_id_t* a_results = loom_op_results((loom_op_t*)a);

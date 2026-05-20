@@ -431,8 +431,8 @@ static iree_status_t loom_parse_format_define_binding_arg(
 }
 
 static iree_status_t loom_parse_format_binding_entry(
-    loom_parser_t* parser, loom_parsed_op_t* parsed,
-    loom_parsed_binding_t* out_binding) {
+    loom_parser_t* parser, const loom_format_element_t* element,
+    loom_parsed_op_t* parsed, loom_parsed_binding_t* out_binding) {
   loom_token_t arg_token = loom_token_none();
   LOOM_PARSE_EXPECT(parser, LOOM_TOKEN_SSA_VALUE, &arg_token);
 
@@ -447,8 +447,14 @@ static iree_status_t loom_parse_format_binding_entry(
   LOOM_PARSE_RESOLVE_VALUE(parser, operand_token, &operand_id);
 
   uint16_t operand_index = parsed->operand_count;
-  IREE_RETURN_IF_ERROR(
-      loom_parsed_op_add_operand(parsed, &parser->parser_arena, operand_id));
+  if (parsed->operand_segment_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_parsed_op_add_segmented_operand(
+        parsed, &parser->parser_arena, element->field_index, operand_id,
+        &operand_index));
+  } else {
+    IREE_RETURN_IF_ERROR(
+        loom_parsed_op_add_operand(parsed, &parser->parser_arena, operand_id));
+  }
   IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
       parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND, operand_index,
       operand_token, operand_token.line, operand_token.end_column));
@@ -485,7 +491,7 @@ static iree_status_t loom_parse_format_grouped_binding_list_tail(
   while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
     loom_parsed_binding_t binding;
     IREE_RETURN_IF_ERROR(
-        loom_parse_format_binding_entry(parser, parsed, &binding));
+        loom_parse_format_binding_entry(parser, element, parsed, &binding));
     IREE_RETURN_IF_ERROR(
         loom_parsed_binding_list_append(parser, &bindings, binding));
 
@@ -515,7 +521,11 @@ iree_status_t loom_parse_format_binding_list(
 
   while (!loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_RPAREN) &&
          !loom_tokenizer_at(&parser->tokenizer, LOOM_TOKEN_EOF)) {
-    if (parsed->operand_count > element->field_index) {
+    if ((parsed->operand_segment_count > 0 &&
+         element->field_index < parsed->operand_segment_count &&
+         parsed->operand_segment_counts[element->field_index] > 0) ||
+        (parsed->operand_segment_count == 0 &&
+         parsed->operand_count > element->field_index)) {
       if (!loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
         break;
       }
@@ -523,7 +533,7 @@ iree_status_t loom_parse_format_binding_list(
 
     loom_parsed_binding_t binding;
     IREE_RETURN_IF_ERROR(
-        loom_parse_format_binding_entry(parser, parsed, &binding));
+        loom_parse_format_binding_entry(parser, element, parsed, &binding));
 
     if (loom_tokenizer_try_consume(&parser->tokenizer, LOOM_TOKEN_COMMA)) {
       IREE_RETURN_IF_ERROR(loom_parse_format_grouped_binding_list_tail(

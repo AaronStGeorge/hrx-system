@@ -2582,6 +2582,7 @@ def _generate_builder_implementation(
     params = _extract_c_params(op, shared_enums)
     layout = compute_layout(op)
     func_args_are_operands = _func_args_are_operands(op)
+    params_by_name = {str(param["name"]): param for param in params if "name" in param}
     lines: list[str] = []
 
     # Compute counts for op_alloc.
@@ -2613,7 +2614,22 @@ def _generate_builder_implementation(
         lines.append(f"    {p}{comma}")
 
     # Validate all host-size counts before narrowing to the op storage width.
-    if variadic_operand_param:
+    if layout.segmented_operands:
+        for param in params:
+            if param["kind"] in (
+                "operand_variadic",
+                "binding_list",
+                "operand_dict",
+                "index_list",
+            ) or (param["kind"] == "func_args" and func_args_are_operands):
+                count_name = param["dynamic_field"] if param["kind"] == "index_list" else param["name"]
+                _emit_builder_count_check(
+                    lines,
+                    count=f"{count_name}_count",
+                    max_value="UINT16_MAX",
+                    message=f"{op.name} operand segment '{count_name}' exceeds uint16_t range",
+                )
+    elif variadic_operand_param:
         max_variadic_operand_count = "UINT16_MAX"
         if fixed_operand_count:
             max_variadic_operand_count = f"UINT16_MAX - {fixed_operand_count}"
@@ -2669,7 +2685,37 @@ def _generate_builder_implementation(
             )
 
     optional_operand_params = [param for param in params if param["kind"] == "operand" and param.get("optional")]
-    if optional_operand_params:
+    if layout.segmented_operands:
+        lines.append(f"  uint16_t operand_segment_counts[{len(op.operands)}] = {{0}};")
+        lines.append("  uint32_t operand_count_32 = 0;")
+        for operand in op.operands:
+            desc = layout.fields[operand.name]
+            operand_param = params_by_name.get(operand.name)
+            if operand.variadic:
+                if operand_param is None:
+                    raise ValueError(f"Op '{op.name}': variadic operand '{operand.name}' has no builder parameter")
+                count_name = operand_param["dynamic_field"] if operand_param["kind"] == "index_list" else operand_param["name"]
+                lines.append(f"  operand_segment_counts[{desc.index}] = (uint16_t){count_name}_count;")
+                lines.append(f"  operand_count_32 += (uint32_t){count_name}_count;")
+            elif operand.optional:
+                if operand_param is None:
+                    raise ValueError(f"Op '{op.name}': optional operand '{operand.name}' has no builder parameter")
+                optional_flag = _build_flag_bit_name(prefix, operand_param)
+                lines.append(f"  if (iree_any_bit_set(build_flags, {optional_flag})) {{")
+                lines.append(f"    operand_segment_counts[{desc.index}] = 1;")
+                lines.append("    operand_count_32 += 1;")
+                lines.append("  }")
+            else:
+                lines.append(f"  operand_segment_counts[{desc.index}] = 1;")
+                lines.append("  operand_count_32 += 1;")
+        lines.append("  if (operand_count_32 > UINT16_MAX) {")
+        lines.append("    return iree_make_status(")
+        lines.append("        IREE_STATUS_INVALID_ARGUMENT,")
+        lines.append(f'        "{op.name} operand count exceeds uint16_t range");')
+        lines.append("  }")
+        lines.append("  uint16_t operand_count = (uint16_t)operand_count_32;")
+        operand_count_expr = "operand_count"
+    elif optional_operand_params:
         optional_operand_params.sort(key=lambda param: param["index"])
         lines.append(f"  uint16_t operand_count = {fixed_operand_count};")
         previous_optional_flag = ""
@@ -2736,9 +2782,14 @@ def _generate_builder_implementation(
     else:
         tied_count_expr = "0"
 
-    allocate_fn = "loom_builder_allocate_op_with_successors" if op.successors else "loom_builder_allocate_op"
+    if layout.segmented_operands:
+        allocate_fn = "loom_builder_allocate_segmented_op_with_successors" if op.successors else "loom_builder_allocate_segmented_op"
+    else:
+        allocate_fn = "loom_builder_allocate_op_with_successors" if op.successors else "loom_builder_allocate_op"
     lines.append(f"  IREE_RETURN_IF_ERROR({allocate_fn}(")
     lines.append(f"      builder, {enum_name}, {operand_count_expr},")
+    if layout.segmented_operands:
+        lines.append("      operand_segment_counts, IREE_ARRAYSIZE(operand_segment_counts),")
     if op.successors:
         lines.append(f"      {result_count_expr}, {successor_count_expr}, {region_count_expr}, {tied_count_expr},")
     else:
@@ -2746,50 +2797,97 @@ def _generate_builder_implementation(
     lines.append(f"      {attr_count}, location, out_op));")
     lines.extend(f"  (*out_op)->instance_flags = {param['name']};" for param in params if param["kind"] == "instance_flags")
 
-    # Fill in fixed operands.
-    for param in params:
-        if param["kind"] != "operand":
-            continue
-        if param.get("optional"):
-            optional_flag = _build_flag_bit_name(prefix, param)
-            lines.append(f"  if (iree_any_bit_set(build_flags, {optional_flag})) {{")
-            lines.append(f"    loom_op_operands(*out_op)[{param['index']}] = {param['name']};")
-            lines.append("  }")
-        else:
-            lines.append(f"  loom_op_operands(*out_op)[{param['index']}] = {param['name']};")
+    if layout.segmented_operands:
+        lines.append("  uint16_t operand_offset = 0;")
+        for operand in op.operands:
+            operand_param = params_by_name.get(operand.name)
+            if operand.variadic:
+                if operand_param is None:
+                    raise ValueError(f"Op '{op.name}': variadic operand '{operand.name}' has no builder parameter")
+                if operand_param["kind"] in ("operand_variadic", "binding_list"):
+                    name = operand_param["name"]
+                    lines.append(f"  if ({name}_count > 0) {{")
+                    lines.append("    memcpy(loom_op_operands(*out_op) + operand_offset,")
+                    lines.append(f"           {name}, {name}_count * sizeof(loom_value_id_t));")
+                    lines.append("  }")
+                    lines.append(f"  operand_offset += (uint16_t){name}_count;")
+                elif operand_param["kind"] == "operand_dict":
+                    name = operand_param["name"]
+                    attr_index = operand_param["names_attr_index"]
+                    lines.append("  IREE_RETURN_IF_ERROR(loom_builder_set_operand_dict(")
+                    lines.append(f"      builder, loom_make_named_value_slice({name}, {name}_count),")
+                    lines.append("      loom_op_operands(*out_op) + operand_offset,")
+                    lines.append(f"      &loom_op_attrs(*out_op)[{attr_index}]));")
+                    lines.append(f"  operand_offset += (uint16_t){name}_count;")
+                elif operand_param["kind"] == "index_list":
+                    dyn = operand_param["dynamic_field"]
+                    lines.append(f"  if ({dyn}_count > 0) {{")
+                    lines.append("    memcpy(loom_op_operands(*out_op) + operand_offset,")
+                    lines.append(f"           {dyn}, {dyn}_count * sizeof(loom_value_id_t));")
+                    lines.append("  }")
+                    lines.append(f"  operand_offset += (uint16_t){dyn}_count;")
+                elif operand_param["kind"] == "func_args" and func_args_are_operands:
+                    lines.append("  for (iree_host_size_t _i = 0; _i < arg_types_count; ++_i) {")
+                    lines.append("    loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
+                    lines.append("    IREE_RETURN_IF_ERROR(")
+                    lines.append("        loom_builder_define_value(builder, arg_types[_i], &_arg_id));")
+                    lines.append("    loom_op_operands(*out_op)[operand_offset + _i] = _arg_id;")
+                    lines.append("  }")
+                    lines.append("  operand_offset += (uint16_t)arg_types_count;")
+            elif operand.optional:
+                if operand_param is None:
+                    raise ValueError(f"Op '{op.name}': optional operand '{operand.name}' has no builder parameter")
+                optional_flag = _build_flag_bit_name(prefix, operand_param)
+                lines.append(f"  if (iree_any_bit_set(build_flags, {optional_flag})) {{")
+                lines.append(f"    loom_op_operands(*out_op)[operand_offset++] = {operand.name};")
+                lines.append("  }")
+            else:
+                lines.append(f"  loom_op_operands(*out_op)[operand_offset++] = {operand.name};")
+    else:
+        # Fill in fixed operands.
+        for param in params:
+            if param["kind"] != "operand":
+                continue
+            if param.get("optional"):
+                optional_flag = _build_flag_bit_name(prefix, param)
+                lines.append(f"  if (iree_any_bit_set(build_flags, {optional_flag})) {{")
+                lines.append(f"    loom_op_operands(*out_op)[{param['index']}] = {param['name']};")
+                lines.append("  }")
+            else:
+                lines.append(f"  loom_op_operands(*out_op)[{param['index']}] = {param['name']};")
+
+        # Fill in variadic operands (memcpy from the array parameter).
+        for param in params:
+            if param["kind"] in ("operand_variadic", "binding_list"):
+                name = param["name"]
+                lines.append(f"  if ({name}_count > 0) {{")
+                lines.append(f"    memcpy(loom_op_operands(*out_op) + {fixed_operand_count},")
+                lines.append(f"           {name}, {name}_count * sizeof(loom_value_id_t));")
+                lines.append("  }")
+            elif param["kind"] == "operand_dict":
+                name = param["name"]
+                operand_index = param["operand_index"]
+                attr_index = param["names_attr_index"]
+                lines.append("  IREE_RETURN_IF_ERROR(loom_builder_set_operand_dict(")
+                lines.append(f"      builder, loom_make_named_value_slice({name}, {name}_count),")
+                lines.append(f"      loom_op_operands(*out_op) + {operand_index},")
+                lines.append(f"      &loom_op_attrs(*out_op)[{attr_index}]));")
+            elif param["kind"] == "index_list":
+                dyn = param["dynamic_field"]
+                lines.append(f"  if ({dyn}_count > 0) {{")
+                lines.append(f"    memcpy(loom_op_operands(*out_op) + {fixed_operand_count},")
+                lines.append(f"           {dyn}, {dyn}_count * sizeof(loom_value_id_t));")
+                lines.append("  }")
+            elif param["kind"] == "func_args" and func_args_are_operands:
+                lines.append("  for (iree_host_size_t _i = 0; _i < arg_types_count; ++_i) {")
+                lines.append("    loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
+                lines.append("    IREE_RETURN_IF_ERROR(")
+                lines.append("        loom_builder_define_value(builder, arg_types[_i], &_arg_id));")
+                lines.append(f"    loom_op_operands(*out_op)[{fixed_operand_count} + _i] = _arg_id;")
+                lines.append("  }")
 
     # Fill in fixed successors.
     lines.extend(f"  loom_op_successors(*out_op)[{param['index']}] = {param['name']};" for param in params if param["kind"] == "successor")
-
-    # Fill in variadic operands (memcpy from the array parameter).
-    for param in params:
-        if param["kind"] in ("operand_variadic", "binding_list"):
-            name = param["name"]
-            lines.append(f"  if ({name}_count > 0) {{")
-            lines.append(f"    memcpy(loom_op_operands(*out_op) + {fixed_operand_count},")
-            lines.append(f"           {name}, {name}_count * sizeof(loom_value_id_t));")
-            lines.append("  }")
-        elif param["kind"] == "operand_dict":
-            name = param["name"]
-            operand_index = param["operand_index"]
-            attr_index = param["names_attr_index"]
-            lines.append("  IREE_RETURN_IF_ERROR(loom_builder_set_operand_dict(")
-            lines.append(f"      builder, loom_make_named_value_slice({name}, {name}_count),")
-            lines.append(f"      loom_op_operands(*out_op) + {operand_index},")
-            lines.append(f"      &loom_op_attrs(*out_op)[{attr_index}]));")
-        elif param["kind"] == "index_list":
-            dyn = param["dynamic_field"]
-            lines.append(f"  if ({dyn}_count > 0) {{")
-            lines.append(f"    memcpy(loom_op_operands(*out_op) + {fixed_operand_count},")
-            lines.append(f"           {dyn}, {dyn}_count * sizeof(loom_value_id_t));")
-            lines.append("  }")
-        elif param["kind"] == "func_args" and func_args_are_operands:
-            lines.append("  for (iree_host_size_t _i = 0; _i < arg_types_count; ++_i) {")
-            lines.append("    loom_value_id_t _arg_id = LOOM_VALUE_ID_INVALID;")
-            lines.append("    IREE_RETURN_IF_ERROR(")
-            lines.append("        loom_builder_define_value(builder, arg_types[_i], &_arg_id));")
-            lines.append(f"    loom_op_operands(*out_op)[{fixed_operand_count} + _i] = _arg_id;")
-            lines.append("  }")
 
     def emit_auto_region(slot_expr: str, name: str, implicit_args: tuple[tuple[str, str], ...]) -> None:
         has_block_args = bool(implicit_args)
@@ -3233,7 +3331,14 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
         # Accessors.
         for operand in op.operands:
             desc = layout.fields[operand.name]
-            if operand.variadic:
+            if layout.segmented_operands:
+                if operand.variadic:
+                    lines.append(f"LOOM_DEFINE_SEGMENTED_OPERANDS({prefix}_{operand.name}, {desc.index})")
+                elif operand.optional:
+                    lines.append(f"LOOM_DEFINE_SEGMENTED_OPTIONAL_OPERAND({prefix}_{operand.name}, {desc.index})")
+                else:
+                    lines.append(f"LOOM_DEFINE_SEGMENTED_OPERAND({prefix}_{operand.name}, {desc.index})")
+            elif operand.variadic:
                 lines.append(f"LOOM_DEFINE_VARIADIC_OPERANDS({prefix}_{operand.name}, {desc.index})")
             elif operand.optional:
                 lines.append(f"LOOM_DEFINE_OPTIONAL_OPERAND({prefix}_{operand.name}, {desc.index})")
@@ -3723,7 +3828,9 @@ def generate_tables_c(
         # Vtable.
         traits = _trait_flags(op)
         vtable_flag_bits: list[str] = []
-        if layout.variadic_operand or _func_args_are_operands(op):
+        if layout.segmented_operands:
+            vtable_flag_bits.append("LOOM_OP_VTABLE_SEGMENTED_OPERANDS")
+        elif layout.variadic_operand or _func_args_are_operands(op):
             vtable_flag_bits.append("LOOM_OP_VTABLE_VARIADIC_OPERANDS")
         if layout.variadic_result:
             vtable_flag_bits.append("LOOM_OP_VTABLE_VARIADIC_RESULTS")
@@ -3750,7 +3857,9 @@ def generate_tables_c(
             operand_descriptor_count += 1
         successor_selector_operand_index = _resolve_successor_selector_operand_index(op)
         implied_operand_descriptor_count = layout.fixed_operand_count
-        if layout.variadic_operand or _func_args_are_operands(op):
+        if layout.segmented_operands:
+            implied_operand_descriptor_count = -1
+        elif layout.variadic_operand or _func_args_are_operands(op):
             implied_operand_descriptor_count += 1
         result_desc_ptr = f"{prefix}_result_desc" if op.results else "NULL"
         region_desc_ptr = f"{prefix}_region_desc" if op.regions else "NULL"

@@ -680,6 +680,9 @@ typedef enum loom_bytecode_section_kind_e {
 //       [operand_count: varint]
 //       For each operand (these REFERENCE existing SSA values):
 //         [value_ref: varint]   (just the value ref, no type info)
+//       For ops with LOOM_OP_VTABLE_SEGMENTED_OPERANDS:
+//         For each operand descriptor:
+//           [segment_count: varint]
 //       [successor_count: varint]
 //       For each successor:
 //         [block_index: varint]  Region-local index of the target block.

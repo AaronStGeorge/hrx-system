@@ -164,11 +164,21 @@ class ModuleVerifier:
     ) -> bool:
         layout = self.registry.layout(op_decl)
         ok = True
-        ok &= self._verify_operand_count(
-            len(operation.operands),
-            layout,
-            path,
-        )
+        if layout.segmented_operands:
+            ok &= self._verify_operand_segments(op_decl, operation, path)
+        else:
+            ok &= self._verify_operand_count(
+                len(operation.operands),
+                layout,
+                path,
+            )
+            if operation.operand_segment_counts:
+                self.diagnostics.error(
+                    "unexpected operand segment counts",
+                    source=path,
+                    details=("op does not use segmented operands",),
+                )
+                ok = False
         ok &= self._verify_count(
             "result",
             len(operation.results),
@@ -197,6 +207,74 @@ class ModuleVerifier:
                 "missing required else region",
                 source=path,
                 details=("scf.if with results requires an else region",),
+            )
+            ok = False
+        return ok
+
+    def _verify_operand_segments(
+        self,
+        op_decl: Op,
+        operation: Operation,
+        path: str,
+    ) -> bool:
+        counts = operation.operand_segment_counts
+        expected_count = len(op_decl.operands)
+        if len(counts) != expected_count:
+            self.diagnostics.error(
+                "wrong operand segment count",
+                source=path,
+                details=(f"expected {expected_count}, found {len(counts)}",),
+            )
+            return False
+
+        ok = True
+        total_count = 0
+        for operand_decl, segment_count in zip(op_decl.operands, counts, strict=False):
+            if segment_count < 0:
+                self.diagnostics.error(
+                    "negative operand segment count",
+                    source=path,
+                    details=(
+                        f"operand field '{operand_decl.name}' has count "
+                        f"{segment_count}",
+                    ),
+                )
+                ok = False
+                continue
+            total_count += segment_count
+            if operand_decl.variadic:
+                continue
+            if operand_decl.optional:
+                if segment_count > 1:
+                    self.diagnostics.error(
+                        "wrong optional operand segment count",
+                        source=path,
+                        details=(
+                            f"operand field '{operand_decl.name}' expected "
+                            f"0..1 values, found {segment_count}",
+                        ),
+                    )
+                    ok = False
+                continue
+            if segment_count != 1:
+                self.diagnostics.error(
+                    "wrong required operand segment count",
+                    source=path,
+                    details=(
+                        f"operand field '{operand_decl.name}' expected "
+                        f"1 value, found {segment_count}",
+                    ),
+                )
+                ok = False
+
+        if total_count != len(operation.operands):
+            self.diagnostics.error(
+                "operand segment counts do not sum to operand count",
+                source=path,
+                details=(
+                    f"segment counts sum to {total_count}",
+                    f"flat operand count is {len(operation.operands)}",
+                ),
             )
             ok = False
         return ok
@@ -321,18 +399,56 @@ class ModuleVerifier:
         operation: Operation,
         path: str,
     ) -> None:
-        self._verify_value_type_constraints(
-            operation.operands,
-            op_decl.operands,
-            path,
-            field_kind="operand",
-        )
+        layout = self.registry.layout(op_decl)
+        if layout.segmented_operands:
+            self._verify_segmented_operand_type_constraints(
+                op_decl,
+                operation,
+                path,
+            )
+        else:
+            self._verify_value_type_constraints(
+                operation.operands,
+                op_decl.operands,
+                path,
+                field_kind="operand",
+            )
         self._verify_value_type_constraints(
             operation.results,
             op_decl.results,
             path,
             field_kind="result",
         )
+
+    def _verify_segmented_operand_type_constraints(
+        self,
+        op_decl: Op,
+        operation: Operation,
+        path: str,
+    ) -> None:
+        value_index = 0
+        for field_decl, segment_count in zip(
+            op_decl.operands, operation.operand_segment_counts, strict=False
+        ):
+            field_value_ids = operation.operands[
+                value_index : value_index + segment_count
+            ]
+            value_index += segment_count
+            for relative_index, value_id in enumerate(field_value_ids):
+                value = self.module.values[value_id]
+                if type_satisfies_constraint(value.type, field_decl.type_constraint):
+                    continue
+                display_name = field_decl.name
+                if field_decl.variadic:
+                    display_name = f"{display_name}[{relative_index}]"
+                self.diagnostics.error(
+                    "operand type constraint violated",
+                    source=path,
+                    details=(
+                        f"operand '{display_name}' has type {value.type}",
+                        f"expected {type_constraint_name(field_decl.type_constraint)}",
+                    ),
+                )
 
     def _verify_value_type_constraints(
         self,
@@ -402,11 +518,14 @@ class ModuleVerifier:
             for field_name, field_desc in layout.fields.items():
                 match field_desc.kind:
                     case FieldKind.OPERAND | FieldKind.RESULT:
-                        values[field_name] = (
-                            resolved.values(field_name)
-                            if field_desc.variadic
-                            else resolved.value(field_name)
-                        )
+                        if field_desc.variadic:
+                            values[field_name] = resolved.values(field_name)
+                        elif field_desc.optional and not resolved.is_present(
+                            field_name
+                        ):
+                            values[field_name] = None
+                        else:
+                            values[field_name] = resolved.value(field_name)
                     case FieldKind.ATTR:
                         values[field_name] = operation.attributes.get(field_name)
                     case FieldKind.REGION:
@@ -421,7 +540,7 @@ class ModuleVerifier:
                             if field_desc.variadic
                             else resolved.successor(field_name)
                         )
-        except (IndexError, KeyError, TypeError) as exc:
+        except (IndexError, KeyError, TypeError, ValueError) as exc:
             self.diagnostics.error(
                 "failed to resolve fields for declarative constraints",
                 source=path,

@@ -1246,6 +1246,7 @@ class Operation:
 
     kind: int = 0
     operands: list[int] = field(default_factory=list)
+    operand_segment_counts: tuple[int, ...] = ()
     results: list[int] = field(default_factory=list)
     tied_results: list[TiedResult] = field(default_factory=list)
     successors: list[Block] = field(default_factory=list)

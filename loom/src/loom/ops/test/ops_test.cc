@@ -31,6 +31,8 @@ static const loom_op_vtable_t* TestVtable(loom_op_kind_t kind) {
 
 TEST(OpDefs, AttributeSize) { static_assert(sizeof(loom_attribute_t) == 16); }
 
+TEST(OpDefs, OperationHeaderSize) { static_assert(sizeof(loom_op_t) == 64); }
+
 TEST(OpDefs, FormatElementSize) {
   static_assert(sizeof(loom_format_element_t) == 4);
 }
@@ -122,6 +124,19 @@ TEST(Vtable, LoopCounts) {
   EXPECT_EQ(vtable->region_count, 1);
   EXPECT_TRUE(vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_OPERANDS);
   EXPECT_TRUE(vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_RESULTS);
+}
+
+TEST(Vtable, SegmentedOperandCounts) {
+  const loom_op_vtable_t* vtable = TestVtable(LOOM_OP_TEST_SEGMENTED);
+  EXPECT_EQ(vtable->fixed_operand_count, 0);
+  EXPECT_EQ(vtable->operand_descriptor_count, 4);
+  EXPECT_FALSE(vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_OPERANDS);
+  EXPECT_TRUE(vtable->vtable_flags & LOOM_OP_VTABLE_SEGMENTED_OPERANDS);
+  ASSERT_NE(vtable->operand_descriptors, nullptr);
+  EXPECT_EQ(vtable->operand_descriptors[0].flags, 0u);
+  EXPECT_TRUE(vtable->operand_descriptors[1].flags & LOOM_OPERAND_OPTIONAL);
+  EXPECT_TRUE(vtable->operand_descriptors[2].flags & LOOM_OPERAND_VARIADIC);
+  EXPECT_TRUE(vtable->operand_descriptors[3].flags & LOOM_OPERAND_VARIADIC);
 }
 
 TEST(Vtable, BranchRegions) {
@@ -377,6 +392,92 @@ TEST_F(BuilderTest, VariadicOperands) {
   EXPECT_EQ(values.values[0], 10u);
   EXPECT_EQ(values.values[1], 20u);
   EXPECT_EQ(values.values[2], 30u);
+}
+
+TEST_F(BuilderTest, SegmentedOperandAccessorsPresentOptional) {
+  loom_value_id_t root = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t guard = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t lhs0 = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t lhs1 = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t rhs = LOOM_VALUE_ID_INVALID;
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  IREE_ASSERT_OK(loom_module_define_value(module_, i32, &root));
+  IREE_ASSERT_OK(loom_module_define_value(module_, i32, &guard));
+  IREE_ASSERT_OK(loom_module_define_value(module_, i32, &lhs0));
+  IREE_ASSERT_OK(loom_module_define_value(module_, i32, &lhs1));
+  IREE_ASSERT_OK(loom_module_define_value(module_, i32, &rhs));
+
+  loom_value_id_t lhs[] = {lhs0, lhs1};
+  loom_value_id_t rhs_values[] = {rhs};
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_segmented_build(
+      &builder_, LOOM_TEST_SEGMENTED_BUILD_FLAG_HAS_GUARD, root, guard, lhs,
+      IREE_ARRAYSIZE(lhs), rhs_values, IREE_ARRAYSIZE(rhs_values), i32,
+      LOOM_LOCATION_UNKNOWN, &op));
+
+  EXPECT_EQ(op->operand_count, 5u);
+  const uint16_t* counts = loom_op_const_operand_segment_counts(op);
+  EXPECT_EQ(counts[0], 1u);
+  EXPECT_EQ(counts[1], 1u);
+  EXPECT_EQ(counts[2], 2u);
+  EXPECT_EQ(counts[3], 1u);
+  EXPECT_EQ(loom_test_segmented_root(op), root);
+  EXPECT_TRUE(loom_test_segmented_guard_is_present(op));
+  EXPECT_EQ(loom_test_segmented_guard(op), guard);
+  loom_value_slice_t lhs_slice = loom_test_segmented_lhs(op);
+  ASSERT_EQ(lhs_slice.count, 2u);
+  EXPECT_EQ(lhs_slice.values[0], lhs0);
+  EXPECT_EQ(lhs_slice.values[1], lhs1);
+  loom_value_slice_t rhs_slice = loom_test_segmented_rhs(op);
+  ASSERT_EQ(rhs_slice.count, 1u);
+  EXPECT_EQ(rhs_slice.values[0], rhs);
+
+  const loom_op_vtable_t* vtable = TestVtable(LOOM_OP_TEST_SEGMENTED);
+  loom_value_slice_t field_span = loom_op_operand_field_span(vtable, op, 2);
+  ASSERT_EQ(field_span.count, 2u);
+  EXPECT_EQ(field_span.values[0], lhs0);
+  EXPECT_EQ(field_span.values[1], lhs1);
+
+  const loom_operand_descriptor_t* descriptor = NULL;
+  uint8_t field_index = 0;
+  uint16_t element_index = 0;
+  EXPECT_TRUE(loom_op_operand_descriptor_at(vtable, op, /*operand_index=*/3,
+                                            &descriptor, &field_index,
+                                            &element_index));
+  ASSERT_NE(descriptor, nullptr);
+  EXPECT_EQ(field_index, 2u);
+  EXPECT_EQ(element_index, 1u);
+}
+
+TEST_F(BuilderTest, SegmentedOperandAccessorsAbsentOptionalAndEmptySpans) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_value_id_t root = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t rhs0 = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t rhs1 = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_define_value(module_, i32, &root));
+  IREE_ASSERT_OK(loom_module_define_value(module_, i32, &rhs0));
+  IREE_ASSERT_OK(loom_module_define_value(module_, i32, &rhs1));
+
+  loom_value_id_t rhs[] = {rhs0, rhs1};
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_segmented_build(
+      &builder_, 0, root, LOOM_VALUE_ID_INVALID, NULL, 0, rhs,
+      IREE_ARRAYSIZE(rhs), i32, LOOM_LOCATION_UNKNOWN, &op));
+
+  EXPECT_EQ(op->operand_count, 3u);
+  const uint16_t* counts = loom_op_const_operand_segment_counts(op);
+  EXPECT_EQ(counts[0], 1u);
+  EXPECT_EQ(counts[1], 0u);
+  EXPECT_EQ(counts[2], 0u);
+  EXPECT_EQ(counts[3], 2u);
+  EXPECT_EQ(loom_test_segmented_root(op), root);
+  EXPECT_FALSE(loom_test_segmented_guard_is_present(op));
+  EXPECT_EQ(loom_test_segmented_guard(op), LOOM_VALUE_ID_INVALID);
+  EXPECT_EQ(loom_test_segmented_lhs(op).count, 0u);
+  loom_value_slice_t rhs_slice = loom_test_segmented_rhs(op);
+  ASSERT_EQ(rhs_slice.count, 2u);
+  EXPECT_EQ(rhs_slice.values[0], rhs0);
+  EXPECT_EQ(rhs_slice.values[1], rhs1);
 }
 
 TEST_F(BuilderTest, OperandDictBuilderCanonicalizesNames) {

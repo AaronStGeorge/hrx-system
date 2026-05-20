@@ -26,13 +26,10 @@ tables where field names are replaced by integer indices at
 generation time. The C format spec references field indices, not
 strings. Same logical structure, zero runtime string lookups.
 
-Constraints:
-  - At most one variadic operand, and it must be the last operand.
-  - Optional operands form a bounded trailing run and cannot be mixed with a
-    variadic operand.
-  - At most one variadic result, and it must be the last result.
-  - If multiple variadic operands are ever needed, explicit segment
-    sizes will be added (an attribute storing per-segment counts).
+Most ops use the compact fixed-plus-trailing-variadic operand layout. Ops with
+multiple named operand spans opt into segmented operands: each operand field has
+one structural segment count in the C op's trailing storage, while the values
+remain one flat operand array for use-def and generic pass infrastructure.
 """
 
 from __future__ import annotations
@@ -148,6 +145,11 @@ class FieldLayout:
     fixed_result_count is the number of non-variadic results. If there is a
     trailing variadic field, that field spans from the fixed count to the
     actual operation's operand/result count.
+
+    When segmented_operands is true, operand FieldDesc.index values are
+    descriptor/segment ordinals instead of flat operand offsets. The operation
+    still stores operands in one flat array; generated builders, parsers, and C
+    accessors maintain the segment-count tail metadata.
     """
 
     fields: dict[str, FieldDesc]
@@ -160,6 +162,7 @@ class FieldLayout:
     variadic_result: str | None  # Name of the variadic result, if any.
     variadic_successor: str | None  # Name of the variadic successor, if any.
     variadic_region: str | None  # Name of the variadic region, if any.
+    segmented_operands: bool = False
 
 
 def compute_layout(op_decl: Op) -> FieldLayout:
@@ -179,50 +182,60 @@ def compute_layout(op_decl: Op) -> FieldLayout:
     variadic_successor: str | None = None
     variadic_region: str | None = None
 
-    # Operands: sequential indices. A declaration may have either a trailing
-    # variadic operand or a bounded run of optional trailing operands.
+    # Operands: use the legacy compact layout when possible, and segmented
+    # counts when optional/variadic fields need independent spans.
+    segmented_operands = False
     saw_optional_operand = False
+    saw_variadic_operand = False
     for i, operand in enumerate(op_decl.operands):
+        if operand.optional and operand.variadic:
+            raise ValueError(
+                f"Op '{op_decl.name}': operand '{operand.name}' cannot be "
+                f"both optional and variadic."
+            )
         if operand.variadic:
-            if variadic_operand is not None:
-                raise ValueError(
-                    f"Op '{op_decl.name}': multiple variadic operands "
-                    f"('{variadic_operand}' and '{operand.name}'). "
-                    f"At most one variadic operand is supported."
-                )
-            if i != len(op_decl.operands) - 1:
-                raise ValueError(
-                    f"Op '{op_decl.name}': variadic operand '{operand.name}' "
-                    f"must be the last operand."
-                )
-            if operand.optional:
-                raise ValueError(
-                    f"Op '{op_decl.name}': operand '{operand.name}' cannot be "
-                    f"both optional and variadic."
-                )
+            if saw_variadic_operand or i != len(op_decl.operands) - 1:
+                segmented_operands = True
             if saw_optional_operand:
-                raise ValueError(
-                    f"Op '{op_decl.name}': variadic operand '{operand.name}' "
-                    f"cannot follow an optional operand."
-                )
-            variadic_operand = operand.name
-            fields[operand.name] = FieldDesc(FieldKind.OPERAND, i, variadic=True)
-        else:
-            if operand.optional:
-                saw_optional_operand = True
-                fields[operand.name] = FieldDesc(
-                    FieldKind.OPERAND,
-                    i,
-                    optional=True,
-                )
+                segmented_operands = True
+            saw_variadic_operand = True
+        elif saw_optional_operand and not operand.optional:
+            segmented_operands = True
+        if operand.optional:
+            saw_optional_operand = True
+
+    if segmented_operands:
+        for i, operand in enumerate(op_decl.operands):
+            if operand.variadic and variadic_operand is None:
+                variadic_operand = operand.name
+            fields[operand.name] = FieldDesc(
+                FieldKind.OPERAND,
+                i,
+                variadic=operand.variadic,
+                optional=operand.optional,
+            )
+    else:
+        saw_optional_operand = False
+        for i, operand in enumerate(op_decl.operands):
+            if operand.variadic:
+                variadic_operand = operand.name
+                fields[operand.name] = FieldDesc(FieldKind.OPERAND, i, variadic=True)
             else:
-                if saw_optional_operand:
-                    raise ValueError(
-                        f"Op '{op_decl.name}': required operand "
-                        f"'{operand.name}' cannot follow an optional operand."
+                if operand.optional:
+                    saw_optional_operand = True
+                    fields[operand.name] = FieldDesc(
+                        FieldKind.OPERAND,
+                        i,
+                        optional=True,
                     )
-                fields[operand.name] = FieldDesc(FieldKind.OPERAND, i)
-                fixed_operand_count += 1
+                else:
+                    if saw_optional_operand:
+                        raise ValueError(
+                            f"Op '{op_decl.name}': required operand "
+                            f"'{operand.name}' cannot follow an optional operand."
+                        )
+                    fields[operand.name] = FieldDesc(FieldKind.OPERAND, i)
+                    fixed_operand_count += 1
 
     # Results: same pattern.
     for i, result in enumerate(op_decl.results):
@@ -323,6 +336,7 @@ def compute_layout(op_decl: Op) -> FieldLayout:
         variadic_result=variadic_result,
         variadic_successor=variadic_successor,
         variadic_region=variadic_region,
+        segmented_operands=segmented_operands,
     )
 
 
@@ -359,12 +373,47 @@ class ResolvedFields:
             )
         return desc
 
+    def _operand_segment(self, name: str, desc: FieldDesc) -> list[int]:
+        """Return the flat values owned by one segmented operand field."""
+        operand_field_count = sum(
+            1
+            for field in self._layout.fields.values()
+            if field.kind == FieldKind.OPERAND
+        )
+        counts = self._op.operand_segment_counts
+        if len(counts) != operand_field_count:
+            raise ValueError(
+                f"Op '{self._op.name}' uses segmented operands but has "
+                f"{len(counts)} segment counts."
+            )
+        if sum(counts) != len(self._op.operands):
+            raise ValueError(
+                f"Op '{self._op.name}' operand segment counts do not sum to "
+                "the flat operand count."
+            )
+        start = sum(counts[: desc.index])
+        count = counts[desc.index]
+        end = start + count
+        if end > len(self._op.operands):
+            raise ValueError(
+                f"Op '{self._op.name}' operand segment '{name}' extends past "
+                f"the flat operand list."
+            )
+        return self._op.operands[start:end]
+
     # --- Value references ---
 
     def value_id(self, name: str) -> int:
         """Get the single value ID for a non-variadic operand or result."""
         desc = self._desc(name)
         if desc.kind == FieldKind.OPERAND:
+            if self._layout.segmented_operands:
+                values = self._operand_segment(name, desc)
+                if not values:
+                    raise IndexError(
+                        f"Operand field '{name}' is absent on op '{self._op.name}'."
+                    )
+                return values[0]
             if desc.index >= len(self._op.operands):
                 raise IndexError(
                     f"Operand field '{name}' index {desc.index} is absent "
@@ -383,6 +432,8 @@ class ResolvedFields:
         """Get value IDs for a variadic operand or result."""
         desc = self._desc(name)
         if desc.kind == FieldKind.OPERAND:
+            if self._layout.segmented_operands:
+                return self._operand_segment(name, desc)
             if desc.variadic:
                 ids: list[int] = self._op.operands[desc.index :]
                 return ids
@@ -559,6 +610,8 @@ class ResolvedFields:
             return name in self._op.attributes
 
         if desc.kind == FieldKind.OPERAND:
+            if self._layout.segmented_operands:
+                return bool(self._operand_segment(name, desc))
             if desc.variadic:
                 return len(self._op.operands) > desc.index
             return desc.index < len(self._op.operands)

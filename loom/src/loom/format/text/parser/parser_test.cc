@@ -961,6 +961,82 @@ TEST_F(ParserTest, VariadicReduce) {
   EXPECT_NE(text.find("test.reduce"), std::string::npos);
 }
 
+TEST_F(ParserTest, SegmentedOperandsRoundTrip) {
+  loom_module_t* module = ParseOk(
+      "%root = test.constant 0 : i32\n"
+      "%guard = test.constant 1 : i32\n"
+      "%lhs0 = test.constant 2 : i32\n"
+      "%lhs1 = test.constant 3 : i32\n"
+      "%rhs = test.constant 4 : i32\n"
+      "%result = test.segmented %root base %guard values %lhs0, %lhs1 "
+      "expected %rhs : i32 -> i32\n");
+  if (!module) return;
+
+  std::string text = PrintModule(module);
+  EXPECT_NE(text.find("test.segmented %root base %guard values %lhs0, %lhs1 "
+                      "expected %rhs : i32 -> i32"),
+            std::string::npos)
+      << text;
+
+  loom_op_t* segmented_op = NULL;
+  loom_block_t* block = loom_module_block(module);
+  loom_op_t* op = NULL;
+  loom_block_for_each_op(block, op) {
+    if (loom_test_segmented_isa(op)) {
+      segmented_op = op;
+      break;
+    }
+  }
+  ASSERT_NE(segmented_op, nullptr);
+  const uint16_t* counts = loom_op_const_operand_segment_counts(segmented_op);
+  EXPECT_EQ(counts[0], 1u);
+  EXPECT_EQ(counts[1], 1u);
+  EXPECT_EQ(counts[2], 2u);
+  EXPECT_EQ(counts[3], 1u);
+  EXPECT_TRUE(loom_test_segmented_guard_is_present(segmented_op));
+  EXPECT_EQ(loom_test_segmented_lhs(segmented_op).count, 2u);
+  EXPECT_EQ(loom_test_segmented_rhs(segmented_op).count, 1u);
+
+  loom_module_free(module);
+}
+
+TEST_F(ParserTest, SegmentedOperandsAbsentOptionalAndEmptySpanRoundTrip) {
+  loom_module_t* module = ParseOk(
+      "%root = test.constant 0 : i32\n"
+      "%rhs0 = test.constant 1 : i32\n"
+      "%rhs1 = test.constant 2 : i32\n"
+      "%result = test.segmented %root values expected %rhs0, %rhs1 : i32 -> "
+      "i32\n");
+  if (!module) return;
+
+  std::string text = PrintModule(module);
+  EXPECT_NE(text.find("test.segmented %root values expected %rhs0, %rhs1 : "
+                      "i32 -> i32"),
+            std::string::npos)
+      << text;
+
+  loom_op_t* segmented_op = NULL;
+  loom_block_t* block = loom_module_block(module);
+  loom_op_t* op = NULL;
+  loom_block_for_each_op(block, op) {
+    if (loom_test_segmented_isa(op)) {
+      segmented_op = op;
+      break;
+    }
+  }
+  ASSERT_NE(segmented_op, nullptr);
+  const uint16_t* counts = loom_op_const_operand_segment_counts(segmented_op);
+  EXPECT_EQ(counts[0], 1u);
+  EXPECT_EQ(counts[1], 0u);
+  EXPECT_EQ(counts[2], 0u);
+  EXPECT_EQ(counts[3], 2u);
+  EXPECT_FALSE(loom_test_segmented_guard_is_present(segmented_op));
+  EXPECT_EQ(loom_test_segmented_lhs(segmented_op).count, 0u);
+  EXPECT_EQ(loom_test_segmented_rhs(segmented_op).count, 2u);
+
+  loom_module_free(module);
+}
+
 TEST_F(ParserTest, FuncDefResultTiedToEntryArg) {
   loom_module_t* module = ParseOk(
       "test.func @identity(%x: f32) -> (%x as f32) {\n"

@@ -2501,6 +2501,45 @@ static iree_status_t loom_bytecode_body_reader_read_op(
     if (loom_bytecode_reader_has_errors(body_reader->reader))
       return iree_ok_status();
   }
+  uint8_t operand_segment_count = loom_op_vtable_operand_segment_count(vtable);
+  uint16_t* operand_segment_counts = NULL;
+  if (operand_segment_count > 0) {
+    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
+        body_reader->arena, operand_segment_count, sizeof(uint16_t),
+        (void**)&operand_segment_counts));
+    uint32_t total_segment_count = 0;
+    for (uint8_t i = 0; i < operand_segment_count; ++i) {
+      uint64_t segment_count_offset =
+          loom_bytecode_reader_cursor_absolute_position(cursor);
+      uint64_t segment_count = 0;
+      IREE_RETURN_IF_ERROR(loom_bytecode_reader_read_uvarint(
+          body_reader->reader, cursor, &segment_count));
+      if (segment_count > UINT16_MAX) {
+        return loom_bytecode_reader_emit_invalid_ir_body(
+            body_reader, segment_count_offset,
+            IREE_SV("operand segment count exceeds field width"));
+      }
+      const loom_operand_descriptor_t* descriptor =
+          &vtable->operand_descriptors[i];
+      if (!iree_any_bit_set(descriptor->flags, LOOM_OPERAND_VARIADIC)) {
+        const bool optional =
+            iree_any_bit_set(descriptor->flags, LOOM_OPERAND_OPTIONAL);
+        if ((!optional && segment_count != 1) ||
+            (optional && segment_count > 1)) {
+          return loom_bytecode_reader_emit_invalid_ir_body(
+              body_reader, segment_count_offset,
+              IREE_SV("operand segment count violates field arity"));
+        }
+      }
+      operand_segment_counts[i] = (uint16_t)segment_count;
+      total_segment_count += (uint32_t)segment_count;
+    }
+    if (total_segment_count != operand_count) {
+      return loom_bytecode_reader_emit_invalid_ir_body(
+          body_reader, op_offset,
+          IREE_SV("operand segment counts do not sum to operand count"));
+    }
+  }
 
   uint64_t successor_count = 0;
   uint64_t successor_count_offset =
@@ -2673,11 +2712,19 @@ static iree_status_t loom_bytecode_body_reader_read_op(
   }
 
   loom_op_t* op = NULL;
-  IREE_RETURN_IF_ERROR(loom_builder_allocate_op_with_successors(
-      builder, op_kind, (uint16_t)operand_count, (uint16_t)result_count,
-      (uint8_t)successor_count, (uint8_t)region_count,
-      (uint16_t)tied_result_count, vtable->attribute_count,
-      (loom_location_id_t)location_id, &op));
+  if (operand_segment_count > 0) {
+    IREE_RETURN_IF_ERROR(loom_builder_allocate_segmented_op_with_successors(
+        builder, op_kind, (uint16_t)operand_count, operand_segment_counts,
+        operand_segment_count, (uint16_t)result_count, (uint8_t)successor_count,
+        (uint8_t)region_count, (uint16_t)tied_result_count,
+        vtable->attribute_count, (loom_location_id_t)location_id, &op));
+  } else {
+    IREE_RETURN_IF_ERROR(loom_builder_allocate_op_with_successors(
+        builder, op_kind, (uint16_t)operand_count, (uint16_t)result_count,
+        (uint8_t)successor_count, (uint8_t)region_count,
+        (uint16_t)tied_result_count, vtable->attribute_count,
+        (loom_location_id_t)location_id, &op));
+  }
   if (operand_count > 0) {
     memcpy(loom_op_operands(op), operands,
            (iree_host_size_t)operand_count * sizeof(loom_value_id_t));

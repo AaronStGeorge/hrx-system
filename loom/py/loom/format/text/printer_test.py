@@ -545,6 +545,49 @@ class TestPrintYield:
         assert "=" not in text.split("test.yield")[0]
 
 
+class TestPrintSegmentedOp:
+    """Exercises: independent operand spans over one flat operand list."""
+
+    def test_present_optional_and_two_variadic_spans(self) -> None:
+        module, [root, guard, lhs0, lhs1, rhs, result] = _module_with(
+            ("root", I32),
+            ("guard", I32),
+            ("lhs0", I32),
+            ("lhs1", I32),
+            ("rhs", I32),
+            ("result", I32),
+        )
+        op = Operation(
+            name="test.segmented",
+            operands=[root, guard, lhs0, lhs1, rhs],
+            operand_segment_counts=(1, 1, 2, 1),
+            results=[result],
+        )
+        assert (
+            _printer().print_operation(op, module)
+            == "%result = test.segmented %root base %guard "
+            "values %lhs0, %lhs1 expected %rhs : i32 -> i32"
+        )
+
+    def test_absent_optional_and_empty_variadic_span(self) -> None:
+        module, [root, rhs0, rhs1, result] = _module_with(
+            ("root", I32),
+            ("rhs0", I32),
+            ("rhs1", I32),
+            ("result", I32),
+        )
+        op = Operation(
+            name="test.segmented",
+            operands=[root, rhs0, rhs1],
+            operand_segment_counts=(1, 0, 0, 2),
+            results=[result],
+        )
+        assert (
+            _printer().print_operation(op, module)
+            == "%result = test.segmented %root values expected %rhs0, %rhs1 : i32 -> i32"
+        )
+
+
 # ============================================================================
 # Complex op printing
 # ============================================================================

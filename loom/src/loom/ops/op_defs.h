@@ -951,6 +951,43 @@ typedef struct loom_op_placement_descriptor_t {
 const loom_region_descriptor_t* loom_op_vtable_region_descriptor(
     const loom_op_vtable_t* vtable, uint8_t region_index);
 
+// Returns true when operand descriptors name independent operand segments
+// stored over the op's flat operand array.
+static inline bool loom_op_vtable_has_segmented_operands(
+    const loom_op_vtable_t* vtable) {
+  return vtable && iree_any_bit_set(vtable->vtable_flags,
+                                    LOOM_OP_VTABLE_SEGMENTED_OPERANDS);
+}
+
+// Returns the number of operand segment counts stored on an instance of this
+// op kind, or zero for non-segmented ops.
+static inline uint8_t loom_op_vtable_operand_segment_count(
+    const loom_op_vtable_t* vtable) {
+  return loom_op_vtable_has_segmented_operands(vtable)
+             ? loom_op_vtable_operand_descriptor_count(vtable)
+             : 0;
+}
+
+// Resolves an author-facing operand field to its flat operand span. For
+// non-segmented ops this preserves the historical fixed-plus-trailing-variadic
+// layout. For segmented ops, |field_index| indexes the operand descriptor array
+// and the returned span is derived from the op's segment-count tail storage.
+loom_value_slice_t loom_op_operand_field_span(const loom_op_vtable_t* vtable,
+                                              const loom_op_t* op,
+                                              uint8_t field_index);
+
+// Returns true when an operand field has at least one value.
+bool loom_op_operand_field_present(const loom_op_vtable_t* vtable,
+                                   const loom_op_t* op, uint8_t field_index);
+
+// Maps a flat operand index back to the operand descriptor that owns it.
+// Returns false if the index is out of range or the op kind has no descriptor
+// metadata.
+bool loom_op_operand_descriptor_at(
+    const loom_op_vtable_t* vtable, const loom_op_t* op, uint16_t operand_index,
+    const loom_operand_descriptor_t** out_descriptor, uint8_t* out_field_index,
+    uint16_t* out_element_index);
+
 // Binding kind for BindingList format elements.
 typedef enum loom_binding_kind_e {
   // Block arg has the same type as the operand.
@@ -1465,6 +1502,49 @@ loom_attribute_t loom_memory_access_atomic_scope(loom_memory_access_t access);
     return slice;                                                   \
   }
 
+// Defines a function that reads a single segmented operand field. The op kind
+// must store operand segment counts in trailing storage.
+#define LOOM_DEFINE_SEGMENTED_OPERAND(func_name, field_index)            \
+  static inline loom_value_id_t func_name(const loom_op_t* op) {         \
+    const uint16_t* counts = loom_op_const_operand_segment_counts(op);   \
+    uint16_t start = 0;                                                  \
+    for (uint8_t _i = 0; _i < (field_index); ++_i) {                     \
+      start += counts[_i];                                               \
+    }                                                                    \
+    return counts[(field_index)] > 0 ? loom_op_const_operands(op)[start] \
+                                     : LOOM_VALUE_ID_INVALID;            \
+  }
+
+// Defines functions that query and read an optional segmented operand field.
+#define LOOM_DEFINE_SEGMENTED_OPTIONAL_OPERAND(func_name, field_index)  \
+  enum { func_name##_OPERAND_FIELD_INDEX = (field_index) };             \
+  static inline bool func_name##_is_present(const loom_op_t* op) {      \
+    return loom_op_const_operand_segment_counts(op)[(field_index)] > 0; \
+  }                                                                     \
+  static inline loom_value_id_t func_name(const loom_op_t* op) {        \
+    const uint16_t* counts = loom_op_const_operand_segment_counts(op);  \
+    if (counts[(field_index)] == 0) return LOOM_VALUE_ID_INVALID;       \
+    uint16_t start = 0;                                                 \
+    for (uint8_t _i = 0; _i < (field_index); ++_i) {                    \
+      start += counts[_i];                                              \
+    }                                                                   \
+    return loom_op_const_operands(op)[start];                           \
+  }
+
+// Defines a function that returns a segmented operand field as a value slice.
+#define LOOM_DEFINE_SEGMENTED_OPERANDS(func_name, field_index)         \
+  static inline loom_value_slice_t func_name(const loom_op_t* op) {    \
+    const uint16_t* counts = loom_op_const_operand_segment_counts(op); \
+    uint16_t start = 0;                                                \
+    for (uint8_t _i = 0; _i < (field_index); ++_i) {                   \
+      start += counts[_i];                                             \
+    }                                                                  \
+    return (loom_value_slice_t){                                       \
+        .values = loom_op_operands(op) + start,                        \
+        .count = counts[(field_index)],                                \
+    };                                                                 \
+  }
+
 // Defines a function that returns the variadic result tail as a value
 // slice. |fixed_count| is the number of non-variadic results before
 // the variadic tail.
@@ -1786,6 +1866,23 @@ iree_status_t loom_builder_allocate_op(
 // fills the ordinary trailing fields through their accessors.
 iree_status_t loom_builder_allocate_op_with_successors(
     loom_builder_t* builder, loom_op_kind_t kind, uint16_t operand_count,
+    uint16_t result_count, uint8_t successor_count, uint8_t region_count,
+    uint16_t tied_result_count, uint8_t attribute_count,
+    loom_location_id_t location, loom_op_t** out_op);
+
+// Allocates an op with segmented operand metadata. |operand_segment_counts|
+// must have one entry per operand descriptor on op kinds whose vtable has
+// LOOM_OP_VTABLE_SEGMENTED_OPERANDS. The counts must sum to |operand_count|.
+iree_status_t loom_builder_allocate_segmented_op(
+    loom_builder_t* builder, loom_op_kind_t kind, uint16_t operand_count,
+    const uint16_t* operand_segment_counts, uint8_t operand_segment_count,
+    uint16_t result_count, uint8_t region_count, uint16_t tied_result_count,
+    uint8_t attribute_count, loom_location_id_t location, loom_op_t** out_op);
+
+// Allocates a segmented-operand op with explicit successor storage.
+iree_status_t loom_builder_allocate_segmented_op_with_successors(
+    loom_builder_t* builder, loom_op_kind_t kind, uint16_t operand_count,
+    const uint16_t* operand_segment_counts, uint8_t operand_segment_count,
     uint16_t result_count, uint8_t successor_count, uint8_t region_count,
     uint16_t tied_result_count, uint8_t attribute_count,
     loom_location_id_t location, loom_op_t** out_op);

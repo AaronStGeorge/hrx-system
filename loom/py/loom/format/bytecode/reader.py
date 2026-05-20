@@ -19,6 +19,7 @@ import struct
 from collections.abc import Iterable
 from typing import Any, ClassVar, cast
 
+from loom.fields import compute_layout
 from loom.format.bytecode.encoding import decode_signed_varint, decode_varint
 from loom.format.bytecode.op_decls import (
     attr_def_for_op,
@@ -1367,6 +1368,30 @@ class BytecodeReader:
         for _ in range(operand_count):
             value_ref, offset = decode_varint(data, offset)
             operands.append(self._map_value_ref(value_ref, value_map))
+        operand_segment_counts: tuple[int, ...] = ()
+        op_decl = self._op_decls_by_name.get(op_name)
+        if op_decl is not None:
+            layout = compute_layout(op_decl)
+            if layout.segmented_operands:
+                counts: list[int] = []
+                for operand in op_decl.operands:
+                    count, offset = decode_varint(data, offset)
+                    if not operand.variadic:
+                        if operand.optional:
+                            if count > 1:
+                                raise BytecodeError(
+                                    "optional operand segment count exceeds one"
+                                )
+                        elif count != 1:
+                            raise BytecodeError(
+                                "required operand segment count is not one"
+                            )
+                    counts.append(count)
+                if sum(counts) != operand_count:
+                    raise BytecodeError(
+                        "operand segment counts do not sum to operand count"
+                    )
+                operand_segment_counts = tuple(counts)
 
         # Successors are region-local block ordinals. Region blocks are
         # preallocated before block bodies are decoded so forward edges can
@@ -1421,6 +1446,7 @@ class BytecodeReader:
         op = Operation(
             name=op_name,
             operands=operands,
+            operand_segment_counts=operand_segment_counts,
             results=result_ids,
             tied_results=tied_results,
             successors=successors,

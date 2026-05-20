@@ -75,6 +75,30 @@ def test_dynamic_builder_constructs_binary_op_with_result_name() -> None:
     assert block.ops[0].operands == [lhs.id, rhs.id]
 
 
+def test_dynamic_builder_records_segmented_operand_counts() -> None:
+    block, builder = _builder()
+    root = builder.value("root", I32)
+    guard = builder.value("guard", I32)
+    lhs0 = builder.value("lhs0", I32)
+    lhs1 = builder.value("lhs1", I32)
+    rhs = builder.value("rhs", I32)
+
+    result = builder.test.segmented(
+        root=root,
+        guard=guard,
+        lhs=[lhs0, lhs1],
+        rhs=[rhs],
+        results=[I32],
+        name="result",
+    )
+
+    assert isinstance(result, ValueRef)
+    assert len(block.ops) == 1
+    assert block.ops[0].name == "test.segmented"
+    assert block.ops[0].operands == [root.id, guard.id, lhs0.id, lhs1.id, rhs.id]
+    assert block.ops[0].operand_segment_counts == (1, 1, 2, 1)
+
+
 def test_dynamic_builder_accepts_empty_variadic_terminator_operands() -> None:
     block, builder = _builder()
 
@@ -209,7 +233,6 @@ def test_dynamic_builder_constructs_region_bearing_scf_for() -> None:
     assert printer.print_module(module) == (
         "func.def @main(%lo: index, %hi: index, %step: index) {\n"
         "  scf.for %iv = [%lo to %hi step %step] {\n"
-        "    scf.yield\n"
         "  }\n"
         "  func.return\n"
         "}\n"

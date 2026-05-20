@@ -778,6 +778,7 @@ enum loom_op_vtable_flag_bits_e {
   LOOM_OP_VTABLE_VARIADIC_RESULTS = 1u << 1,
   LOOM_OP_VTABLE_HAS_INSTANCE_FLAGS = 1u << 2,
   LOOM_OP_VTABLE_VARIADIC_REGIONS = 1u << 3,
+  LOOM_OP_VTABLE_SEGMENTED_OPERANDS = 1u << 4,
 };
 typedef uint8_t loom_op_vtable_flags_t;
 
@@ -1369,6 +1370,7 @@ typedef struct loom_op_t {
   //   loom_use_index_t   operand_use_indices[operand_count]
   //   <padding to alignof(loom_attribute_t)>
   //   loom_attribute_t   attributes[attribute_count]
+  //   uint16_t           operand_segment_counts[operand_descriptor_count]
 } loom_op_t;
 
 static_assert(sizeof(loom_op_t) == 64, "loom_op_t must be 64 bytes");
@@ -1389,6 +1391,7 @@ static_assert(sizeof(loom_op_t) == 64, "loom_op_t must be 64 bytes");
 //   loom_use_index_t   operand_use_indices[operand_count]
 //   <padding to alignof(loom_attribute_t)>
 //   loom_attribute_t   attributes[attribute_count]  (16 bytes each)
+//   uint16_t           operand_segment_counts[]     (segmented ops only)
 
 // Returns a pointer to the successor block pointer array.
 static inline loom_block_t** loom_op_successors(const loom_op_t* op) {
@@ -1449,6 +1452,18 @@ static inline loom_attribute_t* loom_op_attrs(const loom_op_t* op) {
 // Returns a const pointer to the attribute array.
 static inline const loom_attribute_t* loom_op_const_attrs(const loom_op_t* op) {
   return (const loom_attribute_t*)loom_op_attrs(op);
+}
+
+// Returns a pointer to the operand segment count array for segmented ops. The
+// array is present only when the op vtable has
+// LOOM_OP_VTABLE_SEGMENTED_OPERANDS, with one uint16_t count per operand
+// descriptor. Non-segmented callers must not dereference the returned pointer.
+static inline uint16_t* loom_op_operand_segment_counts(const loom_op_t* op) {
+  return (uint16_t*)(loom_op_attrs(op) + op->attribute_count);
+}
+static inline const uint16_t* loom_op_const_operand_segment_counts(
+    const loom_op_t* op) {
+  return (const uint16_t*)(loom_op_attrs(op) + op->attribute_count);
 }
 
 //===----------------------------------------------------------------------===//

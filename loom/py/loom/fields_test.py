@@ -190,42 +190,51 @@ class TestComputeLayout:
         assert layout.fixed_successor_count == 1
         assert layout.variadic_successor == "cases"
 
-    def test_non_trailing_variadic_rejected(self) -> None:
-        with _raises(ValueError, "must be the last operand"):
-            compute_layout(
-                Op(
-                    "test.bad",
-                    operands=[
-                        Operand("items", ANY, variadic=True),
-                        Operand("extra", ANY),
-                    ],
-                )
+    def test_non_trailing_variadic_uses_segmented_operands(self) -> None:
+        layout = compute_layout(
+            Op(
+                "test.segmented",
+                operands=[
+                    Operand("items", ANY, variadic=True),
+                    Operand("extra", ANY),
+                ],
             )
+        )
+        assert layout.segmented_operands
+        assert layout.fields["items"].index == 0
+        assert layout.fields["items"].variadic
+        assert layout.fields["extra"].index == 1
 
-    def test_multiple_variadic_operands_rejected(self) -> None:
-        """Two variadics: the first one isn't trailing, so that error fires."""
-        with _raises(ValueError, "must be the last operand"):
-            compute_layout(
-                Op(
-                    "test.bad",
-                    operands=[
-                        Operand("a", ANY, variadic=True),
-                        Operand("b", ANY, variadic=True),
-                    ],
-                )
+    def test_multiple_variadic_operands_use_segmented_operands(self) -> None:
+        layout = compute_layout(
+            Op(
+                "test.segmented",
+                operands=[
+                    Operand("a", ANY, variadic=True),
+                    Operand("b", ANY, variadic=True),
+                ],
             )
+        )
+        assert layout.segmented_operands
+        assert layout.fields["a"].index == 0
+        assert layout.fields["a"].variadic
+        assert layout.fields["b"].index == 1
+        assert layout.fields["b"].variadic
 
-    def test_required_operand_cannot_follow_optional_operand(self) -> None:
-        with _raises(ValueError, "cannot follow an optional operand"):
-            compute_layout(
-                Op(
-                    "test.bad",
-                    operands=[
-                        Operand("optional_extent", INDEX_CONSTRAINT, optional=True),
-                        Operand("source", TILE),
-                    ],
-                )
+    def test_required_operand_after_optional_uses_segmented_operands(self) -> None:
+        layout = compute_layout(
+            Op(
+                "test.segmented",
+                operands=[
+                    Operand("optional_extent", INDEX_CONSTRAINT, optional=True),
+                    Operand("source", TILE),
+                ],
             )
+        )
+        assert layout.segmented_operands
+        assert layout.fields["optional_extent"].index == 0
+        assert layout.fields["optional_extent"].optional
+        assert layout.fields["source"].index == 1
 
     def test_optional_variadic_operand_rejected(self) -> None:
         with _raises(ValueError, "cannot be both optional and variadic"):
@@ -243,17 +252,21 @@ class TestComputeLayout:
                 )
             )
 
-    def test_variadic_operand_cannot_follow_optional_operand(self) -> None:
-        with _raises(ValueError, "cannot follow an optional operand"):
-            compute_layout(
-                Op(
-                    "test.bad",
-                    operands=[
-                        Operand("optional_extent", INDEX_CONSTRAINT, optional=True),
-                        Operand("values", ANY, variadic=True),
-                    ],
-                )
+    def test_variadic_operand_after_optional_uses_segmented_operands(self) -> None:
+        layout = compute_layout(
+            Op(
+                "test.segmented",
+                operands=[
+                    Operand("optional_extent", INDEX_CONSTRAINT, optional=True),
+                    Operand("values", ANY, variadic=True),
+                ],
             )
+        )
+        assert layout.segmented_operands
+        assert layout.fields["optional_extent"].index == 0
+        assert layout.fields["optional_extent"].optional
+        assert layout.fields["values"].index == 1
+        assert layout.fields["values"].variadic
 
     def test_optional_region_cannot_precede_required_region(self) -> None:
         with _raises(ValueError, "cannot follow an optional region"):
@@ -329,6 +342,73 @@ class TestResolveSingular:
         assert fields.value_id("rhs") == rhs_id
         assert fields.value_name("lhs") == "lhs"
         assert fields.value_name("rhs") == "rhs"
+
+    def test_segmented_operand_fields(self) -> None:
+        module, [root_id, guard_id, lhs0_id, lhs1_id, rhs_id, result_id] = (
+            _make_module_with_values(
+                ("root", I32),
+                ("guard", I32),
+                ("lhs0", I32),
+                ("lhs1", I32),
+                ("rhs", I32),
+                ("result", I32),
+            )
+        )
+        decl = Op(
+            "test.segmented",
+            operands=[
+                Operand("root", ANY),
+                Operand("guard", ANY, optional=True),
+                Operand("lhs", ANY, variadic=True),
+                Operand("rhs", ANY, variadic=True),
+            ],
+            results=[Result("result", ANY)],
+        )
+        op = Operation(
+            kind=1,
+            name="test.segmented",
+            operands=[root_id, guard_id, lhs0_id, lhs1_id, rhs_id],
+            operand_segment_counts=(1, 1, 2, 1),
+            results=[result_id],
+        )
+        fields = resolve_fields(compute_layout(decl), op, module)
+
+        assert fields.value_id("root") == root_id
+        assert fields.value_id("guard") == guard_id
+        assert fields.value_ids("lhs") == [lhs0_id, lhs1_id]
+        assert fields.value_ids("rhs") == [rhs_id]
+        assert fields.is_present("guard")
+        assert fields.types_of("lhs") == [I32, I32]
+
+    def test_absent_segmented_optional_operand(self) -> None:
+        module, [root_id, lhs_id, result_id] = _make_module_with_values(
+            ("root", I32),
+            ("lhs", I32),
+            ("result", I32),
+        )
+        decl = Op(
+            "test.segmented",
+            operands=[
+                Operand("root", ANY),
+                Operand("guard", ANY, optional=True),
+                Operand("lhs", ANY, variadic=True),
+                Operand("rhs", ANY, variadic=True),
+            ],
+            results=[Result("result", ANY)],
+        )
+        op = Operation(
+            kind=1,
+            name="test.segmented",
+            operands=[root_id, lhs_id],
+            operand_segment_counts=(1, 0, 1, 0),
+            results=[result_id],
+        )
+        fields = resolve_fields(compute_layout(decl), op, module)
+
+        assert not fields.is_present("guard")
+        assert fields.value_ids("guard") == []
+        assert fields.value_ids("lhs") == [lhs_id]
+        assert fields.value_ids("rhs") == []
 
     def test_type_of(self) -> None:
         module, [vid] = _make_module_with_values(("x", I32))

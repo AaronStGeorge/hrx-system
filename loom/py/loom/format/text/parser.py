@@ -1469,7 +1469,7 @@ class Parser:
         for operand in op_decl.operands:
             field_values = parsed.operand_fields.get(operand.name)
             if not field_values:
-                if operand.variadic:
+                if operand.optional or operand.variadic:
                     continue
                 return parsed.operand_ids
             if operand.variadic:
@@ -1477,6 +1477,17 @@ class Parser:
             else:
                 operand_ids.append(field_values[0])
         return operand_ids
+
+    def _operand_segment_counts(
+        self, op_decl: Op, parsed: ParsedFields
+    ) -> tuple[int, ...]:
+        layout = self._layout(op_decl)
+        if not layout.segmented_operands:
+            return ()
+        return tuple(
+            len(parsed.operand_fields.get(operand.name, ()))
+            for operand in op_decl.operands
+        )
 
     def _known_value_type(self, value_id: int) -> Type | None:
         value_type = self._module.values[value_id].type
@@ -1639,6 +1650,7 @@ class Parser:
         self._reserved_result_names = []
         self._reserved_result_ids = []
         parsed.operand_ids = self._canonical_operand_ids(op_decl, parsed)
+        operand_segment_counts = self._operand_segment_counts(op_decl, parsed)
 
         # After format walk: resolve func-arg semantics.
         # For declaration-style ops (no body region), func args become operands.
@@ -1741,6 +1753,7 @@ class Parser:
         op = Operation(
             name=op_name,
             operands=parsed.operand_ids,
+            operand_segment_counts=operand_segment_counts,
             results=result_ids,
             tied_results=parsed.tied_results,
             attributes=parsed.attributes,

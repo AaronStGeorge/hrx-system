@@ -600,6 +600,69 @@ TEST_F(PrintOpTest, YieldNoOperands) {
   EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT), "test.yield\n");
 }
 
+TEST_F(PrintOpTest, SegmentedOperands) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_value_id_t root = def(i32);
+  loom_value_id_t guard = def(i32);
+  loom_value_id_t lhs0 = def(i32);
+  loom_value_id_t lhs1 = def(i32);
+  loom_value_id_t rhs = def(i32);
+  set_value_name(root, "root");
+  set_value_name(guard, "guard");
+  set_value_name(lhs0, "lhs0");
+  set_value_name(lhs1, "lhs1");
+  set_value_name(rhs, "rhs");
+
+  loom_value_id_t lhs[] = {lhs0, lhs1};
+  loom_value_id_t rhs_values[] = {rhs};
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_segmented_build(
+      &builder_, LOOM_TEST_SEGMENTED_BUILD_FLAG_HAS_GUARD, root, guard, lhs,
+      IREE_ARRAYSIZE(lhs), rhs_values, IREE_ARRAYSIZE(rhs_values), i32,
+      LOOM_LOCATION_UNKNOWN, &op));
+  set_value_name(loom_test_segmented_result(op), "result");
+
+  std::vector<CapturedPrintField> fields;
+  std::string output = PrintOpWithFields(op, LOOM_TEXT_PRINT_DEFAULT, &fields);
+  EXPECT_EQ(output,
+            "%result = test.segmented %root base %guard values %lhs0, %lhs1 "
+            "expected %rhs : i32 -> i32\n");
+
+  const CapturedPrintField* root_field =
+      FindCapturedPrintField(fields, LOOM_PRINT_FIELD_OPERAND, 0);
+  ASSERT_NE(root_field, nullptr);
+  EXPECT_EQ(
+      output.substr(root_field->start, root_field->end - root_field->start),
+      "%root");
+  const CapturedPrintField* lhs1_field =
+      FindCapturedPrintField(fields, LOOM_PRINT_FIELD_OPERAND, 3);
+  ASSERT_NE(lhs1_field, nullptr);
+  EXPECT_EQ(
+      output.substr(lhs1_field->start, lhs1_field->end - lhs1_field->start),
+      "%lhs1");
+}
+
+TEST_F(PrintOpTest, SegmentedOperandsAbsentOptionalAndEmptySpan) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_value_id_t root = def(i32);
+  loom_value_id_t rhs0 = def(i32);
+  loom_value_id_t rhs1 = def(i32);
+  set_value_name(root, "root");
+  set_value_name(rhs0, "rhs0");
+  set_value_name(rhs1, "rhs1");
+
+  loom_value_id_t rhs[] = {rhs0, rhs1};
+  loom_op_t* op = NULL;
+  IREE_ASSERT_OK(loom_test_segmented_build(
+      &builder_, 0, root, LOOM_VALUE_ID_INVALID, NULL, 0, rhs,
+      IREE_ARRAYSIZE(rhs), i32, LOOM_LOCATION_UNKNOWN, &op));
+  set_value_name(loom_test_segmented_result(op), "result");
+
+  EXPECT_EQ(print_op(op, LOOM_TEXT_PRINT_DEFAULT),
+            "%result = test.segmented %root values expected %rhs0, %rhs1 : "
+            "i32 -> i32\n");
+}
+
 TEST_F(PrintOpTest, SuccessorReferenceSynthesizesBlockLabels) {
   loom_symbol_ref_t callee = make_symbol("cfg");
 

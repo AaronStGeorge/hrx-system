@@ -10,27 +10,7 @@
 
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
-
-static bool loom_ownership_operand_descriptor_at(
-    const loom_op_vtable_t* vtable, uint16_t operand_index,
-    const loom_operand_descriptor_t** out_descriptor,
-    uint8_t* out_field_index) {
-  *out_descriptor = NULL;
-  *out_field_index = 0;
-  if (!vtable || !vtable->operand_descriptors) return false;
-  if (operand_index < vtable->fixed_operand_count) {
-    *out_descriptor = &vtable->operand_descriptors[operand_index];
-    *out_field_index = (uint8_t)operand_index;
-    return true;
-  }
-  if (iree_any_bit_set(vtable->vtable_flags,
-                       LOOM_OP_VTABLE_VARIADIC_OPERANDS)) {
-    *out_descriptor = &vtable->operand_descriptors[vtable->fixed_operand_count];
-    *out_field_index = vtable->fixed_operand_count;
-    return true;
-  }
-  return false;
-}
+#include "loom/ops/op_defs.h"
 
 static bool loom_ownership_result_descriptor_at(
     const loom_op_vtable_t* vtable, uint16_t result_index,
@@ -90,9 +70,9 @@ bool loom_ownership_operand_effect_at(
   }
   const loom_operand_descriptor_t* descriptor = NULL;
   uint8_t field_index = 0;
-  if (!loom_ownership_operand_descriptor_at(loom_op_vtable(module, op),
-                                            operand_index, &descriptor,
-                                            &field_index)) {
+  if (!loom_op_operand_descriptor_at(loom_op_vtable(module, op), op,
+                                     operand_index, &descriptor, &field_index,
+                                     NULL)) {
     return false;
   }
   if (descriptor->ownership_effect == LOOM_OPERAND_OWNERSHIP_NONE) {

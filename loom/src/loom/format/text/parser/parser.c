@@ -21,6 +21,7 @@
 #include "loom/format/text/parser/scope.h"
 #include "loom/format/text/parser/types.h"
 #include "loom/ir/context.h"
+#include "loom/ops/op_defs.h"
 
 //===----------------------------------------------------------------------===//
 // Alias table
@@ -272,7 +273,24 @@ static bool loom_parser_type_is_known(loom_type_t type) {
   return type.header != 0;
 }
 
+static bool loom_parser_resolve_operand_segment_value(
+    const loom_parsed_op_t* parsed, uint8_t field_index,
+    loom_value_id_t* out_value_id) {
+  if (field_index >= parsed->operand_segment_count) return false;
+  uint32_t start = 0;
+  for (uint8_t i = 0; i < field_index; ++i) {
+    start += parsed->operand_segment_counts[i];
+  }
+  if (start >= parsed->operand_count ||
+      parsed->operand_segment_counts[field_index] == 0) {
+    return false;
+  }
+  *out_value_id = parsed->operand_ids[start];
+  return true;
+}
+
 static bool loom_parser_resolve_field_type(const loom_module_t* module,
+                                           const loom_op_vtable_t* vtable,
                                            const loom_parsed_op_t* parsed,
                                            loom_field_ref_t ref,
                                            loom_type_t* out_type) {
@@ -280,6 +298,13 @@ static bool loom_parser_resolve_field_type(const loom_module_t* module,
   loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
   switch (LOOM_FIELD_REF_CATEGORY(ref)) {
     case LOOM_FIELD_OPERAND:
+      if (loom_op_vtable_has_segmented_operands(vtable)) {
+        if (!loom_parser_resolve_operand_segment_value(parsed, index,
+                                                       &value_id)) {
+          return false;
+        }
+        break;
+      }
       if (index >= parsed->operand_count) {
         return false;
       }
@@ -338,8 +363,8 @@ static iree_status_t loom_parser_try_infer_same_type_result(
         continue;
       }
       loom_type_t inferred_type = {0};
-      if (!loom_parser_resolve_field_type(parser->module, parsed, source_ref,
-                                          &inferred_type)) {
+      if (!loom_parser_resolve_field_type(parser->module, vtable, parsed,
+                                          source_ref, &inferred_type)) {
         continue;
       }
       return loom_module_set_value_type(
@@ -360,7 +385,22 @@ static iree_status_t loom_finalize_op(
   // allocated. The allocation is zero-filled, so unset optional
   // attributes at higher indices read as zero (LOOM_ATTR_NONE).
   loom_op_t* op = NULL;
-  if (parsed->successor_count > 0) {
+  uint8_t operand_segment_count = loom_op_vtable_operand_segment_count(vtable);
+  if (operand_segment_count > 0) {
+    if (parsed->successor_count > 0) {
+      IREE_RETURN_IF_ERROR(loom_builder_allocate_segmented_op_with_successors(
+          &parser->builder, kind, parsed->operand_count,
+          parsed->operand_segment_counts, parsed->operand_segment_count,
+          parsed->result_count, parsed->successor_count, parsed->region_count,
+          parsed->tied_result_count, vtable->attribute_count, location, &op));
+    } else {
+      IREE_RETURN_IF_ERROR(loom_builder_allocate_segmented_op(
+          &parser->builder, kind, parsed->operand_count,
+          parsed->operand_segment_counts, parsed->operand_segment_count,
+          parsed->result_count, parsed->region_count, parsed->tied_result_count,
+          vtable->attribute_count, location, &op));
+    }
+  } else if (parsed->successor_count > 0) {
     IREE_RETURN_IF_ERROR(loom_builder_allocate_op_with_successors(
         &parser->builder, kind, parsed->operand_count, parsed->result_count,
         parsed->successor_count, parsed->region_count,
@@ -555,6 +595,12 @@ static iree_status_t loom_parse_op_into(loom_parser_t* parser,
     };
     return loom_parser_emit(parser, LOOM_ERR_PARSE_006, params,
                             IREE_ARRAYSIZE(params), op_name_token);
+  }
+
+  if (loom_op_vtable_has_segmented_operands(vtable)) {
+    IREE_RETURN_IF_ERROR(loom_parsed_op_prepare_operand_segments(
+        parsed, &parser->parser_arena,
+        loom_op_vtable_operand_segment_count(vtable)));
   }
 
   uint16_t pending_func_arg_start = parser->pending_func_args.count;

@@ -24,6 +24,7 @@ from loom.builder_model import (
 )
 from loom.builtin_types import ALL_BUILTIN_TYPES
 from loom.dsl import Op, TypeDef
+from loom.fields import compute_layout
 from loom.ir import (
     VALUE_FLAG_BLOCK_ARG,
     Block,
@@ -191,6 +192,7 @@ class OpCallable:
         values = _validate_and_normalize_kwargs(self._signature, kwargs)
         attributes: dict[str, Any] = {}
         operands: list[ValueRef | int] = []
+        operand_segment_counts: list[int] = []
         successors: list[Block] = []
         func_args: list[ValueRef | int] = []
         regions: list[Region] = []
@@ -243,57 +245,46 @@ class OpCallable:
                     )
 
         params_by_name = {param.name: param for param in self._signature.params}
-        optional_operand_tail_closed = False
-        for operand in op.operands:
-            operand_param = params_by_name.get(operand.name)
-            if operand_param is None:
-                continue
-            value = values.get(operand_param.name)
-            match operand_param.kind:
-                case BuilderParamKind.OPERAND:
-                    if value is None:
-                        if not operand_param.required:
-                            optional_operand_tail_closed = True
-                            continue
-                    elif optional_operand_tail_closed:
-                        raise ValueError(
-                            f"{op.name}: optional operand '{operand_param.name}' "
-                            "cannot be present after an earlier optional operand "
-                            "was omitted"
-                        )
-                    operands.append(cast(ValueRef | int, value))
-                case BuilderParamKind.OPERAND_VARIADIC:
-                    operands.extend(value or [])
-                case BuilderParamKind.INDEX_LIST:
-                    static_offsets: list[int] = []
-                    for index in cast(Sequence[int | ValueRef], value):
-                        if isinstance(index, ValueRef):
-                            static_offsets.append(_STATIC_INDEX_SENTINEL)
-                            operands.append(index)
-                        elif isinstance(index, int):
-                            static_offsets.append(index)
-                        else:
-                            raise TypeError(
-                                f"{op.name}: index list '{operand_param.name}' entries "
-                                "must be int or ValueRef, "
-                                f"got {type(index).__name__}"
-                            )
-                    static_field = _require_param_field(operand_param, "static_field")
-                    attributes[static_field] = static_offsets
-                case BuilderParamKind.OPERAND_DICT:
-                    operand_dict = value or {}
-                    if operand_dict:
-                        operand_names: dict[str, int] = {}
-                        for name in sorted(operand_dict):
-                            operand_names[name] = len(operand_names)
-                            operands.append(operand_dict[name])
-                        names_field = _require_param_field(operand_param, "names_field")
-                        attributes[names_field] = operand_names
-                case _:
+        layout = compute_layout(op)
+        if layout.segmented_operands:
+            for operand in op.operands:
+                operand_param = params_by_name.get(operand.name)
+                if operand_param is None:
+                    operand_segment_counts.append(0)
+                    continue
+                before_count = len(operands)
+                value = values.get(operand_param.name)
+                self._append_operand_param(
+                    op, operand_param, value, operands, attributes
+                )
+                operand_segment_counts.append(len(operands) - before_count)
+        else:
+            optional_operand_tail_closed = False
+            for operand in op.operands:
+                operand_param = params_by_name.get(operand.name)
+                if operand_param is None:
+                    continue
+                value = values.get(operand_param.name)
+                if (
+                    operand_param.kind == BuilderParamKind.OPERAND
+                    and value is None
+                    and not operand_param.required
+                ):
+                    optional_operand_tail_closed = True
+                    continue
+                if (
+                    operand_param.kind == BuilderParamKind.OPERAND
+                    and value is not None
+                    and optional_operand_tail_closed
+                ):
                     raise ValueError(
-                        f"{op.name}: operand field '{operand.name}' is bound to "
-                        f"unsupported builder parameter kind {operand_param.kind.name}"
+                        f"{op.name}: optional operand '{operand_param.name}' "
+                        "cannot be present after an earlier optional operand "
+                        "was omitted"
                     )
+                self._append_operand_param(
+                    op, operand_param, value, operands, attributes
+                )
 
         results = values.get("results")
         result_names = _normalize_result_names(
@@ -306,6 +297,7 @@ class OpCallable:
         return self._ir.build(
             op.name,
             operands,
+            operand_segment_counts=operand_segment_counts,
             successors=successors,
             func_args=func_args,
             results=results,
@@ -314,6 +306,51 @@ class OpCallable:
             regions=regions,
             location_id=values.get("location_id"),
         )
+
+    def _append_operand_param(
+        self,
+        op: Op,
+        operand_param: BuilderParam,
+        value: Any,
+        operands: list[ValueRef | int],
+        attributes: dict[str, Any],
+    ) -> None:
+        match operand_param.kind:
+            case BuilderParamKind.OPERAND:
+                if value is not None:
+                    operands.append(cast(ValueRef | int, value))
+            case BuilderParamKind.OPERAND_VARIADIC:
+                operands.extend(value or [])
+            case BuilderParamKind.INDEX_LIST:
+                static_offsets: list[int] = []
+                for index in cast(Sequence[int | ValueRef], value):
+                    if isinstance(index, ValueRef):
+                        static_offsets.append(_STATIC_INDEX_SENTINEL)
+                        operands.append(index)
+                    elif isinstance(index, int):
+                        static_offsets.append(index)
+                    else:
+                        raise TypeError(
+                            f"{op.name}: index list '{operand_param.name}' entries "
+                            "must be int or ValueRef, "
+                            f"got {type(index).__name__}"
+                        )
+                static_field = _require_param_field(operand_param, "static_field")
+                attributes[static_field] = static_offsets
+            case BuilderParamKind.OPERAND_DICT:
+                operand_dict = value or {}
+                if operand_dict:
+                    operand_names: dict[str, int] = {}
+                    for name in sorted(operand_dict):
+                        operand_names[name] = len(operand_names)
+                        operands.append(operand_dict[name])
+                    names_field = _require_param_field(operand_param, "names_field")
+                    attributes[names_field] = operand_names
+            case _:
+                raise ValueError(
+                    f"{op.name}: operand field '{operand_param.name}' is bound to "
+                    f"unsupported builder parameter kind {operand_param.kind.name}"
+                )
 
 
 _OPERAND_PARAM_KINDS = frozenset(

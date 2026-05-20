@@ -7,6 +7,7 @@
 from loom.builtin_types import ALL_BUILTIN_TYPES
 from loom.diagnostics import DiagnosticEngine
 from loom.dialect.test import ALL_TEST_OPS
+from loom.dsl import ANY, INTEGER, Op, Operand, Result
 from loom.format.bytecode.reader import read_module
 from loom.format.bytecode.writer import write_module
 from loom.format.text.parser import Parser
@@ -77,6 +78,140 @@ def test_verifier_reports_type_constraint_failure() -> None:
     diagnostics = verify_module(module, ops=ALL_TEST_OPS)
 
     assert _diagnostic_text_contains(diagnostics, "operand type constraint violated")
+    assert _diagnostic_text_contains(diagnostics, "expected integer")
+
+
+def test_verifier_accepts_segmented_operand_counts() -> None:
+    module = Module()
+    root = module.add_value(Value("root", I32))
+    lhs = module.add_value(Value("lhs", I32))
+    rhs = module.add_value(Value("rhs", I32))
+    result = module.add_value(Value("result", I32))
+    module = _module_with_body_ops(
+        Operation(
+            name="test.segmented",
+            operands=[root, lhs, rhs],
+            operand_segment_counts=(1, 0, 1, 1),
+            results=[result],
+        ),
+        module=module,
+    )
+
+    diagnostics = verify_module(module, ops=ALL_TEST_OPS)
+
+    assert not diagnostics.has_errors
+
+
+def test_verifier_reports_missing_segmented_required_operand() -> None:
+    module = Module()
+    lhs = module.add_value(Value("lhs", I32))
+    result = module.add_value(Value("result", I32))
+    module = _module_with_body_ops(
+        Operation(
+            name="test.segmented",
+            operands=[lhs],
+            operand_segment_counts=(0, 0, 1, 0),
+            results=[result],
+        ),
+        module=module,
+    )
+
+    diagnostics = verify_module(module, ops=ALL_TEST_OPS)
+
+    assert _diagnostic_text_contains(diagnostics, "required operand segment count")
+    assert _diagnostic_text_contains(diagnostics, "root")
+
+
+def test_verifier_reports_segmented_count_sum_mismatch() -> None:
+    module = Module()
+    root = module.add_value(Value("root", I32))
+    result = module.add_value(Value("result", I32))
+    module = _module_with_body_ops(
+        Operation(
+            name="test.segmented",
+            operands=[root],
+            operand_segment_counts=(1, 0, 1, 0),
+            results=[result],
+        ),
+        module=module,
+    )
+
+    diagnostics = verify_module(module, ops=ALL_TEST_OPS)
+
+    assert _diagnostic_text_contains(diagnostics, "do not sum to operand count")
+
+
+def test_verifier_reports_segmented_optional_operand_too_many_values() -> None:
+    module = Module()
+    root = module.add_value(Value("root", I32))
+    guard0 = module.add_value(Value("guard0", I32))
+    guard1 = module.add_value(Value("guard1", I32))
+    result = module.add_value(Value("result", I32))
+    module = _module_with_body_ops(
+        Operation(
+            name="test.segmented",
+            operands=[root, guard0, guard1],
+            operand_segment_counts=(1, 2, 0, 0),
+            results=[result],
+        ),
+        module=module,
+    )
+
+    diagnostics = verify_module(module, ops=ALL_TEST_OPS)
+
+    assert _diagnostic_text_contains(diagnostics, "optional operand segment count")
+    assert _diagnostic_text_contains(diagnostics, "guard")
+
+
+def test_verifier_reports_unexpected_segment_counts_on_non_segmented_op() -> None:
+    module = Module()
+    lhs = module.add_value(Value("lhs", I32))
+    rhs = module.add_value(Value("rhs", I32))
+    result = module.add_value(Value("result", I32))
+    module = _module_with_body_ops(
+        Operation(
+            name="test.addi",
+            operands=[lhs, rhs],
+            operand_segment_counts=(1, 1),
+            results=[result],
+        ),
+        module=module,
+    )
+
+    diagnostics = verify_module(module, ops=ALL_TEST_OPS)
+
+    assert _diagnostic_text_contains(diagnostics, "unexpected operand segment counts")
+
+
+def test_verifier_type_checks_segmented_operand_spans() -> None:
+    segmented_integer = Op(
+        "test.segmented_integer",
+        operands=[
+            Operand("root", INTEGER),
+            Operand("guard", INTEGER, optional=True),
+            Operand("lhs", INTEGER, variadic=True),
+            Operand("rhs", INTEGER, variadic=True),
+        ],
+        results=[Result("result", ANY)],
+    )
+    module = Module()
+    root = module.add_value(Value("root", I32))
+    rhs = module.add_value(Value("rhs", F32))
+    result = module.add_value(Value("result", I32))
+    module = _module_with_body_ops(
+        Operation(
+            name="test.segmented_integer",
+            operands=[root, rhs],
+            operand_segment_counts=(1, 0, 0, 1),
+            results=[result],
+        ),
+        module=module,
+    )
+
+    diagnostics = verify_module(module, ops=(*ALL_TEST_OPS, segmented_integer))
+
+    assert _diagnostic_text_contains(diagnostics, "operand type constraint violated")
+    assert _diagnostic_text_contains(diagnostics, "rhs[0]")
     assert _diagnostic_text_contains(diagnostics, "expected integer")
 
 

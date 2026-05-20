@@ -543,6 +543,7 @@ class IRBuilder:
         op_name: str,
         operands: Sequence[ValueRef | int] | None = None,
         *,
+        operand_segment_counts: Sequence[int] | None = None,
         successors: Sequence[Block] | None = None,
         func_args: Sequence[ValueRef | int] | None = None,
         results: Sequence[Type | TiedResultSpec] | None = None,
@@ -556,6 +557,8 @@ class IRBuilder:
         Parameters:
           op_name: Full op name (e.g., "test.addi").
           operands: ValueRefs or ints for operands.
+          operand_segment_counts: Structural segment counts for ops with
+            multiple named operand spans.
           successors: Target blocks for CFG terminator edges.
           func_args: Func-like signature argument ValueRefs. Declaration-style
             funcs store these as op operands; bodyful funcs store them as body
@@ -617,6 +620,7 @@ class IRBuilder:
         operation = Operation(
             name=op_name,
             operands=operand_ids,
+            operand_segment_counts=tuple(operand_segment_counts or ()),
             results=result_ids,
             tied_results=tied_results,
             successors=list(successors) if successors else [],

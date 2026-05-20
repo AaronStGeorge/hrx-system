@@ -25,11 +25,13 @@ iree_status_t loom_print_inline_attr_dict(
 // Prints a named operand dictionary.
 iree_status_t loom_print_operand_dict(loom_print_context_t* ctx,
                                       const loom_op_t* op,
+                                      const loom_op_vtable_t* vtable,
                                       const loom_format_element_t* element);
 
 // Prints an attribute-keyed operand row table.
 iree_status_t loom_print_attr_table(loom_print_context_t* ctx,
                                     const loom_op_t* op,
+                                    const loom_op_vtable_t* vtable,
                                     const loom_format_element_t* element);
 
 #ifdef __cplusplus

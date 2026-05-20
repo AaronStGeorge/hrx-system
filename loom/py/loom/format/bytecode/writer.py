@@ -22,6 +22,7 @@ import struct
 from collections.abc import Iterable, Mapping
 from typing import Any, ClassVar, cast
 
+from loom.fields import compute_layout
 from loom.format.bytecode.encoding import ByteBuffer
 from loom.format.bytecode.op_decls import (
     attr_def_for_op,
@@ -1060,6 +1061,23 @@ class BytecodeWriter:
                 value_numbers, operand_id, "operation operand"
             )
             buf.write_varint(value_number)
+        op_decl = self._op_decls_by_name.get(op.name)
+        if op_decl is not None:
+            layout = compute_layout(op_decl)
+            if layout.segmented_operands:
+                if len(op.operand_segment_counts) != len(op_decl.operands):
+                    raise ValueError(
+                        f"operation {op.name} has "
+                        f"{len(op.operand_segment_counts)} operand segment counts, "
+                        f"expected {len(op_decl.operands)}"
+                    )
+                if sum(op.operand_segment_counts) != len(op.operands):
+                    raise ValueError(
+                        f"operation {op.name} operand segment counts do not "
+                        "sum to operand count"
+                    )
+                for count in op.operand_segment_counts:
+                    buf.write_varint(count)
 
         # Successors are encoded as region-local block ordinals instead of
         # labels. Labels are optional text metadata; the edge is semantic.

@@ -7,6 +7,7 @@
 #include "loom/verify/verify_state.h"
 
 #include "iree/base/internal/unicode.h"
+#include "loom/ops/op_defs.h"
 
 void loom_verify_record_diagnostic_status(loom_verify_state_t* state,
                                           iree_status_t status) {
@@ -209,13 +210,19 @@ loom_type_t loom_verify_value_type(const loom_verify_state_t* state,
 // attr and region categories, returns LOOM_VALUE_ID_INVALID (these
 // fields are not values).
 loom_value_id_t loom_verify_resolve_value_field(const loom_op_t* op,
+                                                const loom_op_vtable_t* vtable,
                                                 uint8_t field_ref) {
   uint8_t category = LOOM_FIELD_REF_CATEGORY(field_ref);
   uint8_t index = LOOM_FIELD_REF_INDEX(field_ref);
   switch (category) {
-    case LOOM_FIELD_OPERAND:
+    case LOOM_FIELD_OPERAND: {
+      if (loom_op_vtable_has_segmented_operands(vtable)) {
+        loom_value_slice_t span = loom_op_operand_field_span(vtable, op, index);
+        return span.count > 0 ? span.values[0] : LOOM_VALUE_ID_INVALID;
+      }
       if (index < op->operand_count) return loom_op_const_operands(op)[index];
       break;
+    }
     case LOOM_FIELD_RESULT:
       if (index < op->result_count) return loom_op_const_results(op)[index];
       break;
@@ -233,9 +240,17 @@ bool loom_verify_is_variadic_field(const loom_op_vtable_t* vtable,
   uint8_t category = LOOM_FIELD_REF_CATEGORY(field_ref);
   uint8_t index = LOOM_FIELD_REF_INDEX(field_ref);
   switch (category) {
-    case LOOM_FIELD_OPERAND:
+    case LOOM_FIELD_OPERAND: {
+      if (loom_op_vtable_has_segmented_operands(vtable)) {
+        uint8_t descriptor_count =
+            loom_op_vtable_operand_descriptor_count(vtable);
+        return index < descriptor_count &&
+               iree_any_bit_set(vtable->operand_descriptors[index].flags,
+                                LOOM_OPERAND_VARIADIC);
+      }
       return (vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_OPERANDS) &&
              index == vtable->fixed_operand_count;
+    }
     case LOOM_FIELD_RESULT:
       return (vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_RESULTS) &&
              index == vtable->fixed_result_count;
@@ -253,6 +268,9 @@ uint16_t loom_verify_variadic_count(const loom_op_t* op,
   uint8_t index = LOOM_FIELD_REF_INDEX(field_ref);
   switch (category) {
     case LOOM_FIELD_OPERAND:
+      if (loom_op_vtable_has_segmented_operands(vtable)) {
+        return loom_op_operand_field_span(vtable, op, index).count;
+      }
       if (index <= vtable->fixed_operand_count) {
         return (uint16_t)(op->operand_count - index);
       }
@@ -320,12 +338,25 @@ iree_string_view_t loom_verify_indexed_field_name(
 // Resolves an ordinary operand/result value index to the declared field name.
 // Variadic values use their declaring field name plus an element index, such as
 // "inputs[2]".
-iree_string_view_t loom_verify_value_field_name(const loom_op_vtable_t* vtable,
-                                                uint8_t category,
-                                                uint16_t value_index,
-                                                char* buffer,
-                                                iree_host_size_t buffer_size) {
+iree_string_view_t loom_verify_value_field_name(
+    const loom_op_vtable_t* vtable, const loom_op_t* op, uint8_t category,
+    uint16_t value_index, char* buffer, iree_host_size_t buffer_size) {
   if (category == LOOM_FIELD_OPERAND && vtable->operand_descriptors) {
+    if (loom_op_vtable_has_segmented_operands(vtable)) {
+      const loom_operand_descriptor_t* descriptor = NULL;
+      uint8_t field_index = 0;
+      uint16_t element_index = 0;
+      if (loom_op_operand_descriptor_at(vtable, op, value_index, &descriptor,
+                                        &field_index, &element_index)) {
+        iree_string_view_t field_name = loom_bstring_view(descriptor->name);
+        if (!iree_any_bit_set(descriptor->flags, LOOM_OPERAND_VARIADIC)) {
+          return field_name;
+        }
+        iree_snprintf(buffer, buffer_size, "%.*s[%u]", (int)field_name.size,
+                      field_name.data, element_index);
+        return iree_make_cstring_view(buffer);
+      }
+    }
     uint8_t descriptor_count = loom_op_vtable_operand_descriptor_count(vtable);
     if (value_index < descriptor_count &&
         !iree_any_bit_set(vtable->vtable_flags,
@@ -366,11 +397,18 @@ iree_string_view_t loom_verify_value_field_name(const loom_op_vtable_t* vtable,
 // element count. Returns NULL with |*out_count| = 0 if the field is
 // not a value-bearing variadic (e.g., it points at an attr or region,
 // or its start index is past the op's operand/result range).
-const loom_value_id_t* loom_verify_resolve_variadic_field(const loom_op_t* op,
-                                                          uint8_t field_ref,
-                                                          uint16_t* out_count) {
+const loom_value_id_t* loom_verify_resolve_variadic_field(
+    const loom_op_t* op, const loom_op_vtable_t* vtable, uint8_t field_ref,
+    uint16_t* out_count) {
   uint8_t category = LOOM_FIELD_REF_CATEGORY(field_ref);
   uint8_t start_index = LOOM_FIELD_REF_INDEX(field_ref);
+  if (category == LOOM_FIELD_OPERAND &&
+      loom_op_vtable_has_segmented_operands(vtable)) {
+    loom_value_slice_t span =
+        loom_op_operand_field_span(vtable, op, start_index);
+    *out_count = span.count;
+    return span.values;
+  }
   if (category == LOOM_FIELD_OPERAND && start_index <= op->operand_count) {
     *out_count = (uint16_t)(op->operand_count - start_index);
     return loom_op_const_operands(op) + start_index;

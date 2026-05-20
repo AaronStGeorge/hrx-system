@@ -186,6 +186,11 @@ static iree_status_t loom_print_instance_flag_list(
   return iree_ok_status();
 }
 
+static uint16_t loom_print_operand_flat_index(const loom_op_t* op,
+                                              const loom_value_id_t* operand) {
+  return (uint16_t)(operand - loom_op_const_operands(op));
+}
+
 iree_status_t loom_print_format_elements(loom_print_context_t* ctx,
                                          const loom_op_t* op,
                                          const loom_op_vtable_t* vtable) {
@@ -209,47 +214,61 @@ iree_status_t loom_print_format_elements(loom_print_context_t* ctx,
                       entry_block->arg_count > 0)
                          ? loom_block_arg_id(entry_block, 0)
                          : LOOM_VALUE_ID_INVALID;
-        } else if (element->field_index >= op->operand_count) {
-          return iree_make_status(
-              IREE_STATUS_INVALID_ARGUMENT,
-              "format OPERAND_REF field_index %u out of range (op has %u "
-              "operands)",
-              element->field_index, op->operand_count);
         } else {
-          value_id = loom_op_const_operands(op)[element->field_index];
+          loom_value_slice_t span =
+              loom_op_operand_field_span(vtable, op, element->field_index);
+          if (span.count == 0) {
+            return iree_make_status(
+                IREE_STATUS_INVALID_ARGUMENT,
+                "format OPERAND_REF field_index %u out of range (op has %u "
+                "operands)",
+                element->field_index, op->operand_count);
+          }
+          value_id = span.values[0];
+        }
+        uint16_t operand_index = element->field_index;
+        if (value_id != LOOM_VALUE_ID_INVALID) {
+          loom_value_slice_t span =
+              loom_op_operand_field_span(vtable, op, element->field_index);
+          if (span.count > 0) {
+            operand_index = loom_print_operand_flat_index(op, span.values);
+          }
         }
         IREE_RETURN_IF_ERROR(loom_print_value_name_with_field(
             ctx, value_id,
-            loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND,
-                                 element->field_index)));
+            loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND, operand_index)));
         break;
       }
       case LOOM_FORMAT_KIND_OPERAND_REFS: {
-        const loom_value_id_t* operands = loom_op_const_operands(op);
-        uint16_t start = vtable->fixed_operand_count;
-        for (uint16_t j = start; j < op->operand_count; ++j) {
-          if (j > start) {
+        loom_value_slice_t operands =
+            loom_op_operand_field_span(vtable, op, element->field_index);
+        for (uint16_t j = 0; j < operands.count; ++j) {
+          if (j > 0) {
             IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ",", false));
           }
+          uint16_t operand_index =
+              loom_print_operand_flat_index(op, &operands.values[j]);
           IREE_RETURN_IF_ERROR(loom_print_value_name_with_field(
-              ctx, operands[j],
-              loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND, j)));
+              ctx, operands.values[j],
+              loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND, operand_index)));
         }
         break;
       }
       case LOOM_FORMAT_KIND_OPERAND_TYPED_REFS: {
-        const loom_value_id_t* operands = loom_op_const_operands(op);
-        uint16_t start = vtable->fixed_operand_count;
-        for (uint16_t j = start; j < op->operand_count; ++j) {
-          if (j > start) {
+        loom_value_slice_t operands =
+            loom_op_operand_field_span(vtable, op, element->field_index);
+        for (uint16_t j = 0; j < operands.count; ++j) {
+          if (j > 0) {
             IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ",", false));
           }
+          uint16_t operand_index =
+              loom_print_operand_flat_index(op, &operands.values[j]);
           IREE_RETURN_IF_ERROR(loom_print_value_name_with_field(
-              ctx, operands[j],
-              loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND, j)));
+              ctx, operands.values[j],
+              loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND, operand_index)));
           IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ":", true));
           IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
-          IREE_RETURN_IF_ERROR(loom_print_value_type(ctx, operands[j]));
+          IREE_RETURN_IF_ERROR(loom_print_value_type(ctx, operands.values[j]));
           loom_print_did_write(ctx);
         }
         break;
@@ -294,7 +313,9 @@ iree_status_t loom_print_format_elements(loom_print_context_t* ctx,
         break;
       }
       case LOOM_FORMAT_KIND_OPERAND_TYPE: {
-        if (element->field_index >= op->operand_count) {
+        loom_value_slice_t span =
+            loom_op_operand_field_span(vtable, op, element->field_index);
+        if (span.count == 0) {
           return iree_make_status(
               IREE_STATUS_INVALID_ARGUMENT,
               "format OPERAND_TYPE field_index %u out of range (op has %u "
@@ -302,8 +323,7 @@ iree_status_t loom_print_format_elements(loom_print_context_t* ctx,
               element->field_index, op->operand_count);
         }
         IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
-        IREE_RETURN_IF_ERROR(loom_print_value_type(
-            ctx, loom_op_const_operands(op)[element->field_index]));
+        IREE_RETURN_IF_ERROR(loom_print_value_type(ctx, span.values[0]));
         loom_print_did_write(ctx);
         break;
       }
@@ -322,14 +342,14 @@ iree_status_t loom_print_format_elements(loom_print_context_t* ctx,
         break;
       }
       case LOOM_FORMAT_KIND_OPERAND_TYPES: {
-        const loom_value_id_t* operands = loom_op_const_operands(op);
-        uint16_t start = vtable->fixed_operand_count;
-        for (uint16_t j = start; j < op->operand_count; ++j) {
-          if (j > start) {
+        loom_value_slice_t operands =
+            loom_op_operand_field_span(vtable, op, element->field_index);
+        for (uint16_t j = 0; j < operands.count; ++j) {
+          if (j > 0) {
             IREE_RETURN_IF_ERROR(loom_print_emit_cstr(ctx, ",", false));
           }
           IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
-          IREE_RETURN_IF_ERROR(loom_print_value_type(ctx, operands[j]));
+          IREE_RETURN_IF_ERROR(loom_print_value_type(ctx, operands.values[j]));
           loom_print_did_write(ctx);
         }
         break;
@@ -382,8 +402,8 @@ iree_status_t loom_print_format_elements(loom_print_context_t* ctx,
               static_attr_index, op->attribute_count);
         }
         loom_attribute_t static_attr = loom_op_attrs(op)[static_attr_index];
-        const loom_value_id_t* operands = loom_op_const_operands(op);
-        uint16_t dynamic_start = element->field_index;
+        loom_value_slice_t dynamic_operands =
+            loom_op_operand_field_span(vtable, op, element->field_index);
         uint16_t dynamic_index = 0;
         bool glue =
             i > 0 && LOOM_FORMAT_INDEX_LIST_HAS_LEADING_GLUE(element->data);
@@ -394,17 +414,22 @@ iree_status_t loom_print_format_elements(loom_print_context_t* ctx,
           }
           int64_t static_value = static_attr.i64_array[j];
           if (static_value == INT64_MIN) {
-            uint16_t operand_index = dynamic_start + dynamic_index++;
-            if (operand_index >= op->operand_count) {
+            uint16_t operand_index = dynamic_index++;
+            if (operand_index >= dynamic_operands.count) {
               return iree_make_status(
                   IREE_STATUS_INVALID_ARGUMENT,
                   "format INDEX_LIST dynamic operand %u out of range (op has "
                   "%u operands)",
-                  operand_index, op->operand_count);
+                  operand_index, dynamic_operands.count);
             }
+            const loom_value_id_t* operand =
+                &dynamic_operands.values[operand_index];
+            uint16_t flat_operand_index =
+                loom_print_operand_flat_index(op, operand);
             IREE_RETURN_IF_ERROR(loom_print_value_name_with_field(
-                ctx, operands[operand_index],
-                loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND, operand_index)));
+                ctx, *operand,
+                loom_print_field_ref(LOOM_PRINT_FIELD_OPERAND,
+                                     flat_operand_index)));
           } else {
             IREE_RETURN_IF_ERROR(loom_print_space_if_needed(ctx));
             IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
@@ -469,11 +494,11 @@ iree_status_t loom_print_format_elements(loom_print_context_t* ctx,
         break;
       }
       case LOOM_FORMAT_KIND_OPERAND_DICT: {
-        IREE_RETURN_IF_ERROR(loom_print_operand_dict(ctx, op, element));
+        IREE_RETURN_IF_ERROR(loom_print_operand_dict(ctx, op, vtable, element));
         break;
       }
       case LOOM_FORMAT_KIND_ATTR_TABLE: {
-        IREE_RETURN_IF_ERROR(loom_print_attr_table(ctx, op, element));
+        IREE_RETURN_IF_ERROR(loom_print_attr_table(ctx, op, vtable, element));
         break;
       }
       case LOOM_FORMAT_KIND_REGION_TABLE: {
@@ -660,7 +685,8 @@ iree_status_t loom_print_format_elements(loom_print_context_t* ctx,
         bool present = false;
         switch (anchor_category) {
           case LOOM_ANCHOR_OPERAND:
-            present = op->operand_count > element->field_index;
+            present =
+                loom_op_operand_field_present(vtable, op, element->field_index);
             break;
           case LOOM_ANCHOR_ATTR:
             present = loom_print_optional_attr_present(vtable, op,

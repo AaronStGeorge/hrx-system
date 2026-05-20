@@ -321,6 +321,40 @@ test_typed_use = Op(
     ],
 )
 
+test_segmented = Op(
+    "test.segmented",
+    group=test_ops,
+    doc="Pure test op with independent operand spans sharing one flat operand array.",
+    operands=[
+        Operand("root", ANY),
+        Operand("guard", ANY, optional=True),
+        Operand("lhs", ANY, variadic=True),
+        Operand("rhs", ANY, variadic=True),
+    ],
+    results=[Result("result", ANY)],
+    constraints=[
+        SameType("root", "result"),
+        SameType("root", "lhs", "rhs"),
+    ],
+    traits=[PURE],
+    format=[
+        Ref("root"),
+        OptionalGroup([kw("base"), Ref("guard")], anchor="guard"),
+        kw("values"),
+        Refs("lhs"),
+        kw("expected"),
+        Refs("rhs"),
+        COLON,
+        TypeOf("root"),
+        ARROW,
+        ResultType("result"),
+    ],
+    examples=[
+        "%result = test.segmented %root base %guard values %lhs0, %lhs1 expected %rhs : i32 -> i32",
+        "%result = test.segmented %root values expected %rhs0, %rhs1 : i32 -> i32",
+    ],
+)
+
 # ============================================================================
 # test.fact_* — value facts inspection ops for testing
 # ============================================================================
@@ -2343,4 +2377,5 @@ ALL_TEST_OPS: tuple[Op, ...] = (
     test_resource_escape,
     test_resource_alias,
     test_resource_borrowed,
+    test_segmented,
 )

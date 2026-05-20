@@ -33,6 +33,8 @@ void loom_parsed_op_initialize(loom_parsed_op_t* parsed) {
   parsed->tied_result_capacity = LOOM_PARSED_OP_INLINE_TIED;
   parsed->field_spans = parsed->inline_field_spans;
   parsed->field_span_capacity = LOOM_PARSED_OP_INLINE_FIELD_SPANS;
+  parsed->operand_segment_counts = parsed->inline_operand_segment_counts;
+  parsed->operand_segment_capacity = LOOM_PARSED_OP_INLINE_OPERAND_SEGMENTS;
 }
 
 void loom_parsed_op_reset(loom_parsed_op_t* parsed) {
@@ -43,6 +45,7 @@ void loom_parsed_op_reset(loom_parsed_op_t* parsed) {
   parsed->field_span_count = 0;
   parsed->attribute_count = 0;
   parsed->region_count = 0;
+  parsed->operand_segment_count = 0;
   parsed->instance_flags = 0;
 }
 
@@ -140,6 +143,44 @@ iree_status_t loom_parsed_op_set_operand(loom_parsed_op_t* parsed,
     parsed->operand_ids[parsed->operand_count++] = LOOM_VALUE_ID_INVALID;
   }
   parsed->operand_ids[index] = value_id;
+  return iree_ok_status();
+}
+
+iree_status_t loom_parsed_op_prepare_operand_segments(
+    loom_parsed_op_t* parsed, iree_arena_allocator_t* arena,
+    uint8_t segment_count) {
+  if (segment_count > parsed->operand_segment_capacity) {
+    iree_host_size_t capacity = parsed->operand_segment_capacity;
+    IREE_RETURN_IF_ERROR(loom_parser_grow_bounded_array(
+        arena, parsed->operand_segment_count, segment_count, sizeof(uint16_t),
+        UINT8_MAX, "parsed op operand segment", &capacity,
+        (void**)&parsed->operand_segment_counts));
+    parsed->operand_segment_capacity = (uint8_t)capacity;
+  }
+  parsed->operand_segment_count = segment_count;
+  memset(parsed->operand_segment_counts, 0,
+         (iree_host_size_t)segment_count * sizeof(uint16_t));
+  return iree_ok_status();
+}
+
+iree_status_t loom_parsed_op_add_segmented_operand(
+    loom_parsed_op_t* parsed, iree_arena_allocator_t* arena,
+    uint8_t segment_index, loom_value_id_t value_id,
+    uint16_t* out_operand_index) {
+  if (segment_index >= parsed->operand_segment_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "operand segment index %u is out of range for %u segment(s)",
+        segment_index, parsed->operand_segment_count);
+  }
+  if (parsed->operand_segment_counts[segment_index] == UINT16_MAX) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "parsed operand segment %u exceeds storage limit",
+                            segment_index);
+  }
+  *out_operand_index = parsed->operand_count;
+  IREE_RETURN_IF_ERROR(loom_parsed_op_add_operand(parsed, arena, value_id));
+  ++parsed->operand_segment_counts[segment_index];
   return iree_ok_status();
 }
 

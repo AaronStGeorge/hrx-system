@@ -118,7 +118,8 @@ enum {
   LOOM_OP_TEST_RESOURCE_ESCAPE = LOOM_OP_KIND(LOOM_DIALECT_TEST, 95),
   LOOM_OP_TEST_RESOURCE_ALIAS = LOOM_OP_KIND(LOOM_DIALECT_TEST, 96),
   LOOM_OP_TEST_RESOURCE_BORROWED = LOOM_OP_KIND(LOOM_DIALECT_TEST, 97),
-  LOOM_OP_TEST_COUNT_ = 98,
+  LOOM_OP_TEST_SEGMENTED = LOOM_OP_KIND(LOOM_DIALECT_TEST, 98),
+  LOOM_OP_TEST_COUNT_ = 99,
 };
 
 // Function visibility. Absent (0) means private.
@@ -1801,6 +1802,31 @@ LOOM_DEFINE_RESULT(loom_test_resource_borrowed_result, 0)
 iree_status_t loom_test_resource_borrowed_build(
     loom_builder_t* builder,
     loom_may_consume loom_value_id_t resource,
+    loom_type_t result_type,
+    loom_location_id_t location,
+    loom_op_t** out_op);
+
+// LOOM_OP_TEST_SEGMENTED: Pure test op with independent operand spans sharing one flat operand array.
+// %result = test.segmented %root base %guard values %lhs0, %lhs1 expected %rhs : i32 -> i32
+LOOM_DEFINE_ISA(loom_test_segmented_isa, LOOM_OP_TEST_SEGMENTED)
+LOOM_DEFINE_SEGMENTED_OPERAND(loom_test_segmented_root, 0)
+LOOM_DEFINE_SEGMENTED_OPTIONAL_OPERAND(loom_test_segmented_guard, 1)
+LOOM_DEFINE_SEGMENTED_OPERANDS(loom_test_segmented_lhs, 2)
+LOOM_DEFINE_SEGMENTED_OPERANDS(loom_test_segmented_rhs, 3)
+LOOM_DEFINE_RESULT(loom_test_segmented_result, 0)
+enum loom_test_segmented_build_flag_bits_e {
+  LOOM_TEST_SEGMENTED_BUILD_FLAG_HAS_GUARD = 1u << 0,
+};
+typedef uint32_t loom_test_segmented_build_flags_t;
+iree_status_t loom_test_segmented_build(
+    loom_builder_t* builder,
+    loom_test_segmented_build_flags_t build_flags,
+    loom_may_consume loom_value_id_t root,
+    loom_optional loom_may_consume loom_value_id_t guard,
+    loom_may_consume const loom_value_id_t* lhs,
+    iree_host_size_t lhs_count,
+    loom_may_consume const loom_value_id_t* rhs,
+    iree_host_size_t rhs_count,
     loom_type_t result_type,
     loom_location_id_t location,
     loom_op_t** out_op);

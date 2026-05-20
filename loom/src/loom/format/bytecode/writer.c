@@ -2407,6 +2407,13 @@ static iree_status_t loom_bytecode_write_operation(
     IREE_RETURN_IF_ERROR(
         loom_bytecode_page_writer_write_uvarint(writer, value_number));
   }
+  uint8_t operand_segment_count = loom_op_vtable_operand_segment_count(vtable);
+  const uint16_t* operand_segment_counts =
+      loom_op_const_operand_segment_counts(op);
+  for (uint8_t i = 0; i < operand_segment_count; ++i) {
+    IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_uvarint(
+        writer, operand_segment_counts[i]));
+  }
 
   // Successors are encoded as region-local block ordinals. This keeps bytecode
   // independent from optional text labels and makes forward edges cheap.

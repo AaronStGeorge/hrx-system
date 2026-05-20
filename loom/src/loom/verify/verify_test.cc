@@ -2176,6 +2176,54 @@ TEST_F(VerifyTest, VariadicSameTypeMismatchInVariadic) {
   ExpectTypeParam(*entry, 3, f32_type);
 }
 
+TEST_F(VerifyTest, SegmentedSameTypeConstraintPasses) {
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_type_t arg_types[] = {i32_type, i32_type, i32_type};
+  loom_value_id_t args[3];
+  EnterTestFunc(arg_types, 3, args);
+
+  loom_value_id_t lhs[] = {args[1]};
+  loom_value_id_t rhs[] = {args[2]};
+  loom_op_t* op = nullptr;
+  IREE_ASSERT_OK(loom_test_segmented_build(
+      &builder_, 0, args[0], LOOM_VALUE_ID_INVALID, lhs, IREE_ARRAYSIZE(lhs),
+      rhs, IREE_ARRAYSIZE(rhs), i32_type, LOOM_LOCATION_UNKNOWN, &op));
+
+  TerminateFunc();
+  auto result = Verify();
+  EXPECT_EQ(result.error_count, 0u)
+      << (collector_.errors.empty() ? "" : collector_.errors[0]);
+}
+
+TEST_F(VerifyTest, SegmentedSameTypeMismatchNamesSegmentElement) {
+  loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_type_t f32_type = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
+  loom_type_t arg_types[] = {i32_type, i32_type, f32_type};
+  loom_value_id_t args[3];
+  EnterTestFunc(arg_types, 3, args);
+
+  loom_value_id_t lhs[] = {args[1]};
+  loom_value_id_t rhs[] = {args[2]};
+  loom_op_t* op = nullptr;
+  IREE_ASSERT_OK(loom_test_segmented_build(
+      &builder_, 0, args[0], LOOM_VALUE_ID_INVALID, lhs, IREE_ARRAYSIZE(lhs),
+      rhs, IREE_ARRAYSIZE(rhs), i32_type, LOOM_LOCATION_UNKNOWN, &op));
+
+  TerminateFunc();
+  DiagnosticCapture structured;
+  auto result = VerifyStructured(&structured);
+  EXPECT_GT(result.error_count, 0u);
+  const CapturedDiagnostic* entry = FindDiagnostic(
+      structured, loom_error_def_lookup(LOOM_ERROR_DOMAIN_TYPE, 1));
+  ASSERT_NE(entry, nullptr) << "Expected TYPE/001 mismatch in segmented span";
+  EXPECT_EQ(GetStringParam(*entry, 0), "root");
+  ExpectFieldRefParam(*entry, 0, LOOM_DIAGNOSTIC_FIELD_OPERAND, 0);
+  ExpectTypeParam(*entry, 1, i32_type);
+  EXPECT_EQ(GetStringParam(*entry, 2), "rhs[0]");
+  ExpectFieldRefParam(*entry, 2, LOOM_DIAGNOSTIC_FIELD_OPERAND, 3);
+  ExpectTypeParam(*entry, 3, f32_type);
+}
+
 TEST_F(VerifyTest, VariadicSameTypeMismatchHighlightsWideOperandIndex) {
   constexpr uint16_t kInputCount = 65;
   loom_type_t i32_type = loom_type_scalar(LOOM_SCALAR_TYPE_I32);

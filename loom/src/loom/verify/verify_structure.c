@@ -7,7 +7,61 @@
 #include "loom/verify/verify_structure.h"
 
 #include "loom/error/error_catalog.h"
+#include "loom/ops/op_defs.h"
 #include "loom/verify/verify_diagnostics.h"
+
+static void loom_verify_segmented_operand_structure(
+    loom_verify_state_t* state, const loom_op_t* op,
+    const loom_op_vtable_t* vtable, iree_string_view_t op_name) {
+  uint8_t segment_count = loom_op_vtable_operand_segment_count(vtable);
+  if (segment_count == 0 || !vtable->operand_descriptors) {
+    if (op->operand_count != 0) {
+      loom_diagnostic_param_t params[] = {
+          loom_param_string(op_name),
+          loom_param_u32(op->operand_count),
+          loom_param_u32(0),
+      };
+      loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_001, params,
+                                  IREE_ARRAYSIZE(params));
+    }
+    return;
+  }
+
+  const uint16_t* segment_counts = loom_op_const_operand_segment_counts(op);
+  uint32_t total_count = 0;
+  for (uint8_t i = 0; i < segment_count; ++i) {
+    const loom_operand_descriptor_t* descriptor =
+        &vtable->operand_descriptors[i];
+    uint16_t segment_value_count = segment_counts[i];
+    total_count += segment_value_count;
+    if (iree_any_bit_set(descriptor->flags, LOOM_OPERAND_VARIADIC)) {
+      continue;
+    }
+    uint16_t expected_count = 1;
+    if (iree_any_bit_set(descriptor->flags, LOOM_OPERAND_OPTIONAL)) {
+      if (segment_value_count <= 1) continue;
+      expected_count = 1;
+    } else if (segment_value_count == 1) {
+      continue;
+    }
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(op_name),
+        loom_param_u32(segment_value_count),
+        loom_param_u32(expected_count),
+    };
+    loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_001, params,
+                                IREE_ARRAYSIZE(params));
+  }
+  if (total_count != op->operand_count) {
+    loom_diagnostic_param_t params[] = {
+        loom_param_string(op_name),
+        loom_param_u32(op->operand_count),
+        loom_param_u32(total_count),
+    };
+    loom_verify_emit_structured(state, op, LOOM_ERR_STRUCTURE_001, params,
+                                IREE_ARRAYSIZE(params));
+  }
+}
 
 static void loom_verify_emit_symbol_definition_diagnostic(
     loom_verify_state_t* state, const loom_op_t* op, loom_symbol_ref_t ref,
@@ -321,9 +375,12 @@ void loom_verify_op_structure(loom_verify_state_t* state, const loom_op_t* op,
   iree_string_view_t op_name = loom_op_vtable_name(vtable);
 
   // Check operand count.
+  bool has_segmented_operands = loom_op_vtable_has_segmented_operands(vtable);
   bool has_variadic_operands =
-      (vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_OPERANDS) != 0;
-  if (has_variadic_operands) {
+      iree_any_bit_set(vtable->vtable_flags, LOOM_OP_VTABLE_VARIADIC_OPERANDS);
+  if (has_segmented_operands) {
+    loom_verify_segmented_operand_structure(state, op, vtable, op_name);
+  } else if (has_variadic_operands) {
     if (op->operand_count < vtable->fixed_operand_count) {
       loom_diagnostic_param_t params[] = {
           loom_param_string(op_name),
@@ -538,29 +595,40 @@ void loom_verify_type_constraints(loom_verify_state_t* state,
                                   const loom_op_vtable_t* vtable) {
   // Check operand type constraints.
   if (vtable->operand_descriptors) {
-    bool has_variadic =
-        (vtable->vtable_flags & LOOM_OP_VTABLE_VARIADIC_OPERANDS) != 0;
+    bool has_segmented = loom_op_vtable_has_segmented_operands(vtable);
+    bool has_variadic = iree_any_bit_set(vtable->vtable_flags,
+                                         LOOM_OP_VTABLE_VARIADIC_OPERANDS);
     uint8_t descriptor_count = loom_op_vtable_operand_descriptor_count(vtable);
-    for (uint8_t i = 0; i < descriptor_count && i < op->operand_count; ++i) {
+    for (uint8_t i = 0; i < descriptor_count; ++i) {
       loom_type_constraint_t constraint =
           (loom_type_constraint_t)vtable->operand_descriptors[i]
               .type_constraint;
       if (constraint == LOOM_TYPE_CONSTRAINT_ANY) continue;
 
-      // For variadic operands (the last descriptor when has_variadic),
-      // check all remaining operands.
-      uint16_t start = i;
-      uint16_t end = (has_variadic && i == vtable->fixed_operand_count)
-                         ? op->operand_count
-                         : (uint16_t)(i + 1);
-      for (uint16_t j = start; j < end; ++j) {
-        loom_value_id_t value_id = loom_op_const_operands(op)[j];
+      loom_value_slice_t operand_span = {0};
+      bool operand_is_variadic = false;
+      if (has_segmented) {
+        operand_span = loom_op_operand_field_span(vtable, op, i);
+        operand_is_variadic = iree_any_bit_set(
+            vtable->operand_descriptors[i].flags, LOOM_OPERAND_VARIADIC);
+      } else {
+        if (i >= op->operand_count) continue;
+        uint16_t start = i;
+        uint16_t end = (has_variadic && i == vtable->fixed_operand_count)
+                           ? op->operand_count
+                           : (uint16_t)(i + 1);
+        operand_span = (loom_value_slice_t){
+            .values = loom_op_operands(op) + start,
+            .count = (uint16_t)(end - start),
+        };
+        operand_is_variadic = has_variadic && i == vtable->fixed_operand_count;
+      }
+      for (uint16_t j = 0; j < operand_span.count; ++j) {
+        loom_value_id_t value_id = operand_span.values[j];
         loom_type_t type = loom_verify_value_type(state, value_id);
         if (!loom_type_satisfies_constraint(type, constraint)) {
           uint8_t operand_ref = LOOM_FIELD_REF(LOOM_FIELD_OPERAND, i);
-          uint16_t element_offset = (uint16_t)(j - i);
-          bool operand_is_variadic =
-              has_variadic && i == vtable->fixed_operand_count;
+          uint16_t element_offset = j;
           char operand_name_buffer[64];
           iree_string_view_t operand_name =
               operand_is_variadic
@@ -729,13 +797,13 @@ void loom_verify_operand_dicts(loom_verify_state_t* state, const loom_op_t* op,
         &vtable->format_elements[element_index];
     if (element->kind != LOOM_FORMAT_KIND_OPERAND_DICT) continue;
 
-    uint16_t operand_start = element->field_index;
+    loom_value_slice_t operand_span =
+        loom_op_operand_field_span(vtable, op, element->field_index);
     uint16_t attr_index = element->data;
-    if (operand_start > op->operand_count ||
-        attr_index >= op->attribute_count) {
+    if (attr_index >= op->attribute_count) {
       continue;
     }
-    uint16_t operand_count = (uint16_t)(op->operand_count - operand_start);
+    uint16_t operand_count = operand_span.count;
     loom_attribute_t names_attr = loom_op_attrs(op)[attr_index];
     if (loom_attr_is_absent(names_attr)) {
       if (operand_count != 0) {
@@ -868,7 +936,7 @@ static void loom_verify_value_type_well_formed(
   if (iree_string_view_is_empty(detail)) return;
   char name_buffer[64];
   iree_string_view_t field_name = loom_verify_value_field_name(
-      vtable, category, value_index, name_buffer, sizeof(name_buffer));
+      vtable, op, category, value_index, name_buffer, sizeof(name_buffer));
   loom_verify_emit_type_well_formed_diagnostic(state, op, type, field_name,
                                                field_ref, detail);
 }
@@ -1007,7 +1075,7 @@ void loom_verify_encoding_refs(loom_verify_state_t* state, const loom_op_t* op,
     if (!loom_type_has_ssa_encoding(type)) continue;
     char name_buffer[64];
     iree_string_view_t name = loom_verify_value_field_name(
-        vtable, LOOM_FIELD_OPERAND, i, name_buffer, sizeof(name_buffer));
+        vtable, op, LOOM_FIELD_OPERAND, i, name_buffer, sizeof(name_buffer));
     loom_verify_encoding_ref(
         state, op, vtable, type, name,
         loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_OPERAND, i),
@@ -1022,7 +1090,7 @@ void loom_verify_encoding_refs(loom_verify_state_t* state, const loom_op_t* op,
     if (!loom_type_has_ssa_encoding(type)) continue;
     char name_buffer[64];
     iree_string_view_t name = loom_verify_value_field_name(
-        vtable, LOOM_FIELD_RESULT, i, name_buffer, sizeof(name_buffer));
+        vtable, op, LOOM_FIELD_RESULT, i, name_buffer, sizeof(name_buffer));
     loom_verify_encoding_ref(
         state, op, vtable, type, name,
         loom_diagnostic_field_ref(LOOM_DIAGNOSTIC_FIELD_RESULT, i),

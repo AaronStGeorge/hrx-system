@@ -983,3 +983,16 @@ class TestBuilder(DialectBuilder):
         result_names: Sequence[str] | None = ...,
         location_id: int | None = ...,
     ) -> ValueRef: ...
+    def segmented(
+        self,
+        *,
+        root: ValueRef,
+        guard: ValueRef | None = ...,
+        lhs: list[ValueRef] = ...,
+        rhs: list[ValueRef] = ...,
+        results: list[Type | TiedResultSpec],
+        name: str | None = ...,
+        names: Sequence[str] | None = ...,
+        result_names: Sequence[str] | None = ...,
+        location_id: int | None = ...,
+    ) -> ValueRef: ...

@@ -58,6 +58,7 @@ typedef struct loom_parser_pending_successor_refs_t {
 #define LOOM_PARSED_OP_INLINE_REGIONS 4
 #define LOOM_PARSED_OP_INLINE_TIED 4
 #define LOOM_PARSED_OP_INLINE_FIELD_SPANS 16
+#define LOOM_PARSED_OP_INLINE_OPERAND_SEGMENTS 8
 
 // Accumulates parsed fields during format walk. Pointers start aimed at the
 // inline arrays and redirect to parser_arena spill storage on growth.
@@ -73,6 +74,7 @@ struct loom_parsed_op_t {
   loom_region_t** regions;
   loom_tied_result_t* tied_results;
   loom_location_field_span_t* field_spans;
+  uint16_t* operand_segment_counts;
 
   uint16_t operand_count;
   uint16_t operand_capacity;
@@ -88,8 +90,9 @@ struct loom_parsed_op_t {
   uint8_t attribute_capacity;
   uint8_t region_count;
   uint8_t region_capacity;
+  uint8_t operand_segment_count;
+  uint8_t operand_segment_capacity;
   uint8_t instance_flags;
-  uint8_t reserved_;
 
   loom_value_id_t inline_operand_ids[LOOM_PARSED_OP_INLINE_OPERANDS];
   loom_block_t* inline_successors[LOOM_PARSED_OP_INLINE_SUCCESSORS];
@@ -101,6 +104,8 @@ struct loom_parsed_op_t {
   loom_tied_result_t inline_tied_results[LOOM_PARSED_OP_INLINE_TIED];
   loom_location_field_span_t
       inline_field_spans[LOOM_PARSED_OP_INLINE_FIELD_SPANS];
+  uint16_t
+      inline_operand_segment_counts[LOOM_PARSED_OP_INLINE_OPERAND_SEGMENTS];
 };
 
 void loom_parsed_op_initialize(loom_parsed_op_t* parsed);
@@ -116,6 +121,13 @@ iree_status_t loom_parsed_op_set_operand(loom_parsed_op_t* parsed,
                                          iree_arena_allocator_t* arena,
                                          uint16_t index,
                                          loom_value_id_t value_id);
+iree_status_t loom_parsed_op_prepare_operand_segments(
+    loom_parsed_op_t* parsed, iree_arena_allocator_t* arena,
+    uint8_t segment_count);
+iree_status_t loom_parsed_op_add_segmented_operand(
+    loom_parsed_op_t* parsed, iree_arena_allocator_t* arena,
+    uint8_t segment_index, loom_value_id_t value_id,
+    uint16_t* out_operand_index);
 iree_status_t loom_parsed_op_set_successor(loom_parsed_op_t* parsed,
                                            iree_arena_allocator_t* arena,
                                            uint8_t index, loom_block_t* block,

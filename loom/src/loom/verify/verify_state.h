@@ -181,15 +181,16 @@ const loom_value_id_t* loom_verify_func_signature_arg_ids(
 loom_type_t loom_verify_value_type(const loom_verify_state_t* state,
                                    loom_value_id_t value_id);
 loom_value_id_t loom_verify_resolve_value_field(const loom_op_t* op,
+                                                const loom_op_vtable_t* vtable,
                                                 uint8_t field_ref);
 bool loom_verify_is_variadic_field(const loom_op_vtable_t* vtable,
                                    uint8_t field_ref);
 uint16_t loom_verify_variadic_count(const loom_op_t* op,
                                     const loom_op_vtable_t* vtable,
                                     uint8_t field_ref);
-const loom_value_id_t* loom_verify_resolve_variadic_field(const loom_op_t* op,
-                                                          uint8_t field_ref,
-                                                          uint16_t* out_count);
+const loom_value_id_t* loom_verify_resolve_variadic_field(
+    const loom_op_t* op, const loom_op_vtable_t* vtable, uint8_t field_ref,
+    uint16_t* out_count);
 
 iree_string_view_t loom_verify_field_name(const loom_op_vtable_t* vtable,
                                           uint8_t field_ref, char* buffer,
@@ -197,10 +198,8 @@ iree_string_view_t loom_verify_field_name(const loom_op_vtable_t* vtable,
 iree_string_view_t loom_verify_indexed_field_name(
     const loom_op_vtable_t* vtable, uint8_t field_ref, uint16_t element_index,
     char* buffer, iree_host_size_t buffer_size);
-iree_string_view_t loom_verify_value_field_name(const loom_op_vtable_t* vtable,
-                                                uint8_t category,
-                                                uint16_t value_index,
-                                                char* buffer,
-                                                iree_host_size_t buffer_size);
+iree_string_view_t loom_verify_value_field_name(
+    const loom_op_vtable_t* vtable, const loom_op_t* op, uint8_t category,
+    uint16_t value_index, char* buffer, iree_host_size_t buffer_size);
 
 #endif  // LOOM_VERIFY_VERIFY_STATE_H_

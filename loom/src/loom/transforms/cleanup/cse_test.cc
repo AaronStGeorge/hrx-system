@@ -166,6 +166,55 @@ TEST_F(CSETest, DistinguishesDifferentOperands) {
   EXPECT_EQ(count_live_ops(), 4);  // No change.
 }
 
+TEST_F(CSETest, DistinguishesSegmentedOperandBoundaries) {
+  loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+  loom_block_t* entry_block = loom_region_entry_block(body_);
+  loom_value_id_t root = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t first = LOOM_VALUE_ID_INVALID;
+  loom_value_id_t second = LOOM_VALUE_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_builder_define_block_arg(&builder_, entry_block, i32, &root));
+  IREE_ASSERT_OK(
+      loom_builder_define_block_arg(&builder_, entry_block, i32, &first));
+  IREE_ASSERT_OK(
+      loom_builder_define_block_arg(&builder_, entry_block, i32, &second));
+
+  loom_value_id_t one_lhs[] = {first};
+  loom_value_id_t one_rhs[] = {second};
+  loom_op_t* lhs_rhs = NULL;
+  IREE_ASSERT_OK(loom_test_segmented_build(
+      &builder_, 0, root, LOOM_VALUE_ID_INVALID, one_lhs,
+      IREE_ARRAYSIZE(one_lhs), one_rhs, IREE_ARRAYSIZE(one_rhs), i32,
+      LOOM_LOCATION_UNKNOWN, &lhs_rhs));
+
+  loom_value_id_t two_lhs[] = {first, second};
+  loom_op_t* lhs_only = NULL;
+  IREE_ASSERT_OK(loom_test_segmented_build(
+      &builder_, 0, root, LOOM_VALUE_ID_INVALID, two_lhs,
+      IREE_ARRAYSIZE(two_lhs), NULL, 0, i32, LOOM_LOCATION_UNKNOWN, &lhs_only));
+
+  ASSERT_EQ(lhs_rhs->operand_count, lhs_only->operand_count);
+  for (uint16_t i = 0; i < lhs_rhs->operand_count; ++i) {
+    ASSERT_EQ(loom_op_const_operands(lhs_rhs)[i],
+              loom_op_const_operands(lhs_only)[i]);
+  }
+
+  loom_value_id_t observed[] = {
+      loom_test_segmented_result(lhs_rhs),
+      loom_test_segmented_result(lhs_only),
+  };
+  loom_op_t* use_op = NULL;
+  IREE_ASSERT_OK(loom_test_use_build(&builder_, observed,
+                                     IREE_ARRAYSIZE(observed),
+                                     LOOM_LOCATION_UNKNOWN, &use_op));
+
+  EXPECT_EQ(count_live_ops(), 3);
+  IREE_ASSERT_OK(run_cse());
+  EXPECT_EQ(count_live_ops(), 3);
+  EXPECT_NE(loom_op_const_operands(use_op)[0],
+            loom_op_const_operands(use_op)[1]);
+}
+
 TEST_F(CSETest, DistinguishesDifferentAttributes) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
 

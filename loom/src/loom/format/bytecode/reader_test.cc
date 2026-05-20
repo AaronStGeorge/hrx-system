@@ -750,6 +750,55 @@ class ReaderTest : public ::testing::Test {
     return module;
   }
 
+  loom_module_t* CreateSegmentedModule() {
+    loom_module_t* module = CreateModule("reader_segmented");
+    loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
+    IREE_CHECK_OK(loom_module_intern_type(module, i32, &i32));
+
+    loom_builder_t module_builder;
+    loom_builder_initialize(module, &module->arena, loom_module_block(module),
+                            &module_builder);
+    loom_string_id_t name_id = LOOM_STRING_ID_INVALID;
+    IREE_CHECK_OK(loom_builder_intern_string(&module_builder,
+                                             IREE_SV("segmented"), &name_id));
+    uint16_t symbol_id = LOOM_SYMBOL_ID_INVALID;
+    IREE_CHECK_OK(loom_module_add_symbol(module, name_id, &symbol_id));
+    loom_symbol_ref_t callee = {.module_id = 0, .symbol_id = symbol_id};
+    loom_type_t arg_types[5] = {i32, i32, i32, i32, i32};
+    loom_type_t result_types[1] = {i32};
+    loom_op_t* func_op = NULL;
+    IREE_CHECK_OK(loom_test_func_build(
+        &module_builder, 0, /*visibility=*/0, /*cc=*/0, callee, arg_types,
+        IREE_ARRAYSIZE(arg_types), result_types, IREE_ARRAYSIZE(result_types),
+        NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
+    module->symbols.entries[symbol_id].flags = LOOM_SYMBOL_FLAG_PUBLIC;
+
+    loom_func_like_t func_like = loom_func_like_cast(module, func_op);
+    uint16_t arg_count = 0;
+    const loom_value_id_t* args = loom_func_like_arg_ids(func_like, &arg_count);
+    if (arg_count != IREE_ARRAYSIZE(arg_types)) {
+      ADD_FAILURE() << "expected five segmented function arguments";
+      return module;
+    }
+    loom_region_t* body = loom_func_like_body(func_like);
+    loom_builder_t body_builder;
+    loom_builder_initialize(module, &module->arena,
+                            loom_region_entry_block(body), &body_builder);
+
+    loom_value_id_t lhs[] = {args[2], args[3]};
+    loom_value_id_t rhs_values[] = {args[4]};
+    loom_op_t* segmented_op = NULL;
+    IREE_CHECK_OK(loom_test_segmented_build(
+        &body_builder, LOOM_TEST_SEGMENTED_BUILD_FLAG_HAS_GUARD, args[0],
+        args[1], lhs, IREE_ARRAYSIZE(lhs), rhs_values,
+        IREE_ARRAYSIZE(rhs_values), i32, LOOM_LOCATION_UNKNOWN, &segmented_op));
+    loom_value_id_t result = loom_test_segmented_result(segmented_op);
+    loom_op_t* yield_op = NULL;
+    IREE_CHECK_OK(loom_test_yield_build(&body_builder, &result, 1,
+                                        LOOM_LOCATION_UNKNOWN, &yield_op));
+    return module;
+  }
+
   std::vector<uint8_t> WriteModule(
       const loom_module_t* module,
       const loom_bytecode_write_options_t* options = nullptr) {
@@ -1243,6 +1292,29 @@ class ReaderTest : public ::testing::Test {
     return offset;
   }
 
+  size_t FirstBodySegmentCountOffset(const std::vector<uint8_t>& bytes,
+                                     uint8_t segment_index) {
+    uint64_t arg_count = 0;
+    size_t offset = RootBlockValueListOffset(bytes, &arg_count);
+    for (uint64_t i = 0; i < arg_count; ++i) {
+      ReadValueDefOffsets(bytes, &offset);
+    }
+    uint64_t op_count = ReadUVarint(bytes, &offset);
+    EXPECT_GE(op_count, 1u);
+    ReadUVarint(bytes, &offset);  // op_table_index_plus1
+    ++offset;                     // flags
+    ReadUVarint(bytes, &offset);  // location_id
+    SkipCommentList(bytes, &offset);
+    uint64_t operand_count = ReadUVarint(bytes, &offset);
+    for (uint64_t i = 0; i < operand_count; ++i) {
+      ReadUVarint(bytes, &offset);
+    }
+    for (uint8_t i = 0; i < segment_index; ++i) {
+      ReadUVarint(bytes, &offset);
+    }
+    return offset;
+  }
+
   size_t FirstBodyOpTiedOperandOffset(const std::vector<uint8_t>& bytes) {
     uint64_t arg_count = 0;
     size_t offset = RootBlockValueListOffset(bytes, &arg_count);
@@ -1731,6 +1803,40 @@ TEST_F(ReaderTest, ReadsFunctionBodyModule) {
   loom_module_free(module);
 }
 
+TEST_F(ReaderTest, ReadsSegmentedOperandCounts) {
+  loom_module_t* module = CreateSegmentedModule();
+  auto bytes = WriteModule(module);
+
+  loom_module_t* read_module = nullptr;
+  std::vector<std::string> error_ids;
+  loom_bytecode_read_result_t result =
+      ReadModule(bytes, &read_module, &error_ids,
+                 /*verify_module=*/true);
+
+  EXPECT_EQ(result.error_count, 0u) << ::testing::PrintToString(error_ids);
+  EXPECT_TRUE(error_ids.empty()) << ::testing::PrintToString(error_ids);
+  ASSERT_NE(read_module, nullptr);
+
+  ASSERT_EQ(read_module->symbols.count, 1u);
+  loom_op_t* func_op = read_module->symbols.entries[0].defining_op;
+  ASSERT_NE(func_op, nullptr);
+  loom_region_t* body = loom_test_func_body(func_op);
+  ASSERT_NE(body, nullptr);
+  loom_op_t* op = loom_region_entry_block(body)->first_op;
+  ASSERT_NE(op, nullptr);
+  ASSERT_TRUE(loom_test_segmented_isa(op));
+  const uint16_t* counts = loom_op_const_operand_segment_counts(op);
+  EXPECT_EQ(counts[0], 1u);
+  EXPECT_EQ(counts[1], 1u);
+  EXPECT_EQ(counts[2], 2u);
+  EXPECT_EQ(counts[3], 1u);
+  EXPECT_EQ(loom_test_segmented_lhs(op).count, 2u);
+  EXPECT_EQ(loom_test_segmented_rhs(op).count, 1u);
+
+  loom_module_free(read_module);
+  loom_module_free(module);
+}
+
 TEST_F(ReaderTest, EnumAttributesPreserveFutureOrdinals) {
   loom_module_t* module = CreateTestRecordWithFutureEnumOrdinal();
   auto bytes = WriteModule(module);
@@ -2108,6 +2214,16 @@ TEST_F(ReaderTest, RejectsInvalidBodyValueReference) {
   auto bytes = WriteModule(module);
   size_t operand_offset = FirstBodyOperandRefOffset(bytes);
   bytes[operand_offset] = 0x7F;
+
+  ExpectReadModuleError(bytes, "ERR_BYTECODE_016");
+
+  loom_module_free(module);
+}
+
+TEST_F(ReaderTest, RejectsInvalidSegmentedOperandCount) {
+  loom_module_t* module = CreateSegmentedModule();
+  auto bytes = WriteModule(module);
+  bytes[FirstBodySegmentCountOffset(bytes, /*segment_index=*/0)] = 0;
 
   ExpectReadModuleError(bytes, "ERR_BYTECODE_016");
 

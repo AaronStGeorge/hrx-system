@@ -17,6 +17,7 @@
 #include "loom/format/text/parser/regions.h"
 #include "loom/format/text/parser/scope.h"
 #include "loom/format/text/parser/types.h"
+#include "loom/ops/op_defs.h"
 #include "loom/util/stable_id.h"
 
 //===----------------------------------------------------------------------===//
@@ -38,8 +39,8 @@ iree_status_t loom_parse_format_add_field_span(loom_parser_t* parser,
 // Static values become an i64_array attribute. Dynamic values
 // (INT64_MIN sentinels) generate operand references.
 static iree_status_t loom_parse_format_index_list(
-    loom_parser_t* parser, const loom_format_element_t* element,
-    loom_parsed_op_t* parsed) {
+    loom_parser_t* parser, const loom_op_vtable_t* vtable,
+    const loom_format_element_t* element, loom_parsed_op_t* parsed) {
   uint16_t static_attr_index =
       LOOM_FORMAT_INDEX_LIST_STATIC_ATTR_INDEX(element->data);
   loom_token_t list_start_token = loom_tokenizer_peek(&parser->tokenizer);
@@ -71,8 +72,14 @@ static iree_status_t loom_parse_format_index_list(
       LOOM_PARSE_RESOLVE_VALUE(parser, token, &value_id);
       static_values[value_count] = INT64_MIN;  // Sentinel.
       uint16_t operand_index = element->field_index + dynamic_value_count++;
-      IREE_RETURN_IF_ERROR(loom_parsed_op_set_operand(
-          parsed, &parser->parser_arena, operand_index, value_id));
+      if (loom_op_vtable_has_segmented_operands(vtable)) {
+        IREE_RETURN_IF_ERROR(loom_parsed_op_add_segmented_operand(
+            parsed, &parser->parser_arena, element->field_index, value_id,
+            &operand_index));
+      } else {
+        IREE_RETURN_IF_ERROR(loom_parsed_op_set_operand(
+            parsed, &parser->parser_arena, operand_index, value_id));
+      }
       IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
           parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND,
           operand_index, token, token.line, token.end_column));
@@ -586,8 +593,14 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
         loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
         LOOM_PARSE_RESOLVE_VALUE(parser, token, &value_id);
         uint16_t operand_index = element->field_index;
-        IREE_RETURN_IF_ERROR(loom_parsed_op_set_operand(
-            parsed, &parser->parser_arena, operand_index, value_id));
+        if (loom_op_vtable_has_segmented_operands(vtable)) {
+          IREE_RETURN_IF_ERROR(loom_parsed_op_add_segmented_operand(
+              parsed, &parser->parser_arena, element->field_index, value_id,
+              &operand_index));
+        } else {
+          IREE_RETURN_IF_ERROR(loom_parsed_op_set_operand(
+              parsed, &parser->parser_arena, operand_index, value_id));
+        }
         IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
             parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND,
             operand_index, token, token.line, token.end_column));
@@ -611,8 +624,14 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
           loom_value_id_t value_id = LOOM_VALUE_ID_INVALID;
           LOOM_PARSE_RESOLVE_VALUE(parser, token, &value_id);
           uint16_t operand_index = parsed->operand_count;
-          IREE_RETURN_IF_ERROR(loom_parsed_op_add_operand(
-              parsed, &parser->parser_arena, value_id));
+          if (loom_op_vtable_has_segmented_operands(vtable)) {
+            IREE_RETURN_IF_ERROR(loom_parsed_op_add_segmented_operand(
+                parsed, &parser->parser_arena, element->field_index, value_id,
+                &operand_index));
+          } else {
+            IREE_RETURN_IF_ERROR(loom_parsed_op_add_operand(
+                parsed, &parser->parser_arena, value_id));
+          }
           IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
               parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND,
               operand_index, token, token.line, token.end_column));
@@ -655,8 +674,14 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
             return iree_ok_status();
           }
           uint16_t operand_index = parsed->operand_count;
-          IREE_RETURN_IF_ERROR(loom_parsed_op_add_operand(
-              parsed, &parser->parser_arena, value_id));
+          if (loom_op_vtable_has_segmented_operands(vtable)) {
+            IREE_RETURN_IF_ERROR(loom_parsed_op_add_segmented_operand(
+                parsed, &parser->parser_arena, element->field_index, value_id,
+                &operand_index));
+          } else {
+            IREE_RETURN_IF_ERROR(loom_parsed_op_add_operand(
+                parsed, &parser->parser_arena, value_id));
+          }
           IREE_RETURN_IF_ERROR(loom_parsed_op_add_field_span(
               parsed, &parser->parser_arena, LOOM_LOCATION_FIELD_OPERAND,
               operand_index, token, token.line, token.end_column));
@@ -801,7 +826,7 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
 
       case LOOM_FORMAT_KIND_INDEX_LIST: {
         IREE_RETURN_IF_ERROR(
-            loom_parse_format_index_list(parser, element, parsed));
+            loom_parse_format_index_list(parser, vtable, element, parsed));
         break;
       }
 
@@ -903,13 +928,13 @@ iree_status_t loom_parser_walk_format(loom_parser_t* parser,
 
       case LOOM_FORMAT_KIND_OPERAND_DICT: {
         IREE_RETURN_IF_ERROR(
-            loom_parse_format_operand_dict(parser, element, parsed));
+            loom_parse_format_operand_dict(parser, vtable, element, parsed));
         break;
       }
 
       case LOOM_FORMAT_KIND_ATTR_TABLE: {
         IREE_RETURN_IF_ERROR(
-            loom_parse_format_attr_table(parser, element, parsed));
+            loom_parse_format_attr_table(parser, vtable, element, parsed));
         break;
       }
 

@@ -232,7 +232,11 @@ iree_status_t loom_ir_clone_op(loom_builder_t* builder,
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "cannot clone a dead op");
   }
-  if (!loom_op_vtable(remap->target_module, source_op)) {
+  const loom_op_vtable_t* source_vtable =
+      loom_op_vtable(remap->source_module, source_op);
+  const loom_op_vtable_t* target_vtable =
+      loom_op_vtable(remap->target_module, source_op);
+  if (!target_vtable) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "target module has no vtable for source op kind");
   }
@@ -301,18 +305,42 @@ iree_status_t loom_ir_clone_op(loom_builder_t* builder,
   }
 
   loom_op_t* target_op = NULL;
-  if (source_op->successor_count > 0) {
-    IREE_RETURN_IF_ERROR(loom_builder_allocate_op_with_successors(
-        builder, source_op->kind, source_op->operand_count,
-        source_op->result_count, source_op->successor_count,
-        source_op->region_count, source_op->tied_result_count,
-        source_op->attribute_count, target_location, &target_op));
+  uint8_t operand_segment_count =
+      loom_op_vtable_operand_segment_count(source_vtable);
+  const uint16_t* operand_segment_counts =
+      operand_segment_count > 0
+          ? loom_op_const_operand_segment_counts(source_op)
+          : NULL;
+  if (loom_op_vtable_has_segmented_operands(target_vtable)) {
+    if (source_op->successor_count > 0) {
+      IREE_RETURN_IF_ERROR(loom_builder_allocate_segmented_op_with_successors(
+          builder, source_op->kind, source_op->operand_count,
+          operand_segment_counts, operand_segment_count,
+          source_op->result_count, source_op->successor_count,
+          source_op->region_count, source_op->tied_result_count,
+          source_op->attribute_count, target_location, &target_op));
+    } else {
+      IREE_RETURN_IF_ERROR(loom_builder_allocate_segmented_op(
+          builder, source_op->kind, source_op->operand_count,
+          operand_segment_counts, operand_segment_count,
+          source_op->result_count, source_op->region_count,
+          source_op->tied_result_count, source_op->attribute_count,
+          target_location, &target_op));
+    }
   } else {
-    IREE_RETURN_IF_ERROR(loom_builder_allocate_op(
-        builder, source_op->kind, source_op->operand_count,
-        source_op->result_count, source_op->region_count,
-        source_op->tied_result_count, source_op->attribute_count,
-        target_location, &target_op));
+    if (source_op->successor_count > 0) {
+      IREE_RETURN_IF_ERROR(loom_builder_allocate_op_with_successors(
+          builder, source_op->kind, source_op->operand_count,
+          source_op->result_count, source_op->successor_count,
+          source_op->region_count, source_op->tied_result_count,
+          source_op->attribute_count, target_location, &target_op));
+    } else {
+      IREE_RETURN_IF_ERROR(loom_builder_allocate_op(
+          builder, source_op->kind, source_op->operand_count,
+          source_op->result_count, source_op->region_count,
+          source_op->tied_result_count, source_op->attribute_count,
+          target_location, &target_op));
+    }
   }
   target_op->instance_flags = source_op->instance_flags;
   target_op->traits = source_op->traits;

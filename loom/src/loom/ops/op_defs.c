@@ -273,6 +273,98 @@ const loom_region_descriptor_t* loom_op_vtable_region_descriptor(
   return NULL;
 }
 
+loom_value_slice_t loom_op_operand_field_span(const loom_op_vtable_t* vtable,
+                                              const loom_op_t* op,
+                                              uint8_t field_index) {
+  if (!op) return (loom_value_slice_t){0};
+  if (loom_op_vtable_has_segmented_operands(vtable)) {
+    uint8_t segment_count = loom_op_vtable_operand_segment_count(vtable);
+    if (field_index >= segment_count) return (loom_value_slice_t){0};
+    const uint16_t* counts = loom_op_const_operand_segment_counts(op);
+    uint32_t start = 0;
+    for (uint8_t i = 0; i < field_index; ++i) {
+      start += counts[i];
+    }
+    uint32_t count = counts[field_index];
+    if (start > op->operand_count || count > op->operand_count - start) {
+      return (loom_value_slice_t){0};
+    }
+    return (loom_value_slice_t){
+        .values = loom_op_operands(op) + start,
+        .count = (uint16_t)count,
+    };
+  }
+
+  if (!vtable) return (loom_value_slice_t){0};
+  if (iree_any_bit_set(vtable->vtable_flags,
+                       LOOM_OP_VTABLE_VARIADIC_OPERANDS) &&
+      field_index == vtable->fixed_operand_count) {
+    if (field_index > op->operand_count) return (loom_value_slice_t){0};
+    return (loom_value_slice_t){
+        .values = loom_op_operands(op) + field_index,
+        .count = (uint16_t)(op->operand_count - field_index),
+    };
+  }
+  if (field_index >= op->operand_count) return (loom_value_slice_t){0};
+  return (loom_value_slice_t){
+      .values = loom_op_operands(op) + field_index,
+      .count = 1,
+  };
+}
+
+bool loom_op_operand_field_present(const loom_op_vtable_t* vtable,
+                                   const loom_op_t* op, uint8_t field_index) {
+  return loom_op_operand_field_span(vtable, op, field_index).count > 0;
+}
+
+bool loom_op_operand_descriptor_at(
+    const loom_op_vtable_t* vtable, const loom_op_t* op, uint16_t operand_index,
+    const loom_operand_descriptor_t** out_descriptor, uint8_t* out_field_index,
+    uint16_t* out_element_index) {
+  *out_descriptor = NULL;
+  if (out_field_index) *out_field_index = 0;
+  if (out_element_index) *out_element_index = 0;
+  if (!vtable || !op || !vtable->operand_descriptors ||
+      operand_index >= op->operand_count) {
+    return false;
+  }
+  if (loom_op_vtable_has_segmented_operands(vtable)) {
+    uint8_t segment_count = loom_op_vtable_operand_segment_count(vtable);
+    const uint16_t* counts = loom_op_const_operand_segment_counts(op);
+    uint32_t start = 0;
+    for (uint8_t i = 0; i < segment_count; ++i) {
+      uint32_t count = counts[i];
+      if (operand_index >= start && operand_index < start + count) {
+        *out_descriptor = &vtable->operand_descriptors[i];
+        if (out_field_index) *out_field_index = i;
+        if (out_element_index) {
+          *out_element_index = (uint16_t)(operand_index - start);
+        }
+        return true;
+      }
+      start += count;
+    }
+    return false;
+  }
+  if (operand_index < vtable->fixed_operand_count) {
+    *out_descriptor = &vtable->operand_descriptors[operand_index];
+    if (out_field_index) *out_field_index = (uint8_t)operand_index;
+    if (out_element_index) *out_element_index = 0;
+    return true;
+  }
+  if (iree_any_bit_set(vtable->vtable_flags,
+                       LOOM_OP_VTABLE_VARIADIC_OPERANDS)) {
+    *out_descriptor = &vtable->operand_descriptors[vtable->fixed_operand_count];
+    if (out_field_index) *out_field_index = vtable->fixed_operand_count;
+    if (out_element_index) {
+      *out_element_index =
+          (uint16_t)(operand_index - vtable->fixed_operand_count);
+    }
+    return true;
+  }
+  return false;
+}
+
 //===----------------------------------------------------------------------===//
 // Effect query helpers
 //===----------------------------------------------------------------------===//
@@ -1384,8 +1476,55 @@ iree_status_t loom_builder_set_operand_dict(
       out_names_attr);
 }
 
+static iree_status_t loom_builder_validate_operand_segments(
+    const loom_op_vtable_t* vtable, uint16_t operand_count,
+    const uint16_t* operand_segment_counts, uint8_t operand_segment_count) {
+  uint8_t expected_segment_count = loom_op_vtable_operand_segment_count(vtable);
+  if (expected_segment_count == 0) {
+    if (operand_segment_count != 0 || operand_segment_counts) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "operand segment counts provided for non-segmented op");
+    }
+    return iree_ok_status();
+  }
+  if (!operand_segment_counts ||
+      operand_segment_count != expected_segment_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "segmented op requires %u operand segment count(s), got %u",
+        expected_segment_count, operand_segment_count);
+  }
+  uint32_t total_count = 0;
+  for (uint8_t i = 0; i < operand_segment_count; ++i) {
+    const loom_operand_descriptor_t* descriptor =
+        &vtable->operand_descriptors[i];
+    const uint16_t segment_count = operand_segment_counts[i];
+    if (!iree_any_bit_set(descriptor->flags, LOOM_OPERAND_VARIADIC)) {
+      const bool optional =
+          iree_any_bit_set(descriptor->flags, LOOM_OPERAND_OPTIONAL);
+      if ((!optional && segment_count != 1) ||
+          (optional && segment_count > 1)) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "operand segment %u has %u value(s), expected %s", i,
+            (unsigned)segment_count, optional ? "0 or 1" : "1");
+      }
+    }
+    total_count += segment_count;
+  }
+  if (total_count != operand_count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "operand segment counts sum to %u but op has %u operand(s)",
+        (unsigned)total_count, (unsigned)operand_count);
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_builder_allocate_op_storage(
     loom_builder_t* builder, loom_op_kind_t kind, uint16_t operand_count,
+    const uint16_t* operand_segment_counts, uint8_t operand_segment_count,
     uint16_t result_count, uint8_t successor_count, uint8_t region_count,
     uint16_t tied_result_count, uint8_t attribute_count,
     loom_location_id_t location, loom_op_t** out_op) {
@@ -1394,6 +1533,10 @@ static iree_status_t loom_builder_allocate_op_storage(
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "builder has no insertion block or module");
   }
+  const loom_op_vtable_t* vtable =
+      loom_context_resolve_op(builder->module->context, kind);
+  IREE_RETURN_IF_ERROR(loom_builder_validate_operand_segments(
+      vtable, operand_count, operand_segment_counts, operand_segment_count));
 
   iree_host_size_t successors_size =
       (iree_host_size_t)successor_count * sizeof(loom_block_t*);
@@ -1407,17 +1550,20 @@ static iree_status_t loom_builder_allocate_op_storage(
       (iree_host_size_t)tied_result_count * sizeof(loom_tied_result_t);
   iree_host_size_t operand_use_indices_size =
       (iree_host_size_t)operand_count * sizeof(loom_use_index_t);
+  iree_host_size_t operand_segment_counts_size =
+      (iree_host_size_t)operand_segment_count * sizeof(uint16_t);
 
   iree_host_size_t before_attrs = sizeof(loom_op_t) + successors_size +
                                   regions_size + operands_size + results_size +
                                   tied_size + operand_use_indices_size;
   iree_host_size_t aligned_before_attrs =
-      attribute_count > 0
+      (attribute_count > 0 || operand_segment_count > 0)
           ? iree_host_align(before_attrs, iree_alignof(loom_attribute_t))
           : before_attrs;
   iree_host_size_t attrs_size =
       (iree_host_size_t)attribute_count * sizeof(loom_attribute_t);
-  iree_host_size_t total_size = aligned_before_attrs + attrs_size;
+  iree_host_size_t total_size =
+      aligned_before_attrs + attrs_size + operand_segment_counts_size;
 
   void* allocation = NULL;
   IREE_RETURN_IF_ERROR(
@@ -1432,13 +1578,16 @@ static iree_status_t loom_builder_allocate_op_storage(
   op->region_count = region_count;
   op->tied_result_count = tied_result_count;
   op->attribute_count = attribute_count;
-  const loom_op_vtable_t* vtable = loom_op_vtable(builder->module, op);
   op->traits = vtable ? vtable->traits : LOOM_TRAIT_UNKNOWN_EFFECTS;
   op->location = location;
   op->parent_op = builder->ip.parent_op;
   loom_use_index_t* operand_use_indices = loom_op_operand_use_indices(op);
   for (uint16_t i = 0; i < operand_count; ++i) {
     operand_use_indices[i] = LOOM_USE_INDEX_INVALID;
+  }
+  if (operand_segment_count > 0) {
+    memcpy(loom_op_operand_segment_counts(op), operand_segment_counts,
+           operand_segment_counts_size);
   }
 
   if (!builder->ip.before_op) {
@@ -1458,7 +1607,8 @@ iree_status_t loom_builder_allocate_op(
     uint16_t result_count, uint8_t region_count, uint16_t tied_result_count,
     uint8_t attribute_count, loom_location_id_t location, loom_op_t** out_op) {
   return loom_builder_allocate_op_storage(
-      builder, kind, operand_count, result_count, /*successor_count=*/0,
+      builder, kind, operand_count, /*operand_segment_counts=*/NULL,
+      /*operand_segment_count=*/0, result_count, /*successor_count=*/0,
       region_count, tied_result_count, attribute_count, location, out_op);
 }
 
@@ -1468,7 +1618,31 @@ iree_status_t loom_builder_allocate_op_with_successors(
     uint16_t tied_result_count, uint8_t attribute_count,
     loom_location_id_t location, loom_op_t** out_op) {
   return loom_builder_allocate_op_storage(
-      builder, kind, operand_count, result_count, successor_count, region_count,
+      builder, kind, operand_count, /*operand_segment_counts=*/NULL,
+      /*operand_segment_count=*/0, result_count, successor_count, region_count,
+      tied_result_count, attribute_count, location, out_op);
+}
+
+iree_status_t loom_builder_allocate_segmented_op(
+    loom_builder_t* builder, loom_op_kind_t kind, uint16_t operand_count,
+    const uint16_t* operand_segment_counts, uint8_t operand_segment_count,
+    uint16_t result_count, uint8_t region_count, uint16_t tied_result_count,
+    uint8_t attribute_count, loom_location_id_t location, loom_op_t** out_op) {
+  return loom_builder_allocate_op_storage(
+      builder, kind, operand_count, operand_segment_counts,
+      operand_segment_count, result_count, /*successor_count=*/0, region_count,
+      tied_result_count, attribute_count, location, out_op);
+}
+
+iree_status_t loom_builder_allocate_segmented_op_with_successors(
+    loom_builder_t* builder, loom_op_kind_t kind, uint16_t operand_count,
+    const uint16_t* operand_segment_counts, uint8_t operand_segment_count,
+    uint16_t result_count, uint8_t successor_count, uint8_t region_count,
+    uint16_t tied_result_count, uint8_t attribute_count,
+    loom_location_id_t location, loom_op_t** out_op) {
+  return loom_builder_allocate_op_storage(
+      builder, kind, operand_count, operand_segment_counts,
+      operand_segment_count, result_count, successor_count, region_count,
       tied_result_count, attribute_count, location, out_op);
 }
 
@@ -1546,6 +1720,10 @@ iree_status_t loom_op_remove_results(loom_module_t* module, loom_op_t* op,
     kept_tied_results[kept_tied_count++] = tied_result;
   }
 
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+  uint8_t operand_segment_count = loom_op_vtable_operand_segment_count(vtable);
+  uint16_t* old_operand_segment_counts =
+      operand_segment_count > 0 ? loom_op_operand_segment_counts(op) : NULL;
   loom_use_index_t* old_operand_use_indices = loom_op_operand_use_indices(op);
   loom_attribute_t* old_attrs = loom_op_attrs(op);
   for (uint16_t i = 0; i < old_result_count; ++i) {
@@ -1575,6 +1753,11 @@ iree_status_t loom_op_remove_results(loom_module_t* module, loom_op_t* op,
   if (op->attribute_count > 0) {
     memmove(loom_op_attrs(op), old_attrs,
             (iree_host_size_t)op->attribute_count * sizeof(*old_attrs));
+  }
+  if (operand_segment_count > 0) {
+    memmove(loom_op_operand_segment_counts(op), old_operand_segment_counts,
+            (iree_host_size_t)operand_segment_count *
+                sizeof(*old_operand_segment_counts));
   }
   return iree_ok_status();
 }

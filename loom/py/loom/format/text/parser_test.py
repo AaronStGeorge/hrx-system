@@ -791,6 +791,46 @@ class TestParseYieldOp:
         assert len(op.operands) == 2
 
 
+class TestParseSegmentedOp:
+    def test_present_optional_and_two_variadic_spans(self) -> None:
+        module, scope = _setup_scope(
+            ("root", I32),
+            ("guard", I32),
+            ("lhs0", I32),
+            ("lhs1", I32),
+            ("rhs", I32),
+        )
+        op = _parse_op(
+            "%result = test.segmented %root base %guard "
+            "values %lhs0, %lhs1 expected %rhs : i32 -> i32",
+            module=module,
+            scope=scope,
+        )
+        assert op.name == "test.segmented"
+        assert [module.values[value_id].name for value_id in op.operands] == [
+            "root",
+            "guard",
+            "lhs0",
+            "lhs1",
+            "rhs",
+        ]
+        assert op.operand_segment_counts == (1, 1, 2, 1)
+
+    def test_absent_optional_and_empty_variadic_span(self) -> None:
+        module, scope = _setup_scope(("root", I32), ("rhs0", I32), ("rhs1", I32))
+        op = _parse_op(
+            "%result = test.segmented %root values expected %rhs0, %rhs1 : i32 -> i32",
+            module=module,
+            scope=scope,
+        )
+        assert [module.values[value_id].name for value_id in op.operands] == [
+            "root",
+            "rhs0",
+            "rhs1",
+        ]
+        assert op.operand_segment_counts == (1, 0, 0, 2)
+
+
 class TestParseAttrDictOp:
     def test_with_attrs(self) -> None:
         module, scope = _setup_scope(("x", F32))
