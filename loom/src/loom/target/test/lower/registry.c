@@ -198,6 +198,77 @@ iree_status_t loom_test_low_lower_map_contract_value(
   return iree_ok_status();
 }
 
+static iree_status_t loom_test_low_matrix_options(
+    void* user_data,
+    const loom_target_contract_query_environment_t* environment,
+    const loom_target_contract_descriptor_matrix_rule_t* rule,
+    loom_contract_vector_mma_options_t* out_options) {
+  (void)user_data;
+  (void)environment;
+  (void)rule;
+  *out_options = (loom_contract_vector_mma_options_t){
+      .k_group_size = 1,
+      .fragment =
+          {
+              .atom_bits = LOOM_CONTRACT_FRAGMENT_SUBGROUP_LANE,
+              .subgroup_size = 2,
+          },
+      .capability_class = LOOM_CONTRACT_CAPABILITY_CLASS_GPU_MATRIX,
+      .policy = LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED,
+  };
+  return iree_ok_status();
+}
+
+static bool loom_test_low_matrix_request_is_tiny_i32(
+    const loom_contract_request_t* request) {
+  return request->shape.m == 2 && request->shape.n == 2 &&
+         request->shape.k == 2 && request->lhs.payload_element_count == 4 &&
+         request->rhs.payload_element_count == 4 &&
+         request->accumulator.payload_element_count == 4 &&
+         request->result.payload_element_count == 4 &&
+         request->lhs.numeric_type == LOOM_CONTRACT_NUMERIC_I32 &&
+         request->rhs.numeric_type == LOOM_CONTRACT_NUMERIC_I32 &&
+         request->accumulator.numeric_type == LOOM_CONTRACT_NUMERIC_I32 &&
+         request->result.numeric_type == LOOM_CONTRACT_NUMERIC_I32;
+}
+
+static bool loom_test_low_matrix_target_is_quirky(
+    const loom_target_contract_query_environment_t* environment) {
+  return environment->bundle != NULL && environment->bundle->snapshot != NULL &&
+         environment->bundle->snapshot->subgroup_size == 7;
+}
+
+static iree_status_t loom_test_low_matrix_query(
+    void* user_data,
+    const loom_target_contract_query_environment_t* environment,
+    const loom_target_contract_descriptor_matrix_rule_t* rule,
+    const loom_op_t* source_op, const loom_contract_request_t* request,
+    loom_target_contract_query_result_t* out_result) {
+  (void)user_data;
+  (void)rule;
+  (void)source_op;
+  *out_result = loom_target_contract_query_result_empty();
+  if (!loom_test_low_matrix_request_is_tiny_i32(request)) {
+    return iree_ok_status();
+  }
+  if (!loom_test_low_matrix_target_is_quirky(environment)) {
+    out_result->outcome = LOOM_TARGET_CONTRACT_QUERY_UNSUPPORTED;
+    return iree_ok_status();
+  }
+
+  const loom_low_descriptor_t* descriptor =
+      loom_low_descriptor_set_descriptor_at(
+          environment->descriptor_set,
+          TEST_LOW_CORE_DESCRIPTOR_REF_TEST_MMA_I32_2X2X2);
+  if (descriptor == NULL) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "test-low matrix descriptor ref missing");
+  }
+  out_result->outcome = LOOM_TARGET_CONTRACT_QUERY_LEGAL;
+  out_result->selected_descriptor = descriptor;
+  return iree_ok_status();
+}
+
 static const loom_low_lower_rule_set_t* const kTestLowRuleSets[] = {
     &loom_test_low_core_lower_rule_set,
 };
@@ -223,6 +294,11 @@ static const loom_low_lower_policy_t kTestLowLowerPolicy = {
         },
     .contract_bindings = kTestLowContractBindings,
     .contract_binding_count = IREE_ARRAYSIZE(kTestLowContractBindings),
+    .descriptor_matrix =
+        {
+            .options = loom_test_low_matrix_options,
+            .query = loom_test_low_matrix_query,
+        },
 };
 
 const loom_low_lower_policy_t* loom_test_low_lower_policy(void) {

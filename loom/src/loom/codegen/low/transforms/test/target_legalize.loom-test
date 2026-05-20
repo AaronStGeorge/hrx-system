@@ -1,4 +1,4 @@
-// RUN: pass target-legalize{mode=final},dce,canonicalize
+// RUN: pass target-legalize{mode=final},scf-to-cfg,dce,canonicalize
 
 test.target<low_core> @test_target
 
@@ -118,39 +118,39 @@ func.def target(@test_target) @scalarizes_dynamic_rank2_mma_store(%m: index, %n:
   %94 = index.constant 0 : index
   %95 = index.constant 1 : index
   cfg.br ^_bb1(%94: index)
-^_bb1(%109: index):
-  %110 = index.cmp slt, %109, %m : index
-  cfg.cond_br %110, ^_bb2, ^_bb10
+^_bb1(%170: index):
+  %171 = index.cmp slt, %170, %m : index
+  cfg.cond_br %171, ^_bb2, ^_bb10
 ^_bb2:
   %97 = index.constant 0 : index
   %98 = index.constant 1 : index
   cfg.br ^_bb3(%97: index)
-^_bb3(%112: index):
-  %113 = index.cmp slt, %112, %n : index
-  cfg.cond_br %113, ^_bb4, ^_bb9
+^_bb3(%173: index):
+  %174 = index.cmp slt, %173, %n : index
+  cfg.cond_br %174, ^_bb4, ^_bb9
 ^_bb4:
-  %100 = view.load %init_view[%109, %112] : view<[%m]x[%n]xf32, %layout> -> f32
+  %100 = view.load %init_view[%170, %173] : view<[%m]x[%n]xf32, %layout> -> f32
   %101 = index.constant 0 : index
   %102 = index.constant 1 : index
   cfg.br ^_bb5(%101: index, %100: f32)
-^_bb5(%116: index, %117: f32):
-  %118 = index.cmp slt, %116, %k : index
-  cfg.cond_br %118, ^_bb6, ^_bb7
+^_bb5(%177: index, %178: f32):
+  %179 = index.cmp slt, %177, %k : index
+  cfg.cond_br %179, ^_bb6, ^_bb7
 ^_bb6:
-  %106 = view.load %lhs_view[%109, %116] : view<[%m]x[%k]xf32, %layout> -> f32
-  %107 = view.load %rhs_view[%116, %112] : view<[%k]x[%n]xf32, %layout> -> f32
-  %108 = scalar.fmaf %106, %107, %117 : f32
-  %119 = index.add %116, %102 : index
-  cfg.br ^_bb5(%119: index, %108: f32)
+  %106 = view.load %lhs_view[%170, %177] : view<[%m]x[%k]xf32, %layout> -> f32
+  %107 = view.load %rhs_view[%177, %173] : view<[%k]x[%n]xf32, %layout> -> f32
+  %108 = scalar.fmaf %106, %107, %178 : f32
+  %180 = index.add %177, %102 : index
+  cfg.br ^_bb5(%180: index, %108: f32)
 ^_bb7:
-  cfg.br ^_bb8(%117: f32)
-^_bb8(%115: f32):
-  view.store %115, %out_view[%109, %112] : f32, view<[%m]x[%n]xf32, %layout>
-  %114 = index.add %112, %98 : index
-  cfg.br ^_bb3(%114: index)
+  cfg.br ^_bb8(%178: f32)
+^_bb8(%176: f32):
+  view.store %176, %out_view[%170, %173] : f32, view<[%m]x[%n]xf32, %layout>
+  %175 = index.add %173, %98 : index
+  cfg.br ^_bb3(%175: index)
 ^_bb9:
-  %111 = index.add %109, %95 : index
-  cfg.br ^_bb1(%111: index)
+  %172 = index.add %170, %95 : index
+  cfg.br ^_bb1(%172: index)
 ^_bb10:
   func.return
 }
@@ -160,29 +160,29 @@ func.def target(@test_target) @scalarizes_dynamic_flat_mma_store(%m: index, %n: 
   %layout = encoding.layout.dense : encoding<layout>
   %mn = index.mul %m, %n : index
   %out_view = buffer.view %out_buffer[%base] : buffer -> view<[%mn]xf32, %layout>
-  %120 = index.constant 0 : index
-  %121 = index.constant 1 : index
-  cfg.br ^_bb1(%120: index)
-^_bb1(%137: index):
-  %138 = index.cmp slt, %137, %mn : index
-  cfg.cond_br %138, ^_bb2, ^_bb7
+  %109 = index.constant 0 : index
+  %110 = index.constant 1 : index
+  cfg.br ^_bb1(%109: index)
+^_bb1(%181: index):
+  %182 = index.cmp slt, %181, %mn : index
+  cfg.cond_br %182, ^_bb2, ^_bb7
 ^_bb2:
-  %127 = index.constant 0 : index
-  %128 = index.constant 1 : index
-  cfg.br ^_bb3(%127: index, %init0: f32)
-^_bb3(%141: index, %142: f32):
-  %143 = index.cmp slt, %141, %k : index
-  cfg.cond_br %143, ^_bb4, ^_bb5
+  %116 = index.constant 0 : index
+  %117 = index.constant 1 : index
+  cfg.br ^_bb3(%116: index, %init0: f32)
+^_bb3(%185: index, %186: f32):
+  %187 = index.cmp slt, %185, %k : index
+  cfg.cond_br %187, ^_bb4, ^_bb5
 ^_bb4:
-  %136 = scalar.fmaf %lhs0, %rhs0, %142 : f32
-  %144 = index.add %141, %128 : index
-  cfg.br ^_bb3(%144: index, %136: f32)
+  %125 = scalar.fmaf %lhs0, %rhs0, %186 : f32
+  %188 = index.add %185, %117 : index
+  cfg.br ^_bb3(%188: index, %125: f32)
 ^_bb5:
-  cfg.br ^_bb6(%142: f32)
-^_bb6(%140: f32):
-  view.store %140, %out_view[%137] : f32, view<[%mn]xf32, %layout>
-  %139 = index.add %137, %121 : index
-  cfg.br ^_bb1(%139: index)
+  cfg.br ^_bb6(%186: f32)
+^_bb6(%184: f32):
+  view.store %184, %out_view[%181] : f32, view<[%mn]xf32, %layout>
+  %183 = index.add %181, %110 : index
+  cfg.br ^_bb1(%183: index)
 ^_bb7:
   func.return
 }
@@ -191,45 +191,45 @@ func.def target(@test_target) @scalarizes_dense_flat_mma_fragment_store(%lhs0: f
   %base = index.constant 0 : offset
   %layout = encoding.layout.dense : encoding<layout>
   %out_view = buffer.view %out_buffer[%base] : buffer -> view<2x2xf32, %layout>
-  %145 = index.constant 0 : index
-  %146 = index.constant 2 : index
-  %147 = index.constant 1 : index
-  cfg.br ^_bb1(%145: index)
-^_bb1(%169: index):
-  %171 = index.cmp slt, %169, %146 : index
-  cfg.cond_br %171, ^_bb2, ^_bb10
+  %126 = index.constant 0 : index
+  %127 = index.constant 2 : index
+  %128 = index.constant 1 : index
+  cfg.br ^_bb1(%126: index)
+^_bb1(%189: index):
+  %191 = index.cmp slt, %189, %127 : index
+  cfg.cond_br %191, ^_bb2, ^_bb10
 ^_bb2:
-  %170 = index.assume %169 [range(%169, 0, 1)] : index
-  %149 = index.constant 0 : index
-  %150 = index.constant 2 : index
-  %151 = index.constant 1 : index
-  cfg.br ^_bb3(%149: index)
-^_bb3(%173: index):
-  %175 = index.cmp slt, %173, %150 : index
-  cfg.cond_br %175, ^_bb4, ^_bb9
+  %190 = index.assume %189 [range(%189, 0, 1)] : index
+  %130 = index.constant 0 : index
+  %131 = index.constant 2 : index
+  %132 = index.constant 1 : index
+  cfg.br ^_bb3(%130: index)
+^_bb3(%193: index):
+  %195 = index.cmp slt, %193, %131 : index
+  cfg.cond_br %195, ^_bb4, ^_bb9
 ^_bb4:
-  %174 = index.assume %173 [range(%173, 0, 1)] : index
-  %156 = index.constant 0 : index
-  %157 = index.constant 2 : index
-  %158 = index.constant 1 : index
-  cfg.br ^_bb5(%156: index, %init0: f32)
-^_bb5(%178: index, %179: f32):
-  %181 = index.cmp slt, %178, %157 : index
-  cfg.cond_br %181, ^_bb6, ^_bb7
+  %194 = index.assume %193 [range(%193, 0, 1)] : index
+  %137 = index.constant 0 : index
+  %138 = index.constant 2 : index
+  %139 = index.constant 1 : index
+  cfg.br ^_bb5(%137: index, %init0: f32)
+^_bb5(%198: index, %199: f32):
+  %201 = index.cmp slt, %198, %138 : index
+  cfg.cond_br %201, ^_bb6, ^_bb7
 ^_bb6:
-  %180 = index.assume %178 [range(%178, 0, 1)] : index
-  %168 = scalar.fmaf %lhs0, %rhs0, %179 : f32
-  %182 = index.add %180, %158 : index
-  cfg.br ^_bb5(%182: index, %168: f32)
+  %200 = index.assume %198 [range(%198, 0, 1)] : index
+  %149 = scalar.fmaf %lhs0, %rhs0, %199 : f32
+  %202 = index.add %200, %139 : index
+  cfg.br ^_bb5(%202: index, %149: f32)
 ^_bb7:
-  cfg.br ^_bb8(%179: f32)
-^_bb8(%177: f32):
-  view.store %177, %out_view[%170, %174] : f32, view<2x2xf32, %layout>
-  %176 = index.add %174, %151 : index
-  cfg.br ^_bb3(%176: index)
+  cfg.br ^_bb8(%199: f32)
+^_bb8(%197: f32):
+  view.store %197, %out_view[%190, %194] : f32, view<2x2xf32, %layout>
+  %196 = index.add %194, %132 : index
+  cfg.br ^_bb3(%196: index)
 ^_bb9:
-  %172 = index.add %170, %147 : index
-  cfg.br ^_bb1(%172: index)
+  %192 = index.add %190, %128 : index
+  cfg.br ^_bb1(%192: index)
 ^_bb10:
   func.return
 }
@@ -241,49 +241,49 @@ func.def target(@test_target) @scalarizes_target_shaped_fragment_mma_store(%lhs_
   %rhs_view = buffer.view %rhs_buffer[%base] : buffer -> view<16x16xf16, %layout>
   %init_view = buffer.view %init_buffer[%base] : buffer -> view<16x16xf32, %layout>
   %out_view = buffer.view %out_buffer[%base] : buffer -> view<16x16xf32, %layout>
-  %183 = index.constant 0 : index
-  %184 = index.constant 16 : index
-  %185 = index.constant 1 : index
-  cfg.br ^_bb1(%183: index)
+  %150 = index.constant 0 : index
+  %151 = index.constant 16 : index
+  %152 = index.constant 1 : index
+  cfg.br ^_bb1(%150: index)
 ^_bb1(%203: index):
-  %205 = index.cmp slt, %203, %184 : index
+  %205 = index.cmp slt, %203, %151 : index
   cfg.cond_br %205, ^_bb2, ^_bb10
 ^_bb2:
   %204 = index.assume %203 [range(%203, 0, 15)] : index
-  %187 = index.constant 0 : index
-  %188 = index.constant 16 : index
-  %189 = index.constant 1 : index
-  cfg.br ^_bb3(%187: index)
+  %154 = index.constant 0 : index
+  %155 = index.constant 16 : index
+  %156 = index.constant 1 : index
+  cfg.br ^_bb3(%154: index)
 ^_bb3(%207: index):
-  %209 = index.cmp slt, %207, %188 : index
+  %209 = index.cmp slt, %207, %155 : index
   cfg.cond_br %209, ^_bb4, ^_bb9
 ^_bb4:
   %208 = index.assume %207 [range(%207, 0, 15)] : index
-  %191 = view.load %init_view[%204, %208] : view<16x16xf32, %layout> -> f32
-  %192 = index.constant 0 : index
-  %193 = index.constant 16 : index
-  %194 = index.constant 1 : index
-  cfg.br ^_bb5(%192: index, %191: f32)
+  %158 = view.load %init_view[%204, %208] : view<16x16xf32, %layout> -> f32
+  %159 = index.constant 0 : index
+  %160 = index.constant 16 : index
+  %161 = index.constant 1 : index
+  cfg.br ^_bb5(%159: index, %158: f32)
 ^_bb5(%212: index, %213: f32):
-  %215 = index.cmp slt, %212, %193 : index
+  %215 = index.cmp slt, %212, %160 : index
   cfg.cond_br %215, ^_bb6, ^_bb7
 ^_bb6:
   %214 = index.assume %212 [range(%212, 0, 15)] : index
-  %198 = view.load %lhs_view[%204, %214] : view<16x16xf16, %layout> -> f16
-  %199 = view.load %rhs_view[%214, %208] : view<16x16xf16, %layout> -> f16
-  %200 = scalar.extf %198 : f16 to f32
-  %201 = scalar.extf %199 : f16 to f32
-  %202 = scalar.fmaf %200, %201, %213 : f32
-  %216 = index.add %214, %194 : index
-  cfg.br ^_bb5(%216: index, %202: f32)
+  %165 = view.load %lhs_view[%204, %214] : view<16x16xf16, %layout> -> f16
+  %166 = view.load %rhs_view[%214, %208] : view<16x16xf16, %layout> -> f16
+  %167 = scalar.extf %165 : f16 to f32
+  %168 = scalar.extf %166 : f16 to f32
+  %169 = scalar.fmaf %167, %168, %213 : f32
+  %216 = index.add %214, %161 : index
+  cfg.br ^_bb5(%216: index, %169: f32)
 ^_bb7:
   cfg.br ^_bb8(%213: f32)
 ^_bb8(%211: f32):
   view.store %211, %out_view[%204, %208] : f32, view<16x16xf32, %layout>
-  %210 = index.add %208, %189 : index
+  %210 = index.add %208, %156 : index
   cfg.br ^_bb3(%210: index)
 ^_bb9:
-  %206 = index.add %204, %185 : index
+  %206 = index.add %204, %152 : index
   cfg.br ^_bb1(%206: index)
 ^_bb10:
   func.return

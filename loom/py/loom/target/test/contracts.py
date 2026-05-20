@@ -22,6 +22,7 @@ from loom.target.contracts import (
     AttrProject,
     ContractFragment,
     DescriptorEmitForm,
+    DescriptorMatrixRule,
     DescriptorRule,
     DirectDescriptorCase,
     DirectTypePatterns,
@@ -548,6 +549,10 @@ TEST_LOW_CORE_CONTRACT_FRAGMENT = ContractFragment(
             input_type=_V4F32,
             accumulator_type=_F32,
             descriptor=TEST_LOW_ADD_F32_DESCRIPTOR,
+        ),
+        DescriptorMatrixRule(
+            source_op=vector.vector_mma,
+            source="vector_mma",
         ),
         DescriptorRule(
             source_op=vector.vector_dot4i,

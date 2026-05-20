@@ -54,4 +54,37 @@ iree_executable_test(
     "loom-check"
 )
 
+iree_executable_test(
+  NAME
+    "target_legalize_matrix"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/target_legalize_matrix.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "target_legalize_report"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/target_legalize_report.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
+    "target_legalize_structure"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/target_legalize_structure.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -49,6 +49,17 @@ typedef enum loom_target_low_legality_diagnostic_flag_bits_e {
 } loom_target_low_legality_diagnostic_flag_bits_t;
 typedef uint32_t loom_target_low_legality_diagnostic_flags_t;
 
+typedef enum loom_target_low_structural_legality_flag_bits_e {
+  // Source SCF regions are still legal in the caller's current phase. CFG-mode
+  // source-to-low leaves this unset and requires an explicit structural
+  // lowering pass before executable target-low lowering.
+  LOOM_TARGET_LOW_STRUCTURAL_LEGALITY_ALLOW_SOURCE_SCF = 1u << 0,
+  // All structural legality flags known to this header.
+  LOOM_TARGET_LOW_STRUCTURAL_LEGALITY_ALL =
+      LOOM_TARGET_LOW_STRUCTURAL_LEGALITY_ALLOW_SOURCE_SCF,
+} loom_target_low_structural_legality_flag_bits_t;
+typedef uint32_t loom_target_low_structural_legality_flags_t;
+
 // Bitset of built-in dialect ids a target-low legality provider can handle.
 typedef uint32_t loom_target_low_legality_builtin_dialect_bits_t;
 
@@ -143,6 +154,8 @@ typedef struct loom_target_low_legality_options_t {
   // Optional active value domain for |function|'s body. Providers can use this
   // to request shared function-local analyses without acquiring module scratch.
   const loom_local_value_domain_t* value_domain;
+  // Structural source forms permitted by the caller's current phase.
+  loom_target_low_structural_legality_flags_t structural_legality_flags;
   // Optional target-specific feedback diagnostics to emit during source
   // legality. Zero keeps legality quiet except for errors and provider-owned
   // mandatory contract remarks.

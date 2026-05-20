@@ -26,6 +26,8 @@
 //   // RUN: roundtrip       Parse -> print -> compare (default).
 //   // RUN: verify          Parse -> verify -> match annotations.
 //   // RUN: pass <pipeline> Parse -> run pipeline -> print -> compare.
+//   // RUN: pass-report <pipeline>
+//                           Parse -> run pipeline -> compile report -> compare.
 //   // RUN: format <target> Parse -> convert format -> print -> compare.
 //   // RUN: emit <target>   Parse -> emit analysis or target-structured
 //                           output -> compare. Core targets include
@@ -130,6 +132,7 @@ typedef enum loom_check_mode_e {
   LOOM_CHECK_MODE_PASS = 2,       // Parse -> run pipeline -> print -> compare.
   LOOM_CHECK_MODE_FORMAT = 3,  // Parse -> convert format -> print -> compare.
   LOOM_CHECK_MODE_EMIT = 4,    // Parse -> emit target/check output -> compare.
+  LOOM_CHECK_MODE_PASS_REPORT = 5,  // Parse -> run pipeline -> report.
 } loom_check_mode_t;
 
 // Returns a human-readable name for the mode.
@@ -145,6 +148,8 @@ static inline const char* loom_check_mode_name(loom_check_mode_t mode) {
       return "format";
     case LOOM_CHECK_MODE_EMIT:
       return "emit";
+    case LOOM_CHECK_MODE_PASS_REPORT:
+      return "pass-report";
     default:
       return "unknown";
   }

@@ -168,6 +168,17 @@ static iree_status_t loom_check_parse_run_directive(
   }
 
   if (iree_string_view_consume_prefix(&value,
+                                      iree_make_cstring_view("pass-report "))) {
+    *out_mode = LOOM_CHECK_MODE_PASS_REPORT;
+    *out_pipeline = iree_string_view_trim(value);
+    if (iree_string_view_is_empty(*out_pipeline)) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "RUN: pass-report requires a pipeline argument");
+    }
+    return iree_ok_status();
+  }
+
+  if (iree_string_view_consume_prefix(&value,
                                       iree_make_cstring_view("format "))) {
     *out_mode = LOOM_CHECK_MODE_FORMAT;
     *out_format_target = iree_string_view_trim(value);

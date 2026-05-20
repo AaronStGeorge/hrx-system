@@ -402,6 +402,21 @@ TEST_LOW_DOT4I_S8S8_DESCRIPTOR = Descriptor(
     flags=(DescriptorFlag.DEAD_REMOVABLE,),
 )
 
+TEST_LOW_MMA_I32_2X2X2_DESCRIPTOR = Descriptor(
+    key="test.mma.i32.2x2x2",
+    mnemonic="test.mma.i32.2x2x2",
+    semantic_tag="matrix.mma.i32.2x2x2",
+    operands=(
+        Operand("dst", OperandRole.RESULT, _I32_ALT, unit_count=4),
+        Operand("a", OperandRole.OPERAND, _I32_ALT, unit_count=4),
+        Operand("b", OperandRole.OPERAND, _I32_ALT, unit_count=4),
+        Operand("acc", OperandRole.OPERAND, _I32_ALT, unit_count=4),
+    ),
+    asm_forms=_asm(results=("dst",), operands=("a", "b", "acc")),
+    schedule_class=_SCHEDULE_VECTOR_ALU,
+    flags=(DescriptorFlag.DEAD_REMOVABLE,),
+)
+
 TEST_LOW_SHUFFLE_V4I32_DESCRIPTOR = Descriptor(
     key="test.shuffle.v4i32",
     mnemonic="test.shuffle.v4i32",
@@ -926,6 +941,7 @@ TEST_LOW_CORE_DESCRIPTOR_SET = DescriptorSet(
         TEST_LOW_SELECT_I32_DESCRIPTOR,
         TEST_LOW_ADD_V4I32_DESCRIPTOR,
         TEST_LOW_DOT4I_S8S8_DESCRIPTOR,
+        TEST_LOW_MMA_I32_2X2X2_DESCRIPTOR,
         TEST_LOW_SHUFFLE_V4I32_DESCRIPTOR,
         TEST_LOW_FROM_ELEMENTS_V4I32_DESCRIPTOR,
         TEST_LOW_CMP_EQ_V4I32_DESCRIPTOR,

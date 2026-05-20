@@ -583,15 +583,24 @@ static iree_status_t loom_target_low_legality_try_contract_query_op(
 
 static iree_status_t loom_target_low_legality_reject_source_only_op(
     loom_target_low_legality_context_t* context, const loom_op_t* op) {
+  const bool allow_source_scf =
+      iree_any_bit_set(context->options->structural_legality_flags,
+                       LOOM_TARGET_LOW_STRUCTURAL_LEGALITY_ALLOW_SOURCE_SCF);
   switch (op->kind) {
     case LOOM_OP_SCF_IF:
     case LOOM_OP_SCF_FOR:
     case LOOM_OP_SCF_WHILE:
     case LOOM_OP_SCF_SWITCH:
+      if (allow_source_scf) {
+        return iree_ok_status();
+      }
       return loom_target_low_legality_emit_op_constraint(
           context, op, IREE_SV("source_structure.lower_to_cfg"));
     case LOOM_OP_SCF_CONDITION:
     case LOOM_OP_SCF_YIELD:
+      if (allow_source_scf) {
+        return iree_ok_status();
+      }
       return loom_target_low_legality_emit_op_constraint(
           context, op, IREE_SV("source_structure.parent_lowering"));
     default:
