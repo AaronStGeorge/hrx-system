@@ -951,6 +951,13 @@ typedef struct loom_op_placement_descriptor_t {
 const loom_region_descriptor_t* loom_op_vtable_region_descriptor(
     const loom_op_vtable_t* vtable, uint8_t region_index);
 
+// Returns the module-local symbol reference defined by |op|. Returns false for
+// non-symbol ops, malformed symbol attributes, cross-module refs, or refs
+// outside the module symbol table.
+bool loom_op_defining_symbol_ref(const loom_module_t* module,
+                                 const loom_op_t* op,
+                                 loom_symbol_ref_t* out_ref);
+
 // Returns true when operand descriptors name independent operand segments
 // stored over the op's flat operand array.
 static inline bool loom_op_vtable_has_segmented_operands(

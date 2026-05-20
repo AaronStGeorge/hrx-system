@@ -648,6 +648,40 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    symbol_liveness
+  HDRS
+    "symbol_liveness.h"
+  SRCS
+    "symbol_liveness.c"
+  DEPS
+    ::symbol_dependencies
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    symbol_liveness_test
+  SRCS
+    "symbol_liveness_test.cc"
+  DEPS
+    ::symbol_dependencies
+    ::symbol_liveness
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::op_defs
+    loom::src::loom::testing::module_ptr
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     symbolic_expr
   HDRS
     "symbolic_expr.h"

@@ -6,11 +6,9 @@
 
 #include "loom/transforms/symbol/symbol_dce.h"
 
-#include <string.h>
-
 #include "loom/analysis/symbol_dependencies.h"
+#include "loom/analysis/symbol_liveness.h"
 #include "loom/ir/module.h"
-#include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 
 //===----------------------------------------------------------------------===//
@@ -45,26 +43,15 @@ const loom_pass_info_t* loom_symbol_dce_pass_info(void) {
 // Reachability
 //===----------------------------------------------------------------------===//
 
-typedef struct loom_symbol_dce_worklist_t {
-  // Symbol ids still waiting for defining-op traversal.
-  uint16_t* entries;
-  // Number of queued symbol ids.
-  iree_host_size_t count;
-  // Capacity of entries.
-  iree_host_size_t capacity;
-} loom_symbol_dce_worklist_t;
-
 typedef struct loom_symbol_dce_state_t {
   // Active pass instance for scratch allocation and statistics.
   loom_pass_t* pass;
   // Module being rewritten.
   loom_module_t* module;
-  // One byte per module symbol: non-zero means reachable from a retained root.
-  uint8_t* live_symbols;
-  // Pending reachable symbols whose defining op still needs to be scanned.
-  loom_symbol_dce_worklist_t worklist;
   // Rebuilt module symbol dependency table.
   loom_symbol_dependency_table_t dependencies;
+  // Computed live symbol set.
+  loom_symbol_liveness_t liveness;
 } loom_symbol_dce_state_t;
 
 static bool loom_symbol_dce_symbol_is_erasable(const loom_module_t* module,
@@ -100,86 +87,28 @@ static bool loom_symbol_dce_symbol_is_erasable(const loom_module_t* module,
   return false;
 }
 
-static iree_status_t loom_symbol_dce_worklist_initialize(
-    iree_arena_allocator_t* arena, iree_host_size_t initial_capacity,
-    loom_symbol_dce_worklist_t* worklist) {
-  worklist->count = 0;
-  worklist->capacity = iree_max(initial_capacity, (iree_host_size_t)16);
-  return iree_arena_allocate_array(arena, worklist->capacity,
-                                   sizeof(*worklist->entries),
-                                   (void**)&worklist->entries);
-}
-
-static iree_status_t loom_symbol_dce_mark_symbol_id(
-    loom_symbol_dce_state_t* state, uint16_t symbol_id) {
-  if (symbol_id >= state->module->symbols.count) return iree_ok_status();
-  if (state->live_symbols[symbol_id]) return iree_ok_status();
-  if (state->worklist.count >= state->worklist.capacity) {
-    IREE_RETURN_IF_ERROR(iree_arena_grow_array(
-        state->pass->arena, state->worklist.count, state->worklist.count + 1,
-        sizeof(*state->worklist.entries), &state->worklist.capacity,
-        (void**)&state->worklist.entries));
-  }
-  state->live_symbols[symbol_id] = 1;
-  state->worklist.entries[state->worklist.count++] = symbol_id;
-  return iree_ok_status();
-}
-
-static iree_status_t loom_symbol_dce_traverse_symbol(
-    loom_symbol_dce_state_t* state, uint16_t symbol_id) {
-  if (symbol_id >= state->dependencies.symbol_count) return iree_ok_status();
-  loom_symbol_dependency_edge_id_t edge_id =
-      state->dependencies.symbols[symbol_id].first_outgoing_edge_id;
-  while (edge_id != LOOM_SYMBOL_DEPENDENCY_EDGE_ID_INVALID) {
-    const loom_symbol_dependency_edge_t* edge =
-        &state->dependencies.edges[edge_id];
-    IREE_RETURN_IF_ERROR(
-        loom_symbol_dce_mark_symbol_id(state, edge->target_symbol_id));
-    edge_id = edge->next_outgoing_edge_id;
-  }
-
-  return iree_ok_status();
-}
-
-static iree_status_t loom_symbol_dce_mark_module_root_refs(
-    loom_symbol_dce_state_t* state) {
-  loom_symbol_dependency_edge_id_t edge_id =
-      state->dependencies.first_module_edge_id;
-  while (edge_id != LOOM_SYMBOL_DEPENDENCY_EDGE_ID_INVALID) {
-    const loom_symbol_dependency_edge_t* edge =
-        &state->dependencies.edges[edge_id];
-    IREE_RETURN_IF_ERROR(
-        loom_symbol_dce_mark_symbol_id(state, edge->target_symbol_id));
-    edge_id = edge->next_outgoing_edge_id;
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_symbol_dce_seed_roots(
-    loom_symbol_dce_state_t* state) {
-  const loom_symbol_t* symbol = NULL;
-  loom_module_for_each_symbol(state->module, symbol) {
-    if (!symbol->defining_op) continue;
-    if (loom_symbol_dce_symbol_is_erasable(state->module, symbol)) continue;
-    uint16_t symbol_id = (uint16_t)(symbol - state->module->symbols.entries);
-    IREE_RETURN_IF_ERROR(loom_symbol_dce_mark_symbol_id(state, symbol_id));
-  }
-  return iree_ok_status();
+static bool loom_symbol_dce_symbol_is_root(void* user_data,
+                                           const loom_module_t* module,
+                                           loom_symbol_id_t symbol_id,
+                                           const loom_symbol_t* symbol) {
+  (void)user_data;
+  (void)symbol_id;
+  return !loom_symbol_dce_symbol_is_erasable(module, symbol);
 }
 
 static iree_status_t loom_symbol_dce_compute_live_symbols(
     loom_symbol_dce_state_t* state) {
   IREE_RETURN_IF_ERROR(loom_symbol_dependency_table_build(
       state->module, state->pass->arena, &state->dependencies));
-  IREE_RETURN_IF_ERROR(loom_symbol_dce_seed_roots(state));
-  // Encodings are module-table records that serialize with the module. Until
-  // there is encoding-table DCE, their symbol refs are part of the root set.
-  IREE_RETURN_IF_ERROR(loom_symbol_dce_mark_module_root_refs(state));
-  while (state->worklist.count > 0) {
-    uint16_t symbol_id = state->worklist.entries[--state->worklist.count];
-    IREE_RETURN_IF_ERROR(loom_symbol_dce_traverse_symbol(state, symbol_id));
-  }
-  return iree_ok_status();
+  loom_symbol_liveness_options_t options = {
+      // Encodings are module-table records that serialize with the module.
+      // Until there is encoding-table DCE, their symbol refs are roots.
+      .flags = LOOM_SYMBOL_LIVENESS_INCLUDE_MODULE_EDGES,
+      .root_query = loom_symbol_dce_symbol_is_root,
+  };
+  return loom_symbol_liveness_compute(state->module, &state->dependencies,
+                                      &options, state->pass->arena,
+                                      &state->liveness);
 }
 
 //===----------------------------------------------------------------------===//
@@ -208,7 +137,7 @@ static iree_status_t loom_symbol_dce_collect_erasures(
   const loom_symbol_t* symbol = NULL;
   loom_module_for_each_symbol(state->module, symbol) {
     uint16_t symbol_id = (uint16_t)(symbol - state->module->symbols.entries);
-    if (state->live_symbols[symbol_id]) continue;
+    if (loom_symbol_liveness_is_live(&state->liveness, symbol_id)) continue;
     if (!loom_symbol_dce_symbol_is_erasable(state->module, symbol)) continue;
 
     const bool is_function_like =
@@ -248,15 +177,6 @@ iree_status_t loom_symbol_dce_run(loom_pass_t* pass, loom_module_t* module) {
       .pass = pass,
       .module = module,
   };
-  if (module->symbols.count > 0) {
-    IREE_RETURN_IF_ERROR(iree_arena_allocate_array(
-        pass->arena, module->symbols.count, sizeof(*state.live_symbols),
-        (void**)&state.live_symbols));
-    memset(state.live_symbols, 0,
-           module->symbols.count * sizeof(*state.live_symbols));
-  }
-  IREE_RETURN_IF_ERROR(loom_symbol_dce_worklist_initialize(
-      pass->arena, module->symbols.count, &state.worklist));
   IREE_RETURN_IF_ERROR(loom_symbol_dce_compute_live_symbols(&state));
   IREE_RETURN_IF_ERROR(loom_symbol_dce_erase_unreachable_symbols(&state));
   return loom_module_compact_symbols(module, pass->arena, NULL);

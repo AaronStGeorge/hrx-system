@@ -273,6 +273,29 @@ const loom_region_descriptor_t* loom_op_vtable_region_descriptor(
   return NULL;
 }
 
+bool loom_op_defining_symbol_ref(const loom_module_t* module,
+                                 const loom_op_t* op,
+                                 loom_symbol_ref_t* out_ref) {
+  if (!out_ref) return false;
+  *out_ref = loom_symbol_ref_null();
+  if (!module || !op) return false;
+  const loom_op_vtable_t* vtable = loom_op_vtable(module, op);
+  if (!vtable || !vtable->symbol_def || !vtable->attr_descriptors) {
+    return false;
+  }
+  uint8_t symbol_attr_index = vtable->symbol_def->name_attr_index;
+  if (symbol_attr_index >= vtable->attribute_count ||
+      symbol_attr_index >= op->attribute_count) {
+    return false;
+  }
+  const loom_attr_descriptor_t* descriptor =
+      &vtable->attr_descriptors[symbol_attr_index];
+  if (descriptor->attr_kind != LOOM_ATTR_SYMBOL) return false;
+  *out_ref = loom_attr_as_symbol(loom_op_const_attrs(op)[symbol_attr_index]);
+  return loom_symbol_ref_is_valid(*out_ref) && out_ref->module_id == 0 &&
+         out_ref->symbol_id < module->symbols.count;
+}
+
 loom_value_slice_t loom_op_operand_field_span(const loom_op_vtable_t* vtable,
                                               const loom_op_t* op,
                                               uint8_t field_index) {

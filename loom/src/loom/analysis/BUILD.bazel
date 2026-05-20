@@ -554,6 +554,36 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "symbol_liveness",
+    srcs = ["symbol_liveness.c"],
+    hdrs = ["symbol_liveness.h"],
+    deps = [
+        ":symbol_dependencies",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "symbol_liveness_test",
+    srcs = ["symbol_liveness_test.cc"],
+    deps = [
+        ":symbol_dependencies",
+        ":symbol_liveness",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/testing:module_ptr",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "symbolic_expr",
     srcs = ["symbolic_expr.c"],
     hdrs = ["symbolic_expr.h"],

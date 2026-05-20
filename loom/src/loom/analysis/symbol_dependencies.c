@@ -302,27 +302,6 @@ loom_symbol_dependency_direct_attr_kind(const loom_op_vtable_t* vtable,
   return LOOM_SYMBOL_DEPENDENCY_EDGE_SYMBOL_ATTR;
 }
 
-static bool loom_symbol_dependency_op_symbol_ref(const loom_module_t* module,
-                                                 const loom_op_t* op,
-                                                 const loom_op_vtable_t* vtable,
-                                                 loom_symbol_ref_t* out_ref) {
-  *out_ref = loom_symbol_ref_null();
-  if (!vtable || !vtable->symbol_def || !vtable->attr_descriptors) {
-    return false;
-  }
-  uint8_t symbol_attr_index = vtable->symbol_def->name_attr_index;
-  if (symbol_attr_index >= vtable->attribute_count ||
-      symbol_attr_index >= op->attribute_count) {
-    return false;
-  }
-  const loom_attr_descriptor_t* descriptor =
-      &vtable->attr_descriptors[symbol_attr_index];
-  if (descriptor->attr_kind != LOOM_ATTR_SYMBOL) return false;
-  *out_ref = loom_attr_as_symbol(loom_op_const_attrs(op)[symbol_attr_index]);
-  return loom_symbol_ref_is_valid(*out_ref) && out_ref->module_id == 0 &&
-         out_ref->symbol_id < module->symbols.count;
-}
-
 static iree_status_t loom_symbol_dependency_visit_value_type(
     loom_symbol_dependency_builder_t* builder,
     loom_symbol_id_t source_symbol_id, loom_value_id_t value_id,
@@ -395,8 +374,7 @@ static iree_status_t loom_symbol_dependency_visit_region(
       const loom_op_vtable_t* vtable = loom_op_vtable(builder->module, op);
       loom_symbol_id_t nested_source_symbol_id = source_symbol_id;
       loom_symbol_ref_t op_symbol_ref = loom_symbol_ref_null();
-      if (loom_symbol_dependency_op_symbol_ref(builder->module, op, vtable,
-                                               &op_symbol_ref)) {
+      if (loom_op_defining_symbol_ref(builder->module, op, &op_symbol_ref)) {
         nested_source_symbol_id = op_symbol_ref.symbol_id;
       }
       IREE_RETURN_IF_ERROR(loom_symbol_dependency_visit_op_value_types(

@@ -63,9 +63,9 @@ loom_cc_library(
     hdrs = ["symbol_dce.h"],
     deps = [
         "//loom/src/loom/analysis:symbol_dependencies",
+        "//loom/src/loom/analysis:symbol_liveness",
         "//loom/src/loom/ir",
         "//loom/src/loom/ops:op_defs",
-        "//loom/src/loom/ops/low",
         "//loom/src/loom/pass:types",
         "//runtime/src/iree/base",
     ],

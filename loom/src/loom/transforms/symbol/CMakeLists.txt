@@ -71,8 +71,8 @@ loom_cc_library(
   DEPS
     iree::base
     loom::src::loom::analysis::symbol_dependencies
+    loom::src::loom::analysis::symbol_liveness
     loom::src::loom::ir
-    loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
     loom::src::loom::pass::types
   PUBLIC
