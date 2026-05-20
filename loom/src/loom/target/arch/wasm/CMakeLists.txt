@@ -155,6 +155,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "structured_allocation"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/structured_allocation.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "structured_control"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/structured_control.loom-test"

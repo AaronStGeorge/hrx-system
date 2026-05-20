@@ -49,6 +49,67 @@ static iree_status_t loom_low_allocation_copy_decision_plan_record(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_allocation_copy_decision_count_region_copies(
+    const loom_liveness_analysis_t* liveness, const loom_region_t* region,
+    iree_host_size_t* inout_copy_count) {
+  const loom_block_t* block = NULL;
+  loom_region_for_each_block(region, block) {
+    const loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      if (loom_low_copy_isa(op)) {
+        if (*inout_copy_count == IREE_HOST_SIZE_MAX) {
+          return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                  "low.copy decision count exceeds host size");
+        }
+        ++*inout_copy_count;
+      }
+      if (!loom_liveness_analysis_includes_region_tree(liveness)) {
+        continue;
+      }
+      loom_region_t* const* regions = loom_op_regions(op);
+      for (uint8_t i = 0; i < op->region_count; ++i) {
+        if (regions[i] == NULL) {
+          continue;
+        }
+        IREE_RETURN_IF_ERROR(
+            loom_low_allocation_copy_decision_count_region_copies(
+                liveness, regions[i], inout_copy_count));
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_low_allocation_copy_decision_plan_record_region(
+    const loom_low_allocation_copy_decision_context_t* context,
+    loom_low_allocation_copy_decision_plan_t* plan,
+    const loom_region_t* region) {
+  const loom_block_t* block = NULL;
+  loom_region_for_each_block(region, block) {
+    const loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      if (loom_low_copy_isa(op)) {
+        IREE_RETURN_IF_ERROR(
+            loom_low_allocation_copy_decision_plan_record(context, plan, op));
+      }
+      if (!loom_liveness_analysis_includes_region_tree(
+              context->assignment_map.liveness)) {
+        continue;
+      }
+      loom_region_t* const* regions = loom_op_regions(op);
+      for (uint8_t i = 0; i < op->region_count; ++i) {
+        if (regions[i] == NULL) {
+          continue;
+        }
+        IREE_RETURN_IF_ERROR(
+            loom_low_allocation_copy_decision_plan_record_region(context, plan,
+                                                                 regions[i]));
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_allocation_copy_decision_plan_build(
     const loom_low_allocation_copy_decision_context_t* context,
     iree_arena_allocator_t* arena,
@@ -58,8 +119,9 @@ iree_status_t loom_low_allocation_copy_decision_plan_build(
   IREE_ASSERT_ARGUMENT(out_plan);
   *out_plan = (loom_low_allocation_copy_decision_plan_t){0};
 
-  const iree_host_size_t copy_count =
-      loom_low_allocation_move_topology_count_copy_ops(context->body);
+  iree_host_size_t copy_count = 0;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_copy_decision_count_region_copies(
+      context->assignment_map.liveness, context->body, &copy_count));
   if (copy_count == 0) {
     return iree_ok_status();
   }
@@ -69,17 +131,8 @@ iree_status_t loom_low_allocation_copy_decision_plan_build(
       arena, copy_count, sizeof(*plan.decisions), (void**)&plan.decisions));
   memset(plan.decisions, 0, copy_count * sizeof(*plan.decisions));
 
-  loom_block_t* block = NULL;
-  loom_region_for_each_block(context->body, block) {
-    loom_op_t* op = NULL;
-    loom_block_for_each_op(block, op) {
-      if (!loom_low_copy_isa(op)) {
-        continue;
-      }
-      IREE_RETURN_IF_ERROR(
-          loom_low_allocation_copy_decision_plan_record(context, &plan, op));
-    }
-  }
+  IREE_RETURN_IF_ERROR(loom_low_allocation_copy_decision_plan_record_region(
+      context, &plan, context->body));
   *out_plan = plan;
   return iree_ok_status();
 }

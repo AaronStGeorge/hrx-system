@@ -120,8 +120,8 @@ iree_status_t loom_low_allocate_function(
 
   loom_local_value_domain_t value_domain = {0};
   if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
-    status = loom_local_value_domain_acquire_for_region(module, state.body,
-                                                        arena, &value_domain);
+    status = loom_local_value_domain_acquire_for_region_tree(
+        module, state.body, arena, &value_domain);
   }
   if (iree_status_is_ok(status) && state.target_constraints.error_count == 0) {
     status = loom_liveness_analyze_local_value_domain(

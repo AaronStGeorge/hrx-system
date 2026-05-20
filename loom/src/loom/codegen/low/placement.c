@@ -411,18 +411,37 @@ static iree_status_t loom_low_placement_append_structural_relations(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_placement_visit_region_ops(
+    loom_low_placement_build_state_t* state, const loom_region_t* region,
+    iree_status_t (*visit)(loom_low_placement_build_state_t* state,
+                           const loom_op_t* op)) {
+  const loom_block_t* block = NULL;
+  loom_region_for_each_block(region, block) {
+    const loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      IREE_RETURN_IF_ERROR(visit(state, op));
+      if (!iree_any_bit_set(state->value_domain->flags,
+                            LOOM_LOCAL_VALUE_DOMAIN_FLAG_REGION_TREE)) {
+        continue;
+      }
+      loom_region_t* const* regions = loom_op_regions(op);
+      for (uint8_t i = 0; i < op->region_count; ++i) {
+        if (regions[i] == NULL) {
+          continue;
+        }
+        IREE_RETURN_IF_ERROR(
+            loom_low_placement_visit_region_ops(state, regions[i], visit));
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_placement_visit_ops(
     loom_low_placement_build_state_t* state,
     iree_status_t (*visit)(loom_low_placement_build_state_t* state,
                            const loom_op_t* op)) {
-  const loom_block_t* block = NULL;
-  loom_region_for_each_block(state->region, block) {
-    const loom_op_t* op = NULL;
-    loom_block_for_each_op(block, op) {
-      IREE_RETURN_IF_ERROR(visit(state, op));
-    }
-  }
-  return iree_ok_status();
+  return loom_low_placement_visit_region_ops(state, state->region, visit);
 }
 
 static iree_status_t loom_low_placement_count_op_relations(

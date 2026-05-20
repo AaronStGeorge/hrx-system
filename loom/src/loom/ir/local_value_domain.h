@@ -26,6 +26,8 @@ extern "C" {
 enum loom_local_value_domain_flag_bits_e {
   // The domain currently owns the module value-ordinal scratch map.
   LOOM_LOCAL_VALUE_DOMAIN_FLAG_ACQUIRED = 1u << 0,
+  // The domain covers values in recursively nested regions below |region|.
+  LOOM_LOCAL_VALUE_DOMAIN_FLAG_REGION_TREE = 1u << 1,
 };
 typedef uint16_t loom_local_value_domain_flags_t;
 
@@ -51,6 +53,14 @@ typedef struct loom_local_value_domain_t {
 // Rewriting frames that create new values while the domain is active must
 // explicitly register those values before indexing ordinal-keyed scratch.
 iree_status_t loom_local_value_domain_acquire_for_region(
+    loom_module_t* module, const loom_region_t* region,
+    iree_arena_allocator_t* arena, loom_local_value_domain_t* out_domain);
+
+// Acquires a local value domain for |region| and every nested region below it.
+//
+// This is the domain shape used by structured-control analyses and emitters
+// that need to assign storage to values defined inside op-owned regions.
+iree_status_t loom_local_value_domain_acquire_for_region_tree(
     loom_module_t* module, const loom_region_t* region,
     iree_arena_allocator_t* arena, loom_local_value_domain_t* out_domain);
 

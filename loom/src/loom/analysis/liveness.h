@@ -167,6 +167,12 @@ typedef struct loom_liveness_pressure_budget_violation_t {
   loom_liveness_pressure_budget_violation_flags_t violation_bits;
 } loom_liveness_pressure_budget_violation_t;
 
+enum loom_liveness_analysis_flag_bits_e {
+  // Intervals include values defined in recursively nested structured regions.
+  LOOM_LIVENESS_ANALYSIS_FLAG_REGION_TREE = 1u << 0,
+};
+typedef uint16_t loom_liveness_analysis_flags_t;
+
 // Liveness analysis result for one region. All arrays are arena-owned by the
 // caller-provided arena passed to loom_liveness_analyze_region.
 typedef struct loom_liveness_analysis_t {
@@ -174,6 +180,8 @@ typedef struct loom_liveness_analysis_t {
   const loom_module_t* module;
   // Region analyzed.
   const loom_region_t* region;
+  // Analysis mode flags.
+  loom_liveness_analysis_flags_t flags;
   // True when the region had CFG successor structure.
   bool is_cfg;
   // Per-block liveness summaries in region block order.
@@ -196,6 +204,13 @@ typedef struct loom_liveness_analysis_t {
   // Number of records in |pressure_summaries|.
   iree_host_size_t pressure_summary_count;
 } loom_liveness_analysis_t;
+
+// Returns true when |analysis| models recursively nested structured regions.
+static inline bool loom_liveness_analysis_includes_region_tree(
+    const loom_liveness_analysis_t* analysis) {
+  return analysis && iree_any_bit_set(analysis->flags,
+                                      LOOM_LIVENESS_ANALYSIS_FLAG_REGION_TREE);
+}
 
 // Computes liveness for |region|. The caller must keep |module| and |region|
 // semantically immutable for as long as |out_analysis| is used and must keep
@@ -227,6 +242,15 @@ iree_status_t loom_liveness_analyze_region_with_order(
     loom_module_t* module, const loom_region_t* region,
     loom_liveness_order_t order, iree_arena_allocator_t* arena,
     loom_liveness_analysis_t* out_analysis);
+
+// Resolves |op|'s program point in |analysis|.
+//
+// For region-tree analyses, nested operations are located relative to the
+// structured parent op that owns them. |order| applies only to direct
+// operations in |analysis->region|; nested regions keep source order.
+iree_status_t loom_liveness_op_program_point(
+    const loom_liveness_analysis_t* analysis, loom_liveness_order_t order,
+    const loom_op_t* op, uint32_t* out_program_point);
 
 // Returns the interval for |value_id|, or NULL when the value is not touched by
 // the analyzed region. This convenience helper scans the compact local value

@@ -175,37 +175,57 @@ static iree_status_t loom_low_allocation_packet_moves_for_op(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_allocation_packet_move_count_region_capacity(
+    const loom_low_allocation_packet_move_context_t* context,
+    const loom_region_t* region, iree_host_size_t* out_group_capacity,
+    iree_host_size_t* out_temporary_capacity) {
+  const loom_block_t* block = NULL;
+  loom_region_for_each_block(region, block) {
+    const loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      if (loom_low_allocation_move_topology_op_has_packet_moves(op)) {
+        iree_host_size_t move_count = 0;
+        IREE_RETURN_IF_ERROR(loom_low_allocation_packet_moves_for_op(
+            context, op, /*moves=*/NULL, /*move_capacity=*/IREE_HOST_SIZE_MAX,
+            &move_count));
+        if (move_count != 0) {
+          if (*out_group_capacity == IREE_HOST_SIZE_MAX ||
+              move_count > IREE_HOST_SIZE_MAX - *out_temporary_capacity) {
+            return iree_make_status(
+                IREE_STATUS_OUT_OF_RANGE,
+                "packet-local move temporary capacity exceeds host size");
+          }
+          ++*out_group_capacity;
+          *out_temporary_capacity += move_count;
+        }
+      }
+      if (!loom_liveness_analysis_includes_region_tree(
+              context->assignment_map.liveness)) {
+        continue;
+      }
+      loom_region_t* const* regions = loom_op_regions(op);
+      for (uint8_t i = 0; i < op->region_count; ++i) {
+        if (regions[i] == NULL) {
+          continue;
+        }
+        IREE_RETURN_IF_ERROR(
+            loom_low_allocation_packet_move_count_region_capacity(
+                context, regions[i], out_group_capacity,
+                out_temporary_capacity));
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_allocation_packet_move_count_capacity(
     const loom_low_allocation_packet_move_context_t* context,
     iree_host_size_t* out_group_capacity,
     iree_host_size_t* out_temporary_capacity) {
   *out_group_capacity = 0;
   *out_temporary_capacity = 0;
-  loom_block_t* block = NULL;
-  loom_region_for_each_block(context->body, block) {
-    loom_op_t* op = NULL;
-    loom_block_for_each_op(block, op) {
-      if (!loom_low_allocation_move_topology_op_has_packet_moves(op)) {
-        continue;
-      }
-      iree_host_size_t move_count = 0;
-      IREE_RETURN_IF_ERROR(loom_low_allocation_packet_moves_for_op(
-          context, op, /*moves=*/NULL, /*move_capacity=*/IREE_HOST_SIZE_MAX,
-          &move_count));
-      if (move_count == 0) {
-        continue;
-      }
-      if (*out_group_capacity == IREE_HOST_SIZE_MAX ||
-          move_count > IREE_HOST_SIZE_MAX - *out_temporary_capacity) {
-        return iree_make_status(
-            IREE_STATUS_OUT_OF_RANGE,
-            "packet-local move temporary capacity exceeds host size");
-      }
-      ++*out_group_capacity;
-      *out_temporary_capacity += move_count;
-    }
-  }
-  return iree_ok_status();
+  return loom_low_allocation_packet_move_count_region_capacity(
+      context, context->body, out_group_capacity, out_temporary_capacity);
 }
 
 static bool loom_low_allocation_packet_move_uses_location(
@@ -493,6 +513,51 @@ loom_low_allocation_packet_move_plan_record_temporaries_for_op(
   return iree_ok_status();
 }
 
+static iree_status_t
+loom_low_allocation_packet_move_plan_record_temporaries_for_region(
+    const loom_low_allocation_packet_move_context_t* context,
+    iree_arena_allocator_t* arena, const loom_region_t* region,
+    uint32_t* inout_source_ordinal,
+    loom_low_allocation_packet_move_plan_t* plan) {
+  const loom_block_t* block = NULL;
+  loom_region_for_each_block(region, block) {
+    const loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      if (loom_low_allocation_move_topology_op_has_packet_moves(op)) {
+        IREE_RETURN_IF_ERROR(
+            loom_low_allocation_packet_move_plan_record_temporaries_for_op(
+                context, arena, op, *inout_source_ordinal, plan));
+        if (context->target_constraints->error_count != 0) {
+          return iree_ok_status();
+        }
+      }
+      if (*inout_source_ordinal == UINT32_MAX) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "packet-local move source ordinal exceeds uint32_t");
+      }
+      ++*inout_source_ordinal;
+      if (!loom_liveness_analysis_includes_region_tree(
+              context->assignment_map.liveness)) {
+        continue;
+      }
+      loom_region_t* const* regions = loom_op_regions(op);
+      for (uint8_t i = 0; i < op->region_count; ++i) {
+        if (regions[i] == NULL) {
+          continue;
+        }
+        IREE_RETURN_IF_ERROR(
+            loom_low_allocation_packet_move_plan_record_temporaries_for_region(
+                context, arena, regions[i], inout_source_ordinal, plan));
+        if (context->target_constraints->error_count != 0) {
+          return iree_ok_status();
+        }
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_allocation_packet_move_plan_build(
     const loom_low_allocation_packet_move_context_t* context,
     iree_arena_allocator_t* arena,
@@ -520,21 +585,12 @@ iree_status_t loom_low_allocation_packet_move_plan_build(
   memset(plan.temporaries, 0, temporary_capacity * sizeof(*plan.temporaries));
 
   uint32_t source_ordinal = 0;
-  loom_block_t* block = NULL;
-  loom_region_for_each_block(context->body, block) {
-    loom_op_t* op = NULL;
-    loom_block_for_each_op(block, op) {
-      if (loom_low_allocation_move_topology_op_has_packet_moves(op)) {
-        IREE_RETURN_IF_ERROR(
-            loom_low_allocation_packet_move_plan_record_temporaries_for_op(
-                context, arena, op, source_ordinal, &plan));
-        if (context->target_constraints->error_count != 0) {
-          *out_plan = plan;
-          return iree_ok_status();
-        }
-      }
-      ++source_ordinal;
-    }
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_packet_move_plan_record_temporaries_for_region(
+          context, arena, context->body, &source_ordinal, &plan));
+  if (context->target_constraints->error_count != 0) {
+    *out_plan = plan;
+    return iree_ok_status();
   }
   *out_plan = plan;
   return iree_ok_status();

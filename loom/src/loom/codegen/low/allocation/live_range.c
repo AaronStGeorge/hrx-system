@@ -158,6 +158,10 @@ iree_status_t loom_low_allocation_live_range_op_program_point(
   IREE_ASSERT_ARGUMENT(liveness);
   IREE_ASSERT_ARGUMENT(op);
   IREE_ASSERT_ARGUMENT(out_program_point);
+  if (loom_liveness_analysis_includes_region_tree(liveness)) {
+    return loom_liveness_op_program_point(liveness, loom_liveness_order_empty(),
+                                          op, out_program_point);
+  }
   *out_program_point = UINT32_MAX;
   const loom_liveness_block_info_t* block_info =
       loom_liveness_block_info_for_block(liveness, op->parent_block);
@@ -188,6 +192,10 @@ iree_status_t loom_low_allocation_live_range_ordered_op_program_point(
   IREE_ASSERT_ARGUMENT(body);
   IREE_ASSERT_ARGUMENT(op);
   IREE_ASSERT_ARGUMENT(out_program_point);
+  if (loom_liveness_analysis_includes_region_tree(liveness)) {
+    return loom_liveness_op_program_point(liveness, liveness_order, op,
+                                          out_program_point);
+  }
   if (loom_liveness_order_is_empty(liveness_order)) {
     return loom_low_allocation_live_range_op_program_point(liveness, op,
                                                            out_program_point);

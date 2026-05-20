@@ -670,68 +670,16 @@ static void loom_low_lower_analyze_storage_demands(
   }
 }
 
-static iree_status_t loom_low_lower_register_type_ref_value(
-    loom_value_id_t source_value_id, void* user_data) {
-  loom_low_lower_context_t* context = (loom_low_lower_context_t*)user_data;
-  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
-  return loom_local_value_domain_register_value(
-      &context->lowering.value_domain, &context->arena, source_value_id,
-      &value_ordinal);
-}
-
-static iree_status_t loom_low_lower_register_source_value(
-    loom_low_lower_context_t* context, loom_value_id_t source_value_id) {
-  IREE_RETURN_IF_ERROR(
-      loom_low_lower_register_type_ref_value(source_value_id, context));
-  return loom_type_walk_value_refs(
-      loom_module_value_type(context->module, source_value_id),
-      loom_low_lower_register_type_ref_value, context);
-}
-
-static iree_status_t loom_low_lower_register_region_tree_values(
-    loom_low_lower_context_t* context, const loom_region_t* source_region) {
-  if (source_region == NULL) {
-    return iree_ok_status();
-  }
-  const loom_block_t* block = NULL;
-  loom_region_for_each_block(source_region, block) {
-    for (uint16_t i = 0; i < block->arg_count; ++i) {
-      IREE_RETURN_IF_ERROR(
-          loom_low_lower_register_source_value(context, block->arg_ids[i]));
-    }
-    const loom_op_t* op = NULL;
-    loom_block_for_each_op(block, op) {
-      const loom_value_id_t* operands = loom_op_const_operands(op);
-      for (uint16_t i = 0; i < op->operand_count; ++i) {
-        IREE_RETURN_IF_ERROR(
-            loom_low_lower_register_source_value(context, operands[i]));
-      }
-      const loom_value_id_t* results = loom_op_const_results(op);
-      for (uint16_t i = 0; i < op->result_count; ++i) {
-        IREE_RETURN_IF_ERROR(
-            loom_low_lower_register_source_value(context, results[i]));
-      }
-      loom_region_t* const* regions = loom_op_regions(op);
-      for (uint8_t i = 0; i < op->region_count; ++i) {
-        if (regions[i] != NULL) {
-          IREE_RETURN_IF_ERROR(
-              loom_low_lower_register_region_tree_values(context, regions[i]));
-        }
-      }
-    }
-  }
-  return iree_ok_status();
-}
-
 static iree_status_t loom_low_lowering_frame_initialize_value_ordinals(
     loom_low_lower_context_t* context, loom_region_t* source_body) {
-  IREE_RETURN_IF_ERROR(loom_local_value_domain_acquire_for_region(
-      context->module, source_body, &context->arena,
-      &context->lowering.value_domain));
-  if (!loom_low_lower_structured_low_enabled(context)) {
-    return iree_ok_status();
+  if (loom_low_lower_structured_low_enabled(context)) {
+    return loom_local_value_domain_acquire_for_region_tree(
+        context->module, source_body, &context->arena,
+        &context->lowering.value_domain);
   }
-  return loom_low_lower_register_region_tree_values(context, source_body);
+  return loom_local_value_domain_acquire_for_region(
+      context->module, source_body, &context->arena,
+      &context->lowering.value_domain);
 }
 
 static void loom_low_lowering_frame_deinitialize(

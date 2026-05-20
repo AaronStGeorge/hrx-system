@@ -275,6 +275,36 @@ static iree_status_t loom_low_allocation_unit_liveness_note_block_boundary_uses(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_allocation_unit_liveness_note_region_op_unit_uses(
+    loom_low_allocation_unit_liveness_t* unit_liveness,
+    const loom_module_t* module, loom_region_t* body,
+    const loom_low_resolved_target_t* target,
+    loom_liveness_order_t liveness_order,
+    const loom_liveness_analysis_t* liveness, const loom_region_t* region) {
+  const loom_block_t* block = NULL;
+  loom_region_for_each_block(region, block) {
+    const loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      IREE_RETURN_IF_ERROR(loom_low_allocation_unit_liveness_note_op_unit_uses(
+          unit_liveness, module, body, target, liveness_order, liveness, op));
+      if (!loom_liveness_analysis_includes_region_tree(liveness)) {
+        continue;
+      }
+      loom_region_t* const* regions = loom_op_regions(op);
+      for (uint8_t i = 0; i < op->region_count; ++i) {
+        if (regions[i] == NULL) {
+          continue;
+        }
+        IREE_RETURN_IF_ERROR(
+            loom_low_allocation_unit_liveness_note_region_op_unit_uses(
+                unit_liveness, module, body, target, liveness_order, liveness,
+                regions[i]));
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_low_allocation_unit_liveness_initialize(
     const loom_module_t* module, loom_region_t* body,
     const loom_low_resolved_target_t* target,
@@ -358,16 +388,8 @@ iree_status_t loom_low_allocation_unit_liveness_initialize(
       loom_low_allocation_unit_liveness_note_block_boundary_uses(
           out_unit_liveness, liveness));
 
-  loom_block_t* block = NULL;
-  loom_region_for_each_block(body, block) {
-    loom_op_t* op = NULL;
-    loom_block_for_each_op(block, op) {
-      IREE_RETURN_IF_ERROR(loom_low_allocation_unit_liveness_note_op_unit_uses(
-          out_unit_liveness, module, body, target, liveness_order, liveness,
-          op));
-    }
-  }
-  return iree_ok_status();
+  return loom_low_allocation_unit_liveness_note_region_op_unit_uses(
+      out_unit_liveness, module, body, target, liveness_order, liveness, body);
 }
 
 uint32_t loom_low_allocation_unit_liveness_end_point_start_for_value_ordinal(
