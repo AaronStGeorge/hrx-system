@@ -23,6 +23,6 @@ iree_c_embed_data(
     h_file_output = "libmusl.h",
     identifier = "iree_builtins_libmusl",
     deps = [
-        "//runtime/src:runtime_defines",
+        "//runtime/src:defines",
     ],
 )

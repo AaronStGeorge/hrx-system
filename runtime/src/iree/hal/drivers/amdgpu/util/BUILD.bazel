@@ -406,7 +406,7 @@ cc_binary_benchmark(
     ],
     deps = [
         ":benchmark_flags",
-        "//runtime/src:runtime_defines",
+        "//runtime/src:defines",
         "//runtime/src/iree/async",
         "//runtime/src/iree/async/util:proactor_pool",
         "//runtime/src/iree/base",
@@ -733,7 +733,7 @@ cc_binary_benchmark(
     deps = [
         ":benchmark_flags",
         ":testdata_amdgpu_queue_benchmark",
-        "//runtime/src:runtime_defines",
+        "//runtime/src:defines",
         "//runtime/src/iree/async",
         "//runtime/src/iree/async/util:proactor_pool",
         "//runtime/src/iree/base",
@@ -788,7 +788,7 @@ cc_binary_benchmark(
         ":libhsa",
         ":queue_primitives",
         ":topology",
-        "//runtime/src:runtime_defines",
+        "//runtime/src:defines",
         "//runtime/src/iree/base",
         "@com_google_benchmark//:benchmark",
     ],

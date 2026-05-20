@@ -12,4 +12,6 @@ module(
     bazel_compatibility = [">=9.1.0"],
 )
 
+bazel_dep(name = "rules_testing", version = "0.9.0", dev_dependency = True)
+
 include("//runtime:project.MODULE.bazel")
