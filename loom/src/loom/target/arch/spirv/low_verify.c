@@ -937,6 +937,52 @@ static iree_status_t loom_spirv_low_emit_branch_payload_type_mismatch(
                              IREE_ARRAYSIZE(params));
 }
 
+static iree_status_t loom_spirv_low_define_or_verify_value_type_tracked(
+    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
+    const loom_op_t* op, loom_value_id_t source_value_id,
+    loom_value_id_t target_value_id, loom_spirv_value_type_t source_type,
+    bool* out_matched) {
+  *out_matched = true;
+  loom_spirv_value_type_t target_type = {0};
+  if (loom_spirv_low_value_type_table_lookup(&state->value_types,
+                                             target_value_id, &target_type)) {
+    if (!loom_spirv_value_type_equal(target_type, source_type)) {
+      *out_matched = false;
+      IREE_RETURN_IF_ERROR(loom_spirv_low_emit_branch_payload_type_mismatch(
+          context, state, op, source_value_id, target_value_id, target_type,
+          source_type));
+    }
+    return iree_ok_status();
+  }
+  return loom_spirv_low_value_type_table_define(
+      &state->value_types, target_value_id, source_type, state->arena);
+}
+
+static iree_status_t loom_spirv_low_define_or_verify_value_type(
+    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
+    const loom_op_t* op, loom_value_id_t source_value_id,
+    loom_value_id_t target_value_id, loom_spirv_value_type_t source_type) {
+  bool matched = true;
+  return loom_spirv_low_define_or_verify_value_type_tracked(
+      context, state, op, source_value_id, target_value_id, source_type,
+      &matched);
+}
+
+static iree_status_t loom_spirv_low_verify_bool_condition(
+    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
+    const loom_op_t* op, loom_value_id_t condition) {
+  loom_spirv_value_type_t condition_type = {0};
+  if (!loom_spirv_low_value_type_table_lookup(&state->value_types, condition,
+                                              &condition_type)) {
+    return iree_ok_status();
+  }
+  if (condition_type.value_class != LOOM_SPIRV_VALUE_CLASS_BOOL) {
+    IREE_RETURN_IF_ERROR(loom_spirv_low_emit_branch_condition_type_mismatch(
+        context, state, op, condition, condition_type));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_spirv_low_emit_non_forward_branch(
     loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
     const loom_op_t* op, const loom_block_t* target_block) {
@@ -967,18 +1013,8 @@ static iree_status_t loom_spirv_low_verify_br(
       continue;
     }
     const loom_value_id_t block_arg = loom_block_arg_id(dest, i);
-    loom_spirv_value_type_t block_arg_type = {0};
-    if (loom_spirv_low_value_type_table_lookup(&state->value_types, block_arg,
-                                               &block_arg_type)) {
-      if (!loom_spirv_value_type_equal(block_arg_type, source_type)) {
-        IREE_RETURN_IF_ERROR(loom_spirv_low_emit_branch_payload_type_mismatch(
-            context, state, op, args.values[i], block_arg, block_arg_type,
-            source_type));
-      }
-      continue;
-    }
-    IREE_RETURN_IF_ERROR(loom_spirv_low_value_type_table_define(
-        &state->value_types, block_arg, source_type, state->arena));
+    IREE_RETURN_IF_ERROR(loom_spirv_low_define_or_verify_value_type(
+        context, state, op, args.values[i], block_arg, source_type));
   }
   return iree_ok_status();
 }
@@ -996,17 +1032,8 @@ static iree_status_t loom_spirv_low_verify_cond_br(
         context, state, op, true_dest, false_dest));
   }
 
-  const loom_value_id_t condition = loom_low_cond_br_condition(op);
-  loom_spirv_value_type_t condition_type = {0};
-  if (!loom_spirv_low_value_type_table_lookup(&state->value_types, condition,
-                                              &condition_type)) {
-    return iree_ok_status();
-  }
-  if (condition_type.value_class != LOOM_SPIRV_VALUE_CLASS_BOOL) {
-    IREE_RETURN_IF_ERROR(loom_spirv_low_emit_branch_condition_type_mismatch(
-        context, state, op, condition, condition_type));
-  }
-  return iree_ok_status();
+  return loom_spirv_low_verify_bool_condition(context, state, op,
+                                              loom_low_cond_br_condition(op));
 }
 
 static iree_status_t loom_spirv_low_emit_unsupported_structural_op(
@@ -1021,6 +1048,169 @@ static iree_status_t loom_spirv_low_emit_unsupported_structural_op(
   };
   return loom_spirv_low_emit(context, op, LOOM_ERR_SPIRV_017, params,
                              IREE_ARRAYSIZE(params));
+}
+
+static bool loom_spirv_low_value_type_is_loop_counter(
+    loom_spirv_value_type_t value_type) {
+  if (value_type.value_class == LOOM_SPIRV_VALUE_CLASS_OFFSET64) {
+    return true;
+  }
+  if (value_type.value_class != LOOM_SPIRV_VALUE_CLASS_SCALAR) {
+    return false;
+  }
+  const loom_spirv_scalar_type_descriptor_t* descriptor =
+      loom_spirv_scalar_type_descriptor(value_type.scalar_type);
+  return descriptor != NULL &&
+         descriptor->kind != LOOM_SPIRV_SCALAR_TYPE_KIND_FLOAT;
+}
+
+static iree_status_t loom_spirv_low_verify_scf_if(
+    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
+    const loom_op_t* op) {
+  return loom_spirv_low_verify_bool_condition(context, state, op,
+                                              loom_low_scf_if_condition(op));
+}
+
+static iree_status_t loom_spirv_low_verify_scf_for_bound(
+    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
+    const loom_op_t* op, loom_value_id_t source_value_id,
+    loom_value_id_t target_value_id,
+    loom_spirv_value_type_t expected_value_type) {
+  loom_spirv_value_type_t actual_value_type = {0};
+  if (!loom_spirv_low_value_type_table_lookup(
+          &state->value_types, source_value_id, &actual_value_type)) {
+    return iree_ok_status();
+  }
+  if (!loom_spirv_value_type_equal(expected_value_type, actual_value_type)) {
+    IREE_RETURN_IF_ERROR(loom_spirv_low_emit_branch_payload_type_mismatch(
+        context, state, op, source_value_id, target_value_id,
+        expected_value_type, actual_value_type));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_spirv_low_verify_scf_for(
+    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
+    const loom_op_t* op) {
+  const loom_value_id_t lower_bound = loom_low_scf_for_lower_bound(op);
+  loom_spirv_value_type_t lower_bound_type = {0};
+  if (!loom_spirv_low_value_type_table_lookup(&state->value_types, lower_bound,
+                                              &lower_bound_type)) {
+    return iree_ok_status();
+  }
+  if (!loom_spirv_low_value_type_is_loop_counter(lower_bound_type)) {
+    return loom_spirv_low_emit_unsupported_structural_op(context, state, op);
+  }
+  IREE_RETURN_IF_ERROR(loom_spirv_low_verify_scf_for_bound(
+      context, state, op, loom_low_scf_for_upper_bound(op), lower_bound,
+      lower_bound_type));
+  IREE_RETURN_IF_ERROR(loom_spirv_low_verify_scf_for_bound(
+      context, state, op, loom_low_scf_for_step(op), lower_bound,
+      lower_bound_type));
+
+  const loom_region_t* body_region = loom_low_scf_for_body(op);
+  const loom_block_t* body_block = loom_region_const_entry_block(body_region);
+  if (body_block == NULL) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(loom_spirv_low_define_or_verify_value_type(
+      context, state, op, lower_bound, loom_block_arg_id(body_block, 0),
+      lower_bound_type));
+
+  const loom_value_slice_t iter_args = loom_low_scf_for_iter_args(op);
+  const loom_value_slice_t results = loom_low_scf_for_results(op);
+  if (body_block->arg_count != iter_args.count + 1 ||
+      results.count != iter_args.count) {
+    return iree_ok_status();
+  }
+  for (uint16_t i = 0; i < iter_args.count; ++i) {
+    loom_spirv_value_type_t iter_arg_type = {0};
+    if (!loom_spirv_low_value_type_table_lookup(
+            &state->value_types, iter_args.values[i], &iter_arg_type)) {
+      continue;
+    }
+    const loom_value_id_t body_arg = loom_block_arg_id(body_block, i + 1);
+    IREE_RETURN_IF_ERROR(loom_spirv_low_define_or_verify_value_type(
+        context, state, op, iter_args.values[i], body_arg, iter_arg_type));
+    IREE_RETURN_IF_ERROR(loom_spirv_low_define_or_verify_value_type(
+        context, state, op, iter_args.values[i], results.values[i],
+        iter_arg_type));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_spirv_low_verify_scf_if_yield(
+    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
+    const loom_op_t* op, const loom_op_t* parent_op) {
+  const loom_value_slice_t yielded_values = loom_low_scf_yield_values(op);
+  const loom_value_slice_t results = loom_low_scf_if_results(parent_op);
+  if (yielded_values.count != results.count) {
+    return iree_ok_status();
+  }
+  for (uint16_t i = 0; i < yielded_values.count; ++i) {
+    loom_spirv_value_type_t yielded_type = {0};
+    if (!loom_spirv_low_value_type_table_lookup(
+            &state->value_types, yielded_values.values[i], &yielded_type)) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_spirv_low_define_or_verify_value_type(
+        context, state, op, yielded_values.values[i], results.values[i],
+        yielded_type));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_spirv_low_verify_scf_for_yield(
+    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
+    const loom_op_t* op, const loom_op_t* parent_op) {
+  const loom_region_t* body_region = loom_low_scf_for_body(parent_op);
+  const loom_block_t* body_block = loom_region_const_entry_block(body_region);
+  if (body_block == NULL) {
+    return iree_ok_status();
+  }
+  const loom_value_slice_t yielded_values = loom_low_scf_yield_values(op);
+  const loom_value_slice_t iter_args = loom_low_scf_for_iter_args(parent_op);
+  const loom_value_slice_t results = loom_low_scf_for_results(parent_op);
+  if (yielded_values.count != iter_args.count ||
+      results.count != iter_args.count ||
+      body_block->arg_count != iter_args.count + 1) {
+    return iree_ok_status();
+  }
+  for (uint16_t i = 0; i < yielded_values.count; ++i) {
+    loom_spirv_value_type_t yielded_type = {0};
+    if (!loom_spirv_low_value_type_table_lookup(
+            &state->value_types, yielded_values.values[i], &yielded_type)) {
+      continue;
+    }
+    const loom_value_id_t body_arg = loom_block_arg_id(body_block, i + 1);
+    bool body_arg_matched = true;
+    IREE_RETURN_IF_ERROR(loom_spirv_low_define_or_verify_value_type_tracked(
+        context, state, op, yielded_values.values[i], body_arg, yielded_type,
+        &body_arg_matched));
+    if (!body_arg_matched) {
+      continue;
+    }
+    IREE_RETURN_IF_ERROR(loom_spirv_low_define_or_verify_value_type(
+        context, state, op, yielded_values.values[i], results.values[i],
+        yielded_type));
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_spirv_low_verify_scf_yield(
+    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
+    const loom_op_t* op) {
+  const loom_op_t* parent_op = op->parent_op;
+  if (parent_op == NULL) {
+    return loom_spirv_low_emit_unsupported_structural_op(context, state, op);
+  }
+  if (loom_low_scf_if_isa(parent_op)) {
+    return loom_spirv_low_verify_scf_if_yield(context, state, op, parent_op);
+  }
+  if (loom_low_scf_for_isa(parent_op)) {
+    return loom_spirv_low_verify_scf_for_yield(context, state, op, parent_op);
+  }
+  return loom_spirv_low_emit_unsupported_structural_op(context, state, op);
 }
 
 static bool loom_spirv_low_value_is_workgroup_storage(
@@ -1186,6 +1376,15 @@ static iree_status_t loom_spirv_low_verify_op(
   }
   if (loom_low_cond_br_isa(op)) {
     return loom_spirv_low_verify_cond_br(context, state, op);
+  }
+  if (loom_low_scf_if_isa(op)) {
+    return loom_spirv_low_verify_scf_if(context, state, op);
+  }
+  if (loom_low_scf_for_isa(op)) {
+    return loom_spirv_low_verify_scf_for(context, state, op);
+  }
+  if (loom_low_scf_yield_isa(op)) {
+    return loom_spirv_low_verify_scf_yield(context, state, op);
   }
   if (loom_low_resource_isa(op)) {
     return loom_spirv_low_verify_resource(context, state, op);

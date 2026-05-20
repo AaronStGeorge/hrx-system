@@ -280,6 +280,64 @@ low.func.def target(@target) abi_layout({spirv_arg_value_types = [1, 23, 18]}) @
 
 spirv.target<vulkan1_3> @target
 
+low.func.def target(@target) abi_layout({spirv_arg_value_types = [23]}) @scf_if_condition_type_mismatch(%value: reg<spirv.id>) {
+  // ERROR@+1: SPIRV/019 {function_name="scf_if_condition_type_mismatch", value_name="value", actual_value_type="s32"}
+  low.scf.if %value {
+  }
+  low.return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) abi_layout({spirv_arg_value_types = [1, 23, 18], spirv_result_value_types = [23]}) @scf_if_yield_type_mismatch(%condition: reg<spirv.id>, %lhs: reg<spirv.id>, %rhs: reg<spirv.id>) -> (reg<spirv.id>) {
+  %selected = low.scf.if %condition -> (reg<spirv.id>) {
+    low.scf.yield %lhs : reg<spirv.id>
+  } else {
+    // ERROR@+1: SPIRV/020 {function_name="scf_if_yield_type_mismatch", source_value_name="rhs", target_value_name="selected", expected_value_type="s32", actual_value_type="f32"}
+    low.scf.yield %rhs : reg<spirv.id>
+  }
+  low.return %selected : reg<spirv.id>
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) abi_layout({spirv_arg_value_types = [23, 23, 23, 23, 18], spirv_result_value_types = [23]}) @scf_for_yield_type_mismatch(%start: reg<spirv.id>, %limit: reg<spirv.id>, %step: reg<spirv.id>, %initial: reg<spirv.id>, %wrong: reg<spirv.id>) -> (reg<spirv.id>) {
+  %result = low.scf.for [%start to %limit step %step] iter_args(%initial: reg<spirv.id>) -> (reg<spirv.id>) do(%i: reg<spirv.id>, %carried: reg<spirv.id>) {
+    // ERROR@+1: SPIRV/020 {function_name="scf_for_yield_type_mismatch", source_value_name="wrong", target_value_name="carried", expected_value_type="s32", actual_value_type="f32"}
+    low.scf.yield %wrong : reg<spirv.id>
+  }
+  low.return %result : reg<spirv.id>
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
+low.func.def target(@target) abi_layout({spirv_arg_value_types = [23, 23, 23, 23, 18]}) @scf_for_body_packet_type_mismatch(%start: reg<spirv.id>, %limit: reg<spirv.id>, %step: reg<spirv.id>, %initial: reg<spirv.id>, %wrong: reg<spirv.id>) {
+  %result = low.scf.for [%start to %limit step %step] iter_args(%initial: reg<spirv.id>) -> (reg<spirv.id>) do(%i: reg<spirv.id>, %carried: reg<spirv.id>) {
+    // ERROR@+1: SPIRV/013 {function_name="scf_for_body_packet_type_mismatch", descriptor_key="spirv.op_iadd.i32", field_kind="operand", field_index="0", value_name="wrong", expected_value_type="s32", actual_value_type="f32"}
+    %next = low.op<spirv.op_iadd.i32>(%wrong, %i) : (reg<spirv.id>, reg<spirv.id>) -> reg<spirv.id>
+    low.scf.yield %next : reg<spirv.id>
+  }
+  low.return
+}
+
+// ====
+
+// RUN: verify
+
+spirv.target<vulkan1_3> @target
+
 // ERROR@+1: SPIRV/016 {function_name="shader_entry_pointer_result", value_name="<unnamed>", actual_value_type="storage_buffer_address"}
 low.func.def target(@target) @shader_entry_pointer_result(%result: reg<spirv.ptr.storage_buffer>) -> (reg<spirv.ptr.storage_buffer>) asm<spirv.logical.core> {
   return %result
