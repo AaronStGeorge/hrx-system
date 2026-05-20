@@ -484,7 +484,7 @@
 // Template:         func.template<tile.contract> device @name(...) -> (...) where [...] { ... }
 // Ukernel:          func.ukernel<tile.contract> device @name(...) -> (...)
 // Call:             %out, %count = func.call @compute(%x, %y) : (tile<4xf32>, index) -> (%x as tile<4xf32>, index)
-// Apply:            %r = func.apply @template(%x) : (f32) -> (f32)
+// Apply:            %r = func.apply<tile.contract>(%x) : (f32) -> (f32)
 // Return:           func.return %r : f32
 // Yield:            scf.yield %a, %b : f32, tensor<[%M]xf32>
 //
@@ -532,9 +532,9 @@
 //
 // function-def     ::= 'func.def' modifiers? function-sig '{' block+ '}'
 // function-decl    ::= 'func.decl' modifiers? function-sig
-// function-tmpl    ::= 'func.template' '<' op-name '>' modifiers?
+// function-tmpl    ::= 'func.template' '<' contract-key '>' modifiers?
 //                        function-sig '{' block+ '}'
-// function-ukernel ::= 'func.ukernel' '<' op-name '>' modifiers?
+// function-ukernel ::= 'func.ukernel' '<' contract-key '>' modifiers?
 //                        function-sig
 //
 // --- Body ops (inside function/template bodies) ---
@@ -542,7 +542,7 @@
 // func-call   ::= result-list '=' 'func.call' '@' identifier
 //                   '(' operand-list ')' ':' '(' type-list ')'
 //                   '->' result-type-list
-// func-apply  ::= result-list '=' 'func.apply' '@' identifier
+// func-apply  ::= result-list '=' 'func.apply' '<' contract-key '>'
 //                   '(' operand-list ')' ':' '(' type-list ')'
 //                   '->' result-type-list
 // func-return ::= 'func.return' operand-list ':' type-list
@@ -582,24 +582,25 @@
 //                time.
 //
 // func.template: Constraint-matched visible implementation of an
-//                abstract op T (specified by the <T> parameter). Must
-//                have a body containing loom IR. Not callable by name.
-//                The compiler's template selection pass matches
-//                templates to ops and produces func.apply ops.
+//                implementation contract key T. Must have a body containing
+//                Loom IR. The compiler's selection pass matches templates to
+//                live func.apply contract demands. Exact compile-time calls use
+//                func.call inline @template and must be inlined before
+//                executable lowering.
 //
 // func.ukernel:  Constraint-matched opaque implementation of an
 //                abstract op T. No body. The compiler emits a runtime
 //                dispatch call when selecting a ukernel.
 //
-// func.call:     Runtime function call. Target must be func.def or
-//                func.decl. Survives to runtime as a call instruction.
+// func.call:     Function-like symbol call. Calls to func.def/func.decl
+//                survive to runtime as call instructions. Required-inline
+//                calls to func.template are exact compile-time calls consumed
+//                by the inliner before executable lowering.
 //
-// func.apply:    Compile-time template expansion. Target must be a
-//                func.template. The inlining pass replaces func.apply
-//                with the inlined template body. Users write func.apply
-//                in tests to force a specific template; the compiler's
-//                selection pass produces func.apply when it matches
-//                templates to abstract ops.
+// func.apply:    Compile-time implementation demand. The angle-bracket key
+//                names an implementation contract, not a symbol. Selection
+//                rewrites resolved applies to func.call inline @selected and
+//                unresolved applies are rejected before executable lowering.
 //
 // func.return:   Return values from a function body. Operand types
 //                must match the enclosing function's result types.
@@ -607,7 +608,9 @@
 // Symbol references (@name) are attributes on the operation, not SSA
 // value operands. The callee in func.call is stored as a symbol
 // attribute, not in the operand list. SymbolRef format elements read
-// from the attribute dict and print with @ prefix.
+// from the attribute dict and print with @ prefix. Contract keys in
+// func.template, func.ukernel, and func.apply are string attributes printed
+// in angle brackets.
 //
 // --- Argument dim semantics ---
 //
@@ -650,8 +653,8 @@
 //   // Call: runtime function call.
 //   %r = func.call @negate(%input) : (tensor<4x4xf32>) -> (tensor<4x4xf32>)
 //
-//   // Apply: compile-time template expansion.
-//   %r = func.apply @vnni_q8_matvec(%w, %x) : (tensor<16x32xi8, #q8_0<block=32>>, tensor<32xf32>) -> (tensor<16xf32>)
+//   // Apply: compile-time contract demand.
+//   %r = func.apply<tile.contract>(%w, %x) : (tensor<16x32xi8, #q8_0<block=32>>, tensor<32xf32>) -> (tensor<16xf32>)
 //
 //   // Return: exit function body.
 //   func.return %result : tensor<[%M]xf32>

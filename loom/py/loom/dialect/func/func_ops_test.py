@@ -250,7 +250,7 @@ class TestFuncCallApplyRoundTrip:
         _roundtrip("func.def @caller(%a: f32) -> (f32) {\n  %r = func.call @callee(%a) : (f32) -> (f32)\n  func.return %r : f32\n}\n")
 
     def test_apply_in_function(self) -> None:
-        _roundtrip("func.def @test_template(%a: f32) -> (f32) {\n  %r = func.apply @my_template(%a) : (f32) -> (f32)\n  func.return %r : f32\n}\n")
+        _roundtrip("func.def @test_template(%a: f32) -> (f32) {\n  %r = func.apply<my.template>(%a) : (f32) -> (f32)\n  func.return %r : f32\n}\n")
 
     def test_call_multiple_args_and_results(self) -> None:
         _roundtrip("func.def @multi(%a: f32, %b: i32) -> (f32, i32) {\n  %r0, %r1 = func.call @process(%a, %b) : (f32, i32) -> (f32, i32)\n  func.return %r0, %r1 : f32, i32\n}\n")

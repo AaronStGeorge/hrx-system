@@ -8,10 +8,11 @@
 // dialect. These are hand-written (not generated) and linked into the
 // func dialect library so the vtable function pointers resolve.
 //
-// Purity propagation: the canonicalizer reads the callee's explicit purity or
-// body effect summary from the symbol table and sets the call-site purity attr
-// to match. The effective_traits callback then reports LOOM_TRAIT_PURE instead
-// of LOOM_TRAIT_UNKNOWN_EFFECTS, enabling CSE and DCE across call boundaries.
+// Purity propagation: the func.call canonicalizer reads the callee's explicit
+// purity or body effect summary from the symbol table and sets the call-site
+// purity attr to match. The effective_traits callback then reports
+// LOOM_TRAIT_PURE instead of LOOM_TRAIT_UNKNOWN_EFFECTS, enabling CSE and DCE
+// across call boundaries.
 
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -69,8 +70,9 @@ iree_status_t loom_func_call_canonicalize(loom_op_t* op,
 
 iree_status_t loom_func_apply_canonicalize(loom_op_t* op,
                                            loom_rewriter_t* rewriter) {
-  return loom_func_propagate_callee_purity(op, rewriter,
-                                           loom_func_apply_purity_ATTR_INDEX);
+  (void)op;
+  (void)rewriter;
+  return iree_ok_status();
 }
 
 loom_trait_flags_t loom_func_call_effective_traits(const loom_op_t* op) {

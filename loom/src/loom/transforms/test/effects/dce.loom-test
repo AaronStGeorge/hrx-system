@@ -21,22 +21,14 @@ func.def @dead_pure_call_dies(%value: i32) {
 
 // ====
 
-// func.apply uses the same effective-trait path.
+// Explicitly pure func.apply contract demands use the same effective-trait path.
 // RUN: pass canonicalize,dce
-func.template<test.effect> @pure_template(%value: i32) -> (i32) {
-  func.return %value : i32
-}
-
 func.def @dead_pure_apply_dies(%value: i32) {
-  %dead = func.apply @pure_template(%value) : (i32) -> (i32)
+  %dead = func.apply<test.effect>(%value) pure : (i32) -> (i32)
   func.return
 }
 
 // ----
-func.template<test.effect> @pure_template(%value: i32) -> (i32) {
-  func.return %value : i32
-}
-
 func.def @dead_pure_apply_dies(%value: i32) {
   func.return
 }

@@ -673,19 +673,22 @@ class Flags:
 
 @dataclass(frozen=True, slots=True)
 class OpRef:
-    """Op kind reference in angle brackets after the op name.
+    """Symbolic operation or implementation key in angle brackets.
 
-    Prints/parses: <op.name> (glued to the op name) where the value
-    is a dotted op name like "tile.contract" or "tile.reduce".
+    Prints/parses: <key.name> (glued to the op name) where the value
+    is a dotted symbolic key like "tile.contract", "tile.reduce", or
+    "qwen.q4.matmul".
 
     Used by func.template<T> and func.ukernel<T> to declare which
-    abstract op the template/ukernel implements.
+    implementation contract key they provide, and by func.apply<T> to
+    demand a provider for that same contract key.
 
-    The field names a string attribute storing the op name.
+    The field names a string attribute storing the key.
 
     Examples:
         func.template<tile.contract> device @name(...)
         func.ukernel<tile.reduce> device @name(...)
+        func.apply<qwen.q4.matmul>(%weights, %input) : (...) -> (...)
     """
 
     field: str

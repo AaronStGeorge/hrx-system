@@ -132,7 +132,7 @@ func.template<test.addi> hot inline @double_template(%value: i32) -> (i32) {
 }
 
 func.def public @entry(%arg: i32) -> (i32) {
-  %result = func.apply @double_template(%arg) : (i32) -> (i32)
+  %result = func.call @double_template(%arg) : (i32) -> (i32)
   func.return %result : i32
 }
 

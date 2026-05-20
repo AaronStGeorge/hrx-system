@@ -182,33 +182,6 @@ class CallableInlineTest : public ::testing::Test {
     return func_op;
   }
 
-  loom_op_t* BuildApplyCaller(loom_symbol_ref_t caller,
-                              loom_symbol_ref_t callee, loom_type_t value_type,
-                              loom_op_t** out_apply_op) {
-    loom_op_t* func_op = nullptr;
-    IREE_CHECK_OK(loom_func_def_build(
-        &module_builder_, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
-        loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
-        loom_named_attr_slice_empty(), caller, &value_type, 1, &value_type, 1,
-        nullptr, 0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
-    loom_func_like_t func = loom_func_like_cast(module_, func_op);
-    uint16_t arg_count = 0;
-    const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
-    IREE_ASSERT_EQ(arg_count, 1);
-
-    loom_builder_t body_builder = BodyBuilder(func_op);
-    loom_op_t* apply_op = nullptr;
-    IREE_CHECK_OK(loom_func_apply_build(&body_builder, 0, 0, 0, 0, callee, args,
-                                        1, &value_type, 1, nullptr, 0,
-                                        LOOM_LOCATION_UNKNOWN, &apply_op));
-    loom_value_id_t apply_result = loom_func_apply_results(apply_op).values[0];
-    loom_op_t* return_op = nullptr;
-    IREE_CHECK_OK(loom_func_return_build(&body_builder, &apply_result, 1,
-                                         LOOM_LOCATION_UNKNOWN, &return_op));
-    *out_apply_op = apply_op;
-    return func_op;
-  }
-
   loom_op_t* BuildTwoResultCaller(loom_symbol_ref_t caller,
                                   loom_symbol_ref_t callee,
                                   loom_type_t value_type,
@@ -377,22 +350,21 @@ TEST_F(CallableInlineTest, ConsumingInlineRejectsAdditionalCalleeReference) {
   EXPECT_FALSE(iree_any_bit_set(callee_op->flags, LOOM_OP_FLAG_DEAD));
 }
 
-TEST_F(CallableInlineTest, InlinesFuncApplyTemplate) {
+TEST_F(CallableInlineTest, InlinesExactTemplateCall) {
   loom_type_t i32 = loom_type_scalar(LOOM_SCALAR_TYPE_I32);
   loom_symbol_ref_t callee_ref = MakeSymbol(IREE_SV("template_negate"));
   loom_symbol_ref_t caller_ref = MakeSymbol(IREE_SV("caller"));
   BuildNegateTemplate(callee_ref, i32);
-  loom_op_t* apply_op = nullptr;
-  loom_op_t* caller_op =
-      BuildApplyCaller(caller_ref, callee_ref, i32, &apply_op);
+  loom_op_t* call_op = nullptr;
+  loom_op_t* caller_op = BuildCaller(caller_ref, callee_ref, i32, &call_op);
 
   loom_rewriter_t rewriter = {};
   IREE_ASSERT_OK(
       loom_rewriter_initialize(&rewriter, module_, &rewriter_arena_));
-  IREE_ASSERT_OK(loom_callable_inline_direct_call(&rewriter, apply_op));
+  IREE_ASSERT_OK(loom_callable_inline_direct_call(&rewriter, call_op));
   loom_rewriter_deinitialize(&rewriter);
 
-  EXPECT_TRUE(iree_any_bit_set(apply_op->flags, LOOM_OP_FLAG_DEAD));
+  EXPECT_TRUE(iree_any_bit_set(call_op->flags, LOOM_OP_FLAG_DEAD));
   loom_region_t* caller_body =
       loom_func_like_body(loom_func_like_cast(module_, caller_op));
   loom_block_t* caller_block = loom_region_entry_block(caller_body);

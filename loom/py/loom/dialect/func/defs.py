@@ -14,11 +14,10 @@ Top-level (module-level symbols):
 
 Body ops (inside function/template bodies):
   func.call      — Runtime function call.
-  func.apply     — Compile-time template expansion.
+  func.apply     — Compile-time contract-key implementation demand.
   func.return    — Return values from function body.
 
-func.template<T> and func.ukernel<T> are declared separately once
-the OpRef format element is implemented.
+func.template<T> and func.ukernel<T> provide implementation contract keys.
 """
 
 from typing import Any
@@ -458,14 +457,14 @@ func_ukernel = Op(
 )
 
 # ============================================================================
-# func.call — runtime function call
+# func.call — function-like symbol call
 # ============================================================================
 
 func_call = Op(
     "func.call",
     group=func_ops,
     phase=OpPhase.EXECUTABLE,
-    doc="Runtime function call. Target must be func.def or func.decl.",
+    doc="Function-like symbol call. Runtime calls target func.def/func.decl; required-inline exact template calls are consumed before executable lowering.",
     operands=[
         Operand("operands", ANY, variadic=True),
     ],
@@ -516,55 +515,39 @@ func_call = Op(
         "%r = func.call @add(%a, %b) : (f32, f32) -> (f32)",
         "%r = func.call pure @add(%a, %b) : (f32, f32) -> (f32)",
         "%r = func.call hot inline @add(%a, %b) : (f32, f32) -> (f32)",
+        "%r = func.call inline @specific_template(%a, %b) : (f32, f32) -> (f32)",
         "%out, %count = func.call @process(%a, %b) : (tensor<[%M]xf32>, index) -> (%a as tensor<[%M]xf32>, index)",
     ],
 )
 
 # ============================================================================
-# func.apply — compile-time template expansion
+# func.apply — compile-time contract-key implementation demand
 # ============================================================================
 
 func_apply = Op(
     "func.apply",
     group=func_ops,
-    doc="Compile-time template expansion. Target must be func.template.",
+    doc="Compile-time implementation demand. Contract key must be selected before executable lowering.",
     operands=[
         Operand("operands", ANY, variadic=True),
     ],
     attrs=[
-        AttrDef(
-            "callee",
-            "symbol",
-            symbol_ref=SymbolReference("function", ["func_like"]),
-        ),
+        AttrDef("contract", "string"),
         AttrDef("purity", "enum", enum_def=Purity, optional=True),
         AttrDef("temperature", "enum", enum_def=Temperature, optional=True),
-        AttrDef("inline_policy", "enum", enum_def=InlinePolicy, optional=True),
     ],
     results=[Result("results", ANY, variadic=True)],
     traits=[UNKNOWN_EFFECTS],
-    interfaces=[
-        CallLikeInterface(
-            callee="callee",
-            operands="operands",
-            results="results",
-            purity="purity",
-            temperature="temperature",
-            inline_policy="inline_policy",
-            kind=CallLikeKind.TEMPLATE,
-        ),
-    ],
     canonicalize="loom_func_apply_canonicalize",
     effective_traits="loom_func_apply_effective_traits",
     format=[
-        OptionalGroup([Attr("purity")], anchor="purity"),
-        OptionalGroup([Attr("temperature")], anchor="temperature"),
-        OptionalGroup([Attr("inline_policy")], anchor="inline_policy"),
-        SymbolRef("callee"),
+        OpRef("contract"),
         GLUE,
         LPAREN,
         Refs("operands"),
         RPAREN,
+        OptionalGroup([Attr("purity")], anchor="purity"),
+        OptionalGroup([Attr("temperature")], anchor="temperature"),
         COLON,
         LPAREN,
         TypesOf("operands"),
@@ -575,9 +558,9 @@ func_apply = Op(
         ),
     ],
     examples=[
-        "%r = func.apply @vnni_q8_matvec(%w, %x) : (tensor<16x32xi8>, tensor<32xf32>) -> (tensor<16xf32>)",
-        "%r = func.apply pure @vnni_q8_matvec(%w, %x) : (tensor<16x32xi8>, tensor<32xf32>) -> (tensor<16xf32>)",
-        "%r = func.apply hot inline @vnni_q8_matvec(%w, %x) : (tensor<16x32xi8>, tensor<32xf32>) -> (tensor<16xf32>)",
+        "%r = func.apply<qwen.q4.matmul>(%w, %x) : (tensor<16x32xi8>, tensor<32xf32>) -> (tensor<16xf32>)",
+        "%r = func.apply<qwen.q4.matmul>(%w, %x) pure : (tensor<16x32xi8>, tensor<32xf32>) -> (tensor<16xf32>)",
+        "%r = func.apply<qwen.q4.matmul>(%w, %x) hot : (tensor<16x32xi8>, tensor<32xf32>) -> (tensor<16xf32>)",
     ],
 )
 

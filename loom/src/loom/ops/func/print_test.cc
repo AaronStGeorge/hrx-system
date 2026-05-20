@@ -105,16 +105,16 @@ TEST_F(FuncPrinterTest, Call) {
 }
 
 TEST_F(FuncPrinterTest, Apply) {
-  loom_symbol_ref_t callee = MakeSymbol("my_template");
+  loom_string_id_t contract = Intern("my.template");
   loom_type_t f32 = loom_type_scalar(LOOM_SCALAR_TYPE_F32);
   loom_value_id_t input = DefineValue(f32);
 
   loom_type_t result_types[] = {f32};
   loom_op_t* op = NULL;
-  IREE_ASSERT_OK(loom_func_apply_build(&builder_, 0, 0, 0, 0, callee, &input, 1,
+  IREE_ASSERT_OK(loom_func_apply_build(&builder_, 0, contract, &input, 1, 0, 0,
                                        result_types, 1, NULL, 0,
                                        LOOM_LOCATION_UNKNOWN, &op));
-  EXPECT_EQ(PrintOp(op), "%1 = func.apply @my_template(%0) : (f32) -> (f32)\n");
+  EXPECT_EQ(PrintOp(op), "%1 = func.apply<my.template>(%0) : (f32) -> (f32)\n");
 }
 
 TEST_F(FuncPrinterTest, Return) {

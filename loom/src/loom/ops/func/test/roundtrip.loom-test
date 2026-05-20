@@ -79,7 +79,8 @@ func.def deinitializer @teardown() {
 
 // ====
 
-// Template and ukernel policy modifiers share the same author-facing spelling.
+// Template and ukernel policy modifiers share the same author-facing spelling;
+// func.apply names the implementation contract key rather than a direct symbol.
 func.template<test.effect> hot inline @pure_template(%value: i32) -> (i32) {
   func.return %value : i32
 }
@@ -87,6 +88,6 @@ func.template<test.effect> hot inline @pure_template(%value: i32) -> (i32) {
 func.ukernel<test.effect> cold noinline @opaque_template(%value: i32) -> (i32)
 
 func.def @apply_with_edge_policy(%value: i32) -> (i32) {
-  %result = func.apply cold inline @pure_template(%value) : (i32) -> (i32)
+  %result = func.apply<test.effect>(%value) cold : (i32) -> (i32)
   func.return %result : i32
 }

@@ -862,12 +862,10 @@ enum loom_call_like_kind_e {
   LOOM_CALL_LIKE_KIND_NONE = 0,
   // Ordinary runtime/semantic dispatch.
   LOOM_CALL_LIKE_KIND_SEMANTIC = 1,
-  // Compile-time template expansion.
-  LOOM_CALL_LIKE_KIND_TEMPLATE = 2,
   // Direct target-low function body to target-low function body call.
-  LOOM_CALL_LIKE_KIND_LOW_INTERNAL = 3,
+  LOOM_CALL_LIKE_KIND_LOW_INTERNAL = 2,
   // Explicit semantic-to-target-low invocation of a selected low function.
-  LOOM_CALL_LIKE_KIND_LOW_INVOKE = 4,
+  LOOM_CALL_LIKE_KIND_LOW_INVOKE = 3,
 };
 
 // Interface descriptor for direct symbol call-like ops. The operand and result

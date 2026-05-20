@@ -609,7 +609,6 @@ static bool loom_refine_boundaries_call_kind_participates(
     loom_call_like_kind_t kind) {
   switch (kind) {
     case LOOM_CALL_LIKE_KIND_SEMANTIC:
-    case LOOM_CALL_LIKE_KIND_TEMPLATE:
       return true;
     case LOOM_CALL_LIKE_KIND_LOW_INTERNAL:
     case LOOM_CALL_LIKE_KIND_LOW_INVOKE:

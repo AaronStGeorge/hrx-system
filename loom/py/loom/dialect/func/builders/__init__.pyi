@@ -116,11 +116,10 @@ class FuncBuilder(DialectBuilder):
     def apply(
         self,
         *,
+        contract: str,
+        operands: list[ValueRef] = ...,
         purity: str | None = ...,
         temperature: str | None = ...,
-        inline_policy: str | None = ...,
-        callee: str,
-        operands: list[ValueRef] = ...,
         results: list[Type | TiedResultSpec],
         name: str | None = ...,
         names: Sequence[str] | None = ...,

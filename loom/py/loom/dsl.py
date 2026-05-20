@@ -3141,8 +3141,6 @@ class CallLikeKind(Enum):
 
     # Ordinary runtime/semantic dispatch.
     SEMANTIC = "semantic"
-    # Compile-time template expansion.
-    TEMPLATE = "template"
     # Direct target-low function body to target-low function body call.
     LOW_INTERNAL = "low_internal"
     # Explicit semantic-to-target-low invocation of an already selected low function.

@@ -271,7 +271,7 @@ iree_status_t loom_func_ukernel_build(
     loom_location_id_t location,
     loom_op_t** out_op);
 
-// LOOM_OP_FUNC_CALL: Runtime function call. Target must be func.def or func.decl.
+// LOOM_OP_FUNC_CALL: Function-like symbol call. Runtime calls target func.def/func.decl; required-inline exact template calls are consumed before executable lowering.
 // %r = func.call @add(%a, %b) : (f32, f32) -> (f32)
 LOOM_DEFINE_ISA(loom_func_call_isa, LOOM_OP_FUNC_CALL)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_func_call_operands, 0)
@@ -304,30 +304,27 @@ iree_status_t loom_func_call_build(
 iree_status_t loom_func_call_canonicalize(loom_op_t* op, loom_rewriter_t* rewriter);
 loom_trait_flags_t loom_func_call_effective_traits(const loom_op_t* op);
 
-// LOOM_OP_FUNC_APPLY: Compile-time template expansion. Target must be func.template.
-// %r = func.apply @vnni_q8_matvec(%w, %x) : (tensor<16x32xi8>, tensor<32xf32>) -> (tensor<16xf32>)
+// LOOM_OP_FUNC_APPLY: Compile-time implementation demand. Contract key must be selected before executable lowering.
+// %r = func.apply<qwen.q4.matmul>(%w, %x) : (tensor<16x32xi8>, tensor<32xf32>) -> (tensor<16xf32>)
 LOOM_DEFINE_ISA(loom_func_apply_isa, LOOM_OP_FUNC_APPLY)
 LOOM_DEFINE_VARIADIC_OPERANDS(loom_func_apply_operands, 0)
 LOOM_DEFINE_VARIADIC_RESULTS(loom_func_apply_results, 0)
-LOOM_DEFINE_ATTR_SYMBOL(loom_func_apply_callee, 0)
+LOOM_DEFINE_ATTR_STRING(loom_func_apply_contract, 0)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_apply_purity, 1, loom_func_purity_t)
 LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_apply_temperature, 2, loom_func_temperature_t)
-LOOM_DEFINE_ATTR_ENUM_TYPED(loom_func_apply_inline_policy, 3, loom_func_inline_policy_t)
 enum loom_func_apply_build_flag_bits_e {
   LOOM_FUNC_APPLY_BUILD_FLAG_HAS_PURITY = 1u << 0,
   LOOM_FUNC_APPLY_BUILD_FLAG_HAS_TEMPERATURE = 1u << 1,
-  LOOM_FUNC_APPLY_BUILD_FLAG_HAS_INLINE_POLICY = 1u << 2,
 };
 typedef uint32_t loom_func_apply_build_flags_t;
 iree_status_t loom_func_apply_build(
     loom_builder_t* builder,
     loom_func_apply_build_flags_t build_flags,
-    loom_optional uint8_t purity,
-    loom_optional uint8_t temperature,
-    loom_optional uint8_t inline_policy,
-    loom_symbol_ref_t callee,
+    loom_string_id_t contract,
     loom_may_consume const loom_value_id_t* operands,
     iree_host_size_t operands_count,
+    loom_optional uint8_t purity,
+    loom_optional uint8_t temperature,
     const loom_type_t* result_types,
     iree_host_size_t result_count,
     const loom_tied_result_t* tied_results,

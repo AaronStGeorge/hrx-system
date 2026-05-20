@@ -442,18 +442,10 @@ static iree_string_view_t loom_inline_validate_call_kind(
     const loom_inline_plan_entry_t* entry) {
   switch (loom_call_like_kind(entry->call)) {
     case LOOM_CALL_LIKE_KIND_SEMANTIC:
-      if (loom_func_def_isa(entry->callee.op) ||
-          loom_func_decl_isa(entry->callee.op)) {
+      if (loom_func_like_isa(entry->callee)) {
         return iree_string_view_empty();
       }
-      return IREE_SV("func.call target is not a func.def or func.decl");
-    case LOOM_CALL_LIKE_KIND_TEMPLATE:
-      if (loom_func_template_isa(entry->callee.op) ||
-          loom_func_ukernel_isa(entry->callee.op)) {
-        return iree_string_view_empty();
-      }
-      return IREE_SV(
-          "func.apply target is not a func.template or func.ukernel");
+      return IREE_SV("func.call target is not function-like");
     default:
       return IREE_SV("call kind is not supported by the func-stage inliner");
   }

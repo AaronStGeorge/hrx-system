@@ -486,7 +486,6 @@ class TestInterfaces:
 
     def test_call_like_kind_values(self) -> None:
         assert CallLikeKind.SEMANTIC.value == "semantic"
-        assert CallLikeKind.TEMPLATE.value == "template"
         assert CallLikeKind.LOW_INTERNAL.value == "low_internal"
         assert CallLikeKind.LOW_INVOKE.value == "low_invoke"
 
