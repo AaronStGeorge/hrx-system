@@ -393,6 +393,12 @@ static iree_status_t loom_wasm_module_build_function_frame(
     loom_module_t* module, loom_op_t* function_op,
     const loom_low_emission_frame_options_t* options,
     iree_arena_allocator_t* arena, loom_low_emission_frame_t* out_frame) {
+  if (options->schedule_strategy !=
+      LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "Wasm module emission requires source-order low scheduling");
+  }
   IREE_RETURN_IF_ERROR(loom_low_emission_frame_build(
       module, function_op, options, arena, out_frame));
   if (out_frame->target.descriptor_set !=
@@ -535,9 +541,9 @@ static iree_status_t loom_wasm_module_emit_function_bodies(
   };
   for (iree_host_size_t i = 0; i < layout->function_count; ++i) {
     loom_wasm_module_function_t* function = &layout->functions[i];
-    IREE_RETURN_IF_ERROR(loom_wasm_emit_function_body(
-        &function->frame.schedule, &function->frame.allocation, &body_options,
-        allocator, &function->body));
+    IREE_RETURN_IF_ERROR(
+        loom_wasm_emit_function_body(&function->frame.allocation, &body_options,
+                                     allocator, &function->body));
   }
   return iree_ok_status();
 }

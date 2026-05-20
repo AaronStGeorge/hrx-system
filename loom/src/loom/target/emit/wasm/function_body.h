@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// WebAssembly function-body emission from target-low packet tables.
+// WebAssembly function-body emission from allocated structured target-low IR.
 //
 // This emits the size-prefixed function body stored in a Wasm code section,
 // not a complete Wasm module. Module sections, imports/exports, validation
@@ -16,7 +16,6 @@
 
 #include "iree/base/api.h"
 #include "loom/codegen/low/allocation.h"
-#include "loom/codegen/low/schedule/types.h"
 #include "loom/ir/attribute.h"
 
 #ifdef __cplusplus
@@ -53,12 +52,11 @@ void loom_wasm_function_body_deinitialize(loom_wasm_function_body_t* body,
                                           iree_allocator_t allocator);
 
 // Emits a size-prefixed Wasm code-section function body for one allocated
-// low.func.def. The schedule and allocation tables must describe the same
-// function, use the wasm.core.simd128 descriptor set, and carry source-order
-// packet scheduling so allocation lifetimes match the structured low-region
-// walk. Unsupported packets fail loud instead of producing partial Wasm.
+// low.func.def. The allocation table must use the wasm.core.simd128 descriptor
+// set and describe lifetimes for structured source-order body emission.
+// Unsupported structural forms or descriptor packets fail loud instead of
+// producing partial Wasm.
 iree_status_t loom_wasm_emit_function_body(
-    const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
     const loom_wasm_function_body_options_t* options,
     iree_allocator_t allocator, loom_wasm_function_body_t* out_body);

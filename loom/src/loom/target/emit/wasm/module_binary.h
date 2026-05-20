@@ -44,8 +44,10 @@ void loom_wasm_module_binary_deinitialize(loom_wasm_module_binary_t* module,
 // exports low functions marked public or carrying an explicit export symbol.
 //
 // Imports, kernel entries, and non-wasm low functions currently fail loud. The
-// caller owns source-to-low lowering, target verification, and the frame
-// options used by the scheduler/allocator.
+// body emitter walks structured regions in source order, so module emission
+// requires source-priority frame scheduling. The caller owns source-to-low
+// lowering, target verification, and the remaining frame options used by the
+// scheduler/allocator.
 iree_status_t loom_wasm_emit_module(
     loom_module_t* module, const loom_low_emission_frame_options_t* options,
     iree_arena_allocator_t* arena, iree_allocator_t allocator,

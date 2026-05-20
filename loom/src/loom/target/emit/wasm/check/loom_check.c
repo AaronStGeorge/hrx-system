@@ -14,8 +14,6 @@
 #include "loom/tools/loom-check/low_emit.h"
 
 typedef struct loom_wasm_loom_check_emit_request_t {
-  // Candidate selection strategy used by the low scheduler.
-  loom_low_schedule_strategy_t schedule_strategy;
   // Explicit per-class register budgets passed to allocation.
   loom_low_allocation_budget_t
       allocation_budgets[LOOM_CHECK_LOW_EMIT_MAX_ALLOCATION_BUDGETS];
@@ -78,14 +76,8 @@ static iree_status_t loom_wasm_loom_check_consume_token(
 static iree_status_t loom_wasm_loom_check_parse_emit_request(
     iree_string_view_t target_options,
     loom_wasm_loom_check_emit_request_t* out_request) {
-  *out_request = (loom_wasm_loom_check_emit_request_t){
-      .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
-  };
+  *out_request = (loom_wasm_loom_check_emit_request_t){0};
 
-  enum {
-    LOOM_WASM_LOOM_CHECK_PARSE_OPTION_STRATEGY = 1u << 0,
-  };
-  uint32_t parse_options = 0;
   while (!iree_string_view_is_empty(target_options)) {
     iree_string_view_t token = iree_string_view_empty();
     IREE_RETURN_IF_ERROR(
@@ -99,15 +91,10 @@ static iree_status_t loom_wasm_loom_check_parse_emit_request(
     option_name = iree_string_view_trim(option_name);
     option_value = iree_string_view_trim(option_value);
     if (iree_string_view_equal(option_name, IREE_SV("strategy"))) {
-      if (iree_any_bit_set(parse_options,
-                           LOOM_WASM_LOOM_CHECK_PARSE_OPTION_STRATEGY)) {
-        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "duplicate wasm-dis option 'strategy'");
-      }
-      IREE_RETURN_IF_ERROR(loom_check_low_emit_parse_schedule_strategy(
-          option_value, IREE_SV("wasm-dis"), &out_request->schedule_strategy));
-      parse_options |= LOOM_WASM_LOOM_CHECK_PARSE_OPTION_STRATEGY;
-      continue;
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "wasm-dis emits structured source-order modules; schedule strategy "
+          "options are not supported");
     }
     if (iree_string_view_equal(option_name, IREE_SV("fixed"))) {
       return iree_make_status(
@@ -285,7 +272,7 @@ static iree_status_t loom_wasm_loom_check_emit_provider_execute(
   };
   const loom_low_emission_frame_options_t frame_options = {
       .descriptor_registry = &request->low_registry->registry,
-      .schedule_strategy = emit_request.schedule_strategy,
+      .schedule_strategy = LOOM_LOW_SCHEDULE_STRATEGY_SOURCE_PRIORITY,
       .allocation_budgets = emit_request.allocation_budgets,
       .allocation_budget_count = emit_request.allocation_budget_count,
       .emitter = diagnostic_emitter,

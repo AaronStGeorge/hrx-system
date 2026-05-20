@@ -9,7 +9,6 @@
 #include <inttypes.h>
 
 #include "loom/codegen/low/function.h"
-#include "loom/codegen/low/packet.h"
 #include "loom/codegen/low/target_binding.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -1191,71 +1190,37 @@ static iree_status_t loom_wasm_emit_function_body_payload(
   return loom_wasm_binary_write_u8(&state->writer, LOOM_WASM_OPCODE_END);
 }
 
-static iree_status_t loom_wasm_validate_source_order_schedule(
-    const loom_low_schedule_table_t* schedule) {
-  if (schedule->scheduled_node_count != 0 &&
-      schedule->scheduled_node_indices == NULL) {
+static iree_status_t loom_wasm_validate_allocation(
+    const loom_low_allocation_table_t* allocation) {
+  if (allocation->module == NULL || allocation->function_op == NULL) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
-        "Wasm function-body emission requires a schedule packet index table");
+        "Wasm emission requires an allocation table naming a low function");
   }
-  for (iree_host_size_t block_index = 0; block_index < schedule->block_count;
-       ++block_index) {
-    const loom_low_schedule_block_t* block = &schedule->blocks[block_index];
-    if (block->node_count != block->scheduled_node_count) {
-      return iree_make_status(
-          IREE_STATUS_FAILED_PRECONDITION,
-          "Wasm function-body emission schedule block %" PRIhsz
-          " has mismatched source and scheduled packet counts",
-          block_index);
-    }
-    for (uint32_t ordinal = 0; ordinal < block->scheduled_node_count;
-         ++ordinal) {
-      const uint64_t packet_index =
-          (uint64_t)block->scheduled_node_start + ordinal;
-      if (packet_index >= schedule->scheduled_node_count) {
-        return iree_make_status(
-            IREE_STATUS_OUT_OF_RANGE,
-            "Wasm function-body emission schedule block %" PRIhsz
-            " references packet %" PRIu64 " outside the schedule",
-            block_index, packet_index);
-      }
-      const uint64_t expected_node_index =
-          (uint64_t)block->node_start + ordinal;
-      if (expected_node_index >= schedule->node_count) {
-        return iree_make_status(
-            IREE_STATUS_OUT_OF_RANGE,
-            "Wasm function-body emission schedule block %" PRIhsz
-            " references source node %" PRIu64 " outside the schedule",
-            block_index, expected_node_index);
-      }
-      const uint32_t scheduled_node_index =
-          schedule->scheduled_node_indices[packet_index];
-      if (scheduled_node_index != (uint32_t)expected_node_index) {
-        return iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
-            "Wasm function-body emission requires source-order scheduled low "
-            "packets");
-      }
-    }
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_wasm_validate_tables(
-    const loom_low_schedule_table_t* schedule,
-    const loom_low_allocation_table_t* allocation) {
-  IREE_RETURN_IF_ERROR(loom_low_packet_validate_tables(schedule, allocation));
-  if (schedule->target.descriptor_set !=
+  if (allocation->target.descriptor_set !=
       loom_wasm_core_simd128_descriptor_set()) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "Wasm emission requires wasm.core.simd128");
   }
-  IREE_RETURN_IF_ERROR(loom_wasm_validate_source_order_schedule(schedule));
   if (allocation->spill_count != 0 || allocation->spill_plan_count != 0) {
     return iree_make_status(
         IREE_STATUS_FAILED_PRECONDITION,
         "Wasm emission requires unspilled allocation tables");
+  }
+  if (allocation->edge_copy_count != 0 ||
+      allocation->edge_copy_group_count != 0 ||
+      allocation->edge_copy_temporary_count != 0) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "Wasm emission requires structured allocation tables without CFG edge "
+        "copies");
+  }
+  if (allocation->packet_move_temporary_count != 0 ||
+      allocation->packet_move_temporary_group_count != 0) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "Wasm emission requires allocation tables without packet-local move "
+        "temporaries");
   }
   return iree_ok_status();
 }
@@ -1270,12 +1235,13 @@ void loom_wasm_function_body_deinitialize(loom_wasm_function_body_t* body,
 }
 
 iree_status_t loom_wasm_emit_function_body(
-    const loom_low_schedule_table_t* schedule,
     const loom_low_allocation_table_t* allocation,
     const loom_wasm_function_body_options_t* options,
     iree_allocator_t allocator, loom_wasm_function_body_t* out_body) {
+  IREE_ASSERT_ARGUMENT(allocation);
+  IREE_ASSERT_ARGUMENT(out_body);
   *out_body = (loom_wasm_function_body_t){0};
-  IREE_RETURN_IF_ERROR(loom_wasm_validate_tables(schedule, allocation));
+  IREE_RETURN_IF_ERROR(loom_wasm_validate_allocation(allocation));
 
   loom_wasm_emit_state_t state = {
       .allocation = allocation,
