@@ -13,6 +13,29 @@ package(
 )
 
 loom_cc_library(
+    name = "func_apply_selection",
+    srcs = ["func_apply_selection.c"],
+    hdrs = ["func_apply_selection.h"],
+    deps = [
+        ":symbol_pruning",
+        "//loom/src/loom/analysis:func_provider_catalog",
+        "//loom/src/loom/analysis:symbol_dependencies",
+        "//loom/src/loom/analysis:symbol_facts",
+        "//loom/src/loom/analysis:symbol_liveness",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/pass:pipeline",
+        "//loom/src/loom/pass:registry",
+        "//loom/src/loom/pass:types",
+        "//loom/src/loom/rewrite:rewriter",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "inline_callables",
     srcs = ["inline_callables.c"],
     hdrs = ["inline_callables.h"],
@@ -58,14 +81,29 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "symbol_pruning",
+    srcs = ["symbol_pruning.c"],
+    hdrs = ["symbol_pruning.h"],
+    deps = [
+        "//loom/src/loom/analysis:symbol_liveness",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/ops/kernel",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_library(
     name = "symbol_dce",
     srcs = ["symbol_dce.c"],
     hdrs = ["symbol_dce.h"],
     deps = [
+        ":symbol_pruning",
         "//loom/src/loom/analysis:symbol_dependencies",
         "//loom/src/loom/analysis:symbol_liveness",
         "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_defs",
         "//loom/src/loom/pass:types",
         "//runtime/src/iree/base",
     ],

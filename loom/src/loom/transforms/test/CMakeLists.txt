@@ -78,6 +78,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "func_apply_selection"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/func_apply_selection.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "inline_callables"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/inline_callables.loom-test"

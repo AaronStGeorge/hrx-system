@@ -1,0 +1,213 @@
+// RUN: pass select-func-apply
+
+func.template<demo.double> @double_template(%value: i32) -> (i32) {
+  %doubled = test.addi %value, %value : i32
+  func.return %doubled : i32
+}
+
+func.def public @entry(%arg: i32) -> (i32) {
+  %result = func.apply<demo.double>(%arg) : (i32) -> (i32)
+  func.return %result : i32
+}
+
+// ----
+func.template<demo.double> @double_template(%value: i32) -> (i32) {
+  %doubled = test.addi %value, %value : i32
+  func.return %doubled : i32
+}
+
+func.def public @entry(%arg: i32) -> (i32) {
+  %result = func.call inline @double_template(%arg) : (i32) -> (i32)
+  func.return %result : i32
+}
+
+// ====
+
+// RUN: pass select-func-apply,inline-callables
+
+func.template<demo.double> @double_template(%value: i32) -> (i32) {
+  %doubled = test.addi %value, %value : i32
+  func.return %doubled : i32
+}
+
+func.def public @entry(%arg: i32) -> (i32) {
+  %result = func.apply<demo.double>(%arg) : (i32) -> (i32)
+  func.return %result : i32
+}
+
+// ----
+func.def public @entry(%arg: i32) -> (i32) {
+  %doubled = test.addi %arg, %arg : i32
+  func.return %doubled : i32
+}
+
+// ====
+
+// RUN: pass select-func-apply
+
+func.template<demo.priority> priority(1) @slow(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+func.template<demo.priority> priority(10) @fast(%value: i32) -> (i32) {
+  %doubled = test.addi %value, %value : i32
+  func.return %doubled : i32
+}
+
+func.def public @entry(%arg: i32) -> (i32) {
+  %result = func.apply<demo.priority>(%arg) : (i32) -> (i32)
+  func.return %result : i32
+}
+
+// ----
+func.template<demo.priority> priority(10) @fast(%value: i32) -> (i32) {
+  %doubled = test.addi %value, %value : i32
+  func.return %doubled : i32
+}
+
+func.def public @entry(%arg: i32) -> (i32) {
+  %result = func.call inline @fast(%arg) : (i32) -> (i32)
+  func.return %result : i32
+}
+
+// ====
+
+// RUN: pass select-func-apply{mode=final}
+
+func.def public @entry(%arg: i32) -> (i32) {
+  // ERROR@+1: LOWERING/045 {op_name="func.apply", phase_name="select-func-apply", contract_key="demo.missing", reason="no provider implements the requested contract"}
+  %result = func.apply<demo.missing>(%arg) : (i32) -> (i32)
+  func.return %result : i32
+}
+
+// ====
+
+// RUN: pass select-func-apply{mode=final}
+
+func.template<demo.reject> @wrong_type(%value: f32) -> (f32) {
+  func.return %value : f32
+}
+
+func.def public @entry(%arg: i32) -> (i32) {
+  // ERROR@+1: LOWERING/045 {op_name="func.apply", phase_name="select-func-apply", contract_key="demo.reject", reason="all providers were rejected by signature constraints"}
+  %result = func.apply<demo.reject>(%arg) : (i32) -> (i32)
+  func.return %result : i32
+}
+
+// ====
+
+// RUN: pass select-func-apply{mode=final}
+
+func.template<demo.tie> priority(10) @lhs(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+func.template<demo.tie> priority(10) @rhs(%value: i32) -> (i32) {
+  %doubled = test.addi %value, %value : i32
+  func.return %doubled : i32
+}
+
+func.def public @entry(%arg: i32) -> (i32) {
+  // ERROR@+1: LOWERING/045 {op_name="func.apply", phase_name="select-func-apply", contract_key="demo.tie", reason="multiple providers match at the highest priority"}
+  %result = func.apply<demo.tie>(%arg) : (i32) -> (i32)
+  func.return %result : i32
+}
+
+// ====
+
+// RUN: pass select-func-apply
+
+func.template<demo.dead> @dead_provider(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+func.def @dead_user(%arg: i32) -> (i32) {
+  %result = func.apply<demo.dead>(%arg) : (i32) -> (i32)
+  func.return %result : i32
+}
+
+func.def public @entry(%arg: i32) -> (i32) {
+  func.return %arg : i32
+}
+
+// ----
+func.def public @entry(%arg: i32) -> (i32) {
+  func.return %arg : i32
+}
+
+// ====
+
+// RUN: pass select-func-apply
+
+func.template<demo.dynamic> @identity(%m: index, %arg: tensor<[%m]xf32>) -> (tensor<[%m]xf32>) {
+  func.return %arg : tensor<[%m]xf32>
+}
+
+func.def public @entry(%n: index, %arg: tensor<[%n]xf32>) -> (tensor<[%n]xf32>) {
+  %result = func.apply<demo.dynamic>(%n, %arg) : (index, tensor<[%n]xf32>) -> (tensor<[%n]xf32>)
+  func.return %result : tensor<[%n]xf32>
+}
+
+// ----
+func.template<demo.dynamic> @identity(%m: index, %arg: tensor<[%m]xf32>) -> (tensor<[%m]xf32>) {
+  func.return %arg : tensor<[%m]xf32>
+}
+
+func.def public @entry(%n: index, %arg: tensor<[%n]xf32>) -> (tensor<[%n]xf32>) {
+  %result = func.call inline @identity(%n, %arg) : (index, tensor<[%n]xf32>) -> (tensor<[%n]xf32>)
+  func.return %result : tensor<[%n]xf32>
+}
+
+// ====
+
+// RUN: pass select-func-apply
+
+func.template<demo.maybe> priority(10) @predicated(%m: index, %arg: tensor<[%m]xf32>) -> (tensor<[%m]xf32>) where [mul(%m, 16)] {
+  func.return %arg : tensor<[%m]xf32>
+}
+
+func.template<demo.maybe> priority(1) @fallback(%m: index, %arg: tensor<[%m]xf32>) -> (tensor<[%m]xf32>) {
+  func.return %arg : tensor<[%m]xf32>
+}
+
+func.def public @entry(%n: index, %arg: tensor<[%n]xf32>) -> (tensor<[%n]xf32>) {
+  %result = func.apply<demo.maybe>(%n, %arg) : (index, tensor<[%n]xf32>) -> (tensor<[%n]xf32>)
+  func.return %result : tensor<[%n]xf32>
+}
+
+// ====
+
+// RUN: pass select-func-apply{mode=final}
+
+func.ukernel<demo.ukernel> priority(10) @opaque(%value: i32) -> (i32)
+
+func.template<demo.ukernel> priority(1) @fallback(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+func.def public @entry(%arg: i32) -> (i32) {
+  // ERROR@+1: LOWERING/045 {op_name="func.apply", phase_name="select-func-apply", contract_key="demo.ukernel", reason="selected provider cannot be materialized as an inline func.call"}
+  %result = func.apply<demo.ukernel>(%arg) : (i32) -> (i32)
+  func.return %result : i32
+}
+
+// ====
+
+// RUN: pass select-func-apply
+
+test.target<low_core> @test_target
+
+func.def target(@test_target) @target_entry(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+func.def @dead_helper(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+// ----
+test.target<low_core> @test_target
+
+func.def target(@test_target) @target_entry(%value: i32) -> (i32) {
+  func.return %value : i32
+}

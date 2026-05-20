@@ -12,6 +12,32 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    func_apply_selection
+  HDRS
+    "func_apply_selection.h"
+  SRCS
+    "func_apply_selection.c"
+  DEPS
+    ::symbol_pruning
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::func_provider_catalog
+    loom::src::loom::analysis::symbol_dependencies
+    loom::src::loom::analysis::symbol_facts
+    loom::src::loom::analysis::symbol_liveness
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::op_defs
+    loom::src::loom::pass::pipeline
+    loom::src::loom::pass::registry
+    loom::src::loom::pass::types
+    loom::src::loom::rewrite::rewriter
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     inline_callables
   HDRS
     "inline_callables.h"
@@ -63,17 +89,35 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    symbol_pruning
+  HDRS
+    "symbol_pruning.h"
+  SRCS
+    "symbol_pruning.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::analysis::symbol_liveness
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::kernel
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     symbol_dce
   HDRS
     "symbol_dce.h"
   SRCS
     "symbol_dce.c"
   DEPS
+    ::symbol_pruning
     iree::base
     loom::src::loom::analysis::symbol_dependencies
     loom::src::loom::analysis::symbol_liveness
     loom::src::loom::ir
-    loom::src::loom::ops::op_defs
     loom::src::loom::pass::types
   PUBLIC
 )

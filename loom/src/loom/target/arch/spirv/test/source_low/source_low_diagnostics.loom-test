@@ -12,6 +12,16 @@ func.def target(@target) @unsupported_source_op(%lhs: i32, %rhs: i32) -> (i32) {
 
 spirv.target<vulkan1_3> @target
 
+func.def target(@target) @unresolved_apply_rejected_at_source_low(%value: i32) -> (i32) {
+  // ERROR@+1: LOWERING/045 {op_name="func.apply", phase_name="select-func-apply", contract_key="demo.missing", reason="no provider implements the requested contract"}
+  %result = func.apply<demo.missing>(%value) : (i32) -> (i32)
+  func.return %result : i32
+}
+
+// ====
+
+spirv.target<vulkan1_3> @target
+
 func.def target(@target) @unsigned_i16_requires_target_features(%lhs: i16, %rhs: i16) -> (i16) {
   // ERROR@+1: TARGET/003 {subject_kind="descriptor", subject_name="spirv.op_udiv.u16", constraint_key="descriptor_available"}
   %quotient = scalar.divui %lhs, %rhs : i16

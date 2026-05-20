@@ -60,15 +60,29 @@ static iree_status_t loom_target_pipeline_build_string_attr(
   return iree_ok_status();
 }
 
-static iree_status_t loom_target_pipeline_build_target_legalize(
-    loom_builder_t* builder, iree_string_view_t mode) {
+static iree_status_t loom_target_pipeline_build_run_with_string_option(
+    loom_builder_t* builder, iree_string_view_t key, iree_string_view_t name,
+    iree_string_view_t value) {
   loom_named_attr_t option_attr = {0};
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_string_attr(
-      builder, IREE_SV("mode"), mode, &option_attr));
+      builder, name, value, &option_attr));
   loom_op_t* run_op = NULL;
-  return loom_pass_ir_build_run(builder, IREE_SV("target-legalize"),
-                                loom_make_named_attr_slice(&option_attr, 1),
-                                &run_op);
+  return loom_pass_ir_build_run(
+      builder, key, loom_make_named_attr_slice(&option_attr, 1), &run_op);
+}
+
+static iree_status_t loom_target_pipeline_build_target_legalize(
+    loom_builder_t* builder, iree_string_view_t mode) {
+  return loom_target_pipeline_build_run_with_string_option(
+      builder, IREE_SV("target-legalize"), IREE_SV("mode"), mode);
+}
+
+static iree_status_t loom_target_pipeline_build_authoring_expansion(
+    loom_builder_t* builder) {
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run_with_string_option(
+      builder, IREE_SV("select-func-apply"), IREE_SV("mode"),
+      IREE_SV("final")));
+  return loom_target_pipeline_build_run(builder, IREE_SV("inline-callables"));
 }
 
 static iree_status_t loom_target_pipeline_build_source_to_low(
@@ -206,6 +220,7 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
       user_data, &for_op));
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_target_legalize(builder, IREE_SV("eager")));
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_authoring_expansion(builder));
   loom_pass_ir_body_build_fn_t source_finish_body =
       control_flow_lowering == LOOM_TARGET_CONTROL_FLOW_LOWERING_STRUCTURED_LOW
           ? loom_target_pipeline_build_source_safe_normalization_after_legalize

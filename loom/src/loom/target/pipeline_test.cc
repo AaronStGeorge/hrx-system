@@ -112,6 +112,17 @@ static void ExpectRunKeySequence(loom_module_t* module, loom_block_t* block,
   EXPECT_EQ(op, block->last_op);
 }
 
+static loom_op_t* ExpectAuthoringExpansion(loom_module_t* module,
+                                           loom_op_t* apply_selection) {
+  ExpectRunKey(module, apply_selection, IREE_SV("select-func-apply"));
+  ExpectRunStringOption(module, apply_selection, IREE_SV("mode"),
+                        IREE_SV("final"));
+
+  loom_op_t* inline_callables = apply_selection->next_op;
+  ExpectRunKey(module, inline_callables, IREE_SV("inline-callables"));
+  return inline_callables->next_op;
+}
+
 class TargetPipelineTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -159,7 +170,7 @@ TEST_F(TargetPipelineTest, BuildsVisibleSourceLowPipeline) {
   loom_block_t* pipeline_body =
       loom_region_entry_block(loom_pass_pipeline_body(pipeline_op));
   ASSERT_NE(pipeline_body, nullptr);
-  ASSERT_EQ(pipeline_body->op_count, 8u);
+  ASSERT_EQ(pipeline_body->op_count, 10u);
 
   loom_op_t* source_for = pipeline_body->first_op;
   ASSERT_TRUE(loom_pass_for_isa(source_for));
@@ -179,7 +190,8 @@ TEST_F(TargetPipelineTest, BuildsVisibleSourceLowPipeline) {
   ExpectRunStringOption(module.get(), target_legalize, IREE_SV("mode"),
                         IREE_SV("eager"));
 
-  loom_op_t* source_finish_for = target_legalize->next_op;
+  loom_op_t* source_finish_for =
+      ExpectAuthoringExpansion(module.get(), target_legalize->next_op);
   ASSERT_TRUE(loom_pass_for_isa(source_finish_for));
   loom_block_t* source_finish_body =
       loom_region_entry_block(loom_pass_for_body(source_finish_for));
@@ -241,7 +253,7 @@ TEST_F(TargetPipelineTest, BuildsStructuredSourceLowPipeline) {
   loom_block_t* pipeline_body =
       loom_region_entry_block(loom_pass_pipeline_body(pipeline_op));
   ASSERT_NE(pipeline_body, nullptr);
-  ASSERT_EQ(pipeline_body->op_count, 8u);
+  ASSERT_EQ(pipeline_body->op_count, 10u);
 
   loom_op_t* source_for = pipeline_body->first_op;
   ASSERT_TRUE(loom_pass_for_isa(source_for));
@@ -261,7 +273,8 @@ TEST_F(TargetPipelineTest, BuildsStructuredSourceLowPipeline) {
   ExpectRunStringOption(module.get(), target_legalize, IREE_SV("mode"),
                         IREE_SV("eager"));
 
-  loom_op_t* source_finish_for = target_legalize->next_op;
+  loom_op_t* source_finish_for =
+      ExpectAuthoringExpansion(module.get(), target_legalize->next_op);
   ASSERT_TRUE(loom_pass_for_isa(source_finish_for));
   loom_block_t* source_finish_body =
       loom_region_entry_block(loom_pass_for_body(source_finish_for));
@@ -316,7 +329,7 @@ TEST_F(TargetPipelineTest, BuildsVisiblePreparedLowPipeline) {
   loom_block_t* pipeline_body =
       loom_region_entry_block(loom_pass_pipeline_body(pipeline_op));
   ASSERT_NE(pipeline_body, nullptr);
-  ASSERT_EQ(pipeline_body->op_count, 9u);
+  ASSERT_EQ(pipeline_body->op_count, 11u);
 
   loom_op_t* source_for = pipeline_body->first_op;
   ASSERT_TRUE(loom_pass_for_isa(source_for));
@@ -336,7 +349,8 @@ TEST_F(TargetPipelineTest, BuildsVisiblePreparedLowPipeline) {
   ExpectRunStringOption(module.get(), target_legalize, IREE_SV("mode"),
                         IREE_SV("eager"));
 
-  loom_op_t* source_finish_for = target_legalize->next_op;
+  loom_op_t* source_finish_for =
+      ExpectAuthoringExpansion(module.get(), target_legalize->next_op);
   ASSERT_TRUE(loom_pass_for_isa(source_finish_for));
   loom_block_t* source_finish_body =
       loom_region_entry_block(loom_pass_for_body(source_finish_for));

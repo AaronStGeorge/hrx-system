@@ -21,6 +21,7 @@ loom_check_test_suite(
         "cfg_simplify.loom-test",
         "cfg_simplify_scf_pipeline.loom-test",
         "dce.loom-test",
+        "func_apply_selection.loom-test",
         "inline_callables.loom-test",
         "kernel_async_legality.loom-test",
         "kernel_resources.loom-test",

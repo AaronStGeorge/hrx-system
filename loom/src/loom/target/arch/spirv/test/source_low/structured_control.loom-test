@@ -14,6 +14,8 @@ pass.pipeline<module> @__loom_check_source_low pipeline {
     promote-private-fragments
   }
   target-legalize(mode = "eager")
+  select-func-apply(mode = "final")
+  inline-callables
   for func {
     vector-gather-to-scalar
     linearize-view-accesses

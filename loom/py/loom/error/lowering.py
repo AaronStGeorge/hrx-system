@@ -357,6 +357,29 @@ ERR_LOWERING_044 = ErrorDef(
     ),
 )
 
+# ERR_LOWERING_045: Func apply selection failed.
+ERR_LOWERING_045 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=45,
+    severity=Severity.ERROR,
+    summary="Func apply selection failed.",
+    message=(
+        "{phase_name} cannot select an implementation for {op_name}"
+        "<{contract_key}>: {reason}"
+    ),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("phase_name", ParamKind.STRING),
+        ErrorParam("contract_key", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Add a matching func.template provider, make provider predicates "
+        "resolvable before final selection, or call a specific implementation "
+        "with func.call inline"
+    ),
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_022,
     ERR_LOWERING_023,
@@ -375,4 +398,5 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_036,
     ERR_LOWERING_043,
     ERR_LOWERING_044,
+    ERR_LOWERING_045,
 )
