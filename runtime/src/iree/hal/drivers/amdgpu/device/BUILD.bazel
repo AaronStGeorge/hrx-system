@@ -1,0 +1,133 @@
+# Copyright 2025 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/bazel:build_defs.oss.bzl", "iree_runtime_cc_library", "iree_runtime_cc_test")
+load(":device_bitcode_sources.bzl", "IREE_HAL_AMDGPU_DEVICE_BITCODE_SRCS")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+DEVICE_HDRS = [
+    "blit.h",
+    "dispatch.h",
+    "kernel_tables.h",
+    "kernels.h",
+    "support/common.h",
+    "support/kernel.h",
+    "support/queue.h",
+    "support/signal.h",
+    "timestamp.h",
+]
+
+filegroup(
+    name = "bitcode_srcs",
+    srcs = IREE_HAL_AMDGPU_DEVICE_BITCODE_SRCS,
+)
+
+exports_files(["device_bitcode_sources.bzl"])
+
+filegroup(
+    name = "bitcode_hdrs",
+    srcs = DEVICE_HDRS,
+)
+
+#===------------------------------------------------------------------------===#
+# Exported Headers
+#===------------------------------------------------------------------------===#
+
+iree_runtime_cc_library(
+    name = "headers",
+    hdrs = DEVICE_HDRS,
+    deps = [
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/threading:thread",
+        "//runtime/src/iree/hal/drivers/amdgpu/abi",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "blit",
+    srcs = [
+        "blit.c",
+    ],
+    deps = [
+        ":headers",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "dispatch",
+    srcs = [
+        "dispatch.c",
+    ],
+    deps = [
+        ":headers",
+    ],
+)
+
+iree_runtime_cc_library(
+    name = "timestamp",
+    srcs = [
+        "timestamp.c",
+    ],
+    deps = [
+        ":dispatch",
+        ":headers",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "blit_test",
+    srcs = ["blit_test.cc"],
+    group = "iree-hal-drivers-amdgpu-tests",
+    tags = [
+        "driver=amdgpu",
+        "nodocker",
+    ],
+    deps = [
+        ":blit",
+        ":headers",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "dispatch_test",
+    srcs = ["dispatch_test.cc"],
+    group = "iree-hal-drivers-amdgpu-tests",
+    tags = [
+        "driver=amdgpu",
+        "nodocker",
+    ],
+    deps = [
+        ":dispatch",
+        ":headers",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "timestamp_test",
+    srcs = ["timestamp_test.cc"],
+    group = "iree-hal-drivers-amdgpu-tests",
+    tags = [
+        "driver=amdgpu",
+        "nodocker",
+    ],
+    deps = [
+        ":headers",
+        ":timestamp",
+        "//runtime/src/iree/hal/drivers/amdgpu/abi",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)

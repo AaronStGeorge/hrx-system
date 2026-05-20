@@ -1,0 +1,191 @@
+# Copyright 2019 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Common types and utilities used in the IREE codebase.
+
+load("//build_tools/bazel:build_defs.oss.bzl", "defaulting_select", "iree_runtime_cc_fuzz", "iree_runtime_cc_library", "iree_runtime_cc_test")
+load("//build_tools/bazel:cc_binary_benchmark.bzl", "cc_binary_benchmark")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+#===------------------------------------------------------------------------===#
+# Public API
+#===------------------------------------------------------------------------===#
+
+iree_runtime_cc_library(
+    name = "base",
+    srcs = [
+        "allocator.c",
+        "allocator.h",
+        "assert.h",
+        "bitfield.c",
+        "bitfield.h",
+        "bitmap.c",
+        "bitmap.h",
+        "printf.c",
+        "printf.h",
+        "status.c",
+        "status.h",
+        "status_cc.h",
+        "status_payload.h",
+        "status_stack_trace.c",
+        "string_builder.c",
+        "string_builder.h",
+        "string_view.c",
+        "string_view.h",
+        "time.c",
+        "wait_source.c",
+        "wait_source.h",
+    ] + defaulting_select({
+        "//build_tools/bazel:iree_allocator_system_custom": [],
+        "//conditions:default": ["allocator_libc.c"],
+    }),
+    hdrs = ["api.h"],
+    defines = defaulting_select({
+        "//build_tools/bazel:iree_allocator_system_custom": [],
+        "//conditions:default": [
+            "IREE_ALLOCATOR_SYSTEM_CTL=iree_allocator_libc_ctl",
+        ],
+    }),
+    deps = [
+        ":core_headers",
+        "//build_tools/third_party/libbacktrace",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/internal:time",
+        "//runtime/src/iree/base/tracing:provider",
+    ],
+)
+
+cc_binary_benchmark(
+    name = "allocator_benchmark",
+    srcs = ["allocator_benchmark.cc"],
+    deps = [
+        ":base",
+        "//runtime/src/iree/testing:benchmark",
+        "//runtime/src/iree/testing:benchmark_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "allocator_test",
+    srcs = ["allocator_test.cc"],
+    deps = [
+        ":base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "bitfield_test",
+    srcs = ["bitfield_test.cc"],
+    deps = [
+        ":base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "bitmap_test",
+    srcs = ["bitmap_test.cc"],
+    deps = [
+        ":base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+cc_binary_benchmark(
+    name = "bitmap_benchmark",
+    srcs = ["bitmap_benchmark.cc"],
+    deps = [
+        ":base",
+        "//runtime/src/iree/testing:benchmark",
+        "//runtime/src/iree/testing:benchmark_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "status_test",
+    srcs = ["status_test.cc"],
+    deps = [
+        ":base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "string_builder_test",
+    srcs = ["string_builder_test.cc"],
+    deps = [
+        ":base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "printf_test",
+    srcs = ["printf_test.cc"],
+    deps = [
+        ":base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+iree_runtime_cc_fuzz(
+    name = "printf_fuzz",
+    srcs = ["printf_fuzz.cc"],
+    deps = [
+        ":base",
+    ],
+)
+
+iree_runtime_cc_fuzz(
+    name = "string_view_fuzz",
+    srcs = ["string_view_fuzz.cc"],
+    deps = [
+        ":base",
+    ],
+)
+
+iree_runtime_cc_test(
+    name = "string_view_test",
+    srcs = ["string_view_test.cc"],
+    deps = [
+        ":base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+#===------------------------------------------------------------------------===#
+# Core headers (platform detection, compiler compat, etc)
+#===------------------------------------------------------------------------===#
+
+# NOTE: this cannot contain any sources as it is used by header-only targets.
+iree_runtime_cc_library(
+    name = "core_headers",
+    hdrs = [
+        "alignment.h",
+        "attributes.h",
+        "config.h",
+        "target_platform.h",
+        "time.h",
+        "tracing.h",
+    ],
+)
+
+#===------------------------------------------------------------------------===#
+# Internal IREE C++ wrappers and utilities
+#===------------------------------------------------------------------------===#
