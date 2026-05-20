@@ -804,6 +804,25 @@ low.func.def target(@gfx11_target) @gfx11_global_saddr(%addr: reg<amdgpu.vgpr>, 
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx11_b96_memory waits=none
+amdgpu.target<gfx1100> @gfx11_target
+low.func.def target(@gfx11_target) @gfx11_b96_memory(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %addr: reg<amdgpu.vgpr>, %saddr: reg<amdgpu.sgpr x2>) asm<amdgpu.rdna3.core> {
+  %buffer = buffer_load_b96 %resource, %vaddr, %soffset {offset = 12}
+  buffer_store_b96 %buffer, %resource, %vaddr, %soffset {offset = 16}
+  %global = global_load_b96_saddr %addr, %saddr {offset = 4}
+  global_store_b96_saddr %addr, %global, %saddr {offset = 8}
+  return
+}
+
+// ----
+  buffer_load_b96 v[2:4], v0, s[0:3], s4 offen offset:12
+  buffer_store_b96 v[2:4], v0, s[0:3], s4 offen offset:16
+  global_load_b96 v[2:4], v1, s[6:7] offset:4
+  global_store_b96 v1, v[2:4], s[6:7] offset:8
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-assembly @gfx11_ds_read_dead_result_early_clobber waits=none fixed=%addr:physical_register:0:1
 amdgpu.target<gfx1100> @gfx11_target
 low.func.def target(@gfx11_target) @gfx11_ds_read_dead_result_early_clobber(%addr: reg<amdgpu.vgpr>) asm<amdgpu.rdna3.core> {
@@ -879,6 +898,25 @@ low.func.def target(@gfx950_target) @gfx950_global_load_lds(%addr64: reg<amdgpu.
 // ----
   global_load_lds_dword v[0:1], off offset:4
   global_load_lds_dwordx4 v2, s[0:1] offset:16
+  s_endpgm
+
+// ====
+
+// RUN: emit amdgpu-assembly @gfx950_dwordx3_memory waits=none
+amdgpu.target<gfx950> @gfx950_target
+low.func.def target(@gfx950_target) @gfx950_dwordx3_memory(%resource: reg<amdgpu.sgpr x4>, %vaddr: reg<amdgpu.vgpr>, %soffset: reg<amdgpu.sgpr>, %addr: reg<amdgpu.vgpr>, %saddr: reg<amdgpu.sgpr x2>, %m0: reg<amdgpu.m0>) asm<amdgpu.cdna4.core> {
+  %buffer = buffer_load_dwordx3 %resource, %vaddr, %soffset {offset = 12}
+  buffer_store_dwordx3 %buffer, %resource, %vaddr, %soffset {offset = 16}
+  %global = global_load_dwordx3_saddr %addr, %saddr, %m0 {offset = 4}
+  global_store_dwordx3_saddr %addr, %global, %saddr, %m0 {offset = 8}
+  return
+}
+
+// ----
+  buffer_load_dwordx3 v[2:4], v0, s[0:3], s4 offen offset:12
+  buffer_store_dwordx3 v[2:4], v0, s[0:3], s4 offen offset:16
+  global_load_dwordx3 v[2:4], v1, s[6:7] offset:4
+  global_store_dwordx3 v1, v[2:4], s[6:7] offset:8
   s_endpgm
 
 // ====

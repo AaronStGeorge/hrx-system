@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
+from loom.target.arch.amdgpu.descriptor_overlay import AmdgpuDescriptorOverlay
 from loom.target.arch.amdgpu.descriptors import (
     _ADDRESS_OFFSET_DS16_ENCODING_ID,
     _ADDRESS_OFFSET_DWORD_ENCODING_ID,
@@ -68,6 +69,7 @@ from loom.target.low_descriptors import (
     Descriptor,
     DescriptorSet,
     Effect,
+    EffectFlag,
     EffectKind,
     Immediate,
     ImmediateKind,
@@ -797,6 +799,173 @@ def test_gfx950_global_saddr_memory_asm_forms_include_m0() -> None:
         "sc0",
         "sc1",
     )
+
+
+def _assert_memory_96_overlay(
+    descriptor: AmdgpuDescriptorOverlay,
+    *,
+    semantic_tag: str,
+    mnemonic: str,
+    operand_units: int,
+    payload_field_name: str,
+    effect_kind: EffectKind,
+    memory_space: MemorySpace,
+) -> None:
+    assert descriptor.semantic_tag == semantic_tag
+    assert descriptor.mnemonic == mnemonic
+    payload_operand = next(
+        operand.descriptor_operand
+        for operand in descriptor.operands
+        if operand.descriptor_operand.field_name == payload_field_name
+    )
+    assert payload_operand.unit_count == operand_units
+    assert descriptor.effects == (
+        Effect(
+            effect_kind,
+            memory_space=memory_space,
+            flags=(EffectFlag.DEPENDENCY,),
+            width_bits=96,
+        ),
+    )
+    assert any(
+        operand.operand_type == "OPR_GPUMEM"
+        and operand.data_format_name == "FMT_NUM_B96"
+        and operand.size_bits == 96
+        for operand in descriptor.implicit_operands
+    )
+
+
+def test_dwordx3_memory_descriptors_cover_cdna_and_rdna_families() -> None:
+    for (
+        descriptors,
+        buffer_load_key,
+        buffer_store_key,
+        buffer_mnemonic,
+        global_mnemonic,
+    ) in (
+        (
+            {
+                descriptor.descriptor_key: descriptor
+                for descriptor in _gfx940_core_overlays()
+            },
+            "amdgpu.buffer_load_dwordx3",
+            "amdgpu.buffer_store_dwordx3",
+            "buffer_load_dwordx3",
+            "global_load_dwordx3_saddr",
+        ),
+        (
+            {
+                descriptor.descriptor_key: descriptor
+                for descriptor in _gfx950_core_overlays()
+            },
+            "amdgpu.buffer_load_dwordx3",
+            "amdgpu.buffer_store_dwordx3",
+            "buffer_load_dwordx3",
+            "global_load_dwordx3_saddr",
+        ),
+        (
+            {
+                descriptor.descriptor_key: descriptor
+                for descriptor in _gfx11_core_overlays()
+            },
+            "amdgpu.buffer_load_b96",
+            "amdgpu.buffer_store_b96",
+            "buffer_load_b96",
+            "global_load_b96_saddr",
+        ),
+        (
+            {
+                descriptor.descriptor_key: descriptor
+                for descriptor in _gfx12_core_overlays()
+            },
+            "amdgpu.buffer_load_b96",
+            "amdgpu.buffer_store_b96",
+            "buffer_load_b96",
+            "global_load_b96_saddr",
+        ),
+        (
+            {
+                descriptor.descriptor_key: descriptor
+                for descriptor in _gfx1250_core_overlays()
+            },
+            "amdgpu.buffer_load_b96",
+            "amdgpu.buffer_store_b96",
+            "buffer_load_b96",
+            "global_load_b96_saddr",
+        ),
+    ):
+        _assert_memory_96_overlay(
+            descriptors[buffer_load_key],
+            semantic_tag="memory.load.u96",
+            mnemonic=buffer_mnemonic,
+            operand_units=3,
+            payload_field_name="dst",
+            effect_kind=EffectKind.READ,
+            memory_space=MemorySpace.GLOBAL,
+        )
+        _assert_memory_96_overlay(
+            descriptors[buffer_store_key],
+            semantic_tag="memory.store.u96",
+            mnemonic=buffer_mnemonic.replace("load", "store"),
+            operand_units=3,
+            payload_field_name="value",
+            effect_kind=EffectKind.WRITE,
+            memory_space=MemorySpace.GLOBAL,
+        )
+
+        global_load = descriptors["amdgpu.global_load_b96_saddr"]
+        _assert_memory_96_overlay(
+            global_load,
+            semantic_tag="memory.load.u96",
+            mnemonic=global_mnemonic.removesuffix("_saddr"),
+            operand_units=3,
+            payload_field_name="dst",
+            effect_kind=EffectKind.READ,
+            memory_space=MemorySpace.GLOBAL,
+        )
+        assert global_load.asm_forms is not None
+        assert global_load.asm_forms[0].mnemonic == global_mnemonic
+
+        global_store = descriptors["amdgpu.global_store_b96_saddr"]
+        _assert_memory_96_overlay(
+            global_store,
+            semantic_tag="memory.store.u96",
+            mnemonic=global_mnemonic.removesuffix("_saddr").replace("load", "store"),
+            operand_units=3,
+            payload_field_name="value",
+            effect_kind=EffectKind.WRITE,
+            memory_space=MemorySpace.GLOBAL,
+        )
+        assert global_store.asm_forms is not None
+        assert global_store.asm_forms[0].mnemonic == global_mnemonic.replace(
+            "load", "store"
+        )
+
+        scratch_load = descriptors["amdgpu.scratch_load_b96_vaddr"]
+        _assert_memory_96_overlay(
+            scratch_load,
+            semantic_tag="memory.stack.load.u96",
+            mnemonic="scratch_load_b96",
+            operand_units=3,
+            payload_field_name="dst",
+            effect_kind=EffectKind.READ,
+            memory_space=MemorySpace.STACK,
+        )
+        assert scratch_load.asm_forms is not None
+        assert scratch_load.asm_forms[0].mnemonic == "scratch_load_b96_vaddr"
+
+        scratch_store = descriptors["amdgpu.scratch_store_b96_vaddr"]
+        _assert_memory_96_overlay(
+            scratch_store,
+            semantic_tag="memory.stack.store.u96",
+            mnemonic="scratch_store_b96",
+            operand_units=3,
+            payload_field_name="value",
+            effect_kind=EffectKind.WRITE,
+            memory_space=MemorySpace.STACK,
+        )
+        assert scratch_store.asm_forms is not None
+        assert scratch_store.asm_forms[0].mnemonic == "scratch_store_b96_vaddr"
 
 
 def test_gfx940_scratch_memory_forms_cover_spill_packets() -> None:

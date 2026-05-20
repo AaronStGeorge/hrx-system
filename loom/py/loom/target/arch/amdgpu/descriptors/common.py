@@ -1525,6 +1525,13 @@ _GLOBAL_LOAD_B64_EFFECT = Effect(
     width_bits=64,
 )
 
+_GLOBAL_LOAD_B96_EFFECT = Effect(
+    EffectKind.READ,
+    memory_space=MemorySpace.GLOBAL,
+    flags=(EffectFlag.DEPENDENCY,),
+    width_bits=96,
+)
+
 _GLOBAL_LOAD_B128_EFFECT = Effect(
     EffectKind.READ,
     memory_space=MemorySpace.GLOBAL,
@@ -1558,6 +1565,13 @@ _GLOBAL_STORE_B64_EFFECT = Effect(
     memory_space=MemorySpace.GLOBAL,
     flags=(EffectFlag.DEPENDENCY,),
     width_bits=64,
+)
+
+_GLOBAL_STORE_B96_EFFECT = Effect(
+    EffectKind.WRITE,
+    memory_space=MemorySpace.GLOBAL,
+    flags=(EffectFlag.DEPENDENCY,),
+    width_bits=96,
 )
 
 _GLOBAL_STORE_B128_EFFECT = Effect(
@@ -1912,6 +1926,15 @@ _IGNORE_GLOBAL_READ_MEMORY_B64 = AmdgpuImplicitOperandOverlay(
     ignore_reason="modeled-by-global-read-effect",
 )
 
+_IGNORE_GLOBAL_READ_MEMORY_B96 = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_GPUMEM",
+    data_format_name="FMT_NUM_B96",
+    size_bits=96,
+    is_input=True,
+    is_output=False,
+    ignore_reason="modeled-by-global-read-effect",
+)
+
 _IGNORE_GLOBAL_READ_MEMORY_B128 = AmdgpuImplicitOperandOverlay(
     operand_type="OPR_GPUMEM",
     data_format_name="FMT_NUM_B128",
@@ -1957,6 +1980,15 @@ _IGNORE_GLOBAL_WRITE_MEMORY_B64 = AmdgpuImplicitOperandOverlay(
     ignore_reason="modeled-by-global-write-effect",
 )
 
+_IGNORE_GLOBAL_WRITE_MEMORY_B96 = AmdgpuImplicitOperandOverlay(
+    operand_type="OPR_GPUMEM",
+    data_format_name="FMT_NUM_B96",
+    size_bits=96,
+    is_input=False,
+    is_output=True,
+    ignore_reason="modeled-by-global-write-effect",
+)
+
 _IGNORE_GLOBAL_WRITE_MEMORY_B128 = AmdgpuImplicitOperandOverlay(
     operand_type="OPR_GPUMEM",
     data_format_name="FMT_NUM_B128",
@@ -1994,6 +2026,8 @@ def _ignore_global_read_memory(width_bits: int) -> AmdgpuImplicitOperandOverlay:
             return _IGNORE_GLOBAL_READ_MEMORY
         case 64:
             return _IGNORE_GLOBAL_READ_MEMORY_B64
+        case 96:
+            return _IGNORE_GLOBAL_READ_MEMORY_B96
         case 128:
             return _IGNORE_GLOBAL_READ_MEMORY_B128
         case _:
@@ -2010,6 +2044,8 @@ def _ignore_global_write_memory(width_bits: int) -> AmdgpuImplicitOperandOverlay
             return _IGNORE_GLOBAL_WRITE_MEMORY
         case 64:
             return _IGNORE_GLOBAL_WRITE_MEMORY_B64
+        case 96:
+            return _IGNORE_GLOBAL_WRITE_MEMORY_B96
         case 128:
             return _IGNORE_GLOBAL_WRITE_MEMORY_B128
         case _:
@@ -2026,6 +2062,8 @@ def _global_read_effect(width_bits: int) -> Effect:
             return _GLOBAL_LOAD_EFFECT
         case 64:
             return _GLOBAL_LOAD_B64_EFFECT
+        case 96:
+            return _GLOBAL_LOAD_B96_EFFECT
         case 128:
             return _GLOBAL_LOAD_B128_EFFECT
         case _:
@@ -2042,6 +2080,8 @@ def _global_write_effect(width_bits: int) -> Effect:
             return _GLOBAL_STORE_EFFECT
         case 64:
             return _GLOBAL_STORE_B64_EFFECT
+        case 96:
+            return _GLOBAL_STORE_B96_EFFECT
         case 128:
             return _GLOBAL_STORE_B128_EFFECT
         case _:
@@ -2331,6 +2371,7 @@ __all__ = (
     "_GLOBAL_LOAD_B16_EFFECT",
     "_GLOBAL_LOAD_B8_EFFECT",
     "_GLOBAL_LOAD_B64_EFFECT",
+    "_GLOBAL_LOAD_B96_EFFECT",
     "_GLOBAL_LOAD_EFFECT",
     "_GLOBAL_PREFETCH_EFFECT",
     "_GLOBAL_SADDR_OFF",
@@ -2340,6 +2381,7 @@ __all__ = (
     "_GLOBAL_STORE_B16_EFFECT",
     "_GLOBAL_STORE_B8_EFFECT",
     "_GLOBAL_STORE_B64_EFFECT",
+    "_GLOBAL_STORE_B96_EFFECT",
     "_GLOBAL_STORE_EFFECT",
     "_HAL_BUFFER_DESCRIPTOR_CACHE_SWIZZLE_STRIDE_IMMEDIATE",
     "_HAL_BUFFER_DESCRIPTOR_EXTENT_IMMEDIATE",
@@ -2350,6 +2392,7 @@ __all__ = (
     "_IGNORE_GLOBAL_READ_MEMORY_B16",
     "_IGNORE_GLOBAL_READ_MEMORY_B8",
     "_IGNORE_GLOBAL_READ_MEMORY_B64",
+    "_IGNORE_GLOBAL_READ_MEMORY_B96",
     "_IGNORE_GLOBAL_READ_MEMORY_I8",
     "_IGNORE_GLOBAL_READ_MEMORY_U16",
     "_IGNORE_GLOBAL_WRITE_MEMORY",
@@ -2357,6 +2400,7 @@ __all__ = (
     "_IGNORE_GLOBAL_WRITE_MEMORY_B16",
     "_IGNORE_GLOBAL_WRITE_MEMORY_B8",
     "_IGNORE_GLOBAL_WRITE_MEMORY_B64",
+    "_IGNORE_GLOBAL_WRITE_MEMORY_B96",
     "_INSTRUCTION_PREFETCH_EFFECT",
     "_KMCNT_IMMEDIATE",
     "_LDS_COUNTER_HAZARD",
