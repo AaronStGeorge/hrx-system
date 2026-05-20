@@ -386,6 +386,7 @@ func_template = Op(
         name="function",
         interfaces=["func_like"],
         bytecode_kind="LOOM_SYMBOL_FUNC_TEMPLATE",
+        fact_domain="loom_func_symbol_fact_domain",
     ),
     results=[Result("results", ANY, variadic=True)],
     regions=[RegionDef("body", doc="Template body.", terminator="func.return")],
@@ -432,6 +433,7 @@ func_ukernel = Op(
         name="function",
         interfaces=["func_like"],
         bytecode_kind="LOOM_SYMBOL_FUNC_UKERNEL",
+        fact_domain="loom_func_symbol_fact_domain",
     ),
     results=[Result("results", ANY, variadic=True)],
     interfaces=[

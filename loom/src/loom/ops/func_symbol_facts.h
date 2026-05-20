@@ -48,8 +48,23 @@ typedef struct loom_func_symbol_facts_t {
   // Purity enum value from the func interface.
   uint8_t purity;
 
+  // Execution temperature enum value from the func interface.
+  uint8_t temperature;
+
+  // Inline policy enum value from the func interface.
+  uint8_t inline_policy;
+
   // True when the func op owns an implementation body.
   bool has_body;
+
+  // Implementation contract string ID for provider funcs, or invalid.
+  loom_string_id_t implements_id;
+
+  // Borrowed implementation contract key, or empty for non-providers.
+  iree_string_view_t implements;
+
+  // Provider priority for funcs with an implementation contract.
+  int64_t priority;
 
   // Borrowed argument value IDs in signature order.
   const loom_value_id_t* argument_ids;
@@ -62,6 +77,12 @@ typedef struct loom_func_symbol_facts_t {
 
   // Number of result value IDs.
   uint16_t result_count;
+
+  // Borrowed predicate list for provider or callable selection.
+  const loom_predicate_t* predicates;
+
+  // Number of predicate entries.
+  uint16_t predicate_count;
 
   // True when the func is an external import declaration.
   bool imports;

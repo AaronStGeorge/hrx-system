@@ -76,6 +76,41 @@ loom_cc_test(
 
 loom_cc_library(
   NAME
+    func_provider_catalog
+  HDRS
+    "func_provider_catalog.h"
+  SRCS
+    "func_provider_catalog.c"
+  DEPS
+    ::symbol_facts
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::ir
+    loom::src::loom::ops::func_symbol_facts
+    loom::src::loom::ops::op_defs
+  PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    func_provider_catalog_test
+  SRCS
+    "func_provider_catalog_test.cc"
+  DEPS
+    ::func_provider_catalog
+    ::symbol_facts
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::op_defs
+    loom::src::loom::testing::module_ptr
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_library(
+  NAME
     matrix_fragment_layout
   HDRS
     "matrix_fragment_layout.h"

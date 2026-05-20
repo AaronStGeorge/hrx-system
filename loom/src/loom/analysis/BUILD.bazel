@@ -69,6 +69,37 @@ loom_cc_test(
 )
 
 loom_cc_library(
+    name = "func_provider_catalog",
+    srcs = ["func_provider_catalog.c"],
+    hdrs = ["func_provider_catalog.h"],
+    deps = [
+        ":symbol_facts",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:func_symbol_facts",
+        "//loom/src/loom/ops:op_defs",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+    ],
+)
+
+loom_cc_test(
+    name = "func_provider_catalog_test",
+    srcs = ["func_provider_catalog_test.cc"],
+    deps = [
+        ":func_provider_catalog",
+        ":symbol_facts",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_defs",
+        "//loom/src/loom/ops/func",
+        "//loom/src/loom/testing:module_ptr",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_library(
     name = "matrix_fragment_layout",
     srcs = ["matrix_fragment_layout.c"],
     hdrs = ["matrix_fragment_layout.h"],

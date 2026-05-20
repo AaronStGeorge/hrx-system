@@ -113,11 +113,41 @@ func.def public device @semantic() {
   EXPECT_EQ(facts->visibility, 1);
   EXPECT_EQ(facts->calling_convention, 2);
   EXPECT_EQ(facts->purity, 0);
+  EXPECT_EQ(facts->temperature, 0);
+  EXPECT_EQ(facts->inline_policy, 0);
+  EXPECT_EQ(facts->implements_id, LOOM_STRING_ID_INVALID);
+  EXPECT_TRUE(iree_string_view_is_empty(facts->implements));
+  EXPECT_EQ(facts->priority, 0);
+  EXPECT_EQ(facts->predicate_count, 0);
   EXPECT_EQ(facts->argument_count, 0);
   EXPECT_EQ(facts->result_count, 0);
   EXPECT_FALSE(loom_symbol_ref_is_valid(facts->target_symbol));
   EXPECT_FALSE(facts->has_abi);
   EXPECT_FALSE(facts->exports);
+}
+
+TEST_F(FuncSymbolFactsTest, TemplateFactsCarryProviderContract) {
+  ModulePtr module = ParseModule(R"(
+func.template<qwen.q4.matmul> public device pure hot inline priority(7) @impl(%m: index) -> (index) where [mul(%m, 16)] {
+  func.return %m : index
+}
+)");
+
+  const loom_func_symbol_facts_t* facts =
+      LookupFunc(module.get(), IREE_SV("impl"));
+  EXPECT_EQ(facts->base.symbol_kind, LOOM_SYMBOL_FUNC_TEMPLATE);
+  EXPECT_TRUE(facts->has_body);
+  EXPECT_EQ(facts->visibility, 1);
+  EXPECT_EQ(facts->calling_convention, 2);
+  EXPECT_EQ(facts->purity, 1);
+  EXPECT_EQ(facts->temperature, 1);
+  EXPECT_EQ(facts->inline_policy, 1);
+  EXPECT_TRUE(
+      iree_string_view_equal(facts->implements, IREE_SV("qwen.q4.matmul")));
+  EXPECT_EQ(facts->priority, 7);
+  EXPECT_EQ(facts->argument_count, 1);
+  EXPECT_EQ(facts->result_count, 1);
+  EXPECT_EQ(facts->predicate_count, 1);
 }
 
 TEST_F(FuncSymbolFactsTest, DeclarationFactsCarryImportContract) {
