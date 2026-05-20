@@ -31,6 +31,7 @@
 #include "loom/transforms/ownership/ownership_lifetime.h"
 #include "loom/transforms/scf/scf_to_cfg.h"
 #include "loom/transforms/scf/scf_unroll.h"
+#include "loom/transforms/symbol/inline_callables.h"
 #include "loom/transforms/symbol/refine_boundaries.h"
 #include "loom/transforms/symbol/symbol_dce.h"
 #include "loom/transforms/vector/memory_footprint.h"
@@ -246,6 +247,11 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .key = IREE_SVL("dce"),
         .info = loom_dce_pass_info,
         .function_run = loom_dce_run,
+    },
+    {
+        .key = IREE_SVL("inline-callables"),
+        .info = loom_inline_callables_pass_info,
+        .module_run = loom_inline_callables_run,
     },
     {
         .key = IREE_SVL("kernel-async-legality"),

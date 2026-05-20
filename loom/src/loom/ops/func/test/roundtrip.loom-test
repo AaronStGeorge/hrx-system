@@ -12,8 +12,29 @@ func.def @call_identity(%x: f32) -> (f32) {
 
 // ====
 
+// Inline policy and temperature modifiers on function definitions and calls.
+func.def hot inline @hot_inline_identity(%x: f32) -> (f32) {
+  func.return %x : f32
+}
+
+func.def cold noinline @cold_serializer(%x: f32) -> (f32) {
+  func.return %x : f32
+}
+
+func.def @call_with_edge_policy(%x: f32) -> (f32) {
+  %r = func.call hot inline @hot_inline_identity(%x) : (f32) -> (f32)
+  func.return %r : f32
+}
+
+// ====
+
 // External function declaration with no body.
 func.decl @extern_matmul(%a: f32, %b: f32) -> (f32)
+
+// ====
+
+// Declaration contract carrying author inline policy for provider-backed import.
+func.decl hot inline @extern_small_helper(%x: f32) -> (f32)
 
 // ====
 
@@ -54,4 +75,18 @@ func.def initializer @setup() {
 
 func.def deinitializer @teardown() {
   func.return
+}
+
+// ====
+
+// Template and ukernel policy modifiers share the same author-facing spelling.
+func.template<test.effect> hot inline @pure_template(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+func.ukernel<test.effect> cold noinline @opaque_template(%value: i32) -> (i32)
+
+func.def @apply_with_edge_policy(%value: i32) -> (i32) {
+  %result = func.apply cold inline @pure_template(%value) : (i32) -> (i32)
+  func.return %result : i32
 }

@@ -616,7 +616,7 @@ static iree_status_t loom_callable_outline_build_function(
   loom_builder_set_block(&rewriter->builder, loom_module_block(state->module));
   loom_op_t* func_op = NULL;
   iree_status_t status = loom_func_def_build(
-      &rewriter->builder, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+      &rewriter->builder, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
       loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
       loom_named_attr_slice_empty(), outlined_ref, arg_types, captures->count,
       result_types, live_outs->count, NULL, 0, NULL, 0,
@@ -747,9 +747,9 @@ static iree_status_t loom_callable_outline_build_call(
   loom_builder_set_before(&rewriter->builder, state->first_op);
   loom_op_t* call_op = NULL;
   iree_status_t status = loom_func_call_build(
-      &rewriter->builder, 0, 0, outlined_ref, captures->values, captures->count,
-      result_placeholders, live_outs->count, NULL, 0, state->first_op->location,
-      &call_op);
+      &rewriter->builder, 0, 0, 0, 0, outlined_ref, captures->values,
+      captures->count, result_placeholders, live_outs->count, NULL, 0,
+      state->first_op->location, &call_op);
   loom_builder_restore(&rewriter->builder, saved_ip);
   IREE_RETURN_IF_ERROR(status);
 

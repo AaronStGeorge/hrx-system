@@ -107,7 +107,7 @@ class LlvmIrAmdgpuLegalityTest : public ::testing::Test {
         &module_builder_,
         LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY |
             LOOM_FUNC_DEF_BUILD_FLAG_HAS_CC,
-        LOOM_FUNC_VISIBILITY_PUBLIC, LOOM_FUNC_CC_DEVICE, 0,
+        LOOM_FUNC_VISIBILITY_PUBLIC, LOOM_FUNC_CC_DEVICE, 0, 0, 0,
         loom_symbol_ref_null(), 0, loom_named_attr_slice_empty(),
         LOOM_STRING_ID_INVALID, loom_named_attr_slice_empty(), symbol, NULL, 0,
         NULL, 0, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
@@ -132,7 +132,7 @@ class LlvmIrAmdgpuLegalityTest : public ::testing::Test {
         &module_builder_,
         LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY |
             LOOM_FUNC_DEF_BUILD_FLAG_HAS_CC,
-        LOOM_FUNC_VISIBILITY_PUBLIC, LOOM_FUNC_CC_DEVICE, 0,
+        LOOM_FUNC_VISIBILITY_PUBLIC, LOOM_FUNC_CC_DEVICE, 0, 0, 0,
         loom_symbol_ref_null(), 0, loom_named_attr_slice_empty(),
         LOOM_STRING_ID_INVALID, loom_named_attr_slice_empty(), symbol,
         &view_type, 1, NULL, 0, NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN,

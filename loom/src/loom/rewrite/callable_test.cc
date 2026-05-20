@@ -83,7 +83,7 @@ class CallableInlineTest : public ::testing::Test {
                                  loom_type_t value_type) {
     loom_op_t* func_op = nullptr;
     IREE_CHECK_OK(loom_func_def_build(
-        &module_builder_, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+        &module_builder_, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
         loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
         loom_named_attr_slice_empty(), callee, &value_type, 1, &value_type, 1,
         nullptr, 0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
@@ -107,10 +107,10 @@ class CallableInlineTest : public ::testing::Test {
                                  loom_type_t value_type) {
     loom_string_id_t implements = InternString(IREE_SV("test.neg"));
     loom_op_t* func_op = nullptr;
-    IREE_CHECK_OK(loom_func_template_build(&module_builder_, 0, implements, 0,
-                                           0, 0, 0, callee, &value_type, 1,
-                                           &value_type, 1, nullptr, 0, nullptr,
-                                           0, LOOM_LOCATION_UNKNOWN, &func_op));
+    IREE_CHECK_OK(loom_func_template_build(
+        &module_builder_, 0, implements, 0, 0, 0, 0, 0, 0, callee, &value_type,
+        1, &value_type, 1, nullptr, 0, nullptr, 0, LOOM_LOCATION_UNKNOWN,
+        &func_op));
     loom_func_like_t func = loom_func_like_cast(module_, func_op);
     uint16_t arg_count = 0;
     const loom_value_id_t* args = loom_func_like_arg_ids(func, &arg_count);
@@ -133,7 +133,7 @@ class CallableInlineTest : public ::testing::Test {
     loom_type_t result_types[2] = {value_type, value_type};
     loom_op_t* func_op = nullptr;
     IREE_CHECK_OK(loom_func_def_build(
-        &module_builder_, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+        &module_builder_, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
         loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
         loom_named_attr_slice_empty(), callee, arg_types,
         IREE_ARRAYSIZE(arg_types), result_types, IREE_ARRAYSIZE(result_types),
@@ -159,7 +159,7 @@ class CallableInlineTest : public ::testing::Test {
                          loom_type_t value_type, loom_op_t** out_call_op) {
     loom_op_t* func_op = nullptr;
     IREE_CHECK_OK(loom_func_def_build(
-        &module_builder_, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+        &module_builder_, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
         loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
         loom_named_attr_slice_empty(), caller, &value_type, 1, &value_type, 1,
         nullptr, 0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
@@ -170,8 +170,8 @@ class CallableInlineTest : public ::testing::Test {
 
     loom_builder_t body_builder = BodyBuilder(func_op);
     loom_op_t* call_op = nullptr;
-    IREE_CHECK_OK(loom_func_call_build(&body_builder, 0, 0, callee, args, 1,
-                                       &value_type, 1, nullptr, 0,
+    IREE_CHECK_OK(loom_func_call_build(&body_builder, 0, 0, 0, 0, callee, args,
+                                       1, &value_type, 1, nullptr, 0,
                                        LOOM_LOCATION_UNKNOWN, &call_op));
     loom_value_id_t call_result = loom_func_call_results(call_op).values[0];
     SetValueName(call_result, IREE_SV("call_result"));
@@ -187,7 +187,7 @@ class CallableInlineTest : public ::testing::Test {
                               loom_op_t** out_apply_op) {
     loom_op_t* func_op = nullptr;
     IREE_CHECK_OK(loom_func_def_build(
-        &module_builder_, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+        &module_builder_, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
         loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
         loom_named_attr_slice_empty(), caller, &value_type, 1, &value_type, 1,
         nullptr, 0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
@@ -198,8 +198,8 @@ class CallableInlineTest : public ::testing::Test {
 
     loom_builder_t body_builder = BodyBuilder(func_op);
     loom_op_t* apply_op = nullptr;
-    IREE_CHECK_OK(loom_func_apply_build(&body_builder, 0, 0, callee, args, 1,
-                                        &value_type, 1, nullptr, 0,
+    IREE_CHECK_OK(loom_func_apply_build(&body_builder, 0, 0, 0, 0, callee, args,
+                                        1, &value_type, 1, nullptr, 0,
                                         LOOM_LOCATION_UNKNOWN, &apply_op));
     loom_value_id_t apply_result = loom_func_apply_results(apply_op).values[0];
     loom_op_t* return_op = nullptr;
@@ -217,7 +217,7 @@ class CallableInlineTest : public ::testing::Test {
     loom_type_t result_types[2] = {value_type, value_type};
     loom_op_t* func_op = nullptr;
     IREE_CHECK_OK(loom_func_def_build(
-        &module_builder_, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+        &module_builder_, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
         loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
         loom_named_attr_slice_empty(), caller, arg_types,
         IREE_ARRAYSIZE(arg_types), result_types, IREE_ARRAYSIZE(result_types),
@@ -229,7 +229,7 @@ class CallableInlineTest : public ::testing::Test {
 
     loom_builder_t body_builder = BodyBuilder(func_op);
     loom_op_t* call_op = nullptr;
-    IREE_CHECK_OK(loom_func_call_build(&body_builder, 0, 0, callee, args,
+    IREE_CHECK_OK(loom_func_call_build(&body_builder, 0, 0, 0, 0, callee, args,
                                        IREE_ARRAYSIZE(arg_types), result_types,
                                        IREE_ARRAYSIZE(result_types), nullptr, 0,
                                        LOOM_LOCATION_UNKNOWN, &call_op));
@@ -443,7 +443,7 @@ TEST_F(CallableInlineTest, RejectsRecursiveSelfInline) {
   loom_symbol_ref_t self_ref = MakeSymbol(IREE_SV("self"));
   loom_op_t* func_op = nullptr;
   IREE_ASSERT_OK(loom_func_def_build(
-      &module_builder_, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+      &module_builder_, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
       loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
       loom_named_attr_slice_empty(), self_ref, &i32, 1, &i32, 1, nullptr, 0,
       nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
@@ -454,8 +454,8 @@ TEST_F(CallableInlineTest, RejectsRecursiveSelfInline) {
 
   loom_builder_t body_builder = BodyBuilder(func_op);
   loom_op_t* call_op = nullptr;
-  IREE_ASSERT_OK(loom_func_call_build(&body_builder, 0, 0, self_ref, args, 1,
-                                      &i32, 1, nullptr, 0,
+  IREE_ASSERT_OK(loom_func_call_build(&body_builder, 0, 0, 0, 0, self_ref, args,
+                                      1, &i32, 1, nullptr, 0,
                                       LOOM_LOCATION_UNKNOWN, &call_op));
   loom_value_id_t call_result = loom_func_call_results(call_op).values[0];
   loom_op_t* return_op = nullptr;
@@ -476,7 +476,7 @@ TEST_F(CallableInlineTest, OutlinesRangeIntoFunctionAndCall) {
   loom_symbol_ref_t outlined_ref = MakeSymbol(IREE_SV("outlined"));
   loom_op_t* caller_op = nullptr;
   IREE_ASSERT_OK(loom_func_def_build(
-      &module_builder_, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+      &module_builder_, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
       loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
       loom_named_attr_slice_empty(), caller_ref, &i32, 1, &i32, 1, nullptr, 0,
       nullptr, 0, LOOM_LOCATION_UNKNOWN, &caller_op));
@@ -543,7 +543,7 @@ TEST_F(CallableInlineTest, OutlineReturnsMultipleLiveOuts) {
   loom_type_t result_types[2] = {i32, i32};
   loom_op_t* caller_op = nullptr;
   IREE_ASSERT_OK(loom_func_def_build(
-      &module_builder_, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+      &module_builder_, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
       loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
       loom_named_attr_slice_empty(), caller_ref, &i32, 1, result_types,
       IREE_ARRAYSIZE(result_types), nullptr, 0, nullptr, 0,
@@ -602,7 +602,7 @@ TEST_F(CallableInlineTest, OutlineRemapsDynamicResultTypeRefs) {
   loom_symbol_ref_t outlined_ref = MakeSymbol(IREE_SV("outlined"));
   loom_op_t* caller_op = nullptr;
   IREE_ASSERT_OK(loom_func_def_build(
-      &module_builder_, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+      &module_builder_, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
       loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
       loom_named_attr_slice_empty(), caller_ref, &input_type, 1,
       placeholder_result_types, IREE_ARRAYSIZE(placeholder_result_types),
@@ -663,7 +663,7 @@ TEST_F(CallableInlineTest, OutlineReturnsTypeOnlyDynamicDeps) {
   loom_symbol_ref_t outlined_ref = MakeSymbol(IREE_SV("outlined"));
   loom_op_t* caller_op = nullptr;
   IREE_ASSERT_OK(loom_func_def_build(
-      &module_builder_, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+      &module_builder_, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
       loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
       loom_named_attr_slice_empty(), caller_ref, &input_type, 1, &input_type, 1,
       nullptr, 0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &caller_op));
@@ -724,7 +724,7 @@ TEST_F(CallableInlineTest, OutlineRejectsAlreadyDefinedSymbol) {
   BuildNegateFunction(outlined_ref, i32);
   loom_op_t* caller_op = nullptr;
   IREE_ASSERT_OK(loom_func_def_build(
-      &module_builder_, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+      &module_builder_, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
       loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
       loom_named_attr_slice_empty(), caller_ref, &i32, 1, &i32, 1, nullptr, 0,
       nullptr, 0, LOOM_LOCATION_UNKNOWN, &caller_op));
@@ -819,7 +819,7 @@ class CallableImportTest : public ::testing::Test {
                                  loom_type_t value_type) {
     loom_op_t* func_op = nullptr;
     IREE_CHECK_OK(loom_func_def_build(
-        module_builder, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+        module_builder, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
         loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
         loom_named_attr_slice_empty(), callee, &value_type, 1, &value_type, 1,
         nullptr, 0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
@@ -846,7 +846,7 @@ class CallableImportTest : public ::testing::Test {
                                       loom_type_t value_type) {
     loom_op_t* func_op = nullptr;
     IREE_CHECK_OK(loom_func_def_build(
-        module_builder, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+        module_builder, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
         loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
         loom_named_attr_slice_empty(), caller, &value_type, 1, &value_type, 1,
         nullptr, 0, nullptr, 0, LOOM_LOCATION_UNKNOWN, &func_op));
@@ -857,8 +857,8 @@ class CallableImportTest : public ::testing::Test {
 
     loom_builder_t body_builder = BodyBuilder(module, func_op);
     loom_op_t* call_op = nullptr;
-    IREE_CHECK_OK(loom_func_call_build(&body_builder, 0, 0, callee, args, 1,
-                                       &value_type, 1, nullptr, 0,
+    IREE_CHECK_OK(loom_func_call_build(&body_builder, 0, 0, 0, 0, callee, args,
+                                       1, &value_type, 1, nullptr, 0,
                                        LOOM_LOCATION_UNKNOWN, &call_op));
     loom_value_slice_t call_results = loom_func_call_results(call_op);
     IREE_ASSERT_EQ(call_results.count, 1u);

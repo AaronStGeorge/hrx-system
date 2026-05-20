@@ -3165,6 +3165,10 @@ class CallLikeInterface(NamedTuple):
     results: str
     # Optional purity enum attr. None if not applicable.
     purity: str | None = None
+    # Optional temperature enum attr. None if not applicable.
+    temperature: str | None = None
+    # Optional inline policy enum attr. None if not applicable.
+    inline_policy: str | None = None
     # Semantic class used by analyses to opt into only the call shapes they own.
     kind: CallLikeKind = CallLikeKind.SEMANTIC
 
@@ -3205,6 +3209,10 @@ class FuncLikeInterface(NamedTuple):
     cc: str | None = None
     # Purity enum attr. None if not applicable.
     purity: str | None = None
+    # Temperature enum attr. None if not applicable.
+    temperature: str | None = None
+    # Inline policy enum attr. None if not applicable.
+    inline_policy: str | None = None
     # Predicate list attr for where-clause constraints. None if absent.
     predicates: str | None = None
     # Region name for the function body. None for bodyless ops that

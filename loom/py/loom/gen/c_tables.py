@@ -909,6 +909,8 @@ _INTERFACES: tuple[InterfaceSpec, ...] = (
         fields=(
             InterfaceFieldSpec("callee", "callee_attr_index", "attr"),
             InterfaceFieldSpec("purity", "purity_attr_index", "attr"),
+            InterfaceFieldSpec("temperature", "temperature_attr_index", "attr"),
+            InterfaceFieldSpec("inline_policy", "inline_policy_attr_index", "attr"),
             InterfaceFieldSpec("operands", "operand_offset", "operand"),
             InterfaceFieldSpec("results", "result_offset", "result"),
             InterfaceFieldSpec("kind", "kind", "call_kind"),
@@ -934,6 +936,8 @@ _INTERFACES: tuple[InterfaceSpec, ...] = (
             InterfaceFieldSpec("visibility", "visibility_attr_index", "attr"),
             InterfaceFieldSpec("cc", "cc_attr_index", "attr"),
             InterfaceFieldSpec("purity", "purity_attr_index", "attr"),
+            InterfaceFieldSpec("temperature", "temperature_attr_index", "attr"),
+            InterfaceFieldSpec("inline_policy", "inline_policy_attr_index", "attr"),
             InterfaceFieldSpec("predicates", "predicates_attr_index", "attr"),
             InterfaceFieldSpec("body", "body_region_index", "region"),
             InterfaceFieldSpec("implements", "implements_attr_index", "attr"),

@@ -2105,7 +2105,7 @@ low.kernel.def target(@target) workgroup_size(64, 1, 1) @subgroup_match_all_i32_
 }
 
 // ====
-// RUN: pass target-legalize{mode=final},dce,canonicalize,source-to-low,low-dce
+// RUN: pass target-legalize{mode=final},dce,canonicalize,scf-to-cfg,source-to-low,low-dce
 
 amdgpu.target<gfx1100> @target
 kernel.def target(@target) @subgroup_match_any_i32_wave32_i64(%output: buffer) {

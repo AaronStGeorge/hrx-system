@@ -113,7 +113,7 @@ class LlvmIrX86LegalityTest : public ::testing::Test {
     loom_type_t arg_types[3] = {input_type, input_type, result_type};
     loom_op_t* func_op = NULL;
     IREE_ASSERT_OK(loom_func_def_build(
-        &module_builder_, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+        &module_builder_, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
         loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
         loom_named_attr_slice_empty(), symbol, arg_types,
         IREE_ARRAYSIZE(arg_types), &result_type, 1, NULL, 0, NULL, 0,

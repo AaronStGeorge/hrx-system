@@ -12,6 +12,27 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
+    inline_callables
+  HDRS
+    "inline_callables.h"
+  SRCS
+    "inline_callables.c"
+  DEPS
+    iree::base
+    loom::src::loom::analysis::scc
+    loom::src::loom::analysis::symbol_dependencies
+    loom::src::loom::error::error_defs
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::op_defs
+    loom::src::loom::pass::types
+    loom::src::loom::rewrite::callable
+    loom::src::loom::rewrite::rewriter
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     refine_boundaries
   HDRS
     "refine_boundaries.h"

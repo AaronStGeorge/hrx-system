@@ -338,6 +338,25 @@ ERR_LOWERING_043 = ErrorDef(
     ),
 )
 
+# ERR_LOWERING_044: Required callable inline failed.
+ERR_LOWERING_044 = ErrorDef(
+    domain=ErrorDomain.LOWERING,
+    code=44,
+    severity=Severity.ERROR,
+    summary="Required callable inline failed.",
+    message=("{phase_name} cannot inline {op_name} to @{callee_name}: {reason}"),
+    params=(
+        ErrorParam("op_name", ParamKind.STRING),
+        ErrorParam("phase_name", ParamKind.STRING),
+        ErrorParam("callee_name", ParamKind.STRING),
+        ErrorParam("reason", ParamKind.STRING),
+    ),
+    fix_hint=(
+        "Remove the required inline policy, provide an inlineable same-module "
+        "body, or resolve the reported policy conflict"
+    ),
+)
+
 ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_022,
     ERR_LOWERING_023,
@@ -355,4 +374,5 @@ ALL_LOWERING_ERRORS: tuple[ErrorDef, ...] = (
     ERR_LOWERING_035,
     ERR_LOWERING_036,
     ERR_LOWERING_043,
+    ERR_LOWERING_044,
 )

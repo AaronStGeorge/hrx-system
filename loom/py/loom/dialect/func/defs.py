@@ -104,6 +104,24 @@ Purity = EnumDef(
     doc="Function purity. Absent (0) means unspecified (conservative).",
 )
 
+Temperature = EnumDef(
+    "Temperature",
+    [
+        EnumCase("hot", 1, doc="Expected to execute on a hot path."),
+        EnumCase("cold", 2, doc="Expected to execute on a cold path."),
+    ],
+    doc="Execution temperature hint. Absent (0) means unspecified.",
+)
+
+InlinePolicy = EnumDef(
+    "InlinePolicy",
+    [
+        EnumCase("inline", 1, doc="Require inlining at the current IR stage."),
+        EnumCase("noinline", 2, doc="Preserve the callable boundary."),
+    ],
+    doc="Author inline policy. Absent (0) leaves the edge to the current pass.",
+)
+
 # ============================================================================
 # Shared format fragments
 # ============================================================================
@@ -118,6 +136,8 @@ _MODIFIER_FORMAT: list[FormatElement] = [
     OptionalGroup([Attr("visibility")], anchor="visibility"),
     OptionalGroup([Attr("cc")], anchor="cc"),
     OptionalGroup([Attr("purity")], anchor="purity"),
+    OptionalGroup([Attr("temperature")], anchor="temperature"),
+    OptionalGroup([Attr("inline_policy")], anchor="inline_policy"),
 ]
 
 _TARGET_FORMAT: list[FormatElement] = [
@@ -200,6 +220,8 @@ _MODIFIER_ATTRS = [
     AttrDef("visibility", "enum", enum_def=Visibility, optional=True),
     AttrDef("cc", "enum", enum_def=CallingConv, optional=True),
     AttrDef("purity", "enum", enum_def=Purity, optional=True),
+    AttrDef("temperature", "enum", enum_def=Temperature, optional=True),
+    AttrDef("inline_policy", "enum", enum_def=InlinePolicy, optional=True),
     AttrDef("predicates", "predicate_list", optional=True),
 ]
 
@@ -230,6 +252,8 @@ _DECL_ATTRS = [
     AttrDef("import_symbol", "string", optional=True),
     AttrDef("cc", "enum", enum_def=CallingConv, optional=True),
     AttrDef("purity", "enum", enum_def=Purity, optional=True),
+    AttrDef("temperature", "enum", enum_def=Temperature, optional=True),
+    AttrDef("inline_policy", "enum", enum_def=InlinePolicy, optional=True),
     *_CONTRACT_ATTRS,
     AttrDef("predicates", "predicate_list", optional=True),
 ]
@@ -244,6 +268,8 @@ _FUNC_LIKE_COMMON: dict[str, Any] = dict(
     visibility="visibility",
     cc="cc",
     purity="purity",
+    temperature="temperature",
+    inline_policy="inline_policy",
     predicates="predicates",
 )
 
@@ -296,6 +322,7 @@ func_def = Op(
         "func.def @negate(%input: f32) -> (f32) {\n  func.return %input : f32\n}",
         "func.def public device @entry(%a: f32) -> (f32) {\n  func.return %a : f32\n}",
         "func.def public pure @add(%a: f32, %b: f32) -> (f32) {\n  func.return %a : f32\n}",
+        "func.def cold noinline @serializer(%a: f32) -> (f32) {\n  func.return %a : f32\n}",
     ],
 )
 
@@ -325,6 +352,8 @@ func_decl = Op(
         *_IMPORT_FORMAT,
         OptionalGroup([Attr("cc")], anchor="cc"),
         OptionalGroup([Attr("purity")], anchor="purity"),
+        OptionalGroup([Attr("temperature")], anchor="temperature"),
+        OptionalGroup([Attr("inline_policy")], anchor="inline_policy"),
         *_TARGET_FORMAT,
         *_ABI_FORMAT,
         *_EXPORT_FORMAT,
@@ -333,6 +362,7 @@ func_decl = Op(
     examples=[
         "func.decl @extern_matmul(%a: tensor<[%M]xf32>, %b: tensor<[%K]xf32>) -> (tensor<[%M]xf32>)",
         "func.decl public @exported(%a: f32) -> (f32)",
+        "func.decl hot inline @tiny(%a: f32) -> (f32)",
         'func.decl public import("hal") @hal_buffer_view_create(%a: i32) -> (i64)',
         'func.decl import("hal", "buffer_view.create") @hal_buffer_view_create(%a: i32) -> (i64)',
     ],
@@ -446,6 +476,8 @@ func_call = Op(
             symbol_ref=SymbolReference("function", ["func_like"]),
         ),
         AttrDef("purity", "enum", enum_def=Purity, optional=True),
+        AttrDef("temperature", "enum", enum_def=Temperature, optional=True),
+        AttrDef("inline_policy", "enum", enum_def=InlinePolicy, optional=True),
     ],
     results=[Result("results", ANY, variadic=True)],
     traits=[UNKNOWN_EFFECTS],
@@ -455,6 +487,8 @@ func_call = Op(
             operands="operands",
             results="results",
             purity="purity",
+            temperature="temperature",
+            inline_policy="inline_policy",
             kind=CallLikeKind.SEMANTIC,
         ),
     ],
@@ -462,6 +496,8 @@ func_call = Op(
     effective_traits="loom_func_call_effective_traits",
     format=[
         OptionalGroup([Attr("purity")], anchor="purity"),
+        OptionalGroup([Attr("temperature")], anchor="temperature"),
+        OptionalGroup([Attr("inline_policy")], anchor="inline_policy"),
         SymbolRef("callee"),
         GLUE,
         LPAREN,
@@ -479,6 +515,7 @@ func_call = Op(
     examples=[
         "%r = func.call @add(%a, %b) : (f32, f32) -> (f32)",
         "%r = func.call pure @add(%a, %b) : (f32, f32) -> (f32)",
+        "%r = func.call hot inline @add(%a, %b) : (f32, f32) -> (f32)",
         "%out, %count = func.call @process(%a, %b) : (tensor<[%M]xf32>, index) -> (%a as tensor<[%M]xf32>, index)",
     ],
 )
@@ -501,6 +538,8 @@ func_apply = Op(
             symbol_ref=SymbolReference("function", ["func_like"]),
         ),
         AttrDef("purity", "enum", enum_def=Purity, optional=True),
+        AttrDef("temperature", "enum", enum_def=Temperature, optional=True),
+        AttrDef("inline_policy", "enum", enum_def=InlinePolicy, optional=True),
     ],
     results=[Result("results", ANY, variadic=True)],
     traits=[UNKNOWN_EFFECTS],
@@ -510,6 +549,8 @@ func_apply = Op(
             operands="operands",
             results="results",
             purity="purity",
+            temperature="temperature",
+            inline_policy="inline_policy",
             kind=CallLikeKind.TEMPLATE,
         ),
     ],
@@ -517,6 +558,8 @@ func_apply = Op(
     effective_traits="loom_func_apply_effective_traits",
     format=[
         OptionalGroup([Attr("purity")], anchor="purity"),
+        OptionalGroup([Attr("temperature")], anchor="temperature"),
+        OptionalGroup([Attr("inline_policy")], anchor="inline_policy"),
         SymbolRef("callee"),
         GLUE,
         LPAREN,
@@ -534,6 +577,7 @@ func_apply = Op(
     examples=[
         "%r = func.apply @vnni_q8_matvec(%w, %x) : (tensor<16x32xi8>, tensor<32xf32>) -> (tensor<16xf32>)",
         "%r = func.apply pure @vnni_q8_matvec(%w, %x) : (tensor<16x32xi8>, tensor<32xf32>) -> (tensor<16xf32>)",
+        "%r = func.apply hot inline @vnni_q8_matvec(%w, %x) : (tensor<16x32xi8>, tensor<32xf32>) -> (tensor<16xf32>)",
     ],
 )
 

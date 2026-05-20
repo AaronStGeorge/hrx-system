@@ -645,6 +645,16 @@ static iree_status_t loom_link_merge_func_contract(
           .field_name = IREE_SV("purity"),
       },
       {
+          .source_attr_index = source_func.vtable->temperature_attr_index,
+          .target_attr_index = target_func.vtable->temperature_attr_index,
+          .field_name = IREE_SV("temperature"),
+      },
+      {
+          .source_attr_index = source_func.vtable->inline_policy_attr_index,
+          .target_attr_index = target_func.vtable->inline_policy_attr_index,
+          .field_name = IREE_SV("inline_policy"),
+      },
+      {
           .source_attr_index = source_func.vtable->target_attr_index,
           .target_attr_index = target_func.vtable->target_attr_index,
           .field_name = IREE_SV("target"),

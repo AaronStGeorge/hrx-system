@@ -113,7 +113,7 @@ class LlvmIrLegalityTest : public ::testing::Test {
     loom_op_t* func_op = NULL;
     IREE_ASSERT_OK(loom_func_def_build(
         &module_builder_, LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY,
-        LOOM_FUNC_VISIBILITY_PUBLIC, 0, 0, loom_symbol_ref_null(), 0,
+        LOOM_FUNC_VISIBILITY_PUBLIC, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
         loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
         loom_named_attr_slice_empty(), symbol, arg_types, 2, result_types, 1,
         NULL, 0, NULL, 0, LOOM_LOCATION_UNKNOWN, &func_op));
@@ -172,7 +172,7 @@ class LlvmIrLegalityTest : public ::testing::Test {
     loom_op_t* func_op = NULL;
     IREE_ASSERT_OK(loom_func_def_build(
         &module_builder_, LOOM_FUNC_DEF_BUILD_FLAG_HAS_VISIBILITY,
-        LOOM_FUNC_VISIBILITY_PUBLIC, 0, 0, loom_symbol_ref_null(), 0,
+        LOOM_FUNC_VISIBILITY_PUBLIC, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
         loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
         loom_named_attr_slice_empty(), symbol, arg_types,
         IREE_ARRAYSIZE(arg_types), NULL, 0, NULL, 0, NULL, 0,
@@ -210,7 +210,7 @@ class LlvmIrLegalityTest : public ::testing::Test {
     loom_symbol_ref_t symbol = MakeSymbol(IREE_SV("unknown_intrinsic"));
     loom_op_t* func_op = NULL;
     IREE_ASSERT_OK(loom_func_def_build(
-        &module_builder_, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+        &module_builder_, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
         loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
         loom_named_attr_slice_empty(), symbol, NULL, 0, NULL, 0, NULL, 0, NULL,
         0, LOOM_LOCATION_UNKNOWN, &func_op));
@@ -229,7 +229,7 @@ class LlvmIrLegalityTest : public ::testing::Test {
     loom_symbol_ref_t symbol = MakeSymbol(IREE_SV("f8_identity"));
     loom_op_t* func_op = NULL;
     IREE_ASSERT_OK(loom_func_def_build(
-        &module_builder_, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+        &module_builder_, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
         loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
         loom_named_attr_slice_empty(), symbol, &f8, 1, &f8, 1, NULL, 0, NULL, 0,
         LOOM_LOCATION_UNKNOWN, &func_op));
@@ -252,7 +252,7 @@ class LlvmIrLegalityTest : public ::testing::Test {
     loom_type_t arg_types[3] = {input_type, input_type, result_type};
     loom_op_t* func_op = NULL;
     IREE_ASSERT_OK(loom_func_def_build(
-        &module_builder_, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
+        &module_builder_, 0, 0, 0, 0, 0, 0, loom_symbol_ref_null(), 0,
         loom_named_attr_slice_empty(), LOOM_STRING_ID_INVALID,
         loom_named_attr_slice_empty(), symbol, arg_types,
         IREE_ARRAYSIZE(arg_types), &result_type, 1, NULL, 0, NULL, 0,

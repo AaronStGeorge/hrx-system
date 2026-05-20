@@ -583,6 +583,28 @@ uint8_t loom_call_like_purity(loom_call_like_t call) {
       loom_op_attrs(call.op)[call.vtable->purity_attr_index]);
 }
 
+uint8_t loom_call_like_temperature(loom_call_like_t call) {
+  if (!call.vtable) {
+    return 0;
+  }
+  if (call.vtable->temperature_attr_index == LOOM_ATTR_INDEX_NONE) {
+    return 0;
+  }
+  return loom_attr_as_enum(
+      loom_op_attrs(call.op)[call.vtable->temperature_attr_index]);
+}
+
+uint8_t loom_call_like_inline_policy(loom_call_like_t call) {
+  if (!call.vtable) {
+    return 0;
+  }
+  if (call.vtable->inline_policy_attr_index == LOOM_ATTR_INDEX_NONE) {
+    return 0;
+  }
+  return loom_attr_as_enum(
+      loom_op_attrs(call.op)[call.vtable->inline_policy_attr_index]);
+}
+
 loom_call_like_kind_t loom_call_like_kind(loom_call_like_t call) {
   if (!call.vtable) {
     return LOOM_CALL_LIKE_KIND_NONE;
@@ -649,6 +671,20 @@ uint8_t loom_func_like_purity(loom_func_like_t func) {
   if (func.vtable->purity_attr_index == LOOM_ATTR_INDEX_NONE) return 0;
   return loom_attr_as_enum(
       loom_op_attrs(func.op)[func.vtable->purity_attr_index]);
+}
+
+uint8_t loom_func_like_temperature(loom_func_like_t func) {
+  if (!func.vtable) return 0;
+  if (func.vtable->temperature_attr_index == LOOM_ATTR_INDEX_NONE) return 0;
+  return loom_attr_as_enum(
+      loom_op_attrs(func.op)[func.vtable->temperature_attr_index]);
+}
+
+uint8_t loom_func_like_inline_policy(loom_func_like_t func) {
+  if (!func.vtable) return 0;
+  if (func.vtable->inline_policy_attr_index == LOOM_ATTR_INDEX_NONE) return 0;
+  return loom_attr_as_enum(
+      loom_op_attrs(func.op)[func.vtable->inline_policy_attr_index]);
 }
 
 uint8_t loom_func_like_visibility(loom_func_like_t func) {

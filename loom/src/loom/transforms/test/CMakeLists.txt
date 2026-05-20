@@ -78,6 +78,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "inline_callables"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/inline_callables.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check::loom-check-test
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "kernel_async_legality"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/kernel_async_legality.loom-test"

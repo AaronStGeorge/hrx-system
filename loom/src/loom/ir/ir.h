@@ -880,6 +880,14 @@ typedef struct loom_call_like_vtable_t {
   // Index of the optional purity enum attr. LOOM_ATTR_INDEX_NONE if absent.
   uint8_t purity_attr_index;
 
+  // Index of the optional temperature enum attr. LOOM_ATTR_INDEX_NONE if
+  // absent.
+  uint8_t temperature_attr_index;
+
+  // Index of the optional inline policy enum attr. LOOM_ATTR_INDEX_NONE if
+  // absent.
+  uint8_t inline_policy_attr_index;
+
   // Operand offset where call arguments begin.
   uint8_t operand_offset;
 
@@ -943,10 +951,24 @@ typedef struct loom_func_like_vtable_t {
   // Index of the optional export linkage attr. LOOM_ATTR_INDEX_NONE if absent.
   uint8_t export_linkage_attr_index;
 
-  // Indices of optional enum attrs. LOOM_ATTR_INDEX_NONE if absent.
+  // Index of the optional visibility enum attr. LOOM_ATTR_INDEX_NONE if
+  // absent.
   uint8_t visibility_attr_index;
+
+  // Index of the optional calling convention enum attr. LOOM_ATTR_INDEX_NONE
+  // if absent.
   uint8_t cc_attr_index;
+
+  // Index of the optional purity enum attr. LOOM_ATTR_INDEX_NONE if absent.
   uint8_t purity_attr_index;
+
+  // Index of the optional temperature enum attr. LOOM_ATTR_INDEX_NONE if
+  // absent.
+  uint8_t temperature_attr_index;
+
+  // Index of the optional inline policy enum attr. LOOM_ATTR_INDEX_NONE if
+  // absent.
+  uint8_t inline_policy_attr_index;
 
   // Index of the predicate list attr. LOOM_ATTR_INDEX_NONE if absent.
   uint8_t predicates_attr_index;
