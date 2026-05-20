@@ -6,9 +6,6 @@
 
 #include "loom/target/arch/spirv/low_verify.h"
 
-#include <inttypes.h>
-#include <string.h>
-
 #include "iree/base/internal/arena.h"
 #include "loom/codegen/low/diagnostics.h"
 #include "loom/ir/context.h"
@@ -19,7 +16,6 @@
 #include "loom/target/arch/spirv/error_catalog.h"
 #include "loom/target/arch/spirv/packet_rows.h"
 #include "loom/target/arch/spirv/registers.h"
-#include "loom/target/arch/spirv/structured_control_flow.h"
 #include "loom/target/registers.h"
 
 typedef struct loom_spirv_low_value_type_entry_t {
@@ -645,16 +641,15 @@ static iree_status_t loom_spirv_low_verify_abi_shape(
   return iree_ok_status();
 }
 
-static iree_status_t loom_spirv_low_emit_unstructured_cond_br(
+static iree_status_t loom_spirv_low_emit_structured_control_required(
     loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
-    const loom_op_t* op, const loom_block_t* true_block,
-    const loom_block_t* false_block) {
+    const loom_op_t* op) {
+  const loom_op_vtable_t* vtable = loom_op_vtable(state->module, op);
+  const iree_string_view_t op_name =
+      vtable != NULL ? loom_op_vtable_name(vtable) : IREE_SV("<unknown>");
   loom_diagnostic_param_t params[] = {
       loom_param_string(state->function_name),
-      loom_param_string(
-          loom_low_diagnostic_block_name(state->module, true_block)),
-      loom_param_string(
-          loom_low_diagnostic_block_name(state->module, false_block)),
+      loom_param_string(op_name),
   };
   return loom_spirv_low_emit(context, op, LOOM_ERR_SPIRV_015, params,
                              IREE_ARRAYSIZE(params));
@@ -981,59 +976,6 @@ static iree_status_t loom_spirv_low_verify_bool_condition(
         context, state, op, condition, condition_type));
   }
   return iree_ok_status();
-}
-
-static iree_status_t loom_spirv_low_emit_non_forward_branch(
-    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
-    const loom_op_t* op, const loom_block_t* target_block) {
-  loom_diagnostic_param_t params[] = {
-      loom_param_string(state->function_name),
-      loom_param_string(
-          loom_low_diagnostic_block_name(state->module, target_block)),
-  };
-  return loom_spirv_low_emit(context, op, LOOM_ERR_SPIRV_021, params,
-                             IREE_ARRAYSIZE(params));
-}
-
-static iree_status_t loom_spirv_low_verify_br(
-    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
-    const loom_op_t* op) {
-  loom_value_slice_t args = loom_low_br_args(op);
-  const loom_block_t* dest = loom_low_br_dest(op);
-  if (loom_block_region_index(dest) <=
-          loom_block_region_index(op->parent_block) &&
-      !loom_spirv_low_br_is_loop_backedge(op)) {
-    IREE_RETURN_IF_ERROR(
-        loom_spirv_low_emit_non_forward_branch(context, state, op, dest));
-  }
-  for (uint16_t i = 0; i < args.count; ++i) {
-    loom_spirv_value_type_t source_type = {0};
-    if (!loom_spirv_low_value_type_table_lookup(&state->value_types,
-                                                args.values[i], &source_type)) {
-      continue;
-    }
-    const loom_value_id_t block_arg = loom_block_arg_id(dest, i);
-    IREE_RETURN_IF_ERROR(loom_spirv_low_define_or_verify_value_type(
-        context, state, op, args.values[i], block_arg, source_type));
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_spirv_low_verify_cond_br(
-    loom_low_verify_context_t* context, loom_spirv_low_verify_state_t* state,
-    const loom_op_t* op) {
-  const loom_block_t* true_dest = loom_low_cond_br_true_dest(op);
-  const loom_block_t* false_dest = loom_low_cond_br_false_dest(op);
-  const loom_block_t* merge_block = NULL;
-  loom_spirv_low_loop_shape_t loop = {0};
-  if (!loom_spirv_low_select_merge_block(op, &merge_block) &&
-      !loom_spirv_low_loop_shape(op, &loop)) {
-    IREE_RETURN_IF_ERROR(loom_spirv_low_emit_unstructured_cond_br(
-        context, state, op, true_dest, false_dest));
-  }
-
-  return loom_spirv_low_verify_bool_condition(context, state, op,
-                                              loom_low_cond_br_condition(op));
 }
 
 static iree_status_t loom_spirv_low_emit_unsupported_structural_op(
@@ -1371,11 +1313,8 @@ static iree_status_t loom_spirv_low_verify_op(
   if (loom_low_return_isa(op)) {
     return loom_spirv_low_verify_return(context, state, op);
   }
-  if (loom_low_br_isa(op)) {
-    return loom_spirv_low_verify_br(context, state, op);
-  }
-  if (loom_low_cond_br_isa(op)) {
-    return loom_spirv_low_verify_cond_br(context, state, op);
+  if (loom_low_br_isa(op) || loom_low_cond_br_isa(op)) {
+    return loom_spirv_low_emit_structured_control_required(context, state, op);
   }
   if (loom_low_scf_if_isa(op)) {
     return loom_spirv_low_verify_scf_if(context, state, op);

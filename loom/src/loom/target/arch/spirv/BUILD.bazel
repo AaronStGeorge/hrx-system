@@ -45,7 +45,6 @@ loom_assert_no_dependencies(
         ":provider",
         ":registers",
         ":scalar_types",
-        ":structured_control_flow",
         ":target_records",
         ":value_types",
     ],
@@ -327,16 +326,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "structured_control_flow",
-    srcs = ["structured_control_flow.c"],
-    hdrs = ["structured_control_flow.h"],
-    deps = [
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops/low",
-    ],
-)
-
-loom_cc_library(
     name = "ops",
     srcs = [
         "ops/builders.c",
@@ -393,7 +382,6 @@ loom_cc_library(
         ":packet_rows",
         ":registers",
         ":scalar_types",
-        ":structured_control_flow",
         "//loom/src/loom/codegen/low:diagnostics",
         "//loom/src/loom/codegen/low:verify",
         "//loom/src/loom/ir",

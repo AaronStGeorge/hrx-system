@@ -251,20 +251,19 @@ ERR_SPIRV_014 = ErrorDef(
     ),
 )
 
-# ERR_SPIRV_015: SPIR-V low control flow is not structurally supported.
+# ERR_SPIRV_015: SPIR-V requires structured low control flow.
 ERR_SPIRV_015 = ErrorDef(
     domain=ErrorDomain.SPIRV,
     code=15,
     severity=Severity.ERROR,
-    summary="SPIR-V low function has unsupported control flow.",
+    summary="SPIR-V requires structured low control flow.",
     message=(
-        "SPIR-V binary emission for '@{function_name}' cannot structure "
-        "conditional branch to ^{true_block} and ^{false_block}"
+        "SPIR-V emission for '@{function_name}' requires low.scf control "
+        "flow; '{op_name}' is CFG input"
     ),
     params=(
         ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("true_block", ParamKind.STRING),
-        ErrorParam("false_block", ParamKind.STRING),
+        ErrorParam("op_name", ParamKind.STRING),
     ),
 )
 
@@ -353,22 +352,6 @@ ERR_SPIRV_020 = ErrorDef(
     ),
 )
 
-# ERR_SPIRV_021: SPIR-V low branch target is not forward structured.
-ERR_SPIRV_021 = ErrorDef(
-    domain=ErrorDomain.SPIRV,
-    code=21,
-    severity=Severity.ERROR,
-    summary="Unsupported SPIR-V branch target.",
-    message=(
-        "SPIR-V branch in '@{function_name}' targets ^{target_block}, but "
-        "only forward branches are supported by selection emission"
-    ),
-    params=(
-        ErrorParam("function_name", ParamKind.STRING),
-        ErrorParam("target_block", ParamKind.STRING),
-    ),
-)
-
 # ERR_SPIRV_022: SPIR-V shader-entry argument value is unsupported.
 ERR_SPIRV_022 = ErrorDef(
     domain=ErrorDomain.SPIRV,
@@ -426,7 +409,6 @@ ALL_SPIRV_ERRORS: tuple[ErrorDef, ...] = (
     ERR_SPIRV_018,
     ERR_SPIRV_019,
     ERR_SPIRV_020,
-    ERR_SPIRV_021,
     ERR_SPIRV_022,
     ERR_SPIRV_023,
 )

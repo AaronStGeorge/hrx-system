@@ -1,4 +1,4 @@
-// RUN: emit source-low output=low
+// RUN: emit source-low output=low control-flow=structured-low
 
 spirv.target<vulkan1_3> @target
 
@@ -48,29 +48,27 @@ spirv.target<vulkan1_3> @target
 
 func.def target(@target) @spirv_i32_if_else(%lhs: i32, %rhs: i32, %a: i32, %b: i32) -> (i32) {
   %less = scalar.cmpi slt, %lhs, %rhs : i32
-  cfg.cond_br %less, ^then, ^else
-^then:
-  %sum = scalar.addi %a, %b : i32
-  cfg.br ^join(%sum: i32)
-^else:
-  %difference = scalar.subi %a, %b : i32
-  cfg.br ^join(%difference: i32)
-^join(%result: i32):
+  %result = scf.if %less -> (i32) {
+    %sum = scalar.addi %a, %b : i32
+    scf.yield %sum : i32
+  } else {
+    %difference = scalar.subi %a, %b : i32
+    scf.yield %difference : i32
+  }
   func.return %result : i32
 }
 
 // ----
-low.func.def target(@target) abi(shader_entry_point) abi_layout({spirv_arg_value_types = [23, 23, 23, 23], spirv_result_value_types = [23]}) @spirv_i32_if_else(%lhs: reg<spirv.id>, %rhs: reg<spirv.id>, %a: reg<spirv.id>, %b: reg<spirv.id>) -> (reg<spirv.id>) asm<spirv.logical.core> {
-  %less = OpSLessThan %lhs, %rhs
-  low.cond_br %less, ^then, ^else : reg<spirv.id>
-^then:
-  %sum = OpIAdd %a, %b
-  low.br ^join(%sum: reg<spirv.id>)
-^else:
-  %difference = OpISub %a, %b
-  low.br ^join(%difference: reg<spirv.id>)
-^join(%result: reg<spirv.id>):
-  return %result
+low.func.def target(@target) abi(shader_entry_point) abi_layout({spirv_arg_value_types = [23, 23, 23, 23], spirv_result_value_types = [23]}) @spirv_i32_if_else(%lhs: reg<spirv.id>, %rhs: reg<spirv.id>, %a: reg<spirv.id>, %b: reg<spirv.id>) -> (reg<spirv.id>) {
+  %less = low.op<spirv.op_s_less_than.i32>(%lhs, %rhs) : (reg<spirv.id>, reg<spirv.id>) -> reg<spirv.id>
+  %result = low.scf.if %less -> (reg<spirv.id>) {
+    %sum = low.op<spirv.op_iadd.i32>(%a, %b) : (reg<spirv.id>, reg<spirv.id>) -> reg<spirv.id>
+    low.scf.yield %sum : reg<spirv.id>
+  } else {
+    %difference = low.op<spirv.op_isub.i32>(%a, %b) : (reg<spirv.id>, reg<spirv.id>) -> reg<spirv.id>
+    low.scf.yield %difference : reg<spirv.id>
+  }
+  low.return %result : reg<spirv.id>
 }
 
 // ====
@@ -87,18 +85,13 @@ func.def target(@target) @spirv_index_counted_loop(%start: index, %limit: index,
 }
 
 // ----
-low.func.def target(@target) abi(shader_entry_point) abi_layout({spirv_arg_value_types = [23, 23, 23], spirv_result_value_types = [23]}) @spirv_index_counted_loop(%start: reg<spirv.id>, %limit: reg<spirv.id>, %seed: reg<spirv.id>) -> (reg<spirv.id>) asm<spirv.logical.core> {
-  %step = OpConstant.i32 1
-  low.br ^_bb1(%start: reg<spirv.id>, %seed: reg<spirv.id>)
-^_bb1(%i: reg<spirv.id>, %acc: reg<spirv.id>):
-  %21 = OpSLessThan %i, %limit
-  low.cond_br %21, ^_bb2, ^_bb3 : reg<spirv.id>
-^_bb2:
-  %next = OpIAdd %acc, %i
-  %23 = OpIAdd %i, %step
-  low.br ^_bb1(%23: reg<spirv.id>, %next: reg<spirv.id>)
-^_bb3:
-  return %acc
+low.func.def target(@target) abi(shader_entry_point) abi_layout({spirv_arg_value_types = [23, 23, 23], spirv_result_value_types = [23]}) @spirv_index_counted_loop(%start: reg<spirv.id>, %limit: reg<spirv.id>, %seed: reg<spirv.id>) -> (reg<spirv.id>) {
+  %step = low.const<spirv.op_constant.i32> {i32_value = 1} : reg<spirv.id>
+  %sum = low.scf.for [%start to %limit step %step] iter_args(%seed: reg<spirv.id>) -> (reg<spirv.id>) do(%i: reg<spirv.id>, %acc: reg<spirv.id>) {
+    %next = low.op<spirv.op_iadd.i32>(%acc, %i) : (reg<spirv.id>, reg<spirv.id>) -> reg<spirv.id>
+    low.scf.yield %next : reg<spirv.id>
+  }
+  low.return %sum : reg<spirv.id>
 }
 
 // ====
@@ -355,35 +348,32 @@ kernel.def target(@hal_target) @spirv_hal_resource_storage_buffer_i32_guard(%inp
 } launch {
   %byte_offset_aligned = index.assume %byte_offset [mul(%byte_offset, 4)] : offset
   %inside = index.cmp ult, %byte_offset_aligned, %limit : offset
-  cfg.cond_br %inside, ^in_bounds, ^done
-^in_bounds:
-  %input_aligned = buffer.assume.alignment %input {minimum_alignment = 4} : buffer
-  %output_aligned = buffer.assume.alignment %output {minimum_alignment = 4} : buffer
-  %input_view = buffer.view %input_aligned[%byte_offset_aligned] : buffer -> view<1xi32, #dense>
-  %loaded = view.load %input_view[0] : view<1xi32, #dense> -> i32
-  %incremented = scalar.addi %loaded, %loaded : i32
-  %output_view = buffer.view %output_aligned[%byte_offset_aligned] : buffer -> view<1xi32, #dense>
-  view.store %incremented, %output_view[0] : i32, view<1xi32, #dense>
-  cfg.br ^done
-^done:
+  scf.if %inside {
+    %input_aligned = buffer.assume.alignment %input {minimum_alignment = 4} : buffer
+    %output_aligned = buffer.assume.alignment %output {minimum_alignment = 4} : buffer
+    %input_view = buffer.view %input_aligned[%byte_offset_aligned] : buffer -> view<1xi32, #dense>
+    %loaded = view.load %input_view[0] : view<1xi32, #dense> -> i32
+    %incremented = scalar.addi %loaded, %loaded : i32
+    %output_view = buffer.view %output_aligned[%byte_offset_aligned] : buffer -> view<1xi32, #dense>
+    view.store %incremented, %output_view[0] : i32, view<1xi32, #dense>
+    scf.yield
+  }
   kernel.return
 }
 
 // ----
-low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_hal_resource_storage_buffer_i32_guard(%byte_offset_aligned: reg<spirv.offset64>, %limit: reg<spirv.offset64>) asm<spirv.logical.core> {
-  %input_aligned = resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
-  %output_aligned = resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
-  %inside = OpULessThan.offset64 %byte_offset_aligned, %limit
-  low.cond_br %inside, ^in_bounds, ^done : reg<spirv.id>
-^in_bounds:
-  %input_view = OpPtrAccessChain.storage_buffer.i32.byte_offset %input_aligned, %byte_offset_aligned
-  %loaded = OpLoad.storage_buffer.i32 %input_view
-  %incremented = OpIAdd %loaded, %loaded
-  %output_view = OpPtrAccessChain.storage_buffer.i32.byte_offset %output_aligned, %byte_offset_aligned
-  OpStore.storage_buffer.i32 %output_view, %incremented
-  low.br ^done
-^done:
-  return
+low.kernel.def target(@hal_target) workgroup_size(1, 1, 1) @spirv_hal_resource_storage_buffer_i32_guard(%byte_offset_aligned: reg<spirv.offset64>, %limit: reg<spirv.offset64>) {
+  %input_aligned = low.resource<hal_binding> {index = 0, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %output_aligned = low.resource<hal_binding> {index = 1, source_type = hal.buffer} : reg<spirv.ptr.storage_buffer>
+  %inside = low.op<spirv.op_u_less_than.offset64>(%byte_offset_aligned, %limit) : (reg<spirv.offset64>, reg<spirv.offset64>) -> reg<spirv.id>
+  low.scf.if %inside {
+    %input_view = low.op<spirv.op_ptr_access_chain.storage_buffer.i32.byte_offset>(%input_aligned, %byte_offset_aligned) : (reg<spirv.ptr.storage_buffer>, reg<spirv.offset64>) -> reg<spirv.ptr.storage_buffer>
+    %loaded = low.op<spirv.op_load.storage_buffer.i32>(%input_view) : (reg<spirv.ptr.storage_buffer>) -> reg<spirv.id>
+    %incremented = low.op<spirv.op_iadd.i32>(%loaded, %loaded) : (reg<spirv.id>, reg<spirv.id>) -> reg<spirv.id>
+    %output_view = low.op<spirv.op_ptr_access_chain.storage_buffer.i32.byte_offset>(%output_aligned, %byte_offset_aligned) : (reg<spirv.ptr.storage_buffer>, reg<spirv.offset64>) -> reg<spirv.ptr.storage_buffer>
+    low.op<spirv.op_store.storage_buffer.i32>(%output_view, %incremented) : (reg<spirv.ptr.storage_buffer>, reg<spirv.id>)
+  }
+  low.return
 }
 
 // ====
