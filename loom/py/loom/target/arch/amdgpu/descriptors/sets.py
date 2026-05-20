@@ -303,11 +303,35 @@ def _cdna_core_overlays(
         *_s_load_dword_width_overlays(
             fixed_encoding_fields=_CDNA_SMEM_SGPR_IMM_FIXED_FIELDS
         ),
+        *_s_scratch_load_dword_width_overlays(
+            fixed_encoding_fields=_CDNA_SMEM_SGPR_IMM_FIXED_FIELDS
+        ),
         *_s_load_dword_offset_only_overlays(
             fixed_encoding_fields=_CDNA_SMEM_OFFSET_ONLY_FIXED_FIELDS,
             fixed_soffset=0,
         ),
+        *_s_scratch_load_dword_width_overlays(
+            fixed_encoding_fields=_CDNA_SMEM_OFFSET_ONLY_FIXED_FIELDS,
+            fixed_soffset=0,
+        ),
         *_cdna_s_buffer_load_width_overlays(
+            fixed_encoding_fields=_CDNA_SMEM_SGPR_IMM_FIXED_FIELDS
+        ),
+        *_s_store_dword_width_overlays(
+            fixed_encoding_fields=_CDNA_SMEM_SGPR_IMM_FIXED_FIELDS
+        ),
+        *_s_scratch_store_dword_width_overlays(
+            fixed_encoding_fields=_CDNA_SMEM_SGPR_IMM_FIXED_FIELDS
+        ),
+        *_s_store_dword_width_overlays(
+            fixed_encoding_fields=_CDNA_SMEM_OFFSET_ONLY_FIXED_FIELDS,
+            fixed_soffset=0,
+        ),
+        *_s_scratch_store_dword_width_overlays(
+            fixed_encoding_fields=_CDNA_SMEM_OFFSET_ONLY_FIXED_FIELDS,
+            fixed_soffset=0,
+        ),
+        *_s_buffer_store_dword_width_overlays(
             fixed_encoding_fields=_CDNA_SMEM_SGPR_IMM_FIXED_FIELDS
         ),
         _buffer_load_dword_overlay(
@@ -1822,6 +1846,7 @@ _AMDGPU_CDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
     schedule_classes=(
         *_common_scalar_vector_memory_schedule_classes(
             smem_load_hazards=_SMEM_WAIT_HAZARDS,
+            smem_store_hazards=_SMEM_WAIT_HAZARDS,
             vmem_load_hazards=_VMEM_LOAD_WAIT_HAZARDS,
             vmem_store_hazards=_VMEM_STORE_WAIT_HAZARDS,
             lds_load_hazards=_LDS_WAIT_HAZARDS,
@@ -1964,6 +1989,7 @@ _AMDGPU_RDNA3_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
     schedule_classes=(
         *_common_scalar_vector_memory_schedule_classes(
             smem_load_hazards=_SMEM_WAIT_HAZARDS,
+            smem_store_hazards=_SMEM_WAIT_HAZARDS,
             vmem_load_hazards=_VMEM_LOAD_WAIT_HAZARDS,
             vmem_store_hazards=_VMEM_STORE_WAIT_HAZARDS,
             lds_load_hazards=_LDS_WAIT_HAZARDS,
@@ -2068,6 +2094,7 @@ _AMDGPU_RDNA4_CORE_DESCRIPTOR_SET_BASE = _amdgpu_core_descriptor_set(
     schedule_classes=(
         *_common_scalar_vector_memory_schedule_classes(
             smem_load_hazards=_SMEM_WAIT_HAZARDS,
+            smem_store_hazards=_SMEM_WAIT_HAZARDS,
             vmem_load_hazards=_VMEM_LOAD_WAIT_HAZARDS,
             vmem_store_hazards=_VMEM_STORE_WAIT_HAZARDS,
             lds_load_hazards=_LDS_WAIT_HAZARDS,

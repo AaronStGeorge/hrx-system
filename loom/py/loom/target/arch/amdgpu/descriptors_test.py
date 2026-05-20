@@ -21,6 +21,7 @@ from loom.target.arch.amdgpu.descriptors import (
     _REG_MODE,
     _SCHEDULE_MODE_CONTROL,
     _SCHEDULE_SALU,
+    _SCHEDULE_SMEM_STORE,
     _SCHEDULE_VALU,
     _SOURCE_INLINE_F32_ENCODING_ID,
     _SOURCE_INLINE_U32_ENCODING_ID,
@@ -812,6 +813,7 @@ def _assert_memory_width_overlay(
     effect_kind: EffectKind,
     memory_space: MemorySpace,
     implicit_data_format: str | None = None,
+    implicit_ignore_reason: str | None = None,
 ) -> None:
     assert descriptor.semantic_tag == semantic_tag
     assert descriptor.mnemonic == mnemonic
@@ -834,6 +836,10 @@ def _assert_memory_width_overlay(
         and operand.data_format_name
         == (implicit_data_format or f"FMT_NUM_B{width_bits}")
         and operand.size_bits == width_bits
+        and (
+            implicit_ignore_reason is None
+            or operand.ignore_reason == implicit_ignore_reason
+        )
         for operand in descriptor.implicit_operands
     )
 
@@ -1157,6 +1163,123 @@ def test_rdna4_smem_narrow_load_descriptors_have_extension_semantics() -> None:
                 memory_space=MemorySpace.GLOBAL,
                 implicit_data_format=implicit_data_format,
             )
+
+
+def test_cdna_smem_dwordx4_store_and_scratch_descriptors_cover_xml() -> None:
+    rows = (
+        (32, 1, "dword"),
+        (64, 2, "dwordx2"),
+        (128, 4, "dwordx4"),
+    )
+    for rdna_overlays in (
+        _gfx11_core_overlays(),
+        _gfx12_core_overlays(),
+        _gfx1250_core_overlays(),
+    ):
+        rdna_descriptors = {
+            descriptor.descriptor_key: descriptor for descriptor in rdna_overlays
+        }
+        for _width_bits, _units, suffix in rows:
+            assert f"amdgpu.s_store_{suffix}" not in rdna_descriptors
+            assert f"amdgpu.s_scratch_load_{suffix}" not in rdna_descriptors
+            assert f"amdgpu.s_scratch_store_{suffix}" not in rdna_descriptors
+            assert f"amdgpu.s_buffer_store_{suffix}" not in rdna_descriptors
+
+    for descriptors in (
+        {
+            descriptor.descriptor_key: descriptor
+            for descriptor in _gfx940_core_overlays()
+        },
+        {
+            descriptor.descriptor_key: descriptor
+            for descriptor in _gfx950_core_overlays()
+        },
+    ):
+        for width_bits, units, suffix in rows:
+            store_key = f"amdgpu.s_store_{suffix}"
+            _assert_memory_width_overlay(
+                descriptors[store_key],
+                width_bits=width_bits,
+                semantic_tag=f"memory.store.u{width_bits}",
+                mnemonic=f"s_store_{suffix}",
+                operand_units=units,
+                payload_field_name="value",
+                effect_kind=EffectKind.WRITE,
+                memory_space=MemorySpace.GLOBAL,
+            )
+            assert descriptors[store_key].schedule_class == _SCHEDULE_SMEM_STORE
+            _assert_memory_width_overlay(
+                descriptors[f"{store_key}_offset_only"],
+                width_bits=width_bits,
+                semantic_tag=f"memory.store.u{width_bits}",
+                mnemonic=f"s_store_{suffix}",
+                operand_units=units,
+                payload_field_name="value",
+                effect_kind=EffectKind.WRITE,
+                memory_space=MemorySpace.GLOBAL,
+            )
+
+            scratch_load_key = f"amdgpu.s_scratch_load_{suffix}"
+            _assert_memory_width_overlay(
+                descriptors[scratch_load_key],
+                width_bits=width_bits,
+                semantic_tag=f"memory.stack.load.u{width_bits}",
+                mnemonic=f"s_scratch_load_{suffix}",
+                operand_units=units,
+                payload_field_name="dst",
+                effect_kind=EffectKind.READ,
+                memory_space=MemorySpace.STACK,
+                implicit_ignore_reason="modeled-by-stack-read-effect",
+            )
+            _assert_memory_width_overlay(
+                descriptors[f"{scratch_load_key}_offset_only"],
+                width_bits=width_bits,
+                semantic_tag=f"memory.stack.load.u{width_bits}",
+                mnemonic=f"s_scratch_load_{suffix}",
+                operand_units=units,
+                payload_field_name="dst",
+                effect_kind=EffectKind.READ,
+                memory_space=MemorySpace.STACK,
+                implicit_ignore_reason="modeled-by-stack-read-effect",
+            )
+
+            scratch_store_key = f"amdgpu.s_scratch_store_{suffix}"
+            _assert_memory_width_overlay(
+                descriptors[scratch_store_key],
+                width_bits=width_bits,
+                semantic_tag=f"memory.stack.store.u{width_bits}",
+                mnemonic=f"s_scratch_store_{suffix}",
+                operand_units=units,
+                payload_field_name="value",
+                effect_kind=EffectKind.WRITE,
+                memory_space=MemorySpace.STACK,
+                implicit_ignore_reason="modeled-by-stack-write-effect",
+            )
+            assert descriptors[scratch_store_key].schedule_class == _SCHEDULE_SMEM_STORE
+            _assert_memory_width_overlay(
+                descriptors[f"{scratch_store_key}_offset_only"],
+                width_bits=width_bits,
+                semantic_tag=f"memory.stack.store.u{width_bits}",
+                mnemonic=f"s_scratch_store_{suffix}",
+                operand_units=units,
+                payload_field_name="value",
+                effect_kind=EffectKind.WRITE,
+                memory_space=MemorySpace.STACK,
+                implicit_ignore_reason="modeled-by-stack-write-effect",
+            )
+
+            buffer_store_key = f"amdgpu.s_buffer_store_{suffix}"
+            _assert_memory_width_overlay(
+                descriptors[buffer_store_key],
+                width_bits=width_bits,
+                semantic_tag=f"memory.store.u{width_bits}",
+                mnemonic=f"s_buffer_store_{suffix}",
+                operand_units=units,
+                payload_field_name="value",
+                effect_kind=EffectKind.WRITE,
+                memory_space=MemorySpace.GLOBAL,
+            )
+            assert descriptors[buffer_store_key].schedule_class == _SCHEDULE_SMEM_STORE
 
 
 def test_gfx940_scratch_memory_forms_cover_spill_packets() -> None:

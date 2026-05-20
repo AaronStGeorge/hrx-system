@@ -141,6 +141,7 @@ _SCHEDULE_SALU = "amdgpu.salu"
 _SCHEDULE_VALU = "amdgpu.valu"
 _SCHEDULE_TRANS = "amdgpu.trans"
 _SCHEDULE_SMEM_LOAD = "amdgpu.smem.load"
+_SCHEDULE_SMEM_STORE = "amdgpu.smem.store"
 _SCHEDULE_VMEM_LOAD = "amdgpu.vmem.load"
 _SCHEDULE_VMEM_LOAD_LDS = "amdgpu.vmem.load.lds"
 _SCHEDULE_VMEM_STORE = "amdgpu.vmem.store"
@@ -604,6 +605,7 @@ def _amdgpu_trans_schedule_classes(
 def _common_scalar_vector_memory_schedule_classes(
     *,
     smem_load_hazards: tuple[Hazard, ...],
+    smem_store_hazards: tuple[Hazard, ...],
     vmem_load_hazards: tuple[Hazard, ...],
     vmem_store_hazards: tuple[Hazard, ...],
     lds_load_hazards: tuple[Hazard, ...],
@@ -638,6 +640,15 @@ def _common_scalar_vector_memory_schedule_classes(
             issue_uses=(IssueUse(_RESOURCE_SMEM, cycles=1, units=1),),
             hazards=smem_load_hazards,
             flags=(ScheduleClassFlag.MAY_LOAD,),
+            model_quality=ModelQuality.FALLBACK,
+        ),
+        ScheduleClass(
+            _SCHEDULE_SMEM_STORE,
+            latency_kind=LatencyKind.VARIABLE,
+            latency_cycles=8,
+            issue_uses=(IssueUse(_RESOURCE_SMEM, cycles=1, units=1),),
+            hazards=smem_store_hazards,
+            flags=(ScheduleClassFlag.MAY_STORE,),
             model_quality=ModelQuality.FALLBACK,
         ),
         ScheduleClass(
@@ -2524,6 +2535,7 @@ __all__ = (
     "_SCHEDULE_MODE_CONTROL",
     "_SCHEDULE_SALU",
     "_SCHEDULE_SMEM_LOAD",
+    "_SCHEDULE_SMEM_STORE",
     "_SCHEDULE_SWMMAC",
     "_SCHEDULE_TRANS",
     "_SCHEDULE_VALU",

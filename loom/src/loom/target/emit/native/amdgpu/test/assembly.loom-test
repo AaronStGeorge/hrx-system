@@ -419,6 +419,29 @@ low.func.def target(@gfx950_target) @gfx950_extended_mfma_native(%lhs_f16: reg<a
 
 // ====
 
+// RUN: emit amdgpu-assembly @gfx950_smem_dwordx4_stores waits=none
+amdgpu.target<gfx950> @gfx950_target
+low.func.def target(@gfx950_target) @gfx950_smem_dwordx4_stores(%base: reg<amdgpu.sgpr x2>, %resource: reg<amdgpu.sgpr x4>, %soffset: reg<amdgpu.sgpr>, %value32: reg<amdgpu.sgpr>, %value64: reg<amdgpu.sgpr x2>, %value128: reg<amdgpu.sgpr x4>) asm<amdgpu.cdna4.core> {
+  s_store_dword %value32, %base, %soffset {offset = 4}
+  s_store_dwordx2 %value64, %base, %soffset {offset = 8}
+  s_store_dwordx4 %value128, %base, %soffset {offset = 16}
+  %scratch64 = s_scratch_load_dwordx2 %base, %soffset {offset = 20}
+  s_scratch_store_dwordx2 %scratch64, %base, %soffset {offset = 24}
+  s_buffer_store_dwordx4 %value128, %resource, %soffset {offset = 32}
+  return
+}
+
+// ----
+  s_store_dword s0, s[12:13], s1 offset:4
+  s_store_dwordx2 s[2:3], s[12:13], s1 offset:8
+  s_store_dwordx4 s[8:11], s[12:13], s1 offset:16
+  s_buffer_store_dwordx4 s[8:11], s[4:7], s1 offset:32
+  s_scratch_load_dwordx2 s[2:3], s[12:13], s1 offset:20
+  s_scratch_store_dwordx2 s[2:3], s[12:13], s1 offset:24
+  s_endpgm
+
+// ====
+
 // RUN: emit amdgpu-native @gfx1200_swmmac_native waits=none
 amdgpu.target<gfx1200> @gfx1200_target
 low.func.def target(@gfx1200_target) @gfx1200_swmmac_native(%lhs_f16: reg<amdgpu.vgpr x4>, %rhs_f16: reg<amdgpu.vgpr x8>, %acc_f32: reg<amdgpu.vgpr x8>, %lhs_iu4: reg<amdgpu.vgpr x2>, %rhs_iu4: reg<amdgpu.vgpr x4>, %index: reg<amdgpu.vgpr>) asm<amdgpu.rdna4.core> {
