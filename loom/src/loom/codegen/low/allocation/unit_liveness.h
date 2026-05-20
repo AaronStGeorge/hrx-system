@@ -33,7 +33,8 @@ typedef struct loom_low_allocation_unit_liveness_t {
 
 // Initializes |out_unit_liveness| from value-granular liveness and IR use
 // structure. The resulting end points refine register intervals down to their
-// target allocation units for low.slice and descriptor early-clobber hazards.
+// target allocation units for low.slice, descriptor early-clobber hazards, and
+// structured loop backedges.
 iree_status_t loom_low_allocation_unit_liveness_initialize(
     const loom_module_t* module, loom_region_t* body,
     const loom_low_resolved_target_t* target,

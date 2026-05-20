@@ -8,6 +8,7 @@
 
 #include "loom/codegen/low/allocation/live_range.h"
 #include "loom/codegen/low/descriptors.h"
+#include "loom/ir/module.h"
 #include "loom/ops/low/ops.h"
 
 static bool loom_low_allocation_unit_liveness_value_ordinal_for_value(
@@ -225,6 +226,149 @@ static iree_status_t loom_low_allocation_unit_liveness_note_slice_unit_uses(
       result_interval->unit_count, point);
 }
 
+static bool loom_low_allocation_unit_liveness_region_is_nested_in_op(
+    const loom_op_t* owner_op, const loom_region_t* query_region) {
+  if (owner_op == NULL || query_region == NULL) {
+    return false;
+  }
+  loom_region_t* const* regions = loom_op_regions(owner_op);
+  for (uint8_t i = 0; i < owner_op->region_count; ++i) {
+    if (regions[i] == query_region) {
+      return true;
+    }
+    const loom_block_t* block = NULL;
+    loom_region_for_each_block(regions[i], block) {
+      const loom_op_t* op = NULL;
+      loom_block_for_each_op(block, op) {
+        if (loom_low_allocation_unit_liveness_region_is_nested_in_op(
+                op, query_region)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+static bool loom_low_allocation_unit_liveness_block_is_nested_in_op(
+    const loom_op_t* owner_op, const loom_block_t* query_block) {
+  return query_block != NULL &&
+         loom_low_allocation_unit_liveness_region_is_nested_in_op(
+             owner_op, query_block->parent_region);
+}
+
+static bool loom_low_allocation_unit_liveness_value_is_defined_inside_op(
+    const loom_module_t* module, const loom_op_t* owner_op,
+    loom_value_id_t value_id) {
+  if (value_id >= module->values.count) {
+    return false;
+  }
+  const loom_value_t* value = loom_module_value(module, value_id);
+  if (loom_value_is_block_arg(value)) {
+    return loom_low_allocation_unit_liveness_block_is_nested_in_op(
+        owner_op, loom_value_def_block(value));
+  }
+  const loom_op_t* def_op = loom_value_def_op(value);
+  while (def_op != NULL) {
+    if (def_op == owner_op) {
+      return true;
+    }
+    def_op = def_op->parent_op;
+  }
+  return false;
+}
+
+static iree_status_t
+loom_low_allocation_unit_liveness_note_low_scf_for_capture_uses(
+    loom_low_allocation_unit_liveness_t* unit_liveness,
+    const loom_module_t* module, const loom_liveness_analysis_t* liveness,
+    const loom_op_t* loop_op, const loom_region_t* region,
+    uint32_t backedge_point) {
+  const loom_block_t* block = NULL;
+  loom_region_for_each_block(region, block) {
+    const loom_op_t* op = NULL;
+    loom_block_for_each_op(block, op) {
+      const loom_value_id_t* operands = loom_op_const_operands(op);
+      for (uint16_t i = 0; i < op->operand_count; ++i) {
+        if (loom_low_allocation_unit_liveness_value_is_defined_inside_op(
+                module, loop_op, operands[i])) {
+          continue;
+        }
+        IREE_RETURN_IF_ERROR(
+            loom_low_allocation_unit_liveness_note_value_use_at_point(
+                unit_liveness, liveness, operands[i], backedge_point));
+      }
+      loom_region_t* const* regions = loom_op_regions(op);
+      for (uint8_t i = 0; i < op->region_count; ++i) {
+        IREE_RETURN_IF_ERROR(
+            loom_low_allocation_unit_liveness_note_low_scf_for_capture_uses(
+                unit_liveness, module, liveness, loop_op, regions[i],
+                backedge_point));
+      }
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t
+loom_low_allocation_unit_liveness_note_low_scf_for_backedge_uses(
+    loom_low_allocation_unit_liveness_t* unit_liveness,
+    const loom_module_t* module, const loom_liveness_analysis_t* liveness,
+    const loom_region_t* body, loom_liveness_order_t liveness_order,
+    const loom_op_t* op) {
+  if (!loom_liveness_analysis_includes_region_tree(liveness)) {
+    return iree_ok_status();
+  }
+  const loom_region_t* loop_body = loom_low_scf_for_body(op);
+  const loom_block_t* body_block = loom_region_const_entry_block(loop_body);
+  if (body_block == NULL || body_block->arg_count == 0) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "low allocation saw malformed low.scf.for body");
+  }
+  const loom_op_t* yield = body_block->last_op;
+  if (yield == NULL || !loom_low_scf_yield_isa(yield)) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "low allocation saw low.scf.for without low.scf.yield terminator");
+  }
+
+  const loom_value_slice_t iter_args = loom_low_scf_for_iter_args(op);
+  if (body_block->arg_count != iter_args.count + 1) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "low allocation saw malformed low.scf.for body arguments");
+  }
+
+  uint32_t backedge_point = UINT32_MAX;
+  IREE_RETURN_IF_ERROR(loom_low_allocation_live_range_ordered_op_program_point(
+      liveness, body, liveness_order, yield, &backedge_point));
+
+  // Structured loop lowering reuses captures, control values, and loop-carried
+  // body arguments after the body has executed to start the next iteration or
+  // move final results.
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_unit_liveness_note_low_scf_for_capture_uses(
+          unit_liveness, module, liveness, op, loop_body, backedge_point));
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_unit_liveness_note_value_use_at_point(
+          unit_liveness, liveness, loom_block_arg_id(body_block, 0),
+          backedge_point));
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_unit_liveness_note_value_use_at_point(
+          unit_liveness, liveness, loom_low_scf_for_upper_bound(op),
+          backedge_point));
+  IREE_RETURN_IF_ERROR(
+      loom_low_allocation_unit_liveness_note_value_use_at_point(
+          unit_liveness, liveness, loom_low_scf_for_step(op), backedge_point));
+  for (uint16_t i = 0; i < iter_args.count; ++i) {
+    IREE_RETURN_IF_ERROR(
+        loom_low_allocation_unit_liveness_note_value_use_at_point(
+            unit_liveness, liveness, loom_block_arg_id(body_block, i + 1),
+            backedge_point));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_low_allocation_unit_liveness_note_op_unit_uses(
     loom_low_allocation_unit_liveness_t* unit_liveness,
     const loom_module_t* module, loom_region_t* body,
@@ -241,6 +385,11 @@ static iree_status_t loom_low_allocation_unit_liveness_note_op_unit_uses(
   IREE_RETURN_IF_ERROR(
       loom_low_allocation_unit_liveness_note_generic_op_unit_uses(
           unit_liveness, liveness, op, point));
+  if (loom_low_scf_for_isa(op)) {
+    IREE_RETURN_IF_ERROR(
+        loom_low_allocation_unit_liveness_note_low_scf_for_backedge_uses(
+            unit_liveness, module, liveness, body, liveness_order, op));
+  }
   return loom_low_allocation_unit_liveness_note_descriptor_unit_uses(
       unit_liveness, module, target, liveness, op, point);
 }
