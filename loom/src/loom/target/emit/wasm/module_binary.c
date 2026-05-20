@@ -10,7 +10,7 @@
 #include <string.h>
 
 #include "loom/codegen/low/function.h"
-#include "loom/codegen/low/packet.h"
+#include "loom/codegen/low/target_binding.h"
 #include "loom/ops/low/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/target/arch/wasm/descriptors.h"
@@ -18,6 +18,7 @@
 #include "loom/target/emit/wasm/function_body.h"
 #include "loom/target/emit/wasm/types.h"
 #include "loom/target/registers.h"
+#include "loom/util/walk.h"
 
 enum {
   LOOM_WASM_SECTION_CUSTOM = 0,
@@ -47,6 +48,20 @@ enum {
 enum {
   LOOM_WASM_FUNCTION_INDEX_NONE = UINT32_MAX,
 };
+
+enum loom_wasm_function_fact_bits_e {
+  LOOM_WASM_FUNCTION_FACT_USES_MEMORY = 1u << 0,
+};
+typedef uint32_t loom_wasm_function_facts_t;
+
+enum {
+  LOOM_WASM_FUNCTION_FACT_ALL = LOOM_WASM_FUNCTION_FACT_USES_MEMORY,
+};
+
+enum loom_wasm_module_fact_bits_e {
+  LOOM_WASM_MODULE_FACT_USES_MEMORY = 1u << 0,
+};
+typedef uint32_t loom_wasm_module_facts_t;
 
 typedef struct loom_wasm_function_type_t {
   // Arena-owned Wasm value types for function parameters.
@@ -78,8 +93,8 @@ typedef struct loom_wasm_module_function_t {
   loom_wasm_function_type_t type;
   // Size-prefixed Wasm code-section body bytes.
   loom_wasm_function_body_t body;
-  // True when this function body may access Wasm linear memory.
-  bool uses_memory;
+  // Structural facts collected from the low function body.
+  loom_wasm_function_facts_t facts;
 } loom_wasm_module_function_t;
 
 typedef struct loom_wasm_module_layout_t {
@@ -97,9 +112,18 @@ typedef struct loom_wasm_module_layout_t {
   iree_host_size_t type_count;
   // Number of function exports.
   iree_host_size_t export_count;
-  // True when any function body needs the default linear memory.
-  bool has_memory;
+  // Module-level facts accumulated across all functions.
+  loom_wasm_module_facts_t facts;
 } loom_wasm_module_layout_t;
+
+typedef struct loom_wasm_function_fact_collection_t {
+  // Module containing the walked low function.
+  const loom_module_t* module;
+  // Resolved target descriptor set for descriptor-backed low packets.
+  const loom_low_resolved_target_t* target;
+  // Accumulated facts for the walked function body.
+  loom_wasm_function_facts_t facts;
+} loom_wasm_function_fact_collection_t;
 
 static iree_status_t loom_wasm_module_write_section(
     loom_wasm_binary_writer_t* module_writer, uint8_t section_id,
@@ -285,38 +309,83 @@ static iree_status_t loom_wasm_module_intern_function_type(
   return iree_ok_status();
 }
 
-static iree_status_t loom_wasm_module_uses_memory(
-    const loom_low_schedule_table_t* schedule,
-    const loom_low_allocation_table_t* allocation, bool* out_uses_memory) {
-  *out_uses_memory = false;
-  iree_host_size_t packet_count = loom_low_packet_count(schedule);
-  for (iree_host_size_t i = 0; i < packet_count; ++i) {
-    loom_low_packet_view_t packet = {0};
-    IREE_RETURN_IF_ERROR(
-        loom_low_packet_view_at(schedule, allocation, i, &packet));
-    if (!packet.descriptor ||
-        packet.descriptor->schedule_class_id == LOOM_LOW_SCHEDULE_CLASS_NONE) {
-      continue;
-    }
-    const uint16_t schedule_class_id = packet.descriptor->schedule_class_id;
-    const loom_low_descriptor_set_t* descriptor_set =
-        schedule->target.descriptor_set;
-    if (schedule_class_id >= descriptor_set->schedule_class_count) {
-      return iree_make_status(
-          IREE_STATUS_OUT_OF_RANGE,
-          "Wasm descriptor references invalid schedule class %" PRIu16,
-          schedule_class_id);
-    }
-    const loom_low_schedule_class_t* schedule_class =
-        &descriptor_set->schedule_classes[schedule_class_id];
-    const loom_low_schedule_class_flags_t memory_flags =
-        LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD |
-        LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_STORE;
-    if ((schedule_class->flags & memory_flags) != 0) {
-      *out_uses_memory = true;
-      return iree_ok_status();
-    }
+static iree_status_t loom_wasm_function_facts_record_descriptor(
+    const loom_low_descriptor_set_t* descriptor_set,
+    const loom_low_descriptor_t* descriptor,
+    loom_wasm_function_facts_t* facts) {
+  if (descriptor->schedule_class_id == LOOM_LOW_SCHEDULE_CLASS_NONE) {
+    return iree_ok_status();
   }
+  const uint16_t schedule_class_id = descriptor->schedule_class_id;
+  if (schedule_class_id >= descriptor_set->schedule_class_count) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "Wasm descriptor references invalid schedule class %" PRIu16,
+        schedule_class_id);
+  }
+  const loom_low_schedule_class_t* schedule_class =
+      &descriptor_set->schedule_classes[schedule_class_id];
+  const loom_low_schedule_class_flags_t memory_flags =
+      LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD |
+      LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_STORE;
+  if (iree_any_bit_set(schedule_class->flags, memory_flags)) {
+    *facts |= LOOM_WASM_FUNCTION_FACT_USES_MEMORY;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_wasm_function_facts_walk_op(
+    void* user_data, loom_op_t* op, const loom_walk_context_t* context,
+    loom_walk_result_t* out_result) {
+  (void)context;
+  loom_wasm_function_fact_collection_t* collection =
+      (loom_wasm_function_fact_collection_t*)user_data;
+  *out_result = LOOM_WALK_CONTINUE;
+
+  loom_low_resolved_descriptor_packet_t packet = {0};
+  IREE_RETURN_IF_ERROR(loom_low_resolve_descriptor_packet(
+      collection->module, collection->target, op, &packet));
+  if (packet.kind == LOOM_LOW_DESCRIPTOR_PACKET_NONE) {
+    return iree_ok_status();
+  }
+  if (packet.descriptor == NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "Wasm descriptor packet '%.*s' did not resolve",
+                            (int)packet.key.size, packet.key.data);
+  }
+  IREE_RETURN_IF_ERROR(loom_wasm_function_facts_record_descriptor(
+      collection->target->descriptor_set, packet.descriptor,
+      &collection->facts));
+  if (iree_all_bits_set(collection->facts, LOOM_WASM_FUNCTION_FACT_ALL)) {
+    *out_result = LOOM_WALK_ABORT;
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_wasm_module_collect_function_facts(
+    const loom_low_emission_frame_t* frame, iree_arena_allocator_t* arena,
+    loom_wasm_function_facts_t* out_facts) {
+  *out_facts = 0;
+  loom_func_like_t function =
+      loom_func_like_cast(frame->module, (loom_op_t*)frame->function_op);
+  if (!loom_func_like_isa(function)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "Wasm module facts require a func-like op");
+  }
+
+  loom_wasm_function_fact_collection_t collection = {
+      .module = frame->module,
+      .target = &frame->target,
+  };
+  loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
+  IREE_RETURN_IF_ERROR(
+      loom_walk_function(frame->module, function, LOOM_WALK_PRE_ORDER,
+                         (loom_walk_callback_t){
+                             .fn = loom_wasm_function_facts_walk_op,
+                             .user_data = &collection,
+                         },
+                         arena, &walk_result));
+  *out_facts = collection.facts;
   return iree_ok_status();
 }
 
@@ -345,10 +414,11 @@ static iree_status_t loom_wasm_module_prepare_function(
       &function->frame, arena, &function->type));
   IREE_RETURN_IF_ERROR(loom_wasm_module_intern_function_type(
       layout, &function->type, &function->type_index));
-  IREE_RETURN_IF_ERROR(loom_wasm_module_uses_memory(&function->frame.schedule,
-                                                    &function->frame.allocation,
-                                                    &function->uses_memory));
-  layout->has_memory = layout->has_memory || function->uses_memory;
+  IREE_RETURN_IF_ERROR(loom_wasm_module_collect_function_facts(
+      &function->frame, arena, &function->facts));
+  if (iree_any_bit_set(function->facts, LOOM_WASM_FUNCTION_FACT_USES_MEMORY)) {
+    layout->facts |= LOOM_WASM_MODULE_FACT_USES_MEMORY;
+  }
   return iree_ok_status();
 }
 
@@ -766,7 +836,8 @@ iree_status_t loom_wasm_emit_module(
     status = loom_wasm_module_write_function_section(&layout, &module_writer,
                                                      allocator);
   }
-  if (iree_status_is_ok(status) && layout.has_memory) {
+  if (iree_status_is_ok(status) &&
+      iree_any_bit_set(layout.facts, LOOM_WASM_MODULE_FACT_USES_MEMORY)) {
     status = loom_wasm_module_write_memory_section(&module_writer, allocator);
   }
   if (iree_status_is_ok(status)) {
@@ -785,7 +856,8 @@ iree_status_t loom_wasm_emit_module(
     *out_module = (loom_wasm_module_binary_t){
         .data = module_writer.data,
         .data_length = module_writer.length,
-        .has_memory = layout.has_memory,
+        .has_memory =
+            iree_any_bit_set(layout.facts, LOOM_WASM_MODULE_FACT_USES_MEMORY),
     };
     module_writer.data = NULL;
   }

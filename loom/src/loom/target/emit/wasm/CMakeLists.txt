@@ -96,13 +96,14 @@ loom_cc_library(
     loom::src::loom::codegen::low::descriptors
     loom::src::loom::codegen::low::frame
     loom::src::loom::codegen::low::function
-    loom::src::loom::codegen::low::packet
     loom::src::loom::codegen::low::schedule
+    loom::src::loom::codegen::low::target_binding
     loom::src::loom::ir
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs
     loom::src::loom::target::arch::wasm::descriptors
     loom::src::loom::target::registers
+    loom::src::loom::util::walk
   PUBLIC
 )
 
