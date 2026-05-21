@@ -34,6 +34,7 @@ loom_cc_library(
     "snapshot.h"
     "testbench.h"
     "timing.h"
+    "work_execution.h"
     "work_plan.h"
   SRCS
     "case_execution.c"
@@ -54,6 +55,7 @@ loom_cc_library(
     "snapshot.c"
     "testbench.c"
     "timing.c"
+    "work_execution.c"
     "work_plan.c"
   DEPS
     iree::base
