@@ -4,8 +4,9 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-package(
-    default_visibility = ["//visibility:private"],
-    features = ["layering_check"],
-    licenses = ["notice"],  # Apache 2.0
+package(default_visibility = ["//visibility:public"])
+
+alias(
+    name = "iree-as-module",
+    actual = "//runtime/src/iree/tools/iree-as-module",
 )
