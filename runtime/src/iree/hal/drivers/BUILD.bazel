@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("@bazel_skylib//rules:common_settings.bzl", "string_list_flag")
+load("//build_tools/bazel:select.bzl", "iree_select")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 
 package(
@@ -13,92 +13,55 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-string_list_flag(
-    name = "enabled_drivers",
-    build_setting_default = [
-        "amdgpu",
-        "cuda",
-        "hip",
-        "local-sync",
-        "local-task",
-        "null",
-        "vulkan",
-    ],
-)
-
-UNCONDITIONAL_DRIVERS = [
-    "local-sync",
-    "local-task",
-    "null",
-    "vulkan",
-]
-
-[
-    config_setting(
-        name = "{}_enabled".format(driver),
-        flag_values = {
-            ":enabled_drivers": driver,
-        },
-    )
-    for driver in UNCONDITIONAL_DRIVERS
-]
-
-# AMDGPU is special and is conditioned on availability of ROCM.
-config_setting(
-    name = "amdgpu_enabled",
-    flag_values = {
-        ":enabled_drivers": "amdgpu",
-    },
-)
-
-# CUDA is special and is conditioned on availability of the CUDA toolkit.
-config_setting(
-    name = "cuda_enabled",
-    flag_values = {
-        ":enabled_drivers": "cuda",
-        "@iree_cuda//:enabled": "True",
-    },
-)
-
-# HIP requires HIP API headers (from the hip-build-deps submodule).
-config_setting(
-    name = "hip_enabled",
-    flag_values = {
-        ":enabled_drivers": "hip",
-    },
-)
-
 iree_runtime_cc_library(
     name = "drivers",
     srcs = ["init.c"],
     hdrs = ["init.h"],
-    deps = [
-               "//runtime/src/iree/base",
-               "//runtime/src/iree/hal",
-           ] + select({
-               ":amdgpu_enabled": ["//runtime/src/iree/hal/drivers/amdgpu/registration"],
-               "//conditions:default": [],
-           }) + select({
-               ":cuda_enabled": ["//runtime/src/iree/hal/drivers/cuda/registration"],
-               "//conditions:default": [],
-           }) + select({
-               ":hip_enabled": ["//runtime/src/iree/hal/drivers/hip/registration"],
-               "//conditions:default": [],
-           }) +
-           select({
-               ":local-sync_enabled": ["//runtime/src/iree/hal/drivers/local_sync/registration"],
-               "//conditions:default": [],
-           }) +
-           select({
-               ":local-task_enabled": ["//runtime/src/iree/hal/drivers/local_task/registration"],
-               "//conditions:default": [],
-           }) +
-           select({
-               ":null_enabled": ["//runtime/src/iree/hal/drivers/null/registration"],
-               "//conditions:default": [],
-           }) +
-           select({
-               ":vulkan_enabled": ["//runtime/src/iree/hal/drivers/vulkan/registration"],
-               "//conditions:default": [],
-           }),
+    deps = (
+        [
+            "//runtime/src/iree/base",
+            "//runtime/src/iree/hal",
+        ] + iree_select({
+            "//runtime/config/hal:driver_amdgpu": [
+                "//runtime/src/iree/hal/drivers/amdgpu/registration",
+            ],
+            "//conditions:default": [],
+        }) +
+        iree_select({
+            "//runtime/config/hal:driver_cuda": [
+                "//runtime/src/iree/hal/drivers/cuda/registration",
+            ],
+            "//conditions:default": [],
+        }) +
+        iree_select({
+            "//runtime/config/hal:driver_hip": [
+                "//runtime/src/iree/hal/drivers/hip/registration",
+            ],
+            "//conditions:default": [],
+        }) +
+        iree_select({
+            "//runtime/config/hal:driver_local_sync": [
+                "//runtime/src/iree/hal/drivers/local_sync/registration",
+            ],
+            "//conditions:default": [],
+        }) +
+        iree_select({
+            "//runtime/config/hal:driver_local_task": [
+                "//runtime/src/iree/hal/drivers/local_task/registration",
+            ],
+            "//conditions:default": [],
+        }) +
+        iree_select({
+            "//runtime/config/hal:driver_null": [
+                "//runtime/src/iree/hal/drivers/null/registration",
+            ],
+            "//conditions:default": [],
+        }) +
+        iree_select({
+            "//runtime/config/hal:driver_vulkan": [
+                "//runtime/src/iree/hal/drivers/vulkan/registration",
+            ],
+            "//conditions:default": [],
+        })
+    ),
 )

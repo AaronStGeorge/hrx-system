@@ -1,0 +1,99 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("@bazel_skylib//rules:common_settings.bzl", "string_list_flag")
+
+package(default_visibility = ["//visibility:public"])
+
+# Driver registration defaults to the dependency-light host drivers. GPU drivers
+# remain opt-in so embedders do not fetch SDK packages by depending on the
+# runtime's default driver registry.
+DEFAULT_DRIVERS = [
+    "local-sync",
+    "local-task",
+    "null",
+]
+
+SUPPORTED_DRIVERS = [
+    "amdgpu",
+    "cuda",
+    "hip",
+    "local-sync",
+    "local-task",
+    "null",
+    "vulkan",
+]
+
+# Executable loader registration defaults to binary formats that do not depend
+# on compiler fallback paths. The VMVX bytecode loader is explicit opt-in
+# because it depends on the compiler-oriented fallback module stack.
+DEFAULT_EXECUTABLE_LOADERS = [
+    "embedded-elf",
+    "system-library",
+]
+
+SUPPORTED_EXECUTABLE_LOADERS = [
+    "embedded-elf",
+    "system-library",
+    "vmvx-module",
+]
+
+# Executable plugins are the same host binary formats today. Keep this separate
+# from executable_loaders so plugin and loader policy can diverge deliberately.
+DEFAULT_EXECUTABLE_PLUGINS = [
+    "embedded-elf",
+    "system-library",
+]
+
+SUPPORTED_EXECUTABLE_PLUGINS = [
+    "embedded-elf",
+    "system-library",
+]
+
+string_list_flag(
+    name = "drivers",
+    build_setting_default = DEFAULT_DRIVERS,
+)
+
+[
+    config_setting(
+        name = "driver_{}".format(driver.replace("-", "_")),
+        flag_values = {
+            ":drivers": driver,
+        },
+    )
+    for driver in SUPPORTED_DRIVERS
+]
+
+string_list_flag(
+    name = "executable_loaders",
+    build_setting_default = DEFAULT_EXECUTABLE_LOADERS,
+)
+
+[
+    config_setting(
+        name = "executable_loader_{}".format(loader.replace("-", "_")),
+        flag_values = {
+            ":executable_loaders": loader,
+        },
+    )
+    for loader in SUPPORTED_EXECUTABLE_LOADERS
+]
+
+string_list_flag(
+    name = "executable_plugins",
+    build_setting_default = DEFAULT_EXECUTABLE_PLUGINS,
+)
+
+[
+    config_setting(
+        name = "executable_plugin_{}".format(plugin.replace("-", "_")),
+        flag_values = {
+            ":executable_plugins": plugin,
+        },
+    )
+    for plugin in SUPPORTED_EXECUTABLE_PLUGINS
+]
