@@ -165,6 +165,13 @@ typedef struct iree_benchmark_loom_options_t {
 void iree_benchmark_loom_options_initialize(
     iree_benchmark_loom_options_t* out_options);
 
+// Returns true when the parsed CLI requested the AGENTS.md help snippet.
+bool iree_benchmark_loom_cli_flags_request_agents_md(void);
+
+// Converts parsed command-line flags into structured benchmark options.
+iree_status_t iree_benchmark_loom_options_from_flags(
+    iree_benchmark_loom_options_t* out_options);
+
 // Returns the stable JSON spelling for an artifact bundle policy.
 iree_string_view_t iree_benchmark_loom_artifact_bundle_policy_name(
     iree_benchmark_loom_artifact_bundle_policy_t policy);
