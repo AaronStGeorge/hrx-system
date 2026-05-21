@@ -145,7 +145,7 @@ iree_status_t iree_benchmark_loom_event_sink_emit_sample(
     const iree_benchmark_loom_event_sink_t* sink,
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     iree_string_view_t sample_compilation,
@@ -165,6 +165,7 @@ iree_status_t iree_benchmark_loom_event_sink_emit_sample(
                     {
                         .run = run,
                         .candidate = candidate,
+                        .work_item_index = work_item_index,
                         .module = module,
                         .benchmark_plan = benchmark_plan,
                         .case_plan = case_plan,
@@ -180,7 +181,7 @@ iree_status_t iree_benchmark_loom_event_sink_emit_benchmark_result(
     const iree_benchmark_loom_event_sink_t* sink,
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_benchmark_policy_t* policy,
@@ -201,6 +202,7 @@ iree_status_t iree_benchmark_loom_event_sink_emit_benchmark_result(
                     {
                         .run = run,
                         .candidate = candidate,
+                        .work_item_index = work_item_index,
                         .module = module,
                         .benchmark_plan = benchmark_plan,
                         .case_plan = case_plan,
@@ -217,7 +219,7 @@ iree_status_t iree_benchmark_loom_event_sink_emit_profile(
     const iree_benchmark_loom_event_sink_t* sink,
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_benchmark_policy_t* policy,
@@ -236,6 +238,7 @@ iree_status_t iree_benchmark_loom_event_sink_emit_profile(
                     {
                         .run = run,
                         .candidate = candidate,
+                        .work_item_index = work_item_index,
                         .module = module,
                         .benchmark_plan = benchmark_plan,
                         .case_plan = case_plan,
@@ -374,7 +377,8 @@ static iree_status_t iree_benchmark_loom_jsonl_event_sink_emit(
       return iree_benchmark_loom_jsonl_sink_end(
           jsonl_sink,
           iree_benchmark_loom_append_sample_row(
-              event->sample.run, event->sample.candidate, event->sample.module,
+              event->sample.run, event->sample.candidate,
+              event->sample.work_item_index, event->sample.module,
               event->sample.benchmark_plan, event->sample.case_plan,
               event->sample.sample_compilation,
               event->sample.benchmark_sample_ordinal,
@@ -385,6 +389,7 @@ static iree_status_t iree_benchmark_loom_jsonl_event_sink_emit(
           jsonl_sink,
           iree_benchmark_loom_append_benchmark_result(
               event->benchmark_result.run, event->benchmark_result.candidate,
+              event->benchmark_result.work_item_index,
               event->benchmark_result.module,
               event->benchmark_result.benchmark_plan,
               event->benchmark_result.case_plan, event->benchmark_result.policy,
@@ -397,9 +402,10 @@ static iree_status_t iree_benchmark_loom_jsonl_event_sink_emit(
           jsonl_sink,
           iree_benchmark_loom_append_profile_row(
               event->profile.run, event->profile.candidate,
-              event->profile.module, event->profile.benchmark_plan,
-              event->profile.case_plan, event->profile.policy,
-              event->profile.benchmark_result, jsonl_sink->host_allocator,
+              event->profile.work_item_index, event->profile.module,
+              event->profile.benchmark_plan, event->profile.case_plan,
+              event->profile.policy, event->profile.benchmark_result,
+              jsonl_sink->host_allocator,
               iree_benchmark_loom_jsonl_sink_begin(jsonl_sink)));
     case IREE_BENCHMARK_LOOM_EVENT_FAILURE:
       return iree_benchmark_loom_jsonl_sink_end(

@@ -123,6 +123,8 @@ typedef struct iree_benchmark_loom_sample_event_t {
   const iree_benchmark_loom_run_identity_t* run;
   // Stable candidate identity for the sample row.
   const iree_benchmark_loom_candidate_identity_t* candidate;
+  // Stable physical work item ordinal, or IREE_BENCHMARK_LOOM_INDEX_INVALID.
+  iree_host_size_t work_item_index;
   // Parsed module used to render sample parameter assignments.
   const loom_module_t* module;
   // Benchmark plan owning the sample.
@@ -144,6 +146,8 @@ typedef struct iree_benchmark_loom_benchmark_result_event_t {
   const iree_benchmark_loom_run_identity_t* run;
   // Stable candidate identity for the benchmark row.
   const iree_benchmark_loom_candidate_identity_t* candidate;
+  // Stable physical work item ordinal, or IREE_BENCHMARK_LOOM_INDEX_INVALID.
+  iree_host_size_t work_item_index;
   // Parsed module used to render sample parameter assignments.
   const loom_module_t* module;
   // Benchmark plan owning the result.
@@ -165,6 +169,8 @@ typedef struct iree_benchmark_loom_profile_event_t {
   const iree_benchmark_loom_run_identity_t* run;
   // Stable candidate identity for the profile rows.
   const iree_benchmark_loom_candidate_identity_t* candidate;
+  // Stable physical work item ordinal, or IREE_BENCHMARK_LOOM_INDEX_INVALID.
+  iree_host_size_t work_item_index;
   // Parsed module used to render sample parameter assignments.
   const loom_module_t* module;
   // Benchmark plan owning the profiled result.
@@ -325,7 +331,7 @@ iree_status_t iree_benchmark_loom_event_sink_emit_sample(
     const iree_benchmark_loom_event_sink_t* sink,
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     iree_string_view_t sample_compilation,
@@ -338,7 +344,7 @@ iree_status_t iree_benchmark_loom_event_sink_emit_benchmark_result(
     const iree_benchmark_loom_event_sink_t* sink,
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_benchmark_policy_t* policy,
@@ -351,7 +357,7 @@ iree_status_t iree_benchmark_loom_event_sink_emit_profile(
     const iree_benchmark_loom_event_sink_t* sink,
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_benchmark_policy_t* policy,

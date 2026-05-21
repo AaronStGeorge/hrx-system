@@ -130,6 +130,15 @@ iree_status_t iree_benchmark_loom_write_sample_compilation_field_json(
   return loom_json_write_escaped_string(stream, sample_compilation);
 }
 
+static iree_status_t iree_benchmark_loom_write_work_item_index_field_json(
+    iree_host_size_t work_item_index, loom_output_stream_t* stream) {
+  if (work_item_index == IREE_BENCHMARK_LOOM_INDEX_INVALID) {
+    return iree_ok_status();
+  }
+  return loom_output_stream_write_format(
+      stream, ",\"work_item_index\":%" PRIhsz, work_item_index);
+}
+
 static const char* iree_benchmark_loom_parameter_kind_name(
     loom_testbench_parameter_kind_t kind) {
   switch (kind) {
@@ -296,7 +305,7 @@ iree_status_t iree_benchmark_loom_write_case_sample_plan_fields_json(
 iree_status_t iree_benchmark_loom_append_sample_row(
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     iree_string_view_t sample_compilation,
@@ -312,6 +321,8 @@ iree_status_t iree_benchmark_loom_append_sample_row(
       iree_benchmark_loom_write_run_id_field_json(run, &stream));
   IREE_RETURN_IF_ERROR(
       iree_benchmark_loom_write_candidate_identity_json(candidate, &stream));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_work_item_index_field_json(
+      work_item_index, &stream));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_sample_compilation_field_json(
       sample_compilation, &stream));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_sample_fields_json(
@@ -1934,7 +1945,7 @@ iree_status_t iree_benchmark_loom_append_compile_row(
 iree_status_t iree_benchmark_loom_append_benchmark_result(
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_benchmark_policy_t* policy,
@@ -1950,6 +1961,8 @@ iree_status_t iree_benchmark_loom_append_benchmark_result(
       iree_benchmark_loom_write_run_id_field_json(run, &stream));
   IREE_RETURN_IF_ERROR(
       iree_benchmark_loom_write_candidate_identity_json(candidate, &stream));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_work_item_index_field_json(
+      work_item_index, &stream));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_sample_compilation_field_json(
       benchmark_result->sample_compilation, &stream));
   if (benchmark_result->has_sample_ordinal) {

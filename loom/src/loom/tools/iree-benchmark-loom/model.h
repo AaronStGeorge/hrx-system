@@ -23,6 +23,9 @@
 extern "C" {
 #endif
 
+// Invalid stable ordinal for optional benchmark model indexes.
+#define IREE_BENCHMARK_LOOM_INDEX_INVALID IREE_HOST_SIZE_MAX
+
 typedef enum iree_benchmark_loom_measure_e {
   // Full testbench case execution wall time.
   IREE_BENCHMARK_LOOM_MEASURE_CASE_END_TO_END = 0,

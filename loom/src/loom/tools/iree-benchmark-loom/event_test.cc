@@ -104,16 +104,17 @@ TEST(BenchmarkEventSinkTest, EmitsTypedOutputRowEvents) {
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_compile(
       &sink, &run, &candidate, &benchmark_plan, &case_plan, &provider));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_sample(
-      &sink, &run, &candidate, &module, &benchmark_plan, &case_plan,
-      IREE_SV("once"), /*benchmark_sample_ordinal=*/1,
+      &sink, &run, &candidate, /*work_item_index=*/7, &module, &benchmark_plan,
+      &case_plan, IREE_SV("once"), /*benchmark_sample_ordinal=*/1,
       /*case_sample_ordinal=*/2, &sample_result));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_benchmark_result(
-      &sink, &run, &candidate, &module, &benchmark_plan, &case_plan, &policy,
-      &benchmark_result, /*correctness_sample_count=*/3,
+      &sink, &run, &candidate, /*work_item_index=*/7, &module, &benchmark_plan,
+      &case_plan, &policy, &benchmark_result,
+      /*correctness_sample_count=*/3,
       /*correctness_failed_sample_count=*/4));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_profile(
-      &sink, &run, &candidate, &module, &benchmark_plan, &case_plan, &policy,
-      &benchmark_result));
+      &sink, &run, &candidate, /*work_item_index=*/7, &module, &benchmark_plan,
+      &case_plan, &policy, &benchmark_result));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_failure(
       &sink, &run, IREE_SV("verify"), IREE_SV("diagnostics"), IREE_SV("failed"),
       &diagnostics));
@@ -130,14 +131,17 @@ TEST(BenchmarkEventSinkTest, EmitsTypedOutputRowEvents) {
   EXPECT_EQ(collector.events[0].kind, IREE_BENCHMARK_LOOM_EVENT_DEVICE);
   EXPECT_EQ(collector.events[1].kind, IREE_BENCHMARK_LOOM_EVENT_COMPILE);
   EXPECT_EQ(collector.events[2].kind, IREE_BENCHMARK_LOOM_EVENT_SAMPLE);
+  EXPECT_EQ(collector.events[2].sample.work_item_index, 7u);
   EXPECT_EQ(collector.events[2].sample.benchmark_sample_ordinal, 1u);
   EXPECT_EQ(collector.events[2].sample.case_sample_ordinal, 2u);
   EXPECT_EQ(collector.events[3].kind,
             IREE_BENCHMARK_LOOM_EVENT_BENCHMARK_RESULT);
+  EXPECT_EQ(collector.events[3].benchmark_result.work_item_index, 7u);
   EXPECT_EQ(collector.events[3].benchmark_result.correctness_sample_count, 3u);
   EXPECT_EQ(
       collector.events[3].benchmark_result.correctness_failed_sample_count, 4u);
   EXPECT_EQ(collector.events[4].kind, IREE_BENCHMARK_LOOM_EVENT_PROFILE);
+  EXPECT_EQ(collector.events[4].profile.work_item_index, 7u);
   EXPECT_EQ(collector.events[5].kind, IREE_BENCHMARK_LOOM_EVENT_FAILURE);
   EXPECT_EQ(collector.events[5].failure.diagnostics, &diagnostics);
   EXPECT_EQ(collector.events[6].kind,

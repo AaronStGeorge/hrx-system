@@ -26,7 +26,8 @@ typedef enum iree_benchmark_loom_work_item_kind_e {
   IREE_BENCHMARK_LOOM_WORK_ITEM_DISPATCH_SAMPLE = 2,
 } iree_benchmark_loom_work_item_kind_t;
 
-#define IREE_BENCHMARK_LOOM_WORK_PLAN_INDEX_INVALID IREE_HOST_SIZE_MAX
+#define IREE_BENCHMARK_LOOM_WORK_PLAN_INDEX_INVALID \
+  IREE_BENCHMARK_LOOM_INDEX_INVALID
 
 typedef struct iree_benchmark_loom_dispatch_compile_item_t {
   // Stable compile item ordinal within the plan.

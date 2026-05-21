@@ -100,7 +100,7 @@ iree_status_t iree_benchmark_loom_write_benchmark_result_json(
 iree_status_t iree_benchmark_loom_append_sample_row(
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     iree_string_view_t sample_compilation,
@@ -163,7 +163,7 @@ iree_status_t iree_benchmark_loom_append_compile_row(
 iree_status_t iree_benchmark_loom_append_benchmark_result(
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_benchmark_policy_t* policy,

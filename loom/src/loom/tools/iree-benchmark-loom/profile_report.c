@@ -115,7 +115,7 @@ static void iree_benchmark_loom_consume_status_json_error(
 static iree_status_t iree_benchmark_loom_write_profile_artifact_identity_json(
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_benchmark_result_t* benchmark_result,
@@ -124,6 +124,10 @@ static iree_status_t iree_benchmark_loom_write_profile_artifact_identity_json(
       iree_benchmark_loom_write_run_id_field_json(run, stream));
   IREE_RETURN_IF_ERROR(
       iree_benchmark_loom_write_candidate_identity_json(candidate, stream));
+  if (work_item_index != IREE_BENCHMARK_LOOM_INDEX_INVALID) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        stream, ",\"work_item_index\":%" PRIhsz, work_item_index));
+  }
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_sample_compilation_field_json(
       benchmark_result->sample_compilation, stream));
   if (benchmark_result->has_sample_ordinal) {
@@ -434,7 +438,7 @@ static iree_status_t iree_benchmark_loom_write_profile_counter_status_json(
 static iree_status_t iree_benchmark_loom_append_profile_summary_status_row(
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_benchmark_policy_t* policy,
@@ -448,8 +452,8 @@ static iree_status_t iree_benchmark_loom_append_profile_summary_status_row(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
       &stream, "{\"row\":\"profile_summary\""));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_profile_artifact_identity_json(
-      run, candidate, module, benchmark_plan, case_plan, benchmark_result,
-      &stream));
+      run, candidate, work_item_index, module, benchmark_plan, case_plan,
+      benchmark_result, &stream));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"profile_summary\":"));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_profile_summary_status_json(
@@ -463,7 +467,7 @@ static iree_status_t
 iree_benchmark_loom_append_profile_summary_status_from_error(
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_benchmark_policy_t* policy,
@@ -473,16 +477,16 @@ iree_benchmark_loom_append_profile_summary_status_from_error(
   iree_benchmark_loom_status_json_error_t error = {0};
   iree_benchmark_loom_consume_status_json_error(error_status, &error);
   return iree_benchmark_loom_append_profile_summary_status_row(
-      run, candidate, module, benchmark_plan, case_plan, policy,
-      benchmark_result, /*decode_summary=*/NULL, status, reason, error.code,
-      iree_make_string_view(error.message, error.message_length),
+      run, candidate, work_item_index, module, benchmark_plan, case_plan,
+      policy, benchmark_result, /*decode_summary=*/NULL, status, reason,
+      error.code, iree_make_string_view(error.message, error.message_length),
       profile_output);
 }
 
 static iree_status_t iree_benchmark_loom_append_profile_summary_payload_row(
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_benchmark_result_t* benchmark_result,
@@ -492,8 +496,8 @@ static iree_status_t iree_benchmark_loom_append_profile_summary_payload_row(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
       &stream, "{\"row\":\"profile_summary\""));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_profile_artifact_identity_json(
-      run, candidate, module, benchmark_plan, case_plan, benchmark_result,
-      &stream));
+      run, candidate, work_item_index, module, benchmark_plan, case_plan,
+      benchmark_result, &stream));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"profile_summary\":"));
   IREE_RETURN_IF_ERROR(loom_output_stream_write(&stream, summary_json));
@@ -504,7 +508,7 @@ static iree_status_t iree_benchmark_loom_append_profile_summary_payload_row(
 static iree_status_t iree_benchmark_loom_append_profile_summary_rows(
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_benchmark_policy_t* policy,
@@ -525,34 +529,34 @@ static iree_status_t iree_benchmark_loom_append_profile_summary_rows(
   if (!profile->executed) {
     if (profile->has_error) {
       return iree_benchmark_loom_append_profile_summary_status_row(
-          run, candidate, module, benchmark_plan, case_plan, policy,
-          benchmark_result, /*decode_summary=*/NULL, IREE_SV("unavailable"),
-          IREE_SV("profile_error"), profile->error_code,
+          run, candidate, work_item_index, module, benchmark_plan, case_plan,
+          policy, benchmark_result, /*decode_summary=*/NULL,
+          IREE_SV("unavailable"), IREE_SV("profile_error"), profile->error_code,
           iree_make_string_view(profile->error_message,
                                 profile->error_message_length),
           profile_output);
     }
     return iree_benchmark_loom_append_profile_summary_status_row(
-        run, candidate, module, benchmark_plan, case_plan, policy,
-        benchmark_result, /*decode_summary=*/NULL, IREE_SV("unavailable"),
-        IREE_SV("profile_not_executed"), IREE_STATUS_OK,
+        run, candidate, work_item_index, module, benchmark_plan, case_plan,
+        policy, benchmark_result, /*decode_summary=*/NULL,
+        IREE_SV("unavailable"), IREE_SV("profile_not_executed"), IREE_STATUS_OK,
         iree_string_view_empty(), profile_output);
   }
   if (profile->has_error) {
     return iree_benchmark_loom_append_profile_summary_status_row(
-        run, candidate, module, benchmark_plan, case_plan, policy,
-        benchmark_result, /*decode_summary=*/NULL, IREE_SV("unavailable"),
-        IREE_SV("profile_error"), profile->error_code,
+        run, candidate, work_item_index, module, benchmark_plan, case_plan,
+        policy, benchmark_result, /*decode_summary=*/NULL,
+        IREE_SV("unavailable"), IREE_SV("profile_error"), profile->error_code,
         iree_make_string_view(profile->error_message,
                               profile->error_message_length),
         profile_output);
   }
   if (!profile->has_artifact_path) {
     return iree_benchmark_loom_append_profile_summary_status_row(
-        run, candidate, module, benchmark_plan, case_plan, policy,
-        benchmark_result, /*decode_summary=*/NULL, IREE_SV("unavailable"),
-        IREE_SV("no_profile_artifact_path"), IREE_STATUS_OK,
-        iree_string_view_empty(), profile_output);
+        run, candidate, work_item_index, module, benchmark_plan, case_plan,
+        policy, benchmark_result, /*decode_summary=*/NULL,
+        IREE_SV("unavailable"), IREE_SV("no_profile_artifact_path"),
+        IREE_STATUS_OK, iree_string_view_empty(), profile_output);
   }
 
   FILE* summary_report_file = tmpfile();
@@ -573,8 +577,8 @@ static iree_status_t iree_benchmark_loom_append_profile_summary_rows(
     fclose(summary_report_file);
     iree_string_builder_deinitialize(&summary_rows);
     return iree_benchmark_loom_append_profile_summary_status_from_error(
-        run, candidate, module, benchmark_plan, case_plan, policy,
-        benchmark_result, IREE_SV("raw_artifact_only"),
+        run, candidate, work_item_index, module, benchmark_plan, case_plan,
+        policy, benchmark_result, IREE_SV("raw_artifact_only"),
         IREE_SV("decode_failed"), decode_status, profile_output);
   }
   iree_status_t status = iree_benchmark_loom_read_file_into_builder(
@@ -593,8 +597,8 @@ static iree_status_t iree_benchmark_loom_append_profile_summary_rows(
   if (!iree_status_is_ok(status)) {
     iree_string_builder_deinitialize(&summary_rows);
     return iree_benchmark_loom_append_profile_summary_status_from_error(
-        run, candidate, module, benchmark_plan, case_plan, policy,
-        benchmark_result, IREE_SV("raw_artifact_only"),
+        run, candidate, work_item_index, module, benchmark_plan, case_plan,
+        policy, benchmark_result, IREE_SV("raw_artifact_only"),
         IREE_SV("decode_summary_failed"), status, profile_output);
   }
   const iree_string_view_t reason =
@@ -603,8 +607,8 @@ static iree_status_t iree_benchmark_loom_append_profile_summary_rows(
           ? IREE_SV("decoded_empty_profile_summary")
           : IREE_SV("decoded_profile_summary");
   status = iree_benchmark_loom_append_profile_summary_status_row(
-      run, candidate, module, benchmark_plan, case_plan, policy,
-      benchmark_result, &decode_summary, IREE_SV("decoded"), reason,
+      run, candidate, work_item_index, module, benchmark_plan, case_plan,
+      policy, benchmark_result, &decode_summary, IREE_SV("decoded"), reason,
       IREE_STATUS_OK, iree_string_view_empty(), profile_output);
 
   iree_string_view_t remaining = iree_string_builder_view(&summary_rows);
@@ -616,8 +620,8 @@ static iree_status_t iree_benchmark_loom_append_profile_summary_rows(
       continue;
     }
     status = iree_benchmark_loom_append_profile_summary_payload_row(
-        run, candidate, module, benchmark_plan, case_plan, benchmark_result,
-        line, profile_output);
+        run, candidate, work_item_index, module, benchmark_plan, case_plan,
+        benchmark_result, line, profile_output);
   }
   iree_string_builder_deinitialize(&summary_rows);
   return status;
@@ -626,7 +630,7 @@ static iree_status_t iree_benchmark_loom_append_profile_summary_rows(
 static iree_status_t iree_benchmark_loom_append_profile_counter_status_row(
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_benchmark_policy_t* policy,
@@ -640,8 +644,8 @@ static iree_status_t iree_benchmark_loom_append_profile_counter_status_row(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
       &stream, "{\"row\":\"profile_counter\""));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_profile_artifact_identity_json(
-      run, candidate, module, benchmark_plan, case_plan, benchmark_result,
-      &stream));
+      run, candidate, work_item_index, module, benchmark_plan, case_plan,
+      benchmark_result, &stream));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"counter\":"));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_profile_counter_status_json(
@@ -655,7 +659,7 @@ static iree_status_t
 iree_benchmark_loom_append_profile_counter_status_from_error(
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_benchmark_policy_t* policy,
@@ -665,16 +669,16 @@ iree_benchmark_loom_append_profile_counter_status_from_error(
   iree_benchmark_loom_status_json_error_t error = {0};
   iree_benchmark_loom_consume_status_json_error(error_status, &error);
   return iree_benchmark_loom_append_profile_counter_status_row(
-      run, candidate, module, benchmark_plan, case_plan, policy,
-      benchmark_result, /*decode_summary=*/NULL, status, reason, error.code,
-      iree_make_string_view(error.message, error.message_length),
+      run, candidate, work_item_index, module, benchmark_plan, case_plan,
+      policy, benchmark_result, /*decode_summary=*/NULL, status, reason,
+      error.code, iree_make_string_view(error.message, error.message_length),
       profile_output);
 }
 
 static iree_status_t iree_benchmark_loom_append_profile_counter_payload_row(
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_benchmark_result_t* benchmark_result,
@@ -684,8 +688,8 @@ static iree_status_t iree_benchmark_loom_append_profile_counter_payload_row(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
       &stream, "{\"row\":\"profile_counter\""));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_profile_artifact_identity_json(
-      run, candidate, module, benchmark_plan, case_plan, benchmark_result,
-      &stream));
+      run, candidate, work_item_index, module, benchmark_plan, case_plan,
+      benchmark_result, &stream));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"counter\":"));
   IREE_RETURN_IF_ERROR(loom_output_stream_write(&stream, counter_json));
@@ -696,7 +700,7 @@ static iree_status_t iree_benchmark_loom_append_profile_counter_payload_row(
 static iree_status_t iree_benchmark_loom_append_profile_counter_rows(
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_benchmark_policy_t* policy,
@@ -712,34 +716,34 @@ static iree_status_t iree_benchmark_loom_append_profile_counter_rows(
   if (!profile->executed) {
     if (profile->has_error) {
       return iree_benchmark_loom_append_profile_counter_status_row(
-          run, candidate, module, benchmark_plan, case_plan, policy,
-          benchmark_result, /*decode_summary=*/NULL, IREE_SV("unavailable"),
-          IREE_SV("profile_error"), profile->error_code,
+          run, candidate, work_item_index, module, benchmark_plan, case_plan,
+          policy, benchmark_result, /*decode_summary=*/NULL,
+          IREE_SV("unavailable"), IREE_SV("profile_error"), profile->error_code,
           iree_make_string_view(profile->error_message,
                                 profile->error_message_length),
           profile_output);
     }
     return iree_benchmark_loom_append_profile_counter_status_row(
-        run, candidate, module, benchmark_plan, case_plan, policy,
-        benchmark_result, /*decode_summary=*/NULL, IREE_SV("unavailable"),
-        IREE_SV("profile_not_executed"), IREE_STATUS_OK,
+        run, candidate, work_item_index, module, benchmark_plan, case_plan,
+        policy, benchmark_result, /*decode_summary=*/NULL,
+        IREE_SV("unavailable"), IREE_SV("profile_not_executed"), IREE_STATUS_OK,
         iree_string_view_empty(), profile_output);
   }
   if (profile->has_error) {
     return iree_benchmark_loom_append_profile_counter_status_row(
-        run, candidate, module, benchmark_plan, case_plan, policy,
-        benchmark_result, /*decode_summary=*/NULL, IREE_SV("unavailable"),
-        IREE_SV("profile_error"), profile->error_code,
+        run, candidate, work_item_index, module, benchmark_plan, case_plan,
+        policy, benchmark_result, /*decode_summary=*/NULL,
+        IREE_SV("unavailable"), IREE_SV("profile_error"), profile->error_code,
         iree_make_string_view(profile->error_message,
                               profile->error_message_length),
         profile_output);
   }
   if (!profile->has_artifact_path) {
     return iree_benchmark_loom_append_profile_counter_status_row(
-        run, candidate, module, benchmark_plan, case_plan, policy,
-        benchmark_result, /*decode_summary=*/NULL, IREE_SV("unavailable"),
-        IREE_SV("no_profile_artifact_path"), IREE_STATUS_OK,
-        iree_string_view_empty(), profile_output);
+        run, candidate, work_item_index, module, benchmark_plan, case_plan,
+        policy, benchmark_result, /*decode_summary=*/NULL,
+        IREE_SV("unavailable"), IREE_SV("no_profile_artifact_path"),
+        IREE_STATUS_OK, iree_string_view_empty(), profile_output);
   }
 
   FILE* counter_report_file = tmpfile();
@@ -762,8 +766,8 @@ static iree_status_t iree_benchmark_loom_append_profile_counter_rows(
     fclose(counter_report_file);
     iree_string_builder_deinitialize(&counter_rows);
     return iree_benchmark_loom_append_profile_counter_status_from_error(
-        run, candidate, module, benchmark_plan, case_plan, policy,
-        benchmark_result, IREE_SV("raw_artifact_only"),
+        run, candidate, work_item_index, module, benchmark_plan, case_plan,
+        policy, benchmark_result, IREE_SV("raw_artifact_only"),
         IREE_SV("decode_failed"), decode_status, profile_output);
   }
   iree_status_t status = iree_benchmark_loom_read_file_into_builder(
@@ -782,8 +786,8 @@ static iree_status_t iree_benchmark_loom_append_profile_counter_rows(
   if (!iree_status_is_ok(status)) {
     iree_string_builder_deinitialize(&counter_rows);
     return iree_benchmark_loom_append_profile_counter_status_from_error(
-        run, candidate, module, benchmark_plan, case_plan, policy,
-        benchmark_result, IREE_SV("raw_artifact_only"),
+        run, candidate, work_item_index, module, benchmark_plan, case_plan,
+        policy, benchmark_result, IREE_SV("raw_artifact_only"),
         IREE_SV("decode_summary_failed"), status, profile_output);
   }
   const iree_string_view_t reason =
@@ -792,8 +796,8 @@ static iree_status_t iree_benchmark_loom_append_profile_counter_rows(
           ? IREE_SV("decoded_empty_counter_report")
           : IREE_SV("decoded_counter_report");
   status = iree_benchmark_loom_append_profile_counter_status_row(
-      run, candidate, module, benchmark_plan, case_plan, policy,
-      benchmark_result, &decode_summary, IREE_SV("decoded"), reason,
+      run, candidate, work_item_index, module, benchmark_plan, case_plan,
+      policy, benchmark_result, &decode_summary, IREE_SV("decoded"), reason,
       IREE_STATUS_OK, iree_string_view_empty(), profile_output);
 
   iree_string_view_t remaining = iree_string_builder_view(&counter_rows);
@@ -805,8 +809,8 @@ static iree_status_t iree_benchmark_loom_append_profile_counter_rows(
       continue;
     }
     status = iree_benchmark_loom_append_profile_counter_payload_row(
-        run, candidate, module, benchmark_plan, case_plan, benchmark_result,
-        line, profile_output);
+        run, candidate, work_item_index, module, benchmark_plan, case_plan,
+        benchmark_result, line, profile_output);
   }
   iree_string_builder_deinitialize(&counter_rows);
   return status;
@@ -815,7 +819,7 @@ static iree_status_t iree_benchmark_loom_append_profile_counter_rows(
 iree_status_t iree_benchmark_loom_append_profile_row(
     const iree_benchmark_loom_run_identity_t* run,
     const iree_benchmark_loom_candidate_identity_t* candidate,
-    const loom_module_t* module,
+    iree_host_size_t work_item_index, const loom_module_t* module,
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     const loom_testbench_case_plan_t* case_plan,
     const iree_benchmark_loom_benchmark_policy_t* policy,
@@ -833,6 +837,10 @@ iree_status_t iree_benchmark_loom_append_profile_row(
       iree_benchmark_loom_write_run_id_field_json(run, &stream));
   IREE_RETURN_IF_ERROR(
       iree_benchmark_loom_write_candidate_identity_json(candidate, &stream));
+  if (work_item_index != IREE_BENCHMARK_LOOM_INDEX_INVALID) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        &stream, ",\"work_item_index\":%" PRIhsz, work_item_index));
+  }
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_sample_compilation_field_json(
       benchmark_result->sample_compilation, &stream));
   if (benchmark_result->has_sample_ordinal) {
@@ -855,9 +863,9 @@ iree_status_t iree_benchmark_loom_append_profile_row(
       &benchmark_result->hal_benchmark.profile, &stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}\n"));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_append_profile_summary_rows(
-      run, candidate, module, benchmark_plan, case_plan, policy,
-      benchmark_result, allocator, profile_output));
+      run, candidate, work_item_index, module, benchmark_plan, case_plan,
+      policy, benchmark_result, allocator, profile_output));
   return iree_benchmark_loom_append_profile_counter_rows(
-      run, candidate, module, benchmark_plan, case_plan, policy,
-      benchmark_result, allocator, profile_output);
+      run, candidate, work_item_index, module, benchmark_plan, case_plan,
+      policy, benchmark_result, allocator, profile_output);
 }
