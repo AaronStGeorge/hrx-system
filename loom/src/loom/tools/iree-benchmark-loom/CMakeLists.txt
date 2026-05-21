@@ -15,6 +15,7 @@ loom_cc_library(
     main
   HDRS
     "case_execution.h"
+    "comparison_execution.h"
     "configuration.h"
     "context.h"
     "diagnostics.h"
@@ -38,6 +39,7 @@ loom_cc_library(
     "work_plan.h"
   SRCS
     "case_execution.c"
+    "comparison_execution.c"
     "context.c"
     "diagnostics.c"
     "dispatch_benchmark.c"

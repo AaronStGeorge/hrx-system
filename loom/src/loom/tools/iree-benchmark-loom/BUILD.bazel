@@ -106,6 +106,7 @@ loom_cc_library(
     name = "main",
     srcs = [
         "case_execution.c",
+        "comparison_execution.c",
         "context.c",
         "diagnostics.c",
         "dispatch_benchmark.c",
@@ -128,6 +129,7 @@ loom_cc_library(
     ],
     hdrs = [
         "case_execution.h",
+        "comparison_execution.h",
         "configuration.h",
         "context.h",
         "diagnostics.h",
