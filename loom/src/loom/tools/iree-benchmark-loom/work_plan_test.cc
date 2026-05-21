@@ -128,6 +128,57 @@ check.benchmark<@mlp> @full {rows = 3584}
   iree_benchmark_loom_work_plan_deinitialize(&work_plan);
 }
 
+TEST_F(BenchmarkWorkPlanTest, DeduplicatesEquivalentCaseEndToEndSamples) {
+  const loom_testbench_module_plan_t module_plan = PlanModule(R"(
+check.case @sampled {
+  %value = check.param.choice values([5, 7]) name("value") : i32
+  check.expect.equal actual(%value) expected(%value) : i32
+  check.return
+}
+
+check.benchmark<@sampled> @all_a
+check.benchmark<@sampled> @all_b
+check.benchmark<@sampled> @value7_a {value = 7}
+check.benchmark<@sampled> @value7_b {value = 7}
+)");
+
+  iree_benchmark_loom_options_t options = {};
+  iree_benchmark_loom_options_initialize(&options);
+  options.measure = IREE_SV("case_end_to_end");
+
+  iree_benchmark_loom_work_plan_t work_plan = {};
+  IREE_ASSERT_OK(iree_benchmark_loom_work_plan_initialize(
+      &module_plan, &options, iree_allocator_system(), &work_plan));
+
+  EXPECT_EQ(work_plan.selected_benchmark_count, 4u);
+  EXPECT_EQ(work_plan.logical_sample_count, 4u);
+  EXPECT_EQ(work_plan.dispatch_compile_item_count, 0u);
+  EXPECT_EQ(work_plan.work_item_count, 2u);
+
+  EXPECT_EQ(work_plan.logical_samples[0].selection_index, 0u);
+  EXPECT_EQ(work_plan.logical_samples[0].work_item_index, 0u);
+  EXPECT_EQ(work_plan.logical_samples[1].selection_index, 1u);
+  EXPECT_EQ(work_plan.logical_samples[1].work_item_index, 0u);
+  EXPECT_EQ(work_plan.logical_samples[2].selection_index, 2u);
+  EXPECT_EQ(work_plan.logical_samples[2].case_sample_ordinal, 1u);
+  EXPECT_EQ(work_plan.logical_samples[2].work_item_index, 1u);
+  EXPECT_EQ(work_plan.logical_samples[3].selection_index, 3u);
+  EXPECT_EQ(work_plan.logical_samples[3].case_sample_ordinal, 1u);
+  EXPECT_EQ(work_plan.logical_samples[3].work_item_index, 1u);
+
+  EXPECT_EQ(work_plan.work_items[0].representative_selection_index, 0u);
+  EXPECT_EQ(work_plan.work_items[0].begin_benchmark_sample, 0u);
+  EXPECT_EQ(work_plan.work_items[0].end_benchmark_sample, 2u);
+  EXPECT_FALSE(work_plan.work_items[0].has_case_sample_ordinal);
+  EXPECT_EQ(work_plan.work_items[1].representative_selection_index, 2u);
+  EXPECT_EQ(work_plan.work_items[1].begin_benchmark_sample, 0u);
+  EXPECT_EQ(work_plan.work_items[1].end_benchmark_sample, 1u);
+  EXPECT_TRUE(work_plan.work_items[1].has_case_sample_ordinal);
+  EXPECT_EQ(work_plan.work_items[1].case_sample_ordinal, 1u);
+
+  iree_benchmark_loom_work_plan_deinitialize(&work_plan);
+}
+
 TEST_F(BenchmarkWorkPlanTest, SharesCompileOnceCandidateAcrossSamples) {
   const loom_testbench_module_plan_t module_plan = PlanModule(R"(
 check.case @mlp {

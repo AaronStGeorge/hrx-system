@@ -80,6 +80,10 @@ typedef struct iree_benchmark_loom_summary_event_t {
   iree_host_size_t planned_benchmark_count;
   // Number of selected benchmark candidates.
   iree_host_size_t selected_benchmark_count;
+  // Number of logical benchmark samples selected for reporting.
+  iree_host_size_t logical_sample_count;
+  // Number of unique physical work items selected for execution.
+  iree_host_size_t work_item_count;
   // Number of top-level failure rows emitted.
   iree_host_size_t failure_count;
   // Number of benchmark rows that failed or did not execute successfully.
@@ -294,8 +298,9 @@ iree_status_t iree_benchmark_loom_event_sink_emit_summary(
     const iree_benchmark_loom_artifact_bundle_t* artifact_bundle,
     iree_host_size_t planned_case_count,
     iree_host_size_t planned_benchmark_count,
-    iree_host_size_t selected_benchmark_count, iree_host_size_t failure_count,
-    iree_host_size_t failed_benchmark_count,
+    iree_host_size_t selected_benchmark_count,
+    iree_host_size_t logical_sample_count, iree_host_size_t work_item_count,
+    iree_host_size_t failure_count, iree_host_size_t failed_benchmark_count,
     iree_host_size_t correctness_sample_count,
     iree_host_size_t correctness_failed_sample_count, bool dry_run,
     iree_benchmark_loom_sample_compilation_mode_t sample_compilation_mode);

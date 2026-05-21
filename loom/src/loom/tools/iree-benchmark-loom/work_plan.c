@@ -313,6 +313,26 @@ static iree_host_size_t iree_benchmark_loom_find_or_append_compile_item(
   return compile_item_index;
 }
 
+static bool iree_benchmark_loom_benchmark_sample_ranges_equal(
+    const loom_testbench_case_plan_t* case_plan,
+    const loom_testbench_benchmark_plan_t* lhs,
+    iree_host_size_t lhs_begin_sample,
+    const loom_testbench_benchmark_plan_t* rhs,
+    iree_host_size_t rhs_begin_sample, iree_host_size_t sample_count) {
+  for (iree_host_size_t i = 0; i < sample_count; ++i) {
+    const iree_host_size_t lhs_case_sample_ordinal =
+        loom_testbench_benchmark_sample_case_ordinal(case_plan, lhs,
+                                                     lhs_begin_sample + i);
+    const iree_host_size_t rhs_case_sample_ordinal =
+        loom_testbench_benchmark_sample_case_ordinal(case_plan, rhs,
+                                                     rhs_begin_sample + i);
+    if (lhs_case_sample_ordinal != rhs_case_sample_ordinal) {
+      return false;
+    }
+  }
+  return true;
+}
+
 static bool iree_benchmark_loom_work_item_matches(
     const iree_benchmark_loom_work_item_t* item,
     const iree_benchmark_loom_work_plan_t* plan,
@@ -351,7 +371,11 @@ static bool iree_benchmark_loom_work_item_matches(
     return false;
   }
   if (kind == IREE_BENCHMARK_LOOM_WORK_ITEM_CASE_END_TO_END &&
-      representative->benchmark_plan != selection->benchmark_plan) {
+      representative->benchmark_plan != selection->benchmark_plan &&
+      !iree_benchmark_loom_benchmark_sample_ranges_equal(
+          selection->case_plan, representative->benchmark_plan,
+          item->begin_benchmark_sample, selection->benchmark_plan, begin_sample,
+          end_sample - begin_sample)) {
     return false;
   }
   return true;

@@ -2158,8 +2158,9 @@ iree_status_t iree_benchmark_loom_append_summary_row(
     const iree_benchmark_loom_artifact_bundle_t* bundle,
     iree_host_size_t planned_case_count,
     iree_host_size_t planned_benchmark_count,
-    iree_host_size_t selected_benchmark_count, iree_host_size_t failure_count,
-    iree_host_size_t failed_benchmark_count,
+    iree_host_size_t selected_benchmark_count,
+    iree_host_size_t logical_sample_count, iree_host_size_t work_item_count,
+    iree_host_size_t failure_count, iree_host_size_t failed_benchmark_count,
     iree_host_size_t correctness_sample_count,
     iree_host_size_t correctness_failed_sample_count, bool dry_run,
     iree_benchmark_loom_sample_compilation_mode_t sample_compilation_mode,
@@ -2185,6 +2186,10 @@ iree_status_t iree_benchmark_loom_append_summary_row(
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       output, ",\"benchmark_count\":%" PRIhsz, selected_benchmark_count));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      output, ",\"logical_sample_count\":%" PRIhsz, logical_sample_count));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
+      output, ",\"work_item_count\":%" PRIhsz, work_item_count));
+  IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       output, ",\"failure_count\":%" PRIhsz, failure_count));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       output, ",\"failed_benchmark_count\":%" PRIhsz, failed_benchmark_count));
@@ -2199,8 +2204,10 @@ iree_status_t iree_benchmark_loom_append_summary_row(
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       output,
       "\"planned\":{\"case_count\":%" PRIhsz ",\"benchmark_count\":%" PRIhsz
-      ",\"selected_benchmark_count\":%" PRIhsz "}",
-      planned_case_count, planned_benchmark_count, selected_benchmark_count));
+      ",\"selected_benchmark_count\":%" PRIhsz
+      ",\"logical_sample_count\":%" PRIhsz ",\"work_item_count\":%" PRIhsz "}",
+      planned_case_count, planned_benchmark_count, selected_benchmark_count,
+      logical_sample_count, work_item_count));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       output,
       ",\"failures\":{\"row_count\":%" PRIhsz

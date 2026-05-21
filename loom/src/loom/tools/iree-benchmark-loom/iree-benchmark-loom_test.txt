@@ -36,11 +36,13 @@
 // BENCH: "planned_case_count":2
 // BENCH: "planned_benchmark_count":4
 // BENCH: "benchmark_count":1
+// BENCH: "logical_sample_count":1
+// BENCH: "work_item_count":1
 // BENCH: "failure_count":0
 // BENCH: "failed_benchmark_count":0
 // BENCH: "correctness_sample_count":1
 // BENCH: "correctness_failed_sample_count":0
-// BENCH: "summary":{"planned":{"case_count":2,"benchmark_count":4,"selected_benchmark_count":1},"failures":{"row_count":0,"failed_benchmark_count":0},"correctness":{"sample_count":1,"failed_sample_count":0},"artifacts":{"bundle_enabled":false
+// BENCH: "summary":{"planned":{"case_count":2,"benchmark_count":4,"selected_benchmark_count":1,"logical_sample_count":1,"work_item_count":1},"failures":{"row_count":0,"failed_benchmark_count":0},"correctness":{"sample_count":1,"failed_sample_count":0},"artifacts":{"bundle_enabled":false
 
 // SAMPLE: "row":"plan"
 // SAMPLE: "candidate_id":"c0","candidate_index":0

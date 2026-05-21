@@ -52,6 +52,7 @@ TEST(BenchmarkEventSinkTest, EmitsTypedLifecycleEvents) {
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_summary(
       &sink, &run, &artifact_bundle, /*planned_case_count=*/3,
       /*planned_benchmark_count=*/2, /*selected_benchmark_count=*/1,
+      /*logical_sample_count=*/4, /*work_item_count=*/2,
       /*failure_count=*/0, /*failed_benchmark_count=*/0,
       /*correctness_sample_count=*/5, /*correctness_failed_sample_count=*/0,
       /*dry_run=*/true, IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
@@ -66,6 +67,8 @@ TEST(BenchmarkEventSinkTest, EmitsTypedLifecycleEvents) {
   EXPECT_EQ(collector.events[1].summary.planned_case_count, 3u);
   EXPECT_EQ(collector.events[1].summary.planned_benchmark_count, 2u);
   EXPECT_EQ(collector.events[1].summary.selected_benchmark_count, 1u);
+  EXPECT_EQ(collector.events[1].summary.logical_sample_count, 4u);
+  EXPECT_EQ(collector.events[1].summary.work_item_count, 2u);
   EXPECT_EQ(collector.events[1].summary.correctness_sample_count, 5u);
 }
 
