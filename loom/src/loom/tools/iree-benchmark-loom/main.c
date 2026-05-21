@@ -27,8 +27,8 @@
 #include "loom/tools/iree-benchmark-loom/model.h"
 #include "loom/tools/iree-benchmark-loom/options.h"
 #include "loom/tools/iree-benchmark-loom/output.h"
+#include "loom/tools/iree-benchmark-loom/output_sink.h"
 #include "loom/tools/iree-benchmark-loom/session.h"
-#include "loom/tools/iree-benchmark-loom/snapshot.h"
 #include "loom/tools/iree-benchmark-loom/work_execution.h"
 #include "loom/tools/iree-benchmark-loom/work_plan.h"
 #include "loom/verify/verify.h"
@@ -90,12 +90,9 @@ int iree_benchmark_loom_main(
   memset(&plan_arena, 0, sizeof(plan_arena));
   iree_arena_allocator_t execution_arena;
   memset(&execution_arena, 0, sizeof(execution_arena));
-  iree_benchmark_loom_jsonl_sink_t jsonl_sink = {0};
-  bool jsonl_sink_initialized = false;
-  iree_benchmark_loom_jsonl_event_sink_t jsonl_event_sink = {0};
-  iree_benchmark_loom_snapshot_sink_t snapshot_sink = {0};
-  bool snapshot_sink_initialized = false;
-  iree_benchmark_loom_event_sink_t event_sink = {0};
+  iree_benchmark_loom_output_sink_t output_sink = {0};
+  bool output_sink_initialized = false;
+  const iree_benchmark_loom_event_sink_t* event_sink = &output_sink.event_sink;
   iree_benchmark_loom_diagnostic_capture_t source_diagnostics = {0};
   iree_benchmark_loom_diagnostic_capture_initialize(allocator,
                                                     &source_diagnostics);
@@ -179,34 +176,12 @@ int iree_benchmark_loom_main(
           artifact_bundle.policy),
   };
   if (iree_status_is_ok(status)) {
-    switch (options.output_format) {
-      case IREE_BENCHMARK_LOOM_OUTPUT_FORMAT_SNAPSHOT:
-        status = iree_benchmark_loom_snapshot_sink_initialize(allocator,
-                                                              &snapshot_sink);
-        if (iree_status_is_ok(status)) {
-          snapshot_sink_initialized = true;
-          iree_benchmark_loom_snapshot_event_sink_initialize(&snapshot_sink,
-                                                             &event_sink);
-        }
-        break;
-      case IREE_BENCHMARK_LOOM_OUTPUT_FORMAT_JSONL:
-        status = iree_benchmark_loom_jsonl_sink_initialize(
-            results_output_path, allocator, &jsonl_sink);
-        if (iree_status_is_ok(status)) {
-          jsonl_sink_initialized = true;
-          iree_benchmark_loom_jsonl_event_sink_initialize(
-              &jsonl_sink, &jsonl_event_sink, &event_sink);
-        }
-        break;
-      default:
-        status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                  "unsupported benchmark output format %d",
-                                  (int)options.output_format);
-        break;
-    }
+    status = iree_benchmark_loom_output_sink_initialize(
+        options.output_format, results_output_path, allocator, &output_sink);
     if (iree_status_is_ok(status)) {
+      output_sink_initialized = true;
       status = iree_benchmark_loom_event_sink_emit_run(
-          &event_sink, &run_identity, options.dry_run,
+          event_sink, &run_identity, options.dry_run,
           options.sample_compilation_mode);
     }
   }
@@ -232,7 +207,7 @@ int iree_benchmark_loom_main(
       // carries the same non-infrastructure failure.
       iree_status_free(status);
       status = iree_benchmark_loom_event_sink_emit_failure(
-          &event_sink, &run_identity, IREE_SV("parse"), IREE_SV("diagnostics"),
+          event_sink, &run_identity, IREE_SV("parse"), IREE_SV("diagnostics"),
           IREE_SV("input module has parse errors"), &source_diagnostics);
       ++failure_count;
       exit_code = 1;
@@ -256,7 +231,7 @@ int iree_benchmark_loom_main(
         loom_verify_module(run_module.module, &verify_options, &verify_result);
     if (iree_status_is_ok(status) && verify_result.error_count != 0) {
       status = iree_benchmark_loom_event_sink_emit_failure(
-          &event_sink, &run_identity, IREE_SV("verify"), IREE_SV("diagnostics"),
+          event_sink, &run_identity, IREE_SV("verify"), IREE_SV("diagnostics"),
           IREE_SV("input module failed verification"), &source_diagnostics);
       ++failure_count;
       exit_code = 1;
@@ -322,11 +297,11 @@ int iree_benchmark_loom_main(
           break;
         }
         status = iree_benchmark_loom_event_sink_emit_plan(
-            &event_sink, &run_identity, module_plan.module, &selections[i],
+            event_sink, &run_identity, module_plan.module, &selections[i],
             &options, options.sample_compilation_mode);
         if (iree_status_is_ok(status) && options.dry_run) {
           status = iree_benchmark_loom_event_sink_emit_device(
-              &event_sink, &run_identity, &hal_context);
+              event_sink, &run_identity, &hal_context);
         }
       }
       if (iree_status_is_ok(status) && !options.dry_run) {
@@ -348,7 +323,7 @@ int iree_benchmark_loom_main(
                 .case_execution_options = &execution_options,
                 .execution_arena = &execution_arena,
                 .host_allocator = allocator,
-                .event_sink = &event_sink,
+                .event_sink = event_sink,
             };
         status = iree_benchmark_loom_run_dispatch_comparison(
             &comparison_execution_options, &correctness_sample_count,
@@ -363,18 +338,18 @@ int iree_benchmark_loom_main(
       const iree_benchmark_loom_selected_benchmark_t* selection =
           &work_plan.selected_benchmarks[selection_index];
       status = iree_benchmark_loom_event_sink_emit_plan(
-          &event_sink, &run_identity, module_plan.module, selection, &options,
+          event_sink, &run_identity, module_plan.module, selection, &options,
           options.sample_compilation_mode);
       if (iree_status_is_ok(status) && options.dry_run &&
           selection->policy.measure_kind ==
               IREE_BENCHMARK_LOOM_MEASURE_DISPATCH_COMPLETE) {
         status = iree_benchmark_loom_event_sink_emit_device(
-            &event_sink, &run_identity, &hal_context);
+            event_sink, &run_identity, &hal_context);
       }
     }
     if (iree_status_is_ok(status) && options.dry_run) {
       status = iree_benchmark_loom_event_sink_emit_work_plan(
-          &event_sink, &run_identity, module_plan.module, &work_plan);
+          event_sink, &run_identity, module_plan.module, &work_plan);
     }
     if (iree_status_is_ok(status) && !compare_requested && !options.dry_run) {
       const iree_benchmark_loom_work_plan_execution_options_t
@@ -391,7 +366,7 @@ int iree_benchmark_loom_main(
               .case_execution_options = &execution_options,
               .execution_arena = &execution_arena,
               .host_allocator = allocator,
-              .event_sink = &event_sink,
+              .event_sink = event_sink,
           };
       status = iree_benchmark_loom_run_work_plan(
           &work_execution_options, &correctness_sample_count,
@@ -408,18 +383,15 @@ int iree_benchmark_loom_main(
 
   if (iree_status_is_ok(status)) {
     status = iree_benchmark_loom_event_sink_emit_summary(
-        &event_sink, &run_identity, &artifact_bundle, planned_case_count,
+        event_sink, &run_identity, &artifact_bundle, planned_case_count,
         planned_benchmark_count, selected_benchmark_count, logical_sample_count,
         work_item_count, failure_count, failed_benchmark_count,
         correctness_sample_count, correctness_failed_sample_count,
         options.dry_run, options.sample_compilation_mode);
   }
-  if (iree_status_is_ok(status) && snapshot_sink_initialized) {
-    status = iree_benchmark_loom_snapshot_sink_write(&snapshot_sink,
-                                                     results_output_path);
-  }
-  if (iree_status_is_ok(status) && jsonl_sink_initialized) {
-    status = iree_benchmark_loom_jsonl_sink_close(&jsonl_sink);
+  if (iree_status_is_ok(status) && output_sink_initialized) {
+    status = iree_benchmark_loom_output_sink_flush(&output_sink,
+                                                   results_output_path);
   }
   if (iree_status_is_ok(status)) {
     status = iree_benchmark_loom_write_artifact_bundle_manifest(
@@ -439,14 +411,8 @@ int iree_benchmark_loom_main(
   }
 
   iree_benchmark_loom_diagnostic_capture_deinitialize(&source_diagnostics);
-  if (jsonl_sink_initialized) {
-    iree_benchmark_loom_jsonl_event_sink_deinitialize(&jsonl_event_sink);
-  }
-  if (snapshot_sink_initialized) {
-    iree_benchmark_loom_snapshot_sink_deinitialize(&snapshot_sink);
-  }
-  if (jsonl_sink_initialized) {
-    iree_benchmark_loom_jsonl_sink_deinitialize(&jsonl_sink);
+  if (output_sink_initialized) {
+    iree_benchmark_loom_output_sink_deinitialize(&output_sink);
   }
   iree_arena_deinitialize(&execution_arena);
   iree_arena_deinitialize(&plan_arena);
