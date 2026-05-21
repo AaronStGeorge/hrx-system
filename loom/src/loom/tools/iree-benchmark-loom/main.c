@@ -82,8 +82,8 @@ IREE_FLAG(string, artifact_bundle_policy, "minimal",
           "Artifact bundle policy when --artifact_bundle_dir is set. Use "
           "'minimal', 'debug', or 'full'.");
 IREE_FLAG(bool, dry_run, false,
-          "Emits plan rows for selected benchmarks and stops before "
-          "correctness, compilation, and measurement.");
+          "Reports selected logical benchmarks and deduplicated physical work "
+          "items without running correctness, compilation, or measurement.");
 IREE_FLAG(bool, agents_md, false,
           "Prints a compact Markdown snippet suitable for AGENTS.md and "
           "exits.");
@@ -3087,6 +3087,10 @@ int iree_benchmark_loom_main(
         status = iree_benchmark_loom_event_sink_emit_device(
             &event_sink, &run_identity, &hal_context);
       }
+    }
+    if (iree_status_is_ok(status) && options.dry_run) {
+      status = iree_benchmark_loom_event_sink_emit_work_plan(
+          &event_sink, &run_identity, module_plan.module, &work_plan);
     }
     if (iree_status_is_ok(status) && !compare_requested && !options.dry_run) {
       status = iree_benchmark_loom_run_work_plan(

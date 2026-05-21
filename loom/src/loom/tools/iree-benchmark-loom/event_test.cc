@@ -44,11 +44,15 @@ TEST(BenchmarkEventSinkTest, EmitsTypedLifecycleEvents) {
   run.run_id = IREE_SV("run");
   run.source = IREE_SV("input.loom");
   run.results_path = IREE_SV("-");
+  loom_module_t module = {};
+  iree_benchmark_loom_work_plan_t work_plan = {};
   iree_benchmark_loom_artifact_bundle_t artifact_bundle = {};
 
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_run(
       &sink, &run, /*dry_run=*/true,
       IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
+  IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_work_plan(
+      &sink, &run, &module, &work_plan));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_summary(
       &sink, &run, &artifact_bundle, /*planned_case_count=*/3,
       /*planned_benchmark_count=*/2, /*selected_benchmark_count=*/1,
@@ -57,19 +61,23 @@ TEST(BenchmarkEventSinkTest, EmitsTypedLifecycleEvents) {
       /*correctness_sample_count=*/5, /*correctness_failed_sample_count=*/0,
       /*dry_run=*/true, IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
 
-  ASSERT_EQ(collector.event_count, 2u);
+  ASSERT_EQ(collector.event_count, 3u);
   EXPECT_EQ(collector.events[0].kind, IREE_BENCHMARK_LOOM_EVENT_RUN);
   EXPECT_EQ(collector.events[0].run.run, &run);
   EXPECT_TRUE(collector.events[0].run.dry_run);
-  EXPECT_EQ(collector.events[1].kind, IREE_BENCHMARK_LOOM_EVENT_SUMMARY);
-  EXPECT_EQ(collector.events[1].summary.run, &run);
-  EXPECT_EQ(collector.events[1].summary.artifact_bundle, &artifact_bundle);
-  EXPECT_EQ(collector.events[1].summary.planned_case_count, 3u);
-  EXPECT_EQ(collector.events[1].summary.planned_benchmark_count, 2u);
-  EXPECT_EQ(collector.events[1].summary.selected_benchmark_count, 1u);
-  EXPECT_EQ(collector.events[1].summary.logical_sample_count, 4u);
-  EXPECT_EQ(collector.events[1].summary.work_item_count, 2u);
-  EXPECT_EQ(collector.events[1].summary.correctness_sample_count, 5u);
+  EXPECT_EQ(collector.events[1].kind, IREE_BENCHMARK_LOOM_EVENT_WORK_PLAN);
+  EXPECT_EQ(collector.events[1].work_plan.run, &run);
+  EXPECT_EQ(collector.events[1].work_plan.module, &module);
+  EXPECT_EQ(collector.events[1].work_plan.work_plan, &work_plan);
+  EXPECT_EQ(collector.events[2].kind, IREE_BENCHMARK_LOOM_EVENT_SUMMARY);
+  EXPECT_EQ(collector.events[2].summary.run, &run);
+  EXPECT_EQ(collector.events[2].summary.artifact_bundle, &artifact_bundle);
+  EXPECT_EQ(collector.events[2].summary.planned_case_count, 3u);
+  EXPECT_EQ(collector.events[2].summary.planned_benchmark_count, 2u);
+  EXPECT_EQ(collector.events[2].summary.selected_benchmark_count, 1u);
+  EXPECT_EQ(collector.events[2].summary.logical_sample_count, 4u);
+  EXPECT_EQ(collector.events[2].summary.work_item_count, 2u);
+  EXPECT_EQ(collector.events[2].summary.correctness_sample_count, 5u);
 }
 
 TEST(BenchmarkEventSinkTest, EmitsTypedOutputRowEvents) {

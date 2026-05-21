@@ -62,6 +62,25 @@ iree_status_t iree_benchmark_loom_event_sink_emit_plan(
             });
 }
 
+iree_status_t iree_benchmark_loom_event_sink_emit_work_plan(
+    const iree_benchmark_loom_event_sink_t* sink,
+    const iree_benchmark_loom_run_identity_t* run, const loom_module_t* module,
+    const iree_benchmark_loom_work_plan_t* work_plan) {
+  IREE_ASSERT_ARGUMENT(run);
+  IREE_ASSERT_ARGUMENT(module);
+  IREE_ASSERT_ARGUMENT(work_plan);
+  return iree_benchmark_loom_event_sink_emit(
+      sink, &(iree_benchmark_loom_event_t){
+                .kind = IREE_BENCHMARK_LOOM_EVENT_WORK_PLAN,
+                .work_plan =
+                    {
+                        .run = run,
+                        .module = module,
+                        .work_plan = work_plan,
+                    },
+            });
+}
+
 iree_status_t iree_benchmark_loom_event_sink_emit_summary(
     const iree_benchmark_loom_event_sink_t* sink,
     const iree_benchmark_loom_run_identity_t* run,
@@ -436,6 +455,8 @@ static iree_status_t iree_benchmark_loom_jsonl_event_sink_emit(
               event->comparison.candidate, event->comparison.comparison_group,
               event->comparison.method,
               iree_benchmark_loom_jsonl_sink_begin(jsonl_sink)));
+    case IREE_BENCHMARK_LOOM_EVENT_WORK_PLAN:
+      return iree_ok_status();
     case IREE_BENCHMARK_LOOM_EVENT_NONE:
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

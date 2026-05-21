@@ -135,7 +135,7 @@ TEST(BenchmarkSnapshotSinkTest, AggregatesDeduplicatedWorkItems) {
   iree_benchmark_loom_snapshot_sink_deinitialize(&snapshot);
 }
 
-TEST(BenchmarkSnapshotSinkTest, DryRunReportsPlannedBenchmarksWithoutWork) {
+TEST(BenchmarkSnapshotSinkTest, DryRunReportsPlannedWorkAliases) {
   iree_allocator_t allocator = iree_allocator_system();
   iree_benchmark_loom_snapshot_sink_t snapshot = {};
   IREE_ASSERT_OK(
@@ -148,32 +148,68 @@ TEST(BenchmarkSnapshotSinkTest, DryRunReportsPlannedBenchmarksWithoutWork) {
   run.source = IREE_SV("input.loom");
   run.results_path = IREE_SV("-");
   run.file_output_dir = IREE_SV("/tmp/loom");
-  iree_benchmark_loom_selected_benchmark_t selection = {};
-  selection.identity.candidate_id = IREE_SV("c0");
-  selection.identity.candidate_index = 0;
-  loom_testbench_benchmark_plan_t benchmark_plan = {};
-  benchmark_plan.name = IREE_SV("kernel_latency");
-  benchmark_plan.sample_count = 4;
+  iree_benchmark_loom_selected_benchmark_t selections[2] = {};
+  selections[0].identity.candidate_id = IREE_SV("c0");
+  selections[0].identity.candidate_index = 0;
+  selections[1].identity.candidate_id = IREE_SV("c1");
+  selections[1].identity.candidate_index = 1;
+  loom_testbench_benchmark_plan_t benchmark_plans[2] = {};
+  benchmark_plans[0].name = IREE_SV("kernel_latency_default");
+  benchmark_plans[0].sample_count = 1;
+  benchmark_plans[1].name = IREE_SV("kernel_latency_alias");
+  benchmark_plans[1].sample_count = 1;
   loom_testbench_case_plan_t case_plan = {};
   case_plan.name = IREE_SV("kernel_case");
-  selection.benchmark_plan = &benchmark_plan;
-  selection.case_plan = &case_plan;
-  selection.policy.measure = IREE_SV("case_end_to_end");
-  iree_benchmark_loom_options_t options = {};
-  iree_benchmark_loom_options_initialize(&options);
+  selections[0].benchmark_plan = &benchmark_plans[0];
+  selections[0].case_plan = &case_plan;
+  selections[0].policy.measure = IREE_SV("dispatch_complete");
+  selections[1].benchmark_plan = &benchmark_plans[1];
+  selections[1].case_plan = &case_plan;
+  selections[1].policy.measure = IREE_SV("dispatch_complete");
+  iree_benchmark_loom_logical_sample_t logical_samples[2] = {};
+  logical_samples[0].selection_index = 0;
+  logical_samples[0].begin_benchmark_sample = 0;
+  logical_samples[0].end_benchmark_sample = 1;
+  logical_samples[0].has_case_sample_ordinal = true;
+  logical_samples[0].case_sample_ordinal = 0;
+  logical_samples[0].sample_compilation = IREE_SV("once");
+  logical_samples[0].work_item_index = 7;
+  logical_samples[1].selection_index = 1;
+  logical_samples[1].begin_benchmark_sample = 0;
+  logical_samples[1].end_benchmark_sample = 1;
+  logical_samples[1].has_case_sample_ordinal = true;
+  logical_samples[1].case_sample_ordinal = 0;
+  logical_samples[1].sample_compilation = IREE_SV("once");
+  logical_samples[1].work_item_index = 7;
+  iree_benchmark_loom_work_item_t work_item = {};
+  work_item.kind = IREE_BENCHMARK_LOOM_WORK_ITEM_DISPATCH_SAMPLE;
+  work_item.work_item_index = 7;
+  work_item.representative_selection_index = 0;
+  work_item.dispatch_compile_item_index = 0;
+  work_item.sample_compilation = IREE_SV("once");
+  work_item.begin_benchmark_sample = 0;
+  work_item.end_benchmark_sample = 1;
+  work_item.has_case_sample_ordinal = true;
+  work_item.case_sample_ordinal = 0;
+  iree_benchmark_loom_work_plan_t work_plan = {};
+  work_plan.selected_benchmarks = selections;
+  work_plan.selected_benchmark_count = IREE_ARRAYSIZE(selections);
+  work_plan.logical_samples = logical_samples;
+  work_plan.logical_sample_count = IREE_ARRAYSIZE(logical_samples);
+  work_plan.work_items = &work_item;
+  work_plan.work_item_count = 1;
   loom_module_t module = {};
   iree_benchmark_loom_artifact_bundle_t bundle = {};
 
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_run(
       &event_sink, &run, /*dry_run=*/true,
       IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
-  IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_plan(
-      &event_sink, &run, &module, &selection, &options,
-      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
+  IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_work_plan(
+      &event_sink, &run, &module, &work_plan));
   IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_summary(
       &event_sink, &run, &bundle, /*planned_case_count=*/1,
-      /*planned_benchmark_count=*/1, /*selected_benchmark_count=*/1,
-      /*logical_sample_count=*/4, /*work_item_count=*/0,
+      /*planned_benchmark_count=*/2, /*selected_benchmark_count=*/2,
+      /*logical_sample_count=*/2, /*work_item_count=*/1,
       /*failure_count=*/0, /*failed_benchmark_count=*/0,
       /*correctness_sample_count=*/0, /*correctness_failed_sample_count=*/0,
       /*dry_run=*/true, IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
@@ -190,11 +226,52 @@ TEST(BenchmarkSnapshotSinkTest, DryRunReportsPlannedBenchmarksWithoutWork) {
       iree_json_lookup_object_value(root, IREE_SV("benchmarks"), &benchmarks));
   iree_host_size_t benchmark_count = 0;
   IREE_ASSERT_OK(iree_json_array_length(benchmarks, &benchmark_count));
-  EXPECT_EQ(benchmark_count, 1u);
+  EXPECT_EQ(benchmark_count, 2u);
   iree_string_view_t work_items = iree_string_view_empty();
-  IREE_ASSERT_OK(iree_json_try_lookup_object_value(root, IREE_SV("work_items"),
-                                                   &work_items));
-  EXPECT_TRUE(iree_string_view_is_empty(work_items));
+  IREE_ASSERT_OK(
+      iree_json_lookup_object_value(root, IREE_SV("work_items"), &work_items));
+  iree_host_size_t work_item_count = 0;
+  IREE_ASSERT_OK(iree_json_array_length(work_items, &work_item_count));
+  EXPECT_EQ(work_item_count, 1u);
+
+  iree_string_view_t first_work_item = iree_string_view_empty();
+  IREE_ASSERT_OK(iree_json_array_get(work_items, 0, &first_work_item));
+  iree_string_view_t work_item_index = iree_string_view_empty();
+  IREE_ASSERT_OK(iree_json_lookup_object_value(
+      first_work_item, IREE_SV("work_item_index"), &work_item_index));
+  EXPECT_TRUE(iree_string_view_equal(work_item_index, IREE_SV("7")));
+  iree_string_view_t work_item_kind = iree_string_view_empty();
+  IREE_ASSERT_OK(iree_json_lookup_object_value(first_work_item, IREE_SV("kind"),
+                                               &work_item_kind));
+  EXPECT_TRUE(
+      iree_string_view_equal(work_item_kind, IREE_SV("dispatch_sample")));
+  iree_string_view_t representative_candidate_id = iree_string_view_empty();
+  IREE_ASSERT_OK(iree_json_lookup_object_value(
+      first_work_item, IREE_SV("representative_candidate_id"),
+      &representative_candidate_id));
+  EXPECT_TRUE(
+      iree_string_view_equal(representative_candidate_id, IREE_SV("c0")));
+
+  iree_string_view_t first_benchmark = iree_string_view_empty();
+  IREE_ASSERT_OK(iree_json_array_get(benchmarks, 0, &first_benchmark));
+  iree_string_view_t second_benchmark = iree_string_view_empty();
+  IREE_ASSERT_OK(iree_json_array_get(benchmarks, 1, &second_benchmark));
+  iree_string_view_t first_candidate_id = iree_string_view_empty();
+  IREE_ASSERT_OK(iree_json_lookup_object_value(
+      first_benchmark, IREE_SV("candidate_id"), &first_candidate_id));
+  EXPECT_TRUE(iree_string_view_equal(first_candidate_id, IREE_SV("c0")));
+  iree_string_view_t second_candidate_id = iree_string_view_empty();
+  IREE_ASSERT_OK(iree_json_lookup_object_value(
+      second_benchmark, IREE_SV("candidate_id"), &second_candidate_id));
+  EXPECT_TRUE(iree_string_view_equal(second_candidate_id, IREE_SV("c1")));
+  iree_string_view_t first_alias_work_item = iree_string_view_empty();
+  IREE_ASSERT_OK(iree_json_lookup_object_value(
+      first_benchmark, IREE_SV("work_item_index"), &first_alias_work_item));
+  EXPECT_TRUE(iree_string_view_equal(first_alias_work_item, IREE_SV("7")));
+  iree_string_view_t second_alias_work_item = iree_string_view_empty();
+  IREE_ASSERT_OK(iree_json_lookup_object_value(
+      second_benchmark, IREE_SV("work_item_index"), &second_alias_work_item));
+  EXPECT_TRUE(iree_string_view_equal(second_alias_work_item, IREE_SV("7")));
 
   iree_string_builder_deinitialize(&output);
   iree_benchmark_loom_snapshot_sink_deinitialize(&snapshot);

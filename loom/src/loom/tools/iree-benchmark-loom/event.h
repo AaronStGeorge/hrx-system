@@ -15,6 +15,7 @@
 #include "loom/tools/iree-benchmark-loom/model.h"
 #include "loom/tools/iree-benchmark-loom/options.h"
 #include "loom/tools/iree-benchmark-loom/output.h"
+#include "loom/tools/iree-benchmark-loom/work_plan.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,6 +46,8 @@ typedef enum iree_benchmark_loom_event_kind_e {
   IREE_BENCHMARK_LOOM_EVENT_BENCHMARK_REPETITION = 10,
   // Aggregate interleaved comparison result.
   IREE_BENCHMARK_LOOM_EVENT_COMPARISON = 11,
+  // Deduplicated planned work graph for dry-run/reporting sinks.
+  IREE_BENCHMARK_LOOM_EVENT_WORK_PLAN = 12,
 } iree_benchmark_loom_event_kind_t;
 
 typedef struct iree_benchmark_loom_run_event_t {
@@ -232,6 +235,15 @@ typedef struct iree_benchmark_loom_comparison_event_t {
   iree_string_view_t method;
 } iree_benchmark_loom_comparison_event_t;
 
+typedef struct iree_benchmark_loom_work_plan_event_t {
+  // Run identity shared by all emitted events.
+  const iree_benchmark_loom_run_identity_t* run;
+  // Parsed module that owns case and benchmark plan references.
+  const loom_module_t* module;
+  // Selected benchmark and logical-to-physical work plan.
+  const iree_benchmark_loom_work_plan_t* work_plan;
+} iree_benchmark_loom_work_plan_event_t;
+
 typedef struct iree_benchmark_loom_event_t {
   // Event kind and union discriminator.
   iree_benchmark_loom_event_kind_t kind;
@@ -258,6 +270,8 @@ typedef struct iree_benchmark_loom_event_t {
     iree_benchmark_loom_benchmark_repetition_event_t benchmark_repetition;
     // Payload for IREE_BENCHMARK_LOOM_EVENT_COMPARISON.
     iree_benchmark_loom_comparison_event_t comparison;
+    // Payload for IREE_BENCHMARK_LOOM_EVENT_WORK_PLAN.
+    iree_benchmark_loom_work_plan_event_t work_plan;
   };
 } iree_benchmark_loom_event_t;
 
@@ -296,6 +310,12 @@ iree_status_t iree_benchmark_loom_event_sink_emit_plan(
     const iree_benchmark_loom_selected_benchmark_t* selection,
     const iree_benchmark_loom_options_t* options,
     iree_benchmark_loom_sample_compilation_mode_t sample_compilation_mode);
+
+// Emits the deduplicated planned work graph.
+iree_status_t iree_benchmark_loom_event_sink_emit_work_plan(
+    const iree_benchmark_loom_event_sink_t* sink,
+    const iree_benchmark_loom_run_identity_t* run, const loom_module_t* module,
+    const iree_benchmark_loom_work_plan_t* work_plan);
 
 // Emits the terminal aggregate summary event.
 iree_status_t iree_benchmark_loom_event_sink_emit_summary(

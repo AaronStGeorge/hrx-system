@@ -437,28 +437,9 @@ static iree_status_t iree_benchmark_loom_snapshot_append_run(
 static iree_status_t iree_benchmark_loom_snapshot_append_plan(
     iree_benchmark_loom_snapshot_state_t* state,
     const iree_benchmark_loom_plan_event_t* event) {
-  if (!state->dry_run) {
-    return iree_ok_status();
-  }
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_begin_array_entry(
-      &state->benchmarks_json, &state->first_benchmark));
-  loom_output_stream_t stream;
-  loom_output_stream_for_builder(&state->benchmarks_json, &stream);
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "{"));
-  bool first_field = true;
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_candidate_fields(
-      &event->selection->identity, &stream, &first_field));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_benchmark_fields(
-      event->selection->benchmark_plan, event->selection->case_plan, &stream,
-      &first_field));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-      &stream, &first_field, "status", IREE_SV("planned")));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
-      &stream, &first_field, "measure", event->selection->policy.measure));
-  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
-      &stream, &first_field, "sample_count",
-      event->selection->benchmark_plan->sample_count));
-  return loom_output_stream_write_cstring(&stream, "}");
+  (void)state;
+  (void)event;
+  return iree_ok_status();
 }
 
 static iree_status_t iree_benchmark_loom_snapshot_append_summary(
@@ -625,6 +606,133 @@ static iree_status_t iree_benchmark_loom_snapshot_append_benchmark(
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}"));
   }
   return loom_output_stream_write_cstring(&stream, "}");
+}
+
+static iree_string_view_t iree_benchmark_loom_snapshot_work_item_kind_name(
+    iree_benchmark_loom_work_item_kind_t kind) {
+  switch (kind) {
+    case IREE_BENCHMARK_LOOM_WORK_ITEM_CASE_END_TO_END:
+      return IREE_SV("case_end_to_end");
+    case IREE_BENCHMARK_LOOM_WORK_ITEM_DISPATCH_SAMPLE:
+      return IREE_SV("dispatch_sample");
+    case IREE_BENCHMARK_LOOM_WORK_ITEM_NONE:
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+static iree_status_t iree_benchmark_loom_snapshot_write_sample_range_fields(
+    const loom_module_t* module, const loom_testbench_case_plan_t* case_plan,
+    iree_host_size_t begin_sample, iree_host_size_t end_sample,
+    bool has_case_sample_ordinal, iree_host_size_t case_sample_ordinal,
+    loom_output_stream_t* stream, bool* first_field) {
+  if (has_case_sample_ordinal) {
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+        stream, first_field, "benchmark_sample_index", begin_sample));
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+        stream, first_field, "case_sample_index", case_sample_ordinal));
+    return iree_benchmark_loom_write_sample_fields_json(
+        module, case_plan, case_sample_ordinal, stream);
+  }
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+      stream, first_field, "benchmark_sample_begin", begin_sample));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+      stream, first_field, "benchmark_sample_end", end_sample));
+  return iree_benchmark_loom_write_json_size_field(
+      stream, first_field, "sample_count", end_sample - begin_sample);
+}
+
+static iree_status_t iree_benchmark_loom_snapshot_append_planned_work_item(
+    iree_benchmark_loom_snapshot_state_t* state,
+    const iree_benchmark_loom_work_plan_event_t* event,
+    const iree_benchmark_loom_work_item_t* work_item) {
+  const iree_benchmark_loom_work_plan_t* work_plan = event->work_plan;
+  const iree_benchmark_loom_selected_benchmark_t* selection =
+      &work_plan
+           ->selected_benchmarks[work_item->representative_selection_index];
+
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_begin_array_entry(
+      &state->work_items_json, &state->first_work_item));
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&state->work_items_json, &stream);
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "{"));
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+      &stream, &first_field, "work_item_index", work_item->work_item_index));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
+      &stream, &first_field, "status", IREE_SV("planned")));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
+      &stream, &first_field, "kind",
+      iree_benchmark_loom_snapshot_work_item_kind_name(work_item->kind)));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_size_field(
+      &stream, &first_field, "representative_candidate_index",
+      selection->identity.candidate_index));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
+      &stream, &first_field, "representative_candidate_id",
+      selection->identity.candidate_id));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_benchmark_fields(
+      selection->benchmark_plan, selection->case_plan, &stream, &first_field));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
+      &stream, &first_field, "measure", selection->policy.measure));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_optional_string_field(
+      &stream, &first_field, "sample_compilation",
+      work_item->sample_compilation));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_sample_range_fields(
+      event->module, selection->case_plan, work_item->begin_benchmark_sample,
+      work_item->end_benchmark_sample, work_item->has_case_sample_ordinal,
+      work_item->case_sample_ordinal, &stream, &first_field));
+  return loom_output_stream_write_cstring(&stream, "}");
+}
+
+static iree_status_t iree_benchmark_loom_snapshot_append_planned_benchmark(
+    iree_benchmark_loom_snapshot_state_t* state,
+    const iree_benchmark_loom_work_plan_event_t* event,
+    const iree_benchmark_loom_logical_sample_t* logical_sample) {
+  const iree_benchmark_loom_work_plan_t* work_plan = event->work_plan;
+  const iree_benchmark_loom_selected_benchmark_t* selection =
+      &work_plan->selected_benchmarks[logical_sample->selection_index];
+
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_begin_array_entry(
+      &state->benchmarks_json, &state->first_benchmark));
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(&state->benchmarks_json, &stream);
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "{"));
+  bool first_field = true;
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_candidate_fields(
+      &selection->identity, &stream, &first_field));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_work_item_field(
+      logical_sample->work_item_index, &stream, &first_field));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_benchmark_fields(
+      selection->benchmark_plan, selection->case_plan, &stream, &first_field));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
+      &stream, &first_field, "status", IREE_SV("planned")));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_string_field(
+      &stream, &first_field, "measure", selection->policy.measure));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_optional_string_field(
+      &stream, &first_field, "sample_compilation",
+      logical_sample->sample_compilation));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_sample_range_fields(
+      event->module, selection->case_plan,
+      logical_sample->begin_benchmark_sample,
+      logical_sample->end_benchmark_sample,
+      logical_sample->has_case_sample_ordinal,
+      logical_sample->case_sample_ordinal, &stream, &first_field));
+  return loom_output_stream_write_cstring(&stream, "}");
+}
+
+static iree_status_t iree_benchmark_loom_snapshot_append_work_plan(
+    iree_benchmark_loom_snapshot_state_t* state,
+    const iree_benchmark_loom_work_plan_event_t* event) {
+  for (iree_host_size_t i = 0; i < event->work_plan->work_item_count; ++i) {
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_append_planned_work_item(
+        state, event, &event->work_plan->work_items[i]));
+  }
+  for (iree_host_size_t i = 0; i < event->work_plan->logical_sample_count;
+       ++i) {
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_append_planned_benchmark(
+        state, event, &event->work_plan->logical_samples[i]));
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t iree_benchmark_loom_snapshot_append_failure(
@@ -795,6 +903,9 @@ static iree_status_t iree_benchmark_loom_snapshot_emit_event(
     case IREE_BENCHMARK_LOOM_EVENT_COMPARISON:
       return iree_benchmark_loom_snapshot_append_comparison(state,
                                                             &event->comparison);
+    case IREE_BENCHMARK_LOOM_EVENT_WORK_PLAN:
+      return iree_benchmark_loom_snapshot_append_work_plan(state,
+                                                           &event->work_plan);
     case IREE_BENCHMARK_LOOM_EVENT_NONE:
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
