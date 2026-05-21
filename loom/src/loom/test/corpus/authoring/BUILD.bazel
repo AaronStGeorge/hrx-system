@@ -19,7 +19,7 @@ exports_files([
 
 iree_executable_test(
     name = "ffn_gate_up_swiglu_q6q8_plan_test",
-    src = "//loom/src/loom/tools/iree-tune-loom",
+    src = "//loom/src/loom/tools/iree-benchmark-loom",
     args = [
         "$(location ffn_gate_up_swiglu_q6q8.loom)",
         "--dry_run",
@@ -32,7 +32,7 @@ iree_executable_test(
 
 iree_executable_test(
     name = "mlp_down_projection_residual_bf16_plan_test",
-    src = "//loom/src/loom/tools/iree-tune-loom",
+    src = "//loom/src/loom/tools/iree-benchmark-loom",
     args = [
         "$(location mlp_down_projection_residual_bf16.loom)",
         "--dry_run",
@@ -45,7 +45,7 @@ iree_executable_test(
 
 iree_executable_test(
     name = "ffn_gate_up_swiglu_q6q8_amdgpu_test",
-    src = "//loom/src/loom/tools/iree-tune-loom",
+    src = "//loom/src/loom/tools/iree-benchmark-loom",
     args = [
         "$(location ffn_gate_up_swiglu_q6q8.loom)",
         "--device=amdgpu",
@@ -69,7 +69,7 @@ iree_executable_test(
 
 iree_executable_test(
     name = "mlp_down_projection_residual_bf16_amdgpu_test",
-    src = "//loom/src/loom/tools/iree-tune-loom",
+    src = "//loom/src/loom/tools/iree-benchmark-loom",
     args = [
         "$(location mlp_down_projection_residual_bf16.loom)",
         "--device=amdgpu",

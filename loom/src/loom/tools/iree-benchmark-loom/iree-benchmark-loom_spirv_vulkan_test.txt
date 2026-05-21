@@ -1,5 +1,5 @@
 // RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
-// RUN:   iree-tune-loom %S/../iree-test-loom/testdata/spirv_vulkan_hal_actual.loom \
+// RUN:   iree-benchmark-loom %S/../iree-test-loom/testdata/spirv_vulkan_hal_actual.loom \
 // RUN:     --benchmark=@double_i32_at_byte_offset --device=vulkan \
 // RUN:     --measure=dispatch_complete \
 // RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
@@ -8,7 +8,7 @@
 // RUN: FileCheck --check-prefix=SPIRV %s < %t.spirv.bundle/results.jsonl
 // RUN: FileCheck --check-prefix=SPIRV-MANIFEST %s < %t.spirv.bundle/manifest.json
 // RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
-// RUN:   iree-tune-loom %S/../iree-test-loom/testdata/spirv_vulkan_coop_hal_actual.loom \
+// RUN:   iree-benchmark-loom %S/../iree-test-loom/testdata/spirv_vulkan_coop_hal_actual.loom \
 // RUN:     --benchmark=@dense_projection_tiled_f16_128 --device=vulkan \
 // RUN:     --measure=dispatch_complete \
 // RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
@@ -16,7 +16,7 @@
 // RUN:     --artifact_bundle_dir=%t.spirv.coop.bundle --artifact_bundle_policy=debug
 // RUN: FileCheck --check-prefix=COOP %s < %t.spirv.coop.bundle/results.jsonl
 // RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
-// RUN:   iree-tune-loom %S/../iree-test-loom/testdata/spirv_vulkan_coop_u8_hal_actual.loom \
+// RUN:   iree-benchmark-loom %S/../iree-test-loom/testdata/spirv_vulkan_coop_u8_hal_actual.loom \
 // RUN:     --benchmark=@dense_projection_tiled_u8_128 --device=vulkan \
 // RUN:     --measure=dispatch_complete \
 // RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
@@ -24,7 +24,7 @@
 // RUN:     --artifact_bundle_dir=%t.spirv.coop.u8.bundle --artifact_bundle_policy=debug
 // RUN: FileCheck --check-prefix=COOP-U8 %s < %t.spirv.coop.u8.bundle/results.jsonl
 // RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
-// RUN:   iree-tune-loom %S/../iree-test-loom/testdata/spirv_vulkan_quantized_hal_actual.loom \
+// RUN:   iree-benchmark-loom %S/../iree-test-loom/testdata/spirv_vulkan_quantized_hal_actual.loom \
 // RUN:     --benchmark=@quantized_projection_u8_scalar_128 --device=vulkan \
 // RUN:     --measure=dispatch_complete \
 // RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
@@ -32,7 +32,7 @@
 // RUN:     --artifact_bundle_dir=%t.spirv.quant.u8.bundle --artifact_bundle_policy=debug
 // RUN: FileCheck --check-prefix=QUANT-U8 %s < %t.spirv.quant.u8.bundle/results.jsonl
 // RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
-// RUN:   iree-tune-loom %S/../iree-test-loom/testdata/spirv_vulkan_coop_hal_actual.loom \
+// RUN:   iree-benchmark-loom %S/../iree-test-loom/testdata/spirv_vulkan_coop_hal_actual.loom \
 // RUN:     --benchmark=@narrow_score_tiled_f16_128x16_m1 --device=vulkan \
 // RUN:     --measure=dispatch_complete \
 // RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
@@ -40,7 +40,7 @@
 // RUN:     --artifact_bundle_dir=%t.spirv.narrow.bundle --artifact_bundle_policy=debug
 // RUN: FileCheck --check-prefix=NARROW %s < %t.spirv.narrow.bundle/results.jsonl
 // RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
-// RUN:   iree-tune-loom %S/../iree-test-loom/testdata/spirv_vulkan_coop_hal_actual.loom \
+// RUN:   iree-benchmark-loom %S/../iree-test-loom/testdata/spirv_vulkan_coop_hal_actual.loom \
 // RUN:     --compare=@narrow_score_tiled_f16_128x16_m1,@narrow_score_tiled_f16_128x16_m2 --device=vulkan \
 // RUN:     --measure=dispatch_complete \
 // RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
@@ -72,7 +72,7 @@
 // SPIRV: "failure_count":0
 // SPIRV: "failed_benchmark_count":0
 
-// SPIRV-MANIFEST: "tool":"iree-tune-loom"
+// SPIRV-MANIFEST: "tool":"iree-benchmark-loom"
 // SPIRV-MANIFEST: "policy":"debug"
 // SPIRV-MANIFEST: "files":{"results":{"path":
 // SPIRV-MANIFEST: "compile_reports":[{"path":

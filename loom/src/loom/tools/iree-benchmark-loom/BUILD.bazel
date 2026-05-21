@@ -46,7 +46,7 @@ string_list_flag(
 
 _AMDGPU_PROVIDER_COPTS = iree_select({
     ":amdgpu_provider_enabled": [
-        "-DIREE_TUNE_LOOM_HAVE_AMDGPU=1",
+        "-DIREE_BENCHMARK_LOOM_HAVE_AMDGPU=1",
     ],
     "//conditions:default": [],
 })
@@ -61,7 +61,7 @@ _AMDGPU_PROVIDER_DEPS = iree_select({
 
 _IREEVM_EXECUTION_COPTS = iree_select({
     ":ireevm_provider_enabled": [
-        "-DIREE_TUNE_LOOM_HAVE_IREEVM=1",
+        "-DIREE_BENCHMARK_LOOM_HAVE_IREEVM=1",
     ],
     "//conditions:default": [],
 })
@@ -75,7 +75,7 @@ _IREEVM_EXECUTION_DEPS = iree_select({
 
 _SPIRV_PROVIDER_COPTS = iree_select({
     ":spirv_provider_enabled": [
-        "-DIREE_TUNE_LOOM_HAVE_SPIRV=1",
+        "-DIREE_BENCHMARK_LOOM_HAVE_SPIRV=1",
     ],
     "//conditions:default": [],
 })
@@ -89,13 +89,13 @@ _SPIRV_PROVIDER_DEPS = iree_select({
     "//conditions:default": [],
 })
 
-_IREE_TUNE_LOOM_PROVIDER_COPTS = (
+_IREE_BENCHMARK_LOOM_PROVIDER_COPTS = (
     _AMDGPU_PROVIDER_COPTS +
     _IREEVM_EXECUTION_COPTS +
     _SPIRV_PROVIDER_COPTS
 )
 
-_IREE_TUNE_LOOM_PROVIDER_DEPS = (
+_IREE_BENCHMARK_LOOM_PROVIDER_DEPS = (
     _AMDGPU_PROVIDER_DEPS +
     _IREEVM_EXECUTION_DEPS +
     _SPIRV_PROVIDER_DEPS
@@ -171,20 +171,20 @@ loom_cc_library(
 )
 
 loom_cc_binary(
-    name = "iree-tune-loom",
-    srcs = ["iree-tune-loom.c"],
-    copts = _IREE_TUNE_LOOM_PROVIDER_COPTS,
+    name = "iree-benchmark-loom",
+    srcs = ["iree-benchmark-loom.c"],
+    copts = _IREE_BENCHMARK_LOOM_PROVIDER_COPTS,
     deps = [
         ":main",
         "//loom/src/loom/tooling/execution:execution_provider",
         "//loom/src/loom/tooling/execution/hal:artifact",
         "//runtime/src/iree/base",
-    ] + _IREE_TUNE_LOOM_PROVIDER_DEPS,
+    ] + _IREE_BENCHMARK_LOOM_PROVIDER_DEPS,
 )
 
 iree_lit_test_suite(
     name = "lit_test",
-    srcs = ["iree-tune-loom_test.txt"],
+    srcs = ["iree-benchmark-loom_test.txt"],
     cfg = "//runtime:lit.cfg.py",
     data = [
         "testdata/duplicate_symbol.loom",
@@ -192,14 +192,14 @@ iree_lit_test_suite(
     ],
     tags = ["hostonly"],
     tools = [
-        ":iree-tune-loom",
+        ":iree-benchmark-loom",
         "@llvm-project//llvm:FileCheck",
     ],
 )
 
 iree_lit_test_suite(
     name = "amdgpu_lit_test",
-    srcs = ["iree-tune-loom_amdgpu_test.txt"],
+    srcs = ["iree-benchmark-loom_amdgpu_test.txt"],
     cfg = "//runtime:lit.cfg.py",
     data = [
         "//loom/src/loom/tools/iree-test-loom:testdata/amdgpu_hal_actual.loom",
@@ -210,14 +210,14 @@ iree_lit_test_suite(
         "requires-gpu-amd",
     ],
     tools = [
-        ":iree-tune-loom",
+        ":iree-benchmark-loom",
         "@llvm-project//llvm:FileCheck",
     ],
 )
 
 iree_lit_test_suite(
     name = "spirv_vulkan_lit_test",
-    srcs = ["iree-tune-loom_spirv_vulkan_test.txt"],
+    srcs = ["iree-benchmark-loom_spirv_vulkan_test.txt"],
     cfg = "//runtime:lit.cfg.py",
     data = [
         "//build_tools/sanitizer:lsan_suppressions_vulkan.txt",
@@ -232,7 +232,7 @@ iree_lit_test_suite(
         "requires-gpu-vulkan",
     ],
     tools = [
-        ":iree-tune-loom",
+        ":iree-benchmark-loom",
         "@llvm-project//llvm:FileCheck",
     ],
 )

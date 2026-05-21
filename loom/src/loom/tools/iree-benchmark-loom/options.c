@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tools/iree-tune-loom/options.h"
+#include "loom/tools/iree-benchmark-loom/options.h"
 
 #include <errno.h>
 #include <inttypes.h>
@@ -13,41 +13,41 @@
 
 #include "loom/util/json.h"
 
-iree_string_view_t iree_tune_loom_artifact_bundle_policy_name(
-    iree_tune_loom_artifact_bundle_policy_t policy) {
+iree_string_view_t iree_benchmark_loom_artifact_bundle_policy_name(
+    iree_benchmark_loom_artifact_bundle_policy_t policy) {
   switch (policy) {
-    case IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_NONE:
+    case IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_NONE:
       return IREE_SV("none");
-    case IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_MINIMAL:
+    case IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_MINIMAL:
       return IREE_SV("minimal");
-    case IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_DEBUG:
+    case IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_DEBUG:
       return IREE_SV("debug");
-    case IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_FULL:
+    case IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_FULL:
       return IREE_SV("full");
     default:
       return IREE_SV("unknown");
   }
 }
 
-iree_status_t iree_tune_loom_parse_artifact_bundle_policy(
+iree_status_t iree_benchmark_loom_parse_artifact_bundle_policy(
     iree_string_view_t value,
-    iree_tune_loom_artifact_bundle_policy_t* out_policy) {
+    iree_benchmark_loom_artifact_bundle_policy_t* out_policy) {
   value = iree_string_view_trim(value);
   if (iree_string_view_equal(value, IREE_SV("none"))) {
-    *out_policy = IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_NONE;
+    *out_policy = IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_NONE;
     return iree_ok_status();
   }
   if (iree_string_view_is_empty(value) ||
       iree_string_view_equal(value, IREE_SV("minimal"))) {
-    *out_policy = IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_MINIMAL;
+    *out_policy = IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_MINIMAL;
     return iree_ok_status();
   }
   if (iree_string_view_equal(value, IREE_SV("debug"))) {
-    *out_policy = IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_DEBUG;
+    *out_policy = IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_DEBUG;
     return iree_ok_status();
   }
   if (iree_string_view_equal(value, IREE_SV("full"))) {
-    *out_policy = IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_FULL;
+    *out_policy = IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_FULL;
     return iree_ok_status();
   }
   return iree_make_status(
@@ -57,20 +57,20 @@ iree_status_t iree_tune_loom_parse_artifact_bundle_policy(
       (int)value.size, value.data);
 }
 
-iree_status_t iree_tune_loom_parse_sample_compilation_mode(
+iree_status_t iree_benchmark_loom_parse_sample_compilation_mode(
     iree_string_view_t value,
-    iree_tune_loom_sample_compilation_mode_t* out_mode) {
+    iree_benchmark_loom_sample_compilation_mode_t* out_mode) {
   value = iree_string_view_trim(value);
   if (iree_string_view_equal(value, IREE_SV("once"))) {
-    *out_mode = IREE_TUNE_LOOM_SAMPLE_COMPILATION_ONCE;
+    *out_mode = IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE;
     return iree_ok_status();
   }
   if (iree_string_view_equal(value, IREE_SV("per_sample"))) {
-    *out_mode = IREE_TUNE_LOOM_SAMPLE_COMPILATION_PER_SAMPLE;
+    *out_mode = IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_PER_SAMPLE;
     return iree_ok_status();
   }
   if (iree_string_view_equal(value, IREE_SV("both"))) {
-    *out_mode = IREE_TUNE_LOOM_SAMPLE_COMPILATION_BOTH;
+    *out_mode = IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_BOTH;
     return iree_ok_status();
   }
   return iree_make_status(
@@ -80,44 +80,44 @@ iree_status_t iree_tune_loom_parse_sample_compilation_mode(
       (int)value.size, value.data);
 }
 
-iree_string_view_t iree_tune_loom_sample_compilation_mode_name(
-    iree_tune_loom_sample_compilation_mode_t mode) {
+iree_string_view_t iree_benchmark_loom_sample_compilation_mode_name(
+    iree_benchmark_loom_sample_compilation_mode_t mode) {
   switch (mode) {
-    case IREE_TUNE_LOOM_SAMPLE_COMPILATION_ONCE:
+    case IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE:
       return IREE_SV("once");
-    case IREE_TUNE_LOOM_SAMPLE_COMPILATION_PER_SAMPLE:
+    case IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_PER_SAMPLE:
       return IREE_SV("per_sample");
-    case IREE_TUNE_LOOM_SAMPLE_COMPILATION_BOTH:
+    case IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_BOTH:
       return IREE_SV("both");
     default:
       return IREE_SV("unknown");
   }
 }
 
-bool iree_tune_loom_sample_compilation_runs_once(
-    iree_tune_loom_sample_compilation_mode_t mode) {
-  return mode == IREE_TUNE_LOOM_SAMPLE_COMPILATION_ONCE ||
-         mode == IREE_TUNE_LOOM_SAMPLE_COMPILATION_BOTH;
+bool iree_benchmark_loom_sample_compilation_runs_once(
+    iree_benchmark_loom_sample_compilation_mode_t mode) {
+  return mode == IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE ||
+         mode == IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_BOTH;
 }
 
-bool iree_tune_loom_sample_compilation_runs_per_sample(
-    iree_tune_loom_sample_compilation_mode_t mode) {
-  return mode == IREE_TUNE_LOOM_SAMPLE_COMPILATION_PER_SAMPLE ||
-         mode == IREE_TUNE_LOOM_SAMPLE_COMPILATION_BOTH;
+bool iree_benchmark_loom_sample_compilation_runs_per_sample(
+    iree_benchmark_loom_sample_compilation_mode_t mode) {
+  return mode == IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_PER_SAMPLE ||
+         mode == IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_BOTH;
 }
 
-iree_status_t iree_tune_loom_parse_interleave_mode(
-    iree_string_view_t value, iree_tune_loom_interleave_mode_t* out_mode) {
+iree_status_t iree_benchmark_loom_parse_interleave_mode(
+    iree_string_view_t value, iree_benchmark_loom_interleave_mode_t* out_mode) {
   value = iree_string_view_trim(value);
   if (iree_string_view_is_empty(value) ||
       iree_string_view_equal(value, IREE_SV("ABABA")) ||
       iree_string_view_equal(value, IREE_SV("ababa"))) {
-    *out_mode = IREE_TUNE_LOOM_INTERLEAVE_ABABA;
+    *out_mode = IREE_BENCHMARK_LOOM_INTERLEAVE_ABABA;
     return iree_ok_status();
   }
   if (iree_string_view_equal(value, IREE_SV("round_robin")) ||
       iree_string_view_equal(value, IREE_SV("round-robin"))) {
-    *out_mode = IREE_TUNE_LOOM_INTERLEAVE_ROUND_ROBIN;
+    *out_mode = IREE_BENCHMARK_LOOM_INTERLEAVE_ROUND_ROBIN;
     return iree_ok_status();
   }
   return iree_make_status(
@@ -126,31 +126,31 @@ iree_status_t iree_tune_loom_parse_interleave_mode(
       (int)value.size, value.data);
 }
 
-iree_string_view_t iree_tune_loom_interleave_mode_name(
-    iree_tune_loom_interleave_mode_t mode) {
+iree_string_view_t iree_benchmark_loom_interleave_mode_name(
+    iree_benchmark_loom_interleave_mode_t mode) {
   switch (mode) {
-    case IREE_TUNE_LOOM_INTERLEAVE_NONE:
+    case IREE_BENCHMARK_LOOM_INTERLEAVE_NONE:
       return IREE_SV("none");
-    case IREE_TUNE_LOOM_INTERLEAVE_ABABA:
+    case IREE_BENCHMARK_LOOM_INTERLEAVE_ABABA:
       return IREE_SV("ABABA");
-    case IREE_TUNE_LOOM_INTERLEAVE_ROUND_ROBIN:
+    case IREE_BENCHMARK_LOOM_INTERLEAVE_ROUND_ROBIN:
       return IREE_SV("round_robin");
     default:
       return IREE_SV("unknown");
   }
 }
 
-typedef struct iree_tune_loom_profile_family_name_t {
+typedef struct iree_benchmark_loom_profile_family_name_t {
   // HAL profiling data-family bit represented by these names.
   iree_hal_device_profiling_data_families_t bit;
   // Command-line family name accepted by --profile_data.
   const char* flag_name;
   // Stable JSON string used for this family.
   const char* json_name;
-} iree_tune_loom_profile_family_name_t;
+} iree_benchmark_loom_profile_family_name_t;
 
-static const iree_tune_loom_profile_family_name_t
-    iree_tune_loom_profile_family_names[] = {
+static const iree_benchmark_loom_profile_family_name_t
+    iree_benchmark_loom_profile_family_names[] = {
         {IREE_HAL_DEVICE_PROFILING_DATA_QUEUE_EVENTS, "queue-events",
          "queue_events"},
         {IREE_HAL_DEVICE_PROFILING_DATA_HOST_EXECUTION_EVENTS, "host-execution",
@@ -175,22 +175,23 @@ static const iree_tune_loom_profile_family_name_t
          "counter_ranges"},
 };
 
-bool iree_tune_loom_profile_data_has_counter_data(
+bool iree_benchmark_loom_profile_data_has_counter_data(
     iree_hal_device_profiling_data_families_t profile_data_families) {
   return iree_any_bit_set(profile_data_families,
                           IREE_HAL_DEVICE_PROFILING_DATA_COUNTER_SAMPLES |
                               IREE_HAL_DEVICE_PROFILING_DATA_COUNTER_RANGES);
 }
 
-bool iree_tune_loom_profile_data_needs_artifact_data(
+bool iree_benchmark_loom_profile_data_needs_artifact_data(
     iree_hal_device_profiling_data_families_t profile_data_families) {
-  return iree_tune_loom_profile_data_has_counter_data(profile_data_families) ||
+  return iree_benchmark_loom_profile_data_has_counter_data(
+             profile_data_families) ||
          iree_any_bit_set(profile_data_families,
                           IREE_HAL_DEVICE_PROFILING_DATA_DEVICE_METRICS |
                               IREE_HAL_DEVICE_PROFILING_DATA_EXECUTABLE_TRACES);
 }
 
-iree_status_t iree_tune_loom_parse_profile_data_families(
+iree_status_t iree_benchmark_loom_parse_profile_data_families(
     iree_string_view_t value,
     iree_hal_device_profiling_data_families_t* out_profile_data_families) {
   *out_profile_data_families =
@@ -220,9 +221,9 @@ iree_status_t iree_tune_loom_parse_profile_data_families(
     }
     bool matched = false;
     for (iree_host_size_t i = 0;
-         i < IREE_ARRAYSIZE(iree_tune_loom_profile_family_names); ++i) {
-      const iree_tune_loom_profile_family_name_t* family =
-          &iree_tune_loom_profile_family_names[i];
+         i < IREE_ARRAYSIZE(iree_benchmark_loom_profile_family_names); ++i) {
+      const iree_benchmark_loom_profile_family_name_t* family =
+          &iree_benchmark_loom_profile_family_names[i];
       if (iree_string_view_equal(family_part,
                                  iree_make_cstring_view(family->flag_name)) ||
           iree_string_view_equal(family_part,
@@ -248,15 +249,15 @@ iree_status_t iree_tune_loom_parse_profile_data_families(
   return iree_ok_status();
 }
 
-iree_status_t iree_tune_loom_write_profile_family_names_json(
+iree_status_t iree_benchmark_loom_write_profile_family_names_json(
     iree_hal_device_profiling_data_families_t profile_data_families,
     loom_output_stream_t* stream) {
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "["));
   bool first = true;
   for (iree_host_size_t i = 0;
-       i < IREE_ARRAYSIZE(iree_tune_loom_profile_family_names); ++i) {
-    const iree_tune_loom_profile_family_name_t* family =
-        &iree_tune_loom_profile_family_names[i];
+       i < IREE_ARRAYSIZE(iree_benchmark_loom_profile_family_names); ++i) {
+    const iree_benchmark_loom_profile_family_name_t* family =
+        &iree_benchmark_loom_profile_family_names[i];
     if (!iree_all_bits_set(profile_data_families, family->bit)) {
       continue;
     }
@@ -271,10 +272,11 @@ iree_status_t iree_tune_loom_write_profile_family_names_json(
   return iree_ok_status();
 }
 
-iree_status_t iree_tune_loom_parse_i32_flag(iree_string_view_t flag_name,
-                                            void* storage,
-                                            iree_string_view_t value) {
-  iree_tune_loom_i32_flag_t* flag = (iree_tune_loom_i32_flag_t*)storage;
+iree_status_t iree_benchmark_loom_parse_i32_flag(iree_string_view_t flag_name,
+                                                 void* storage,
+                                                 iree_string_view_t value) {
+  iree_benchmark_loom_i32_flag_t* flag =
+      (iree_benchmark_loom_i32_flag_t*)storage;
   char* value_end = NULL;
   int64_t parsed_value = 0;
   if (!iree_string_view_is_empty(value)) {
@@ -305,18 +307,19 @@ iree_status_t iree_tune_loom_parse_i32_flag(iree_string_view_t flag_name,
   return iree_ok_status();
 }
 
-void iree_tune_loom_print_i32_flag(iree_string_view_t flag_name, void* storage,
-                                   FILE* file) {
-  const iree_tune_loom_i32_flag_t* flag =
-      (const iree_tune_loom_i32_flag_t*)storage;
+void iree_benchmark_loom_print_i32_flag(iree_string_view_t flag_name,
+                                        void* storage, FILE* file) {
+  const iree_benchmark_loom_i32_flag_t* flag =
+      (const iree_benchmark_loom_i32_flag_t*)storage;
   fprintf(file, "--%.*s=%" PRId32 "\n", (int)flag_name.size, flag_name.data,
           flag->value);
 }
 
-iree_status_t iree_tune_loom_parse_bool_flag(iree_string_view_t flag_name,
-                                             void* storage,
-                                             iree_string_view_t value) {
-  iree_tune_loom_bool_flag_t* flag = (iree_tune_loom_bool_flag_t*)storage;
+iree_status_t iree_benchmark_loom_parse_bool_flag(iree_string_view_t flag_name,
+                                                  void* storage,
+                                                  iree_string_view_t value) {
+  iree_benchmark_loom_bool_flag_t* flag =
+      (iree_benchmark_loom_bool_flag_t*)storage;
   if (iree_string_view_is_empty(value) ||
       iree_string_view_equal(value, IREE_SV("true")) ||
       iree_string_view_equal(value, IREE_SV("1"))) {
@@ -334,10 +337,10 @@ iree_status_t iree_tune_loom_parse_bool_flag(iree_string_view_t flag_name,
   return iree_ok_status();
 }
 
-void iree_tune_loom_print_bool_flag(iree_string_view_t flag_name, void* storage,
-                                    FILE* file) {
-  const iree_tune_loom_bool_flag_t* flag =
-      (const iree_tune_loom_bool_flag_t*)storage;
+void iree_benchmark_loom_print_bool_flag(iree_string_view_t flag_name,
+                                         void* storage, FILE* file) {
+  const iree_benchmark_loom_bool_flag_t* flag =
+      (const iree_benchmark_loom_bool_flag_t*)storage;
   fprintf(file, "--%.*s=%s\n", (int)flag_name.size, flag_name.data,
           flag->value ? "true" : "false");
 }

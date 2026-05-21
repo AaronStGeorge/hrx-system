@@ -4,20 +4,20 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tools/iree-tune-loom/module_query.h"
+#include "loom/tools/iree-benchmark-loom/module_query.h"
 
 #include "loom/ops/special_values.h"
 
-iree_string_view_t iree_tune_loom_module_string(const loom_module_t* module,
-                                                loom_string_id_t string_id) {
+iree_string_view_t iree_benchmark_loom_module_string(
+    const loom_module_t* module, loom_string_id_t string_id) {
   if (string_id >= module->strings.count) {
     return iree_string_view_empty();
   }
   return module->strings.entries[string_id];
 }
 
-iree_string_view_t iree_tune_loom_value_name(const loom_module_t* module,
-                                             loom_value_id_t value_id) {
+iree_string_view_t iree_benchmark_loom_value_name(const loom_module_t* module,
+                                                  loom_value_id_t value_id) {
   if (value_id >= module->values.count) {
     return iree_string_view_empty();
   }
@@ -28,7 +28,7 @@ iree_string_view_t iree_tune_loom_value_name(const loom_module_t* module,
   return module->strings.entries[name_id];
 }
 
-iree_string_view_t iree_tune_loom_normalize_selection_name(
+iree_string_view_t iree_benchmark_loom_normalize_selection_name(
     iree_string_view_t selection_name) {
   selection_name = iree_string_view_trim(selection_name);
   if (iree_string_view_starts_with(selection_name, IREE_SV("@"))) {
@@ -37,21 +37,21 @@ iree_string_view_t iree_tune_loom_normalize_selection_name(
   return selection_name;
 }
 
-bool iree_tune_loom_case_matches_selection(
+bool iree_benchmark_loom_case_matches_selection(
     const loom_testbench_case_plan_t* case_plan,
     iree_string_view_t selected_case_name) {
   return iree_string_view_is_empty(selected_case_name) ||
          iree_string_view_equal(case_plan->name, selected_case_name);
 }
 
-bool iree_tune_loom_benchmark_matches_selection(
+bool iree_benchmark_loom_benchmark_matches_selection(
     const loom_testbench_benchmark_plan_t* benchmark_plan,
     iree_string_view_t selected_benchmark_name) {
   return iree_string_view_is_empty(selected_benchmark_name) ||
          iree_string_view_equal(benchmark_plan->name, selected_benchmark_name);
 }
 
-iree_status_t iree_tune_loom_module_symbol_name_from_ref(
+iree_status_t iree_benchmark_loom_module_symbol_name_from_ref(
     const loom_module_t* module, loom_symbol_ref_t ref,
     iree_string_view_t* out_name) {
   *out_name = iree_string_view_empty();

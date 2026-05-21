@@ -1,16 +1,16 @@
-// RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency | FileCheck --check-prefix=BENCH %s
-// RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@sampled_choice_latency --sample=1 --iterations=2 --warmup_iterations=0 | FileCheck --check-prefix=SAMPLE %s
-// RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@sampled_choice_value7 --sample=0 --iterations=1 --warmup_iterations=0 | FileCheck --check-prefix=SLICE %s
-// RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --iterations=2 --warmup_iterations=0 | FileCheck --check-prefix=CLI-OVERRIDE %s
-// RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --dry_run --output=%t.tune.jsonl
+// RUN: iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency | FileCheck --check-prefix=BENCH %s
+// RUN: iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --benchmark=@sampled_choice_latency --sample=1 --iterations=2 --warmup_iterations=0 | FileCheck --check-prefix=SAMPLE %s
+// RUN: iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --benchmark=@sampled_choice_value7 --sample=0 --iterations=1 --warmup_iterations=0 | FileCheck --check-prefix=SLICE %s
+// RUN: iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --iterations=2 --warmup_iterations=0 | FileCheck --check-prefix=CLI-OVERRIDE %s
+// RUN: iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --dry_run --output=%t.tune.jsonl
 // RUN: FileCheck --check-prefix=DRY %s < %t.tune.jsonl
-// RUN: iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --dry_run --artifact_bundle_dir=%t.bundle
+// RUN: iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --dry_run --artifact_bundle_dir=%t.bundle
 // RUN: FileCheck --check-prefix=BUNDLE %s < %t.bundle/results.jsonl
 // RUN: FileCheck --check-prefix=BUNDLE-MANIFEST %s < %t.bundle/manifest.json
-// RUN: ( iree-tune-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_dispatch_latency --measure=dispatch_complete 2>&1 || true ) | FileCheck --check-prefix=DISPATCH-NO-ACTUAL %s
-// RUN: ( iree-tune-loom %S/testdata/duplicate_symbol.loom --benchmark=@duplicate_symbol_latency || true ) | FileCheck --check-prefix=DUPLICATE %s
-// RUN: iree-tune-loom --agents_md | FileCheck --check-prefix=AGENTS %s
-// RUN: iree-tune-loom --help 2>&1 | FileCheck --check-prefix=HELP %s
+// RUN: ( iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_dispatch_latency --measure=dispatch_complete 2>&1 || true ) | FileCheck --check-prefix=DISPATCH-NO-ACTUAL %s
+// RUN: ( iree-benchmark-loom %S/testdata/duplicate_symbol.loom --benchmark=@duplicate_symbol_latency || true ) | FileCheck --check-prefix=DUPLICATE %s
+// RUN: iree-benchmark-loom --agents_md | FileCheck --check-prefix=AGENTS %s
+// RUN: iree-benchmark-loom --help 2>&1 | FileCheck --check-prefix=HELP %s
 
 // BENCH: "row":"run","run_id":"r
 // BENCH: "source":
@@ -101,7 +101,7 @@
 // BUNDLE: "row":"summary"
 // BUNDLE: "artifacts":{"bundle_enabled":true
 
-// BUNDLE-MANIFEST: "tool":"iree-tune-loom"
+// BUNDLE-MANIFEST: "tool":"iree-benchmark-loom"
 // BUNDLE-MANIFEST: "source_identity":{"byte_count":
 // BUNDLE-MANIFEST: "policy":"minimal"
 // BUNDLE-MANIFEST: "paths":{"bundle":
@@ -119,7 +119,7 @@
 // DUPLICATE: "row":"summary"
 // DUPLICATE: "failure_count":1
 
-// AGENTS: ## iree-tune-loom
+// AGENTS: ## iree-benchmark-loom
 // AGENTS: Rows are written and flushed
 // AGENTS: profile_summary
 // AGENTS: compile_report_path

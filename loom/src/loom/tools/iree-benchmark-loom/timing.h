@@ -6,23 +6,23 @@
 
 // Timing-stat helpers for benchmark result rows.
 
-#ifndef LOOM_TOOLS_IREE_TUNE_LOOM_TIMING_H_
-#define LOOM_TOOLS_IREE_TUNE_LOOM_TIMING_H_
+#ifndef LOOM_TOOLS_IREE_BENCHMARK_LOOM_TIMING_H_
+#define LOOM_TOOLS_IREE_BENCHMARK_LOOM_TIMING_H_
 
 #include "iree/base/api.h"
-#include "loom/tools/iree-tune-loom/model.h"
+#include "loom/tools/iree-benchmark-loom/model.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 // Sorts |durations| in place and computes nearest-rank summary statistics.
-void iree_tune_loom_compute_timing_stats(
+void iree_benchmark_loom_compute_timing_stats(
     iree_duration_t* durations, iree_host_size_t count,
-    iree_tune_loom_timing_stats_t* out_stats);
+    iree_benchmark_loom_timing_stats_t* out_stats);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TOOLS_IREE_TUNE_LOOM_TIMING_H_
+#endif  // LOOM_TOOLS_IREE_BENCHMARK_LOOM_TIMING_H_

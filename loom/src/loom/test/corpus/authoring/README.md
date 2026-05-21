@@ -7,9 +7,9 @@ are all in the `.loom` file.
 
 The examples are tested through production-facing tools:
 
-- `iree-tune-loom --dry_run` proves `check.case` and `check.benchmark` planning
+- `iree-benchmark-loom --dry_run` proves `check.case` and `check.benchmark` planning
   without requiring a local GPU during host-only CI.
-- `iree-tune-loom --device=amdgpu --measure=dispatch_complete` compiles,
+- `iree-benchmark-loom --device=amdgpu --measure=dispatch_complete` compiles,
   executes correctness samples, and benchmarks the same sources on AMDGPU test
   hosts.
 
@@ -40,4 +40,4 @@ per-sample compilation so each selected row count becomes a compile-time fact
 before launch geometry and memory legality are finalized.
 
 Iteration counts, warmups, profiling, compile timing, and soak/quick modes live
-on `iree-tune-loom` flags or embedding APIs.
+on `iree-benchmark-loom` flags or embedding APIs.

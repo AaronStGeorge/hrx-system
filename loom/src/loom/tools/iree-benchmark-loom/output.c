@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tools/iree-tune-loom/output.h"
+#include "loom/tools/iree-benchmark-loom/output.h"
 
 #include <errno.h>
 #include <inttypes.h>
@@ -21,7 +21,7 @@
 #include "iree/io/stdio_stream.h"
 #include "loom/tooling/io/file.h"
 
-static bool iree_tune_loom_path_is_absolute(iree_string_view_t path) {
+static bool iree_benchmark_loom_path_is_absolute(iree_string_view_t path) {
   if (iree_string_view_is_empty(path)) {
     return false;
   }
@@ -36,24 +36,24 @@ static bool iree_tune_loom_path_is_absolute(iree_string_view_t path) {
   return false;
 }
 
-static iree_string_view_t iree_tune_loom_path_as_output_relative(
+static iree_string_view_t iree_benchmark_loom_path_as_output_relative(
     iree_string_view_t path) {
   return iree_string_view_trim(path);
 }
 
-static bool iree_tune_loom_is_safe_output_path_char(char c) {
+static bool iree_benchmark_loom_is_safe_output_path_char(char c) {
   return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
          (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-' || c == '/';
 }
 
-static iree_status_t iree_tune_loom_validate_file_output_path(
+static iree_status_t iree_benchmark_loom_validate_file_output_path(
     iree_string_view_t path) {
   if (loom_tooling_file_path_is_stdio(path)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "check.file.write paths must name a file; '-' "
                             "would conflict with the JSONL output stream");
   }
-  if (iree_tune_loom_path_is_absolute(path)) {
+  if (iree_benchmark_loom_path_is_absolute(path)) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "check.file.write path '%.*s' must be relative to --file_output_dir",
@@ -61,7 +61,7 @@ static iree_status_t iree_tune_loom_validate_file_output_path(
   }
 
   iree_string_view_t remaining =
-      iree_tune_loom_path_as_output_relative(iree_string_view_trim(path));
+      iree_benchmark_loom_path_as_output_relative(iree_string_view_trim(path));
   if (iree_string_view_is_empty(remaining)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "check.file.write path resolves to an empty "
@@ -92,8 +92,8 @@ static iree_status_t iree_tune_loom_validate_file_output_path(
   return iree_ok_status();
 }
 
-static uint64_t iree_tune_loom_hash_string_view(uint64_t hash,
-                                                iree_string_view_t value) {
+static uint64_t iree_benchmark_loom_hash_string_view(uint64_t hash,
+                                                     iree_string_view_t value) {
   for (iree_host_size_t i = 0; i < value.size; ++i) {
     hash ^= (uint8_t)value.data[i];
     hash *= 1099511628211ull;
@@ -101,7 +101,7 @@ static uint64_t iree_tune_loom_hash_string_view(uint64_t hash,
   return hash;
 }
 
-iree_status_t iree_tune_loom_append_sanitized_path_component(
+iree_status_t iree_benchmark_loom_append_sanitized_path_component(
     iree_string_view_t value, iree_string_builder_t* builder) {
   if (iree_string_view_equal(value, IREE_SV("<stdin>"))) {
     return iree_string_builder_append_cstring(builder, "stdin");
@@ -109,7 +109,7 @@ iree_status_t iree_tune_loom_append_sanitized_path_component(
   bool appended = false;
   for (iree_host_size_t i = 0; i < value.size; ++i) {
     char c = value.data[i];
-    if (!iree_tune_loom_is_safe_output_path_char(c) || c == '/') {
+    if (!iree_benchmark_loom_is_safe_output_path_char(c) || c == '/') {
       c = '_';
     }
     IREE_RETURN_IF_ERROR(iree_string_builder_append_string(
@@ -122,17 +122,17 @@ iree_status_t iree_tune_loom_append_sanitized_path_component(
   return iree_ok_status();
 }
 
-iree_status_t iree_tune_loom_join_path(iree_string_view_t lhs,
-                                       iree_string_view_t rhs,
-                                       iree_allocator_t allocator,
-                                       char** out_path) {
+iree_status_t iree_benchmark_loom_join_path(iree_string_view_t lhs,
+                                            iree_string_view_t rhs,
+                                            iree_allocator_t allocator,
+                                            char** out_path) {
   *out_path = NULL;
   return iree_file_path_join(lhs, rhs, allocator, out_path);
 }
 
-iree_status_t iree_tune_loom_dup_string_view(iree_string_view_t value,
-                                             iree_allocator_t allocator,
-                                             char** out_value) {
+iree_status_t iree_benchmark_loom_dup_string_view(iree_string_view_t value,
+                                                  iree_allocator_t allocator,
+                                                  char** out_value) {
   *out_value = NULL;
   iree_host_size_t storage_size = 0;
   if (!iree_host_size_checked_add(value.size, 1, &storage_size)) {
@@ -150,7 +150,7 @@ iree_status_t iree_tune_loom_dup_string_view(iree_string_view_t value,
   return iree_ok_status();
 }
 
-static iree_string_view_t iree_tune_loom_tmp_dir(void) {
+static iree_string_view_t iree_benchmark_loom_tmp_dir(void) {
   const char* tmp_dir = getenv("TMPDIR");
   if (tmp_dir == NULL || tmp_dir[0] == '\0') {
     tmp_dir = getenv("TEMP");
@@ -164,19 +164,19 @@ static iree_string_view_t iree_tune_loom_tmp_dir(void) {
   return iree_make_cstring_view(tmp_dir);
 }
 
-static iree_status_t iree_tune_loom_make_default_file_output_dir(
+static iree_status_t iree_benchmark_loom_make_default_file_output_dir(
     iree_string_view_t filename, iree_string_view_t run_id,
     iree_allocator_t allocator, char** out_path) {
   *out_path = NULL;
 
   uint64_t hash = 1469598103934665603ull;
-  hash = iree_tune_loom_hash_string_view(hash, filename);
-  hash = iree_tune_loom_hash_string_view(hash, run_id);
+  hash = iree_benchmark_loom_hash_string_view(hash, filename);
+  hash = iree_benchmark_loom_hash_string_view(hash, run_id);
 
   iree_string_builder_t leaf_builder;
   iree_string_builder_initialize(allocator, &leaf_builder);
   iree_string_view_t source_name = iree_file_path_basename(filename);
-  iree_status_t status = iree_tune_loom_append_sanitized_path_component(
+  iree_status_t status = iree_benchmark_loom_append_sanitized_path_component(
       source_name, &leaf_builder);
   if (iree_status_is_ok(status)) {
     status =
@@ -186,24 +186,25 @@ static iree_status_t iree_tune_loom_make_default_file_output_dir(
 
   char* root_path = NULL;
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_join_path(iree_tune_loom_tmp_dir(),
-                                      IREE_SV("iree-loom-tune"), allocator,
-                                      &root_path);
+    status = iree_benchmark_loom_join_path(iree_benchmark_loom_tmp_dir(),
+                                           IREE_SV("iree-loom-benchmark"),
+                                           allocator, &root_path);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_join_path(iree_make_cstring_view(root_path), leaf,
-                                      allocator, out_path);
+    status = iree_benchmark_loom_join_path(iree_make_cstring_view(root_path),
+                                           leaf, allocator, out_path);
   }
   iree_allocator_free(allocator, root_path);
   iree_string_builder_deinitialize(&leaf_builder);
   return status;
 }
 
-static bool iree_tune_loom_artifact_bundle_has_file(
-    const iree_tune_loom_artifact_bundle_t* bundle,
-    iree_tune_loom_bundle_file_kind_t kind, iree_string_view_t path) {
+static bool iree_benchmark_loom_artifact_bundle_has_file(
+    const iree_benchmark_loom_artifact_bundle_t* bundle,
+    iree_benchmark_loom_bundle_file_kind_t kind, iree_string_view_t path) {
   for (iree_host_size_t i = 0; i < bundle->file_entry_count; ++i) {
-    const iree_tune_loom_bundle_file_entry_t* entry = &bundle->file_entries[i];
+    const iree_benchmark_loom_bundle_file_entry_t* entry =
+        &bundle->file_entries[i];
     if (entry->kind == kind &&
         iree_string_view_equal(iree_make_cstring_view(entry->path), path)) {
       return true;
@@ -212,16 +213,16 @@ static bool iree_tune_loom_artifact_bundle_has_file(
   return false;
 }
 
-iree_status_t iree_tune_loom_artifact_bundle_record_file(
-    iree_tune_loom_artifact_bundle_t* bundle,
-    iree_tune_loom_bundle_file_kind_t kind, iree_string_view_t path) {
+iree_status_t iree_benchmark_loom_artifact_bundle_record_file(
+    iree_benchmark_loom_artifact_bundle_t* bundle,
+    iree_benchmark_loom_bundle_file_kind_t kind, iree_string_view_t path) {
   if (bundle == NULL || !bundle->enabled) {
     return iree_ok_status();
   }
   path = iree_string_view_trim(path);
   if (iree_string_view_is_empty(path) ||
       loom_tooling_file_path_is_stdio(path) ||
-      iree_tune_loom_artifact_bundle_has_file(bundle, kind, path)) {
+      iree_benchmark_loom_artifact_bundle_has_file(bundle, kind, path)) {
     return iree_ok_status();
   }
 
@@ -239,18 +240,18 @@ iree_status_t iree_tune_loom_artifact_bundle_record_file(
     bundle->file_entry_capacity = new_capacity;
   }
 
-  iree_tune_loom_bundle_file_entry_t* entry =
+  iree_benchmark_loom_bundle_file_entry_t* entry =
       &bundle->file_entries[bundle->file_entry_count];
   entry->kind = kind;
-  IREE_RETURN_IF_ERROR(iree_tune_loom_dup_string_view(
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_dup_string_view(
       path, bundle->host_allocator, &entry->path));
   ++bundle->file_entry_count;
   return iree_ok_status();
 }
 
-iree_host_size_t iree_tune_loom_artifact_bundle_file_count(
-    const iree_tune_loom_artifact_bundle_t* bundle,
-    iree_tune_loom_bundle_file_kind_t kind) {
+iree_host_size_t iree_benchmark_loom_artifact_bundle_file_count(
+    const iree_benchmark_loom_artifact_bundle_t* bundle,
+    iree_benchmark_loom_bundle_file_kind_t kind) {
   if (bundle == NULL || !bundle->enabled) {
     return 0;
   }
@@ -263,12 +264,13 @@ iree_host_size_t iree_tune_loom_artifact_bundle_file_count(
   return count;
 }
 
-iree_status_t iree_tune_loom_file_provider_initialize(
+iree_status_t iree_benchmark_loom_file_provider_initialize(
     iree_string_view_t filename, iree_string_view_t run_id,
     iree_string_view_t explicit_output_dir,
     iree_string_view_t default_output_dir,
-    iree_tune_loom_artifact_bundle_t* artifact_bundle,
-    iree_allocator_t allocator, iree_tune_loom_file_provider_t* out_provider) {
+    iree_benchmark_loom_artifact_bundle_t* artifact_bundle,
+    iree_allocator_t allocator,
+    iree_benchmark_loom_file_provider_t* out_provider) {
   memset(out_provider, 0, sizeof(*out_provider));
   out_provider->host_allocator = allocator;
   out_provider->artifact_bundle = artifact_bundle;
@@ -278,13 +280,13 @@ iree_status_t iree_tune_loom_file_provider_initialize(
 
   iree_string_view_t output_dir = iree_string_view_trim(explicit_output_dir);
   if (!iree_string_view_is_empty(output_dir)) {
-    IREE_RETURN_IF_ERROR(iree_tune_loom_dup_string_view(
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_dup_string_view(
         output_dir, allocator, &out_provider->output_dir_storage));
   } else if (!iree_string_view_is_empty(default_output_dir)) {
-    IREE_RETURN_IF_ERROR(iree_tune_loom_dup_string_view(
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_dup_string_view(
         default_output_dir, allocator, &out_provider->output_dir_storage));
   } else {
-    IREE_RETURN_IF_ERROR(iree_tune_loom_make_default_file_output_dir(
+    IREE_RETURN_IF_ERROR(iree_benchmark_loom_make_default_file_output_dir(
         filename, run_id, allocator, &out_provider->output_dir_storage));
   }
   out_provider->output_dir =
@@ -292,8 +294,8 @@ iree_status_t iree_tune_loom_file_provider_initialize(
   return iree_ok_status();
 }
 
-void iree_tune_loom_file_provider_deinitialize(
-    iree_tune_loom_file_provider_t* provider) {
+void iree_benchmark_loom_file_provider_deinitialize(
+    iree_benchmark_loom_file_provider_t* provider) {
   if (provider == NULL) {
     return;
   }
@@ -301,35 +303,35 @@ void iree_tune_loom_file_provider_deinitialize(
   memset(provider, 0, sizeof(*provider));
 }
 
-static iree_status_t iree_tune_loom_resolve_file_read_path(
-    const iree_tune_loom_file_provider_t* provider, iree_string_view_t path,
-    char** out_path) {
+static iree_status_t iree_benchmark_loom_resolve_file_read_path(
+    const iree_benchmark_loom_file_provider_t* provider,
+    iree_string_view_t path, char** out_path) {
   *out_path = NULL;
   if (loom_tooling_file_path_is_stdio(path)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "check.file.read paths must name a file");
   }
-  if (iree_tune_loom_path_is_absolute(path) ||
+  if (iree_benchmark_loom_path_is_absolute(path) ||
       iree_string_view_is_empty(provider->input_dir)) {
-    return iree_tune_loom_dup_string_view(path, provider->host_allocator,
-                                          out_path);
+    return iree_benchmark_loom_dup_string_view(path, provider->host_allocator,
+                                               out_path);
   }
-  return iree_tune_loom_join_path(provider->input_dir, path,
-                                  provider->host_allocator, out_path);
+  return iree_benchmark_loom_join_path(provider->input_dir, path,
+                                       provider->host_allocator, out_path);
 }
 
-static iree_status_t iree_tune_loom_resolve_file_write_path(
-    const iree_tune_loom_file_provider_t* provider, iree_string_view_t path,
-    char** out_path) {
+static iree_status_t iree_benchmark_loom_resolve_file_write_path(
+    const iree_benchmark_loom_file_provider_t* provider,
+    iree_string_view_t path, char** out_path) {
   *out_path = NULL;
-  IREE_RETURN_IF_ERROR(iree_tune_loom_validate_file_output_path(path));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_validate_file_output_path(path));
   iree_string_view_t relative_path =
-      iree_tune_loom_path_as_output_relative(iree_string_view_trim(path));
-  return iree_tune_loom_join_path(provider->output_dir, relative_path,
-                                  provider->host_allocator, out_path);
+      iree_benchmark_loom_path_as_output_relative(iree_string_view_trim(path));
+  return iree_benchmark_loom_join_path(provider->output_dir, relative_path,
+                                       provider->host_allocator, out_path);
 }
 
-iree_status_t iree_tune_loom_create_directory_if_needed(
+iree_status_t iree_benchmark_loom_create_directory_if_needed(
     iree_string_view_t path, iree_allocator_t allocator) {
   path = iree_string_view_trim(path);
   if (iree_string_view_is_empty(path)) {
@@ -338,7 +340,7 @@ iree_status_t iree_tune_loom_create_directory_if_needed(
 
   char* storage = NULL;
   IREE_RETURN_IF_ERROR(
-      iree_tune_loom_dup_string_view(path, allocator, &storage));
+      iree_benchmark_loom_dup_string_view(path, allocator, &storage));
   iree_host_size_t length = strlen(storage);
   while (length > 1 && storage[length - 1] == '/') {
     storage[--length] = '\0';
@@ -384,18 +386,18 @@ iree_status_t iree_tune_loom_create_directory_if_needed(
   return status;
 }
 
-iree_status_t iree_tune_loom_create_parent_directory(
+iree_status_t iree_benchmark_loom_create_parent_directory(
     iree_string_view_t path, iree_allocator_t allocator) {
   iree_string_view_t parent = iree_file_path_dirname(path);
   if (iree_string_view_is_empty(parent)) {
     return iree_ok_status();
   }
-  return iree_tune_loom_create_directory_if_needed(parent, allocator);
+  return iree_benchmark_loom_create_directory_if_needed(parent, allocator);
 }
 
-iree_status_t iree_tune_loom_jsonl_sink_initialize(
+iree_status_t iree_benchmark_loom_jsonl_sink_initialize(
     iree_string_view_t path, iree_allocator_t allocator,
-    iree_tune_loom_jsonl_sink_t* out_sink) {
+    iree_benchmark_loom_jsonl_sink_t* out_sink) {
   memset(out_sink, 0, sizeof(*out_sink));
   out_sink->host_allocator = allocator;
   iree_string_builder_initialize(allocator, &out_sink->row_builder);
@@ -407,10 +409,10 @@ iree_status_t iree_tune_loom_jsonl_sink_initialize(
   }
 
   iree_status_t status =
-      iree_tune_loom_create_parent_directory(path, allocator);
+      iree_benchmark_loom_create_parent_directory(path, allocator);
   char* storage = NULL;
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_dup_string_view(path, allocator, &storage);
+    status = iree_benchmark_loom_dup_string_view(path, allocator, &storage);
   }
   if (iree_status_is_ok(status)) {
     out_sink->file = fopen(storage, "wb");
@@ -430,7 +432,8 @@ iree_status_t iree_tune_loom_jsonl_sink_initialize(
   return status;
 }
 
-void iree_tune_loom_jsonl_sink_deinitialize(iree_tune_loom_jsonl_sink_t* sink) {
+void iree_benchmark_loom_jsonl_sink_deinitialize(
+    iree_benchmark_loom_jsonl_sink_t* sink) {
   if (sink == NULL) {
     return;
   }
@@ -441,14 +444,14 @@ void iree_tune_loom_jsonl_sink_deinitialize(iree_tune_loom_jsonl_sink_t* sink) {
   memset(sink, 0, sizeof(*sink));
 }
 
-iree_string_builder_t* iree_tune_loom_jsonl_sink_begin(
-    iree_tune_loom_jsonl_sink_t* sink) {
+iree_string_builder_t* iree_benchmark_loom_jsonl_sink_begin(
+    iree_benchmark_loom_jsonl_sink_t* sink) {
   iree_string_builder_reset(&sink->row_builder);
   return &sink->row_builder;
 }
 
-static iree_status_t iree_tune_loom_jsonl_sink_flush(
-    iree_tune_loom_jsonl_sink_t* sink) {
+static iree_status_t iree_benchmark_loom_jsonl_sink_flush(
+    iree_benchmark_loom_jsonl_sink_t* sink) {
   iree_string_view_t contents = iree_string_builder_view(&sink->row_builder);
   if (iree_string_view_is_empty(contents)) {
     return iree_ok_status();
@@ -469,8 +472,8 @@ static iree_status_t iree_tune_loom_jsonl_sink_flush(
   return iree_ok_status();
 }
 
-iree_status_t iree_tune_loom_jsonl_sink_close(
-    iree_tune_loom_jsonl_sink_t* sink) {
+iree_status_t iree_benchmark_loom_jsonl_sink_close(
+    iree_benchmark_loom_jsonl_sink_t* sink) {
   if (!sink->owns_file || sink->file == NULL) {
     return iree_ok_status();
   }
@@ -486,23 +489,23 @@ iree_status_t iree_tune_loom_jsonl_sink_close(
   return iree_ok_status();
 }
 
-iree_status_t iree_tune_loom_jsonl_sink_end(iree_tune_loom_jsonl_sink_t* sink,
-                                            iree_status_t row_status) {
+iree_status_t iree_benchmark_loom_jsonl_sink_end(
+    iree_benchmark_loom_jsonl_sink_t* sink, iree_status_t row_status) {
   if (!iree_status_is_ok(row_status)) {
     iree_string_builder_reset(&sink->row_builder);
     return row_status;
   }
-  return iree_tune_loom_jsonl_sink_flush(sink);
+  return iree_benchmark_loom_jsonl_sink_flush(sink);
 }
 
-static iree_status_t iree_tune_loom_join_bundle_path(
+static iree_status_t iree_benchmark_loom_join_bundle_path(
     iree_string_view_t bundle_dir, iree_string_view_t child,
     iree_allocator_t allocator, char** out_path) {
-  return iree_tune_loom_join_path(bundle_dir, child, allocator, out_path);
+  return iree_benchmark_loom_join_path(bundle_dir, child, allocator, out_path);
 }
 
-void iree_tune_loom_artifact_bundle_deinitialize(
-    iree_tune_loom_artifact_bundle_t* bundle) {
+void iree_benchmark_loom_artifact_bundle_deinitialize(
+    iree_benchmark_loom_artifact_bundle_t* bundle) {
   if (bundle == NULL) {
     return;
   }
@@ -524,12 +527,13 @@ void iree_tune_loom_artifact_bundle_deinitialize(
   iree_allocator_free(bundle->host_allocator, bundle->manifest_path_storage);
   iree_allocator_free(bundle->host_allocator, bundle->results_path_storage);
   iree_allocator_free(bundle->host_allocator, bundle->dir_storage);
-  *bundle = (iree_tune_loom_artifact_bundle_t){0};
+  *bundle = (iree_benchmark_loom_artifact_bundle_t){0};
 }
 
-iree_status_t iree_tune_loom_artifact_bundle_initialize(
-    const iree_tune_loom_artifact_bundle_options_t* options,
-    iree_allocator_t allocator, iree_tune_loom_artifact_bundle_t* out_bundle) {
+iree_status_t iree_benchmark_loom_artifact_bundle_initialize(
+    const iree_benchmark_loom_artifact_bundle_options_t* options,
+    iree_allocator_t allocator,
+    iree_benchmark_loom_artifact_bundle_t* out_bundle) {
   IREE_ASSERT_ARGUMENT(options);
   memset(out_bundle, 0, sizeof(*out_bundle));
   out_bundle->host_allocator = allocator;
@@ -537,63 +541,63 @@ iree_status_t iree_tune_loom_artifact_bundle_initialize(
 
   const iree_string_view_t bundle_dir = iree_string_view_trim(options->dir);
   if (iree_string_view_is_empty(bundle_dir)) {
-    out_bundle->policy = IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_NONE;
+    out_bundle->policy = IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_NONE;
     return iree_ok_status();
   }
   if (loom_tooling_file_path_is_stdio(bundle_dir)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "--artifact_bundle_dir must name a directory");
   }
-  if (out_bundle->policy == IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_NONE) {
+  if (out_bundle->policy == IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_NONE) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "--artifact_bundle_policy=none conflicts with "
                             "--artifact_bundle_dir");
   }
 
-  iree_status_t status = iree_tune_loom_dup_string_view(
+  iree_status_t status = iree_benchmark_loom_dup_string_view(
       bundle_dir, allocator, &out_bundle->dir_storage);
   if (iree_status_is_ok(status)) {
     out_bundle->dir = iree_make_cstring_view(out_bundle->dir_storage);
-    status =
-        iree_tune_loom_create_directory_if_needed(out_bundle->dir, allocator);
+    status = iree_benchmark_loom_create_directory_if_needed(out_bundle->dir,
+                                                            allocator);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_join_bundle_path(
+    status = iree_benchmark_loom_join_bundle_path(
         out_bundle->dir, IREE_SV("results.jsonl"), allocator,
         &out_bundle->results_path_storage);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_join_bundle_path(
+    status = iree_benchmark_loom_join_bundle_path(
         out_bundle->dir, IREE_SV("manifest.json"), allocator,
         &out_bundle->manifest_path_storage);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_join_bundle_path(
+    status = iree_benchmark_loom_join_bundle_path(
         out_bundle->dir, IREE_SV("outputs"), allocator,
         &out_bundle->file_output_dir_storage);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_join_bundle_path(
+    status = iree_benchmark_loom_join_bundle_path(
         out_bundle->dir, IREE_SV("profiles"), allocator,
         &out_bundle->profile_artifacts_dir_storage);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_join_bundle_path(
+    status = iree_benchmark_loom_join_bundle_path(
         out_bundle->dir, IREE_SV("compile_reports"), allocator,
         &out_bundle->compile_report_dir_storage);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_join_bundle_path(
+    status = iree_benchmark_loom_join_bundle_path(
         out_bundle->dir, IREE_SV("target_artifacts"), allocator,
         &out_bundle->target_artifact_dir_storage);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_join_bundle_path(
+    status = iree_benchmark_loom_join_bundle_path(
         out_bundle->dir, IREE_SV("target_listings"), allocator,
         &out_bundle->target_listing_dir_storage);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_join_bundle_path(
+    status = iree_benchmark_loom_join_bundle_path(
         out_bundle->dir, IREE_SV("hal_executables"), allocator,
         &out_bundle->hal_executable_dir_storage);
   }
@@ -616,25 +620,25 @@ iree_status_t iree_tune_loom_artifact_bundle_initialize(
         iree_make_cstring_view(out_bundle->hal_executable_dir_storage);
     out_bundle->enabled = true;
   } else {
-    iree_tune_loom_artifact_bundle_deinitialize(out_bundle);
+    iree_benchmark_loom_artifact_bundle_deinitialize(out_bundle);
   }
   return status;
 }
 
-bool iree_tune_loom_artifact_bundle_wants_debug_artifacts(
-    const iree_tune_loom_artifact_bundle_t* bundle) {
+bool iree_benchmark_loom_artifact_bundle_wants_debug_artifacts(
+    const iree_benchmark_loom_artifact_bundle_t* bundle) {
   return bundle != NULL && bundle->enabled &&
-         bundle->policy >= IREE_TUNE_LOOM_ARTIFACT_BUNDLE_POLICY_DEBUG;
+         bundle->policy >= IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_DEBUG;
 }
 
-bool iree_tune_loom_artifact_bundle_wants_compile_reports(
-    const iree_tune_loom_artifact_bundle_t* bundle) {
-  return iree_tune_loom_artifact_bundle_wants_debug_artifacts(bundle);
+bool iree_benchmark_loom_artifact_bundle_wants_compile_reports(
+    const iree_benchmark_loom_artifact_bundle_t* bundle) {
+  return iree_benchmark_loom_artifact_bundle_wants_debug_artifacts(bundle);
 }
 
-iree_string_view_t iree_tune_loom_effective_results_output_path(
+iree_string_view_t iree_benchmark_loom_effective_results_output_path(
     iree_string_view_t explicit_output,
-    const iree_tune_loom_artifact_bundle_t* bundle) {
+    const iree_benchmark_loom_artifact_bundle_t* bundle) {
   explicit_output = iree_string_view_trim(explicit_output);
   if (!iree_string_view_is_empty(explicit_output)) {
     return explicit_output;
@@ -645,9 +649,9 @@ iree_string_view_t iree_tune_loom_effective_results_output_path(
   return iree_string_view_empty();
 }
 
-iree_string_view_t iree_tune_loom_effective_profile_artifacts_dir(
+iree_string_view_t iree_benchmark_loom_effective_profile_artifacts_dir(
     iree_string_view_t explicit_artifacts_dir,
-    const iree_tune_loom_artifact_bundle_t* bundle) {
+    const iree_benchmark_loom_artifact_bundle_t* bundle) {
   explicit_artifacts_dir = iree_string_view_trim(explicit_artifacts_dir);
   if (!iree_string_view_is_empty(explicit_artifacts_dir)) {
     return explicit_artifacts_dir;
@@ -656,37 +660,36 @@ iree_string_view_t iree_tune_loom_effective_profile_artifacts_dir(
                          : iree_string_view_empty();
 }
 
-iree_status_t iree_tune_loom_open_file_for_read(void* user_data,
-                                                iree_string_view_t path,
-                                                iree_io_stream_t** out_stream) {
+iree_status_t iree_benchmark_loom_open_file_for_read(
+    void* user_data, iree_string_view_t path, iree_io_stream_t** out_stream) {
   *out_stream = NULL;
-  iree_tune_loom_file_provider_t* provider =
-      (iree_tune_loom_file_provider_t*)user_data;
+  iree_benchmark_loom_file_provider_t* provider =
+      (iree_benchmark_loom_file_provider_t*)user_data;
   char* resolved_path = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_tune_loom_resolve_file_read_path(provider, path, &resolved_path));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_resolve_file_read_path(
+      provider, path, &resolved_path));
   iree_status_t status = iree_io_stdio_stream_open(
       IREE_IO_STDIO_STREAM_MODE_READ, iree_make_cstring_view(resolved_path),
       provider->host_allocator, out_stream);
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_artifact_bundle_record_file(
-        provider->artifact_bundle, IREE_TUNE_LOOM_BUNDLE_FILE_FIXTURE_READ,
+    status = iree_benchmark_loom_artifact_bundle_record_file(
+        provider->artifact_bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_FIXTURE_READ,
         iree_make_cstring_view(resolved_path));
   }
   iree_allocator_free(provider->host_allocator, resolved_path);
   return status;
 }
 
-iree_status_t iree_tune_loom_open_file_for_write(
+iree_status_t iree_benchmark_loom_open_file_for_write(
     void* user_data, iree_string_view_t path, iree_io_stream_t** out_stream) {
   *out_stream = NULL;
-  iree_tune_loom_file_provider_t* provider =
-      (iree_tune_loom_file_provider_t*)user_data;
+  iree_benchmark_loom_file_provider_t* provider =
+      (iree_benchmark_loom_file_provider_t*)user_data;
   char* resolved_path = NULL;
-  IREE_RETURN_IF_ERROR(
-      iree_tune_loom_resolve_file_write_path(provider, path, &resolved_path));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_resolve_file_write_path(
+      provider, path, &resolved_path));
   iree_string_view_t resolved_path_view = iree_make_cstring_view(resolved_path);
-  iree_status_t status = iree_tune_loom_create_parent_directory(
+  iree_status_t status = iree_benchmark_loom_create_parent_directory(
       resolved_path_view, provider->host_allocator);
   if (iree_status_is_ok(status)) {
     status = iree_io_stdio_stream_open(
@@ -694,8 +697,8 @@ iree_status_t iree_tune_loom_open_file_for_write(
         resolved_path_view, provider->host_allocator, out_stream);
   }
   if (iree_status_is_ok(status)) {
-    status = iree_tune_loom_artifact_bundle_record_file(
-        provider->artifact_bundle, IREE_TUNE_LOOM_BUNDLE_FILE_OUTPUT,
+    status = iree_benchmark_loom_artifact_bundle_record_file(
+        provider->artifact_bundle, IREE_BENCHMARK_LOOM_BUNDLE_FILE_OUTPUT,
         resolved_path_view);
   }
   iree_allocator_free(provider->host_allocator, resolved_path);

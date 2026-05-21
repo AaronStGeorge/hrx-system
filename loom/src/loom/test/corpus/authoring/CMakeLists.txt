@@ -17,7 +17,7 @@ iree_executable_test(
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/ffn_gate_up_swiglu_q6q8.loom"
     "--dry_run"
   SRC
-    loom::src::loom::tools::iree-tune-loom
+    loom::src::loom::tools::iree-benchmark-loom
   LABELS
     "hostonly"
 )
@@ -29,7 +29,7 @@ iree_executable_test(
     "${PROJECT_SOURCE_DIR}/loom/src/loom/test/corpus/authoring/mlp_down_projection_residual_bf16.loom"
     "--dry_run"
   SRC
-    loom::src::loom::tools::iree-tune-loom
+    loom::src::loom::tools::iree-benchmark-loom
   LABELS
     "hostonly"
 )
@@ -48,7 +48,7 @@ iree_executable_test(
     "--max_batches=1"
     "--input_ring_count=1"
   SRC
-    loom::src::loom::tools::iree-tune-loom
+    loom::src::loom::tools::iree-benchmark-loom
   LABELS
     "driver=amdgpu"
     "manual"
@@ -70,7 +70,7 @@ iree_executable_test(
     "--max_batches=1"
     "--input_ring_count=1"
   SRC
-    loom::src::loom::tools::iree-tune-loom
+    loom::src::loom::tools::iree-benchmark-loom
   LABELS
     "driver=amdgpu"
     "manual"
