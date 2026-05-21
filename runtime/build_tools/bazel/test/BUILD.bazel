@@ -61,4 +61,9 @@ iree_runtime_cc_test(
 
 flatcc_rules_test_suite(name = "flatcc_tests")
 
+test_suite(
+    name = "hal_cts_tests",
+    tests = ["//runtime/build_tools/bazel/test/hal_cts:hal_cts_tests"],
+)
+
 vmasm_module_rules_test_suite(name = "vmasm_module_tests")

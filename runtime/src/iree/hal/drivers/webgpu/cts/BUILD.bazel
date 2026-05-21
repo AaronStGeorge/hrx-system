@@ -14,9 +14,9 @@
 # Tests requiring async completion waits (semaphore waits, buffer mapping,
 # dispatch) are excluded until threaded mode (bd-1gi) enables blocking waits.
 
-load("//build_tools/bazel:iree_hal_cts_test_suite.bzl", "iree_hal_cts_test_suite")
 load("//build_tools/bazel:iree_wasm_library.bzl", "iree_wasm_entry")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
+load("//runtime/build_tools/bazel:hal_cts.bzl", "iree_runtime_hal_cts_test_suite")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -48,7 +48,7 @@ iree_runtime_cc_library(
     alwayslink = True,
 )
 
-iree_hal_cts_test_suite(
+iree_runtime_hal_cts_test_suite(
     backends_lib = ":backends",
     local = True,
     target_compatible_with = _WASM_ONLY,
