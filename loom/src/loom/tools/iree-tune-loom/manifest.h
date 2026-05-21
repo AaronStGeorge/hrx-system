@@ -26,7 +26,7 @@ iree_status_t iree_tune_loom_write_artifact_bundle_manifest(
     const iree_tune_loom_run_identity_t* run,
     const iree_tune_loom_hal_context_t* hal_context, iree_string_view_t source,
     iree_string_view_t command_line_json, bool dry_run,
-    iree_tune_loom_shape_specialization_mode_t shape_specialization_mode,
+    iree_tune_loom_sample_compilation_mode_t sample_compilation_mode,
     iree_allocator_t allocator);
 
 #ifdef __cplusplus

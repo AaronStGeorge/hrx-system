@@ -123,10 +123,10 @@ static iree_status_t iree_tune_loom_write_profile_artifact_identity_json(
   IREE_RETURN_IF_ERROR(iree_tune_loom_write_run_id_field_json(run, stream));
   IREE_RETURN_IF_ERROR(
       iree_tune_loom_write_candidate_identity_json(candidate, stream));
-  IREE_RETURN_IF_ERROR(iree_tune_loom_write_specialization_field_json(
-      benchmark_result->specialization, stream));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_sample_compilation_field_json(
+      benchmark_result->sample_compilation, stream));
   if (benchmark_result->has_sample_ordinal) {
-    IREE_RETURN_IF_ERROR(iree_tune_loom_write_shape_point_fields_json(
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_sample_fields_json(
         module, case_plan, benchmark_result->sample_ordinal, stream));
   }
   IREE_RETURN_IF_ERROR(
@@ -825,10 +825,10 @@ iree_status_t iree_tune_loom_append_profile_row(
   IREE_RETURN_IF_ERROR(iree_tune_loom_write_run_id_field_json(run, &stream));
   IREE_RETURN_IF_ERROR(
       iree_tune_loom_write_candidate_identity_json(candidate, &stream));
-  IREE_RETURN_IF_ERROR(iree_tune_loom_write_specialization_field_json(
-      benchmark_result->specialization, &stream));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_sample_compilation_field_json(
+      benchmark_result->sample_compilation, &stream));
   if (benchmark_result->has_sample_ordinal) {
-    IREE_RETURN_IF_ERROR(iree_tune_loom_write_shape_point_fields_json(
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_sample_fields_json(
         module, case_plan, benchmark_result->sample_ordinal, &stream));
   }
   IREE_RETURN_IF_ERROR(

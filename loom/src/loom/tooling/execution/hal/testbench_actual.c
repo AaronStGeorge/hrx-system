@@ -256,10 +256,9 @@ void loom_run_hal_testbench_actual_provider_initialize(
       .pipeline = options->pipeline,
       .test_module = options->test_module,
       .actual_invocation = options->actual_invocation,
-      .specialization_case_plan = options->specialization_case_plan,
-      .specialization_sample_ordinal = options->specialization_sample_ordinal,
-      .has_specialization_sample_ordinal =
-          options->has_specialization_sample_ordinal,
+      .sample_constant_case_plan = options->sample_constant_case_plan,
+      .sample_constant_ordinal = options->sample_constant_ordinal,
+      .has_sample_constant_ordinal = options->has_sample_constant_ordinal,
       .diagnostic_sink = options->diagnostic_sink,
       .max_errors = options->max_errors,
       .report = options->report,
@@ -377,10 +376,11 @@ static bool loom_run_hal_testbench_value_facts_from_sample_attr(
   }
 }
 
-static iree_status_t loom_run_hal_testbench_specialize_func_region_argument(
+static iree_status_t
+loom_run_hal_testbench_apply_sample_constant_to_func_region_argument(
     loom_module_t* module, loom_func_like_t func, uint8_t region_index,
     uint16_t argument_index, loom_value_facts_t facts,
-    iree_host_size_t* inout_specialized_count) {
+    iree_host_size_t* inout_sample_constant_count) {
   loom_region_t* region = loom_func_like_region(func, region_index);
   if (region == NULL || region->block_count == 0) {
     return iree_ok_status();
@@ -409,15 +409,15 @@ static iree_status_t loom_run_hal_testbench_specialize_func_region_argument(
                                            location, &replacement_id));
   IREE_RETURN_IF_ERROR(
       loom_value_replace_all_uses_with(module, argument_id, replacement_id));
-  *inout_specialized_count += 1;
+  *inout_sample_constant_count += 1;
   return iree_ok_status();
 }
 
-static iree_status_t loom_run_hal_testbench_specialize_sample(
+static iree_status_t loom_run_hal_testbench_apply_sample_constants(
     loom_run_hal_testbench_actual_provider_t* provider,
     iree_string_view_t entry_symbol) {
-  if (!provider->has_specialization_sample_ordinal ||
-      provider->specialization_case_plan == NULL) {
+  if (!provider->has_sample_constant_ordinal ||
+      provider->sample_constant_case_plan == NULL) {
     return iree_ok_status();
   }
 
@@ -432,18 +432,18 @@ static iree_status_t loom_run_hal_testbench_specialize_sample(
     }
     iree_host_size_t parameter_index = 0;
     if (!loom_run_hal_testbench_find_parameter_index_for_value(
-            provider->specialization_case_plan,
+            provider->sample_constant_case_plan,
             provider->actual_invocation->input_value_ids[input_index],
             &parameter_index)) {
       continue;
     }
     const iree_host_size_t parameter_sample_ordinal =
         loom_testbench_case_sample_parameter_ordinal(
-            provider->specialization_case_plan,
-            provider->specialization_sample_ordinal, parameter_index);
+            provider->sample_constant_case_plan,
+            provider->sample_constant_ordinal, parameter_index);
     loom_attribute_t sample_value = loom_attr_absent();
     IREE_RETURN_IF_ERROR(loom_testbench_parameter_sample_value(
-        &provider->specialization_case_plan->parameters[parameter_index],
+        &provider->sample_constant_case_plan->parameters[parameter_index],
         parameter_sample_ordinal, &sample_value));
     loom_value_facts_t facts = loom_value_facts_unknown();
     if (!loom_run_hal_testbench_value_facts_from_sample_attr(sample_value,
@@ -459,9 +459,9 @@ static iree_status_t loom_run_hal_testbench_specialize_sample(
         continue;
       }
       IREE_RETURN_IF_ERROR(
-          loom_run_hal_testbench_specialize_func_region_argument(
+          loom_run_hal_testbench_apply_sample_constant_to_func_region_argument(
               module, func, region_index, (uint16_t)input_index, facts,
-              &provider->specialized_argument_count));
+              &provider->sample_constant_argument_count));
     }
   }
   return iree_ok_status();
@@ -553,7 +553,7 @@ iree_status_t loom_run_hal_testbench_actual_provider_compile(
                                              &provider->compile_module));
   provider->compile_module_initialized = true;
   IREE_RETURN_IF_ERROR(
-      loom_run_hal_testbench_specialize_sample(provider, entry_symbol));
+      loom_run_hal_testbench_apply_sample_constants(provider, entry_symbol));
 
   loom_run_one_shot_options_t one_shot_options = {0};
   loom_run_one_shot_options_initialize(&one_shot_options);
@@ -868,10 +868,9 @@ iree_status_t loom_run_hal_testbench_actual_sequence_initialize(
         .pipeline = options->pipeline,
         .test_module = options->test_module,
         .actual_invocation = invocation,
-        .specialization_case_plan = options->specialization_case_plan,
-        .specialization_sample_ordinal = options->specialization_sample_ordinal,
-        .has_specialization_sample_ordinal =
-            options->has_specialization_sample_ordinal,
+        .sample_constant_case_plan = options->sample_constant_case_plan,
+        .sample_constant_ordinal = options->sample_constant_ordinal,
+        .has_sample_constant_ordinal = options->has_sample_constant_ordinal,
         .diagnostic_sink = options->diagnostic_sink,
         .max_errors = options->max_errors,
         .artifact_flags = options->artifact_flags,

@@ -32,17 +32,17 @@ iree_status_t iree_tune_loom_write_candidate_identity_json(
     const iree_tune_loom_candidate_identity_t* candidate,
     loom_output_stream_t* stream);
 
-// Writes a specialization field when |specialization| is non-empty.
-iree_status_t iree_tune_loom_write_specialization_field_json(
-    iree_string_view_t specialization, loom_output_stream_t* stream);
+// Writes a sample-compilation field when |sample_compilation| is non-empty.
+iree_status_t iree_tune_loom_write_sample_compilation_field_json(
+    iree_string_view_t sample_compilation, loom_output_stream_t* stream);
 
-// Writes shape fields for one concrete case sample when the case is shaped.
-iree_status_t iree_tune_loom_write_shape_point_fields_json(
+// Writes fields for one concrete parameterized case sample.
+iree_status_t iree_tune_loom_write_sample_fields_json(
     const loom_module_t* module, const loom_testbench_case_plan_t* case_plan,
     iree_host_size_t sample_ordinal, loom_output_stream_t* stream);
 
-// Writes shape-plan fields for a parameterized case.
-iree_status_t iree_tune_loom_write_shape_plan_fields_json(
+// Writes sample-plan fields for a parameterized case.
+iree_status_t iree_tune_loom_write_case_sample_plan_fields_json(
     const loom_module_t* module, const loom_testbench_case_plan_t* case_plan,
     loom_output_stream_t* stream);
 
@@ -100,7 +100,7 @@ iree_status_t iree_tune_loom_write_benchmark_result_json(
 // Appends the initial run row.
 iree_status_t iree_tune_loom_append_run_row(
     const iree_tune_loom_run_identity_t* run, bool dry_run,
-    iree_tune_loom_shape_specialization_mode_t shape_specialization_mode,
+    iree_tune_loom_sample_compilation_mode_t sample_compilation_mode,
     iree_string_builder_t* output);
 
 // Appends the selected HAL device row once per run.
@@ -162,7 +162,7 @@ iree_status_t iree_tune_loom_append_summary_row(
     iree_host_size_t failed_benchmark_count,
     iree_host_size_t correctness_sample_count,
     iree_host_size_t correctness_failed_sample_count, bool dry_run,
-    iree_tune_loom_shape_specialization_mode_t shape_specialization_mode,
+    iree_tune_loom_sample_compilation_mode_t sample_compilation_mode,
     iree_string_builder_t* output);
 
 #ifdef __cplusplus

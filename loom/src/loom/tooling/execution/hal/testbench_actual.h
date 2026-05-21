@@ -102,12 +102,12 @@ typedef struct loom_run_hal_testbench_actual_provider_options_t {
   const loom_module_t* test_module;
   // Actual invocation selected from the owning check.case.
   const loom_testbench_invocation_plan_t* actual_invocation;
-  // Optional case plan used for per-sample shape specialization.
-  const loom_testbench_case_plan_t* specialization_case_plan;
-  // Sample ordinal used when |has_specialization_sample_ordinal| is true.
-  iree_host_size_t specialization_sample_ordinal;
-  // True when per-sample shape specialization should be applied.
-  bool has_specialization_sample_ordinal;
+  // Optional case plan providing parameter values for sample constants.
+  const loom_testbench_case_plan_t* sample_constant_case_plan;
+  // Case sample ordinal used when |has_sample_constant_ordinal| is true.
+  iree_host_size_t sample_constant_ordinal;
+  // True when sample parameter values become compile-time constants.
+  bool has_sample_constant_ordinal;
   // Diagnostic sink used while parsing, lowering, and emitting the candidate.
   loom_diagnostic_sink_t diagnostic_sink;
   // Maximum diagnostics to emit before stopping. Zero uses the default.
@@ -137,12 +137,12 @@ typedef struct loom_run_hal_testbench_actual_provider_t {
   const loom_module_t* test_module;
   // Actual invocation selected from the owning check.case.
   const loom_testbench_invocation_plan_t* actual_invocation;
-  // Optional case plan used for per-sample shape specialization.
-  const loom_testbench_case_plan_t* specialization_case_plan;
-  // Sample ordinal used when |has_specialization_sample_ordinal| is true.
-  iree_host_size_t specialization_sample_ordinal;
-  // True when per-sample shape specialization should be applied.
-  bool has_specialization_sample_ordinal;
+  // Optional case plan providing parameter values for sample constants.
+  const loom_testbench_case_plan_t* sample_constant_case_plan;
+  // Case sample ordinal used when |has_sample_constant_ordinal| is true.
+  iree_host_size_t sample_constant_ordinal;
+  // True when sample parameter values become compile-time constants.
+  bool has_sample_constant_ordinal;
   // Diagnostic sink used while parsing, lowering, and emitting the candidate.
   loom_diagnostic_sink_t diagnostic_sink;
   // Maximum diagnostics to emit before stopping. Zero uses the default.
@@ -190,8 +190,9 @@ typedef struct loom_run_hal_testbench_actual_provider_t {
   bool prepared_candidate_initialized;
   // True when HAL candidate emission populated the caller's compile report.
   bool compile_report_available;
-  // Number of function-like region arguments replaced by constants.
-  iree_host_size_t specialized_argument_count;
+  // Number of function-like region arguments replaced by selected sample
+  // constants.
+  iree_host_size_t sample_constant_argument_count;
 } loom_run_hal_testbench_actual_provider_t;
 
 typedef struct loom_run_hal_testbench_actual_sequence_options_t {
@@ -211,12 +212,12 @@ typedef struct loom_run_hal_testbench_actual_sequence_options_t {
   const loom_module_t* test_module;
   // Case plan whose actual invocations are executed by the sequence.
   const loom_testbench_case_plan_t* case_plan;
-  // Optional case plan used for per-sample shape specialization.
-  const loom_testbench_case_plan_t* specialization_case_plan;
-  // Sample ordinal used when |has_specialization_sample_ordinal| is true.
-  iree_host_size_t specialization_sample_ordinal;
-  // True when per-sample shape specialization should be applied.
-  bool has_specialization_sample_ordinal;
+  // Optional case plan providing parameter values for sample constants.
+  const loom_testbench_case_plan_t* sample_constant_case_plan;
+  // Case sample ordinal used when |has_sample_constant_ordinal| is true.
+  iree_host_size_t sample_constant_ordinal;
+  // True when sample parameter values become compile-time constants.
+  bool has_sample_constant_ordinal;
   // Diagnostic sink used while parsing, lowering, and emitting candidates.
   loom_diagnostic_sink_t diagnostic_sink;
   // Maximum diagnostics to emit before stopping. Zero uses the default.

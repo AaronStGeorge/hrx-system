@@ -117,14 +117,14 @@ iree_status_t iree_tune_loom_write_candidate_identity_json(
       stream, ",\"candidate_index\":%" PRIhsz, candidate->candidate_index);
 }
 
-iree_status_t iree_tune_loom_write_specialization_field_json(
-    iree_string_view_t specialization, loom_output_stream_t* stream) {
-  if (iree_string_view_is_empty(specialization)) {
+iree_status_t iree_tune_loom_write_sample_compilation_field_json(
+    iree_string_view_t sample_compilation, loom_output_stream_t* stream) {
+  if (iree_string_view_is_empty(sample_compilation)) {
     return iree_ok_status();
   }
   IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, ",\"specialization\":"));
-  return loom_json_write_escaped_string(stream, specialization);
+      loom_output_stream_write_cstring(stream, ",\"sample_compilation\":"));
+  return loom_json_write_escaped_string(stream, sample_compilation);
 }
 
 static const char* iree_tune_loom_parameter_kind_name(
@@ -187,7 +187,7 @@ static iree_status_t iree_tune_loom_write_sample_attr_json(
   }
 }
 
-static iree_status_t iree_tune_loom_write_shape_parameter_map_json(
+static iree_status_t iree_tune_loom_write_case_parameter_map_json(
     const loom_module_t* module, const loom_testbench_case_plan_t* case_plan,
     iree_host_size_t sample_ordinal, bool write_ordinals,
     loom_output_stream_t* stream) {
@@ -219,7 +219,7 @@ static iree_status_t iree_tune_loom_write_shape_parameter_map_json(
   return loom_output_stream_write_cstring(stream, "}");
 }
 
-static iree_status_t iree_tune_loom_write_shape_point_json(
+static iree_status_t iree_tune_loom_write_sample_json(
     const loom_module_t* module, const loom_testbench_case_plan_t* case_plan,
     iree_host_size_t sample_ordinal, loom_output_stream_t* stream) {
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "{"));
@@ -229,30 +229,31 @@ static iree_status_t iree_tune_loom_write_shape_point_json(
       stream, ",\"parameter_count\":%" PRIhsz, case_plan->parameter_count));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"parameters\":"));
-  IREE_RETURN_IF_ERROR(iree_tune_loom_write_shape_parameter_map_json(
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_case_parameter_map_json(
       module, case_plan, sample_ordinal, /*write_ordinals=*/false, stream));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(stream, ",\"parameter_ordinals\":"));
-  IREE_RETURN_IF_ERROR(iree_tune_loom_write_shape_parameter_map_json(
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_case_parameter_map_json(
       module, case_plan, sample_ordinal, /*write_ordinals=*/true, stream));
   return loom_output_stream_write_cstring(stream, "}");
 }
 
-iree_status_t iree_tune_loom_write_shape_point_fields_json(
+iree_status_t iree_tune_loom_write_sample_fields_json(
     const loom_module_t* module, const loom_testbench_case_plan_t* case_plan,
     iree_host_size_t sample_ordinal, loom_output_stream_t* stream) {
   if (case_plan->parameter_count == 0) {
     return iree_ok_status();
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      stream, ",\"shape_id\":\"s%" PRIhsz "\",\"shape_index\":%" PRIhsz,
+      stream, ",\"sample_id\":\"s%" PRIhsz "\",\"sample_index\":%" PRIhsz,
       sample_ordinal, sample_ordinal));
-  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, ",\"shape\":"));
-  return iree_tune_loom_write_shape_point_json(module, case_plan,
-                                               sample_ordinal, stream);
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(stream, ",\"sample\":"));
+  return iree_tune_loom_write_sample_json(module, case_plan, sample_ordinal,
+                                          stream);
 }
 
-iree_status_t iree_tune_loom_write_shape_plan_fields_json(
+iree_status_t iree_tune_loom_write_case_sample_plan_fields_json(
     const loom_module_t* module, const loom_testbench_case_plan_t* case_plan,
     loom_output_stream_t* stream) {
   if (case_plan->parameter_count == 0) {
@@ -260,13 +261,13 @@ iree_status_t iree_tune_loom_write_shape_plan_fields_json(
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream,
-      ",\"shape_sample_count\":%" PRIhsz
-      ",\"shape_cartesian_sample_count\":%" PRIhsz
-      ",\"shape_sample_count_truncated\":%s",
+      ",\"case_sample_count\":%" PRIhsz
+      ",\"case_cartesian_sample_count\":%" PRIhsz
+      ",\"case_sample_count_truncated\":%s",
       case_plan->sample_count, case_plan->cartesian_sample_count,
       case_plan->sample_count_truncated ? "true" : "false"));
   IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(stream, ",\"shape_parameters\":["));
+      loom_output_stream_write_cstring(stream, ",\"case_parameters\":["));
   for (iree_host_size_t parameter_index = 0;
        parameter_index < case_plan->parameter_count; ++parameter_index) {
     const loom_testbench_parameter_plan_t* parameter =
@@ -291,7 +292,7 @@ iree_status_t iree_tune_loom_write_shape_plan_fields_json(
 
 iree_status_t iree_tune_loom_append_run_row(
     const iree_tune_loom_run_identity_t* run, bool dry_run,
-    iree_tune_loom_shape_specialization_mode_t shape_specialization_mode,
+    iree_tune_loom_sample_compilation_mode_t sample_compilation_mode,
     iree_string_builder_t* output) {
   loom_output_stream_t stream;
   loom_output_stream_for_builder(output, &stream);
@@ -331,10 +332,10 @@ iree_status_t iree_tune_loom_append_run_row(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       &stream, ",\"dry_run\":%s", dry_run ? "true" : "false"));
   IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, ",\"shape_specialization\":"));
+      loom_output_stream_write_cstring(&stream, ",\"sample_compilation\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      &stream, iree_tune_loom_shape_specialization_mode_name(
-                   shape_specialization_mode)));
+      &stream,
+      iree_tune_loom_sample_compilation_mode_name(sample_compilation_mode)));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}\n"));
   return iree_ok_status();
 }
@@ -1078,15 +1079,14 @@ static iree_status_t iree_tune_loom_append_candidate_artifact_stem(
   IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(stem, "_"));
   IREE_RETURN_IF_ERROR(iree_tune_loom_append_sanitized_path_component(
       candidate->candidate_id, stem));
-  if (!iree_string_view_is_empty(provider->specialization)) {
+  if (!iree_string_view_is_empty(provider->sample_compilation)) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(stem, "_"));
     IREE_RETURN_IF_ERROR(iree_tune_loom_append_sanitized_path_component(
-        provider->specialization, stem));
+        provider->sample_compilation, stem));
   }
-  if (provider->execution.has_specialization_sample_ordinal) {
+  if (provider->execution.has_sample_constant_ordinal) {
     IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
-        stem, "_sample%" PRIhsz,
-        provider->execution.specialization_sample_ordinal));
+        stem, "_sample%" PRIhsz, provider->execution.sample_constant_ordinal));
   }
   return iree_ok_status();
 }
@@ -1256,12 +1256,12 @@ static iree_status_t iree_tune_loom_append_compile_report_artifact_json(
   IREE_RETURN_IF_ERROR(iree_tune_loom_write_run_id_field_json(run, &stream));
   IREE_RETURN_IF_ERROR(
       iree_tune_loom_write_candidate_identity_json(candidate, &stream));
-  IREE_RETURN_IF_ERROR(iree_tune_loom_write_specialization_field_json(
-      provider->specialization, &stream));
-  if (provider->execution.has_specialization_sample_ordinal) {
-    IREE_RETURN_IF_ERROR(iree_tune_loom_write_shape_point_fields_json(
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_sample_compilation_field_json(
+      provider->sample_compilation, &stream));
+  if (provider->execution.has_sample_constant_ordinal) {
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_sample_fields_json(
         provider->execution.test_module, case_plan,
-        provider->execution.specialization_sample_ordinal, &stream));
+        provider->execution.sample_constant_ordinal, &stream));
   }
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"benchmark\":"));
@@ -1322,8 +1322,8 @@ static iree_status_t iree_tune_loom_append_compile_report_artifact_json(
       &stream, ",\"diagnostic_remark_count\":%" PRIhsz,
       provider->diagnostics.remark_count));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      &stream, ",\"specialized_argument_count\":%" PRIhsz,
-      provider->execution.specialized_argument_count));
+      &stream, ",\"sample_constant_argument_count\":%" PRIhsz,
+      provider->execution.sample_constant_argument_count));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"diagnostics\":"));
   IREE_RETURN_IF_ERROR(iree_tune_loom_write_diagnostic_array_json(
@@ -1452,8 +1452,8 @@ iree_status_t iree_tune_loom_write_benchmark_result_json(
       loom_output_stream_write_cstring(stream, ",\"status\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
       stream, iree_tune_loom_benchmark_result_status(benchmark_result)));
-  IREE_RETURN_IF_ERROR(iree_tune_loom_write_specialization_field_json(
-      benchmark_result->specialization, stream));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_sample_compilation_field_json(
+      benchmark_result->sample_compilation, stream));
   if (benchmark_result->has_sample_ordinal) {
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_format(stream, ",\"sample_ordinal\":%" PRIhsz,
@@ -1603,12 +1603,12 @@ iree_status_t iree_tune_loom_append_compile_row(
   IREE_RETURN_IF_ERROR(iree_tune_loom_write_run_id_field_json(run, &stream));
   IREE_RETURN_IF_ERROR(
       iree_tune_loom_write_candidate_identity_json(candidate, &stream));
-  IREE_RETURN_IF_ERROR(iree_tune_loom_write_specialization_field_json(
-      provider->specialization, &stream));
-  if (provider->execution.has_specialization_sample_ordinal) {
-    IREE_RETURN_IF_ERROR(iree_tune_loom_write_shape_point_fields_json(
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_sample_compilation_field_json(
+      provider->sample_compilation, &stream));
+  if (provider->execution.has_sample_constant_ordinal) {
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_sample_fields_json(
         provider->execution.test_module, case_plan,
-        provider->execution.specialization_sample_ordinal, &stream));
+        provider->execution.sample_constant_ordinal, &stream));
   }
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"benchmark\":"));
@@ -1651,8 +1651,8 @@ iree_status_t iree_tune_loom_append_compile_row(
       &stream, ",\"diagnostic_remark_count\":%" PRIhsz,
       provider->diagnostics.remark_count));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
-      &stream, ",\"specialized_argument_count\":%" PRIhsz,
-      provider->execution.specialized_argument_count));
+      &stream, ",\"sample_constant_argument_count\":%" PRIhsz,
+      provider->execution.sample_constant_argument_count));
   if (!iree_string_view_is_empty(provider->compile_report_artifact_path)) {
     IREE_RETURN_IF_ERROR(
         loom_output_stream_write_cstring(&stream, ",\"compile_report_path\":"));
@@ -1709,10 +1709,10 @@ iree_status_t iree_tune_loom_append_benchmark_result(
   IREE_RETURN_IF_ERROR(iree_tune_loom_write_run_id_field_json(run, &stream));
   IREE_RETURN_IF_ERROR(
       iree_tune_loom_write_candidate_identity_json(candidate, &stream));
-  IREE_RETURN_IF_ERROR(iree_tune_loom_write_specialization_field_json(
-      benchmark_result->specialization, &stream));
+  IREE_RETURN_IF_ERROR(iree_tune_loom_write_sample_compilation_field_json(
+      benchmark_result->sample_compilation, &stream));
   if (benchmark_result->has_sample_ordinal) {
-    IREE_RETURN_IF_ERROR(iree_tune_loom_write_shape_point_fields_json(
+    IREE_RETURN_IF_ERROR(iree_tune_loom_write_sample_fields_json(
         module, case_plan, benchmark_result->sample_ordinal, &stream));
   }
   IREE_RETURN_IF_ERROR(
@@ -1772,7 +1772,7 @@ iree_status_t iree_tune_loom_append_summary_row(
     iree_host_size_t failed_benchmark_count,
     iree_host_size_t correctness_sample_count,
     iree_host_size_t correctness_failed_sample_count, bool dry_run,
-    iree_tune_loom_shape_specialization_mode_t shape_specialization_mode,
+    iree_tune_loom_sample_compilation_mode_t sample_compilation_mode,
     iree_string_builder_t* output) {
   IREE_RETURN_IF_ERROR(
       iree_string_builder_append_cstring(output, "{\"row\":\"summary\""));
@@ -1782,10 +1782,10 @@ iree_status_t iree_tune_loom_append_summary_row(
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       output, ",\"dry_run\":%s", dry_run ? "true" : "false"));
   IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, ",\"shape_specialization\":"));
+      loom_output_stream_write_cstring(&stream, ",\"sample_compilation\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      &stream, iree_tune_loom_shape_specialization_mode_name(
-                   shape_specialization_mode)));
+      &stream,
+      iree_tune_loom_sample_compilation_mode_name(sample_compilation_mode)));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(
       output, ",\"planned_case_count\":%" PRIhsz, planned_case_count));
   IREE_RETURN_IF_ERROR(iree_string_builder_append_format(

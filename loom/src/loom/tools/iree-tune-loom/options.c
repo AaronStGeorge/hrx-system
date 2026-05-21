@@ -57,54 +57,53 @@ iree_status_t iree_tune_loom_parse_artifact_bundle_policy(
       (int)value.size, value.data);
 }
 
-iree_status_t iree_tune_loom_parse_shape_specialization_mode(
+iree_status_t iree_tune_loom_parse_sample_compilation_mode(
     iree_string_view_t value,
-    iree_tune_loom_shape_specialization_mode_t* out_mode) {
+    iree_tune_loom_sample_compilation_mode_t* out_mode) {
   value = iree_string_view_trim(value);
-  if (iree_string_view_equal(value, IREE_SV("dynamic"))) {
-    *out_mode = IREE_TUNE_LOOM_SHAPE_SPECIALIZATION_DYNAMIC;
+  if (iree_string_view_equal(value, IREE_SV("once"))) {
+    *out_mode = IREE_TUNE_LOOM_SAMPLE_COMPILATION_ONCE;
     return iree_ok_status();
   }
-  if (iree_string_view_equal(value, IREE_SV("per_sample")) ||
-      iree_string_view_equal(value, IREE_SV("per-sample"))) {
-    *out_mode = IREE_TUNE_LOOM_SHAPE_SPECIALIZATION_PER_SAMPLE;
+  if (iree_string_view_equal(value, IREE_SV("per_sample"))) {
+    *out_mode = IREE_TUNE_LOOM_SAMPLE_COMPILATION_PER_SAMPLE;
     return iree_ok_status();
   }
   if (iree_string_view_equal(value, IREE_SV("both"))) {
-    *out_mode = IREE_TUNE_LOOM_SHAPE_SPECIALIZATION_BOTH;
+    *out_mode = IREE_TUNE_LOOM_SAMPLE_COMPILATION_BOTH;
     return iree_ok_status();
   }
   return iree_make_status(
       IREE_STATUS_INVALID_ARGUMENT,
-      "--shape_specialization must be one of dynamic, per_sample, or both; got "
+      "--sample_compilation must be one of once, per_sample, or both; got "
       "'%.*s'",
       (int)value.size, value.data);
 }
 
-iree_string_view_t iree_tune_loom_shape_specialization_mode_name(
-    iree_tune_loom_shape_specialization_mode_t mode) {
+iree_string_view_t iree_tune_loom_sample_compilation_mode_name(
+    iree_tune_loom_sample_compilation_mode_t mode) {
   switch (mode) {
-    case IREE_TUNE_LOOM_SHAPE_SPECIALIZATION_DYNAMIC:
-      return IREE_SV("dynamic");
-    case IREE_TUNE_LOOM_SHAPE_SPECIALIZATION_PER_SAMPLE:
+    case IREE_TUNE_LOOM_SAMPLE_COMPILATION_ONCE:
+      return IREE_SV("once");
+    case IREE_TUNE_LOOM_SAMPLE_COMPILATION_PER_SAMPLE:
       return IREE_SV("per_sample");
-    case IREE_TUNE_LOOM_SHAPE_SPECIALIZATION_BOTH:
+    case IREE_TUNE_LOOM_SAMPLE_COMPILATION_BOTH:
       return IREE_SV("both");
     default:
       return IREE_SV("unknown");
   }
 }
 
-bool iree_tune_loom_shape_specialization_runs_dynamic(
-    iree_tune_loom_shape_specialization_mode_t mode) {
-  return mode == IREE_TUNE_LOOM_SHAPE_SPECIALIZATION_DYNAMIC ||
-         mode == IREE_TUNE_LOOM_SHAPE_SPECIALIZATION_BOTH;
+bool iree_tune_loom_sample_compilation_runs_once(
+    iree_tune_loom_sample_compilation_mode_t mode) {
+  return mode == IREE_TUNE_LOOM_SAMPLE_COMPILATION_ONCE ||
+         mode == IREE_TUNE_LOOM_SAMPLE_COMPILATION_BOTH;
 }
 
-bool iree_tune_loom_shape_specialization_runs_per_sample(
-    iree_tune_loom_shape_specialization_mode_t mode) {
-  return mode == IREE_TUNE_LOOM_SHAPE_SPECIALIZATION_PER_SAMPLE ||
-         mode == IREE_TUNE_LOOM_SHAPE_SPECIALIZATION_BOTH;
+bool iree_tune_loom_sample_compilation_runs_per_sample(
+    iree_tune_loom_sample_compilation_mode_t mode) {
+  return mode == IREE_TUNE_LOOM_SAMPLE_COMPILATION_PER_SAMPLE ||
+         mode == IREE_TUNE_LOOM_SAMPLE_COMPILATION_BOTH;
 }
 
 iree_status_t iree_tune_loom_parse_interleave_mode(

@@ -156,8 +156,8 @@ typedef struct iree_tune_loom_benchmark_result_t {
   bool executed;
   // True when no measured or warmup sample failed expectations.
   bool passed;
-  // Shape specialization label for this benchmark result.
-  iree_string_view_t specialization;
+  // Sample compilation label for this benchmark result.
+  iree_string_view_t sample_compilation;
   // True when |sample_ordinal| identifies the measured sample.
   bool has_sample_ordinal;
   // Concrete case sample ordinal measured by dispatch_complete.
@@ -190,8 +190,8 @@ typedef struct iree_tune_loom_hal_actual_provider_t {
   iree_tune_loom_hal_context_t* context;
   // Shared HAL actual provider owning compilation and dispatch state.
   loom_run_hal_testbench_actual_provider_t execution;
-  // Shape specialization label for rows emitted from this provider.
-  iree_string_view_t specialization;
+  // Sample compilation label for rows emitted from this provider.
+  iree_string_view_t sample_compilation;
   // Structured diagnostics emitted while compiling this candidate.
   iree_tune_loom_diagnostic_capture_t diagnostics;
   // Structured compile report populated while emitting this candidate.
@@ -219,12 +219,12 @@ typedef struct iree_tune_loom_hal_actual_provider_t {
 typedef struct iree_tune_loom_dispatch_comparison_candidate_t {
   // Selected benchmark/case/policy identity for this comparison member.
   const iree_tune_loom_selected_benchmark_t* selection;
-  // Shape specialization label for this prepared candidate.
-  iree_string_view_t specialization;
-  // True when |specialization_sample_ordinal| is the only comparable shape.
-  bool has_specialization_sample_ordinal;
-  // Benchmark-local sample ordinal used for per-sample specialization.
-  iree_host_size_t specialization_sample_ordinal;
+  // Sample compilation label for this prepared candidate.
+  iree_string_view_t sample_compilation;
+  // True when |sample_constant_ordinal| is the only comparable sample.
+  bool has_sample_constant_ordinal;
+  // Benchmark-local sample ordinal used for per-sample compilation.
+  iree_host_size_t sample_constant_ordinal;
   // First benchmark-local sample ordinal included in the comparison window.
   iree_host_size_t begin_sample;
   // One-past-end benchmark-local sample ordinal included in the comparison

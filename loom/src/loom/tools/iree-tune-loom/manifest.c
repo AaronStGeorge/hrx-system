@@ -212,7 +212,7 @@ static iree_status_t iree_tune_loom_append_artifact_bundle_manifest_json(
     const iree_tune_loom_hal_context_t* hal_context,
     iree_string_view_t source_text, iree_string_view_t command_line_json,
     bool dry_run,
-    iree_tune_loom_shape_specialization_mode_t shape_specialization_mode,
+    iree_tune_loom_sample_compilation_mode_t sample_compilation_mode,
     iree_allocator_t allocator, iree_string_builder_t* manifest) {
   loom_output_stream_t stream;
   loom_output_stream_for_builder(manifest, &stream);
@@ -246,10 +246,10 @@ static iree_status_t iree_tune_loom_append_artifact_bundle_manifest_json(
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, dry_run ? "true" : "false"));
   IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, ",\"shape_specialization\":"));
+      loom_output_stream_write_cstring(&stream, ",\"sample_compilation\":"));
   IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
-      &stream, iree_tune_loom_shape_specialization_mode_name(
-                   shape_specialization_mode)));
+      &stream,
+      iree_tune_loom_sample_compilation_mode_name(sample_compilation_mode)));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"paths\":{"));
   IREE_RETURN_IF_ERROR(
@@ -326,7 +326,7 @@ iree_status_t iree_tune_loom_write_artifact_bundle_manifest(
     const iree_tune_loom_hal_context_t* hal_context,
     iree_string_view_t source_text, iree_string_view_t command_line_json,
     bool dry_run,
-    iree_tune_loom_shape_specialization_mode_t shape_specialization_mode,
+    iree_tune_loom_sample_compilation_mode_t sample_compilation_mode,
     iree_allocator_t allocator) {
   if (!bundle->enabled) {
     return iree_ok_status();
@@ -336,7 +336,7 @@ iree_status_t iree_tune_loom_write_artifact_bundle_manifest(
   iree_string_builder_initialize(allocator, &manifest);
   iree_status_t status = iree_tune_loom_append_artifact_bundle_manifest_json(
       bundle, run, hal_context, source_text, command_line_json, dry_run,
-      shape_specialization_mode, allocator, &manifest);
+      sample_compilation_mode, allocator, &manifest);
   if (iree_status_is_ok(status)) {
     status = loom_tooling_write_output_file(
         bundle->manifest_path, iree_string_builder_view(&manifest), allocator);
