@@ -24,13 +24,21 @@
 extern "C" {
 #endif
 
+typedef enum loom_wasm_module_binary_flag_bits_e {
+  // Module defines one default linear memory section.
+  LOOM_WASM_MODULE_BINARY_FLAG_DEFINES_MEMORY = 1u << 0,
+} loom_wasm_module_binary_flag_bits_t;
+
+// Bitset of loom_wasm_module_binary_flag_bits_t values.
+typedef uint32_t loom_wasm_module_binary_flags_t;
+
 typedef struct loom_wasm_module_binary_t {
   // Allocator-owned Wasm module binary bytes.
   uint8_t* data;
   // Number of bytes in |data|.
   iree_host_size_t data_length;
-  // True when the module defines one default linear memory.
-  bool has_memory;
+  // Structural facts represented in the emitted module binary.
+  loom_wasm_module_binary_flags_t flags;
 } loom_wasm_module_binary_t;
 
 // Releases storage owned by |module|. Safe to call on a zero-initialized

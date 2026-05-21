@@ -199,6 +199,8 @@ typedef struct loom_wasm_emit_state_t {
   loom_wasm_local_layout_t locals;
   // Mutable body payload writer.
   loom_wasm_binary_writer_t writer;
+  // Structural facts observed while emitting the function body.
+  loom_wasm_function_body_flags_t flags;
 } loom_wasm_emit_state_t;
 
 static const iree_string_view_t kWasmAttrI32ValueName = IREE_SVL("i32_value");
@@ -808,6 +810,31 @@ static iree_status_t loom_wasm_emit_descriptor_packet(
   }
 }
 
+static iree_status_t loom_wasm_record_descriptor_flags(
+    loom_wasm_emit_state_t* state, const loom_low_descriptor_t* descriptor) {
+  if (descriptor->schedule_class_id == LOOM_LOW_SCHEDULE_CLASS_NONE) {
+    return iree_ok_status();
+  }
+  const loom_low_descriptor_set_t* descriptor_set =
+      state->allocation->target.descriptor_set;
+  const uint16_t schedule_class_id = descriptor->schedule_class_id;
+  if (schedule_class_id >= descriptor_set->schedule_class_count) {
+    return iree_make_status(
+        IREE_STATUS_OUT_OF_RANGE,
+        "Wasm descriptor references invalid schedule class %" PRIu16,
+        schedule_class_id);
+  }
+  const loom_low_schedule_class_t* schedule_class =
+      &descriptor_set->schedule_classes[schedule_class_id];
+  const loom_low_schedule_class_flags_t memory_flags =
+      LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD |
+      LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_STORE;
+  if (iree_any_bit_set(schedule_class->flags, memory_flags)) {
+    state->flags |= LOOM_WASM_FUNCTION_BODY_FLAG_USES_MEMORY;
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_wasm_emit_low_copy(loom_wasm_emit_state_t* state,
                                              const loom_op_t* op) {
   IREE_RETURN_IF_ERROR(
@@ -1122,6 +1149,8 @@ static iree_status_t loom_wasm_emit_op(loom_wasm_emit_state_t* state,
                             "Wasm descriptor packet '%.*s' did not resolve",
                             (int)packet.key.size, packet.key.data);
   }
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_record_descriptor_flags(state, packet.descriptor));
   return loom_wasm_emit_descriptor_packet(state, op, packet.descriptor);
 }
 
@@ -1284,6 +1313,7 @@ iree_status_t loom_wasm_emit_function_body(
         .body_length = state.writer.length,
         .parameter_count = state.locals.parameter_count,
         .local_count = (uint32_t)state.locals.local_type_count,
+        .flags = state.flags,
     };
     output_writer.data = NULL;
   }

@@ -18,7 +18,6 @@
 #include "loom/target/emit/wasm/function_body.h"
 #include "loom/target/emit/wasm/types.h"
 #include "loom/target/registers.h"
-#include "loom/util/walk.h"
 
 enum {
   LOOM_WASM_SECTION_CUSTOM = 0,
@@ -48,20 +47,6 @@ enum {
 enum {
   LOOM_WASM_FUNCTION_INDEX_NONE = UINT32_MAX,
 };
-
-enum loom_wasm_function_fact_bits_e {
-  LOOM_WASM_FUNCTION_FACT_USES_MEMORY = 1u << 0,
-};
-typedef uint32_t loom_wasm_function_facts_t;
-
-enum {
-  LOOM_WASM_FUNCTION_FACT_ALL = LOOM_WASM_FUNCTION_FACT_USES_MEMORY,
-};
-
-enum loom_wasm_module_fact_bits_e {
-  LOOM_WASM_MODULE_FACT_USES_MEMORY = 1u << 0,
-};
-typedef uint32_t loom_wasm_module_facts_t;
 
 typedef struct loom_wasm_function_type_t {
   // Arena-owned Wasm value types for function parameters.
@@ -93,8 +78,6 @@ typedef struct loom_wasm_module_function_t {
   loom_wasm_function_type_t type;
   // Size-prefixed Wasm code-section body bytes.
   loom_wasm_function_body_t body;
-  // Structural facts collected from the low function body.
-  loom_wasm_function_facts_t facts;
 } loom_wasm_module_function_t;
 
 typedef struct loom_wasm_module_layout_t {
@@ -112,18 +95,9 @@ typedef struct loom_wasm_module_layout_t {
   iree_host_size_t type_count;
   // Number of function exports.
   iree_host_size_t export_count;
-  // Module-level facts accumulated across all functions.
-  loom_wasm_module_facts_t facts;
+  // Structural facts represented in the emitted module binary.
+  loom_wasm_module_binary_flags_t flags;
 } loom_wasm_module_layout_t;
-
-typedef struct loom_wasm_function_fact_collection_t {
-  // Module containing the walked low function.
-  const loom_module_t* module;
-  // Resolved target descriptor set for descriptor-backed low packets.
-  const loom_low_resolved_target_t* target;
-  // Accumulated facts for the walked function body.
-  loom_wasm_function_facts_t facts;
-} loom_wasm_function_fact_collection_t;
 
 static iree_status_t loom_wasm_module_write_section(
     loom_wasm_binary_writer_t* module_writer, uint8_t section_id,
@@ -198,7 +172,7 @@ static iree_status_t loom_wasm_module_read_value_type(
   const loom_type_t type = loom_module_value_type(module, value_id);
   if (!loom_low_type_is_register(type)) {
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
+        IREE_STATUS_FAILED_PRECONDITION,
         "Wasm signature value %u is not declared as a register value",
         (unsigned)value_id);
   }
@@ -207,7 +181,7 @@ static iree_status_t loom_wasm_module_read_value_type(
     iree_string_view_t descriptor_set_key = loom_low_descriptor_set_string(
         descriptor_set, descriptor_set->key_string_offset);
     return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
+        IREE_STATUS_FAILED_PRECONDITION,
         "Wasm signature value %u does not use descriptor set '%.*s'",
         (unsigned)value_id, (int)descriptor_set_key.size,
         descriptor_set_key.data);
@@ -215,7 +189,7 @@ static iree_status_t loom_wasm_module_read_value_type(
   const uint32_t unit_count = loom_low_register_type_unit_count(type);
   if (unit_count != 1) {
     return iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
+        IREE_STATUS_FAILED_PRECONDITION,
         "Wasm signature value %u declares %u register units",
         (unsigned)value_id, unit_count);
   }
@@ -250,7 +224,7 @@ static iree_status_t loom_wasm_module_build_function_type(
   loom_func_like_t function =
       loom_func_like_cast(frame->module, (loom_op_t*)frame->function_op);
   if (!loom_func_like_isa(function)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "Wasm module emission requires a func-like op");
   }
 
@@ -309,86 +283,6 @@ static iree_status_t loom_wasm_module_intern_function_type(
   return iree_ok_status();
 }
 
-static iree_status_t loom_wasm_function_facts_record_descriptor(
-    const loom_low_descriptor_set_t* descriptor_set,
-    const loom_low_descriptor_t* descriptor,
-    loom_wasm_function_facts_t* facts) {
-  if (descriptor->schedule_class_id == LOOM_LOW_SCHEDULE_CLASS_NONE) {
-    return iree_ok_status();
-  }
-  const uint16_t schedule_class_id = descriptor->schedule_class_id;
-  if (schedule_class_id >= descriptor_set->schedule_class_count) {
-    return iree_make_status(
-        IREE_STATUS_OUT_OF_RANGE,
-        "Wasm descriptor references invalid schedule class %" PRIu16,
-        schedule_class_id);
-  }
-  const loom_low_schedule_class_t* schedule_class =
-      &descriptor_set->schedule_classes[schedule_class_id];
-  const loom_low_schedule_class_flags_t memory_flags =
-      LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_LOAD |
-      LOOM_LOW_SCHEDULE_CLASS_FLAG_MAY_STORE;
-  if (iree_any_bit_set(schedule_class->flags, memory_flags)) {
-    *facts |= LOOM_WASM_FUNCTION_FACT_USES_MEMORY;
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_wasm_function_facts_walk_op(
-    void* user_data, loom_op_t* op, const loom_walk_context_t* context,
-    loom_walk_result_t* out_result) {
-  (void)context;
-  loom_wasm_function_fact_collection_t* collection =
-      (loom_wasm_function_fact_collection_t*)user_data;
-  *out_result = LOOM_WALK_CONTINUE;
-
-  loom_low_resolved_descriptor_packet_t packet = {0};
-  IREE_RETURN_IF_ERROR(loom_low_resolve_descriptor_packet(
-      collection->module, collection->target, op, &packet));
-  if (packet.kind == LOOM_LOW_DESCRIPTOR_PACKET_NONE) {
-    return iree_ok_status();
-  }
-  if (packet.descriptor == NULL) {
-    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
-                            "Wasm descriptor packet '%.*s' did not resolve",
-                            (int)packet.key.size, packet.key.data);
-  }
-  IREE_RETURN_IF_ERROR(loom_wasm_function_facts_record_descriptor(
-      collection->target->descriptor_set, packet.descriptor,
-      &collection->facts));
-  if (iree_all_bits_set(collection->facts, LOOM_WASM_FUNCTION_FACT_ALL)) {
-    *out_result = LOOM_WALK_ABORT;
-  }
-  return iree_ok_status();
-}
-
-static iree_status_t loom_wasm_module_collect_function_facts(
-    const loom_low_emission_frame_t* frame, iree_arena_allocator_t* arena,
-    loom_wasm_function_facts_t* out_facts) {
-  *out_facts = 0;
-  loom_func_like_t function =
-      loom_func_like_cast(frame->module, (loom_op_t*)frame->function_op);
-  if (!loom_func_like_isa(function)) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "Wasm module facts require a func-like op");
-  }
-
-  loom_wasm_function_fact_collection_t collection = {
-      .module = frame->module,
-      .target = &frame->target,
-  };
-  loom_walk_result_t walk_result = LOOM_WALK_CONTINUE;
-  IREE_RETURN_IF_ERROR(
-      loom_walk_function(frame->module, function, LOOM_WALK_PRE_ORDER,
-                         (loom_walk_callback_t){
-                             .fn = loom_wasm_function_facts_walk_op,
-                             .user_data = &collection,
-                         },
-                         arena, &walk_result));
-  *out_facts = collection.facts;
-  return iree_ok_status();
-}
-
 static iree_status_t loom_wasm_module_build_function_frame(
     loom_module_t* module, loom_op_t* function_op,
     const loom_low_emission_frame_options_t* options,
@@ -404,7 +298,7 @@ static iree_status_t loom_wasm_module_build_function_frame(
   if (out_frame->target.descriptor_set !=
       loom_wasm_core_simd128_descriptor_set()) {
     return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
+        IREE_STATUS_FAILED_PRECONDITION,
         "Wasm module emission requires descriptor set 'wasm.core.simd128'");
   }
   return iree_ok_status();
@@ -420,11 +314,6 @@ static iree_status_t loom_wasm_module_prepare_function(
       &function->frame, arena, &function->type));
   IREE_RETURN_IF_ERROR(loom_wasm_module_intern_function_type(
       layout, &function->type, &function->type_index));
-  IREE_RETURN_IF_ERROR(loom_wasm_module_collect_function_facts(
-      &function->frame, arena, &function->facts));
-  if (iree_any_bit_set(function->facts, LOOM_WASM_FUNCTION_FACT_USES_MEMORY)) {
-    layout->facts |= LOOM_WASM_MODULE_FACT_USES_MEMORY;
-  }
   return iree_ok_status();
 }
 
@@ -435,7 +324,7 @@ static iree_status_t loom_wasm_module_collect_functions(
       .module = module,
   };
   if (module->symbols.count == 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "Wasm module emission requires low functions");
   }
 
@@ -498,7 +387,7 @@ static iree_status_t loom_wasm_module_collect_functions(
   }
 
   if (out_layout->function_count == 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "Wasm module emission requires at least one "
                             "low.func.def");
   }
@@ -510,11 +399,11 @@ static iree_status_t loom_wasm_module_resolve_function_index(
   const loom_wasm_module_layout_t* layout =
       (const loom_wasm_module_layout_t*)user_data;
   if (!loom_symbol_ref_is_valid(callee) || callee.module_id != 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "Wasm direct call uses a non-local callee symbol");
   }
   if (callee.symbol_id >= layout->module->symbols.count) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "Wasm direct call uses an out-of-range callee "
                             "symbol %" PRIu16,
                             callee.symbol_id);
@@ -527,7 +416,7 @@ static iree_status_t loom_wasm_module_resolve_function_index(
   }
   const iree_string_view_t callee_name = loom_wasm_module_symbol_name(
       layout->module, &layout->module->symbols.entries[callee.symbol_id]);
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+  return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                           "Wasm direct call callee '@%.*s' is not defined in "
                           "this module",
                           (int)callee_name.size, callee_name.data);
@@ -544,6 +433,10 @@ static iree_status_t loom_wasm_module_emit_function_bodies(
     IREE_RETURN_IF_ERROR(
         loom_wasm_emit_function_body(&function->frame.allocation, &body_options,
                                      allocator, &function->body));
+    if (iree_any_bit_set(function->body.flags,
+                         LOOM_WASM_FUNCTION_BODY_FLAG_USES_MEMORY)) {
+      layout->flags |= LOOM_WASM_MODULE_BINARY_FLAG_DEFINES_MEMORY;
+    }
   }
   return iree_ok_status();
 }
@@ -843,7 +736,8 @@ iree_status_t loom_wasm_emit_module(
                                                      allocator);
   }
   if (iree_status_is_ok(status) &&
-      iree_any_bit_set(layout.facts, LOOM_WASM_MODULE_FACT_USES_MEMORY)) {
+      iree_any_bit_set(layout.flags,
+                       LOOM_WASM_MODULE_BINARY_FLAG_DEFINES_MEMORY)) {
     status = loom_wasm_module_write_memory_section(&module_writer, allocator);
   }
   if (iree_status_is_ok(status)) {
@@ -862,8 +756,7 @@ iree_status_t loom_wasm_emit_module(
     *out_module = (loom_wasm_module_binary_t){
         .data = module_writer.data,
         .data_length = module_writer.length,
-        .has_memory =
-            iree_any_bit_set(layout.facts, LOOM_WASM_MODULE_FACT_USES_MEMORY),
+        .flags = layout.flags,
     };
     module_writer.data = NULL;
   }

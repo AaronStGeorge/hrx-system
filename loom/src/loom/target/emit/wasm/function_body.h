@@ -22,6 +22,14 @@
 extern "C" {
 #endif
 
+typedef enum loom_wasm_function_body_flag_bits_e {
+  // Body contains at least one descriptor-backed memory access.
+  LOOM_WASM_FUNCTION_BODY_FLAG_USES_MEMORY = 1u << 0,
+} loom_wasm_function_body_flag_bits_t;
+
+// Bitset of loom_wasm_function_body_flag_bits_t values.
+typedef uint32_t loom_wasm_function_body_flags_t;
+
 typedef struct loom_wasm_function_body_t {
   // Allocator-owned size-prefixed Wasm function-body bytes.
   uint8_t* data;
@@ -33,6 +41,8 @@ typedef struct loom_wasm_function_body_t {
   uint32_t parameter_count;
   // Number of Wasm local indices including parameters.
   uint32_t local_count;
+  // Structural facts observed while emitting the function body.
+  loom_wasm_function_body_flags_t flags;
 } loom_wasm_function_body_t;
 
 // Resolves a direct low.func.call callee to a Wasm function index owned by the

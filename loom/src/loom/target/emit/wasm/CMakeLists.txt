@@ -102,7 +102,6 @@ loom_cc_library(
     loom::src::loom::ops::op_defs
     loom::src::loom::target::arch::wasm::descriptors
     loom::src::loom::target::registers
-    loom::src::loom::util::walk
   PUBLIC
 )
 
