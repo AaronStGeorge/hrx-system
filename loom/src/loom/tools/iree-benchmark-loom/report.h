@@ -109,6 +109,18 @@ iree_status_t iree_benchmark_loom_append_device_row(
     iree_benchmark_loom_device_row_state_t* state,
     iree_string_builder_t* output);
 
+// Appends a selected benchmark plan row.
+iree_status_t iree_benchmark_loom_append_plan_row(
+    const iree_benchmark_loom_run_identity_t* run,
+    const iree_benchmark_loom_candidate_identity_t* candidate,
+    const loom_module_t* module,
+    const loom_testbench_benchmark_plan_t* benchmark_plan,
+    const loom_testbench_case_plan_t* case_plan,
+    const iree_benchmark_loom_benchmark_policy_t* policy,
+    const iree_benchmark_loom_options_t* options,
+    iree_benchmark_loom_sample_compilation_mode_t sample_compilation_mode,
+    iree_allocator_t allocator, iree_string_builder_t* plan_output);
+
 // Writes target, listing, and HAL executable artifacts for a candidate.
 iree_status_t iree_benchmark_loom_write_compiled_artifacts(
     const iree_benchmark_loom_run_identity_t* run,

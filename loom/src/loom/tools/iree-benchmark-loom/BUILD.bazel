@@ -106,6 +106,7 @@ loom_cc_library(
     name = "main",
     srcs = [
         "diagnostics.c",
+        "event.c",
         "help.c",
         "main.c",
         "manifest.c",
@@ -120,6 +121,7 @@ loom_cc_library(
     ],
     hdrs = [
         "diagnostics.h",
+        "event.h",
         "help.h",
         "main.h",
         "manifest.h",
@@ -170,6 +172,17 @@ loom_cc_library(
         "//runtime/src/iree/tooling/profile:counter",
         "//runtime/src/iree/tooling/profile:summary",
         "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_test(
+    name = "event_test",
+    srcs = ["event_test.cc"],
+    deps = [
+        ":main",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

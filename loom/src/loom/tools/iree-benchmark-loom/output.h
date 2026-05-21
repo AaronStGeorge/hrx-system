@@ -196,6 +196,12 @@ iree_string_view_t iree_benchmark_loom_effective_profile_artifacts_dir(
     iree_string_view_t explicit_artifacts_dir,
     const iree_benchmark_loom_artifact_bundle_t* bundle);
 
+// Appends the effective profile artifact directory for |run| and profile data.
+iree_status_t iree_benchmark_loom_append_effective_profile_artifacts_dir(
+    const iree_benchmark_loom_run_identity_t* run,
+    iree_hal_device_profiling_data_families_t profile_data_families,
+    iree_string_builder_t* artifact_dir);
+
 // Initializes a file provider used by check.file.read/write materialization.
 iree_status_t iree_benchmark_loom_file_provider_initialize(
     iree_string_view_t filename, iree_string_view_t run_id,

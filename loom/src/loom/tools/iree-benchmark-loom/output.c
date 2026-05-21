@@ -504,32 +504,6 @@ static iree_status_t iree_benchmark_loom_join_bundle_path(
   return iree_benchmark_loom_join_path(bundle_dir, child, allocator, out_path);
 }
 
-void iree_benchmark_loom_artifact_bundle_deinitialize(
-    iree_benchmark_loom_artifact_bundle_t* bundle) {
-  if (bundle == NULL) {
-    return;
-  }
-  for (iree_host_size_t i = 0; i < bundle->file_entry_count; ++i) {
-    iree_allocator_free(bundle->host_allocator, bundle->file_entries[i].path);
-  }
-  iree_allocator_free(bundle->host_allocator, bundle->file_entries);
-  iree_allocator_free(bundle->host_allocator,
-                      bundle->hal_executable_dir_storage);
-  iree_allocator_free(bundle->host_allocator,
-                      bundle->target_artifact_dir_storage);
-  iree_allocator_free(bundle->host_allocator,
-                      bundle->target_listing_dir_storage);
-  iree_allocator_free(bundle->host_allocator,
-                      bundle->compile_report_dir_storage);
-  iree_allocator_free(bundle->host_allocator,
-                      bundle->profile_artifacts_dir_storage);
-  iree_allocator_free(bundle->host_allocator, bundle->file_output_dir_storage);
-  iree_allocator_free(bundle->host_allocator, bundle->manifest_path_storage);
-  iree_allocator_free(bundle->host_allocator, bundle->results_path_storage);
-  iree_allocator_free(bundle->host_allocator, bundle->dir_storage);
-  *bundle = (iree_benchmark_loom_artifact_bundle_t){0};
-}
-
 iree_status_t iree_benchmark_loom_artifact_bundle_initialize(
     const iree_benchmark_loom_artifact_bundle_options_t* options,
     iree_allocator_t allocator,
@@ -625,6 +599,32 @@ iree_status_t iree_benchmark_loom_artifact_bundle_initialize(
   return status;
 }
 
+void iree_benchmark_loom_artifact_bundle_deinitialize(
+    iree_benchmark_loom_artifact_bundle_t* bundle) {
+  if (bundle == NULL) {
+    return;
+  }
+  for (iree_host_size_t i = 0; i < bundle->file_entry_count; ++i) {
+    iree_allocator_free(bundle->host_allocator, bundle->file_entries[i].path);
+  }
+  iree_allocator_free(bundle->host_allocator, bundle->file_entries);
+  iree_allocator_free(bundle->host_allocator,
+                      bundle->hal_executable_dir_storage);
+  iree_allocator_free(bundle->host_allocator,
+                      bundle->target_artifact_dir_storage);
+  iree_allocator_free(bundle->host_allocator,
+                      bundle->target_listing_dir_storage);
+  iree_allocator_free(bundle->host_allocator,
+                      bundle->compile_report_dir_storage);
+  iree_allocator_free(bundle->host_allocator,
+                      bundle->profile_artifacts_dir_storage);
+  iree_allocator_free(bundle->host_allocator, bundle->file_output_dir_storage);
+  iree_allocator_free(bundle->host_allocator, bundle->manifest_path_storage);
+  iree_allocator_free(bundle->host_allocator, bundle->results_path_storage);
+  iree_allocator_free(bundle->host_allocator, bundle->dir_storage);
+  *bundle = (iree_benchmark_loom_artifact_bundle_t){0};
+}
+
 bool iree_benchmark_loom_artifact_bundle_wants_debug_artifacts(
     const iree_benchmark_loom_artifact_bundle_t* bundle) {
   return bundle != NULL && bundle->enabled &&
@@ -658,6 +658,27 @@ iree_string_view_t iree_benchmark_loom_effective_profile_artifacts_dir(
   }
   return bundle->enabled ? bundle->profile_artifacts_dir
                          : iree_string_view_empty();
+}
+
+iree_status_t iree_benchmark_loom_append_effective_profile_artifacts_dir(
+    const iree_benchmark_loom_run_identity_t* run,
+    iree_hal_device_profiling_data_families_t profile_data_families,
+    iree_string_builder_t* artifact_dir) {
+  if (!iree_string_view_is_empty(run->profile_artifacts_dir)) {
+    return iree_string_builder_append_string(artifact_dir,
+                                             run->profile_artifacts_dir);
+  }
+  if (!iree_benchmark_loom_profile_data_needs_artifact_data(
+          profile_data_families)) {
+    return iree_ok_status();
+  }
+
+  IREE_RETURN_IF_ERROR(
+      iree_string_builder_append_string(artifact_dir, run->file_output_dir));
+  if (!iree_string_view_ends_with(run->file_output_dir, IREE_SV("/"))) {
+    IREE_RETURN_IF_ERROR(iree_string_builder_append_cstring(artifact_dir, "/"));
+  }
+  return iree_string_builder_append_cstring(artifact_dir, "profiles");
 }
 
 iree_status_t iree_benchmark_loom_open_file_for_read(

@@ -15,6 +15,7 @@ loom_cc_library(
     main
   HDRS
     "diagnostics.h"
+    "event.h"
     "help.h"
     "main.h"
     "manifest.h"
@@ -29,6 +30,7 @@ loom_cc_library(
     "work_plan.h"
   SRCS
     "diagnostics.c"
+    "event.c"
     "help.c"
     "main.c"
     "manifest.c"
@@ -78,6 +80,18 @@ loom_cc_library(
     iree::tooling::profile::summary
     iree::vm
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    event_test
+  SRCS
+    "event_test.cc"
+  DEPS
+    ::main
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(
