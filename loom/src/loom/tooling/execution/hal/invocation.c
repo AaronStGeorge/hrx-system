@@ -97,9 +97,7 @@ void loom_run_hal_dispatch_batch_deinitialize(
   for (iree_host_size_t i = 0; i < batch->binding_list_count; ++i) {
     iree_vm_list_release(batch->binding_lists[i]);
   }
-  if (batch->binding_lists != NULL) {
-    iree_allocator_free(batch->host_allocator, batch->binding_lists);
-  }
+  iree_allocator_free(batch->host_allocator, batch->binding_lists);
   iree_hal_command_buffer_release(batch->command_buffer);
   iree_hal_semaphore_release(batch->semaphore);
   *batch = (loom_run_hal_dispatch_batch_t){0};

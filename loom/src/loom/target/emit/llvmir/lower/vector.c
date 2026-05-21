@@ -62,7 +62,7 @@ static iree_status_t loom_llvmir_lowering_repeated_i32_vector_constant(
     status = loom_llvmir_lowering_i32_vector_constant(state, values, lane_count,
                                                       out_value_id);
   }
-  if (values) iree_allocator_free(state->allocator, values);
+  iree_allocator_free(state->allocator, values);
   return status;
 }
 
@@ -135,7 +135,7 @@ static iree_status_t loom_llvmir_lowering_shuffle_mask(
     status = loom_llvmir_lowering_i32_vector_constant(
         state, values, result_lane_count, out_mask);
   }
-  if (values) iree_allocator_free(state->allocator, values);
+  iree_allocator_free(state->allocator, values);
   return status;
 }
 
@@ -223,7 +223,7 @@ iree_status_t loom_llvmir_lowering_lower_vector_constant(
       status = loom_llvmir_lowering_map_value(state, result_id, result);
     }
   }
-  if (values) iree_allocator_free(state->allocator, values);
+  iree_allocator_free(state->allocator, values);
   return status;
 }
 

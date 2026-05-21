@@ -991,9 +991,7 @@ void loom_run_hal_testbench_actual_sequence_deinitialize(
     loom_run_hal_testbench_actual_provider_deinitialize(
         &sequence->providers[i]);
   }
-  if (sequence->providers != NULL) {
-    iree_allocator_free(sequence->host_allocator, sequence->providers);
-  }
+  iree_allocator_free(sequence->host_allocator, sequence->providers);
   *sequence = (loom_run_hal_testbench_actual_sequence_t){0};
 }
 

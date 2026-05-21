@@ -13,6 +13,7 @@
 #include "iree/base/internal/path.h"
 #include "iree/hal/api.h"
 #include "iree/tooling/device_util.h"
+#include "loom/tooling/execution/benchmark.h"
 #include "loom/tooling/io/file.h"
 #include "loom/tools/iree-benchmark-loom/diagnostics.h"
 #include "loom/tools/iree-benchmark-loom/module_query.h"
@@ -290,6 +291,42 @@ iree_status_t iree_benchmark_loom_write_case_sample_plan_fields_json(
     IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(stream, "}"));
   }
   return loom_output_stream_write_cstring(stream, "]");
+}
+
+iree_status_t iree_benchmark_loom_append_sample_row(
+    const iree_benchmark_loom_run_identity_t* run,
+    const iree_benchmark_loom_candidate_identity_t* candidate,
+    const loom_module_t* module,
+    const loom_testbench_benchmark_plan_t* benchmark_plan,
+    const loom_testbench_case_plan_t* case_plan,
+    iree_string_view_t sample_compilation,
+    iree_host_size_t benchmark_sample_ordinal,
+    iree_host_size_t case_sample_ordinal,
+    const loom_testbench_case_sample_result_t* sample_result,
+    iree_string_builder_t* sample_output) {
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(sample_output, &stream);
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, "{\"row\":\"sample\""));
+  IREE_RETURN_IF_ERROR(
+      iree_benchmark_loom_write_run_id_field_json(run, &stream));
+  IREE_RETURN_IF_ERROR(
+      iree_benchmark_loom_write_candidate_identity_json(candidate, &stream));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_sample_compilation_field_json(
+      sample_compilation, &stream));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_sample_fields_json(
+      module, case_plan, case_sample_ordinal, &stream));
+  if (benchmark_sample_ordinal != case_sample_ordinal) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+        &stream, ",\"benchmark_sample_ordinal\":%" PRIhsz,
+        benchmark_sample_ordinal));
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"sample\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_testbench_case_sample_result_write_json(sample_result, &stream));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}\n"));
+  return iree_ok_status();
 }
 
 iree_status_t iree_benchmark_loom_append_run_row(
@@ -1926,6 +1963,154 @@ iree_status_t iree_benchmark_loom_append_benchmark_result(
       correctness_sample_count, correctness_failed_sample_count, &stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}\n"));
   return iree_ok_status();
+}
+
+iree_status_t iree_benchmark_loom_append_benchmark_repetition_row(
+    const iree_benchmark_loom_run_identity_t* run,
+    const iree_benchmark_loom_dispatch_comparison_candidate_t* candidate,
+    const iree_benchmark_loom_candidate_identity_t* baseline,
+    iree_string_view_t comparison_group, iree_string_view_t method,
+    iree_host_size_t order_index, iree_host_size_t repetition_index,
+    char schedule_token, bool profile_suppressed,
+    const iree_benchmark_loom_benchmark_result_t* benchmark_result,
+    iree_string_builder_t* benchmark_output) {
+  const iree_benchmark_loom_selected_benchmark_t* selection =
+      candidate->selection;
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(benchmark_output, &stream);
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+      &stream, "{\"row\":\"benchmark.repetition\""));
+  IREE_RETURN_IF_ERROR(
+      iree_benchmark_loom_write_run_id_field_json(run, &stream));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_candidate_identity_json(
+      &selection->identity, &stream));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_sample_compilation_field_json(
+      candidate->sample_compilation, &stream));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_sample_fields_json(
+      candidate->provider.execution.test_module, selection->case_plan,
+      benchmark_result->sample_ordinal, &stream));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"comparison_group\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_string(&stream, comparison_group));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"baseline_candidate_id\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_string(&stream, baseline->candidate_id));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"method\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(&stream, method));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"order_index\":%" PRIhsz, order_index));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"repetition_index\":%" PRIhsz, repetition_index));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"schedule_token\":\"%c\"", schedule_token));
+  if (profile_suppressed) {
+    IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(
+        &stream, ",\"profile_suppressed_for_interleave\":true"));
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"benchmark_result\":"));
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_benchmark_result_json(
+      selection->benchmark_plan, selection->case_plan, &selection->policy,
+      benchmark_result, candidate->correctness_sample_count,
+      candidate->correctness_failed_sample_count, &stream));
+  return loom_output_stream_write_cstring(&stream, "}\n");
+}
+
+iree_status_t iree_benchmark_loom_append_comparison_row(
+    const iree_benchmark_loom_run_identity_t* run,
+    const iree_benchmark_loom_dispatch_comparison_candidate_t* baseline,
+    const iree_benchmark_loom_dispatch_comparison_candidate_t* candidate,
+    iree_string_view_t comparison_group, iree_string_view_t method,
+    iree_string_builder_t* benchmark_output) {
+  if (baseline->sample_count == 0 || candidate->sample_count == 0) {
+    return iree_ok_status();
+  }
+
+  loom_run_benchmark_timing_stats_t baseline_p50 = {0};
+  loom_run_benchmark_timing_stats_t candidate_p50 = {0};
+  loom_run_benchmark_timing_stats_t baseline_p90 = {0};
+  loom_run_benchmark_timing_stats_t candidate_p90 = {0};
+  IREE_RETURN_IF_ERROR(loom_run_benchmark_compute_timing_stats(
+      baseline->p50_samples, baseline->sample_count, &baseline_p50));
+  IREE_RETURN_IF_ERROR(loom_run_benchmark_compute_timing_stats(
+      candidate->p50_samples, candidate->sample_count, &candidate_p50));
+  IREE_RETURN_IF_ERROR(loom_run_benchmark_compute_timing_stats(
+      baseline->p90_samples, baseline->sample_count, &baseline_p90));
+  IREE_RETURN_IF_ERROR(loom_run_benchmark_compute_timing_stats(
+      candidate->p90_samples, candidate->sample_count, &candidate_p90));
+
+  const double baseline_p50_ns = (double)baseline_p50.p50_ns;
+  const double candidate_p50_ns = (double)candidate_p50.p50_ns;
+  const double ratio_p50 =
+      baseline_p50_ns == 0.0 ? 0.0 : candidate_p50_ns / baseline_p50_ns;
+  const double speedup_p50 =
+      candidate_p50_ns == 0.0 ? 0.0 : baseline_p50_ns / candidate_p50_ns;
+  const double baseline_p90_ns = (double)baseline_p90.p50_ns;
+  const double candidate_p90_ns = (double)candidate_p90.p50_ns;
+  const double ratio_p90 =
+      baseline_p90_ns == 0.0 ? 0.0 : candidate_p90_ns / baseline_p90_ns;
+  const double speedup_p90 =
+      candidate_p90_ns == 0.0 ? 0.0 : baseline_p90_ns / candidate_p90_ns;
+
+  loom_output_stream_t stream;
+  loom_output_stream_for_builder(benchmark_output, &stream);
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, "{\"row\":\"comparison\""));
+  IREE_RETURN_IF_ERROR(
+      iree_benchmark_loom_write_run_id_field_json(run, &stream));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"comparison_group\":"));
+  IREE_RETURN_IF_ERROR(
+      loom_json_write_escaped_string(&stream, comparison_group));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"method\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(&stream, method));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"baseline_candidate_id\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      &stream, baseline->selection->identity.candidate_id));
+  IREE_RETURN_IF_ERROR(
+      loom_output_stream_write_cstring(&stream, ",\"candidate_id\":"));
+  IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
+      &stream, candidate->selection->identity.candidate_id));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"baseline_repetition_count\":%" PRIhsz,
+      baseline->sample_count));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"candidate_repetition_count\":%" PRIhsz,
+      candidate->sample_count));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"baseline_p50_ns\":%" PRIi64, baseline_p50.p50_ns));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"candidate_p50_ns\":%" PRIi64, candidate_p50.p50_ns));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"baseline_p90_ns\":%" PRIi64, baseline_p90.p50_ns));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"candidate_p90_ns\":%" PRIi64, candidate_p90.p50_ns));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"baseline_p50_spread_ppm\":%" PRIu64,
+      baseline_p50.p90_to_p50_delta_ppm));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"candidate_p50_spread_ppm\":%" PRIu64,
+      candidate_p50.p90_to_p50_delta_ppm));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"baseline_p90_spread_ppm\":%" PRIu64,
+      baseline_p90.p90_to_p50_delta_ppm));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"candidate_p90_spread_ppm\":%" PRIu64,
+      candidate_p90.p90_to_p50_delta_ppm));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"ratio_p50\":%.6f", ratio_p50));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"speedup_p50\":%.6f", speedup_p50));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"ratio_p90\":%.6f", ratio_p90));
+  IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
+      &stream, ",\"speedup_p90\":%.6f", speedup_p90));
+  return loom_output_stream_write_cstring(&stream, "}\n");
 }
 
 iree_status_t iree_benchmark_loom_append_failure_row(

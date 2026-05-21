@@ -1154,13 +1154,6 @@ static iree_status_t loom_llvmir_bitcode_inline_asm_value_id(
                           "function");
 }
 
-static void loom_llvmir_bitcode_function_value_map_deinitialize(
-    loom_llvmir_bitcode_function_value_map_t* map) {
-  if (map->value_ids != NULL) {
-    iree_allocator_free(iree_allocator_system(), map->value_ids);
-  }
-}
-
 static iree_status_t loom_llvmir_bitcode_function_value_map_initialize(
     const loom_llvmir_function_t* function,
     loom_llvmir_bitcode_function_value_map_t* out_map) {
@@ -1276,9 +1269,15 @@ static iree_status_t loom_llvmir_bitcode_function_value_map_initialize(
     }
   }
   if (!iree_status_is_ok(status)) {
-    loom_llvmir_bitcode_function_value_map_deinitialize(out_map);
+    iree_allocator_free(iree_allocator_system(), out_map->value_ids);
+    *out_map = (loom_llvmir_bitcode_function_value_map_t){0};
   }
   return status;
+}
+
+static void loom_llvmir_bitcode_function_value_map_deinitialize(
+    loom_llvmir_bitcode_function_value_map_t* map) {
+  iree_allocator_free(iree_allocator_system(), map->value_ids);
 }
 
 static iree_status_t loom_llvmir_bitcode_map_value(
@@ -3770,8 +3769,6 @@ iree_status_t loom_llvmir_bitcode_write_module(
   if (iree_status_is_ok(status)) {
     status = loom_llvmir_bitstream_writer_finish(&bitstream);
   }
-  if (string_table_storage != NULL) {
-    iree_allocator_free(iree_allocator_system(), string_table_storage);
-  }
+  iree_allocator_free(iree_allocator_system(), string_table_storage);
   return status;
 }

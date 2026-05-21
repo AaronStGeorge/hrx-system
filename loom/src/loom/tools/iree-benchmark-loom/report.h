@@ -96,6 +96,19 @@ iree_status_t iree_benchmark_loom_write_benchmark_result_json(
     iree_host_size_t correctness_failed_sample_count,
     loom_output_stream_t* stream);
 
+// Appends one correctness sample result row.
+iree_status_t iree_benchmark_loom_append_sample_row(
+    const iree_benchmark_loom_run_identity_t* run,
+    const iree_benchmark_loom_candidate_identity_t* candidate,
+    const loom_module_t* module,
+    const loom_testbench_benchmark_plan_t* benchmark_plan,
+    const loom_testbench_case_plan_t* case_plan,
+    iree_string_view_t sample_compilation,
+    iree_host_size_t benchmark_sample_ordinal,
+    iree_host_size_t case_sample_ordinal,
+    const loom_testbench_case_sample_result_t* sample_result,
+    iree_string_builder_t* sample_output);
+
 // Appends the initial run row.
 iree_status_t iree_benchmark_loom_append_run_row(
     const iree_benchmark_loom_run_identity_t* run, bool dry_run,
@@ -157,6 +170,25 @@ iree_status_t iree_benchmark_loom_append_benchmark_result(
     const iree_benchmark_loom_benchmark_result_t* benchmark_result,
     iree_host_size_t correctness_sample_count,
     iree_host_size_t correctness_failed_sample_count,
+    iree_string_builder_t* benchmark_output);
+
+// Appends one interleaved comparison benchmark repetition row.
+iree_status_t iree_benchmark_loom_append_benchmark_repetition_row(
+    const iree_benchmark_loom_run_identity_t* run,
+    const iree_benchmark_loom_dispatch_comparison_candidate_t* candidate,
+    const iree_benchmark_loom_candidate_identity_t* baseline,
+    iree_string_view_t comparison_group, iree_string_view_t method,
+    iree_host_size_t order_index, iree_host_size_t repetition_index,
+    char schedule_token, bool profile_suppressed,
+    const iree_benchmark_loom_benchmark_result_t* benchmark_result,
+    iree_string_builder_t* benchmark_output);
+
+// Appends one aggregate interleaved comparison row.
+iree_status_t iree_benchmark_loom_append_comparison_row(
+    const iree_benchmark_loom_run_identity_t* run,
+    const iree_benchmark_loom_dispatch_comparison_candidate_t* baseline,
+    const iree_benchmark_loom_dispatch_comparison_candidate_t* candidate,
+    iree_string_view_t comparison_group, iree_string_view_t method,
     iree_string_builder_t* benchmark_output);
 
 // Appends a parse, verify, planning, or infrastructure failure row.
