@@ -25,6 +25,10 @@ iree_runtime_cc_library(
     defines = [
         "IREE_HAVE_VMVX_MODULE",
     ],
+    target_compatible_with = select({
+        "//runtime/config/hal:executable_loader_vmvx_module": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
     textual_hdrs = [
         "exports.inl",
     ],

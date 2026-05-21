@@ -4,41 +4,12 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
-)
-
-#===------------------------------------------------------------------------===#
-# Configuration
-#===------------------------------------------------------------------------===#
-
-string_flag(
-    name = "tracing_provider",
-    build_setting_default = "disabled",
-    values = [
-        "disabled",
-        "console",
-        "tracy",
-    ],
-)
-
-config_setting(
-    name = "_console_enable",
-    flag_values = {
-        ":tracing_provider": "console",
-    },
-)
-
-config_setting(
-    name = "_tracy_enable",
-    flag_values = {
-        ":tracing_provider": "tracy",
-    },
 )
 
 iree_runtime_cc_library(
@@ -48,8 +19,8 @@ iree_runtime_cc_library(
 alias(
     name = "provider",
     actual = select({
-        ":_console_enable": ":console",
-        ":_tracy_enable": ":tracy",
+        "//runtime/config/base/tracing:provider_console": ":console",
+        "//runtime/config/base/tracing:provider_tracy": ":tracy",
         "//conditions:default": ":disabled",
     }),
 )
@@ -84,6 +55,10 @@ iree_runtime_cc_library(
         "IREE_TRACING_PROVIDER_H=\\\"iree/base/tracing/tracy.h\\\"",
         "IREE_TRACING_MODE=2",
     ],
+    target_compatible_with = select({
+        "//runtime/config/base/tracing:provider_tracy": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
     deps = [
         "//runtime/src/iree/base:core_headers",
         "@tracy_client//:runtime",
