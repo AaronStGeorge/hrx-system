@@ -18,8 +18,6 @@
 #include "iree/hal/api.h"
 #include "iree/vm/api.h"
 #include "loom/ir/module.h"
-#include "loom/ops/op_registry.h"
-#include "loom/ops/special_values.h"
 #include "loom/tooling/compile/pipeline.h"
 #include "loom/tooling/execution/compile_report_capture.h"
 #include "loom/tooling/execution/hal/artifact.h"
@@ -43,6 +41,7 @@
 #include "loom/tools/iree-benchmark-loom/options.h"
 #include "loom/tools/iree-benchmark-loom/output.h"
 #include "loom/tools/iree-benchmark-loom/report.h"
+#include "loom/tools/iree-benchmark-loom/session.h"
 #include "loom/tools/iree-benchmark-loom/snapshot.h"
 #include "loom/tools/iree-benchmark-loom/testbench.h"
 #include "loom/tools/iree-benchmark-loom/work_plan.h"
@@ -357,18 +356,6 @@ static iree_status_t iree_benchmark_loom_options_from_flags(
         "--file_output_dir must name a directory; '-' is reserved for stdout");
   }
   return iree_ok_status();
-}
-
-static iree_status_t iree_benchmark_loom_register_context(
-    void* user_data, loom_context_t* context) {
-  const iree_benchmark_loom_configuration_t* configuration =
-      (const iree_benchmark_loom_configuration_t*)user_data;
-  IREE_RETURN_IF_ERROR(loom_op_registry_register_all_dialects(context));
-  if (configuration->register_context.fn == NULL) {
-    return iree_ok_status();
-  }
-  return configuration->register_context.fn(
-      configuration->register_context.user_data, context);
 }
 
 static iree_status_t iree_benchmark_loom_compile_report_options_initialize(
@@ -2309,16 +2296,8 @@ int iree_benchmark_loom_main(
   }
 
   if (iree_status_is_ok(status)) {
-    loom_run_session_options_t session_options = {0};
-    loom_run_session_options_initialize(&session_options);
-    session_options.host_allocator = allocator;
-    session_options.register_context = (loom_run_register_context_callback_t){
-        .fn = iree_benchmark_loom_register_context,
-        .user_data = (void*)configuration,
-    };
-    session_options.initialize_low_descriptor_registry =
-        configuration->initialize_low_descriptor_registry;
-    status = loom_run_session_initialize(&session_options, &session);
+    status = iree_benchmark_loom_session_initialize(configuration, allocator,
+                                                    &session);
   }
   const iree_string_view_t input_path =
       argc < 2 ? iree_string_view_empty() : iree_make_cstring_view(argv[1]);
