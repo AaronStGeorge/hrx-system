@@ -89,7 +89,7 @@ func.template<demo.reject> @wrong_type(%value: f32) -> (f32) {
 }
 
 func.def public @entry(%arg: i32) -> (i32) {
-  // ERROR@+1: LOWERING/045 {op_name="func.apply", phase_name="select-templates", contract_key="demo.reject", reason="all providers were rejected by signature constraints"}
+  // ERROR@+1: LOWERING/045 {op_name="func.apply", phase_name="select-templates", contract_key="demo.reject", reason="all providers were rejected by signature or predicate constraints"}
   %result = func.apply<demo.reject>(%arg) : (i32) -> (i32)
   func.return %result : i32
 }
@@ -173,6 +173,138 @@ func.template<demo.maybe> priority(1) @fallback(%m: index, %arg: tensor<[%m]xf32
 func.def public @entry(%n: index, %arg: tensor<[%n]xf32>) -> (tensor<[%n]xf32>) {
   %result = func.apply<demo.maybe>(%n, %arg) : (index, tensor<[%n]xf32>) -> (tensor<[%n]xf32>)
   func.return %result : tensor<[%n]xf32>
+}
+
+// ====
+
+// RUN: pass select-templates
+
+func.template<demo.predicates> priority(10) @aligned(%m: index) -> (index) where [range(%m, 64, 64), mul(%m, 16)] {
+  func.return %m : index
+}
+
+func.template<demo.predicates> priority(1) @fallback(%m: index) -> (index) {
+  func.return %m : index
+}
+
+func.def public @entry(%n: index) -> (index) {
+  %aligned = index.assume %n [range(%n, 64, 64), mul(%n, 16)] : index
+  %result = func.apply<demo.predicates>(%aligned) : (index) -> (index)
+  func.return %result : index
+}
+
+// ----
+func.template<demo.predicates> priority(10) @aligned(%m: index) -> (index) where [range(%m, 64, 64), mul(%m, 16)] {
+  func.return %m : index
+}
+
+func.def public @entry(%n: index) -> (index) {
+  %aligned = index.assume %n [range(%n, 64, 64), mul(%n, 16)] : index
+  %result = func.call inline @aligned(%aligned) : (index) -> (index)
+  func.return %result : index
+}
+
+// ====
+
+// Function-level where predicates seed facts for entry block arguments, so
+// callers do not need a redundant index.assume before func.apply.
+// RUN: pass select-templates
+
+func.template<demo.function_where_fact_seed> priority(10) @aligned(%m: index) -> (index) where [mul(%m, 16)] {
+  func.return %m : index
+}
+
+func.template<demo.function_where_fact_seed> priority(1) @fallback(%m: index) -> (index) {
+  func.return %m : index
+}
+
+func.def public @entry(%n: index) -> (index) where [mul(%n, 16)] {
+  %result = func.apply<demo.function_where_fact_seed>(%n) : (index) -> (index)
+  func.return %result : index
+}
+
+// ----
+func.template<demo.function_where_fact_seed> priority(10) @aligned(%m: index) -> (index) where [mul(%m, 16)] {
+  func.return %m : index
+}
+
+func.def public @entry(%n: index) -> (index) where [mul(%n, 16)] {
+  %result = func.call inline @aligned(%n) : (index) -> (index)
+  func.return %result : index
+}
+
+// ====
+
+// RUN: pass select-templates
+
+func.template<demo.rejected_predicate> priority(10) @aligned(%m: index) -> (index) where [mul(%m, 16)] {
+  func.return %m : index
+}
+
+func.template<demo.rejected_predicate> priority(1) @fallback(%m: index) -> (index) {
+  func.return %m : index
+}
+
+func.def public @entry() -> (index) {
+  %n = index.constant 15 : index
+  %result = func.apply<demo.rejected_predicate>(%n) : (index) -> (index)
+  func.return %result : index
+}
+
+// ----
+func.template<demo.rejected_predicate> priority(1) @fallback(%m: index) -> (index) {
+  func.return %m : index
+}
+
+func.def public @entry() -> (index) {
+  %n = index.constant 15 : index
+  %result = func.call inline @fallback(%n) : (index) -> (index)
+  func.return %result : index
+}
+
+// ====
+
+// RUN: pass select-templates
+
+func.template<demo.same_value> priority(10) @same(%m: index, %n: index) -> (index) where [eq(%m, %n)] {
+  func.return %m : index
+}
+
+func.template<demo.same_value> priority(1) @fallback(%m: index, %n: index) -> (index) {
+  func.return %m : index
+}
+
+func.def public @entry(%n: index) -> (index) {
+  %result = func.apply<demo.same_value>(%n, %n) : (index, index) -> (index)
+  func.return %result : index
+}
+
+// ----
+func.template<demo.same_value> priority(10) @same(%m: index, %n: index) -> (index) where [eq(%m, %n)] {
+  func.return %m : index
+}
+
+func.def public @entry(%n: index) -> (index) {
+  %result = func.call inline @same(%n, %n) : (index, index) -> (index)
+  func.return %result : index
+}
+
+// ====
+
+// RUN: pass select-templates{mode=final}
+
+func.template<demo.final_maybe> priority(10) @large(%m: index) -> (index) where [ge(%m, 1024)] {
+  func.return %m : index
+}
+
+func.template<demo.final_maybe> priority(1) @fallback(%m: index) -> (index) {
+  func.return %m : index
+}
+
+func.def public @entry(%n: index) -> (index) {
+  // ERROR@+1: LOWERING/045 {op_name="func.apply", phase_name="select-templates", contract_key="demo.final_maybe", reason="selection depends on unresolved provider predicate facts"}
+  %result = func.apply<demo.final_maybe>(%n) : (index) -> (index)
+  func.return %result : index
 }
 
 // ====

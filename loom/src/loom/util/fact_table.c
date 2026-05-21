@@ -1741,6 +1741,43 @@ loom_value_fact_table_seeded_buffer_memory_space(const loom_module_t* module,
   return LOOM_VALUE_FACT_MEMORY_SPACE_UNKNOWN;
 }
 
+static bool loom_value_fact_table_block_contains_arg(const loom_block_t* block,
+                                                     loom_value_id_t value_id) {
+  for (uint16_t i = 0; i < block->arg_count; ++i) {
+    if (loom_block_arg_id(block, i) == value_id) return true;
+  }
+  return false;
+}
+
+static iree_status_t loom_value_fact_table_apply_func_predicates(
+    loom_value_fact_table_t* table, const loom_module_t* module,
+    const loom_block_t* block, loom_op_t* parent_op) {
+  loom_func_like_t function = loom_func_like_cast(module, parent_op);
+  if (!loom_func_like_isa(function)) return iree_ok_status();
+  loom_region_t* body = loom_func_like_body(function);
+  if (!body || block != loom_region_const_entry_block(body)) {
+    return iree_ok_status();
+  }
+
+  uint16_t predicate_count = 0;
+  const loom_predicate_t* predicates =
+      loom_func_like_predicates(function, &predicate_count);
+  for (uint16_t i = 0; i < predicate_count; ++i) {
+    const loom_predicate_t* predicate = &predicates[i];
+    if (predicate->arg_tags[0] != LOOM_PRED_ARG_VALUE) continue;
+    int64_t raw_value_id = predicate->args[0];
+    if (raw_value_id < 0 || raw_value_id > UINT32_MAX) continue;
+    loom_value_id_t value_id = (loom_value_id_t)raw_value_id;
+    if (!loom_value_fact_table_block_contains_arg(block, value_id)) {
+      continue;
+    }
+    loom_value_facts_t facts = loom_value_fact_table_lookup(table, value_id);
+    loom_value_facts_apply_predicate(&facts, predicate);
+    IREE_RETURN_IF_ERROR(loom_value_fact_table_define(table, value_id, facts));
+  }
+  return iree_ok_status();
+}
+
 static iree_status_t loom_value_fact_table_seed_block_args(
     loom_value_fact_table_t* table, const loom_module_t* module,
     const loom_block_t* block, loom_op_t* parent_op) {
@@ -1769,6 +1806,8 @@ static iree_status_t loom_value_fact_table_seed_block_args(
         table, module, type, /*result_ids=*/NULL, /*result_count=*/0,
         /*result_facts=*/NULL, /*out_changed=*/NULL));
   }
+  IREE_RETURN_IF_ERROR(loom_value_fact_table_apply_func_predicates(
+      table, module, block, parent_op));
   return loom_value_fact_table_seed_loop_iv_arg(table, module, block,
                                                 parent_op);
 }

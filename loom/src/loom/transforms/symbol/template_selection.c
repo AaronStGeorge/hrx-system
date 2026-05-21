@@ -15,11 +15,13 @@
 #include "loom/analysis/symbol_liveness.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
+#include "loom/ir/facts.h"
 #include "loom/ir/module.h"
 #include "loom/ops/func/ops.h"
 #include "loom/ops/op_defs.h"
 #include "loom/pass/pipeline.h"
 #include "loom/pass/registry.h"
+#include "loom/pass/value_facts.h"
 #include "loom/rewrite/rewriter.h"
 #include "loom/transforms/symbol/symbol_pruning.h"
 
@@ -183,6 +185,26 @@ typedef enum loom_template_provider_feasibility_e {
   LOOM_TEMPLATE_PROVIDER_MATCH = 2,
 } loom_template_provider_feasibility_t;
 
+typedef enum loom_template_predicate_arg_kind_e {
+  LOOM_TEMPLATE_PREDICATE_ARG_INVALID = 0,
+  LOOM_TEMPLATE_PREDICATE_ARG_CONST = 1,
+  LOOM_TEMPLATE_PREDICATE_ARG_VALUE = 2,
+} loom_template_predicate_arg_kind_t;
+
+typedef struct loom_template_predicate_arg_t {
+  // Resolved argument category.
+  loom_template_predicate_arg_kind_t kind;
+
+  // Apply-site SSA value when kind is VALUE.
+  loom_value_id_t value_id;
+
+  // Integer literal when kind is CONST.
+  int64_t constant;
+
+  // Scalar facts for the literal or apply-site SSA value.
+  loom_value_facts_t facts;
+} loom_template_predicate_arg_t;
+
 typedef enum loom_template_selection_action_e {
   LOOM_TEMPLATE_SELECTION_ACTION_UNRESOLVED = 0,
   LOOM_TEMPLATE_SELECTION_ACTION_SELECT = 1,
@@ -266,7 +288,8 @@ static iree_string_view_t loom_template_selection_blocker_reason(
     case LOOM_TEMPLATE_SELECTION_BLOCKER_NO_PROVIDER:
       return IREE_SV("no provider implements the requested contract");
     case LOOM_TEMPLATE_SELECTION_BLOCKER_ALL_REJECTED:
-      return IREE_SV("all providers were rejected by signature constraints");
+      return IREE_SV(
+          "all providers were rejected by signature or predicate constraints");
     case LOOM_TEMPLATE_SELECTION_BLOCKER_MISSING_FACTS:
       return IREE_SV(
           "selection depends on unresolved provider predicate facts");
@@ -343,9 +366,380 @@ static iree_status_t loom_template_selection_types_match(
   return iree_ok_status();
 }
 
-static iree_status_t loom_template_selection_classify_provider(
+static iree_status_t loom_template_selection_apply_fact_table(
+    loom_template_selection_state_t* state,
+    const loom_symbol_liveness_contributor_context_t* context,
+    const loom_value_fact_table_t** out_table) {
+  *out_table = NULL;
+  if (!context || !context->source_symbol ||
+      !context->source_symbol->defining_op) {
+    return iree_ok_status();
+  }
+  loom_func_like_t source_function =
+      loom_func_like_cast(state->module, context->source_symbol->defining_op);
+  if (!loom_func_like_isa(source_function) ||
+      !loom_func_like_body(source_function)) {
+    return iree_ok_status();
+  }
+  loom_value_fact_table_t* table = NULL;
+  IREE_RETURN_IF_ERROR(loom_pass_value_facts_acquire(
+      state->pass, state->module,
+      loom_pass_value_fact_scope_function(source_function), &table));
+  *out_table = table;
+  return iree_ok_status();
+}
+
+static bool loom_template_selection_remap_provider_value(
+    const loom_op_t* apply_op, const loom_func_provider_summary_t* provider,
+    loom_value_id_t provider_value_id, loom_value_id_t* out_apply_value_id) {
+  if (!provider->func_facts) return false;
+
+  loom_value_slice_t operands = loom_func_apply_operands(apply_op);
+  for (uint16_t i = 0;
+       i < provider->func_facts->argument_count && i < operands.count; ++i) {
+    if (provider->func_facts->argument_ids[i] == provider_value_id) {
+      *out_apply_value_id = operands.values[i];
+      return true;
+    }
+  }
+
+  loom_value_slice_t results = loom_func_apply_results(apply_op);
+  for (uint16_t i = 0;
+       i < provider->func_facts->result_count && i < results.count; ++i) {
+    if (provider->func_facts->result_ids[i] == provider_value_id) {
+      *out_apply_value_id = results.values[i];
+      return true;
+    }
+  }
+
+  return false;
+}
+
+static bool loom_template_selection_resolve_predicate_arg(
     const loom_template_selection_state_t* state, const loom_op_t* apply_op,
     const loom_func_provider_summary_t* provider,
+    const loom_value_fact_table_t* fact_table,
+    const loom_predicate_t* predicate, uint8_t argument_index,
+    loom_template_predicate_arg_t* out_arg) {
+  *out_arg = (loom_template_predicate_arg_t){
+      .kind = LOOM_TEMPLATE_PREDICATE_ARG_INVALID,
+      .value_id = LOOM_VALUE_ID_INVALID,
+      .facts = loom_value_facts_unknown(),
+  };
+  if (argument_index >= predicate->arg_count) return false;
+
+  switch ((loom_predicate_arg_tag_t)predicate->arg_tags[argument_index]) {
+    case LOOM_PRED_ARG_CONST:
+      out_arg->kind = LOOM_TEMPLATE_PREDICATE_ARG_CONST;
+      out_arg->constant = predicate->args[argument_index];
+      out_arg->facts = loom_value_facts_exact_i64(out_arg->constant);
+      return true;
+    case LOOM_PRED_ARG_VALUE: {
+      int64_t raw_value_id = predicate->args[argument_index];
+      if (raw_value_id < 0 || raw_value_id > UINT32_MAX) return false;
+      loom_value_id_t provider_value_id = (loom_value_id_t)raw_value_id;
+      loom_value_id_t apply_value_id = LOOM_VALUE_ID_INVALID;
+      if (!loom_template_selection_remap_provider_value(
+              apply_op, provider, provider_value_id, &apply_value_id)) {
+        return false;
+      }
+      if (apply_value_id >= state->module->values.count) return false;
+      out_arg->kind = LOOM_TEMPLATE_PREDICATE_ARG_VALUE;
+      out_arg->value_id = apply_value_id;
+      if (fact_table) {
+        out_arg->facts =
+            loom_value_fact_table_lookup(fact_table, apply_value_id);
+      }
+      return true;
+    }
+    case LOOM_PRED_ARG_NONE:
+    default:
+      return false;
+  }
+}
+
+static loom_template_provider_feasibility_t
+loom_template_selection_feasibility_from_bool(bool value) {
+  return value ? LOOM_TEMPLATE_PROVIDER_MATCH : LOOM_TEMPLATE_PROVIDER_REJECT;
+}
+
+static bool loom_template_predicate_arg_exact_i64(
+    const loom_template_predicate_arg_t* arg, int64_t* out_value) {
+  if (arg->kind == LOOM_TEMPLATE_PREDICATE_ARG_CONST) {
+    *out_value = arg->constant;
+    return true;
+  }
+  return loom_value_facts_as_exact_i64(arg->facts, out_value);
+}
+
+static loom_template_provider_feasibility_t
+loom_template_selection_evaluate_relation(
+    const loom_template_predicate_arg_t* lhs,
+    const loom_template_predicate_arg_t* rhs, uint8_t predicate_kind) {
+  if (lhs->kind == LOOM_TEMPLATE_PREDICATE_ARG_VALUE &&
+      rhs->kind == LOOM_TEMPLATE_PREDICATE_ARG_VALUE &&
+      lhs->value_id == rhs->value_id) {
+    switch ((loom_predicate_kind_t)predicate_kind) {
+      case LOOM_PREDICATE_EQ:
+      case LOOM_PREDICATE_LE:
+      case LOOM_PREDICATE_GE:
+        return LOOM_TEMPLATE_PROVIDER_MATCH;
+      case LOOM_PREDICATE_NE:
+      case LOOM_PREDICATE_LT:
+      case LOOM_PREDICATE_GT:
+        return LOOM_TEMPLATE_PROVIDER_REJECT;
+      default:
+        return LOOM_TEMPLATE_PROVIDER_MAYBE;
+    }
+  }
+
+  int64_t lhs_exact = 0;
+  int64_t rhs_exact = 0;
+  if (loom_template_predicate_arg_exact_i64(lhs, &lhs_exact) &&
+      loom_template_predicate_arg_exact_i64(rhs, &rhs_exact)) {
+    switch ((loom_predicate_kind_t)predicate_kind) {
+      case LOOM_PREDICATE_EQ:
+        return loom_template_selection_feasibility_from_bool(lhs_exact ==
+                                                             rhs_exact);
+      case LOOM_PREDICATE_NE:
+        return loom_template_selection_feasibility_from_bool(lhs_exact !=
+                                                             rhs_exact);
+      case LOOM_PREDICATE_LT:
+        return loom_template_selection_feasibility_from_bool(lhs_exact <
+                                                             rhs_exact);
+      case LOOM_PREDICATE_LE:
+        return loom_template_selection_feasibility_from_bool(lhs_exact <=
+                                                             rhs_exact);
+      case LOOM_PREDICATE_GT:
+        return loom_template_selection_feasibility_from_bool(lhs_exact >
+                                                             rhs_exact);
+      case LOOM_PREDICATE_GE:
+        return loom_template_selection_feasibility_from_bool(lhs_exact >=
+                                                             rhs_exact);
+      default:
+        return LOOM_TEMPLATE_PROVIDER_MAYBE;
+    }
+  }
+
+  if (loom_value_facts_is_float(lhs->facts) ||
+      loom_value_facts_is_float(rhs->facts)) {
+    return LOOM_TEMPLATE_PROVIDER_MAYBE;
+  }
+
+  switch ((loom_predicate_kind_t)predicate_kind) {
+    case LOOM_PREDICATE_EQ:
+      if (lhs->facts.range_hi < rhs->facts.range_lo ||
+          rhs->facts.range_hi < lhs->facts.range_lo) {
+        return LOOM_TEMPLATE_PROVIDER_REJECT;
+      }
+      return LOOM_TEMPLATE_PROVIDER_MAYBE;
+    case LOOM_PREDICATE_NE:
+      if (lhs->facts.range_hi < rhs->facts.range_lo ||
+          rhs->facts.range_hi < lhs->facts.range_lo) {
+        return LOOM_TEMPLATE_PROVIDER_MATCH;
+      }
+      return LOOM_TEMPLATE_PROVIDER_MAYBE;
+    case LOOM_PREDICATE_LT:
+      if (lhs->facts.range_hi < rhs->facts.range_lo) {
+        return LOOM_TEMPLATE_PROVIDER_MATCH;
+      }
+      if (lhs->facts.range_lo >= rhs->facts.range_hi) {
+        return LOOM_TEMPLATE_PROVIDER_REJECT;
+      }
+      return LOOM_TEMPLATE_PROVIDER_MAYBE;
+    case LOOM_PREDICATE_LE:
+      if (lhs->facts.range_hi <= rhs->facts.range_lo) {
+        return LOOM_TEMPLATE_PROVIDER_MATCH;
+      }
+      if (lhs->facts.range_lo > rhs->facts.range_hi) {
+        return LOOM_TEMPLATE_PROVIDER_REJECT;
+      }
+      return LOOM_TEMPLATE_PROVIDER_MAYBE;
+    case LOOM_PREDICATE_GT:
+      if (lhs->facts.range_lo > rhs->facts.range_hi) {
+        return LOOM_TEMPLATE_PROVIDER_MATCH;
+      }
+      if (lhs->facts.range_hi <= rhs->facts.range_lo) {
+        return LOOM_TEMPLATE_PROVIDER_REJECT;
+      }
+      return LOOM_TEMPLATE_PROVIDER_MAYBE;
+    case LOOM_PREDICATE_GE:
+      if (lhs->facts.range_lo >= rhs->facts.range_hi) {
+        return LOOM_TEMPLATE_PROVIDER_MATCH;
+      }
+      if (lhs->facts.range_hi < rhs->facts.range_lo) {
+        return LOOM_TEMPLATE_PROVIDER_REJECT;
+      }
+      return LOOM_TEMPLATE_PROVIDER_MAYBE;
+    default:
+      return LOOM_TEMPLATE_PROVIDER_MAYBE;
+  }
+}
+
+static loom_template_provider_feasibility_t
+loom_template_selection_evaluate_multiple(
+    const loom_template_predicate_arg_t* value_arg, int64_t divisor) {
+  if (divisor <= 0 || loom_value_facts_is_float(value_arg->facts)) {
+    return LOOM_TEMPLATE_PROVIDER_MAYBE;
+  }
+  int64_t exact_value = 0;
+  if (loom_template_predicate_arg_exact_i64(value_arg, &exact_value)) {
+    return loom_template_selection_feasibility_from_bool(
+        exact_value % divisor == 0);
+  }
+  if (loom_value_facts_divisible_by(value_arg->facts, divisor)) {
+    return LOOM_TEMPLATE_PROVIDER_MATCH;
+  }
+  if (value_arg->facts.range_lo > 0 && value_arg->facts.range_hi < divisor) {
+    return LOOM_TEMPLATE_PROVIDER_REJECT;
+  }
+  if (value_arg->facts.range_hi < 0 && value_arg->facts.range_lo > -divisor) {
+    return LOOM_TEMPLATE_PROVIDER_REJECT;
+  }
+  return LOOM_TEMPLATE_PROVIDER_MAYBE;
+}
+
+static loom_template_provider_feasibility_t
+loom_template_selection_evaluate_pow2(
+    const loom_template_predicate_arg_t* value_arg) {
+  if (loom_value_facts_is_float(value_arg->facts)) {
+    return LOOM_TEMPLATE_PROVIDER_MAYBE;
+  }
+  if (loom_value_facts_is_power_of_two(value_arg->facts)) {
+    return LOOM_TEMPLATE_PROVIDER_MATCH;
+  }
+  int64_t exact_value = 0;
+  if (loom_template_predicate_arg_exact_i64(value_arg, &exact_value)) {
+    return LOOM_TEMPLATE_PROVIDER_REJECT;
+  }
+  if (value_arg->facts.range_hi < 1) {
+    return LOOM_TEMPLATE_PROVIDER_REJECT;
+  }
+  return LOOM_TEMPLATE_PROVIDER_MAYBE;
+}
+
+static loom_template_provider_feasibility_t
+loom_template_selection_evaluate_range(
+    const loom_template_predicate_arg_t* value_arg, int64_t lower_bound,
+    int64_t upper_bound) {
+  if (lower_bound > upper_bound) {
+    return LOOM_TEMPLATE_PROVIDER_REJECT;
+  }
+  if (loom_value_facts_is_float(value_arg->facts)) {
+    return LOOM_TEMPLATE_PROVIDER_MAYBE;
+  }
+  if (value_arg->facts.range_lo >= lower_bound &&
+      value_arg->facts.range_hi <= upper_bound) {
+    return LOOM_TEMPLATE_PROVIDER_MATCH;
+  }
+  if (value_arg->facts.range_hi < lower_bound ||
+      value_arg->facts.range_lo > upper_bound) {
+    return LOOM_TEMPLATE_PROVIDER_REJECT;
+  }
+  return LOOM_TEMPLATE_PROVIDER_MAYBE;
+}
+
+static iree_status_t loom_template_selection_evaluate_predicate(
+    const loom_template_selection_state_t* state, const loom_op_t* apply_op,
+    const loom_func_provider_summary_t* provider,
+    const loom_value_fact_table_t* fact_table,
+    const loom_predicate_t* predicate,
+    loom_template_provider_feasibility_t* out_feasibility) {
+  *out_feasibility = LOOM_TEMPLATE_PROVIDER_MAYBE;
+  loom_template_predicate_arg_t args[3];
+  uint8_t expected_argument_count =
+      loom_predicate_kind_argument_count(predicate->kind);
+  if (expected_argument_count == UINT8_MAX ||
+      predicate->arg_count != expected_argument_count ||
+      predicate->arg_count > IREE_ARRAYSIZE(args)) {
+    return iree_ok_status();
+  }
+
+  for (uint8_t i = 0; i < predicate->arg_count && i < IREE_ARRAYSIZE(args);
+       ++i) {
+    if (!loom_template_selection_resolve_predicate_arg(
+            state, apply_op, provider, fact_table, predicate, i, &args[i])) {
+      return iree_ok_status();
+    }
+  }
+
+  switch ((loom_predicate_kind_t)predicate->kind) {
+    case LOOM_PREDICATE_EQ:
+    case LOOM_PREDICATE_NE:
+    case LOOM_PREDICATE_LT:
+    case LOOM_PREDICATE_LE:
+    case LOOM_PREDICATE_GT:
+    case LOOM_PREDICATE_GE:
+      *out_feasibility = loom_template_selection_evaluate_relation(
+          &args[0], &args[1], predicate->kind);
+      return iree_ok_status();
+    case LOOM_PREDICATE_MUL: {
+      int64_t divisor = 0;
+      if (!loom_template_predicate_arg_exact_i64(&args[1], &divisor)) {
+        return iree_ok_status();
+      }
+      *out_feasibility =
+          loom_template_selection_evaluate_multiple(&args[0], divisor);
+      return iree_ok_status();
+    }
+    case LOOM_PREDICATE_MIN:
+      *out_feasibility = loom_template_selection_evaluate_relation(
+          &args[0], &args[1], LOOM_PREDICATE_GE);
+      return iree_ok_status();
+    case LOOM_PREDICATE_MAX:
+      *out_feasibility = loom_template_selection_evaluate_relation(
+          &args[0], &args[1], LOOM_PREDICATE_LE);
+      return iree_ok_status();
+    case LOOM_PREDICATE_POW2:
+      *out_feasibility = loom_template_selection_evaluate_pow2(&args[0]);
+      return iree_ok_status();
+    case LOOM_PREDICATE_RANGE: {
+      int64_t lower_bound = 0;
+      int64_t upper_bound = 0;
+      if (!loom_template_predicate_arg_exact_i64(&args[1], &lower_bound) ||
+          !loom_template_predicate_arg_exact_i64(&args[2], &upper_bound)) {
+        return iree_ok_status();
+      }
+      *out_feasibility = loom_template_selection_evaluate_range(
+          &args[0], lower_bound, upper_bound);
+      return iree_ok_status();
+    }
+    default:
+      return iree_ok_status();
+  }
+}
+
+static iree_status_t loom_template_selection_evaluate_predicates(
+    loom_template_selection_state_t* state,
+    const loom_symbol_liveness_contributor_context_t* context,
+    const loom_op_t* apply_op, const loom_func_provider_summary_t* provider,
+    loom_template_provider_feasibility_t* out_feasibility) {
+  const loom_value_fact_table_t* fact_table = NULL;
+  IREE_RETURN_IF_ERROR(
+      loom_template_selection_apply_fact_table(state, context, &fact_table));
+
+  *out_feasibility = LOOM_TEMPLATE_PROVIDER_MATCH;
+  for (uint16_t i = 0; i < provider->predicate_count; ++i) {
+    loom_template_provider_feasibility_t predicate_feasibility =
+        LOOM_TEMPLATE_PROVIDER_MAYBE;
+    IREE_RETURN_IF_ERROR(loom_template_selection_evaluate_predicate(
+        state, apply_op, provider, fact_table, &provider->predicates[i],
+        &predicate_feasibility));
+    if (predicate_feasibility == LOOM_TEMPLATE_PROVIDER_REJECT) {
+      *out_feasibility = LOOM_TEMPLATE_PROVIDER_REJECT;
+      return iree_ok_status();
+    }
+    if (predicate_feasibility == LOOM_TEMPLATE_PROVIDER_MAYBE) {
+      *out_feasibility = LOOM_TEMPLATE_PROVIDER_MAYBE;
+    }
+  }
+  return iree_ok_status();
+}
+
+static iree_status_t loom_template_selection_classify_provider(
+    loom_template_selection_state_t* state,
+    const loom_symbol_liveness_contributor_context_t* context,
+    const loom_op_t* apply_op, const loom_func_provider_summary_t* provider,
     loom_template_provider_feasibility_t* out_feasibility) {
   *out_feasibility = LOOM_TEMPLATE_PROVIDER_REJECT;
   bool types_match = false;
@@ -354,8 +748,8 @@ static iree_status_t loom_template_selection_classify_provider(
   if (!types_match) return iree_ok_status();
 
   if (provider->predicate_count > 0) {
-    *out_feasibility = LOOM_TEMPLATE_PROVIDER_MAYBE;
-    return iree_ok_status();
+    return loom_template_selection_evaluate_predicates(
+        state, context, apply_op, provider, out_feasibility);
   }
 
   *out_feasibility = LOOM_TEMPLATE_PROVIDER_MATCH;
@@ -402,7 +796,7 @@ static iree_status_t loom_template_selection_mark_exact_priority(
     loom_template_provider_feasibility_t feasibility =
         LOOM_TEMPLATE_PROVIDER_REJECT;
     IREE_RETURN_IF_ERROR(loom_template_selection_classify_provider(
-        state, apply_op, provider, &feasibility));
+        state, context, apply_op, provider, &feasibility));
     if (feasibility != LOOM_TEMPLATE_PROVIDER_MATCH ||
         provider->priority != priority) {
       continue;
@@ -423,7 +817,7 @@ static iree_status_t loom_template_selection_mark_missing_fact_candidates(
     loom_template_provider_feasibility_t feasibility =
         LOOM_TEMPLATE_PROVIDER_REJECT;
     IREE_RETURN_IF_ERROR(loom_template_selection_classify_provider(
-        state, apply_op, provider, &feasibility));
+        state, context, apply_op, provider, &feasibility));
     if (feasibility == LOOM_TEMPLATE_PROVIDER_REJECT) continue;
     if (has_exact) {
       if (feasibility == LOOM_TEMPLATE_PROVIDER_MATCH &&
@@ -485,7 +879,7 @@ static iree_status_t loom_template_selection_analyze_apply(
     loom_template_provider_feasibility_t feasibility =
         LOOM_TEMPLATE_PROVIDER_REJECT;
     IREE_RETURN_IF_ERROR(loom_template_selection_classify_provider(
-        state, apply_op, provider, &feasibility));
+        state, context, apply_op, provider, &feasibility));
     if (feasibility == LOOM_TEMPLATE_PROVIDER_REJECT) {
       continue;
     }
