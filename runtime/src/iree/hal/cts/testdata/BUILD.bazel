@@ -8,12 +8,12 @@
 # These are compiled per-backend by each driver's cts/BUILD.bazel using
 # iree_hal_executables() with backend-specific flags.
 #
-# The executable_srcs filegroup is the single source of truth for which
-# MLIR files are included. enforce_glob validates it matches the directory
-# contents — adding or removing an MLIR file without updating this list
-# will fail the build with a helpful message.
+# The executable_srcs filegroup is the single source of truth for which MLIR
+# files are included. The checked glob validates it matches the directory
+# contents so adding or removing an MLIR file without updating this list fails
+# the build with a helpful message.
 
-load("//build_tools/bazel:enforce_glob.bzl", "enforce_glob")
+load("//build_tools/bazel:glob.bzl", "iree_checked_glob")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -22,7 +22,7 @@ package(
 
 filegroup(
     name = "executable_srcs",
-    srcs = enforce_glob(
+    srcs = iree_checked_glob(
         # keep sorted
         [
             "command_buffer_dispatch_constants_bindings_test.mlir",
