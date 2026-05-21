@@ -14,7 +14,7 @@
 # The handle table is pure C and runs on any host — used for the native (Dawn)
 # path and tested on the host.
 
-load("//build_tools/bazel:iree_wasm_library.bzl", "iree_wasm_cc_library")
+load("//build_tools/bazel:wasm.bzl", "iree_wasm_cc_library")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
 

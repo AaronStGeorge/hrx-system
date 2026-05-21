@@ -59,3 +59,8 @@ filegroup(
 glob_rules_test_suite(name = "glob_tests")
 
 query_rules_test_suite(name = "query_tests")
+
+test_suite(
+    name = "wasm_tests",
+    tests = ["//build_tools/wasm/test:wasm_tests"],
+)

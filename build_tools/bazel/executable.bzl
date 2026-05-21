@@ -6,6 +6,13 @@
 
 """Rules for exposing existing executables as binaries or tests."""
 
+load(
+    ":wasm.bzl",
+    "collect_and_bundle_wasm",
+    "collect_wasm_js",
+    "discover_wasm_entry",
+)
+
 IreeExecutableInfo = provider(
     doc = "Metadata for an executable alias or test wrapper.",
     fields = {
@@ -29,7 +36,7 @@ def _expand_env(ctx):
         for key, value in ctx.attr.env.items()
     }
 
-def _executable_output(ctx):
+def _native_executable_output(ctx):
     output_name = ctx.attr.out
     if not output_name:
         output_name = ctx.label.name
@@ -41,13 +48,79 @@ def _executable_output(ctx):
     )
     return output
 
+def _is_wasm_target(ctx):
+    return ctx.target_platform_has_constraint(
+        ctx.attr._wasm32_constraint[platform_common.ConstraintValueInfo],
+    )
+
+def _wasm_entry(ctx, allow_default_test_main):
+    entry = discover_wasm_entry([ctx.attr.src])
+    if entry != None:
+        return struct(
+            main = entry.main,
+            srcs = list(entry.srcs),
+        )
+    if allow_default_test_main:
+        return struct(
+            main = ctx.file._wasm_test_main,
+            srcs = [],
+        )
+    fail("%s needs an iree_wasm_entry dependency when wrapping wasm binaries" % ctx.label)
+
+def _wasm_executable_output(ctx, allow_default_test_main):
+    output_name = ctx.attr.out
+    if not output_name:
+        output_name = ctx.label.name
+    output = ctx.actions.declare_file(output_name)
+    entry = _wasm_entry(ctx, allow_default_test_main)
+    output_mjs = collect_and_bundle_wasm(
+        ctx = ctx,
+        wasm_binary = ctx.executable.src,
+        main_js = entry.main,
+        cc_deps = [ctx.attr.src],
+        bundler = ctx.executable._wasm_bundler,
+        main_srcs = entry.srcs,
+    )
+
+    wrapper_content = (
+        "#!/usr/bin/env bash\n" +
+        "set -euo pipefail\n" +
+        "RUNFILES=\"${{RUNFILES_DIR:-$0.runfiles}}\"\n" +
+        "exec \"${{RUNFILES}}/{workspace}/{runner}\" " +
+        "\"${{RUNFILES}}/{bundle}\" \"$@\"\n"
+    ).format(
+        workspace = ctx.workspace_name,
+        runner = ctx.file._wasm_runner.short_path,
+        bundle = output_mjs.short_path,
+    )
+    ctx.actions.write(
+        content = wrapper_content,
+        is_executable = True,
+        output = output,
+    )
+    return struct(
+        bundle = output_mjs,
+        output = output,
+        runfiles = ctx.runfiles(files = [
+            ctx.executable.src,
+            ctx.file._wasm_runner,
+            output_mjs,
+        ]),
+    )
+
 def _iree_executable_alias_impl(ctx):
-    output = _executable_output(ctx)
+    if _is_wasm_target(ctx):
+        wasm_output = _wasm_executable_output(ctx, allow_default_test_main = False)
+        output = wasm_output.output
+        runfiles = _merge_runfiles(ctx).merge(wasm_output.runfiles)
+    else:
+        output = _native_executable_output(ctx)
+        runfiles = _merge_runfiles(ctx)
     return [
         DefaultInfo(
             executable = output,
             files = depset([output]),
-            runfiles = _merge_runfiles(ctx),
+            runfiles = runfiles,
         ),
         IreeExecutableInfo(
             data = depset(ctx.files.data),
@@ -58,13 +131,19 @@ def _iree_executable_alias_impl(ctx):
     ]
 
 def _iree_executable_test_impl(ctx):
-    output = _executable_output(ctx)
+    if _is_wasm_target(ctx):
+        wasm_output = _wasm_executable_output(ctx, allow_default_test_main = True)
+        output = wasm_output.output
+        runfiles = _merge_runfiles(ctx).merge(wasm_output.runfiles)
+    else:
+        output = _native_executable_output(ctx)
+        runfiles = _merge_runfiles(ctx)
     expanded_env = _expand_env(ctx)
     return [
         DefaultInfo(
             executable = output,
             files = depset([output]),
-            runfiles = _merge_runfiles(ctx),
+            runfiles = runfiles,
         ),
         IreeExecutableInfo(
             data = depset(ctx.files.data),
@@ -85,10 +164,27 @@ _SHARED_ATTRS = {
     ),
     "src": attr.label(
         allow_files = True,
+        aspects = [collect_wasm_js],
         cfg = "target",
         doc = "Executable target or file to expose.",
         executable = True,
         mandatory = True,
+    ),
+    "_wasm32_constraint": attr.label(
+        default = "@platforms//cpu:wasm32",
+    ),
+    "_wasm_bundler": attr.label(
+        cfg = "exec",
+        default = "//build_tools/wasm:wasm_binary_bundler",
+        executable = True,
+    ),
+    "_wasm_runner": attr.label(
+        allow_single_file = True,
+        default = "//build_tools/wasm:wasm_node_test_runner.sh",
+    ),
+    "_wasm_test_main": attr.label(
+        allow_single_file = True,
+        default = "//build_tools/wasm:wasm_test_main.mjs",
     ),
 }
 
