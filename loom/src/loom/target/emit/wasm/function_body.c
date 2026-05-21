@@ -156,6 +156,13 @@ typedef struct loom_wasm_local_entry_t {
   uint32_t local_index;
 } loom_wasm_local_entry_t;
 
+typedef struct loom_wasm_local_value_entry_t {
+  // Function-local Wasm index assigned to this SSA value.
+  uint32_t local_index;
+  // Wasm value type stored in this local.
+  loom_wasm_value_type_t value_type;
+} loom_wasm_local_value_entry_t;
+
 typedef struct loom_wasm_local_layout_t {
   // Allocator used for local metadata arrays.
   iree_allocator_t allocator;
@@ -173,6 +180,10 @@ typedef struct loom_wasm_local_layout_t {
   iree_host_size_t local_type_capacity;
   // Number of ABI parameter locals at the start of |local_types|.
   uint32_t parameter_count;
+  // Value-ordinal to local lookup table.
+  loom_wasm_local_value_entry_t* values;
+  // Number of records in |values|.
+  iree_host_size_t value_count;
 } loom_wasm_local_layout_t;
 
 typedef struct loom_wasm_attr_name_ids_t {
@@ -251,7 +262,30 @@ static void loom_wasm_local_layout_deinitialize(
     loom_wasm_local_layout_t* layout) {
   iree_allocator_free(layout->allocator, layout->entries);
   iree_allocator_free(layout->allocator, layout->local_types);
+  iree_allocator_free(layout->allocator, layout->values);
   *layout = (loom_wasm_local_layout_t){0};
+}
+
+static iree_status_t loom_wasm_local_layout_initialize_values(
+    loom_wasm_local_layout_t* layout, iree_host_size_t value_count) {
+  layout->value_count = value_count;
+  if (value_count == 0) {
+    return iree_ok_status();
+  }
+  iree_host_size_t byte_length = 0;
+  if (!iree_host_size_checked_mul(value_count, sizeof(*layout->values),
+                                  &byte_length)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "Wasm local value map size overflow");
+  }
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(layout->allocator, byte_length,
+                                             (void**)&layout->values));
+  for (iree_host_size_t i = 0; i < value_count; ++i) {
+    layout->values[i] = (loom_wasm_local_value_entry_t){
+        .local_index = UINT32_MAX,
+    };
+  }
+  return iree_ok_status();
 }
 
 static iree_status_t loom_wasm_local_layout_reserve_entries(
@@ -343,7 +377,6 @@ static iree_status_t loom_wasm_local_layout_add_entry(
 }
 
 static iree_status_t loom_wasm_validate_target_id_assignment(
-    const loom_low_allocation_table_t* allocation,
     const loom_low_allocation_assignment_t* assignment,
     loom_wasm_value_type_t* out_value_type) {
   if (assignment->location_kind != LOOM_LOW_ALLOCATION_LOCATION_TARGET_ID) {
@@ -370,14 +403,60 @@ static iree_status_t loom_wasm_validate_target_id_assignment(
 
 static iree_status_t loom_wasm_map_assignment(
     const loom_low_allocation_table_t* allocation, loom_value_id_t value_id,
+    loom_value_ordinal_t* out_value_ordinal,
     const loom_low_allocation_assignment_t** out_assignment,
     loom_wasm_value_type_t* out_value_type) {
+  if (out_value_ordinal) {
+    *out_value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
+  }
+  *out_assignment = NULL;
+
+  const loom_value_ordinal_t value_ordinal =
+      loom_module_value_ordinal_scratch_lookup(allocation->module, value_id);
+  if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "Wasm value %u has no allocation ordinal",
+                            (unsigned)value_id);
+  }
   const loom_low_allocation_assignment_t* assignment =
-      loom_low_allocation_map_active_value_assignment(allocation, value_id,
-                                                      NULL);
-  IREE_RETURN_IF_ERROR(loom_wasm_validate_target_id_assignment(
-      allocation, assignment, out_value_type));
+      loom_low_allocation_assignment_for_value_ordinal(allocation,
+                                                       value_ordinal, NULL);
+  if (assignment == NULL) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "Wasm value %u has no allocation assignment",
+                            (unsigned)value_id);
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_validate_target_id_assignment(assignment, out_value_type));
+  if (out_value_ordinal) {
+    *out_value_ordinal = value_ordinal;
+  }
   *out_assignment = assignment;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_wasm_local_layout_set_value(
+    loom_wasm_local_layout_t* layout, loom_value_ordinal_t value_ordinal,
+    uint32_t local_index, loom_wasm_value_type_t value_type) {
+  if (value_ordinal >= layout->value_count) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "Wasm allocation ordinal %u is out of local range",
+                            (unsigned)value_ordinal);
+  }
+  loom_wasm_local_value_entry_t* value = &layout->values[value_ordinal];
+  if (value->local_index != UINT32_MAX) {
+    if (value->local_index != local_index || value->value_type != value_type) {
+      return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                              "Wasm allocation ordinal %u changed local "
+                              "mapping",
+                              (unsigned)value_ordinal);
+    }
+    return iree_ok_status();
+  }
+  *value = (loom_wasm_local_value_entry_t){
+      .local_index = local_index,
+      .value_type = value_type,
+  };
   return iree_ok_status();
 }
 
@@ -385,10 +464,11 @@ static iree_status_t loom_wasm_local_layout_add_parameter(
     const loom_low_allocation_table_t* allocation,
     loom_wasm_local_layout_t* layout, loom_value_id_t value_id,
     uint32_t parameter_index) {
+  loom_value_ordinal_t value_ordinal = LOOM_VALUE_ORDINAL_INVALID;
   const loom_low_allocation_assignment_t* assignment = NULL;
   loom_wasm_value_type_t value_type = 0;
-  IREE_RETURN_IF_ERROR(
-      loom_wasm_map_assignment(allocation, value_id, &assignment, &value_type));
+  IREE_RETURN_IF_ERROR(loom_wasm_map_assignment(
+      allocation, value_id, &value_ordinal, &assignment, &value_type));
   uint32_t local_index = 0;
   IREE_RETURN_IF_ERROR(
       loom_wasm_local_layout_append_type(layout, value_type, &local_index));
@@ -406,18 +486,28 @@ static iree_status_t loom_wasm_local_layout_add_parameter(
         " for one register class",
         existing->local_index, parameter_index, assignment->location_base);
   }
-  return loom_wasm_local_layout_add_entry(
+  IREE_RETURN_IF_ERROR(loom_wasm_local_layout_add_entry(
       layout, assignment->descriptor_reg_class_id, assignment->location_base,
-      value_type, parameter_index);
+      value_type, parameter_index));
+  return loom_wasm_local_layout_set_value(layout, value_ordinal,
+                                          parameter_index, value_type);
 }
 
 static iree_status_t loom_wasm_local_layout_add_assignment(
     const loom_low_allocation_table_t* allocation,
     loom_wasm_local_layout_t* layout,
     const loom_low_allocation_assignment_t* assignment) {
+  const loom_value_ordinal_t value_ordinal =
+      loom_module_value_ordinal_scratch_lookup(allocation->module,
+                                               assignment->value_id);
+  if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "Wasm value %u has no allocation ordinal",
+                            (unsigned)assignment->value_id);
+  }
   loom_wasm_value_type_t value_type = 0;
-  IREE_RETURN_IF_ERROR(loom_wasm_validate_target_id_assignment(
-      allocation, assignment, &value_type));
+  IREE_RETURN_IF_ERROR(
+      loom_wasm_validate_target_id_assignment(assignment, &value_type));
   loom_wasm_local_entry_t* existing = loom_wasm_local_layout_find_entry(
       layout, assignment->descriptor_reg_class_id, assignment->location_base);
   if (existing) {
@@ -426,15 +516,18 @@ static iree_status_t loom_wasm_local_layout_add_assignment(
                               "Wasm target id %" PRIu32 " changes value type",
                               assignment->location_base);
     }
-    return iree_ok_status();
+    return loom_wasm_local_layout_set_value(layout, value_ordinal,
+                                            existing->local_index, value_type);
   }
 
   uint32_t local_index = 0;
   IREE_RETURN_IF_ERROR(
       loom_wasm_local_layout_append_type(layout, value_type, &local_index));
-  return loom_wasm_local_layout_add_entry(
+  IREE_RETURN_IF_ERROR(loom_wasm_local_layout_add_entry(
       layout, assignment->descriptor_reg_class_id, assignment->location_base,
-      value_type, local_index);
+      value_type, local_index));
+  return loom_wasm_local_layout_set_value(layout, value_ordinal, local_index,
+                                          value_type);
 }
 
 static iree_status_t loom_wasm_build_local_layout(
@@ -451,6 +544,8 @@ static iree_status_t loom_wasm_build_local_layout(
                             "Wasm emission requires a func-like low function");
   }
 
+  IREE_RETURN_IF_ERROR(loom_wasm_local_layout_initialize_values(
+      out_layout, allocation->liveness.value_count));
   uint16_t parameter_count = 0;
   const loom_value_id_t* parameter_ids =
       loom_func_like_arg_ids(function, &parameter_count);
@@ -474,21 +569,25 @@ static iree_status_t loom_wasm_build_local_layout(
 static iree_status_t loom_wasm_lookup_local(
     loom_wasm_emit_state_t* state, loom_value_id_t value_id,
     uint32_t* out_local_index, loom_wasm_value_type_t* out_value_type) {
-  const loom_low_allocation_assignment_t* assignment = NULL;
-  loom_wasm_value_type_t value_type = 0;
-  IREE_RETURN_IF_ERROR(loom_wasm_map_assignment(state->allocation, value_id,
-                                                &assignment, &value_type));
-  loom_wasm_local_entry_t* entry = loom_wasm_local_layout_find_entry(
-      &state->locals, assignment->descriptor_reg_class_id,
-      assignment->location_base);
-  if (!entry) {
+  const loom_value_ordinal_t value_ordinal =
+      loom_module_value_ordinal_scratch_lookup(state->allocation->module,
+                                               value_id);
+  if (value_ordinal == LOOM_VALUE_ORDINAL_INVALID ||
+      value_ordinal >= state->locals.value_count) {
+    return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
+                            "Wasm value %u has no local ordinal",
+                            (unsigned)value_id);
+  }
+  const loom_wasm_local_value_entry_t* value =
+      &state->locals.values[value_ordinal];
+  if (value->local_index == UINT32_MAX) {
     return iree_make_status(IREE_STATUS_FAILED_PRECONDITION,
                             "Wasm value %u has no local mapping",
                             (unsigned)value_id);
   }
-  *out_local_index = entry->local_index;
+  *out_local_index = value->local_index;
   if (out_value_type) {
-    *out_value_type = entry->value_type;
+    *out_value_type = value->value_type;
   }
   return iree_ok_status();
 }
