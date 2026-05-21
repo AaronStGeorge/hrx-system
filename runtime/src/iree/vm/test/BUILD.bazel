@@ -5,8 +5,8 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
-load("//build_tools/bazel:iree_vmasm_module.bzl", "iree_vmasm_module")
 load("//build_tools/embed_data:build_defs.bzl", "iree_c_embed_data")
+load("//runtime/build_tools/bazel:vmasm_module.bzl", "iree_runtime_vmasm_module")
 
 package(
     default_visibility = ["//runtime/src/iree/vm:__subpackages__"],
@@ -62,152 +62,152 @@ iree_c_embed_data(
     h_file_output = "all_bytecode_modules.h",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "arithmetic_ops",
     src = "arithmetic_ops.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "arithmetic_ops_f32",
     src = "arithmetic_ops_f32.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "arithmetic_ops_f64",
     src = "arithmetic_ops_f64.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "arithmetic_ops_i64",
     src = "arithmetic_ops_i64.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "assignment_ops",
     src = "assignment_ops.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "assignment_ops_f32",
     src = "assignment_ops_f32.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "assignment_ops_f64",
     src = "assignment_ops_f64.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "assignment_ops_i64",
     src = "assignment_ops_i64.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "async_ops",
     src = "async_ops.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "buffer_ops",
     src = "buffer_ops.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "call_ops",
     src = "call_ops.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "comparison_ops",
     src = "comparison_ops.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "comparison_ops_f32",
     src = "comparison_ops_f32.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "comparison_ops_f64",
     src = "comparison_ops_f64.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "comparison_ops_i64",
     src = "comparison_ops_i64.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "control_flow_ops",
     src = "control_flow_ops.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "conversion_ops",
     src = "conversion_ops.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "conversion_ops_f32",
     src = "conversion_ops_f32.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "conversion_ops_f64",
     src = "conversion_ops_f64.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "conversion_ops_i64",
     src = "conversion_ops_i64.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "global_ops",
     src = "global_ops.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "global_ops_f32",
     src = "global_ops_f32.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "global_ops_f64",
     src = "global_ops_f64.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "global_ops_i64",
     src = "global_ops_i64.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "list_ops",
     src = "list_ops.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "list_ops_i64",
     src = "list_ops_i64.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "list_variant_ops",
     src = "list_variant_ops.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "ref_ops",
     src = "ref_ops.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "shift_ops",
     src = "shift_ops.vmasm",
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "shift_ops_i64",
     src = "shift_ops_i64.vmasm",
 )

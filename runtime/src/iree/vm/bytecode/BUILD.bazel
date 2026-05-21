@@ -4,10 +4,10 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//build_tools/bazel:iree_vmasm_module.bzl", "iree_vmasm_module")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 load("//runtime/build_tools/bazel:cc_benchmark.bzl", "iree_runtime_cc_benchmark")
 load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
+load("//runtime/build_tools/bazel:vmasm_module.bzl", "iree_runtime_vmasm_module")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -60,7 +60,7 @@ iree_runtime_cc_test(
     ],
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "module_test_module",
     testonly = True,
     src = "module_test.vmasm",
@@ -81,7 +81,7 @@ iree_runtime_cc_benchmark(
     ],
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "module_benchmark_module",
     testonly = True,
     src = "module_benchmark.vmasm",
@@ -99,7 +99,7 @@ iree_runtime_cc_benchmark(
     ],
 )
 
-iree_vmasm_module(
+iree_runtime_vmasm_module(
     name = "module_size_benchmark_module",
     testonly = True,
     src = "module_size_benchmark.vmasm",

@@ -10,6 +10,7 @@ load(":cc_benchmark_rules_test.bzl", "cc_benchmark_rules_test_suite")
 load(":cc_fuzz_rules_test.bzl", "cc_fuzz_rules_test_suite")
 load(":cc_rules_test.bzl", "cc_rules_test_suite")
 load(":flatcc_rules_test.bzl", "flatcc_rules_test_suite")
+load(":vmasm_module_rules_test.bzl", "vmasm_module_rules_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -59,3 +60,5 @@ iree_runtime_cc_test(
 )
 
 flatcc_rules_test_suite(name = "flatcc_tests")
+
+vmasm_module_rules_test_suite(name = "vmasm_module_tests")
