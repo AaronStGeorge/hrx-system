@@ -48,6 +48,11 @@ typedef enum iree_benchmark_loom_interleave_mode_e {
   IREE_BENCHMARK_LOOM_INTERLEAVE_ROUND_ROBIN = 2,
 } iree_benchmark_loom_interleave_mode_t;
 
+enum {
+  // Default device-buffer ring byte target used to reduce hot-cache artifacts.
+  IREE_BENCHMARK_LOOM_DEFAULT_INPUT_RING_MIN_BYTES = 32 * 1024 * 1024,
+};
+
 typedef struct iree_benchmark_loom_i32_flag_t {
   // Current flag value.
   int32_t value;
@@ -61,6 +66,95 @@ typedef struct iree_benchmark_loom_bool_flag_t {
   // True when the flag was provided on the command line or in a flagfile.
   bool specified;
 } iree_benchmark_loom_bool_flag_t;
+
+typedef struct iree_benchmark_loom_options_t {
+  // Optional check.case symbol selected for execution.
+  iree_string_view_t selected_case;
+  // Optional check.benchmark symbol selected for execution.
+  iree_string_view_t selected_benchmark;
+  // Optional concrete benchmark sample ordinal, or negative to select all.
+  int32_t sample_ordinal;
+  // Maximum planned concrete samples retained for each check.case.
+  iree_host_size_t max_samples_per_case;
+  // Pass pipeline used before target artifact emission.
+  iree_string_view_t pipeline;
+  // Explicit result output path, or empty to use stdout or bundle defaults.
+  iree_string_view_t output;
+  // Explicit directory receiving check.file.write.* outputs.
+  iree_string_view_t file_output_dir;
+  // Explicit artifact bundle root directory, or empty when disabled.
+  iree_string_view_t artifact_bundle_dir;
+  // Artifact bundle policy controlling sidecar artifact classes.
+  iree_benchmark_loom_artifact_bundle_policy_t artifact_bundle_policy;
+  // True when the run stops after planning selected benchmarks.
+  bool dry_run;
+  // Measurement mode requested for selected benchmarks.
+  iree_string_view_t measure;
+  // Structured compile-report request.
+  iree_string_view_t compile_report;
+  // Maximum rows retained for each compile-report category.
+  iree_host_size_t compile_report_row_limit;
+  // Requested HAL profiling data-family list.
+  iree_string_view_t profile_data;
+  // Requested HAL profiling counter names.
+  iree_string_view_list_t profile_counters;
+  // Explicit directory receiving raw HAL profile artifacts.
+  iree_string_view_t profile_artifacts_dir;
+  // Sample compilation mode for dispatch-complete benchmarks.
+  iree_benchmark_loom_sample_compilation_mode_t sample_compilation_mode;
+  // Minimum total byte size for generated dispatch input rings.
+  int64_t input_ring_min_bytes;
+  // Exact dispatch input ring count, or zero for byte-size based selection.
+  iree_host_size_t input_ring_count;
+  // Benchmark list requested for interleaved comparison.
+  iree_string_view_t compare;
+  // Interleaving policy used when |compare| selects multiple benchmarks.
+  iree_benchmark_loom_interleave_mode_t interleave_mode;
+  // Number of interleaved comparison repetitions.
+  iree_host_size_t repetitions;
+  // Number of measured benchmark iterations or batches.
+  iree_host_size_t iterations;
+  // True when |iterations| was provided by the CLI/user.
+  bool iterations_specified;
+  // Number of warmup iterations or batches before measurement.
+  iree_host_size_t warmup_iterations;
+  // True when |warmup_iterations| was provided by the CLI/user.
+  bool warmup_iterations_specified;
+  // Number of dispatches recorded into each HAL benchmark batch.
+  iree_host_size_t batch_size;
+  // True when |batch_size| was provided by the CLI/user.
+  bool batch_size_specified;
+  // Minimum measured duration in milliseconds for dispatch benchmarks.
+  int64_t min_time_ms;
+  // True when |min_time_ms| was provided by the CLI/user.
+  bool min_time_ms_specified;
+  // Minimum warmup duration in milliseconds for dispatch benchmarks.
+  int64_t warmup_time_ms;
+  // True when |warmup_time_ms| was provided by the CLI/user.
+  bool warmup_time_ms_specified;
+  // Maximum measured HAL command-buffer batches.
+  iree_host_size_t max_batches;
+  // True when |max_batches| was provided by the CLI/user.
+  bool max_batches_specified;
+  // Accepted p90-to-p50 spread threshold in parts per million.
+  uint64_t stable_p90_to_p50_ppm;
+  // True when |stable_p90_to_p50_ppm| was provided by the CLI/user.
+  bool stable_p90_to_p50_ppm_specified;
+  // True when one final profiled batch should run after timing.
+  bool profile_final_batch;
+  // True when |profile_final_batch| was provided by the CLI/user.
+  bool profile_final_batch_specified;
+  // True when |profile_data| was explicitly provided and is not "none".
+  bool profile_data_requested;
+  // True when |input_ring_min_bytes| differs from the default.
+  bool input_ring_min_bytes_specified;
+  // True when |input_ring_count| was provided by the CLI/user.
+  bool input_ring_count_specified;
+} iree_benchmark_loom_options_t;
+
+// Initializes benchmark runner options with production defaults.
+void iree_benchmark_loom_options_initialize(
+    iree_benchmark_loom_options_t* out_options);
 
 // Returns the stable JSON spelling for an artifact bundle policy.
 iree_string_view_t iree_benchmark_loom_artifact_bundle_policy_name(

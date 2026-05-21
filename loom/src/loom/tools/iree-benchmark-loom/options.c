@@ -10,8 +10,38 @@
 #include <inttypes.h>
 #include <limits.h>
 #include <stdlib.h>
+#include <string.h>
 
+#include "loom/tooling/execution/compile_report_capture.h"
+#include "loom/tooling/testbench/testbench.h"
 #include "loom/util/json.h"
+
+void iree_benchmark_loom_options_initialize(
+    iree_benchmark_loom_options_t* out_options) {
+  memset(out_options, 0, sizeof(*out_options));
+  out_options->sample_ordinal = -1;
+  out_options->max_samples_per_case =
+      LOOM_TESTBENCH_DEFAULT_MAX_SAMPLES_PER_CASE;
+  out_options->pipeline = IREE_SV("default");
+  out_options->artifact_bundle_policy =
+      IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_MINIMAL;
+  out_options->measure = IREE_SV("case_end_to_end");
+  out_options->compile_report = IREE_SV("summary");
+  out_options->compile_report_row_limit =
+      LOOM_RUN_COMPILE_REPORT_DEFAULT_ROW_LIMIT;
+  out_options->sample_compilation_mode =
+      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE;
+  out_options->input_ring_min_bytes =
+      IREE_BENCHMARK_LOOM_DEFAULT_INPUT_RING_MIN_BYTES;
+  out_options->interleave_mode = IREE_BENCHMARK_LOOM_INTERLEAVE_NONE;
+  out_options->repetitions = 2;
+  out_options->iterations = 10;
+  out_options->warmup_iterations = 1;
+  out_options->batch_size = 1;
+  out_options->min_time_ms = 100;
+  out_options->max_batches = 1000;
+  out_options->stable_p90_to_p50_ppm = 100000;
+}
 
 iree_string_view_t iree_benchmark_loom_artifact_bundle_policy_name(
     iree_benchmark_loom_artifact_bundle_policy_t policy) {
