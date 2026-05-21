@@ -28,6 +28,10 @@ def _expect_path_suffix(env, paths, suffix):
             return
     env.fail("expected one of %s to end with %r" % (paths, suffix))
 
+def _expect_value(env, values, expected_value):
+    if expected_value not in values:
+        env.fail("expected %r in %r" % (expected_value, values))
+
 def _test_cc_library_preserves_system_include_inputs(name, **kwargs):
     util.helper_target(
         iree_cc_library,
@@ -51,6 +55,39 @@ def _test_cc_library_preserves_system_include_inputs_impl(env, target):
     paths = _all_compilation_paths(target[CcInfo].compilation_context)
     _expect_path_suffix(env, paths, "public_include")
     _expect_path_suffix(env, paths, "system_include")
+
+def _test_cc_library_preserves_language_compile_options(name, **kwargs):
+    util.helper_target(
+        iree_cc_library,
+        name = name + "_subject",
+        conlyopts = ["-DUSER_CONLYOPT"] + select({
+            "//conditions:default": ["-DUSER_SELECTED_CONLYOPT"],
+        }),
+        cxxopts = ["-DUSER_CXXOPT"] + select({
+            "//conditions:default": ["-DUSER_SELECTED_CXXOPT"],
+        }),
+        srcs = [
+            name + "_subject.c",
+            name + "_subject.cc",
+        ],
+        tags = ["manual"],
+    )
+    analysis_test(
+        name = name,
+        attr_values = {
+            "timeout": "short",
+        },
+        impl = _test_cc_library_preserves_language_compile_options_impl,
+        target = name + "_subject",
+        **kwargs
+    )
+
+def _test_cc_library_preserves_language_compile_options_impl(env, target):
+    attrs = target[TestingAspectInfo].attrs
+    _expect_value(env, attrs.conlyopts, "-DUSER_CONLYOPT")
+    _expect_value(env, attrs.conlyopts, "-DUSER_SELECTED_CONLYOPT")
+    _expect_value(env, attrs.cxxopts, "-DUSER_CXXOPT")
+    _expect_value(env, attrs.cxxopts, "-DUSER_SELECTED_CXXOPT")
 
 def _test_cc_binary_preserves_system_include_inputs(name, **kwargs):
     util.helper_target(
@@ -136,6 +173,7 @@ def cc_rules_test_suite(name):
         name = name,
         tests = [
             _test_cc_library_preserves_system_include_inputs,
+            _test_cc_library_preserves_language_compile_options,
             _test_cc_binary_preserves_system_include_inputs,
             _test_cc_test_preserves_system_include_inputs,
             _test_cc_test_applies_resource_group_tags,

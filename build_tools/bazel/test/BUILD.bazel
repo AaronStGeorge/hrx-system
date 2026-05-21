@@ -4,11 +4,13 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("//build_tools/bazel:cc_benchmark.bzl", "iree_cc_benchmark")
 load(":cc_benchmark_rules_test.bzl", "cc_benchmark_rules_test_suite")
 load(":cc_fuzz_rules_test.bzl", "cc_fuzz_rules_test_suite")
 load(":cc_link_test.bzl", "cc_link_test_suite")
 load(":cc_rules_test.bzl", "cc_rules_test_suite")
+load(":generate_rules_test.bzl", "generate_rules_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -29,3 +31,10 @@ cc_fuzz_rules_test_suite(name = "cc_fuzz_tests")
 cc_rules_test_suite(name = "cc_tests")
 
 cc_link_test_suite(name = "cc_link_tests")
+
+sh_binary(
+    name = "generate_rule_fixture_tool",
+    srcs = ["generate_rule_fixture.sh"],
+)
+
+generate_rules_test_suite(name = "generate_tests")

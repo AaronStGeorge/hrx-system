@@ -14,25 +14,25 @@ iree_genrule(
   NAME
     op_table_gen
   SRCS
-    "${PROJECT_SOURCE_DIR}/build_tools/scripts/generate_vm_isa.py"
+    "generate_vm_isa.py"
     "isa.json"
   OUTS
     op_table.h
   CMD
-    "python3 $(rootpath //build_tools/scripts:generate_vm_isa.py) --schema $(rootpath isa.json) --op-table $(execpath op_table.h)"
+    "python3 $(rootpath generate_vm_isa.py) --schema $(rootpath isa.json) --op-table $(execpath op_table.h)"
 )
 
 iree_genrule(
   NAME
     encoding_table_gen
   SRCS
-    "${PROJECT_SOURCE_DIR}/build_tools/scripts/generate_vm_isa.py"
+    "generate_vm_isa.py"
     "isa.json"
   OUTS
     encoding_table.c
     encoding_table.h
   CMD
-    "python3 $(rootpath //build_tools/scripts:generate_vm_isa.py) --schema $(rootpath isa.json) --encoding-table-header $(execpath encoding_table.h) --encoding-table-source $(execpath encoding_table.c)"
+    "python3 $(rootpath generate_vm_isa.py) --schema $(rootpath isa.json) --encoding-table-header $(execpath encoding_table.h) --encoding-table-source $(execpath encoding_table.c)"
 )
 
 iree_cc_library(

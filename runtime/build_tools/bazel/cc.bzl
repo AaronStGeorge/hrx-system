@@ -18,10 +18,25 @@ load(
 )
 load(":cc_attrs.bzl", "runtime_cc_attrs")
 
-def _iree_runtime_cc_library_impl(name, visibility, deps, **kwargs):
+def _iree_runtime_cc_library_impl(
+        name,
+        visibility,
+        copts,
+        conlyopts,
+        cxxopts,
+        deps,
+        **kwargs):
+    compiler_options = runtime_cc_attrs.with_runtime_compiler_options(
+        copts = copts,
+        conlyopts = conlyopts,
+        cxxopts = cxxopts,
+    )
     iree_cc_library(
         name = name,
         visibility = visibility,
+        copts = compiler_options.copts,
+        conlyopts = compiler_options.conlyopts,
+        cxxopts = compiler_options.cxxopts,
         deps = runtime_cc_attrs.with_runtime_deps(deps),
         **kwargs
     )
@@ -39,10 +54,25 @@ iree_runtime_cc_library = macro(
     attrs = {},
 )
 
-def _iree_runtime_cc_binary_impl(name, visibility, deps, **kwargs):
+def _iree_runtime_cc_binary_impl(
+        name,
+        visibility,
+        copts,
+        conlyopts,
+        cxxopts,
+        deps,
+        **kwargs):
+    compiler_options = runtime_cc_attrs.with_runtime_compiler_options(
+        copts = copts,
+        conlyopts = conlyopts,
+        cxxopts = cxxopts,
+    )
     iree_cc_binary(
         name = name,
         visibility = visibility,
+        copts = compiler_options.copts,
+        conlyopts = compiler_options.conlyopts,
+        cxxopts = compiler_options.cxxopts,
         deps = runtime_cc_attrs.with_runtime_deps(deps),
         **kwargs
     )

@@ -6,6 +6,8 @@
 
 """Runtime-specific C/C++ attribute helpers."""
 
+load("//build_tools/bazel:cc_opts.bzl", "cc_opts")
+
 _RUNTIME_DEFINES_DEP = Label("//runtime/src:defines")
 
 def _with_runtime_deps(deps):
@@ -13,6 +15,14 @@ def _with_runtime_deps(deps):
         deps = []
     return deps + [_RUNTIME_DEFINES_DEP]
 
+def _with_runtime_compiler_options(copts, conlyopts, cxxopts):
+    return cc_opts.iree_code_compiler_options(
+        copts = copts,
+        conlyopts = conlyopts,
+        cxxopts = cxxopts,
+    )
+
 runtime_cc_attrs = struct(
+    with_runtime_compiler_options = _with_runtime_compiler_options,
     with_runtime_deps = _with_runtime_deps,
 )

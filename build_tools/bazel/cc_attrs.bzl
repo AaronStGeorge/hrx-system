@@ -19,8 +19,14 @@ def _merge_string_lists(first, second):
     return first + second
 
 _COMPILATION_ATTRS = {
+    "conlyopts": attr.string_list(
+        doc = "Additional compiler options used only for C compile actions in this target.",
+    ),
     "copts": attr.string_list(
         doc = "Additional compiler options for this target.",
+    ),
+    "cxxopts": attr.string_list(
+        doc = "Additional compiler options used only for C++ compile actions in this target.",
     ),
     "defines": attr.string_list(
         doc = "Preprocessor definitions propagated to dependents.",
@@ -109,6 +115,8 @@ def _collect(
         deps,
         data,
         copts,
+        conlyopts,
+        cxxopts,
         defines,
         local_defines,
         includes,
@@ -124,6 +132,8 @@ def _collect(
     _add_if_not_none(result, "deps", deps)
     _add_if_not_none(result, "data", data)
     _add_if_not_none(result, "copts", copts)
+    _add_if_not_none(result, "conlyopts", conlyopts)
+    _add_if_not_none(result, "cxxopts", cxxopts)
     _add_if_not_none(result, "defines", defines)
     _add_if_not_none(result, "local_defines", local_defines)
     _add_if_not_none(result, "linkopts", linkopts)

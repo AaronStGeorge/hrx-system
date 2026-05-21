@@ -4,8 +4,10 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//build_tools/bazel:build_defs.oss.bzl", "iree_runtime_cc_library", "iree_runtime_cc_test")
-load("//build_tools/bazel:iree_genrule.bzl", "iree_genrule")
+load("@rules_python//python:defs.bzl", "py_binary")
+load("//build_tools/bazel:generate.bzl", "iree_generated_files")
+load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
+load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -17,54 +19,58 @@ exports_files([
     "isa.json",
 ])
 
-iree_genrule(
-    name = "op_table_gen",
-    srcs = [
-        "isa.json",
-        "//build_tools/scripts:generate_vm_isa.py",
-    ],
-    outs = ["op_table.h"],
-    cmd = " ".join([
-        "python3",
-        "$(rootpath //build_tools/scripts:generate_vm_isa.py)",
-        "--schema",
-        "$(rootpath isa.json)",
-        "--op-table",
-        "$(execpath op_table.h)",
-    ]),
+py_binary(
+    name = "generate_vm_isa",
+    srcs = ["generate_vm_isa.py"],
+    main = "generate_vm_isa.py",
+    visibility = ["//visibility:private"],
 )
 
-iree_genrule(
-    name = "encoding_table_gen",
-    srcs = [
-        "isa.json",
-        "//build_tools/scripts:generate_vm_isa.py",
+iree_generated_files(
+    name = "op_table_gen",
+    srcs = ["isa.json"],
+    outs = ["op_table.h"],
+    args = [
+        "--schema",
+        "$(location isa.json)",
     ],
+    mnemonic = "IreeVmIsa",
+    output_args = {
+        "op_table.h": "--op-table",
+    },
+    progress_message = "Generating VM ISA operation table for %{label}",
+    tool = ":generate_vm_isa",
+    visibility = ["//visibility:private"],
+)
+
+iree_generated_files(
+    name = "encoding_table_gen",
+    srcs = ["isa.json"],
     outs = [
         "encoding_table.c",
         "encoding_table.h",
     ],
-    cmd = " ".join([
-        "python3",
-        "$(rootpath //build_tools/scripts:generate_vm_isa.py)",
+    args = [
         "--schema",
-        "$(rootpath isa.json)",
-        "--encoding-table-header",
-        "$(execpath encoding_table.h)",
-        "--encoding-table-source",
-        "$(execpath encoding_table.c)",
-    ]),
+        "$(location isa.json)",
+    ],
+    mnemonic = "IreeVmIsa",
+    output_args = {
+        "encoding_table.c": "--encoding-table-source",
+        "encoding_table.h": "--encoding-table-header",
+    },
+    progress_message = "Generating VM ISA encoding tables for %{label}",
+    tool = ":generate_vm_isa",
+    visibility = ["//visibility:private"],
 )
 
 iree_runtime_cc_library(
     name = "isa",
-    srcs = [
-        "encoding_table.c",
-    ],
+    srcs = [":encoding_table.c"],
     hdrs = [
-        "encoding_table.h",
         "isa.h",
-        "op_table.h",
+        ":encoding_table.h",
+        ":op_table.h",
     ],
     deps = [
         "//runtime/src/iree/base",
