@@ -41,6 +41,7 @@
 #include "loom/tools/iree-benchmark-loom/options.h"
 #include "loom/tools/iree-benchmark-loom/output.h"
 #include "loom/tools/iree-benchmark-loom/report.h"
+#include "loom/tools/iree-benchmark-loom/snapshot.h"
 #include "loom/tools/iree-benchmark-loom/testbench.h"
 #include "loom/tools/iree-benchmark-loom/timing.h"
 #include "loom/tools/iree-benchmark-loom/work_plan.h"
@@ -65,15 +66,17 @@ IREE_FLAG(string, pipeline, "default",
           "Pass pipeline used before HAL candidate emission. Use 'default', "
           "'none', '@symbol', or a comma-separated pass list.");
 IREE_FLAG(string, output, "",
-          "Output path for the JSONL result stream. Empty or '-' writes to "
-          "stdout.");
+          "Output path for benchmark results. Empty or '-' writes to stdout.");
+IREE_FLAG(string, output_format, "snapshot",
+          "Benchmark result output format. Use 'snapshot' for one compact JSON "
+          "document or 'jsonl' for newline-delimited lifecycle events.");
 IREE_FLAG(string, file_output_dir, "",
           "Directory receiving check.file.write.* outputs. Empty uses "
           "$TMPDIR/iree-loom-benchmark/<source>_<hash>/ for this run.");
 IREE_FLAG(string, artifact_bundle_dir, "",
           "Directory receiving a self-contained run bundle. When set and "
-          "--output is empty, results are written to results.jsonl inside the "
-          "bundle; check.file.write outputs and profile artifacts default to "
+          "--output is empty, results are written inside the bundle; "
+          "check.file.write outputs and profile artifacts default to "
           "bundle subdirectories unless their explicit flags are set.");
 IREE_FLAG(string, artifact_bundle_policy, "minimal",
           "Artifact bundle policy when --artifact_bundle_dir is set. Use "
@@ -218,6 +221,8 @@ static iree_status_t iree_benchmark_loom_options_from_flags(
   out_options->sample_ordinal = FLAG_sample;
   out_options->pipeline = iree_make_cstring_view(FLAG_pipeline);
   out_options->output = iree_make_cstring_view(FLAG_output);
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_parse_output_format(
+      iree_make_cstring_view(FLAG_output_format), &out_options->output_format));
   out_options->file_output_dir = iree_make_cstring_view(FLAG_file_output_dir);
   out_options->artifact_bundle_dir =
       iree_string_view_trim(iree_make_cstring_view(FLAG_artifact_bundle_dir));
@@ -374,7 +379,7 @@ static iree_status_t iree_benchmark_loom_compile_report_options_initialize(
   if (out_options->sink_format == LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_TEXT) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "iree-benchmark-loom emits structured JSONL reports; use "
+        "iree-benchmark-loom emits structured JSON reports; use "
         "--compile_report=summary, details, json-summary, or json-details");
   }
   out_options->row_limit = options->compile_report_row_limit;
@@ -2812,8 +2817,9 @@ int iree_benchmark_loom_main(
   iree_benchmark_loom_jsonl_sink_t jsonl_sink = {0};
   bool jsonl_sink_initialized = false;
   iree_benchmark_loom_jsonl_event_sink_t jsonl_event_sink = {0};
+  iree_benchmark_loom_snapshot_sink_t snapshot_sink = {0};
+  bool snapshot_sink_initialized = false;
   iree_benchmark_loom_event_sink_t event_sink = {0};
-  bool event_sink_initialized = false;
   iree_benchmark_loom_diagnostic_capture_t source_diagnostics = {0};
   iree_benchmark_loom_diagnostic_capture_initialize(allocator,
                                                     &source_diagnostics);
@@ -2849,6 +2855,7 @@ int iree_benchmark_loom_main(
     iree_benchmark_loom_artifact_bundle_options_t artifact_bundle_options = {
         .dir = options.artifact_bundle_dir,
         .policy = options.artifact_bundle_policy,
+        .output_format = options.output_format,
     };
     status = iree_benchmark_loom_artifact_bundle_initialize(
         &artifact_bundle_options, allocator, &artifact_bundle);
@@ -2904,13 +2911,32 @@ int iree_benchmark_loom_main(
           artifact_bundle.policy),
   };
   if (iree_status_is_ok(status)) {
-    status = iree_benchmark_loom_jsonl_sink_initialize(results_output_path,
-                                                       allocator, &jsonl_sink);
+    switch (options.output_format) {
+      case IREE_BENCHMARK_LOOM_OUTPUT_FORMAT_SNAPSHOT:
+        status = iree_benchmark_loom_snapshot_sink_initialize(allocator,
+                                                              &snapshot_sink);
+        if (iree_status_is_ok(status)) {
+          snapshot_sink_initialized = true;
+          iree_benchmark_loom_snapshot_event_sink_initialize(&snapshot_sink,
+                                                             &event_sink);
+        }
+        break;
+      case IREE_BENCHMARK_LOOM_OUTPUT_FORMAT_JSONL:
+        status = iree_benchmark_loom_jsonl_sink_initialize(
+            results_output_path, allocator, &jsonl_sink);
+        if (iree_status_is_ok(status)) {
+          jsonl_sink_initialized = true;
+          iree_benchmark_loom_jsonl_event_sink_initialize(
+              &jsonl_sink, &jsonl_event_sink, &event_sink);
+        }
+        break;
+      default:
+        status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                                  "unsupported benchmark output format %d",
+                                  (int)options.output_format);
+        break;
+    }
     if (iree_status_is_ok(status)) {
-      jsonl_sink_initialized = true;
-      iree_benchmark_loom_jsonl_event_sink_initialize(
-          &jsonl_sink, &jsonl_event_sink, &event_sink);
-      event_sink_initialized = true;
       status = iree_benchmark_loom_event_sink_emit_run(
           &event_sink, &run_identity, options.dry_run,
           options.sample_compilation_mode);
@@ -3087,6 +3113,10 @@ int iree_benchmark_loom_main(
         correctness_sample_count, correctness_failed_sample_count,
         options.dry_run, options.sample_compilation_mode);
   }
+  if (iree_status_is_ok(status) && snapshot_sink_initialized) {
+    status = iree_benchmark_loom_snapshot_sink_write(&snapshot_sink,
+                                                     results_output_path);
+  }
   if (iree_status_is_ok(status) && jsonl_sink_initialized) {
     status = iree_benchmark_loom_jsonl_sink_close(&jsonl_sink);
   }
@@ -3108,8 +3138,11 @@ int iree_benchmark_loom_main(
   }
 
   iree_benchmark_loom_diagnostic_capture_deinitialize(&source_diagnostics);
-  if (event_sink_initialized) {
+  if (jsonl_sink_initialized) {
     iree_benchmark_loom_jsonl_event_sink_deinitialize(&jsonl_event_sink);
+  }
+  if (snapshot_sink_initialized) {
+    iree_benchmark_loom_snapshot_sink_deinitialize(&snapshot_sink);
   }
   if (jsonl_sink_initialized) {
     iree_benchmark_loom_jsonl_sink_deinitialize(&jsonl_sink);

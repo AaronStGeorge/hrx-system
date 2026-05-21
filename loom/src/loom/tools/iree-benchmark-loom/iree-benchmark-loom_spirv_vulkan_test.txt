@@ -4,6 +4,7 @@
 // RUN:     --measure=dispatch_complete \
 // RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
 // RUN:     --min_time_ms=0 --max_batches=1 --input_ring_count=1 \
+// RUN:     --output_format=jsonl \
 // RUN:     --artifact_bundle_dir=%t.spirv.bundle --artifact_bundle_policy=debug
 // RUN: FileCheck --check-prefix=SPIRV %s < %t.spirv.bundle/results.jsonl
 // RUN: FileCheck --check-prefix=SPIRV-MANIFEST %s < %t.spirv.bundle/manifest.json
@@ -13,6 +14,7 @@
 // RUN:     --measure=dispatch_complete \
 // RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
 // RUN:     --min_time_ms=0 --max_batches=1 --input_ring_count=1 \
+// RUN:     --output_format=jsonl \
 // RUN:     --artifact_bundle_dir=%t.spirv.coop.bundle --artifact_bundle_policy=debug
 // RUN: FileCheck --check-prefix=COOP %s < %t.spirv.coop.bundle/results.jsonl
 // RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
@@ -21,6 +23,7 @@
 // RUN:     --measure=dispatch_complete \
 // RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
 // RUN:     --min_time_ms=0 --max_batches=1 --input_ring_count=1 \
+// RUN:     --output_format=jsonl \
 // RUN:     --artifact_bundle_dir=%t.spirv.coop.u8.bundle --artifact_bundle_policy=debug
 // RUN: FileCheck --check-prefix=COOP-U8 %s < %t.spirv.coop.u8.bundle/results.jsonl
 // RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
@@ -29,6 +32,7 @@
 // RUN:     --measure=dispatch_complete \
 // RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
 // RUN:     --min_time_ms=0 --max_batches=1 --input_ring_count=1 \
+// RUN:     --output_format=jsonl \
 // RUN:     --artifact_bundle_dir=%t.spirv.quant.u8.bundle --artifact_bundle_policy=debug
 // RUN: FileCheck --check-prefix=QUANT-U8 %s < %t.spirv.quant.u8.bundle/results.jsonl
 // RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
@@ -37,6 +41,7 @@
 // RUN:     --measure=dispatch_complete \
 // RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
 // RUN:     --min_time_ms=0 --max_batches=1 --input_ring_count=1 \
+// RUN:     --output_format=jsonl \
 // RUN:     --artifact_bundle_dir=%t.spirv.narrow.bundle --artifact_bundle_policy=debug
 // RUN: FileCheck --check-prefix=NARROW %s < %t.spirv.narrow.bundle/results.jsonl
 // RUN: env LSAN_OPTIONS=suppressions=%S/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt \
@@ -45,6 +50,7 @@
 // RUN:     --measure=dispatch_complete \
 // RUN:     --iterations=1 --warmup_iterations=0 --batch_size=1 \
 // RUN:     --min_time_ms=0 --max_batches=1 --input_ring_count=1 --repetitions=1 \
+// RUN:     --output_format=jsonl \
 // RUN:     --artifact_bundle_dir=%t.spirv.narrow.compare.bundle --artifact_bundle_policy=minimal
 // RUN: FileCheck --check-prefix=NARROW-COMPARE %s < %t.spirv.narrow.compare.bundle/results.jsonl
 
@@ -61,7 +67,7 @@
 // SPIRV: "compile_report_path":
 // SPIRV: "target_artifact_path":
 // SPIRV: "row":"sample"
-// SPIRV: "sample":{"case":"double_i32_at_byte_offset_case","sample_ordinal":0,"passed":true
+// SPIRV: "sample_result":{"case":"double_i32_at_byte_offset_case","sample_ordinal":0,"passed":true
 // SPIRV: "row":"benchmark"
 // SPIRV: "benchmark":"double_i32_at_byte_offset","case":"double_i32_at_byte_offset_case","status":"ok"
 // SPIRV: "correctness_failed_sample_count":0
@@ -131,10 +137,10 @@
 // NARROW-COMPARE: "candidate_id":"c1","candidate_index":1,"benchmark":"narrow_score_tiled_f16_128x16_m2","case":"narrow_score_tiled_f16_128x16_m2_case"
 // NARROW-COMPARE: "row":"sample"
 // NARROW-COMPARE: "candidate_id":"c0","candidate_index":0
-// NARROW-COMPARE: "sample":{"case":"narrow_score_tiled_f16_128x16_m1_case","sample_ordinal":0,"passed":true
+// NARROW-COMPARE: "sample_result":{"case":"narrow_score_tiled_f16_128x16_m1_case","sample_ordinal":0,"passed":true
 // NARROW-COMPARE: "row":"sample"
 // NARROW-COMPARE: "candidate_id":"c1","candidate_index":1
-// NARROW-COMPARE: "sample":{"case":"narrow_score_tiled_f16_128x16_m2_case","sample_ordinal":0,"passed":true
+// NARROW-COMPARE: "sample_result":{"case":"narrow_score_tiled_f16_128x16_m2_case","sample_ordinal":0,"passed":true
 // NARROW-COMPARE: "row":"benchmark.repetition"
 // NARROW-COMPARE: "candidate_id":"c0","candidate_index":0
 // NARROW-COMPARE: "comparison_group":"narrow_score_tiled_f16_128x16_m1","baseline_candidate_id":"c0","method":"ABABA","order_index":0,"repetition_index":0,"schedule_token":"A"

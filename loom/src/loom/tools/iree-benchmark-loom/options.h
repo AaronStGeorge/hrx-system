@@ -48,6 +48,13 @@ typedef enum iree_benchmark_loom_interleave_mode_e {
   IREE_BENCHMARK_LOOM_INTERLEAVE_ROUND_ROBIN = 2,
 } iree_benchmark_loom_interleave_mode_t;
 
+typedef enum iree_benchmark_loom_output_format_e {
+  // Emit one compact JSON document after the benchmark run completes.
+  IREE_BENCHMARK_LOOM_OUTPUT_FORMAT_SNAPSHOT = 0,
+  // Emit newline-delimited lifecycle event rows as the run proceeds.
+  IREE_BENCHMARK_LOOM_OUTPUT_FORMAT_JSONL = 1,
+} iree_benchmark_loom_output_format_t;
+
 enum {
   // Default device-buffer ring byte target used to reduce hot-cache artifacts.
   IREE_BENCHMARK_LOOM_DEFAULT_INPUT_RING_MIN_BYTES = 32 * 1024 * 1024,
@@ -80,6 +87,8 @@ typedef struct iree_benchmark_loom_options_t {
   iree_string_view_t pipeline;
   // Explicit result output path, or empty to use stdout or bundle defaults.
   iree_string_view_t output;
+  // Selected result output format.
+  iree_benchmark_loom_output_format_t output_format;
   // Explicit directory receiving check.file.write.* outputs.
   iree_string_view_t file_output_dir;
   // Explicit artifact bundle root directory, or empty when disabled.
@@ -159,6 +168,14 @@ void iree_benchmark_loom_options_initialize(
 // Returns the stable JSON spelling for an artifact bundle policy.
 iree_string_view_t iree_benchmark_loom_artifact_bundle_policy_name(
     iree_benchmark_loom_artifact_bundle_policy_t policy);
+
+// Returns the stable flag and JSON spelling for an output format.
+iree_string_view_t iree_benchmark_loom_output_format_name(
+    iree_benchmark_loom_output_format_t format);
+
+// Parses an output format flag value.
+iree_status_t iree_benchmark_loom_parse_output_format(
+    iree_string_view_t value, iree_benchmark_loom_output_format_t* out_format);
 
 // Parses an artifact bundle policy flag value.
 iree_status_t iree_benchmark_loom_parse_artifact_bundle_policy(

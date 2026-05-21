@@ -1,14 +1,14 @@
-// RUN: iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency | FileCheck --check-prefix=BENCH %s
-// RUN: iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --benchmark=@sampled_choice_latency --sample=1 --iterations=2 --warmup_iterations=0 | FileCheck --check-prefix=SAMPLE %s
-// RUN: iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --benchmark=@sampled_choice_value7 --sample=0 --iterations=1 --warmup_iterations=0 | FileCheck --check-prefix=SLICE %s
-// RUN: iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --iterations=2 --warmup_iterations=0 | FileCheck --check-prefix=CLI-OVERRIDE %s
-// RUN: iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --dry_run --output=%t.tune.jsonl
+// RUN: iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --output_format=jsonl --benchmark=@scalar_equal_latency | FileCheck --check-prefix=BENCH %s
+// RUN: iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --output_format=jsonl --benchmark=@sampled_choice_latency --sample=1 --iterations=2 --warmup_iterations=0 | FileCheck --check-prefix=SAMPLE %s
+// RUN: iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --output_format=jsonl --benchmark=@sampled_choice_value7 --sample=0 --iterations=1 --warmup_iterations=0 | FileCheck --check-prefix=SLICE %s
+// RUN: iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --output_format=jsonl --benchmark=@scalar_equal_latency --iterations=2 --warmup_iterations=0 | FileCheck --check-prefix=CLI-OVERRIDE %s
+// RUN: iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --output_format=jsonl --benchmark=@scalar_equal_latency --dry_run --output=%t.tune.jsonl
 // RUN: FileCheck --check-prefix=DRY %s < %t.tune.jsonl
-// RUN: iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_latency --dry_run --artifact_bundle_dir=%t.bundle
+// RUN: iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --output_format=jsonl --benchmark=@scalar_equal_latency --dry_run --artifact_bundle_dir=%t.bundle
 // RUN: FileCheck --check-prefix=BUNDLE %s < %t.bundle/results.jsonl
 // RUN: FileCheck --check-prefix=BUNDLE-MANIFEST %s < %t.bundle/manifest.json
-// RUN: ( iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --benchmark=@scalar_equal_dispatch_latency --measure=dispatch_complete 2>&1 || true ) | FileCheck --check-prefix=DISPATCH-NO-ACTUAL %s
-// RUN: ( iree-benchmark-loom %S/testdata/duplicate_symbol.loom --benchmark=@duplicate_symbol_latency || true ) | FileCheck --check-prefix=DUPLICATE %s
+// RUN: ( iree-benchmark-loom %S/testdata/scalar_benchmarks.loom --output_format=jsonl --benchmark=@scalar_equal_dispatch_latency --measure=dispatch_complete 2>&1 || true ) | FileCheck --check-prefix=DISPATCH-NO-ACTUAL %s
+// RUN: ( iree-benchmark-loom %S/testdata/duplicate_symbol.loom --output_format=jsonl --benchmark=@duplicate_symbol_latency || true ) | FileCheck --check-prefix=DUPLICATE %s
 // RUN: iree-benchmark-loom --agents_md | FileCheck --check-prefix=AGENTS %s
 // RUN: iree-benchmark-loom --help 2>&1 | FileCheck --check-prefix=HELP %s
 
@@ -52,7 +52,7 @@
 // SAMPLE: "row":"sample"
 // SAMPLE: "sample_id":"s1","sample_index":1
 // SAMPLE: "sample":{"sample_ordinal":1,"parameter_count":1,"parameters":{"value":7},"parameter_ordinals":{"value":1}}
-// SAMPLE: "sample":{"case":"sampled_choice","sample_ordinal":1,"passed":true
+// SAMPLE: "sample_result":{"case":"sampled_choice","sample_ordinal":1,"passed":true
 // SAMPLE: "row":"benchmark"
 // SAMPLE: "sample_id":"s1","sample_index":1
 // SAMPLE: "benchmark":"sampled_choice_latency","case":"sampled_choice","status":"ok"
@@ -72,7 +72,7 @@
 // SLICE: "row":"sample"
 // SLICE: "sample_id":"s1","sample_index":1
 // SLICE: "benchmark_sample_ordinal":0
-// SLICE: "sample":{"case":"sampled_choice","sample_ordinal":1,"passed":true
+// SLICE: "sample_result":{"case":"sampled_choice","sample_ordinal":1,"passed":true
 // SLICE: "row":"benchmark"
 // SLICE: "sample_id":"s1","sample_index":1
 // SLICE: "benchmark":"sampled_choice_value7","case":"sampled_choice","status":"ok"
@@ -122,13 +122,16 @@
 // DUPLICATE: "failure_count":1
 
 // AGENTS: ## iree-benchmark-loom
-// AGENTS: Rows are written and flushed
-// AGENTS: profile_summary
+// AGENTS: default output is a compact JSON snapshot
+// AGENTS: work_items
+// AGENTS: --output_format=jsonl
 // AGENTS: compile_report_path
 // AGENTS: target_artifact_path
 
 // HELP: Runs correctness-gated check.benchmark records from a Loom module.
-// HELP: Rows are written and flushed as evidence becomes available
-// HELP: Raw bundles emit profile_summary JSONL rows
+// HELP: Snapshot output (default)
+// HELP: work_items   deduplicated physical execution results and timing
+// HELP: JSONL event stream (--output_format=jsonl)
+// HELP: results.json in snapshot mode
 // HELP: compile_report_path
 // HELP: target_artifact_path

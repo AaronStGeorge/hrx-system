@@ -115,6 +115,7 @@ loom_cc_library(
         "output.c",
         "profile_report.c",
         "report.c",
+        "snapshot.c",
         "testbench.c",
         "timing.c",
         "work_plan.c",
@@ -131,6 +132,7 @@ loom_cc_library(
         "output.h",
         "profile_report.h",
         "report.h",
+        "snapshot.h",
         "testbench.h",
         "timing.h",
         "work_plan.h",
@@ -198,6 +200,18 @@ loom_cc_test(
         "//loom/src/loom/tooling/testbench",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "snapshot_test",
+    srcs = ["snapshot_test.cc"],
+    deps = [
+        ":main",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:json",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],

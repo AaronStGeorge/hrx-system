@@ -51,7 +51,7 @@ static iree_status_t iree_benchmark_loom_validate_file_output_path(
   if (loom_tooling_file_path_is_stdio(path)) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "check.file.write paths must name a file; '-' "
-                            "would conflict with the JSONL output stream");
+                            "would conflict with the result output stream");
   }
   if (iree_benchmark_loom_path_is_absolute(path)) {
     return iree_make_status(
@@ -536,8 +536,13 @@ iree_status_t iree_benchmark_loom_artifact_bundle_initialize(
                                                             allocator);
   }
   if (iree_status_is_ok(status)) {
+    iree_string_view_t results_leaf = IREE_SV("results.json");
+    if (out_bundle->policy != IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_NONE &&
+        options->output_format == IREE_BENCHMARK_LOOM_OUTPUT_FORMAT_JSONL) {
+      results_leaf = IREE_SV("results.jsonl");
+    }
     status = iree_benchmark_loom_join_bundle_path(
-        out_bundle->dir, IREE_SV("results.jsonl"), allocator,
+        out_bundle->dir, results_leaf, allocator,
         &out_bundle->results_path_storage);
   }
   if (iree_status_is_ok(status)) {

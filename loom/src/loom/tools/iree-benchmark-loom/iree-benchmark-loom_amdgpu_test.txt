@@ -3,12 +3,14 @@
 // RUN:   --measure=dispatch_complete \
 // RUN:   --iterations=1 --warmup_iterations=0 --batch_size=1 \
 // RUN:   --min_time_ms=0 --max_batches=1 --input_ring_count=1 \
+// RUN:   --output_format=jsonl \
 // RUN:   | FileCheck --check-prefix=AMDGPU %s
 // RUN: iree-benchmark-loom %S/../iree-test-loom/testdata/amdgpu_hal_actual.loom \
 // RUN:   --benchmark=@store_then_double_i32 --device=amdgpu \
 // RUN:   --measure=dispatch_complete \
 // RUN:   --iterations=1 --warmup_iterations=0 --batch_size=1 \
 // RUN:   --min_time_ms=0 --max_batches=1 --input_ring_count=1 \
+// RUN:   --output_format=jsonl \
 // RUN:   | FileCheck --check-prefix=MULTI %s
 
 // AMDGPU: "row":"plan"
@@ -19,7 +21,7 @@
 // AMDGPU: "row":"compile"
 // AMDGPU: "benchmark":"store_i32","case":"store_i32_case","entry":"store_i32","status":"ok"
 // AMDGPU: "row":"sample"
-// AMDGPU: "sample":{"case":"store_i32_case","sample_ordinal":0,"passed":true
+// AMDGPU: "sample_result":{"case":"store_i32_case","sample_ordinal":0,"passed":true
 // AMDGPU: "row":"benchmark"
 // AMDGPU: "benchmark":"store_i32","case":"store_i32_case","status":"ok"
 // AMDGPU: "correctness_failed_sample_count":0
@@ -37,7 +39,7 @@
 // MULTI: "row":"device"
 // MULTI: "driver":"amdgpu","provider":"amdgpu-hal"
 // MULTI: "row":"sample"
-// MULTI: "sample":{"case":"store_then_double_i32_case","sample_ordinal":0,"passed":true
+// MULTI: "sample_result":{"case":"store_then_double_i32_case","sample_ordinal":0,"passed":true
 // MULTI: "row":"benchmark"
 // MULTI: "benchmark":"store_then_double_i32","case":"store_then_double_i32_case","status":"ok"
 // MULTI: "correctness_failed_sample_count":0

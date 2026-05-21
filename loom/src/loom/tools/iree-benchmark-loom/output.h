@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// Output paths, JSONL streaming, and artifact bundle ownership.
+// Output paths, event streaming, and artifact bundle ownership.
 
 #ifndef LOOM_TOOLS_IREE_BENCHMARK_LOOM_OUTPUT_H_
 #define LOOM_TOOLS_IREE_BENCHMARK_LOOM_OUTPUT_H_
@@ -20,11 +20,11 @@ extern "C" {
 #endif
 
 typedef struct iree_benchmark_loom_run_identity_t {
-  // Process-local run identifier copied into every JSONL row.
+  // Process-local run identifier copied into result output records.
   iree_string_view_t run_id;
   // User-provided source path, or "<stdin>" when reading standard input.
   iree_string_view_t source;
-  // Effective JSONL output path, or "-" when writing to stdout.
+  // Effective result output path, or "-" when writing to stdout.
   iree_string_view_t results_path;
   // Directory receiving check.file.write.* outputs for this run.
   iree_string_view_t file_output_dir;
@@ -77,7 +77,7 @@ typedef struct iree_benchmark_loom_artifact_bundle_t {
   char* dir_storage;
   // Borrowed view into |results_path_storage|.
   iree_string_view_t results_path;
-  // Owned default JSONL result path inside |dir|.
+  // Owned default result path inside |dir|.
   char* results_path_storage;
   // Borrowed view into |manifest_path_storage|.
   iree_string_view_t manifest_path;
@@ -120,6 +120,8 @@ typedef struct iree_benchmark_loom_artifact_bundle_options_t {
   iree_string_view_t dir;
   // Parsed bundle policy requested by the CLI.
   iree_benchmark_loom_artifact_bundle_policy_t policy;
+  // Result file format used to pick the bundle default result filename.
+  iree_benchmark_loom_output_format_t output_format;
 } iree_benchmark_loom_artifact_bundle_options_t;
 
 typedef struct iree_benchmark_loom_file_provider_t {
@@ -186,7 +188,7 @@ bool iree_benchmark_loom_artifact_bundle_wants_debug_artifacts(
 bool iree_benchmark_loom_artifact_bundle_wants_compile_reports(
     const iree_benchmark_loom_artifact_bundle_t* bundle);
 
-// Resolves the JSONL output path after applying bundle defaults.
+// Resolves the result output path after applying bundle defaults.
 iree_string_view_t iree_benchmark_loom_effective_results_output_path(
     iree_string_view_t explicit_output,
     const iree_benchmark_loom_artifact_bundle_t* bundle);

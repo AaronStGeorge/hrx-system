@@ -23,6 +23,7 @@ void iree_benchmark_loom_options_initialize(
   out_options->max_samples_per_case =
       LOOM_TESTBENCH_DEFAULT_MAX_SAMPLES_PER_CASE;
   out_options->pipeline = IREE_SV("default");
+  out_options->output_format = IREE_BENCHMARK_LOOM_OUTPUT_FORMAT_SNAPSHOT;
   out_options->artifact_bundle_policy =
       IREE_BENCHMARK_LOOM_ARTIFACT_BUNDLE_POLICY_MINIMAL;
   out_options->measure = IREE_SV("case_end_to_end");
@@ -57,6 +58,37 @@ iree_string_view_t iree_benchmark_loom_artifact_bundle_policy_name(
     default:
       return IREE_SV("unknown");
   }
+}
+
+iree_string_view_t iree_benchmark_loom_output_format_name(
+    iree_benchmark_loom_output_format_t format) {
+  switch (format) {
+    case IREE_BENCHMARK_LOOM_OUTPUT_FORMAT_SNAPSHOT:
+      return IREE_SV("snapshot");
+    case IREE_BENCHMARK_LOOM_OUTPUT_FORMAT_JSONL:
+      return IREE_SV("jsonl");
+    default:
+      return IREE_SV("unknown");
+  }
+}
+
+iree_status_t iree_benchmark_loom_parse_output_format(
+    iree_string_view_t value, iree_benchmark_loom_output_format_t* out_format) {
+  value = iree_string_view_trim(value);
+  if (iree_string_view_is_empty(value) ||
+      iree_string_view_equal(value, IREE_SV("snapshot")) ||
+      iree_string_view_equal(value, IREE_SV("json"))) {
+    *out_format = IREE_BENCHMARK_LOOM_OUTPUT_FORMAT_SNAPSHOT;
+    return iree_ok_status();
+  }
+  if (iree_string_view_equal(value, IREE_SV("jsonl"))) {
+    *out_format = IREE_BENCHMARK_LOOM_OUTPUT_FORMAT_JSONL;
+    return iree_ok_status();
+  }
+  return iree_make_status(
+      IREE_STATUS_INVALID_ARGUMENT,
+      "--output_format must be one of snapshot or jsonl; got '%.*s'",
+      (int)value.size, value.data);
 }
 
 iree_status_t iree_benchmark_loom_parse_artifact_bundle_policy(

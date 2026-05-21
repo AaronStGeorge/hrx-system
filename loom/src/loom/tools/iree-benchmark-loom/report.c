@@ -333,7 +333,7 @@ iree_status_t iree_benchmark_loom_append_sample_row(
         benchmark_sample_ordinal));
   }
   IREE_RETURN_IF_ERROR(
-      loom_output_stream_write_cstring(&stream, ",\"sample\":"));
+      loom_output_stream_write_cstring(&stream, ",\"sample_result\":"));
   IREE_RETURN_IF_ERROR(
       loom_testbench_case_sample_result_write_json(sample_result, &stream));
   IREE_RETURN_IF_ERROR(loom_output_stream_write_cstring(&stream, "}\n"));

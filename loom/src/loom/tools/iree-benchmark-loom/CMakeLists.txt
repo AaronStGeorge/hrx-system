@@ -25,6 +25,7 @@ loom_cc_library(
     "output.h"
     "profile_report.h"
     "report.h"
+    "snapshot.h"
     "testbench.h"
     "timing.h"
     "work_plan.h"
@@ -39,6 +40,7 @@ loom_cc_library(
     "output.c"
     "profile_report.c"
     "report.c"
+    "snapshot.c"
     "testbench.c"
     "timing.c"
     "work_plan.c"
@@ -108,6 +110,19 @@ loom_cc_test(
     loom::src::loom::ir
     loom::src::loom::ops::check
     loom::src::loom::tooling::testbench
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    snapshot_test
+  SRCS
+    "snapshot_test.cc"
+  DEPS
+    ::main
+    iree::base
+    iree::base::internal::json
     iree::testing::gtest
     iree::testing::gtest_main
 )
