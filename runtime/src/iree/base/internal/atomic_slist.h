@@ -206,7 +206,8 @@ bool iree_atomic_slist_flush(iree_atomic_slist_t* list,
     return entry ? (type*)(((uint8_t*)entry) - next_offset) : NULL;            \
   }                                                                            \
                                                                                \
-  static inline type* name##_slist_get_next(type* entry) {                     \
+  IREE_ATTRIBUTE_UNUSED static inline type* name##_slist_get_next(             \
+      type* entry) {                                                           \
     if (!entry) return NULL;                                                   \
     return name##_slist_entry_to_ptr(                                          \
         ((iree_atomic_slist_entry_t*)((uint8_t*)entry + next_offset))->next);  \
@@ -240,7 +241,8 @@ bool iree_atomic_slist_flush(iree_atomic_slist_t* list,
     iree_atomic_slist_concat(&list->impl, name##_slist_entry_from_ptr(head),   \
                              name##_slist_entry_from_ptr(tail));               \
   }                                                                            \
-  static inline void name##_slist_discard(name##_slist_t* list) {              \
+  IREE_ATTRIBUTE_UNUSED static inline void name##_slist_discard(               \
+      name##_slist_t* list) {                                                  \
     iree_atomic_slist_discard(&list->impl);                                    \
   }                                                                            \
   static inline type* name##_slist_pop(name##_slist_t* list) {                 \

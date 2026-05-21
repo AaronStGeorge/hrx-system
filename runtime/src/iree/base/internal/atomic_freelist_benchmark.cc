@@ -142,8 +142,7 @@ BENCHMARK(BM_ReleaseOnly)->Arg(64)->Arg(256)->Arg(1024);
 
 class MutexFreelist {
  public:
-  MutexFreelist(size_t count)
-      : count_(count), slots_(count), available_(count) {
+  explicit MutexFreelist(size_t count) : slots_(count), available_(count) {
     for (size_t i = 0; i < count - 1; ++i) {
       slots_[i] = static_cast<uint16_t>(i + 1);
     }
@@ -168,7 +167,6 @@ class MutexFreelist {
   }
 
  private:
-  size_t count_ = 0;
   std::vector<uint16_t> slots_;
   uint16_t head_ = 0;
   size_t available_ = 0;

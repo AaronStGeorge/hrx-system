@@ -24,6 +24,7 @@ def _iree_cc_test_impl(
         linkstatic,
         args,
         env,
+        size,
         tags,
         resource_group,
         **kwargs):
@@ -44,6 +45,7 @@ def _iree_cc_test_impl(
     target_attrs = cc_attrs.merge_dicts(kwargs, target_attrs)
     cc_attrs.add_if_not_none(target_attrs, "args", args)
     cc_attrs.add_if_not_none(target_attrs, "env", env)
+    target_attrs["size"] = size
     target_attrs["tags"] = cc_attrs.with_resource_group_tags(tags, resource_group)
     cc_test(
         name = name,
@@ -75,6 +77,11 @@ iree_cc_test = macro(
             "resource_group": attr.string(
                 configurable = False,
                 doc = "Local resource name used to serialize tests competing for the same host resource.",
+            ),
+            "size": attr.string(
+                configurable = False,
+                default = "small",
+                doc = "Bazel test size.",
             ),
         },
     ),
