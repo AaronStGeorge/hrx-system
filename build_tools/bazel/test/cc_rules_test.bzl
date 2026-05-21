@@ -113,6 +113,29 @@ def _test_cc_binary_preserves_system_include_inputs_impl(env, target):
     _expect_path_suffix(env, paths, "binary_include")
     _expect_path_suffix(env, paths, "binary_system_include")
 
+def _test_cc_binary_preserves_shared_library_mode(name, **kwargs):
+    util.helper_target(
+        iree_cc_binary,
+        name = name + "_subject",
+        linkshared = True,
+        srcs = [name + "_subject.cc"],
+        tags = ["manual"],
+    )
+    analysis_test(
+        name = name,
+        attr_values = {
+            "timeout": "short",
+        },
+        impl = _test_cc_binary_preserves_shared_library_mode_impl,
+        target = name + "_subject",
+        **kwargs
+    )
+
+def _test_cc_binary_preserves_shared_library_mode_impl(env, target):
+    attrs = target[TestingAspectInfo].attrs
+    if not attrs.linkshared:
+        env.fail("expected shared-library binary mode")
+
 def _test_cc_test_preserves_system_include_inputs(name, **kwargs):
     util.helper_target(
         iree_cc_test,
@@ -175,6 +198,7 @@ def cc_rules_test_suite(name):
             _test_cc_library_preserves_system_include_inputs,
             _test_cc_library_preserves_language_compile_options,
             _test_cc_binary_preserves_system_include_inputs,
+            _test_cc_binary_preserves_shared_library_mode,
             _test_cc_test_preserves_system_include_inputs,
             _test_cc_test_applies_resource_group_tags,
         ],

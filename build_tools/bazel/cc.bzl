@@ -95,6 +95,7 @@ def _iree_cc_binary_impl(
         includes,
         system_includes,
         linkopts,
+        linkshared,
         linkstatic,
         args,
         **kwargs):
@@ -116,6 +117,7 @@ def _iree_cc_binary_impl(
     )
     target_attrs = cc_attrs.merge_dicts(kwargs, target_attrs)
     cc_attrs.add_if_not_none(target_attrs, "args", args)
+    cc_attrs.add_if_not_none(target_attrs, "linkshared", linkshared)
     cc_binary(
         name = name,
         visibility = visibility,
@@ -134,6 +136,9 @@ iree_cc_binary = macro(
         {
             "args": attr.string_list(
                 doc = "Command-line arguments used when this binary is run by Bazel.",
+            ),
+            "linkshared": attr.bool(
+                doc = "Whether to create a shared library.",
             ),
         },
     ),

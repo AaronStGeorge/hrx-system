@@ -37,6 +37,7 @@ MODULE.bazel.lock text eol=lf merge=bazel-lockfile-merge
 CMakeLists.txt text eol=lf
 
 # Checked-in binary artifacts used by runtime tests or embedded kernels.
+build_tools/embed_data/testdata/crlf.bin binary -eol
 *.bc binary -eol
 *.dll binary -eol
 *.dylib binary -eol
