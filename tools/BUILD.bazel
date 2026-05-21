@@ -10,3 +10,8 @@ alias(
     name = "iree-as-module",
     actual = "//runtime/src/iree/tools/iree-as-module",
 )
+
+alias(
+    name = "iree-dump-cpuinfo",
+    actual = "//runtime/src/iree/tools/iree-dump-cpuinfo",
+)
