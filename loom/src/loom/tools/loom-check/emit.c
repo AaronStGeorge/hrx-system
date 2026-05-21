@@ -55,6 +55,7 @@ typedef enum loom_check_emit_source_low_output_e {
   LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_MODULE = 0,
   LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW = 1,
   LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_PIPELINE = 2,
+  LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_PREPARED_PIPELINE = 3,
 } loom_check_emit_source_low_output_t;
 
 enum {
@@ -328,11 +329,14 @@ static iree_status_t loom_check_emit_parse_source_low_option(
     request->source_low_output = LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_LOW;
   } else if (iree_string_view_equal(value, IREE_SV("pipeline"))) {
     request->source_low_output = LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_PIPELINE;
+  } else if (iree_string_view_equal(value, IREE_SV("prepared-pipeline"))) {
+    request->source_low_output =
+        LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_PREPARED_PIPELINE;
   } else {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "source-low option 'output' expected 'module', 'low', or 'pipeline', "
-        "got '%.*s'",
+        "source-low option 'output' expected 'module', 'low', 'pipeline', or "
+        "'prepared-pipeline', got '%.*s'",
         (int)value.size, value.data);
   }
   request->has_source_low_output_option = true;
@@ -1296,7 +1300,7 @@ static iree_status_t loom_check_emit_write_source_low_pipeline_text(
   if (request->has_source_low_diagnostics_option) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
-        "source-low output=pipeline cannot be combined with diagnostics");
+        "source-low pipeline outputs cannot be combined with diagnostics");
   }
   loom_module_t* pipeline_module = NULL;
   iree_status_t status = loom_module_allocate(
@@ -1307,10 +1311,18 @@ static iree_status_t loom_check_emit_write_source_low_pipeline_text(
       .control_flow_lowering = request->source_low_control_flow_lowering,
   };
   if (iree_status_is_ok(status)) {
-    status = loom_target_pipeline_build_to_source_low(
-        pipeline_module, IREE_SV("__loom_check_source_low"),
-        &target_pipeline_options, target_environment,
-        loom_pass_environment_empty(), &pipeline_op);
+    if (request->source_low_output ==
+        LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_PREPARED_PIPELINE) {
+      status = loom_target_pipeline_build_to_prepared_low(
+          pipeline_module, IREE_SV("__loom_check_prepared_low"),
+          &target_pipeline_options, target_environment,
+          loom_pass_environment_empty(), &pipeline_op);
+    } else {
+      status = loom_target_pipeline_build_to_source_low(
+          pipeline_module, IREE_SV("__loom_check_source_low"),
+          &target_pipeline_options, target_environment,
+          loom_pass_environment_empty(), &pipeline_op);
+    }
   }
   if (iree_status_is_ok(status) && pipeline_op == NULL) {
     status = iree_make_status(IREE_STATUS_INTERNAL,
@@ -1354,7 +1366,9 @@ static iree_status_t loom_check_emit_write_source_low_text(
                             "source-low emit requires a target environment");
   }
   if (request->source_low_output ==
-      LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_PIPELINE) {
+          LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_PIPELINE ||
+      request->source_low_output ==
+          LOOM_CHECK_EMIT_SOURCE_LOW_OUTPUT_PREPARED_PIPELINE) {
     return loom_check_emit_write_source_low_pipeline_text(
         module, request, environment->target_environment, block_pool, result);
   }

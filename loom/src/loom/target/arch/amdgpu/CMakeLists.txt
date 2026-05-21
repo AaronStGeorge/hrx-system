@@ -1557,6 +1557,17 @@ iree_executable_test(
 
 iree_executable_test(
   NAME
+    "source_low_pipeline"
+  ARGS
+    "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_pipeline.loom-test"
+  SRC
+    loom::src::loom::tools::loom-check
+  LABELS
+    "loom-check"
+)
+
+iree_executable_test(
+  NAME
     "source_low_prefetch_gfx12"
   ARGS
     "${CMAKE_CURRENT_SOURCE_DIR}/test/source_low/source_low_prefetch_gfx12.loom-test"

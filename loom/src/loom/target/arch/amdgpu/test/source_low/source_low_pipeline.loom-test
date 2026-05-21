@@ -1,0 +1,111 @@
+// RUN: emit source-low output=pipeline
+
+amdgpu.target<gfx1100> @target
+
+func.def target(@target) @pipeline_probe(%value: i32) -> (i32) {
+  func.return %value : i32
+}
+
+// ----
+pass.pipeline<module> @__loom_check_source_low pipeline {
+  for func {
+    where target {
+      legalize-math
+      normalize-kernel-resources
+      promote-private-fragments
+    }
+  }
+  target-legalize(mode = "eager")
+  select-templates(mode = "final")
+  inline-callables
+  for func {
+    where target {
+      vector-gather-to-scalar
+      linearize-view-accesses
+      canonicalize
+      cse
+      unroll-scf-for
+      canonicalize
+      cse
+      scf-to-cfg
+      cfg-simplify
+      canonicalize
+      cse
+      branch-sink
+    }
+  }
+  target-legalize(mode = "eager")
+  source-to-low
+  for func {
+    where target {
+      cfg-simplify
+      canonicalize
+      cse
+      low-dce
+    }
+  }
+}
+
+// ====
+// RUN: emit source-low output=prepared-pipeline
+
+amdgpu.target<gfx1100> @target
+
+kernel.def target(@target) @prepared_pipeline_probe(%arg: buffer) {
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch {
+  kernel.return
+}
+
+// ----
+pass.pipeline<module> @__loom_check_prepared_low pipeline {
+  for func {
+    where target {
+      legalize-math
+      normalize-kernel-resources
+      promote-private-fragments
+    }
+  }
+  target-legalize(mode = "eager")
+  select-templates(mode = "final")
+  inline-callables
+  for func {
+    where target {
+      vector-gather-to-scalar
+      linearize-view-accesses
+      canonicalize
+      cse
+      unroll-scf-for
+      canonicalize
+      cse
+      scf-to-cfg
+      cfg-simplify
+      canonicalize
+      cse
+      branch-sink
+    }
+  }
+  target-legalize(mode = "eager")
+  source-to-low
+  for func {
+    where target {
+      cfg-simplify
+      canonicalize
+      cse
+      low-dce
+    }
+  }
+  for func {
+    where target {
+      where target(abi = "hal_kernel", codegen = "low_native", target_op = "amdgpu.target") {
+        amdgpu-materialize-hal-kernel-abi
+      }
+      canonicalize
+      cse
+      cse
+      low-select-operand-forms
+      low-dce
+    }
+  }
+}

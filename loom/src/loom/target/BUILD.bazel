@@ -353,22 +353,6 @@ loom_cc_test(
     ],
 )
 
-loom_cc_test(
-    name = "pipeline_test",
-    srcs = ["pipeline_test.cc"],
-    deps = [
-        ":pipeline",
-        "//loom/src/loom/ir",
-        "//loom/src/loom/ops:op_registry",
-        "//loom/src/loom/ops/pass",
-        "//loom/src/loom/pass:builder",
-        "//loom/src/loom/testing:module_ptr",
-        "//runtime/src/iree/base/internal:arena",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
-
 loom_cc_library(
     name = "entry_selection",
     srcs = ["entry_selection.c"],

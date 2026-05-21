@@ -18,6 +18,13 @@ typedef struct loom_target_pipeline_build_context_t {
   const loom_target_pipeline_options_t* options;
 } loom_target_pipeline_build_context_t;
 
+typedef struct loom_target_pipeline_function_body_t {
+  // Function-anchor body builder guarded by the target predicate.
+  loom_pass_ir_body_build_fn_t build_body;
+  // Opaque user data forwarded to |build_body|.
+  void* user_data;
+} loom_target_pipeline_function_body_t;
+
 static iree_status_t loom_target_pipeline_resolve_control_flow_lowering(
     const loom_target_pipeline_options_t* options,
     loom_target_control_flow_lowering_t* out_lowering) {
@@ -82,6 +89,28 @@ static iree_status_t loom_target_pipeline_build_authoring_expansion(
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run_with_string_option(
       builder, IREE_SV("select-templates"), IREE_SV("mode"), IREE_SV("final")));
   return loom_target_pipeline_build_run(builder, IREE_SV("inline-callables"));
+}
+
+static iree_status_t loom_target_pipeline_build_target_function_body(
+    loom_builder_t* builder, void* user_data) {
+  const loom_target_pipeline_function_body_t* body =
+      (const loom_target_pipeline_function_body_t*)user_data;
+  loom_op_t* where_op = NULL;
+  return loom_pass_ir_build_where(builder, IREE_SV("target"),
+                                  loom_named_attr_slice_empty(),
+                                  body->build_body, body->user_data, &where_op);
+}
+
+static iree_status_t loom_target_pipeline_build_for_target_functions(
+    loom_builder_t* builder, loom_pass_ir_body_build_fn_t build_body,
+    void* user_data, loom_op_t** out_for_op) {
+  const loom_target_pipeline_function_body_t body = {
+      .build_body = build_body,
+      .user_data = user_data,
+  };
+  return loom_pass_ir_build_for(builder, LOOM_PASS_ANCHOR_FUNC,
+                                loom_target_pipeline_build_target_function_body,
+                                (void*)&body, out_for_op);
 }
 
 static iree_status_t loom_target_pipeline_build_source_to_low(
@@ -213,9 +242,8 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
   IREE_RETURN_IF_ERROR(loom_target_pipeline_resolve_control_flow_lowering(
       context->options, &control_flow_lowering));
   loom_op_t* for_op = NULL;
-  IREE_RETURN_IF_ERROR(loom_pass_ir_build_for(
-      builder, LOOM_PASS_ANCHOR_FUNC,
-      loom_target_pipeline_build_source_normalization_before_legalize,
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
+      builder, loom_target_pipeline_build_source_normalization_before_legalize,
       user_data, &for_op));
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_target_legalize(builder, IREE_SV("eager")));
@@ -224,17 +252,16 @@ static iree_status_t loom_target_pipeline_build_source_low_body(
       control_flow_lowering == LOOM_TARGET_CONTROL_FLOW_LOWERING_STRUCTURED_LOW
           ? loom_target_pipeline_build_source_safe_normalization_after_legalize
           : loom_target_pipeline_build_cfg_source_normalization_after_legalize;
-  IREE_RETURN_IF_ERROR(loom_pass_ir_build_for(
-      builder, LOOM_PASS_ANCHOR_FUNC, source_finish_body, user_data, &for_op));
+  IREE_RETURN_IF_ERROR(loom_target_pipeline_build_for_target_functions(
+      builder, source_finish_body, user_data, &for_op));
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_target_legalize(builder, IREE_SV("eager")));
   IREE_RETURN_IF_ERROR(loom_target_pipeline_contribute_phase(
       builder, context, LOOM_TARGET_PIPELINE_PHASE_SOURCE_TO_LOW));
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_source_to_low(builder, context->options));
-  return loom_pass_ir_build_for(builder, LOOM_PASS_ANCHOR_FUNC,
-                                loom_target_pipeline_build_low_cleanup_body,
-                                user_data, &for_op);
+  return loom_target_pipeline_build_for_target_functions(
+      builder, loom_target_pipeline_build_low_cleanup_body, user_data, &for_op);
 }
 
 static iree_status_t loom_target_pipeline_build_prepared_low_body(
@@ -242,9 +269,8 @@ static iree_status_t loom_target_pipeline_build_prepared_low_body(
   IREE_RETURN_IF_ERROR(
       loom_target_pipeline_build_source_low_body(builder, user_data));
   loom_op_t* for_op = NULL;
-  return loom_pass_ir_build_for(builder, LOOM_PASS_ANCHOR_FUNC,
-                                loom_target_pipeline_build_low_preparation,
-                                user_data, &for_op);
+  return loom_target_pipeline_build_for_target_functions(
+      builder, loom_target_pipeline_build_low_preparation, user_data, &for_op);
 }
 
 iree_status_t loom_target_pipeline_build_to_source_low(

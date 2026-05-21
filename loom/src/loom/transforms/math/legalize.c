@@ -385,9 +385,6 @@ static iree_status_t loom_math_legalize_resolve_policy(
       .resolved = true,
       .contract_set_key = IREE_SV("<targetless>"),
   };
-  if (state->policy_registry == NULL) {
-    return iree_ok_status();
-  }
 
   const loom_func_symbol_facts_t* func_facts = NULL;
   IREE_RETURN_IF_ERROR(
@@ -408,8 +405,10 @@ static iree_status_t loom_math_legalize_resolve_policy(
 
   state->target.contract_set_key =
       state->target.bundle_storage.config.contract_set_key;
-  state->target.policy = loom_target_math_policy_registry_lookup_for_bundle(
-      state->policy_registry, &state->target.bundle_storage.bundle);
+  if (state->policy_registry != NULL) {
+    state->target.policy = loom_target_math_policy_registry_lookup_for_bundle(
+        state->policy_registry, &state->target.bundle_storage.bundle);
+  }
   return iree_ok_status();
 }
 
@@ -560,6 +559,10 @@ iree_status_t loom_math_legalize_run(loom_pass_t* pass, loom_module_t* module,
                                      loom_func_like_t function) {
   const loom_math_legalize_options_t* options =
       (const loom_math_legalize_options_t*)pass->state;
+  if (!loom_func_like_body(function) ||
+      !loom_symbol_ref_is_valid(loom_func_like_target(function))) {
+    return iree_ok_status();
+  }
 
   const loom_target_math_pass_capability_t* math_capability =
       loom_target_math_pass_capability_from_pass(pass);
