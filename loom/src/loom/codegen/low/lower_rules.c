@@ -847,7 +847,11 @@ static bool loom_low_lower_source_memory_matches(
     const loom_low_lower_rule_match_context_t* match_context,
     const loom_op_t* source_op,
     const loom_low_lower_source_memory_t* source_memory,
-    loom_low_source_memory_access_plan_t* out_access) {
+    loom_low_source_memory_access_plan_t* out_access,
+    uint16_t* out_diagnostic_index) {
+  if (out_diagnostic_index != NULL) {
+    *out_diagnostic_index = source_memory->diagnostic_index;
+  }
   if (match_context->fact_table == NULL) {
     return false;
   }
@@ -875,9 +879,14 @@ static bool loom_low_lower_source_memory_matches(
       access.cache_policy.build_flags !=
           source_memory->cache_policy_build_flags ||
       !loom_low_lower_source_memory_dynamic_terms_match(source_memory,
-                                                        &access) ||
-      !loom_low_lower_source_memory_dynamic_offset_matches(source_memory,
+                                                        &access)) {
+    return false;
+  }
+  if (!loom_low_lower_source_memory_dynamic_offset_matches(source_memory,
                                                            &access)) {
+    if (out_diagnostic_index != NULL) {
+      *out_diagnostic_index = source_memory->dynamic_offset_diagnostic_index;
+    }
     return false;
   }
   if (out_access != NULL) {
@@ -1133,9 +1142,11 @@ static iree_status_t loom_low_lower_rule_matches(
         (uint16_t)(emit->source_memory_ordinal - 1);
     const loom_low_lower_source_memory_t* source_memory =
         &rule_set->source_memories[source_memory_index];
-    if (!loom_low_lower_source_memory_matches(match_context, source_op,
-                                              source_memory, NULL)) {
-      *out_diagnostic_index = source_memory->diagnostic_index;
+    uint16_t source_memory_diagnostic_index = source_memory->diagnostic_index;
+    if (!loom_low_lower_source_memory_matches(
+            match_context, source_op, source_memory, NULL,
+            &source_memory_diagnostic_index)) {
+      *out_diagnostic_index = source_memory_diagnostic_index;
       *out_matched_guard_count = rule->guard_count;
       return iree_ok_status();
     }
@@ -1600,7 +1611,7 @@ static void loom_low_lower_rule_source_memory_access(
   const loom_low_lower_rule_match_context_t match_context =
       loom_low_lower_rule_match_context_from_lowering(context);
   if (!loom_low_lower_source_memory_matches(&match_context, source_op,
-                                            source_memory, out_access)) {
+                                            source_memory, out_access, NULL)) {
     IREE_ASSERT_UNREACHABLE("selected source memory must still match");
     IREE_BUILTIN_UNREACHABLE();
   }

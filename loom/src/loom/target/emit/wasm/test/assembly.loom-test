@@ -49,6 +49,32 @@ Disassembly of section CODE:
 
 wasm.target<simd128> @target
 
+low.func.def public target(@target) abi(wasm_function) @i32_const_bitpattern() -> (reg<wasm.i32>) asm<wasm.core.simd128> {
+  %bits = i32.const 4294967295
+  return %bits
+}
+
+// ----
+Disassembly of section CODE:
+
+<CODE>:
+        # 1 functions in section.
+
+<i32_const_bitpattern>:
+        .local i32
+  i32.const  -1
+  local.set  0
+  local.get  0
+  return
+  end
+
+// ====
+
+// RUN: emit wasm-dis
+// REQUIRES: wasm-objdump
+
+wasm.target<simd128> @target
+
 low.func.def target(@target) abi(wasm_function) @if_without_results(%cond: reg<wasm.i32>, %lhs: reg<wasm.v128>, %rhs: reg<wasm.v128>) {
   low.scf.if %cond {
     %sum = low.op<wasm.i32x4.add>(%lhs, %rhs) : (reg<wasm.v128>, reg<wasm.v128>) -> reg<wasm.v128>

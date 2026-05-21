@@ -681,14 +681,15 @@ static iree_status_t loom_wasm_emit_i32_const(
   IREE_RETURN_IF_ERROR(
       loom_wasm_read_i64_attr(loom_low_const_attrs(op), kWasmAttrI32ValueName,
                               state->attr_names.i32_value, &value));
-  if (value < INT32_MIN || value > INT32_MAX) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "wasm.i32.const value is outside i32 range");
+  if (value < INT32_MIN || value > UINT32_MAX) {
+    return iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "wasm.i32.const value is outside the verified i32 bit-pattern range");
   }
   IREE_RETURN_IF_ERROR(
       loom_wasm_write_opcode(&state->writer, descriptor->encoding_id));
   IREE_RETURN_IF_ERROR(
-      loom_wasm_binary_write_i32_leb(&state->writer, (int32_t)value));
+      loom_wasm_binary_write_i32_leb(&state->writer, (int32_t)(uint32_t)value));
   return loom_wasm_emit_local_set(state, loom_low_const_result(op));
 }
 

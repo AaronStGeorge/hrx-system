@@ -83,6 +83,7 @@ class SourceMemoryConstraint:
     )
     dynamic_byte_stride: int = 0
     dynamic_offset_unsigned_bit_count: int = 0
+    dynamic_offset_diagnostic: GuardDiagnostic | None = None
     cache_policy_build_flags: int = 0
     diagnostic: GuardDiagnostic | None = None
 
@@ -105,6 +106,7 @@ class SourceMemoryConstraint:
         ),
         dynamic_byte_stride: int = 0,
         dynamic_offset_unsigned_bit_count: int = 0,
+        dynamic_offset_diagnostic: GuardDiagnostic | None = None,
         cache_policy_build_flags: int = 0,
         diagnostic: GuardDiagnostic | None = None,
     ) -> None:
@@ -129,6 +131,11 @@ class SourceMemoryConstraint:
             self,
             "dynamic_offset_unsigned_bit_count",
             dynamic_offset_unsigned_bit_count,
+        )
+        object.__setattr__(
+            self,
+            "dynamic_offset_diagnostic",
+            dynamic_offset_diagnostic,
         )
         object.__setattr__(self, "cache_policy_build_flags", cache_policy_build_flags)
         object.__setattr__(self, "diagnostic", diagnostic)

@@ -27,6 +27,7 @@ from loom.error.wasm import (
     ERR_WASM_003,
     ERR_WASM_004,
     ERR_WASM_005,
+    ERR_WASM_006,
 )
 from loom.target.arch.wasm.descriptors import WASM_CORE_SIMD128_DESCRIPTOR_SET
 from loom.target.contracts import (
@@ -73,12 +74,15 @@ _I64_ATTR_DIAGNOSTIC = GuardDiagnostic(
         string_param("field_name", "value"),
     ),
 )
+_I32_BIT_PATTERN_MIN = -(2**31)
+_I32_BIT_PATTERN_MAX = (2**32) - 1
+
 _I32_CONSTANT_RANGE_DIAGNOSTIC = GuardDiagnostic(
     ref=target_diagnostic(
         ERR_WASM_003,
         string_param("field_name", "value"),
-        i64_param("minimum", -(2**31)),
-        i64_param("maximum", (2**31) - 1),
+        i64_param("minimum", _I32_BIT_PATTERN_MIN),
+        i64_param("maximum", _I32_BIT_PATTERN_MAX),
     ),
 )
 _ZERO_BUFFER_VIEW_OFFSET_DIAGNOSTIC = GuardDiagnostic(
@@ -89,6 +93,12 @@ _ZERO_BUFFER_VIEW_OFFSET_DIAGNOSTIC = GuardDiagnostic(
 )
 _SOURCE_MEMORY_DIAGNOSTIC = GuardDiagnostic(
     ref=target_diagnostic(ERR_WASM_005),
+)
+_WASM32_ADDRESS_DIAGNOSTIC = GuardDiagnostic(
+    ref=target_diagnostic(
+        ERR_WASM_006,
+        i64_param("bit_count", 32),
+    ),
 )
 
 
@@ -150,8 +160,8 @@ def _const_i32_rule(source_op: Op, result_type: TypePattern) -> DescriptorRule:
             _value_type("result", result_type),
             Guard.i64_range(
                 "value",
-                -(2**31),
-                (2**31) - 1,
+                _I32_BIT_PATTERN_MIN,
+                _I32_BIT_PATTERN_MAX,
                 diagnostic=_I32_CONSTANT_RANGE_DIAGNOSTIC,
             ),
         ),
@@ -431,6 +441,7 @@ def _source_memory_constraint(
         ),
         dynamic_byte_stride=4 if dynamic else 0,
         dynamic_offset_unsigned_bit_count=32 if dynamic else 0,
+        dynamic_offset_diagnostic=(_WASM32_ADDRESS_DIAGNOSTIC if dynamic else None),
         diagnostic=_SOURCE_MEMORY_DIAGNOSTIC,
     )
 

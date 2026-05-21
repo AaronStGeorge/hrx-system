@@ -144,6 +144,7 @@ class LowerSourceMemory:
 
     constraint: SourceMemoryConstraint
     diagnostic_index: int
+    dynamic_offset_diagnostic_index: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -1163,6 +1164,10 @@ class _LowerRuleSetCompiler:
                 source_op,
                 _source_memory_diagnostic(constraint),
             ),
+            dynamic_offset_diagnostic_index=self._append_diagnostic_ref(
+                source_op,
+                _source_memory_dynamic_offset_diagnostic(constraint),
+            ),
         )
         for index, existing in enumerate(self._source_memories):
             if existing == row:
@@ -1873,6 +1878,19 @@ def _source_memory_diagnostic(
         ERR_TARGET_008,
         string_param("operation_kind", constraint.operation.value),
     )
+
+
+def _source_memory_dynamic_offset_diagnostic(
+    constraint: SourceMemoryConstraint,
+) -> DiagnosticRef:
+    if constraint.dynamic_offset_diagnostic is not None:
+        ref = constraint.dynamic_offset_diagnostic.ref
+        if ref is None:
+            raise ValueError(
+                "source-memory dynamic-offset diagnostic is missing an error ref"
+            )
+        return ref
+    return _source_memory_diagnostic(constraint)
 
 
 def _attr_diagnostic(field: str, attr_type: str) -> DiagnosticRef:

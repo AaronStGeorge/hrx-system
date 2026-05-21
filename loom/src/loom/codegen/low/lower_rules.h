@@ -365,6 +365,8 @@ typedef struct loom_low_lower_source_memory_t {
   int64_t dynamic_byte_stride;
   // Required unsigned dynamic byte offset bit width, or zero if unconstrained.
   uint8_t dynamic_offset_unsigned_bit_count;
+  // Diagnostic emitted when the dynamic byte offset width check rejects.
+  uint16_t dynamic_offset_diagnostic_index;
   // Required source cache-policy build flags.
   uint32_t cache_policy_build_flags;
   // Diagnostic table row emitted when this source-memory row rejects.

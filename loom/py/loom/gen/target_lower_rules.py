@@ -618,6 +618,12 @@ def _source_memory_row(row: LowerSourceMemory) -> list[str]:
     )
     _append_field(
         fields,
+        "dynamic_offset_diagnostic_index",
+        _diagnostic_index(row.dynamic_offset_diagnostic_index),
+        always=True,
+    )
+    _append_field(
+        fields,
         "cache_policy_build_flags",
         constraint.cache_policy_build_flags,
     )

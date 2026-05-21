@@ -120,7 +120,7 @@ _I32_VALUE_IMMEDIATE = Immediate(
     ImmediateKind.SIGNED,
     bit_width=32,
     signed_min=-(2**31),
-    unsigned_max=(2**31) - 1,
+    unsigned_max=(2**32) - 1,
 )
 
 _V128_LO_IMMEDIATE = Immediate(

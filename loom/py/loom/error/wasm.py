@@ -103,10 +103,29 @@ ERR_WASM_005 = ErrorDef(
     params=_TARGET_CONTEXT_PARAMS,
 )
 
+# ERR_WASM_006: Wasm source memory byte offset is outside the target address width.
+ERR_WASM_006 = ErrorDef(
+    domain=ErrorDomain.WASM,
+    code=6,
+    severity=Severity.ERROR,
+    summary="Wasm source memory byte offset is outside the target address width.",
+    message=(
+        "Wasm target '{target_key}' export '{export_name}' config "
+        "'{config_key}' rejected '{op_name}' source memory access in "
+        "'@{function_name}': effective byte offset must be provably "
+        "representable as an unsigned {bit_count}-bit Wasm address"
+    ),
+    params=(
+        *_TARGET_CONTEXT_PARAMS,
+        ErrorParam("bit_count", ParamKind.I64),
+    ),
+)
+
 ALL_WASM_ERRORS = (
     ERR_WASM_001,
     ERR_WASM_002,
     ERR_WASM_003,
     ERR_WASM_004,
     ERR_WASM_005,
+    ERR_WASM_006,
 )
