@@ -4,107 +4,78 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Analysis tests for shared C/C++ Bazel macros."""
+"""Shared C/C++ Bazel test macros for IREE repositories."""
 
-load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
-load("@rules_testing//lib:analysis_test.bzl", "analysis_test", "test_suite")
-load("@rules_testing//lib:util.bzl", "util")
-load(":cc.bzl", "iree_cc_binary", "iree_cc_library", "iree_cc_test")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load(":cc_attrs.bzl", "cc_attrs")
 
-def _all_compilation_paths(compilation_context):
-    return [
-        str(path)
-        for path in (
-            compilation_context.includes.to_list() +
-            compilation_context.quote_includes.to_list() +
-            compilation_context.system_includes.to_list()
-        )
-    ]
-
-def _expect_path_suffix(env, paths, suffix):
-    for path in paths:
-        if path.endswith(suffix):
-            return
-    env.fail("expected one of %s to end with %r" % (paths, suffix))
-
-def _test_cc_library_preserves_system_include_inputs(name, **kwargs):
-    util.helper_target(
-        iree_cc_library,
-        name = name + "_subject",
-        hdrs = [name + "_subject.h"],
-        includes = ["public_include"],
-        system_includes = ["system_include"],
-        tags = ["manual"],
+def _iree_cc_test_impl(
+        name,
+        visibility,
+        srcs,
+        deps,
+        data,
+        copts,
+        defines,
+        local_defines,
+        includes,
+        system_includes,
+        linkopts,
+        linkstatic,
+        args,
+        env,
+        tags,
+        resource_group,
+        **kwargs):
+    target_attrs = cc_attrs.collect(
+        srcs = srcs,
+        hdrs = None,
+        textual_hdrs = None,
+        deps = deps,
+        data = data,
+        copts = copts,
+        defines = defines,
+        local_defines = local_defines,
+        includes = includes,
+        system_includes = system_includes,
+        linkopts = linkopts,
+        linkstatic = linkstatic,
     )
-    analysis_test(
+    target_attrs = cc_attrs.merge_dicts(kwargs, target_attrs)
+    cc_attrs.add_if_not_none(target_attrs, "args", args)
+    cc_attrs.add_if_not_none(target_attrs, "env", env)
+    target_attrs["tags"] = cc_attrs.with_resource_group_tags(tags, resource_group)
+    cc_test(
         name = name,
-        attr_values = {
-            "timeout": "short",
+        visibility = visibility,
+        **target_attrs
+    )
+
+iree_cc_test = macro(
+    doc = """Defines a shared IREE C/C++ test target.
+
+    `resource_group` serializes tests that compete for a named local resource.
+    Bazel receives the conservative `exclusive-if-local` tag plus a structured
+    `resource_group:<name>` tag that CI and other generators can inspect.
+    """,
+    implementation = _iree_cc_test_impl,
+    inherit_attrs = "common",
+    attrs = cc_attrs.merge_dicts(
+        cc_attrs.compilation,
+        cc_attrs.dependency,
+        cc_attrs.binary_source,
+        cc_attrs.link,
+        {
+            "args": attr.string_list(
+                doc = "Command-line arguments passed to the test binary.",
+            ),
+            "env": attr.string_dict(
+                doc = "Environment variables passed to the test binary.",
+            ),
+            "resource_group": attr.string(
+                configurable = False,
+                doc = "Local resource name used to serialize tests competing for the same host resource.",
+            ),
         },
-        impl = _test_cc_library_preserves_system_include_inputs_impl,
-        target = name + "_subject",
-        **kwargs
-    )
-
-def _test_cc_library_preserves_system_include_inputs_impl(env, target):
-    paths = _all_compilation_paths(target[CcInfo].compilation_context)
-    _expect_path_suffix(env, paths, "public_include")
-    _expect_path_suffix(env, paths, "system_include")
-
-def _test_cc_binary_preserves_system_include_inputs(name, **kwargs):
-    util.helper_target(
-        iree_cc_binary,
-        name = name + "_subject",
-        srcs = [name + "_subject.cc"],
-        includes = ["binary_include"],
-        system_includes = ["binary_system_include"],
-        tags = ["manual"],
-    )
-    analysis_test(
-        name = name,
-        attr_values = {
-            "timeout": "short",
-        },
-        impl = _test_cc_binary_preserves_system_include_inputs_impl,
-        target = name + "_subject",
-        **kwargs
-    )
-
-def _test_cc_binary_preserves_system_include_inputs_impl(env, target):
-    paths = _all_compilation_paths(target[CcInfo].compilation_context)
-    _expect_path_suffix(env, paths, "binary_include")
-    _expect_path_suffix(env, paths, "binary_system_include")
-
-def _test_cc_test_preserves_system_include_inputs(name, **kwargs):
-    util.helper_target(
-        iree_cc_test,
-        name = name + "_subject",
-        srcs = [name + "_subject.cc"],
-        includes = ["test_include"],
-        system_includes = ["test_system_include"],
-        tags = ["manual"],
-    )
-    analysis_test(
-        name = name,
-        attr_values = {
-            "timeout": "short",
-        },
-        impl = _test_cc_test_preserves_system_include_inputs_impl,
-        target = name + "_subject",
-        **kwargs
-    )
-
-def _test_cc_test_preserves_system_include_inputs_impl(env, target):
-    paths = _all_compilation_paths(target[CcInfo].compilation_context)
-    _expect_path_suffix(env, paths, "test_include")
-    _expect_path_suffix(env, paths, "test_system_include")
-
-def cc_test_suite(name):
-    test_suite(
-        name = name,
-        tests = [
-            _test_cc_library_preserves_system_include_inputs,
-            _test_cc_binary_preserves_system_include_inputs,
-            _test_cc_test_preserves_system_include_inputs,
-        ],
-    )
+    ),
+)

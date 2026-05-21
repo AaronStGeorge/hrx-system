@@ -4,8 +4,8 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load(":cc_test.bzl", "cc_test_suite")
+load(":cc_rules_test.bzl", "cc_rules_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
-cc_test_suite(name = "cc_tests")
+cc_rules_test_suite(name = "cc_tests")
