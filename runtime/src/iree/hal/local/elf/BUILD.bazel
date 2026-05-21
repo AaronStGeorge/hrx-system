@@ -5,7 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
-load("//build_tools/bazel:native_binary.bzl", "native_test")
+load("//build_tools/bazel:executable.bzl", "iree_executable_test")
 load(
     "//runtime/build_tools/bazel:cc.bzl",
     "iree_runtime_cc_binary",
@@ -63,7 +63,7 @@ iree_runtime_cc_binary(
     ],
 )
 
-native_test(
+iree_executable_test(
     name = "elf_module_test",
     src = ":elf_module_test_binary",
 )

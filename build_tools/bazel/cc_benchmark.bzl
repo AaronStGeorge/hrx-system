@@ -8,6 +8,7 @@
 
 load(":cc.bzl", "iree_cc_binary")
 load(":cc_attrs.bzl", "cc_attrs")
+load(":executable.bzl", "iree_executable_test")
 
 _SMOKE_TEST_ARGS = ["--benchmark_min_time=0s"]
 _GOOGLE_BENCHMARK_DEP = Label("//build_tools/third_party/google_benchmark:benchmark")
@@ -16,52 +17,6 @@ def _with_google_benchmark_dep(deps):
     if deps == None:
         deps = []
     return deps + [_GOOGLE_BENCHMARK_DEP]
-
-def _benchmark_smoke_test_impl(ctx):
-    output = ctx.actions.declare_file(ctx.label.name)
-    ctx.actions.symlink(
-        output = output,
-        target_file = ctx.executable.src,
-        is_executable = True,
-    )
-
-    runfiles = ctx.attr.src[DefaultInfo].default_runfiles
-    for data_target in ctx.attr.data:
-        runfiles = runfiles.merge(data_target[DefaultInfo].default_runfiles)
-
-    expanded_env = {
-        key: ctx.expand_location(value, ctx.attr.data + [ctx.attr.src])
-        for key, value in ctx.attr.env.items()
-    }
-    return [
-        DefaultInfo(
-            executable = output,
-            files = depset([output]),
-            runfiles = runfiles,
-        ),
-        testing.TestEnvironment(expanded_env),
-    ]
-
-_benchmark_smoke_test = rule(
-    implementation = _benchmark_smoke_test_impl,
-    attrs = {
-        "data": attr.label_list(
-            allow_files = True,
-            doc = "Additional runtime data dependencies for the smoke test.",
-        ),
-        "env": attr.string_dict(
-            doc = "Environment variables passed to the smoke test binary.",
-        ),
-        "src": attr.label(
-            allow_files = True,
-            cfg = "target",
-            doc = "Benchmark binary to run as a smoke test.",
-            executable = True,
-            mandatory = True,
-        ),
-    },
-    test = True,
-)
 
 def _iree_cc_benchmark_impl(
         name,
@@ -117,7 +72,7 @@ def _iree_cc_benchmark_impl(
     })
     if timeout:
         smoke_test_attrs["timeout"] = timeout
-    _benchmark_smoke_test(
+    iree_executable_test(
         name = name + "_test",
         **smoke_test_attrs
     )
