@@ -105,6 +105,7 @@ _IREE_BENCHMARK_LOOM_PROVIDER_DEPS = (
 loom_cc_library(
     name = "main",
     srcs = [
+        "case_execution.c",
         "context.c",
         "diagnostics.c",
         "event.c",
@@ -122,6 +123,7 @@ loom_cc_library(
         "work_plan.c",
     ],
     hdrs = [
+        "case_execution.h",
         "configuration.h",
         "context.h",
         "diagnostics.h",
@@ -169,6 +171,7 @@ loom_cc_library(
         "//loom/src/loom/util:stream",
         "//loom/src/loom/verify",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
         "//runtime/src/iree/base/internal:json",
         "//runtime/src/iree/base/internal:path",
         "//runtime/src/iree/base/tooling:flags",
@@ -178,6 +181,23 @@ loom_cc_library(
         "//runtime/src/iree/tooling/profile:counter",
         "//runtime/src/iree/tooling/profile:summary",
         "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_test(
+    name = "case_execution_test",
+    srcs = ["case_execution_test.cc"],
+    deps = [
+        ":main",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/check",
+        "//loom/src/loom/tooling/testbench",
+        "//loom/src/loom/tooling/testbench:executor",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

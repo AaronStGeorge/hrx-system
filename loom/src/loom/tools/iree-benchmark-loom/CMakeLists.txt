@@ -14,6 +14,7 @@ loom_cc_library(
   NAME
     main
   HDRS
+    "case_execution.h"
     "configuration.h"
     "context.h"
     "diagnostics.h"
@@ -32,6 +33,7 @@ loom_cc_library(
     "timing.h"
     "work_plan.h"
   SRCS
+    "case_execution.c"
     "context.c"
     "diagnostics.c"
     "event.c"
@@ -49,6 +51,7 @@ loom_cc_library(
     "work_plan.c"
   DEPS
     iree::base
+    iree::base::internal::arena
     iree::base::internal::json
     iree::base::internal::path
     iree::base::tooling::flags
@@ -86,6 +89,24 @@ loom_cc_library(
     iree::tooling::profile::summary
     iree::vm
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    case_execution_test
+  SRCS
+    "case_execution_test.cc"
+  DEPS
+    ::main
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::check
+    loom::src::loom::tooling::testbench
+    loom::src::loom::tooling::testbench::executor
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(
