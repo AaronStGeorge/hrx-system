@@ -105,6 +105,7 @@ _IREE_BENCHMARK_LOOM_PROVIDER_DEPS = (
 loom_cc_library(
     name = "main",
     srcs = [
+        "context.c",
         "diagnostics.c",
         "event.c",
         "help.c",
@@ -122,6 +123,7 @@ loom_cc_library(
     ],
     hdrs = [
         "configuration.h",
+        "context.h",
         "diagnostics.h",
         "event.h",
         "help.h",

@@ -32,6 +32,7 @@
 #include "loom/tooling/execution/one_shot.h"
 #include "loom/tooling/io/file.h"
 #include "loom/tooling/testbench/executor.h"
+#include "loom/tools/iree-benchmark-loom/context.h"
 #include "loom/tools/iree-benchmark-loom/diagnostics.h"
 #include "loom/tools/iree-benchmark-loom/event.h"
 #include "loom/tools/iree-benchmark-loom/help.h"
@@ -413,27 +414,6 @@ static iree_host_size_t iree_benchmark_loom_case_sample_from_benchmark_sample(
     iree_host_size_t benchmark_sample_ordinal) {
   return loom_testbench_benchmark_sample_case_ordinal(case_plan, benchmark_plan,
                                                       benchmark_sample_ordinal);
-}
-
-static void iree_benchmark_loom_hal_context_initialize(
-    const iree_benchmark_loom_configuration_t* configuration,
-    iree_allocator_t host_allocator,
-    iree_benchmark_loom_hal_context_t* out_context) {
-  *out_context = (iree_benchmark_loom_hal_context_t){
-      .configuration = configuration,
-  };
-  loom_run_hal_testbench_context_initialize(
-      configuration->hal_artifact_provider_registry, host_allocator,
-      &out_context->execution);
-}
-
-static void iree_benchmark_loom_hal_context_deinitialize(
-    iree_benchmark_loom_hal_context_t* context) {
-  if (!context) {
-    return;
-  }
-  loom_run_hal_testbench_context_deinitialize(&context->execution);
-  *context = (iree_benchmark_loom_hal_context_t){0};
 }
 
 static iree_status_t iree_benchmark_loom_hal_actual_provider_initialize(

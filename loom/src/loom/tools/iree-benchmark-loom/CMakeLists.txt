@@ -15,6 +15,7 @@ loom_cc_library(
     main
   HDRS
     "configuration.h"
+    "context.h"
     "diagnostics.h"
     "event.h"
     "help.h"
@@ -31,6 +32,7 @@ loom_cc_library(
     "timing.h"
     "work_plan.h"
   SRCS
+    "context.c"
     "diagnostics.c"
     "event.c"
     "help.c"
