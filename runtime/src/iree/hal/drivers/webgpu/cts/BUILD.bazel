@@ -14,7 +14,7 @@
 # Tests requiring async completion waits (semaphore waits, buffer mapping,
 # dispatch) are excluded until threaded mode (bd-1gi) enables blocking waits.
 
-load("//build_tools/bazel:wasm.bzl", "iree_wasm_entry")
+load("//build_tools/wasm:build_defs.bzl", "iree_wasm_entry")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 load("//runtime/build_tools/bazel:hal_cts.bzl", "iree_runtime_hal_cts_test_suite")
 

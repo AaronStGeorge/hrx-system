@@ -7,7 +7,7 @@
 """Rules for exposing existing executables as binaries or tests."""
 
 load(
-    ":wasm.bzl",
+    "//build_tools/wasm:build_defs.bzl",
     "collect_and_bundle_wasm",
     "collect_wasm_js",
     "discover_wasm_entry",

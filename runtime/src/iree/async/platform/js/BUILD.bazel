@@ -8,7 +8,7 @@
 
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load(
-    "//build_tools/bazel:wasm.bzl",
+    "//build_tools/wasm:build_defs.bzl",
     "iree_wasm_cc_library",
     "iree_wasm_entry",
 )

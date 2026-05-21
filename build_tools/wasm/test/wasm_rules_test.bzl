@@ -14,7 +14,7 @@ load(
     "iree_executable_alias",
 )
 load(
-    "//build_tools/bazel:wasm.bzl",
+    "//build_tools/wasm:build_defs.bzl",
     "IreeWasmEntryInfo",
     "IreeWasmJsInfo",
     "iree_wasm_cc_library",
