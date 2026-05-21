@@ -116,6 +116,7 @@ def _iree_cc_binary_impl(
         linkstatic = linkstatic,
     )
     target_attrs = cc_attrs.merge_dicts(kwargs, target_attrs)
+    target_attrs["linkstatic"] = True
     cc_attrs.add_if_not_none(target_attrs, "args", args)
     cc_attrs.add_if_not_none(target_attrs, "linkshared", linkshared)
     cc_binary(
@@ -125,7 +126,13 @@ def _iree_cc_binary_impl(
     )
 
 iree_cc_binary = macro(
-    doc = """Defines a shared IREE C/C++ binary target.""",
+    doc = """Defines a shared IREE C/C++ binary target.
+
+    Binaries link statically by default so test and tool executables do not
+    split runtime or test state across Bazel-generated shared objects. Dynamic
+    linking should be a deliberate target-specific rule, not an accidental
+    default inherited from rules_cc.
+    """,
     implementation = _iree_cc_binary_impl,
     inherit_attrs = "common",
     attrs = cc_attrs.merge_dicts(

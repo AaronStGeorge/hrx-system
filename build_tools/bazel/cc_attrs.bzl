@@ -52,7 +52,7 @@ _LINK_ATTRS = {
         doc = "Additional linker options for this target.",
     ),
     "linkstatic": attr.bool(
-        doc = "Whether to prefer static linking for this target.",
+        doc = "Whether to force static linking for this target.",
     ),
 }
 
@@ -137,7 +137,8 @@ def _collect(
     _add_if_not_none(result, "defines", defines)
     _add_if_not_none(result, "local_defines", local_defines)
     _add_if_not_none(result, "linkopts", linkopts)
-    _add_if_not_none(result, "linkstatic", linkstatic)
+    if linkstatic:
+        result["linkstatic"] = linkstatic
     return result
 
 cc_attrs = struct(

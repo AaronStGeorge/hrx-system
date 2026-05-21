@@ -47,6 +47,7 @@ def _iree_cc_test_impl(
         linkstatic = linkstatic,
     )
     target_attrs = cc_attrs.merge_dicts(kwargs, target_attrs)
+    target_attrs["linkstatic"] = True
     cc_attrs.add_if_not_none(target_attrs, "args", args)
     cc_attrs.add_if_not_none(target_attrs, "env", env)
     target_attrs["size"] = size
@@ -59,6 +60,9 @@ def _iree_cc_test_impl(
 
 iree_cc_test = macro(
     doc = """Defines a shared IREE C/C++ test target.
+
+    Tests link statically by default so each executable does not split
+    process-local test state across Bazel-generated shared objects.
 
     `resource_group` serializes tests that compete for a named local resource.
     Bazel receives the conservative `exclusive-if-local` tag plus a structured

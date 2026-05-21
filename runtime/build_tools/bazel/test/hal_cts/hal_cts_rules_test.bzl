@@ -28,7 +28,7 @@ def _test_non_executable_suite_generates_wrapped_test(name, **kwargs):
     iree_runtime_hal_cts_test_suite(
         name = name + "_subject",
         args = ["--cts_fixture_flag=true"],
-        backends_lib = ":hal_cts_test_backends",
+        backends = ":hal_cts_test_backends",
         env = {
             "IREE_HAL_CTS_FIXTURE": "1",
         },
@@ -69,7 +69,7 @@ def _test_non_executable_suite_generates_wrapped_test_impl(env, target):
 def _test_non_executable_suite_links_base_cts_deps(name, **kwargs):
     iree_runtime_hal_cts_test_suite(
         name = name + "_subject",
-        backends_lib = ":hal_cts_test_backends",
+        backends = ":hal_cts_test_backends",
         tags = ["manual"],
     )
     analysis_test(
@@ -91,7 +91,7 @@ def _test_non_executable_suite_links_base_cts_deps_impl(env, target):
 def _test_executable_suite_links_prebuilt_testdata(name, **kwargs):
     iree_runtime_hal_cts_test_suite(
         name = name + "_subject",
-        backends_lib = ":hal_cts_test_backends",
+        backends = ":hal_cts_test_backends",
         tags = ["manual"],
         testdata_libs = [":hal_cts_testdata"],
     )

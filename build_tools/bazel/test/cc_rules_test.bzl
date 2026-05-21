@@ -136,6 +136,28 @@ def _test_cc_binary_preserves_shared_library_mode_impl(env, target):
     if not attrs.linkshared:
         env.fail("expected shared-library binary mode")
 
+def _test_cc_binary_links_statically_by_default(name, **kwargs):
+    util.helper_target(
+        iree_cc_binary,
+        name = name + "_subject",
+        srcs = [name + "_subject.cc"],
+        tags = ["manual"],
+    )
+    analysis_test(
+        name = name,
+        attr_values = {
+            "timeout": "short",
+        },
+        impl = _test_cc_binary_links_statically_by_default_impl,
+        target = name + "_subject",
+        **kwargs
+    )
+
+def _test_cc_binary_links_statically_by_default_impl(env, target):
+    attrs = target[TestingAspectInfo].attrs
+    if not attrs.linkstatic:
+        env.fail("expected C/C++ binaries to link statically by default")
+
 def _test_cc_test_preserves_system_include_inputs(name, **kwargs):
     util.helper_target(
         iree_cc_test,
@@ -191,6 +213,28 @@ def _test_cc_test_applies_resource_group_tags_impl(env, target):
         if expected_tag not in tags:
             env.fail("expected %r in test tags %r" % (expected_tag, tags))
 
+def _test_cc_test_links_statically_by_default(name, **kwargs):
+    util.helper_target(
+        iree_cc_test,
+        name = name + "_subject",
+        srcs = [name + "_subject.cc"],
+        tags = ["manual"],
+    )
+    analysis_test(
+        name = name,
+        attr_values = {
+            "timeout": "short",
+        },
+        impl = _test_cc_test_links_statically_by_default_impl,
+        target = name + "_subject",
+        **kwargs
+    )
+
+def _test_cc_test_links_statically_by_default_impl(env, target):
+    attrs = target[TestingAspectInfo].attrs
+    if not attrs.linkstatic:
+        env.fail("expected C/C++ tests to link statically by default")
+
 def cc_rules_test_suite(name):
     test_suite(
         name = name,
@@ -199,7 +243,9 @@ def cc_rules_test_suite(name):
             _test_cc_library_preserves_language_compile_options,
             _test_cc_binary_preserves_system_include_inputs,
             _test_cc_binary_preserves_shared_library_mode,
+            _test_cc_binary_links_statically_by_default,
             _test_cc_test_preserves_system_include_inputs,
             _test_cc_test_applies_resource_group_tags,
+            _test_cc_test_links_statically_by_default,
         ],
     )

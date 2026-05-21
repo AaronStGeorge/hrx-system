@@ -99,7 +99,7 @@ def _hal_cts_test(
     )
 
 def iree_runtime_hal_cts_test_suite(
-        backends_lib,
+        backends,
         executable_formats = None,
         testdata = None,
         testdata_libs = None,
@@ -116,7 +116,7 @@ def iree_runtime_hal_cts_test_suite(
     executable testdata with the CTS registry.
 
     Args:
-      backends_lib: Driver-specific library that registers CTS backends.
+      backends: Driver-specific library that registers CTS backends.
       executable_formats: Compiler-driven executable testdata configuration
         from the old monorepo rule. This runtime macro rejects it so callsites
         cannot accidentally depend on an in-tree compiler.
@@ -146,7 +146,7 @@ def iree_runtime_hal_cts_test_suite(
         )
 
     split_attrs = _split_test_attrs(kwargs)
-    common_deps = [backends_lib] + _COMMON_DEPS
+    common_deps = [backends] + _COMMON_DEPS
     args = _normalize_list(args)
     tags = _normalize_list(tags)
     testdata_libs = _normalize_list(testdata_libs)
