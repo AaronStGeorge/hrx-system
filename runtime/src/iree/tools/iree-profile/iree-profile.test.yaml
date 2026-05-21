@@ -1,0 +1,26 @@
+version: 1
+
+cases:
+  - name: prints agent markdown guide
+    run:
+      tool: iree-profile
+      args:
+        - "--agents_md"
+    stdout:
+      contains:
+        - "# IREE HAL Profiling With iree-profile"
+        - "JSONL"
+    stderr:
+      empty: true
+
+  - name: requires profile bundle path
+    run:
+      tool: iree-profile
+    exit:
+      nonzero: true
+    stdout:
+      empty: true
+    stderr:
+      contains:
+        - "Error: expected profile bundle path."
+        - "expected profile bundle path"

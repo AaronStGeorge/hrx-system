@@ -327,6 +327,10 @@ py_test(
 py_test(
     name = "cli_test",
     srcs = ["cli_test.py"],
+    args = [
+        "--fixture-generator=$(rootpath :test_fixture_generator)",
+        "--iree-profile=$(rootpath //tools:iree-profile)",
+    ],
     data = [
         ":test_fixture_generator",
         "//tools:iree-profile",
