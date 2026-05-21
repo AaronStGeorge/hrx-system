@@ -26,6 +26,7 @@ loom_cc_library(
     "report.h"
     "testbench.h"
     "timing.h"
+    "work_plan.h"
   SRCS
     "diagnostics.c"
     "help.c"
@@ -38,6 +39,7 @@ loom_cc_library(
     "report.c"
     "testbench.c"
     "timing.c"
+    "work_plan.c"
   DEPS
     iree::base
     iree::base::internal::json
@@ -76,6 +78,23 @@ loom_cc_library(
     iree::tooling::profile::summary
     iree::vm
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    work_plan_test
+  SRCS
+    "work_plan_test.cc"
+  DEPS
+    ::main
+    iree::base
+    iree::base::internal::arena
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::check
+    loom::src::loom::tooling::testbench
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_binary(

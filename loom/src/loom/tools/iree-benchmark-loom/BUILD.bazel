@@ -11,6 +11,7 @@ load(
     "iree_select",
     "loom_cc_binary",
     "loom_cc_library",
+    "loom_cc_test",
 )
 
 package(
@@ -115,6 +116,7 @@ loom_cc_library(
         "report.c",
         "testbench.c",
         "timing.c",
+        "work_plan.c",
     ],
     hdrs = [
         "diagnostics.h",
@@ -129,6 +131,7 @@ loom_cc_library(
         "report.h",
         "testbench.h",
         "timing.h",
+        "work_plan.h",
     ],
     deps = [
         "//loom/src/loom/error:diagnostic",
@@ -167,6 +170,22 @@ loom_cc_library(
         "//runtime/src/iree/tooling/profile:counter",
         "//runtime/src/iree/tooling/profile:summary",
         "//runtime/src/iree/vm",
+    ],
+)
+
+loom_cc_test(
+    name = "work_plan_test",
+    srcs = ["work_plan_test.cc"],
+    deps = [
+        ":main",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops/check",
+        "//loom/src/loom/tooling/testbench",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

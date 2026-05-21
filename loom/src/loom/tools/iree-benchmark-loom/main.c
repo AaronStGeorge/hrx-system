@@ -43,6 +43,7 @@
 #include "loom/tools/iree-benchmark-loom/report.h"
 #include "loom/tools/iree-benchmark-loom/testbench.h"
 #include "loom/tools/iree-benchmark-loom/timing.h"
+#include "loom/tools/iree-benchmark-loom/work_plan.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
 #include "loom/verify/verify.h"
@@ -364,243 +365,6 @@ static iree_status_t iree_benchmark_loom_register_context(
   }
   return configuration->register_context.fn(
       configuration->register_context.user_data, context);
-}
-
-static iree_status_t iree_benchmark_loom_duration_ms_to_ns(
-    int64_t duration_ms, iree_duration_t* out_duration_ns) {
-  if (duration_ms < 0) {
-    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "duration must be non-negative; got %" PRIi64,
-                            duration_ms);
-  }
-  if (duration_ms > INT64_MAX / 1000000) {
-    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                            "duration %" PRIi64 "ms overflows nanoseconds",
-                            duration_ms);
-  }
-  *out_duration_ns = (iree_duration_t)(duration_ms * 1000000);
-  return iree_ok_status();
-}
-
-static iree_status_t iree_benchmark_loom_policy_from_benchmark(
-    const loom_testbench_module_plan_t* module_plan,
-    const loom_testbench_benchmark_plan_t* benchmark_plan,
-    const iree_benchmark_loom_options_t* options,
-    iree_benchmark_loom_benchmark_policy_t* out_policy) {
-  memset(out_policy, 0, sizeof(*out_policy));
-  loom_run_hal_benchmark_options_initialize(&out_policy->hal_options);
-
-  (void)module_plan;
-  iree_string_view_t measure = options->measure;
-  iree_benchmark_loom_measure_t measure_kind =
-      IREE_BENCHMARK_LOOM_MEASURE_CASE_END_TO_END;
-  if (iree_string_view_equal(measure, IREE_SV("case_end_to_end")) ||
-      iree_string_view_equal(measure, IREE_SV("end_to_end"))) {
-    measure = IREE_SV("case_end_to_end");
-    measure_kind = IREE_BENCHMARK_LOOM_MEASURE_CASE_END_TO_END;
-  } else if (iree_string_view_equal(measure, IREE_SV("dispatch_complete"))) {
-    measure_kind = IREE_BENCHMARK_LOOM_MEASURE_DISPATCH_COMPLETE;
-  } else {
-    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                            "benchmark `%.*s` requested unsupported V0 "
-                            "measure '%.*s'",
-                            (int)benchmark_plan->name.size,
-                            benchmark_plan->name.data, (int)measure.size,
-                            measure.data);
-  }
-  if (measure_kind != IREE_BENCHMARK_LOOM_MEASURE_DISPATCH_COMPLETE &&
-      (!iree_string_view_is_empty(options->profile_artifacts_dir) ||
-       options->profile_data_requested ||
-       options->profile_counters.count != 0)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "final-batch profile flags require benchmark `%.*s` "
-        "to use measure = \"dispatch_complete\"",
-        (int)benchmark_plan->name.size, benchmark_plan->name.data);
-  }
-
-  *out_policy = (iree_benchmark_loom_benchmark_policy_t){
-      .measure_kind = measure_kind,
-      .measure = measure,
-      .warmup_iterations = options->warmup_iterations,
-      .iterations = options->iterations,
-  };
-  loom_run_hal_benchmark_options_initialize(&out_policy->hal_options);
-  if (measure_kind == IREE_BENCHMARK_LOOM_MEASURE_DISPATCH_COMPLETE) {
-    bool profile_final_batch = options->profile_final_batch;
-    const bool profile_artifacts_requested =
-        !iree_string_view_is_empty(options->profile_artifacts_dir);
-    if ((profile_artifacts_requested || options->profile_data_requested ||
-         options->profile_counters.count != 0) &&
-        !profile_final_batch) {
-      if (options->profile_final_batch_specified &&
-          !options->profile_final_batch) {
-        return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "--profile_final_batch=false conflicts with "
-                                "requested final-batch profile data");
-      }
-      profile_final_batch = true;
-    }
-    iree_duration_t min_duration_ns = 0;
-    iree_duration_t warmup_min_duration_ns = 0;
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_duration_ms_to_ns(
-        options->min_time_ms, &min_duration_ns));
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_duration_ms_to_ns(
-        options->warmup_time_ms, &warmup_min_duration_ns));
-    out_policy->hal_options.timing.batch_size = options->batch_size;
-    out_policy->hal_options.timing.warmup_batch_count =
-        options->warmup_iterations;
-    out_policy->hal_options.timing.warmup_min_duration_ns =
-        warmup_min_duration_ns;
-    out_policy->hal_options.timing.min_batch_count = options->iterations;
-    out_policy->hal_options.timing.min_duration_ns = min_duration_ns;
-    out_policy->hal_options.timing.max_batch_count = options->max_batches;
-    out_policy->hal_options.timing.stable_p90_to_p50_delta_ppm =
-        options->stable_p90_to_p50_ppm;
-    out_policy->hal_options.dispatch_batch.dispatch_count = options->batch_size;
-    IREE_RETURN_IF_ERROR(iree_benchmark_loom_parse_profile_data_families(
-        options->profile_data, &out_policy->hal_options.profile_data_families));
-    const iree_hal_device_profiling_data_families_t counter_data =
-        IREE_HAL_DEVICE_PROFILING_DATA_COUNTER_SAMPLES |
-        IREE_HAL_DEVICE_PROFILING_DATA_COUNTER_RANGES;
-    if (options->profile_counters.count != 0) {
-      if (!iree_any_bit_set(out_policy->hal_options.profile_data_families,
-                            counter_data)) {
-        return iree_make_status(
-            IREE_STATUS_INVALID_ARGUMENT,
-            "--profile_counter requires --profile_data to include counters or "
-            "counter-ranges");
-      }
-      out_policy->profile_counter_set =
-          (iree_hal_profile_counter_set_selection_t){
-              .name = IREE_SV("iree-benchmark-loom"),
-              .counter_name_count = options->profile_counters.count,
-              .counter_names = options->profile_counters.values,
-          };
-      out_policy->hal_options.profile_counter_set_count = 1;
-      out_policy->hal_options.profile_counter_sets =
-          &out_policy->profile_counter_set;
-    }
-    if (profile_final_batch) {
-      out_policy->hal_options.flags |=
-          LOOM_RUN_HAL_BENCHMARK_FLAG_PROFILE_FINAL_BATCH;
-    }
-  }
-  return iree_ok_status();
-}
-
-static iree_host_size_t iree_benchmark_loom_compare_token_count(
-    iree_string_view_t compare_list) {
-  iree_host_size_t count = 0;
-  iree_string_view_t remaining = iree_string_view_trim(compare_list);
-  while (!iree_string_view_is_empty(remaining)) {
-    iree_string_view_t token = iree_string_view_empty();
-    iree_string_view_split(remaining, ',', &token, &remaining);
-    token = iree_string_view_trim(token);
-    if (!iree_string_view_is_empty(token)) {
-      ++count;
-    }
-    remaining = iree_string_view_trim(remaining);
-  }
-  return count;
-}
-
-static iree_status_t iree_benchmark_loom_selected_benchmark_initialize(
-    const loom_testbench_module_plan_t* module_plan,
-    const loom_testbench_benchmark_plan_t* benchmark_plan,
-    const iree_benchmark_loom_options_t* options,
-    iree_host_size_t candidate_index,
-    iree_benchmark_loom_selected_benchmark_t* out_selection) {
-  if (benchmark_plan->case_index >= module_plan->case_count) {
-    return iree_make_status(
-        IREE_STATUS_FAILED_PRECONDITION,
-        "benchmark `%.*s` does not reference a planned check.case",
-        (int)benchmark_plan->name.size, benchmark_plan->name.data);
-  }
-  memset(out_selection, 0, sizeof(*out_selection));
-  snprintf(out_selection->candidate_id_storage,
-           sizeof(out_selection->candidate_id_storage), "c%" PRIhsz,
-           candidate_index);
-  out_selection->identity = (iree_benchmark_loom_candidate_identity_t){
-      .candidate_id =
-          iree_make_cstring_view(out_selection->candidate_id_storage),
-      .candidate_index = candidate_index,
-  };
-  out_selection->benchmark_plan = benchmark_plan;
-  out_selection->case_plan = &module_plan->cases[benchmark_plan->case_index];
-  return iree_benchmark_loom_policy_from_benchmark(
-      module_plan, benchmark_plan, options, &out_selection->policy);
-}
-
-static iree_status_t iree_benchmark_loom_find_benchmark_by_name(
-    const loom_testbench_module_plan_t* module_plan, iree_string_view_t name,
-    const loom_testbench_benchmark_plan_t** out_benchmark) {
-  *out_benchmark = NULL;
-  for (iree_host_size_t i = 0; i < module_plan->benchmark_count; ++i) {
-    const loom_testbench_benchmark_plan_t* benchmark =
-        &module_plan->benchmarks[i];
-    if (iree_string_view_equal(benchmark->name, name)) {
-      *out_benchmark = benchmark;
-      return iree_ok_status();
-    }
-  }
-  return iree_make_status(IREE_STATUS_NOT_FOUND,
-                          "--compare benchmark '@%.*s' was not found",
-                          (int)name.size, name.data);
-}
-
-static iree_status_t iree_benchmark_loom_select_compare_benchmarks(
-    const loom_testbench_module_plan_t* module_plan, iree_string_view_t compare,
-    const iree_benchmark_loom_options_t* options, iree_allocator_t allocator,
-    iree_benchmark_loom_selected_benchmark_t** out_selections,
-    iree_host_size_t* out_selection_count) {
-  *out_selections = NULL;
-  *out_selection_count = 0;
-  compare = iree_string_view_trim(compare);
-  const iree_host_size_t selection_count =
-      iree_benchmark_loom_compare_token_count(compare);
-  if (selection_count < 2) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "--compare requires at least two comma-separated check.benchmark "
-        "symbols");
-  }
-
-  iree_benchmark_loom_selected_benchmark_t* selections = NULL;
-  IREE_RETURN_IF_ERROR(iree_allocator_malloc_array(
-      allocator, selection_count, sizeof(*selections), (void**)&selections));
-  memset(selections, 0, selection_count * sizeof(*selections));
-
-  iree_status_t status = iree_ok_status();
-  iree_host_size_t selection_index = 0;
-  iree_string_view_t remaining = compare;
-  while (iree_status_is_ok(status) && !iree_string_view_is_empty(remaining)) {
-    iree_string_view_t token = iree_string_view_empty();
-    iree_string_view_split(remaining, ',', &token, &remaining);
-    token = iree_benchmark_loom_normalize_selection_name(token);
-    if (iree_string_view_is_empty(token)) {
-      status = iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                                "--compare contains an empty benchmark name");
-      break;
-    }
-    const loom_testbench_benchmark_plan_t* benchmark = NULL;
-    status = iree_benchmark_loom_find_benchmark_by_name(module_plan, token,
-                                                        &benchmark);
-    if (iree_status_is_ok(status)) {
-      status = iree_benchmark_loom_selected_benchmark_initialize(
-          module_plan, benchmark, options, selection_index,
-          &selections[selection_index]);
-    }
-    ++selection_index;
-    remaining = iree_string_view_trim(remaining);
-  }
-  if (iree_status_is_ok(status)) {
-    *out_selections = selections;
-    *out_selection_count = selection_count;
-  } else {
-    iree_allocator_free(allocator, selections);
-  }
-  return status;
 }
 
 static iree_status_t iree_benchmark_loom_compile_report_options_initialize(
@@ -3331,9 +3095,6 @@ int iree_benchmark_loom_main(
       planned_case_count = module_plan.case_count;
       planned_benchmark_count = module_plan.benchmark_count;
     }
-    const iree_string_view_t selected_case_name = options.selected_case;
-    const iree_string_view_t selected_benchmark_name =
-        options.selected_benchmark;
     loom_testbench_case_execution_options_t execution_options = {0};
     loom_testbench_case_execution_options_initialize(&execution_options);
     execution_options.materializer.host_allocator = allocator;
@@ -3348,18 +3109,24 @@ int iree_benchmark_loom_main(
             .user_data = &file_provider,
         };
 
-    if (iree_status_is_ok(status) && compare_requested) {
-      iree_benchmark_loom_selected_benchmark_t* selections = NULL;
-      iree_host_size_t selection_count = 0;
-      status = iree_benchmark_loom_select_compare_benchmarks(
-          &module_plan, options.compare, &options, allocator, &selections,
-          &selection_count);
+    iree_benchmark_loom_work_plan_t work_plan = {0};
+    bool work_plan_initialized = false;
+    if (iree_status_is_ok(status)) {
+      status = iree_benchmark_loom_work_plan_initialize(&module_plan, &options,
+                                                        allocator, &work_plan);
       if (iree_status_is_ok(status)) {
-        selected_benchmark_count = selection_count;
+        work_plan_initialized = true;
+        selected_benchmark_count = work_plan.selected_benchmark_count;
       }
-      for (iree_host_size_t i = 0; iree_status_is_ok(status) &&
-                                   selections != NULL && i < selection_count;
-           ++i) {
+    }
+
+    if (iree_status_is_ok(status) && compare_requested) {
+      const iree_benchmark_loom_selected_benchmark_t* selections =
+          work_plan.selected_benchmarks;
+      const iree_host_size_t selection_count =
+          work_plan.selected_benchmark_count;
+      for (iree_host_size_t i = 0;
+           iree_status_is_ok(status) && i < selection_count; ++i) {
         if (selections[i].policy.measure_kind !=
             IREE_BENCHMARK_LOOM_MEASURE_DISPATCH_COMPLETE) {
           status =
@@ -3395,56 +3162,30 @@ int iree_benchmark_loom_main(
             &execution_arena, allocator, &jsonl_sink, &correctness_sample_count,
             &correctness_failed_sample_count, &failed_benchmark_count);
       }
-      iree_allocator_free(allocator, selections);
     }
 
-    for (iree_host_size_t benchmark_index = 0;
+    for (iree_host_size_t selection_index = 0;
          iree_status_is_ok(status) && !compare_requested &&
-         benchmark_index < module_plan.benchmark_count;
-         ++benchmark_index) {
+         selection_index < work_plan.selected_benchmark_count;
+         ++selection_index) {
+      const iree_benchmark_loom_selected_benchmark_t* selection =
+          &work_plan.selected_benchmarks[selection_index];
       const loom_testbench_benchmark_plan_t* benchmark_plan =
-          &module_plan.benchmarks[benchmark_index];
-      if (!iree_benchmark_loom_benchmark_matches_selection(
-              benchmark_plan, selected_benchmark_name)) {
-        continue;
-      }
-      if (benchmark_plan->case_index >= module_plan.case_count) {
-        status = iree_make_status(
-            IREE_STATUS_FAILED_PRECONDITION,
-            "benchmark `%.*s` does not reference a planned check.case",
-            (int)benchmark_plan->name.size, benchmark_plan->name.data);
-        break;
-      }
-      const loom_testbench_case_plan_t* case_plan =
-          &module_plan.cases[benchmark_plan->case_index];
-      if (!iree_benchmark_loom_case_matches_selection(case_plan,
-                                                      selected_case_name)) {
-        continue;
-      }
+          selection->benchmark_plan;
+      const loom_testbench_case_plan_t* case_plan = selection->case_plan;
+      const iree_benchmark_loom_benchmark_policy_t* policy = &selection->policy;
+      const iree_benchmark_loom_candidate_identity_t* candidate_identity =
+          &selection->identity;
 
-      const iree_host_size_t candidate_index = selected_benchmark_count;
-      char candidate_id_storage[32];
-      snprintf(candidate_id_storage, sizeof(candidate_id_storage), "c%" PRIhsz,
-               candidate_index);
-      const iree_benchmark_loom_candidate_identity_t candidate_identity = {
-          .candidate_id = iree_make_cstring_view(candidate_id_storage),
-          .candidate_index = candidate_index,
-      };
-      ++selected_benchmark_count;
-      iree_benchmark_loom_benchmark_policy_t policy = {0};
-      status = iree_benchmark_loom_policy_from_benchmark(
-          &module_plan, benchmark_plan, &options, &policy);
-      if (iree_status_is_ok(status)) {
-        status = iree_benchmark_loom_jsonl_sink_end(
-            &jsonl_sink,
-            iree_benchmark_loom_append_plan_row(
-                &run_identity, &candidate_identity, module_plan.module,
-                benchmark_plan, case_plan, &policy, &options,
-                options.sample_compilation_mode, allocator,
-                iree_benchmark_loom_jsonl_sink_begin(&jsonl_sink)));
-      }
+      status = iree_benchmark_loom_jsonl_sink_end(
+          &jsonl_sink,
+          iree_benchmark_loom_append_plan_row(
+              &run_identity, candidate_identity, module_plan.module,
+              benchmark_plan, case_plan, policy, &options,
+              options.sample_compilation_mode, allocator,
+              iree_benchmark_loom_jsonl_sink_begin(&jsonl_sink)));
       if (iree_status_is_ok(status) && options.dry_run &&
-          policy.measure_kind ==
+          policy->measure_kind ==
               IREE_BENCHMARK_LOOM_MEASURE_DISPATCH_COMPLETE) {
         status = iree_benchmark_loom_jsonl_sink_end(
             &jsonl_sink,
@@ -3457,13 +3198,13 @@ int iree_benchmark_loom_main(
       }
 
       if (iree_status_is_ok(status) &&
-          policy.measure_kind ==
+          policy->measure_kind ==
               IREE_BENCHMARK_LOOM_MEASURE_DISPATCH_COMPLETE) {
         if (iree_benchmark_loom_sample_compilation_runs_once(
                 options.sample_compilation_mode)) {
           status = iree_benchmark_loom_run_dispatch_complete_benchmark(
-              &run_identity, &candidate_identity, &module_plan, benchmark_plan,
-              case_plan, &policy, &options, &hal_context, &session, filename,
+              &run_identity, candidate_identity, &module_plan, benchmark_plan,
+              case_plan, policy, &options, &hal_context, &session, filename,
               source, &compile_report_options, &execution_options,
               IREE_SV("once"), /*has_sample_constant_ordinal=*/false,
               /*sample_constant_ordinal=*/0, &device_row_state,
@@ -3483,10 +3224,10 @@ int iree_benchmark_loom_main(
                iree_status_is_ok(status) && sample_ordinal < end_sample;
                ++sample_ordinal) {
             status = iree_benchmark_loom_run_dispatch_complete_benchmark(
-                &run_identity, &candidate_identity, &module_plan,
-                benchmark_plan, case_plan, &policy, &options, &hal_context,
-                &session, filename, source, &compile_report_options,
-                &execution_options, IREE_SV("per_sample"),
+                &run_identity, candidate_identity, &module_plan, benchmark_plan,
+                case_plan, policy, &options, &hal_context, &session, filename,
+                source, &compile_report_options, &execution_options,
+                IREE_SV("per_sample"),
                 /*has_sample_constant_ordinal=*/true, sample_ordinal,
                 &device_row_state, &execution_arena, allocator, &jsonl_sink,
                 &correctness_sample_count, &correctness_failed_sample_count,
@@ -3502,7 +3243,7 @@ int iree_benchmark_loom_main(
       iree_host_size_t benchmark_correctness_failed_sample_count = 0;
       if (iree_status_is_ok(status)) {
         status = iree_benchmark_loom_run_case_correctness(
-            &run_identity, &candidate_identity, &module_plan, benchmark_plan,
+            &run_identity, candidate_identity, &module_plan, benchmark_plan,
             &options, benchmark_plan->case_index, &benchmark_execution_options,
             iree_string_view_empty(), &execution_arena, &jsonl_sink,
             &benchmark_correctness_sample_count,
@@ -3519,7 +3260,7 @@ int iree_benchmark_loom_main(
           benchmark_correctness_failed_sample_count == 0) {
         status = iree_benchmark_loom_run_benchmark_iterations(
             &module_plan, benchmark_plan, &options,
-            &benchmark_execution_options, &policy, &execution_arena, allocator,
+            &benchmark_execution_options, policy, &execution_arena, allocator,
             &benchmark_result);
       }
       if (iree_status_is_ok(status) &&
@@ -3545,8 +3286,8 @@ int iree_benchmark_loom_main(
         status = iree_benchmark_loom_jsonl_sink_end(
             &jsonl_sink,
             iree_benchmark_loom_append_benchmark_result(
-                &run_identity, &candidate_identity, module_plan.module,
-                benchmark_plan, case_plan, &policy, &benchmark_result,
+                &run_identity, candidate_identity, module_plan.module,
+                benchmark_plan, case_plan, policy, &benchmark_result,
                 benchmark_correctness_sample_count,
                 benchmark_correctness_failed_sample_count,
                 iree_benchmark_loom_jsonl_sink_begin(&jsonl_sink)));
@@ -3554,21 +3295,19 @@ int iree_benchmark_loom_main(
           status = iree_benchmark_loom_jsonl_sink_end(
               &jsonl_sink,
               iree_benchmark_loom_append_profile_row(
-                  &run_identity, &candidate_identity, module_plan.module,
-                  benchmark_plan, case_plan, &policy, &benchmark_result,
+                  &run_identity, candidate_identity, module_plan.module,
+                  benchmark_plan, case_plan, policy, &benchmark_result,
                   allocator,
                   iree_benchmark_loom_jsonl_sink_begin(&jsonl_sink)));
         }
       }
     }
-    if (iree_status_is_ok(status) && selected_benchmark_count == 0) {
-      status = iree_make_status(
-          IREE_STATUS_NOT_FOUND, "no check.benchmark matched '%.*s'",
-          (int)selected_benchmark_name.size, selected_benchmark_name.data);
-    }
     if (iree_status_is_ok(status) &&
         (failed_benchmark_count != 0 || correctness_failed_sample_count != 0)) {
       exit_code = 1;
+    }
+    if (work_plan_initialized) {
+      iree_benchmark_loom_work_plan_deinitialize(&work_plan);
     }
   }
 
