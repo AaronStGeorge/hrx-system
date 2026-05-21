@@ -14,6 +14,7 @@ loom_cc_library(
   NAME
     main
   HDRS
+    "configuration.h"
     "diagnostics.h"
     "event.h"
     "help.h"

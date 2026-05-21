@@ -15,7 +15,7 @@
 #include "loom/tooling/execution/hal/benchmark.h"
 #include "loom/tooling/execution/hal/testbench_actual.h"
 #include "loom/tooling/testbench/executor.h"
-#include "loom/tools/iree-benchmark-loom/main.h"
+#include "loom/tools/iree-benchmark-loom/configuration.h"
 #include "loom/tools/iree-benchmark-loom/output.h"
 #include "loom/util/stream.h"
 

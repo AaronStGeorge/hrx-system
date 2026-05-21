@@ -14,7 +14,7 @@
 #include "loom/tooling/testbench/executor.h"
 #include "loom/tooling/testbench/reference.h"
 #include "loom/tooling/testbench/requirements.h"
-#include "loom/tools/iree-benchmark-loom/main.h"
+#include "loom/tools/iree-benchmark-loom/configuration.h"
 
 #ifdef __cplusplus
 extern "C" {

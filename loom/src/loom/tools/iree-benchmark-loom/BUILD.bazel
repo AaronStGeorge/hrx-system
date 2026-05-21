@@ -121,6 +121,7 @@ loom_cc_library(
         "work_plan.c",
     ],
     hdrs = [
+        "configuration.h",
         "diagnostics.h",
         "event.h",
         "help.h",
