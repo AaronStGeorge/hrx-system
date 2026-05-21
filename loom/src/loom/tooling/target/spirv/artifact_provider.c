@@ -100,7 +100,6 @@ static void loom_spirv_hal_artifact_provider_deinitialize_device_target(
 
 static iree_status_t loom_spirv_hal_artifact_provider_emit_selected_entry(
     loom_module_t* module, const loom_target_entry_options_t* target_options,
-    const loom_target_entry_t* entry,
     const loom_run_hal_device_target_t* target,
     loom_target_entry_diagnostic_emitter_t* diagnostic_emitter,
     const loom_target_low_descriptor_registry_t* low_registry,
@@ -129,8 +128,8 @@ static iree_status_t loom_spirv_hal_artifact_provider_emit_selected_entry(
       iree_allocator_malloc(allocator, sizeof(*storage), (void**)&storage));
   *storage = (loom_spirv_hal_artifact_storage_t){0};
 
-  iree_status_t status = loom_spirv_emit_low_function_module(
-      module, entry->func.op, &low_registry->registry, target_selection,
+  iree_status_t status = loom_spirv_emit_low_module(
+      module, &low_registry->registry, target_selection,
       loom_target_entry_emitter(diagnostic_emitter), arena, &storage->module,
       allocator);
   if (iree_status_is_ok(status) && diagnostic_emitter->error_count == 0) {
@@ -214,8 +213,8 @@ static iree_status_t loom_spirv_hal_artifact_provider_emit_artifact(
           report, &entry.bundle_storage.bundle);
     }
     status = loom_spirv_hal_artifact_provider_emit_selected_entry(
-        module, &target_options, &entry, target, &diagnostic_emitter,
-        &low_registry, &arena, allocator, out_emitted, out_artifact);
+        module, &target_options, target, &diagnostic_emitter, &low_registry,
+        &arena, allocator, out_emitted, out_artifact);
   }
   if (report != NULL) {
     loom_target_compile_report_record_status(report, status);

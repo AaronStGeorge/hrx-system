@@ -13,9 +13,9 @@ package(
 )
 
 loom_cc_library(
-    name = "func_apply_selection",
-    srcs = ["func_apply_selection.c"],
-    hdrs = ["func_apply_selection.h"],
+    name = "template_selection",
+    srcs = ["template_selection.c"],
+    hdrs = ["template_selection.h"],
     deps = [
         ":symbol_pruning",
         "//loom/src/loom/analysis:func_provider_catalog",

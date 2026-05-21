@@ -12,11 +12,11 @@ iree_add_all_subdirs()
 
 loom_cc_library(
   NAME
-    func_apply_selection
+    template_selection
   HDRS
-    "func_apply_selection.h"
+    "template_selection.h"
   SRCS
-    "func_apply_selection.c"
+    "template_selection.c"
   DEPS
     ::symbol_pruning
     iree::base

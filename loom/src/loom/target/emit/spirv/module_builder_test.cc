@@ -548,7 +548,7 @@ TEST(SpirvModuleBuilderTest, RejectsNonSpirvTargetBundle) {
   };
 
   loom_spirv_module_builder_t builder;
-  IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
+  IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION,
                         loom_spirv_module_builder_initialize(
                             &target, iree_allocator_system(), &builder));
 }

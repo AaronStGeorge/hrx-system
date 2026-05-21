@@ -80,8 +80,7 @@ static iree_status_t loom_target_pipeline_build_target_legalize(
 static iree_status_t loom_target_pipeline_build_authoring_expansion(
     loom_builder_t* builder) {
   IREE_RETURN_IF_ERROR(loom_target_pipeline_build_run_with_string_option(
-      builder, IREE_SV("select-func-apply"), IREE_SV("mode"),
-      IREE_SV("final")));
+      builder, IREE_SV("select-templates"), IREE_SV("mode"), IREE_SV("final")));
   return loom_target_pipeline_build_run(builder, IREE_SV("inline-callables"));
 }
 

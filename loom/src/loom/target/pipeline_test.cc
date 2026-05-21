@@ -114,7 +114,7 @@ static void ExpectRunKeySequence(loom_module_t* module, loom_block_t* block,
 
 static loom_op_t* ExpectAuthoringExpansion(loom_module_t* module,
                                            loom_op_t* apply_selection) {
-  ExpectRunKey(module, apply_selection, IREE_SV("select-func-apply"));
+  ExpectRunKey(module, apply_selection, IREE_SV("select-templates"));
   ExpectRunStringOption(module, apply_selection, IREE_SV("mode"),
                         IREE_SV("final"));
 

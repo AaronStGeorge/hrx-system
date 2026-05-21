@@ -31,10 +31,10 @@
 #include "loom/transforms/ownership/ownership_lifetime.h"
 #include "loom/transforms/scf/scf_to_cfg.h"
 #include "loom/transforms/scf/scf_unroll.h"
-#include "loom/transforms/symbol/func_apply_selection.h"
 #include "loom/transforms/symbol/inline_callables.h"
 #include "loom/transforms/symbol/refine_boundaries.h"
 #include "loom/transforms/symbol/symbol_dce.h"
+#include "loom/transforms/symbol/template_selection.h"
 #include "loom/transforms/vector/memory_footprint.h"
 #include "loom/transforms/vector/to_scalar.h"
 #include "loom/transforms/view/linearize_view_accesses.h"
@@ -227,17 +227,17 @@ static const loom_pass_option_schema_t kRefineBoundariesOptionSchema[] = {
     },
 };
 
-static const loom_pass_option_enum_value_t kFuncApplySelectionModeValues[] = {
+static const loom_pass_option_enum_value_t kTemplateSelectionModeValues[] = {
     {.value = IREE_SVL("early")},
     {.value = IREE_SVL("final")},
 };
 
-static const loom_pass_option_schema_t kFuncApplySelectionOptionSchema[] = {
+static const loom_pass_option_schema_t kTemplateSelectionOptionSchema[] = {
     {
         .name = IREE_SVL("mode"),
         .kind = LOOM_PASS_OPTION_SCHEMA_ENUM,
-        .enum_values = kFuncApplySelectionModeValues,
-        .enum_value_count = IREE_ARRAYSIZE(kFuncApplySelectionModeValues),
+        .enum_values = kTemplateSelectionModeValues,
+        .enum_value_count = IREE_ARRAYSIZE(kTemplateSelectionModeValues),
     },
 };
 
@@ -363,12 +363,12 @@ static const loom_pass_descriptor_t kBuiltinPassDescriptors[] = {
         .function_run = loom_scf_to_cfg_run,
     },
     {
-        .key = IREE_SVL("select-func-apply"),
-        .info = loom_func_apply_selection_pass_info,
-        .module_run = loom_func_apply_selection_run,
-        .create = loom_func_apply_selection_create,
-        .option_schema = kFuncApplySelectionOptionSchema,
-        .option_schema_count = IREE_ARRAYSIZE(kFuncApplySelectionOptionSchema),
+        .key = IREE_SVL("select-templates"),
+        .info = loom_template_selection_pass_info,
+        .module_run = loom_template_selection_run,
+        .create = loom_template_selection_create,
+        .option_schema = kTemplateSelectionOptionSchema,
+        .option_schema_count = IREE_ARRAYSIZE(kTemplateSelectionOptionSchema),
     },
     {
         .key = IREE_SVL("source-to-low"),
