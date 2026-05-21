@@ -254,6 +254,19 @@ loom_cc_test(
     ],
 )
 
+loom_cc_test(
+    name = "run_test",
+    srcs = ["run_test.cc"],
+    deps = [
+        ":main",
+        "//loom/src/loom/target:low_descriptor_registry_core_test",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/testing:temp_file",
+    ],
+)
+
 loom_cc_binary(
     name = "iree-benchmark-loom",
     srcs = ["iree-benchmark-loom.c"],

@@ -20,6 +20,7 @@
 #include "loom/tools/iree-benchmark-loom/diagnostics.h"
 #include "loom/tools/iree-benchmark-loom/manifest.h"
 #include "loom/tools/iree-benchmark-loom/model.h"
+#include "loom/tools/iree-benchmark-loom/module_query.h"
 #include "loom/tools/iree-benchmark-loom/output.h"
 #include "loom/tools/iree-benchmark-loom/output_sink.h"
 #include "loom/tools/iree-benchmark-loom/session.h"
@@ -50,8 +51,16 @@ iree_status_t iree_benchmark_loom_run_file(
   IREE_ASSERT_ARGUMENT(out_result);
   *out_result = (iree_benchmark_loom_run_result_t){0};
 
+  iree_benchmark_loom_options_t normalized_benchmark_options =
+      *options->benchmark_options;
+  normalized_benchmark_options.selected_case =
+      iree_benchmark_loom_normalize_selection_name(
+          normalized_benchmark_options.selected_case);
+  normalized_benchmark_options.selected_benchmark =
+      iree_benchmark_loom_normalize_selection_name(
+          normalized_benchmark_options.selected_benchmark);
   const iree_benchmark_loom_options_t* benchmark_options =
-      options->benchmark_options;
+      &normalized_benchmark_options;
   const iree_allocator_t allocator = options->host_allocator;
   const iree_string_view_t input_path = options->input_path;
   const bool compare_requested =

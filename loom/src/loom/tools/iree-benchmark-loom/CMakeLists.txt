@@ -165,6 +165,20 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_test(
+  NAME
+    run_test
+  SRCS
+    "run_test.cc"
+  DEPS
+    ::main
+    iree::base
+    loom::src::loom::target::low_descriptor_registry_core_test
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::testing::temp_file
+)
+
 loom_cc_binary(
   NAME
     iree-benchmark-loom
