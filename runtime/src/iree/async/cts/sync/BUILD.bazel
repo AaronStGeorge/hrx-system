@@ -6,7 +6,7 @@
 
 # Tests for synchronization primitives: notifications, cancellation, fences.
 
-load("//build_tools/bazel:build_defs.oss.bzl", "iree_runtime_cc_library")
+load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -219,12 +219,12 @@ iree_runtime_cc_library(
     name = "platform_tests",
     testonly = True,
     deps = select({
-        "//build_tools/bazel:iree_is_windows": [
-            ":relay_windows_test",
-        ],
-        "//build_tools/bazel:iree_is_linux": [
+        "@platforms//os:linux": [
             ":fence_posix_test",
             ":relay_posix_test",
+        ],
+        "@platforms//os:windows": [
+            ":relay_windows_test",
         ],
         "//conditions:default": [
             ":fence_posix_test",

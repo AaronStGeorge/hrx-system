@@ -10,7 +10,7 @@
 # Test Suite. Test logic lives in separate category directories (core/,
 # buffer/, command_buffer/, etc.) while this directory provides the foundation.
 
-load("//build_tools/bazel:build_defs.oss.bzl", "iree_runtime_cc_library")
+load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],

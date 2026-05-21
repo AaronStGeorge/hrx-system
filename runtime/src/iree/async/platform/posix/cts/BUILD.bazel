@@ -6,8 +6,9 @@
 
 # CTS binaries for the POSIX (poll + thread pool) backend.
 
-load("//build_tools/bazel:build_defs.oss.bzl", "iree_runtime_cc_library", "iree_runtime_cc_test")
-load("//build_tools/bazel:cc_binary_benchmark.bzl", "cc_binary_benchmark")
+load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
+load("//runtime/build_tools/bazel:cc_benchmark.bzl", "iree_runtime_cc_benchmark")
+load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -179,7 +180,7 @@ iree_runtime_cc_test(
 # Benchmarks
 #===------------------------------------------------------------------------===#
 
-cc_binary_benchmark(
+iree_runtime_cc_benchmark(
     name = "buffer_benchmarks",
     srcs = ["//runtime/src/iree/async/cts/util:benchmark_main.cc"],
     target_compatible_with = _POSIX_ONLY,
@@ -191,7 +192,7 @@ cc_binary_benchmark(
     ],
 )
 
-cc_binary_benchmark(
+iree_runtime_cc_benchmark(
     name = "core_benchmarks",
     srcs = ["//runtime/src/iree/async/cts/util:benchmark_main.cc"],
     target_compatible_with = _POSIX_ONLY,
@@ -203,7 +204,7 @@ cc_binary_benchmark(
     ],
 )
 
-cc_binary_benchmark(
+iree_runtime_cc_benchmark(
     name = "event_benchmarks",
     srcs = ["//runtime/src/iree/async/cts/util:benchmark_main.cc"],
     target_compatible_with = _POSIX_ONLY,
@@ -215,7 +216,7 @@ cc_binary_benchmark(
     ],
 )
 
-cc_binary_benchmark(
+iree_runtime_cc_benchmark(
     name = "futex_benchmarks",
     srcs = ["//runtime/src/iree/async/cts/util:benchmark_main.cc"],
     target_compatible_with = _POSIX_ONLY,
@@ -227,7 +228,7 @@ cc_binary_benchmark(
     ],
 )
 
-cc_binary_benchmark(
+iree_runtime_cc_benchmark(
     name = "socket_benchmarks",
     srcs = ["//runtime/src/iree/async/cts/util:benchmark_main.cc"],
     target_compatible_with = _POSIX_ONLY,
@@ -239,7 +240,7 @@ cc_binary_benchmark(
     ],
 )
 
-cc_binary_benchmark(
+iree_runtime_cc_benchmark(
     name = "sync_benchmarks",
     srcs = ["//runtime/src/iree/async/cts/util:benchmark_main.cc"],
     target_compatible_with = _POSIX_ONLY,

@@ -4,12 +4,14 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//build_tools/bazel:build_defs.oss.bzl", "iree_cmake_extra_content", "iree_runtime_cc_library", "iree_runtime_cc_test")
-load("//build_tools/bazel:cc_binary_benchmark.bzl", "cc_binary_benchmark")
+load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
 load(
     "//build_tools/bazel:iree_hal_cts_test_suite.bzl",
     "iree_hal_cts_testdata",
 )
+load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
+load("//runtime/build_tools/bazel:cc_benchmark.bzl", "iree_runtime_cc_benchmark")
+load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -285,7 +287,7 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "access_policy_test",
     srcs = ["access_policy_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     deps = [
         ":access_policy",
         "//runtime/src/iree/base",
@@ -298,7 +300,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "queue_affinity_test",
     srcs = ["queue_affinity_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     deps = [
         ":queue_affinity",
         "//runtime/src/iree/base",
@@ -311,7 +313,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "allocator_test",
     srcs = ["allocator_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     tags = [
         "driver=amdgpu",
         "nodocker",
@@ -332,7 +334,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "aql_block_processor_test",
     srcs = ["aql_block_processor_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     tags = [
         "driver=amdgpu",
         "nodocker",
@@ -354,7 +356,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "aql_block_processor_timestamp_test",
     srcs = ["aql_block_processor_timestamp_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     tags = [
         "driver=amdgpu",
         "nodocker",
@@ -374,7 +376,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "aql_command_buffer_test",
     srcs = ["aql_command_buffer_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     tags = [
         "driver=amdgpu",
         "nodocker",
@@ -394,7 +396,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "aql_program_builder_test",
     srcs = ["aql_program_builder_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     tags = [
         "driver=amdgpu",
         "nodocker",
@@ -413,7 +415,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "driver_options_test",
     srcs = ["driver_options_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     deps = [
         ":amdgpu",
         ":headers",
@@ -427,7 +429,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "executable_test",
     srcs = ["executable_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     deps = [
         ":amdgpu",
         ":headers",
@@ -452,7 +454,7 @@ iree_runtime_cc_test(
         "host_queue_command_buffer_packet.h",
         "host_queue_command_buffer_test.cc",
     ],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     tags = [
         "driver=amdgpu",
         "nodocker",
@@ -504,7 +506,7 @@ iree_hal_cts_testdata(
     testdata = "//runtime/src/iree/hal/drivers/amdgpu:pm4_command_buffer_benchmark_testdata_srcs",
 )
 
-cc_binary_benchmark(
+iree_runtime_cc_benchmark(
     name = "pm4_command_buffer_benchmark",
     srcs = ["pm4_command_buffer_benchmark.cc"],
     tags = [
@@ -538,7 +540,7 @@ iree_cmake_extra_content(
 iree_runtime_cc_test(
     name = "host_queue_pending_test",
     srcs = ["host_queue_pending_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     tags = [
         "driver=amdgpu",
         "nodocker",
@@ -563,7 +565,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "host_queue_submission_test",
     srcs = ["host_queue_submission_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     tags = [
         "driver=amdgpu",
         "nodocker",
@@ -583,7 +585,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "host_queue_staging_test",
     srcs = ["host_queue_staging_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     tags = [
         "driver=amdgpu",
         "nodocker",
@@ -605,7 +607,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "physical_device_capabilities_test",
     srcs = ["physical_device_capabilities_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     deps = [
         ":amdgpu",
         ":headers",
@@ -619,7 +621,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "profile_metadata_test",
     srcs = ["profile_metadata_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     deps = [
         ":amdgpu",
         ":headers",
@@ -633,7 +635,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "profile_events_test",
     srcs = ["profile_events_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     deps = [
         ":profile_events",
         "//runtime/src/iree/base",
@@ -646,7 +648,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "semaphore_test",
     srcs = ["semaphore_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     tags = [
         "driver=amdgpu",
         "nodocker",
@@ -666,7 +668,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "slab_provider_test",
     srcs = ["slab_provider_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     tags = [
         "driver=amdgpu",
         "nodocker",
@@ -686,7 +688,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "system_test",
     srcs = ["system_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     tags = [
         "driver=amdgpu",
         "nodocker",

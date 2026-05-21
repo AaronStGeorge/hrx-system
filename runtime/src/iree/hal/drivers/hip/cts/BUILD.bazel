@@ -7,12 +7,13 @@
 # CTS test binaries for the HIP HAL driver.
 # Stream and graph variants share compiled test executables.
 
-load("//build_tools/bazel:build_defs.oss.bzl", "iree_cmake_extra_content", "iree_runtime_cc_library")
+load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
 load(
     "//build_tools/bazel:iree_hal_cts_test_suite.bzl",
     "iree_hal_cts_test_suite",
     "iree_hal_cts_testdata",
 )
+load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],

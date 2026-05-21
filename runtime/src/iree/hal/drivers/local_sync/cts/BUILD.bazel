@@ -6,8 +6,8 @@
 
 # CTS test binaries for the local-sync HAL driver.
 
-load("//build_tools/bazel:build_defs.oss.bzl", "iree_runtime_cc_library")
 load("//build_tools/bazel:iree_hal_cts_test_suite.bzl", "iree_hal_cts_test_suite")
+load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],

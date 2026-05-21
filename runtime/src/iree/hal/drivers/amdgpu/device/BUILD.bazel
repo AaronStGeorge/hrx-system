@@ -4,7 +4,8 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//build_tools/bazel:build_defs.oss.bzl", "iree_runtime_cc_library", "iree_runtime_cc_test")
+load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
+load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
 load(":device_bitcode_sources.bzl", "IREE_HAL_AMDGPU_DEVICE_BITCODE_SRCS")
 
 package(
@@ -86,7 +87,7 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "blit_test",
     srcs = ["blit_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     tags = [
         "driver=amdgpu",
         "nodocker",
@@ -102,7 +103,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "dispatch_test",
     srcs = ["dispatch_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     tags = [
         "driver=amdgpu",
         "nodocker",
@@ -118,7 +119,7 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "timestamp_test",
     srcs = ["timestamp_test.cc"],
-    group = "iree-hal-drivers-amdgpu-tests",
+    resource_group = "iree-hal-drivers-amdgpu-tests",
     tags = [
         "driver=amdgpu",
         "nodocker",

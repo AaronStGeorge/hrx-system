@@ -6,7 +6,7 @@
 
 # Tests for socket operations.
 
-load("//build_tools/bazel:build_defs.oss.bzl", "iree_runtime_cc_library")
+load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -190,9 +190,9 @@ iree_runtime_cc_library(
         ":udp_test",
         ":zerocopy_test",
     ] + select({
-        "@platforms//os:windows": [":win32_test"],
         "@platforms//os:linux": [":posix_test"],
         "@platforms//os:macos": [":posix_test"],
+        "@platforms//os:windows": [":win32_test"],
         "//conditions:default": [],
     }),
 )
