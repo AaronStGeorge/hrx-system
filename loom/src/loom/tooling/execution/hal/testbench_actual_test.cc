@@ -35,13 +35,17 @@ TEST_F(HalTestbenchActualTest, ScalarInputsPackDispatchConstantWords) {
       iree_vm_make_variant_value(
           iree_vm_value_make_i64(static_cast<int64_t>(0x1122334455667788ull))),
   };
+  loom_type_t input_types[] = {
+      loom_type_scalar(LOOM_SCALAR_TYPE_I32),
+      loom_type_scalar(LOOM_SCALAR_TYPE_I64),
+  };
   loom_run_hal_invocation_options_t options = {};
   loom_run_hal_invocation_options_initialize(&options);
   iree_vm_list_t* bindings = nullptr;
 
   IREE_ASSERT_OK(loom_run_hal_testbench_invocation_inputs_from_variants(
-      inputs, IREE_ARRAYSIZE(inputs), &options, iree_allocator_system(),
-      &bindings));
+      inputs, input_types, IREE_ARRAYSIZE(inputs), &options,
+      iree_allocator_system(), &bindings));
 
   EXPECT_EQ(iree_vm_list_size(bindings), 0u);
   EXPECT_EQ(options.constant_count, 3u);
@@ -56,18 +60,43 @@ TEST_F(HalTestbenchActualTest, F64InputsPackDispatchConstantWords) {
   iree_vm_variant_t inputs[] = {
       iree_vm_make_variant_value(iree_vm_value_make_f64(1.0)),
   };
+  loom_type_t input_types[] = {
+      loom_type_scalar(LOOM_SCALAR_TYPE_F64),
+  };
   loom_run_hal_invocation_options_t options = {};
   loom_run_hal_invocation_options_initialize(&options);
   iree_vm_list_t* bindings = nullptr;
 
   IREE_ASSERT_OK(loom_run_hal_testbench_invocation_inputs_from_variants(
-      inputs, IREE_ARRAYSIZE(inputs), &options, iree_allocator_system(),
-      &bindings));
+      inputs, input_types, IREE_ARRAYSIZE(inputs), &options,
+      iree_allocator_system(), &bindings));
 
   EXPECT_EQ(iree_vm_list_size(bindings), 0u);
   EXPECT_EQ(options.constant_count, 2u);
   EXPECT_EQ(options.constants[0], 0x00000000u);
   EXPECT_EQ(options.constants[1], 0x3ff00000u);
+
+  iree_vm_list_release(bindings);
+}
+
+TEST_F(HalTestbenchActualTest, IndexInputPacksAsOneDispatchConstantWord) {
+  iree_vm_variant_t inputs[] = {
+      iree_vm_make_variant_value(iree_vm_value_make_i64(3584)),
+  };
+  loom_type_t input_types[] = {
+      loom_type_scalar(LOOM_SCALAR_TYPE_INDEX),
+  };
+  loom_run_hal_invocation_options_t options = {};
+  loom_run_hal_invocation_options_initialize(&options);
+  iree_vm_list_t* bindings = nullptr;
+
+  IREE_ASSERT_OK(loom_run_hal_testbench_invocation_inputs_from_variants(
+      inputs, input_types, IREE_ARRAYSIZE(inputs), &options,
+      iree_allocator_system(), &bindings));
+
+  EXPECT_EQ(iree_vm_list_size(bindings), 0u);
+  EXPECT_EQ(options.constant_count, 1u);
+  EXPECT_EQ(options.constants[0], 3584u);
 
   iree_vm_list_release(bindings);
 }

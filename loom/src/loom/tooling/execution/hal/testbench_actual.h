@@ -271,10 +271,15 @@ iree_status_t loom_run_hal_testbench_actual_sequence_invoke(
     iree_host_size_t result_count, iree_vm_variant_t* out_results);
 
 // Appends borrowed testbench input variants to HAL bindings/constants.
+//
+// Scalar constants are packed according to the corresponding Loom source input
+// type, not only the VM carrier type. This matters for index/offset values,
+// which the testbench materializes as VM i64 values before the HAL direct
+// constant ABI narrows them to one 32-bit word.
 iree_status_t loom_run_hal_testbench_invocation_inputs_from_variants(
-    const iree_vm_variant_t* inputs, iree_host_size_t input_count,
-    loom_run_hal_invocation_options_t* options, iree_allocator_t allocator,
-    iree_vm_list_t** out_bindings);
+    const iree_vm_variant_t* inputs, const loom_type_t* input_types,
+    iree_host_size_t input_count, loom_run_hal_invocation_options_t* options,
+    iree_allocator_t allocator, iree_vm_list_t** out_bindings);
 
 // Extracts the selected actual invocation inputs from an already-materialized
 // case sample value table as HAL bindings/constants.

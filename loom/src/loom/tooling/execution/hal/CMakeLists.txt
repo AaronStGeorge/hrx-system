@@ -105,17 +105,19 @@ loom_cc_library(
     loom::src::loom::error::diagnostic
     loom::src::loom::ir
     loom::src::loom::ir::facts
+    loom::src::loom::ops::kernel
     loom::src::loom::ops::op_defs
     loom::src::loom::ops::special_values
     loom::src::loom::pass::types
     loom::src::loom::target::provider
+    loom::src::loom::target::types
     loom::src::loom::tooling::compile::pipeline
     loom::src::loom::tooling::execution::compile_options
-    loom::src::loom::tooling::execution::one_shot
     loom::src::loom::tooling::execution::session
     loom::src::loom::tooling::testbench
     loom::src::loom::tooling::testbench::requirements
     loom::src::loom::tooling::testbench::value_materializer
+    loom::src::loom::util::fact_table
     iree::tooling::device_util
     iree::vm
   PUBLIC
