@@ -10,6 +10,12 @@ load(":cc.bzl", "iree_cc_binary")
 load(":cc_attrs.bzl", "cc_attrs")
 
 _SMOKE_TEST_ARGS = ["--benchmark_min_time=0s"]
+_GOOGLE_BENCHMARK_DEP = Label("//build_tools/third_party/google_benchmark:benchmark")
+
+def _with_google_benchmark_dep(deps):
+    if deps == None:
+        deps = []
+    return deps + [_GOOGLE_BENCHMARK_DEP]
 
 def _benchmark_smoke_test_impl(ctx):
     output = ctx.actions.declare_file(ctx.label.name)
@@ -82,7 +88,7 @@ def _iree_cc_benchmark_impl(
         name = name,
         visibility = visibility,
         srcs = srcs,
-        deps = deps,
+        deps = _with_google_benchmark_dep(deps),
         data = data,
         copts = copts,
         defines = defines,
@@ -118,6 +124,11 @@ iree_cc_benchmark = macro(
     The benchmark binary is emitted as `<name>`. A companion `<name>_test`
     target runs the benchmark with `--benchmark_min_time=0s` so ordinary test
     runs verify that the benchmark starts without collecting timing data.
+
+    The Google Benchmark API dependency is supplied by this macro through the
+    repository-local `//build_tools/third_party/google_benchmark:benchmark`
+    alias. Project callsites should add their own benchmark helper libraries
+    only when they include project-specific benchmark headers.
 
     `resource_group` serializes the generated smoke test when the benchmark
     touches a scarce local resource such as a GPU.

@@ -6,7 +6,8 @@
 
 # Testing utilities for IREE.
 
-load("//build_tools/bazel:build_defs.oss.bzl", "iree_runtime_cc_library", "iree_runtime_cc_test")
+load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
+load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -23,9 +24,9 @@ iree_runtime_cc_library(
         "benchmark.h",
     ],
     deps = [
+        "//build_tools/third_party/google_benchmark:benchmark",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
-        "@com_google_benchmark//:benchmark",
     ],
 )
 
@@ -47,8 +48,8 @@ iree_runtime_cc_library(
         "status_matchers.h",
     ],
     deps = [
+        "//build_tools/third_party/googletest:gtest",
         "//runtime/src/iree/base",
-        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -59,9 +60,9 @@ iree_runtime_cc_library(
     tags = ["keep_dep"],
     deps = [
         ":gtest",
+        "//build_tools/third_party/googletest:gtest",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",
-        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -81,9 +82,9 @@ iree_runtime_cc_library(
     testonly = True,
     hdrs = ["gbenchmark_harness.h"],
     deps = [
+        "//build_tools/third_party/google_benchmark:benchmark",
+        "//build_tools/third_party/google_benchmark:benchmark_main",
         "//runtime/src/iree/base",
-        "@com_google_benchmark//:benchmark",
-        "@com_google_benchmark//:benchmark_main",
     ],
 )
 
@@ -131,9 +132,9 @@ iree_runtime_cc_library(
     deps = [
         ":coordinated_test",
         ":gtest",
+        "//build_tools/third_party/googletest:gtest",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",
-        "@com_google_googletest//:gtest",
     ],
 )
 

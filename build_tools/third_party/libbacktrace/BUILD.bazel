@@ -1,0 +1,33 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/bazel:cc.bzl", "iree_cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+iree_cc_library(
+    name = "libbacktrace_linux",
+    hdrs = ["iree_libbacktrace.h"],
+    defines = ["IREE_HAVE_LIBBACKTRACE=1"],
+    includes = ["."],
+    deps = [
+        "//build_tools:dl",
+        "//build_tools:pthreads",
+        "@libbacktrace",
+    ],
+)
+
+iree_cc_library(
+    name = "libbacktrace_disabled",
+)
+
+alias(
+    name = "libbacktrace",
+    actual = select({
+        "@platforms//os:linux": ":libbacktrace_linux",
+        "//conditions:default": ":libbacktrace_disabled",
+    }),
+)

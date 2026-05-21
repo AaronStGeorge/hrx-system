@@ -6,8 +6,11 @@
 
 # Common types and utilities used in the IREE codebase.
 
-load("//build_tools/bazel:build_defs.oss.bzl", "defaulting_select", "iree_runtime_cc_fuzz", "iree_runtime_cc_library", "iree_runtime_cc_test")
-load("//build_tools/bazel:cc_binary_benchmark.bzl", "cc_binary_benchmark")
+load("//build_tools/bazel:select.bzl", "iree_select")
+load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
+load("//runtime/build_tools/bazel:cc_benchmark.bzl", "iree_runtime_cc_benchmark")
+load("//runtime/build_tools/bazel:cc_fuzz.bzl", "iree_runtime_cc_fuzz")
+load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -23,33 +26,36 @@ iree_runtime_cc_library(
     name = "base",
     srcs = [
         "allocator.c",
-        "allocator.h",
-        "assert.h",
         "bitfield.c",
-        "bitfield.h",
         "bitmap.c",
-        "bitmap.h",
         "printf.c",
-        "printf.h",
         "status.c",
+        "status_stack_trace.c",
+        "string_builder.c",
+        "string_view.c",
+        "time.c",
+        "wait_source.c",
+    ] + iree_select({
+        "//runtime/config/base:allocator_system_custom": [],
+        "//conditions:default": ["allocator_libc.c"],
+    }),
+    hdrs = [
+        "allocator.h",
+        "api.h",
+        "assert.h",
+        "bitfield.h",
+        "bitmap.h",
+        "printf.h",
         "status.h",
         "status_cc.h",
         "status_payload.h",
-        "status_stack_trace.c",
-        "string_builder.c",
         "string_builder.h",
-        "string_view.c",
         "string_view.h",
-        "time.c",
-        "wait_source.c",
+        "time.h",
         "wait_source.h",
-    ] + defaulting_select({
-        "//build_tools/bazel:iree_allocator_system_custom": [],
-        "//conditions:default": ["allocator_libc.c"],
-    }),
-    hdrs = ["api.h"],
-    defines = defaulting_select({
-        "//build_tools/bazel:iree_allocator_system_custom": [],
+    ],
+    defines = iree_select({
+        "//runtime/config/base:allocator_system_custom": [],
         "//conditions:default": [
             "IREE_ALLOCATOR_SYSTEM_CTL=iree_allocator_libc_ctl",
         ],
@@ -63,7 +69,7 @@ iree_runtime_cc_library(
     ],
 )
 
-cc_binary_benchmark(
+iree_runtime_cc_benchmark(
     name = "allocator_benchmark",
     srcs = ["allocator_benchmark.cc"],
     deps = [
@@ -103,7 +109,7 @@ iree_runtime_cc_test(
     ],
 )
 
-cc_binary_benchmark(
+iree_runtime_cc_benchmark(
     name = "bitmap_benchmark",
     srcs = ["bitmap_benchmark.cc"],
     deps = [

@@ -5,10 +5,13 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load(":cc_benchmark_rules_test.bzl", "cc_benchmark_rules_test_suite")
+load(":cc_fuzz_rules_test.bzl", "cc_fuzz_rules_test_suite")
 load(":cc_rules_test.bzl", "cc_rules_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
 cc_benchmark_rules_test_suite(name = "cc_benchmark_tests")
+
+cc_fuzz_rules_test_suite(name = "cc_fuzz_tests")
 
 cc_rules_test_suite(name = "cc_tests")
