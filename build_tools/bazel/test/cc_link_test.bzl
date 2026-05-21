@@ -7,7 +7,7 @@
 """Analysis tests for shared C/C++ platform link options."""
 
 load("@rules_testing//lib:analysis_test.bzl", "analysis_test", "test_suite")
-load(":cc_link.bzl", "cc_link")
+load("//build_tools/bazel:cc_link.bzl", "cc_link")
 
 LinkOptsInfo = provider(
     doc = "Selected link options for a configured test subject.",
@@ -29,7 +29,7 @@ _linkopts_subject = rule(
 )
 
 def _platform_label(name, os_name):
-    return Label("//build_tools/bazel:%s_%s_platform" % (name, os_name))
+    return Label(":%s_%s_platform" % (name, os_name))
 
 def _define_platform(name, os_name):
     native.platform(

@@ -4,13 +4,12 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Analysis tests for runtime C/C++ Bazel macros."""
+"""Analysis tests for runtime C/C++ benchmark Bazel macros."""
 
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 load("@rules_testing//lib:analysis_test.bzl", "analysis_test", "test_suite")
 load("@rules_testing//lib:util.bzl", "TestingAspectInfo", "util")
-load(":cc.bzl", "iree_runtime_cc_binary", "iree_runtime_cc_library")
-load(":cc_test.bzl", "iree_runtime_cc_test")
+load("//runtime/build_tools/bazel:cc_benchmark.bzl", "iree_runtime_cc_benchmark")
 
 def _all_compilation_paths(compilation_context):
     return [
@@ -28,30 +27,9 @@ def _expect_path_suffix(env, paths, suffix):
             return
     env.fail("expected one of %s to end with %r" % (paths, suffix))
 
-def _test_runtime_library_adds_runtime_include_root(name, **kwargs):
+def _test_runtime_benchmark_binary_adds_runtime_include_root(name, **kwargs):
     util.helper_target(
-        iree_runtime_cc_library,
-        name = name + "_subject",
-        hdrs = [name + "_subject.h"],
-        tags = ["manual"],
-    )
-    analysis_test(
-        name = name,
-        attr_values = {
-            "timeout": "short",
-        },
-        impl = _test_runtime_library_adds_runtime_include_root_impl,
-        target = name + "_subject",
-        **kwargs
-    )
-
-def _test_runtime_library_adds_runtime_include_root_impl(env, target):
-    paths = _all_compilation_paths(target[CcInfo].compilation_context)
-    _expect_path_suffix(env, paths, "runtime/src")
-
-def _test_runtime_binary_adds_runtime_include_root(name, **kwargs):
-    util.helper_target(
-        iree_runtime_cc_binary,
+        iree_runtime_cc_benchmark,
         name = name + "_subject",
         srcs = [name + "_subject.cc"],
         tags = ["manual"],
@@ -61,21 +39,21 @@ def _test_runtime_binary_adds_runtime_include_root(name, **kwargs):
         attr_values = {
             "timeout": "short",
         },
-        impl = _test_runtime_binary_adds_runtime_include_root_impl,
+        impl = _test_runtime_benchmark_binary_adds_runtime_include_root_impl,
         target = name + "_subject",
         **kwargs
     )
 
-def _test_runtime_binary_adds_runtime_include_root_impl(env, target):
+def _test_runtime_benchmark_binary_adds_runtime_include_root_impl(env, target):
     paths = _all_compilation_paths(target[CcInfo].compilation_context)
     _expect_path_suffix(env, paths, "runtime/src")
 
-def _test_runtime_test_adds_runtime_include_root(name, **kwargs):
+def _test_runtime_benchmark_smoke_test_applies_resource_group_tags(name, **kwargs):
     util.helper_target(
-        iree_runtime_cc_test,
+        iree_runtime_cc_benchmark,
         name = name + "_subject",
-        srcs = [name + "_subject.cc"],
         resource_group = "gpu",
+        srcs = [name + "_subject.cc"],
         tags = [
             "driver=amdgpu",
             "manual",
@@ -86,14 +64,12 @@ def _test_runtime_test_adds_runtime_include_root(name, **kwargs):
         attr_values = {
             "timeout": "short",
         },
-        impl = _test_runtime_test_adds_runtime_include_root_impl,
-        target = name + "_subject",
+        impl = _test_runtime_benchmark_smoke_test_applies_resource_group_tags_impl,
+        target = name + "_subject_test",
         **kwargs
     )
 
-def _test_runtime_test_adds_runtime_include_root_impl(env, target):
-    paths = _all_compilation_paths(target[CcInfo].compilation_context)
-    _expect_path_suffix(env, paths, "runtime/src")
+def _test_runtime_benchmark_smoke_test_applies_resource_group_tags_impl(env, target):
     tags = target[TestingAspectInfo].attrs.tags
     for expected_tag in [
         "driver=amdgpu",
@@ -101,14 +77,13 @@ def _test_runtime_test_adds_runtime_include_root_impl(env, target):
         "resource_group:gpu",
     ]:
         if expected_tag not in tags:
-            env.fail("expected %r in test tags %r" % (expected_tag, tags))
+            env.fail("expected %r in smoke test tags %r" % (expected_tag, tags))
 
-def cc_rules_test_suite(name):
+def cc_benchmark_rules_test_suite(name):
     test_suite(
         name = name,
         tests = [
-            _test_runtime_library_adds_runtime_include_root,
-            _test_runtime_binary_adds_runtime_include_root,
-            _test_runtime_test_adds_runtime_include_root,
+            _test_runtime_benchmark_binary_adds_runtime_include_root,
+            _test_runtime_benchmark_smoke_test_applies_resource_group_tags,
         ],
     )
