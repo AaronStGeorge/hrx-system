@@ -7,6 +7,6 @@
 #ifndef IREE_HAL_DRIVERS_CUDA_NCCL_HEADERS_H_
 #define IREE_HAL_DRIVERS_CUDA_NCCL_HEADERS_H_
 
-#include "third_party/nccl/nccl.h"  // IWYU pragma: export
+#include "rccl/rccl.h"  // IWYU pragma: export
 
 #endif  // IREE_HAL_DRIVERS_CUDA_NCCL_HEADERS_H_

@@ -595,7 +595,7 @@ iree_status_t iree_hal_amdgpu_host_queue_initialize(
     memset(&thread_params, 0, sizeof(thread_params));
     char thread_name[32] = {0};
     snprintf(thread_name, IREE_ARRAYSIZE(thread_name),
-             "iree-hal-amdgpu-l0p%uq%u-complete",
+             "amdgpu-d%uq%u-c",
              (unsigned)iree_async_axis_device_index(axis),
              (unsigned)iree_async_axis_queue_index(axis));
     thread_params.name = iree_make_cstring_view(thread_name);

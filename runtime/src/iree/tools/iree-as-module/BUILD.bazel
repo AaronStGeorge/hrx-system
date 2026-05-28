@@ -16,7 +16,10 @@ package(
 iree_runtime_cc_binary(
     name = "iree-as-module",
     srcs = ["iree-as-module.c"],
-    visibility = ["//tools:__pkg__"],
+    visibility = [
+        "//runtime/src/iree/tools:__pkg__",
+        "//tools:__pkg__",
+    ],
     deps = [
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",

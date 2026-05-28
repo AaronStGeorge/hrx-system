@@ -25,6 +25,7 @@ CMakeUserPresets.json
 
 # Local Bazel overrides. MODULE.bazel.lock is intentionally tracked once the
 # module graph exists.
+/.bazelrc.configured
 /.bazelrc.local
 /configured.bazelrc
 /user.bazelrc

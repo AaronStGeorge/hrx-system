@@ -4,8 +4,29 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_binary")
+
 package(
     default_visibility = ["//visibility:private"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+alias(
+    name = "iree-as-module",
+    actual = "//runtime/src/iree/tools/iree-as-module",
+    visibility = ["//visibility:public"],
+)
+
+iree_runtime_cc_binary(
+    name = "iree-profile",
+    srcs = ["iree-profile-main.c"],
+    defines = ["IREE_PROFILE_HAVE_AMDGPU_ATT=0"],
+    visibility = ["//tools:__pkg__"],
+    deps = [
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/tooling:flags",
+        "//runtime/src/iree/tooling/profile:commands",
+        "//runtime/src/iree/tooling/profile:help",
+    ],
 )

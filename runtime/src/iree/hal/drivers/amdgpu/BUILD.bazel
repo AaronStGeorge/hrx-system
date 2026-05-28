@@ -518,7 +518,6 @@ iree_runtime_cc_benchmark(
         ":amdgpu",
         ":headers",
         ":testdata_amdgpu_pm4_command_buffer_benchmark",
-        "//runtime/src:defines",
         "//runtime/src/iree/async",
         "//runtime/src/iree/async/util:proactor_pool",
         "//runtime/src/iree/base",

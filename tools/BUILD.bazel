@@ -15,3 +15,8 @@ alias(
     name = "iree-dump-cpuinfo",
     actual = "//runtime/src/iree/tools/iree-dump-cpuinfo",
 )
+
+alias(
+    name = "iree-profile",
+    actual = "//runtime/src/iree/tools:iree-profile",
+)

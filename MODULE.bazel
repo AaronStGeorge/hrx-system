@@ -35,4 +35,13 @@ pip.parse(
 )
 use_repo(pip, "pypi")
 
+amdgpu_device_toolchain_repo = use_repo_rule(
+    "//build_tools/bazel:amdgpu_device_toolchain_repo.bzl",
+    "amdgpu_device_toolchain_repo",
+)
+
+amdgpu_device_toolchain_repo(
+    name = "iree_amdgpu_device_toolchain",
+)
+
 include("//runtime:project.MODULE.bazel")

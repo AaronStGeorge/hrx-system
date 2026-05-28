@@ -23,5 +23,8 @@ build --enable_runfiles
 # Keep successful test output quiet while preserving failure logs.
 test --test_output=errors
 
-# Local machine overrides stay out of version control.
+# Generated configuration and local machine overrides stay out of version
+# control. Local overrides are imported last so they can adjust generated
+# settings for a specific checkout.
+try-import %workspace%/.bazelrc.configured
 try-import %workspace%/.bazelrc.local

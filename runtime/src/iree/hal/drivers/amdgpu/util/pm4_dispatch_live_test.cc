@@ -174,7 +174,7 @@ static iree_status_t LookupKernel(const iree_hal_amdgpu_libhsa_t* libhsa,
                                   hsa_executable_t executable,
                                   hsa_agent_t agent, const char* kernel_name,
                                   KernelInfo* out_info) {
-  memset(out_info, 0, sizeof(*out_info));
+  *out_info = KernelInfo{};
 
   char descriptor_symbol_name[128] = {0};
   std::snprintf(descriptor_symbol_name, sizeof(descriptor_symbol_name), "%s.kd",
