@@ -63,3 +63,13 @@ iree_cc_test(
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
+
+# encoding_table.c includes isa.h, and isa.h includes the generated op_table.h.
+# The generated encoding_table.c source gives CMake an edge to
+# encoding_table_gen, but it does not infer the include-time dependency on
+# op_table_gen before the first compile in a clean tree. Make that order-only
+# dependency explicit so parallel CI builds cannot compile encoding_table.c
+# before op_table.h exists.
+add_dependencies(iree_vm_bytecode_isa_isa.objects
+  op_table_gen
+)

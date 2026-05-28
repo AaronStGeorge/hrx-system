@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-name: CI Core Linux
+name: CI CMake Linux
 
 on:
   workflow_dispatch:
@@ -64,12 +64,12 @@ permissions:
 
 jobs:
   normal:
-    name: Normal
+    name: CMake Linux CI
     uses: ./.github/workflows/build_core_linux.yml
     permissions:
       contents: read
     with:
-      name: normal
+      name: Default
       release_type: ${{ inputs.release_type || 'nightly' }}
       run_id: ${{ inputs.run_id || '' }}
       artifact_set: ${{ inputs.artifact_set || 'core' }}

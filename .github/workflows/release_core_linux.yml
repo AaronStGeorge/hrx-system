@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-name: Release Core Linux
+name: Release CMake Linux Core
 
 on:
   push:
@@ -30,13 +30,13 @@ jobs:
           fi
 
   build_core_linux:
-    name: Build release package
+    name: CMake Linux Release
     needs: validate_tag
     uses: ./.github/workflows/build_core_linux.yml
     permissions:
       contents: read
     with:
-      name: release
+      name: Release
       release_type: nightly
       artifact_set: core
       build_type: RelWithDebInfo
