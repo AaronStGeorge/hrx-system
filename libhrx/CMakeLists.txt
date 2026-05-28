@@ -19,27 +19,36 @@ if(NOT TARGET iree_vm_vm)
     "libhrx must be added after the reduced IREE runtime has been configured")
 endif()
 
+iree_setup_c_src_root(
+  PACKAGE_ROOT_PREFIX libhrx
+)
+
+add_library(libhrx_defs INTERFACE)
+target_include_directories(libhrx_defs INTERFACE
+  "$<BUILD_INTERFACE:${LIBHRX_SOURCE_DIR}/include>"
+  "$<BUILD_INTERFACE:${IREE_ROOT_DIR}/runtime/src>"
+  "$<BUILD_INTERFACE:${IREE_BINARY_DIR}/runtime/src>"
+)
+include_directories(
+  "${IREE_ROOT_DIR}/runtime/src"
+  "${IREE_BINARY_DIR}/runtime/src"
+)
+
+function(hrx_cc_test)
+  set(_libhrx_saved_iree_build_tests "${IREE_BUILD_TESTS}")
+  set(IREE_BUILD_TESTS ON)
+  iree_cc_test(${ARGN})
+  set(IREE_BUILD_TESTS "${_libhrx_saved_iree_build_tests}")
+endfunction()
+
 add_subdirectory(src/libhrx)
 add_subdirectory(src/streaming)
 add_subdirectory(src/binding/hip)
+add_subdirectory(tools)
 
 if(LIBHRX_BUILD_CUDA_BINDING)
   add_subdirectory(src/binding/cuda)
 endif()
-
-add_executable(hrx-info tools/hrx_info.c)
-target_include_directories(hrx-info PRIVATE
-  "${LIBHRX_SOURCE_DIR}/include"
-  "${LIBHRX_SOURCE_DIR}/src/libhrx"
-)
-target_link_libraries(hrx-info PRIVATE
-  hrx
-  iree_base_tooling_flags
-)
-set_target_properties(hrx-info PROPERTIES
-  INSTALL_RPATH "\$ORIGIN/../${CMAKE_INSTALL_LIBDIR}")
-install(TARGETS hrx-info
-  RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 
 if(LIBHRX_BUILD_CTS)
   enable_testing()
@@ -50,12 +59,10 @@ if(LIBHRX_BUILD_PASSTHROUGH)
   add_subdirectory(src/passthrough)
 endif()
 
-add_library(hrx::hrx ALIAS hrx)
-
 set(_hrx_cmake_package_dir "${CMAKE_INSTALL_LIBDIR}/cmake/hrx")
 set(_hrx_build_package_dir "${LIBHRX_BINARY_DIR}/cmake/hrx")
 
-install(TARGETS hrx EXPORT hrx-targets
+install(TARGETS libhrx_src_libhrx_hrx EXPORT hrx-targets
   LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
   INCLUDES DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/hrx")

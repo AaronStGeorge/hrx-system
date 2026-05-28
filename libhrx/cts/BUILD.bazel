@@ -1,0 +1,118 @@
+# Copyright 2026 The HRX Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//libhrx/build_tools/bazel:cc.bzl", "hrx_cc_library", "hrx_cc_test")
+load("//libhrx/build_tools/bazel:cts.bzl", "hrx_cts_test")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+hrx_cc_library(
+    name = "core",
+    srcs = [
+        "core/hrx_loader.cpp",
+        "core/main.cpp",
+    ],
+    hdrs = [
+        "core/hrx_loader.hpp",
+        "core/hrx_test_fixture.hpp",
+    ],
+    copts = [
+        "-fexceptions",
+    ],
+    cxxopts = [
+        "-fexceptions",
+    ],
+    includes = [
+        "../include",
+        "core",
+    ],
+    deps = [
+        "@catch2//:catch2",
+        "//build_tools:dl",
+    ],
+)
+
+hrx_cts_test(
+    name = "host_allocator",
+    srcs = ["tests/host_allocator/host_allocator_test.cpp"],
+)
+
+hrx_cts_test(
+    name = "lifecycle",
+    srcs = ["tests/lifecycle/lifecycle_test.cpp"],
+)
+
+hrx_cts_test(
+    name = "device",
+    srcs = ["tests/device/device_test.cpp"],
+)
+
+hrx_cts_test(
+    name = "allocator",
+    srcs = ["tests/allocator/allocator_test.cpp"],
+)
+
+hrx_cts_test(
+    name = "semaphore",
+    srcs = ["tests/semaphore/semaphore_test.cpp"],
+)
+
+hrx_cts_test(
+    name = "stream",
+    srcs = ["tests/stream/stream_test.cpp"],
+)
+
+hrx_cts_test(
+    name = "memory",
+    srcs = ["tests/memory/memory_test.cpp"],
+)
+
+hrx_cts_test(
+    name = "transfer",
+    srcs = ["tests/transfer/transfer_test.cpp"],
+)
+
+hrx_cts_test(
+    name = "stream_ops",
+    srcs = ["tests/stream_ops/stream_ops_test.cpp"],
+)
+
+hrx_cts_test(
+    name = "executable",
+    srcs = ["tests/executable/executable_test.cpp"],
+)
+
+hrx_cts_test(
+    name = "queue_ops",
+    srcs = ["tests/queue_ops/queue_ops_test.cpp"],
+)
+
+hrx_cts_test(
+    name = "status",
+    srcs = ["tests/status/status_test.cpp"],
+)
+
+hrx_cts_test(
+    name = "refcount",
+    srcs = ["tests/refcount/refcount_test.cpp"],
+)
+
+hrx_cts_test(
+    name = "virtual_memory",
+    srcs = ["tests/virtual_memory/virtual_memory_test.cpp"],
+)
+
+hrx_cts_test(
+    name = "cxx_api",
+    srcs = ["tests/cxx_api/cxx_api_test.cpp"],
+    deps = [
+        "//libhrx/src/libhrx:hrx_static",
+    ],
+)

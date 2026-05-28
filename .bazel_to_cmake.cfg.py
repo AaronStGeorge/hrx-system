@@ -8,7 +8,7 @@ import bazel_to_cmake_converter
 import bazel_to_cmake_targets
 
 
-DEFAULT_ROOT_DIRS = ["runtime/src/iree"]
+DEFAULT_ROOT_DIRS = ["runtime/src/iree", "libhrx"]
 
 REPO_MAP = {
     "@iree_core": "",
@@ -16,6 +16,81 @@ REPO_MAP = {
 
 
 class CustomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
+    def _drop_selects(self, values):
+        if isinstance(values, bazel_to_cmake_converter.MixedDeps):
+            return values.unconditional
+        return values
+
+    def iree_select(self, selector):
+        return self.select(selector)
+
+    def hrx_cc_library(self, deps=[], **kwargs):
+        self.cc_library(deps=deps + ["//runtime/src:defines", "//libhrx:defines"], **kwargs)
+
+    def hrx_cc_binary(self, deps=[], **kwargs):
+        self.cc_binary(deps=deps + ["//runtime/src:defines", "//libhrx:defines"], **kwargs)
+
+    def hrx_cc_test(self, deps=[], resource_group=None, **kwargs):
+        self.cc_test(
+            deps=deps + ["//runtime/src:defines", "//libhrx:defines"],
+            resource_group=resource_group,
+            **kwargs,
+        )
+
+    def hrx_cc_benchmark(self, deps=[], **kwargs):
+        self.cc_binary_benchmark(
+            deps=deps + ["//runtime/src:defines", "//libhrx:defines"], **kwargs
+        )
+
+    def hrx_cc_shared_library(self, deps=[], **kwargs):
+        kwargs["copts"] = self._drop_selects(kwargs.get("copts"))
+        kwargs["hdrs"] = [
+            hdr
+            for hdr in (kwargs.get("hdrs") or [])
+            if hdr != "//libhrx/src:iree_hal_compat.h"
+        ]
+        self.cc_library(
+            deps=deps + ["//runtime/src:defines", "//libhrx:defines"],
+            shared=True,
+            **kwargs,
+        )
+
+    def hrx_cts_test(self, name, deps=[], **kwargs):
+        srcs = kwargs.get("srcs")
+        copts = kwargs.get("copts")
+        defines = kwargs.get("defines")
+        includes = kwargs.get("includes")
+        full_deps = [
+            ":core",
+            "@catch2//:catch2",
+        ] + deps + ["//runtime/src:defines", "//libhrx:defines"]
+        name_block = self._convert_string_arg_block("NAME", "hrx_cts_" + name, quote=False)
+        srcs_block = self._convert_srcs_block(srcs)
+        copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
+        defines_block = self._convert_string_list_block("DEFINES", defines)
+        deps_block, platform_deps_block = self._convert_platform_select_deps("hrx_cts_" + name, full_deps)
+        includes_block = self._convert_includes_block(includes)
+        args_block = self._convert_string_list_block(
+            "ARGS",
+            [
+                "--hrx-library",
+                "$<TARGET_FILE:libhrx::src::libhrx::hrx>",
+            ],
+        )
+        if platform_deps_block:
+            self._converter.body += platform_deps_block
+        self._converter.body += (
+            f"hrx_cc_test(\n"
+            f"{name_block}"
+            f"{srcs_block}"
+            f"{copts_block}"
+            f"{defines_block}"
+            f"{deps_block}"
+            f"{args_block}"
+            f"{includes_block}"
+            f")\n\n"
+        )
+
     def iree_runtime_cc_library(self, deps=[], **kwargs):
         self.cc_library(deps=deps + ["//runtime/src:defines"], **kwargs)
 
@@ -65,6 +140,10 @@ class CustomTargetConverter(bazel_to_cmake_targets.TargetConverter):
         self._update_target_mappings(
             {
                 "//runtime/src:defines": [],
+                "//libhrx:defines": ["libhrx_defs"],
+                "//libhrx/src/libhrx:hrx_static": [
+                    "libhrx::src::libhrx::hrx"
+                ],
                 # Temporary AQL profile SDK header shape. See the comments in
                 # build_tools/cmake/hrx_dependencies.cmake and
                 # build_tools/third_party/BUILD.bazel: this should become a
@@ -77,8 +156,16 @@ class CustomTargetConverter(bazel_to_cmake_targets.TargetConverter):
                 "@flatcc//:flatcc": ["flatcc"],
                 "@flatcc//:parsing": ["flatcc::parsing"],
                 "@flatcc//:runtime": ["flatcc::runtime"],
+                "@catch2//:catch2": ["Catch2::Catch2"],
             }
         )
 
     def _convert_unmatched_target(self, target: str) -> str:
+        if target.startswith("//libhrx"):
+            cmake_path = self._convert_to_cmake_path(target)
+            if cmake_path == "libhrx":
+                return ["libhrx"]
+            if cmake_path.startswith("libhrx::"):
+                cmake_path = cmake_path[len("libhrx::") :]
+            return ["libhrx::" + cmake_path]
         return ["iree::" + self._convert_to_cmake_path(target)]

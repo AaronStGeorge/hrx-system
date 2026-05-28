@@ -1,0 +1,32 @@
+# Copyright 2026 The HRX Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
+load("//libhrx/build_tools/bazel:cc.bzl", "hrx_cc_binary")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+hrx_cc_binary(
+    name = "hrx-info",
+    srcs = ["hrx_info.c"],
+    deps = [
+        "//libhrx/src/libhrx:hrx_static",
+        "//runtime/src/iree/base/tooling:flags",
+    ],
+)
+
+iree_cmake_extra_content(
+    inline = True,
+    content = """
+set_target_properties(libhrx_tools_hrx-info PROPERTIES
+  INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}"
+)
+""",
+)

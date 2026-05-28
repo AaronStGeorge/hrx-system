@@ -56,6 +56,13 @@ _COMPILER_PLUGIN_CMAKE_OPTIONS = {
     "//compiler/plugins:hal_target_vulkan_spirv_enabled": "IREE_TARGET_BACKEND_VULKAN_SPIRV",
 }
 
+_RUNTIME_HAL_DRIVER_CMAKE_OPTIONS = {
+    "//runtime/config/hal:driver_amdgpu": "IREE_HAL_DRIVER_AMDGPU",
+    "//runtime/config/hal:driver_local_sync": "IREE_HAL_DRIVER_LOCAL_SYNC",
+    "//runtime/config/hal:driver_local_task": "IREE_HAL_DRIVER_LOCAL_TASK",
+    "//runtime/config/hal:driver_null": "IREE_HAL_DRIVER_NULL",
+}
+
 
 class ConditionSelect:
     """Represents a supported conditional value from a Bazel select().
@@ -183,6 +190,8 @@ class BuildFileFunctions(object):
         condition = self._convert_platform_condition(label)
         if condition:
             return condition
+        if label in _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS:
+            return _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS[label]
         return _COMPILER_PLUGIN_CMAKE_OPTIONS.get(label)
 
     def _emit_platform_guard_begin(self, target_compatible_with):
@@ -890,13 +899,12 @@ class BuildFileFunctions(object):
         includes=None,
         system_includes=None,
         alwayslink=None,
+        shared=None,
         target_compatible_with=None,
         **kwargs,
     ):
         if self._should_skip_target(**kwargs):
             return
-        if linkopts:
-            self._convert_unimplemented_function("linkopts")
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         hdrs_block = self._convert_string_list_block("HDRS", hdrs, sort=True)
         textual_hdrs_block = self._convert_string_list_block(
@@ -909,6 +917,8 @@ class BuildFileFunctions(object):
         deps_block, platform_deps_block = self._convert_platform_select_deps(name, deps)
         testonly_block = self._convert_option_block("TESTONLY", testonly)
         alwayslink_block = self._convert_option_block("ALWAYSLINK", alwayslink)
+        shared_block = self._convert_option_block("SHARED", shared)
+        linkopts_block = self._convert_string_list_block("LINKOPTS", linkopts)
         includes_block = self._convert_includes_block(includes)
         system_includes_block = self._convert_string_list_block(
             "SYSTEM_INCLUDES", system_includes
@@ -929,6 +939,8 @@ class BuildFileFunctions(object):
             f"{defines_block}"
             f"{testonly_block}"
             f"{alwayslink_block}"
+            f"{shared_block}"
+            f"{linkopts_block}"
             f"{includes_block}"
             f"{system_includes_block}"
             f"  PUBLIC\n)\n\n"
@@ -1032,11 +1044,10 @@ class BuildFileFunctions(object):
     ):
         if self._should_skip_target(**kwargs):
             return
-        if linkopts:
-            self._convert_unimplemented_function("linkopts")
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
         defines_block = self._convert_string_list_block("DEFINES", defines)
+        linkopts_block = self._convert_string_list_block("LINKOPTS", linkopts)
         srcs_block = self._convert_srcs_block(srcs)
         data_block = self._convert_target_list_block("DATA", data)
         deps_block, platform_deps_block = self._convert_platform_select_deps(name, deps)
@@ -1052,6 +1063,7 @@ class BuildFileFunctions(object):
             f"{srcs_block}"
             f"{copts_block}"
             f"{defines_block}"
+            f"{linkopts_block}"
             f"{data_block}"
             f"{deps_block}"
             f"{testonly_block}"

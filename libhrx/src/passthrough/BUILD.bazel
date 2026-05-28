@@ -1,0 +1,81 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
+load("//libhrx/build_tools/bazel:cc.bzl", "hrx_cc_shared_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+PASSTHROUGH_INCLUDES = [
+    "..",
+]
+
+hrx_cc_shared_library(
+    name = "hip_intercept",
+    srcs = ["hip_intercept.c"],
+    hdrs = ["hip_function_table.h"],
+    includes = PASSTHROUGH_INCLUDES,
+    deps = [
+        "//build_tools:dl",
+        "//build_tools:pthreads",
+    ],
+)
+
+hrx_cc_shared_library(
+    name = "hip_logging",
+    srcs = ["hip_logging.c"],
+    hdrs = ["hip_function_table.h"],
+    includes = PASSTHROUGH_INCLUDES,
+    deps = ["//build_tools:pthreads"],
+)
+
+hrx_cc_shared_library(
+    name = "hip_noop",
+    srcs = ["interceptors/passthrough_interceptor.c"],
+    hdrs = ["hip_function_table.h"],
+    includes = PASSTHROUGH_INCLUDES,
+)
+
+hrx_cc_shared_library(
+    name = "hip_buffer_tracer",
+    srcs = ["hip_buffer_tracer.c"],
+    hdrs = ["hip_function_table.h"],
+    includes = PASSTHROUGH_INCLUDES,
+    deps = ["//build_tools:pthreads"],
+)
+
+iree_cmake_extra_content(
+    inline = True,
+    content = """
+set_target_properties(libhrx_src_passthrough_hip_intercept PROPERTIES
+  OUTPUT_NAME hip_intercept
+  VERSION 1.0.0
+  SOVERSION 1
+)
+set_target_properties(libhrx_src_passthrough_hip_logging PROPERTIES
+  OUTPUT_NAME hip_logging
+  VERSION 1.0.0
+  SOVERSION 1
+)
+set_target_properties(libhrx_src_passthrough_hip_noop PROPERTIES
+  OUTPUT_NAME hip_noop
+  VERSION 1.0.0
+  SOVERSION 1
+)
+set_target_properties(libhrx_src_passthrough_hip_buffer_tracer PROPERTIES
+  OUTPUT_NAME hip_buffer_tracer
+  VERSION 1.0.0
+  SOVERSION 1
+)
+install(FILES hip_function_table.h
+  DESTINATION include/passthrough
+)
+""",
+)

@@ -218,9 +218,6 @@ static hrx_status_t hrx_create_local_task_device(
   iree_task_topology_t out_topology;
   iree_task_topology_initialize(&out_topology);
   iree_task_topology_initialize_from_group_count(group_count, &out_topology);
-  iree_task_executor_t *out_exec = NULL;
-  iree_task_executor_options_t out_exec_options;
-  iree_task_executor_options_initialize(&out_exec_options);
   // Note: we don't need a separate executor for shutdown tracking.
   // The driver owns the executor internally. Set output to NULL.
   iree_task_topology_deinitialize(&out_topology);

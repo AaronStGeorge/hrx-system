@@ -6,7 +6,9 @@ project(hrx-package-smoke LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 
-find_package(hrx CONFIG REQUIRED)
+if(NOT TARGET hrx::hrx)
+  find_package(hrx CONFIG REQUIRED)
+endif()
 
 add_executable(hrx_package_smoke main.c)
 target_link_libraries(hrx_package_smoke PRIVATE hrx::hrx)

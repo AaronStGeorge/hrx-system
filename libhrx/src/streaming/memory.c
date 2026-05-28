@@ -91,7 +91,7 @@ iree_hal_streaming_buffer_wrap(iree_hal_streaming_context_t *context,
   // this wrapper.
   if (!have_device_ptr) {
     static atomic_uintptr_t g_next_synthetic =
-        ATOMIC_VAR_INIT(0xDEAD000000000000ULL);
+        (uintptr_t)0xDEAD000000000000ULL;
     iree_device_size_t buf_size = iree_hal_buffer_byte_length(buffer);
     iree_device_size_t aligned_size =
         (buf_size + 255) & ~(iree_device_size_t)255;
