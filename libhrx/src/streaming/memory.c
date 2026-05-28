@@ -49,7 +49,6 @@ iree_hal_streaming_buffer_wrap(iree_hal_streaming_context_t *context,
   iree_hal_external_buffer_t external_ptr;
   iree_status_t status = iree_ok_status();
   bool have_device_ptr = false;
-  bool have_host_ptr = false;
 
   // Try to export as device allocation (works for device-local memory
   // and mapped host memory).
@@ -74,7 +73,6 @@ iree_hal_streaming_buffer_wrap(iree_hal_streaming_context_t *context,
         IREE_HAL_EXTERNAL_BUFFER_FLAG_NONE, &external_ptr);
     if (iree_status_is_ok(host_status)) {
       wrapper->host_ptr = (void *)external_ptr.handle.host_allocation.ptr;
-      have_host_ptr = true;
       // For host-local memory, use host_ptr as device_ptr if we don't have one.
       if (!have_device_ptr) {
         wrapper->device_ptr = (iree_hal_streaming_deviceptr_t)wrapper->host_ptr;

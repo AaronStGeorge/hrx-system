@@ -1630,6 +1630,7 @@ HIPAPI hipError_t hipDeviceSynchronize(void) {
   // Ensure initialization and get context.
   static int sync_count = 0;
   sync_count++;
+  (void)sync_count;
   iree_hal_streaming_context_t *context = NULL;
   hipError_t init_result = iree_hip_ensure_context(&context);
   if (init_result != hipSuccess) {
@@ -3326,6 +3327,7 @@ HIPAPI hipError_t hipFree(void *ptr) {
       // The pool is large enough to hold all allocations for a typical
       // forward pass. If pool exhaustion becomes an issue, compaction
       // should be deferred until after a device synchronize.
+      (void)found;
       POOL_LOG(
           "[POOL] free %p: marked-dead offset=%zu top=%zu found=%d live=%zu\n",
           ptr, g_pool_offset, g_pool_allocs_top, found, g_pool_alloc_count);
@@ -10766,7 +10768,6 @@ HIPAPI hipError_t hipGraphGetRootNodes(hipGraph_t graph,
   // Build a set of nodes that have incoming edges from additional_edges.
   // For simplicity, we use a linear search approach for small graphs.
   size_t root_count = 0;
-  size_t node_index = 0;
 
   iree_hal_streaming_node_block_t *block = stream_graph->node_blocks;
   while (block) {
@@ -10775,7 +10776,6 @@ HIPAPI hipError_t hipGraphGetRootNodes(hipGraph_t graph,
 
       // Check if node has any embedded dependencies.
       if (node->dependency_count > 0) {
-        ++node_index;
         continue;
       }
 
@@ -10797,7 +10797,6 @@ HIPAPI hipError_t hipGraphGetRootNodes(hipGraph_t graph,
         }
         ++root_count;
       }
-      ++node_index;
     }
     block = block->next;
   }

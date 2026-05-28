@@ -1,0 +1,113 @@
+# Copyright 2026 The HRX Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+name: Build Core Linux
+
+on:
+  workflow_call:
+    inputs:
+      name:
+        type: string
+        default: core
+      release_type:
+        type: string
+        default: nightly
+      run_id:
+        type: string
+        default: ""
+      artifact_set:
+        type: string
+        default: core
+      build_type:
+        type: string
+        default: RelWithDebInfo
+      sanitizer:
+        type: string
+        default: none
+      cmake_options:
+        type: string
+        default: ""
+      ctest_regex:
+        type: string
+        default: libhrx/cts
+      test_gpu:
+        type: boolean
+        default: false
+      package:
+        type: boolean
+        default: true
+      package_suffix:
+        type: string
+        default: ""
+      artifact_name:
+        type: string
+        default: hrx-core-linux-x86_64
+
+permissions:
+  contents: read
+
+jobs:
+  build_core_linux:
+    name: ${{ inputs.name }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    container:
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
+      options: --cap-add=SYS_PTRACE --security-opt seccomp=unconfined
+    env:
+      HRX_OUTPUT_DIR: ${{ github.workspace }}/build/linux
+      HRX_CMAKE_OPTIONS: ${{ inputs.cmake_options }}
+      CCACHE_DIR: ${{ github.workspace }}/build/linux/caches/ccache
+      PIP_CACHE_DIR: ${{ github.workspace }}/build/linux/caches/pip
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Adjust git config
+        run: git config --global --add safe.directory "$PWD"
+
+      - name: Install Python dependencies
+        run: python3 -m pip install --upgrade boto3 zstandard
+
+      - name: Build, test, and package
+        run: |
+          args=(
+            run
+            --release-type "${{ inputs.release_type }}"
+            --artifact-set "${{ inputs.artifact_set }}"
+            --rocm-root "${HRX_OUTPUT_DIR}/rocm-root"
+            --download-cache-dir "${HRX_OUTPUT_DIR}/downloads"
+            --build-dir "${HRX_OUTPUT_DIR}/build/hrx-core"
+            --install-prefix "${HRX_OUTPUT_DIR}/rocm-root"
+            --package-smoke-build-dir "${HRX_OUTPUT_DIR}/build/package-smoke"
+            --package-output-dir "${HRX_OUTPUT_DIR}/dist"
+            --build-type "${{ inputs.build_type }}"
+            --sanitizer "${{ inputs.sanitizer }}"
+            --ctest-regex "${{ inputs.ctest_regex }}"
+          )
+          if [[ -n "${{ inputs.run_id }}" ]]; then
+            args+=(--run-id "${{ inputs.run_id }}")
+          fi
+          if [[ "${{ inputs.test_gpu }}" == "true" ]]; then
+            args+=(--gpu)
+          fi
+          if [[ "${{ inputs.package }}" != "true" ]]; then
+            args+=(--no-package)
+          fi
+          if [[ -n "${{ inputs.package_suffix }}" ]]; then
+            args+=(--package-suffix "${{ inputs.package_suffix }}")
+          fi
+          python3 build_tools/ci_core_linux.py "${args[@]}"
+
+      - name: Upload package
+        if: ${{ inputs.package }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: |
+            build/linux/dist/*.tar.zst
+            build/linux/dist/*.manifest.json
+          if-no-files-found: error

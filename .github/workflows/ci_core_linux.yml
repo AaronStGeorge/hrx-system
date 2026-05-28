@@ -1,0 +1,81 @@
+# Copyright 2026 The HRX Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+name: CI Core Linux
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        type: choice
+        options:
+          - nightly
+          - dev
+          - prerelease
+        default: nightly
+      run_id:
+        type: string
+        description: "TheRock artifact run id. Empty means latest complete Linux run."
+        default: ""
+      artifact_set:
+        type: choice
+        options:
+          - core
+          - core-with-llvm-dev
+          - core-with-upstream-hip
+        default: core
+      test_gpu:
+        type: boolean
+        default: false
+  pull_request:
+    branches:
+      - main
+      - main-staging
+    paths:
+      - ".github/workflows/**"
+      - "CMakeLists.txt"
+      - "build_tools/**"
+      - "configure-bazel.py"
+      - "libhrx/**"
+      - "runtime/**"
+      - "tools/**"
+      - "MODULE.bazel*"
+      - "BUILD.bazel"
+  push:
+    branches:
+      - main
+      - main-staging
+    paths:
+      - ".github/workflows/**"
+      - "CMakeLists.txt"
+      - "build_tools/**"
+      - "configure-bazel.py"
+      - "libhrx/**"
+      - "runtime/**"
+      - "tools/**"
+      - "MODULE.bazel*"
+      - "BUILD.bazel"
+
+permissions:
+  contents: read
+
+jobs:
+  normal:
+    name: Normal
+    uses: ./.github/workflows/build_core_linux.yml
+    permissions:
+      contents: read
+    with:
+      name: normal
+      release_type: ${{ inputs.release_type || 'nightly' }}
+      run_id: ${{ inputs.run_id || '' }}
+      artifact_set: ${{ inputs.artifact_set || 'core' }}
+      build_type: RelWithDebInfo
+      sanitizer: none
+      ctest_regex: libhrx/cts
+      test_gpu: ${{ inputs.test_gpu || false }}
+      package: true
+      artifact_name: hrx-core-linux-x86_64
