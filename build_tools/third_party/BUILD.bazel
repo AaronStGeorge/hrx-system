@@ -7,3 +7,20 @@
 exports_files([
     "rocm_hsa_runtime_headers.BUILD",
 ])
+
+# TODO(upstream ROCm packaging): replace this alias with a real external
+# aqlprofile-sdk header repository/package when ROCm publishes CMake/Bazel
+# metadata for include/aqlprofile-sdk. For now the ROCm install exposes the
+# aqlprofile SDK headers from the same include root as hsa_runtime::headers.
+filegroup(
+    name = "empty_aqlprofile_sdk_headers",
+)
+
+alias(
+    name = "aqlprofile_sdk_headers",
+    actual = select({
+        "//runtime/config/hal:driver_amdgpu": "@hsa_runtime_headers",
+        "//conditions:default": ":empty_aqlprofile_sdk_headers",
+    }),
+    visibility = ["//visibility:public"],
+)

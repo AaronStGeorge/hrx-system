@@ -37,6 +37,7 @@ iree_cc_library(
     "libaqlprofile.c"
   DEPS
     ::libhsa
+    aqlprofile-sdk::headers
     hsa_runtime::headers
     iree::base
     iree::base::internal
@@ -59,8 +60,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_test(
@@ -76,8 +77,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_library(
@@ -109,8 +110,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_library(
@@ -139,8 +140,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_fuzz(
@@ -234,8 +235,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_library(
@@ -466,8 +467,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_test(
@@ -485,8 +486,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_test(
@@ -499,8 +500,8 @@ iree_cc_test(
     iree::base
     iree::testing::gtest
     iree::testing::gtest_main
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_test(
@@ -516,8 +517,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_test(
@@ -534,8 +535,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_test(
@@ -551,8 +552,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_test(
@@ -568,8 +569,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_test(
@@ -599,8 +600,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_test(
@@ -620,8 +621,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_test(
@@ -636,8 +637,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_test(
@@ -652,8 +653,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_test(
@@ -668,8 +669,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_test(
@@ -686,8 +687,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_amdgpu_binary(
@@ -711,7 +712,7 @@ iree_cc_test(
   SRCS
     "pm4_dispatch_live_test.cc"
   DATA
-    ::pm4_dispatch_test_kernels_gfx1100.so
+    pm4_dispatch_test_kernels_gfx1100.so
   DEPS
     ::libhsa
     ::packet
@@ -729,8 +730,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_test(
@@ -749,8 +750,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 if(TARGET iree::hal::drivers::amdgpu::cts::testdata_amdgpu)
 add_custom_command(OUTPUT queue_benchmark_testdata_srcs.stamp
@@ -826,8 +827,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 iree_cc_binary_benchmark(
@@ -863,8 +864,8 @@ iree_cc_test(
   LABELS
     "driver=amdgpu"
     "nodocker"
-  GROUP
-    "iree-hal-drivers-amdgpu-tests"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

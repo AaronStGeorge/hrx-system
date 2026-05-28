@@ -119,8 +119,12 @@ if(IREE_EXTERNAL_TOOLING_MODULES_USED)
   )
 endif()
 
+set(_RESOLVER_INTERNAL_COPTS)
 set(_RESOLVER_INTERNAL_DEPS)
-list(APPEND _RESOLVER_INTERNAL_DEPS iree::modules::vmvx)
+if(IREE_MODULE_VMVX)
+  list(APPEND _RESOLVER_INTERNAL_COPTS "-DIREE_HAVE_VMVX_MODULE=1")
+  list(APPEND _RESOLVER_INTERNAL_DEPS iree::modules::vmvx)
+endif()
 
 iree_cc_library(
   NAME
@@ -132,6 +136,7 @@ iree_cc_library(
     ${_RESOLVER_EXTERNAL_C_SRC}
   COPTS
     ${_RESOLVER_EXTERNAL_COPTS}
+    ${_RESOLVER_INTERNAL_COPTS}
   DEPS
     iree::base
     iree::vm

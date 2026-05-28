@@ -4,6 +4,10 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+if(NOT IREE_MODULE_VMVX)
+  return()
+endif()
+
 set(_VMVX_OPTIONAL_COPTS)
 set(_VMVX_OPTIONAL_DEPS)
 
