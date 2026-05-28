@@ -4,7 +4,6 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
 load("//build_tools/bazel:select.bzl", "iree_select")
 load("//libhrx/build_tools/bazel:cc.bzl", "hrx_cc_library", "hrx_cc_shared_library")
 
@@ -91,62 +90,4 @@ hrx_cc_shared_library(
     ] + HRX_AMDGPU_COPTS,
     includes = HRX_INCLUDES,
     deps = HRX_DEPS,
-)
-
-iree_cmake_extra_content(
-    inline = True,
-    content = """
-if(IREE_HAL_DRIVER_AMDGPU)
-  target_link_libraries(libhrx_src_libhrx_hrx PRIVATE
-    iree::hal::drivers::amdgpu::registration
-  )
-  target_compile_definitions(libhrx_src_libhrx_hrx.objects PRIVATE
-    HRX_HAS_IREE_AMDGPU_DRIVER
-  )
-endif()
-# IREE's allocator selector is exposed as a compile definition on the base
-# library target. libhrx is compiled through IREE's object-library wrapper, so
-# forward that definition to the object target that actually compiles the
-# sources using iree_allocator_system().
-target_compile_definitions(libhrx_src_libhrx_hrx.objects PRIVATE
-  $<TARGET_PROPERTY:iree_base_base,INTERFACE_COMPILE_DEFINITIONS>
-)
-foreach(_hrx_generated_header_target
-    iree_base_internal_flatcc_dummy_gen
-    iree_schemas_bytecode_module_def_c_fbs_gen
-    op_table_gen
-    encoding_table_gen)
-  if(TARGET ${_hrx_generated_header_target})
-    add_dependencies(libhrx_src_libhrx_hrx.objects ${_hrx_generated_header_target})
-  endif()
-endforeach()
-set_target_properties(libhrx_src_libhrx_hrx PROPERTIES
-  OUTPUT_NAME hrx
-  VERSION ${PROJECT_VERSION}
-  SOVERSION 0
-  EXPORT_NAME hrx
-  C_VISIBILITY_PRESET hidden
-  POSITION_INDEPENDENT_CODE ON
-  LINK_FLAGS "-Wl,--version-script=${LIBHRX_SOURCE_DIR}/cmake/hrx_exports.lds"
-)
-set_property(TARGET libhrx_src_libhrx_hrx PROPERTY
-  INTERFACE_LINK_LIBRARIES ""
-)
-include(CheckIPOSupported)
-check_ipo_supported(RESULT _hrx_ipo_supported OUTPUT _hrx_ipo_error)
-if(_hrx_ipo_supported)
-  set_target_properties(libhrx_src_libhrx_hrx PROPERTIES
-    INTERPROCEDURAL_OPTIMIZATION TRUE
-  )
-  message(STATUS "hrx-runtime: LTO enabled for libhrx.so")
-else()
-  message(WARNING "hrx-runtime: LTO not supported: ${_hrx_ipo_error}")
-endif()
-if(NOT TARGET hrx)
-  add_library(hrx ALIAS libhrx_src_libhrx_hrx)
-endif()
-if(NOT TARGET hrx::hrx)
-  add_library(hrx::hrx ALIAS libhrx_src_libhrx_hrx)
-endif()
-""",
 )

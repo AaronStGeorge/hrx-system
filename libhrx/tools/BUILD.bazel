@@ -4,7 +4,6 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
 load("//libhrx/build_tools/bazel:cc.bzl", "hrx_cc_binary")
 
 package(
@@ -20,13 +19,4 @@ hrx_cc_binary(
         "//libhrx/src/libhrx:hrx_static",
         "//runtime/src/iree/base/tooling:flags",
     ],
-)
-
-iree_cmake_extra_content(
-    inline = True,
-    content = """
-set_target_properties(libhrx_tools_hrx-info PROPERTIES
-  INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR}"
-)
-""",
 )

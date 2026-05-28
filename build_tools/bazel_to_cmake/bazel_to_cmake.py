@@ -256,8 +256,7 @@ def convert_directory(directory_path, write_files, allow_partial_conversion, ver
                 f"# {autogeneration_tag} from",
                 f"# {rel_build_file_path}",
                 "#",
-                "# Use iree_cmake_extra_content from iree/build_defs.oss.bzl to add arbitrary",
-                "# CMake-only content.",
+                "# Add CMake-only content below the preserve marker at the end of this file.",
                 "#",
                 f"# To disable autogeneration for this file entirely, delete this header.",
             ]

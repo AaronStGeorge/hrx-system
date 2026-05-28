@@ -116,6 +116,9 @@ class CustomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
     def iree_runtime_cc_fuzz(self, deps=[], **kwargs):
         self.iree_cc_fuzz(deps=deps + ["//runtime/src:defines"], **kwargs)
 
+    def iree_executable_test(self, src, **kwargs):
+        self.native_test(src=src, **kwargs)
+
     def iree_runtime_flatbuffer_c_library(
         self, flatcc_includes=None, deps=None, **kwargs
     ):
@@ -123,10 +126,30 @@ class CustomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
             kwargs["deps"] = deps
         self.iree_flatbuffer_c_library(includes=flatcc_includes, **kwargs)
 
+    def iree_checked_glob(self, files, **kwargs):
+        return files
+
+    def iree_generated_files(self, name, srcs, outs, args, output_args, tool, **kwargs):
+        if tool != ":generate_vm_isa":
+            self._convert_unimplemented_function("iree_generated_files", tool)
+            return
+        cmd_parts = ["python3 $(rootpath generate_vm_isa.py)"]
+        cmd_parts.extend(arg.replace("$(location ", "$(rootpath ") for arg in args)
+        for out in outs:
+            cmd_parts.extend([output_args[out], f"$(execpath {out})"])
+        self.iree_genrule(
+            name=name,
+            srcs=["generate_vm_isa.py"] + srcs,
+            outs=outs,
+            cmd=" ".join(cmd_parts),
+        )
+
     def iree_runtime_vmasm_module(self, deps=[], **kwargs):
         self.iree_vmasm_module(deps=deps + ["//runtime/src:defines"], **kwargs)
 
     def iree_runtime_hal_cts_test_suite(self, **kwargs):
+        if "backends" in kwargs and "backends_lib" not in kwargs:
+            kwargs["backends_lib"] = kwargs.pop("backends")
         self.iree_hal_cts_test_suite(**kwargs)
 
     def iree_execution_test_suite(self, **kwargs):
@@ -156,6 +179,10 @@ class CustomTargetConverter(bazel_to_cmake_targets.TargetConverter):
                 "@flatcc//:flatcc": ["flatcc"],
                 "@flatcc//:parsing": ["flatcc::parsing"],
                 "@flatcc//:runtime": ["flatcc::runtime"],
+                "//build_tools/third_party/flatcc": ["flatcc"],
+                "//build_tools/third_party/flatcc:flatcc": ["flatcc"],
+                "//build_tools/third_party/flatcc:parsing": ["flatcc::parsing"],
+                "//build_tools/third_party/flatcc:runtime": ["flatcc::runtime"],
                 "@catch2//:catch2": ["Catch2::Catch2"],
             }
         )

@@ -37,6 +37,7 @@ _PLATFORM_CMAKE_SYSTEM_NAME = {
     "//build_tools/bazel:iree_is_windows": "Windows",
     # target_compatible_with constraint labels.
     "@platforms//os:android": "Android",
+    "@platforms//os:emscripten": "Emscripten",
     "@platforms//os:linux": "Linux",
     "@platforms//os:macos": "Darwin",
     "@platforms//os:windows": "Windows",
@@ -61,6 +62,9 @@ _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS = {
     "//runtime/config/hal:driver_local_sync": "IREE_HAL_DRIVER_LOCAL_SYNC",
     "//runtime/config/hal:driver_local_task": "IREE_HAL_DRIVER_LOCAL_TASK",
     "//runtime/config/hal:driver_null": "IREE_HAL_DRIVER_NULL",
+    "//runtime/config/hal:executable_loader_embedded_elf": "IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF",
+    "//runtime/config/hal:executable_loader_system_library": "IREE_HAL_EXECUTABLE_LOADER_SYSTEM_LIBRARY",
+    "//runtime/config/hal:executable_loader_vmvx_module": "IREE_HAL_EXECUTABLE_LOADER_VMVX_MODULE",
 }
 
 
@@ -1558,11 +1562,14 @@ class BuildFileFunctions(object):
             f")\n\n"
         )
 
-    def iree_flatbuffer_c_library(self, name, srcs, flatcc_args=None, includes=None):
+    def iree_flatbuffer_c_library(
+        self, name, srcs, flatcc_args=None, includes=None, deps=None
+    ):
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         srcs_block = self._convert_srcs_block(srcs)
         flatcc_args_block = self._convert_string_list_block("FLATCC_ARGS", flatcc_args)
         includes_block = self._convert_srcs_block(includes, block_name="INCLUDES")
+        deps_block = self._convert_target_list_block("DEPS", deps)
 
         self._converter.body += (
             f"flatbuffer_c_library(\n"
@@ -1570,6 +1577,7 @@ class BuildFileFunctions(object):
             f"{srcs_block}"
             f"{flatcc_args_block}"
             f"{includes_block}"
+            f"{deps_block}"
             f"  PUBLIC\n)\n\n"
         )
 
