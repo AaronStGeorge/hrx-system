@@ -110,6 +110,31 @@ function(_hrx_configure_benchmark)
   message(FATAL_ERROR "google benchmark did not provide a benchmark target")
 endfunction()
 
+function(_hrx_configure_catch2)
+  if(NOT LIBHRX_BUILD_CTS)
+    return()
+  endif()
+
+  find_package(Catch2 3 CONFIG QUIET)
+  if(NOT TARGET Catch2::Catch2)
+    _hrx_assert_fetch_allowed("Catch2")
+    set(CATCH_INSTALL_DOCS OFF CACHE BOOL "" FORCE)
+    set(CATCH_INSTALL_EXTRAS OFF CACHE BOOL "" FORCE)
+    set(CATCH_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+      catch2
+      GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+      GIT_TAG v3.8.1
+      EXCLUDE_FROM_ALL
+    )
+    FetchContent_MakeAvailable(catch2)
+  endif()
+
+  if(NOT TARGET Catch2::Catch2)
+    message(FATAL_ERROR "Catch2 did not provide a Catch2::Catch2 target")
+  endif()
+endfunction()
+
 function(_hrx_fetch_flatcc_if_needed out_source_dir)
   find_package(flatcc CONFIG QUIET)
   if(TARGET flatcc::runtime AND TARGET flatcc::parsing AND TARGET iree-flatcc-cli)
@@ -368,5 +393,6 @@ function(hrx_configure_dependencies)
   _hrx_configure_libbacktrace()
   _hrx_configure_googletest()
   _hrx_configure_benchmark()
+  _hrx_configure_catch2()
   _hrx_configure_flatcc()
 endfunction()

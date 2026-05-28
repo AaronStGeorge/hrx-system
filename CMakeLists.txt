@@ -10,7 +10,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # HRX is the top-level build/product. The runtime subtree is still the IREE
 # runtime subsystem, and intentionally keeps IREE_* options and iree:: targets.
-project(HRX C CXX ASM)
+project(HRX VERSION 0.1.0 LANGUAGES C CXX ASM)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
@@ -35,7 +35,16 @@ option(HRX_HERMETIC_BUILD
   "Require all dependencies to be provided by package discovery; never FetchContent."
   OFF)
 
+option(LIBHRX_BUILD
+  "Build libhrx and HRX compatibility targets." ON)
+option(LIBHRX_BUILD_PASSTHROUGH
+  "Build libhrx HIP passthrough/interception tools." ON)
+option(LIBHRX_BUILD_CUDA_BINDING
+  "Build libhrx CUDA runtime/driver API compatibility binding." OFF)
+
 option(IREE_BUILD_TESTS "Build IREE runtime unit tests and CTS targets." ON)
+option(LIBHRX_BUILD_CTS
+  "Build libhrx conformance tests." ${IREE_BUILD_TESTS})
 cmake_dependent_option(IREE_BUILD_BENCHMARKS
   "Build IREE runtime benchmarks." ON "NOT IREE_BUILD_TESTS" ON)
 
@@ -237,6 +246,10 @@ endif()
 
 add_subdirectory(build_tools/embed_data)
 add_subdirectory(runtime/src)
+
+if(LIBHRX_BUILD)
+  add_subdirectory(libhrx)
+endif()
 
 if(IREE_BUILD_TESTS)
   iree_create_ctest_customization()

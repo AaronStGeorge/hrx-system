@@ -1,0 +1,6 @@
+{
+  global:
+    hrx_*;
+  local:
+    *;
+};
