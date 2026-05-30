@@ -79,15 +79,44 @@ def log(message: str = "") -> None:
     print(message, flush=True)
 
 
+def env_default(name: str, default: str) -> str:
+    return os.environ.get(name, default)
+
+
+def env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    return value.lower() in ("1", "true", "yes", "on")
+
+
+def env_int(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    return int(value)
+
+
+def env_path(name: str, default: Path) -> Path:
+    return Path(os.environ.get(name, os.fspath(default)))
+
+
+def default_ctest_parallelism() -> int:
+    cpu_count = os.cpu_count() or 2
+    return max(1, (cpu_count + 1) // 2)
+
+
 def run(
     args: Iterable[str | os.PathLike[str]],
     *,
     cwd: Path | None = None,
     env: dict[str, str] | None = None,
+    stderr_to_stdout: bool = False,
 ) -> None:
     cmd = [os.fspath(arg) for arg in args]
     log(f"++ Exec [{cwd or Path.cwd()}]$ {' '.join(shlex.quote(a) for a in cmd)}")
-    subprocess.run(cmd, cwd=cwd, env=env, check=True)
+    stderr = subprocess.STDOUT if stderr_to_stdout else None
+    subprocess.run(cmd, cwd=cwd, env=env, check=True, stderr=stderr)
 
 
 def require_path(path: Path, description: str) -> None:
@@ -489,7 +518,7 @@ def build_core(args: argparse.Namespace) -> None:
     ranlib = rocm_tool(rocm_root, "llvm-ranlib")
 
     cmake_prefix_path = ";".join([str(rocm_root)])
-    ctest_enabled = bool(args.ctest_regex)
+    ctest_enabled = True
     cmake_defines = [
         f"CMAKE_PREFIX_PATH={cmake_prefix_path}",
         f"CMAKE_INSTALL_PREFIX={install_prefix}",
@@ -508,6 +537,7 @@ def build_core(args: argparse.Namespace) -> None:
         f"IREE_BUILD_TESTS={'ON' if ctest_enabled else 'OFF'}",
         "IREE_BUILD_BENCHMARKS=ON",
         f"LIBHRX_BUILD_CTS={'ON' if ctest_enabled else 'OFF'}",
+        f"HRX_INSTALL_TESTS={'ON' if ctest_enabled else 'OFF'}",
         f"LIBHRX_BUILD_PASSTHROUGH={'ON' if args.passthrough else 'OFF'}",
         f"IREE_HAL_DRIVER_AMDGPU={'ON' if args.amdgpu else 'OFF'}",
         "IREE_ENABLE_LIBBACKTRACE=OFF",
@@ -539,9 +569,10 @@ def test_core(args: argparse.Namespace) -> None:
     build_dir = args.build_dir.resolve()
     install_prefix = args.install_prefix.resolve()
     smoke_build_dir = args.package_smoke_build_dir.resolve()
+    installed_tests_dir = install_prefix / "share" / "hrx-system" / "tests"
 
     require_path(rocm_root, "ROCm build root")
-    require_path(build_dir / "CTestTestfile.cmake", "build-tree CTest file")
+    require_path(installed_tests_dir / "CTestTestfile.cmake", "installed CTest file")
     require_path(install_prefix / "lib" / "libhrx.so", "installed libhrx.so")
     require_path(install_prefix / "bin" / "hrx-info", "installed hrx-info")
 
@@ -552,10 +583,18 @@ def test_core(args: argparse.Namespace) -> None:
     env["PATH"] = f"{install_prefix / 'bin'}:{env['PATH']}"
     env["CMAKE_PREFIX_PATH"] = f"{install_prefix}:{rocm_root}:{env.get('CMAKE_PREFIX_PATH', '')}"
 
-    ctest_cmd = ["ctest", "--test-dir", build_dir, "--output-on-failure"]
+    ctest_parallelism = args.ctest_parallelism or default_ctest_parallelism()
+    ctest_cmd = [
+        "ctest",
+        "--test-dir",
+        installed_tests_dir,
+        "--output-on-failure",
+        "--parallel",
+        str(ctest_parallelism),
+    ]
     if args.ctest_regex:
         ctest_cmd.extend(["-R", args.ctest_regex])
-    run(ctest_cmd, cwd=REPO_ROOT, env=env)
+    run(ctest_cmd, cwd=REPO_ROOT, env=env, stderr_to_stdout=True)
     run([install_prefix / "bin" / "hrx-info"], cwd=REPO_ROOT, env=env)
     run([install_prefix / "bin" / "hrx-info", "--device=cpu:0"], cwd=REPO_ROOT, env=env)
     if args.gpu:
@@ -691,25 +730,26 @@ def run_all(args: argparse.Namespace) -> None:
 
 def add_shared_args(parser: argparse.ArgumentParser) -> None:
     default_output = REPO_ROOT / "build" / "linux"
-    parser.add_argument("--release-type", default="nightly", choices=["dev", "nightly", "prerelease"])
-    parser.add_argument("--run-id", default="")
-    parser.add_argument("--artifact-set", default="core", choices=sorted(ARTIFACT_SETS))
-    parser.add_argument("--rocm-root", type=Path, default=default_output / "rocm-root")
-    parser.add_argument("--download-cache-dir", type=Path, default=default_output / "downloads")
-    parser.add_argument("--download-concurrency", type=int, default=8)
-    parser.add_argument("--build-dir", type=Path, default=default_output / "build" / "hrx-core")
-    parser.add_argument("--install-prefix", type=Path, default=default_output / "rocm-root")
-    parser.add_argument("--package-smoke-build-dir", type=Path, default=default_output / "build" / "package-smoke")
-    parser.add_argument("--package-output-dir", type=Path, default=default_output / "dist")
-    parser.add_argument("--build-type", default="RelWithDebInfo")
-    parser.add_argument("--target", default="all")
-    parser.add_argument("--sanitizer", default="none", choices=["none", "asan", "tsan", "ubsan"])
-    parser.add_argument("--ctest-regex", default="libhrx/cts")
-    parser.add_argument("--gpu", action="store_true")
-    parser.add_argument("--package", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--package-suffix", default="")
-    parser.add_argument("--passthrough", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--amdgpu", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--release-type", default=env_default("HRX_RELEASE_TYPE", "nightly"), choices=["dev", "nightly", "prerelease"])
+    parser.add_argument("--run-id", default=env_default("HRX_RUN_ID", ""))
+    parser.add_argument("--artifact-set", default=env_default("HRX_ARTIFACT_SET", "core"), choices=sorted(ARTIFACT_SETS))
+    parser.add_argument("--rocm-root", type=Path, default=env_path("HRX_ROCM_ROOT", default_output / "rocm-root"))
+    parser.add_argument("--download-cache-dir", type=Path, default=env_path("HRX_DOWNLOAD_CACHE_DIR", default_output / "downloads"))
+    parser.add_argument("--download-concurrency", type=int, default=env_int("HRX_DOWNLOAD_CONCURRENCY", 8))
+    parser.add_argument("--build-dir", type=Path, default=env_path("HRX_BUILD_DIR", default_output / "build" / "hrx-core"))
+    parser.add_argument("--install-prefix", type=Path, default=env_path("HRX_INSTALL_PREFIX", default_output / "rocm-root"))
+    parser.add_argument("--package-smoke-build-dir", type=Path, default=env_path("HRX_PACKAGE_SMOKE_BUILD_DIR", default_output / "build" / "package-smoke"))
+    parser.add_argument("--package-output-dir", type=Path, default=env_path("HRX_PACKAGE_OUTPUT_DIR", default_output / "dist"))
+    parser.add_argument("--build-type", default=env_default("HRX_BUILD_TYPE", "RelWithDebInfo"))
+    parser.add_argument("--target", default=env_default("HRX_BUILD_TARGET", "all"))
+    parser.add_argument("--sanitizer", default=env_default("HRX_SANITIZER", "none"), choices=["none", "asan", "tsan", "ubsan"])
+    parser.add_argument("--ctest-regex", default=env_default("HRX_CTEST_REGEX", ""))
+    parser.add_argument("--ctest-parallelism", type=int, default=env_int("HRX_CTEST_PARALLELISM", 0))
+    parser.add_argument("--gpu", action="store_true", default=env_bool("HRX_TEST_GPU", False))
+    parser.add_argument("--package", action=argparse.BooleanOptionalAction, default=env_bool("HRX_PACKAGE", True))
+    parser.add_argument("--package-suffix", default=env_default("HRX_PACKAGE_SUFFIX", ""))
+    parser.add_argument("--passthrough", action=argparse.BooleanOptionalAction, default=env_bool("HRX_PASSTHROUGH", True))
+    parser.add_argument("--amdgpu", action=argparse.BooleanOptionalAction, default=env_bool("HRX_AMDGPU", True))
     parser.add_argument("-D", dest="cmake_option", action="append", default=[])
 
 
