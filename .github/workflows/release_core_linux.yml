@@ -42,6 +42,9 @@ jobs:
       build_type: RelWithDebInfo
       sanitizer: none
       test_gpu: false
+      ctest_label_exclude_regex: "requires-gpu-"
+      cmake_options: |
+        -DIREE_ROCM_TEST_TARGET_CHIP=gfx942
       package: true
       package_suffix: ${{ github.ref_name }}
 
@@ -53,21 +56,60 @@ jobs:
       actions: read
       contents: write
     steps:
-      - name: Download package artifacts
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Download public package artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: hrx-public-linux-x86_64
+          path: release-assets
+
+      - name: Download public dependency package artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: hrx-public-deps-linux-x86_64
+          path: release-assets
+
+      - name: Download test package artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: hrx-tests-linux-x86_64
+          path: release-assets
+
+      - name: Download ROCm build environment package artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: hrx-rocm-buildenv-linux-x86_64
+          path: release-assets
+
+      - name: Validate release assets
         run: |
-          mkdir -p release-assets
-          for artifact_name in \
-            hrx-public-linux-x86_64 \
-            hrx-public-deps-linux-x86_64 \
-            hrx-tests-linux-x86_64 \
-            hrx-rocm-buildenv-linux-x86_64; do
-            gh run download "${GITHUB_RUN_ID}" \
-              --repo "${GITHUB_REPOSITORY}" \
-              --name "${artifact_name}" \
-              --dir release-assets
+          tag="${GITHUB_REF_NAME}"
+          expected_assets=(
+            "hrx-public-linux-x86_64-${tag}.tar.zst"
+            "hrx-public-linux-x86_64-${tag}.manifest.json"
+            "hrx-public-linux-x86_64-env.sh"
+            "hrx-public-deps-linux-x86_64-${tag}.tar.zst"
+            "hrx-public-deps-linux-x86_64-${tag}.manifest.json"
+            "hrx-public-deps-linux-x86_64-env.sh"
+            "hrx-tests-linux-x86_64-${tag}.tar.zst"
+            "hrx-tests-linux-x86_64-${tag}.manifest.json"
+            "hrx-rocm-buildenv-linux-x86_64-${tag}.tar.zst"
+            "hrx-rocm-buildenv-linux-x86_64-${tag}.manifest.json"
+            "hrx-rocm-buildenv-linux-x86_64-env.sh"
+          )
+
+          missing=0
+          for asset in "${expected_assets[@]}"; do
+            if [[ ! -f "release-assets/${asset}" ]]; then
+              echo "Missing release asset: ${asset}" >&2
+              missing=1
+            fi
           done
+          if [[ "${missing}" != 0 ]]; then
+            echo "Downloaded assets:" >&2
+            find release-assets -maxdepth 2 -type f -print >&2 || true
+            exit 1
+          fi
+
           ls -lh release-assets
 
       - name: Publish GitHub release
