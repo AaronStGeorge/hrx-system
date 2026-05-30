@@ -27,15 +27,24 @@ on:
       sanitizer:
         type: string
         default: none
+      assertions:
+        type: boolean
+        default: false
       cmake_options:
         type: string
         default: ""
       ctest_regex:
         type: string
         default: ""
+      ctest_exclude_regex:
+        type: string
+        default: ""
       test_gpu:
         type: boolean
         default: false
+      run_tests:
+        type: boolean
+        default: true
       package:
         type: boolean
         default: true
@@ -69,8 +78,10 @@ jobs:
       HRX_PACKAGE_OUTPUT_DIR: ${{ github.workspace }}/build/linux/dist
       HRX_BUILD_TYPE: ${{ inputs.build_type }}
       HRX_SANITIZER: ${{ inputs.sanitizer }}
+      HRX_ASSERTIONS: ${{ inputs.assertions }}
       HRX_CMAKE_OPTIONS: ${{ inputs.cmake_options }}
       HRX_CTEST_REGEX: ${{ inputs.ctest_regex }}
+      HRX_CTEST_EXCLUDE_REGEX: ${{ inputs.ctest_exclude_regex }}
       HRX_TEST_GPU: ${{ inputs.test_gpu }}
       HRX_PACKAGE: ${{ inputs.package }}
       HRX_PACKAGE_SUFFIX: ${{ inputs.package_suffix }}
@@ -93,6 +104,7 @@ jobs:
         run: python3 build_tools/ci_core_linux.py build
 
       - name: Run installed tests
+        if: ${{ inputs.run_tests }}
         run: python3 build_tools/ci_core_linux.py test
 
       - name: Package
