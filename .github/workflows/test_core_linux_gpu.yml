@@ -1,0 +1,121 @@
+# Copyright 2026 The HRX Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+name: Test CMake Linux GPU
+
+on:
+  workflow_call:
+    inputs:
+      name:
+        type: string
+        default: Linux / CMake / GPU gfx942
+      artifact_run_id:
+        type: string
+        default: ""
+      device:
+        type: string
+        default: gpu:0
+      ctest_label_regex:
+        type: string
+        default: requires-gpu-amd
+      ctest_label_exclude_regex:
+        type: string
+        default: ""
+      ctest_parallelism:
+        type: number
+        default: 1
+  workflow_dispatch:
+    inputs:
+      artifact_run_id:
+        type: string
+        description: "GitHub Actions run id containing HRX package artifacts. Empty means this workflow run."
+        default: ""
+      device:
+        type: string
+        description: "libhrx CTS device spec."
+        default: gpu:0
+      ctest_label_regex:
+        type: string
+        description: "CTest label regex for GPU installed tests."
+        default: requires-gpu-amd
+      ctest_label_exclude_regex:
+        type: string
+        description: "CTest label exclusion regex."
+        default: ""
+      ctest_parallelism:
+        type: number
+        description: "CTest parallelism on the GPU runner."
+        default: 1
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  test_core_linux_gpu:
+    name: ${{ inputs.name || 'Linux / CMake / GPU gfx942' }}
+    runs-on: linux-gfx942-1gpu-core42-ossci-rocm
+    timeout-minutes: 20
+    env:
+      HRX_OUTPUT_DIR: ${{ github.workspace }}/build/linux-gpu
+      HRX_ARTIFACT_DOWNLOAD_DIR: ${{ github.workspace }}/build/linux-gpu/artifacts
+      HRX_PUBLIC_INSTALL_DIR: ${{ github.workspace }}/build/linux-gpu/install/public
+      HRX_PUBLIC_DEPS_DIR: ${{ github.workspace }}/build/linux-gpu/install/public-deps
+      HRX_TESTS_INSTALL_DIR: ${{ github.workspace }}/build/linux-gpu/install/tests
+      HRX_COMPOSED_INSTALL_DIR: ${{ github.workspace }}/build/linux-gpu/install/composed
+      HRX_PREPARE_PUBLIC_DEPS: "false"
+      HRX_PACKAGE_SMOKE: "false"
+      HRX_TEST_GPU: "true"
+      HRX_CTS_DEVICE: ${{ inputs.device || 'gpu:0' }}
+      HRX_CTEST_LABEL_REGEX: ${{ inputs.ctest_label_regex || 'requires-gpu-amd' }}
+      HRX_CTEST_LABEL_EXCLUDE_REGEX: ${{ inputs.ctest_label_exclude_regex || '' }}
+      HRX_CTEST_PARALLELISM: ${{ inputs.ctest_parallelism || 1 }}
+      HRX_TEST_TMPDIR: ${{ github.workspace }}/build/linux-gpu/test-tmp
+      PIP_CACHE_DIR: ${{ github.workspace }}/build/linux-gpu/caches/pip
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Adjust git config
+        run: git config --global --add safe.directory "$PWD"
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: python3 -m pip install --upgrade zstandard
+
+      - name: Download public package artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: hrx-public-linux-x86_64
+          path: ${{ env.HRX_ARTIFACT_DOWNLOAD_DIR }}
+          run-id: ${{ inputs.artifact_run_id || github.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download public dependency package artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: hrx-public-deps-linux-x86_64
+          path: ${{ env.HRX_ARTIFACT_DOWNLOAD_DIR }}
+          run-id: ${{ inputs.artifact_run_id || github.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Download test package artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: hrx-tests-linux-x86_64
+          path: ${{ env.HRX_ARTIFACT_DOWNLOAD_DIR }}
+          run-id: ${{ inputs.artifact_run_id || github.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Extract package artifacts
+        run: python3 build_tools/ci_core_linux.py extract-packages
+
+      - name: Run installed GPU tests
+        run: python3 build_tools/ci_core_linux.py test
