@@ -1107,6 +1107,7 @@ static iree_status_t iree_hal_amdgpu_executable_calculate_kernarg_block_count(
 
 static iree_status_t iree_hal_amdgpu_executable_initialize_dispatch_descriptor(
     const iree_hal_amdgpu_device_kernel_args_t* kernel_args,
+    const iree_hal_amdgpu_kernel_descriptor_t* host_descriptor,
     iree_hal_amdgpu_executable_dispatch_descriptor_t* out_descriptor) {
   memset(out_descriptor, 0, sizeof(*out_descriptor));
 
@@ -1157,24 +1158,30 @@ static iree_status_t iree_hal_amdgpu_executable_initialize_dispatch_descriptor(
   out_descriptor->max_dynamic_workgroup_local_memory =
       UINT32_MAX - kernel_args->group_segment_size;
 
-  // HSA reports the kernel object as the process-addressable AMDHSA descriptor
-  // address. The descriptor also acts as the base for the signed entry offset.
+  // The PM4 fast-dispatch path needs the AMDHSA kernel descriptor. HSA reports
+  // its address as the kernel object, but that points at device (VRAM) memory
+  // that is not host-accessible on small-BAR / discrete GPUs, so we must not
+  // dereference it. Instead we use a host-resident copy parsed from the code
+  // object ELF (|host_descriptor|); when none is available we skip the PM4 fast
+  // path and fall back to AQL dispatch. |kernel_object| is still used as the
+  // (device) base for the signed entry-point offset, never dereferenced.
   const uint64_t kernel_object = kernel_args->kernel_object;
-  if (IREE_UNLIKELY(kernel_object == 0)) {
+  if (IREE_UNLIKELY(kernel_object == 0) || host_descriptor == NULL) {
+    out_descriptor->pm4_group_segment_fixed_size =
+        kernel_args->group_segment_size;
+    out_descriptor->pm4_launch_state_valid = false;
     return iree_ok_status();
   }
-  const iree_hal_amdgpu_kernel_descriptor_t* amdhsa_descriptor =
-      (const iree_hal_amdgpu_kernel_descriptor_t*)(uintptr_t)kernel_object;
   out_descriptor->pm4_group_segment_fixed_size =
-      amdhsa_descriptor->group_segment_fixed_size;
+      host_descriptor->group_segment_fixed_size;
   out_descriptor->pm4_launch_state_valid =
       iree_hal_amdgpu_pm4_dispatch_launch_state_is_supported_gfx10(
-          amdhsa_descriptor, kernel_object, kernel_args->workgroup_size,
+          host_descriptor, kernel_object, kernel_args->workgroup_size,
           IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_NONE);
   if (out_descriptor->pm4_launch_state_valid) {
     IREE_RETURN_IF_ERROR(
         iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
-            amdhsa_descriptor, kernel_object, kernel_args->workgroup_size,
+            host_descriptor, kernel_object, kernel_args->workgroup_size,
             IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_NONE,
             &out_descriptor->pm4_launch_state));
     IREE_RETURN_IF_ERROR(iree_hal_amdgpu_pm4_dispatch_emit_setup(
@@ -1232,6 +1239,14 @@ typedef struct iree_hal_amdgpu_executable_t {
   // Host-resident dispatch descriptors stored as [device_count][kernel_count].
   iree_hal_amdgpu_executable_dispatch_descriptor_t*
       host_dispatch_descriptors /*[device_count * kernel_count]*/;
+  // Host-resident copies of the 64-byte AMDHSA kernel descriptors, one per
+  // kernel, parsed from the host code object ELF. Used to derive PM4 launch
+  // state without dereferencing the device-resident kernel object (which is not
+  // host-accessible on small-BAR / discrete GPUs). Only consulted when
+  // |host_kernel_descriptors_valid|; otherwise the PM4 fast path is skipped.
+  iree_hal_amdgpu_kernel_descriptor_t* host_kernel_descriptors /*[kernel_count]*/;
+  // True once |host_kernel_descriptors| has been fully populated.
+  bool host_kernel_descriptors_valid;
 
   // Queue affinity this executable was loaded for after normalization.
   iree_hal_queue_affinity_t queue_affinity;
@@ -1326,6 +1341,7 @@ static iree_status_t iree_hal_amdgpu_executable_allocate(
   iree_host_size_t export_parameter_name_storage_offset = 0;
   iree_host_size_t host_kernel_args_offset = 0;
   iree_host_size_t host_dispatch_descriptors_offset = 0;
+  iree_host_size_t host_kernel_descriptors_offset = 0;
   iree_host_size_t device_agents_offset = 0;
   IREE_RETURN_IF_ERROR(IREE_STRUCT_LAYOUT(
       sizeof(iree_hal_amdgpu_executable_t), &total_size,
@@ -1348,6 +1364,8 @@ static iree_status_t iree_hal_amdgpu_executable_allocate(
       IREE_STRUCT_FIELD(dispatch_descriptor_count,
                         iree_hal_amdgpu_executable_dispatch_descriptor_t,
                         &host_dispatch_descriptors_offset),
+      IREE_STRUCT_FIELD(export_count, iree_hal_amdgpu_kernel_descriptor_t,
+                        &host_kernel_descriptors_offset),
       IREE_STRUCT_FIELD(topology->gpu_agent_count, hsa_agent_t,
                         &device_agents_offset)));
 
@@ -1378,6 +1396,9 @@ static iree_status_t iree_hal_amdgpu_executable_allocate(
   executable->host_dispatch_descriptors =
       (iree_hal_amdgpu_executable_dispatch_descriptor_t*)(executable_storage +
                                                           host_dispatch_descriptors_offset);
+  executable->host_kernel_descriptors =
+      (iree_hal_amdgpu_kernel_descriptor_t*)(executable_storage +
+                                             host_kernel_descriptors_offset);
   executable->device_agents =
       (hsa_agent_t*)(executable_storage + device_agents_offset);
   memcpy(executable->device_agents, topology->gpu_agents,
@@ -1418,9 +1439,13 @@ iree_hal_amdgpu_executable_initialize_dispatch_descriptors_for_device(
        kernel_ordinal < executable->kernel_count; ++kernel_ordinal) {
     const iree_host_size_t descriptor_ordinal =
         device_ordinal * executable->kernel_count + kernel_ordinal;
+    const iree_hal_amdgpu_kernel_descriptor_t* host_descriptor =
+        executable->host_kernel_descriptors_valid
+            ? &executable->host_kernel_descriptors[kernel_ordinal]
+            : NULL;
     IREE_RETURN_IF_ERROR(
         iree_hal_amdgpu_executable_initialize_dispatch_descriptor(
-            &executable->host_kernel_args[kernel_ordinal],
+            &executable->host_kernel_args[kernel_ordinal], host_descriptor,
             &executable->host_dispatch_descriptors[descriptor_ordinal]),
         "initializing dispatch descriptor for device %" PRIhsz
         " export %" PRIhsz,
@@ -2102,6 +2127,26 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_raw_hsaco(
         &hsaco_metadata, executable->export_infos,
         executable->export_parameter_offsets, executable->export_parameters,
         export_name_storage, export_parameter_name_storage);
+  }
+  // Capture host-readable copies of each kernel's AMDHSA descriptor from the
+  // code object ELF so dispatch-descriptor init never dereferences the device
+  // kernel object. If any can't be parsed we leave the copies invalid and the
+  // PM4 fast path falls back to AQL dispatch.
+  if (iree_status_is_ok(status)) {
+    bool descriptors_valid = true;
+    for (iree_host_size_t i = 0; i < hsaco_metadata.kernel_count; ++i) {
+      iree_status_t copy_status =
+          iree_hal_amdgpu_hsaco_metadata_copy_symbol_object(
+              &hsaco_metadata, hsaco_metadata.kernels[i].symbol_name,
+              sizeof(executable->host_kernel_descriptors[i]),
+              &executable->host_kernel_descriptors[i]);
+      if (!iree_status_is_ok(copy_status)) {
+        iree_status_ignore(copy_status);
+        descriptors_valid = false;
+        break;
+      }
+    }
+    executable->host_kernel_descriptors_valid = descriptors_valid;
   }
   if (iree_status_is_ok(status)) {
     iree_hal_amdgpu_profile_metadata_hash_code_object(

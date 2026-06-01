@@ -1409,3 +1409,162 @@ iree_status_t iree_hal_amdgpu_hsaco_metadata_find_kernel_by_symbol(
   }
   return iree_ok_status();
 }
+
+iree_status_t iree_hal_amdgpu_hsaco_metadata_copy_symbol_object(
+    const iree_hal_amdgpu_hsaco_metadata_t* metadata,
+    iree_string_view_t symbol_name, iree_host_size_t object_size,
+    void* out_object) {
+  IREE_ASSERT_ARGUMENT(metadata);
+  IREE_ASSERT_ARGUMENT(out_object);
+  const uint8_t* data = metadata->elf_data.data;
+  const iree_host_size_t total = metadata->elf_data.data_length;
+  if (total < IREE_HAL_AMDGPU_ELF64_HEADER_SIZE) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU ELF data too small");
+  }
+
+  // ELF64 header: e_shoff @40 (u64), e_shentsize @58 (u16), e_shnum @60 (u16).
+  iree_host_size_t section_table_offset = 0;
+  if (!iree_hal_amdgpu_hsaco_metadata_u64_to_host_size(
+          iree_hal_amdgpu_hsaco_metadata_load_le_u64(data + 40),
+          &section_table_offset)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU ELF section header offset overflow");
+  }
+  const uint16_t section_entry_size =
+      iree_hal_amdgpu_hsaco_metadata_load_le_u16(data + 58);
+  const uint16_t section_count =
+      iree_hal_amdgpu_hsaco_metadata_load_le_u16(data + 60);
+  if (section_entry_size < 64 || section_count == 0) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU ELF has no usable section header table");
+  }
+  iree_host_size_t section_table_size = 0;
+  if (!iree_host_size_checked_mul(section_count, section_entry_size,
+                                  &section_table_size) ||
+      !iree_hal_amdgpu_hsaco_metadata_range_in_bounds(
+          section_table_offset, section_table_size, total)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU ELF section header table out of bounds");
+  }
+
+  // Locate a symbol table (prefer SHT_SYMTAB=2, fall back to SHT_DYNSYM=11).
+  // Shdr: sh_type @4, sh_addr @16, sh_offset @24, sh_size @32, sh_link @40,
+  // sh_entsize @56.
+  const uint8_t* symtab_shdr = NULL;
+  for (uint16_t i = 0; i < section_count; ++i) {
+    const uint8_t* shdr =
+        data + section_table_offset + (iree_host_size_t)i * section_entry_size;
+    const uint32_t sh_type =
+        iree_hal_amdgpu_hsaco_metadata_load_le_u32(shdr + 4);
+    if (sh_type == 2) {
+      symtab_shdr = shdr;
+      break;
+    }
+    if (sh_type == 11 && symtab_shdr == NULL) {
+      symtab_shdr = shdr;  // keep scanning for a real SYMTAB
+    }
+  }
+  if (symtab_shdr == NULL) {
+    return iree_make_status(IREE_STATUS_NOT_FOUND,
+                            "AMDGPU ELF has no symbol table");
+  }
+  const uint32_t string_section_index =
+      iree_hal_amdgpu_hsaco_metadata_load_le_u32(symtab_shdr + 40);
+  const uint64_t symbol_entry_size =
+      iree_hal_amdgpu_hsaco_metadata_load_le_u64(symtab_shdr + 56);
+  if (symbol_entry_size < 24 || string_section_index >= section_count) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "AMDGPU ELF symbol table is malformed");
+  }
+  iree_host_size_t symtab_offset = 0;
+  iree_host_size_t symtab_size = 0;
+  if (!iree_hal_amdgpu_hsaco_metadata_u64_to_host_size(
+          iree_hal_amdgpu_hsaco_metadata_load_le_u64(symtab_shdr + 24),
+          &symtab_offset) ||
+      !iree_hal_amdgpu_hsaco_metadata_u64_to_host_size(
+          iree_hal_amdgpu_hsaco_metadata_load_le_u64(symtab_shdr + 32),
+          &symtab_size) ||
+      !iree_hal_amdgpu_hsaco_metadata_range_in_bounds(symtab_offset, symtab_size,
+                                                      total)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU ELF symbol table out of bounds");
+  }
+
+  const uint8_t* string_shdr =
+      data + section_table_offset +
+      (iree_host_size_t)string_section_index * section_entry_size;
+  iree_host_size_t string_offset = 0;
+  iree_host_size_t string_size = 0;
+  if (!iree_hal_amdgpu_hsaco_metadata_u64_to_host_size(
+          iree_hal_amdgpu_hsaco_metadata_load_le_u64(string_shdr + 24),
+          &string_offset) ||
+      !iree_hal_amdgpu_hsaco_metadata_u64_to_host_size(
+          iree_hal_amdgpu_hsaco_metadata_load_le_u64(string_shdr + 32),
+          &string_size) ||
+      !iree_hal_amdgpu_hsaco_metadata_range_in_bounds(string_offset, string_size,
+                                                      total)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "AMDGPU ELF string table out of bounds");
+  }
+
+  // Sym: st_name @0 (u32), st_info @4 (u8), st_shndx @6 (u16), st_value @8 (u64),
+  // st_size @16 (u64).
+  const uint64_t symbol_count = symtab_size / symbol_entry_size;
+  for (uint64_t i = 0; i < symbol_count; ++i) {
+    const uint8_t* sym =
+        data + symtab_offset + (iree_host_size_t)i * symbol_entry_size;
+    if ((sym[4] & 0x0F) != 1 /*STT_OBJECT*/) continue;
+    const uint32_t name_offset =
+        iree_hal_amdgpu_hsaco_metadata_load_le_u32(sym + 0);
+    if (name_offset >= string_size) continue;
+    const iree_host_size_t name_capacity = string_size - name_offset;
+    if (symbol_name.size + 1 > name_capacity) continue;
+    const char* candidate = (const char*)(data + string_offset + name_offset);
+    if (memcmp(candidate, symbol_name.data, symbol_name.size) != 0) continue;
+    if (candidate[symbol_name.size] != '\0') continue;
+
+    const uint64_t st_size =
+        iree_hal_amdgpu_hsaco_metadata_load_le_u64(sym + 16);
+    if (st_size != (uint64_t)object_size) {
+      return iree_make_status(
+          IREE_STATUS_FAILED_PRECONDITION,
+          "AMDGPU symbol `%.*s` object size %u does not match expected %u",
+          (int)symbol_name.size, symbol_name.data, (uint32_t)st_size,
+          (uint32_t)object_size);
+    }
+    const uint16_t section_index =
+        iree_hal_amdgpu_hsaco_metadata_load_le_u16(sym + 6);
+    if (section_index >= section_count) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "AMDGPU symbol references invalid section");
+    }
+    const uint8_t* shdr = data + section_table_offset +
+                          (iree_host_size_t)section_index * section_entry_size;
+    const uint64_t section_addr =
+        iree_hal_amdgpu_hsaco_metadata_load_le_u64(shdr + 16);
+    const uint64_t section_offset =
+        iree_hal_amdgpu_hsaco_metadata_load_le_u64(shdr + 24);
+    const uint64_t st_value =
+        iree_hal_amdgpu_hsaco_metadata_load_le_u64(sym + 8);
+    if (st_value < section_addr) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "AMDGPU symbol value precedes its section");
+    }
+    iree_host_size_t file_offset = 0;
+    if (!iree_hal_amdgpu_hsaco_metadata_u64_to_host_size(
+            section_offset + (st_value - section_addr), &file_offset) ||
+        !iree_hal_amdgpu_hsaco_metadata_range_in_bounds(file_offset,
+                                                        object_size, total)) {
+      return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "AMDGPU symbol object out of bounds");
+    }
+    memcpy(out_object, data + file_offset, object_size);
+    return iree_ok_status();
+  }
+
+  return iree_make_status(
+      IREE_STATUS_NOT_FOUND,
+      "AMDGPU object symbol `%.*s` not found in ELF symbol table",
+      (int)symbol_name.size, symbol_name.data);
+}

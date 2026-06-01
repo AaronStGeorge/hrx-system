@@ -180,6 +180,17 @@ iree_status_t iree_hal_amdgpu_hsaco_metadata_find_kernel_by_symbol(
     iree_string_view_t symbol_name,
     const iree_hal_amdgpu_hsaco_metadata_kernel_t** out_kernel);
 
+// Copies the bytes of a STT_OBJECT symbol named |symbol_name| (e.g. a `foo.kd`
+// AMDHSA kernel descriptor) from the parsed ELF into |out_object|, which must be
+// |object_size| bytes. Lets callers obtain a host-readable kernel descriptor
+// without dereferencing the device-resident kernel object address (which is not
+// host-accessible on small-BAR / discrete GPUs). Returns NOT_FOUND if no such
+// object symbol exists and FAILED_PRECONDITION on a size mismatch.
+iree_status_t iree_hal_amdgpu_hsaco_metadata_copy_symbol_object(
+    const iree_hal_amdgpu_hsaco_metadata_t* metadata,
+    iree_string_view_t symbol_name, iree_host_size_t object_size,
+    void* out_object);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus
