@@ -5,6 +5,11 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // Typed benchmark lifecycle events and sink adapters.
+//
+// Event payloads are borrowed from the benchmark run and are only valid for the
+// duration of the sink callback receiving them. Streaming sinks should render
+// rows before returning, and aggregating sinks must copy any strings or derived
+// JSON they need after the run advances.
 
 #ifndef LOOM_TOOLS_IREE_BENCHMARK_LOOM_EVENT_H_
 #define LOOM_TOOLS_IREE_BENCHMARK_LOOM_EVENT_H_
@@ -279,14 +284,14 @@ typedef iree_status_t (*iree_benchmark_loom_event_sink_emit_fn_t)(
     void* user_data, const iree_benchmark_loom_event_t* event);
 
 typedef struct iree_benchmark_loom_event_sink_t {
-  // Callback invoked once per event.
+  // Callback invoked once per event with a borrowed event payload.
   iree_benchmark_loom_event_sink_emit_fn_t emit;
   // Opaque sink state passed to |emit|.
   void* user_data;
 } iree_benchmark_loom_event_sink_t;
 
 typedef struct iree_benchmark_loom_jsonl_event_sink_t {
-  // Borrowed JSONL row sink receiving rendered events.
+  // Borrowed JSONL row sink receiving rendered events during emission.
   iree_benchmark_loom_jsonl_sink_t* jsonl_sink;
   // Renderer-local selected-device row suppression state.
   iree_benchmark_loom_device_row_state_t device_row_state;

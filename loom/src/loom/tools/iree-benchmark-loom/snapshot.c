@@ -281,6 +281,18 @@ static iree_status_t iree_benchmark_loom_snapshot_write_profile_json(
   return loom_output_stream_write_cstring(stream, "}");
 }
 
+static iree_status_t iree_benchmark_loom_snapshot_write_compile_report_json(
+    const loom_run_compile_report_capture_t* compile_report_capture,
+    loom_output_stream_t* stream, bool* first_field) {
+  if (!loom_run_compile_report_capture_is_enabled(compile_report_capture)) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_json_object_field_name(
+      stream, first_field, "compile_report"));
+  return loom_run_compile_report_capture_append_json(compile_report_capture,
+                                                     stream);
+}
+
 static iree_status_t iree_benchmark_loom_snapshot_write_failure_fields_json(
     const iree_benchmark_loom_benchmark_result_t* benchmark_result,
     loom_output_stream_t* stream, bool* first_field) {
@@ -371,6 +383,8 @@ static iree_status_t iree_benchmark_loom_snapshot_write_measurement_fields(
           &benchmark_result->hal_benchmark.profile, stream));
     }
   }
+  IREE_RETURN_IF_ERROR(iree_benchmark_loom_snapshot_write_compile_report_json(
+      benchmark_result->compile_report_capture, stream, first_field));
   return iree_benchmark_loom_snapshot_write_failure_fields_json(
       benchmark_result, stream, first_field);
 }

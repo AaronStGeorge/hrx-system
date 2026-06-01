@@ -22,6 +22,10 @@ typedef struct iree_benchmark_loom_snapshot_sink_t {
 } iree_benchmark_loom_snapshot_sink_t;
 
 // Initializes an empty compact snapshot aggregator.
+//
+// The snapshot sink copies the event data needed for final output, so callers
+// may append the JSON document after the benchmark run and borrowed event
+// payloads have gone out of scope.
 iree_status_t iree_benchmark_loom_snapshot_sink_initialize(
     iree_allocator_t allocator,
     iree_benchmark_loom_snapshot_sink_t* out_snapshot);
@@ -30,7 +34,8 @@ iree_status_t iree_benchmark_loom_snapshot_sink_initialize(
 void iree_benchmark_loom_snapshot_sink_deinitialize(
     iree_benchmark_loom_snapshot_sink_t* snapshot);
 
-// Initializes an event sink that appends lifecycle events into |snapshot|.
+// Initializes an event sink that appends lifecycle events into |snapshot|. The
+// returned sink borrows |snapshot| until the snapshot is deinitialized.
 void iree_benchmark_loom_snapshot_event_sink_initialize(
     iree_benchmark_loom_snapshot_sink_t* snapshot,
     iree_benchmark_loom_event_sink_t* out_sink);

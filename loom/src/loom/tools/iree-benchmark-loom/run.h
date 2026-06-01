@@ -19,16 +19,15 @@ extern "C" {
 #endif
 
 typedef struct iree_benchmark_loom_file_run_options_t {
-  // Target-linked runner configuration.
+  // Borrowed target-linked runner configuration.
   const iree_benchmark_loom_configuration_t* configuration;
-  // Parsed benchmark runner options.
+  // Borrowed parsed options; selected @symbols are normalized inside the run.
   const iree_benchmark_loom_options_t* benchmark_options;
   // Input module path, empty for stdin, or "-" for stdin.
   iree_string_view_t input_path;
   // JSON command-line vector recorded in artifact manifests.
   iree_string_view_t command_line_json;
-  // Optional caller-owned event sink; NULL selects the configured result
-  // output.
+  // Optional caller-owned event sink; NULL selects configured result output.
   const iree_benchmark_loom_event_sink_t* event_sink;
   // Host allocator used for run-owned storage.
   iree_allocator_t host_allocator;

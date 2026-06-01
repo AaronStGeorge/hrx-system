@@ -31,6 +31,26 @@ static iree_string_view_t ParseJsonDocument(iree_string_view_t json) {
   return value;
 }
 
+static iree_string_view_t LookupObject(iree_string_view_t object,
+                                       iree_string_view_t key) {
+  iree_string_view_t value = iree_string_view_empty();
+  IREE_EXPECT_OK(iree_json_lookup_object_value(object, key, &value));
+  return value;
+}
+
+static iree_string_view_t TryLookupObject(iree_string_view_t object,
+                                          iree_string_view_t key) {
+  iree_string_view_t value = iree_string_view_empty();
+  IREE_EXPECT_OK(iree_json_try_lookup_object_value(object, key, &value));
+  return value;
+}
+
+static iree_string_view_t FirstArrayElement(iree_string_view_t array) {
+  iree_string_view_t element = iree_string_view_empty();
+  IREE_EXPECT_OK(iree_json_array_get(array, 0, &element));
+  return element;
+}
+
 TEST(BenchmarkSnapshotSinkTest, AggregatesDeduplicatedWorkItems) {
   iree_allocator_t allocator = iree_allocator_system();
   iree_benchmark_loom_snapshot_sink_t snapshot = {};
@@ -98,38 +118,259 @@ TEST(BenchmarkSnapshotSinkTest, AggregatesDeduplicatedWorkItems) {
   iree_string_builder_initialize(allocator, &output);
   iree_string_view_t root = ParseJsonDocument(SnapshotJson(&snapshot, &output));
 
-  iree_string_view_t output_format = iree_string_view_empty();
-  IREE_ASSERT_OK(iree_json_lookup_object_value(root, IREE_SV("output_format"),
-                                               &output_format));
+  iree_string_view_t output_format =
+      LookupObject(root, IREE_SV("output_format"));
   EXPECT_TRUE(iree_string_view_equal(output_format, IREE_SV("snapshot")));
 
-  iree_string_view_t work_items = iree_string_view_empty();
-  IREE_ASSERT_OK(
-      iree_json_lookup_object_value(root, IREE_SV("work_items"), &work_items));
+  iree_string_view_t work_items = LookupObject(root, IREE_SV("work_items"));
   iree_host_size_t work_item_count = 0;
   IREE_ASSERT_OK(iree_json_array_length(work_items, &work_item_count));
   EXPECT_EQ(work_item_count, 1u);
 
-  iree_string_view_t benchmarks = iree_string_view_empty();
-  IREE_ASSERT_OK(
-      iree_json_lookup_object_value(root, IREE_SV("benchmarks"), &benchmarks));
+  iree_string_view_t benchmarks = LookupObject(root, IREE_SV("benchmarks"));
   iree_host_size_t benchmark_count = 0;
   IREE_ASSERT_OK(iree_json_array_length(benchmarks, &benchmark_count));
   EXPECT_EQ(benchmark_count, 2u);
 
-  iree_string_view_t first_work_item = iree_string_view_empty();
-  IREE_ASSERT_OK(iree_json_array_get(work_items, 0, &first_work_item));
-  iree_string_view_t timing = iree_string_view_empty();
-  IREE_ASSERT_OK(iree_json_lookup_object_value(first_work_item,
-                                               IREE_SV("timing_ns"), &timing));
-  iree_string_view_t redundant_timing = iree_string_view_empty();
-  IREE_ASSERT_OK(iree_json_try_lookup_object_value(
-      first_work_item, IREE_SV("batch_timing_ns"), &redundant_timing));
-  EXPECT_TRUE(iree_string_view_is_empty(redundant_timing));
-  iree_string_view_t compile_report = iree_string_view_empty();
-  IREE_ASSERT_OK(iree_json_try_lookup_object_value(
-      first_work_item, IREE_SV("compile_report"), &compile_report));
-  EXPECT_TRUE(iree_string_view_is_empty(compile_report));
+  iree_string_view_t first_work_item = FirstArrayElement(work_items);
+  EXPECT_FALSE(iree_string_view_is_empty(
+      LookupObject(first_work_item, IREE_SV("timing_ns"))));
+  EXPECT_TRUE(iree_string_view_is_empty(
+      TryLookupObject(first_work_item, IREE_SV("batch_timing_ns"))));
+  EXPECT_TRUE(iree_string_view_is_empty(
+      TryLookupObject(first_work_item, IREE_SV("dispatch_timing_ns"))));
+  EXPECT_TRUE(iree_string_view_is_empty(
+      TryLookupObject(first_work_item, IREE_SV("operation_timing_ns"))));
+  EXPECT_TRUE(iree_string_view_is_empty(
+      TryLookupObject(first_work_item, IREE_SV("profile"))));
+  EXPECT_TRUE(iree_string_view_is_empty(
+      TryLookupObject(first_work_item, IREE_SV("compile_report"))));
+  EXPECT_TRUE(
+      iree_string_view_is_empty(TryLookupObject(root, IREE_SV("failures"))));
+  EXPECT_TRUE(iree_string_view_is_empty(
+      TryLookupObject(root, IREE_SV("failed_samples"))));
+
+  iree_string_builder_deinitialize(&output);
+  iree_benchmark_loom_snapshot_sink_deinitialize(&snapshot);
+}
+
+TEST(BenchmarkSnapshotSinkTest, IncludesRequestedProfileSummary) {
+  iree_allocator_t allocator = iree_allocator_system();
+  iree_benchmark_loom_snapshot_sink_t snapshot = {};
+  IREE_ASSERT_OK(
+      iree_benchmark_loom_snapshot_sink_initialize(allocator, &snapshot));
+  iree_benchmark_loom_event_sink_t event_sink = {};
+  iree_benchmark_loom_snapshot_event_sink_initialize(&snapshot, &event_sink);
+
+  iree_benchmark_loom_run_identity_t run = {};
+  run.run_id = IREE_SV("run");
+  run.source = IREE_SV("input.loom");
+  run.results_path = IREE_SV("-");
+  iree_benchmark_loom_candidate_identity_t candidate = {};
+  candidate.candidate_id = IREE_SV("c0");
+  loom_module_t module = {};
+  loom_testbench_benchmark_plan_t benchmark_plan = {};
+  benchmark_plan.name = IREE_SV("kernel_latency");
+  loom_testbench_case_plan_t case_plan = {};
+  case_plan.name = IREE_SV("kernel_case");
+  iree_benchmark_loom_benchmark_policy_t policy = {};
+  policy.measure = IREE_SV("dispatch_complete");
+  iree_benchmark_loom_benchmark_result_t result = {};
+  result.executed = true;
+  result.passed = true;
+  result.samples_per_iteration = 1;
+  result.has_hal_benchmark = true;
+  result.hal_benchmark.timing.batch_size = 16;
+  result.hal_benchmark.timing.measured_batch_count = 3;
+  result.hal_benchmark.timing.measured_operation_count = 48;
+  result.hal_benchmark.timing.stop_reason =
+      LOOM_RUN_BENCHMARK_STOP_REASON_STABLE;
+  result.hal_benchmark.timing.operation_timing.count = 3;
+  result.hal_benchmark.timing.operation_timing.total_ns = 90;
+  result.hal_benchmark.timing.operation_timing.minimum_ns = 20;
+  result.hal_benchmark.timing.operation_timing.maximum_ns = 40;
+  result.hal_benchmark.timing.operation_timing.mean_ns = 30.0;
+  result.hal_benchmark.timing.operation_timing.p50_ns = 30;
+  result.hal_benchmark.timing.operation_timing.p90_ns = 40;
+  result.hal_benchmark.profile.requested = true;
+
+  IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_run(
+      &event_sink, &run, /*dry_run=*/false,
+      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
+  IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_benchmark_result(
+      &event_sink, &run, &candidate, /*work_item_index=*/0, &module,
+      &benchmark_plan, &case_plan, &policy, &result,
+      /*correctness_sample_count=*/1,
+      /*correctness_failed_sample_count=*/0));
+  iree_benchmark_loom_artifact_bundle_t bundle = {};
+  IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_summary(
+      &event_sink, &run, &bundle, /*planned_case_count=*/1,
+      /*planned_benchmark_count=*/1, /*selected_benchmark_count=*/1,
+      /*logical_sample_count=*/1, /*work_item_count=*/1,
+      /*failure_count=*/0, /*failed_benchmark_count=*/0,
+      /*correctness_sample_count=*/1, /*correctness_failed_sample_count=*/0,
+      /*dry_run=*/false, IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
+
+  iree_string_builder_t output;
+  iree_string_builder_initialize(allocator, &output);
+  iree_string_view_t root = ParseJsonDocument(SnapshotJson(&snapshot, &output));
+  iree_string_view_t work_items = LookupObject(root, IREE_SV("work_items"));
+  iree_string_view_t first_work_item = FirstArrayElement(work_items);
+  iree_string_view_t profile =
+      LookupObject(first_work_item, IREE_SV("profile"));
+  iree_string_view_t profile_status = LookupObject(profile, IREE_SV("status"));
+  EXPECT_TRUE(iree_string_view_equal(profile_status, IREE_SV("requested")));
+
+  iree_string_builder_deinitialize(&output);
+  iree_benchmark_loom_snapshot_sink_deinitialize(&snapshot);
+}
+
+TEST(BenchmarkSnapshotSinkTest, IncludesRequestedCompileReport) {
+  iree_allocator_t allocator = iree_allocator_system();
+  iree_benchmark_loom_snapshot_sink_t snapshot = {};
+  IREE_ASSERT_OK(
+      iree_benchmark_loom_snapshot_sink_initialize(allocator, &snapshot));
+  iree_benchmark_loom_event_sink_t event_sink = {};
+  iree_benchmark_loom_snapshot_event_sink_initialize(&snapshot, &event_sink);
+
+  loom_run_compile_report_capture_options_t capture_options = {};
+  loom_run_compile_report_capture_options_initialize(&capture_options);
+  capture_options.sink_format = LOOM_RUN_COMPILE_REPORT_SINK_FORMAT_JSON;
+  capture_options.detail_mode = LOOM_TARGET_COMPILE_REPORT_FORMAT_MODE_SUMMARY;
+  loom_run_compile_report_capture_t capture = {};
+  IREE_ASSERT_OK(loom_run_compile_report_capture_initialize(
+      &capture_options, allocator, &capture));
+  capture.report.artifact_kind = LOOM_TARGET_COMPILE_ARTIFACT_KIND_VM_ARCHIVE;
+  capture.report.entry_symbol = IREE_SV("entry");
+
+  iree_benchmark_loom_run_identity_t run = {};
+  run.run_id = IREE_SV("run");
+  run.source = IREE_SV("input.loom");
+  run.results_path = IREE_SV("-");
+  iree_benchmark_loom_candidate_identity_t candidate = {};
+  candidate.candidate_id = IREE_SV("c0");
+  loom_module_t module = {};
+  loom_testbench_benchmark_plan_t benchmark_plan = {};
+  benchmark_plan.name = IREE_SV("kernel_latency");
+  loom_testbench_case_plan_t case_plan = {};
+  case_plan.name = IREE_SV("kernel_case");
+  iree_benchmark_loom_benchmark_policy_t policy = {};
+  policy.measure = IREE_SV("case_end_to_end");
+  iree_benchmark_loom_benchmark_result_t result = {};
+  result.executed = true;
+  result.passed = true;
+  result.samples_per_iteration = 1;
+  result.timing.count = 1;
+  result.timing.total_ns = 10;
+  result.timing.minimum_ns = 10;
+  result.timing.maximum_ns = 10;
+  result.timing.mean_ns = 10.0;
+  result.timing.p50_ns = 10;
+  result.timing.p90_ns = 10;
+  result.compile_report_capture = &capture;
+
+  IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_run(
+      &event_sink, &run, /*dry_run=*/false,
+      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
+  IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_benchmark_result(
+      &event_sink, &run, &candidate, /*work_item_index=*/0, &module,
+      &benchmark_plan, &case_plan, &policy, &result,
+      /*correctness_sample_count=*/1,
+      /*correctness_failed_sample_count=*/0));
+  iree_benchmark_loom_artifact_bundle_t bundle = {};
+  IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_summary(
+      &event_sink, &run, &bundle, /*planned_case_count=*/1,
+      /*planned_benchmark_count=*/1, /*selected_benchmark_count=*/1,
+      /*logical_sample_count=*/1, /*work_item_count=*/1,
+      /*failure_count=*/0, /*failed_benchmark_count=*/0,
+      /*correctness_sample_count=*/1, /*correctness_failed_sample_count=*/0,
+      /*dry_run=*/false, IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
+
+  iree_string_builder_t output;
+  iree_string_builder_initialize(allocator, &output);
+  iree_string_view_t root = ParseJsonDocument(SnapshotJson(&snapshot, &output));
+  iree_string_view_t work_items = LookupObject(root, IREE_SV("work_items"));
+  iree_string_view_t first_work_item = FirstArrayElement(work_items);
+  iree_string_view_t compile_report =
+      LookupObject(first_work_item, IREE_SV("compile_report"));
+  iree_string_view_t artifact_kind =
+      LookupObject(compile_report, IREE_SV("artifact_kind"));
+  EXPECT_TRUE(iree_string_view_equal(artifact_kind, IREE_SV("vm-archive")));
+  iree_string_view_t entry = LookupObject(compile_report, IREE_SV("entry"));
+  EXPECT_TRUE(iree_string_view_equal(entry, IREE_SV("entry")));
+
+  iree_string_builder_deinitialize(&output);
+  loom_run_compile_report_capture_deinitialize(&capture);
+  iree_benchmark_loom_snapshot_sink_deinitialize(&snapshot);
+}
+
+TEST(BenchmarkSnapshotSinkTest, IncludesFailurePayloadsOnFailure) {
+  iree_allocator_t allocator = iree_allocator_system();
+  iree_benchmark_loom_snapshot_sink_t snapshot = {};
+  IREE_ASSERT_OK(
+      iree_benchmark_loom_snapshot_sink_initialize(allocator, &snapshot));
+  iree_benchmark_loom_event_sink_t event_sink = {};
+  iree_benchmark_loom_snapshot_event_sink_initialize(&snapshot, &event_sink);
+
+  iree_benchmark_loom_run_identity_t run = {};
+  run.run_id = IREE_SV("run");
+  run.source = IREE_SV("input.loom");
+  run.results_path = IREE_SV("-");
+  iree_benchmark_loom_candidate_identity_t candidate = {};
+  candidate.candidate_id = IREE_SV("c0");
+  loom_module_t module = {};
+  loom_testbench_benchmark_plan_t benchmark_plan = {};
+  benchmark_plan.name = IREE_SV("kernel_latency");
+  loom_testbench_case_plan_t case_plan = {};
+  case_plan.name = IREE_SV("kernel_case");
+  iree_benchmark_loom_benchmark_policy_t policy = {};
+  policy.measure = IREE_SV("dispatch_complete");
+  iree_benchmark_loom_benchmark_result_t result = {};
+  result.has_failure = true;
+  result.failure_stage = IREE_SV("compile");
+  result.failure_kind = IREE_SV("diagnostics");
+  result.failure_message = IREE_SV("candidate did not lower");
+  result.diagnostic_error_count = 1;
+  result.diagnostic_json = IREE_SV("{\"message\":\"bad op\"}");
+
+  IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_run(
+      &event_sink, &run, /*dry_run=*/false,
+      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
+  IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_failure(
+      &event_sink, &run, IREE_SV("parse"), IREE_SV("diagnostics"),
+      IREE_SV("input module has parse errors"), /*diagnostics=*/NULL));
+  IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_benchmark_result(
+      &event_sink, &run, &candidate, /*work_item_index=*/0, &module,
+      &benchmark_plan, &case_plan, &policy, &result,
+      /*correctness_sample_count=*/0,
+      /*correctness_failed_sample_count=*/0));
+  iree_benchmark_loom_artifact_bundle_t bundle = {};
+  IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_summary(
+      &event_sink, &run, &bundle, /*planned_case_count=*/1,
+      /*planned_benchmark_count=*/1, /*selected_benchmark_count=*/1,
+      /*logical_sample_count=*/1, /*work_item_count=*/1,
+      /*failure_count=*/1, /*failed_benchmark_count=*/1,
+      /*correctness_sample_count=*/0, /*correctness_failed_sample_count=*/0,
+      /*dry_run=*/false, IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
+
+  iree_string_builder_t output;
+  iree_string_builder_initialize(allocator, &output);
+  iree_string_view_t root = ParseJsonDocument(SnapshotJson(&snapshot, &output));
+  iree_string_view_t failures = LookupObject(root, IREE_SV("failures"));
+  iree_host_size_t failure_count = 0;
+  IREE_ASSERT_OK(iree_json_array_length(failures, &failure_count));
+  EXPECT_EQ(failure_count, 1u);
+  iree_string_view_t work_items = LookupObject(root, IREE_SV("work_items"));
+  iree_string_view_t first_work_item = FirstArrayElement(work_items);
+  iree_string_view_t failure =
+      LookupObject(first_work_item, IREE_SV("failure"));
+  iree_string_view_t failure_stage = LookupObject(failure, IREE_SV("stage"));
+  EXPECT_TRUE(iree_string_view_equal(failure_stage, IREE_SV("compile")));
+  iree_string_view_t diagnostics =
+      LookupObject(failure, IREE_SV("diagnostics"));
+  iree_host_size_t diagnostic_count = 0;
+  IREE_ASSERT_OK(iree_json_array_length(diagnostics, &diagnostic_count));
+  EXPECT_EQ(diagnostic_count, 1u);
 
   iree_string_builder_deinitialize(&output);
   iree_benchmark_loom_snapshot_sink_deinitialize(&snapshot);

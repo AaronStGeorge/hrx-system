@@ -6,8 +6,13 @@
 
 #include "loom/tools/iree-benchmark-loom/event.h"
 
+#include <fstream>
+#include <string>
+
+#include "iree/base/internal/json.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+#include "iree/testing/temp_file.h"
 
 namespace loom {
 namespace {
@@ -33,6 +38,22 @@ static iree_status_t reject_event(void* user_data,
   (void)user_data;
   (void)event;
   return iree_make_status(IREE_STATUS_ABORTED, "sink stopped");
+}
+
+static iree_string_view_t ParseJsonDocument(iree_string_view_t json) {
+  iree_string_view_t cursor = json;
+  iree_string_view_t value = iree_string_view_empty();
+  IREE_EXPECT_OK(iree_json_consume_value(&cursor, &value));
+  IREE_EXPECT_OK(iree_json_consume_insignificant(&cursor));
+  EXPECT_TRUE(iree_string_view_is_empty(cursor));
+  return value;
+}
+
+static iree_string_view_t LookupObject(iree_string_view_t object,
+                                       iree_string_view_t key) {
+  iree_string_view_t value = iree_string_view_empty();
+  IREE_EXPECT_OK(iree_json_lookup_object_value(object, key, &value));
+  return value;
 }
 
 TEST(BenchmarkEventSinkTest, EmitsTypedLifecycleEvents) {
@@ -173,6 +194,56 @@ TEST(BenchmarkEventSinkTest, PropagatesSinkStatus) {
                         iree_benchmark_loom_event_sink_emit_run(
                             &sink, &run, /*dry_run=*/false,
                             IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_PER_SAMPLE));
+}
+
+TEST(BenchmarkEventSinkTest, JsonlAdapterWritesLifecycleRows) {
+  iree::testing::TempFilePath output_path("loom-benchmark-events", ".jsonl");
+  iree_benchmark_loom_jsonl_sink_t jsonl_sink = {};
+  IREE_ASSERT_OK(iree_benchmark_loom_jsonl_sink_initialize(
+      output_path.path_view(), iree_allocator_system(), &jsonl_sink));
+  iree_benchmark_loom_jsonl_event_sink_t adapter = {};
+  iree_benchmark_loom_event_sink_t event_sink = {};
+  iree_benchmark_loom_jsonl_event_sink_initialize(&jsonl_sink, &adapter,
+                                                  &event_sink);
+
+  iree_benchmark_loom_run_identity_t run = {};
+  run.run_id = IREE_SV("run");
+  run.source = IREE_SV("input.loom");
+  run.results_path = output_path.path_view();
+  iree_benchmark_loom_artifact_bundle_t artifact_bundle = {};
+  IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_run(
+      &event_sink, &run, /*dry_run=*/false,
+      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
+  IREE_ASSERT_OK(iree_benchmark_loom_event_sink_emit_summary(
+      &event_sink, &run, &artifact_bundle, /*planned_case_count=*/1,
+      /*planned_benchmark_count=*/2, /*selected_benchmark_count=*/2,
+      /*logical_sample_count=*/4, /*work_item_count=*/2,
+      /*failure_count=*/0, /*failed_benchmark_count=*/0,
+      /*correctness_sample_count=*/4, /*correctness_failed_sample_count=*/0,
+      /*dry_run=*/false, IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_ONCE));
+  IREE_ASSERT_OK(iree_benchmark_loom_jsonl_sink_close(&jsonl_sink));
+  iree_benchmark_loom_jsonl_event_sink_deinitialize(&adapter);
+  iree_benchmark_loom_jsonl_sink_deinitialize(&jsonl_sink);
+
+  std::ifstream output_file(output_path.path());
+  std::string run_row;
+  std::string summary_row;
+  std::getline(output_file, run_row);
+  std::getline(output_file, summary_row);
+  EXPECT_FALSE(run_row.empty());
+  EXPECT_FALSE(summary_row.empty());
+
+  iree_string_view_t run_root = ParseJsonDocument(iree_make_string_view(
+      run_row.data(), static_cast<iree_host_size_t>(run_row.size())));
+  iree_string_view_t summary_root = ParseJsonDocument(iree_make_string_view(
+      summary_row.data(), static_cast<iree_host_size_t>(summary_row.size())));
+  iree_string_view_t run_kind = LookupObject(run_root, IREE_SV("row"));
+  EXPECT_TRUE(iree_string_view_equal(run_kind, IREE_SV("run")));
+  iree_string_view_t summary_kind = LookupObject(summary_root, IREE_SV("row"));
+  EXPECT_TRUE(iree_string_view_equal(summary_kind, IREE_SV("summary")));
+  iree_string_view_t work_item_count =
+      LookupObject(summary_root, IREE_SV("work_item_count"));
+  EXPECT_TRUE(iree_string_view_equal(work_item_count, IREE_SV("2")));
 }
 
 }  // namespace

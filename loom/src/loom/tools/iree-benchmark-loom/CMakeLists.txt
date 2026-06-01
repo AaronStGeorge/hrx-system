@@ -131,8 +131,10 @@ loom_cc_test(
   DEPS
     ::main
     iree::base
+    iree::base::internal::json
     iree::testing::gtest
     iree::testing::gtest_main
+    iree::testing::temp_file
 )
 
 loom_cc_test(
@@ -173,6 +175,7 @@ loom_cc_test(
   DEPS
     ::main
     iree::base
+    iree::base::internal::json
     loom::src::loom::target::low_descriptor_registry_core_test
     iree::testing::gtest
     iree::testing::gtest_main
