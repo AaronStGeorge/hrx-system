@@ -42,7 +42,7 @@ void iree_hal_amdgpu_device_dispatch_emplace_packet(
 // Dispatch kernarg emission
 //===----------------------------------------------------------------------===//
 
-static void iree_hal_amdgpu_device_dispatch_emplace_implicit_args(
+void iree_hal_amdgpu_device_dispatch_emplace_implicit_args(
     const iree_hal_amdgpu_device_kernel_args_t* IREE_AMDGPU_RESTRICT
         kernel_args,
     const uint32_t workgroup_count[3], uint32_t dynamic_workgroup_local_memory,
@@ -70,7 +70,6 @@ static void iree_hal_amdgpu_device_dispatch_emplace_implicit_args(
 void iree_hal_amdgpu_device_dispatch_emplace_hal_kernargs(
     const iree_hal_amdgpu_device_kernel_args_t* IREE_AMDGPU_RESTRICT
         kernel_args,
-    const uint32_t workgroup_count[3], uint32_t dynamic_workgroup_local_memory,
     const iree_hal_amdgpu_device_dispatch_kernarg_layout_t* IREE_AMDGPU_RESTRICT
         layout,
     const uint64_t* IREE_AMDGPU_RESTRICT binding_ptrs,
@@ -89,16 +88,9 @@ void iree_hal_amdgpu_device_dispatch_emplace_hal_kernargs(
     iree_amdgpu_memcpy((uint8_t*)kernarg_ptr + binding_bytes, constants,
                        constant_bytes);
   }
-
-  iree_hal_amdgpu_device_dispatch_emplace_implicit_args(
-      kernel_args, workgroup_count, dynamic_workgroup_local_memory, layout,
-      kernarg_ptr);
 }
 
 void iree_hal_amdgpu_device_dispatch_emplace_custom_kernargs(
-    const iree_hal_amdgpu_device_kernel_args_t* IREE_AMDGPU_RESTRICT
-        kernel_args,
-    const uint32_t workgroup_count[3], uint32_t dynamic_workgroup_local_memory,
     const iree_hal_amdgpu_device_dispatch_kernarg_layout_t* IREE_AMDGPU_RESTRICT
         layout,
     const void* IREE_AMDGPU_RESTRICT custom_kernarg_ptr,
@@ -120,10 +112,6 @@ void iree_hal_amdgpu_device_dispatch_emplace_custom_kernargs(
       iree_amdgpu_memcpy(kernarg_ptr, custom_kernarg_ptr, copy_bytes);
     }
   }
-
-  iree_hal_amdgpu_device_dispatch_emplace_implicit_args(
-      kernel_args, workgroup_count, dynamic_workgroup_local_memory, layout,
-      kernarg_ptr);
 }
 
 //===----------------------------------------------------------------------===//

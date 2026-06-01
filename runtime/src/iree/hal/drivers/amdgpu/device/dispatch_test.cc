@@ -111,9 +111,10 @@ TEST(DispatchTest, EmplaceHalKernargsWritesBindingsConstantsAndImplicitArgs) {
   kernargs.fill(0xFD);
 
   iree_hal_amdgpu_device_dispatch_emplace_hal_kernargs(
-      &kernel_args, workgroup_count,
-      /*dynamic_workgroup_local_memory=*/13, &layout, bindings, constants,
-      kernargs.data());
+      &kernel_args, &layout, bindings, constants, kernargs.data());
+  iree_hal_amdgpu_device_dispatch_emplace_implicit_args(
+      &kernel_args, workgroup_count, /*dynamic_workgroup_local_memory=*/13,
+      &layout, kernargs.data());
 
   const uint64_t* binding_words =
       reinterpret_cast<const uint64_t*>(kernargs.data());
@@ -158,10 +159,6 @@ TEST(DispatchTest, EmplaceHalKernargsWritesBindingsConstantsAndImplicitArgs) {
 }
 
 TEST(DispatchTest, EmplaceCustomKernargsCopiesRawBlob) {
-  iree_hal_amdgpu_device_kernel_args_t kernel_args =
-      MakeKernelArgs(/*kernel_object=*/0x1234u, /*kernarg_size=*/20,
-                     /*kernarg_alignment=*/16, /*binding_count=*/0,
-                     /*constant_count=*/0);
   iree_hal_amdgpu_device_dispatch_kernarg_layout_t layout = {};
   const std::array<uint8_t, 20> custom_kernargs = {
       0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
@@ -170,11 +167,8 @@ TEST(DispatchTest, EmplaceCustomKernargsCopiesRawBlob) {
   alignas(16) std::array<uint8_t, 32> kernargs = {};
   kernargs.fill(0xFD);
 
-  const uint32_t workgroup_count[3] = {7, 8, 9};
   iree_hal_amdgpu_device_dispatch_emplace_custom_kernargs(
-      &kernel_args, workgroup_count, /*dynamic_workgroup_local_memory=*/13,
-      &layout, custom_kernargs.data(), custom_kernargs.size(),
-      kernargs.data());
+      &layout, custom_kernargs.data(), custom_kernargs.size(), kernargs.data());
 
   EXPECT_EQ(std::memcmp(kernargs.data(), custom_kernargs.data(),
                         custom_kernargs.size()),

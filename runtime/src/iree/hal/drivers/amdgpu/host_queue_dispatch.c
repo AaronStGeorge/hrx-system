@@ -543,16 +543,17 @@ static iree_status_t iree_hal_amdgpu_host_queue_submit_direct_dispatch(
 
   if (uses_custom_direct_arguments) {
     iree_hal_amdgpu_device_dispatch_emplace_custom_kernargs(
-        plan->kernel_args, config.workgroup_count,
-        config.dynamic_workgroup_local_memory, plan->layout, constants.data,
-        constants.data_length, submission.kernel.kernargs.blocks->data);
+        plan->layout, constants.data, constants.data_length,
+        submission.kernel.kernargs.blocks->data);
   } else {
     iree_hal_amdgpu_device_dispatch_emplace_hal_kernargs(
-        plan->kernel_args, config.workgroup_count,
-        config.dynamic_workgroup_local_memory, plan->layout, binding_ptrs,
-        (const uint32_t*)constants.data,
-        submission.kernel.kernargs.blocks->data);
+        plan->kernel_args, plan->layout, binding_ptrs,
+        (const uint32_t*)constants.data, submission.kernel.kernargs.blocks->data);
   }
+  iree_hal_amdgpu_device_dispatch_emplace_implicit_args(
+      plan->kernel_args, config.workgroup_count,
+      config.dynamic_workgroup_local_memory, plan->layout,
+      submission.kernel.kernargs.blocks->data);
   iree_hal_amdgpu_device_dispatch_emplace_packet(
       plan->kernel_args, config.workgroup_count,
       config.dynamic_workgroup_local_memory,
@@ -739,15 +740,17 @@ static iree_status_t iree_hal_amdgpu_host_queue_submit_indirect_dispatch(
   const uint32_t placeholder_workgroup_count[3] = {0, 0, 0};
   if (uses_custom_direct_arguments) {
     iree_hal_amdgpu_device_dispatch_emplace_custom_kernargs(
-        plan->kernel_args, placeholder_workgroup_count,
-        config.dynamic_workgroup_local_memory, plan->layout, constants.data,
-        constants.data_length, dispatch_kernarg_data);
+        plan->layout, constants.data, constants.data_length,
+        dispatch_kernarg_data);
   } else {
     iree_hal_amdgpu_device_dispatch_emplace_hal_kernargs(
-        plan->kernel_args, placeholder_workgroup_count,
-        config.dynamic_workgroup_local_memory, plan->layout, binding_ptrs,
+        plan->kernel_args, plan->layout, binding_ptrs,
         (const uint32_t*)constants.data, dispatch_kernarg_data);
   }
+  iree_hal_amdgpu_device_dispatch_emplace_implicit_args(
+      plan->kernel_args, placeholder_workgroup_count,
+      config.dynamic_workgroup_local_memory, plan->layout,
+      dispatch_kernarg_data);
   iree_hal_amdgpu_device_dispatch_emplace_packet(
       plan->kernel_args, placeholder_workgroup_count,
       config.dynamic_workgroup_local_memory, &dispatch_packet->dispatch,

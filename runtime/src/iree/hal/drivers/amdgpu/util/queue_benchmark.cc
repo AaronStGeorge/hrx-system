@@ -1555,8 +1555,11 @@ class QueueBenchmark : public benchmark::Fixture {
 
     const uint32_t constant_data[] = {3, 10};
     iree_hal_amdgpu_device_dispatch_emplace_hal_kernargs(
+        kernel_args, &descriptor->hal_kernarg_layout, binding_ptrs,
+        constant_data, kernargs);
+    iree_hal_amdgpu_device_dispatch_emplace_implicit_args(
         kernel_args, workgroup_count, dynamic_workgroup_local_memory,
-        &descriptor->hal_kernarg_layout, binding_ptrs, constant_data, kernargs);
+        &descriptor->hal_kernarg_layout, kernargs);
     std::memset(&pre_resolved_dispatch_packet_template_, 0,
                 sizeof(pre_resolved_dispatch_packet_template_));
     iree_hal_amdgpu_device_dispatch_emplace_packet(
