@@ -1899,85 +1899,74 @@ static iree_status_t iree_hal_amdgpu_executable_resolve_flatbuffer_kernel_args(
 
 static iree_status_t iree_hal_amdgpu_executable_resolve_raw_hsaco_kernel_args(
     const iree_hal_amdgpu_libhsa_t* libhsa, hsa_executable_t executable,
-    const iree_hal_amdgpu_hsaco_metadata_t* hsaco_metadata,
+    const iree_hal_amdgpu_hsaco_metadata_kernel_t* kernel,
     hsa_agent_t any_device_agent,
-    iree_hal_amdgpu_device_kernel_args_t* host_kernel_args) {
-  for (iree_host_size_t kernel_ordinal = 0;
-       kernel_ordinal < hsaco_metadata->kernel_count; ++kernel_ordinal) {
-    const iree_hal_amdgpu_hsaco_metadata_kernel_t* kernel =
-        &hsaco_metadata->kernels[kernel_ordinal];
-    iree_string_view_t symbol_name = kernel->symbol_name;
+    iree_hal_amdgpu_device_kernel_args_t* out_host_kernel_args) {
+  iree_string_view_t symbol_name = kernel->symbol_name;
 
-    hsa_executable_symbol_t symbol = {0};
-    IREE_RETURN_IF_ERROR(
-        iree_hal_amdgpu_executable_get_raw_hsaco_symbol_by_name(
-            libhsa, executable, symbol_name, any_device_agent, &symbol),
-        "looking up HSA symbol for raw kernel `%.*s`", (int)symbol_name.size,
-        symbol_name.data);
+  hsa_executable_symbol_t symbol = {0};
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_executable_get_raw_hsaco_symbol_by_name(
+          libhsa, executable, symbol_name, any_device_agent, &symbol),
+      "looking up HSA symbol for raw kernel `%.*s`", (int)symbol_name.size,
+      symbol_name.data);
 
-    iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
-    IREE_RETURN_IF_ERROR(
-        iree_hal_amdgpu_hsaco_metadata_calculate_default_export_parameter_requirements(
-            kernel, &requirements),
-        "projecting HSACO parameters for raw kernel `%.*s`",
-        (int)symbol_name.size, symbol_name.data);
+  iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_hsaco_metadata_calculate_default_export_parameter_requirements(
+          kernel, &requirements),
+      "projecting HSACO parameters for raw kernel `%.*s`",
+      (int)symbol_name.size, symbol_name.data);
 
-    uint32_t workgroup_size[3] = {0};
-    iree_hal_amdgpu_executable_raw_hsaco_workgroup_size(kernel, workgroup_size);
-    IREE_RETURN_IF_ERROR(
-        iree_hal_amdgpu_executable_resolve_kernel_args_from_symbol(
-            libhsa, symbol, workgroup_size, requirements.constant_count,
-            requirements.binding_count, &host_kernel_args[kernel_ordinal]),
-        "resolving kernel args for raw kernel `%.*s`", (int)symbol_name.size,
-        symbol_name.data);
+  uint32_t workgroup_size[3] = {0};
+  iree_hal_amdgpu_executable_raw_hsaco_workgroup_size(kernel, workgroup_size);
+  IREE_RETURN_IF_ERROR(
+      iree_hal_amdgpu_executable_resolve_kernel_args_from_symbol(
+          libhsa, symbol, workgroup_size, requirements.constant_count,
+          requirements.binding_count, out_host_kernel_args),
+      "resolving kernel args for raw kernel `%.*s`", (int)symbol_name.size,
+      symbol_name.data);
 
-    // Raw HSACO metadata is the source of truth for caller-visible kernargs:
-    // some code objects report a smaller HSA symbol size than the metadata
-    // segment needed by pre-packed HIP launch buffers.
-    if (host_kernel_args[kernel_ordinal].kernarg_size <
-        kernel->kernarg_segment_size) {
-      host_kernel_args[kernel_ordinal].kernarg_size =
-          kernel->kernarg_segment_size;
-    }
-    if (host_kernel_args[kernel_ordinal].kernarg_alignment <
-        kernel->kernarg_segment_alignment) {
-      host_kernel_args[kernel_ordinal].kernarg_alignment =
-          kernel->kernarg_segment_alignment;
-    }
+  // Raw HSACO metadata is the source of truth for caller-visible kernargs:
+  // some code objects report a smaller HSA symbol size than the metadata
+  // segment needed by pre-packed HIP launch buffers.
+  if (out_host_kernel_args->kernarg_size < kernel->kernarg_segment_size) {
+    out_host_kernel_args->kernarg_size = kernel->kernarg_segment_size;
+  }
+  if (out_host_kernel_args->kernarg_alignment <
+      kernel->kernarg_segment_alignment) {
+    out_host_kernel_args->kernarg_alignment = kernel->kernarg_segment_alignment;
+  }
 
-    uint16_t implicit_args_offset = UINT16_MAX;
-    uint32_t explicit_args_end = 0;
-    for (iree_host_size_t arg_i = 0; arg_i < kernel->arg_count; ++arg_i) {
-      const iree_hal_amdgpu_hsaco_metadata_arg_t* arg =
-          &kernel->args[arg_i];
-      if (arg->kind == IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_HIDDEN ||
-          arg->kind == IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_HIDDEN_NONE) {
-        if (arg->offset <= UINT16_MAX &&
-            (implicit_args_offset == UINT16_MAX ||
-             arg->offset < implicit_args_offset)) {
-          implicit_args_offset = (uint16_t)arg->offset;
-        }
-      } else {
-        iree_host_size_t arg_end = 0;
-        if (!iree_host_size_checked_add(arg->offset, arg->size, &arg_end) ||
-            arg_end > UINT32_MAX) {
-          return iree_make_status(
-              IREE_STATUS_OUT_OF_RANGE,
-              "AMDGPU kernel `%.*s` argument offset overflows",
-              (int)symbol_name.size, symbol_name.data);
-        }
-        explicit_args_end = iree_max(explicit_args_end, (uint32_t)arg_end);
+  uint16_t implicit_args_offset = UINT16_MAX;
+  uint32_t explicit_args_end = 0;
+  for (iree_host_size_t arg_i = 0; arg_i < kernel->arg_count; ++arg_i) {
+    const iree_hal_amdgpu_hsaco_metadata_arg_t* arg = &kernel->args[arg_i];
+    if (arg->kind == IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_HIDDEN ||
+        arg->kind == IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_HIDDEN_NONE) {
+      if (arg->offset <= UINT16_MAX &&
+          (implicit_args_offset == UINT16_MAX ||
+           arg->offset < implicit_args_offset)) {
+        implicit_args_offset = (uint16_t)arg->offset;
       }
+    } else {
+      iree_host_size_t arg_end = 0;
+      if (!iree_host_size_checked_add(arg->offset, arg->size, &arg_end) ||
+          arg_end > UINT32_MAX) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "AMDGPU kernel `%.*s` argument offset overflows",
+            (int)symbol_name.size, symbol_name.data);
+      }
+      explicit_args_end = iree_max(explicit_args_end, (uint32_t)arg_end);
     }
-    if (implicit_args_offset != UINT16_MAX && implicit_args_offset > 0) {
-      host_kernel_args[kernel_ordinal].implicit_args_offset =
-          implicit_args_offset;
-    } else if (explicit_args_end <= UINT16_MAX &&
-               host_kernel_args[kernel_ordinal].kernarg_size >=
-                   explicit_args_end + IREE_AMDGPU_KERNEL_IMPLICIT_ARGS_SIZE) {
-      host_kernel_args[kernel_ordinal].implicit_args_offset =
-          (uint16_t)explicit_args_end;
-    }
+  }
+  if (implicit_args_offset != UINT16_MAX && implicit_args_offset > 0) {
+    out_host_kernel_args->implicit_args_offset = implicit_args_offset;
+  } else if (explicit_args_end <= UINT16_MAX &&
+             out_host_kernel_args->kernarg_size >=
+                 explicit_args_end + IREE_AMDGPU_KERNEL_IMPLICIT_ARGS_SIZE) {
+    out_host_kernel_args->implicit_args_offset = (uint16_t)explicit_args_end;
   }
   return iree_ok_status();
 }
@@ -2175,9 +2164,15 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_raw_hsaco(
   // devices have the same ISA. The only thing that will differ is the
   // kernel_object pointer and we handle that per-device during table upload.
   if (iree_status_is_ok(status)) {
-    status = iree_hal_amdgpu_executable_resolve_raw_hsaco_kernel_args(
-        libhsa, executable->handle, &hsaco_metadata, any_device_agent,
-        executable->host_kernel_args);
+    for (iree_host_size_t kernel_ordinal = 0;
+         iree_status_is_ok(status) &&
+         kernel_ordinal < hsaco_metadata.kernel_count; ++kernel_ordinal) {
+      const iree_hal_amdgpu_hsaco_metadata_kernel_t* kernel =
+          &hsaco_metadata.kernels[kernel_ordinal];
+      status = iree_hal_amdgpu_executable_resolve_raw_hsaco_kernel_args(
+          libhsa, executable->handle, kernel, any_device_agent,
+          &executable->host_kernel_args[kernel_ordinal]);
+    }
   }
 
   // Upload copies of kernel arguments for each device.
