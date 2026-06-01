@@ -155,11 +155,12 @@ void iree_hal_amdgpu_hsaco_metadata_deinitialize(
 // reflection projection for |kernel|.
 //
 // This projection maps `.value_kind == "global_buffer"` arguments to bindings
-// in metadata argument order and `.value_kind == "by_value"` arguments to
-// constants in metadata argument order. Reflected by-value sizes must be
-// whole 32-bit constants. Hidden ABI arguments are skipped. Any
-// other visible argument kind fails with IREE_STATUS_INVALID_ARGUMENT so
-// callers do not accidentally publish partial reflection for unsupported ABIs.
+// and `.value_kind == "by_value"` arguments to constants while preserving their
+// raw kernarg byte offsets. The constant table covers the full aligned kernarg
+// segment so custom/direct HIP argument buffers can be copied without compacting
+// or dropping padding/trailing bytes. Hidden ABI arguments are skipped. Any
+// other visible argument kind fails with IREE_STATUS_INVALID_ARGUMENT so callers
+// do not accidentally publish partial reflection for unsupported ABIs.
 iree_status_t
 iree_hal_amdgpu_hsaco_metadata_calculate_default_export_parameter_requirements(
     const iree_hal_amdgpu_hsaco_metadata_kernel_t* kernel,
