@@ -157,11 +157,6 @@ typedef struct iree_hal_executable_function_parameter_t {
   uint16_t size;
   // Offset of the parameter in bytes or binding ordinal, depending on type.
   uint16_t offset;
-  // Backend-reported byte offset of this parameter within the raw kernarg
-  // segment. Consumers that synthesize raw kernarg blobs must use this field
-  // for BINDING parameters because |offset| may be a binding ordinal for
-  // backends that follow the generic HAL contract.
-  uint16_t kernarg_offset;
   // Parameter name if available, otherwise empty.
   iree_string_view_t name;
 } iree_hal_executable_function_parameter_t;

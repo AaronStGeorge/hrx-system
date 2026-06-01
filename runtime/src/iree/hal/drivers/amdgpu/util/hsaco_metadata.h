@@ -90,9 +90,6 @@ typedef struct iree_hal_amdgpu_hsaco_metadata_kernel_t {
   iree_host_size_t arg_count;
   // Argument records borrowed from the owning metadata object.
   const iree_hal_amdgpu_hsaco_metadata_arg_t* args;
-  // True when this kernel was synthesized from an ELF symbol and borrowed
-  // argument layout metadata from another kernel in the same code object.
-  bool uses_borrowed_arg_layout;
 } iree_hal_amdgpu_hsaco_metadata_kernel_t;
 
 // Decoded AMDGPU code object metadata.

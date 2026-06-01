@@ -1546,7 +1546,6 @@ iree_hal_amdgpu_hsaco_metadata_append_elf_kernel_symbols(
           template_kernel->has_required_workgroup_size;
       kernel->arg_count = template_kernel->arg_count;
       kernel->args = template_kernel->args;
-      kernel->uses_borrowed_arg_layout = true;
     }
   }
   expanded.kernel_count = write_index;
@@ -1779,7 +1778,6 @@ iree_status_t iree_hal_amdgpu_hsaco_metadata_populate_default_export_parameters(
     }
 
     parameter->offset = (uint16_t)arg->offset;
-    parameter->kernarg_offset = (uint16_t)arg->offset;
     switch (arg->kind) {
       case IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_GLOBAL_BUFFER:
         parameter->type = IREE_HAL_EXECUTABLE_FUNCTION_PARAMETER_TYPE_BINDING;
