@@ -1930,6 +1930,7 @@ static iree_status_t iree_hal_amdgpu_executable_resolve_raw_hsaco_kernel_args(
             requirements.binding_count, &host_kernel_args[kernel_ordinal]),
         "resolving kernel args for raw kernel `%.*s`", (int)symbol_name.size,
         symbol_name.data);
+
     // Raw HSACO metadata is the source of truth for caller-visible kernargs:
     // some code objects report a smaller HSA symbol size than the metadata
     // segment needed by pre-packed HIP launch buffers.
