@@ -162,8 +162,7 @@ TEST(DispatchTest, EmplaceCustomKernargsCopiesRawBlob) {
       MakeKernelArgs(/*kernel_object=*/0x1234u, /*kernarg_size=*/20,
                      /*kernarg_alignment=*/16, /*binding_count=*/0,
                      /*constant_count=*/0);
-  iree_hal_amdgpu_device_dispatch_kernarg_layout_t layout =
-      iree_hal_amdgpu_device_dispatch_make_custom_kernarg_layout(20);
+  iree_hal_amdgpu_device_dispatch_kernarg_layout_t layout = {};
   const std::array<uint8_t, 20> custom_kernargs = {
       0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
       0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13,

@@ -78,23 +78,6 @@ iree_hal_amdgpu_device_dispatch_make_hal_kernarg_layout(
   };
 }
 
-// Returns a custom-direct-argument layout for a raw kernarg blob of
-// |kernarg_size| bytes.
-//
-// The caller owns all packing and padding in the raw argument blob. No implicit
-// suffix is synthesized in this mode.
-static inline iree_hal_amdgpu_device_dispatch_kernarg_layout_t
-iree_hal_amdgpu_device_dispatch_make_custom_kernarg_layout(
-    size_t kernarg_size) {
-  (void)kernarg_size;
-  return (iree_hal_amdgpu_device_dispatch_kernarg_layout_t){
-      .explicit_kernarg_size = 0,
-      .implicit_args_offset = 0,
-      .total_kernarg_size = 0,
-      .has_implicit_args = false,
-  };
-}
-
 //===----------------------------------------------------------------------===//
 // Dispatch Packet/Kernarg Emission
 //===----------------------------------------------------------------------===//
@@ -186,8 +169,10 @@ void iree_hal_amdgpu_device_dispatch_emplace_hal_kernargs(
 // Preconditions:
 //   - |kernel_args|, |workgroup_count|, |layout|, and |kernarg_ptr| are
 //     non-NULL.
-//   - |layout| was derived with
-//     iree_hal_amdgpu_device_dispatch_make_custom_kernarg_layout.
+//   - |layout| describes either a fixed custom-direct reservation with optional
+//     implicit suffix storage or a dynamic custom-direct reservation where
+//     |layout->total_kernarg_size == 0| and |custom_kernarg_length| determines
+//     the reservation size.
 //   - |custom_kernarg_ptr| is non-NULL when |custom_kernarg_length| > 0.
 void iree_hal_amdgpu_device_dispatch_emplace_custom_kernargs(
     const iree_hal_amdgpu_device_kernel_args_t* IREE_AMDGPU_RESTRICT

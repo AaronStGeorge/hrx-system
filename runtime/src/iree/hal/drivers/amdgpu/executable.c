@@ -1139,9 +1139,11 @@ static iree_status_t iree_hal_amdgpu_executable_initialize_dispatch_descriptor(
       &out_descriptor->hal_kernarg_layout,
       &out_descriptor->hal_kernarg_block_count));
 
+  // Dynamic custom-direct layout: callers provide a prepacked ABI blob and its
+  // length at dispatch time. Fixed fields are only needed when the metadata
+  // requires an implicit suffix we must synthesize.
   out_descriptor->custom_kernarg_layout =
-      iree_hal_amdgpu_device_dispatch_make_custom_kernarg_layout(
-          kernel_args->kernarg_size);
+      (iree_hal_amdgpu_device_dispatch_kernarg_layout_t){0};
   if (custom_implicit_args_offset != UINT16_MAX) {
     out_descriptor->custom_kernarg_layout.explicit_kernarg_size =
         custom_implicit_args_offset;
