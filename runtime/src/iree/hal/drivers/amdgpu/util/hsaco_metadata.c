@@ -1427,14 +1427,13 @@ iree_hal_amdgpu_hsaco_metadata_append_elf_kernel_symbols(
         continue;
       }
       ++extra_count;
-      IREE_RETURN_IF_ERROR(iree_host_size_checked_add(
+      if (!iree_host_size_checked_add(
           extra_symbol_name_storage_size, name.size + 3,
-          &extra_symbol_name_storage_size)
-                            ? iree_ok_status()
-                            : iree_make_status(
-                                  IREE_STATUS_OUT_OF_RANGE,
-                                  "AMDGPU metadata symbol name storage "
-                                  "size overflow"));
+          &extra_symbol_name_storage_size)) {
+            return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                                    "AMDGPU metadata symbol name storage "
+                                    "size overflow");
+      }
     }
   }
   if (extra_count == 0) return iree_ok_status();
