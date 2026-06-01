@@ -15,6 +15,7 @@
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
 #include "loom/ops/check/ops.h"
+#include "loom/tools/iree-benchmark-loom/comparison_execution.h"
 
 namespace loom {
 namespace {
@@ -313,6 +314,102 @@ check.benchmark<@mlp> @full {rows = 3584}
             work_plan.logical_samples[3].work_item_index);
 
   iree_benchmark_loom_work_plan_deinitialize(&work_plan);
+}
+
+TEST_F(BenchmarkWorkPlanTest, CompareSelectionsShareDuplicatePhysicalWork) {
+  const loom_testbench_module_plan_t module_plan = PlanModule(R"(
+check.case @mlp {
+  %rows = check.param.choice values([2, 3584]) name("rows") : index
+  check.return
+}
+
+check.benchmark<@mlp> @decode_a {rows = 2}
+check.benchmark<@mlp> @decode_b {rows = 2}
+)");
+
+  iree_benchmark_loom_options_t options = {};
+  iree_benchmark_loom_options_initialize(&options);
+  options.measure = IREE_SV("dispatch_complete");
+  options.sample_compilation_mode =
+      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_PER_SAMPLE;
+  options.compare = IREE_SV("@decode_a,@decode_b");
+
+  iree_benchmark_loom_work_plan_t work_plan = {};
+  IREE_ASSERT_OK(iree_benchmark_loom_work_plan_initialize(
+      &module_plan, &options, iree_allocator_system(), &work_plan));
+
+  EXPECT_EQ(work_plan.selected_benchmark_count, 2u);
+  EXPECT_EQ(work_plan.logical_sample_count, 2u);
+  EXPECT_EQ(work_plan.dispatch_compile_item_count, 1u);
+  EXPECT_EQ(work_plan.work_item_count, 1u);
+  EXPECT_EQ(work_plan.logical_samples[0].selection_index, 0u);
+  EXPECT_EQ(work_plan.logical_samples[0].work_item_index, 0u);
+  EXPECT_EQ(work_plan.logical_samples[1].selection_index, 1u);
+  EXPECT_EQ(work_plan.logical_samples[1].work_item_index, 0u);
+  EXPECT_EQ(work_plan.dispatch_compile_items[0].case_sample_ordinal, 0u);
+  EXPECT_EQ(work_plan.work_items[0].case_sample_ordinal, 0u);
+
+  iree_benchmark_loom_work_plan_deinitialize(&work_plan);
+}
+
+TEST_F(BenchmarkWorkPlanTest, CompareSampleFlagNarrowsBeforeDedupe) {
+  const loom_testbench_module_plan_t module_plan = PlanModule(R"(
+check.case @sampled {
+  %value = check.param.choice values([5, 7, 11]) name("value") : i32
+  check.return
+}
+
+check.benchmark<@sampled> @all_a
+check.benchmark<@sampled> @all_b
+)");
+
+  iree_benchmark_loom_options_t options = {};
+  iree_benchmark_loom_options_initialize(&options);
+  options.measure = IREE_SV("dispatch_complete");
+  options.sample_compilation_mode =
+      IREE_BENCHMARK_LOOM_SAMPLE_COMPILATION_PER_SAMPLE;
+  options.compare = IREE_SV("@all_a,@all_b");
+  options.sample_ordinal = 1;
+
+  iree_benchmark_loom_work_plan_t work_plan = {};
+  IREE_ASSERT_OK(iree_benchmark_loom_work_plan_initialize(
+      &module_plan, &options, iree_allocator_system(), &work_plan));
+
+  EXPECT_EQ(work_plan.selected_benchmark_count, 2u);
+  EXPECT_EQ(work_plan.logical_sample_count, 2u);
+  EXPECT_EQ(work_plan.dispatch_compile_item_count, 1u);
+  EXPECT_EQ(work_plan.work_item_count, 1u);
+  EXPECT_EQ(work_plan.logical_samples[0].begin_benchmark_sample, 1u);
+  EXPECT_EQ(work_plan.logical_samples[0].case_sample_ordinal, 1u);
+  EXPECT_EQ(work_plan.logical_samples[1].begin_benchmark_sample, 1u);
+  EXPECT_EQ(work_plan.logical_samples[1].case_sample_ordinal, 1u);
+  EXPECT_EQ(work_plan.dispatch_compile_items[0].case_sample_ordinal, 1u);
+  EXPECT_EQ(work_plan.work_items[0].case_sample_ordinal, 1u);
+
+  iree_benchmark_loom_work_plan_deinitialize(&work_plan);
+}
+
+TEST(BenchmarkComparisonExecutionTest, AbabaSampleCapacityKeepsBaselinePairs) {
+  EXPECT_EQ(iree_benchmark_loom_dispatch_comparison_sample_capacity(
+                IREE_BENCHMARK_LOOM_INTERLEAVE_ABABA,
+                /*candidate_count=*/2, /*candidate_index=*/0,
+                /*repetitions=*/3),
+            4u);
+  EXPECT_EQ(iree_benchmark_loom_dispatch_comparison_sample_capacity(
+                IREE_BENCHMARK_LOOM_INTERLEAVE_ABABA,
+                /*candidate_count=*/2, /*candidate_index=*/1,
+                /*repetitions=*/3),
+            3u);
+  EXPECT_EQ(iree_benchmark_loom_dispatch_comparison_sample_capacity(
+                IREE_BENCHMARK_LOOM_INTERLEAVE_ROUND_ROBIN,
+                /*candidate_count=*/4, /*candidate_index=*/0,
+                /*repetitions=*/3),
+            3u);
+  EXPECT_EQ(iree_benchmark_loom_dispatch_comparison_sample_capacity(
+                IREE_BENCHMARK_LOOM_INTERLEAVE_ROUND_ROBIN,
+                /*candidate_count=*/4, /*candidate_index=*/3,
+                /*repetitions=*/3),
+            3u);
 }
 
 }  // namespace

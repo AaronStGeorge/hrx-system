@@ -288,14 +288,9 @@ iree_status_t iree_benchmark_loom_run_file(
         const iree_benchmark_loom_comparison_execution_options_t
             comparison_execution_options = {
                 .run = &run_identity,
-                .selections = selections,
-                .selection_count = selection_count,
                 .module_plan = &module_plan,
+                .work_plan = &work_plan,
                 .benchmark_options = benchmark_options,
-                .sample_compilation_mode =
-                    benchmark_options->sample_compilation_mode,
-                .interleave_mode = benchmark_options->interleave_mode,
-                .repetitions = benchmark_options->repetitions,
                 .hal_context = &hal_context,
                 .session = &session,
                 .filename = filename,

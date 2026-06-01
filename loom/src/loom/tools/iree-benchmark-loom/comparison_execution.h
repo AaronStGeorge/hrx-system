@@ -18,6 +18,7 @@
 #include "loom/tools/iree-benchmark-loom/event.h"
 #include "loom/tools/iree-benchmark-loom/model.h"
 #include "loom/tools/iree-benchmark-loom/options.h"
+#include "loom/tools/iree-benchmark-loom/work_plan.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,20 +27,12 @@ extern "C" {
 typedef struct iree_benchmark_loom_comparison_execution_options_t {
   // Stable run identity emitted into lifecycle events.
   const iree_benchmark_loom_run_identity_t* run;
-  // Selected dispatch_complete benchmarks participating in the comparison.
-  const iree_benchmark_loom_selected_benchmark_t* selections;
-  // Number of entries in |selections|.
-  iree_host_size_t selection_count;
   // Planned testbench module containing cases and benchmarks.
   const loom_testbench_module_plan_t* module_plan;
+  // Selected benchmarks and deduplicated setup work for the comparison.
+  const iree_benchmark_loom_work_plan_t* work_plan;
   // Parsed benchmark options controlling compilation and measurement.
   const iree_benchmark_loom_options_t* benchmark_options;
-  // Sample compilation mode used for every comparison candidate.
-  iree_benchmark_loom_sample_compilation_mode_t sample_compilation_mode;
-  // Interleaving policy used to schedule comparison windows.
-  iree_benchmark_loom_interleave_mode_t interleave_mode;
-  // Number of interleaved comparison repetitions.
-  iree_host_size_t repetitions;
   // Shared HAL context used by dispatch_complete work items.
   iree_benchmark_loom_hal_context_t* hal_context;
   // Shared Loom run session used for candidate compilation.
@@ -59,6 +52,12 @@ typedef struct iree_benchmark_loom_comparison_execution_options_t {
   // Structured lifecycle event sink receiving execution records.
   const iree_benchmark_loom_event_sink_t* event_sink;
 } iree_benchmark_loom_comparison_execution_options_t;
+
+// Returns the number of timing samples a candidate receives from a schedule.
+iree_host_size_t iree_benchmark_loom_dispatch_comparison_sample_capacity(
+    iree_benchmark_loom_interleave_mode_t interleave_mode,
+    iree_host_size_t candidate_count, iree_host_size_t candidate_index,
+    iree_host_size_t repetitions);
 
 // Executes an interleaved comparison and emits repetition/comparison events.
 iree_status_t iree_benchmark_loom_run_dispatch_comparison(

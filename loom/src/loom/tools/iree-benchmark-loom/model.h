@@ -222,23 +222,17 @@ typedef struct iree_benchmark_loom_hal_actual_provider_t {
 typedef struct iree_benchmark_loom_dispatch_comparison_candidate_t {
   // Selected benchmark/case/policy identity for this comparison member.
   const iree_benchmark_loom_selected_benchmark_t* selection;
+  // Module owning the selected benchmark and case plans.
+  const loom_module_t* module;
+  // Deduplicated physical work item index used for setup.
+  iree_host_size_t work_item_index;
   // Sample compilation label for this prepared candidate.
   iree_string_view_t sample_compilation;
-  // True when |sample_constant_ordinal| is the only comparable sample.
-  bool has_sample_constant_ordinal;
-  // Benchmark-local sample ordinal used for per-sample compilation.
-  iree_host_size_t sample_constant_ordinal;
   // First benchmark-local sample ordinal included in the comparison window.
   iree_host_size_t begin_sample;
   // One-past-end benchmark-local sample ordinal included in the comparison
   // window.
   iree_host_size_t end_sample;
-  // HAL provider owning the compiled executable and prepared candidate.
-  iree_benchmark_loom_hal_actual_provider_t provider;
-  // True when |provider| needs deinitialization.
-  bool provider_initialized;
-  // Materializer used to build device-buffer binding rings for timing windows.
-  loom_testbench_value_materializer_options_t benchmark_materializer;
   // Number of correctness samples executed before interleaved timing.
   iree_host_size_t correctness_sample_count;
   // Number of failed correctness samples observed before interleaved timing.

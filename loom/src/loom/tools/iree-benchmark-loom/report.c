@@ -2000,8 +2000,8 @@ iree_status_t iree_benchmark_loom_append_benchmark_repetition_row(
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_sample_compilation_field_json(
       candidate->sample_compilation, &stream));
   IREE_RETURN_IF_ERROR(iree_benchmark_loom_write_sample_fields_json(
-      candidate->provider.execution.test_module, selection->case_plan,
-      benchmark_result->sample_ordinal, &stream));
+      candidate->module, selection->case_plan, benchmark_result->sample_ordinal,
+      &stream));
   IREE_RETURN_IF_ERROR(
       loom_output_stream_write_cstring(&stream, ",\"comparison_group\":"));
   IREE_RETURN_IF_ERROR(
