@@ -20,3 +20,8 @@ alias(
     name = "iree-profile",
     actual = "//runtime/src/iree/tools:iree-profile",
 )
+
+alias(
+    name = "iree-run-module",
+    actual = "//runtime/src/iree/tools/iree-run-module",
+)
