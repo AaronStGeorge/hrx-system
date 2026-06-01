@@ -64,10 +64,30 @@ set(IREE_HAL_EXECUTABLE_PLUGIN_EXTRA_DEPS "" CACHE STRING "")
 
 option(IREE_HAL_DRIVER_DEFAULTS
   "Sets the default value for all runtime HAL drivers." OFF)
-option(IREE_HAL_DRIVER_AMDGPU "Enables the amdgpu runtime HAL driver." ON)
-option(IREE_HAL_DRIVER_LOCAL_SYNC "Enables the local-sync runtime HAL driver." ON)
-option(IREE_HAL_DRIVER_LOCAL_TASK "Enables the local-task runtime HAL driver." ON)
-option(IREE_HAL_DRIVER_NULL "Enables the null runtime HAL driver." ON)
+if(NOT DEFINED IREE_HAL_DRIVER_AMDGPU_DEFAULT)
+  set(IREE_HAL_DRIVER_AMDGPU_DEFAULT ${IREE_HAL_DRIVER_DEFAULTS})
+endif()
+if(NOT DEFINED IREE_HAL_DRIVER_LOCAL_SYNC_DEFAULT)
+  set(IREE_HAL_DRIVER_LOCAL_SYNC_DEFAULT ON)
+endif()
+if(NOT DEFINED IREE_HAL_DRIVER_LOCAL_TASK_DEFAULT)
+  set(IREE_HAL_DRIVER_LOCAL_TASK_DEFAULT ON)
+endif()
+if(NOT DEFINED IREE_HAL_DRIVER_NULL_DEFAULT)
+  set(IREE_HAL_DRIVER_NULL_DEFAULT ON)
+endif()
+option(IREE_HAL_DRIVER_AMDGPU
+  "Enables the amdgpu runtime HAL driver."
+  ${IREE_HAL_DRIVER_AMDGPU_DEFAULT})
+option(IREE_HAL_DRIVER_LOCAL_SYNC
+  "Enables the local-sync runtime HAL driver."
+  ${IREE_HAL_DRIVER_LOCAL_SYNC_DEFAULT})
+option(IREE_HAL_DRIVER_LOCAL_TASK
+  "Enables the local-task runtime HAL driver."
+  ${IREE_HAL_DRIVER_LOCAL_TASK_DEFAULT})
+option(IREE_HAL_DRIVER_NULL
+  "Enables the null runtime HAL driver."
+  ${IREE_HAL_DRIVER_NULL_DEFAULT})
 set(IREE_HAL_DRIVER_CUDA OFF CACHE BOOL
   "CUDA HAL driver is not wired in the reduced HRX runtime tree." FORCE)
 set(IREE_HAL_DRIVER_HIP OFF CACHE BOOL

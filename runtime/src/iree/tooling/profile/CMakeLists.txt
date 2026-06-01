@@ -373,7 +373,7 @@ iree_local_py_test(
     "cli_test.py"
   ARGS
     "--fixture-generator=$<TARGET_FILE:iree_tooling_profile_test_fixture_generator>"
-    "--iree-profile=$<TARGET_FILE:iree-profile>"
+    "--iree-profile=$<TARGET_FILE:iree::tools::iree-profile>"
   LABELS
     "noriscv"
   PACKAGE_DIRS

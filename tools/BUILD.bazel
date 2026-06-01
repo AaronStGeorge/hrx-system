@@ -18,7 +18,7 @@ alias(
 
 alias(
     name = "iree-profile",
-    actual = "//runtime/src/iree/tools:iree-profile",
+    actual = "//runtime/src/iree/tools/iree-profile",
 )
 
 alias(

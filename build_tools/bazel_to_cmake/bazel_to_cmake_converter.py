@@ -152,6 +152,9 @@ class BuildFileFunctions(object):
     def _expand_cmake_var(self, var):
         return "${" + var + "}"
 
+    def _cmake_variable_name(self, name):
+        return re.sub(r"[^A-Za-z0-9_]", "_", name)
+
     def _convert_string_arg_block(self, name, value, quote=True):
         #  NAME
         #    "value"
@@ -278,7 +281,7 @@ class BuildFileFunctions(object):
             return self._convert_target_list_block("DEPS", deps), ""
 
         # Emit a CMake variable for the conditional deps.
-        var_name = f"_{name}_platform_deps"
+        var_name = f"_{self._cmake_variable_name(name)}_platform_deps"
         var_block = f'set({var_name} "")\n'
 
         for ps in deps.selects:
@@ -309,7 +312,6 @@ class BuildFileFunctions(object):
             var_block += "endif()\n"
 
         # Build the DEPS block: unconditional deps + the variable reference.
-        all_deps = list(deps.unconditional) + [f"${{{var_name}}}"]
         deps_block = self._convert_target_list_block("DEPS", deps.unconditional)
         # Append the variable reference to the deps block.
         if deps_block:
@@ -319,6 +321,72 @@ class BuildFileFunctions(object):
             deps_block = f"  DEPS\n    ${{{var_name}}}\n"
 
         return deps_block, var_block
+
+    def _convert_platform_select_strings(
+        self, name, block_name, values, quote=True, sort=False
+    ):
+        """Handles string lists that may contain ConditionSelect entries.
+
+        If values is a plain list, returns (converted_block, ""). If values is a
+        MixedDeps or ConditionSelect, emits a CMake list variable with
+        if/elseif/else blocks before the target and returns the normal argument
+        block with an additional variable reference.
+        """
+        if values is None:
+            return self._convert_string_list_block(block_name, None), ""
+        if isinstance(values, ConditionSelect):
+            values = MixedDeps(unconditional=[], selects=[values])
+        if not isinstance(values, MixedDeps):
+            return self._convert_string_list_block(
+                block_name, values, quote=quote, sort=sort
+            ), ""
+
+        var_name = (
+            f"_{self._cmake_variable_name(name)}_platform_{block_name.lower()}"
+        )
+        var_block = f'set({var_name} "")\n'
+
+        def append_value(value):
+            if quote:
+                return f'  list(APPEND {var_name} "{value}")\n'
+            return f"  list(APPEND {var_name} {value})\n"
+
+        for ps in values.selects:
+            first = True
+            for label, selected_values in ps.conditions.items():
+                if label == "//conditions:default":
+                    continue
+                cond = self._convert_select_condition(label)
+                if not cond:
+                    raise NotImplementedError(f"select condition: {label}")
+                keyword = "if" if first else "elseif"
+                var_block += f"{keyword}({cond})\n"
+                if sort:
+                    selected_values = sorted(selected_values)
+                for value in selected_values:
+                    var_block += append_value(value)
+                first = False
+            default_values = ps.conditions.get("//conditions:default", [])
+            if default_values:
+                var_block += "else()\n"
+                if sort:
+                    default_values = sorted(default_values)
+                for value in default_values:
+                    var_block += append_value(value)
+            var_block += "endif()\n"
+
+        unconditional = values.unconditional
+        if sort:
+            unconditional = sorted(unconditional)
+        string_block = self._convert_string_list_block(
+            block_name, unconditional, quote=quote, sort=False
+        )
+        if string_block:
+            string_block = string_block.rstrip("\n") + f"\n    ${{{var_name}}}\n"
+        else:
+            string_block = f"  {block_name}\n    ${{{var_name}}}\n"
+
+        return string_block, var_block
 
     def _convert_timeout_arg_block(self, name, value):
         if value is None:
@@ -900,22 +968,34 @@ class BuildFileFunctions(object):
             "TEXTUAL_HDRS", textual_hdrs, sort=True
         )
         srcs_block = self._convert_srcs_block(srcs)
-        copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
-        defines_block = self._convert_string_list_block("DEFINES", defines)
+        copts_block, platform_copts_block = self._convert_platform_select_strings(
+            name, "COPTS", copts, sort=False
+        )
+        defines_block, platform_defines_block = self._convert_platform_select_strings(
+            name, "DEFINES", defines
+        )
         data_block = self._convert_target_list_block("DATA", data)
         deps_block, platform_deps_block = self._convert_platform_select_deps(name, deps)
         testonly_block = self._convert_option_block("TESTONLY", testonly)
         alwayslink_block = self._convert_option_block("ALWAYSLINK", alwayslink)
         shared_block = self._convert_option_block("SHARED", shared)
-        linkopts_block = self._convert_string_list_block("LINKOPTS", linkopts)
+        linkopts_block, platform_linkopts_block = self._convert_platform_select_strings(
+            name, "LINKOPTS", linkopts
+        )
         includes_block = self._convert_includes_block(includes)
         system_includes_block = self._convert_string_list_block(
             "SYSTEM_INCLUDES", system_includes
         )
 
         self._emit_platform_guard_begin(target_compatible_with)
+        if platform_copts_block:
+            self._converter.body += platform_copts_block
+        if platform_defines_block:
+            self._converter.body += platform_defines_block
         if platform_deps_block:
             self._converter.body += platform_deps_block
+        if platform_linkopts_block:
+            self._converter.body += platform_linkopts_block
         self._converter.body += (
             f"iree_cc_library(\n"
             f"{name_block}"
@@ -978,8 +1058,12 @@ class BuildFileFunctions(object):
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         hdrs_block = self._convert_string_list_block("HDRS", hdrs, sort=True)
         srcs_block = self._convert_srcs_block(srcs)
-        copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
-        defines_block = self._convert_string_list_block("DEFINES", defines)
+        copts_block, platform_copts_block = self._convert_platform_select_strings(
+            name, "COPTS", copts, sort=False
+        )
+        defines_block, platform_defines_block = self._convert_platform_select_strings(
+            name, "DEFINES", defines
+        )
         data_block = self._convert_target_list_block("DATA", data, omit_empty=True)
         deps_block, platform_deps_block = self._convert_platform_select_deps(name, deps)
         args_block = self._convert_string_list_block("ARGS", args)
@@ -995,6 +1079,10 @@ class BuildFileFunctions(object):
         did_emit_testdata_guard = self._emit_optional_local_cts_testdata_guard_begin(
             deps
         )
+        if platform_copts_block:
+            self._converter.body += platform_copts_block
+        if platform_defines_block:
+            self._converter.body += platform_defines_block
         if platform_deps_block:
             self._converter.body += platform_deps_block
         self._converter.body += (
@@ -1034,9 +1122,15 @@ class BuildFileFunctions(object):
         if self._should_skip_target(**kwargs):
             return
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
-        copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
-        defines_block = self._convert_string_list_block("DEFINES", defines)
-        linkopts_block = self._convert_string_list_block("LINKOPTS", linkopts)
+        copts_block, platform_copts_block = self._convert_platform_select_strings(
+            name, "COPTS", copts, sort=False
+        )
+        defines_block, platform_defines_block = self._convert_platform_select_strings(
+            name, "DEFINES", defines
+        )
+        linkopts_block, platform_linkopts_block = self._convert_platform_select_strings(
+            name, "LINKOPTS", linkopts
+        )
         srcs_block = self._convert_srcs_block(srcs)
         data_block = self._convert_target_list_block("DATA", data)
         deps_block, platform_deps_block = self._convert_platform_select_deps(name, deps)
@@ -1044,8 +1138,14 @@ class BuildFileFunctions(object):
         includes_block = self._convert_includes_block(includes)
 
         self._emit_platform_guard_begin(target_compatible_with)
+        if platform_copts_block:
+            self._converter.body += platform_copts_block
+        if platform_defines_block:
+            self._converter.body += platform_defines_block
         if platform_deps_block:
             self._converter.body += platform_deps_block
+        if platform_linkopts_block:
+            self._converter.body += platform_linkopts_block
         self._converter.body += (
             f"iree_cc_binary(\n"
             f"{name_block}"
@@ -1080,14 +1180,26 @@ class BuildFileFunctions(object):
         srcs_block = self._convert_srcs_block(srcs)
         data_block = self._convert_target_list_block("DATA", data)
         deps_block, platform_deps_block = self._convert_platform_select_deps(name, deps)
-        copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
-        defines_block = self._convert_string_list_block("DEFINES", defines)
-        linkopts_block = self._convert_string_list_block("LINKOPTS", linkopts)
+        copts_block, platform_copts_block = self._convert_platform_select_strings(
+            name, "COPTS", copts, sort=False
+        )
+        defines_block, platform_defines_block = self._convert_platform_select_strings(
+            name, "DEFINES", defines
+        )
+        linkopts_block, platform_linkopts_block = self._convert_platform_select_strings(
+            name, "LINKOPTS", linkopts
+        )
         labels_block = self._convert_string_list_block("LABELS", tags)
 
         self._emit_platform_guard_begin(target_compatible_with)
+        if platform_copts_block:
+            self._converter.body += platform_copts_block
+        if platform_defines_block:
+            self._converter.body += platform_defines_block
         if platform_deps_block:
             self._converter.body += platform_deps_block
+        if platform_linkopts_block:
+            self._converter.body += platform_linkopts_block
         self._converter.body += (
             f"iree_cc_fuzz(\n"
             f"{name_block}"

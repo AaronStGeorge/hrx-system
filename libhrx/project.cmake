@@ -8,8 +8,10 @@ list(APPEND CMAKE_MODULE_PATH
   "${CMAKE_CURRENT_LIST_DIR}/build_tools/cmake"
 )
 
-option(LIBHRX_BUILD
-  "Build libhrx and HRX compatibility targets." ON)
+if(NOT DEFINED LIBHRX_BUILD)
+  option(LIBHRX_BUILD
+    "Build libhrx and HRX compatibility targets." ON)
+endif()
 option(LIBHRX_BUILD_PASSTHROUGH
   "Build libhrx HIP passthrough/interception tools." ON)
 option(LIBHRX_BUILD_CUDA_BINDING

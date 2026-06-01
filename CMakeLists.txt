@@ -60,6 +60,8 @@ option(IREE_ENABLE_ASSERTIONS "Force unset of NDEBUG compile option." OFF)
 option(IREE_DEV_MODE
   "Configure settings optimized for IREE development instead of CI/release."
   OFF)
+option(LIBHRX_BUILD
+  "Build libhrx and HRX compatibility targets." ON)
 
 set(IREE_USE_LINKER "" CACHE STRING "")
 cmake_dependent_option(IREE_ENABLE_LLD
@@ -87,6 +89,10 @@ hrx_fix_ndebug()
 list(APPEND CMAKE_MODULE_PATH
   "${CMAKE_CURRENT_LIST_DIR}/build_tools/cmake"
 )
+
+if(LIBHRX_BUILD)
+  set(IREE_HAL_DRIVER_AMDGPU_DEFAULT ON)
+endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/runtime/project.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/libhrx/project.cmake")
