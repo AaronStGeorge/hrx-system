@@ -965,7 +965,6 @@ static iree_status_t iree_hal_amdgpu_executable_resolve_kernel_args_from_symbol(
 
   out_kernel_args->binding_count = binding_count;
   out_kernel_args->constant_count = constant_count;
-  out_kernel_args->implicit_args_offset = UINT16_MAX;
 
   IREE_TRACE_ZONE_END(z0);
   return iree_ok_status();
@@ -1108,6 +1107,7 @@ static iree_status_t iree_hal_amdgpu_executable_calculate_kernarg_block_count(
 
 static iree_status_t iree_hal_amdgpu_executable_initialize_dispatch_descriptor(
     const iree_hal_amdgpu_device_kernel_args_t* kernel_args,
+    uint16_t custom_implicit_args_offset,
     iree_hal_amdgpu_executable_dispatch_descriptor_t* out_descriptor) {
   memset(out_descriptor, 0, sizeof(*out_descriptor));
 
@@ -1142,9 +1142,7 @@ static iree_status_t iree_hal_amdgpu_executable_initialize_dispatch_descriptor(
   out_descriptor->custom_kernarg_layout =
       iree_hal_amdgpu_device_dispatch_make_custom_kernarg_layout(
           kernel_args->kernarg_size);
-  if (kernel_args->implicit_args_offset != UINT16_MAX) {
-    const uint16_t custom_implicit_args_offset =
-        kernel_args->implicit_args_offset;
+  if (custom_implicit_args_offset != UINT16_MAX) {
     out_descriptor->custom_kernarg_layout.explicit_kernarg_size =
         custom_implicit_args_offset;
     out_descriptor->custom_kernarg_layout.implicit_args_offset =
@@ -1427,14 +1425,19 @@ static void iree_hal_amdgpu_executable_invalidate_host_kernel_objects(
 
 static iree_status_t
 iree_hal_amdgpu_executable_initialize_dispatch_descriptors_for_device(
-    iree_hal_amdgpu_executable_t* executable, iree_host_size_t device_ordinal) {
+    iree_hal_amdgpu_executable_t* executable, iree_host_size_t device_ordinal,
+    const uint16_t* custom_implicit_args_offsets) {
   for (iree_host_size_t kernel_ordinal = 0;
        kernel_ordinal < executable->kernel_count; ++kernel_ordinal) {
     const iree_host_size_t descriptor_ordinal =
         device_ordinal * executable->kernel_count + kernel_ordinal;
+    const uint16_t custom_implicit_args_offset =
+        custom_implicit_args_offsets ? custom_implicit_args_offsets[kernel_ordinal]
+                                     : UINT16_MAX;
     IREE_RETURN_IF_ERROR(
         iree_hal_amdgpu_executable_initialize_dispatch_descriptor(
             &executable->host_kernel_args[kernel_ordinal],
+            custom_implicit_args_offset,
             &executable->host_dispatch_descriptors[descriptor_ordinal]),
         "initializing dispatch descriptor for device %" PRIhsz
         " export %" PRIhsz,
@@ -1938,6 +1941,15 @@ static iree_status_t iree_hal_amdgpu_executable_resolve_raw_hsaco_kernel_args(
     out_host_kernel_args->kernarg_alignment = kernel->kernarg_segment_alignment;
   }
 
+  return iree_ok_status();
+}
+
+static iree_status_t iree_hal_amdgpu_executable_raw_hsaco_implicit_args_offset(
+    const iree_hal_amdgpu_hsaco_metadata_kernel_t* kernel,
+    const iree_hal_amdgpu_device_kernel_args_t* kernel_args,
+    uint16_t* out_implicit_args_offset) {
+  *out_implicit_args_offset = UINT16_MAX;
+  iree_string_view_t symbol_name = kernel->symbol_name;
   uint16_t implicit_args_offset = UINT16_MAX;
   uint32_t explicit_args_end = 0;
   for (iree_host_size_t arg_i = 0; arg_i < kernel->arg_count; ++arg_i) {
@@ -1962,11 +1974,11 @@ static iree_status_t iree_hal_amdgpu_executable_resolve_raw_hsaco_kernel_args(
     }
   }
   if (implicit_args_offset != UINT16_MAX && implicit_args_offset > 0) {
-    out_host_kernel_args->implicit_args_offset = implicit_args_offset;
+    *out_implicit_args_offset = implicit_args_offset;
   } else if (explicit_args_end <= UINT16_MAX &&
-             out_host_kernel_args->kernarg_size >=
+             kernel_args->kernarg_size >=
                  explicit_args_end + IREE_AMDGPU_KERNEL_IMPLICIT_ARGS_SIZE) {
-    out_host_kernel_args->implicit_args_offset = (uint16_t)explicit_args_end;
+    *out_implicit_args_offset = (uint16_t)explicit_args_end;
   }
   return iree_ok_status();
 }
@@ -2081,7 +2093,8 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_flatbuffer(
     if (iree_status_is_ok(status)) {
       status =
           iree_hal_amdgpu_executable_initialize_dispatch_descriptors_for_device(
-              executable, device_ordinal);
+              executable, device_ordinal,
+              /*custom_implicit_args_offsets=*/NULL);
     }
   }
 
@@ -2164,35 +2177,48 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_raw_hsaco(
   // devices have the same ISA. The only thing that will differ is the
   // kernel_object pointer and we handle that per-device during table upload.
   if (iree_status_is_ok(status)) {
+    uint16_t* custom_implicit_args_offsets = NULL;
+    if (hsaco_metadata.kernel_count > 0) {
+      custom_implicit_args_offsets = (uint16_t*)iree_alloca(
+          hsaco_metadata.kernel_count * sizeof(custom_implicit_args_offsets[0]));
+    }
     for (iree_host_size_t kernel_ordinal = 0;
          iree_status_is_ok(status) &&
          kernel_ordinal < hsaco_metadata.kernel_count; ++kernel_ordinal) {
       const iree_hal_amdgpu_hsaco_metadata_kernel_t* kernel =
           &hsaco_metadata.kernels[kernel_ordinal];
+      iree_hal_amdgpu_device_kernel_args_t* host_kernel_args =
+          &executable->host_kernel_args[kernel_ordinal];
       status = iree_hal_amdgpu_executable_resolve_raw_hsaco_kernel_args(
           libhsa, executable->handle, kernel, any_device_agent,
-          &executable->host_kernel_args[kernel_ordinal]);
+          host_kernel_args);
+      if (iree_status_is_ok(status)) {
+        status =
+            iree_hal_amdgpu_executable_raw_hsaco_implicit_args_offset(
+                kernel, host_kernel_args,
+                &custom_implicit_args_offsets[kernel_ordinal]);
+      }
     }
-  }
 
-  // Upload copies of kernel arguments for each device.
-  // We reuse the host storage we already allocated to make it possible to
-  // memcpy the entire table in one go from host memory.
-  for (iree_host_size_t device_ordinal = 0;
-       iree_status_is_ok(status) && device_ordinal < executable->device_count;
-       ++device_ordinal) {
-    if (!iree_hal_amdgpu_physical_device_mask_contains(
-            executable->loaded_physical_device_mask, device_ordinal)) {
-      continue;
-    }
-    status = iree_hal_amdgpu_executable_upload_raw_hsaco_kernel_table(
-        libhsa, executable->handle, &hsaco_metadata,
-        executable->host_kernel_args, topology->gpu_agents[device_ordinal],
-        &executable->device_kernel_args[device_ordinal]);
-    if (iree_status_is_ok(status)) {
-      status =
-          iree_hal_amdgpu_executable_initialize_dispatch_descriptors_for_device(
-              executable, device_ordinal);
+    // Upload copies of kernel arguments for each device.
+    // We reuse the host storage we already allocated to make it possible to
+    // memcpy the entire table in one go from host memory.
+    for (iree_host_size_t device_ordinal = 0;
+         iree_status_is_ok(status) && device_ordinal < executable->device_count;
+         ++device_ordinal) {
+      if (!iree_hal_amdgpu_physical_device_mask_contains(
+              executable->loaded_physical_device_mask, device_ordinal)) {
+        continue;
+      }
+      status = iree_hal_amdgpu_executable_upload_raw_hsaco_kernel_table(
+          libhsa, executable->handle, &hsaco_metadata,
+          executable->host_kernel_args, topology->gpu_agents[device_ordinal],
+          &executable->device_kernel_args[device_ordinal]);
+      if (iree_status_is_ok(status)) {
+        status =
+            iree_hal_amdgpu_executable_initialize_dispatch_descriptors_for_device(
+                executable, device_ordinal, custom_implicit_args_offsets);
+      }
     }
   }
 
