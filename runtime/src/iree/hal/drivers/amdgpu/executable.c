@@ -1591,7 +1591,7 @@ static iree_status_t iree_hal_amdgpu_executable_calculate_reflection_storage(
 
     iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
     IREE_RETURN_IF_ERROR(
-        iree_hal_amdgpu_hsaco_metadata_calculate_default_export_parameter_requirements(
+        iree_hal_amdgpu_hsaco_metadata_calculate_flatbuffer_hal_export_parameter_requirements(
             kernel, &requirements),
         "projecting HSACO parameters for export `%.*s`", (int)symbol_name.size,
         symbol_name.data);
@@ -1692,7 +1692,7 @@ iree_hal_amdgpu_executable_calculate_raw_hsaco_reflection_storage(
 
     iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
     IREE_RETURN_IF_ERROR(
-        iree_hal_amdgpu_hsaco_metadata_calculate_default_export_parameter_requirements(
+        iree_hal_amdgpu_hsaco_metadata_calculate_native_kernarg_export_parameter_requirements(
             kernel, &requirements),
         "projecting HSACO parameters for raw kernel `%.*s`",
         (int)kernel->symbol_name.size, kernel->symbol_name.data);
@@ -1740,7 +1740,7 @@ static iree_status_t iree_hal_amdgpu_executable_initialize_export_infos(
 
     iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
     IREE_RETURN_IF_ERROR(
-        iree_hal_amdgpu_hsaco_metadata_calculate_default_export_parameter_requirements(
+        iree_hal_amdgpu_hsaco_metadata_calculate_flatbuffer_hal_export_parameter_requirements(
             kernel, &requirements),
         "projecting HSACO parameters for export `%.*s`", (int)symbol_name.size,
         symbol_name.data);
@@ -1779,7 +1779,7 @@ static iree_status_t iree_hal_amdgpu_executable_initialize_export_infos(
     char* export_parameter_name_base =
         requirements.name_storage_size ? export_parameter_name_storage : NULL;
     IREE_RETURN_IF_ERROR(
-        iree_hal_amdgpu_hsaco_metadata_populate_default_export_parameters(
+        iree_hal_amdgpu_hsaco_metadata_populate_flatbuffer_hal_export_parameters(
             kernel, requirements.parameter_count, export_parameter_base,
             requirements.name_storage_size, export_parameter_name_base),
         "populating reflected parameters for export `%.*s`",
@@ -1809,7 +1809,7 @@ iree_hal_amdgpu_executable_initialize_raw_hsaco_export_infos(
 
     iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
     IREE_RETURN_IF_ERROR(
-        iree_hal_amdgpu_hsaco_metadata_calculate_default_export_parameter_requirements(
+        iree_hal_amdgpu_hsaco_metadata_calculate_native_kernarg_export_parameter_requirements(
             kernel, &requirements),
         "projecting HSACO parameters for raw kernel `%.*s`",
         (int)kernel->symbol_name.size, kernel->symbol_name.data);
@@ -1838,7 +1838,7 @@ iree_hal_amdgpu_executable_initialize_raw_hsaco_export_infos(
     char* export_parameter_name_base =
         requirements.name_storage_size ? export_parameter_name_storage : NULL;
     IREE_RETURN_IF_ERROR(
-        iree_hal_amdgpu_hsaco_metadata_populate_default_export_parameters(
+        iree_hal_amdgpu_hsaco_metadata_populate_native_kernarg_export_parameters(
             kernel, requirements.parameter_count, export_parameter_base,
             requirements.name_storage_size, export_parameter_name_base),
         "populating reflected parameters for raw kernel `%.*s`",
@@ -1918,7 +1918,7 @@ static iree_status_t iree_hal_amdgpu_executable_resolve_raw_hsaco_kernel_args(
 
   iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
   IREE_RETURN_IF_ERROR(
-      iree_hal_amdgpu_hsaco_metadata_calculate_default_export_parameter_requirements(
+      iree_hal_amdgpu_hsaco_metadata_calculate_native_kernarg_export_parameter_requirements(
           kernel, &requirements),
       "projecting HSACO parameters for raw kernel `%.*s`",
       (int)symbol_name.size, symbol_name.data);

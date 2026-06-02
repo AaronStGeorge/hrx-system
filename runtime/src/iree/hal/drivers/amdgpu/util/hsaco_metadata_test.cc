@@ -385,7 +385,7 @@ TEST(HsacoMetadataTest, ParsesValidMetadata) {
   iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
 }
 
-TEST(HsacoMetadataTest, PopulatesDefaultExportParameters) {
+TEST(HsacoMetadataTest, PopulatesFlatbufferHalExportParameters) {
   std::vector<uint8_t> elf = BuildElfWithMetadata(BuildKernelMetadata());
 
   iree_hal_amdgpu_hsaco_metadata_t metadata;
@@ -395,18 +395,18 @@ TEST(HsacoMetadataTest, PopulatesDefaultExportParameters) {
   const iree_hal_amdgpu_hsaco_metadata_kernel_t& kernel = metadata.kernels[0];
   iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
   IREE_ASSERT_OK(
-      iree_hal_amdgpu_hsaco_metadata_calculate_default_export_parameter_requirements(
+      iree_hal_amdgpu_hsaco_metadata_calculate_flatbuffer_hal_export_parameter_requirements(
           &kernel, &requirements));
   EXPECT_EQ(requirements.parameter_count, 4);
   EXPECT_EQ(requirements.binding_count, 2);
-  EXPECT_EQ(requirements.constant_count, 6);
+  EXPECT_EQ(requirements.constant_count, 2);
   EXPECT_EQ(requirements.name_storage_size, 12);
 
   std::vector<iree_hal_executable_function_parameter_t> parameters(
       requirements.parameter_count);
   std::vector<char> name_storage(requirements.name_storage_size);
   IREE_ASSERT_OK(
-      iree_hal_amdgpu_hsaco_metadata_populate_default_export_parameters(
+      iree_hal_amdgpu_hsaco_metadata_populate_flatbuffer_hal_export_parameters(
           &kernel, parameters.size(), parameters.data(), name_storage.size(),
           name_storage.data()));
 
@@ -419,31 +419,76 @@ TEST(HsacoMetadataTest, PopulatesDefaultExportParameters) {
   EXPECT_EQ(parameters[1].type,
             IREE_HAL_EXECUTABLE_FUNCTION_PARAMETER_TYPE_BINDING);
   EXPECT_EQ(parameters[1].size, 8);
-  EXPECT_EQ(parameters[1].offset, 8);
+  EXPECT_EQ(parameters[1].offset, 1);
   EXPECT_EQ(ToString(parameters[1].name), "rhs");
 
   EXPECT_EQ(parameters[2].type,
             IREE_HAL_EXECUTABLE_FUNCTION_PARAMETER_TYPE_CONSTANT);
   EXPECT_EQ(parameters[2].size, 4);
-  EXPECT_EQ(parameters[2].offset, 16);
+  EXPECT_EQ(parameters[2].offset, 0);
   EXPECT_EQ(ToString(parameters[2].name), "n");
 
   EXPECT_EQ(parameters[3].type,
             IREE_HAL_EXECUTABLE_FUNCTION_PARAMETER_TYPE_CONSTANT);
   EXPECT_EQ(parameters[3].size, 4);
-  EXPECT_EQ(parameters[3].offset, 20);
+  EXPECT_EQ(parameters[3].offset, 4);
   EXPECT_EQ(ToString(parameters[3].name), "alpha");
 
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_RESOURCE_EXHAUSTED,
-      iree_hal_amdgpu_hsaco_metadata_populate_default_export_parameters(
+      iree_hal_amdgpu_hsaco_metadata_populate_flatbuffer_hal_export_parameters(
           &kernel, parameters.size() - 1, parameters.data(),
           name_storage.size(), name_storage.data()));
 
   iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
 }
 
-TEST(HsacoMetadataTest, DefaultExportParametersSkipHiddenArguments) {
+TEST(HsacoMetadataTest, PopulatesNativeKernargExportParameters) {
+  std::vector<uint8_t> elf = BuildElfWithMetadata(BuildKernelMetadata());
+
+  iree_hal_amdgpu_hsaco_metadata_t metadata;
+  IREE_ASSERT_OK(iree_hal_amdgpu_hsaco_metadata_initialize_from_elf(
+      ByteSpan(elf), iree_allocator_system(), &metadata));
+
+  const iree_hal_amdgpu_hsaco_metadata_kernel_t& kernel = metadata.kernels[0];
+  iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
+  IREE_ASSERT_OK(
+      iree_hal_amdgpu_hsaco_metadata_calculate_native_kernarg_export_parameter_requirements(
+          &kernel, &requirements));
+  EXPECT_EQ(requirements.parameter_count, 4);
+  EXPECT_EQ(requirements.binding_count, 2);
+  EXPECT_EQ(requirements.constant_count, 6);
+  EXPECT_EQ(requirements.name_storage_size, 12);
+
+  std::vector<iree_hal_executable_function_parameter_t> parameters(
+      requirements.parameter_count);
+  std::vector<char> name_storage(requirements.name_storage_size);
+  IREE_ASSERT_OK(
+      iree_hal_amdgpu_hsaco_metadata_populate_native_kernarg_export_parameters(
+          &kernel, parameters.size(), parameters.data(), name_storage.size(),
+          name_storage.data()));
+
+  EXPECT_EQ(parameters[0].type,
+            IREE_HAL_EXECUTABLE_FUNCTION_PARAMETER_TYPE_BINDING);
+  EXPECT_EQ(parameters[0].offset, 0);
+  EXPECT_EQ(ToString(parameters[0].name), "lhs");
+  EXPECT_EQ(parameters[1].type,
+            IREE_HAL_EXECUTABLE_FUNCTION_PARAMETER_TYPE_BINDING);
+  EXPECT_EQ(parameters[1].offset, 8);
+  EXPECT_EQ(ToString(parameters[1].name), "rhs");
+  EXPECT_EQ(parameters[2].type,
+            IREE_HAL_EXECUTABLE_FUNCTION_PARAMETER_TYPE_CONSTANT);
+  EXPECT_EQ(parameters[2].offset, 16);
+  EXPECT_EQ(ToString(parameters[2].name), "n");
+  EXPECT_EQ(parameters[3].type,
+            IREE_HAL_EXECUTABLE_FUNCTION_PARAMETER_TYPE_CONSTANT);
+  EXPECT_EQ(parameters[3].offset, 20);
+  EXPECT_EQ(ToString(parameters[3].name), "alpha");
+
+  iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
+}
+
+TEST(HsacoMetadataTest, FlatbufferHalExportParametersSkipHiddenArguments) {
   std::vector<uint8_t> elf =
       BuildElfWithMetadata(BuildHiddenArgumentMetadata());
 
@@ -459,18 +504,18 @@ TEST(HsacoMetadataTest, DefaultExportParametersSkipHiddenArguments) {
 
   iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
   IREE_ASSERT_OK(
-      iree_hal_amdgpu_hsaco_metadata_calculate_default_export_parameter_requirements(
+      iree_hal_amdgpu_hsaco_metadata_calculate_flatbuffer_hal_export_parameter_requirements(
           &kernel, &requirements));
   EXPECT_EQ(requirements.parameter_count, 2);
   EXPECT_EQ(requirements.binding_count, 1);
-  EXPECT_EQ(requirements.constant_count, 5);
+  EXPECT_EQ(requirements.constant_count, 1);
   EXPECT_EQ(requirements.name_storage_size, 11);
 
   std::vector<iree_hal_executable_function_parameter_t> parameters(
       requirements.parameter_count);
   std::vector<char> name_storage(requirements.name_storage_size);
   IREE_ASSERT_OK(
-      iree_hal_amdgpu_hsaco_metadata_populate_default_export_parameters(
+      iree_hal_amdgpu_hsaco_metadata_populate_flatbuffer_hal_export_parameters(
           &kernel, parameters.size(), parameters.data(), name_storage.size(),
           name_storage.data()));
   EXPECT_EQ(ToString(parameters[0].name), "buffer");
@@ -483,7 +528,25 @@ TEST(HsacoMetadataTest, DefaultExportParametersSkipHiddenArguments) {
   iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
 }
 
-TEST(HsacoMetadataTest, AllowsNarrowByValueDefaultExportParameter) {
+TEST(HsacoMetadataTest, RejectsNarrowByValueFlatbufferHalExportParameter) {
+  std::vector<uint8_t> elf = BuildElfWithMetadata(BuildKernelMetadata(
+      /*out_of_range_arg=*/false, /*unknown_value_kind=*/false,
+      /*narrow_by_value_arg=*/true));
+
+  iree_hal_amdgpu_hsaco_metadata_t metadata;
+  IREE_ASSERT_OK(iree_hal_amdgpu_hsaco_metadata_initialize_from_elf(
+      ByteSpan(elf), iree_allocator_system(), &metadata));
+
+  iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      iree_hal_amdgpu_hsaco_metadata_calculate_flatbuffer_hal_export_parameter_requirements(
+          &metadata.kernels[0], &requirements));
+
+  iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
+}
+
+TEST(HsacoMetadataTest, AllowsNarrowByValueNativeKernargExportParameter) {
   std::vector<uint8_t> elf = BuildElfWithMetadata(BuildKernelMetadata(
       /*out_of_range_arg=*/false, /*unknown_value_kind=*/false,
       /*narrow_by_value_arg=*/true));
@@ -494,7 +557,7 @@ TEST(HsacoMetadataTest, AllowsNarrowByValueDefaultExportParameter) {
 
   iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
   IREE_ASSERT_OK(
-      iree_hal_amdgpu_hsaco_metadata_calculate_default_export_parameter_requirements(
+      iree_hal_amdgpu_hsaco_metadata_calculate_native_kernarg_export_parameter_requirements(
           &metadata.kernels[0], &requirements));
   EXPECT_EQ(requirements.parameter_count, 4);
   EXPECT_EQ(requirements.binding_count, 2);
@@ -540,7 +603,7 @@ TEST(HsacoMetadataTest, AllowsUnknownValueKindAsOpaqueMetadata) {
   iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
-      iree_hal_amdgpu_hsaco_metadata_calculate_default_export_parameter_requirements(
+      iree_hal_amdgpu_hsaco_metadata_calculate_flatbuffer_hal_export_parameter_requirements(
           &metadata.kernels[0], &requirements));
 
   iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
