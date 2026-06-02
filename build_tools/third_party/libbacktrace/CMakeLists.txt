@@ -22,7 +22,7 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" OR NOT IREE_ENABLE_LIBBACKTRACE)
 endif()
 
 # Set target variable for consumers to use in DEPS.
-set(IREE_LIBBACKTRACE_TARGET "libbacktrace::libbacktrace" CACHE INTERNAL "libbacktrace target")
+set(IREE_LIBBACKTRACE_TARGET "iree::third_party::libbacktrace" CACHE INTERNAL "libbacktrace target")
 
 include(CheckSymbolExists)
 include(iree_third_party_helpers)
@@ -154,3 +154,4 @@ target_compile_definitions(libbacktrace_libbacktrace
   INTERFACE IREE_HAVE_LIBBACKTRACE=1
 )
 add_library(libbacktrace::libbacktrace ALIAS libbacktrace_libbacktrace)
+iree_add_alias_interface(iree::third_party::libbacktrace libbacktrace::libbacktrace)

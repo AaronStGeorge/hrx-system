@@ -98,6 +98,6 @@ iree_runtime_cc_library(
         ":registry",
         "//runtime/src/iree/async",
         "//runtime/src/iree/base/threading",
-        "@com_google_benchmark//:benchmark",
+        "//third_party:google_benchmark",
     ],
 )

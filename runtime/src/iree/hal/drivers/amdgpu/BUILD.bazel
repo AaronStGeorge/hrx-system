@@ -527,7 +527,6 @@ iree_runtime_cc_benchmark(
         "//runtime/src/iree/hal/drivers/amdgpu/abi",
         "//runtime/src/iree/hal/drivers/amdgpu/util:benchmark_flags",
         "//runtime/src/iree/hal/drivers/amdgpu/util:benchmark_profile",
-        "@com_google_benchmark//:benchmark",
     ],
 )
 

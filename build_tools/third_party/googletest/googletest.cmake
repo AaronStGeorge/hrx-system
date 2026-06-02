@@ -7,10 +7,6 @@
 include(iree_third_party_helpers)
 
 function(iree_configure_googletest)
-  if(NOT IREE_BUILD_TESTS)
-    return()
-  endif()
-
   find_package(GTest CONFIG QUIET)
   if(NOT TARGET GTest::gtest)
     find_package(GTest QUIET)
@@ -51,5 +47,16 @@ function(iree_configure_googletest)
     # Provided by FetchContent.
   elseif(TARGET GTest::gmock_main)
     iree_add_alias_interface(gmock_main GTest::gmock_main)
+  endif()
+
+  iree_add_alias_interface(iree::third_party::google_test gmock gtest)
+  if(TARGET gtest_main)
+    iree_add_alias_interface(iree::third_party::google_test_main gtest_main)
+  endif()
+  if(TARGET gmock)
+    iree_add_alias_interface(iree::third_party::google_mock gmock)
+  endif()
+  if(TARGET gmock_main)
+    iree_add_alias_interface(iree::third_party::google_mock_main gmock_main)
   endif()
 endfunction()

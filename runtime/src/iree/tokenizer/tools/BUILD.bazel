@@ -22,6 +22,5 @@ iree_runtime_cc_benchmark(
         "//runtime/src/iree/tokenizer",
         "//runtime/src/iree/tokenizer/format/huggingface:tokenizer_json",
         "//runtime/src/iree/tokenizer/format/tiktoken",
-        "@com_google_benchmark//:benchmark",
     ],
 )

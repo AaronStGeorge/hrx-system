@@ -27,10 +27,7 @@ set(HRX_INSTALL_TESTS_COMPONENT "HrxTestsDist" CACHE STRING
 set(HRX_INSTALL_TESTS_DIR "${CMAKE_INSTALL_DATADIR}/hrx-system/tests" CACHE STRING
   "Install directory for the HRX system CTest tree and test artifacts.")
 
-include("${CMAKE_CURRENT_LIST_DIR}/build_tools/third_party/libhrx_dependencies.cmake")
-
 include(hrx_installed_tests)
 
 function(libhrx_configure_project)
-  libhrx_configure_dependencies()
 endfunction()

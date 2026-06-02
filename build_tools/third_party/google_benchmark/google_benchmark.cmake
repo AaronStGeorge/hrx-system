@@ -7,10 +7,6 @@
 include(iree_third_party_helpers)
 
 function(iree_configure_google_benchmark)
-  if(NOT IREE_ENABLE_THREADING OR NOT IREE_BUILD_BENCHMARKS)
-    return()
-  endif()
-
   find_package(benchmark CONFIG QUIET)
   if(NOT TARGET benchmark AND NOT TARGET benchmark::benchmark)
     iree_fetch_content_assert_allowed("google benchmark")
@@ -21,12 +17,20 @@ function(iree_configure_google_benchmark)
     FetchContent_MakeAvailable(google_benchmark)
   endif()
 
-  if(TARGET benchmark)
-    return()
-  endif()
   if(TARGET benchmark::benchmark)
     iree_add_alias_interface(benchmark benchmark::benchmark)
-    return()
   endif()
-  message(FATAL_ERROR "google benchmark did not provide a benchmark target")
+  if(NOT TARGET benchmark)
+    message(FATAL_ERROR "google benchmark did not provide a benchmark target")
+  endif()
+
+  iree_add_alias_interface(iree::third_party::google_benchmark benchmark)
+
+  if(TARGET benchmark_main)
+    iree_add_alias_interface(
+      iree::third_party::google_benchmark_main benchmark_main)
+  elseif(TARGET benchmark::benchmark_main)
+    iree_add_alias_interface(
+      iree::third_party::google_benchmark_main benchmark::benchmark_main)
+  endif()
 endfunction()

@@ -14,5 +14,3 @@ module(
 
 include("//build_tools/bazel:deps.MODULE.bazel")
 include("//build_tools/third_party:deps.MODULE.bazel")
-include("//runtime/build_tools/third_party:deps.MODULE.bazel")
-include("//libhrx/build_tools/third_party:deps.MODULE.bazel")

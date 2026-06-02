@@ -4,11 +4,9 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-function(iree_runtime_configure_rocm_headers)
-  if(NOT IREE_HAL_DRIVER_AMDGPU)
-    return()
-  endif()
+include(iree_third_party_helpers)
 
+function(iree_configure_rocm_headers)
   find_package(hsa-runtime64 CONFIG REQUIRED)
   if(NOT TARGET hsa_runtime::headers)
     get_target_property(_hsa_runtime_include_dirs
@@ -22,6 +20,8 @@ function(iree_runtime_configure_rocm_headers)
       ${_hsa_runtime_include_dirs})
     add_library(hsa_runtime::headers ALIAS hsa_runtime_headers)
   endif()
+  iree_add_alias_interface(
+    iree::third_party::hsa_runtime_headers hsa_runtime::headers)
 
   # TODO(upstream ROCm packaging): replace this compatibility target with:
   #
@@ -43,4 +43,6 @@ function(iree_runtime_configure_rocm_headers)
     target_link_libraries(aqlprofile_sdk_headers INTERFACE hsa_runtime::headers)
     add_library(aqlprofile-sdk::headers ALIAS aqlprofile_sdk_headers)
   endif()
+  iree_add_alias_interface(
+    iree::third_party::aqlprofile_sdk_headers aqlprofile-sdk::headers)
 endfunction()

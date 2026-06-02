@@ -151,6 +151,7 @@ iree_cc_binary_benchmark(
   DEPS
     ::threading
     iree::testing::benchmark_main
+    iree::third_party::google_benchmark
   TESTONLY
 )
 
@@ -163,6 +164,7 @@ iree_cc_binary_benchmark(
     ::thread
     ::threading
     iree::testing::benchmark_main
+    iree::third_party::google_benchmark
   TESTONLY
 )
 
@@ -175,6 +177,7 @@ iree_cc_binary_benchmark(
     ::thread
     ::threading
     iree::testing::benchmark_main
+    iree::third_party::google_benchmark
   TESTONLY
 )
 

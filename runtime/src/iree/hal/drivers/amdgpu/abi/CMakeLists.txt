@@ -39,7 +39,7 @@ iree_cc_library(
     "signal.h"
     "timestamp.h"
   DEPS
-    hsa_runtime::headers
+    iree::third_party::hsa_runtime_headers
   PUBLIC
 )
 

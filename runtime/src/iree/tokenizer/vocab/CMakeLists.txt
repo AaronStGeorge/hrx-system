@@ -98,6 +98,7 @@ iree_cc_binary_benchmark(
     iree::base
     iree::testing::benchmark
     iree::testing::benchmark_main
+    iree::third_party::google_benchmark
   TESTONLY
 )
 
@@ -161,9 +162,9 @@ iree_cc_binary_benchmark(
     ::token
     ::vocab_hash
     ::vocab_trie
-    benchmark
     iree::base
     iree::testing::benchmark_main
+    iree::third_party::google_benchmark
   TESTONLY
 )
 

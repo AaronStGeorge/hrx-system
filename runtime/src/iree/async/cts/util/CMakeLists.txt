@@ -69,9 +69,9 @@ iree_cc_library(
     "benchmark_base.h"
   DEPS
     ::registry
-    benchmark
     iree::async
     iree::base::threading
+    iree::third_party::google_benchmark
   TESTONLY
   PUBLIC
 )

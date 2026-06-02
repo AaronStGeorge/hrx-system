@@ -92,6 +92,7 @@ iree_cc_binary_benchmark(
     iree::base
     iree::testing::benchmark
     iree::testing::benchmark_main
+    iree::third_party::google_benchmark
   TESTONLY
 )
 
@@ -153,6 +154,7 @@ iree_cc_binary_benchmark(
   DEPS
     ::atomic_slist
     iree::testing::benchmark_main
+    iree::third_party::google_benchmark
   TESTONLY
 )
 
@@ -189,6 +191,7 @@ iree_cc_binary_benchmark(
     ::atomic_freelist
     ::memory
     iree::testing::benchmark_main
+    iree::third_party::google_benchmark
   TESTONLY
 )
 
@@ -270,6 +273,7 @@ iree_cc_binary_benchmark(
     iree::base
     iree::testing::benchmark
     iree::testing::benchmark_main
+    iree::third_party::google_benchmark
   TESTONLY
 )
 
@@ -445,6 +449,7 @@ iree_cc_binary_benchmark(
   DEPS
     ::spsc_queue
     iree::testing::benchmark_main
+    iree::third_party::google_benchmark
   TESTONLY
 )
 

@@ -175,14 +175,33 @@ class TargetConverter:
                 # Vulkan
                 "@vulkan_headers": ["Vulkan::Headers"],
                 # Misc single targets
-                "@com_google_benchmark//:benchmark": ["benchmark"],
-                "@com_github_dvidelabs_flatcc//:flatcc": ["flatcc"],
-                "@com_github_dvidelabs_flatcc//:parsing": ["flatcc::parsing"],
-                "@com_github_dvidelabs_flatcc//:runtime": ["flatcc::runtime"],
-                "@com_google_googletest//:gtest": ["gmock", "gtest"],
+                "//third_party:google_benchmark": [
+                    "iree::third_party::google_benchmark"
+                ],
+                "//third_party:google_benchmark_main": [
+                    "iree::third_party::google_benchmark_main"
+                ],
+                "//third_party:flatcc": ["iree-flatcc-cli"],
+                "//third_party:flatcc_compiler": ["iree-flatcc-cli"],
+                "//third_party:flatcc_parsing": [
+                    "iree::third_party::flatcc_parsing"
+                ],
+                "//third_party:flatcc_runtime": [
+                    "iree::third_party::flatcc_runtime"
+                ],
+                "//third_party:google_test": ["iree::third_party::google_test"],
+                "//third_party:google_test_main": [
+                    "iree::third_party::google_test_main"
+                ],
                 "@spirv_cross//:spirv_cross_lib": ["spirv-cross-msl"],
-                "@hsa_runtime_headers": ["hsa_runtime::headers"],
-                "@libbacktrace": ["libbacktrace::libbacktrace"],
+                "//third_party:hsa_runtime_headers": [
+                    "iree::third_party::hsa_runtime_headers"
+                ],
+                "//third_party:aqlprofile_sdk_headers": [
+                    "iree::third_party::aqlprofile_sdk_headers"
+                ],
+                "//third_party:libbacktrace": ["${IREE_LIBBACKTRACE_TARGET}"],
+                "//third_party:catch2": ["iree::third_party::catch2"],
                 "@webgpu_headers": [],
                 # py_binary targets have no CMake equivalent.
                 # This is the only target bazel needs to execute the lit tests.

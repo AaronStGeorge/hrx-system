@@ -6,7 +6,7 @@
 
 load("//build_tools/bazel:cc.bzl", "iree_cc_library")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//visibility:private"])
 
 iree_cc_library(
     name = "libbacktrace_linux",
@@ -30,4 +30,5 @@ alias(
         "@platforms//os:linux": ":libbacktrace_linux",
         "//conditions:default": ":libbacktrace_disabled",
     }),
+    visibility = ["//third_party:__pkg__"],
 )

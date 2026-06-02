@@ -59,12 +59,12 @@ iree_cc_library(
   SRCS
     "event_benchmark.cc"
   DEPS
-    benchmark
     iree::async
     iree::async::cts::util::benchmark_base
     iree::async::cts::util::registry
     iree::async::event_pool
     iree::base
+    iree::third_party::google_benchmark
   TESTONLY
   ALWAYSLINK
   PUBLIC
@@ -76,12 +76,12 @@ iree_cc_library(
   SRCS
     "event_pool_benchmark.cc"
   DEPS
-    benchmark
     iree::async
     iree::async::cts::util::benchmark_base
     iree::async::cts::util::registry
     iree::async::event_pool
     iree::base
+    iree::third_party::google_benchmark
   TESTONLY
   ALWAYSLINK
   PUBLIC

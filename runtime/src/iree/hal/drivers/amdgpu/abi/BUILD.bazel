@@ -32,6 +32,6 @@ iree_runtime_cc_library(
     name = "abi",
     hdrs = ABI_HDRS,
     deps = [
-        "@hsa_runtime_headers",
+        "//third_party:hsa_runtime_headers",
     ],
 )

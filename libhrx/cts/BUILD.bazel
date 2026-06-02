@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//libhrx/build_tools/bazel:cc.bzl", "hrx_cc_library", "hrx_cc_test")
+load("//libhrx/build_tools/bazel:cc.bzl", "hrx_cc_library")
 load("//libhrx/build_tools/bazel:cts.bzl", "hrx_cts_test")
 
 package(
@@ -36,8 +36,8 @@ hrx_cc_library(
         "core",
     ],
     deps = [
-        "@catch2//:catch2",
         "//build_tools:dl",
+        "//third_party:catch2",
     ],
 )
 

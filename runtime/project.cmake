@@ -137,10 +137,6 @@ endif()
 set(IREE_ROCM_TEST_AMDGCNSPIRV OFF CACHE BOOL
   "Use amdgcnspirv for ROCm e2e tests.")
 
-include("${CMAKE_CURRENT_LIST_DIR}/build_tools/third_party/flatcc/flatcc.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/build_tools/third_party/libbacktrace/libbacktrace.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/build_tools/third_party/rocm_headers.cmake")
-
 include(flatbuffer_c_library)
 include(iree_amdgpu_binary)
 include(iree_execution_test_suite)
@@ -151,7 +147,4 @@ include(iree_wasm_library)
 
 function(iree_runtime_configure_project)
   iree_runtime_configure_amdgpu_toolchain()
-  iree_runtime_configure_rocm_headers()
-  iree_runtime_configure_libbacktrace()
-  iree_configure_flatcc()
 endfunction()

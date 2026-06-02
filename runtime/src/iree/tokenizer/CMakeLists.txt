@@ -267,9 +267,9 @@ iree_cc_binary_benchmark(
     "tokenizer_benchmark.cc"
   DEPS
     ::tokenizer
-    benchmark
     iree::base
     iree::testing::benchmark_main
+    iree::third_party::google_benchmark
     iree::tokenizer::decoder::byte_level
     iree::tokenizer::model::bpe
     iree::tokenizer::segmenter::whitespace

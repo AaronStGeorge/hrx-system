@@ -182,7 +182,6 @@ iree_runtime_cc_benchmark(
         ":backends",
         "//runtime/src/iree/async/cts/buffer:all_benchmarks",
         "//runtime/src/iree/async/cts/util:registry",
-        "@com_google_benchmark//:benchmark",
     ],
 )
 
@@ -194,7 +193,6 @@ iree_runtime_cc_benchmark(
         ":backends",
         "//runtime/src/iree/async/cts/core:all_benchmarks",
         "//runtime/src/iree/async/cts/util:registry",
-        "@com_google_benchmark//:benchmark",
     ],
 )
 
@@ -206,7 +204,6 @@ iree_runtime_cc_benchmark(
         ":backends",
         "//runtime/src/iree/async/cts/event:all_benchmarks",
         "//runtime/src/iree/async/cts/util:registry",
-        "@com_google_benchmark//:benchmark",
     ],
 )
 
@@ -218,7 +215,6 @@ iree_runtime_cc_benchmark(
         ":backends",
         "//runtime/src/iree/async/cts/futex:all_benchmarks",
         "//runtime/src/iree/async/cts/util:registry",
-        "@com_google_benchmark//:benchmark",
     ],
 )
 
@@ -230,7 +226,6 @@ iree_runtime_cc_benchmark(
         ":backends",
         "//runtime/src/iree/async/cts/socket:all_benchmarks",
         "//runtime/src/iree/async/cts/util:registry",
-        "@com_google_benchmark//:benchmark",
     ],
 )
 
@@ -242,6 +237,5 @@ iree_runtime_cc_benchmark(
         ":backends",
         "//runtime/src/iree/async/cts/sync:all_benchmarks",
         "//runtime/src/iree/async/cts/util:registry",
-        "@com_google_benchmark//:benchmark",
     ],
 )

@@ -129,11 +129,11 @@ iree_cc_library(
   SRCS
     "dispatch_scalability_benchmark.cc"
   DEPS
-    benchmark
     iree::async
     iree::async::cts::util::benchmark_base
     iree::async::cts::util::registry
     iree::base
+    iree::third_party::google_benchmark
   TESTONLY
   ALWAYSLINK
   PUBLIC
@@ -145,11 +145,11 @@ iree_cc_library(
   SRCS
     "sequence_benchmark.cc"
   DEPS
-    benchmark
     iree::async
     iree::async::cts::util::benchmark_base
     iree::async::cts::util::registry
     iree::base
+    iree::third_party::google_benchmark
   TESTONLY
   ALWAYSLINK
   PUBLIC

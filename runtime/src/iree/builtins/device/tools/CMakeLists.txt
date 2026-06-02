@@ -19,6 +19,7 @@ iree_cc_binary_benchmark(
     iree::base::tooling::flags
     iree::builtins::device
     iree::testing::benchmark
+    iree::third_party::google_benchmark
   TESTONLY
 )
 

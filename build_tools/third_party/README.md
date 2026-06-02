@@ -8,8 +8,8 @@ MODULE.bazel.lock   Bazel/Bzlmod lock maintained by Bazel.
 MODULE.cmake.lock   CMake source lock generated from Bazel fragments.
 ```
 
-Dependency declarations live next to the owner of the dependency. The root lock
-files live next to the root module because they describe the complete resolved
+Source dependency declarations live at the repository root. The root lock files
+live next to the root module because they describe the complete resolved
 repository state shipped to users and CI.
 
 ## Ownership
@@ -21,32 +21,31 @@ Bazel implementation owner and are intentionally absent from the CMake lock:
 build_tools/bazel/deps.MODULE.bazel
 ```
 
-Shared source dependencies used by more than one project live under root
-third-party ownership:
+Source dependencies live under root third-party ownership. Bazel users consume
+the `//third_party:*` facade; the declarations, locks, and CMake adapters remain
+under build tooling:
 
 ```text
+third_party/BUILD.bazel
 build_tools/third_party/deps.MODULE.bazel
 build_tools/third_party/<dependency>/<dependency>.cmake
 ```
 
-Project-owned source dependencies use the same shape under the project:
+The facade is the ownership boundary. A dependency can be root-declared but
+visible only to `//runtime/...`, `//libhrx/...`, `//loom/...`, or shared testing
+infrastructure. That keeps updates centralized while preventing accidental
+cross-project dependency creep.
 
-```text
-runtime/build_tools/third_party/deps.MODULE.bazel
-runtime/build_tools/third_party/<dependency>/<dependency>.cmake
-
-libhrx/build_tools/third_party/deps.MODULE.bazel
-libhrx/build_tools/third_party/<dependency>/<dependency>.cmake
-```
-
-The promotion rule is mechanical: when two projects consume a project-owned
-source dependency, move the declaration and shared adapter contract to
-`build_tools/third_party/`.
+Repo code should not depend on `//build_tools/third_party/...` labels. Those
+packages are implementation details for dependency declarations, external
+repository overlay files, or CMake adapters. Checked-in BUILD files consume
+`//third_party:*` labels so visibility can express the intended project
+ownership.
 
 ## Bazel Source Declarations
 
 Use `bazel_dep()` for dependencies available from the Bazel Central Registry.
-The version lives only in the owner `deps.MODULE.bazel` fragment:
+The version lives only in `build_tools/third_party/deps.MODULE.bazel`:
 
 ```starlark
 bazel_dep(
@@ -65,7 +64,7 @@ http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "ht
 
 http_archive(
     name = "flatcc",
-    build_file = "//runtime/build_tools/third_party/flatcc:flatcc.BUILD.bazel",
+    build_file = "//build_tools/third_party/flatcc:flatcc.BUILD.bazel",
     sha256 = "...",
     strip_prefix = "...",
     url = "https://...",
@@ -73,9 +72,15 @@ http_archive(
 ```
 
 SDK discovery rules, toolchain repositories, and platform probes are separate
-from source archive locking. They can live in an owner fragment when they are
-part of that owner’s Bazel visibility contract, but they are not emitted into
-`MODULE.cmake.lock`.
+from source archive locking. They are declared in the same root fragment when
+they produce repositories consumed by source targets, but they are not emitted
+into `MODULE.cmake.lock`.
+
+SDK-backed targets that cannot be built on an unconfigured machine should be
+explicit about that contract. For example, `//third_party:hsa_runtime_headers`
+is tagged `manual` so `bazel build //third_party/...` remains a cheap facade
+sanity check, while explicit AMDGPU users still fail loudly without
+`IREE_ROCM_PATH`.
 
 ## CMake Source Lock
 
@@ -112,9 +117,9 @@ iree_declare_locked_fetch_content(googletest)
 FetchContent_MakeAvailable(googletest)
 ```
 
-Adapters keep the target contract close to the build code that needs it. For
-example, flatcc still has a runtime-owned adapter because CMake builds only the
-flatcc runtime pieces and schema compiler target IREE needs.
+Adapters normalize upstream packages into repo-local CMake targets. Repo code
+uses `iree::third_party::*` targets; upstream targets such as `benchmark`,
+`flatcc::runtime`, or `Catch2::Catch2` are adapter implementation details.
 
 Package discovery remains an integration mode:
 
@@ -125,32 +130,79 @@ find_package(GTest CONFIG QUIET)
 If package discovery does not provide the expected targets, adapters fall back
 to pinned FetchContent unless the relevant hermetic option forbids fetching.
 
+Adapters configure dependencies; they do not decide whether a project wants the
+dependency. The top-level project configuration owns enablement policy:
+
+```cmake
+if(IREE_BUILD_TESTS)
+  iree_configure_googletest()
+endif()
+if(IREE_ENABLE_THREADING AND IREE_BUILD_BENCHMARKS)
+  iree_configure_google_benchmark()
+endif()
+if(IREE_HAL_DRIVER_AMDGPU)
+  iree_configure_rocm_headers()
+endif()
+if(LIBHRX_BUILD AND LIBHRX_BUILD_CTS)
+  iree_configure_catch2()
+endif()
+```
+
+This keeps embedding builds predictable: disabling tests, benchmarks, HRX CTS,
+or AMDGPU support prevents those dependencies from being discovered or fetched.
+
 ## Adding Or Updating A Dependency
 
-1. Pick the owner fragment with the narrowest real ownership.
+1. Add or update the source declaration in `build_tools/third_party/deps.MODULE.bazel`.
 2. Use `bazel_dep()` when the dependency exists in BCR; use `http_archive` when
    it does not.
-3. Add or update the dependency-specific CMake adapter under the same owner.
-4. Run `python build_tools/bazel_to_cmake/deps.py`.
-5. Run `python build_tools/bazel_to_cmake/deps.py --check`.
-6. Run focused Bazel and CMake builds that prove the consumed targets work.
+3. Add or update the public Bazel facade in `third_party/BUILD.bazel`, with the
+   narrowest package-group visibility that matches real consumers.
+4. Add or update the dependency-specific CMake adapter under
+   `build_tools/third_party/<dependency>/`.
+5. Update `build_tools/bazel_to_cmake/bazel_to_cmake_targets.py` and
+   `.bazel_to_cmake.cfg.py` so generated CMake uses repo-local targets.
+6. Run `python build_tools/bazel_to_cmake/deps.py`.
+7. Run `python build_tools/bazel_to_cmake/deps.py --check`.
+8. Run focused Bazel and CMake builds that prove the consumed targets work.
 
-When a dependency moves between owners, regenerate the lock in the same commit
-as the owner move so the lock remains a faithful snapshot of the source
-declarations.
+When a dependency changes source, version, hash, or repo-local target contract,
+regenerate the lock and generated CMake metadata in the same commit.
 
 ## Target Contracts
 
 Checked-in adapters define the target contracts consumed by the repo:
 
 ```text
-Googletest:       gtest, gtest_main, gmock, gmock_main
-Google benchmark: benchmark
-Flatcc:           flatcc, iree-flatcc-cli, flatcc::parsing, flatcc::runtime
-Libbacktrace:     libbacktrace::libbacktrace, or an empty
+Googletest:       //third_party:google_test
+                  //third_party:google_test_main
+                  iree::third_party::google_test
+                  iree::third_party::google_test_main
+Google benchmark: //third_party:google_benchmark
+                  //third_party:google_benchmark_main
+                  iree::third_party::google_benchmark
+                  iree::third_party::google_benchmark_main
+Flatcc:           //third_party:flatcc
+                  //third_party:flatcc_compiler
+                  //third_party:flatcc_parsing
+                  //third_party:flatcc_runtime
+                  iree-flatcc-cli
+                  iree::third_party::flatcc_parsing
+                  iree::third_party::flatcc_runtime
+Libbacktrace:     //third_party:libbacktrace
+                  iree::third_party::libbacktrace, or an empty
                   IREE_LIBBACKTRACE_TARGET when disabled or unsupported
-Catch2:           Catch2::Catch2
+Catch2:           //third_party:catch2
+                  iree::third_party::catch2
+ROCm headers:     //third_party:hsa_runtime_headers
+                  //third_party:aqlprofile_sdk_headers
+                  iree::third_party::hsa_runtime_headers
+                  iree::third_party::aqlprofile_sdk_headers
 ```
+
+`iree::third_party::google_test` intentionally carries the practical
+`iree/testing/gtest.h` contract, which includes gmock headers as well as gtest
+headers.
 
 Repo code should depend on repo-local Bazel labels and these CMake target
 contracts instead of reaching into upstream repository internals.

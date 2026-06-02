@@ -41,7 +41,7 @@ iree_runtime_cc_library(
         "//runtime/src/iree/base/internal",
         "//runtime/src/iree/base/internal:dynamic_library",
         "//runtime/src/iree/base/internal:path",
-        "@hsa_runtime_headers",
+        "//third_party:hsa_runtime_headers",
     ],
 )
 
@@ -62,11 +62,11 @@ iree_runtime_cc_library(
         "//runtime/src/iree/hal/drivers/amdgpu/abi",
         # TODO(upstream ROCm packaging): this is intentionally a logical
         # aqlprofile-sdk header dependency even though the temporary Bazel alias
-        # resolves through @hsa_runtime_headers. The matching CMake target is
-        # aqlprofile-sdk::headers and should switch to the real ROCm package
-        # once one exists.
-        "//runtime/build_tools/third_party:aqlprofile_sdk_headers",
-        "@hsa_runtime_headers",
+        # resolves through hsa_runtime_headers. The matching CMake target is
+        # iree::third_party::aqlprofile_sdk_headers and should switch to the
+        # real ROCm package once one exists.
+        "//third_party:aqlprofile_sdk_headers",
+        "//third_party:hsa_runtime_headers",
     ],
 )
 
@@ -390,7 +390,7 @@ iree_runtime_cc_library(
         "//runtime/src/iree/async",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",
-        "@com_google_benchmark//:benchmark",
+        "//third_party:google_benchmark",
     ],
 )
 
@@ -422,7 +422,6 @@ iree_runtime_cc_benchmark(
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/drivers/amdgpu/registration",
-        "@com_google_benchmark//:benchmark",
     ],
 )
 
@@ -757,7 +756,6 @@ iree_runtime_cc_benchmark(
         "//runtime/src/iree/hal/drivers/amdgpu/registration",
         "//runtime/src/iree/hal/memory:tlsf_pool",
         "//runtime/src/iree/io:file_handle",
-        "@com_google_benchmark//:benchmark",
     ],
 )
 
@@ -797,7 +795,6 @@ iree_runtime_cc_benchmark(
         ":queue_primitives",
         ":topology",
         "//runtime/src/iree/base",
-        "@com_google_benchmark//:benchmark",
     ],
 )
 

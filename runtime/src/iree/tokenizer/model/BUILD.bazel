@@ -119,7 +119,6 @@ iree_runtime_cc_benchmark(
         ":bpe_heap",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:benchmark_main",
-        "@com_google_benchmark//:benchmark",
     ],
 )
 

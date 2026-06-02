@@ -514,7 +514,6 @@ iree_cc_binary_benchmark(
     ::amdgpu
     ::headers
     ::testdata_amdgpu_pm4_command_buffer_benchmark
-    benchmark
     iree::async
     iree::async::util::proactor_pool
     iree::base
@@ -524,6 +523,7 @@ iree_cc_binary_benchmark(
     iree::hal::drivers::amdgpu::abi
     iree::hal::drivers::amdgpu::util::benchmark_flags
     iree::hal::drivers::amdgpu::util::benchmark_profile
+    iree::third_party::google_benchmark
   TESTONLY
   LABELS
     "benchmark"

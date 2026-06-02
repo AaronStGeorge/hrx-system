@@ -111,9 +111,9 @@ iree_cc_binary_benchmark(
     "bpe_heap_benchmark.cc"
   DEPS
     ::bpe_heap
-    benchmark
     iree::base
     iree::testing::benchmark_main
+    iree::third_party::google_benchmark
   TESTONLY
 )
 

@@ -19,7 +19,7 @@ iree_runtime_cc_library(
     deps = [
         ":dummy",
         ":parsing",
-        "//runtime/build_tools/third_party/flatcc:runtime",
+        "//third_party:flatcc_runtime",
     ],
 )
 
@@ -28,7 +28,7 @@ iree_runtime_cc_library(
     hdrs = ["debugging.h"],
     deps = [
         ":dummy",
-        "//runtime/build_tools/third_party/flatcc:runtime",
+        "//third_party:flatcc_runtime",
     ],
 )
 
@@ -37,7 +37,7 @@ iree_runtime_cc_library(
     hdrs = ["parsing.h"],
     deps = [
         ":dummy",
-        "//runtime/build_tools/third_party/flatcc:parsing",
+        "//third_party:flatcc_parsing",
     ],
 )
 

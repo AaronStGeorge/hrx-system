@@ -19,11 +19,11 @@ iree_cc_library(
   SRCS
     "libhsa.c"
   DEPS
-    hsa_runtime::headers
     iree::base
     iree::base::internal
     iree::base::internal::dynamic_library
     iree::base::internal::path
+    iree::third_party::hsa_runtime_headers
   PUBLIC
 )
 
@@ -36,13 +36,13 @@ iree_cc_library(
     "libaqlprofile.c"
   DEPS
     ::libhsa
-    aqlprofile-sdk::headers
-    hsa_runtime::headers
     iree::base
     iree::base::internal
     iree::base::internal::dynamic_library
     iree::base::internal::path
     iree::hal::drivers::amdgpu::abi
+    iree::third_party::aqlprofile_sdk_headers
+    iree::third_party::hsa_runtime_headers
   PUBLIC
 )
 
@@ -407,10 +407,10 @@ iree_cc_library(
   SRCS
     "benchmark_flags.cc"
   DEPS
-    benchmark
     iree::async
     iree::base
     iree::base::tooling::flags
+    iree::third_party::google_benchmark
   TESTONLY
   PUBLIC
 )
@@ -436,7 +436,6 @@ iree_cc_binary_benchmark(
     "blit_benchmark.cc"
   DEPS
     ::benchmark_flags
-    benchmark
     iree::async
     iree::async::util::proactor_pool
     iree::base
@@ -444,6 +443,7 @@ iree_cc_binary_benchmark(
     iree::base::tooling::flags
     iree::hal
     iree::hal::drivers::amdgpu::registration
+    iree::third_party::google_benchmark
   TESTONLY
   LABELS
     "benchmark"
@@ -789,7 +789,6 @@ iree_cc_binary_benchmark(
   DEPS
     ::benchmark_flags
     ::testdata_amdgpu_queue_benchmark
-    benchmark
     iree::async
     iree::async::util::proactor_pool
     iree::base
@@ -805,6 +804,7 @@ iree_cc_binary_benchmark(
     iree::hal::drivers::amdgpu::registration
     iree::hal::memory::tlsf_pool
     iree::io::file_handle
+    iree::third_party::google_benchmark
   TESTONLY
   LABELS
     "benchmark"
@@ -840,8 +840,8 @@ iree_cc_binary_benchmark(
     ::libhsa
     ::queue_primitives
     ::topology
-    benchmark
     iree::base
+    iree::third_party::google_benchmark
   TESTONLY
   LABELS
     "benchmark"

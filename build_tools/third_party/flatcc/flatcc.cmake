@@ -6,6 +6,32 @@
 
 include(iree_third_party_helpers)
 
+function(_iree_configure_flatcc_aliases)
+  iree_add_alias_interface(iree::third_party::flatcc_parsing flatcc::parsing)
+  iree_add_alias_interface(iree::third_party::flatcc_runtime flatcc::runtime)
+endfunction()
+
+function(_iree_configure_flatcc_include_dir)
+  if(IREE_FLATCC_INCLUDE_DIR)
+    return()
+  endif()
+
+  foreach(_target_name flatcc::runtime flatcc::parsing)
+    get_target_property(_include_dirs
+      ${_target_name} INTERFACE_INCLUDE_DIRECTORIES)
+    if(_include_dirs)
+      list(GET _include_dirs 0 _include_dir)
+      set(IREE_FLATCC_INCLUDE_DIR "${_include_dir}" CACHE PATH
+        "flatcc include directory used by generated schema targets." FORCE)
+      return()
+    endif()
+  endforeach()
+
+  message(FATAL_ERROR
+    "flatcc targets did not publish INTERFACE_INCLUDE_DIRECTORIES; "
+    "cannot configure generated schema include paths")
+endfunction()
+
 function(_iree_fetch_flatcc_if_needed out_source_dir)
   find_package(flatcc CONFIG QUIET)
   if(TARGET flatcc::runtime AND TARGET flatcc::parsing AND TARGET iree-flatcc-cli)
@@ -32,6 +58,8 @@ endfunction()
 function(iree_configure_flatcc)
   _iree_fetch_flatcc_if_needed(_flatcc_source_dir)
   if(TARGET flatcc::runtime AND TARGET flatcc::parsing AND TARGET iree-flatcc-cli)
+    _iree_configure_flatcc_include_dir()
+    _iree_configure_flatcc_aliases()
     return()
   endif()
   if(NOT _flatcc_source_dir)
@@ -121,4 +149,6 @@ function(iree_configure_flatcc)
   if(NOT TARGET flatcc)
     add_executable(flatcc ALIAS iree-flatcc-cli)
   endif()
+  _iree_configure_flatcc_include_dir()
+  _iree_configure_flatcc_aliases()
 endfunction()

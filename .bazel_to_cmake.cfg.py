@@ -39,7 +39,13 @@ class CustomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
 
     def hrx_cc_benchmark(self, deps=[], **kwargs):
         self.cc_binary_benchmark(
-            deps=deps + ["//runtime/src:defines", "//libhrx:defines"], **kwargs
+            deps=deps
+            + [
+                "//runtime/src:defines",
+                "//libhrx:defines",
+                "//third_party:google_benchmark",
+            ],
+            **kwargs,
         )
 
     def hrx_cc_shared_library(self, deps=[], **kwargs):
@@ -63,7 +69,7 @@ class CustomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         tags = kwargs.get("tags")
         full_deps = [
             ":core",
-            "@catch2//:catch2",
+            "//third_party:catch2",
         ] + deps + ["//runtime/src:defines", "//libhrx:defines"]
         name_block = self._convert_string_arg_block("NAME", "hrx_cts_" + name, quote=False)
         srcs_block = self._convert_srcs_block(srcs)
@@ -114,7 +120,14 @@ class CustomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         )
 
     def iree_runtime_cc_benchmark(self, deps=[], **kwargs):
-        self.cc_binary_benchmark(deps=deps + ["//runtime/src:defines"], **kwargs)
+        self.cc_binary_benchmark(
+            deps=deps
+            + [
+                "//runtime/src:defines",
+                "//third_party:google_benchmark",
+            ],
+            **kwargs,
+        )
 
     def iree_runtime_cc_fuzz(self, deps=[], **kwargs):
         self.iree_cc_fuzz(deps=deps + ["//runtime/src:defines"], **kwargs)
@@ -165,25 +178,28 @@ class CustomTargetConverter(bazel_to_cmake_targets.TargetConverter):
                     "libhrx::src::libhrx::hrx"
                 ],
                 # Temporary AQL profile SDK header shape. See the comments in
-                # runtime/build_tools/third_party/rocm_headers.cmake
-                # and runtime/build_tools/third_party/BUILD.bazel: this should
-                # become a real ROCm-provided package/target once upstream publishes
-                # package metadata for include/aqlprofile-sdk.
-                "//runtime/build_tools/third_party:aqlprofile_sdk_headers": [
-                    "aqlprofile-sdk::headers"
+                # build_tools/third_party/rocm_headers.cmake and
+                # third_party/BUILD.bazel: this should become a real
+                # ROCm-provided package/target once upstream publishes package
+                # metadata for include/aqlprofile-sdk.
+                "//third_party:aqlprofile_sdk_headers": [
+                    "iree::third_party::aqlprofile_sdk_headers"
                 ],
-                "//runtime/build_tools/third_party/libbacktrace": [
+                "//third_party:hsa_runtime_headers": [
+                    "iree::third_party::hsa_runtime_headers"
+                ],
+                "//third_party:libbacktrace": [
                     "${IREE_LIBBACKTRACE_TARGET}"
                 ],
-                "@flatcc//:compiler": ["iree-flatcc-cli"],
-                "@flatcc//:flatcc": ["flatcc"],
-                "@flatcc//:parsing": ["flatcc::parsing"],
-                "@flatcc//:runtime": ["flatcc::runtime"],
-                "//runtime/build_tools/third_party/flatcc": ["flatcc"],
-                "//runtime/build_tools/third_party/flatcc:flatcc": ["flatcc"],
-                "//runtime/build_tools/third_party/flatcc:parsing": ["flatcc::parsing"],
-                "//runtime/build_tools/third_party/flatcc:runtime": ["flatcc::runtime"],
-                "@catch2//:catch2": ["Catch2::Catch2"],
+                "//third_party:flatcc": ["iree-flatcc-cli"],
+                "//third_party:flatcc_compiler": ["iree-flatcc-cli"],
+                "//third_party:flatcc_parsing": [
+                    "iree::third_party::flatcc_parsing"
+                ],
+                "//third_party:flatcc_runtime": [
+                    "iree::third_party::flatcc_runtime"
+                ],
+                "//third_party:catch2": ["iree::third_party::catch2"],
             }
         )
 

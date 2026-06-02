@@ -4,14 +4,4 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-package(default_visibility = ["//visibility:public"])
-
-alias(
-    name = "gtest",
-    actual = "@com_google_googletest//:gtest",
-)
-
-alias(
-    name = "gtest_main",
-    actual = "@com_google_googletest//:gtest_main",
-)
+exports_files(["flatcc.BUILD.bazel"])

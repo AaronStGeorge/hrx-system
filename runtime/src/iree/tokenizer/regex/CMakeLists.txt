@@ -42,9 +42,9 @@ iree_cc_binary_benchmark(
   DEPS
     ::compile
     ::exec
-    benchmark
     iree::base
     iree::testing::benchmark_main
+    iree::third_party::google_benchmark
   TESTONLY
 )
 
@@ -159,9 +159,9 @@ iree_cc_binary_benchmark(
     "compile_benchmark.cc"
   DEPS
     ::compile
-    benchmark
     iree::base
     iree::testing::benchmark_main
+    iree::third_party::google_benchmark
   TESTONLY
 )
 

@@ -17,7 +17,7 @@ if(IREE_ENABLE_THREADING AND IREE_BUILD_BENCHMARKS)
     SRCS
       "benchmark_full.cc"
     DEPS
-      benchmark
+      iree::third_party::google_benchmark
       iree::base
     PUBLIC
   )
@@ -54,9 +54,8 @@ iree_cc_library(
     "gtest.h"
     "status_matchers.h"
   DEPS
-    gmock
-    gtest
     iree::base
+    iree::third_party::google_test
   TESTONLY
   PUBLIC
 )
@@ -68,10 +67,9 @@ iree_cc_library(
     "gtest_main.cc"
   DEPS
     ::gtest
-    gmock
-    gtest
     iree::base
     iree::base::tooling::flags
+    iree::third_party::google_test
   TESTONLY
   PUBLIC
 )
@@ -112,9 +110,9 @@ iree_cc_library(
   DEPS
     ::coordinated_test
     ::gtest
-    gtest
     iree::base
     iree::base::tooling::flags
+    iree::third_party::google_test
   TESTONLY
   PUBLIC
 )

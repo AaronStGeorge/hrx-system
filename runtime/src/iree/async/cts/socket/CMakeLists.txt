@@ -201,11 +201,11 @@ iree_cc_library(
   SRCS
     "socket_benchmark.cc"
   DEPS
-    benchmark
     iree::async
     iree::async::cts::util::benchmark_base
     iree::async::cts::util::registry
     iree::base
+    iree::third_party::google_benchmark
   TESTONLY
   ALWAYSLINK
   PUBLIC
