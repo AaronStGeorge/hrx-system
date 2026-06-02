@@ -40,25 +40,28 @@ Common usage:
 Configuration
 -------------
 When invoked, bazel_to_cmake will traverse up from the current directory until
-it finds a ".bazel_to_cmake.cfg.py" file. This file both serves as a marker
-for the repository root and provides repository specific configuration.
+it finds a ".bazel_to_cmake.cfg.py" file with BAZEL_TO_CMAKE_REPO_ROOT = True.
+This file serves as the repository root marker and provides repository specific
+configuration. The root config can explicitly include project-local configs
+that own rule handlers and target mappings for subtrees such as runtime/ or
+libhrx/.
 
 The file is evaluated as a module and can have the following customizations:
 
 * DEFAULT_ROOT_DIRS: A list of root directory names that should be recursively
   processed (relative to the repository root) when invoked without arguments.
-* REPO_MAP: Mapping of canonical Bazel repo name (i.e. "@iree_core") to what it
+* REPO_MAP: Mapping of canonical Bazel repo name (i.e. "@iree") to what it
   is known as locally (most commonly the empty string). This is used in global
   target rules to make sure that they work either in the defining or referencing
   repository.
-* CustomBuildFileFunctions: A class that extends
-  `bazel_to_cmake_converter.BuildFileFunctions` and injects globals for
-  processing the BUILD file. All symbols that do not start with "_" are
-  available.
-* CustomTargetConverter: A class that extends
-  `bazel_to_cmake_targets.TargetConverter` and customizes target mapping.
-  Typically, this is used for purely local targets in leaf projects (as global
-  targets will be encoded in the main bazel_to_cmake_targets.py file).
+* PROJECTS: An explicit list of ProjectConfig values included by the root
+  config. The converter selects a project's BuildFileFunctions by the BUILD
+  file path and routes local target-label fallback conversion by the referenced
+  label's owning project.
+* TARGET_MAPPINGS: Repository-owned target mappings applied before
+  project-owned mappings.
+* CustomBuildFileFunctions and CustomTargetConverter: Legacy single-config
+  hooks used when PROJECTS is not provided.
 """
 # pylint: disable=missing-docstring
 
@@ -184,32 +187,64 @@ def setup_environment():
     global repo_root
     global repo_cfg
 
-    # Scan up the directory tree for a repo config file.
+    # Scan up the directory tree for repo and project config files.
+    candidate_config_dirs = []
     check_dir = os.getcwd()
-    while not os.path.exists(os.path.join(check_dir, REPO_CFG_FILE)):
+    while True:
+        if os.path.exists(os.path.join(check_dir, REPO_CFG_FILE)):
+            candidate_config_dirs.append(check_dir)
         new_check_dir = os.path.dirname(check_dir)
         if not new_check_dir or new_check_dir == check_dir:
-            print(
-                f"ERROR: Could not find {REPO_CFG_FILE} in a parent directory "
-                f"of {os.getcwd()}"
-            )
-            sys.exit(1)
+            break
         check_dir = new_check_dir
-    repo_root = check_dir
+
+    if not candidate_config_dirs:
+        print(
+            f"ERROR: Could not find {REPO_CFG_FILE} in a parent directory "
+            f"of {os.getcwd()}"
+        )
+        sys.exit(1)
 
     # Dynamically load the config file as a module.
     orig_dont_write_bytecode = sys.dont_write_bytecode
     sys.dont_write_bytecode = True  # Don't generate __pycache__ dir
-    repo_cfg_path = os.path.join(repo_root, REPO_CFG_FILE)
-    spec = importlib.util.spec_from_file_location(REPO_CFG_MODULE_NAME, repo_cfg_path)
-    if spec and spec.loader:
-        repo_cfg = importlib.util.module_from_spec(spec)
-        sys.modules[REPO_CFG_MODULE_NAME] = repo_cfg
-        spec.loader.exec_module(repo_cfg)
+    try:
+        for candidate_dir in reversed(candidate_config_dirs):
+            candidate_cfg_path = os.path.join(candidate_dir, REPO_CFG_FILE)
+            spec = importlib.util.spec_from_file_location(
+                REPO_CFG_MODULE_NAME,
+                candidate_cfg_path,
+            )
+            if not spec or not spec.loader:
+                print(
+                    f"INTERNAL ERROR: Could not evaluate {candidate_cfg_path} "
+                    "as module"
+                )
+                sys.exit(1)
+            candidate_cfg = importlib.util.module_from_spec(spec)
+            sys.modules[REPO_CFG_MODULE_NAME] = candidate_cfg
+            spec.loader.exec_module(candidate_cfg)
+            if getattr(candidate_cfg, "BAZEL_TO_CMAKE_REPO_ROOT", False):
+                repo_root = candidate_dir
+                repo_cfg = candidate_cfg
+                break
+        if repo_cfg is None:
+            repo_root = candidate_config_dirs[-1]
+            repo_cfg_path = os.path.join(repo_root, REPO_CFG_FILE)
+            spec = importlib.util.spec_from_file_location(
+                REPO_CFG_MODULE_NAME,
+                repo_cfg_path,
+            )
+            if not spec or not spec.loader:
+                print(
+                    f"INTERNAL ERROR: Could not evaluate {repo_cfg_path} as module"
+                )
+                sys.exit(1)
+            repo_cfg = importlib.util.module_from_spec(spec)
+            sys.modules[REPO_CFG_MODULE_NAME] = repo_cfg
+            spec.loader.exec_module(repo_cfg)
+    finally:
         sys.dont_write_bytecode = orig_dont_write_bytecode
-    else:
-        print(f"INTERNAL ERROR: Could not evaluate {repo_cfg_path} as module")
-        sys.exit(1)
 
 
 def repo_relpath(path):

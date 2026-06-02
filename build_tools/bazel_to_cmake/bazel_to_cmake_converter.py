@@ -17,6 +17,7 @@ import itertools
 import re
 import os
 
+import bazel_to_cmake_config
 import bazel_to_cmake_targets
 
 # Maps Bazel string_flag labels to CMake variable names. Used by
@@ -940,6 +941,9 @@ class BuildFileFunctions(object):
             return ConditionSelect(d)
         raise NotImplementedError(f"select: {d}")
 
+    def iree_select(self, selector):
+        return self.select(selector)
+
     def defaulting_select(self, selector):
         """Defined in build_defs.oss.bzl as a scoped alternative to select."""
         default_value = selector.get("//conditions:default")
@@ -1220,9 +1224,6 @@ class BuildFileFunctions(object):
         )
         self._emit_platform_guard_end(target_compatible_with)
 
-    def iree_runtime_cc_fuzz(self, **kwargs):
-        self.iree_cc_fuzz(**kwargs)
-
     def iree_compiler_cc_fuzz(self, **kwargs):
         self.iree_cc_fuzz(**kwargs)
 
@@ -1269,7 +1270,7 @@ class BuildFileFunctions(object):
             f"  PUBLIC\n)\n\n"
         )
 
-    def iree_amdgpu_binary(
+    def _iree_amdgpu_binary(
         self,
         name,
         target,
@@ -1308,7 +1309,7 @@ class BuildFileFunctions(object):
         )
         self._emit_platform_guard_end(target_compatible_with)
 
-    def iree_hal_amdgpu_source_device_binaries(self):
+    def _iree_hal_amdgpu_source_device_binaries(self):
         self._converter.body += (
             "# Source-built AMDGPU device binary targets are wired manually by\n"
             "# runtime/src/iree/hal/drivers/amdgpu/device/binaries/CMakeLists.txt.\n\n"
@@ -1474,7 +1475,7 @@ class BuildFileFunctions(object):
             f"  PUBLIC\n)\n\n"
         )
 
-    def iree_hal_cts_testdata(
+    def _iree_hal_cts_testdata(
         self,
         format_name,
         target_device,
@@ -1554,7 +1555,7 @@ class BuildFileFunctions(object):
         )
         self._emit_platform_guard_end(target_compatible_with)
 
-    def iree_hal_cts_test_suite(
+    def _iree_hal_cts_test_suite(
         self,
         backends_lib,
         executable_formats=None,
@@ -1581,7 +1582,7 @@ class BuildFileFunctions(object):
         _testdata_libs = list(testdata_libs or [])
         if executable_formats:
             for format_name, config in executable_formats.items():
-                self.iree_hal_cts_testdata(
+                self._iree_hal_cts_testdata(
                     format_name=format_name,
                     target_device=config["target_device"],
                     identifier=config["identifier"],
@@ -1959,12 +1960,18 @@ def convert_build_file(
     converter = Converter()
     # Allow overrides of TargetConverter and BuildFileFunctions from repo cfg.
     repo_map = getattr(repo_cfg, "REPO_MAP", {})
-    target_converter = getattr(
-        repo_cfg, "CustomTargetConverter", bazel_to_cmake_targets.TargetConverter
-    )(repo_map=repo_map)
-    build_file_functions = getattr(
-        repo_cfg, "CustomBuildFileFunctions", BuildFileFunctions
-    )(
+    target_converter = bazel_to_cmake_config.create_target_converter(
+        repo_cfg,
+        repo_map,
+        bazel_to_cmake_targets.TargetConverter,
+    )
+    build_file_functions_class = bazel_to_cmake_config.select_build_file_functions(
+        repo_cfg,
+        build_dir,
+        repo_root,
+        BuildFileFunctions,
+    )
+    build_file_functions = build_file_functions_class(
         converter=converter,
         targets=target_converter,
         build_dir=build_dir,

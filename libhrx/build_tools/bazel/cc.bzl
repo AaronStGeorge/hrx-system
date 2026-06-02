@@ -6,44 +6,54 @@
 
 """HRX-specific C/C++ Bazel macros."""
 
-load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_binary", "iree_runtime_cc_library")
-load("//runtime/build_tools/bazel:cc_benchmark.bzl", "iree_runtime_cc_benchmark")
-load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
+load("//build_tools/bazel:cc.bzl", "iree_cc_binary", "iree_cc_library")
+load("//build_tools/bazel:cc_benchmark.bzl", "iree_cc_benchmark")
+load("//build_tools/bazel:cc_test.bzl", "iree_cc_test")
+load(":cc_attrs.bzl", "hrx_cc_attrs")
 
-_LIBHRX_DEPS = [
-    "//libhrx:defines",
-]
+_GOOGLE_BENCHMARK_DEP = Label("//third_party:google_benchmark")
 
-def _with_libhrx_deps(deps):
-    if deps == None:
-        deps = []
-    return deps + _LIBHRX_DEPS
+def _pop_hrx_compiler_options(kwargs):
+    compiler_options = hrx_cc_attrs.with_hrx_compiler_options(
+        copts = kwargs.pop("copts", None),
+        conlyopts = kwargs.pop("conlyopts", None),
+        cxxopts = kwargs.pop("cxxopts", None),
+    )
+    kwargs["copts"] = compiler_options.copts
+    kwargs["conlyopts"] = compiler_options.conlyopts
+    kwargs["cxxopts"] = compiler_options.cxxopts
 
 def hrx_cc_library(name, deps = None, **kwargs):
-    iree_runtime_cc_library(
+    _pop_hrx_compiler_options(kwargs)
+    iree_cc_library(
         name = name,
-        deps = _with_libhrx_deps(deps),
+        deps = hrx_cc_attrs.with_hrx_deps(deps),
         **kwargs
     )
 
 def hrx_cc_binary(name, deps = None, **kwargs):
-    iree_runtime_cc_binary(
+    _pop_hrx_compiler_options(kwargs)
+    iree_cc_binary(
         name = name,
-        deps = _with_libhrx_deps(deps),
+        deps = hrx_cc_attrs.with_hrx_deps(deps),
         **kwargs
     )
 
 def hrx_cc_test(name, deps = None, **kwargs):
-    iree_runtime_cc_test(
+    _pop_hrx_compiler_options(kwargs)
+    iree_cc_test(
         name = name,
-        deps = _with_libhrx_deps(deps),
+        deps = hrx_cc_attrs.with_hrx_deps(deps),
         **kwargs
     )
 
 def hrx_cc_benchmark(name, deps = None, **kwargs):
-    iree_runtime_cc_benchmark(
+    if deps == None:
+        deps = []
+    _pop_hrx_compiler_options(kwargs)
+    iree_cc_benchmark(
         name = name,
-        deps = _with_libhrx_deps(deps),
+        deps = hrx_cc_attrs.with_hrx_deps(deps + [_GOOGLE_BENCHMARK_DEP]),
         **kwargs
     )
 
@@ -59,6 +69,16 @@ def hrx_cc_shared_library(
 
     bazel_to_cmake has a matching handler that emits an iree_cc_library(SHARED)
     target from the same BUILD call.
+
+    Args:
+      name: Target name.
+      srcs: C/C++ source files.
+      hdrs: Public or private headers compiled into the shared library.
+      textual_hdrs: Textual headers compiled into the shared library.
+      deps: Additional target dependencies.
+      copts: Additional C/C++ compiler options.
+      **kwargs: Additional attributes forwarded to the shared C/C++ binary
+        macro.
     """
     if srcs == None:
         srcs = []
@@ -68,12 +88,18 @@ def hrx_cc_shared_library(
         textual_hdrs = []
     if copts == None:
         copts = []
-    iree_runtime_cc_binary(
+    compiler_options = hrx_cc_attrs.with_hrx_compiler_options(
+        copts = copts,
+        conlyopts = kwargs.pop("conlyopts", None),
+        cxxopts = kwargs.pop("cxxopts", None),
+    )
+    iree_cc_binary(
         name = name,
         srcs = srcs + hdrs + textual_hdrs,
-        deps = _with_libhrx_deps(deps),
-        copts = copts,
+        deps = hrx_cc_attrs.with_hrx_deps(deps),
+        copts = compiler_options.copts,
+        conlyopts = compiler_options.conlyopts,
+        cxxopts = compiler_options.cxxopts,
         linkshared = True,
         **kwargs
     )
-

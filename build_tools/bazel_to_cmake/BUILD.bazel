@@ -7,6 +7,15 @@
 load("@rules_python//python:defs.bzl", "py_test")
 
 py_test(
+    name = "config_test",
+    srcs = [
+        "bazel_to_cmake_config.py",
+        "bazel_to_cmake_targets.py",
+        "config_test.py",
+    ],
+)
+
+py_test(
     name = "deps_test",
     srcs = [
         "deps.py",
