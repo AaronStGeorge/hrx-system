@@ -10,6 +10,7 @@
 #include "loom/codegen/low/pass_environment.h"
 #include "loom/pass/registry.h"
 #include "loom/target/provider.h"
+#include "loom/target/types.h"
 #include "loomc/target.h"
 #include "visibility.h"
 
@@ -64,6 +65,20 @@ LOOMC_API_PRIVATE loomc_status_t loomc_target_environment_register_context(
 LOOMC_API_PRIVATE loomc_status_t loomc_context_target_options_resolve(
     const loomc_context_options_t* options,
     loomc_target_environment_t** out_target_environment);
+
+// Resolves target-selection invocation option extensions.
+LOOMC_API_PRIVATE loomc_status_t loomc_target_selection_options_resolve(
+    const void* next, loomc_target_selection_t** out_target_selection);
+
+// Validates that a target selection can be used with a target environment.
+LOOMC_API_PRIVATE loomc_status_t loomc_target_selection_validate_environment(
+    const loomc_target_selection_t* target_selection,
+    const loomc_target_environment_t* target_environment);
+
+// Returns the internal target selection represented by a public handle.
+LOOMC_API_PRIVATE loom_target_selection_t
+loomc_target_selection_loom_target_selection(
+    const loomc_target_selection_t* target_selection);
 
 // Initializes a stable pass registry combining builtin and target-owned pass
 // descriptors. The returned registry points into out_storage.

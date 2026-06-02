@@ -114,10 +114,9 @@ static loomc_status_t loomc_compile_validate_options(
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
                              "compile options structure_size is too small");
   }
-  if (options->next != NULL) {
-    return loomc_make_status(LOOMC_STATUS_UNIMPLEMENTED,
-                             "compile option extensions are not supported");
-  }
+  loomc_target_selection_t* target_selection = NULL;
+  LOOMC_RETURN_IF_ERROR(
+      loomc_target_selection_options_resolve(options->next, &target_selection));
   LOOMC_RETURN_IF_ERROR(
       loomc_compile_validate_string_view(options->module_name));
   LOOMC_RETURN_IF_ERROR(
@@ -287,7 +286,7 @@ static iree_status_t loomc_compile_capture_diagnostic_emission(
 static loomc_status_t loomc_compile_run_pass_program(
     loomc_compiler_t* compiler, loomc_workspace_t* workspace,
     const loomc_pass_program_t* pass_program, loom_module_t* internal_module,
-    loomc_result_t* result) {
+    loom_target_selection_t target_selection, loomc_result_t* result) {
   loomc_compile_diagnostic_capture_t capture = {
       .result = result,
   };
@@ -299,8 +298,7 @@ static loomc_status_t loomc_compile_run_pass_program(
       loomc_context_target_pass_environment(compiler->context);
   if (target_environment != NULL) {
     pass_environment = loomc_target_pass_environment_make_loom_pass_environment(
-        target_environment, loom_target_selection_empty(),
-        &low_environment_storage);
+        target_environment, target_selection, &low_environment_storage);
     loom_target_pass_predicate_provider_storage_initialize(
         loomc_workspace_block_pool(workspace), &predicate_storage);
     predicate_provider =
@@ -589,6 +587,11 @@ loomc_status_t loomc_compile_module(loomc_compiler_t* compiler,
                              "module does not contain internal IR");
   }
   LOOMC_RETURN_IF_ERROR(loomc_compile_validate_options(options));
+  loomc_target_selection_t* target_selection = NULL;
+  LOOMC_RETURN_IF_ERROR(loomc_target_selection_options_resolve(
+      options ? options->next : NULL, &target_selection));
+  LOOMC_RETURN_IF_ERROR(loomc_target_selection_validate_environment(
+      target_selection, loomc_context_target_environment(compiler->context)));
 
   allocator = loomc_allocator_or_system(allocator);
   loomc_result_t* result = NULL;
@@ -604,8 +607,9 @@ loomc_status_t loomc_compile_module(loomc_compiler_t* compiler,
                                         internal_module, result, allocator);
   }
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
-    status = loomc_compile_run_pass_program(compiler, workspace, pass_program,
-                                            internal_module, result);
+    status = loomc_compile_run_pass_program(
+        compiler, workspace, pass_program, internal_module,
+        loomc_target_selection_loom_target_selection(target_selection), result);
   }
   if (loomc_status_is_ok(status)) {
     status = loomc_compile_emit_requested_artifacts(result, options, module);

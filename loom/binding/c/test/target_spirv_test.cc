@@ -17,7 +17,7 @@
 #include "loomc/source.h"
 #include "loomc/status.h"
 #include "loomc/target.h"
-#include "loomc/target/spirv.h"
+#include "loomc/target/spirv/emit.h"
 #include "loomc/workspace.h"
 #include "test/util.h"
 
@@ -33,6 +33,10 @@ using ResultPtr = HandlePtr<loomc_result_t, loomc_result_release>;
 using SourcePtr = HandlePtr<loomc_source_t, loomc_source_release>;
 using TargetEnvironmentPtr =
     HandlePtr<loomc_target_environment_t, loomc_target_environment_release>;
+using TargetProfilePtr =
+    HandlePtr<loomc_target_profile_t, loomc_target_profile_release>;
+using TargetSelectionPtr =
+    HandlePtr<loomc_target_selection_t, loomc_target_selection_release>;
 using WorkspacePtr = HandlePtr<loomc_workspace_t, loomc_workspace_release>;
 
 std::string ToString(loomc_string_view_t value) {
@@ -76,6 +80,29 @@ ContextPtr CreateSpirvContext(loomc_target_environment_t* target_environment) {
       &context_options, loomc_allocator_system(), &context);
   LOOMC_EXPECT_OK(status);
   return ContextPtr(context);
+}
+
+TargetProfilePtr CreateEmptyProfile(
+    loomc_target_environment_t* target_environment) {
+  loomc_target_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_TARGET_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("spirv-test-profile"),
+  };
+  loomc_target_profile_t* profile = nullptr;
+  loomc_status_t status = loomc_target_profile_create_empty(
+      target_environment, &options, loomc_allocator_system(), &profile);
+  LOOMC_EXPECT_OK(status);
+  return TargetProfilePtr(profile);
+}
+
+TargetSelectionPtr CreateSelectionFromProfile(loomc_target_profile_t* profile) {
+  loomc_target_selection_t* selection = nullptr;
+  loomc_status_t status = loomc_target_selection_create_from_profile(
+      profile, loomc_allocator_system(), &selection);
+  LOOMC_EXPECT_OK(status);
+  return TargetSelectionPtr(selection);
 }
 
 SourcePtr CreateTextSource(const char* identifier, const char* contents) {
@@ -130,12 +157,20 @@ std::string SourceContentsToString(const loomc_source_t* source) {
 
 TEST(TargetSpirvTest, CreatesTargetPipelinePassProgram) {
   TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  TargetProfilePtr profile = CreateEmptyProfile(target_environment.get());
+  TargetSelectionPtr selection = CreateSelectionFromProfile(profile.get());
   ContextPtr context = CreateSpirvContext(target_environment.get());
 
+  loomc_target_selection_options_t target_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_TARGET_SELECTION_OPTIONS,
+      /*.structure_size=*/sizeof(target_options),
+      /*.next=*/nullptr,
+      /*.target_selection=*/selection.get(),
+  };
   loomc_target_pipeline_options_t options = {
       /*.type=*/LOOMC_STRUCTURE_TYPE_TARGET_PIPELINE_OPTIONS,
       /*.structure_size=*/sizeof(options),
-      /*.next=*/nullptr,
+      /*.next=*/&target_options,
       /*.identifier=*/loomc_make_cstring_view("spirv-prepared-low"),
       /*.kind=*/LOOMC_TARGET_PIPELINE_KIND_PREPARED_LOW,
       /*.control_flow_lowering=*/LOOMC_TARGET_CONTROL_FLOW_LOWERING_CFG,
@@ -155,6 +190,8 @@ TEST(TargetSpirvTest, CreatesTargetPipelinePassProgram) {
 
 TEST(TargetSpirvTest, EmitsSpirvBinaryArtifact) {
   TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  TargetProfilePtr profile = CreateEmptyProfile(target_environment.get());
+  TargetSelectionPtr selection = CreateSelectionFromProfile(profile.get());
   ContextPtr context = CreateSpirvContext(target_environment.get());
   SourcePtr source = CreateTextSource("barrier_spirv_low.loom", R"(
 spirv.target<vulkan1_3> @target
@@ -174,37 +211,46 @@ low.func.def target(@target) abi(shader_entry_point) @spirv_barriers() asm<spirv
   ModulePtr round_trip_module =
       DeserializeModule(context.get(), serialized.get());
 
-  loomc_workspace_t* workspace = nullptr;
-  loomc_status_t workspace_status =
-      loomc_workspace_create(nullptr, loomc_allocator_system(), &workspace);
-  LOOMC_EXPECT_OK(workspace_status);
-  WorkspacePtr workspace_ptr(workspace);
-
+  loomc_target_selection_options_t target_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_TARGET_SELECTION_OPTIONS,
+      /*.structure_size=*/sizeof(target_options),
+      /*.next=*/nullptr,
+      /*.target_selection=*/selection.get(),
+  };
   loomc_spirv_emit_options_t options = {
       /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_EMIT_OPTIONS,
       /*.structure_size=*/sizeof(options),
-      /*.next=*/nullptr,
+      /*.next=*/&target_options,
       /*.identifier=*/loomc_make_cstring_view("spirv_barriers.spv"),
   };
-  loomc_result_t* result = nullptr;
-  loomc_status_t status = loomc_spirv_emit_module(
-      target_environment.get(), workspace_ptr.get(), round_trip_module.get(),
-      &options, loomc_allocator_system(), &result);
-  LOOMC_EXPECT_OK(status);
-  ResultPtr result_ptr(result);
-  ExpectSucceededResult(result_ptr.get());
-  ASSERT_EQ(loomc_result_artifact_count(result_ptr.get()), 1u);
 
-  const loomc_artifact_t* artifact =
-      loomc_result_artifact_at(result_ptr.get(), 0);
-  ASSERT_NE(artifact, nullptr);
-  EXPECT_EQ(artifact->kind, LOOMC_ARTIFACT_KIND_EXECUTABLE);
-  EXPECT_EQ(ToString(artifact->format), LOOMC_ARTIFACT_FORMAT_SPIRV);
-  EXPECT_EQ(ToString(artifact->identifier), "spirv_barriers.spv");
-  ASSERT_GE(artifact->contents.data_length, sizeof(uint32_t));
-  uint32_t magic = 0;
-  memcpy(&magic, artifact->contents.data, sizeof(magic));
-  EXPECT_EQ(magic, 0x07230203u);
+  for (int i = 0; i < 2; ++i) {
+    loomc_workspace_t* workspace = nullptr;
+    loomc_status_t workspace_status =
+        loomc_workspace_create(nullptr, loomc_allocator_system(), &workspace);
+    LOOMC_EXPECT_OK(workspace_status);
+    WorkspacePtr workspace_ptr(workspace);
+
+    loomc_result_t* result = nullptr;
+    loomc_status_t status = loomc_spirv_emit_module(
+        target_environment.get(), workspace_ptr.get(), round_trip_module.get(),
+        &options, loomc_allocator_system(), &result);
+    LOOMC_EXPECT_OK(status);
+    ResultPtr result_ptr(result);
+    ExpectSucceededResult(result_ptr.get());
+    ASSERT_EQ(loomc_result_artifact_count(result_ptr.get()), 1u);
+
+    const loomc_artifact_t* artifact =
+        loomc_result_artifact_at(result_ptr.get(), 0);
+    ASSERT_NE(artifact, nullptr);
+    EXPECT_EQ(artifact->kind, LOOMC_ARTIFACT_KIND_EXECUTABLE);
+    EXPECT_EQ(ToString(artifact->format), LOOMC_ARTIFACT_FORMAT_SPIRV);
+    EXPECT_EQ(ToString(artifact->identifier), "spirv_barriers.spv");
+    ASSERT_GE(artifact->contents.data_length, sizeof(uint32_t));
+    uint32_t magic = 0;
+    memcpy(&magic, artifact->contents.data, sizeof(magic));
+    EXPECT_EQ(magic, 0x07230203u);
+  }
 }
 
 }  // namespace

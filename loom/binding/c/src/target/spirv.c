@@ -4,13 +4,12 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loomc/target/spirv.h"
-
 #include "diagnostic.h"
 #include "loom/error/error_defs.h"
 #include "loom/target/arch/spirv/provider.h"
 #include "loom/target/emit/spirv/module_emitter.h"
 #include "loomc/iree.h"
+#include "loomc/target/spirv/emit.h"
 #include "module.h"
 #include "result.h"
 #include "target.h"
@@ -46,10 +45,9 @@ static loomc_status_t loomc_spirv_emit_validate_options(
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
                              "SPIR-V emit options structure_size is too small");
   }
-  if (options->next != NULL) {
-    return loomc_make_status(LOOMC_STATUS_UNIMPLEMENTED,
-                             "SPIR-V emit option extensions are not supported");
-  }
+  loomc_target_selection_t* target_selection = NULL;
+  LOOMC_RETURN_IF_ERROR(
+      loomc_target_selection_options_resolve(options->next, &target_selection));
   return loomc_spirv_emit_validate_string_view(options->identifier);
 }
 
@@ -97,6 +95,11 @@ loomc_status_t loomc_spirv_emit_module(
                              "module does not contain internal IR");
   }
   LOOMC_RETURN_IF_ERROR(loomc_spirv_emit_validate_options(options));
+  loomc_target_selection_t* target_selection = NULL;
+  LOOMC_RETURN_IF_ERROR(loomc_target_selection_options_resolve(
+      options ? options->next : NULL, &target_selection));
+  LOOMC_RETURN_IF_ERROR(loomc_target_selection_validate_environment(
+      target_selection, target_environment));
 
   allocator = loomc_allocator_or_system(allocator);
   loomc_result_t* result = NULL;
@@ -114,7 +117,7 @@ loomc_status_t loomc_spirv_emit_module(
       loomc_target_environment_pass_environment(target_environment);
   loomc_status_t status = loomc_status_from_iree(loom_spirv_emit_low_module(
       internal_module, &pass_environment->low_descriptor_registry.registry,
-      loom_target_selection_empty(),
+      loomc_target_selection_loom_target_selection(target_selection),
       (iree_diagnostic_emitter_t){
           .fn = loomc_spirv_emit_capture_diagnostic,
           .user_data = &capture,

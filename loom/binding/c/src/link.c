@@ -21,6 +21,7 @@
 #include "module.h"
 #include "result.h"
 #include "source.h"
+#include "target.h"
 #include "workspace.h"
 
 enum {
@@ -116,10 +117,11 @@ static loomc_status_t loomc_link_validate_options(
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
                              "link options structure_size is too small");
   }
-  if (options->next != NULL) {
-    return loomc_make_status(LOOMC_STATUS_UNIMPLEMENTED,
-                             "link option extensions are not supported");
-  }
+  loomc_target_selection_t* target_selection = NULL;
+  LOOMC_RETURN_IF_ERROR(
+      loomc_target_selection_options_resolve(options->next, &target_selection));
+  LOOMC_RETURN_IF_ERROR(loomc_target_selection_validate_environment(
+      target_selection, loomc_context_target_environment(linker->context)));
   if (options->link_index == NULL) {
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
                              "link_index must not be NULL");

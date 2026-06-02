@@ -79,6 +79,7 @@ loom_cc_library(
     loom::src::loom::target::pipeline
     loom::src::loom::target::predicate
     loom::src::loom::target::provider
+    loom::src::loom::target::types
     loom::src::loom::tooling::config
     loom::src::loom::util::json
     loom::src::loom::util::stream
@@ -95,6 +96,8 @@ loom_cc_library(
     loomc_target_spirv
   HDRS
     "include/loomc/target/spirv.h"
+    "include/loomc/target/spirv/base.h"
+    "include/loomc/target/spirv/emit.h"
   SRCS
     "src/target/spirv.c"
   ALWAYSLINK
@@ -164,6 +167,19 @@ loom_cc_test(
     target_spirv_test
   SRCS
     "test/target_spirv_test.cc"
+  DEPS
+    ::loomc
+    ::loomc_target_spirv
+    ::test_util
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    target_test
+  SRCS
+    "test/target_test.cc"
   DEPS
     ::loomc
     ::loomc_target_spirv

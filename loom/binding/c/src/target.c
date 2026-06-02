@@ -12,6 +12,7 @@
 #include "loom/codegen/low/text_asm.h"
 #include "loom/pass/builtin_registry.h"
 #include "loomc/iree.h"
+#include "source.h"
 
 struct loomc_target_environment_t {
   // Atomic reference count for shared immutable ownership.
@@ -27,6 +28,37 @@ struct loomc_target_environment_t {
   loomc_target_pass_environment_t pass_environment;
 };
 
+struct loomc_target_profile_t {
+  // Atomic reference count for shared immutable ownership.
+  iree_atomic_ref_count_t ref_count;
+
+  // Allocator used to release target-profile storage.
+  loomc_allocator_t allocator;
+
+  // Target environment whose provider package understands this profile.
+  loomc_target_environment_t* target_environment;
+
+  // Copied stable identifier used in diagnostics and reports.
+  loomc_string_view_t identifier;
+
+  // Compiler-facing target selection produced by this profile.
+  loom_target_selection_t selection;
+};
+
+struct loomc_target_selection_t {
+  // Atomic reference count for shared immutable ownership.
+  iree_atomic_ref_count_t ref_count;
+
+  // Allocator used to release target-selection storage.
+  loomc_allocator_t allocator;
+
+  // Profile retained by this selection, or NULL for targetless selection.
+  loomc_target_profile_t* profile;
+
+  // Compiler-facing target selection snapshot.
+  loom_target_selection_t selection;
+};
+
 typedef struct loomc_descriptor_prefix_t {
   // Structure type identifying the descriptor.
   loomc_structure_type_t type;
@@ -37,6 +69,15 @@ typedef struct loomc_descriptor_prefix_t {
   // Next descriptor in the option extension chain.
   const void* next;
 } loomc_descriptor_prefix_t;
+
+static loomc_status_t loomc_target_validate_string_view(
+    loomc_string_view_t value) {
+  if (value.data == NULL && value.size != 0) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "string view has length but no data");
+  }
+  return loomc_ok_status();
+}
 
 static loomc_status_t loomc_context_target_options_validate(
     const loomc_context_target_options_t* options) {
@@ -57,6 +98,74 @@ static loomc_status_t loomc_context_target_options_validate(
         "context target options require a target environment");
   }
   return loomc_ok_status();
+}
+
+static loomc_status_t loomc_target_profile_options_validate(
+    const loomc_target_profile_options_t* options) {
+  if (options == NULL) {
+    return loomc_ok_status();
+  }
+  if (options->type != LOOMC_STRUCTURE_TYPE_NONE &&
+      options->type != LOOMC_STRUCTURE_TYPE_TARGET_PROFILE_OPTIONS) {
+    return loomc_make_status(
+        LOOMC_STATUS_INVALID_ARGUMENT,
+        "target profile options have an unknown structure type");
+  }
+  if (options->structure_size != 0 &&
+      options->structure_size < sizeof(*options)) {
+    return loomc_make_status(
+        LOOMC_STATUS_INVALID_ARGUMENT,
+        "target profile options structure_size is too small");
+  }
+  if (options->next != NULL) {
+    return loomc_make_status(
+        LOOMC_STATUS_UNIMPLEMENTED,
+        "target profile option extensions are not supported");
+  }
+  return loomc_target_validate_string_view(options->identifier);
+}
+
+static loomc_status_t loomc_target_selection_options_validate(
+    const loomc_target_selection_options_t* options) {
+  if (options->type != LOOMC_STRUCTURE_TYPE_TARGET_SELECTION_OPTIONS) {
+    return loomc_make_status(
+        LOOMC_STATUS_INVALID_ARGUMENT,
+        "target selection options have an unknown structure type");
+  }
+  if (options->structure_size != 0 &&
+      options->structure_size < sizeof(*options)) {
+    return loomc_make_status(
+        LOOMC_STATUS_INVALID_ARGUMENT,
+        "target selection options structure_size is too small");
+  }
+  if (options->target_selection == NULL) {
+    return loomc_make_status(
+        LOOMC_STATUS_INVALID_ARGUMENT,
+        "target selection options require a target selection");
+  }
+  return loomc_ok_status();
+}
+
+static const loom_target_provider_set_t* loomc_target_environment_provider_set(
+    const loomc_target_environment_t* target_environment) {
+  return target_environment ? target_environment->environment.provider_set
+                            : NULL;
+}
+
+static bool loomc_target_environment_is_compatible(
+    const loomc_target_environment_t* target_environment,
+    const loomc_target_environment_t* profile_environment) {
+  if (profile_environment == NULL) {
+    return true;
+  }
+  if (target_environment == NULL) {
+    return false;
+  }
+  if (target_environment == profile_environment) {
+    return true;
+  }
+  return loomc_target_environment_provider_set(target_environment) ==
+         loomc_target_environment_provider_set(profile_environment);
 }
 
 static loomc_status_t loomc_target_pass_environment_initialize(
@@ -83,6 +192,20 @@ static loomc_status_t loomc_target_pass_environment_initialize(
       loom_target_environment_low_legality_provider_list(internal_environment);
   out_environment->legalizer_provider_list =
       loom_target_environment_legalizer_provider_list(internal_environment);
+  return loomc_ok_status();
+}
+
+static loomc_status_t loomc_target_selection_allocate(
+    loomc_allocator_t allocator,
+    loomc_target_selection_t** out_target_selection) {
+  *out_target_selection = NULL;
+  loomc_target_selection_t* target_selection = NULL;
+  LOOMC_RETURN_IF_ERROR(loomc_allocator_malloc(
+      allocator, sizeof(*target_selection), (void**)&target_selection));
+  memset(target_selection, 0, sizeof(*target_selection));
+  iree_atomic_ref_count_init(&target_selection->ref_count);
+  target_selection->allocator = allocator;
+  *out_target_selection = target_selection;
   return loomc_ok_status();
 }
 
@@ -192,6 +315,66 @@ loomc_status_t loomc_context_target_options_resolve(
   return loomc_ok_status();
 }
 
+loomc_status_t loomc_target_selection_options_resolve(
+    const void* next, loomc_target_selection_t** out_target_selection) {
+  if (out_target_selection == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "out_target_selection must not be NULL");
+  }
+  *out_target_selection = NULL;
+  while (next != NULL) {
+    const loomc_descriptor_prefix_t* prefix =
+        (const loomc_descriptor_prefix_t*)next;
+    switch (prefix->type) {
+      case LOOMC_STRUCTURE_TYPE_TARGET_SELECTION_OPTIONS: {
+        if (*out_target_selection != NULL) {
+          return loomc_make_status(
+              LOOMC_STATUS_INVALID_ARGUMENT,
+              "option chain contains duplicate target selection options");
+        }
+        const loomc_target_selection_options_t* target_options =
+            (const loomc_target_selection_options_t*)next;
+        LOOMC_RETURN_IF_ERROR(
+            loomc_target_selection_options_validate(target_options));
+        *out_target_selection = target_options->target_selection;
+        next = target_options->next;
+        break;
+      }
+      case LOOMC_STRUCTURE_TYPE_NONE:
+        return loomc_make_status(
+            LOOMC_STATUS_INVALID_ARGUMENT,
+            "option extension is missing a structure type");
+      default:
+        return loomc_make_status(LOOMC_STATUS_UNIMPLEMENTED,
+                                 "option extension type is not supported");
+    }
+  }
+  return loomc_ok_status();
+}
+
+loomc_status_t loomc_target_selection_validate_environment(
+    const loomc_target_selection_t* target_selection,
+    const loomc_target_environment_t* target_environment) {
+  if (target_selection == NULL || target_selection->profile == NULL) {
+    return loomc_ok_status();
+  }
+  const loomc_target_environment_t* profile_environment =
+      target_selection->profile->target_environment;
+  if (loomc_target_environment_is_compatible(target_environment,
+                                             profile_environment)) {
+    return loomc_ok_status();
+  }
+  return loomc_make_status(
+      LOOMC_STATUS_INVALID_ARGUMENT,
+      "target selection was created for an incompatible target environment");
+}
+
+loom_target_selection_t loomc_target_selection_loom_target_selection(
+    const loomc_target_selection_t* target_selection) {
+  return target_selection ? target_selection->selection
+                          : loom_target_selection_empty();
+}
+
 loomc_status_t loomc_target_pass_registry_initialize(
     const loomc_target_environment_t* target_environment,
     loom_pass_registry_storage_t* out_storage,
@@ -265,4 +448,120 @@ void loomc_target_environment_release(
       &target_environment->pass_environment);
   loom_target_environment_deinitialize(&target_environment->environment);
   loomc_allocator_free(allocator, target_environment);
+}
+
+loomc_status_t loomc_target_profile_create_empty(
+    loomc_target_environment_t* target_environment,
+    const loomc_target_profile_options_t* options, loomc_allocator_t allocator,
+    loomc_target_profile_t** out_profile) {
+  if (out_profile == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "out_profile must not be NULL");
+  }
+  *out_profile = NULL;
+  if (target_environment == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "target_environment must not be NULL");
+  }
+  LOOMC_RETURN_IF_ERROR(loomc_target_profile_options_validate(options));
+
+  allocator = loomc_allocator_or_system(allocator);
+  loomc_target_profile_t* profile = NULL;
+  LOOMC_RETURN_IF_ERROR(
+      loomc_allocator_malloc(allocator, sizeof(*profile), (void**)&profile));
+  memset(profile, 0, sizeof(*profile));
+  iree_atomic_ref_count_init(&profile->ref_count);
+  profile->allocator = allocator;
+  profile->target_environment = target_environment;
+  loomc_target_environment_retain(profile->target_environment);
+  profile->selection = loom_target_selection_empty();
+
+  loomc_status_t status = loomc_source_copy_string(
+      options ? options->identifier : loomc_string_view_empty(), allocator,
+      &profile->identifier);
+  if (loomc_status_is_ok(status)) {
+    *out_profile = profile;
+    profile = NULL;
+  }
+  loomc_target_profile_release(profile);
+  return status;
+}
+
+void loomc_target_profile_retain(loomc_target_profile_t* profile) {
+  if (profile == NULL) {
+    return;
+  }
+  iree_atomic_ref_count_inc(&profile->ref_count);
+}
+
+void loomc_target_profile_release(loomc_target_profile_t* profile) {
+  if (profile == NULL) {
+    return;
+  }
+  if (iree_atomic_ref_count_dec(&profile->ref_count) != 1) {
+    return;
+  }
+  loomc_allocator_t allocator = profile->allocator;
+  loomc_target_environment_release(profile->target_environment);
+  loomc_allocator_free(allocator, (void*)profile->identifier.data);
+  loomc_allocator_free(allocator, profile);
+}
+
+loomc_status_t loomc_target_selection_create_empty(
+    loomc_allocator_t allocator,
+    loomc_target_selection_t** out_target_selection) {
+  if (out_target_selection == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "out_target_selection must not be NULL");
+  }
+  allocator = loomc_allocator_or_system(allocator);
+  loomc_target_selection_t* target_selection = NULL;
+  LOOMC_RETURN_IF_ERROR(
+      loomc_target_selection_allocate(allocator, &target_selection));
+  target_selection->selection = loom_target_selection_empty();
+  *out_target_selection = target_selection;
+  return loomc_ok_status();
+}
+
+loomc_status_t loomc_target_selection_create_from_profile(
+    loomc_target_profile_t* profile, loomc_allocator_t allocator,
+    loomc_target_selection_t** out_target_selection) {
+  if (out_target_selection == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "out_target_selection must not be NULL");
+  }
+  *out_target_selection = NULL;
+  if (profile == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "profile must not be NULL");
+  }
+  allocator = loomc_allocator_or_system(allocator);
+  loomc_target_selection_t* target_selection = NULL;
+  LOOMC_RETURN_IF_ERROR(
+      loomc_target_selection_allocate(allocator, &target_selection));
+  target_selection->profile = profile;
+  loomc_target_profile_retain(target_selection->profile);
+  target_selection->selection = profile->selection;
+  *out_target_selection = target_selection;
+  return loomc_ok_status();
+}
+
+void loomc_target_selection_retain(loomc_target_selection_t* target_selection) {
+  if (target_selection == NULL) {
+    return;
+  }
+  iree_atomic_ref_count_inc(&target_selection->ref_count);
+}
+
+void loomc_target_selection_release(
+    loomc_target_selection_t* target_selection) {
+  if (target_selection == NULL) {
+    return;
+  }
+  if (iree_atomic_ref_count_dec(&target_selection->ref_count) != 1) {
+    return;
+  }
+  loomc_allocator_t allocator = target_selection->allocator;
+  loomc_target_profile_release(target_selection->profile);
+  loomc_allocator_free(allocator, target_selection);
 }

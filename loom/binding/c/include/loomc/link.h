@@ -116,7 +116,9 @@ typedef uint32_t loomc_link_flags_t;
 /// module or a failed result with diagnostics. Supplying roots or
 /// `LOOMC_LINK_FLAG_INCLUDE_EXPORTED_ROOTS` selects a dependency closure.
 /// Supplying neither performs archive-style linking and materializes all
-/// linkable symbols in stable index order.
+/// linkable symbols in stable index order. Target selections can be supplied
+/// through `loomc_target_selection_options_t` on `next` so target-aware linking
+/// policy has a stable place in the invocation contract as it grows.
 typedef struct loomc_link_options_t {
   /// Structure type. Must be `LOOMC_STRUCTURE_TYPE_LINK_OPTIONS` when nonzero.
   loomc_structure_type_t type;
@@ -124,7 +126,8 @@ typedef struct loomc_link_options_t {
   /// Size of this structure in bytes.
   loomc_host_size_t structure_size;
 
-  /// Extension chain for future link invocation options.
+  /// Extension chain for link invocation options such as
+  /// `loomc_target_selection_options_t`.
   const void* next;
 
   /// Frozen provider index to link.
@@ -184,6 +187,12 @@ LOOMC_API_EXPORT loomc_status_t loomc_linker_create(
 /// @thread_safety
 /// Calls using the same linker may run concurrently when each call uses a
 /// distinct workspace. The same workspace requires external synchronization.
+///
+/// @par Target Selection
+/// `loomc_target_selection_options_t` may be attached to
+/// `loomc_link_options_t::next`. The selected profile must be compatible with
+/// the linker's context. The current linker validates the selection and leaves
+/// target-specific link policy to later target package integrations.
 LOOMC_API_EXPORT loomc_status_t
 loomc_link_module(loomc_linker_t* linker, loomc_workspace_t* workspace,
                   const loomc_link_options_t* options,
