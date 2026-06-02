@@ -84,6 +84,70 @@ repository default. `package` requires embedding or distribution builds to
 provide package targets and never falls back to source fetching. `auto` tries
 package discovery first and falls back to pinned source dependencies.
 
+## Local Presubmit
+
+The repository uses Lefthook to run local presubmit checks from Git hooks and
+manual commands. Install the hooks from the repository root:
+
+```bash
+lefthook install
+```
+
+The default `pre-commit` hook runs the `default` presubmit profile over the
+files Lefthook selected for the hook. It applies mechanical hygiene fixes and
+stages the files those fixers own. This covers buildifier, clang-format,
+generated CMake metadata, watchwords, merge-conflict markers, basic text
+hygiene, and targeted generated AMDGPU metadata checks.
+
+```bash
+lefthook run pre-commit
+```
+
+The `paranoid` profile adds affected project Bazel presubmit tests. Runtime
+paths run the runtime project presubmit, libhrx paths run the libhrx project
+presubmit, and shared build/dependency paths fan out to every configured
+project. The profile also reserves the static-analysis lane that will later
+host clang-tidy, CodeQL, and related heavy checks:
+
+```bash
+IREE_PRESUBMIT_PROFILE=paranoid lefthook run pre-commit
+python build_tools/lefthook/presubmit.py --profile paranoid
+```
+
+To make the paranoid profile run on every local commit, copy the example local
+overlay. `lefthook-local.yml` is ignored by Git and merged after `lefthook.yml`:
+
+```bash
+cp lefthook-local.paranoid.example.yml lefthook-local.yml
+lefthook install
+lefthook dump
+```
+
+The `ci` profile is the CI-safe non-mutating mode. When run directly without an
+explicit input mode, it checks all tracked files and runs all configured project
+presubmit tests without writing generated or formatted files:
+
+```bash
+python build_tools/lefthook/presubmit.py --profile ci
+```
+
+When running through Lefthook, the profile uses Lefthook's file selection. Pass
+`--all-files` to force a full-tree hook run:
+
+```bash
+IREE_PRESUBMIT_PROFILE=ci lefthook run pre-commit --all-files
+```
+
+The root presubmit script is also runnable directly when a workflow needs an
+explicit input set:
+
+```bash
+python build_tools/lefthook/presubmit.py --fix --staged --hygiene
+python build_tools/lefthook/presubmit.py --fix --staged --hygiene --tests
+python build_tools/lefthook/presubmit.py --check --all --hygiene --tests
+python build_tools/lefthook/presubmit.py --check --since origin/main --hygiene --tests --print-plan
+```
+
 ## Running Tests
 
 The installed test tree is relocatable and can run outside the build directory:

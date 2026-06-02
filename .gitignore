@@ -30,6 +30,9 @@ CMakeUserPresets.json
 /configured.bazelrc
 /user.bazelrc
 
+# Local presubmit/lefthook policy overrides.
+/lefthook-local.yml
+
 # Python caches, virtual environments, and packaging output.
 /.venv/
 /venv/

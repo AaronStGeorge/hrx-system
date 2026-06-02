@@ -1,0 +1,10 @@
+# Copyright 2026 The IREE Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Copy this to lefthook-local.yml to run the paranoid presubmit profile on each
+# local commit. The local config is ignored by Git and merged after lefthook.yml.
+
+pre-commit:
+  commands:
+    presubmit:
+      run: python build_tools/lefthook/presubmit.py --profile paranoid {staged_files}

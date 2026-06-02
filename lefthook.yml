@@ -1,0 +1,11 @@
+# Copyright 2026 The IREE Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Root lefthook configuration intentionally delegates policy to the repository
+# presubmit script. Use IREE_PRESUBMIT_PROFILE=paranoid locally to run affected
+# project tests and future static-analysis providers on every commit.
+
+pre-commit:
+  commands:
+    presubmit:
+      run: python build_tools/lefthook/presubmit.py {staged_files}

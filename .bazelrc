@@ -23,6 +23,16 @@ build --enable_runfiles
 # Keep successful test output quiet while preserving failure logs.
 test --test_output=errors
 
+# Local presubmit uses the configured Bazel graph. Build and runtime
+# requirements belong on targets and package policy rather than tag filters.
+test:presubmit --config=locked
+test:presubmit --test_output=errors
+
+# Manual sweeps can keep going to expose the full failure set without changing
+# the default hook behavior.
+test:presubmit-keep-going --config=presubmit
+test:presubmit-keep-going --keep_going
+
 # Generated configuration and local machine overrides stay out of version
 # control. Local overrides are imported last so they can adjust generated
 # settings for a specific checkout.

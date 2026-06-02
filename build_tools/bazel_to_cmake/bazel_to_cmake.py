@@ -31,6 +31,9 @@ Common usage:
       $ python build_tools/bazel_to_cmake/bazel_to_cmake.py --dry-run
       $ python build_tools/bazel_to_cmake/bazel_to_cmake.py --check
 
+  Write generated CMake files and stage files updated by this invocation:
+      $ python build_tools/bazel_to_cmake/bazel_to_cmake.py --stage-updates
+
   Dump generated CMake contents to stdout without writing files:
       $ python build_tools/bazel_to_cmake/bazel_to_cmake.py --preview runtime/src/iree/base/
 
@@ -64,9 +67,10 @@ import importlib
 import importlib.util
 import os
 import re
+import subprocess
 import sys
 import textwrap
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
@@ -98,6 +102,7 @@ class ConversionSummary:
     updated_count: int = 0
     skip_count: int = 0
     noop_count: int = 0
+    updated_paths: list[str] = field(default_factory=list)
 
 
 def parse_arguments():
@@ -119,6 +124,12 @@ def parse_arguments():
         "--check",
         help="Verify generated CMake files are up to date without writing files. "
         "Exits with status 1 if any file would be updated.",
+        action="store_true",
+        default=False,
+    )
+    output_group.add_argument(
+        "--stage-updates",
+        help="Write generated CMake files and git-add files updated by this invocation.",
         action="store_true",
         default=False,
     )
@@ -227,6 +238,7 @@ def convert_directories(directories, write_files, print_generated_content, verbo
             summary.skip_count += 1
         elif status == Status.UPDATED:
             summary.updated_count += 1
+            summary.updated_paths.append(os.path.join(directory, "CMakeLists.txt"))
         elif status == Status.NOOP:
             summary.noop_count += 1
 
@@ -384,6 +396,17 @@ def path_to_directory(path):
     raise FileNotFoundError(f"Cannot find BUILD file or directory '{path}'")
 
 
+def stage_updated_paths(paths):
+    if not paths:
+        return
+    rel_paths = [repo_relpath(path) for path in paths]
+    log(f"Staging {len(rel_paths)} generated CMake update(s).")
+    result = subprocess.run(["git", "add", "--"] + rel_paths, cwd=repo_root)
+    if result.returncode:
+        log("ERROR: Failed to stage generated CMake updates.")
+        sys.exit(result.returncode)
+
+
 def main(args):
     """Runs Bazel to CMake conversion."""
     global repo_root
@@ -444,6 +467,11 @@ def main(args):
 
     if args.check and any(summary.updated_count for summary in summaries):
         sys.exit(1)
+    if args.stage_updates:
+        updated_paths = [
+            path for summary in summaries for path in summary.updated_paths
+        ]
+        stage_updated_paths(updated_paths)
 
 
 if __name__ == "__main__":
