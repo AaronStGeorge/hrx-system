@@ -43,6 +43,15 @@ struct loomc_target_profile_t {
 
   // Compiler-facing target selection produced by this profile.
   loom_target_selection_t selection;
+
+  // Stable process-local payload type token.
+  const void* payload_type;
+
+  // Target-owned payload storage referenced by selection.data.
+  void* payload;
+
+  // Releases payload when the final profile reference is released.
+  loomc_target_profile_payload_deinitialize_fn_t payload_deinitialize;
 };
 
 struct loomc_target_selection_t {
@@ -215,6 +224,16 @@ static void loomc_target_pass_environment_deinitialize(
     return;
   }
   *environment = (loomc_target_pass_environment_t){0};
+}
+
+static void loomc_target_profile_deinitialize_payload(
+    void* payload,
+    loomc_target_profile_payload_deinitialize_fn_t payload_deinitialize,
+    loomc_allocator_t allocator) {
+  if (payload == NULL || payload_deinitialize == NULL) {
+    return;
+  }
+  payload_deinitialize(payload, allocator);
 }
 
 loomc_status_t loomc_target_environment_create_from_provider_set(
@@ -454,37 +473,82 @@ loomc_status_t loomc_target_profile_create_empty(
     loomc_target_environment_t* target_environment,
     const loomc_target_profile_options_t* options, loomc_allocator_t allocator,
     loomc_target_profile_t** out_profile) {
-  if (out_profile == NULL) {
-    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
-                             "out_profile must not be NULL");
-  }
-  *out_profile = NULL;
-  if (target_environment == NULL) {
-    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
-                             "target_environment must not be NULL");
-  }
-  LOOMC_RETURN_IF_ERROR(loomc_target_profile_options_validate(options));
+  return loomc_target_profile_create_from_selection(
+      target_environment, options, loom_target_selection_empty(), NULL, NULL,
+      NULL, allocator, out_profile);
+}
 
+loomc_status_t loomc_target_profile_create_from_selection(
+    loomc_target_environment_t* target_environment,
+    const loomc_target_profile_options_t* options,
+    loom_target_selection_t selection, const void* payload_type, void* payload,
+    loomc_target_profile_payload_deinitialize_fn_t deinitialize,
+    loomc_allocator_t allocator, loomc_target_profile_t** out_profile) {
   allocator = loomc_allocator_or_system(allocator);
+  void* pending_payload = payload;
   loomc_target_profile_t* profile = NULL;
-  LOOMC_RETURN_IF_ERROR(
-      loomc_allocator_malloc(allocator, sizeof(*profile), (void**)&profile));
-  memset(profile, 0, sizeof(*profile));
-  iree_atomic_ref_count_init(&profile->ref_count);
-  profile->allocator = allocator;
-  profile->target_environment = target_environment;
-  loomc_target_environment_retain(profile->target_environment);
-  profile->selection = loom_target_selection_empty();
+  loomc_status_t status = loomc_ok_status();
 
-  loomc_status_t status = loomc_source_copy_string(
-      options ? options->identifier : loomc_string_view_empty(), allocator,
-      &profile->identifier);
+  if (out_profile == NULL) {
+    status = loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                               "out_profile must not be NULL");
+  } else {
+    *out_profile = NULL;
+  }
+  if (loomc_status_is_ok(status) && target_environment == NULL) {
+    status = loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                               "target_environment must not be NULL");
+  }
+  if (loomc_status_is_ok(status) && pending_payload != NULL &&
+      (payload_type == NULL || deinitialize == NULL)) {
+    status = loomc_make_status(
+        LOOMC_STATUS_INVALID_ARGUMENT,
+        "profile payload requires a payload type and deinitializer");
+  }
   if (loomc_status_is_ok(status)) {
+    status = loomc_target_profile_options_validate(options);
+  }
+  if (loomc_status_is_ok(status)) {
+    status =
+        loomc_allocator_malloc(allocator, sizeof(*profile), (void**)&profile);
+  }
+  if (loomc_status_is_ok(status)) {
+    memset(profile, 0, sizeof(*profile));
+    iree_atomic_ref_count_init(&profile->ref_count);
+    profile->allocator = allocator;
+    profile->target_environment = target_environment;
+    loomc_target_environment_retain(profile->target_environment);
+    profile->selection = selection;
+    profile->payload_type = payload_type;
+    profile->payload = pending_payload;
+    profile->payload_deinitialize = deinitialize;
+    pending_payload = NULL;
+    status = loomc_source_copy_string(
+        options ? options->identifier : loomc_string_view_empty(), allocator,
+        &profile->identifier);
+  }
+  if (loomc_status_is_ok(status) && out_profile != NULL) {
     *out_profile = profile;
     profile = NULL;
+  } else {
+    loomc_target_profile_release(profile);
+    loomc_target_profile_deinitialize_payload(pending_payload, deinitialize,
+                                              allocator);
   }
-  loomc_target_profile_release(profile);
   return status;
+}
+
+loom_target_selection_t loomc_target_profile_loom_target_selection(
+    const loomc_target_profile_t* profile) {
+  return profile ? profile->selection : loom_target_selection_empty();
+}
+
+const void* loomc_target_profile_payload(const loomc_target_profile_t* profile,
+                                         const void* payload_type) {
+  if (profile == NULL || profile->payload_type != payload_type) {
+    return NULL;
+  }
+  return profile->payload;
 }
 
 void loomc_target_profile_retain(loomc_target_profile_t* profile) {
@@ -502,6 +566,9 @@ void loomc_target_profile_release(loomc_target_profile_t* profile) {
     return;
   }
   loomc_allocator_t allocator = profile->allocator;
+  if (profile->payload != NULL && profile->payload_deinitialize != NULL) {
+    profile->payload_deinitialize(profile->payload, allocator);
+  }
   loomc_target_environment_release(profile->target_environment);
   loomc_allocator_free(allocator, (void*)profile->identifier.data);
   loomc_allocator_free(allocator, profile);

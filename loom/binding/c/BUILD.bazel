@@ -113,11 +113,15 @@ loom_cc_library(
 
 loom_cc_library(
     name = "loomc_target_spirv",
-    srcs = ["src/target/spirv.c"],
+    srcs = [
+        "src/target/spirv.c",
+        "src/target/spirv/profile.c",
+    ],
     hdrs = [
         "include/loomc/target/spirv.h",
         "include/loomc/target/spirv/base.h",
         "include/loomc/target/spirv/emit.h",
+        "include/loomc/target/spirv/profile.h",
     ],
     includes = [
         ".",
@@ -129,6 +133,9 @@ loom_cc_library(
         ":loomc",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/target:types",
+        "//loom/src/loom/target/arch/spirv:cooperative_properties",
+        "//loom/src/loom/target/arch/spirv:features",
+        "//loom/src/loom/target/arch/spirv:profile",
         "//loom/src/loom/target/arch/spirv:provider",
         "//loom/src/loom/target/emit/spirv:module_emitter",
     ],
@@ -173,6 +180,18 @@ loom_cc_test(
     srcs = ["test/pass_program_test.cc"],
     deps = [
         ":loomc",
+        ":test_util",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "target_spirv_profile_test",
+    srcs = ["test/target_spirv_profile_test.cc"],
+    deps = [
+        ":loomc",
+        ":loomc_target_spirv",
         ":test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

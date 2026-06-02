@@ -139,6 +139,22 @@ typedef struct loomc_target_profile_t loomc_target_profile_t;
 /// threads. Retain/release operations are safe from multiple threads.
 typedef struct loomc_target_selection_t loomc_target_selection_t;
 
+/// Three-valued target fact state.
+///
+/// Target profiles distinguish unavailable, available, and not-yet-known facts
+/// because partial targets are valid inputs. Unknown is not false: a later live
+/// probe, saved profile, or user override may refine it.
+typedef enum loomc_target_fact_state_e {
+  /// No fact has been supplied yet.
+  LOOMC_TARGET_FACT_STATE_UNKNOWN = 0,
+
+  /// The fact is known to be unavailable or false.
+  LOOMC_TARGET_FACT_STATE_FALSE = 1,
+
+  /// The fact is known to be available or true.
+  LOOMC_TARGET_FACT_STATE_TRUE = 2,
+} loomc_target_fact_state_t;
+
 /// Context option extension that registers a target environment.
 ///
 /// Put this descriptor on `loomc_context_options_t::next` so target dialects

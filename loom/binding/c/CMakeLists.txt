@@ -98,13 +98,18 @@ loom_cc_library(
     "include/loomc/target/spirv.h"
     "include/loomc/target/spirv/base.h"
     "include/loomc/target/spirv/emit.h"
+    "include/loomc/target/spirv/profile.h"
   SRCS
     "src/target/spirv.c"
+    "src/target/spirv/profile.c"
   ALWAYSLINK
   DEPS
     ::loomc
     loom::src::loom::error::error_defs
     loom::src::loom::target::types
+    loom::src::loom::target::arch::spirv::cooperative_properties
+    loom::src::loom::target::arch::spirv::features
+    loom::src::loom::target::arch::spirv::profile
     loom::src::loom::target::arch::spirv::provider
     loom::src::loom::target::emit::spirv::module_emitter
   INCLUDES
@@ -157,6 +162,19 @@ loom_cc_test(
     "test/pass_program_test.cc"
   DEPS
     ::loomc
+    ::test_util
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    target_spirv_profile_test
+  SRCS
+    "test/target_spirv_profile_test.cc"
+  DEPS
+    ::loomc
+    ::loomc_target_spirv
     ::test_util
     iree::testing::gtest
     iree::testing::gtest_main

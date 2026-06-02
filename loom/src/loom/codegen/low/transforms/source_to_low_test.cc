@@ -183,6 +183,38 @@ TEST_F(LowLowerPassTest,
   iree_arena_deinitialize(&arena);
 }
 
+TEST_F(LowLowerPassTest, SourceSelectionAppliesRuntimeTargetDataOnly) {
+  ModulePtr module = Parse(IREE_SV(
+      "test.target<low_core> @test_target\n"
+      "func.def target(@test_target) @add(%lhs: i32, %rhs: i32) -> (i32) {\n"
+      "  %sum = scalar.addi %lhs, %rhs : i32\n"
+      "  func.return %sum : i32\n"
+      "}\n"));
+  const int target_payload = 42;
+
+  loom_low_lower_policy_registry_t policy_registry = {};
+  loom_test_low_lower_policy_registry_initialize(&policy_registry);
+  iree_arena_allocator_t arena;
+  iree_arena_initialize(&block_pool_, &arena);
+  loom_low_source_selection_options_t options = {
+      .policy_registry = &policy_registry,
+      .target_selection =
+          {
+              .bundle = NULL,
+              .data = &target_payload,
+          },
+  };
+  loom_low_source_selection_list_t selections = {};
+  IREE_ASSERT_OK(loom_low_select_source_symbols(module.get(), &options, &arena,
+                                                &selections));
+
+  ASSERT_EQ(selections.count, 1u);
+  EXPECT_TRUE(iree_string_view_equal(selections.values[0].target_bundle->name,
+                                     IREE_SV("test_target")));
+  EXPECT_EQ(selections.values[0].target_data, &target_payload);
+  iree_arena_deinitialize(&arena);
+}
+
 TEST_F(LowLowerPassTest,
        SourceSelectionIgnoresIncompatibleRuntimeTargetSelection) {
   ModulePtr module = Parse(IREE_SV(

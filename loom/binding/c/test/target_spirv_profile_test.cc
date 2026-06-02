@@ -1,0 +1,467 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include <memory>
+#include <string>
+
+#include "iree/testing/gtest.h"
+#include "loomc/context.h"
+#include "loomc/pass.h"
+#include "loomc/result.h"
+#include "loomc/status.h"
+#include "loomc/target.h"
+#include "loomc/target/spirv/base.h"
+#include "loomc/target/spirv/profile.h"
+#include "test/util.h"
+
+namespace {
+
+using loomc::testing::HandlePtr;
+
+using ContextPtr = HandlePtr<loomc_context_t, loomc_context_release>;
+using PassProgramPtr =
+    HandlePtr<loomc_pass_program_t, loomc_pass_program_release>;
+using ResultPtr = HandlePtr<loomc_result_t, loomc_result_release>;
+using TargetEnvironmentPtr =
+    HandlePtr<loomc_target_environment_t, loomc_target_environment_release>;
+using TargetProfilePtr =
+    HandlePtr<loomc_target_profile_t, loomc_target_profile_release>;
+using TargetSelectionPtr =
+    HandlePtr<loomc_target_selection_t, loomc_target_selection_release>;
+
+constexpr uint32_t kSpirvVersion13 = 0x00010300;
+constexpr uint32_t kSpirvAddressingModelLogical = 0;
+constexpr uint32_t kSpirvAddressingModelPhysicalStorageBuffer64 = 5348;
+constexpr uint32_t kSpirvMemoryModelGlsl450 = 1;
+constexpr uint32_t kSpirvMemoryModelVulkan = 3;
+constexpr uint32_t kSpirvCapabilityShader = 1;
+constexpr uint32_t kSpirvCapabilityFloat16 = 9;
+constexpr uint32_t kSpirvCapabilityFloat64 = 10;
+constexpr uint32_t kSpirvCapabilityInt64 = 11;
+constexpr uint32_t kSpirvCapabilityVulkanMemoryModel = 5345;
+constexpr uint32_t kSpirvCapabilityPhysicalStorageBufferAddresses = 5347;
+constexpr uint32_t kSpirvStorageClassPhysicalStorageBuffer = 5349;
+constexpr uint32_t kSpirvDecorationRestrictPointer = 5355;
+constexpr uint32_t kSpirvDecorationAliasedPointer = 5356;
+
+std::string ToString(loomc_string_view_t value) {
+  return value.data ? std::string(value.data, value.size) : std::string();
+}
+
+void ExpectSucceededResult(const loomc_result_t* result) {
+  ASSERT_NE(result, nullptr);
+  if (!loomc_result_succeeded(result) &&
+      loomc_result_diagnostic_count(result) != 0) {
+    const loomc_diagnostic_t* diagnostic =
+        loomc_result_diagnostic_at(result, 0);
+    ASSERT_NE(diagnostic, nullptr);
+    ADD_FAILURE() << ToString(diagnostic->message);
+  }
+  EXPECT_TRUE(loomc_result_succeeded(result));
+}
+
+void ExpectFailedResult(const loomc_result_t* result) {
+  ASSERT_NE(result, nullptr);
+  EXPECT_FALSE(loomc_result_succeeded(result));
+  EXPECT_EQ(loomc_result_state(result), LOOMC_RESULT_STATE_FAILED);
+  ASSERT_GE(loomc_result_diagnostic_count(result), 1u);
+  const loomc_diagnostic_t* diagnostic = loomc_result_diagnostic_at(result, 0);
+  ASSERT_NE(diagnostic, nullptr);
+  EXPECT_EQ(diagnostic->severity, LOOMC_DIAGNOSTIC_SEVERITY_ERROR);
+  EXPECT_EQ(ToString(diagnostic->code), "SPIRV/PROFILE");
+}
+
+TargetEnvironmentPtr CreateSpirvTargetEnvironment() {
+  loomc_target_environment_t* target_environment = nullptr;
+  loomc_status_t status = loomc_target_environment_create_spirv(
+      loomc_allocator_system(), &target_environment);
+  LOOMC_EXPECT_OK(status);
+  return TargetEnvironmentPtr(target_environment);
+}
+
+ContextPtr CreateSpirvContext(loomc_target_environment_t* target_environment) {
+  loomc_context_target_options_t target_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_CONTEXT_TARGET_OPTIONS,
+      /*.structure_size=*/sizeof(target_options),
+      /*.next=*/nullptr,
+      /*.target_environment=*/target_environment,
+  };
+  loomc_context_options_t context_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_CONTEXT_OPTIONS,
+      /*.structure_size=*/sizeof(context_options),
+      /*.next=*/&target_options,
+  };
+  loomc_context_t* context = nullptr;
+  loomc_status_t status = loomc_context_create(
+      &context_options, loomc_allocator_system(), &context);
+  LOOMC_EXPECT_OK(status);
+  return ContextPtr(context);
+}
+
+TargetProfilePtr CreateSpirvProfile(
+    loomc_target_environment_t* target_environment,
+    const loomc_spirv_profile_options_t* options) {
+  loomc_target_profile_t* profile = nullptr;
+  loomc_result_t* result = nullptr;
+  loomc_status_t status = loomc_target_profile_create_spirv(
+      target_environment, options, loomc_allocator_system(), &profile, &result);
+  LOOMC_EXPECT_OK(status);
+  ResultPtr result_ptr(result);
+  ExpectSucceededResult(result_ptr.get());
+  return TargetProfilePtr(profile);
+}
+
+TargetSelectionPtr CreateSelectionFromProfile(loomc_target_profile_t* profile) {
+  loomc_target_selection_t* selection = nullptr;
+  loomc_status_t status = loomc_target_selection_create_from_profile(
+      profile, loomc_allocator_system(), &selection);
+  LOOMC_EXPECT_OK(status);
+  return TargetSelectionPtr(selection);
+}
+
+bool ProfileHasExtension(const loomc_target_profile_t* profile,
+                         const char* expected_extension) {
+  loomc_spirv_profile_info_t info = {};
+  LOOMC_EXPECT_OK(loomc_spirv_target_profile_query_info(profile, &info));
+  for (loomc_host_size_t i = 0; i < info.extension_count; ++i) {
+    loomc_string_view_t extension = loomc_string_view_empty();
+    LOOMC_EXPECT_OK(
+        loomc_spirv_target_profile_extension_at(profile, i, &extension));
+    if (ToString(extension) == expected_extension) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool ProfileHasCapability(const loomc_target_profile_t* profile,
+                          uint32_t expected_capability) {
+  loomc_spirv_profile_info_t info = {};
+  LOOMC_EXPECT_OK(loomc_spirv_target_profile_query_info(profile, &info));
+  for (loomc_host_size_t i = 0; i < info.capability_count; ++i) {
+    uint32_t capability = 0;
+    LOOMC_EXPECT_OK(
+        loomc_spirv_target_profile_capability_at(profile, i, &capability));
+    if (capability == expected_capability) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool ProfileHasStorageClass(const loomc_target_profile_t* profile,
+                            uint32_t expected_storage_class) {
+  loomc_spirv_profile_info_t info = {};
+  LOOMC_EXPECT_OK(loomc_spirv_target_profile_query_info(profile, &info));
+  for (loomc_host_size_t i = 0; i < info.storage_class_count; ++i) {
+    uint32_t storage_class = 0;
+    LOOMC_EXPECT_OK(loomc_spirv_target_profile_storage_class_at(
+        profile, i, &storage_class));
+    if (storage_class == expected_storage_class) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool ProfileHasDecoration(const loomc_target_profile_t* profile,
+                          uint32_t expected_decoration) {
+  loomc_spirv_profile_info_t info = {};
+  LOOMC_EXPECT_OK(loomc_spirv_target_profile_query_info(profile, &info));
+  for (loomc_host_size_t i = 0; i < info.decoration_count; ++i) {
+    uint32_t decoration = 0;
+    LOOMC_EXPECT_OK(
+        loomc_spirv_target_profile_decoration_at(profile, i, &decoration));
+    if (decoration == expected_decoration) {
+      return true;
+    }
+  }
+  return false;
+}
+
+TEST(TargetSpirvProfileTest, CreatesEmptyPartialProfile) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  TargetProfilePtr profile = CreateSpirvProfile(target_environment.get(),
+                                                /*options=*/nullptr);
+
+  loomc_target_fact_state_t state = LOOMC_TARGET_FACT_STATE_TRUE;
+  LOOMC_EXPECT_OK(loomc_spirv_target_profile_query_feature(
+      profile.get(), LOOMC_SPIRV_FEATURE_VULKAN_SHADER, &state));
+  EXPECT_EQ(state, LOOMC_TARGET_FACT_STATE_UNKNOWN);
+
+  loomc_spirv_profile_info_t info = {};
+  LOOMC_EXPECT_OK(loomc_spirv_target_profile_query_info(profile.get(), &info));
+  EXPECT_EQ(info.minimum_spirv_version, 0u);
+  EXPECT_EQ(info.addressing_model, kSpirvAddressingModelLogical);
+  EXPECT_EQ(info.memory_model, kSpirvMemoryModelGlsl450);
+  EXPECT_EQ(info.extension_count, 0u);
+  EXPECT_EQ(info.capability_count, 0u);
+}
+
+TEST(TargetSpirvProfileTest, CreatesPresetProfileAndQueriesRows) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_spirv_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("offline-vulkan13"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_VULKAN_1_3_BDA,
+      /*.feature_facts=*/nullptr,
+      /*.feature_fact_count=*/0,
+  };
+  TargetProfilePtr profile =
+      CreateSpirvProfile(target_environment.get(), &options);
+
+  loomc_target_fact_state_t state = LOOMC_TARGET_FACT_STATE_UNKNOWN;
+  LOOMC_EXPECT_OK(loomc_spirv_target_profile_query_feature(
+      profile.get(), LOOMC_SPIRV_FEATURE_VULKAN_SHADER, &state));
+  EXPECT_EQ(state, LOOMC_TARGET_FACT_STATE_TRUE);
+  LOOMC_EXPECT_OK(loomc_spirv_target_profile_query_feature(
+      profile.get(), LOOMC_SPIRV_FEATURE_PHYSICAL_STORAGE_BUFFER, &state));
+  EXPECT_EQ(state, LOOMC_TARGET_FACT_STATE_TRUE);
+  LOOMC_EXPECT_OK(loomc_spirv_target_profile_query_feature(
+      profile.get(), LOOMC_SPIRV_FEATURE_INT64, &state));
+  EXPECT_EQ(state, LOOMC_TARGET_FACT_STATE_TRUE);
+  LOOMC_EXPECT_OK(loomc_spirv_target_profile_query_feature(
+      profile.get(), LOOMC_SPIRV_FEATURE_FLOAT16, &state));
+  EXPECT_EQ(state, LOOMC_TARGET_FACT_STATE_UNKNOWN);
+
+  loomc_spirv_profile_info_t info = {};
+  LOOMC_EXPECT_OK(loomc_spirv_target_profile_query_info(profile.get(), &info));
+  EXPECT_EQ(info.minimum_spirv_version, kSpirvVersion13);
+  EXPECT_EQ(info.addressing_model,
+            kSpirvAddressingModelPhysicalStorageBuffer64);
+  EXPECT_EQ(info.memory_model, kSpirvMemoryModelVulkan);
+  EXPECT_TRUE(
+      ProfileHasExtension(profile.get(), "SPV_KHR_vulkan_memory_model"));
+  EXPECT_TRUE(
+      ProfileHasExtension(profile.get(), "SPV_KHR_physical_storage_buffer"));
+  EXPECT_TRUE(ProfileHasCapability(profile.get(), kSpirvCapabilityShader));
+  EXPECT_TRUE(
+      ProfileHasCapability(profile.get(), kSpirvCapabilityVulkanMemoryModel));
+  EXPECT_TRUE(ProfileHasCapability(
+      profile.get(), kSpirvCapabilityPhysicalStorageBufferAddresses));
+  EXPECT_TRUE(ProfileHasCapability(profile.get(), kSpirvCapabilityInt64));
+  EXPECT_TRUE(ProfileHasStorageClass(profile.get(),
+                                     kSpirvStorageClassPhysicalStorageBuffer));
+  EXPECT_TRUE(
+      ProfileHasDecoration(profile.get(), kSpirvDecorationRestrictPointer));
+  EXPECT_TRUE(
+      ProfileHasDecoration(profile.get(), kSpirvDecorationAliasedPointer));
+
+  loomc_string_view_t extension = loomc_string_view_empty();
+  loomc_status_t extension_status = loomc_spirv_target_profile_extension_at(
+      profile.get(), info.extension_count, &extension);
+  LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_OUT_OF_RANGE, extension_status);
+}
+
+TEST(TargetSpirvProfileTest, RefinesPresetWithExplicitTrueFact) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_spirv_feature_fact_t facts[] = {
+      {
+          /*.feature=*/LOOMC_SPIRV_FEATURE_FLOAT16,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.provenance=*/
+          loomc_make_cstring_view("vulkaninfo:shaderFloat16"),
+      },
+  };
+  loomc_spirv_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("offline-vulkan13-f16"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_VULKAN_1_3_BDA,
+      /*.feature_facts=*/facts,
+      /*.feature_fact_count=*/1,
+  };
+  TargetProfilePtr profile =
+      CreateSpirvProfile(target_environment.get(), &options);
+
+  loomc_target_fact_state_t state = LOOMC_TARGET_FACT_STATE_UNKNOWN;
+  LOOMC_EXPECT_OK(loomc_spirv_target_profile_query_feature(
+      profile.get(), LOOMC_SPIRV_FEATURE_FLOAT16, &state));
+  EXPECT_EQ(state, LOOMC_TARGET_FACT_STATE_TRUE);
+  EXPECT_TRUE(ProfileHasCapability(profile.get(), kSpirvCapabilityFloat16));
+}
+
+TEST(TargetSpirvProfileTest, PreservesKnownFalseFeatureFacts) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_spirv_feature_fact_t facts[] = {
+      {
+          /*.feature=*/LOOMC_SPIRV_FEATURE_FLOAT64,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_FALSE,
+          /*.provenance=*/
+          loomc_make_cstring_view("vulkaninfo:shaderFloat64"),
+      },
+  };
+  loomc_spirv_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("partial-no-f64"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_NONE,
+      /*.feature_facts=*/facts,
+      /*.feature_fact_count=*/1,
+  };
+  TargetProfilePtr profile =
+      CreateSpirvProfile(target_environment.get(), &options);
+
+  loomc_target_fact_state_t state = LOOMC_TARGET_FACT_STATE_UNKNOWN;
+  LOOMC_EXPECT_OK(loomc_spirv_target_profile_query_feature(
+      profile.get(), LOOMC_SPIRV_FEATURE_FLOAT64, &state));
+  EXPECT_EQ(state, LOOMC_TARGET_FACT_STATE_FALSE);
+  EXPECT_FALSE(ProfileHasCapability(profile.get(), kSpirvCapabilityFloat64));
+}
+
+TEST(TargetSpirvProfileTest, ReportsContradictoryFactsWithProvenance) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_spirv_feature_fact_t facts[] = {
+      {
+          /*.feature=*/LOOMC_SPIRV_FEATURE_FLOAT16,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.provenance=*/loomc_make_cstring_view("probe:a"),
+      },
+      {
+          /*.feature=*/LOOMC_SPIRV_FEATURE_FLOAT16,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_FALSE,
+          /*.provenance=*/loomc_make_cstring_view("override:b"),
+      },
+  };
+  loomc_spirv_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("contradiction"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_NONE,
+      /*.feature_facts=*/facts,
+      /*.feature_fact_count=*/2,
+  };
+  loomc_target_profile_t* profile = nullptr;
+  loomc_result_t* result = nullptr;
+  loomc_status_t status = loomc_target_profile_create_spirv(
+      target_environment.get(), &options, loomc_allocator_system(), &profile,
+      &result);
+  LOOMC_EXPECT_OK(status);
+  TargetProfilePtr profile_ptr(profile);
+  ResultPtr result_ptr(result);
+  EXPECT_EQ(profile_ptr.get(), nullptr);
+  ExpectFailedResult(result_ptr.get());
+  const loomc_diagnostic_t* diagnostic =
+      loomc_result_diagnostic_at(result_ptr.get(), 0);
+  ASSERT_NE(diagnostic, nullptr);
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("contradictory facts"));
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("spirv.float16"));
+  EXPECT_THAT(ToString(diagnostic->message), ::testing::HasSubstr("probe:a"));
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("override:b"));
+}
+
+TEST(TargetSpirvProfileTest, ReportsMissingFeatureDependenciesAsResult) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_spirv_feature_fact_t facts[] = {
+      {
+          /*.feature=*/LOOMC_SPIRV_FEATURE_PHYSICAL_STORAGE_BUFFER,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.provenance=*/
+          loomc_make_cstring_view("override:physical-storage-buffer"),
+      },
+  };
+  loomc_spirv_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("missing-dependency"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_NONE,
+      /*.feature_facts=*/facts,
+      /*.feature_fact_count=*/1,
+  };
+  loomc_target_profile_t* profile = nullptr;
+  loomc_result_t* result = nullptr;
+  loomc_status_t status = loomc_target_profile_create_spirv(
+      target_environment.get(), &options, loomc_allocator_system(), &profile,
+      &result);
+  LOOMC_EXPECT_OK(status);
+  TargetProfilePtr profile_ptr(profile);
+  ResultPtr result_ptr(result);
+  EXPECT_EQ(profile_ptr.get(), nullptr);
+  ExpectFailedResult(result_ptr.get());
+  const loomc_diagnostic_t* diagnostic =
+      loomc_result_diagnostic_at(result_ptr.get(), 0);
+  ASSERT_NE(diagnostic, nullptr);
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("missing dependency"));
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("spirv.physical_storage_buffer"));
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("spirv.vulkan.shader"));
+}
+
+TEST(TargetSpirvProfileTest, RejectsNonSpirvProfileQueries) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_target_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_TARGET_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("generic-profile"),
+  };
+  loomc_target_profile_t* profile = nullptr;
+  loomc_status_t create_status = loomc_target_profile_create_empty(
+      target_environment.get(), &options, loomc_allocator_system(), &profile);
+  LOOMC_EXPECT_OK(create_status);
+  TargetProfilePtr profile_ptr(profile);
+
+  loomc_target_fact_state_t state = LOOMC_TARGET_FACT_STATE_UNKNOWN;
+  loomc_status_t query_status = loomc_spirv_target_profile_query_feature(
+      profile_ptr.get(), LOOMC_SPIRV_FEATURE_FLOAT16, &state);
+  LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_INVALID_ARGUMENT, query_status);
+}
+
+TEST(TargetSpirvProfileTest, PreparedProfileSelectionCreatesTargetPipeline) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_spirv_profile_options_t profile_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(profile_options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("selected-vulkan13"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_VULKAN_1_3_BDA,
+      /*.feature_facts=*/nullptr,
+      /*.feature_fact_count=*/0,
+  };
+  TargetProfilePtr profile =
+      CreateSpirvProfile(target_environment.get(), &profile_options);
+  TargetSelectionPtr selection = CreateSelectionFromProfile(profile.get());
+  ContextPtr context = CreateSpirvContext(target_environment.get());
+
+  loomc_target_selection_options_t target_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_TARGET_SELECTION_OPTIONS,
+      /*.structure_size=*/sizeof(target_options),
+      /*.next=*/nullptr,
+      /*.target_selection=*/selection.get(),
+  };
+  loomc_target_pipeline_options_t pipeline_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_TARGET_PIPELINE_OPTIONS,
+      /*.structure_size=*/sizeof(pipeline_options),
+      /*.next=*/&target_options,
+      /*.identifier=*/loomc_make_cstring_view("selected-spirv-pipeline"),
+      /*.kind=*/LOOMC_TARGET_PIPELINE_KIND_PREPARED_LOW,
+      /*.control_flow_lowering=*/LOOMC_TARGET_CONTROL_FLOW_LOWERING_CFG,
+      /*.source_to_low_max_errors=*/20,
+  };
+  loomc_pass_program_t* pass_program = nullptr;
+  loomc_result_t* result = nullptr;
+  loomc_status_t status = loomc_pass_program_create_from_target_pipeline(
+      context.get(), &pipeline_options, loomc_allocator_system(), &pass_program,
+      &result);
+  LOOMC_EXPECT_OK(status);
+  PassProgramPtr pass_program_ptr(pass_program);
+  ResultPtr result_ptr(result);
+  EXPECT_NE(pass_program_ptr.get(), nullptr);
+  ExpectSucceededResult(result_ptr.get());
+}
+
+}  // namespace

@@ -296,8 +296,9 @@ typedef struct loom_target_selection_t {
   // Runtime-selected effective target bundle, or NULL when source IR target
   // records alone select the target contract.
   const loom_target_bundle_t* bundle;
-  // Target-owned immutable payload associated with |bundle|. Core compiler
-  // code passes this through and never interprets it.
+  // Target-owned immutable payload associated with |bundle| or with the source
+  // selected target bundle when |bundle| is NULL. Core compiler code passes
+  // this through and never interprets it.
   const void* data;
 } loom_target_selection_t;
 
@@ -309,7 +310,7 @@ static inline loom_target_selection_t loom_target_selection_empty(void) {
 // Returns true when |selection| has no selected target overlay.
 static inline bool loom_target_selection_is_empty(
     loom_target_selection_t selection) {
-  return selection.bundle == NULL;
+  return selection.bundle == NULL && selection.data == NULL;
 }
 
 typedef struct loom_target_bundle_table_t {

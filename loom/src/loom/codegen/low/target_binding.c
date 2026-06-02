@@ -244,7 +244,7 @@ static iree_status_t loom_low_resolve_func_target(
         &out_target->bundle_storage);
   }
   if (iree_status_is_ok(status) && contract_valid &&
-      !loom_target_selection_is_empty(target_selection) &&
+      target_selection.bundle != NULL &&
       loom_target_function_contract_bundles_compatible(
           &out_target->bundle_storage.bundle, target_selection.bundle)) {
     status = loom_target_function_contract_resolve_from_bundle(

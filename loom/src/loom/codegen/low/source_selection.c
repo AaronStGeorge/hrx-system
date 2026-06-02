@@ -30,9 +30,16 @@ static iree_status_t loom_low_source_selection_apply_target_selection(
     const loom_low_source_selection_options_t* options,
     const loom_func_symbol_facts_t* func_facts, bool* inout_contract_valid,
     loom_low_source_selection_t* selection) {
-  if (!*inout_contract_valid ||
-      loom_target_selection_is_empty(options->target_selection)) {
+  if (!*inout_contract_valid) {
     selection->target_data = NULL;
+    return iree_ok_status();
+  }
+  if (loom_target_selection_is_empty(options->target_selection)) {
+    selection->target_data = NULL;
+    return iree_ok_status();
+  }
+  if (options->target_selection.bundle == NULL) {
+    selection->target_data = options->target_selection.data;
     return iree_ok_status();
   }
   if (!loom_target_function_contract_bundles_compatible(

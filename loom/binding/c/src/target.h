@@ -20,6 +20,10 @@ typedef struct loom_text_low_asm_environment_t loom_text_low_asm_environment_t;
 extern "C" {
 #endif
 
+// Releases target-owned profile payload storage.
+typedef void (*loomc_target_profile_payload_deinitialize_fn_t)(
+    void* payload, loomc_allocator_t allocator);
+
 // Prepared target pass capability tables derived from a public target
 // environment.
 typedef struct loomc_target_pass_environment_t {
@@ -79,6 +83,25 @@ LOOMC_API_PRIVATE loomc_status_t loomc_target_selection_validate_environment(
 LOOMC_API_PRIVATE loom_target_selection_t
 loomc_target_selection_loom_target_selection(
     const loomc_target_selection_t* target_selection);
+
+// Creates a public target profile with an already prepared compiler-facing
+// selection. The profile takes ownership of payload and calls deinitialize when
+// the final profile reference is released.
+LOOMC_API_PRIVATE loomc_status_t loomc_target_profile_create_from_selection(
+    loomc_target_environment_t* target_environment,
+    const loomc_target_profile_options_t* options,
+    loom_target_selection_t selection, const void* payload_type, void* payload,
+    loomc_target_profile_payload_deinitialize_fn_t deinitialize,
+    loomc_allocator_t allocator, loomc_target_profile_t** out_profile);
+
+// Returns the internal target selection represented by a public profile.
+LOOMC_API_PRIVATE loom_target_selection_t
+loomc_target_profile_loom_target_selection(
+    const loomc_target_profile_t* profile);
+
+// Returns target-owned profile payload when it has the expected type.
+LOOMC_API_PRIVATE const void* loomc_target_profile_payload(
+    const loomc_target_profile_t* profile, const void* payload_type);
 
 // Initializes a stable pass registry combining builtin and target-owned pass
 // descriptors. The returned registry points into out_storage.

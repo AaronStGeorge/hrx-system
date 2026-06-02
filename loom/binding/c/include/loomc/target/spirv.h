@@ -9,6 +9,7 @@
 
 #include "loomc/target/spirv/base.h"
 #include "loomc/target/spirv/emit.h"
+#include "loomc/target/spirv/profile.h"
 
 /// @file
 /// SPIR-V target package aggregation header.
