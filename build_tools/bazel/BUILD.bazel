@@ -6,6 +6,10 @@
 
 package(default_visibility = ["//visibility:public"])
 
+exports_files([
+    "deps.MODULE.bazel",
+])
+
 config_setting(
     name = "cc_compiler_clang",
     flag_values = {

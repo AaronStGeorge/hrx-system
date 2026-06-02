@@ -1,0 +1,20 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""Bazel module fragment for shared third-party dependencies."""
+
+bazel_dep(
+    name = "google_benchmark",
+    version = "1.9.5",
+    dev_dependency = True,
+    repo_name = "com_google_benchmark",
+)
+bazel_dep(
+    name = "googletest",
+    version = "1.17.0.bcr.2",
+    dev_dependency = True,
+    repo_name = "com_google_googletest",
+)
