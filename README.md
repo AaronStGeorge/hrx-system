@@ -70,8 +70,7 @@ Useful options:
 
 | Option | Default | Purpose |
 |--------|---------|---------|
-| `HRX_HERMETIC_BUILD` | OFF | Error instead of using libhrx FetchContent fallbacks. |
-| `IREE_HERMETIC_BUILD` | `${HRX_HERMETIC_BUILD}` | Error instead of using IREE/shared FetchContent fallbacks. |
+| `IREE_DEPENDENCY_MODE` | `pinned` | Controls dependency resolution: `pinned`, `package`, or `auto`. |
 | `LIBHRX_BUILD` | ON | Build libhrx and compatibility targets. |
 | `LIBHRX_BUILD_CTS` | `${IREE_BUILD_TESTS}` | Build libhrx CTS binaries. |
 | `LIBHRX_BUILD_PASSTHROUGH` | ON | Build HIP passthrough/interception tools. |
@@ -80,8 +79,10 @@ Useful options:
 | `IREE_HAL_DRIVER_AMDGPU` | ON | Build the AMDGPU runtime HAL driver. |
 | `IREE_ROCM_TEST_TARGET_CHIP` | empty | Target chip for ROCm tests that compile device code. |
 
-Hermetic build options are intended for release and distro-style builds where
-all dependencies must be supplied by package discovery.
+`IREE_DEPENDENCY_MODE=pinned` uses the checked-in source lock and is the
+repository default. `package` requires embedding or distribution builds to
+provide package targets and never falls back to source fetching. `auto` tries
+package discovery first and falls back to pinned source dependencies.
 
 ## Running Tests
 

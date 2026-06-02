@@ -117,6 +117,22 @@ iree_declare_locked_fetch_content(googletest)
 FetchContent_MakeAvailable(googletest)
 ```
 
+`IREE_DEPENDENCY_MODE` controls how source dependencies are resolved:
+
+```text
+pinned   Use MODULE.cmake.lock and FetchContent. This is the default.
+package  Use package/target discovery supplied by the embedding build. Never
+         FetchContent pinned sources.
+auto     Try package/target discovery first, then fall back to pinned sources.
+```
+
+Normal repository development and CI should use `pinned` so the build is
+deterministic and does not silently consume random system packages. Embedding
+and distribution builds can use `package` when they intentionally provide
+dependencies through `CMAKE_PREFIX_PATH` or parent-project targets. The `auto`
+mode is for local integration experiments where convenience is more important
+than reproducibility.
+
 Adapters normalize upstream packages into repo-local CMake targets. Repo code
 uses `iree::third_party::*` targets; upstream targets such as `benchmark`,
 `flatcc::runtime`, or `Catch2::Catch2` are adapter implementation details.
@@ -127,8 +143,8 @@ Package discovery remains an integration mode:
 find_package(GTest CONFIG QUIET)
 ```
 
-If package discovery does not provide the expected targets, adapters fall back
-to pinned FetchContent unless the relevant hermetic option forbids fetching.
+In `package` mode, missing package targets are configuration errors. In `auto`
+mode, missing package targets fall back to the pinned source lock.
 
 Adapters configure dependencies; they do not decide whether a project wants the
 dependency. The top-level project configuration owns enablement policy:

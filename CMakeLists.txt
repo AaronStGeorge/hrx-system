@@ -32,12 +32,9 @@ include(CTest)
 include(GNUInstallDirs)
 find_package(Python3 COMPONENTS Interpreter QUIET)
 
-option(HRX_HERMETIC_BUILD
-  "Require all dependencies to be provided by package discovery; never FetchContent."
-  OFF)
-option(IREE_HERMETIC_BUILD
-  "Require IREE/shared dependencies to be provided by package discovery; never FetchContent."
-  ${HRX_HERMETIC_BUILD})
+set(IREE_DEPENDENCY_MODE "pinned" CACHE STRING
+  "How source dependencies are resolved: pinned, package, or auto.")
+set_property(CACHE IREE_DEPENDENCY_MODE PROPERTY STRINGS pinned package auto)
 
 option(BUILD_SHARED_LIBS
   "Instructs CMake to build libraries as shared if possible." OFF)

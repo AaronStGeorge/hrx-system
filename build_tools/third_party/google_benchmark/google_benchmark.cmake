@@ -7,9 +7,13 @@
 include(iree_third_party_helpers)
 
 function(iree_configure_google_benchmark)
-  find_package(benchmark CONFIG QUIET)
+  iree_dependency_package_discovery_allowed(_package_discovery_allowed)
+  if(_package_discovery_allowed)
+    find_package(benchmark CONFIG QUIET)
+  endif()
+
   if(NOT TARGET benchmark AND NOT TARGET benchmark::benchmark)
-    iree_fetch_content_assert_allowed("google benchmark")
+    iree_dependency_require_pinned_source_allowed("google benchmark")
     set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
     set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
     set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)

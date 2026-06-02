@@ -7,9 +7,13 @@
 include(iree_third_party_helpers)
 
 function(iree_configure_catch2)
-  find_package(Catch2 3 CONFIG QUIET)
+  iree_dependency_package_discovery_allowed(_package_discovery_allowed)
+  if(_package_discovery_allowed)
+    find_package(Catch2 3 CONFIG QUIET)
+  endif()
+
   if(NOT TARGET Catch2::Catch2)
-    iree_fetch_content_assert_allowed("Catch2")
+    iree_dependency_require_pinned_source_allowed("Catch2")
     set(CATCH_INSTALL_DOCS OFF CACHE BOOL "" FORCE)
     set(CATCH_INSTALL_EXTRAS OFF CACHE BOOL "" FORCE)
     set(CATCH_BUILD_TESTING OFF CACHE BOOL "" FORCE)

@@ -6,12 +6,53 @@
 
 include(FetchContent)
 
-function(iree_fetch_content_assert_allowed dep_name)
-  if(IREE_HERMETIC_BUILD)
+set(_IREE_DEPENDENCY_MODES pinned package auto)
+
+function(iree_dependency_mode out_var)
+  if(NOT DEFINED IREE_DEPENDENCY_MODE OR "${IREE_DEPENDENCY_MODE}" STREQUAL "")
+    set(IREE_DEPENDENCY_MODE "pinned" CACHE STRING
+      "How source dependencies are resolved: pinned, package, or auto." FORCE)
+    set_property(CACHE IREE_DEPENDENCY_MODE PROPERTY STRINGS
+      ${_IREE_DEPENDENCY_MODES})
+  endif()
+
+  string(TOLOWER "${IREE_DEPENDENCY_MODE}" _mode)
+  if(NOT _mode IN_LIST _IREE_DEPENDENCY_MODES)
     message(FATAL_ERROR
-      "${dep_name} was not found via package discovery and IREE_HERMETIC_BUILD=ON "
-      "forbids FetchContent. Provide the package via CMAKE_PREFIX_PATH or an "
-      "equivalent CMake package path.")
+      "IREE_DEPENDENCY_MODE must be one of pinned, package, or auto; got "
+      "'${IREE_DEPENDENCY_MODE}'")
+  endif()
+
+  set(${out_var} "${_mode}" PARENT_SCOPE)
+endfunction()
+
+function(iree_dependency_package_discovery_allowed out_var)
+  iree_dependency_mode(_mode)
+  if(_mode STREQUAL "package" OR _mode STREQUAL "auto")
+    set(${out_var} TRUE PARENT_SCOPE)
+  else()
+    set(${out_var} FALSE PARENT_SCOPE)
+  endif()
+endfunction()
+
+function(iree_dependency_pinned_source_allowed out_var)
+  iree_dependency_mode(_mode)
+  if(_mode STREQUAL "pinned" OR _mode STREQUAL "auto")
+    set(${out_var} TRUE PARENT_SCOPE)
+  else()
+    set(${out_var} FALSE PARENT_SCOPE)
+  endif()
+endfunction()
+
+function(iree_dependency_require_pinned_source_allowed dep_name)
+  iree_dependency_pinned_source_allowed(_pinned_source_allowed)
+  if(NOT _pinned_source_allowed)
+    iree_dependency_mode(_mode)
+    message(FATAL_ERROR
+      "${dep_name} was not found through package discovery and "
+      "IREE_DEPENDENCY_MODE=${_mode} forbids pinned FetchContent sources. "
+      "Provide the package through CMAKE_PREFIX_PATH or use "
+      "IREE_DEPENDENCY_MODE=pinned or auto.")
   endif()
 endfunction()
 

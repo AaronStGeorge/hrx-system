@@ -14,7 +14,17 @@ function(iree_configure_libbacktrace)
       "libbacktrace target (empty when disabled)" FORCE)
     return()
   endif()
-  iree_fetch_content_assert_allowed("libbacktrace")
+
+  iree_dependency_package_discovery_allowed(_package_discovery_allowed)
+  if(_package_discovery_allowed AND TARGET libbacktrace::libbacktrace)
+    iree_add_alias_interface(
+      iree::third_party::libbacktrace libbacktrace::libbacktrace)
+    set(IREE_LIBBACKTRACE_TARGET "iree::third_party::libbacktrace"
+      CACHE INTERNAL "libbacktrace target" FORCE)
+    return()
+  endif()
+
+  iree_dependency_require_pinned_source_allowed("libbacktrace")
   add_subdirectory(
     "${_IREE_LIBBACKTRACE_CMAKE_DIR}"
     "${CMAKE_BINARY_DIR}/build_tools/third_party/libbacktrace"
