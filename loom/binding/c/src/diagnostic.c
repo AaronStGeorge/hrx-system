@@ -139,6 +139,20 @@ loomc_status_t loomc_result_add_status_diagnostic(
   return loomc_result_add_diagnostic(result, &diagnostic);
 }
 
+bool loomc_status_is_result_diagnostic(loomc_status_t status) {
+  switch (loomc_status_code(status)) {
+    case LOOMC_STATUS_INVALID_ARGUMENT:
+    case LOOMC_STATUS_NOT_FOUND:
+    case LOOMC_STATUS_FAILED_PRECONDITION:
+    case LOOMC_STATUS_OUT_OF_RANGE:
+    case LOOMC_STATUS_UNIMPLEMENTED:
+    case LOOMC_STATUS_INCOMPATIBLE:
+      return true;
+    default:
+      return false;
+  }
+}
+
 loomc_status_t loomc_result_fail_status_diagnostic(
     loomc_result_t* result, const loomc_source_t* source,
     loomc_diagnostic_severity_t severity, loomc_string_view_t code,
@@ -146,4 +160,14 @@ loomc_status_t loomc_result_fail_status_diagnostic(
   LOOMC_RETURN_IF_ERROR(loomc_result_add_status_diagnostic(
       result, source, severity, code, status));
   return loomc_result_set_state(result, LOOMC_RESULT_STATE_FAILED);
+}
+
+loomc_status_t loomc_result_fail_status_diagnostic_consume(
+    loomc_result_t* result, const loomc_source_t* source,
+    loomc_diagnostic_severity_t severity, loomc_string_view_t code,
+    loomc_status_t status) {
+  loomc_status_t add_status = loomc_result_fail_status_diagnostic(
+      result, source, severity, code, status);
+  loomc_status_free(status);
+  return add_status;
 }

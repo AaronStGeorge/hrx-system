@@ -32,8 +32,17 @@ LOOMC_API_PRIVATE loomc_status_t loomc_result_add_status_diagnostic(
     loomc_diagnostic_severity_t severity, loomc_string_view_t code,
     loomc_status_t status);
 
+// Returns true when status should be represented as an operation diagnostic.
+LOOMC_API_PRIVATE bool loomc_status_is_result_diagnostic(loomc_status_t status);
+
 // Adds a status diagnostic and marks the result failed.
 LOOMC_API_PRIVATE loomc_status_t loomc_result_fail_status_diagnostic(
+    loomc_result_t* result, const loomc_source_t* source,
+    loomc_diagnostic_severity_t severity, loomc_string_view_t code,
+    loomc_status_t status);
+
+// Adds a status diagnostic, marks the result failed, and frees status.
+LOOMC_API_PRIVATE loomc_status_t loomc_result_fail_status_diagnostic_consume(
     loomc_result_t* result, const loomc_source_t* source,
     loomc_diagnostic_severity_t severity, loomc_string_view_t code,
     loomc_status_t status);

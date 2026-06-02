@@ -21,6 +21,7 @@ loom_cc_library(
     "include/loomc/result.h"
     "include/loomc/source.h"
     "include/loomc/status.h"
+    "include/loomc/target.h"
     "include/loomc/workspace.h"
     "src/context.h"
     "src/diagnostic.h"
@@ -29,6 +30,7 @@ loom_cc_library(
     "src/pass_program.h"
     "src/result.h"
     "src/source.h"
+    "src/target.h"
     "src/visibility.h"
     "src/workspace.h"
   SRCS
@@ -44,6 +46,7 @@ loom_cc_library(
     "src/result.c"
     "src/source.c"
     "src/status.c"
+    "src/target.c"
     "src/workspace.c"
   DEPS
     iree::base
@@ -60,6 +63,8 @@ loom_cc_library(
     loom::src::loom::format::text::parser
     loom::src::loom::format::text::printer
     loom::src::loom::ir
+    loom::src::loom::codegen::low::pass_environment
+    loom::src::loom::codegen::low::text_asm
     loom::src::loom::link::linker
     loom::src::loom::link::module_index
     loom::src::loom::link::planner
@@ -69,11 +74,36 @@ loom_cc_library(
     loom::src::loom::pass::environment
     loom::src::loom::pass::interpreter
     loom::src::loom::pass::program
+    loom::src::loom::pass::registry
     loom::src::loom::pass::tooling
+    loom::src::loom::target::pipeline
+    loom::src::loom::target::predicate
+    loom::src::loom::target::provider
     loom::src::loom::tooling::config
     loom::src::loom::util::json
     loom::src::loom::util::stream
     loom::src::loom::verify
+  INCLUDES
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    loomc_target_spirv
+  HDRS
+    "include/loomc/target/spirv.h"
+  SRCS
+    "src/target/spirv.c"
+  ALWAYSLINK
+  DEPS
+    ::loomc
+    loom::src::loom::error::error_defs
+    loom::src::loom::target::types
+    loom::src::loom::target::arch::spirv::provider
+    loom::src::loom::target::emit::spirv::module_emitter
   INCLUDES
     "${CMAKE_CURRENT_SOURCE_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
@@ -124,6 +154,19 @@ loom_cc_test(
     "test/pass_program_test.cc"
   DEPS
     ::loomc
+    ::test_util
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    target_spirv_test
+  SRCS
+    "test/target_spirv_test.cc"
+  DEPS
+    ::loomc
+    ::loomc_target_spirv
     ::test_util
     iree::testing::gtest
     iree::testing::gtest_main

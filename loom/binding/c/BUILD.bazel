@@ -33,6 +33,7 @@ LOOMC_PUBLIC_HDRS = [
     "include/loomc/result.h",
     "include/loomc/source.h",
     "include/loomc/status.h",
+    "include/loomc/target.h",
     "include/loomc/workspace.h",
 ]
 
@@ -51,6 +52,7 @@ loom_cc_library(
         "src/result.c",
         "src/source.c",
         "src/status.c",
+        "src/target.c",
         "src/workspace.c",
     ],
     hdrs = LOOMC_PUBLIC_HDRS + [
@@ -61,6 +63,7 @@ loom_cc_library(
         "src/pass_program.h",
         "src/result.h",
         "src/source.h",
+        "src/target.h",
         "src/visibility.h",
         "src/workspace.h",
     ],
@@ -70,6 +73,8 @@ loom_cc_library(
         "src",
     ],
     deps = [
+        "//loom/src/loom/codegen/low:pass_environment",
+        "//loom/src/loom/codegen/low:text_asm",
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/error:error_defs",
         "//loom/src/loom/error:renderer",
@@ -88,7 +93,11 @@ loom_cc_library(
         "//loom/src/loom/pass:environment",
         "//loom/src/loom/pass:interpreter",
         "//loom/src/loom/pass:program",
+        "//loom/src/loom/pass:registry",
         "//loom/src/loom/pass:tooling",
+        "//loom/src/loom/target:pipeline",
+        "//loom/src/loom/target:predicate",
+        "//loom/src/loom/target:provider",
         "//loom/src/loom/tooling/config",
         "//loom/src/loom/util:json",
         "//loom/src/loom/util:stream",
@@ -99,6 +108,26 @@ loom_cc_library(
         "//runtime/src/iree/io:file_handle",
         "//runtime/src/iree/io:stream",
     ],
+)
+
+loom_cc_library(
+    name = "loomc_target_spirv",
+    srcs = ["src/target/spirv.c"],
+    hdrs = ["include/loomc/target/spirv.h"],
+    includes = [
+        ".",
+        "include",
+        "src",
+    ],
+    linkstatic = True,
+    deps = [
+        ":loomc",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/target:types",
+        "//loom/src/loom/target/arch/spirv:provider",
+        "//loom/src/loom/target/emit/spirv:module_emitter",
+    ],
+    alwayslink = True,
 )
 
 loom_cc_library(
@@ -139,6 +168,18 @@ loom_cc_test(
     srcs = ["test/pass_program_test.cc"],
     deps = [
         ":loomc",
+        ":test_util",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "target_spirv_test",
+    srcs = ["test/target_spirv_test.cc"],
+    deps = [
+        ":loomc",
+        ":loomc_target_spirv",
         ":test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

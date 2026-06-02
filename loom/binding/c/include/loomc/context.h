@@ -59,7 +59,8 @@ typedef struct loomc_context_options_t {
   /// Size of this structure in bytes.
   loomc_host_size_t structure_size;
 
-  /// Extension chain for future context options.
+  /// Extension chain for context options such as
+  /// `loomc_context_target_options_t`.
   const void* next;
 } loomc_context_options_t;
 

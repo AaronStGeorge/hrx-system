@@ -14,6 +14,7 @@
 #include "loom/error/error_defs.h"
 #include "loom/pass/environment.h"
 #include "loom/pass/interpreter.h"
+#include "loom/target/predicate.h"
 #include "loom/tooling/config/config.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
@@ -23,6 +24,7 @@
 #include "pass_program.h"
 #include "result.h"
 #include "source.h"
+#include "target.h"
 #include "workspace.h"
 
 struct loomc_compiler_t {
@@ -131,20 +133,6 @@ static loomc_status_t loomc_compile_validate_options(
   return loomc_compile_validate_config_options(&options->config);
 }
 
-static bool loomc_compile_status_is_result_diagnostic(loomc_status_t status) {
-  switch (loomc_status_code(status)) {
-    case LOOMC_STATUS_INVALID_ARGUMENT:
-    case LOOMC_STATUS_NOT_FOUND:
-    case LOOMC_STATUS_FAILED_PRECONDITION:
-    case LOOMC_STATUS_OUT_OF_RANGE:
-    case LOOMC_STATUS_UNIMPLEMENTED:
-    case LOOMC_STATUS_INCOMPATIBLE:
-      return true;
-    default:
-      return false;
-  }
-}
-
 static iree_status_t loomc_compile_capture_diagnostic(
     void* user_data, const loom_diagnostic_t* diagnostic) {
   loomc_compile_diagnostic_capture_t* capture =
@@ -238,10 +226,8 @@ loomc_compile_config_materialize_flags(loomc_config_policy_flags_t flags) {
 
 static loomc_status_t loomc_compile_fail_result_from_status(
     loomc_result_t* result, loomc_string_view_t code, loomc_status_t status) {
-  loomc_status_t add_status = loomc_result_fail_status_diagnostic(
+  return loomc_result_fail_status_diagnostic_consume(
       result, NULL, LOOMC_DIAGNOSTIC_SEVERITY_ERROR, code, status);
-  loomc_status_free(status);
-  return add_status;
 }
 
 static loomc_status_t loomc_compile_apply_config(
@@ -281,7 +267,7 @@ static loomc_status_t loomc_compile_apply_config(
         loom_tooling_config_require_resolved_module(internal_module, NULL));
   }
   if (!loomc_status_is_ok(status) &&
-      loomc_compile_status_is_result_diagnostic(status)) {
+      loomc_status_is_result_diagnostic(status)) {
     status = loomc_compile_fail_result_from_status(
         result, loomc_make_cstring_view("CONFIG/INVALID"), status);
   }
@@ -299,19 +285,36 @@ static iree_status_t loomc_compile_capture_diagnostic_emission(
 }
 
 static loomc_status_t loomc_compile_run_pass_program(
-    loomc_workspace_t* workspace, const loomc_pass_program_t* pass_program,
-    loom_module_t* internal_module, loomc_result_t* result) {
+    loomc_compiler_t* compiler, loomc_workspace_t* workspace,
+    const loomc_pass_program_t* pass_program, loom_module_t* internal_module,
+    loomc_result_t* result) {
   loomc_compile_diagnostic_capture_t capture = {
       .result = result,
   };
+  loom_low_pass_environment_storage_t low_environment_storage = {0};
+  loom_pass_environment_t pass_environment = loom_pass_environment_empty();
+  loom_target_pass_predicate_provider_storage_t predicate_storage = {0};
+  loom_pass_predicate_provider_t predicate_provider = {0};
+  const loomc_target_pass_environment_t* target_environment =
+      loomc_context_target_pass_environment(compiler->context);
+  if (target_environment != NULL) {
+    pass_environment = loomc_target_pass_environment_make_loom_pass_environment(
+        target_environment, loom_target_selection_empty(),
+        &low_environment_storage);
+    loom_target_pass_predicate_provider_storage_initialize(
+        loomc_workspace_block_pool(workspace), &predicate_storage);
+    predicate_provider =
+        loom_target_pass_predicate_provider(&predicate_storage);
+  }
   loom_pass_interpreter_options_t interpreter_options = {
       .block_pool = loomc_workspace_block_pool(workspace),
+      .predicate_provider = predicate_provider,
       .diagnostic_emitter =
           {
               .fn = loomc_compile_capture_diagnostic_emission,
               .user_data = &capture,
           },
-      .environment = loom_pass_environment_empty(),
+      .environment = pass_environment,
   };
   loom_pass_run_result_t run_result = {0};
   LOOMC_RETURN_IF_ERROR(loomc_status_from_iree(loom_pass_interpreter_run_module(
@@ -550,7 +553,6 @@ loomc_status_t loomc_compiler_create(loomc_context_t* context,
   compiler->allocator = allocator;
   compiler->context = context;
   loomc_context_retain(context);
-
   *out_compiler = compiler;
   return loomc_ok_status();
 }
@@ -602,7 +604,7 @@ loomc_status_t loomc_compile_module(loomc_compiler_t* compiler,
                                         internal_module, result, allocator);
   }
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
-    status = loomc_compile_run_pass_program(workspace, pass_program,
+    status = loomc_compile_run_pass_program(compiler, workspace, pass_program,
                                             internal_module, result);
   }
   if (loomc_status_is_ok(status)) {

@@ -204,6 +204,15 @@ typedef enum loomc_structure_type_e {
 
   /// `loomc_pass_program_options_t`.
   LOOMC_STRUCTURE_TYPE_PASS_PROGRAM_OPTIONS = 11,
+
+  /// `loomc_context_target_options_t`.
+  LOOMC_STRUCTURE_TYPE_CONTEXT_TARGET_OPTIONS = 12,
+
+  /// `loomc_target_pipeline_options_t`.
+  LOOMC_STRUCTURE_TYPE_TARGET_PIPELINE_OPTIONS = 13,
+
+  /// `loomc_spirv_emit_options_t`.
+  LOOMC_STRUCTURE_TYPE_SPIRV_EMIT_OPTIONS = 14,
 } loomc_structure_type_t;
 
 /// Controls the behavior of a `loomc_allocator_ctl_fn_t` callback.

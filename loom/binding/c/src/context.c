@@ -6,9 +6,12 @@
 
 #include "context.h"
 
+#include <string.h>
+
 #include "iree/base/internal/atomics.h"
 #include "loom/ops/op_registry.h"
 #include "loomc/iree.h"
+#include "target.h"
 
 struct loomc_context_t {
   // Atomic reference count for shared immutable ownership.
@@ -17,6 +20,8 @@ struct loomc_context_t {
   loomc_allocator_t allocator;
   // Finalized production Loom dialect and encoding context.
   loom_context_t context;
+  // Optional target environment registered into the context.
+  loomc_target_environment_t* target_environment;
 };
 
 static loomc_status_t loomc_context_validate_options(
@@ -34,16 +39,13 @@ static loomc_status_t loomc_context_validate_options(
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
                              "context options structure_size is too small");
   }
-  if (options->next != NULL) {
-    return loomc_make_status(LOOMC_STATUS_UNIMPLEMENTED,
-                             "context option extensions are not supported");
-  }
   return loomc_ok_status();
 }
 
 static void loomc_context_destroy(loomc_context_t* context) {
   loomc_allocator_t allocator = context->allocator;
   loom_context_deinitialize(&context->context);
+  loomc_target_environment_release(context->target_environment);
   loomc_allocator_free(allocator, context);
 }
 
@@ -56,19 +58,34 @@ loomc_status_t loomc_context_create(const loomc_context_options_t* options,
   }
   *out_context = NULL;
   LOOMC_RETURN_IF_ERROR(loomc_context_validate_options(options));
+  loomc_target_environment_t* target_environment = NULL;
+  LOOMC_RETURN_IF_ERROR(
+      loomc_context_target_options_resolve(options, &target_environment));
 
   allocator = loomc_allocator_or_system(allocator);
   loomc_context_t* context = NULL;
   LOOMC_RETURN_IF_ERROR(
       loomc_allocator_malloc(allocator, sizeof(*context), (void**)&context));
+  memset(context, 0, sizeof(*context));
   iree_atomic_ref_count_init(&context->ref_count);
   context->allocator = allocator;
-  loomc_status_t status =
-      loomc_status_from_iree(loom_op_registry_initialize_context(
-          iree_allocator_from_loomc(allocator), &context->context));
+  loom_context_initialize(iree_allocator_from_loomc(allocator),
+                          &context->context);
+  loomc_status_t status = loomc_status_from_iree(
+      loom_op_registry_register_all_dialects(&context->context));
+  if (loomc_status_is_ok(status) && target_environment != NULL) {
+    status = loomc_target_environment_register_context(target_environment,
+                                                       &context->context);
+  }
   if (loomc_status_is_ok(status)) {
+    status = loomc_status_from_iree(loom_context_finalize(&context->context));
+  }
+  if (loomc_status_is_ok(status)) {
+    context->target_environment = target_environment;
+    loomc_target_environment_retain(context->target_environment);
     *out_context = context;
   } else {
+    loom_context_deinitialize(&context->context);
     loomc_allocator_free(allocator, context);
   }
   return status;
@@ -92,4 +109,16 @@ void loomc_context_release(loomc_context_t* context) {
 
 loom_context_t* loomc_context_loom_context(loomc_context_t* context) {
   return context ? &context->context : NULL;
+}
+
+loomc_target_environment_t* loomc_context_target_environment(
+    const loomc_context_t* context) {
+  return context ? context->target_environment : NULL;
+}
+
+const loomc_target_pass_environment_t* loomc_context_target_pass_environment(
+    const loomc_context_t* context) {
+  return context ? loomc_target_environment_pass_environment(
+                       context->target_environment)
+                 : NULL;
 }

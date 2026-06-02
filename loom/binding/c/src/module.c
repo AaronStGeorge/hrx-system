@@ -23,6 +23,7 @@
 #include "loomc/iree.h"
 #include "result.h"
 #include "source.h"
+#include "target.h"
 
 enum {
   LOOMC_MODULE_SERIALIZE_BLOCK_SIZE = 32 * 1024,
@@ -264,6 +265,17 @@ static iree_status_t loomc_module_write_iree_stream(void* user_data,
                                                     iree_string_view_t text) {
   return iree_io_stream_write((iree_io_stream_t*)user_data, text.size,
                               text.data);
+}
+
+static loom_text_print_options_t loomc_module_text_print_options(
+    const loomc_module_t* module) {
+  loom_text_print_options_t print_options = {
+      .flags = LOOM_TEXT_PRINT_DEFAULT,
+  };
+  loomc_target_pass_environment_initialize_text_asm_environment(
+      loomc_context_target_pass_environment(module->context),
+      &print_options.low_asm_environment);
+  return print_options;
 }
 
 static loomc_module_byte_buffer_stream_t* loomc_module_byte_buffer_stream_cast(
@@ -516,33 +528,42 @@ static loomc_status_t loomc_module_read_file_to_storage(
 }
 
 static loomc_status_t loomc_module_serialize_text_to_iree_stream(
-    const loom_module_t* internal_module, iree_io_stream_t* target_stream) {
+    const loomc_module_t* module, const loom_module_t* internal_module,
+    iree_io_stream_t* target_stream) {
   loom_output_stream_t output_stream = {
       .write = loomc_module_write_iree_stream,
       .user_data = target_stream,
   };
-  return loomc_status_from_iree(loom_text_print_module(
-      internal_module, &output_stream, LOOM_TEXT_PRINT_DEFAULT));
+  loom_text_print_options_t print_options =
+      loomc_module_text_print_options(module);
+  return loomc_status_from_iree(loom_text_print_module_with_options(
+      internal_module, &output_stream, &print_options));
 }
 
 static loomc_status_t loomc_module_serialize_text_to_file(
-    const loom_module_t* internal_module, FILE* file) {
+    const loomc_module_t* module, const loom_module_t* internal_module,
+    FILE* file) {
   loom_output_stream_t output_stream;
   loom_output_stream_for_file(file, &output_stream);
-  return loomc_status_from_iree(loom_text_print_module(
-      internal_module, &output_stream, LOOM_TEXT_PRINT_DEFAULT));
+  loom_text_print_options_t print_options =
+      loomc_module_text_print_options(module);
+  return loomc_status_from_iree(loom_text_print_module_with_options(
+      internal_module, &output_stream, &print_options));
 }
 
 static loomc_status_t loomc_module_serialize_text_to_source(
-    const loom_module_t* internal_module, loomc_string_view_t identifier,
-    loomc_allocator_t allocator, loomc_source_t** out_source) {
+    const loomc_module_t* module, const loom_module_t* internal_module,
+    loomc_string_view_t identifier, loomc_allocator_t allocator,
+    loomc_source_t** out_source) {
   *out_source = NULL;
   iree_string_builder_t builder;
   iree_string_builder_initialize(iree_allocator_from_loomc(allocator),
                                  &builder);
+  loom_text_print_options_t print_options =
+      loomc_module_text_print_options(module);
   loomc_status_t status =
-      loomc_status_from_iree(loom_text_print_module_to_builder(
-          internal_module, &builder, LOOM_TEXT_PRINT_DEFAULT));
+      loomc_status_from_iree(loom_text_print_module_to_builder_with_options(
+          internal_module, &builder, &print_options));
   const iree_host_size_t length = iree_string_builder_size(&builder);
   char* storage = NULL;
   if (loomc_status_is_ok(status)) {
@@ -643,6 +664,9 @@ static loomc_status_t loomc_module_deserialize_text_source(
               .user_data = &capture,
           },
   };
+  loomc_target_pass_environment_initialize_text_asm_environment(
+      loomc_context_target_pass_environment(context),
+      &parse_options.low_asm_environment);
   return loomc_status_from_iree(loom_text_parse(
       iree_make_string_view((const char*)contents.data, contents.data_length),
       iree_string_view_from_loomc(options->identifier),
@@ -975,8 +999,9 @@ loomc_status_t loomc_module_serialize_to_source(
   allocator = loomc_allocator_or_system(allocator);
   switch (resolved_options.format) {
     case LOOMC_SOURCE_FORMAT_TEXT:
-      return loomc_module_serialize_text_to_source(
-          internal_module, resolved_options.identifier, allocator, out_source);
+      return loomc_module_serialize_text_to_source(module, internal_module,
+                                                   resolved_options.identifier,
+                                                   allocator, out_source);
     case LOOMC_SOURCE_FORMAT_BYTECODE:
       return loomc_module_serialize_bytecode_to_source(
           internal_module, resolved_options.identifier, allocator, out_source);
@@ -1003,7 +1028,7 @@ loomc_status_t loomc_module_serialize_to_file(
       loomc_module_require_internal(module, &internal_module));
 
   if (resolved_options.format == LOOMC_SOURCE_FORMAT_TEXT) {
-    return loomc_module_serialize_text_to_file(internal_module, file);
+    return loomc_module_serialize_text_to_file(module, internal_module, file);
   }
 
   loomc_source_t* source = NULL;
@@ -1047,8 +1072,8 @@ loomc_status_t loomc_module_serialize_to_path(
       &stream));
   if (loomc_status_is_ok(status)) {
     if (resolved_options.format == LOOMC_SOURCE_FORMAT_TEXT) {
-      status =
-          loomc_module_serialize_text_to_iree_stream(internal_module, stream);
+      status = loomc_module_serialize_text_to_iree_stream(
+          module, internal_module, stream);
     } else {
       status = loomc_module_serialize_bytecode_to_stream(internal_module,
                                                          stream, allocator);

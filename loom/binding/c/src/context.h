@@ -11,6 +11,9 @@
 #include "loomc/context.h"
 #include "visibility.h"
 
+typedef struct loomc_target_environment_t loomc_target_environment_t;
+typedef struct loomc_target_pass_environment_t loomc_target_pass_environment_t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -18,6 +21,15 @@ extern "C" {
 // Returns the Loom context owned by the public context handle.
 LOOMC_API_PRIVATE loom_context_t* loomc_context_loom_context(
     loomc_context_t* context);
+
+// Returns the target environment retained by the context, or NULL.
+LOOMC_API_PRIVATE loomc_target_environment_t* loomc_context_target_environment(
+    const loomc_context_t* context);
+
+// Returns prepared target pass capability tables owned by the context target
+// environment, or NULL for a target-free context.
+LOOMC_API_PRIVATE const loomc_target_pass_environment_t*
+loomc_context_target_pass_environment(const loomc_context_t* context);
 
 #ifdef __cplusplus
 }  // extern "C"

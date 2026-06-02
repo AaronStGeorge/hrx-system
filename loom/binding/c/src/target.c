@@ -1,0 +1,268 @@
+// Copyright 2026 The IREE Authors
+//
+// Licensed under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+#include "target.h"
+
+#include <string.h>
+
+#include "iree/base/internal/atomics.h"
+#include "loom/codegen/low/text_asm.h"
+#include "loom/pass/builtin_registry.h"
+#include "loomc/iree.h"
+
+struct loomc_target_environment_t {
+  // Atomic reference count for shared immutable ownership.
+  iree_atomic_ref_count_t ref_count;
+
+  // Allocator used to release target-environment storage.
+  loomc_allocator_t allocator;
+
+  // Prepared target provider composition.
+  loom_target_environment_t environment;
+
+  // Prepared immutable pass capability tables over environment.
+  loomc_target_pass_environment_t pass_environment;
+};
+
+typedef struct loomc_descriptor_prefix_t {
+  // Structure type identifying the descriptor.
+  loomc_structure_type_t type;
+
+  // Size of the descriptor in bytes.
+  loomc_host_size_t structure_size;
+
+  // Next descriptor in the option extension chain.
+  const void* next;
+} loomc_descriptor_prefix_t;
+
+static loomc_status_t loomc_context_target_options_validate(
+    const loomc_context_target_options_t* options) {
+  if (options->type != LOOMC_STRUCTURE_TYPE_CONTEXT_TARGET_OPTIONS) {
+    return loomc_make_status(
+        LOOMC_STATUS_INVALID_ARGUMENT,
+        "context target options have an unknown structure type");
+  }
+  if (options->structure_size != 0 &&
+      options->structure_size < sizeof(*options)) {
+    return loomc_make_status(
+        LOOMC_STATUS_INVALID_ARGUMENT,
+        "context target options structure_size is too small");
+  }
+  if (options->target_environment == NULL) {
+    return loomc_make_status(
+        LOOMC_STATUS_INVALID_ARGUMENT,
+        "context target options require a target environment");
+  }
+  return loomc_ok_status();
+}
+
+static loomc_status_t loomc_target_pass_environment_initialize(
+    const loomc_target_environment_t* target_environment,
+    loomc_target_pass_environment_t* out_environment) {
+  if (target_environment == NULL || out_environment == NULL) {
+    return loomc_make_status(
+        LOOMC_STATUS_INVALID_ARGUMENT,
+        "target_environment and out_environment must not be NULL");
+  }
+  *out_environment = (loomc_target_pass_environment_t){0};
+  const loom_target_environment_t* internal_environment =
+      &target_environment->environment;
+  LOOMC_RETURN_IF_ERROR(loomc_status_from_iree(
+      loom_target_environment_initialize_low_descriptor_registry(
+          internal_environment, &out_environment->low_descriptor_registry)));
+  LOOMC_RETURN_IF_ERROR(loomc_status_from_iree(
+      loom_target_environment_initialize_low_lower_policy_registry(
+          internal_environment, &out_environment->low_lower_policy_registry)));
+  LOOMC_RETURN_IF_ERROR(loomc_status_from_iree(
+      loom_target_environment_initialize_math_policy_registry(
+          internal_environment, &out_environment->math_policy_registry)));
+  out_environment->low_legality_provider_list =
+      loom_target_environment_low_legality_provider_list(internal_environment);
+  out_environment->legalizer_provider_list =
+      loom_target_environment_legalizer_provider_list(internal_environment);
+  return loomc_ok_status();
+}
+
+static void loomc_target_pass_environment_deinitialize(
+    loomc_target_pass_environment_t* environment) {
+  if (environment == NULL) {
+    return;
+  }
+  *environment = (loomc_target_pass_environment_t){0};
+}
+
+loomc_status_t loomc_target_environment_create_from_provider_set(
+    const loom_target_provider_set_t* provider_set, loomc_allocator_t allocator,
+    loomc_target_environment_t** out_target_environment) {
+  if (out_target_environment == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "out_target_environment must not be NULL");
+  }
+  *out_target_environment = NULL;
+  if (provider_set == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "provider_set must not be NULL");
+  }
+
+  allocator = loomc_allocator_or_system(allocator);
+  loomc_target_environment_t* target_environment = NULL;
+  LOOMC_RETURN_IF_ERROR(loomc_allocator_malloc(
+      allocator, sizeof(*target_environment), (void**)&target_environment));
+  memset(target_environment, 0, sizeof(*target_environment));
+  iree_atomic_ref_count_init(&target_environment->ref_count);
+  target_environment->allocator = allocator;
+
+  loomc_status_t status =
+      loomc_status_from_iree(loom_target_environment_initialize(
+          provider_set, &target_environment->environment));
+  if (loomc_status_is_ok(status)) {
+    status = loomc_target_pass_environment_initialize(
+        target_environment, &target_environment->pass_environment);
+  }
+  if (loomc_status_is_ok(status)) {
+    *out_target_environment = target_environment;
+  } else {
+    loomc_target_pass_environment_deinitialize(
+        &target_environment->pass_environment);
+    loom_target_environment_deinitialize(&target_environment->environment);
+    loomc_allocator_free(allocator, target_environment);
+  }
+  return status;
+}
+
+const loom_target_environment_t*
+loomc_target_environment_loom_target_environment(
+    const loomc_target_environment_t* target_environment) {
+  return target_environment ? &target_environment->environment : NULL;
+}
+
+const loomc_target_pass_environment_t*
+loomc_target_environment_pass_environment(
+    const loomc_target_environment_t* target_environment) {
+  return target_environment ? &target_environment->pass_environment : NULL;
+}
+
+loomc_status_t loomc_target_environment_register_context(
+    const loomc_target_environment_t* target_environment,
+    loom_context_t* context) {
+  if (target_environment == NULL || context == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "target_environment and context must not be NULL");
+  }
+  return loomc_status_from_iree(loom_target_environment_register_context(
+      &target_environment->environment, context));
+}
+
+loomc_status_t loomc_context_target_options_resolve(
+    const loomc_context_options_t* options,
+    loomc_target_environment_t** out_target_environment) {
+  *out_target_environment = NULL;
+  const void* next = options ? options->next : NULL;
+  while (next != NULL) {
+    const loomc_descriptor_prefix_t* prefix =
+        (const loomc_descriptor_prefix_t*)next;
+    switch (prefix->type) {
+      case LOOMC_STRUCTURE_TYPE_CONTEXT_TARGET_OPTIONS: {
+        if (*out_target_environment != NULL) {
+          return loomc_make_status(
+              LOOMC_STATUS_INVALID_ARGUMENT,
+              "context options contain duplicate target options");
+        }
+        const loomc_context_target_options_t* target_options =
+            (const loomc_context_target_options_t*)next;
+        LOOMC_RETURN_IF_ERROR(
+            loomc_context_target_options_validate(target_options));
+        *out_target_environment = target_options->target_environment;
+        next = target_options->next;
+        break;
+      }
+      case LOOMC_STRUCTURE_TYPE_NONE:
+        return loomc_make_status(
+            LOOMC_STATUS_INVALID_ARGUMENT,
+            "context option extension is missing a structure type");
+      default:
+        return loomc_make_status(
+            LOOMC_STATUS_UNIMPLEMENTED,
+            "context option extension type is not supported");
+    }
+  }
+  return loomc_ok_status();
+}
+
+loomc_status_t loomc_target_pass_registry_initialize(
+    const loomc_target_environment_t* target_environment,
+    loom_pass_registry_storage_t* out_storage,
+    const loom_pass_registry_t** out_registry) {
+  if (out_storage == NULL || out_registry == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "out_storage and out_registry must not be NULL");
+  }
+  *out_storage = (loom_pass_registry_storage_t){0};
+  *out_registry = NULL;
+  const loom_pass_registry_t* registries[2] = {
+      loom_pass_builtin_registry(),
+  };
+  iree_host_size_t registry_count = 1;
+  if (target_environment != NULL) {
+    registries[registry_count++] =
+        loom_target_environment_pass_registry(&target_environment->environment);
+  }
+  LOOMC_RETURN_IF_ERROR(loomc_status_from_iree(
+      loom_pass_registry_storage_initialize_from_registries(
+          registries, registry_count, out_storage)));
+  *out_registry = loom_pass_registry_storage_registry(out_storage);
+  return loomc_ok_status();
+}
+
+loom_pass_environment_t
+loomc_target_pass_environment_make_loom_pass_environment(
+    const loomc_target_pass_environment_t* environment,
+    loom_target_selection_t target_selection,
+    loom_low_pass_environment_storage_t* out_storage) {
+  return loom_low_pass_environment_storage_initialize(
+      &environment->low_descriptor_registry.registry,
+      &environment->low_lower_policy_registry,
+      &environment->low_legality_provider_list,
+      &environment->legalizer_provider_list, &environment->math_policy_registry,
+      NULL, target_selection, out_storage);
+}
+
+void loomc_target_pass_environment_initialize_text_asm_environment(
+    const loomc_target_pass_environment_t* environment,
+    loom_text_low_asm_environment_t* out_environment) {
+  if (out_environment == NULL) {
+    return;
+  }
+  if (environment == NULL) {
+    *out_environment = (loom_text_low_asm_environment_t){0};
+    return;
+  }
+  loom_low_descriptor_text_asm_environment_initialize(
+      &environment->low_descriptor_registry.registry, out_environment);
+}
+
+void loomc_target_environment_retain(
+    loomc_target_environment_t* target_environment) {
+  if (target_environment == NULL) {
+    return;
+  }
+  iree_atomic_ref_count_inc(&target_environment->ref_count);
+}
+
+void loomc_target_environment_release(
+    loomc_target_environment_t* target_environment) {
+  if (target_environment == NULL) {
+    return;
+  }
+  if (iree_atomic_ref_count_dec(&target_environment->ref_count) != 1) {
+    return;
+  }
+  loomc_allocator_t allocator = target_environment->allocator;
+  loomc_target_pass_environment_deinitialize(
+      &target_environment->pass_environment);
+  loom_target_environment_deinitialize(&target_environment->environment);
+  loomc_allocator_free(allocator, target_environment);
+}
