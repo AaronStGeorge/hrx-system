@@ -45,7 +45,7 @@ def _test_vmasm_module_action_contract_impl(env, target):
     )
     env.expect.that_str(info.src.basename).equals("vmasm_module_test.vmasm")
     if not str(info.tool).endswith(
-        "//runtime/src/iree/tools/iree-as-module:iree-as-module"
+        "//runtime/src/iree/tools/iree-as-module:iree-as-module",
     ):
         env.fail("unexpected VMASM tool %s" % info.tool)
 

@@ -29,7 +29,6 @@ from .common import (
     timestamp_midpoint,
 )
 
-
 TRUSTED_PACKET_SEQUENCE_ID = 1001
 DEVICE_METRIC_SAMPLE_FLAG_PARTIAL = 1 << 1
 FORMAT_NAME = "perfetto"
@@ -311,9 +310,9 @@ class PerfettoTraceConverter:
             collections.defaultdict(list)
         )
         self.device_metric_sources_by_id: dict[int, dict[str, Any]] = {}
-        self.device_metric_descriptors_by_key: dict[tuple[int, int], dict[str, Any]] = (
-            {}
-        )
+        self.device_metric_descriptors_by_key: dict[
+            tuple[int, int], dict[str, Any]
+        ] = {}
         self.root_uuid = self.tracks.uuid("iree", "root")
         self.diagnostics_uuid = self.tracks.uuid("iree", "diagnostics")
         self.dispatch_lane_allocators: dict[tuple[int, int], LaneAllocator] = (
@@ -925,8 +924,7 @@ class PerfettoTraceConverter:
             if field_name in record:
                 operation_annotations[f"iree_host_{field_name}"] = record[field_name]
         operation_name = (
-            f"cb#{command_buffer_id} "
-            f"{self.command_operation_display_name(operation)}"
+            f"cb#{command_buffer_id} {self.command_operation_display_name(operation)}"
         )
         self.timeline_events.append(
             TimelineEvent(
@@ -940,13 +938,15 @@ class PerfettoTraceConverter:
                     command_buffer_id,
                     command_index,
                 ),
-                lambda timestamp_ns=start_time_ns, track_uuid=track_uuid, name=operation_name, annotations=operation_annotations: add_instant(
-                    self.builder,
-                    self.perfetto.track_event,
-                    timestamp_ns,
-                    track_uuid,
-                    name,
-                    annotations,
+                lambda timestamp_ns=start_time_ns, track_uuid=track_uuid, name=operation_name, annotations=operation_annotations: (
+                    add_instant(
+                        self.builder,
+                        self.perfetto.track_event,
+                        timestamp_ns,
+                        track_uuid,
+                        name,
+                        annotations,
+                    )
                 ),
             )
         )
@@ -1078,13 +1078,15 @@ class PerfettoTraceConverter:
                     queue_ordinal,
                     event_time_ns,
                 ),
-                lambda timestamp_ns=event_time_ns, track_uuid=track_uuid, name=name, annotations=annotations: add_instant(
-                    self.builder,
-                    self.perfetto.track_event,
-                    timestamp_ns,
-                    track_uuid,
-                    name,
-                    annotations,
+                lambda timestamp_ns=event_time_ns, track_uuid=track_uuid, name=name, annotations=annotations: (
+                    add_instant(
+                        self.builder,
+                        self.perfetto.track_event,
+                        timestamp_ns,
+                        track_uuid,
+                        name,
+                        annotations,
+                    )
                 ),
             )
         )
@@ -1105,13 +1107,15 @@ class PerfettoTraceConverter:
             TimelineEvent(
                 event_time_ns,
                 (2, "clock", physical_device_ordinal, event_time_ns),
-                lambda timestamp_ns=event_time_ns, track_uuid=track_uuid, annotations=annotations: add_instant(
-                    self.builder,
-                    self.perfetto.track_event,
-                    timestamp_ns,
-                    track_uuid,
-                    "clock correlation",
-                    annotations,
+                lambda timestamp_ns=event_time_ns, track_uuid=track_uuid, annotations=annotations: (
+                    add_instant(
+                        self.builder,
+                        self.perfetto.track_event,
+                        timestamp_ns,
+                        track_uuid,
+                        "clock correlation",
+                        annotations,
+                    )
                 ),
             )
         )
@@ -1547,13 +1551,15 @@ class PerfettoTraceConverter:
                         metric_id,
                         event_time_ns,
                     ),
-                    lambda timestamp_ns=event_time_ns, track_uuid=track_uuid, value=counter_value, annotations=annotations: add_counter(
-                        self.builder,
-                        self.perfetto.track_event,
-                        timestamp_ns,
-                        track_uuid,
-                        value,
-                        annotations,
+                    lambda timestamp_ns=event_time_ns, track_uuid=track_uuid, value=counter_value, annotations=annotations: (
+                        add_counter(
+                            self.builder,
+                            self.perfetto.track_event,
+                            timestamp_ns,
+                            track_uuid,
+                            value,
+                            annotations,
+                        )
                     ),
                 )
             )
@@ -1591,13 +1597,15 @@ class PerfettoTraceConverter:
                     source_id,
                     event_time_ns,
                 ),
-                lambda timestamp_ns=event_time_ns, track_uuid=track_uuid, annotations=annotations: add_instant(
-                    self.builder,
-                    self.perfetto.track_event,
-                    timestamp_ns,
-                    track_uuid,
-                    "device metrics partial sample",
-                    annotations,
+                lambda timestamp_ns=event_time_ns, track_uuid=track_uuid, annotations=annotations: (
+                    add_instant(
+                        self.builder,
+                        self.perfetto.track_event,
+                        timestamp_ns,
+                        track_uuid,
+                        "device metrics partial sample",
+                        annotations,
+                    )
                 ),
             )
         )
@@ -1738,13 +1746,15 @@ class PerfettoTraceConverter:
             TimelineEvent(
                 0,
                 (2, "diagnostic", record.get("source_record_index", 0)),
-                lambda timestamp_ns=0, track_uuid=self.diagnostics_uuid, annotations=annotations: add_instant(
-                    self.builder,
-                    self.perfetto.track_event,
-                    timestamp_ns,
-                    track_uuid,
-                    str(record.get("code", "diagnostic")),
-                    annotations,
+                lambda timestamp_ns=0, track_uuid=self.diagnostics_uuid, annotations=annotations: (
+                    add_instant(
+                        self.builder,
+                        self.perfetto.track_event,
+                        timestamp_ns,
+                        track_uuid,
+                        str(record.get("code", "diagnostic")),
+                        annotations,
+                    )
                 ),
             )
         )
@@ -1857,12 +1867,14 @@ class PerfettoTraceConverter:
                         queue_ordinal,
                         event_time_ns,
                     ),
-                    lambda timestamp_ns=event_time_ns, track_uuid=track_uuid, value=value: add_counter(
-                        self.builder,
-                        self.perfetto.track_event,
-                        timestamp_ns,
-                        track_uuid,
-                        value,
+                    lambda timestamp_ns=event_time_ns, track_uuid=track_uuid, value=value: (
+                        add_counter(
+                            self.builder,
+                            self.perfetto.track_event,
+                            timestamp_ns,
+                            track_uuid,
+                            value,
+                        )
                     ),
                 )
             )

@@ -40,8 +40,10 @@ class RuntimeBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
             tags = list(kwargs.get("tags") or [])
             tags.extend(policy_tags)
             kwargs["tags"] = tags
-        if include_run_requirements and policy.resource_group and not kwargs.get(
-            "resource_group"
+        if (
+            include_run_requirements
+            and policy.resource_group
+            and not kwargs.get("resource_group")
         ):
             kwargs["resource_group"] = policy.resource_group
         return kwargs

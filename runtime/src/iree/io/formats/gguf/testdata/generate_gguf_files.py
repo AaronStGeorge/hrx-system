@@ -21,6 +21,7 @@
 #   * Run with a custom suffix: `./generate_gguf_files.py --suffix=_v2`
 
 import argparse
+
 import numpy as np
 from gguf import GGUFWriter
 

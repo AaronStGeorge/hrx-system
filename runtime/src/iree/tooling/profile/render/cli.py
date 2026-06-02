@@ -7,8 +7,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from . import backends
-from . import common
+from . import backends, common
 
 
 def format_descriptions() -> str:
