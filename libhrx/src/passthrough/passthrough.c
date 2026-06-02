@@ -40,22 +40,22 @@
 //===----------------------------------------------------------------------===//
 
 static pthread_once_t g_init_once = PTHREAD_ONCE_INIT;
-static void *g_backend_lib = NULL;
-static void *g_interceptor_lib = NULL;
+static void* g_backend_lib = NULL;
+static void* g_interceptor_lib = NULL;
 static hip_function_table_t g_real_table = {0};
-static hip_function_table_t *g_active_table = NULL;
+static hip_function_table_t* g_active_table = NULL;
 static pfn_hip_interceptor_shutdown g_interceptor_shutdown = NULL;
 
 //===----------------------------------------------------------------------===//
 // Symbol Loading Helpers
 //===----------------------------------------------------------------------===//
 
-#define LOAD_SYMBOL(lib, table, name)                                          \
-  do {                                                                         \
-    (table)->name = (pfn_##name)dlsym(lib, #name);                             \
+#define LOAD_SYMBOL(lib, table, name)              \
+  do {                                             \
+    (table)->name = (pfn_##name)dlsym(lib, #name); \
   } while (0)
 
-static bool load_hip_symbols(void *lib, hip_function_table_t *table) {
+static bool load_hip_symbols(void* lib, hip_function_table_t* table) {
   table->version = 1;
   table->struct_size = sizeof(hip_function_table_t);
 
@@ -133,7 +133,7 @@ static bool load_hip_symbols(void *lib, hip_function_table_t *table) {
 
 static void passthrough_init(void) {
   // Load backend library
-  const char *backend_path = getenv("HIP_PASSTHROUGH_BACKEND_LIB");
+  const char* backend_path = getenv("HIP_PASSTHROUGH_BACKEND_LIB");
   if (!backend_path) {
     fprintf(stderr,
             "passthrough: error: HIP_PASSTHROUGH_BACKEND_LIB not set\n");
@@ -163,7 +163,7 @@ static void passthrough_init(void) {
   g_active_table = &g_real_table;
 
   // Optionally load interceptor library
-  const char *interceptor_path = getenv("HIP_PASSTHROUGH_INTERCEPTOR");
+  const char* interceptor_path = getenv("HIP_PASSTHROUGH_INTERCEPTOR");
   if (interceptor_path && *interceptor_path) {
     g_interceptor_lib = dlopen(interceptor_path, RTLD_NOW | RTLD_LOCAL);
     if (!g_interceptor_lib) {
@@ -175,7 +175,7 @@ static void passthrough_init(void) {
       pfn_hip_interceptor_init init_fn = (pfn_hip_interceptor_init)dlsym(
           g_interceptor_lib, "hip_interceptor_init");
       if (init_fn) {
-        hip_function_table_t *interceptor_table = init_fn(&g_real_table);
+        hip_function_table_t* interceptor_table = init_fn(&g_real_table);
         if (interceptor_table) {
           g_active_table = interceptor_table;
           fprintf(stderr, "passthrough: interceptor loaded: %s\n",
@@ -220,12 +220,12 @@ __attribute__((destructor)) static void passthrough_fini(void) {
 // Public API
 //===----------------------------------------------------------------------===//
 
-hip_function_table_t *hip_passthrough_get_real_table(void) {
+hip_function_table_t* hip_passthrough_get_real_table(void) {
   ensure_initialized();
   return &g_real_table;
 }
 
-hip_function_table_t *hip_passthrough_get_active_table(void) {
+hip_function_table_t* hip_passthrough_get_active_table(void) {
   ensure_initialized();
   return g_active_table;
 }
@@ -237,119 +237,103 @@ hip_function_table_t *hip_passthrough_get_active_table(void) {
 // Device Management
 hipError_t hipInit(unsigned int flags) {
   ensure_initialized();
-  if (!g_active_table->hipInit)
-    return 1;
+  if (!g_active_table->hipInit) return 1;
   return g_active_table->hipInit(flags);
 }
 
-hipError_t hipGetDevice(int *deviceId) {
+hipError_t hipGetDevice(int* deviceId) {
   ensure_initialized();
-  if (!g_active_table->hipGetDevice)
-    return 1;
+  if (!g_active_table->hipGetDevice) return 1;
   return g_active_table->hipGetDevice(deviceId);
 }
 
-hipError_t hipGetDeviceCount(int *count) {
+hipError_t hipGetDeviceCount(int* count) {
   ensure_initialized();
-  if (!g_active_table->hipGetDeviceCount)
-    return 1;
+  if (!g_active_table->hipGetDeviceCount) return 1;
   return g_active_table->hipGetDeviceCount(count);
 }
 
 hipError_t hipSetDevice(int deviceId) {
   ensure_initialized();
-  if (!g_active_table->hipSetDevice)
-    return 1;
+  if (!g_active_table->hipSetDevice) return 1;
   return g_active_table->hipSetDevice(deviceId);
 }
 
 hipError_t hipDeviceSynchronize(void) {
   ensure_initialized();
-  if (!g_active_table->hipDeviceSynchronize)
-    return 1;
+  if (!g_active_table->hipDeviceSynchronize) return 1;
   return g_active_table->hipDeviceSynchronize();
 }
 
 // Memory Management
-hipError_t hipMalloc(void **ptr, size_t size) {
+hipError_t hipMalloc(void** ptr, size_t size) {
   ensure_initialized();
-  if (!g_active_table->hipMalloc)
-    return 1;
+  if (!g_active_table->hipMalloc) return 1;
   return g_active_table->hipMalloc(ptr, size);
 }
 
-hipError_t hipFree(void *ptr) {
+hipError_t hipFree(void* ptr) {
   ensure_initialized();
-  if (!g_active_table->hipFree)
-    return 1;
+  if (!g_active_table->hipFree) return 1;
   return g_active_table->hipFree(ptr);
 }
 
 // Memory Copy
-hipError_t hipMemcpy(void *dst, const void *src, size_t sizeBytes,
+hipError_t hipMemcpy(void* dst, const void* src, size_t sizeBytes,
                      hipMemcpyKind kind) {
   ensure_initialized();
-  if (!g_active_table->hipMemcpy)
-    return 1;
+  if (!g_active_table->hipMemcpy) return 1;
   return g_active_table->hipMemcpy(dst, src, sizeBytes, kind);
 }
 
-hipError_t hipMemcpyAsync(void *dst, const void *src, size_t sizeBytes,
+hipError_t hipMemcpyAsync(void* dst, const void* src, size_t sizeBytes,
                           hipMemcpyKind kind, hipStream_t stream) {
   ensure_initialized();
-  if (!g_active_table->hipMemcpyAsync)
-    return 1;
+  if (!g_active_table->hipMemcpyAsync) return 1;
   return g_active_table->hipMemcpyAsync(dst, src, sizeBytes, kind, stream);
 }
 
 // Stream Management
-hipError_t hipStreamCreate(hipStream_t *stream) {
+hipError_t hipStreamCreate(hipStream_t* stream) {
   ensure_initialized();
-  if (!g_active_table->hipStreamCreate)
-    return 1;
+  if (!g_active_table->hipStreamCreate) return 1;
   return g_active_table->hipStreamCreate(stream);
 }
 
 hipError_t hipStreamDestroy(hipStream_t stream) {
   ensure_initialized();
-  if (!g_active_table->hipStreamDestroy)
-    return 1;
+  if (!g_active_table->hipStreamDestroy) return 1;
   return g_active_table->hipStreamDestroy(stream);
 }
 
 hipError_t hipStreamSynchronize(hipStream_t stream) {
   ensure_initialized();
-  if (!g_active_table->hipStreamSynchronize)
-    return 1;
+  if (!g_active_table->hipStreamSynchronize) return 1;
   return g_active_table->hipStreamSynchronize(stream);
 }
 
 // Event Management
-hipError_t hipEventCreate(hipEvent_t *event) {
+hipError_t hipEventCreate(hipEvent_t* event) {
   ensure_initialized();
-  if (!g_active_table->hipEventCreate)
-    return 1;
+  if (!g_active_table->hipEventCreate) return 1;
   return g_active_table->hipEventCreate(event);
 }
 
 hipError_t hipEventDestroy(hipEvent_t event) {
   ensure_initialized();
-  if (!g_active_table->hipEventDestroy)
-    return 1;
+  if (!g_active_table->hipEventDestroy) return 1;
   return g_active_table->hipEventDestroy(event);
 }
 
 hipError_t hipEventRecord(hipEvent_t event, hipStream_t stream) {
   ensure_initialized();
-  if (!g_active_table->hipEventRecord)
-    return 1;
+  if (!g_active_table->hipEventRecord) return 1;
   return g_active_table->hipEventRecord(event, stream);
 }
 
 hipError_t hipEventSynchronize(hipEvent_t event) {
   ensure_initialized();
-  if (!g_active_table->hipEventSynchronize)
-    return 1;
+  if (!g_active_table->hipEventSynchronize) return 1;
   return g_active_table->hipEventSynchronize(event);
 }
 
@@ -359,22 +343,20 @@ hipError_t hipModuleLaunchKernel(hipFunction_t f, unsigned int gridDimX,
                                  unsigned int blockDimX, unsigned int blockDimY,
                                  unsigned int blockDimZ,
                                  unsigned int sharedMemBytes,
-                                 hipStream_t stream, void **kernelParams,
-                                 void **extra) {
+                                 hipStream_t stream, void** kernelParams,
+                                 void** extra) {
   ensure_initialized();
-  if (!g_active_table->hipModuleLaunchKernel)
-    return 1;
+  if (!g_active_table->hipModuleLaunchKernel) return 1;
   return g_active_table->hipModuleLaunchKernel(
       f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ,
       sharedMemBytes, stream, kernelParams, extra);
 }
 
-hipError_t hipLaunchKernel(const void *function_address, dim3 numBlocks,
-                           dim3 dimBlocks, void **args, size_t sharedMemBytes,
+hipError_t hipLaunchKernel(const void* function_address, dim3 numBlocks,
+                           dim3 dimBlocks, void** args, size_t sharedMemBytes,
                            hipStream_t stream) {
   ensure_initialized();
-  if (!g_active_table->hipLaunchKernel)
-    return 1;
+  if (!g_active_table->hipLaunchKernel) return 1;
   return g_active_table->hipLaunchKernel(function_address, numBlocks, dimBlocks,
                                          args, sharedMemBytes, stream);
 }
@@ -382,44 +364,40 @@ hipError_t hipLaunchKernel(const void *function_address, dim3 numBlocks,
 // Error Handling
 hipError_t hipGetLastError(void) {
   ensure_initialized();
-  if (!g_active_table->hipGetLastError)
-    return 0;
+  if (!g_active_table->hipGetLastError) return 0;
   return g_active_table->hipGetLastError();
 }
 
-const char *hipGetErrorString(hipError_t hipError) {
+const char* hipGetErrorString(hipError_t hipError) {
   ensure_initialized();
-  if (!g_active_table->hipGetErrorString)
-    return "unknown";
+  if (!g_active_table->hipGetErrorString) return "unknown";
   return g_active_table->hipGetErrorString(hipError);
 }
 
-const char *hipGetErrorName(hipError_t hipError) {
+const char* hipGetErrorName(hipError_t hipError) {
   ensure_initialized();
-  if (!g_active_table->hipGetErrorName)
-    return "unknown";
+  if (!g_active_table->hipGetErrorName) return "unknown";
   return g_active_table->hipGetErrorName(hipError);
 }
 
 // Fat Binary Registration
-void **__hipRegisterFatBinary(const void *data) {
+void** __hipRegisterFatBinary(const void* data) {
   ensure_initialized();
-  if (!g_active_table->__hipRegisterFatBinary)
-    return NULL;
+  if (!g_active_table->__hipRegisterFatBinary) return NULL;
   return g_active_table->__hipRegisterFatBinary(data);
 }
 
-void __hipUnregisterFatBinary(void **fatCubinHandle) {
+void __hipUnregisterFatBinary(void** fatCubinHandle) {
   ensure_initialized();
   if (g_active_table->__hipUnregisterFatBinary) {
     g_active_table->__hipUnregisterFatBinary(fatCubinHandle);
   }
 }
 
-void __hipRegisterFunction(void **fatCubinHandle, const char *hostFun,
-                           char *deviceFun, const char *deviceName,
-                           int thread_limit, void *tid, void *bid,
-                           dim3 *blockDim, dim3 *gridDim, int *wSize) {
+void __hipRegisterFunction(void** fatCubinHandle, const char* hostFun,
+                           char* deviceFun, const char* deviceName,
+                           int thread_limit, void* tid, void* bid,
+                           dim3* blockDim, dim3* gridDim, int* wSize) {
   ensure_initialized();
   if (g_active_table->__hipRegisterFunction) {
     g_active_table->__hipRegisterFunction(fatCubinHandle, hostFun, deviceFun,
@@ -428,8 +406,8 @@ void __hipRegisterFunction(void **fatCubinHandle, const char *hostFun,
   }
 }
 
-void __hipRegisterVar(void **fatCubinHandle, char *hostVar, char *deviceAddress,
-                      const char *deviceName, int ext, size_t size,
+void __hipRegisterVar(void** fatCubinHandle, char* hostVar, char* deviceAddress,
+                      const char* deviceName, int ext, size_t size,
                       int constant, int global) {
   ensure_initialized();
   if (g_active_table->__hipRegisterVar) {

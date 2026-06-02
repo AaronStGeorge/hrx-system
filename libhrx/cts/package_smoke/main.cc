@@ -5,7 +5,6 @@
 
 int main() {
   hrx::runtime::device_ptr device;
-  return !device && hrx::runtime::format_status(hrx_ok_status()) == "OK"
-             ? 0
-             : 1;
+  return !device && hrx::runtime::format_status(hrx_ok_status()) == "OK" ? 0
+                                                                         : 1;
 }

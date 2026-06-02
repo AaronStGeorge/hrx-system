@@ -3,23 +3,22 @@
 //
 // Custom Catch2 main for hrx CTS. Initializes hrx and selects a device.
 
-#include "hrx_loader.hpp"
-#include "hrx_test_fixture.hpp"
-
 #include <catch2/catch_session.hpp>
-
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <string>
 
+#include "hrx_loader.hpp"
+#include "hrx_test_fixture.hpp"
+
 hrx_device_t g_test_device = nullptr;
 hrx_accelerator_type_t g_test_device_type = HRX_ACCELERATOR_CPU;
 
 namespace {
 
-void seedInstalledCtsSourceDir(const char *argv0) {
+void seedInstalledCtsSourceDir(const char* argv0) {
   if (std::getenv("HRX_CTS_SOURCE_DIR") || !argv0) {
     return;
   }
@@ -37,13 +36,13 @@ void seedInstalledCtsSourceDir(const char *argv0) {
   }
 }
 
-} // namespace
+}  // namespace
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
   Catch::Session session;
 
   std::string hrx_library;
-  const char *hrx_device_env = std::getenv("HRX_CTS_DEVICE");
+  const char* hrx_device_env = std::getenv("HRX_CTS_DEVICE");
   std::string hrx_device_spec =
       hrx_device_env && hrx_device_env[0] ? hrx_device_env : "cpu:0";
 
@@ -56,8 +55,7 @@ int main(int argc, char *argv[]) {
   session.cli(cli);
 
   int ret = session.applyCommandLine(argc, argv);
-  if (ret != 0)
-    return ret;
+  if (ret != 0) return ret;
 
   seedInstalledCtsSourceDir(argc > 0 ? argv[0] : nullptr);
 
@@ -67,7 +65,7 @@ int main(int argc, char *argv[]) {
   }
 
   try {
-    auto &loader = HrxLoader::instance();
+    auto& loader = HrxLoader::instance();
 
     // Print version.
     int major, minor, patch;
@@ -116,7 +114,7 @@ int main(int argc, char *argv[]) {
                                sizeof(name));
     printf("Test device: %s (%s)\n", hrx_device_spec.c_str(), name);
 
-  } catch (const HrxLoaderError &e) {
+  } catch (const HrxLoaderError& e) {
     fprintf(stderr, "Loader error: %s\n", e.what());
     return 1;
   }

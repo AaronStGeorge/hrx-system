@@ -4,17 +4,16 @@
 #ifndef HRX_RUNTIME_CXX_H_
 #define HRX_RUNTIME_CXX_H_
 
-#include "hrx_runtime.h"
-
 #include <string>
+
+#include "hrx_runtime.h"
 
 namespace hrx::runtime {
 
 inline std::string format_status(hrx_status_t status) {
-  if (hrx_status_is_ok(status))
-    return "OK";
+  if (hrx_status_is_ok(status)) return "OK";
 
-  char *message = nullptr;
+  char* message = nullptr;
   size_t length = 0;
   hrx_status_t format_status = hrx_status_to_string(status, &message, &length);
   if (hrx_status_is_ok(format_status) && message) {
@@ -30,20 +29,21 @@ inline std::string format_status(hrx_status_t status) {
   return "<<could not format hrx_status_t>>";
 }
 
-template <typename T, void (*RetainFn)(T), void (*ReleaseFn)(T)> class hrx_ptr {
-public:
+template <typename T, void (*RetainFn)(T), void (*ReleaseFn)(T)>
+class hrx_ptr {
+ public:
   hrx_ptr() = default;
   explicit hrx_ptr(T owned) : ptr_(owned) {}
 
-  hrx_ptr(const hrx_ptr &other) : ptr_(other.ptr_) {
+  hrx_ptr(const hrx_ptr& other) : ptr_(other.ptr_) {
     if (ptr_) {
       RetainFn(ptr_);
     }
   }
 
-  hrx_ptr(hrx_ptr &&other) noexcept : ptr_(other.ptr_) { other.ptr_ = nullptr; }
+  hrx_ptr(hrx_ptr&& other) noexcept : ptr_(other.ptr_) { other.ptr_ = nullptr; }
 
-  hrx_ptr &operator=(const hrx_ptr &other) {
+  hrx_ptr& operator=(const hrx_ptr& other) {
     if (this == &other) {
       return *this;
     }
@@ -55,7 +55,7 @@ public:
     return *this;
   }
 
-  hrx_ptr &operator=(hrx_ptr &&other) noexcept {
+  hrx_ptr& operator=(hrx_ptr&& other) noexcept {
     if (this == &other) {
       return *this;
     }
@@ -76,7 +76,7 @@ public:
     return hrx_ptr(ptr);
   }
 
-  T *for_output() {
+  T* for_output() {
     reset();
     return &ptr_;
   }
@@ -102,7 +102,7 @@ public:
   operator T() const { return ptr_; }
   explicit operator bool() const { return ptr_ != nullptr; }
 
-private:
+ private:
   T ptr_ = nullptr;
 };
 
@@ -122,6 +122,6 @@ using fence_ptr = hrx_ptr<hrx_fence_t, hrx_fence_retain, hrx_fence_release>;
 using buffer_view_ptr =
     hrx_ptr<hrx_buffer_view_t, hrx_buffer_view_retain, hrx_buffer_view_release>;
 
-} // namespace hrx::runtime
+}  // namespace hrx::runtime
 
-#endif // HRX_RUNTIME_CXX_H_
+#endif  // HRX_RUNTIME_CXX_H_

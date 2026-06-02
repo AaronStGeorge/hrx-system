@@ -1,9 +1,10 @@
 // Copyright 2026 The HRX Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "hrx_test_fixture.hpp"
 #include <catch2/catch_test_macros.hpp>
 #include <cstring>
+
+#include "hrx_test_fixture.hpp"
 
 TEST_CASE_METHOD(HrxTestFixture, "Stream fill buffer", "[stream_ops][fill]") {
   hrx_stream_t stream = nullptr;
@@ -21,9 +22,9 @@ TEST_CASE_METHOD(HrxTestFixture, "Stream fill buffer", "[stream_ops][fill]") {
   REQUIRE_OK(hrx().stream_synchronize(stream));
 
   // Verify.
-  void *ptr = nullptr;
+  void* ptr = nullptr;
   REQUIRE_OK(hrx().buffer_map(buf, HRX_MAP_READ, 0, 1024, &ptr));
-  uint32_t *data = (uint32_t *)ptr;
+  uint32_t* data = (uint32_t*)ptr;
   for (int i = 0; i < 256; i++) {
     REQUIRE(data[i] == 0xCAFEBABE);
   }
@@ -49,9 +50,9 @@ TEST_CASE_METHOD(HrxTestFixture, "Stream wait observes flushed work",
   REQUIRE_OK(hrx().stream_flush(stream));
   REQUIRE_OK(hrx().stream_wait(stream));
 
-  void *ptr = nullptr;
+  void* ptr = nullptr;
   REQUIRE_OK(hrx().buffer_map(buf, HRX_MAP_READ, 0, 1024, &ptr));
-  const uint32_t *data = static_cast<const uint32_t *>(ptr);
+  const uint32_t* data = static_cast<const uint32_t*>(ptr);
   for (int i = 0; i < 256; ++i) {
     REQUIRE(data[i] == pattern);
   }
@@ -87,9 +88,9 @@ TEST_CASE_METHOD(HrxTestFixture, "Stream copy buffer", "[stream_ops][copy]") {
   REQUIRE_OK(hrx().stream_synchronize(stream));
 
   // Verify.
-  void *ptr = nullptr;
+  void* ptr = nullptr;
   REQUIRE_OK(hrx().buffer_map(dst, HRX_MAP_READ, 0, 512, &ptr));
-  uint32_t *data = (uint32_t *)ptr;
+  uint32_t* data = (uint32_t*)ptr;
   for (int i = 0; i < 128; i++) {
     REQUIRE(data[i] == 0x12345678);
   }
@@ -117,9 +118,9 @@ TEST_CASE_METHOD(HrxTestFixture, "Stream update buffer", "[stream_ops][copy]") {
   REQUIRE_OK(hrx().stream_synchronize(stream));
 
   // Verify.
-  void *ptr = nullptr;
+  void* ptr = nullptr;
   REQUIRE_OK(hrx().buffer_map(buf, HRX_MAP_READ, 0, 64, &ptr));
-  uint8_t *data = (uint8_t *)ptr;
+  uint8_t* data = (uint8_t*)ptr;
   for (int i = 0; i < 64; i++) {
     REQUIRE(data[i] == 0x77);
   }
@@ -149,9 +150,9 @@ TEST_CASE_METHOD(HrxTestFixture, "Stream execution barrier",
   REQUIRE_OK(hrx().stream_flush(stream));
   REQUIRE_OK(hrx().stream_synchronize(stream));
 
-  void *ptr = nullptr;
+  void* ptr = nullptr;
   REQUIRE_OK(hrx().buffer_map(buf, HRX_MAP_READ, 0, 64, &ptr));
-  const uint32_t *data = static_cast<const uint32_t *>(ptr);
+  const uint32_t* data = static_cast<const uint32_t*>(ptr);
   for (int i = 0; i < 8; ++i) {
     REQUIRE(data[i] == first);
     REQUIRE(data[8 + i] == second);

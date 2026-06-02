@@ -63,10 +63,14 @@ class HrxBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         defines = kwargs.get("defines")
         includes = kwargs.get("includes")
         tags = kwargs.get("tags")
-        full_deps = [
-            ":core",
-            "//third_party:catch2",
-        ] + deps + ["//runtime/src:defines", "//libhrx:defines"]
+        full_deps = (
+            [
+                ":core",
+                "//third_party:catch2",
+            ]
+            + deps
+            + ["//runtime/src:defines", "//libhrx:defines"]
+        )
         name_block = self._convert_string_arg_block(
             "NAME",
             "hrx_cts_" + name,

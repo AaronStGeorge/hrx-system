@@ -3,18 +3,18 @@
 //
 // Timeline semaphore operations.
 
-#include "hrx_internal.h"
-
 #include <stdlib.h>
 
+#include "hrx_internal.h"
+
 hrx_status_t hrx_semaphore_create(hrx_device_t device, uint64_t initial_value,
-                                  hrx_semaphore_t *semaphore) {
+                                  hrx_semaphore_t* semaphore) {
   if (!device || !semaphore) {
     return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT,
                            "device or semaphore is NULL");
   }
 
-  hrx_semaphore_s *sem = (hrx_semaphore_s *)calloc(1, sizeof(hrx_semaphore_s));
+  hrx_semaphore_s* sem = (hrx_semaphore_s*)calloc(1, sizeof(hrx_semaphore_s));
   if (!sem) {
     return hrx_make_status(HRX_STATUS_OUT_OF_MEMORY,
                            "failed to allocate semaphore");
@@ -49,7 +49,7 @@ void hrx_semaphore_release(hrx_semaphore_t semaphore) {
   }
 }
 
-hrx_status_t hrx_semaphore_query(hrx_semaphore_t semaphore, uint64_t *value) {
+hrx_status_t hrx_semaphore_query(hrx_semaphore_t semaphore, uint64_t* value) {
   if (!semaphore || !value) {
     return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT,
                            "semaphore or value is NULL");

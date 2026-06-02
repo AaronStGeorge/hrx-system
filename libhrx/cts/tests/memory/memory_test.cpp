@@ -1,9 +1,10 @@
 // Copyright 2026 The HRX Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "hrx_test_fixture.hpp"
 #include <catch2/catch_test_macros.hpp>
 #include <cstring>
+
+#include "hrx_test_fixture.hpp"
 
 TEST_CASE_METHOD(HrxTestFixture, "Buffer allocate and release",
                  "[memory][alloc]") {
@@ -29,7 +30,7 @@ TEST_CASE_METHOD(HrxTestFixture, "Buffer map and unmap", "[memory][map]") {
       stream, 4096, HRX_MEMORY_TYPE_HOST_LOCAL | HRX_MEMORY_TYPE_DEVICE_VISIBLE,
       HRX_BUFFER_USAGE_DEFAULT | HRX_BUFFER_USAGE_MAPPING_SCOPED, &buf));
 
-  void *ptr = nullptr;
+  void* ptr = nullptr;
   REQUIRE_OK(hrx().buffer_map(buf, HRX_MAP_WRITE, 0, 4096, &ptr));
   REQUIRE(ptr != nullptr);
 
@@ -52,15 +53,15 @@ TEST_CASE_METHOD(HrxTestFixture, "Buffer map read back written data",
       HRX_BUFFER_USAGE_DEFAULT | HRX_BUFFER_USAGE_MAPPING_SCOPED, &buf));
 
   // Write.
-  void *wptr = nullptr;
+  void* wptr = nullptr;
   REQUIRE_OK(hrx().buffer_map(buf, HRX_MAP_WRITE, 0, 256, &wptr));
   memset(wptr, 0x42, 256);
   REQUIRE_OK(hrx().buffer_unmap(buf));
 
   // Read back.
-  void *rptr = nullptr;
+  void* rptr = nullptr;
   REQUIRE_OK(hrx().buffer_map(buf, HRX_MAP_READ, 0, 256, &rptr));
-  unsigned char *data = (unsigned char *)rptr;
+  unsigned char* data = (unsigned char*)rptr;
   for (int i = 0; i < 256; i++) {
     REQUIRE(data[i] == 0x42);
   }

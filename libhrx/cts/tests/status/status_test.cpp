@@ -1,9 +1,10 @@
 // Copyright 2026 The HRX Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "hrx_test_fixture.hpp"
 #include <catch2/catch_test_macros.hpp>
 #include <cstring>
+
+#include "hrx_test_fixture.hpp"
 
 TEST_CASE("OK status is null", "[status]") {
   hrx_status_t ok = hrx_ok_status();
@@ -16,7 +17,7 @@ TEST_CASE("Make and inspect error status", "[status]") {
   REQUIRE(!hrx_status_is_ok(err));
   REQUIRE(hrx().status_code(err) == HRX_STATUS_NOT_FOUND);
 
-  char *msg = nullptr;
+  char* msg = nullptr;
   size_t len = 0;
   REQUIRE_OK(hrx().status_to_string(err, &msg, &len));
   REQUIRE(msg != nullptr);
@@ -32,7 +33,7 @@ TEST_CASE("Status ignore frees resources", "[status]") {
 }
 
 TEST_CASE("OK status to_string", "[status]") {
-  char *msg = nullptr;
+  char* msg = nullptr;
   size_t len = 0;
   REQUIRE_OK(hrx().status_to_string(hrx_ok_status(), &msg, &len));
   REQUIRE(msg != nullptr);

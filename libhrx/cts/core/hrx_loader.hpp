@@ -7,23 +7,23 @@
 #ifndef HRX_CTS_LOADER_HPP
 #define HRX_CTS_LOADER_HPP
 
-#include "hrx_runtime.h"
-
 #include <stdexcept>
 #include <string>
 
+#include "hrx_runtime.h"
+
 class HrxLoaderError : public std::runtime_error {
-public:
+ public:
   using std::runtime_error::runtime_error;
 };
 
 class HrxLoader {
-public:
-  static HrxLoader &instance();
-  static void setLibraryPath(const std::string &path);
+ public:
+  static HrxLoader& instance();
+  static void setLibraryPath(const std::string& path);
 
   // Host allocator. system_value is a data symbol loaded via dlsym.
-  hrx_host_allocator_t *host_allocator_system_ptr;
+  hrx_host_allocator_t* host_allocator_system_ptr;
   hrx_host_allocator_t host_allocator_system() {
     return *host_allocator_system_ptr;
   }
@@ -184,16 +184,16 @@ public:
   decltype(&hrx_allocator_virtual_memory_protect)
       allocator_virtual_memory_protect;
 
-private:
+ private:
   HrxLoader();
   ~HrxLoader();
-  void load(const std::string &path);
-  void *loadSymbol(const char *name);
+  void load(const std::string& path);
+  void* loadSymbol(const char* name);
 
-  void *handle_ = nullptr;
+  void* handle_ = nullptr;
   static std::string library_path_;
 };
 
-inline HrxLoader &hrx() { return HrxLoader::instance(); }
+inline HrxLoader& hrx() { return HrxLoader::instance(); }
 
-#endif // HRX_CTS_LOADER_HPP
+#endif  // HRX_CTS_LOADER_HPP

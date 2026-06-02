@@ -6,48 +6,48 @@
 // This validates the build architecture: two copies of IREE in one process
 // (hidden inside libhrx.so and static in this binary) must not conflict.
 
-#include "hrx_runtime.h"
-
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "hrx_runtime.h"
+
 // IREE flags for CLI parsing (linked statically into this binary).
 #include "iree/base/tooling/flags.h"
 
-#define CHECK_STATUS(expr)                                                     \
-  do {                                                                         \
-    hrx_status_t _s = (expr);                                                  \
-    if (!hrx_status_is_ok(_s)) {                                               \
-      char *msg = NULL;                                                        \
-      size_t len = 0;                                                          \
-      hrx_status_to_string(_s, &msg, &len);                                    \
-      fprintf(stderr, "ERROR: %s\n", msg ? msg : "?");                         \
-      hrx_status_free_message(msg);                                            \
-      hrx_status_ignore(_s);                                                   \
-      return 1;                                                                \
-    }                                                                          \
+#define CHECK_STATUS(expr)                             \
+  do {                                                 \
+    hrx_status_t _s = (expr);                          \
+    if (!hrx_status_is_ok(_s)) {                       \
+      char* msg = NULL;                                \
+      size_t len = 0;                                  \
+      hrx_status_to_string(_s, &msg, &len);            \
+      fprintf(stderr, "ERROR: %s\n", msg ? msg : "?"); \
+      hrx_status_free_message(msg);                    \
+      hrx_status_ignore(_s);                           \
+      return 1;                                        \
+    }                                                  \
   } while (0)
 
-#define CHECK_STATUS_CLEANUP(expr)                                             \
-  do {                                                                         \
-    hrx_status_t _s = (expr);                                                  \
-    if (!hrx_status_is_ok(_s)) {                                               \
-      char *msg = NULL;                                                        \
-      size_t len = 0;                                                          \
-      hrx_status_to_string(_s, &msg, &len);                                    \
-      fprintf(stderr, "ERROR: %s\n", msg ? msg : "?");                         \
-      hrx_status_free_message(msg);                                            \
-      hrx_status_ignore(_s);                                                   \
-      result = 1;                                                              \
-      goto cleanup;                                                            \
-    }                                                                          \
+#define CHECK_STATUS_CLEANUP(expr)                     \
+  do {                                                 \
+    hrx_status_t _s = (expr);                          \
+    if (!hrx_status_is_ok(_s)) {                       \
+      char* msg = NULL;                                \
+      size_t len = 0;                                  \
+      hrx_status_to_string(_s, &msg, &len);            \
+      fprintf(stderr, "ERROR: %s\n", msg ? msg : "?"); \
+      hrx_status_free_message(msg);                    \
+      hrx_status_ignore(_s);                           \
+      result = 1;                                      \
+      goto cleanup;                                    \
+    }                                                  \
   } while (0)
 
-static void print_status_message(FILE *stream, const char *prefix,
+static void print_status_message(FILE* stream, const char* prefix,
                                  hrx_status_t status) {
-  char *msg = NULL;
+  char* msg = NULL;
   size_t len = 0;
   hrx_status_to_string(status, &msg, &len);
   fprintf(stream, "%s%s", prefix, msg ? msg : "?");
@@ -137,7 +137,7 @@ cleanup:
   return result;
 }
 
-static int run_device_smoke_test(hrx_device_t device, const char *label) {
+static int run_device_smoke_test(hrx_device_t device, const char* label) {
   printf("Opening %s...\n", label);
 
   // Create a stream.
@@ -173,9 +173,9 @@ static int run_device_smoke_test(hrx_device_t device, const char *label) {
   printf("  Copy buffer: OK\n");
 
   // Verify data.
-  void *mapped = NULL;
+  void* mapped = NULL;
   CHECK_STATUS(hrx_buffer_map(buffer2, HRX_MAP_READ, 0, size, &mapped));
-  uint32_t *data = (uint32_t *)mapped;
+  uint32_t* data = (uint32_t*)mapped;
   bool ok = true;
   for (size_t i = 0; i < size / sizeof(uint32_t); i++) {
     if (data[i] != 0xDEADBEEF) {
@@ -186,8 +186,7 @@ static int run_device_smoke_test(hrx_device_t device, const char *label) {
     }
   }
   CHECK_STATUS(hrx_buffer_unmap(buffer2));
-  if (ok)
-    printf("  Verify data: OK\n");
+  if (ok) printf("  Verify data: OK\n");
 
   // Release.
   hrx_buffer_release(buffer2);
@@ -198,8 +197,8 @@ static int run_device_smoke_test(hrx_device_t device, const char *label) {
   return ok ? 0 : 1;
 }
 
-static int parse_device_spec(const char *spec, hrx_accelerator_type_t *type,
-                             int *index) {
+static int parse_device_spec(const char* spec, hrx_accelerator_type_t* type,
+                             int* index) {
   if (strncmp(spec, "gpu:", 4) == 0) {
     *type = HRX_ACCELERATOR_GPU;
     *index = atoi(spec + 4);
@@ -213,8 +212,8 @@ static int parse_device_spec(const char *spec, hrx_accelerator_type_t *type,
   return 1;
 }
 
-int main(int argc, char **argv) {
-  const char *device_spec = NULL;
+int main(int argc, char** argv) {
+  const char* device_spec = NULL;
   bool test_all = false;
   hrx_accelerator_type_t requested_type = HRX_ACCELERATOR_CPU;
   int requested_index = 0;
@@ -251,10 +250,8 @@ int main(int argc, char **argv) {
       test_all || (device_spec && requested_type == HRX_ACCELERATOR_GPU);
   const bool need_cpu =
       test_all || (device_spec && requested_type == HRX_ACCELERATOR_CPU);
-  hrx_status_t gpu_status =
-      need_gpu ? hrx_gpu_initialize(0) : hrx_ok_status();
-  hrx_status_t cpu_status =
-      need_cpu ? hrx_cpu_initialize(0) : hrx_ok_status();
+  hrx_status_t gpu_status = need_gpu ? hrx_gpu_initialize(0) : hrx_ok_status();
+  hrx_status_t cpu_status = need_cpu ? hrx_cpu_initialize(0) : hrx_ok_status();
   bool gpu_initialized = need_gpu && hrx_status_is_ok(gpu_status);
   bool cpu_initialized = need_cpu && hrx_status_is_ok(cpu_status);
 
@@ -293,8 +290,7 @@ int main(int argc, char **argv) {
         char label[32];
         snprintf(label, sizeof(label), "gpu:%d", i);
         int r = run_device_smoke_test(dev, label);
-        if (r != 0)
-          result = r;
+        if (r != 0) result = r;
       }
     } else {
       hrx_status_ignore(gpu_status);
@@ -310,8 +306,7 @@ int main(int argc, char **argv) {
         char label[32];
         snprintf(label, sizeof(label), "cpu:%d", i);
         int r = run_device_smoke_test(dev, label);
-        if (r != 0)
-          result = r;
+        if (r != 0) result = r;
       }
     } else {
       hrx_status_ignore(cpu_status);

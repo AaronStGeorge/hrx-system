@@ -1,15 +1,15 @@
 // Copyright 2026 The HRX Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "hrx_internal.h"
-
 #include <stdlib.h>
 
+#include "hrx_internal.h"
+
 hrx_status_t hrx_buffer_view_create(hrx_buffer_t buffer, size_t shape_rank,
-                                    const int64_t *shape,
+                                    const int64_t* shape,
                                     hrx_element_type_t element_type,
                                     hrx_encoding_type_t encoding_type,
-                                    hrx_buffer_view_t *buffer_view) {
+                                    hrx_buffer_view_t* buffer_view) {
   if (!buffer || !buffer_view) {
     return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT,
                            "buffer or buffer_view is NULL");
@@ -27,11 +27,11 @@ hrx_status_t hrx_buffer_view_create(hrx_buffer_t buffer, size_t shape_rank,
   }
 
   iree_hal_dim_t stack_shape[8];
-  iree_hal_dim_t *iree_shape = stack_shape;
+  iree_hal_dim_t* iree_shape = stack_shape;
   if (shape_rank > IREE_ARRAYSIZE(stack_shape)) {
     iree_status_t alloc_status = iree_allocator_malloc(
         iree_allocator_system(), shape_rank * sizeof(*iree_shape),
-        (void **)&iree_shape);
+        (void**)&iree_shape);
     if (!iree_status_is_ok(alloc_status)) {
       free(created);
       return hrx_status_from_iree(alloc_status);
@@ -82,7 +82,7 @@ void hrx_buffer_view_release(hrx_buffer_view_t buffer_view) {
   }
 }
 
-hrx_status_t hrx_buffer_view_rank(hrx_buffer_view_t buffer_view, size_t *rank) {
+hrx_status_t hrx_buffer_view_rank(hrx_buffer_view_t buffer_view, size_t* rank) {
   if (!buffer_view || !rank) {
     return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT,
                            "buffer_view or rank is NULL");
@@ -92,7 +92,7 @@ hrx_status_t hrx_buffer_view_rank(hrx_buffer_view_t buffer_view, size_t *rank) {
 }
 
 hrx_status_t hrx_buffer_view_dim(hrx_buffer_view_t buffer_view, size_t dim,
-                                 int64_t *value) {
+                                 int64_t* value) {
   if (!buffer_view || !value) {
     return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT,
                            "buffer_view or value is NULL");

@@ -1,9 +1,9 @@
 // Copyright 2026 The HRX Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "hrx_internal.h"
-
 #include <string.h>
+
+#include "hrx_internal.h"
 
 hrx_allocator_t hrx_device_allocator(hrx_device_t device) {
   return &device->allocator;
@@ -21,7 +21,7 @@ void hrx_allocator_release(hrx_allocator_t allocator) {
 
 hrx_status_t hrx_allocator_allocate_buffer(hrx_allocator_t allocator,
                                            hrx_buffer_params_t params,
-                                           size_t size, hrx_buffer_t *buffer) {
+                                           size_t size, hrx_buffer_t* buffer) {
   HRX_TRACE_ZONE_BEGIN(z0, "hrx_allocator_allocate_buffer");
   HRX_TRACE_ZONE_APPEND_BYTES(z0, size);
   if (!allocator || !buffer) {
@@ -36,7 +36,7 @@ hrx_status_t hrx_allocator_allocate_buffer(hrx_allocator_t allocator,
       .queue_affinity = (iree_hal_queue_affinity_t)params.queue_affinity,
   };
 
-  iree_hal_buffer_t *hal_buffer = NULL;
+  iree_hal_buffer_t* hal_buffer = NULL;
   iree_status_t status =
       iree_hal_allocator_allocate_buffer(allocator->hal_allocator, hal_params,
                                          (iree_device_size_t)size, &hal_buffer);
@@ -46,7 +46,7 @@ hrx_status_t hrx_allocator_allocate_buffer(hrx_allocator_t allocator,
 
   hrx_buffer_t buf = NULL;
   iree_status_t alloc_status = iree_allocator_malloc(
-      iree_allocator_system(), sizeof(hrx_buffer_s), (void **)&buf);
+      iree_allocator_system(), sizeof(hrx_buffer_s), (void**)&buf);
   if (!iree_status_is_ok(alloc_status)) {
     iree_hal_buffer_release(hal_buffer);
     HRX_RETURN_AND_END_ZONE(z0, hrx_status_from_iree(alloc_status));
@@ -65,8 +65,8 @@ hrx_status_t hrx_allocator_allocate_buffer(hrx_allocator_t allocator,
 
 hrx_status_t hrx_allocator_import_buffer(hrx_allocator_t allocator,
                                          hrx_buffer_params_t params,
-                                         void *host_ptr, size_t size,
-                                         hrx_buffer_t *buffer) {
+                                         void* host_ptr, size_t size,
+                                         hrx_buffer_t* buffer) {
   HRX_TRACE_ZONE_BEGIN(z0, "hrx_allocator_import_buffer");
   HRX_TRACE_ZONE_APPEND_BYTES(z0, size);
   if (!allocator || !host_ptr || !buffer) {
@@ -89,7 +89,7 @@ hrx_status_t hrx_allocator_import_buffer(hrx_allocator_t allocator,
       .handle.host_allocation.ptr = host_ptr,
   };
 
-  iree_hal_buffer_t *hal_buffer = NULL;
+  iree_hal_buffer_t* hal_buffer = NULL;
   iree_status_t status = iree_hal_allocator_import_buffer(
       allocator->hal_allocator, hal_params, &ext,
       iree_hal_buffer_release_callback_null(), &hal_buffer);
@@ -99,7 +99,7 @@ hrx_status_t hrx_allocator_import_buffer(hrx_allocator_t allocator,
 
   hrx_buffer_t buf = NULL;
   iree_status_t alloc_status = iree_allocator_malloc(
-      iree_allocator_system(), sizeof(hrx_buffer_s), (void **)&buf);
+      iree_allocator_system(), sizeof(hrx_buffer_s), (void**)&buf);
   if (!iree_status_is_ok(alloc_status)) {
     iree_hal_buffer_release(hal_buffer);
     HRX_RETURN_AND_END_ZONE(z0, hrx_status_from_iree(alloc_status));
@@ -122,9 +122,9 @@ hrx_status_t hrx_allocator_import_buffer(hrx_allocator_t allocator,
 
 hrx_status_t hrx_allocator_query_virtual_memory(hrx_allocator_t allocator,
                                                 hrx_memory_type_t mem_type,
-                                                bool *supported,
-                                                size_t *min_page_size,
-                                                size_t *recommended_page_size) {
+                                                bool* supported,
+                                                size_t* min_page_size,
+                                                size_t* recommended_page_size) {
   if (!allocator || !supported) {
     return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT,
                            "allocator or supported is NULL");
@@ -133,10 +133,8 @@ hrx_status_t hrx_allocator_query_virtual_memory(hrx_allocator_t allocator,
   *supported =
       iree_hal_allocator_supports_virtual_memory(allocator->hal_allocator);
   if (!*supported) {
-    if (min_page_size)
-      *min_page_size = 0;
-    if (recommended_page_size)
-      *recommended_page_size = 0;
+    if (min_page_size) *min_page_size = 0;
+    if (recommended_page_size) *recommended_page_size = 0;
     return hrx_ok_status();
   }
 
@@ -150,25 +148,20 @@ hrx_status_t hrx_allocator_query_virtual_memory(hrx_allocator_t allocator,
       allocator->hal_allocator, hal_params, &iree_min, &iree_rec);
   if (!iree_status_is_ok(status)) {
     *supported = false;
-    if (min_page_size)
-      *min_page_size = 0;
-    if (recommended_page_size)
-      *recommended_page_size = 0;
+    if (min_page_size) *min_page_size = 0;
+    if (recommended_page_size) *recommended_page_size = 0;
     iree_status_ignore(status);
     return hrx_ok_status();
   }
 
-  if (min_page_size)
-    *min_page_size = (size_t)iree_min;
-  if (recommended_page_size)
-    *recommended_page_size = (size_t)iree_rec;
+  if (min_page_size) *min_page_size = (size_t)iree_min;
+  if (recommended_page_size) *recommended_page_size = (size_t)iree_rec;
   return hrx_ok_status();
 }
 
-hrx_status_t
-hrx_allocator_virtual_memory_reserve(hrx_allocator_t allocator,
-                                     hrx_queue_affinity_t affinity, size_t size,
-                                     hrx_buffer_t *virtual_buffer) {
+hrx_status_t hrx_allocator_virtual_memory_reserve(
+    hrx_allocator_t allocator, hrx_queue_affinity_t affinity, size_t size,
+    hrx_buffer_t* virtual_buffer) {
   HRX_TRACE_ZONE_BEGIN(z0, "hrx_allocator_virtual_memory_reserve");
   HRX_TRACE_ZONE_APPEND_BYTES(z0, size);
   if (!allocator || !virtual_buffer) {
@@ -176,7 +169,7 @@ hrx_allocator_virtual_memory_reserve(hrx_allocator_t allocator,
         z0, hrx_make_status(HRX_STATUS_INVALID_ARGUMENT, "NULL argument"));
   }
 
-  iree_hal_buffer_t *hal_buffer = NULL;
+  iree_hal_buffer_t* hal_buffer = NULL;
   iree_status_t status = iree_hal_allocator_virtual_memory_reserve(
       allocator->hal_allocator, (iree_hal_queue_affinity_t)affinity,
       (iree_device_size_t)size, &hal_buffer);
@@ -186,7 +179,7 @@ hrx_allocator_virtual_memory_reserve(hrx_allocator_t allocator,
 
   hrx_buffer_t buf = NULL;
   iree_status_t alloc_status = iree_allocator_malloc(
-      iree_allocator_system(), sizeof(hrx_buffer_s), (void **)&buf);
+      iree_allocator_system(), sizeof(hrx_buffer_s), (void**)&buf);
   if (!iree_status_is_ok(alloc_status)) {
     iree_hal_allocator_virtual_memory_release(allocator->hal_allocator,
                                               hal_buffer);
@@ -223,10 +216,9 @@ hrx_status_t hrx_allocator_virtual_memory_release(hrx_allocator_t allocator,
   HRX_RETURN_AND_END_ZONE(z0, hrx_status_from_iree(status));
 }
 
-hrx_status_t
-hrx_allocator_physical_memory_allocate(hrx_allocator_t allocator,
-                                       hrx_memory_type_t mem_type, size_t size,
-                                       hrx_physical_memory_t *physical) {
+hrx_status_t hrx_allocator_physical_memory_allocate(
+    hrx_allocator_t allocator, hrx_memory_type_t mem_type, size_t size,
+    hrx_physical_memory_t* physical) {
   if (!allocator || !physical) {
     return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT, "NULL argument");
   }
@@ -237,17 +229,16 @@ hrx_allocator_physical_memory_allocate(hrx_allocator_t allocator,
   };
   return hrx_status_from_iree(iree_hal_allocator_physical_memory_allocate(
       allocator->hal_allocator, hal_params, (iree_device_size_t)size,
-      iree_allocator_system(), (iree_hal_physical_memory_t **)physical));
+      iree_allocator_system(), (iree_hal_physical_memory_t**)physical));
 }
 
-hrx_status_t
-hrx_allocator_physical_memory_free(hrx_allocator_t allocator,
-                                   hrx_physical_memory_t physical) {
+hrx_status_t hrx_allocator_physical_memory_free(
+    hrx_allocator_t allocator, hrx_physical_memory_t physical) {
   if (!allocator || !physical) {
     return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT, "NULL argument");
   }
   return hrx_status_from_iree(iree_hal_allocator_physical_memory_free(
-      allocator->hal_allocator, (iree_hal_physical_memory_t *)physical));
+      allocator->hal_allocator, (iree_hal_physical_memory_t*)physical));
 }
 
 hrx_status_t hrx_allocator_virtual_memory_map(hrx_allocator_t allocator,
@@ -261,8 +252,7 @@ hrx_status_t hrx_allocator_virtual_memory_map(hrx_allocator_t allocator,
   }
   return hrx_status_from_iree(iree_hal_allocator_virtual_memory_map(
       allocator->hal_allocator, virtual_buffer->hal_buffer,
-      (iree_device_size_t)virtual_offset,
-      (iree_hal_physical_memory_t *)physical,
+      (iree_device_size_t)virtual_offset, (iree_hal_physical_memory_t*)physical,
       (iree_device_size_t)physical_offset, (iree_device_size_t)size));
 }
 

@@ -1,9 +1,10 @@
 // Copyright 2026 The HRX Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "hrx_test_fixture.hpp"
 #include <catch2/catch_test_macros.hpp>
 #include <cstring>
+
+#include "hrx_test_fixture.hpp"
 
 TEST_CASE_METHOD(HrxTestFixture, "synchronous_h2d basic", "[transfer][h2d]") {
   hrx_allocator_t alloc = hrx().device_allocator(device_);
@@ -21,7 +22,7 @@ TEST_CASE_METHOD(HrxTestFixture, "synchronous_h2d basic", "[transfer][h2d]") {
   REQUIRE_OK(hrx().synchronous_h2d(device_, src, buf, 0, 256));
 
   // Verify via map.
-  void *mapped = nullptr;
+  void* mapped = nullptr;
   REQUIRE_OK(hrx().buffer_map(buf, HRX_MAP_READ, 0, 256, &mapped));
   REQUIRE(memcmp(mapped, src, 256) == 0);
   REQUIRE_OK(hrx().buffer_unmap(buf));
@@ -40,7 +41,7 @@ TEST_CASE_METHOD(HrxTestFixture, "synchronous_d2h basic", "[transfer][d2h]") {
   REQUIRE_OK(hrx().allocator_allocate_buffer(alloc, params, 256, &buf));
 
   // Write via map.
-  void *mapped = nullptr;
+  void* mapped = nullptr;
   REQUIRE_OK(hrx().buffer_map(buf, HRX_MAP_WRITE, 0, 256, &mapped));
   memset(mapped, 0x99, 256);
   REQUIRE_OK(hrx().buffer_unmap(buf));
@@ -69,8 +70,7 @@ TEST_CASE_METHOD(HrxTestFixture, "synchronous h2d then d2h roundtrip",
 
   // Write pattern.
   uint32_t pattern[256];
-  for (int i = 0; i < 256; i++)
-    pattern[i] = (uint32_t)i * 0x01010101;
+  for (int i = 0; i < 256; i++) pattern[i] = (uint32_t)i * 0x01010101;
 
   REQUIRE_OK(hrx().synchronous_h2d(device_, pattern, buf, 0, sizeof(pattern)));
 

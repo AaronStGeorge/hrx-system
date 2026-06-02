@@ -1,20 +1,21 @@
 // Copyright 2026 The HRX Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "hrx_test_fixture.hpp"
 #include <catch2/catch_test_macros.hpp>
 #include <cstring>
 #include <vector>
 
+#include "hrx_test_fixture.hpp"
+
 namespace {
 
-hrx_status_t hostCallIncrement(void *user_data) {
-  auto *value = static_cast<int *>(user_data);
+hrx_status_t hostCallIncrement(void* user_data) {
+  auto* value = static_cast<int*>(user_data);
   *value += 1;
   return hrx_ok_status();
 }
 
-} // namespace
+}  // namespace
 
 TEST_CASE_METHOD(HrxTestFixture, "Queue host call", "[queue_ops][host_call]") {
   hrx_semaphore_t done = nullptr;
