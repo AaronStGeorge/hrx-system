@@ -129,6 +129,205 @@ static inline loomc_spirv_feature_bits_t loomc_spirv_feature_bit(
              : 0u;
 }
 
+/// SPIR-V semantic scalar type fact.
+///
+/// These values describe the scalar element types Loom selects for SPIR-V type
+/// declarations. They are separate from SPIR-V component-type enum operands,
+/// which are only used by instructions or extension APIs that literally encode
+/// those operands.
+typedef enum loomc_spirv_scalar_type_e {
+  /// Unknown or uninitialized scalar type.
+  LOOMC_SPIRV_SCALAR_TYPE_UNKNOWN = 0,
+
+  /// IEEE binary16 floating-point scalar type.
+  LOOMC_SPIRV_SCALAR_TYPE_F16 = 1,
+
+  /// IEEE binary32 floating-point scalar type.
+  LOOMC_SPIRV_SCALAR_TYPE_F32 = 2,
+
+  /// IEEE binary64 floating-point scalar type.
+  LOOMC_SPIRV_SCALAR_TYPE_F64 = 3,
+
+  /// KHR bfloat16 scalar type.
+  LOOMC_SPIRV_SCALAR_TYPE_BF16 = 4,
+
+  /// Signed 8-bit integer scalar type.
+  LOOMC_SPIRV_SCALAR_TYPE_S8 = 5,
+
+  /// Signed 16-bit integer scalar type.
+  LOOMC_SPIRV_SCALAR_TYPE_S16 = 6,
+
+  /// Signed 32-bit integer scalar type.
+  LOOMC_SPIRV_SCALAR_TYPE_S32 = 7,
+
+  /// Signed 64-bit integer scalar type.
+  LOOMC_SPIRV_SCALAR_TYPE_S64 = 8,
+
+  /// Unsigned 8-bit integer scalar type.
+  LOOMC_SPIRV_SCALAR_TYPE_U8 = 9,
+
+  /// Unsigned 16-bit integer scalar type.
+  LOOMC_SPIRV_SCALAR_TYPE_U16 = 10,
+
+  /// Unsigned 32-bit integer scalar type.
+  LOOMC_SPIRV_SCALAR_TYPE_U32 = 11,
+
+  /// Unsigned 64-bit integer scalar type.
+  LOOMC_SPIRV_SCALAR_TYPE_U64 = 12,
+} loomc_spirv_scalar_type_t;
+
+/// SPIR-V Scope operand values used by public profile fact rows.
+typedef enum loomc_spirv_scope_e {
+  /// CrossDevice scope.
+  LOOMC_SPIRV_SCOPE_CROSS_DEVICE = 0,
+
+  /// Device scope.
+  LOOMC_SPIRV_SCOPE_DEVICE = 1,
+
+  /// Workgroup scope.
+  LOOMC_SPIRV_SCOPE_WORKGROUP = 2,
+
+  /// Subgroup scope.
+  LOOMC_SPIRV_SCOPE_SUBGROUP = 3,
+
+  /// Invocation scope.
+  LOOMC_SPIRV_SCOPE_INVOCATION = 4,
+
+  /// QueueFamily scope.
+  LOOMC_SPIRV_SCOPE_QUEUE_FAMILY = 5,
+
+  /// ShaderCallKHR scope.
+  LOOMC_SPIRV_SCOPE_SHADER_CALL_KHR = 6,
+} loomc_spirv_scope_t;
+
+/// Cooperative matrix layout fact bits.
+typedef enum loomc_spirv_cooperative_matrix_layout_flag_bits_e {
+  /// RowMajorKHR layout is accepted.
+  LOOMC_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_BIT = 1u << 0,
+
+  /// ColumnMajorKHR layout is accepted.
+  LOOMC_SPIRV_COOPERATIVE_MATRIX_LAYOUT_COLUMN_MAJOR_BIT = 1u << 1,
+} loomc_spirv_cooperative_matrix_layout_flag_bits_t;
+
+/// Bitset of `loomc_spirv_cooperative_matrix_layout_flag_bits_t` values.
+typedef uint32_t loomc_spirv_cooperative_matrix_layout_flags_t;
+
+/// Cooperative matrix operand fact bits.
+typedef enum loomc_spirv_cooperative_matrix_operand_flag_bits_e {
+  /// Matrix A signed-components operand is required.
+  LOOMC_SPIRV_COOPERATIVE_MATRIX_OPERAND_A_SIGNED_COMPONENTS = 1u << 0,
+
+  /// Matrix B signed-components operand is required.
+  LOOMC_SPIRV_COOPERATIVE_MATRIX_OPERAND_B_SIGNED_COMPONENTS = 1u << 1,
+
+  /// Matrix C signed-components operand is required.
+  LOOMC_SPIRV_COOPERATIVE_MATRIX_OPERAND_C_SIGNED_COMPONENTS = 1u << 2,
+
+  /// Matrix result signed-components operand is required.
+  LOOMC_SPIRV_COOPERATIVE_MATRIX_OPERAND_RESULT_SIGNED_COMPONENTS = 1u << 3,
+
+  /// Saturating accumulation operand is required.
+  LOOMC_SPIRV_COOPERATIVE_MATRIX_OPERAND_SATURATING_ACCUMULATION = 1u << 4,
+} loomc_spirv_cooperative_matrix_operand_flag_bits_t;
+
+/// Bitset of `loomc_spirv_cooperative_matrix_operand_flag_bits_t` values.
+typedef uint32_t loomc_spirv_cooperative_matrix_operand_flags_t;
+
+/// SPIR-V cooperative vector ComponentType operand values.
+typedef enum loomc_spirv_component_type_e {
+  /// Float16NV component type.
+  LOOMC_SPIRV_COMPONENT_TYPE_FLOAT16_NV = 0,
+
+  /// Float32NV component type.
+  LOOMC_SPIRV_COMPONENT_TYPE_FLOAT32_NV = 1,
+
+  /// Float64NV component type.
+  LOOMC_SPIRV_COMPONENT_TYPE_FLOAT64_NV = 2,
+
+  /// SignedInt8NV component type.
+  LOOMC_SPIRV_COMPONENT_TYPE_SIGNED_INT8_NV = 3,
+
+  /// SignedInt16NV component type.
+  LOOMC_SPIRV_COMPONENT_TYPE_SIGNED_INT16_NV = 4,
+
+  /// SignedInt32NV component type.
+  LOOMC_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV = 5,
+
+  /// SignedInt64NV component type.
+  LOOMC_SPIRV_COMPONENT_TYPE_SIGNED_INT64_NV = 6,
+
+  /// UnsignedInt8NV component type.
+  LOOMC_SPIRV_COMPONENT_TYPE_UNSIGNED_INT8_NV = 7,
+
+  /// UnsignedInt16NV component type.
+  LOOMC_SPIRV_COMPONENT_TYPE_UNSIGNED_INT16_NV = 8,
+
+  /// UnsignedInt32NV component type.
+  LOOMC_SPIRV_COMPONENT_TYPE_UNSIGNED_INT32_NV = 9,
+
+  /// UnsignedInt64NV component type.
+  LOOMC_SPIRV_COMPONENT_TYPE_UNSIGNED_INT64_NV = 10,
+
+  /// SignedInt8PackedNV component type.
+  LOOMC_SPIRV_COMPONENT_TYPE_SIGNED_INT8_PACKED_NV = 1000491000,
+
+  /// UnsignedInt8PackedNV component type.
+  LOOMC_SPIRV_COMPONENT_TYPE_UNSIGNED_INT8_PACKED_NV = 1000491001,
+
+  /// FloatE4M3NV component type.
+  LOOMC_SPIRV_COMPONENT_TYPE_FLOAT_E4_M3_NV = 1000491002,
+
+  /// FloatE5M2NV component type.
+  LOOMC_SPIRV_COMPONENT_TYPE_FLOAT_E5_M2_NV = 1000491003,
+} loomc_spirv_component_type_t;
+
+/// Cooperative vector matrix-layout fact bits.
+typedef enum loomc_spirv_cooperative_vector_matrix_layout_flag_bits_e {
+  /// RowMajorNV layout is accepted.
+  LOOMC_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_ROW_MAJOR_BIT = 1u << 0,
+
+  /// ColumnMajorNV layout is accepted.
+  LOOMC_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_COLUMN_MAJOR_BIT = 1u << 1,
+
+  /// InferencingOptimalNV layout is accepted.
+  LOOMC_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_INFERENCING_OPTIMAL_BIT =
+      (1u << 2),
+
+  /// TrainingOptimalNV layout is accepted.
+  LOOMC_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_TRAINING_OPTIMAL_BIT = 1u << 3,
+} loomc_spirv_cooperative_vector_matrix_layout_flag_bits_t;
+
+/// Bitset of
+/// `loomc_spirv_cooperative_vector_matrix_layout_flag_bits_t` values.
+typedef uint32_t loomc_spirv_cooperative_vector_matrix_layout_flags_t;
+
+/// Cooperative vector behavior fact bits.
+typedef enum loomc_spirv_cooperative_vector_flag_bits_e {
+  /// Transposed opaque matrix layout is accepted.
+  LOOMC_SPIRV_COOPERATIVE_VECTOR_FLAG_TRANSPOSE = 1u << 0,
+
+  /// Row is intended for training operations rather than inference only.
+  LOOMC_SPIRV_COOPERATIVE_VECTOR_FLAG_TRAINING = 1u << 1,
+} loomc_spirv_cooperative_vector_flag_bits_t;
+
+/// Bitset of `loomc_spirv_cooperative_vector_flag_bits_t` values.
+typedef uint32_t loomc_spirv_cooperative_vector_flags_t;
+
+/// Storage-class fact bits used by cooperative operation rows.
+typedef enum loomc_spirv_storage_class_flag_bits_e {
+  /// Workgroup storage class is accepted.
+  LOOMC_SPIRV_STORAGE_CLASS_BIT_WORKGROUP = 1u << 0,
+
+  /// StorageBuffer storage class is accepted.
+  LOOMC_SPIRV_STORAGE_CLASS_BIT_STORAGE_BUFFER = 1u << 1,
+
+  /// PhysicalStorageBuffer storage class is accepted.
+  LOOMC_SPIRV_STORAGE_CLASS_BIT_PHYSICAL_STORAGE_BUFFER = 1u << 2,
+} loomc_spirv_storage_class_flag_bits_t;
+
+/// Bitset of `loomc_spirv_storage_class_flag_bits_t` values.
+typedef uint32_t loomc_spirv_storage_class_flags_t;
+
 /// Built-in SPIR-V profile preset.
 typedef enum loomc_spirv_profile_preset_e {
   /// No preset facts.
@@ -200,7 +399,94 @@ typedef struct loomc_spirv_profile_info_t {
 
   /// Number of decoration rows selected by known-true features.
   loomc_host_size_t decoration_count;
+
+  /// Number of cooperative matrix rows selected by known-true features.
+  loomc_host_size_t cooperative_matrix_row_count;
+
+  /// Number of cooperative vector rows selected by known-true features.
+  loomc_host_size_t cooperative_vector_row_count;
 } loomc_spirv_profile_info_t;
+
+/// Cooperative matrix operation fact row.
+typedef struct loomc_spirv_cooperative_matrix_row_t {
+  /// Stable row name for diagnostics, caches, and tests.
+  loomc_string_view_t name;
+
+  /// Feature bits required before this row is legal.
+  loomc_spirv_feature_bits_t required_features;
+
+  /// Result row count and Matrix A row count.
+  uint16_t m_size;
+
+  /// Result column count and Matrix B column count.
+  uint16_t n_size;
+
+  /// Matrix A column count and Matrix B row count.
+  uint16_t k_size;
+
+  /// Matrix A scalar component type.
+  loomc_spirv_scalar_type_t lhs_type;
+
+  /// Matrix B scalar component type.
+  loomc_spirv_scalar_type_t rhs_type;
+
+  /// Matrix C accumulator scalar component type.
+  loomc_spirv_scalar_type_t accumulator_type;
+
+  /// Result scalar component type.
+  loomc_spirv_scalar_type_t result_type;
+
+  /// Cooperative matrix scope operand.
+  loomc_spirv_scope_t scope;
+
+  /// Accepted load/store memory layouts.
+  loomc_spirv_cooperative_matrix_layout_flags_t layout_flags;
+
+  /// Accepted pointer storage classes for load/store operations.
+  loomc_spirv_storage_class_flags_t storage_class_flags;
+
+  /// Required cooperative matrix operand bits for this row.
+  loomc_spirv_cooperative_matrix_operand_flags_t operand_flags;
+} loomc_spirv_cooperative_matrix_row_t;
+
+/// Cooperative vector operation fact row.
+typedef struct loomc_spirv_cooperative_vector_row_t {
+  /// Stable row name for diagnostics, caches, and tests.
+  loomc_string_view_t name;
+
+  /// Feature bits required before this row is legal.
+  loomc_spirv_feature_bits_t required_features;
+
+  /// Output vector component count.
+  uint16_t m_size;
+
+  /// Logical input vector component count.
+  uint16_t k_size;
+
+  /// Component type of the Input vector object.
+  loomc_spirv_component_type_t input_type;
+
+  /// InputInterpretation operand value.
+  loomc_spirv_component_type_t input_interpretation;
+
+  /// MatrixInterpretation operand value.
+  loomc_spirv_component_type_t matrix_interpretation;
+
+  /// BiasInterpretation operand value.
+  loomc_spirv_component_type_t bias_interpretation;
+
+  /// Component type of the Result vector object.
+  loomc_spirv_component_type_t result_type;
+
+  /// Accepted matrix layout operands.
+  loomc_spirv_cooperative_vector_matrix_layout_flags_t matrix_layout_flags;
+
+  /// Accepted matrix pointer storage classes.
+  loomc_spirv_storage_class_flags_t storage_class_flags;
+
+  /// Additional cooperative vector behavior flags.
+  loomc_spirv_cooperative_vector_flags_t flags;
+} loomc_spirv_cooperative_vector_row_t;
 
 /// Creates a reusable SPIR-V target profile.
 ///
@@ -264,6 +550,24 @@ LOOMC_API_EXPORT loomc_status_t loomc_spirv_target_profile_storage_class_at(
 LOOMC_API_EXPORT loomc_status_t loomc_spirv_target_profile_decoration_at(
     const loomc_target_profile_t* profile, loomc_host_size_t index,
     uint32_t* out_decoration);
+
+/// Returns a cooperative matrix fact row by index.
+///
+/// @lifetime
+/// The returned string view remains valid until `profile` is released.
+LOOMC_API_EXPORT loomc_status_t
+loomc_spirv_target_profile_cooperative_matrix_row_at(
+    const loomc_target_profile_t* profile, loomc_host_size_t index,
+    loomc_spirv_cooperative_matrix_row_t* out_row);
+
+/// Returns a cooperative vector fact row by index.
+///
+/// @lifetime
+/// The returned string view remains valid until `profile` is released.
+LOOMC_API_EXPORT loomc_status_t
+loomc_spirv_target_profile_cooperative_vector_row_at(
+    const loomc_target_profile_t* profile, loomc_host_size_t index,
+    loomc_spirv_cooperative_vector_row_t* out_row);
 
 #ifdef __cplusplus
 }  // extern "C"
