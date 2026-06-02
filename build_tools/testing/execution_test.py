@@ -6,10 +6,10 @@
 
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -17,7 +17,6 @@ import execution
 
 
 class ExecutionUnitTest(unittest.TestCase):
-
     def test_substitution_preserves_unknown_braces(self):
         with tempfile.TemporaryDirectory() as directory:
             tool_path = Path(directory) / "tool"
@@ -32,9 +31,13 @@ class ExecutionUnitTest(unittest.TestCase):
 
     def test_contains_ordering(self):
         runner = execution.ExecutionRunner(tools={})
-        runner._check_contains("case", "step", "stdout", "alpha\nbeta\ngamma\n", ["alpha", "gamma"])
+        runner._check_contains(
+            "case", "step", "stdout", "alpha\nbeta\ngamma\n", ["alpha", "gamma"]
+        )
         with self.assertRaises(execution.CaseFailure):
-            runner._check_contains("case", "step", "stdout", "alpha\nbeta\ngamma\n", ["gamma", "alpha"])
+            runner._check_contains(
+                "case", "step", "stdout", "alpha\nbeta\ngamma\n", ["gamma", "alpha"]
+            )
 
 
 if __name__ == "__main__":

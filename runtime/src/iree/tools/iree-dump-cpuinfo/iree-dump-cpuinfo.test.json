@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "dump host cpu features",
+      "run": {
+        "tool": "iree-dump-cpuinfo"
+      },
+      "stdout": {
+        "contains": [
+          {
+            "regex": "(?m)^[a-z0-9_.-]+ +[01]$"
+          }
+        ]
+      },
+      "stderr": {
+        "empty": true
+      }
+    }
+  ]
+}

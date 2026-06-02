@@ -19,14 +19,6 @@ python.defaults(python_version = "3.12")
 python.toolchain(python_version = "3.12")
 use_repo(python, "python_3_12")
 
-pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
-pip.parse(
-    hub_name = "pypi",
-    python_version = "3.12",
-    requirements_lock = "//:requirements-dev.lock.txt",
-)
-use_repo(pip, "pypi")
-
 amdgpu_device_toolchain_repo = use_repo_rule(
     "//build_tools/bazel:amdgpu_device_toolchain_repo.bzl",
     "amdgpu_device_toolchain_repo",

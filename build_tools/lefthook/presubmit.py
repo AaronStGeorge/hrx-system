@@ -46,6 +46,7 @@ C_FORMAT_EXTENSIONS = {
     ".m",
     ".mm",
 }
+PYTHON_EXTENSIONS = {".py"}
 WATCHWORD_PATTERNS = (
     re.compile("DO " + "NOT SUBMIT"),
     re.compile("DO_" + "NOT_SUBMIT"),
@@ -53,6 +54,7 @@ WATCHWORD_PATTERNS = (
     re.compile("TODO before " + "submit", re.IGNORECASE),
 )
 CONFLICT_MARKER_PATTERN = re.compile(r"^(<<<<<<< .+|>>>>>>> .+)")
+MAX_DISPLAY_COMMAND_ARGUMENTS = 32
 
 
 @dataclass(frozen=True)
@@ -181,9 +183,17 @@ def apply_profile_defaults(args: argparse.Namespace) -> None:
             args.static_analysis = True
 
 
+def display_command(command: list[str]) -> str:
+    if len(command) <= MAX_DISPLAY_COMMAND_ARGUMENTS:
+        return " ".join(command)
+    shown_arguments = command[:MAX_DISPLAY_COMMAND_ARGUMENTS]
+    omitted_count = len(command) - len(shown_arguments)
+    return " ".join(shown_arguments) + f" ... ({omitted_count} more argument(s))"
+
+
 def run_command(command: list[str], description: str) -> bool:
     print(f"presubmit: {description}")
-    print("  " + " ".join(command))
+    print("  " + display_command(command))
     sys.stdout.flush()
     result = subprocess.run(command, cwd=REPO_ROOT)
     if result.returncode == 0:
@@ -201,16 +211,12 @@ def require_tool(tool: str) -> bool:
 
 def git_list(args: list[str]) -> list[str]:
     result = subprocess.run(
-        ["git"] + args,
+        ["git", *args],
         cwd=REPO_ROOT,
         check=True,
         stdout=subprocess.PIPE,
     )
-    return [
-        path.decode("utf-8")
-        for path in result.stdout.split(b"\0")
-        if path
-    ]
+    return [path.decode("utf-8") for path in result.stdout.split(b"\0") if path]
 
 
 def selected_files(args: argparse.Namespace) -> list[str]:
@@ -221,7 +227,7 @@ def selected_files(args: argparse.Namespace) -> list[str]:
     if args.all:
         return git_list(["ls-files", "-z"])
     if args.files_from:
-        with open(args.files_from, "r", encoding="utf-8") as file_list:
+        with open(args.files_from, encoding="utf-8") as file_list:
             return [line.strip() for line in file_list if line.strip()]
     return git_list(
         ["diff", "--name-only", "-z", "--diff-filter=ACMR", args.since, "--"]
@@ -235,16 +241,22 @@ def existing_files(paths: list[str]) -> list[str]:
 def stage_files(paths: list[str]) -> bool:
     if not paths:
         return True
-    return run_command(["git", "add", "--"] + paths, "stage local fixups")
+    return run_command(["git", "add", "--", *paths], "stage local fixups")
 
 
 def is_buildifier_file(path: str) -> bool:
     file_path = Path(path)
-    return file_path.name in BUILDIFIER_NAMES or file_path.suffix in BUILDIFIER_EXTENSIONS
+    return (
+        file_path.name in BUILDIFIER_NAMES or file_path.suffix in BUILDIFIER_EXTENSIONS
+    )
 
 
 def is_c_format_file(path: str) -> bool:
     return Path(path).suffix in C_FORMAT_EXTENSIONS
+
+
+def is_python_file(path: str) -> bool:
+    return Path(path).suffix in PYTHON_EXTENSIONS
 
 
 def run_buildifier(paths: list[str], fix: bool) -> bool:
@@ -260,6 +272,30 @@ def run_buildifier(paths: list[str], fix: bool) -> bool:
     ok = run_command(command, "buildifier")
     if fix and ok:
         ok = stage_files(files)
+    return ok
+
+
+def run_ruff(paths: list[str], fix: bool) -> bool:
+    files = existing_files([path for path in paths if is_python_file(path)])
+    if not files:
+        return True
+    if not require_tool("ruff"):
+        return False
+    ok = True
+    lint_command = ["ruff", "check", "--cache-dir", ".ruff_cache"]
+    if fix:
+        lint_command.append("--fix")
+    lint_command += files
+    ok = run_command(lint_command, "ruff check") and ok
+
+    format_command = ["ruff", "format", "--cache-dir", ".ruff_cache"]
+    if not fix:
+        format_command.append("--check")
+    format_command += files
+    ok = run_command(format_command, "ruff format") and ok
+
+    if fix:
+        ok = stage_files(files) and ok
     return ok
 
 
@@ -401,6 +437,7 @@ def run_hygiene(paths: list[str], fix: bool) -> bool:
     ok = run_text_hygiene(paths, fix=fix) and ok
     ok = run_watchwords(paths) and ok
     ok = run_buildifier(paths, fix=fix) and ok
+    ok = run_ruff(paths, fix=fix) and ok
     ok = run_clang_format(paths, fix=fix) and ok
     ok = run_bazel_to_cmake(fix=fix) and ok
     ok = run_amdgpu_target_map(paths, fix=fix) and ok
@@ -425,7 +462,10 @@ def projects_for_paths(paths: list[str]) -> list[Project]:
 def is_global_trigger(path: str) -> bool:
     if path.startswith("requirements") and path.endswith(".txt"):
         return True
-    return any(path == trigger or path.startswith(trigger) for trigger in GLOBAL_PROJECT_TRIGGERS)
+    return any(
+        path == trigger or path.startswith(trigger)
+        for trigger in GLOBAL_PROJECT_TRIGGERS
+    )
 
 
 def run_project_tests(projects: list[Project], paths: list[str], fix: bool) -> bool:

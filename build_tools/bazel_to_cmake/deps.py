@@ -597,7 +597,11 @@ def _urls_from_kwargs(kwargs: dict[str, Any], context: str) -> list[str]:
 def _source_urls(source: dict[str, Any], dependency_name: str) -> list[str]:
     if "urls" in source:
         urls = source["urls"]
-        if isinstance(urls, list) and all(isinstance(url, str) for url in urls) and urls:
+        if (
+            isinstance(urls, list)
+            and all(isinstance(url, str) for url in urls)
+            and urls
+        ):
             return urls
         raise ValueError(f"BCR source for {dependency_name} has invalid urls")
     url = source.get("url")

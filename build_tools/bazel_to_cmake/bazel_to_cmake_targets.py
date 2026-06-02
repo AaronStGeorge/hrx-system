@@ -4,8 +4,8 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from typing import Dict, List
 import re
+from typing import Dict, List
 
 
 class TargetConverter:
@@ -183,12 +183,8 @@ class TargetConverter:
                 ],
                 "//third_party:flatcc": ["iree-flatcc-cli"],
                 "//third_party:flatcc_compiler": ["iree-flatcc-cli"],
-                "//third_party:flatcc_parsing": [
-                    "iree::third_party::flatcc_parsing"
-                ],
-                "//third_party:flatcc_runtime": [
-                    "iree::third_party::flatcc_runtime"
-                ],
+                "//third_party:flatcc_parsing": ["iree::third_party::flatcc_parsing"],
+                "//third_party:flatcc_runtime": ["iree::third_party::flatcc_runtime"],
                 "//third_party:google_test": ["iree::third_party::google_test"],
                 "//third_party:google_test_main": [
                     "iree::third_party::google_test_main"
@@ -240,7 +236,7 @@ class TargetConverter:
         # that sets this up.
         label = target.rsplit(":")[-1]
         if label.startswith("CAPI") and label.endswith("Headers"):
-            return [f"IREELLVMIncludeSetup"]
+            return ["IREELLVMIncludeSetup"]
         else:
             return [f"MLIR{label}"]
 

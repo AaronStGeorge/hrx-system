@@ -14,7 +14,6 @@ import shlex
 import sys
 from pathlib import Path
 
-
 HOST_DRIVERS = ("local-sync", "local-task", "null")
 
 SDK_DRIVER_PACKAGES = {
@@ -120,10 +119,12 @@ def deleted_package_lines(enabled_drivers: set[str]) -> list[str]:
     for driver, packages in SDK_DRIVER_PACKAGES.items():
         if driver in enabled_drivers:
             continue
-        lines.append(bazelrc_line(
-            "common",
-            "--deleted_packages=" + ",".join(packages),
-        ))
+        lines.append(
+            bazelrc_line(
+                "common",
+                "--deleted_packages=" + ",".join(packages),
+            )
+        )
     return lines
 
 
@@ -156,37 +157,44 @@ def generate_config(args: argparse.Namespace) -> str:
         "# Runtime driver registry scope.",
         bazelrc_line(
             "build",
-            "--//runtime/config/hal:drivers=" + ",".join(
-                ordered_driver_set(enabled_drivers)
-            ),
+            "--//runtime/config/hal:drivers="
+            + ",".join(ordered_driver_set(enabled_drivers)),
         ),
         "",
         "# Optional AMDGPU device compiler toolchain.",
     ]
     if "amdgpu" in enabled_drivers:
-        lines.append(bazelrc_line(
-            "common",
-            "--repo_env=IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=rocm",
-        ))
+        lines.append(
+            bazelrc_line(
+                "common",
+                "--repo_env=IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=rocm",
+            )
+        )
     else:
-        lines.append(bazelrc_line(
-            "common",
-            "--repo_env=IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=none",
-        ))
+        lines.append(
+            bazelrc_line(
+                "common",
+                "--repo_env=IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=none",
+            )
+        )
 
     if rocm_path:
-        lines.extend([
-            bazelrc_line("common", "--repo_env=IREE_ROCM_PATH=" + rocm_path),
-            "",
-        ])
+        lines.extend(
+            [
+                bazelrc_line("common", "--repo_env=IREE_ROCM_PATH=" + rocm_path),
+                "",
+            ]
+        )
     else:
         lines.append("")
 
-    lines.extend([
-        "# Recursive build package scope.",
-        *deleted_package_lines(enabled_drivers),
-        "",
-    ])
+    lines.extend(
+        [
+            "# Recursive build package scope.",
+            *deleted_package_lines(enabled_drivers),
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 

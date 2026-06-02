@@ -27,7 +27,7 @@ iree_execution_test_suite(
   NAME
     execution_test
   MANIFESTS
-    "iree-run-module.test.yaml"
+    "iree-run-module.test.json"
   TOOLS
     "iree-as-module=iree::tools::iree-as-module"
     "iree-run-module=iree::tools::iree-run-module"

@@ -83,7 +83,9 @@ class ProjectRequirementPolicy:
             _append_unique_requirements(build_requirements, policy.build_requirements)
             _append_unique_requirements(run_requirements, policy.run_requirements)
             if policy.resource_group:
-                specificity = max(_specificity(pattern) for pattern in matching_patterns)
+                specificity = max(
+                    _specificity(pattern) for pattern in matching_patterns
+                )
                 if specificity >= resource_group_specificity:
                     resource_group = policy.resource_group
                     resource_group_specificity = specificity
@@ -193,4 +195,3 @@ def _append_unique_requirements(target, requirements):
         if requirement.id not in ids:
             target.append(requirement)
             ids.add(requirement.id)
-

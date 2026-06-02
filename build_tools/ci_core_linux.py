@@ -15,22 +15,20 @@ release variants reusable without growing large stringly shell snippets in YAML.
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import datetime as dt
 import hashlib
 import json
 import os
-from pathlib import Path, PurePosixPath
 import platform
 import re
 import shlex
 import shutil
 import subprocess
-import sys
 import tarfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
 from typing import Iterable
-
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PLATFORM = "linux"
@@ -155,7 +153,9 @@ def remove_tree(path: Path) -> None:
         shutil.rmtree(path)
 
 
-def copy_tree_contents(src: Path, dst: Path, *, skip_names: set[str] | None = None) -> None:
+def copy_tree_contents(
+    src: Path, dst: Path, *, skip_names: set[str] | None = None
+) -> None:
     skip_names = skip_names or set()
     dst.mkdir(parents=True, exist_ok=True)
     for child in src.iterdir():
@@ -215,7 +215,9 @@ def rocm_tool(rocm_root: Path, name: str) -> Path:
     return tool_path
 
 
-def rocm_build_env(rocm_root: Path, base_env: dict[str, str] | None = None) -> dict[str, str]:
+def rocm_build_env(
+    rocm_root: Path, base_env: dict[str, str] | None = None
+) -> dict[str, str]:
     env = dict(base_env or os.environ)
     llvm_bin = rocm_llvm_bin(rocm_root)
     env["PATH"] = f"{llvm_bin}:{rocm_root / 'bin'}:{env.get('PATH', '')}"
@@ -223,7 +225,9 @@ def rocm_build_env(rocm_root: Path, base_env: dict[str, str] | None = None) -> d
     return env
 
 
-def install_runtime_env(root: Path, base_env: dict[str, str] | None = None) -> dict[str, str]:
+def install_runtime_env(
+    root: Path, base_env: dict[str, str] | None = None
+) -> dict[str, str]:
     env = dict(base_env or os.environ)
     lib_paths = [
         root / "lib",
@@ -282,7 +286,10 @@ def checked_dest(base: Path, relpath: str) -> Path:
     dest = base / rel
     base_resolved = base.resolve()
     parent_resolved = dest.parent.resolve()
-    if base_resolved != parent_resolved and base_resolved not in parent_resolved.parents:
+    if (
+        base_resolved != parent_resolved
+        and base_resolved not in parent_resolved.parents
+    ):
         raise RuntimeError(f"Archive path escapes output directory: {relpath}")
     return dest
 
@@ -421,9 +428,9 @@ def extract_packages(args: argparse.Namespace) -> None:
 
 def create_s3_client():
     try:
+        import boto3
         from botocore import UNSIGNED
         from botocore.config import Config
-        import boto3
     except ModuleNotFoundError as e:
         raise RuntimeError("Install boto3 and botocore to fetch ROCm artifacts") from e
     return boto3.client(
@@ -772,7 +779,9 @@ def build_core(args: argparse.Namespace) -> None:
         env=env,
         pretty_command=True,
     )
-    run(["cmake", "--build", build_dir, "--target", args.target], cwd=REPO_ROOT, env=env)
+    run(
+        ["cmake", "--build", build_dir, "--target", args.target], cwd=REPO_ROOT, env=env
+    )
 
     for install_dir, component in [
         (public_install_dir, args.public_component),
@@ -817,7 +826,9 @@ def test_core(args: argparse.Namespace) -> None:
 
     env = install_runtime_env(install_root, base_env)
     if args.sanitizer != "none":
-        env = add_sanitizer_runtime_env(env, sanitizer=args.sanitizer, rocm_root=rocm_root)
+        env = add_sanitizer_runtime_env(
+            env, sanitizer=args.sanitizer, rocm_root=rocm_root
+        )
     if args.cts_device:
         env["HRX_CTS_DEVICE"] = args.cts_device
     if args.test_tmpdir is not None:
@@ -844,7 +855,11 @@ def test_core(args: argparse.Namespace) -> None:
     run([install_root / "bin" / "hrx-info"], cwd=REPO_ROOT, env=env)
     run([install_root / "bin" / "hrx-info", "--device=cpu:0"], cwd=REPO_ROOT, env=env)
     if args.gpu:
-        run([install_root / "bin" / "hrx-info", "--device=gpu:0"], cwd=REPO_ROOT, env=env)
+        run(
+            [install_root / "bin" / "hrx-info", "--device=gpu:0"],
+            cwd=REPO_ROOT,
+            env=env,
+        )
 
     if not args.package_smoke:
         return
@@ -967,7 +982,9 @@ def create_tar_zst(
         with cctx.stream_writer(f, closefd=False) as zstd_stream:
             with tarfile.open(fileobj=zstd_stream, mode="w|") as tf:
                 for child in sorted(source_dir.iterdir(), key=lambda p: p.name):
-                    tf.add(child, arcname=child.name, recursive=True, filter=filter_member)
+                    tf.add(
+                        child, arcname=child.name, recursive=True, filter=filter_member
+                    )
 
 
 def write_package_env_script(output_dir: Path, script_name: str) -> Path:
@@ -1000,7 +1017,9 @@ def ldd_rocm_dependencies(rocm_root: Path, binary: Path) -> list[Path]:
     return deps
 
 
-def copy_matching_rocm_paths(rocm_root: Path, dst_root: Path, patterns: list[str]) -> list[Path]:
+def copy_matching_rocm_paths(
+    rocm_root: Path, dst_root: Path, patterns: list[str]
+) -> list[Path]:
     copied: list[Path] = []
     for pattern in patterns:
         for src in sorted(rocm_root.glob(pattern)):
@@ -1146,14 +1165,26 @@ def package_core(args: argparse.Namespace) -> None:
     output_dir = args.package_output_dir.resolve()
     suffix = args.package_suffix or dt.datetime.now(dt.UTC).strftime("%Y-%m-%d")
 
-    require_path(args.public_install_dir.resolve() / "lib" / "libhrx.so", "public libhrx.so")
-    require_path(args.public_install_dir.resolve() / "bin" / "hrx-info", "public hrx-info")
     require_path(
-        args.public_install_dir.resolve() / "lib" / "cmake" / "hrx" / "hrx-config.cmake",
+        args.public_install_dir.resolve() / "lib" / "libhrx.so", "public libhrx.so"
+    )
+    require_path(
+        args.public_install_dir.resolve() / "bin" / "hrx-info", "public hrx-info"
+    )
+    require_path(
+        args.public_install_dir.resolve()
+        / "lib"
+        / "cmake"
+        / "hrx"
+        / "hrx-config.cmake",
         "public hrx CMake package",
     )
     require_path(
-        args.tests_install_dir.resolve() / "share" / "hrx-system" / "tests" / "CTestTestfile.cmake",
+        args.tests_install_dir.resolve()
+        / "share"
+        / "hrx-system"
+        / "tests"
+        / "CTestTestfile.cmake",
         "installed CTest file",
     )
     prepare_public_deps_root(args)
@@ -1212,57 +1243,181 @@ def run_all(args: argparse.Namespace) -> None:
 
 def add_shared_args(parser: argparse.ArgumentParser) -> None:
     default_output = REPO_ROOT / "build" / "linux"
-    parser.add_argument("--release-type", default=env_default("HRX_RELEASE_TYPE", "nightly"), choices=["dev", "nightly", "prerelease"])
+    parser.add_argument(
+        "--release-type",
+        default=env_default("HRX_RELEASE_TYPE", "nightly"),
+        choices=["dev", "nightly", "prerelease"],
+    )
     parser.add_argument("--run-id", default=env_default("HRX_RUN_ID", ""))
-    parser.add_argument("--artifact-set", default=env_default("HRX_ARTIFACT_SET", "core"), choices=sorted(ARTIFACT_SETS))
-    parser.add_argument("--rocm-root", type=Path, default=env_path("HRX_ROCM_ROOT", default_output / "rocm-root"))
-    parser.add_argument("--download-cache-dir", type=Path, default=env_path("HRX_DOWNLOAD_CACHE_DIR", default_output / "downloads"))
-    parser.add_argument("--download-concurrency", type=int, default=env_int("HRX_DOWNLOAD_CONCURRENCY", 8))
-    parser.add_argument("--build-dir", type=Path, default=env_path("HRX_BUILD_DIR", default_output / "build" / "hrx-core"))
-    parser.add_argument("--public-install-dir", type=Path, default=env_path("HRX_PUBLIC_INSTALL_DIR", default_output / "install" / "public"))
-    parser.add_argument("--tests-install-dir", type=Path, default=env_path("HRX_TESTS_INSTALL_DIR", default_output / "install" / "tests"))
-    parser.add_argument("--public-deps-dir", type=Path, default=env_path("HRX_PUBLIC_DEPS_DIR", default_output / "install" / "public-deps"))
-    parser.add_argument("--composed-install-dir", type=Path, default=env_path("HRX_COMPOSED_INSTALL_DIR", default_output / "install" / "composed"))
-    parser.add_argument("--artifact-download-dir", type=Path, default=env_path("HRX_ARTIFACT_DOWNLOAD_DIR", default_output / "downloaded-artifacts"))
-    parser.add_argument("--package-smoke-build-dir", type=Path, default=env_path("HRX_PACKAGE_SMOKE_BUILD_DIR", default_output / "build" / "package-smoke"))
-    parser.add_argument("--package-output-dir", type=Path, default=env_path("HRX_PACKAGE_OUTPUT_DIR", default_output / "dist"))
-    parser.add_argument("--public-component", default=env_default("HRX_PUBLIC_COMPONENT", "HrxPublicDist"))
-    parser.add_argument("--tests-component", default=env_default("HRX_TESTS_COMPONENT", "HrxTestsDist"))
-    parser.add_argument("--build-type", default=env_default("HRX_BUILD_TYPE", "RelWithDebInfo"))
+    parser.add_argument(
+        "--artifact-set",
+        default=env_default("HRX_ARTIFACT_SET", "core"),
+        choices=sorted(ARTIFACT_SETS),
+    )
+    parser.add_argument(
+        "--rocm-root",
+        type=Path,
+        default=env_path("HRX_ROCM_ROOT", default_output / "rocm-root"),
+    )
+    parser.add_argument(
+        "--download-cache-dir",
+        type=Path,
+        default=env_path("HRX_DOWNLOAD_CACHE_DIR", default_output / "downloads"),
+    )
+    parser.add_argument(
+        "--download-concurrency",
+        type=int,
+        default=env_int("HRX_DOWNLOAD_CONCURRENCY", 8),
+    )
+    parser.add_argument(
+        "--build-dir",
+        type=Path,
+        default=env_path("HRX_BUILD_DIR", default_output / "build" / "hrx-core"),
+    )
+    parser.add_argument(
+        "--public-install-dir",
+        type=Path,
+        default=env_path(
+            "HRX_PUBLIC_INSTALL_DIR", default_output / "install" / "public"
+        ),
+    )
+    parser.add_argument(
+        "--tests-install-dir",
+        type=Path,
+        default=env_path("HRX_TESTS_INSTALL_DIR", default_output / "install" / "tests"),
+    )
+    parser.add_argument(
+        "--public-deps-dir",
+        type=Path,
+        default=env_path(
+            "HRX_PUBLIC_DEPS_DIR", default_output / "install" / "public-deps"
+        ),
+    )
+    parser.add_argument(
+        "--composed-install-dir",
+        type=Path,
+        default=env_path(
+            "HRX_COMPOSED_INSTALL_DIR", default_output / "install" / "composed"
+        ),
+    )
+    parser.add_argument(
+        "--artifact-download-dir",
+        type=Path,
+        default=env_path(
+            "HRX_ARTIFACT_DOWNLOAD_DIR", default_output / "downloaded-artifacts"
+        ),
+    )
+    parser.add_argument(
+        "--package-smoke-build-dir",
+        type=Path,
+        default=env_path(
+            "HRX_PACKAGE_SMOKE_BUILD_DIR", default_output / "build" / "package-smoke"
+        ),
+    )
+    parser.add_argument(
+        "--package-output-dir",
+        type=Path,
+        default=env_path("HRX_PACKAGE_OUTPUT_DIR", default_output / "dist"),
+    )
+    parser.add_argument(
+        "--public-component",
+        default=env_default("HRX_PUBLIC_COMPONENT", "HrxPublicDist"),
+    )
+    parser.add_argument(
+        "--tests-component", default=env_default("HRX_TESTS_COMPONENT", "HrxTestsDist")
+    )
+    parser.add_argument(
+        "--build-type", default=env_default("HRX_BUILD_TYPE", "RelWithDebInfo")
+    )
     parser.add_argument("--target", default=env_default("HRX_BUILD_TARGET", "all"))
-    parser.add_argument("--sanitizer", default=env_default("HRX_SANITIZER", "none"), choices=["none", "asan", "tsan", "msan", "ubsan"])
-    parser.add_argument("--assertions", action=argparse.BooleanOptionalAction, default=env_bool("HRX_ASSERTIONS", False))
+    parser.add_argument(
+        "--sanitizer",
+        default=env_default("HRX_SANITIZER", "none"),
+        choices=["none", "asan", "tsan", "msan", "ubsan"],
+    )
+    parser.add_argument(
+        "--assertions",
+        action=argparse.BooleanOptionalAction,
+        default=env_bool("HRX_ASSERTIONS", False),
+    )
     parser.add_argument("--ctest-regex", default=env_default("HRX_CTEST_REGEX", ""))
-    parser.add_argument("--ctest-exclude-regex", default=env_default("HRX_CTEST_EXCLUDE_REGEX", ""))
-    parser.add_argument("--ctest-label-regex", default=env_default("HRX_CTEST_LABEL_REGEX", ""))
-    parser.add_argument("--ctest-label-exclude-regex", default=env_default("HRX_CTEST_LABEL_EXCLUDE_REGEX", ""))
-    parser.add_argument("--ctest-parallelism", type=int, default=env_int("HRX_CTEST_PARALLELISM", 0))
+    parser.add_argument(
+        "--ctest-exclude-regex", default=env_default("HRX_CTEST_EXCLUDE_REGEX", "")
+    )
+    parser.add_argument(
+        "--ctest-label-regex", default=env_default("HRX_CTEST_LABEL_REGEX", "")
+    )
+    parser.add_argument(
+        "--ctest-label-exclude-regex",
+        default=env_default("HRX_CTEST_LABEL_EXCLUDE_REGEX", ""),
+    )
+    parser.add_argument(
+        "--ctest-parallelism", type=int, default=env_int("HRX_CTEST_PARALLELISM", 0)
+    )
     parser.add_argument("--cts-device", default=env_default("HRX_CTS_DEVICE", ""))
-    parser.add_argument("--test-tmpdir", type=Path, default=Path(os.environ["HRX_TEST_TMPDIR"]) if os.environ.get("HRX_TEST_TMPDIR") else None)
-    parser.add_argument("--gpu", action="store_true", default=env_bool("HRX_TEST_GPU", False))
-    parser.add_argument("--prepare-public-deps", action=argparse.BooleanOptionalAction, default=env_bool("HRX_PREPARE_PUBLIC_DEPS", True))
-    parser.add_argument("--package-smoke", action=argparse.BooleanOptionalAction, default=env_bool("HRX_PACKAGE_SMOKE", True))
-    parser.add_argument("--package", action=argparse.BooleanOptionalAction, default=env_bool("HRX_PACKAGE", True))
-    parser.add_argument("--package-suffix", default=env_default("HRX_PACKAGE_SUFFIX", ""))
-    parser.add_argument("--passthrough", action=argparse.BooleanOptionalAction, default=env_bool("HRX_PASSTHROUGH", True))
-    parser.add_argument("--amdgpu", action=argparse.BooleanOptionalAction, default=env_bool("HRX_AMDGPU", True))
+    parser.add_argument(
+        "--test-tmpdir",
+        type=Path,
+        default=Path(os.environ["HRX_TEST_TMPDIR"])
+        if os.environ.get("HRX_TEST_TMPDIR")
+        else None,
+    )
+    parser.add_argument(
+        "--gpu", action="store_true", default=env_bool("HRX_TEST_GPU", False)
+    )
+    parser.add_argument(
+        "--prepare-public-deps",
+        action=argparse.BooleanOptionalAction,
+        default=env_bool("HRX_PREPARE_PUBLIC_DEPS", True),
+    )
+    parser.add_argument(
+        "--package-smoke",
+        action=argparse.BooleanOptionalAction,
+        default=env_bool("HRX_PACKAGE_SMOKE", True),
+    )
+    parser.add_argument(
+        "--package",
+        action=argparse.BooleanOptionalAction,
+        default=env_bool("HRX_PACKAGE", True),
+    )
+    parser.add_argument(
+        "--package-suffix", default=env_default("HRX_PACKAGE_SUFFIX", "")
+    )
+    parser.add_argument(
+        "--passthrough",
+        action=argparse.BooleanOptionalAction,
+        default=env_bool("HRX_PASSTHROUGH", True),
+    )
+    parser.add_argument(
+        "--amdgpu",
+        action=argparse.BooleanOptionalAction,
+        default=env_bool("HRX_AMDGPU", True),
+    )
     parser.add_argument("-D", dest="cmake_option", action="append", default=[])
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    run_parser = subparsers.add_parser("run", help="Fetch ROCm, build, test, and optionally package")
+    run_parser = subparsers.add_parser(
+        "run", help="Fetch ROCm, build, test, and optionally package"
+    )
     add_shared_args(run_parser)
-    fetch_parser = subparsers.add_parser("fetch-rocm", help="Fetch and flatten TheRock ROCm artifacts")
+    fetch_parser = subparsers.add_parser(
+        "fetch-rocm", help="Fetch and flatten TheRock ROCm artifacts"
+    )
     add_shared_args(fetch_parser)
     build_parser = subparsers.add_parser("build", help="Configure, build, and install")
     add_shared_args(build_parser)
     test_parser = subparsers.add_parser("test", help="Validate build and install trees")
     add_shared_args(test_parser)
-    extract_parser = subparsers.add_parser("extract-packages", help="Extract downloaded HRX package artifacts")
+    extract_parser = subparsers.add_parser(
+        "extract-packages", help="Extract downloaded HRX package artifacts"
+    )
     add_shared_args(extract_parser)
-    package_parser = subparsers.add_parser("package", help="Package an installed HRX/ROCm tree")
+    package_parser = subparsers.add_parser(
+        "package", help="Package an installed HRX/ROCm tree"
+    )
     add_shared_args(package_parser)
     args = parser.parse_args(argv)
 

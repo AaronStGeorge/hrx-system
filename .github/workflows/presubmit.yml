@@ -1,0 +1,58 @@
+# Copyright 2026 The HRX Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+name: Presubmit
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+      - main-staging
+
+permissions:
+  contents: read
+
+jobs:
+  presubmit:
+    name: Linux / Presubmit
+    runs-on: aws-linux-scale-rocm-prod
+    timeout-minutes: 45
+    container:
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
+    env:
+      PIP_CACHE_DIR: ${{ github.workspace }}/build/presubmit/caches/pip
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Adjust git config
+        run: git config --global --add safe.directory "$PWD"
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Python developer tools
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install --require-hashes -r requirements-dev.lock.txt
+          .venv/bin/python build_tools/devtools/install.py
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Check tool versions
+        run: |
+          bazel --version
+          buildifier --version
+          clang-format --version
+          ruff --version
+          lefthook version
+
+      - name: Run presubmit
+        run: lefthook run check

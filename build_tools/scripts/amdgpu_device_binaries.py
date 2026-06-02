@@ -16,16 +16,15 @@ from __future__ import annotations
 import argparse
 import ast
 import os
-from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 from typing import Iterable, Sequence
 
 import amdgpu_target_map
-
 
 TARGET_TRIPLE = "amdgcn-amd-amdhsa"
 DEFAULT_TARGET_SELECTIONS = amdgpu_target_map.DEFAULT_TARGET_SELECTIONS

@@ -4,22 +4,21 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""YAML execution test runner for command-line tooling tests."""
+"""JSON execution test runner for command-line tooling tests."""
 
 from __future__ import annotations
 
 import argparse
 import dataclasses
+import json
 import os
-from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 from typing import Any
-
-import yaml
 
 
 class ExecutionError(Exception):
@@ -73,12 +72,12 @@ def resolve_runfile(path: str) -> Path:
     raise FileNotFoundError(path)
 
 
-def _load_yaml(path: Path) -> Any:
-    with path.open("r", encoding="utf-8") as file:
+def _load_manifest(path: Path) -> Any:
+    with path.open(encoding="utf-8") as file:
         try:
-            return yaml.safe_load(file)
-        except yaml.YAMLError as exc:
-            raise SchemaError(f"{path}: invalid YAML: {exc}") from exc
+            return json.load(file)
+        except json.JSONDecodeError as exc:
+            raise SchemaError(f"{path}: invalid JSON: {exc}") from exc
 
 
 def _as_mapping(value: Any, location: str) -> dict[str, Any]:
@@ -120,7 +119,9 @@ def _normalize_text(text: str, normalizers: list[Any] | None) -> str:
             normalized = normalized.replace("\\", "/")
         elif kind == "regex":
             pattern = _as_string(entry.get("pattern"), "normalize.pattern")
-            replacement = _as_string(entry.get("replacement", ""), "normalize.replacement")
+            replacement = _as_string(
+                entry.get("replacement", ""), "normalize.replacement"
+            )
             normalized = re.sub(pattern, replacement, normalized)
         else:
             raise SchemaError(f"unknown normalizer {kind!r}")
@@ -156,7 +157,7 @@ class _Substituter:
 
 
 class ExecutionRunner:
-    """Runs one or more YAML execution manifests."""
+    """Runs one or more JSON execution manifests."""
 
     def __init__(
         self,
@@ -175,7 +176,7 @@ class ExecutionRunner:
 
     def run_manifest(self, manifest_path: Path) -> RunSummary:
         manifest_path = resolve_runfile(str(manifest_path))
-        manifest = _as_mapping(_load_yaml(manifest_path), str(manifest_path))
+        manifest = _as_mapping(_load_manifest(manifest_path), str(manifest_path))
         version = manifest.get("version")
         if version != 1:
             raise SchemaError(f"{manifest_path}: expected version: 1")
@@ -183,9 +184,15 @@ class ExecutionRunner:
         summary = RunSummary()
         for index, case in enumerate(case_values):
             case_mapping = _as_mapping(case, f"{manifest_path}: cases[{index}]")
-            name = _as_string(case_mapping.get("name"), f"{manifest_path}: cases[{index}].name")
+            name = _as_string(
+                case_mapping.get("name"), f"{manifest_path}: cases[{index}].name"
+            )
             qualified_name = f"{manifest_path.name}:{name}"
-            if self._case_filters and name not in self._case_filters and qualified_name not in self._case_filters:
+            if (
+                self._case_filters
+                and name not in self._case_filters
+                and qualified_name not in self._case_filters
+            ):
                 continue
             if self._list_only:
                 print(qualified_name, file=self._output_stream)
@@ -202,7 +209,9 @@ class ExecutionRunner:
     def _run_case(self, manifest_path: Path, case: dict[str, Any]) -> None:
         case_name = _as_string(case.get("name"), "case.name")
         temp_root = os.environ.get("TEST_TMPDIR")
-        temp_dir = Path(tempfile.mkdtemp(prefix=_safe_case_name(case_name) + "-", dir=temp_root))
+        temp_dir = Path(
+            tempfile.mkdtemp(prefix=_safe_case_name(case_name) + "-", dir=temp_root)
+        )
         substituter = _Substituter(
             {
                 "case": _safe_case_name(case_name),
@@ -235,19 +244,19 @@ class ExecutionRunner:
             if not self._keep_temp and not failed:
                 shutil.rmtree(temp_dir, ignore_errors=True)
             elif self._keep_temp:
-                print(f"kept temp directory for {case_name}: {temp_dir}", file=self._output_stream)
+                print(
+                    f"kept temp directory for {case_name}: {temp_dir}",
+                    file=self._output_stream,
+                )
 
     def _case_steps(self, case: dict[str, Any]) -> list[dict[str, Any]]:
         if "steps" in case:
-            return [_as_mapping(step, "case.steps[]") for step in _as_sequence(case["steps"], "case.steps")]
-        if "run" in case:
             return [
-                {
-                    key: value
-                    for key, value in case.items()
-                    if key not in ("name",)
-                }
+                _as_mapping(step, "case.steps[]")
+                for step in _as_sequence(case["steps"], "case.steps")
             ]
+        if "run" in case:
+            return [{key: value for key, value in case.items() if key not in ("name",)}]
         raise SchemaError(f"{case.get('name', '<unnamed>')}: expected 'run' or 'steps'")
 
     def _run_step(
@@ -260,7 +269,9 @@ class ExecutionRunner:
         step_outputs: dict[str, subprocess.CompletedProcess[bytes]],
     ) -> None:
         if "write" in step:
-            self._run_write_step(case_name, step_name, _as_mapping(step["write"], f"{step_name}.write"))
+            self._run_write_step(
+                case_name, step_name, _as_mapping(step["write"], f"{step_name}.write")
+            )
             return
         if "run" not in step:
             raise SchemaError(f"{case_name}:{step_name}: expected 'run' or 'write'")
@@ -270,18 +281,26 @@ class ExecutionRunner:
             raise SchemaError(f"{case_name}:{step_name}: unknown tool {tool_name!r}")
         args = [
             _as_string(arg, f"{case_name}:{step_name}.run.args[]")
-            for arg in _as_sequence(run.get("args", []), f"{case_name}:{step_name}.run.args")
+            for arg in _as_sequence(
+                run.get("args", []), f"{case_name}:{step_name}.run.args"
+            )
         ]
         argv = [str(self._tools[tool_name]), *args]
-        stdin = self._stdin_bytes(case_name, step_name, run.get("stdin", step.get("stdin")), step_outputs)
+        stdin = self._stdin_bytes(
+            case_name, step_name, run.get("stdin", step.get("stdin")), step_outputs
+        )
         env = dict(os.environ)
         env.update(
             {
                 key: _as_string(value, f"{case_name}:{step_name}.env[{key!r}]")
-                for key, value in _as_mapping(step.get("env", {}), f"{case_name}:{step_name}.env").items()
+                for key, value in _as_mapping(
+                    step.get("env", {}), f"{case_name}:{step_name}.env"
+                ).items()
             }
         )
-        cwd = Path(_as_string(step.get("cwd", str(temp_dir)), f"{case_name}:{step_name}.cwd"))
+        cwd = Path(
+            _as_string(step.get("cwd", str(temp_dir)), f"{case_name}:{step_name}.cwd")
+        )
         try:
             completed = subprocess.run(
                 argv,
@@ -300,20 +319,37 @@ class ExecutionRunner:
                 f"cwd: {cwd}"
             ) from exc
         self._check_exit(case_name, step_name, argv, completed, step.get("exit", 0))
-        self._check_stream(case_name, step_name, argv, "stdout", completed.stdout, step.get("stdout"))
-        self._check_stream(case_name, step_name, argv, "stderr", completed.stderr, step.get("stderr"))
+        self._check_stream(
+            case_name, step_name, argv, "stdout", completed.stdout, step.get("stdout")
+        )
+        self._check_stream(
+            case_name, step_name, argv, "stderr", completed.stderr, step.get("stderr")
+        )
         self._check_files(case_name, step_name, step.get("files", []))
         step_outputs[step_name] = completed
 
-    def _run_write_step(self, case_name: str, step_name: str, write: dict[str, Any]) -> None:
-        path = Path(_as_string(write.get("path"), f"{case_name}:{step_name}.write.path"))
+    def _run_write_step(
+        self, case_name: str, step_name: str, write: dict[str, Any]
+    ) -> None:
+        path = Path(
+            _as_string(write.get("path"), f"{case_name}:{step_name}.write.path")
+        )
         path.parent.mkdir(parents=True, exist_ok=True)
         if "text" in write:
-            path.write_text(_as_string(write["text"], f"{case_name}:{step_name}.write.text"), encoding="utf-8")
+            path.write_text(
+                _as_string(write["text"], f"{case_name}:{step_name}.write.text"),
+                encoding="utf-8",
+            )
         elif "bytes" in write:
-            path.write_bytes(bytes(_as_sequence(write["bytes"], f"{case_name}:{step_name}.write.bytes")))
+            path.write_bytes(
+                bytes(
+                    _as_sequence(write["bytes"], f"{case_name}:{step_name}.write.bytes")
+                )
+            )
         else:
-            raise SchemaError(f"{case_name}:{step_name}.write: expected 'text' or 'bytes'")
+            raise SchemaError(
+                f"{case_name}:{step_name}.write: expected 'text' or 'bytes'"
+            )
 
     def _stdin_bytes(
         self,
@@ -326,15 +362,25 @@ class ExecutionRunner:
             return None
         spec = _as_mapping(stdin, f"{case_name}:{step_name}.stdin")
         if "text" in spec:
-            return _as_string(spec["text"], f"{case_name}:{step_name}.stdin.text").encode("utf-8")
+            return _as_string(
+                spec["text"], f"{case_name}:{step_name}.stdin.text"
+            ).encode("utf-8")
         if "file" in spec:
-            return Path(_as_string(spec["file"], f"{case_name}:{step_name}.stdin.file")).read_bytes()
+            return Path(
+                _as_string(spec["file"], f"{case_name}:{step_name}.stdin.file")
+            ).read_bytes()
         if "step_stdout" in spec:
-            source = _as_string(spec["step_stdout"], f"{case_name}:{step_name}.stdin.step_stdout")
+            source = _as_string(
+                spec["step_stdout"], f"{case_name}:{step_name}.stdin.step_stdout"
+            )
             if source not in step_outputs:
-                raise SchemaError(f"{case_name}:{step_name}: unknown stdout source step {source!r}")
+                raise SchemaError(
+                    f"{case_name}:{step_name}: unknown stdout source step {source!r}"
+                )
             return step_outputs[source].stdout
-        raise SchemaError(f"{case_name}:{step_name}.stdin: expected 'text', 'file', or 'step_stdout'")
+        raise SchemaError(
+            f"{case_name}:{step_name}.stdin: expected 'text', 'file', or 'step_stdout'"
+        )
 
     def _check_exit(
         self,
@@ -347,13 +393,21 @@ class ExecutionRunner:
         if isinstance(expected, int):
             if completed.returncode == expected:
                 return
-            self._fail_command(case_name, step_name, argv, completed, f"expected exit {expected}")
+            self._fail_command(
+                case_name, step_name, argv, completed, f"expected exit {expected}"
+            )
         spec = _as_mapping(expected, f"{case_name}:{step_name}.exit")
         if spec.get("nonzero") is True and completed.returncode != 0:
             return
         if "code" in spec and completed.returncode == spec["code"]:
             return
-        self._fail_command(case_name, step_name, argv, completed, f"unexpected exit {completed.returncode}")
+        self._fail_command(
+            case_name,
+            step_name,
+            argv,
+            completed,
+            f"unexpected exit {completed.returncode}",
+        )
 
     def _check_stream(
         self,
@@ -368,16 +422,28 @@ class ExecutionRunner:
             return
         spec = _as_mapping(spec_value, f"{case_name}:{step_name}.{stream_name}")
         if "save" in spec:
-            save_path = Path(_as_string(spec["save"], f"{case_name}:{step_name}.{stream_name}.save"))
+            save_path = Path(
+                _as_string(spec["save"], f"{case_name}:{step_name}.{stream_name}.save")
+            )
             save_path.parent.mkdir(parents=True, exist_ok=True)
             save_path.write_bytes(raw)
         text = _normalize_text(_decode_text(raw), spec.get("normalize"))
         if spec.get("empty") is True and text:
-            self._fail_command(case_name, step_name, argv, None, f"expected empty {stream_name}, got:\n{text}")
+            self._fail_command(
+                case_name,
+                step_name,
+                argv,
+                None,
+                f"expected empty {stream_name}, got:\n{text}",
+            )
         if "contains" in spec:
-            self._check_contains(case_name, step_name, stream_name, text, spec["contains"])
+            self._check_contains(
+                case_name, step_name, stream_name, text, spec["contains"]
+            )
         if "not_contains" in spec:
-            self._check_not_contains(case_name, step_name, stream_name, text, spec["not_contains"])
+            self._check_not_contains(
+                case_name, step_name, stream_name, text, spec["not_contains"]
+            )
 
     def _check_contains(
         self,
@@ -387,7 +453,9 @@ class ExecutionRunner:
         text: str,
         value: Any,
     ) -> None:
-        ordered, entries = self._contains_entries(value, f"{case_name}:{step_name}.{stream_name}.contains")
+        ordered, entries = self._contains_entries(
+            value, f"{case_name}:{step_name}.{stream_name}.contains"
+        )
         position = 0
         for entry in entries:
             match = self._find_match(text, entry, position if ordered else 0)
@@ -407,7 +475,9 @@ class ExecutionRunner:
         text: str,
         value: Any,
     ) -> None:
-        _, entries = self._contains_entries(value, f"{case_name}:{step_name}.{stream_name}.not_contains")
+        _, entries = self._contains_entries(
+            value, f"{case_name}:{step_name}.{stream_name}.not_contains"
+        )
         for entry in entries:
             if self._find_match(text, entry, 0) is not None:
                 raise CaseFailure(
@@ -432,19 +502,31 @@ class ExecutionRunner:
         mapping = _as_mapping(entry, "contains[]")
         if "regex" not in mapping:
             raise SchemaError("contains[] mapping expected 'regex'")
-        match = re.search(_as_string(mapping["regex"], "contains[].regex"), text[position:])
+        match = re.search(
+            _as_string(mapping["regex"], "contains[].regex"), text[position:]
+        )
         if not match:
             return None
         return position + match.end()
 
     def _check_files(self, case_name: str, step_name: str, value: Any) -> None:
-        for index, entry in enumerate(_as_sequence(value, f"{case_name}:{step_name}.files")):
+        for index, entry in enumerate(
+            _as_sequence(value, f"{case_name}:{step_name}.files")
+        ):
             spec = _as_mapping(entry, f"{case_name}:{step_name}.files[{index}]")
-            path = Path(_as_string(spec.get("path"), f"{case_name}:{step_name}.files[{index}].path"))
+            path = Path(
+                _as_string(
+                    spec.get("path"), f"{case_name}:{step_name}.files[{index}].path"
+                )
+            )
             if spec.get("exists", True) and not path.exists():
-                raise CaseFailure(f"{case_name}:{step_name}: expected file {path} to exist")
+                raise CaseFailure(
+                    f"{case_name}:{step_name}: expected file {path} to exist"
+                )
             if spec.get("non_empty") is True and path.stat().st_size == 0:
-                raise CaseFailure(f"{case_name}:{step_name}: expected file {path} to be non-empty")
+                raise CaseFailure(
+                    f"{case_name}:{step_name}: expected file {path} to be non-empty"
+                )
 
     def _fail_command(
         self,
@@ -474,13 +556,21 @@ class ExecutionRunner:
     def _preserve_failed_temp(self, case_name: str, temp_dir: Path) -> None:
         undeclared_outputs = os.environ.get("TEST_UNDECLARED_OUTPUTS_DIR")
         if undeclared_outputs:
-            destination = Path(undeclared_outputs) / (_safe_case_name(case_name) + "_temp")
+            destination = Path(undeclared_outputs) / (
+                _safe_case_name(case_name) + "_temp"
+            )
             if destination.exists():
                 shutil.rmtree(destination)
             shutil.copytree(temp_dir, destination)
-            print(f"preserved temp directory for {case_name}: {destination}", file=self._output_stream)
+            print(
+                f"preserved temp directory for {case_name}: {destination}",
+                file=self._output_stream,
+            )
         else:
-            print(f"preserved temp directory for {case_name}: {temp_dir}", file=self._output_stream)
+            print(
+                f"preserved temp directory for {case_name}: {temp_dir}",
+                file=self._output_stream,
+            )
 
 
 def parse_tool_bindings(values: list[str]) -> dict[str, Path]:
@@ -495,11 +585,21 @@ def parse_tool_bindings(values: list[str]) -> dict[str, Path]:
 
 def run_from_args(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", action="append", default=[], help="YAML execution manifest.")
-    parser.add_argument("--tool", action="append", default=[], help="Tool binding as name=path.")
-    parser.add_argument("--case", action="append", default=[], help="Only run a case name.")
-    parser.add_argument("--keep-temp", action="store_true", help="Keep per-case temporary directories.")
-    parser.add_argument("--list", action="store_true", help="List selected cases without running them.")
+    parser.add_argument(
+        "--manifest", action="append", default=[], help="JSON execution manifest."
+    )
+    parser.add_argument(
+        "--tool", action="append", default=[], help="Tool binding as name=path."
+    )
+    parser.add_argument(
+        "--case", action="append", default=[], help="Only run a case name."
+    )
+    parser.add_argument(
+        "--keep-temp", action="store_true", help="Keep per-case temporary directories."
+    )
+    parser.add_argument(
+        "--list", action="store_true", help="List selected cases without running them."
+    )
     args = parser.parse_args(argv)
     if not args.manifest:
         raise SchemaError("at least one --manifest is required")

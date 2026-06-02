@@ -42,6 +42,7 @@ CMakeUserPresets.json
 *.whl
 **/__pycache__/
 **/.ipynb_checkpoints/
+/.ruff_cache/
 
 # Source indexing and language-server output.
 /.cache/

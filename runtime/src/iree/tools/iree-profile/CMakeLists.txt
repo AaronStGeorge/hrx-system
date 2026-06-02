@@ -38,7 +38,7 @@ iree_execution_test_suite(
   NAME
     execution_test
   MANIFESTS
-    "iree-profile.test.yaml"
+    "iree-profile.test.json"
   TOOLS
     "iree-profile=iree::tools::iree-profile"
 )

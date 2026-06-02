@@ -35,7 +35,7 @@ iree_runtime_cc_binary(
 
 iree_execution_test_suite(
     name = "execution_test",
-    manifests = ["iree-profile.test.yaml"],
+    manifests = ["iree-profile.test.json"],
     tools = {
         "iree-profile": "//tools:iree-profile",
     },

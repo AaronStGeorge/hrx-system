@@ -217,8 +217,7 @@ def setup_environment():
             )
             if not spec or not spec.loader:
                 print(
-                    f"INTERNAL ERROR: Could not evaluate {candidate_cfg_path} "
-                    "as module"
+                    f"INTERNAL ERROR: Could not evaluate {candidate_cfg_path} as module"
                 )
                 sys.exit(1)
             candidate_cfg = importlib.util.module_from_spec(spec)
@@ -236,9 +235,7 @@ def setup_environment():
                 repo_cfg_path,
             )
             if not spec or not spec.loader:
-                print(
-                    f"INTERNAL ERROR: Could not evaluate {repo_cfg_path} as module"
-                )
+                print(f"INTERNAL ERROR: Could not evaluate {repo_cfg_path} as module")
                 sys.exit(1)
             repo_cfg = importlib.util.module_from_spec(spec)
             sys.modules[REPO_CFG_MODULE_NAME] = repo_cfg
@@ -322,14 +319,14 @@ def convert_directory(directory_path, write_files, print_generated_content, verb
     header = "\n".join(
         ["#" * 80]
         + [
-            l.ljust(79) + "#"
-            for l in [
+            header_line.ljust(79) + "#"
+            for header_line in [
                 f"# {autogeneration_tag} from",
                 f"# {rel_build_file_path}",
                 "#",
                 "# Add CMake-only content below the preserve marker at the end of this file.",
                 "#",
-                f"# To disable autogeneration for this file entirely, delete this header.",
+                "# To disable autogeneration for this file entirely, delete this header.",
             ]
         ]
         + ["#" * 80]
@@ -360,7 +357,7 @@ def convert_directory(directory_path, write_files, print_generated_content, verb
                 preserved_footer_lines.append(line)
         if not found_autogeneration_tag:
             if verbosity >= 1:
-                log(f"Skipped. Did not find autogeneration line.", indent=2)
+                log("Skipped. Did not find autogeneration line.", indent=2)
             return Status.SKIPPED
     preserved_header = (
         "".join(possible_preserved_header_lines) if found_preserve_above_tag else ""
@@ -372,7 +369,7 @@ def convert_directory(directory_path, write_files, print_generated_content, verb
         build_file_contents = build_file.read()
     if "bazel-to-cmake: skip" in build_file_contents:
         if verbosity >= 1:
-            log(f"Skipped. BUILD file has bazel-to-cmake: skip.", indent=2)
+            log("Skipped. BUILD file has bazel-to-cmake: skip.", indent=2)
         return Status.SKIPPED
     build_file_code = compile(build_file_contents, build_file_path, "exec")
     try:
@@ -493,10 +490,10 @@ def main(args):
         )
     else:
         log(
-            f"ERROR: No paths provided and no DEFAULT_ROOT_DIRS in "
-            f".bazel_to_cmake.cfg.py. Pass BUILD files or directories as "
-            f"positional arguments, use --dir for a single directory, or "
-            f"--recursive_dir to process an entire tree."
+            "ERROR: No paths provided and no DEFAULT_ROOT_DIRS in "
+            ".bazel_to_cmake.cfg.py. Pass BUILD files or directories as "
+            "positional arguments, use --dir for a single directory, or "
+            "--recursive_dir to process an entire tree."
         )
         sys.exit(1)
 

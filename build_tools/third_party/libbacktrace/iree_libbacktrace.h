@@ -12,4 +12,3 @@
 #include <backtrace.h>
 
 #endif  // IREE_BUILD_TOOLS_THIRD_PARTY_LIBBACKTRACE_IREE_LIBBACKTRACE_H_
-

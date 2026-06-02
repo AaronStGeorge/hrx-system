@@ -14,8 +14,8 @@ See bazel_to_cmake.py for usage.
 # pylint: disable=exec-used
 
 import itertools
-import re
 import os
+import re
 
 import bazel_to_cmake_config
 import bazel_to_cmake_targets
@@ -260,7 +260,7 @@ class BuildFileFunctions(object):
             )
             if has_compatible:
                 self._converter.body = self._converter.body.rstrip("\n") + "\n"
-                self._converter.body += f"endif()\n\n"
+                self._converter.body += "endif()\n\n"
             return
 
         # Only emit if all labels are recognized (same check as begin).
@@ -270,7 +270,7 @@ class BuildFileFunctions(object):
             # Strip trailing blank line from the target body so endif() is
             # adjacent to the closing paren.
             self._converter.body = self._converter.body.rstrip("\n") + "\n"
-            self._converter.body += f"endif()\n\n"
+            self._converter.body += "endif()\n\n"
 
     def _convert_platform_select_deps(self, name, deps):
         """Handles deps that may contain ConditionSelect entries.
@@ -348,9 +348,7 @@ class BuildFileFunctions(object):
                 block_name, values, quote=quote, sort=sort
             ), ""
 
-        var_name = (
-            f"_{self._cmake_variable_name(name)}_platform_{block_name.lower()}"
-        )
+        var_name = f"_{self._cmake_variable_name(name)}_platform_{block_name.lower()}"
         var_block = f'set({var_name} "")\n'
 
         def append_value(value):
@@ -584,8 +582,7 @@ class BuildFileFunctions(object):
             f"TARGET {target}" for target in sorted(set(optional_targets))
         )
         self._converter.body += (
-            f"iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)\n"
-            f"if({conditions})\n"
+            f"iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)\nif({conditions})\n"
         )
         return True
 
@@ -793,11 +790,7 @@ class BuildFileFunctions(object):
 
         self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
-            f"iree_wasm_entry(\n"
-            f"{name_block}"
-            f"{main_block}"
-            f"{srcs_block}"
-            f"  PUBLIC\n)\n\n"
+            f"iree_wasm_entry(\n{name_block}{main_block}{srcs_block}  PUBLIC\n)\n\n"
         )
         self._emit_platform_guard_end(target_compatible_with)
 
@@ -1032,10 +1025,7 @@ class BuildFileFunctions(object):
         )
         target_block = self._convert_single_target_block("TARGET", target)
         self._converter.body += (
-            f"iree_compiler_register_plugin(\n"
-            f"{plugin_id_block}"
-            f"{target_block}"
-            f")\n\n"
+            f"iree_compiler_register_plugin(\n{plugin_id_block}{target_block})\n\n"
         )
 
     def cc_test(
@@ -1847,6 +1837,7 @@ class BuildFileFunctions(object):
             f"{args_block}"
             f"{test_binary_block}"
             f"{labels_block}"
+            f"{timeout_block}"
             f")\n\n"
         )
 
@@ -1912,12 +1903,7 @@ class BuildFileFunctions(object):
         cmd_block = self._convert_string_arg_block("CMD", cmd, quote=True)
 
         self._converter.body += (
-            f"iree_genrule(\n"
-            f"{name_block}"
-            f"{srcs_block}"
-            f"{outs_block}"
-            f"{cmd_block}"
-            f")\n\n"
+            f"iree_genrule(\n{name_block}{srcs_block}{outs_block}{cmd_block})\n\n"
         )
 
 
@@ -1931,9 +1917,7 @@ class Converter(object):
         self.body = ""
 
     def convert(self):
-        converted_content = (
-            f"{self.header}\n\n" f"iree_add_all_subdirs()\n\n" f"{self.body}"
-        )
+        converted_content = f"{self.header}\n\niree_add_all_subdirs()\n\n{self.body}"
 
         # Cleanup newline characters. This is more convenient than ensuring all
         # conversions are careful with where they insert newlines.

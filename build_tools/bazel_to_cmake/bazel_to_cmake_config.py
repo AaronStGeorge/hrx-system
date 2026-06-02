@@ -115,7 +115,9 @@ def create_target_converter(repo_cfg, repo_map, default_class):
             repo_map=repo_map,
             projects=projects,
             target_mappings=getattr(repo_cfg, "TARGET_MAPPINGS", {}),
-            convert_unmatched_target=getattr(repo_cfg, "convert_unmatched_target", None),
+            convert_unmatched_target=getattr(
+                repo_cfg, "convert_unmatched_target", None
+            ),
         )
     return getattr(repo_cfg, "CustomTargetConverter", default_class)(repo_map=repo_map)
 

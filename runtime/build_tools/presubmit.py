@@ -15,6 +15,18 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = "runtime/"
+GLOBAL_TEST_TRIGGERS = (
+    "BUILD.bazel",
+    "MODULE.bazel",
+    ".bazelrc",
+    ".bazel_to_cmake.cfg.py",
+    "requirements",
+    "build_tools/bazel/",
+    "build_tools/bazel_to_cmake/",
+    "build_tools/testing/",
+    "build_tools/third_party/",
+)
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -37,15 +49,40 @@ def run_command(command: list[str], description: str) -> bool:
     result = subprocess.run(command, cwd=REPO_ROOT)
     if result.returncode == 0:
         return True
-    print(
-        f"runtime presubmit: {description} failed with exit code {result.returncode}"
-    )
+    print(f"runtime presubmit: {description} failed with exit code {result.returncode}")
     return False
+
+
+def is_global_trigger(path: str) -> bool:
+    if path.startswith("requirements") and path.endswith(".txt"):
+        return True
+    return any(
+        path == trigger or path.startswith(trigger) for trigger in GLOBAL_TEST_TRIGGERS
+    )
+
+
+def selected_files(files_from: str | None) -> list[str]:
+    if not files_from:
+        return []
+    with open(files_from, encoding="utf-8") as file_list:
+        return [line.strip() for line in file_list if line.strip()]
+
+
+def should_run_tests(files_from: str | None) -> bool:
+    paths = selected_files(files_from)
+    if not paths:
+        return files_from is None
+    return any(
+        path.startswith(PROJECT_ROOT) or is_global_trigger(path) for path in paths
+    )
 
 
 def main() -> int:
     args = parse_arguments()
     if not args.tests:
+        return 0
+    if not should_run_tests(args.files_from):
+        print("runtime presubmit: no runtime-affecting files")
         return 0
     ok = run_command(
         ["bazel", "test", "--config=presubmit", "//runtime/..."],

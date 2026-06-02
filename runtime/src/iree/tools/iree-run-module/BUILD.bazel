@@ -29,7 +29,7 @@ iree_runtime_cc_binary(
 
 iree_execution_test_suite(
     name = "execution_test",
-    manifests = ["iree-run-module.test.yaml"],
+    manifests = ["iree-run-module.test.json"],
     tools = {
         "iree-as-module": "//tools:iree-as-module",
         "iree-run-module": "//tools:iree-run-module",
