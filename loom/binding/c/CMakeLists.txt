@@ -1,0 +1,259 @@
+################################################################################
+# Public LoomC C API bindings.
+################################################################################
+
+loom_cc_library(
+  NAME
+    loomc
+  HDRS
+    "include/loomc/artifact.h"
+    "include/loomc/base.h"
+    "include/loomc/compile.h"
+    "include/loomc/config.h"
+    "include/loomc/context.h"
+    "include/loomc/diagnostic.h"
+    "include/loomc/iree.h"
+    "include/loomc/link.h"
+    "include/loomc/link_index.h"
+    "include/loomc/loomc.h"
+    "include/loomc/module.h"
+    "include/loomc/pass.h"
+    "include/loomc/result.h"
+    "include/loomc/source.h"
+    "include/loomc/status.h"
+    "include/loomc/workspace.h"
+    "src/context.h"
+    "src/diagnostic.h"
+    "src/link_index.h"
+    "src/module.h"
+    "src/pass_program.h"
+    "src/result.h"
+    "src/source.h"
+    "src/visibility.h"
+    "src/workspace.h"
+  SRCS
+    "src/artifact.c"
+    "src/base.c"
+    "src/compile.c"
+    "src/context.c"
+    "src/diagnostic.c"
+    "src/link.c"
+    "src/link_index.c"
+    "src/module.c"
+    "src/pass_program.c"
+    "src/result.c"
+    "src/source.c"
+    "src/status.c"
+    "src/workspace.c"
+  DEPS
+    iree::base
+    iree::base::internal::arena
+    iree::base::internal
+    iree::io::file_handle
+    iree::io::stream
+    loom::src::loom::error::diagnostic
+    loom::src::loom::error::error_defs
+    loom::src::loom::error::renderer
+    loom::src::loom::format::bytecode::format
+    loom::src::loom::format::bytecode::reader
+    loom::src::loom::format::bytecode::writer
+    loom::src::loom::format::text::parser
+    loom::src::loom::format::text::printer
+    loom::src::loom::ir
+    loom::src::loom::link::linker
+    loom::src::loom::link::module_index
+    loom::src::loom::link::planner
+    loom::src::loom::ops::op_registry
+    loom::src::loom::ops::pass
+    loom::src::loom::pass::builtin_registry
+    loom::src::loom::pass::environment
+    loom::src::loom::pass::interpreter
+    loom::src::loom::pass::program
+    loom::src::loom::pass::tooling
+    loom::src::loom::tooling::config
+    loom::src::loom::util::json
+    loom::src::loom::util::stream
+    loom::src::loom::verify
+  INCLUDES
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    test_util
+  HDRS
+    "test/util.h"
+  DEPS
+    ::loomc
+    iree::testing::gtest
+  TESTONLY
+)
+
+loom_cc_test(
+  NAME
+    artifact_test
+  SRCS
+    "test/artifact_test.cc"
+  DEPS
+    ::loomc
+    ::test_util
+    iree::testing::gtest
+    iree::testing::gtest_main
+    iree::testing::temp_file
+)
+
+loom_cc_test(
+  NAME
+    compile_test
+  SRCS
+    "test/compile_test.cc"
+  DEPS
+    ::loomc
+    ::test_util
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    pass_program_test
+  SRCS
+    "test/pass_program_test.cc"
+  DEPS
+    ::loomc
+    ::test_util
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    context_test
+  SRCS
+    "test/context_test.cc"
+  DEPS
+    ::loomc
+    ::test_util
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    status_test
+  SRCS
+    "test/status_test.cc"
+  DEPS
+    ::loomc
+    ::test_util
+    iree::base
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    source_test
+  SRCS
+    "test/source_test.cc"
+  DEPS
+    ::loomc
+    ::test_util
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    workspace_test
+  SRCS
+    "test/workspace_test.cc"
+  DEPS
+    ::loomc
+    ::test_util
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    result_test
+  SRCS
+    "test/result_test.cc"
+  DEPS
+    ::loomc
+    ::test_util
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    link_index_test
+  SRCS
+    "test/link_index_test.cc"
+  DEPS
+    ::loomc
+    ::test_util
+    iree::base
+    iree::base::internal::arena
+    iree::io::stream
+    loom::src::loom::format::bytecode::writer
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::op_registry
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    link_test
+  SRCS
+    "test/link_test.cc"
+  DEPS
+    ::loomc
+    ::test_util
+    iree::base
+    iree::base::internal::arena
+    iree::io::stream
+    loom::src::loom::format::bytecode::writer
+    loom::src::loom::format::text::parser
+    loom::src::loom::format::text::printer
+    loom::src::loom::ir
+    loom::src::loom::ops::op_registry
+    loom::src::loom::verify
+    iree::testing::temp_file
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_binary(
+  NAME
+    source_info
+  SRCS
+    "example/source_info.c"
+  DEPS
+    ::loomc
+)
+
+loom_cc_binary(
+  NAME
+    compile_text
+  SRCS
+    "example/compile_text.c"
+  DEPS
+    ::loomc
+)
+
+loom_cc_binary(
+  NAME
+    link_modules
+  SRCS
+    "example/link_modules.c"
+  DEPS
+    ::loomc
+)

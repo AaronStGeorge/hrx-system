@@ -1,0 +1,265 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_binary",
+    "loom_cc_library",
+    "loom_cc_test",
+)
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+LOOMC_PUBLIC_HDRS = [
+    "include/loomc/artifact.h",
+    "include/loomc/base.h",
+    "include/loomc/compile.h",
+    "include/loomc/config.h",
+    "include/loomc/context.h",
+    "include/loomc/diagnostic.h",
+    "include/loomc/iree.h",
+    "include/loomc/link.h",
+    "include/loomc/link_index.h",
+    "include/loomc/loomc.h",
+    "include/loomc/module.h",
+    "include/loomc/pass.h",
+    "include/loomc/result.h",
+    "include/loomc/source.h",
+    "include/loomc/status.h",
+    "include/loomc/workspace.h",
+]
+
+loom_cc_library(
+    name = "loomc",
+    srcs = [
+        "src/artifact.c",
+        "src/base.c",
+        "src/compile.c",
+        "src/context.c",
+        "src/diagnostic.c",
+        "src/link.c",
+        "src/link_index.c",
+        "src/module.c",
+        "src/pass_program.c",
+        "src/result.c",
+        "src/source.c",
+        "src/status.c",
+        "src/workspace.c",
+    ],
+    hdrs = LOOMC_PUBLIC_HDRS + [
+        "src/context.h",
+        "src/diagnostic.h",
+        "src/link_index.h",
+        "src/module.h",
+        "src/pass_program.h",
+        "src/result.h",
+        "src/source.h",
+        "src/visibility.h",
+        "src/workspace.h",
+    ],
+    includes = [
+        ".",
+        "include",
+        "src",
+    ],
+    deps = [
+        "//loom/src/loom/error:diagnostic",
+        "//loom/src/loom/error:error_defs",
+        "//loom/src/loom/error:renderer",
+        "//loom/src/loom/format/bytecode:format",
+        "//loom/src/loom/format/bytecode:reader",
+        "//loom/src/loom/format/bytecode:writer",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/link:linker",
+        "//loom/src/loom/link:module_index",
+        "//loom/src/loom/link:planner",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ops/pass",
+        "//loom/src/loom/pass:builtin_registry",
+        "//loom/src/loom/pass:environment",
+        "//loom/src/loom/pass:interpreter",
+        "//loom/src/loom/pass:program",
+        "//loom/src/loom/pass:tooling",
+        "//loom/src/loom/tooling/config",
+        "//loom/src/loom/util:json",
+        "//loom/src/loom/util:stream",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:file_handle",
+        "//runtime/src/iree/io:stream",
+    ],
+)
+
+loom_cc_library(
+    name = "test_util",
+    testonly = True,
+    hdrs = ["test/util.h"],
+    deps = [
+        ":loomc",
+        "//runtime/src/iree/testing:gtest",
+    ],
+)
+
+loom_cc_test(
+    name = "artifact_test",
+    srcs = ["test/artifact_test.cc"],
+    deps = [
+        ":loomc",
+        ":test_util",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/testing:temp_file",
+    ],
+)
+
+loom_cc_test(
+    name = "compile_test",
+    srcs = ["test/compile_test.cc"],
+    deps = [
+        ":loomc",
+        ":test_util",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "pass_program_test",
+    srcs = ["test/pass_program_test.cc"],
+    deps = [
+        ":loomc",
+        ":test_util",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "context_test",
+    srcs = ["test/context_test.cc"],
+    deps = [
+        ":loomc",
+        ":test_util",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "status_test",
+    srcs = ["test/status_test.cc"],
+    deps = [
+        ":loomc",
+        ":test_util",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "source_test",
+    srcs = ["test/source_test.cc"],
+    deps = [
+        ":loomc",
+        ":test_util",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "workspace_test",
+    srcs = ["test/workspace_test.cc"],
+    deps = [
+        ":loomc",
+        ":test_util",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "result_test",
+    srcs = ["test/result_test.cc"],
+    deps = [
+        ":loomc",
+        ":test_util",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "link_index_test",
+    srcs = ["test/link_index_test.cc"],
+    deps = [
+        ":loomc",
+        ":test_util",
+        "//loom/src/loom/format/bytecode:writer",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "link_test",
+    srcs = ["test/link_test.cc"],
+    deps = [
+        ":loomc",
+        ":test_util",
+        "//loom/src/loom/format/bytecode:writer",
+        "//loom/src/loom/format/text:parser",
+        "//loom/src/loom/format/text:printer",
+        "//loom/src/loom/ir",
+        "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/verify",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
+        "//runtime/src/iree/io:stream",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/testing:temp_file",
+    ],
+)
+
+loom_cc_binary(
+    name = "source_info",
+    srcs = ["example/source_info.c"],
+    deps = [
+        ":loomc",
+    ],
+)
+
+loom_cc_binary(
+    name = "compile_text",
+    srcs = ["example/compile_text.c"],
+    deps = [
+        ":loomc",
+    ],
+)
+
+loom_cc_binary(
+    name = "link_modules",
+    srcs = ["example/link_modules.c"],
+    deps = [
+        ":loomc",
+    ],
+)

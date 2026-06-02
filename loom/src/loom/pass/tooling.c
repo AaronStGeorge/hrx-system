@@ -438,7 +438,7 @@ static iree_status_t loom_pass_tool_build_flat_pipeline_body(
       status, loom_pass_tool_flat_function_group_close(&function_group));
 }
 
-static iree_status_t loom_pass_tool_build_synthetic_pipeline(
+iree_status_t loom_pass_tool_build_flat_pipeline(
     loom_module_t* pipeline_module, iree_string_view_t pipeline,
     const loom_pass_registry_t* registry, const loom_op_t** out_pipeline_op) {
   *out_pipeline_op = NULL;
@@ -468,7 +468,7 @@ iree_status_t loom_pass_tool_run_flat_pipeline(
       module->context, IREE_SV("__pass_tool"), options->block_pool, NULL,
       iree_allocator_system(), &pipeline_module));
   const loom_op_t* pipeline_op = NULL;
-  iree_status_t status = loom_pass_tool_build_synthetic_pipeline(
+  iree_status_t status = loom_pass_tool_build_flat_pipeline(
       pipeline_module, pipeline, options->registry, &pipeline_op);
   if (iree_status_is_ok(status)) {
     status = loom_pass_tool_run_pipeline_module_op(
