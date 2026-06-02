@@ -7,6 +7,10 @@
 """Runtime-specific C/C++ Bazel fuzz macros."""
 
 load("//build_tools/bazel:cc_fuzz.bzl", "iree_cc_fuzz")
+load(
+    "//runtime/requirements:package_policy.bzl",
+    "apply_runtime_target_policy",
+)
 load(":cc_attrs.bzl", "runtime_cc_attrs")
 
 def _iree_runtime_cc_fuzz_impl(
@@ -17,6 +21,7 @@ def _iree_runtime_cc_fuzz_impl(
         cxxopts,
         deps,
         **kwargs):
+    kwargs = apply_runtime_target_policy(kwargs)
     compiler_options = runtime_cc_attrs.with_runtime_compiler_options(
         copts = copts,
         conlyopts = conlyopts,

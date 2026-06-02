@@ -16,6 +16,10 @@ load(
     "iree_cc_binary",
     "iree_cc_library",
 )
+load(
+    "//runtime/requirements:package_policy.bzl",
+    "apply_runtime_target_policy",
+)
 load(":cc_attrs.bzl", "runtime_cc_attrs")
 
 def _iree_runtime_cc_library_impl(
@@ -26,6 +30,7 @@ def _iree_runtime_cc_library_impl(
         cxxopts,
         deps,
         **kwargs):
+    kwargs = apply_runtime_target_policy(kwargs)
     compiler_options = runtime_cc_attrs.with_runtime_compiler_options(
         copts = copts,
         conlyopts = conlyopts,
@@ -62,6 +67,7 @@ def _iree_runtime_cc_binary_impl(
         cxxopts,
         deps,
         **kwargs):
+    kwargs = apply_runtime_target_policy(kwargs)
     compiler_options = runtime_cc_attrs.with_runtime_compiler_options(
         copts = copts,
         conlyopts = conlyopts,

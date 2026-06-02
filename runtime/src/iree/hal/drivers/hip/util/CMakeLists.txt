@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(IREE_HAL_DRIVER_HIP)
 iree_cc_library(
   NAME
     hip_util
@@ -22,7 +23,9 @@ iree_cc_library(
     iree::base
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_HIP)
 iree_cc_test(
   NAME
     queue_test
@@ -32,8 +35,12 @@ iree_cc_test(
     ::hip_util
     iree::testing::gtest
     iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.hip"
 )
+endif()
 
+if(IREE_HAL_DRIVER_HIP)
 iree_cc_test(
   NAME
     tree_test
@@ -43,6 +50,9 @@ iree_cc_test(
     ::hip_util
     iree::testing::gtest
     iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.hip"
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

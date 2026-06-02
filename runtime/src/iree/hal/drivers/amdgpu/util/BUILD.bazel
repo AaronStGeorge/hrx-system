@@ -5,11 +5,11 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
-load("//build_tools/bazel:iree_amdgpu_binary.bzl", "iree_amdgpu_binary")
 load(
     "//build_tools/bazel:iree_hal_cts_test_suite.bzl",
     "iree_hal_cts_testdata",
 )
+load("//runtime/build_tools/bazel:amdgpu_binary.bzl", "iree_amdgpu_binary")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 load("//runtime/build_tools/bazel:cc_benchmark.bzl", "iree_runtime_cc_benchmark")
 load("//runtime/build_tools/bazel:cc_fuzz.bzl", "iree_runtime_cc_fuzz")
@@ -73,11 +73,6 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "libhsa_test",
     srcs = ["libhsa_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":libhsa",
         "//runtime/src/iree/base",
@@ -89,11 +84,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "libaqlprofile_test",
     srcs = ["libaqlprofile_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":libaqlprofile",
         "//runtime/src/iree/base",
@@ -120,11 +110,6 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "topology_test",
     srcs = ["topology_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":libhsa",
         ":topology",
@@ -148,11 +133,6 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "hsaco_metadata_test",
     srcs = ["hsaco_metadata_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":hsaco_metadata",
         "//runtime/src/iree/base",
@@ -229,11 +209,6 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "code_object_target_test",
     srcs = ["code_object_target_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":code_object_target",
         ":target_id",
@@ -410,8 +385,6 @@ iree_runtime_cc_benchmark(
     srcs = ["blit_benchmark.cc"],
     tags = [
         "benchmark",
-        "driver=amdgpu",
-        "nodocker",
     ],
     deps = [
         ":benchmark_flags",
@@ -428,11 +401,6 @@ iree_runtime_cc_benchmark(
 iree_runtime_cc_test(
     name = "block_pool_test",
     srcs = ["block_pool_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":block_pool",
         ":topology",
@@ -446,11 +414,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "device_library_test",
     srcs = ["device_library_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":device_library",
         ":topology",
@@ -464,7 +427,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "device_library_target_test",
     srcs = ["device_library_target_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
     deps = [
         ":device_library_target",
         "//runtime/src/iree/base",
@@ -476,11 +438,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "target_id_test",
     srcs = ["target_id_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":target_id",
         "//runtime/src/iree/base",
@@ -492,11 +449,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "epoch_signal_table_test",
     srcs = ["epoch_signal_table_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":queue_primitives",
         "//runtime/src/iree/async",
@@ -509,11 +461,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "kernarg_ring_test",
     srcs = ["kernarg_ring_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":queue_primitives",
         "//runtime/src/iree/base",
@@ -525,11 +472,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "queue_upload_ring_test",
     srcs = ["queue_upload_ring_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":queue_primitives",
         "//runtime/src/iree/base",
@@ -552,11 +494,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "kfd_test",
     srcs = ["kfd_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":kfd",
         ":libhsa",
@@ -570,11 +507,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "notification_ring_test",
     srcs = ["notification_ring_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":libhsa",
         ":queue_primitives",
@@ -590,11 +522,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "aql_emitter_test",
     srcs = ["aql_emitter_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":packet",
         "//runtime/src/iree/testing:gtest",
@@ -605,11 +532,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "pm4_emitter_test",
     srcs = ["pm4_emitter_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":packet",
         "//runtime/src/iree/testing:gtest",
@@ -620,11 +542,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "pm4_barrier_test",
     srcs = ["pm4_barrier_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":packet",
         "//runtime/src/iree/testing:gtest",
@@ -635,11 +552,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "pm4_dispatch_test",
     srcs = ["pm4_dispatch_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":packet",
         ":pm4_dispatch",
@@ -660,12 +572,6 @@ iree_runtime_cc_test(
     name = "pm4_dispatch_live_test",
     srcs = ["pm4_dispatch_live_test.cc"],
     data = [":pm4_dispatch_test_kernels_gfx1100.so"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-        "requires-gpu-gfx1100",
-    ],
     deps = [
         ":libhsa",
         ":packet",
@@ -686,11 +592,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "pm4_program_test",
     srcs = ["pm4_program_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":packet",
         ":pm4_program",
@@ -735,8 +636,6 @@ iree_runtime_cc_benchmark(
     srcs = ["queue_benchmark.cc"],
     tags = [
         "benchmark",
-        "driver=amdgpu",
-        "nodocker",
     ],
     deps = [
         ":benchmark_flags",
@@ -767,11 +666,6 @@ iree_cmake_extra_content(
 iree_runtime_cc_test(
     name = "signal_pool_test",
     srcs = ["signal_pool_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":libhsa",
         ":queue_primitives",
@@ -787,8 +681,6 @@ iree_runtime_cc_benchmark(
     srcs = ["signal_pool_benchmark.cc"],
     tags = [
         "benchmark",
-        "driver=amdgpu",
-        "nodocker",
     ],
     deps = [
         ":libhsa",
@@ -801,11 +693,6 @@ iree_runtime_cc_benchmark(
 iree_runtime_cc_test(
     name = "vmem_test",
     srcs = ["vmem_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":libhsa",
         ":topology",

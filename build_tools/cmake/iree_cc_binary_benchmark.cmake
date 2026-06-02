@@ -26,6 +26,8 @@
 # TESTONLY: whether the binary should only be compiled for tests
 # HOSTONLY: whether the binary should be compiled using host toolchain when
 #   cross-compiling
+# RESOURCE_GROUP: If set, the generated smoke test is serialized with other
+#   tests sharing the same resource group.
 # LABELS: Additional labels to apply to the test. The package path is added
 #     automatically.
 #
@@ -36,7 +38,7 @@ function(iree_cc_binary_benchmark)
   cmake_parse_arguments(
     _RULE
     "HOSTONLY;TESTONLY"
-    "NAME"
+    "NAME;RESOURCE_GROUP"
     "SRCS;COPTS;DEFINES;LINKOPTS;DATA;DEPS;LABELS"
     ${ARGN}
   )
@@ -85,6 +87,8 @@ function(iree_cc_binary_benchmark)
       ::${_RULE_NAME}
     LABELS
       ${_RULE_LABELS}
+    RESOURCE_GROUP
+      ${_RULE_RESOURCE_GROUP}
   )
   set(IREE_SKIP_TEST_REGISTRATION "${_IREE_SAVED_SKIP_TEST_REGISTRATION}")
 endfunction()

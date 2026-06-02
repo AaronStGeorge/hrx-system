@@ -34,9 +34,11 @@ iree_cc_library(
 )
 endif()
 
+if(IREE_ARCH STREQUAL "wasm_32")
 iree_hal_cts_test_suite(
   BACKENDS_LIB
     ::backends
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

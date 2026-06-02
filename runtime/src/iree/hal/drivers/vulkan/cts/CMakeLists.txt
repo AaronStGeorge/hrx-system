@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_library(
   NAME
     backends
@@ -22,7 +23,9 @@ iree_cc_library(
   ALWAYSLINK
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_library(
   NAME
     bda_backends
@@ -36,7 +39,9 @@ iree_cc_library(
   ALWAYSLINK
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_library(
   NAME
     vulkan_file_test
@@ -51,7 +56,9 @@ iree_cc_library(
   ALWAYSLINK
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_hal_cts_testdata(
   FORMAT_NAME
     vulkan_spirv
@@ -66,7 +73,9 @@ iree_hal_cts_testdata(
   TESTDATA_DIR
     "${PROJECT_SOURCE_DIR}/runtime/src/iree/hal/cts/testdata"
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_hal_cts_testdata(
   FORMAT_NAME
     vulkan_spirv_bda
@@ -83,7 +92,9 @@ iree_hal_cts_testdata(
   FLAGS
     "--iree-vulkan-dispatch-abi=bda"
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_test(
   NAME
     core_driver_tests
@@ -97,10 +108,15 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_test(
   NAME
     core_semaphore_tests
@@ -114,10 +130,15 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_test(
   NAME
     core_semaphore_thread_tests
@@ -131,10 +152,15 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_test(
   NAME
     buffer_tests
@@ -148,10 +174,15 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_test(
   NAME
     allocator_guardrail_tests
@@ -166,10 +197,15 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_test(
   NAME
     allocator_virtual_memory_tests
@@ -184,10 +220,15 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_lib)
 iree_cc_test(
@@ -206,12 +247,17 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_test(
   NAME
     command_buffer_basic_tests
@@ -225,10 +271,15 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_test(
   NAME
     command_buffer_fill_buffer_tests
@@ -242,10 +293,15 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_test(
   NAME
     command_buffer_update_buffer_tests
@@ -259,10 +315,15 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_test(
   NAME
     command_buffer_copy_buffer_tests
@@ -276,10 +337,15 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_test(
   NAME
     command_buffer_transient_buffer_tests
@@ -293,10 +359,15 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_lib)
 iree_cc_test(
@@ -313,12 +384,17 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_bda_lib)
 iree_cc_test(
@@ -335,13 +411,18 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
     "vulkan_uses_vk_khr_buffer_device_address"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_lib)
 iree_cc_test(
@@ -358,12 +439,17 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_bda_lib)
 iree_cc_test(
@@ -380,13 +466,18 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
     "vulkan_uses_vk_khr_buffer_device_address"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_lib)
 iree_cc_test(
@@ -403,12 +494,17 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_bda_lib)
 iree_cc_test(
@@ -425,13 +521,18 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
     "vulkan_uses_vk_khr_buffer_device_address"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_lib)
 iree_cc_test(
@@ -448,12 +549,17 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_bda_lib)
 iree_cc_test(
@@ -470,13 +576,18 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
     "vulkan_uses_vk_khr_buffer_device_address"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_lib)
 iree_cc_test(
@@ -493,12 +604,17 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_bda_lib)
 iree_cc_test(
@@ -515,13 +631,18 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
     "vulkan_uses_vk_khr_buffer_device_address"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_lib)
 iree_cc_test(
@@ -538,12 +659,17 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_bda_lib)
 iree_cc_test(
@@ -560,13 +686,18 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
     "vulkan_uses_vk_khr_buffer_device_address"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_lib)
 iree_cc_test(
@@ -583,12 +714,17 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_bda_lib)
 iree_cc_test(
@@ -605,13 +741,18 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
     "vulkan_uses_vk_khr_buffer_device_address"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_lib)
 iree_cc_test(
@@ -628,12 +769,17 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_bda_lib)
 iree_cc_test(
@@ -650,13 +796,18 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
     "vulkan_uses_vk_khr_buffer_device_address"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_test(
   NAME
     command_buffer_stress_tests
@@ -670,10 +821,15 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_lib)
 iree_cc_test(
@@ -690,12 +846,17 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_bda_lib)
 iree_cc_test(
@@ -712,13 +873,18 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
     "vulkan_uses_vk_khr_buffer_device_address"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_bda_lib)
 iree_cc_test(
@@ -739,13 +905,18 @@ iree_cc_test(
     iree::schemas::vulkan_executable_def_c_fbs
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
     "vulkan_uses_vk_khr_buffer_device_address"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_test(
   NAME
     bda_raw_spirv_tests
@@ -763,11 +934,16 @@ iree_cc_test(
     iree::hal::drivers::vulkan::headers
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
     "vulkan_uses_vk_khr_buffer_device_address"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_test(
   NAME
     file_tests
@@ -782,10 +958,15 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_test(
   NAME
     queue_alloca_tests
@@ -799,10 +980,15 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_test(
   NAME
     queue_host_call_tests
@@ -816,10 +1002,15 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_lib)
 iree_cc_test(
@@ -839,12 +1030,17 @@ iree_cc_test(
   ARGS
     "--gtest_filter=CTS/QueueDispatchTest.*"
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_lib)
 iree_cc_test(
@@ -864,12 +1060,17 @@ iree_cc_test(
   ARGS
     "--gtest_filter=CTS/QueueDispatchIndirectParametersTest.*"
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_bda_lib)
 iree_cc_test(
@@ -889,13 +1090,18 @@ iree_cc_test(
   ARGS
     "--gtest_filter=CTS/QueueDispatchTest.*"
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
     "vulkan_uses_vk_khr_buffer_device_address"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_bda_lib)
 iree_cc_test(
@@ -915,13 +1121,18 @@ iree_cc_test(
   ARGS
     "--gtest_filter=CTS/QueueDispatchIndirectParametersTest.*"
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
     "vulkan_uses_vk_khr_buffer_device_address"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_test(
   NAME
     queue_transfer_tests
@@ -936,10 +1147,15 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)
 if(TARGET ${_IREE_OPTIONAL_TESTDATA_PACKAGE_NS}::testdata_vulkan_spirv_lib)
 iree_cc_test(
@@ -959,12 +1175,17 @@ iree_cc_test(
     iree::hal::drivers::vulkan::headers
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
 
 endif()
+endif()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_test(
   NAME
     semaphore_submission_tests
@@ -978,8 +1199,12 @@ iree_cc_test(
     iree::hal::cts::util::test_base
     iree::testing::gtest
   LABELS
-    "driver=vulkan"
-    "requires-gpu-vulkan"
+    "iree-build-requirement=runtime.hal.vulkan"
+    "iree-run-requirement=runtime.resource.vulkan_device"
+    "runtime-resource=vulkan-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-vulkan-tests
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

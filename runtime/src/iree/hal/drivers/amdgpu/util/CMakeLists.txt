@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     libhsa
@@ -26,7 +27,9 @@ iree_cc_library(
     iree::third_party::hsa_runtime_headers
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     libaqlprofile
@@ -45,7 +48,9 @@ iree_cc_library(
     iree::third_party::hsa_runtime_headers
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     libhsa_test
@@ -57,12 +62,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     libaqlprofile_test
@@ -74,12 +82,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     topology
@@ -93,7 +104,9 @@ iree_cc_library(
     iree::hal
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     topology_test
@@ -107,12 +120,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     hsaco_metadata
@@ -125,7 +141,9 @@ iree_cc_library(
     iree::hal
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     hsaco_metadata_test
@@ -137,12 +155,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_fuzz(
   NAME
     hsaco_metadata_fuzz
@@ -151,8 +172,12 @@ iree_cc_fuzz(
   DEPS
     ::hsaco_metadata
     iree::base
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     affinity
@@ -162,7 +187,9 @@ iree_cc_library(
     iree::base::internal
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     packet
@@ -176,7 +203,9 @@ iree_cc_library(
     iree::hal::drivers::amdgpu::abi
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     info
@@ -189,7 +218,9 @@ iree_cc_library(
     iree::base
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     target_id
@@ -203,7 +234,9 @@ iree_cc_library(
     iree::base
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     code_object_target
@@ -218,7 +251,9 @@ iree_cc_library(
     iree::hal::utils::elf_format
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     code_object_target_test
@@ -232,12 +267,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     device_clock
@@ -250,7 +288,9 @@ iree_cc_library(
     iree::base
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     kfd
@@ -262,7 +302,9 @@ iree_cc_library(
     iree::base
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     pm4_program
@@ -276,7 +318,9 @@ iree_cc_library(
     iree::base
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     pm4_dispatch
@@ -290,7 +334,9 @@ iree_cc_library(
     iree::hal::drivers::amdgpu::abi
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     queue_primitives
@@ -318,7 +364,9 @@ iree_cc_library(
     iree::hal::utils::resource_set
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     vmem
@@ -333,7 +381,9 @@ iree_cc_library(
     iree::hal
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     block_pool
@@ -348,7 +398,9 @@ iree_cc_library(
     iree::hal::memory::tracing
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     device_library
@@ -366,7 +418,9 @@ iree_cc_library(
     iree::hal::drivers::amdgpu::device::headers
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     device_library_target
@@ -379,7 +433,9 @@ iree_cc_library(
     iree::base
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     util
@@ -398,7 +454,9 @@ iree_cc_library(
     ::vmem
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     benchmark_flags
@@ -414,7 +472,9 @@ iree_cc_library(
   TESTONLY
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     benchmark_profile
@@ -428,7 +488,9 @@ iree_cc_library(
   TESTONLY
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_binary_benchmark(
   NAME
     blit_benchmark
@@ -447,10 +509,15 @@ iree_cc_binary_benchmark(
   TESTONLY
   LABELS
     "benchmark"
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     block_pool_test
@@ -464,12 +531,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     device_library_test
@@ -483,12 +553,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     device_library_target_test
@@ -499,10 +572,16 @@ iree_cc_test(
     iree::base
     iree::testing::gtest
     iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     target_id_test
@@ -514,12 +593,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     epoch_signal_table_test
@@ -532,12 +614,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     kernarg_ring_test
@@ -549,12 +634,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     queue_upload_ring_test
@@ -566,12 +654,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     device_clock_test
@@ -582,8 +673,16 @@ iree_cc_test(
     iree::base
     iree::testing::gtest
     iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     kfd_test
@@ -597,12 +696,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     notification_ring_test
@@ -618,12 +720,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     aql_emitter_test
@@ -634,12 +739,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     pm4_emitter_test
@@ -650,12 +758,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     pm4_barrier_test
@@ -666,12 +777,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     pm4_dispatch_test
@@ -684,12 +798,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_amdgpu_binary(
   NAME
     pm4_dispatch_test_kernels_gfx1100
@@ -704,7 +821,9 @@ iree_amdgpu_binary(
   LINKOPTS
 
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     pm4_dispatch_live_test
@@ -727,13 +846,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
-    "requires-gpu-gfx1100"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     pm4_program_test
@@ -748,11 +869,13 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 if(TARGET iree::hal::drivers::amdgpu::cts::testdata_amdgpu)
 add_custom_command(OUTPUT queue_benchmark_testdata_srcs.stamp
     COMMAND ${CMAKE_COMMAND} -E touch queue_benchmark_testdata_srcs.stamp
@@ -764,6 +887,7 @@ add_custom_target(queue_benchmark_testdata_srcs
     DEPENDS queue_benchmark_testdata_srcs.stamp
 )
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_hal_cts_testdata(
   FORMAT_NAME
     amdgpu_queue_benchmark
@@ -780,7 +904,9 @@ iree_hal_cts_testdata(
   FLAGS
     "--iree-rocm-target=${IREE_ROCM_TEST_TARGET_CHIP}"
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_binary_benchmark(
   NAME
     queue_benchmark
@@ -808,10 +934,15 @@ iree_cc_binary_benchmark(
   TESTONLY
   LABELS
     "benchmark"
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 endif()
+endif()
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     signal_pool_test
@@ -825,12 +956,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_binary_benchmark(
   NAME
     signal_pool_benchmark
@@ -845,10 +979,15 @@ iree_cc_binary_benchmark(
   TESTONLY
   LABELS
     "benchmark"
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
     vmem_test
@@ -862,11 +1001,13 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=amdgpu"
-    "nodocker"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
     iree-hal-drivers-amdgpu-tests
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
 

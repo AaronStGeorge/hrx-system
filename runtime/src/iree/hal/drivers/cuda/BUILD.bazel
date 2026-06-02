@@ -108,7 +108,6 @@ iree_runtime_cc_test(
     srcs = [
         "dynamic_symbols_test.cc",
     ],
-    tags = ["driver=cuda"],
     deps = [
         ":dynamic_symbols",
         "//runtime/src/iree/base",

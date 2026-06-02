@@ -16,6 +16,7 @@ repository cannot assume an in-tree compiler.
 load("//build_tools/bazel:cc_attrs.bzl", "cc_attrs")
 load("//build_tools/bazel:executable.bzl", "iree_executable_test")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_binary")
+load("//runtime/requirements:package_policy.bzl", "apply_runtime_test_policy")
 
 _NON_EXECUTABLE_TEST_SUITES = [
     ("buffer_tests", "//runtime/src/iree/hal/cts/buffer:all_tests"),
@@ -145,7 +146,14 @@ def iree_runtime_hal_cts_test_suite(
             "testdata_libs",
         )
 
-    split_attrs = _split_test_attrs(kwargs)
+    policy_attrs = dict(kwargs)
+    policy_attrs["resource_group"] = resource_group
+    policy_attrs["tags"] = tags
+    policy_attrs = apply_runtime_test_policy(policy_attrs)
+    resource_group = policy_attrs.pop("resource_group", None)
+    tags = policy_attrs.pop("tags", None)
+
+    split_attrs = _split_test_attrs(policy_attrs)
     common_deps = [backends] + _COMMON_DEPS
     args = _normalize_list(args)
     tags = _normalize_list(tags)

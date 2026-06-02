@@ -79,10 +79,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         "//runtime/src/iree/base/tooling:flags",
@@ -100,10 +96,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         "//runtime/src/iree/base/tooling:flags",
@@ -121,10 +113,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         "//runtime/src/iree/base/tooling:flags",
@@ -142,10 +130,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         "//runtime/src/iree/base/tooling:flags",
@@ -166,10 +150,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         "//runtime/src/iree/base/tooling:flags",
@@ -190,10 +170,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         "//runtime/src/iree/base/tooling:flags",
@@ -214,10 +190,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         ":testdata_vulkan_spirv_lib",
@@ -237,10 +209,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         "//runtime/src/iree/base/tooling:flags",
@@ -258,10 +226,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         "//runtime/src/iree/base/tooling:flags",
@@ -279,10 +243,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         "//runtime/src/iree/base/tooling:flags",
@@ -300,10 +260,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         "//runtime/src/iree/base/tooling:flags",
@@ -321,10 +277,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         "//runtime/src/iree/base/tooling:flags",
@@ -342,10 +294,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         ":testdata_vulkan_spirv_lib",
@@ -365,8 +313,6 @@ iree_runtime_cc_test(
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
     tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
         "vulkan_uses_vk_khr_buffer_device_address",
     ],
     deps = [
@@ -387,10 +333,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         ":testdata_vulkan_spirv_lib",
@@ -410,8 +352,6 @@ iree_runtime_cc_test(
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
     tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
         "vulkan_uses_vk_khr_buffer_device_address",
     ],
     deps = [
@@ -432,10 +372,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         ":testdata_vulkan_spirv_lib",
@@ -455,8 +391,6 @@ iree_runtime_cc_test(
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
     tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
         "vulkan_uses_vk_khr_buffer_device_address",
     ],
     deps = [
@@ -477,10 +411,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         ":testdata_vulkan_spirv_lib",
@@ -500,8 +430,6 @@ iree_runtime_cc_test(
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
     tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
         "vulkan_uses_vk_khr_buffer_device_address",
     ],
     deps = [
@@ -522,10 +450,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         ":testdata_vulkan_spirv_lib",
@@ -545,8 +469,6 @@ iree_runtime_cc_test(
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
     tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
         "vulkan_uses_vk_khr_buffer_device_address",
     ],
     deps = [
@@ -567,10 +489,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         ":testdata_vulkan_spirv_lib",
@@ -590,8 +508,6 @@ iree_runtime_cc_test(
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
     tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
         "vulkan_uses_vk_khr_buffer_device_address",
     ],
     deps = [
@@ -612,10 +528,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         ":testdata_vulkan_spirv_lib",
@@ -635,8 +547,6 @@ iree_runtime_cc_test(
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
     tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
         "vulkan_uses_vk_khr_buffer_device_address",
     ],
     deps = [
@@ -657,10 +567,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         ":testdata_vulkan_spirv_lib",
@@ -680,8 +586,6 @@ iree_runtime_cc_test(
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
     tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
         "vulkan_uses_vk_khr_buffer_device_address",
     ],
     deps = [
@@ -702,10 +606,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         "//runtime/src/iree/base/tooling:flags",
@@ -723,10 +623,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         ":testdata_vulkan_spirv_lib",
@@ -746,8 +642,6 @@ iree_runtime_cc_test(
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
     tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
         "vulkan_uses_vk_khr_buffer_device_address",
     ],
     deps = [
@@ -772,8 +666,6 @@ iree_runtime_cc_test(
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
     tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
         "vulkan_uses_vk_khr_buffer_device_address",
     ],
     deps = [
@@ -801,8 +693,6 @@ iree_runtime_cc_test(
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
     tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
         "vulkan_uses_vk_khr_buffer_device_address",
     ],
     deps = [
@@ -825,10 +715,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         ":vulkan_file_test",
@@ -847,10 +733,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         "//runtime/src/iree/base/tooling:flags",
@@ -868,10 +750,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         "//runtime/src/iree/base/tooling:flags",
@@ -890,10 +768,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         ":testdata_vulkan_spirv_lib",
@@ -914,10 +788,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         ":testdata_vulkan_spirv_lib",
@@ -939,8 +809,6 @@ iree_runtime_cc_test(
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
     tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
         "vulkan_uses_vk_khr_buffer_device_address",
     ],
     deps = [
@@ -964,8 +832,6 @@ iree_runtime_cc_test(
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
     tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
         "vulkan_uses_vk_khr_buffer_device_address",
     ],
     deps = [
@@ -987,10 +853,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         "//runtime/src/iree/base/tooling:flags",
@@ -1012,10 +874,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         ":testdata_vulkan_spirv_lib",
@@ -1036,10 +894,6 @@ iree_runtime_cc_test(
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
     },
-    tags = [
-        "driver=vulkan",
-        "requires-gpu-vulkan",
-    ],
     deps = [
         ":backends",
         "//runtime/src/iree/base/tooling:flags",

@@ -26,6 +26,8 @@
 # SRC: binary target to run as the test.
 # WILL_FAIL: The target will run, but its pass/fail status will be inverted.
 # DISABLED: The target will be skipped and its status will be 'Not Run'.
+# RESOURCE_GROUP: If set, tests sharing the same RESOURCE_GROUP name will not
+#     run concurrently under CTest.
 # LABELS: Additional labels to apply to the test. The package path is added
 #     automatically.
 # TIMEOUT: Test target timeout in seconds.
@@ -56,7 +58,7 @@ function(iree_native_test)
   cmake_parse_arguments(
     _RULE
     ""
-    "NAME;SRC;DRIVER;WILL_FAIL;DISABLED"
+    "NAME;SRC;DRIVER;WILL_FAIL;DISABLED;RESOURCE_GROUP"
     "ARGS;LABELS;DATA;TIMEOUT"
     ${ARGN}
   )
@@ -185,6 +187,9 @@ function(iree_native_test)
   set_property(TEST ${_TEST_NAME} PROPERTY LABELS "${_RULE_LABELS}")
   set_property(TEST "${_TEST_NAME}" PROPERTY REQUIRED_FILES "${_RULE_DATA}")
   set_property(TEST ${_TEST_NAME} PROPERTY TIMEOUT ${_RULE_TIMEOUT})
+  if(_RULE_RESOURCE_GROUP)
+    set_property(TEST ${_TEST_NAME} PROPERTY RESOURCE_LOCK "${_RULE_RESOURCE_GROUP}")
+  endif()
   if(_RULE_WILL_FAIL)
     set_property(TEST ${_TEST_NAME} PROPERTY WILL_FAIL ${_RULE_WILL_FAIL})
   endif()
@@ -203,6 +208,10 @@ function(iree_native_test)
     if(_RULE_DISABLED)
       set(_IREE_REGISTERED_DISABLED DISABLED)
     endif()
+    set(_IREE_REGISTERED_RESOURCE_GROUP)
+    if(_RULE_RESOURCE_GROUP)
+      set(_IREE_REGISTERED_RESOURCE_GROUP RESOURCE_GROUP "${_RULE_RESOURCE_GROUP}")
+    endif()
     if(COMMAND ${IREE_TEST_REGISTRATION_FUNCTION})
       cmake_language(CALL ${IREE_TEST_REGISTRATION_FUNCTION}
         NAME
@@ -219,6 +228,7 @@ function(iree_native_test)
           ${_RULE_LABELS}
         TIMEOUT
           ${_RULE_TIMEOUT}
+        ${_IREE_REGISTERED_RESOURCE_GROUP}
         ${_IREE_REGISTERED_WILL_FAIL}
         ${_IREE_REGISTERED_DISABLED}
       )

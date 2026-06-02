@@ -7,6 +7,10 @@
 """Runtime-specific C/C++ Bazel test macros."""
 
 load("//build_tools/bazel:cc_test.bzl", "iree_cc_test")
+load(
+    "//runtime/requirements:package_policy.bzl",
+    "apply_runtime_test_policy",
+)
 load(":cc_attrs.bzl", "runtime_cc_attrs")
 
 def _iree_runtime_cc_test_impl(
@@ -17,6 +21,7 @@ def _iree_runtime_cc_test_impl(
         cxxopts,
         deps,
         **kwargs):
+    kwargs = apply_runtime_test_policy(kwargs)
     compiler_options = runtime_cc_attrs.with_runtime_compiler_options(
         copts = copts,
         conlyopts = conlyopts,

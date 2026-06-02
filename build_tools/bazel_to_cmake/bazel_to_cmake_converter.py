@@ -59,9 +59,12 @@ _COMPILER_PLUGIN_CMAKE_OPTIONS = {
 
 _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS = {
     "//runtime/config/hal:driver_amdgpu": "IREE_HAL_DRIVER_AMDGPU",
+    "//runtime/config/hal:driver_cuda": "IREE_HAL_DRIVER_CUDA",
+    "//runtime/config/hal:driver_hip": "IREE_HAL_DRIVER_HIP",
     "//runtime/config/hal:driver_local_sync": "IREE_HAL_DRIVER_LOCAL_SYNC",
     "//runtime/config/hal:driver_local_task": "IREE_HAL_DRIVER_LOCAL_TASK",
     "//runtime/config/hal:driver_null": "IREE_HAL_DRIVER_NULL",
+    "//runtime/config/hal:driver_vulkan": "IREE_HAL_DRIVER_VULKAN",
     "//runtime/config/hal:executable_loader_embedded_elf": "IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF",
     "//runtime/config/hal:executable_loader_system_library": "IREE_HAL_EXECUTABLE_LOADER_SYSTEM_LIBRARY",
     "//runtime/config/hal:executable_loader_vmvx_module": "IREE_HAL_EXECUTABLE_LOADER_VMVX_MODULE",
@@ -194,6 +197,9 @@ class BuildFileFunctions(object):
 
     def _convert_select_condition(self, label):
         """Returns a CMake condition string for a supported select condition."""
+        cmake_condition = getattr(label, "cmake_condition", None)
+        if cmake_condition:
+            return cmake_condition
         condition = self._convert_platform_condition(label)
         if condition:
             return condition
@@ -1264,8 +1270,20 @@ class BuildFileFunctions(object):
         )
 
     def iree_amdgpu_binary(
-        self, name, target, arch, srcs, internal_hdrs=[], copts=[], linkopts=[]
+        self,
+        name,
+        target,
+        arch,
+        srcs,
+        internal_hdrs=[],
+        copts=[],
+        linkopts=[],
+        tags=None,
+        target_compatible_with=None,
+        **kwargs,
     ):
+        if self._should_skip_target(tags=tags, **kwargs):
+            return
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         target_block = self._convert_string_arg_block("TARGET", target, quote=False)
         arch_block = self._convert_string_arg_block("ARCH", arch, quote=False)
@@ -1276,6 +1294,7 @@ class BuildFileFunctions(object):
             "LINKOPTS", linkopts, sort=False
         )
 
+        self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
             f"iree_amdgpu_binary(\n"
             f"{name_block}"
@@ -1287,6 +1306,7 @@ class BuildFileFunctions(object):
             f"{linkopts_block}"
             f")\n\n"
         )
+        self._emit_platform_guard_end(target_compatible_with)
 
     def iree_hal_amdgpu_source_device_binaries(self):
         self._converter.body += (
@@ -1345,7 +1365,12 @@ class BuildFileFunctions(object):
         c_identifier=None,
         deps=None,
         testonly=None,
+        tags=None,
+        target_compatible_with=None,
+        **kwargs,
     ):
+        if self._should_skip_target(tags=tags, **kwargs):
+            return
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         src_block = self._convert_string_arg_block("SRC", src)
         module_name_block = self._convert_string_arg_block(
@@ -1358,6 +1383,7 @@ class BuildFileFunctions(object):
         deps_block = self._convert_target_list_block("DEPS", deps)
         testonly_block = self._convert_option_block("TESTONLY", testonly)
 
+        self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
             f"iree_vmasm_module(\n"
             f"{name_block}"
@@ -1369,6 +1395,7 @@ class BuildFileFunctions(object):
             f"{testonly_block}"
             f"  PUBLIC\n)\n\n"
         )
+        self._emit_platform_guard_end(target_compatible_with)
 
     def iree_hal_executable(
         self,
@@ -1459,6 +1486,7 @@ class BuildFileFunctions(object):
         flag_values=None,
         data=None,
         testonly=None,
+        target_compatible_with=None,
         **kwargs,
     ):
         # Resolve {PLACEHOLDER} template variables from flag_values.
@@ -1512,6 +1540,7 @@ class BuildFileFunctions(object):
             f'  TESTDATA_DIR\n    "${{PROJECT_SOURCE_DIR}}/{testdata_dir}"\n'
         )
 
+        self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
             f"iree_hal_cts_testdata(\n"
             f"{name_block}"
@@ -1523,6 +1552,7 @@ class BuildFileFunctions(object):
             f"{flags_block}"
             f")\n\n"
         )
+        self._emit_platform_guard_end(target_compatible_with)
 
     def iree_hal_cts_test_suite(
         self,
@@ -1536,6 +1566,7 @@ class BuildFileFunctions(object):
         resource_group=None,
         tags=None,
         testonly=None,
+        target_compatible_with=None,
         **kwargs,
     ):
         if not resource_group and tags:
@@ -1559,6 +1590,7 @@ class BuildFileFunctions(object):
                     testdata=testdata,
                     flag_values=flag_values,
                     flags=config.get("flags"),
+                    target_compatible_with=target_compatible_with,
                 )
                 _testdata_libs.append(f":testdata_{format_name}_lib")
 
@@ -1582,6 +1614,7 @@ class BuildFileFunctions(object):
         )
         testonly_block = self._convert_option_block("TESTONLY", testonly)
 
+        self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
             f"iree_hal_cts_test_suite(\n"
             f"{backends_block}"
@@ -1593,16 +1626,28 @@ class BuildFileFunctions(object):
             f"{testonly_block}"
             f")\n\n"
         )
+        self._emit_platform_guard_end(target_compatible_with)
 
     def iree_flatbuffer_c_library(
-        self, name, srcs, flatcc_args=None, includes=None, deps=None
+        self,
+        name,
+        srcs,
+        flatcc_args=None,
+        includes=None,
+        deps=None,
+        tags=None,
+        target_compatible_with=None,
+        **kwargs,
     ):
+        if self._should_skip_target(tags=tags, **kwargs):
+            return
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         srcs_block = self._convert_srcs_block(srcs)
         flatcc_args_block = self._convert_string_list_block("FLATCC_ARGS", flatcc_args)
         includes_block = self._convert_srcs_block(includes, block_name="INCLUDES")
         deps_block = self._convert_target_list_block("DEPS", deps)
 
+        self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
             f"flatbuffer_c_library(\n"
             f"{name_block}"
@@ -1612,6 +1657,7 @@ class BuildFileFunctions(object):
             f"{deps_block}"
             f"  PUBLIC\n)\n\n"
         )
+        self._emit_platform_guard_end(target_compatible_with)
 
     def gentbl_cc_library(
         self,
@@ -1813,6 +1859,7 @@ class BuildFileFunctions(object):
         defines=None,
         linkopts=None,
         tags=None,
+        resource_group=None,
         testonly=True,
         target_compatible_with=None,
         # unused
@@ -1830,6 +1877,9 @@ class BuildFileFunctions(object):
         linkopts_block = self._convert_string_list_block("LINKOPTS", linkopts)
         testonly_block = self._convert_option_block("TESTONLY", testonly)
         labels_block = self._convert_string_list_block("LABELS", tags)
+        resource_group_block = self._convert_string_arg_block(
+            "RESOURCE_GROUP", resource_group, quote=False
+        )
 
         self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
@@ -1843,6 +1893,7 @@ class BuildFileFunctions(object):
             f"{linkopts_block}"
             f"{testonly_block}"
             f"{labels_block}"
+            f"{resource_group_block}"
             f")\n\n"
         )
         self._emit_platform_guard_end(target_compatible_with)

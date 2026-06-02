@@ -114,7 +114,6 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "dynamic_symbols_test",
     srcs = ["dynamic_symbols_test.cc"],
-    tags = ["driver=hip"],
     deps = [
         ":dynamic_symbols",
         "//runtime/src/iree/base",
@@ -126,11 +125,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "graph_command_buffer_test",
     srcs = ["graph_command_buffer_test.cc"],
-    resource_group = "hip_driver",
-    tags = [
-        "driver=hip",
-        "requires-gpu-amd",
-    ],
     deps = [
         ":hip",
         "//runtime/src/iree/async",
@@ -146,11 +140,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "hip_allocator_test",
     srcs = ["hip_allocator_test.cc"],
-    resource_group = "hip_driver",
-    tags = [
-        "driver=hip",
-        "requires-gpu-amd",
-    ],
     deps = [
         ":dynamic_symbols",
         "//runtime/src/iree/async/util:proactor_pool",

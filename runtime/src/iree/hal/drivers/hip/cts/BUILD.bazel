@@ -45,11 +45,6 @@ iree_hal_cts_test_suite(
     name = "stream",
     args = ["--hip_use_streams=true"],
     backends_lib = ":backends",
-    resource_group = "hip_driver",
-    tags = [
-        "driver=hip",
-        "requires-gpu-amd",
-    ],
 )
 
 iree_hal_cts_test_suite(
@@ -59,9 +54,4 @@ iree_hal_cts_test_suite(
         "--gtest_filter=-CTS/QueueTransferTest.*:CTS/AsyncTransientBufferTest.*:CTS/TransientBufferTest.*",
     ],
     backends_lib = ":backends",
-    resource_group = "hip_driver",
-    tags = [
-        "driver=hip",
-        "requires-gpu-amd",
-    ],
 )

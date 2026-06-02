@@ -26,6 +26,7 @@ add_custom_target(amdgpu_abi_bitcode_hdrs
     DEPENDS amdgpu_abi_bitcode_hdrs.stamp
 )
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     abi
@@ -42,5 +43,6 @@ iree_cc_library(
     iree::third_party::hsa_runtime_headers
   PUBLIC
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
