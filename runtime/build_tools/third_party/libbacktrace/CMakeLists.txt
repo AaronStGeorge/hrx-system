@@ -25,7 +25,7 @@ endif()
 set(IREE_LIBBACKTRACE_TARGET "libbacktrace::libbacktrace" CACHE INTERNAL "libbacktrace target")
 
 include(CheckSymbolExists)
-include(FetchContent)
+include(iree_third_party_helpers)
 
 # pthreads is required for pthread_once used in status_stack_trace.c.
 find_package(Threads REQUIRED)
@@ -36,15 +36,7 @@ if(POLICY CMP0169)
   cmake_policy(SET CMP0169 OLD)
 endif()
 
-# Pin to a specific commit for reproducibility.
-set(LIBBACKTRACE_VERSION "b9e40069c0b47a722286b94eb5231f7f05c08713")
-
-FetchContent_Declare(
-  libbacktrace_src
-  GIT_REPOSITORY https://github.com/ianlancetaylor/libbacktrace.git
-  GIT_TAG        ${LIBBACKTRACE_VERSION}
-  EXCLUDE_FROM_ALL
-)
+iree_declare_locked_fetch_content(libbacktrace FETCH_NAME libbacktrace_src)
 
 # Just populate, don't configure (upstream has no CMake).
 FetchContent_GetProperties(libbacktrace_src)

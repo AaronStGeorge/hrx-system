@@ -4,7 +4,6 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-include(FetchContent)
 include(iree_third_party_helpers)
 
 function(iree_configure_google_benchmark)
@@ -18,12 +17,7 @@ function(iree_configure_google_benchmark)
     set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
     set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
     set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)
-    FetchContent_Declare(
-      google_benchmark
-      GIT_REPOSITORY https://github.com/google/benchmark.git
-      GIT_TAG v1.9.5
-      EXCLUDE_FROM_ALL
-    )
+    iree_declare_locked_fetch_content(google_benchmark)
     FetchContent_MakeAvailable(google_benchmark)
   endif()
 

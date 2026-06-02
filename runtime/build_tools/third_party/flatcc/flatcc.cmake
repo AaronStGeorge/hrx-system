@@ -4,7 +4,6 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-include(FetchContent)
 include(iree_third_party_helpers)
 
 function(_iree_fetch_flatcc_if_needed out_source_dir)
@@ -15,12 +14,7 @@ function(_iree_fetch_flatcc_if_needed out_source_dir)
   endif()
 
   iree_fetch_content_assert_allowed("flatcc")
-  FetchContent_Declare(
-    flatcc
-    URL https://github.com/dvidelabs/flatcc/archive/9362cd00f0007d8cbee7bff86e90fb4b6b227ff3.tar.gz
-    URL_HASH SHA256=f77f842e996f5bbfa25305a7b38b40d1325fb44154f2bf9880c58356ece92c62
-    EXCLUDE_FROM_ALL
-  )
+  iree_declare_locked_fetch_content(flatcc)
   FetchContent_GetProperties(flatcc)
   if(NOT flatcc_POPULATED)
     if(POLICY CMP0169)

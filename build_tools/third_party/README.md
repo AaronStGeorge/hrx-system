@@ -1,141 +1,156 @@
 # Dependency Management
 
-IREE has one dependency intent model with Bazel and CMake materializations.
-Dependency declarations live next to the owner of the dependency, while
-build-system machinery lives under the build-system directory that implements
-it.
+IREE keeps one dependency declaration path and two build-system locks:
 
-The default build path should use pinned, hash-verified dependencies owned by
-the repository. Package discovery and caller-supplied dependencies are explicit
-integration modes; they should not happen as accidental fallback behavior.
+```text
+MODULE.bazel        Bazel module identity and ordered dependency fragments.
+MODULE.bazel.lock   Bazel/Bzlmod lock maintained by Bazel.
+MODULE.cmake.lock   CMake source lock generated from Bazel fragments.
+```
+
+Dependency declarations live next to the owner of the dependency. The root lock
+files live next to the root module because they describe the complete resolved
+repository state shipped to users and CI.
 
 ## Ownership
 
-Shared dependencies are owned by root infrastructure:
-
-```text
-build_tools/third_party/deps.MODULE.bazel
-build_tools/third_party/deps.cmake
-build_tools/third_party/<dependency>/<dependency>.cmake
-```
-
-Project-owned dependencies use the same shape under the owning project:
-
-```text
-runtime/build_tools/third_party/deps.MODULE.bazel
-runtime/build_tools/third_party/deps.cmake
-runtime/build_tools/third_party/<dependency>/<dependency>.cmake
-
-libhrx/build_tools/third_party/deps.MODULE.bazel
-libhrx/build_tools/third_party/deps.cmake
-libhrx/build_tools/third_party/<dependency>/<dependency>.cmake
-```
-
-Build-system dependencies and implementation machinery are separate from
-third-party library declarations:
+Build-system dependencies are not source dependencies. They stay under the
+Bazel implementation owner and are intentionally absent from the CMake lock:
 
 ```text
 build_tools/bazel/deps.MODULE.bazel
-build_tools/bazel/deps.bzl
-build_tools/cmake/iree_dependencies.cmake
-build_tools/bazel_to_cmake/deps.py
 ```
 
-The root `MODULE.bazel` should remain a short identity file plus ordered
-`include()` calls for these dependency fragments.
-
-## Classification
-
-Every dependency must have one canonical repo-local name and one owner.
-Promotion is mechanical: when two projects consume a project-owned dependency,
-move the declaration and any shared adapter contract to
-`build_tools/third_party/`.
-
-Dependencies fall into these categories:
-
-- `production`: required by shipping library or tool targets.
-- `test`: required by tests that may be enabled in normal development builds.
-- `dev`: required only by repository development, analysis tests, or local
-  infrastructure.
-- `toolchain`: required to build artifacts for a target platform.
-- `sdk`: supplied by a platform SDK or vendor stack instead of source archives.
-
-Production dependencies must not depend on dev-only repositories. Tests and
-benchmarks should keep their dependencies behind the build options that enable
-them so embedders are not forced to fetch unused packages.
-
-## Bazel
-
-Bazel dependency declarations currently use normal Bzlmod APIs in
-`deps.MODULE.bazel` owner fragments. The root module includes those fragments
-directly. An owner fragment is self-contained: it declares the module extension
-or repo rule proxy it needs, declares repositories, and calls `use_repo()` for
-the repositories made visible to that module.
-
-Direct `bazel_dep()` entries belong in the narrowest owner fragment:
-
-- Bazel rule sets and build tooling: `build_tools/bazel/deps.MODULE.bazel`.
-- Shared third-party libraries/tools: `build_tools/third_party/deps.MODULE.bazel`.
-- Runtime-only dependencies: `runtime/build_tools/third_party/deps.MODULE.bazel`.
-- LibHRX-only dependencies: `libhrx/build_tools/third_party/deps.MODULE.bazel`.
-
-Source archives should move behind the repository dependency extension before
-their CMake pins are changed. The extension entry is responsible for recording
-the URL, hash, strip prefix, Bazel overlay, CMake package name, CMake target
-contract, license, and homepage in one place.
-
-## CMake
-
-CMake dependency inventory files use the same owner layout as Bazel once a
-dependency migrates to generated source identity metadata:
+Shared source dependencies used by more than one project live under root
+third-party ownership:
 
 ```text
-*/build_tools/third_party/deps.cmake
+build_tools/third_party/deps.MODULE.bazel
+build_tools/third_party/<dependency>/<dependency>.cmake
 ```
 
-Generated `deps.cmake` files should contain source identity and dependency
-mode declarations. Dependency-specific adapters, such as
-`runtime/build_tools/third_party/flatcc/flatcc.cmake`, own target construction
-and alias policy. Adapters must not repeat URL, hash, version, or dependency
-mode data once the dependency has migrated to generated metadata.
+Project-owned source dependencies use the same shape under the project:
 
-The reproducible default mode should use repository-pinned source archives.
-Package mode should require the caller to provide packages through
-`CMAKE_PREFIX_PATH`, toolchain files, or explicit cache variables. Auto mode is
-only acceptable when it reports which path was selected and still uses pinned
-source archives for fallback.
+```text
+runtime/build_tools/third_party/deps.MODULE.bazel
+runtime/build_tools/third_party/<dependency>/<dependency>.cmake
 
-Current CMake adapters still own their FetchContent declarations directly. A
-dependency is fully migrated only when the source identity lives in the matching
-`deps.cmake` inventory and the adapter only constructs the target contract.
+libhrx/build_tools/third_party/deps.MODULE.bazel
+libhrx/build_tools/third_party/<dependency>/<dependency>.cmake
+```
+
+The promotion rule is mechanical: when two projects consume a project-owned
+source dependency, move the declaration and shared adapter contract to
+`build_tools/third_party/`.
+
+## Bazel Source Declarations
+
+Use `bazel_dep()` for dependencies available from the Bazel Central Registry.
+The version lives only in the owner `deps.MODULE.bazel` fragment:
+
+```starlark
+bazel_dep(
+    name = "googletest",
+    version = "1.17.0.bcr.2",
+    dev_dependency = True,
+    repo_name = "com_google_googletest",
+)
+```
+
+Use Bazel's `http_archive` repo rule for source archives that are not available
+from BCR:
+
+```starlark
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "flatcc",
+    build_file = "//runtime/build_tools/third_party/flatcc:flatcc.BUILD.bazel",
+    sha256 = "...",
+    strip_prefix = "...",
+    url = "https://...",
+)
+```
+
+SDK discovery rules, toolchain repositories, and platform probes are separate
+from source archive locking. They can live in an owner fragment when they are
+part of that owner’s Bazel visibility contract, but they are not emitted into
+`MODULE.cmake.lock`.
+
+## CMake Source Lock
+
+`MODULE.cmake.lock` is generated by:
+
+```bash
+python build_tools/bazel_to_cmake/deps.py
+```
+
+The update path may fetch BCR `source.json` files in order to translate a
+`bazel_dep()` module version into the exact archive URL, SHA256, and strip
+prefix CMake needs. Direct `http_archive` declarations are resolved without
+network access because the URL and hash are already in the Bazel fragment.
+
+CI uses offline check mode:
+
+```bash
+python build_tools/bazel_to_cmake/deps.py --check
+```
+
+`--check` never makes network requests. It parses the same Bazel fragments,
+validates that every source dependency has a matching checked-in lock entry,
+checks `http_archive` URL/hash data exactly, and fails when a BCR dependency
+version changed without regenerating the lock.
+
+## CMake Adapters
+
+Dependency-specific CMake adapters own package discovery, FetchContent policy,
+target construction, and repo-local aliases. They consume source identity
+through `build_tools/cmake/iree_third_party_helpers.cmake`:
+
+```cmake
+iree_declare_locked_fetch_content(googletest)
+FetchContent_MakeAvailable(googletest)
+```
+
+Adapters keep the target contract close to the build code that needs it. For
+example, flatcc still has a runtime-owned adapter because CMake builds only the
+flatcc runtime pieces and schema compiler target IREE needs.
+
+Package discovery remains an integration mode:
+
+```cmake
+find_package(GTest CONFIG QUIET)
+```
+
+If package discovery does not provide the expected targets, adapters fall back
+to pinned FetchContent unless the relevant hermetic option forbids fetching.
 
 ## Adding Or Updating A Dependency
 
-1. Identify the owner: root shared infrastructure, runtime, libhrx, loom, or a
-   build-system/toolchain owner.
-2. Add or update the Bazel declaration in that owner's `deps.MODULE.bazel`.
-3. Add or update the CMake declaration in the matching `deps.cmake` once that
-   owner has migrated to generated CMake dependency inventory.
-4. Keep dependency-specific target construction in a small adapter under the
-   same owner directory.
-5. Document the target contract in the adapter and in this playbook when the
-   dependency is public to other packages.
-6. Regenerate checked-in dependency metadata and lockfiles with the documented
-   dependency update command.
-7. Run focused Bazel and CMake tests that prove the dependency's targets and
-   package/source modes.
+1. Pick the owner fragment with the narrowest real ownership.
+2. Use `bazel_dep()` when the dependency exists in BCR; use `http_archive` when
+   it does not.
+3. Add or update the dependency-specific CMake adapter under the same owner.
+4. Run `python build_tools/bazel_to_cmake/deps.py`.
+5. Run `python build_tools/bazel_to_cmake/deps.py --check`.
+6. Run focused Bazel and CMake builds that prove the consumed targets work.
+
+When a dependency moves between owners, regenerate the lock in the same commit
+as the owner move so the lock remains a faithful snapshot of the source
+declarations.
 
 ## Target Contracts
 
 Checked-in adapters define the target contracts consumed by the repo:
 
-- Googletest: `gtest`, `gtest_main`, `gmock`, `gmock_main`.
-- Google benchmark: `benchmark`.
-- Flatcc: `flatcc`, `iree-flatcc-cli`, `flatcc::parsing`,
-  `flatcc::runtime`.
-- Libbacktrace: `libbacktrace::libbacktrace` or an empty
-  `${IREE_LIBBACKTRACE_TARGET}` when disabled or unsupported.
-- Catch2: `Catch2::Catch2`.
+```text
+Googletest:       gtest, gtest_main, gmock, gmock_main
+Google benchmark: benchmark
+Flatcc:           flatcc, iree-flatcc-cli, flatcc::parsing, flatcc::runtime
+Libbacktrace:     libbacktrace::libbacktrace, or an empty
+                  IREE_LIBBACKTRACE_TARGET when disabled or unsupported
+Catch2:           Catch2::Catch2
+```
 
-Build files should depend on repo-local aliases where that improves
-portability and where embedders need stable labels.
+Repo code should depend on repo-local Bazel labels and these CMake target
+contracts instead of reaching into upstream repository internals.

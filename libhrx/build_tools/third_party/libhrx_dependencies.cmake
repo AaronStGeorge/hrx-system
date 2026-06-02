@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-include(FetchContent)
+include(iree_third_party_helpers)
 
 function(_libhrx_assert_fetch_allowed dep_name)
   if(HRX_HERMETIC_BUILD)
@@ -26,12 +26,7 @@ function(_libhrx_configure_catch2)
     set(CATCH_INSTALL_DOCS OFF CACHE BOOL "" FORCE)
     set(CATCH_INSTALL_EXTRAS OFF CACHE BOOL "" FORCE)
     set(CATCH_BUILD_TESTING OFF CACHE BOOL "" FORCE)
-    FetchContent_Declare(
-      catch2
-      GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-      GIT_TAG v3.13.0
-      EXCLUDE_FROM_ALL
-    )
+    iree_declare_locked_fetch_content(catch2)
     FetchContent_MakeAvailable(catch2)
   endif()
 
