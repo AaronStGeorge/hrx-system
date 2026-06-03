@@ -307,6 +307,7 @@ loom_cc_library(
     ::low_packet_diagnostics
     ::math_policy
     iree::base
+    iree::base::internal::arena
     loom::src::loom::codegen::low::lower
     loom::src::loom::codegen::low::verify
     loom::src::loom::ir

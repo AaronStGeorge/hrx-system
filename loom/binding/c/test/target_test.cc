@@ -13,6 +13,7 @@
 #include "iree/testing/gtest.h"
 #include "loomc/compile.h"
 #include "loomc/context.h"
+#include "loomc/emit.h"
 #include "loomc/link.h"
 #include "loomc/module.h"
 #include "loomc/pass.h"
@@ -21,6 +22,7 @@
 #include "loomc/status.h"
 #include "loomc/target/spirv/base.h"
 #include "loomc/workspace.h"
+#include "target.h"
 #include "test/util.h"
 
 namespace {
@@ -45,6 +47,89 @@ using TargetProfilePtr =
 using TargetSelectionPtr =
     HandlePtr<loomc_target_selection_t, loomc_target_selection_release>;
 using WorkspacePtr = HandlePtr<loomc_workspace_t, loomc_workspace_release>;
+
+void FakeArtifactDeinitialize(void* storage, iree_allocator_t allocator) {
+  iree_allocator_free(allocator, storage);
+}
+
+iree_status_t EmitFakeArtifact(const loom_target_emit_request_t* request,
+                               loom_target_emit_artifact_t* out_artifact) {
+  *out_artifact = {};
+  uint8_t* contents = nullptr;
+  IREE_RETURN_IF_ERROR(
+      iree_allocator_malloc(request->allocator, 4, (void**)&contents));
+  contents[0] = 0x7F;
+  contents[1] = 'L';
+  contents[2] = 'O';
+  contents[3] = 'M';
+  out_artifact->target_artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_ELF;
+  out_artifact->contents = iree_make_const_byte_span(contents, 4);
+  out_artifact->storage = contents;
+  out_artifact->deinitialize = FakeArtifactDeinitialize;
+  return iree_ok_status();
+}
+
+static const loom_target_emitter_t kFakeElfEmitter = {
+    /*.name=*/{"fake-elf", 8},
+    /*.public_artifact_format=*/{"fake-elf", 8},
+    /*.default_identifier=*/{"fake.bin", 8},
+    /*.target_artifact_format=*/LOOM_TARGET_ARTIFACT_FORMAT_ELF,
+    /*.emit=*/EmitFakeArtifact,
+};
+
+static const loom_target_emitter_t kFakeWasmEmitter = {
+    /*.name=*/{"fake-wasm", 9},
+    /*.public_artifact_format=*/{"fake-wasm", 9},
+    /*.default_identifier=*/{"fake.wasm", 9},
+    /*.target_artifact_format=*/LOOM_TARGET_ARTIFACT_FORMAT_WASM_BINARY,
+    /*.emit=*/EmitFakeArtifact,
+};
+
+static const loom_target_emitter_t* const kFakeElfEmitters[] = {
+    &kFakeElfEmitter,
+};
+
+static const loom_target_emitter_t* const kFakeWasmEmitters[] = {
+    &kFakeWasmEmitter,
+};
+
+static const loom_target_provider_t kEmptyProvider = {};
+
+static const loom_target_provider_t kFakeElfProvider = {
+    /*.register_context=*/nullptr,
+    /*.initialize_low_descriptor_registry=*/nullptr,
+    /*.initialize_low_lower_policy_registry=*/nullptr,
+    /*.initialize_math_policy_registry=*/nullptr,
+    /*.low_legality_provider_list=*/{},
+    /*.legalizer_provider_list=*/{},
+    /*.low_packet_diagnostic_provider_list=*/{},
+    /*.low_verify_provider_list=*/{},
+    /*.emitter_list=*/
+    {
+        /*.values=*/kFakeElfEmitters,
+        /*.count=*/IREE_ARRAYSIZE(kFakeElfEmitters),
+    },
+    /*.pass_registry=*/nullptr,
+    /*.contribute_pipeline=*/nullptr,
+};
+
+static const loom_target_provider_t kFakeWasmProvider = {
+    /*.register_context=*/nullptr,
+    /*.initialize_low_descriptor_registry=*/nullptr,
+    /*.initialize_low_lower_policy_registry=*/nullptr,
+    /*.initialize_math_policy_registry=*/nullptr,
+    /*.low_legality_provider_list=*/{},
+    /*.legalizer_provider_list=*/{},
+    /*.low_packet_diagnostic_provider_list=*/{},
+    /*.low_verify_provider_list=*/{},
+    /*.emitter_list=*/
+    {
+        /*.values=*/kFakeWasmEmitters,
+        /*.count=*/IREE_ARRAYSIZE(kFakeWasmEmitters),
+    },
+    /*.pass_registry=*/nullptr,
+    /*.contribute_pipeline=*/nullptr,
+};
 
 std::string ToString(loomc_string_view_t value) {
   return value.data ? std::string(value.data, value.size) : std::string();
@@ -94,6 +179,15 @@ TargetEnvironmentPtr CreateSpirvTargetEnvironment() {
   loomc_target_environment_t* target_environment = nullptr;
   loomc_status_t status = loomc_target_environment_create_spirv(
       loomc_allocator_system(), &target_environment);
+  LOOMC_EXPECT_OK(status);
+  return TargetEnvironmentPtr(target_environment);
+}
+
+TargetEnvironmentPtr CreateTargetEnvironmentFromProviderSet(
+    const loom_target_provider_set_t* provider_set) {
+  loomc_target_environment_t* target_environment = nullptr;
+  loomc_status_t status = loomc_target_environment_create_from_provider_set(
+      provider_set, loomc_allocator_system(), &target_environment);
   LOOMC_EXPECT_OK(status);
   return TargetEnvironmentPtr(target_environment);
 }
@@ -225,6 +319,121 @@ ModulePtr CreateIdentityModule(loomc_context_t* context, const char* symbol) {
 )");
   SourcePtr source = CreateTextSource("identity.loom", contents.c_str());
   return DeserializeModule(context, source.get());
+}
+
+ResultPtr EmitModule(loomc_target_environment_t* target_environment,
+                     loomc_workspace_t* workspace, loomc_module_t* module,
+                     const loomc_emit_options_t* options) {
+  loomc_result_t* result = nullptr;
+  loomc_status_t status =
+      loomc_emit_module(target_environment, workspace, module, options,
+                        loomc_allocator_system(), &result);
+  LOOMC_EXPECT_OK(status);
+  return ResultPtr(result);
+}
+
+void ExpectFailedEmitTargetResult(const loomc_result_t* result) {
+  ASSERT_NE(result, nullptr);
+  EXPECT_FALSE(loomc_result_succeeded(result));
+  ASSERT_EQ(loomc_result_diagnostic_count(result), 1u);
+  const loomc_diagnostic_t* diagnostic = loomc_result_diagnostic_at(result, 0);
+  ASSERT_NE(diagnostic, nullptr);
+  EXPECT_EQ(ToString(diagnostic->code), "EMIT/TARGET");
+}
+
+TEST(TargetTest, EmitSelectsOnlyLinkedEmitterWhenFormatOmitted) {
+  const loom_target_provider_t* providers[] = {
+      &kFakeElfProvider,
+  };
+  loom_target_provider_set_t provider_set =
+      loom_target_provider_set_make(providers, IREE_ARRAYSIZE(providers));
+  TargetEnvironmentPtr target_environment =
+      CreateTargetEnvironmentFromProviderSet(&provider_set);
+  ContextPtr context = CreateContext();
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreateIdentityModule(context.get(), "entry");
+
+  loomc_emit_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_EMIT_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.artifact_format=*/loomc_string_view_empty(),
+      /*.identifier=*/loomc_string_view_empty(),
+      /*.artifact_flags=*/0,
+  };
+  ResultPtr result = EmitModule(target_environment.get(), workspace.get(),
+                                module.get(), &options);
+  ExpectSucceededResult(result.get());
+  ASSERT_EQ(loomc_result_artifact_count(result.get()), 1u);
+  const loomc_artifact_t* artifact = loomc_result_artifact_at(result.get(), 0);
+  ASSERT_NE(artifact, nullptr);
+  EXPECT_EQ(ToString(artifact->format), "fake-elf");
+  EXPECT_EQ(ToString(artifact->identifier), "fake.bin");
+  ASSERT_EQ(artifact->contents.data_length, 4u);
+  EXPECT_EQ(artifact->contents.data[0], 0x7Fu);
+}
+
+TEST(TargetTest, EmitReportsZeroLinkedEmittersThroughResult) {
+  const loom_target_provider_t* providers[] = {
+      &kEmptyProvider,
+  };
+  loom_target_provider_set_t provider_set =
+      loom_target_provider_set_make(providers, IREE_ARRAYSIZE(providers));
+  TargetEnvironmentPtr target_environment =
+      CreateTargetEnvironmentFromProviderSet(&provider_set);
+  ContextPtr context = CreateContext();
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreateIdentityModule(context.get(), "entry");
+
+  ResultPtr result = EmitModule(target_environment.get(), workspace.get(),
+                                module.get(), nullptr);
+  ExpectFailedEmitTargetResult(result.get());
+  EXPECT_EQ(loomc_result_artifact_count(result.get()), 0u);
+}
+
+TEST(TargetTest, EmitReportsAmbiguousOmittedFormatThroughResult) {
+  const loom_target_provider_t* providers[] = {
+      &kFakeElfProvider,
+      &kFakeWasmProvider,
+  };
+  loom_target_provider_set_t provider_set =
+      loom_target_provider_set_make(providers, IREE_ARRAYSIZE(providers));
+  TargetEnvironmentPtr target_environment =
+      CreateTargetEnvironmentFromProviderSet(&provider_set);
+  ContextPtr context = CreateContext();
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreateIdentityModule(context.get(), "entry");
+
+  ResultPtr result = EmitModule(target_environment.get(), workspace.get(),
+                                module.get(), nullptr);
+  ExpectFailedEmitTargetResult(result.get());
+  EXPECT_EQ(loomc_result_artifact_count(result.get()), 0u);
+}
+
+TEST(TargetTest, EmitReportsMissingFormatThroughResult) {
+  const loom_target_provider_t* providers[] = {
+      &kFakeElfProvider,
+  };
+  loom_target_provider_set_t provider_set =
+      loom_target_provider_set_make(providers, IREE_ARRAYSIZE(providers));
+  TargetEnvironmentPtr target_environment =
+      CreateTargetEnvironmentFromProviderSet(&provider_set);
+  ContextPtr context = CreateContext();
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreateIdentityModule(context.get(), "entry");
+
+  loomc_emit_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_EMIT_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.artifact_format=*/loomc_make_cstring_view("missing"),
+      /*.identifier=*/loomc_string_view_empty(),
+      /*.artifact_flags=*/0,
+  };
+  ResultPtr result = EmitModule(target_environment.get(), workspace.get(),
+                                module.get(), &options);
+  ExpectFailedEmitTargetResult(result.get());
+  EXPECT_EQ(loomc_result_artifact_count(result.get()), 0u);
 }
 
 LinkIndexPtr CreateSingleSourceLinkIndex(loomc_context_t* context) {

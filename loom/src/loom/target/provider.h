@@ -16,9 +16,11 @@
 #define LOOM_TARGET_PROVIDER_H_
 
 #include "iree/base/api.h"
+#include "iree/base/internal/arena.h"
 #include "loom/codegen/low/lower.h"
 #include "loom/codegen/low/verify.h"
 #include "loom/ir/context.h"
+#include "loom/ir/ir.h"
 #include "loom/pass/environment.h"
 #include "loom/pass/registry.h"
 #include "loom/target/legalization.h"
@@ -49,6 +51,97 @@ typedef void (*loom_target_math_policy_registry_initializer_t)(
 
 typedef struct loom_builder_t loom_builder_t;
 typedef struct loom_target_environment_t loom_target_environment_t;
+
+// Target emission artifact storage release callback.
+typedef void (*loom_target_emit_artifact_deinitialize_fn_t)(
+    void* storage, iree_allocator_t allocator);
+
+// One target artifact produced by an emitter.
+typedef struct loom_target_emit_artifact_t {
+  // Target-neutral artifact format produced by the emitter.
+  loom_target_artifact_format_t target_artifact_format;
+
+  // Borrowed view over emitted artifact bytes.
+  iree_const_byte_span_t contents;
+
+  // Emitter-owned storage that keeps |contents| alive until deinitialized.
+  void* storage;
+
+  // Optional callback that releases |storage|.
+  loom_target_emit_artifact_deinitialize_fn_t deinitialize;
+} loom_target_emit_artifact_t;
+
+// Emission request passed to a target-owned emitter.
+typedef struct loom_target_emit_request_t {
+  // Composed target environment receiving the emission request.
+  const loom_target_environment_t* target_environment;
+
+  // Target-low descriptor registry prepared from target providers.
+  const loom_low_descriptor_registry_t* low_descriptor_registry;
+
+  // Mutable module containing already-prepared target-low IR.
+  loom_module_t* module;
+
+  // Invocation target selection overlay.
+  loom_target_selection_t target_selection;
+
+  // Embedding-owned option chain borrowed for the duration of the call.
+  const void* option_chain;
+
+  // Stable artifact identifier requested by the caller.
+  iree_string_view_t identifier;
+
+  // Diagnostic emitter that reports target diagnostics into the operation
+  // result.
+  iree_diagnostic_emitter_t diagnostic_emitter;
+
+  // Invocation-local scratch arena.
+  iree_arena_allocator_t* scratch_arena;
+
+  // Host allocator used for artifact storage that escapes the call.
+  iree_allocator_t allocator;
+} loom_target_emit_request_t;
+
+// Emits one target artifact from prepared target-low IR.
+typedef iree_status_t (*loom_target_emit_fn_t)(
+    const loom_target_emit_request_t* request,
+    loom_target_emit_artifact_t* out_artifact);
+
+// Target-owned emission backend linked into a binary or embedding.
+typedef struct loom_target_emitter_t {
+  // Stable emitter name used in diagnostics.
+  iree_string_view_t name;
+
+  // Public artifact format string returned by binding layers.
+  iree_string_view_t public_artifact_format;
+
+  // Default artifact identifier used when the caller leaves it empty.
+  iree_string_view_t default_identifier;
+
+  // Target-neutral artifact format produced by this emitter.
+  loom_target_artifact_format_t target_artifact_format;
+
+  // Emission callback.
+  loom_target_emit_fn_t emit;
+} loom_target_emitter_t;
+
+// Borrowed list of target-owned emitters.
+typedef struct loom_target_emitter_list_t {
+  // Emitter table.
+  const loom_target_emitter_t* const* values;
+
+  // Number of entries in |values|.
+  iree_host_size_t count;
+} loom_target_emitter_list_t;
+
+// Creates a borrowed emitter list.
+static inline loom_target_emitter_list_t loom_target_emitter_list_make(
+    const loom_target_emitter_t* const* values, iree_host_size_t count) {
+  return (loom_target_emitter_list_t){
+      .values = values,
+      .count = count,
+  };
+}
 
 // Coarse phase hooks owned by a top-level compile pipeline builder. Target
 // providers append pass IR into these hooks; they do not execute passes.
@@ -101,6 +194,8 @@ typedef struct loom_target_provider_t {
       low_packet_diagnostic_provider_list;
   // Optional target-owned low verifier providers contributed by this target.
   loom_low_verify_provider_list_t low_verify_provider_list;
+  // Optional target-owned emitters contributed by this target.
+  loom_target_emitter_list_t emitter_list;
   // Optional target-owned pass descriptors contributed by this target.
   const loom_pass_registry_t* pass_registry;
   // Optional pass-pipeline contribution callback.
@@ -123,6 +218,7 @@ enum {
   LOOM_TARGET_PROVIDER_LEGALIZER_PROVIDER_CAPACITY = 64,
   LOOM_TARGET_PROVIDER_LOW_PACKET_DIAGNOSTIC_PROVIDER_CAPACITY = 64,
   LOOM_TARGET_PROVIDER_LOW_VERIFY_PROVIDER_CAPACITY = 64,
+  LOOM_TARGET_PROVIDER_EMITTER_CAPACITY = 64,
   LOOM_TARGET_PROVIDER_PASS_REGISTRY_CAPACITY = 64,
 };
 
@@ -166,6 +262,10 @@ struct loom_target_environment_t {
       low_verify_providers[LOOM_TARGET_PROVIDER_LOW_VERIFY_PROVIDER_CAPACITY];
   // Number of entries in |low_verify_providers|.
   iree_host_size_t low_verify_provider_count;
+  // Target-owned emitter table assembled once.
+  const loom_target_emitter_t* emitters[LOOM_TARGET_PROVIDER_EMITTER_CAPACITY];
+  // Number of entries in |emitters|.
+  iree_host_size_t emitter_count;
   // Composed target-owned pass registry storage.
   loom_pass_registry_storage_t pass_registry_storage;
 };
@@ -227,6 +327,10 @@ loom_target_environment_low_packet_diagnostic_provider_list(
 // Returns target-owned low verifier providers linked into |environment|.
 loom_low_verify_provider_list_t
 loom_target_environment_low_verify_provider_list(
+    const loom_target_environment_t* environment);
+
+// Returns target-owned emitters linked into |environment|.
+loom_target_emitter_list_t loom_target_environment_emitter_list(
     const loom_target_environment_t* environment);
 
 // Returns target-owned pass descriptors linked into |environment|.

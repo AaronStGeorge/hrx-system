@@ -4,150 +4,75 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "diagnostic.h"
-#include "loom/error/error_defs.h"
 #include "loom/target/arch/spirv/provider.h"
 #include "loom/target/emit/spirv/module_emitter.h"
-#include "loomc/iree.h"
-#include "loomc/target/spirv/emit.h"
-#include "module.h"
-#include "result.h"
+#include "loomc/target/spirv/base.h"
 #include "target.h"
-#include "workspace.h"
 
-typedef struct loomc_spirv_emit_diagnostic_capture_t {
-  // Result receiving converted diagnostics.
-  loomc_result_t* result;
-} loomc_spirv_emit_diagnostic_capture_t;
-
-static loomc_status_t loomc_spirv_emit_validate_string_view(
-    loomc_string_view_t value) {
-  if (value.data == NULL && value.size != 0) {
-    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
-                             "string view has length but no data");
-  }
-  return loomc_ok_status();
+static void loomc_spirv_emit_artifact_deinitialize(void* storage,
+                                                   iree_allocator_t allocator) {
+  iree_allocator_free(allocator, storage);
 }
 
-static loomc_status_t loomc_spirv_emit_validate_options(
-    const loomc_spirv_emit_options_t* options) {
-  if (options == NULL) {
-    return loomc_ok_status();
+static iree_status_t loomc_spirv_emit_module_artifact(
+    const loom_target_emit_request_t* request,
+    loom_target_emit_artifact_t* out_artifact) {
+  *out_artifact = (loom_target_emit_artifact_t){0};
+
+  loom_spirv_module_binary_t binary = {0};
+  iree_status_t status = loom_spirv_emit_low_module(
+      request->module, request->low_descriptor_registry,
+      request->target_selection, request->diagnostic_emitter,
+      request->scratch_arena, &binary, request->allocator);
+  if (iree_status_is_ok(status)) {
+    out_artifact->target_artifact_format =
+        LOOM_TARGET_ARTIFACT_FORMAT_SPIRV_BINARY;
+    out_artifact->contents = iree_make_const_byte_span(
+        binary.words, binary.word_count * sizeof(uint32_t));
+    out_artifact->storage = binary.words;
+    out_artifact->deinitialize = loomc_spirv_emit_artifact_deinitialize;
+    binary.words = NULL;
+    binary.word_count = 0;
   }
-  if (options->type != LOOMC_STRUCTURE_TYPE_NONE &&
-      options->type != LOOMC_STRUCTURE_TYPE_SPIRV_EMIT_OPTIONS) {
-    return loomc_make_status(
-        LOOMC_STATUS_INVALID_ARGUMENT,
-        "SPIR-V emit options have an unknown structure type");
-  }
-  if (options->structure_size != 0 &&
-      options->structure_size < sizeof(*options)) {
-    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
-                             "SPIR-V emit options structure_size is too small");
-  }
-  loomc_target_selection_t* target_selection = NULL;
-  LOOMC_RETURN_IF_ERROR(
-      loomc_target_selection_options_resolve(options->next, &target_selection));
-  return loomc_spirv_emit_validate_string_view(options->identifier);
+
+  loom_spirv_module_binary_deinitialize(&binary, request->allocator);
+  return status;
 }
 
-static iree_status_t loomc_spirv_emit_capture_diagnostic(
-    void* user_data, const loom_diagnostic_emission_t* emission) {
-  loomc_spirv_emit_diagnostic_capture_t* capture =
-      (loomc_spirv_emit_diagnostic_capture_t*)user_data;
-  return iree_status_from_loomc(loomc_result_add_loom_diagnostic_emission(
-      capture->result, /*source=*/NULL, LOOM_EMITTER_PASS, emission));
-}
+static const loom_target_emitter_t loomc_spirv_emitter = {
+    .name = {"spirv", 5},
+    .public_artifact_format = {LOOMC_ARTIFACT_FORMAT_SPIRV,
+                               sizeof(LOOMC_ARTIFACT_FORMAT_SPIRV) - 1},
+    .default_identifier = {"module.spv", 10},
+    .target_artifact_format = LOOM_TARGET_ARTIFACT_FORMAT_SPIRV_BINARY,
+    .emit = loomc_spirv_emit_module_artifact,
+};
 
-static loomc_string_view_t loomc_spirv_emit_identifier(
-    const loomc_spirv_emit_options_t* options) {
-  if (options == NULL || loomc_string_view_is_empty(options->identifier)) {
-    return loomc_make_cstring_view("module.spv");
-  }
-  return options->identifier;
-}
+static const loom_target_emitter_t* const kLoomcSpirvEmitters[] = {
+    &loomc_spirv_emitter,
+};
+
+static const loom_target_provider_t loomc_spirv_emit_target_provider = {
+    .emitter_list =
+        {
+            .values = kLoomcSpirvEmitters,
+            .count = IREE_ARRAYSIZE(kLoomcSpirvEmitters),
+        },
+};
+
+static const loom_target_provider_t* const kLoomcSpirvTargetProviders[] = {
+    &loom_spirv_target_provider,
+    &loomc_spirv_emit_target_provider,
+};
+
+static const loom_target_provider_set_t loomc_spirv_target_provider_set = {
+    .providers = kLoomcSpirvTargetProviders,
+    .provider_count = IREE_ARRAYSIZE(kLoomcSpirvTargetProviders),
+};
 
 loomc_status_t loomc_target_environment_create_spirv(
     loomc_allocator_t allocator,
     loomc_target_environment_t** out_target_environment) {
   return loomc_target_environment_create_from_provider_set(
-      &loom_spirv_target_provider_set, allocator, out_target_environment);
-}
-
-loomc_status_t loomc_spirv_emit_module(
-    loomc_target_environment_t* target_environment,
-    loomc_workspace_t* workspace, loomc_module_t* module,
-    const loomc_spirv_emit_options_t* options, loomc_allocator_t allocator,
-    loomc_result_t** out_result) {
-  if (out_result == NULL) {
-    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
-                             "out_result must not be NULL");
-  }
-  *out_result = NULL;
-  if (target_environment == NULL || workspace == NULL || module == NULL) {
-    return loomc_make_status(
-        LOOMC_STATUS_INVALID_ARGUMENT,
-        "target_environment, workspace, and module must not be NULL");
-  }
-  loom_module_t* internal_module = loomc_module_loom_module(module);
-  if (internal_module == NULL) {
-    return loomc_make_status(LOOMC_STATUS_FAILED_PRECONDITION,
-                             "module does not contain internal IR");
-  }
-  LOOMC_RETURN_IF_ERROR(loomc_spirv_emit_validate_options(options));
-  loomc_target_selection_t* target_selection = NULL;
-  LOOMC_RETURN_IF_ERROR(loomc_target_selection_options_resolve(
-      options ? options->next : NULL, &target_selection));
-  LOOMC_RETURN_IF_ERROR(loomc_target_selection_validate_environment(
-      target_selection, target_environment));
-
-  allocator = loomc_allocator_or_system(allocator);
-  loomc_result_t* result = NULL;
-  LOOMC_RETURN_IF_ERROR(
-      loomc_result_create(LOOMC_RESULT_STATE_SUCCEEDED, allocator, &result));
-
-  loom_spirv_module_binary_t binary = {0};
-  loomc_spirv_emit_diagnostic_capture_t capture = {
-      .result = result,
-  };
-  iree_arena_allocator_t scratch_arena;
-  iree_arena_initialize(loomc_workspace_block_pool(workspace), &scratch_arena);
-
-  const loomc_target_pass_environment_t* pass_environment =
-      loomc_target_environment_pass_environment(target_environment);
-  loomc_status_t status = loomc_status_from_iree(loom_spirv_emit_low_module(
-      internal_module, &pass_environment->low_descriptor_registry.registry,
-      loomc_target_selection_loom_target_selection(target_selection),
-      (iree_diagnostic_emitter_t){
-          .fn = loomc_spirv_emit_capture_diagnostic,
-          .user_data = &capture,
-      },
-      &scratch_arena, &binary, iree_allocator_from_loomc(allocator)));
-  if (!loomc_status_is_ok(status) &&
-      loomc_status_is_result_diagnostic(status)) {
-    status = loomc_result_fail_status_diagnostic_consume(
-        result, NULL, LOOMC_DIAGNOSTIC_SEVERITY_ERROR,
-        loomc_make_cstring_view("SPIRV/EMIT"), status);
-  }
-  if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
-    status = loomc_result_add_artifact_take_contents(
-        result, LOOMC_ARTIFACT_KIND_EXECUTABLE,
-        loomc_make_cstring_view(LOOMC_ARTIFACT_FORMAT_SPIRV),
-        loomc_spirv_emit_identifier(options),
-        loomc_make_byte_span(binary.words,
-                             binary.word_count * sizeof(uint32_t)));
-    if (loomc_status_is_ok(status)) {
-      binary = (loom_spirv_module_binary_t){0};
-    }
-  }
-
-  loom_spirv_module_binary_deinitialize(&binary,
-                                        iree_allocator_from_loomc(allocator));
-  iree_arena_deinitialize(&scratch_arena);
-  if (loomc_status_is_ok(status)) {
-    *out_result = result;
-    result = NULL;
-  }
-  loomc_result_release(result);
-  return status;
+      &loomc_spirv_target_provider_set, allocator, out_target_environment);
 }

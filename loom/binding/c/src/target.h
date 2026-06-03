@@ -74,6 +74,10 @@ LOOMC_API_PRIVATE loomc_status_t loomc_context_target_options_resolve(
 LOOMC_API_PRIVATE loomc_status_t loomc_target_selection_options_resolve(
     const void* next, loomc_target_selection_t** out_target_selection);
 
+// Validates one target-selection option descriptor.
+LOOMC_API_PRIVATE loomc_status_t loomc_target_selection_options_validate(
+    const loomc_target_selection_options_t* options);
+
 // Validates that a target selection can be used with a target environment.
 LOOMC_API_PRIVATE loomc_status_t loomc_target_selection_validate_environment(
     const loomc_target_selection_t* target_selection,

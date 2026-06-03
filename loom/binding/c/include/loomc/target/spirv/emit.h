@@ -7,44 +7,38 @@
 #ifndef LOOMC_TARGET_SPIRV_EMIT_H_
 #define LOOMC_TARGET_SPIRV_EMIT_H_
 
-#include "loomc/module.h"
-#include "loomc/result.h"
+#include "loomc/emit.h"
 #include "loomc/target/spirv/base.h"
-#include "loomc/workspace.h"
 
 /// @file
-/// SPIR-V binary emission.
+/// SPIR-V emission option space.
 ///
-/// This optional leaf is implemented by the SPIR-V target binding package.
-/// Embedders that link it can explicitly emit SPIR-V binaries from prepared
-/// target-low IR without pulling in Vulkan, IREE HAL, or saved-profile adapter
-/// headers.
+/// Link the SPIR-V target binding package to make the generic
+/// `loomc_emit_module` operation capable of producing
+/// `LOOMC_ARTIFACT_FORMAT_SPIRV` artifacts. This header owns SPIR-V-specific
+/// emission descriptors that may be attached to `loomc_emit_options_t::next`.
 ///
 /// @par Example
-/// Emit a prepared target-low module to an in-memory SPIR-V artifact:
+/// Emit a prepared SPIR-V target-low module:
 ///
 /// @code{.c}
-/// loomc_spirv_emit_options_t emit_options = {
-///     .type = LOOMC_STRUCTURE_TYPE_SPIRV_EMIT_OPTIONS,
-///     .structure_size = sizeof(loomc_spirv_emit_options_t),
+/// loomc_emit_options_t emit_options = {
+///     .type = LOOMC_STRUCTURE_TYPE_EMIT_OPTIONS,
+///     .structure_size = sizeof(loomc_emit_options_t),
+///     .artifact_format = loomc_make_cstring_view(LOOMC_ARTIFACT_FORMAT_SPIRV),
 ///     .identifier = loomc_make_cstring_view("kernel.spv"),
 /// };
+///
 /// loomc_result_t* emit_result = NULL;
-/// loomc_status_t status = loomc_spirv_emit_module(
+/// loomc_status_t status = loomc_emit_module(
 ///     target_environment, workspace, module, &emit_options,
 ///     loomc_allocator_system(), &emit_result);
 /// if (!loomc_status_is_ok(status)) return status;
-/// if (loomc_result_succeeded(emit_result)) {
-///   const loomc_artifact_t* artifact =
-///       loomc_result_artifact_at(emit_result, 0);
-///   // Load or cache artifact->contents as SPIR-V binary bytes.
+/// if (!loomc_result_succeeded(emit_result)) {
+///   // Inspect typed diagnostics from emit_result.
 /// }
 /// loomc_result_release(emit_result);
 /// @endcode
-///
-/// Attach `loomc_target_selection_options_t` to
-/// `loomc_spirv_emit_options_t::next` when emission should use a prepared
-/// profile. Omitting the extension emits without a concrete target overlay.
 
 #ifdef __cplusplus
 extern "C" {
@@ -52,9 +46,10 @@ extern "C" {
 
 /// SPIR-V binary emission options.
 ///
-/// Callers zero-initialize this descriptor, set `type` to
-/// `LOOMC_STRUCTURE_TYPE_SPIRV_EMIT_OPTIONS`, set `structure_size` to
-/// `sizeof(loomc_spirv_emit_options_t)`, and fill the requested fields.
+/// SPIR-V emission uses the generic artifact format, artifact identifier, and
+/// target selection settings on `loomc_emit_options_t` and shared invocation
+/// descriptors. This target-specific descriptor carries no additional stable
+/// fields today.
 typedef struct loomc_spirv_emit_options_t {
   /// Structure type. Must be `LOOMC_STRUCTURE_TYPE_SPIRV_EMIT_OPTIONS` when
   /// nonzero.
@@ -63,50 +58,9 @@ typedef struct loomc_spirv_emit_options_t {
   /// Size of this structure in bytes.
   loomc_host_size_t structure_size;
 
-  /// Extension chain for SPIR-V emission options such as
-  /// `loomc_target_selection_options_t`.
+  /// Next invocation option extension.
   const void* next;
-
-  /// Artifact identifier for the returned SPIR-V binary. Empty selects
-  /// `module.spv`.
-  loomc_string_view_t identifier;
 } loomc_spirv_emit_options_t;
-
-/// Emits one SPIR-V binary artifact from prepared target-low IR.
-///
-/// The module must already contain SPIR-V target-low function definitions, such
-/// as IR produced by a prepared-low target pipeline. This function does not run
-/// source-to-low lowering or target preparation passes.
-///
-/// @param target_environment SPIR-V target environment used to resolve
-/// target-low descriptor rows.
-/// @param workspace Invocation-local scratch workspace.
-/// @param module Mutable module containing prepared SPIR-V target-low IR.
-/// @param options Emission options, or `NULL` for defaults.
-/// @param allocator Host allocator used for result-owned storage.
-/// @param out_result Receives a retained result containing diagnostics and, on
-/// success, one SPIR-V binary artifact.
-/// @return OK when the emission operation completed far enough to report a
-/// result. Non-OK statuses represent API misuse or infrastructure failures
-/// before a result could be produced.
-///
-/// @ownership
-/// The caller owns `out_result` on an OK return and releases it with
-/// `loomc_result_release`.
-///
-/// @lifetime
-/// Returned artifacts do not borrow from `workspace` or `module` and remain
-/// valid until the result is released.
-///
-/// @par Target Selection
-/// `loomc_target_selection_options_t` may be attached to
-/// `loomc_spirv_emit_options_t::next`. The selected profile must be compatible
-/// with `target_environment`.
-LOOMC_API_EXPORT loomc_status_t loomc_spirv_emit_module(
-    loomc_target_environment_t* target_environment,
-    loomc_workspace_t* workspace, loomc_module_t* module,
-    const loomc_spirv_emit_options_t* options, loomc_allocator_t allocator,
-    loomc_result_t** out_result);
 
 #ifdef __cplusplus
 }  // extern "C"

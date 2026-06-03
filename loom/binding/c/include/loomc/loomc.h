@@ -20,6 +20,7 @@
 #include "loomc/config.h"
 #include "loomc/context.h"
 #include "loomc/diagnostic.h"
+#include "loomc/emit.h"
 #include "loomc/link.h"
 #include "loomc/link_index.h"
 #include "loomc/module.h"

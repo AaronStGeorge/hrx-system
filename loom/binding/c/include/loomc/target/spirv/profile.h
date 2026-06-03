@@ -514,16 +514,31 @@ LOOMC_API_EXPORT loomc_status_t loomc_target_profile_create_spirv(
     loomc_target_profile_t** out_profile, loomc_result_t** out_result);
 
 /// Returns the known state for one SPIR-V feature fact.
+///
+/// @param profile SPIR-V target profile to query.
+/// @param feature Feature fact to inspect.
+/// @param out_state Receives the feature state.
+/// @return OK when the feature state was returned.
 LOOMC_API_EXPORT loomc_status_t loomc_spirv_target_profile_query_feature(
     const loomc_target_profile_t* profile, loomc_spirv_feature_t feature,
     loomc_target_fact_state_t* out_state);
 
 /// Returns prepared SPIR-V profile summary rows.
+///
+/// @param profile SPIR-V target profile to query.
+/// @param out_info Receives counts for extension, capability, opcode,
+/// storage-class, decoration, and cooperative operation rows.
+/// @return OK when summary information was returned.
 LOOMC_API_EXPORT loomc_status_t
 loomc_spirv_target_profile_query_info(const loomc_target_profile_t* profile,
                                       loomc_spirv_profile_info_t* out_info);
 
 /// Returns an OpExtension row by index.
+///
+/// @param profile SPIR-V target profile to query.
+/// @param index Zero-based extension row index.
+/// @param out_extension Receives the extension name.
+/// @return OK when the extension row was returned.
 ///
 /// @lifetime
 /// The returned string view remains valid until `profile` is released.
@@ -532,26 +547,51 @@ LOOMC_API_EXPORT loomc_status_t loomc_spirv_target_profile_extension_at(
     loomc_string_view_t* out_extension);
 
 /// Returns an OpCapability numeric row by index.
+///
+/// @param profile SPIR-V target profile to query.
+/// @param index Zero-based capability row index.
+/// @param out_capability Receives the SPIR-V capability enumerant value.
+/// @return OK when the capability row was returned.
 LOOMC_API_EXPORT loomc_status_t loomc_spirv_target_profile_capability_at(
     const loomc_target_profile_t* profile, loomc_host_size_t index,
     uint32_t* out_capability);
 
 /// Returns an opcode numeric row by index.
+///
+/// @param profile SPIR-V target profile to query.
+/// @param index Zero-based opcode row index.
+/// @param out_opcode Receives the SPIR-V opcode enumerant value.
+/// @return OK when the opcode row was returned.
 LOOMC_API_EXPORT loomc_status_t loomc_spirv_target_profile_opcode_at(
     const loomc_target_profile_t* profile, loomc_host_size_t index,
     uint32_t* out_opcode);
 
 /// Returns a storage-class numeric row by index.
+///
+/// @param profile SPIR-V target profile to query.
+/// @param index Zero-based storage-class row index.
+/// @param out_storage_class Receives the SPIR-V storage-class enumerant value.
+/// @return OK when the storage-class row was returned.
 LOOMC_API_EXPORT loomc_status_t loomc_spirv_target_profile_storage_class_at(
     const loomc_target_profile_t* profile, loomc_host_size_t index,
     uint32_t* out_storage_class);
 
 /// Returns a decoration numeric row by index.
+///
+/// @param profile SPIR-V target profile to query.
+/// @param index Zero-based decoration row index.
+/// @param out_decoration Receives the SPIR-V decoration enumerant value.
+/// @return OK when the decoration row was returned.
 LOOMC_API_EXPORT loomc_status_t loomc_spirv_target_profile_decoration_at(
     const loomc_target_profile_t* profile, loomc_host_size_t index,
     uint32_t* out_decoration);
 
 /// Returns a cooperative matrix fact row by index.
+///
+/// @param profile SPIR-V target profile to query.
+/// @param index Zero-based cooperative matrix row index.
+/// @param out_row Receives the cooperative matrix fact row.
+/// @return OK when the cooperative matrix row was returned.
 ///
 /// @lifetime
 /// The returned string view remains valid until `profile` is released.
@@ -561,6 +601,11 @@ loomc_spirv_target_profile_cooperative_matrix_row_at(
     loomc_spirv_cooperative_matrix_row_t* out_row);
 
 /// Returns a cooperative vector fact row by index.
+///
+/// @param profile SPIR-V target profile to query.
+/// @param index Zero-based cooperative vector row index.
+/// @param out_row Receives the cooperative vector fact row.
+/// @return OK when the cooperative vector row was returned.
 ///
 /// @lifetime
 /// The returned string view remains valid until `profile` is released.

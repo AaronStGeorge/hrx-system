@@ -222,7 +222,54 @@ typedef enum loomc_structure_type_e {
 
   /// `loomc_spirv_profile_options_t`.
   LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS = 17,
+
+  /// `loomc_emit_options_t`.
+  LOOMC_STRUCTURE_TYPE_EMIT_OPTIONS = 18,
+
+  /// `loomc_option_dict_t`.
+  LOOMC_STRUCTURE_TYPE_OPTION_DICT = 19,
 } loomc_structure_type_t;
+
+/// One loose string option entry.
+///
+/// Option entries are intended for argv, framework, scripting, and build-server
+/// integration layers that already traffic in string key/value data. Strict and
+/// high-throughput embedders should use typed option descriptors when
+/// available.
+typedef struct loomc_option_entry_t {
+  /// Canonical option key.
+  loomc_string_view_t key;
+
+  /// Option value.
+  loomc_string_view_t value;
+} loomc_option_entry_t;
+
+/// Ordered loose string option dictionary.
+///
+/// Operations that document support for this descriptor accept it on their
+/// invocation option `next` chain. Supporting operations walk descriptor-chain
+/// order, and each dictionary walks `entries` in array order. When a
+/// recognized key appears more than once, the last recognized value wins.
+///
+/// Supporting operations report unknown keys through the returned result, not
+/// process-level status failures. A non-OK status is still used for structural
+/// API misuse such as an entry count with a `NULL` entry pointer.
+typedef struct loomc_option_dict_t {
+  /// Structure type. Must be `LOOMC_STRUCTURE_TYPE_OPTION_DICT`.
+  loomc_structure_type_t type;
+
+  /// Size of this structure in bytes.
+  loomc_host_size_t structure_size;
+
+  /// Next invocation option extension.
+  const void* next;
+
+  /// Ordered option entries.
+  const loomc_option_entry_t* entries;
+
+  /// Number of entries in `entries`.
+  loomc_host_size_t entry_count;
+} loomc_option_dict_t;
 
 /// Controls the behavior of a `loomc_allocator_ctl_fn_t` callback.
 typedef enum loomc_allocator_command_e {

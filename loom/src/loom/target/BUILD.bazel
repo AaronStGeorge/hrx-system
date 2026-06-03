@@ -272,6 +272,7 @@ loom_cc_library(
         "//loom/src/loom/pass:environment",
         "//loom/src/loom/pass:registry",
         "//runtime/src/iree/base",
+        "//runtime/src/iree/base/internal:arena",
     ],
 )
 

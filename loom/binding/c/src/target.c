@@ -134,7 +134,7 @@ static loomc_status_t loomc_target_profile_options_validate(
   return loomc_target_validate_string_view(options->identifier);
 }
 
-static loomc_status_t loomc_target_selection_options_validate(
+loomc_status_t loomc_target_selection_options_validate(
     const loomc_target_selection_options_t* options) {
   if (options->type != LOOMC_STRUCTURE_TYPE_TARGET_SELECTION_OPTIONS) {
     return loomc_make_status(

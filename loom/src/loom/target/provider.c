@@ -135,6 +135,21 @@ static iree_status_t loom_target_environment_append_low_verify_providers(
   return iree_ok_status();
 }
 
+static iree_status_t loom_target_environment_append_emitters(
+    loom_target_environment_t* environment,
+    const loom_target_provider_t* provider) {
+  if (environment->emitter_count + provider->emitter_list.count >
+      IREE_ARRAYSIZE(environment->emitters)) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "target emitter capacity exceeded");
+  }
+  for (iree_host_size_t i = 0; i < provider->emitter_list.count; ++i) {
+    const iree_host_size_t index = environment->emitter_count++;
+    environment->emitters[index] = provider->emitter_list.values[i];
+  }
+  return iree_ok_status();
+}
+
 iree_status_t loom_target_environment_initialize(
     const loom_target_provider_set_t* provider_set,
     loom_target_environment_t* out_environment) {
@@ -172,6 +187,8 @@ iree_status_t loom_target_environment_initialize(
             out_environment, provider));
     IREE_RETURN_IF_ERROR(loom_target_environment_append_low_verify_providers(
         out_environment, provider));
+    IREE_RETURN_IF_ERROR(
+        loom_target_environment_append_emitters(out_environment, provider));
   }
   IREE_RETURN_IF_ERROR(loom_pass_registry_storage_initialize_from_registries(
       pass_registries, pass_registry_count,
@@ -268,6 +285,13 @@ loom_target_environment_low_verify_provider_list(
   return loom_low_verify_provider_list_make(
       environment->low_verify_providers,
       environment->low_verify_provider_count);
+}
+
+loom_target_emitter_list_t loom_target_environment_emitter_list(
+    const loom_target_environment_t* environment) {
+  IREE_ASSERT_ARGUMENT(environment);
+  return loom_target_emitter_list_make(environment->emitters,
+                                       environment->emitter_count);
 }
 
 const loom_pass_registry_t* loom_target_environment_pass_registry(
