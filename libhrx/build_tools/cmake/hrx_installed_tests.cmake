@@ -36,6 +36,7 @@ file(WRITE "${_HRX_INSTALLED_TESTS_CTEST_FILE}"
 
 set_property(GLOBAL PROPERTY HRX_INSTALLED_TEST_TARGETS "")
 set_property(GLOBAL PROPERTY HRX_INSTALLED_TEST_DEFERRED_TARGETS "")
+set_property(GLOBAL PROPERTY HRX_INSTALLED_TEST_DEFERRED_TARGET_PATHS "")
 set_property(GLOBAL PROPERTY HRX_INSTALLED_TEST_FILES "")
 set_property(GLOBAL PROPERTY HRX_INSTALLED_TEST_TMPDIRS "")
 
@@ -107,6 +108,15 @@ function(hrx_installed_tests_target_filename OUT_VAR TARGET_NAME)
   set(${OUT_VAR} "${_PREFIX}${_OUTPUT_NAME}${_SUFFIX}" PARENT_SCOPE)
 endfunction()
 
+function(hrx_installed_tests_deferred_target_filename OUT_VAR TARGET_NAME)
+  if("${TARGET_NAME}" MATCHES "::([^:]+)$")
+    set(_FILENAME "${CMAKE_MATCH_1}${CMAKE_EXECUTABLE_SUFFIX}")
+  else()
+    set(_FILENAME "${TARGET_NAME}${CMAKE_EXECUTABLE_SUFFIX}")
+  endif()
+  set(${OUT_VAR} "${_FILENAME}" PARENT_SCOPE)
+endfunction()
+
 function(hrx_installed_tests_install_target TARGET_NAME OUT_VAR)
   hrx_installed_tests_is_enabled(_ENABLED)
   if(NOT _ENABLED)
@@ -115,8 +125,11 @@ function(hrx_installed_tests_install_target TARGET_NAME OUT_VAR)
 
   if(NOT TARGET "${TARGET_NAME}")
     string(MAKE_C_IDENTIFIER "${TARGET_NAME}" _SAFE_TARGET)
-    set(_INSTALLED_PATH "\${CMAKE_CURRENT_LIST_DIR}/../bin/${_SAFE_TARGET}/${TARGET_NAME}${CMAKE_EXECUTABLE_SUFFIX}")
+    hrx_installed_tests_deferred_target_filename(_FILENAME "${TARGET_NAME}")
+    set(_INSTALLED_PATH "\${CMAKE_CURRENT_LIST_DIR}/../bin/${_SAFE_TARGET}/${_FILENAME}")
     set_property(GLOBAL APPEND PROPERTY HRX_INSTALLED_TEST_DEFERRED_TARGETS "${TARGET_NAME}")
+    set_property(GLOBAL APPEND PROPERTY HRX_INSTALLED_TEST_DEFERRED_TARGET_PATHS
+      "${TARGET_NAME}|${_INSTALLED_PATH}")
     set(${OUT_VAR} "${_INSTALLED_PATH}" PARENT_SCOPE)
     return()
   endif()
@@ -461,7 +474,28 @@ function(hrx_create_installed_tests)
       message(FATAL_ERROR
         "Installed test target was referenced before it existed and was never created: ${_DEFERRED_TARGET}")
     endif()
-    hrx_installed_tests_install_target("${_DEFERRED_TARGET}" _UNUSED_INSTALLED_PATH)
+    hrx_installed_tests_install_target("${_DEFERRED_TARGET}" _INSTALLED_PATH)
+    get_property(_DEFERRED_TARGET_PATHS GLOBAL PROPERTY HRX_INSTALLED_TEST_DEFERRED_TARGET_PATHS)
+    foreach(_DEFERRED_TARGET_PATH IN LISTS _DEFERRED_TARGET_PATHS)
+      string(FIND "${_DEFERRED_TARGET_PATH}" "|" _PATH_SEPARATOR_INDEX)
+      if(_PATH_SEPARATOR_INDEX LESS 0)
+        message(FATAL_ERROR
+          "Installed test target path record is malformed: ${_DEFERRED_TARGET_PATH}")
+      endif()
+      string(SUBSTRING "${_DEFERRED_TARGET_PATH}" 0 ${_PATH_SEPARATOR_INDEX} _PATH_TARGET)
+      math(EXPR _PATH_VALUE_INDEX "${_PATH_SEPARATOR_INDEX} + 1")
+      string(LENGTH "${_DEFERRED_TARGET_PATH}" _DEFERRED_TARGET_PATH_LENGTH)
+      math(EXPR _PATH_VALUE_LENGTH "${_DEFERRED_TARGET_PATH_LENGTH} - ${_PATH_VALUE_INDEX}")
+      string(SUBSTRING "${_DEFERRED_TARGET_PATH}" ${_PATH_VALUE_INDEX} ${_PATH_VALUE_LENGTH} _EXPECTED_PATH)
+      if(_PATH_TARGET STREQUAL _DEFERRED_TARGET)
+        if(NOT _EXPECTED_PATH STREQUAL _INSTALLED_PATH)
+          message(FATAL_ERROR
+            "Installed test target '${_DEFERRED_TARGET}' resolved to '${_INSTALLED_PATH}' "
+            "after a test had already recorded '${_EXPECTED_PATH}'. Add the target before "
+            "the test registration or update the deferred path inference.")
+        endif()
+      endif()
+    endforeach()
   endforeach()
 
   get_property(_TMPDIRS GLOBAL PROPERTY HRX_INSTALLED_TEST_TMPDIRS)
