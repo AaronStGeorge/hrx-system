@@ -38,12 +38,6 @@ void loom_context_initialize(iree_allocator_t allocator,
 }
 
 void loom_context_deinitialize(loom_context_t* context) {
-  // Free interned source name strings.
-  for (iree_host_size_t i = 0; i < context->sources.count; ++i) {
-    iree_allocator_free(context->allocator,
-                        (void*)context->sources.entries[i].data);
-  }
-  iree_allocator_free(context->allocator, context->sources.entries);
   iree_allocator_free(context->allocator, context->encoding_vtables.entries);
   iree_allocator_free(context->allocator, context->op_name_table.entries);
   memset(context, 0, sizeof(*context));
@@ -175,51 +169,6 @@ static iree_status_t loom_context_build_op_name_table(loom_context_t* context) {
 
 iree_status_t loom_context_finalize(loom_context_t* context) {
   return loom_context_build_op_name_table(context);
-}
-
-//===----------------------------------------------------------------------===//
-// Source registration
-//===----------------------------------------------------------------------===//
-
-iree_status_t loom_context_register_source(loom_context_t* context,
-                                           iree_string_view_t name,
-                                           loom_source_id_t* out_source_id) {
-  // Check for existing entry with matching name.
-  for (iree_host_size_t i = 0; i < context->sources.count; ++i) {
-    if (iree_string_view_equal(context->sources.entries[i], name)) {
-      *out_source_id = (loom_source_id_t)i;
-      return iree_ok_status();
-    }
-  }
-
-  // Source IDs are 0-based uint16_t. LOOM_SOURCE_ID_INVALID is the null
-  // sentinel, so the maximum valid ID is LOOM_SOURCE_ID_INVALID - 1.
-  if (context->sources.count >= LOOM_SOURCE_ID_INVALID) {
-    return iree_make_status(
-        IREE_STATUS_RESOURCE_EXHAUSTED,
-        "source table full (%" PRIhsz " entries, max id %u)",
-        context->sources.count, (unsigned)(LOOM_SOURCE_ID_INVALID - 1));
-  }
-
-  // Grow the entries array if needed.
-  if (context->sources.count >= context->sources.capacity) {
-    IREE_RETURN_IF_ERROR(iree_allocator_grow_array(
-        context->allocator, 4, sizeof(iree_string_view_t),
-        &context->sources.capacity, (void**)&context->sources.entries));
-  }
-
-  // Intern the name string.
-  char* interned = NULL;
-  if (!iree_string_view_is_empty(name)) {
-    IREE_RETURN_IF_ERROR(iree_allocator_malloc(context->allocator, name.size,
-                                               (void**)&interned));
-    memcpy(interned, name.data, name.size);
-  }
-
-  iree_host_size_t index = context->sources.count++;
-  context->sources.entries[index] = iree_make_string_view(interned, name.size);
-  *out_source_id = (loom_source_id_t)index;
-  return iree_ok_status();
 }
 
 //===----------------------------------------------------------------------===//

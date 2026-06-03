@@ -2080,7 +2080,7 @@ TEST_F(ParserTest, TrailingFileLocationOverridesParserSourceFallback) {
       "%c = test.constant 42 : i32 "
       "loc(\"model \\\"main\\\"\\\\v2\\n.loom\":42:3 to 42:58)\n");
   ASSERT_NE(module, nullptr);
-  ASSERT_EQ(context_.sources.count, 2u);
+  ASSERT_EQ(module->sources.count, 2u);
 
   const loom_block_t* body = loom_module_block(module);
   ASSERT_NE(body, nullptr);
@@ -2093,11 +2093,11 @@ TEST_F(ParserTest, TrailingFileLocationOverridesParserSourceFallback) {
   const loom_location_entry_t& location =
       module->locations.entries[op->location];
   ASSERT_EQ(location.kind, LOOM_LOCATION_FILE);
-  ASSERT_LT(location.file.source_id, context_.sources.count);
-  EXPECT_TRUE(iree_string_view_equal(context_.sources.entries[0],
-                                     IREE_SV("test.loom")));
+  ASSERT_LT(location.file.source_id, module->sources.count);
   EXPECT_TRUE(
-      iree_string_view_equal(context_.sources.entries[location.file.source_id],
+      iree_string_view_equal(module->sources.entries[0], IREE_SV("test.loom")));
+  EXPECT_TRUE(
+      iree_string_view_equal(module->sources.entries[location.file.source_id],
                              IREE_SV("model \"main\"\\v2\n.loom")));
   EXPECT_EQ(location.file.start_line, 42u);
   EXPECT_EQ(location.file.start_col, 3u);
@@ -2135,7 +2135,7 @@ TEST_F(ParserTest, TrailingLocationsReuseSourceIds) {
       "%c0 = test.constant 1 : i32 loc(\"model.loom\":7:8)\n"
       "%c1 = test.constant 2 : i32 loc(\"model.loom\":9:10)\n");
   ASSERT_NE(module, nullptr);
-  ASSERT_EQ(context_.sources.count, 2u);
+  ASSERT_EQ(module->sources.count, 2u);
 
   const loom_block_t* body = loom_module_block(module);
   ASSERT_NE(body, nullptr);
@@ -2153,7 +2153,7 @@ TEST_F(ParserTest, TrailingLocationsReuseSourceIds) {
   ASSERT_EQ(second_location.kind, LOOM_LOCATION_FILE);
   EXPECT_EQ(first_location.file.source_id, second_location.file.source_id);
   EXPECT_TRUE(iree_string_view_equal(
-      context_.sources.entries[first_location.file.source_id],
+      module->sources.entries[first_location.file.source_id],
       IREE_SV("model.loom")));
 
   loom_module_free(module);
@@ -2189,7 +2189,7 @@ TEST_F(ParserTest, FallbackParserLocationPrintedWhenNoExplicitLoc) {
       module->locations.entries[op->location];
   ASSERT_EQ(location.kind, LOOM_LOCATION_FILE);
   EXPECT_TRUE(iree_string_view_equal(
-      context_.sources.entries[location.file.source_id], IREE_SV("test.loom")));
+      module->sources.entries[location.file.source_id], IREE_SV("test.loom")));
   EXPECT_EQ(location.file.start_line, 1u);
   EXPECT_EQ(location.file.start_col, 1u);
 

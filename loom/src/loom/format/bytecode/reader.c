@@ -93,7 +93,7 @@ typedef struct loom_bytecode_reader_state_t {
   iree_string_view_t* strings;    // Current module STRINGS entries.
   iree_host_size_t string_count;  // Number of current module strings.
   iree_string_view_t* sources;    // Current module SOURCES entries.
-  loom_source_id_t* source_ids;   // Bytecode source index to context source ID.
+  loom_source_id_t* source_ids;   // Bytecode source index to module source ID.
   iree_host_size_t source_count;  // Number of current module sources.
   loom_type_t* types;             // Current module TYPES entries.
   iree_host_size_t type_count;    // Number of current module types.
@@ -608,8 +608,8 @@ static iree_status_t loom_bytecode_reader_materialize_sources(
       reader->arena, reader->source_count, sizeof(loom_source_id_t),
       (void**)&reader->source_ids));
   for (iree_host_size_t i = 0; i < reader->source_count; ++i) {
-    IREE_RETURN_IF_ERROR(loom_context_register_source(
-        reader->context, reader->sources[i], &reader->source_ids[i]));
+    IREE_RETURN_IF_ERROR(loom_module_register_source(
+        reader->output_module, reader->sources[i], &reader->source_ids[i]));
   }
   return iree_ok_status();
 }

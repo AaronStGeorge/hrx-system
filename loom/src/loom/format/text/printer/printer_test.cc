@@ -2362,8 +2362,8 @@ TEST_F(PrintOpTest, LocationUnknown) {
 TEST_F(PrintOpTest, LocationFile) {
   // Register a source with the context.
   loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
-  IREE_ASSERT_OK(loom_context_register_source(&context_, IREE_SV("model.loom"),
-                                              &source_id));
+  IREE_ASSERT_OK(
+      loom_module_register_source(module_, IREE_SV("model.loom"), &source_id));
 
   // Add a file location to the module.
   loom_location_entry_t file_loc =
@@ -2383,8 +2383,8 @@ TEST_F(PrintOpTest, LocationFile) {
 
 TEST_F(PrintOpTest, LocationFileUsesCanonicalStringEscapes) {
   loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
-  IREE_ASSERT_OK(loom_context_register_source(
-      &context_, IREE_SV("model \"main\"\\v2\n.loom"), &source_id));
+  IREE_ASSERT_OK(loom_module_register_source(
+      module_, IREE_SV("model \"main\"\\v2\n.loom"), &source_id));
 
   loom_location_entry_t file_loc =
       loom_location_file_range(source_id, 7, 8, 9, 10);
@@ -2407,7 +2407,7 @@ TEST_F(PrintOpTest, LocationOpaque) {
   // Register a source tag with the context.
   loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
   IREE_ASSERT_OK(
-      loom_context_register_source(&context_, IREE_SV("torch"), &source_id));
+      loom_module_register_source(module_, IREE_SV("torch"), &source_id));
 
   // Add an opaque location.
   loom_location_entry_t opaque_loc = {.kind = LOOM_LOCATION_OPAQUE};
@@ -2431,8 +2431,8 @@ TEST_F(PrintOpTest, LocationOpaque) {
 
 TEST_F(PrintOpTest, LocationOpaqueUsesCanonicalStringEscapes) {
   loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
-  IREE_ASSERT_OK(loom_context_register_source(
-      &context_, IREE_SV("torch \"aten\""), &source_id));
+  IREE_ASSERT_OK(loom_module_register_source(module_, IREE_SV("torch \"aten\""),
+                                             &source_id));
 
   loom_location_entry_t opaque_loc = {.kind = LOOM_LOCATION_OPAQUE};
   opaque_loc.opaque.source_id = source_id;
@@ -2457,7 +2457,7 @@ TEST_F(PrintOpTest, LocationOpaqueUsesCanonicalStringEscapes) {
 TEST_F(PrintOpTest, LocationOpaqueRejectsInvalidUtf8Data) {
   loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
   IREE_ASSERT_OK(
-      loom_context_register_source(&context_, IREE_SV("torch"), &source_id));
+      loom_module_register_source(module_, IREE_SV("torch"), &source_id));
 
   loom_location_entry_t opaque_loc = {.kind = LOOM_LOCATION_OPAQUE};
   opaque_loc.opaque.source_id = source_id;
@@ -2478,8 +2478,8 @@ TEST_F(PrintOpTest, LocationOpaqueRejectsInvalidUtf8Data) {
 
 TEST_F(PrintOpTest, LocationFusedPrintsNestedLocationBodies) {
   loom_source_id_t jax_source_id = LOOM_SOURCE_ID_INVALID;
-  IREE_ASSERT_OK(loom_context_register_source(&context_, IREE_SV("jax.py"),
-                                              &jax_source_id));
+  IREE_ASSERT_OK(
+      loom_module_register_source(module_, IREE_SV("jax.py"), &jax_source_id));
   loom_location_id_t jax_loc_id = LOOM_LOCATION_UNKNOWN;
   IREE_ASSERT_OK(loom_module_add_location(
       module_,
@@ -2489,8 +2489,8 @@ TEST_F(PrintOpTest, LocationFusedPrintsNestedLocationBodies) {
       &jax_loc_id));
 
   loom_source_id_t recipe_source_id = LOOM_SOURCE_ID_INVALID;
-  IREE_ASSERT_OK(loom_context_register_source(&context_, IREE_SV("recipe.loom"),
-                                              &recipe_source_id));
+  IREE_ASSERT_OK(loom_module_register_source(module_, IREE_SV("recipe.loom"),
+                                             &recipe_source_id));
   loom_location_id_t recipe_loc_id = LOOM_LOCATION_UNKNOWN;
   IREE_ASSERT_OK(loom_module_add_location(
       module_,
@@ -2500,8 +2500,8 @@ TEST_F(PrintOpTest, LocationFusedPrintsNestedLocationBodies) {
       &recipe_loc_id));
 
   loom_source_id_t torch_source_id = LOOM_SOURCE_ID_INVALID;
-  IREE_ASSERT_OK(loom_context_register_source(&context_, IREE_SV("torch"),
-                                              &torch_source_id));
+  IREE_ASSERT_OK(
+      loom_module_register_source(module_, IREE_SV("torch"), &torch_source_id));
   loom_location_entry_t opaque_loc = {.kind = LOOM_LOCATION_OPAQUE};
   opaque_loc.opaque.source_id = torch_source_id;
   const char* data = "node\n42";

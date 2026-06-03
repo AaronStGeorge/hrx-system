@@ -291,9 +291,10 @@ typedef enum loom_bytecode_section_kind_e {
 // SOURCES section
 // ==========================================================================
 //
-// Source identifiers for the location table. Same format as STRINGS
-// but stored separately because sources are context-level (shared
-// across modules during linking) while strings are module-local.
+// Source identifiers for the location table. Same format as STRINGS but stored
+// separately so location provenance stays distinct from IR string data. Source
+// IDs are module-local, and linking/remapping interns referenced source names
+// into the destination module.
 //
 //   [source_count: varint]
 //   For each source:

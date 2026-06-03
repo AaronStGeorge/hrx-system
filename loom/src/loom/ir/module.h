@@ -228,6 +228,14 @@ static inline loom_value_ordinal_t loom_module_value_ordinal_scratch_lookup(
   return scratch->values_by_value_id[value_id];
 }
 
+// Registers a source identifier (filename, system tag, etc.) in |module| and
+// returns its module-local ID. The name is copied into module-owned arena
+// storage. If the same name is already registered, returns the existing ID
+// without allocating.
+iree_status_t loom_module_register_source(loom_module_t* module,
+                                          iree_string_view_t name,
+                                          loom_source_id_t* out_source_id);
+
 // Attaches leading source comments to |op|. Comment payloads are the exact
 // source bytes after each leading // marker and are copied into |module|.
 iree_status_t loom_module_attach_op_comments(loom_module_t* module,

@@ -5,7 +5,7 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // Global compilation context: dialect registration, op vtable and semantic
-// metadata lookup, context-owned encoding vtables, and source interning.
+// metadata lookup, and context-owned encoding vtables.
 //
 // Lifecycle:
 //   1. loom_context_initialize() — zero-init with allocator.
@@ -16,9 +16,7 @@
 //   6. loom_context_deinitialize() — release resources.
 //
 // After finalization, the dialect/op registries and op-name table are
-// immutable and can be read from any thread without synchronization. Source
-// registration remains append-only; callers must provide external
-// synchronization if multiple threads register source names concurrently.
+// immutable and can be read from any thread without synchronization.
 
 #ifndef LOOM_IR_CONTEXT_H_
 #define LOOM_IR_CONTEXT_H_
@@ -80,18 +78,14 @@ typedef struct loom_op_name_table_t {
   uint32_t count;
 } loom_op_name_table_t;
 
-// The global context: vtables, allocator, and source/name registries.
+// The global context: vtables, allocator, and shared language registries.
 //
 // Created once at startup, shared across all modules and threads.
-// Dialect/op lookup state is immutable after finalization. Source names may
-// still be appended through loom_context_register_source().
+// Dialect/op lookup state is immutable after finalization.
 //
 // Lifetime: the context must outlive all modules created from it.
 struct loom_context_t {
   iree_allocator_t allocator;
-
-  // Source table: filenames, system tags, provenance labels.
-  loom_source_table_t sources;
 
   // Context-owned encoding vtables.
   loom_encoding_vtable_list_t encoding_vtables;
@@ -172,15 +166,6 @@ const loom_op_vtable_t* loom_context_lookup_op_by_name(
 // Returns NULL when no matching family has been registered.
 const loom_encoding_vtable_t* loom_context_lookup_encoding_vtable(
     const loom_context_t* context, iree_string_view_t name);
-
-// Registers a source identifier (filename, system tag, etc.) and
-// returns its ID. The name is interned into context-owned storage.
-// If the same name is already registered, returns the existing ID
-// without allocating. May be called after finalization — the source
-// table is append-only and does not affect lookup structures.
-iree_status_t loom_context_register_source(loom_context_t* context,
-                                           iree_string_view_t name,
-                                           loom_source_id_t* out_source_id);
 
 //===----------------------------------------------------------------------===//
 // Op convenience accessors

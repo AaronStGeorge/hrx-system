@@ -21,6 +21,7 @@
 #include "loom/format/text/parser/scope.h"
 #include "loom/format/text/parser/types.h"
 #include "loom/ir/context.h"
+#include "loom/ir/module.h"
 #include "loom/ops/op_defs.h"
 
 //===----------------------------------------------------------------------===//
@@ -1097,18 +1098,22 @@ iree_status_t loom_text_parse(iree_string_view_t source,
                               loom_module_t** out_module) {
   *out_module = NULL;
 
-  // Register the source filename for location tracking. This interns
-  // the string into the context so locations can reference it by ID.
-  loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
-  if (!iree_string_view_is_empty(filename)) {
-    IREE_RETURN_IF_ERROR(
-        loom_context_register_source(context, filename, &source_id));
-  }
-
   // Allocate the module using the context's host allocator.
   loom_module_t* module = NULL;
   IREE_RETURN_IF_ERROR(loom_module_allocate(context, IREE_SV(""), block_pool,
                                             NULL, context->allocator, &module));
+
+  // Register the source filename for location tracking. This interns the string
+  // into the module so locations can reference it by module-local ID.
+  iree_status_t status = iree_ok_status();
+  loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
+  if (!iree_string_view_is_empty(filename)) {
+    status = loom_module_register_source(module, filename, &source_id);
+  }
+  if (!iree_status_is_ok(status)) {
+    loom_module_free(module);
+    return status;
+  }
 
   // Initialize the parser.
   loom_parser_scope_t root_scope = {0};
@@ -1144,7 +1149,7 @@ iree_status_t loom_text_parse(iree_string_view_t source,
                           &parser.builder);
 
   // Parse the module body.
-  iree_status_t status = loom_parse_module_body(&parser);
+  status = loom_parse_module_body(&parser);
 
   // Check for tokenizer scan errors.
   if (iree_status_is_ok(status)) {

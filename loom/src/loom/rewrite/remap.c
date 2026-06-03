@@ -349,6 +349,29 @@ iree_status_t loom_ir_remap_string_id(loom_ir_remap_t* remap,
       remap->source_module->strings.entries[source_string_id], out_string_id);
 }
 
+static iree_status_t loom_ir_remap_source_id(
+    loom_ir_remap_t* remap, loom_source_id_t source_id,
+    loom_source_id_t* out_target_source_id) {
+  *out_target_source_id = LOOM_SOURCE_ID_INVALID;
+  if (source_id == LOOM_SOURCE_ID_INVALID) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "source id is invalid");
+  }
+  if (source_id >= remap->source_module->sources.count) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "source id %u out of range (source module has %" PRIhsz " sources)",
+        (unsigned)source_id, remap->source_module->sources.count);
+  }
+  if (remap->source_module == remap->target_module) {
+    *out_target_source_id = source_id;
+    return iree_ok_status();
+  }
+  return loom_module_register_source(
+      remap->target_module, remap->source_module->sources.entries[source_id],
+      out_target_source_id);
+}
+
 static iree_status_t loom_ir_remap_location_entry(
     loom_ir_remap_t* remap, loom_location_entry_t source_entry,
     iree_host_size_t depth, loom_location_entry_t* out_target_entry) {
@@ -363,7 +386,9 @@ static iree_status_t loom_ir_remap_location_entry(
       *out_target_entry = target_entry;
       return iree_ok_status();
 
-    case LOOM_LOCATION_FILE:
+    case LOOM_LOCATION_FILE: {
+      IREE_RETURN_IF_ERROR(loom_ir_remap_source_id(
+          remap, source_entry.file.source_id, &target_entry.file.source_id));
       if (source_entry.file.field_span_count > 0) {
         if (!source_entry.file.field_spans) {
           return iree_make_status(
@@ -383,6 +408,7 @@ static iree_status_t loom_ir_remap_location_entry(
       }
       *out_target_entry = target_entry;
       return iree_ok_status();
+    }
 
     case LOOM_LOCATION_FUSED:
       if (source_entry.fused.count > 0) {
@@ -418,7 +444,10 @@ static iree_status_t loom_ir_remap_location_entry(
       *out_target_entry = target_entry;
       return iree_ok_status();
 
-    case LOOM_LOCATION_OPAQUE:
+    case LOOM_LOCATION_OPAQUE: {
+      IREE_RETURN_IF_ERROR(
+          loom_ir_remap_source_id(remap, source_entry.opaque.source_id,
+                                  &target_entry.opaque.source_id));
       if (source_entry.opaque.data_length > 0) {
         if (!source_entry.opaque.data) {
           return iree_make_status(
@@ -437,6 +466,7 @@ static iree_status_t loom_ir_remap_location_entry(
       }
       *out_target_entry = target_entry;
       return iree_ok_status();
+    }
 
     default:
       return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,

@@ -395,8 +395,12 @@ TEST_F(RemapTest, RemapsTypeAttributesAcrossModules) {
 
 TEST_F(RemapTest, RemapsLocationsAcrossModules) {
   loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
-  IREE_ASSERT_OK(loom_context_register_source(&context_, IREE_SV("model.loom"),
-                                              &source_id));
+  IREE_ASSERT_OK(
+      loom_module_register_source(source_, IREE_SV("model.loom"), &source_id));
+  loom_source_id_t target_preexisting_source_id = LOOM_SOURCE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_register_source(target_,
+                                             IREE_SV("target-preexisting.loom"),
+                                             &target_preexisting_source_id));
 
   loom_location_entry_t file_entry =
       loom_location_file_range(source_id, 2, 3, 4, 5);
@@ -444,7 +448,12 @@ TEST_F(RemapTest, RemapsLocationsAcrossModules) {
   const loom_location_entry_t& target_child =
       target_->locations.entries[target_child_id];
   ASSERT_EQ(target_child.kind, LOOM_LOCATION_FILE);
-  EXPECT_EQ(target_child.file.source_id, source_id);
+  EXPECT_NE(target_child.file.source_id, source_id);
+  EXPECT_NE(target_child.file.source_id, target_preexisting_source_id);
+  ASSERT_LT(target_child.file.source_id, target_->sources.count);
+  EXPECT_TRUE(iree_string_view_equal(
+      target_->sources.entries[target_child.file.source_id],
+      IREE_SV("model.loom")));
   EXPECT_EQ(target_child.file.start_line, 2u);
   ASSERT_EQ(target_child.file.field_span_count, 1u);
   ASSERT_NE(target_child.file.field_spans, nullptr);

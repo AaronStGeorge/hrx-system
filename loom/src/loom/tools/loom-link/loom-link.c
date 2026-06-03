@@ -342,8 +342,8 @@ static iree_status_t loom_link_cli_read_input(
   }
 
   loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
-  IREE_RETURN_IF_ERROR(
-      loom_context_register_source(context, out_input->filename, &source_id));
+  IREE_RETURN_IF_ERROR(loom_module_register_source(
+      out_input->materialized_modules[0], out_input->filename, &source_id));
   out_input->source_entry = (loom_source_entry_t){
       .source_id = source_id,
       .source = source,

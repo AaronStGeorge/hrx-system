@@ -110,7 +110,7 @@ iree_status_t loom_check_diagnostic_collector_sink(
 
 // Initializes a single-source resolver for a parsed loom-check case.
 iree_status_t loom_check_source_resolver_for_case(
-    loom_context_t* context, iree_string_view_t filename,
+    loom_module_t* module, iree_string_view_t filename,
     iree_string_view_t source, loom_source_entry_t* out_source_entry,
     loom_source_table_resolver_t* out_source_resolver);
 

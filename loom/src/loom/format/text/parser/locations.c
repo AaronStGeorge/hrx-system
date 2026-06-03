@@ -12,7 +12,7 @@
 #include "loom/format/text/parser/attrs.h"
 #include "loom/format/text/parser/diagnostics.h"
 #include "loom/format/text/parser/regions.h"
-#include "loom/ir/context.h"
+#include "loom/ir/module.h"
 
 //===----------------------------------------------------------------------===//
 // Location parsing
@@ -45,8 +45,8 @@ static iree_status_t loom_parser_resolve_location_source(
     return iree_ok_status();
   }
 
-  IREE_RETURN_IF_ERROR(loom_context_register_source(
-      parser->context, source_name, out_source_id));
+  IREE_RETURN_IF_ERROR(
+      loom_module_register_source(parser->module, source_name, out_source_id));
   parser->cached_location.source_name = source_name;
   parser->cached_location.source_id = *out_source_id;
   return iree_ok_status();

@@ -1633,7 +1633,7 @@ iree_status_t loom_check_execute_emit(
     loom_source_entry_t source_entry = {0};
     loom_source_table_resolver_t resolver_data = {0};
     status = loom_check_source_resolver_for_case(
-        context, filename, stripped_view, &source_entry, &resolver_data);
+        module, filename, stripped_view, &source_entry, &resolver_data);
     const loom_source_resolver_t source_resolver = {
         .fn = loom_source_table_resolve,
         .user_data = &resolver_data,
@@ -1708,7 +1708,7 @@ iree_status_t loom_check_execute_emit(
     loom_source_entry_t source_entry = {0};
     loom_source_table_resolver_t resolver_data = {0};
     status = loom_check_source_resolver_for_case(
-        context, filename, stripped_view, &source_entry, &resolver_data);
+        module, filename, stripped_view, &source_entry, &resolver_data);
     if (iree_status_is_ok(status)) {
       status = loom_check_emit_write_source_low_text(
           module, &request, &low_registry, environment,
@@ -1747,7 +1747,7 @@ iree_status_t loom_check_execute_emit(
     loom_source_entry_t source_entry = {0};
     loom_source_table_resolver_t resolver_data = {0};
     status = loom_check_source_resolver_for_case(
-        context, filename, stripped_view, &source_entry, &resolver_data);
+        module, filename, stripped_view, &source_entry, &resolver_data);
     loom_verify_options_t verify_options = {
         .sink = {.fn = loom_check_diagnostic_collector_sink,
                  .user_data = &diagnostic_collector},

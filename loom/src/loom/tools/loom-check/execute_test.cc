@@ -951,10 +951,6 @@ TEST_F(ExecuteTest, PassModeVerifiesTransformedModule) {
 }
 
 TEST_F(ExecuteTest, PassModeCapturesPassDiagnostic) {
-  loom_source_id_t unrelated_source_id = LOOM_SOURCE_ID_INVALID;
-  IREE_ASSERT_OK(loom_context_register_source(
-      &context_, IREE_SV("unrelated-before-parse.loom"), &unrelated_source_id));
-
   loom_check_result_t result;
   IREE_ASSERT_OK(ExecuteFirst(
       "// RUN: pass vector-memory-footprint\n"

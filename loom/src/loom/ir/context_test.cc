@@ -6,8 +6,6 @@
 
 #include "loom/ir/context.h"
 
-#include <string.h>
-
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 
@@ -117,48 +115,6 @@ TEST_F(ContextTest, RegisterDialectSemanticsRequiresMatchingVtables) {
   status = loom_context_register_dialect_semantics(&context_, LOOM_DIALECT_TEST,
                                                    kTestDialectSemantics, 0);
   IREE_EXPECT_STATUS_IS(IREE_STATUS_FAILED_PRECONDITION, status);
-}
-
-TEST_F(ContextTest, RegisterSourceDeduplicatesBySpelling) {
-  loom_source_id_t first_id = LOOM_SOURCE_ID_INVALID;
-  loom_source_id_t second_id = LOOM_SOURCE_ID_INVALID;
-  IREE_ASSERT_OK(loom_context_register_source(&context_, IREE_SV("model.loom"),
-                                              &first_id));
-  IREE_ASSERT_OK(loom_context_register_source(&context_, IREE_SV("model.loom"),
-                                              &second_id));
-
-  EXPECT_EQ(first_id, 0u);
-  EXPECT_EQ(second_id, first_id);
-  ASSERT_EQ(context_.sources.count, 1u);
-  EXPECT_TRUE(iree_string_view_equal(context_.sources.entries[0],
-                                     IREE_SV("model.loom")));
-}
-
-TEST_F(ContextTest, RegisterEmptySource) {
-  loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
-  IREE_ASSERT_OK(loom_context_register_source(
-      &context_, iree_string_view_empty(), &source_id));
-
-  EXPECT_EQ(source_id, 0u);
-  ASSERT_EQ(context_.sources.count, 1u);
-  EXPECT_EQ(context_.sources.entries[0].size, 0u);
-}
-
-TEST_F(ContextTest, RegisterSourceRejectsInvalidSentinelId) {
-  iree_string_view_t* entries = NULL;
-  IREE_ASSERT_OK(
-      iree_allocator_malloc_array(context_.allocator, LOOM_SOURCE_ID_INVALID,
-                                  sizeof(*entries), (void**)&entries));
-  memset(entries, 0,
-         (iree_host_size_t)LOOM_SOURCE_ID_INVALID * sizeof(*entries));
-  context_.sources.entries = entries;
-  context_.sources.capacity = LOOM_SOURCE_ID_INVALID;
-  context_.sources.count = LOOM_SOURCE_ID_INVALID;
-
-  loom_source_id_t source_id = 0;
-  IREE_EXPECT_STATUS_IS(
-      IREE_STATUS_RESOURCE_EXHAUSTED,
-      loom_context_register_source(&context_, IREE_SV("overflow"), &source_id));
 }
 
 TEST_F(ContextTest, RegisterEncodingVtableAndLookupByName) {

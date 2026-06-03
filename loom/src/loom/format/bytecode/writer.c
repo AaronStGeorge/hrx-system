@@ -3299,13 +3299,12 @@ static iree_status_t loom_bytecode_write_strings_section(
 // Writes the SOURCES section through the page writer.
 static iree_status_t loom_bytecode_write_sources_section(
     loom_bytecode_page_writer_t* page_writer, const loom_module_t* module) {
-  iree_host_size_t source_count =
-      module->context ? module->context->sources.count : 0;
+  iree_host_size_t source_count = module->sources.count;
   IREE_RETURN_IF_ERROR(
       loom_bytecode_page_writer_write_uvarint(page_writer, source_count));
   for (iree_host_size_t i = 0; i < source_count; ++i) {
     IREE_RETURN_IF_ERROR(loom_bytecode_page_writer_write_string(
-        page_writer, module->context->sources.entries[i]));
+        page_writer, module->sources.entries[i]));
   }
   return iree_ok_status();
 }
@@ -3970,7 +3969,7 @@ iree_status_t loom_bytecode_write_module(
     }
   }
 
-  // Sources section: context-level source identifiers (filenames, tags).
+  // Sources section: module-local source identifiers (filenames, tags).
   if (iree_status_is_ok(status)) {
     section_offsets[LOOM_BYTECODE_SECTION_SOURCES] =
         page_writer.total_written - module_start;

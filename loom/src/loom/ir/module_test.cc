@@ -78,6 +78,61 @@ TEST_F(ModuleTest, ModuleName) {
   loom_module_free(module);
 }
 
+TEST_F(ModuleTest, RegisterSourceDeduplicatesBySpelling) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_source_id_t first_id = LOOM_SOURCE_ID_INVALID;
+  loom_source_id_t second_id = LOOM_SOURCE_ID_INVALID;
+  IREE_ASSERT_OK(
+      loom_module_register_source(module, IREE_SV("model.loom"), &first_id));
+  IREE_ASSERT_OK(
+      loom_module_register_source(module, IREE_SV("model.loom"), &second_id));
+
+  EXPECT_EQ(first_id, 0u);
+  EXPECT_EQ(second_id, first_id);
+  ASSERT_EQ(module->sources.count, 1u);
+  EXPECT_TRUE(iree_string_view_equal(module->sources.entries[0],
+                                     IREE_SV("model.loom")));
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, RegisterEmptySource) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
+  IREE_ASSERT_OK(loom_module_register_source(module, iree_string_view_empty(),
+                                             &source_id));
+
+  EXPECT_EQ(source_id, 0u);
+  ASSERT_EQ(module->sources.count, 1u);
+  EXPECT_EQ(module->sources.entries[0].size, 0u);
+  loom_module_free(module);
+}
+
+TEST_F(ModuleTest, RegisterSourceRejectsInvalidSentinelId) {
+  loom_module_t* module = NULL;
+  IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,
+                                      NULL, iree_allocator_system(), &module));
+
+  iree_string_view_t* entries = NULL;
+  IREE_ASSERT_OK(iree_arena_allocate_array(&module->arena,
+                                           LOOM_SOURCE_ID_INVALID,
+                                           sizeof(*entries), (void**)&entries));
+  module->sources.entries = entries;
+  module->sources.capacity = LOOM_SOURCE_ID_INVALID;
+  module->sources.count = LOOM_SOURCE_ID_INVALID;
+
+  loom_source_id_t source_id = 0;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_RESOURCE_EXHAUSTED,
+      loom_module_register_source(module, IREE_SV("overflow"), &source_id));
+  loom_module_free(module);
+}
+
 TEST_F(ModuleTest, ValueNameHelpersSkipAnonymousSource) {
   loom_module_t* module = NULL;
   IREE_ASSERT_OK(loom_module_allocate(&context_, IREE_SV("test"), &block_pool_,

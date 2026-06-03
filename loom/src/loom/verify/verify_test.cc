@@ -214,14 +214,15 @@ class VerifyTest : public ::testing::Test {
     return parsed_module;
   }
 
-  loom_source_id_t FindContextSourceId(const char* filename) const {
+  loom_source_id_t FindModuleSourceId(const loom_module_t* module,
+                                      const char* filename) const {
     iree_string_view_t source_name = iree_make_cstring_view(filename);
-    for (iree_host_size_t i = 0; i < context_.sources.count; ++i) {
-      if (iree_string_view_equal(context_.sources.entries[i], source_name)) {
+    for (iree_host_size_t i = 0; i < module->sources.count; ++i) {
+      if (iree_string_view_equal(module->sources.entries[i], source_name)) {
         return (loom_source_id_t)i;
       }
     }
-    ADD_FAILURE() << "Expected context source table to contain " << filename;
+    ADD_FAILURE() << "Expected module source table to contain " << filename;
     return LOOM_SOURCE_ID_INVALID;
   }
 
@@ -229,8 +230,8 @@ class VerifyTest : public ::testing::Test {
                                      uint16_t start_col, uint16_t end_line,
                                      uint16_t end_col) {
     loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
-    IREE_EXPECT_OK(loom_context_register_source(
-        &context_, iree_make_cstring_view(filename), &source_id));
+    IREE_EXPECT_OK(loom_module_register_source(
+        module_, iree_make_cstring_view(filename), &source_id));
     EXPECT_NE(source_id, LOOM_SOURCE_ID_INVALID);
     loom_location_id_t location_id = LOOM_LOCATION_UNKNOWN;
     IREE_EXPECT_OK(loom_module_add_location(
@@ -246,7 +247,7 @@ class VerifyTest : public ::testing::Test {
       loom_module_t* parsed_module, const char* source, const char* filename,
       DiagnosticCapture* capture) {
     loom_source_entry_t source_entries[] = {{
-        .source_id = FindContextSourceId(filename),
+        .source_id = FindModuleSourceId(parsed_module, filename),
         .source = iree_make_cstring_view(source),
         .filename = iree_make_cstring_view(filename),
     }};
@@ -1025,7 +1026,8 @@ TEST_F(VerifyTest, ParsedSourceResolverHighlightsExactResultAndOperandTokens) {
 
   loom_source_entry_t source_entries[] = {
       {
-          .source_id = FindContextSourceId("parsed_verify_test.loom"),
+          .source_id =
+              FindModuleSourceId(parsed_module, "parsed_verify_test.loom"),
           .source = iree_make_cstring_view(kSource),
           .filename = IREE_SV("parsed_verify_test.loom"),
       },
@@ -1096,7 +1098,8 @@ TEST_F(VerifyTest, ParsedUseAfterConsumeReportsRelatedConsumeLocation) {
   ASSERT_NE(parsed_module, nullptr);
 
   loom_source_entry_t source_entries[] = {{
-      .source_id = FindContextSourceId("parsed_use_after_consume.loom"),
+      .source_id =
+          FindModuleSourceId(parsed_module, "parsed_use_after_consume.loom"),
       .source = iree_make_cstring_view(kSource),
       .filename = IREE_SV("parsed_use_after_consume.loom"),
   }};
@@ -1639,7 +1642,7 @@ TEST_F(VerifyTest, DuplicateTiedResultIndexDetected) {
       IREE_ARRAYSIZE(tied_results), location, &op));
 
   loom_source_entry_t source_entries[] = {{
-      .source_id = FindContextSourceId(filename),
+      .source_id = FindModuleSourceId(module_, filename),
       .source = iree_make_cstring_view(kSource),
       .filename = IREE_SV("duplicate_tied_result.loom"),
   }};

@@ -743,8 +743,8 @@ class ReaderTest : public ::testing::Test {
   loom_module_t* CreateLocatedModule() {
     loom_module_t* module = CreateModule("located");
     loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
-    IREE_CHECK_OK(loom_context_register_source(&context_, IREE_SV("model.loom"),
-                                               &source_id));
+    IREE_CHECK_OK(
+        loom_module_register_source(module, IREE_SV("model.loom"), &source_id));
     loom_location_id_t location_id = LOOM_LOCATION_UNKNOWN;
     IREE_CHECK_OK(loom_module_add_location(
         module, loom_location_file_range(source_id, 1, 1, 1, 2), &location_id));
@@ -1941,15 +1941,12 @@ TEST_F(ReaderTest, ReadsDynamicGlobalSymbolModule) {
   loom_module_free(module);
 }
 
-TEST_F(ReaderTest, ReadsLocationTablesWithRemappedSources) {
+TEST_F(ReaderTest, ReadsLocationTablesWithModuleSources) {
   loom_module_t* module = CreateLocatedModule();
   auto bytes = WriteModule(module);
 
   loom_context_t read_context;
   InitializeBytecodeTestContext(&read_context);
-  loom_source_id_t preexisting_source_id = LOOM_SOURCE_ID_INVALID;
-  IREE_ASSERT_OK(loom_context_register_source(
-      &read_context, IREE_SV("preexisting.loom"), &preexisting_source_id));
 
   loom_module_t* read_module = nullptr;
   std::vector<std::string> error_ids;
@@ -1959,14 +1956,14 @@ TEST_F(ReaderTest, ReadsLocationTablesWithRemappedSources) {
   EXPECT_EQ(result.error_count, 0u);
   EXPECT_TRUE(error_ids.empty());
   ASSERT_NE(read_module, nullptr);
-  ASSERT_EQ(read_context.sources.count, 2u);
-  EXPECT_TRUE(iree_string_view_equal(read_context.sources.entries[1],
+  ASSERT_EQ(read_module->sources.count, 1u);
+  EXPECT_TRUE(iree_string_view_equal(read_module->sources.entries[0],
                                      IREE_SV("model.loom")));
   ASSERT_EQ(read_module->locations.count, 2u);
   const loom_location_entry_t& file_location =
       read_module->locations.entries[1];
   EXPECT_EQ(file_location.kind, LOOM_LOCATION_FILE);
-  EXPECT_EQ(file_location.file.source_id, 1u);
+  EXPECT_EQ(file_location.file.source_id, 0u);
   EXPECT_EQ(file_location.file.start_line, 1u);
   EXPECT_EQ(file_location.file.end_col, 2u);
 

@@ -9,6 +9,7 @@
 #include "loom/codegen/low/text_asm.h"
 #include "loom/error/diagnostic.h"
 #include "loom/format/text/parser.h"
+#include "loom/ir/module.h"
 
 enum {
   LOOM_RUN_DEFAULT_BLOCK_POOL_BLOCK_SIZE = 32 * 1024,
@@ -116,8 +117,8 @@ iree_status_t loom_run_module_parse(
   }
   if (iree_status_is_ok(status)) {
     loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
-    status = loom_context_register_source(&session->context, options->filename,
-                                          &source_id);
+    status = loom_module_register_source(out_module->module, options->filename,
+                                         &source_id);
     if (iree_status_is_ok(status)) {
       out_module->source_entry = (loom_source_entry_t){
           .source_id = source_id,

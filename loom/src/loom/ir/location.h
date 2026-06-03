@@ -47,21 +47,24 @@ extern "C" {
 typedef uint32_t loom_location_id_t;
 #define LOOM_LOCATION_UNKNOWN ((loom_location_id_t)0)
 
-// Index into the context's source table.
+// Index into the module's source table.
 //
-// The source table is a context-level table of unique source identifiers:
+// The source table is a module-level table of unique source identifiers:
 // filenames ("model.loom"), external system tags ("torch", "jax"), or any
-// other provenance label. Shared across modules because the same source can be
-// referenced by multiple modules.
+// other provenance label. Cross-module cloning imports referenced source
+// identifiers into the target module and remaps source IDs in copied locations.
 typedef uint16_t loom_source_id_t;
 #define LOOM_SOURCE_ID_INVALID ((loom_source_id_t)UINT16_MAX)
 
-// Source table stored on the context. Entries are interned copies of source
-// names (filenames, system tags). The table is append-only and deduplicates by
-// exact string match.
+// Module-owned source table. Entries are interned copies of source names
+// (filenames, system tags). The table is append-only and deduplicates by exact
+// string match.
 typedef struct loom_source_table_t {
+  // Number of source identifiers stored in entries.
   iree_host_size_t count;
+  // Allocated entry capacity.
   iree_host_size_t capacity;
+  // Module-arena-owned source identifier entries.
   iree_string_view_t* entries;
 } loom_source_table_t;
 
@@ -118,7 +121,7 @@ static_assert(sizeof(loom_location_field_span_t) == 16,
 // file. Agent-authored .loom files are typically hundreds of lines; linked
 // module dumps are diagnostic output, not round-tripped source.
 //
-// The source_id field indexes into the context's source table, which stores
+// The source_id field indexes into the module's source table, which stores
 // filenames, system tags, and any other provenance labels.
 typedef struct loom_location_entry_t {
   loom_location_kind_t kind;

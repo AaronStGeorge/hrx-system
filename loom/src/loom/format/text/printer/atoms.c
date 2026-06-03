@@ -790,11 +790,11 @@ iree_status_t loom_print_result_value_type(loom_print_context_t* ctx,
 static iree_status_t loom_print_location_source(
     const loom_module_t* module, loom_source_id_t source_id,
     iree_string_view_t* out_source) {
-  if (!module->context || source_id >= module->context->sources.count) {
+  if (source_id >= module->sources.count) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "location source_id %u out of range", source_id);
   }
-  *out_source = module->context->sources.entries[source_id];
+  *out_source = module->sources.entries[source_id];
   return iree_ok_status();
 }
 

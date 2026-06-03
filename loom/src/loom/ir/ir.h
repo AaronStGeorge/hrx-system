@@ -2027,6 +2027,9 @@ typedef struct loom_module_t {
   // Module-level named symbols (functions, globals, executables).
   loom_symbol_table_t symbols;
 
+  // Source identifiers referenced by this module's locations.
+  loom_source_table_t sources;
+
   // Source locations for diagnostics, debug info, and source mapping.
   // Entry 0 is always LOOM_LOCATION_NONE (unknown/absent). Ops
   // reference entries by loom_location_id_t index. When locations are

@@ -220,12 +220,12 @@ iree_status_t loom_check_diagnostic_collector_sink(
 //===----------------------------------------------------------------------===//
 
 iree_status_t loom_check_source_resolver_for_case(
-    loom_context_t* context, iree_string_view_t filename,
+    loom_module_t* module, iree_string_view_t filename,
     iree_string_view_t source, loom_source_entry_t* out_source_entry,
     loom_source_table_resolver_t* out_source_resolver) {
   loom_source_id_t source_id = LOOM_SOURCE_ID_INVALID;
   IREE_RETURN_IF_ERROR(
-      loom_context_register_source(context, filename, &source_id));
+      loom_module_register_source(module, filename, &source_id));
   *out_source_entry = (loom_source_entry_t){
       .source_id = source_id,
       .source = source,

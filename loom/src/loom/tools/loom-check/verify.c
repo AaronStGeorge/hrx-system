@@ -75,7 +75,7 @@ iree_status_t loom_check_execute_verify(
     loom_source_table_resolver_t resolver_data = {0};
     if (iree_status_is_ok(status)) {
       status = loom_check_source_resolver_for_case(
-          context, filename, stripped_view, &source_entry, &resolver_data);
+          module, filename, stripped_view, &source_entry, &resolver_data);
     }
     loom_verify_options_t verify_options = {
         .sink = {.fn = loom_check_diagnostic_collector_sink,

@@ -271,8 +271,7 @@ static iree_status_t loom_check_verify_pass_output(
   loom_source_entry_t source_entry = {0};
   loom_source_table_resolver_t resolver_data = {0};
   IREE_RETURN_IF_ERROR(loom_check_source_resolver_for_case(
-      module->context, filename, test_case->input, &source_entry,
-      &resolver_data));
+      module, filename, test_case->input, &source_entry, &resolver_data));
   loom_verify_options_t verify_options = {
       .sink = {.fn = loom_check_diagnostic_collector_sink,
                .user_data = diagnostic_collector},
@@ -451,7 +450,7 @@ static iree_status_t loom_check_execute_pass_with_output(
   loom_source_entry_t source_entry = {0};
   loom_source_table_resolver_t resolver_data = {0};
   status = loom_check_source_resolver_for_case(
-      context, filename, test_case->input, &source_entry, &resolver_data);
+      module, filename, test_case->input, &source_entry, &resolver_data);
   loom_check_diagnostic_emitter_capture_t pass_diagnostic_capture = {
       .diagnostic_collector = &diagnostic_collector,
       .module = module,
