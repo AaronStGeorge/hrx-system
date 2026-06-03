@@ -66,12 +66,14 @@ loom_cc_library(
     loom::src::loom::format::text::printer
     loom::src::loom::ir
     loom::src::loom::codegen::low::pass_environment
+    loom::src::loom::codegen::low::target_binding
     loom::src::loom::codegen::low::text_asm
     loom::src::loom::link::linker
     loom::src::loom::link::module_index
     loom::src::loom::link::planner
     loom::src::loom::ops::op_registry
     loom::src::loom::ops::pass
+    loom::src::loom::ops::low
     loom::src::loom::pass::builtin_registry
     loom::src::loom::pass::environment
     loom::src::loom::pass::interpreter

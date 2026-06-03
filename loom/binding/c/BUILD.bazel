@@ -97,6 +97,7 @@ loom_cc_library(
     ],
     deps = [
         "//loom/src/loom/codegen/low:pass_environment",
+        "//loom/src/loom/codegen/low:target_binding",
         "//loom/src/loom/codegen/low:text_asm",
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/error:error_defs",
@@ -111,6 +112,7 @@ loom_cc_library(
         "//loom/src/loom/link:module_index",
         "//loom/src/loom/link:planner",
         "//loom/src/loom/ops:op_registry",
+        "//loom/src/loom/ops/low",
         "//loom/src/loom/ops/pass",
         "//loom/src/loom/pass:builtin_registry",
         "//loom/src/loom/pass:environment",

@@ -134,13 +134,20 @@ ModulePtr DeserializeModule(loomc_context_t* context,
   return ModulePtr(module);
 }
 
-SourcePtr SerializeModuleText(loomc_module_t* module) {
+SourcePtr SerializeModuleText(
+    loomc_module_t* module,
+    loomc_module_text_presentation_t text_presentation =
+        LOOMC_MODULE_TEXT_PRESENTATION_DEFAULT,
+    loomc_string_view_t low_asm_descriptor_set_key =
+        loomc_string_view_empty()) {
   loomc_module_serialize_options_t options = {
       /*.type=*/LOOMC_STRUCTURE_TYPE_MODULE_SERIALIZE_OPTIONS,
       /*.structure_size=*/sizeof(options),
       /*.next=*/nullptr,
       /*.format=*/LOOMC_SOURCE_FORMAT_TEXT,
       /*.identifier=*/loomc_make_cstring_view("roundtrip.loom"),
+      /*.text_presentation=*/text_presentation,
+      /*.low_asm_descriptor_set_key=*/low_asm_descriptor_set_key,
   };
   loomc_source_t* source = nullptr;
   loomc_status_t status = loomc_module_serialize_to_source(
@@ -224,7 +231,9 @@ TEST(TargetSpirvTest, EmitsSpirvBinaryArtifact) {
   ModulePtr module = CreateBarrierSpirvLowModule(context.get());
   SourcePtr serialized = SerializeModuleText(module.get());
   std::string serialized_text = SourceContentsToString(serialized.get());
-  EXPECT_NE(serialized_text.find("low.op<spirv.op_control_barrier"),
+  EXPECT_NE(serialized_text.find("asm<spirv.logical.core>"), std::string::npos)
+      << serialized_text;
+  EXPECT_NE(serialized_text.find("OpControlBarrier.subgroup.workgroup.acq_rel"),
             std::string::npos)
       << serialized_text;
   ModulePtr round_trip_module =
@@ -283,6 +292,52 @@ TEST(TargetSpirvTest, EmitsSpirvBinaryArtifact) {
     ExpectSucceededResult(result_ptr.get());
     ExpectSpirvArtifact(result_ptr.get(), "spirv_barriers.spv");
   }
+}
+
+TEST(TargetSpirvTest, SerializesGenericTargetLowTextWhenRequested) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  ContextPtr context = CreateSpirvContext(target_environment.get());
+  ModulePtr module = CreateBarrierSpirvLowModule(context.get());
+
+  SourcePtr serialized =
+      SerializeModuleText(module.get(), LOOMC_MODULE_TEXT_PRESENTATION_GENERIC);
+  std::string serialized_text = SourceContentsToString(serialized.get());
+  EXPECT_NE(serialized_text.find("low.op<spirv.op_control_barrier"),
+            std::string::npos)
+      << serialized_text;
+  EXPECT_EQ(serialized_text.find("OpControlBarrier.subgroup.workgroup.acq_rel"),
+            std::string::npos)
+      << serialized_text;
+  ModulePtr round_trip_module =
+      DeserializeModule(context.get(), serialized.get());
+  SourcePtr round_trip_text = SerializeModuleText(
+      round_trip_module.get(), LOOMC_MODULE_TEXT_PRESENTATION_GENERIC);
+  EXPECT_NE(SourceContentsToString(round_trip_text.get())
+                .find("low.op<spirv.op_control_barrier"),
+            std::string::npos);
+}
+
+TEST(TargetSpirvTest, RejectsUnknownLowAsmDescriptorSet) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  ContextPtr context = CreateSpirvContext(target_environment.get());
+  ModulePtr module = CreateBarrierSpirvLowModule(context.get());
+
+  loomc_string_view_t unknown_descriptor_set_key =
+      loomc_make_cstring_view("spirv.definitely_not_real");
+  loomc_module_serialize_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_MODULE_SERIALIZE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.format=*/LOOMC_SOURCE_FORMAT_TEXT,
+      /*.identifier=*/loomc_make_cstring_view("roundtrip.loom"),
+      /*.text_presentation=*/LOOMC_MODULE_TEXT_PRESENTATION_LOW_ASM,
+      /*.low_asm_descriptor_set_key=*/unknown_descriptor_set_key,
+  };
+  loomc_source_t* source = nullptr;
+  loomc_status_t status = loomc_module_serialize_to_source(
+      module.get(), &options, loomc_allocator_system(), &source);
+  LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_NOT_FOUND, status);
+  EXPECT_EQ(source, nullptr);
 }
 
 TEST(TargetSpirvTest, EmitsSpirvWithDefaultOptions) {
