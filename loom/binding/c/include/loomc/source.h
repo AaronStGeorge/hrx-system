@@ -7,6 +7,8 @@
 #ifndef LOOMC_SOURCE_H_
 #define LOOMC_SOURCE_H_
 
+#include <stdio.h>
+
 #include "loomc/status.h"
 
 /// @file
@@ -39,6 +41,29 @@
 /// }
 ///
 /// // Use source from any worker thread after sharing or retaining it.
+///
+/// loomc_source_release(source);
+/// @endcode
+///
+/// @par Example
+/// Load source bytes from a path and let the source own the loaded file buffer:
+///
+/// @code{.c}
+/// loomc_source_load_options_t options = {
+///     .type = LOOMC_STRUCTURE_TYPE_SOURCE_LOAD_OPTIONS,
+///     .structure_size = sizeof(loomc_source_load_options_t),
+///     .format = LOOMC_SOURCE_FORMAT_UNKNOWN,
+/// };
+///
+/// loomc_source_t* source = NULL;
+/// loomc_status_t status = loomc_source_create_from_path(
+///     loomc_make_cstring_view("profile.json"), &options,
+///     loomc_allocator_system(), &source);
+/// if (!loomc_status_is_ok(status)) {
+///   return status;
+/// }
+///
+/// // Pass source to a parser, importer, linker index builder, or compiler.
 ///
 /// loomc_source_release(source);
 /// @endcode
@@ -125,6 +150,32 @@ typedef struct loomc_source_options_t {
   void* release_user_data;
 } loomc_source_options_t;
 
+/// Source load options for host file and path constructors.
+///
+/// Callers zero-initialize this descriptor, set `type` to
+/// `LOOMC_STRUCTURE_TYPE_SOURCE_LOAD_OPTIONS`, set `structure_size` to
+/// `sizeof(loomc_source_load_options_t)`, and fill the requested fields.
+typedef struct loomc_source_load_options_t {
+  /// Structure type. Must be `LOOMC_STRUCTURE_TYPE_SOURCE_LOAD_OPTIONS` when
+  /// nonzero.
+  loomc_structure_type_t type;
+
+  /// Size of this structure in bytes.
+  loomc_host_size_t structure_size;
+
+  /// Reserved extension chain. Must be `NULL`.
+  const void* next;
+
+  /// Loaded source format.
+  loomc_source_format_t format;
+
+  /// Stable identifier used in diagnostics and cache keys.
+  ///
+  /// Empty uses no identifier for open-file loads and uses `path` for path
+  /// loads.
+  loomc_string_view_t identifier;
+} loomc_source_load_options_t;
+
 /// Creates an immutable source handle.
 ///
 /// @param options Source format, identity, bytes, and storage policy.
@@ -147,6 +198,52 @@ typedef struct loomc_source_options_t {
 LOOMC_API_EXPORT loomc_status_t
 loomc_source_create(const loomc_source_options_t* options,
                     loomc_allocator_t allocator, loomc_source_t** out_source);
+
+/// Creates an immutable source by reading an open file.
+///
+/// @param file Open file positioned at the first byte to read.
+/// @param options Source format and identity metadata, or `NULL` for defaults.
+/// @param allocator Host allocator used for source and byte storage.
+/// @param out_source Receives one retained source on success.
+/// @return OK when all remaining file bytes were read into source-owned memory.
+///
+/// @ownership
+/// The caller owns the returned reference and releases it with
+/// `loomc_source_release`. The caller still owns `file` and is responsible for
+/// closing it.
+///
+/// @lifetime
+/// The returned source owns a copy of the bytes read from `file`; the file can
+/// be closed or reused after this call returns.
+///
+/// @thread_safety
+/// The returned source is immutable and may be shared across threads. This call
+/// performs ordinary C `FILE*` reads and does not synchronize access to `file`.
+LOOMC_API_EXPORT loomc_status_t loomc_source_create_from_file(
+    FILE* file, const loomc_source_load_options_t* options,
+    loomc_allocator_t allocator, loomc_source_t** out_source);
+
+/// Creates an immutable source by reading a filesystem path.
+///
+/// @param path Path to read. The path view need not be NUL-terminated.
+/// @param options Source format and identity metadata, or `NULL` for defaults.
+/// @param allocator Host allocator used for source and byte storage.
+/// @param out_source Receives one retained source on success.
+/// @return OK when the path contents were read into source-owned memory.
+///
+/// @ownership
+/// The caller owns the returned reference and releases it with
+/// `loomc_source_release`.
+///
+/// @lifetime
+/// The returned source owns the loaded bytes and copies the source identifier.
+/// When `options->identifier` is empty, `path` is copied as the identifier.
+///
+/// @thread_safety
+/// The returned source is immutable and may be shared across threads.
+LOOMC_API_EXPORT loomc_status_t loomc_source_create_from_path(
+    loomc_string_view_t path, const loomc_source_load_options_t* options,
+    loomc_allocator_t allocator, loomc_source_t** out_source);
 
 /// Retains `source` for another owner.
 ///

@@ -17,6 +17,8 @@
 /// require hardware. The importer accepts immutable `loomc_source_t` handles so
 /// embedders can choose borrowed, copied, memory-mapped, cached, or
 /// binding-owned storage using the ordinary source API.
+/// Filesystem input should be loaded with `loomc_source_create_from_path` and
+/// then passed to this importer.
 ///
 /// The imported facts are intentionally the same public fact rows accepted by
 /// `loomc_target_profile_create_spirv`. The importer is a convenience adapter,

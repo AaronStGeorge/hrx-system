@@ -28,7 +28,6 @@
 enum {
   LOOMC_MODULE_SERIALIZE_BLOCK_SIZE = 32 * 1024,
   LOOMC_MODULE_DESERIALIZE_BLOCK_SIZE = 32 * 1024,
-  LOOMC_MODULE_FILE_READ_BLOCK_SIZE = 32 * 1024,
 };
 
 struct loomc_module_t {
@@ -490,43 +489,6 @@ static uint8_t* loomc_module_byte_buffer_stream_take_storage(
   return data;
 }
 
-static loomc_status_t loomc_module_read_file_to_storage(
-    FILE* file, loomc_allocator_t allocator, uint8_t** out_data,
-    loomc_host_size_t* out_data_length) {
-  *out_data = NULL;
-  *out_data_length = 0;
-
-  loomc_module_byte_buffer_stream_t* stream = NULL;
-  loomc_status_t status =
-      loomc_module_byte_buffer_stream_create(allocator, &stream);
-  uint8_t buffer[LOOMC_MODULE_FILE_READ_BLOCK_SIZE];
-  while (loomc_status_is_ok(status)) {
-    size_t read_length = fread(buffer, 1, sizeof(buffer), file);
-    if (read_length != 0) {
-      status = loomc_status_from_iree(loomc_module_byte_buffer_stream_write(
-          &stream->base, read_length, buffer));
-    }
-    if (read_length < sizeof(buffer)) {
-      if (ferror(file) != 0 && loomc_status_is_ok(status)) {
-        status = loomc_make_status(LOOMC_STATUS_UNKNOWN,
-                                   "failed to read module file");
-      }
-      break;
-    }
-  }
-
-  if (loomc_status_is_ok(status)) {
-    iree_host_size_t stream_length = 0;
-    *out_data =
-        loomc_module_byte_buffer_stream_take_storage(stream, &stream_length);
-    *out_data_length = stream_length;
-  }
-  if (stream != NULL) {
-    iree_io_stream_release(&stream->base);
-  }
-  return status;
-}
-
 static loomc_status_t loomc_module_serialize_text_to_iree_stream(
     const loomc_module_t* module, const loom_module_t* internal_module,
     iree_io_stream_t* target_stream) {
@@ -897,7 +859,7 @@ loomc_status_t loomc_module_deserialize_from_file(
   allocator = loomc_allocator_or_system(allocator);
   uint8_t* contents = NULL;
   loomc_host_size_t contents_length = 0;
-  LOOMC_RETURN_IF_ERROR(loomc_module_read_file_to_storage(
+  LOOMC_RETURN_IF_ERROR(loomc_source_read_file_to_storage(
       file, allocator, &contents, &contents_length));
 
   loomc_module_resolved_deserialize_options_t resolved_options = {0};
