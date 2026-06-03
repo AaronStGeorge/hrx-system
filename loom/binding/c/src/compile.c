@@ -332,8 +332,8 @@ static loomc_status_t loomc_compile_make_artifact_identifier(
   loomc_string_view_t module_name =
       options ? options->module_name : loomc_string_view_empty();
   if (loomc_string_view_is_empty(module_name)) {
-    return loomc_source_copy_string(fallback_identifier, allocator,
-                                    out_identifier);
+    return loomc_string_view_clone(fallback_identifier, allocator,
+                                   out_identifier);
   }
 
   const loomc_host_size_t identifier_length =

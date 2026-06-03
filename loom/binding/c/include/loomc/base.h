@@ -361,6 +361,24 @@ LOOMC_API_EXPORT loomc_status_t loomc_allocator_malloc(
 LOOMC_API_EXPORT loomc_status_t loomc_allocator_malloc_uninitialized(
     loomc_allocator_t allocator, loomc_host_size_t byte_length, void** out_ptr);
 
+/// Copies a string view into allocator-owned storage.
+///
+/// @param source Borrowed source string view to copy.
+/// @param allocator Allocator used for the copied storage, or a
+/// zero-initialized value to use the system allocator.
+/// @param out_string Receives the owned string view on success.
+/// @return OK on success or a non-OK status on allocation failure.
+///
+/// Empty source views produce an empty output view without allocating. The
+/// copied bytes are not NUL-terminated.
+///
+/// @ownership
+/// The caller owns `out_string->data` on success and frees it with
+/// `loomc_allocator_free` using the same allocator.
+LOOMC_API_EXPORT loomc_status_t
+loomc_string_view_clone(loomc_string_view_t source, loomc_allocator_t allocator,
+                        loomc_string_view_t* out_string);
+
 /// Frees memory previously returned by `allocator`.
 ///
 /// @param allocator Allocator that returned `ptr`, or a zero-initialized value

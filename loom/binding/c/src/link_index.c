@@ -540,7 +540,7 @@ loomc_status_t loomc_link_index_builder_reserve_source_slot(
       .role = options ? options->role : LOOMC_LINK_PROVIDER_ROLE_INPUT,
   };
   if (options) {
-    LOOMC_RETURN_IF_ERROR(loomc_source_copy_string(
+    LOOMC_RETURN_IF_ERROR(loomc_string_view_clone(
         options->provider_name, builder->allocator, &source->provider_name));
   }
   builder->source_count = ordinal + 1;

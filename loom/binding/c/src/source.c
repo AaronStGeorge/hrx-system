@@ -29,25 +29,6 @@ struct loomc_source_t {
   void* release_user_data;
 };
 
-loomc_status_t loomc_source_copy_string(loomc_string_view_t source,
-                                        loomc_allocator_t allocator,
-                                        loomc_string_view_t* out_string) {
-  if (out_string == NULL) {
-    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
-                             "out_string must not be NULL");
-  }
-  *out_string = loomc_string_view_empty();
-  if (loomc_string_view_is_empty(source)) {
-    return loomc_ok_status();
-  }
-  char* target = NULL;
-  LOOMC_RETURN_IF_ERROR(loomc_allocator_malloc_uninitialized(
-      allocator, source.size, (void**)&target));
-  memcpy(target, source.data, source.size);
-  *out_string = loomc_make_string_view(target, source.size);
-  return loomc_ok_status();
-}
-
 static loomc_status_t loomc_source_validate_options(
     const loomc_source_options_t* options) {
   if (options == NULL) {
@@ -120,7 +101,7 @@ loomc_status_t loomc_source_create(const loomc_source_options_t* options,
   source->release = options->release;
   source->release_user_data = options->release_user_data;
 
-  loomc_status_t status = loomc_source_copy_string(
+  loomc_status_t status = loomc_string_view_clone(
       options->identifier, allocator, &source->identifier);
   if (loomc_status_is_ok(status)) {
     if (options->storage == LOOMC_SOURCE_STORAGE_COPY &&
@@ -176,7 +157,7 @@ loomc_status_t loomc_source_create_take_contents(loomc_source_format_t format,
   source->release_user_data = NULL;
 
   loomc_status_t status =
-      loomc_source_copy_string(identifier, allocator, &source->identifier);
+      loomc_string_view_clone(identifier, allocator, &source->identifier);
   if (loomc_status_is_ok(status)) {
     source->contents = contents;
     source->storage = LOOMC_SOURCE_STORAGE_COPY;

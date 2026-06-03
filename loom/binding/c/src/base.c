@@ -66,6 +66,29 @@ loomc_status_t loomc_allocator_malloc_uninitialized(
                        out_ptr);
 }
 
+loomc_status_t loomc_string_view_clone(loomc_string_view_t source,
+                                       loomc_allocator_t allocator,
+                                       loomc_string_view_t* out_string) {
+  if (out_string == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "out_string must not be NULL");
+  }
+  *out_string = loomc_string_view_empty();
+  if (source.data == NULL && source.size != 0) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "string view has length but no data");
+  }
+  if (loomc_string_view_is_empty(source)) {
+    return loomc_ok_status();
+  }
+  char* target = NULL;
+  LOOMC_RETURN_IF_ERROR(loomc_allocator_malloc_uninitialized(
+      allocator, source.size, (void**)&target));
+  memcpy(target, source.data, source.size);
+  *out_string = loomc_make_string_view(target, source.size);
+  return loomc_ok_status();
+}
+
 void loomc_allocator_free(loomc_allocator_t allocator, void* ptr) {
   if (ptr == NULL) {
     return;

@@ -478,7 +478,7 @@ loomc_status_t loomc_linker_create(loomc_context_t* context,
   linker->context = context;
   loomc_context_retain(context);
 
-  loomc_status_t status = loomc_source_copy_string(
+  loomc_status_t status = loomc_string_view_clone(
       options ? options->module_name : loomc_string_view_empty(), allocator,
       &linker->module_name);
   if (loomc_status_is_ok(status)) {

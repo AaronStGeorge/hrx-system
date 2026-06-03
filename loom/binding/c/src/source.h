@@ -14,11 +14,6 @@
 extern "C" {
 #endif
 
-// Copies string into allocator-owned storage.
-LOOMC_API_PRIVATE loomc_status_t loomc_source_copy_string(
-    loomc_string_view_t source, loomc_allocator_t allocator,
-    loomc_string_view_t* out_string);
-
 // Creates a source that takes ownership of allocator-backed contents.
 LOOMC_API_PRIVATE loomc_status_t loomc_source_create_take_contents(
     loomc_source_format_t format, loomc_string_view_t identifier,

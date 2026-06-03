@@ -103,6 +103,14 @@ LOOMC_API_PRIVATE loom_target_selection_t
 loomc_target_profile_loom_target_selection(
     const loomc_target_profile_t* profile);
 
+// Returns the target environment retained by a public profile.
+LOOMC_API_PRIVATE loomc_target_environment_t*
+loomc_target_profile_target_environment(const loomc_target_profile_t* profile);
+
+// Returns the stable diagnostic identifier owned by a public profile.
+LOOMC_API_PRIVATE loomc_string_view_t
+loomc_target_profile_identifier(const loomc_target_profile_t* profile);
+
 // Returns target-owned profile payload when it has the expected type.
 LOOMC_API_PRIVATE const void* loomc_target_profile_payload(
     const loomc_target_profile_t* profile, const void* payload_type);

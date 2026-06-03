@@ -523,7 +523,7 @@ loomc_status_t loomc_target_profile_create_from_selection(
     profile->payload = pending_payload;
     profile->payload_deinitialize = deinitialize;
     pending_payload = NULL;
-    status = loomc_source_copy_string(
+    status = loomc_string_view_clone(
         options ? options->identifier : loomc_string_view_empty(), allocator,
         &profile->identifier);
   }
@@ -541,6 +541,16 @@ loomc_status_t loomc_target_profile_create_from_selection(
 loom_target_selection_t loomc_target_profile_loom_target_selection(
     const loomc_target_profile_t* profile) {
   return profile ? profile->selection : loom_target_selection_empty();
+}
+
+loomc_target_environment_t* loomc_target_profile_target_environment(
+    const loomc_target_profile_t* profile) {
+  return profile ? profile->target_environment : NULL;
+}
+
+loomc_string_view_t loomc_target_profile_identifier(
+    const loomc_target_profile_t* profile) {
+  return profile ? profile->identifier : loomc_string_view_empty();
 }
 
 const void* loomc_target_profile_payload(const loomc_target_profile_t* profile,

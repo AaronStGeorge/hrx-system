@@ -678,6 +678,40 @@ LOOMC_API_EXPORT loomc_status_t loomc_target_profile_create_spirv(
     const loomc_spirv_profile_options_t* options, loomc_allocator_t allocator,
     loomc_target_profile_t** out_profile, loomc_result_t** out_result);
 
+/// Refines a SPIR-V target profile with additional facts.
+///
+/// @param base_profile Existing SPIR-V profile to refine.
+/// @param options Additional profile facts, or `NULL` to clone the base
+/// profile.
+/// @param allocator Host allocator used for refined profile and result storage.
+/// @param out_profile Receives one retained refined profile when `out_result`
+/// succeeds.
+/// @param out_result Receives one retained result describing profile
+/// refinement.
+/// @return OK when refinement completed far enough to report a result. Non-OK
+/// statuses represent API misuse or infrastructure failures before a result
+/// could be produced.
+///
+/// Refinement never mutates `base_profile`. Known facts from `base_profile`
+/// are applied first, then `options->preset`, then explicit option facts in
+/// array order. Repeating the same fact is accepted when the known state and
+/// value match. Contradictory facts fail `out_result` and preserve provenance
+/// from both the base fact and the refining fact. Empty `options->identifier`
+/// carries the base profile identifier into the refined profile.
+///
+/// @ownership
+/// The caller owns `out_profile` when the returned result succeeds and releases
+/// it with `loomc_target_profile_release`. The caller always owns `out_result`
+/// on an OK return and releases it with `loomc_result_release`.
+///
+/// @thread_safety
+/// Refinement reads the immutable base profile and may run concurrently with
+/// other queries or refinements of the same profile.
+LOOMC_API_EXPORT loomc_status_t loomc_spirv_target_profile_refine(
+    const loomc_target_profile_t* base_profile,
+    const loomc_spirv_profile_options_t* options, loomc_allocator_t allocator,
+    loomc_target_profile_t** out_profile, loomc_result_t** out_result);
+
 /// Returns the known state for one SPIR-V feature fact.
 ///
 /// @param profile SPIR-V target profile to query.

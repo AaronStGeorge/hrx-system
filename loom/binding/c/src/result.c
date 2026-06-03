@@ -169,11 +169,11 @@ loomc_status_t loomc_result_add_diagnostic(
   loomc_owned_diagnostic_t* target =
       &result->diagnostics[result->diagnostic_count];
   *target = (loomc_owned_diagnostic_t){0};
-  loomc_status_t status = loomc_source_copy_string(
+  loomc_status_t status = loomc_string_view_clone(
       diagnostic->code, result->allocator, &target->code_storage);
   if (loomc_status_is_ok(status)) {
-    status = loomc_source_copy_string(diagnostic->message, result->allocator,
-                                      &target->message_storage);
+    status = loomc_string_view_clone(diagnostic->message, result->allocator,
+                                     &target->message_storage);
   }
   if (loomc_status_is_ok(status)) {
     target->value = *diagnostic;
@@ -206,11 +206,11 @@ static loomc_status_t loomc_result_add_artifact_storage(
       (void**)&result->artifacts));
   loomc_owned_artifact_t* target = &result->artifacts[result->artifact_count];
   *target = (loomc_owned_artifact_t){0};
-  loomc_status_t status = loomc_source_copy_string(
+  loomc_status_t status = loomc_string_view_clone(
       artifact->format, result->allocator, &target->format_storage);
   if (loomc_status_is_ok(status)) {
-    status = loomc_source_copy_string(artifact->identifier, result->allocator,
-                                      &target->identifier_storage);
+    status = loomc_string_view_clone(artifact->identifier, result->allocator,
+                                     &target->identifier_storage);
   }
   if (loomc_status_is_ok(status) &&
       storage_mode == LOOMC_RESULT_ARTIFACT_STORAGE_COPY &&
