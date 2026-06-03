@@ -6,6 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_assert_no_dependencies",
     "loom_cc_binary",
     "loom_cc_library",
     "loom_cc_test",
@@ -15,6 +16,15 @@ package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+loom_assert_no_dependencies(
+    name = "loomc_no_target_package_deps",
+    dependencies = [
+        ":loomc_target_spirv",
+        ":loomc_target_spirv_vulkaninfo",
+    ],
+    targets = [":loomc"],
 )
 
 LOOMC_PUBLIC_HDRS = [
@@ -36,6 +46,17 @@ LOOMC_PUBLIC_HDRS = [
     "include/loomc/status.h",
     "include/loomc/target.h",
     "include/loomc/workspace.h",
+]
+
+LOOMC_TARGET_SPIRV_PUBLIC_HDRS = [
+    "include/loomc/target/spirv.h",
+    "include/loomc/target/spirv/base.h",
+    "include/loomc/target/spirv/emit.h",
+    "include/loomc/target/spirv/profile.h",
+]
+
+LOOMC_TARGET_SPIRV_VULKANINFO_PUBLIC_HDRS = [
+    "include/loomc/target/spirv/vulkaninfo.h",
 ]
 
 loom_cc_library(
@@ -119,12 +140,7 @@ loom_cc_library(
         "src/target/spirv.c",
         "src/target/spirv/profile.c",
     ],
-    hdrs = [
-        "include/loomc/target/spirv.h",
-        "include/loomc/target/spirv/base.h",
-        "include/loomc/target/spirv/emit.h",
-        "include/loomc/target/spirv/profile.h",
-    ],
+    hdrs = LOOMC_TARGET_SPIRV_PUBLIC_HDRS,
     includes = [
         ".",
         "include",
@@ -150,9 +166,7 @@ loom_cc_library(
     srcs = [
         "src/target/spirv/vulkaninfo.c",
     ],
-    hdrs = [
-        "include/loomc/target/spirv/vulkaninfo.h",
-    ],
+    hdrs = LOOMC_TARGET_SPIRV_VULKANINFO_PUBLIC_HDRS,
     includes = [
         ".",
         "include",
@@ -168,12 +182,41 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "loomc_full",
+    hdrs = (
+        LOOMC_PUBLIC_HDRS +
+        LOOMC_TARGET_SPIRV_PUBLIC_HDRS +
+        LOOMC_TARGET_SPIRV_VULKANINFO_PUBLIC_HDRS
+    ),
+    includes = [
+        ".",
+        "include",
+    ],
+    deps = [
+        ":loomc",
+        ":loomc_target_spirv",
+        ":loomc_target_spirv_vulkaninfo",
+    ],
+)
+
+loom_cc_library(
     name = "test_util",
     testonly = True,
     hdrs = ["test/util.h"],
     deps = [
         ":loomc",
         "//runtime/src/iree/testing:gtest",
+    ],
+)
+
+loom_cc_test(
+    name = "full_package_test",
+    srcs = ["test/full_package_test.cc"],
+    deps = [
+        ":loomc_full",
+        ":test_util",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

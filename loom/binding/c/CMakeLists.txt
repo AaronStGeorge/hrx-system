@@ -142,6 +142,16 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    loomc_full
+  DEPS
+    ::loomc
+    ::loomc_target_spirv
+    ::loomc_target_spirv_vulkaninfo
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     test_util
   HDRS
     "test/util.h"
@@ -149,6 +159,18 @@ loom_cc_library(
     ::loomc
     iree::testing::gtest
   TESTONLY
+)
+
+loom_cc_test(
+  NAME
+    full_package_test
+  SRCS
+    "test/full_package_test.cc"
+  DEPS
+    ::loomc_full
+    ::test_util
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(
