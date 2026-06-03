@@ -59,7 +59,7 @@ hrx_cc_test(
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -75,7 +75,7 @@ hrx_cc_test(
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -91,7 +91,7 @@ hrx_cc_test(
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -107,7 +107,7 @@ hrx_cc_test(
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -123,7 +123,7 @@ hrx_cc_test(
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -139,7 +139,7 @@ hrx_cc_test(
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -155,7 +155,7 @@ hrx_cc_test(
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -171,7 +171,7 @@ hrx_cc_test(
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -187,7 +187,7 @@ hrx_cc_test(
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -203,7 +203,7 @@ hrx_cc_test(
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -233,7 +233,7 @@ hrx_cc_test(
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -249,7 +249,7 @@ hrx_cc_test(
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(

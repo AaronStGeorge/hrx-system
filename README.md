@@ -164,12 +164,12 @@ HRX_TEST_TMPDIR=/tmp/hrx-system-tests \
   --output-on-failure --parallel "$(nproc)"
 ```
 
-GPU tests are labeled with `requires-gpu-*`. CPU-only runners should exclude
-them:
+Tests that require runtime hardware resources are labeled with
+`runtime-resource=*`. CPU-only runners should exclude them:
 
 ```bash
 ctest --test-dir build/hrx-tests/share/hrx-system/tests \
-  --output-on-failure -LE requires-gpu-
+  --output-on-failure -LE runtime-resource=
 ```
 
 ## Release Artifacts

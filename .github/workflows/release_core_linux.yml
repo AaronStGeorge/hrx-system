@@ -42,7 +42,7 @@ jobs:
       build_type: RelWithDebInfo
       sanitizer: none
       test_gpu: false
-      ctest_label_exclude_regex: "requires-gpu-|runtime-resource="
+      ctest_label_exclude_regex: "runtime-resource="
       cmake_options: |
         -DIREE_ROCM_TEST_TARGET_CHIP=gfx942
       package: true
