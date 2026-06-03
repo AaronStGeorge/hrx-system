@@ -58,4 +58,36 @@ loom_cc_binary(
     iree::runtime::binding::c::loomc_target_spirv_vulkaninfo
 )
 
+loom_cc_binary(
+  NAME
+    emit_spirv_vulkan
+  SRCS
+    "emit_spirv_vulkan.c"
+  DEPS
+    ${CMAKE_DL_LIBS}
+    iree::runtime::binding::c::loomc
+    iree::runtime::binding::c::loomc_target_spirv
+    iree::runtime::binding::c::loomc_target_spirv_vulkan
+)
+
+loom_cc_test(
+  NAME
+    emit_spirv_vulkan_test
+  SRCS
+    "emit_spirv_vulkan.c"
+  DEPS
+    ${CMAKE_DL_LIBS}
+    iree::runtime::binding::c::loomc
+    iree::runtime::binding::c::loomc_target_spirv
+    iree::runtime::binding::c::loomc_target_spirv_vulkan
+  LABELS
+    "driver=vulkan"
+)
+
+set_property(TEST iree/loom/binding/c/example/emit_spirv_vulkan_test
+  APPEND PROPERTY ENVIRONMENT
+    "VK_DRIVER_FILES=/dev/null"
+    "VK_ICD_FILENAMES=/dev/null"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
