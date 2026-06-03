@@ -69,4 +69,27 @@ loom_cc_test(
     iree::testing::gtest_main
 )
 
+loom_cc_test(
+  NAME
+    iree_hal_execution_test
+  SRCS
+    "iree_hal_execution_test.cc"
+  DEPS
+    iree::base
+    iree::runtime::binding::c::loomc
+    iree::runtime::binding::c::loomc_target_iree_hal
+    iree::runtime::binding::c::loomc_target_spirv
+    iree::runtime::binding::c::loomc_target_spirv_iree_hal
+    iree::runtime::binding::c::test::target::iree_hal_execution_test_util
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "driver=vulkan"
+)
+
+set_property(TEST iree/loom/binding/c/test/target/spirv/iree_hal_execution_test
+  APPEND PROPERTY ENVIRONMENT
+    "LSAN_OPTIONS=suppressions=${IREE_ROOT_DIR}/build_tools/sanitizer/lsan_suppressions_vulkan.txt"
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

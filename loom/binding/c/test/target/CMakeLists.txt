@@ -10,6 +10,31 @@
 
 iree_add_all_subdirs()
 
+loom_cc_library(
+  NAME
+    iree_hal_execution_test_util
+  HDRS
+    "iree_hal_execution.h"
+  SRCS
+    "iree_hal_execution.cc"
+  DEPS
+    iree::async
+    iree::async::util::proactor_pool
+    iree::base
+    iree::base::threading
+    iree::hal
+    iree::hal::drivers
+    iree::runtime::binding::c::loomc
+    iree::runtime::binding::c::loomc_target_iree_hal
+    iree::runtime::binding::c::test::test_util
+    iree::testing::gtest
+  TESTONLY
+  INCLUDES
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../..>"
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../..>"
+  PUBLIC
+)
+
 loom_cc_test(
   NAME
     iree_hal_test

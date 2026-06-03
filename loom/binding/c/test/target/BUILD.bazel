@@ -6,6 +6,7 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_library",
     "loom_cc_test",
 )
 
@@ -13,6 +14,26 @@ package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+loom_cc_library(
+    name = "iree_hal_execution_test_util",
+    testonly = True,
+    srcs = ["iree_hal_execution.cc"],
+    hdrs = ["iree_hal_execution.h"],
+    includes = ["../.."],
+    deps = [
+        "//loom/binding/c:loomc",
+        "//loom/binding/c:loomc_target_iree_hal",
+        "//loom/binding/c/test:test_util",
+        "//runtime/src/iree/async",
+        "//runtime/src/iree/async/util:proactor_pool",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers",
+        "//runtime/src/iree/testing:gtest",
+    ],
 )
 
 loom_cc_test(
