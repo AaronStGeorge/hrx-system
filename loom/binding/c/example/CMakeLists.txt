@@ -37,4 +37,14 @@ loom_cc_binary(
     iree::runtime::binding::c::loomc
 )
 
+loom_cc_binary(
+  NAME
+    emit_spirv_offline
+  SRCS
+    "emit_spirv_offline.c"
+  DEPS
+    iree::runtime::binding::c::loomc
+    iree::runtime::binding::c::loomc_target_spirv
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
