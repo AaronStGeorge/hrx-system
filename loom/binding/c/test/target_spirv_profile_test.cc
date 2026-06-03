@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -15,6 +16,7 @@
 #include "loomc/target.h"
 #include "loomc/target/spirv/base.h"
 #include "loomc/target/spirv/profile.h"
+#include "target.h"
 #include "test/util.h"
 
 namespace {
@@ -254,10 +256,36 @@ void ExpectLimitValue(const loomc_target_profile_t* profile,
   EXPECT_EQ(value.value, expected_value);
 }
 
+void ExpectPartialProfileSelection(const loomc_target_profile_t* profile) {
+  const loom_target_selection_t selection =
+      loomc_target_profile_loom_target_selection(profile);
+  EXPECT_EQ(selection.bundle, nullptr);
+  EXPECT_NE(selection.data, nullptr);
+}
+
+void ExpectVulkanBdaProfileBundle(const loomc_target_profile_t* profile) {
+  const loom_target_selection_t selection =
+      loomc_target_profile_loom_target_selection(profile);
+  ASSERT_NE(selection.bundle, nullptr);
+  ASSERT_NE(selection.bundle->snapshot, nullptr);
+  ASSERT_NE(selection.bundle->config, nullptr);
+  EXPECT_EQ(selection.bundle->snapshot->codegen_format,
+            LOOM_TARGET_CODEGEN_FORMAT_SPIRV);
+  EXPECT_EQ(selection.bundle->snapshot->artifact_format,
+            LOOM_TARGET_ARTIFACT_FORMAT_SPIRV_BINARY);
+  const loomc_spirv_feature_bits_t expected_features =
+      loomc_spirv_feature_bit(LOOMC_SPIRV_FEATURE_VULKAN_SHADER) |
+      loomc_spirv_feature_bit(LOOMC_SPIRV_FEATURE_PHYSICAL_STORAGE_BUFFER) |
+      loomc_spirv_feature_bit(LOOMC_SPIRV_FEATURE_INT64);
+  EXPECT_EQ(selection.bundle->config->contract_feature_bits, expected_features);
+  EXPECT_NE(selection.data, nullptr);
+}
+
 TEST(TargetSpirvProfileTest, CreatesEmptyPartialProfile) {
   TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
   TargetProfilePtr profile = CreateSpirvProfile(target_environment.get(),
                                                 /*options=*/nullptr);
+  ExpectPartialProfileSelection(profile.get());
 
   loomc_target_fact_state_t state = LOOMC_TARGET_FACT_STATE_TRUE;
   LOOMC_EXPECT_OK(loomc_spirv_target_profile_query_feature(
@@ -321,6 +349,14 @@ TEST(TargetSpirvProfileTest, PreservesExplicitNumericLimitFacts) {
   };
   TargetProfilePtr profile =
       CreateSpirvProfile(target_environment.get(), &options);
+  ExpectVulkanBdaProfileBundle(profile.get());
+  const loom_target_selection_t selection =
+      loomc_target_profile_loom_target_selection(profile.get());
+  EXPECT_EQ(selection.bundle->snapshot->max_workgroup_size.x, 1024u);
+  EXPECT_EQ(selection.bundle->snapshot->max_workgroup_size.y, 0u);
+  EXPECT_EQ(selection.bundle->snapshot->max_flat_workgroup_size, 1024u);
+  EXPECT_EQ(selection.bundle->snapshot->subgroup_size, 32u);
+  EXPECT_EQ(selection.bundle->snapshot->max_workgroup_count.z, 65535u);
 
   ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_X,
                    LOOMC_TARGET_FACT_STATE_TRUE, 1024);
@@ -349,6 +385,7 @@ TEST(TargetSpirvProfileTest, CreatesPresetProfileAndQueriesRows) {
   };
   TargetProfilePtr profile =
       CreateSpirvProfile(target_environment.get(), &options);
+  ExpectVulkanBdaProfileBundle(profile.get());
 
   loomc_target_fact_state_t state = LOOMC_TARGET_FACT_STATE_UNKNOWN;
   LOOMC_EXPECT_OK(loomc_spirv_target_profile_query_feature(
@@ -416,6 +453,12 @@ TEST(TargetSpirvProfileTest, RefinesPresetWithExplicitTrueFact) {
   };
   TargetProfilePtr profile =
       CreateSpirvProfile(target_environment.get(), &options);
+  const loom_target_selection_t selection =
+      loomc_target_profile_loom_target_selection(profile.get());
+  ASSERT_NE(selection.bundle, nullptr);
+  EXPECT_NE(selection.bundle->config->contract_feature_bits &
+                loomc_spirv_feature_bit(LOOMC_SPIRV_FEATURE_FLOAT16),
+            0u);
 
   loomc_target_fact_state_t state = LOOMC_TARGET_FACT_STATE_UNKNOWN;
   LOOMC_EXPECT_OK(loomc_spirv_target_profile_query_feature(
@@ -700,6 +743,48 @@ TEST(TargetSpirvProfileTest, ReportsInvalidZeroLimitValuesAsResult) {
               ::testing::HasSubstr("spirv.max_workgroup_size_x"));
   EXPECT_THAT(ToString(diagnostic->message),
               ::testing::HasSubstr("probe:zero"));
+}
+
+TEST(TargetSpirvProfileTest, ReportsOutOfRangeLimitValuesAsResult) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_spirv_limit_fact_t limits[] = {
+      {
+          /*.limit=*/LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_X,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.value=*/UINT64_C(0x100000000),
+          /*.provenance=*/loomc_make_cstring_view("probe:too-large"),
+      },
+  };
+  loomc_spirv_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("out-of-range-limit"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_NONE,
+      /*.feature_facts=*/nullptr,
+      /*.feature_fact_count=*/0,
+      /*.limit_facts=*/limits,
+      /*.limit_fact_count=*/1,
+  };
+  loomc_target_profile_t* profile = nullptr;
+  loomc_result_t* result = nullptr;
+  loomc_status_t status = loomc_target_profile_create_spirv(
+      target_environment.get(), &options, loomc_allocator_system(), &profile,
+      &result);
+  LOOMC_EXPECT_OK(status);
+  TargetProfilePtr profile_ptr(profile);
+  ResultPtr result_ptr(result);
+  EXPECT_EQ(profile_ptr.get(), nullptr);
+  ExpectFailedResult(result_ptr.get());
+  const loomc_diagnostic_t* diagnostic =
+      loomc_result_diagnostic_at(result_ptr.get(), 0);
+  ASSERT_NE(diagnostic, nullptr);
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("exceeds uint32_t range"));
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("spirv.max_workgroup_count_x"));
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("probe:too-large"));
 }
 
 TEST(TargetSpirvProfileTest, ReportsMissingFeatureDependenciesAsResult) {

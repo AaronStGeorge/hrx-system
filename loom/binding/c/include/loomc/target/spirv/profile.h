@@ -581,6 +581,12 @@ typedef struct loomc_spirv_cooperative_vector_row_t {
 /// Non-OK statuses represent API misuse or infrastructure failures before a
 /// result could be produced.
 ///
+/// When known-true facts select the Vulkan 1.3 physical-storage-buffer profile,
+/// the returned target profile contains a compiler-facing target bundle whose
+/// snapshot includes known numeric limit facts. More partial profiles still
+/// carry SPIR-V target data, but let source IR target records select the
+/// compiler target snapshot.
+///
 /// @ownership
 /// The caller owns `out_profile` when the returned result succeeds and releases
 /// it with `loomc_target_profile_release`. The caller always owns `out_result`

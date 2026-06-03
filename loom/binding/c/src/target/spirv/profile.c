@@ -13,6 +13,7 @@
 #include "loom/target/arch/spirv/cooperative_properties.h"
 #include "loom/target/arch/spirv/features.h"
 #include "loom/target/arch/spirv/profile.h"
+#include "loom/target/arch/spirv/target_records.h"
 #include "loomc/iree.h"
 #include "result.h"
 #include "target.h"
@@ -26,6 +27,10 @@ typedef struct loomc_spirv_target_profile_payload_t {
 
   // Cooperative property view derived from feature_set.
   loom_spirv_cooperative_property_set_t cooperative_properties;
+
+  // Materialized compiler-facing target bundle, when the profile facts are
+  // concrete enough to refine source-selected target records.
+  loom_target_bundle_storage_t bundle_storage;
 
   // Public tri-state feature facts.
   loomc_target_fact_state_t feature_states[LOOMC_SPIRV_FEATURE_COUNT];
@@ -504,6 +509,18 @@ static loomc_status_t loomc_spirv_profile_apply_limit_fact(
         result, loomc_make_cstring_view("SPIRV/PROFILE"),
         loomc_status_from_iree(status));
   }
+  if (state == LOOMC_TARGET_FACT_STATE_TRUE && value > UINT32_MAX) {
+    iree_status_t status = iree_make_status(
+        IREE_STATUS_FAILED_PRECONDITION,
+        "SPIR-V limit '%.*s' value from '%.*s' exceeds uint32_t range: "
+        "%" PRIu64,
+        (int)limit_name.size, loomc_spirv_profile_string_data(limit_name),
+        (int)provenance.size, loomc_spirv_profile_string_data(provenance),
+        value);
+    return loomc_spirv_profile_fail_status(
+        result, loomc_make_cstring_view("SPIRV/PROFILE"),
+        loomc_status_from_iree(status));
+  }
 
   loomc_spirv_limit_state_t* current = &limit_states[limit];
   if (current->value.state == LOOMC_TARGET_FACT_STATE_UNKNOWN) {
@@ -647,6 +664,69 @@ static void loomc_spirv_profile_copy_limit_values(
   }
 }
 
+static void loomc_spirv_profile_apply_u32_limit_value(
+    const loomc_spirv_limit_value_t* limit_values, loomc_spirv_limit_t limit,
+    uint32_t* out_value) {
+  if (limit_values[limit].state != LOOMC_TARGET_FACT_STATE_TRUE) {
+    return;
+  }
+  *out_value = (uint32_t)limit_values[limit].value;
+}
+
+static void loomc_spirv_profile_apply_limit_values_to_bundle(
+    const loomc_spirv_limit_value_t* limit_values,
+    loom_target_bundle_storage_t* storage) {
+  loomc_spirv_profile_apply_u32_limit_value(
+      limit_values, LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_X,
+      &storage->snapshot.max_workgroup_size.x);
+  loomc_spirv_profile_apply_u32_limit_value(
+      limit_values, LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_Y,
+      &storage->snapshot.max_workgroup_size.y);
+  loomc_spirv_profile_apply_u32_limit_value(
+      limit_values, LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_Z,
+      &storage->snapshot.max_workgroup_size.z);
+  loomc_spirv_profile_apply_u32_limit_value(
+      limit_values, LOOMC_SPIRV_LIMIT_MAX_FLAT_WORKGROUP_SIZE,
+      &storage->snapshot.max_flat_workgroup_size);
+  loomc_spirv_profile_apply_u32_limit_value(limit_values,
+                                            LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE,
+                                            &storage->snapshot.subgroup_size);
+  loomc_spirv_profile_apply_u32_limit_value(
+      limit_values, LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_X,
+      &storage->snapshot.max_workgroup_count.x);
+  loomc_spirv_profile_apply_u32_limit_value(
+      limit_values, LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_Y,
+      &storage->snapshot.max_workgroup_count.y);
+  loomc_spirv_profile_apply_u32_limit_value(
+      limit_values, LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_Z,
+      &storage->snapshot.max_workgroup_count.z);
+}
+
+static bool loomc_spirv_profile_can_materialize_vulkan_bda_bundle(
+    const loom_spirv_feature_set_t* feature_set) {
+  return loom_spirv_feature_set_has_atom(
+      feature_set, LOOM_SPIRV_FEATURE_ATOM_PHYSICAL_STORAGE_BUFFER);
+}
+
+static void loomc_spirv_profile_initialize_vulkan_bda_bundle(
+    const loom_spirv_feature_set_t* feature_set,
+    const loomc_spirv_limit_value_t* limit_values,
+    loom_target_bundle_storage_t* out_storage) {
+  *out_storage = (loom_target_bundle_storage_t){
+      .snapshot = *loom_spirv_low_target_bundle_vulkan1_3.snapshot,
+      .export_plan = *loom_spirv_low_target_bundle_vulkan1_3.export_plan,
+      .config = *loom_spirv_low_target_bundle_vulkan1_3.config,
+      .bundle = loom_spirv_low_target_bundle_vulkan1_3,
+  };
+  loom_target_bundle_storage_rebind(out_storage);
+  out_storage->bundle.name = IREE_SV("spirv-vulkan1.3-bda-profile");
+  out_storage->snapshot.name = IREE_SV("spirv-vulkan1.3-bda-profile");
+  out_storage->config.name =
+      IREE_SV("spirv.logical.core.vulkan1.3.bda.profile");
+  out_storage->config.contract_feature_bits = feature_set->atom_bits;
+  loomc_spirv_profile_apply_limit_values_to_bundle(limit_values, out_storage);
+}
+
 static const loomc_spirv_target_profile_payload_t*
 loomc_spirv_profile_payload_from_profile(
     const loomc_target_profile_t* profile) {
@@ -734,9 +814,17 @@ loomc_status_t loomc_target_profile_create_spirv(
         &payload->feature_set, &payload->cooperative_properties);
     payload->profile.cooperative_properties = &payload->cooperative_properties;
     const loom_target_selection_t selection = {
-        .bundle = NULL,
+        .bundle = loomc_spirv_profile_can_materialize_vulkan_bda_bundle(
+                      &payload->feature_set)
+                      ? &payload->bundle_storage.bundle
+                      : NULL,
         .data = &payload->profile,
     };
+    if (selection.bundle != NULL) {
+      loomc_spirv_profile_initialize_vulkan_bda_bundle(
+          &payload->feature_set, payload->limit_values,
+          &payload->bundle_storage);
+    }
     loomc_target_profile_options_t target_options = {
         .type = LOOMC_STRUCTURE_TYPE_TARGET_PROFILE_OPTIONS,
         .structure_size = sizeof(target_options),
