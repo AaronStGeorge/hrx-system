@@ -60,7 +60,7 @@ typedef enum loomc_config_policy_flag_bits_e {
   /// Reject config bindings that do not match any known config symbol.
   LOOMC_CONFIG_POLICY_FLAG_REJECT_UNKNOWN = 1u << 0,
 
-  /// Require all final compile config values to be resolved.
+  /// Require all final operation config values to be resolved.
   LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED = 1u << 1,
 } loomc_config_policy_flag_bits_t;
 

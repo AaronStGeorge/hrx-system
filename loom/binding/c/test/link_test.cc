@@ -97,6 +97,12 @@ SourcePtr SerializeModuleToSource(const loomc_module_t* module,
   return SourcePtr(source);
 }
 
+std::string SerializeModuleToText(const loomc_module_t* module) {
+  SourcePtr source =
+      SerializeModuleToSource(module, LOOMC_SOURCE_FORMAT_TEXT, "module.loom");
+  return ToString(loomc_source_contents(source.get()));
+}
+
 ModulePtr DeserializeModuleFromSource(loomc_context_t* context,
                                       const loomc_source_t* source) {
   loomc_module_t* module = nullptr;
@@ -280,6 +286,22 @@ void VerifyLinkedCallerModule(const loomc_module_t* module) {
   EXPECT_TRUE(ModuleHasSymbol(internal_module, "identity"));
   EXPECT_FALSE(ModuleHasSymbol(internal_module, "unused_harness"));
   EXPECT_FALSE(ModuleHasSymbol(internal_module, "unused_library"));
+}
+
+void ExpectFailedResultCode(const loomc_result_t* result, const char* code) {
+  ASSERT_NE(result, nullptr);
+  EXPECT_FALSE(loomc_result_succeeded(result));
+  const loomc_host_size_t diagnostic_count =
+      loomc_result_diagnostic_count(result);
+  ASSERT_NE(diagnostic_count, 0u);
+  bool found = false;
+  for (loomc_host_size_t i = 0; i < diagnostic_count; ++i) {
+    const loomc_diagnostic_t* diagnostic =
+        loomc_result_diagnostic_at(result, i);
+    ASSERT_NE(diagnostic, nullptr);
+    found |= ToString(diagnostic->code) == code;
+  }
+  EXPECT_TRUE(found);
 }
 
 std::vector<uint8_t> WriteBytecodeModule(const char* source_text) {
@@ -480,6 +502,94 @@ func.def public @unused_library(%x: i32) -> (i32) {
   EXPECT_TRUE(bytecode_path.Remove());
 }
 
+TEST(LinkTest, LinkModuleMaterializesInvocationConfigOnLinkedOutput) {
+  ContextPtr context = CreateContext();
+  BuilderPtr builder = CreateBuilder(context.get());
+  SourcePtr source = CreateTextSource("config.loom", R"(
+config.decl @model36.model.hidden_size : %value: index where [range(%value, 0, 8192), mul(%value, 16)]
+
+func.def public @entry() -> (index) {
+  %hidden = config.get @model36.model.hidden_size : index
+  func.return %hidden : index
+}
+)");
+  AddSource(builder.get(), source.get(), "config",
+            LOOMC_LINK_PROVIDER_ROLE_INPUT);
+
+  LinkIndexPtr link_index;
+  FinishIndex(builder.get(), &link_index);
+  LinkerPtr linker = CreateLinker(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  const loomc_string_view_t roots[] = {
+      loomc_make_cstring_view("@entry"),
+  };
+  loomc_config_binding_t first_bindings[] = {
+      {
+          /*.key=*/loomc_make_cstring_view("@model36.model.hidden_size"),
+          /*.value=*/loomc_make_cstring_view("4096"),
+      },
+  };
+  loomc_link_options_t first_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_NONE,
+      /*.structure_size=*/0,
+      /*.next=*/nullptr,
+      /*.link_index=*/nullptr,
+      /*.module_name=*/loomc_string_view_empty(),
+      /*.root_symbols=*/roots,
+      /*.root_symbol_count=*/1,
+      /*.flags=*/0,
+      /*.config=*/
+      {
+          /*.bindings=*/first_bindings,
+          /*.binding_count=*/1,
+          /*.json_object=*/loomc_make_cstring_view(R"({
+                "model36": {
+                  "model": {"hidden_size": 2048}
+                }
+              })"),
+          /*.flags=*/LOOMC_CONFIG_POLICY_FLAG_REJECT_UNKNOWN |
+              LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED,
+      },
+  };
+  ResultPtr first_result;
+  ModulePtr first_module =
+      LinkIndex(linker.get(), workspace.get(), link_index.get(), &first_options,
+                &first_result);
+
+  ASSERT_TRUE(loomc_result_succeeded(first_result.get()));
+  ASSERT_NE(first_module.get(), nullptr);
+  std::string first_text = SerializeModuleToText(first_module.get());
+  EXPECT_NE(
+      first_text.find("config.def @model36.model.hidden_size = 4096 : index"),
+      std::string::npos);
+  EXPECT_EQ(first_text.find("config.decl @model36.model.hidden_size"),
+            std::string::npos);
+  EXPECT_EQ(first_text.find("2048"), std::string::npos);
+
+  loomc_config_binding_t second_bindings[] = {
+      {
+          /*.key=*/loomc_make_cstring_view("@model36.model.hidden_size"),
+          /*.value=*/loomc_make_cstring_view("1024"),
+      },
+  };
+  loomc_link_options_t second_options = first_options;
+  second_options.config.bindings = second_bindings;
+  second_options.config.binding_count = 1;
+  second_options.config.json_object = loomc_string_view_empty();
+  ResultPtr second_result;
+  ModulePtr second_module =
+      LinkIndex(linker.get(), workspace.get(), link_index.get(),
+                &second_options, &second_result);
+
+  ASSERT_TRUE(loomc_result_succeeded(second_result.get()));
+  ASSERT_NE(second_module.get(), nullptr);
+  std::string second_text = SerializeModuleToText(second_module.get());
+  EXPECT_NE(
+      second_text.find("config.def @model36.model.hidden_size = 1024 : index"),
+      std::string::npos);
+  EXPECT_EQ(second_text.find("4096"), std::string::npos);
+}
+
 TEST(LinkTest, DeserializeParseErrorsProduceFailedResult) {
   ContextPtr context = CreateContext();
   SourcePtr source = CreateTextSource("broken.loom", R"(
@@ -576,6 +686,155 @@ func.def public @from_bytecode(%x: i32) -> (i32) {
   ASSERT_NE(linked_module, nullptr);
   VerifyModule(linked_module);
   EXPECT_TRUE(ModuleHasSymbol(linked_module, "from_bytecode"));
+}
+
+TEST(LinkTest, LinkModuleMaterializesConfigFromBytecodeIndex) {
+  std::vector<uint8_t> bytecode = WriteBytecodeModule(R"(
+config.decl @model36.model.hidden_size : %value: index where [range(%value, 0, 8192), mul(%value, 16)]
+
+func.def public @from_bytecode() -> (index) {
+  %hidden = config.get @model36.model.hidden_size : index
+  func.return %hidden : index
+}
+)");
+  ContextPtr context = CreateContext();
+  BuilderPtr builder = CreateBuilder(context.get());
+  SourcePtr source = CreateSource(LOOMC_SOURCE_FORMAT_BYTECODE, "module.loombc",
+                                  bytecode.data(), bytecode.size());
+  AddSource(builder.get(), source.get(), "bytecode",
+            LOOMC_LINK_PROVIDER_ROLE_LIBRARY);
+
+  LinkIndexPtr link_index;
+  FinishIndex(builder.get(), &link_index);
+  source.reset();
+  bytecode.clear();
+
+  LinkerPtr linker = CreateLinker(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  loomc_config_binding_t bindings[] = {
+      {
+          /*.key=*/loomc_make_cstring_view("@model36.model.hidden_size"),
+          /*.value=*/loomc_make_cstring_view("4096"),
+      },
+  };
+  loomc_link_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_NONE,
+      /*.structure_size=*/0,
+      /*.next=*/nullptr,
+      /*.link_index=*/nullptr,
+      /*.module_name=*/loomc_string_view_empty(),
+      /*.root_symbols=*/nullptr,
+      /*.root_symbol_count=*/0,
+      /*.flags=*/0,
+      /*.config=*/
+      {
+          /*.bindings=*/bindings,
+          /*.binding_count=*/1,
+          /*.json_object=*/loomc_string_view_empty(),
+          /*.flags=*/LOOMC_CONFIG_POLICY_FLAG_REJECT_UNKNOWN |
+              LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED,
+      },
+  };
+  ResultPtr result;
+  ModulePtr module = LinkIndex(linker.get(), workspace.get(), link_index.get(),
+                               &options, &result);
+
+  ASSERT_TRUE(loomc_result_succeeded(result.get()));
+  ASSERT_NE(module.get(), nullptr);
+  std::string text = SerializeModuleToText(module.get());
+  EXPECT_NE(text.find("config.def @model36.model.hidden_size = 4096 : index"),
+            std::string::npos);
+  EXPECT_EQ(text.find("config.decl @model36.model.hidden_size"),
+            std::string::npos);
+}
+
+TEST(LinkTest, LinkModuleReportsUnknownConfigAsResultDiagnostic) {
+  ContextPtr context = CreateContext();
+  BuilderPtr builder = CreateBuilder(context.get());
+  SourcePtr source = CreateTextSource("entry.loom", R"(
+func.def public @entry(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+)");
+  AddSource(builder.get(), source.get(), "entry",
+            LOOMC_LINK_PROVIDER_ROLE_INPUT);
+
+  LinkIndexPtr link_index;
+  FinishIndex(builder.get(), &link_index);
+  LinkerPtr linker = CreateLinker(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  loomc_config_binding_t bindings[] = {
+      {
+          /*.key=*/loomc_make_cstring_view("tile_m"),
+          /*.value=*/loomc_make_cstring_view("128"),
+      },
+  };
+  loomc_link_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_NONE,
+      /*.structure_size=*/0,
+      /*.next=*/nullptr,
+      /*.link_index=*/nullptr,
+      /*.module_name=*/loomc_string_view_empty(),
+      /*.root_symbols=*/nullptr,
+      /*.root_symbol_count=*/0,
+      /*.flags=*/0,
+      /*.config=*/
+      {
+          /*.bindings=*/bindings,
+          /*.binding_count=*/1,
+          /*.json_object=*/loomc_string_view_empty(),
+          /*.flags=*/LOOMC_CONFIG_POLICY_FLAG_REJECT_UNKNOWN,
+      },
+  };
+  ResultPtr result;
+  ModulePtr module = LinkIndex(linker.get(), workspace.get(), link_index.get(),
+                               &options, &result);
+
+  EXPECT_EQ(module.get(), nullptr);
+  ExpectFailedResultCode(result.get(), "CONFIG/INVALID");
+}
+
+TEST(LinkTest, LinkModuleReportsUnresolvedConfigAsResultDiagnostic) {
+  ContextPtr context = CreateContext();
+  BuilderPtr builder = CreateBuilder(context.get());
+  SourcePtr source = CreateTextSource("config.loom", R"(
+config.decl @model36.model.hidden_size : %value: index where [range(%value, 0, 8192), mul(%value, 16)]
+
+func.def public @entry() -> (index) {
+  %hidden = config.get @model36.model.hidden_size : index
+  func.return %hidden : index
+}
+)");
+  AddSource(builder.get(), source.get(), "config",
+            LOOMC_LINK_PROVIDER_ROLE_INPUT);
+
+  LinkIndexPtr link_index;
+  FinishIndex(builder.get(), &link_index);
+  LinkerPtr linker = CreateLinker(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  loomc_link_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_NONE,
+      /*.structure_size=*/0,
+      /*.next=*/nullptr,
+      /*.link_index=*/nullptr,
+      /*.module_name=*/loomc_string_view_empty(),
+      /*.root_symbols=*/nullptr,
+      /*.root_symbol_count=*/0,
+      /*.flags=*/0,
+      /*.config=*/
+      {
+          /*.bindings=*/nullptr,
+          /*.binding_count=*/0,
+          /*.json_object=*/loomc_string_view_empty(),
+          /*.flags=*/LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED,
+      },
+  };
+  ResultPtr result;
+  ModulePtr module = LinkIndex(linker.get(), workspace.get(), link_index.get(),
+                               &options, &result);
+
+  EXPECT_EQ(module.get(), nullptr);
+  ExpectFailedResultCode(result.get(), "CONFIG/INVALID");
 }
 
 }  // namespace

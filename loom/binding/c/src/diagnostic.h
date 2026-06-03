@@ -8,6 +8,7 @@
 #define LOOMC_DIAGNOSTIC_STORAGE_H_
 
 #include "loom/error/diagnostic.h"
+#include "loom/ir/module.h"
 #include "loomc/diagnostic.h"
 #include "result.h"
 #include "visibility.h"
@@ -25,6 +26,11 @@ LOOMC_API_PRIVATE loomc_status_t loomc_result_add_loom_diagnostic(
 LOOMC_API_PRIVATE loomc_status_t loomc_result_add_loom_diagnostic_emission(
     loomc_result_t* result, const loomc_source_t* source,
     loom_emitter_t emitter, const loom_diagnostic_emission_t* emission);
+
+// Verifies a Loom module and adds verifier diagnostics to result.
+LOOMC_API_PRIVATE loomc_status_t loomc_result_verify_loom_module(
+    const loom_module_t* module, const loomc_source_t* source,
+    loomc_result_t* result);
 
 // Adds a rendered status as a result diagnostic without consuming status.
 LOOMC_API_PRIVATE loomc_status_t loomc_result_add_status_diagnostic(

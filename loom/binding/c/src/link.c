@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "config.h"
 #include "context.h"
 #include "diagnostic.h"
 #include "iree/base/internal/arena.h"
@@ -139,7 +140,7 @@ static loomc_status_t loomc_link_validate_options(
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
                              "link options contain unknown flag bits");
   }
-  return loomc_ok_status();
+  return loomc_config_validate_options(&options->config);
 }
 
 static loomc_status_t loomc_link_result_set_failed(loomc_result_t* result) {
@@ -610,6 +611,17 @@ loomc_status_t loomc_link_module(loomc_linker_t* linker,
     status = loomc_link_translate_operation_status(
         result, before_diagnostics, loomc_make_cstring_view("LINK/FINISH"),
         operation_status);
+  }
+  if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
+    loomc_config_apply_to_module_options_t config_apply_options = {
+        .config = &options->config,
+        .module = linked_module,
+        .result = result,
+        .diagnostic_code = loomc_make_cstring_view("CONFIG/INVALID"),
+        .block_pool = loomc_workspace_block_pool(workspace),
+        .allocator = linker->allocator,
+    };
+    status = loomc_config_apply_to_module(&config_apply_options);
   }
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
     status = loomc_module_set_loom_module(module, linked_module);

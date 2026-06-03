@@ -8,17 +8,15 @@
 
 #include <string.h>
 
+#include "config.h"
 #include "context.h"
 #include "diagnostic.h"
 #include "iree/base/internal/atomics.h"
-#include "loom/error/error_defs.h"
 #include "loom/pass/environment.h"
 #include "loom/pass/interpreter.h"
 #include "loom/target/predicate.h"
-#include "loom/tooling/config/config.h"
 #include "loom/util/json.h"
 #include "loom/util/stream.h"
-#include "loom/verify/verify.h"
 #include "loomc/iree.h"
 #include "module.h"
 #include "pass_program.h"
@@ -74,31 +72,6 @@ static loomc_status_t loomc_compile_validate_compiler_options(
   return loomc_ok_status();
 }
 
-static loomc_status_t loomc_compile_validate_config_options(
-    const loomc_config_options_t* options) {
-  if (options->binding_count != 0 && options->bindings == NULL) {
-    return loomc_make_status(
-        LOOMC_STATUS_INVALID_ARGUMENT,
-        "config binding_count is non-zero but bindings is NULL");
-  }
-  for (loomc_host_size_t i = 0; i < options->binding_count; ++i) {
-    LOOMC_RETURN_IF_ERROR(
-        loomc_compile_validate_string_view(options->bindings[i].key));
-    LOOMC_RETURN_IF_ERROR(
-        loomc_compile_validate_string_view(options->bindings[i].value));
-  }
-  LOOMC_RETURN_IF_ERROR(
-      loomc_compile_validate_string_view(options->json_object));
-  const loomc_config_policy_flags_t known_flags =
-      LOOMC_CONFIG_POLICY_FLAG_REJECT_UNKNOWN |
-      LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED;
-  if ((options->flags & ~known_flags) != 0) {
-    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
-                             "config options contain unknown flag bits");
-  }
-  return loomc_ok_status();
-}
-
 static loomc_status_t loomc_compile_validate_options(
     const loomc_compile_options_t* options) {
   if (options == NULL) {
@@ -129,150 +102,7 @@ static loomc_status_t loomc_compile_validate_options(
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
                              "compile options contain unknown artifact flags");
   }
-  return loomc_compile_validate_config_options(&options->config);
-}
-
-static iree_status_t loomc_compile_capture_diagnostic(
-    void* user_data, const loom_diagnostic_t* diagnostic) {
-  loomc_compile_diagnostic_capture_t* capture =
-      (loomc_compile_diagnostic_capture_t*)user_data;
-  return iree_status_from_loomc(loomc_result_add_loom_diagnostic(
-      capture->result, /*source=*/NULL, diagnostic));
-}
-
-static loomc_status_t loomc_compile_verify_module(
-    const loom_module_t* internal_module, loomc_result_t* result) {
-  loomc_compile_diagnostic_capture_t capture = {
-      .result = result,
-  };
-  loom_verify_options_t verify_options = {
-      .sink =
-          {
-              .fn = loomc_compile_capture_diagnostic,
-              .user_data = &capture,
-          },
-      .max_errors = 20,
-  };
-  loom_verify_result_t verify_result = {0};
-  LOOMC_RETURN_IF_ERROR(loomc_status_from_iree(
-      loom_verify_module(internal_module, &verify_options, &verify_result)));
-  if (verify_result.error_count != 0) {
-    return loomc_result_set_state(result, LOOMC_RESULT_STATE_FAILED);
-  }
-  return loomc_ok_status();
-}
-
-static iree_string_view_t loomc_compile_normalize_config_key(
-    loomc_string_view_t key) {
-  iree_string_view_t normalized_key = iree_string_view_from_loomc(key);
-  normalized_key = iree_string_view_trim(normalized_key);
-  (void)iree_string_view_consume_prefix_char(&normalized_key, '@');
-  return iree_string_view_trim(normalized_key);
-}
-
-static bool loomc_compile_config_binding_overrides_json(
-    const loomc_config_options_t* options,
-    const loom_tooling_config_binding_t* json_binding) {
-  for (loomc_host_size_t i = 0; i < options->binding_count; ++i) {
-    iree_string_view_t binding_key =
-        loomc_compile_normalize_config_key(options->bindings[i].key);
-    if (iree_string_view_equal(binding_key, json_binding->key)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-static iree_status_t loomc_compile_populate_config_set(
-    const loomc_config_options_t* options, iree_allocator_t host_allocator,
-    loom_tooling_config_set_t* config_set) {
-  loom_tooling_config_set_t json_config_set;
-  loom_tooling_config_set_initialize(host_allocator, &json_config_set);
-
-  iree_status_t status = iree_ok_status();
-  if (!loomc_string_view_is_empty(options->json_object)) {
-    status = loom_tooling_config_set_append_json_object(
-        &json_config_set, iree_string_view_from_loomc(options->json_object));
-  }
-  for (iree_host_size_t i = 0;
-       i < json_config_set.binding_count && iree_status_is_ok(status); ++i) {
-    const loom_tooling_config_binding_t* binding = &json_config_set.bindings[i];
-    if (loomc_compile_config_binding_overrides_json(options, binding)) {
-      continue;
-    }
-    status = loom_tooling_config_set_append(config_set, binding->key,
-                                            binding->value);
-  }
-  for (loomc_host_size_t i = 0;
-       i < options->binding_count && iree_status_is_ok(status); ++i) {
-    status = loom_tooling_config_set_append(
-        config_set, iree_string_view_from_loomc(options->bindings[i].key),
-        iree_string_view_from_loomc(options->bindings[i].value));
-  }
-
-  loom_tooling_config_set_deinitialize(&json_config_set);
-  return status;
-}
-
-static loom_tooling_config_materialize_flags_t
-loomc_compile_config_materialize_flags(loomc_config_policy_flags_t flags) {
-  loom_tooling_config_materialize_flags_t result = 0;
-  if (iree_any_bit_set(flags, LOOMC_CONFIG_POLICY_FLAG_REJECT_UNKNOWN)) {
-    result |= LOOM_TOOLING_CONFIG_MATERIALIZE_REQUIRE_MATCHES;
-  }
-  return result;
-}
-
-static loomc_status_t loomc_compile_fail_result_from_status(
-    loomc_result_t* result, loomc_string_view_t code, loomc_status_t status) {
-  return loomc_result_fail_status_diagnostic_consume(
-      result, NULL, LOOMC_DIAGNOSTIC_SEVERITY_ERROR, code, status);
-}
-
-static loomc_status_t loomc_compile_apply_config(
-    loomc_workspace_t* workspace, const loomc_config_options_t* options,
-    loom_module_t* internal_module, loomc_result_t* result,
-    loomc_allocator_t allocator) {
-  if (options->binding_count == 0 &&
-      loomc_string_view_is_empty(options->json_object) && options->flags == 0) {
-    return loomc_ok_status();
-  }
-
-  iree_allocator_t host_allocator = iree_allocator_from_loomc(allocator);
-  loom_tooling_config_set_t config_set;
-  loom_tooling_config_set_initialize(host_allocator, &config_set);
-
-  loomc_status_t status = loomc_status_from_iree(
-      loomc_compile_populate_config_set(options, host_allocator, &config_set));
-  loom_tooling_config_materialize_result_t materialize_result = {0};
-  if (loomc_status_is_ok(status)) {
-    loom_tooling_config_materialize_options_t materialize_options;
-    loom_tooling_config_materialize_options_initialize(&materialize_options);
-    materialize_options.flags =
-        loomc_compile_config_materialize_flags(options->flags);
-    materialize_options.config_set = &config_set;
-    status = loomc_status_from_iree(loom_tooling_config_materialize_module(
-        internal_module, &materialize_options,
-        loomc_workspace_block_pool(workspace), &materialize_result));
-  }
-  if (loomc_status_is_ok(status) &&
-      materialize_result.materialized_count != 0) {
-    status = loomc_compile_verify_module(internal_module, result);
-  }
-  if (loomc_status_is_ok(status) && loomc_result_succeeded(result) &&
-      iree_any_bit_set(options->flags,
-                       LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED)) {
-    status = loomc_status_from_iree(
-        loom_tooling_config_require_resolved_module(internal_module, NULL));
-  }
-  if (!loomc_status_is_ok(status) &&
-      loomc_status_is_result_diagnostic(status)) {
-    status = loomc_compile_fail_result_from_status(
-        result, loomc_make_cstring_view("CONFIG/INVALID"), status);
-  }
-
-  loom_tooling_config_set_deinitialize(&config_set);
-  return status;
+  return loomc_config_validate_options(&options->config);
 }
 
 static iree_status_t loomc_compile_capture_diagnostic_emission(
@@ -596,13 +426,21 @@ loomc_status_t loomc_compile_module(loomc_compiler_t* compiler,
   LOOMC_RETURN_IF_ERROR(
       loomc_result_create(LOOMC_RESULT_STATE_SUCCEEDED, allocator, &result));
 
-  loomc_status_t status = loomc_compile_verify_module(internal_module, result);
+  loomc_status_t status =
+      loomc_result_verify_loom_module(internal_module, /*source=*/NULL, result);
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
     const loomc_config_options_t empty_config_options = {0};
     const loomc_config_options_t* config_options =
         options ? &options->config : &empty_config_options;
-    status = loomc_compile_apply_config(workspace, config_options,
-                                        internal_module, result, allocator);
+    loomc_config_apply_to_module_options_t config_apply_options = {
+        .config = config_options,
+        .module = internal_module,
+        .result = result,
+        .diagnostic_code = loomc_make_cstring_view("CONFIG/INVALID"),
+        .block_pool = loomc_workspace_block_pool(workspace),
+        .allocator = allocator,
+    };
+    status = loomc_config_apply_to_module(&config_apply_options);
   }
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
     status = loomc_compile_run_pass_program(

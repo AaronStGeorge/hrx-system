@@ -79,6 +79,7 @@ loom_cc_library(
         "src/base.c",
         "src/base_system.c",
         "src/compile.c",
+        "src/config.c",
         "src/context.c",
         "src/diagnostic.c",
         "src/emit.c",
@@ -93,6 +94,7 @@ loom_cc_library(
         "src/workspace.c",
     ],
     hdrs = LOOMC_PUBLIC_HDRS + [
+        "src/config.h",
         "src/context.h",
         "src/diagnostic.h",
         "src/link_index.h",

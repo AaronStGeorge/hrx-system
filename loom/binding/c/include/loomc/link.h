@@ -7,6 +7,7 @@
 #ifndef LOOMC_LINK_H_
 #define LOOMC_LINK_H_
 
+#include "loomc/config.h"
 #include "loomc/link_index.h"
 #include "loomc/module.h"
 #include "loomc/result.h"
@@ -118,7 +119,9 @@ typedef uint32_t loomc_link_flags_t;
 /// Supplying neither performs archive-style linking and materializes all
 /// linkable symbols in stable index order. Target selections can be supplied
 /// through `loomc_target_selection_options_t` on `next` so target-aware linking
-/// policy has a stable place in the invocation contract as it grows.
+/// policy has a stable place in the invocation contract as it grows. Config
+/// options materialize on the linked output for this invocation; frozen indexes
+/// and reusable input/library modules are never mutated by link-time config.
 typedef struct loomc_link_options_t {
   /// Structure type. Must be `LOOMC_STRUCTURE_TYPE_LINK_OPTIONS` when nonzero.
   loomc_structure_type_t type;
@@ -144,6 +147,9 @@ typedef struct loomc_link_options_t {
 
   /// Link operation flags.
   loomc_link_flags_t flags;
+
+  /// Per-invocation config bindings materialized into the linked output module.
+  loomc_config_options_t config;
 } loomc_link_options_t;
 
 /// Creates a prepared immutable linker.

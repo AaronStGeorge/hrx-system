@@ -10,7 +10,16 @@
 #include "loom/error/error_defs.h"
 #include "loom/error/renderer.h"
 #include "loom/util/stream.h"
+#include "loom/verify/verify.h"
 #include "loomc/iree.h"
+
+typedef struct loomc_result_verify_capture_t {
+  // Result receiving converted diagnostics.
+  loomc_result_t* result;
+
+  // Source associated with emitted diagnostics.
+  const loomc_source_t* source;
+} loomc_result_verify_capture_t;
 
 static loomc_diagnostic_severity_t loomc_diagnostic_severity_from_loom(
     loom_diagnostic_severity_t severity) {
@@ -112,6 +121,42 @@ loomc_status_t loomc_result_add_loom_diagnostic_emission(
       .emitter = emitter,
   };
   return loomc_result_add_loom_diagnostic(result, source, &diagnostic);
+}
+
+static iree_status_t loomc_result_verify_capture_diagnostic(
+    void* user_data, const loom_diagnostic_t* diagnostic) {
+  loomc_result_verify_capture_t* capture =
+      (loomc_result_verify_capture_t*)user_data;
+  return iree_status_from_loomc(loomc_result_add_loom_diagnostic(
+      capture->result, capture->source, diagnostic));
+}
+
+loomc_status_t loomc_result_verify_loom_module(const loom_module_t* module,
+                                               const loomc_source_t* source,
+                                               loomc_result_t* result) {
+  if (module == NULL || result == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "module and result must not be NULL");
+  }
+  loomc_result_verify_capture_t capture = {
+      .result = result,
+      .source = source,
+  };
+  loom_verify_options_t verify_options = {
+      .sink =
+          {
+              .fn = loomc_result_verify_capture_diagnostic,
+              .user_data = &capture,
+          },
+      .max_errors = 20,
+  };
+  loom_verify_result_t verify_result = {0};
+  LOOMC_RETURN_IF_ERROR(loomc_status_from_iree(
+      loom_verify_module(module, &verify_options, &verify_result)));
+  if (verify_result.error_count != 0) {
+    return loomc_result_set_state(result, LOOMC_RESULT_STATE_FAILED);
+  }
+  return loomc_ok_status();
 }
 
 loomc_status_t loomc_result_add_status_diagnostic(
