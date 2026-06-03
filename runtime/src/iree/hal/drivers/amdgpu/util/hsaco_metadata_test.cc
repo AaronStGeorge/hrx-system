@@ -314,6 +314,23 @@ static std::vector<uint8_t> BuildElfWithMetadata(
   return BuildElfWithNote(metadata, IREE_SV("AMDGPU"), 32);
 }
 
+static std::vector<uint8_t> AddMalformedSymbolSection(
+    std::vector<uint8_t> elf) {
+  constexpr size_t kSectionHeaderSize = 64;
+  size_t section_offset = elf.size();
+  StoreU64LE(&elf, 40, section_offset);
+  StoreU16LE(&elf, 58, kSectionHeaderSize);
+  StoreU16LE(&elf, 60, 1);
+
+  elf.resize(section_offset + kSectionHeaderSize, 0);
+  StoreU32LE(&elf, section_offset + 4, 2);  // SHT_SYMTAB.
+  // Point inside the ELF but declare a section size that extends beyond EOF.
+  StoreU64LE(&elf, section_offset + 24, elf.size() - 8);
+  StoreU64LE(&elf, section_offset + 32, 64);
+  StoreU64LE(&elf, section_offset + 56, 24);
+  return elf;
+}
+
 static iree_const_byte_span_t ByteSpan(const std::vector<uint8_t>& data) {
   return iree_make_const_byte_span(data.data(), data.size());
 }
@@ -637,6 +654,19 @@ TEST(HsacoMetadataTest, RejectsMalformedMessagePackMetadata) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         iree_hal_amdgpu_hsaco_metadata_initialize_from_elf(
                             ByteSpan(elf), iree_allocator_system(), &metadata));
+}
+
+TEST(HsacoMetadataTest, IgnoresMalformedElfSymbolSectionBounds) {
+  std::vector<uint8_t> elf =
+      AddMalformedSymbolSection(BuildElfWithMetadata(BuildKernelMetadata()));
+
+  iree_hal_amdgpu_hsaco_metadata_t metadata;
+  IREE_ASSERT_OK(iree_hal_amdgpu_hsaco_metadata_initialize_from_elf(
+      ByteSpan(elf), iree_allocator_system(), &metadata));
+  EXPECT_EQ(metadata.kernel_count, 1);
+  EXPECT_EQ(ToString(metadata.kernels[0].symbol_name), "vector_add.kd");
+
+  iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
 }
 
 TEST(HsacoMetadataTest, RejectsDuplicateArgumentField) {
