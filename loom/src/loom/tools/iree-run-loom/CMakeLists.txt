@@ -92,7 +92,7 @@ if(IREE_RUN_LOOM_ENABLE_IREEVM)
   _iree_run_loom_enable_provider(
     ${_IREE_RUN_LOOM_TARGET}
     IREE_RUN_LOOM_HAVE_IREEVM
-    loom::src::loom::tooling::target::ireevm::provider
+    loom::src::loom::tooling::execution::ireevm::provider
   )
 endif()
 

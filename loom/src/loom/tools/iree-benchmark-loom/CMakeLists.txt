@@ -284,7 +284,7 @@ if(IREE_BENCHMARK_LOOM_ENABLE_IREEVM)
   _iree_benchmark_loom_enable_provider(
     ${_IREE_BENCHMARK_LOOM_TARGET}
     IREE_BENCHMARK_LOOM_HAVE_IREEVM
-    loom::src::loom::tooling::target::ireevm::provider
+    loom::src::loom::tooling::execution::ireevm::provider
   )
 endif()
 
@@ -296,6 +296,7 @@ if(IREE_BENCHMARK_LOOM_ENABLE_SPIRV)
   )
   target_link_libraries(${_IREE_BENCHMARK_LOOM_TARGET} PRIVATE
     loom::src::loom::tooling::target::spirv::artifact_provider
+    loom::src::loom::tooling::target::spirv::testbench_requirements
   )
 endif()
 

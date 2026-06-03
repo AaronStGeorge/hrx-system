@@ -74,16 +74,19 @@ if(LOOM_COMPILE_ENABLE_AMDGPU)
     LOOM_COMPILE_HAVE_AMDGPU
     loom::src::loom::target::arch::amdgpu::provider
   )
+  target_link_libraries(${_LOOM_COMPILE_TARGET} PRIVATE
+    loom::src::loom::tooling::target::amdgpu::artifact_provider
+  )
 endif()
 
 if(LOOM_COMPILE_ENABLE_IREEVM)
   _loom_compile_enable_provider(
     ${_LOOM_COMPILE_TARGET}
     LOOM_COMPILE_HAVE_IREEVM
-    loom::src::loom::tooling::target::ireevm::candidate
+    loom::src::loom::tooling::execution::ireevm::candidate
   )
   target_link_libraries(${_LOOM_COMPILE_TARGET} PRIVATE
-    loom::src::loom::tooling::target::ireevm::provider
+    loom::src::loom::tooling::execution::ireevm::provider
   )
 endif()
 

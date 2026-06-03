@@ -44,8 +44,8 @@
 #include "loom/tooling/target/amdgpu/artifact_provider.h"
 #endif  // LOOM_COMPILE_HAVE_AMDGPU
 #if LOOM_COMPILE_HAVE_IREEVM
-#include "loom/tooling/target/ireevm/candidate.h"
-#include "loom/tooling/target/ireevm/provider.h"
+#include "loom/tooling/execution/ireevm/candidate.h"
+#include "loom/tooling/execution/ireevm/provider.h"
 #endif  // LOOM_COMPILE_HAVE_IREEVM
 #if LOOM_COMPILE_HAVE_SPIRV
 #include "loom/target/arch/spirv/provider.h"

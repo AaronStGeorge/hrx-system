@@ -34,7 +34,7 @@
 #include "loom/tooling/target/amdgpu/artifact_provider.h"
 #endif  // IREE_BENCHMARK_LOOM_HAVE_AMDGPU
 #if IREE_BENCHMARK_LOOM_HAVE_IREEVM
-#include "loom/tooling/target/ireevm/provider.h"
+#include "loom/tooling/execution/ireevm/provider.h"
 #endif  // IREE_BENCHMARK_LOOM_HAVE_IREEVM
 #if IREE_BENCHMARK_LOOM_HAVE_SPIRV
 #include "loom/target/arch/spirv/provider.h"

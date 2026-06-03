@@ -63,8 +63,8 @@ _IREEVM_COMPILE_COPTS = iree_select({
 
 _IREEVM_COMPILE_DEPS = iree_select({
     ":ireevm_provider_enabled": [
-        "//loom/src/loom/tooling/target/ireevm:candidate",
-        "//loom/src/loom/tooling/target/ireevm:provider",
+        "//loom/src/loom/tooling/execution/ireevm:candidate",
+        "//loom/src/loom/tooling/execution/ireevm:provider",
     ],
     "//conditions:default": [],
 })

@@ -130,7 +130,7 @@ if(IREE_TEST_LOOM_ENABLE_IREEVM)
   _iree_test_loom_enable_provider(
     ${_IREE_TEST_LOOM_TARGET}
     IREE_TEST_LOOM_HAVE_IREEVM
-    loom::src::loom::tooling::target::ireevm::provider
+    loom::src::loom::tooling::execution::ireevm::provider
   )
 endif()
 
