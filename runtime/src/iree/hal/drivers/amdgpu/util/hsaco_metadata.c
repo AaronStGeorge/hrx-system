@@ -1486,13 +1486,18 @@ iree_hal_amdgpu_hsaco_metadata_append_elf_kernel_symbols(
   };
   expanded.kernels = NULL;
   expanded.args = NULL;
+  expanded.owned_string_storage = NULL;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_metadata_allocate_storage(
       expanded_count, metadata->host_allocator, &expanded));
   char* extra_symbol_name_storage = NULL;
   if (extra_symbol_name_storage_size) {
-    IREE_RETURN_IF_ERROR(iree_allocator_malloc(
+    iree_status_t allocation_status = iree_allocator_malloc(
         metadata->host_allocator, extra_symbol_name_storage_size,
-        (void**)&extra_symbol_name_storage));
+        (void**)&extra_symbol_name_storage);
+    if (!iree_status_is_ok(allocation_status)) {
+      iree_allocator_free(metadata->host_allocator, expanded.kernels);
+      return allocation_status;
+    }
     expanded.owned_string_storage = extra_symbol_name_storage;
   }
   if (metadata->arg_count) {
@@ -1510,11 +1515,13 @@ iree_hal_amdgpu_hsaco_metadata_append_elf_kernel_symbols(
 
   iree_host_size_t write_index = metadata->kernel_count;
   iree_host_size_t extra_symbol_name_storage_offset = 0;
+  iree_status_t status = iree_ok_status();
   for (uint16_t section_index = 0; section_index < section_count;
        ++section_index) {
     const uint8_t* section = NULL;
-    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_hsaco_metadata_elf_section(
-        elf_data, section_index, &section));
+    status = iree_hal_amdgpu_hsaco_metadata_elf_section(elf_data, section_index,
+                                                        &section);
+    if (!iree_status_is_ok(status)) break;
     uint32_t section_type = iree_hal_amdgpu_hsaco_metadata_load_le_u32(section + 4);
     if (section_type != IREE_HAL_AMDGPU_ELF_SHT_DYNSYM &&
         section_type != IREE_HAL_AMDGPU_ELF_SHT_SYMTAB) {
@@ -1568,6 +1575,14 @@ iree_hal_amdgpu_hsaco_metadata_append_elf_kernel_symbols(
       kernel->arg_count = template_kernel->arg_count;
       kernel->args = template_kernel->args;
     }
+  }
+  if (!iree_status_is_ok(status)) {
+    if (expanded.owned_string_storage) {
+      iree_allocator_free(metadata->host_allocator,
+                          expanded.owned_string_storage);
+    }
+    iree_allocator_free(metadata->host_allocator, expanded.kernels);
+    return status;
   }
   expanded.kernel_count = write_index;
 
