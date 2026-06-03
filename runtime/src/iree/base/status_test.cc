@@ -8,6 +8,7 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "iree/base/api.h"
 #include "iree/testing/gtest.h"
@@ -150,6 +151,23 @@ static std::string FormatStatusBuffer(iree_status_t status) {
   return result;
 }
 
+static void ExpectStatusFormatTruncated(iree_status_t status,
+                                        iree_host_size_t buffer_capacity) {
+  iree_host_size_t required_length = 0;
+  EXPECT_TRUE(iree_status_format(status, 0, NULL, &required_length));
+  ASSERT_GT(required_length, buffer_capacity);
+
+  constexpr char kSentinel = '\x7F';
+  std::vector<char> buffer(buffer_capacity + 16, kSentinel);
+  iree_host_size_t actual_length = 0;
+  EXPECT_FALSE(iree_status_format(status, buffer_capacity, buffer.data(),
+                                  &actual_length));
+  EXPECT_EQ(required_length, actual_length);
+  for (iree_host_size_t i = buffer_capacity; i < buffer.size(); ++i) {
+    EXPECT_EQ(kSentinel, buffer[i]) << "index " << i;
+  }
+}
+
 TEST(StatusFormatTo, OkStatus) {
   iree_status_t status = iree_ok_status();
   std::string cb_result = FormatStatusTo(status);
@@ -166,6 +184,11 @@ TEST(StatusFormatTo, CodeOnly) {
   EXPECT_THAT(cb_result, HasSubstr("INTERNAL"));
 }
 
+TEST(StatusFormatTo, CodeOnlyTruncatedBuffer) {
+  iree_status_t status = iree_status_from_code(IREE_STATUS_INTERNAL);
+  ExpectStatusFormatTruncated(status, /*buffer_capacity=*/4);
+}
+
 #if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_ANNOTATIONS) != 0
 
 TEST(StatusFormatTo, WithMessage) {
@@ -177,6 +200,14 @@ TEST(StatusFormatTo, WithMessage) {
   EXPECT_EQ(cb_result, buffer_result);
   EXPECT_THAT(cb_result, HasSubstr("NOT_FOUND"));
   EXPECT_THAT(cb_result, HasSubstr("something missing"));
+  iree_status_free(status);
+}
+
+TEST(StatusFormatTo, WithMessageTruncatedBuffer) {
+  iree_status_t status =
+      iree_status_allocate(IREE_STATUS_INTERNAL, NULL, 0,
+                           iree_make_cstring_view("error with more detail"));
+  ExpectStatusFormatTruncated(status, /*buffer_capacity=*/8);
   iree_status_free(status);
 }
 
@@ -219,6 +250,23 @@ TEST(StatusFormatTo, WithMultipleAnnotations) {
   EXPECT_THAT(cb_result, HasSubstr("layer 2: attempt 3 of 3"));
   iree_status_free(status);
 }
+
+#if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_STACK_TRACE) != 0
+
+TEST(StatusFormatTo, WithStackTraceTruncatedBuffer) {
+  iree_status_t status =
+      iree_make_status(IREE_STATUS_UNAVAILABLE, "stack trace payload");
+
+  iree_host_size_t required_length = 0;
+  EXPECT_TRUE(iree_status_format(status, 0, NULL, &required_length));
+  ASSERT_GT(required_length, 64u);
+  iree_host_size_t buffer_capacity =
+      required_length > 512 ? 512 : required_length - 1;
+  ExpectStatusFormatTruncated(status, buffer_capacity);
+  iree_status_free(status);
+}
+
+#endif  // has IREE_STATUS_FEATURE_STACK_TRACE
 
 TEST(StatusFormatTo, CallbackShortCircuit) {
   iree_status_t status =
