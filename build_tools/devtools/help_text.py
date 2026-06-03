@@ -55,41 +55,45 @@ The default setup creates or updates .venv. Use --system when tools are already
 installed and this checkout should not get a local tool environment.""",
         )
     if command == "hook":
+        default_profile = {
+            "bazel": "paranoid",
+            "cmake": "default",
+        }[lane]
         return CommandHelp(
             description=f"Install Git hooks for the {lane} lane.",
             epilog=f"""Examples:
   python dev.py {lane} hook
+  python dev.py {lane} hook --profile {default_profile}
   python dev.py {lane} hook --verify
 
-This writes ignored lefthook-local.yml from the checked-in {lane} template and
-then runs lefthook install.""",
+This writes ignored lefthook-local.yml with the selected lane/profile and then
+runs lefthook install. Re-run this command with a different --profile to change
+the default profile used by Git commits.""",
         )
     if command == "configure":
         if lane == "bazel":
             return CommandHelp(
                 description="Configure the Bazel source graph for this checkout.",
-                arguments="Configure options. Use -- before options that start with '-'.",
+                arguments="Portable -D project options or documented native Bazel rc options.",
                 epilog="""Examples:
   python dev.py bazel configure
-  python dev.py bazel configure -- --enable-driver=amdgpu --rocm-path=/opt/rocm
-  python dev.py bazel configure -- --exclude-driver=amdgpu
+  python dev.py bazel configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm
+  python dev.py bazel configure --//runtime/config/hal:drivers=amdgpu,local-sync,local-task,null --repo_env=IREE_ROCM_PATH=/opt/rocm
 
-This writes .bazelrc.configured. Useful configure options include:
-  --enable-driver DRIVER   Include an optional runtime HAL driver.
-  --exclude-driver DRIVER  Exclude a runtime HAL driver.
-  --rocm-path PATH         ROCm or TheRock SDK root used when enabling AMDGPU.
-  --output PATH            Write a different Bazel rc fragment.""",
+This writes .bazelrc.configured. Published portable build options live in
+BUILDING.md. Use .bazelrc.local for checkout-specific Bazel overrides.""",
             )
         return CommandHelp(
             description="Configure the CMake package/install-test build tree.",
-            arguments="CMake configure options. Use -- before options that start with '-'.",
+            arguments="CMake configure options.",
             epilog="""Examples:
   python dev.py cmake configure
-  python dev.py cmake configure -- --fresh
-  python dev.py cmake configure -- -DCMAKE_BUILD_TYPE=Debug
-  python dev.py cmake configure -- -DIREE_HAL_DRIVER_AMDGPU=ON
+  python dev.py cmake configure --fresh
+  python dev.py cmake configure -DCMAKE_BUILD_TYPE=Debug
+  python dev.py cmake configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm
 
-The build tree lives outside the checkout at ../builds/<checkout-name>/.""",
+The build tree lives outside the checkout at ../builds/<checkout-name>/.
+Published project build options live in BUILDING.md.""",
         )
     if command == "build":
         if lane == "bazel":
@@ -105,14 +109,15 @@ With no explicit target, this builds //runtime/... and //libhrx/....""",
             )
         return CommandHelp(
             description="Build CMake targets in the configured build tree.",
-            arguments="Target names. Use -- before raw CMake build options.",
+            arguments="Target names followed by native CMake build options.",
             epilog="""Examples:
   python dev.py cmake build hrx
   python dev.py cmake build libhrx_src_libhrx_hrx
-  python dev.py cmake build -- --parallel 8
+  python dev.py cmake build hrx --parallel 8
+  python dev.py cmake build --parallel 8
 
 Positional arguments are target names and become cmake --build ... --target
-<name>. Raw CMake build options still work after --.""",
+<name>. Option-looking arguments are forwarded to CMake.""",
         )
     if command == "test":
         if lane == "bazel":
@@ -126,11 +131,11 @@ Positional arguments are target names and become cmake --build ... --target
             )
         return CommandHelp(
             description="Run CTest in the configured CMake build tree.",
-            arguments="CTest options. Use -- before options that start with '-'.",
+            arguments="CTest options.",
             epilog="""Examples:
   python dev.py cmake test
-  python dev.py cmake test -- -R hrx
-  python dev.py cmake test -- --rerun-failed
+  python dev.py cmake test -R hrx
+  python dev.py cmake test --rerun-failed
 
 CTest runs in ../builds/<checkout-name>/ with --output-on-failure.""",
         )
@@ -151,17 +156,26 @@ The default profile is ci. This is intentionally the expensive full-tree check
 that CI runs. Use `python dev.py {lane} precommit` for local changes only.""",
         )
     if command == "precommit":
+        default_profile = {
+            "bazel": "paranoid",
+            "cmake": "default",
+        }[lane]
         if lane == "bazel":
             lane_scope = (
-                "The Bazel lane uses the paranoid profile: repository hygiene, "
-                "affected project tests, and configured static-analysis providers."
+                "The Bazel lane defaults to the paranoid profile: repository "
+                "hygiene, affected project tests, and configured "
+                "static-analysis providers."
             )
         else:
-            lane_scope = "The CMake lane runs shared repository hygiene checks."
+            lane_scope = (
+                "The CMake lane defaults to the default profile and currently "
+                "runs shared repository hygiene checks."
+            )
         return CommandHelp(
             description=f"Run non-mutating checks for local {lane} changes.",
             epilog=f"""Examples:
   python dev.py {lane} precommit
+  python dev.py {lane} precommit --profile {default_profile}
   python dev.py {lane} precommit --base origin/main
   python dev.py {lane} precommit --staged
   python dev.py {lane} precommit README.md CONTRIBUTING.md
@@ -170,7 +184,9 @@ that CI runs. Use `python dev.py {lane} precommit` for local changes only.""",
 With no input option, precommit checks staged, unstaged, and untracked files.
 `--base` checks branch changes from the merge base with the given ref through
 HEAD, plus local staged, unstaged, and untracked files.
-Explicit paths check only those files and are used by Git hook templates.
+Explicit paths check only those files and are used by the generated Git hook.
+The default profile is {default_profile}. Use --profile to select default,
+paranoid, or ci for this run.
 
 {lane_scope}""",
         )

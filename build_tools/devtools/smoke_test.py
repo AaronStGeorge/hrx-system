@@ -85,16 +85,31 @@ def assert_absent(path: Path) -> None:
 def run_dry_run_scenario(checkout: Path) -> None:
     tool_root = checkout.parent / "external-tools"
     run_command(checkout, ["--dry-run", "bazel", "setup"])
-    run_command(checkout, ["bazel", "setup", "--system", "--dry-run"])
+    run_command(checkout, ["--dry-run", "bazel", "setup", "--system"])
     run_command(
-        checkout, ["bazel", "setup", "--tool-root", str(tool_root), "--dry-run"]
+        checkout, ["--dry-run", "bazel", "setup", "--tool-root", str(tool_root)]
     )
-    run_command(checkout, ["bazel", "hook", "--dry-run"])
-    run_command(checkout, ["cmake", "hook", "--dry-run"])
-    run_command(checkout, ["bazel", "precommit", "--dry-run"])
-    run_command(checkout, ["cmake", "precommit", "--dry-run"])
-    run_command(checkout, ["bazel", "presubmit", "--dry-run"])
-    run_command(checkout, ["cmake", "presubmit", "--dry-run"])
+    run_command(
+        checkout,
+        ["--dry-run", "bazel", "configure", "-DIREE_HAL_DRIVER_AMDGPU=OFF"],
+    )
+    run_command(
+        checkout,
+        [
+            "--dry-run",
+            "cmake",
+            "configure",
+            "-DIREE_HAL_DRIVER_AMDGPU=OFF",
+            "-DLIBHRX_BUILD=OFF",
+        ],
+    )
+    run_command(checkout, ["--dry-run", "bazel", "hook", "--profile", "ci"])
+    run_command(checkout, ["--dry-run", "cmake", "hook", "--profile", "paranoid"])
+    run_command(checkout, ["--dry-run", "bazel", "precommit", "--profile", "default"])
+    run_command(checkout, ["--dry-run", "cmake", "precommit", "--profile", "ci"])
+    run_command(checkout, ["--dry-run", "bazel", "presubmit", "--profile", "paranoid"])
+    run_command(checkout, ["--dry-run", "cmake", "presubmit", "--profile", "default"])
+    assert_absent(checkout / ".bazelrc.configured")
     assert_absent(checkout / ".venv")
     assert_absent(checkout / "lefthook-local.yml")
     assert_absent(tool_root)

@@ -22,6 +22,21 @@ from build_tools.devtools.environment import (
 
 LANES = ("bazel", "cmake")
 DEFAULT_BAZEL_TARGETS = ("//runtime/...", "//libhrx/...")
+PASSTHROUGH_COMMANDS = {
+    "bazel": frozenset(("configure", "build", "test", "run", "try", "fuzz")),
+    "cmake": frozenset(("configure", "build", "test", "run", "try")),
+}
+HELP_FLAGS = frozenset(("-h", "--help"))
+DEV_OPTIONS_WITH_VALUES = frozenset(
+    (
+        "--alias-dir",
+        "--alias_dir",
+        "--base",
+        "--profile",
+        "--tool-root",
+        "--tool_root",
+    )
+)
 
 
 def expand_option_aliases(option_strings: tuple[str, ...]) -> tuple[str, ...]:
@@ -67,8 +82,73 @@ def forwarded_args(args: list[str]) -> list[str]:
     return args
 
 
-def has_backend_separator(args: list[str]) -> bool:
-    return bool(args and args[0] == "--")
+def cmake_build_args(backend_args: list[str]) -> list[str]:
+    target_names = []
+    raw_args = []
+    for index, arg in enumerate(backend_args):
+        if arg.startswith("-"):
+            raw_args = backend_args[index:]
+            break
+        target_names.append(arg)
+    else:
+        raw_args = []
+
+    cmake_args = []
+    for target_name in target_names:
+        cmake_args.extend(["--target", target_name])
+    cmake_args.extend(raw_args)
+    return cmake_args
+
+
+def option_name(arg: str) -> str:
+    return arg.split("=", 1)[0]
+
+
+def option_consumes_next_arg(arg: str) -> bool:
+    return "=" not in arg and option_name(arg) in DEV_OPTIONS_WITH_VALUES
+
+
+def find_passthrough_tail(argv: list[str]) -> int | None:
+    index = 0
+    while index < len(argv):
+        arg = argv[index]
+        if option_consumes_next_arg(arg):
+            index += 2
+            continue
+        if arg not in LANES:
+            index += 1
+            continue
+
+        lane = arg
+        command_index = index + 1
+        while command_index < len(argv):
+            command = argv[command_index]
+            if option_consumes_next_arg(command):
+                command_index += 2
+                continue
+            if command in PASSTHROUGH_COMMANDS[lane]:
+                return command_index + 1
+            if command.startswith("-"):
+                command_index += 1
+                continue
+            return None
+        return None
+    return None
+
+
+def normalize_passthrough_args(argv: list[str]) -> list[str]:
+    tail_index = find_passthrough_tail(argv)
+    if tail_index is None:
+        return argv
+
+    tail = argv[tail_index:]
+    if not tail or tail[0] == "--":
+        return argv
+    if len(tail) == 1 and tail[0] in HELP_FLAGS:
+        return argv
+    if not any(arg.startswith("-") for arg in tail):
+        return argv
+    return [*argv[:tail_index], "--", *tail]
 
 
 def add_common_options(parser: argparse.ArgumentParser) -> None:
@@ -121,29 +201,49 @@ def add_tool_environment_options(parser: argparse.ArgumentParser) -> None:
         mode_group,
         "--venv",
         action="store_true",
+        default=argparse.SUPPRESS,
         help="Use the repo-local .venv tool environment.",
     )
     add_argument(
         mode_group,
         "--system",
         action="store_true",
+        default=argparse.SUPPRESS,
         help="Use tools from the system PATH and install nothing.",
     )
     add_argument(
         mode_group,
         "--tool-root",
         type=Path,
+        default=argparse.SUPPRESS,
         help="Use or create an external tool environment root.",
     )
 
 
+def add_profile_option(
+    parser: argparse.ArgumentParser,
+    *,
+    default: str,
+    command: str,
+) -> None:
+    add_argument(
+        parser,
+        "--profile",
+        choices=presubmit.PROFILES,
+        default=default,
+        help=f"{command} profile. Defaults to {default}.",
+    )
+
+
 def parse_arguments(argv: list[str]) -> argparse.Namespace:
+    argv = normalize_passthrough_args(argv)
     parser = argparse.ArgumentParser(
         prog="dev.py",
         description="Repository developer command router.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     add_common_options(parser)
+    add_tool_environment_options(parser)
     subparsers = parser.add_subparsers(dest="command")
 
     add_root_commands(subparsers)
@@ -157,6 +257,13 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
         args.dry_run = False
     if not hasattr(args, "verbose"):
         args.verbose = False
+    selected_tool_modes = [
+        bool(getattr(args, "venv", False)),
+        bool(getattr(args, "system", False)),
+        getattr(args, "tool_root", None) is not None,
+    ]
+    if sum(selected_tool_modes) > 1:
+        parser.error("--venv, --system, and --tool-root are mutually exclusive")
     if getattr(args, "paths", None) and (
         getattr(args, "base", None) is not None or getattr(args, "staged", False)
     ):
@@ -222,6 +329,7 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
         help=f"{lane} developer commands.",
     )
     add_common_options(lane_parser)
+    add_tool_environment_options(lane_parser)
     lane_parser.set_defaults(lane=lane)
     lane_subparsers = lane_parser.add_subparsers(dest=f"{lane}_command")
 
@@ -249,6 +357,11 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
     add_argument(
         hook_parser, "--verify", action="store_true", help="Run the hook after install."
     )
+    add_profile_option(
+        hook_parser,
+        default=presubmit.precommit_default_profile(lane),
+        command="Git hook precommit",
+    )
     hook_parser.set_defaults(handler=handle_hook, lane=lane)
 
     configure_help = help_text.lane_command_help(lane, "configure")
@@ -258,8 +371,6 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
         command_help=configure_help,
         help=f"Configure {lane}.",
     )
-    add_common_options(configure_parser)
-    add_tool_environment_options(configure_parser)
     configure_parser.add_argument(
         "args",
         nargs=argparse.REMAINDER,
@@ -274,8 +385,6 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
         command_help=build_help,
         help=f"Build with {lane}.",
     )
-    add_common_options(build_parser)
-    add_tool_environment_options(build_parser)
     build_parser.add_argument(
         "args",
         nargs=argparse.REMAINDER,
@@ -290,8 +399,6 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
         command_help=test_help,
         help=f"Test with {lane}.",
     )
-    add_common_options(test_parser)
-    add_tool_environment_options(test_parser)
     test_parser.add_argument(
         "args",
         nargs=argparse.REMAINDER,
@@ -320,10 +427,15 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
         action="store_true",
         help="Check only files staged for commit.",
     )
+    add_profile_option(
+        precommit_parser,
+        default=presubmit.precommit_default_profile(lane),
+        command="Precommit",
+    )
     precommit_parser.add_argument(
         "paths",
         nargs="*",
-        help="Explicit repo-relative paths. Used by Git hook file templates.",
+        help="Explicit repo-relative paths. Used by the generated Git hook.",
     )
     precommit_parser.set_defaults(handler=handle_precommit, lane=lane)
 
@@ -335,12 +447,10 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
     )
     add_common_options(presubmit_parser)
     add_tool_environment_options(presubmit_parser)
-    add_argument(
+    add_profile_option(
         presubmit_parser,
-        "--profile",
-        choices=("default", "paranoid", "ci"),
-        default="ci",
-        help="Presubmit profile. Defaults to ci.",
+        default=presubmit.PRESUBMIT_DEFAULT_PROFILE,
+        command="Presubmit",
     )
     presubmit_parser.set_defaults(handler=handle_presubmit, lane=lane)
 
@@ -374,8 +484,6 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
             command_help=command_help,
             help=f"{command_name} with {lane}.",
         )
-        add_common_options(command_parser)
-        add_tool_environment_options(command_parser)
         command_parser.add_argument(
             "args", nargs=argparse.REMAINDER, help=command_help.arguments
         )
@@ -442,7 +550,9 @@ def handle_tools_check(args: argparse.Namespace) -> CommandPlan:
 
 
 def handle_hook(args: argparse.Namespace) -> CommandPlan:
-    return hooks.hook_plan(args.lane, existing_or_system_environment(args), args.verify)
+    return hooks.hook_plan(
+        args.lane, existing_or_system_environment(args), args.verify, args.profile
+    )
 
 
 def handle_configure(args: argparse.Namespace) -> CommandPlan:
@@ -451,7 +561,7 @@ def handle_configure(args: argparse.Namespace) -> CommandPlan:
     if args.lane == "bazel":
         command = [
             tool_env.python,
-            str(REPO_ROOT / "configure-bazel.py"),
+            str(REPO_ROOT / "build_tools/bazel/configure.py"),
             *backend_args,
         ]
     else:
@@ -482,14 +592,11 @@ def handle_build(args: argparse.Namespace) -> CommandPlan:
         targets = backend_args or list(DEFAULT_BAZEL_TARGETS)
         command = [tool_env.tool("bazel"), "build", *targets]
     else:
-        cmake_args = backend_args
-        if backend_args and not has_backend_separator(args.args):
-            cmake_args = ["--target", *backend_args]
         command = [
             tool_env.tool("cmake"),
             "--build",
             str(cmake_build_dir()),
-            *cmake_args,
+            *cmake_build_args(backend_args),
         ]
     return CommandPlan(
         [
@@ -542,6 +649,7 @@ def handle_precommit(args: argparse.Namespace) -> CommandPlan:
     return presubmit.precommit_plan(
         args.lane,
         existing_or_system_environment(args),
+        args.profile,
         base=args.base,
         staged=args.staged,
         paths=args.paths,
@@ -591,17 +699,22 @@ def print_agent_md(lanes: tuple[str, ...]) -> None:
 def agent_md_header(lanes: tuple[str, ...]) -> str:
     if lanes == ("bazel",):
         command_shape = "`python dev.py bazel <command>`."
+        wrapper_example = "`python dev.py --dry-run bazel build`"
     elif lanes == ("cmake",):
         command_shape = "`python dev.py cmake <command>`."
+        wrapper_example = "`python dev.py --dry-run cmake build hrx`"
     else:
         command_shape = (
             "`python dev.py bazel <command>` for Bazel and "
             "`python dev.py cmake <command>` for CMake."
         )
+        wrapper_example = "`python dev.py --dry-run bazel build`"
     return f"""## dev.py
 
 Run from repo root: {command_shape} Use `--help` for command details.
-Long flags accept hyphen or underscore spellings: `--dry-run`, `--dry_run`."""
+Put wrapper options before the lane command: {wrapper_example}.
+Long flags accept hyphen or underscore spellings: `--dry-run`, `--dry_run`.
+Published build configuration options live in BUILDING.md."""
 
 
 def agent_md_bazel_section() -> str:
@@ -613,11 +726,12 @@ Use absolute labels such as `//runtime/src/iree/base/...`, not `:target`.
 
 ```bash
 python dev.py bazel configure
-python dev.py bazel configure -- --enable-driver=amdgpu --rocm-path=/opt/rocm
-python dev.py bazel configure -- --exclude-driver=amdgpu
+python dev.py bazel configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm
+python dev.py bazel configure --//runtime/config/hal:drivers=amdgpu,local-sync,local-task,null --repo_env=IREE_ROCM_PATH=/opt/rocm
 python dev.py bazel build [targets...]
 python dev.py bazel test [targets...]
 python dev.py bazel precommit [paths...]
+python dev.py bazel precommit --profile paranoid
 python dev.py bazel precommit --base origin/main
 python dev.py bazel presubmit
 ```
@@ -635,15 +749,15 @@ def agent_md_cmake_section() -> str:
 
 Use CMake for package and install-test workflows. `configure` writes
 `{build_dir}/`. `build TARGET` maps to `cmake --build ... --target TARGET`.
-Put raw CMake or CTest options after `--`.
 
 ```bash
 python dev.py cmake configure
-python dev.py cmake configure -- -DIREE_HAL_DRIVER_AMDGPU=OFF -DLIBHRX_BUILD=OFF
-python dev.py cmake configure -- -DCMAKE_PREFIX_PATH=/opt/rocm
+python dev.py cmake configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm
+python dev.py cmake configure -DIREE_HAL_DRIVER_AMDGPU=OFF -DLIBHRX_BUILD=OFF
 python dev.py cmake build hrx
-python dev.py cmake test -- -R hrx
+python dev.py cmake test -R hrx
 python dev.py cmake precommit
+python dev.py cmake precommit --profile default
 python dev.py cmake presubmit
 ```
 

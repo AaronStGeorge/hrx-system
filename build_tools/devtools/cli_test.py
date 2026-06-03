@@ -12,6 +12,7 @@ import unittest
 from pathlib import Path
 
 from build_tools.devtools import cli
+from build_tools.devtools.command_plan import WriteFileStep
 
 
 class CliTest(unittest.TestCase):
@@ -31,14 +32,46 @@ class CliTest(unittest.TestCase):
         self.assertEqual(cm.exception.code, 0)
         return output.getvalue()
 
-    def test_backend_separator_is_not_forwarded(self):
-        args = cli.parse_arguments(["cmake", "configure", "--", "--fresh"])
+    def test_cmake_configure_forwards_options_without_separator(self):
+        args = cli.parse_arguments(["cmake", "configure", "--fresh"])
 
         plan = args.handler(args)
         description = plan.describe()
 
         self.assertIn("--fresh", description)
         self.assertNotIn("-- --fresh", description)
+
+    def test_bazel_configure_accepts_portable_project_options(self):
+        args = cli.parse_arguments(
+            [
+                "bazel",
+                "configure",
+                "-DIREE_HAL_DRIVER_AMDGPU=ON",
+                "-DIREE_ROCM_PATH=/opt/rocm",
+            ]
+        )
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("-DIREE_HAL_DRIVER_AMDGPU=ON", description)
+        self.assertIn("-DIREE_ROCM_PATH=/opt/rocm", description)
+
+    def test_bazel_configure_accepts_native_driver_options(self):
+        args = cli.parse_arguments(
+            [
+                "bazel",
+                "configure",
+                "--//runtime/config/hal:drivers=amdgpu,local-sync,local-task,null",
+                "--repo_env=IREE_ROCM_PATH=/opt/rocm",
+            ]
+        )
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("--//runtime/config/hal:drivers=amdgpu", description)
+        self.assertIn("--repo_env=IREE_ROCM_PATH=/opt/rocm", description)
 
     def test_bazel_build_defaults_to_project_targets(self):
         args = cli.parse_arguments(["bazel", "build"])
@@ -59,20 +92,31 @@ class CliTest(unittest.TestCase):
 
         self.assertTrue(args.dry_run)
 
+    def test_tool_environment_options_can_precede_passthrough_command(self):
+        args = cli.parse_arguments(["--system", "bazel", "build"])
+
+        self.assertTrue(args.system)
+
+        args = cli.parse_arguments(["bazel", "--system", "build"])
+
+        self.assertTrue(args.system)
+
     def test_forwarded_verbose_is_not_wrapper_verbose(self):
-        args = cli.parse_arguments(["bazel", "build", "--", "--verbose"])
+        args = cli.parse_arguments(["bazel", "build", "--verbose"])
 
         self.assertFalse(args.verbose)
-        self.assertEqual(args.args, ["--", "--verbose"])
+        plan = args.handler(args)
+        self.assertIn("bazel build --verbose", plan.describe())
 
     def test_forwarded_dry_run_is_not_wrapper_dry_run(self):
-        args = cli.parse_arguments(["bazel", "build", "--", "--dry-run"])
+        args = cli.parse_arguments(["bazel", "build", "--dry-run"])
 
         self.assertFalse(args.dry_run)
-        self.assertEqual(args.args, ["--", "--dry-run"])
+        plan = args.handler(args)
+        self.assertIn("bazel build --dry-run", plan.describe())
 
     def test_hyphenated_flags_accept_underscore_aliases(self):
-        args = cli.parse_arguments(["bazel", "build", "--dry_run"])
+        args = cli.parse_arguments(["--dry_run", "bazel", "build"])
 
         self.assertTrue(args.dry_run)
 
@@ -101,12 +145,6 @@ class CliTest(unittest.TestCase):
         self.assertIn("### CMake", output)
         self.assertNotIn("### Bazel", output)
 
-    def test_command_agents_md_uses_command_section(self):
-        output = self.parse_agent_md(["bazel", "build", "--agents-md"])
-
-        self.assertIn("### Bazel", output)
-        self.assertNotIn("### CMake", output)
-
     def test_cmake_build_target_shorthand(self):
         args = cli.parse_arguments(["cmake", "build", "hrx"])
 
@@ -115,14 +153,32 @@ class CliTest(unittest.TestCase):
 
         self.assertIn("--target hrx", description)
 
-    def test_cmake_build_separator_for_raw_backend_args(self):
-        args = cli.parse_arguments(["cmake", "build", "--", "--parallel", "8"])
+    def test_cmake_build_forwards_raw_backend_args_without_separator(self):
+        args = cli.parse_arguments(["cmake", "build", "--parallel", "8"])
 
         plan = args.handler(args)
         description = plan.describe()
 
         self.assertIn("--parallel 8", description)
         self.assertNotIn("--target --parallel", description)
+
+    def test_cmake_build_accepts_targets_before_raw_backend_args(self):
+        args = cli.parse_arguments(["cmake", "build", "hrx", "--parallel", "8"])
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("--target hrx", description)
+        self.assertIn("--parallel 8", description)
+
+    def test_cmake_test_forwards_options_without_separator(self):
+        args = cli.parse_arguments(["cmake", "test", "-R", "hrx"])
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("-R hrx", description)
+        self.assertNotIn("-- -R", description)
 
     def test_bazel_precommit_defaults_to_changed_paranoid_profile(self):
         args = cli.parse_arguments(["bazel", "precommit"])
@@ -132,6 +188,23 @@ class CliTest(unittest.TestCase):
 
         self.assertIn("--changed", description)
         self.assertIn("--profile paranoid", description)
+
+    def test_precommit_profile_can_be_selected(self):
+        args = cli.parse_arguments(["bazel", "precommit", "--profile", "default"])
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("--profile default", description)
+        self.assertNotIn("--profile paranoid", description)
+
+        args = cli.parse_arguments(["cmake", "precommit", "--profile", "paranoid"])
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("--profile paranoid", description)
+        self.assertIn("--hygiene", description)
 
     def test_bazel_precommit_can_use_base_ref(self):
         args = cli.parse_arguments(["bazel", "precommit", "--base", "origin/main"])
@@ -176,6 +249,50 @@ class CliTest(unittest.TestCase):
         self.assertIn("--changed", description)
         self.assertIn("--hygiene", description)
         self.assertIn("--profile default", description)
+
+    def test_cmake_presubmit_profile_can_be_selected(self):
+        args = cli.parse_arguments(["cmake", "presubmit", "--profile", "paranoid"])
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("--profile paranoid", description)
+        self.assertIn("--all", description)
+        self.assertIn("--hygiene", description)
+
+    def test_bazel_presubmit_uses_full_tree_input(self):
+        args = cli.parse_arguments(["bazel", "presubmit", "--profile", "default"])
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("--profile default", description)
+        self.assertIn("--all", description)
+
+    def test_hook_writes_selected_profile(self):
+        args = cli.parse_arguments(["bazel", "hook", "--profile", "ci"])
+
+        plan = args.handler(args)
+        step = plan.steps[0]
+
+        self.assertIsInstance(step, WriteFileStep)
+        self.assertIn("python dev.py bazel hook --profile ci", step.content)
+        self.assertIn(
+            "run: python dev.py bazel precommit --profile ci {staged_files}",
+            step.content,
+        )
+
+    def test_cmake_hook_defaults_to_default_profile(self):
+        args = cli.parse_arguments(["cmake", "hook"])
+
+        plan = args.handler(args)
+        step = plan.steps[0]
+
+        self.assertIsInstance(step, WriteFileStep)
+        self.assertIn(
+            "run: python dev.py cmake precommit --profile default {staged_files}",
+            step.content,
+        )
 
     def test_cmake_configure_help_explains_user_visible_build_tree(self):
         output = self.parse_help(["cmake", "configure", "--help"])

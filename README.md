@@ -40,8 +40,8 @@ and build-lane selection consistent:
 
 ```bash
 python dev.py cmake setup
-python dev.py cmake configure -- \
-  -DCMAKE_PREFIX_PATH=/opt/rocm \
+python dev.py cmake configure \
+  -DIREE_ROCM_PATH=/opt/rocm \
   -DCMAKE_INSTALL_LIBDIR=lib \
   -DCMAKE_C_COMPILER=/opt/rocm/llvm/bin/clang \
   -DCMAKE_CXX_COMPILER=/opt/rocm/llvm/bin/clang++ \
@@ -67,7 +67,7 @@ build without `dev.py`:
 
 ```bash
 cmake -S . -B build/hrx-system -GNinja \
-  -DCMAKE_PREFIX_PATH=/opt/rocm \
+  -DIREE_ROCM_PATH=/opt/rocm \
   -DCMAKE_INSTALL_LIBDIR=lib \
   -DCMAKE_C_COMPILER=/opt/rocm/llvm/bin/clang \
   -DCMAKE_CXX_COMPILER=/opt/rocm/llvm/bin/clang++ \
@@ -99,6 +99,7 @@ Useful options:
 | `IREE_BUILD_TESTS` | ON | Build IREE runtime tests and CTS targets. |
 | `HRX_INSTALL_TESTS` | `${IREE_BUILD_TESTS}` | Install a relocatable CTest tree. |
 | `IREE_HAL_DRIVER_AMDGPU` | ON | Build the AMDGPU runtime HAL driver. |
+| `IREE_ROCM_PATH` | empty | ROCm or TheRock SDK root used for ROCm headers and device tooling. |
 | `IREE_ROCM_TEST_TARGET_CHIP` | empty | Target chip for ROCm tests that compile device code. |
 
 `IREE_DEPENDENCY_MODE=pinned` uses the checked-in source lock and is the
@@ -113,7 +114,7 @@ the local change-set checks before committing:
 
 ```bash
 python dev.py bazel setup
-python dev.py bazel hook
+python dev.py bazel hook --profile paranoid
 python dev.py bazel precommit
 ```
 
@@ -121,15 +122,18 @@ Use the CMake lane when you are working from the package/install-test side:
 
 ```bash
 python dev.py cmake setup
-python dev.py cmake hook
+python dev.py cmake hook --profile default
 python dev.py cmake precommit
 ```
 
 `precommit` checks staged, unstaged, and untracked files. Use
 `python dev.py <lane> precommit --base <git-ref>` to check the branch diff from
 the merge base through `HEAD` plus local changes, or `--staged` for staged
-files only. Use `python dev.py <lane> presubmit` for the full-tree CI-shaped
-check.
+files only. Add `--profile default`, `--profile paranoid`, or `--profile ci`
+to select the check profile for a manual run. Re-run
+`python dev.py <lane> hook --profile <profile>` to change the default profile
+used by Git commits. Use `python dev.py <lane> presubmit` for the full-tree
+CI-shaped check.
 
 Mechanical fixups are explicit:
 
@@ -216,6 +220,7 @@ developer tools for comparing behavior against the real ROCm HIP runtime.
 
 ## More Documentation
 
+- `BUILDING.md`: source-build, embedding, and build configuration options.
 - `CONTRIBUTING.md`: contributor workflow and `dev.py` modes.
 - `build_tools/lefthook/README.md`: Lefthook profiles and hook architecture.
 - `docs/testing/installed_tests.md`: installed test tree details.

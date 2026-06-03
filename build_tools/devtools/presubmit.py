@@ -11,6 +11,20 @@ from __future__ import annotations
 from build_tools.devtools.command_plan import CommandPlan, CommandStep
 from build_tools.devtools.environment import REPO_ROOT, ToolEnvironment
 
+PROFILES = ("default", "paranoid", "ci")
+PRESUBMIT_DEFAULT_PROFILE = "ci"
+PRECOMMIT_DEFAULT_PROFILES = {
+    "bazel": "paranoid",
+    "cmake": "default",
+}
+
+
+def precommit_default_profile(lane: str) -> str:
+    try:
+        return PRECOMMIT_DEFAULT_PROFILES[lane]
+    except KeyError:
+        raise ValueError(f"unknown lane: {lane}") from None
+
 
 def presubmit_plan(
     lane: str,
@@ -27,6 +41,7 @@ def presubmit_plan(
             "--profile",
             profile,
             "--check",
+            "--all",
         ]
         if verbose:
             command.append("--verbose")
@@ -43,8 +58,9 @@ def presubmit_plan(
             tool_env.python,
             str(REPO_ROOT / "build_tools/lefthook/presubmit.py"),
             "--profile",
-            "ci",
+            profile,
             "--check",
+            "--all",
             "--hygiene",
         ]
         if verbose:
@@ -65,6 +81,7 @@ def presubmit_plan(
 def precommit_plan(
     lane: str,
     tool_env: ToolEnvironment,
+    profile: str,
     base: str | None = None,
     staged: bool = False,
     paths: list[str] | None = None,
@@ -86,9 +103,9 @@ def precommit_plan(
         command.append("--changed")
 
     if lane == "bazel":
-        command += ["--profile", "paranoid"]
+        command += ["--profile", profile]
     elif lane == "cmake":
-        command += ["--profile", "default", "--hygiene"]
+        command += ["--profile", profile, "--hygiene"]
     else:
         raise ValueError(f"unknown lane: {lane}")
 

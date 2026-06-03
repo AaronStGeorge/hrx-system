@@ -13,7 +13,7 @@ stale formatter or generated-file output. The Git `pre-commit` hook therefore
 runs in non-mutating check mode:
 
 ```bash
-python dev.py <lane> precommit {staged_files}
+python dev.py <lane> precommit --profile <profile> {staged_files}
 ```
 
 Local fixups happen through explicit commands:
@@ -51,20 +51,44 @@ clang-tidy or CodeQL are wired in.
 `ci` is the full-tree, non-mutating profile. It checks all tracked files and
 runs all configured project presubmit tests.
 
+The default manual `precommit` and hook-install profiles are:
+
+| Lane | Default Profile | Scope |
+|------|-----------------|-------|
+| Bazel | `paranoid` | Hygiene, affected project Bazel tests, and configured static-analysis providers. |
+| CMake | `default` | Shared repository hygiene. |
+
+`presubmit` defaults to `ci` for both lanes:
+
+```bash
+python dev.py bazel presubmit
+python dev.py cmake presubmit
+```
+
+Any manual run can select a profile explicitly:
+
+```bash
+python dev.py bazel precommit --profile default
+python dev.py bazel precommit --profile paranoid
+python dev.py bazel precommit --profile ci
+python dev.py cmake presubmit --profile default
+```
+
 ## Lefthook Groups
 
 `pre-commit` is the installed Git hook and is check-only.
 
-`dev.py` installs lane-specific local hook policy from checked-in templates:
+`dev.py` installs lane-specific local hook policy into ignored
+`lefthook-local.yml`:
 
 ```bash
-python dev.py bazel hook
-python dev.py cmake hook
+python dev.py bazel hook --profile paranoid
+python dev.py cmake hook --profile default
 ```
 
-`python dev.py bazel hook` writes ignored `lefthook-local.yml` from
-`build_tools/lefthook/lefthook-local.bazel.yml`. `python dev.py cmake hook`
-writes it from `build_tools/lefthook/lefthook-local.cmake.yml`.
+Re-run `python dev.py <lane> hook --profile <profile>` to change the default
+profile used by Git commits. The generated file records the selected lane and
+profile so local hook behavior can be audited without reading Python.
 
 `fix` runs the staged hygiene fixer for manual use through Lefthook:
 

@@ -183,7 +183,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "paths",
         nargs="*",
-        help="Explicit repo-relative paths. Used by lefthook file templates.",
+        help="Explicit repo-relative paths. Used by the generated Git hook.",
     )
 
     args = parser.parse_args()

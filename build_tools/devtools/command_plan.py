@@ -137,6 +137,8 @@ class WriteFileStep:
 
     def describe(self) -> str:
         suffix = " and mark executable" if self.executable else ""
+        if self.label and not self.label.startswith("write "):
+            return f"# {self.label}: write {self.path}{suffix}"
         return f"# write {self.path}{suffix}"
 
     def run(self, verbose: bool = False) -> int:

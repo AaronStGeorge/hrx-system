@@ -11,7 +11,7 @@ pre-commit:
   fail_on_changes: always
   commands:
     precommit:
-      run: python dev.py bazel precommit {staged_files}
+      run: python dev.py bazel precommit --profile paranoid {staged_files}
 
 fix:
   commands:
@@ -21,14 +21,14 @@ fix:
 precommit:
   commands:
     precommit:
-      run: python dev.py bazel precommit
+      run: python dev.py bazel precommit --profile paranoid
 
 presubmit:
   commands:
     presubmit:
-      run: python dev.py bazel presubmit
+      run: python dev.py bazel presubmit --profile ci
 
 check:
   commands:
     check:
-      run: python dev.py bazel presubmit
+      run: python dev.py bazel presubmit --profile ci

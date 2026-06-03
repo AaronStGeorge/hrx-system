@@ -12,7 +12,7 @@ Bazel/source graph lane:
 
 ```bash
 python dev.py bazel setup
-python dev.py bazel hook
+python dev.py bazel hook --profile paranoid
 python dev.py bazel precommit
 ```
 
@@ -20,7 +20,7 @@ CMake/package lane:
 
 ```bash
 python dev.py cmake setup
-python dev.py cmake hook
+python dev.py cmake hook --profile default
 python dev.py cmake precommit
 ```
 
@@ -74,7 +74,8 @@ With no explicit targets, the Bazel build and test commands cover
 `//runtime/...` and `//libhrx/...`. In the CMake lane, positional build
 arguments are target names, so `python dev.py cmake build hrx` maps to
 `cmake --build ... --target hrx`. The CMake lane writes its build tree outside
-the checkout at `../builds/<checkout-name>/`.
+the checkout at `../builds/<checkout-name>/`. Source-build and embedding
+configuration options are documented in `BUILDING.md`.
 
 ## Before Commit
 
@@ -93,7 +94,10 @@ python dev.py cmake precommit
 With no input option, `precommit` checks staged, unstaged, and untracked files.
 Use `--base <git-ref>` to check the branch diff from the merge base through
 `HEAD` plus local changes. Use `--staged` when you explicitly want staged files
-only.
+only. Use `--profile default`, `--profile paranoid`, or `--profile ci` to select
+the check profile for one manual run. The Bazel lane defaults to `paranoid` for
+precommit. The CMake lane defaults to `default` and currently runs shared
+repository hygiene checks.
 
 Use the fix command when you want mechanical repairs:
 
@@ -116,26 +120,26 @@ CI-shaped check.
 Install the hook for the lane you want Git commits to check:
 
 ```bash
-python dev.py bazel hook
+python dev.py bazel hook --profile paranoid
 ```
 
 or:
 
 ```bash
-python dev.py cmake hook
+python dev.py cmake hook --profile default
 ```
 
 The hook is check-only. It should never leave the worktree dirty after a
 successful commit. Lane-specific hook policy is stored in ignored
-`lefthook-local.yml` and generated from checked-in templates under
-`build_tools/lefthook/`.
+`lefthook-local.yml`. Re-run `python dev.py <lane> hook --profile <profile>` to
+change the profile used by Git commits.
 
 ## Verification
 
 Core developer-tool tests:
 
 ```bash
-bazel test --config=presubmit //build_tools/devtools:cli_test //build_tools/devtools:command_plan_test //build_tools/devtools:setup_test
+bazel test --config=presubmit //build_tools/bazel:configure_test //build_tools/devtools:cli_test //build_tools/devtools:command_plan_test //build_tools/devtools:setup_test
 ```
 
 Checkout smoke test for the command router:
@@ -144,9 +148,9 @@ Checkout smoke test for the command router:
 python build_tools/devtools/smoke_test.py --from-working-tree --scenario dry-run
 ```
 
-The smoke test creates a temporary checkout, runs dry-run setup/hook/presubmit
-commands, and verifies those dry-runs do not create a venv, hook config, or
-external tool root.
+The smoke test creates a temporary checkout, runs dry-run
+setup/configure/hook/presubmit commands, and verifies those dry-runs do not
+create a venv, hook config, generated Bazel rc, or external tool root.
 
 More detail on profiles and hook internals lives in
 `build_tools/lefthook/README.md`.

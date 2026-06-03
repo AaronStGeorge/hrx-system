@@ -36,6 +36,16 @@ set(IREE_DEPENDENCY_MODE "pinned" CACHE STRING
   "How source dependencies are resolved: pinned, package, or auto.")
 set_property(CACHE IREE_DEPENDENCY_MODE PROPERTY STRINGS pinned package auto)
 
+set(IREE_ROCM_PATH "" CACHE PATH
+  "ROCm or TheRock SDK root used for ROCm headers and device tooling.")
+if(IREE_ROCM_PATH)
+  list(PREPEND CMAKE_PREFIX_PATH "${IREE_ROCM_PATH}")
+  if(NOT DEFINED IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN_ROCM_PATH)
+    set(IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN_ROCM_PATH "${IREE_ROCM_PATH}" CACHE PATH
+      "ROCm or TheRock SDK root used for compiling AMDGPU device binaries.")
+  endif()
+endif()
+
 option(BUILD_SHARED_LIBS
   "Instructs CMake to build libraries as shared if possible." OFF)
 option(IREE_VISIBILITY_HIDDEN "Builds C/C++ libraries with hidden visibility." ON)

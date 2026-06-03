@@ -34,6 +34,18 @@ class CommandPlanTest(unittest.TestCase):
             self.assertEqual(plan.run(), 0)
             self.assertEqual(output_path.read_text(encoding="utf-8"), "hello\n")
 
+    def test_write_file_step_describes_non_write_label(self):
+        step = WriteFileStep(
+            Path("lefthook-local.yml"),
+            "hello\n",
+            label="select bazel hook policy with ci profile",
+        )
+
+        self.assertIn(
+            "# select bazel hook policy with ci profile: write lefthook-local.yml",
+            step.describe(),
+        )
+
     def test_command_step_describes_argv_not_shell_blob(self):
         step = CommandStep(["python", "dev.py", "bazel", "setup"], cwd=Path.cwd())
 
