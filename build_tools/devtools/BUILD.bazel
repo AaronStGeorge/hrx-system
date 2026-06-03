@@ -13,6 +13,7 @@ py_library(
     srcs = [
         "__init__.py",
         "aliases.py",
+        "ci.py",
         "cli.py",
         "command_plan.py",
         "doctor.py",
@@ -25,8 +26,23 @@ py_library(
 )
 
 py_binary(
+    name = "ci",
+    srcs = ["ci.py"],
+)
+
+py_binary(
     name = "smoke_test",
     srcs = ["smoke_test.py"],
+)
+
+py_test(
+    name = "ci_test",
+    srcs = [
+        "__init__.py",
+        "ci.py",
+        "ci_test.py",
+    ],
+    main = "ci_test.py",
 )
 
 py_test(

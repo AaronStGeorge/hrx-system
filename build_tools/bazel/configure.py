@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shlex
 import sys
 from dataclasses import dataclass, field
@@ -303,10 +304,17 @@ def generate_config(args: argparse.Namespace) -> str:
 
     rocm_enabled_drivers = request.enabled_drivers.intersection(ROCM_DRIVERS)
     if rocm_enabled_drivers and not request.rocm_path:
+        rocm_path = os.environ.get("IREE_ROCM_PATH")
+        if rocm_path:
+            request.set_rocm_path(rocm_path)
+
+    if rocm_enabled_drivers and not request.rocm_path:
         raise SystemExit(
             "-DIREE_ROCM_PATH=/path/to/rocm or "
-            "--repo_env=IREE_ROCM_PATH=/path/to/rocm is required when enabling "
-            "{}.".format(", ".join(sorted(rocm_enabled_drivers)))
+            "--repo_env=IREE_ROCM_PATH=/path/to/rocm or IREE_ROCM_PATH in the "
+            "environment is required when enabling {}.".format(
+                ", ".join(sorted(rocm_enabled_drivers))
+            )
         )
 
     lines = [

@@ -77,6 +77,12 @@ def run_command(checkout: Path, args: list[str]) -> None:
     subprocess.run(command, cwd=checkout, check=True)
 
 
+def run_ci_command(checkout: Path, args: list[str]) -> None:
+    command = [sys.executable, "build_tools/devtools/ci.py", *args]
+    print("smoke:", " ".join(command), flush=True)
+    subprocess.run(command, cwd=checkout, check=True)
+
+
 def assert_absent(path: Path) -> None:
     if path.exists():
         raise RuntimeError(f"dry-run smoke unexpectedly created {path}")
@@ -109,6 +115,15 @@ def run_dry_run_scenario(checkout: Path) -> None:
     run_command(checkout, ["--dry-run", "cmake", "precommit", "--profile", "ci"])
     run_command(checkout, ["--dry-run", "bazel", "presubmit", "--profile", "paranoid"])
     run_command(checkout, ["--dry-run", "cmake", "presubmit", "--profile", "default"])
+    run_ci_command(checkout, ["iree-cpu", "--dry-run"])
+    run_ci_command(checkout, ["iree-cpu-sanitizers", "--dry-run"])
+    run_ci_command(
+        checkout,
+        [
+            "iree-amdgpu",
+            "--dry-run",
+        ],
+    )
     assert_absent(checkout / ".bazelrc.configured")
     assert_absent(checkout / ".venv")
     assert_absent(checkout / "lefthook-local.yml")

@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 CONFIGURE_BAZEL_PATH = Path(__file__).with_name("configure.py")
 
@@ -75,6 +76,28 @@ class ConfigureBazelTest(unittest.TestCase):
         )
         self.assertIn("common --repo_env=IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=rocm", config)
         self.assertIn(f"common --repo_env=IREE_ROCM_PATH={rocm_root}", config)
+
+    def test_environment_rocm_path_configures_amdgpu(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            rocm_root = self.make_rocm_root(temporary_directory)
+            args = self.configure_bazel.parse_arguments(["-DIREE_HAL_DRIVER_AMDGPU=ON"])
+
+            with mock.patch.dict(
+                self.configure_bazel.os.environ,
+                {"IREE_ROCM_PATH": str(rocm_root)},
+                clear=True,
+            ):
+                config = self.configure_bazel.generate_config(args)
+
+        self.assertIn("common --repo_env=IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=rocm", config)
+        self.assertIn(f"common --repo_env=IREE_ROCM_PATH={rocm_root}", config)
+
+    def test_enabled_amdgpu_without_rocm_path_fails(self):
+        args = self.configure_bazel.parse_arguments(["-DIREE_HAL_DRIVER_AMDGPU=ON"])
+
+        with mock.patch.dict(self.configure_bazel.os.environ, {}, clear=True):
+            with self.assertRaisesRegex(SystemExit, "IREE_ROCM_PATH"):
+                self.configure_bazel.generate_config(args)
 
     def test_removed_driver_dialect_fails(self):
         args = self.configure_bazel.parse_arguments(["--enable-driver=amdgpu"])

@@ -119,6 +119,14 @@ python dev.py bazel configure \
   -DIREE_ROCM_PATH=/opt/rocm
 ```
 
+When AMDGPU is enabled, Bazel configuration also accepts `IREE_ROCM_PATH` from
+the inherited environment. This keeps CI reproduction commands independent of
+machine-local SDK paths:
+
+```bash
+IREE_ROCM_PATH=/opt/rocm python dev.py bazel configure -DIREE_HAL_DRIVER_AMDGPU=ON
+```
+
 Other Bazel-native overrides belong in `.bazelrc.local`.
 
 ## Project Availability
