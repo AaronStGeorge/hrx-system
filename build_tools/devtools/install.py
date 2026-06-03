@@ -40,6 +40,7 @@ class Tool:
     version: str
     install_names: tuple[str, ...]
     assets: dict[str, ToolAsset]
+    groups: tuple[str, ...]
     default: bool = True
 
 
@@ -47,6 +48,7 @@ TOOLS = {
     "bazelisk": Tool(
         version="1.29.0",
         install_names=("bazelisk", "bazel"),
+        groups=("bazel",),
         assets={
             "darwin-amd64": ToolAsset(
                 url="https://github.com/bazelbuild/bazelisk/releases/download/v1.29.0/bazelisk-darwin-amd64",
@@ -73,6 +75,7 @@ TOOLS = {
     "buildifier": Tool(
         version="8.5.1",
         install_names=("buildifier",),
+        groups=("bazel",),
         assets={
             "darwin-amd64": ToolAsset(
                 url="https://github.com/bazelbuild/buildtools/releases/download/v8.5.1/buildifier-darwin-amd64",
@@ -105,6 +108,13 @@ def parse_arguments() -> argparse.Namespace:
         "tools",
         nargs="*",
         help="Tool names to install. Defaults to required tools. Use 'all' for every known tool.",
+    )
+    parser.add_argument(
+        "--group",
+        action="append",
+        choices=("bazel", "cmake"),
+        default=[],
+        help="Install tools required by a developer command lane.",
     )
     parser.add_argument(
         "--bin-dir",
@@ -149,6 +159,13 @@ def default_bin_dir() -> Path:
 def selected_tools(args: argparse.Namespace) -> dict[str, Tool]:
     if args.list:
         return TOOLS
+    if args.group:
+        groups = set(args.group)
+        return {
+            name: tool
+            for name, tool in TOOLS.items()
+            if groups.intersection(tool.groups)
+        }
     if not args.tools:
         return {name: tool for name, tool in TOOLS.items() if tool.default}
     if "all" in args.tools:
@@ -249,7 +266,12 @@ def main() -> int:
     if args.list:
         for name, tool in sorted(tools.items()):
             marker = "default" if tool.default else "optional"
-            print(f"{name} {tool.version} ({marker})")
+            groups = ",".join(tool.groups) if tool.groups else "none"
+            print(f"{name} {tool.version} ({marker}; groups: {groups})")
+        return 0
+
+    if not tools:
+        print("devtools: no standalone tools selected")
         return 0
 
     platform_key = host_platform_key()

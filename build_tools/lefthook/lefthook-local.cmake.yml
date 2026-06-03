@@ -1,0 +1,9 @@
+# Copyright 2026 The IREE Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Local CMake-lane hook policy. Installed by `python dev.py cmake hook`.
+
+pre-commit:
+  commands:
+    precommit:
+      run: python dev.py cmake precommit {staged_files}

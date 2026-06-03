@@ -3,27 +3,32 @@
 
 # Root lefthook configuration delegates policy to the repository presubmit
 # script. Lefthook owns the Git hook event and manual run groups; presubmit.py
-# owns profiles such as default, paranoid, and ci.
+# owns file selection and profiles such as default, paranoid, and ci.
 
 min_version: 2.1.9
 
 pre-commit:
   fail_on_changes: always
   commands:
-    presubmit:
-      run: python build_tools/lefthook/presubmit.py --check {staged_files}
+    precommit:
+      run: python dev.py bazel precommit {staged_files}
 
 fix:
   commands:
     fix:
-      run: python build_tools/lefthook/presubmit.py --fix --staged --hygiene
+      run: python dev.py bazel fix
+
+precommit:
+  commands:
+    precommit:
+      run: python dev.py bazel precommit
 
 presubmit:
   commands:
     presubmit:
-      run: python build_tools/lefthook/presubmit.py --profile paranoid {staged_files}
+      run: python dev.py bazel presubmit
 
 check:
   commands:
     check:
-      run: python build_tools/lefthook/presubmit.py --profile ci
+      run: python dev.py bazel presubmit

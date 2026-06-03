@@ -1,0 +1,9 @@
+# Copyright 2026 The IREE Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Local Bazel-lane hook policy. Installed by `python dev.py bazel hook`.
+
+pre-commit:
+  commands:
+    precommit:
+      run: python dev.py bazel precommit {staged_files}

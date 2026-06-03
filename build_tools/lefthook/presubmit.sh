@@ -19,5 +19,4 @@ if [[ -x "${REPO_ROOT}/.venv/bin/python" ]]; then
   PYTHON="${REPO_ROOT}/.venv/bin/python"
 fi
 
-"${PYTHON}" build_tools/lefthook/presubmit.py --fix --staged --hygiene
-"${PYTHON}" build_tools/lefthook/presubmit.py --profile paranoid --check --staged
+"${PYTHON}" build_tools/lefthook/presubmit.py --profile ci --check

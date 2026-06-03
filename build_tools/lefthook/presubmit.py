@@ -14,12 +14,17 @@ presubmit entry points. Project-specific test policy stays in each project.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -54,7 +59,6 @@ WATCHWORD_PATTERNS = (
     re.compile("TODO before " + "submit", re.IGNORECASE),
 )
 CONFLICT_MARKER_PATTERN = re.compile(r"^(<<<<<<< .+|>>>>>>> .+)")
-MAX_DISPLAY_COMMAND_ARGUMENTS = 32
 
 
 @dataclass(frozen=True)
@@ -93,6 +97,16 @@ GLOBAL_PROJECT_TRIGGERS = (
     "build_tools/testing/",
     "build_tools/third_party/",
 )
+ROOT_DEVTOOLS_TRIGGERS = (
+    ".github/workflows/presubmit.yml",
+    "CONTRIBUTING.md",
+    "README.md",
+    "dev.py",
+    "lefthook.yml",
+    "requirements-dev",
+    "build_tools/devtools/",
+    "build_tools/lefthook/",
+)
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -114,13 +128,26 @@ def parse_arguments() -> argparse.Namespace:
 
     inputs = parser.add_mutually_exclusive_group()
     inputs.add_argument(
+        "--changed",
+        action="store_true",
+        help="Use local staged, unstaged, and untracked files.",
+    )
+    inputs.add_argument(
         "--staged", action="store_true", help="Use files staged for commit."
     )
     inputs.add_argument("--all", action="store_true", help="Use all tracked files.")
     inputs.add_argument(
+        "--base",
+        metavar="GIT_REF",
+        help=(
+            "Use files changed from the merge base with GIT_REF through HEAD, "
+            "plus local staged, unstaged, and untracked files."
+        ),
+    )
+    inputs.add_argument(
         "--since",
         metavar="GIT_REF",
-        help="Use files changed since the given Git ref.",
+        help="Use tracked files changed since the given Git ref.",
     )
     inputs.add_argument(
         "--files-from",
@@ -149,16 +176,33 @@ def parse_arguments() -> argparse.Namespace:
         help="Print the selected plan before running it.",
     )
     parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Stream command output and print exact commands.",
+    )
+    parser.add_argument(
         "paths",
         nargs="*",
         help="Explicit repo-relative paths. Used by lefthook file templates.",
     )
 
     args = parser.parse_args()
-    if args.paths and (args.staged or args.all or args.since or args.files_from):
+    args.verbose = args.verbose or env_flag("IREE_PRESUBMIT_VERBOSE")
+    if args.paths and (
+        args.changed
+        or args.staged
+        or args.all
+        or args.base
+        or args.since
+        or args.files_from
+    ):
         parser.error("explicit paths cannot be combined with another input mode")
     apply_profile_defaults(args)
     return args
+
+
+def env_flag(name: str) -> bool:
+    return os.environ.get(name, "").lower() in ("1", "true", "yes", "on")
 
 
 def apply_profile_defaults(args: argparse.Namespace) -> None:
@@ -168,13 +212,15 @@ def apply_profile_defaults(args: argparse.Namespace) -> None:
 
     if (
         not args.paths
+        and not args.changed
         and not args.staged
         and not args.all
+        and not args.base
         and not args.since
         and not args.files_from
     ):
         args.all = args.profile == "ci"
-        args.staged = not args.all
+        args.changed = not args.all
 
     if not args.hygiene and not args.tests and not args.static_analysis:
         args.hygiene = True
@@ -183,29 +229,122 @@ def apply_profile_defaults(args: argparse.Namespace) -> None:
             args.static_analysis = True
 
 
-def display_command(command: list[str]) -> str:
-    if len(command) <= MAX_DISPLAY_COMMAND_ARGUMENTS:
-        return " ".join(command)
-    shown_arguments = command[:MAX_DISPLAY_COMMAND_ARGUMENTS]
-    omitted_count = len(command) - len(shown_arguments)
-    return " ".join(shown_arguments) + f" ... ({omitted_count} more argument(s))"
+def format_duration(seconds: float) -> str:
+    if seconds < 1:
+        return f"{seconds * 1000:.0f} ms"
+    if seconds < 60:
+        return f"{seconds:.1f} s"
+    minutes = int(seconds // 60)
+    remainder = seconds - minutes * 60
+    return f"{minutes} m {remainder:.0f} s"
 
 
-def run_command(command: list[str], description: str) -> bool:
-    print(f"presubmit: {description}")
-    print("  " + display_command(command))
+def command_text(command: list[str]) -> str:
+    return shlex.join(command)
+
+
+def print_section(title: str) -> None:
+    print(f"\n== {title} ==")
+
+
+def skip_step(description: str, reason: str) -> bool:
+    print(f"[skip] {description}: {reason}")
+    return True
+
+
+def print_step_failure(
+    description: str,
+    elapsed_seconds: float,
+    *,
+    command: list[str] | None = None,
+    output: str | None = None,
+    exit_code: int | None = None,
+) -> None:
+    if exit_code is None:
+        print(f"[fail] {description} ({format_duration(elapsed_seconds)})")
+    else:
+        print(
+            f"[fail] {description} ({format_duration(elapsed_seconds)}, "
+            f"exit {exit_code})"
+        )
+    if command is not None:
+        print("command:")
+        print("  " + command_text(command))
+    if output:
+        print("output:")
+        print(output.rstrip())
+
+
+def run_command(command: list[str], description: str, verbose: bool) -> bool:
+    print(f"[run] {description}")
     sys.stdout.flush()
-    result = subprocess.run(command, cwd=REPO_ROOT)
+    start_time = time.monotonic()
+    if verbose:
+        print("  " + command_text(command))
+        sys.stdout.flush()
+        result = subprocess.run(command, cwd=REPO_ROOT)
+        output = None
+    else:
+        result = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        output = result.stdout
+    elapsed_seconds = time.monotonic() - start_time
     if result.returncode == 0:
+        print(f"[ok] {description} ({format_duration(elapsed_seconds)})")
         return True
-    print(f"presubmit: {description} failed with exit code {result.returncode}")
+    print_step_failure(
+        description,
+        elapsed_seconds,
+        command=None if verbose else command,
+        output=output,
+        exit_code=result.returncode,
+    )
     return False
 
 
-def require_tool(tool: str) -> bool:
+def run_inline_check(description: str, action, verbose: bool) -> bool:
+    print(f"[run] {description}")
+    sys.stdout.flush()
+    start_time = time.monotonic()
+    if verbose:
+        ok = action()
+        elapsed_seconds = time.monotonic() - start_time
+        if ok:
+            print(f"[ok] {description} ({format_duration(elapsed_seconds)})")
+        else:
+            print(f"[fail] {description} ({format_duration(elapsed_seconds)})")
+        return ok
+
+    output_stream = io.StringIO()
+    with (
+        contextlib.redirect_stdout(output_stream),
+        contextlib.redirect_stderr(output_stream),
+    ):
+        try:
+            ok = action()
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+            ok = False
+    elapsed_seconds = time.monotonic() - start_time
+    output = output_stream.getvalue()
+    if ok:
+        print(f"[ok] {description} ({format_duration(elapsed_seconds)})")
+        return True
+    print_step_failure(description, elapsed_seconds, output=output)
+    return False
+
+
+def require_tool(tool: str, description: str) -> bool:
     if shutil.which(tool):
         return True
-    print(f"presubmit: required tool '{tool}' was not found on PATH.", file=sys.stderr)
+    print(f"[fail] {description}: required tool '{tool}' was not found on PATH.")
     return False
 
 
@@ -219,13 +358,52 @@ def git_list(args: list[str]) -> list[str]:
     return [path.decode("utf-8") for path in result.stdout.split(b"\0") if path]
 
 
+def unique_paths(paths: list[str]) -> list[str]:
+    unique = []
+    seen = set()
+    for path in paths:
+        if path in seen:
+            continue
+        seen.add(path)
+        unique.append(path)
+    return unique
+
+
+def changed_files() -> list[str]:
+    return unique_paths(
+        [
+            *git_list(["diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"]),
+            *git_list(["diff", "--name-only", "-z", "--diff-filter=ACMR"]),
+            *git_list(["ls-files", "--others", "--exclude-standard", "-z"]),
+        ]
+    )
+
+
 def selected_files(args: argparse.Namespace) -> list[str]:
     if args.paths:
         return args.paths
+    if args.changed:
+        return changed_files()
     if args.staged:
         return git_list(["diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"])
     if args.all:
         return git_list(["ls-files", "-z"])
+    if args.base:
+        return unique_paths(
+            [
+                *git_list(
+                    [
+                        "diff",
+                        "--name-only",
+                        "-z",
+                        "--diff-filter=ACMR",
+                        f"{args.base}...HEAD",
+                        "--",
+                    ]
+                ),
+                *changed_files(),
+            ]
+        )
     if args.files_from:
         with open(args.files_from, encoding="utf-8") as file_list:
             return [line.strip() for line in file_list if line.strip()]
@@ -238,10 +416,10 @@ def existing_files(paths: list[str]) -> list[str]:
     return [path for path in paths if (REPO_ROOT / path).is_file()]
 
 
-def stage_files(paths: list[str]) -> bool:
+def stage_files(paths: list[str], verbose: bool) -> bool:
     if not paths:
         return True
-    return run_command(["git", "add", "--", *paths], "stage local fixups")
+    return run_command(["git", "add", "--", *paths], "Stage local fixups", verbose)
 
 
 def is_buildifier_file(path: str) -> bool:
@@ -259,51 +437,51 @@ def is_python_file(path: str) -> bool:
     return Path(path).suffix in PYTHON_EXTENSIONS
 
 
-def run_buildifier(paths: list[str], fix: bool) -> bool:
+def run_buildifier(paths: list[str], fix: bool, verbose: bool) -> bool:
     files = existing_files([path for path in paths if is_buildifier_file(path)])
     if not files:
-        return True
-    if not require_tool("buildifier"):
+        return skip_step("Buildifier", "no Bazel files")
+    if not require_tool("buildifier", "Buildifier"):
         return False
     command = ["buildifier", "-lint=off"]
     if not fix:
         command.append("-mode=check")
     command += files
-    ok = run_command(command, "buildifier")
+    ok = run_command(command, "Buildifier", verbose)
     if fix and ok:
-        ok = stage_files(files)
+        ok = stage_files(files, verbose)
     return ok
 
 
-def run_ruff(paths: list[str], fix: bool) -> bool:
+def run_ruff(paths: list[str], fix: bool, verbose: bool) -> bool:
     files = existing_files([path for path in paths if is_python_file(path)])
     if not files:
-        return True
-    if not require_tool("ruff"):
+        return skip_step("Ruff", "no Python files")
+    if not require_tool("ruff", "Ruff"):
         return False
     ok = True
     lint_command = ["ruff", "check", "--cache-dir", ".ruff_cache"]
     if fix:
         lint_command.append("--fix")
     lint_command += files
-    ok = run_command(lint_command, "ruff check") and ok
+    ok = run_command(lint_command, "Ruff lint", verbose) and ok
 
     format_command = ["ruff", "format", "--cache-dir", ".ruff_cache"]
     if not fix:
         format_command.append("--check")
     format_command += files
-    ok = run_command(format_command, "ruff format") and ok
+    ok = run_command(format_command, "Ruff format", verbose) and ok
 
     if fix:
-        ok = stage_files(files) and ok
+        ok = stage_files(files, verbose) and ok
     return ok
 
 
-def run_clang_format(paths: list[str], fix: bool) -> bool:
+def run_clang_format(paths: list[str], fix: bool, verbose: bool) -> bool:
     files = existing_files([path for path in paths if is_c_format_file(path)])
     if not files:
-        return True
-    if not require_tool("clang-format"):
+        return skip_step("clang-format", "no C/C++ files")
+    if not require_tool("clang-format", "clang-format"):
         return False
     command = ["clang-format"]
     if fix:
@@ -311,9 +489,9 @@ def run_clang_format(paths: list[str], fix: bool) -> bool:
     else:
         command += ["--dry-run", "--Werror"]
     command += files
-    ok = run_command(command, "clang-format")
+    ok = run_command(command, "clang-format", verbose)
     if fix and ok:
-        ok = stage_files(files)
+        ok = stage_files(files, verbose)
     return ok
 
 
@@ -349,7 +527,7 @@ def fix_text_hygiene(path: str, text: str) -> bool:
     return True
 
 
-def run_text_hygiene(paths: list[str], fix: bool) -> bool:
+def run_text_hygiene(paths: list[str], fix: bool, verbose: bool) -> bool:
     ok = True
     changed = []
     for path in existing_files(paths):
@@ -374,7 +552,7 @@ def run_text_hygiene(paths: list[str], fix: bool) -> bool:
                 print(f"{path}: missing final newline")
                 ok = False
     if fix and changed:
-        ok = stage_files(changed) and ok
+        ok = stage_files(changed, verbose) and ok
     return ok
 
 
@@ -402,45 +580,59 @@ def run_build_filename_check(paths: list[str]) -> bool:
     return ok
 
 
-def run_bazel_to_cmake(fix: bool) -> bool:
+def run_bazel_to_cmake(fix: bool, verbose: bool) -> bool:
     command = ["python", "build_tools/bazel_to_cmake/bazel_to_cmake.py"]
     command.append("--stage-updates" if fix else "--check")
-    return run_command(command, "bazel-to-cmake")
+    return run_command(command, "Bazel-to-CMake", verbose)
 
 
-def run_amdgpu_target_map(paths: list[str], fix: bool) -> bool:
+def run_amdgpu_target_map(paths: list[str], fix: bool, verbose: bool) -> bool:
     relevant_prefixes = (
         "build_tools/scripts/amdgpu_target_map.py",
         "runtime/src/iree/hal/drivers/amdgpu/device/binaries/target_map.",
         "runtime/src/iree/hal/drivers/amdgpu/util/target_id_map.inl",
     )
     if not any(path.startswith(relevant_prefixes) for path in paths):
-        return True
+        return skip_step("AMDGPU target map", "no AMDGPU target-map inputs")
     command = ["python", "build_tools/scripts/amdgpu_target_map.py"]
     if not fix:
         command.append("--check")
-    ok = run_command(command, "AMDGPU target map")
+    ok = run_command(command, "AMDGPU target map", verbose)
     if fix and ok:
         ok = stage_files(
             [
                 "runtime/src/iree/hal/drivers/amdgpu/device/binaries/target_map.bzl",
                 "runtime/src/iree/hal/drivers/amdgpu/device/binaries/target_map.cmake",
                 "runtime/src/iree/hal/drivers/amdgpu/util/target_id_map.inl",
-            ]
+            ],
+            verbose,
         )
     return ok
 
 
-def run_hygiene(paths: list[str], fix: bool) -> bool:
+def run_hygiene(paths: list[str], fix: bool, verbose: bool) -> bool:
+    print_section("Hygiene")
     ok = True
-    ok = run_build_filename_check(paths) and ok
-    ok = run_text_hygiene(paths, fix=fix) and ok
-    ok = run_watchwords(paths) and ok
-    ok = run_buildifier(paths, fix=fix) and ok
-    ok = run_ruff(paths, fix=fix) and ok
-    ok = run_clang_format(paths, fix=fix) and ok
-    ok = run_bazel_to_cmake(fix=fix) and ok
-    ok = run_amdgpu_target_map(paths, fix=fix) and ok
+    ok = (
+        run_inline_check(
+            "BUILD filename policy", lambda: run_build_filename_check(paths), verbose
+        )
+        and ok
+    )
+    ok = (
+        run_inline_check(
+            "Text hygiene",
+            lambda: run_text_hygiene(paths, fix=fix, verbose=verbose),
+            verbose,
+        )
+        and ok
+    )
+    ok = run_inline_check("Watchwords", lambda: run_watchwords(paths), verbose) and ok
+    ok = run_buildifier(paths, fix=fix, verbose=verbose) and ok
+    ok = run_ruff(paths, fix=fix, verbose=verbose) and ok
+    ok = run_clang_format(paths, fix=fix, verbose=verbose) and ok
+    ok = run_bazel_to_cmake(fix=fix, verbose=verbose) and ok
+    ok = run_amdgpu_target_map(paths, fix=fix, verbose=verbose) and ok
     return ok
 
 
@@ -468,10 +660,14 @@ def is_global_trigger(path: str) -> bool:
     )
 
 
-def run_project_tests(projects: list[Project], paths: list[str], fix: bool) -> bool:
+def run_project_tests(
+    projects: list[Project],
+    paths: list[str],
+    fix: bool,
+    verbose: bool,
+) -> bool:
     if not projects:
-        print("presubmit: no affected project test entry points")
-        return True
+        return skip_step("Project tests", "no affected project entry points")
     ok = True
     with tempfile.NamedTemporaryFile(
         mode="w", encoding="utf-8", delete=False, dir=REPO_ROOT / ".git"
@@ -489,17 +685,61 @@ def run_project_tests(projects: list[Project], paths: list[str], fix: bool) -> b
                 "--tests",
             ]
             command.append("--fix" if fix else "--check")
-            ok = run_command(command, f"{project.name} presubmit") and ok
+            ok = run_command(command, f"{project.name} tests", verbose) and ok
     finally:
         Path(file_list_path).unlink(missing_ok=True)
     return ok
 
 
+def run_root_devtools_tests(paths: list[str], verbose: bool) -> bool:
+    if not any(is_root_devtools_trigger(path) for path in paths):
+        return skip_step("Root devtools tests", "no root devtools inputs")
+    ok = True
+    ok = (
+        run_command(
+            [
+                "bazel",
+                "test",
+                "--config=presubmit",
+                "//build_tools/devtools:cli_test",
+                "//build_tools/devtools:command_plan_test",
+                "//build_tools/devtools:setup_test",
+            ],
+            "Root devtools Bazel tests",
+            verbose,
+        )
+        and ok
+    )
+    ok = (
+        run_command(
+            [
+                "python",
+                "build_tools/devtools/smoke_test.py",
+                "--from-working-tree",
+                "--scenario",
+                "dry-run",
+            ],
+            "Root devtools smoke test",
+            verbose,
+        )
+        and ok
+    )
+    return ok
+
+
+def is_root_devtools_trigger(path: str) -> bool:
+    if path.startswith("requirements") and path.endswith(".txt"):
+        return True
+    return any(
+        path == trigger or path.startswith(trigger)
+        for trigger in ROOT_DEVTOOLS_TRIGGERS
+    )
+
+
 def run_static_analysis(paths: list[str]) -> bool:
     if not paths:
         return True
-    print("presubmit: static-analysis lane has no configured providers yet")
-    return True
+    return skip_step("Static analysis", "no providers configured")
 
 
 def print_plan(
@@ -508,8 +748,12 @@ def print_plan(
     mutation = "fix" if args.fix else "check"
     if args.paths:
         input_mode = "explicit paths"
+    elif args.changed:
+        input_mode = "changed"
     elif args.all:
         input_mode = "all"
+    elif args.base:
+        input_mode = f"base {args.base}"
     elif args.since:
         input_mode = f"since {args.since}"
     elif args.files_from:
@@ -544,10 +788,16 @@ def main() -> int:
 
     ok = True
     if args.hygiene:
-        ok = run_hygiene(paths, fix=args.fix) and ok
+        ok = run_hygiene(paths, fix=args.fix, verbose=args.verbose) and ok
     if args.tests:
-        ok = run_project_tests(projects, paths, fix=args.fix) and ok
+        print_section("Tests")
+        ok = run_root_devtools_tests(paths, verbose=args.verbose) and ok
+        ok = (
+            run_project_tests(projects, paths, fix=args.fix, verbose=args.verbose)
+            and ok
+        )
     if args.static_analysis:
+        print_section("Static Analysis")
         ok = run_static_analysis(paths) and ok
     return 0 if ok else 1
 

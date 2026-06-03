@@ -89,10 +89,6 @@ list(APPEND CMAKE_MODULE_PATH
 
 include("${CMAKE_CURRENT_LIST_DIR}/MODULE.cmake.lock")
 
-if(LIBHRX_BUILD)
-  set(IREE_HAL_DRIVER_AMDGPU_DEFAULT ON)
-endif()
-
 include("${CMAKE_CURRENT_LIST_DIR}/runtime/project.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/libhrx/project.cmake")
 

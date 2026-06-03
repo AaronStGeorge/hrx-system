@@ -1,6 +1,7 @@
 # Lefthook Presubmit
 
-The root Lefthook configuration owns hook dispatch. The Python presubmit
+The root Lefthook configuration owns Git hook dispatch. `dev.py` selects the
+local build lane and installs the hook through Lefthook. The Python presubmit
 dispatcher owns file selection, profiles, hygiene checks, and project test
 routing. Project-specific policy stays in each project under
 `*/build_tools/presubmit.py`.
@@ -12,19 +13,30 @@ stale formatter or generated-file output. The Git `pre-commit` hook therefore
 runs in non-mutating check mode:
 
 ```bash
-python build_tools/lefthook/presubmit.py --check {staged_files}
+python dev.py <lane> precommit {staged_files}
 ```
 
-Local fixups happen through explicit helper scripts:
+Local fixups happen through explicit commands:
+
+```bash
+python dev.py bazel fix
+python dev.py cmake fix
+```
+
+`fix` applies staged hygiene repairs and stages files owned by those fixers.
+`precommit` checks the current local change set. `presubmit` is non-mutating and
+runs the full-tree CI-shaped profile.
+
+Normal presubmit output is terse: major phases, named checks, pass/fail status,
+and failure details. Use `--verbose` when debugging the dispatcher itself or
+when exact command lines and streaming tool output are useful.
+
+Legacy shell helpers remain for direct debugging:
 
 ```bash
 build_tools/lefthook/precommit.sh
 build_tools/lefthook/presubmit.sh
 ```
-
-`precommit.sh` fixes and checks staged hygiene. `presubmit.sh` fixes staged
-hygiene, then runs the paranoid staged-file profile, which includes affected
-project tests.
 
 ## Profiles
 
@@ -43,19 +55,37 @@ runs all configured project presubmit tests.
 
 `pre-commit` is the installed Git hook and is check-only.
 
+`dev.py` installs lane-specific local hook policy from checked-in templates:
+
+```bash
+python dev.py bazel hook
+python dev.py cmake hook
+```
+
+`python dev.py bazel hook` writes ignored `lefthook-local.yml` from
+`build_tools/lefthook/lefthook-local.bazel.yml`. `python dev.py cmake hook`
+writes it from `build_tools/lefthook/lefthook-local.cmake.yml`.
+
 `fix` runs the staged hygiene fixer for manual use through Lefthook:
 
 ```bash
 lefthook run fix
 ```
 
-`presubmit` runs the paranoid profile for manual use through Lefthook:
+`precommit` runs the paranoid profile over staged, unstaged, and untracked
+local changes:
+
+```bash
+lefthook run precommit
+```
+
+`presubmit` runs the CI profile:
 
 ```bash
 lefthook run presubmit
 ```
 
-`check` runs the CI profile:
+`check` is kept as a CI-profile alias:
 
 ```bash
 lefthook run check
@@ -70,13 +100,16 @@ Python-packaged local tools are pinned in `requirements-dev.lock.txt`. That
 lock contains only local development tools; Bazel build and test dependencies
 belong in Bazel module fragments and `MODULE.bazel.lock`.
 
-Standalone binaries are installed by `build_tools/devtools/install.py` into
-`.venv/bin` when a virtual environment exists. The default manifest installs
-Bazelisk and buildifier with pinned URLs and SHA-256 hashes:
+Standalone binaries are installed by `build_tools/devtools/install.py` into the
+selected tool environment. The Bazel lane installs Bazelisk and buildifier with
+pinned URLs and SHA-256 hashes:
 
 ```bash
-.venv/bin/python build_tools/devtools/install.py
+python dev.py bazel setup
 ```
+
+The CMake lane currently has no standalone tool downloads; it uses system CMake
+and CTest plus the shared Python-packaged tools.
 
 Optional future providers can be added to the installer manifest without being
 part of the default install set. Presubmit providers that are optional should

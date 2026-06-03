@@ -1,0 +1,552 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+"""Command-line interface for dev.py."""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+from build_tools.devtools import doctor, help_text, hooks, presubmit, setup
+from build_tools.devtools.command_plan import CommandPlan, CommandStep
+from build_tools.devtools.environment import (
+    REPO_ROOT,
+    existing_or_system_environment,
+    tool_environment_from_args,
+)
+
+LANES = ("bazel", "cmake")
+DEFAULT_BAZEL_TARGETS = ("//runtime/...", "//libhrx/...")
+
+
+def cmake_build_dir() -> Path:
+    return REPO_ROOT.parent / "builds" / REPO_ROOT.name
+
+
+def forwarded_args(args: list[str]) -> list[str]:
+    if args and args[0] == "--":
+        return args[1:]
+    return args
+
+
+def has_backend_separator(args: list[str]) -> bool:
+    return bool(args and args[0] == "--")
+
+
+def add_common_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "-n",
+        "--dry-run",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Print the command plan without executing it.",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Print extra diagnostics.",
+    )
+
+
+def add_subparser(
+    subparsers: argparse._SubParsersAction,
+    name: str,
+    *,
+    command_help: help_text.CommandHelp,
+    help: str,
+) -> argparse.ArgumentParser:
+    return subparsers.add_parser(
+        name,
+        description=command_help.description,
+        epilog=command_help.epilog,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        help=help,
+    )
+
+
+def add_tool_environment_options(parser: argparse.ArgumentParser) -> None:
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
+        "--venv",
+        action="store_true",
+        help="Use the repo-local .venv tool environment.",
+    )
+    mode_group.add_argument(
+        "--system",
+        action="store_true",
+        help="Use tools from the system PATH and install nothing.",
+    )
+    mode_group.add_argument(
+        "--tool-root",
+        type=Path,
+        help="Use or create an external tool environment root.",
+    )
+
+
+def parse_arguments(argv: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="dev.py",
+        description="Repository developer command router.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--agent-md",
+        "--agents-md",
+        action="store_true",
+        dest="agent_md",
+        help="Print AGENTS.md-ready command guidance.",
+    )
+    add_common_options(parser)
+    subparsers = parser.add_subparsers(dest="command")
+
+    add_root_commands(subparsers)
+    for lane in LANES:
+        add_lane_commands(subparsers, lane)
+
+    args = parser.parse_args(argv)
+    if not hasattr(args, "dry_run"):
+        args.dry_run = False
+    if not hasattr(args, "verbose"):
+        args.verbose = False
+    if getattr(args, "paths", None) and (
+        getattr(args, "base", None) is not None or getattr(args, "staged", False)
+    ):
+        parser.error("explicit precommit paths cannot be combined with input mode")
+    if args.agent_md:
+        print_agent_md()
+        raise SystemExit(0)
+    if not args.command:
+        parser.print_help()
+        raise SystemExit(2)
+    return args
+
+
+def add_root_commands(subparsers: argparse._SubParsersAction) -> None:
+    setup_parser = add_subparser(
+        subparsers,
+        "setup",
+        command_help=help_text.root_command_help("setup"),
+        help="Set up common developer tools.",
+    )
+    add_common_options(setup_parser)
+    add_tool_environment_options(setup_parser)
+    setup_parser.add_argument(
+        "--alias-dir", type=Path, help="Directory for generated aliases."
+    )
+    setup_parser.set_defaults(handler=handle_root_setup)
+
+    doctor_parser = add_subparser(
+        subparsers,
+        "doctor",
+        command_help=help_text.root_command_help("doctor"),
+        help="Check common developer tools.",
+    )
+    add_common_options(doctor_parser)
+    add_tool_environment_options(doctor_parser)
+    doctor_parser.set_defaults(handler=handle_root_doctor)
+
+    tools_parser = subparsers.add_parser(
+        "tools", help="Inspect pinned standalone tools."
+    )
+    add_common_options(tools_parser)
+    tools_subparsers = tools_parser.add_subparsers(dest="tools_command", required=True)
+    list_parser = tools_subparsers.add_parser(
+        "list", help="List known standalone tools."
+    )
+    add_common_options(list_parser)
+    list_parser.set_defaults(handler=handle_tools_list)
+    check_parser = tools_subparsers.add_parser(
+        "check", help="Check installed standalone tools."
+    )
+    add_common_options(check_parser)
+    add_tool_environment_options(check_parser)
+    check_parser.set_defaults(handler=handle_tools_check)
+
+
+def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None:
+    lane_parser = subparsers.add_parser(
+        lane,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        help=f"{lane} developer commands.",
+    )
+    lane_subparsers = lane_parser.add_subparsers(dest=f"{lane}_command", required=True)
+
+    setup_parser = add_subparser(
+        lane_subparsers,
+        "setup",
+        command_help=help_text.lane_command_help(lane, "setup"),
+        help=f"Set up {lane} tools.",
+    )
+    add_common_options(setup_parser)
+    add_tool_environment_options(setup_parser)
+    setup_parser.add_argument(
+        "--alias-dir", type=Path, help="Directory for generated aliases."
+    )
+    setup_parser.set_defaults(handler=handle_lane_setup, lane=lane)
+
+    hook_parser = add_subparser(
+        lane_subparsers,
+        "hook",
+        command_help=help_text.lane_command_help(lane, "hook"),
+        help=f"Install {lane} Git hooks.",
+    )
+    add_common_options(hook_parser)
+    add_tool_environment_options(hook_parser)
+    hook_parser.add_argument(
+        "--verify", action="store_true", help="Run the hook after install."
+    )
+    hook_parser.set_defaults(handler=handle_hook, lane=lane)
+
+    configure_help = help_text.lane_command_help(lane, "configure")
+    configure_parser = add_subparser(
+        lane_subparsers,
+        "configure",
+        command_help=configure_help,
+        help=f"Configure {lane}.",
+    )
+    add_common_options(configure_parser)
+    add_tool_environment_options(configure_parser)
+    configure_parser.add_argument(
+        "args",
+        nargs=argparse.REMAINDER,
+        help=configure_help.arguments,
+    )
+    configure_parser.set_defaults(handler=handle_configure, lane=lane)
+
+    build_help = help_text.lane_command_help(lane, "build")
+    build_parser = add_subparser(
+        lane_subparsers,
+        "build",
+        command_help=build_help,
+        help=f"Build with {lane}.",
+    )
+    add_common_options(build_parser)
+    add_tool_environment_options(build_parser)
+    build_parser.add_argument(
+        "args",
+        nargs=argparse.REMAINDER,
+        help=build_help.arguments,
+    )
+    build_parser.set_defaults(handler=handle_build, lane=lane)
+
+    test_help = help_text.lane_command_help(lane, "test")
+    test_parser = add_subparser(
+        lane_subparsers,
+        "test",
+        command_help=test_help,
+        help=f"Test with {lane}.",
+    )
+    add_common_options(test_parser)
+    add_tool_environment_options(test_parser)
+    test_parser.add_argument(
+        "args",
+        nargs=argparse.REMAINDER,
+        help=test_help.arguments,
+    )
+    test_parser.set_defaults(handler=handle_test, lane=lane)
+
+    precommit_parser = add_subparser(
+        lane_subparsers,
+        "precommit",
+        command_help=help_text.lane_command_help(lane, "precommit"),
+        help=f"Run {lane} checks for local changes.",
+    )
+    add_common_options(precommit_parser)
+    add_tool_environment_options(precommit_parser)
+    precommit_input_group = precommit_parser.add_mutually_exclusive_group()
+    precommit_input_group.add_argument(
+        "--base",
+        metavar="GIT_REF",
+        help="Check branch changes since GIT_REF plus local changes.",
+    )
+    precommit_input_group.add_argument(
+        "--staged",
+        action="store_true",
+        help="Check only files staged for commit.",
+    )
+    precommit_parser.add_argument(
+        "paths",
+        nargs="*",
+        help="Explicit repo-relative paths. Used by Git hook file templates.",
+    )
+    precommit_parser.set_defaults(handler=handle_precommit, lane=lane)
+
+    presubmit_parser = add_subparser(
+        lane_subparsers,
+        "presubmit",
+        command_help=help_text.lane_command_help(lane, "presubmit"),
+        help=f"Run {lane} presubmit.",
+    )
+    add_common_options(presubmit_parser)
+    add_tool_environment_options(presubmit_parser)
+    presubmit_parser.add_argument(
+        "--profile",
+        choices=("default", "paranoid", "ci"),
+        default="ci",
+        help="Presubmit profile. Defaults to ci.",
+    )
+    presubmit_parser.set_defaults(handler=handle_presubmit, lane=lane)
+
+    fix_parser = add_subparser(
+        lane_subparsers,
+        "fix",
+        command_help=help_text.lane_command_help(lane, "fix"),
+        help="Apply staged mechanical fixups.",
+    )
+    add_common_options(fix_parser)
+    add_tool_environment_options(fix_parser)
+    fix_parser.set_defaults(handler=handle_fix, lane=lane)
+
+    doctor_parser = add_subparser(
+        lane_subparsers,
+        "doctor",
+        command_help=help_text.lane_command_help(lane, "doctor"),
+        help=f"Check {lane} tools.",
+    )
+    add_common_options(doctor_parser)
+    add_tool_environment_options(doctor_parser)
+    doctor_parser.set_defaults(handler=handle_lane_doctor, lane=lane)
+
+    for command_name in ("run", "try", "fuzz"):
+        if lane == "cmake" and command_name == "fuzz":
+            continue
+        command_help = help_text.lane_command_help(lane, command_name)
+        command_parser = add_subparser(
+            lane_subparsers,
+            command_name,
+            command_help=command_help,
+            help=f"{command_name} with {lane}.",
+        )
+        add_common_options(command_parser)
+        add_tool_environment_options(command_parser)
+        command_parser.add_argument(
+            "args", nargs=argparse.REMAINDER, help=command_help.arguments
+        )
+        command_parser.set_defaults(
+            handler=handle_unimplemented_backend_command,
+            lane=lane,
+            backend_command=command_name,
+        )
+
+
+def handle_root_setup(args: argparse.Namespace) -> CommandPlan:
+    tool_env = tool_environment_from_args(args)
+    return setup.common_setup_plan(tool_env)
+
+
+def handle_lane_setup(args: argparse.Namespace) -> CommandPlan:
+    tool_env = tool_environment_from_args(args)
+    return setup.setup_plan(args.lane, tool_env, args.alias_dir)
+
+
+def handle_root_doctor(args: argparse.Namespace) -> CommandPlan:
+    return doctor.doctor_plan(None, existing_or_system_environment(args))
+
+
+def handle_lane_doctor(args: argparse.Namespace) -> CommandPlan:
+    return doctor.doctor_plan(args.lane, existing_or_system_environment(args))
+
+
+def handle_tools_list(args: argparse.Namespace) -> CommandPlan:
+    return CommandPlan(
+        [
+            CommandStep(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "build_tools/devtools/install.py"),
+                    "--list",
+                ],
+                cwd=REPO_ROOT,
+                label="list standalone developer tools",
+            )
+        ]
+    )
+
+
+def handle_tools_check(args: argparse.Namespace) -> CommandPlan:
+    tool_env = existing_or_system_environment(args)
+    command = [
+        tool_env.python,
+        str(REPO_ROOT / "build_tools/devtools/install.py"),
+        "--check",
+    ]
+    if tool_env.bin_dir is not None:
+        command += ["--bin-dir", str(tool_env.bin_dir)]
+    return CommandPlan(
+        [
+            CommandStep(
+                command,
+                cwd=REPO_ROOT,
+                env=tool_env.path_env(),
+                label="check standalone developer tools",
+            )
+        ]
+    )
+
+
+def handle_hook(args: argparse.Namespace) -> CommandPlan:
+    return hooks.hook_plan(args.lane, existing_or_system_environment(args), args.verify)
+
+
+def handle_configure(args: argparse.Namespace) -> CommandPlan:
+    tool_env = existing_or_system_environment(args)
+    backend_args = forwarded_args(args.args)
+    if args.lane == "bazel":
+        command = [
+            tool_env.python,
+            str(REPO_ROOT / "configure-bazel.py"),
+            *backend_args,
+        ]
+    else:
+        command = [
+            tool_env.tool("cmake"),
+            "-S",
+            str(REPO_ROOT),
+            "-B",
+            str(cmake_build_dir()),
+            *backend_args,
+        ]
+    return CommandPlan(
+        [
+            CommandStep(
+                command,
+                cwd=REPO_ROOT,
+                env=tool_env.path_env(),
+                label=f"configure {args.lane}",
+            )
+        ]
+    )
+
+
+def handle_build(args: argparse.Namespace) -> CommandPlan:
+    tool_env = existing_or_system_environment(args)
+    backend_args = forwarded_args(args.args)
+    if args.lane == "bazel":
+        targets = backend_args or list(DEFAULT_BAZEL_TARGETS)
+        command = [tool_env.tool("bazel"), "build", *targets]
+    else:
+        cmake_args = backend_args
+        if backend_args and not has_backend_separator(args.args):
+            cmake_args = ["--target", *backend_args]
+        command = [
+            tool_env.tool("cmake"),
+            "--build",
+            str(cmake_build_dir()),
+            *cmake_args,
+        ]
+    return CommandPlan(
+        [
+            CommandStep(
+                command,
+                cwd=REPO_ROOT,
+                env=tool_env.path_env(),
+                label=f"{args.lane} build",
+            )
+        ]
+    )
+
+
+def handle_test(args: argparse.Namespace) -> CommandPlan:
+    tool_env = existing_or_system_environment(args)
+    backend_args = forwarded_args(args.args)
+    if args.lane == "bazel":
+        targets = backend_args or list(DEFAULT_BAZEL_TARGETS)
+        command = [tool_env.tool("bazel"), "test", "--config=presubmit", *targets]
+    else:
+        command = [
+            tool_env.tool("ctest"),
+            "--test-dir",
+            str(cmake_build_dir()),
+            "--output-on-failure",
+            *backend_args,
+        ]
+    return CommandPlan(
+        [
+            CommandStep(
+                command,
+                cwd=REPO_ROOT,
+                env=tool_env.path_env(),
+                label=f"{args.lane} test",
+            )
+        ]
+    )
+
+
+def handle_presubmit(args: argparse.Namespace) -> CommandPlan:
+    return presubmit.presubmit_plan(
+        args.lane,
+        existing_or_system_environment(args),
+        args.profile,
+        verbose=args.verbose,
+    )
+
+
+def handle_precommit(args: argparse.Namespace) -> CommandPlan:
+    return presubmit.precommit_plan(
+        args.lane,
+        existing_or_system_environment(args),
+        base=args.base,
+        staged=args.staged,
+        paths=args.paths,
+        verbose=args.verbose,
+    )
+
+
+def handle_fix(args: argparse.Namespace) -> CommandPlan:
+    return presubmit.fix_plan(
+        existing_or_system_environment(args), verbose=args.verbose
+    )
+
+
+def handle_unimplemented_backend_command(args: argparse.Namespace) -> CommandPlan:
+    return CommandPlan(
+        [
+            CommandStep(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "import sys; "
+                        f"print('dev.py {args.lane} {args.backend_command} is not wired yet', file=sys.stderr); "
+                        "sys.exit(1)"
+                    ),
+                ],
+                cwd=REPO_ROOT,
+                label=f"{args.lane} {args.backend_command}",
+            )
+        ]
+    )
+
+
+def print_agent_md() -> None:
+    print(
+        """## dev.py
+
+Use the structural developer command lanes instead of guessing a backend flag:
+
+```bash
+python dev.py bazel setup
+python dev.py bazel precommit
+python dev.py cmake setup
+python dev.py cmake precommit
+```
+
+Add `--dry-run` to print the underlying command plan before executing it.
+Use `--system` to rely on tools from PATH and write no repo-local tool env.
+Use `--tool-root PATH` to place a managed tool environment outside this checkout.
+Use `presubmit` for the full-tree CI-shaped check.
+"""
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_arguments(sys.argv[1:] if argv is None else argv)
+    plan = args.handler(args)
+    return plan.run(dry_run=args.dry_run, verbose=args.verbose)
