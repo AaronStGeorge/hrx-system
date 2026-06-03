@@ -129,6 +129,18 @@ loom_cc_test(
 
 loom_cc_test(
   NAME
+    module_test
+  SRCS
+    "module_test.cc"
+  DEPS
+    ::test_util
+    iree::runtime::binding::c::loomc
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
     pass_program_test
   SRCS
     "pass_program_test.cc"

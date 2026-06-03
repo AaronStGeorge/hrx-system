@@ -55,6 +55,7 @@ loom_cc_library(
     "src/link.c"
     "src/link_index.c"
     "src/module.c"
+    "src/module_function.c"
     "src/pass_program.c"
     "src/result.c"
     "src/source.c"
@@ -82,7 +83,10 @@ loom_cc_library(
     loom::src::loom::link::linker
     loom::src::loom::link::module_index
     loom::src::loom::link::planner
+    loom::src::loom::ops::func
+    loom::src::loom::ops::kernel
     loom::src::loom::ops::low
+    loom::src::loom::ops::op_defs
     loom::src::loom::ops::op_registry
     loom::src::loom::ops::pass
     loom::src::loom::pass::builtin_registry
