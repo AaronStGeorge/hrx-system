@@ -754,6 +754,7 @@ loom_cc_library(
   SRCS
     "verify.c"
   DEPS
+    ::storage_layout
     ::target_binding
     iree::base
     iree::base::internal::arena
@@ -764,6 +765,30 @@ loom_cc_library(
     loom::src::loom::target::registers
     loom::src::loom::util::walk
   PUBLIC
+)
+
+loom_cc_test(
+  NAME
+    verify_test
+  SRCS
+    "verify_test.cc"
+  DEPS
+    ::text_asm
+    ::verify
+    iree::base::internal::arena
+    loom::src::loom::error::error_defs
+    loom::src::loom::format::text::parser
+    loom::src::loom::ir
+    loom::src::loom::ops::func
+    loom::src::loom::ops::low
+    loom::src::loom::ops::target
+    loom::src::loom::ops::test
+    loom::src::loom::target::test::low_registry
+    loom::src::loom::target::test::target_record_table
+    loom::src::loom::testing::diagnostic_matchers
+    loom::src::loom::testing::module_ptr
+    iree::testing::gtest
+    iree::testing::gtest_main
 )
 
 loom_cc_test(

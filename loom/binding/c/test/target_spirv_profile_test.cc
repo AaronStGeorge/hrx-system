@@ -354,6 +354,13 @@ TEST(TargetSpirvProfileTest, PreservesExplicitNumericLimitFacts) {
           loomc_make_cstring_view("vulkaninfo:maxComputeWorkGroupInvocations"),
       },
       {
+          /*.limit=*/LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_STORAGE_BYTES,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.value=*/UINT64_C(49152),
+          /*.provenance=*/
+          loomc_make_cstring_view("vulkaninfo:maxComputeSharedMemorySize"),
+      },
+      {
           /*.limit=*/LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE,
           /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
           /*.value=*/32,
@@ -394,7 +401,7 @@ TEST(TargetSpirvProfileTest, PreservesExplicitNumericLimitFacts) {
       /*.feature_facts=*/nullptr,
       /*.feature_fact_count=*/0,
       /*.limit_facts=*/limits,
-      /*.limit_fact_count=*/7,
+      /*.limit_fact_count=*/8,
       /*.environment_facts=*/nullptr,
       /*.environment_fact_count=*/0,
   };
@@ -406,6 +413,8 @@ TEST(TargetSpirvProfileTest, PreservesExplicitNumericLimitFacts) {
   EXPECT_EQ(selection.bundle->snapshot->max_workgroup_size.x, 1024u);
   EXPECT_EQ(selection.bundle->snapshot->max_workgroup_size.y, 0u);
   EXPECT_EQ(selection.bundle->snapshot->max_flat_workgroup_size, 1024u);
+  EXPECT_EQ(selection.bundle->snapshot->max_workgroup_storage_bytes,
+            UINT64_C(49152));
   EXPECT_EQ(selection.bundle->snapshot->subgroup_size, 32u);
   EXPECT_EQ(selection.bundle->snapshot->max_workgroup_count.z, 65535u);
   EXPECT_EQ(selection.bundle->snapshot->max_grid_size.x, 4096u);
@@ -420,6 +429,8 @@ TEST(TargetSpirvProfileTest, PreservesExplicitNumericLimitFacts) {
                    LOOMC_TARGET_FACT_STATE_UNKNOWN, 0);
   ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_FLAT_WORKGROUP_SIZE,
                    LOOMC_TARGET_FACT_STATE_TRUE, 1024);
+  ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_STORAGE_BYTES,
+                   LOOMC_TARGET_FACT_STATE_TRUE, UINT64_C(49152));
   ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE,
                    LOOMC_TARGET_FACT_STATE_TRUE, 32);
   ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_Z,
@@ -859,15 +870,15 @@ TEST(TargetSpirvProfileTest, ReportsContradictoryLimitFactsWithProvenance) {
   TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
   loomc_spirv_limit_fact_t limits[] = {
       {
-          /*.limit=*/LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE,
+          /*.limit=*/LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_STORAGE_BYTES,
           /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
-          /*.value=*/32,
+          /*.value=*/UINT64_C(49152),
           /*.provenance=*/loomc_make_cstring_view("probe:a"),
       },
       {
-          /*.limit=*/LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE,
+          /*.limit=*/LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_STORAGE_BYTES,
           /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
-          /*.value=*/64,
+          /*.value=*/UINT64_C(32768),
           /*.provenance=*/loomc_make_cstring_view("override:b"),
       },
   };
@@ -900,12 +911,12 @@ TEST(TargetSpirvProfileTest, ReportsContradictoryLimitFactsWithProvenance) {
   EXPECT_THAT(ToString(diagnostic->message),
               ::testing::HasSubstr("contradictory values"));
   EXPECT_THAT(ToString(diagnostic->message),
-              ::testing::HasSubstr("spirv.subgroup_size"));
+              ::testing::HasSubstr("spirv.max_workgroup_storage_bytes"));
   EXPECT_THAT(ToString(diagnostic->message), ::testing::HasSubstr("probe:a"));
   EXPECT_THAT(ToString(diagnostic->message),
               ::testing::HasSubstr("override:b"));
-  EXPECT_THAT(ToString(diagnostic->message), ::testing::HasSubstr("32"));
-  EXPECT_THAT(ToString(diagnostic->message), ::testing::HasSubstr("64"));
+  EXPECT_THAT(ToString(diagnostic->message), ::testing::HasSubstr("49152"));
+  EXPECT_THAT(ToString(diagnostic->message), ::testing::HasSubstr("32768"));
 }
 
 TEST(TargetSpirvProfileTest,

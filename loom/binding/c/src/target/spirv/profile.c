@@ -142,6 +142,8 @@ static loomc_string_view_t loomc_spirv_profile_limit_name(
       return loomc_make_cstring_view("spirv.max_workgroup_size_z");
     case LOOMC_SPIRV_LIMIT_MAX_FLAT_WORKGROUP_SIZE:
       return loomc_make_cstring_view("spirv.max_flat_workgroup_size");
+    case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_STORAGE_BYTES:
+      return loomc_make_cstring_view("spirv.max_workgroup_storage_bytes");
     case LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE:
       return loomc_make_cstring_view("spirv.subgroup_size");
     case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_X:
@@ -169,6 +171,7 @@ static uint64_t loomc_spirv_profile_limit_maximum_value(
     loomc_spirv_limit_t limit) {
   switch (limit) {
     case LOOMC_SPIRV_LIMIT_MAX_FLAT_GRID_SIZE:
+    case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_STORAGE_BYTES:
       return UINT64_MAX;
     case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_X:
     case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_Y:
@@ -192,6 +195,7 @@ static const char* loomc_spirv_profile_limit_range_name(
     loomc_spirv_limit_t limit) {
   switch (limit) {
     case LOOMC_SPIRV_LIMIT_MAX_FLAT_GRID_SIZE:
+    case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_STORAGE_BYTES:
       return "uint64_t";
     case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_X:
     case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_Y:
@@ -936,6 +940,9 @@ static void loomc_spirv_profile_apply_limit_states_to_bundle(
   loomc_spirv_profile_apply_u32_limit_value(
       limit_states, LOOMC_SPIRV_LIMIT_MAX_FLAT_WORKGROUP_SIZE,
       &storage->snapshot.max_flat_workgroup_size);
+  loomc_spirv_profile_apply_u64_limit_value(
+      limit_states, LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_STORAGE_BYTES,
+      &storage->snapshot.max_workgroup_storage_bytes);
   loomc_spirv_profile_apply_u32_limit_value(limit_states,
                                             LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE,
                                             &storage->snapshot.subgroup_size);

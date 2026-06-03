@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "iree/base/internal/arena.h"
+#include "loom/codegen/low/storage_layout.h"
 #include "loom/error/error_catalog.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -1267,6 +1268,32 @@ static iree_status_t loom_low_verify_function_register_values(
   return iree_ok_status();
 }
 
+static iree_status_t loom_low_verify_workgroup_storage_limit(
+    loom_low_function_verify_state_t* function_state) {
+  const loom_target_bundle_t* bundle =
+      &function_state->target->bundle_storage.bundle;
+  const uint64_t limit = bundle->snapshot->max_workgroup_storage_bytes;
+  if (limit == 0 || function_state->body == NULL ||
+      loom_low_verify_should_stop(function_state->state)) {
+    return iree_ok_status();
+  }
+  loom_low_storage_layout_space_sizes_t sizes = {0};
+  IREE_RETURN_IF_ERROR(loom_low_storage_layout_collect_space_sizes(
+      function_state->state->module, function_state->function_op, &sizes));
+  if (sizes.workgroup_bytes <= limit) {
+    return iree_ok_status();
+  }
+  const loom_diagnostic_param_t params[] = {
+      loom_param_string(function_state->function_name),
+      loom_param_string(bundle->name),
+      loom_param_u64(sizes.workgroup_bytes),
+      loom_param_u64(limit),
+  };
+  return loom_low_verify_emit(function_state->state,
+                              function_state->function_op, LOOM_ERR_TARGET_051,
+                              params, IREE_ARRAYSIZE(params), NULL, 0);
+}
+
 static iree_status_t loom_low_verify_descriptor_register_field(
     loom_low_function_verify_state_t* function_state, const loom_op_t* op,
     const loom_low_descriptor_t* descriptor, uint16_t descriptor_operand_index,
@@ -1845,6 +1872,11 @@ static iree_status_t loom_low_verify_function(loom_low_verify_state_t* state,
       loom_low_register_type_resolver_for_descriptor_set(target.descriptor_set);
   IREE_RETURN_IF_ERROR(loom_low_verify_function_register_values(
       &function_state, low_func_op, body));
+  if (loom_low_verify_should_stop(state)) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(
+      loom_low_verify_workgroup_storage_limit(&function_state));
   if (loom_low_verify_should_stop(state)) {
     return iree_ok_status();
   }

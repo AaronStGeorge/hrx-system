@@ -996,6 +996,29 @@ ERR_TARGET_050 = ErrorDef(
     ),
 )
 
+# ERR_TARGET_051: Low workgroup storage use exceeds target limit.
+ERR_TARGET_051 = ErrorDef(
+    domain=ErrorDomain.TARGET,
+    code=51,
+    severity=Severity.ERROR,
+    summary="Low workgroup storage use exceeds target limit.",
+    message=(
+        "low function '@{function_name}' target '@{target_name}' reserves "
+        "{reserved_bytes} byte(s) of workgroup storage, exceeding target limit "
+        "{limit_bytes}"
+    ),
+    params=(
+        ErrorParam("function_name", ParamKind.STRING),
+        ErrorParam("target_name", ParamKind.STRING),
+        ErrorParam("reserved_bytes", ParamKind.U64),
+        ErrorParam("limit_bytes", ParamKind.U64),
+    ),
+    fix_hint=(
+        "Reduce workgroup storage reservations or select a target profile with "
+        "a larger workgroup storage limit."
+    ),
+)
+
 ALL_TARGET_ERRORS = (
     ERR_TARGET_001,
     ERR_TARGET_002,
@@ -1047,4 +1070,5 @@ ALL_TARGET_ERRORS = (
     ERR_TARGET_048,
     ERR_TARGET_049,
     ERR_TARGET_050,
+    ERR_TARGET_051,
 )

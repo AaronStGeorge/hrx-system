@@ -674,6 +674,10 @@ static loomc_status_t loomc_spirv_vulkaninfo_import_limits(
       import, limits, IREE_SV("maxComputeWorkGroupInvocations"),
       LOOMC_SPIRV_LIMIT_MAX_FLAT_WORKGROUP_SIZE,
       loomc_make_cstring_view("vulkaninfo:maxComputeWorkGroupInvocations")));
+  LOOMC_RETURN_IF_ERROR(loomc_spirv_vulkaninfo_add_limit(
+      import, limits, IREE_SV("maxComputeSharedMemorySize"),
+      LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_STORAGE_BYTES,
+      loomc_make_cstring_view("vulkaninfo:maxComputeSharedMemorySize")));
   LOOMC_RETURN_IF_ERROR(loomc_spirv_vulkaninfo_add_limit_array_element(
       import, limits, IREE_SV("maxComputeWorkGroupCount"), 0,
       LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_X,

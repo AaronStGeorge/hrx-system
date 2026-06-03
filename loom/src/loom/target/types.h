@@ -229,6 +229,9 @@ typedef struct loom_target_snapshot_t {
   // Maximum flat local workgroup size. Zero means the target has not supplied a
   // tighter total-workitem limit across the workgroup dimensions.
   uint32_t max_flat_workgroup_size;
+  // Maximum bytes a single function may reserve in workgroup storage. Zero
+  // means the target has not supplied a tighter function-local storage limit.
+  uint64_t max_workgroup_storage_bytes;
   // Fixed subgroup size in invocations. Zero means the target has not supplied
   // a target-wide fixed subgroup size.
   uint32_t subgroup_size;

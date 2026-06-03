@@ -146,7 +146,8 @@ TEST(TargetSpirvVulkaninfoTest, ImportsGpuinfoProfileWrapper) {
             "limits": {
               "maxComputeWorkGroupCount": [65535, 1024, 64],
               "maxComputeWorkGroupInvocations": 256,
-              "maxComputeWorkGroupSize": [256, 128, 64]
+              "maxComputeWorkGroupSize": [256, 128, 64],
+              "maxComputeSharedMemorySize": 49152
             }
           },
           "VkPhysicalDeviceVulkan11Properties": {
@@ -220,6 +221,8 @@ TEST(TargetSpirvVulkaninfoTest, ImportsGpuinfoProfileWrapper) {
                    LOOMC_TARGET_FACT_STATE_TRUE, 64);
   ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_FLAT_WORKGROUP_SIZE,
                    LOOMC_TARGET_FACT_STATE_TRUE, 256);
+  ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_STORAGE_BYTES,
+                   LOOMC_TARGET_FACT_STATE_TRUE, UINT64_C(49152));
   ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE,
                    LOOMC_TARGET_FACT_STATE_TRUE, 32);
   ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_X,
@@ -247,7 +250,8 @@ TEST(TargetSpirvVulkaninfoTest, ImportsRawDevicesArrayByIndex) {
           "limits": {
             "maxComputeWorkGroupCount": [1, 1, 1],
             "maxComputeWorkGroupInvocations": 64,
-            "maxComputeWorkGroupSize": [64, 1, 1]
+            "maxComputeWorkGroupSize": [64, 1, 1],
+            "maxComputeSharedMemorySize": 8192
           }
         },
         "features": {
@@ -260,7 +264,8 @@ TEST(TargetSpirvVulkaninfoTest, ImportsRawDevicesArrayByIndex) {
           "limits": {
             "maxComputeWorkGroupCount": [16, 8, 4],
             "maxComputeWorkGroupInvocations": 128,
-            "maxComputeWorkGroupSize": [128, 2, 1]
+            "maxComputeWorkGroupSize": [128, 2, 1],
+            "maxComputeSharedMemorySize": 32768
           }
         },
         "features": {
@@ -297,6 +302,8 @@ TEST(TargetSpirvVulkaninfoTest, ImportsRawDevicesArrayByIndex) {
                    LOOMC_TARGET_FACT_STATE_TRUE, 128);
   ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_X,
                    LOOMC_TARGET_FACT_STATE_TRUE, 16);
+  ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_STORAGE_BYTES,
+                   LOOMC_TARGET_FACT_STATE_TRUE, UINT64_C(32768));
   ExpectEnvironmentValue(profile.get(),
                          LOOMC_SPIRV_ENVIRONMENT_MAX_SPIRV_VERSION,
                          LOOMC_TARGET_FACT_STATE_TRUE, LOOMC_SPIRV_VERSION_1_5);
