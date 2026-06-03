@@ -532,6 +532,14 @@ typedef struct loomc_spirv_environment_value_t {
   uint64_t value;
 } loomc_spirv_environment_value_t;
 
+/// Forward declaration for a cooperative matrix operation fact row.
+typedef struct loomc_spirv_cooperative_matrix_row_t
+    loomc_spirv_cooperative_matrix_row_t;
+
+/// Forward declaration for a cooperative vector operation fact row.
+typedef struct loomc_spirv_cooperative_vector_row_t
+    loomc_spirv_cooperative_vector_row_t;
+
 /// SPIR-V target profile creation options.
 typedef struct loomc_spirv_profile_options_t {
   /// Structure type. Must be `LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS` when
@@ -567,6 +575,18 @@ typedef struct loomc_spirv_profile_options_t {
 
   /// Number of entries in `environment_facts`.
   loomc_host_size_t environment_fact_count;
+
+  /// Borrowed cooperative matrix row fact array.
+  const loomc_spirv_cooperative_matrix_row_t* cooperative_matrix_rows;
+
+  /// Number of entries in `cooperative_matrix_rows`.
+  loomc_host_size_t cooperative_matrix_row_count;
+
+  /// Borrowed cooperative vector row fact array.
+  const loomc_spirv_cooperative_vector_row_t* cooperative_vector_rows;
+
+  /// Number of entries in `cooperative_vector_rows`.
+  loomc_host_size_t cooperative_vector_row_count;
 } loomc_spirv_profile_options_t;
 
 /// Prepared SPIR-V profile summary.
@@ -606,6 +626,12 @@ typedef struct loomc_spirv_profile_info_t {
 typedef struct loomc_spirv_cooperative_matrix_row_t {
   /// Stable row name for diagnostics, caches, and tests.
   loomc_string_view_t name;
+
+  /// Known availability state for this row.
+  loomc_target_fact_state_t state;
+
+  /// Borrowed provenance string used in diagnostics.
+  loomc_string_view_t provenance;
 
   /// Feature bits required before this row is legal.
   loomc_spirv_feature_bits_t required_features;
@@ -648,6 +674,12 @@ typedef struct loomc_spirv_cooperative_matrix_row_t {
 typedef struct loomc_spirv_cooperative_vector_row_t {
   /// Stable row name for diagnostics, caches, and tests.
   loomc_string_view_t name;
+
+  /// Known availability state for this row.
+  loomc_target_fact_state_t state;
+
+  /// Borrowed provenance string used in diagnostics.
+  loomc_string_view_t provenance;
 
   /// Feature bits required before this row is legal.
   loomc_spirv_feature_bits_t required_features;

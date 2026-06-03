@@ -299,6 +299,58 @@ loom_spirv_cooperative_matrix_model_properties(iree_host_size_t* out_count) {
   return kCooperativeMatrixProperties;
 }
 
+const loom_spirv_cooperative_vector_property_t*
+loom_spirv_cooperative_vector_model_properties(iree_host_size_t* out_count) {
+  IREE_ASSERT_ARGUMENT(out_count);
+  *out_count = IREE_ARRAYSIZE(kCooperativeVectorProperties);
+  return kCooperativeVectorProperties;
+}
+
+static uint64_t loom_spirv_cooperative_matrix_property_shape_key(
+    const loom_spirv_cooperative_matrix_property_t* row) {
+  return loom_spirv_cooperative_matrix_shape_key(row->m_size, row->n_size,
+                                                 row->k_size);
+}
+
+static uint64_t loom_spirv_cooperative_vector_property_shape_key(
+    const loom_spirv_cooperative_vector_property_t* row) {
+  return loom_spirv_vector_shape_key(row->m_size, row->k_size);
+}
+
+static void loom_spirv_cooperative_property_storage_sort_matrix_rows(
+    loom_spirv_cooperative_matrix_property_t* rows,
+    iree_host_size_t row_count) {
+  for (iree_host_size_t i = 1; i < row_count; ++i) {
+    const loom_spirv_cooperative_matrix_property_t row = rows[i];
+    const uint64_t shape_key =
+        loom_spirv_cooperative_matrix_property_shape_key(&row);
+    iree_host_size_t j = i;
+    while (j > 0 && loom_spirv_cooperative_matrix_property_shape_key(
+                        &rows[j - 1]) > shape_key) {
+      rows[j] = rows[j - 1];
+      --j;
+    }
+    rows[j] = row;
+  }
+}
+
+static void loom_spirv_cooperative_property_storage_sort_vector_rows(
+    loom_spirv_cooperative_vector_property_t* rows,
+    iree_host_size_t row_count) {
+  for (iree_host_size_t i = 1; i < row_count; ++i) {
+    const loom_spirv_cooperative_vector_property_t row = rows[i];
+    const uint64_t shape_key =
+        loom_spirv_cooperative_vector_property_shape_key(&row);
+    iree_host_size_t j = i;
+    while (j > 0 && loom_spirv_cooperative_vector_property_shape_key(
+                        &rows[j - 1]) > shape_key) {
+      rows[j] = rows[j - 1];
+      --j;
+    }
+    rows[j] = row;
+  }
+}
+
 static iree_status_t loom_spirv_cooperative_property_storage_copy_matrix_rows(
     const loom_spirv_cooperative_matrix_property_t* matrix_properties,
     iree_host_size_t matrix_property_count, iree_allocator_t allocator,
@@ -311,8 +363,29 @@ static iree_status_t loom_spirv_cooperative_property_storage_copy_matrix_rows(
       (void**)&storage->matrix_properties));
   memcpy(storage->matrix_properties, matrix_properties,
          matrix_property_count * sizeof(*storage->matrix_properties));
+  loom_spirv_cooperative_property_storage_sort_matrix_rows(
+      storage->matrix_properties, matrix_property_count);
   storage->set.matrix_properties = storage->matrix_properties;
   storage->set.matrix_property_count = (uint16_t)matrix_property_count;
+  return iree_ok_status();
+}
+
+static iree_status_t loom_spirv_cooperative_property_storage_copy_vector_rows(
+    const loom_spirv_cooperative_vector_property_t* vector_properties,
+    iree_host_size_t vector_property_count, iree_allocator_t allocator,
+    loom_spirv_cooperative_property_storage_t* storage) {
+  if (vector_property_count == 0) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
+      allocator, vector_property_count * sizeof(*storage->vector_properties),
+      (void**)&storage->vector_properties));
+  memcpy(storage->vector_properties, vector_properties,
+         vector_property_count * sizeof(*storage->vector_properties));
+  loom_spirv_cooperative_property_storage_sort_vector_rows(
+      storage->vector_properties, vector_property_count);
+  storage->set.vector_properties = storage->vector_properties;
+  storage->set.vector_property_count = (uint16_t)vector_property_count;
   return iree_ok_status();
 }
 
@@ -355,14 +428,53 @@ static iree_status_t loom_spirv_cooperative_property_storage_build_matrix_spans(
   return iree_ok_status();
 }
 
-iree_status_t loom_spirv_cooperative_property_storage_initialize_matrix_rows(
+static iree_status_t loom_spirv_cooperative_property_storage_build_vector_spans(
+    iree_host_size_t vector_property_count, iree_allocator_t allocator,
+    loom_spirv_cooperative_property_storage_t* storage) {
+  if (vector_property_count == 0) {
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(
+      allocator, vector_property_count * sizeof(*storage->vector_shape_spans),
+      (void**)&storage->vector_shape_spans));
+  uint64_t previous_shape_key = 0;
+  for (iree_host_size_t i = 0; i < vector_property_count; ++i) {
+    const loom_spirv_cooperative_vector_property_t* row =
+        &storage->vector_properties[i];
+    const uint64_t shape_key =
+        loom_spirv_cooperative_vector_property_shape_key(row);
+    if (i == 0 || shape_key != previous_shape_key) {
+      storage->vector_shape_spans[storage->set.vector_shape_span_count++] =
+          (loom_spirv_cooperative_property_span_t){
+              .shape_key = shape_key,
+              .start = (uint16_t)i,
+              .count = 1,
+          };
+    } else {
+      const uint16_t span_index = storage->set.vector_shape_span_count - 1;
+      loom_spirv_cooperative_property_span_t* span =
+          &storage->vector_shape_spans[span_index];
+      ++span->count;
+    }
+    previous_shape_key = shape_key;
+  }
+  storage->set.vector_shape_spans = storage->vector_shape_spans;
+  return iree_ok_status();
+}
+
+iree_status_t loom_spirv_cooperative_property_storage_initialize(
     loom_spirv_feature_bits_t feature_bits,
     const loom_spirv_cooperative_matrix_property_t* matrix_properties,
-    iree_host_size_t matrix_property_count, iree_allocator_t allocator,
+    iree_host_size_t matrix_property_count,
+    const loom_spirv_cooperative_vector_property_t* vector_properties,
+    iree_host_size_t vector_property_count, iree_allocator_t allocator,
     loom_spirv_cooperative_property_storage_t* out_storage) {
   IREE_ASSERT_ARGUMENT(out_storage);
   if (matrix_property_count != 0) {
     IREE_ASSERT_ARGUMENT(matrix_properties);
+  }
+  if (vector_property_count != 0) {
+    IREE_ASSERT_ARGUMENT(vector_properties);
   }
   memset(out_storage, 0, sizeof(*out_storage));
   if (matrix_property_count > UINT16_MAX) {
@@ -370,13 +482,26 @@ iree_status_t loom_spirv_cooperative_property_storage_initialize_matrix_rows(
         IREE_STATUS_RESOURCE_EXHAUSTED,
         "SPIR-V cooperative matrix property count exceeds uint16_t capacity");
   }
+  if (vector_property_count > UINT16_MAX) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "SPIR-V cooperative vector property count exceeds uint16_t capacity");
+  }
   out_storage->set.feature_bits = feature_bits;
   iree_status_t status =
       loom_spirv_cooperative_property_storage_copy_matrix_rows(
           matrix_properties, matrix_property_count, allocator, out_storage);
   if (iree_status_is_ok(status)) {
+    status = loom_spirv_cooperative_property_storage_copy_vector_rows(
+        vector_properties, vector_property_count, allocator, out_storage);
+  }
+  if (iree_status_is_ok(status)) {
     status = loom_spirv_cooperative_property_storage_build_matrix_spans(
         matrix_property_count, allocator, out_storage);
+  }
+  if (iree_status_is_ok(status)) {
+    status = loom_spirv_cooperative_property_storage_build_vector_spans(
+        vector_property_count, allocator, out_storage);
   }
   if (!iree_status_is_ok(status)) {
     loom_spirv_cooperative_property_storage_deinitialize(out_storage,
@@ -391,6 +516,8 @@ void loom_spirv_cooperative_property_storage_deinitialize(
   if (storage == NULL) {
     return;
   }
+  iree_allocator_free(allocator, storage->vector_shape_spans);
+  iree_allocator_free(allocator, storage->vector_properties);
   iree_allocator_free(allocator, storage->matrix_shape_spans);
   iree_allocator_free(allocator, storage->matrix_properties);
   *storage = (loom_spirv_cooperative_property_storage_t){0};

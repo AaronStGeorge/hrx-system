@@ -17,6 +17,7 @@
 #include "loomc/iree.h"
 #include "result.h"
 #include "target.h"
+#include "target/spirv/profile_rows.h"
 
 typedef struct loomc_spirv_feature_state_t {
   // Current observed state.
@@ -44,8 +45,8 @@ typedef struct loomc_spirv_target_profile_payload_t {
   // Prepared feature set derived from known-true feature facts.
   loom_spirv_feature_set_t feature_set;
 
-  // Cooperative property view derived from feature_set.
-  loom_spirv_cooperative_property_set_t cooperative_properties;
+  // Cooperative matrix/vector row facts and prepared property views.
+  loomc_spirv_cooperative_row_fact_set_t cooperative_row_facts;
 
   // Materialized compiler-facing target bundle, when the profile facts are
   // concrete enough to refine source-selected target records.
@@ -60,6 +61,7 @@ typedef struct loomc_spirv_target_profile_payload_t {
   // Public tri-state numeric environment facts with owned provenance strings.
   loomc_spirv_numeric_fact_state_t
       environment_states[LOOMC_SPIRV_ENVIRONMENT_COUNT];
+
 } loomc_spirv_target_profile_payload_t;
 
 static const char kLoomcSpirvTargetProfilePayloadType = 0;
@@ -242,202 +244,6 @@ static loomc_spirv_feature_bits_t loomc_spirv_profile_feature_bits_from_loom(
   return public_feature_bits;
 }
 
-static loomc_status_t loomc_spirv_scalar_type_from_loom(
-    loom_spirv_scalar_type_t type, loomc_spirv_scalar_type_t* out_type) {
-  *out_type = LOOMC_SPIRV_SCALAR_TYPE_UNKNOWN;
-  switch (type) {
-    case LOOM_SPIRV_SCALAR_TYPE_UNKNOWN:
-      *out_type = LOOMC_SPIRV_SCALAR_TYPE_UNKNOWN;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCALAR_TYPE_F16:
-      *out_type = LOOMC_SPIRV_SCALAR_TYPE_F16;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCALAR_TYPE_F32:
-      *out_type = LOOMC_SPIRV_SCALAR_TYPE_F32;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCALAR_TYPE_F64:
-      *out_type = LOOMC_SPIRV_SCALAR_TYPE_F64;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCALAR_TYPE_BF16:
-      *out_type = LOOMC_SPIRV_SCALAR_TYPE_BF16;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCALAR_TYPE_S8:
-      *out_type = LOOMC_SPIRV_SCALAR_TYPE_S8;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCALAR_TYPE_S16:
-      *out_type = LOOMC_SPIRV_SCALAR_TYPE_S16;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCALAR_TYPE_S32:
-      *out_type = LOOMC_SPIRV_SCALAR_TYPE_S32;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCALAR_TYPE_S64:
-      *out_type = LOOMC_SPIRV_SCALAR_TYPE_S64;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCALAR_TYPE_U8:
-      *out_type = LOOMC_SPIRV_SCALAR_TYPE_U8;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCALAR_TYPE_U16:
-      *out_type = LOOMC_SPIRV_SCALAR_TYPE_U16;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCALAR_TYPE_U32:
-      *out_type = LOOMC_SPIRV_SCALAR_TYPE_U32;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCALAR_TYPE_U64:
-      *out_type = LOOMC_SPIRV_SCALAR_TYPE_U64;
-      return loomc_ok_status();
-  }
-  return loomc_make_status(LOOMC_STATUS_INTERNAL,
-                           "unknown internal SPIR-V scalar type");
-}
-
-static loomc_status_t loomc_spirv_scope_from_loom(
-    loom_spirv_scope_t scope, loomc_spirv_scope_t* out_scope) {
-  *out_scope = LOOMC_SPIRV_SCOPE_CROSS_DEVICE;
-  switch (scope) {
-    case LOOM_SPIRV_SCOPE_CROSS_DEVICE:
-      *out_scope = LOOMC_SPIRV_SCOPE_CROSS_DEVICE;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCOPE_DEVICE:
-      *out_scope = LOOMC_SPIRV_SCOPE_DEVICE;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCOPE_WORKGROUP:
-      *out_scope = LOOMC_SPIRV_SCOPE_WORKGROUP;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCOPE_SUBGROUP:
-      *out_scope = LOOMC_SPIRV_SCOPE_SUBGROUP;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCOPE_INVOCATION:
-      *out_scope = LOOMC_SPIRV_SCOPE_INVOCATION;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCOPE_QUEUE_FAMILY:
-      *out_scope = LOOMC_SPIRV_SCOPE_QUEUE_FAMILY;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCOPE_SHADER_CALL_KHR:
-      *out_scope = LOOMC_SPIRV_SCOPE_SHADER_CALL_KHR;
-      return loomc_ok_status();
-    case LOOM_SPIRV_SCOPE_MAX:
-      break;
-  }
-  return loomc_make_status(LOOMC_STATUS_INTERNAL,
-                           "unknown internal SPIR-V scope");
-}
-
-static loomc_status_t loomc_spirv_component_type_from_loom(
-    loom_spirv_component_type_t component_type,
-    loomc_spirv_component_type_t* out_component_type) {
-  *out_component_type = LOOMC_SPIRV_COMPONENT_TYPE_FLOAT16_NV;
-  switch (component_type) {
-    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV:
-      *out_component_type = LOOMC_SPIRV_COMPONENT_TYPE_FLOAT16_NV;
-      return loomc_ok_status();
-    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT32_NV:
-      *out_component_type = LOOMC_SPIRV_COMPONENT_TYPE_FLOAT32_NV;
-      return loomc_ok_status();
-    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT64_NV:
-      *out_component_type = LOOMC_SPIRV_COMPONENT_TYPE_FLOAT64_NV;
-      return loomc_ok_status();
-    case LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_NV:
-      *out_component_type = LOOMC_SPIRV_COMPONENT_TYPE_SIGNED_INT8_NV;
-      return loomc_ok_status();
-    case LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT16_NV:
-      *out_component_type = LOOMC_SPIRV_COMPONENT_TYPE_SIGNED_INT16_NV;
-      return loomc_ok_status();
-    case LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV:
-      *out_component_type = LOOMC_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV;
-      return loomc_ok_status();
-    case LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT64_NV:
-      *out_component_type = LOOMC_SPIRV_COMPONENT_TYPE_SIGNED_INT64_NV;
-      return loomc_ok_status();
-    case LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT8_NV:
-      *out_component_type = LOOMC_SPIRV_COMPONENT_TYPE_UNSIGNED_INT8_NV;
-      return loomc_ok_status();
-    case LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT16_NV:
-      *out_component_type = LOOMC_SPIRV_COMPONENT_TYPE_UNSIGNED_INT16_NV;
-      return loomc_ok_status();
-    case LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT32_NV:
-      *out_component_type = LOOMC_SPIRV_COMPONENT_TYPE_UNSIGNED_INT32_NV;
-      return loomc_ok_status();
-    case LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT64_NV:
-      *out_component_type = LOOMC_SPIRV_COMPONENT_TYPE_UNSIGNED_INT64_NV;
-      return loomc_ok_status();
-    case LOOM_SPIRV_COMPONENT_TYPE_SIGNED_INT8_PACKED_NV:
-      *out_component_type = LOOMC_SPIRV_COMPONENT_TYPE_SIGNED_INT8_PACKED_NV;
-      return loomc_ok_status();
-    case LOOM_SPIRV_COMPONENT_TYPE_UNSIGNED_INT8_PACKED_NV:
-      *out_component_type = LOOMC_SPIRV_COMPONENT_TYPE_UNSIGNED_INT8_PACKED_NV;
-      return loomc_ok_status();
-    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT_E4_M3_NV:
-      *out_component_type = LOOMC_SPIRV_COMPONENT_TYPE_FLOAT_E4_M3_NV;
-      return loomc_ok_status();
-    case LOOM_SPIRV_COMPONENT_TYPE_FLOAT_E5_M2_NV:
-      *out_component_type = LOOMC_SPIRV_COMPONENT_TYPE_FLOAT_E5_M2_NV;
-      return loomc_ok_status();
-    case LOOM_SPIRV_COMPONENT_TYPE_MAX:
-      break;
-  }
-  return loomc_make_status(LOOMC_STATUS_INTERNAL,
-                           "unknown internal SPIR-V component type");
-}
-
-static loomc_status_t loomc_spirv_cooperative_matrix_row_from_loom(
-    const loom_spirv_cooperative_matrix_property_t* property,
-    loomc_spirv_cooperative_matrix_row_t* out_row) {
-  *out_row = (loomc_spirv_cooperative_matrix_row_t){
-      .name = loomc_string_view_from_iree(property->name),
-      .required_features = loomc_spirv_profile_feature_bits_from_loom(
-          property->required_feature_bits),
-      .m_size = property->m_size,
-      .n_size = property->n_size,
-      .k_size = property->k_size,
-      .layout_flags =
-          (loomc_spirv_cooperative_matrix_layout_flags_t)property->layout_flags,
-      .storage_class_flags =
-          (loomc_spirv_storage_class_flags_t)property->storage_class_flags,
-      .operand_flags = (loomc_spirv_cooperative_matrix_operand_flags_t)
-                           property->operand_flags,
-  };
-  LOOMC_RETURN_IF_ERROR(loomc_spirv_scalar_type_from_loom(property->lhs_type,
-                                                          &out_row->lhs_type));
-  LOOMC_RETURN_IF_ERROR(loomc_spirv_scalar_type_from_loom(property->rhs_type,
-                                                          &out_row->rhs_type));
-  LOOMC_RETURN_IF_ERROR(loomc_spirv_scalar_type_from_loom(
-      property->accumulator_type, &out_row->accumulator_type));
-  LOOMC_RETURN_IF_ERROR(loomc_spirv_scalar_type_from_loom(
-      property->result_type, &out_row->result_type));
-  LOOMC_RETURN_IF_ERROR(
-      loomc_spirv_scope_from_loom(property->scope, &out_row->scope));
-  return loomc_ok_status();
-}
-
-static loomc_status_t loomc_spirv_cooperative_vector_row_from_loom(
-    const loom_spirv_cooperative_vector_property_t* property,
-    loomc_spirv_cooperative_vector_row_t* out_row) {
-  *out_row = (loomc_spirv_cooperative_vector_row_t){
-      .name = loomc_string_view_from_iree(property->name),
-      .required_features = loomc_spirv_profile_feature_bits_from_loom(
-          property->required_feature_bits),
-      .m_size = property->m_size,
-      .k_size = property->k_size,
-      .matrix_layout_flags =
-          (loomc_spirv_cooperative_vector_matrix_layout_flags_t)
-              property->matrix_layout_flags,
-      .storage_class_flags =
-          (loomc_spirv_storage_class_flags_t)property->storage_class_flags,
-      .flags = (loomc_spirv_cooperative_vector_flags_t)property->flags,
-  };
-  LOOMC_RETURN_IF_ERROR(loomc_spirv_component_type_from_loom(
-      property->input_type, &out_row->input_type));
-  LOOMC_RETURN_IF_ERROR(loomc_spirv_component_type_from_loom(
-      property->input_interpretation, &out_row->input_interpretation));
-  LOOMC_RETURN_IF_ERROR(loomc_spirv_component_type_from_loom(
-      property->matrix_interpretation, &out_row->matrix_interpretation));
-  LOOMC_RETURN_IF_ERROR(loomc_spirv_component_type_from_loom(
-      property->bias_interpretation, &out_row->bias_interpretation));
-  LOOMC_RETURN_IF_ERROR(loomc_spirv_component_type_from_loom(
-      property->result_type, &out_row->result_type));
-  return loomc_ok_status();
-}
-
 static loomc_status_t loomc_spirv_profile_validate_feature(
     loomc_spirv_feature_t feature) {
   if (feature <= LOOMC_SPIRV_FEATURE_UNKNOWN ||
@@ -469,7 +275,9 @@ static loomc_status_t loomc_spirv_profile_validate_environment(
 
 static loomc_status_t loomc_spirv_profile_validate_fact_state(
     loomc_target_fact_state_t state) {
-  if (state > LOOMC_TARGET_FACT_STATE_TRUE) {
+  if (state != LOOMC_TARGET_FACT_STATE_UNKNOWN &&
+      state != LOOMC_TARGET_FACT_STATE_FALSE &&
+      state != LOOMC_TARGET_FACT_STATE_TRUE) {
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
                              "target fact state is invalid");
   }
@@ -543,7 +351,7 @@ static loomc_status_t loomc_spirv_profile_validate_options(
     LOOMC_RETURN_IF_ERROR(
         loomc_spirv_profile_validate_string_view(fact->provenance));
   }
-  return loomc_ok_status();
+  return loomc_spirv_profile_validate_cooperative_row_options(options);
 }
 
 static loomc_status_t loomc_spirv_profile_fail_status(loomc_result_t* result,
@@ -830,6 +638,8 @@ static void loomc_spirv_target_profile_payload_deinitialize(
     void* payload, loomc_allocator_t allocator) {
   loomc_spirv_target_profile_payload_t* profile_payload =
       (loomc_spirv_target_profile_payload_t*)payload;
+  loomc_spirv_cooperative_row_fact_set_deinitialize(
+      &profile_payload->cooperative_row_facts, allocator);
   loomc_spirv_profile_deinitialize_feature_states(
       allocator, profile_payload->feature_states, LOOMC_SPIRV_FEATURE_COUNT);
   loomc_spirv_profile_deinitialize_numeric_states(
@@ -1000,8 +810,9 @@ static loomc_status_t loomc_spirv_target_profile_create_from_states(
     const loomc_spirv_feature_state_t* feature_states,
     const loomc_spirv_numeric_fact_state_t* limit_states,
     const loomc_spirv_numeric_fact_state_t* environment_states,
-    loomc_result_t* result, loomc_allocator_t allocator,
-    loomc_target_profile_t** out_profile) {
+    const loomc_spirv_cooperative_row_fact_set_t* base_row_facts,
+    const loomc_spirv_profile_options_t* options, loomc_result_t* result,
+    loomc_allocator_t allocator, loomc_target_profile_t** out_profile) {
   loomc_spirv_target_profile_payload_t* payload = NULL;
   loomc_status_t status =
       loomc_allocator_malloc(allocator, sizeof(*payload), (void**)&payload);
@@ -1017,6 +828,11 @@ static loomc_status_t loomc_spirv_target_profile_create_from_states(
   if (loomc_status_is_ok(status)) {
     status = loomc_spirv_profile_copy_environment_states(environment_states,
                                                          allocator, payload);
+  }
+  if (loomc_status_is_ok(status)) {
+    status = loomc_spirv_cooperative_row_fact_set_initialize(
+        base_row_facts, options, result, allocator,
+        &payload->cooperative_row_facts);
   }
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
     status = loomc_status_from_iree(loom_spirv_feature_set_prepare(
@@ -1034,9 +850,11 @@ static loomc_status_t loomc_spirv_target_profile_create_from_states(
         &payload->feature_set, environment_states, result);
   }
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
-    loom_spirv_cooperative_property_set_prepare(
-        &payload->feature_set, &payload->cooperative_properties);
-    payload->profile.cooperative_properties = &payload->cooperative_properties;
+    status = loomc_spirv_cooperative_row_fact_set_prepare_properties(
+        &payload->cooperative_row_facts, &payload->feature_set, allocator,
+        &payload->profile.cooperative_properties);
+  }
+  if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
     const loom_target_selection_t selection = {
         .bundle = loomc_spirv_profile_can_materialize_vulkan_bda_bundle(
                       &payload->feature_set)
@@ -1132,8 +950,8 @@ loomc_status_t loomc_target_profile_create_spirv(
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
     status = loomc_spirv_target_profile_create_from_states(
         target_environment, loomc_spirv_profile_identifier(options),
-        feature_states, limit_states, environment_states, result, allocator,
-        out_profile);
+        feature_states, limit_states, environment_states,
+        /*base_row_facts=*/NULL, options, result, allocator, out_profile);
   }
   if (loomc_status_is_ok(status)) {
     *out_result = result;
@@ -1178,7 +996,8 @@ loomc_status_t loomc_spirv_target_profile_refine(
     status = loomc_spirv_target_profile_create_from_states(
         loomc_target_profile_target_environment(base_profile),
         loomc_spirv_profile_refined_identifier(base_profile, options),
-        feature_states, limit_states, environment_states, result, allocator,
+        feature_states, limit_states, environment_states,
+        &base_payload->cooperative_row_facts, options, result, allocator,
         out_profile);
   }
   if (loomc_status_is_ok(status)) {
@@ -1262,9 +1081,11 @@ loomc_status_t loomc_spirv_target_profile_query_info(
       .storage_class_count = feature_set->storage_class_count,
       .decoration_count = feature_set->decoration_count,
       .cooperative_matrix_row_count =
-          payload->cooperative_properties.matrix_property_count,
+          loomc_spirv_cooperative_row_fact_set_matrix_row_count(
+              &payload->cooperative_row_facts),
       .cooperative_vector_row_count =
-          payload->cooperative_properties.vector_property_count,
+          loomc_spirv_cooperative_row_fact_set_vector_row_count(
+              &payload->cooperative_row_facts),
   };
   return loomc_ok_status();
 }
@@ -1370,13 +1191,8 @@ loomc_status_t loomc_spirv_target_profile_cooperative_matrix_row_at(
   *out_row = (loomc_spirv_cooperative_matrix_row_t){0};
   const loomc_spirv_target_profile_payload_t* payload = NULL;
   LOOMC_RETURN_IF_ERROR(loomc_spirv_profile_validate_query(profile, &payload));
-  if (index >= payload->cooperative_properties.matrix_property_count) {
-    return loomc_make_status(
-        LOOMC_STATUS_OUT_OF_RANGE,
-        "SPIR-V cooperative matrix row index is out of range");
-  }
-  return loomc_spirv_cooperative_matrix_row_from_loom(
-      &payload->cooperative_properties.matrix_properties[index], out_row);
+  return loomc_spirv_cooperative_row_fact_set_matrix_row_at(
+      &payload->cooperative_row_facts, index, out_row);
 }
 
 loomc_status_t loomc_spirv_target_profile_cooperative_vector_row_at(
@@ -1389,11 +1205,6 @@ loomc_status_t loomc_spirv_target_profile_cooperative_vector_row_at(
   *out_row = (loomc_spirv_cooperative_vector_row_t){0};
   const loomc_spirv_target_profile_payload_t* payload = NULL;
   LOOMC_RETURN_IF_ERROR(loomc_spirv_profile_validate_query(profile, &payload));
-  if (index >= payload->cooperative_properties.vector_property_count) {
-    return loomc_make_status(
-        LOOMC_STATUS_OUT_OF_RANGE,
-        "SPIR-V cooperative vector row index is out of range");
-  }
-  return loomc_spirv_cooperative_vector_row_from_loom(
-      &payload->cooperative_properties.vector_properties[index], out_row);
+  return loomc_spirv_cooperative_row_fact_set_vector_row_at(
+      &payload->cooperative_row_facts, index, out_row);
 }

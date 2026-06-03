@@ -230,8 +230,12 @@ typedef struct loom_spirv_cooperative_property_storage_t {
   loom_spirv_cooperative_property_set_t set;
   // Matrix property rows owned by this storage object.
   loom_spirv_cooperative_matrix_property_t* matrix_properties;
-  // Shape-key spans owned by this storage object.
+  // Matrix shape-key spans owned by this storage object.
   loom_spirv_cooperative_property_span_t* matrix_shape_spans;
+  // Vector property rows owned by this storage object.
+  loom_spirv_cooperative_vector_property_t* vector_properties;
+  // Vector shape-key spans owned by this storage object.
+  loom_spirv_cooperative_property_span_t* vector_shape_spans;
 } loom_spirv_cooperative_property_storage_t;
 
 typedef struct loom_spirv_cooperative_matrix_query_t {
@@ -338,6 +342,10 @@ loom_spirv_storage_class_flags_t loom_spirv_storage_class_bit(
 const loom_spirv_cooperative_matrix_property_t*
 loom_spirv_cooperative_matrix_model_properties(iree_host_size_t* out_count);
 
+// Returns the sorted static cooperative vector model rows.
+const loom_spirv_cooperative_vector_property_t*
+loom_spirv_cooperative_vector_model_properties(iree_host_size_t* out_count);
+
 // Returns the shape key used to group matrix property rows.
 uint64_t loom_spirv_cooperative_matrix_shape_key(uint16_t m_size,
                                                  uint16_t n_size,
@@ -348,20 +356,21 @@ void loom_spirv_cooperative_property_set_prepare(
     const loom_spirv_feature_set_t* feature_set,
     loom_spirv_cooperative_property_set_t* out_property_set);
 
-// Initializes storage with a copied, sorted subset of matrix rows.
+// Initializes storage with copied, sorted cooperative property rows.
 //
-// |matrix_properties| must already be sorted by
-// loom_spirv_cooperative_matrix_shape_key. This helper owns allocation and
-// span construction; selection remains the same direct shape-key lookup used by
-// static property sets.
-iree_status_t loom_spirv_cooperative_property_storage_initialize_matrix_rows(
+// This helper owns allocation, stable shape-key sorting, and span construction;
+// selection remains the same direct shape-key lookup used by static property
+// sets.
+iree_status_t loom_spirv_cooperative_property_storage_initialize(
     loom_spirv_feature_bits_t feature_bits,
     const loom_spirv_cooperative_matrix_property_t* matrix_properties,
-    iree_host_size_t matrix_property_count, iree_allocator_t allocator,
+    iree_host_size_t matrix_property_count,
+    const loom_spirv_cooperative_vector_property_t* vector_properties,
+    iree_host_size_t vector_property_count, iree_allocator_t allocator,
     loom_spirv_cooperative_property_storage_t* out_storage);
 
 // Releases storage allocated by
-// loom_spirv_cooperative_property_storage_initialize_matrix_rows.
+// loom_spirv_cooperative_property_storage_initialize.
 void loom_spirv_cooperative_property_storage_deinitialize(
     loom_spirv_cooperative_property_storage_t* storage,
     iree_allocator_t allocator);

@@ -106,6 +106,8 @@ loom_cc_library(
   SRCS
     "src/target/spirv.c"
     "src/target/spirv/profile.c"
+    "src/target/spirv/profile_rows.h"
+    "src/target/spirv/profile_rows.c"
   ALWAYSLINK
   DEPS
     ::loomc

@@ -256,6 +256,55 @@ bool FindCooperativeVectorRow(const loomc_target_profile_t* profile,
   return false;
 }
 
+loomc_spirv_cooperative_matrix_row_t MakeCustomMatrixRow(
+    loomc_string_view_t name, loomc_target_fact_state_t state,
+    loomc_string_view_t provenance) {
+  return {
+      /*.name=*/name,
+      /*.state=*/state,
+      /*.provenance=*/provenance,
+      /*.required_features=*/
+      loomc_spirv_feature_bit(LOOMC_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR) |
+          loomc_spirv_feature_bit(LOOMC_SPIRV_FEATURE_FLOAT16),
+      /*.m_size=*/8,
+      /*.n_size=*/8,
+      /*.k_size=*/16,
+      /*.lhs_type=*/LOOMC_SPIRV_SCALAR_TYPE_F16,
+      /*.rhs_type=*/LOOMC_SPIRV_SCALAR_TYPE_F16,
+      /*.accumulator_type=*/LOOMC_SPIRV_SCALAR_TYPE_F32,
+      /*.result_type=*/LOOMC_SPIRV_SCALAR_TYPE_F32,
+      /*.scope=*/LOOMC_SPIRV_SCOPE_SUBGROUP,
+      /*.layout_flags=*/LOOMC_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_BIT,
+      /*.storage_class_flags=*/LOOMC_SPIRV_STORAGE_CLASS_BIT_STORAGE_BUFFER,
+      /*.operand_flags=*/0,
+  };
+}
+
+loomc_spirv_cooperative_vector_row_t MakeCustomVectorRow(
+    loomc_string_view_t name, loomc_target_fact_state_t state,
+    loomc_string_view_t provenance) {
+  return {
+      /*.name=*/name,
+      /*.state=*/state,
+      /*.provenance=*/provenance,
+      /*.required_features=*/
+      loomc_spirv_feature_bit(LOOMC_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV),
+      /*.m_size=*/64,
+      /*.k_size=*/32,
+      /*.input_type=*/LOOMC_SPIRV_COMPONENT_TYPE_UNSIGNED_INT32_NV,
+      /*.input_interpretation=*/
+      LOOMC_SPIRV_COMPONENT_TYPE_SIGNED_INT8_PACKED_NV,
+      /*.matrix_interpretation=*/LOOMC_SPIRV_COMPONENT_TYPE_SIGNED_INT8_NV,
+      /*.bias_interpretation=*/LOOMC_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV,
+      /*.result_type=*/LOOMC_SPIRV_COMPONENT_TYPE_SIGNED_INT32_NV,
+      /*.matrix_layout_flags=*/
+      LOOMC_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_INFERENCING_OPTIMAL_BIT,
+      /*.storage_class_flags=*/
+      LOOMC_SPIRV_STORAGE_CLASS_BIT_PHYSICAL_STORAGE_BUFFER,
+      /*.flags=*/0,
+  };
+}
+
 void ExpectLimitValue(const loomc_target_profile_t* profile,
                       loomc_spirv_limit_t limit,
                       loomc_target_fact_state_t expected_state,
@@ -721,6 +770,8 @@ TEST(TargetSpirvProfileTest, QueriesCooperativePropertyRows) {
   loomc_spirv_cooperative_matrix_row_t matrix_row = {};
   ASSERT_TRUE(FindCooperativeMatrixRow(profile.get(), kF16CooperativeMatrixRow,
                                        &matrix_row));
+  EXPECT_EQ(matrix_row.state, LOOMC_TARGET_FACT_STATE_TRUE);
+  EXPECT_TRUE(loomc_string_view_is_empty(matrix_row.provenance));
   EXPECT_EQ(
       matrix_row.required_features,
       loomc_spirv_feature_bit(LOOMC_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR) |
@@ -747,6 +798,8 @@ TEST(TargetSpirvProfileTest, QueriesCooperativePropertyRows) {
   loomc_spirv_cooperative_vector_row_t vector_row = {};
   ASSERT_TRUE(FindCooperativeVectorRow(
       profile.get(), kPackedS8CooperativeVectorRow, &vector_row));
+  EXPECT_EQ(vector_row.state, LOOMC_TARGET_FACT_STATE_TRUE);
+  EXPECT_TRUE(loomc_string_view_is_empty(vector_row.provenance));
   EXPECT_EQ(vector_row.required_features,
             loomc_spirv_feature_bit(LOOMC_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV));
   EXPECT_EQ(vector_row.m_size, 32u);
@@ -782,6 +835,325 @@ TEST(TargetSpirvProfileTest, QueriesCooperativePropertyRows) {
           profile.get(), info.cooperative_vector_row_count,
           &out_of_range_vector_row);
   LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_OUT_OF_RANGE, vector_status);
+}
+
+TEST(TargetSpirvProfileTest, ExplicitCooperativeRowsAnnotateModelRows) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_spirv_feature_fact_t facts[] = {
+      {
+          /*.feature=*/LOOMC_SPIRV_FEATURE_FLOAT16,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.provenance=*/loomc_make_cstring_view("probe:float16"),
+      },
+      {
+          /*.feature=*/LOOMC_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.provenance=*/loomc_make_cstring_view("probe:matrix"),
+      },
+  };
+  loomc_spirv_profile_options_t model_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(model_options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("cooperative-row-model"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_VULKAN_1_3_BDA,
+      /*.feature_facts=*/facts,
+      /*.feature_fact_count=*/2,
+      /*.limit_facts=*/nullptr,
+      /*.limit_fact_count=*/0,
+      /*.environment_facts=*/nullptr,
+      /*.environment_fact_count=*/0,
+      /*.cooperative_matrix_rows=*/nullptr,
+      /*.cooperative_matrix_row_count=*/0,
+      /*.cooperative_vector_rows=*/nullptr,
+      /*.cooperative_vector_row_count=*/0,
+  };
+  TargetProfilePtr model_profile =
+      CreateSpirvProfile(target_environment.get(), &model_options);
+  loomc_spirv_profile_info_t model_info = {};
+  LOOMC_EXPECT_OK(
+      loomc_spirv_target_profile_query_info(model_profile.get(), &model_info));
+
+  loomc_spirv_cooperative_matrix_row_t explicit_row = {};
+  ASSERT_TRUE(FindCooperativeMatrixRow(
+      model_profile.get(), kF16CooperativeMatrixRow, &explicit_row));
+  explicit_row.provenance = loomc_make_cstring_view("vulkaninfo:row[0]");
+
+  loomc_spirv_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("cooperative-row-annotated"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_VULKAN_1_3_BDA,
+      /*.feature_facts=*/facts,
+      /*.feature_fact_count=*/2,
+      /*.limit_facts=*/nullptr,
+      /*.limit_fact_count=*/0,
+      /*.environment_facts=*/nullptr,
+      /*.environment_fact_count=*/0,
+      /*.cooperative_matrix_rows=*/&explicit_row,
+      /*.cooperative_matrix_row_count=*/1,
+      /*.cooperative_vector_rows=*/nullptr,
+      /*.cooperative_vector_row_count=*/0,
+  };
+  TargetProfilePtr profile =
+      CreateSpirvProfile(target_environment.get(), &options);
+  loomc_spirv_profile_info_t info = {};
+  LOOMC_EXPECT_OK(loomc_spirv_target_profile_query_info(profile.get(), &info));
+  EXPECT_EQ(info.cooperative_matrix_row_count,
+            model_info.cooperative_matrix_row_count);
+
+  loomc_spirv_cooperative_matrix_row_t matrix_row = {};
+  ASSERT_TRUE(FindCooperativeMatrixRow(profile.get(), kF16CooperativeMatrixRow,
+                                       &matrix_row));
+  EXPECT_EQ(matrix_row.state, LOOMC_TARGET_FACT_STATE_TRUE);
+  EXPECT_EQ(ToString(matrix_row.provenance), "vulkaninfo:row[0]");
+}
+
+TEST(TargetSpirvProfileTest, AppliesExplicitCooperativeRowFacts) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_spirv_feature_fact_t facts[] = {
+      {
+          /*.feature=*/LOOMC_SPIRV_FEATURE_FLOAT16,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.provenance=*/loomc_make_cstring_view("probe:float16"),
+      },
+      {
+          /*.feature=*/LOOMC_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.provenance=*/loomc_make_cstring_view("probe:matrix"),
+      },
+      {
+          /*.feature=*/LOOMC_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.provenance=*/loomc_make_cstring_view("probe:vector"),
+      },
+  };
+  loomc_spirv_cooperative_matrix_row_t matrix_rows[] = {
+      MakeCustomMatrixRow(
+          loomc_make_cstring_view("probe.matrix.f16.8x8x16.f32.subgroup"),
+          LOOMC_TARGET_FACT_STATE_TRUE,
+          loomc_make_cstring_view("vulkaninfo:matrix-row")),
+  };
+  loomc_spirv_cooperative_vector_row_t vector_rows[] = {
+      MakeCustomVectorRow(
+          loomc_make_cstring_view("probe.vector.u32.64x32.s8_packed"),
+          LOOMC_TARGET_FACT_STATE_TRUE,
+          loomc_make_cstring_view("vulkaninfo:vector-row")),
+  };
+  loomc_spirv_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("explicit-cooperative-rows"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_VULKAN_1_3_BDA,
+      /*.feature_facts=*/facts,
+      /*.feature_fact_count=*/3,
+      /*.limit_facts=*/nullptr,
+      /*.limit_fact_count=*/0,
+      /*.environment_facts=*/nullptr,
+      /*.environment_fact_count=*/0,
+      /*.cooperative_matrix_rows=*/matrix_rows,
+      /*.cooperative_matrix_row_count=*/1,
+      /*.cooperative_vector_rows=*/vector_rows,
+      /*.cooperative_vector_row_count=*/1,
+  };
+  TargetProfilePtr profile =
+      CreateSpirvProfile(target_environment.get(), &options);
+
+  loomc_spirv_cooperative_matrix_row_t matrix_row = {};
+  ASSERT_TRUE(FindCooperativeMatrixRow(
+      profile.get(), "probe.matrix.f16.8x8x16.f32.subgroup", &matrix_row));
+  EXPECT_EQ(matrix_row.state, LOOMC_TARGET_FACT_STATE_TRUE);
+  EXPECT_EQ(ToString(matrix_row.provenance), "vulkaninfo:matrix-row");
+  EXPECT_EQ(matrix_row.m_size, 8u);
+  EXPECT_EQ(matrix_row.n_size, 8u);
+  EXPECT_EQ(matrix_row.k_size, 16u);
+  EXPECT_EQ(matrix_row.layout_flags,
+            LOOMC_SPIRV_COOPERATIVE_MATRIX_LAYOUT_ROW_MAJOR_BIT);
+  EXPECT_EQ(matrix_row.storage_class_flags,
+            LOOMC_SPIRV_STORAGE_CLASS_BIT_STORAGE_BUFFER);
+
+  loomc_spirv_cooperative_vector_row_t vector_row = {};
+  ASSERT_TRUE(FindCooperativeVectorRow(
+      profile.get(), "probe.vector.u32.64x32.s8_packed", &vector_row));
+  EXPECT_EQ(vector_row.state, LOOMC_TARGET_FACT_STATE_TRUE);
+  EXPECT_EQ(ToString(vector_row.provenance), "vulkaninfo:vector-row");
+  EXPECT_EQ(vector_row.m_size, 64u);
+  EXPECT_EQ(vector_row.k_size, 32u);
+  EXPECT_EQ(
+      vector_row.matrix_layout_flags,
+      LOOMC_SPIRV_COOPERATIVE_VECTOR_MATRIX_LAYOUT_INFERENCING_OPTIMAL_BIT);
+  EXPECT_EQ(vector_row.storage_class_flags,
+            LOOMC_SPIRV_STORAGE_CLASS_BIT_PHYSICAL_STORAGE_BUFFER);
+}
+
+TEST(TargetSpirvProfileTest, UnavailableCooperativeRowsSuppressModelRows) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_spirv_feature_fact_t facts[] = {
+      {
+          /*.feature=*/LOOMC_SPIRV_FEATURE_FLOAT16,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.provenance=*/loomc_make_cstring_view("probe:float16"),
+      },
+      {
+          /*.feature=*/LOOMC_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.provenance=*/loomc_make_cstring_view("probe:matrix"),
+      },
+  };
+  loomc_spirv_profile_options_t model_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(model_options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("cooperative-row-model"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_VULKAN_1_3_BDA,
+      /*.feature_facts=*/facts,
+      /*.feature_fact_count=*/2,
+      /*.limit_facts=*/nullptr,
+      /*.limit_fact_count=*/0,
+      /*.environment_facts=*/nullptr,
+      /*.environment_fact_count=*/0,
+      /*.cooperative_matrix_rows=*/nullptr,
+      /*.cooperative_matrix_row_count=*/0,
+      /*.cooperative_vector_rows=*/nullptr,
+      /*.cooperative_vector_row_count=*/0,
+  };
+  TargetProfilePtr model_profile =
+      CreateSpirvProfile(target_environment.get(), &model_options);
+  loomc_spirv_cooperative_matrix_row_t unavailable_row = {};
+  ASSERT_TRUE(FindCooperativeMatrixRow(
+      model_profile.get(), kF16CooperativeMatrixRow, &unavailable_row));
+  unavailable_row.state = LOOMC_TARGET_FACT_STATE_FALSE;
+  unavailable_row.provenance = loomc_make_cstring_view("override:no-f16-row");
+
+  loomc_spirv_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("cooperative-row-unavailable"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_VULKAN_1_3_BDA,
+      /*.feature_facts=*/facts,
+      /*.feature_fact_count=*/2,
+      /*.limit_facts=*/nullptr,
+      /*.limit_fact_count=*/0,
+      /*.environment_facts=*/nullptr,
+      /*.environment_fact_count=*/0,
+      /*.cooperative_matrix_rows=*/&unavailable_row,
+      /*.cooperative_matrix_row_count=*/1,
+      /*.cooperative_vector_rows=*/nullptr,
+      /*.cooperative_vector_row_count=*/0,
+  };
+  TargetProfilePtr profile =
+      CreateSpirvProfile(target_environment.get(), &options);
+
+  loomc_spirv_cooperative_matrix_row_t matrix_row = {};
+  ASSERT_TRUE(FindCooperativeMatrixRow(profile.get(), kF16CooperativeMatrixRow,
+                                       &matrix_row));
+  EXPECT_EQ(matrix_row.state, LOOMC_TARGET_FACT_STATE_FALSE);
+  EXPECT_EQ(ToString(matrix_row.provenance), "override:no-f16-row");
+}
+
+TEST(TargetSpirvProfileTest,
+     ReportsContradictoryCooperativeRowsWithProvenance) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_spirv_cooperative_matrix_row_t matrix_rows[] = {
+      MakeCustomMatrixRow(loomc_make_cstring_view("probe.matrix.conflict"),
+                          LOOMC_TARGET_FACT_STATE_TRUE,
+                          loomc_make_cstring_view("probe:matrix-true")),
+      MakeCustomMatrixRow(loomc_make_cstring_view("probe.matrix.conflict"),
+                          LOOMC_TARGET_FACT_STATE_FALSE,
+                          loomc_make_cstring_view("override:matrix-false")),
+  };
+  loomc_spirv_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("contradictory-matrix-rows"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_NONE,
+      /*.feature_facts=*/nullptr,
+      /*.feature_fact_count=*/0,
+      /*.limit_facts=*/nullptr,
+      /*.limit_fact_count=*/0,
+      /*.environment_facts=*/nullptr,
+      /*.environment_fact_count=*/0,
+      /*.cooperative_matrix_rows=*/matrix_rows,
+      /*.cooperative_matrix_row_count=*/2,
+      /*.cooperative_vector_rows=*/nullptr,
+      /*.cooperative_vector_row_count=*/0,
+  };
+  loomc_target_profile_t* profile = nullptr;
+  loomc_result_t* result = nullptr;
+  loomc_status_t status = loomc_target_profile_create_spirv(
+      target_environment.get(), &options, loomc_allocator_system(), &profile,
+      &result);
+  LOOMC_EXPECT_OK(status);
+  TargetProfilePtr profile_ptr(profile);
+  ResultPtr result_ptr(result);
+  EXPECT_EQ(profile_ptr.get(), nullptr);
+  ExpectFailedResult(result_ptr.get());
+  const loomc_diagnostic_t* diagnostic =
+      loomc_result_diagnostic_at(result_ptr.get(), 0);
+  ASSERT_NE(diagnostic, nullptr);
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("contradictory cooperative matrix row"));
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("probe:matrix-true"));
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("override:matrix-false"));
+}
+
+TEST(TargetSpirvProfileTest, RefinesCooperativeRowsWithOwnedProvenance) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_spirv_feature_fact_t facts[] = {
+      {
+          /*.feature=*/LOOMC_SPIRV_FEATURE_FLOAT16,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.provenance=*/loomc_make_cstring_view("probe:float16"),
+      },
+      {
+          /*.feature=*/LOOMC_SPIRV_FEATURE_COOPERATIVE_MATRIX_KHR,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.provenance=*/loomc_make_cstring_view("probe:matrix"),
+      },
+  };
+  std::string provenance = "base:matrix-row";
+  loomc_spirv_cooperative_matrix_row_t matrix_rows[] = {
+      MakeCustomMatrixRow(
+          loomc_make_cstring_view("probe.matrix.refine"),
+          LOOMC_TARGET_FACT_STATE_TRUE,
+          loomc_make_string_view(provenance.data(), provenance.size())),
+  };
+  loomc_spirv_profile_options_t base_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(base_options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("base-cooperative-row"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_VULKAN_1_3_BDA,
+      /*.feature_facts=*/facts,
+      /*.feature_fact_count=*/2,
+      /*.limit_facts=*/nullptr,
+      /*.limit_fact_count=*/0,
+      /*.environment_facts=*/nullptr,
+      /*.environment_fact_count=*/0,
+      /*.cooperative_matrix_rows=*/matrix_rows,
+      /*.cooperative_matrix_row_count=*/1,
+      /*.cooperative_vector_rows=*/nullptr,
+      /*.cooperative_vector_row_count=*/0,
+  };
+  TargetProfilePtr base_profile =
+      CreateSpirvProfile(target_environment.get(), &base_options);
+  for (char& character : provenance) {
+    character = 'x';
+  }
+  TargetProfilePtr refined_profile =
+      RefineSpirvProfile(base_profile.get(), /*options=*/nullptr);
+
+  loomc_spirv_cooperative_matrix_row_t matrix_row = {};
+  ASSERT_TRUE(FindCooperativeMatrixRow(refined_profile.get(),
+                                       "probe.matrix.refine", &matrix_row));
+  EXPECT_EQ(matrix_row.state, LOOMC_TARGET_FACT_STATE_TRUE);
+  EXPECT_EQ(ToString(matrix_row.provenance), "base:matrix-row");
 }
 
 TEST(TargetSpirvProfileTest, PreservesKnownFalseFeatureFacts) {

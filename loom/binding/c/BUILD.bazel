@@ -156,6 +156,8 @@ loom_cc_library(
     srcs = [
         "src/target/spirv.c",
         "src/target/spirv/profile.c",
+        "src/target/spirv/profile_rows.c",
+        "src/target/spirv/profile_rows.h",
     ],
     hdrs = LOOMC_TARGET_SPIRV_PUBLIC_HDRS,
     includes = [

@@ -395,8 +395,9 @@ iree_status_t loom_spirv_vulkan_hal_target_profile_storage_initialize(
     for (iree_host_size_t i = 0; i < matrix_row_count; ++i) {
       feature_bits |= matrix_rows[i].required_feature_bits;
     }
-    status = loom_spirv_cooperative_property_storage_initialize_matrix_rows(
-        feature_bits, matrix_rows, matrix_row_count, allocator,
+    status = loom_spirv_cooperative_property_storage_initialize(
+        feature_bits, matrix_rows, matrix_row_count,
+        /*vector_properties=*/NULL, /*vector_property_count=*/0, allocator,
         &out_storage->cooperative_properties);
   }
   iree_allocator_free(allocator, matrix_rows);

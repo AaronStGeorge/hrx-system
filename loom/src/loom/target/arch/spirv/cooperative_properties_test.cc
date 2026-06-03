@@ -278,9 +278,10 @@ TEST(SpirvCooperativePropertiesTest, SelectsFromOwnedMatrixRowSubset) {
   ASSERT_GE(model_count, 2u);
 
   loom_spirv_cooperative_property_storage_t storage = {};
-  IREE_ASSERT_OK(loom_spirv_cooperative_property_storage_initialize_matrix_rows(
-      kF16CooperativeMatrixFeatures, model_rows, 1, iree_allocator_system(),
-      &storage));
+  IREE_ASSERT_OK(loom_spirv_cooperative_property_storage_initialize(
+      kF16CooperativeMatrixFeatures, model_rows, 1,
+      /*vector_properties=*/NULL, /*vector_property_count=*/0,
+      iree_allocator_system(), &storage));
 
   loom_spirv_cooperative_diagnostic_t diagnostic = {};
   const loom_spirv_cooperative_matrix_query_t f16_query =
@@ -292,6 +293,51 @@ TEST(SpirvCooperativePropertiesTest, SelectsFromOwnedMatrixRowSubset) {
       Bf16MatrixQuery(LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED);
   EXPECT_EQ(loom_spirv_cooperative_matrix_property_select(
                 &storage.set, &bf16_query, &diagnostic),
+            nullptr);
+  EXPECT_EQ(diagnostic.status,
+            LOOM_SPIRV_COOPERATIVE_SELECTION_REQUIRED_PROPERTY_MISSING);
+  EXPECT_TRUE(
+      iree_any_bit_set(diagnostic.rejection_flags,
+                       LOOM_SPIRV_COOPERATIVE_REJECTION_COMPONENT_TYPE));
+
+  loom_spirv_cooperative_property_storage_deinitialize(&storage,
+                                                       iree_allocator_system());
+}
+
+TEST(SpirvCooperativePropertiesTest, SelectsFromOwnedVectorRowSubset) {
+  iree_host_size_t model_count = 0;
+  const loom_spirv_cooperative_vector_property_t* model_rows =
+      loom_spirv_cooperative_vector_model_properties(&model_count);
+  ASSERT_GE(model_count, 1u);
+  const loom_spirv_cooperative_vector_property_t* packed_s8_row = nullptr;
+  for (iree_host_size_t i = 0; i < model_count; ++i) {
+    if (iree_string_view_equal(
+            model_rows[i].name,
+            IREE_SV("nv.cooperative_vector.u32.32x32.s8_packed"))) {
+      packed_s8_row = &model_rows[i];
+      break;
+    }
+  }
+  ASSERT_NE(packed_s8_row, nullptr);
+
+  loom_spirv_cooperative_property_storage_t storage = {};
+  IREE_ASSERT_OK(loom_spirv_cooperative_property_storage_initialize(
+      LOOM_SPIRV_FEATURE_VULKAN_SHADER |
+          LOOM_SPIRV_FEATURE_COOPERATIVE_VECTOR_NV,
+      /*matrix_properties=*/NULL, /*matrix_property_count=*/0, packed_s8_row, 1,
+      iree_allocator_system(), &storage));
+
+  loom_spirv_cooperative_diagnostic_t diagnostic = {};
+  const loom_spirv_cooperative_vector_query_t s8_query =
+      PackedS8VectorQuery(LOOM_LOWERING_POLICY_TARGET_PRIMITIVE_REQUIRED);
+  EXPECT_NE(loom_spirv_cooperative_vector_property_select(
+                &storage.set, &s8_query, &diagnostic),
+            nullptr);
+  loom_spirv_cooperative_vector_query_t component_miss_query = s8_query;
+  component_miss_query.input_interpretation =
+      LOOM_SPIRV_COMPONENT_TYPE_FLOAT16_NV;
+  EXPECT_EQ(loom_spirv_cooperative_vector_property_select(
+                &storage.set, &component_miss_query, &diagnostic),
             nullptr);
   EXPECT_EQ(diagnostic.status,
             LOOM_SPIRV_COOPERATIVE_SELECTION_REQUIRED_PROPERTY_MISSING);
