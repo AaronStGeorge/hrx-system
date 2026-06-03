@@ -33,17 +33,10 @@ jobs:
       - name: Adjust git config
         run: git config --global --add safe.directory "$PWD"
 
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: "3.12"
-
-      - name: Install Python developer tools
+      - name: Install developer tools
         run: |
-          python -m venv .venv
-          .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/python -m pip install --require-hashes -r requirements-dev.lock.txt
-          .venv/bin/python build_tools/devtools/install.py
+          python3 --version
+          python3 dev.py bazel setup --venv
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Check tool versions
