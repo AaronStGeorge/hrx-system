@@ -123,6 +123,25 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    loomc_target_spirv_vulkaninfo
+  HDRS
+    "include/loomc/target/spirv/vulkaninfo.h"
+  SRCS
+    "src/target/spirv/vulkaninfo.c"
+  ALWAYSLINK
+  DEPS
+    ::loomc
+    ::loomc_target_spirv
+    iree::base::internal::json
+  INCLUDES
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     test_util
   HDRS
     "test/util.h"
@@ -177,6 +196,20 @@ loom_cc_test(
   DEPS
     ::loomc
     ::loomc_target_spirv
+    ::test_util
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    target_spirv_vulkaninfo_test
+  SRCS
+    "test/target_spirv_vulkaninfo_test.cc"
+  DEPS
+    ::loomc
+    ::loomc_target_spirv
+    ::loomc_target_spirv_vulkaninfo
     ::test_util
     iree::testing::gtest
     iree::testing::gtest_main

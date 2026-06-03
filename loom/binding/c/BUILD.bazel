@@ -146,6 +146,28 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "loomc_target_spirv_vulkaninfo",
+    srcs = [
+        "src/target/spirv/vulkaninfo.c",
+    ],
+    hdrs = [
+        "include/loomc/target/spirv/vulkaninfo.h",
+    ],
+    includes = [
+        ".",
+        "include",
+        "src",
+    ],
+    linkstatic = True,
+    deps = [
+        ":loomc",
+        ":loomc_target_spirv",
+        "//runtime/src/iree/base/internal:json",
+    ],
+    alwayslink = True,
+)
+
+loom_cc_library(
     name = "test_util",
     testonly = True,
     hdrs = ["test/util.h"],
@@ -195,6 +217,19 @@ loom_cc_test(
     deps = [
         ":loomc",
         ":loomc_target_spirv",
+        ":test_util",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "target_spirv_vulkaninfo_test",
+    srcs = ["test/target_spirv_vulkaninfo_test.cc"],
+    deps = [
+        ":loomc",
+        ":loomc_target_spirv",
+        ":loomc_target_spirv_vulkaninfo",
         ":test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

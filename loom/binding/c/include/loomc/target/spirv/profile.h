@@ -151,8 +151,23 @@ typedef uint64_t loomc_spirv_feature_bits_t;
 /// SPIR-V 1.0 binary version word.
 #define LOOMC_SPIRV_VERSION_1_0 LOOMC_SPIRV_VERSION(1, 0)
 
+/// SPIR-V 1.1 binary version word.
+#define LOOMC_SPIRV_VERSION_1_1 LOOMC_SPIRV_VERSION(1, 1)
+
+/// SPIR-V 1.2 binary version word.
+#define LOOMC_SPIRV_VERSION_1_2 LOOMC_SPIRV_VERSION(1, 2)
+
 /// SPIR-V 1.3 binary version word.
 #define LOOMC_SPIRV_VERSION_1_3 LOOMC_SPIRV_VERSION(1, 3)
+
+/// SPIR-V 1.4 binary version word.
+#define LOOMC_SPIRV_VERSION_1_4 LOOMC_SPIRV_VERSION(1, 4)
+
+/// SPIR-V 1.5 binary version word.
+#define LOOMC_SPIRV_VERSION_1_5 LOOMC_SPIRV_VERSION(1, 5)
+
+/// SPIR-V 1.6 binary version word.
+#define LOOMC_SPIRV_VERSION_1_6 LOOMC_SPIRV_VERSION(1, 6)
 
 /// Returns the direct bit for a SPIR-V feature.
 static inline loomc_spirv_feature_bits_t loomc_spirv_feature_bit(

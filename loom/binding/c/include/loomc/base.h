@@ -228,6 +228,9 @@ typedef enum loomc_structure_type_e {
 
   /// `loomc_option_dict_t`.
   LOOMC_STRUCTURE_TYPE_OPTION_DICT = 19,
+
+  /// `loomc_spirv_vulkaninfo_profile_options_t`.
+  LOOMC_STRUCTURE_TYPE_SPIRV_VULKANINFO_PROFILE_OPTIONS = 20,
 } loomc_structure_type_t;
 
 /// One loose string option entry.
