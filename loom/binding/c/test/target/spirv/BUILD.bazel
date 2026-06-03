@@ -1,0 +1,71 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load(
+    "//loom/build_tools/bazel:build_defs.bzl",
+    "loom_cc_test",
+)
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+loom_cc_test(
+    name = "profile_test",
+    srcs = ["profile_test.cc"],
+    deps = [
+        "//loom/binding/c:loomc",
+        "//loom/binding/c:loomc_target_spirv",
+        "//loom/binding/c/test:test_util",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "vulkaninfo_test",
+    srcs = ["vulkaninfo_test.cc"],
+    deps = [
+        "//loom/binding/c:loomc",
+        "//loom/binding/c:loomc_target_spirv",
+        "//loom/binding/c:loomc_target_spirv_vulkaninfo",
+        "//loom/binding/c/test:test_util",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "//runtime/src/iree/testing:temp_file",
+    ],
+)
+
+loom_cc_test(
+    name = "vulkan_test",
+    srcs = ["vulkan_test.cc"],
+    deps = [
+        "//loom/binding/c:loomc",
+        "//loom/binding/c:loomc_target_spirv",
+        "//loom/binding/c:loomc_target_spirv_vulkan",
+        "//loom/binding/c/test:test_util",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+        "@vulkan_headers",
+    ],
+)
+
+loom_cc_test(
+    name = "iree_hal_test",
+    srcs = ["iree_hal_test.cc"],
+    deps = [
+        "//loom/binding/c:loomc",
+        "//loom/binding/c:loomc_target_iree_hal",
+        "//loom/binding/c:loomc_target_spirv",
+        "//loom/binding/c:loomc_target_spirv_iree_hal",
+        "//loom/binding/c/test:test_util",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)

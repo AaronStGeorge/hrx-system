@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loomc/target/spirv/vulkan.h"
+
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -13,7 +15,6 @@
 #include "loomc/target.h"
 #include "loomc/target/spirv/base.h"
 #include "loomc/target/spirv/profile.h"
-#include "loomc/target/spirv/vulkan.h"
 #include "test/util.h"
 
 namespace {

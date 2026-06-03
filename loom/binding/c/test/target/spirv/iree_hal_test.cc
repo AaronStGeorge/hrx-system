@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "loomc/target/iree_hal.h"
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -13,7 +15,6 @@
 #include "loomc/diagnostic.h"
 #include "loomc/result.h"
 #include "loomc/target.h"
-#include "loomc/target/iree_hal.h"
 #include "loomc/target/spirv/base.h"
 #include "loomc/target/spirv/iree_hal.h"
 #include "loomc/target/spirv/profile.h"
