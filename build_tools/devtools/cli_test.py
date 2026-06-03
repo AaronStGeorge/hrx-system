@@ -86,30 +86,35 @@ class CliTest(unittest.TestCase):
     def test_root_agents_md_includes_bazel_and_cmake_lanes(self):
         output = self.parse_agent_md(["--agents_md"])
 
-        self.assertIn("### Bazel Lane", output)
-        self.assertIn("### CMake Lane", output)
+        self.assertIn("### Bazel", output)
+        self.assertIn("### CMake", output)
         self.assertIn("python dev.py bazel precommit", output)
         self.assertIn("python dev.py cmake build hrx", output)
+        self.assertNotIn("Lane", output)
+        self.assertNotIn("setup", output)
+        self.assertNotIn("hook", output)
 
     def test_bazel_agents_md_includes_only_bazel_lane(self):
         output = self.parse_agent_md(["bazel", "--agents_md"])
 
-        self.assertIn("### Bazel Lane", output)
-        self.assertNotIn("### CMake Lane", output)
+        self.assertIn("### Bazel", output)
+        self.assertNotIn("### CMake", output)
         self.assertIn("python dev.py bazel test", output)
+        self.assertNotIn("python dev.py cmake", output)
 
     def test_cmake_agents_md_includes_only_cmake_lane(self):
         output = self.parse_agent_md(["cmake", "--agent_md"])
 
-        self.assertIn("### CMake Lane", output)
-        self.assertNotIn("### Bazel Lane", output)
+        self.assertIn("### CMake", output)
+        self.assertNotIn("### Bazel", output)
         self.assertIn("../builds/<checkout-name>/", output)
+        self.assertIn("raw CMake or CTest options after `--`", output)
 
     def test_command_agents_md_uses_command_lane(self):
         output = self.parse_agent_md(["bazel", "build", "--agents-md"])
 
-        self.assertIn("### Bazel Lane", output)
-        self.assertNotIn("### CMake Lane", output)
+        self.assertIn("### Bazel", output)
+        self.assertNotIn("### CMake", output)
 
     def test_cmake_build_target_shorthand(self):
         args = cli.parse_arguments(["cmake", "build", "hrx"])

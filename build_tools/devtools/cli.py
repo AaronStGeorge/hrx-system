@@ -576,20 +576,7 @@ def handle_unimplemented_backend_command(args: argparse.Namespace) -> CommandPla
 
 
 def print_agent_md(lanes: tuple[str, ...]) -> None:
-    sections = [
-        "## dev.py",
-        "",
-        "Use `dev.py` from the repository root. The build lane is structural:",
-        "`python dev.py bazel ...` for Bazel/source-graph work and "
-        "`python dev.py cmake ...` for CMake/package work.",
-        "",
-        "Tool environment modes:",
-        "- Default: managed `.venv` when it exists, system tools otherwise.",
-        "- `--system`: use tools from `PATH` and write no managed tool env.",
-        "- `--tool-root PATH`: use an external managed tool env.",
-        "- `--dry-run`: print the underlying command plan without executing it.",
-        "",
-    ]
+    sections = [agent_md_header(lanes), ""]
     for lane in lanes:
         if lane == "bazel":
             sections.append(agent_md_bazel_section())
@@ -601,51 +588,53 @@ def print_agent_md(lanes: tuple[str, ...]) -> None:
     print("\n".join(sections).rstrip() + "\n")
 
 
+def agent_md_header(lanes: tuple[str, ...]) -> str:
+    if lanes == ("bazel",):
+        command_shape = "`python dev.py bazel <command>`."
+    elif lanes == ("cmake",):
+        command_shape = "`python dev.py cmake <command>`."
+    else:
+        command_shape = (
+            "`python dev.py bazel <command>` for Bazel and "
+            "`python dev.py cmake <command>` for CMake."
+        )
+    return f"""## dev.py
+
+Run from repo root: {command_shape} Use `--help` for command details.
+Long flags accept hyphen or underscore spellings: `--dry-run`, `--dry_run`."""
+
+
 def agent_md_bazel_section() -> str:
-    return """### Bazel Lane
+    return """### Bazel
 
-Use the Bazel lane for source-graph development and normal local acceptance
-checks.
+Use Bazel for source-tree builds, tests, and review checks. `build` and `test`
+default to `//runtime/...` and `//libhrx/...` when no targets are given.
+Use absolute labels such as `//runtime/src/iree/base/...`, not `:target`.
 
-Setup and hooks:
-```bash
-python dev.py bazel setup
-python dev.py bazel hook
-```
-
-Common commands:
 ```bash
 python dev.py bazel configure
-python dev.py bazel build
-python dev.py bazel test
-python dev.py bazel precommit
+python dev.py bazel build [targets...]
+python dev.py bazel test [targets...]
+python dev.py bazel precommit [paths...]
 python dev.py bazel precommit --base origin/main
 python dev.py bazel presubmit
 ```
 
-Notes:
-- With no explicit targets, `build` and `test` cover `//runtime/...` and
-  `//libhrx/...`.
-- `precommit` checks staged, unstaged, and untracked local files.
-- `precommit --base REF` checks branch changes from the merge base with `REF`
-  through `HEAD`, plus local changes.
-- `presubmit` is the full-tree CI-shaped check.
-- Bazel outputs live under `bazel-bin/`, `bazel-testlogs/`, and `bazel-out/`."""
+`precommit` checks staged, unstaged, and untracked local changes.
+`precommit --base REF` checks branch changes from the merge base with `REF`
+through `HEAD`, plus local changes. `presubmit` is the full CI-shaped check.
+
+Outputs: `bazel-bin/`, `bazel-testlogs/`, and `bazel-out/`."""
 
 
 def agent_md_cmake_section() -> str:
     build_dir = "../builds/<checkout-name>"
-    return f"""### CMake Lane
+    return f"""### CMake
 
-Use the CMake lane for package/install-test workflows and CMake target checks.
+Use CMake for package and install-test workflows. `configure` writes
+`{build_dir}/`. `build TARGET` maps to `cmake --build ... --target TARGET`.
+Put raw CMake or CTest options after `--`.
 
-Setup and hooks:
-```bash
-python dev.py cmake setup
-python dev.py cmake hook
-```
-
-Common commands:
 ```bash
 python dev.py cmake configure
 python dev.py cmake configure -- -DCMAKE_PREFIX_PATH=/opt/rocm
@@ -655,13 +644,8 @@ python dev.py cmake precommit
 python dev.py cmake presubmit
 ```
 
-Notes:
-- Configure and build outputs live outside the source tree under `{build_dir}/`.
-- Positional `cmake build` arguments are target names, so
-  `python dev.py cmake build hrx` maps to `cmake --build ... --target hrx`.
-- Use `--` before raw CMake or CTest options.
-- The CMake precommit lane currently runs shared repository hygiene.
-- `presubmit` is the full-tree CI-shaped shared hygiene check for this lane."""
+`precommit` runs shared hygiene for local changes. `presubmit` is the full-tree
+shared hygiene check."""
 
 
 def main(argv: list[str] | None = None) -> int:
