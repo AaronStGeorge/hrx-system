@@ -47,4 +47,15 @@ loom_cc_binary(
     iree::runtime::binding::c::loomc_target_spirv
 )
 
+loom_cc_binary(
+  NAME
+    emit_spirv_vulkaninfo
+  SRCS
+    "emit_spirv_vulkaninfo.c"
+  DEPS
+    iree::runtime::binding::c::loomc
+    iree::runtime::binding::c::loomc_target_spirv
+    iree::runtime::binding::c::loomc_target_spirv_vulkaninfo
+)
+
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

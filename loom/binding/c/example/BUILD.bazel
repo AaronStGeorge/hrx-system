@@ -47,3 +47,13 @@ loom_cc_binary(
         "//loom/binding/c:loomc_target_spirv",
     ],
 )
+
+loom_cc_binary(
+    name = "emit_spirv_vulkaninfo",
+    srcs = ["emit_spirv_vulkaninfo.c"],
+    deps = [
+        "//loom/binding/c:loomc",
+        "//loom/binding/c:loomc_target_spirv",
+        "//loom/binding/c:loomc_target_spirv_vulkaninfo",
+    ],
+)
