@@ -15,17 +15,15 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+CMAKE_BUILD_DIR = REPO_ROOT.parent / "builds" / REPO_ROOT.name
 PROJECT_ROOT = "runtime/"
+CMAKE_TEST_REGEX = "^iree/"
 GLOBAL_TEST_TRIGGERS = (
     "BUILD.bazel",
     "MODULE.bazel",
     ".bazelrc",
     ".bazel_to_cmake.cfg.py",
     "requirements",
-    "build_tools/bazel/",
-    "build_tools/bazel_to_cmake/",
-    "build_tools/testing/",
-    "build_tools/third_party/",
 )
 
 
@@ -34,6 +32,12 @@ def parse_arguments() -> argparse.Namespace:
     mutation = parser.add_mutually_exclusive_group()
     mutation.add_argument("--fix", action="store_true", help="Accepted for symmetry.")
     mutation.add_argument("--check", action="store_true", help="Accepted for symmetry.")
+    parser.add_argument(
+        "--lane",
+        choices=("bazel", "cmake"),
+        default="bazel",
+        help="Build-system lane used for tests. Defaults to bazel.",
+    )
     parser.add_argument("--tests", action="store_true", help="Run runtime tests.")
     parser.add_argument(
         "--files-from",
@@ -54,6 +58,8 @@ def run_command(command: list[str], description: str) -> bool:
 
 
 def is_global_trigger(path: str) -> bool:
+    if "build_tools" in Path(path).parts:
+        return True
     if path.startswith("requirements") and path.endswith(".txt"):
         return True
     return any(
@@ -77,6 +83,38 @@ def should_run_tests(files_from: str | None) -> bool:
     )
 
 
+def run_bazel_tests() -> bool:
+    return run_command(
+        ["bazel", "test", "--config=presubmit", "//runtime/..."],
+        "Bazel tests",
+    )
+
+
+def run_cmake_tests() -> bool:
+    if not (CMAKE_BUILD_DIR / "CMakeCache.txt").is_file():
+        print(
+            "runtime presubmit: CMake build tree is not configured; "
+            "run `python dev.py cmake configure` first"
+        )
+        return False
+    if not run_command(
+        ["cmake", "--build", str(CMAKE_BUILD_DIR)],
+        "CMake build",
+    ):
+        return False
+    return run_command(
+        [
+            "ctest",
+            "--test-dir",
+            str(CMAKE_BUILD_DIR),
+            "--output-on-failure",
+            "-R",
+            CMAKE_TEST_REGEX,
+        ],
+        "CTest tests",
+    )
+
+
 def main() -> int:
     args = parse_arguments()
     if not args.tests:
@@ -84,10 +122,12 @@ def main() -> int:
     if not should_run_tests(args.files_from):
         print("runtime presubmit: no runtime-affecting files")
         return 0
-    ok = run_command(
-        ["bazel", "test", "--config=presubmit", "//runtime/..."],
-        "Bazel tests",
-    )
+    if args.lane == "bazel":
+        ok = run_bazel_tests()
+    elif args.lane == "cmake":
+        ok = run_cmake_tests()
+    else:
+        raise ValueError(f"unknown lane: {args.lane}")
     return 0 if ok else 1
 
 

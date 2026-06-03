@@ -38,6 +38,8 @@ def presubmit_plan(
         command = [
             tool_env.python,
             str(REPO_ROOT / "build_tools/lefthook/presubmit.py"),
+            "--lane",
+            lane,
             "--profile",
             profile,
             "--check",
@@ -57,11 +59,12 @@ def presubmit_plan(
         command = [
             tool_env.python,
             str(REPO_ROOT / "build_tools/lefthook/presubmit.py"),
+            "--lane",
+            lane,
             "--profile",
             profile,
             "--check",
             "--all",
-            "--hygiene",
         ]
         if verbose:
             command.append("--verbose")
@@ -70,7 +73,7 @@ def presubmit_plan(
                 command,
                 cwd=REPO_ROOT,
                 env=env,
-                label="run CMake-lane shared hygiene",
+                label="run CMake-lane presubmit",
             )
         )
     else:
@@ -91,6 +94,8 @@ def precommit_plan(
     command = [
         tool_env.python,
         str(REPO_ROOT / "build_tools/lefthook/presubmit.py"),
+        "--lane",
+        lane,
         "--check",
     ]
     if paths:
@@ -105,7 +110,7 @@ def precommit_plan(
     if lane == "bazel":
         command += ["--profile", profile]
     elif lane == "cmake":
-        command += ["--profile", profile, "--hygiene"]
+        command += ["--profile", profile]
     else:
         raise ValueError(f"unknown lane: {lane}")
 

@@ -6,6 +6,11 @@
 
 #include "iree/hal/drivers/amdgpu/util/libaqlprofile.h"
 
+// Some ROCm aqlprofile SDK headers define these C tag types without matching
+// typedefs, then use the untagged names in public prototypes.
+typedef struct aqlprofile_att_buffer_status_t aqlprofile_att_buffer_status_t;
+typedef enum aqlprofile_spm_decode_query_t aqlprofile_spm_decode_query_t;
+
 #include "aqlprofile-sdk/aql_profile_v2.h"
 #include "iree/base/internal/dynamic_library.h"
 #include "iree/base/internal/path.h"

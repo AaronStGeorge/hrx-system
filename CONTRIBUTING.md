@@ -96,8 +96,8 @@ Use `--base <git-ref>` to check the branch diff from the merge base through
 `HEAD` plus local changes. Use `--staged` when you explicitly want staged files
 only. Use `--profile default`, `--profile paranoid`, or `--profile ci` to select
 the check profile for one manual run. The Bazel lane defaults to `paranoid` for
-precommit. The CMake lane defaults to `default` and currently runs shared
-repository hygiene checks.
+precommit. The CMake lane defaults to `default`; select `paranoid` or `ci` to
+add affected project CMake/CTest checks.
 
 Use the fix command when you want mechanical repairs:
 

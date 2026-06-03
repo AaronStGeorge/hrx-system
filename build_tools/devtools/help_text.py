@@ -168,8 +168,8 @@ that CI runs. Use `python dev.py {lane} precommit` for local changes only.""",
             )
         else:
             lane_scope = (
-                "The CMake lane defaults to the default profile and currently "
-                "runs shared repository hygiene checks."
+                "The CMake lane defaults to the default profile. Select "
+                "paranoid or ci to add affected project CMake/CTest checks."
             )
         return CommandHelp(
             description=f"Run non-mutating checks for local {lane} changes.",

@@ -187,6 +187,7 @@ class CliTest(unittest.TestCase):
         description = plan.describe()
 
         self.assertIn("--changed", description)
+        self.assertIn("--lane bazel", description)
         self.assertIn("--profile paranoid", description)
 
     def test_precommit_profile_can_be_selected(self):
@@ -195,6 +196,7 @@ class CliTest(unittest.TestCase):
         plan = args.handler(args)
         description = plan.describe()
 
+        self.assertIn("--lane bazel", description)
         self.assertIn("--profile default", description)
         self.assertNotIn("--profile paranoid", description)
 
@@ -203,8 +205,9 @@ class CliTest(unittest.TestCase):
         plan = args.handler(args)
         description = plan.describe()
 
+        self.assertIn("--lane cmake", description)
         self.assertIn("--profile paranoid", description)
-        self.assertIn("--hygiene", description)
+        self.assertNotIn("--hygiene", description)
 
     def test_bazel_precommit_can_use_base_ref(self):
         args = cli.parse_arguments(["bazel", "precommit", "--base", "origin/main"])
@@ -240,14 +243,15 @@ class CliTest(unittest.TestCase):
                 ["bazel", "precommit", "--base", "origin/main", "README.md"]
             )
 
-    def test_cmake_precommit_is_hygiene_only(self):
+    def test_cmake_precommit_uses_selected_lane(self):
         args = cli.parse_arguments(["cmake", "precommit"])
 
         plan = args.handler(args)
         description = plan.describe()
 
         self.assertIn("--changed", description)
-        self.assertIn("--hygiene", description)
+        self.assertIn("--lane cmake", description)
+        self.assertNotIn("--hygiene", description)
         self.assertIn("--profile default", description)
 
     def test_cmake_presubmit_profile_can_be_selected(self):
@@ -256,9 +260,10 @@ class CliTest(unittest.TestCase):
         plan = args.handler(args)
         description = plan.describe()
 
+        self.assertIn("--lane cmake", description)
         self.assertIn("--profile paranoid", description)
         self.assertIn("--all", description)
-        self.assertIn("--hygiene", description)
+        self.assertNotIn("--hygiene", description)
 
     def test_bazel_presubmit_uses_full_tree_input(self):
         args = cli.parse_arguments(["bazel", "presubmit", "--profile", "default"])
@@ -266,6 +271,7 @@ class CliTest(unittest.TestCase):
         plan = args.handler(args)
         description = plan.describe()
 
+        self.assertIn("--lane bazel", description)
         self.assertIn("--profile default", description)
         self.assertIn("--all", description)
 

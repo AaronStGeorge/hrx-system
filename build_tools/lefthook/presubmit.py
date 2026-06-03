@@ -92,10 +92,6 @@ GLOBAL_PROJECT_TRIGGERS = (
     ".bazelrc",
     ".bazel_to_cmake.cfg.py",
     "requirements",
-    "build_tools/bazel/",
-    "build_tools/bazel_to_cmake/",
-    "build_tools/testing/",
-    "build_tools/third_party/",
 )
 ROOT_DEVTOOLS_TRIGGERS = (
     ".github/workflows/presubmit.yml",
@@ -111,6 +107,12 @@ ROOT_DEVTOOLS_TRIGGERS = (
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run repository presubmit checks.")
+    parser.add_argument(
+        "--lane",
+        choices=("bazel", "cmake"),
+        default="bazel",
+        help="Build-system lane used for project tests. Defaults to bazel.",
+    )
     parser.add_argument(
         "--profile",
         choices=("default", "paranoid", "ci"),
@@ -163,7 +165,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--tests",
         action="store_true",
-        help="Run affected project Bazel presubmit tests.",
+        help="Run affected project tests for the selected lane.",
     )
     parser.add_argument(
         "--static-analysis",
@@ -652,6 +654,8 @@ def projects_for_paths(paths: list[str]) -> list[Project]:
 
 
 def is_global_trigger(path: str) -> bool:
+    if "build_tools" in Path(path).parts:
+        return True
     if path.startswith("requirements") and path.endswith(".txt"):
         return True
     return any(
@@ -665,6 +669,7 @@ def run_project_tests(
     paths: list[str],
     fix: bool,
     verbose: bool,
+    lane: str,
 ) -> bool:
     if not projects:
         return skip_step("Project tests", "no affected project entry points")
@@ -680,6 +685,8 @@ def run_project_tests(
             command = [
                 "python",
                 project.script,
+                "--lane",
+                lane,
                 "--files-from",
                 file_list_path,
                 "--tests",
@@ -727,6 +734,30 @@ def run_root_devtools_tests(paths: list[str], verbose: bool) -> bool:
     return ok
 
 
+def run_root_devtools_tests_for_lane(
+    paths: list[str], lane: str, verbose: bool
+) -> bool:
+    if lane == "bazel":
+        return run_root_devtools_tests(paths, verbose)
+    if lane != "cmake":
+        raise ValueError(f"unknown lane: {lane}")
+    if not any(is_root_devtools_trigger(path) for path in paths):
+        return skip_step("Root devtools tests", "no root devtools inputs")
+    return run_command(
+        [
+            "python",
+            "-B",
+            "-m",
+            "unittest",
+            "build_tools.devtools.cli_test",
+            "build_tools.devtools.command_plan_test",
+            "build_tools.devtools.setup_test",
+        ],
+        "Root devtools Python tests",
+        verbose,
+    )
+
+
 def is_root_devtools_trigger(path: str) -> bool:
     if path.startswith("requirements") and path.endswith(".txt"):
         return True
@@ -768,6 +799,7 @@ def print_plan(
     if args.static_analysis:
         scopes.append("static-analysis")
     print("presubmit plan:")
+    print(f"  lane: {args.lane}")
     print(f"  profile: {args.profile}")
     print(f"  mode: {mutation}")
     print(f"  input: {input_mode} ({len(paths)} file(s))")
@@ -791,9 +823,20 @@ def main() -> int:
         ok = run_hygiene(paths, fix=args.fix, verbose=args.verbose) and ok
     if args.tests:
         print_section("Tests")
-        ok = run_root_devtools_tests(paths, verbose=args.verbose) and ok
         ok = (
-            run_project_tests(projects, paths, fix=args.fix, verbose=args.verbose)
+            run_root_devtools_tests_for_lane(
+                paths, lane=args.lane, verbose=args.verbose
+            )
+            and ok
+        )
+        ok = (
+            run_project_tests(
+                projects,
+                paths,
+                fix=args.fix,
+                verbose=args.verbose,
+                lane=args.lane,
+            )
             and ok
         )
     if args.static_analysis:

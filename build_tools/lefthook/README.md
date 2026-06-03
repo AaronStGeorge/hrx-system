@@ -44,9 +44,9 @@ build_tools/lefthook/presubmit.sh
 bazel-to-cmake, generated AMDGPU target metadata, watchwords, merge-conflict
 markers, and basic text hygiene.
 
-`paranoid` adds affected project Bazel presubmit tests and the static-analysis
-lane. The static-analysis lane is intentionally empty until providers such as
-clang-tidy or CodeQL are wired in.
+`paranoid` adds affected project tests for the selected build lane and the
+static-analysis lane. The static-analysis lane is intentionally empty until
+providers such as clang-tidy or CodeQL are wired in.
 
 `ci` is the full-tree, non-mutating profile. It checks all tracked files and
 runs all configured project presubmit tests.
@@ -56,7 +56,7 @@ The default manual `precommit` and hook-install profiles are:
 | Lane | Default Profile | Scope |
 |------|-----------------|-------|
 | Bazel | `paranoid` | Hygiene, affected project Bazel tests, and configured static-analysis providers. |
-| CMake | `default` | Shared repository hygiene. |
+| CMake | `default` | Repository hygiene. Select `paranoid` or `ci` to add affected project CMake/CTest checks. |
 
 `presubmit` defaults to `ci` for both lanes:
 
@@ -64,6 +64,10 @@ The default manual `precommit` and hook-install profiles are:
 python dev.py bazel presubmit
 python dev.py cmake presubmit
 ```
+
+The checked-in GitHub `check` group currently runs the Bazel lane. The CMake
+`ci` profile is a local opt-in until the CMake build/test lane is green enough
+to gate CI.
 
 Any manual run can select a profile explicitly:
 
@@ -145,6 +149,17 @@ The root dispatcher writes the selected file list once and invokes each affected
 project script with `--files-from`. Project scripts decide whether those files
 affect their project. Shared build-system paths fan out to every configured
 project entry point.
+
+CMake project tests use normal CMake commands: build the configured tree, then
+run `ctest` with the project's native selector. Presubmit scripts do not
+translate Bazel labels to CMake target names or create synthetic CMake test
+groups.
+
+Any path under a `build_tools/` directory is a global project trigger. That rule
+is intentionally structural: root `build_tools/`, `runtime/build_tools/`,
+`libhrx/build_tools/`, and future project tool directories all fan out to every
+configured project entry point instead of maintaining dependency-specific folder
+lists.
 
 This keeps root policy focused on repository-wide hygiene while preserving
 project ownership of tests, expensive checks, and future project-specific static

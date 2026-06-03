@@ -757,12 +757,12 @@ python dev.py cmake configure -DIREE_HAL_DRIVER_AMDGPU=OFF -DLIBHRX_BUILD=OFF
 python dev.py cmake build hrx
 python dev.py cmake test -R hrx
 python dev.py cmake precommit
-python dev.py cmake precommit --profile default
+python dev.py cmake precommit --profile paranoid
 python dev.py cmake presubmit
 ```
 
-`precommit` runs shared hygiene for local changes. `presubmit` is the full-tree
-shared hygiene check."""
+`precommit` checks local changes. `precommit --profile paranoid` adds affected
+project CMake/CTest checks. `presubmit` is the full-tree CI-shaped check."""
 
 
 def main(argv: list[str] | None = None) -> int:
