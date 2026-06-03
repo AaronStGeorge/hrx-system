@@ -249,6 +249,9 @@ typedef enum loomc_structure_type_e {
 
   /// `loomc_module_function_query_options_t`.
   LOOMC_STRUCTURE_TYPE_MODULE_FUNCTION_QUERY_OPTIONS = 26,
+
+  /// `loomc_module_global_query_options_t`.
+  LOOMC_STRUCTURE_TYPE_MODULE_GLOBAL_QUERY_OPTIONS = 27,
 } loomc_structure_type_t;
 
 /// One loose string option entry.

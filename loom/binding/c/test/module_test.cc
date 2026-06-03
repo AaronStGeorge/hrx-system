@@ -120,11 +120,41 @@ kernel.def export("dispatch") @entry() {
   return DeserializeModule(context, source.get());
 }
 
+ModulePtr CreateMixedSymbolModule(loomc_context_t* context) {
+  SourcePtr source = CreateTextSource("mixed_symbols.loom", R"(
+global.constant @answer : index = 40
+
+func.def public @helper(%x: i32) -> (i32) {
+  func.return %x : i32
+}
+
+global.variable @state : index = 0
+
+kernel.def export("dispatch") @entry() {
+  %one = index.constant 1 : index
+  kernel.launch.config workgroups(%one, %one, %one) workgroup_size(%one, %one, %one) : index
+} launch {
+  kernel.return
+}
+)");
+  return DeserializeModule(context, source.get());
+}
+
 const loomc_module_function_t* FindFunction(
     const std::vector<loomc_module_function_t>& functions, const char* name) {
   for (const loomc_module_function_t& function : functions) {
     if (ToString(function.symbol_name) == name) {
       return &function;
+    }
+  }
+  return nullptr;
+}
+
+const loomc_module_global_t* FindGlobal(
+    const std::vector<loomc_module_global_t>& globals, const char* name) {
+  for (const loomc_module_global_t& global : globals) {
+    if (ToString(global.symbol_name) == name) {
+      return &global;
     }
   }
   return nullptr;
@@ -332,6 +362,254 @@ TEST(ModuleTest, ReportsNamedFunctionQueryMissInResult) {
   ResultPtr result_ptr(result);
   EXPECT_EQ(function_count, 0u);
   ExpectFailedResultCode(result_ptr.get(), "MODULE_FUNCTION/NOT_FOUND");
+}
+
+TEST(ModuleTest, QueriesGlobalsInMixedModule) {
+  ContextPtr context = CreateContext();
+  ModulePtr module = CreateMixedSymbolModule(context.get());
+
+  loomc_module_global_query_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_MODULE_GLOBAL_QUERY_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.global_symbol=*/loomc_string_view_empty(),
+      /*.kind=*/LOOMC_MODULE_GLOBAL_KIND_UNKNOWN,
+  };
+  loomc_host_size_t global_count = 0;
+  loomc_result_t* result = nullptr;
+  loomc_status_t status = loomc_module_query_globals(
+      module.get(), &options, loomc_allocator_system(), 0, nullptr,
+      &global_count, &result);
+  LOOMC_ASSERT_OK(status);
+  ResultPtr count_result(result);
+  ExpectSucceededResult(count_result.get());
+  ASSERT_EQ(global_count, 2u);
+
+  std::vector<loomc_module_global_t> globals(global_count);
+  result = nullptr;
+  status = loomc_module_query_globals(module.get(), &options,
+                                      loomc_allocator_system(), globals.size(),
+                                      globals.data(), &global_count, &result);
+  LOOMC_ASSERT_OK(status);
+  ResultPtr query_result(result);
+  ExpectSucceededResult(query_result.get());
+  ASSERT_EQ(global_count, globals.size());
+
+  const loomc_module_global_t* answer = FindGlobal(globals, "answer");
+  ASSERT_NE(answer, nullptr);
+  EXPECT_EQ(answer->global_ordinal, 0u);
+  EXPECT_EQ(answer->kind, LOOMC_MODULE_GLOBAL_KIND_CONSTANT);
+
+  const loomc_module_global_t* state = FindGlobal(globals, "state");
+  ASSERT_NE(state, nullptr);
+  EXPECT_EQ(state->global_ordinal, 1u);
+  EXPECT_EQ(state->kind, LOOMC_MODULE_GLOBAL_KIND_VARIABLE);
+
+  loomc_module_function_query_options_t function_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_MODULE_FUNCTION_QUERY_OPTIONS,
+      /*.structure_size=*/sizeof(function_options),
+      /*.next=*/nullptr,
+      /*.function_symbol=*/loomc_string_view_empty(),
+      /*.kind=*/LOOMC_MODULE_FUNCTION_KIND_UNKNOWN,
+  };
+  loomc_host_size_t function_count = 0;
+  result = nullptr;
+  status = loomc_module_query_functions(module.get(), &function_options,
+                                        loomc_allocator_system(), 0, nullptr,
+                                        &function_count, &result);
+  LOOMC_ASSERT_OK(status);
+  ResultPtr function_result(result);
+  ExpectSucceededResult(function_result.get());
+  EXPECT_EQ(function_count, 2u);
+}
+
+TEST(ModuleTest, FiltersGlobalsByKind) {
+  ContextPtr context = CreateContext();
+  ModulePtr module = CreateMixedSymbolModule(context.get());
+
+  loomc_module_global_query_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_MODULE_GLOBAL_QUERY_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.global_symbol=*/loomc_string_view_empty(),
+      /*.kind=*/LOOMC_MODULE_GLOBAL_KIND_CONSTANT,
+  };
+  loomc_module_global_t global = {};
+  loomc_host_size_t global_count = 0;
+  loomc_result_t* result = nullptr;
+  loomc_status_t status = loomc_module_query_globals(
+      module.get(), &options, loomc_allocator_system(), 1, &global,
+      &global_count, &result);
+  LOOMC_ASSERT_OK(status);
+  ResultPtr constant_result(result);
+  ExpectSucceededResult(constant_result.get());
+  ASSERT_EQ(global_count, 1u);
+  EXPECT_EQ(ToString(global.symbol_name), "answer");
+  EXPECT_EQ(global.kind, LOOMC_MODULE_GLOBAL_KIND_CONSTANT);
+
+  options.kind = LOOMC_MODULE_GLOBAL_KIND_VARIABLE;
+  global = {};
+  result = nullptr;
+  status = loomc_module_query_globals(module.get(), &options,
+                                      loomc_allocator_system(), 1, &global,
+                                      &global_count, &result);
+  LOOMC_ASSERT_OK(status);
+  ResultPtr variable_result(result);
+  ExpectSucceededResult(variable_result.get());
+  ASSERT_EQ(global_count, 1u);
+  EXPECT_EQ(ToString(global.symbol_name), "state");
+  EXPECT_EQ(global.kind, LOOMC_MODULE_GLOBAL_KIND_VARIABLE);
+
+  options.kind = static_cast<loomc_module_global_kind_t>(1234);
+  result = nullptr;
+  status = loomc_module_query_globals(module.get(), &options,
+                                      loomc_allocator_system(), 0, nullptr,
+                                      &global_count, &result);
+  LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_INVALID_ARGUMENT, status);
+  EXPECT_EQ(result, nullptr);
+}
+
+TEST(ModuleTest, LooksUpGlobalNamesWithOrWithoutSigil) {
+  ContextPtr context = CreateContext();
+  ModulePtr module = CreateMixedSymbolModule(context.get());
+
+  loomc_module_global_t by_plain_name = {};
+  loomc_status_t status = loomc_module_lookup_global(
+      module.get(), loomc_make_cstring_view("answer"), &by_plain_name);
+  LOOMC_ASSERT_OK(status);
+  EXPECT_EQ(ToString(by_plain_name.symbol_name), "answer");
+  EXPECT_EQ(by_plain_name.kind, LOOMC_MODULE_GLOBAL_KIND_CONSTANT);
+
+  loomc_module_global_t by_symbol_name = {};
+  ASSERT_TRUE(loomc_module_try_lookup_global(
+      module.get(), loomc_make_cstring_view("@answer"), &by_symbol_name));
+  EXPECT_EQ(by_symbol_name.global_ordinal, by_plain_name.global_ordinal);
+  EXPECT_EQ(by_symbol_name.kind, LOOMC_MODULE_GLOBAL_KIND_CONSTANT);
+}
+
+TEST(ModuleTest, GetsGlobalsByOrdinal) {
+  ContextPtr context = CreateContext();
+  ModulePtr module = CreateMixedSymbolModule(context.get());
+
+  loomc_module_global_t global = {};
+  ASSERT_TRUE(loomc_module_try_get_global_at(module.get(), 0, &global));
+  EXPECT_EQ(ToString(global.symbol_name), "answer");
+  EXPECT_EQ(global.global_ordinal, 0u);
+
+  loomc_status_t status = loomc_module_get_global_at(module.get(), 1, &global);
+  LOOMC_ASSERT_OK(status);
+  EXPECT_EQ(ToString(global.symbol_name), "state");
+  EXPECT_EQ(global.global_ordinal, 1u);
+
+  EXPECT_FALSE(loomc_module_try_get_global_at(module.get(), 2, &global));
+  status = loomc_module_get_global_at(module.get(), 2, &global);
+  LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_NOT_FOUND, status);
+}
+
+TEST(ModuleTest, QueryReportsTotalGlobalCountForPartialStorage) {
+  ContextPtr context = CreateContext();
+  ModulePtr module = CreateMixedSymbolModule(context.get());
+
+  loomc_module_global_query_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_MODULE_GLOBAL_QUERY_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.global_symbol=*/loomc_string_view_empty(),
+      /*.kind=*/LOOMC_MODULE_GLOBAL_KIND_UNKNOWN,
+  };
+  loomc_module_global_t global = {};
+  loomc_host_size_t global_count = 0;
+  loomc_result_t* result = nullptr;
+  loomc_status_t status = loomc_module_query_globals(
+      module.get(), &options, loomc_allocator_system(), 1, &global,
+      &global_count, &result);
+  LOOMC_ASSERT_OK(status);
+  ResultPtr result_ptr(result);
+  ExpectSucceededResult(result_ptr.get());
+  EXPECT_EQ(global_count, 2u);
+  EXPECT_FALSE(ToString(global.symbol_name).empty());
+}
+
+TEST(ModuleTest, HandlesMissingAndWrongKindGlobalProbesWithoutStatus) {
+  ContextPtr context = CreateContext();
+  ModulePtr module = CreateMixedSymbolModule(context.get());
+
+  loomc_module_global_t global = {};
+  EXPECT_FALSE(loomc_module_try_lookup_global(
+      module.get(), loomc_make_cstring_view("missing"), &global));
+  EXPECT_EQ(global.global_ordinal, 0u);
+  EXPECT_TRUE(loomc_string_view_is_empty(global.symbol_name));
+
+  EXPECT_FALSE(loomc_module_try_lookup_global(
+      module.get(), loomc_make_cstring_view("entry"), &global));
+  EXPECT_EQ(global.global_ordinal, 0u);
+  EXPECT_TRUE(loomc_string_view_is_empty(global.symbol_name));
+
+  loomc_status_t status = loomc_module_lookup_global(
+      module.get(), loomc_make_cstring_view("entry"), &global);
+  LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_NOT_FOUND, status);
+}
+
+TEST(ModuleTest, RejectsMalformedGlobalQueriesWithoutCrashing) {
+  ContextPtr context = CreateContext();
+  ModulePtr module = CreateMixedSymbolModule(context.get());
+
+  loomc_module_global_t global = {};
+  loomc_string_view_t invalid_symbol_name = loomc_make_string_view(nullptr, 1);
+  EXPECT_FALSE(loomc_module_try_lookup_global(module.get(), invalid_symbol_name,
+                                              &global));
+  loomc_status_t status =
+      loomc_module_lookup_global(module.get(), invalid_symbol_name, &global);
+  LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_INVALID_ARGUMENT, status);
+
+  loomc_module_global_query_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_MODULE_GLOBAL_QUERY_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.global_symbol=*/invalid_symbol_name,
+      /*.kind=*/LOOMC_MODULE_GLOBAL_KIND_UNKNOWN,
+  };
+  loomc_host_size_t global_count = 0;
+  loomc_result_t* result = nullptr;
+  status = loomc_module_query_globals(module.get(), &options,
+                                      loomc_allocator_system(), 0, nullptr,
+                                      &global_count, &result);
+  LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_INVALID_ARGUMENT, status);
+  EXPECT_EQ(result, nullptr);
+}
+
+TEST(ModuleTest, ReportsNamedGlobalQueryMissInResult) {
+  ContextPtr context = CreateContext();
+  ModulePtr module = CreateMixedSymbolModule(context.get());
+
+  loomc_module_global_query_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_MODULE_GLOBAL_QUERY_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.global_symbol=*/loomc_make_cstring_view("@missing"),
+      /*.kind=*/LOOMC_MODULE_GLOBAL_KIND_UNKNOWN,
+  };
+  loomc_module_global_t global = {};
+  loomc_host_size_t global_count = 1;
+  loomc_result_t* result = nullptr;
+  loomc_status_t status = loomc_module_query_globals(
+      module.get(), &options, loomc_allocator_system(), 1, &global,
+      &global_count, &result);
+  LOOMC_ASSERT_OK(status);
+  ResultPtr missing_result(result);
+  EXPECT_EQ(global_count, 0u);
+  ExpectFailedResultCode(missing_result.get(), "MODULE_GLOBAL/NOT_FOUND");
+
+  options.global_symbol = loomc_make_cstring_view("@helper");
+  result = nullptr;
+  global_count = 1;
+  status = loomc_module_query_globals(module.get(), &options,
+                                      loomc_allocator_system(), 1, &global,
+                                      &global_count, &result);
+  LOOMC_ASSERT_OK(status);
+  ResultPtr wrong_kind_result(result);
+  EXPECT_EQ(global_count, 0u);
+  ExpectFailedResultCode(wrong_kind_result.get(), "MODULE_GLOBAL/NOT_FOUND");
 }
 
 }  // namespace

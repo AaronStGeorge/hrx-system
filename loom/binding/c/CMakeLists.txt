@@ -56,6 +56,7 @@ loom_cc_library(
     "src/link_index.c"
     "src/module.c"
     "src/module_function.c"
+    "src/module_global.c"
     "src/pass_program.c"
     "src/result.c"
     "src/source.c"
@@ -84,6 +85,7 @@ loom_cc_library(
     loom::src::loom::link::module_index
     loom::src::loom::link::planner
     loom::src::loom::ops::func
+    loom::src::loom::ops::global
     loom::src::loom::ops::kernel
     loom::src::loom::ops::low
     loom::src::loom::ops::op_defs

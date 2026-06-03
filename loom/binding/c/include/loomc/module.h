@@ -246,6 +246,77 @@ typedef struct loomc_module_function_query_options_t {
   loomc_module_function_kind_t kind;
 } loomc_module_function_query_options_t;
 
+/// Public global category reported from a module query.
+typedef enum loomc_module_global_kind_e {
+  /// No specific global kind was requested or reported.
+  LOOMC_MODULE_GLOBAL_KIND_UNKNOWN = 0,
+
+  /// Immutable `global.constant` definition.
+  LOOMC_MODULE_GLOBAL_KIND_CONSTANT = 1,
+
+  /// Mutable `global.variable` definition.
+  LOOMC_MODULE_GLOBAL_KIND_VARIABLE = 2,
+} loomc_module_global_kind_t;
+
+/// Module global metadata flag bits.
+typedef enum loomc_module_global_flag_bits_e {
+  /// Global symbol is visible outside the module for linking.
+  LOOMC_MODULE_GLOBAL_FLAG_PUBLIC = 1u << 0,
+} loomc_module_global_flag_bits_t;
+
+/// Bitmask of `loomc_module_global_flag_bits_t` values.
+typedef uint32_t loomc_module_global_flags_t;
+
+/// Global metadata view written into caller-provided storage.
+///
+/// This is the common identity record for supported global definitions.
+/// Additional type, initializer, storage-class, or target-specific payloads
+/// should be queried through typed accessors instead of being mixed into this
+/// structure as mutually exclusive fields.
+///
+/// @lifetime
+/// `symbol_name` borrows from the module that produced this view. The view and
+/// `global_ordinal` remain valid until that module is released or mutated.
+typedef struct loomc_module_global_t {
+  /// Ordinal in the module's global metadata sequence.
+  loomc_host_size_t global_ordinal;
+
+  /// Loom module symbol name, without a leading `@`.
+  loomc_string_view_t symbol_name;
+
+  /// Global category.
+  loomc_module_global_kind_t kind;
+
+  /// Present metadata flags.
+  loomc_module_global_flags_t flags;
+} loomc_module_global_t;
+
+/// Module global query options.
+///
+/// Callers zero-initialize this descriptor, set `type` to
+/// `LOOMC_STRUCTURE_TYPE_MODULE_GLOBAL_QUERY_OPTIONS`, set `structure_size` to
+/// `sizeof(loomc_module_global_query_options_t)`, and fill the requested
+/// fields.
+typedef struct loomc_module_global_query_options_t {
+  /// Structure type. Must be
+  /// `LOOMC_STRUCTURE_TYPE_MODULE_GLOBAL_QUERY_OPTIONS` when nonzero.
+  loomc_structure_type_t type;
+
+  /// Size of this structure in bytes.
+  loomc_host_size_t structure_size;
+
+  /// Extension chain for future global query options.
+  const void* next;
+
+  /// Optional symbol selector. Empty enumerates all matching globals. Both
+  /// `global` and `@global` spellings are accepted.
+  loomc_string_view_t global_symbol;
+
+  /// Optional kind filter. `LOOMC_MODULE_GLOBAL_KIND_UNKNOWN` accepts every
+  /// supported global kind.
+  loomc_module_global_kind_t kind;
+} loomc_module_global_query_options_t;
+
 /// Text presentation policy used when serializing `.loom` text.
 typedef enum loomc_module_text_presentation_e {
   /// Prefer target-low assembly syntax when the module selects one descriptor
@@ -428,6 +499,83 @@ LOOMC_API_EXPORT loomc_status_t loomc_module_query_functions(
     loomc_module_function_t* out_functions,
     loomc_host_size_t* out_function_count, loomc_result_t** out_result);
 
+/// Queries global metadata from a module.
+///
+/// @param module Module to inspect.
+/// @param options Query options. `NULL` enumerates all supported global kinds.
+/// @param allocator Host allocator used for the returned result.
+/// @param global_capacity Number of entries available in `out_globals`.
+/// @param out_globals Caller-owned output storage. May be `NULL` only when
+/// `global_capacity` is zero.
+/// @param out_global_count Receives the total number of matching globals,
+/// which may be larger than `global_capacity`.
+/// @param out_result Receives a retained result for the query.
+/// @return OK when the query ran to a result. Non-OK statuses represent API
+/// misuse or infrastructure failures before a result could be produced.
+///
+/// @ownership
+/// The caller owns `out_globals` storage. The caller always owns `out_result`
+/// on an OK return and releases it with `loomc_result_release`.
+///
+/// @lifetime
+/// Global string views borrow from `module`. Returned views and global ordinals
+/// remain valid until the module is released or mutated. Follow-up metadata
+/// queries must use the same module that produced the global views.
+///
+/// @thread_safety
+/// Global queries are read-only with respect to `module`. Concurrent queries of
+/// the same module are valid when the caller guarantees that no mutating module
+/// operation is active.
+///
+/// @par Example
+/// Find mutable globals that an embedding runtime may need to allocate:
+///
+/// @code{.c}
+/// static loomc_status_t list_mutable_globals(loomc_module_t* module) {
+///   loomc_allocator_t allocator = loomc_allocator_system();
+///   loomc_module_global_query_options_t options = {
+///       .type = LOOMC_STRUCTURE_TYPE_MODULE_GLOBAL_QUERY_OPTIONS,
+///       .structure_size = sizeof(loomc_module_global_query_options_t),
+///       .kind = LOOMC_MODULE_GLOBAL_KIND_VARIABLE,
+///   };
+///
+///   loomc_module_global_t* globals = NULL;
+///   loomc_host_size_t global_count = 0;
+///   loomc_result_t* result = NULL;
+///   loomc_status_t status = loomc_module_query_globals(
+///       module, &options, allocator, 0, NULL, &global_count, &result);
+///
+///   if (loomc_status_is_ok(status) && loomc_result_succeeded(result) &&
+///       global_count != 0) {
+///     loomc_result_release(result);
+///     result = NULL;
+///     status = loomc_allocator_malloc(
+///         allocator, global_count * sizeof(*globals), (void**)&globals);
+///   }
+///   if (loomc_status_is_ok(status) && globals != NULL) {
+///     status = loomc_module_query_globals(module, &options, allocator,
+///                                         global_count, globals,
+///                                         &global_count, &result);
+///   }
+///   if (loomc_status_is_ok(status) && result != NULL &&
+///       loomc_result_succeeded(result)) {
+///     for (loomc_host_size_t i = 0; i < global_count; ++i) {
+///       allocate_global_storage(globals[i].symbol_name);
+///     }
+///   }
+///
+///   loomc_allocator_free(allocator, globals);
+///   loomc_result_release(result);
+///   return status;
+/// }
+/// @endcode
+LOOMC_API_EXPORT loomc_status_t loomc_module_query_globals(
+    const loomc_module_t* module,
+    const loomc_module_global_query_options_t* options,
+    loomc_allocator_t allocator, loomc_host_size_t global_capacity,
+    loomc_module_global_t* out_globals, loomc_host_size_t* out_global_count,
+    loomc_result_t** out_result);
+
 /// Tries to get function metadata by public function ordinal without allocating
 /// a status.
 ///
@@ -473,6 +621,51 @@ LOOMC_API_EXPORT bool loomc_module_try_lookup_function(
 LOOMC_API_EXPORT loomc_status_t loomc_module_lookup_function(
     const loomc_module_t* module, loomc_string_view_t symbol_name,
     loomc_module_function_t* out_function);
+
+/// Tries to get global metadata by global ordinal without allocating a status.
+///
+/// @param module Module to inspect.
+/// @param global_ordinal Ordinal in the module's unfiltered global metadata
+/// sequence.
+/// @param out_global Receives global metadata when the ordinal names a
+/// supported global.
+/// @return True when `global_ordinal` names a supported global.
+LOOMC_API_EXPORT bool loomc_module_try_get_global_at(
+    const loomc_module_t* module, loomc_host_size_t global_ordinal,
+    loomc_module_global_t* out_global);
+
+/// Gets global metadata by global ordinal.
+///
+/// @param module Module to inspect.
+/// @param global_ordinal Ordinal in the module's unfiltered global metadata
+/// sequence.
+/// @param out_global Receives global metadata.
+/// @return OK when the ordinal names a supported global, NOT_FOUND when it
+/// does not, or another non-OK status for API misuse.
+LOOMC_API_EXPORT loomc_status_t loomc_module_get_global_at(
+    const loomc_module_t* module, loomc_host_size_t global_ordinal,
+    loomc_module_global_t* out_global);
+
+/// Looks up one global by symbol name without allocating a status.
+///
+/// @param module Module to inspect.
+/// @param symbol_name Global symbol name, with or without a leading `@`.
+/// @param out_global Receives global metadata when the lookup succeeds.
+/// @return True when `symbol_name` names a supported global.
+LOOMC_API_EXPORT bool loomc_module_try_lookup_global(
+    const loomc_module_t* module, loomc_string_view_t symbol_name,
+    loomc_module_global_t* out_global);
+
+/// Looks up one global by symbol name.
+///
+/// @param module Module to inspect.
+/// @param symbol_name Global symbol name, with or without a leading `@`.
+/// @param out_global Receives global metadata when the lookup succeeds.
+/// @return OK when `symbol_name` names a supported global, NOT_FOUND when it
+/// does not, or another non-OK status for API misuse.
+LOOMC_API_EXPORT loomc_status_t loomc_module_lookup_global(
+    const loomc_module_t* module, loomc_string_view_t symbol_name,
+    loomc_module_global_t* out_global);
 
 /// Tries to get export metadata by public function ordinal without allocating a
 /// status.
