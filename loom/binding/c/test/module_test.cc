@@ -163,21 +163,36 @@ TEST(ModuleTest, QueriesFunctionsAndKernelSidecars) {
 
   const loomc_module_function_t* helper = FindFunction(functions, "helper");
   ASSERT_NE(helper, nullptr);
+  EXPECT_EQ(helper->function_ordinal, 0u);
   EXPECT_EQ(helper->kind, LOOMC_MODULE_FUNCTION_KIND_FUNCTION);
   EXPECT_TRUE(helper->flags & LOOMC_MODULE_FUNCTION_FLAG_PUBLIC);
   loomc_module_kernel_function_info_t kernel_info = {};
   EXPECT_FALSE(loomc_module_function_try_get_kernel_info(module.get(), helper,
                                                          &kernel_info));
+  EXPECT_FALSE(loomc_module_function_try_get_kernel_info_at(
+      module.get(), helper->function_ordinal, &kernel_info));
   status =
       loomc_module_function_get_kernel_info(module.get(), helper, &kernel_info);
+  LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_NOT_FOUND, status);
+  status = loomc_module_function_get_kernel_info_at(
+      module.get(), helper->function_ordinal, &kernel_info);
+  LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_NOT_FOUND, status);
+  loomc_module_function_export_info_t export_info = {};
+  EXPECT_FALSE(loomc_module_function_try_get_export_info_at(
+      module.get(), helper->function_ordinal, &export_info));
+  status = loomc_module_function_get_export_info_at(
+      module.get(), helper->function_ordinal, &export_info);
   LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_NOT_FOUND, status);
 
   const loomc_module_function_t* entry = FindFunction(functions, "entry");
   ASSERT_NE(entry, nullptr);
+  EXPECT_EQ(entry->function_ordinal, 1u);
   EXPECT_EQ(entry->kind, LOOMC_MODULE_FUNCTION_KIND_KERNEL);
   EXPECT_TRUE(entry->flags & LOOMC_MODULE_FUNCTION_FLAG_HAS_EXPORT_INFO);
   ASSERT_TRUE(loomc_module_function_try_get_kernel_info(module.get(), entry,
                                                         &kernel_info));
+  ASSERT_TRUE(loomc_module_function_try_get_kernel_info_at(
+      module.get(), entry->function_ordinal, &kernel_info));
   EXPECT_TRUE(
       kernel_info.flags &
       LOOMC_MODULE_KERNEL_FUNCTION_FLAG_HAS_STATIC_DISPATCH_WORKGROUP_COUNT);
@@ -190,9 +205,11 @@ TEST(ModuleTest, QueriesFunctionsAndKernelSidecars) {
   EXPECT_EQ(kernel_info.static_workgroup_size.y, 6u);
   EXPECT_EQ(kernel_info.static_workgroup_size.z, 1u);
 
-  loomc_module_function_export_info_t export_info = {};
+  export_info = {};
   ASSERT_TRUE(loomc_module_function_try_get_export_info(module.get(), entry,
                                                         &export_info));
+  ASSERT_TRUE(loomc_module_function_try_get_export_info_at(
+      module.get(), entry->function_ordinal, &export_info));
   EXPECT_TRUE(export_info.flags & LOOMC_MODULE_FUNCTION_EXPORT_FLAG_HAS_SYMBOL);
   EXPECT_EQ(ToString(export_info.export_symbol), "dispatch");
   EXPECT_FALSE(export_info.flags &
@@ -212,8 +229,28 @@ TEST(ModuleTest, LooksUpFunctionNamesWithOrWithoutSigil) {
   loomc_module_function_t by_symbol_name = {};
   ASSERT_TRUE(loomc_module_try_lookup_function(
       module.get(), loomc_make_cstring_view("@entry"), &by_symbol_name));
-  EXPECT_EQ(by_symbol_name.symbol_ordinal, by_plain_name.symbol_ordinal);
+  EXPECT_EQ(by_symbol_name.function_ordinal, by_plain_name.function_ordinal);
   EXPECT_EQ(by_symbol_name.kind, LOOMC_MODULE_FUNCTION_KIND_KERNEL);
+}
+
+TEST(ModuleTest, GetsFunctionsByPublicOrdinal) {
+  ContextPtr context = CreateContext();
+  ModulePtr module = CreateFunctionModule(context.get());
+
+  loomc_module_function_t function = {};
+  ASSERT_TRUE(loomc_module_try_get_function_at(module.get(), 0, &function));
+  EXPECT_EQ(ToString(function.symbol_name), "helper");
+  EXPECT_EQ(function.function_ordinal, 0u);
+
+  loomc_status_t status =
+      loomc_module_get_function_at(module.get(), 1, &function);
+  LOOMC_ASSERT_OK(status);
+  EXPECT_EQ(ToString(function.symbol_name), "entry");
+  EXPECT_EQ(function.function_ordinal, 1u);
+
+  EXPECT_FALSE(loomc_module_try_get_function_at(module.get(), 2, &function));
+  status = loomc_module_get_function_at(module.get(), 2, &function);
+  LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_NOT_FOUND, status);
 }
 
 TEST(ModuleTest, QueryReportsTotalFunctionCountForPartialStorage) {

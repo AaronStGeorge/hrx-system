@@ -179,14 +179,10 @@ static bool loomc_module_function_symbol_is_public(
   return loom_func_like_isa(func) && loom_func_like_visibility(func) != 0;
 }
 
-static bool loomc_module_function_populate(
-    const loom_module_t* module, uint32_t symbol_ordinal,
-    loomc_module_function_t* out_function) {
+static bool loomc_module_function_populate_from_symbol(
+    const loom_module_t* module, loomc_host_size_t function_ordinal,
+    const loom_symbol_t* symbol, loomc_module_function_t* out_function) {
   *out_function = (loomc_module_function_t){0};
-  if (symbol_ordinal >= module->symbols.count) {
-    return false;
-  }
-  const loom_symbol_t* symbol = &module->symbols.entries[symbol_ordinal];
   loomc_module_function_kind_t kind = LOOMC_MODULE_FUNCTION_KIND_UNKNOWN;
   if (!loomc_module_function_symbol_kind(symbol, &kind)) {
     return false;
@@ -197,7 +193,7 @@ static bool loomc_module_function_populate(
     return false;
   }
 
-  out_function->symbol_ordinal = symbol_ordinal;
+  out_function->function_ordinal = function_ordinal;
   out_function->symbol_name = loomc_string_view_from_iree(symbol_name);
   out_function->kind = kind;
   if (loomc_module_function_symbol_is_public(module, symbol)) {
@@ -207,6 +203,52 @@ static bool loomc_module_function_populate(
     out_function->flags |= LOOMC_MODULE_FUNCTION_FLAG_HAS_EXPORT_INFO;
   }
   return true;
+}
+
+static bool loomc_module_function_try_resolve_at(
+    const loom_module_t* module, loomc_host_size_t function_ordinal,
+    const loom_symbol_t** out_symbol, loomc_module_function_kind_t* out_kind) {
+  *out_symbol = NULL;
+  *out_kind = LOOMC_MODULE_FUNCTION_KIND_UNKNOWN;
+  if (module == NULL) {
+    return false;
+  }
+
+  loomc_host_size_t current_function_ordinal = 0;
+  for (loomc_host_size_t i = 0; i < module->symbols.count; ++i) {
+    loomc_module_function_kind_t kind = LOOMC_MODULE_FUNCTION_KIND_UNKNOWN;
+    const loom_symbol_t* symbol = &module->symbols.entries[i];
+    if (!loomc_module_function_symbol_kind(symbol, &kind)) {
+      continue;
+    }
+    if (current_function_ordinal == function_ordinal) {
+      *out_symbol = symbol;
+      *out_kind = kind;
+      return true;
+    }
+    ++current_function_ordinal;
+  }
+  return false;
+}
+
+static bool loomc_module_function_symbol_function_ordinal(
+    const loom_module_t* module, const loom_symbol_t* expected_symbol,
+    loomc_host_size_t* out_function_ordinal) {
+  *out_function_ordinal = 0;
+  loomc_host_size_t current_function_ordinal = 0;
+  for (loomc_host_size_t i = 0; i < module->symbols.count; ++i) {
+    loomc_module_function_kind_t kind = LOOMC_MODULE_FUNCTION_KIND_UNKNOWN;
+    const loom_symbol_t* symbol = &module->symbols.entries[i];
+    if (!loomc_module_function_symbol_kind(symbol, &kind)) {
+      continue;
+    }
+    if (symbol == expected_symbol) {
+      *out_function_ordinal = current_function_ordinal;
+      return true;
+    }
+    ++current_function_ordinal;
+  }
+  return false;
 }
 
 static bool loomc_module_function_symbol_name_equal(
@@ -266,18 +308,23 @@ static loomc_host_size_t loomc_module_function_fill_matching_symbols(
     loomc_host_size_t function_capacity,
     loomc_module_function_t* out_functions) {
   loomc_host_size_t written_count = 0;
+  loomc_host_size_t function_ordinal = 0;
   for (loomc_host_size_t i = 0;
        i < module->symbols.count && written_count < function_capacity; ++i) {
     loomc_module_function_kind_t kind = LOOMC_MODULE_FUNCTION_KIND_UNKNOWN;
-    if (!loomc_module_function_symbol_kind(&module->symbols.entries[i],
-                                           &kind) ||
-        !loomc_module_function_kind_matches(options, kind)) {
+    const loom_symbol_t* symbol = &module->symbols.entries[i];
+    if (!loomc_module_function_symbol_kind(symbol, &kind)) {
       continue;
     }
-    if (loomc_module_function_populate(module, (uint32_t)i,
-                                       &out_functions[written_count])) {
+    if (!loomc_module_function_kind_matches(options, kind)) {
+      ++function_ordinal;
+      continue;
+    }
+    if (loomc_module_function_populate_from_symbol(
+            module, function_ordinal, symbol, &out_functions[written_count])) {
       ++written_count;
     }
+    ++function_ordinal;
   }
   return written_count;
 }
@@ -306,10 +353,14 @@ static loomc_status_t loomc_module_function_query_named(
 
   *out_function_count = 1;
   if (function_capacity != 0) {
-    const uint32_t symbol_ordinal =
-        (uint32_t)(symbol - module->symbols.entries);
-    (void)loomc_module_function_populate(module, symbol_ordinal,
-                                         &out_functions[0]);
+    loomc_host_size_t function_ordinal = 0;
+    if (!loomc_module_function_symbol_function_ordinal(module, symbol,
+                                                       &function_ordinal)) {
+      *out_function_count = 0;
+      return loomc_module_function_fail_not_found_result(result);
+    }
+    (void)loomc_module_function_populate_from_symbol(module, function_ordinal,
+                                                     symbol, &out_functions[0]);
   }
   return loomc_ok_status();
 }
@@ -336,15 +387,14 @@ static bool loomc_module_function_try_resolve(
   *out_symbol = NULL;
   *out_kind = LOOMC_MODULE_FUNCTION_KIND_UNKNOWN;
   const loom_module_t* internal_module = loomc_module_const_loom_module(module);
-  if (internal_module == NULL || function == NULL ||
-      function->symbol_ordinal >= internal_module->symbols.count) {
+  if (internal_module == NULL || function == NULL) {
     return false;
   }
 
-  const loom_symbol_t* symbol =
-      &internal_module->symbols.entries[function->symbol_ordinal];
+  const loom_symbol_t* symbol = NULL;
   loomc_module_function_kind_t kind = LOOMC_MODULE_FUNCTION_KIND_UNKNOWN;
-  if (!loomc_module_function_symbol_kind(symbol, &kind) ||
+  if (!loomc_module_function_try_resolve_at(
+          internal_module, function->function_ordinal, &symbol, &kind) ||
       kind != function->kind ||
       !loomc_module_function_string_view_is_valid(function->symbol_name) ||
       !loomc_module_function_symbol_name_equal(internal_module, symbol,
@@ -485,6 +535,48 @@ loomc_status_t loomc_module_query_functions(
   return status;
 }
 
+bool loomc_module_try_get_function_at(const loomc_module_t* module,
+                                      loomc_host_size_t function_ordinal,
+                                      loomc_module_function_t* out_function) {
+  if (out_function == NULL) {
+    return false;
+  }
+  const loom_module_t* internal_module = loomc_module_const_loom_module(module);
+  const loom_symbol_t* symbol = NULL;
+  loomc_module_function_kind_t kind = LOOMC_MODULE_FUNCTION_KIND_UNKNOWN;
+  if (!loomc_module_function_try_resolve_at(internal_module, function_ordinal,
+                                            &symbol, &kind)) {
+    *out_function = (loomc_module_function_t){0};
+    return false;
+  }
+  return loomc_module_function_populate_from_symbol(
+      internal_module, function_ordinal, symbol, out_function);
+}
+
+loomc_status_t loomc_module_get_function_at(
+    const loomc_module_t* module, loomc_host_size_t function_ordinal,
+    loomc_module_function_t* out_function) {
+  if (module == NULL || out_function == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "module and out_function must not be NULL");
+  }
+  const loom_module_t* internal_module = loomc_module_const_loom_module(module);
+  if (internal_module == NULL) {
+    return loomc_make_status(LOOMC_STATUS_FAILED_PRECONDITION,
+                             "module does not contain internal IR");
+  }
+  const loom_symbol_t* symbol = NULL;
+  loomc_module_function_kind_t kind = LOOMC_MODULE_FUNCTION_KIND_UNKNOWN;
+  if (!loomc_module_function_try_resolve_at(internal_module, function_ordinal,
+                                            &symbol, &kind) ||
+      !loomc_module_function_populate_from_symbol(
+          internal_module, function_ordinal, symbol, out_function)) {
+    return loomc_make_status(LOOMC_STATUS_NOT_FOUND,
+                             "module function ordinal was not found");
+  }
+  return loomc_ok_status();
+}
+
 bool loomc_module_try_lookup_function(const loomc_module_t* module,
                                       loomc_string_view_t symbol_name,
                                       loomc_module_function_t* out_function) {
@@ -502,10 +594,13 @@ bool loomc_module_try_lookup_function(const loomc_module_t* module,
   if (symbol == NULL) {
     return false;
   }
-  const uint32_t symbol_ordinal =
-      (uint32_t)(symbol - internal_module->symbols.entries);
-  return loomc_module_function_populate(internal_module, symbol_ordinal,
-                                        out_function);
+  loomc_host_size_t function_ordinal = 0;
+  if (!loomc_module_function_symbol_function_ordinal(internal_module, symbol,
+                                                     &function_ordinal)) {
+    return false;
+  }
+  return loomc_module_function_populate_from_symbol(
+      internal_module, function_ordinal, symbol, out_function);
 }
 
 loomc_status_t loomc_module_lookup_function(
@@ -529,12 +624,64 @@ loomc_status_t loomc_module_lookup_function(
     return loomc_make_status(LOOMC_STATUS_NOT_FOUND,
                              "module function symbol was not found");
   }
-  const uint32_t symbol_ordinal =
-      (uint32_t)(symbol - internal_module->symbols.entries);
-  if (!loomc_module_function_populate(internal_module, symbol_ordinal,
-                                      out_function)) {
+  loomc_host_size_t function_ordinal = 0;
+  if (!loomc_module_function_symbol_function_ordinal(internal_module, symbol,
+                                                     &function_ordinal) ||
+      !loomc_module_function_populate_from_symbol(
+          internal_module, function_ordinal, symbol, out_function)) {
     return loomc_make_status(LOOMC_STATUS_NOT_FOUND,
                              "module function symbol was not found");
+  }
+  return loomc_ok_status();
+}
+
+bool loomc_module_function_try_get_export_info_at(
+    const loomc_module_t* module, loomc_host_size_t function_ordinal,
+    loomc_module_function_export_info_t* out_info) {
+  if (out_info == NULL) {
+    return false;
+  }
+  *out_info = (loomc_module_function_export_info_t){0};
+  const loom_module_t* internal_module = loomc_module_const_loom_module(module);
+  const loom_symbol_t* symbol = NULL;
+  loomc_module_function_kind_t kind = LOOMC_MODULE_FUNCTION_KIND_UNKNOWN;
+  if (!loomc_module_function_try_resolve_at(internal_module, function_ordinal,
+                                            &symbol, &kind)) {
+    return false;
+  }
+  bool invalid_ordinal = false;
+  return loomc_module_function_populate_export_info(internal_module, symbol,
+                                                    &invalid_ordinal, out_info);
+}
+
+loomc_status_t loomc_module_function_get_export_info_at(
+    const loomc_module_t* module, loomc_host_size_t function_ordinal,
+    loomc_module_function_export_info_t* out_info) {
+  if (module == NULL || out_info == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "module and out_info must not be NULL");
+  }
+  *out_info = (loomc_module_function_export_info_t){0};
+  const loom_module_t* internal_module = loomc_module_const_loom_module(module);
+  if (internal_module == NULL) {
+    return loomc_make_status(LOOMC_STATUS_FAILED_PRECONDITION,
+                             "module does not contain internal IR");
+  }
+  const loom_symbol_t* symbol = NULL;
+  loomc_module_function_kind_t kind = LOOMC_MODULE_FUNCTION_KIND_UNKNOWN;
+  if (!loomc_module_function_try_resolve_at(internal_module, function_ordinal,
+                                            &symbol, &kind)) {
+    return loomc_make_status(LOOMC_STATUS_NOT_FOUND,
+                             "module function ordinal was not found");
+  }
+  bool invalid_ordinal = false;
+  if (!loomc_module_function_populate_export_info(internal_module, symbol,
+                                                  &invalid_ordinal, out_info)) {
+    return loomc_make_status(
+        invalid_ordinal ? LOOMC_STATUS_INVALID_ARGUMENT
+                        : LOOMC_STATUS_NOT_FOUND,
+        invalid_ordinal ? "module function export ordinal must fit uint32"
+                        : "module function has no export metadata");
   }
   return loomc_ok_status();
 }
@@ -578,6 +725,65 @@ loomc_status_t loomc_module_function_get_export_info(
                         : LOOMC_STATUS_NOT_FOUND,
         invalid_ordinal ? "module function export ordinal must fit uint32"
                         : "module function has no export metadata");
+  }
+  return loomc_ok_status();
+}
+
+bool loomc_module_function_try_get_kernel_info_at(
+    const loomc_module_t* module, loomc_host_size_t function_ordinal,
+    loomc_module_kernel_function_info_t* out_info) {
+  if (out_info == NULL) {
+    return false;
+  }
+  *out_info = (loomc_module_kernel_function_info_t){0};
+  const loom_module_t* internal_module = loomc_module_const_loom_module(module);
+  const loom_symbol_t* symbol = NULL;
+  loomc_module_function_kind_t kind = LOOMC_MODULE_FUNCTION_KIND_UNKNOWN;
+  if (!loomc_module_function_try_resolve_at(internal_module, function_ordinal,
+                                            &symbol, &kind) ||
+      !loomc_module_function_kind_is_kernel(kind)) {
+    return false;
+  }
+  if (kind == LOOMC_MODULE_FUNCTION_KIND_KERNEL) {
+    loomc_module_function_populate_source_kernel_info(
+        internal_module, symbol->defining_op, out_info);
+  } else {
+    loomc_module_function_populate_target_kernel_info(symbol->defining_op,
+                                                      out_info);
+  }
+  return true;
+}
+
+loomc_status_t loomc_module_function_get_kernel_info_at(
+    const loomc_module_t* module, loomc_host_size_t function_ordinal,
+    loomc_module_kernel_function_info_t* out_info) {
+  if (module == NULL || out_info == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "module and out_info must not be NULL");
+  }
+  *out_info = (loomc_module_kernel_function_info_t){0};
+  const loom_module_t* internal_module = loomc_module_const_loom_module(module);
+  if (internal_module == NULL) {
+    return loomc_make_status(LOOMC_STATUS_FAILED_PRECONDITION,
+                             "module does not contain internal IR");
+  }
+  const loom_symbol_t* symbol = NULL;
+  loomc_module_function_kind_t kind = LOOMC_MODULE_FUNCTION_KIND_UNKNOWN;
+  if (!loomc_module_function_try_resolve_at(internal_module, function_ordinal,
+                                            &symbol, &kind)) {
+    return loomc_make_status(LOOMC_STATUS_NOT_FOUND,
+                             "module function ordinal was not found");
+  }
+  if (!loomc_module_function_kind_is_kernel(kind)) {
+    return loomc_make_status(LOOMC_STATUS_NOT_FOUND,
+                             "module function is not a kernel");
+  }
+  if (kind == LOOMC_MODULE_FUNCTION_KIND_KERNEL) {
+    loomc_module_function_populate_source_kernel_info(
+        internal_module, symbol->defining_op, out_info);
+  } else {
+    loomc_module_function_populate_target_kernel_info(symbol->defining_op,
+                                                      out_info);
   }
   return loomc_ok_status();
 }

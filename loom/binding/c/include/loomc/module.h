@@ -140,10 +140,10 @@ typedef uint32_t loomc_module_function_flags_t;
 ///
 /// @lifetime
 /// `symbol_name` borrows from the module that produced this view. The view and
-/// `symbol_ordinal` remain valid until that module is released or mutated.
+/// `function_ordinal` remain valid until that module is released or mutated.
 typedef struct loomc_module_function_t {
-  /// Module symbol-table ordinal used by follow-up metadata queries.
-  uint32_t symbol_ordinal;
+  /// Ordinal in the module's public function metadata sequence.
+  loomc_host_size_t function_ordinal;
 
   /// Loom module symbol name, without a leading `@`.
   loomc_string_view_t symbol_name;
@@ -361,10 +361,9 @@ LOOMC_API_EXPORT void loomc_module_release(loomc_module_t* module);
 /// `out_result` on an OK return and releases it with `loomc_result_release`.
 ///
 /// @lifetime
-/// Function string views borrow from `module`. Returned views and
-/// `symbol_ordinal` identities remain valid until the module is released or
-/// mutated. Follow-up metadata queries must use the same module that produced
-/// the function views.
+/// Function string views borrow from `module`. Returned views and function
+/// ordinals remain valid until the module is released or mutated. Follow-up
+/// metadata queries must use the same module that produced the function views.
 ///
 /// @thread_safety
 /// Function queries are read-only with respect to `module`. Concurrent queries
@@ -404,13 +403,12 @@ LOOMC_API_EXPORT void loomc_module_release(loomc_module_t* module);
 ///   if (loomc_status_is_ok(status) && result != NULL &&
 ///       loomc_result_succeeded(result)) {
 ///     for (loomc_host_size_t i = 0; i < function_count; ++i) {
-///       loomc_module_kernel_function_flags_t static_grid_flag =
-///           LOOMC_MODULE_KERNEL_FUNCTION_FLAG_HAS_STATIC_DISPATCH_WORKGROUP_COUNT;
 ///       loomc_module_kernel_function_info_t kernel_info;
 ///       bool has_static_grid =
-///           loomc_module_function_try_get_kernel_info(module, &functions[i],
-///                                                    &kernel_info) &&
-///           (kernel_info.flags & static_grid_flag);
+///           loomc_module_function_try_get_kernel_info_at(
+///               module, functions[i].function_ordinal, &kernel_info) &&
+///           (kernel_info.flags &
+///            LOOMC_MODULE_KERNEL_FUNCTION_FLAG_HAS_STATIC_DISPATCH_WORKGROUP_COUNT);
 ///       if (has_static_grid) {
 ///         dispatch(functions[i].symbol_name,
 ///                  kernel_info.static_dispatch_workgroup_count);
@@ -429,6 +427,31 @@ LOOMC_API_EXPORT loomc_status_t loomc_module_query_functions(
     loomc_allocator_t allocator, loomc_host_size_t function_capacity,
     loomc_module_function_t* out_functions,
     loomc_host_size_t* out_function_count, loomc_result_t** out_result);
+
+/// Tries to get function metadata by public function ordinal without allocating
+/// a status.
+///
+/// @param module Module to inspect.
+/// @param function_ordinal Ordinal in the module's unfiltered function metadata
+/// sequence.
+/// @param out_function Receives function metadata when the ordinal names a
+/// supported function.
+/// @return True when `function_ordinal` names a supported function.
+LOOMC_API_EXPORT bool loomc_module_try_get_function_at(
+    const loomc_module_t* module, loomc_host_size_t function_ordinal,
+    loomc_module_function_t* out_function);
+
+/// Gets function metadata by public function ordinal.
+///
+/// @param module Module to inspect.
+/// @param function_ordinal Ordinal in the module's unfiltered function metadata
+/// sequence.
+/// @param out_function Receives function metadata.
+/// @return OK when the ordinal names a supported function, NOT_FOUND when it
+/// does not, or another non-OK status for API misuse.
+LOOMC_API_EXPORT loomc_status_t loomc_module_get_function_at(
+    const loomc_module_t* module, loomc_host_size_t function_ordinal,
+    loomc_module_function_t* out_function);
 
 /// Looks up one function by symbol name without allocating a status.
 ///
@@ -451,6 +474,31 @@ LOOMC_API_EXPORT loomc_status_t loomc_module_lookup_function(
     const loomc_module_t* module, loomc_string_view_t symbol_name,
     loomc_module_function_t* out_function);
 
+/// Tries to get export metadata by public function ordinal without allocating a
+/// status.
+///
+/// @param module Module to inspect.
+/// @param function_ordinal Ordinal in the module's unfiltered function metadata
+/// sequence.
+/// @param out_info Receives export metadata when available.
+/// @return True when `function_ordinal` names a function with export metadata.
+LOOMC_API_EXPORT bool loomc_module_function_try_get_export_info_at(
+    const loomc_module_t* module, loomc_host_size_t function_ordinal,
+    loomc_module_function_export_info_t* out_info);
+
+/// Gets export metadata by public function ordinal.
+///
+/// @param module Module to inspect.
+/// @param function_ordinal Ordinal in the module's unfiltered function metadata
+/// sequence.
+/// @param out_info Receives export metadata.
+/// @return OK when export metadata is available, NOT_FOUND when the ordinal
+/// does not name a function with export metadata, or another non-OK status for
+/// API misuse.
+LOOMC_API_EXPORT loomc_status_t loomc_module_function_get_export_info_at(
+    const loomc_module_t* module, loomc_host_size_t function_ordinal,
+    loomc_module_function_export_info_t* out_info);
+
 /// Tries to get export metadata for a function without allocating a status.
 ///
 /// @param module Module that produced `function`.
@@ -471,6 +519,31 @@ LOOMC_API_EXPORT bool loomc_module_function_try_get_export_info(
 LOOMC_API_EXPORT loomc_status_t loomc_module_function_get_export_info(
     const loomc_module_t* module, const loomc_module_function_t* function,
     loomc_module_function_export_info_t* out_info);
+
+/// Tries to get kernel metadata by public function ordinal without allocating a
+/// status.
+///
+/// @param module Module to inspect.
+/// @param function_ordinal Ordinal in the module's unfiltered function metadata
+/// sequence.
+/// @param out_info Receives kernel metadata when the ordinal names a
+/// kernel-shaped function.
+/// @return True when `function_ordinal` names a kernel function.
+LOOMC_API_EXPORT bool loomc_module_function_try_get_kernel_info_at(
+    const loomc_module_t* module, loomc_host_size_t function_ordinal,
+    loomc_module_kernel_function_info_t* out_info);
+
+/// Gets kernel metadata by public function ordinal.
+///
+/// @param module Module to inspect.
+/// @param function_ordinal Ordinal in the module's unfiltered function metadata
+/// sequence.
+/// @param out_info Receives kernel metadata.
+/// @return OK when the ordinal names a kernel function, NOT_FOUND when it does
+/// not, or another non-OK status for API misuse.
+LOOMC_API_EXPORT loomc_status_t loomc_module_function_get_kernel_info_at(
+    const loomc_module_t* module, loomc_host_size_t function_ordinal,
+    loomc_module_kernel_function_info_t* out_info);
 
 /// Tries to get kernel metadata for a function without allocating a status.
 ///
