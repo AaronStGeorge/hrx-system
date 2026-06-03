@@ -196,8 +196,20 @@ typedef enum loomc_spirv_limit_e {
   /// Maximum dispatched workgroup count along the z dimension.
   LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_Z = 8,
 
+  /// Maximum dispatched grid size along the x dimension, in workitems.
+  LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_X = 9,
+
+  /// Maximum dispatched grid size along the y dimension, in workitems.
+  LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_Y = 10,
+
+  /// Maximum dispatched grid size along the z dimension, in workitems.
+  LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_Z = 11,
+
+  /// Maximum product of dispatched grid dimensions, in workitems.
+  LOOMC_SPIRV_LIMIT_MAX_FLAT_GRID_SIZE = 12,
+
   /// Number of public SPIR-V limit identifiers.
-  LOOMC_SPIRV_LIMIT_COUNT = 9,
+  LOOMC_SPIRV_LIMIT_COUNT = 13,
 } loomc_spirv_limit_t;
 
 /// Stable SPIR-V numeric environment fact identifier.

@@ -150,11 +150,65 @@ static loomc_string_view_t loomc_spirv_profile_limit_name(
       return loomc_make_cstring_view("spirv.max_workgroup_count_y");
     case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_Z:
       return loomc_make_cstring_view("spirv.max_workgroup_count_z");
+    case LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_X:
+      return loomc_make_cstring_view("spirv.max_grid_size_x");
+    case LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_Y:
+      return loomc_make_cstring_view("spirv.max_grid_size_y");
+    case LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_Z:
+      return loomc_make_cstring_view("spirv.max_grid_size_z");
+    case LOOMC_SPIRV_LIMIT_MAX_FLAT_GRID_SIZE:
+      return loomc_make_cstring_view("spirv.max_flat_grid_size");
     case LOOMC_SPIRV_LIMIT_UNKNOWN:
     case LOOMC_SPIRV_LIMIT_COUNT:
       return loomc_make_cstring_view("spirv.unknown");
   }
   return loomc_make_cstring_view("spirv.unknown");
+}
+
+static uint64_t loomc_spirv_profile_limit_maximum_value(
+    loomc_spirv_limit_t limit) {
+  switch (limit) {
+    case LOOMC_SPIRV_LIMIT_MAX_FLAT_GRID_SIZE:
+      return UINT64_MAX;
+    case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_X:
+    case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_Y:
+    case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_Z:
+    case LOOMC_SPIRV_LIMIT_MAX_FLAT_WORKGROUP_SIZE:
+    case LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE:
+    case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_X:
+    case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_Y:
+    case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_Z:
+    case LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_X:
+    case LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_Y:
+    case LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_Z:
+    case LOOMC_SPIRV_LIMIT_UNKNOWN:
+    case LOOMC_SPIRV_LIMIT_COUNT:
+      return UINT32_MAX;
+  }
+  return UINT32_MAX;
+}
+
+static const char* loomc_spirv_profile_limit_range_name(
+    loomc_spirv_limit_t limit) {
+  switch (limit) {
+    case LOOMC_SPIRV_LIMIT_MAX_FLAT_GRID_SIZE:
+      return "uint64_t";
+    case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_X:
+    case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_Y:
+    case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_Z:
+    case LOOMC_SPIRV_LIMIT_MAX_FLAT_WORKGROUP_SIZE:
+    case LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE:
+    case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_X:
+    case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_Y:
+    case LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_Z:
+    case LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_X:
+    case LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_Y:
+    case LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_Z:
+    case LOOMC_SPIRV_LIMIT_UNKNOWN:
+    case LOOMC_SPIRV_LIMIT_COUNT:
+      return "uint32_t";
+  }
+  return "uint32_t";
 }
 
 static loomc_string_view_t loomc_spirv_profile_environment_name(
@@ -611,8 +665,10 @@ static loomc_status_t loomc_spirv_profile_apply_limit_fact(
     loomc_string_view_t provenance,
     loomc_spirv_numeric_fact_state_t* limit_states, loomc_result_t* result) {
   return loomc_spirv_profile_apply_numeric_fact(
-      "limit", loomc_spirv_profile_limit_name(limit), state, value, UINT32_MAX,
-      "uint32_t", provenance, &limit_states[limit], result);
+      "limit", loomc_spirv_profile_limit_name(limit), state, value,
+      loomc_spirv_profile_limit_maximum_value(limit),
+      loomc_spirv_profile_limit_range_name(limit), provenance,
+      &limit_states[limit], result);
 }
 
 static loomc_status_t loomc_spirv_profile_apply_environment_fact(
@@ -796,6 +852,15 @@ static void loomc_spirv_profile_apply_u32_limit_value(
   *out_value = (uint32_t)limit_values[limit].value;
 }
 
+static void loomc_spirv_profile_apply_u64_limit_value(
+    const loomc_spirv_limit_value_t* limit_values, loomc_spirv_limit_t limit,
+    uint64_t* out_value) {
+  if (limit_values[limit].state != LOOMC_TARGET_FACT_STATE_TRUE) {
+    return;
+  }
+  *out_value = limit_values[limit].value;
+}
+
 static void loomc_spirv_profile_apply_limit_values_to_bundle(
     const loomc_spirv_limit_value_t* limit_values,
     loom_target_bundle_storage_t* storage) {
@@ -823,6 +888,18 @@ static void loomc_spirv_profile_apply_limit_values_to_bundle(
   loomc_spirv_profile_apply_u32_limit_value(
       limit_values, LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_Z,
       &storage->snapshot.max_workgroup_count.z);
+  loomc_spirv_profile_apply_u32_limit_value(limit_values,
+                                            LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_X,
+                                            &storage->snapshot.max_grid_size.x);
+  loomc_spirv_profile_apply_u32_limit_value(limit_values,
+                                            LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_Y,
+                                            &storage->snapshot.max_grid_size.y);
+  loomc_spirv_profile_apply_u32_limit_value(limit_values,
+                                            LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_Z,
+                                            &storage->snapshot.max_grid_size.z);
+  loomc_spirv_profile_apply_u64_limit_value(
+      limit_values, LOOMC_SPIRV_LIMIT_MAX_FLAT_GRID_SIZE,
+      &storage->snapshot.max_flat_grid_size);
 }
 
 static bool loomc_spirv_profile_can_materialize_vulkan_bda_bundle(

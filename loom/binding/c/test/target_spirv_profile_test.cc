@@ -353,6 +353,24 @@ TEST(TargetSpirvProfileTest, PreservesExplicitNumericLimitFacts) {
           /*.provenance=*/
           loomc_make_cstring_view("vulkaninfo:maxComputeWorkGroupCount[2]"),
       },
+      {
+          /*.limit=*/LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_X,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.value=*/4096,
+          /*.provenance=*/loomc_make_cstring_view("profile:maxGridSize[0]"),
+      },
+      {
+          /*.limit=*/LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_Y,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.value=*/2048,
+          /*.provenance=*/loomc_make_cstring_view("profile:maxGridSize[1]"),
+      },
+      {
+          /*.limit=*/LOOMC_SPIRV_LIMIT_MAX_FLAT_GRID_SIZE,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.value=*/UINT64_C(0x100000000),
+          /*.provenance=*/loomc_make_cstring_view("profile:maxFlatGridSize"),
+      },
   };
   loomc_spirv_profile_options_t options = {
       /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
@@ -363,7 +381,7 @@ TEST(TargetSpirvProfileTest, PreservesExplicitNumericLimitFacts) {
       /*.feature_facts=*/nullptr,
       /*.feature_fact_count=*/0,
       /*.limit_facts=*/limits,
-      /*.limit_fact_count=*/4,
+      /*.limit_fact_count=*/7,
       /*.environment_facts=*/nullptr,
       /*.environment_fact_count=*/0,
   };
@@ -377,6 +395,11 @@ TEST(TargetSpirvProfileTest, PreservesExplicitNumericLimitFacts) {
   EXPECT_EQ(selection.bundle->snapshot->max_flat_workgroup_size, 1024u);
   EXPECT_EQ(selection.bundle->snapshot->subgroup_size, 32u);
   EXPECT_EQ(selection.bundle->snapshot->max_workgroup_count.z, 65535u);
+  EXPECT_EQ(selection.bundle->snapshot->max_grid_size.x, 4096u);
+  EXPECT_EQ(selection.bundle->snapshot->max_grid_size.y, 2048u);
+  EXPECT_EQ(selection.bundle->snapshot->max_grid_size.z, 0u);
+  EXPECT_EQ(selection.bundle->snapshot->max_flat_grid_size,
+            UINT64_C(0x100000000));
 
   ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_X,
                    LOOMC_TARGET_FACT_STATE_TRUE, 1024);
@@ -388,6 +411,12 @@ TEST(TargetSpirvProfileTest, PreservesExplicitNumericLimitFacts) {
                    LOOMC_TARGET_FACT_STATE_TRUE, 32);
   ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_Z,
                    LOOMC_TARGET_FACT_STATE_TRUE, 65535);
+  ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_X,
+                   LOOMC_TARGET_FACT_STATE_TRUE, 4096);
+  ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_GRID_SIZE_Z,
+                   LOOMC_TARGET_FACT_STATE_UNKNOWN, 0);
+  ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_FLAT_GRID_SIZE,
+                   LOOMC_TARGET_FACT_STATE_TRUE, UINT64_C(0x100000000));
 }
 
 TEST(TargetSpirvProfileTest, PreservesExplicitEnvironmentFacts) {
