@@ -213,6 +213,7 @@ loom_cc_test(
     ::test_util
     iree::testing::gtest
     iree::testing::gtest_main
+    iree::testing::temp_file
 )
 
 loom_cc_test(

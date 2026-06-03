@@ -4,10 +4,14 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <cstdio>
+#include <cstring>
+#include <fstream>
 #include <memory>
 #include <string>
 
 #include "iree/testing/gtest.h"
+#include "iree/testing/temp_file.h"
 #include "loomc/result.h"
 #include "loomc/source.h"
 #include "loomc/status.h"
@@ -26,6 +30,31 @@ using TargetEnvironmentPtr =
     HandlePtr<loomc_target_environment_t, loomc_target_environment_release>;
 using TargetProfilePtr =
     HandlePtr<loomc_target_profile_t, loomc_target_profile_release>;
+
+constexpr char kRawDevicesJson[] = R"json({
+  "devices": [
+    {
+      "properties": {
+        "apiVersion": 4202496,
+        "limits": {
+          "maxComputeWorkGroupCount": [16, 8, 4],
+          "maxComputeWorkGroupInvocations": 128,
+          "maxComputeWorkGroupSize": [128, 2, 1],
+          "maxComputeSharedMemorySize": 32768
+        }
+      },
+      "features": {
+        "shaderInt64": true,
+        "shaderFloat64": true
+      },
+      "extended_features": {
+        "VkPhysicalDeviceVulkan12Features": {
+          "bufferDeviceAddress": true
+        }
+      }
+    }
+  ]
+})json";
 
 std::string ToString(loomc_string_view_t value) {
   return value.data ? std::string(value.data, value.size) : std::string();
@@ -307,6 +336,65 @@ TEST(TargetSpirvVulkaninfoTest, ImportsRawDevicesArrayByIndex) {
   ExpectEnvironmentValue(profile.get(),
                          LOOMC_SPIRV_ENVIRONMENT_MAX_SPIRV_VERSION,
                          LOOMC_TARGET_FACT_STATE_TRUE, LOOMC_SPIRV_VERSION_1_5);
+}
+
+TEST(TargetSpirvVulkaninfoTest, ImportsSourceLoadedFromOpenFile) {
+  FILE* file = tmpfile();
+  ASSERT_NE(file, nullptr);
+  ASSERT_EQ(fwrite(kRawDevicesJson, 1, strlen(kRawDevicesJson), file),
+            strlen(kRawDevicesJson));
+  ASSERT_EQ(fseek(file, 0, SEEK_SET), 0);
+
+  loomc_source_load_options_t source_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SOURCE_LOAD_OPTIONS,
+      /*.structure_size=*/sizeof(source_options),
+      /*.next=*/nullptr,
+      /*.format=*/LOOMC_SOURCE_FORMAT_UNKNOWN,
+      /*.identifier=*/loomc_make_cstring_view("open-file-vulkaninfo.json"),
+  };
+  loomc_source_t* source = nullptr;
+  loomc_status_t status = loomc_source_create_from_file(
+      file, &source_options, loomc_allocator_system(), &source);
+  LOOMC_ASSERT_OK(status);
+  SourcePtr source_ptr(source);
+  ASSERT_EQ(fclose(file), 0);
+
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  TargetProfilePtr profile = ImportVulkaninfoProfile(
+      target_environment.get(), source_ptr.get(), /*options=*/nullptr);
+  ExpectFeatureState(profile.get(), LOOMC_SPIRV_FEATURE_PHYSICAL_STORAGE_BUFFER,
+                     LOOMC_TARGET_FACT_STATE_TRUE);
+  ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_STORAGE_BYTES,
+                   LOOMC_TARGET_FACT_STATE_TRUE, UINT64_C(32768));
+}
+
+TEST(TargetSpirvVulkaninfoTest, ImportsSourceLoadedFromPath) {
+  iree::testing::TempFilePath path("loomc_vulkaninfo", ".json");
+  {
+    std::ofstream output(path.path(), std::ios::binary);
+    output << kRawDevicesJson;
+    output.close();
+    ASSERT_TRUE(output.good());
+  }
+
+  loomc_source_t* source = nullptr;
+  loomc_status_t status = loomc_source_create_from_path(
+      loomc_make_string_view(path.path().data(), path.path().size()), nullptr,
+      loomc_allocator_system(), &source);
+  LOOMC_ASSERT_OK(status);
+  SourcePtr source_ptr(source);
+
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  TargetProfilePtr profile = ImportVulkaninfoProfile(
+      target_environment.get(), source_ptr.get(), /*options=*/nullptr);
+  ExpectFeatureState(profile.get(), LOOMC_SPIRV_FEATURE_PHYSICAL_STORAGE_BUFFER,
+                     LOOMC_TARGET_FACT_STATE_TRUE);
+  ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_X,
+                   LOOMC_TARGET_FACT_STATE_TRUE, 128);
+  ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_STORAGE_BYTES,
+                   LOOMC_TARGET_FACT_STATE_TRUE, UINT64_C(32768));
+
+  EXPECT_TRUE(path.Remove());
 }
 
 TEST(TargetSpirvVulkaninfoTest, ReportsMalformedJsonAsResultDiagnostic) {
