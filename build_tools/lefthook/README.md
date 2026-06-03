@@ -107,17 +107,27 @@ local changes:
 lefthook run precommit
 ```
 
-`presubmit` runs the CI profile:
+`presubmit` runs the local CI profile, including project tests:
 
 ```bash
 lefthook run presubmit
 ```
 
-`check` is kept as a CI-profile alias:
+`check` is kept as the same local CI-profile alias:
 
 ```bash
 lefthook run check
 ```
+
+The GitHub Presubmit workflow calls:
+
+```bash
+python dev.py bazel presubmit --profile ci --no-project-tests
+```
+
+That workflow still runs full tracked-tree hygiene, root devtools tests, and
+configured static-analysis providers. It skips runtime/libhrx/loom project
+tests because dedicated CI workflows own those project build and test lanes.
 
 `lefthook.yml` requires Lefthook 2.1.9 or newer because the repository uses
 custom manual hook groups in addition to Git hook names.

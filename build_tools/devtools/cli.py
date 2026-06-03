@@ -452,6 +452,14 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
         default=presubmit.PRESUBMIT_DEFAULT_PROFILE,
         command="Presubmit",
     )
+    add_argument(
+        presubmit_parser,
+        "--no-project-tests",
+        dest="project_tests",
+        action="store_false",
+        default=True,
+        help="Skip runtime/libhrx/loom project tests while still running root devtools tests.",
+    )
     presubmit_parser.set_defaults(handler=handle_presubmit, lane=lane)
 
     fix_parser = add_subparser(
@@ -642,6 +650,7 @@ def handle_presubmit(args: argparse.Namespace) -> CommandPlan:
         existing_or_system_environment(args),
         args.profile,
         verbose=args.verbose,
+        project_tests=args.project_tests,
     )
 
 

@@ -145,6 +145,7 @@ CTest runs in ../builds/<checkout-name>/ with --output-on-failure.""",
             epilog=f"""Examples:
   python dev.py {lane} presubmit
   python dev.py {lane} presubmit --profile paranoid
+  python dev.py {lane} presubmit --no-project-tests
   python dev.py {lane} presubmit --verbose
 
 Profiles:
@@ -153,7 +154,9 @@ Profiles:
   ci        Full tracked-tree hygiene plus all configured project tests.
 
 The default profile is ci. This is intentionally the expensive full-tree check
-that CI runs. Use `python dev.py {lane} precommit` for local changes only.""",
+that approximates the project test workflows a developer can run locally. Use
+--no-project-tests only for CI jobs that have separate project test workflows.
+Use `python dev.py {lane} precommit` for local changes only.""",
         )
     if command == "precommit":
         default_profile = {

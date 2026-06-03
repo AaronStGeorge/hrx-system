@@ -275,6 +275,14 @@ class CliTest(unittest.TestCase):
         self.assertIn("--profile default", description)
         self.assertIn("--all", description)
 
+    def test_bazel_presubmit_can_skip_project_tests(self):
+        args = cli.parse_arguments(["bazel", "presubmit", "--no_project_tests"])
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("--no-project-tests", description)
+
     def test_hook_writes_selected_profile(self):
         args = cli.parse_arguments(["bazel", "hook", "--profile", "ci"])
 

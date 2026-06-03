@@ -48,4 +48,4 @@ jobs:
           lefthook version
 
       - name: Run presubmit
-        run: lefthook run check
+        run: python3 dev.py bazel presubmit --profile ci --no-project-tests

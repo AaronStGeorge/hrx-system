@@ -168,6 +168,14 @@ def parse_arguments() -> argparse.Namespace:
         help="Run affected project tests for the selected lane.",
     )
     parser.add_argument(
+        "--no-project-tests",
+        "--no_project_tests",
+        dest="project_tests",
+        action="store_false",
+        default=True,
+        help="Skip runtime/libhrx/loom project tests while still running root devtools tests.",
+    )
+    parser.add_argument(
         "--static-analysis",
         action="store_true",
         help="Run configured static-analysis providers.",
@@ -808,6 +816,7 @@ def print_plan(
         print("  projects: " + ", ".join(project.name for project in projects))
     else:
         print("  projects: none")
+    print(f"  project tests: {'enabled' if args.project_tests else 'disabled'}")
     sys.stdout.flush()
 
 
@@ -829,16 +838,19 @@ def main() -> int:
             )
             and ok
         )
-        ok = (
-            run_project_tests(
-                projects,
-                paths,
-                fix=args.fix,
-                verbose=args.verbose,
-                lane=args.lane,
+        if args.project_tests:
+            ok = (
+                run_project_tests(
+                    projects,
+                    paths,
+                    fix=args.fix,
+                    verbose=args.verbose,
+                    lane=args.lane,
+                )
+                and ok
             )
-            and ok
-        )
+        else:
+            ok = skip_step("Project tests", "disabled by --no-project-tests") and ok
     if args.static_analysis:
         print_section("Static Analysis")
         ok = run_static_analysis(paths) and ok

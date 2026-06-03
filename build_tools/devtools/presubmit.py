@@ -31,6 +31,7 @@ def presubmit_plan(
     tool_env: ToolEnvironment,
     profile: str,
     verbose: bool = False,
+    project_tests: bool = True,
 ) -> CommandPlan:
     env = tool_env.path_env()
     plan = CommandPlan()
@@ -47,6 +48,8 @@ def presubmit_plan(
         ]
         if verbose:
             command.append("--verbose")
+        if not project_tests:
+            command.append("--no-project-tests")
         plan.add(
             CommandStep(
                 command,
@@ -68,6 +71,8 @@ def presubmit_plan(
         ]
         if verbose:
             command.append("--verbose")
+        if not project_tests:
+            command.append("--no-project-tests")
         plan.add(
             CommandStep(
                 command,
