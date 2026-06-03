@@ -141,21 +141,20 @@ static std::string FormatStatusTo(iree_status_t status) {
 static std::string FormatStatusBuffer(iree_status_t status) {
   iree_host_size_t buffer_length = 0;
   if (!iree_status_format(status, 0, NULL, &buffer_length)) return "<!>";
-  std::string result(buffer_length, '\0');
+  std::vector<char> buffer(buffer_length + 1, '\0');
   iree_host_size_t actual_length = 0;
-  if (!iree_status_format(status, result.size() + 1,
-                          const_cast<char*>(result.data()), &actual_length)) {
+  if (!iree_status_format(status, buffer.size(), buffer.data(),
+                          &actual_length)) {
     return "<!>";
   }
-  result.resize(actual_length);
-  return result;
+  return std::string(buffer.data(), actual_length);
 }
 
 static void ExpectStatusFormatTruncated(iree_status_t status,
                                         iree_host_size_t buffer_capacity) {
   iree_host_size_t required_length = 0;
   EXPECT_TRUE(iree_status_format(status, 0, NULL, &required_length));
-  ASSERT_GT(required_length, buffer_capacity);
+  ASSERT_GE(required_length, buffer_capacity);
 
   constexpr char kSentinel = '\x7F';
   std::vector<char> buffer(buffer_capacity + 16, kSentinel);
@@ -164,6 +163,41 @@ static void ExpectStatusFormatTruncated(iree_status_t status,
                                   &actual_length));
   EXPECT_EQ(required_length, actual_length);
   for (iree_host_size_t i = buffer_capacity; i < buffer.size(); ++i) {
+    EXPECT_EQ(kSentinel, buffer[i]) << "index " << i;
+  }
+}
+
+static void ExpectStatusFormatTruncatedAtAllSmallerCapacities(
+    iree_status_t status) {
+  iree_host_size_t required_length = 0;
+  ASSERT_TRUE(iree_status_format(status, 0, NULL, &required_length));
+  ASSERT_GT(required_length, 0u);
+  for (iree_host_size_t buffer_capacity = 0; buffer_capacity < required_length;
+       ++buffer_capacity) {
+    ExpectStatusFormatTruncated(status, buffer_capacity);
+  }
+}
+
+static void ExpectStatusFormatRequiresTerminator(iree_status_t status) {
+  iree_host_size_t required_length = 0;
+  ASSERT_TRUE(iree_status_format(status, 0, NULL, &required_length));
+  ASSERT_GT(required_length, 0u);
+  ExpectStatusFormatTruncated(status, required_length);
+}
+
+static void ExpectStatusFormatFitsExactly(iree_status_t status) {
+  std::string expected = FormatStatusTo(status);
+  ASSERT_FALSE(expected.empty());
+
+  constexpr char kSentinel = '\x7F';
+  std::vector<char> buffer(expected.size() + 17, kSentinel);
+  iree_host_size_t actual_length = 0;
+  EXPECT_TRUE(iree_status_format(status, expected.size() + 1, buffer.data(),
+                                 &actual_length));
+  EXPECT_EQ(expected.size(), actual_length);
+  EXPECT_EQ(expected, std::string(buffer.data(), actual_length));
+  EXPECT_EQ('\0', buffer[actual_length]);
+  for (iree_host_size_t i = actual_length + 1; i < buffer.size(); ++i) {
     EXPECT_EQ(kSentinel, buffer[i]) << "index " << i;
   }
 }
@@ -189,6 +223,22 @@ TEST(StatusFormatTo, CodeOnlyTruncatedBuffer) {
   ExpectStatusFormatTruncated(status, /*buffer_capacity=*/4);
 }
 
+TEST(StatusFormatTo, CodeOnlyTinyBuffers) {
+  iree_status_t status = iree_status_from_code(IREE_STATUS_INTERNAL);
+  ExpectStatusFormatTruncated(status, /*buffer_capacity=*/0);
+  ExpectStatusFormatTruncated(status, /*buffer_capacity=*/1);
+}
+
+TEST(StatusFormatTo, CodeOnlyRequiresTerminator) {
+  iree_status_t status = iree_status_from_code(IREE_STATUS_INTERNAL);
+  ExpectStatusFormatRequiresTerminator(status);
+}
+
+TEST(StatusFormatTo, CodeOnlyExactFit) {
+  iree_status_t status = iree_status_from_code(IREE_STATUS_INTERNAL);
+  ExpectStatusFormatFitsExactly(status);
+}
+
 #if (IREE_STATUS_FEATURES & IREE_STATUS_FEATURE_ANNOTATIONS) != 0
 
 TEST(StatusFormatTo, WithMessage) {
@@ -208,6 +258,31 @@ TEST(StatusFormatTo, WithMessageTruncatedBuffer) {
       iree_status_allocate(IREE_STATUS_INTERNAL, NULL, 0,
                            iree_make_cstring_view("error with more detail"));
   ExpectStatusFormatTruncated(status, /*buffer_capacity=*/8);
+  iree_status_free(status);
+}
+
+TEST(StatusFormatTo, WithMessageTinyBuffers) {
+  iree_status_t status =
+      iree_status_allocate(IREE_STATUS_INTERNAL, NULL, 0,
+                           iree_make_cstring_view("error with more detail"));
+  ExpectStatusFormatTruncated(status, /*buffer_capacity=*/0);
+  ExpectStatusFormatTruncated(status, /*buffer_capacity=*/1);
+  iree_status_free(status);
+}
+
+TEST(StatusFormatTo, WithMessageRequiresTerminator) {
+  iree_status_t status =
+      iree_status_allocate(IREE_STATUS_INTERNAL, NULL, 0,
+                           iree_make_cstring_view("error with more detail"));
+  ExpectStatusFormatRequiresTerminator(status);
+  iree_status_free(status);
+}
+
+TEST(StatusFormatTo, WithMessageExactFit) {
+  iree_status_t status =
+      iree_status_allocate(IREE_STATUS_INTERNAL, NULL, 0,
+                           iree_make_cstring_view("error with more detail"));
+  ExpectStatusFormatFitsExactly(status);
   iree_status_free(status);
 }
 
@@ -248,6 +323,17 @@ TEST(StatusFormatTo, WithMultipleAnnotations) {
   EXPECT_THAT(cb_result, HasSubstr("root cause"));
   EXPECT_THAT(cb_result, HasSubstr("layer 1: retry failed"));
   EXPECT_THAT(cb_result, HasSubstr("layer 2: attempt 3 of 3"));
+  iree_status_free(status);
+}
+
+TEST(StatusFormatTo, WithMultipleAnnotationsTruncatedAtAllBoundaries) {
+  iree_status_t status =
+      iree_status_allocate_f(IREE_STATUS_UNAVAILABLE, NULL, 0, "root cause");
+  status = iree_status_annotate_f(status, "layer 1: %s", "retry failed");
+  status = iree_status_annotate_f(status, "layer 2: attempt %d of %d", 3, 3);
+  ExpectStatusFormatTruncatedAtAllSmallerCapacities(status);
+  ExpectStatusFormatRequiresTerminator(status);
+  ExpectStatusFormatFitsExactly(status);
   iree_status_free(status);
 }
 

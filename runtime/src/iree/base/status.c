@@ -404,16 +404,13 @@ static void iree_status_payload_message_formatter(
     char* buffer, iree_host_size_t* out_buffer_length) {
   iree_status_payload_message_t* payload =
       (iree_status_payload_message_t*)base_payload;
-  if (!buffer) {
-    *out_buffer_length = payload->message.size;
-    return;
+  if (buffer && buffer_capacity > 0) {
+    iree_host_size_t copy_length =
+        iree_min(payload->message.size, buffer_capacity - 1);
+    memcpy(buffer, payload->message.data, copy_length);
+    buffer[copy_length] = '\0';
   }
-  iree_host_size_t n = buffer_capacity < payload->message.size
-                           ? buffer_capacity
-                           : payload->message.size;
-  memcpy(buffer, payload->message.data, n);
-  buffer[n] = '\0';
-  *out_buffer_length = n;
+  *out_buffer_length = payload->message.size;
 }
 
 // Captures the current stack and attaches it to the status storage.
