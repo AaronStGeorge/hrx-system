@@ -40,6 +40,16 @@ def has_backend_separator(args: list[str]) -> bool:
 
 def add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
+        "--agent-md",
+        "--agent_md",
+        "--agents-md",
+        "--agents_md",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        dest="agent_md",
+        help="Print AGENTS.md-ready command guidance.",
+    )
+    parser.add_argument(
         "-n",
         "--dry-run",
         action="store_true",
@@ -96,13 +106,6 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
         description="Repository developer command router.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument(
-        "--agent-md",
-        "--agents-md",
-        action="store_true",
-        dest="agent_md",
-        help="Print AGENTS.md-ready command guidance.",
-    )
     add_common_options(parser)
     subparsers = parser.add_subparsers(dest="command")
 
@@ -111,6 +114,8 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
         add_lane_commands(subparsers, lane)
 
     args = parser.parse_args(argv)
+    if not hasattr(args, "agent_md"):
+        args.agent_md = False
     if not hasattr(args, "dry_run"):
         args.dry_run = False
     if not hasattr(args, "verbose"):
@@ -120,11 +125,14 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
     ):
         parser.error("explicit precommit paths cannot be combined with input mode")
     if args.agent_md:
-        print_agent_md()
+        lane = getattr(args, "lane", None)
+        print_agent_md((lane,) if lane else LANES)
         raise SystemExit(0)
     if not args.command:
         parser.print_help()
         raise SystemExit(2)
+    if args.command in LANES and not hasattr(args, "handler"):
+        parser.error(f"{args.command} requires a subcommand unless --agents_md is used")
     return args
 
 
@@ -176,7 +184,9 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
         formatter_class=argparse.RawDescriptionHelpFormatter,
         help=f"{lane} developer commands.",
     )
-    lane_subparsers = lane_parser.add_subparsers(dest=f"{lane}_command", required=True)
+    add_common_options(lane_parser)
+    lane_parser.set_defaults(lane=lane)
+    lane_subparsers = lane_parser.add_subparsers(dest=f"{lane}_command")
 
     setup_parser = add_subparser(
         lane_subparsers,
@@ -525,25 +535,93 @@ def handle_unimplemented_backend_command(args: argparse.Namespace) -> CommandPla
     )
 
 
-def print_agent_md() -> None:
-    print(
-        """## dev.py
+def print_agent_md(lanes: tuple[str, ...]) -> None:
+    sections = [
+        "## dev.py",
+        "",
+        "Use `dev.py` from the repository root. The build lane is structural:",
+        "`python dev.py bazel ...` for Bazel/source-graph work and "
+        "`python dev.py cmake ...` for CMake/package work.",
+        "",
+        "Tool environment modes:",
+        "- Default: managed `.venv` when it exists, system tools otherwise.",
+        "- `--system`: use tools from `PATH` and write no managed tool env.",
+        "- `--tool-root PATH`: use an external managed tool env.",
+        "- `--dry-run`: print the underlying command plan without executing it.",
+        "",
+    ]
+    for lane in lanes:
+        if lane == "bazel":
+            sections.append(agent_md_bazel_section())
+        elif lane == "cmake":
+            sections.append(agent_md_cmake_section())
+        else:
+            raise ValueError(f"unknown lane: {lane}")
+        sections.append("")
+    print("\n".join(sections).rstrip() + "\n")
 
-Use the structural developer command lanes instead of guessing a backend flag:
 
+def agent_md_bazel_section() -> str:
+    return """### Bazel Lane
+
+Use the Bazel lane for source-graph development and normal local acceptance
+checks.
+
+Setup and hooks:
 ```bash
 python dev.py bazel setup
-python dev.py bazel precommit
-python dev.py cmake setup
-python dev.py cmake precommit
+python dev.py bazel hook
 ```
 
-Add `--dry-run` to print the underlying command plan before executing it.
-Use `--system` to rely on tools from PATH and write no repo-local tool env.
-Use `--tool-root PATH` to place a managed tool environment outside this checkout.
-Use `presubmit` for the full-tree CI-shaped check.
-"""
-    )
+Common commands:
+```bash
+python dev.py bazel configure
+python dev.py bazel build
+python dev.py bazel test
+python dev.py bazel precommit
+python dev.py bazel precommit --base origin/main
+python dev.py bazel presubmit
+```
+
+Notes:
+- With no explicit targets, `build` and `test` cover `//runtime/...` and
+  `//libhrx/...`.
+- `precommit` checks staged, unstaged, and untracked local files.
+- `precommit --base REF` checks branch changes from the merge base with `REF`
+  through `HEAD`, plus local changes.
+- `presubmit` is the full-tree CI-shaped check.
+- Bazel outputs live under `bazel-bin/`, `bazel-testlogs/`, and `bazel-out/`."""
+
+
+def agent_md_cmake_section() -> str:
+    build_dir = "../builds/<checkout-name>"
+    return f"""### CMake Lane
+
+Use the CMake lane for package/install-test workflows and CMake target checks.
+
+Setup and hooks:
+```bash
+python dev.py cmake setup
+python dev.py cmake hook
+```
+
+Common commands:
+```bash
+python dev.py cmake configure
+python dev.py cmake configure -- -DCMAKE_PREFIX_PATH=/opt/rocm
+python dev.py cmake build hrx
+python dev.py cmake test -- -R hrx
+python dev.py cmake precommit
+python dev.py cmake presubmit
+```
+
+Notes:
+- Configure and build outputs live outside the source tree under `{build_dir}/`.
+- Positional `cmake build` arguments are target names, so
+  `python dev.py cmake build hrx` maps to `cmake --build ... --target hrx`.
+- Use `--` before raw CMake or CTest options.
+- The CMake precommit lane currently runs shared repository hygiene.
+- `presubmit` is the full-tree CI-shaped shared hygiene check for this lane."""
 
 
 def main(argv: list[str] | None = None) -> int:
