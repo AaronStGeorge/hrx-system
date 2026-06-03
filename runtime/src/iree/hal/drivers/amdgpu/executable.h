@@ -92,6 +92,9 @@ typedef struct iree_hal_amdgpu_executable_dispatch_descriptor_t {
   uint32_t pm4_setup_dword_count;
   // AMDHSA descriptor fixed group segment byte size validated for PM4 launch.
   uint32_t pm4_group_segment_fixed_size;
+  // True when this export has no reflected parameter metadata and may only be
+  // launched with a caller-provided native kernarg buffer.
+  bool custom_direct_only;
   // True when the PM4 metadata fields are valid for this dispatch.
   bool pm4_launch_state_valid;
 } iree_hal_amdgpu_executable_dispatch_descriptor_t;

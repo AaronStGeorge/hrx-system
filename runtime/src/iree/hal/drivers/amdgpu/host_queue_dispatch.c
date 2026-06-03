@@ -257,6 +257,11 @@ static iree_status_t iree_hal_amdgpu_host_queue_validate_dispatch_kernargs(
                    (uint32_t)provided_kernarg_block_count);
     }
   } else {
+    if (IREE_UNLIKELY(descriptor->custom_direct_only)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "dispatch export requires custom direct kernarg arguments");
+    }
     if (IREE_UNLIKELY(constants.data_length > 0 && !constants.data)) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,

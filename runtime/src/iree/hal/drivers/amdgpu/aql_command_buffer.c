@@ -2035,6 +2035,13 @@ static iree_status_t iree_hal_amdgpu_aql_command_buffer_prepare_dispatch_plan(
   }
   out_plan->kernarg_strategy =
       IREE_HAL_AMDGPU_COMMAND_BUFFER_KERNARG_STRATEGY_HAL;
+  if (IREE_UNLIKELY(out_plan->descriptor->custom_direct_only &&
+                    !iree_hal_amdgpu_aql_dispatch_plan_uses_custom_direct_arguments(
+                        out_plan))) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "dispatch export requires custom direct kernarg arguments");
+  }
   if (IREE_UNLIKELY(inputs->constants.data_length > 0 &&
                     !inputs->constants.data)) {
     return iree_make_status(

@@ -314,20 +314,65 @@ static std::vector<uint8_t> BuildElfWithMetadata(
   return BuildElfWithNote(metadata, IREE_SV("AMDGPU"), 32);
 }
 
-static std::vector<uint8_t> AddMalformedSymbolSection(
+static void AlignVector(std::vector<uint8_t>* output, size_t alignment) {
+  while ((output->size() % alignment) != 0) output->push_back(0);
+}
+
+static void AppendElf64Symbol(std::vector<uint8_t>* output,
+                              uint32_t name_offset, uint8_t info) {
+  size_t symbol_offset = output->size();
+  output->resize(symbol_offset + 24, 0);
+  StoreU32LE(output, symbol_offset + 0, name_offset);
+  (*output)[symbol_offset + 4] = info;
+  StoreU16LE(output, symbol_offset + 6, 1);
+}
+
+static std::vector<uint8_t> AddSyntheticCandidateSymbolSection(
     std::vector<uint8_t> elf) {
+  constexpr uint8_t kGlobalFunction = 0x12;  // STB_GLOBAL | STT_FUNC.
+  constexpr uint8_t kGlobalObject = 0x11;    // STB_GLOBAL | STT_OBJECT.
   constexpr size_t kSectionHeaderSize = 64;
-  size_t section_offset = elf.size();
+
+  const size_t string_offset = elf.size();
+  elf.push_back(0);
+  const uint32_t function_name_offset =
+      static_cast<uint32_t>(elf.size() - string_offset);
+  const char kFunctionName[] = "extra_kernel";
+  elf.insert(elf.end(), kFunctionName, kFunctionName + sizeof(kFunctionName));
+  const uint32_t descriptor_name_offset =
+      static_cast<uint32_t>(elf.size() - string_offset);
+  const char kDescriptorName[] = "extra_kernel.kd";
+  elf.insert(elf.end(), kDescriptorName,
+             kDescriptorName + sizeof(kDescriptorName));
+  const size_t string_size = elf.size() - string_offset;
+
+  AlignVector(&elf, 8);
+  const size_t symbol_offset = elf.size();
+  AppendElf64Symbol(&elf, 0, 0);
+  AppendElf64Symbol(&elf, function_name_offset, kGlobalFunction);
+  AppendElf64Symbol(&elf, descriptor_name_offset, kGlobalObject);
+  const size_t symbol_size = elf.size() - symbol_offset;
+
+  AlignVector(&elf, 8);
+  const size_t section_offset = elf.size();
   StoreU64LE(&elf, 40, section_offset);
   StoreU16LE(&elf, 58, kSectionHeaderSize);
-  StoreU16LE(&elf, 60, 1);
+  StoreU16LE(&elf, 60, 3);
 
-  elf.resize(section_offset + kSectionHeaderSize, 0);
-  StoreU32LE(&elf, section_offset + 4, 2);  // SHT_SYMTAB.
-  // Point inside the ELF but declare a section size that extends beyond EOF.
-  StoreU64LE(&elf, section_offset + 24, elf.size() - 8);
-  StoreU64LE(&elf, section_offset + 32, 64);
-  StoreU64LE(&elf, section_offset + 56, 24);
+  elf.resize(section_offset + 3 * kSectionHeaderSize, 0);
+  const size_t string_section = section_offset + kSectionHeaderSize;
+  StoreU32LE(&elf, string_section + 4, 3);  // SHT_STRTAB.
+  StoreU64LE(&elf, string_section + 24, string_offset);
+  StoreU64LE(&elf, string_section + 32, string_size);
+  StoreU64LE(&elf, string_section + 48, 1);
+
+  const size_t symbol_section = section_offset + 2 * kSectionHeaderSize;
+  StoreU32LE(&elf, symbol_section + 4, 2);  // SHT_SYMTAB.
+  StoreU64LE(&elf, symbol_section + 24, symbol_offset);
+  StoreU64LE(&elf, symbol_section + 32, symbol_size);
+  StoreU32LE(&elf, symbol_section + 40, 1);  // sh_link: string table section.
+  StoreU64LE(&elf, symbol_section + 48, 8);
+  StoreU64LE(&elf, symbol_section + 56, 24);
   return elf;
 }
 
@@ -656,15 +701,19 @@ TEST(HsacoMetadataTest, RejectsMalformedMessagePackMetadata) {
                             ByteSpan(elf), iree_allocator_system(), &metadata));
 }
 
-TEST(HsacoMetadataTest, IgnoresMalformedElfSymbolSectionBounds) {
+TEST(HsacoMetadataTest, DiscoversElfSymbolsWithoutSynthesizingKernels) {
   std::vector<uint8_t> elf =
-      AddMalformedSymbolSection(BuildElfWithMetadata(BuildKernelMetadata()));
+      AddSyntheticCandidateSymbolSection(BuildElfWithMetadata(BuildKernelMetadata()));
 
   iree_hal_amdgpu_hsaco_metadata_t metadata;
   IREE_ASSERT_OK(iree_hal_amdgpu_hsaco_metadata_initialize_from_elf(
       ByteSpan(elf), iree_allocator_system(), &metadata));
-  EXPECT_EQ(metadata.kernel_count, 1);
+  ASSERT_EQ(metadata.kernel_count, 1);
   EXPECT_EQ(ToString(metadata.kernels[0].symbol_name), "vector_add.kd");
+  ASSERT_EQ(metadata.elf_kernel_symbol_count, 1);
+  EXPECT_EQ(ToString(metadata.elf_kernel_symbols[0].name), "extra_kernel");
+  EXPECT_EQ(ToString(metadata.elf_kernel_symbols[0].symbol_name),
+            "extra_kernel.kd");
 
   iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
 }

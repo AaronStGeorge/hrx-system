@@ -92,6 +92,14 @@ typedef struct iree_hal_amdgpu_hsaco_metadata_kernel_t {
   const iree_hal_amdgpu_hsaco_metadata_arg_t* args;
 } iree_hal_amdgpu_hsaco_metadata_kernel_t;
 
+// ELF kernel symbol with no decoded AMDGPU metadata entry.
+typedef struct iree_hal_amdgpu_hsaco_metadata_elf_kernel_symbol_t {
+  // Function/export name, usually the symbol name without a `.kd` suffix.
+  iree_string_view_t name;
+  // Kernel descriptor symbol name used to resolve the HSA kernel object.
+  iree_string_view_t symbol_name;
+} iree_hal_amdgpu_hsaco_metadata_elf_kernel_symbol_t;
+
 // Decoded AMDGPU code object metadata.
 //
 // All string views and |message_pack_data| borrow from |elf_data|. Callers must
@@ -109,12 +117,15 @@ typedef struct iree_hal_amdgpu_hsaco_metadata_t {
   iree_host_size_t reflection_name_storage_size;
   // Bytes required to clone all decoded argument names.
   iree_host_size_t arg_name_storage_size;
-  // Extra string storage owned by HRX metadata augmentation.
-  char* owned_string_storage;
   // Number of decoded kernels.
   iree_host_size_t kernel_count;
   // Decoded kernel records.
   iree_hal_amdgpu_hsaco_metadata_kernel_t* kernels;
+  // Number of ELF kernel symbols that have no decoded metadata entry.
+  iree_host_size_t elf_kernel_symbol_count;
+  // ELF-only kernel symbols. These are not reflected metadata and must only be
+  // used by custom-direct native kernarg launch paths.
+  iree_hal_amdgpu_hsaco_metadata_elf_kernel_symbol_t* elf_kernel_symbols;
   // Total number of decoded argument records.
   iree_host_size_t arg_count;
   // Contiguous argument storage referenced by |kernels|.
