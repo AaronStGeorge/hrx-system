@@ -102,9 +102,8 @@ void iree_hal_amdgpu_device_dispatch_emplace_custom_kernargs(
   if (total_kernarg_size > 0) {
     iree_amdgpu_memset(kernarg_ptr, 0, total_kernarg_size);
     const size_t explicit_bytes =
-        layout->has_implicit_args
-            ? layout->implicit_args_offset
-            : total_kernarg_size;
+        layout->explicit_kernarg_size ? layout->explicit_kernarg_size
+                                      : total_kernarg_size;
     const size_t copy_bytes =
         custom_kernarg_length < explicit_bytes ? custom_kernarg_length
                                                : explicit_bytes;

@@ -1070,6 +1070,13 @@ static iree_status_t iree_hal_amdgpu_executable_upload_raw_hsaco_kernel_table(
     hsa_agent_t device_agent,
     IREE_AMDGPU_DEVICE_PTR const iree_hal_amdgpu_device_kernel_args_t**
         out_device_kernel_args) {
+  iree_host_size_t kernel_count = 0;
+  if (!iree_host_size_checked_add(hsaco_metadata->kernel_count,
+                                  hsaco_metadata->elf_kernel_symbol_count,
+                                  &kernel_count)) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "raw HSACO kernel table count overflow");
+  }
   for (iree_host_size_t kernel_ordinal = 0;
        kernel_ordinal < hsaco_metadata->kernel_count; ++kernel_ordinal) {
     iree_string_view_t symbol_name =
@@ -1096,9 +1103,8 @@ static iree_status_t iree_hal_amdgpu_executable_upload_raw_hsaco_kernel_table(
         libhsa, symbol, &host_kernel_args[kernel_ordinal].kernel_object));
   }
   return iree_hal_amdgpu_executable_upload_resolved_kernel_table(
-      libhsa, hsaco_metadata->kernel_count +
-                  hsaco_metadata->elf_kernel_symbol_count,
-      host_kernel_args, device_agent, out_device_kernel_args);
+      libhsa, kernel_count, host_kernel_args, device_agent,
+      out_device_kernel_args);
 }
 
 static iree_status_t iree_hal_amdgpu_executable_calculate_kernarg_block_count(
@@ -1162,25 +1168,17 @@ static iree_status_t iree_hal_amdgpu_executable_initialize_dispatch_descriptor(
           .explicit_kernarg_size = custom_explicit_kernarg_size,
       };
   if (custom_implicit_args_offset != UINT16_MAX) {
-    if (IREE_UNLIKELY(custom_explicit_kernarg_size >
-                      custom_implicit_args_offset)) {
-      return iree_make_status(
-          IREE_STATUS_INVALID_ARGUMENT,
-          "custom explicit kernargs end at %" PRIhsz
-          " beyond implicit args offset %u",
-          custom_explicit_kernarg_size, custom_implicit_args_offset);
-    }
-    // Custom-direct callers own all bytes before the implicit suffix; requiring
-    // the suffix offset rejects truly short prepacked buffers while still
-    // allowing missing trailing ABI padding inside that explicit region.
-    out_descriptor->custom_kernarg_layout.explicit_kernarg_size =
-        custom_implicit_args_offset;
+    // Custom-direct callers own every visible native kernarg byte. Hidden
+    // metadata marks the implicit suffix location, but visible args may appear
+    // after the first hidden record in some code objects, so validate/copy the
+    // full visible extent instead of truncating at the suffix offset.
     out_descriptor->custom_kernarg_layout.implicit_args_offset =
         custom_implicit_args_offset;
-    out_descriptor->custom_kernarg_layout.total_kernarg_size = iree_max(
-        (size_t)kernel_args->kernarg_size,
-        (size_t)custom_implicit_args_offset +
-            IREE_AMDGPU_KERNEL_IMPLICIT_ARGS_SIZE);
+    out_descriptor->custom_kernarg_layout.total_kernarg_size =
+        iree_max((size_t)kernel_args->kernarg_size,
+                 iree_max((size_t)custom_explicit_kernarg_size,
+                          (size_t)custom_implicit_args_offset +
+                              IREE_AMDGPU_KERNEL_IMPLICIT_ARGS_SIZE));
     out_descriptor->custom_kernarg_layout.has_implicit_args = true;
   }
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_executable_calculate_kernarg_block_count(
@@ -2076,16 +2074,14 @@ iree_hal_amdgpu_executable_raw_hsaco_custom_kernarg_layout(
       explicit_args_end = iree_max(explicit_args_end, arg_end);
     }
   }
-  if (implicit_args_offset != UINT16_MAX && implicit_args_offset > 0) {
-    *out_explicit_kernarg_size = implicit_args_offset;
+  if (implicit_args_offset != UINT16_MAX) {
+    *out_explicit_kernarg_size =
+        iree_max(explicit_args_end, (iree_host_size_t)implicit_args_offset);
     *out_implicit_args_offset = implicit_args_offset;
-  } else {
-    *out_explicit_kernarg_size = explicit_args_end;
-    if (explicit_args_end <= UINT16_MAX &&
-        kernel_args->kernarg_size >=
-            explicit_args_end + IREE_AMDGPU_KERNEL_IMPLICIT_ARGS_SIZE) {
-      *out_implicit_args_offset = (uint16_t)explicit_args_end;
-    }
+  } else if (explicit_args_end <= UINT16_MAX &&
+             kernel_args->kernarg_size >=
+                 explicit_args_end + IREE_AMDGPU_KERNEL_IMPLICIT_ARGS_SIZE) {
+    *out_implicit_args_offset = (uint16_t)explicit_args_end;
   }
   return iree_ok_status();
 }
@@ -2242,8 +2238,14 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_raw_hsaco(
   iree_hal_amdgpu_hsaco_metadata_t hsaco_metadata = {0};
   iree_status_t status = iree_hal_amdgpu_hsaco_metadata_initialize_from_elf(
       code_object_data, host_allocator, &hsaco_metadata);
-  const iree_host_size_t export_count =
-      hsaco_metadata.kernel_count + hsaco_metadata.elf_kernel_symbol_count;
+  iree_host_size_t export_count = 0;
+  if (iree_status_is_ok(status) &&
+      !iree_host_size_checked_add(hsaco_metadata.kernel_count,
+                                  hsaco_metadata.elf_kernel_symbol_count,
+                                  &export_count)) {
+    status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                              "raw HSACO export count overflow");
+  }
 
   iree_host_size_t export_name_storage_size = 0;
   iree_host_size_t export_parameter_count = 0;

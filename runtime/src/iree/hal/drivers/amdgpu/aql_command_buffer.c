@@ -1348,7 +1348,16 @@ static iree_status_t iree_hal_amdgpu_aql_command_buffer_validate_dispatch_shape(
     const iree_hal_dispatch_config_t config, iree_hal_dispatch_flags_t flags) {
   const bool uses_indirect_parameters =
       iree_hal_dispatch_uses_indirect_parameters(flags);
-  if (iree_hal_amdgpu_dispatch_config_has_workgroup_size_override(config)) {
+  const bool has_workgroup_size_override =
+      iree_hal_amdgpu_dispatch_config_has_workgroup_size_override(config);
+  if (IREE_UNLIKELY(descriptor->custom_direct_only &&
+                    !has_workgroup_size_override)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "custom-direct-only ELF exports require a dispatch workgroup size "
+        "override");
+  }
+  if (has_workgroup_size_override) {
     for (iree_host_size_t i = 0; i < 3; ++i) {
       if (IREE_UNLIKELY(!config.workgroup_size[i])) {
         return iree_make_status(
@@ -2035,6 +2044,30 @@ static iree_status_t iree_hal_amdgpu_aql_command_buffer_prepare_dispatch_plan(
   }
   out_plan->kernarg_strategy =
       IREE_HAL_AMDGPU_COMMAND_BUFFER_KERNARG_STRATEGY_HAL;
+  if (out_plan->descriptor->custom_direct_only) {
+    if (IREE_UNLIKELY(
+            !iree_hal_amdgpu_dispatch_config_has_workgroup_size_override(
+                inputs->config))) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "custom-direct-only ELF exports require a dispatch workgroup size "
+          "override");
+    }
+    for (iree_host_size_t i = 0; i < 3; ++i) {
+      if (IREE_UNLIKELY(!inputs->config.workgroup_size[i])) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "dispatch workgroup size override must specify all dimensions");
+      }
+      if (IREE_UNLIKELY(inputs->config.workgroup_size[i] > UINT16_MAX)) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "dispatch workgroup size override dimension %" PRIhsz
+            " value %u exceeds %u",
+            i, inputs->config.workgroup_size[i], UINT16_MAX);
+      }
+    }
+  }
   if (IREE_UNLIKELY(out_plan->descriptor->custom_direct_only &&
                     !iree_hal_amdgpu_aql_dispatch_plan_uses_custom_direct_arguments(
                         out_plan))) {
@@ -2081,12 +2114,18 @@ static iree_status_t iree_hal_amdgpu_aql_command_buffer_prepare_dispatch_plan(
     out_plan->kernarg_block_count =
         iree_max(1u, out_plan->descriptor->custom_kernarg_block_count);
     if (out_plan->layout->total_kernarg_size > 0) {
-      const uint32_t provided_kernarg_block_count =
-          (uint32_t)iree_host_size_ceil_div(
-              out_plan->layout->total_kernarg_size,
-              sizeof(iree_hal_amdgpu_kernarg_block_t));
+      const iree_host_size_t provided_kernarg_block_count =
+          iree_host_size_ceil_div(out_plan->layout->total_kernarg_size,
+                                  sizeof(iree_hal_amdgpu_kernarg_block_t));
+      if (IREE_UNLIKELY(provided_kernarg_block_count > UINT32_MAX)) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "dispatch kernargs require too many blocks (%" PRIhsz ", max=%u)",
+            provided_kernarg_block_count, UINT32_MAX);
+      }
       out_plan->kernarg_block_count =
-          iree_max(out_plan->kernarg_block_count, provided_kernarg_block_count);
+          iree_max(out_plan->kernarg_block_count,
+                   (uint32_t)provided_kernarg_block_count);
     }
     out_plan->kernarg_strategy =
         IREE_HAL_AMDGPU_COMMAND_BUFFER_KERNARG_STRATEGY_CUSTOM_DIRECT;

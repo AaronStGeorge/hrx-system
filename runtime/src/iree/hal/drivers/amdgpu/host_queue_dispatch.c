@@ -112,7 +112,16 @@ static iree_status_t iree_hal_amdgpu_host_queue_validate_dispatch_shape(
     const iree_hal_dispatch_config_t config, iree_hal_dispatch_flags_t flags) {
   const bool uses_indirect_parameters =
       iree_hal_dispatch_uses_indirect_parameters(flags);
-  if (iree_hal_amdgpu_dispatch_config_has_workgroup_size_override(config)) {
+  const bool has_workgroup_size_override =
+      iree_hal_amdgpu_dispatch_config_has_workgroup_size_override(config);
+  if (IREE_UNLIKELY(descriptor->custom_direct_only &&
+                    !has_workgroup_size_override)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "custom-direct-only ELF exports require a dispatch workgroup size "
+        "override");
+  }
+  if (has_workgroup_size_override) {
     for (iree_host_size_t i = 0; i < 3; ++i) {
       const uint64_t grid_size =
           (uint64_t)config.workgroup_count[i] * kernel_args->workgroup_size[i];
