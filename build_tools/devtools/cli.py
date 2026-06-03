@@ -32,6 +32,8 @@ DEV_OPTIONS_WITH_VALUES = frozenset(
         "--alias-dir",
         "--alias_dir",
         "--base",
+        "--cmake-build-dir",
+        "--cmake_build_dir",
         "--profile",
         "--tool-root",
         "--tool_root",
@@ -72,7 +74,13 @@ def add_argument(
     return parser.add_argument(*expand_option_aliases(option_strings), **kwargs)
 
 
-def cmake_build_dir() -> Path:
+def cmake_build_dir(args: argparse.Namespace | None = None) -> Path:
+    configured_build_dir = getattr(args, "cmake_build_dir", None)
+    if configured_build_dir is not None:
+        build_dir = Path(configured_build_dir)
+        if build_dir.is_absolute():
+            return build_dir
+        return REPO_ROOT / build_dir
     return REPO_ROOT.parent / "builds" / REPO_ROOT.name
 
 
@@ -176,6 +184,16 @@ def add_common_options(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         default=argparse.SUPPRESS,
         help="Print extra diagnostics.",
+    )
+    add_argument(
+        parser,
+        "--cmake-build-dir",
+        type=Path,
+        default=argparse.SUPPRESS,
+        help=(
+            "CMake build directory for cmake commands. Relative paths are "
+            "resolved from the repository root."
+        ),
     )
 
 
@@ -578,7 +596,7 @@ def handle_configure(args: argparse.Namespace) -> CommandPlan:
             "-S",
             str(REPO_ROOT),
             "-B",
-            str(cmake_build_dir()),
+            str(cmake_build_dir(args)),
             *backend_args,
         ]
     return CommandPlan(
@@ -603,7 +621,7 @@ def handle_build(args: argparse.Namespace) -> CommandPlan:
         command = [
             tool_env.tool("cmake"),
             "--build",
-            str(cmake_build_dir()),
+            str(cmake_build_dir(args)),
             *cmake_build_args(backend_args),
         ]
     return CommandPlan(
@@ -628,7 +646,7 @@ def handle_test(args: argparse.Namespace) -> CommandPlan:
         command = [
             tool_env.tool("ctest"),
             "--test-dir",
-            str(cmake_build_dir()),
+            str(cmake_build_dir(args)),
             "--output-on-failure",
             *backend_args,
         ]
@@ -763,6 +781,7 @@ Use CMake for package and install-test workflows. `configure` writes
 python dev.py cmake configure
 python dev.py cmake configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm
 python dev.py cmake configure -DIREE_HAL_DRIVER_AMDGPU=OFF -DLIBHRX_BUILD=OFF
+python dev.py --cmake-build-dir build/cmake-asan cmake configure -DIREE_ENABLE_ASAN=ON
 python dev.py cmake build hrx
 python dev.py cmake test -R hrx
 python dev.py cmake precommit

@@ -17,6 +17,32 @@ import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+CI_DRY_RUN_COMMANDS = (
+    ("iree-bazel-cpu",),
+    ("iree-bazel-cpu-asan",),
+    ("iree-bazel-cpu-msan",),
+    ("iree-bazel-cpu-tsan",),
+    ("iree-bazel-cpu-ubsan",),
+    ("iree-bazel-cpu-sanitizers",),
+    ("iree-bazel-amdgpu",),
+    ("iree-bazel-amdgpu-asan",),
+    ("iree-bazel-amdgpu-msan",),
+    ("iree-bazel-amdgpu-tsan",),
+    ("iree-bazel-amdgpu-ubsan",),
+    ("iree-bazel-amdgpu-sanitizers",),
+    ("iree-cmake-cpu",),
+    ("iree-cmake-cpu-asan",),
+    ("iree-cmake-cpu-msan",),
+    ("iree-cmake-cpu-tsan",),
+    ("iree-cmake-cpu-ubsan",),
+    ("iree-cmake-cpu-sanitizers",),
+    ("iree-cmake-amdgpu",),
+    ("iree-cmake-amdgpu-asan",),
+    ("iree-cmake-amdgpu-msan",),
+    ("iree-cmake-amdgpu-tsan",),
+    ("iree-cmake-amdgpu-ubsan",),
+    ("iree-cmake-amdgpu-sanitizers",),
+)
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -103,6 +129,8 @@ def run_dry_run_scenario(checkout: Path) -> None:
         checkout,
         [
             "--dry-run",
+            "--cmake-build-dir",
+            "build/smoke-cmake",
             "cmake",
             "configure",
             "-DIREE_HAL_DRIVER_AMDGPU=OFF",
@@ -115,15 +143,8 @@ def run_dry_run_scenario(checkout: Path) -> None:
     run_command(checkout, ["--dry-run", "cmake", "precommit", "--profile", "ci"])
     run_command(checkout, ["--dry-run", "bazel", "presubmit", "--profile", "paranoid"])
     run_command(checkout, ["--dry-run", "cmake", "presubmit", "--profile", "default"])
-    run_ci_command(checkout, ["iree-cpu", "--dry-run"])
-    run_ci_command(checkout, ["iree-cpu-sanitizers", "--dry-run"])
-    run_ci_command(
-        checkout,
-        [
-            "iree-amdgpu",
-            "--dry-run",
-        ],
-    )
+    for command in CI_DRY_RUN_COMMANDS:
+        run_ci_command(checkout, [*command, "--dry-run"])
     assert_absent(checkout / ".bazelrc.configured")
     assert_absent(checkout / ".venv")
     assert_absent(checkout / "lefthook-local.yml")

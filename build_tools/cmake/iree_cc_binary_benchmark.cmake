@@ -34,6 +34,9 @@
 # )
 
 function(iree_cc_binary_benchmark)
+  if(NOT IREE_BUILD_BENCHMARKS)
+    return()
+  endif()
 
   cmake_parse_arguments(
     _RULE

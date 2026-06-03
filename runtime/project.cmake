@@ -9,8 +9,7 @@ list(APPEND CMAKE_MODULE_PATH
 )
 
 option(IREE_BUILD_TESTS "Build IREE runtime unit tests and CTS targets." ON)
-cmake_dependent_option(IREE_BUILD_BENCHMARKS
-  "Build IREE runtime benchmarks." ON "NOT IREE_BUILD_TESTS" ON)
+option(IREE_BUILD_BENCHMARKS "Build IREE runtime benchmarks." ON)
 
 set(IREE_BUILD_COMPILER OFF CACHE BOOL
   "The reduced HRX runtime tree does not build the IREE compiler." FORCE)

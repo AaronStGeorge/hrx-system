@@ -4,19 +4,16 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-name: CI IREE Bazel
+name: CI IREE CMake
 
 on:
   workflow_dispatch:
   pull_request:
     paths:
-      - ".bazelrc"
-      - ".bazelrc.configured"
-      - ".github/workflows/ci_iree_bazel.yml"
-      - "BUILD.bazel"
+      - ".github/workflows/ci_iree_cmake.yml"
       - "BUILDING.md"
-      - "MODULE.bazel"
-      - "MODULE.bazel.lock"
+      - "CMakeLists.txt"
+      - "MODULE.cmake.lock"
       - "dev.py"
       - "requirements-dev.in"
       - "requirements-dev.lock.txt"
@@ -30,13 +27,10 @@ on:
       - main
       - main-staging
     paths:
-      - ".bazelrc"
-      - ".bazelrc.configured"
-      - ".github/workflows/ci_iree_bazel.yml"
-      - "BUILD.bazel"
+      - ".github/workflows/ci_iree_cmake.yml"
       - "BUILDING.md"
-      - "MODULE.bazel"
-      - "MODULE.bazel.lock"
+      - "CMakeLists.txt"
+      - "MODULE.cmake.lock"
       - "dev.py"
       - "requirements-dev.in"
       - "requirements-dev.lock.txt"
@@ -50,7 +44,7 @@ permissions:
   contents: read
 
 jobs:
-  linux_bazel_cpu:
+  linux_cmake_cpu:
     name: ${{ matrix.name }}
     runs-on: aws-linux-scale-rocm-prod
     timeout-minutes: 45
@@ -61,17 +55,17 @@ jobs:
       matrix:
         include:
           - name: Linux / CPU
-            command: iree-bazel-cpu
+            command: iree-cmake-cpu
           - name: Linux / CPU / Sanitizers
-            command: iree-bazel-cpu-sanitizers
+            command: iree-cmake-cpu-sanitizers
     env:
       HRX_ARTIFACT_SET: core
-      HRX_DOWNLOAD_CACHE_DIR: ${{ github.workspace }}/build/iree-bazel/downloads
-      HRX_OUTPUT_DIR: ${{ github.workspace }}/build/iree-bazel
-      HRX_PYTHON: ${{ github.workspace }}/build/iree-bazel/python/bin/python3
+      HRX_DOWNLOAD_CACHE_DIR: ${{ github.workspace }}/build/iree-cmake/downloads
+      HRX_OUTPUT_DIR: ${{ github.workspace }}/build/iree-cmake
+      HRX_PYTHON: ${{ github.workspace }}/build/iree-cmake/python/bin/python3
       HRX_RELEASE_TYPE: nightly
-      HRX_ROCM_ROOT: ${{ github.workspace }}/build/iree-bazel/rocm-root
-      PIP_CACHE_DIR: ${{ github.workspace }}/build/iree-bazel/caches/pip
+      HRX_ROCM_ROOT: ${{ github.workspace }}/build/iree-cmake/rocm-root
+      PIP_CACHE_DIR: ${{ github.workspace }}/build/iree-cmake/caches/pip
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -95,22 +89,24 @@ jobs:
       - name: Install developer tools
         run: |
           python3 --version
-          python3 dev.py bazel setup --venv
+          python3 dev.py cmake setup --venv
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Check tool versions
         run: |
-          bazel --version
+          cmake --version
+          ctest --version
+          ninja --version
           clang --version
           "$CC" --version
           test -d "$IREE_ROCM_PATH/include"
 
-      - name: Run IREE Bazel CI
+      - name: Run IREE CMake CI
         run: |
-          echo "python3 build_tools/devtools/ci.py ${{ matrix.command }} --target //runtime/... --keep-going"
-          python3 build_tools/devtools/ci.py ${{ matrix.command }} --target //runtime/... --keep-going
+          echo "python3 build_tools/devtools/ci.py ${{ matrix.command }} --keep-going"
+          python3 build_tools/devtools/ci.py ${{ matrix.command }} --keep-going
 
-  linux_bazel_amdgpu:
+  linux_cmake_amdgpu:
     name: ${{ matrix.name }}
     runs-on: linux-gfx942-1gpu-core42-ossci-rocm
     timeout-minutes: 60
@@ -119,17 +115,17 @@ jobs:
       matrix:
         include:
           - name: Linux / AMDGPU
-            command: iree-bazel-amdgpu
+            command: iree-cmake-amdgpu
           - name: Linux / AMDGPU / Sanitizers
-            command: iree-bazel-amdgpu-sanitizers
+            command: iree-cmake-amdgpu-sanitizers
     env:
       HRX_ARTIFACT_SET: core
-      HRX_DOWNLOAD_CACHE_DIR: ${{ github.workspace }}/build/iree-bazel-gpu/downloads
-      HRX_OUTPUT_DIR: ${{ github.workspace }}/build/iree-bazel-gpu
-      HRX_PYTHON: ${{ github.workspace }}/build/iree-bazel-gpu/python/bin/python3
+      HRX_DOWNLOAD_CACHE_DIR: ${{ github.workspace }}/build/iree-cmake-gpu/downloads
+      HRX_OUTPUT_DIR: ${{ github.workspace }}/build/iree-cmake-gpu
+      HRX_PYTHON: ${{ github.workspace }}/build/iree-cmake-gpu/python/bin/python3
       HRX_RELEASE_TYPE: nightly
-      HRX_ROCM_ROOT: ${{ github.workspace }}/build/iree-bazel-gpu/rocm-root
-      PIP_CACHE_DIR: ${{ github.workspace }}/build/iree-bazel-gpu/caches/pip
+      HRX_ROCM_ROOT: ${{ github.workspace }}/build/iree-cmake-gpu/rocm-root
+      PIP_CACHE_DIR: ${{ github.workspace }}/build/iree-cmake-gpu/caches/pip
       ROCR_VISIBLE_DEVICES: "0"
     steps:
       - name: Checkout repository
@@ -154,17 +150,19 @@ jobs:
       - name: Install developer tools
         run: |
           python3 --version
-          python3 dev.py bazel setup --venv
+          python3 dev.py cmake setup --venv
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Check tool versions
         run: |
-          bazel --version
+          cmake --version
+          ctest --version
+          ninja --version
           clang --version
           "$CC" --version
           test -d "$IREE_ROCM_PATH/include"
 
-      - name: Run IREE Bazel CI
+      - name: Run IREE CMake CI
         run: |
-          echo "python3 build_tools/devtools/ci.py ${{ matrix.command }} --target //runtime/... --keep-going"
-          python3 build_tools/devtools/ci.py ${{ matrix.command }} --target //runtime/... --keep-going
+          echo "python3 build_tools/devtools/ci.py ${{ matrix.command }} --keep-going"
+          python3 build_tools/devtools/ci.py ${{ matrix.command }} --keep-going

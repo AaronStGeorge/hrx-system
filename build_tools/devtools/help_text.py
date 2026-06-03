@@ -91,8 +91,11 @@ BUILDING.md. Use .bazelrc.local for checkout-specific Bazel overrides.""",
   python dev.py cmake configure --fresh
   python dev.py cmake configure -DCMAKE_BUILD_TYPE=Debug
   python dev.py cmake configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm
+  python dev.py --cmake-build-dir build/cmake-asan cmake configure -DIREE_ENABLE_ASAN=ON
 
 The build tree lives outside the checkout at ../builds/<checkout-name>/.
+Use --cmake-build-dir to select a different tree for CI, experiments, or
+parallel configurations.
 Published project build options live in BUILDING.md.""",
         )
     if command == "build":

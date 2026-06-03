@@ -9,6 +9,7 @@ from __future__ import annotations
 import contextlib
 import io
 import unittest
+from pathlib import Path
 
 from build_tools.devtools import ci, ci_config
 
@@ -17,7 +18,7 @@ class CiTest(unittest.TestCase):
     def test_cpu_dry_run_exposes_copyable_commands(self):
         args = ci.parse_arguments(
             [
-                "iree-cpu",
+                "iree-bazel-cpu",
                 "--dry-run",
                 "--target",
                 "//runtime/...",
@@ -44,7 +45,7 @@ class CiTest(unittest.TestCase):
     def test_amdgpu_dry_run_does_not_embed_machine_paths(self):
         args = ci.parse_arguments(
             [
-                "iree-amdgpu",
+                "iree-bazel-amdgpu",
                 "--dry-run",
                 "--target",
                 "//runtime/...",
@@ -71,7 +72,7 @@ class CiTest(unittest.TestCase):
     def test_sanitizer_command_runs_tests_and_msan_build(self):
         args = ci.parse_arguments(
             [
-                "iree-cpu-sanitizers",
+                "iree-bazel-cpu-sanitizers",
                 "--target",
                 "//runtime/...",
             ]
@@ -112,10 +113,53 @@ class CiTest(unittest.TestCase):
                 any(xfail_target in step.argv for step in sanitizer_test_steps)
             )
 
+    def test_bazel_cpu_single_sanitizer_command_runs_one_configuration(self):
+        args = ci.parse_arguments(
+            [
+                "iree-bazel-cpu-asan",
+                "--target",
+                "//runtime/...",
+            ]
+        )
+
+        steps = ci.steps_from_args(args)
+        command_lines = [step.command_line() for step in steps]
+
+        self.assertEqual(command_lines[0], "python3 dev.py bazel configure")
+        self.assertTrue(
+            any(
+                "bazel test --config=asan -- //runtime/..." in line
+                for line in command_lines
+            )
+        )
+        self.assertFalse(any("--config=ubsan" in line for line in command_lines))
+        self.assertFalse(any("--config=tsan" in line for line in command_lines))
+        self.assertFalse(any("--config=msan" in line for line in command_lines))
+
+    def test_bazel_cpu_msan_command_builds_without_tests(self):
+        args = ci.parse_arguments(
+            [
+                "iree-bazel-cpu-msan",
+                "--target",
+                "//runtime/...",
+            ]
+        )
+
+        steps = ci.steps_from_args(args)
+        command_lines = [step.command_line() for step in steps]
+
+        self.assertTrue(
+            any(
+                "bazel build //runtime/... --config=msan" in line
+                for line in command_lines
+            )
+        )
+        self.assertFalse(any("bazel test" in line for line in command_lines))
+
     def test_amdgpu_command_scopes_tests_to_amdgpu(self):
         args = ci.parse_arguments(
             [
-                "iree-amdgpu",
+                "iree-bazel-amdgpu",
                 "--target",
                 "//runtime/...",
             ]
@@ -143,7 +187,7 @@ class CiTest(unittest.TestCase):
     def test_amdgpu_sanitizer_command_uses_amdgpu_sanitizer_xfails(self):
         args = ci.parse_arguments(
             [
-                "iree-amdgpu-sanitizers",
+                "iree-bazel-amdgpu-sanitizers",
                 "--target",
                 "//runtime/...",
             ]
@@ -158,6 +202,129 @@ class CiTest(unittest.TestCase):
             self.assertTrue(
                 any(xfail_target in step.argv for step in sanitizer_test_steps)
             )
+
+    def test_bazel_amdgpu_single_sanitizer_command_runs_one_configuration(self):
+        args = ci.parse_arguments(
+            [
+                "iree-bazel-amdgpu-tsan",
+                "--target",
+                "//runtime/...",
+            ]
+        )
+
+        steps = ci.steps_from_args(args)
+        command_lines = [step.command_line() for step in steps]
+
+        self.assertEqual(
+            command_lines[0],
+            "python3 dev.py bazel configure -DIREE_HAL_DRIVER_AMDGPU=ON",
+        )
+        self.assertTrue(
+            any(
+                "bazel test --config=tsan --test_tag_filters="
+                + ci_config.AMDGPU_RESOURCE_TAG
+                in line
+                for line in command_lines
+            )
+        )
+        self.assertFalse(any("--config=asan" in line for line in command_lines))
+        self.assertFalse(any("--config=ubsan" in line for line in command_lines))
+        self.assertFalse(any("--config=msan" in line for line in command_lines))
+
+    def test_xfails_project_to_ctest_regexes(self):
+        self.assertIn(
+            "^iree/tokenizer/",
+            ci_config.CPU_SANITIZERS_CTEST_EXCLUDE_REGEX,
+        )
+        self.assertIn(
+            "^iree/hal/drivers/amdgpu/allocator_test$",
+            ci_config.AMDGPU_CTEST_EXCLUDE_REGEX,
+        )
+        self.assertIn(
+            "^iree/hal/drivers/amdgpu/util/block_pool_test$",
+            ci_config.AMDGPU_SANITIZERS_CTEST_EXCLUDE_REGEX,
+        )
+        self.assertIn(
+            "^iree/hal/drivers/amdgpu/util/pm4_program_test$",
+            ci_config.AMDGPU_SANITIZERS_CTEST_EXCLUDE_REGEX,
+        )
+
+    def test_cmake_cpu_sanitizer_command_uses_cmake_build_dir_and_xfails(self):
+        args = ci.parse_arguments(["iree-cmake-cpu-ubsan"])
+
+        steps = ci.steps_from_args(args)
+        command_lines = [step.command_line() for step in steps]
+
+        self.assertTrue(
+            any(
+                "--cmake-build-dir build/ci/iree-cmake-cpu-ubsan" in line
+                for line in command_lines
+            )
+        )
+        self.assertTrue(any("-DIREE_ENABLE_UBSAN=ON" in line for line in command_lines))
+        test_steps = [step for step in steps if step.name.startswith("Test IREE")]
+        self.assertTrue(
+            any(
+                ci_config.CPU_SANITIZERS_CTEST_EXCLUDE_REGEX in step.argv
+                for step in test_steps
+            )
+        )
+        self.assertTrue(any("runtime-resource=" in step.argv for step in test_steps))
+
+    def test_cmake_cpu_sanitizers_command_runs_each_configuration(self):
+        args = ci.parse_arguments(["iree-cmake-cpu-sanitizers"])
+
+        steps = ci.steps_from_args(args)
+        command_lines = [step.command_line() for step in steps]
+
+        self.assertTrue(any("iree-cmake-cpu-asan" in line for line in command_lines))
+        self.assertTrue(any("iree-cmake-cpu-ubsan" in line for line in command_lines))
+        self.assertTrue(any("iree-cmake-cpu-tsan" in line for line in command_lines))
+        self.assertTrue(any("iree-cmake-cpu-msan" in line for line in command_lines))
+        tsan_options = [
+            value for step in steps for key, value in step.env if key == "TSAN_OPTIONS"
+        ]
+        self.assertNotEqual(tsan_options, [])
+        for value in tsan_options:
+            path = Path(value.removeprefix("suppressions="))
+            self.assertTrue(path.is_absolute())
+            self.assertTrue(path.is_file())
+        self.assertTrue(
+            any("-DIREE_BUILD_BENCHMARKS=OFF" in line for line in command_lines)
+        )
+        self.assertTrue(any("-DIREE_BUILD_TESTS=OFF" in line for line in command_lines))
+        self.assertFalse(
+            any("Test IREE CMake with MSAN" in step.name for step in steps)
+        )
+
+    def test_cmake_amdgpu_command_scopes_tests_to_amdgpu(self):
+        args = ci.parse_arguments(["iree-cmake-amdgpu"])
+
+        steps = ci.steps_from_args(args)
+        command_lines = [step.command_line() for step in steps]
+
+        self.assertTrue(
+            any("-DIREE_HAL_DRIVER_AMDGPU=ON" in line for line in command_lines)
+        )
+        self.assertTrue(
+            any(
+                "-DIREE_ROCM_TEST_TARGET_CHIP=" + ci_config.AMDGPU_ROCM_TEST_TARGET_CHIP
+                in line
+                for line in command_lines
+            )
+        )
+        self.assertTrue(
+            any("-R '^iree/hal/drivers/amdgpu/'" in line for line in command_lines)
+        )
+        self.assertTrue(
+            any("-L runtime-resource=amd-gpu" in line for line in command_lines)
+        )
+
+    def test_cmake_command_rejects_bazel_targets(self):
+        args = ci.parse_arguments(["iree-cmake-cpu", "--target", "//runtime/..."])
+
+        with self.assertRaisesRegex(ValueError, "--target"):
+            ci.steps_from_args(args)
 
 
 if __name__ == "__main__":

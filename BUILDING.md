@@ -88,6 +88,39 @@ python dev.py bazel test //runtime/... --config=asan
 python dev.py bazel test //runtime/src/iree/async/... --config=tsan
 ```
 
+## IREE CI Reproduction
+
+IREE source-tree CI is run through `build_tools/devtools/ci.py` so GitHub
+workflow failures have copyable local commands. Command names are
+`iree-<build-lane>-<target-group>[-<configuration>]`. Bazel jobs take explicit
+target patterns. CMake jobs use generated CTest names and labels directly.
+
+```bash
+python build_tools/devtools/ci.py iree-bazel-cpu --target //runtime/... --keep-going
+python build_tools/devtools/ci.py iree-bazel-cpu-sanitizers --target //runtime/... --keep-going
+python build_tools/devtools/ci.py iree-bazel-amdgpu --target //runtime/... --keep-going
+python build_tools/devtools/ci.py iree-bazel-amdgpu-sanitizers --target //runtime/... --keep-going
+
+python build_tools/devtools/ci.py iree-cmake-cpu --keep-going
+python build_tools/devtools/ci.py iree-cmake-cpu-sanitizers --keep-going
+python build_tools/devtools/ci.py iree-cmake-amdgpu --keep-going
+python build_tools/devtools/ci.py iree-cmake-amdgpu-sanitizers --keep-going
+```
+
+The aggregate `*-sanitizers` commands batch sanitizer configurations for CI
+scheduling. Individual sanitizer commands are the targeted reproduction form:
+
+```bash
+python build_tools/devtools/ci.py iree-bazel-cpu-asan --target //runtime/... --keep-going
+python build_tools/devtools/ci.py iree-bazel-amdgpu-tsan --target //runtime/... --keep-going
+python build_tools/devtools/ci.py iree-cmake-cpu-ubsan --keep-going
+python build_tools/devtools/ci.py iree-cmake-amdgpu-tsan --keep-going
+```
+
+Sanitizer CI tests ASAN, UBSAN, and TSAN. MSAN is build-only until the CI host
+dependency stack is MSAN-instrumented enough for test execution to produce
+runtime signal instead of dependency instrumentation noise.
+
 ## Shared Project Configuration
 
 Shared project options use CMake-style `-DNAME=VALUE` spelling. These options

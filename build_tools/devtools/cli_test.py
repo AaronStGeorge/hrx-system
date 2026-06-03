@@ -41,6 +41,23 @@ class CliTest(unittest.TestCase):
         self.assertIn("--fresh", description)
         self.assertNotIn("-- --fresh", description)
 
+    def test_cmake_build_dir_can_be_selected(self):
+        args = cli.parse_arguments(
+            [
+                "--cmake-build-dir",
+                "build/cmake-ci",
+                "cmake",
+                "configure",
+                "-DIREE_HAL_DRIVER_AMDGPU=OFF",
+            ]
+        )
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("build/cmake-ci", description)
+        self.assertNotIn("../builds", description)
+
     def test_bazel_configure_accepts_portable_project_options(self):
         args = cli.parse_arguments(
             [
