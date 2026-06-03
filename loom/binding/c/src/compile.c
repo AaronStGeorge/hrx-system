@@ -542,7 +542,6 @@ loomc_status_t loomc_compiler_create(loomc_context_t* context,
   }
   LOOMC_RETURN_IF_ERROR(loomc_compile_validate_compiler_options(options));
 
-  allocator = loomc_allocator_or_system(allocator);
   loomc_compiler_t* compiler = NULL;
   LOOMC_RETURN_IF_ERROR(
       loomc_allocator_malloc(allocator, sizeof(*compiler), (void**)&compiler));
@@ -593,7 +592,6 @@ loomc_status_t loomc_compile_module(loomc_compiler_t* compiler,
   LOOMC_RETURN_IF_ERROR(loomc_target_selection_validate_environment(
       target_selection, loomc_context_target_environment(compiler->context)));
 
-  allocator = loomc_allocator_or_system(allocator);
   loomc_result_t* result = NULL;
   LOOMC_RETURN_IF_ERROR(
       loomc_result_create(LOOMC_RESULT_STATE_SUCCEEDED, allocator, &result));

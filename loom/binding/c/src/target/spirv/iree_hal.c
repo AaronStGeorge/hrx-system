@@ -476,7 +476,6 @@ loomc_status_t loomc_target_profile_create_spirv_iree_hal(
     const loomc_spirv_iree_hal_profile_options_t* options,
     loomc_allocator_t allocator, loomc_target_profile_t** out_profile,
     loomc_result_t** out_result) {
-  allocator = loomc_allocator_or_system(allocator);
   if (out_profile == NULL || out_result == NULL) {
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
                              "out_profile and out_result must not be NULL");

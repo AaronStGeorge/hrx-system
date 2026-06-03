@@ -62,7 +62,6 @@ loomc_status_t loomc_context_create(const loomc_context_options_t* options,
   LOOMC_RETURN_IF_ERROR(
       loomc_context_target_options_resolve(options, &target_environment));
 
-  allocator = loomc_allocator_or_system(allocator);
   loomc_context_t* context = NULL;
   LOOMC_RETURN_IF_ERROR(
       loomc_allocator_malloc(allocator, sizeof(*context), (void**)&context));

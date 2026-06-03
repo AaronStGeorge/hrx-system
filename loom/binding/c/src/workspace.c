@@ -60,7 +60,6 @@ loomc_status_t loomc_workspace_create(const loomc_workspace_options_t* options,
   *out_workspace = NULL;
   LOOMC_RETURN_IF_ERROR(loomc_workspace_validate_options(options));
 
-  allocator = loomc_allocator_or_system(allocator);
   loomc_workspace_t* workspace = NULL;
   LOOMC_RETURN_IF_ERROR(loomc_allocator_malloc(allocator, sizeof(*workspace),
                                                (void**)&workspace));

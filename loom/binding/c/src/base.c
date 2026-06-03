@@ -11,27 +11,12 @@
 #include "iree/base/api.h"
 #include "loomc/status.h"
 
-static loomc_status_t loomc_system_allocator_ctl(
-    void* self, loomc_allocator_command_t command, const void* params,
-    void** inout_ptr) {
-  (void)self;
-  iree_allocator_t allocator = iree_allocator_system();
-  return (loomc_status_t)allocator.ctl(
-      allocator.self, (iree_allocator_command_t)command, params, inout_ptr);
-}
-
-loomc_allocator_t loomc_allocator_system(void) {
-  return (loomc_allocator_t){
-      .self = NULL,
-      .ctl = loomc_system_allocator_ctl,
-  };
-}
-
-loomc_allocator_t loomc_allocator_or_system(loomc_allocator_t allocator) {
-  if (allocator.ctl) {
-    return allocator;
+static loomc_status_t loomc_allocator_validate(loomc_allocator_t allocator) {
+  if (!loomc_allocator_is_valid(allocator)) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "allocator.ctl must not be NULL");
   }
-  return loomc_allocator_system();
+  return loomc_ok_status();
 }
 
 loomc_status_t loomc_allocator_malloc(loomc_allocator_t allocator,
@@ -42,7 +27,7 @@ loomc_status_t loomc_allocator_malloc(loomc_allocator_t allocator,
                              "out_ptr must not be NULL");
   }
   *out_ptr = NULL;
-  allocator = loomc_allocator_or_system(allocator);
+  LOOMC_RETURN_IF_ERROR(loomc_allocator_validate(allocator));
   loomc_allocator_alloc_params_t params = {
       .byte_length = byte_length,
   };
@@ -58,7 +43,7 @@ loomc_status_t loomc_allocator_malloc_uninitialized(
                              "out_ptr must not be NULL");
   }
   *out_ptr = NULL;
-  allocator = loomc_allocator_or_system(allocator);
+  LOOMC_RETURN_IF_ERROR(loomc_allocator_validate(allocator));
   loomc_allocator_alloc_params_t params = {
       .byte_length = byte_length,
   };
@@ -93,7 +78,7 @@ void loomc_allocator_free(loomc_allocator_t allocator, void* ptr) {
   if (ptr == NULL) {
     return;
   }
-  allocator = loomc_allocator_or_system(allocator);
+  IREE_ASSERT_ARGUMENT(loomc_allocator_is_valid(allocator));
   void* inout_ptr = ptr;
   allocator.ctl(allocator.self, LOOMC_ALLOCATOR_COMMAND_FREE, NULL, &inout_ptr);
 }

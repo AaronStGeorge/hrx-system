@@ -37,6 +37,7 @@ loom_cc_library(
   SRCS
     "src/artifact.c"
     "src/base.c"
+    "src/base_system.c"
     "src/compile.c"
     "src/context.c"
     "src/diagnostic.c"
@@ -232,6 +233,18 @@ loom_cc_test(
     "test/full_package_test.cc"
   DEPS
     ::loomc_full
+    ::test_util
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    base_test
+  SRCS
+    "test/base_test.cc"
+  DEPS
+    ::loomc
     ::test_util
     iree::testing::gtest
     iree::testing::gtest_main

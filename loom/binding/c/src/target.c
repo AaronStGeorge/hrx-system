@@ -249,7 +249,6 @@ loomc_status_t loomc_target_environment_create_from_provider_set(
                              "provider_set must not be NULL");
   }
 
-  allocator = loomc_allocator_or_system(allocator);
   loomc_target_environment_t* target_environment = NULL;
   LOOMC_RETURN_IF_ERROR(loomc_allocator_malloc(
       allocator, sizeof(*target_environment), (void**)&target_environment));
@@ -484,7 +483,6 @@ loomc_status_t loomc_target_profile_create_from_selection(
     loom_target_selection_t selection, const void* payload_type, void* payload,
     loomc_target_profile_payload_deinitialize_fn_t deinitialize,
     loomc_allocator_t allocator, loomc_target_profile_t** out_profile) {
-  allocator = loomc_allocator_or_system(allocator);
   void* pending_payload = payload;
   loomc_target_profile_t* profile = NULL;
   loomc_status_t status = loomc_ok_status();
@@ -591,7 +589,6 @@ loomc_status_t loomc_target_selection_create_empty(
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
                              "out_target_selection must not be NULL");
   }
-  allocator = loomc_allocator_or_system(allocator);
   loomc_target_selection_t* target_selection = NULL;
   LOOMC_RETURN_IF_ERROR(
       loomc_target_selection_allocate(allocator, &target_selection));
@@ -612,7 +609,6 @@ loomc_status_t loomc_target_selection_create_from_profile(
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
                              "profile must not be NULL");
   }
-  allocator = loomc_allocator_or_system(allocator);
   loomc_target_selection_t* target_selection = NULL;
   LOOMC_RETURN_IF_ERROR(
       loomc_target_selection_allocate(allocator, &target_selection));

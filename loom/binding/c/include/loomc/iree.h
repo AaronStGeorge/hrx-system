@@ -173,7 +173,7 @@ static inline loomc_allocator_t loomc_allocator_from_iree(
 
 /// Converts a Loom allocator to an IREE allocator.
 ///
-/// @param allocator Loom allocator.
+/// @param allocator Valid Loom allocator.
 /// @return IREE allocator that forwards to the same callback and state.
 ///
 /// @lifetime
@@ -181,6 +181,7 @@ static inline loomc_allocator_t loomc_allocator_from_iree(
 /// state remain valid.
 static inline iree_allocator_t iree_allocator_from_loomc(
     loomc_allocator_t allocator) {
+  IREE_ASSERT_ARGUMENT(loomc_allocator_is_valid(allocator));
   return (iree_allocator_t){
       .self = allocator.self,
       .ctl = (iree_allocator_ctl_fn_t)allocator.ctl,

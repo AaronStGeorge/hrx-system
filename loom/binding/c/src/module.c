@@ -12,6 +12,7 @@
 
 #include "context.h"
 #include "diagnostic.h"
+#include "iree/base/api.h"
 #include "iree/base/internal/atomics.h"
 #include "iree/io/file_contents.h"
 #include "iree/io/stdio_stream.h"
@@ -623,7 +624,6 @@ static loomc_status_t loomc_module_byte_buffer_stream_create(
     loomc_allocator_t allocator,
     loomc_module_byte_buffer_stream_t** out_stream) {
   *out_stream = NULL;
-  allocator = loomc_allocator_or_system(allocator);
   loomc_module_byte_buffer_stream_t* stream = NULL;
   LOOMC_RETURN_IF_ERROR(
       loomc_allocator_malloc(allocator, sizeof(*stream), (void**)&stream));
@@ -899,7 +899,6 @@ loomc_status_t loomc_module_create_empty(loomc_context_t* context,
                              "context and out_module must not be NULL");
   }
   *out_module = NULL;
-  allocator = loomc_allocator_or_system(allocator);
 
   loomc_module_t* module = NULL;
   LOOMC_RETURN_IF_ERROR(
@@ -927,7 +926,8 @@ loomc_status_t loomc_module_create_empty(loomc_context_t* context,
 }
 
 loomc_allocator_t loomc_module_allocator(const loomc_module_t* module) {
-  return module ? module->allocator : loomc_allocator_system();
+  IREE_ASSERT_ARGUMENT(module);
+  return module->allocator;
 }
 
 loomc_context_t* loomc_module_context(const loomc_module_t* module) {
@@ -995,7 +995,6 @@ loomc_status_t loomc_module_deserialize_from_source(
         "context, source, out_module, and out_result must not be NULL");
   }
 
-  allocator = loomc_allocator_or_system(allocator);
   loomc_module_resolved_deserialize_options_t resolved_options = {0};
   LOOMC_RETURN_IF_ERROR(loomc_module_resolve_deserialize_options(
       options, loomc_source_identifier(source), loomc_source_format(source),
@@ -1022,7 +1021,6 @@ loomc_status_t loomc_module_deserialize_from_file(
         "context, file, out_module, and out_result must not be NULL");
   }
 
-  allocator = loomc_allocator_or_system(allocator);
   uint8_t* contents = NULL;
   loomc_host_size_t contents_length = 0;
   LOOMC_RETURN_IF_ERROR(loomc_source_read_file_to_storage(
@@ -1069,7 +1067,10 @@ loomc_status_t loomc_module_deserialize_from_path(
         "context, path, out_module, and out_result must be valid");
   }
 
-  allocator = loomc_allocator_or_system(allocator);
+  if (!loomc_allocator_is_valid(allocator)) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "allocator.ctl must not be NULL");
+  }
   iree_io_file_contents_t* file_contents = NULL;
   LOOMC_RETURN_IF_ERROR(loomc_status_from_iree(iree_io_file_contents_read(
       iree_string_view_from_loomc(path), iree_allocator_from_loomc(allocator),
@@ -1124,7 +1125,6 @@ loomc_status_t loomc_module_serialize_to_source(
   LOOMC_RETURN_IF_ERROR(
       loomc_module_require_internal(module, &internal_module));
 
-  allocator = loomc_allocator_or_system(allocator);
   switch (resolved_options.format) {
     case LOOMC_SOURCE_FORMAT_TEXT:
       return loomc_module_serialize_text_to_source(
@@ -1192,7 +1192,10 @@ loomc_status_t loomc_module_serialize_to_path(
   LOOMC_RETURN_IF_ERROR(
       loomc_module_require_internal(module, &internal_module));
 
-  allocator = loomc_allocator_or_system(allocator);
+  if (!loomc_allocator_is_valid(allocator)) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "allocator.ctl must not be NULL");
+  }
   iree_io_stream_t* stream = NULL;
   loomc_status_t status = loomc_status_from_iree(iree_io_stdio_stream_open(
       IREE_IO_STDIO_STREAM_MODE_WRITE | IREE_IO_STDIO_STREAM_MODE_DISCARD,

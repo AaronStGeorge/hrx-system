@@ -884,7 +884,6 @@ loomc_status_t loomc_target_profile_create_spirv_vulkaninfo(
                              "source contents have length but no data");
   }
 
-  allocator = loomc_allocator_or_system(allocator);
   loomc_result_t* result = NULL;
   LOOMC_RETURN_IF_ERROR(
       loomc_result_create(LOOMC_RESULT_STATE_SUCCEEDED, allocator, &result));

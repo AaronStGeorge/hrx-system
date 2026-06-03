@@ -461,7 +461,6 @@ loomc_status_t loomc_link_index_builder_create(
   *out_builder = NULL;
   LOOMC_RETURN_IF_ERROR(loomc_link_index_validate_builder_options(options));
 
-  allocator = loomc_allocator_or_system(allocator);
   loomc_link_index_builder_t* builder = NULL;
   LOOMC_RETURN_IF_ERROR(
       loomc_allocator_malloc(allocator, sizeof(*builder), (void**)&builder));

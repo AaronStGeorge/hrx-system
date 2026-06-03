@@ -936,7 +936,6 @@ loomc_status_t loomc_target_profile_create_spirv(
   *out_result = NULL;
   LOOMC_RETURN_IF_ERROR(loomc_spirv_profile_validate_options(options));
 
-  allocator = loomc_allocator_or_system(allocator);
   loomc_result_t* result = NULL;
   LOOMC_RETURN_IF_ERROR(
       loomc_result_create(LOOMC_RESULT_STATE_SUCCEEDED, allocator, &result));
@@ -976,7 +975,6 @@ loomc_status_t loomc_spirv_target_profile_refine(
   LOOMC_RETURN_IF_ERROR(
       loomc_spirv_profile_validate_query(base_profile, &base_payload));
 
-  allocator = loomc_allocator_or_system(allocator);
   loomc_result_t* result = NULL;
   LOOMC_RETURN_IF_ERROR(
       loomc_result_create(LOOMC_RESULT_STATE_SUCCEEDED, allocator, &result));

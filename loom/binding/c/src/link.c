@@ -468,7 +468,6 @@ loomc_status_t loomc_linker_create(loomc_context_t* context,
   *out_linker = NULL;
   LOOMC_RETURN_IF_ERROR(loomc_link_validate_linker_options(options));
 
-  allocator = loomc_allocator_or_system(allocator);
   loomc_linker_t* linker = NULL;
   LOOMC_RETURN_IF_ERROR(
       loomc_allocator_malloc(allocator, sizeof(*linker), (void**)&linker));

@@ -328,8 +328,8 @@ typedef loomc_status_t(LOOMC_API_PTR* loomc_allocator_ctl_fn_t)(
 
 /// Host allocator used for persistent Loom object storage.
 ///
-/// A zero-initialized allocator value is accepted by APIs that take an
-/// allocator and is treated as `loomc_allocator_system()`.
+/// APIs that take an allocator require `ctl` to be non-NULL. Callers that want
+/// the process heap must pass `loomc_allocator_system()` explicitly.
 typedef struct loomc_allocator_t {
   /// Callback-owned state pointer.
   void* self;
@@ -338,26 +338,26 @@ typedef struct loomc_allocator_t {
   loomc_allocator_ctl_fn_t ctl;
 } loomc_allocator_t;
 
+/// Returns true when `allocator` can service allocation commands.
+///
+/// @param allocator Allocator to inspect.
+/// @return True when `allocator.ctl` is non-NULL.
+static inline bool loomc_allocator_is_valid(loomc_allocator_t allocator) {
+  return allocator.ctl != NULL;
+}
+
 /// Returns a process-global system allocator.
 ///
 /// @return Allocator backed by the process heap.
 LOOMC_API_EXPORT loomc_allocator_t loomc_allocator_system(void);
 
-/// Returns `allocator` when it is valid, otherwise the system allocator.
-///
-/// @param allocator Allocator to normalize.
-/// @return `allocator` when `allocator.ctl` is non-NULL, otherwise
-/// `loomc_allocator_system()`.
-LOOMC_API_EXPORT loomc_allocator_t
-loomc_allocator_or_system(loomc_allocator_t allocator);
-
 /// Allocates zero-initialized memory from `allocator`.
 ///
-/// @param allocator Allocator used for the allocation, or a zero-initialized
-/// value to use the system allocator.
+/// @param allocator Allocator used for the allocation.
 /// @param byte_length Number of bytes to allocate.
 /// @param out_ptr Receives the allocated memory on success.
-/// @return OK on success or a non-OK status on allocation failure.
+/// @return OK on success, `LOOMC_STATUS_INVALID_ARGUMENT` when the allocator
+/// is invalid, or a non-OK status on allocation failure.
 ///
 /// @ownership
 /// The caller owns `out_ptr` on success and frees it with
@@ -367,11 +367,11 @@ LOOMC_API_EXPORT loomc_status_t loomc_allocator_malloc(
 
 /// Allocates uninitialized memory from `allocator`.
 ///
-/// @param allocator Allocator used for the allocation, or a zero-initialized
-/// value to use the system allocator.
+/// @param allocator Allocator used for the allocation.
 /// @param byte_length Number of bytes to allocate.
 /// @param out_ptr Receives the allocated memory on success.
-/// @return OK on success or a non-OK status on allocation failure.
+/// @return OK on success, `LOOMC_STATUS_INVALID_ARGUMENT` when the allocator
+/// is invalid, or a non-OK status on allocation failure.
 ///
 /// @ownership
 /// The caller owns `out_ptr` on success and frees it with
@@ -382,10 +382,10 @@ LOOMC_API_EXPORT loomc_status_t loomc_allocator_malloc_uninitialized(
 /// Copies a string view into allocator-owned storage.
 ///
 /// @param source Borrowed source string view to copy.
-/// @param allocator Allocator used for the copied storage, or a
-/// zero-initialized value to use the system allocator.
+/// @param allocator Allocator used for the copied storage.
 /// @param out_string Receives the owned string view on success.
-/// @return OK on success or a non-OK status on allocation failure.
+/// @return OK on success, `LOOMC_STATUS_INVALID_ARGUMENT` when the allocator
+/// or source view is invalid, or a non-OK status on allocation failure.
 ///
 /// Empty source views produce an empty output view without allocating. The
 /// copied bytes are not NUL-terminated.
@@ -399,9 +399,12 @@ loomc_string_view_clone(loomc_string_view_t source, loomc_allocator_t allocator,
 
 /// Frees memory previously returned by `allocator`.
 ///
-/// @param allocator Allocator that returned `ptr`, or a zero-initialized value
-/// when `ptr` came from the system allocator.
+/// @param allocator Allocator that returned `ptr`.
 /// @param ptr Allocation to free. Passing `NULL` is allowed.
+///
+/// When `ptr` is non-NULL, `allocator.ctl` must also be non-NULL. Invalid
+/// allocator values are programmer errors because this function has no status
+/// channel.
 LOOMC_API_EXPORT void loomc_allocator_free(loomc_allocator_t allocator,
                                            void* ptr);
 

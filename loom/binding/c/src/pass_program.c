@@ -433,7 +433,6 @@ loomc_status_t loomc_pass_program_create_empty(
       options ? options->next : NULL, &target_selection));
   LOOMC_RETURN_IF_ERROR(loomc_target_selection_validate_environment(
       target_selection, loomc_context_target_environment(context)));
-  allocator = loomc_allocator_or_system(allocator);
 
   loomc_pass_program_t* pass_program = NULL;
   loomc_status_t status =
@@ -477,7 +476,6 @@ loomc_status_t loomc_pass_program_create_from_pipeline_text(
   LOOMC_RETURN_IF_ERROR(loomc_target_selection_validate_environment(
       target_selection, loomc_context_target_environment(context)));
 
-  allocator = loomc_allocator_or_system(allocator);
   loomc_result_t* result = NULL;
   LOOMC_RETURN_IF_ERROR(
       loomc_result_create(LOOMC_RESULT_STATE_SUCCEEDED, allocator, &result));
@@ -536,7 +534,6 @@ loomc_status_t loomc_pass_program_create_from_module_symbol(
   LOOMC_RETURN_IF_ERROR(loomc_target_selection_validate_environment(
       target_selection, loomc_context_target_environment(context)));
 
-  allocator = loomc_allocator_or_system(allocator);
   loomc_result_t* result = NULL;
   LOOMC_RETURN_IF_ERROR(
       loomc_result_create(LOOMC_RESULT_STATE_SUCCEEDED, allocator, &result));
@@ -606,7 +603,6 @@ loomc_status_t loomc_pass_program_create_from_target_pipeline(
   LOOMC_RETURN_IF_ERROR(loomc_target_selection_validate_environment(
       target_selection, loomc_context_target_environment(context)));
 
-  allocator = loomc_allocator_or_system(allocator);
   loomc_result_t* result = NULL;
   LOOMC_RETURN_IF_ERROR(
       loomc_result_create(LOOMC_RESULT_STATE_SUCCEEDED, allocator, &result));

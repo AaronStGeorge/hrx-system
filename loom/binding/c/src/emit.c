@@ -403,11 +403,13 @@ loomc_status_t loomc_emit_module(loomc_target_environment_t* target_environment,
                              "module does not contain internal IR");
   }
 
-  allocator = loomc_allocator_or_system(allocator);
-  iree_allocator_t host_allocator = iree_allocator_from_loomc(allocator);
+  iree_allocator_t host_allocator = {0};
   loomc_result_t* result = NULL;
   loomc_status_t status =
       loomc_result_create(LOOMC_RESULT_STATE_SUCCEEDED, allocator, &result);
+  if (loomc_status_is_ok(status)) {
+    host_allocator = iree_allocator_from_loomc(allocator);
+  }
 
   loomc_emit_resolved_options_t resolved_options = {0};
   if (loomc_status_is_ok(status)) {

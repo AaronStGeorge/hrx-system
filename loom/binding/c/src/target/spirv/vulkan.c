@@ -252,7 +252,6 @@ static loomc_status_t loomc_spirv_vulkan_query_extensions(
     return loomc_ok_status();
   }
 
-  allocator = loomc_allocator_or_system(allocator);
   VkExtensionProperties* extensions = NULL;
   loomc_status_t status = loomc_ok_status();
   bool completed = false;

@@ -8,6 +8,7 @@
 
 #include <string.h>
 
+#include "iree/base/api.h"
 #include "iree/base/internal/atomics.h"
 #include "source.h"
 
@@ -126,7 +127,6 @@ loomc_status_t loomc_result_create(loomc_result_state_t state,
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
                              "result state is invalid");
   }
-  allocator = loomc_allocator_or_system(allocator);
   loomc_result_t* result = NULL;
   LOOMC_RETURN_IF_ERROR(
       loomc_allocator_malloc(allocator, sizeof(*result), (void**)&result));
@@ -139,7 +139,8 @@ loomc_status_t loomc_result_create(loomc_result_state_t state,
 }
 
 loomc_allocator_t loomc_result_allocator(const loomc_result_t* result) {
-  return result ? result->allocator : loomc_allocator_system();
+  IREE_ASSERT_ARGUMENT(result);
+  return result->allocator;
 }
 
 loomc_status_t loomc_result_set_state(loomc_result_t* result,

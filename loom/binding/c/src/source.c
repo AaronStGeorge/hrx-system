@@ -179,7 +179,6 @@ loomc_status_t loomc_source_create(const loomc_source_options_t* options,
   *out_source = NULL;
   LOOMC_RETURN_IF_ERROR(loomc_source_validate_options(options));
 
-  allocator = loomc_allocator_or_system(allocator);
   loomc_source_t* source = NULL;
   LOOMC_RETURN_IF_ERROR(
       loomc_allocator_malloc(allocator, sizeof(*source), (void**)&source));
@@ -232,7 +231,10 @@ loomc_status_t loomc_source_read_file_to_storage(
                              "file must not be NULL");
   }
 
-  allocator = loomc_allocator_or_system(allocator);
+  if (!loomc_allocator_is_valid(allocator)) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "allocator.ctl must not be NULL");
+  }
   uint8_t* data = NULL;
   loomc_host_size_t length = 0;
   loomc_host_size_t capacity = 0;
@@ -290,7 +292,6 @@ loomc_status_t loomc_source_create_from_file(
   LOOMC_RETURN_IF_ERROR(loomc_source_resolve_load_options(
       options, loomc_string_view_empty(), &resolved_options));
 
-  allocator = loomc_allocator_or_system(allocator);
   uint8_t* contents = NULL;
   loomc_host_size_t contents_length = 0;
   LOOMC_RETURN_IF_ERROR(loomc_source_read_file_to_storage(
@@ -327,7 +328,10 @@ loomc_status_t loomc_source_create_from_path(
   LOOMC_RETURN_IF_ERROR(
       loomc_source_resolve_load_options(options, path, &resolved_options));
 
-  allocator = loomc_allocator_or_system(allocator);
+  if (!loomc_allocator_is_valid(allocator)) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "allocator.ctl must not be NULL");
+  }
   iree_io_file_contents_t* file_contents = NULL;
   LOOMC_RETURN_IF_ERROR(loomc_status_from_iree(iree_io_file_contents_read(
       iree_string_view_from_loomc(path), iree_allocator_from_loomc(allocator),
@@ -372,8 +376,6 @@ loomc_status_t loomc_source_create_take_contents(loomc_source_format_t format,
                              "source contents have length but no data");
   }
   *out_source = NULL;
-  allocator = loomc_allocator_or_system(allocator);
-
   loomc_source_t* source = NULL;
   LOOMC_RETURN_IF_ERROR(
       loomc_allocator_malloc(allocator, sizeof(*source), (void**)&source));

@@ -79,6 +79,7 @@ loom_cc_library(
     srcs = [
         "src/artifact.c",
         "src/base.c",
+        "src/base_system.c",
         "src/compile.c",
         "src/context.c",
         "src/diagnostic.c",
@@ -299,6 +300,17 @@ loom_cc_test(
     srcs = ["test/full_package_test.cc"],
     deps = [
         ":loomc_full",
+        ":test_util",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "base_test",
+    srcs = ["test/base_test.cc"],
+    deps = [
+        ":loomc",
         ":test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",

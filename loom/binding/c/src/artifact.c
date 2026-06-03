@@ -105,7 +105,10 @@ loomc_status_t loomc_artifact_write_to_path(const loomc_artifact_t* artifact,
   LOOMC_RETURN_IF_ERROR(loomc_artifact_validate_string_view(path));
   LOOMC_RETURN_IF_ERROR(loomc_artifact_validate_contents(artifact->contents));
 
-  allocator = loomc_allocator_or_system(allocator);
+  if (!loomc_allocator_is_valid(allocator)) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "allocator.ctl must not be NULL");
+  }
   iree_io_stream_t* stream = NULL;
   loomc_status_t status = loomc_status_from_iree(iree_io_stdio_stream_open(
       IREE_IO_STDIO_STREAM_MODE_WRITE | IREE_IO_STDIO_STREAM_MODE_DISCARD,
