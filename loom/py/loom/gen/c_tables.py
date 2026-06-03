@@ -1022,6 +1022,10 @@ _TARGET_PROJECTION_FIELDS: dict[str, tuple[str, str]] = {
     "max_workgroup_size_z": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.max_workgroup_size.z"),
     "max_flat_workgroup_size": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.max_flat_workgroup_size"),
     "subgroup_size": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.subgroup_size"),
+    "max_grid_size_x": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.max_grid_size.x"),
+    "max_grid_size_y": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.max_grid_size.y"),
+    "max_grid_size_z": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.max_grid_size.z"),
+    "max_flat_grid_size": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U64", "snapshot.max_flat_grid_size"),
     "max_workgroup_count_x": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.max_workgroup_count.x"),
     "max_workgroup_count_y": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.max_workgroup_count.y"),
     "max_workgroup_count_z": ("LOOM_TARGET_PROJECTION_VALUE_I64_TO_U32", "snapshot.max_workgroup_count.z"),
@@ -2422,6 +2426,20 @@ def _build_flags_type_name(prefix: str) -> str:
     return f"{prefix}_build_flags_t"
 
 
+def _build_flags_storage_type(flag_count: int) -> str:
+    """Returns the smallest public integer type that can hold all build flags."""
+    if flag_count <= 32:
+        return "uint32_t"
+    if flag_count <= 64:
+        return "uint64_t"
+    raise ValueError(f"build has {flag_count} optional fields, which exceeds the 64-bit build flag capacity")
+
+
+def _build_flag_bit_literal(flag_count: int) -> str:
+    """Returns the C integer literal used for build flag enumerators."""
+    return "UINT64_C(1)" if flag_count > 32 else "1u"
+
+
 def _build_flag_bit_name(prefix: str, param: dict[str, object]) -> str:
     return f"{prefix.upper()}_BUILD_FLAG_HAS_{str(param['name']).upper()}"
 
@@ -2430,14 +2448,15 @@ def _generate_build_flags_declaration(prefix: str, params: list[dict[str, object
     flag_params = _build_flag_params(params)
     if not flag_params:
         return []
-    if len(flag_params) > 32:
-        raise ValueError(f"{prefix}_build has {len(flag_params)} optional fields, which exceeds the 32-bit build flag capacity")
+    flag_count = len(flag_params)
+    storage_type = _build_flags_storage_type(flag_count)
+    bit_literal = _build_flag_bit_literal(flag_count)
 
     lines = [f"enum {prefix}_build_flag_bits_e {{"]
     for index, param in enumerate(flag_params):
-        lines.append(f"  {_build_flag_bit_name(prefix, param)} = 1u << {index},")
+        lines.append(f"  {_build_flag_bit_name(prefix, param)} = {bit_literal} << {index},")
     lines.append("};")
-    lines.append(f"typedef uint32_t {_build_flags_type_name(prefix)};")
+    lines.append(f"typedef {storage_type} {_build_flags_type_name(prefix)};")
     return lines
 
 
