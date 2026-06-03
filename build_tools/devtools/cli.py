@@ -613,6 +613,8 @@ Use absolute labels such as `//runtime/src/iree/base/...`, not `:target`.
 
 ```bash
 python dev.py bazel configure
+python dev.py bazel configure -- --enable-driver=amdgpu --rocm-path=/opt/rocm
+python dev.py bazel configure -- --exclude-driver=amdgpu
 python dev.py bazel build [targets...]
 python dev.py bazel test [targets...]
 python dev.py bazel precommit [paths...]
@@ -637,6 +639,7 @@ Put raw CMake or CTest options after `--`.
 
 ```bash
 python dev.py cmake configure
+python dev.py cmake configure -- -DIREE_HAL_DRIVER_AMDGPU=OFF -DLIBHRX_BUILD=OFF
 python dev.py cmake configure -- -DCMAKE_PREFIX_PATH=/opt/rocm
 python dev.py cmake build hrx
 python dev.py cmake test -- -R hrx

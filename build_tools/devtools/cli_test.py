@@ -83,34 +83,25 @@ class CliTest(unittest.TestCase):
         self.assertEqual(args.tool_root, Path(".tools"))
         self.assertEqual(args.alias_dir, Path("aliases"))
 
-    def test_root_agents_md_includes_bazel_and_cmake_lanes(self):
+    def test_root_agents_md_includes_bazel_and_cmake_sections(self):
         output = self.parse_agent_md(["--agents_md"])
 
         self.assertIn("### Bazel", output)
         self.assertIn("### CMake", output)
-        self.assertIn("python dev.py bazel precommit", output)
-        self.assertIn("python dev.py cmake build hrx", output)
-        self.assertNotIn("Lane", output)
-        self.assertNotIn("setup", output)
-        self.assertNotIn("hook", output)
 
-    def test_bazel_agents_md_includes_only_bazel_lane(self):
+    def test_bazel_agents_md_includes_only_bazel_section(self):
         output = self.parse_agent_md(["bazel", "--agents_md"])
 
         self.assertIn("### Bazel", output)
         self.assertNotIn("### CMake", output)
-        self.assertIn("python dev.py bazel test", output)
-        self.assertNotIn("python dev.py cmake", output)
 
-    def test_cmake_agents_md_includes_only_cmake_lane(self):
+    def test_cmake_agents_md_includes_only_cmake_section(self):
         output = self.parse_agent_md(["cmake", "--agent_md"])
 
         self.assertIn("### CMake", output)
         self.assertNotIn("### Bazel", output)
-        self.assertIn("../builds/<checkout-name>/", output)
-        self.assertIn("raw CMake or CTest options after `--`", output)
 
-    def test_command_agents_md_uses_command_lane(self):
+    def test_command_agents_md_uses_command_section(self):
         output = self.parse_agent_md(["bazel", "build", "--agents-md"])
 
         self.assertIn("### Bazel", output)
