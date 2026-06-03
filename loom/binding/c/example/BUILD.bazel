@@ -71,6 +71,22 @@ loom_cc_binary(
     ],
 )
 
+loom_cc_binary(
+    name = "emit_spirv_iree_hal",
+    srcs = ["emit_spirv_iree_hal.c"],
+    deps = [
+        "//loom/binding/c:loomc",
+        "//loom/binding/c:loomc_target_iree_hal",
+        "//loom/binding/c:loomc_target_spirv",
+        "//loom/binding/c:loomc_target_spirv_iree_hal",
+        "//runtime/src/iree/async/util:proactor_pool",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers",
+    ],
+)
+
 loom_cc_test(
     name = "emit_spirv_vulkan_test",
     srcs = ["emit_spirv_vulkan.c"],
@@ -91,9 +107,40 @@ loom_cc_test(
     ],
 )
 
+loom_cc_test(
+    name = "emit_spirv_iree_hal_test",
+    srcs = ["emit_spirv_iree_hal.c"],
+    data = ["//build_tools/sanitizer:lsan_suppressions_vulkan.txt"],
+    env = {
+        "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
+        "VK_DRIVER_FILES": "/dev/null",
+        "VK_ICD_FILENAMES": "/dev/null",
+    },
+    tags = [
+        "driver=vulkan",
+    ],
+    deps = [
+        "//loom/binding/c:loomc",
+        "//loom/binding/c:loomc_target_iree_hal",
+        "//loom/binding/c:loomc_target_spirv",
+        "//loom/binding/c:loomc_target_spirv_iree_hal",
+        "//runtime/src/iree/async/util:proactor_pool",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers",
+    ],
+)
+
 iree_cmake_extra_content(
     content = """
 set_property(TEST iree/loom/binding/c/example/emit_spirv_vulkan_test
+  APPEND PROPERTY ENVIRONMENT
+    "VK_DRIVER_FILES=/dev/null"
+    "VK_ICD_FILENAMES=/dev/null"
+)
+
+set_property(TEST iree/loom/binding/c/example/emit_spirv_iree_hal_test
   APPEND PROPERTY ENVIRONMENT
     "VK_DRIVER_FILES=/dev/null"
     "VK_ICD_FILENAMES=/dev/null"

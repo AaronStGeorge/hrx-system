@@ -70,6 +70,23 @@ loom_cc_binary(
     iree::runtime::binding::c::loomc_target_spirv_vulkan
 )
 
+loom_cc_binary(
+  NAME
+    emit_spirv_iree_hal
+  SRCS
+    "emit_spirv_iree_hal.c"
+  DEPS
+    iree::async::util::proactor_pool
+    iree::base
+    iree::base::threading
+    iree::hal
+    iree::hal::drivers
+    iree::runtime::binding::c::loomc
+    iree::runtime::binding::c::loomc_target_iree_hal
+    iree::runtime::binding::c::loomc_target_spirv
+    iree::runtime::binding::c::loomc_target_spirv_iree_hal
+)
+
 loom_cc_test(
   NAME
     emit_spirv_vulkan_test
@@ -84,7 +101,32 @@ loom_cc_test(
     "driver=vulkan"
 )
 
+loom_cc_test(
+  NAME
+    emit_spirv_iree_hal_test
+  SRCS
+    "emit_spirv_iree_hal.c"
+  DEPS
+    iree::async::util::proactor_pool
+    iree::base
+    iree::base::threading
+    iree::hal
+    iree::hal::drivers
+    iree::runtime::binding::c::loomc
+    iree::runtime::binding::c::loomc_target_iree_hal
+    iree::runtime::binding::c::loomc_target_spirv
+    iree::runtime::binding::c::loomc_target_spirv_iree_hal
+  LABELS
+    "driver=vulkan"
+)
+
 set_property(TEST iree/loom/binding/c/example/emit_spirv_vulkan_test
+  APPEND PROPERTY ENVIRONMENT
+    "VK_DRIVER_FILES=/dev/null"
+    "VK_ICD_FILENAMES=/dev/null"
+)
+
+set_property(TEST iree/loom/binding/c/example/emit_spirv_iree_hal_test
   APPEND PROPERTY ENVIRONMENT
     "VK_DRIVER_FILES=/dev/null"
     "VK_ICD_FILENAMES=/dev/null"
