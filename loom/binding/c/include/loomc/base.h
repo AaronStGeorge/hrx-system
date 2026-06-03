@@ -234,6 +234,12 @@ typedef enum loomc_structure_type_e {
 
   /// `loomc_source_load_options_t`.
   LOOMC_STRUCTURE_TYPE_SOURCE_LOAD_OPTIONS = 21,
+
+  /// `loomc_spirv_vulkan_function_table_t`.
+  LOOMC_STRUCTURE_TYPE_SPIRV_VULKAN_FUNCTION_TABLE = 22,
+
+  /// `loomc_spirv_vulkan_profile_options_t`.
+  LOOMC_STRUCTURE_TYPE_SPIRV_VULKAN_PROFILE_OPTIONS = 23,
 } loomc_structure_type_t;
 
 /// One loose string option entry.

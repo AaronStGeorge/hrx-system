@@ -169,6 +169,24 @@ typedef uint64_t loomc_spirv_feature_bits_t;
 /// SPIR-V 1.6 binary version word.
 #define LOOMC_SPIRV_VERSION_1_6 LOOMC_SPIRV_VERSION(1, 6)
 
+/// Returns the maximum SPIR-V version implied by a Vulkan API version pair.
+///
+/// The returned value is a SPIR-V binary version word such as
+/// `LOOMC_SPIRV_VERSION_1_6`.
+static inline uint32_t loomc_spirv_max_version_from_vulkan_api_version(
+    uint32_t vulkan_major, uint32_t vulkan_minor) {
+  if (vulkan_major > 1 || (vulkan_major == 1 && vulkan_minor >= 3)) {
+    return LOOMC_SPIRV_VERSION_1_6;
+  }
+  if (vulkan_major == 1 && vulkan_minor >= 2) {
+    return LOOMC_SPIRV_VERSION_1_5;
+  }
+  if (vulkan_major == 1 && vulkan_minor >= 1) {
+    return LOOMC_SPIRV_VERSION_1_3;
+  }
+  return LOOMC_SPIRV_VERSION_1_0;
+}
+
 /// Returns the direct bit for a SPIR-V feature.
 static inline loomc_spirv_feature_bits_t loomc_spirv_feature_bit(
     loomc_spirv_feature_t feature) {

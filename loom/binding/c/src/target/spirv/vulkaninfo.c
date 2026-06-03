@@ -446,20 +446,6 @@ static bool loomc_spirv_vulkaninfo_parse_dotted_version(
   return true;
 }
 
-static uint32_t loomc_spirv_vulkaninfo_max_spirv_version_from_vulkan(
-    uint32_t vulkan_major, uint32_t vulkan_minor) {
-  if (vulkan_major > 1 || (vulkan_major == 1 && vulkan_minor >= 3)) {
-    return LOOMC_SPIRV_VERSION_1_6;
-  }
-  if (vulkan_major == 1 && vulkan_minor >= 2) {
-    return LOOMC_SPIRV_VERSION_1_5;
-  }
-  if (vulkan_major == 1 && vulkan_minor >= 1) {
-    return LOOMC_SPIRV_VERSION_1_3;
-  }
-  return LOOMC_SPIRV_VERSION_1_0;
-}
-
 static loomc_status_t loomc_spirv_vulkaninfo_add_api_version(
     loomc_spirv_vulkaninfo_import_t* import, iree_string_view_t object,
     iree_string_view_t key, loomc_string_view_t provenance) {
@@ -496,8 +482,8 @@ static loomc_status_t loomc_spirv_vulkaninfo_add_api_version(
   }
 
   const uint32_t max_spirv_version =
-      loomc_spirv_vulkaninfo_max_spirv_version_from_vulkan(vulkan_major,
-                                                           vulkan_minor);
+      loomc_spirv_max_version_from_vulkan_api_version(vulkan_major,
+                                                      vulkan_minor);
   return loomc_spirv_vulkaninfo_add_environment_fact(
       import, LOOMC_SPIRV_ENVIRONMENT_MAX_SPIRV_VERSION, max_spirv_version,
       provenance);

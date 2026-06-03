@@ -15,6 +15,7 @@
 #include "loomc/source.h"
 #include "loomc/target.h"
 #include "loomc/target/spirv.h"
+#include "loomc/target/spirv/vulkan.h"
 #include "loomc/target/spirv/vulkaninfo.h"
 #include "test/util.h"
 
@@ -71,6 +72,17 @@ void ExpectSucceededResult(const loomc_result_t* result) {
 }
 
 TEST(LoomcFullPackageTest, LinksCoreAndSpirvTargetPackages) {
+  loomc_spirv_vulkan_function_table_t vulkan_functions = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_VULKAN_FUNCTION_TABLE,
+      /*.structure_size=*/sizeof(vulkan_functions),
+      /*.next=*/nullptr,
+      /*.get_physical_device_properties2=*/nullptr,
+      /*.get_physical_device_features2=*/nullptr,
+      /*.enumerate_device_extension_properties=*/nullptr,
+  };
+  EXPECT_EQ(vulkan_functions.type,
+            LOOMC_STRUCTURE_TYPE_SPIRV_VULKAN_FUNCTION_TABLE);
+
   loomc_target_environment_t* target_environment = nullptr;
   LOOMC_ASSERT_OK(loomc_target_environment_create_spirv(
       loomc_allocator_system(), &target_environment));
