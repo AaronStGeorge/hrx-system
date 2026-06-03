@@ -21,7 +21,10 @@ package(
 loom_assert_no_dependencies(
     name = "loomc_no_target_package_deps",
     dependencies = [
+        ":loomc_target_iree_hal",
         ":loomc_target_spirv",
+        ":loomc_target_spirv_iree_hal",
+        ":loomc_target_spirv_vulkan",
         ":loomc_target_spirv_vulkaninfo",
     ],
     targets = [":loomc"],
@@ -61,6 +64,14 @@ LOOMC_TARGET_SPIRV_VULKANINFO_PUBLIC_HDRS = [
 
 LOOMC_TARGET_SPIRV_VULKAN_PUBLIC_HDRS = [
     "include/loomc/target/spirv/vulkan.h",
+]
+
+LOOMC_TARGET_SPIRV_IREE_HAL_PUBLIC_HDRS = [
+    "include/loomc/target/spirv/iree_hal.h",
+]
+
+LOOMC_TARGET_IREE_HAL_PUBLIC_HDRS = [
+    "include/loomc/target/iree_hal.h",
 ]
 
 loom_cc_library(
@@ -208,10 +219,52 @@ loom_cc_library(
 )
 
 loom_cc_library(
+    name = "loomc_target_iree_hal",
+    srcs = [
+        "src/target/iree_hal.c",
+    ],
+    hdrs = LOOMC_TARGET_IREE_HAL_PUBLIC_HDRS,
+    includes = [
+        ".",
+        "include",
+        "src",
+    ],
+    linkstatic = True,
+    deps = [
+        ":loomc",
+        "//runtime/src/iree/hal",
+    ],
+    alwayslink = True,
+)
+
+loom_cc_library(
+    name = "loomc_target_spirv_iree_hal",
+    srcs = [
+        "src/target/spirv/iree_hal.c",
+    ],
+    hdrs = LOOMC_TARGET_SPIRV_IREE_HAL_PUBLIC_HDRS,
+    includes = [
+        ".",
+        "include",
+        "src",
+    ],
+    linkstatic = True,
+    deps = [
+        ":loomc",
+        ":loomc_target_iree_hal",
+        ":loomc_target_spirv",
+        "//runtime/src/iree/hal",
+    ],
+    alwayslink = True,
+)
+
+loom_cc_library(
     name = "loomc_full",
     hdrs = (
         LOOMC_PUBLIC_HDRS +
+        LOOMC_TARGET_IREE_HAL_PUBLIC_HDRS +
         LOOMC_TARGET_SPIRV_PUBLIC_HDRS +
+        LOOMC_TARGET_SPIRV_IREE_HAL_PUBLIC_HDRS +
         LOOMC_TARGET_SPIRV_VULKANINFO_PUBLIC_HDRS +
         LOOMC_TARGET_SPIRV_VULKAN_PUBLIC_HDRS
     ),
@@ -221,7 +274,9 @@ loom_cc_library(
     ],
     deps = [
         ":loomc",
+        ":loomc_target_iree_hal",
         ":loomc_target_spirv",
+        ":loomc_target_spirv_iree_hal",
         ":loomc_target_spirv_vulkan",
         ":loomc_target_spirv_vulkaninfo",
     ],
@@ -319,6 +374,35 @@ loom_cc_test(
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
         "@vulkan_headers",
+    ],
+)
+
+loom_cc_test(
+    name = "target_iree_hal_test",
+    srcs = ["test/target_iree_hal_test.cc"],
+    deps = [
+        ":loomc",
+        ":loomc_target_iree_hal",
+        ":loomc_target_spirv",
+        ":test_util",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
+
+loom_cc_test(
+    name = "target_spirv_iree_hal_test",
+    srcs = ["test/target_spirv_iree_hal_test.cc"],
+    deps = [
+        ":loomc",
+        ":loomc_target_iree_hal",
+        ":loomc_target_spirv",
+        ":loomc_target_spirv_iree_hal",
+        ":test_util",
+        "//runtime/src/iree/hal",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
     ],
 )
 

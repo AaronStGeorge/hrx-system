@@ -14,7 +14,9 @@
 #include "loomc/result.h"
 #include "loomc/source.h"
 #include "loomc/target.h"
+#include "loomc/target/iree_hal.h"
 #include "loomc/target/spirv.h"
+#include "loomc/target/spirv/iree_hal.h"
 #include "loomc/target/spirv/vulkan.h"
 #include "loomc/target/spirv/vulkaninfo.h"
 #include "test/util.h"
@@ -82,6 +84,20 @@ TEST(LoomcFullPackageTest, LinksCoreAndSpirvTargetPackages) {
   };
   EXPECT_EQ(vulkan_functions.type,
             LOOMC_STRUCTURE_TYPE_SPIRV_VULKAN_FUNCTION_TABLE);
+  loomc_iree_hal_profile_options_t hal_options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_IREE_HAL_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(hal_options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("full-package"),
+      /*.device=*/nullptr,
+      /*.executable_cache=*/nullptr,
+      /*.providers=*/nullptr,
+      /*.provider_count=*/0,
+  };
+  EXPECT_EQ(hal_options.type, LOOMC_STRUCTURE_TYPE_IREE_HAL_PROFILE_OPTIONS);
+  const loomc_iree_hal_profile_provider_t* provider =
+      loomc_spirv_iree_hal_profile_provider();
+  ASSERT_NE(provider, nullptr);
 
   loomc_target_environment_t* target_environment = nullptr;
   LOOMC_ASSERT_OK(loomc_target_environment_create_spirv(

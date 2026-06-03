@@ -163,10 +163,50 @@ loom_cc_library(
 
 loom_cc_library(
   NAME
+    loomc_target_iree_hal
+  HDRS
+    "include/loomc/target/iree_hal.h"
+  SRCS
+    "src/target/iree_hal.c"
+  ALWAYSLINK
+  DEPS
+    ::loomc
+    iree::hal
+  INCLUDES
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
+    loomc_target_spirv_iree_hal
+  HDRS
+    "include/loomc/target/spirv/iree_hal.h"
+  SRCS
+    "src/target/spirv/iree_hal.c"
+  ALWAYSLINK
+  DEPS
+    ::loomc
+    ::loomc_target_iree_hal
+    ::loomc_target_spirv
+    iree::hal
+  INCLUDES
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+  PUBLIC
+)
+
+loom_cc_library(
+  NAME
     loomc_full
   DEPS
     ::loomc
+    ::loomc_target_iree_hal
     ::loomc_target_spirv
+    ::loomc_target_spirv_iree_hal
     ::loomc_target_spirv_vulkan
     ::loomc_target_spirv_vulkaninfo
   PUBLIC
@@ -271,6 +311,37 @@ loom_cc_test(
     ::loomc_target_spirv_vulkan
     ::test_util
     Vulkan::Headers
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    target_iree_hal_test
+  SRCS
+    "test/target_iree_hal_test.cc"
+  DEPS
+    ::loomc
+    ::loomc_target_iree_hal
+    ::loomc_target_spirv
+    ::test_util
+    iree::hal
+    iree::testing::gtest
+    iree::testing::gtest_main
+)
+
+loom_cc_test(
+  NAME
+    target_spirv_iree_hal_test
+  SRCS
+    "test/target_spirv_iree_hal_test.cc"
+  DEPS
+    ::loomc
+    ::loomc_target_iree_hal
+    ::loomc_target_spirv
+    ::loomc_target_spirv_iree_hal
+    ::test_util
+    iree::hal
     iree::testing::gtest
     iree::testing::gtest_main
 )

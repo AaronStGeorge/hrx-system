@@ -240,6 +240,12 @@ typedef enum loomc_structure_type_e {
 
   /// `loomc_spirv_vulkan_profile_options_t`.
   LOOMC_STRUCTURE_TYPE_SPIRV_VULKAN_PROFILE_OPTIONS = 23,
+
+  /// `loomc_iree_hal_profile_options_t`.
+  LOOMC_STRUCTURE_TYPE_IREE_HAL_PROFILE_OPTIONS = 24,
+
+  /// `loomc_spirv_iree_hal_profile_options_t`.
+  LOOMC_STRUCTURE_TYPE_SPIRV_IREE_HAL_PROFILE_OPTIONS = 25,
 } loomc_structure_type_t;
 
 /// One loose string option entry.
