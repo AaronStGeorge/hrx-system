@@ -117,7 +117,7 @@ filegroup(
 alias(
     name = "aqlprofile_sdk_headers",
     actual = select({
-        "//runtime/config/hal:driver_amdgpu": "@hsa_runtime_headers",
+        "//runtime/config/hal:driver_amdgpu": "@hsa_runtime_headers//:aqlprofile_sdk_headers",
         "//conditions:default": ":empty_aqlprofile_sdk_headers",
     }),
     visibility = [":runtime_users"],

@@ -31,11 +31,13 @@ TEST(LibAqlprofileTest, Load) {
   status = iree_hal_amdgpu_libaqlprofile_initialize(
       &libhsa, iree_string_view_list_empty(), iree_allocator_system(),
       &libaqlprofile);
-  if (iree_status_code(status) == IREE_STATUS_NOT_FOUND) {
+  iree_status_code_t status_code = iree_status_code(status);
+  if (status_code == IREE_STATUS_NOT_FOUND ||
+      status_code == IREE_STATUS_UNIMPLEMENTED) {
     iree_status_fprint(stderr, status);
     iree_status_free(status);
     iree_hal_amdgpu_libhsa_deinitialize(&libhsa);
-    GTEST_SKIP() << "aqlprofile not available, skipping test";
+    GTEST_SKIP() << "aqlprofile not available in this build, skipping test";
   }
   if (!iree_status_is_ok(status)) {
     iree_hal_amdgpu_libhsa_deinitialize(&libhsa);

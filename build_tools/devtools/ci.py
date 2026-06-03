@@ -19,9 +19,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-IREE_TARGET_DIRECTORIES = ("runtime", "loom")
-SANITIZER_TEST_CONFIGS = ("asan", "ubsan", "tsan")
-SANITIZER_BUILD_CONFIGS = ("msan",)
+if __package__:
+    from . import ci_config
+else:
+    sys.path.insert(0, str(REPO_ROOT))
+    from build_tools.devtools import ci_config
 
 
 @dataclass(frozen=True)
@@ -48,7 +50,7 @@ def command_targets(explicit_targets: list[str] | None = None) -> tuple[str, ...
     if explicit_targets:
         return tuple(explicit_targets)
     targets = []
-    for directory in IREE_TARGET_DIRECTORIES:
+    for directory in ci_config.IREE_TARGET_DIRECTORIES:
         if (REPO_ROOT / directory).is_dir():
             targets.append(f"//{directory}/...")
     if not targets:
@@ -82,10 +84,17 @@ def bazel_test_step(
     name: str,
     targets: tuple[str, ...],
     config: str | None = None,
+    test_tag_filters: tuple[str, ...] = (),
 ) -> CiStep:
-    command = ["bazel", "test", *targets]
+    options = []
     if config is not None:
-        command.append(f"--config={config}")
+        options.append(f"--config={config}")
+    if test_tag_filters:
+        options.append("--test_tag_filters=" + ",".join(test_tag_filters))
+    command = ["bazel", "test", *options]
+    if any(target.startswith("-") for target in targets):
+        command.append("--")
+    command.extend(targets)
     return CiStep(name, dev_command(*command))
 
 
@@ -93,21 +102,21 @@ def cpu_steps(targets: tuple[str, ...]) -> list[CiStep]:
     return [
         bazel_configure_step(),
         bazel_build_step("Build IREE", targets),
-        bazel_test_step("Test IREE", targets),
+        bazel_test_step("Test IREE", targets + ci_config.CPU_XFAIL_TARGETS),
     ]
 
 
 def cpu_sanitizer_steps(targets: tuple[str, ...]) -> list[CiStep]:
     steps = [bazel_configure_step()]
-    for config in SANITIZER_TEST_CONFIGS:
+    for config in ci_config.SANITIZER_TEST_CONFIGS:
         steps.append(
             bazel_test_step(
                 f"Test IREE with {config.upper()}",
-                targets,
+                targets + ci_config.CPU_SANITIZERS_XFAIL_TARGETS,
                 config=config,
             )
         )
-    for config in SANITIZER_BUILD_CONFIGS:
+    for config in ci_config.SANITIZER_BUILD_CONFIGS:
         steps.append(
             bazel_build_step(
                 f"Build IREE with {config.upper()}",
@@ -118,29 +127,48 @@ def cpu_sanitizer_steps(targets: tuple[str, ...]) -> list[CiStep]:
     return steps
 
 
+def amdgpu_test_steps(
+    targets: tuple[str, ...],
+    config: str | None = None,
+    xfail_targets: tuple[str, ...] = (),
+) -> list[CiStep]:
+    config_name = f" and {config.upper()}" if config is not None else ""
+    return [
+        bazel_test_step(
+            f"Test IREE AMDGPU resources{config_name}",
+            targets + xfail_targets,
+            config=config,
+            test_tag_filters=(ci_config.AMDGPU_RESOURCE_TAG,),
+        ),
+    ]
+
+
 def amdgpu_steps(targets: tuple[str, ...]) -> list[CiStep]:
     return [
         bazel_configure_step(enable_amdgpu=True),
-        bazel_build_step("Build IREE with AMDGPU", targets),
-        bazel_test_step("Test IREE with AMDGPU", targets),
+        bazel_build_step(
+            "Build IREE with AMDGPU",
+            ci_config.AMDGPU_DRIVER_TARGETS,
+        ),
+        *amdgpu_test_steps(targets, xfail_targets=ci_config.AMDGPU_XFAIL_TARGETS),
     ]
 
 
 def amdgpu_sanitizer_steps(targets: tuple[str, ...]) -> list[CiStep]:
     steps = [bazel_configure_step(enable_amdgpu=True)]
-    for config in SANITIZER_TEST_CONFIGS:
-        steps.append(
-            bazel_test_step(
-                f"Test IREE with AMDGPU and {config.upper()}",
+    for config in ci_config.SANITIZER_TEST_CONFIGS:
+        steps.extend(
+            amdgpu_test_steps(
                 targets,
                 config=config,
+                xfail_targets=ci_config.AMDGPU_SANITIZERS_XFAIL_TARGETS,
             )
         )
-    for config in SANITIZER_BUILD_CONFIGS:
+    for config in ci_config.SANITIZER_BUILD_CONFIGS:
         steps.append(
             bazel_build_step(
                 f"Build IREE with AMDGPU and {config.upper()}",
-                targets,
+                ci_config.AMDGPU_DRIVER_TARGETS,
                 config=config,
             )
         )

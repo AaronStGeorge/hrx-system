@@ -88,7 +88,6 @@ build:ubsan --config=sanitizer
 build:ubsan --features=ubsan
 build:ubsan --copt=-fsanitize=undefined
 build:ubsan --linkopt=-fsanitize=undefined
-build:ubsan --linkopt=-lubsan
 
 # Match the CMake UBSAN configuration: the runtime uses type-erased function
 # pointers for dynamic dispatch, which UBSAN's function check cannot model.

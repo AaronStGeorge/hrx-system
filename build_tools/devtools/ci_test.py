@@ -10,7 +10,7 @@ import contextlib
 import io
 import unittest
 
-from build_tools.devtools import ci
+from build_tools.devtools import ci, ci_config
 
 
 class CiTest(unittest.TestCase):
@@ -77,23 +77,24 @@ class CiTest(unittest.TestCase):
             ]
         )
 
-        command_lines = [step.command_line() for step in ci.steps_from_args(args)]
+        steps = ci.steps_from_args(args)
+        command_lines = [step.command_line() for step in steps]
 
         self.assertTrue(
             any(
-                "bazel test //runtime/... --config=asan" in line
+                "bazel test --config=asan -- //runtime/..." in line
                 for line in command_lines
             )
         )
         self.assertTrue(
             any(
-                "bazel test //runtime/... --config=ubsan" in line
+                "bazel test --config=ubsan -- //runtime/..." in line
                 for line in command_lines
             )
         )
         self.assertTrue(
             any(
-                "bazel test //runtime/... --config=tsan" in line
+                "bazel test --config=tsan -- //runtime/..." in line
                 for line in command_lines
             )
         )
@@ -103,6 +104,60 @@ class CiTest(unittest.TestCase):
                 for line in command_lines
             )
         )
+        sanitizer_test_steps = [
+            step for step in steps if step.name.startswith("Test IREE")
+        ]
+        for xfail_target in ci_config.CPU_SANITIZERS_XFAIL_TARGETS:
+            self.assertTrue(
+                any(xfail_target in step.argv for step in sanitizer_test_steps)
+            )
+
+    def test_amdgpu_command_scopes_tests_to_amdgpu(self):
+        args = ci.parse_arguments(
+            [
+                "iree-amdgpu",
+                "--target",
+                "//runtime/...",
+            ]
+        )
+
+        steps = ci.steps_from_args(args)
+        command_lines = [step.command_line() for step in steps]
+
+        build_steps = [step for step in steps if step.name.startswith("Build IREE")]
+        for target in ci_config.AMDGPU_DRIVER_TARGETS:
+            self.assertTrue(any(target in step.argv for step in build_steps))
+        self.assertTrue(
+            any(
+                "--test_tag_filters=" + ci_config.AMDGPU_RESOURCE_TAG in line
+                for line in command_lines
+            )
+        )
+        resource_test = next(
+            step for step in steps if step.name == "Test IREE AMDGPU resources"
+        )
+        self.assertIn("//runtime/...", resource_test.argv)
+        for target in ci_config.AMDGPU_XFAIL_TARGETS:
+            self.assertIn(target, resource_test.argv)
+
+    def test_amdgpu_sanitizer_command_uses_amdgpu_sanitizer_xfails(self):
+        args = ci.parse_arguments(
+            [
+                "iree-amdgpu-sanitizers",
+                "--target",
+                "//runtime/...",
+            ]
+        )
+
+        steps = ci.steps_from_args(args)
+        sanitizer_test_steps = [
+            step for step in steps if step.name.startswith("Test IREE")
+        ]
+
+        for xfail_target in ci_config.AMDGPU_SANITIZERS_XFAIL_TARGETS:
+            self.assertTrue(
+                any(xfail_target in step.argv for step in sanitizer_test_steps)
+            )
 
 
 if __name__ == "__main__":

@@ -11,4 +11,6 @@ package(
     licenses = ["notice"],
 )
 
-iree_hal_amdgpu_source_device_binaries()
+iree_hal_amdgpu_source_device_binaries(
+    name = "source_device_binaries",
+)
