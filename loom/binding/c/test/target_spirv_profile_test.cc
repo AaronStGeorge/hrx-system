@@ -240,6 +240,20 @@ bool FindCooperativeVectorRow(const loomc_target_profile_t* profile,
   return false;
 }
 
+void ExpectLimitValue(const loomc_target_profile_t* profile,
+                      loomc_spirv_limit_t limit,
+                      loomc_target_fact_state_t expected_state,
+                      uint64_t expected_value) {
+  loomc_spirv_limit_value_t value = {
+      /*.state=*/LOOMC_TARGET_FACT_STATE_UNKNOWN,
+      /*.value=*/0,
+  };
+  LOOMC_EXPECT_OK(
+      loomc_spirv_target_profile_query_limit(profile, limit, &value));
+  EXPECT_EQ(value.state, expected_state);
+  EXPECT_EQ(value.value, expected_value);
+}
+
 TEST(TargetSpirvProfileTest, CreatesEmptyPartialProfile) {
   TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
   TargetProfilePtr profile = CreateSpirvProfile(target_environment.get(),
@@ -257,6 +271,67 @@ TEST(TargetSpirvProfileTest, CreatesEmptyPartialProfile) {
   EXPECT_EQ(info.memory_model, kSpirvMemoryModelGlsl450);
   EXPECT_EQ(info.extension_count, 0u);
   EXPECT_EQ(info.capability_count, 0u);
+  ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_X,
+                   LOOMC_TARGET_FACT_STATE_UNKNOWN, 0);
+  ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE,
+                   LOOMC_TARGET_FACT_STATE_UNKNOWN, 0);
+}
+
+TEST(TargetSpirvProfileTest, PreservesExplicitNumericLimitFacts) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_spirv_limit_fact_t limits[] = {
+      {
+          /*.limit=*/LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_X,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.value=*/1024,
+          /*.provenance=*/
+          loomc_make_cstring_view("vulkaninfo:maxComputeWorkGroupSize[0]"),
+      },
+      {
+          /*.limit=*/LOOMC_SPIRV_LIMIT_MAX_FLAT_WORKGROUP_SIZE,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.value=*/1024,
+          /*.provenance=*/
+          loomc_make_cstring_view("vulkaninfo:maxComputeWorkGroupInvocations"),
+      },
+      {
+          /*.limit=*/LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.value=*/32,
+          /*.provenance=*/loomc_make_cstring_view("vulkaninfo:subgroupSize"),
+      },
+      {
+          /*.limit=*/LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_Z,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.value=*/65535,
+          /*.provenance=*/
+          loomc_make_cstring_view("vulkaninfo:maxComputeWorkGroupCount[2]"),
+      },
+  };
+  loomc_spirv_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("offline-vulkan13-limits"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_VULKAN_1_3_BDA,
+      /*.feature_facts=*/nullptr,
+      /*.feature_fact_count=*/0,
+      /*.limit_facts=*/limits,
+      /*.limit_fact_count=*/4,
+  };
+  TargetProfilePtr profile =
+      CreateSpirvProfile(target_environment.get(), &options);
+
+  ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_X,
+                   LOOMC_TARGET_FACT_STATE_TRUE, 1024);
+  ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_Y,
+                   LOOMC_TARGET_FACT_STATE_UNKNOWN, 0);
+  ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_FLAT_WORKGROUP_SIZE,
+                   LOOMC_TARGET_FACT_STATE_TRUE, 1024);
+  ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE,
+                   LOOMC_TARGET_FACT_STATE_TRUE, 32);
+  ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_Z,
+                   LOOMC_TARGET_FACT_STATE_TRUE, 65535);
 }
 
 TEST(TargetSpirvProfileTest, CreatesPresetProfileAndQueriesRows) {
@@ -269,6 +344,8 @@ TEST(TargetSpirvProfileTest, CreatesPresetProfileAndQueriesRows) {
       /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_VULKAN_1_3_BDA,
       /*.feature_facts=*/nullptr,
       /*.feature_fact_count=*/0,
+      /*.limit_facts=*/nullptr,
+      /*.limit_fact_count=*/0,
   };
   TargetProfilePtr profile =
       CreateSpirvProfile(target_environment.get(), &options);
@@ -334,6 +411,8 @@ TEST(TargetSpirvProfileTest, RefinesPresetWithExplicitTrueFact) {
       /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_VULKAN_1_3_BDA,
       /*.feature_facts=*/facts,
       /*.feature_fact_count=*/1,
+      /*.limit_facts=*/nullptr,
+      /*.limit_fact_count=*/0,
   };
   TargetProfilePtr profile =
       CreateSpirvProfile(target_environment.get(), &options);
@@ -375,6 +454,8 @@ TEST(TargetSpirvProfileTest, QueriesCooperativePropertyRows) {
       /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_VULKAN_1_3_BDA,
       /*.feature_facts=*/facts,
       /*.feature_fact_count=*/3,
+      /*.limit_facts=*/nullptr,
+      /*.limit_fact_count=*/0,
   };
   TargetProfilePtr profile =
       CreateSpirvProfile(target_environment.get(), &options);
@@ -468,6 +549,8 @@ TEST(TargetSpirvProfileTest, PreservesKnownFalseFeatureFacts) {
       /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_NONE,
       /*.feature_facts=*/facts,
       /*.feature_fact_count=*/1,
+      /*.limit_facts=*/nullptr,
+      /*.limit_fact_count=*/0,
   };
   TargetProfilePtr profile =
       CreateSpirvProfile(target_environment.get(), &options);
@@ -501,6 +584,8 @@ TEST(TargetSpirvProfileTest, ReportsContradictoryFactsWithProvenance) {
       /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_NONE,
       /*.feature_facts=*/facts,
       /*.feature_fact_count=*/2,
+      /*.limit_facts=*/nullptr,
+      /*.limit_fact_count=*/0,
   };
   loomc_target_profile_t* profile = nullptr;
   loomc_result_t* result = nullptr;
@@ -524,6 +609,99 @@ TEST(TargetSpirvProfileTest, ReportsContradictoryFactsWithProvenance) {
               ::testing::HasSubstr("override:b"));
 }
 
+TEST(TargetSpirvProfileTest, ReportsContradictoryLimitFactsWithProvenance) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_spirv_limit_fact_t limits[] = {
+      {
+          /*.limit=*/LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.value=*/32,
+          /*.provenance=*/loomc_make_cstring_view("probe:a"),
+      },
+      {
+          /*.limit=*/LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.value=*/64,
+          /*.provenance=*/loomc_make_cstring_view("override:b"),
+      },
+  };
+  loomc_spirv_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("contradictory-limits"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_NONE,
+      /*.feature_facts=*/nullptr,
+      /*.feature_fact_count=*/0,
+      /*.limit_facts=*/limits,
+      /*.limit_fact_count=*/2,
+  };
+  loomc_target_profile_t* profile = nullptr;
+  loomc_result_t* result = nullptr;
+  loomc_status_t status = loomc_target_profile_create_spirv(
+      target_environment.get(), &options, loomc_allocator_system(), &profile,
+      &result);
+  LOOMC_EXPECT_OK(status);
+  TargetProfilePtr profile_ptr(profile);
+  ResultPtr result_ptr(result);
+  EXPECT_EQ(profile_ptr.get(), nullptr);
+  ExpectFailedResult(result_ptr.get());
+  const loomc_diagnostic_t* diagnostic =
+      loomc_result_diagnostic_at(result_ptr.get(), 0);
+  ASSERT_NE(diagnostic, nullptr);
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("contradictory values"));
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("spirv.subgroup_size"));
+  EXPECT_THAT(ToString(diagnostic->message), ::testing::HasSubstr("probe:a"));
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("override:b"));
+  EXPECT_THAT(ToString(diagnostic->message), ::testing::HasSubstr("32"));
+  EXPECT_THAT(ToString(diagnostic->message), ::testing::HasSubstr("64"));
+}
+
+TEST(TargetSpirvProfileTest, ReportsInvalidZeroLimitValuesAsResult) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_spirv_limit_fact_t limits[] = {
+      {
+          /*.limit=*/LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_X,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.value=*/0,
+          /*.provenance=*/loomc_make_cstring_view("probe:zero"),
+      },
+  };
+  loomc_spirv_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("invalid-zero-limit"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_NONE,
+      /*.feature_facts=*/nullptr,
+      /*.feature_fact_count=*/0,
+      /*.limit_facts=*/limits,
+      /*.limit_fact_count=*/1,
+  };
+  loomc_target_profile_t* profile = nullptr;
+  loomc_result_t* result = nullptr;
+  loomc_status_t status = loomc_target_profile_create_spirv(
+      target_environment.get(), &options, loomc_allocator_system(), &profile,
+      &result);
+  LOOMC_EXPECT_OK(status);
+  TargetProfilePtr profile_ptr(profile);
+  ResultPtr result_ptr(result);
+  EXPECT_EQ(profile_ptr.get(), nullptr);
+  ExpectFailedResult(result_ptr.get());
+  const loomc_diagnostic_t* diagnostic =
+      loomc_result_diagnostic_at(result_ptr.get(), 0);
+  ASSERT_NE(diagnostic, nullptr);
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("invalid zero value"));
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("spirv.max_workgroup_size_x"));
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("probe:zero"));
+}
+
 TEST(TargetSpirvProfileTest, ReportsMissingFeatureDependenciesAsResult) {
   TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
   loomc_spirv_feature_fact_t facts[] = {
@@ -542,6 +720,8 @@ TEST(TargetSpirvProfileTest, ReportsMissingFeatureDependenciesAsResult) {
       /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_NONE,
       /*.feature_facts=*/facts,
       /*.feature_fact_count=*/1,
+      /*.limit_facts=*/nullptr,
+      /*.limit_fact_count=*/0,
   };
   loomc_target_profile_t* profile = nullptr;
   loomc_result_t* result = nullptr;
@@ -582,6 +762,14 @@ TEST(TargetSpirvProfileTest, RejectsNonSpirvProfileQueries) {
   loomc_status_t query_status = loomc_spirv_target_profile_query_feature(
       profile_ptr.get(), LOOMC_SPIRV_FEATURE_FLOAT16, &state);
   LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_INVALID_ARGUMENT, query_status);
+
+  loomc_spirv_limit_value_t value = {
+      /*.state=*/LOOMC_TARGET_FACT_STATE_UNKNOWN,
+      /*.value=*/0,
+  };
+  loomc_status_t limit_query_status = loomc_spirv_target_profile_query_limit(
+      profile_ptr.get(), LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE, &value);
+  LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_INVALID_ARGUMENT, limit_query_status);
 }
 
 TEST(TargetSpirvProfileTest, PreparedProfileSelectionCreatesTargetPipeline) {
@@ -594,6 +782,8 @@ TEST(TargetSpirvProfileTest, PreparedProfileSelectionCreatesTargetPipeline) {
       /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_VULKAN_1_3_BDA,
       /*.feature_facts=*/nullptr,
       /*.feature_fact_count=*/0,
+      /*.limit_facts=*/nullptr,
+      /*.limit_fact_count=*/0,
   };
   TargetProfilePtr profile =
       CreateSpirvProfile(target_environment.get(), &profile_options);

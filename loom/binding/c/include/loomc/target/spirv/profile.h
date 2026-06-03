@@ -22,7 +22,9 @@
 /// until a caller supplies a stronger observation; false means a feature is
 /// known to be unavailable. Contradictory true/false facts are reported through
 /// the returned `loomc_result_t` with provenance strings preserved in the
-/// diagnostic text.
+/// diagnostic text. Numeric limits follow the same tri-state model: true means
+/// the value is known, false means the limit is known not to apply to this
+/// profile, and unknown preserves partial-target compilation.
 ///
 /// @par Example
 /// Create a reusable Vulkan-style SPIR-V profile and target selection:
@@ -35,6 +37,15 @@
 ///         .provenance = loomc_make_cstring_view("vulkaninfo:shaderFloat16"),
 ///     },
 /// };
+/// loomc_spirv_limit_fact_t limits[] = {
+///     {
+///         .limit = LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_X,
+///         .state = LOOMC_TARGET_FACT_STATE_TRUE,
+///         .value = 1024,
+///         .provenance =
+///             loomc_make_cstring_view("vulkaninfo:maxComputeWorkGroupSize[0]"),
+///     },
+/// };
 /// loomc_spirv_profile_options_t options = {
 ///     .type = LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
 ///     .structure_size = sizeof(loomc_spirv_profile_options_t),
@@ -42,6 +53,8 @@
 ///     .preset = LOOMC_SPIRV_PROFILE_PRESET_VULKAN_1_3_BDA,
 ///     .feature_facts = facts,
 ///     .feature_fact_count = 1,
+///     .limit_facts = limits,
+///     .limit_fact_count = 1,
 /// };
 /// loomc_target_profile_t* profile = NULL;
 /// loomc_result_t* result = NULL;
@@ -128,6 +141,43 @@ static inline loomc_spirv_feature_bits_t loomc_spirv_feature_bit(
              ? (UINT64_C(1) << feature)
              : 0u;
 }
+
+/// Stable SPIR-V numeric limit fact identifier.
+///
+/// Limits use Loom profile names rather than Vulkan field names so the same
+/// fact can come from Vulkan, another SPIR-V-capable API, a saved profile, or a
+/// synthetic cross-compilation target.
+typedef enum loomc_spirv_limit_e {
+  /// Unknown or uninitialized limit.
+  LOOMC_SPIRV_LIMIT_UNKNOWN = 0,
+
+  /// Maximum local workgroup size along the x dimension.
+  LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_X = 1,
+
+  /// Maximum local workgroup size along the y dimension.
+  LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_Y = 2,
+
+  /// Maximum local workgroup size along the z dimension.
+  LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_SIZE_Z = 3,
+
+  /// Maximum product of local workgroup dimensions.
+  LOOMC_SPIRV_LIMIT_MAX_FLAT_WORKGROUP_SIZE = 4,
+
+  /// Fixed target-wide subgroup size in invocations.
+  LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE = 5,
+
+  /// Maximum dispatched workgroup count along the x dimension.
+  LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_X = 6,
+
+  /// Maximum dispatched workgroup count along the y dimension.
+  LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_Y = 7,
+
+  /// Maximum dispatched workgroup count along the z dimension.
+  LOOMC_SPIRV_LIMIT_MAX_WORKGROUP_COUNT_Z = 8,
+
+  /// Number of public SPIR-V limit identifiers.
+  LOOMC_SPIRV_LIMIT_COUNT = 9,
+} loomc_spirv_limit_t;
 
 /// SPIR-V semantic scalar type fact.
 ///
@@ -349,6 +399,30 @@ typedef struct loomc_spirv_feature_fact_t {
   loomc_string_view_t provenance;
 } loomc_spirv_feature_fact_t;
 
+/// One SPIR-V numeric limit observation.
+typedef struct loomc_spirv_limit_fact_t {
+  /// Limit being observed.
+  loomc_spirv_limit_t limit;
+
+  /// Observed state for the limit.
+  loomc_target_fact_state_t state;
+
+  /// Observed limit value when `state` is `LOOMC_TARGET_FACT_STATE_TRUE`.
+  uint64_t value;
+
+  /// Borrowed provenance string used in diagnostics.
+  loomc_string_view_t provenance;
+} loomc_spirv_limit_fact_t;
+
+/// Queried SPIR-V numeric limit state.
+typedef struct loomc_spirv_limit_value_t {
+  /// Known state for the limit.
+  loomc_target_fact_state_t state;
+
+  /// Limit value when `state` is `LOOMC_TARGET_FACT_STATE_TRUE`.
+  uint64_t value;
+} loomc_spirv_limit_value_t;
+
 /// SPIR-V target profile creation options.
 typedef struct loomc_spirv_profile_options_t {
   /// Structure type. Must be `LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS` when
@@ -372,6 +446,12 @@ typedef struct loomc_spirv_profile_options_t {
 
   /// Number of entries in `feature_facts`.
   loomc_host_size_t feature_fact_count;
+
+  /// Borrowed numeric limit fact array.
+  const loomc_spirv_limit_fact_t* limit_facts;
+
+  /// Number of entries in `limit_facts`.
+  loomc_host_size_t limit_fact_count;
 } loomc_spirv_profile_options_t;
 
 /// Prepared SPIR-V profile summary.
@@ -522,6 +602,16 @@ LOOMC_API_EXPORT loomc_status_t loomc_target_profile_create_spirv(
 LOOMC_API_EXPORT loomc_status_t loomc_spirv_target_profile_query_feature(
     const loomc_target_profile_t* profile, loomc_spirv_feature_t feature,
     loomc_target_fact_state_t* out_state);
+
+/// Returns the known state and value for one SPIR-V numeric limit.
+///
+/// @param profile SPIR-V target profile to query.
+/// @param limit Limit fact to inspect.
+/// @param out_value Receives the limit state and value.
+/// @return OK when the limit state was returned.
+LOOMC_API_EXPORT loomc_status_t loomc_spirv_target_profile_query_limit(
+    const loomc_target_profile_t* profile, loomc_spirv_limit_t limit,
+    loomc_spirv_limit_value_t* out_value);
 
 /// Returns prepared SPIR-V profile summary rows.
 ///
