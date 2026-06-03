@@ -69,6 +69,25 @@ iree-cmake-configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm
 iree-cmake-test -R hrx
 ```
 
+## Bazel Sanitizers
+
+Bazel has native sanitizer configs for source-tree development and CI:
+
+| Config | Meaning |
+| --- | --- |
+| `--config=asan` | AddressSanitizer with use-after-scope checks. |
+| `--config=ubsan` | UndefinedBehaviorSanitizer with the function and vptr checks disabled to match the runtime's type-erased dispatch and `-fno-rtti` C++ mode. |
+| `--config=tsan` | ThreadSanitizer. |
+| `--config=msan` | MemorySanitizer. MSAN builds are useful before the host dependency stack is fully instrumented; MSAN test failures can be dependency-instrumentation failures rather than runtime bugs. |
+| `--config=fuzzer` | libFuzzer build mode with ASAN enabled. |
+
+Examples:
+
+```bash
+python dev.py bazel test //runtime/... --config=asan
+python dev.py bazel test //runtime/src/iree/async/... --config=tsan
+```
+
 ## Shared Project Configuration
 
 Shared project options use CMake-style `-DNAME=VALUE` spelling. These options
