@@ -24,6 +24,39 @@ LANES = ("bazel", "cmake")
 DEFAULT_BAZEL_TARGETS = ("//runtime/...", "//libhrx/...")
 
 
+def expand_option_aliases(option_strings: tuple[str, ...]) -> tuple[str, ...]:
+    expanded_option_strings = []
+    seen_option_strings = set()
+    for option_string in option_strings:
+        for candidate_option_string in option_aliases(option_string):
+            if candidate_option_string in seen_option_strings:
+                continue
+            expanded_option_strings.append(candidate_option_string)
+            seen_option_strings.add(candidate_option_string)
+    return tuple(expanded_option_strings)
+
+
+def option_aliases(option_string: str) -> tuple[str, ...]:
+    if not option_string.startswith("--"):
+        return (option_string,)
+
+    aliases = [option_string]
+    option_name = option_string[2:]
+    if "-" in option_name:
+        aliases.append("--" + option_name.replace("-", "_"))
+    if "_" in option_name:
+        aliases.append("--" + option_name.replace("_", "-"))
+    return tuple(aliases)
+
+
+def add_argument(
+    parser: argparse.ArgumentParser | argparse._MutuallyExclusiveGroup,
+    *option_strings: str,
+    **kwargs,
+) -> argparse.Action:
+    return parser.add_argument(*expand_option_aliases(option_strings), **kwargs)
+
+
 def cmake_build_dir() -> Path:
     return REPO_ROOT.parent / "builds" / REPO_ROOT.name
 
@@ -39,24 +72,25 @@ def has_backend_separator(args: list[str]) -> bool:
 
 
 def add_common_options(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
+    add_argument(
+        parser,
         "--agent-md",
-        "--agent_md",
         "--agents-md",
-        "--agents_md",
         action="store_true",
         default=argparse.SUPPRESS,
         dest="agent_md",
         help="Print AGENTS.md-ready command guidance.",
     )
-    parser.add_argument(
+    add_argument(
+        parser,
         "-n",
         "--dry-run",
         action="store_true",
         default=argparse.SUPPRESS,
         help="Print the command plan without executing it.",
     )
-    parser.add_argument(
+    add_argument(
+        parser,
         "-v",
         "--verbose",
         action="store_true",
@@ -83,17 +117,20 @@ def add_subparser(
 
 def add_tool_environment_options(parser: argparse.ArgumentParser) -> None:
     mode_group = parser.add_mutually_exclusive_group()
-    mode_group.add_argument(
+    add_argument(
+        mode_group,
         "--venv",
         action="store_true",
         help="Use the repo-local .venv tool environment.",
     )
-    mode_group.add_argument(
+    add_argument(
+        mode_group,
         "--system",
         action="store_true",
         help="Use tools from the system PATH and install nothing.",
     )
-    mode_group.add_argument(
+    add_argument(
+        mode_group,
         "--tool-root",
         type=Path,
         help="Use or create an external tool environment root.",
@@ -145,8 +182,8 @@ def add_root_commands(subparsers: argparse._SubParsersAction) -> None:
     )
     add_common_options(setup_parser)
     add_tool_environment_options(setup_parser)
-    setup_parser.add_argument(
-        "--alias-dir", type=Path, help="Directory for generated aliases."
+    add_argument(
+        setup_parser, "--alias-dir", type=Path, help="Directory for generated aliases."
     )
     setup_parser.set_defaults(handler=handle_root_setup)
 
@@ -196,8 +233,8 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
     )
     add_common_options(setup_parser)
     add_tool_environment_options(setup_parser)
-    setup_parser.add_argument(
-        "--alias-dir", type=Path, help="Directory for generated aliases."
+    add_argument(
+        setup_parser, "--alias-dir", type=Path, help="Directory for generated aliases."
     )
     setup_parser.set_defaults(handler=handle_lane_setup, lane=lane)
 
@@ -209,8 +246,8 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
     )
     add_common_options(hook_parser)
     add_tool_environment_options(hook_parser)
-    hook_parser.add_argument(
-        "--verify", action="store_true", help="Run the hook after install."
+    add_argument(
+        hook_parser, "--verify", action="store_true", help="Run the hook after install."
     )
     hook_parser.set_defaults(handler=handle_hook, lane=lane)
 
@@ -271,12 +308,14 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
     add_common_options(precommit_parser)
     add_tool_environment_options(precommit_parser)
     precommit_input_group = precommit_parser.add_mutually_exclusive_group()
-    precommit_input_group.add_argument(
+    add_argument(
+        precommit_input_group,
         "--base",
         metavar="GIT_REF",
         help="Check branch changes since GIT_REF plus local changes.",
     )
-    precommit_input_group.add_argument(
+    add_argument(
+        precommit_input_group,
         "--staged",
         action="store_true",
         help="Check only files staged for commit.",
@@ -296,7 +335,8 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
     )
     add_common_options(presubmit_parser)
     add_tool_environment_options(presubmit_parser)
-    presubmit_parser.add_argument(
+    add_argument(
+        presubmit_parser,
         "--profile",
         choices=("default", "paranoid", "ci"),
         default="ci",

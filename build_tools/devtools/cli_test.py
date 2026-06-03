@@ -9,6 +9,7 @@ from __future__ import annotations
 import contextlib
 import io
 import unittest
+from pathlib import Path
 
 from build_tools.devtools import cli
 
@@ -69,6 +70,18 @@ class CliTest(unittest.TestCase):
 
         self.assertFalse(args.dry_run)
         self.assertEqual(args.args, ["--", "--dry-run"])
+
+    def test_hyphenated_flags_accept_underscore_aliases(self):
+        args = cli.parse_arguments(["bazel", "build", "--dry_run"])
+
+        self.assertTrue(args.dry_run)
+
+        args = cli.parse_arguments(
+            ["bazel", "setup", "--tool_root", ".tools", "--alias_dir", "aliases"]
+        )
+
+        self.assertEqual(args.tool_root, Path(".tools"))
+        self.assertEqual(args.alias_dir, Path("aliases"))
 
     def test_root_agents_md_includes_bazel_and_cmake_lanes(self):
         output = self.parse_agent_md(["--agents_md"])
