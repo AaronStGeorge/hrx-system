@@ -110,7 +110,7 @@ def _get_tokenizers_lib():
             _tokenizer_lib = tokenizers
         except ImportError:
             print(
-                f"Error: tokenizers library not installed.\n" f"Hint: {UV_HINT}",
+                f"Error: tokenizers library not installed.\nHint: {UV_HINT}",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -127,7 +127,7 @@ def _get_hf_hub():
             _hf_hub = huggingface_hub
         except ImportError:
             print(
-                f"Error: huggingface_hub library not installed.\n" f"Hint: {UV_HINT}",
+                f"Error: huggingface_hub library not installed.\nHint: {UV_HINT}",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -144,7 +144,7 @@ def _get_auto_tokenizer():
             _auto_tokenizer = AutoTokenizer
         except ImportError:
             print(
-                f"Error: transformers library not installed.\n" f"Hint: {UV_HINT}",
+                f"Error: transformers library not installed.\nHint: {UV_HINT}",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -970,7 +970,7 @@ def run_fuzz_tests(
     with tempfile.TemporaryDirectory() as tmpdir:
         tokenizer_json = save_tokenizer_json(tokenizer, tmpdir, is_fast)
         if not tokenizer_json:
-            print(f"  ERROR: Could not save tokenizer.json")
+            print("  ERROR: Could not save tokenizer.json")
             return 0, 0, [], None
 
         for gen_name in generators:

@@ -24,9 +24,9 @@ iree_runtime_cc_library(
         "benchmark.h",
     ],
     deps = [
-        "//build_tools/third_party/google_benchmark:benchmark",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/internal",
+        "//third_party:google_benchmark",
     ],
 )
 
@@ -48,8 +48,8 @@ iree_runtime_cc_library(
         "status_matchers.h",
     ],
     deps = [
-        "//build_tools/third_party/googletest:gtest",
         "//runtime/src/iree/base",
+        "//third_party:google_test",
     ],
 )
 
@@ -60,9 +60,9 @@ iree_runtime_cc_library(
     tags = ["keep_dep"],
     deps = [
         ":gtest",
-        "//build_tools/third_party/googletest:gtest",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",
+        "//third_party:google_test",
     ],
 )
 
@@ -82,9 +82,9 @@ iree_runtime_cc_library(
     testonly = True,
     hdrs = ["gbenchmark_harness.h"],
     deps = [
-        "//build_tools/third_party/google_benchmark:benchmark",
-        "//build_tools/third_party/google_benchmark:benchmark_main",
         "//runtime/src/iree/base",
+        "//third_party:google_benchmark",
+        "//third_party:google_benchmark_main",
     ],
 )
 
@@ -132,9 +132,9 @@ iree_runtime_cc_library(
     deps = [
         ":coordinated_test",
         ":gtest",
-        "//build_tools/third_party/googletest:gtest",
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",
+        "//third_party:google_test",
     ],
 )
 

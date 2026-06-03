@@ -1,0 +1,26 @@
+# Copyright 2026 The IREE Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+target-version = "py312"
+line-length = 88
+
+[format]
+quote-style = "double"
+docstring-code-format = true
+
+[lint]
+select = [
+    "E4",  # pycodestyle import/module errors
+    "E7",  # pycodestyle statement errors
+    "E9",  # pycodestyle runtime syntax errors
+    "F",   # pyflakes
+    "I",   # isort
+]
+ignore = [
+    # Some tests and standalone tools patch sys.path before importing local
+    # modules. Project-specific lanes can tighten this once they own packaging.
+    "E402",
+]
+
+[lint.isort]
+known-first-party = ["build_tools", "libhrx", "runtime"]

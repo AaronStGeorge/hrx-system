@@ -1,0 +1,168 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+name: CI IREE CMake
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/ci_iree_cmake.yml"
+      - "BUILDING.md"
+      - "CMakeLists.txt"
+      - "MODULE.cmake.lock"
+      - "dev.py"
+      - "requirements-dev.in"
+      - "requirements-dev.lock.txt"
+      - "build_tools/**"
+      - "runtime/**"
+      - "loom/**"
+      - "third_party/**"
+      - "tools/**"
+  push:
+    branches:
+      - main
+      - main-staging
+    paths:
+      - ".github/workflows/ci_iree_cmake.yml"
+      - "BUILDING.md"
+      - "CMakeLists.txt"
+      - "MODULE.cmake.lock"
+      - "dev.py"
+      - "requirements-dev.in"
+      - "requirements-dev.lock.txt"
+      - "build_tools/**"
+      - "runtime/**"
+      - "loom/**"
+      - "third_party/**"
+      - "tools/**"
+
+permissions:
+  contents: read
+
+jobs:
+  linux_cmake_cpu:
+    name: ${{ matrix.name }}
+    runs-on: aws-linux-scale-rocm-prod
+    timeout-minutes: 45
+    container:
+      image: ghcr.io/rocm/therock_build_manylinux_x86_64@sha256:702a5133851e6d1daf1207d2c9fbb01c2667914a5b6dc5a01faeb3ce66ea6421
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux / CPU
+            command: iree-cmake-cpu
+          - name: Linux / CPU / Sanitizers
+            command: iree-cmake-cpu-sanitizers
+    env:
+      HRX_ARTIFACT_SET: core
+      HRX_DOWNLOAD_CACHE_DIR: ${{ github.workspace }}/build/iree-cmake/downloads
+      HRX_OUTPUT_DIR: ${{ github.workspace }}/build/iree-cmake
+      HRX_PYTHON: ${{ github.workspace }}/build/iree-cmake/python/bin/python3
+      HRX_RELEASE_TYPE: nightly
+      HRX_ROCM_ROOT: ${{ github.workspace }}/build/iree-cmake/rocm-root
+      PIP_CACHE_DIR: ${{ github.workspace }}/build/iree-cmake/caches/pip
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Adjust git config
+        run: git config --global --add safe.directory "$PWD"
+
+      - name: Fetch ROCm toolchain
+        run: |
+          python3 -m venv "${HRX_OUTPUT_DIR}/python"
+          "${HRX_PYTHON}" -m pip install --upgrade pip boto3 zstandard
+          "${HRX_PYTHON}" build_tools/ci_core_linux.py fetch-rocm
+          echo "${HRX_ROCM_ROOT}/lib/llvm/bin" >> "$GITHUB_PATH"
+          echo "${HRX_ROCM_ROOT}/bin" >> "$GITHUB_PATH"
+          echo "IREE_ROCM_PATH=${HRX_ROCM_ROOT}" >> "$GITHUB_ENV"
+          echo "CC=${HRX_ROCM_ROOT}/lib/llvm/bin/clang" >> "$GITHUB_ENV"
+          echo "CXX=${HRX_ROCM_ROOT}/lib/llvm/bin/clang++" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=${HRX_ROCM_ROOT}${CMAKE_PREFIX_PATH:+:${CMAKE_PREFIX_PATH}}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=${HRX_ROCM_ROOT}/lib:${HRX_ROCM_ROOT}/lib/rocm_sysdeps/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> "$GITHUB_ENV"
+
+      - name: Install developer tools
+        run: |
+          python3 --version
+          python3 dev.py cmake setup --venv
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Check tool versions
+        run: |
+          cmake --version
+          ctest --version
+          ninja --version
+          clang --version
+          "$CC" --version
+          test -d "$IREE_ROCM_PATH/include"
+
+      - name: Run IREE CMake CI
+        run: |
+          echo "python3 build_tools/devtools/ci.py ${{ matrix.command }} --keep-going"
+          python3 build_tools/devtools/ci.py ${{ matrix.command }} --keep-going
+
+  linux_cmake_amdgpu:
+    name: ${{ matrix.name }}
+    runs-on: linux-gfx942-1gpu-core42-ossci-rocm
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux / AMDGPU
+            command: iree-cmake-amdgpu
+          - name: Linux / AMDGPU / Sanitizers
+            command: iree-cmake-amdgpu-sanitizers
+    env:
+      HRX_ARTIFACT_SET: core
+      HRX_DOWNLOAD_CACHE_DIR: ${{ github.workspace }}/build/iree-cmake-gpu/downloads
+      HRX_OUTPUT_DIR: ${{ github.workspace }}/build/iree-cmake-gpu
+      HRX_PYTHON: ${{ github.workspace }}/build/iree-cmake-gpu/python/bin/python3
+      HRX_RELEASE_TYPE: nightly
+      HRX_ROCM_ROOT: ${{ github.workspace }}/build/iree-cmake-gpu/rocm-root
+      PIP_CACHE_DIR: ${{ github.workspace }}/build/iree-cmake-gpu/caches/pip
+      ROCR_VISIBLE_DEVICES: "0"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Adjust git config
+        run: git config --global --add safe.directory "$PWD"
+
+      - name: Fetch ROCm toolchain
+        run: |
+          python3 -m venv "${HRX_OUTPUT_DIR}/python"
+          "${HRX_PYTHON}" -m pip install --upgrade pip boto3 zstandard
+          "${HRX_PYTHON}" build_tools/ci_core_linux.py fetch-rocm
+          echo "${HRX_ROCM_ROOT}/lib/llvm/bin" >> "$GITHUB_PATH"
+          echo "${HRX_ROCM_ROOT}/bin" >> "$GITHUB_PATH"
+          echo "IREE_ROCM_PATH=${HRX_ROCM_ROOT}" >> "$GITHUB_ENV"
+          echo "CC=${HRX_ROCM_ROOT}/lib/llvm/bin/clang" >> "$GITHUB_ENV"
+          echo "CXX=${HRX_ROCM_ROOT}/lib/llvm/bin/clang++" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=${HRX_ROCM_ROOT}${CMAKE_PREFIX_PATH:+:${CMAKE_PREFIX_PATH}}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=${HRX_ROCM_ROOT}/lib:${HRX_ROCM_ROOT}/lib/rocm_sysdeps/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" >> "$GITHUB_ENV"
+
+      - name: Install developer tools
+        run: |
+          python3 --version
+          python3 dev.py cmake setup --venv
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Check tool versions
+        run: |
+          cmake --version
+          ctest --version
+          ninja --version
+          clang --version
+          "$CC" --version
+          test -d "$IREE_ROCM_PATH/include"
+
+      - name: Run IREE CMake CI
+        run: |
+          echo "python3 build_tools/devtools/ci.py ${{ matrix.command }} --keep-going"
+          python3 build_tools/devtools/ci.py ${{ matrix.command }} --keep-going

@@ -346,6 +346,7 @@ iree_cc_binary_benchmark(
     iree::base::internal::prng
     iree::hal
     iree::testing::benchmark
+    iree::third_party::google_benchmark
   TESTONLY
 )
 

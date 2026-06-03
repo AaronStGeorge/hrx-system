@@ -96,7 +96,7 @@ jobs:
       test_gpu: ${{ inputs.test_gpu || false }}
       run_tests: ${{ matrix.run_tests }}
       ctest_exclude_regex: ${{ matrix.ctest_exclude_regex }}
-      ctest_label_exclude_regex: "requires-gpu-"
+      ctest_label_exclude_regex: "runtime-resource="
       cmake_options: |
         -DIREE_ROCM_TEST_TARGET_CHIP=gfx942
       package: ${{ matrix.package }}
@@ -113,7 +113,8 @@ jobs:
       name: Linux / CMake / GPU gfx942
       artifact_run_id: ${{ github.run_id }}
       device: gpu:0
-      ctest_label_regex: requires-gpu-amd
+      ctest_regex: "^libhrx/cts/"
+      ctest_label_regex: runtime-resource=amd-gpu
       ctest_parallelism: 1
 
   summary:

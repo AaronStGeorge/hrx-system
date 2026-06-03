@@ -11,12 +11,6 @@ load(":cc_attrs.bzl", "cc_attrs")
 load(":executable.bzl", "iree_executable_test")
 
 _SMOKE_TEST_ARGS = ["--benchmark_min_time=0s"]
-_GOOGLE_BENCHMARK_DEP = Label("//build_tools/third_party/google_benchmark:benchmark")
-
-def _with_google_benchmark_dep(deps):
-    if deps == None:
-        deps = []
-    return deps + [_GOOGLE_BENCHMARK_DEP]
 
 def _iree_cc_benchmark_impl(
         name,
@@ -45,7 +39,7 @@ def _iree_cc_benchmark_impl(
         name = name,
         visibility = visibility,
         srcs = srcs,
-        deps = _with_google_benchmark_dep(deps),
+        deps = deps,
         data = data,
         copts = copts,
         conlyopts = conlyopts,
@@ -84,10 +78,8 @@ iree_cc_benchmark = macro(
     target runs the benchmark with `--benchmark_min_time=0s` so ordinary test
     runs verify that the benchmark starts without collecting timing data.
 
-    The Google Benchmark API dependency is supplied by this macro through the
-    repository-local `//build_tools/third_party/google_benchmark:benchmark`
-    alias. Project callsites should add their own benchmark helper libraries
-    only when they include project-specific benchmark headers.
+    This shared macro does not select a benchmark framework. Project-specific
+    wrappers add the framework dependency that matches their benchmark harness.
 
     `resource_group` serializes the generated smoke test when the benchmark
     touches a scarce local resource such as a GPU.

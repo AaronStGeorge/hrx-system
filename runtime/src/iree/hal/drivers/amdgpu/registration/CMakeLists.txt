@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     registration
@@ -25,5 +26,6 @@ iree_cc_library(
     "IREE_HAVE_HAL_AMDGPU_DRIVER_MODULE=1"
   PUBLIC
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

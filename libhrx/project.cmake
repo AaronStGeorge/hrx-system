@@ -8,8 +8,10 @@ list(APPEND CMAKE_MODULE_PATH
   "${CMAKE_CURRENT_LIST_DIR}/build_tools/cmake"
 )
 
-option(LIBHRX_BUILD
-  "Build libhrx and HRX compatibility targets." ON)
+if(NOT DEFINED LIBHRX_BUILD)
+  option(LIBHRX_BUILD
+    "Build libhrx and HRX compatibility targets." ON)
+endif()
 option(LIBHRX_BUILD_PASSTHROUGH
   "Build libhrx HIP passthrough/interception tools." ON)
 option(LIBHRX_BUILD_CUDA_BINDING
@@ -25,10 +27,7 @@ set(HRX_INSTALL_TESTS_COMPONENT "HrxTestsDist" CACHE STRING
 set(HRX_INSTALL_TESTS_DIR "${CMAKE_INSTALL_DATADIR}/hrx-system/tests" CACHE STRING
   "Install directory for the HRX system CTest tree and test artifacts.")
 
-include("${CMAKE_CURRENT_LIST_DIR}/build_tools/third_party/libhrx_dependencies.cmake")
-
 include(hrx_installed_tests)
 
 function(libhrx_configure_project)
-  libhrx_configure_dependencies()
 endfunction()

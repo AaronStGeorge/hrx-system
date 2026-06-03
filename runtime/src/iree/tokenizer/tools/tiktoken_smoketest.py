@@ -336,7 +336,7 @@ def run_encoding_tests(
 
     if not tests:
         print(f"  No test entries found for {corpus_key} in corpus.")
-        print(f"  Run generate_tiktoken_golden_ids.py first.")
+        print("  Run generate_tiktoken_golden_ids.py first.")
         result.error = "No test entries in corpus"
         return result, None
 
@@ -764,7 +764,7 @@ def main():
     # Cross-validation (optional).
     if args.cross_validate:
         print(f"{'=' * 60}")
-        print(f"  Cross-Validation: tiktoken vs HuggingFace JSON")
+        print("  Cross-Validation: tiktoken vs HuggingFace JSON")
         print(f"{'=' * 60}")
 
         xv_passed = 0

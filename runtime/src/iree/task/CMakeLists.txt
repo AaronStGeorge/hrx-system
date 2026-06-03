@@ -116,9 +116,9 @@ iree_cc_binary_benchmark(
     "executor_benchmark.cc"
   DEPS
     ::task
-    benchmark
     iree::base
     iree::testing::benchmark_main
+    iree::third_party::google_benchmark
   TESTONLY
 )
 

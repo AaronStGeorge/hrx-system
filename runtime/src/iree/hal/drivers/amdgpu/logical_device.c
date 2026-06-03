@@ -1893,15 +1893,14 @@ static iree_status_t iree_hal_amdgpu_logical_device_query_i64(
         return iree_make_status(IREE_STATUS_UNAVAILABLE,
                                 "logical device has no physical devices");
       }
-      *out_value =
-          (int64_t)logical_device->physical_devices[0]->wavefront_size;
+      *out_value = (int64_t)logical_device->physical_devices[0]->wavefront_size;
       return iree_ok_status();
     }
     if (iree_string_view_equal(key, IREE_SV("gfxip"))) {
       if (logical_device->physical_device_count == 0) {
-        return iree_make_status(
-            IREE_STATUS_INTERNAL,
-            "logical device has no physical devices (initialization incomplete)");
+        return iree_make_status(IREE_STATUS_INTERNAL,
+                                "logical device has no physical devices "
+                                "(initialization incomplete)");
       }
       const iree_hal_amdgpu_gfxip_version_t version =
           logical_device->physical_devices[0]->isa.target_id.version;
@@ -1912,8 +1911,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_query_i64(
     if (iree_string_view_equal(key, IREE_SV("memory.total")) ||
         iree_string_view_equal(key, IREE_SV("memory.free"))) {
       uint64_t total = 0;
-      for (iree_host_size_t i = 0;
-           i < logical_device->physical_device_count; ++i) {
+      for (iree_host_size_t i = 0; i < logical_device->physical_device_count;
+           ++i) {
         iree_hal_amdgpu_physical_device_t* physical_device =
             logical_device->physical_devices[i];
         hsa_amd_memory_pool_t pool =
@@ -1921,8 +1920,8 @@ static iree_status_t iree_hal_amdgpu_logical_device_query_i64(
         if (!pool.handle) continue;
         size_t pool_size = 0;
         IREE_RETURN_IF_ERROR(iree_hsa_amd_memory_pool_get_info(
-            IREE_LIBHSA(&system->libhsa), pool,
-            HSA_AMD_MEMORY_POOL_INFO_SIZE, &pool_size));
+            IREE_LIBHSA(&system->libhsa), pool, HSA_AMD_MEMORY_POOL_INFO_SIZE,
+            &pool_size));
         total += (uint64_t)pool_size;
       }
       *out_value = (int64_t)total;

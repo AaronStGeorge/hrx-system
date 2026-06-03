@@ -1455,7 +1455,8 @@ static iree_status_t iree_hal_amdgpu_allocator_export_buffer(
                             requested_flags);
   }
 
-  iree_hal_buffer_t* allocated_buffer = iree_hal_buffer_allocated_buffer(buffer);
+  iree_hal_buffer_t* allocated_buffer =
+      iree_hal_buffer_allocated_buffer(buffer);
   void* base_ptr = iree_hal_amdgpu_buffer_device_pointer(allocated_buffer);
   if (IREE_UNLIKELY(!base_ptr)) {
     return iree_make_status(
@@ -1487,9 +1488,8 @@ static iree_status_t iree_hal_amdgpu_allocator_export_buffer(
     }
 
     case IREE_HAL_EXTERNAL_BUFFER_TYPE_HOST_ALLOCATION: {
-      if (IREE_UNLIKELY(
-              !iree_all_bits_set(iree_hal_buffer_memory_type(buffer),
-                                 IREE_HAL_MEMORY_TYPE_HOST_LOCAL))) {
+      if (IREE_UNLIKELY(!iree_all_bits_set(iree_hal_buffer_memory_type(buffer),
+                                           IREE_HAL_MEMORY_TYPE_HOST_LOCAL))) {
         return iree_make_status(
             IREE_STATUS_UNAVAILABLE,
             "AMDGPU buffer memory type is not supported for export as an "

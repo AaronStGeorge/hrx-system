@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(IREE_HAL_DRIVER_CUDA)
 iree_cc_library(
   NAME
     cuda
@@ -69,7 +70,9 @@ iree_cc_library(
     iree::schemas::executable_debug_info_c_fbs
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_CUDA)
 iree_cc_library(
   NAME
     dynamic_symbols
@@ -95,7 +98,9 @@ iree_cc_library(
     nccl::headers
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_CUDA)
 iree_cc_test(
   NAME
     dynamic_symbols_test
@@ -107,7 +112,8 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=cuda"
+    "iree-build-requirement=runtime.hal.cuda"
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

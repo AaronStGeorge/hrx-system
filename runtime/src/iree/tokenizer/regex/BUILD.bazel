@@ -50,7 +50,6 @@ iree_runtime_cc_benchmark(
         ":exec",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:benchmark_main",
-        "@com_google_benchmark//:benchmark",
     ],
 )
 
@@ -157,7 +156,6 @@ iree_runtime_cc_benchmark(
         ":compile",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:benchmark_main",
-        "@com_google_benchmark//:benchmark",
     ],
 )
 

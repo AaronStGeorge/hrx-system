@@ -4,8 +4,8 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from typing import Dict, List
 import re
+from typing import Dict, List
 
 
 class TargetConverter:
@@ -13,22 +13,22 @@ class TargetConverter:
         self._explicit_target_mapping = {}
         self._repo_map = repo_map
 
-        iree_core_repo = self._repo_alias("@iree_core")
+        iree_repo = self._repo_alias("@iree")
         torch_mlir_cmake_prefix = "iree::compiler::plugins::input::Torch"
         self._update_target_mappings(
             {
                 # Internal utilities to emulate various binary/library options.
-                f"{iree_core_repo}//build_tools:pthreads": [],
-                f"{iree_core_repo}//build_tools:dl": ["${CMAKE_DL_LIBS}"],
-                f"{iree_core_repo}//build_tools:rt": [],
+                f"{iree_repo}//build_tools:pthreads": [],
+                f"{iree_repo}//build_tools:dl": ["${CMAKE_DL_LIBS}"],
+                f"{iree_repo}//build_tools:rt": [],
                 # CMake test macros set LSAN_OPTIONS from driver labels.
-                f"{iree_core_repo}//build_tools/sanitizer:lsan_suppressions_rocm.txt": [],
-                f"{iree_core_repo}//build_tools/sanitizer:lsan_suppressions_vulkan.txt": [],
-                f"{iree_core_repo}//compiler/src/iree/compiler/API:CAPI": [
+                f"{iree_repo}//build_tools/sanitizer:lsan_suppressions_rocm.txt": [],
+                f"{iree_repo}//build_tools/sanitizer:lsan_suppressions_vulkan.txt": [],
+                f"{iree_repo}//compiler/src/iree/compiler/API:CAPI": [
                     "IREECompilerCAPILib"
                 ],
                 # IREE llvm-external-projects
-                f"{iree_core_repo}//llvm-external-projects/iree-dialects:CAPI": [
+                f"{iree_repo}//llvm-external-projects/iree-dialects:CAPI": [
                     "IREEDialectsCAPI"
                 ],
                 # Disable all hard-coded codegen targets (they are expanded dynamically
@@ -175,14 +175,29 @@ class TargetConverter:
                 # Vulkan
                 "@vulkan_headers": ["Vulkan::Headers"],
                 # Misc single targets
-                "@com_google_benchmark//:benchmark": ["benchmark"],
-                "@com_github_dvidelabs_flatcc//:flatcc": ["flatcc"],
-                "@com_github_dvidelabs_flatcc//:parsing": ["flatcc::parsing"],
-                "@com_github_dvidelabs_flatcc//:runtime": ["flatcc::runtime"],
-                "@com_google_googletest//:gtest": ["gmock", "gtest"],
+                "//third_party:google_benchmark": [
+                    "iree::third_party::google_benchmark"
+                ],
+                "//third_party:google_benchmark_main": [
+                    "iree::third_party::google_benchmark_main"
+                ],
+                "//third_party:flatcc": ["iree-flatcc-cli"],
+                "//third_party:flatcc_compiler": ["iree-flatcc-cli"],
+                "//third_party:flatcc_parsing": ["iree::third_party::flatcc_parsing"],
+                "//third_party:flatcc_runtime": ["iree::third_party::flatcc_runtime"],
+                "//third_party:google_test": ["iree::third_party::google_test"],
+                "//third_party:google_test_main": [
+                    "iree::third_party::google_test_main"
+                ],
                 "@spirv_cross//:spirv_cross_lib": ["spirv-cross-msl"],
-                "@hsa_runtime_headers": ["hsa_runtime::headers"],
-                "@libbacktrace": ["libbacktrace::libbacktrace"],
+                "//third_party:hsa_runtime_headers": [
+                    "iree::third_party::hsa_runtime_headers"
+                ],
+                "//third_party:aqlprofile_sdk_headers": [
+                    "iree::third_party::aqlprofile_sdk_headers"
+                ],
+                "//third_party:libbacktrace": ["${IREE_LIBBACKTRACE_TARGET}"],
+                "//third_party:catch2": ["iree::third_party::catch2"],
                 "@webgpu_headers": [],
                 # py_binary targets have no CMake equivalent.
                 # This is the only target bazel needs to execute the lit tests.
@@ -196,8 +211,17 @@ class TargetConverter:
         pass
 
     def _repo_alias(self, repo_name: str) -> str:
-        """Returns the prefix of a repo (i.e. '@iree_core') given the repo map."""
+        """Returns the prefix of a repo (i.e. '@iree') given the repo map."""
         return self._repo_map.get(repo_name, repo_name)
+
+    def _normalize_target_repo_alias(self, target: str) -> str:
+        iree_repo = self._repo_alias("@iree")
+        if target.startswith("@iree//") and iree_repo != "@iree":
+            target_body = target[len("@iree//") :]
+            if iree_repo:
+                return f"{iree_repo}//{target_body}"
+            return f"//{target_body}"
+        return target
 
     def _update_target_mappings(self, mappings: Dict[str, List[str]]):
         self._explicit_target_mapping.update(mappings)
@@ -212,7 +236,7 @@ class TargetConverter:
         # that sets this up.
         label = target.rsplit(":")[-1]
         if label.startswith("CAPI") and label.endswith("Headers"):
-            return [f"IREELLVMIncludeSetup"]
+            return ["IREELLVMIncludeSetup"]
         else:
             return [f"MLIR{label}"]
 
@@ -259,7 +283,8 @@ class TargetConverter:
         Raises:
           KeyError: No conversion was found for the target.
         """
-        iree_core_repo = self._repo_alias("@iree_core")
+        target = self._normalize_target_repo_alias(target)
+        iree_repo = self._repo_alias("@iree")
         if target in self._explicit_target_mapping:
             return self._explicit_target_mapping[target]
         if target.startswith("@llvm-project//llvm"):
@@ -271,8 +296,8 @@ class TargetConverter:
         # pip dependencies don't exist in CMake (system Python is used).
         if target.startswith("@pip//"):
             return []
-        if target.startswith(f"{iree_core_repo}//"):
-            return self._convert_iree_core_target(target)
+        if target.startswith(f"{iree_repo}//"):
+            return self._convert_iree_repo_target(target)
         if target.startswith("@"):
             raise KeyError(f"No conversion found for target '{target}'")
 
@@ -289,9 +314,9 @@ class TargetConverter:
 
         return self._convert_unmatched_target(target)
 
-    def _convert_iree_core_target(self, target):
-        iree_core_repo = self._repo_alias("@iree_core")
-        if target.startswith(f"{iree_core_repo}//llvm-external-projects/iree-dialects"):
+    def _convert_iree_repo_target(self, target):
+        iree_repo = self._repo_alias("@iree")
+        if target.startswith(f"{iree_repo}//llvm-external-projects/iree-dialects"):
             return self._convert_iree_dialects_target(target)
 
         # IREE root paths map to package names based on explicit rules.
@@ -303,17 +328,17 @@ class TargetConverter:
         # (iree_package_ns function).
 
         # Map //compiler/src/iree/(.*) -> iree::\1 (i.e. iree::compiler::\1)
-        m = re.match(f"^{iree_core_repo}//compiler/src/iree/(.+)", target)
+        m = re.match(f"^{iree_repo}//compiler/src/iree/(.+)", target)
         if m:
             return ["iree::" + self._convert_to_cmake_path(m.group(1))]
 
         # Map //runtime/src/iree/(.*) -> iree::\1
-        m = re.match(f"^{iree_core_repo}//runtime/src/iree/(.+)", target)
+        m = re.match(f"^{iree_repo}//runtime/src/iree/(.+)", target)
         if m:
             return ["iree::" + self._convert_to_cmake_path(m.group(1))]
 
         # Map root tool aliases to the runtime tool namespace.
-        m = re.match(f"^{iree_core_repo}//tools[|:](.+)", target)
+        m = re.match(f"^{iree_repo}//tools[|:](.+)", target)
         if m:
             return ["iree::tools::" + self._convert_to_cmake_path(m.group(1))]
 

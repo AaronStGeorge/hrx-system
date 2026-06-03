@@ -1,0 +1,34 @@
+# Copyright 2026 The IREE Authors
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Root lefthook configuration delegates policy to the repository presubmit
+# script. Lefthook owns the Git hook event and manual run groups; presubmit.py
+# owns file selection and profiles such as default, paranoid, and ci.
+
+min_version: 2.1.9
+
+pre-commit:
+  fail_on_changes: always
+  commands:
+    precommit:
+      run: python dev.py bazel precommit --profile paranoid {staged_files}
+
+fix:
+  commands:
+    fix:
+      run: python dev.py bazel fix
+
+precommit:
+  commands:
+    precommit:
+      run: python dev.py bazel precommit --profile paranoid
+
+presubmit:
+  commands:
+    presubmit:
+      run: python dev.py bazel presubmit --profile ci
+
+check:
+  commands:
+    check:
+      run: python dev.py bazel presubmit --profile ci

@@ -5,14 +5,10 @@ from __future__ import annotations
 
 import unittest
 
-from render import backends
-from render import cli
-from render import common
-from render import perfetto
+from render import backends, cli, common, perfetto
 
 
 class _FakeRepeated(list):
-
     def __init__(self, item_type):
         super().__init__()
         self._item_type = item_type
@@ -28,7 +24,6 @@ class _FakeAnnotation:
 
 
 class _FakeCounter:
-
     def SetInParent(self):
         pass
 
@@ -52,14 +47,12 @@ class _FakeTrackEvent:
 
 
 class _FakePacket:
-
     def __init__(self):
         self.track_descriptor = _FakeTrackDescriptor()
         self.track_event = _FakeTrackEvent()
 
 
 class _FakeTraceProtoBuilder:
-
     def __init__(self):
         self.packets = []
 
@@ -73,7 +66,6 @@ class _FakeTraceProtoBuilder:
 
 
 class CommonTest(unittest.TestCase):
-
     def test_cli_lists_registered_formats(self):
         self.assertIn("perfetto", cli.format_descriptions())
 
@@ -162,7 +154,6 @@ class CommonTest(unittest.TestCase):
 
 
 class PerfettoTest(unittest.TestCase):
-
     def test_perfetto_backend_is_registered(self):
         self.assertIn("perfetto", backends.BACKENDS)
         self.assertEqual(

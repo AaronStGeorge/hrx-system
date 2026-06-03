@@ -1,9 +1,10 @@
 // Copyright 2026 The HRX Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "hrx_test_fixture.hpp"
 #include <catch2/catch_test_macros.hpp>
 #include <cstring>
+
+#include "hrx_test_fixture.hpp"
 
 TEST_CASE_METHOD(HrxTestFixture, "Device has a name", "[device]") {
   char name[128] = {0};

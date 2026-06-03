@@ -79,7 +79,7 @@ iree_runtime_cc_library(
         "//runtime/src/iree/async/cts/util:benchmark_base",
         "//runtime/src/iree/async/cts/util:registry",
         "//runtime/src/iree/base",
-        "@com_google_benchmark//:benchmark",
+        "//third_party:google_benchmark",
     ],
     alwayslink = True,
 )
@@ -95,7 +95,7 @@ iree_runtime_cc_library(
         "//runtime/src/iree/async/cts/util:benchmark_base",
         "//runtime/src/iree/async/cts/util:registry",
         "//runtime/src/iree/base",
-        "@com_google_benchmark//:benchmark",
+        "//third_party:google_benchmark",
     ],
     alwayslink = True,
 )

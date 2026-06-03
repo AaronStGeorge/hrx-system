@@ -13,6 +13,7 @@ endif()
 
 iree_add_all_subdirs()
 
+if(IREE_HAL_DRIVER_HIP)
 iree_cc_library(
   NAME
     backends
@@ -28,7 +29,9 @@ iree_cc_library(
   ALWAYSLINK
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_HIP)
 iree_hal_cts_test_suite(
   BACKENDS_LIB
     ::backends
@@ -37,12 +40,15 @@ iree_hal_cts_test_suite(
   ARGS
     "--hip_use_streams=true"
   LABELS
-    "driver=hip"
-    "requires-gpu-amd"
+    "iree-build-requirement=runtime.hal.hip"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
-    hip_driver
+    iree-hal-drivers-hip-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_HIP)
 iree_hal_cts_test_suite(
   BACKENDS_LIB
     ::backends
@@ -52,10 +58,12 @@ iree_hal_cts_test_suite(
     "--hip_use_streams=false"
     "--gtest_filter=-CTS/QueueTransferTest.*:CTS/AsyncTransientBufferTest.*:CTS/TransientBufferTest.*"
   LABELS
-    "driver=hip"
-    "requires-gpu-amd"
+    "iree-build-requirement=runtime.hal.hip"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
-    hip_driver
+    iree-hal-drivers-hip-tests
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

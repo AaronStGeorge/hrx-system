@@ -1,0 +1,131 @@
+# Copyright 2026 The HRX Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+import bazel_to_cmake_config
+import bazel_to_cmake_converter
+
+
+class HrxBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
+    def _drop_selects(self, values):
+        if isinstance(values, bazel_to_cmake_converter.MixedDeps):
+            return values.unconditional
+        return values
+
+    def hrx_cc_library(self, deps=[], **kwargs):
+        self.cc_library(
+            deps=deps + ["//runtime/src:defines", "//libhrx:defines"],
+            **kwargs,
+        )
+
+    def hrx_cc_binary(self, deps=[], **kwargs):
+        self.cc_binary(
+            deps=deps + ["//runtime/src:defines", "//libhrx:defines"],
+            **kwargs,
+        )
+
+    def hrx_cc_test(self, deps=[], resource_group=None, **kwargs):
+        self.cc_test(
+            deps=deps + ["//runtime/src:defines", "//libhrx:defines"],
+            resource_group=resource_group,
+            **kwargs,
+        )
+
+    def hrx_cc_benchmark(self, deps=[], **kwargs):
+        self.cc_binary_benchmark(
+            deps=deps
+            + [
+                "//runtime/src:defines",
+                "//libhrx:defines",
+                "//third_party:google_benchmark",
+            ],
+            **kwargs,
+        )
+
+    def hrx_cc_shared_library(self, deps=[], **kwargs):
+        kwargs["copts"] = self._drop_selects(kwargs.get("copts"))
+        kwargs["hdrs"] = [
+            hdr
+            for hdr in (kwargs.get("hdrs") or [])
+            if hdr != "//libhrx/src:iree_hal_compat.h"
+        ]
+        self.cc_library(
+            deps=deps + ["//runtime/src:defines", "//libhrx:defines"],
+            shared=True,
+            **kwargs,
+        )
+
+    def hrx_cts_test(self, name, deps=[], **kwargs):
+        srcs = kwargs.get("srcs")
+        copts = kwargs.get("copts")
+        defines = kwargs.get("defines")
+        includes = kwargs.get("includes")
+        tags = kwargs.get("tags")
+        full_deps = (
+            [
+                ":core",
+                "//third_party:catch2",
+            ]
+            + deps
+            + ["//runtime/src:defines", "//libhrx:defines"]
+        )
+        name_block = self._convert_string_arg_block(
+            "NAME",
+            "hrx_cts_" + name,
+            quote=False,
+        )
+        srcs_block = self._convert_srcs_block(srcs)
+        copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
+        defines_block = self._convert_string_list_block("DEFINES", defines)
+        deps_block, platform_deps_block = self._convert_platform_select_deps(
+            "hrx_cts_" + name,
+            full_deps,
+        )
+        includes_block = self._convert_includes_block(includes)
+        args_block = self._convert_string_list_block(
+            "ARGS",
+            [
+                "--hrx-library",
+                "$<TARGET_FILE:libhrx::src::libhrx::hrx>",
+            ],
+        )
+        if platform_deps_block:
+            self._converter.body += platform_deps_block
+        labels_block = self._convert_string_list_block("LABELS", tags)
+        self._converter.body += (
+            f"hrx_cc_test(\n"
+            f"{name_block}"
+            f"{srcs_block}"
+            f"{copts_block}"
+            f"{defines_block}"
+            f"{deps_block}"
+            f"{args_block}"
+            f"{includes_block}"
+            f"{labels_block}"
+            f")\n\n"
+        )
+
+
+def convert_unmatched_target(converter, target):
+    cmake_path = converter._convert_to_cmake_path(target)
+    if cmake_path == "libhrx":
+        return ["libhrx"]
+    if cmake_path.startswith("libhrx::"):
+        cmake_path = cmake_path[len("libhrx::") :]
+    return ["libhrx::" + cmake_path]
+
+
+PROJECT_CONFIG = bazel_to_cmake_config.ProjectConfig(
+    name="libhrx",
+    package_prefixes=["libhrx"],
+    build_file_functions=HrxBuildFileFunctions,
+    target_mappings={
+        "//libhrx:defines": ["libhrx_defs"],
+        "//libhrx/src/libhrx:hrx_static": [
+            "libhrx::src::libhrx::hrx",
+        ],
+    },
+    convert_unmatched_target=convert_unmatched_target,
+)

@@ -19,8 +19,6 @@ Usage:
     python generate_testdata_expected_ids.py
 """
 
-import json
-import os
 from pathlib import Path
 
 # Import tokenizers library

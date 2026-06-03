@@ -22,7 +22,7 @@ iree_cc_library(
     "core/main.cpp"
   DEPS
     ${CMAKE_DL_LIBS}
-    Catch2::Catch2
+    iree::third_party::catch2
     libhrx_defs
   INCLUDES
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../include>"
@@ -39,7 +39,7 @@ hrx_cc_test(
     "tests/host_allocator/host_allocator_test.cpp"
   DEPS
     ::core
-    Catch2::Catch2
+    iree::third_party::catch2
     libhrx_defs
   ARGS
     "--hrx-library"
@@ -53,13 +53,13 @@ hrx_cc_test(
     "tests/lifecycle/lifecycle_test.cpp"
   DEPS
     ::core
-    Catch2::Catch2
+    iree::third_party::catch2
     libhrx_defs
   ARGS
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -69,13 +69,13 @@ hrx_cc_test(
     "tests/device/device_test.cpp"
   DEPS
     ::core
-    Catch2::Catch2
+    iree::third_party::catch2
     libhrx_defs
   ARGS
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -85,13 +85,13 @@ hrx_cc_test(
     "tests/allocator/allocator_test.cpp"
   DEPS
     ::core
-    Catch2::Catch2
+    iree::third_party::catch2
     libhrx_defs
   ARGS
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -101,13 +101,13 @@ hrx_cc_test(
     "tests/semaphore/semaphore_test.cpp"
   DEPS
     ::core
-    Catch2::Catch2
+    iree::third_party::catch2
     libhrx_defs
   ARGS
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -117,13 +117,13 @@ hrx_cc_test(
     "tests/stream/stream_test.cpp"
   DEPS
     ::core
-    Catch2::Catch2
+    iree::third_party::catch2
     libhrx_defs
   ARGS
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -133,13 +133,13 @@ hrx_cc_test(
     "tests/memory/memory_test.cpp"
   DEPS
     ::core
-    Catch2::Catch2
+    iree::third_party::catch2
     libhrx_defs
   ARGS
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -149,13 +149,13 @@ hrx_cc_test(
     "tests/transfer/transfer_test.cpp"
   DEPS
     ::core
-    Catch2::Catch2
+    iree::third_party::catch2
     libhrx_defs
   ARGS
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -165,13 +165,13 @@ hrx_cc_test(
     "tests/stream_ops/stream_ops_test.cpp"
   DEPS
     ::core
-    Catch2::Catch2
+    iree::third_party::catch2
     libhrx_defs
   ARGS
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -181,13 +181,13 @@ hrx_cc_test(
     "tests/executable/executable_test.cpp"
   DEPS
     ::core
-    Catch2::Catch2
+    iree::third_party::catch2
     libhrx_defs
   ARGS
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -197,13 +197,13 @@ hrx_cc_test(
     "tests/queue_ops/queue_ops_test.cpp"
   DEPS
     ::core
-    Catch2::Catch2
+    iree::third_party::catch2
     libhrx_defs
   ARGS
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -213,7 +213,7 @@ hrx_cc_test(
     "tests/status/status_test.cpp"
   DEPS
     ::core
-    Catch2::Catch2
+    iree::third_party::catch2
     libhrx_defs
   ARGS
     "--hrx-library"
@@ -227,13 +227,13 @@ hrx_cc_test(
     "tests/refcount/refcount_test.cpp"
   DEPS
     ::core
-    Catch2::Catch2
+    iree::third_party::catch2
     libhrx_defs
   ARGS
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -243,13 +243,13 @@ hrx_cc_test(
     "tests/virtual_memory/virtual_memory_test.cpp"
   DEPS
     ::core
-    Catch2::Catch2
+    iree::third_party::catch2
     libhrx_defs
   ARGS
     "--hrx-library"
     "$<TARGET_FILE:libhrx::src::libhrx::hrx>"
   LABELS
-    "requires-gpu-amd"
+    "runtime-resource=amd-gpu"
 )
 
 hrx_cc_test(
@@ -259,7 +259,7 @@ hrx_cc_test(
     "tests/cxx_api/cxx_api_test.cpp"
   DEPS
     ::core
-    Catch2::Catch2
+    iree::third_party::catch2
     libhrx::src::libhrx::hrx
     libhrx_defs
   ARGS

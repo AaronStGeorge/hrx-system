@@ -1,11 +1,11 @@
 // Copyright 2026 The HRX Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "hrx_internal.h"
-
 #include <stdlib.h>
 
-hrx_status_t hrx_fence_create(size_t capacity, hrx_fence_t *fence) {
+#include "hrx_internal.h"
+
+hrx_status_t hrx_fence_create(size_t capacity, hrx_fence_t* fence) {
   if (!fence) {
     return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT, "fence is NULL");
   }
@@ -30,7 +30,7 @@ hrx_status_t hrx_fence_create(size_t capacity, hrx_fence_t *fence) {
 }
 
 hrx_status_t hrx_fence_create_at(hrx_semaphore_t semaphore, uint64_t value,
-                                 hrx_fence_t *fence) {
+                                 hrx_fence_t* fence) {
   if (!semaphore || !fence) {
     return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT,
                            "semaphore or fence is NULL");

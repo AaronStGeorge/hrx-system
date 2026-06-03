@@ -17,7 +17,7 @@ iree_cc_library(
   DEPS
     ::dummy
     ::parsing
-    flatcc::runtime
+    iree::third_party::flatcc_runtime
   PUBLIC
 )
 
@@ -28,7 +28,7 @@ iree_cc_library(
     "debugging.h"
   DEPS
     ::dummy
-    flatcc::runtime
+    iree::third_party::flatcc_runtime
   PUBLIC
 )
 
@@ -39,7 +39,7 @@ iree_cc_library(
     "parsing.h"
   DEPS
     ::dummy
-    flatcc::parsing
+    iree::third_party::flatcc_parsing
   PUBLIC
 )
 

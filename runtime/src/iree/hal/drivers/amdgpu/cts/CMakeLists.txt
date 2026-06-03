@@ -13,6 +13,7 @@ endif()
 
 iree_add_all_subdirs()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_library(
   NAME
     backends
@@ -26,7 +27,9 @@ iree_cc_library(
   ALWAYSLINK
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_hal_cts_testdata(
   FORMAT_NAME
     amdgpu
@@ -41,13 +44,19 @@ iree_hal_cts_testdata(
   TESTDATA_DIR
     "${PROJECT_SOURCE_DIR}/runtime/src/iree/hal/cts/testdata"
 )
+endif()
 
+if(IREE_HAL_DRIVER_AMDGPU)
 iree_hal_cts_test_suite(
   BACKENDS_LIB
     ::backends
   LABELS
-    "driver=amdgpu"
-    "requires-gpu-amd"
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

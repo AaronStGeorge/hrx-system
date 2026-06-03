@@ -25,4 +25,3 @@ alias(
     name = "hrx",
     actual = "//libhrx/src/libhrx:hrx",
 )
-

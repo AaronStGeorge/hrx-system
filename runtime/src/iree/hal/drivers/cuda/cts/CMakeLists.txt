@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(IREE_HAL_DRIVER_CUDA)
 iree_cc_library(
   NAME
     backends
@@ -24,7 +25,9 @@ iree_cc_library(
   ALWAYSLINK
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_CUDA)
 iree_hal_cts_test_suite(
   BACKENDS_LIB
     ::backends
@@ -33,10 +36,15 @@ iree_hal_cts_test_suite(
   ARGS
     "--cuda_use_streams=false"
   LABELS
-    "driver=cuda"
-    "requires-gpu-nvidia"
+    "iree-build-requirement=runtime.hal.cuda"
+    "iree-run-requirement=runtime.resource.nvidia_gpu"
+    "runtime-resource=nvidia-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-cuda-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_CUDA)
 iree_hal_cts_test_suite(
   BACKENDS_LIB
     ::backends
@@ -45,8 +53,12 @@ iree_hal_cts_test_suite(
   ARGS
     "--cuda_use_streams=true"
   LABELS
-    "driver=cuda"
-    "requires-gpu-nvidia"
+    "iree-build-requirement=runtime.hal.cuda"
+    "iree-run-requirement=runtime.resource.nvidia_gpu"
+    "runtime-resource=nvidia-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-cuda-tests
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

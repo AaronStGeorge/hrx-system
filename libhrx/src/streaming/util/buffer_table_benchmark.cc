@@ -23,7 +23,7 @@
 // different. At least we have tests!
 struct iree_hal_streaming_buffer_t {
   iree_hal_streaming_deviceptr_t device_ptr;
-  void *host_ptr;
+  void* host_ptr;
   size_t size;
   // Padding to make allocation pattern and cache impacts a bit more realistic.
   uint64_t padding[5];
@@ -34,10 +34,9 @@ struct iree_hal_streaming_buffer_t {
 //===----------------------------------------------------------------------===//
 
 // Generates ascending addresses starting from a base.
-static std::vector<iree_hal_streaming_deviceptr_t>
-GenerateAscendingAddresses(size_t count,
-                           iree_hal_streaming_deviceptr_t base = 0x100000000ULL,
-                           size_t stride = 0x10000) {
+static std::vector<iree_hal_streaming_deviceptr_t> GenerateAscendingAddresses(
+    size_t count, iree_hal_streaming_deviceptr_t base = 0x100000000ULL,
+    size_t stride = 0x10000) {
   std::vector<iree_hal_streaming_deviceptr_t> addresses;
   addresses.reserve(count);
   for (size_t i = 0; i < count; ++i) {
@@ -77,8 +76,8 @@ GenerateInterleavedAscDescAddresses(
 }
 
 // Generates random addresses with a fixed seed for reproducibility.
-static std::vector<iree_hal_streaming_deviceptr_t>
-GenerateRandomAddresses(size_t count, uint32_t seed = 0x12345678) {
+static std::vector<iree_hal_streaming_deviceptr_t> GenerateRandomAddresses(
+    size_t count, uint32_t seed = 0x12345678) {
   std::mt19937_64 gen(seed);
   // Distribute addresses across the virtual address space.
   std::uniform_int_distribution<iree_hal_streaming_deviceptr_t> dist(
@@ -87,52 +86,52 @@ GenerateRandomAddresses(size_t count, uint32_t seed = 0x12345678) {
   std::vector<iree_hal_streaming_deviceptr_t> addresses;
   addresses.reserve(count);
   for (size_t i = 0; i < count; ++i) {
-    addresses.push_back(dist(gen) & ~0xFULL); // Align to 16 bytes.
+    addresses.push_back(dist(gen) & ~0xFULL);  // Align to 16 bytes.
   }
   return addresses;
 }
 
 // Generates sparse addresses with large gaps.
-static std::vector<iree_hal_streaming_deviceptr_t>
-GenerateSparseAddresses(size_t count) {
+static std::vector<iree_hal_streaming_deviceptr_t> GenerateSparseAddresses(
+    size_t count) {
   std::vector<iree_hal_streaming_deviceptr_t> addresses;
   addresses.reserve(count);
   iree_hal_streaming_deviceptr_t base = 0x100000000ULL;
   for (size_t i = 0; i < count; ++i) {
     // Linearly increasing gaps that grow over time to avoid duplicates.
     // Use larger minimum gap and increasing multiplier.
-    base += 0x10000 * (i + 1); // Gaps: 0x10000, 0x20000, 0x30000, etc.
+    base += 0x10000 * (i + 1);  // Gaps: 0x10000, 0x20000, 0x30000, etc.
     addresses.push_back(base);
   }
   return addresses;
 }
 
 // Creates dummy buffers with the given addresses.
-static std::vector<iree_hal_streaming_buffer_t *>
-CreateDummyBuffers(const std::vector<iree_hal_streaming_deviceptr_t> &addresses,
-                   iree_allocator_t allocator, bool with_host_ptr = false) {
-  std::vector<iree_hal_streaming_buffer_t *> buffers;
+static std::vector<iree_hal_streaming_buffer_t*> CreateDummyBuffers(
+    const std::vector<iree_hal_streaming_deviceptr_t>& addresses,
+    iree_allocator_t allocator, bool with_host_ptr = false) {
+  std::vector<iree_hal_streaming_buffer_t*> buffers;
   buffers.reserve(addresses.size());
   for (size_t i = 0; i < addresses.size(); ++i) {
-    iree_hal_streaming_buffer_t *buffer = nullptr;
+    iree_hal_streaming_buffer_t* buffer = nullptr;
     IREE_CHECK_OK(iree_allocator_malloc(
-        allocator, sizeof(iree_hal_streaming_buffer_t), (void **)&buffer));
+        allocator, sizeof(iree_hal_streaming_buffer_t), (void**)&buffer));
     buffer->device_ptr = addresses[i];
     // Set host_ptr if requested (use different address space).
     buffer->host_ptr =
-        with_host_ptr ? reinterpret_cast<void *>(0x800000000ULL + i * 0x1000)
+        with_host_ptr ? reinterpret_cast<void*>(0x800000000ULL + i * 0x1000)
                       : nullptr;
-    buffer->size = 0x1000; // 4KB default size.
+    buffer->size = 0x1000;  // 4KB default size.
     buffers.push_back(buffer);
   }
   return buffers;
 }
 
 // Frees dummy buffers.
-static void
-FreeDummyBuffers(const std::vector<iree_hal_streaming_buffer_t *> &buffers,
-                 iree_allocator_t allocator) {
-  for (auto *buffer : buffers) {
+static void FreeDummyBuffers(
+    const std::vector<iree_hal_streaming_buffer_t*>& buffers,
+    iree_allocator_t allocator) {
+  for (auto* buffer : buffers) {
     iree_allocator_free(allocator, buffer);
   }
 }
@@ -151,7 +150,7 @@ IREE_BENCHMARK_FN(BM_InsertAscending) {
 
   while (iree_benchmark_keep_running(benchmark_state, count)) {
     iree_benchmark_pause_timing(benchmark_state);
-    iree_hal_streaming_buffer_table_t *table = nullptr;
+    iree_hal_streaming_buffer_table_t* table = nullptr;
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
     iree_benchmark_resume_timing(benchmark_state);
 
@@ -179,7 +178,7 @@ IREE_BENCHMARK_FN(BM_InsertDescending) {
 
   while (iree_benchmark_keep_running(benchmark_state, count)) {
     iree_benchmark_pause_timing(benchmark_state);
-    iree_hal_streaming_buffer_table_t *table = nullptr;
+    iree_hal_streaming_buffer_table_t* table = nullptr;
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
     iree_benchmark_resume_timing(benchmark_state);
 
@@ -207,7 +206,7 @@ IREE_BENCHMARK_FN(BM_InsertInterleavedAscDesc) {
 
   while (iree_benchmark_keep_running(benchmark_state, count)) {
     iree_benchmark_pause_timing(benchmark_state);
-    iree_hal_streaming_buffer_table_t *table = nullptr;
+    iree_hal_streaming_buffer_table_t* table = nullptr;
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
     iree_benchmark_resume_timing(benchmark_state);
 
@@ -235,7 +234,7 @@ IREE_BENCHMARK_FN(BM_InsertRandom) {
 
   while (iree_benchmark_keep_running(benchmark_state, count)) {
     iree_benchmark_pause_timing(benchmark_state);
-    iree_hal_streaming_buffer_table_t *table = nullptr;
+    iree_hal_streaming_buffer_table_t* table = nullptr;
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
     iree_benchmark_resume_timing(benchmark_state);
 
@@ -263,7 +262,7 @@ IREE_BENCHMARK_FN(BM_InsertSparseAddresses) {
 
   while (iree_benchmark_keep_running(benchmark_state, count)) {
     iree_benchmark_pause_timing(benchmark_state);
-    iree_hal_streaming_buffer_table_t *table = nullptr;
+    iree_hal_streaming_buffer_table_t* table = nullptr;
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
     iree_benchmark_resume_timing(benchmark_state);
 
@@ -293,7 +292,7 @@ IREE_BENCHMARK_FN(BM_LookupExactHit) {
   auto addresses = GenerateRandomAddresses(count);
   auto buffers = CreateDummyBuffers(addresses, allocator);
 
-  iree_hal_streaming_buffer_table_t *table = nullptr;
+  iree_hal_streaming_buffer_table_t* table = nullptr;
   IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
   for (size_t i = 0; i < count; ++i) {
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_insert(table, buffers[i]));
@@ -301,7 +300,7 @@ IREE_BENCHMARK_FN(BM_LookupExactHit) {
 
   while (iree_benchmark_keep_running(benchmark_state, count)) {
     for (size_t i = 0; i < count; ++i) {
-      iree_hal_streaming_buffer_t *found = nullptr;
+      iree_hal_streaming_buffer_t* found = nullptr;
       IREE_CHECK_OK(
           iree_hal_streaming_buffer_table_lookup(table, addresses[i], &found));
       iree_optimization_barrier(found);
@@ -322,7 +321,7 @@ IREE_BENCHMARK_FN(BM_LookupExactMiss) {
   auto addresses = GenerateRandomAddresses(count);
   auto buffers = CreateDummyBuffers(addresses, allocator);
 
-  iree_hal_streaming_buffer_table_t *table = nullptr;
+  iree_hal_streaming_buffer_table_t* table = nullptr;
   IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
   for (size_t i = 0; i < count; ++i) {
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_insert(table, buffers[i]));
@@ -333,7 +332,7 @@ IREE_BENCHMARK_FN(BM_LookupExactMiss) {
 
   while (iree_benchmark_keep_running(benchmark_state, count)) {
     for (size_t i = 0; i < count; ++i) {
-      iree_hal_streaming_buffer_t *found = nullptr;
+      iree_hal_streaming_buffer_t* found = nullptr;
       iree_status_t status = iree_hal_streaming_buffer_table_lookup(
           table, miss_addresses[i], &found);
       iree_status_ignore(status);
@@ -357,10 +356,10 @@ IREE_BENCHMARK_FN(BM_LookupRangeHit) {
 
   // Set realistic sizes for buffers.
   for (size_t i = 0; i < count; ++i) {
-    buffers[i]->size = 0x8000; // 32KB buffers.
+    buffers[i]->size = 0x8000;  // 32KB buffers.
   }
 
-  iree_hal_streaming_buffer_table_t *table = nullptr;
+  iree_hal_streaming_buffer_table_t* table = nullptr;
   IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
   for (size_t i = 0; i < count; ++i) {
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_insert(table, buffers[i]));
@@ -368,7 +367,7 @@ IREE_BENCHMARK_FN(BM_LookupRangeHit) {
 
   while (iree_benchmark_keep_running(benchmark_state, count)) {
     for (size_t i = 0; i < count; ++i) {
-      iree_hal_streaming_buffer_t *found = nullptr;
+      iree_hal_streaming_buffer_t* found = nullptr;
       // Lookup in the middle of each buffer.
       IREE_CHECK_OK(iree_hal_streaming_buffer_table_lookup_range(
           table, addresses[i] + 0x1000, 0x1000, &found));
@@ -392,7 +391,7 @@ IREE_BENCHMARK_FN(BM_LookupAfterManyInserts) {
   auto addresses = GenerateRandomAddresses(count);
   auto buffers = CreateDummyBuffers(addresses, allocator);
 
-  iree_hal_streaming_buffer_table_t *table = nullptr;
+  iree_hal_streaming_buffer_table_t* table = nullptr;
   IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
   for (size_t i = 0; i < count; ++i) {
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_insert(table, buffers[i]));
@@ -402,7 +401,7 @@ IREE_BENCHMARK_FN(BM_LookupAfterManyInserts) {
   const size_t lookup_count = 100;
   while (iree_benchmark_keep_running(benchmark_state, lookup_count)) {
     for (size_t i = 0; i < lookup_count; ++i) {
-      iree_hal_streaming_buffer_t *found = nullptr;
+      iree_hal_streaming_buffer_t* found = nullptr;
       IREE_CHECK_OK(iree_hal_streaming_buffer_table_lookup(
           table, addresses[i % count], &found));
       iree_optimization_barrier(found);
@@ -430,7 +429,7 @@ IREE_BENCHMARK_FN(BM_RemoveFIFO) {
 
   while (iree_benchmark_keep_running(benchmark_state, count)) {
     iree_benchmark_pause_timing(benchmark_state);
-    iree_hal_streaming_buffer_table_t *table = nullptr;
+    iree_hal_streaming_buffer_table_t* table = nullptr;
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
 
     // Insert all (not timed).
@@ -466,7 +465,7 @@ IREE_BENCHMARK_FN(BM_RemoveLIFO) {
 
   while (iree_benchmark_keep_running(benchmark_state, count)) {
     iree_benchmark_pause_timing(benchmark_state);
-    iree_hal_streaming_buffer_table_t *table = nullptr;
+    iree_hal_streaming_buffer_table_t* table = nullptr;
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
 
     // Insert all (not timed).
@@ -508,7 +507,7 @@ IREE_BENCHMARK_FN(BM_RemoveRandom) {
 
   while (iree_benchmark_keep_running(benchmark_state, count)) {
     iree_benchmark_pause_timing(benchmark_state);
-    iree_hal_streaming_buffer_table_t *table = nullptr;
+    iree_hal_streaming_buffer_table_t* table = nullptr;
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
 
     // Insert all (not timed).
@@ -548,7 +547,7 @@ IREE_BENCHMARK_FN(BM_MixedInsertLookup) {
 
   while (iree_benchmark_keep_running(benchmark_state, count * 2)) {
     iree_benchmark_pause_timing(benchmark_state);
-    iree_hal_streaming_buffer_table_t *table = nullptr;
+    iree_hal_streaming_buffer_table_t* table = nullptr;
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
     iree_benchmark_resume_timing(benchmark_state);
 
@@ -558,7 +557,7 @@ IREE_BENCHMARK_FN(BM_MixedInsertLookup) {
 
       // Lookup a previously inserted buffer.
       if (i > 0) {
-        iree_hal_streaming_buffer_t *found = nullptr;
+        iree_hal_streaming_buffer_t* found = nullptr;
         IREE_CHECK_OK(iree_hal_streaming_buffer_table_lookup(
             table, addresses[i / 2], &found));
         iree_optimization_barrier(found);
@@ -581,12 +580,12 @@ IREE_BENCHMARK_FN(BM_MixedInsertRemove) {
   iree_allocator_t allocator = iree_allocator_system();
   const size_t count = 1000;
   auto addresses =
-      GenerateRandomAddresses(count * 2); // Need extra for replacements.
+      GenerateRandomAddresses(count * 2);  // Need extra for replacements.
   auto buffers = CreateDummyBuffers(addresses, allocator);
 
   while (iree_benchmark_keep_running(benchmark_state, count * 2)) {
     iree_benchmark_pause_timing(benchmark_state);
-    iree_hal_streaming_buffer_table_t *table = nullptr;
+    iree_hal_streaming_buffer_table_t* table = nullptr;
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
 
     // Insert initial set (not timed).
@@ -628,7 +627,7 @@ IREE_BENCHMARK_FN(BM_LargeScale) {
 
   while (iree_benchmark_keep_running(benchmark_state, count)) {
     iree_benchmark_pause_timing(benchmark_state);
-    iree_hal_streaming_buffer_table_t *table = nullptr;
+    iree_hal_streaming_buffer_table_t* table = nullptr;
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
     iree_benchmark_resume_timing(benchmark_state);
 
@@ -668,8 +667,8 @@ IREE_BENCHMARK_FN(BM_FragmentedMemory) {
       // This ensures uniqueness while maintaining randomization.
       // The i * 0x10000 guarantees each address has a unique 64KB slot.
       // The random part adds variation within a 16KB range.
-      uint64_t deterministic_offset = i * 0x10000; // 64KB slots.
-      uint64_t random_offset = (gen() % 0x4000);   // Random within 16KB.
+      uint64_t deterministic_offset = i * 0x10000;  // 64KB slots.
+      uint64_t random_offset = (gen() % 0x4000);    // Random within 16KB.
       addresses.push_back(cluster_base + deterministic_offset + random_offset);
     }
   }
@@ -678,7 +677,7 @@ IREE_BENCHMARK_FN(BM_FragmentedMemory) {
 
   while (iree_benchmark_keep_running(benchmark_state, count * 2)) {
     iree_benchmark_pause_timing(benchmark_state);
-    iree_hal_streaming_buffer_table_t *table = nullptr;
+    iree_hal_streaming_buffer_table_t* table = nullptr;
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
 
     // Insert all buffers (not timed).
@@ -690,7 +689,7 @@ IREE_BENCHMARK_FN(BM_FragmentedMemory) {
 
     // Perform lookups across clusters.
     for (size_t i = 0; i < count; ++i) {
-      iree_hal_streaming_buffer_t *found = nullptr;
+      iree_hal_streaming_buffer_t* found = nullptr;
       IREE_CHECK_OK(iree_hal_streaming_buffer_table_lookup(
           table, addresses[(i * 7) % count], &found));
       iree_optimization_barrier(found);
@@ -728,7 +727,7 @@ IREE_BENCHMARK_FN(BM_PathologicalPattern) {
 
   while (iree_benchmark_keep_running(benchmark_state, count)) {
     iree_benchmark_pause_timing(benchmark_state);
-    iree_hal_streaming_buffer_table_t *table = nullptr;
+    iree_hal_streaming_buffer_table_t* table = nullptr;
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
 
     // Insert in reverse order to maximize search distance (not timed).
@@ -741,7 +740,7 @@ IREE_BENCHMARK_FN(BM_PathologicalPattern) {
 
     // Lookup in forward order (worst case for linear search).
     for (size_t i = 0; i < count; ++i) {
-      iree_hal_streaming_buffer_t *found = nullptr;
+      iree_hal_streaming_buffer_t* found = nullptr;
       IREE_CHECK_OK(
           iree_hal_streaming_buffer_table_lookup(table, addresses[i], &found));
       iree_optimization_barrier(found);
@@ -767,11 +766,11 @@ IREE_BENCHMARK_FN(BM_InsertWithHostPointer) {
   const size_t count = 1000;
   auto addresses = GenerateAscendingAddresses(count);
   auto buffers =
-      CreateDummyBuffers(addresses, allocator, true); // with_host_ptr
+      CreateDummyBuffers(addresses, allocator, true);  // with_host_ptr
 
   while (iree_benchmark_keep_running(benchmark_state, count)) {
     iree_benchmark_pause_timing(benchmark_state);
-    iree_hal_streaming_buffer_table_t *table = nullptr;
+    iree_hal_streaming_buffer_table_t* table = nullptr;
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
     iree_benchmark_resume_timing(benchmark_state);
 
@@ -795,11 +794,11 @@ IREE_BENCHMARK_FN(BM_LookupHostPointer) {
   const size_t count = 1000;
   auto addresses = GenerateRandomAddresses(count);
   auto buffers =
-      CreateDummyBuffers(addresses, allocator, true); // with_host_ptr
+      CreateDummyBuffers(addresses, allocator, true);  // with_host_ptr
 
   while (iree_benchmark_keep_running(benchmark_state, count)) {
     iree_benchmark_pause_timing(benchmark_state);
-    iree_hal_streaming_buffer_table_t *table = nullptr;
+    iree_hal_streaming_buffer_table_t* table = nullptr;
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
 
     // Insert all buffers (not timed).
@@ -811,7 +810,7 @@ IREE_BENCHMARK_FN(BM_LookupHostPointer) {
 
     // Lookup using host pointers.
     for (size_t i = 0; i < count; ++i) {
-      iree_hal_streaming_buffer_t *found = nullptr;
+      iree_hal_streaming_buffer_t* found = nullptr;
       uint64_t host_addr = (uint64_t)(uintptr_t)buffers[i]->host_ptr;
       IREE_CHECK_OK(
           iree_hal_streaming_buffer_table_lookup(table, host_addr, &found));
@@ -837,7 +836,7 @@ IREE_BENCHMARK_FN(BM_LookupMidBuffer) {
 
   while (iree_benchmark_keep_running(benchmark_state, count)) {
     iree_benchmark_pause_timing(benchmark_state);
-    iree_hal_streaming_buffer_table_t *table = nullptr;
+    iree_hal_streaming_buffer_table_t* table = nullptr;
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
 
     // Insert all buffers (not timed).
@@ -849,7 +848,7 @@ IREE_BENCHMARK_FN(BM_LookupMidBuffer) {
     std::vector<iree_hal_streaming_any_ptr_t> lookup_addrs;
     for (size_t i = 0; i < count; ++i) {
       // Use random offset within buffer (0 to size-1).
-      uint32_t offset = (i * 31) % buffers[i]->size; // Deterministic pattern.
+      uint32_t offset = (i * 31) % buffers[i]->size;  // Deterministic pattern.
       lookup_addrs.push_back(addresses[i] + offset);
     }
 
@@ -857,7 +856,7 @@ IREE_BENCHMARK_FN(BM_LookupMidBuffer) {
 
     // Lookup using mid-buffer pointers.
     for (size_t i = 0; i < count; ++i) {
-      iree_hal_streaming_buffer_t *found = nullptr;
+      iree_hal_streaming_buffer_t* found = nullptr;
       IREE_CHECK_OK(iree_hal_streaming_buffer_table_lookup(
           table, lookup_addrs[i], &found));
       iree_optimization_barrier(found);
@@ -880,16 +879,16 @@ IREE_BENCHMARK_FN(BM_MixedPointerTypes) {
   auto addresses = GenerateRandomAddresses(count);
 
   // Create buffers with ~50% having host pointers to ensure coverage.
-  std::vector<iree_hal_streaming_buffer_t *> buffers;
+  std::vector<iree_hal_streaming_buffer_t*> buffers;
   buffers.reserve(count);
   for (size_t i = 0; i < count; ++i) {
-    iree_hal_streaming_buffer_t *buffer = nullptr;
+    iree_hal_streaming_buffer_t* buffer = nullptr;
     IREE_CHECK_OK(iree_allocator_malloc(
-        allocator, sizeof(iree_hal_streaming_buffer_t), (void **)&buffer));
+        allocator, sizeof(iree_hal_streaming_buffer_t), (void**)&buffer));
     buffer->device_ptr = addresses[i];
     // Half have host pointers.
     buffer->host_ptr =
-        (i % 2 == 0) ? reinterpret_cast<void *>(0x800000000ULL + i * 0x1000)
+        (i % 2 == 0) ? reinterpret_cast<void*>(0x800000000ULL + i * 0x1000)
                      : nullptr;
     buffer->size = 0x1000;
     buffers.push_back(buffer);
@@ -897,7 +896,7 @@ IREE_BENCHMARK_FN(BM_MixedPointerTypes) {
 
   while (iree_benchmark_keep_running(benchmark_state, count)) {
     iree_benchmark_pause_timing(benchmark_state);
-    iree_hal_streaming_buffer_table_t *table = nullptr;
+    iree_hal_streaming_buffer_table_t* table = nullptr;
     IREE_CHECK_OK(iree_hal_streaming_buffer_table_allocate(allocator, &table));
 
     // Insert all buffers (not timed).
@@ -921,7 +920,7 @@ IREE_BENCHMARK_FN(BM_MixedPointerTypes) {
 
     // Perform mixed lookups.
     for (size_t i = 0; i < count; ++i) {
-      iree_hal_streaming_buffer_t *found = nullptr;
+      iree_hal_streaming_buffer_t* found = nullptr;
       IREE_CHECK_OK(iree_hal_streaming_buffer_table_lookup(
           table, lookup_addrs[i], &found));
       iree_optimization_barrier(found);

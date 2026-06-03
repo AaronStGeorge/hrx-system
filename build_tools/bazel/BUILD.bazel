@@ -4,7 +4,22 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("@rules_python//python:defs.bzl", "py_test")
+
 package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "deps.MODULE.bazel",
+])
+
+py_test(
+    name = "configure_test",
+    srcs = [
+        "configure.py",
+        "configure_test.py",
+    ],
+    main = "configure_test.py",
+)
 
 config_setting(
     name = "cc_compiler_clang",

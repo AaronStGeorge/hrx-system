@@ -6,12 +6,12 @@
 
 # iree_execution_test_suite()
 #
-# Creates a CTest test that runs YAML execution manifests for command-line
+# Creates a CTest test that runs JSON execution manifests for command-line
 # tools. Mirrors the Bazel rule in build_tools/testing/build_defs.bzl.
 #
 # Parameters:
 # NAME: name of the test.
-# MANIFESTS: YAML manifest files, relative to the current source directory.
+# MANIFESTS: JSON manifest files, relative to the current source directory.
 # TOOLS: list of tool_name=cmake_target entries.
 # DATA: additional data files required by the manifests.
 # ARGS: additional arguments passed to the runner.
@@ -25,20 +25,6 @@ function(iree_execution_test_suite)
   if(NOT Python3_EXECUTABLE)
     message(FATAL_ERROR "iree_execution_test_suite requires Python3")
   endif()
-  execute_process(
-    COMMAND "${Python3_EXECUTABLE}" -c "import yaml"
-    RESULT_VARIABLE _IREE_PYTHON_YAML_RESULT
-    OUTPUT_QUIET
-    ERROR_QUIET
-  )
-  if(NOT _IREE_PYTHON_YAML_RESULT EQUAL 0)
-    message(FATAL_ERROR
-      "iree_execution_test_suite requires PyYAML for ${Python3_EXECUTABLE}; "
-      "install the repository development Python requirements with: "
-      "uv pip install --python ${Python3_EXECUTABLE} -r "
-      "${PROJECT_SOURCE_DIR}/requirements-dev.lock.txt")
-  endif()
-
   cmake_parse_arguments(
     _RULE
     ""

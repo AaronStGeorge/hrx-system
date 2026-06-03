@@ -32,12 +32,19 @@ include(CTest)
 include(GNUInstallDirs)
 find_package(Python3 COMPONENTS Interpreter QUIET)
 
-option(HRX_HERMETIC_BUILD
-  "Require all dependencies to be provided by package discovery; never FetchContent."
-  OFF)
-option(IREE_HERMETIC_BUILD
-  "Require IREE/shared dependencies to be provided by package discovery; never FetchContent."
-  ${HRX_HERMETIC_BUILD})
+set(IREE_DEPENDENCY_MODE "pinned" CACHE STRING
+  "How source dependencies are resolved: pinned, package, or auto.")
+set_property(CACHE IREE_DEPENDENCY_MODE PROPERTY STRINGS pinned package auto)
+
+set(IREE_ROCM_PATH "" CACHE PATH
+  "ROCm or TheRock SDK root used for ROCm headers and device tooling.")
+if(IREE_ROCM_PATH)
+  list(PREPEND CMAKE_PREFIX_PATH "${IREE_ROCM_PATH}")
+  if(NOT DEFINED IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN_ROCM_PATH)
+    set(IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN_ROCM_PATH "${IREE_ROCM_PATH}" CACHE PATH
+      "ROCm or TheRock SDK root used for compiling AMDGPU device binaries.")
+  endif()
+endif()
 
 option(BUILD_SHARED_LIBS
   "Instructs CMake to build libraries as shared if possible." OFF)
@@ -60,6 +67,15 @@ option(IREE_ENABLE_ASSERTIONS "Force unset of NDEBUG compile option." OFF)
 option(IREE_DEV_MODE
   "Configure settings optimized for IREE development instead of CI/release."
   OFF)
+option(LIBHRX_BUILD
+  "Build libhrx and HRX compatibility targets." ON)
+if(LIBHRX_BUILD)
+  if(DEFINED IREE_HAL_DRIVER_AMDGPU AND NOT IREE_HAL_DRIVER_AMDGPU)
+    message(FATAL_ERROR
+      "LIBHRX_BUILD=ON requires IREE_HAL_DRIVER_AMDGPU=ON.")
+  endif()
+  set(IREE_HAL_DRIVER_AMDGPU_DEFAULT ON)
+endif()
 
 set(IREE_USE_LINKER "" CACHE STRING "")
 cmake_dependent_option(IREE_ENABLE_LLD
@@ -88,6 +104,8 @@ list(APPEND CMAKE_MODULE_PATH
   "${CMAKE_CURRENT_LIST_DIR}/build_tools/cmake"
 )
 
+include("${CMAKE_CURRENT_LIST_DIR}/MODULE.cmake.lock")
+
 include("${CMAKE_CURRENT_LIST_DIR}/runtime/project.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/libhrx/project.cmake")
 
@@ -111,10 +129,26 @@ include(iree_setup_toolchain)
 
 include("${CMAKE_CURRENT_LIST_DIR}/build_tools/third_party/googletest/googletest.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/build_tools/third_party/google_benchmark/google_benchmark.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/build_tools/third_party/flatcc/flatcc.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/build_tools/third_party/libbacktrace/libbacktrace.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/build_tools/third_party/rocm_headers.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/build_tools/third_party/catch2/catch2.cmake")
 
 iree_setup_toolchain()
-iree_configure_googletest()
-iree_configure_google_benchmark()
+if(IREE_BUILD_TESTS)
+  iree_configure_googletest()
+endif()
+if(IREE_ENABLE_THREADING AND IREE_BUILD_BENCHMARKS)
+  iree_configure_google_benchmark()
+endif()
+iree_configure_flatcc()
+iree_configure_libbacktrace()
+if(IREE_HAL_DRIVER_AMDGPU)
+  iree_configure_rocm_headers()
+endif()
+if(LIBHRX_BUILD AND LIBHRX_BUILD_CTS)
+  iree_configure_catch2()
+endif()
 iree_runtime_configure_project()
 libhrx_configure_project()
 

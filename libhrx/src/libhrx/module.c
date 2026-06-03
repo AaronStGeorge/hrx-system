@@ -1,12 +1,12 @@
 // Copyright 2026 The HRX Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "hrx_internal.h"
-
 #include "iree/vm/bytecode/module.h"
 
 #include <stdlib.h>
 #include <string.h>
+
+#include "hrx_internal.h"
 
 static void hrx_module_destroy_partial(hrx_module_t module) {
   if (module->context) {
@@ -26,7 +26,7 @@ static void hrx_module_destroy_partial(hrx_module_t module) {
 
 static hrx_status_t hrx_module_load_archive(
     hrx_device_t device, iree_const_byte_span_t archive_contents,
-    iree_allocator_t archive_allocator, hrx_module_t *module) {
+    iree_allocator_t archive_allocator, hrx_module_t* module) {
   HRX_TRACE_ZONE_BEGIN(z0, "hrx_module_load_archive");
   HRX_TRACE_ZONE_APPEND_BYTES(z0, archive_contents.data_length);
   *module = NULL;
@@ -35,7 +35,7 @@ static hrx_status_t hrx_module_load_archive(
                                                 "vmfb_size must be > 0"));
   }
 
-  hrx_shared_state_t *shared = hrx_get_shared_state();
+  hrx_shared_state_t* shared = hrx_get_shared_state();
   if (!shared->shared_initialized || !shared->vm_instance) {
     HRX_RETURN_AND_END_ZONE(z0, hrx_make_status(HRX_STATUS_UNAVAILABLE,
                                                 "runtime is not initialized"));
@@ -56,7 +56,7 @@ static hrx_status_t hrx_module_load_archive(
     HRX_RETURN_AND_END_ZONE(z0, hrx_status_from_iree(status));
   }
 
-  iree_hal_device_group_t *device_group = device->hal_device_group;
+  iree_hal_device_group_t* device_group = device->hal_device_group;
   if (!device_group) {
     hrx_module_destroy_partial(loaded);
     HRX_RETURN_AND_END_ZONE(
@@ -76,7 +76,7 @@ static hrx_status_t hrx_module_load_archive(
     HRX_RETURN_AND_END_ZONE(z0, hrx_status_from_iree(status));
   }
 
-  iree_vm_module_t *modules[] = {
+  iree_vm_module_t* modules[] = {
       loaded->hal_module,
       loaded->bytecode_module,
   };
@@ -95,8 +95,8 @@ static hrx_status_t hrx_module_load_archive(
   HRX_RETURN_AND_END_ZONE(z0, hrx_ok_status());
 }
 
-hrx_status_t hrx_module_load_vmfb(hrx_device_t device, const void *vmfb_data,
-                                  size_t vmfb_size, hrx_module_t *module) {
+hrx_status_t hrx_module_load_vmfb(hrx_device_t device, const void* vmfb_data,
+                                  size_t vmfb_size, hrx_module_t* module) {
   HRX_TRACE_ZONE_BEGIN(z0, "hrx_module_load_vmfb");
   HRX_TRACE_ZONE_APPEND_BYTES(z0, vmfb_size);
   if (!device || !vmfb_data || !module) {
@@ -105,12 +105,12 @@ hrx_status_t hrx_module_load_vmfb(hrx_device_t device, const void *vmfb_data,
                             "device, vmfb_data, or module is NULL"));
   }
   iree_const_byte_span_t archive_contents = {
-      .data = (const uint8_t *)vmfb_data,
+      .data = (const uint8_t*)vmfb_data,
       .data_length = vmfb_size,
   };
-  HRX_RETURN_AND_END_ZONE(z0, hrx_module_load_archive(device, archive_contents,
-                                                      iree_allocator_null(),
-                                                      module));
+  HRX_RETURN_AND_END_ZONE(
+      z0, hrx_module_load_archive(device, archive_contents,
+                                  iree_allocator_null(), module));
 }
 
 void hrx_module_retain(hrx_module_t module) {
@@ -133,8 +133,8 @@ void hrx_module_release(hrx_module_t module) {
   }
 }
 
-hrx_status_t hrx_module_lookup_function(hrx_module_t module, const char *name,
-                                        hrx_function_t *function) {
+hrx_status_t hrx_module_lookup_function(hrx_module_t module, const char* name,
+                                        hrx_function_t* function) {
   HRX_TRACE_ZONE_BEGIN(z0, "hrx_module_lookup_function");
   if (name) {
     IREE_TRACE_ZONE_APPEND_TEXT(z0, name);

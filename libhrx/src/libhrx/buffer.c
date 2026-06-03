@@ -4,9 +4,9 @@
 // Buffer allocation, mapping, and lifecycle.
 // Adapted from iree-hal-streaming's memory.c allocation patterns.
 
-#include "hrx_internal.h"
-
 #include <string.h>
+
+#include "hrx_internal.h"
 
 static iree_status_t hrx_buffer_unmap_internal(hrx_buffer_t buffer) {
   iree_status_t status = iree_hal_buffer_unmap_range(&buffer->mapping);
@@ -18,7 +18,7 @@ static iree_status_t hrx_buffer_unmap_internal(hrx_buffer_t buffer) {
 hrx_status_t hrx_buffer_allocate(hrx_stream_t stream, size_t size,
                                  hrx_memory_type_t mem_type,
                                  hrx_buffer_usage_t usage,
-                                 hrx_buffer_t *buffer) {
+                                 hrx_buffer_t* buffer) {
   HRX_TRACE_ZONE_BEGIN(z0, "hrx_buffer_allocate");
   HRX_TRACE_ZONE_APPEND_BYTES(z0, size);
   if (!stream || !buffer) {
@@ -30,9 +30,9 @@ hrx_status_t hrx_buffer_allocate(hrx_stream_t stream, size_t size,
                                                 "allocation size must be > 0"));
   }
 
-  hrx_buffer_s *buf = NULL;
+  hrx_buffer_s* buf = NULL;
   iree_status_t alloc_s = iree_allocator_malloc(
-      iree_allocator_system(), sizeof(hrx_buffer_s), (void **)&buf);
+      iree_allocator_system(), sizeof(hrx_buffer_s), (void**)&buf);
   if (!iree_status_is_ok(alloc_s)) {
     HRX_RETURN_AND_END_ZONE(z0, hrx_status_from_iree(alloc_s));
   }
@@ -65,7 +65,7 @@ hrx_status_t hrx_buffer_allocate(hrx_stream_t stream, size_t size,
 
   uint64_t wait_value = stream->timepoint;
   uint64_t signal_value = stream->timepoint + 1;
-  iree_hal_semaphore_t *sem = stream->semaphore->hal_semaphore;
+  iree_hal_semaphore_t* sem = stream->semaphore->hal_semaphore;
   iree_hal_semaphore_list_t wait_list = {
       .count = (stream->timepoint > 0) ? 1 : 0,
       .semaphores = &sem,
@@ -123,8 +123,8 @@ void hrx_buffer_release(hrx_buffer_t buffer) {
   if (buffer) {
     HRX_TRACE_ZONE_APPEND_BYTES(z0, buffer->size);
   }
-  iree_hal_buffer_t *hal_buffer = buffer->hal_buffer;
-  iree_hal_pool_t *hal_pool = buffer->hal_pool;
+  iree_hal_buffer_t* hal_buffer = buffer->hal_buffer;
+  iree_hal_pool_t* hal_pool = buffer->hal_pool;
   hrx_device_t device = buffer->device;
   if (iree_atomic_ref_count_dec(&buffer->ref_count) == 1) {
     if (buffer->is_mapped) {
@@ -139,7 +139,7 @@ void hrx_buffer_release(hrx_buffer_t buffer) {
 }
 
 hrx_status_t hrx_buffer_map(hrx_buffer_t buffer, hrx_map_flags_t flags,
-                            size_t offset, size_t size, void **mapped_ptr) {
+                            size_t offset, size_t size, void** mapped_ptr) {
   HRX_TRACE_ZONE_BEGIN(z0, "hrx_buffer_map");
   HRX_TRACE_ZONE_APPEND_BYTES(z0, size);
   if (!buffer || !mapped_ptr) {
@@ -148,18 +148,14 @@ hrx_status_t hrx_buffer_map(hrx_buffer_t buffer, hrx_map_flags_t flags,
                                             "buffer or mapped_ptr is NULL"));
   }
   if (buffer->is_mapped) {
-    HRX_RETURN_AND_END_ZONE(
-        z0, hrx_make_status(HRX_STATUS_FAILED_PRECONDITION,
-                            "buffer is already mapped"));
+    HRX_RETURN_AND_END_ZONE(z0, hrx_make_status(HRX_STATUS_FAILED_PRECONDITION,
+                                                "buffer is already mapped"));
   }
 
   iree_hal_memory_access_t access = 0;
-  if (flags & HRX_MAP_READ)
-    access |= IREE_HAL_MEMORY_ACCESS_READ;
-  if (flags & HRX_MAP_WRITE)
-    access |= IREE_HAL_MEMORY_ACCESS_WRITE;
-  if (flags & HRX_MAP_DISCARD)
-    access |= IREE_HAL_MEMORY_ACCESS_DISCARD_WRITE;
+  if (flags & HRX_MAP_READ) access |= IREE_HAL_MEMORY_ACCESS_READ;
+  if (flags & HRX_MAP_WRITE) access |= IREE_HAL_MEMORY_ACCESS_WRITE;
+  if (flags & HRX_MAP_DISCARD) access |= IREE_HAL_MEMORY_ACCESS_DISCARD_WRITE;
 
   iree_status_t status = iree_hal_buffer_map_range(
       buffer->hal_buffer, IREE_HAL_MAPPING_MODE_SCOPED, access,
@@ -184,14 +180,14 @@ hrx_status_t hrx_buffer_unmap(hrx_buffer_t buffer) {
         z0, hrx_make_status(HRX_STATUS_INVALID_ARGUMENT, "buffer is NULL"));
   }
   if (!buffer->is_mapped) {
-    HRX_RETURN_AND_END_ZONE(z0, hrx_ok_status()); // Not mapped, no-op.
+    HRX_RETURN_AND_END_ZONE(z0, hrx_ok_status());  // Not mapped, no-op.
   }
 
   iree_status_t status = hrx_buffer_unmap_internal(buffer);
   HRX_RETURN_AND_END_ZONE(z0, hrx_status_from_iree(status));
 }
 
-hrx_status_t hrx_buffer_get_device_ptr(hrx_buffer_t buffer, void **device_ptr) {
+hrx_status_t hrx_buffer_get_device_ptr(hrx_buffer_t buffer, void** device_ptr) {
   HRX_TRACE_ZONE_BEGIN(z0, "hrx_buffer_get_device_ptr");
   if (buffer) {
     HRX_TRACE_ZONE_APPEND_BYTES(z0, buffer->size);
@@ -227,7 +223,7 @@ hrx_status_t hrx_buffer_get_device_ptr(hrx_buffer_t buffer, void **device_ptr) {
                           "cannot get device pointer for this buffer type"));
 }
 
-hrx_status_t hrx_buffer_get_size(hrx_buffer_t buffer, size_t *size) {
+hrx_status_t hrx_buffer_get_size(hrx_buffer_t buffer, size_t* size) {
   if (!buffer || !size) {
     return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT,
                            "buffer or size is NULL");

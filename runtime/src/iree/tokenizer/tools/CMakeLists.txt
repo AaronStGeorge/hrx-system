@@ -15,10 +15,10 @@ iree_cc_binary_benchmark(
   SRCS
     "comprehensive_benchmark.cc"
   DEPS
-    benchmark
     iree::base
     iree::base::internal::unicode
     iree::base::tooling::flags
+    iree::third_party::google_benchmark
     iree::tokenizer
     iree::tokenizer::format::huggingface::tokenizer_json
     iree::tokenizer::format::tiktoken

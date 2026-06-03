@@ -51,7 +51,6 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "api_test",
     srcs = ["api_test.cc"],
-    resource_group = "iree-hal-drivers-vulkan-tests",
     deps = [
         ":headers",
         ":vulkan",
@@ -65,7 +64,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "command_buffer_test",
     srcs = ["command_buffer_test.cc"],
-    resource_group = "iree-hal-drivers-vulkan-tests",
     deps = [
         ":headers",
         ":vulkan",
@@ -80,7 +78,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "debug_utils_test",
     srcs = ["debug_utils_test.cc"],
-    resource_group = "iree-hal-drivers-vulkan-tests",
     deps = [
         ":headers",
         ":vulkan",
@@ -93,7 +90,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "device_options_test",
     srcs = ["device_options_test.cc"],
-    resource_group = "iree-hal-drivers-vulkan-tests",
     deps = [
         ":headers",
         ":vulkan",
@@ -106,7 +102,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "device_plan_test",
     srcs = ["device_plan_test.cc"],
-    resource_group = "iree-hal-drivers-vulkan-tests",
     deps = [
         ":headers",
         ":vulkan",
@@ -119,7 +114,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "executable_test",
     srcs = ["executable_test.cc"],
-    resource_group = "iree-hal-drivers-vulkan-tests",
     deps = [
         ":headers",
         ":vulkan",
@@ -137,7 +131,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "physical_device_selection_test",
     srcs = ["physical_device_selection_test.cc"],
-    resource_group = "iree-hal-drivers-vulkan-tests",
     deps = [
         ":headers",
         ":vulkan",
@@ -150,7 +143,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "spirv_test",
     srcs = ["spirv_test.cc"],
-    resource_group = "iree-hal-drivers-vulkan-tests",
     deps = [
         ":headers",
         ":vulkan",

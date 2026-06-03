@@ -52,16 +52,15 @@ iree_status_t iree_tooling_resolve_module_dependency(
     // VMVX module used on the host side for the inline HAL.
     IREE_RETURN_AND_END_ZONE_IF_ERROR(
         z0, iree_vmvx_module_create(instance, host_allocator, &module));
-  } else {
+  }
 #endif  // IREE_HAVE_VMVX_MODULE
+  if (!module) {
     // Try to resolve the module from externally-defined modules.
     // If the module is not found this will succeed but module will be NULL.
     IREE_RETURN_AND_END_ZONE_IF_ERROR(
         z0, iree_tooling_try_resolve_external_module_dependency(
                 instance, dependency, host_allocator, &module));
-#if defined(IREE_HAVE_VMVX_MODULE)
   }
-#endif  // IREE_HAVE_VMVX_MODULE
 
   IREE_TRACE_ZONE_END(z0);
   if (!module && iree_all_bits_set(dependency->flags,

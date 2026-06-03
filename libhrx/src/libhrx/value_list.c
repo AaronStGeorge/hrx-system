@@ -1,11 +1,11 @@
 // Copyright 2026 The HRX Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "hrx_internal.h"
-
 #include <stdlib.h>
 
-hrx_status_t hrx_value_list_create(size_t capacity, hrx_value_list_t *list) {
+#include "hrx_internal.h"
+
+hrx_status_t hrx_value_list_create(size_t capacity, hrx_value_list_t* list) {
   if (!list) {
     return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT, "list is NULL");
   }
@@ -42,7 +42,7 @@ void hrx_value_list_release(hrx_value_list_t list) {
   }
 }
 
-hrx_status_t hrx_value_list_size(hrx_value_list_t list, size_t *size) {
+hrx_status_t hrx_value_list_size(hrx_value_list_t list, size_t* size) {
   if (!list || !size) {
     return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT, "list or size is NULL");
   }
@@ -60,7 +60,7 @@ hrx_status_t hrx_value_list_push_i64(hrx_value_list_t list, int64_t value) {
 }
 
 hrx_status_t hrx_value_list_get_i64(hrx_value_list_t list, size_t index,
-                                    int64_t *value) {
+                                    int64_t* value) {
   if (!list || !value) {
     return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT,
                            "list or value is NULL");

@@ -1,17 +1,16 @@
 // Copyright 2026 The HRX Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "hrx_test_fixture.hpp"
-
-#include <catch2/catch_test_macros.hpp>
-
 #include <array>
+#include <catch2/catch_test_macros.hpp>
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <initializer_list>
 #include <string>
 #include <vector>
+
+#include "hrx_test_fixture.hpp"
 
 namespace {
 
@@ -26,14 +25,14 @@ std::string gpu_architecture(hrx_device_t device) {
   return value;
 }
 
-void append_candidate(std::vector<std::filesystem::path> &candidates,
-                      const char *root,
-                      std::initializer_list<const char *> fragments) {
+void append_candidate(std::vector<std::filesystem::path>& candidates,
+                      const char* root,
+                      std::initializer_list<const char*> fragments) {
   if (!root || !root[0]) {
     return;
   }
   std::filesystem::path path(root);
-  for (const char *fragment : fragments) {
+  for (const char* fragment : fragments) {
     path /= fragment;
   }
   candidates.push_back(path);
@@ -49,7 +48,7 @@ std::filesystem::path find_noop_hsaco() {
   append_candidate(candidates, std::getenv("IREE_BINARY_DIR"),
                    {"libhrx", "cts", "hrx_cts_noop_kernel.so"});
 
-  for (const auto &candidate : candidates) {
+  for (const auto& candidate : candidates) {
     if (std::filesystem::exists(candidate) &&
         std::filesystem::file_size(candidate) > 0) {
       return candidate;
@@ -58,7 +57,7 @@ std::filesystem::path find_noop_hsaco() {
   return {};
 }
 
-} // namespace
+}  // namespace
 
 TEST_CASE_METHOD(HrxTestFixture, "executable_load_lookup_dispatch_noop") {
   if (!is_gpu()) {

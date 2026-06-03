@@ -87,11 +87,6 @@ iree_runtime_cc_library(
 iree_runtime_cc_test(
     name = "blit_test",
     srcs = ["blit_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":blit",
         ":headers",
@@ -103,11 +98,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "dispatch_test",
     srcs = ["dispatch_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":dispatch",
         ":headers",
@@ -119,11 +109,6 @@ iree_runtime_cc_test(
 iree_runtime_cc_test(
     name = "timestamp_test",
     srcs = ["timestamp_test.cc"],
-    resource_group = "iree-hal-drivers-amdgpu-tests",
-    tags = [
-        "driver=amdgpu",
-        "nodocker",
-    ],
     deps = [
         ":headers",
         ":timestamp",

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Transform hip_intercept.c to add logging to all pass-through functions."""
+
 import re
 import sys
 

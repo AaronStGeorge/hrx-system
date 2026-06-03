@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(IREE_HAL_DRIVER_VULKAN)
 iree_cc_library(
   NAME
     libvulkan
@@ -25,5 +26,6 @@ iree_cc_library(
     iree::hal::drivers::vulkan::api
   PUBLIC
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -23,8 +23,8 @@ hrx_cc_shared_library(
     ],
     includes = [
         "../..",
-        "../../libhrx",
         "../../../include",
+        "../../libhrx",
     ],
     deps = [
         "//libhrx/src/streaming",

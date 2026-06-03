@@ -36,18 +36,10 @@ iree_hal_cts_test_suite(
     name = "graph",
     args = ["--cuda_use_streams=false"],
     backends_lib = ":backends",
-    tags = [
-        "driver=cuda",
-        "requires-gpu-nvidia",
-    ],
 )
 
 iree_hal_cts_test_suite(
     name = "stream",
     args = ["--cuda_use_streams=true"],
     backends_lib = ":backends",
-    tags = [
-        "driver=cuda",
-        "requires-gpu-nvidia",
-    ],
 )

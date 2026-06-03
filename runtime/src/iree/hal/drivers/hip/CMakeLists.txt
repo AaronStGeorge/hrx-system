@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(IREE_HAL_DRIVER_HIP)
 iree_cc_library(
   NAME
     hip
@@ -75,7 +76,9 @@ iree_cc_library(
     iree::schemas::hip_executable_def_c_fbs
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_HIP)
 iree_cc_library(
   NAME
     dynamic_symbols
@@ -103,7 +106,9 @@ iree_cc_library(
     rccl::headers
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_HIP)
 iree_cc_test(
   NAME
     dynamic_symbols_test
@@ -115,9 +120,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=hip"
+    "iree-build-requirement=runtime.hal.hip"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-hip-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_HIP)
 iree_cc_test(
   NAME
     graph_command_buffer_test
@@ -133,12 +144,15 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=hip"
-    "requires-gpu-amd"
+    "iree-build-requirement=runtime.hal.hip"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
-    hip_driver
+    iree-hal-drivers-hip-tests
 )
+endif()
 
+if(IREE_HAL_DRIVER_HIP)
 iree_cc_test(
   NAME
     hip_allocator_test
@@ -154,10 +168,12 @@ iree_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "driver=hip"
-    "requires-gpu-amd"
+    "iree-build-requirement=runtime.hal.hip"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
   RESOURCE_GROUP
-    hip_driver
+    iree-hal-drivers-hip-tests
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

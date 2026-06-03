@@ -9,22 +9,4 @@
 
 iree_add_all_subdirs()
 
-iree_cc_binary(
-  NAME
-    iree-profile
-  SRCS
-    "iree-profile-main.c"
-  DEFINES
-    "IREE_PROFILE_HAVE_AMDGPU_ATT=0"
-  DEPS
-    iree::base
-    iree::base::tooling::flags
-    iree::tooling::profile::commands
-    iree::tooling::profile::help
-)
-
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
-
-# Some hand-authored runtime CMake snippets still refer to the historical tool
-# target by its unqualified name in generator expressions.
-add_executable(iree-profile ALIAS iree_tools_iree-profile)

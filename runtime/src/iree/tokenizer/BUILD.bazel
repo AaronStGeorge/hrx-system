@@ -243,7 +243,6 @@ iree_runtime_cc_benchmark(
         "//runtime/src/iree/tokenizer/segmenter:whitespace",
         "//runtime/src/iree/tokenizer/vocab",
         "//runtime/src/iree/tokenizer/vocab:vocab_builder",
-        "@com_google_benchmark//:benchmark",
     ],
 )
 

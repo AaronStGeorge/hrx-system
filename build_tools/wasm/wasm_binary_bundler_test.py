@@ -45,7 +45,6 @@ def _wasm_with_import_modules(module_names):
 
 
 class WasmBinaryBundlerTest(unittest.TestCase):
-
     def test_parse_wasm_import_modules(self):
         with tempfile.TemporaryDirectory() as directory:
             wasm_path = os.path.join(directory, "module.wasm")

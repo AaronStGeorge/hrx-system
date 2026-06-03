@@ -80,7 +80,6 @@ def _parse_tool_paths(argv):
 
 
 class IreeProfileCliTest(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         cls.fixture_generator = (

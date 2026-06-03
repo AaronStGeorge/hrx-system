@@ -1,0 +1,91 @@
+# Copyright 2026 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+
+package(default_visibility = ["//visibility:public"])
+
+py_library(
+    name = "devtools",
+    srcs = [
+        "__init__.py",
+        "aliases.py",
+        "ci.py",
+        "ci_config.py",
+        "cli.py",
+        "command_plan.py",
+        "doctor.py",
+        "environment.py",
+        "help_text.py",
+        "hooks.py",
+        "presubmit.py",
+        "setup.py",
+    ],
+)
+
+py_binary(
+    name = "ci",
+    srcs = [
+        "__init__.py",
+        "ci.py",
+        "ci_config.py",
+    ],
+)
+
+py_binary(
+    name = "smoke_test",
+    srcs = ["smoke_test.py"],
+)
+
+py_test(
+    name = "ci_test",
+    srcs = [
+        "__init__.py",
+        "ci.py",
+        "ci_config.py",
+        "ci_test.py",
+    ],
+    main = "ci_test.py",
+)
+
+py_test(
+    name = "cli_test",
+    srcs = [
+        "aliases.py",
+        "cli.py",
+        "cli_test.py",
+        "command_plan.py",
+        "doctor.py",
+        "environment.py",
+        "help_text.py",
+        "hooks.py",
+        "presubmit.py",
+        "setup.py",
+    ],
+    main = "cli_test.py",
+)
+
+py_test(
+    name = "command_plan_test",
+    srcs = [
+        "command_plan.py",
+        "command_plan_test.py",
+    ],
+    main = "command_plan_test.py",
+)
+
+py_test(
+    name = "setup_test",
+    srcs = [
+        "__init__.py",
+        "aliases.py",
+        "command_plan.py",
+        "environment.py",
+        "setup.py",
+        "setup_test.py",
+    ],
+    main = "setup_test.py",
+)

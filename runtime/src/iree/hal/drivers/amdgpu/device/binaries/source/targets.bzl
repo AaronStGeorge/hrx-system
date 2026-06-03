@@ -75,15 +75,30 @@ def _generator_command(code_object_target):
         "--llvm-objcopy $(location %s)" % (AMDGPU_LLVM_OBJCOPY_TOOL,),
     ] + AMDGPU_CLANG_RESOURCE_INCLUDE_ARGS)
 
-def iree_hal_amdgpu_source_device_binaries():
+def iree_hal_amdgpu_source_device_binaries(name):
+    """Defines manual source-built AMDGPU builtin device binary targets.
+
+    Args:
+      name: Aggregate filegroup name for explicitly building all source blobs.
+    """
     target_compatible_with = [] if AMDGPU_DEVICE_TOOLCHAIN_AVAILABLE else _INCOMPATIBLE_TARGET
+    binary_srcs = []
     for code_object_target in IREE_HAL_AMDGPU_DEVICE_BINARY_CODE_OBJECT_TARGETS:
+        binary_name = "amdgcn-amd-amdhsa--%s" % (code_object_target,)
+        binary_srcs.append(":%s.so" % (binary_name,))
         native.genrule(
-            name = "amdgcn-amd-amdhsa--%s" % (code_object_target,),
+            name = binary_name,
             srcs = _generator_srcs(),
-            outs = ["amdgcn-amd-amdhsa--%s.so" % (code_object_target,)],
+            outs = ["%s.so" % (binary_name,)],
             cmd = _generator_command(code_object_target),
+            tags = ["manual"],
             target_compatible_with = target_compatible_with,
             tools = _generator_tools(),
             message = "Generating AMDGPU builtin device binary for %s..." % (code_object_target,),
         )
+    native.filegroup(
+        name = name,
+        srcs = binary_srcs,
+        tags = ["manual"],
+        target_compatible_with = target_compatible_with,
+    )

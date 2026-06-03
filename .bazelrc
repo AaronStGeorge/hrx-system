@@ -1,6 +1,10 @@
 # Copyright 2026 The IREE Authors
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+# -----------------------------------------------------------------------------
+# Bazel graph and dependency policy.
+# -----------------------------------------------------------------------------
+
 # Keep Bazel module behavior explicit even when running older compatible tools.
 common --enable_bzlmod
 
@@ -9,6 +13,10 @@ common --check_direct_dependencies=error
 
 # Opt-in configuration for CI/hooks that must not rewrite dependency state.
 common:locked --lockfile_mode=error
+
+# -----------------------------------------------------------------------------
+# Local build defaults.
+# -----------------------------------------------------------------------------
 
 # Build actions should not implicitly inherit host environment state.
 build --incompatible_strict_action_env
@@ -20,8 +28,95 @@ build --guard_against_concurrent_changes
 startup --windows_enable_symlinks
 build --enable_runfiles
 
+# -----------------------------------------------------------------------------
+# Test presets.
+# -----------------------------------------------------------------------------
+
 # Keep successful test output quiet while preserving failure logs.
 test --test_output=errors
+
+# Local presubmit uses the configured Bazel graph. Build and runtime
+# requirements belong on targets and package policy rather than tag filters.
+test:presubmit --config=locked
+test:presubmit --test_output=errors
+
+# Manual sweeps can keep going to expose the full failure set without changing
+# the default hook behavior.
+test:presubmit-keep-going --config=presubmit
+test:presubmit-keep-going --keep_going
+
+# -----------------------------------------------------------------------------
+# Sanitizers.
+# -----------------------------------------------------------------------------
+
+# Shared sanitizer build shape. Sanitized builds keep debug information, avoid
+# static sanitizer runtime conflicts, and use longer test timeouts.
+build:sanitizer --strip=never
+build:sanitizer --copt=-g
+build:sanitizer --force_ignore_dash_static
+build:sanitizer --test_timeout=120,600,1800,-1
+build:sanitizer --copt=-fno-omit-frame-pointer
+
+# AddressSanitizer.
+build:asan --config=sanitizer
+build:asan --features=asan
+build:asan --copt=-fsanitize=address
+build:asan --copt=-fsanitize-address-use-after-scope
+build:asan --linkopt=-fsanitize=address
+build:asan --cc_output_directory_tag=asan
+build:asan --copt=-DADDRESS_SANITIZER
+
+# MemorySanitizer.
+build:msan --config=sanitizer
+build:msan --features=msan
+build:msan --copt=-fsanitize=memory
+build:msan --copt=-fsanitize-memory-track-origins
+build:msan --linkopt=-fsanitize=memory
+build:msan --cc_output_directory_tag=msan
+build:msan --copt=-DMEMORY_SANITIZER
+
+# ThreadSanitizer.
+build:tsan --config=sanitizer
+build:tsan --features=tsan
+build:tsan --copt=-fsanitize=thread
+build:tsan --linkopt=-fsanitize=thread
+build:tsan --cc_output_directory_tag=tsan
+build:tsan --copt=-DTHREAD_SANITIZER
+
+# UndefinedBehaviorSanitizer.
+build:ubsan --config=sanitizer
+build:ubsan --features=ubsan
+build:ubsan --copt=-fsanitize=undefined
+build:ubsan --linkopt=-fsanitize=undefined
+
+# Match the CMake UBSAN configuration: the runtime uses type-erased function
+# pointers for dynamic dispatch, which UBSAN's function check cannot model.
+build:ubsan --copt=-fno-sanitize=function
+build:ubsan --cxxopt=-fno-sanitize=function
+
+# The vptr sanitizer check requires RTTI. IREE C++ code compiles with -fno-rtti
+# for LLVM/MLIR compatibility, so vptr reports false positives.
+build:ubsan --cxxopt=-fno-sanitize=vptr
+build:ubsan --cc_output_directory_tag=ubsan
+
+# LibFuzzer builds include ASAN by default; fuzzing without memory
+# instrumentation is not a useful local or CI default. This spells out the
+# ASAN flags instead of inheriting --config=asan so the output directory tag is
+# set exactly once.
+build:fuzzer --config=sanitizer
+build:fuzzer --features=asan
+build:fuzzer --copt=-fsanitize=address
+build:fuzzer --copt=-fsanitize-address-use-after-scope
+build:fuzzer --linkopt=-fsanitize=address
+build:fuzzer --copt=-DADDRESS_SANITIZER
+build:fuzzer --copt=-fsanitize=fuzzer-no-link
+build:fuzzer --linkopt=-fsanitize=fuzzer-no-link
+build:fuzzer --cc_output_directory_tag=asan-fuzzer
+build:fuzzer --copt=-DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+
+# -----------------------------------------------------------------------------
+# Local/generated configuration.
+# -----------------------------------------------------------------------------
 
 # Generated configuration and local machine overrides stay out of version
 # control. Local overrides are imported last so they can adjust generated

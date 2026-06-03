@@ -63,6 +63,7 @@ iree_cc_binary_benchmark(
     iree::hal::local::plugins::registration
     iree::io::file_handle
     iree::testing::benchmark
+    iree::third_party::google_benchmark
   TESTONLY
 )
 

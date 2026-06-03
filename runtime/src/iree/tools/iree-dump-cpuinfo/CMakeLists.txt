@@ -24,7 +24,7 @@ iree_execution_test_suite(
   NAME
     execution_test
   MANIFESTS
-    "iree-dump-cpuinfo.test.yaml"
+    "iree-dump-cpuinfo.test.json"
   TOOLS
     "iree-dump-cpuinfo=iree::tools::iree-dump-cpuinfo"
 )

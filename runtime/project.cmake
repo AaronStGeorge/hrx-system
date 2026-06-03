@@ -9,8 +9,7 @@ list(APPEND CMAKE_MODULE_PATH
 )
 
 option(IREE_BUILD_TESTS "Build IREE runtime unit tests and CTS targets." ON)
-cmake_dependent_option(IREE_BUILD_BENCHMARKS
-  "Build IREE runtime benchmarks." ON "NOT IREE_BUILD_TESTS" ON)
+option(IREE_BUILD_BENCHMARKS "Build IREE runtime benchmarks." ON)
 
 set(IREE_BUILD_COMPILER OFF CACHE BOOL
   "The reduced HRX runtime tree does not build the IREE compiler." FORCE)
@@ -64,10 +63,30 @@ set(IREE_HAL_EXECUTABLE_PLUGIN_EXTRA_DEPS "" CACHE STRING "")
 
 option(IREE_HAL_DRIVER_DEFAULTS
   "Sets the default value for all runtime HAL drivers." OFF)
-option(IREE_HAL_DRIVER_AMDGPU "Enables the amdgpu runtime HAL driver." ON)
-option(IREE_HAL_DRIVER_LOCAL_SYNC "Enables the local-sync runtime HAL driver." ON)
-option(IREE_HAL_DRIVER_LOCAL_TASK "Enables the local-task runtime HAL driver." ON)
-option(IREE_HAL_DRIVER_NULL "Enables the null runtime HAL driver." ON)
+if(NOT DEFINED IREE_HAL_DRIVER_AMDGPU_DEFAULT)
+  set(IREE_HAL_DRIVER_AMDGPU_DEFAULT ${IREE_HAL_DRIVER_DEFAULTS})
+endif()
+if(NOT DEFINED IREE_HAL_DRIVER_LOCAL_SYNC_DEFAULT)
+  set(IREE_HAL_DRIVER_LOCAL_SYNC_DEFAULT ON)
+endif()
+if(NOT DEFINED IREE_HAL_DRIVER_LOCAL_TASK_DEFAULT)
+  set(IREE_HAL_DRIVER_LOCAL_TASK_DEFAULT ON)
+endif()
+if(NOT DEFINED IREE_HAL_DRIVER_NULL_DEFAULT)
+  set(IREE_HAL_DRIVER_NULL_DEFAULT ON)
+endif()
+option(IREE_HAL_DRIVER_AMDGPU
+  "Enables the amdgpu runtime HAL driver."
+  ${IREE_HAL_DRIVER_AMDGPU_DEFAULT})
+option(IREE_HAL_DRIVER_LOCAL_SYNC
+  "Enables the local-sync runtime HAL driver."
+  ${IREE_HAL_DRIVER_LOCAL_SYNC_DEFAULT})
+option(IREE_HAL_DRIVER_LOCAL_TASK
+  "Enables the local-task runtime HAL driver."
+  ${IREE_HAL_DRIVER_LOCAL_TASK_DEFAULT})
+option(IREE_HAL_DRIVER_NULL
+  "Enables the null runtime HAL driver."
+  ${IREE_HAL_DRIVER_NULL_DEFAULT})
 set(IREE_HAL_DRIVER_CUDA OFF CACHE BOOL
   "CUDA HAL driver is not wired in the reduced HRX runtime tree." FORCE)
 set(IREE_HAL_DRIVER_HIP OFF CACHE BOOL
@@ -117,10 +136,6 @@ endif()
 set(IREE_ROCM_TEST_AMDGCNSPIRV OFF CACHE BOOL
   "Use amdgcnspirv for ROCm e2e tests.")
 
-include("${CMAKE_CURRENT_LIST_DIR}/build_tools/third_party/flatcc/flatcc.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/build_tools/third_party/libbacktrace/libbacktrace.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/build_tools/third_party/rocm_headers.cmake")
-
 include(flatbuffer_c_library)
 include(iree_amdgpu_binary)
 include(iree_execution_test_suite)
@@ -131,7 +146,4 @@ include(iree_wasm_library)
 
 function(iree_runtime_configure_project)
   iree_runtime_configure_amdgpu_toolchain()
-  iree_runtime_configure_rocm_headers()
-  iree_runtime_configure_libbacktrace()
-  iree_configure_flatcc()
 endfunction()

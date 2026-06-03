@@ -3,16 +3,17 @@
 
 #include "hrx_loader.hpp"
 
-#include <cstdlib>
 #include <dlfcn.h>
+
+#include <cstdlib>
 
 std::string HrxLoader::library_path_;
 
-void HrxLoader::setLibraryPath(const std::string &path) {
+void HrxLoader::setLibraryPath(const std::string& path) {
   library_path_ = path;
 }
 
-HrxLoader &HrxLoader::instance() {
+HrxLoader& HrxLoader::instance() {
   static HrxLoader loader;
   return loader;
 }
@@ -20,9 +21,8 @@ HrxLoader &HrxLoader::instance() {
 HrxLoader::HrxLoader() {
   std::string path = library_path_;
   if (path.empty()) {
-    const char *env = std::getenv("HRX_LIBRARY");
-    if (env)
-      path = env;
+    const char* env = std::getenv("HRX_LIBRARY");
+    if (env) path = env;
   }
   if (path.empty()) {
     path = "libhrx.so";
@@ -36,8 +36,8 @@ HrxLoader::~HrxLoader() {
   }
 }
 
-void *HrxLoader::loadSymbol(const char *name) {
-  void *sym = dlsym(handle_, name);
+void* HrxLoader::loadSymbol(const char* name) {
+  void* sym = dlsym(handle_, name);
   if (!sym) {
     throw HrxLoaderError(std::string("Failed to load symbol: ") + name + " (" +
                          dlerror() + ")");
@@ -45,7 +45,7 @@ void *HrxLoader::loadSymbol(const char *name) {
   return sym;
 }
 
-void HrxLoader::load(const std::string &path) {
+void HrxLoader::load(const std::string& path) {
   handle_ = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
   if (!handle_) {
     throw HrxLoaderError(std::string("Failed to load ") + path + ": " +
@@ -56,7 +56,7 @@ void HrxLoader::load(const std::string &path) {
 #define LOAD_FULL(field, sym) field = (decltype(field))loadSymbol(#sym)
 
   host_allocator_system_ptr =
-      (hrx_host_allocator_t *)loadSymbol("hrx_host_allocator_system_value");
+      (hrx_host_allocator_t*)loadSymbol("hrx_host_allocator_system_value");
 
   LOAD(host_allocator_malloc);
   LOAD(host_allocator_malloc_uninitialized);

@@ -13,7 +13,6 @@ import re
 import sys
 from pathlib import Path
 
-
 _SET_ID_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 _C_TAG_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 _C_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -127,7 +126,7 @@ def _validate_template_field(field, field_path, parameter_kinds):
     if isinstance(field_type, str) and not field_type.startswith("$"):
         _require(
             field_type == "any" or field_type in _REGISTER_BANKS,
-            f"{field_path}.type must be 'any' or one of " f"{sorted(_REGISTER_BANKS)}",
+            f"{field_path}.type must be 'any' or one of {sorted(_REGISTER_BANKS)}",
         )
 
     for key, value in field.items():
@@ -773,8 +772,7 @@ def _generate_encoding_table_source(schema_path):
     for encoding_ref in used_encodings:
         fields = _resolve_encoding_fields(encodings[encoding_ref], operation_classes)
         lines.append(
-            f"static const iree_vm_isa_field_t "
-            f"iree_vm_isa_{encoding_ref}_fields[] = {{"
+            f"static const iree_vm_isa_field_t iree_vm_isa_{encoding_ref}_fields[] = {{"
         )
         for field in fields:
             lines.extend(

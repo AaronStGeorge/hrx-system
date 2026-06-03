@@ -1,0 +1,3 @@
+# Suppress ROCr runtime async event bookkeeping races reported while HSA-backed
+# tests initialize and tear down the external runtime.
+race:rocr::core::Runtime::ConcurrentAsyncEvents::GetAllEvents*

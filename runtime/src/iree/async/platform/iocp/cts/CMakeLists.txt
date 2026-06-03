@@ -187,9 +187,9 @@ iree_cc_binary_benchmark(
     "${PROJECT_SOURCE_DIR}/runtime/src/iree/async/cts/util/benchmark_main.cc"
   DEPS
     ::backends
-    benchmark
     iree::async::cts::buffer::all_benchmarks
     iree::async::cts::util::registry
+    iree::third_party::google_benchmark
   TESTONLY
 )
 endif()
@@ -202,9 +202,9 @@ iree_cc_binary_benchmark(
     "${PROJECT_SOURCE_DIR}/runtime/src/iree/async/cts/util/benchmark_main.cc"
   DEPS
     ::backends
-    benchmark
     iree::async::cts::core::all_benchmarks
     iree::async::cts::util::registry
+    iree::third_party::google_benchmark
   TESTONLY
 )
 endif()
@@ -217,9 +217,9 @@ iree_cc_binary_benchmark(
     "${PROJECT_SOURCE_DIR}/runtime/src/iree/async/cts/util/benchmark_main.cc"
   DEPS
     ::backends
-    benchmark
     iree::async::cts::event::all_benchmarks
     iree::async::cts::util::registry
+    iree::third_party::google_benchmark
   TESTONLY
 )
 endif()
@@ -232,9 +232,9 @@ iree_cc_binary_benchmark(
     "${PROJECT_SOURCE_DIR}/runtime/src/iree/async/cts/util/benchmark_main.cc"
   DEPS
     ::backends
-    benchmark
     iree::async::cts::futex::all_benchmarks
     iree::async::cts::util::registry
+    iree::third_party::google_benchmark
   TESTONLY
 )
 endif()
@@ -247,9 +247,9 @@ iree_cc_binary_benchmark(
     "${PROJECT_SOURCE_DIR}/runtime/src/iree/async/cts/util/benchmark_main.cc"
   DEPS
     ::backends
-    benchmark
     iree::async::cts::socket::all_benchmarks
     iree::async::cts::util::registry
+    iree::third_party::google_benchmark
   TESTONLY
 )
 endif()
@@ -262,9 +262,9 @@ iree_cc_binary_benchmark(
     "${PROJECT_SOURCE_DIR}/runtime/src/iree/async/cts/util/benchmark_main.cc"
   DEPS
     ::backends
-    benchmark
     iree::async::cts::sync::all_benchmarks
     iree::async::cts::util::registry
+    iree::third_party::google_benchmark
   TESTONLY
 )
 endif()

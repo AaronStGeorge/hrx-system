@@ -4,28 +4,22 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-include(FetchContent)
 include(iree_third_party_helpers)
 
 function(iree_configure_googletest)
-  if(NOT IREE_BUILD_TESTS)
-    return()
+  iree_dependency_package_discovery_allowed(_package_discovery_allowed)
+  if(_package_discovery_allowed)
+    find_package(GTest CONFIG QUIET)
+    if(NOT TARGET GTest::gtest)
+      find_package(GTest QUIET)
+    endif()
   endif()
 
-  find_package(GTest CONFIG QUIET)
-  if(NOT TARGET GTest::gtest)
-    find_package(GTest QUIET)
-  endif()
-  if(NOT TARGET GTest::gtest)
-    iree_fetch_content_assert_allowed("googletest")
+  if(NOT TARGET gtest AND NOT TARGET GTest::gtest)
+    iree_dependency_require_pinned_source_allowed("googletest")
     set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-    FetchContent_Declare(
-      googletest
-      GIT_REPOSITORY https://github.com/google/googletest.git
-      GIT_TAG v1.17.0
-      EXCLUDE_FROM_ALL
-    )
+    iree_declare_locked_fetch_content(googletest)
     FetchContent_MakeAvailable(googletest)
   endif()
 
@@ -57,5 +51,16 @@ function(iree_configure_googletest)
     # Provided by FetchContent.
   elseif(TARGET GTest::gmock_main)
     iree_add_alias_interface(gmock_main GTest::gmock_main)
+  endif()
+
+  iree_add_alias_interface(iree::third_party::google_test gmock gtest)
+  if(TARGET gtest_main)
+    iree_add_alias_interface(iree::third_party::google_test_main gtest_main)
+  endif()
+  if(TARGET gmock)
+    iree_add_alias_interface(iree::third_party::google_mock gmock)
+  endif()
+  if(TARGET gmock_main)
+    iree_add_alias_interface(iree::third_party::google_mock_main gmock_main)
   endif()
 endfunction()

@@ -14,9 +14,10 @@ See bazel_to_cmake.py for usage.
 # pylint: disable=exec-used
 
 import itertools
-import re
 import os
+import re
 
+import bazel_to_cmake_config
 import bazel_to_cmake_targets
 
 # Maps Bazel string_flag labels to CMake variable names. Used by
@@ -59,9 +60,12 @@ _COMPILER_PLUGIN_CMAKE_OPTIONS = {
 
 _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS = {
     "//runtime/config/hal:driver_amdgpu": "IREE_HAL_DRIVER_AMDGPU",
+    "//runtime/config/hal:driver_cuda": "IREE_HAL_DRIVER_CUDA",
+    "//runtime/config/hal:driver_hip": "IREE_HAL_DRIVER_HIP",
     "//runtime/config/hal:driver_local_sync": "IREE_HAL_DRIVER_LOCAL_SYNC",
     "//runtime/config/hal:driver_local_task": "IREE_HAL_DRIVER_LOCAL_TASK",
     "//runtime/config/hal:driver_null": "IREE_HAL_DRIVER_NULL",
+    "//runtime/config/hal:driver_vulkan": "IREE_HAL_DRIVER_VULKAN",
     "//runtime/config/hal:executable_loader_embedded_elf": "IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF",
     "//runtime/config/hal:executable_loader_system_library": "IREE_HAL_EXECUTABLE_LOADER_SYSTEM_LIBRARY",
     "//runtime/config/hal:executable_loader_vmvx_module": "IREE_HAL_EXECUTABLE_LOADER_VMVX_MODULE",
@@ -152,6 +156,9 @@ class BuildFileFunctions(object):
     def _expand_cmake_var(self, var):
         return "${" + var + "}"
 
+    def _cmake_variable_name(self, name):
+        return re.sub(r"[^A-Za-z0-9_]", "_", name)
+
     def _convert_string_arg_block(self, name, value, quote=True):
         #  NAME
         #    "value"
@@ -191,6 +198,9 @@ class BuildFileFunctions(object):
 
     def _convert_select_condition(self, label):
         """Returns a CMake condition string for a supported select condition."""
+        cmake_condition = getattr(label, "cmake_condition", None)
+        if cmake_condition:
+            return cmake_condition
         condition = self._convert_platform_condition(label)
         if condition:
             return condition
@@ -250,7 +260,7 @@ class BuildFileFunctions(object):
             )
             if has_compatible:
                 self._converter.body = self._converter.body.rstrip("\n") + "\n"
-                self._converter.body += f"endif()\n\n"
+                self._converter.body += "endif()\n\n"
             return
 
         # Only emit if all labels are recognized (same check as begin).
@@ -260,7 +270,7 @@ class BuildFileFunctions(object):
             # Strip trailing blank line from the target body so endif() is
             # adjacent to the closing paren.
             self._converter.body = self._converter.body.rstrip("\n") + "\n"
-            self._converter.body += f"endif()\n\n"
+            self._converter.body += "endif()\n\n"
 
     def _convert_platform_select_deps(self, name, deps):
         """Handles deps that may contain ConditionSelect entries.
@@ -278,7 +288,7 @@ class BuildFileFunctions(object):
             return self._convert_target_list_block("DEPS", deps), ""
 
         # Emit a CMake variable for the conditional deps.
-        var_name = f"_{name}_platform_deps"
+        var_name = f"_{self._cmake_variable_name(name)}_platform_deps"
         var_block = f'set({var_name} "")\n'
 
         for ps in deps.selects:
@@ -309,7 +319,6 @@ class BuildFileFunctions(object):
             var_block += "endif()\n"
 
         # Build the DEPS block: unconditional deps + the variable reference.
-        all_deps = list(deps.unconditional) + [f"${{{var_name}}}"]
         deps_block = self._convert_target_list_block("DEPS", deps.unconditional)
         # Append the variable reference to the deps block.
         if deps_block:
@@ -319,6 +328,70 @@ class BuildFileFunctions(object):
             deps_block = f"  DEPS\n    ${{{var_name}}}\n"
 
         return deps_block, var_block
+
+    def _convert_platform_select_strings(
+        self, name, block_name, values, quote=True, sort=False
+    ):
+        """Handles string lists that may contain ConditionSelect entries.
+
+        If values is a plain list, returns (converted_block, ""). If values is a
+        MixedDeps or ConditionSelect, emits a CMake list variable with
+        if/elseif/else blocks before the target and returns the normal argument
+        block with an additional variable reference.
+        """
+        if values is None:
+            return self._convert_string_list_block(block_name, None), ""
+        if isinstance(values, ConditionSelect):
+            values = MixedDeps(unconditional=[], selects=[values])
+        if not isinstance(values, MixedDeps):
+            return self._convert_string_list_block(
+                block_name, values, quote=quote, sort=sort
+            ), ""
+
+        var_name = f"_{self._cmake_variable_name(name)}_platform_{block_name.lower()}"
+        var_block = f'set({var_name} "")\n'
+
+        def append_value(value):
+            if quote:
+                return f'  list(APPEND {var_name} "{value}")\n'
+            return f"  list(APPEND {var_name} {value})\n"
+
+        for ps in values.selects:
+            first = True
+            for label, selected_values in ps.conditions.items():
+                if label == "//conditions:default":
+                    continue
+                cond = self._convert_select_condition(label)
+                if not cond:
+                    raise NotImplementedError(f"select condition: {label}")
+                keyword = "if" if first else "elseif"
+                var_block += f"{keyword}({cond})\n"
+                if sort:
+                    selected_values = sorted(selected_values)
+                for value in selected_values:
+                    var_block += append_value(value)
+                first = False
+            default_values = ps.conditions.get("//conditions:default", [])
+            if default_values:
+                var_block += "else()\n"
+                if sort:
+                    default_values = sorted(default_values)
+                for value in default_values:
+                    var_block += append_value(value)
+            var_block += "endif()\n"
+
+        unconditional = values.unconditional
+        if sort:
+            unconditional = sorted(unconditional)
+        string_block = self._convert_string_list_block(
+            block_name, unconditional, quote=quote, sort=False
+        )
+        if string_block:
+            string_block = string_block.rstrip("\n") + f"\n    ${{{var_name}}}\n"
+        else:
+            string_block = f"  {block_name}\n    ${{{var_name}}}\n"
+
+        return string_block, var_block
 
     def _convert_timeout_arg_block(self, name, value):
         if value is None:
@@ -509,8 +582,7 @@ class BuildFileFunctions(object):
             f"TARGET {target}" for target in sorted(set(optional_targets))
         )
         self._converter.body += (
-            f"iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)\n"
-            f"if({conditions})\n"
+            f"iree_package_ns(_IREE_OPTIONAL_TESTDATA_PACKAGE_NS)\nif({conditions})\n"
         )
         return True
 
@@ -718,11 +790,7 @@ class BuildFileFunctions(object):
 
         self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
-            f"iree_wasm_entry(\n"
-            f"{name_block}"
-            f"{main_block}"
-            f"{srcs_block}"
-            f"  PUBLIC\n)\n\n"
+            f"iree_wasm_entry(\n{name_block}{main_block}{srcs_block}  PUBLIC\n)\n\n"
         )
         self._emit_platform_guard_end(target_compatible_with)
 
@@ -866,6 +934,9 @@ class BuildFileFunctions(object):
             return ConditionSelect(d)
         raise NotImplementedError(f"select: {d}")
 
+    def iree_select(self, selector):
+        return self.select(selector)
+
     def defaulting_select(self, selector):
         """Defined in build_defs.oss.bzl as a scoped alternative to select."""
         default_value = selector.get("//conditions:default")
@@ -900,22 +971,34 @@ class BuildFileFunctions(object):
             "TEXTUAL_HDRS", textual_hdrs, sort=True
         )
         srcs_block = self._convert_srcs_block(srcs)
-        copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
-        defines_block = self._convert_string_list_block("DEFINES", defines)
+        copts_block, platform_copts_block = self._convert_platform_select_strings(
+            name, "COPTS", copts, sort=False
+        )
+        defines_block, platform_defines_block = self._convert_platform_select_strings(
+            name, "DEFINES", defines
+        )
         data_block = self._convert_target_list_block("DATA", data)
         deps_block, platform_deps_block = self._convert_platform_select_deps(name, deps)
         testonly_block = self._convert_option_block("TESTONLY", testonly)
         alwayslink_block = self._convert_option_block("ALWAYSLINK", alwayslink)
         shared_block = self._convert_option_block("SHARED", shared)
-        linkopts_block = self._convert_string_list_block("LINKOPTS", linkopts)
+        linkopts_block, platform_linkopts_block = self._convert_platform_select_strings(
+            name, "LINKOPTS", linkopts
+        )
         includes_block = self._convert_includes_block(includes)
         system_includes_block = self._convert_string_list_block(
             "SYSTEM_INCLUDES", system_includes
         )
 
         self._emit_platform_guard_begin(target_compatible_with)
+        if platform_copts_block:
+            self._converter.body += platform_copts_block
+        if platform_defines_block:
+            self._converter.body += platform_defines_block
         if platform_deps_block:
             self._converter.body += platform_deps_block
+        if platform_linkopts_block:
+            self._converter.body += platform_linkopts_block
         self._converter.body += (
             f"iree_cc_library(\n"
             f"{name_block}"
@@ -942,10 +1025,7 @@ class BuildFileFunctions(object):
         )
         target_block = self._convert_single_target_block("TARGET", target)
         self._converter.body += (
-            f"iree_compiler_register_plugin(\n"
-            f"{plugin_id_block}"
-            f"{target_block}"
-            f")\n\n"
+            f"iree_compiler_register_plugin(\n{plugin_id_block}{target_block})\n\n"
         )
 
     def cc_test(
@@ -978,8 +1058,12 @@ class BuildFileFunctions(object):
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         hdrs_block = self._convert_string_list_block("HDRS", hdrs, sort=True)
         srcs_block = self._convert_srcs_block(srcs)
-        copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
-        defines_block = self._convert_string_list_block("DEFINES", defines)
+        copts_block, platform_copts_block = self._convert_platform_select_strings(
+            name, "COPTS", copts, sort=False
+        )
+        defines_block, platform_defines_block = self._convert_platform_select_strings(
+            name, "DEFINES", defines
+        )
         data_block = self._convert_target_list_block("DATA", data, omit_empty=True)
         deps_block, platform_deps_block = self._convert_platform_select_deps(name, deps)
         args_block = self._convert_string_list_block("ARGS", args)
@@ -995,6 +1079,10 @@ class BuildFileFunctions(object):
         did_emit_testdata_guard = self._emit_optional_local_cts_testdata_guard_begin(
             deps
         )
+        if platform_copts_block:
+            self._converter.body += platform_copts_block
+        if platform_defines_block:
+            self._converter.body += platform_defines_block
         if platform_deps_block:
             self._converter.body += platform_deps_block
         self._converter.body += (
@@ -1034,9 +1122,15 @@ class BuildFileFunctions(object):
         if self._should_skip_target(**kwargs):
             return
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
-        copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
-        defines_block = self._convert_string_list_block("DEFINES", defines)
-        linkopts_block = self._convert_string_list_block("LINKOPTS", linkopts)
+        copts_block, platform_copts_block = self._convert_platform_select_strings(
+            name, "COPTS", copts, sort=False
+        )
+        defines_block, platform_defines_block = self._convert_platform_select_strings(
+            name, "DEFINES", defines
+        )
+        linkopts_block, platform_linkopts_block = self._convert_platform_select_strings(
+            name, "LINKOPTS", linkopts
+        )
         srcs_block = self._convert_srcs_block(srcs)
         data_block = self._convert_target_list_block("DATA", data)
         deps_block, platform_deps_block = self._convert_platform_select_deps(name, deps)
@@ -1044,8 +1138,14 @@ class BuildFileFunctions(object):
         includes_block = self._convert_includes_block(includes)
 
         self._emit_platform_guard_begin(target_compatible_with)
+        if platform_copts_block:
+            self._converter.body += platform_copts_block
+        if platform_defines_block:
+            self._converter.body += platform_defines_block
         if platform_deps_block:
             self._converter.body += platform_deps_block
+        if platform_linkopts_block:
+            self._converter.body += platform_linkopts_block
         self._converter.body += (
             f"iree_cc_binary(\n"
             f"{name_block}"
@@ -1080,14 +1180,26 @@ class BuildFileFunctions(object):
         srcs_block = self._convert_srcs_block(srcs)
         data_block = self._convert_target_list_block("DATA", data)
         deps_block, platform_deps_block = self._convert_platform_select_deps(name, deps)
-        copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
-        defines_block = self._convert_string_list_block("DEFINES", defines)
-        linkopts_block = self._convert_string_list_block("LINKOPTS", linkopts)
+        copts_block, platform_copts_block = self._convert_platform_select_strings(
+            name, "COPTS", copts, sort=False
+        )
+        defines_block, platform_defines_block = self._convert_platform_select_strings(
+            name, "DEFINES", defines
+        )
+        linkopts_block, platform_linkopts_block = self._convert_platform_select_strings(
+            name, "LINKOPTS", linkopts
+        )
         labels_block = self._convert_string_list_block("LABELS", tags)
 
         self._emit_platform_guard_begin(target_compatible_with)
+        if platform_copts_block:
+            self._converter.body += platform_copts_block
+        if platform_defines_block:
+            self._converter.body += platform_defines_block
         if platform_deps_block:
             self._converter.body += platform_deps_block
+        if platform_linkopts_block:
+            self._converter.body += platform_linkopts_block
         self._converter.body += (
             f"iree_cc_fuzz(\n"
             f"{name_block}"
@@ -1101,9 +1213,6 @@ class BuildFileFunctions(object):
             f")\n\n"
         )
         self._emit_platform_guard_end(target_compatible_with)
-
-    def iree_runtime_cc_fuzz(self, **kwargs):
-        self.iree_cc_fuzz(**kwargs)
 
     def iree_compiler_cc_fuzz(self, **kwargs):
         self.iree_cc_fuzz(**kwargs)
@@ -1151,9 +1260,21 @@ class BuildFileFunctions(object):
             f"  PUBLIC\n)\n\n"
         )
 
-    def iree_amdgpu_binary(
-        self, name, target, arch, srcs, internal_hdrs=[], copts=[], linkopts=[]
+    def _iree_amdgpu_binary(
+        self,
+        name,
+        target,
+        arch,
+        srcs,
+        internal_hdrs=[],
+        copts=[],
+        linkopts=[],
+        tags=None,
+        target_compatible_with=None,
+        **kwargs,
     ):
+        if self._should_skip_target(tags=tags, **kwargs):
+            return
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         target_block = self._convert_string_arg_block("TARGET", target, quote=False)
         arch_block = self._convert_string_arg_block("ARCH", arch, quote=False)
@@ -1164,6 +1285,7 @@ class BuildFileFunctions(object):
             "LINKOPTS", linkopts, sort=False
         )
 
+        self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
             f"iree_amdgpu_binary(\n"
             f"{name_block}"
@@ -1175,8 +1297,9 @@ class BuildFileFunctions(object):
             f"{linkopts_block}"
             f")\n\n"
         )
+        self._emit_platform_guard_end(target_compatible_with)
 
-    def iree_hal_amdgpu_source_device_binaries(self):
+    def _iree_hal_amdgpu_source_device_binaries(self):
         self._converter.body += (
             "# Source-built AMDGPU device binary targets are wired manually by\n"
             "# runtime/src/iree/hal/drivers/amdgpu/device/binaries/CMakeLists.txt.\n\n"
@@ -1233,7 +1356,12 @@ class BuildFileFunctions(object):
         c_identifier=None,
         deps=None,
         testonly=None,
+        tags=None,
+        target_compatible_with=None,
+        **kwargs,
     ):
+        if self._should_skip_target(tags=tags, **kwargs):
+            return
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         src_block = self._convert_string_arg_block("SRC", src)
         module_name_block = self._convert_string_arg_block(
@@ -1246,6 +1374,7 @@ class BuildFileFunctions(object):
         deps_block = self._convert_target_list_block("DEPS", deps)
         testonly_block = self._convert_option_block("TESTONLY", testonly)
 
+        self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
             f"iree_vmasm_module(\n"
             f"{name_block}"
@@ -1257,6 +1386,7 @@ class BuildFileFunctions(object):
             f"{testonly_block}"
             f"  PUBLIC\n)\n\n"
         )
+        self._emit_platform_guard_end(target_compatible_with)
 
     def iree_hal_executable(
         self,
@@ -1335,7 +1465,7 @@ class BuildFileFunctions(object):
             f"  PUBLIC\n)\n\n"
         )
 
-    def iree_hal_cts_testdata(
+    def _iree_hal_cts_testdata(
         self,
         format_name,
         target_device,
@@ -1347,6 +1477,7 @@ class BuildFileFunctions(object):
         flag_values=None,
         data=None,
         testonly=None,
+        target_compatible_with=None,
         **kwargs,
     ):
         # Resolve {PLACEHOLDER} template variables from flag_values.
@@ -1400,6 +1531,7 @@ class BuildFileFunctions(object):
             f'  TESTDATA_DIR\n    "${{PROJECT_SOURCE_DIR}}/{testdata_dir}"\n'
         )
 
+        self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
             f"iree_hal_cts_testdata(\n"
             f"{name_block}"
@@ -1411,8 +1543,9 @@ class BuildFileFunctions(object):
             f"{flags_block}"
             f")\n\n"
         )
+        self._emit_platform_guard_end(target_compatible_with)
 
-    def iree_hal_cts_test_suite(
+    def _iree_hal_cts_test_suite(
         self,
         backends_lib,
         executable_formats=None,
@@ -1424,6 +1557,7 @@ class BuildFileFunctions(object):
         resource_group=None,
         tags=None,
         testonly=None,
+        target_compatible_with=None,
         **kwargs,
     ):
         if not resource_group and tags:
@@ -1438,7 +1572,7 @@ class BuildFileFunctions(object):
         _testdata_libs = list(testdata_libs or [])
         if executable_formats:
             for format_name, config in executable_formats.items():
-                self.iree_hal_cts_testdata(
+                self._iree_hal_cts_testdata(
                     format_name=format_name,
                     target_device=config["target_device"],
                     identifier=config["identifier"],
@@ -1447,6 +1581,7 @@ class BuildFileFunctions(object):
                     testdata=testdata,
                     flag_values=flag_values,
                     flags=config.get("flags"),
+                    target_compatible_with=target_compatible_with,
                 )
                 _testdata_libs.append(f":testdata_{format_name}_lib")
 
@@ -1470,6 +1605,7 @@ class BuildFileFunctions(object):
         )
         testonly_block = self._convert_option_block("TESTONLY", testonly)
 
+        self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
             f"iree_hal_cts_test_suite(\n"
             f"{backends_block}"
@@ -1481,16 +1617,28 @@ class BuildFileFunctions(object):
             f"{testonly_block}"
             f")\n\n"
         )
+        self._emit_platform_guard_end(target_compatible_with)
 
     def iree_flatbuffer_c_library(
-        self, name, srcs, flatcc_args=None, includes=None, deps=None
+        self,
+        name,
+        srcs,
+        flatcc_args=None,
+        includes=None,
+        deps=None,
+        tags=None,
+        target_compatible_with=None,
+        **kwargs,
     ):
+        if self._should_skip_target(tags=tags, **kwargs):
+            return
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         srcs_block = self._convert_srcs_block(srcs)
         flatcc_args_block = self._convert_string_list_block("FLATCC_ARGS", flatcc_args)
         includes_block = self._convert_srcs_block(includes, block_name="INCLUDES")
         deps_block = self._convert_target_list_block("DEPS", deps)
 
+        self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
             f"flatbuffer_c_library(\n"
             f"{name_block}"
@@ -1500,6 +1648,7 @@ class BuildFileFunctions(object):
             f"{deps_block}"
             f"  PUBLIC\n)\n\n"
         )
+        self._emit_platform_guard_end(target_compatible_with)
 
     def gentbl_cc_library(
         self,
@@ -1688,6 +1837,7 @@ class BuildFileFunctions(object):
             f"{args_block}"
             f"{test_binary_block}"
             f"{labels_block}"
+            f"{timeout_block}"
             f")\n\n"
         )
 
@@ -1701,6 +1851,7 @@ class BuildFileFunctions(object):
         defines=None,
         linkopts=None,
         tags=None,
+        resource_group=None,
         testonly=True,
         target_compatible_with=None,
         # unused
@@ -1718,6 +1869,9 @@ class BuildFileFunctions(object):
         linkopts_block = self._convert_string_list_block("LINKOPTS", linkopts)
         testonly_block = self._convert_option_block("TESTONLY", testonly)
         labels_block = self._convert_string_list_block("LABELS", tags)
+        resource_group_block = self._convert_string_arg_block(
+            "RESOURCE_GROUP", resource_group, quote=False
+        )
 
         self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
@@ -1731,6 +1885,7 @@ class BuildFileFunctions(object):
             f"{linkopts_block}"
             f"{testonly_block}"
             f"{labels_block}"
+            f"{resource_group_block}"
             f")\n\n"
         )
         self._emit_platform_guard_end(target_compatible_with)
@@ -1748,12 +1903,7 @@ class BuildFileFunctions(object):
         cmd_block = self._convert_string_arg_block("CMD", cmd, quote=True)
 
         self._converter.body += (
-            f"iree_genrule(\n"
-            f"{name_block}"
-            f"{srcs_block}"
-            f"{outs_block}"
-            f"{cmd_block}"
-            f")\n\n"
+            f"iree_genrule(\n{name_block}{srcs_block}{outs_block}{cmd_block})\n\n"
         )
 
 
@@ -1767,9 +1917,7 @@ class Converter(object):
         self.body = ""
 
     def convert(self):
-        converted_content = (
-            f"{self.header}\n\n" f"iree_add_all_subdirs()\n\n" f"{self.body}"
-        )
+        converted_content = f"{self.header}\n\niree_add_all_subdirs()\n\n{self.body}"
 
         # Cleanup newline characters. This is more convenient than ensuring all
         # conversions are careful with where they insert newlines.
@@ -1796,12 +1944,18 @@ def convert_build_file(
     converter = Converter()
     # Allow overrides of TargetConverter and BuildFileFunctions from repo cfg.
     repo_map = getattr(repo_cfg, "REPO_MAP", {})
-    target_converter = getattr(
-        repo_cfg, "CustomTargetConverter", bazel_to_cmake_targets.TargetConverter
-    )(repo_map=repo_map)
-    build_file_functions = getattr(
-        repo_cfg, "CustomBuildFileFunctions", BuildFileFunctions
-    )(
+    target_converter = bazel_to_cmake_config.create_target_converter(
+        repo_cfg,
+        repo_map,
+        bazel_to_cmake_targets.TargetConverter,
+    )
+    build_file_functions_class = bazel_to_cmake_config.select_build_file_functions(
+        repo_cfg,
+        build_dir,
+        repo_root,
+        BuildFileFunctions,
+    )
+    build_file_functions = build_file_functions_class(
         converter=converter,
         targets=target_converter,
         build_dir=build_dir,

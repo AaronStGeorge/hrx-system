@@ -1,15 +1,15 @@
 // Copyright 2026 The HRX Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "hrx_internal.h"
-
 #include <string.h>
+
+#include "hrx_internal.h"
 
 //===----------------------------------------------------------------------===//
 // Synchronous data transfer
 //===----------------------------------------------------------------------===//
 
-hrx_status_t hrx_synchronous_h2d(hrx_device_t device, const void *host_src,
+hrx_status_t hrx_synchronous_h2d(hrx_device_t device, const void* host_src,
                                  hrx_buffer_t dst, size_t dst_offset,
                                  size_t size) {
   HRX_TRACE_ZONE_BEGIN(z0, "hrx_synchronous_h2d");
@@ -31,7 +31,7 @@ hrx_status_t hrx_synchronous_h2d(hrx_device_t device, const void *host_src,
 }
 
 hrx_status_t hrx_synchronous_d2h(hrx_device_t device, hrx_buffer_t src,
-                                 size_t src_offset, void *host_dst,
+                                 size_t src_offset, void* host_dst,
                                  size_t size) {
   HRX_TRACE_ZONE_BEGIN(z0, "hrx_synchronous_d2h");
   HRX_TRACE_ZONE_APPEND_BYTES(z0, size);

@@ -11,11 +11,10 @@
 #ifndef HRX_STREAMING_BRIDGE_H_
 #define HRX_STREAMING_BRIDGE_H_
 
-#include "hrx_runtime.h"
-
-#include "iree/base/api.h"
-
 #include <string.h>
+
+#include "hrx_runtime.h"
+#include "iree/base/api.h"
 
 //===----------------------------------------------------------------------===//
 // Status bridging: hrx_status_t <-> iree_status_t
@@ -75,7 +74,7 @@ static inline hrx_host_allocator_t iree_to_hrx_allocator(iree_allocator_t a) {
 #include "hrx_internal.h"
 
 // Get the HAL device from a hrx device (for HAL calls not wrapped by hrx).
-static inline iree_hal_device_t *hrx_device_hal(hrx_device_t dev) {
+static inline iree_hal_device_t* hrx_device_hal(hrx_device_t dev) {
   return dev ? dev->hal_device : NULL;
 }
 
@@ -84,4 +83,4 @@ static inline iree_allocator_t hrx_system_iree_allocator(void) {
   return hrx_to_iree_allocator(hrx_host_allocator_system());
 }
 
-#endif // HRX_STREAMING_BRIDGE_H_
+#endif  // HRX_STREAMING_BRIDGE_H_

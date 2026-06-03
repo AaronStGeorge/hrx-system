@@ -51,8 +51,4 @@ iree_hal_cts_testdata(
 
 iree_hal_cts_test_suite(
     backends_lib = ":backends",
-    tags = [
-        "driver=amdgpu",
-        "requires-gpu-amd",
-    ],
 )

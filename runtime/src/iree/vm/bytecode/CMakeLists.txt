@@ -74,6 +74,7 @@ iree_cc_binary_benchmark(
     iree::base
     iree::testing::benchmark
     iree::testing::benchmark_main
+    iree::third_party::google_benchmark
     iree::vm
   TESTONLY
 )
@@ -100,6 +101,7 @@ iree_cc_binary_benchmark(
     ::module
     ::module_size_benchmark_module_c
     iree::base
+    iree::third_party::google_benchmark
     iree::vm
   TESTONLY
 )

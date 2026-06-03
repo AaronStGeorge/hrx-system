@@ -26,7 +26,7 @@ iree_runtime_cc_binary(
 
 iree_execution_test_suite(
     name = "execution_test",
-    manifests = ["iree-dump-cpuinfo.test.yaml"],
+    manifests = ["iree-dump-cpuinfo.test.json"],
     tools = {
         "iree-dump-cpuinfo": "//tools:iree-dump-cpuinfo",
     },

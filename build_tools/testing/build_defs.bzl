@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-"""Bazel rules for YAML execution tests."""
+"""Bazel rules for JSON execution tests."""
 
 load("@rules_python//python:defs.bzl", "py_test")
 
@@ -15,11 +15,11 @@ def iree_execution_test_suite(
         data = None,
         args = None,
         **kwargs):
-    """Declares a YAML execution test suite.
+    """Declares a JSON execution test suite.
 
     Args:
       name: Bazel target name.
-      manifests: YAML manifest files to run.
+      manifests: JSON manifest files to run.
       tools: Dictionary mapping manifest tool names to executable labels.
       data: Additional runtime data files made available to manifests.
       args: Additional runner arguments.
@@ -43,6 +43,5 @@ def iree_execution_test_suite(
         args = runner_args + args,
         data = list(manifests) + data + tool_labels,
         main = "//build_tools/testing:execution_main.py",
-        deps = ["@pypi//pyyaml"],
         **kwargs
     )

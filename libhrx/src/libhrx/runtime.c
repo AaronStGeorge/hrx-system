@@ -7,12 +7,11 @@
 // driver-based creation via iree_hal_task_driver_create +
 // iree_hal_driver_create_default_device.
 
-#include "hrx_internal.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "hrx_internal.h"
 #include "iree/async/frontier_tracker.h"
 #include "iree/async/util/proactor_pool.h"
 #include "iree/hal/drivers/local_task/task_driver.h"
@@ -33,19 +32,18 @@ static hrx_shared_state_t g_shared = {0};
 static hrx_gpu_state_t g_gpu = {0};
 static hrx_cpu_state_t g_cpu = {0};
 
-hrx_shared_state_t *hrx_get_shared_state(void) { return &g_shared; }
-hrx_gpu_state_t *hrx_get_gpu_state(void) { return &g_gpu; }
-hrx_cpu_state_t *hrx_get_cpu_state(void) { return &g_cpu; }
+hrx_shared_state_t* hrx_get_shared_state(void) { return &g_shared; }
+hrx_gpu_state_t* hrx_get_gpu_state(void) { return &g_gpu; }
+hrx_cpu_state_t* hrx_get_cpu_state(void) { return &g_cpu; }
 
-static iree_status_t
-hrx_create_single_device_group(iree_hal_device_t *device,
-                               iree_allocator_t host_allocator,
-                               iree_hal_device_group_t **out_device_group) {
+static iree_status_t hrx_create_single_device_group(
+    iree_hal_device_t* device, iree_allocator_t host_allocator,
+    iree_hal_device_group_t** out_device_group) {
   IREE_ASSERT_ARGUMENT(device);
   IREE_ASSERT_ARGUMENT(out_device_group);
   *out_device_group = NULL;
 
-  iree_async_frontier_tracker_t *frontier_tracker = NULL;
+  iree_async_frontier_tracker_t* frontier_tracker = NULL;
   IREE_RETURN_IF_ERROR(iree_async_frontier_tracker_create(
       iree_async_frontier_tracker_options_default(), host_allocator,
       &frontier_tracker));
@@ -60,13 +58,10 @@ hrx_create_single_device_group(iree_hal_device_t *device,
 // Version
 //===----------------------------------------------------------------------===//
 
-void hrx_runtime_version(int *major, int *minor, int *patch) {
-  if (major)
-    *major = HRX_VERSION_MAJOR;
-  if (minor)
-    *minor = HRX_VERSION_MINOR;
-  if (patch)
-    *patch = HRX_VERSION_PATCH;
+void hrx_runtime_version(int* major, int* minor, int* patch) {
+  if (major) *major = HRX_VERSION_MAJOR;
+  if (minor) *minor = HRX_VERSION_MINOR;
+  if (patch) *patch = HRX_VERSION_PATCH;
 }
 
 //===----------------------------------------------------------------------===//
@@ -110,8 +105,8 @@ hrx_status_t hrx_ensure_shared_state(void) {
 }
 
 #ifdef HRX_HAS_IREE_AMDGPU_DRIVER
-static void hrx_set_gpu_architecture_from_hal(iree_hal_device_t *hal_device,
-                                              hrx_device_s *dev) {
+static void hrx_set_gpu_architecture_from_hal(iree_hal_device_t* hal_device,
+                                              hrx_device_s* dev) {
   int64_t gfxip = 0;
   iree_status_t status = iree_hal_device_query_i64(
       hal_device, iree_make_cstring_view("hal.device"),
@@ -128,14 +123,12 @@ static void hrx_set_gpu_architecture_from_hal(iree_hal_device_t *hal_device,
   snprintf(dev->architecture, sizeof(dev->architecture), "gfx%d%d%d", major,
            minor, stepping);
 }
-#endif // HRX_HAS_IREE_AMDGPU_DRIVER
+#endif  // HRX_HAS_IREE_AMDGPU_DRIVER
 
 static void hrx_release_shared_state(void) {
-  if (!g_shared.shared_initialized)
-    return;
+  if (!g_shared.shared_initialized) return;
   g_shared.init_count--;
-  if (g_shared.init_count > 0)
-    return;
+  if (g_shared.init_count > 0) return;
 
   if (g_shared.proactor_pool) {
     iree_async_proactor_pool_release(g_shared.proactor_pool);
@@ -156,9 +149,8 @@ static void hrx_release_shared_state(void) {
 // This matches the proven path in PyTorch's HrxRuntime::initialize().
 // group_count controls the task executor parallelism.
 static hrx_status_t hrx_create_local_task_device(
-    int group_count, iree_task_executor_t **out_executor,
-    iree_hal_driver_t **out_driver, iree_hal_device_t **out_hal_device) {
-
+    int group_count, iree_task_executor_t** out_executor,
+    iree_hal_driver_t** out_driver, iree_hal_device_t** out_hal_device) {
   iree_allocator_t alloc = g_shared.host_allocator;
 
   // Task topology + executor.
@@ -172,7 +164,7 @@ static hrx_status_t hrx_create_local_task_device(
   // size from 16KB. Use 256KB which is safe for ASAN builds too.
   exec_options.worker_stack_size = 256 * 1024;
 
-  iree_task_executor_t *executor = NULL;
+  iree_task_executor_t* executor = NULL;
   iree_status_t status =
       iree_task_executor_create(exec_options, &topology, alloc, &executor);
   iree_task_topology_deinitialize(&topology);
@@ -181,7 +173,7 @@ static hrx_status_t hrx_create_local_task_device(
   }
 
   // Executable loaders.
-  iree_hal_executable_loader_t *loaders[8] = {NULL};
+  iree_hal_executable_loader_t* loaders[8] = {NULL};
   iree_host_size_t loader_count = 0;
   status = iree_hal_create_all_available_executable_loaders(
       /*plugin_manager=*/NULL, IREE_ARRAYSIZE(loaders), &loader_count, loaders,
@@ -192,7 +184,7 @@ static hrx_status_t hrx_create_local_task_device(
   }
 
   // Heap allocator for host-accessible buffers.
-  iree_hal_allocator_t *device_allocator = NULL;
+  iree_hal_allocator_t* device_allocator = NULL;
   status = iree_hal_allocator_create_heap(iree_make_cstring_view("hrx"), alloc,
                                           alloc, &device_allocator);
   if (!iree_status_is_ok(status)) {
@@ -206,7 +198,7 @@ static hrx_status_t hrx_create_local_task_device(
   iree_hal_task_device_params_t task_params;
   iree_hal_task_device_params_initialize(&task_params);
 
-  iree_hal_driver_t *driver = NULL;
+  iree_hal_driver_t* driver = NULL;
   status = iree_hal_task_driver_create(
       iree_make_cstring_view("local-task"), &task_params,
       /*queue_count=*/1, &executor, loader_count, loaders, device_allocator,
@@ -227,7 +219,7 @@ static hrx_status_t hrx_create_local_task_device(
       iree_hal_device_create_params_default();
   device_params.proactor_pool = g_shared.proactor_pool;
 
-  iree_hal_device_t *hal_device = NULL;
+  iree_hal_device_t* hal_device = NULL;
   status = iree_hal_driver_create_default_device(driver, &device_params, alloc,
                                                  &hal_device);
   if (!iree_status_is_ok(status)) {
@@ -243,38 +235,37 @@ static hrx_status_t hrx_create_local_task_device(
   // The driver owns the executor internally. Set output to NULL.
   iree_task_topology_deinitialize(&out_topology);
 
-  *out_executor = NULL; // Driver manages executor lifetime.
+  *out_executor = NULL;  // Driver manages executor lifetime.
   *out_driver = driver;
   *out_hal_device = hal_device;
   return hrx_ok_status();
 }
 
-static const char *hrx_get_gpu_driver_name(void) {
-  const char *value = getenv("HRX_GPU_DRIVER");
+static const char* hrx_get_gpu_driver_name(void) {
+  const char* value = getenv("HRX_GPU_DRIVER");
   return (value && value[0]) ? value : "amdgpu";
 }
 
 static bool hrx_gpu_debug_enabled(void) {
-  const char *value = getenv("HRX_GPU_DEBUG");
+  const char* value = getenv("HRX_GPU_DEBUG");
   return value && value[0] && strcmp(value, "0") != 0;
 }
 
-static const char *hrx_get_profile_file_path(void) {
-  const char *value = getenv("HRX_PROFILE_FILE");
+static const char* hrx_get_profile_file_path(void) {
+  const char* value = getenv("HRX_PROFILE_FILE");
   return (value && value[0]) ? value : NULL;
 }
 
-static iree_status_t
-hrx_profile_file_sink_create(const char *file_path,
-                             iree_allocator_t host_allocator,
-                             iree_hal_profile_sink_t **out_sink) {
+static iree_status_t hrx_profile_file_sink_create(
+    const char* file_path, iree_allocator_t host_allocator,
+    iree_hal_profile_sink_t** out_sink) {
   IREE_ASSERT_ARGUMENT(out_sink);
   *out_sink = NULL;
   if (!file_path || !file_path[0]) {
     return iree_ok_status();
   }
 
-  iree_io_file_handle_t *file_handle = NULL;
+  iree_io_file_handle_t* file_handle = NULL;
   iree_status_t status = iree_io_file_handle_create(
       IREE_IO_FILE_MODE_WRITE | IREE_IO_FILE_MODE_SEQUENTIAL_SCAN |
           IREE_IO_FILE_MODE_SHARE_READ,
@@ -288,12 +279,11 @@ hrx_profile_file_sink_create(const char *file_path,
   return status;
 }
 
-static iree_status_t
-hrx_get_profile_data_families(
-    iree_hal_device_profiling_data_families_t *out_data_families) {
+static iree_status_t hrx_get_profile_data_families(
+    iree_hal_device_profiling_data_families_t* out_data_families) {
   IREE_ASSERT_ARGUMENT(out_data_families);
 
-  const char *value = getenv("HRX_PROFILE_MODE");
+  const char* value = getenv("HRX_PROFILE_MODE");
   if (!value || !value[0] || strcmp(value, "queue") == 0) {
     *out_data_families = IREE_HAL_DEVICE_PROFILING_DATA_QUEUE_EVENTS;
   } else if (strcmp(value, "dispatch") == 0) {
@@ -317,15 +307,14 @@ hrx_get_profile_data_families(
   return iree_ok_status();
 }
 
-static iree_status_t hrx_device_profile_begin(hrx_device_s *device,
-                                              iree_hal_profile_sink_t *sink) {
+static iree_status_t hrx_device_profile_begin(hrx_device_s* device,
+                                              iree_hal_profile_sink_t* sink) {
   if (!device || !sink) {
     return iree_ok_status();
   }
 
   iree_hal_device_profiling_options_t options = {0};
-  IREE_RETURN_IF_ERROR(
-      hrx_get_profile_data_families(&options.data_families));
+  IREE_RETURN_IF_ERROR(hrx_get_profile_data_families(&options.data_families));
   options.sink = sink;
   iree_status_t status =
       iree_hal_device_profiling_begin(device->hal_device, &options);
@@ -335,7 +324,7 @@ static iree_status_t hrx_device_profile_begin(hrx_device_s *device,
   return status;
 }
 
-static iree_status_t hrx_device_profile_end(hrx_device_s *device) {
+static iree_status_t hrx_device_profile_end(hrx_device_s* device) {
   if (!device || !device->profiling_active || !device->hal_device) {
     return iree_ok_status();
   }
@@ -366,12 +355,11 @@ static void hrx_gpu_release_created_devices(int count) {
   }
 }
 
-static void hrx_debug_print_iree_status(const char *label,
+static void hrx_debug_print_iree_status(const char* label,
                                         iree_status_t status) {
-  if (!hrx_gpu_debug_enabled() || iree_status_is_ok(status))
-    return;
+  if (!hrx_gpu_debug_enabled() || iree_status_is_ok(status)) return;
   iree_allocator_t allocator = iree_allocator_system();
-  char *message = NULL;
+  char* message = NULL;
   iree_host_size_t message_length = 0;
   if (iree_status_to_string(status, &allocator, &message, &message_length)) {
     fprintf(stderr, "hrx gpu debug: %s: %s\n", label,
@@ -383,9 +371,8 @@ static void hrx_debug_print_iree_status(const char *label,
 }
 
 #ifdef HRX_HAS_IREE_AMDGPU_DRIVER
-static hrx_status_t
-hrx_create_iree_amdgpu_driver(iree_allocator_t alloc,
-                              iree_hal_driver_t **out_driver) {
+static hrx_status_t hrx_create_iree_amdgpu_driver(
+    iree_allocator_t alloc, iree_hal_driver_t** out_driver) {
   iree_status_t status = iree_hal_amdgpu_driver_module_register(
       iree_hal_driver_registry_default());
   if (iree_status_is_already_exists(status)) {
@@ -397,7 +384,7 @@ hrx_create_iree_amdgpu_driver(iree_allocator_t alloc,
     return hrx_status_from_iree(status);
   }
 
-  iree_hal_driver_t *driver = NULL;
+  iree_hal_driver_t* driver = NULL;
   status = iree_hal_driver_registry_try_create(
       iree_hal_driver_registry_default(), iree_make_cstring_view("amdgpu"),
       alloc, &driver);
@@ -412,8 +399,8 @@ hrx_create_iree_amdgpu_driver(iree_allocator_t alloc,
 #endif
 
 static hrx_status_t hrx_create_gpu_driver(iree_allocator_t alloc,
-                                          iree_hal_driver_t **out_driver) {
-  const char *driver_name = hrx_get_gpu_driver_name();
+                                          iree_hal_driver_t** out_driver) {
+  const char* driver_name = hrx_get_gpu_driver_name();
 #ifdef HRX_HAS_IREE_AMDGPU_DRIVER
   if (strcmp(driver_name, "amdgpu") == 0) {
     return hrx_create_iree_amdgpu_driver(alloc, out_driver);
@@ -443,19 +430,18 @@ hrx_status_t hrx_cpu_initialize(uint32_t flags) {
   }
 
   hrx_status_t status = hrx_ensure_shared_state();
-  if (!hrx_status_is_ok(status))
-    return status;
+  if (!hrx_status_is_ok(status)) return status;
 
-  iree_hal_driver_t *driver = NULL;
-  iree_hal_device_t *hal_device = NULL;
-  iree_task_executor_t *executor = NULL;
+  iree_hal_driver_t* driver = NULL;
+  iree_hal_device_t* hal_device = NULL;
+  iree_task_executor_t* executor = NULL;
   status = hrx_create_local_task_device(4, &executor, &driver, &hal_device);
   if (!hrx_status_is_ok(status)) {
     hrx_release_shared_state();
     return status;
   }
 
-  iree_hal_device_group_t *device_group = NULL;
+  iree_hal_device_group_t* device_group = NULL;
   iree_status_t iree_status = hrx_create_single_device_group(
       hal_device, g_shared.host_allocator, &device_group);
   if (!iree_status_is_ok(iree_status)) {
@@ -465,7 +451,7 @@ hrx_status_t hrx_cpu_initialize(uint32_t flags) {
     return hrx_status_from_iree(iree_status);
   }
 
-  hrx_device_s *dev = &g_cpu.devices[0];
+  hrx_device_s* dev = &g_cpu.devices[0];
   memset(dev, 0, sizeof(*dev));
   iree_atomic_ref_count_init(&dev->ref_count);
   dev->type = HRX_ACCELERATOR_CPU;
@@ -505,7 +491,7 @@ hrx_status_t hrx_cpu_shutdown(void) {
   return hrx_ok_status();
 }
 
-hrx_status_t hrx_cpu_device_count(int *count) {
+hrx_status_t hrx_cpu_device_count(int* count) {
   if (!count) {
     return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT, "count is NULL");
   }
@@ -517,7 +503,7 @@ hrx_status_t hrx_cpu_device_count(int *count) {
   return hrx_ok_status();
 }
 
-hrx_status_t hrx_cpu_device_get(int index, hrx_device_t *device) {
+hrx_status_t hrx_cpu_device_get(int index, hrx_device_t* device) {
   if (!device) {
     return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT, "device is NULL");
   }
@@ -550,12 +536,11 @@ hrx_status_t hrx_gpu_initialize(uint32_t flags) {
       "no GPU driver available (built without AMDGPU support)");
 #else
   hrx_status_t status = hrx_ensure_shared_state();
-  if (!hrx_status_is_ok(status))
-    return status;
+  if (!hrx_status_is_ok(status)) return status;
 
   iree_allocator_t alloc = g_shared.host_allocator;
 
-  iree_hal_driver_t *driver = NULL;
+  iree_hal_driver_t* driver = NULL;
   status = hrx_create_gpu_driver(alloc, &driver);
   if (!hrx_status_is_ok(status)) {
     hrx_release_shared_state();
@@ -565,7 +550,7 @@ hrx_status_t hrx_gpu_initialize(uint32_t flags) {
   // Enumerate available GPU devices.
   iree_status_t iree_status = iree_ok_status();
   iree_host_size_t device_info_count = 0;
-  iree_hal_device_info_t *device_infos = NULL;
+  iree_hal_device_info_t* device_infos = NULL;
   iree_status = iree_hal_driver_query_available_devices(
       driver, alloc, &device_info_count, &device_infos);
   hrx_debug_print_iree_status("query available devices", iree_status);
@@ -591,8 +576,7 @@ hrx_status_t hrx_gpu_initialize(uint32_t flags) {
   // physical device. HRX exposes physical devices to callers.
   int physical_count = 0;
   for (iree_host_size_t i = 0; i < device_info_count; ++i) {
-    if (device_infos[i].path.size == 0)
-      continue;
+    if (device_infos[i].path.size == 0) continue;
     physical_count++;
   }
   if (physical_count == 0) {
@@ -610,8 +594,8 @@ hrx_status_t hrx_gpu_initialize(uint32_t flags) {
       iree_hal_device_create_params_default();
   create_params.proactor_pool = g_shared.proactor_pool;
 
-  iree_hal_profile_sink_t *profile_sink = NULL;
-  const char *profile_file_path = hrx_get_profile_file_path();
+  iree_hal_profile_sink_t* profile_sink = NULL;
+  const char* profile_file_path = hrx_get_profile_file_path();
   if (profile_file_path) {
     iree_status =
         hrx_profile_file_sink_create(profile_file_path, alloc, &profile_sink);
@@ -627,10 +611,9 @@ hrx_status_t hrx_gpu_initialize(uint32_t flags) {
   int created_count = 0;
   for (iree_host_size_t info_index = 0;
        info_index < device_info_count && created_count < count; ++info_index) {
-    if (device_infos[info_index].path.size == 0)
-      continue;
+    if (device_infos[info_index].path.size == 0) continue;
 
-    iree_hal_device_t *hal_device = NULL;
+    iree_hal_device_t* hal_device = NULL;
     iree_status = iree_hal_driver_create_device_by_ordinal(
         driver, info_index, /*param_count=*/0, /*params=*/NULL, &create_params,
         alloc, &hal_device);
@@ -644,7 +627,7 @@ hrx_status_t hrx_gpu_initialize(uint32_t flags) {
       return hrx_status_from_iree(iree_status);
     }
 
-    iree_hal_device_group_t *device_group = NULL;
+    iree_hal_device_group_t* device_group = NULL;
     iree_status =
         hrx_create_single_device_group(hal_device, alloc, &device_group);
     if (!iree_status_is_ok(iree_status)) {
@@ -657,7 +640,7 @@ hrx_status_t hrx_gpu_initialize(uint32_t flags) {
       return hrx_status_from_iree(iree_status);
     }
 
-    hrx_device_s *dev = &g_gpu.devices[created_count];
+    hrx_device_s* dev = &g_gpu.devices[created_count];
     memset(dev, 0, sizeof(*dev));
     iree_atomic_ref_count_init(&dev->ref_count);
     dev->type = HRX_ACCELERATOR_GPU;
@@ -670,8 +653,7 @@ hrx_status_t hrx_gpu_initialize(uint32_t flags) {
     dev->allocator.device = dev;
 
     iree_host_size_t name_len = device_infos[info_index].name.size;
-    if (name_len >= sizeof(dev->name))
-      name_len = sizeof(dev->name) - 1;
+    if (name_len >= sizeof(dev->name)) name_len = sizeof(dev->name) - 1;
     memcpy(dev->name, device_infos[info_index].name.data, name_len);
     dev->name[name_len] = '\0';
 
@@ -698,7 +680,7 @@ hrx_status_t hrx_gpu_initialize(uint32_t flags) {
   g_gpu.device_count = created_count;
   g_gpu.initialized = true;
   return hrx_ok_status();
-#endif // HRX_HAS_IREE_AMDGPU_DRIVER
+#endif  // HRX_HAS_IREE_AMDGPU_DRIVER
 }
 
 hrx_status_t hrx_gpu_shutdown(void) {
@@ -725,7 +707,7 @@ hrx_status_t hrx_gpu_shutdown(void) {
   return hrx_ok_status();
 }
 
-hrx_status_t hrx_gpu_device_count(int *count) {
+hrx_status_t hrx_gpu_device_count(int* count) {
   if (!count) {
     return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT, "count is NULL");
   }
@@ -737,7 +719,7 @@ hrx_status_t hrx_gpu_device_count(int *count) {
   return hrx_ok_status();
 }
 
-hrx_status_t hrx_gpu_device_get(int index, hrx_device_t *device) {
+hrx_status_t hrx_gpu_device_get(int index, hrx_device_t* device) {
   if (!device) {
     return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT, "device is NULL");
   }

@@ -9,6 +9,16 @@
 load("//libhrx/build_tools/bazel:cc.bzl", "hrx_cc_test")
 
 def hrx_cts_test(name, srcs, deps = None, data = None, args = None, **kwargs):
+    """Defines an HRX CTS executable with the standard runtime library argument.
+
+    Args:
+      name: Short CTS case name, without the `hrx_cts_` target prefix.
+      srcs: Source files for the CTS executable.
+      deps: Additional dependencies for the CTS executable.
+      data: Additional runtime data files for the CTS executable.
+      args: Additional command-line arguments passed to the CTS executable.
+      **kwargs: Additional `hrx_cc_test` keyword arguments.
+    """
     if deps == None:
         deps = []
     if data == None:
@@ -20,7 +30,7 @@ def hrx_cts_test(name, srcs, deps = None, data = None, args = None, **kwargs):
         srcs = srcs,
         deps = [
             ":core",
-            "@catch2//:catch2",
+            "//third_party:catch2",
         ] + deps,
         data = [
             "//libhrx/src/libhrx:hrx",
@@ -31,4 +41,3 @@ def hrx_cts_test(name, srcs, deps = None, data = None, args = None, **kwargs):
         ] + args,
         **kwargs
     )
-
