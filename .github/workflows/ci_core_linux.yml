@@ -113,6 +113,7 @@ jobs:
       name: Linux / CMake / GPU gfx942
       artifact_run_id: ${{ github.run_id }}
       device: gpu:0
+      ctest_regex: "^libhrx/cts/"
       ctest_label_regex: runtime-resource=amd-gpu
       ctest_parallelism: 1
 

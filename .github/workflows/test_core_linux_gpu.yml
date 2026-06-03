@@ -18,6 +18,9 @@ on:
       device:
         type: string
         default: gpu:0
+      ctest_regex:
+        type: string
+        default: "^libhrx/cts/"
       ctest_label_regex:
         type: string
         default: runtime-resource=amd-gpu
@@ -37,6 +40,10 @@ on:
         type: string
         description: "libhrx CTS device spec."
         default: gpu:0
+      ctest_regex:
+        type: string
+        description: "CTest name regex for installed GPU tests."
+        default: "^libhrx/cts/"
       ctest_label_regex:
         type: string
         description: "CTest label regex for GPU installed tests."
@@ -70,8 +77,9 @@ jobs:
       HRX_PACKAGE_SMOKE: "false"
       HRX_TEST_GPU: "true"
       HRX_CTS_DEVICE: ${{ inputs.device || 'gpu:0' }}
-      HRX_CTEST_LABEL_REGEX: ${{ inputs.ctest_label_regex || 'runtime-resource=amd-gpu' }}
-      HRX_CTEST_LABEL_EXCLUDE_REGEX: ${{ inputs.ctest_label_exclude_regex || '' }}
+      HRX_CTEST_REGEX: ${{ inputs.ctest_regex }}
+      HRX_CTEST_LABEL_REGEX: ${{ inputs.ctest_label_regex }}
+      HRX_CTEST_LABEL_EXCLUDE_REGEX: ${{ inputs.ctest_label_exclude_regex }}
       HRX_CTEST_PARALLELISM: ${{ inputs.ctest_parallelism || 1 }}
       HRX_TEST_TMPDIR: ${{ github.workspace }}/build/linux-gpu/test-tmp
       HRX_PYTHON: ${{ github.workspace }}/build/linux-gpu/python/bin/python3

@@ -172,6 +172,13 @@ ctest --test-dir build/hrx-tests/share/hrx-system/tests \
   --output-on-failure -LE runtime-resource=
 ```
 
+The HRX GPU CTS run uses the HRX test namespace plus the AMD GPU resource label:
+
+```bash
+ctest --test-dir build/hrx-tests/share/hrx-system/tests \
+  --output-on-failure -R '^libhrx/cts/' -L runtime-resource=amd-gpu
+```
+
 ## Release Artifacts
 
 Tagged releases publish one tarball per artifact, plus manifests and environment
