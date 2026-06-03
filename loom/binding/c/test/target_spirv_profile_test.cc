@@ -34,7 +34,8 @@ using TargetProfilePtr =
 using TargetSelectionPtr =
     HandlePtr<loomc_target_selection_t, loomc_target_selection_release>;
 
-constexpr uint32_t kSpirvVersion13 = 0x00010300;
+constexpr uint32_t kSpirvVersion10 = LOOMC_SPIRV_VERSION_1_0;
+constexpr uint32_t kSpirvVersion13 = LOOMC_SPIRV_VERSION_1_3;
 constexpr uint32_t kSpirvAddressingModelLogical = 0;
 constexpr uint32_t kSpirvAddressingModelPhysicalStorageBuffer64 = 5348;
 constexpr uint32_t kSpirvMemoryModelGlsl450 = 1;
@@ -256,6 +257,20 @@ void ExpectLimitValue(const loomc_target_profile_t* profile,
   EXPECT_EQ(value.value, expected_value);
 }
 
+void ExpectEnvironmentValue(const loomc_target_profile_t* profile,
+                            loomc_spirv_environment_t environment,
+                            loomc_target_fact_state_t expected_state,
+                            uint64_t expected_value) {
+  loomc_spirv_environment_value_t value = {
+      /*.state=*/LOOMC_TARGET_FACT_STATE_UNKNOWN,
+      /*.value=*/0,
+  };
+  LOOMC_EXPECT_OK(loomc_spirv_target_profile_query_environment(
+      profile, environment, &value));
+  EXPECT_EQ(value.state, expected_state);
+  EXPECT_EQ(value.value, expected_value);
+}
+
 void ExpectPartialProfileSelection(const loomc_target_profile_t* profile) {
   const loom_target_selection_t selection =
       loomc_target_profile_loom_target_selection(profile);
@@ -303,6 +318,9 @@ TEST(TargetSpirvProfileTest, CreatesEmptyPartialProfile) {
                    LOOMC_TARGET_FACT_STATE_UNKNOWN, 0);
   ExpectLimitValue(profile.get(), LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE,
                    LOOMC_TARGET_FACT_STATE_UNKNOWN, 0);
+  ExpectEnvironmentValue(profile.get(),
+                         LOOMC_SPIRV_ENVIRONMENT_MAX_SPIRV_VERSION,
+                         LOOMC_TARGET_FACT_STATE_UNKNOWN, 0);
 }
 
 TEST(TargetSpirvProfileTest, PreservesExplicitNumericLimitFacts) {
@@ -346,6 +364,8 @@ TEST(TargetSpirvProfileTest, PreservesExplicitNumericLimitFacts) {
       /*.feature_fact_count=*/0,
       /*.limit_facts=*/limits,
       /*.limit_fact_count=*/4,
+      /*.environment_facts=*/nullptr,
+      /*.environment_fact_count=*/0,
   };
   TargetProfilePtr profile =
       CreateSpirvProfile(target_environment.get(), &options);
@@ -370,6 +390,37 @@ TEST(TargetSpirvProfileTest, PreservesExplicitNumericLimitFacts) {
                    LOOMC_TARGET_FACT_STATE_TRUE, 65535);
 }
 
+TEST(TargetSpirvProfileTest, PreservesExplicitEnvironmentFacts) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_spirv_environment_fact_t environment[] = {
+      {
+          /*.environment=*/LOOMC_SPIRV_ENVIRONMENT_MAX_SPIRV_VERSION,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.value=*/kSpirvVersion13,
+          /*.provenance=*/loomc_make_cstring_view("vulkaninfo:apiVersion"),
+      },
+  };
+  loomc_spirv_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("offline-vulkan13-environment"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_VULKAN_1_3_BDA,
+      /*.feature_facts=*/nullptr,
+      /*.feature_fact_count=*/0,
+      /*.limit_facts=*/nullptr,
+      /*.limit_fact_count=*/0,
+      /*.environment_facts=*/environment,
+      /*.environment_fact_count=*/1,
+  };
+  TargetProfilePtr profile =
+      CreateSpirvProfile(target_environment.get(), &options);
+  ExpectVulkanBdaProfileBundle(profile.get());
+  ExpectEnvironmentValue(profile.get(),
+                         LOOMC_SPIRV_ENVIRONMENT_MAX_SPIRV_VERSION,
+                         LOOMC_TARGET_FACT_STATE_TRUE, kSpirvVersion13);
+}
+
 TEST(TargetSpirvProfileTest, CreatesPresetProfileAndQueriesRows) {
   TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
   loomc_spirv_profile_options_t options = {
@@ -382,6 +433,8 @@ TEST(TargetSpirvProfileTest, CreatesPresetProfileAndQueriesRows) {
       /*.feature_fact_count=*/0,
       /*.limit_facts=*/nullptr,
       /*.limit_fact_count=*/0,
+      /*.environment_facts=*/nullptr,
+      /*.environment_fact_count=*/0,
   };
   TargetProfilePtr profile =
       CreateSpirvProfile(target_environment.get(), &options);
@@ -450,6 +503,8 @@ TEST(TargetSpirvProfileTest, RefinesPresetWithExplicitTrueFact) {
       /*.feature_fact_count=*/1,
       /*.limit_facts=*/nullptr,
       /*.limit_fact_count=*/0,
+      /*.environment_facts=*/nullptr,
+      /*.environment_fact_count=*/0,
   };
   TargetProfilePtr profile =
       CreateSpirvProfile(target_environment.get(), &options);
@@ -499,6 +554,8 @@ TEST(TargetSpirvProfileTest, QueriesCooperativePropertyRows) {
       /*.feature_fact_count=*/3,
       /*.limit_facts=*/nullptr,
       /*.limit_fact_count=*/0,
+      /*.environment_facts=*/nullptr,
+      /*.environment_fact_count=*/0,
   };
   TargetProfilePtr profile =
       CreateSpirvProfile(target_environment.get(), &options);
@@ -594,6 +651,8 @@ TEST(TargetSpirvProfileTest, PreservesKnownFalseFeatureFacts) {
       /*.feature_fact_count=*/1,
       /*.limit_facts=*/nullptr,
       /*.limit_fact_count=*/0,
+      /*.environment_facts=*/nullptr,
+      /*.environment_fact_count=*/0,
   };
   TargetProfilePtr profile =
       CreateSpirvProfile(target_environment.get(), &options);
@@ -629,6 +688,8 @@ TEST(TargetSpirvProfileTest, ReportsContradictoryFactsWithProvenance) {
       /*.feature_fact_count=*/2,
       /*.limit_facts=*/nullptr,
       /*.limit_fact_count=*/0,
+      /*.environment_facts=*/nullptr,
+      /*.environment_fact_count=*/0,
   };
   loomc_target_profile_t* profile = nullptr;
   loomc_result_t* result = nullptr;
@@ -678,6 +739,8 @@ TEST(TargetSpirvProfileTest, ReportsContradictoryLimitFactsWithProvenance) {
       /*.feature_fact_count=*/0,
       /*.limit_facts=*/limits,
       /*.limit_fact_count=*/2,
+      /*.environment_facts=*/nullptr,
+      /*.environment_fact_count=*/0,
   };
   loomc_target_profile_t* profile = nullptr;
   loomc_result_t* result = nullptr;
@@ -703,6 +766,58 @@ TEST(TargetSpirvProfileTest, ReportsContradictoryLimitFactsWithProvenance) {
   EXPECT_THAT(ToString(diagnostic->message), ::testing::HasSubstr("64"));
 }
 
+TEST(TargetSpirvProfileTest,
+     ReportsContradictoryEnvironmentFactsWithProvenance) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_spirv_environment_fact_t environment[] = {
+      {
+          /*.environment=*/LOOMC_SPIRV_ENVIRONMENT_MAX_SPIRV_VERSION,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.value=*/kSpirvVersion13,
+          /*.provenance=*/loomc_make_cstring_view("probe:a"),
+      },
+      {
+          /*.environment=*/LOOMC_SPIRV_ENVIRONMENT_MAX_SPIRV_VERSION,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.value=*/kSpirvVersion10,
+          /*.provenance=*/loomc_make_cstring_view("override:b"),
+      },
+  };
+  loomc_spirv_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("contradictory-environment"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_NONE,
+      /*.feature_facts=*/nullptr,
+      /*.feature_fact_count=*/0,
+      /*.limit_facts=*/nullptr,
+      /*.limit_fact_count=*/0,
+      /*.environment_facts=*/environment,
+      /*.environment_fact_count=*/2,
+  };
+  loomc_target_profile_t* profile = nullptr;
+  loomc_result_t* result = nullptr;
+  loomc_status_t status = loomc_target_profile_create_spirv(
+      target_environment.get(), &options, loomc_allocator_system(), &profile,
+      &result);
+  LOOMC_EXPECT_OK(status);
+  TargetProfilePtr profile_ptr(profile);
+  ResultPtr result_ptr(result);
+  EXPECT_EQ(profile_ptr.get(), nullptr);
+  ExpectFailedResult(result_ptr.get());
+  const loomc_diagnostic_t* diagnostic =
+      loomc_result_diagnostic_at(result_ptr.get(), 0);
+  ASSERT_NE(diagnostic, nullptr);
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("contradictory values"));
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("spirv.max_spirv_version"));
+  EXPECT_THAT(ToString(diagnostic->message), ::testing::HasSubstr("probe:a"));
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("override:b"));
+}
+
 TEST(TargetSpirvProfileTest, ReportsInvalidZeroLimitValuesAsResult) {
   TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
   loomc_spirv_limit_fact_t limits[] = {
@@ -723,6 +838,8 @@ TEST(TargetSpirvProfileTest, ReportsInvalidZeroLimitValuesAsResult) {
       /*.feature_fact_count=*/0,
       /*.limit_facts=*/limits,
       /*.limit_fact_count=*/1,
+      /*.environment_facts=*/nullptr,
+      /*.environment_fact_count=*/0,
   };
   loomc_target_profile_t* profile = nullptr;
   loomc_result_t* result = nullptr;
@@ -765,6 +882,8 @@ TEST(TargetSpirvProfileTest, ReportsOutOfRangeLimitValuesAsResult) {
       /*.feature_fact_count=*/0,
       /*.limit_facts=*/limits,
       /*.limit_fact_count=*/1,
+      /*.environment_facts=*/nullptr,
+      /*.environment_fact_count=*/0,
   };
   loomc_target_profile_t* profile = nullptr;
   loomc_result_t* result = nullptr;
@@ -787,6 +906,50 @@ TEST(TargetSpirvProfileTest, ReportsOutOfRangeLimitValuesAsResult) {
               ::testing::HasSubstr("probe:too-large"));
 }
 
+TEST(TargetSpirvProfileTest, ReportsEnvironmentVersionTooLowAsResult) {
+  TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
+  loomc_spirv_environment_fact_t environment[] = {
+      {
+          /*.environment=*/LOOMC_SPIRV_ENVIRONMENT_MAX_SPIRV_VERSION,
+          /*.state=*/LOOMC_TARGET_FACT_STATE_TRUE,
+          /*.value=*/kSpirvVersion10,
+          /*.provenance=*/loomc_make_cstring_view("vulkaninfo:apiVersion"),
+      },
+  };
+  loomc_spirv_profile_options_t options = {
+      /*.type=*/LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
+      /*.structure_size=*/sizeof(options),
+      /*.next=*/nullptr,
+      /*.identifier=*/loomc_make_cstring_view("vulkan13-on-spirv10"),
+      /*.preset=*/LOOMC_SPIRV_PROFILE_PRESET_VULKAN_1_3_BDA,
+      /*.feature_facts=*/nullptr,
+      /*.feature_fact_count=*/0,
+      /*.limit_facts=*/nullptr,
+      /*.limit_fact_count=*/0,
+      /*.environment_facts=*/environment,
+      /*.environment_fact_count=*/1,
+  };
+  loomc_target_profile_t* profile = nullptr;
+  loomc_result_t* result = nullptr;
+  loomc_status_t status = loomc_target_profile_create_spirv(
+      target_environment.get(), &options, loomc_allocator_system(), &profile,
+      &result);
+  LOOMC_EXPECT_OK(status);
+  TargetProfilePtr profile_ptr(profile);
+  ResultPtr result_ptr(result);
+  EXPECT_EQ(profile_ptr.get(), nullptr);
+  ExpectFailedResult(result_ptr.get());
+  const loomc_diagnostic_t* diagnostic =
+      loomc_result_diagnostic_at(result_ptr.get(), 0);
+  ASSERT_NE(diagnostic, nullptr);
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("requires SPIR-V version"));
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("spirv.max_spirv_version"));
+  EXPECT_THAT(ToString(diagnostic->message),
+              ::testing::HasSubstr("vulkaninfo:apiVersion"));
+}
+
 TEST(TargetSpirvProfileTest, ReportsMissingFeatureDependenciesAsResult) {
   TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
   loomc_spirv_feature_fact_t facts[] = {
@@ -807,6 +970,8 @@ TEST(TargetSpirvProfileTest, ReportsMissingFeatureDependenciesAsResult) {
       /*.feature_fact_count=*/1,
       /*.limit_facts=*/nullptr,
       /*.limit_fact_count=*/0,
+      /*.environment_facts=*/nullptr,
+      /*.environment_fact_count=*/0,
   };
   loomc_target_profile_t* profile = nullptr;
   loomc_result_t* result = nullptr;
@@ -855,6 +1020,17 @@ TEST(TargetSpirvProfileTest, RejectsNonSpirvProfileQueries) {
   loomc_status_t limit_query_status = loomc_spirv_target_profile_query_limit(
       profile_ptr.get(), LOOMC_SPIRV_LIMIT_SUBGROUP_SIZE, &value);
   LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_INVALID_ARGUMENT, limit_query_status);
+
+  loomc_spirv_environment_value_t environment_value = {
+      /*.state=*/LOOMC_TARGET_FACT_STATE_UNKNOWN,
+      /*.value=*/0,
+  };
+  loomc_status_t environment_query_status =
+      loomc_spirv_target_profile_query_environment(
+          profile_ptr.get(), LOOMC_SPIRV_ENVIRONMENT_MAX_SPIRV_VERSION,
+          &environment_value);
+  LOOMC_EXPECT_STATUS_IS(LOOMC_STATUS_INVALID_ARGUMENT,
+                         environment_query_status);
 }
 
 TEST(TargetSpirvProfileTest, PreparedProfileSelectionCreatesTargetPipeline) {
@@ -869,6 +1045,8 @@ TEST(TargetSpirvProfileTest, PreparedProfileSelectionCreatesTargetPipeline) {
       /*.feature_fact_count=*/0,
       /*.limit_facts=*/nullptr,
       /*.limit_fact_count=*/0,
+      /*.environment_facts=*/nullptr,
+      /*.environment_fact_count=*/0,
   };
   TargetProfilePtr profile =
       CreateSpirvProfile(target_environment.get(), &profile_options);

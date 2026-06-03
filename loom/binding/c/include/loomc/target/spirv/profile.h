@@ -22,9 +22,10 @@
 /// until a caller supplies a stronger observation; false means a feature is
 /// known to be unavailable. Contradictory true/false facts are reported through
 /// the returned `loomc_result_t` with provenance strings preserved in the
-/// diagnostic text. Numeric limits follow the same tri-state model: true means
-/// the value is known, false means the limit is known not to apply to this
-/// profile, and unknown preserves partial-target compilation.
+/// diagnostic text. Numeric limits and environment facts follow the same
+/// tri-state model: true means the value is known, false means the fact is
+/// known not to apply to this profile, and unknown preserves partial-target
+/// compilation.
 ///
 /// @par Example
 /// Create a reusable Vulkan-style SPIR-V profile and target selection:
@@ -46,6 +47,14 @@
 ///             loomc_make_cstring_view("vulkaninfo:maxComputeWorkGroupSize[0]"),
 ///     },
 /// };
+/// loomc_spirv_environment_fact_t environment[] = {
+///     {
+///         .environment = LOOMC_SPIRV_ENVIRONMENT_MAX_SPIRV_VERSION,
+///         .state = LOOMC_TARGET_FACT_STATE_TRUE,
+///         .value = LOOMC_SPIRV_VERSION_1_3,
+///         .provenance = loomc_make_cstring_view("vulkaninfo:apiVersion"),
+///     },
+/// };
 /// loomc_spirv_profile_options_t options = {
 ///     .type = LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS,
 ///     .structure_size = sizeof(loomc_spirv_profile_options_t),
@@ -55,6 +64,8 @@
 ///     .feature_fact_count = 1,
 ///     .limit_facts = limits,
 ///     .limit_fact_count = 1,
+///     .environment_facts = environment,
+///     .environment_fact_count = 1,
 /// };
 /// loomc_target_profile_t* profile = NULL;
 /// loomc_result_t* result = NULL;
@@ -133,6 +144,16 @@ typedef enum loomc_spirv_feature_e {
 /// Bitset of `loomc_spirv_feature_t` values.
 typedef uint64_t loomc_spirv_feature_bits_t;
 
+/// Encodes a SPIR-V binary version word.
+#define LOOMC_SPIRV_VERSION(major, minor) \
+  ((((uint32_t)(major)) << 16) | (((uint32_t)(minor)) << 8))
+
+/// SPIR-V 1.0 binary version word.
+#define LOOMC_SPIRV_VERSION_1_0 LOOMC_SPIRV_VERSION(1, 0)
+
+/// SPIR-V 1.3 binary version word.
+#define LOOMC_SPIRV_VERSION_1_3 LOOMC_SPIRV_VERSION(1, 3)
+
 /// Returns the direct bit for a SPIR-V feature.
 static inline loomc_spirv_feature_bits_t loomc_spirv_feature_bit(
     loomc_spirv_feature_t feature) {
@@ -178,6 +199,22 @@ typedef enum loomc_spirv_limit_e {
   /// Number of public SPIR-V limit identifiers.
   LOOMC_SPIRV_LIMIT_COUNT = 9,
 } loomc_spirv_limit_t;
+
+/// Stable SPIR-V numeric environment fact identifier.
+///
+/// Environment facts describe the SPIR-V module environment accepted by the
+/// target independently from individual feature bits. They constrain feature
+/// selection but do not themselves imply extensions or capabilities.
+typedef enum loomc_spirv_environment_e {
+  /// Unknown or uninitialized environment fact.
+  LOOMC_SPIRV_ENVIRONMENT_UNKNOWN = 0,
+
+  /// Maximum SPIR-V binary version accepted by the target.
+  LOOMC_SPIRV_ENVIRONMENT_MAX_SPIRV_VERSION = 1,
+
+  /// Number of public SPIR-V environment identifiers.
+  LOOMC_SPIRV_ENVIRONMENT_COUNT = 2,
+} loomc_spirv_environment_t;
 
 /// SPIR-V semantic scalar type fact.
 ///
@@ -423,6 +460,30 @@ typedef struct loomc_spirv_limit_value_t {
   uint64_t value;
 } loomc_spirv_limit_value_t;
 
+/// One SPIR-V environment observation.
+typedef struct loomc_spirv_environment_fact_t {
+  /// Environment fact being observed.
+  loomc_spirv_environment_t environment;
+
+  /// Observed state for the environment fact.
+  loomc_target_fact_state_t state;
+
+  /// Observed environment value when `state` is `LOOMC_TARGET_FACT_STATE_TRUE`.
+  uint64_t value;
+
+  /// Borrowed provenance string used in diagnostics.
+  loomc_string_view_t provenance;
+} loomc_spirv_environment_fact_t;
+
+/// Queried SPIR-V environment fact state.
+typedef struct loomc_spirv_environment_value_t {
+  /// Known state for the environment fact.
+  loomc_target_fact_state_t state;
+
+  /// Environment value when `state` is `LOOMC_TARGET_FACT_STATE_TRUE`.
+  uint64_t value;
+} loomc_spirv_environment_value_t;
+
 /// SPIR-V target profile creation options.
 typedef struct loomc_spirv_profile_options_t {
   /// Structure type. Must be `LOOMC_STRUCTURE_TYPE_SPIRV_PROFILE_OPTIONS` when
@@ -452,6 +513,12 @@ typedef struct loomc_spirv_profile_options_t {
 
   /// Number of entries in `limit_facts`.
   loomc_host_size_t limit_fact_count;
+
+  /// Borrowed environment fact array.
+  const loomc_spirv_environment_fact_t* environment_facts;
+
+  /// Number of entries in `environment_facts`.
+  loomc_host_size_t environment_fact_count;
 } loomc_spirv_profile_options_t;
 
 /// Prepared SPIR-V profile summary.
@@ -618,6 +685,17 @@ LOOMC_API_EXPORT loomc_status_t loomc_spirv_target_profile_query_feature(
 LOOMC_API_EXPORT loomc_status_t loomc_spirv_target_profile_query_limit(
     const loomc_target_profile_t* profile, loomc_spirv_limit_t limit,
     loomc_spirv_limit_value_t* out_value);
+
+/// Returns the known state and value for one SPIR-V environment fact.
+///
+/// @param profile SPIR-V target profile to query.
+/// @param environment Environment fact to inspect.
+/// @param out_value Receives the environment state and value.
+/// @return OK when the environment state was returned.
+LOOMC_API_EXPORT loomc_status_t loomc_spirv_target_profile_query_environment(
+    const loomc_target_profile_t* profile,
+    loomc_spirv_environment_t environment,
+    loomc_spirv_environment_value_t* out_value);
 
 /// Returns prepared SPIR-V profile summary rows.
 ///
