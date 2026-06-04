@@ -124,9 +124,8 @@ _Static_assert(HRX_BUFFER_USAGE_DEFAULT == IREE_HAL_BUFFER_USAGE_DEFAULT,
 
 // HRX dispatch flags intentionally use their own bit assignments. Translate
 // them instead of casting into IREE HAL dispatch flags.
-static inline hrx_status_t
-hrx_iree_dispatch_flags_from_hrx(uint32_t hrx_flags,
-                                 iree_hal_dispatch_flags_t *out_iree_flags) {
+static inline hrx_status_t hrx_iree_dispatch_flags_from_hrx(
+    uint32_t hrx_flags, iree_hal_dispatch_flags_t* out_iree_flags) {
   *out_iree_flags = IREE_HAL_DISPATCH_FLAG_NONE;
   const uint32_t supported_flags = HRX_DISPATCH_FLAG_CUSTOM_DIRECT_ARGUMENTS |
                                    HRX_DISPATCH_FLAG_ALLOW_INLINE_EXECUTION;
