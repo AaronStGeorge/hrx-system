@@ -314,6 +314,87 @@ static std::vector<uint8_t> BuildElfWithMetadata(
   return BuildElfWithNote(metadata, IREE_SV("AMDGPU"), 32);
 }
 
+static void AlignVector(std::vector<uint8_t>* output, size_t alignment) {
+  while ((output->size() % alignment) != 0) output->push_back(0);
+}
+
+static void AppendElf64Symbol(std::vector<uint8_t>* output,
+                              uint32_t name_offset, uint8_t info,
+                              uint16_t section_index = 1) {
+  size_t symbol_offset = output->size();
+  output->resize(symbol_offset + 24, 0);
+  StoreU32LE(output, symbol_offset + 0, name_offset);
+  (*output)[symbol_offset + 4] = info;
+  StoreU16LE(output, symbol_offset + 6, section_index);
+}
+
+static std::vector<uint8_t> AddSyntheticCandidateSymbolSection(
+    std::vector<uint8_t> elf, uint8_t descriptor_info = 0x11,
+    uint16_t function_section_index = 1) {
+  constexpr uint8_t kGlobalFunction = 0x12;  // STB_GLOBAL | STT_FUNC.
+  constexpr size_t kSectionHeaderSize = 64;
+
+  const size_t string_offset = elf.size();
+  elf.push_back(0);
+  const uint32_t function_name_offset =
+      static_cast<uint32_t>(elf.size() - string_offset);
+  const char kFunctionName[] = "extra_kernel";
+  elf.insert(elf.end(), kFunctionName, kFunctionName + sizeof(kFunctionName));
+  const uint32_t descriptor_name_offset =
+      static_cast<uint32_t>(elf.size() - string_offset);
+  const char kDescriptorName[] = "extra_kernel.kd";
+  elf.insert(elf.end(), kDescriptorName,
+             kDescriptorName + sizeof(kDescriptorName));
+  const size_t string_size = elf.size() - string_offset;
+
+  AlignVector(&elf, 8);
+  const size_t symbol_offset = elf.size();
+  AppendElf64Symbol(&elf, 0, 0);
+  AppendElf64Symbol(&elf, function_name_offset, kGlobalFunction,
+                    function_section_index);
+  AppendElf64Symbol(&elf, descriptor_name_offset, descriptor_info);
+  const size_t symbol_size = elf.size() - symbol_offset;
+
+  AlignVector(&elf, 8);
+  const size_t section_offset = elf.size();
+  StoreU64LE(&elf, 40, section_offset);
+  StoreU16LE(&elf, 58, kSectionHeaderSize);
+  StoreU16LE(&elf, 60, 3);
+
+  elf.resize(section_offset + 3 * kSectionHeaderSize, 0);
+  const size_t string_section = section_offset + kSectionHeaderSize;
+  StoreU32LE(&elf, string_section + 4, 3);  // SHT_STRTAB.
+  StoreU64LE(&elf, string_section + 24, string_offset);
+  StoreU64LE(&elf, string_section + 32, string_size);
+  StoreU64LE(&elf, string_section + 48, 1);
+
+  const size_t symbol_section = section_offset + 2 * kSectionHeaderSize;
+  StoreU32LE(&elf, symbol_section + 4, 2);  // SHT_SYMTAB.
+  StoreU64LE(&elf, symbol_section + 24, symbol_offset);
+  StoreU64LE(&elf, symbol_section + 32, symbol_size);
+  StoreU32LE(&elf, symbol_section + 40, 1);  // sh_link: string table section.
+  StoreU64LE(&elf, symbol_section + 48, 8);
+  StoreU64LE(&elf, symbol_section + 56, 24);
+  return elf;
+}
+
+static std::vector<uint8_t> AddMalformedSymbolSection(
+    std::vector<uint8_t> elf) {
+  constexpr size_t kSectionHeaderSize = 64;
+  size_t section_offset = elf.size();
+  StoreU64LE(&elf, 40, section_offset);
+  StoreU16LE(&elf, 58, kSectionHeaderSize);
+  StoreU16LE(&elf, 60, 1);
+
+  elf.resize(section_offset + kSectionHeaderSize, 0);
+  StoreU32LE(&elf, section_offset + 4, 2);  // SHT_SYMTAB.
+  // Point inside the ELF but declare a section size that extends beyond EOF.
+  StoreU64LE(&elf, section_offset + 24, elf.size() - 8);
+  StoreU64LE(&elf, section_offset + 32, 64);
+  StoreU64LE(&elf, section_offset + 56, 24);
+  return elf;
+}
+
 static iree_const_byte_span_t ByteSpan(const std::vector<uint8_t>& data) {
   return iree_make_const_byte_span(data.data(), data.size());
 }
@@ -385,7 +466,7 @@ TEST(HsacoMetadataTest, ParsesValidMetadata) {
   iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
 }
 
-TEST(HsacoMetadataTest, PopulatesDefaultExportParameters) {
+TEST(HsacoMetadataTest, PopulatesFlatbufferHalExportParameters) {
   std::vector<uint8_t> elf = BuildElfWithMetadata(BuildKernelMetadata());
 
   iree_hal_amdgpu_hsaco_metadata_t metadata;
@@ -395,7 +476,7 @@ TEST(HsacoMetadataTest, PopulatesDefaultExportParameters) {
   const iree_hal_amdgpu_hsaco_metadata_kernel_t& kernel = metadata.kernels[0];
   iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
   IREE_ASSERT_OK(
-      iree_hal_amdgpu_hsaco_metadata_calculate_default_export_parameter_requirements(
+      iree_hal_amdgpu_hsaco_metadata_calculate_flatbuffer_hal_export_parameter_requirements(
           &kernel, &requirements));
   EXPECT_EQ(requirements.parameter_count, 4);
   EXPECT_EQ(requirements.binding_count, 2);
@@ -406,7 +487,7 @@ TEST(HsacoMetadataTest, PopulatesDefaultExportParameters) {
       requirements.parameter_count);
   std::vector<char> name_storage(requirements.name_storage_size);
   IREE_ASSERT_OK(
-      iree_hal_amdgpu_hsaco_metadata_populate_default_export_parameters(
+      iree_hal_amdgpu_hsaco_metadata_populate_flatbuffer_hal_export_parameters(
           &kernel, parameters.size(), parameters.data(), name_storage.size(),
           name_storage.data()));
 
@@ -436,14 +517,59 @@ TEST(HsacoMetadataTest, PopulatesDefaultExportParameters) {
 
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_RESOURCE_EXHAUSTED,
-      iree_hal_amdgpu_hsaco_metadata_populate_default_export_parameters(
+      iree_hal_amdgpu_hsaco_metadata_populate_flatbuffer_hal_export_parameters(
           &kernel, parameters.size() - 1, parameters.data(),
           name_storage.size(), name_storage.data()));
 
   iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
 }
 
-TEST(HsacoMetadataTest, DefaultExportParametersSkipHiddenArguments) {
+TEST(HsacoMetadataTest, PopulatesNativeKernargExportParameters) {
+  std::vector<uint8_t> elf = BuildElfWithMetadata(BuildKernelMetadata());
+
+  iree_hal_amdgpu_hsaco_metadata_t metadata;
+  IREE_ASSERT_OK(iree_hal_amdgpu_hsaco_metadata_initialize_from_elf(
+      ByteSpan(elf), iree_allocator_system(), &metadata));
+
+  const iree_hal_amdgpu_hsaco_metadata_kernel_t& kernel = metadata.kernels[0];
+  iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
+  IREE_ASSERT_OK(
+      iree_hal_amdgpu_hsaco_metadata_calculate_native_kernarg_export_parameter_requirements(
+          &kernel, &requirements));
+  EXPECT_EQ(requirements.parameter_count, 4);
+  EXPECT_EQ(requirements.binding_count, 2);
+  EXPECT_EQ(requirements.constant_count, 6);
+  EXPECT_EQ(requirements.name_storage_size, 12);
+
+  std::vector<iree_hal_executable_function_parameter_t> parameters(
+      requirements.parameter_count);
+  std::vector<char> name_storage(requirements.name_storage_size);
+  IREE_ASSERT_OK(
+      iree_hal_amdgpu_hsaco_metadata_populate_native_kernarg_export_parameters(
+          &kernel, parameters.size(), parameters.data(), name_storage.size(),
+          name_storage.data()));
+
+  EXPECT_EQ(parameters[0].type,
+            IREE_HAL_EXECUTABLE_FUNCTION_PARAMETER_TYPE_BINDING);
+  EXPECT_EQ(parameters[0].offset, 0);
+  EXPECT_EQ(ToString(parameters[0].name), "lhs");
+  EXPECT_EQ(parameters[1].type,
+            IREE_HAL_EXECUTABLE_FUNCTION_PARAMETER_TYPE_BINDING);
+  EXPECT_EQ(parameters[1].offset, 8);
+  EXPECT_EQ(ToString(parameters[1].name), "rhs");
+  EXPECT_EQ(parameters[2].type,
+            IREE_HAL_EXECUTABLE_FUNCTION_PARAMETER_TYPE_CONSTANT);
+  EXPECT_EQ(parameters[2].offset, 16);
+  EXPECT_EQ(ToString(parameters[2].name), "n");
+  EXPECT_EQ(parameters[3].type,
+            IREE_HAL_EXECUTABLE_FUNCTION_PARAMETER_TYPE_CONSTANT);
+  EXPECT_EQ(parameters[3].offset, 20);
+  EXPECT_EQ(ToString(parameters[3].name), "alpha");
+
+  iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
+}
+
+TEST(HsacoMetadataTest, FlatbufferHalExportParametersSkipHiddenArguments) {
   std::vector<uint8_t> elf =
       BuildElfWithMetadata(BuildHiddenArgumentMetadata());
 
@@ -459,7 +585,7 @@ TEST(HsacoMetadataTest, DefaultExportParametersSkipHiddenArguments) {
 
   iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
   IREE_ASSERT_OK(
-      iree_hal_amdgpu_hsaco_metadata_calculate_default_export_parameter_requirements(
+      iree_hal_amdgpu_hsaco_metadata_calculate_flatbuffer_hal_export_parameter_requirements(
           &kernel, &requirements));
   EXPECT_EQ(requirements.parameter_count, 2);
   EXPECT_EQ(requirements.binding_count, 1);
@@ -470,7 +596,7 @@ TEST(HsacoMetadataTest, DefaultExportParametersSkipHiddenArguments) {
       requirements.parameter_count);
   std::vector<char> name_storage(requirements.name_storage_size);
   IREE_ASSERT_OK(
-      iree_hal_amdgpu_hsaco_metadata_populate_default_export_parameters(
+      iree_hal_amdgpu_hsaco_metadata_populate_flatbuffer_hal_export_parameters(
           &kernel, parameters.size(), parameters.data(), name_storage.size(),
           name_storage.data()));
   EXPECT_EQ(ToString(parameters[0].name), "buffer");
@@ -483,7 +609,7 @@ TEST(HsacoMetadataTest, DefaultExportParametersSkipHiddenArguments) {
   iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
 }
 
-TEST(HsacoMetadataTest, RejectsNarrowByValueDefaultExportParameter) {
+TEST(HsacoMetadataTest, RejectsNarrowByValueFlatbufferHalExportParameter) {
   std::vector<uint8_t> elf = BuildElfWithMetadata(BuildKernelMetadata(
       /*out_of_range_arg=*/false, /*unknown_value_kind=*/false,
       /*narrow_by_value_arg=*/true));
@@ -495,8 +621,28 @@ TEST(HsacoMetadataTest, RejectsNarrowByValueDefaultExportParameter) {
   iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
-      iree_hal_amdgpu_hsaco_metadata_calculate_default_export_parameter_requirements(
+      iree_hal_amdgpu_hsaco_metadata_calculate_flatbuffer_hal_export_parameter_requirements(
           &metadata.kernels[0], &requirements));
+
+  iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
+}
+
+TEST(HsacoMetadataTest, AllowsNarrowByValueNativeKernargExportParameter) {
+  std::vector<uint8_t> elf = BuildElfWithMetadata(BuildKernelMetadata(
+      /*out_of_range_arg=*/false, /*unknown_value_kind=*/false,
+      /*narrow_by_value_arg=*/true));
+
+  iree_hal_amdgpu_hsaco_metadata_t metadata;
+  IREE_ASSERT_OK(iree_hal_amdgpu_hsaco_metadata_initialize_from_elf(
+      ByteSpan(elf), iree_allocator_system(), &metadata));
+
+  iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
+  IREE_ASSERT_OK(
+      iree_hal_amdgpu_hsaco_metadata_calculate_native_kernarg_export_parameter_requirements(
+          &metadata.kernels[0], &requirements));
+  EXPECT_EQ(requirements.parameter_count, 4);
+  EXPECT_EQ(requirements.binding_count, 2);
+  EXPECT_EQ(requirements.constant_count, 6);
 
   iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
 }
@@ -538,7 +684,7 @@ TEST(HsacoMetadataTest, AllowsUnknownValueKindAsOpaqueMetadata) {
   iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t requirements;
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_INVALID_ARGUMENT,
-      iree_hal_amdgpu_hsaco_metadata_calculate_default_export_parameter_requirements(
+      iree_hal_amdgpu_hsaco_metadata_calculate_flatbuffer_hal_export_parameter_requirements(
           &metadata.kernels[0], &requirements));
 
   iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
@@ -572,6 +718,67 @@ TEST(HsacoMetadataTest, RejectsMalformedMessagePackMetadata) {
   IREE_EXPECT_STATUS_IS(IREE_STATUS_INVALID_ARGUMENT,
                         iree_hal_amdgpu_hsaco_metadata_initialize_from_elf(
                             ByteSpan(elf), iree_allocator_system(), &metadata));
+}
+
+TEST(HsacoMetadataTest, DiscoversElfSymbolsWithoutSynthesizingKernels) {
+  std::vector<uint8_t> elf = AddSyntheticCandidateSymbolSection(
+      BuildElfWithMetadata(BuildKernelMetadata()));
+
+  iree_hal_amdgpu_hsaco_metadata_t metadata;
+  IREE_ASSERT_OK(iree_hal_amdgpu_hsaco_metadata_initialize_from_elf(
+      ByteSpan(elf), iree_allocator_system(), &metadata));
+  ASSERT_EQ(metadata.kernel_count, 1);
+  EXPECT_EQ(ToString(metadata.kernels[0].symbol_name), "vector_add.kd");
+  ASSERT_EQ(metadata.elf_kernel_symbol_count, 1);
+  EXPECT_EQ(ToString(metadata.elf_kernel_symbols[0].name), "extra_kernel");
+  EXPECT_EQ(ToString(metadata.elf_kernel_symbols[0].symbol_name),
+            "extra_kernel.kd");
+
+  iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
+}
+
+TEST(HsacoMetadataTest, IgnoresElfFunctionWithWrongDescriptorType) {
+  constexpr uint8_t kGlobalFunction = 0x12;  // STB_GLOBAL | STT_FUNC.
+  std::vector<uint8_t> elf = AddSyntheticCandidateSymbolSection(
+      BuildElfWithMetadata(BuildKernelMetadata()),
+      /*descriptor_info=*/kGlobalFunction);
+
+  iree_hal_amdgpu_hsaco_metadata_t metadata;
+  IREE_ASSERT_OK(iree_hal_amdgpu_hsaco_metadata_initialize_from_elf(
+      ByteSpan(elf), iree_allocator_system(), &metadata));
+  ASSERT_EQ(metadata.kernel_count, 1);
+  EXPECT_EQ(metadata.elf_kernel_symbol_count, 0);
+
+  iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
+}
+
+TEST(HsacoMetadataTest, IgnoresUndefinedElfFunctionSymbol) {
+  constexpr uint16_t kUndefinedSectionIndex = 0;
+  std::vector<uint8_t> elf = AddSyntheticCandidateSymbolSection(
+      BuildElfWithMetadata(BuildKernelMetadata()),
+      /*descriptor_info=*/0x11, kUndefinedSectionIndex);
+
+  iree_hal_amdgpu_hsaco_metadata_t metadata;
+  IREE_ASSERT_OK(iree_hal_amdgpu_hsaco_metadata_initialize_from_elf(
+      ByteSpan(elf), iree_allocator_system(), &metadata));
+  ASSERT_EQ(metadata.kernel_count, 1);
+  EXPECT_EQ(metadata.elf_kernel_symbol_count, 0);
+
+  iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
+}
+
+TEST(HsacoMetadataTest, IgnoresMalformedElfSymbolSectionBounds) {
+  std::vector<uint8_t> elf =
+      AddMalformedSymbolSection(BuildElfWithMetadata(BuildKernelMetadata()));
+
+  iree_hal_amdgpu_hsaco_metadata_t metadata;
+  IREE_ASSERT_OK(iree_hal_amdgpu_hsaco_metadata_initialize_from_elf(
+      ByteSpan(elf), iree_allocator_system(), &metadata));
+  EXPECT_EQ(metadata.kernel_count, 1);
+  EXPECT_EQ(metadata.elf_kernel_symbol_count, 0);
+  EXPECT_EQ(ToString(metadata.kernels[0].symbol_name), "vector_add.kd");
+
+  iree_hal_amdgpu_hsaco_metadata_deinitialize(&metadata);
 }
 
 TEST(HsacoMetadataTest, RejectsDuplicateArgumentField) {

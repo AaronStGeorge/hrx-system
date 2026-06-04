@@ -489,6 +489,7 @@ iree_cc_test(
     iree::base::core_headers
     iree::base::internal::flatcc::building
     iree::hal
+    iree::hal::drivers::amdgpu::util::hsaco_metadata
     iree::schemas::amdgpu_executable_def_c_fbs
     iree::testing::gtest
     iree::testing::gtest_main

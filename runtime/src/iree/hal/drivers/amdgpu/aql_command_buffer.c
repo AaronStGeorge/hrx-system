@@ -1348,7 +1348,16 @@ static iree_status_t iree_hal_amdgpu_aql_command_buffer_validate_dispatch_shape(
     const iree_hal_dispatch_config_t config, iree_hal_dispatch_flags_t flags) {
   const bool uses_indirect_parameters =
       iree_hal_dispatch_uses_indirect_parameters(flags);
-  if (iree_hal_amdgpu_dispatch_config_has_workgroup_size_override(config)) {
+  const bool has_workgroup_size_override =
+      iree_hal_amdgpu_dispatch_config_has_workgroup_size_override(config);
+  if (IREE_UNLIKELY(descriptor->custom_direct_only &&
+                    !has_workgroup_size_override)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "custom-direct-only ELF exports require a dispatch workgroup size "
+        "override");
+  }
+  if (has_workgroup_size_override) {
     for (iree_host_size_t i = 0; i < 3; ++i) {
       if (IREE_UNLIKELY(!config.workgroup_size[i])) {
         return iree_make_status(
@@ -1690,11 +1699,33 @@ static iree_status_t iree_hal_amdgpu_aql_command_buffer_write_dispatch_tail(
       }
       return iree_ok_status();
     }
-    case IREE_HAL_AMDGPU_COMMAND_BUFFER_KERNARG_STRATEGY_CUSTOM_DIRECT:
-      if (constants.data_length > 0) {
-        memcpy(tail_payload, constants.data, constants.data_length);
+    case IREE_HAL_AMDGPU_COMMAND_BUFFER_KERNARG_STRATEGY_CUSTOM_DIRECT: {
+      const iree_host_size_t explicit_bytes = layout->explicit_kernarg_size;
+      const iree_host_size_t copy_bytes = constants.data_length < explicit_bytes
+                                              ? constants.data_length
+                                              : explicit_bytes;
+      if (copy_bytes > 0) {
+        memcpy(tail_payload, constants.data, copy_bytes);
+      }
+      if (copy_bytes < explicit_bytes) {
+        memset(tail_payload + copy_bytes, 0, explicit_bytes - copy_bytes);
+      }
+      if (layout->has_implicit_args) {
+        iree_amdgpu_kernel_implicit_args_t* implicit_args =
+            (iree_amdgpu_kernel_implicit_args_t*)(tail_payload +
+                                                  layout->implicit_args_offset);
+        iree_hal_amdgpu_aql_command_buffer_write_implicit_args(
+            kernel_args, config, implicit_args);
+        const iree_host_size_t implicit_args_end =
+            layout->implicit_args_offset +
+            IREE_AMDGPU_KERNEL_IMPLICIT_ARGS_SIZE;
+        if (layout->total_kernarg_size > implicit_args_end) {
+          memset(tail_payload + implicit_args_end, 0,
+                 layout->total_kernarg_size - implicit_args_end);
+        }
       }
       return iree_ok_status();
+    }
     case IREE_HAL_AMDGPU_COMMAND_BUFFER_KERNARG_STRATEGY_INDIRECT:
       return iree_make_status(
           IREE_STATUS_UNIMPLEMENTED,
@@ -1880,6 +1911,11 @@ typedef struct iree_hal_amdgpu_aql_dispatch_plan_t {
   // Kernarg layout selected for HAL or custom-direct arguments.
   const iree_hal_amdgpu_device_dispatch_kernarg_layout_t* layout;
 
+  // Resolved per-dispatch custom-direct layout. Used when descriptor metadata
+  // leaves the raw kernarg size dynamic and the caller-provided byte length is
+  // the only exact reservation size.
+  iree_hal_amdgpu_device_dispatch_kernarg_layout_t custom_layout;
+
   // Number of kernarg blocks required by the selected descriptor path.
   uint32_t kernarg_block_count;
 
@@ -2008,6 +2044,38 @@ static iree_status_t iree_hal_amdgpu_aql_command_buffer_prepare_dispatch_plan(
   }
   out_plan->kernarg_strategy =
       IREE_HAL_AMDGPU_COMMAND_BUFFER_KERNARG_STRATEGY_HAL;
+  if (out_plan->descriptor->custom_direct_only) {
+    if (IREE_UNLIKELY(
+            !iree_hal_amdgpu_dispatch_config_has_workgroup_size_override(
+                inputs->config))) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "custom-direct-only ELF exports require a dispatch workgroup size "
+          "override");
+    }
+    for (iree_host_size_t i = 0; i < 3; ++i) {
+      if (IREE_UNLIKELY(!inputs->config.workgroup_size[i])) {
+        return iree_make_status(
+            IREE_STATUS_INVALID_ARGUMENT,
+            "dispatch workgroup size override must specify all dimensions");
+      }
+      if (IREE_UNLIKELY(inputs->config.workgroup_size[i] > UINT16_MAX)) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "dispatch workgroup size override dimension %" PRIhsz
+            " value %u exceeds %u",
+            i, inputs->config.workgroup_size[i], UINT16_MAX);
+      }
+    }
+  }
+  if (IREE_UNLIKELY(
+          out_plan->descriptor->custom_direct_only &&
+          !iree_hal_amdgpu_aql_dispatch_plan_uses_custom_direct_arguments(
+              out_plan))) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "dispatch export requires custom direct kernarg arguments");
+  }
   if (IREE_UNLIKELY(inputs->constants.data_length > 0 &&
                     !inputs->constants.data)) {
     return iree_make_status(
@@ -2017,18 +2085,50 @@ static iree_status_t iree_hal_amdgpu_aql_command_buffer_prepare_dispatch_plan(
 
   if (iree_hal_amdgpu_aql_dispatch_plan_uses_custom_direct_arguments(
           out_plan)) {
-    if (IREE_UNLIKELY(inputs->constants.data_length !=
-                      out_plan->descriptor->kernel_args.kernarg_size)) {
+    // Callers (e.g. rocBLAS/Tensile) sometimes omit trailing ABI padding or pad
+    // beyond the declared kernarg_segment_size with extra trailing scalars. The
+    // kernel only reads its declared size, so trailing bytes are ignored and
+    // the memcpy in write_dispatch_tail clamps to the declared size.
+    //
+    // Validate after 8-byte ABI padding so we accept missing tail padding while
+    // still rejecting truly short pre-packed HIP argument buffers.
+    const uint32_t required_explicit_bytes =
+        (uint32_t)
+            out_plan->descriptor->custom_kernarg_layout.explicit_kernarg_size;
+    const iree_host_size_t padded_constant_length =
+        iree_host_align(inputs->constants.data_length, /*alignment=*/8);
+    if (IREE_UNLIKELY(padded_constant_length < required_explicit_bytes)) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "custom dispatch argument length mismatch; expected %u but got "
-          "%" PRIhsz,
-          out_plan->descriptor->kernel_args.kernarg_size,
-          inputs->constants.data_length);
+          "custom dispatch argument length too short; expected at least %u "
+          "but got %" PRIhsz " (padded to %" PRIhsz ")",
+          required_explicit_bytes, inputs->constants.data_length,
+          padded_constant_length);
     }
-    out_plan->layout = &out_plan->descriptor->custom_kernarg_layout;
+    out_plan->custom_layout = out_plan->descriptor->custom_kernarg_layout;
+    if (out_plan->custom_layout.total_kernarg_size == 0) {
+      out_plan->custom_layout.explicit_kernarg_size =
+          inputs->constants.data_length;
+      out_plan->custom_layout.total_kernarg_size =
+          inputs->constants.data_length;
+    }
+    out_plan->layout = &out_plan->custom_layout;
     out_plan->kernarg_block_count =
         iree_max(1u, out_plan->descriptor->custom_kernarg_block_count);
+    if (out_plan->layout->total_kernarg_size > 0) {
+      const iree_host_size_t provided_kernarg_block_count =
+          iree_host_size_ceil_div(out_plan->layout->total_kernarg_size,
+                                  sizeof(iree_hal_amdgpu_kernarg_block_t));
+      if (IREE_UNLIKELY(provided_kernarg_block_count > UINT32_MAX)) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "dispatch kernargs require too many blocks (%" PRIhsz ", max=%u)",
+            provided_kernarg_block_count, UINT32_MAX);
+      }
+      out_plan->kernarg_block_count =
+          iree_max(out_plan->kernarg_block_count,
+                   (uint32_t)provided_kernarg_block_count);
+    }
     out_plan->kernarg_strategy =
         IREE_HAL_AMDGPU_COMMAND_BUFFER_KERNARG_STRATEGY_CUSTOM_DIRECT;
     return iree_ok_status();
@@ -2102,14 +2202,20 @@ iree_hal_amdgpu_aql_command_buffer_calculate_dispatch_layout(
           ? 0
           : (iree_host_size_t)plan->kernel_args->binding_count *
                 sizeof(uint64_t);
-  const iree_host_size_t tail_byte_length =
-      plan->layout->total_kernarg_size - binding_bytes;
+  const iree_host_size_t total_kernarg_size = plan->layout->total_kernarg_size;
+  if (IREE_UNLIKELY(total_kernarg_size < binding_bytes)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "dispatch kernarg size %" PRIhsz
+                            " is smaller than binding table size %" PRIhsz,
+                            total_kernarg_size, binding_bytes);
+  }
+  const iree_host_size_t tail_byte_length = total_kernarg_size - binding_bytes;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_aql_command_buffer_qword_length(
       tail_byte_length, "dispatch tail payload",
       &out_layout->kernarg.tail_length_qwords,
       &out_layout->kernarg.tail_padded_length));
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_aql_command_buffer_qword_length(
-      plan->layout->total_kernarg_size, "dispatch kernarg",
+      total_kernarg_size, "dispatch kernarg",
       &out_layout->kernarg.total_length_qwords,
       &out_layout->kernarg.total_padded_length));
   out_layout->kernarg.implicit_args_offset_qwords =

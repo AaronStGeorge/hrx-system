@@ -78,22 +78,6 @@ iree_hal_amdgpu_device_dispatch_make_hal_kernarg_layout(
   };
 }
 
-// Returns a custom-direct-argument layout for a raw kernarg blob of
-// |kernarg_size| bytes.
-//
-// The caller owns all packing and padding in the raw argument blob. No implicit
-// suffix is synthesized in this mode.
-static inline iree_hal_amdgpu_device_dispatch_kernarg_layout_t
-iree_hal_amdgpu_device_dispatch_make_custom_kernarg_layout(
-    size_t kernarg_size) {
-  return (iree_hal_amdgpu_device_dispatch_kernarg_layout_t){
-      .explicit_kernarg_size = kernarg_size,
-      .implicit_args_offset = kernarg_size,
-      .total_kernarg_size = kernarg_size,
-      .has_implicit_args = false,
-  };
-}
-
 //===----------------------------------------------------------------------===//
 // Dispatch Packet/Kernarg Emission
 //===----------------------------------------------------------------------===//
@@ -152,7 +136,26 @@ void iree_hal_amdgpu_device_dispatch_emplace_packet(
     iree_hsa_kernel_dispatch_packet_t* IREE_AMDGPU_RESTRICT dispatch_packet,
     void* IREE_AMDGPU_RESTRICT kernarg_ptr);
 
-// Populates HAL ABI kernargs in already-reserved storage.
+// Populates the HIP/OpenCL implicit args suffix in already-reserved storage.
+//
+// This must be called after explicit HAL/custom kernargs have been populated
+// whenever |layout->has_implicit_args| is true.
+//
+// Preconditions:
+//   - |kernel_args|, |workgroup_count|, |layout|, and |kernarg_ptr| are
+//     non-NULL.
+//   - |layout| describes a reservation with an implicit suffix.
+//   - |kernarg_ptr| points to at least |layout->total_kernarg_size| bytes of
+//     writable storage.
+void iree_hal_amdgpu_device_dispatch_emplace_implicit_args(
+    const iree_hal_amdgpu_device_kernel_args_t* IREE_AMDGPU_RESTRICT
+        kernel_args,
+    const uint32_t workgroup_count[3], uint32_t dynamic_workgroup_local_memory,
+    const iree_hal_amdgpu_device_dispatch_kernarg_layout_t* IREE_AMDGPU_RESTRICT
+        layout,
+    void* IREE_AMDGPU_RESTRICT kernarg_ptr);
+
+// Populates HAL ABI explicit kernargs in already-reserved storage.
 //
 // |binding_ptrs| must provide |kernel_args->binding_count| device pointers as
 // raw 64-bit values. |constants| must provide
@@ -169,28 +172,30 @@ void iree_hal_amdgpu_device_dispatch_emplace_packet(
 void iree_hal_amdgpu_device_dispatch_emplace_hal_kernargs(
     const iree_hal_amdgpu_device_kernel_args_t* IREE_AMDGPU_RESTRICT
         kernel_args,
-    const uint32_t workgroup_count[3], uint32_t dynamic_workgroup_local_memory,
     const iree_hal_amdgpu_device_dispatch_kernarg_layout_t* IREE_AMDGPU_RESTRICT
         layout,
     const uint64_t* IREE_AMDGPU_RESTRICT binding_ptrs,
     const uint32_t* IREE_AMDGPU_RESTRICT constants,
     void* IREE_AMDGPU_RESTRICT kernarg_ptr);
 
-// Populates custom direct kernargs in already-reserved storage.
+// Populates custom direct explicit kernargs in already-reserved storage.
 //
-// |custom_kernarg_ptr| must provide |layout->total_kernarg_size| bytes in the
-// final kernel ABI shape expected by the target kernel.
+// |custom_kernarg_ptr| provides up to |layout->total_kernarg_size| bytes in the
+// final kernel ABI shape expected by the target kernel. Missing trailing
+// padding bytes remain zeroed.
 //
 // Preconditions:
 //   - |layout| and |kernarg_ptr| are non-NULL.
-//   - |layout| was derived with
-//     iree_hal_amdgpu_device_dispatch_make_custom_kernarg_layout.
-//   - |custom_kernarg_ptr| is non-NULL when |layout->total_kernarg_size| > 0.
+//   - |layout| describes either a fixed custom-direct reservation with optional
+//     implicit suffix storage or a dynamic custom-direct reservation where
+//     |layout->total_kernarg_size == 0| and |custom_kernarg_length| determines
+//     the reservation size.
+//   - |custom_kernarg_ptr| is non-NULL when |custom_kernarg_length| > 0.
 void iree_hal_amdgpu_device_dispatch_emplace_custom_kernargs(
     const iree_hal_amdgpu_device_dispatch_kernarg_layout_t* IREE_AMDGPU_RESTRICT
         layout,
     const void* IREE_AMDGPU_RESTRICT custom_kernarg_ptr,
-    void* IREE_AMDGPU_RESTRICT kernarg_ptr);
+    size_t custom_kernarg_length, void* IREE_AMDGPU_RESTRICT kernarg_ptr);
 
 // Populates the builtin patch dispatch that updates an indirect-parameter
 // dispatch packet and then publishes its header.

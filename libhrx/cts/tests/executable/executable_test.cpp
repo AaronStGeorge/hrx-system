@@ -128,7 +128,7 @@ TEST_CASE_METHOD(HrxTestFixture, "executable_load_lookup_dispatch_noop") {
   REQUIRE_OK(hrx().stream_dispatch(stream, executable, ordinal, &config,
                                    /*constants=*/nullptr, /*constants_size=*/0,
                                    /*bindings=*/nullptr, /*binding_count=*/0,
-                                   HRX_DISPATCH_FLAG_NONE));
+                                   HRX_DISPATCH_FLAG_CUSTOM_DIRECT_ARGUMENTS));
   REQUIRE_OK(hrx().stream_synchronize(stream));
 
   hrx().stream_release(stream);

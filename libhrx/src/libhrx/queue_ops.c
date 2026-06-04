@@ -225,6 +225,11 @@ hrx_status_t hrx_queue_dispatch(
             "device, executable, config, constants, or bindings are invalid"));
   }
 
+  iree_hal_dispatch_flags_t hal_flags = IREE_HAL_DISPATCH_FLAG_NONE;
+  hrx_status_t flag_status =
+      hrx_iree_dispatch_flags_from_hrx(flags, &hal_flags);
+  if (!hrx_status_is_ok(flag_status)) HRX_RETURN_AND_END_ZONE(z0, flag_status);
+
   iree_hal_buffer_ref_t* hal_bindings = NULL;
   if (binding_count > 0) {
     hal_bindings = (iree_hal_buffer_ref_t*)calloc(
@@ -282,7 +287,7 @@ hrx_status_t hrx_queue_dispatch(
       device->hal_device, hrx_normalize_queue_affinity(affinity), wait_list,
       sig_list, executable->hal_executable,
       iree_hal_executable_function_from_index(export_ordinal), hal_config,
-      hal_constants, hal_binding_list, (iree_hal_dispatch_flags_t)flags);
+      hal_constants, hal_binding_list, hal_flags);
   free(hal_bindings);
   HRX_RETURN_AND_END_ZONE(z0, hrx_status_from_iree(status));
 }

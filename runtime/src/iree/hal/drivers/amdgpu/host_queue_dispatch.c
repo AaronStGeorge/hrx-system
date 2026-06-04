@@ -112,7 +112,16 @@ static iree_status_t iree_hal_amdgpu_host_queue_validate_dispatch_shape(
     const iree_hal_dispatch_config_t config, iree_hal_dispatch_flags_t flags) {
   const bool uses_indirect_parameters =
       iree_hal_dispatch_uses_indirect_parameters(flags);
-  if (iree_hal_amdgpu_dispatch_config_has_workgroup_size_override(config)) {
+  const bool has_workgroup_size_override =
+      iree_hal_amdgpu_dispatch_config_has_workgroup_size_override(config);
+  if (IREE_UNLIKELY(descriptor->custom_direct_only &&
+                    !has_workgroup_size_override)) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "custom-direct-only ELF exports require a dispatch workgroup size "
+        "override");
+  }
+  if (has_workgroup_size_override) {
     for (iree_host_size_t i = 0; i < 3; ++i) {
       const uint64_t grid_size =
           (uint64_t)config.workgroup_count[i] * kernel_args->workgroup_size[i];
@@ -221,13 +230,17 @@ static iree_status_t iree_hal_amdgpu_host_queue_validate_dispatch_kernargs(
 
   iree_host_size_t operation_resource_count = 1;
   if (iree_any_bit_set(flags, IREE_HAL_DISPATCH_FLAG_CUSTOM_DIRECT_ARGUMENTS)) {
-    if (IREE_UNLIKELY(constants.data_length !=
-                      descriptor->kernel_args.kernarg_size)) {
+    const uint32_t required_explicit_bytes =
+        (uint32_t)descriptor->custom_kernarg_layout.explicit_kernarg_size;
+    const iree_host_size_t padded_constant_length =
+        iree_host_align(constants.data_length, /*alignment=*/8);
+    if (IREE_UNLIKELY(padded_constant_length < required_explicit_bytes)) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
-          "custom dispatch argument length mismatch; expected %u but got "
-          "%" PRIhsz,
-          descriptor->kernel_args.kernarg_size, constants.data_length);
+          "custom dispatch argument length too short; expected at least %u "
+          "but got %" PRIhsz " (padded to %" PRIhsz ")",
+          required_explicit_bytes, constants.data_length,
+          padded_constant_length);
     }
     if (IREE_UNLIKELY(constants.data_length > 0 && !constants.data)) {
       return iree_make_status(
@@ -238,7 +251,25 @@ static iree_status_t iree_hal_amdgpu_host_queue_validate_dispatch_kernargs(
     *out_layout = &descriptor->custom_kernarg_layout;
     *out_kernarg_block_count =
         iree_max(1u, descriptor->custom_kernarg_block_count);
+    if ((*out_layout)->total_kernarg_size == 0 && constants.data_length > 0) {
+      const iree_host_size_t provided_kernarg_block_count =
+          iree_host_size_ceil_div(constants.data_length,
+                                  sizeof(iree_hal_amdgpu_kernarg_block_t));
+      if (IREE_UNLIKELY(provided_kernarg_block_count > UINT32_MAX)) {
+        return iree_make_status(
+            IREE_STATUS_OUT_OF_RANGE,
+            "dispatch kernargs require too many blocks (%" PRIhsz ", max=%u)",
+            provided_kernarg_block_count, UINT32_MAX);
+      }
+      *out_kernarg_block_count = iree_max(
+          *out_kernarg_block_count, (uint32_t)provided_kernarg_block_count);
+    }
   } else {
+    if (IREE_UNLIKELY(descriptor->custom_direct_only)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "dispatch export requires custom direct kernarg arguments");
+    }
     if (IREE_UNLIKELY(constants.data_length > 0 && !constants.data)) {
       return iree_make_status(
           IREE_STATUS_INVALID_ARGUMENT,
@@ -532,14 +563,18 @@ static iree_status_t iree_hal_amdgpu_host_queue_submit_direct_dispatch(
 
   if (uses_custom_direct_arguments) {
     iree_hal_amdgpu_device_dispatch_emplace_custom_kernargs(
-        plan->layout, constants.data, submission.kernel.kernargs.blocks->data);
+        plan->layout, constants.data, constants.data_length,
+        submission.kernel.kernargs.blocks->data);
   } else {
     iree_hal_amdgpu_device_dispatch_emplace_hal_kernargs(
-        plan->kernel_args, config.workgroup_count,
-        config.dynamic_workgroup_local_memory, plan->layout, binding_ptrs,
+        plan->kernel_args, plan->layout, binding_ptrs,
         (const uint32_t*)constants.data,
         submission.kernel.kernargs.blocks->data);
   }
+  iree_hal_amdgpu_device_dispatch_emplace_implicit_args(
+      plan->kernel_args, config.workgroup_count,
+      config.dynamic_workgroup_local_memory, plan->layout,
+      submission.kernel.kernargs.blocks->data);
   iree_hal_amdgpu_device_dispatch_emplace_packet(
       plan->kernel_args, config.workgroup_count,
       config.dynamic_workgroup_local_memory,
@@ -726,13 +761,17 @@ static iree_status_t iree_hal_amdgpu_host_queue_submit_indirect_dispatch(
   const uint32_t placeholder_workgroup_count[3] = {0, 0, 0};
   if (uses_custom_direct_arguments) {
     iree_hal_amdgpu_device_dispatch_emplace_custom_kernargs(
-        plan->layout, constants.data, dispatch_kernarg_data);
+        plan->layout, constants.data, constants.data_length,
+        dispatch_kernarg_data);
   } else {
     iree_hal_amdgpu_device_dispatch_emplace_hal_kernargs(
-        plan->kernel_args, placeholder_workgroup_count,
-        config.dynamic_workgroup_local_memory, plan->layout, binding_ptrs,
+        plan->kernel_args, plan->layout, binding_ptrs,
         (const uint32_t*)constants.data, dispatch_kernarg_data);
   }
+  iree_hal_amdgpu_device_dispatch_emplace_implicit_args(
+      plan->kernel_args, placeholder_workgroup_count,
+      config.dynamic_workgroup_local_memory, plan->layout,
+      dispatch_kernarg_data);
   iree_hal_amdgpu_device_dispatch_emplace_packet(
       plan->kernel_args, placeholder_workgroup_count,
       config.dynamic_workgroup_local_memory, &dispatch_packet->dispatch,

@@ -401,7 +401,11 @@ hrx_status_t hrx_stream_dispatch(hrx_stream_t stream,
             "stream, executable, config, constants, or bindings are invalid"));
   }
 
-  hrx_status_t status = hrx_stream_begin_cb(stream);
+  iree_hal_dispatch_flags_t hal_flags = IREE_HAL_DISPATCH_FLAG_NONE;
+  hrx_status_t status = hrx_iree_dispatch_flags_from_hrx(flags, &hal_flags);
+  if (!hrx_status_is_ok(status)) HRX_RETURN_AND_END_ZONE(z0, status);
+
+  status = hrx_stream_begin_cb(stream);
   if (!hrx_status_is_ok(status)) HRX_RETURN_AND_END_ZONE(z0, status);
 
   iree_hal_buffer_ref_t* hal_bindings = NULL;
@@ -450,7 +454,7 @@ hrx_status_t hrx_stream_dispatch(hrx_stream_t stream,
   iree_status_t iree_status = iree_hal_command_buffer_dispatch(
       stream->pending_cb, executable->hal_executable,
       iree_hal_executable_function_from_index(export_ordinal), hal_config,
-      hal_constants, hal_binding_list, (iree_hal_dispatch_flags_t)flags);
+      hal_constants, hal_binding_list, hal_flags);
   free(hal_bindings);
   if (!iree_status_is_ok(iree_status)) {
     HRX_RETURN_AND_END_ZONE(z0, hrx_status_from_iree(iree_status));
