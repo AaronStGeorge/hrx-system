@@ -50,18 +50,6 @@ _PLATFORM_CMAKE_SYSTEM_NAME = {
     "@platforms//cpu:wasm32": "wasm_32",
 }
 
-_COMPILER_PLUGIN_CMAKE_OPTIONS = {
-    "//compiler/plugins:input_stablehlo_enabled": "IREE_INPUT_STABLEHLO",
-    "//compiler/plugins:input_torch_enabled": "IREE_INPUT_TORCH",
-    "//compiler/plugins:input_tosa_enabled": "IREE_INPUT_TOSA",
-    "//compiler/plugins:hal_target_cuda_enabled": "IREE_TARGET_BACKEND_CUDA",
-    "//compiler/plugins:hal_target_llvm_cpu_enabled": "IREE_TARGET_BACKEND_LLVM_CPU",
-    "//compiler/plugins:hal_target_metal_spirv_enabled": "IREE_TARGET_BACKEND_METAL_SPIRV",
-    "//compiler/plugins:hal_target_rocm_enabled": "IREE_TARGET_BACKEND_ROCM",
-    "//compiler/plugins:hal_target_vmvx_enabled": "IREE_TARGET_BACKEND_VMVX",
-    "//compiler/plugins:hal_target_vulkan_spirv_enabled": "IREE_TARGET_BACKEND_VULKAN_SPIRV",
-}
-
 _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS = {
     "//runtime/config/hal:driver_amdgpu": "IREE_HAL_DRIVER_AMDGPU",
     "//runtime/config/hal:driver_cuda": "IREE_HAL_DRIVER_CUDA",
@@ -70,6 +58,7 @@ _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS = {
     "//runtime/config/hal:driver_local_task": "IREE_HAL_DRIVER_LOCAL_TASK",
     "//runtime/config/hal:driver_null": "IREE_HAL_DRIVER_NULL",
     "//runtime/config/hal:driver_vulkan": "IREE_HAL_DRIVER_VULKAN",
+    "//runtime/config/hal:driver_webgpu": "IREE_HAL_DRIVER_WEBGPU",
     "//runtime/config/hal:executable_loader_embedded_elf": "IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF",
     "//runtime/config/hal:executable_loader_system_library": "IREE_HAL_EXECUTABLE_LOADER_SYSTEM_LIBRARY",
     "//runtime/config/hal:executable_loader_vmvx_module": "IREE_HAL_EXECUTABLE_LOADER_VMVX_MODULE",
@@ -208,69 +197,69 @@ class BuildFileFunctions(object):
         condition = self._convert_platform_condition(label)
         if condition:
             return condition
-        if label in _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS:
-            return _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS[label]
-        return _COMPILER_PLUGIN_CMAKE_OPTIONS.get(label)
+        return _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS.get(label)
+
+    def _condition_select_compatibility_condition(self, condition_select):
+        compatible_conditions = []
+        for label, value in condition_select.conditions.items():
+            if label == "//conditions:default":
+                continue
+            # Empty list means compatible for this condition.
+            if value == []:
+                condition = self._convert_select_condition(label)
+                if condition:
+                    compatible_conditions.append(condition)
+        if not compatible_conditions:
+            return None
+        return " OR ".join(compatible_conditions)
+
+    def _target_compatible_condition(self, target_compatible_with):
+        if not target_compatible_with:
+            return None
+
+        if isinstance(target_compatible_with, ConditionSelect):
+            return self._condition_select_compatibility_condition(
+                target_compatible_with
+            )
+
+        if isinstance(target_compatible_with, MixedDeps):
+            conditions = []
+            for label in target_compatible_with.unconditional:
+                condition = self._convert_select_condition(label)
+                if not condition:
+                    raise NotImplementedError(f"target_compatible_with: {label}")
+                conditions.append(condition)
+            for condition_select in target_compatible_with.selects:
+                condition = self._condition_select_compatibility_condition(
+                    condition_select
+                )
+                if condition:
+                    conditions.append(condition)
+            if not conditions:
+                return None
+            return " AND ".join(
+                f"({condition})" if " OR " in condition else condition
+                for condition in conditions
+            )
+
+        conditions = []
+        for label in target_compatible_with:
+            condition = self._convert_select_condition(label)
+            if condition:
+                conditions.append(condition)
+            else:
+                raise NotImplementedError(f"target_compatible_with: {label}")
+        return " AND ".join(conditions)
 
     def _emit_platform_guard_begin(self, target_compatible_with):
         """Emits platform guards for target_compatible_with."""
-        if not target_compatible_with:
-            return
-
-        # Handle ConditionSelect from select() in target_compatible_with.
-        # Example: select({"@platforms//os:linux": [], "@platforms//os:macos": [],
-        #                  "//conditions:default": ["@platforms//:incompatible"]})
-        # Conditions with empty list are compatible; default with incompatible
-        # means "only build when one of the explicitly listed conditions matches".
-        if isinstance(target_compatible_with, ConditionSelect):
-            compatible_conditions = []
-            for label, value in target_compatible_with.conditions.items():
-                if label == "//conditions:default":
-                    continue
-                # Empty list means compatible for this condition.
-                if value == []:
-                    condition = self._convert_select_condition(label)
-                    if condition:
-                        compatible_conditions.append(condition)
-            if compatible_conditions:
-                combined = " OR ".join(compatible_conditions)
-                self._converter.body += f"if({combined})\n"
-            return
-
-        # target_compatible_with is a list of constraints (typically one).
-        conditions = []
-        for label in target_compatible_with:
-            cond = self._convert_select_condition(label)
-            if cond:
-                conditions.append(cond)
-            else:
-                raise NotImplementedError(f"target_compatible_with: {label}")
-        # Multiple constraints are AND-ed (all must be satisfied).
-        combined = " AND ".join(conditions)
-        self._converter.body += f"if({combined})\n"
+        condition = self._target_compatible_condition(target_compatible_with)
+        if condition:
+            self._converter.body += f"if({condition})\n"
 
     def _emit_platform_guard_end(self, target_compatible_with):
         """Emits endif() to close a target_compatible_with guard."""
-        if not target_compatible_with:
-            return
-
-        # Handle ConditionSelect: check if any compatible conditions were found.
-        if isinstance(target_compatible_with, ConditionSelect):
-            has_compatible = any(
-                label != "//conditions:default"
-                and value == []
-                and self._convert_select_condition(label)
-                for label, value in target_compatible_with.conditions.items()
-            )
-            if has_compatible:
-                self._converter.body = self._converter.body.rstrip("\n") + "\n"
-                self._converter.body += "endif()\n\n"
-            return
-
-        # Only emit if all labels are recognized (same check as begin).
-        if all(
-            self._convert_select_condition(label) for label in target_compatible_with
-        ):
+        if self._target_compatible_condition(target_compatible_with):
             # Strip trailing blank line from the target body so endif() is
             # adjacent to the closing paren.
             self._converter.body = self._converter.body.rstrip("\n") + "\n"
@@ -489,29 +478,6 @@ class BuildFileFunctions(object):
         ]
 
         return self._convert_string_list_block(block_name, srcs, sort=True)
-
-    def _convert_td_file_block(self, td_file):
-        if td_file.startswith("//iree"):
-            # TODO: This should be generalized for out of tree.
-            # Bazel `//iree/dir/td_file.td`
-            # -> CMake `${IREE_ROOT_DIR}/iree/dir/td_file.td
-            # Bazel `//iree/dir/IR:td_file.td`
-            # -> CMake `${IREE_ROOT_DIR}/iree/dir/IR/td_file.td
-            td_file = td_file.replace("//iree", "${IREE_ROOT_DIR}/iree")
-            td_file = td_file.replace(":", "/")
-        return self._convert_string_arg_block("TD_FILE", td_file)
-
-    def _convert_tbl_outs_block(self, tbl_outs):
-        outs_list = "\n".join(
-            [f"    {' '.join(flags)} {value}" for flags, value in tbl_outs]
-        )
-        return f"  OUTS\n{outs_list}\n"
-
-    def _convert_tblgen_block(self, tblgen):
-        if tblgen.endswith("iree-tblgen"):
-            return "  TBLGEN\n    IREE\n"
-        else:
-            return ""
 
     def _convert_target(self, target):
         """Returns a list of targets that correspond to the specified Bazel target.
@@ -1692,67 +1658,6 @@ class BuildFileFunctions(object):
             f"  PUBLIC\n)\n\n"
         )
         self._emit_platform_guard_end(target_compatible_with)
-
-    def gentbl_cc_library(
-        self,
-        name,
-        tblgen,
-        td_file,
-        tbl_outs,
-        td_srcs=None,
-        deps=None,
-        includes=None,
-        strip_include_prefix=None,
-        test=None,
-    ):
-        name_block = self._convert_string_arg_block("NAME", name, quote=False)
-        tblgen_block = self._convert_tblgen_block(tblgen)
-        td_file_block = self._convert_td_file_block(td_file)
-        outs_block = self._convert_tbl_outs_block(tbl_outs)
-
-        self._converter.body += (
-            f"iree_tablegen_library(\n"
-            f"{name_block}"
-            f"{td_file_block}"
-            f"{outs_block}"
-            f"{tblgen_block}"
-            f")\n\n"
-        )
-
-    def iree_gentbl_cc_library(self, **kwargs):
-        if self._should_skip_target(**kwargs):
-            return
-        # The bazel version of this rule adds some include directories and defs
-        # that are implicitly handled by the cmake version.
-        self.gentbl_cc_library(**kwargs)
-
-    def iree_tablegen_doc(
-        self,
-        name,
-        category,
-        tblgen,
-        td_file,
-        tbl_outs,
-        td_srcs=None,
-        includes=None,
-        deps=None,
-        test=None,
-    ):
-        name_block = self._convert_string_arg_block("NAME", name, quote=False)
-        category_block = self._convert_string_arg_block("CATEGORY", category)
-        tblgen_block = self._convert_tblgen_block(tblgen)
-        td_file_block = self._convert_td_file_block(td_file)
-        outs_block = self._convert_tbl_outs_block(tbl_outs)
-
-        self._converter.body += (
-            f"iree_tablegen_doc(\n"
-            f"{name_block}"
-            f"{category_block}"
-            f"{td_file_block}"
-            f"{outs_block}"
-            f"{tblgen_block}"
-            f")\n\n"
-        )
 
     def iree_execution_test_suite(
         self,

@@ -8,11 +8,14 @@
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import bazel_to_cmake_config
+import bazel_to_cmake_converter
+import bazel_to_cmake_targets
 
 
 class ConfigTest(unittest.TestCase):
@@ -97,6 +100,75 @@ class ConfigTest(unittest.TestCase):
         self.assertEqual(
             converter.convert_target("//other:thing"),
             ["root:other::thing"],
+        )
+
+    def test_rejects_compiler_monorepo_external_targets(self):
+        converter = bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""})
+
+        for target in (
+            "@llvm-project//llvm:Core",
+            "@llvm-project//mlir:IR",
+            "@stablehlo//:stablehlo_ops",
+            "@torch-mlir//:TorchMLIRTorchDialect",
+        ):
+            with self.subTest(target=target):
+                with self.assertRaises(KeyError):
+                    converter.convert_target(target)
+
+    def test_rejects_compiler_monorepo_local_targets(self):
+        def convert_root_target(converter, target):
+            return ["root:" + converter._convert_to_cmake_path(target)]
+
+        converter = bazel_to_cmake_config.ProjectTargetConverter(
+            repo_map={"@iree": ""},
+            projects=[],
+            convert_unmatched_target=convert_root_target,
+        )
+
+        for target in (
+            "@iree//compiler/src/iree/compiler/API:CAPI",
+            "@iree//llvm-external-projects/iree-dialects:CAPI",
+        ):
+            with self.subTest(target=target):
+                with self.assertRaises(ValueError):
+                    converter.convert_target(target)
+
+    def test_rejects_compiler_monorepo_select_conditions(self):
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=SimpleNamespace(body=""),
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="",
+        )
+
+        self.assertEqual(
+            functions._convert_select_condition("//runtime/config/hal:driver_hip"),
+            "IREE_HAL_DRIVER_HIP",
+        )
+        with self.assertRaises(NotImplementedError):
+            functions.select(
+                {
+                    "//compiler/plugins:input_stablehlo_enabled": [],
+                    "//conditions:default": [],
+                }
+            )
+
+    def test_target_compatible_with_composes_selects_and_requirements(self):
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=SimpleNamespace(body=""),
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="",
+        )
+
+        target_compatible_with = functions.select(
+            {
+                "@platforms//cpu:wasm32": [],
+                "//conditions:default": ["@platforms//:incompatible"],
+            }
+        ) + [SimpleNamespace(cmake_condition="IREE_HAL_DRIVER_WEBGPU")]
+
+        self.assertEqual(
+            functions._target_compatible_condition(target_compatible_with),
+            'IREE_HAL_DRIVER_WEBGPU AND IREE_ARCH STREQUAL "wasm_32"',
         )
 
 

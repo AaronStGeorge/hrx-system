@@ -14,7 +14,6 @@ class TargetConverter:
         self._repo_map = repo_map
 
         iree_repo = self._repo_alias("@iree")
-        torch_mlir_cmake_prefix = "iree::compiler::plugins::input::Torch"
         self._update_target_mappings(
             {
                 # Internal utilities to emulate various binary/library options.
@@ -24,140 +23,6 @@ class TargetConverter:
                 # CMake test macros set LSAN_OPTIONS from driver labels.
                 f"{iree_repo}//build_tools/sanitizer:lsan_suppressions_rocm.txt": [],
                 f"{iree_repo}//build_tools/sanitizer:lsan_suppressions_vulkan.txt": [],
-                f"{iree_repo}//compiler/src/iree/compiler/API:CAPI": [
-                    "IREECompilerCAPILib"
-                ],
-                # IREE llvm-external-projects
-                f"{iree_repo}//llvm-external-projects/iree-dialects:CAPI": [
-                    "IREEDialectsCAPI"
-                ],
-                # Disable all hard-coded codegen targets (they are expanded dynamically
-                # in CMake).
-                "@llvm-project//llvm:AArch64AsmParser": ["IREELLVMCPUTargetDeps"],
-                "@llvm-project//llvm:AArch64CodeGen": ["IREELLVMCPUTargetDeps"],
-                "@llvm-project//llvm:ARMAsmParser": ["IREELLVMCPUTargetDeps"],
-                "@llvm-project//llvm:ARMCodeGen": ["IREELLVMCPUTargetDeps"],
-                "@llvm-project//llvm:RISCVAsmParser": ["IREELLVMCPUTargetDeps"],
-                "@llvm-project//llvm:RISCVCodeGen": ["IREELLVMCPUTargetDeps"],
-                "@llvm-project//llvm:WebAssemblyAsmParser": ["IREELLVMCPUTargetDeps"],
-                "@llvm-project//llvm:WebAssemblyCodeGen": ["IREELLVMCPUTargetDeps"],
-                "@llvm-project//llvm:X86AsmParser": ["IREELLVMCPUTargetDeps"],
-                "@llvm-project//llvm:X86CodeGen": ["IREELLVMCPUTargetDeps"],
-                # Clang
-                "@llvm-project//clang": ["${IREE_CLANG_TARGET}"],
-                # LLD
-                "@llvm-project//lld": ["${IREE_LLD_TARGET}"],
-                "@llvm-project//lld:COFF": ["lldCOFF"],
-                "@llvm-project//lld:Common": ["lldCommon"],
-                "@llvm-project//lld:ELF": ["lldELF"],
-                "@llvm-project//lld:MachO": ["lldMachO"],
-                "@llvm-project//lld:Wasm": ["lldWasm"],
-                # LLVM
-                "@llvm-project//llvm:config": [],
-                "@llvm-project//llvm:IPO": ["LLVMipo"],
-                "@llvm-project//llvm:FileCheck": ["FileCheck"],
-                "@llvm-project//llvm:not": ["not"],
-                "@llvm-project//llvm:llvm-link": ["${IREE_LLVM_LINK_TARGET}"],
-                "@llvm-project//llvm:NVPTXUtilsAndDesc": [
-                    "LLVMNVPTXDesc",
-                ],
-                # MLIR
-                "@llvm-project//mlir:AllPassesAndDialects": ["MLIRAllDialects"],
-                "@llvm-project//mlir:ArithOpsIncGen": ["MLIRArithDialect"],
-                "@llvm-project//mlir:BufferizationInterfaces": [""],
-                "@llvm-project//mlir:BuiltinTypesIncGen": [""],
-                "@llvm-project//mlir:CommonFolders": [""],
-                "@llvm-project//mlir:ConversionPasses": [""],
-                "@llvm-project//mlir:DialectUtils": [""],
-                "@llvm-project//mlir:GPUDialect": ["MLIRGPUDialect"],
-                "@llvm-project//mlir:GPUTransforms": ["MLIRGPUTransforms"],
-                "@llvm-project//mlir:InliningUtils": [""],
-                "@llvm-project//mlir:LinalgInterfaces": [
-                    "MLIRLinalgInterfacesIncGenLib"
-                ],
-                "@llvm-project//mlir:LinalgOpsIncGen": ["MLIRLinalgOpsIncGenLib"],
-                "@llvm-project//mlir:LinalgStructuredOpsIncGen": [
-                    "MLIRLinalgStructuredOpsIncGenLib"
-                ],
-                "@llvm-project//mlir:ShapeTransforms": ["MLIRShapeOpsTransforms"],
-                "@llvm-project//mlir:FromLLVMIRTranslation": ["MLIRTargetLLVMIRImport"],
-                "@llvm-project//mlir:ToLLVMIRTranslation": ["MLIRTargetLLVMIRExport"],
-                "@llvm-project//mlir:mlir-translate": ["mlir-translate"],
-                "@llvm-project//mlir:MlirLspServerLib": ["MLIRLspServerLib"],
-                "@llvm-project//mlir:MlirTableGenMain": ["MLIRTableGen"],
-                "@llvm-project//mlir:MlirOptLib": ["MLIROptLib"],
-                "@llvm-project//mlir:CAPISMT": [
-                    "MLIRCAPISMT",
-                    "MLIRCAPIExportSMTLIB",
-                ],
-                "@llvm-project//mlir:SMTDialect": ["MLIRSMT"],
-                "@llvm-project//mlir:TargetSMTLIB": ["MLIRExportSMTLIB"],
-                "@llvm-project//mlir:VectorOps": ["MLIRVector"],
-                # StableHLO.
-                "@stablehlo//:chlo_ops": [
-                    "ChloOps",
-                ],
-                "@stablehlo//:stablehlo_ops": [
-                    "StablehloOps",
-                ],
-                "@stablehlo//:broadcast_utils": [
-                    "StablehloBroadcastUtils",
-                ],
-                "@stablehlo//:stablehlo_passes": [
-                    "StablehloPasses",
-                ],
-                "@stablehlo//:linalg_passes": [
-                    "StablehloLinalgTransforms",
-                ],
-                "@stablehlo//:vhlo_ops": [
-                    "VhloOps",
-                ],
-                # Torch-MLIR.
-                #
-                # The CMake vendor shim groups several fine-grained Bazel
-                # overlay libraries into coarser CMake libraries.
-                "@torch-mlir//:TorchMLIRConversionPasses": [
-                    f"{torch_mlir_cmake_prefix}::torch-mlir::ConversionPasses",
-                ],
-                "@torch-mlir//:TorchMLIRTMTensorDialect": [
-                    f"{torch_mlir_cmake_prefix}::torch-mlir-dialects::TMTensorDialectIR",
-                ],
-                "@torch-mlir//:TorchMLIRTorchConversionDialect": [
-                    f"{torch_mlir_cmake_prefix}::torch-mlir::TorchConversionDialectIR",
-                ],
-                "@torch-mlir//:TorchMLIRTorchConversionPasses": [
-                    f"{torch_mlir_cmake_prefix}::torch-mlir::ConversionPasses",
-                ],
-                "@torch-mlir//:TorchMLIRTorchConversionToMLProgram": [
-                    f"{torch_mlir_cmake_prefix}::torch-mlir::ConversionPasses",
-                ],
-                "@torch-mlir//:TorchMLIRTorchDialect": [
-                    f"{torch_mlir_cmake_prefix}::torch-mlir::TorchDialectIR",
-                ],
-                "@torch-mlir//:TorchMLIRTorchDialectUtils": [
-                    f"{torch_mlir_cmake_prefix}::torch-mlir::TorchDialectUtils",
-                ],
-                "@torch-mlir//:TorchMLIRTorchOnnxToTorch": [
-                    f"{torch_mlir_cmake_prefix}::torch-mlir::TorchOnnxToTorchPasses",
-                ],
-                "@torch-mlir//:TorchMLIRTorchPasses": [
-                    f"{torch_mlir_cmake_prefix}::torch-mlir::TorchDialectPasses",
-                ],
-                "@torch-mlir//:TorchMLIRTorchToArith": [
-                    f"{torch_mlir_cmake_prefix}::torch-mlir::ConversionPasses",
-                ],
-                "@torch-mlir//:TorchMLIRTorchToLinalg": [
-                    f"{torch_mlir_cmake_prefix}::torch-mlir::ConversionPasses",
-                ],
-                "@torch-mlir//:TorchMLIRTorchToSCF": [
-                    f"{torch_mlir_cmake_prefix}::torch-mlir::ConversionPasses",
-                ],
-                "@torch-mlir//:TorchMLIRTorchToTMTensor": [
-                    f"{torch_mlir_cmake_prefix}::torch-mlir::ConversionPasses",
-                ],
-                "@torch-mlir//:TorchMLIRTorchToTensor": [
-                    f"{torch_mlir_cmake_prefix}::torch-mlir::ConversionPasses",
-                ],
                 # HIP
                 "@hip_api_headers//:headers": [
                     "hip_api_headers::headers",
@@ -226,36 +91,11 @@ class TargetConverter:
     def _update_target_mappings(self, mappings: Dict[str, List[str]]):
         self._explicit_target_mapping.update(mappings)
 
-    def _convert_mlir_target(self, target):
-        # Default to a pattern substitution approach.
-        # Take "MLIR" and append the name part of the full target identifier, e.g.
-        #   "@llvm-project//mlir:IR"   -> "MLIRIR"
-        #   "@llvm-project//mlir:Pass" -> "MLIRPass"
-        # MLIR does not have header-only targets apart from the libraries. Here
-        # we redirect any request for a CAPI{Name}Headers to a target within IREE
-        # that sets this up.
-        label = target.rsplit(":")[-1]
-        if label.startswith("CAPI") and label.endswith("Headers"):
-            return ["IREELLVMIncludeSetup"]
-        else:
-            return [f"MLIR{label}"]
-
-    def _convert_llvm_target(self, target):
-        # Default to a pattern substitution approach.
-        # Prepend "LLVM" to the Bazel target name.
-        #   "@llvm-project//llvm:AsmParser" -> "LLVMAsmParser"
-        #   "@llvm-project//llvm:Core" -> "LLVMCore"
-        return ["LLVM" + target.rsplit(":")[-1]]
-
     def _convert_iree_cuda_target(self, target):
         # Convert like:
         #   @iree_cuda//:libdevice_embedded -> iree_cuda::libdevice_embedded
         label = target.rsplit(":")[-1]
         return [f"iree_cuda::{label}"]
-
-    def _convert_iree_dialects_target(self, target):
-        # Just take the target name as-is.
-        return [target.rsplit(":")[-1]]
 
     def _convert_to_cmake_path(self, bazel_path_fragment: str) -> str:
         cmake_path = bazel_path_fragment
@@ -266,6 +106,26 @@ class TargetConverter:
         cmake_path = cmake_path.replace(":", "::")  # iree/base::foo or ::foo
         cmake_path = cmake_path.replace("/", "::")  # iree::base
         return cmake_path
+
+    def _repo_local_package(self, target: str) -> str:
+        iree_repo = self._repo_alias("@iree")
+        repo_prefix = f"{iree_repo}//"
+        if target.startswith(repo_prefix):
+            label_body = target[len(repo_prefix) :]
+        elif target.startswith("//"):
+            label_body = target[len("//") :]
+        else:
+            label_body = target
+        return label_body.split(":", 1)[0]
+
+    def _is_removed_compiler_package(self, target: str) -> bool:
+        package = self._repo_local_package(target)
+        return (
+            package == "compiler"
+            or package.startswith("compiler/")
+            or package == "llvm-external-projects"
+            or package.startswith("llvm-external-projects/")
+        )
 
     def convert_target(self, target):
         """Converts a Bazel target to a list of CMake targets.
@@ -287,10 +147,6 @@ class TargetConverter:
         iree_repo = self._repo_alias("@iree")
         if target in self._explicit_target_mapping:
             return self._explicit_target_mapping[target]
-        if target.startswith("@llvm-project//llvm"):
-            return self._convert_llvm_target(target)
-        if target.startswith("@llvm-project//mlir"):
-            return self._convert_mlir_target(target)
         if target.startswith("@iree_cuda//"):
             return self._convert_iree_cuda_target(target)
         # pip dependencies don't exist in CMake (system Python is used).
@@ -316,21 +172,16 @@ class TargetConverter:
 
     def _convert_iree_repo_target(self, target):
         iree_repo = self._repo_alias("@iree")
-        if target.startswith(f"{iree_repo}//llvm-external-projects/iree-dialects"):
-            return self._convert_iree_dialects_target(target)
+        if self._is_removed_compiler_package(target):
+            raise ValueError(f"No target matching for removed compiler label {target}")
 
         # IREE root paths map to package names based on explicit rules.
-        #   * src/iree/ directories (compiler/src/iree/ and runtime/src/iree/)
-        #     creating their own root paths by trimming down to just "iree"
-        #   * tools/ uses an empty root, for binary targets names like "iree-compile"
+        #   * runtime/src/iree/ creates its own root path by trimming down to
+        #     just "iree"
+        #   * tools/ uses an empty root, for binary target names like "iree-run-module"
         #   * other top level directories add back an 'iree' prefix
         # If changing these, make the corresponding change in iree_macros.cmake
         # (iree_package_ns function).
-
-        # Map //compiler/src/iree/(.*) -> iree::\1 (i.e. iree::compiler::\1)
-        m = re.match(f"^{iree_repo}//compiler/src/iree/(.+)", target)
-        if m:
-            return ["iree::" + self._convert_to_cmake_path(m.group(1))]
 
         # Map //runtime/src/iree/(.*) -> iree::\1
         m = re.match(f"^{iree_repo}//runtime/src/iree/(.+)", target)

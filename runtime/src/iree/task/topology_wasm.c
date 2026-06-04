@@ -58,8 +58,7 @@ iree_status_t iree_task_topology_initialize_from_logical_cpu_set(
     group->caches.l1_data = 32 * 1024;
     group->caches.l2_data = 128 * 1024;
 
-    // NOTE: without cpuinfo we can't get SMT and node info but this isn't
-    // really used on Linux today anyway.
+    // NOTE: without host topology queries we can't get SMT and node info.
     iree_thread_affinity_t* affinity = &group->ideal_thread_affinity;
     memset(affinity, 0, sizeof(*affinity));
     affinity->id_assigned = 1;

@@ -93,74 +93,6 @@ else()
   message(SEND_ERROR "Unrecognized target architecture ${_IREE_UNNORMALIZED_ARCH_LOWERCASE}")
 endif()
 
-# iree_arch_to_llvm_arch()
-#
-# Helper mapping an architecture in IREE's naming scheme (as in IREE_ARCH)
-# to an architecture in LLVM's naming scheme (as in LLVM target triples).
-function(iree_arch_to_llvm_arch DST_LLVM_ARCH_VARIABLE SRC_ARCH)
-  if("${SRC_ARCH}" STREQUAL "arm_64")
-    set(${DST_LLVM_ARCH_VARIABLE} "aarch64" PARENT_SCOPE)
-  elseif("${SRC_ARCH}" STREQUAL "arm_32")
-    set(${DST_LLVM_ARCH_VARIABLE} "arm" PARENT_SCOPE)
-  elseif("${SRC_ARCH}" STREQUAL "x86_64")
-    set(${DST_LLVM_ARCH_VARIABLE} "x86_64" PARENT_SCOPE)
-  elseif("${SRC_ARCH}" STREQUAL "x86_32")
-    set(${DST_LLVM_ARCH_VARIABLE} "i386" PARENT_SCOPE)
-  elseif("${SRC_ARCH}" STREQUAL "riscv_64")
-    set(${DST_LLVM_ARCH_VARIABLE} "riscv64" PARENT_SCOPE)
-  elseif("${SRC_ARCH}" STREQUAL "riscv_32")
-    set(${DST_LLVM_ARCH_VARIABLE} "riscv32" PARENT_SCOPE)
-  elseif("${SRC_ARCH}" STREQUAL "wasm_64")
-    set(${DST_LLVM_ARCH_VARIABLE} "wasm64" PARENT_SCOPE)
-  elseif("${SRC_ARCH}" STREQUAL "wasm_32")
-    set(${DST_LLVM_ARCH_VARIABLE} "wasm32" PARENT_SCOPE)
-  else()
-    message(SEND_ERROR "What is the LLVM name of the architecture that we call ${SRC_ARCH} ?")
-    set(${DST_LLVM_ARCH_VARIABLE} "unknown" PARENT_SCOPE)
-  endif()
-endfunction()
-
-# iree_arch_to_llvm_target()
-#
-# Helper mapping an architecture in IREE's naming scheme (as in IREE_ARCH)
-# to a LLVM CPU target (as in LLVM_TARGETS_TO_BUILD, the CMake variable).
-function(iree_arch_to_llvm_target DST_LLVM_TARGET_VARIABLE SRC_ARCH)
-  if("${SRC_ARCH}" STREQUAL "arm_64")
-    set(${DST_LLVM_TARGET_VARIABLE} "AArch64" PARENT_SCOPE)
-  elseif("${SRC_ARCH}" STREQUAL "arm_32")
-    set(${DST_LLVM_TARGET_VARIABLE} "ARM" PARENT_SCOPE)
-  elseif("${SRC_ARCH}" MATCHES "^x86_")
-    set(${DST_LLVM_TARGET_VARIABLE} "X86" PARENT_SCOPE)
-  elseif("${SRC_ARCH}" MATCHES "^riscv_")
-    set(${DST_LLVM_TARGET_VARIABLE} "RISCV" PARENT_SCOPE)
-  elseif("${SRC_ARCH}" MATCHES "^wasm_")
-    set(${DST_LLVM_TARGET_VARIABLE} "WebAssembly" PARENT_SCOPE)
-  else()
-    message(SEND_ERROR "What is the LLVM target handling of the architecture that we call ${SRC_ARCH} ?")
-    set(${DST_LLVM_TARGET_VARIABLE} "" PARENT_SCOPE)
-  endif()
-endfunction()
-
-# iree_compiler_targeting_iree_arch
-#
-# Helper returning true if we are building the IREE compiler with the llvm-cpu
-# backend enabled and with the LLVM target supporting the CPU architecture
-# give in IREE's naming scheme (as in IREE_ARCH).
-function(iree_compiler_targeting_iree_arch DST_VAR SRC_ARCH)
-  if (NOT IREE_BUILD_COMPILER OR NOT IREE_TARGET_BACKEND_LLVM_CPU)
-    set(${DST_VAR} OFF PARENT_SCOPE)
-    return()
-  endif()
-
-  iree_arch_to_llvm_target(_LLVM_TARGET "${SRC_ARCH}")
-  # WebAssembly is unconditionally enabled, and not enumerated in LLVM_TARGETS_TO_BUILD.
-  if (_LLVM_TARGET IN_LIST LLVM_TARGETS_TO_BUILD OR _LLVM_TARGET STREQUAL "WebAssembly")
-    set(${DST_VAR} ON PARENT_SCOPE)
-  else()
-    set(${DST_VAR} OFF PARENT_SCOPE)
-  endif()
-endfunction()
-
 #-------------------------------------------------------------------------------
 # General utilities
 #-------------------------------------------------------------------------------
@@ -215,11 +147,8 @@ endfunction()
 # PACKAGE_ROOT_PREFIX:
 #   Explicitly set the package root prefix (as something like "iree::foobar").
 #   Default is empty.
-# See runtime/src/CMakeLists.txt for typical usage in a directory tree
-# that installs static dev libraries.
-#
-# See compiler/src/CMakeLists.txt for typical usage that does not install
-# static dev libraries.
+# See runtime/src/CMakeLists.txt for typical usage in a directory tree that
+# installs static dev libraries.
 function(iree_setup_c_src_root)
   cmake_parse_arguments(
     _RULE
@@ -248,9 +177,6 @@ function(iree_setup_c_src_root)
       "${_RULE_DEFAULT_INSTALL_COMPONENT}"
       PARENT_SCOPE)
   endif()
-
-  # Tell tablegen to include from here.
-  set(IREE_COMPILER_TABLEGEN_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}" PARENT_SCOPE)
 
   # Create an implicit defs target that adds this include directory.
   if(_RULE_IMPLICIT_DEFS_TARGET)
@@ -281,8 +207,8 @@ endfunction()
 # format (::).
 #
 # Examples:
-#   compiler/src/iree/compiler/Utils/CMakeLists.txt -> iree::compiler::Utils
 #   runtime/src/iree/base/CMakeLists.txt -> iree::base
+#   libhrx/src/libhrx/CMakeLists.txt -> libhrx::src::libhrx
 #   tests/e2e/CMakeLists.txt -> iree::tests::e2e
 function(iree_package_ns PACKAGE_NS)
   if(DEFINED IREE_PACKAGE_ROOT_DIR)
@@ -676,57 +602,4 @@ function(iree_validate_required_arguments
       message(SEND_ERROR "Missing required argument ${_KEYWORD}")
     endif()
   endforeach()
-endfunction()
-
-# iree_compile_flags_for_patform
-#
-# Helper function to add necessary compile flags based on platform-specific
-# configurations. Note the flags are added for cpu backends only.
-function(iree_compile_flags_for_platform OUT_FLAGS IN_FLAGS)
-  # Match both --iree-hal-target-backends= (iree_bytecode_module flag format)
-  # and --iree-hal-local-target-device-backends= (iree_hal_executable format).
-  if(NOT (IN_FLAGS MATCHES "backends=llvm-cpu" OR
-          IN_FLAGS MATCHES "backends=vmvx"))
-    set(${OUT_FLAGS} "" PARENT_SCOPE)
-    return()
-  endif()
-
-  if(ANDROID AND NOT IN_FLAGS MATCHES "iree-llvmcpu-target-triple")
-    # Android's CMake toolchain defines some variables that we can use to infer
-    # the appropriate target triple from the configured settings:
-    # https://developer.android.com/ndk/guides/cmake#android_platform
-    #
-    # In typical CMake fashion, the various strings are pretty fuzzy and can
-    # have multiple values like "latest", "android-25"/"25"/"android-N-MR1".
-    #
-    # From looking at the toolchain file, ANDROID_PLATFORM_LEVEL seems like it
-    # should pretty consistently be just a number we can use for target triple.
-    set(_TARGET_TRIPLE "aarch64-none-linux-android${ANDROID_PLATFORM_LEVEL}")
-    list(APPEND _FLAGS "--iree-llvmcpu-target-triple=${_TARGET_TRIPLE}")
-  endif()
-
-  if(IREE_ARCH STREQUAL "riscv_64" AND
-     CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
-     NOT IN_FLAGS MATCHES "iree-llvmcpu-target-triple")
-    # RV64 Linux crosscompile toolchain can support iree-compile with
-    # specific CPU flags. Add the llvm flags to support RV64 RVV codegen if
-    # llvm-target-triple is not specified.
-    list(APPEND _FLAGS ${RISCV64_TEST_DEFAULT_LLVM_FLAGS})
-  elseif(IREE_ARCH STREQUAL "riscv_32" AND
-         CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
-         NOT IN_FLAGS MATCHES "iree-llvmcpu-target-triple")
-    # RV32 Linux crosscompile toolchain can support iree-compile with
-    # specific CPU flags. Add the llvm flags to support RV32 RVV codegen if
-    # llvm-target-triple is not specified.
-    list(APPEND _FLAGS ${RISCV32_TEST_DEFAULT_LLVM_FLAGS})
-  endif()
-
-  if(EMSCRIPTEN AND NOT IN_FLAGS MATCHES "iree-llvmcpu-target-triple")
-    set(_EMSCRIPTEN_TEST_DEFAULT_FLAGS
-      "--iree-llvmcpu-target-triple=wasm32-unknown-emscripten"
-    )
-    list(APPEND _FLAGS ${_EMSCRIPTEN_TEST_DEFAULT_FLAGS})
-  endif()
-
-  set(${OUT_FLAGS} "${_FLAGS}" PARENT_SCOPE)
 endfunction()

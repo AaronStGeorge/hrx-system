@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
   NAME
     webgpu
@@ -29,7 +30,9 @@ iree_cc_library(
     iree::hal
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_wasm_cc_library(
   NAME
     webgpu_imports_js
@@ -39,7 +42,9 @@ iree_wasm_cc_library(
     "iree_webgpu"
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
   NAME
     handle_table
@@ -51,7 +56,9 @@ iree_cc_library(
     iree::base
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_test(
   NAME
     handle_table_test
@@ -61,8 +68,12 @@ iree_cc_test(
     ::handle_table
     iree::testing::gtest
     iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.webgpu"
 )
+endif()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
   NAME
     webgpu_imports
@@ -72,7 +83,9 @@ iree_cc_library(
     iree::base
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
   NAME
     webgpu_allocator
@@ -88,7 +101,9 @@ iree_cc_library(
     iree::hal
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
   NAME
     webgpu_buffer
@@ -104,7 +119,9 @@ iree_cc_library(
     iree::hal
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
   NAME
     webgpu_builder
@@ -121,7 +138,9 @@ iree_cc_library(
     iree::hal
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
   NAME
     webgpu_builtins
@@ -137,7 +156,9 @@ iree_cc_library(
     iree::base
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
   NAME
     webgpu_command_buffer
@@ -156,7 +177,9 @@ iree_cc_library(
     iree::hal
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
   NAME
     webgpu_constants
@@ -166,7 +189,9 @@ iree_cc_library(
 
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
   NAME
     webgpu_device
@@ -191,7 +216,9 @@ iree_cc_library(
     iree::hal::utils::files
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
   NAME
     webgpu_fd_file
@@ -205,7 +232,9 @@ iree_cc_library(
     iree::io::file_handle
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
   NAME
     webgpu_queue
@@ -231,7 +260,9 @@ iree_cc_library(
     iree::hal
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
   NAME
     webgpu_executable
@@ -250,7 +281,9 @@ iree_cc_library(
     iree::schemas::webgpu_executable_def_c_fbs
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
   NAME
     webgpu_executable_cache
@@ -265,7 +298,9 @@ iree_cc_library(
     iree::hal
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
   NAME
     webgpu_isa
@@ -275,7 +310,9 @@ iree_cc_library(
 
   PUBLIC
 )
+endif()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
   NAME
     webgpu_semaphore
@@ -290,5 +327,6 @@ iree_cc_library(
     iree::hal
   PUBLIC
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

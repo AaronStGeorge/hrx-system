@@ -245,7 +245,7 @@ static iree_status_t iree_encode_load_and_discover(
     return iree_make_status(
         IREE_STATUS_NOT_FOUND,
         "no encoder functions found in module; ensure the module was produced "
-        "by iree-compile with --iree-parameter-encoder-output-file");
+        "with parameter encoder output enabled");
   }
 
   IREE_TRACE_ZONE_END(z0);
@@ -1119,27 +1119,21 @@ int main(int argc, char** argv) {
       "Encodes parameter files using an encoding module.\n"
       "\n"
       "This tool transforms model parameters using an encoder module produced\n"
-      "by iree-compile with --iree-parameter-encoder-output-file. The encoder\n"
-      "pre-computes parameter transformations (packing, encoding, dispatches)\n"
+      "with parameter encoder output enabled. The encoder pre-computes\n"
+      "parameter transformations, including packing, encoding, and dispatches\n"
       "that would otherwise run at model load time.\n"
       "\n"
       "WORKFLOW:\n"
-      "  1. Compile main module with encoder output:\n"
-      "       iree-compile model.mlir \\\n"
-      "         --iree-parameter-encoder-output-file=encoder.mlir \\\n"
-      "         --iree-parameter-splat-path=input.irpa \\\n"
-      "         -o main.vmfb\n"
+      "  1. Produce main.vmfb and encoder.vmfb with parameter encoder output\n"
+      "     enabled.\n"
       "\n"
-      "  2. Compile the encoder module:\n"
-      "       iree-compile encoder.mlir -o encoder.vmfb\n"
-      "\n"
-      "  3. Run the encoder to transform parameters:\n"
+      "  2. Run the encoder to transform parameters:\n"
       "       iree-encode-parameters \\\n"
       "         --module=encoder.vmfb \\\n"
       "         --parameters=model=input.irpa \\\n"
       "         --output=encoded=output.irpa\n"
       "\n"
-      "  4. Run the main module with encoded parameters:\n"
+      "  3. Run the main module with encoded parameters:\n"
       "       iree-run-module \\\n"
       "         --module=main.vmfb \\\n"
       "         --parameters=model=input.irpa \\\n"

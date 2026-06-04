@@ -77,6 +77,18 @@ class ConfigureBazelTest(unittest.TestCase):
         self.assertIn("common --repo_env=IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=rocm", config)
         self.assertIn(f"common --repo_env=IREE_ROCM_PATH={rocm_root}", config)
 
+    def test_portable_project_options_configure_webgpu(self):
+        args = self.configure_bazel.parse_arguments(["-DIREE_HAL_DRIVER_WEBGPU=ON"])
+        config = self.configure_bazel.generate_config(args)
+
+        self.assertIn(
+            "build --//runtime/config/hal:drivers=local-sync,local-task,null,webgpu",
+            config,
+        )
+        self.assertIn("common --repo_env=IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=none", config)
+        self.assertNotIn("runtime/src/iree/hal/drivers/webgpu,", config)
+        self.assertNotIn("runtime/src/iree/hal/drivers/webgpu/registration", config)
+
     def test_environment_rocm_path_configures_amdgpu(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             rocm_root = self.make_rocm_root(temporary_directory)

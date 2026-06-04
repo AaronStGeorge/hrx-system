@@ -10,12 +10,9 @@
 // Fallback topology implementation when no specialized implementation is
 // available. This provides a conservative single-threaded topology.
 //
-// Only compiles when:
-// - cpuinfo is not available
-// - Not on a platform with a dedicated implementation
-#if !defined(IREE_TASK_USE_CPUINFO) && !defined(IREE_PLATFORM_APPLE) && \
-    !defined(IREE_PLATFORM_WINDOWS) && !defined(IREE_PLATFORM_WASM) &&  \
-    !defined(IREE_PLATFORM_LINUX)
+// Only compiles when no platform with a dedicated implementation is selected.
+#if !defined(IREE_PLATFORM_APPLE) && !defined(IREE_PLATFORM_WINDOWS) && \
+    !defined(IREE_PLATFORM_WASM) && !defined(IREE_PLATFORM_LINUX)
 
 #include <string.h>
 

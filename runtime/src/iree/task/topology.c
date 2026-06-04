@@ -33,7 +33,7 @@ void iree_task_topology_deinitialize(iree_task_topology_t* topology) {
 
 iree_status_t iree_task_topology_parse(iree_string_view_t value,
                                        iree_task_topology_t* out_topology) {
-  // TODO(benvanik): define a format that is generally useful alongside cpuinfo.
+  // TODO(benvanik): define a format for task topology assignment.
   // Maybe colon-separated group-id values from thread affinities? Like:
   //   0.0:0.2:0.4:0.8 to indicate cores 0,2,4,8 on group 0
   //   0.0:0.1:1.0:1.1 to indicate cores 0,1 of both groups 0,1

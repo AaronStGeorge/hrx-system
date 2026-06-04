@@ -24,6 +24,11 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
+_WEBGPU_DRIVER_COMPATIBLE_WITH = select({
+    "//runtime/config/hal:driver_webgpu": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
+
 #===------------------------------------------------------------------------===#
 # Public API and JS companion
 #===------------------------------------------------------------------------===#
@@ -57,6 +62,7 @@ iree_wasm_cc_library(
     name = "webgpu_imports_js",
     srcs = ["webgpu_imports.mjs"],
     module = "iree_webgpu",
+    target_compatible_with = _WEBGPU_DRIVER_COMPATIBLE_WITH,
 )
 
 #===------------------------------------------------------------------------===#

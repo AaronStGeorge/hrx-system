@@ -29,20 +29,17 @@ function(iree_configure_test TEST_NAME)
   # File extension cmake uses for the target platform.
   set_property(TEST ${TEST_NAME} APPEND PROPERTY ENVIRONMENT "IREE_DYLIB_EXT=${CMAKE_SHARED_LIBRARY_SUFFIX}")
 
-  # IREE_*_DISABLE environment variables may used to skip test cases which
-  # require both a compiler target backend and compatible runtime HAL driver.
+  # IREE_*_DISABLE environment variables may be used to skip test cases which
+  # require a compatible runtime HAL driver.
   #
   # These variables may be set by the test environment, typically as a property
   # of some continuous execution test runner or by an individual developer, or
   # here by the build system.
-  #
-  # Tests which only depend on a compiler target backend or a runtime HAL
-  # driver, but not both, should generally use a different method of filtering.
-  if(NOT IREE_TARGET_BACKEND_VULKAN_SPIRV OR NOT IREE_HAL_DRIVER_VULKAN)
+  if(NOT IREE_HAL_DRIVER_VULKAN)
     set_property(TEST ${TEST_NAME} APPEND PROPERTY ENVIRONMENT "IREE_VULKAN_DISABLE=1")
   endif()
 
-  if(NOT IREE_TARGET_BACKEND_METAL_SPIRV OR NOT IREE_HAL_DRIVER_METAL)
+  if(NOT IREE_HAL_DRIVER_METAL)
     set_property(TEST ${TEST_NAME} APPEND PROPERTY ENVIRONMENT "IREE_METAL_DISABLE=1")
   endif()
 

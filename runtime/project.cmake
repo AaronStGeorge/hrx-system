@@ -11,10 +11,8 @@ list(APPEND CMAKE_MODULE_PATH
 option(IREE_BUILD_TESTS "Build IREE runtime unit tests and CTS targets." ON)
 option(IREE_BUILD_BENCHMARKS "Build IREE runtime benchmarks." ON)
 
-set(IREE_BUILD_COMPILER OFF CACHE BOOL
-  "The reduced HRX runtime tree does not build the IREE compiler." FORCE)
 option(IREE_MODULE_VMVX
-  "Builds the VMVX runtime module. Disabled until builtins/ukernel is imported."
+  "Builds the VMVX runtime module boundary."
   OFF)
 set(IREE_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
 set(IREE_BUILD_DOCS OFF CACHE BOOL "" FORCE)
@@ -37,8 +35,6 @@ option(IREE_SYNCHRONIZATION_DISABLE_UNSAFE
   "Disables synchronization primitives for single-threaded bare-metal targets only."
   OFF)
 option(IREE_ENABLE_POSIX "Builds IREE with POSIX support." ON)
-option(IREE_ENABLE_CPUINFO
-  "Enables runtime use of cpuinfo for processor topology detection." OFF)
 option(IREE_ENABLE_LIBBACKTRACE
   "Enables libbacktrace for Linux stack traces." OFF)
 
@@ -62,9 +58,15 @@ set(IREE_HAL_EXECUTABLE_LOADER_EXTRA_DEPS "" CACHE STRING "")
 set(IREE_HAL_EXECUTABLE_PLUGIN_EXTRA_DEPS "" CACHE STRING "")
 
 option(IREE_HAL_DRIVER_DEFAULTS
-  "Sets the default value for all runtime HAL drivers." OFF)
+  "Default value for opt-in runtime HAL drivers." OFF)
 if(NOT DEFINED IREE_HAL_DRIVER_AMDGPU_DEFAULT)
   set(IREE_HAL_DRIVER_AMDGPU_DEFAULT ${IREE_HAL_DRIVER_DEFAULTS})
+endif()
+if(NOT DEFINED IREE_HAL_DRIVER_CUDA_DEFAULT)
+  set(IREE_HAL_DRIVER_CUDA_DEFAULT ${IREE_HAL_DRIVER_DEFAULTS})
+endif()
+if(NOT DEFINED IREE_HAL_DRIVER_HIP_DEFAULT)
+  set(IREE_HAL_DRIVER_HIP_DEFAULT ${IREE_HAL_DRIVER_DEFAULTS})
 endif()
 if(NOT DEFINED IREE_HAL_DRIVER_LOCAL_SYNC_DEFAULT)
   set(IREE_HAL_DRIVER_LOCAL_SYNC_DEFAULT ON)
@@ -72,31 +74,45 @@ endif()
 if(NOT DEFINED IREE_HAL_DRIVER_LOCAL_TASK_DEFAULT)
   set(IREE_HAL_DRIVER_LOCAL_TASK_DEFAULT ON)
 endif()
+if(NOT DEFINED IREE_HAL_DRIVER_METAL_DEFAULT)
+  set(IREE_HAL_DRIVER_METAL_DEFAULT ${IREE_HAL_DRIVER_DEFAULTS})
+endif()
 if(NOT DEFINED IREE_HAL_DRIVER_NULL_DEFAULT)
   set(IREE_HAL_DRIVER_NULL_DEFAULT ON)
+endif()
+if(NOT DEFINED IREE_HAL_DRIVER_VULKAN_DEFAULT)
+  set(IREE_HAL_DRIVER_VULKAN_DEFAULT ${IREE_HAL_DRIVER_DEFAULTS})
+endif()
+if(NOT DEFINED IREE_HAL_DRIVER_WEBGPU_DEFAULT)
+  set(IREE_HAL_DRIVER_WEBGPU_DEFAULT ${IREE_HAL_DRIVER_DEFAULTS})
 endif()
 option(IREE_HAL_DRIVER_AMDGPU
   "Enables the amdgpu runtime HAL driver."
   ${IREE_HAL_DRIVER_AMDGPU_DEFAULT})
+option(IREE_HAL_DRIVER_CUDA
+  "Enables the CUDA runtime HAL driver."
+  ${IREE_HAL_DRIVER_CUDA_DEFAULT})
+option(IREE_HAL_DRIVER_HIP
+  "Enables the HIP runtime HAL driver."
+  ${IREE_HAL_DRIVER_HIP_DEFAULT})
 option(IREE_HAL_DRIVER_LOCAL_SYNC
   "Enables the local-sync runtime HAL driver."
   ${IREE_HAL_DRIVER_LOCAL_SYNC_DEFAULT})
 option(IREE_HAL_DRIVER_LOCAL_TASK
   "Enables the local-task runtime HAL driver."
   ${IREE_HAL_DRIVER_LOCAL_TASK_DEFAULT})
+option(IREE_HAL_DRIVER_METAL
+  "Enables the Metal runtime HAL driver."
+  ${IREE_HAL_DRIVER_METAL_DEFAULT})
 option(IREE_HAL_DRIVER_NULL
   "Enables the null runtime HAL driver."
   ${IREE_HAL_DRIVER_NULL_DEFAULT})
-set(IREE_HAL_DRIVER_CUDA OFF CACHE BOOL
-  "CUDA HAL driver is not wired in the reduced HRX runtime tree." FORCE)
-set(IREE_HAL_DRIVER_HIP OFF CACHE BOOL
-  "HIP HAL driver is not wired in the reduced HRX runtime tree." FORCE)
-set(IREE_HAL_DRIVER_METAL OFF CACHE BOOL
-  "Metal HAL driver is not wired in the reduced HRX runtime tree." FORCE)
-set(IREE_HAL_DRIVER_VULKAN OFF CACHE BOOL
-  "Vulkan HAL driver is not wired in the reduced HRX runtime tree." FORCE)
-set(IREE_HAL_DRIVER_WEBGPU OFF CACHE BOOL
-  "WebGPU HAL driver is not wired in the reduced HRX runtime tree." FORCE)
+option(IREE_HAL_DRIVER_VULKAN
+  "Enables the Vulkan runtime HAL driver."
+  ${IREE_HAL_DRIVER_VULKAN_DEFAULT})
+option(IREE_HAL_DRIVER_WEBGPU
+  "Enables the WebGPU runtime HAL driver."
+  ${IREE_HAL_DRIVER_WEBGPU_DEFAULT})
 
 option(IREE_HAL_EXECUTABLE_LOADER_DEFAULTS
   "Sets the default value for all runtime HAL executable loaders." ON)
@@ -114,6 +130,10 @@ option(IREE_HAL_EXECUTABLE_LOADER_SYSTEM_LIBRARY
 option(IREE_HAL_EXECUTABLE_LOADER_VMVX_MODULE
   "Enables the VMVX module loader for local HAL drivers."
   ${IREE_HAL_EXECUTABLE_LOADER_VMVX_MODULE_DEFAULT})
+if(IREE_HAL_EXECUTABLE_LOADER_VMVX_MODULE)
+  set(IREE_MODULE_VMVX ON CACHE BOOL
+    "Builds the VMVX runtime module boundary." FORCE)
+endif()
 
 option(IREE_HAL_EXECUTABLE_PLUGIN_DEFAULTS
   "Sets the default value for all runtime HAL executable plugin mechanisms." ON)

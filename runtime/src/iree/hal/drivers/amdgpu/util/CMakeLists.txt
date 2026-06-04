@@ -825,37 +825,6 @@ endif()
 if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
-    pm4_dispatch_live_test
-  SRCS
-    "pm4_dispatch_live_test.cc"
-  DATA
-    pm4_dispatch_test_kernels_gfx1100.so
-  DEPS
-    ::libhsa
-    ::packet
-    ::pm4_dispatch
-    ::pm4_program
-    ::queue_primitives
-    ::topology
-    ::vmem
-    iree::base
-    iree::base::threading
-    iree::hal::drivers::amdgpu::abi
-    iree::io::file_handle
-    iree::testing::gtest
-    iree::testing::gtest_main
-  LABELS
-    "iree-build-requirement=runtime.hal.amdgpu"
-    "iree-run-requirement=runtime.resource.amd_gpu"
-    "runtime-resource=amd-gpu"
-  RESOURCE_GROUP
-    iree-hal-drivers-amdgpu-tests
-)
-endif()
-
-if(IREE_HAL_DRIVER_AMDGPU)
-iree_cc_test(
-  NAME
     pm4_program_test
   SRCS
     "pm4_program_test.cc"

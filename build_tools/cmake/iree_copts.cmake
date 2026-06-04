@@ -15,15 +15,16 @@
 #          ███ ███  ██   ██ ██   ██ ██   ████ ██ ██   ████  ██████
 #
 # Everything here is added to *every* iree_cc_library/iree_cc_binary/etc.
-# That includes both runtime and compiler components, and these may propagate
-# out to user code interacting with either (such as custom modules).
+# These options may propagate out to user code interacting with runtime
+# extension points such as custom modules.
 #
 # Be extremely judicious in the use of these flags.
 #
 # - Need to disable a warning?
-#   Usually these are encountered in compiler-specific code and can be disabled
-#   in a compiler-specific way. Only add global warning disables when it's clear
-#   that we never want them or that they'll show up in a lot of places.
+#   Usually these are encountered in code for a specific toolchain or platform
+#   and can be disabled at that scope. Only add global warning disables when
+#   it's clear that we never want them or that they'll show up in a lot of
+#   places.
 #
 #   See: https://stackoverflow.com/questions/3378560/how-to-disable-gcc-warnings-for-a-few-lines-of-code
 #
@@ -54,12 +55,11 @@
 #   easier for readers to find the files, etc.
 #
 # - Still think you need to add an include directory? (system includes, etc)
-#   Don't do that here, either. It's highly doubtful that every single target in
-#   all of IREE (both compiler and runtime) on all platforms (both host and
-#   cross-compilation targets) needs your special include directory. Add it on
-#   the COPTS of the target you are using it in and, ideally, private to that
-#   target (used in .c/cc files, not in a .h that leaks the include path
-#   requirements to all consumers of the API).
+#   Don't do that here, either. It's highly doubtful that every single IREE
+#   target on all platforms and cross-compilation targets needs your special
+#   include directory. Add it on the COPTS of the target you are using it in and,
+#   ideally, private to that target (used in .c/cc files, not in a .h that leaks
+#   the include path requirements to all consumers of the API).
 
 set(IREE_CXX_STANDARD ${CMAKE_CXX_STANDARD})
 
@@ -74,17 +74,17 @@ set(IREE_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 # makes Linux and Windows behave similarly with respect to shared libraries
 # and DLLs.
 if(IREE_VISIBILITY_HIDDEN)
-iree_select_compiler_opts(IREE_DEFAULT_COPTS
-  CLANG_OR_GCC
-    "-fvisibility=hidden"
-)
+  iree_select_compiler_opts(IREE_DEFAULT_COPTS
+    CLANG_OR_GCC
+      "-fvisibility=hidden"
+  )
 endif()
 
 # Key compilation options
 iree_select_compiler_opts(IREE_DEFAULT_COPTS
   CLANG_OR_GCC
-    # NOTE: The RTTI setting must match what LLVM was compiled with (defaults
-    # to RTTI disabled).
+    # Keep runtime C++ targets free of RTTI and exceptions unless a leaf target
+    # has a specific ABI requirement.
     "$<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>"
     "$<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>"
 
@@ -113,8 +113,7 @@ iree_select_compiler_opts(IREE_DEFAULT_COPTS
     # them in a portable fashion and use those - and that's what we try to do
     # in certain places where we can get away with it. Other uses, like getenv,
     # are fine as these are not intended for use in core runtime code that needs
-    # to be secure (friends don't let friends ship entire compiler stacks
-    # embedded inside security sensitive applications anyway :).
+    # to be secure.
     # https://docs.microsoft.com/en-us/cpp/c-runtime-library/security-features-in-the-crt
     "/D_CRT_SECURE_NO_WARNINGS"
 
@@ -125,23 +124,14 @@ iree_select_compiler_opts(IREE_DEFAULT_COPTS
     # https://docs.microsoft.com/en-us/cpp/c-runtime-library/secure-template-overloads
     "/D_CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES"
 
-    # MLIR defines std::complex<APFloat>, which is invalid per the C++ spec
-    # stating that std::complex must only be used with builtin compiler types.
-    # Until MLIR cleans this up we silence it so that we don't end up with
-    # a warning per file that includes mlir/IR/BuiltinAttributes.h.
-    # Tracking issue: https://github.com/llvm/llvm-project/issues/65255
-    "/D_SILENCE_NONFLOATING_COMPLEX_DEPRECATION_WARNING"
-
     # Configure RTTI generation.
     # - /GR - Enable generation of RTTI (default)
     # - /GR- - Disables generation of RTTI
     # https://docs.microsoft.com/en-us/cpp/build/reference/gr-enable-run-time-type-information?view=msvc-160
     "/GR-"
 
-    # Default max section count is 64k, which is woefully inadequate for some of
-    # the insanely bloated tablegen outputs LLVM/MLIR produces. This cranks it
-    # up to 2^32. It's not great that we have to generate/link files like that
-    # but it's better to not get spurious failures during LTCG.
+    # Default max section count is 64k, which can be inadequate for large
+    # generated sources or heavily templated code.
     # https://docs.microsoft.com/en-us/cpp/build/reference/bigobj-increase-number-of-sections-in-dot-obj-file
     "/bigobj"
 
@@ -262,24 +252,19 @@ iree_select_compiler_opts(IREE_DEFAULT_COPTS
     # dereference buffer[-1ull]!").
     # https://docs.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warning-level-3-c4018
     #
-    # TODO(#3844): remove this (or make it per-file to iree/compiler, as LLVM
-    # tends to not care about these kind of things and it crops up there a lot).
+    # TODO(#3844): remove this warning suppression from runtime code.
     "/wd4018"
 
-    # Also common in LLVM is mismatching signed/unsigned math. That's even more
-    # dangerous than C4018: almost always these crop up in doing something with
-    # a size_t and a non-size_t value (usually int or something like it) and do
-    # you want out-of-bounds access exploits? Because that's how you get
-    # out-of-bounds access exploits. Before fuzzers took over finding code and
-    # trying to compile it with this warning forced to be an error was a way to
-    # narrow down the places to look for attack vectors. I lived through the
-    # Microsoft SAL/safe-int code red, and once you get used to using the safe
-    # buffer offset/size manipulation functions it eliminates all kinds of
-    # annoying bugs - as well as potential security issues.
+    # Mismatching signed/unsigned math is even more dangerous than C4018:
+    # almost always these crop up in doing something with a size_t and a
+    # non-size_t value (usually int or something like it) and can produce
+    # out-of-bounds accesses. Before fuzzers took over finding code and trying
+    # to compile it with this warning forced to be an error was a way to narrow
+    # down the places to look for attack vectors. Using safe buffer offset/size
+    # manipulation functions eliminates all kinds of annoying bugs, as well as
+    # potential security issues.
     #
-    # TODO(#3844): work to remove this class of errors from our code. It's
-    # almost entirely in LLVM related stuff so per-file iree/compiler/... would
-    # be fine.
+    # TODO(#3844): work to remove this class of errors from our code.
     "/wd4146"  # operator applied to unsigned type, result still unsigned
     "/wd4244"  # possible loss of data
     "/wd4267"  # initializing: possible loss of data
@@ -419,10 +404,6 @@ iree_select_compiler_opts(IREE_DEFAULT_LINKOPTS
     ${_IREE_LOGGING_LINKOPTS}
   MSVC
     "-natvis:${IREE_ROOT_DIR}/runtime/iree.natvis"
-
-    # Added to fix "LNK1318" error when "IREECompiler.pdb" exceeds 4GiB per:
-    # https://github.com/iree-org/iree/issues/20763#issuecomment-2902057042
-    "-pdbpagesize:32768"
 )
 
 if(EMSCRIPTEN AND IREE_EXTERNAL_WEBGPU_HAL_DRIVER_FOUND)
@@ -545,10 +526,10 @@ function(iree_enable_optimization_options)
 endfunction()
 
 #-------------------------------------------------------------------------------
-# Compiler: Clang/LLVM
+# C/C++ compiler: Clang/LLVM
 #-------------------------------------------------------------------------------
 
-# TODO(benvanik): Clang/LLVM options.
+# TODO(benvanik): Clang/LLVM C/C++ compiler options.
 
 #-------------------------------------------------------------------------------
 # Compiler: GCC
@@ -573,14 +554,4 @@ if(MSVC)
     string(REPLACE "/Zi" "/Z7" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
     string(REPLACE "/Zi" "/Z7" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
   endif()
-endif()
-
-#-------------------------------------------------------------------------------
-# Third party: llvm-project
-#-------------------------------------------------------------------------------
-
-if(IREE_BUILD_COMPILER)
-  # iree-tblgen is not defined using the add_tablegen mechanism as other
-  # TableGen tools in LLVM.
-  set(IREE_TABLEGEN_EXE "$<TARGET_FILE:iree-tblgen>")
 endif()

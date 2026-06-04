@@ -40,6 +40,13 @@ HAL_VULKAN = build_requirement(
     cmake_condition = "IREE_HAL_DRIVER_VULKAN",
 )
 
+HAL_WEBGPU = build_requirement(
+    id = "runtime.hal.webgpu",
+    label = "//runtime/requirements:hal_webgpu",
+    enabled_by = "//runtime/config/hal:driver_webgpu",
+    cmake_condition = "IREE_HAL_DRIVER_WEBGPU",
+)
+
 AMDGPU_RESOURCE = run_requirement(
     id = "runtime.resource.amd_gpu",
     label = "//runtime/requirements:amd_gpu",
@@ -61,12 +68,21 @@ VULKAN_DEVICE_RESOURCE = run_requirement(
     skip_contract = "Tests skip when no compatible Vulkan device is available.",
 )
 
+WEBGPU_DEVICE_RESOURCE = run_requirement(
+    id = "runtime.resource.webgpu_device",
+    label = "//runtime/requirements:webgpu_device",
+    cmake_label = "runtime-resource=webgpu-device",
+    skip_contract = "Tests skip when no compatible WebGPU/Dawn device is available.",
+)
+
 REQUIREMENTS = [
     HAL_AMDGPU,
     HAL_CUDA,
     HAL_HIP,
     HAL_VULKAN,
+    HAL_WEBGPU,
     AMDGPU_RESOURCE,
     NVIDIA_GPU_RESOURCE,
     VULKAN_DEVICE_RESOURCE,
+    WEBGPU_DEVICE_RESOURCE,
 ]

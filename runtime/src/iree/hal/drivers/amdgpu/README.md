@@ -9,8 +9,6 @@
 Configure CMake with the following options:
 
 ```sh
--DIREE_BUILD_COMPILER=ON
--DIREE_TARGET_BACKEND_ROCM=ON
 -DIREE_HAL_DRIVER_AMDGPU=ON
 -DIREE_HAL_AMDGPU_DEVICE_BINARY_TARGETS=all
 -DIREE_ROCM_TEST_TARGET_CHIP=gfx1100
@@ -22,8 +20,8 @@ Build tools with the AMDGPU runtime driver registered and with device artifacts
 compiled for your local GPU architecture:
 
 ```sh
-iree-bazel-build //tools:iree-compile //tools:iree-run-module \
-  --iree_drivers=amdgpu,cuda,hip,local-sync,local-task,vulkan \
+iree-bazel-build //tools:iree-run-module \
+  --iree_drivers=amdgpu,hip,local-sync,local-task,vulkan \
   --//build_tools/bazel:rocm_test_target=gfx1100
 ```
 
@@ -52,36 +50,17 @@ ROCR_VISIBLE_DEVICES=2,3 iree-run-module --device=amdgpu
 iree-run-module --device=amdgpu://0,1 --device=amdgpu://2,3
 ```
 
-Use `amdgpu` to specify the AMDGPU target when compiling programs:
+Run a VMFB containing AMDGPU-compatible executables with the AMDGPU HAL driver:
 
 ```sh
-iree-compile --iree-hal-target-device=amdgpu ...
-```
-
-For a direct Bazel-built smoke test, compile with the AMDGPU target device and
-run the resulting VMFB with the AMDGPU HAL driver:
-
-```sh
-bazel-bin/tools/iree-compile \
-  --iree-input-type=stablehlo \
-  --iree-hal-target-device=amdgpu \
-  --iree-rocm-target=gfx1100 \
-  --iree-rocm-bc-dir=bazel-bin/external/_main~iree_extension~amdgpu_device_libs/bitcode \
-  tests/e2e/stablehlo_models/mnist_fake_weights.mlir \
-  -o=/tmp/mnist_fake_amdgpu.vmfb
-
 bazel-bin/tools/iree-run-module \
   --device=amdgpu \
-  --module=/tmp/mnist_fake_amdgpu.vmfb \
-  --function=predict \
-  --input=1x28x28x1xf32 \
-  --expected_output='1x10xf32=0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1'
+  --module=/tmp/model_amdgpu.vmfb \
+  --function=main
 ```
 
-Prefer this explicit two-step flow when debugging AMDGPU target-device behavior.
-`iree-run-mlir --device=amdgpu` currently relies on generic device-to-compiler
-flag inference and may select the legacy ROCm/HIP target path instead of the
-AMDGPU HAL target.
+Add `--input=` and `--expected_output=` flags matching the entry point when
+running modules that require arguments or output validation.
 
 To capture a Tracy trace of the same runtime path, use the Bazel trace wrapper.
 The wrapper requires a `tracy-capture` binary in `PATH`, or one supplied through
@@ -91,16 +70,14 @@ The wrapper requires a `tracy-capture` binary in `PATH`, or one supplied through
 IREE_TRACY_CAPTURE=/path/to/tracy-capture \
   build_tools/bin/iree-bazel-run \
   --trace \
-  --trace_name=fake_mnist \
+  --trace_name=amdgpu_runtime \
   //tools:iree-run-module \
-  --iree_drivers=amdgpu,cuda,hip,local-sync,local-task,vulkan \
+  --iree_drivers=amdgpu,hip,local-sync,local-task,vulkan \
   --//build_tools/bazel:rocm_test_target=gfx1100 \
   -- \
   --device=amdgpu \
-  --module=/tmp/mnist_fake_amdgpu.vmfb \
-  --function=predict \
-  --input=1x28x28x1xf32 \
-  --expected_output='1x10xf32=0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1'
+  --module=/tmp/model_amdgpu.vmfb \
+  --function=main
 ```
 
 ## Driver Shape
