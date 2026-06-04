@@ -24,18 +24,6 @@ endif()
 """,
 )
 
-iree_cmake_extra_content(
-    content = """
-# cpuinfo can be conditionally disabled when it is not supported.
-# If disabled then by default the task system will use 1 thread.
-set(IREE_CPUINFO_TARGET)
-if(IREE_ENABLE_CPUINFO)
-  set(IREE_CPUINFO_TARGET cpuinfo)
-endif()
-""",
-    inline = True,
-)
-
 iree_runtime_cc_library(
     name = "api",
     srcs = ["api.c"],
@@ -56,7 +44,6 @@ iree_runtime_cc_library(
         "process.c",
         "scope.c",
         "topology.c",
-        "topology_cpuinfo.c",
         "topology_darwin.c",
         "topology_fallback.c",
         "topology_sysfs.c",

@@ -14,13 +14,6 @@ endif()
 
 iree_add_all_subdirs()
 
-# cpuinfo can be conditionally disabled when it is not supported.
-# If disabled then by default the task system will use 1 thread.
-set(IREE_CPUINFO_TARGET)
-if(IREE_ENABLE_CPUINFO)
-  set(IREE_CPUINFO_TARGET cpuinfo)
-endif()
-
 iree_cc_library(
   NAME
     api
@@ -52,7 +45,6 @@ iree_cc_library(
     "process.c"
     "scope.c"
     "topology.c"
-    "topology_cpuinfo.c"
     "topology_darwin.c"
     "topology_fallback.c"
     "topology_sysfs.c"
@@ -126,18 +118,14 @@ iree_cc_binary_benchmark(
 
 # Topology implementation selection.
 # All topology sources are compiled unconditionally (required for Bazel).
-# Files self-select based on platform guards and IREE_HAVE_CPUINFO.
+# Files self-select based on platform guards.
 #
 # Priority (first match wins):
-# 1. cpuinfo (if IREE_ENABLE_CPUINFO=ON)
-# 2. sysfs (Linux/Android, excluding Emscripten/Wasm)
-# 3. Platform-specific (Darwin, Windows, Wasm)
-# 4. Fallback (single-threaded conservative topology)
+# 1. sysfs (Linux/Android, excluding Emscripten/Wasm)
+# 2. Platform-specific (Darwin, Windows, Wasm)
+# 3. Fallback (single-threaded conservative topology)
 
-if(IREE_ENABLE_CPUINFO)
-  target_compile_definitions(iree_task_task PRIVATE IREE_TASK_USE_CPUINFO=1)
-  message(STATUS "IREE task topology: using cpuinfo")
-elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT EMSCRIPTEN AND NOT IREE_ARCH STREQUAL "wasm_32")
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT EMSCRIPTEN AND NOT IREE_ARCH STREQUAL "wasm_32")
   message(STATUS "IREE task topology: using sysfs (Linux)")
 elseif(APPLE)
   message(STATUS "IREE task topology: using platform-specific (Darwin)")

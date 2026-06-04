@@ -122,8 +122,7 @@ TEST(TopologyTest, FromGroupCount) {
 }
 
 // Verifies only that the |topology| is usable.
-// If we actually checked the contents here then we'd just be validating that
-// cpuinfo was working and the tests would become machine-dependent.
+// Checking the exact contents would make the tests machine-dependent.
 static void EnsureTopologyValid(iree_host_size_t max_group_count,
                                 iree_task_topology_t* topology) {
   EXPECT_LE(iree_task_topology_group_count(topology),

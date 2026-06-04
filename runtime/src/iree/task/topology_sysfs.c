@@ -5,7 +5,6 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 // Linux sysfs-based topology detection.
-// Defers to cpuinfo if available, otherwise provides sysfs implementation.
 //
 // Documentation:
 // https://docs.kernel.org/admin-guide/abi-stable-files.html#abi-file-stable-sysfs-devices-system-cpu
@@ -17,8 +16,7 @@
 #include "iree/base/internal/sysfs.h"
 #include "iree/task/topology.h"
 
-#if !defined(IREE_TASK_USE_CPUINFO) && defined(IREE_PLATFORM_LINUX) && \
-    !defined(IREE_PLATFORM_WASM)
+#if defined(IREE_PLATFORM_LINUX) && !defined(IREE_PLATFORM_WASM)
 
 #include <errno.h>
 #include <fcntl.h>
@@ -875,5 +873,4 @@ iree_status_t iree_task_topology_initialize_from_physical_cores(
   return status;
 }
 
-#endif  // !IREE_TASK_USE_CPUINFO && IREE_PLATFORM_LINUX &&
-        // !IREE_PLATFORM_WASM
+#endif  // IREE_PLATFORM_LINUX && !IREE_PLATFORM_WASM

@@ -37,8 +37,6 @@ option(IREE_SYNCHRONIZATION_DISABLE_UNSAFE
   "Disables synchronization primitives for single-threaded bare-metal targets only."
   OFF)
 option(IREE_ENABLE_POSIX "Builds IREE with POSIX support." ON)
-option(IREE_ENABLE_CPUINFO
-  "Enables runtime use of cpuinfo for processor topology detection." OFF)
 option(IREE_ENABLE_LIBBACKTRACE
   "Enables libbacktrace for Linux stack traces." OFF)
 
