@@ -151,6 +151,14 @@ def parse_arguments() -> argparse.Namespace:
     inputs.add_argument(
         "--staged", action="store_true", help="Use files staged for commit."
     )
+    inputs.add_argument(
+        "--commit",
+        action="store_true",
+        help=(
+            "Use files staged for commit plus files changed by HEAD. This is "
+            "the Git hook scope and covers amended commit contents."
+        ),
+    )
     inputs.add_argument("--all", action="store_true", help="Use all tracked files.")
     inputs.add_argument(
         "--base",
@@ -215,6 +223,7 @@ def parse_arguments() -> argparse.Namespace:
     if args.paths and (
         args.changed
         or args.staged
+        or args.commit
         or args.all
         or args.base
         or args.since
@@ -238,6 +247,7 @@ def apply_profile_defaults(args: argparse.Namespace) -> None:
         not args.paths
         and not args.changed
         and not args.staged
+        and not args.commit
         and not args.all
         and not args.base
         and not args.since
@@ -427,6 +437,29 @@ def changed_files() -> list[str]:
     )
 
 
+def head_commit_files() -> list[str]:
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", "HEAD^"],
+        cwd=REPO_ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if result.returncode != 0:
+        return []
+    return git_list(
+        ["diff", "--name-only", "-z", "--diff-filter=ACMR", "HEAD^", "HEAD", "--"]
+    )
+
+
+def commit_files() -> list[str]:
+    return unique_paths(
+        [
+            *git_list(["diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"]),
+            *head_commit_files(),
+        ]
+    )
+
+
 def selected_files(args: argparse.Namespace) -> list[str]:
     if args.paths:
         return args.paths
@@ -434,6 +467,8 @@ def selected_files(args: argparse.Namespace) -> list[str]:
         return changed_files()
     if args.staged:
         return git_list(["diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"])
+    if args.commit:
+        return commit_files()
     if args.all:
         return git_list(["ls-files", "-z"])
     if args.base:
@@ -825,6 +860,8 @@ def print_plan(
         input_mode = "explicit paths"
     elif args.changed:
         input_mode = "changed"
+    elif args.commit:
+        input_mode = "commit"
     elif args.all:
         input_mode = "all"
     elif args.base:
@@ -879,6 +916,8 @@ def dev_py_rerun_command(args: argparse.Namespace, verbose: bool) -> list[str]:
         ]
         if args.base:
             command += ["--base", args.base]
+        elif args.commit:
+            command.append("--commit")
         elif args.staged or args.paths:
             command.append("--staged")
     if verbose:
@@ -887,7 +926,7 @@ def dev_py_rerun_command(args: argparse.Namespace, verbose: bool) -> list[str]:
 
 
 def precommit_invocation_autofixes(args: argparse.Namespace) -> bool:
-    return args.tests and (args.staged or bool(args.paths))
+    return args.tests and (args.commit or args.staged or bool(args.paths))
 
 
 def print_suggested_actions(args: argparse.Namespace, ok: bool) -> None:

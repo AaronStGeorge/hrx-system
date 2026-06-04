@@ -242,6 +242,18 @@ class CliTest(unittest.TestCase):
         self.assertIn("--base origin/main", description)
         self.assertNotIn("--changed", description)
 
+    def test_bazel_precommit_can_use_commit_scope(self):
+        args = cli.parse_arguments(["bazel", "precommit", "--commit"])
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertEqual(len(plan.steps), 2)
+        self.assertIn("--fix", plan.steps[0].argv)
+        self.assertIn("--check", plan.steps[1].argv)
+        self.assertIn("--commit", description)
+        self.assertNotIn("--changed", description)
+
     def test_bazel_precommit_can_use_staged_files(self):
         args = cli.parse_arguments(["bazel", "precommit", "--staged"])
 
@@ -322,7 +334,7 @@ class CliTest(unittest.TestCase):
         self.assertIsInstance(step, WriteFileStep)
         self.assertIn("python dev.py bazel hook --profile ci", step.content)
         self.assertIn(
-            "run: python dev.py bazel precommit --profile ci {staged_files}",
+            "run: python dev.py bazel precommit --profile ci --commit",
             step.content,
         )
 
@@ -334,7 +346,7 @@ class CliTest(unittest.TestCase):
 
         self.assertIsInstance(step, WriteFileStep)
         self.assertIn(
-            "run: python dev.py cmake precommit --profile default {staged_files}",
+            "run: python dev.py cmake precommit --profile default --commit",
             step.content,
         )
 
@@ -357,9 +369,11 @@ class CliTest(unittest.TestCase):
         output = self.parse_help(["bazel", "precommit", "--help"])
 
         self.assertIn("staged, unstaged, and untracked files", output)
+        self.assertIn("--commit", output)
         self.assertIn("--base", output)
         self.assertIn("--staged", output)
         self.assertIn("Explicit paths", output)
+        self.assertNotIn("generated Git hook", output)
         self.assertIn("mechanical fixups", output)
         self.assertIn("non-mutating check mode", output)
 

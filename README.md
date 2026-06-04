@@ -142,10 +142,12 @@ python dev.py bazel fix
 python dev.py cmake fix
 ```
 
-The Git `pre-commit` hook is check-only. Mechanical updates happen through
-`fix`, so a successful `git commit` cannot leave the worktree dirty or commit
-stale generated/formatted content. See `CONTRIBUTING.md` for contributor setup
-and `build_tools/lefthook/README.md` for the hook architecture.
+Test-bearing Git `pre-commit` hook profiles apply mechanical fixups before
+running the same profile in non-mutating check mode. The hook validates commit
+scope, not the full branch: files staged for commit plus files changed by
+`HEAD`, so amended commits include the commit being replaced. See
+`CONTRIBUTING.md` for contributor setup and `build_tools/lefthook/README.md`
+for the hook architecture.
 
 ## Running Tests
 

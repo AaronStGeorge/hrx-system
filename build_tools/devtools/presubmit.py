@@ -32,9 +32,9 @@ def profile_runs_tests(profile: str) -> bool:
 
 
 def precommit_should_autofix(
-    profile: str, staged: bool, paths: list[str] | None
+    profile: str, commit: bool, staged: bool, paths: list[str] | None
 ) -> bool:
-    return profile_runs_tests(profile) and (staged or bool(paths))
+    return profile_runs_tests(profile) and (commit or staged or bool(paths))
 
 
 def presubmit_plan(
@@ -102,6 +102,7 @@ def precommit_plan(
     tool_env: ToolEnvironment,
     profile: str,
     base: str | None = None,
+    commit: bool = False,
     staged: bool = False,
     paths: list[str] | None = None,
     verbose: bool = False,
@@ -115,13 +116,15 @@ def precommit_plan(
         input_args += paths
     elif base is not None:
         input_args += ["--base", base]
+    elif commit:
+        input_args.append("--commit")
     elif staged:
         input_args.append("--staged")
     else:
         input_args.append("--changed")
 
     plan = CommandPlan()
-    if precommit_should_autofix(profile, staged, paths):
+    if precommit_should_autofix(profile, commit, staged, paths):
         command = [
             tool_env.python,
             str(REPO_ROOT / "build_tools/lefthook/presubmit.py"),

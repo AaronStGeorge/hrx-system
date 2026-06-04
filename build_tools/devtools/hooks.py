@@ -24,12 +24,12 @@ def hook_content(lane: str, profile: str) -> str:
 
 # Local {lane_name}-lane hook policy.
 # Installed by `python dev.py {lane} hook --profile {profile}`.
-# Test-bearing staged precommit profiles apply fixups before validation.
+# Test-bearing commit-scope precommit profiles apply fixups before validation.
 
 pre-commit:
   commands:
     precommit:
-      run: python dev.py {lane} precommit --profile {profile} {{staged_files}}
+      run: python dev.py {lane} precommit --profile {profile} --commit
 """
 
 

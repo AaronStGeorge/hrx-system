@@ -68,7 +68,9 @@ installed and this checkout should not get a local tool environment.""",
 
 This writes ignored lefthook-local.yml with the selected lane/profile and then
 runs lefthook install. Re-run this command with a different --profile to change
-the default profile used by Git commits.""",
+the default profile used by Git commits. The installed hook uses commit scope:
+staged files plus files changed by HEAD, so amended commits validate the commit
+being replaced.""",
         )
     if command == "configure":
         if lane == "bazel":
@@ -182,20 +184,23 @@ Use `python dev.py {lane} precommit` for local changes only.""",
             epilog=f"""Examples:
   python dev.py {lane} precommit
   python dev.py {lane} precommit --profile {default_profile}
+  python dev.py {lane} precommit --commit
   python dev.py {lane} precommit --base origin/main
   python dev.py {lane} precommit --staged
   python dev.py {lane} precommit README.md CONTRIBUTING.md
   python dev.py {lane} precommit --verbose
 
 With no input option, precommit checks staged, unstaged, and untracked files.
+`--commit` checks the Git hook scope: staged files plus files changed by HEAD.
 `--base` checks branch changes from the merge base with the given ref through
 HEAD, plus local staged, unstaged, and untracked files.
-Explicit paths check only those files and are used by the generated Git hook.
+Explicit paths check only those files for narrow manual runs.
 The default profile is {default_profile}. Use --profile to select default,
 paranoid, or ci for this run.
-Staged-file runs with profiles that run tests, currently paranoid and ci, apply
-mechanical fixups before running the same profile in non-mutating check mode.
-Broader local-change runs and the profile named default are check-only.
+Commit-scope, staged-file, and explicit-path runs with profiles that run tests,
+currently paranoid and ci, apply mechanical fixups before running the same
+profile in non-mutating check mode. Broader local-change runs and the profile
+named default are check-only.
 
 {lane_scope}""",
         )

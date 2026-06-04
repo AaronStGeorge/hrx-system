@@ -9,19 +9,21 @@ routing. Project-specific policy stays in each project under
 ## Commit Contract
 
 A successful Git commit must not commit stale formatter or generated-file
-output. Test-bearing Git `pre-commit` profiles over staged input therefore run
-a mechanical fix pass first, stage files owned by those fixers, and then run the
-same profile in non-mutating check mode:
+output. The Git `pre-commit` hook uses commit scope: files staged for commit
+plus files changed by `HEAD`, so `git commit --amend` validates the commit being
+replaced without scanning the full feature branch. Test-bearing hook profiles
+run a mechanical fix pass first, stage files owned by those fixers, and then run
+the same profile in non-mutating check mode:
 
 ```bash
-python dev.py <lane> precommit --profile <profile> {staged_files}
+python dev.py <lane> precommit --profile <profile> --commit
 ```
 
 This fix-then-check path is used for `paranoid` and `ci` when the input is the
-generated hook's staged-file list or an explicit `--staged` precommit, because
-those profiles run affected tests after any mutation. Broader local-change
-precommit runs stay check-only. The `default` profile remains check-only. Local
-fixups are also available through explicit commands:
+generated hook's commit scope or an explicit `--staged` precommit, because those
+profiles run affected tests after any mutation. Broader local-change precommit
+runs stay check-only. The `default` profile remains check-only. Local fixups are
+also available through explicit commands:
 
 ```bash
 python dev.py bazel fix
@@ -29,9 +31,9 @@ python dev.py cmake fix
 ```
 
 `fix` applies staged hygiene repairs and stages files owned by those fixers.
-`precommit` checks the current local change set, with autofix enabled only for
-staged test-bearing runs. `presubmit` is non-mutating and runs the full-tree
-CI-shaped profile.
+`precommit` checks the current local change set, with autofix enabled for
+commit-scope, staged, and explicit-path test-bearing runs. `presubmit` is
+non-mutating and runs the full-tree CI-shaped profile.
 
 Normal presubmit output is terse: major phases, named checks, pass/fail status,
 and failure details. Large captured failures print the beginning and end with an
@@ -82,9 +84,9 @@ python dev.py cmake presubmit --profile default
 
 ## Lefthook Groups
 
-`pre-commit` is the installed Git hook. With staged-file `paranoid` or `ci` it
-runs fixups first and then validates the same staged-file set; with `default` it
-is check-only.
+`pre-commit` is the installed Git hook. With `paranoid` or `ci` it runs fixups
+first and then validates the same commit-scope set; with `default` it is
+check-only.
 
 `dev.py` installs lane-specific local hook policy into ignored
 `lefthook-local.yml`:

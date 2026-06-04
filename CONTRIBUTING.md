@@ -129,10 +129,13 @@ or:
 python dev.py cmake hook --profile default
 ```
 
-The hook is check-only. It should never leave the worktree dirty after a
-successful commit. Lane-specific hook policy is stored in ignored
-`lefthook-local.yml`. Re-run `python dev.py <lane> hook --profile <profile>` to
-change the profile used by Git commits.
+The hook validates commit scope: files staged for commit plus files changed by
+`HEAD`, so amended commits include the commit being replaced without checking
+the full branch. Test-bearing hook profiles apply mechanical fixups before
+running the same profile in non-mutating check mode. Lane-specific hook policy
+is stored in ignored `lefthook-local.yml`. Re-run
+`python dev.py <lane> hook --profile <profile>` to change the profile used by
+Git commits.
 
 ## Verification
 
