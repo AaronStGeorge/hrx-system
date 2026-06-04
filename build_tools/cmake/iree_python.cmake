@@ -190,7 +190,6 @@ function(iree_py_test)
     LABELS
       ${_RULE_LABELS}
     PACKAGE_DIRS
-      "${IREE_BINARY_DIR}/compiler/bindings/python"
       "${IREE_BINARY_DIR}/runtime/bindings/python"
     GENERATED_IN_BINARY_DIR
       "${_RULE_GENERATED_IN_BINARY_DIR}"

@@ -18,7 +18,7 @@
 #
 # Required variables:
 #   IREE_EXTERNAL_TOOLING_MODULE_{name}_TARGET: static library target name.
-#   IREE_EXTERNAL_TOOLING_MODULE_{name}_NAME: module name in MLIR.
+#   IREE_EXTERNAL_TOOLING_MODULE_{name}_NAME: runtime module name.
 #   IREE_EXTERNAL_TOOLING_MODULE_{name}_CREATE: module creation name:
 #      iree_status_t {CREATE}(iree_vm_instance_t* instance,
 #                             iree_allocator_t host_allocator,

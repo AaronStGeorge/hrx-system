@@ -141,8 +141,8 @@ macro(iree_setup_toolchain)
 
   # Note: we add these flags to the global CMake flags, not to IREE-specific
   # variables such as IREE_DEFAULT_COPTS so that all symbols are consistently
-  # defined with the same sanitizer flags, including e.g. standard library
-  # symbols that might be used by both IREE and non-IREE (e.g. LLVM) code.
+  # defined with the same sanitizer flags, including standard library symbols
+  # that might be shared between IREE and embedding applications.
 
   # Fuzzing requires ASan - enable it automatically if not already set.
   if(IREE_ENABLE_FUZZING AND NOT IREE_ENABLE_ASAN)
@@ -166,7 +166,7 @@ macro(iree_setup_toolchain)
     # If doing any kind of shared library builds, then we have to link against
     # the shared libasan, and the user will be responsible for adding the
     # appropriate path to LD_LIBRARY_PATH (or else binaries will fail to launch).
-    if(BUILD_SHARED_LIBS OR IREE_COMPILER_BUILD_SHARED_LIBS)
+    if(BUILD_SHARED_LIBS)
       string(APPEND CMAKE_EXE_LINKER_FLAGS " -shared-libasan")
       string(APPEND CMAKE_SHARED_LINKER_FLAGS " -shared-libasan")
     endif()
@@ -193,9 +193,9 @@ macro(iree_setup_toolchain)
     string(APPEND CMAKE_CXX_FLAGS " -fsanitize=undefined")
     string(APPEND CMAKE_C_FLAGS " -fsanitize=undefined")
     # The vptr sanitizer check uses typeid() to verify vtable pointers, which
-    # requires RTTI. IREE compiles all C++ with -fno-rtti for LLVM/MLIR
-    # compatibility, so the vptr check produces false positives on every
-    # virtual dispatch (including gtest internals). Exclude it.
+    # requires RTTI. IREE compiles runtime C++ with -fno-rtti by default, so the
+    # vptr check produces false positives on every virtual dispatch, including
+    # gtest internals. Exclude it.
     string(APPEND CMAKE_CXX_FLAGS " -fno-sanitize=vptr")
   endif()
   if(IREE_ENABLE_FUZZING)

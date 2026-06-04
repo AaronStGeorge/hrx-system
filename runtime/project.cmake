@@ -11,8 +11,6 @@ list(APPEND CMAKE_MODULE_PATH
 option(IREE_BUILD_TESTS "Build IREE runtime unit tests and CTS targets." ON)
 option(IREE_BUILD_BENCHMARKS "Build IREE runtime benchmarks." ON)
 
-set(IREE_BUILD_COMPILER OFF CACHE BOOL
-  "The reduced HRX runtime tree does not build the IREE compiler." FORCE)
 option(IREE_MODULE_VMVX
   "Builds the VMVX runtime module boundary."
   OFF)

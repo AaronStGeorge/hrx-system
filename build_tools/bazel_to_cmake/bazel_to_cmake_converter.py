@@ -472,29 +472,6 @@ class BuildFileFunctions(object):
 
         return self._convert_string_list_block(block_name, srcs, sort=True)
 
-    def _convert_td_file_block(self, td_file):
-        if td_file.startswith("//iree"):
-            # TODO: This should be generalized for out of tree.
-            # Bazel `//iree/dir/td_file.td`
-            # -> CMake `${IREE_ROOT_DIR}/iree/dir/td_file.td
-            # Bazel `//iree/dir/IR:td_file.td`
-            # -> CMake `${IREE_ROOT_DIR}/iree/dir/IR/td_file.td
-            td_file = td_file.replace("//iree", "${IREE_ROOT_DIR}/iree")
-            td_file = td_file.replace(":", "/")
-        return self._convert_string_arg_block("TD_FILE", td_file)
-
-    def _convert_tbl_outs_block(self, tbl_outs):
-        outs_list = "\n".join(
-            [f"    {' '.join(flags)} {value}" for flags, value in tbl_outs]
-        )
-        return f"  OUTS\n{outs_list}\n"
-
-    def _convert_tblgen_block(self, tblgen):
-        if tblgen.endswith("iree-tblgen"):
-            return "  TBLGEN\n    IREE\n"
-        else:
-            return ""
-
     def _convert_target(self, target):
         """Returns a list of targets that correspond to the specified Bazel target.
         Note that this must be a list because some targets have a one to many mapping.
@@ -1635,67 +1612,6 @@ class BuildFileFunctions(object):
             f"  PUBLIC\n)\n\n"
         )
         self._emit_platform_guard_end(target_compatible_with)
-
-    def gentbl_cc_library(
-        self,
-        name,
-        tblgen,
-        td_file,
-        tbl_outs,
-        td_srcs=None,
-        deps=None,
-        includes=None,
-        strip_include_prefix=None,
-        test=None,
-    ):
-        name_block = self._convert_string_arg_block("NAME", name, quote=False)
-        tblgen_block = self._convert_tblgen_block(tblgen)
-        td_file_block = self._convert_td_file_block(td_file)
-        outs_block = self._convert_tbl_outs_block(tbl_outs)
-
-        self._converter.body += (
-            f"iree_tablegen_library(\n"
-            f"{name_block}"
-            f"{td_file_block}"
-            f"{outs_block}"
-            f"{tblgen_block}"
-            f")\n\n"
-        )
-
-    def iree_gentbl_cc_library(self, **kwargs):
-        if self._should_skip_target(**kwargs):
-            return
-        # The bazel version of this rule adds some include directories and defs
-        # that are implicitly handled by the cmake version.
-        self.gentbl_cc_library(**kwargs)
-
-    def iree_tablegen_doc(
-        self,
-        name,
-        category,
-        tblgen,
-        td_file,
-        tbl_outs,
-        td_srcs=None,
-        includes=None,
-        deps=None,
-        test=None,
-    ):
-        name_block = self._convert_string_arg_block("NAME", name, quote=False)
-        category_block = self._convert_string_arg_block("CATEGORY", category)
-        tblgen_block = self._convert_tblgen_block(tblgen)
-        td_file_block = self._convert_td_file_block(td_file)
-        outs_block = self._convert_tbl_outs_block(tbl_outs)
-
-        self._converter.body += (
-            f"iree_tablegen_doc(\n"
-            f"{name_block}"
-            f"{category_block}"
-            f"{td_file_block}"
-            f"{outs_block}"
-            f"{tblgen_block}"
-            f")\n\n"
-        )
 
     def iree_execution_test_suite(
         self,
