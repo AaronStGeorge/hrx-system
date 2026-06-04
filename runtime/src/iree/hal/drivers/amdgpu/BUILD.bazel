@@ -408,6 +408,7 @@ iree_runtime_cc_test(
         "//runtime/src/iree/base:core_headers",
         "//runtime/src/iree/base/internal/flatcc:building",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/amdgpu/util:hsaco_metadata",
         "//runtime/src/iree/schemas:amdgpu_executable_def_c_fbs",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
