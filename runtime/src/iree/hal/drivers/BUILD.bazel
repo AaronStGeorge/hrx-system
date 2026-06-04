@@ -62,6 +62,12 @@ iree_runtime_cc_library(
                 "//runtime/src/iree/hal/drivers/vulkan/registration",
             ],
             "//conditions:default": [],
+        }) +
+        iree_select({
+            "//runtime/config/hal:driver_webgpu": [
+                "//runtime/src/iree/hal/drivers/webgpu/registration",
+            ],
+            "//conditions:default": [],
         })
     ),
 )

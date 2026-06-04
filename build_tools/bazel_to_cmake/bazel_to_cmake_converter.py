@@ -54,6 +54,7 @@ _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS = {
     "//runtime/config/hal:driver_local_task": "IREE_HAL_DRIVER_LOCAL_TASK",
     "//runtime/config/hal:driver_null": "IREE_HAL_DRIVER_NULL",
     "//runtime/config/hal:driver_vulkan": "IREE_HAL_DRIVER_VULKAN",
+    "//runtime/config/hal:driver_webgpu": "IREE_HAL_DRIVER_WEBGPU",
     "//runtime/config/hal:executable_loader_embedded_elf": "IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF",
     "//runtime/config/hal:executable_loader_system_library": "IREE_HAL_EXECUTABLE_LOADER_SYSTEM_LIBRARY",
     "//runtime/config/hal:executable_loader_vmvx_module": "IREE_HAL_EXECUTABLE_LOADER_VMVX_MODULE",
@@ -194,65 +195,67 @@ class BuildFileFunctions(object):
             return condition
         return _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS.get(label)
 
-    def _emit_platform_guard_begin(self, target_compatible_with):
-        """Emits platform guards for target_compatible_with."""
+    def _condition_select_compatibility_condition(self, condition_select):
+        compatible_conditions = []
+        for label, value in condition_select.conditions.items():
+            if label == "//conditions:default":
+                continue
+            # Empty list means compatible for this condition.
+            if value == []:
+                condition = self._convert_select_condition(label)
+                if condition:
+                    compatible_conditions.append(condition)
+        if not compatible_conditions:
+            return None
+        return " OR ".join(compatible_conditions)
+
+    def _target_compatible_condition(self, target_compatible_with):
         if not target_compatible_with:
-            return
+            return None
 
-        # Handle ConditionSelect from select() in target_compatible_with.
-        # Example: select({"@platforms//os:linux": [], "@platforms//os:macos": [],
-        #                  "//conditions:default": ["@platforms//:incompatible"]})
-        # Conditions with empty list are compatible; default with incompatible
-        # means "only build when one of the explicitly listed conditions matches".
         if isinstance(target_compatible_with, ConditionSelect):
-            compatible_conditions = []
-            for label, value in target_compatible_with.conditions.items():
-                if label == "//conditions:default":
-                    continue
-                # Empty list means compatible for this condition.
-                if value == []:
-                    condition = self._convert_select_condition(label)
-                    if condition:
-                        compatible_conditions.append(condition)
-            if compatible_conditions:
-                combined = " OR ".join(compatible_conditions)
-                self._converter.body += f"if({combined})\n"
-            return
+            return self._condition_select_compatibility_condition(
+                target_compatible_with
+            )
 
-        # target_compatible_with is a list of constraints (typically one).
+        if isinstance(target_compatible_with, MixedDeps):
+            conditions = []
+            for label in target_compatible_with.unconditional:
+                condition = self._convert_select_condition(label)
+                if not condition:
+                    raise NotImplementedError(f"target_compatible_with: {label}")
+                conditions.append(condition)
+            for condition_select in target_compatible_with.selects:
+                condition = self._condition_select_compatibility_condition(
+                    condition_select
+                )
+                if condition:
+                    conditions.append(condition)
+            if not conditions:
+                return None
+            return " AND ".join(
+                f"({condition})" if " OR " in condition else condition
+                for condition in conditions
+            )
+
         conditions = []
         for label in target_compatible_with:
-            cond = self._convert_select_condition(label)
-            if cond:
-                conditions.append(cond)
+            condition = self._convert_select_condition(label)
+            if condition:
+                conditions.append(condition)
             else:
                 raise NotImplementedError(f"target_compatible_with: {label}")
-        # Multiple constraints are AND-ed (all must be satisfied).
-        combined = " AND ".join(conditions)
-        self._converter.body += f"if({combined})\n"
+        return " AND ".join(conditions)
+
+    def _emit_platform_guard_begin(self, target_compatible_with):
+        """Emits platform guards for target_compatible_with."""
+        condition = self._target_compatible_condition(target_compatible_with)
+        if condition:
+            self._converter.body += f"if({condition})\n"
 
     def _emit_platform_guard_end(self, target_compatible_with):
         """Emits endif() to close a target_compatible_with guard."""
-        if not target_compatible_with:
-            return
-
-        # Handle ConditionSelect: check if any compatible conditions were found.
-        if isinstance(target_compatible_with, ConditionSelect):
-            has_compatible = any(
-                label != "//conditions:default"
-                and value == []
-                and self._convert_select_condition(label)
-                for label, value in target_compatible_with.conditions.items()
-            )
-            if has_compatible:
-                self._converter.body = self._converter.body.rstrip("\n") + "\n"
-                self._converter.body += "endif()\n\n"
-            return
-
-        # Only emit if all labels are recognized (same check as begin).
-        if all(
-            self._convert_select_condition(label) for label in target_compatible_with
-        ):
+        if self._target_compatible_condition(target_compatible_with):
             # Strip trailing blank line from the target body so endif() is
             # adjacent to the closing paren.
             self._converter.body = self._converter.body.rstrip("\n") + "\n"

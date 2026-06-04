@@ -17,7 +17,7 @@ iree_wasm_entry(
   PUBLIC
 )
 
-if(IREE_ARCH STREQUAL "wasm_32")
+if(IREE_HAL_DRIVER_WEBGPU AND IREE_ARCH STREQUAL "wasm_32")
 iree_cc_library(
   NAME
     backends
@@ -34,10 +34,16 @@ iree_cc_library(
 )
 endif()
 
-if(IREE_ARCH STREQUAL "wasm_32")
+if(IREE_HAL_DRIVER_WEBGPU AND IREE_ARCH STREQUAL "wasm_32")
 iree_hal_cts_test_suite(
   BACKENDS_LIB
     ::backends
+  LABELS
+    "iree-build-requirement=runtime.hal.webgpu"
+    "iree-run-requirement=runtime.resource.webgpu_device"
+    "runtime-resource=webgpu-device"
+  RESOURCE_GROUP
+    iree-hal-drivers-webgpu-tests
 )
 endif()
 

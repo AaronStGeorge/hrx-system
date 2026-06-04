@@ -152,6 +152,25 @@ class ConfigTest(unittest.TestCase):
                 }
             )
 
+    def test_target_compatible_with_composes_selects_and_requirements(self):
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=SimpleNamespace(body=""),
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="",
+        )
+
+        target_compatible_with = functions.select(
+            {
+                "@platforms//cpu:wasm32": [],
+                "//conditions:default": ["@platforms//:incompatible"],
+            }
+        ) + [SimpleNamespace(cmake_condition="IREE_HAL_DRIVER_WEBGPU")]
+
+        self.assertEqual(
+            functions._target_compatible_condition(target_compatible_with),
+            'IREE_HAL_DRIVER_WEBGPU AND IREE_ARCH STREQUAL "wasm_32"',
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

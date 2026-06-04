@@ -25,6 +25,7 @@ SUPPORTED_DRIVERS = [
     "local-task",
     "null",
     "vulkan",
+    "webgpu",
 ]
 
 # Executable loader registration defaults to binary formats that do not depend

@@ -20,8 +20,10 @@ load(
     "HAL_CUDA",
     "HAL_HIP",
     "HAL_VULKAN",
+    "HAL_WEBGPU",
     "NVIDIA_GPU_RESOURCE",
     "VULKAN_DEVICE_RESOURCE",
+    "WEBGPU_DEVICE_RESOURCE",
 )
 
 PACKAGE_POLICIES = [
@@ -66,6 +68,15 @@ PACKAGE_POLICIES = [
         ],
         run_requirements = [VULKAN_DEVICE_RESOURCE],
         resource_group = "iree-hal-drivers-vulkan-tests",
+    ),
+    package_policy(
+        packages = ["runtime/src/iree/hal/drivers/webgpu/..."],
+        build_requirements = [HAL_WEBGPU],
+    ),
+    package_policy(
+        packages = ["runtime/src/iree/hal/drivers/webgpu/cts/..."],
+        run_requirements = [WEBGPU_DEVICE_RESOURCE],
+        resource_group = "iree-hal-drivers-webgpu-tests",
     ),
 ]
 

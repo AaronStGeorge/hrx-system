@@ -16,6 +16,9 @@ iree_runtime_cc_library(
     name = "registration",
     srcs = ["driver_module.c"],
     hdrs = ["driver_module.h"],
+    defines = [
+        "IREE_HAVE_HAL_WEBGPU_DRIVER_MODULE=1",
+    ],
     deps = [
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",

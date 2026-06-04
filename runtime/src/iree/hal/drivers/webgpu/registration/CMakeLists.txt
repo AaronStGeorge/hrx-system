@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
   NAME
     registration
@@ -20,7 +21,10 @@ iree_cc_library(
     iree::base
     iree::hal
     iree::hal::drivers::webgpu
+  DEFINES
+    "IREE_HAVE_HAL_WEBGPU_DRIVER_MODULE=1"
   PUBLIC
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

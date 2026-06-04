@@ -58,9 +58,15 @@ set(IREE_HAL_EXECUTABLE_LOADER_EXTRA_DEPS "" CACHE STRING "")
 set(IREE_HAL_EXECUTABLE_PLUGIN_EXTRA_DEPS "" CACHE STRING "")
 
 option(IREE_HAL_DRIVER_DEFAULTS
-  "Sets the default value for all runtime HAL drivers." OFF)
+  "Default value for opt-in runtime HAL drivers." OFF)
 if(NOT DEFINED IREE_HAL_DRIVER_AMDGPU_DEFAULT)
   set(IREE_HAL_DRIVER_AMDGPU_DEFAULT ${IREE_HAL_DRIVER_DEFAULTS})
+endif()
+if(NOT DEFINED IREE_HAL_DRIVER_CUDA_DEFAULT)
+  set(IREE_HAL_DRIVER_CUDA_DEFAULT ${IREE_HAL_DRIVER_DEFAULTS})
+endif()
+if(NOT DEFINED IREE_HAL_DRIVER_HIP_DEFAULT)
+  set(IREE_HAL_DRIVER_HIP_DEFAULT ${IREE_HAL_DRIVER_DEFAULTS})
 endif()
 if(NOT DEFINED IREE_HAL_DRIVER_LOCAL_SYNC_DEFAULT)
   set(IREE_HAL_DRIVER_LOCAL_SYNC_DEFAULT ON)
@@ -68,31 +74,45 @@ endif()
 if(NOT DEFINED IREE_HAL_DRIVER_LOCAL_TASK_DEFAULT)
   set(IREE_HAL_DRIVER_LOCAL_TASK_DEFAULT ON)
 endif()
+if(NOT DEFINED IREE_HAL_DRIVER_METAL_DEFAULT)
+  set(IREE_HAL_DRIVER_METAL_DEFAULT ${IREE_HAL_DRIVER_DEFAULTS})
+endif()
 if(NOT DEFINED IREE_HAL_DRIVER_NULL_DEFAULT)
   set(IREE_HAL_DRIVER_NULL_DEFAULT ON)
+endif()
+if(NOT DEFINED IREE_HAL_DRIVER_VULKAN_DEFAULT)
+  set(IREE_HAL_DRIVER_VULKAN_DEFAULT ${IREE_HAL_DRIVER_DEFAULTS})
+endif()
+if(NOT DEFINED IREE_HAL_DRIVER_WEBGPU_DEFAULT)
+  set(IREE_HAL_DRIVER_WEBGPU_DEFAULT ${IREE_HAL_DRIVER_DEFAULTS})
 endif()
 option(IREE_HAL_DRIVER_AMDGPU
   "Enables the amdgpu runtime HAL driver."
   ${IREE_HAL_DRIVER_AMDGPU_DEFAULT})
+option(IREE_HAL_DRIVER_CUDA
+  "Enables the CUDA runtime HAL driver."
+  ${IREE_HAL_DRIVER_CUDA_DEFAULT})
+option(IREE_HAL_DRIVER_HIP
+  "Enables the HIP runtime HAL driver."
+  ${IREE_HAL_DRIVER_HIP_DEFAULT})
 option(IREE_HAL_DRIVER_LOCAL_SYNC
   "Enables the local-sync runtime HAL driver."
   ${IREE_HAL_DRIVER_LOCAL_SYNC_DEFAULT})
 option(IREE_HAL_DRIVER_LOCAL_TASK
   "Enables the local-task runtime HAL driver."
   ${IREE_HAL_DRIVER_LOCAL_TASK_DEFAULT})
+option(IREE_HAL_DRIVER_METAL
+  "Enables the Metal runtime HAL driver."
+  ${IREE_HAL_DRIVER_METAL_DEFAULT})
 option(IREE_HAL_DRIVER_NULL
   "Enables the null runtime HAL driver."
   ${IREE_HAL_DRIVER_NULL_DEFAULT})
-set(IREE_HAL_DRIVER_CUDA OFF CACHE BOOL
-  "CUDA HAL driver is not wired in the reduced HRX runtime tree." FORCE)
-set(IREE_HAL_DRIVER_HIP OFF CACHE BOOL
-  "HIP HAL driver is not wired in the reduced HRX runtime tree." FORCE)
-set(IREE_HAL_DRIVER_METAL OFF CACHE BOOL
-  "Metal HAL driver is not wired in the reduced HRX runtime tree." FORCE)
-set(IREE_HAL_DRIVER_VULKAN OFF CACHE BOOL
-  "Vulkan HAL driver is not wired in the reduced HRX runtime tree." FORCE)
-set(IREE_HAL_DRIVER_WEBGPU OFF CACHE BOOL
-  "WebGPU HAL driver is not wired in the reduced HRX runtime tree." FORCE)
+option(IREE_HAL_DRIVER_VULKAN
+  "Enables the Vulkan runtime HAL driver."
+  ${IREE_HAL_DRIVER_VULKAN_DEFAULT})
+option(IREE_HAL_DRIVER_WEBGPU
+  "Enables the WebGPU runtime HAL driver."
+  ${IREE_HAL_DRIVER_WEBGPU_DEFAULT})
 
 option(IREE_HAL_EXECUTABLE_LOADER_DEFAULTS
   "Sets the default value for all runtime HAL executable loaders." ON)
