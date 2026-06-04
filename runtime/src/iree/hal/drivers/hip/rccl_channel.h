@@ -7,6 +7,8 @@
 #ifndef IREE_HAL_DRIVERS_HIP_RCCL_CHANNEL_H_
 #define IREE_HAL_DRIVERS_HIP_RCCL_CHANNEL_H_
 
+#include <string.h>
+
 #include "iree/base/api.h"
 #include "iree/hal/api.h"
 #include "iree/hal/drivers/hip/api.h"
@@ -23,6 +25,8 @@ static inline bool iree_hal_hip_nccl_id_is_empty(
   }
   return true;
 }
+
+#if IREE_HAL_HIP_ENABLE_RCCL
 
 // Gets a unique ID to bootstrap a new communicator. It calls ncclGetUniqueId
 // under the hood.
@@ -47,5 +51,41 @@ iree_status_t iree_hal_hip_nccl_submit_batch(
     iree_hal_stream_tracing_context_t* tracing_context,
     iree_hal_stream_tracing_context_event_list_t* tracing_event_list,
     const iree_hal_collective_batch_t* batch, hipStream_t stream);
+
+#else
+
+static inline iree_status_t iree_hal_hip_nccl_get_unique_id(
+    const iree_hal_hip_nccl_dynamic_symbols_t* symbols,
+    iree_hal_hip_nccl_id_t* out_id) {
+  IREE_ASSERT_ARGUMENT(symbols);
+  IREE_ASSERT_ARGUMENT(out_id);
+  memset(out_id, 0, sizeof(*out_id));
+  return iree_hal_hip_nccl_dynamic_symbols_unavailable_status();
+}
+
+static inline iree_status_t iree_hal_hip_nccl_channel_create(
+    const iree_hal_hip_dynamic_symbols_t* hip_symbols,
+    const iree_hal_hip_nccl_dynamic_symbols_t* nccl_symbols,
+    const iree_hal_hip_nccl_id_t* id, int rank, int count,
+    iree_allocator_t host_allocator, iree_hal_channel_t** out_channel) {
+  IREE_ASSERT_ARGUMENT(hip_symbols);
+  IREE_ASSERT_ARGUMENT(nccl_symbols);
+  IREE_ASSERT_ARGUMENT(id);
+  IREE_ASSERT_ARGUMENT(out_channel);
+  *out_channel = NULL;
+  return iree_hal_hip_nccl_dynamic_symbols_unavailable_status();
+}
+
+static inline iree_status_t iree_hal_hip_nccl_submit_batch(
+    const iree_hal_hip_nccl_dynamic_symbols_t* nccl_symbols,
+    iree_hal_stream_tracing_context_t* tracing_context,
+    iree_hal_stream_tracing_context_event_list_t* tracing_event_list,
+    const iree_hal_collective_batch_t* batch, hipStream_t stream) {
+  IREE_ASSERT_ARGUMENT(nccl_symbols);
+  IREE_ASSERT_ARGUMENT(batch);
+  return iree_hal_hip_nccl_dynamic_symbols_unavailable_status();
+}
+
+#endif  // IREE_HAL_HIP_ENABLE_RCCL
 
 #endif  // IREE_HAL_DRIVERS_HIP_RCCL_CHANNEL_H_

@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 list(APPEND CMAKE_MODULE_PATH
+  "${CMAKE_CURRENT_LIST_DIR}/../build_tools/amdgpu"
   "${CMAKE_CURRENT_LIST_DIR}/build_tools/cmake"
 )
 
@@ -28,6 +29,8 @@ set(HRX_INSTALL_TESTS_DIR "${CMAKE_INSTALL_DATADIR}/hrx-system/tests" CACHE STRI
   "Install directory for the HRX system CTest tree and test artifacts.")
 
 include(hrx_installed_tests)
+include(binary)
+include(selectors)
 
 function(libhrx_configure_project)
 endfunction()

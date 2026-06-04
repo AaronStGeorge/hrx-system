@@ -4,11 +4,17 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("@rules_python//python:defs.bzl", "py_test")
+
 package(
     default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 
-exports_files([
-    "amdgpu_device_binaries.py",
-])
+py_test(
+    name = "presubmit_test",
+    srcs = [
+        "presubmit.py",
+        "presubmit_test.py",
+    ],
+)

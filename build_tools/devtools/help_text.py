@@ -178,7 +178,7 @@ Use `python dev.py {lane} precommit` for local changes only.""",
                 "paranoid or ci to add affected project CMake/CTest checks."
             )
         return CommandHelp(
-            description=f"Run non-mutating checks for local {lane} changes.",
+            description=f"Run precommit checks for local {lane} changes.",
             epilog=f"""Examples:
   python dev.py {lane} precommit
   python dev.py {lane} precommit --profile {default_profile}
@@ -193,6 +193,9 @@ HEAD, plus local staged, unstaged, and untracked files.
 Explicit paths check only those files and are used by the generated Git hook.
 The default profile is {default_profile}. Use --profile to select default,
 paranoid, or ci for this run.
+Staged-file runs with profiles that run tests, currently paranoid and ci, apply
+mechanical fixups before running the same profile in non-mutating check mode.
+Broader local-change runs and the profile named default are check-only.
 
 {lane_scope}""",
         )
@@ -202,8 +205,9 @@ paranoid, or ci for this run.
             epilog=f"""Examples:
   python dev.py {lane} fix
 
-Fix runs the staged-file formatter/generated-file repair path. The Git hook and
-presubmit commands stay non-mutating.""",
+Fix runs the staged-file formatter/generated-file repair path. Staged
+test-bearing precommit runs also use this repair path before validation.
+Presubmit stays non-mutating.""",
         )
     if command == "doctor":
         return CommandHelp(

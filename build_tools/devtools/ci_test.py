@@ -308,8 +308,7 @@ class CiTest(unittest.TestCase):
         )
         self.assertTrue(
             any(
-                "-DIREE_ROCM_TEST_TARGET_CHIP=" + ci_config.AMDGPU_ROCM_TEST_TARGET_CHIP
-                in line
+                "-DIREE_HAL_AMDGPU_TARGETS=" + ci_config.AMDGPU_TARGET_SELECTOR in line
                 for line in command_lines
             )
         )

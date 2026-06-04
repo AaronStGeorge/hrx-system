@@ -58,6 +58,20 @@ WATCHWORD_PATTERNS = (
     re.compile("DO" + "NOTSUBMIT"),
     re.compile("TODO before " + "submit", re.IGNORECASE),
 )
+FAILURE_OUTPUT_LINE_LIMIT = 240
+
+
+def git_worktree_dir() -> Path:
+    """Returns the worktree-specific Git directory for scratch files."""
+    return Path(
+        subprocess.check_output(
+            ["git", "rev-parse", "--absolute-git-dir"],
+            cwd=REPO_ROOT,
+            text=True,
+        ).strip()
+    )
+
+
 CONFLICT_MARKER_PATTERN = re.compile(r"^(<<<<<<< .+|>>>>>>> .+)")
 
 
@@ -253,6 +267,30 @@ def command_text(command: list[str]) -> str:
     return shlex.join(command)
 
 
+def elide_failure_output(output: str) -> str:
+    stripped_output = output.rstrip()
+    if not stripped_output:
+        return ""
+
+    lines = stripped_output.splitlines()
+    if len(lines) <= FAILURE_OUTPUT_LINE_LIMIT:
+        return stripped_output
+
+    head_line_count = FAILURE_OUTPUT_LINE_LIMIT // 3
+    tail_line_count = FAILURE_OUTPUT_LINE_LIMIT - head_line_count
+    omitted_line_count = len(lines) - head_line_count - tail_line_count
+    return "\n".join(
+        [
+            *lines[:head_line_count],
+            (
+                f"[... omitted {omitted_line_count} lines; rerun with --verbose "
+                "for full streaming output ...]"
+            ),
+            *lines[-tail_line_count:],
+        ]
+    )
+
+
 def print_section(title: str) -> None:
     print(f"\n== {title} ==")
 
@@ -282,7 +320,7 @@ def print_step_failure(
         print("  " + command_text(command))
     if output:
         print("output:")
-        print(output.rstrip())
+        print(elide_failure_output(output))
 
 
 def run_command(command: list[str], description: str, verbose: bool) -> bool:
@@ -598,21 +636,21 @@ def run_bazel_to_cmake(fix: bool, verbose: bool) -> bool:
 
 def run_amdgpu_target_map(paths: list[str], fix: bool, verbose: bool) -> bool:
     relevant_prefixes = (
-        "build_tools/scripts/amdgpu_target_map.py",
-        "runtime/src/iree/hal/drivers/amdgpu/device/binaries/target_map.",
+        "build_tools/amdgpu/target_map.",
         "runtime/src/iree/hal/drivers/amdgpu/util/target_id_map.inl",
     )
     if not any(path.startswith(relevant_prefixes) for path in paths):
         return skip_step("AMDGPU target map", "no AMDGPU target-map inputs")
-    command = ["python", "build_tools/scripts/amdgpu_target_map.py"]
+    command = ["python", "build_tools/amdgpu/target_map.py"]
     if not fix:
         command.append("--check")
     ok = run_command(command, "AMDGPU target map", verbose)
     if fix and ok:
         ok = stage_files(
             [
-                "runtime/src/iree/hal/drivers/amdgpu/device/binaries/target_map.bzl",
-                "runtime/src/iree/hal/drivers/amdgpu/device/binaries/target_map.cmake",
+                "build_tools/amdgpu/target_map.bzl",
+                "build_tools/amdgpu/target_map.cmake",
+                "build_tools/amdgpu/target_map.h",
                 "runtime/src/iree/hal/drivers/amdgpu/util/target_id_map.inl",
             ],
             verbose,
@@ -683,7 +721,7 @@ def run_project_tests(
         return skip_step("Project tests", "no affected project entry points")
     ok = True
     with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", delete=False, dir=REPO_ROOT / ".git"
+        mode="w", encoding="utf-8", delete=False, dir=git_worktree_dir()
     ) as file_list:
         for path in paths:
             file_list.write(path + "\n")
@@ -818,6 +856,67 @@ def print_plan(
     sys.stdout.flush()
 
 
+def dev_py_rerun_command(args: argparse.Namespace, verbose: bool) -> list[str]:
+    if args.all:
+        command = [
+            "python",
+            "dev.py",
+            args.lane,
+            "presubmit",
+            "--profile",
+            args.profile,
+        ]
+        if not args.project_tests:
+            command.append("--no-project-tests")
+    else:
+        command = [
+            "python",
+            "dev.py",
+            args.lane,
+            "precommit",
+            "--profile",
+            args.profile,
+        ]
+        if args.base:
+            command += ["--base", args.base]
+        elif args.staged or args.paths:
+            command.append("--staged")
+    if verbose:
+        command.append("--verbose")
+    return command
+
+
+def precommit_invocation_autofixes(args: argparse.Namespace) -> bool:
+    return args.tests and (args.staged or bool(args.paths))
+
+
+def print_suggested_actions(args: argparse.Namespace, ok: bool) -> None:
+    if ok:
+        return
+
+    print_section("Suggested Actions")
+    if args.fix:
+        print(
+            "[next] Inspect the failing fixer/test output above, adjust files, then run:"
+        )
+        print("  " + command_text(dev_py_rerun_command(args, verbose=False)))
+    elif precommit_invocation_autofixes(args):
+        print(
+            "[next] Apply mechanical fixes and rerun the selected test-bearing check:"
+        )
+        print("  " + command_text(dev_py_rerun_command(args, verbose=False)))
+    else:
+        if args.all:
+            print("[next] Repair the diagnostics above. For staged mechanical fixups:")
+        else:
+            print("[next] Stage the intended files and apply mechanical fixes:")
+        print(f"  python dev.py {args.lane} fix")
+        print("[verify] Re-run the selected check:")
+        print("  " + command_text(dev_py_rerun_command(args, verbose=False)))
+    print("[debug] Re-run with full tool output:")
+    print("  " + command_text(dev_py_rerun_command(args, verbose=True)))
+
+
 def main() -> int:
     args = parse_arguments()
     paths = selected_files(args)
@@ -852,6 +951,7 @@ def main() -> int:
     if args.static_analysis:
         print_section("Static Analysis")
         ok = run_static_analysis(paths) and ok
+    print_suggested_actions(args, ok)
     return 0 if ok else 1
 
 

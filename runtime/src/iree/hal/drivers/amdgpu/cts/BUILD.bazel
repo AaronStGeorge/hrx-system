@@ -22,7 +22,12 @@ package(
 
 iree_cmake_extra_content(
     content = """
-if(NOT IREE_ROCM_TEST_TARGET_CHIP_VALUES)
+iree_amdgpu_expand_target_selectors(
+  _IREE_HAL_AMDGPU_EXACT_TARGETS
+  "${IREE_AMDGPU_TARGET_EXPANSION_EXACT}"
+  ${IREE_HAL_AMDGPU_TARGETS}
+)
+if(NOT _IREE_HAL_AMDGPU_EXACT_TARGETS)
   return()
 endif()
 """,
@@ -42,8 +47,12 @@ iree_runtime_cc_library(
 
 iree_hal_cts_testdata(
     backend_name = "amdgpu",
+    cmake_format_variant_values = ["AMDGPU_TARGET"],
+    flag_values = {
+        "AMDGPU_TARGET": "//runtime/src/iree/hal/drivers/amdgpu:targets",
+    },
     format_name = "amdgpu",
-    format_string = '"amdgcn-amd-amdhsa"',
+    format_string = '"amdgcn-amd-amdhsa--{AMDGPU_TARGET}"',
     identifier = "iree_cts_testdata_amdgpu",
     target_device = "amdgpu",
     testdata = "//runtime/src/iree/hal/cts/testdata:executable_srcs",

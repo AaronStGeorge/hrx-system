@@ -10,6 +10,10 @@
 iree_add_all_subdirs()
 
 if(IREE_HAL_DRIVER_HIP)
+set(_hip_platform_defines "")
+if(IREE_HAL_DRIVER_HIP_RCCL)
+  list(APPEND _hip_platform_defines "IREE_HAL_HIP_ENABLE_RCCL=1")
+endif()
 iree_cc_library(
   NAME
     hip
@@ -74,16 +78,27 @@ iree_cc_library(
     iree::hal::utils::stream_tracing
     iree::schemas::executable_debug_info_c_fbs
     iree::schemas::hip_executable_def_c_fbs
+  DEFINES
+    ${_hip_platform_defines}
   PUBLIC
 )
 endif()
 
 if(IREE_HAL_DRIVER_HIP)
+set(_dynamic_symbols_platform_defines "")
+if(IREE_HAL_DRIVER_HIP_RCCL)
+  list(APPEND _dynamic_symbols_platform_defines "IREE_HAL_HIP_ENABLE_RCCL=1")
+endif()
+set(_dynamic_symbols_platform_deps "")
+if(IREE_HAL_DRIVER_HIP_RCCL)
+  list(APPEND _dynamic_symbols_platform_deps rccl::headers)
+endif()
 iree_cc_library(
   NAME
     dynamic_symbols
   HDRS
     "dynamic_symbols.h"
+    "hip_headers.h"
     "rccl_dynamic_symbols.h"
     "rccl_status_util.h"
     "status_util.h"
@@ -92,7 +107,6 @@ iree_cc_library(
     "rccl_dynamic_symbol_table.h"
   SRCS
     "dynamic_symbols.c"
-    "hip_headers.h"
     "rccl_dynamic_symbols.c"
     "rccl_headers.h"
     "rccl_status_util.c"
@@ -103,7 +117,9 @@ iree_cc_library(
     iree::base::core_headers
     iree::base::internal::dynamic_library
     iree::base::internal::path
-    rccl::headers
+    ${_dynamic_symbols_platform_deps}
+  DEFINES
+    ${_dynamic_symbols_platform_defines}
   PUBLIC
 )
 endif()

@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 list(APPEND CMAKE_MODULE_PATH
+  "${CMAKE_CURRENT_LIST_DIR}/../build_tools/amdgpu"
   "${CMAKE_CURRENT_LIST_DIR}/build_tools/cmake"
 )
 
@@ -113,6 +114,9 @@ option(IREE_HAL_DRIVER_VULKAN
 option(IREE_HAL_DRIVER_WEBGPU
   "Enables the WebGPU runtime HAL driver."
   ${IREE_HAL_DRIVER_WEBGPU_DEFAULT})
+option(IREE_HAL_DRIVER_HIP_RCCL
+  "Enables RCCL collective support in the HIP HAL driver."
+  OFF)
 
 option(IREE_HAL_EXECUTABLE_LOADER_DEFAULTS
   "Sets the default value for all runtime HAL executable loaders." ON)
@@ -144,40 +148,16 @@ option(IREE_HAL_EXECUTABLE_PLUGIN_SYSTEM_LIBRARY
   "Enables the system dynamic library plugin mechanism for local HAL drivers."
   ${IREE_HAL_EXECUTABLE_PLUGIN_DEFAULTS})
 
-set(IREE_ROCM_TEST_TARGET_CHIP "" CACHE STRING
-  "Target chip or semicolon-separated chips for ROCm tests that need to compile device code. Empty disables live ROCm CTS.")
-set(IREE_HIP_TEST_TARGET_CHIP "" CACHE STRING
-  "Deprecated; use IREE_ROCM_TEST_TARGET_CHIP instead.")
-if(IREE_HIP_TEST_TARGET_CHIP AND NOT IREE_ROCM_TEST_TARGET_CHIP)
-  message(WARNING
-    "IREE_HIP_TEST_TARGET_CHIP is deprecated; use IREE_ROCM_TEST_TARGET_CHIP instead.")
-  set(IREE_ROCM_TEST_TARGET_CHIP "${IREE_HIP_TEST_TARGET_CHIP}" CACHE STRING "" FORCE)
-endif()
-set(IREE_ROCM_TEST_TARGET_CHIP_VALUES)
-foreach(_IREE_ROCM_TEST_TARGET_CHIP IN LISTS IREE_ROCM_TEST_TARGET_CHIP)
-  string(STRIP "${_IREE_ROCM_TEST_TARGET_CHIP}" _IREE_ROCM_TEST_TARGET_CHIP)
-  if(_IREE_ROCM_TEST_TARGET_CHIP STREQUAL "")
-    continue()
-  endif()
-  if(NOT _IREE_ROCM_TEST_TARGET_CHIP MATCHES "^gfx[0-9]+$")
-    message(FATAL_ERROR
-      "IREE_ROCM_TEST_TARGET_CHIP entries must be bare gfx target names for now: "
-      "'${_IREE_ROCM_TEST_TARGET_CHIP}'")
-  endif()
-  list(APPEND IREE_ROCM_TEST_TARGET_CHIP_VALUES "${_IREE_ROCM_TEST_TARGET_CHIP}")
-endforeach()
-if(IREE_ROCM_TEST_TARGET_CHIP_VALUES)
-  list(REMOVE_DUPLICATES IREE_ROCM_TEST_TARGET_CHIP_VALUES)
-endif()
-set(IREE_ROCM_TEST_TARGET_CHIP_PRIMARY "")
-if(IREE_ROCM_TEST_TARGET_CHIP_VALUES)
-  list(GET IREE_ROCM_TEST_TARGET_CHIP_VALUES 0 IREE_ROCM_TEST_TARGET_CHIP_PRIMARY)
-endif()
+set(IREE_HAL_AMDGPU_TARGETS
+  "gfx9-generic;gfx90a;gfx9-4-generic;gfx10-1-generic;gfx10-3-generic;gfx11-generic;gfx12-generic"
+  CACHE STRING
+  "AMDGPU target selectors supported by this runtime build.")
 set(IREE_ROCM_TEST_AMDGCNSPIRV OFF CACHE BOOL
   "Use amdgcnspirv for ROCm e2e tests.")
 
 include(flatbuffer_c_library)
-include(iree_amdgpu_binary)
+include(binary)
+include(selectors)
 include(iree_execution_test_suite)
 include(iree_runtime_amdgpu_toolchain)
 include(iree_vmasm_module)

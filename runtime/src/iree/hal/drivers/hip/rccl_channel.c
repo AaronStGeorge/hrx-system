@@ -6,6 +6,8 @@
 
 #include "iree/hal/drivers/hip/rccl_channel.h"
 
+#if IREE_HAL_HIP_ENABLE_RCCL
+
 #include <stddef.h>
 #include <stdlib.h>
 
@@ -626,3 +628,5 @@ static const iree_hal_channel_vtable_t iree_hal_hip_nccl_channel_vtable = {
     .split = iree_hal_hip_nccl_channel_split,
     .query_rank_and_count = iree_hal_hip_nccl_channel_query_rank_and_count,
 };
+
+#endif  // IREE_HAL_HIP_ENABLE_RCCL

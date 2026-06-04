@@ -130,6 +130,7 @@ between Bazel and CMake.
 | Option | Values | CMake | Bazel portable | Bazel native |
 | --- | --- | --- | --- | --- |
 | `IREE_HAL_DRIVER_AMDGPU` | `ON`, `OFF` | Builds the AMDGPU runtime HAL driver. | Adds or removes `amdgpu` from the runtime driver registry and recursive package scope. | `--//runtime/config/hal:drivers=<complete-driver-list>` |
+| `IREE_HAL_DRIVER_HIP` | `ON`, `OFF` | Currently forced `OFF` in this reduced runtime tree. | Adds or removes `hip` from the runtime driver registry and recursive package scope for testing and development. | `--//runtime/config/hal:drivers=<complete-driver-list>` |
 | `IREE_HAL_DRIVER_LOCAL_SYNC` | `ON`, `OFF` | Builds the local-sync runtime HAL driver. | Adds or removes `local-sync` from the runtime driver registry. | `--//runtime/config/hal:drivers=<complete-driver-list>` |
 | `IREE_HAL_DRIVER_LOCAL_TASK` | `ON`, `OFF` | Builds the local-task runtime HAL driver. | Adds or removes `local-task` from the runtime driver registry. | `--//runtime/config/hal:drivers=<complete-driver-list>` |
 | `IREE_HAL_DRIVER_NULL` | `ON`, `OFF` | Builds the null runtime HAL driver. | Adds or removes `null` from the runtime driver registry. | `--//runtime/config/hal:drivers=<complete-driver-list>` |
@@ -159,6 +160,11 @@ machine-local SDK paths:
 ```bash
 IREE_ROCM_PATH=/opt/rocm python dev.py bazel configure -DIREE_HAL_DRIVER_AMDGPU=ON
 ```
+
+The Bazel HIP HAL driver is an opt-in testing/development path, not part of the
+default libhrx build path. It is ROCm-backed, so `-DIREE_HAL_DRIVER_HIP=ON`
+also requires `IREE_ROCM_PATH` through `-DIREE_ROCM_PATH=...`,
+`--repo_env=IREE_ROCM_PATH=...`, or the inherited environment.
 
 Other Bazel-native overrides belong in `.bazelrc.local`.
 

@@ -80,7 +80,7 @@ CPU_SANITIZERS_XFAIL_TARGETS = bazel_xfail_targets(CPU_SANITIZERS_XFAILS)
 CPU_SANITIZERS_CTEST_EXCLUDE_REGEX = ctest_exclude_regex(CPU_SANITIZERS_XFAILS)
 
 AMDGPU_DRIVER_TARGETS = ("//runtime/src/iree/hal/drivers/amdgpu/...",)
-AMDGPU_ROCM_TEST_TARGET_CHIP = "gfx942"
+AMDGPU_TARGET_SELECTOR = "gfx942"
 AMDGPU_RESOURCE_TAG = "iree-run-requirement=runtime.resource.amd_gpu"
 AMDGPU_CTEST_RESOURCE_LABEL = "runtime-resource=amd-gpu"
 AMDGPU_XFAILS = (

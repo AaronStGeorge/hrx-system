@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 load("//runtime/build_tools/bazel:cc_test.bzl", "iree_runtime_cc_test")
 
@@ -12,6 +13,28 @@ package(
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
+
+bool_flag(
+    name = "enable_rccl",
+    build_setting_default = False,
+)
+
+config_setting(
+    name = "rccl_enabled",
+    flag_values = {
+        ":enable_rccl": "true",
+    },
+)
+
+_RCCL_DEFINES = select({
+    "//runtime/src/iree/hal/drivers/hip:rccl_enabled": ["IREE_HAL_HIP_ENABLE_RCCL=1"],
+    "//conditions:default": [],
+})
+
+_RCCL_DEPS = select({
+    "//runtime/src/iree/hal/drivers/hip:rccl_enabled": ["@rccl//:headers"],
+    "//conditions:default": [],
+})
 
 iree_runtime_cc_library(
     name = "hip",
@@ -52,6 +75,7 @@ iree_runtime_cc_library(
     hdrs = [
         "api.h",
     ],
+    defines = _RCCL_DEFINES,
     deps = [
         ":dynamic_symbols",
         "//runtime/src/iree/async",
@@ -85,7 +109,6 @@ iree_runtime_cc_library(
     name = "dynamic_symbols",
     srcs = [
         "dynamic_symbols.c",
-        "hip_headers.h",
         "rccl_dynamic_symbols.c",
         "rccl_headers.h",
         "rccl_status_util.c",
@@ -93,10 +116,12 @@ iree_runtime_cc_library(
     ],
     hdrs = [
         "dynamic_symbols.h",
+        "hip_headers.h",
         "rccl_dynamic_symbols.h",
         "rccl_status_util.h",
         "status_util.h",
     ],
+    defines = _RCCL_DEFINES,
     textual_hdrs = [
         "dynamic_symbol_tables.h",
         "rccl_dynamic_symbol_table.h",
@@ -107,8 +132,7 @@ iree_runtime_cc_library(
         "//runtime/src/iree/base/internal:dynamic_library",
         "//runtime/src/iree/base/internal:path",
         "@hip_api_headers//:headers",
-        "@rccl//:headers",
-    ],
+    ] + _RCCL_DEPS,
 )
 
 iree_runtime_cc_test(

@@ -806,19 +806,55 @@ iree_cc_test(
 endif()
 
 if(IREE_HAL_DRIVER_AMDGPU)
-iree_amdgpu_binary(
+iree_amdgpu_binary_variants_embed_data(
   NAME
-    pm4_dispatch_test_kernels_gfx1100
+    pm4_dispatch_test_kernels
   TARGET
     amdgcn-amd-amdhsa
-  ARCH
-    gfx1100
+  TARGETS
+    ${IREE_HAL_AMDGPU_TARGETS}
+  BINARY_NAME_PREFIX
+    pm4_dispatch_test_kernels
+  C_FILE_OUTPUT
+    "pm4_dispatch_test_kernels.c.embed.c"
+  H_FILE_OUTPUT
+    "pm4_dispatch_test_kernels.h"
+  IDENTIFIER
+    "iree_hal_amdgpu_pm4_dispatch_test_kernels"
   SRCS
     "pm4_dispatch_test_kernels.c"
-  COPTS
+  TESTONLY
+  PUBLIC
+)
+endif()
 
-  LINKOPTS
-
+if(IREE_HAL_DRIVER_AMDGPU)
+iree_cc_test(
+  NAME
+    pm4_dispatch_live_test
+  SRCS
+    "pm4_dispatch_live_test.cc"
+  DEPS
+    ::libhsa
+    ::packet
+    ::pm4_dispatch
+    ::pm4_dispatch_test_kernels
+    ::pm4_program
+    ::queue_primitives
+    ::target_id
+    ::topology
+    ::vmem
+    iree::base
+    iree::base::threading
+    iree::hal::drivers::amdgpu::abi
+    iree::testing::gtest
+    iree::testing::gtest_main
+  LABELS
+    "iree-build-requirement=runtime.hal.amdgpu"
+    "iree-run-requirement=runtime.resource.amd_gpu"
+    "runtime-resource=amd-gpu"
+  RESOURCE_GROUP
+    iree-hal-drivers-amdgpu-tests
 )
 endif()
 
@@ -844,7 +880,16 @@ iree_cc_test(
     iree-hal-drivers-amdgpu-tests
 )
 endif()
+
 if(TARGET iree::hal::drivers::amdgpu::cts::testdata_amdgpu)
+  iree_amdgpu_expand_target_selectors(
+    _IREE_HAL_AMDGPU_EXACT_TARGETS
+    "${IREE_AMDGPU_TARGET_EXPANSION_EXACT}"
+    ${IREE_HAL_AMDGPU_TARGETS}
+  )
+endif()
+if(_IREE_HAL_AMDGPU_EXACT_TARGETS)
+
 add_custom_command(OUTPUT queue_benchmark_testdata_srcs.stamp
     COMMAND ${CMAKE_COMMAND} -E touch queue_benchmark_testdata_srcs.stamp
   DEPENDS
@@ -860,9 +905,9 @@ iree_hal_cts_testdata(
   FORMAT_NAME
     amdgpu_queue_benchmark
   FORMAT_VARIANT_TOKEN
-    "{ROCM_TARGET}"
+    "{AMDGPU_TARGET}"
   FORMAT_VARIANTS
-    ${IREE_ROCM_TEST_TARGET_CHIP_VALUES}
+    ${_IREE_HAL_AMDGPU_EXACT_TARGETS}
   TARGET_DEVICE
     "amdgpu"
   IDENTIFIER
@@ -870,11 +915,9 @@ iree_hal_cts_testdata(
   BACKEND_NAME
     "amdgpu"
   FORMAT_STRING
-    [=["amdgcn-amd-amdhsa--{ROCM_TARGET}"]=]
+    [=["amdgcn-amd-amdhsa--{AMDGPU_TARGET}"]=]
   TESTDATA_DIR
     "${PROJECT_SOURCE_DIR}/runtime/src/iree/hal/drivers/amdgpu/util"
-  FLAGS
-    "--iree-rocm-target={ROCM_TARGET}"
 )
 endif()
 

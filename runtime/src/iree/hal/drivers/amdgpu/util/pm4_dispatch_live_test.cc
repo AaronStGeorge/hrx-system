@@ -4,10 +4,10 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -19,19 +19,18 @@
 #include "iree/hal/drivers/amdgpu/util/libhsa.h"
 #include "iree/hal/drivers/amdgpu/util/pm4_barrier.h"
 #include "iree/hal/drivers/amdgpu/util/pm4_dispatch.h"
+#include "iree/hal/drivers/amdgpu/util/pm4_dispatch_test_kernels.h"
 #include "iree/hal/drivers/amdgpu/util/pm4_program.h"
+#include "iree/hal/drivers/amdgpu/util/target_id.h"
 #include "iree/hal/drivers/amdgpu/util/topology.h"
 #include "iree/hal/drivers/amdgpu/util/vmem.h"
-#include "iree/io/file_contents.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
 
 namespace iree::hal::amdgpu {
 namespace {
 
-constexpr char kTestCodeObjectPath[] =
-    "runtime/src/iree/hal/drivers/amdgpu/util/"
-    "pm4_dispatch_test_kernels_gfx1100.so";
+constexpr char kTestCodeObjectBaseName[] = "pm4_dispatch_test_kernels";
 constexpr uint32_t kAqlValueA = 0xA1100001u;
 constexpr uint32_t kAqlValueB = 0xB2200002u;
 constexpr uint32_t kPm4ValueA = 0xA4400004u;
@@ -89,41 +88,35 @@ struct QueueError {
   std::atomic<uint32_t> status{HSA_STATUS_SUCCESS};
 };
 
-static bool FileExists(const std::string& path) {
-  FILE* file = std::fopen(path.c_str(), "rb");
-  if (!file) return false;
-  std::fclose(file);
-  return true;
+static std::string StringViewToString(iree_string_view_t value) {
+  return std::string(value.data, value.size);
 }
 
-static std::string JoinPath(const char* lhs, const char* rhs) {
-  if (!lhs || lhs[0] == 0) return std::string(rhs);
-  std::string result(lhs);
-  if (!result.empty() && result.back() != '/') result.push_back('/');
-  result.append(rhs);
-  return result;
+static std::string TargetLabelFragment(std::string target) {
+  std::replace(target.begin(), target.end(), '-', '_');
+  std::replace(target.begin(), target.end(), '.', '_');
+  return target;
 }
 
-static std::string FindTestCodeObjectPath() {
-  std::vector<std::string> candidates;
-  const char* test_srcdir = std::getenv("TEST_SRCDIR");
-  const char* test_workspace = std::getenv("TEST_WORKSPACE");
-  if (test_srcdir && test_workspace) {
-    const std::string workspace_path = JoinPath(test_srcdir, test_workspace);
-    candidates.push_back(JoinPath(workspace_path.c_str(), kTestCodeObjectPath));
-  }
-  if (test_srcdir) {
-    const std::string main_path = JoinPath(test_srcdir, "_main");
-    candidates.push_back(JoinPath(main_path.c_str(), kTestCodeObjectPath));
-    candidates.push_back(JoinPath(test_srcdir, kTestCodeObjectPath));
-  }
-  candidates.push_back(kTestCodeObjectPath);
-  candidates.push_back(JoinPath("bazel-bin", kTestCodeObjectPath));
+static std::string TestCodeObjectFileName(
+    const std::string& code_object_target) {
+  return std::string(kTestCodeObjectBaseName) + "_" +
+         TargetLabelFragment(code_object_target) + ".so";
+}
 
-  for (const std::string& candidate : candidates) {
-    if (FileExists(candidate)) return candidate;
+static iree_const_byte_span_t FindTestCodeObjectData(
+    const std::string& code_object_target) {
+  const std::string file_name = TestCodeObjectFileName(code_object_target);
+  const iree_file_toc_t* toc =
+      iree_hal_amdgpu_pm4_dispatch_test_kernels_create();
+  for (iree_host_size_t i = 0;
+       i < iree_hal_amdgpu_pm4_dispatch_test_kernels_size(); ++i) {
+    if (iree_string_view_equal(iree_make_cstring_view(toc[i].name),
+                               iree_make_cstring_view(file_name.c_str()))) {
+      return iree_make_const_byte_span(toc[i].data, toc[i].size);
+    }
   }
-  return candidates.front();
+  return iree_const_byte_span_empty();
 }
 
 static void HsaQueueErrorCallback(hsa_status_t status, hsa_queue_t* queue,
@@ -136,10 +129,12 @@ static void HsaQueueErrorCallback(hsa_status_t status, hsa_queue_t* queue,
 
 struct IsaQuery {
   const iree_hal_amdgpu_libhsa_t* libhsa = nullptr;
-  bool supports_gfx1100 = false;
+  bool found = false;
+  std::string exact_target;
+  std::string code_object_target;
 };
 
-static hsa_status_t FindGfx1100Isa(hsa_isa_t isa, void* user_data) {
+static hsa_status_t FindAgentCodeObjectTarget(hsa_isa_t isa, void* user_data) {
   IsaQuery* query = reinterpret_cast<IsaQuery*>(user_data);
   uint32_t name_length = 0;
   if (!iree_status_is_ok(
@@ -152,22 +147,43 @@ static hsa_status_t FindGfx1100Isa(hsa_isa_t isa, void* user_data) {
           IREE_LIBHSA(query->libhsa), isa, HSA_ISA_INFO_NAME, name.data()))) {
     return HSA_STATUS_ERROR;
   }
-  if (std::strstr(name.data(), "gfx1100")) {
-    query->supports_gfx1100 = true;
-    return HSA_STATUS_INFO_BREAK;
+
+  iree_hal_amdgpu_target_id_t exact_target_id;
+  iree_status_t status = iree_hal_amdgpu_target_id_parse_hsa_isa_name(
+      iree_make_cstring_view(name.data()), &exact_target_id);
+  if (!iree_status_is_ok(status)) {
+    iree_status_free(status);
+    return HSA_STATUS_SUCCESS;
   }
-  return HSA_STATUS_SUCCESS;
+
+  iree_hal_amdgpu_target_id_t code_object_target_id;
+  status = iree_hal_amdgpu_target_id_lookup_code_object_target(
+      &exact_target_id, &code_object_target_id);
+  if (!iree_status_is_ok(status)) {
+    iree_status_free(status);
+    return HSA_STATUS_ERROR;
+  }
+  query->exact_target = StringViewToString(exact_target_id.processor);
+  query->code_object_target =
+      StringViewToString(code_object_target_id.processor);
+  query->found = true;
+  return HSA_STATUS_INFO_BREAK;
 }
 
-static bool AgentSupportsGfx1100(const iree_hal_amdgpu_libhsa_t* libhsa,
-                                 hsa_agent_t agent) {
+static bool QueryAgentCodeObjectTarget(const iree_hal_amdgpu_libhsa_t* libhsa,
+                                       hsa_agent_t agent,
+                                       std::string* out_exact_target,
+                                       std::string* out_code_object_target) {
   IsaQuery query = {.libhsa = libhsa};
-  iree_status_t status = iree_hsa_agent_iterate_isas(IREE_LIBHSA(libhsa), agent,
-                                                     FindGfx1100Isa, &query);
+  iree_status_t status = iree_hsa_agent_iterate_isas(
+      IREE_LIBHSA(libhsa), agent, FindAgentCodeObjectTarget, &query);
   if (!iree_status_is_ok(status)) {
     iree_status_free(status);
   }
-  return query.supports_gfx1100;
+  if (!query.found) return false;
+  *out_exact_target = query.exact_target;
+  *out_code_object_target = query.code_object_target;
+  return true;
 }
 
 static iree_status_t LookupKernel(const iree_hal_amdgpu_libhsa_t* libhsa,
@@ -296,8 +312,20 @@ class PM4DispatchLiveTest : public ::testing::Test {
     if (topology.gpu_agent_count == 0 || topology.cpu_agent_count == 0) {
       GTEST_SKIP() << "CPU and GPU agents are required, skipping tests";
     }
-    if (!AgentSupportsGfx1100(&libhsa, topology.gpu_agents[0])) {
-      GTEST_SKIP() << "gfx1100 GPU is required for this PM4 dispatch smoke";
+
+    if (!QueryAgentCodeObjectTarget(&libhsa, topology.gpu_agents[0],
+                                    &agent_exact_target,
+                                    &agent_code_object_target)) {
+      GTEST_SKIP() << "could not query AMDGPU agent ISA";
+    }
+    const std::string file_name =
+        TestCodeObjectFileName(agent_code_object_target);
+    test_code_object_data = FindTestCodeObjectData(agent_code_object_target);
+    if (test_code_object_data.data_length == 0) {
+      GTEST_SKIP() << "PM4 dispatch code object " << file_name << " for agent "
+                   << agent_exact_target << " via " << agent_code_object_target
+                   << " was not generated; configure IREE_HAL_AMDGPU_TARGETS "
+                      "or //runtime/src/iree/hal/drivers/amdgpu:targets";
     }
   }
 
@@ -309,26 +337,26 @@ class PM4DispatchLiveTest : public ::testing::Test {
   static iree_allocator_t host_allocator;
   static iree_hal_amdgpu_libhsa_t libhsa;
   static iree_hal_amdgpu_topology_t topology;
+  static std::string agent_exact_target;
+  static std::string agent_code_object_target;
+  static iree_const_byte_span_t test_code_object_data;
 };
 
 iree_allocator_t PM4DispatchLiveTest::host_allocator;
 iree_hal_amdgpu_libhsa_t PM4DispatchLiveTest::libhsa;
 iree_hal_amdgpu_topology_t PM4DispatchLiveTest::topology;
+std::string PM4DispatchLiveTest::agent_exact_target;
+std::string PM4DispatchLiveTest::agent_code_object_target;
+iree_const_byte_span_t PM4DispatchLiveTest::test_code_object_data;
 
 TEST_F(PM4DispatchLiveTest, AqlAndAqlPm4IbLaunchMixedKernels) {
   hsa_agent_t cpu_agent = topology.cpu_agents[0];
   hsa_agent_t gpu_agent = topology.gpu_agents[0];
 
-  std::string code_object_path = FindTestCodeObjectPath();
-  iree_io_file_contents_t* code_object_contents = nullptr;
-  IREE_ASSERT_OK(iree_io_file_contents_read(
-      iree_make_cstring_view(code_object_path.c_str()), host_allocator,
-      &code_object_contents));
-
   hsa_code_object_reader_t code_object_reader = {0};
   IREE_ASSERT_OK(iree_hsa_code_object_reader_create_from_memory(
-      IREE_LIBHSA(&libhsa), code_object_contents->const_buffer.data,
-      code_object_contents->const_buffer.data_length, &code_object_reader));
+      IREE_LIBHSA(&libhsa), test_code_object_data.data,
+      test_code_object_data.data_length, &code_object_reader));
 
   hsa_executable_t executable = {0};
   IREE_ASSERT_OK(
@@ -344,8 +372,6 @@ TEST_F(PM4DispatchLiveTest, AqlAndAqlPm4IbLaunchMixedKernels) {
   IREE_ASSERT_OK(iree_hsa_code_object_reader_destroy(IREE_LIBHSA(&libhsa),
                                                      code_object_reader));
   code_object_reader = {0};
-  iree_io_file_contents_free(code_object_contents);
-  code_object_contents = nullptr;
 
   KernelInfo kernels[4];
   IREE_ASSERT_OK(LookupKernel(&libhsa, executable, gpu_agent,

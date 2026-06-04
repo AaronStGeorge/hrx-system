@@ -829,13 +829,8 @@ static iree_status_t iree_hal_hip_device_create_channel(
     iree_hal_device_t* base_device, iree_hal_queue_affinity_t queue_affinity,
     iree_hal_channel_params_t params, iree_hal_channel_t** out_channel) {
   iree_hal_hip_device_t* device = iree_hal_hip_device_cast(base_device);
-  if (!device->nccl_symbols || !device->nccl_symbols->dylib) {
-    return iree_make_status(
-        IREE_STATUS_UNAVAILABLE,
-        "RCCL runtime library version %d.%d and greater not available; "
-        "ensure installed and the shared library (rccl.dll/librccl.so) "
-        "is on your PATH/LD_LIBRARY_PATH.",
-        NCCL_MAJOR, NCCL_MINOR);
+  if (!iree_hal_hip_nccl_dynamic_symbols_is_available(device->nccl_symbols)) {
+    return iree_hal_hip_nccl_dynamic_symbols_unavailable_status();
   }
 
   // Today we only allow a single logical device per channel.

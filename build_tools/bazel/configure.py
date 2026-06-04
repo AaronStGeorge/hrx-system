@@ -53,12 +53,12 @@ SDK_DRIVER_PACKAGES = {
         "runtime/src/iree/hal/drivers/webgpu/registration",
     ),
 }
-
 ROCM_DRIVERS = frozenset(("amdgpu", "hip"))
-SUPPORTED_ENABLE_DRIVERS = frozenset((*HOST_DRIVERS, "amdgpu", "webgpu"))
+SUPPORTED_ENABLE_DRIVERS = frozenset((*HOST_DRIVERS, "amdgpu", "hip", "webgpu"))
 ALL_DRIVERS = tuple(HOST_DRIVERS) + tuple(SDK_DRIVER_PACKAGES)
 DRIVER_DEFINES = {
     "IREE_HAL_DRIVER_AMDGPU": "amdgpu",
+    "IREE_HAL_DRIVER_HIP": "hip",
     "IREE_HAL_DRIVER_LOCAL_SYNC": "local-sync",
     "IREE_HAL_DRIVER_LOCAL_TASK": "local-task",
     "IREE_HAL_DRIVER_NULL": "null",
@@ -66,7 +66,6 @@ DRIVER_DEFINES = {
 }
 UNSUPPORTED_DRIVER_DEFINES = {
     "IREE_HAL_DRIVER_CUDA": "cuda",
-    "IREE_HAL_DRIVER_HIP": "hip",
     "IREE_HAL_DRIVER_METAL": "metal",
     "IREE_HAL_DRIVER_VULKAN": "vulkan",
 }
@@ -166,7 +165,7 @@ def check_removed_option(arg: str) -> None:
     if removed_option not in REMOVED_OPTIONS:
         return
     raise SystemExit(
-        "{} was removed. Use -DIREE_HAL_DRIVER_AMDGPU=ON and "
+        "{} was removed. Use portable -DIREE_HAL_DRIVER_* options and "
         "-DIREE_ROCM_PATH=/path/to/rocm, or the native Bazel form "
         "{}=amdgpu,local-sync,local-task,null "
         "--repo_env=IREE_ROCM_PATH=/path/to/rocm.".format(
@@ -276,20 +275,6 @@ def bazelrc_line(command: str, option: str) -> str:
     return f"{command} {shlex.quote(option)}"
 
 
-def deleted_package_lines(enabled_drivers: set[str]) -> list[str]:
-    lines = []
-    for driver, packages in SDK_DRIVER_PACKAGES.items():
-        if driver in enabled_drivers:
-            continue
-        lines.append(
-            bazelrc_line(
-                "common",
-                "--deleted_packages=" + ",".join(packages),
-            )
-        )
-    return lines
-
-
 def generate_config(args: argparse.Namespace) -> str:
     request = request_from_args(args)
     unsupported_enabled_drivers = request.enabled_drivers.difference(
@@ -357,13 +342,6 @@ def generate_config(args: argparse.Namespace) -> str:
     else:
         lines.append("")
 
-    lines.extend(
-        [
-            "# Recursive build package scope.",
-            *deleted_package_lines(request.enabled_drivers),
-            "",
-        ]
-    )
     return "\n".join(lines)
 
 

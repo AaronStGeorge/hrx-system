@@ -6,6 +6,41 @@
 
 """Rules for compiling with clang to produce AMDGPU libraries."""
 
+load(
+    "@iree_amdgpu_device_toolchain//:paths.bzl",
+    "AMDGPU_CLANG_RESOURCE_HEADERS",
+    "AMDGPU_CLANG_RESOURCE_MARKER",
+    "AMDGPU_CLANG_TOOL",
+    "AMDGPU_DEVICE_TOOLCHAIN_AVAILABLE",
+    "AMDGPU_LLD_TOOL",
+    "AMDGPU_LLVM_LINK_TOOL",
+    "AMDGPU_LLVM_OBJCOPY_TOOL",
+)
+load(
+    "//build_tools/amdgpu:selectors.bzl",
+    "iree_amdgpu_target_label_fragment",
+    "iree_amdgpu_target_selector_config_settings",
+)
+load("//build_tools/amdgpu:target_map.bzl", "IREE_AMDGPU_CODE_OBJECT_TARGETS")
+load("//build_tools/embed_data:build_defs.bzl", "iree_c_embed_data")
+
+_INCOMPATIBLE_TARGET = ["@platforms//:incompatible"]
+_CLANG_RESOURCE_INCLUDE_FLAG = "-isystem $$(dirname $(location %s))" % (
+    AMDGPU_CLANG_RESOURCE_MARKER,
+) if AMDGPU_CLANG_RESOURCE_MARKER else ""
+
+def _incompatible_filegroup(name, kwargs):
+    filegroup_kwargs = {}
+    for attr in ["tags", "testonly", "visibility"]:
+        if attr in kwargs:
+            filegroup_kwargs[attr] = kwargs[attr]
+    native.filegroup(
+        name = name,
+        srcs = [],
+        target_compatible_with = _INCOMPATIBLE_TARGET,
+        **filegroup_kwargs
+    )
+
 def iree_amdgpu_binary(
         name,
         target,
@@ -14,13 +49,13 @@ def iree_amdgpu_binary(
         internal_hdrs = [],
         copts = [],
         linkopts = [],
-        clang_tool = "@iree_amdgpu_device_toolchain//:clang",
-        link_tool = "@iree_amdgpu_device_toolchain//:llvm-link",
-        lld_tool = "@iree_amdgpu_device_toolchain//:lld",
-        objcopy_tool = "@iree_amdgpu_device_toolchain//:llvm-objcopy",
-        builtin_headers_dep = "@iree_amdgpu_device_toolchain//:clang_resource_headers",
-        builtin_headers_marker = "@iree_amdgpu_device_toolchain//:clang_resource_include_marker",
-        builtin_headers_include_flag = "-isystem $$(dirname $(location @iree_amdgpu_device_toolchain//:clang_resource_include_marker))",
+        clang_tool = AMDGPU_CLANG_TOOL,
+        link_tool = AMDGPU_LLVM_LINK_TOOL,
+        lld_tool = AMDGPU_LLD_TOOL,
+        objcopy_tool = AMDGPU_LLVM_OBJCOPY_TOOL,
+        builtin_headers_dep = AMDGPU_CLANG_RESOURCE_HEADERS,
+        builtin_headers_marker = AMDGPU_CLANG_RESOURCE_MARKER,
+        builtin_headers_include_flag = _CLANG_RESOURCE_INCLUDE_FLAG,
         **kwargs):
     """Builds an LLVM shared library for AMDGPU from input files via clang.
 
@@ -46,6 +81,9 @@ def iree_amdgpu_binary(
                                       include directory to clang.
         **kwargs: any additional attributes to pass to the underlying rules.
     """
+    if not AMDGPU_DEVICE_TOOLCHAIN_AVAILABLE:
+        _incompatible_filegroup(name, kwargs)
+        return
 
     base_copts = [
         # C configuration.
@@ -82,8 +120,10 @@ def iree_amdgpu_binary(
     archive_out = "%s.a" % (name)
     source_locations = " ".join(["$(locations %s)" % (src,) for src in srcs])
     object_dir = "$(@D)/%s.objects" % (name,)
-    compile_srcs = srcs + [builtin_headers_dep] + internal_hdrs
-    if builtin_headers_marker != None:
+    compile_srcs = srcs + internal_hdrs
+    if builtin_headers_dep:
+        compile_srcs.append(builtin_headers_dep)
+    if builtin_headers_marker:
         compile_srcs.append(builtin_headers_marker)
     native.genrule(
         name = "archive_%s" % (name),
@@ -194,4 +234,127 @@ def iree_amdgpu_binary(
         message = "Generating OpenCL binary %s to %s..." % (name, out),
         output_to_bindir = 1,
         **kwargs
+    )
+
+def iree_amdgpu_binary_variants(
+        name,
+        target,
+        srcs,
+        target_selectors_flag,
+        binary_name_prefix = None,
+        code_object_targets = IREE_AMDGPU_CODE_OBJECT_TARGETS,
+        tags = [],
+        **kwargs):
+    """Builds code-object variants and exposes the selected outputs.
+
+    Args:
+      name: Aggregate filegroup name containing selected binaries.
+      target: LLVM `-target` flag.
+      srcs: source files or filegroups to pass to clang.
+      target_selectors_flag: Label of an `iree_amdgpu_target_selectors_flag`
+        build setting controlling which variants are selected.
+      binary_name_prefix: Prefix for generated per-code-object binary targets.
+        Defaults to `name`.
+      code_object_targets: Code-object targets to build variants for.
+      tags: Tags applied to generated binary targets and the aggregate
+        filegroup.
+      **kwargs: Additional attributes forwarded to `iree_amdgpu_binary`.
+    """
+    if binary_name_prefix == None:
+        binary_name_prefix = name
+
+    target_selection = iree_amdgpu_target_selector_config_settings(
+        name = "{}_target".format(name),
+        code_object_targets = code_object_targets,
+        flag = target_selectors_flag,
+    )
+
+    selected_srcs = []
+    for code_object_target in code_object_targets:
+        binary_name = "{}_{}".format(
+            binary_name_prefix,
+            iree_amdgpu_target_label_fragment(code_object_target),
+        )
+        iree_amdgpu_binary(
+            name = binary_name,
+            target = target,
+            arch = code_object_target,
+            srcs = srcs,
+            tags = tags,
+            **kwargs
+        )
+        selected_srcs += select({
+            target_selection.requested[code_object_target]: [":" + binary_name],
+            "//conditions:default": [],
+        })
+
+    filegroup_kwargs = {}
+    if "visibility" in kwargs:
+        filegroup_kwargs["visibility"] = kwargs["visibility"]
+    native.filegroup(
+        name = name,
+        srcs = selected_srcs,
+        tags = tags,
+        testonly = kwargs.get("testonly", False),
+        **filegroup_kwargs
+    )
+
+def iree_amdgpu_binary_variants_embed_data(
+        name,
+        target,
+        srcs,
+        target_selectors_flag,
+        binary_name_prefix = None,
+        c_file_output = None,
+        h_file_output = None,
+        identifier = None,
+        flatten = True,
+        code_object_targets = IREE_AMDGPU_CODE_OBJECT_TARGETS,
+        tags = [],
+        **kwargs):
+    """Builds selected AMDGPU binaries and embeds them into a C library.
+
+    Args:
+      name: Generated `cc_library` target name.
+      target: LLVM `-target` flag.
+      srcs: source files or filegroups to pass to clang.
+      target_selectors_flag: Label of an `iree_amdgpu_target_selectors_flag`
+        build setting controlling which variants are selected.
+      binary_name_prefix: Prefix for generated per-code-object binary targets.
+        Defaults to `name`.
+      c_file_output: Generated C implementation filename. Defaults to
+        `<name>.c`.
+      h_file_output: Generated C header filename. Defaults to `<name>.h`.
+      identifier: C identifier prefix. Defaults to `name`.
+      flatten: Whether embedded table-of-contents names drop directory
+        components.
+      code_object_targets: Code-object targets to build variants for.
+      tags: Tags applied to generated targets.
+      **kwargs: Additional attributes forwarded to `iree_amdgpu_binary`.
+    """
+    binary_variants_name = name + "_binaries"
+    iree_amdgpu_binary_variants(
+        name = binary_variants_name,
+        target = target,
+        srcs = srcs,
+        target_selectors_flag = target_selectors_flag,
+        binary_name_prefix = binary_name_prefix,
+        code_object_targets = code_object_targets,
+        tags = tags,
+        **kwargs
+    )
+
+    embed_kwargs = {}
+    if "visibility" in kwargs:
+        embed_kwargs["visibility"] = kwargs["visibility"]
+    iree_c_embed_data(
+        name = name,
+        testonly = kwargs.get("testonly", False),
+        srcs = [":" + binary_variants_name],
+        c_file_output = c_file_output or (name + ".c"),
+        h_file_output = h_file_output or (name + ".h"),
+        identifier = identifier,
+        flatten = flatten,
+        tags = tags,
+        **embed_kwargs
     )

@@ -23,12 +23,10 @@ import bazel_to_cmake_targets
 # Maps Bazel string_flag labels to CMake variable names. Used by
 # flag_values in iree_hal_executable rules and CTS macros to resolve
 # {PLACEHOLDER} template variables to ${CMAKE_VARIABLE} references.
-_BUILD_SETTING_CMAKE_VARIABLES = {
-    "//build_tools/bazel:rocm_test_target": "IREE_ROCM_TEST_TARGET_CHIP",
-}
+_BUILD_SETTING_CMAKE_VARIABLES = {}
 
 _BUILD_SETTING_CMAKE_LIST_VARIABLES = {
-    "//build_tools/bazel:rocm_test_target": "IREE_ROCM_TEST_TARGET_CHIP_VALUES",
+    "//runtime/src/iree/hal/drivers/amdgpu:targets": "_IREE_HAL_AMDGPU_EXACT_TARGETS",
 }
 
 # Maps Bazel platform labels (from both select() conditions and
@@ -62,6 +60,7 @@ _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS = {
     "//runtime/config/hal:executable_loader_embedded_elf": "IREE_HAL_EXECUTABLE_LOADER_EMBEDDED_ELF",
     "//runtime/config/hal:executable_loader_system_library": "IREE_HAL_EXECUTABLE_LOADER_SYSTEM_LIBRARY",
     "//runtime/config/hal:executable_loader_vmvx_module": "IREE_HAL_EXECUTABLE_LOADER_VMVX_MODULE",
+    "//runtime/src/iree/hal/drivers/hip:rccl_enabled": "IREE_HAL_DRIVER_HIP_RCCL",
 }
 
 
@@ -1266,6 +1265,132 @@ class BuildFileFunctions(object):
             f"{copts_block}"
             f"{linkopts_block}"
             f")\n\n"
+        )
+        self._emit_platform_guard_end(target_compatible_with)
+
+    def _convert_amdgpu_target_selectors_block(self, target_selectors_flag):
+        if target_selectors_flag != "//runtime/src/iree/hal/drivers/amdgpu:targets":
+            raise NotImplementedError(
+                f"AMDGPU target selector flag: {target_selectors_flag}"
+            )
+        return self._convert_string_list_block(
+            "TARGETS", ["${IREE_HAL_AMDGPU_TARGETS}"], quote=False
+        )
+
+    def _iree_amdgpu_binary_variants(
+        self,
+        name,
+        target,
+        srcs,
+        target_selectors_flag,
+        binary_name_prefix=None,
+        internal_hdrs=None,
+        copts=None,
+        linkopts=None,
+        testonly=None,
+        tags=None,
+        target_compatible_with=None,
+        **kwargs,
+    ):
+        if self._should_skip_target(tags=tags, **kwargs):
+            return
+        name_block = self._convert_string_arg_block("NAME", name, quote=False)
+        target_block = self._convert_string_arg_block("TARGET", target, quote=False)
+        targets_block = self._convert_amdgpu_target_selectors_block(
+            target_selectors_flag
+        )
+        binary_name_prefix_block = self._convert_string_arg_block(
+            "BINARY_NAME_PREFIX", binary_name_prefix, quote=False
+        )
+        hdrs_block = self._convert_srcs_block(internal_hdrs, block_name="INTERNAL_HDRS")
+        srcs_block = self._convert_srcs_block(srcs)
+        copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
+        linkopts_block = self._convert_string_list_block(
+            "LINKOPTS", linkopts, sort=False
+        )
+        testonly_block = self._convert_option_block("TESTONLY", testonly)
+
+        self._emit_platform_guard_begin(target_compatible_with)
+        self._converter.body += (
+            f"iree_amdgpu_binary_variants(\n"
+            f"{name_block}"
+            f"{target_block}"
+            f"{targets_block}"
+            f"{binary_name_prefix_block}"
+            f"{hdrs_block}"
+            f"{srcs_block}"
+            f"{copts_block}"
+            f"{linkopts_block}"
+            f"{testonly_block}"
+            f")\n\n"
+        )
+        self._emit_platform_guard_end(target_compatible_with)
+
+    def _iree_amdgpu_binary_variants_embed_data(
+        self,
+        name,
+        target,
+        srcs,
+        target_selectors_flag,
+        binary_name_prefix=None,
+        c_file_output=None,
+        h_file_output=None,
+        identifier=None,
+        flatten=None,
+        internal_hdrs=None,
+        copts=None,
+        linkopts=None,
+        deps=None,
+        testonly=None,
+        tags=None,
+        target_compatible_with=None,
+        **kwargs,
+    ):
+        if self._should_skip_target(tags=tags, **kwargs):
+            return
+        name_block = self._convert_string_arg_block("NAME", name, quote=False)
+        target_block = self._convert_string_arg_block("TARGET", target, quote=False)
+        targets_block = self._convert_amdgpu_target_selectors_block(
+            target_selectors_flag
+        )
+        binary_name_prefix_block = self._convert_string_arg_block(
+            "BINARY_NAME_PREFIX", binary_name_prefix, quote=False
+        )
+        c_file_output_block = self._convert_string_arg_block(
+            "C_FILE_OUTPUT", c_file_output
+        )
+        h_file_output_block = self._convert_string_arg_block(
+            "H_FILE_OUTPUT", h_file_output
+        )
+        identifier_block = self._convert_string_arg_block("IDENTIFIER", identifier)
+        hdrs_block = self._convert_srcs_block(internal_hdrs, block_name="INTERNAL_HDRS")
+        srcs_block = self._convert_srcs_block(srcs)
+        copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
+        linkopts_block = self._convert_string_list_block(
+            "LINKOPTS", linkopts, sort=False
+        )
+        deps_block = self._convert_target_list_block("DEPS", deps)
+        testonly_block = self._convert_option_block("TESTONLY", testonly)
+        flatten_block = self._convert_option_block("FLATTEN", flatten)
+
+        self._emit_platform_guard_begin(target_compatible_with)
+        self._converter.body += (
+            f"iree_amdgpu_binary_variants_embed_data(\n"
+            f"{name_block}"
+            f"{target_block}"
+            f"{targets_block}"
+            f"{binary_name_prefix_block}"
+            f"{c_file_output_block}"
+            f"{h_file_output_block}"
+            f"{identifier_block}"
+            f"{hdrs_block}"
+            f"{srcs_block}"
+            f"{copts_block}"
+            f"{linkopts_block}"
+            f"{deps_block}"
+            f"{testonly_block}"
+            f"{flatten_block}"
+            f"  PUBLIC\n)\n\n"
         )
         self._emit_platform_guard_end(target_compatible_with)
 

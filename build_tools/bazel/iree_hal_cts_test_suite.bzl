@@ -10,6 +10,12 @@ This reduced repository does not contain the IREE compiler pipeline that the
 monorepo used to lower CTS MLIR test inputs into executable flatbuffers.
 """
 
+load(
+    "//build_tools/amdgpu:selectors.bzl",
+    "iree_amdgpu_exact_target_selector_config_settings",
+    "iree_amdgpu_target_label_fragment",
+)
+load("//build_tools/amdgpu:target_map.bzl", "IREE_AMDGPU_EXACT_TARGETS")
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 load("//runtime/build_tools/bazel:hal_cts.bzl", "iree_runtime_hal_cts_test_suite")
 
@@ -80,6 +86,32 @@ _registration = rule(
     },
 )
 
+def _generate_registration(
+        name,
+        header,
+        format_name,
+        format_string,
+        identifier,
+        backend_name,
+        testonly):
+    registration = "%s.cc" % name
+    _registration(
+        name = "%s_gen" % name,
+        template = "//runtime/src/iree/hal/cts/util:testdata_format.cc.tpl",
+        out = registration,
+        substitutions = {
+            "{BACKEND_NAME}": backend_name,
+            "{FORMAT_FUNC_NAME}": _camel_case(format_name),
+            "{FORMAT_NAME}": format_name,
+            "{FORMAT_STRING}": format_string,
+            "{FORMAT_VAR_NAME}": "%s_format" % format_name,
+            "{HEADER_PATH}": "%s/%s" % (native.package_name(), header),
+            "{IDENTIFIER}": identifier,
+        },
+        testonly = testonly,
+    )
+    return registration
+
 def iree_hal_cts_testdata(
         format_name,
         target_device,
@@ -113,26 +145,51 @@ def iree_hal_cts_testdata(
         **kwargs
     )
 
-    registration = "%s_registration.cc" % testdata_name
-    _registration(
-        name = "%s_registration_gen" % testdata_name,
-        template = "//runtime/src/iree/hal/cts/util:testdata_format.cc.tpl",
-        out = registration,
-        substitutions = {
-            "{BACKEND_NAME}": backend_name,
-            "{FORMAT_FUNC_NAME}": _camel_case(format_name),
-            "{FORMAT_NAME}": format_name,
-            "{FORMAT_STRING}": format_string,
-            "{FORMAT_VAR_NAME}": "%s_format" % format_name,
-            "{HEADER_PATH}": "%s/%s" % (native.package_name(), header),
-            "{IDENTIFIER}": identifier,
-        },
-        testonly = testonly,
-    )
+    variant_placeholders = cmake_format_variant_values
+    if len(variant_placeholders) > 1:
+        fail("iree_hal_cts_testdata supports one CMake format variant value")
+
+    if variant_placeholders:
+        variant_placeholder = variant_placeholders[0]
+        variant_flag = flag_values.get(variant_placeholder)
+        if not variant_flag:
+            fail("cmake_format_variant_values requires matching flag_values")
+
+        requested = iree_amdgpu_exact_target_selector_config_settings(
+            name = "%s_exact_target" % testdata_name,
+            flag = variant_flag,
+        )
+        registration_srcs = []
+        variant_token = "{%s}" % variant_placeholder
+        for exact_target in IREE_AMDGPU_EXACT_TARGETS:
+            target_fragment = iree_amdgpu_target_label_fragment(exact_target)
+            registration = _generate_registration(
+                name = "%s_%s_registration" % (testdata_name, target_fragment),
+                header = header,
+                format_name = "%s_%s" % (format_name, target_fragment),
+                format_string = format_string.replace(variant_token, exact_target),
+                identifier = identifier,
+                backend_name = backend_name,
+                testonly = testonly,
+            )
+            registration_srcs = registration_srcs + select({
+                requested[exact_target]: [registration],
+                "//conditions:default": [],
+            })
+    else:
+        registration_srcs = [_generate_registration(
+            name = "%s_registration" % testdata_name,
+            header = header,
+            format_name = format_name,
+            format_string = format_string,
+            identifier = identifier,
+            backend_name = backend_name,
+            testonly = testonly,
+        )]
 
     iree_runtime_cc_library(
         name = "%s_lib" % testdata_name,
-        srcs = [registration],
+        srcs = registration_srcs,
         deps = [
             ":%s" % testdata_name,
             "//runtime/src/iree/hal/cts/util:registry",

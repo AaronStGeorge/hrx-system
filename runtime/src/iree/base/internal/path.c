@@ -235,15 +235,40 @@ iree_string_view_t iree_file_path_extension(iree_string_view_t path) {
   return extension;
 }
 
-// We could limit this to only those libraries supported on the current platform
-// or to accept special library suffixes (.so.1, etc). For now most of the
-// libraries we produce and follow the cmake defaults which match these.
+static bool iree_file_path_has_versioned_so_suffix(iree_string_view_t path) {
+  iree_string_view_t basename = iree_file_path_basename(path);
+  if (basename.size < 6) return false;  // "x.so.1"
+
+  for (iree_host_size_t i = 1; i + 4 <= basename.size; ++i) {
+    if (memcmp(basename.data + i, ".so.", 4) != 0) continue;
+
+    bool needs_digit = true;
+    for (iree_host_size_t j = i + 4; j < basename.size; ++j) {
+      char c = basename.data[j];
+      if (c >= '0' && c <= '9') {
+        needs_digit = false;
+      } else if (c == '.' && !needs_digit) {
+        needs_digit = true;
+      } else {
+        return false;
+      }
+    }
+    return !needs_digit;
+  }
+
+  return false;
+}
+
+// We could limit this to only those libraries supported on the current
+// platform. For now most of the libraries we produce follow the CMake defaults
+// below, while system libraries may use ELF soname suffixes such as `.so.1`.
 bool iree_file_path_is_dynamic_library(iree_string_view_t path) {
   iree_string_view_t ext = iree_file_path_extension(path);
   return iree_string_view_equal(ext, IREE_SV("dll")) ||
          iree_string_view_equal(ext, IREE_SV("dylib")) ||
          iree_string_view_equal(ext, IREE_SV("so")) ||
-         iree_string_view_equal(ext, IREE_SV("sos"));
+         iree_string_view_equal(ext, IREE_SV("sos")) ||
+         iree_file_path_has_versioned_so_suffix(path);
 }
 
 void iree_uri_split(iree_string_view_t uri, iree_string_view_t* out_schema,

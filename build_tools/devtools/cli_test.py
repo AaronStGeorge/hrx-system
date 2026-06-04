@@ -203,6 +203,8 @@ class CliTest(unittest.TestCase):
         plan = args.handler(args)
         description = plan.describe()
 
+        self.assertEqual(len(plan.steps), 1)
+        self.assertIn("--check", plan.steps[0].argv)
         self.assertIn("--changed", description)
         self.assertIn("--lane bazel", description)
         self.assertIn("--profile paranoid", description)
@@ -213,15 +215,20 @@ class CliTest(unittest.TestCase):
         plan = args.handler(args)
         description = plan.describe()
 
+        self.assertEqual(len(plan.steps), 1)
+        self.assertIn("--check", plan.steps[0].argv)
         self.assertIn("--lane bazel", description)
         self.assertIn("--profile default", description)
         self.assertNotIn("--profile paranoid", description)
+        self.assertNotIn("--fix", description)
 
         args = cli.parse_arguments(["cmake", "precommit", "--profile", "paranoid"])
 
         plan = args.handler(args)
         description = plan.describe()
 
+        self.assertEqual(len(plan.steps), 1)
+        self.assertIn("--check", plan.steps[0].argv)
         self.assertIn("--lane cmake", description)
         self.assertIn("--profile paranoid", description)
         self.assertNotIn("--hygiene", description)
@@ -241,6 +248,9 @@ class CliTest(unittest.TestCase):
         plan = args.handler(args)
         description = plan.describe()
 
+        self.assertEqual(len(plan.steps), 2)
+        self.assertIn("--fix", plan.steps[0].argv)
+        self.assertIn("--check", plan.steps[1].argv)
         self.assertIn("--staged", description)
         self.assertNotIn("--changed", description)
 
@@ -250,6 +260,9 @@ class CliTest(unittest.TestCase):
         plan = args.handler(args)
         description = plan.describe()
 
+        self.assertEqual(len(plan.steps), 2)
+        self.assertIn("--fix", plan.steps[0].argv)
+        self.assertIn("--check", plan.steps[1].argv)
         self.assertIn("README.md dev.py", description)
         self.assertNotIn("--changed", description)
         self.assertNotIn("--staged", description)
@@ -347,6 +360,8 @@ class CliTest(unittest.TestCase):
         self.assertIn("--base", output)
         self.assertIn("--staged", output)
         self.assertIn("Explicit paths", output)
+        self.assertIn("mechanical fixups", output)
+        self.assertIn("non-mutating check mode", output)
 
     def test_presubmit_help_calls_out_full_tree_default(self):
         output = self.parse_help(["bazel", "presubmit", "--help"])

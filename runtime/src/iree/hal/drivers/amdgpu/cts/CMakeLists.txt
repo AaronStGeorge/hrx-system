@@ -7,7 +7,12 @@
 # To disable autogeneration for this file entirely, delete this header.        #
 ################################################################################
 
-if(NOT IREE_ROCM_TEST_TARGET_CHIP_VALUES)
+iree_amdgpu_expand_target_selectors(
+  _IREE_HAL_AMDGPU_EXACT_TARGETS
+  "${IREE_AMDGPU_TARGET_EXPANSION_EXACT}"
+  ${IREE_HAL_AMDGPU_TARGETS}
+)
+if(NOT _IREE_HAL_AMDGPU_EXACT_TARGETS)
   return()
 endif()
 
@@ -33,6 +38,10 @@ if(IREE_HAL_DRIVER_AMDGPU)
 iree_hal_cts_testdata(
   FORMAT_NAME
     amdgpu
+  FORMAT_VARIANT_TOKEN
+    "{AMDGPU_TARGET}"
+  FORMAT_VARIANTS
+    ${_IREE_HAL_AMDGPU_EXACT_TARGETS}
   TARGET_DEVICE
     "amdgpu"
   IDENTIFIER
@@ -40,7 +49,7 @@ iree_hal_cts_testdata(
   BACKEND_NAME
     "amdgpu"
   FORMAT_STRING
-    [=["amdgcn-amd-amdhsa"]=]
+    [=["amdgcn-amd-amdhsa--{AMDGPU_TARGET}"]=]
   TESTDATA_DIR
     "${PROJECT_SOURCE_DIR}/runtime/src/iree/hal/cts/testdata"
 )

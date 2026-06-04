@@ -6,6 +6,8 @@
 
 #include "iree/hal/drivers/hip/rccl_dynamic_symbols.h"
 
+#if IREE_HAL_HIP_ENABLE_RCCL
+
 #include <string.h>
 
 #include "iree/base/api.h"
@@ -49,7 +51,7 @@ static iree_status_t iree_hal_hip_nccl_check_version(
   iree_status_t status = iree_dynamic_library_lookup_symbol(
       nccl_library, "ncclGetVersion", (void**)&ncclGetVersion);
   if (!iree_status_is_ok(status)) {
-    iree_status_ignore(status);
+    iree_status_free(status);
     return iree_make_status(
         IREE_STATUS_UNAVAILABLE,
         "ncclGetVersion symbol not found in dynamic library");
@@ -104,11 +106,11 @@ iree_status_t iree_hal_hip_nccl_dynamic_symbols_initialize(
       iree_hal_hip_nccl_dylib_names, IREE_DYNAMIC_LIBRARY_FLAG_NODELETE,
       host_allocator, &out_syms->dylib);
   if (iree_status_is_not_found(status)) {
-    iree_status_ignore(status);
+    iree_status_free(status);
     status = iree_make_status(
         IREE_STATUS_UNAVAILABLE,
         "RCCL runtime library version %d.%d and greater not available; "
-        "ensure installed and the shared library (rccl.dll/lirnccl.so) "
+        "ensure installed and the shared library (rccl.dll/librccl.so) "
         "is on your PATH/LD_LIBRARY_PATH.",
         NCCL_MAJOR, NCCL_MINOR);
   }
@@ -142,3 +144,5 @@ void iree_hal_hip_nccl_dynamic_symbols_deinitialize(
 
   IREE_TRACE_ZONE_END(z0);
 }
+
+#endif  // IREE_HAL_HIP_ENABLE_RCCL

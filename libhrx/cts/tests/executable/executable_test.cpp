@@ -4,13 +4,11 @@
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cctype>
-#include <cstdlib>
-#include <filesystem>
-#include <initializer_list>
 #include <string>
-#include <vector>
 
+#include "build_tools/amdgpu/target_map.h"
 #include "hrx_test_fixture.hpp"
+#include "libhrx/cts/amdgpu_executable_noop_kernels.h"
 
 namespace {
 
@@ -25,43 +23,33 @@ std::string gpu_architecture(hrx_device_t device) {
   return value;
 }
 
-void append_candidate(std::vector<std::filesystem::path>& candidates,
-                      const char* root,
-                      std::initializer_list<const char*> fragments) {
-  if (!root || !root[0]) {
-    return;
+const iree_file_toc_t* find_noop_hsaco_for_target(const std::string& target) {
+  char fragment[64] = {};
+  if (!iree_amdgpu_target_label_fragment(target.c_str(), fragment,
+                                         sizeof(fragment))) {
+    return nullptr;
   }
-  std::filesystem::path path(root);
-  for (const char* fragment : fragments) {
-    path /= fragment;
-  }
-  candidates.push_back(path);
-}
-
-std::filesystem::path find_noop_hsaco(const std::string& arch) {
-  std::vector<std::filesystem::path> candidates;
-  std::string arch_file_name = "hrx_cts_noop_kernel_" + arch + ".so";
-  append_candidate(candidates, std::getenv("HRX_CTS_EXECUTABLE_HSACO"), {});
-  append_candidate(candidates, std::getenv("TEST_SRCDIR"),
-                   {"libhrx", "cts", arch_file_name.c_str()});
-  append_candidate(candidates, std::getenv("RUNFILES_DIR"),
-                   {"libhrx", "cts", arch_file_name.c_str()});
-  append_candidate(candidates, std::getenv("IREE_BINARY_DIR"),
-                   {"libhrx", "cts", arch_file_name.c_str()});
-  append_candidate(candidates, std::getenv("TEST_SRCDIR"),
-                   {"libhrx", "cts", "hrx_cts_noop_kernel.so"});
-  append_candidate(candidates, std::getenv("RUNFILES_DIR"),
-                   {"libhrx", "cts", "hrx_cts_noop_kernel.so"});
-  append_candidate(candidates, std::getenv("IREE_BINARY_DIR"),
-                   {"libhrx", "cts", "hrx_cts_noop_kernel.so"});
-
-  for (const auto& candidate : candidates) {
-    if (std::filesystem::exists(candidate) &&
-        std::filesystem::file_size(candidate) > 0) {
-      return candidate;
+  const std::string filename =
+      std::string("hrx_cts_noop_kernel_") + fragment + ".so";
+  const iree_file_toc_t* toc = hrx_cts_amdgpu_executable_noop_kernels_create();
+  for (size_t i = 0; i < hrx_cts_amdgpu_executable_noop_kernels_size(); ++i) {
+    if (filename == toc[i].name) {
+      return &toc[i];
     }
   }
-  return {};
+  return nullptr;
+}
+
+const iree_file_toc_t* find_noop_hsaco(const std::string& arch) {
+  if (const iree_file_toc_t* file = find_noop_hsaco_for_target(arch)) {
+    return file;
+  }
+  const char* code_object_target =
+      iree_amdgpu_code_object_target_for_exact(arch.c_str());
+  if (code_object_target && arch != code_object_target) {
+    return find_noop_hsaco_for_target(code_object_target);
+  }
+  return nullptr;
 }
 
 }  // namespace
@@ -78,15 +66,15 @@ TEST_CASE_METHOD(HrxTestFixture, "executable_load_lookup_dispatch_noop") {
     return;
   }
 
-  std::filesystem::path hsaco_path = find_noop_hsaco(arch);
-  if (hsaco_path.empty()) {
+  const iree_file_toc_t* hsaco = find_noop_hsaco(arch);
+  if (!hsaco) {
     SUCCEED("Skipping native executable CTS: no build-time HSACO test asset");
     return;
   }
 
   hrx_executable_t executable = nullptr;
-  REQUIRE_OK(hrx().executable_load_file(device_, hsaco_path.c_str(), nullptr,
-                                        &executable));
+  REQUIRE_OK(hrx().executable_load_data(device_, hsaco->data, hsaco->size,
+                                        nullptr, &executable));
   REQUIRE(executable != nullptr);
 
   hrx().executable_retain(executable);

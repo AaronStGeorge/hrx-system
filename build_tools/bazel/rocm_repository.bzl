@@ -11,8 +11,9 @@ def _rocm_repository_impl(repository_ctx):
     if not rocm_path:
         fail(
             "{} requires --repo_env=IREE_ROCM_PATH=/path/to/rocm. " +
-            "Run python build_tools/bazel/configure.py -DIREE_HAL_DRIVER_AMDGPU=ON " +
-            "-DIREE_ROCM_PATH=/path/to/rocm to generate .bazelrc.configured.".format(
+            "Run python build_tools/bazel/configure.py with a ROCm-backed " +
+            "driver and -DIREE_ROCM_PATH=/path/to/rocm to generate " +
+            ".bazelrc.configured.".format(
                 repository_ctx.name,
             ),
         )

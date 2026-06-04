@@ -377,8 +377,16 @@ function(iree_add_data_dependencies)
   endif()
 
   foreach(_DATA_LABEL ${_RULE_DATA})
-    if(TARGET ${_DATA_LABEL})
-      add_dependencies(${_RULE_NAME} ${_DATA_LABEL})
+    set(_DATA_TARGET_NAME "${_DATA_LABEL}")
+    if(_DATA_TARGET_NAME MATCHES "^::")
+      iree_package_ns(_DATA_PACKAGE_NS)
+      string(REGEX REPLACE "^::" "${_DATA_PACKAGE_NS}::"
+             _DATA_TARGET_NAME "${_DATA_TARGET_NAME}")
+      string(REPLACE "::" "_" _DATA_TARGET_NAME "${_DATA_TARGET_NAME}")
+    endif()
+
+    if(TARGET ${_DATA_TARGET_NAME})
+      add_dependencies(${_RULE_NAME} ${_DATA_TARGET_NAME})
     else()
       # Some Bazel data edges refer to generated files in the current package
       # rather than source-tree files. The CMake custom commands that produce

@@ -6,6 +6,8 @@
 
 #include "iree/hal/drivers/hip/rccl_status_util.h"
 
+#if IREE_HAL_HIP_ENABLE_RCCL
+
 #include <stddef.h>
 
 #include "iree/hal/drivers/hip/rccl_dynamic_symbols.h"
@@ -47,3 +49,5 @@ iree_status_t iree_hal_hip_nccl_result_to_status(
                                         result,
                                         syms->ncclGetErrorString(result));
 }
+
+#endif  // IREE_HAL_HIP_ENABLE_RCCL

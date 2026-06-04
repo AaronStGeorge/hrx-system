@@ -24,11 +24,14 @@ import tempfile
 from pathlib import Path
 from typing import Iterable, Sequence
 
-import amdgpu_target_map
+AMDGPU_BUILD_TOOLS_DIR = Path(__file__).resolve().parent.parent / "amdgpu"
+sys.path.insert(0, str(AMDGPU_BUILD_TOOLS_DIR))
+
+import target_map as amdgpu_target_map
 
 TARGET_TRIPLE = "amdgcn-amd-amdhsa"
 DEFAULT_TARGET_SELECTIONS = amdgpu_target_map.DEFAULT_TARGET_SELECTIONS
-DEVICE_BINARY_TARGET_ENV = "IREE_HAL_AMDGPU_DEVICE_BINARY_TARGETS"
+AMDGPU_TARGET_ENV = "IREE_HAL_AMDGPU_TARGETS"
 DEVICE_PACKAGE_PATH = Path("runtime/src/iree/hal/drivers/amdgpu/device")
 DEVICE_SOURCE_LIST_PATH = DEVICE_PACKAGE_PATH / "device_bitcode_sources.bzl"
 DEVICE_SOURCE_LIST_VARIABLE = "IREE_HAL_AMDGPU_DEVICE_BITCODE_SRCS"
@@ -409,7 +412,7 @@ def expand_target_selections(selections: Sequence[str]) -> list[str]:
 
 
 def default_target_selections() -> tuple[str, ...]:
-    env_value = os.environ.get(DEVICE_BINARY_TARGET_ENV)
+    env_value = os.environ.get(AMDGPU_TARGET_ENV)
     if env_value:
         return tuple(split_env_list(env_value))
     return DEFAULT_TARGET_SELECTIONS
@@ -735,10 +738,10 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--targets",
-        default=",".join(default_target_selections()),
+        default=None,
         help=(
             "Comma/space separated exact targets, code-object targets, or families. "
-            f"Defaults to ${DEVICE_BINARY_TARGET_ENV} or "
+            f"Defaults to ${AMDGPU_TARGET_ENV} or "
             f"{','.join(DEFAULT_TARGET_SELECTIONS)}."
         ),
     )
@@ -822,11 +825,12 @@ def main(argv: Sequence[str]) -> int:
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    selections = (
-        amdgpu_target_map.code_object_targets()
-        if args.all_targets
-        else split_env_list(args.targets)
-    )
+    if args.all_targets:
+        selections = amdgpu_target_map.code_object_targets()
+    elif args.targets:
+        selections = split_env_list(args.targets)
+    else:
+        selections = default_target_selections()
     code_object_targets = expand_target_selections(selections)
     source_paths = load_device_source_paths(repo_root)
     toolchain = detect_toolchain(args)
