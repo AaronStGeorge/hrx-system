@@ -1845,8 +1845,7 @@ static iree_status_t iree_hal_amdgpu_executable_initialize_export_infos(
   return iree_ok_status();
 }
 
-static iree_status_t
-iree_hal_amdgpu_executable_initialize_raw_hsaco_export_infos(
+iree_status_t iree_hal_amdgpu_executable_initialize_raw_hsaco_export_infos(
     const iree_hal_amdgpu_hsaco_metadata_t* hsaco_metadata,
     bool* custom_direct_only_exports,
     iree_hal_executable_function_info_t* export_infos,
@@ -1883,6 +1882,7 @@ iree_hal_amdgpu_executable_initialize_raw_hsaco_export_infos(
     info->parameter_count = requirements.parameter_count;
     iree_hal_amdgpu_executable_raw_hsaco_workgroup_size(kernel,
                                                         info->workgroup_size);
+    custom_direct_only_exports[i] = true;
 
     iree_hal_executable_function_parameter_t* export_parameter_base =
         requirements.parameter_count
@@ -2042,8 +2042,7 @@ iree_hal_amdgpu_executable_resolve_raw_hsaco_elf_kernel_args(
       /*binding_count=*/0, out_host_kernel_args);
 }
 
-static iree_status_t
-iree_hal_amdgpu_executable_raw_hsaco_custom_kernarg_layout(
+iree_status_t iree_hal_amdgpu_executable_raw_hsaco_custom_kernarg_layout(
     const iree_hal_amdgpu_hsaco_metadata_kernel_t* kernel,
     const iree_hal_amdgpu_device_kernel_args_t* kernel_args,
     iree_host_size_t* out_explicit_kernarg_size,
@@ -2074,14 +2073,27 @@ iree_hal_amdgpu_executable_raw_hsaco_custom_kernarg_layout(
       explicit_args_end = iree_max(explicit_args_end, arg_end);
     }
   }
+  *out_explicit_kernarg_size = explicit_args_end;
   if (implicit_args_offset != UINT16_MAX) {
-    *out_explicit_kernarg_size =
-        iree_max(explicit_args_end, (iree_host_size_t)implicit_args_offset);
+    if (explicit_args_end > implicit_args_offset) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "AMDGPU kernel `%.*s` has unsupported interleaved hidden kernarg "
+          "metadata",
+          (int)symbol_name.size, symbol_name.data);
+    }
+    iree_host_size_t implicit_args_end = 0;
+    if (!iree_host_size_checked_add(
+            (iree_host_size_t)implicit_args_offset,
+            (iree_host_size_t)IREE_AMDGPU_KERNEL_IMPLICIT_ARGS_SIZE,
+            &implicit_args_end) ||
+        kernel_args->kernarg_size < implicit_args_end) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "AMDGPU kernel `%.*s` has truncated implicit kernarg suffix",
+          (int)symbol_name.size, symbol_name.data);
+    }
     *out_implicit_args_offset = implicit_args_offset;
-  } else if (explicit_args_end <= UINT16_MAX &&
-             kernel_args->kernarg_size >=
-                 explicit_args_end + IREE_AMDGPU_KERNEL_IMPLICIT_ARGS_SIZE) {
-    *out_implicit_args_offset = (uint16_t)explicit_args_end;
   }
   return iree_ok_status();
 }

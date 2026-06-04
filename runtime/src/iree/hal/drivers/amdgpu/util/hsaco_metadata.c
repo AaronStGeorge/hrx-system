@@ -25,8 +25,10 @@
 #define IREE_HAL_AMDGPU_ELF_SHT_SYMTAB 2
 #define IREE_HAL_AMDGPU_ELF_SHT_DYNSYM 11
 #define IREE_HAL_AMDGPU_ELF_STT_FUNC 2
+#define IREE_HAL_AMDGPU_ELF_STT_OBJECT 1
 #define IREE_HAL_AMDGPU_ELF_STB_GLOBAL 1
 #define IREE_HAL_AMDGPU_ELF_STB_WEAK 2
+#define IREE_HAL_AMDGPU_ELF_SHN_UNDEF 0
 
 #define IREE_HAL_AMDGPU_ELF64_HEADER_SIZE 64
 #define IREE_HAL_AMDGPU_ELF64_PROGRAM_HEADER_SIZE 56
@@ -1357,8 +1359,13 @@ static bool iree_hal_amdgpu_hsaco_metadata_find_kernel_descriptor_symbol(
         continue;
       }
       uint8_t binding = symbol[4] >> 4;
-      if (binding != IREE_HAL_AMDGPU_ELF_STB_GLOBAL &&
-          binding != IREE_HAL_AMDGPU_ELF_STB_WEAK) {
+      uint8_t type = symbol[4] & 0x0F;
+      uint16_t section_index_for_symbol =
+          iree_hal_amdgpu_hsaco_metadata_load_le_u16(symbol + 6);
+      if (type != IREE_HAL_AMDGPU_ELF_STT_OBJECT ||
+          section_index_for_symbol == IREE_HAL_AMDGPU_ELF_SHN_UNDEF ||
+          (binding != IREE_HAL_AMDGPU_ELF_STB_GLOBAL &&
+           binding != IREE_HAL_AMDGPU_ELF_STB_WEAK)) {
         continue;
       }
       iree_string_view_t name =
@@ -1441,7 +1448,10 @@ static iree_status_t iree_hal_amdgpu_hsaco_metadata_count_elf_kernel_symbols(
       }
       uint8_t binding = symbol[4] >> 4;
       uint8_t type = symbol[4] & 0x0F;
+      uint16_t section_index_for_symbol =
+          iree_hal_amdgpu_hsaco_metadata_load_le_u16(symbol + 6);
       if (type != IREE_HAL_AMDGPU_ELF_STT_FUNC ||
+          section_index_for_symbol == IREE_HAL_AMDGPU_ELF_SHN_UNDEF ||
           (binding != IREE_HAL_AMDGPU_ELF_STB_GLOBAL &&
            binding != IREE_HAL_AMDGPU_ELF_STB_WEAK)) {
         continue;
@@ -1516,7 +1526,10 @@ static iree_status_t iree_hal_amdgpu_hsaco_metadata_populate_elf_kernel_symbols(
       }
       uint8_t binding = symbol[4] >> 4;
       uint8_t type = symbol[4] & 0x0F;
+      uint16_t section_index_for_symbol =
+          iree_hal_amdgpu_hsaco_metadata_load_le_u16(symbol + 6);
       if (type != IREE_HAL_AMDGPU_ELF_STT_FUNC ||
+          section_index_for_symbol == IREE_HAL_AMDGPU_ELF_SHN_UNDEF ||
           (binding != IREE_HAL_AMDGPU_ELF_STB_GLOBAL &&
            binding != IREE_HAL_AMDGPU_ELF_STB_WEAK)) {
         continue;

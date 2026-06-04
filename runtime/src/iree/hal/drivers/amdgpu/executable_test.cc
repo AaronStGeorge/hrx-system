@@ -14,9 +14,26 @@
 #include "iree/base/alignment.h"
 #include "iree/base/api.h"
 #include "iree/base/internal/flatcc/building.h"
+#include "iree/hal/drivers/amdgpu/util/hsaco_metadata.h"
 #include "iree/schemas/amdgpu_executable_def_builder.h"
 #include "iree/testing/gtest.h"
 #include "iree/testing/status_matchers.h"
+
+extern "C" {
+iree_status_t iree_hal_amdgpu_executable_initialize_raw_hsaco_export_infos(
+    const iree_hal_amdgpu_hsaco_metadata_t* hsaco_metadata,
+    bool* custom_direct_only_exports,
+    iree_hal_executable_function_info_t* export_infos,
+    iree_host_size_t* export_parameter_offsets,
+    iree_hal_executable_function_parameter_t* export_parameters,
+    char* export_name_storage, char* export_parameter_name_storage);
+
+iree_status_t iree_hal_amdgpu_executable_raw_hsaco_custom_kernarg_layout(
+    const iree_hal_amdgpu_hsaco_metadata_kernel_t* kernel,
+    const iree_hal_amdgpu_device_kernel_args_t* kernel_args,
+    iree_host_size_t* out_explicit_kernarg_size,
+    uint16_t* out_implicit_args_offset);
+}  // extern "C"
 
 namespace iree::hal::amdgpu {
 namespace {
@@ -150,6 +167,42 @@ static std::string InferExecutableFormat(iree_const_byte_span_t executable_data,
   return std::string(executable_format);
 }
 
+static iree_hal_amdgpu_device_kernel_args_t MakeKernelArgs(
+    uint32_t kernarg_size) {
+  iree_hal_amdgpu_device_kernel_args_t kernel_args = {};
+  kernel_args.kernarg_size = kernarg_size;
+  kernel_args.kernarg_alignment = 8;
+  kernel_args.workgroup_size[0] = 1;
+  kernel_args.workgroup_size[1] = 1;
+  kernel_args.workgroup_size[2] = 1;
+  return kernel_args;
+}
+
+static iree_hal_amdgpu_hsaco_metadata_arg_t MakeArg(
+    iree_hal_amdgpu_hsaco_metadata_arg_kind_t kind, uint32_t offset,
+    uint32_t size, iree_string_view_t name = iree_string_view_empty()) {
+  iree_hal_amdgpu_hsaco_metadata_arg_t arg = {};
+  arg.name = name;
+  arg.kind = kind;
+  arg.offset = offset;
+  arg.size = size;
+  return arg;
+}
+
+static iree_hal_amdgpu_hsaco_metadata_kernel_t MakeKernel(
+    uint32_t kernarg_size, const iree_hal_amdgpu_hsaco_metadata_arg_t* args,
+    iree_host_size_t arg_count) {
+  iree_hal_amdgpu_hsaco_metadata_kernel_t kernel = {};
+  kernel.name = IREE_SV("raw");
+  kernel.symbol_name = IREE_SV("raw.kd");
+  kernel.reflection_name = IREE_SV("raw");
+  kernel.kernarg_segment_size = kernarg_size;
+  kernel.kernarg_segment_alignment = 8;
+  kernel.arg_count = arg_count;
+  kernel.args = args;
+  return kernel;
+}
+
 TEST(ExecutableTest, InfersRawHsacoTargetIdFromElfFlags) {
   const auto elf = MakeElf64AmdgpuHsa(
       kElfAbiVersionV5, kElfMachineAmdgpu,
@@ -179,6 +232,121 @@ TEST(ExecutableTest, InfersWrappedFlatbufferTargetIdFromEmbeddedElf) {
                             &inferred_size),
       "gfx942:sramecc+:xnack-");
   EXPECT_EQ(inferred_size, executable_data.size());
+}
+
+TEST(ExecutableTest, RawHsacoMetadataExportsAreCustomDirectOnly) {
+  const iree_hal_amdgpu_hsaco_metadata_arg_t args[] = {
+      MakeArg(IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_BY_VALUE, /*offset=*/0,
+              /*size=*/4, IREE_SV("x")),
+  };
+  iree_hal_amdgpu_hsaco_metadata_kernel_t kernel =
+      MakeKernel(/*kernarg_size=*/4, args, IREE_ARRAYSIZE(args));
+  iree_hal_amdgpu_hsaco_metadata_t metadata = {};
+  metadata.kernel_count = 1;
+  metadata.kernels = &kernel;
+
+  bool custom_direct_only_exports[1] = {};
+  iree_hal_executable_function_info_t export_infos[1] = {};
+  iree_host_size_t export_parameter_offsets[2] = {};
+  iree_hal_executable_function_parameter_t export_parameters[1] = {};
+  char export_name_storage[16] = {};
+  char export_parameter_name_storage[16] = {};
+  IREE_ASSERT_OK(iree_hal_amdgpu_executable_initialize_raw_hsaco_export_infos(
+      &metadata, custom_direct_only_exports, export_infos,
+      export_parameter_offsets, export_parameters, export_name_storage,
+      export_parameter_name_storage));
+
+  EXPECT_TRUE(custom_direct_only_exports[0]);
+  EXPECT_EQ(export_infos[0].parameter_count, 1u);
+  EXPECT_EQ(export_infos[0].constant_count, 1u);
+  EXPECT_EQ(export_parameter_offsets[0], 0u);
+  EXPECT_EQ(export_parameter_offsets[1], 1u);
+}
+
+TEST(ExecutableTest, RawHsacoCustomKernargLayoutRequiresVisibleExtent) {
+  const iree_hal_amdgpu_hsaco_metadata_arg_t args[] = {
+      MakeArg(IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_GLOBAL_BUFFER,
+              /*offset=*/0, /*size=*/8),
+      MakeArg(IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_BY_VALUE,
+              /*offset=*/16, /*size=*/4),
+  };
+  iree_hal_amdgpu_hsaco_metadata_kernel_t kernel =
+      MakeKernel(/*kernarg_size=*/20, args, IREE_ARRAYSIZE(args));
+  iree_hal_amdgpu_device_kernel_args_t kernel_args =
+      MakeKernelArgs(/*kernarg_size=*/20);
+
+  iree_host_size_t explicit_kernarg_size = 0;
+  uint16_t implicit_args_offset = 0;
+  IREE_ASSERT_OK(iree_hal_amdgpu_executable_raw_hsaco_custom_kernarg_layout(
+      &kernel, &kernel_args, &explicit_kernarg_size, &implicit_args_offset));
+  EXPECT_EQ(explicit_kernarg_size, 20u);
+  EXPECT_EQ(implicit_args_offset, UINT16_MAX);
+}
+
+TEST(ExecutableTest, RawHsacoCustomKernargLayoutRejectsInterleavedHiddenArgs) {
+  const iree_hal_amdgpu_hsaco_metadata_arg_t args[] = {
+      MakeArg(IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_GLOBAL_BUFFER,
+              /*offset=*/0, /*size=*/8),
+      MakeArg(IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_HIDDEN,
+              /*offset=*/8, /*size=*/8),
+      MakeArg(IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_BY_VALUE,
+              /*offset=*/16, /*size=*/4),
+  };
+  iree_hal_amdgpu_hsaco_metadata_kernel_t kernel =
+      MakeKernel(/*kernarg_size=*/8 + IREE_AMDGPU_KERNEL_IMPLICIT_ARGS_SIZE,
+                 args, IREE_ARRAYSIZE(args));
+  iree_hal_amdgpu_device_kernel_args_t kernel_args =
+      MakeKernelArgs(/*kernarg_size=*/8 + IREE_AMDGPU_KERNEL_IMPLICIT_ARGS_SIZE);
+
+  iree_host_size_t explicit_kernarg_size = 0;
+  uint16_t implicit_args_offset = 0;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      iree_hal_amdgpu_executable_raw_hsaco_custom_kernarg_layout(
+          &kernel, &kernel_args, &explicit_kernarg_size,
+          &implicit_args_offset));
+}
+
+TEST(ExecutableTest, RawHsacoCustomKernargLayoutAcceptsFullImplicitSuffix) {
+  const iree_hal_amdgpu_hsaco_metadata_arg_t args[] = {
+      MakeArg(IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_GLOBAL_BUFFER,
+              /*offset=*/0, /*size=*/8),
+      MakeArg(IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_HIDDEN,
+              /*offset=*/16, /*size=*/8),
+  };
+  iree_hal_amdgpu_hsaco_metadata_kernel_t kernel =
+      MakeKernel(/*kernarg_size=*/16 + IREE_AMDGPU_KERNEL_IMPLICIT_ARGS_SIZE,
+                 args, IREE_ARRAYSIZE(args));
+  iree_hal_amdgpu_device_kernel_args_t kernel_args = MakeKernelArgs(
+      /*kernarg_size=*/16 + IREE_AMDGPU_KERNEL_IMPLICIT_ARGS_SIZE);
+
+  iree_host_size_t explicit_kernarg_size = 0;
+  uint16_t implicit_args_offset = 0;
+  IREE_ASSERT_OK(iree_hal_amdgpu_executable_raw_hsaco_custom_kernarg_layout(
+      &kernel, &kernel_args, &explicit_kernarg_size, &implicit_args_offset));
+  EXPECT_EQ(explicit_kernarg_size, 8u);
+  EXPECT_EQ(implicit_args_offset, 16u);
+}
+
+TEST(ExecutableTest, RawHsacoCustomKernargLayoutRejectsTruncatedImplicitSuffix) {
+  const iree_hal_amdgpu_hsaco_metadata_arg_t args[] = {
+      MakeArg(IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_GLOBAL_BUFFER,
+              /*offset=*/0, /*size=*/8),
+      MakeArg(IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_HIDDEN,
+              /*offset=*/16, /*size=*/8),
+  };
+  iree_hal_amdgpu_hsaco_metadata_kernel_t kernel =
+      MakeKernel(/*kernarg_size=*/16, args, IREE_ARRAYSIZE(args));
+  iree_hal_amdgpu_device_kernel_args_t kernel_args =
+      MakeKernelArgs(/*kernarg_size=*/16);
+
+  iree_host_size_t explicit_kernarg_size = 0;
+  uint16_t implicit_args_offset = 0;
+  IREE_EXPECT_STATUS_IS(
+      IREE_STATUS_INVALID_ARGUMENT,
+      iree_hal_amdgpu_executable_raw_hsaco_custom_kernarg_layout(
+          &kernel, &kernel_args, &explicit_kernarg_size,
+          &implicit_args_offset));
 }
 
 }  // namespace
