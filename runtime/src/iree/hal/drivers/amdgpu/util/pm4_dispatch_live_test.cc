@@ -41,11 +41,6 @@ constexpr uint32_t kPm4PatchValue = 0xD7700007u;
 constexpr uint32_t kPm4PatchWrongValue = 0xE8800008u;
 constexpr uint16_t kWorkgroupSize[3] = {64, 1, 1};
 constexpr uint32_t kDispatchGridSize[3] = {64, 1, 1};
-constexpr iree_hal_amdgpu_vendor_packet_capability_flags_t
-    kBarrierCapabilities =
-        IREE_HAL_AMDGPU_VENDOR_PACKET_CAPABILITY_PM4_EVENT_WRITE |
-        IREE_HAL_AMDGPU_VENDOR_PACKET_CAPABILITY_PM4_ACQUIRE_MEM |
-        IREE_HAL_AMDGPU_VENDOR_PACKET_CAPABILITY_PM4_ACQUIRE_MEM_GFX10;
 
 struct StoreKernargs {
   uint32_t* target;
@@ -130,6 +125,7 @@ static void HsaQueueErrorCallback(hsa_status_t status, hsa_queue_t* queue,
 struct IsaQuery {
   const iree_hal_amdgpu_libhsa_t* libhsa = nullptr;
   bool found = false;
+  iree_hal_amdgpu_gfxip_version_t gfxip_version = {};
   std::string exact_target;
   std::string code_object_target;
 };
@@ -166,14 +162,15 @@ static hsa_status_t FindAgentCodeObjectTarget(hsa_isa_t isa, void* user_data) {
   query->exact_target = StringViewToString(exact_target_id.processor);
   query->code_object_target =
       StringViewToString(code_object_target_id.processor);
+  query->gfxip_version = exact_target_id.version;
   query->found = true;
   return HSA_STATUS_INFO_BREAK;
 }
 
-static bool QueryAgentCodeObjectTarget(const iree_hal_amdgpu_libhsa_t* libhsa,
-                                       hsa_agent_t agent,
-                                       std::string* out_exact_target,
-                                       std::string* out_code_object_target) {
+static bool QueryAgentCodeObjectTarget(
+    const iree_hal_amdgpu_libhsa_t* libhsa, hsa_agent_t agent,
+    iree_hal_amdgpu_gfxip_version_t* out_gfxip_version,
+    std::string* out_exact_target, std::string* out_code_object_target) {
   IsaQuery query = {.libhsa = libhsa};
   iree_status_t status = iree_hsa_agent_iterate_isas(
       IREE_LIBHSA(libhsa), agent, FindAgentCodeObjectTarget, &query);
@@ -181,9 +178,22 @@ static bool QueryAgentCodeObjectTarget(const iree_hal_amdgpu_libhsa_t* libhsa,
     iree_status_free(status);
   }
   if (!query.found) return false;
+  *out_gfxip_version = query.gfxip_version;
   *out_exact_target = query.exact_target;
   *out_code_object_target = query.code_object_target;
   return true;
+}
+
+static iree_hal_amdgpu_vendor_packet_capability_flags_t
+BarrierCapabilitiesForGfxIp(iree_hal_amdgpu_gfxip_version_t gfxip_version) {
+  iree_hal_amdgpu_vendor_packet_capability_flags_t capabilities =
+      IREE_HAL_AMDGPU_VENDOR_PACKET_CAPABILITY_PM4_EVENT_WRITE |
+      IREE_HAL_AMDGPU_VENDOR_PACKET_CAPABILITY_PM4_ACQUIRE_MEM;
+  capabilities |=
+      gfxip_version.major == 9
+          ? IREE_HAL_AMDGPU_VENDOR_PACKET_CAPABILITY_PM4_ACQUIRE_MEM_GFX9
+          : IREE_HAL_AMDGPU_VENDOR_PACKET_CAPABILITY_PM4_ACQUIRE_MEM_GFX10;
+  return capabilities;
 }
 
 static iree_status_t LookupKernel(const iree_hal_amdgpu_libhsa_t* libhsa,
@@ -314,10 +324,16 @@ class PM4DispatchLiveTest : public ::testing::Test {
     }
 
     if (!QueryAgentCodeObjectTarget(&libhsa, topology.gpu_agents[0],
-                                    &agent_exact_target,
+                                    &agent_gfxip_version, &agent_exact_target,
                                     &agent_code_object_target)) {
       GTEST_SKIP() << "could not query AMDGPU agent ISA";
     }
+    if (agent_gfxip_version.major < 9 || agent_gfxip_version.major > 12) {
+      GTEST_SKIP() << "PM4 dispatch test does not support agent "
+                   << agent_exact_target;
+    }
+    agent_pm4_barrier_capabilities =
+        BarrierCapabilitiesForGfxIp(agent_gfxip_version);
     const std::string file_name =
         TestCodeObjectFileName(agent_code_object_target);
     test_code_object_data = FindTestCodeObjectData(agent_code_object_target);
@@ -337,6 +353,9 @@ class PM4DispatchLiveTest : public ::testing::Test {
   static iree_allocator_t host_allocator;
   static iree_hal_amdgpu_libhsa_t libhsa;
   static iree_hal_amdgpu_topology_t topology;
+  static iree_hal_amdgpu_gfxip_version_t agent_gfxip_version;
+  static iree_hal_amdgpu_vendor_packet_capability_flags_t
+      agent_pm4_barrier_capabilities;
   static std::string agent_exact_target;
   static std::string agent_code_object_target;
   static iree_const_byte_span_t test_code_object_data;
@@ -345,6 +364,9 @@ class PM4DispatchLiveTest : public ::testing::Test {
 iree_allocator_t PM4DispatchLiveTest::host_allocator;
 iree_hal_amdgpu_libhsa_t PM4DispatchLiveTest::libhsa;
 iree_hal_amdgpu_topology_t PM4DispatchLiveTest::topology;
+iree_hal_amdgpu_gfxip_version_t PM4DispatchLiveTest::agent_gfxip_version;
+iree_hal_amdgpu_vendor_packet_capability_flags_t
+    PM4DispatchLiveTest::agent_pm4_barrier_capabilities;
 std::string PM4DispatchLiveTest::agent_exact_target;
 std::string PM4DispatchLiveTest::agent_code_object_target;
 iree_const_byte_span_t PM4DispatchLiveTest::test_code_object_data;
@@ -457,9 +479,9 @@ TEST_F(PM4DispatchLiveTest, AqlAndAqlPm4IbLaunchMixedKernels) {
     const iree_hal_amdgpu_kernel_descriptor_t* descriptor =
         reinterpret_cast<const iree_hal_amdgpu_kernel_descriptor_t*>(
             static_cast<uintptr_t>(kernels[i].kernel_object));
-    IREE_ASSERT_OK(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
-        descriptor, kernels[i].kernel_object, kWorkgroupSize,
-        IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE,
+    IREE_ASSERT_OK(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize(
+        agent_gfxip_version, descriptor, kernels[i].kernel_object,
+        kWorkgroupSize, IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE,
         &launch_states[i]));
   }
 
@@ -521,10 +543,10 @@ TEST_F(PM4DispatchLiveTest, AqlAndAqlPm4IbLaunchMixedKernels) {
       launch_states[0], reinterpret_cast<uintptr_t>(&memory->store_kernargs[0]),
       pm4_dwords, IREE_ARRAYSIZE(pm4_dwords), &pm4_dword_count));
   uint32_t barrier_dword_count = 0;
-  ASSERT_TRUE(iree_hal_amdgpu_pm4_barrier_emit_gfx10(
-      kBarrierCapabilities, IREE_HAL_AMDGPU_PM4_BARRIER_FLAG_EXECUTION,
-      IREE_HSA_FENCE_SCOPE_SYSTEM, IREE_HSA_FENCE_SCOPE_SYSTEM,
-      IREE_ARRAYSIZE(pm4_dwords) - pm4_dword_count,
+  ASSERT_TRUE(iree_hal_amdgpu_pm4_barrier_emit(
+      agent_pm4_barrier_capabilities,
+      IREE_HAL_AMDGPU_PM4_BARRIER_FLAG_EXECUTION, IREE_HSA_FENCE_SCOPE_SYSTEM,
+      IREE_HSA_FENCE_SCOPE_SYSTEM, IREE_ARRAYSIZE(pm4_dwords) - pm4_dword_count,
       &pm4_dwords[pm4_dword_count], &barrier_dword_count));
   pm4_dword_count += barrier_dword_count;
   IREE_ASSERT_OK(AppendPm4DispatchDirect(
@@ -611,10 +633,10 @@ TEST_F(PM4DispatchLiveTest, AqlAndAqlPm4IbLaunchMixedKernels) {
       reinterpret_cast<uintptr_t>(&memory->patch_user_data_kernargs),
       pm4_dwords, IREE_ARRAYSIZE(pm4_dwords), &pm4_dword_count));
   barrier_dword_count = 0;
-  ASSERT_TRUE(iree_hal_amdgpu_pm4_barrier_emit_gfx10(
-      kBarrierCapabilities, IREE_HAL_AMDGPU_PM4_BARRIER_FLAG_FIXUP_TO_IB,
-      IREE_HSA_FENCE_SCOPE_NONE, IREE_HSA_FENCE_SCOPE_NONE,
-      IREE_ARRAYSIZE(pm4_dwords) - pm4_dword_count,
+  ASSERT_TRUE(iree_hal_amdgpu_pm4_barrier_emit(
+      agent_pm4_barrier_capabilities,
+      IREE_HAL_AMDGPU_PM4_BARRIER_FLAG_FIXUP_TO_IB, IREE_HSA_FENCE_SCOPE_NONE,
+      IREE_HSA_FENCE_SCOPE_NONE, IREE_ARRAYSIZE(pm4_dwords) - pm4_dword_count,
       &pm4_dwords[pm4_dword_count], &barrier_dword_count));
   pm4_dword_count += barrier_dword_count;
   IREE_ASSERT_OK(iree_hal_amdgpu_pm4_program_initialize(

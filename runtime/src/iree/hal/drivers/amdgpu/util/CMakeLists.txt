@@ -329,6 +329,7 @@ iree_cc_library(
     "pm4_dispatch.c"
   DEPS
     ::packet
+    ::target_id
     iree::base
     iree::hal::drivers::amdgpu::abi
   PUBLIC

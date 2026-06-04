@@ -252,6 +252,7 @@ iree_runtime_cc_library(
     hdrs = ["pm4_dispatch.h"],
     deps = [
         ":packet",
+        ":target_id",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal/drivers/amdgpu/abi",
     ],

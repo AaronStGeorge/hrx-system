@@ -1126,6 +1126,7 @@ static iree_status_t iree_hal_amdgpu_executable_calculate_kernarg_block_count(
 }
 
 static iree_status_t iree_hal_amdgpu_executable_initialize_dispatch_descriptor(
+    iree_hal_amdgpu_gfxip_version_t gfxip_version,
     const iree_hal_amdgpu_device_kernel_args_t* kernel_args,
     iree_host_size_t custom_explicit_kernarg_size,
     uint16_t custom_implicit_args_offset,
@@ -1208,15 +1209,16 @@ static iree_status_t iree_hal_amdgpu_executable_initialize_dispatch_descriptor(
   out_descriptor->pm4_group_segment_fixed_size =
       amdhsa_descriptor->group_segment_fixed_size;
   out_descriptor->pm4_launch_state_valid =
-      iree_hal_amdgpu_pm4_dispatch_launch_state_is_supported_gfx10(
-          amdhsa_descriptor, kernel_object, kernel_args->workgroup_size,
+      iree_hal_amdgpu_pm4_dispatch_launch_state_is_supported(
+          gfxip_version, amdhsa_descriptor, kernel_object,
+          kernel_args->workgroup_size,
           IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_NONE);
   if (out_descriptor->pm4_launch_state_valid) {
-    IREE_RETURN_IF_ERROR(
-        iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
-            amdhsa_descriptor, kernel_object, kernel_args->workgroup_size,
-            IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_NONE,
-            &out_descriptor->pm4_launch_state));
+    IREE_RETURN_IF_ERROR(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize(
+        gfxip_version, amdhsa_descriptor, kernel_object,
+        kernel_args->workgroup_size,
+        IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_NONE,
+        &out_descriptor->pm4_launch_state));
     IREE_RETURN_IF_ERROR(iree_hal_amdgpu_pm4_dispatch_emit_setup(
         &out_descriptor->pm4_launch_state,
         IREE_HAL_AMDGPU_PM4_DISPATCH_SETUP_DWORD_COUNT,
@@ -1459,7 +1461,9 @@ static void iree_hal_amdgpu_executable_invalidate_host_kernel_objects(
 
 static iree_status_t
 iree_hal_amdgpu_executable_initialize_dispatch_descriptors_for_device(
-    iree_hal_amdgpu_executable_t* executable, iree_host_size_t device_ordinal,
+    iree_hal_amdgpu_executable_t* executable,
+    iree_hal_amdgpu_gfxip_version_t gfxip_version,
+    iree_host_size_t device_ordinal,
     const iree_host_size_t* custom_explicit_kernarg_sizes,
     const uint16_t* custom_implicit_args_offsets) {
   for (iree_host_size_t kernel_ordinal = 0;
@@ -1476,7 +1480,7 @@ iree_hal_amdgpu_executable_initialize_dispatch_descriptors_for_device(
             : UINT16_MAX;
     IREE_RETURN_IF_ERROR(
         iree_hal_amdgpu_executable_initialize_dispatch_descriptor(
-            &executable->host_kernel_args[kernel_ordinal],
+            gfxip_version, &executable->host_kernel_args[kernel_ordinal],
             custom_explicit_kernarg_size, custom_implicit_args_offset,
             &executable->host_dispatch_descriptors[descriptor_ordinal]),
         "initializing dispatch descriptor for device %" PRIhsz
@@ -2103,6 +2107,7 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_flatbuffer(
         physical_devices,
     const iree_hal_executable_params_t* executable_params,
     const iree_hal_amdgpu_device_limits_t* limits, hsa_agent_t any_device_agent,
+    iree_hal_amdgpu_gfxip_version_t gfxip_version,
     iree_hal_amdgpu_profile_metadata_registry_t* profile_metadata,
     iree_allocator_t host_allocator, iree_hal_executable_t** out_executable) {
   *out_executable = NULL;
@@ -2206,7 +2211,7 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_flatbuffer(
     if (iree_status_is_ok(status)) {
       status =
           iree_hal_amdgpu_executable_initialize_dispatch_descriptors_for_device(
-              executable, device_ordinal,
+              executable, gfxip_version, device_ordinal,
               /*custom_explicit_kernarg_sizes=*/NULL,
               /*custom_implicit_args_offsets=*/NULL);
     }
@@ -2240,6 +2245,7 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_raw_hsaco(
         physical_devices,
     const iree_hal_executable_params_t* executable_params,
     const iree_hal_amdgpu_device_limits_t* limits, hsa_agent_t any_device_agent,
+    iree_hal_amdgpu_gfxip_version_t gfxip_version,
     iree_hal_amdgpu_profile_metadata_registry_t* profile_metadata,
     iree_allocator_t host_allocator, iree_hal_executable_t** out_executable) {
   *out_executable = NULL;
@@ -2361,8 +2367,8 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_raw_hsaco(
       if (iree_status_is_ok(status)) {
         status =
             iree_hal_amdgpu_executable_initialize_dispatch_descriptors_for_device(
-                executable, device_ordinal, custom_explicit_kernarg_sizes,
-                custom_implicit_args_offsets);
+                executable, gfxip_version, device_ordinal,
+                custom_explicit_kernarg_sizes, custom_implicit_args_offsets);
       }
     }
   }
@@ -2440,16 +2446,24 @@ iree_status_t iree_hal_amdgpu_executable_create(
       z0, iree_hal_amdgpu_query_device_limits(libhsa, any_device_agent, isa,
                                               &limits));
 
+  iree_hal_amdgpu_agent_isa_target_t agent_isa_target;
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(z0, iree_hal_amdgpu_query_agent_isa_target(
+                                            libhsa, isa, &agent_isa_target));
+  const iree_hal_amdgpu_gfxip_version_t gfxip_version =
+      agent_isa_target.target_id.version;
+
   iree_status_t status = iree_ok_status();
   if (iree_hal_amdgpu_executable_data_is_wrapped_flatbuffer(
           executable_params->executable_data)) {
     status = iree_hal_amdgpu_executable_create_from_flatbuffer(
         device, libhsa, topology, &physical_devices, executable_params, &limits,
-        any_device_agent, profile_metadata, host_allocator, out_executable);
+        any_device_agent, gfxip_version, profile_metadata, host_allocator,
+        out_executable);
   } else {
     status = iree_hal_amdgpu_executable_create_from_raw_hsaco(
         device, libhsa, topology, &physical_devices, executable_params, &limits,
-        any_device_agent, profile_metadata, host_allocator, out_executable);
+        any_device_agent, gfxip_version, profile_metadata, host_allocator,
+        out_executable);
   }
   if (!iree_status_is_ok(status)) {
     iree_hal_executable_release(*out_executable);

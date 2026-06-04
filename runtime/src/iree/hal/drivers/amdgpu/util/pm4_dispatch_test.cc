@@ -17,6 +17,18 @@ namespace {
 
 using iree::testing::status::StatusIs;
 
+static constexpr iree_hal_amdgpu_gfxip_version_t kGfx9 = {
+    /*major=*/9,
+    /*minor=*/4,
+    /*stepping=*/2,
+};
+
+static constexpr iree_hal_amdgpu_gfxip_version_t kGfx10 = {
+    /*major=*/10,
+    /*minor=*/3,
+    /*stepping=*/0,
+};
+
 static iree_hal_amdgpu_kernel_descriptor_t MakeDescriptor(
     uint16_t kernel_code_properties =
         IREE_HAL_AMDGPU_KERNEL_CODE_PROPERTY_ENABLE_SGPR_KERNARG_SEGMENT_PTR |
@@ -36,6 +48,15 @@ static iree_hal_amdgpu_kernel_descriptor_t MakeDescriptor(
       (4u << IREE_HAL_AMDGPU_COMPUTE_PGM_RSRC2_GRANULATED_LDS_SIZE_SHIFT);
   descriptor.kernel_code_properties = kernel_code_properties;
   return descriptor;
+}
+
+static iree_status_t InitializeLaunchState(
+    const iree_hal_amdgpu_kernel_descriptor_t* descriptor,
+    uint64_t kernel_object, const uint16_t workgroup_size[3],
+    iree_hal_amdgpu_pm4_dispatch_launch_flags_t flags,
+    iree_hal_amdgpu_pm4_dispatch_launch_state_t* out_state) {
+  return iree_hal_amdgpu_pm4_dispatch_launch_state_initialize(
+      kGfx10, descriptor, kernel_object, workgroup_size, flags, out_state);
 }
 
 TEST(PM4DispatchTest, KernelDescriptorLayoutMatchesAmdhsaAbi) {
@@ -68,7 +89,7 @@ TEST(PM4DispatchTest, InitializesLaunchStateFromDescriptor) {
   const uint16_t workgroup_size[3] = {256, 2, 1};
 
   iree_hal_amdgpu_pm4_dispatch_launch_state_t state = {};
-  IREE_ASSERT_OK(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+  IREE_ASSERT_OK(InitializeLaunchState(
       &descriptor, /*kernel_object=*/0x0000123456780000ull, workgroup_size,
       IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE, &state));
 
@@ -81,6 +102,8 @@ TEST(PM4DispatchTest, InitializesLaunchStateFromDescriptor) {
   EXPECT_EQ(state.resources[0], descriptor.compute_pgm_rsrc1);
   EXPECT_EQ(state.resources[1], descriptor.compute_pgm_rsrc2);
   EXPECT_EQ(state.resource3, descriptor.compute_pgm_rsrc3);
+  EXPECT_EQ(state.resource3_register_address,
+            IREE_HAL_AMDGPU_PM4_COMPUTE_PGM_RSRC3_GFX10_REGISTER);
   EXPECT_EQ(state.temporary_ring_size, 0u);
   EXPECT_EQ(state.restart[0], 0u);
   EXPECT_EQ(state.restart[1], 0u);
@@ -112,7 +135,7 @@ TEST(PM4DispatchTest, InitializesLaunchStateWithPaddedUserDataDwords) {
   const uint16_t workgroup_size[3] = {64, 1, 1};
 
   iree_hal_amdgpu_pm4_dispatch_launch_state_t state = {};
-  IREE_ASSERT_OK(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+  IREE_ASSERT_OK(InitializeLaunchState(
       &descriptor, /*kernel_object=*/0x0000123456780000ull, workgroup_size,
       IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE, &state));
 
@@ -129,7 +152,7 @@ TEST(PM4DispatchTest, InitializesLaunchStateWithKernargPreload) {
   const uint16_t workgroup_size[3] = {64, 1, 1};
 
   iree_hal_amdgpu_pm4_dispatch_launch_state_t state = {};
-  IREE_ASSERT_OK(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+  IREE_ASSERT_OK(InitializeLaunchState(
       &descriptor, /*kernel_object=*/0x0000123456780000ull, workgroup_size,
       IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE, &state));
 
@@ -143,7 +166,7 @@ TEST(PM4DispatchTest, EmitsStaticSetupDwords) {
   iree_hal_amdgpu_kernel_descriptor_t descriptor = MakeDescriptor();
   const uint16_t workgroup_size[3] = {128, 1, 1};
   iree_hal_amdgpu_pm4_dispatch_launch_state_t state = {};
-  IREE_ASSERT_OK(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+  IREE_ASSERT_OK(InitializeLaunchState(
       &descriptor, /*kernel_object=*/0x0000123456780000ull, workgroup_size,
       IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE, &state));
 
@@ -172,7 +195,7 @@ TEST(PM4DispatchTest, EmitsStaticSetupDwords) {
       state.resources[1],
       iree_hal_amdgpu_pm4_make_header(
           IREE_HAL_AMDGPU_PM4_HDR_IT_OPCODE_SET_SH_REG, 3),
-      IREE_HAL_AMDGPU_PM4_COMPUTE_PGM_RSRC3_REGISTER -
+      IREE_HAL_AMDGPU_PM4_COMPUTE_PGM_RSRC3_GFX10_REGISTER -
           IREE_HAL_AMDGPU_PM4_PERSISTENT_SPACE_START,
       state.resource3,
       iree_hal_amdgpu_pm4_make_header(
@@ -210,11 +233,36 @@ TEST(PM4DispatchTest, EmitsStaticSetupDwords) {
   EXPECT_EQ(std::memcmp(dwords, expected, sizeof(expected)), 0);
 }
 
+TEST(PM4DispatchTest, EmitsGfx9Resource3RegisterOffset) {
+  iree_hal_amdgpu_kernel_descriptor_t descriptor = MakeDescriptor(
+      IREE_HAL_AMDGPU_KERNEL_CODE_PROPERTY_ENABLE_SGPR_KERNARG_SEGMENT_PTR);
+  const uint16_t workgroup_size[3] = {64, 1, 1};
+  iree_hal_amdgpu_pm4_dispatch_launch_state_t state = {};
+  IREE_ASSERT_OK(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize(
+      kGfx9, &descriptor, /*kernel_object=*/0x0000123456780000ull,
+      workgroup_size, IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE,
+      &state));
+
+  uint32_t dwords[IREE_HAL_AMDGPU_PM4_DISPATCH_SETUP_DWORD_COUNT] = {};
+  uint32_t dword_count = 0;
+  IREE_ASSERT_OK(iree_hal_amdgpu_pm4_dispatch_emit_setup(
+      &state, IREE_ARRAYSIZE(dwords), dwords, &dword_count));
+  EXPECT_EQ(dword_count, IREE_HAL_AMDGPU_PM4_DISPATCH_SETUP_DWORD_COUNT);
+  EXPECT_EQ(state.resource3_register_address,
+            IREE_HAL_AMDGPU_PM4_COMPUTE_PGM_RSRC3_GFX9_REGISTER);
+  EXPECT_EQ(dwords[13], IREE_HAL_AMDGPU_PM4_COMPUTE_PGM_RSRC3_GFX9_REGISTER -
+                            IREE_HAL_AMDGPU_PM4_PERSISTENT_SPACE_START);
+  EXPECT_EQ(dwords[14], descriptor.compute_pgm_rsrc3);
+  EXPECT_FALSE(
+      iree_any_bit_set(state.dispatch_initiator,
+                       IREE_HAL_AMDGPU_PM4_DISPATCH_INITIATOR_CS_W32_EN));
+}
+
 TEST(PM4DispatchTest, EmitsKernargUserDataDwords) {
   iree_hal_amdgpu_kernel_descriptor_t descriptor = MakeDescriptor();
   const uint16_t workgroup_size[3] = {64, 1, 1};
   iree_hal_amdgpu_pm4_dispatch_launch_state_t state = {};
-  IREE_ASSERT_OK(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+  IREE_ASSERT_OK(InitializeLaunchState(
       &descriptor, /*kernel_object=*/0x0000123456780000ull, workgroup_size,
       IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE, &state));
 
@@ -244,7 +292,7 @@ TEST(PM4DispatchTest, EmitsPaddedKernargUserDataDwords) {
       /*user_data_dword_count=*/15);
   const uint16_t workgroup_size[3] = {64, 1, 1};
   iree_hal_amdgpu_pm4_dispatch_launch_state_t state = {};
-  IREE_ASSERT_OK(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+  IREE_ASSERT_OK(InitializeLaunchState(
       &descriptor, /*kernel_object=*/0x0000123456780000ull, workgroup_size,
       IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE, &state));
 
@@ -276,7 +324,7 @@ TEST(PM4DispatchTest, EmitsKernargPreloadUserDataDwords) {
       (1u << IREE_HAL_AMDGPU_KERNEL_DESCRIPTOR_KERNARG_PRELOAD_OFFSET_SHIFT);
   const uint16_t workgroup_size[3] = {64, 1, 1};
   iree_hal_amdgpu_pm4_dispatch_launch_state_t state = {};
-  IREE_ASSERT_OK(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+  IREE_ASSERT_OK(InitializeLaunchState(
       &descriptor, /*kernel_object=*/0x0000123456780000ull, workgroup_size,
       IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE, &state));
 
@@ -318,7 +366,7 @@ TEST(PM4DispatchTest, RejectsMissingKernargPreloadData) {
       2u << IREE_HAL_AMDGPU_KERNEL_DESCRIPTOR_KERNARG_PRELOAD_LENGTH_SHIFT;
   const uint16_t workgroup_size[3] = {64, 1, 1};
   iree_hal_amdgpu_pm4_dispatch_launch_state_t state = {};
-  IREE_ASSERT_OK(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+  IREE_ASSERT_OK(InitializeLaunchState(
       &descriptor, /*kernel_object=*/0x0000123456780000ull, workgroup_size,
       IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE, &state));
 
@@ -338,7 +386,7 @@ TEST(PM4DispatchTest, RejectsUnsupportedDescriptorShapes) {
 
   iree_hal_amdgpu_kernel_descriptor_t descriptor = MakeDescriptor();
   descriptor.private_segment_fixed_size = 4;
-  EXPECT_THAT(Status(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+  EXPECT_THAT(Status(InitializeLaunchState(
                   &descriptor, /*kernel_object=*/0x1000, workgroup_size,
                   IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE, &state)),
               StatusIs(StatusCode::kUnimplemented));
@@ -348,7 +396,7 @@ TEST(PM4DispatchTest, RejectsUnsupportedDescriptorShapes) {
       /*user_data_dword_count=*/2);
   descriptor.kernarg_preload =
       1u << IREE_HAL_AMDGPU_KERNEL_DESCRIPTOR_KERNARG_PRELOAD_LENGTH_SHIFT;
-  EXPECT_THAT(Status(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+  EXPECT_THAT(Status(InitializeLaunchState(
                   &descriptor, /*kernel_object=*/0x1000, workgroup_size,
                   IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE, &state)),
               StatusIs(StatusCode::kFailedPrecondition));
@@ -356,7 +404,7 @@ TEST(PM4DispatchTest, RejectsUnsupportedDescriptorShapes) {
   descriptor = MakeDescriptor(
       IREE_HAL_AMDGPU_KERNEL_CODE_PROPERTY_ENABLE_SGPR_KERNARG_SEGMENT_PTR |
       IREE_HAL_AMDGPU_KERNEL_CODE_PROPERTY_ENABLE_SGPR_QUEUE_PTR);
-  EXPECT_THAT(Status(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+  EXPECT_THAT(Status(InitializeLaunchState(
                   &descriptor, /*kernel_object=*/0x1000, workgroup_size,
                   IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE, &state)),
               StatusIs(StatusCode::kUnimplemented));
@@ -365,7 +413,7 @@ TEST(PM4DispatchTest, RejectsUnsupportedDescriptorShapes) {
   descriptor.compute_pgm_rsrc2 =
       IREE_HAL_AMDGPU_COMPUTE_PGM_RSRC2_ENABLE_PRIVATE_SEGMENT |
       (2u << IREE_HAL_AMDGPU_COMPUTE_PGM_RSRC2_USER_SGPR_COUNT_SHIFT);
-  EXPECT_THAT(Status(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+  EXPECT_THAT(Status(InitializeLaunchState(
                   &descriptor, /*kernel_object=*/0x1000, workgroup_size,
                   IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE, &state)),
               StatusIs(StatusCode::kUnimplemented));
@@ -373,7 +421,7 @@ TEST(PM4DispatchTest, RejectsUnsupportedDescriptorShapes) {
   descriptor = MakeDescriptor();
   descriptor.compute_pgm_rsrc2 =
       1u << IREE_HAL_AMDGPU_COMPUTE_PGM_RSRC2_USER_SGPR_COUNT_SHIFT;
-  EXPECT_THAT(Status(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+  EXPECT_THAT(Status(InitializeLaunchState(
                   &descriptor, /*kernel_object=*/0x1000, workgroup_size,
                   IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE, &state)),
               StatusIs(StatusCode::kFailedPrecondition));
@@ -382,7 +430,7 @@ TEST(PM4DispatchTest, RejectsUnsupportedDescriptorShapes) {
       IREE_HAL_AMDGPU_KERNEL_CODE_PROPERTY_ENABLE_SGPR_KERNARG_SEGMENT_PTR |
           IREE_HAL_AMDGPU_KERNEL_CODE_PROPERTY_ENABLE_WAVEFRONT_SIZE32,
       IREE_HAL_AMDGPU_PM4_DISPATCH_USER_DATA_DWORD_CAPACITY + 1);
-  EXPECT_THAT(Status(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+  EXPECT_THAT(Status(InitializeLaunchState(
                   &descriptor, /*kernel_object=*/0x1000, workgroup_size,
                   IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE, &state)),
               StatusIs(StatusCode::kOutOfRange));
@@ -392,18 +440,18 @@ TEST(PM4DispatchTest, RejectsInvalidLaunchArguments) {
   iree_hal_amdgpu_kernel_descriptor_t descriptor = MakeDescriptor();
   iree_hal_amdgpu_pm4_dispatch_launch_state_t state = {};
   const uint16_t valid_workgroup_size[3] = {64, 1, 1};
-  EXPECT_THAT(Status(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+  EXPECT_THAT(Status(InitializeLaunchState(
                   &descriptor, /*kernel_object=*/0, valid_workgroup_size,
                   IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE, &state)),
               StatusIs(StatusCode::kInvalidArgument));
 
   const uint16_t invalid_workgroup_size[3] = {64, 0, 1};
-  EXPECT_THAT(Status(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+  EXPECT_THAT(Status(InitializeLaunchState(
                   &descriptor, /*kernel_object=*/0x1000, invalid_workgroup_size,
                   IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE, &state)),
               StatusIs(StatusCode::kInvalidArgument));
 
-  EXPECT_THAT(Status(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+  EXPECT_THAT(Status(InitializeLaunchState(
                   &descriptor, /*kernel_object=*/0x1000, valid_workgroup_size,
                   /*flags=*/0x80000000u, &state)),
               StatusIs(StatusCode::kInvalidArgument));
@@ -413,7 +461,7 @@ TEST(PM4DispatchTest, RejectsInsufficientPacketCapacityWithoutWrites) {
   iree_hal_amdgpu_kernel_descriptor_t descriptor = MakeDescriptor();
   const uint16_t workgroup_size[3] = {64, 1, 1};
   iree_hal_amdgpu_pm4_dispatch_launch_state_t state = {};
-  IREE_ASSERT_OK(iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+  IREE_ASSERT_OK(InitializeLaunchState(
       &descriptor, /*kernel_object=*/0x0000123456780000ull, workgroup_size,
       IREE_HAL_AMDGPU_PM4_DISPATCH_LAUNCH_FLAG_ORDER_MODE, &state));
 
