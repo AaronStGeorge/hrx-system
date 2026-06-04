@@ -19,7 +19,8 @@ include("${CMAKE_CURRENT_LIST_DIR}/selectors.cmake")
 #                compiled as translation units or exposed as interface headers.
 # COPTS: additional flags to pass to clang.
 # LINKOPTS: additional flags to pass to lld.
-# MINIMIZE: hide non-HSA ABI symbols after linking.
+# MINIMIZE: apply post-link symbol-table minimization. Only valid for opaque
+#           code-object data blobs whose kernels are not looked up by name.
 function(iree_amdgpu_binary)
   cmake_parse_arguments(
     _RULE
@@ -218,7 +219,7 @@ endfunction()
 #              to the current binary directory.
 # OUTPUT_PATHS_OUT: Optional variable receiving absolute generated output paths.
 # TARGETS_OUT: Optional variable receiving generated CMake target names.
-# MINIMIZE: hide non-HSA ABI symbols after linking.
+# MINIMIZE: apply post-link symbol-table minimization.
 function(iree_amdgpu_binary_variants)
   cmake_parse_arguments(
     _RULE
@@ -325,7 +326,7 @@ endfunction()
 # FLATTEN: drop directory components from table-of-contents names.
 # PUBLIC: expose the generated C embed-data library publicly.
 # TESTONLY: only build the generated library when tests are enabled.
-# MINIMIZE: hide non-HSA ABI symbols after linking.
+# MINIMIZE: apply post-link symbol-table minimization.
 function(iree_amdgpu_binary_variants_embed_data)
   cmake_parse_arguments(
     _RULE

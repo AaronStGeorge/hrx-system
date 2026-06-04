@@ -53,6 +53,7 @@ def iree_amdgpu_binary(
         link_tool = AMDGPU_LLVM_LINK_TOOL,
         lld_tool = AMDGPU_LLD_TOOL,
         objcopy_tool = AMDGPU_LLVM_OBJCOPY_TOOL,
+        minimize = False,
         builtin_headers_dep = AMDGPU_CLANG_RESOURCE_HEADERS,
         builtin_headers_marker = AMDGPU_CLANG_RESOURCE_MARKER,
         builtin_headers_include_flag = _CLANG_RESOURCE_INCLUDE_FLAG,
@@ -72,8 +73,11 @@ def iree_amdgpu_binary(
         clang_tool: clang/amdclang executable target.
         link_tool: llvm-link executable target.
         lld_tool: lld executable target.
-        objcopy_tool: optional llvm-objcopy executable target used to minimize
-                      the linked ELF image.
+        objcopy_tool: optional llvm-objcopy executable target used for
+                      `minimize`.
+        minimize: whether to apply the optional post-link symbol-table
+                  minimization pass. This is only valid for opaque code-object
+                  data blobs whose kernels are not looked up by name.
         builtin_headers_dep: target containing clang builtin headers.
         builtin_headers_marker: optional single builtin header file used to
                                 derive the builtin header include directory.
@@ -199,7 +203,7 @@ def iree_amdgpu_binary(
     link_output = "$(location %s)" % (out)
     lld_linkopts = base_linkopts + linkopts
     objcopy_command = None
-    if objcopy_tool != None:
+    if minimize and objcopy_tool != None:
         link_output = "$(@D)/%s.linked.so" % (name,)
         lld_linkopts = lld_linkopts + [
             "--version-script=\"%s\"" % (version_script,),
@@ -214,7 +218,7 @@ def iree_amdgpu_binary(
             "$(location %s)" % (out),
         ])
     cmd = []
-    if objcopy_tool != None:
+    if minimize and objcopy_tool != None:
         cmd.append("printf '{\\n  local:\\n    *;\\n};\\n' > \"%s\"" % (version_script,))
     cmd.append(" ".join([
         "$(location %s)" % (lld_tool),
@@ -225,12 +229,15 @@ def iree_amdgpu_binary(
     ]))
     if objcopy_command:
         cmd.append(objcopy_command)
+    tools = [lld_tool]
+    if minimize and objcopy_tool != None:
+        tools.append(objcopy_tool)
     native.genrule(
         name = name,
         srcs = [link_out],
         outs = [out],
         cmd = " && ".join(cmd),
-        tools = [tool for tool in [lld_tool, objcopy_tool] if tool != None],
+        tools = tools,
         message = "Generating OpenCL binary %s to %s..." % (name, out),
         output_to_bindir = 1,
         **kwargs
@@ -243,6 +250,7 @@ def iree_amdgpu_binary_variants(
         target_selectors_flag,
         binary_name_prefix = None,
         code_object_targets = IREE_AMDGPU_CODE_OBJECT_TARGETS,
+        minimize = False,
         tags = [],
         **kwargs):
     """Builds code-object variants and exposes the selected outputs.
@@ -256,6 +264,8 @@ def iree_amdgpu_binary_variants(
       binary_name_prefix: Prefix for generated per-code-object binary targets.
         Defaults to `name`.
       code_object_targets: Code-object targets to build variants for.
+      minimize: Whether generated binaries should apply post-link
+        symbol-table minimization.
       tags: Tags applied to generated binary targets and the aggregate
         filegroup.
       **kwargs: Additional attributes forwarded to `iree_amdgpu_binary`.
@@ -280,6 +290,7 @@ def iree_amdgpu_binary_variants(
             target = target,
             arch = code_object_target,
             srcs = srcs,
+            minimize = minimize,
             tags = tags,
             **kwargs
         )
@@ -310,6 +321,7 @@ def iree_amdgpu_binary_variants_embed_data(
         identifier = None,
         flatten = True,
         code_object_targets = IREE_AMDGPU_CODE_OBJECT_TARGETS,
+        minimize = False,
         tags = [],
         **kwargs):
     """Builds selected AMDGPU binaries and embeds them into a C library.
@@ -329,6 +341,8 @@ def iree_amdgpu_binary_variants_embed_data(
       flatten: Whether embedded table-of-contents names drop directory
         components.
       code_object_targets: Code-object targets to build variants for.
+      minimize: Whether generated binaries should apply post-link
+        symbol-table minimization.
       tags: Tags applied to generated targets.
       **kwargs: Additional attributes forwarded to `iree_amdgpu_binary`.
     """
@@ -340,6 +354,7 @@ def iree_amdgpu_binary_variants_embed_data(
         target_selectors_flag = target_selectors_flag,
         binary_name_prefix = binary_name_prefix,
         code_object_targets = code_object_targets,
+        minimize = minimize,
         tags = tags,
         **kwargs
     )
