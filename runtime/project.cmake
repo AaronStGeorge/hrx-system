@@ -14,7 +14,7 @@ option(IREE_BUILD_BENCHMARKS "Build IREE runtime benchmarks." ON)
 set(IREE_BUILD_COMPILER OFF CACHE BOOL
   "The reduced HRX runtime tree does not build the IREE compiler." FORCE)
 option(IREE_MODULE_VMVX
-  "Builds the VMVX runtime module. Disabled until builtins/ukernel is imported."
+  "Builds the VMVX runtime module boundary."
   OFF)
 set(IREE_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
 set(IREE_BUILD_DOCS OFF CACHE BOOL "" FORCE)
@@ -112,6 +112,10 @@ option(IREE_HAL_EXECUTABLE_LOADER_SYSTEM_LIBRARY
 option(IREE_HAL_EXECUTABLE_LOADER_VMVX_MODULE
   "Enables the VMVX module loader for local HAL drivers."
   ${IREE_HAL_EXECUTABLE_LOADER_VMVX_MODULE_DEFAULT})
+if(IREE_HAL_EXECUTABLE_LOADER_VMVX_MODULE)
+  set(IREE_MODULE_VMVX ON CACHE BOOL
+    "Builds the VMVX runtime module boundary." FORCE)
+endif()
 
 option(IREE_HAL_EXECUTABLE_PLUGIN_DEFAULTS
   "Sets the default value for all runtime HAL executable plugin mechanisms." ON)
