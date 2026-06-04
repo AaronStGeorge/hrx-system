@@ -7,7 +7,12 @@
 # To disable autogeneration for this file entirely, delete this header.        #
 ################################################################################
 
-if(NOT IREE_ROCM_TEST_TARGET_CHIP_VALUES)
+iree_amdgpu_expand_target_selectors(
+  _IREE_HAL_AMDGPU_EXACT_TARGETS
+  "${IREE_AMDGPU_TARGET_EXPANSION_EXACT}"
+  ${IREE_HAL_AMDGPU_TARGETS}
+)
+if(NOT _IREE_HAL_AMDGPU_EXACT_TARGETS)
   return()
 endif()
 

@@ -98,7 +98,7 @@ jobs:
       ctest_exclude_regex: ${{ matrix.ctest_exclude_regex }}
       ctest_label_exclude_regex: "runtime-resource="
       cmake_options: |
-        -DIREE_ROCM_TEST_TARGET_CHIP=gfx942;gfx1151;gfx1201
+        -DIREE_HAL_AMDGPU_TARGETS=gfx942;gfx1151;gfx1201
       package: ${{ matrix.package }}
 
   gpu_linux:

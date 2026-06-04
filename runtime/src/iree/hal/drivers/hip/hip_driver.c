@@ -89,12 +89,15 @@ static iree_status_t iree_hal_hip_driver_create_internal(
       options->hip_lib_search_paths, &driver->hip_symbols);
 
   if (iree_status_is_ok(status)) {
-    // Try to dynamically load NCCL. This will fail if NCCL is unavailable or
-    // incompatible. We only fail on unavailability when the user tries to
-    // create a channel and otherwise defer reporting.
+    // Initialize NCCL capability state. Builds with RCCL defer unavailable
+    // library reporting until channel creation; builds without RCCL keep this
+    // as a no-op.
     status = iree_hal_hip_nccl_dynamic_symbols_initialize(
         host_allocator, &driver->hip_symbols, &driver->nccl_symbols);
-    if (iree_status_is_unavailable(status)) status = iree_status_ignore(status);
+    if (iree_status_is_unavailable(status)) {
+      iree_status_free(status);
+      status = iree_ok_status();
+    }
   }
 
   memcpy(&driver->device_params, device_params, sizeof(driver->device_params));

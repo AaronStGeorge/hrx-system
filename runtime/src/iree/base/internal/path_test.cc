@@ -182,6 +182,25 @@ TEST(FilePathTest, Extension) {
   EXPECT_SV_EQ(iree_file_path_extension(_SV("..bar")), _SV("bar"));
 }
 
+TEST(FilePathTest, IsDynamicLibrary) {
+  EXPECT_FALSE(iree_file_path_is_dynamic_library(_SV("")));
+  EXPECT_FALSE(iree_file_path_is_dynamic_library(_SV("/opt/rocm/lib")));
+  EXPECT_FALSE(iree_file_path_is_dynamic_library(_SV("foo")));
+  EXPECT_FALSE(iree_file_path_is_dynamic_library(_SV("foo.so.")));
+  EXPECT_FALSE(iree_file_path_is_dynamic_library(_SV("foo.so..1")));
+  EXPECT_FALSE(iree_file_path_is_dynamic_library(_SV("foo.so.1a")));
+  EXPECT_FALSE(iree_file_path_is_dynamic_library(_SV("foo.so.backup")));
+
+  EXPECT_TRUE(iree_file_path_is_dynamic_library(_SV("foo.dll")));
+  EXPECT_TRUE(iree_file_path_is_dynamic_library(_SV("foo.dylib")));
+  EXPECT_TRUE(iree_file_path_is_dynamic_library(_SV("foo.so")));
+  EXPECT_TRUE(iree_file_path_is_dynamic_library(_SV("foo.sos")));
+  EXPECT_TRUE(iree_file_path_is_dynamic_library(_SV("foo.so.1")));
+  EXPECT_TRUE(iree_file_path_is_dynamic_library(_SV("foo.so.1.2.3")));
+  EXPECT_TRUE(iree_file_path_is_dynamic_library(
+      _SV("/opt/rocm/lib/libhsa-runtime64.so.1")));
+}
+
 // NOTE: these URI methods are all implemented using the same iree_uri_split and
 // we test each independently because it's easier.
 

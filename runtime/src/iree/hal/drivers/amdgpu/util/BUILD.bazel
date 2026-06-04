@@ -9,7 +9,10 @@ load(
     "//build_tools/bazel:iree_hal_cts_test_suite.bzl",
     "iree_hal_cts_testdata",
 )
-load("//runtime/build_tools/bazel:amdgpu_binary.bzl", "iree_amdgpu_binary")
+load(
+    "//runtime/build_tools/bazel:amdgpu_binary.bzl",
+    "iree_amdgpu_binary_variants_embed_data",
+)
 load("//runtime/build_tools/bazel:cc.bzl", "iree_runtime_cc_library")
 load("//runtime/build_tools/bazel:cc_benchmark.bzl", "iree_runtime_cc_benchmark")
 load("//runtime/build_tools/bazel:cc_fuzz.bzl", "iree_runtime_cc_fuzz")
@@ -249,6 +252,7 @@ iree_runtime_cc_library(
     hdrs = ["pm4_dispatch.h"],
     deps = [
         ":packet",
+        ":target_id",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal/drivers/amdgpu/abi",
     ],
@@ -555,35 +559,39 @@ iree_runtime_cc_test(
     ],
 )
 
-iree_amdgpu_binary(
-    name = "pm4_dispatch_test_kernels_gfx1100",
+iree_amdgpu_binary_variants_embed_data(
+    name = "pm4_dispatch_test_kernels",
+    testonly = True,
     srcs = ["pm4_dispatch_test_kernels.c"],
-    arch = "gfx1100",
+    binary_name_prefix = "pm4_dispatch_test_kernels",
+    c_file_output = "pm4_dispatch_test_kernels.c.embed.c",
+    h_file_output = "pm4_dispatch_test_kernels.h",
+    identifier = "iree_hal_amdgpu_pm4_dispatch_test_kernels",
+    tags = ["manual"],
     target = "amdgcn-amd-amdhsa",
+    target_selectors_flag = "//runtime/src/iree/hal/drivers/amdgpu:targets",
 )
 
-# Disabled until the generated code object is available through the test data
-# path in both Bazel and CMake.
-# iree_runtime_cc_test(
-#     name = "pm4_dispatch_live_test",
-#     srcs = ["pm4_dispatch_live_test.cc"],
-#     data = [":pm4_dispatch_test_kernels_gfx1100.so"],
-#     deps = [
-#         ":libhsa",
-#         ":packet",
-#         ":pm4_dispatch",
-#         ":pm4_program",
-#         ":queue_primitives",
-#         ":topology",
-#         ":vmem",
-#         "//runtime/src/iree/base",
-#         "//runtime/src/iree/base/threading",
-#         "//runtime/src/iree/hal/drivers/amdgpu/abi",
-#         "//runtime/src/iree/io:file_handle",
-#         "//runtime/src/iree/testing:gtest",
-#         "//runtime/src/iree/testing:gtest_main",
-#     ],
-# )
+iree_runtime_cc_test(
+    name = "pm4_dispatch_live_test",
+    srcs = ["pm4_dispatch_live_test.cc"],
+    deps = [
+        ":libhsa",
+        ":packet",
+        ":pm4_dispatch",
+        ":pm4_dispatch_test_kernels",
+        ":pm4_program",
+        ":queue_primitives",
+        ":target_id",
+        ":topology",
+        ":vmem",
+        "//runtime/src/iree/base",
+        "//runtime/src/iree/base/threading",
+        "//runtime/src/iree/hal/drivers/amdgpu/abi",
+        "//runtime/src/iree/testing:gtest",
+        "//runtime/src/iree/testing:gtest_main",
+    ],
+)
 
 iree_runtime_cc_test(
     name = "pm4_program_test",
@@ -600,7 +608,16 @@ iree_runtime_cc_test(
 )
 
 iree_cmake_extra_content(
-    content = "if(TARGET iree::hal::drivers::amdgpu::cts::testdata_amdgpu)",
+    content = """
+if(TARGET iree::hal::drivers::amdgpu::cts::testdata_amdgpu)
+  iree_amdgpu_expand_target_selectors(
+    _IREE_HAL_AMDGPU_EXACT_TARGETS
+    "${IREE_AMDGPU_TARGET_EXPANSION_EXACT}"
+    ${IREE_HAL_AMDGPU_TARGETS}
+  )
+endif()
+if(_IREE_HAL_AMDGPU_EXACT_TARGETS)
+""",
     inline = True,
 )
 
@@ -612,17 +629,12 @@ filegroup(
 
 iree_hal_cts_testdata(
     backend_name = "amdgpu",
-    cmake_format_variant_values = ["ROCM_TARGET"],
+    cmake_format_variant_values = ["AMDGPU_TARGET"],
     flag_values = {
-        "ROCM_BC_DIR": "@amdgpu_device_libs//:bitcode",
-        "ROCM_TARGET": "//build_tools/bazel:rocm_test_target",
+        "AMDGPU_TARGET": "//runtime/src/iree/hal/drivers/amdgpu:targets",
     },
-    flags = [
-        "--iree-rocm-target={ROCM_TARGET}",
-        "--iree-rocm-bc-dir={ROCM_BC_DIR}",
-    ],
     format_name = "amdgpu_queue_benchmark",
-    format_string = '"amdgcn-amd-amdhsa--{ROCM_TARGET}"',
+    format_string = '"amdgcn-amd-amdhsa--{AMDGPU_TARGET}"',
     identifier = "iree_queue_benchmark_testdata_amdgpu",
     target_device = "amdgpu",
     testdata = "//runtime/src/iree/hal/drivers/amdgpu/util:queue_benchmark_testdata_srcs",

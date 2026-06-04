@@ -12,6 +12,8 @@
 #include "iree/base/api.h"
 #include "iree/hal/drivers/hip/rccl_dynamic_symbols.h"
 
+#if IREE_HAL_HIP_ENABLE_RCCL
+
 // Converts a ncclResult_t to an iree_status_t.
 //
 // Usage:
@@ -56,5 +58,7 @@
 iree_status_t iree_hal_hip_nccl_result_to_status(
     const iree_hal_hip_nccl_dynamic_symbols_t* syms, ncclResult_t result,
     const char* file, uint32_t line);
+
+#endif  // IREE_HAL_HIP_ENABLE_RCCL
 
 #endif  // IREE_HAL_DRIVERS_HIP_RCCL_STATUS_UTIL_H_

@@ -153,6 +153,17 @@ class RuntimeBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         kwargs = self._apply_runtime_cmake_policy(kwargs)
         self._iree_amdgpu_binary(**kwargs)
 
+    def iree_amdgpu_binary_variants(self, **kwargs):
+        kwargs = self._apply_runtime_cmake_policy(kwargs)
+        self._iree_amdgpu_binary_variants(**kwargs)
+
+    def iree_amdgpu_binary_variants_embed_data(self, **kwargs):
+        kwargs = self._apply_runtime_cmake_policy(kwargs)
+        self._iree_amdgpu_binary_variants_embed_data(**kwargs)
+
+    def iree_amdgpu_target_selectors_flag(self, *args, **kwargs):
+        pass
+
     def iree_hal_amdgpu_source_device_binaries(self, name):
         self._iree_hal_amdgpu_source_device_binaries()
 

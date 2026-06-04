@@ -17,6 +17,7 @@
 #include "iree/base/api.h"
 #include "iree/hal/drivers/amdgpu/abi/kernel_descriptor.h"
 #include "iree/hal/drivers/amdgpu/util/pm4_emitter.h"
+#include "iree/hal/drivers/amdgpu/util/target_id.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,8 +43,10 @@ typedef struct iree_hal_amdgpu_pm4_dispatch_launch_state_t {
   uint32_t program[6];
   // Register values for COMPUTE_PGM_RSRC1 and COMPUTE_PGM_RSRC2.
   uint32_t resources[2];
-  // Register value for COMPUTE_PGM_RSRC3 on gfx10+.
+  // Register value for COMPUTE_PGM_RSRC3.
   uint32_t resource3;
+  // Register address used when emitting COMPUTE_PGM_RSRC3.
+  uint32_t resource3_register_address;
   // Register value for COMPUTE_TMPRING_SIZE.
   uint32_t temporary_ring_size;
   // Register values for COMPUTE_RESTART_X/Y/Z.
@@ -66,14 +69,16 @@ typedef struct iree_hal_amdgpu_pm4_dispatch_launch_state_t {
   uint32_t dispatch_initiator;
 } iree_hal_amdgpu_pm4_dispatch_launch_state_t;
 
-// Returns whether a descriptor can be represented by
-// iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10.
-bool iree_hal_amdgpu_pm4_dispatch_launch_state_is_supported_gfx10(
+// Returns whether a descriptor can be represented by PM4 launch state for
+// |gfxip_version|.
+bool iree_hal_amdgpu_pm4_dispatch_launch_state_is_supported(
+    iree_hal_amdgpu_gfxip_version_t gfxip_version,
     const iree_hal_amdgpu_kernel_descriptor_t* descriptor,
     uint64_t kernel_object, const uint16_t workgroup_size[3],
     iree_hal_amdgpu_pm4_dispatch_launch_flags_t flags);
 
-iree_status_t iree_hal_amdgpu_pm4_dispatch_launch_state_initialize_gfx10(
+iree_status_t iree_hal_amdgpu_pm4_dispatch_launch_state_initialize(
+    iree_hal_amdgpu_gfxip_version_t gfxip_version,
     const iree_hal_amdgpu_kernel_descriptor_t* descriptor,
     uint64_t kernel_object, const uint16_t workgroup_size[3],
     iree_hal_amdgpu_pm4_dispatch_launch_flags_t flags,

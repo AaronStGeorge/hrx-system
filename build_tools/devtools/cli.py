@@ -283,7 +283,9 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
     if sum(selected_tool_modes) > 1:
         parser.error("--venv, --system, and --tool-root are mutually exclusive")
     if getattr(args, "paths", None) and (
-        getattr(args, "base", None) is not None or getattr(args, "staged", False)
+        getattr(args, "base", None) is not None
+        or getattr(args, "staged", False)
+        or getattr(args, "commit", False)
     ):
         parser.error("explicit precommit paths cannot be combined with input mode")
     if args.agent_md:
@@ -438,6 +440,12 @@ def add_lane_commands(subparsers: argparse._SubParsersAction, lane: str) -> None
         "--base",
         metavar="GIT_REF",
         help="Check branch changes since GIT_REF plus local changes.",
+    )
+    add_argument(
+        precommit_input_group,
+        "--commit",
+        action="store_true",
+        help="Check the Git hook commit scope.",
     )
     add_argument(
         precommit_input_group,
@@ -678,6 +686,7 @@ def handle_precommit(args: argparse.Namespace) -> CommandPlan:
         existing_or_system_environment(args),
         args.profile,
         base=args.base,
+        commit=args.commit,
         staged=args.staged,
         paths=args.paths,
         verbose=args.verbose,

@@ -63,11 +63,13 @@ TEST(DynamicSymbolsTest, SearchPathsFail) {
   ASSERT_EQ(IREE_STATUS_UNAVAILABLE, status_code);
 }
 
+#if IREE_HAL_HIP_ENABLE_RCCL
+
 #define NCCL_CHECK_ERRORS(expr)     \
-  {                                 \
-    ncclResult_t status = expr;     \
+  do {                              \
+    ncclResult_t status = (expr);   \
     ASSERT_EQ(ncclSuccess, status); \
-  }
+  } while (false)
 
 TEST(NCCLDynamicSymbolsTest, CreateFromSystemLoader) {
   iree_hal_hip_dynamic_symbols_t hip_symbols;
@@ -98,6 +100,8 @@ TEST(NCCLDynamicSymbolsTest, CreateFromSystemLoader) {
   iree_hal_hip_nccl_dynamic_symbols_deinitialize(&nccl_symbols);
   iree_hal_hip_dynamic_symbols_deinitialize(&hip_symbols);
 }
+
+#endif  // IREE_HAL_HIP_ENABLE_RCCL
 
 }  // namespace
 }  // namespace hip

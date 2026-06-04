@@ -39,3 +39,13 @@ rocm_repository(
     name = "hsa_runtime_headers",
     build_file = "//build_tools/third_party:rocm_hsa_runtime_headers.BUILD",
 )
+
+rocm_repository(
+    name = "hip_api_headers",
+    build_file = "//build_tools/third_party:rocm_hip_api_headers.BUILD",
+)
+
+rocm_repository(
+    name = "rccl",
+    build_file = "//build_tools/third_party:rocm_rccl_headers.BUILD",
+)

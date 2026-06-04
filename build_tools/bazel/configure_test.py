@@ -56,7 +56,7 @@ class ConfigureBazelTest(unittest.TestCase):
         )
         self.assertIn("common --repo_env=IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=rocm", config)
         self.assertIn(f"common --repo_env=IREE_ROCM_PATH={rocm_root}", config)
-        self.assertNotIn("runtime/src/iree/hal/drivers/amdgpu,", config)
+        self.assertNotIn("--deleted_packages", config)
 
     def test_native_bazel_options_configure_amdgpu(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -76,6 +76,68 @@ class ConfigureBazelTest(unittest.TestCase):
         )
         self.assertIn("common --repo_env=IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=rocm", config)
         self.assertIn(f"common --repo_env=IREE_ROCM_PATH={rocm_root}", config)
+        self.assertNotIn("--deleted_packages", config)
+
+    def test_portable_project_options_configure_hip(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            rocm_root = self.make_rocm_root(temporary_directory)
+
+            args = self.configure_bazel.parse_arguments(
+                [
+                    "-DIREE_HAL_DRIVER_HIP=ON",
+                    f"-DIREE_ROCM_PATH={rocm_root}",
+                ]
+            )
+            config = self.configure_bazel.generate_config(args)
+
+        self.assertIn(
+            "build --//runtime/config/hal:drivers=local-sync,local-task,null,hip",
+            config,
+        )
+        self.assertIn("common --repo_env=IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=none", config)
+        self.assertIn(f"common --repo_env=IREE_ROCM_PATH={rocm_root}", config)
+        self.assertNotIn("--deleted_packages", config)
+
+    def test_portable_project_options_configure_amdgpu_and_hip(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            rocm_root = self.make_rocm_root(temporary_directory)
+
+            args = self.configure_bazel.parse_arguments(
+                [
+                    "-DIREE_HAL_DRIVER_AMDGPU=ON",
+                    "-DIREE_HAL_DRIVER_HIP=ON",
+                    f"-DIREE_ROCM_PATH={rocm_root}",
+                ]
+            )
+            config = self.configure_bazel.generate_config(args)
+
+        self.assertIn(
+            "build --//runtime/config/hal:drivers=local-sync,local-task,null,amdgpu,hip",
+            config,
+        )
+        self.assertIn("common --repo_env=IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=rocm", config)
+        self.assertIn(f"common --repo_env=IREE_ROCM_PATH={rocm_root}", config)
+        self.assertNotIn("--deleted_packages", config)
+
+    def test_native_bazel_options_configure_hip(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            rocm_root = self.make_rocm_root(temporary_directory)
+
+            args = self.configure_bazel.parse_arguments(
+                [
+                    "--//runtime/config/hal:drivers=hip,local-sync,local-task,null",
+                    f"--repo_env=IREE_ROCM_PATH={rocm_root}",
+                ]
+            )
+            config = self.configure_bazel.generate_config(args)
+
+        self.assertIn(
+            "build --//runtime/config/hal:drivers=local-sync,local-task,null,hip",
+            config,
+        )
+        self.assertIn("common --repo_env=IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=none", config)
+        self.assertIn(f"common --repo_env=IREE_ROCM_PATH={rocm_root}", config)
+        self.assertNotIn("--deleted_packages", config)
 
     def test_portable_project_options_configure_webgpu(self):
         args = self.configure_bazel.parse_arguments(["-DIREE_HAL_DRIVER_WEBGPU=ON"])
@@ -104,12 +166,32 @@ class ConfigureBazelTest(unittest.TestCase):
         self.assertIn("common --repo_env=IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=rocm", config)
         self.assertIn(f"common --repo_env=IREE_ROCM_PATH={rocm_root}", config)
 
-    def test_enabled_amdgpu_without_rocm_path_fails(self):
-        args = self.configure_bazel.parse_arguments(["-DIREE_HAL_DRIVER_AMDGPU=ON"])
+    def test_environment_rocm_path_configures_hip(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            rocm_root = self.make_rocm_root(temporary_directory)
+            args = self.configure_bazel.parse_arguments(["-DIREE_HAL_DRIVER_HIP=ON"])
 
-        with mock.patch.dict(self.configure_bazel.os.environ, {}, clear=True):
-            with self.assertRaisesRegex(SystemExit, "IREE_ROCM_PATH"):
-                self.configure_bazel.generate_config(args)
+            with mock.patch.dict(
+                self.configure_bazel.os.environ,
+                {"IREE_ROCM_PATH": str(rocm_root)},
+                clear=True,
+            ):
+                config = self.configure_bazel.generate_config(args)
+
+        self.assertIn("common --repo_env=IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN=none", config)
+        self.assertIn(f"common --repo_env=IREE_ROCM_PATH={rocm_root}", config)
+
+    def test_enabled_rocm_driver_without_rocm_path_fails(self):
+        for driver_define in (
+            "IREE_HAL_DRIVER_AMDGPU",
+            "IREE_HAL_DRIVER_HIP",
+        ):
+            with self.subTest(driver_define=driver_define):
+                args = self.configure_bazel.parse_arguments([f"-D{driver_define}=ON"])
+
+                with mock.patch.dict(self.configure_bazel.os.environ, {}, clear=True):
+                    with self.assertRaisesRegex(SystemExit, "IREE_ROCM_PATH"):
+                        self.configure_bazel.generate_config(args)
 
     def test_removed_driver_dialect_fails(self):
         args = self.configure_bazel.parse_arguments(["--enable-driver=amdgpu"])

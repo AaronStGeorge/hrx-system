@@ -136,10 +136,10 @@ typedef struct iree_hal_amdgpu_libhsa_t {
 // resources. The populated structure is immutable once initialized but if
 // copied the iree_hal_amdgpu_libhsa_copy API must be used (no memcpy!).
 //
-// |search_paths| will override the default library search paths and look for
-// the canonical library file under each before falling back to the defaults.
-// The `IREE_HAL_AMDGPU_LIBHSA_PATH` environment variable can also be set and
-// will be checked after the explicitly provided search paths.
+// |search_paths| will override the default library search paths. Entries may
+// be directories containing the canonical library file or exact dynamic library
+// paths. The `IREE_HAL_AMDGPU_LIBHSA_PATH` environment variable accepts the
+// same forms and will be checked after the explicitly provided search paths.
 IREE_API_EXPORT iree_status_t iree_hal_amdgpu_libhsa_initialize(
     iree_hal_amdgpu_libhsa_flags_t flags, iree_string_view_list_t search_paths,
     iree_allocator_t host_allocator, iree_hal_amdgpu_libhsa_t* out_libhsa);

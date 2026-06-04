@@ -501,7 +501,16 @@ iree_cc_test(
     iree-hal-drivers-amdgpu-tests
 )
 endif()
+
 if(TARGET iree::hal::drivers::amdgpu::cts::testdata_amdgpu)
+  iree_amdgpu_expand_target_selectors(
+    _IREE_HAL_AMDGPU_EXACT_TARGETS
+    "${IREE_AMDGPU_TARGET_EXPANSION_EXACT}"
+    ${IREE_HAL_AMDGPU_TARGETS}
+  )
+endif()
+if(_IREE_HAL_AMDGPU_EXACT_TARGETS)
+
 if(IREE_HAL_DRIVER_AMDGPU)
 iree_cc_test(
   NAME
@@ -529,8 +538,15 @@ iree_cc_test(
 )
 endif()
 endif()
-
 if(TARGET iree::hal::drivers::amdgpu::cts::testdata_amdgpu)
+  iree_amdgpu_expand_target_selectors(
+    _IREE_HAL_AMDGPU_EXACT_TARGETS
+    "${IREE_AMDGPU_TARGET_EXPANSION_EXACT}"
+    ${IREE_HAL_AMDGPU_TARGETS}
+  )
+endif()
+if(_IREE_HAL_AMDGPU_EXACT_TARGETS)
+
 add_custom_command(OUTPUT pm4_command_buffer_benchmark_testdata_srcs.stamp
     COMMAND ${CMAKE_COMMAND} -E touch pm4_command_buffer_benchmark_testdata_srcs.stamp
   DEPENDS
@@ -546,9 +562,9 @@ iree_hal_cts_testdata(
   FORMAT_NAME
     amdgpu_pm4_command_buffer_benchmark
   FORMAT_VARIANT_TOKEN
-    "{ROCM_TARGET}"
+    "{AMDGPU_TARGET}"
   FORMAT_VARIANTS
-    ${IREE_ROCM_TEST_TARGET_CHIP_VALUES}
+    ${_IREE_HAL_AMDGPU_EXACT_TARGETS}
   TARGET_DEVICE
     "amdgpu"
   IDENTIFIER
@@ -556,11 +572,9 @@ iree_hal_cts_testdata(
   BACKEND_NAME
     "amdgpu"
   FORMAT_STRING
-    [=["amdgcn-amd-amdhsa--{ROCM_TARGET}"]=]
+    [=["amdgcn-amd-amdhsa--{AMDGPU_TARGET}"]=]
   TESTDATA_DIR
     "${PROJECT_SOURCE_DIR}/runtime/src/iree/hal/drivers/amdgpu"
-  FLAGS
-    "--iree-rocm-target={ROCM_TARGET}"
 )
 endif()
 

@@ -10,8 +10,7 @@ Configure CMake with the following options:
 
 ```sh
 -DIREE_HAL_DRIVER_AMDGPU=ON
--DIREE_HAL_AMDGPU_DEVICE_BINARY_TARGETS=all
--DIREE_ROCM_TEST_TARGET_CHIP=gfx1100
+-DIREE_HAL_AMDGPU_TARGETS=gfx1100
 ```
 
 ### Bazel
@@ -21,17 +20,33 @@ compiled for your local GPU architecture:
 
 ```sh
 iree-bazel-build //tools:iree-run-module \
-  --iree_drivers=amdgpu,hip,local-sync,local-task,vulkan \
-  --//build_tools/bazel:rocm_test_target=gfx1100
+  --//runtime/config/hal:drivers=amdgpu,local-sync,local-task,null \
+  --//runtime/src/iree/hal/drivers/amdgpu:targets=gfx1100
 ```
 
-The ROCM chip target defaults to `gfx1100`. Override for your hardware:
+The AMDGPU target selector accepts exact targets such as `gfx1100`, generic
+code-object targets such as `gfx11-generic`, and TheRock-style selector
+families such as `gfx110X-all`. It is the runtime's supported AMDGPU target
+set: embedded device libraries, AMDGPU/HIP HAL CTS assets, and source-built
+util test/benchmark assets all use this same selector. Override for your
+hardware:
 
 ```sh
-iree-bazel-test --//build_tools/bazel:rocm_test_target=gfx942 //runtime/src/iree/hal/drivers/amdgpu/cts/...
+iree-bazel-test \
+  --//runtime/src/iree/hal/drivers/amdgpu:targets=gfx942 \
+  //runtime/src/iree/hal/drivers/amdgpu/cts/...
 ```
 
 Substitute the architecture with your own. See [therock_amdgpu_targets.cmake](https://github.com/ROCm/TheRock/blob/main/cmake/therock_amdgpu_targets.cmake) for the target and generic family vocabulary mirrored by the embedded device binary build.
+Source-built util test and benchmark assets follow the same runtime selector:
+
+```sh
+iree-bazel-build \
+  --//runtime/src/iree/hal/drivers/amdgpu:targets=gfx942,gfx950 \
+  //runtime/src/iree/hal/drivers/amdgpu/util:pm4_dispatch_test_kernels
+```
+
+Those exact selectors both expand to one `gfx9-4-generic` code object.
 
 Use `amdgpu` to specify devices at runtime:
 
@@ -72,8 +87,8 @@ IREE_TRACY_CAPTURE=/path/to/tracy-capture \
   --trace \
   --trace_name=amdgpu_runtime \
   //tools:iree-run-module \
-  --iree_drivers=amdgpu,hip,local-sync,local-task,vulkan \
-  --//build_tools/bazel:rocm_test_target=gfx1100 \
+  --//runtime/config/hal:drivers=amdgpu,local-sync,local-task,null \
+  --//runtime/src/iree/hal/drivers/amdgpu:targets=gfx1100 \
   -- \
   --device=amdgpu \
   --module=/tmp/model_amdgpu.vmfb \
@@ -139,7 +154,7 @@ See the website documentation for the full workflows:
 
 We maintain a fork of the HSA headers required for compilation as [third_party/hsa-runtime-headers/](https://github.com/iree-org/hsa-runtime-headers). This fork may also contain tweaks not yet upstreamed required to use the headers in our build.
 
-We require that at runtime a dynamic library with the name `libhsa-runtime64.so` exists on the path. This can be overridden programmatically when constructing the driver, via the `--amdgpu_libhsa_search_path=` flag if using the command line tools, via the `IREE_HAL_AMDGPU_LIBHSA_PATH` environment variable, or by just adding a directory containing the file to `PATH`.
+We require that at runtime a dynamic library with the name `libhsa-runtime64.so` exists on the path. This can be overridden programmatically when constructing the driver, via the `--amdgpu_libhsa_search_path=` flag if using the command line tools, via the `IREE_HAL_AMDGPU_LIBHSA_PATH` environment variable, or by just adding a directory containing the file to `PATH`. The command-line flag and environment variable accept either a directory containing the library or an exact dynamic library path such as `/opt/rocm/lib/libhsa-runtime64.so.1`.
 
 It's recommended that developers check out a copy of the [ROCR-Runtime](https://github.com/ROCm/ROCR-Runtime) and build it locally in whatever configuration they are using (debug/release/ASAN/etc). This allows for easier debugging and profiling as symbols are present and may be required to get recent features not available in platform installs. Eventually IREE will ship its own copy of the library (directly or indirectly) as part of the install packages such that only a relatively recent AMDGPU driver is required.
 
@@ -182,11 +197,14 @@ host tools build, or a ROCm/TheRock SDK. Important CMake knobs are
 `IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN_ROCM_PATH`,
 `IREE_HAL_AMDGPU_DEVICE_TOOLCHAIN_LLVM_TOOLS_DIR`, and the per-tool overrides
 documented in
+[`build_tools/amdgpu/README.md`](../../../../../../build_tools/amdgpu/README.md)
+and the package-local notes in
 [`device/binaries/README.md`](device/binaries/README.md).
 
-The `IREE_HAL_AMDGPU_DEVICE_BINARY_TARGETS` CMake variable defaults to
+The `IREE_HAL_AMDGPU_TARGETS` CMake variable defaults to
 `gfx9-generic;gfx90a;gfx9-4-generic;gfx10-1-generic;gfx10-3-generic;gfx11-generic;gfx12-generic`,
-which embeds the current checked-in generic-family set plus `gfx90a`. Packagers
+which embeds the current checked-in generic-family set plus `gfx90a` and drives
+the AMDGPU/HIP HAL CTS and source-built util test/benchmark assets. Packagers
 can set it to exact target architectures, LLVM generic ISA targets,
 TheRock-style generic target families, or TheRock-style product bundles. Exact
 targets use the HSA ISA spelling, such as `gfx1100`. LLVM generic ISA targets
@@ -197,10 +215,10 @@ compatible code object set instead of one code object per exact GPU.
 Architectures not built into the library will fail to instantiate the driver at
 runtime.
 
-The Bazel build exposes the same selector vocabulary through `//runtime/src/iree/hal/drivers/amdgpu/device/binaries:targets`:
+The Bazel build exposes the same selector vocabulary through `//runtime/src/iree/hal/drivers/amdgpu:targets`:
 
 ```sh
-iree-bazel-build --//runtime/src/iree/hal/drivers/amdgpu/device/binaries:targets=igpu-all //runtime/src/iree/hal/drivers/amdgpu:amdgpu
+iree-bazel-build --//runtime/src/iree/hal/drivers/amdgpu:targets=igpu-all //runtime/src/iree/hal/drivers/amdgpu:amdgpu
 ```
 
 By default Bazel uses the checked-in prebuilt blobs. Developers editing the HAL
@@ -208,6 +226,8 @@ device kernels can opt into live source rebuilds with
 `--config=amdgpu_device_binaries_source_rocm` or
 `--config=amdgpu_device_binaries_source_llvm_project`.
 
-See [`device/binaries/README.md`](device/binaries/README.md) for the target map
-update flow, the generated Bazel/CMake/runtime fragments, and the TheRock/LLVM
-sources that should be checked when adding support for a new architecture.
+See
+[`build_tools/amdgpu/README.md`](../../../../../../build_tools/amdgpu/README.md)
+for the shared selector and target-map system, and
+[`device/binaries/README.md`](device/binaries/README.md) for the embedded
+runtime blob regeneration flow.

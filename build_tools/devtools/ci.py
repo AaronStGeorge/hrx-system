@@ -168,9 +168,7 @@ def cmake_configure_step(
         f"-DIREE_HAL_DRIVER_AMDGPU={'ON' if enable_amdgpu else 'OFF'}",
     ]
     if enable_amdgpu:
-        command.append(
-            f"-DIREE_ROCM_TEST_TARGET_CHIP={ci_config.AMDGPU_ROCM_TEST_TARGET_CHIP}"
-        )
+        command.append(f"-DIREE_HAL_AMDGPU_TARGETS={ci_config.AMDGPU_TARGET_SELECTOR}")
     if sanitizer is not None:
         command.append("-DIREE_ENABLE_ASSERTIONS=ON")
         command.extend(CMAKE_SANITIZER_OPTIONS[sanitizer])

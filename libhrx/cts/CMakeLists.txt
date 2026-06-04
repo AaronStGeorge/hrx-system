@@ -9,6 +9,27 @@
 
 iree_add_all_subdirs()
 
+iree_amdgpu_binary_variants_embed_data(
+  NAME
+    amdgpu_executable_noop_kernels
+  TARGET
+    amdgcn-amd-amdhsa
+  TARGETS
+    ${IREE_HAL_AMDGPU_TARGETS}
+  BINARY_NAME_PREFIX
+    hrx_cts_noop_kernel
+  C_FILE_OUTPUT
+    "amdgpu_executable_noop_kernels.c"
+  H_FILE_OUTPUT
+    "amdgpu_executable_noop_kernels.h"
+  IDENTIFIER
+    "hrx_cts_amdgpu_executable_noop_kernels"
+  SRCS
+    "tests/executable/noop_kernel.c"
+  TESTONLY
+  PUBLIC
+)
+
 iree_cc_library(
   NAME
     core
@@ -180,6 +201,7 @@ hrx_cc_test(
   SRCS
     "tests/executable/executable_test.cpp"
   DEPS
+    ::amdgpu_executable_noop_kernels
     ::core
     iree::third_party::catch2
     libhrx_defs
@@ -268,33 +290,3 @@ hrx_cc_test(
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
-
-foreach(_HRX_CTS_NOOP_KERNEL_CHIP ${IREE_ROCM_TEST_TARGET_CHIP_VALUES})
-  set(_HRX_CTS_NOOP_KERNEL_TARGET
-      "hrx_cts_noop_kernel_${_HRX_CTS_NOOP_KERNEL_CHIP}")
-  set(_HRX_CTS_NOOP_KERNEL_OUTPUT
-      "${_HRX_CTS_NOOP_KERNEL_TARGET}.so")
-  iree_amdgpu_binary(
-    NAME
-      "${_HRX_CTS_NOOP_KERNEL_TARGET}"
-    OUT
-      "${_HRX_CTS_NOOP_KERNEL_OUTPUT}"
-    TARGET
-      "amdgcn-amd-amdhsa"
-    ARCH
-      "${_HRX_CTS_NOOP_KERNEL_CHIP}"
-    SRCS
-      "tests/executable/noop_kernel.c"
-  )
-
-  add_dependencies(libhrx_cts_hrx_cts_executable
-    "libhrx_cts_${_HRX_CTS_NOOP_KERNEL_TARGET}")
-
-  install(FILES
-      "${CMAKE_CURRENT_BINARY_DIR}/${_HRX_CTS_NOOP_KERNEL_OUTPUT}"
-    DESTINATION
-      "${HRX_INSTALL_TESTS_DIR}/testdata/libhrx/cts"
-    COMPONENT
-      "${HRX_INSTALL_TESTS_COMPONENT}"
-  )
-endforeach()

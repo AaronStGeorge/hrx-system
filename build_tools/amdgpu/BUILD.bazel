@@ -4,11 +4,22 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
 package(
     default_visibility = ["//visibility:public"],
     licenses = ["notice"],
 )
 
 exports_files([
-    "amdgpu_device_binaries.py",
+    "binary.cmake",
+    "selectors.cmake",
+    "target_map.cmake",
+    "target_map.py",
 ])
+
+cc_library(
+    name = "target_map_h",
+    hdrs = ["target_map.h"],
+    include_prefix = "build_tools/amdgpu",
+)

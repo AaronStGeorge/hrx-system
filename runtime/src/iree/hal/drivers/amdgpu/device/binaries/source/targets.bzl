@@ -19,14 +19,14 @@ load(
     "AMDGPU_LLVM_OBJCOPY_TOOL",
 )
 load(
-    "//runtime/src/iree/hal/drivers/amdgpu/device/binaries:target_map.bzl",
-    "IREE_HAL_AMDGPU_DEVICE_BINARY_CODE_OBJECT_TARGETS",
+    "//build_tools/amdgpu:target_map.bzl",
+    "IREE_AMDGPU_CODE_OBJECT_TARGETS",
 )
 
 _GENERATOR_SCRIPT = "//build_tools/scripts:amdgpu_device_binaries.py"
 _GENERATOR_SCRIPT_DEPS = [
     _GENERATOR_SCRIPT,
-    "//build_tools/scripts:amdgpu_target_map.py",
+    "//build_tools/amdgpu:target_map.py",
 ]
 
 _GENERATOR_INPUTS = [
@@ -83,7 +83,7 @@ def iree_hal_amdgpu_source_device_binaries(name):
     """
     target_compatible_with = [] if AMDGPU_DEVICE_TOOLCHAIN_AVAILABLE else _INCOMPATIBLE_TARGET
     binary_srcs = []
-    for code_object_target in IREE_HAL_AMDGPU_DEVICE_BINARY_CODE_OBJECT_TARGETS:
+    for code_object_target in IREE_AMDGPU_CODE_OBJECT_TARGETS:
         binary_name = "amdgcn-amd-amdhsa--%s" % (code_object_target,)
         binary_srcs.append(":%s.so" % (binary_name,))
         native.genrule(

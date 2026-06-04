@@ -9,6 +9,15 @@ import bazel_to_cmake_converter
 
 
 class HrxBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
+    def select(self, selector):
+        if all(
+            condition == "//conditions:default"
+            or condition.startswith(":amdgpu_executable_target_")
+            for condition in selector
+        ):
+            return selector.get("//conditions:default", [])
+        return super().select(selector)
+
     def _drop_selects(self, values):
         if isinstance(values, bazel_to_cmake_converter.MixedDeps):
             return values.unconditional
@@ -56,6 +65,34 @@ class HrxBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
             shared=True,
             **kwargs,
         )
+
+    def iree_amdgpu_binary(self, **kwargs):
+        self._iree_amdgpu_binary(**kwargs)
+
+    def iree_amdgpu_binary_variants(self, **kwargs):
+        self._iree_amdgpu_binary_variants(**kwargs)
+
+    def iree_amdgpu_binary_variants_embed_data(self, **kwargs):
+        self._iree_amdgpu_binary_variants_embed_data(**kwargs)
+
+    def iree_amdgpu_target_label_fragment(self, target):
+        return target.replace("-", "_").replace(".", "_")
+
+    def iree_amdgpu_target_selector_config_settings(
+        self, name, flag, code_object_targets
+    ):
+        del name
+        del flag
+        requested = {
+            target: ":amdgpu_executable_target_{}_requested".format(
+                self.iree_amdgpu_target_label_fragment(target)
+            )
+            for target in code_object_targets
+        }
+        return type("AmdgpuTargetSelection", (), {"requested": requested})()
+
+    def iree_amdgpu_target_selectors_flag(self, *args, **kwargs):
+        pass
 
     def hrx_cts_test(self, name, deps=[], **kwargs):
         srcs = kwargs.get("srcs")
@@ -122,6 +159,7 @@ PROJECT_CONFIG = bazel_to_cmake_config.ProjectConfig(
     package_prefixes=["libhrx"],
     build_file_functions=HrxBuildFileFunctions,
     target_mappings={
+        "//build_tools/amdgpu:target_map_h": [],
         "//libhrx:defines": ["libhrx_defs"],
         "//libhrx/src/libhrx:hrx_static": [
             "libhrx::src::libhrx::hrx",
