@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(IREE_ARCH STREQUAL "wasm_32" AND IREE_HAL_DRIVER_WEBGPU)
 iree_wasm_entry(
   NAME
     cts_main
@@ -16,8 +17,9 @@ iree_wasm_entry(
     "webgpu_cts_main.mjs"
   PUBLIC
 )
+endif()
 
-if(IREE_HAL_DRIVER_WEBGPU AND IREE_ARCH STREQUAL "wasm_32")
+if(IREE_ARCH STREQUAL "wasm_32" AND IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
   NAME
     backends
@@ -34,7 +36,7 @@ iree_cc_library(
 )
 endif()
 
-if(IREE_HAL_DRIVER_WEBGPU AND IREE_ARCH STREQUAL "wasm_32")
+if(IREE_ARCH STREQUAL "wasm_32" AND IREE_HAL_DRIVER_WEBGPU)
 iree_hal_cts_test_suite(
   BACKENDS_LIB
     ::backends

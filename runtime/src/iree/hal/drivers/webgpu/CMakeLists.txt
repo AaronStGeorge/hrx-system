@@ -32,6 +32,7 @@ iree_cc_library(
 )
 endif()
 
+if(IREE_HAL_DRIVER_WEBGPU)
 iree_wasm_cc_library(
   NAME
     webgpu_imports_js
@@ -41,6 +42,7 @@ iree_wasm_cc_library(
     "iree_webgpu"
   PUBLIC
 )
+endif()
 
 if(IREE_HAL_DRIVER_WEBGPU)
 iree_cc_library(
