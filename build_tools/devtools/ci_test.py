@@ -183,6 +183,10 @@ class CiTest(unittest.TestCase):
         self.assertIn("//runtime/...", resource_test.argv)
         for target in ci_config.AMDGPU_XFAIL_TARGETS:
             self.assertIn(target, resource_test.argv)
+        self.assertNotIn(
+            "-//runtime/src/iree/hal/drivers/amdgpu:system_test",
+            resource_test.argv,
+        )
 
     def test_amdgpu_sanitizer_command_uses_amdgpu_sanitizer_xfails(self):
         args = ci.parse_arguments(
@@ -238,6 +242,14 @@ class CiTest(unittest.TestCase):
         )
         self.assertIn(
             "^iree/hal/drivers/amdgpu/allocator_test$",
+            ci_config.AMDGPU_CTEST_EXCLUDE_REGEX,
+        )
+        self.assertIn(
+            "^iree/hal/drivers/amdgpu/system_test$",
+            ci_config.AMDGPU_CTEST_EXCLUDE_REGEX,
+        )
+        self.assertIn(
+            "^iree/hal/drivers/amdgpu/util/vmem_test$",
             ci_config.AMDGPU_CTEST_EXCLUDE_REGEX,
         )
         self.assertIn(
@@ -314,6 +326,18 @@ class CiTest(unittest.TestCase):
         )
         self.assertTrue(
             any("-R '^iree/hal/drivers/amdgpu/'" in line for line in command_lines)
+        )
+        self.assertTrue(
+            any(
+                "^iree/hal/drivers/amdgpu/system_test$" in line
+                for line in command_lines
+            )
+        )
+        self.assertTrue(
+            any(
+                "^iree/hal/drivers/amdgpu/util/vmem_test$" in line
+                for line in command_lines
+            )
         )
         self.assertTrue(
             any("-L runtime-resource=amd-gpu" in line for line in command_lines)

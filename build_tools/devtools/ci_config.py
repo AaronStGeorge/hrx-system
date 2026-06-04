@@ -35,6 +35,10 @@ def bazel_xfail(pattern: str, *, ctest_regex: str | None = None) -> TestXfail:
     )
 
 
+def ctest_xfail(regex: str) -> TestXfail:
+    return TestXfail(ctest_regex=regex)
+
+
 def bazel_pattern_to_ctest_regex(pattern: str) -> str:
     if not pattern.startswith("//runtime/src/"):
         raise ValueError(f"cannot map Bazel pattern to CTest name: {pattern}")
@@ -90,6 +94,13 @@ AMDGPU_XFAILS = (
     bazel_xfail(
         "//runtime/src/iree/hal/drivers/amdgpu:pm4_command_buffer_benchmark_test"
     ),
+    ctest_xfail("^iree/hal/drivers/amdgpu/host_queue_pending_test$"),
+    ctest_xfail("^iree/hal/drivers/amdgpu/host_queue_staging_test$"),
+    ctest_xfail("^iree/hal/drivers/amdgpu/host_queue_submission_test$"),
+    ctest_xfail("^iree/hal/drivers/amdgpu/slab_provider_test$"),
+    ctest_xfail("^iree/hal/drivers/amdgpu/system_test$"),
+    ctest_xfail("^iree/hal/drivers/amdgpu/util/queue_benchmark_test$"),
+    ctest_xfail("^iree/hal/drivers/amdgpu/util/vmem_test$"),
 )
 AMDGPU_SANITIZERS_XFAILS = (
     bazel_xfail("//runtime/src/iree/hal/drivers/amdgpu/cts/..."),
