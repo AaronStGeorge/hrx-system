@@ -22,6 +22,7 @@ namespace {
 using loomc::testing::HandlePtr;
 
 using ContextPtr = HandlePtr<loomc_context_t, loomc_context_release>;
+using WorkspacePtr = HandlePtr<loomc_workspace_t, loomc_workspace_release>;
 using SourcePtr = HandlePtr<loomc_source_t, loomc_source_release>;
 using ModulePtr = HandlePtr<loomc_module_t, loomc_module_release>;
 using PassProgramPtr =
@@ -38,6 +39,14 @@ ContextPtr CreateContext() {
       loomc_context_create(nullptr, loomc_allocator_system(), &context);
   LOOMC_EXPECT_OK(status);
   return ContextPtr(context);
+}
+
+WorkspacePtr CreateWorkspace() {
+  loomc_workspace_t* workspace = nullptr;
+  loomc_status_t status =
+      loomc_workspace_create(nullptr, loomc_allocator_system(), &workspace);
+  LOOMC_EXPECT_OK(status);
+  return WorkspacePtr(workspace);
 }
 
 SourcePtr CreateTextSource(const char* identifier, const char* contents) {
@@ -58,18 +67,21 @@ SourcePtr CreateTextSource(const char* identifier, const char* contents) {
 }
 
 ModulePtr DeserializeModule(loomc_context_t* context,
+                            loomc_workspace_t* workspace,
                             const loomc_source_t* source) {
   loomc_module_t* module = nullptr;
   loomc_result_t* result = nullptr;
   loomc_status_t status = loomc_module_deserialize_from_source(
-      context, source, nullptr, loomc_allocator_system(), &module, &result);
+      context, workspace, source, nullptr, loomc_allocator_system(), &module,
+      &result);
   LOOMC_EXPECT_OK(status);
   ResultPtr result_ptr(result);
   EXPECT_TRUE(loomc_result_succeeded(result_ptr.get()));
   return ModulePtr(module);
 }
 
-ModulePtr CreatePipelineModule(loomc_context_t* context) {
+ModulePtr CreatePipelineModule(loomc_context_t* context,
+                               loomc_workspace_t* workspace) {
   SourcePtr source = CreateTextSource("pipelines.loom", R"(
 pass.pipeline<module> @cleanup pipeline {
   for func {
@@ -84,7 +96,7 @@ pass.pipeline<module> @finish pipeline {
   }
 }
 )");
-  return DeserializeModule(context, source.get());
+  return DeserializeModule(context, workspace, source.get());
 }
 
 void ExpectInvalidPassProgramResult(const loomc_result_t* result) {
@@ -138,7 +150,8 @@ TEST(PassProgramTest, CreatesFromPipelineText) {
 
 TEST(PassProgramTest, CreatesFromModuleSymbol) {
   ContextPtr context = CreateContext();
-  ModulePtr module = CreatePipelineModule(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreatePipelineModule(context.get(), workspace.get());
 
   loomc_pass_program_t* pass_program = nullptr;
   loomc_result_t* result = nullptr;
@@ -169,7 +182,8 @@ TEST(PassProgramTest, ReportsInvalidPipelineTextInResult) {
 
 TEST(PassProgramTest, ReportsMissingModuleSymbolInResult) {
   ContextPtr context = CreateContext();
-  ModulePtr module = CreatePipelineModule(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreatePipelineModule(context.get(), workspace.get());
 
   loomc_pass_program_t* pass_program = nullptr;
   loomc_result_t* result = nullptr;
@@ -184,12 +198,14 @@ TEST(PassProgramTest, ReportsMissingModuleSymbolInResult) {
 
 TEST(PassProgramTest, ReportsNonPipelineModuleSymbolInResult) {
   ContextPtr context = CreateContext();
+  WorkspacePtr workspace = CreateWorkspace();
   SourcePtr source = CreateTextSource("not_pipeline.loom", R"(
 func.def @not_pipeline() {
   func.return
 }
 )");
-  ModulePtr module = DeserializeModule(context.get(), source.get());
+  ModulePtr module =
+      DeserializeModule(context.get(), workspace.get(), source.get());
 
   loomc_pass_program_t* pass_program = nullptr;
   loomc_result_t* result = nullptr;

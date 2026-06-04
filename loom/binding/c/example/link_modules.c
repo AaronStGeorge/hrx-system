@@ -256,7 +256,6 @@ static loomc_status_t link_module(link_modules_state_t* state) {
   }
   if (loomc_status_is_ok(status)) {
     link_modules_state_reset_result(state);
-    loomc_workspace_reset(state->workspace);
   }
   return status;
 }

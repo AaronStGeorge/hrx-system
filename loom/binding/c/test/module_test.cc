@@ -26,6 +26,8 @@ using ContextPtr = HandlePtr<loomc_context_t, loomc_context_release>;
 
 using SourcePtr = HandlePtr<loomc_source_t, loomc_source_release>;
 
+using WorkspacePtr = HandlePtr<loomc_workspace_t, loomc_workspace_release>;
+
 using ModulePtr = HandlePtr<loomc_module_t, loomc_module_release>;
 
 using ResultPtr = HandlePtr<loomc_result_t, loomc_result_release>;
@@ -36,6 +38,14 @@ ContextPtr CreateContext() {
       loomc_context_create(nullptr, loomc_allocator_system(), &context);
   LOOMC_EXPECT_OK(status);
   return ContextPtr(context);
+}
+
+WorkspacePtr CreateWorkspace() {
+  loomc_workspace_t* workspace = nullptr;
+  loomc_status_t status =
+      loomc_workspace_create(nullptr, loomc_allocator_system(), &workspace);
+  LOOMC_EXPECT_OK(status);
+  return WorkspacePtr(workspace);
 }
 
 SourcePtr CreateTextSource(const char* identifier, const char* contents) {
@@ -88,18 +98,21 @@ void ExpectFailedResultCode(const loomc_result_t* result, const char* code) {
 }
 
 ModulePtr DeserializeModule(loomc_context_t* context,
+                            loomc_workspace_t* workspace,
                             const loomc_source_t* source) {
   loomc_module_t* module = nullptr;
   loomc_result_t* result = nullptr;
   loomc_status_t status = loomc_module_deserialize_from_source(
-      context, source, nullptr, loomc_allocator_system(), &module, &result);
+      context, workspace, source, nullptr, loomc_allocator_system(), &module,
+      &result);
   LOOMC_EXPECT_OK(status);
   ResultPtr result_ptr(result);
   ExpectSucceededResult(result_ptr.get());
   return ModulePtr(module);
 }
 
-ModulePtr CreateFunctionModule(loomc_context_t* context) {
+ModulePtr CreateFunctionModule(loomc_context_t* context,
+                               loomc_workspace_t* workspace) {
   SourcePtr source = CreateTextSource("functions.loom", R"(
 func.def public @helper(%x: i32) -> (i32) {
   func.return %x : i32
@@ -117,10 +130,11 @@ kernel.def export("dispatch") @entry() {
   kernel.return
 }
 )");
-  return DeserializeModule(context, source.get());
+  return DeserializeModule(context, workspace, source.get());
 }
 
-ModulePtr CreateMixedSymbolModule(loomc_context_t* context) {
+ModulePtr CreateMixedSymbolModule(loomc_context_t* context,
+                                  loomc_workspace_t* workspace) {
   SourcePtr source = CreateTextSource("mixed_symbols.loom", R"(
 global.constant @answer : index = 40
 
@@ -137,7 +151,7 @@ kernel.def export("dispatch") @entry() {
   kernel.return
 }
 )");
-  return DeserializeModule(context, source.get());
+  return DeserializeModule(context, workspace, source.get());
 }
 
 const loomc_module_function_t* FindFunction(
@@ -162,7 +176,8 @@ const loomc_module_global_t* FindGlobal(
 
 TEST(ModuleTest, QueriesFunctionsAndKernelSidecars) {
   ContextPtr context = CreateContext();
-  ModulePtr module = CreateFunctionModule(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreateFunctionModule(context.get(), workspace.get());
 
   loomc_module_function_query_options_t options = {
       /*.type=*/LOOMC_STRUCTURE_TYPE_MODULE_FUNCTION_QUERY_OPTIONS,
@@ -248,7 +263,8 @@ TEST(ModuleTest, QueriesFunctionsAndKernelSidecars) {
 
 TEST(ModuleTest, LooksUpFunctionNamesWithOrWithoutSigil) {
   ContextPtr context = CreateContext();
-  ModulePtr module = CreateFunctionModule(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreateFunctionModule(context.get(), workspace.get());
 
   loomc_module_function_t by_plain_name = {};
   loomc_status_t status = loomc_module_lookup_function(
@@ -263,9 +279,40 @@ TEST(ModuleTest, LooksUpFunctionNamesWithOrWithoutSigil) {
   EXPECT_EQ(by_symbol_name.kind, LOOMC_MODULE_FUNCTION_KIND_KERNEL);
 }
 
+TEST(ModuleTest, CloneCopiesModuleIntoTargetWorkspace) {
+  ContextPtr context = CreateContext();
+  WorkspacePtr source_workspace = CreateWorkspace();
+  ModulePtr source =
+      CreateMixedSymbolModule(context.get(), source_workspace.get());
+  source_workspace.reset();
+
+  WorkspacePtr clone_workspace = CreateWorkspace();
+  loomc_module_t* raw_clone = nullptr;
+  loomc_status_t status =
+      loomc_module_clone(source.get(), clone_workspace.get(),
+                         loomc_allocator_system(), &raw_clone);
+  LOOMC_ASSERT_OK(status);
+  ModulePtr clone(raw_clone);
+  clone_workspace.reset();
+  source.reset();
+
+  loomc_module_function_t function = {};
+  status = loomc_module_lookup_function(
+      clone.get(), loomc_make_cstring_view("@entry"), &function);
+  LOOMC_ASSERT_OK(status);
+  EXPECT_EQ(function.kind, LOOMC_MODULE_FUNCTION_KIND_KERNEL);
+
+  loomc_module_global_t global = {};
+  status = loomc_module_lookup_global(
+      clone.get(), loomc_make_cstring_view("@answer"), &global);
+  LOOMC_ASSERT_OK(status);
+  EXPECT_EQ(global.kind, LOOMC_MODULE_GLOBAL_KIND_CONSTANT);
+}
+
 TEST(ModuleTest, GetsFunctionsByPublicOrdinal) {
   ContextPtr context = CreateContext();
-  ModulePtr module = CreateFunctionModule(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreateFunctionModule(context.get(), workspace.get());
 
   loomc_module_function_t function = {};
   ASSERT_TRUE(loomc_module_try_get_function_at(module.get(), 0, &function));
@@ -285,7 +332,8 @@ TEST(ModuleTest, GetsFunctionsByPublicOrdinal) {
 
 TEST(ModuleTest, QueryReportsTotalFunctionCountForPartialStorage) {
   ContextPtr context = CreateContext();
-  ModulePtr module = CreateFunctionModule(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreateFunctionModule(context.get(), workspace.get());
 
   loomc_module_function_query_options_t options = {
       /*.type=*/LOOMC_STRUCTURE_TYPE_MODULE_FUNCTION_QUERY_OPTIONS,
@@ -309,7 +357,8 @@ TEST(ModuleTest, QueryReportsTotalFunctionCountForPartialStorage) {
 
 TEST(ModuleTest, RejectsMalformedFunctionViewsWithoutCrashing) {
   ContextPtr context = CreateContext();
-  ModulePtr module = CreateFunctionModule(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreateFunctionModule(context.get(), workspace.get());
 
   loomc_module_function_t lookup_function = {};
   loomc_string_view_t invalid_symbol_name = loomc_make_string_view(nullptr, 1);
@@ -343,7 +392,8 @@ TEST(ModuleTest, RejectsMalformedFunctionViewsWithoutCrashing) {
 
 TEST(ModuleTest, ReportsNamedFunctionQueryMissInResult) {
   ContextPtr context = CreateContext();
-  ModulePtr module = CreateFunctionModule(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreateFunctionModule(context.get(), workspace.get());
 
   loomc_module_function_query_options_t options = {
       /*.type=*/LOOMC_STRUCTURE_TYPE_MODULE_FUNCTION_QUERY_OPTIONS,
@@ -366,7 +416,8 @@ TEST(ModuleTest, ReportsNamedFunctionQueryMissInResult) {
 
 TEST(ModuleTest, QueriesGlobalsInMixedModule) {
   ContextPtr context = CreateContext();
-  ModulePtr module = CreateMixedSymbolModule(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreateMixedSymbolModule(context.get(), workspace.get());
 
   loomc_module_global_query_options_t options = {
       /*.type=*/LOOMC_STRUCTURE_TYPE_MODULE_GLOBAL_QUERY_OPTIONS,
@@ -425,7 +476,8 @@ TEST(ModuleTest, QueriesGlobalsInMixedModule) {
 
 TEST(ModuleTest, FiltersGlobalsByKind) {
   ContextPtr context = CreateContext();
-  ModulePtr module = CreateMixedSymbolModule(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreateMixedSymbolModule(context.get(), workspace.get());
 
   loomc_module_global_query_options_t options = {
       /*.type=*/LOOMC_STRUCTURE_TYPE_MODULE_GLOBAL_QUERY_OPTIONS,
@@ -471,7 +523,8 @@ TEST(ModuleTest, FiltersGlobalsByKind) {
 
 TEST(ModuleTest, LooksUpGlobalNamesWithOrWithoutSigil) {
   ContextPtr context = CreateContext();
-  ModulePtr module = CreateMixedSymbolModule(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreateMixedSymbolModule(context.get(), workspace.get());
 
   loomc_module_global_t by_plain_name = {};
   loomc_status_t status = loomc_module_lookup_global(
@@ -489,7 +542,8 @@ TEST(ModuleTest, LooksUpGlobalNamesWithOrWithoutSigil) {
 
 TEST(ModuleTest, GetsGlobalsByOrdinal) {
   ContextPtr context = CreateContext();
-  ModulePtr module = CreateMixedSymbolModule(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreateMixedSymbolModule(context.get(), workspace.get());
 
   loomc_module_global_t global = {};
   ASSERT_TRUE(loomc_module_try_get_global_at(module.get(), 0, &global));
@@ -508,7 +562,8 @@ TEST(ModuleTest, GetsGlobalsByOrdinal) {
 
 TEST(ModuleTest, QueryReportsTotalGlobalCountForPartialStorage) {
   ContextPtr context = CreateContext();
-  ModulePtr module = CreateMixedSymbolModule(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreateMixedSymbolModule(context.get(), workspace.get());
 
   loomc_module_global_query_options_t options = {
       /*.type=*/LOOMC_STRUCTURE_TYPE_MODULE_GLOBAL_QUERY_OPTIONS,
@@ -532,7 +587,8 @@ TEST(ModuleTest, QueryReportsTotalGlobalCountForPartialStorage) {
 
 TEST(ModuleTest, HandlesMissingAndWrongKindGlobalProbesWithoutStatus) {
   ContextPtr context = CreateContext();
-  ModulePtr module = CreateMixedSymbolModule(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreateMixedSymbolModule(context.get(), workspace.get());
 
   loomc_module_global_t global = {};
   EXPECT_FALSE(loomc_module_try_lookup_global(
@@ -552,7 +608,8 @@ TEST(ModuleTest, HandlesMissingAndWrongKindGlobalProbesWithoutStatus) {
 
 TEST(ModuleTest, RejectsMalformedGlobalQueriesWithoutCrashing) {
   ContextPtr context = CreateContext();
-  ModulePtr module = CreateMixedSymbolModule(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreateMixedSymbolModule(context.get(), workspace.get());
 
   loomc_module_global_t global = {};
   loomc_string_view_t invalid_symbol_name = loomc_make_string_view(nullptr, 1);
@@ -580,7 +637,8 @@ TEST(ModuleTest, RejectsMalformedGlobalQueriesWithoutCrashing) {
 
 TEST(ModuleTest, ReportsNamedGlobalQueryMissInResult) {
   ContextPtr context = CreateContext();
-  ModulePtr module = CreateMixedSymbolModule(context.get());
+  WorkspacePtr workspace = CreateWorkspace();
+  ModulePtr module = CreateMixedSymbolModule(context.get(), workspace.get());
 
   loomc_module_global_query_options_t options = {
       /*.type=*/LOOMC_STRUCTURE_TYPE_MODULE_GLOBAL_QUERY_OPTIONS,

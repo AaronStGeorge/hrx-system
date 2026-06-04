@@ -12,13 +12,13 @@
 /// @file
 /// Per-worker scratch workspace.
 ///
-/// A workspace owns transient memory used by parsing, indexing, linking, and
-/// compiling. High-throughput embedders normally create one workspace per
-/// worker thread or task-system worker and reset it between operations or
-/// phases.
+/// A workspace owns the arena block pool used by parsing, indexing, linking,
+/// cloning, and compiling. High-throughput embedders normally create one
+/// workspace per worker thread or task-system worker and reuse it across
+/// operations.
 ///
 /// @par Example
-/// Keep a workspace thread-local and reset it between independent operations:
+/// Keep a workspace thread-local and reuse it across independent operations:
 ///
 /// @code{.c}
 /// loomc_workspace_t* workspace = NULL;
@@ -29,11 +29,14 @@
 /// }
 ///
 /// for (size_t i = 0; i < kernel_count; ++i) {
-///   // Pass workspace to the link or compile invocation for this kernel.
-///   // Retained results, sources, frozen indexes, and prepared tools survive
-///   // the reset because they do not borrow workspace storage.
-///   loomc_workspace_reset(workspace);
+///   // Pass workspace to deserialize, link, compile, or emit invocations for
+///   // this kernel. Releasing modules returns their arena blocks to the
+///   // workspace for reuse by later operations.
 /// }
+///
+/// // Optionally return idle blocks to the host allocator under memory
+/// // pressure or before entering a long idle period.
+/// loomc_workspace_trim(workspace);
 ///
 /// loomc_workspace_release(workspace);
 /// @endcode
@@ -82,9 +85,11 @@ typedef struct loomc_workspace_options_t {
 /// `loomc_workspace_release`.
 ///
 /// @lifetime
-/// Persistent handles such as sources, retained results, frozen link indexes,
-/// prepared linkers, and prepared compilers must not borrow from workspace
-/// storage unless an operation descriptor explicitly says so.
+/// Sources, retained results, frozen link indexes, prepared linkers, and
+/// prepared compilers do not use workspace arena storage unless an operation
+/// descriptor explicitly says so. Modules created, linked, cloned, or
+/// deserialized with a workspace retain that workspace and return their arena
+/// blocks when released.
 ///
 /// @thread_safety
 /// The returned workspace is mutable scratch and is intended for one worker at
@@ -93,25 +98,38 @@ LOOMC_API_EXPORT loomc_status_t loomc_workspace_create(
     const loomc_workspace_options_t* options, loomc_allocator_t allocator,
     loomc_workspace_t** out_workspace);
 
-/// Resets transient allocations owned by `workspace`.
+/// Retains `workspace` for another owner.
 ///
-/// @param workspace Workspace to reset.
+/// @param workspace Workspace to retain. Passing `NULL` is allowed.
+///
+/// @thread_safety
+/// Retain/release operations are safe from multiple threads.
+LOOMC_API_EXPORT void loomc_workspace_retain(loomc_workspace_t* workspace);
+
+/// Trims idle arena blocks owned by `workspace`.
+///
+/// @param workspace Workspace to trim.
 ///
 /// @lifetime
-/// Pointers and views whose lifetime is documented as workspace-tied become
-/// invalid after reset. Persistent handles remain valid across reset.
+/// Trim returns blocks that are already idle in the workspace block pool to the
+/// host allocator. Retained modules created from this workspace remain valid
+/// across trim, but their active arena blocks cannot be reused until those
+/// modules are released. Results, sources, frozen indexes, and prepared tools
+/// remain valid.
 ///
 /// @thread_safety
 /// External synchronization is required if another thread may be using the same
 /// workspace.
-LOOMC_API_EXPORT void loomc_workspace_reset(loomc_workspace_t* workspace);
+LOOMC_API_EXPORT void loomc_workspace_trim(loomc_workspace_t* workspace);
 
 /// Releases `workspace` and all storage it owns.
 ///
 /// @param workspace Workspace to release. Passing `NULL` is allowed.
 ///
 /// @thread_safety
-/// No other thread may be using `workspace` when it is released.
+/// Retain/release operations are safe from multiple threads. The workspace is
+/// destroyed when the final reference is released; no thread may be mutating it
+/// at that moment.
 LOOMC_API_EXPORT void loomc_workspace_release(loomc_workspace_t* workspace);
 
 #ifdef __cplusplus

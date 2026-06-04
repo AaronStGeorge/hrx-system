@@ -120,11 +120,13 @@ SourcePtr CreateTextSource(const char* identifier, const char* contents) {
 }
 
 ModulePtr DeserializeModule(loomc_context_t* context,
+                            loomc_workspace_t* workspace,
                             const loomc_source_t* source) {
   loomc_module_t* module = nullptr;
   loomc_result_t* result = nullptr;
   loomc_status_t status = loomc_module_deserialize_from_source(
-      context, source, nullptr, loomc_allocator_system(), &module, &result);
+      context, workspace, source, nullptr, loomc_allocator_system(), &module,
+      &result);
   LOOMC_EXPECT_OK(status);
   ResultPtr result_ptr(result);
   EXPECT_TRUE(loomc_result_succeeded(result_ptr.get()));
@@ -206,16 +208,18 @@ std::string SerializeModuleToText(const loomc_module_t* module) {
   return ToString(loomc_source_contents(source_ptr.get()));
 }
 
-ModulePtr CreateValidModule(loomc_context_t* context) {
+ModulePtr CreateValidModule(loomc_context_t* context,
+                            loomc_workspace_t* workspace) {
   SourcePtr source = CreateTextSource("compile.loom", R"(
 func.def public @entry(%x: i32) -> (i32) {
   func.return %x : i32
 }
 )");
-  return DeserializeModule(context, source.get());
+  return DeserializeModule(context, workspace, source.get());
 }
 
-ModulePtr CreateConfigModule(loomc_context_t* context) {
+ModulePtr CreateConfigModule(loomc_context_t* context,
+                             loomc_workspace_t* workspace) {
   SourcePtr source = CreateTextSource("config.loom", R"(
 config.decl @model36.model.hidden_size : %value: index where [range(%value, 0, 8192), mul(%value, 16)]
 
@@ -224,7 +228,7 @@ func.def public @entry() -> (index) {
   func.return %hidden : index
 }
 )");
-  return DeserializeModule(context, source.get());
+  return DeserializeModule(context, workspace, source.get());
 }
 
 TEST(CompileTest, CompilerRetainRelease) {
@@ -240,7 +244,7 @@ TEST(CompileTest, CompileModuleRunsPreparedPassProgram) {
   CompilerPtr compiler = CreateCompiler(context.get());
   PassProgramPtr pass_program =
       CreatePassProgramFromPipelineText(context.get(), "canonicalize,dce");
-  ModulePtr module = CreateValidModule(context.get());
+  ModulePtr module = CreateValidModule(context.get(), workspace.get());
 
   loomc_config_binding_t bindings[] = {
       {
@@ -293,13 +297,13 @@ pass.pipeline<module> @finish pipeline {
 }
 )");
   ModulePtr pipeline_module =
-      DeserializeModule(context.get(), pipeline_source.get());
+      DeserializeModule(context.get(), workspace.get(), pipeline_source.get());
   PassProgramPtr pass_program =
       CreatePassProgramFromModuleSymbol(pipeline_module.get(), "@cleanup");
   ASSERT_NE(pass_program.get(), nullptr);
   pipeline_module.reset();
   pipeline_source.reset();
-  ModulePtr module = CreateValidModule(context.get());
+  ModulePtr module = CreateValidModule(context.get(), workspace.get());
 
   loomc_result_t* result = nullptr;
   loomc_status_t status = loomc_compile_module(
@@ -318,7 +322,7 @@ TEST(CompileTest, CompileModuleMaterializesInvocationConfig) {
   WorkspacePtr workspace = CreateWorkspace();
   CompilerPtr compiler = CreateCompiler(context.get());
   PassProgramPtr pass_program = CreateEmptyPassProgram(context.get());
-  ModulePtr module = CreateConfigModule(context.get());
+  ModulePtr module = CreateConfigModule(context.get(), workspace.get());
 
   loomc_config_binding_t bindings[] = {
       {
@@ -367,7 +371,7 @@ TEST(CompileTest, CompileModuleEmitsRequestedArtifacts) {
   WorkspacePtr workspace = CreateWorkspace();
   CompilerPtr compiler = CreateCompiler(context.get());
   PassProgramPtr pass_program = CreateEmptyPassProgram(context.get());
-  ModulePtr module = CreateConfigModule(context.get());
+  ModulePtr module = CreateConfigModule(context.get(), workspace.get());
 
   loomc_config_binding_t bindings[] = {
       {
@@ -426,8 +430,8 @@ TEST(CompileTest, CompileModuleEmitsRequestedArtifacts) {
   SourcePtr bytecode_source_ptr(bytecode_source);
   EXPECT_EQ(loomc_source_format(bytecode_source_ptr.get()),
             LOOMC_SOURCE_FORMAT_BYTECODE);
-  ModulePtr bytecode_module =
-      DeserializeModule(context.get(), bytecode_source_ptr.get());
+  ModulePtr bytecode_module = DeserializeModule(context.get(), workspace.get(),
+                                                bytecode_source_ptr.get());
   EXPECT_NE(bytecode_module.get(), nullptr);
 
   const loomc_artifact_t* report_artifact = FindArtifact(
@@ -447,7 +451,7 @@ TEST(CompileTest, CompileModuleReportsUnknownConfigAsResultDiagnostic) {
   WorkspacePtr workspace = CreateWorkspace();
   CompilerPtr compiler = CreateCompiler(context.get());
   PassProgramPtr pass_program = CreateEmptyPassProgram(context.get());
-  ModulePtr module = CreateValidModule(context.get());
+  ModulePtr module = CreateValidModule(context.get(), workspace.get());
 
   loomc_config_binding_t bindings[] = {
       {
@@ -491,7 +495,7 @@ TEST(CompileTest, CompileModuleReportsUnresolvedConfigAsResultDiagnostic) {
   WorkspacePtr workspace = CreateWorkspace();
   CompilerPtr compiler = CreateCompiler(context.get());
   PassProgramPtr pass_program = CreateEmptyPassProgram(context.get());
-  ModulePtr module = CreateConfigModule(context.get());
+  ModulePtr module = CreateConfigModule(context.get(), workspace.get());
 
   loomc_compile_options_t options = {
       /*.type=*/LOOMC_STRUCTURE_TYPE_COMPILE_OPTIONS,
@@ -522,7 +526,7 @@ TEST(CompileTest, CompileModuleRejectsInvalidInvocationConfig) {
   WorkspacePtr workspace = CreateWorkspace();
   CompilerPtr compiler = CreateCompiler(context.get());
   PassProgramPtr pass_program = CreateEmptyPassProgram(context.get());
-  ModulePtr module = CreateValidModule(context.get());
+  ModulePtr module = CreateValidModule(context.get(), workspace.get());
 
   loomc_compile_options_t options = {
       /*.type=*/LOOMC_STRUCTURE_TYPE_COMPILE_OPTIONS,
@@ -550,7 +554,7 @@ TEST(CompileTest, CompileModuleRejectsUnknownOptionStructure) {
   WorkspacePtr workspace = CreateWorkspace();
   CompilerPtr compiler = CreateCompiler(context.get());
   PassProgramPtr pass_program = CreateEmptyPassProgram(context.get());
-  ModulePtr module = CreateValidModule(context.get());
+  ModulePtr module = CreateValidModule(context.get(), workspace.get());
 
   loomc_compile_options_t options = {
       /*.type=*/LOOMC_STRUCTURE_TYPE_SOURCE_OPTIONS,

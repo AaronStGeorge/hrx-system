@@ -123,11 +123,13 @@ SourcePtr CreateTextSource(const char* identifier, const char* contents) {
 }
 
 ModulePtr DeserializeModule(loomc_context_t* context,
+                            loomc_workspace_t* workspace,
                             const loomc_source_t* source) {
   loomc_module_t* module = nullptr;
   loomc_result_t* result = nullptr;
   loomc_status_t status = loomc_module_deserialize_from_source(
-      context, source, nullptr, loomc_allocator_system(), &module, &result);
+      context, workspace, source, nullptr, loomc_allocator_system(), &module,
+      &result);
   LOOMC_EXPECT_OK(status);
   ResultPtr result_ptr(result);
   ExpectSucceededResult(result_ptr.get());
@@ -162,7 +164,8 @@ std::string SourceContentsToString(const loomc_source_t* source) {
                      contents.data_length);
 }
 
-ModulePtr CreateBarrierSpirvLowModule(loomc_context_t* context) {
+ModulePtr CreateBarrierSpirvLowModule(loomc_context_t* context,
+                                      loomc_workspace_t* workspace) {
   SourcePtr source = CreateTextSource("barrier_spirv_low.loom", R"(
 spirv.target<vulkan1_3> @target
 
@@ -172,7 +175,7 @@ low.func.def target(@target) abi(shader_entry_point) @spirv_barriers() asm<spirv
   return
 }
 )");
-  return DeserializeModule(context, source.get());
+  return DeserializeModule(context, workspace, source.get());
 }
 
 void ExpectSpirvArtifact(const loomc_result_t* result,
@@ -228,7 +231,12 @@ TEST(TargetSpirvTest, EmitsSpirvBinaryArtifact) {
   TargetProfilePtr profile = CreateEmptyProfile(target_environment.get());
   TargetSelectionPtr selection = CreateSelectionFromProfile(profile.get());
   ContextPtr context = CreateSpirvContext(target_environment.get());
-  ModulePtr module = CreateBarrierSpirvLowModule(context.get());
+  loomc_workspace_t* module_workspace_handle = nullptr;
+  LOOMC_ASSERT_OK(loomc_workspace_create(nullptr, loomc_allocator_system(),
+                                         &module_workspace_handle));
+  WorkspacePtr module_workspace(module_workspace_handle);
+  ModulePtr module =
+      CreateBarrierSpirvLowModule(context.get(), module_workspace.get());
   SourcePtr serialized = SerializeModuleText(module.get());
   std::string serialized_text = SourceContentsToString(serialized.get());
   EXPECT_NE(serialized_text.find("asm<spirv.logical.core>"), std::string::npos)
@@ -236,8 +244,8 @@ TEST(TargetSpirvTest, EmitsSpirvBinaryArtifact) {
   EXPECT_NE(serialized_text.find("OpControlBarrier.subgroup.workgroup.acq_rel"),
             std::string::npos)
       << serialized_text;
-  ModulePtr round_trip_module =
-      DeserializeModule(context.get(), serialized.get());
+  ModulePtr round_trip_module = DeserializeModule(
+      context.get(), module_workspace.get(), serialized.get());
 
   loomc_target_selection_options_t target_options = {
       /*.type=*/LOOMC_STRUCTURE_TYPE_TARGET_SELECTION_OPTIONS,
@@ -297,7 +305,12 @@ TEST(TargetSpirvTest, EmitsSpirvBinaryArtifact) {
 TEST(TargetSpirvTest, SerializesGenericTargetLowTextWhenRequested) {
   TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
   ContextPtr context = CreateSpirvContext(target_environment.get());
-  ModulePtr module = CreateBarrierSpirvLowModule(context.get());
+  loomc_workspace_t* workspace_handle = nullptr;
+  LOOMC_ASSERT_OK(loomc_workspace_create(nullptr, loomc_allocator_system(),
+                                         &workspace_handle));
+  WorkspacePtr workspace(workspace_handle);
+  ModulePtr module =
+      CreateBarrierSpirvLowModule(context.get(), workspace.get());
 
   SourcePtr serialized =
       SerializeModuleText(module.get(), LOOMC_MODULE_TEXT_PRESENTATION_GENERIC);
@@ -309,7 +322,7 @@ TEST(TargetSpirvTest, SerializesGenericTargetLowTextWhenRequested) {
             std::string::npos)
       << serialized_text;
   ModulePtr round_trip_module =
-      DeserializeModule(context.get(), serialized.get());
+      DeserializeModule(context.get(), workspace.get(), serialized.get());
   SourcePtr round_trip_text = SerializeModuleText(
       round_trip_module.get(), LOOMC_MODULE_TEXT_PRESENTATION_GENERIC);
   EXPECT_NE(SourceContentsToString(round_trip_text.get())
@@ -320,7 +333,12 @@ TEST(TargetSpirvTest, SerializesGenericTargetLowTextWhenRequested) {
 TEST(TargetSpirvTest, RejectsUnknownLowAsmDescriptorSet) {
   TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
   ContextPtr context = CreateSpirvContext(target_environment.get());
-  ModulePtr module = CreateBarrierSpirvLowModule(context.get());
+  loomc_workspace_t* workspace_handle = nullptr;
+  LOOMC_ASSERT_OK(loomc_workspace_create(nullptr, loomc_allocator_system(),
+                                         &workspace_handle));
+  WorkspacePtr workspace(workspace_handle);
+  ModulePtr module =
+      CreateBarrierSpirvLowModule(context.get(), workspace.get());
 
   loomc_string_view_t unknown_descriptor_set_key =
       loomc_make_cstring_view("spirv.definitely_not_real");
@@ -343,13 +361,13 @@ TEST(TargetSpirvTest, RejectsUnknownLowAsmDescriptorSet) {
 TEST(TargetSpirvTest, EmitsSpirvWithDefaultOptions) {
   TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
   ContextPtr context = CreateSpirvContext(target_environment.get());
-  ModulePtr module = CreateBarrierSpirvLowModule(context.get());
-
   loomc_workspace_t* workspace = nullptr;
   loomc_status_t workspace_status =
       loomc_workspace_create(nullptr, loomc_allocator_system(), &workspace);
   LOOMC_EXPECT_OK(workspace_status);
   WorkspacePtr workspace_ptr(workspace);
+  ModulePtr module =
+      CreateBarrierSpirvLowModule(context.get(), workspace_ptr.get());
 
   loomc_result_t* result = nullptr;
   loomc_status_t status = loomc_emit_module(
@@ -364,8 +382,6 @@ TEST(TargetSpirvTest, EmitsSpirvWithDefaultOptions) {
 TEST(TargetSpirvTest, RejectsUnknownEmitDictOptionThroughResult) {
   TargetEnvironmentPtr target_environment = CreateSpirvTargetEnvironment();
   ContextPtr context = CreateSpirvContext(target_environment.get());
-  ModulePtr module = CreateBarrierSpirvLowModule(context.get());
-
   const loomc_option_entry_t emit_entries[] = {
       {
           /*.key=*/loomc_make_cstring_view("emit.definitely_not_real"),
@@ -393,6 +409,8 @@ TEST(TargetSpirvTest, RejectsUnknownEmitDictOptionThroughResult) {
       loomc_workspace_create(nullptr, loomc_allocator_system(), &workspace);
   LOOMC_EXPECT_OK(workspace_status);
   WorkspacePtr workspace_ptr(workspace);
+  ModulePtr module =
+      CreateBarrierSpirvLowModule(context.get(), workspace_ptr.get());
 
   loomc_result_t* result = nullptr;
   loomc_status_t status = loomc_emit_module(

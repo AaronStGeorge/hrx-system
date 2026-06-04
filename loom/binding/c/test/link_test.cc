@@ -104,22 +104,26 @@ std::string SerializeModuleToText(const loomc_module_t* module) {
 }
 
 ModulePtr DeserializeModuleFromSource(loomc_context_t* context,
+                                      loomc_workspace_t* workspace,
                                       const loomc_source_t* source) {
   loomc_module_t* module = nullptr;
   loomc_result_t* result = nullptr;
   loomc_status_t status = loomc_module_deserialize_from_source(
-      context, source, nullptr, loomc_allocator_system(), &module, &result);
+      context, workspace, source, nullptr, loomc_allocator_system(), &module,
+      &result);
   LOOMC_EXPECT_OK(status);
   ResultPtr result_ptr(result);
   EXPECT_TRUE(loomc_result_succeeded(result_ptr.get()));
   return ModulePtr(module);
 }
 
-ModulePtr DeserializeModuleFromFile(loomc_context_t* context, FILE* file) {
+ModulePtr DeserializeModuleFromFile(loomc_context_t* context,
+                                    loomc_workspace_t* workspace, FILE* file) {
   loomc_module_t* module = nullptr;
   loomc_result_t* result = nullptr;
   loomc_status_t status = loomc_module_deserialize_from_file(
-      context, file, nullptr, loomc_allocator_system(), &module, &result);
+      context, workspace, file, nullptr, loomc_allocator_system(), &module,
+      &result);
   LOOMC_EXPECT_OK(status);
   ResultPtr result_ptr(result);
   EXPECT_TRUE(loomc_result_succeeded(result_ptr.get()));
@@ -127,12 +131,13 @@ ModulePtr DeserializeModuleFromFile(loomc_context_t* context, FILE* file) {
 }
 
 ModulePtr DeserializeModuleFromPath(loomc_context_t* context,
+                                    loomc_workspace_t* workspace,
                                     const std::string& path) {
   loomc_module_t* module = nullptr;
   loomc_result_t* result = nullptr;
   loomc_status_t status = loomc_module_deserialize_from_path(
-      context, loomc_make_string_view(path.data(), path.size()), nullptr,
-      loomc_allocator_system(), &module, &result);
+      context, workspace, loomc_make_string_view(path.data(), path.size()),
+      nullptr, loomc_allocator_system(), &module, &result);
   LOOMC_EXPECT_OK(status);
   ResultPtr result_ptr(result);
   EXPECT_TRUE(loomc_result_succeeded(result_ptr.get()));
@@ -413,8 +418,8 @@ func.def public @unused_library(%x: i32) -> (i32) {
   EXPECT_NE(linked_text.find("func.def public @identity"), std::string::npos);
   EXPECT_EQ(linked_text.find("unused_harness"), std::string::npos);
   EXPECT_EQ(linked_text.find("unused_library"), std::string::npos);
-  ModulePtr text_source_module =
-      DeserializeModuleFromSource(context.get(), serialized_text.get());
+  ModulePtr text_source_module = DeserializeModuleFromSource(
+      context.get(), workspace.get(), serialized_text.get());
   VerifyLinkedCallerModule(text_source_module.get());
 
   loomc_module_serialize_options_t text_options = {
@@ -433,7 +438,7 @@ func.def public @unused_library(%x: i32) -> (i32) {
             linked_text);
   ASSERT_EQ(fseek(text_file, 0, SEEK_SET), 0);
   ModulePtr text_file_module =
-      DeserializeModuleFromFile(context.get(), text_file);
+      DeserializeModuleFromFile(context.get(), workspace.get(), text_file);
   VerifyLinkedCallerModule(text_file_module.get());
   fclose(text_file);
 
@@ -443,8 +448,8 @@ func.def public @unused_library(%x: i32) -> (i32) {
       loomc_make_string_view(text_path.path().data(), text_path.path().size()),
       loomc_allocator_system()));
   EXPECT_EQ(ReadPathToString(text_path.path()), linked_text);
-  ModulePtr text_path_module =
-      DeserializeModuleFromPath(context.get(), text_path.path());
+  ModulePtr text_path_module = DeserializeModuleFromPath(
+      context.get(), workspace.get(), text_path.path());
   VerifyLinkedCallerModule(text_path_module.get());
   EXPECT_TRUE(text_path.Remove());
 
@@ -453,8 +458,8 @@ func.def public @unused_library(%x: i32) -> (i32) {
   EXPECT_EQ(loomc_source_format(serialized_bytecode.get()),
             LOOMC_SOURCE_FORMAT_BYTECODE);
   EXPECT_GT(loomc_source_contents(serialized_bytecode.get()).data_length, 0u);
-  ModulePtr bytecode_source_module =
-      DeserializeModuleFromSource(context.get(), serialized_bytecode.get());
+  ModulePtr bytecode_source_module = DeserializeModuleFromSource(
+      context.get(), workspace.get(), serialized_bytecode.get());
   VerifyLinkedCallerModule(bytecode_source_module.get());
 
   loomc_byte_span_t bytecode_contents =
@@ -463,7 +468,7 @@ func.def public @unused_library(%x: i32) -> (i32) {
       CreateSource(LOOMC_SOURCE_FORMAT_UNKNOWN, "inferred.loombc",
                    bytecode_contents.data, bytecode_contents.data_length);
   ModulePtr inferred_bytecode_source_module = DeserializeModuleFromSource(
-      context.get(), inferred_bytecode_source.get());
+      context.get(), workspace.get(), inferred_bytecode_source.get());
   VerifyLinkedCallerModule(inferred_bytecode_source_module.get());
 
   BuilderPtr serialized_builder = CreateBuilder(context.get());
@@ -485,7 +490,7 @@ func.def public @unused_library(%x: i32) -> (i32) {
   EXPECT_GT(ReadOpenFileBytes(bytecode_file).size(), 0u);
   ASSERT_EQ(fseek(bytecode_file, 0, SEEK_SET), 0);
   ModulePtr bytecode_file_module =
-      DeserializeModuleFromFile(context.get(), bytecode_file);
+      DeserializeModuleFromFile(context.get(), workspace.get(), bytecode_file);
   VerifyLinkedCallerModule(bytecode_file_module.get());
   fclose(bytecode_file);
 
@@ -496,8 +501,8 @@ func.def public @unused_library(%x: i32) -> (i32) {
                              bytecode_path.path().size()),
       loomc_allocator_system()));
   EXPECT_GT(ReadPathToString(bytecode_path.path()).size(), 0u);
-  ModulePtr bytecode_path_module =
-      DeserializeModuleFromPath(context.get(), bytecode_path.path());
+  ModulePtr bytecode_path_module = DeserializeModuleFromPath(
+      context.get(), workspace.get(), bytecode_path.path());
   VerifyLinkedCallerModule(bytecode_path_module.get());
   EXPECT_TRUE(bytecode_path.Remove());
 }
@@ -592,6 +597,7 @@ func.def public @entry() -> (index) {
 
 TEST(LinkTest, DeserializeParseErrorsProduceFailedResult) {
   ContextPtr context = CreateContext();
+  WorkspacePtr workspace = CreateWorkspace();
   SourcePtr source = CreateTextSource("broken.loom", R"(
 func.def public @broken(%x: i32) -> (i32) {
   func.return %missing : i32
@@ -601,8 +607,8 @@ func.def public @broken(%x: i32) -> (i32) {
   loomc_module_t* module = nullptr;
   loomc_result_t* result = nullptr;
   loomc_status_t status = loomc_module_deserialize_from_source(
-      context.get(), source.get(), nullptr, loomc_allocator_system(), &module,
-      &result);
+      context.get(), workspace.get(), source.get(), nullptr,
+      loomc_allocator_system(), &module, &result);
   LOOMC_EXPECT_OK(status);
   ModulePtr module_ptr(module);
   ResultPtr result_ptr(result);

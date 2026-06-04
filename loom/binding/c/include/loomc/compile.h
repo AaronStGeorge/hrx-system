@@ -67,8 +67,7 @@
 ///   // operation. The compile invocation borrows it and may rewrite its IR, so
 ///   // this worker owns exclusive access for the duration of the call. Reuse
 ///   // compiler, pass program, and workspace for many independent module
-///   // invocations on this worker. Reset workspace between independent
-///   // invocations.
+///   // invocations on this worker.
 ///   loomc_result_t* result = NULL;
 ///   status = loomc_compile_module(compiler, workspace, pass_program, module,
 ///                                 &compile_options,
@@ -215,7 +214,7 @@ LOOMC_API_EXPORT loomc_status_t loomc_compiler_create(
 ///
 /// @lifetime
 /// Returned results and artifacts do not borrow from `workspace` and remain
-/// valid after `loomc_workspace_reset`.
+/// valid after `loomc_workspace_trim`.
 ///
 /// @par Artifact Requests
 /// Artifact emission is opt-in through `loomc_compile_options_t`. Requesting

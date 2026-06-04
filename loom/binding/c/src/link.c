@@ -26,7 +26,6 @@
 #include "workspace.h"
 
 enum {
-  LOOMC_LINK_DEFAULT_BLOCK_SIZE = 32 * 1024,
   LOOMC_LINK_KNOWN_FLAGS = LOOMC_LINK_FLAG_INCLUDE_EXPORTED_ROOTS |
                            LOOMC_LINK_FLAG_ALLOW_UNRESOLVED_SYMBOLS |
                            LOOMC_LINK_FLAG_STRIP_CHECK_SYMBOLS,
@@ -585,8 +584,8 @@ loomc_status_t loomc_link_module(loomc_linker_t* linker,
   }
 
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
-    status = loomc_module_create_empty(linker->context, linker->allocator,
-                                       LOOMC_LINK_DEFAULT_BLOCK_SIZE, &module);
+    status = loomc_module_create_empty(linker->context, workspace,
+                                       linker->allocator, &module);
   }
   if (loomc_status_is_ok(status) && loomc_result_succeeded(result)) {
     loom_linker_options_t linker_options = {

@@ -23,15 +23,16 @@
 #include "loom/format/bytecode/writer.h"
 #include "loom/format/text/parser.h"
 #include "loom/format/text/printer.h"
+#include "loom/link/linker.h"
 #include "loom/ops/low/ops.h"
 #include "loomc/iree.h"
 #include "result.h"
 #include "source.h"
 #include "target.h"
+#include "workspace.h"
 
 enum {
   LOOMC_MODULE_SERIALIZE_BLOCK_SIZE = 32 * 1024,
-  LOOMC_MODULE_DESERIALIZE_BLOCK_SIZE = 32 * 1024,
 };
 
 struct loomc_module_t {
@@ -44,8 +45,8 @@ struct loomc_module_t {
   // Context retained by the module handle.
   loomc_context_t* context;
 
-  // Stable block pool backing the module arena.
-  iree_arena_block_pool_t* block_pool;
+  // Workspace retained for the module arena block pool.
+  loomc_workspace_t* workspace;
 
   // Internal linked, parsed, or optimized module.
   loom_module_t* module;
@@ -72,8 +73,6 @@ typedef struct loomc_module_resolved_deserialize_options_t {
   // Identifier used for diagnostics and module provenance.
   loomc_string_view_t identifier;
 
-  // Persistent module arena block size.
-  loomc_host_size_t block_size;
 } loomc_module_resolved_deserialize_options_t;
 
 typedef struct loomc_module_diagnostic_capture_t {
@@ -104,19 +103,10 @@ typedef struct loomc_module_byte_buffer_stream_t {
   iree_io_stream_pos_t position;
 } loomc_module_byte_buffer_stream_t;
 
-static void loomc_module_block_pool_release(
-    loomc_allocator_t allocator, iree_arena_block_pool_t* block_pool) {
-  if (block_pool == NULL) {
-    return;
-  }
-  iree_arena_block_pool_deinitialize(block_pool);
-  loomc_allocator_free(allocator, block_pool);
-}
-
 static void loomc_module_destroy(loomc_module_t* module) {
   loomc_allocator_t allocator = module->allocator;
   loom_module_free(module->module);
-  loomc_module_block_pool_release(allocator, module->block_pool);
+  loomc_workspace_release(module->workspace);
   loomc_context_release(module->context);
   loomc_allocator_free(allocator, module);
 }
@@ -295,14 +285,8 @@ static loomc_status_t loomc_module_resolve_deserialize_options(
     identifier = loomc_module_default_identifier(format);
   }
 
-  loomc_host_size_t block_size = options ? options->block_size : 0;
-  if (block_size == 0) {
-    block_size = LOOMC_MODULE_DESERIALIZE_BLOCK_SIZE;
-  }
-
   out_options->format = format;
   out_options->identifier = identifier;
-  out_options->block_size = block_size;
   return loomc_ok_status();
 }
 
@@ -318,6 +302,15 @@ static loomc_status_t loomc_module_require_internal(
   }
   *out_internal_module = module->module;
   return loomc_ok_status();
+}
+
+static iree_string_view_t loomc_module_internal_name(
+    const loom_module_t* internal_module) {
+  if (internal_module == NULL ||
+      internal_module->name_id == LOOM_STRING_ID_INVALID) {
+    return IREE_SV("module");
+  }
+  return internal_module->strings.entries[internal_module->name_id];
 }
 
 static iree_status_t loomc_module_capture_diagnostic(
@@ -835,7 +828,8 @@ static loomc_status_t loomc_module_deserialize_bytecode_source(
 }
 
 static loomc_status_t loomc_module_deserialize_source(
-    loomc_context_t* context, const loomc_source_t* source,
+    loomc_context_t* context, loomc_workspace_t* workspace,
+    const loomc_source_t* source,
     const loomc_module_resolved_deserialize_options_t* options,
     loomc_allocator_t allocator, loomc_module_t** out_module,
     loomc_result_t** out_result) {
@@ -844,8 +838,8 @@ static loomc_status_t loomc_module_deserialize_source(
       loomc_result_create(LOOMC_RESULT_STATE_SUCCEEDED, allocator, &result));
 
   loomc_module_t* module = NULL;
-  loomc_status_t status = loomc_module_create_empty(
-      context, allocator, options->block_size, &module);
+  loomc_status_t status =
+      loomc_module_create_empty(context, workspace, allocator, &module);
   loom_module_t* internal_module = NULL;
   const loomc_host_size_t before_diagnostic_count =
       loomc_result_diagnostic_count(result);
@@ -891,12 +885,13 @@ static void loomc_module_release_file_contents(void* user_data,
 }
 
 loomc_status_t loomc_module_create_empty(loomc_context_t* context,
+                                         loomc_workspace_t* workspace,
                                          loomc_allocator_t allocator,
-                                         loomc_host_size_t block_size,
                                          loomc_module_t** out_module) {
-  if (context == NULL || out_module == NULL) {
+  if (context == NULL || workspace == NULL || out_module == NULL) {
     return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
-                             "context and out_module must not be NULL");
+                             "context, workspace, and out_module must not be "
+                             "NULL");
   }
   *out_module = NULL;
 
@@ -908,21 +903,11 @@ loomc_status_t loomc_module_create_empty(loomc_context_t* context,
   module->allocator = allocator;
   module->context = context;
   loomc_context_retain(context);
+  module->workspace = workspace;
+  loomc_workspace_retain(workspace);
 
-  loomc_status_t status =
-      loomc_allocator_malloc(module->allocator, sizeof(*module->block_pool),
-                             (void**)&module->block_pool);
-  if (loomc_status_is_ok(status)) {
-    iree_arena_block_pool_initialize(
-        block_size, iree_allocator_from_loomc(module->allocator),
-        module->block_pool);
-  }
-  if (loomc_status_is_ok(status)) {
-    *out_module = module;
-  } else {
-    loomc_module_release(module);
-  }
-  return status;
+  *out_module = module;
+  return loomc_ok_status();
 }
 
 loomc_allocator_t loomc_module_allocator(const loomc_module_t* module) {
@@ -935,7 +920,7 @@ loomc_context_t* loomc_module_context(const loomc_module_t* module) {
 }
 
 iree_arena_block_pool_t* loomc_module_block_pool(loomc_module_t* module) {
-  return module ? module->block_pool : NULL;
+  return module ? loomc_workspace_block_pool(module->workspace) : NULL;
 }
 
 loomc_status_t loomc_module_set_loom_module(loomc_module_t* module,
@@ -977,8 +962,57 @@ void loomc_module_release(loomc_module_t* module) {
   }
 }
 
+loomc_status_t loomc_module_clone(const loomc_module_t* source_module,
+                                  loomc_workspace_t* workspace,
+                                  loomc_allocator_t allocator,
+                                  loomc_module_t** out_module) {
+  if (out_module == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "out_module must not be NULL");
+  }
+  *out_module = NULL;
+  if (workspace == NULL) {
+    return loomc_make_status(LOOMC_STATUS_INVALID_ARGUMENT,
+                             "workspace must not be NULL");
+  }
+
+  const loom_module_t* source_internal_module = NULL;
+  LOOMC_RETURN_IF_ERROR(
+      loomc_module_require_internal(source_module, &source_internal_module));
+
+  loomc_module_t* module = NULL;
+  loom_module_t* cloned_internal_module = NULL;
+  loomc_status_t status = loomc_module_create_empty(
+      source_module->context, workspace, allocator, &module);
+  if (loomc_status_is_ok(status)) {
+    const loom_module_t* source_modules[] = {source_internal_module};
+    loom_link_options_t link_options = {
+        .module_name = loomc_module_internal_name(source_internal_module),
+    };
+    status = loomc_status_from_iree(loom_link_materialized_modules(
+        source_modules, IREE_ARRAYSIZE(source_modules), &link_options,
+        loomc_module_block_pool(module), iree_allocator_from_loomc(allocator),
+        &cloned_internal_module));
+  }
+  if (loomc_status_is_ok(status)) {
+    status = loomc_module_set_loom_module(module, cloned_internal_module);
+    if (loomc_status_is_ok(status)) {
+      cloned_internal_module = NULL;
+    }
+  }
+  if (loomc_status_is_ok(status)) {
+    *out_module = module;
+    module = NULL;
+  }
+
+  loom_module_free(cloned_internal_module);
+  loomc_module_release(module);
+  return status;
+}
+
 loomc_status_t loomc_module_deserialize_from_source(
-    loomc_context_t* context, const loomc_source_t* source,
+    loomc_context_t* context, loomc_workspace_t* workspace,
+    const loomc_source_t* source,
     const loomc_module_deserialize_options_t* options,
     loomc_allocator_t allocator, loomc_module_t** out_module,
     loomc_result_t** out_result) {
@@ -988,23 +1022,25 @@ loomc_status_t loomc_module_deserialize_from_source(
   if (out_result != NULL) {
     *out_result = NULL;
   }
-  if (context == NULL || source == NULL || out_module == NULL ||
-      out_result == NULL) {
+  if (context == NULL || workspace == NULL || source == NULL ||
+      out_module == NULL || out_result == NULL) {
     return loomc_make_status(
         LOOMC_STATUS_INVALID_ARGUMENT,
-        "context, source, out_module, and out_result must not be NULL");
+        "context, workspace, source, out_module, and out_result must not be "
+        "NULL");
   }
 
   loomc_module_resolved_deserialize_options_t resolved_options = {0};
   LOOMC_RETURN_IF_ERROR(loomc_module_resolve_deserialize_options(
       options, loomc_source_identifier(source), loomc_source_format(source),
       loomc_source_contents(source), &resolved_options));
-  return loomc_module_deserialize_source(context, source, &resolved_options,
-                                         allocator, out_module, out_result);
+  return loomc_module_deserialize_source(context, workspace, source,
+                                         &resolved_options, allocator,
+                                         out_module, out_result);
 }
 
 loomc_status_t loomc_module_deserialize_from_file(
-    loomc_context_t* context, FILE* file,
+    loomc_context_t* context, loomc_workspace_t* workspace, FILE* file,
     const loomc_module_deserialize_options_t* options,
     loomc_allocator_t allocator, loomc_module_t** out_module,
     loomc_result_t** out_result) {
@@ -1014,11 +1050,12 @@ loomc_status_t loomc_module_deserialize_from_file(
   if (out_result != NULL) {
     *out_result = NULL;
   }
-  if (context == NULL || file == NULL || out_module == NULL ||
-      out_result == NULL) {
+  if (context == NULL || workspace == NULL || file == NULL ||
+      out_module == NULL || out_result == NULL) {
     return loomc_make_status(
         LOOMC_STATUS_INVALID_ARGUMENT,
-        "context, file, out_module, and out_result must not be NULL");
+        "context, workspace, file, out_module, and out_result must not be "
+        "NULL");
   }
 
   uint8_t* contents = NULL;
@@ -1041,8 +1078,9 @@ loomc_status_t loomc_module_deserialize_from_file(
     }
   }
   if (loomc_status_is_ok(status)) {
-    status = loomc_module_deserialize_source(context, source, &resolved_options,
-                                             allocator, out_module, out_result);
+    status = loomc_module_deserialize_source(context, workspace, source,
+                                             &resolved_options, allocator,
+                                             out_module, out_result);
   }
   loomc_source_release(source);
   loomc_allocator_free(allocator, contents);
@@ -1050,8 +1088,8 @@ loomc_status_t loomc_module_deserialize_from_file(
 }
 
 loomc_status_t loomc_module_deserialize_from_path(
-    loomc_context_t* context, loomc_string_view_t path,
-    const loomc_module_deserialize_options_t* options,
+    loomc_context_t* context, loomc_workspace_t* workspace,
+    loomc_string_view_t path, const loomc_module_deserialize_options_t* options,
     loomc_allocator_t allocator, loomc_module_t** out_module,
     loomc_result_t** out_result) {
   if (out_module != NULL) {
@@ -1060,11 +1098,12 @@ loomc_status_t loomc_module_deserialize_from_path(
   if (out_result != NULL) {
     *out_result = NULL;
   }
-  if (context == NULL || loomc_string_view_is_empty(path) ||
-      out_module == NULL || out_result == NULL) {
+  if (context == NULL || workspace == NULL ||
+      loomc_string_view_is_empty(path) || out_module == NULL ||
+      out_result == NULL) {
     return loomc_make_status(
         LOOMC_STATUS_INVALID_ARGUMENT,
-        "context, path, out_module, and out_result must be valid");
+        "context, workspace, path, out_module, and out_result must be valid");
   }
 
   if (!loomc_allocator_is_valid(allocator)) {
@@ -1100,8 +1139,9 @@ loomc_status_t loomc_module_deserialize_from_path(
     }
   }
   if (loomc_status_is_ok(status)) {
-    status = loomc_module_deserialize_source(context, source, &resolved_options,
-                                             allocator, out_module, out_result);
+    status = loomc_module_deserialize_source(context, workspace, source,
+                                             &resolved_options, allocator,
+                                             out_module, out_result);
   }
   loomc_source_release(source);
   iree_io_file_contents_free(file_contents);

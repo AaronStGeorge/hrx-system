@@ -15,7 +15,7 @@
 extern "C" {
 #endif
 
-// Returns the transient block pool owned by workspace.
+// Returns the arena block pool owned by workspace.
 LOOMC_API_PRIVATE iree_arena_block_pool_t* loomc_workspace_block_pool(
     loomc_workspace_t* workspace);
 

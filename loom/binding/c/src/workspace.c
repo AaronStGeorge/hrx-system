@@ -7,14 +7,19 @@
 #include "workspace.h"
 
 #include "iree/base/api.h"
+#include "iree/base/internal/atomics.h"
 
 enum {
   LOOMC_WORKSPACE_DEFAULT_BLOCK_SIZE = 32 * 1024,
 };
 
 struct loomc_workspace_t {
+  // Atomic reference count for shared storage ownership.
+  iree_atomic_ref_count_t ref_count;
+
   // Allocator used to release workspace storage.
   loomc_allocator_t allocator;
+
   // Transient arena block pool reused across operations.
   iree_arena_block_pool_t block_pool;
 };
@@ -63,6 +68,7 @@ loomc_status_t loomc_workspace_create(const loomc_workspace_options_t* options,
   loomc_workspace_t* workspace = NULL;
   LOOMC_RETURN_IF_ERROR(loomc_allocator_malloc(allocator, sizeof(*workspace),
                                                (void**)&workspace));
+  iree_atomic_ref_count_init(&workspace->ref_count);
   workspace->allocator = allocator;
   iree_host_size_t block_size = LOOMC_WORKSPACE_DEFAULT_BLOCK_SIZE;
   if (options && options->block_size != 0) {
@@ -75,7 +81,14 @@ loomc_status_t loomc_workspace_create(const loomc_workspace_options_t* options,
   return loomc_ok_status();
 }
 
-void loomc_workspace_reset(loomc_workspace_t* workspace) {
+void loomc_workspace_retain(loomc_workspace_t* workspace) {
+  if (workspace == NULL) {
+    return;
+  }
+  iree_atomic_ref_count_inc(&workspace->ref_count);
+}
+
+void loomc_workspace_trim(loomc_workspace_t* workspace) {
   if (workspace == NULL) {
     return;
   }
@@ -84,6 +97,9 @@ void loomc_workspace_reset(loomc_workspace_t* workspace) {
 
 void loomc_workspace_release(loomc_workspace_t* workspace) {
   if (workspace == NULL) {
+    return;
+  }
+  if (iree_atomic_ref_count_dec(&workspace->ref_count) != 1) {
     return;
   }
   loomc_allocator_t allocator = workspace->allocator;

@@ -299,18 +299,22 @@ void ExpectSucceededResult(const loomc_result_t* result) {
 }
 
 ModulePtr DeserializeModule(loomc_context_t* context,
+                            loomc_workspace_t* workspace,
                             const loomc_source_t* source) {
   loomc_module_t* module = nullptr;
   loomc_result_t* result = nullptr;
   loomc_status_t status = loomc_module_deserialize_from_source(
-      context, source, nullptr, loomc_allocator_system(), &module, &result);
+      context, workspace, source, nullptr, loomc_allocator_system(), &module,
+      &result);
   LOOMC_EXPECT_OK(status);
   ResultPtr result_ptr(result);
   ExpectSucceededResult(result_ptr.get());
   return ModulePtr(module);
 }
 
-ModulePtr CreateIdentityModule(loomc_context_t* context, const char* symbol) {
+ModulePtr CreateIdentityModule(loomc_context_t* context,
+                               loomc_workspace_t* workspace,
+                               const char* symbol) {
   std::string contents = "func.def public @";
   contents.append(symbol);
   contents.append(R"((%x: i32) -> (i32) {
@@ -318,7 +322,7 @@ ModulePtr CreateIdentityModule(loomc_context_t* context, const char* symbol) {
 }
 )");
   SourcePtr source = CreateTextSource("identity.loom", contents.c_str());
-  return DeserializeModule(context, source.get());
+  return DeserializeModule(context, workspace, source.get());
 }
 
 ResultPtr EmitModule(loomc_target_environment_t* target_environment,
@@ -351,7 +355,8 @@ TEST(TargetTest, EmitSelectsOnlyLinkedEmitterWhenFormatOmitted) {
       CreateTargetEnvironmentFromProviderSet(&provider_set);
   ContextPtr context = CreateContext();
   WorkspacePtr workspace = CreateWorkspace();
-  ModulePtr module = CreateIdentityModule(context.get(), "entry");
+  ModulePtr module =
+      CreateIdentityModule(context.get(), workspace.get(), "entry");
 
   loomc_emit_options_t options = {
       /*.type=*/LOOMC_STRUCTURE_TYPE_EMIT_OPTIONS,
@@ -383,7 +388,8 @@ TEST(TargetTest, EmitReportsZeroLinkedEmittersThroughResult) {
       CreateTargetEnvironmentFromProviderSet(&provider_set);
   ContextPtr context = CreateContext();
   WorkspacePtr workspace = CreateWorkspace();
-  ModulePtr module = CreateIdentityModule(context.get(), "entry");
+  ModulePtr module =
+      CreateIdentityModule(context.get(), workspace.get(), "entry");
 
   ResultPtr result = EmitModule(target_environment.get(), workspace.get(),
                                 module.get(), nullptr);
@@ -402,7 +408,8 @@ TEST(TargetTest, EmitReportsAmbiguousOmittedFormatThroughResult) {
       CreateTargetEnvironmentFromProviderSet(&provider_set);
   ContextPtr context = CreateContext();
   WorkspacePtr workspace = CreateWorkspace();
-  ModulePtr module = CreateIdentityModule(context.get(), "entry");
+  ModulePtr module =
+      CreateIdentityModule(context.get(), workspace.get(), "entry");
 
   ResultPtr result = EmitModule(target_environment.get(), workspace.get(),
                                 module.get(), nullptr);
@@ -420,7 +427,8 @@ TEST(TargetTest, EmitReportsMissingFormatThroughResult) {
       CreateTargetEnvironmentFromProviderSet(&provider_set);
   ContextPtr context = CreateContext();
   WorkspacePtr workspace = CreateWorkspace();
-  ModulePtr module = CreateIdentityModule(context.get(), "entry");
+  ModulePtr module =
+      CreateIdentityModule(context.get(), workspace.get(), "entry");
 
   loomc_emit_options_t options = {
       /*.type=*/LOOMC_STRUCTURE_TYPE_EMIT_OPTIONS,
@@ -612,7 +620,8 @@ TEST(TargetTest, ReusesSelectionAcrossCompileWorkspaces) {
 
   for (int i = 0; i < 2; ++i) {
     WorkspacePtr workspace = CreateWorkspace();
-    ModulePtr module = CreateIdentityModule(context.get(), "entry");
+    ModulePtr module =
+        CreateIdentityModule(context.get(), workspace.get(), "entry");
     loomc_result_t* result = nullptr;
     loomc_status_t status = loomc_compile_module(
         compiler.get(), workspace.get(), pass_program.get(), module.get(),

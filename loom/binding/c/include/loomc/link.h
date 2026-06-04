@@ -187,8 +187,9 @@ LOOMC_API_EXPORT loomc_status_t loomc_linker_create(
 /// and releases it with `loomc_result_release`.
 ///
 /// @lifetime
-/// Returned modules and results do not borrow from `workspace` and remain valid
-/// after `loomc_workspace_reset`.
+/// Returned results do not borrow from `workspace` and remain valid after
+/// `loomc_workspace_trim`. Returned modules retain `workspace` and keep their
+/// arena blocks live until released.
 ///
 /// @thread_safety
 /// Calls using the same linker may run concurrently when each call uses a

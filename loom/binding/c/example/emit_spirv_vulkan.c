@@ -664,15 +664,14 @@ static loomc_status_t create_resources(emit_spirv_vulkan_state_t* state) {
 
 static loomc_status_t deserialize_source(emit_spirv_vulkan_state_t* state) {
   loomc_status_t status = loomc_module_deserialize_from_source(
-      state->context, state->source, NULL, loomc_allocator_system(),
-      &state->module, &state->result);
+      state->context, state->workspace, state->source, NULL,
+      loomc_allocator_system(), &state->module, &state->result);
   if (loomc_status_is_ok(status)) {
     status = require_successful_result(state->result,
                                        "source deserialization failed");
   }
   if (loomc_status_is_ok(status)) {
     emit_spirv_vulkan_state_reset_result(state);
-    loomc_workspace_reset(state->workspace);
   }
   return status;
 }
@@ -699,7 +698,6 @@ static loomc_status_t compile_module_to_prepared_low(
   }
   if (loomc_status_is_ok(status)) {
     emit_spirv_vulkan_state_reset_result(state);
-    loomc_workspace_reset(state->workspace);
   }
   return status;
 }

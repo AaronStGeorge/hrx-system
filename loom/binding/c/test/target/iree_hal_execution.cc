@@ -286,12 +286,14 @@ loomc_status_t CreateTargetPipeline(const IreeHalKernelExecutionTarget& target,
 }
 
 loomc_status_t DeserializeSource(loomc_context_t* context,
+                                 loomc_workspace_t* workspace,
                                  const loomc_source_t* source,
                                  ModulePtr* out_module, ResultPtr* out_result) {
   loomc_module_t* module = nullptr;
   loomc_result_t* result = nullptr;
   loomc_status_t status = loomc_module_deserialize_from_source(
-      context, source, nullptr, loomc_allocator_system(), &module, &result);
+      context, workspace, source, nullptr, loomc_allocator_system(), &module,
+      &result);
   if (loomc_status_is_ok(status)) {
     out_module->reset(module);
     out_result->reset(result);
@@ -508,8 +510,8 @@ void RunIreeHalKernelExecutionTest(const IreeHalKernelExecutionTarget& target) {
   target_selection.reset(target_selection_handle);
 
   ModulePtr module;
-  LOOMC_ASSERT_OK(
-      DeserializeSource(context.get(), source.get(), &module, &result));
+  LOOMC_ASSERT_OK(DeserializeSource(context.get(), workspace.get(),
+                                    source.get(), &module, &result));
   ASSERT_TRUE(ResultSucceeded(result.get(), "source deserialization"));
   result.reset();
 
@@ -547,7 +549,6 @@ void RunIreeHalKernelExecutionTest(const IreeHalKernelExecutionTarget& target) {
                                 module.get(), &result));
   ASSERT_TRUE(ResultSucceeded(result.get(), "module compilation"));
   result.reset();
-  loomc_workspace_reset(workspace.get());
 
   loomc_result_t* emit_result = nullptr;
   loomc_status_t emit_status = target.emit_module(

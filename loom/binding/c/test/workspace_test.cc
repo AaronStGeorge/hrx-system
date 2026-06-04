@@ -11,7 +11,7 @@
 
 namespace {
 
-TEST(WorkspaceTest, CreateResetRelease) {
+TEST(WorkspaceTest, CreateTrimRetainRelease) {
   loomc_workspace_options_t options = {
       /*.type=*/LOOMC_STRUCTURE_TYPE_WORKSPACE_OPTIONS,
       /*.structure_size=*/sizeof(options),
@@ -24,7 +24,9 @@ TEST(WorkspaceTest, CreateResetRelease) {
   LOOMC_ASSERT_OK(status);
   ASSERT_NE(workspace, nullptr);
 
-  loomc_workspace_reset(workspace);
+  loomc_workspace_retain(workspace);
+  loomc_workspace_trim(workspace);
+  loomc_workspace_release(workspace);
   loomc_workspace_release(workspace);
 }
 

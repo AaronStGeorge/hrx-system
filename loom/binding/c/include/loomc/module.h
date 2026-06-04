@@ -12,6 +12,7 @@
 #include "loomc/context.h"
 #include "loomc/result.h"
 #include "loomc/source.h"
+#include "loomc/workspace.h"
 
 /// @file
 /// Opaque in-memory Loom modules.
@@ -21,8 +22,8 @@
 /// reparsing `.loom` text on the hot path. Serialization is the boundary that
 /// turns a module back into text or bytecode bytes for storage, display, cache
 /// keys, or handoff to systems that consume sources. Deserialization is the
-/// inverse boundary that turns text or bytecode bytes into an owned mutable
-/// module handle.
+/// inverse boundary that turns text or bytecode bytes into a mutable module
+/// handle allocated from a caller-provided workspace.
 ///
 /// @par Example
 /// Serialize a linked module back to an immutable source handle:
@@ -54,7 +55,8 @@
 /// loomc_module_t* module = NULL;
 /// loomc_result_t* result = NULL;
 /// loomc_status_t status = loomc_module_deserialize_from_source(
-///     context, serialized, NULL, loomc_allocator_system(), &module, &result);
+///     context, workspace, serialized, NULL, loomc_allocator_system(), &module,
+///     &result);
 /// if (!loomc_status_is_ok(status)) {
 ///   return status;
 /// }
@@ -71,6 +73,12 @@ extern "C" {
 #endif
 
 /// Opaque parsed, linked, optimized, or lowered module.
+///
+/// Modules use arena storage from the workspace that created, linked, cloned,
+/// or deserialized them. Releasing a module returns its active arena blocks to
+/// that workspace. A module retains the workspace, so release ordering is
+/// memory-safe, but keeping modules live across `loomc_workspace_trim` keeps
+/// their storage live too.
 ///
 /// @thread_safety
 /// Retain/release operations are safe from multiple threads. Module contents
@@ -390,9 +398,6 @@ typedef struct loomc_module_deserialize_options_t {
   /// Identifier used for diagnostics and module provenance. Empty uses the
   /// input source identifier, filesystem path, or a format-specific default.
   loomc_string_view_t identifier;
-
-  /// Persistent module arena block size in bytes. Zero selects the default.
-  loomc_host_size_t block_size;
 } loomc_module_deserialize_options_t;
 
 /// Retains an opaque module for another owner.
@@ -411,6 +416,32 @@ LOOMC_API_EXPORT void loomc_module_retain(loomc_module_t* module);
 /// Retain/release operations are intended to be safe from multiple threads. The
 /// module is destroyed when the final reference is released.
 LOOMC_API_EXPORT void loomc_module_release(loomc_module_t* module);
+
+/// Clones a module into workspace-backed mutable storage.
+///
+/// @param source_module Module to clone. The source is read-only during this
+/// operation.
+/// @param workspace Workspace used to allocate the cloned module's IR storage.
+/// @param allocator Host allocator used for the returned module handle.
+/// @param out_module Receives the cloned module on success.
+/// @return OK when the clone succeeded.
+///
+/// @ownership
+/// The caller owns the returned module and releases it with
+/// `loomc_module_release`.
+///
+/// @lifetime
+/// The cloned module retains `workspace` and returns its arena blocks when the
+/// module is released. The clone does not borrow from `source_module`; both
+/// modules may be mutated independently after this call returns.
+///
+/// @thread_safety
+/// Cloning reads `source_module` and mutates `workspace`. Concurrent clones of
+/// the same source are valid when no thread is mutating that source module.
+/// Distinct workspaces may be used concurrently.
+LOOMC_API_EXPORT loomc_status_t loomc_module_clone(
+    const loomc_module_t* source_module, loomc_workspace_t* workspace,
+    loomc_allocator_t allocator, loomc_module_t** out_module);
 
 /// Queries function metadata from a module.
 ///
@@ -810,9 +841,10 @@ LOOMC_API_EXPORT loomc_status_t loomc_module_serialize_to_path(
 /// Deserializes an immutable source handle into an owned mutable module.
 ///
 /// @param context Context used to resolve Loom dialect and bytecode metadata.
+/// @param workspace Workspace used to allocate module IR storage.
 /// @param source Source bytes to deserialize.
 /// @param options Deserialization options. `NULL` infers format from `source`.
-/// @param allocator Host allocator used for module-owned storage.
+/// @param allocator Host allocator used for module handle storage.
 /// @param out_module Receives a retained module when the result succeeds.
 /// Receives `NULL` when the result fails.
 /// @param out_result Receives a retained result for the operation.
@@ -821,15 +853,19 @@ LOOMC_API_EXPORT loomc_status_t loomc_module_serialize_to_path(
 ///
 /// @ownership
 /// The caller owns `out_module` when non-NULL and releases it with
-/// `loomc_module_release`. The caller always owns `out_result` on an OK return
-/// and releases it with `loomc_result_release`.
+/// `loomc_module_release`. The returned module retains `workspace`. The caller
+/// always owns `out_result` on an OK return and releases it with
+/// `loomc_result_release`.
 ///
 /// @lifetime
 /// Returned modules and results do not borrow from `source`. Diagnostics retain
 /// `source` when they reference it. Later module operations may mutate the
-/// returned module in place.
+/// returned module in place. Releasing the module returns its arena blocks to
+/// `workspace`; keeping it live across `loomc_workspace_trim` keeps those
+/// blocks live.
 LOOMC_API_EXPORT loomc_status_t loomc_module_deserialize_from_source(
-    loomc_context_t* context, const loomc_source_t* source,
+    loomc_context_t* context, loomc_workspace_t* workspace,
+    const loomc_source_t* source,
     const loomc_module_deserialize_options_t* options,
     loomc_allocator_t allocator, loomc_module_t** out_module,
     loomc_result_t** out_result);
@@ -837,10 +873,11 @@ LOOMC_API_EXPORT loomc_status_t loomc_module_deserialize_from_source(
 /// Deserializes bytes from an open C `FILE*` into a module.
 ///
 /// @param context Context used to resolve Loom dialect and bytecode metadata.
+/// @param workspace Workspace used to allocate module IR storage.
 /// @param file Open readable file handle. Bytes are read from the current file
 /// position to EOF.
 /// @param options Deserialization options. `NULL` infers format from bytes.
-/// @param allocator Host allocator used for module-owned storage and temporary
+/// @param allocator Host allocator used for module handle storage and temporary
 /// input bytes.
 /// @param out_module Receives a retained module when the result succeeds.
 /// Receives `NULL` when the result fails.
@@ -851,8 +888,9 @@ LOOMC_API_EXPORT loomc_status_t loomc_module_deserialize_from_source(
 ///
 /// @ownership
 /// The caller retains ownership of `file`; this function does not close it.
+/// The returned module retains `workspace`.
 LOOMC_API_EXPORT loomc_status_t loomc_module_deserialize_from_file(
-    loomc_context_t* context, FILE* file,
+    loomc_context_t* context, loomc_workspace_t* workspace, FILE* file,
     const loomc_module_deserialize_options_t* options,
     loomc_allocator_t allocator, loomc_module_t** out_module,
     loomc_result_t** out_result);
@@ -860,10 +898,11 @@ LOOMC_API_EXPORT loomc_status_t loomc_module_deserialize_from_file(
 /// Deserializes bytes from a filesystem path into a module.
 ///
 /// @param context Context used to resolve Loom dialect and bytecode metadata.
+/// @param workspace Workspace used to allocate module IR storage.
 /// @param path Input file path. The path is a borrowed byte view and does not
 /// need to be NUL-terminated.
 /// @param options Deserialization options. `NULL` infers format from bytes.
-/// @param allocator Host allocator used for module-owned storage and temporary
+/// @param allocator Host allocator used for module handle storage and temporary
 /// input bytes.
 /// @param out_module Receives a retained module when the result succeeds.
 /// Receives `NULL` when the result fails.
@@ -872,8 +911,8 @@ LOOMC_API_EXPORT loomc_status_t loomc_module_deserialize_from_file(
 /// API misuse, file read failures, or infrastructure failures before a result
 /// could be produced.
 LOOMC_API_EXPORT loomc_status_t loomc_module_deserialize_from_path(
-    loomc_context_t* context, loomc_string_view_t path,
-    const loomc_module_deserialize_options_t* options,
+    loomc_context_t* context, loomc_workspace_t* workspace,
+    loomc_string_view_t path, const loomc_module_deserialize_options_t* options,
     loomc_allocator_t allocator, loomc_module_t** out_module,
     loomc_result_t** out_result);
 
