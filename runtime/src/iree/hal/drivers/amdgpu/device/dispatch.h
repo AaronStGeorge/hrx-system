@@ -181,8 +181,8 @@ void iree_hal_amdgpu_device_dispatch_emplace_hal_kernargs(
 // Populates custom direct explicit kernargs in already-reserved storage.
 //
 // |custom_kernarg_ptr| provides up to |layout->total_kernarg_size| bytes in the
-// final kernel ABI shape expected by the target kernel. Missing trailing padding
-// bytes remain zeroed.
+// final kernel ABI shape expected by the target kernel. Missing trailing
+// padding bytes remain zeroed.
 //
 // Preconditions:
 //   - |layout| and |kernarg_ptr| are non-NULL.
@@ -195,8 +195,7 @@ void iree_hal_amdgpu_device_dispatch_emplace_custom_kernargs(
     const iree_hal_amdgpu_device_dispatch_kernarg_layout_t* IREE_AMDGPU_RESTRICT
         layout,
     const void* IREE_AMDGPU_RESTRICT custom_kernarg_ptr,
-    size_t custom_kernarg_length,
-    void* IREE_AMDGPU_RESTRICT kernarg_ptr);
+    size_t custom_kernarg_length, void* IREE_AMDGPU_RESTRICT kernarg_ptr);
 
 // Populates the builtin patch dispatch that updates an indirect-parameter
 // dispatch packet and then publishes its header.

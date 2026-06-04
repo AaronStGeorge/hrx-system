@@ -378,7 +378,8 @@ static std::vector<uint8_t> AddSyntheticCandidateSymbolSection(
   return elf;
 }
 
-static std::vector<uint8_t> AddMalformedSymbolSection(std::vector<uint8_t> elf) {
+static std::vector<uint8_t> AddMalformedSymbolSection(
+    std::vector<uint8_t> elf) {
   constexpr size_t kSectionHeaderSize = 64;
   size_t section_offset = elf.size();
   StoreU64LE(&elf, 40, section_offset);
@@ -720,8 +721,8 @@ TEST(HsacoMetadataTest, RejectsMalformedMessagePackMetadata) {
 }
 
 TEST(HsacoMetadataTest, DiscoversElfSymbolsWithoutSynthesizingKernels) {
-  std::vector<uint8_t> elf =
-      AddSyntheticCandidateSymbolSection(BuildElfWithMetadata(BuildKernelMetadata()));
+  std::vector<uint8_t> elf = AddSyntheticCandidateSymbolSection(
+      BuildElfWithMetadata(BuildKernelMetadata()));
 
   iree_hal_amdgpu_hsaco_metadata_t metadata;
   IREE_ASSERT_OK(iree_hal_amdgpu_hsaco_metadata_initialize_from_elf(

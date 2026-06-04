@@ -261,9 +261,8 @@ static iree_status_t iree_hal_amdgpu_host_queue_validate_dispatch_kernargs(
             "dispatch kernargs require too many blocks (%" PRIhsz ", max=%u)",
             provided_kernarg_block_count, UINT32_MAX);
       }
-      *out_kernarg_block_count =
-          iree_max(*out_kernarg_block_count,
-                   (uint32_t)provided_kernarg_block_count);
+      *out_kernarg_block_count = iree_max(
+          *out_kernarg_block_count, (uint32_t)provided_kernarg_block_count);
     }
   } else {
     if (IREE_UNLIKELY(descriptor->custom_direct_only)) {
@@ -569,7 +568,8 @@ static iree_status_t iree_hal_amdgpu_host_queue_submit_direct_dispatch(
   } else {
     iree_hal_amdgpu_device_dispatch_emplace_hal_kernargs(
         plan->kernel_args, plan->layout, binding_ptrs,
-        (const uint32_t*)constants.data, submission.kernel.kernargs.blocks->data);
+        (const uint32_t*)constants.data,
+        submission.kernel.kernargs.blocks->data);
   }
   iree_hal_amdgpu_device_dispatch_emplace_implicit_args(
       plan->kernel_args, config.workgroup_count,

@@ -1386,8 +1386,7 @@ static iree_status_t iree_hal_amdgpu_executable_allocate(
                         &export_parameters_offset),
       IREE_STRUCT_FIELD(export_parameter_name_storage_size, char,
                         &export_parameter_name_storage_offset),
-      IREE_STRUCT_FIELD(export_count, bool,
-                        &custom_direct_only_exports_offset),
+      IREE_STRUCT_FIELD(export_count, bool, &custom_direct_only_exports_offset),
       IREE_STRUCT_FIELD(export_count, iree_hal_amdgpu_device_kernel_args_t,
                         &host_kernel_args_offset),
       IREE_STRUCT_FIELD(dispatch_descriptor_count,
@@ -1472,13 +1471,13 @@ iree_hal_amdgpu_executable_initialize_dispatch_descriptors_for_device(
             ? custom_explicit_kernarg_sizes[kernel_ordinal]
             : executable->host_kernel_args[kernel_ordinal].kernarg_size;
     const uint16_t custom_implicit_args_offset =
-        custom_implicit_args_offsets ? custom_implicit_args_offsets[kernel_ordinal]
-                                     : UINT16_MAX;
+        custom_implicit_args_offsets
+            ? custom_implicit_args_offsets[kernel_ordinal]
+            : UINT16_MAX;
     IREE_RETURN_IF_ERROR(
         iree_hal_amdgpu_executable_initialize_dispatch_descriptor(
             &executable->host_kernel_args[kernel_ordinal],
-            custom_explicit_kernarg_size,
-            custom_implicit_args_offset,
+            custom_explicit_kernarg_size, custom_implicit_args_offset,
             &executable->host_dispatch_descriptors[descriptor_ordinal]),
         "initializing dispatch descriptor for device %" PRIhsz
         " export %" PRIhsz,
@@ -1751,10 +1750,10 @@ iree_hal_amdgpu_executable_calculate_raw_hsaco_reflection_storage(
   }
   for (iree_host_size_t i = 0; i < hsaco_metadata->elf_kernel_symbol_count;
        ++i) {
-    if (!iree_host_size_checked_add(export_name_storage_size,
-                                    hsaco_metadata->elf_kernel_symbols[i]
-                                        .name.size,
-                                    &export_name_storage_size)) {
+    if (!iree_host_size_checked_add(
+            export_name_storage_size,
+            hsaco_metadata->elf_kernel_symbols[i].name.size,
+            &export_name_storage_size)) {
       return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
                               "export name storage size overflow");
     }
@@ -2029,12 +2028,12 @@ iree_hal_amdgpu_executable_resolve_raw_hsaco_elf_kernel_args(
     hsa_agent_t any_device_agent,
     iree_hal_amdgpu_device_kernel_args_t* out_host_kernel_args) {
   hsa_executable_symbol_t symbol = {0};
-  IREE_RETURN_IF_ERROR(
-      iree_hal_amdgpu_executable_get_raw_hsaco_symbol_by_name(
-          libhsa, executable, elf_symbol->symbol_name, any_device_agent,
-          &symbol),
-      "looking up HSA symbol for ELF-only kernel `%.*s`",
-      (int)elf_symbol->symbol_name.size, elf_symbol->symbol_name.data);
+  IREE_RETURN_IF_ERROR(iree_hal_amdgpu_executable_get_raw_hsaco_symbol_by_name(
+                           libhsa, executable, elf_symbol->symbol_name,
+                           any_device_agent, &symbol),
+                       "looking up HSA symbol for ELF-only kernel `%.*s`",
+                       (int)elf_symbol->symbol_name.size,
+                       elf_symbol->symbol_name.data);
 
   const uint32_t workgroup_size[3] = {1, 1, 1};
   return iree_hal_amdgpu_executable_resolve_kernel_args_from_symbol(
@@ -2056,9 +2055,8 @@ iree_status_t iree_hal_amdgpu_executable_raw_hsaco_custom_kernarg_layout(
     const iree_hal_amdgpu_hsaco_metadata_arg_t* arg = &kernel->args[arg_i];
     if (arg->kind == IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_HIDDEN ||
         arg->kind == IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_HIDDEN_NONE) {
-      if (arg->offset <= UINT16_MAX &&
-          (implicit_args_offset == UINT16_MAX ||
-           arg->offset < implicit_args_offset)) {
+      if (arg->offset <= UINT16_MAX && (implicit_args_offset == UINT16_MAX ||
+                                        arg->offset < implicit_args_offset)) {
         implicit_args_offset = (uint16_t)arg->offset;
       }
     } else {
@@ -2312,7 +2310,8 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_raw_hsaco(
     }
     for (iree_host_size_t kernel_ordinal = 0;
          iree_status_is_ok(status) &&
-         kernel_ordinal < hsaco_metadata.kernel_count; ++kernel_ordinal) {
+         kernel_ordinal < hsaco_metadata.kernel_count;
+         ++kernel_ordinal) {
       const iree_hal_amdgpu_hsaco_metadata_kernel_t* kernel =
           &hsaco_metadata.kernels[kernel_ordinal];
       iree_hal_amdgpu_device_kernel_args_t* host_kernel_args =
@@ -2321,25 +2320,23 @@ static iree_status_t iree_hal_amdgpu_executable_create_from_raw_hsaco(
           libhsa, executable->handle, kernel, any_device_agent,
           host_kernel_args);
       if (iree_status_is_ok(status)) {
-        status =
-            iree_hal_amdgpu_executable_raw_hsaco_custom_kernarg_layout(
-                kernel, host_kernel_args,
-                &custom_explicit_kernarg_sizes[kernel_ordinal],
-                &custom_implicit_args_offsets[kernel_ordinal]);
+        status = iree_hal_amdgpu_executable_raw_hsaco_custom_kernarg_layout(
+            kernel, host_kernel_args,
+            &custom_explicit_kernarg_sizes[kernel_ordinal],
+            &custom_implicit_args_offsets[kernel_ordinal]);
       }
     }
-    for (iree_host_size_t i = 0;
-         iree_status_is_ok(status) &&
-         i < hsaco_metadata.elf_kernel_symbol_count; ++i) {
+    for (iree_host_size_t i = 0; iree_status_is_ok(status) &&
+                                 i < hsaco_metadata.elf_kernel_symbol_count;
+         ++i) {
       const iree_host_size_t kernel_ordinal = hsaco_metadata.kernel_count + i;
       const iree_hal_amdgpu_hsaco_metadata_elf_kernel_symbol_t* elf_symbol =
           &hsaco_metadata.elf_kernel_symbols[i];
       iree_hal_amdgpu_device_kernel_args_t* host_kernel_args =
           &executable->host_kernel_args[kernel_ordinal];
-      status =
-          iree_hal_amdgpu_executable_resolve_raw_hsaco_elf_kernel_args(
-              libhsa, executable->handle, elf_symbol, any_device_agent,
-              host_kernel_args);
+      status = iree_hal_amdgpu_executable_resolve_raw_hsaco_elf_kernel_args(
+          libhsa, executable->handle, elf_symbol, any_device_agent,
+          host_kernel_args);
       if (iree_status_is_ok(status)) {
         custom_explicit_kernarg_sizes[kernel_ordinal] =
             host_kernel_args->kernarg_size;

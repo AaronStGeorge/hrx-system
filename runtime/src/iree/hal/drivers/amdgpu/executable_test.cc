@@ -295,8 +295,8 @@ TEST(ExecutableTest, RawHsacoCustomKernargLayoutRejectsInterleavedHiddenArgs) {
   iree_hal_amdgpu_hsaco_metadata_kernel_t kernel =
       MakeKernel(/*kernarg_size=*/8 + IREE_AMDGPU_KERNEL_IMPLICIT_ARGS_SIZE,
                  args, IREE_ARRAYSIZE(args));
-  iree_hal_amdgpu_device_kernel_args_t kernel_args =
-      MakeKernelArgs(/*kernarg_size=*/8 + IREE_AMDGPU_KERNEL_IMPLICIT_ARGS_SIZE);
+  iree_hal_amdgpu_device_kernel_args_t kernel_args = MakeKernelArgs(
+      /*kernarg_size=*/8 + IREE_AMDGPU_KERNEL_IMPLICIT_ARGS_SIZE);
 
   iree_host_size_t explicit_kernarg_size = 0;
   uint16_t implicit_args_offset = 0;
@@ -328,7 +328,8 @@ TEST(ExecutableTest, RawHsacoCustomKernargLayoutAcceptsFullImplicitSuffix) {
   EXPECT_EQ(implicit_args_offset, 16u);
 }
 
-TEST(ExecutableTest, RawHsacoCustomKernargLayoutRejectsTruncatedImplicitSuffix) {
+TEST(ExecutableTest,
+     RawHsacoCustomKernargLayoutRejectsTruncatedImplicitSuffix) {
   const iree_hal_amdgpu_hsaco_metadata_arg_t args[] = {
       MakeArg(IREE_HAL_AMDGPU_HSACO_METADATA_ARG_KIND_GLOBAL_BUFFER,
               /*offset=*/0, /*size=*/8),

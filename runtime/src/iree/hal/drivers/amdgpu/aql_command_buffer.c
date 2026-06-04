@@ -1701,9 +1701,9 @@ static iree_status_t iree_hal_amdgpu_aql_command_buffer_write_dispatch_tail(
     }
     case IREE_HAL_AMDGPU_COMMAND_BUFFER_KERNARG_STRATEGY_CUSTOM_DIRECT: {
       const iree_host_size_t explicit_bytes = layout->explicit_kernarg_size;
-      const iree_host_size_t copy_bytes =
-          constants.data_length < explicit_bytes ? constants.data_length
-                                                 : explicit_bytes;
+      const iree_host_size_t copy_bytes = constants.data_length < explicit_bytes
+                                              ? constants.data_length
+                                              : explicit_bytes;
       if (copy_bytes > 0) {
         memcpy(tail_payload, constants.data, copy_bytes);
       }
@@ -2068,9 +2068,10 @@ static iree_status_t iree_hal_amdgpu_aql_command_buffer_prepare_dispatch_plan(
       }
     }
   }
-  if (IREE_UNLIKELY(out_plan->descriptor->custom_direct_only &&
-                    !iree_hal_amdgpu_aql_dispatch_plan_uses_custom_direct_arguments(
-                        out_plan))) {
+  if (IREE_UNLIKELY(
+          out_plan->descriptor->custom_direct_only &&
+          !iree_hal_amdgpu_aql_dispatch_plan_uses_custom_direct_arguments(
+              out_plan))) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "dispatch export requires custom direct kernarg arguments");
@@ -2086,14 +2087,14 @@ static iree_status_t iree_hal_amdgpu_aql_command_buffer_prepare_dispatch_plan(
           out_plan)) {
     // Callers (e.g. rocBLAS/Tensile) sometimes omit trailing ABI padding or pad
     // beyond the declared kernarg_segment_size with extra trailing scalars. The
-    // kernel only reads its declared size, so trailing bytes are ignored and the
-    // memcpy in write_dispatch_tail clamps to the declared size.
+    // kernel only reads its declared size, so trailing bytes are ignored and
+    // the memcpy in write_dispatch_tail clamps to the declared size.
     //
     // Validate after 8-byte ABI padding so we accept missing tail padding while
     // still rejecting truly short pre-packed HIP argument buffers.
     const uint32_t required_explicit_bytes =
-        (uint32_t)out_plan->descriptor->custom_kernarg_layout
-            .explicit_kernarg_size;
+        (uint32_t)
+            out_plan->descriptor->custom_kernarg_layout.explicit_kernarg_size;
     const iree_host_size_t padded_constant_length =
         iree_host_align(inputs->constants.data_length, /*alignment=*/8);
     if (IREE_UNLIKELY(padded_constant_length < required_explicit_bytes)) {
@@ -2108,7 +2109,8 @@ static iree_status_t iree_hal_amdgpu_aql_command_buffer_prepare_dispatch_plan(
     if (out_plan->custom_layout.total_kernarg_size == 0) {
       out_plan->custom_layout.explicit_kernarg_size =
           inputs->constants.data_length;
-      out_plan->custom_layout.total_kernarg_size = inputs->constants.data_length;
+      out_plan->custom_layout.total_kernarg_size =
+          inputs->constants.data_length;
     }
     out_plan->layout = &out_plan->custom_layout;
     out_plan->kernarg_block_count =
@@ -2202,11 +2204,10 @@ iree_hal_amdgpu_aql_command_buffer_calculate_dispatch_layout(
                 sizeof(uint64_t);
   const iree_host_size_t total_kernarg_size = plan->layout->total_kernarg_size;
   if (IREE_UNLIKELY(total_kernarg_size < binding_bytes)) {
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "dispatch kernarg size %" PRIhsz
-        " is smaller than binding table size %" PRIhsz,
-        total_kernarg_size, binding_bytes);
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "dispatch kernarg size %" PRIhsz
+                            " is smaller than binding table size %" PRIhsz,
+                            total_kernarg_size, binding_bytes);
   }
   const iree_host_size_t tail_byte_length = total_kernarg_size - binding_bytes;
   IREE_RETURN_IF_ERROR(iree_hal_amdgpu_aql_command_buffer_qword_length(

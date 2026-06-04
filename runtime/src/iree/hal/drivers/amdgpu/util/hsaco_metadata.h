@@ -174,14 +174,16 @@ iree_hal_amdgpu_hsaco_metadata_calculate_flatbuffer_hal_export_parameter_require
     iree_hal_amdgpu_hsaco_metadata_export_parameter_requirements_t*
         out_requirements);
 
-// Populates |out_parameters| using the flatbuffer HAL ABI reflection projection.
+// Populates |out_parameters| using the flatbuffer HAL ABI reflection
+// projection.
 //
 // |parameter_capacity| and |name_storage_capacity| must satisfy the
 // requirements returned by
 // iree_hal_amdgpu_hsaco_metadata_calculate_flatbuffer_hal_export_parameter_requirements.
 // Reflected parameter names are cloned into |name_storage| and borrowed by the
 // returned parameter records. No NUL terminators are written or required.
-iree_status_t iree_hal_amdgpu_hsaco_metadata_populate_flatbuffer_hal_export_parameters(
+iree_status_t
+iree_hal_amdgpu_hsaco_metadata_populate_flatbuffer_hal_export_parameters(
     const iree_hal_amdgpu_hsaco_metadata_kernel_t* kernel,
     iree_host_size_t parameter_capacity,
     iree_hal_executable_function_parameter_t* out_parameters,
