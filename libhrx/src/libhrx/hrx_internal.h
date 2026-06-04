@@ -122,6 +122,27 @@ _Static_assert(HRX_BUFFER_USAGE_DISPATCH_STORAGE ==
 _Static_assert(HRX_BUFFER_USAGE_DEFAULT == IREE_HAL_BUFFER_USAGE_DEFAULT,
                "buffer usage mismatch");
 
+// HRX dispatch flags intentionally use their own bit assignments. Translate
+// them instead of casting into IREE HAL dispatch flags.
+static inline hrx_status_t
+hrx_iree_dispatch_flags_from_hrx(uint32_t hrx_flags,
+                                 iree_hal_dispatch_flags_t *out_iree_flags) {
+  *out_iree_flags = IREE_HAL_DISPATCH_FLAG_NONE;
+  const uint32_t supported_flags = HRX_DISPATCH_FLAG_CUSTOM_DIRECT_ARGUMENTS |
+                                   HRX_DISPATCH_FLAG_ALLOW_INLINE_EXECUTION;
+  if (IREE_UNLIKELY(hrx_flags & ~supported_flags)) {
+    return hrx_make_status(HRX_STATUS_INVALID_ARGUMENT,
+                           "unsupported HRX dispatch flags");
+  }
+  if (hrx_flags & HRX_DISPATCH_FLAG_CUSTOM_DIRECT_ARGUMENTS) {
+    *out_iree_flags |= IREE_HAL_DISPATCH_FLAG_CUSTOM_DIRECT_ARGUMENTS;
+  }
+  if (hrx_flags & HRX_DISPATCH_FLAG_ALLOW_INLINE_EXECUTION) {
+    *out_iree_flags |= IREE_HAL_DISPATCH_FLAG_ALLOW_INLINE_EXECUTION;
+  }
+  return hrx_ok_status();
+}
+
 // Buffer view metadata.
 _Static_assert(HRX_ELEMENT_TYPE_NONE == IREE_HAL_ELEMENT_TYPE_NONE,
                "element type mismatch");
