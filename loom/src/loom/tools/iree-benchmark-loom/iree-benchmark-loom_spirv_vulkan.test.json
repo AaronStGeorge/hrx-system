@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "runs spirv vulkan scalar benchmark with bundle",
+      "env": {
+        "LSAN_OPTIONS": "suppressions={srcdir}/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt"
+      },
+      "run": {
+        "tool": "iree-benchmark-loom",
+        "args": [
+          "{srcdir}/../iree-test-loom/testdata/spirv_vulkan_hal_actual.loom",
+          "--benchmark=@double_i32_at_byte_offset",
+          "--device=vulkan",
+          "--measure=dispatch_complete",
+          "--iterations=1",
+          "--warmup_iterations=0",
+          "--batch_size=1",
+          "--min_time_ms=0",
+          "--max_batches=1",
+          "--input_ring_count=1",
+          "--output_format=jsonl",
+          "--artifact_bundle_dir={tmp}/spirv.bundle",
+          "--artifact_bundle_policy=debug"
+        ]
+      },
+      "files": [
+        {
+          "path": "{tmp}/spirv.bundle/results.jsonl",
+          "non_empty": true
+        },
+        {
+          "path": "{tmp}/spirv.bundle/manifest.json",
+          "non_empty": true
+        }
+      ]
+    },
+    {
+      "name": "runs spirv vulkan cooperative f16 benchmark",
+      "env": {
+        "LSAN_OPTIONS": "suppressions={srcdir}/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt"
+      },
+      "run": {
+        "tool": "iree-benchmark-loom",
+        "args": [
+          "{srcdir}/../iree-test-loom/testdata/spirv_vulkan_coop_hal_actual.loom",
+          "--benchmark=@dense_projection_tiled_f16_128",
+          "--device=vulkan",
+          "--measure=dispatch_complete",
+          "--iterations=1",
+          "--warmup_iterations=0",
+          "--batch_size=1",
+          "--min_time_ms=0",
+          "--max_batches=1",
+          "--input_ring_count=1",
+          "--output_format=jsonl",
+          "--artifact_bundle_dir={tmp}/spirv.coop.bundle",
+          "--artifact_bundle_policy=debug"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"row\":\"plan\"",
+          "\"benchmark\":\"dense_projection_tiled_f16_128\"",
+          "\"measure\":\"dispatch_complete\"",
+          "\"row\":\"benchmark\"",
+          "\"row\":\"summary\"",
+          "\"failure_count\":0",
+          "\"failed_benchmark_count\":0"
+        ]
+      }
+    },
+    {
+      "name": "runs spirv vulkan comparison benchmark",
+      "env": {
+        "LSAN_OPTIONS": "suppressions={srcdir}/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt"
+      },
+      "run": {
+        "tool": "iree-benchmark-loom",
+        "args": [
+          "{srcdir}/../iree-test-loom/testdata/spirv_vulkan_coop_hal_actual.loom",
+          "--compare=@narrow_score_tiled_f16_128x16_m1,@narrow_score_tiled_f16_128x16_m2",
+          "--device=vulkan",
+          "--measure=dispatch_complete",
+          "--iterations=1",
+          "--warmup_iterations=0",
+          "--batch_size=1",
+          "--min_time_ms=0",
+          "--max_batches=1",
+          "--input_ring_count=1",
+          "--repetitions=1",
+          "--output_format=jsonl",
+          "--artifact_bundle_dir={tmp}/spirv.compare.bundle",
+          "--artifact_bundle_policy=minimal"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"row\":\"comparison\"",
+          "\"method\":\"ABABA\"",
+          "\"benchmark_count\":2",
+          "\"failure_count\":0",
+          "\"failed_benchmark_count\":0"
+        ]
+      }
+    }
+  ]
+}

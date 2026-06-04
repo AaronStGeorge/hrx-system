@@ -150,8 +150,8 @@ layout is configured with the importer. CMake uses matching top-level options:
 
 ```shell
 iree-cmake-configure \\
-    -DLOOM_IMPORTER_MLIR=ON \\
-    -DLOOM_IMPORTER_TILELANG=ON
+    -DLOOM_IMPORT_MLIR=ON \\
+    -DLOOM_IMPORT_TILELANG=ON
 ```
 
 For a local Bazel checkout that always runs importer tests, put the build

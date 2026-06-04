@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("@rules_python//python:defs.bzl", "py_library", "py_test")
+load("//build_tools/bazel:python.bzl", "iree_py_library", "iree_py_test")
 load("//loom/build_tools/bazel:build_defs.bzl", "iree_cmake_extra_content", "iree_select")
 
 package(
@@ -13,11 +13,11 @@ package(
 )
 
 _TILELANG_IMPORTER_COMPATIBLE = iree_select({
-    "//loom/py/loom/importers:tilelang_enabled": [],
+    "//loom/config/import:tilelang": [],
     "//conditions:default": ["@platforms//:incompatible"],
 })
 
-py_library(
+iree_py_library(
     name = "tilelang",
     srcs = [
         "__init__.py",
@@ -36,12 +36,12 @@ py_library(
 
 iree_cmake_extra_content(
     content = """
-if(LOOM_IMPORTER_TILELANG)
+if(LOOM_IMPORT_TILELANG)
 """,
     inline = True,
 )
 
-py_test(
+iree_py_test(
     name = "tilelang_test",
     srcs = [
         "cases_test.py",

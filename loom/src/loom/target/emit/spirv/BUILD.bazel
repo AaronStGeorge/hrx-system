@@ -6,8 +6,6 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "iree_cmake_extra_content",
-    "iree_genrule",
     "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",

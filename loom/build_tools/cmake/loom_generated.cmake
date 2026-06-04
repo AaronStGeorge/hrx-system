@@ -6,7 +6,8 @@
 
 # Loom generated C build helpers.
 #
-# These helpers mirror loom/src/loom/build_defs.bzl for generated CMake.
+# These helpers mirror loom/build_tools/bazel/build_defs.bzl for generated
+# CMake.
 # Loom packages keep source-of-truth tables in Python and generate compact C
 # data into the build tree.
 

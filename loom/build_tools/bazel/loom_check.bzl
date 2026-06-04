@@ -6,7 +6,12 @@
 
 """Macros for defining tests that run .loom-test files through loom-check."""
 
+load("//build_tools/bazel:cc_attrs.bzl", "cc_attrs")
 load("//build_tools/bazel:executable.bzl", "iree_executable_test")
+load(
+    "//loom/requirements:package_policy.bzl",
+    "apply_loom_test_policy",
+)
 
 _LOOM_CHECK_EXTENSION = ".loom-test"
 
@@ -38,6 +43,9 @@ def loom_check_test(
       **kwargs: Additional attributes passed to native_test.
     """
     _loom_check_test_base_name(src)
+    kwargs = apply_loom_test_policy(kwargs)
+    policy_tags = kwargs.pop("tags", [])
+    resource_group = kwargs.pop("resource_group", None)
     iree_executable_test(
         name = name,
         src = runner,
@@ -45,7 +53,10 @@ def loom_check_test(
         args = ["$(rootpath %s)" % src],
         env = env,
         size = size,
-        tags = tags + ["loom-check"],
+        tags = cc_attrs.with_resource_group_tags(
+            tags + ["loom-check"] + policy_tags,
+            resource_group,
+        ),
         **kwargs
     )
 

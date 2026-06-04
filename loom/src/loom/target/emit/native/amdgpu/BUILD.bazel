@@ -520,6 +520,6 @@ loom_cc_test(
         "//runtime/src/iree/io:stream",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
-        "@hsa_runtime_headers",
+        "//third_party:hsa_runtime_headers",
     ],
 )

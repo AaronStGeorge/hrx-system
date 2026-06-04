@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "runs amdgpu store case",
+      "run": {
+        "tool": "iree-test-loom",
+        "args": [
+          "{srcdir}/testdata/amdgpu_hal_actual.loom",
+          "--case=@store_i32_case",
+          "--device=amdgpu"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"format\":\"loom.test.v0\"",
+          "\"case\":\"store_i32_case\"",
+          "\"passed\":true"
+        ]
+      }
+    },
+    {
+      "name": "runs amdgpu dependent store case",
+      "run": {
+        "tool": "iree-test-loom",
+        "args": [
+          "{srcdir}/testdata/amdgpu_hal_actual.loom",
+          "--case=@store_then_double_i32_case",
+          "--device=amdgpu"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"format\":\"loom.test.v0\"",
+          "\"case\":\"store_then_double_i32_case\"",
+          "\"passed\":true"
+        ]
+      }
+    }
+  ]
+}

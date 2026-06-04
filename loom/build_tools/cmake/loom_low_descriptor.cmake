@@ -6,10 +6,11 @@
 
 # Loom target-low generated table build helpers.
 #
-# These helpers mirror loom/src/loom/build_defs.bzl for generated CMake.
+# These helpers mirror loom/build_tools/bazel/build_defs.bzl for generated
+# CMake.
 # Target packages declare descriptor shards and target-info tables; this file
 # owns the CMake mechanics for running generators into the binary tree and
-# wrapping the outputs in iree_cc_library targets.
+# wrapping the outputs in loom_cc_library targets.
 
 include(ExternalProject)
 

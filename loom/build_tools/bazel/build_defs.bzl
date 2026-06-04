@@ -12,11 +12,87 @@ checked-in Loom Python descriptions and, for some targets, fetched vendor
 machine-readable data.
 """
 
-load(
-    "//loom/build_tools/bazel:build_defs.bzl",
-    "iree_genrule",
-    "loom_cc_library",
-)
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//build_tools/bazel:cmake.bzl", _iree_cmake_extra_content = "iree_cmake_extra_content")
+load("//build_tools/bazel:generate.bzl", "iree_generated_files")
+load("//build_tools/bazel:select.bzl", _iree_select = "iree_select")
+load(":cc.bzl", _loom_cc_binary = "loom_cc_binary", _loom_cc_library = "loom_cc_library")
+load(":cc_benchmark.bzl", _loom_cc_benchmark = "loom_cc_benchmark")
+load(":cc_fuzz.bzl", _loom_cc_fuzz = "loom_cc_fuzz")
+load(":cc_test.bzl", _loom_cc_test = "loom_cc_test")
+
+iree_cmake_extra_content = _iree_cmake_extra_content
+iree_select = _iree_select
+loom_cc_benchmark = _loom_cc_benchmark
+loom_cc_binary = _loom_cc_binary
+loom_cc_fuzz = _loom_cc_fuzz
+loom_cc_library = _loom_cc_library
+loom_cc_test = _loom_cc_test
+
+def _loom_bazel_generator_args(args):
+    return [
+        arg.replace("$(rootpath ", "$(location ").replace("$(execpath ", "$(location ")
+        for arg in args
+    ]
+
+def _loom_output_basename(path):
+    return path.split("/")[-1]
+
+def _loom_output_arg(flag):
+    if "{path}" in flag:
+        return flag
+    if flag.endswith("="):
+        return flag + "{path}"
+    if "=" in flag:
+        return flag + "={path}"
+    return flag
+
+def _loom_output_args(flags, outputs):
+    output_args = {}
+    for i in range(len(outputs)):
+        output_args[_loom_output_basename(outputs[i])] = _loom_output_arg(flags[i])
+    return output_args
+
+def loom_generated_textual_header(
+        name,
+        generator,
+        output,
+        output_flag,
+        args = [],
+        inputs = [],
+        tags = [],
+        visibility = None,
+        comment = None):
+    """Generates one textual header consumed by a Loom C/C++ target.
+
+    Args:
+      name: Generator action target name.
+      generator: Executable label that writes the textual header.
+      output: Generated textual header filename.
+      output_flag: Generator flag paired with the output path.
+      args: Generator arguments before the output flag.
+      inputs: Source data labels consumed by the generator.
+      tags: Additional Bazel tags for the generator action.
+      visibility: Passed through to the generator action.
+      comment: Optional progress message for the generator action.
+    """
+
+    rule_kwargs = {}
+    if visibility != None:
+        rule_kwargs["visibility"] = visibility
+    if comment != None:
+        rule_kwargs["progress_message"] = comment
+
+    iree_generated_files(
+        name = name,
+        srcs = inputs,
+        outs = [output],
+        args = _loom_bazel_generator_args(args),
+        output_args = _loom_output_args([output_flag], [output]),
+        tags = tags + ["skip-bazel_to_cmake"],
+        tool = generator,
+        **rule_kwargs
+    )
 
 def _loom_canonical_query_labels(labels):
     canonical_labels = []
@@ -72,7 +148,7 @@ def loom_assert_no_dependencies(
         tags = ["manual"],
         **kwargs
     )
-    native.sh_test(
+    sh_test(
         name = name,
         srcs = ["//build_tools/bazel:assert_empty_query.sh"],
         args = ["$(location :%s)" % query_name],
@@ -104,7 +180,7 @@ def loom_low_descriptor_data_archive(
 
     # The Bazel repository rule is declared from MODULE.bazel; this macro is a
     # target-local CMake conversion contract.
-    _ignore = (name, repo_name, urls, sha256, kwargs)
+    _ = (repo_name, urls, sha256, kwargs)  # @unused
 
 def loom_target_table_cc_library(
         name,
@@ -132,7 +208,7 @@ def loom_target_table_cc_library(
     Args:
       name: Runtime C library target name.
       generator: Python executable label that writes C/H outputs. Bazel uses it
-        as the genrule tool; bazel_to_cmake resolves the Python target's main
+        as the generator tool; bazel_to_cmake resolves the Python target's main
         script and transitive sources for generated CMake dependencies.
       source: Generated C source filename. Defaults to <name>.c.
       header: Generated C header filename. Defaults to <name>.h.
@@ -158,6 +234,7 @@ def loom_target_table_cc_library(
     """
     if len(generated_hdr_flags) != len(generated_hdrs):
         fail("generated_hdr_flags and generated_hdrs must have the same length")
+    _ = exclude_from_cmake_all  # @unused
 
     package_name = native.package_name()
     header = header or (name + ".h")
@@ -182,43 +259,33 @@ def loom_target_table_cc_library(
             visibility = visibility,
             **kwargs
         )
-        _ignore = (exclude_from_cmake_all, tags)
         return
 
     if generator == None:
         fail("loom_target_table_cc_library %s requires generator" % name)
 
-    genrule_kwargs = {}
+    rule_kwargs = {}
     if visibility != None:
-        genrule_kwargs["visibility"] = visibility
+        rule_kwargs["visibility"] = visibility
 
     source = source or (name + ".c")
 
     # BUILD files use rootpath so the CMake converter can map external data
-    # labels to their fetched source directories. Bazel genrules execute in the
-    # action sandbox and need execpath to read declared srcs.
-    bazel_args = [arg.replace("$(rootpath ", "$(execpath ") for arg in args]
-    output_args = [
-        "--source=$(execpath %s)" % source,
-        "--header=$(execpath %s)" % header,
-    ]
-    for i in range(len(generated_hdrs)):
-        flag = generated_hdr_flags[i]
-        header_output = generated_hdrs[i]
-        output_args.append("%s=$(execpath %s)" % (flag, header_output))
+    # labels to their fetched source directories. The Bazel action expands the
+    # same labels through declared inputs.
+    bazel_args = _loom_bazel_generator_args(args)
+    output_flags = ["--source", "--header"] + generated_hdr_flags
+    outputs = [source, header] + generated_hdrs
 
-    iree_genrule(
+    iree_generated_files(
         name = name + "_gen",
         srcs = inputs,
-        outs = [source, header] + generated_hdrs,
-        cmd = " ".join(
-            ["$(location %s)" % generator] +
-            bazel_args +
-            output_args,
-        ),
+        outs = outputs,
+        args = bazel_args,
+        output_args = _loom_output_args(output_flags, outputs),
         tags = tags + ["skip-bazel_to_cmake"],
-        tools = [generator],
-        **genrule_kwargs
+        tool = generator,
+        **rule_kwargs
     )
 
     generated_source = "//%s:%s" % (package_name, source)
@@ -231,7 +298,6 @@ def loom_target_table_cc_library(
         visibility = visibility,
         **kwargs
     )
-    _ignore = (exclude_from_cmake_all,)
 
 def loom_generated_cc_library(
         name,
@@ -277,34 +343,24 @@ def loom_generated_cc_library(
     if len(extra_output_flags) != len(extra_outputs):
         fail("extra_output_flags and extra_outputs must have the same length")
 
-    genrule_kwargs = {}
+    rule_kwargs = {}
     if visibility != None:
-        genrule_kwargs["visibility"] = visibility
+        rule_kwargs["visibility"] = visibility
 
     source = source or (name + ".c")
-    bazel_args = [arg.replace("$(rootpath ", "$(execpath ") for arg in args]
-    output_args = ["--source=$(execpath %s)" % source]
-    for i in range(len(generated_hdrs)):
-        flag = generated_hdr_flags[i]
-        header = generated_hdrs[i]
-        output_args.append("%s=$(execpath %s)" % (flag, header))
-    for i in range(len(extra_outputs)):
-        flag = extra_output_flags[i]
-        output = extra_outputs[i]
-        output_args.append("%s=$(execpath %s)" % (flag, output))
+    bazel_args = _loom_bazel_generator_args(args)
+    output_flags = ["--source"] + generated_hdr_flags + extra_output_flags
+    outputs = [source] + generated_hdrs + extra_outputs
 
-    iree_genrule(
+    iree_generated_files(
         name = name + "_gen",
         srcs = inputs,
-        outs = [source] + generated_hdrs + extra_outputs,
-        cmd = " ".join(
-            ["$(location %s)" % generator] +
-            bazel_args +
-            output_args,
-        ),
+        outs = outputs,
+        args = bazel_args,
+        output_args = _loom_output_args(output_flags, outputs),
         tags = tags + ["skip-bazel_to_cmake"],
-        tools = [generator],
-        **genrule_kwargs
+        tool = generator,
+        **rule_kwargs
     )
 
     package_name = native.package_name()
@@ -340,7 +396,29 @@ def loom_low_descriptor_cc_library(
         testonly = False,
         visibility = None,
         **kwargs):
-    """Generates a low descriptor C/H shard and wraps it in a runtime library."""
+    """Generates a low descriptor C/H shard and wraps it in a runtime library.
+
+    Args:
+      name: Runtime C library target name.
+      generator: Python executable label that writes C/H outputs.
+      source: Generated C source filename. Defaults to <name>.c for generated
+        targets.
+      header: Generated C header filename. Defaults to <name>.h.
+      generated_hdr_flags: Generator flags paired with generated_hdrs.
+      generated_hdrs: Additional generated headers produced by this action for
+        sibling header_only targets.
+      header_only: Declares a generated-header-only library.
+      args: Generator arguments before the output flags.
+      inputs: Source/vendor data labels consumed by the generator.
+      deps: Runtime C library dependencies.
+      ids_deps: Runtime C library dependencies for the generated _ids target.
+        Defaults to deps.
+      exclude_from_cmake_all: Excludes the generated C library from CMake all.
+      tags: Additional Bazel tags for the internal generator action.
+      testonly: Passed through to the runtime C libraries.
+      visibility: Passed through to the generator action and runtime libraries.
+      **kwargs: Additional arguments passed through to loom_cc_library.
+    """
     if not header_only:
         source = source or (name + ".c")
     header = header or (name + ".h")
@@ -386,4 +464,4 @@ def loom_low_descriptor_exclude_from_cmake_all(
       cc_libraries: iree_cc_library names in the current package.
       targets: Other CMake target names in the current package, usually tests.
     """
-    _ignore = (cc_libraries, targets)
+    _ = (cc_libraries, targets)  # @unused

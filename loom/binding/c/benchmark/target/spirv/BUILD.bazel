@@ -24,6 +24,5 @@ loom_cc_benchmark(
         "//loom/binding/c/benchmark:compile_throughput_benchmark_harness",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:benchmark_main",
-        "@com_google_benchmark//:benchmark",
     ],
 )

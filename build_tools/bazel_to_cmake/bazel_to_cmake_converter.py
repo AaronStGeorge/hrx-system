@@ -29,6 +29,8 @@ _BUILD_SETTING_CMAKE_LIST_VARIABLES = {
     "//runtime/src/iree/hal/drivers/amdgpu:targets": "_IREE_HAL_AMDGPU_EXACT_TARGETS",
 }
 
+_LOCATION_PATTERN = re.compile(r"\$\((location|locations) ([^)]+)\)")
+
 # Maps Bazel platform labels (from both select() conditions and
 # target_compatible_with) to CMake platform condition values.
 _PLATFORM_CMAKE_SYSTEM_NAME = {
@@ -86,6 +88,13 @@ class ConditionSelect:
         """Support: ConditionSelect(...) + unconditional_list."""
         if isinstance(other, list):
             return MixedDeps(unconditional=list(other), selects=[self])
+        if isinstance(other, ConditionSelect):
+            return MixedDeps(unconditional=[], selects=[self, other])
+        if isinstance(other, MixedDeps):
+            return MixedDeps(
+                unconditional=list(other.unconditional),
+                selects=[self] + list(other.selects),
+            )
         return NotImplemented
 
 
@@ -108,6 +117,11 @@ class MixedDeps:
                 unconditional=self.unconditional + other,
                 selects=list(self.selects),
             )
+        if isinstance(other, ConditionSelect):
+            return MixedDeps(
+                unconditional=list(self.unconditional),
+                selects=list(self.selects) + [other],
+            )
         return NotImplemented
 
     def __radd__(self, other):
@@ -116,6 +130,11 @@ class MixedDeps:
             return MixedDeps(
                 unconditional=other + self.unconditional,
                 selects=list(self.selects),
+            )
+        if isinstance(other, ConditionSelect):
+            return MixedDeps(
+                unconditional=list(self.unconditional),
+                selects=[other] + list(self.selects),
             )
         return NotImplemented
 
@@ -135,6 +154,7 @@ class BuildFileFunctions(object):
         self._targets = targets
         self._build_dir = build_dir
         self._repo_root = repo_root
+        self._filegroup_srcs = {}
         self._custom_initialize()
 
     def _custom_initialize(self):
@@ -174,6 +194,11 @@ class BuildFileFunctions(object):
         if tags and "skip-bazel_to_cmake" in tags:
             return True
         return False
+
+    def _check_no_unhandled_kwargs(self, rule_name, kwargs):
+        if kwargs:
+            names = ", ".join(sorted(kwargs))
+            raise NotImplementedError(f"{rule_name} attributes: {names}")
 
     def _convert_platform_condition(self, constraint_label):
         """Returns a CMake condition string for a platform constraint label."""
@@ -463,6 +488,230 @@ class BuildFileFunctions(object):
         else:
             return f"${{PROJECT_BINARY_DIR}}/{src}"
 
+    def _current_package(self):
+        if not self._repo_root:
+            return ""
+        return os.path.relpath(self._build_dir, self._repo_root).replace("\\", "/")
+
+    def _should_emit_python_target(self):
+        return False
+
+    def _python_package_dirs(self):
+        return []
+
+    def _convert_location_arg(self, arg):
+        def replace_location(match):
+            return " ".join(self._cmake_location_paths(match.group(2)))
+
+        return [_LOCATION_PATTERN.sub(replace_location, arg)]
+
+    def _convert_location_args(self, args):
+        if args is None:
+            return None
+        converted_args = []
+        for arg in args:
+            converted_args.extend(self._convert_location_arg(arg))
+        return converted_args
+
+    def _location_label_keys(self, args):
+        if args is None:
+            return set()
+        labels = set()
+        for arg in args:
+            for match in _LOCATION_PATTERN.finditer(arg):
+                labels.add(self._split_location_label(match.group(2)))
+        return labels
+
+    def _cmake_location_paths(self, label):
+        package, name = self._split_location_label(label)
+        if package == self._current_package() and name in self._filegroup_srcs:
+            return [
+                self._cmake_source_location_path(src)
+                for src in self._filegroup_srcs[name]
+            ]
+        source_path = self._cmake_source_location_path(label)
+        if self._repo_root:
+            concrete_source_path = os.path.join(self._repo_root, package, name)
+            if os.path.exists(concrete_source_path):
+                return [source_path]
+        try:
+            cmake_targets = self._targets.convert_target("//%s:%s" % (package, name))
+        except (KeyError, ValueError):
+            return [source_path]
+        if len(cmake_targets) == 1 and cmake_targets[0]:
+            target = cmake_targets[0].replace("::", "_")
+            return [f"$<TARGET_FILE:{target}>"]
+        return [source_path]
+
+    def _split_location_label(self, label):
+        if label.startswith("//"):
+            package_and_name = label[2:]
+            if ":" in package_and_name:
+                package, name = package_and_name.split(":", 1)
+                return package, name
+            return package_and_name, package_and_name.rsplit("/", 1)[-1]
+        if label.startswith(":"):
+            return self._current_package(), label[1:]
+        if ":" in label and not os.path.splitext(label)[1]:
+            package, name = label.split(":", 1)
+            return f"{self._current_package()}/{package}", name
+        return self._current_package(), label
+
+    def _cmake_source_location_path(self, label):
+        if label.startswith("${"):
+            return label
+        package, name = self._split_location_label(label)
+        if name in self._filegroup_srcs and package == self._current_package():
+            raise ValueError(f"filegroup label {label} was not expanded")
+        return f"${{PROJECT_SOURCE_DIR}}/{package}/{name}"
+
+    def _canonical_python_label(self, label, current_package=None):
+        if label.startswith("@"):
+            return label
+        package = (
+            current_package if current_package is not None else self._current_package()
+        )
+        if label.startswith(":"):
+            return "//%s%s" % (package, label)
+        if label.startswith("//"):
+            return label
+        if ":" in label:
+            return "//%s/%s" % (package, label)
+        return "//%s:%s" % (package, label)
+
+    def _split_python_label(self, label, current_package=None):
+        canonical_label = self._canonical_python_label(label, current_package)
+        if canonical_label.startswith("@"):
+            raise KeyError(f"external Python target '{label}' is not converted")
+        if not canonical_label.startswith("//"):
+            raise KeyError(f"unsupported Python target label '{label}'")
+        package_and_name = canonical_label[2:]
+        if ":" in package_and_name:
+            package, name = package_and_name.split(":", 1)
+        else:
+            package = package_and_name
+            name = package.rsplit("/", 1)[-1]
+        return package, name
+
+    def _python_cmake_target_name(self, label, current_package=None):
+        package, name = self._split_python_label(label, current_package)
+        return self._targets.convert_target("//%s:%s" % (package, name))[0]
+
+    def _python_file_cmake_path(self, label, current_package=None):
+        package, name = self._split_python_label(label, current_package)
+        repo_relative_path = os.path.join(package, name)
+        return os.path.relpath(
+            os.path.join(self._repo_root, repo_relative_path), self._build_dir
+        ).replace("\\", "/")
+
+    def _python_file_basename(self, label):
+        if label.startswith("//") or label.startswith(":"):
+            label = label.rsplit(":", 1)[-1]
+        return os.path.basename(label)
+
+    def _python_local_targets(self, targets):
+        if not targets:
+            return []
+        return [
+            target
+            for target in targets
+            if isinstance(target, str) and not target.startswith("@")
+        ]
+
+    def _has_only_external_targets(self, targets):
+        if not targets:
+            return True
+        if isinstance(targets, ConditionSelect):
+            return all(
+                self._has_only_external_targets(values)
+                for values in targets.conditions.values()
+            )
+        if isinstance(targets, MixedDeps):
+            return self._has_only_external_targets(targets.unconditional) and all(
+                self._has_only_external_targets(values)
+                for select in targets.selects
+                for values in select.conditions.values()
+            )
+        return all(
+            isinstance(target, str) and target.startswith("@") for target in targets
+        )
+
+    def _convert_python_targets(self, targets):
+        return [
+            self._python_cmake_target_name(target)
+            for target in self._python_local_targets(targets)
+        ]
+
+    def _convert_python_target_list_blocks(self, target_name, list_name, targets):
+        if not targets:
+            return "", ""
+        if isinstance(targets, ConditionSelect):
+            targets = MixedDeps(unconditional=[], selects=[targets])
+        if isinstance(targets, MixedDeps):
+            converted_targets = self._convert_python_targets(targets.unconditional)
+            var_block = ""
+            var_name = (
+                f"_{self._cmake_variable_name(target_name)}_python_{list_name.lower()}"
+            )
+            for select in targets.selects:
+                first = True
+                select_has_local_targets = any(
+                    self._python_local_targets(values)
+                    for values in select.conditions.values()
+                )
+                if not select_has_local_targets:
+                    continue
+                if not var_block:
+                    var_block = f'set({var_name} "")\n'
+                for values in select.conditions.values():
+                    for target in values:
+                        if not isinstance(target, str):
+                            raise NotImplementedError(f"{list_name} with select()")
+                default_targets = []
+                for label, values in select.conditions.items():
+                    if label == "//conditions:default":
+                        default_targets = self._convert_python_targets(values)
+                        continue
+                    local_targets = self._convert_python_targets(values)
+                    cond = self._convert_select_condition(label)
+                    if not cond:
+                        raise NotImplementedError(f"select condition: {label}")
+                    keyword = "if" if first else "elseif"
+                    var_block += f"{keyword}({cond})\n"
+                    for target in local_targets:
+                        var_block += f"  list(APPEND {var_name} {target})\n"
+                    first = False
+                if default_targets:
+                    var_block += "else()\n"
+                    for target in default_targets:
+                        var_block += f"  list(APPEND {var_name} {target})\n"
+                var_block += "endif()\n"
+            deps_block = self._convert_string_list_block(
+                list_name, converted_targets, sort=False, quote=False
+            )
+            if var_block:
+                if deps_block:
+                    deps_block = deps_block.rstrip("\n") + f"\n    ${{{var_name}}}\n"
+                else:
+                    deps_block = f"  {list_name}\n    ${{{var_name}}}\n"
+            elif not converted_targets:
+                deps_block = ""
+            return deps_block, var_block
+        converted_targets = self._convert_python_targets(targets)
+        if not converted_targets:
+            return "", ""
+        return self._convert_string_list_block(
+            list_name, converted_targets, sort=False, quote=False
+        ), ""
+
+    def _convert_python_target_list_block(self, list_name, targets):
+        block, var_block = self._convert_python_target_list_blocks(
+            list_name.lower(), list_name, targets
+        )
+        if var_block:
+            raise NotImplementedError(f"{list_name} with select()")
+        return block
+
     def _convert_srcs_block(self, srcs, is_generated=False, block_name="SRCS"):
         if not srcs:
             return ""
@@ -588,6 +837,12 @@ class BuildFileFunctions(object):
     def bool_flag(self, *args, **kwargs):
         pass
 
+    def string_list_flag(self, *args, **kwargs):
+        pass
+
+    def declare_requirements(self, *args, **kwargs):
+        pass
+
     def load(self, *args, **kwargs):
         """Attempts to bind constants from loaded .bzl files.
 
@@ -628,6 +883,10 @@ class BuildFileFunctions(object):
                     if name not in self._exec_namespace:
                         self._exec_namespace[name] = namespace[name]
         except Exception:
+            if hasattr(self, "_exec_namespace"):
+                for name in names:
+                    if name == "REQUIREMENTS" and name not in self._exec_namespace:
+                        self._exec_namespace[name] = []
             pass  # .bzl uses Starlark features — fall back to no-op.
 
     def package(self, **kwargs):
@@ -656,20 +915,188 @@ class BuildFileFunctions(object):
         """
         pass
 
-    # Technically we could do something with a CMake equivalent but we have no use
-    # case.
-    def py_binary(self, *args, **kwargs):
-        pass
+    def iree_py_binary(
+        self,
+        name,
+        srcs=None,
+        deps=None,
+        main=None,
+        imports=None,
+        data=None,
+        tags=None,
+        target_compatible_with=None,
+        testonly=None,
+        visibility=None,
+        **kwargs,
+    ):
+        if self._should_skip_target(tags=tags, **kwargs):
+            return
+        if not self._should_emit_python_target():
+            return
+        self._check_no_unhandled_kwargs("iree_py_binary", kwargs)
+        if data and not self._has_only_external_targets(data):
+            raise NotImplementedError(f"iree_py_binary data: {name}")
+        source_list = list(srcs or [])
+        if main and main not in source_list:
+            source_list.append(main)
+        name_block = self._convert_string_arg_block("NAME", name, quote=False)
+        main_block = self._convert_string_arg_block("MAIN", main)
+        source_block = self._convert_string_list_block("SRCS", source_list, sort=False)
+        imports_block = self._convert_string_list_block("IMPORTS", imports, sort=False)
+        deps_block, deps_var_block = self._convert_python_target_list_blocks(
+            name, "DEPS", deps
+        )
+        self._emit_platform_guard_begin(target_compatible_with)
+        if deps_var_block:
+            self._converter.body += deps_var_block
+        self._converter.body += (
+            "iree_py_library(\n"
+            f"{name_block}"
+            f"{main_block}"
+            f"{source_block}"
+            f"{imports_block}"
+            f"{deps_block}"
+            ")\n\n"
+        )
+        self._emit_platform_guard_end(target_compatible_with)
 
-    def py_library(self, *args, **kwargs):
-        pass
+    def iree_py_library(
+        self,
+        name,
+        srcs=None,
+        deps=None,
+        imports=None,
+        data=None,
+        tags=None,
+        target_compatible_with=None,
+        testonly=None,
+        visibility=None,
+        **kwargs,
+    ):
+        if self._should_skip_target(tags=tags, **kwargs):
+            return
+        if not self._should_emit_python_target():
+            return
+        self._check_no_unhandled_kwargs("iree_py_library", kwargs)
+        if data and not self._has_only_external_targets(data):
+            raise NotImplementedError(f"iree_py_library data: {name}")
+        name_block = self._convert_string_arg_block("NAME", name, quote=False)
+        source_block = self._convert_string_list_block("SRCS", srcs, sort=False)
+        imports_block = self._convert_string_list_block("IMPORTS", imports, sort=False)
+        deps_block, deps_var_block = self._convert_python_target_list_blocks(
+            name, "DEPS", deps
+        )
+        self._emit_platform_guard_begin(target_compatible_with)
+        if deps_var_block:
+            self._converter.body += deps_var_block
+        self._converter.body += (
+            "iree_py_library(\n"
+            f"{name_block}"
+            f"{source_block}"
+            f"{imports_block}"
+            f"{deps_block}"
+            ")\n\n"
+        )
+        self._emit_platform_guard_end(target_compatible_with)
 
-    def py_test(self, *args, **kwargs):
-        pass
+    def iree_py_test(
+        self,
+        name,
+        srcs=None,
+        args=None,
+        data=None,
+        deps=None,
+        env=None,
+        imports=None,
+        main=None,
+        package_dirs=None,
+        tags=None,
+        target_compatible_with=None,
+        testonly=None,
+        timeout=None,
+        visibility=None,
+        **kwargs,
+    ):
+        if self._should_skip_target(tags=tags, **kwargs):
+            return
+        if not self._should_emit_python_target():
+            return
+        self._check_no_unhandled_kwargs("iree_py_test", kwargs)
+        if env:
+            raise NotImplementedError(f"iree_py_test env: {name}")
+        if data:
+            if not isinstance(data, list):
+                if self._has_only_external_targets(data):
+                    data = None
+                else:
+                    raise NotImplementedError(f"iree_py_test data: {name}")
+        if data:
+            location_labels = self._location_label_keys(args)
+            data_labels = {self._split_location_label(label) for label in data}
+            if not data_labels.issubset(location_labels):
+                raise NotImplementedError(f"iree_py_test data: {name}")
+        source_list = list(srcs or [])
+        main_source = None
+        if main:
+            for source in source_list:
+                if self._python_file_basename(source) == main:
+                    main_source = source
+                    break
+            if main_source is None:
+                main_source = main
+        elif len(source_list) == 1:
+            main_source = source_list[0]
+        else:
+            raise ValueError(f"iree_py_test {name} requires a main source")
+
+        name_block = self._convert_string_arg_block("NAME", name, quote=False)
+        source_block = self._convert_string_arg_block(
+            "SRCS", self._python_file_cmake_path(main_source)
+        )
+        args_block = self._convert_string_list_block(
+            "ARGS", self._convert_location_args(args), sort=False
+        )
+        deps_block, deps_var_block = self._convert_python_target_list_blocks(
+            name, "DEPS", deps
+        )
+        imports_block = self._convert_string_list_block("IMPORTS", imports, sort=False)
+        labels_block = self._convert_string_list_block("LABELS", tags)
+        package_dirs_block = self._convert_string_list_block(
+            "PACKAGE_DIRS",
+            package_dirs or self._python_package_dirs(),
+            sort=False,
+        )
+        timeout_block = self._convert_timeout_arg_block("TIMEOUT", timeout)
+        self._emit_platform_guard_begin(target_compatible_with)
+        if deps_var_block:
+            self._converter.body += deps_var_block
+        self._converter.body += (
+            "iree_py_test(\n"
+            f"{name_block}"
+            f"{source_block}"
+            f"{args_block}"
+            f"{deps_block}"
+            f"{imports_block}"
+            f"{labels_block}"
+            f"{package_dirs_block}"
+            f"{timeout_block}"
+            ")\n\n"
+        )
+        self._emit_platform_guard_end(target_compatible_with)
+
+    def py_binary(self, **kwargs):
+        self.iree_py_binary(**kwargs)
+
+    def py_library(self, **kwargs):
+        self.iree_py_library(**kwargs)
+
+    def py_test(self, **kwargs):
+        self.iree_py_test(**kwargs)
 
     def filegroup(self, name, srcs, **kwargs):
         if not srcs:
             return
+        self._filegroup_srcs[name] = list(srcs)
 
         # Converting a dependency on a filegroup requires either using the
         # transitive dependency to the actual file or creating a similar
@@ -936,8 +1363,8 @@ class BuildFileFunctions(object):
             return
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         hdrs_block = self._convert_string_list_block("HDRS", hdrs, sort=True)
-        textual_hdrs_block = self._convert_string_list_block(
-            "TEXTUAL_HDRS", textual_hdrs, sort=True
+        textual_hdrs_block = self._convert_srcs_block(
+            textual_hdrs, block_name="TEXTUAL_HDRS"
         )
         srcs_block = self._convert_srcs_block(srcs)
         copts_block, platform_copts_block = self._convert_platform_select_strings(
@@ -987,6 +1414,9 @@ class BuildFileFunctions(object):
             f"  PUBLIC\n)\n\n"
         )
         self._emit_platform_guard_end(target_compatible_with)
+
+    def iree_cc_library(self, **kwargs):
+        self.cc_library(**kwargs)
 
     def iree_compiler_register_plugin(self, plugin_id, target):
         plugin_id_block = self._convert_string_arg_block(
@@ -1074,6 +1504,9 @@ class BuildFileFunctions(object):
         self._emit_optional_local_cts_testdata_guard_end(did_emit_testdata_guard)
         self._emit_platform_guard_end(target_compatible_with)
 
+    def iree_cc_test(self, **kwargs):
+        self.cc_test(**kwargs)
+
     def cc_binary(
         self,
         name,
@@ -1129,6 +1562,9 @@ class BuildFileFunctions(object):
             f")\n\n"
         )
         self._emit_platform_guard_end(target_compatible_with)
+
+    def iree_cc_binary(self, **kwargs):
+        self.cc_binary(**kwargs)
 
     def iree_cc_fuzz(
         self,
@@ -1975,6 +2411,9 @@ class BuildFileFunctions(object):
             f")\n\n"
         )
 
+    def iree_executable_test(self, src, **kwargs):
+        self.native_test(src=src, **kwargs)
+
     def cc_binary_benchmark(
         self,
         name,
@@ -1984,6 +2423,7 @@ class BuildFileFunctions(object):
         copts=None,
         defines=None,
         linkopts=None,
+        args=None,
         tags=None,
         resource_group=None,
         testonly=True,
@@ -2001,6 +2441,7 @@ class BuildFileFunctions(object):
         copts_block = self._convert_string_list_block("COPTS", copts, sort=False)
         defines_block = self._convert_string_list_block("DEFINES", defines)
         linkopts_block = self._convert_string_list_block("LINKOPTS", linkopts)
+        args_block = self._convert_string_list_block("ARGS", args)
         testonly_block = self._convert_option_block("TESTONLY", testonly)
         labels_block = self._convert_string_list_block("LABELS", tags)
         resource_group_block = self._convert_string_arg_block(
@@ -2017,12 +2458,16 @@ class BuildFileFunctions(object):
             f"{copts_block}"
             f"{defines_block}"
             f"{linkopts_block}"
+            f"{args_block}"
             f"{testonly_block}"
             f"{labels_block}"
             f"{resource_group_block}"
             f")\n\n"
         )
         self._emit_platform_guard_end(target_compatible_with)
+
+    def iree_cc_benchmark(self, **kwargs):
+        self.cc_binary_benchmark(**kwargs)
 
     def iree_cmake_extra_content(self, content, inline=False):
         if inline:

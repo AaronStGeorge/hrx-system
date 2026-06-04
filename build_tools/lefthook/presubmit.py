@@ -836,7 +836,11 @@ def run_project_tests(
         return skip_step("Project tests", "no affected project entry points")
     ok = True
     with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", delete=False, dir=git_worktree_dir()
+        mode="w",
+        encoding="utf-8",
+        delete=False,
+        dir=git_worktree_dir(),
+        prefix="iree-x-presubmit-files-",
     ) as file_list:
         for path in paths:
             file_list.write(path + "\n")

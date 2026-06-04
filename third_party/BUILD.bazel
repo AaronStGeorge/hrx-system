@@ -167,7 +167,10 @@ alias(
         "//conditions:default": ":empty_rccl_headers",
     }),
     tags = ["manual"],
-    visibility = [":runtime_users"],
+    visibility = [
+        ":loom_users",
+        ":runtime_users",
+    ],
 )
 
 alias(

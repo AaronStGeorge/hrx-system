@@ -1,4 +1,3 @@
-load("@bazel_skylib//rules:common_settings.bzl", "string_list_flag")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_select",
@@ -13,34 +12,6 @@ package(
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
-
-ALL_CHECK_PROVIDERS = [
-    "amdgpu",
-    "ireevm",
-    "llvmir",
-    "spirv",
-    "wasm",
-    "x86",
-]
-
-#===------------------------------------------------------------------------===#
-# Provider selection
-#===------------------------------------------------------------------------===#
-
-string_list_flag(
-    name = "enabled_providers",
-    build_setting_default = ALL_CHECK_PROVIDERS,
-)
-
-[
-    config_setting(
-        name = "{}_provider_enabled".format(provider),
-        flag_values = {
-            ":enabled_providers": provider,
-        },
-    )
-    for provider in ALL_CHECK_PROVIDERS
-]
 
 #===------------------------------------------------------------------------===#
 # Layering checks
@@ -61,108 +32,138 @@ loom_assert_no_dependencies(
     ],
 )
 
-_AMDGPU_CHECK_COPTS = iree_select({
-    ":amdgpu_provider_enabled": [
-        "-DLOOM_CHECK_HAVE_AMDGPU=1",
+_TARGET_AMDGPU_CHECK_COPTS = iree_select({
+    "//loom/config/target:amdgpu": [
+        "-DLOOM_CHECK_HAVE_TARGET_AMDGPU=1",
     ],
     "//conditions:default": [],
 })
 
-_AMDGPU_CHECK_DEPS = iree_select({
-    ":amdgpu_provider_enabled": [
+_TARGET_AMDGPU_CHECK_DEPS = iree_select({
+    "//loom/config/target:amdgpu": [
         "//loom/src/loom/target/arch/amdgpu:check_provider",
     ],
     "//conditions:default": [],
 })
 
-_IREEVM_CHECK_COPTS = iree_select({
-    ":ireevm_provider_enabled": [
-        "-DLOOM_CHECK_HAVE_IREEVM=1",
+_TARGET_IREEVM_CHECK_COPTS = iree_select({
+    "//loom/config/target:ireevm": [
+        "-DLOOM_CHECK_HAVE_TARGET_IREEVM=1",
     ],
     "//conditions:default": [],
 })
 
-_IREEVM_CHECK_DEPS = iree_select({
-    ":ireevm_provider_enabled": [
+_TARGET_IREEVM_CHECK_DEPS = iree_select({
+    "//loom/config/target:ireevm": [
         "//loom/src/loom/target/arch/ireevm:check_provider",
     ],
     "//conditions:default": [],
 })
 
-_LLVMIR_CHECK_COPTS = iree_select({
-    ":llvmir_provider_enabled": [
-        "-DLOOM_CHECK_HAVE_LLVMIR=1",
+_EMIT_LLVMIR_CHECK_COPTS = iree_select({
+    "//loom/config/emit:llvmir": [
+        "-DLOOM_CHECK_HAVE_EMIT_LLVMIR=1",
     ],
     "//conditions:default": [],
 })
 
-_LLVMIR_CHECK_DEPS = iree_select({
-    ":llvmir_provider_enabled": [
+_EMIT_LLVMIR_CHECK_DEPS = iree_select({
+    "//loom/config/emit:llvmir": [
         "//loom/src/loom/target/emit/llvmir:check_provider",
     ],
     "//conditions:default": [],
 })
 
-_SPIRV_CHECK_COPTS = iree_select({
-    ":spirv_provider_enabled": [
-        "-DLOOM_CHECK_HAVE_SPIRV=1",
+_TARGET_SPIRV_CHECK_COPTS = iree_select({
+    "//loom/config/target:spirv": [
+        "-DLOOM_CHECK_HAVE_TARGET_SPIRV=1",
     ],
     "//conditions:default": [],
 })
 
-_SPIRV_CHECK_DEPS = iree_select({
-    ":spirv_provider_enabled": [
+_TARGET_SPIRV_CHECK_DEPS = iree_select({
+    "//loom/config/target:spirv": [
         "//loom/src/loom/target/arch/spirv:check_provider",
+    ],
+    "//conditions:default": [],
+})
+
+_EMIT_SPIRV_CHECK_COPTS = iree_select({
+    "//loom/config/emit:spirv": [
+        "-DLOOM_CHECK_HAVE_EMIT_SPIRV=1",
+    ],
+    "//conditions:default": [],
+})
+
+_EMIT_SPIRV_CHECK_DEPS = iree_select({
+    "//loom/config/emit:spirv": [
         "//loom/src/loom/target/emit/spirv:check_provider",
     ],
     "//conditions:default": [],
 })
 
-_WASM_CHECK_COPTS = iree_select({
-    ":wasm_provider_enabled": [
-        "-DLOOM_CHECK_HAVE_WASM=1",
+_TARGET_WASM_CHECK_COPTS = iree_select({
+    "//loom/config/target:wasm": [
+        "-DLOOM_CHECK_HAVE_TARGET_WASM=1",
     ],
     "//conditions:default": [],
 })
 
-_WASM_CHECK_DEPS = iree_select({
-    ":wasm_provider_enabled": [
+_TARGET_WASM_CHECK_DEPS = iree_select({
+    "//loom/config/target:wasm": [
         "//loom/src/loom/target/arch/wasm:check_provider",
+    ],
+    "//conditions:default": [],
+})
+
+_EMIT_WASM_CHECK_COPTS = iree_select({
+    "//loom/config/emit:wasm": [
+        "-DLOOM_CHECK_HAVE_EMIT_WASM=1",
+    ],
+    "//conditions:default": [],
+})
+
+_EMIT_WASM_CHECK_DEPS = iree_select({
+    "//loom/config/emit:wasm": [
         "//loom/src/loom/target/emit/wasm:check_provider",
     ],
     "//conditions:default": [],
 })
 
-_X86_CHECK_COPTS = iree_select({
-    ":x86_provider_enabled": [
-        "-DLOOM_CHECK_HAVE_X86=1",
+_TARGET_X86_CHECK_COPTS = iree_select({
+    "//loom/config/target:x86": [
+        "-DLOOM_CHECK_HAVE_TARGET_X86=1",
     ],
     "//conditions:default": [],
 })
 
-_X86_CHECK_DEPS = iree_select({
-    ":x86_provider_enabled": [
+_TARGET_X86_CHECK_DEPS = iree_select({
+    "//loom/config/target:x86": [
         "//loom/src/loom/target/arch/x86:check_provider",
     ],
     "//conditions:default": [],
 })
 
 _LOOM_CHECK_PROVIDER_COPTS = (
-    _AMDGPU_CHECK_COPTS +
-    _IREEVM_CHECK_COPTS +
-    _LLVMIR_CHECK_COPTS +
-    _SPIRV_CHECK_COPTS +
-    _WASM_CHECK_COPTS +
-    _X86_CHECK_COPTS
+    _TARGET_AMDGPU_CHECK_COPTS +
+    _TARGET_IREEVM_CHECK_COPTS +
+    _EMIT_LLVMIR_CHECK_COPTS +
+    _TARGET_SPIRV_CHECK_COPTS +
+    _EMIT_SPIRV_CHECK_COPTS +
+    _TARGET_WASM_CHECK_COPTS +
+    _EMIT_WASM_CHECK_COPTS +
+    _TARGET_X86_CHECK_COPTS
 )
 
 _LOOM_CHECK_PROVIDER_DEPS = (
-    _AMDGPU_CHECK_DEPS +
-    _IREEVM_CHECK_DEPS +
-    _LLVMIR_CHECK_DEPS +
-    _SPIRV_CHECK_DEPS +
-    _WASM_CHECK_DEPS +
-    _X86_CHECK_DEPS
+    _TARGET_AMDGPU_CHECK_DEPS +
+    _TARGET_IREEVM_CHECK_DEPS +
+    _EMIT_LLVMIR_CHECK_DEPS +
+    _TARGET_SPIRV_CHECK_DEPS +
+    _EMIT_SPIRV_CHECK_DEPS +
+    _TARGET_WASM_CHECK_DEPS +
+    _EMIT_WASM_CHECK_DEPS +
+    _TARGET_X86_CHECK_DEPS
 )
 
 loom_cc_library(

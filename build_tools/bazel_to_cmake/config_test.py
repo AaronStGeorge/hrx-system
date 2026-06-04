@@ -102,6 +102,35 @@ class ConfigTest(unittest.TestCase):
             ["root:other::thing"],
         )
 
+    def test_loom_c_root_targets_strip_filesystem_staging_prefix(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        loom = bazel_to_cmake_config.include_project(
+            str(repo_root / ".bazel_to_cmake.cfg.py"),
+            "loom/.bazel_to_cmake.cfg.py",
+        )
+
+        converter = bazel_to_cmake_config.ProjectTargetConverter(
+            repo_map={"@iree": ""},
+            projects=[loom],
+        )
+
+        self.assertEqual(
+            converter.convert_target("//loom/src/loom/ir"),
+            ["loom::ir"],
+        )
+        self.assertEqual(
+            converter.convert_target("@iree//loom/src/loom/tools/loom-check"),
+            ["loom::tools::loom-check"],
+        )
+        self.assertEqual(
+            converter.convert_target("//loom/src/loom/tools/loom-check:loom-check"),
+            ["loom::tools::loom-check::loom-check"],
+        )
+        self.assertEqual(
+            converter.convert_target("//loom/src:defines"),
+            [],
+        )
+
     def test_rejects_compiler_monorepo_external_targets(self):
         converter = bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""})
 

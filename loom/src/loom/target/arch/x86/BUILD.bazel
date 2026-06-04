@@ -6,11 +6,10 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "iree_cmake_extra_content",
-    "iree_genrule",
     "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
+    "loom_generated_textual_header",
     "loom_low_descriptor_cc_library",
 )
 load(
@@ -91,31 +90,11 @@ loom_cc_library(
     deps = ["//runtime/src/iree/base"],
 )
 
-iree_genrule(
-    name = "target_profiles_gen",
-    srcs = [],
-    outs = ["target_profiles.inl"],
-    cmd = "$(location //loom/py/loom/gen:x86_target_profiles) --native-output=$(execpath target_profiles.inl)",
-    tags = ["skip-bazel_to_cmake"],
-    tools = ["//loom/py/loom/gen:x86_target_profiles"],
-)
-
-iree_cmake_extra_content(
-    content = """
 loom_generated_textual_header(
-  NAME
-    target_profiles_gen
-  GENERATOR
-    iree::runtime::py::loom::gen::x86_target_profiles
-  OUTPUT
-    "target_profiles.inl"
-  OUTPUT_FLAG
-    "--native-output"
-  COMMENT
-    "Generating x86 native target profiles"
-)
-""",
-    inline = True,
+    name = "target_profiles_gen",
+    generator = "//loom/py/loom/gen:x86_target_profiles",
+    output = "target_profiles.inl",
+    output_flag = "--native-output",
 )
 
 loom_cc_library(
@@ -128,17 +107,6 @@ loom_cc_library(
         "//loom/src/loom/target:types",
         "//runtime/src/iree/base",
     ],
-)
-
-iree_cmake_extra_content(
-    content = """
-iree_package_name(_PACKAGE_NAME)
-add_dependencies(
-  "${_PACKAGE_NAME}_target_records.objects"
-  "${_PACKAGE_NAME}_target_profiles_gen"
-)
-""",
-    inline = True,
 )
 
 loom_cc_library(

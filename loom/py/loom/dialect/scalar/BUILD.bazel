@@ -4,14 +4,14 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("@rules_python//python:defs.bzl", "py_library")
+load("//build_tools/bazel:python.bzl", "iree_py_library")
 
 package(
     default_visibility = ["//visibility:public"],
     licenses = ["notice"],  # Apache 2.0
 )
 
-py_library(
+iree_py_library(
     name = "scalar",
     srcs = [
         "__init__.py",

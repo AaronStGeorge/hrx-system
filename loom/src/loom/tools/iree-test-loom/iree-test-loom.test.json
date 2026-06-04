@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "runs selected sampled case",
+      "run": {
+        "tool": "iree-test-loom",
+        "args": [
+          "{srcdir}/testdata/scalar_cases.loom",
+          "--case=@sampled_choice",
+          "--sample=1"
+        ]
+      },
+      "stdout": {
+        "contains": [
+          "\"format\":\"loom.test.v0\"",
+          "\"case_count\":1",
+          "\"sample_count\":1",
+          "\"failed_sample_count\":0",
+          "\"skipped_case_count\":0",
+          "\"case\":\"sampled_choice\",\"sample_ordinal\":1,\"passed\":true"
+        ]
+      }
+    },
+    {
+      "name": "runs all scalar cases",
+      "run": {
+        "tool": "iree-test-loom",
+        "args": ["{srcdir}/testdata/scalar_cases.loom"]
+      },
+      "stdout": {
+        "contains": [
+          "\"format\":\"loom.test.v0\"",
+          "\"case_count\":2",
+          "\"sample_count\":3",
+          "\"failed_sample_count\":0",
+          "\"skipped_case_count\":0",
+          "\"case\":\"scalar_equal\",\"sample_ordinal\":0,\"passed\":true",
+          "\"case\":\"sampled_choice\",\"sample_ordinal\":0,\"passed\":true",
+          "\"case\":\"sampled_choice\",\"sample_ordinal\":1,\"passed\":true"
+        ]
+      }
+    }
+  ]
+}

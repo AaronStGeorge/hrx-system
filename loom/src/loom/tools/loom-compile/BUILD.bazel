@@ -4,10 +4,9 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("@bazel_skylib//rules:common_settings.bzl", "string_list_flag")
+load("//build_tools/testing:build_defs.bzl", "iree_execution_test_suite")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "iree_lit_test_suite",
     "iree_select",
     "loom_cc_binary",
 )
@@ -18,36 +17,15 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-ALL_COMPILE_PROVIDERS = [
-    "amdgpu",
-    "ireevm",
-    "spirv",
-]
-
-string_list_flag(
-    name = "enabled_providers",
-    build_setting_default = ALL_COMPILE_PROVIDERS,
-)
-
-[
-    config_setting(
-        name = "{}_provider_enabled".format(provider),
-        flag_values = {
-            ":enabled_providers": provider,
-        },
-    )
-    for provider in ALL_COMPILE_PROVIDERS
-]
-
 _AMDGPU_COMPILE_COPTS = iree_select({
-    ":amdgpu_provider_enabled": [
+    "//loom/config/emit:amdgpu": [
         "-DLOOM_COMPILE_HAVE_AMDGPU=1",
     ],
     "//conditions:default": [],
 })
 
 _AMDGPU_COMPILE_DEPS = iree_select({
-    ":amdgpu_provider_enabled": [
+    "//loom/config/emit:amdgpu": [
         "//loom/src/loom/target/arch/amdgpu:provider",
         "//loom/src/loom/tooling/target/amdgpu:artifact_provider",
     ],
@@ -55,14 +33,14 @@ _AMDGPU_COMPILE_DEPS = iree_select({
 })
 
 _IREEVM_COMPILE_COPTS = iree_select({
-    ":ireevm_provider_enabled": [
+    "//loom/config/emit:ireevm": [
         "-DLOOM_COMPILE_HAVE_IREEVM=1",
     ],
     "//conditions:default": [],
 })
 
 _IREEVM_COMPILE_DEPS = iree_select({
-    ":ireevm_provider_enabled": [
+    "//loom/config/emit:ireevm": [
         "//loom/src/loom/tooling/execution/ireevm:candidate",
         "//loom/src/loom/tooling/execution/ireevm:provider",
     ],
@@ -70,14 +48,14 @@ _IREEVM_COMPILE_DEPS = iree_select({
 })
 
 _SPIRV_COMPILE_COPTS = iree_select({
-    ":spirv_provider_enabled": [
+    "//loom/config/emit:spirv": [
         "-DLOOM_COMPILE_HAVE_SPIRV=1",
     ],
     "//conditions:default": [],
 })
 
 _SPIRV_COMPILE_DEPS = iree_select({
-    ":spirv_provider_enabled": [
+    "//loom/config/emit:spirv": [
         "//loom/src/loom/target/arch/spirv:provider",
         "//loom/src/loom/tooling/target/spirv:artifact_provider",
     ],
@@ -106,14 +84,12 @@ loom_cc_binary(
     ] + _AMDGPU_COMPILE_DEPS + _IREEVM_COMPILE_DEPS + _SPIRV_COMPILE_DEPS,
 )
 
-iree_lit_test_suite(
-    name = "lit_test",
-    srcs = ["loom-compile_test.txt"],
-    cfg = "//runtime:lit.cfg.py",
+iree_execution_test_suite(
+    name = "execution_test",
+    manifests = ["loom-compile.test.json"],
     tags = ["hostonly"],
-    tools = [
-        ":loom-compile",
-        "//tools:iree-run-module",
-        "@llvm-project//llvm:FileCheck",
-    ],
+    tools = {
+        "iree-run-module": "//tools:iree-run-module",
+        "loom-compile": ":loom-compile",
+    },
 )
