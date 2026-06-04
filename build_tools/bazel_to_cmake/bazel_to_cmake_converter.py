@@ -2390,7 +2390,15 @@ class BuildFileFunctions(object):
         )
 
     def native_test(
-        self, name, src, args=None, data=None, env=None, tags=None, timeout=None
+        self,
+        name,
+        src,
+        args=None,
+        data=None,
+        env=None,
+        tags=None,
+        timeout=None,
+        target_compatible_with=None,
     ):
         if self._should_skip_target(tags=tags):
             return
@@ -2401,6 +2409,7 @@ class BuildFileFunctions(object):
         labels_block = self._convert_string_list_block("LABELS", tags)
         timeout_block = self._convert_timeout_arg_block("TIMEOUT", timeout)
 
+        self._emit_platform_guard_begin(target_compatible_with)
         self._converter.body += (
             f"iree_native_test(\n"
             f"{name_block}"
@@ -2410,6 +2419,7 @@ class BuildFileFunctions(object):
             f"{timeout_block}"
             f")\n\n"
         )
+        self._emit_platform_guard_end(target_compatible_with)
 
     def iree_executable_test(self, src, **kwargs):
         self.native_test(src=src, **kwargs)

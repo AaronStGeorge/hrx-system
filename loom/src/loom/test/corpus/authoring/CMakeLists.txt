@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(LOOM_EXECUTE_AMDGPU)
 iree_native_test(
   NAME
     "ffn_gate_up_swiglu_q6q8_plan_test"
@@ -20,7 +21,9 @@ iree_native_test(
   LABELS
     "hostonly"
 )
+endif()
 
+if(LOOM_EXECUTE_AMDGPU)
 iree_native_test(
   NAME
     "mlp_down_projection_residual_bf16_plan_test"
@@ -32,6 +35,7 @@ iree_native_test(
   LABELS
     "hostonly"
 )
+endif()
 
 iree_native_test(
   NAME

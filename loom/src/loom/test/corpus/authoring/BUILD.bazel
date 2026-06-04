@@ -17,6 +17,11 @@ exports_files([
     "mlp_down_projection_residual_bf16.loom",
 ])
 
+_AMDGPU_EXECUTE_COMPATIBLE_WITH = select({
+    "//loom/config/execute:amdgpu": [],
+    "//conditions:default": ["@platforms//:incompatible"],
+})
+
 iree_executable_test(
     name = "ffn_gate_up_swiglu_q6q8_plan_test",
     src = "//loom/src/loom/tools/iree-benchmark-loom",
@@ -28,6 +33,7 @@ iree_executable_test(
         "ffn_gate_up_swiglu_q6q8.loom",
     ],
     tags = ["hostonly"],
+    target_compatible_with = _AMDGPU_EXECUTE_COMPATIBLE_WITH,
 )
 
 iree_executable_test(
@@ -41,6 +47,7 @@ iree_executable_test(
         "mlp_down_projection_residual_bf16.loom",
     ],
     tags = ["hostonly"],
+    target_compatible_with = _AMDGPU_EXECUTE_COMPATIBLE_WITH,
 )
 
 iree_executable_test(

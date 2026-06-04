@@ -82,9 +82,15 @@ static iree_status_t loom_greedy_rewrite_enable_region_facts(
   }
 
   loom_value_fact_table_t* facts = NULL;
+  const loom_target_bundle_t* target_bundle =
+      options && options->seed_facts
+          ? options->seed_facts->context.target_bundle
+          : NULL;
   IREE_RETURN_IF_ERROR(loom_pass_value_fact_owner_prepare(
       driver->value_facts, driver->module,
-      loom_pass_value_fact_scope_region(function, region, parent_op), &facts));
+      loom_pass_value_fact_scope_region_for_target(function, region, parent_op,
+                                                   target_bundle),
+      &facts));
   driver->latest_facts = facts;
   return loom_rewriter_enable_region_analysis_with_seed_facts(
       &driver->rewriter, function, region, parent_op, facts,

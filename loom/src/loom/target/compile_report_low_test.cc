@@ -20,13 +20,16 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
   constexpr uint32_t kRegisterCopyTagOffset = 0;
   constexpr uint32_t kMemoryGlobalTagOffset = 18;
   constexpr uint32_t kMatrixWmmaTagOffset = 41;
+  constexpr uint32_t kRegisterClassGprOffset = 57;
   static const uint8_t kDescriptorStringTable[] =
       "\x11"
       "register.copy.b32"
       "\x16"
       "memory.global.load.u32"
       "\x0f"
-      "matrix.wmma.f32";
+      "matrix.wmma.f32"
+      "\x08"
+      "test.gpr";
   const loom_low_descriptor_t descriptors[] = {
       {
           .semantic_tag_string_offset = kRegisterCopyTagOffset,
@@ -38,7 +41,18 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
           .semantic_tag_string_offset = kMatrixWmmaTagOffset,
       },
   };
+  const loom_low_reg_class_t reg_classes[] = {
+      {
+          .name_string_offset = kRegisterClassGprOffset,
+          .flags = LOOM_LOW_REG_CLASS_FLAG_VIRTUAL_ONLY,
+          .alloc_unit_bits = 32,
+          .spill_class_id = LOOM_LOW_REG_CLASS_NONE,
+          .full_register_part_mask = 1,
+          .spill_slot_space = LOOM_LOW_SPILL_SLOT_SPACE_STACK,
+      },
+  };
   const loom_low_descriptor_set_t descriptor_set = {
+      .stable_id = 1,
       .string_table =
           {
               .data = kDescriptorStringTable,
@@ -46,6 +60,8 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
           },
       .descriptors = descriptors,
       .descriptor_count = IREE_ARRAYSIZE(descriptors),
+      .reg_classes = reg_classes,
+      .reg_class_count = IREE_ARRAYSIZE(reg_classes),
   };
   loom_target_compile_report_pressure_row_t pressure_rows[1] = {};
   loom_target_compile_report_spill_row_t spill_rows[1] = {};
@@ -119,6 +135,7 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
       {
           .value_id = 4,
           .value_class = pressure_summaries[0].value_class,
+          .descriptor_reg_class_id = 0,
           .location_kind = LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT,
           .location_base = 0,
           .location_count = 1,
@@ -126,6 +143,7 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
       {
           .value_id = 5,
           .value_class = pressure_summaries[1].value_class,
+          .descriptor_reg_class_id = 0,
           .location_kind = LOOM_LOW_ALLOCATION_LOCATION_SPILL_SLOT,
           .location_base = 1,
           .location_count = 1,
@@ -216,6 +234,10 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
       .schedule_class_name = IREE_SVL("amdgpu.wmma"),
   };
   const loom_low_emission_frame_t frame = {
+      .target =
+          {
+              .descriptor_set = &descriptor_set,
+          },
       .schedule =
           {
               .module = &module,
@@ -234,6 +256,10 @@ TEST(CompileReportLowTest, CopiesBoundedPressureAndSpillRows) {
       .allocation =
           {
               .module = &module,
+              .target =
+                  {
+                      .descriptor_set = &descriptor_set,
+                  },
               .liveness =
                   {
                       .value_ids = liveness_value_ids,

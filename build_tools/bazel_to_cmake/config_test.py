@@ -200,6 +200,29 @@ class ConfigTest(unittest.TestCase):
             'IREE_HAL_DRIVER_WEBGPU AND IREE_ARCH STREQUAL "wasm_32"',
         )
 
+    def test_native_test_emits_target_compatible_guard(self):
+        converter = SimpleNamespace(body="")
+        functions = bazel_to_cmake_converter.BuildFileFunctions(
+            converter=converter,
+            targets=bazel_to_cmake_targets.TargetConverter(repo_map={"@iree": ""}),
+            build_dir="",
+        )
+
+        functions.native_test(
+            name="portable_test",
+            src="//tools:runner",
+            target_compatible_with=functions.select(
+                {
+                    "@platforms//cpu:wasm32": [],
+                    "//conditions:default": ["@platforms//:incompatible"],
+                }
+            ),
+        )
+
+        self.assertIn('if(IREE_ARCH STREQUAL "wasm_32")', converter.body)
+        self.assertIn("iree_native_test(", converter.body)
+        self.assertIn("endif()", converter.body)
+
 
 if __name__ == "__main__":
     unittest.main()
