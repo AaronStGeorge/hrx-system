@@ -9,19 +9,27 @@
 
 iree_add_all_subdirs()
 
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     view
+  GENERATOR
+    loom::py::loom::gen::c_tables_generator
+  SRCS
+    "facts.c"
+    "reference.c"
+    "type_transfer.c"
+    "verify.c"
+  GENERATED_SRC_FLAGS
+    "--builders"
+    "--tables"
+  GENERATED_SRCS
+    "builders.c"
+    "tables.c"
   HDRS
     "ops.h"
     "reference.h"
-  SRCS
-    "builders.c"
-    "facts.c"
-    "reference.c"
-    "tables.c"
-    "type_transfer.c"
-    "verify.c"
+  ARGS
+    "--dialect=view"
   DEPS
     loom::error::emitter
     loom::error::error_defs
@@ -33,7 +41,6 @@ loom_cc_library(
     loom::rewrite::type_propagation
     loom::util::fact_table
     loom::util::math
-  PUBLIC
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

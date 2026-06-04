@@ -52,6 +52,7 @@ loom_cc_library(
         ":compile_pool_prototype",
         "//loom/binding/c:loomc",
         "//runtime/src/iree/base",
+        "//third_party:google_benchmark",
     ],
 )
 

@@ -250,16 +250,24 @@ loom_cc_library(
 endif()
 
 if(LOOM_TARGET_SPIRV)
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     ops
+  GENERATOR
+    loom::py::loom::gen::c_tables_generator
+  SRCS
+    "ops/registry.c"
+  GENERATED_SRC_FLAGS
+    "--builders"
+    "--tables"
+  GENERATED_SRCS
+    "ops/builders.c"
+    "ops/tables.c"
   HDRS
     "ops/ops.h"
     "ops/registry.h"
-  SRCS
-    "ops/builders.c"
-    "ops/registry.c"
-    "ops/tables.c"
+  ARGS
+    "--dialect=spirv"
   DEPS
     ::target_records
     iree::base
@@ -268,7 +276,6 @@ loom_cc_library(
     loom::ops::op_defs
     loom::ops::target
     loom::target::types
-  PUBLIC
 )
 endif()
 

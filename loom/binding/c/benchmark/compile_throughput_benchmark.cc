@@ -11,6 +11,7 @@
 #include <string>
 #include <thread>
 
+#include "benchmark/benchmark.h"
 #include "loom/binding/c/benchmark/benchmark_kernels.h"
 #include "loom/binding/c/benchmark/util/compile_pool_prototype.h"
 

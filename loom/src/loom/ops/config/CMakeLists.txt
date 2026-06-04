@@ -9,18 +9,26 @@
 
 iree_add_all_subdirs()
 
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     config
+  GENERATOR
+    loom::py::loom::gen::c_tables_generator
+  SRCS
+    "contract.c"
+    "facts.c"
+    "verify.c"
+  GENERATED_SRC_FLAGS
+    "--builders"
+    "--tables"
+  GENERATED_SRCS
+    "builders.c"
+    "tables.c"
   HDRS
     "contract.h"
     "ops.h"
-  SRCS
-    "builders.c"
-    "contract.c"
-    "facts.c"
-    "tables.c"
-    "verify.c"
+  ARGS
+    "--dialect=config"
   DEPS
     iree::base
     loom::error::emitter
@@ -28,7 +36,6 @@ loom_cc_library(
     loom::ir
     loom::ir::facts
     loom::ops::op_defs
-  PUBLIC
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

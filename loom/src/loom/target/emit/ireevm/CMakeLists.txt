@@ -68,6 +68,7 @@ loom_cc_library(
     iree::base
     iree::base::internal::flatcc::building
     iree::schemas::bytecode_module_def_c_fbs
+    iree::vm::bytecode::isa
     iree::vm::bytecode::utils
   PUBLIC
 )

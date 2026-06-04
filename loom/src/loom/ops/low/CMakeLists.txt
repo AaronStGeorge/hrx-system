@@ -9,19 +9,27 @@
 
 iree_add_all_subdirs()
 
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     low
-  HDRS
-    "kernel.h"
-    "ops.h"
+  GENERATOR
+    loom::py::loom::gen::c_tables_generator
   SRCS
-    "builders.c"
     "canonicalize.c"
     "facts.c"
     "kernel.c"
-    "tables.c"
     "verify.c"
+  GENERATED_SRC_FLAGS
+    "--builders"
+    "--tables"
+  GENERATED_SRCS
+    "builders.c"
+    "tables.c"
+  HDRS
+    "kernel.h"
+    "ops.h"
+  ARGS
+    "--dialect=low"
   DEPS
     loom::error::emitter
     loom::error::error_defs
@@ -37,7 +45,6 @@ loom_cc_library(
     loom::target::types
     loom::util::fact_table
     loom::util::stable_id
-  PUBLIC
 )
 
 loom_cc_test(

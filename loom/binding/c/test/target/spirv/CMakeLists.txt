@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
     profile_test
@@ -20,8 +21,13 @@ loom_cc_test(
     loom::binding::c::loomc
     loom::binding::c::loomc_target_spirv
     loom::binding::c::test::test_util
+  LABELS
+    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.emit.spirv"
 )
+endif()
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
     vulkaninfo_test
@@ -35,23 +41,37 @@ loom_cc_test(
     loom::binding::c::loomc_target_spirv
     loom::binding::c::loomc_target_spirv_vulkaninfo
     loom::binding::c::test::test_util
+  LABELS
+    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.emit.spirv"
 )
+endif()
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+set(_vulkan_test_platform_deps "")
+if(LOOM_EXECUTE_SPIRV_VULKAN)
+  list(APPEND _vulkan_test_platform_deps Vulkan::Headers)
+endif()
 loom_cc_test(
   NAME
     vulkan_test
   SRCS
     "vulkan_test.cc"
   DEPS
-    Vulkan::Headers
     iree::testing::gtest
     iree::testing::gtest_main
     loom::binding::c::loomc
     loom::binding::c::loomc_target_spirv
     loom::binding::c::loomc_target_spirv_vulkan
     loom::binding::c::test::test_util
+    ${_vulkan_test_platform_deps}
+  LABELS
+    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.emit.spirv"
 )
+endif()
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
     iree_hal_test
@@ -66,8 +86,13 @@ loom_cc_test(
     loom::binding::c::loomc_target_spirv
     loom::binding::c::loomc_target_spirv_iree_hal
     loom::binding::c::test::test_util
+  LABELS
+    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.emit.spirv"
 )
+endif()
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
     iree_hal_execution_test
@@ -84,11 +109,16 @@ loom_cc_test(
     loom::binding::c::test::target::iree_hal_execution_test_util
   LABELS
     "driver=vulkan"
+    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.emit.spirv"
 )
+endif()
 
-set_property(TEST iree/loom/binding/c/test/target/spirv/iree_hal_execution_test
-  APPEND PROPERTY ENVIRONMENT
-    "LSAN_OPTIONS=suppressions=${IREE_ROOT_DIR}/build_tools/sanitizer/lsan_suppressions_vulkan.txt"
-)
+if(TEST iree/loom/binding/c/test/target/spirv/iree_hal_execution_test)
+  set_property(TEST iree/loom/binding/c/test/target/spirv/iree_hal_execution_test
+    APPEND PROPERTY ENVIRONMENT
+      "LSAN_OPTIONS=suppressions=${IREE_ROOT_DIR}/build_tools/sanitizer/lsan_suppressions_vulkan.txt"
+  )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

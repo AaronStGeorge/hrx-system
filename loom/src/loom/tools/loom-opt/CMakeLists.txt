@@ -31,7 +31,7 @@ loom_cc_binary(
     loom::pass::registry
     loom::pass::report
     loom::pass::tooling
-    loom::target::all::provider
+    loom::target::configured::provider
     loom::target::math_policy
     loom::target::predicate
     loom::target::provider

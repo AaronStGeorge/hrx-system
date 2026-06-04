@@ -9,19 +9,27 @@
 
 iree_add_all_subdirs()
 
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     index
-  HDRS
-    "ops.h"
+  GENERATOR
+    loom::py::loom::gen::c_tables_generator
   SRCS
-    "builders.c"
     "canonicalize.c"
     "compare.c"
-    "compare.h"
     "facts.c"
-    "tables.c"
     "verify.c"
+  GENERATED_SRC_FLAGS
+    "--builders"
+    "--tables"
+  GENERATED_SRCS
+    "builders.c"
+    "tables.c"
+  HDRS
+    "compare.h"
+    "ops.h"
+  ARGS
+    "--dialect=index"
   DEPS
     loom::error::emitter
     loom::error::error_defs
@@ -31,7 +39,6 @@ loom_cc_library(
     loom::ops::scalar
     loom::rewrite::rewriter
     loom::util::math
-  PUBLIC
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

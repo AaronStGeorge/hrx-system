@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "benchmark/benchmark.h"
 #include "loom/binding/c/benchmark/compile_throughput_benchmark.h"
 
 namespace {

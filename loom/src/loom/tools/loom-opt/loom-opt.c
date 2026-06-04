@@ -24,7 +24,7 @@
 #include "loom/pass/registry.h"
 #include "loom/pass/report.h"
 #include "loom/pass/tooling.h"
-#include "loom/target/all/provider.h"
+#include "loom/target/configured/provider.h"
 #include "loom/target/predicate.h"
 #include "loom/target/provider.h"
 #include "loom/tooling/config/config.h"
@@ -980,7 +980,7 @@ int main(int argc, char** argv) {
   loom_tooling_config_set_t config_set;
   loom_tooling_config_set_initialize(allocator, &config_set);
   const loom_target_environment_t* target_environment =
-      loom_all_target_environment();
+      loom_configured_target_environment();
   loom_pass_registry_storage_t pass_registry_storage = {0};
   const loom_pass_registry_t* pass_registry = NULL;
   iree_string_view_t source = iree_string_view_empty();

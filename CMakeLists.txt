@@ -194,7 +194,7 @@ add_subdirectory(runtime/src)
 
 if(LOOM_BUILD)
   add_subdirectory(loom/py/loom)
-  add_subdirectory(loom/src/loom)
+  add_subdirectory(loom/src)
   add_subdirectory(loom/binding/c)
 endif()
 

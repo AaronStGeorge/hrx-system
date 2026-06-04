@@ -7,6 +7,9 @@
 # To disable autogeneration for this file entirely, delete this header.        #
 ################################################################################
 
+set(IREE_PACKAGE_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(IREE_PACKAGE_ROOT_PREFIX "loom/binding/c")
+
 iree_add_all_subdirs()
 
 loom_cc_library(
@@ -114,6 +117,7 @@ loom_cc_library(
   PUBLIC
 )
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     loomc_target_spirv
@@ -147,7 +151,9 @@ loom_cc_library(
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/src>"
   PUBLIC
 )
+endif()
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     loomc_target_spirv_vulkaninfo
@@ -169,7 +175,13 @@ loom_cc_library(
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/src>"
   PUBLIC
 )
+endif()
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
+set(_loomc_target_spirv_vulkan_platform_deps "")
+if(LOOM_EXECUTE_SPIRV_VULKAN)
+  list(APPEND _loomc_target_spirv_vulkan_platform_deps Vulkan::Headers)
+endif()
 loom_cc_library(
   NAME
     loomc_target_spirv_vulkan
@@ -180,7 +192,7 @@ loom_cc_library(
   DEPS
     ::loomc
     ::loomc_target_spirv
-    Vulkan::Headers
+    ${_loomc_target_spirv_vulkan_platform_deps}
   ALWAYSLINK
   INCLUDES
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/.>"
@@ -191,6 +203,7 @@ loom_cc_library(
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/src>"
   PUBLIC
 )
+endif()
 
 loom_cc_library(
   NAME
@@ -213,6 +226,7 @@ loom_cc_library(
   PUBLIC
 )
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     loomc_target_spirv_iree_hal
@@ -235,7 +249,9 @@ loom_cc_library(
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/src>"
   PUBLIC
 )
+endif()
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
 loom_cc_library(
   NAME
     loomc_full
@@ -280,5 +296,6 @@ loom_cc_library(
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>"
   PUBLIC
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

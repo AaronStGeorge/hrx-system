@@ -20,7 +20,6 @@ import subprocess
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TypeVar
 
 from loom.gen.generated_file import line_comment_header
 from loom.target.low_descriptors import (
@@ -238,11 +237,8 @@ def _c_identifier(value: str) -> str:
     return identifier.lower()
 
 
-_T = TypeVar("_T")
-
-
-def _dedupe_by_name(items: Sequence[_T], get_name: Callable[[_T], str]) -> dict[str, _T]:
-    result: dict[str, _T] = {}
+def _dedupe_by_name[T](items: Sequence[T], get_name: Callable[[T], str]) -> dict[str, T]:
+    result: dict[str, T] = {}
     for item in items:
         name = get_name(item)
         if name in result:
@@ -2588,13 +2584,13 @@ def write_descriptor_set_to_paths(
 
 
 def main() -> None:
-    from loom.gen.x86_packed_dot_contract import write_x86_packed_dot_contract_data
+    from loom.gen.x86_packed_dot_contract import write_x86_packed_dot_contract_header
     from loom.target.descriptor_sets import iter_checked_in_c_descriptor_sets
 
     descriptor_sets = tuple(iter_checked_in_c_descriptor_sets())
     for descriptor_set in descriptor_sets:
         write_descriptor_set(descriptor_set)
-    write_x86_packed_dot_contract_data()
+    write_x86_packed_dot_contract_header()
     print(f"Generated {len(descriptor_sets)} low descriptor sets")
 
 

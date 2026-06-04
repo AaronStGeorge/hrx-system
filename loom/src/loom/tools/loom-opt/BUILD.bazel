@@ -33,7 +33,7 @@ loom_cc_binary(
         "//loom/src/loom/target:math_policy",
         "//loom/src/loom/target:predicate",
         "//loom/src/loom/target:provider",
-        "//loom/src/loom/target/all:provider",
+        "//loom/src/loom/target/configured:provider",
         "//loom/src/loom/tooling/config",
         "//loom/src/loom/tooling/execution:session",
         "//loom/src/loom/tooling/io:file",

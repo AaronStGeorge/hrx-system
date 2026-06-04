@@ -12,7 +12,7 @@
 
 #include "iree/base/internal/flatcc/building.h"
 #include "iree/schemas/bytecode_module_def_builder.h"
-#include "iree/vm/bytecode/utils/isa.h"
+#include "iree/vm/bytecode/isa/isa.h"
 
 typedef struct loom_ireevm_module_build_t {
   // FlatCC table references for each imported function.

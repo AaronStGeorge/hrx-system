@@ -735,8 +735,8 @@ static iree_status_t iree_benchmark_loom_write_benchmark_timing_stats_json(
 static const char* iree_benchmark_loom_profile_statistics_row_type_name(
     iree_hal_profile_statistics_row_type_t row_type) {
   switch (row_type) {
-    case IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_DISPATCH_EXPORT:
-      return "dispatch_export";
+    case IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_DISPATCH_FUNCTION:
+      return "dispatch_function";
     case IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_DISPATCH_COMMAND_BUFFER:
       return "dispatch_command_buffer";
     case IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_DISPATCH_COMMAND_OPERATION:
@@ -745,8 +745,8 @@ static const char* iree_benchmark_loom_profile_statistics_row_type_name(
       return "queue_device_operation";
     case IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_QUEUE_HOST_OPERATION:
       return "queue_host_operation";
-    case IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_HOST_EXECUTION_EXPORT:
-      return "host_execution_export";
+    case IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_HOST_EXECUTION_FUNCTION:
+      return "host_execution_function";
     case IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_HOST_EXECUTION_COMMAND_BUFFER:
       return "host_execution_command_buffer";
     case IREE_HAL_PROFILE_STATISTICS_ROW_TYPE_HOST_EXECUTION_COMMAND_OPERATION:
@@ -851,15 +851,15 @@ static iree_status_t iree_benchmark_loom_write_hal_profile_row_summary_json(
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream,
       ",\"executable_id\":%" PRIu64 ",\"command_buffer_id\":%" PRIu64
-      ",\"export_ordinal\":%" PRIu32 ",\"command_index\":%" PRIu32,
-      row->executable_id, row->command_buffer_id, row->export_ordinal,
+      ",\"function_ordinal\":%" PRIu32 ",\"command_index\":%" PRIu32,
+      row->executable_id, row->command_buffer_id, row->function_ordinal,
       row->command_index));
-  if (row->export_name_length != 0) {
+  if (row->function_name_length != 0) {
     IREE_RETURN_IF_ERROR(
-        loom_output_stream_write_cstring(stream, ",\"export_name\":"));
+        loom_output_stream_write_cstring(stream, ",\"function_name\":"));
     IREE_RETURN_IF_ERROR(loom_json_write_escaped_string(
         stream,
-        iree_make_string_view(row->export_name, row->export_name_length)));
+        iree_make_string_view(row->function_name, row->function_name_length)));
   }
   IREE_RETURN_IF_ERROR(loom_output_stream_write_format(
       stream,

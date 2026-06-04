@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(LOOM_TARGET_AMDGPU AND LOOM_TARGET_IREEVM AND LOOM_TARGET_SPIRV AND LOOM_TARGET_WASM AND LOOM_TARGET_X86)
 loom_cc_library(
   NAME
     provider
@@ -27,7 +28,9 @@ loom_cc_library(
     loom::target::provider
   PUBLIC
 )
+endif()
 
+if(LOOM_TARGET_AMDGPU AND LOOM_TARGET_IREEVM AND LOOM_TARGET_SPIRV AND LOOM_TARGET_WASM AND LOOM_TARGET_X86)
 loom_cc_library(
   NAME
     low_registry
@@ -44,5 +47,6 @@ loom_cc_library(
     loom::target::low_legality
   PUBLIC
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

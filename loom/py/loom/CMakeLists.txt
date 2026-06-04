@@ -7,6 +7,9 @@
 # To disable autogeneration for this file entirely, delete this header.        #
 ################################################################################
 
+set(IREE_PACKAGE_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(IREE_PACKAGE_ROOT_PREFIX "loom/py/loom")
+
 iree_add_all_subdirs()
 
 iree_py_library(

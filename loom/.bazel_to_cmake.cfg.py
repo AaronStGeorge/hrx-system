@@ -309,6 +309,9 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         name,
         generator,
         source=None,
+        srcs=None,
+        generated_src_flags=None,
+        generated_srcs=None,
         hdrs=None,
         generated_hdr_flags=None,
         generated_hdrs=None,
@@ -332,6 +335,13 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
         name_block = self._convert_string_arg_block("NAME", name, quote=False)
         generator_block = self._convert_single_target_block("GENERATOR", generator)
         source_block = self._convert_string_arg_block("SOURCE", source)
+        srcs_block = self._convert_srcs_block(srcs, block_name="SRCS")
+        generated_src_flags_block = self._convert_string_list_block(
+            "GENERATED_SRC_FLAGS", generated_src_flags or None, sort=False
+        )
+        generated_srcs_block = self._convert_string_list_block(
+            "GENERATED_SRCS", generated_srcs or None, sort=False
+        )
         hdrs_block = self._convert_srcs_block(hdrs, block_name="HDRS")
         generated_hdr_flags_block = self._convert_string_list_block(
             "GENERATED_HDR_FLAGS", generated_hdr_flags or None, sort=False
@@ -359,6 +369,9 @@ class LoomBuildFileFunctions(bazel_to_cmake_converter.BuildFileFunctions):
             f"{name_block}"
             f"{generator_block}"
             f"{source_block}"
+            f"{srcs_block}"
+            f"{generated_src_flags_block}"
+            f"{generated_srcs_block}"
             f"{hdrs_block}"
             f"{generated_hdr_flags_block}"
             f"{generated_hdrs_block}"

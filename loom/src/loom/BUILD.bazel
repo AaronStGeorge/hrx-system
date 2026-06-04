@@ -7,10 +7,7 @@
 # Loom: lightweight ML model compiler targeting the IREE runtime.
 # No MLIR or LLVM dependency. Uses iree/base/ for infrastructure.
 
-load(
-    "//loom/build_tools/bazel:build_defs.bzl",
-    "iree_cmake_extra_content",
-)
+load("//build_tools/bazel:cmake.bzl", "iree_cmake_extra_content")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -20,15 +17,7 @@ package(
 
 iree_cmake_extra_content(
     content = """
-iree_setup_c_src_root(
-  PACKAGE_ROOT_PREFIX "loom"
-  DEFAULT_EXPORT_SET Runtime
-  DEFAULT_INSTALL_COMPONENT IREEDevLibraries-Runtime
-  IMPLICIT_DEFS_TARGET loom_defs
-)
-
-include("${PROJECT_SOURCE_DIR}/loom/build_tools/cmake/loom_cc.cmake")
-include("${PROJECT_SOURCE_DIR}/loom/build_tools/cmake/loom_low_descriptor.cmake")
-include("${PROJECT_SOURCE_DIR}/loom/build_tools/cmake/loom_generated.cmake")
+set(IREE_PACKAGE_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(IREE_PACKAGE_ROOT_PREFIX "loom")
 """,
 )

@@ -102,6 +102,31 @@ iree_py_library(
   DEPS
     loom::py::loom::gen::generated_file
     loom::py::loom::core
+    loom::py::loom::dialect::package
+    loom::py::loom::target::arch::amdgpu::dialect
+    loom::py::loom::target::arch::ireevm::dialect
+    loom::py::loom::target::arch::spirv::dialect
+    loom::py::loom::target::arch::wasm::dialect
+    loom::py::loom::target::arch::x86::dialect
+)
+
+iree_py_library(
+  NAME
+    c_tables_generator
+  MAIN
+    "c_tables.py"
+  SRCS
+    "bootstrap.py"
+    "c_tables.py"
+  DEPS
+    loom::py::loom::gen::generated_file
+    loom::py::loom::core
+    loom::py::loom::dialect::package
+    loom::py::loom::target::arch::amdgpu::dialect
+    loom::py::loom::target::arch::ireevm::dialect
+    loom::py::loom::target::arch::spirv::dialect
+    loom::py::loom::target::arch::wasm::dialect
+    loom::py::loom::target::arch::x86::dialect
 )
 
 iree_py_test(
@@ -377,6 +402,19 @@ iree_py_library(
     loom::py::loom::gen::generated_file
     loom::py::loom::target::arch::x86::target_info
     loom::py::loom::target::emit::llvmir::x86::target_info
+)
+
+iree_py_library(
+  NAME
+    x86_packed_dot_contract
+  MAIN
+    "x86_packed_dot_contract.py"
+  SRCS
+    "x86_packed_dot_contract.py"
+  DEPS
+    loom::py::loom::gen::generated_file
+    loom::py::loom::target::low_descriptors
+    loom::py::loom::target::arch::x86::target_info
 )
 
 iree_py_test(

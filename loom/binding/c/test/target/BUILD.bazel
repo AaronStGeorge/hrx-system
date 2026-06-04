@@ -16,6 +16,11 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
+LOOMC_TARGET_SPIRV_COMPATIBLE_WITH = [
+    "//loom/config/target:spirv",
+    "//loom/config/emit:spirv",
+]
+
 loom_cc_library(
     name = "iree_hal_execution_test_util",
     testonly = True,
@@ -39,6 +44,7 @@ loom_cc_library(
 loom_cc_test(
     name = "iree_hal_test",
     srcs = ["iree_hal_test.cc"],
+    target_compatible_with = LOOMC_TARGET_SPIRV_COMPATIBLE_WITH,
     deps = [
         "//loom/binding/c:loomc",
         "//loom/binding/c:loomc_target_iree_hal",
@@ -53,6 +59,7 @@ loom_cc_test(
 loom_cc_test(
     name = "spirv_test",
     srcs = ["spirv_test.cc"],
+    target_compatible_with = LOOMC_TARGET_SPIRV_COMPATIBLE_WITH,
     deps = [
         "//loom/binding/c:loomc",
         "//loom/binding/c:loomc_target_spirv",

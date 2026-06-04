@@ -11,6 +11,20 @@
 # Loom packages keep source-of-truth tables in Python and generate compact C
 # data into the build tree.
 
+function(_loom_generated_python_command_prefix OUTPUT_PREFIX GENERATOR)
+  iree_py_library_collect_package_dirs(_GENERATOR_PACKAGE_DIRS "${GENERATOR}")
+  list(APPEND _GENERATOR_PACKAGE_DIRS "$ENV{PYTHONPATH}")
+  if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+    list(JOIN _GENERATOR_PACKAGE_DIRS "\\;" _GENERATOR_PYTHONPATH)
+  else()
+    list(JOIN _GENERATOR_PACKAGE_DIRS ":" _GENERATOR_PYTHONPATH)
+  endif()
+  set(${OUTPUT_PREFIX}
+    "${CMAKE_COMMAND}" -E env "PYTHONPATH=${_GENERATOR_PYTHONPATH}"
+    PARENT_SCOPE
+  )
+endfunction()
+
 function(loom_generated_textual_header)
   cmake_parse_arguments(
     _RULE
@@ -40,11 +54,13 @@ function(loom_generated_textual_header)
 
   iree_py_library_main(_GENERATOR "${_RULE_GENERATOR}")
   iree_py_library_collect_sources(_GENERATOR_INPUTS "${_RULE_GENERATOR}")
+  _loom_generated_python_command_prefix(_PYTHON_COMMAND_PREFIX "${_RULE_GENERATOR}")
 
   add_custom_command(
     OUTPUT
       "${_OUTPUT}"
     COMMAND
+      ${_PYTHON_COMMAND_PREFIX}
       "${Python3_EXECUTABLE}"
       "${_GENERATOR}"
       ${_RULE_ARGS}
@@ -74,7 +90,7 @@ function(loom_generated_cc_library)
     _RULE
     ""
     "NAME;GENERATOR;SOURCE"
-    "HDRS;GENERATED_HDR_FLAGS;GENERATED_HDRS;ARGS;INPUTS;EXTRA_OUTPUT_FLAGS;EXTRA_OUTPUTS;DEPS"
+    "SRCS;GENERATED_SRC_FLAGS;GENERATED_SRCS;HDRS;GENERATED_HDR_FLAGS;GENERATED_HDRS;ARGS;INPUTS;EXTRA_OUTPUT_FLAGS;EXTRA_OUTPUTS;DEPS"
     ${ARGN}
   )
 
@@ -84,8 +100,15 @@ function(loom_generated_cc_library)
   if(NOT _RULE_GENERATOR)
     message(FATAL_ERROR "loom_generated_cc_library requires GENERATOR")
   endif()
-  if(NOT _RULE_SOURCE)
+  if(NOT _RULE_SOURCE AND NOT _RULE_GENERATED_SRCS)
     set(_RULE_SOURCE "${_RULE_NAME}.c")
+  endif()
+
+  list(LENGTH _RULE_GENERATED_SRC_FLAGS _GENERATED_SRC_FLAG_COUNT)
+  list(LENGTH _RULE_GENERATED_SRCS _GENERATED_SRC_COUNT)
+  if(NOT _GENERATED_SRC_FLAG_COUNT EQUAL _GENERATED_SRC_COUNT)
+    message(FATAL_ERROR
+      "loom_generated_cc_library requires paired GENERATED_SRC_FLAGS and GENERATED_SRCS")
   endif()
 
   list(LENGTH _RULE_GENERATED_HDR_FLAGS _GENERATED_HDR_FLAG_COUNT)
@@ -102,9 +125,30 @@ function(loom_generated_cc_library)
       "loom_generated_cc_library requires paired EXTRA_OUTPUT_FLAGS and EXTRA_OUTPUTS")
   endif()
 
-  set(_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/${_RULE_SOURCE}")
-  set(_OUTPUTS "${_SOURCE}")
-  set(_OUTPUT_ARGS "--source=${_SOURCE}")
+  set(_OUTPUTS)
+  set(_OUTPUT_ARGS)
+  set(_GENERATED_SRCS)
+  if(_RULE_SOURCE)
+    set(_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/${_RULE_SOURCE}")
+    list(APPEND _OUTPUTS "${_SOURCE}")
+    list(APPEND _OUTPUT_ARGS "--source=${_SOURCE}")
+    list(APPEND _GENERATED_SRCS "${_SOURCE}")
+  endif()
+  if(_GENERATED_SRC_COUNT GREATER 0)
+    math(EXPR _GENERATED_SRC_LAST "${_GENERATED_SRC_COUNT} - 1")
+    foreach(_INDEX RANGE 0 ${_GENERATED_SRC_LAST})
+      list(GET _RULE_GENERATED_SRC_FLAGS ${_INDEX} _OUTPUT_FLAG)
+      list(GET _RULE_GENERATED_SRCS ${_INDEX} _OUTPUT)
+      set(_OUTPUT_PATH "${CMAKE_CURRENT_BINARY_DIR}/${_OUTPUT}")
+      list(APPEND _OUTPUTS "${_OUTPUT_PATH}")
+      list(APPEND _OUTPUT_ARGS "${_OUTPUT_FLAG}=${_OUTPUT_PATH}")
+      list(APPEND _GENERATED_SRCS "${_OUTPUT_PATH}")
+    endforeach()
+  endif()
+  if(NOT _GENERATED_SRCS)
+    message(FATAL_ERROR "loom_generated_cc_library requires at least one generated source")
+  endif()
+
   set(_GENERATED_HDRS)
   if(_GENERATED_HDR_COUNT GREATER 0)
     math(EXPR _GENERATED_HDR_LAST "${_GENERATED_HDR_COUNT} - 1")
@@ -130,11 +174,13 @@ function(loom_generated_cc_library)
 
   iree_py_library_main(_GENERATOR "${_RULE_GENERATOR}")
   iree_py_library_collect_sources(_GENERATOR_INPUTS "${_RULE_GENERATOR}")
+  _loom_generated_python_command_prefix(_PYTHON_COMMAND_PREFIX "${_RULE_GENERATOR}")
 
   add_custom_command(
     OUTPUT
       ${_OUTPUTS}
     COMMAND
+      ${_PYTHON_COMMAND_PREFIX}
       "${Python3_EXECUTABLE}"
       "${_GENERATOR}"
       ${_RULE_ARGS}
@@ -145,6 +191,10 @@ function(loom_generated_cc_library)
     COMMENT
       "Generating ${_RULE_NAME} C table"
     VERBATIM
+  )
+  set_source_files_properties(
+    ${_OUTPUTS}
+    PROPERTIES GENERATED TRUE
   )
 
   iree_package_name(_PACKAGE_NAME)
@@ -160,7 +210,8 @@ function(loom_generated_cc_library)
       ${_RULE_HDRS}
       ${_GENERATED_HDRS}
     SRCS
-      "${_SOURCE}"
+      ${_RULE_SRCS}
+      ${_GENERATED_SRCS}
     DEPS
       ${_RULE_DEPS}
     PUBLIC

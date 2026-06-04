@@ -228,17 +228,25 @@ loom_cc_library(
     ],
 )
 
-loom_cc_library(
+loom_generated_cc_library(
     name = "ops",
     srcs = [
-        "ops/builders.c",
         "ops/registry.c",
-        "ops/tables.c",
     ],
     hdrs = [
         "ops/ops.h",
         "ops/registry.h",
     ],
+    args = ["--dialect=spirv"],
+    generated_src_flags = [
+        "--builders",
+        "--tables",
+    ],
+    generated_srcs = [
+        "ops/builders.c",
+        "ops/tables.c",
+    ],
+    generator = "//loom/py/loom/gen:c_tables_generator",
     deps = [
         ":target_records",
         "//loom/src/loom/error:error_defs",

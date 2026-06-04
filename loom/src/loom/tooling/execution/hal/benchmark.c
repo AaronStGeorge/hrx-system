@@ -232,31 +232,31 @@ static void loom_run_hal_profile_summary_copy_artifact_path(
 }
 
 typedef struct loom_run_hal_profile_summary_capture_context_t {
-  // Statistics sink used to resolve export names and scale device ticks.
+  // Statistics sink used to resolve function names and scale device ticks.
   const iree_hal_profile_statistics_sink_t* sink;
   // Profile summary receiving bounded row copies.
   loom_run_hal_profile_summary_t* profile;
 } loom_run_hal_profile_summary_capture_context_t;
 
-static void loom_run_hal_profile_summary_copy_export_name(
+static void loom_run_hal_profile_summary_copy_function_name(
     const iree_hal_profile_statistics_sink_t* sink,
     const iree_hal_profile_statistics_row_t* row,
     loom_run_hal_profile_row_summary_t* summary) {
-  summary->export_name_length = 0;
-  if (row->executable_id == 0 || row->export_ordinal == UINT32_MAX) {
+  summary->function_name_length = 0;
+  if (row->executable_id == 0 || row->function_ordinal == UINT32_MAX) {
     return;
   }
-  iree_string_view_t export_name = iree_string_view_empty();
-  if (!iree_hal_profile_statistics_sink_find_export_name(
-          sink, row->executable_id, row->export_ordinal, &export_name)) {
+  iree_string_view_t function_name = iree_string_view_empty();
+  if (!iree_hal_profile_statistics_sink_find_function_name(
+          sink, row->executable_id, row->function_ordinal, &function_name)) {
     return;
   }
-  iree_host_size_t copy_length =
-      iree_min(export_name.size,
-               (iree_host_size_t)LOOM_RUN_HAL_PROFILE_EXPORT_NAME_CAPACITY - 1);
-  memcpy(summary->export_name, export_name.data, copy_length);
-  summary->export_name[copy_length] = '\0';
-  summary->export_name_length = copy_length;
+  iree_host_size_t copy_length = iree_min(
+      function_name.size,
+      (iree_host_size_t)LOOM_RUN_HAL_PROFILE_FUNCTION_NAME_CAPACITY - 1);
+  memcpy(summary->function_name, function_name.data, copy_length);
+  summary->function_name[copy_length] = '\0';
+  summary->function_name_length = copy_length;
 }
 
 static void loom_run_hal_profile_summary_copy_scaled_duration(
@@ -305,7 +305,7 @@ static iree_status_t loom_run_hal_profile_summary_capture_row(
       .event_type = row->event_type,
       .executable_id = row->executable_id,
       .command_buffer_id = row->command_buffer_id,
-      .export_ordinal = row->export_ordinal,
+      .function_ordinal = row->function_ordinal,
       .command_index = row->command_index,
       .sample_count = row->sample_count,
       .invalid_sample_count = row->invalid_sample_count,
@@ -319,7 +319,7 @@ static iree_status_t loom_run_hal_profile_summary_capture_row(
       .minimum_duration = row->minimum_duration,
       .maximum_duration = row->maximum_duration,
   };
-  loom_run_hal_profile_summary_copy_export_name(context->sink, row, summary);
+  loom_run_hal_profile_summary_copy_function_name(context->sink, row, summary);
   loom_run_hal_profile_summary_copy_scaled_duration(context->sink, row,
                                                     summary);
   return iree_ok_status();

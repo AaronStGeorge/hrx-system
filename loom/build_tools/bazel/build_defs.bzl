@@ -12,10 +12,14 @@ checked-in Loom Python descriptions and, for some targets, fetched vendor
 machine-readable data.
 """
 
-load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//build_tools/bazel:cmake.bzl", _iree_cmake_extra_content = "iree_cmake_extra_content")
 load("//build_tools/bazel:generate.bzl", "iree_generated_files")
+load("//build_tools/bazel:query.bzl", _iree_assert_no_dependency = "iree_assert_no_dependency")
 load("//build_tools/bazel:select.bzl", _iree_select = "iree_select")
+load(
+    "//loom/requirements:package_policy.bzl",
+    "apply_loom_target_policy",
+)
 load(":cc.bzl", _loom_cc_binary = "loom_cc_binary", _loom_cc_library = "loom_cc_library")
 load(":cc_benchmark.bzl", _loom_cc_benchmark = "loom_cc_benchmark")
 load(":cc_fuzz.bzl", _loom_cc_fuzz = "loom_cc_fuzz")
@@ -82,6 +86,8 @@ def loom_generated_textual_header(
         rule_kwargs["visibility"] = visibility
     if comment != None:
         rule_kwargs["progress_message"] = comment
+    rule_kwargs["tags"] = tags + ["skip-bazel_to_cmake"]
+    rule_kwargs = apply_loom_target_policy(rule_kwargs)
 
     iree_generated_files(
         name = name,
@@ -89,7 +95,6 @@ def loom_generated_textual_header(
         outs = [output],
         args = _loom_bazel_generator_args(args),
         output_args = _loom_output_args([output_flag], [output]),
-        tags = tags + ["skip-bazel_to_cmake"],
         tool = generator,
         **rule_kwargs
     )
@@ -104,10 +109,12 @@ def _loom_canonical_query_labels(labels):
             canonical_labels.append(label)
     return canonical_labels
 
-def _loom_query_set(labels):
-    if len(labels) == 0:
-        fail("query label set must not be empty")
-    return "set(%s)" % " ".join(labels)
+def _loom_dependency_test_name(name, target, dependency):
+    return "%s_%s_no_%s" % (
+        name,
+        target.replace("//", "").replace(":", "_").replace("/", "_").replace("-", "_").replace(".", "_"),
+        dependency.replace("//", "").replace(":", "_").replace("/", "_").replace("-", "_").replace(".", "_"),
+    )
 
 def loom_assert_no_dependencies(
         name,
@@ -119,43 +126,40 @@ def loom_assert_no_dependencies(
 
     This is the Loom package-boundary form of iree_assert_no_dependency. Use it
     for architectural isolation checks over public/interface targets, not for
-    duplicating every private rule edge in a package. The generated query is a
-    single transitive check from the target set to the forbidden dependency set.
-
-    Bazel genquery does not accept wildcard package patterns such as :all or
-    ... in a portable way, so callers should pass explicit package boundary
-    labels: public interface libraries, provider entry points, or other small
-    roots that represent the component contract.
+    duplicating every private rule edge in a package. Each target/dependency
+    pair is a configured analysis test so disabled select() branches do not
+    force their providers to resolve.
 
     Args:
       name: Test target name.
       targets: Boundary target labels that must remain independent.
       dependencies: Forbidden dependency labels.
       tags: Additional tags for the test target.
-      **kwargs: Additional arguments forwarded to genquery and sh_test.
+      **kwargs: Additional arguments forwarded to each analysis test.
     """
+    if len(targets) == 0:
+        fail("targets must not be empty")
+    if len(dependencies) == 0:
+        fail("dependencies must not be empty")
 
     canonical_targets = _loom_canonical_query_labels(targets)
     canonical_dependencies = _loom_canonical_query_labels(dependencies)
-    query_name = name + "_query"
-    native.genquery(
-        name = query_name,
-        expression = "deps(%s) intersect %s" % (
-            _loom_query_set(canonical_targets),
-            _loom_query_set(canonical_dependencies),
-        ),
-        scope = canonical_targets + canonical_dependencies,
-        tags = ["manual"],
-        **kwargs
-    )
-    sh_test(
+    tests = []
+    for target in canonical_targets:
+        for dependency in canonical_dependencies:
+            test_name = _loom_dependency_test_name(name, target, dependency)
+            tests.append(test_name)
+            _iree_assert_no_dependency(
+                name = test_name,
+                dependency = dependency,
+                tags = tags,
+                target = target,
+                **kwargs
+            )
+    native.test_suite(
         name = name,
-        srcs = ["//build_tools/bazel:assert_empty_query.sh"],
-        args = ["$(location :%s)" % query_name],
-        data = [":%s" % query_name],
-        size = "small",
         tags = tags,
-        **kwargs
+        tests = tests,
     )
 
 def loom_low_descriptor_data_archive(
@@ -267,6 +271,8 @@ def loom_target_table_cc_library(
     rule_kwargs = {}
     if visibility != None:
         rule_kwargs["visibility"] = visibility
+    rule_kwargs["tags"] = tags + ["skip-bazel_to_cmake"]
+    rule_kwargs = apply_loom_target_policy(rule_kwargs)
 
     source = source or (name + ".c")
 
@@ -283,7 +289,6 @@ def loom_target_table_cc_library(
         outs = outputs,
         args = bazel_args,
         output_args = _loom_output_args(output_flags, outputs),
-        tags = tags + ["skip-bazel_to_cmake"],
         tool = generator,
         **rule_kwargs
     )
@@ -303,6 +308,9 @@ def loom_generated_cc_library(
         name,
         generator,
         source = None,
+        srcs = [],
+        generated_src_flags = [],
+        generated_srcs = [],
         hdrs = [],
         generated_hdr_flags = [],
         generated_hdrs = [],
@@ -315,16 +323,21 @@ def loom_generated_cc_library(
         testonly = False,
         visibility = None,
         **kwargs):
-    """Generates a C source table and wraps it in a runtime library.
+    """Generates C source tables and wraps them in a runtime library.
 
     This is the common build-system contract for generated C data. Generators
-    receive --source=<path> for the C output plus optional flag/output pairs
-    for generated headers and sidecar generated artifacts.
+    receive --source=<path> for the primary C output by default, optional
+    flag/output pairs for additional generated sources, and optional
+    flag/output pairs for generated headers and sidecar generated artifacts.
 
     Args:
       name: Runtime C library target name.
       generator: Python executable label that writes the generated outputs.
-      source: Generated C source filename. Defaults to <name>.c.
+      source: Generated C source filename. Defaults to <name>.c when no
+        generated_srcs are specified.
+      srcs: Checked-in C source filenames compiled into the same library.
+      generated_src_flags: Generator flags paired with generated_srcs.
+      generated_srcs: Additional generated C source filenames.
       hdrs: Checked-in public/private headers for the C library.
       generated_hdr_flags: Generator flags paired with generated_hdrs.
       generated_hdrs: Generated public/private headers for the C library.
@@ -338,6 +351,8 @@ def loom_generated_cc_library(
       visibility: Passed through to the generator action and runtime library.
       **kwargs: Additional arguments passed through to loom_cc_library.
     """
+    if len(generated_src_flags) != len(generated_srcs):
+        fail("generated_src_flags and generated_srcs must have the same length")
     if len(generated_hdr_flags) != len(generated_hdrs):
         fail("generated_hdr_flags and generated_hdrs must have the same length")
     if len(extra_output_flags) != len(extra_outputs):
@@ -346,11 +361,25 @@ def loom_generated_cc_library(
     rule_kwargs = {}
     if visibility != None:
         rule_kwargs["visibility"] = visibility
+    rule_kwargs["tags"] = tags + ["skip-bazel_to_cmake"]
+    rule_kwargs = apply_loom_target_policy(rule_kwargs)
 
-    source = source or (name + ".c")
+    if source == None and not generated_srcs:
+        source = name + ".c"
+
+    source_flags = []
+    sources = []
+    if source != None:
+        source_flags.append("--source")
+        sources.append(source)
+    source_flags += generated_src_flags
+    sources += generated_srcs
+    if not sources:
+        fail("loom_generated_cc_library requires at least one generated source")
+
     bazel_args = _loom_bazel_generator_args(args)
-    output_flags = ["--source"] + generated_hdr_flags + extra_output_flags
-    outputs = [source] + generated_hdrs + extra_outputs
+    output_flags = source_flags + generated_hdr_flags + extra_output_flags
+    outputs = sources + generated_hdrs + extra_outputs
 
     iree_generated_files(
         name = name + "_gen",
@@ -358,20 +387,22 @@ def loom_generated_cc_library(
         outs = outputs,
         args = bazel_args,
         output_args = _loom_output_args(output_flags, outputs),
-        tags = tags + ["skip-bazel_to_cmake"],
         tool = generator,
         **rule_kwargs
     )
 
     package_name = native.package_name()
-    generated_source = "//%s:%s" % (package_name, source)
+    generated_sources = [
+        "//%s:%s" % (package_name, source)
+        for source in sources
+    ]
     generated_headers = [
         "//%s:%s" % (package_name, header)
         for header in generated_hdrs
     ]
     loom_cc_library(
         name = name,
-        srcs = [generated_source],
+        srcs = srcs + generated_sources,
         hdrs = hdrs + generated_headers,
         deps = deps,
         testonly = testonly,

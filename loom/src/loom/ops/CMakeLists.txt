@@ -148,13 +148,19 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     op_registry
+  GENERATOR
+    loom::py::loom::gen::c_tables_generator
+  GENERATED_SRC_FLAGS
+    "--op-registry-source"
+  GENERATED_SRCS
+    "op_registry.c"
   HDRS
     "op_registry.h"
-  SRCS
-    "op_registry.c"
+  ARGS
+    "--registry"
   DEPS
     ::op_defs
     iree::base
@@ -177,7 +183,6 @@ loom_cc_library(
     loom::ops::target
     loom::ops::vector
     loom::ops::view
-  PUBLIC
 )
 
 loom_cc_library(
@@ -198,20 +203,25 @@ loom_cc_library(
   PUBLIC
 )
 
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     type_registry
+  GENERATOR
+    loom::py::loom::gen::c_tables_generator
+  GENERATED_SRC_FLAGS
+    "--type-registry-source"
+  GENERATED_SRCS
+    "type_registry.c"
   HDRS
     "type_registry.h"
-  SRCS
-    "type_registry.c"
+  ARGS
+    "--registry"
   DEPS
     ::op_defs
     ::storage_facts
     iree::base
     loom::ir
     loom::util::fact_table
-  PUBLIC
 )
 
 loom_cc_test(

@@ -286,11 +286,14 @@ function(iree_py_test)
     "ARGS;LABELS;PACKAGE_DIRS;IMPORTS;DEPS;TIMEOUT"
     ${ARGN}
   )
+  set(_HAS_EXPLICIT_PACKAGE_DIRS FALSE)
   if(NOT _RULE_PACKAGE_DIRS)
     set(_RULE_PACKAGE_DIRS
       "${IREE_BINARY_DIR}/compiler/bindings/python"
       "${IREE_BINARY_DIR}/runtime/bindings/python"
     )
+  else()
+    set(_HAS_EXPLICIT_PACKAGE_DIRS TRUE)
   endif()
 
   foreach(_IMPORT ${_RULE_IMPORTS})
@@ -305,10 +308,12 @@ function(iree_py_test)
 
   iree_package_ns(_PACKAGE_NS)
   list(TRANSFORM _RULE_DEPS REPLACE "^::" "${_PACKAGE_NS}::")
-  foreach(_DEP ${_RULE_DEPS})
-    iree_py_library_collect_package_dirs(_DEP_PACKAGE_DIRS "${_DEP}")
-    list(APPEND _RULE_PACKAGE_DIRS ${_DEP_PACKAGE_DIRS})
-  endforeach()
+  if(NOT _HAS_EXPLICIT_PACKAGE_DIRS)
+    foreach(_DEP ${_RULE_DEPS})
+      iree_py_library_collect_package_dirs(_DEP_PACKAGE_DIRS "${_DEP}")
+      list(APPEND _RULE_PACKAGE_DIRS ${_DEP_PACKAGE_DIRS})
+    endforeach()
+  endif()
   if(_RULE_PACKAGE_DIRS)
     list(REMOVE_DUPLICATES _RULE_PACKAGE_DIRS)
   endif()

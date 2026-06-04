@@ -36,6 +36,7 @@ loom_cc_binary(
     loom::binding::c::loomc
 )
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_binary(
   NAME
     emit_spirv_offline
@@ -45,7 +46,9 @@ loom_cc_binary(
     loom::binding::c::loomc
     loom::binding::c::loomc_target_spirv
 )
+endif()
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_binary(
   NAME
     emit_spirv_vulkaninfo
@@ -56,7 +59,9 @@ loom_cc_binary(
     loom::binding::c::loomc_target_spirv
     loom::binding::c::loomc_target_spirv_vulkaninfo
 )
+endif()
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
 loom_cc_binary(
   NAME
     emit_spirv_vulkan
@@ -68,7 +73,9 @@ loom_cc_binary(
     loom::binding::c::loomc_target_spirv
     loom::binding::c::loomc_target_spirv_vulkan
 )
+endif()
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_binary(
   NAME
     emit_spirv_iree_hal
@@ -85,7 +92,9 @@ loom_cc_binary(
     loom::binding::c::loomc_target_spirv
     loom::binding::c::loomc_target_spirv_iree_hal
 )
+endif()
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
 loom_cc_test(
   NAME
     emit_spirv_vulkan_test
@@ -99,7 +108,9 @@ loom_cc_test(
   LABELS
     "driver=vulkan"
 )
+endif()
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
 loom_cc_test(
   NAME
     emit_spirv_iree_hal_test
@@ -118,17 +129,22 @@ loom_cc_test(
   LABELS
     "driver=vulkan"
 )
+endif()
 
-set_property(TEST iree/loom/binding/c/example/emit_spirv_vulkan_test
-  APPEND PROPERTY ENVIRONMENT
-    "VK_DRIVER_FILES=/dev/null"
-    "VK_ICD_FILENAMES=/dev/null"
-)
+if(TEST iree/loom/binding/c/example/emit_spirv_vulkan_test)
+  set_property(TEST iree/loom/binding/c/example/emit_spirv_vulkan_test
+    APPEND PROPERTY ENVIRONMENT
+      "VK_DRIVER_FILES=/dev/null"
+      "VK_ICD_FILENAMES=/dev/null"
+  )
+endif()
 
-set_property(TEST iree/loom/binding/c/example/emit_spirv_iree_hal_test
-  APPEND PROPERTY ENVIRONMENT
-    "VK_DRIVER_FILES=/dev/null"
-    "VK_ICD_FILENAMES=/dev/null"
-)
+if(TEST iree/loom/binding/c/example/emit_spirv_iree_hal_test)
+  set_property(TEST iree/loom/binding/c/example/emit_spirv_iree_hal_test
+    APPEND PROPERTY ENVIRONMENT
+      "VK_DRIVER_FILES=/dev/null"
+      "VK_ICD_FILENAMES=/dev/null"
+  )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

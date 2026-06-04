@@ -7,6 +7,7 @@
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "iree_cmake_extra_content",
+    "iree_select",
     "loom_cc_test",
 )
 
@@ -15,6 +16,13 @@ package(
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
 )
+
+LOOMC_TARGET_SPIRV_VULKAN_DEPS = iree_select({
+    "//loom/config/execute:spirv_vulkan": [
+        "@vulkan_headers",
+    ],
+    "//conditions:default": [],
+})
 
 loom_cc_test(
     name = "profile_test",
@@ -52,8 +60,7 @@ loom_cc_test(
         "//loom/binding/c/test:test_util",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
-        "@vulkan_headers",
-    ],
+    ] + LOOMC_TARGET_SPIRV_VULKAN_DEPS,
 )
 
 loom_cc_test(
@@ -95,10 +102,12 @@ loom_cc_test(
 
 iree_cmake_extra_content(
     content = """
-set_property(TEST iree/loom/binding/c/test/target/spirv/iree_hal_execution_test
-  APPEND PROPERTY ENVIRONMENT
-    "LSAN_OPTIONS=suppressions=${IREE_ROOT_DIR}/build_tools/sanitizer/lsan_suppressions_vulkan.txt"
-)
+if(TEST iree/loom/binding/c/test/target/spirv/iree_hal_execution_test)
+  set_property(TEST iree/loom/binding/c/test/target/spirv/iree_hal_execution_test
+    APPEND PROPERTY ENVIRONMENT
+      "LSAN_OPTIONS=suppressions=${IREE_ROOT_DIR}/build_tools/sanitizer/lsan_suppressions_vulkan.txt"
+  )
+endif()
 """,
     inline = True,
 )

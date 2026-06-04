@@ -10,9 +10,11 @@ Usage:
     python3 loom/py/loom/gen/run.py builders_pyi --in-place
     python3 loom/py/loom/gen/run.py builders_pyi --check
     python3 loom/py/loom/gen/run.py c_errors --check
-    python3 loom/py/loom/gen/run.py c_tables
+    python3 loom/py/loom/gen/run.py c_tables --check
+    python3 loom/py/loom/gen/run.py c_tables --in-place
     python3 loom/py/loom/gen/run.py low_descriptors
     python3 loom/py/loom/gen/run.py textmate
+    python3 loom/py/loom/gen/run.py x86_packed_dot_contract --in-place
     python3 loom/py/loom/gen/run.py x86_target_profiles --check
 """
 
@@ -22,7 +24,7 @@ import importlib
 import sys
 from pathlib import Path
 
-import bootstrap
+import bootstrap  # type: ignore[import-not-found]
 
 GENERATORS = {
     "builders_pyi": "loom.gen.builders_pyi",
@@ -31,13 +33,16 @@ GENERATORS = {
     "low_descriptors": "loom.gen.low_descriptors",
     "package_inits": "loom.gen.package_inits",
     "textmate": "loom.gen.textmate",
+    "x86_packed_dot_contract": "loom.gen.x86_packed_dot_contract",
     "x86_target_profiles": "loom.gen.x86_target_profiles",
 }
 
 ARGUMENT_GENERATORS: set[str] = {
     "builders_pyi",
     "c_errors",
+    "c_tables",
     "package_inits",
+    "x86_packed_dot_contract",
     "x86_target_profiles",
 }
 

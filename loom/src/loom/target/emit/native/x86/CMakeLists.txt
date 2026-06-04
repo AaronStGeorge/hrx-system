@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(LOOM_TARGET_X86)
 loom_cc_library(
   NAME
     assembly
@@ -35,7 +36,9 @@ loom_cc_library(
     loom::target::emit::native::assembly
   PUBLIC
 )
+endif()
 
+if(LOOM_TARGET_X86)
 loom_cc_library(
   NAME
     loom_check
@@ -50,7 +53,9 @@ loom_cc_library(
   TESTONLY
   PUBLIC
 )
+endif()
 
+if(LOOM_TARGET_X86)
 iree_native_test(
   NAME
     "test_assembly"
@@ -61,5 +66,6 @@ iree_native_test(
   LABELS
     "loom-check"
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

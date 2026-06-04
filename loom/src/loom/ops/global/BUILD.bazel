@@ -4,7 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//loom/build_tools/bazel:build_defs.bzl", "loom_cc_library")
+load("//loom/build_tools/bazel:build_defs.bzl", "loom_generated_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -12,15 +12,23 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
-loom_cc_library(
+loom_generated_cc_library(
     name = "global",
     srcs = [
-        "builders.c",
         "facts.c",
-        "tables.c",
         "verify.c",
     ],
     hdrs = ["ops.h"],
+    args = ["--dialect=global"],
+    generated_src_flags = [
+        "--builders",
+        "--tables",
+    ],
+    generated_srcs = [
+        "builders.c",
+        "tables.c",
+    ],
+    generator = "//loom/py/loom/gen:c_tables_generator",
     deps = [
         "//loom/src/loom/error:emitter",
         "//loom/src/loom/error:error_defs",

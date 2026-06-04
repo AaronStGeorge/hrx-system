@@ -9,6 +9,7 @@
 
 iree_add_all_subdirs()
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_benchmark(
   NAME
     compile_throughput_benchmark
@@ -23,6 +24,10 @@ loom_cc_benchmark(
   ARGS
     "--benchmark_filter=Smoke"
   TESTONLY
+  LABELS
+    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.emit.spirv"
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -24,8 +24,8 @@ def import_iree_ir(*, prefer_abi3_extensions: bool = False) -> Any:
     if prefer_abi3_extensions:
         _prefer_abi3_extensions()
     try:
-        from iree.compiler import ir
-        from iree.compiler.dialects import (
+        from iree.compiler import ir  # type: ignore[import-not-found]
+        from iree.compiler.dialects import (  # type: ignore[import-not-found]
             affine,  # noqa: F401
             amdgpu,  # noqa: F401
             arith,  # noqa: F401

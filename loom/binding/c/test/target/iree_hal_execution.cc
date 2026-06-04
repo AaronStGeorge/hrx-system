@@ -394,8 +394,10 @@ iree_status_t DispatchAndWait(iree_hal_device_t* device,
     iree_hal_dispatch_config_t dispatch_config =
         iree_hal_make_static_dispatch_config(
             workgroup_count.x, workgroup_count.y, workgroup_count.z);
+    iree_hal_executable_function_t function =
+        iree_hal_executable_function_from_index(0);
     status = iree_hal_command_buffer_dispatch(
-        command_buffer, executable, /*entry_point=*/0, dispatch_config,
+        command_buffer, executable, function, dispatch_config,
         iree_make_const_byte_span(constants, sizeof(constants)), bindings,
         IREE_HAL_DISPATCH_FLAG_NONE);
   }

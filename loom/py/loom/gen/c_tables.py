@@ -6,26 +6,30 @@
 
 """Generator: Op declarations -> C op tables, accessors, and builders.
 
-Reads Op declarations from the Python DSL and emits three C files per
-dialect:
+Reads Op declarations from the Python DSL and emits C op metadata per dialect:
 
   ops.h      — enum + ISA macros + accessor macros + builder declarations
   builders.c — builder implementations (macros for common, explicit for complex)
   tables.c   — .rodata: B-string names, format arrays, descriptors, vtables
 
-The generated files are checked into the repository. The C build never
-requires Python.
+Public generated headers are checked into the repository for code archaeology
+and editor/search ergonomics. Bulky generated C table sources are build outputs.
 
 Usage:
-    python3 loom/py/loom/gen/run.py c_tables
+    python3 loom/py/loom/gen/run.py c_tables --check
+    python3 loom/py/loom/gen/run.py c_tables --in-place
+    bazel run //loom/py/loom/gen:c_tables_generator -- --dialect=check --builders=/tmp/builders.c --tables=/tmp/tables.c
 """
 
 from __future__ import annotations
 
+import argparse
 import re
-from collections.abc import Sequence
+import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from pathlib import Path
+from typing import Any
 
 from loom.assembly import (
     Attr,
@@ -579,10 +583,7 @@ def _emit_type_semantics(lines: list[str], type_def: TypeDef) -> None:
     lines.append("    },")
 
 
-_T = TypeVar("_T")
-
-
-def _find_interface(op: Op, iface_class: type[_T]) -> _T | None:
+def _find_interface[T](op: Op, iface_class: type[T]) -> T | None:
     """Returns the interface instance from op.interfaces matching |iface_class|, or None.
 
     Generic over the interface class so callers retain type information
@@ -1582,15 +1583,15 @@ def _translate_format_elements(
                     elements.append(("LOOM_FORMAT_KIND_REGION", index, _resolve_region_syntax(syntax)))
 
                 case IndexList(dynamic=dynamic_field, static=static_field, glue=glue):
-                    dyn_kind, dyn_index = _resolve_field(dynamic_field)
-                    sta_kind, sta_index = _resolve_field(static_field)
+                    _dyn_kind, dyn_index = _resolve_field(dynamic_field)
+                    _sta_kind, sta_index = _resolve_field(static_field)
                     if sta_index > 0x7FFF:
                         raise ValueError(f"Op '{op.name}': IndexList static attr index {sta_index} exceeds packed format limit")
                     payload = str(sta_index) if glue else f"LOOM_FORMAT_INDEX_LIST_DATA({sta_index}, false)"
                     elements.append(("LOOM_FORMAT_KIND_INDEX_LIST", dyn_index, payload))
 
                 case BindingList(field=name, kind=binding_kind):
-                    fld_kind, index = _resolve_field(name)
+                    _fld_kind, index = _resolve_field(name)
                     bk = "LOOM_BINDING_ELEMENT" if binding_kind == "element" else "LOOM_BINDING_CAPTURE"
                     elements.append(("LOOM_FORMAT_KIND_BINDING_LIST", index, bk))
 
@@ -1604,7 +1605,7 @@ def _translate_format_elements(
                     elements.append(("LOOM_FORMAT_KIND_FUNC_ARGS", 0, "0"))
 
                 case PredicateList(field=name):
-                    fld_kind, index = _resolve_field(name)
+                    _fld_kind, index = _resolve_field(name)
                     elements.append(("LOOM_FORMAT_KIND_PREDICATE_LIST", index, "0"))
 
                 case OptionalGroup(elements=inner, anchor=anchor):
@@ -3255,7 +3256,7 @@ def generate_ops_h(dialect_name: str, dialect_id: int, ops: Sequence[Op]) -> str
         line_comment_header(
             "//",
             generator="loom.gen.c_tables",
-            regenerate="python3 loom/py/loom/gen/run.py c_tables",
+            regenerate="python3 loom/py/loom/gen/run.py c_tables --in-place",
         )
     )
     lines.append("// clang-format off")
@@ -4774,8 +4775,40 @@ def generate_keyword_table_inc() -> str:
 # ============================================================================
 
 
-def main() -> None:
-    """Generate C tables for all registered dialects."""
+@dataclass(frozen=True)
+class DialectGeneration:
+    """Generated C metadata inputs for one dialect."""
+
+    dialect: Any
+    ops: list[Op]
+    table_shards: Sequence[tuple[Any, Sequence[Op]]] | None
+
+
+@dataclass(frozen=True)
+class GenerationModel:
+    """Complete op/type model consumed by C table generation."""
+
+    dialects: list[DialectGeneration]
+    types: list[Any]
+
+
+@dataclass(frozen=True)
+class NamedOutput:
+    """One named generated output path from the CLI."""
+
+    name: str
+    path: Path
+
+
+def _parse_named_output(value: str) -> NamedOutput:
+    name, separator, path = value.partition("=")
+    if not separator or not name or not path:
+        raise argparse.ArgumentTypeError("expected NAME=PATH")
+    return NamedOutput(name=name, path=Path(path))
+
+
+def _load_generation_model() -> GenerationModel:
+    """Loads all Python DSL declarations needed for C table generation."""
     from loom.builtin_types import ALL_BUILTIN_TYPES
     from loom.dialect.buffer import ALL_BUFFER_OPS, buffer_ops
     from loom.dialect.cfg import ALL_CFG_OPS, cfg_ops
@@ -4808,117 +4841,263 @@ def main() -> None:
     from loom.target.arch.x86.dialect import ALL_X86_OPS, x86_ops
 
     dialects = [
-        (test_ops, list(ALL_TEST_OPS), None),
-        (scalar_ops, list(ALL_SCALAR_OPS), SCALAR_OP_CATEGORY_GROUPS),
-        (func_ops, list(ALL_FUNC_OPS), None),
-        (encoding_ops, list(ALL_ENCODING_OPS), None),
-        (pool_ops, list(ALL_POOL_OPS), None),
-        (global_ops, list(ALL_GLOBAL_OPS), None),
-        (scf_ops, list(ALL_SCF_OPS), None),
-        (cfg_ops, list(ALL_CFG_OPS), None),
-        (check_ops, list(ALL_CHECK_OPS), None),
-        (buffer_ops, list(ALL_BUFFER_OPS), None),
-        (view_ops, list(ALL_VIEW_OPS), None),
-        (vector_ops, list(ALL_VECTOR_OPS), VECTOR_OP_CATEGORY_GROUPS),
-        (index_ops, list(ALL_INDEX_OPS), None),
-        (kernel_ops, list(ALL_KERNEL_OPS), None),
-        (llvmir_ops, list(ALL_LLVMIR_OPS), None),
-        (target_ops, list(ALL_TARGET_OPS), None),
-        (low_ops, list(ALL_LOW_OPS), None),
-        (pass_ops, list(ALL_PASS_OPS), None),
-        (config_ops, list(ALL_CONFIG_OPS), None),
-        (amdgpu_ops, list(ALL_AMDGPU_OPS), None),
-        (x86_ops, list(ALL_X86_OPS), None),
-        (spirv_ops, list(ALL_SPIRV_OPS), None),
-        (wasm_ops, list(ALL_WASM_OPS), None),
-        (ireevm_ops, list(ALL_IREEVM_OPS), None),
+        DialectGeneration(test_ops, list(ALL_TEST_OPS), None),
+        DialectGeneration(scalar_ops, list(ALL_SCALAR_OPS), SCALAR_OP_CATEGORY_GROUPS),
+        DialectGeneration(func_ops, list(ALL_FUNC_OPS), None),
+        DialectGeneration(encoding_ops, list(ALL_ENCODING_OPS), None),
+        DialectGeneration(pool_ops, list(ALL_POOL_OPS), None),
+        DialectGeneration(global_ops, list(ALL_GLOBAL_OPS), None),
+        DialectGeneration(scf_ops, list(ALL_SCF_OPS), None),
+        DialectGeneration(cfg_ops, list(ALL_CFG_OPS), None),
+        DialectGeneration(check_ops, list(ALL_CHECK_OPS), None),
+        DialectGeneration(buffer_ops, list(ALL_BUFFER_OPS), None),
+        DialectGeneration(view_ops, list(ALL_VIEW_OPS), None),
+        DialectGeneration(vector_ops, list(ALL_VECTOR_OPS), VECTOR_OP_CATEGORY_GROUPS),
+        DialectGeneration(index_ops, list(ALL_INDEX_OPS), None),
+        DialectGeneration(kernel_ops, list(ALL_KERNEL_OPS), None),
+        DialectGeneration(llvmir_ops, list(ALL_LLVMIR_OPS), None),
+        DialectGeneration(target_ops, list(ALL_TARGET_OPS), None),
+        DialectGeneration(low_ops, list(ALL_LOW_OPS), None),
+        DialectGeneration(pass_ops, list(ALL_PASS_OPS), None),
+        DialectGeneration(config_ops, list(ALL_CONFIG_OPS), None),
+        DialectGeneration(amdgpu_ops, list(ALL_AMDGPU_OPS), None),
+        DialectGeneration(x86_ops, list(ALL_X86_OPS), None),
+        DialectGeneration(spirv_ops, list(ALL_SPIRV_OPS), None),
+        DialectGeneration(wasm_ops, list(ALL_WASM_OPS), None),
+        DialectGeneration(ireevm_ops, list(ALL_IREEVM_OPS), None),
     ]
-    production_dialects = [(dialect, ops) for dialect, ops, _ in dialects if dialect.register_by_default]
-
-    output_root = _bootstrap.REPO_ROOT / "loom" / "src" / "loom"
-
-    for dialect, ops, table_shards in dialects:
-        dialect_dir = output_root / _c_dialect_path(dialect)
-        dialect_dir.mkdir(parents=True, exist_ok=True)
-        include_path = _c_dialect_include_path(dialect)
-
-        ops_h = generate_ops_h(dialect.name, dialect.dialect_id, ops)
-        table_files = (
-            generate_sharded_tables_c(
-                dialect.name,
-                dialect.dialect_id,
-                table_shards,
-                include_path=include_path,
-            )
-            if table_shards is not None
-            else {
-                "tables.c": generate_tables_c(
-                    dialect.name,
-                    dialect.dialect_id,
-                    ops,
-                    include_path=include_path,
-                )
-            }
-        )
-        builders_c = generate_builders_c(dialect.name, ops, include_path=include_path)
-
-        ops_h_path = dialect_dir / "ops.h"
-        builders_c_path = dialect_dir / "builders.c"
-        generated_paths = {dialect_dir / filename for filename in table_files}
-        if table_shards is not None:
-            for stale_path in dialect_dir.glob("tables_*.c"):
-                if stale_path not in generated_paths:
-                    stale_path.unlink()
-            shard_dir = dialect_dir / "tables"
-            if shard_dir.exists():
-                for stale_path in shard_dir.glob("*.c"):
-                    if stale_path not in generated_paths:
-                        stale_path.unlink()
-
-        for path, content in [
-            (ops_h_path, ops_h),
-            (builders_c_path, builders_c),
-            *((dialect_dir / filename, content) for filename, content in table_files.items()),
-        ]:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(content)
-        rel = dialect_dir.relative_to(_bootstrap.REPO_ROOT / "loom" / "src" / "loom")
-        print(f"  {dialect.name}: {len(ops)} ops in {rel}/")
-
-    # Generate cross-dialect registries.
-    op_reg_h, op_reg_c = generate_op_registry(production_dialects)
-    all_types = [
+    types = [
         *ALL_BUILTIN_TYPES,
         *ALL_HAL_TYPES,
         *ALL_KERNEL_TYPES,
         *ALL_IREEVM_TYPES,
     ]
-    type_reg_h, type_reg_c = generate_type_registry(all_types)
+    return GenerationModel(dialects=dialects, types=types)
 
-    # Generate keyword definitions.
-    keyword_enum = generate_keyword_enum_inc()
-    keyword_table = generate_keyword_table_inc()
 
-    for filename, content in [
-        ("op_registry.h", op_reg_h),
-        ("op_registry.c", op_reg_c),
-        ("type_registry.h", type_reg_h),
-        ("type_registry.c", type_reg_c),
-        ("keyword_enum.inc", keyword_enum),
-        ("keyword_table.inc", keyword_table),
-    ]:
-        path = output_root / "ops" / filename
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(content)
+def _generate_dialect_contents(generation: DialectGeneration) -> dict[str, str]:
+    """Returns generated file contents keyed relative to the dialect C directory."""
+    dialect = generation.dialect
+    include_path = _c_dialect_include_path(dialect)
+    table_files = (
+        generate_sharded_tables_c(
+            dialect.name,
+            dialect.dialect_id,
+            generation.table_shards,
+            include_path=include_path,
+        )
+        if generation.table_shards is not None
+        else {
+            "tables.c": generate_tables_c(
+                dialect.name,
+                dialect.dialect_id,
+                generation.ops,
+                include_path=include_path,
+            )
+        }
+    )
+    return {
+        "ops.h": generate_ops_h(dialect.name, dialect.dialect_id, generation.ops),
+        "builders.c": generate_builders_c(dialect.name, generation.ops, include_path=include_path),
+        **table_files,
+    }
 
-    total_ops = sum(len(ops) for _, ops, _ in dialects)
-    total_types = len(all_types)
-    print(f"  op tables: {total_ops} ops")
-    print(f"  op_registry: {len(production_dialects)} production dialects")
-    print(f"  type_registry: {total_types} types")
-    print(f"  keywords: {len(KEYWORD_MAP)} keywords")
+
+def _production_dialects(model: GenerationModel) -> list[tuple[Any, list[Op]]]:
+    return [(generation.dialect, generation.ops) for generation in model.dialects if generation.dialect.register_by_default]
+
+
+def _generate_registry_contents(model: GenerationModel) -> dict[str, str]:
+    op_reg_h, op_reg_c = generate_op_registry(_production_dialects(model))
+    type_reg_h, type_reg_c = generate_type_registry(model.types)
+    return {
+        "op_registry.h": op_reg_h,
+        "op_registry.c": op_reg_c,
+        "type_registry.h": type_reg_h,
+        "type_registry.c": type_reg_c,
+        "keyword_enum.inc": generate_keyword_enum_inc(),
+        "keyword_table.inc": generate_keyword_table_inc(),
+    }
+
+
+def _write_file(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def _checked_in_output_contents(model: GenerationModel) -> dict[Path, str]:
+    output_root = _bootstrap.REPO_ROOT / "loom" / "src" / "loom"
+    outputs: dict[Path, str] = {}
+    for generation in model.dialects:
+        dialect_dir = output_root / _c_dialect_path(generation.dialect)
+        contents = _generate_dialect_contents(generation)
+        outputs[dialect_dir / "ops.h"] = contents["ops.h"]
+        if "tables.h" in contents:
+            outputs[dialect_dir / "tables.h"] = contents["tables.h"]
+
+    registry_contents = _generate_registry_contents(model)
+    registry_dir = output_root / "ops"
+    for filename in (
+        "op_registry.h",
+        "type_registry.h",
+        "keyword_enum.inc",
+        "keyword_table.inc",
+    ):
+        outputs[registry_dir / filename] = registry_contents[filename]
+    return outputs
+
+
+def _build_generated_source_paths(model: GenerationModel) -> list[Path]:
+    output_root = _bootstrap.REPO_ROOT / "loom" / "src" / "loom"
+    paths: list[Path] = []
+    for generation in model.dialects:
+        dialect_dir = output_root / _c_dialect_path(generation.dialect)
+        contents = _generate_dialect_contents(generation)
+        paths.extend(dialect_dir / filename for filename in contents if filename.endswith(".c"))
+    registry_dir = output_root / "ops"
+    paths.extend(
+        [
+            registry_dir / "op_registry.c",
+            registry_dir / "type_registry.c",
+        ]
+    )
+    return sorted(paths)
+
+
+def _check_checked_in_outputs(model: GenerationModel) -> int:
+    failures: list[str] = []
+    for path, expected in sorted(_checked_in_output_contents(model).items()):
+        if not path.exists():
+            failures.append(f"{path.relative_to(_bootstrap.REPO_ROOT)}: missing generated file")
+            continue
+        actual = path.read_text(encoding="utf-8")
+        if actual != expected:
+            failures.append(f"{path.relative_to(_bootstrap.REPO_ROOT)}: stale generated file")
+
+    failures.extend(f"{path.relative_to(_bootstrap.REPO_ROOT)}: generated C source must be a build output" for path in _build_generated_source_paths(model) if path.exists())
+
+    if failures:
+        print("c table generation check failed:", file=sys.stderr)
+        for failure in failures:
+            print(f"  {failure}", file=sys.stderr)
+        print("regenerate with python3 loom/py/loom/gen/run.py c_tables --in-place", file=sys.stderr)
+        return 1
+
+    print(f"checked {len(_checked_in_output_contents(model))} generated C table headers")
+    return 0
+
+
+def _update_checked_in_outputs(model: GenerationModel) -> int:
+    for path, content in _checked_in_output_contents(model).items():
+        _write_file(path, content)
+    print(f"updated {len(_checked_in_output_contents(model))} generated C table headers")
+    return 0
+
+
+def _set_output(parser: argparse.ArgumentParser, outputs: dict[str, Path], name: str, path: Path | None) -> None:
+    if path is None:
+        return
+    if name in outputs:
+        parser.error(f"duplicate output for {name}")
+    outputs[name] = path
+
+
+def _generate_selected_outputs(
+    parser: argparse.ArgumentParser,
+    contents: Mapping[str, str],
+    outputs: Mapping[str, Path],
+) -> int:
+    if not outputs:
+        parser.error("at least one output path is required")
+    unknown_outputs = sorted(name for name in outputs if name not in contents)
+    if unknown_outputs:
+        parser.error(f"unknown generated output(s): {', '.join(unknown_outputs)}")
+    for name, path in outputs.items():
+        _write_file(path, contents[name])
+    return 0
+
+
+def _main_build_output_mode(parser: argparse.ArgumentParser, args: argparse.Namespace, model: GenerationModel) -> int:
+    if args.dialect:
+        generations = {generation.dialect.name: generation for generation in model.dialects}
+        generation = generations.get(args.dialect)
+        if generation is None:
+            parser.error(f"unknown dialect {args.dialect!r}; expected one of {', '.join(sorted(generations))}")
+
+        outputs: dict[str, Path] = {}
+        _set_output(parser, outputs, "ops.h", args.ops_header)
+        _set_output(parser, outputs, "builders.c", args.builders)
+        _set_output(parser, outputs, "tables.c", args.tables)
+        _set_output(parser, outputs, "tables.h", args.table_header)
+        for output in args.table_shard:
+            _set_output(parser, outputs, f"tables/{output.name}.c", output.path)
+        return _generate_selected_outputs(parser, _generate_dialect_contents(generation), outputs)
+
+    outputs = {}
+    _set_output(parser, outputs, "op_registry.h", args.op_registry_header)
+    _set_output(parser, outputs, "op_registry.c", args.op_registry_source)
+    _set_output(parser, outputs, "type_registry.h", args.type_registry_header)
+    _set_output(parser, outputs, "type_registry.c", args.type_registry_source)
+    _set_output(parser, outputs, "keyword_enum.inc", args.keyword_enum)
+    _set_output(parser, outputs, "keyword_table.inc", args.keyword_table)
+    return _generate_selected_outputs(parser, _generate_registry_contents(model), outputs)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Generate C tables for Loom dialects and registries."""
+    parser = argparse.ArgumentParser(description="Generate Loom C op tables from Python definitions.")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--check",
+        action="store_true",
+        help="Verify checked-in generated headers are current and generated C sources are absent.",
+    )
+    mode.add_argument(
+        "--in-place",
+        action="store_true",
+        help="Regenerate checked-in generated headers.",
+    )
+    target = parser.add_mutually_exclusive_group()
+    target.add_argument("--dialect", help="Generate selected outputs for one dialect.")
+    target.add_argument(
+        "--registry",
+        action="store_true",
+        help="Generate selected cross-dialect registry outputs.",
+    )
+    parser.add_argument("--ops-header", type=Path, help="Generated dialect ops.h path.")
+    parser.add_argument("--builders", type=Path, help="Generated dialect builders.c path.")
+    parser.add_argument("--tables", type=Path, help="Generated dialect tables.c path.")
+    parser.add_argument("--table-header", type=Path, help="Generated sharded-dialect tables.h path.")
+    parser.add_argument(
+        "--table-shard",
+        action="append",
+        default=[],
+        metavar="NAME=PATH",
+        type=_parse_named_output,
+        help="Generated sharded-dialect tables/NAME.c path.",
+    )
+    parser.add_argument("--op-registry-header", type=Path, help="Generated op_registry.h path.")
+    parser.add_argument("--op-registry-source", type=Path, help="Generated op_registry.c path.")
+    parser.add_argument("--type-registry-header", type=Path, help="Generated type_registry.h path.")
+    parser.add_argument("--type-registry-source", type=Path, help="Generated type_registry.c path.")
+    parser.add_argument("--keyword-enum", type=Path, help="Generated keyword_enum.inc path.")
+    parser.add_argument("--keyword-table", type=Path, help="Generated keyword_table.inc path.")
+    args = parser.parse_args(argv)
+
+    build_output_selected = args.dialect is not None or args.registry
+    header_mode_selected = args.check or args.in_place
+    if build_output_selected and header_mode_selected:
+        parser.error("build-output generation cannot be combined with --check or --in-place")
+    if not build_output_selected and not header_mode_selected:
+        parser.error("select --check, --in-place, --dialect, or --registry")
+
+    model = _load_generation_model()
+    if args.check:
+        return _check_checked_in_outputs(model)
+    if args.in_place:
+        return _update_checked_in_outputs(model)
+    return _main_build_output_mode(parser, args, model)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

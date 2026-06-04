@@ -9,21 +9,29 @@
 
 iree_add_all_subdirs()
 
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     test
-  HDRS
-    "facts.h"
-    "ops.h"
-    "registry.h"
+  GENERATOR
+    loom::py::loom::gen::c_tables_generator
   SRCS
-    "builders.c"
     "canonicalize.c"
     "facts.c"
     "registry.c"
     "symbol_facts.c"
-    "tables.c"
     "verify.c"
+  GENERATED_SRC_FLAGS
+    "--builders"
+    "--tables"
+  GENERATED_SRCS
+    "builders.c"
+    "tables.c"
+  HDRS
+    "facts.h"
+    "ops.h"
+    "registry.h"
+  ARGS
+    "--dialect=test"
   DEPS
     iree::base
     loom::analysis::symbol_facts
@@ -38,7 +46,6 @@ loom_cc_library(
     loom::target::test::target_record_table
     loom::target::types
     loom::util::fact_table
-  PUBLIC
 )
 
 loom_cc_test(

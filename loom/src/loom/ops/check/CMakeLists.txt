@@ -9,19 +9,25 @@
 
 iree_add_all_subdirs()
 
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     check
-  HDRS
-    "ops.h"
-  SRCS
+  GENERATOR
+    loom::py::loom::gen::c_tables_generator
+  GENERATED_SRC_FLAGS
+    "--builders"
+    "--tables"
+  GENERATED_SRCS
     "builders.c"
     "tables.c"
+  HDRS
+    "ops.h"
+  ARGS
+    "--dialect=check"
   DEPS
     loom::error::error_defs
     loom::ir
     loom::ops::op_defs
-  PUBLIC
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

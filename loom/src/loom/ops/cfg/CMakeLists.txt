@@ -9,22 +9,29 @@
 
 iree_add_all_subdirs()
 
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     cfg
-  HDRS
-    "ops.h"
+  GENERATOR
+    loom::py::loom::gen::c_tables_generator
   SRCS
+    "verify.c"
+  GENERATED_SRC_FLAGS
+    "--builders"
+    "--tables"
+  GENERATED_SRCS
     "builders.c"
     "tables.c"
-    "verify.c"
+  HDRS
+    "ops.h"
+  ARGS
+    "--dialect=cfg"
   DEPS
     loom::error::emitter
     loom::error::error_defs
     loom::ir
     loom::ops::op_defs
     loom::ops::successor_verify
-  PUBLIC
 )
 
 loom_cc_test(

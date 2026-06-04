@@ -6,7 +6,6 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "iree_cmake_extra_content",
     "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
@@ -264,12 +263,10 @@ loom_cc_test(
     ],
 )
 
-loom_cc_library(
+loom_generated_cc_library(
     name = "ops",
     srcs = [
-        "ops/builders.c",
         "ops/registry.c",
-        "ops/tables.c",
         "ops/target.c",
     ],
     hdrs = [
@@ -277,6 +274,16 @@ loom_cc_library(
         "ops/registry.h",
         "ops/target.h",
     ],
+    args = ["--dialect=amdgpu"],
+    generated_src_flags = [
+        "--builders",
+        "--tables",
+    ],
+    generated_srcs = [
+        "ops/builders.c",
+        "ops/tables.c",
+    ],
+    generator = "//loom/py/loom/gen:c_tables_generator",
     deps = [
         ":error_defs",
         ":target_info",

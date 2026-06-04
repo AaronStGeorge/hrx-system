@@ -34,6 +34,7 @@ loom_cc_library(
   PUBLIC
 )
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
     iree_hal_test
@@ -48,7 +49,9 @@ loom_cc_test(
     loom::binding::c::loomc_target_spirv
     loom::binding::c::test::test_util
 )
+endif()
 
+if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
     spirv_test
@@ -61,5 +64,6 @@ loom_cc_test(
     loom::binding::c::loomc_target_spirv
     loom::binding::c::test::test_util
 )
+endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

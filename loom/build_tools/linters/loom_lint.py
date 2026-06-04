@@ -70,7 +70,7 @@ def main() -> int:
     )
     ok &= _run(
         "c tables",
-        [sys.executable, "loom/py/loom/gen/run.py", "c_tables"],
+        [sys.executable, "loom/py/loom/gen/run.py", "c_tables", "--check"],
         cwd=REPO_ROOT,
     )
     ok &= _run(

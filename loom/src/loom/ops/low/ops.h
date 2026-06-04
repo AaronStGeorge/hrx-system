@@ -6,7 +6,7 @@
 
 // GENERATED FILE: DO NOT EDIT.
 // Generator: loom.gen.c_tables.
-// Regenerate: python3 loom/py/loom/gen/run.py c_tables
+// Regenerate: python3 loom/py/loom/gen/run.py c_tables --in-place
 // clang-format off
 
 #ifndef LOOM_OPS_LOW_OPS_H_

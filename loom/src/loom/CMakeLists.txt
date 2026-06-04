@@ -7,16 +7,8 @@
 # To disable autogeneration for this file entirely, delete this header.        #
 ################################################################################
 
-iree_setup_c_src_root(
-  PACKAGE_ROOT_PREFIX "loom"
-  DEFAULT_EXPORT_SET Runtime
-  DEFAULT_INSTALL_COMPONENT IREEDevLibraries-Runtime
-  IMPLICIT_DEFS_TARGET loom_defs
-)
-
-include("${PROJECT_SOURCE_DIR}/loom/build_tools/cmake/loom_cc.cmake")
-include("${PROJECT_SOURCE_DIR}/loom/build_tools/cmake/loom_low_descriptor.cmake")
-include("${PROJECT_SOURCE_DIR}/loom/build_tools/cmake/loom_generated.cmake")
+set(IREE_PACKAGE_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(IREE_PACKAGE_ROOT_PREFIX "loom")
 
 iree_add_all_subdirs()
 

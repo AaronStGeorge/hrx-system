@@ -6,6 +6,8 @@
 
 // GENERATED FILE: DO NOT EDIT.
 // Generator: loom.gen.x86_packed_dot_contract.
+// Regenerate:
+//   python3 loom/py/loom/gen/run.py x86_packed_dot_contract --in-place
 
 #ifndef LOOM_TARGET_ARCH_X86_PACKED_DOT_CONTRACT_DATA_H_
 #define LOOM_TARGET_ARCH_X86_PACKED_DOT_CONTRACT_DATA_H_

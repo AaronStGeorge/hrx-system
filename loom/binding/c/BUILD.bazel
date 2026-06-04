@@ -6,6 +6,8 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
+    "iree_cmake_extra_content",
+    "iree_select",
     "loom_assert_no_dependencies",
     "loom_cc_library",
 )
@@ -14,6 +16,13 @@ package(
     default_visibility = ["//visibility:public"],
     features = ["layering_check"],
     licenses = ["notice"],  # Apache 2.0
+)
+
+iree_cmake_extra_content(
+    content = """
+set(IREE_PACKAGE_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(IREE_PACKAGE_ROOT_PREFIX "loom/binding/c")
+""",
 )
 
 loom_assert_no_dependencies(
@@ -71,6 +80,22 @@ LOOMC_TARGET_SPIRV_IREE_HAL_PUBLIC_HDRS = [
 LOOMC_TARGET_IREE_HAL_PUBLIC_HDRS = [
     "include/loomc/target/iree_hal.h",
 ]
+
+LOOMC_TARGET_SPIRV_COMPATIBLE_WITH = [
+    "//loom/config/target:spirv",
+    "//loom/config/emit:spirv",
+]
+
+LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH = LOOMC_TARGET_SPIRV_COMPATIBLE_WITH + [
+    "//loom/config/execute:spirv_vulkan",
+]
+
+LOOMC_TARGET_SPIRV_VULKAN_DEPS = iree_select({
+    "//loom/config/execute:spirv_vulkan": [
+        "@vulkan_headers",
+    ],
+    "//conditions:default": [],
+})
 
 loom_cc_library(
     name = "loomc",
@@ -173,6 +198,7 @@ loom_cc_library(
         "src",
     ],
     linkstatic = True,
+    target_compatible_with = LOOMC_TARGET_SPIRV_COMPATIBLE_WITH,
     deps = [
         ":loomc",
         "//loom/src/loom/error:error_defs",
@@ -199,6 +225,7 @@ loom_cc_library(
         "src",
     ],
     linkstatic = True,
+    target_compatible_with = LOOMC_TARGET_SPIRV_COMPATIBLE_WITH,
     deps = [
         ":loomc",
         ":loomc_target_spirv",
@@ -219,11 +246,11 @@ loom_cc_library(
         "src",
     ],
     linkstatic = True,
+    target_compatible_with = LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH,
     deps = [
         ":loomc",
         ":loomc_target_spirv",
-        "@vulkan_headers",
-    ],
+    ] + LOOMC_TARGET_SPIRV_VULKAN_DEPS,
     alwayslink = True,
 )
 
@@ -258,6 +285,7 @@ loom_cc_library(
         "src",
     ],
     linkstatic = True,
+    target_compatible_with = LOOMC_TARGET_SPIRV_COMPATIBLE_WITH,
     deps = [
         ":loomc",
         ":loomc_target_iree_hal",
@@ -281,6 +309,7 @@ loom_cc_library(
         ".",
         "include",
     ],
+    target_compatible_with = LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH,
     deps = [
         ":loomc",
         ":loomc_target_iree_hal",

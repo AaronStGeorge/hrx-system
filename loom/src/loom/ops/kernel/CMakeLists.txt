@@ -9,19 +9,27 @@
 
 iree_add_all_subdirs()
 
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     kernel
-  HDRS
-    "launch_config.h"
-    "ops.h"
+  GENERATOR
+    loom::py::loom::gen::c_tables_generator
   SRCS
-    "builders.c"
     "canonicalize.c"
     "facts.c"
     "launch_config.c"
-    "tables.c"
     "verify.c"
+  GENERATED_SRC_FLAGS
+    "--builders"
+    "--tables"
+  GENERATED_SRCS
+    "builders.c"
+    "tables.c"
+  HDRS
+    "launch_config.h"
+    "ops.h"
+  ARGS
+    "--dialect=kernel"
   DEPS
     loom::error::emitter
     loom::error::error_defs
@@ -40,7 +48,6 @@ loom_cc_library(
     loom::target::types
     loom::util::fact_table
     loom::util::math
-  PUBLIC
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

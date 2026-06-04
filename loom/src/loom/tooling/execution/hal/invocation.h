@@ -28,7 +28,7 @@ enum {
 };
 
 typedef struct loom_run_hal_invocation_options_t {
-  // HAL executable entry point ordinal to dispatch.
+  // HAL executable entry point table index to dispatch.
   uint32_t entry_point;
   // Dispatch workgroup count in x, y, z order.
   uint32_t workgroup_count[3];

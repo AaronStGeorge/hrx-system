@@ -13,9 +13,12 @@
 #include <string>
 #include <vector>
 
-#include "benchmark/benchmark.h"
 #include "iree/base/api.h"
 #include "loomc/iree.h"
+
+namespace benchmark {
+class State;
+}  // namespace benchmark
 
 namespace loomc::bench {
 

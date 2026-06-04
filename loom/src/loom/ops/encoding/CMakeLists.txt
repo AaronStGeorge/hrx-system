@@ -9,9 +9,25 @@
 
 iree_add_all_subdirs()
 
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     encoding
+  GENERATOR
+    loom::py::loom::gen::c_tables_generator
+  SRCS
+    "facts.c"
+    "families.c"
+    "matrix_operand.c"
+    "numeric_transform.c"
+    "roles.c"
+    "storage.c"
+    "verify.c"
+  GENERATED_SRC_FLAGS
+    "--builders"
+    "--tables"
+  GENERATED_SRCS
+    "builders.c"
+    "tables.c"
   HDRS
     "families.h"
     "matrix_operand.h"
@@ -20,16 +36,8 @@ loom_cc_library(
     "params.h"
     "roles.h"
     "storage.h"
-  SRCS
-    "builders.c"
-    "facts.c"
-    "families.c"
-    "matrix_operand.c"
-    "numeric_transform.c"
-    "roles.c"
-    "storage.c"
-    "tables.c"
-    "verify.c"
+  ARGS
+    "--dialect=encoding"
   DEPS
     iree::base
     loom::error::emitter
@@ -38,7 +46,6 @@ loom_cc_library(
     loom::ops::op_defs
     loom::util::fact_table
     loom::util::stable_id
-  PUBLIC
 )
 
 loom_cc_test(

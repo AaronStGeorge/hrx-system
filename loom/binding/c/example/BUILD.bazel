@@ -17,6 +17,15 @@ package(
     licenses = ["notice"],  # Apache 2.0
 )
 
+LOOMC_TARGET_SPIRV_COMPATIBLE_WITH = [
+    "//loom/config/target:spirv",
+    "//loom/config/emit:spirv",
+]
+
+LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH = LOOMC_TARGET_SPIRV_COMPATIBLE_WITH + [
+    "//loom/config/execute:spirv_vulkan",
+]
+
 loom_cc_binary(
     name = "source_info",
     srcs = ["source_info.c"],
@@ -44,6 +53,7 @@ loom_cc_binary(
 loom_cc_binary(
     name = "emit_spirv_offline",
     srcs = ["emit_spirv_offline.c"],
+    target_compatible_with = LOOMC_TARGET_SPIRV_COMPATIBLE_WITH,
     deps = [
         "//loom/binding/c:loomc",
         "//loom/binding/c:loomc_target_spirv",
@@ -53,6 +63,7 @@ loom_cc_binary(
 loom_cc_binary(
     name = "emit_spirv_vulkaninfo",
     srcs = ["emit_spirv_vulkaninfo.c"],
+    target_compatible_with = LOOMC_TARGET_SPIRV_COMPATIBLE_WITH,
     deps = [
         "//loom/binding/c:loomc",
         "//loom/binding/c:loomc_target_spirv",
@@ -63,6 +74,7 @@ loom_cc_binary(
 loom_cc_binary(
     name = "emit_spirv_vulkan",
     srcs = ["emit_spirv_vulkan.c"],
+    target_compatible_with = LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH,
     deps = [
         "//build_tools:dl",
         "//loom/binding/c:loomc",
@@ -74,6 +86,7 @@ loom_cc_binary(
 loom_cc_binary(
     name = "emit_spirv_iree_hal",
     srcs = ["emit_spirv_iree_hal.c"],
+    target_compatible_with = LOOMC_TARGET_SPIRV_COMPATIBLE_WITH,
     deps = [
         "//loom/binding/c:loomc",
         "//loom/binding/c:loomc_target_iree_hal",
@@ -99,6 +112,7 @@ loom_cc_test(
     tags = [
         "driver=vulkan",
     ],
+    target_compatible_with = LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH,
     deps = [
         "//build_tools:dl",
         "//loom/binding/c:loomc",
@@ -119,6 +133,7 @@ loom_cc_test(
     tags = [
         "driver=vulkan",
     ],
+    target_compatible_with = LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH,
     deps = [
         "//loom/binding/c:loomc",
         "//loom/binding/c:loomc_target_iree_hal",
@@ -134,17 +149,21 @@ loom_cc_test(
 
 iree_cmake_extra_content(
     content = """
-set_property(TEST iree/loom/binding/c/example/emit_spirv_vulkan_test
-  APPEND PROPERTY ENVIRONMENT
-    "VK_DRIVER_FILES=/dev/null"
-    "VK_ICD_FILENAMES=/dev/null"
-)
+if(TEST iree/loom/binding/c/example/emit_spirv_vulkan_test)
+  set_property(TEST iree/loom/binding/c/example/emit_spirv_vulkan_test
+    APPEND PROPERTY ENVIRONMENT
+      "VK_DRIVER_FILES=/dev/null"
+      "VK_ICD_FILENAMES=/dev/null"
+  )
+endif()
 
-set_property(TEST iree/loom/binding/c/example/emit_spirv_iree_hal_test
-  APPEND PROPERTY ENVIRONMENT
-    "VK_DRIVER_FILES=/dev/null"
-    "VK_ICD_FILENAMES=/dev/null"
-)
+if(TEST iree/loom/binding/c/example/emit_spirv_iree_hal_test)
+  set_property(TEST iree/loom/binding/c/example/emit_spirv_iree_hal_test
+    APPEND PROPERTY ENVIRONMENT
+      "VK_DRIVER_FILES=/dev/null"
+      "VK_ICD_FILENAMES=/dev/null"
+  )
+endif()
 """,
     inline = True,
 )

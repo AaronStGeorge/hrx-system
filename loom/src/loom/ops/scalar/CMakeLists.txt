@@ -9,28 +9,42 @@
 
 iree_add_all_subdirs()
 
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     scalar
-  HDRS
-    "combining.h"
-    "compare.h"
-    "ops.h"
+  GENERATOR
+    loom::py::loom::gen::c_tables_generator
   SRCS
-    "builders.c"
     "canonicalize.c"
     "combining.c"
     "compare.c"
     "facts.c"
+    "verify.c"
+  GENERATED_SRC_FLAGS
+    "--builders"
+    "--tables"
+    "--table-shard=analysis"
+    "--table-shard=arithmetic"
+    "--table-shard=bitwise"
+    "--table-shard=comparison"
+    "--table-shard=conversion"
+    "--table-shard=math"
+  GENERATED_SRCS
+    "builders.c"
     "tables.c"
-    "tables.h"
     "tables/analysis.c"
     "tables/arithmetic.c"
     "tables/bitwise.c"
     "tables/comparison.c"
     "tables/conversion.c"
     "tables/math.c"
-    "verify.c"
+  HDRS
+    "combining.h"
+    "compare.h"
+    "ops.h"
+    "tables.h"
+  ARGS
+    "--dialect=scalar"
   DEPS
     loom::error::emitter
     loom::error::error_defs
@@ -40,7 +54,6 @@ loom_cc_library(
     loom::ops::op_defs
     loom::rewrite::rewriter
     loom::util::math
-  PUBLIC
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

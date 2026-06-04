@@ -52,6 +52,7 @@ loom_cc_library(
     ::benchmark_kernels
     ::compile_pool_prototype
     iree::base
+    iree::third_party::google_benchmark
     loom::binding::c::loomc
   TESTONLY
   PUBLIC

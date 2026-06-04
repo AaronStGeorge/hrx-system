@@ -610,8 +610,6 @@ loom_cc_test(
     "requires-gpu-amd"
     "iree-build-requirement=loom.target.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"
-  GROUP
-    "iree-loom-amdgpu-tests"
 )
 endif()
 

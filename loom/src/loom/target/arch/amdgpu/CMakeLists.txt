@@ -155,18 +155,26 @@ loom_cc_test(
 endif()
 
 if(LOOM_TARGET_AMDGPU)
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     ops
+  GENERATOR
+    loom::py::loom::gen::c_tables_generator
+  SRCS
+    "ops/registry.c"
+    "ops/target.c"
+  GENERATED_SRC_FLAGS
+    "--builders"
+    "--tables"
+  GENERATED_SRCS
+    "ops/builders.c"
+    "ops/tables.c"
   HDRS
     "ops/ops.h"
     "ops/registry.h"
     "ops/target.h"
-  SRCS
-    "ops/builders.c"
-    "ops/registry.c"
-    "ops/tables.c"
-    "ops/target.c"
+  ARGS
+    "--dialect=amdgpu"
   DEPS
     ::error_defs
     ::target_info
@@ -177,7 +185,6 @@ loom_cc_library(
     loom::ops::op_defs
     loom::ops::target
     loom::target::types
-  PUBLIC
 )
 endif()
 

@@ -9,6 +9,7 @@ load(
     "loom_assert_no_dependencies",
     "loom_cc_library",
     "loom_cc_test",
+    "loom_generated_cc_library",
     "loom_generated_textual_header",
     "loom_low_descriptor_cc_library",
 )
@@ -109,17 +110,25 @@ loom_cc_library(
     ],
 )
 
-loom_cc_library(
+loom_generated_cc_library(
     name = "ops",
     srcs = [
-        "ops/builders.c",
         "ops/registry.c",
-        "ops/tables.c",
     ],
     hdrs = [
         "ops/ops.h",
         "ops/registry.h",
     ],
+    args = ["--dialect=x86"],
+    generated_src_flags = [
+        "--builders",
+        "--tables",
+    ],
+    generated_srcs = [
+        "ops/builders.c",
+        "ops/tables.c",
+    ],
+    generator = "//loom/py/loom/gen:c_tables_generator",
     deps = [
         ":target_records",
         "//loom/src/loom/error:error_defs",
@@ -431,16 +440,17 @@ loom_check_test_suite(
 # x86 packed-dot contracts
 #===------------------------------------------------------------------------===#
 
-loom_cc_library(
+loom_generated_cc_library(
     name = "packed_dot_contract",
     srcs = [
         "packed_dot_contract.c",
-        "packed_dot_contract_data.c",
     ],
     hdrs = [
         "packed_dot_contract.h",
         "packed_dot_contract_data.h",
     ],
+    generator = "//loom/py/loom/gen:x86_packed_dot_contract",
+    source = "packed_dot_contract_data.c",
     deps = [
         ":feature_bits",
         "//runtime/src/iree/base",

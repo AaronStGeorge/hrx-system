@@ -9,18 +9,26 @@
 
 iree_add_all_subdirs()
 
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     scf
-  HDRS
-    "ops.h"
+  GENERATOR
+    loom::py::loom::gen::c_tables_generator
   SRCS
-    "builders.c"
     "canonicalize.c"
     "facts.c"
-    "tables.c"
     "type_transfer.c"
     "verify.c"
+  GENERATED_SRC_FLAGS
+    "--builders"
+    "--tables"
+  GENERATED_SRCS
+    "builders.c"
+    "tables.c"
+  HDRS
+    "ops.h"
+  ARGS
+    "--dialect=scf"
   DEPS
     loom::analysis::availability
     loom::analysis::motion
@@ -33,7 +41,6 @@ loom_cc_library(
     loom::rewrite::type_propagation
     loom::util::fact_table
     loom::util::math
-  PUBLIC
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

@@ -9,23 +9,39 @@
 
 iree_add_all_subdirs()
 
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     vector
-  HDRS
-    "encoding_auxiliary.h"
-    "fragment.h"
-    "memory.h"
-    "ops.h"
+  GENERATOR
+    loom::py::loom::gen::c_tables_generator
   SRCS
-    "builders.c"
     "canonicalize.c"
     "encoding_auxiliary.c"
     "facts.c"
     "fragment.c"
     "memory.c"
+    "type_transfer.c"
+    "verify.c"
+  GENERATED_SRC_FLAGS
+    "--builders"
+    "--tables"
+    "--table-shard=aggregate"
+    "--table-shard=atomic"
+    "--table-shard=bitpack"
+    "--table-shard=cast"
+    "--table-shard=compare"
+    "--table-shard=construction"
+    "--table-shard=contraction"
+    "--table-shard=encoding"
+    "--table-shard=float_arithmetic"
+    "--table-shard=integer_arithmetic"
+    "--table-shard=math"
+    "--table-shard=memory"
+    "--table-shard=reduction"
+    "--table-shard=table"
+  GENERATED_SRCS
+    "builders.c"
     "tables.c"
-    "tables.h"
     "tables/aggregate.c"
     "tables/atomic.c"
     "tables/bitpack.c"
@@ -40,8 +56,14 @@ loom_cc_library(
     "tables/memory.c"
     "tables/reduction.c"
     "tables/table.c"
-    "type_transfer.c"
-    "verify.c"
+  HDRS
+    "encoding_auxiliary.h"
+    "fragment.h"
+    "memory.h"
+    "ops.h"
+    "tables.h"
+  ARGS
+    "--dialect=vector"
   DEPS
     iree::base
     loom::error::emitter
@@ -61,7 +83,6 @@ loom_cc_library(
     loom::util::fact_table
     loom::util::math
     loom::util::stable_id
-  PUBLIC
 )
 
 loom_cc_test(

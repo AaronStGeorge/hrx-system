@@ -488,7 +488,6 @@ loom_cc_test(
 loom_cc_test(
     name = "hsaco_hsa_test",
     srcs = ["hsaco_hsa_test.cc"],
-    group = "iree-loom-amdgpu-tests",
     tags = [
         "driver=amdgpu",
         "nodocker",

@@ -29,7 +29,7 @@ enum loom_run_hal_benchmark_flag_bits_e {
 };
 
 #define LOOM_RUN_HAL_PROFILE_SUMMARY_MAX_ROWS 32
-#define LOOM_RUN_HAL_PROFILE_EXPORT_NAME_CAPACITY 128
+#define LOOM_RUN_HAL_PROFILE_FUNCTION_NAME_CAPACITY 128
 #define LOOM_RUN_HAL_PROFILE_ARTIFACT_PATH_CAPACITY 512
 
 typedef struct loom_run_hal_profile_row_summary_t {
@@ -49,8 +49,8 @@ typedef struct loom_run_hal_profile_row_summary_t {
   uint64_t executable_id;
   // Session-local command-buffer identifier, or zero.
   uint64_t command_buffer_id;
-  // Executable export ordinal, or UINT32_MAX.
-  uint32_t export_ordinal;
+  // Executable function ordinal, or UINT32_MAX.
+  uint32_t function_ordinal;
   // Command ordinal within a command buffer, or UINT32_MAX.
   uint32_t command_index;
   // Number of source samples accumulated into this row.
@@ -83,10 +83,10 @@ typedef struct loom_run_hal_profile_row_summary_t {
   uint64_t minimum_duration_ns;
   // Maximum valid source duration in nanoseconds when scaling was available.
   uint64_t maximum_duration_ns;
-  // Length of |export_name| when executable metadata named the export.
-  iree_host_size_t export_name_length;
-  // Export name copied from profile metadata and truncated when necessary.
-  char export_name[LOOM_RUN_HAL_PROFILE_EXPORT_NAME_CAPACITY];
+  // Length of |function_name| when executable metadata named the function.
+  iree_host_size_t function_name_length;
+  // Function name copied from profile metadata and truncated when necessary.
+  char function_name[LOOM_RUN_HAL_PROFILE_FUNCTION_NAME_CAPACITY];
 } loom_run_hal_profile_row_summary_t;
 
 typedef struct loom_run_hal_profile_summary_t {

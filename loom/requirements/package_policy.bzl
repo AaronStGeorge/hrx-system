@@ -68,6 +68,10 @@ PACKAGE_POLICIES = [
         build_requirements = [TARGET_AMDGPU, EMIT_AMDGPU],
     ),
     package_policy(
+        packages = ["loom/src/loom/target/emit/native/x86/..."],
+        build_requirements = [TARGET_X86],
+    ),
+    package_policy(
         packages = ["loom/src/loom/target/emit/spirv/..."],
         build_requirements = [TARGET_SPIRV, EMIT_SPIRV],
     ),
@@ -112,6 +116,14 @@ PACKAGE_POLICIES = [
     package_policy(
         packages = ["loom/py/loom/importers/tilelang/..."],
         build_requirements = [IMPORT_TILELANG],
+    ),
+    package_policy(
+        packages = ["loom/binding/c/benchmark/target/spirv/..."],
+        build_requirements = [TARGET_SPIRV, EMIT_SPIRV],
+    ),
+    package_policy(
+        packages = ["loom/binding/c/test/target/spirv/..."],
+        build_requirements = [TARGET_SPIRV, EMIT_SPIRV],
     ),
 ]
 

@@ -9,19 +9,25 @@
 
 iree_add_all_subdirs()
 
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     pass
-  HDRS
-    "ops.h"
-  SRCS
+  GENERATOR
+    loom::py::loom::gen::c_tables_generator
+  GENERATED_SRC_FLAGS
+    "--builders"
+    "--tables"
+  GENERATED_SRCS
     "builders.c"
     "tables.c"
+  HDRS
+    "ops.h"
+  ARGS
+    "--dialect=pass"
   DEPS
     loom::error::error_defs
     loom::ir
     loom::ops::op_defs
-  PUBLIC
 )
 
 loom_cc_test(

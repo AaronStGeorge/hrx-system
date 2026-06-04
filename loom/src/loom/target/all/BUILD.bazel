@@ -38,10 +38,19 @@ loom_assert_no_dependencies(
 # All-target convenience registry
 #===------------------------------------------------------------------------===#
 
+ALL_TARGETS_ENABLED = [
+    "//loom/config/target:amdgpu",
+    "//loom/config/target:ireevm",
+    "//loom/config/target:spirv",
+    "//loom/config/target:wasm",
+    "//loom/config/target:x86",
+]
+
 loom_cc_library(
     name = "provider",
     srcs = ["provider.c"],
     hdrs = ["provider.h"],
+    target_compatible_with = ALL_TARGETS_ENABLED,
     deps = [
         "//loom/src/loom/target:provider",
         "//loom/src/loom/target/arch/amdgpu:provider",
@@ -58,6 +67,7 @@ loom_cc_library(
     name = "low_registry",
     srcs = ["low_registry.c"],
     hdrs = ["low_registry.h"],
+    target_compatible_with = ALL_TARGETS_ENABLED,
     deps = [
         ":provider",
         "//loom/src/loom/codegen/low:lower",

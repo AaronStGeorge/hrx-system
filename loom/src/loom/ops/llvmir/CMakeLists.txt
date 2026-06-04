@@ -9,23 +9,30 @@
 
 iree_add_all_subdirs()
 
-loom_cc_library(
+loom_generated_cc_library(
   NAME
     llvmir
+  GENERATOR
+    loom::py::loom::gen::c_tables_generator
+  SRCS
+    "target_records.c"
+  GENERATED_SRC_FLAGS
+    "--builders"
+    "--tables"
+  GENERATED_SRCS
+    "builders.c"
+    "tables.c"
   HDRS
     "ops.h"
     "target_records.h"
-  SRCS
-    "builders.c"
-    "tables.c"
-    "target_records.c"
+  ARGS
+    "--dialect=llvmir"
   DEPS
     loom::error::error_defs
     loom::ir
     loom::ops::op_defs
     loom::ops::target
     loom::target::types
-  PUBLIC
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###
