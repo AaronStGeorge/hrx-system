@@ -102,10 +102,6 @@ loom_cc_binary(
 loom_cc_test(
     name = "emit_spirv_vulkan_test",
     srcs = ["emit_spirv_vulkan.c"],
-    data = ["//build_tools/sanitizer:lsan_suppressions_vulkan.txt"],
-    env = {
-        "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
-    },
     tags = [
         "driver=vulkan",
     ],
@@ -121,10 +117,6 @@ loom_cc_test(
 loom_cc_test(
     name = "emit_spirv_iree_hal_test",
     srcs = ["emit_spirv_iree_hal.c"],
-    data = ["//build_tools/sanitizer:lsan_suppressions_vulkan.txt"],
-    env = {
-        "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
-    },
     tags = [
         "driver=vulkan",
     ],

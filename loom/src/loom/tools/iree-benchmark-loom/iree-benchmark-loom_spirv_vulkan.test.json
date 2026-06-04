@@ -3,9 +3,6 @@
   "cases": [
     {
       "name": "runs spirv vulkan scalar benchmark with bundle",
-      "env": {
-        "LSAN_OPTIONS": "suppressions={srcdir}/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt"
-      },
       "run": {
         "tool": "iree-benchmark-loom",
         "args": [
@@ -37,9 +34,6 @@
     },
     {
       "name": "runs spirv vulkan cooperative f16 benchmark",
-      "env": {
-        "LSAN_OPTIONS": "suppressions={srcdir}/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt"
-      },
       "run": {
         "tool": "iree-benchmark-loom",
         "args": [
@@ -72,9 +66,6 @@
     },
     {
       "name": "runs spirv vulkan comparison benchmark",
-      "env": {
-        "LSAN_OPTIONS": "suppressions={srcdir}/../../../../../build_tools/sanitizer/lsan_suppressions_vulkan.txt"
-      },
       "run": {
         "tool": "iree-benchmark-loom",
         "args": [

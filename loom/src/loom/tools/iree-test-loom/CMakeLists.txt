@@ -107,7 +107,6 @@ iree_execution_test_suite(
   TOOLS
     "iree-test-loom=::iree-test-loom"
   DATA
-    "${PROJECT_SOURCE_DIR}/build_tools/sanitizer/lsan_suppressions_vulkan.txt"
     "testdata/spirv_vulkan_coop_hal_actual.loom"
     "testdata/spirv_vulkan_coop_u8_hal_actual.loom"
     "testdata/spirv_vulkan_hal_actual.loom"

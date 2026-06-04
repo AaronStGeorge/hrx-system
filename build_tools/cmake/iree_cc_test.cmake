@@ -151,12 +151,6 @@ function(iree_cc_test)
       list(APPEND _ENVIRONMENT_VARS
           "LSAN_OPTIONS=suppressions=${_LSAN_SUPP_FILE}")
     endif()
-    if("driver=vulkan" IN_LIST _RULE_LABELS)
-      set(_LSAN_SUPP_FILE
-          "${CMAKE_SOURCE_DIR}/build_tools/sanitizer/lsan_suppressions_vulkan.txt")
-      list(APPEND _ENVIRONMENT_VARS
-          "LSAN_OPTIONS=suppressions=${_LSAN_SUPP_FILE}")
-    endif()
   endif()
 
   # Case for cross-compiling towards Android.

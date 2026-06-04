@@ -114,11 +114,4 @@ loom_cc_test(
 )
 endif()
 
-if(TEST iree/loom/binding/c/test/target/spirv/iree_hal_execution_test)
-  set_property(TEST iree/loom/binding/c/test/target/spirv/iree_hal_execution_test
-    APPEND PROPERTY ENVIRONMENT
-      "LSAN_OPTIONS=suppressions=${IREE_ROOT_DIR}/build_tools/sanitizer/lsan_suppressions_vulkan.txt"
-  )
-endif()
-
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

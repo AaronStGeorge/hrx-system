@@ -258,7 +258,6 @@ iree_execution_test_suite(
   TOOLS
     "iree-benchmark-loom=::iree-benchmark-loom"
   DATA
-    "${PROJECT_SOURCE_DIR}/build_tools/sanitizer/lsan_suppressions_vulkan.txt"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-test-loom/testdata/spirv_vulkan_coop_hal_actual.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-test-loom/testdata/spirv_vulkan_coop_u8_hal_actual.loom"
     "${PROJECT_SOURCE_DIR}/loom/src/loom/tools/iree-test-loom/testdata/spirv_vulkan_hal_actual.loom"

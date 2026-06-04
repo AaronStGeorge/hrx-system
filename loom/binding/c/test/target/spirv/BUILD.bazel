@@ -6,7 +6,6 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "iree_cmake_extra_content",
     "iree_select",
     "loom_cc_test",
 )
@@ -81,10 +80,6 @@ loom_cc_test(
 loom_cc_test(
     name = "iree_hal_execution_test",
     srcs = ["iree_hal_execution_test.cc"],
-    data = ["//build_tools/sanitizer:lsan_suppressions_vulkan.txt"],
-    env = {
-        "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
-    },
     tags = [
         "driver=vulkan",
     ],
@@ -98,16 +93,4 @@ loom_cc_test(
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
     ],
-)
-
-iree_cmake_extra_content(
-    content = """
-if(TEST iree/loom/binding/c/test/target/spirv/iree_hal_execution_test)
-  set_property(TEST iree/loom/binding/c/test/target/spirv/iree_hal_execution_test
-    APPEND PROPERTY ENVIRONMENT
-      "LSAN_OPTIONS=suppressions=${IREE_ROOT_DIR}/build_tools/sanitizer/lsan_suppressions_vulkan.txt"
-  )
-endif()
-""",
-    inline = True,
 )

@@ -143,7 +143,6 @@ iree_execution_test_suite(
         "testdata/spirv_vulkan_coop_u8_hal_actual.loom",
         "testdata/spirv_vulkan_hal_actual.loom",
         "testdata/spirv_vulkan_quantized_hal_actual.loom",
-        "//build_tools/sanitizer:lsan_suppressions_vulkan.txt",
     ],
     manifests = ["iree-test-loom_spirv_vulkan.test.json"],
     tags = [
