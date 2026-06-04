@@ -183,19 +183,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         default="loom/target/arch/amdgpu/atomic_candidates.h",
         help="Public include path for the generated header.",
     )
+    parser.add_argument("--format", action="store_true")
     args = parser.parse_args(argv)
 
     args.header.parent.mkdir(parents=True, exist_ok=True)
     args.source.parent.mkdir(parents=True, exist_ok=True)
     args.header.write_text(
-        _emit_header(header_path=args.header, format_output=True),
+        _emit_header(header_path=args.header, format_output=args.format),
         encoding="utf-8",
     )
     args.source.write_text(
         _emit_source(
             public_header=args.public_header,
             source_path=args.source,
-            format_output=True,
+            format_output=args.format,
         ),
         encoding="utf-8",
     )

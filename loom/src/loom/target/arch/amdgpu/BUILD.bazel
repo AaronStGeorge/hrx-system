@@ -4,6 +4,7 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("//loom/build_tools/amdgpu/isa_xml:archive.bzl", "AMDGPU_ISA_XML_ARCHIVE")
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
     "loom_assert_no_dependencies",
@@ -19,7 +20,6 @@ load(
     "//loom/build_tools/bazel:loom_check.bzl",
     "loom_check_test_suite",
 )
-load(":archives.bzl", "AMDGPU_ISA_XML_ARCHIVE")
 
 package(
     default_visibility = ["//visibility:public"],

@@ -290,13 +290,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=[],
         help="ISA XML fact source as key:path.",
     )
+    parser.add_argument("--format", action="store_true")
     args = parser.parse_args(argv)
 
     isa_specs = _parse_isa_xml_arguments(args.isa_xml)
     args.header.parent.mkdir(parents=True, exist_ok=True)
     args.source.parent.mkdir(parents=True, exist_ok=True)
     args.header.write_text(
-        _emit_header(header_path=args.header, format_output=True),
+        _emit_header(header_path=args.header, format_output=args.format),
         encoding="utf-8",
     )
     args.source.write_text(
@@ -304,7 +305,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             public_header=args.public_header,
             source_path=args.source,
             isa_specs=isa_specs,
-            format_output=True,
+            format_output=args.format,
         ),
         encoding="utf-8",
     )
