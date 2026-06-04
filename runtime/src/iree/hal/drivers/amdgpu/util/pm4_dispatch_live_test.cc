@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cinttypes>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -247,21 +248,96 @@ static void EmitDispatchDirect(uint32_t* target_dwords,
   target_dwords[4] = dispatch_initiator;
 }
 
-static void EmitReleaseMem32Gfx10Gfx11(uint32_t* target_dwords, void* target,
-                                       uint32_t value) {
+static iree_status_t AppendPm4Barrier(
+    iree_hal_amdgpu_vendor_packet_capability_flags_t capabilities,
+    iree_hal_amdgpu_pm4_barrier_flags_t barrier_flags,
+    iree_hsa_fence_scope_t acquire_scope, iree_hsa_fence_scope_t release_scope,
+    uint32_t* dwords, uint32_t capacity, uint32_t* inout_dword_count) {
+  if (*inout_dword_count > capacity) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "PM4 barrier append cursor %u exceeds capacity %u",
+                            *inout_dword_count, capacity);
+  }
+  const uint32_t barrier_dword_count = iree_hal_amdgpu_pm4_barrier_dword_count(
+      capabilities, barrier_flags, acquire_scope, release_scope);
+  if (barrier_dword_count == 0) {
+    return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
+                            "PM4 barrier cannot be emitted for capabilities "
+                            "0x%08" PRIx32,
+                            capabilities);
+  }
+  if (capacity - *inout_dword_count < barrier_dword_count) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "PM4 barrier requires %u dwords but only %u are available",
+        barrier_dword_count, capacity - *inout_dword_count);
+  }
+  uint32_t emitted_dword_count = 0;
+  if (!iree_hal_amdgpu_pm4_barrier_emit(
+          capabilities, barrier_flags, acquire_scope, release_scope,
+          capacity - *inout_dword_count, &dwords[*inout_dword_count],
+          &emitted_dword_count) ||
+      emitted_dword_count != barrier_dword_count) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "PM4 barrier emission changed size");
+  }
+  *inout_dword_count += emitted_dword_count;
+  return iree_ok_status();
+}
+
+static iree_status_t AppendPm4HostAcquire(
+    iree_hal_amdgpu_vendor_packet_capability_flags_t capabilities,
+    uint32_t* dwords, uint32_t capacity, uint32_t* inout_dword_count) {
+  return AppendPm4Barrier(
+      capabilities, IREE_HAL_AMDGPU_PM4_BARRIER_FLAG_EXECUTION,
+      IREE_HSA_FENCE_SCOPE_SYSTEM, IREE_HSA_FENCE_SCOPE_NONE, dwords, capacity,
+      inout_dword_count);
+}
+
+static iree_status_t AppendPm4WriteData32(uint32_t* dwords, uint32_t capacity,
+                                          uint32_t* inout_dword_count,
+                                          void* target, uint32_t value) {
+  if (*inout_dword_count > capacity) {
+    return iree_make_status(IREE_STATUS_RESOURCE_EXHAUSTED,
+                            "PM4 write-data append cursor %u exceeds "
+                            "capacity %u",
+                            *inout_dword_count, capacity);
+  }
+  if (!iree_host_ptr_has_alignment(target, 4)) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "PM4 write-data target is not 4-byte aligned");
+  }
+  constexpr uint32_t kWriteData32DwordCount = 5;
+  if (capacity - *inout_dword_count < kWriteData32DwordCount) {
+    return iree_make_status(
+        IREE_STATUS_RESOURCE_EXHAUSTED,
+        "PM4 write-data requires %u dwords but only %u are available",
+        kWriteData32DwordCount, capacity - *inout_dword_count);
+  }
   const uintptr_t address = reinterpret_cast<uintptr_t>(target);
+  uint32_t* target_dwords = &dwords[*inout_dword_count];
   target_dwords[0] = iree_hal_amdgpu_pm4_make_header(
-      IREE_HAL_AMDGPU_PM4_HDR_IT_OPCODE_RELEASE_MEM, /*dword_count=*/8);
-  target_dwords[1] = (1u << 22) | (1u << 21) | (1u << 13) | (1u << 12) |
-                     (3u << 25) | (0x14u << 0) | (5u << 8);
-  target_dwords[2] =
-      IREE_HAL_AMDGPU_PM4_RELEASE_MEM_INT_SEL_SEND_DATA_AFTER_WR_CONFIRM |
-      (1u << 29);
-  target_dwords[3] = iree_hal_amdgpu_pm4_addr_lo(address);
-  target_dwords[4] = iree_hal_amdgpu_pm4_addr_hi(address);
-  target_dwords[5] = value;
-  target_dwords[6] = 0;
-  target_dwords[7] = 0;
+      IREE_HAL_AMDGPU_PM4_HDR_IT_OPCODE_WRITE_DATA, kWriteData32DwordCount);
+  target_dwords[1] =
+      IREE_HAL_AMDGPU_PM4_WRITE_DATA_DST_SEL_TC_L2 |
+      IREE_HAL_AMDGPU_PM4_WRITE_DATA_WR_CONFIRM_WAIT_CONFIRMATION;
+  target_dwords[2] = iree_hal_amdgpu_pm4_addr_lo(address);
+  target_dwords[3] = iree_hal_amdgpu_pm4_addr_hi(address);
+  target_dwords[4] = value;
+  *inout_dword_count += kWriteData32DwordCount;
+  return iree_ok_status();
+}
+
+static iree_status_t AppendPm4CompletionWrite(
+    iree_hal_amdgpu_vendor_packet_capability_flags_t capabilities,
+    uint32_t* dwords, uint32_t capacity, uint32_t* inout_dword_count,
+    void* target, uint32_t value) {
+  IREE_RETURN_IF_ERROR(
+      AppendPm4Barrier(capabilities, IREE_HAL_AMDGPU_PM4_BARRIER_FLAG_EXECUTION,
+                       IREE_HSA_FENCE_SCOPE_NONE, IREE_HSA_FENCE_SCOPE_SYSTEM,
+                       dwords, capacity, inout_dword_count));
+  return AppendPm4WriteData32(dwords, capacity, inout_dword_count, target,
+                              value);
 }
 
 static iree_status_t AppendPm4DispatchDirect(
@@ -493,16 +569,18 @@ TEST_F(PM4DispatchLiveTest, AqlAndAqlPm4IbLaunchMixedKernels) {
   memory->store_kernargs[1] = {.target = &memory->outputs[1],
                                .value = kPm4ValueB};
 
+  IREE_ASSERT_OK(AppendPm4HostAcquire(agent_pm4_barrier_capabilities,
+                                      pm4_dwords, IREE_ARRAYSIZE(pm4_dwords),
+                                      &pm4_dword_count));
   for (uint32_t i = 0; i < 2; ++i) {
     IREE_ASSERT_OK(AppendPm4DispatchDirect(
         launch_states[i],
         reinterpret_cast<uintptr_t>(&memory->store_kernargs[i]), pm4_dwords,
         IREE_ARRAYSIZE(pm4_dwords), &pm4_dword_count));
   }
-  ASSERT_LE(pm4_dword_count + 8, IREE_ARRAYSIZE(pm4_dwords));
-  EmitReleaseMem32Gfx10Gfx11(&pm4_dwords[pm4_dword_count], &memory->completion,
-                             /*value=*/1);
-  pm4_dword_count += 8;
+  IREE_ASSERT_OK(AppendPm4CompletionWrite(
+      agent_pm4_barrier_capabilities, pm4_dwords, IREE_ARRAYSIZE(pm4_dwords),
+      &pm4_dword_count, &memory->completion, /*value=*/1));
 
   iree_hal_amdgpu_pm4_program_t pm4_program = {};
   IREE_ASSERT_OK(iree_hal_amdgpu_pm4_program_initialize(
@@ -539,23 +617,23 @@ TEST_F(PM4DispatchLiveTest, AqlAndAqlPm4IbLaunchMixedKernels) {
   memory->read_add_kernargs = {.source = &memory->scratch[0],
                                .target = &memory->outputs[2],
                                .value = kPm4BarrierAdd};
+  IREE_ASSERT_OK(AppendPm4HostAcquire(agent_pm4_barrier_capabilities,
+                                      pm4_dwords, IREE_ARRAYSIZE(pm4_dwords),
+                                      &pm4_dword_count));
   IREE_ASSERT_OK(AppendPm4DispatchDirect(
       launch_states[0], reinterpret_cast<uintptr_t>(&memory->store_kernargs[0]),
       pm4_dwords, IREE_ARRAYSIZE(pm4_dwords), &pm4_dword_count));
-  uint32_t barrier_dword_count = 0;
-  ASSERT_TRUE(iree_hal_amdgpu_pm4_barrier_emit(
+  IREE_ASSERT_OK(AppendPm4Barrier(
       agent_pm4_barrier_capabilities,
       IREE_HAL_AMDGPU_PM4_BARRIER_FLAG_EXECUTION, IREE_HSA_FENCE_SCOPE_SYSTEM,
-      IREE_HSA_FENCE_SCOPE_SYSTEM, IREE_ARRAYSIZE(pm4_dwords) - pm4_dword_count,
-      &pm4_dwords[pm4_dword_count], &barrier_dword_count));
-  pm4_dword_count += barrier_dword_count;
+      IREE_HSA_FENCE_SCOPE_SYSTEM, pm4_dwords, IREE_ARRAYSIZE(pm4_dwords),
+      &pm4_dword_count));
   IREE_ASSERT_OK(AppendPm4DispatchDirect(
       launch_states[2], reinterpret_cast<uintptr_t>(&memory->read_add_kernargs),
       pm4_dwords, IREE_ARRAYSIZE(pm4_dwords), &pm4_dword_count));
-  ASSERT_LE(pm4_dword_count + 8, IREE_ARRAYSIZE(pm4_dwords));
-  EmitReleaseMem32Gfx10Gfx11(&pm4_dwords[pm4_dword_count], &memory->completion,
-                             /*value=*/2);
-  pm4_dword_count += 8;
+  IREE_ASSERT_OK(AppendPm4CompletionWrite(
+      agent_pm4_barrier_capabilities, pm4_dwords, IREE_ARRAYSIZE(pm4_dwords),
+      &pm4_dword_count, &memory->completion, /*value=*/2));
   IREE_ASSERT_OK(iree_hal_amdgpu_pm4_program_initialize(
       &libhsa, gpu_agent, pm4_memory_pool, pm4_dwords, pm4_dword_count,
       &pm4_program));
@@ -590,6 +668,10 @@ TEST_F(PM4DispatchLiveTest, AqlAndAqlPm4IbLaunchMixedKernels) {
   memory->store_kernargs[3] = {.target = &memory->outputs[2],
                                .value = kPm4PatchValue};
   pm4_dword_count = 0;
+  IREE_ASSERT_OK(AppendPm4HostAcquire(agent_pm4_barrier_capabilities,
+                                      pm4_dwords, IREE_ARRAYSIZE(pm4_dwords),
+                                      &pm4_dword_count));
+  uint32_t barrier_dword_count = 0;
   IREE_ASSERT_OK(iree_hal_amdgpu_pm4_dispatch_emit_setup(
       &launch_states[1], IREE_ARRAYSIZE(pm4_dwords) - pm4_dword_count,
       &pm4_dwords[pm4_dword_count], &barrier_dword_count));
@@ -609,10 +691,9 @@ TEST_F(PM4DispatchLiveTest, AqlAndAqlPm4IbLaunchMixedKernels) {
                      /*workgroup_count_z=*/1,
                      launch_states[1].dispatch_initiator);
   pm4_dword_count += IREE_HAL_AMDGPU_PM4_DISPATCH_DIRECT_DWORD_COUNT;
-  ASSERT_LE(pm4_dword_count + 8, IREE_ARRAYSIZE(pm4_dwords));
-  EmitReleaseMem32Gfx10Gfx11(&pm4_dwords[pm4_dword_count], &memory->completion,
-                             /*value=*/3);
-  pm4_dword_count += 8;
+  IREE_ASSERT_OK(AppendPm4CompletionWrite(
+      agent_pm4_barrier_capabilities, pm4_dwords, IREE_ARRAYSIZE(pm4_dwords),
+      &pm4_dword_count, &memory->completion, /*value=*/3));
   iree_hal_amdgpu_pm4_program_t target_pm4_program = {};
   IREE_ASSERT_OK(iree_hal_amdgpu_pm4_program_initialize(
       &libhsa, gpu_agent, pm4_memory_pool, pm4_dwords, pm4_dword_count,
@@ -628,6 +709,9 @@ TEST_F(PM4DispatchLiveTest, AqlAndAqlPm4IbLaunchMixedKernels) {
   // The target userdata lives in a following IB. Later dwords in the current IB
   // may already be fetched by the command processor before a shader fixup runs.
   pm4_dword_count = 0;
+  IREE_ASSERT_OK(AppendPm4HostAcquire(agent_pm4_barrier_capabilities,
+                                      pm4_dwords, IREE_ARRAYSIZE(pm4_dwords),
+                                      &pm4_dword_count));
   IREE_ASSERT_OK(AppendPm4DispatchDirect(
       launch_states[3],
       reinterpret_cast<uintptr_t>(&memory->patch_user_data_kernargs),
