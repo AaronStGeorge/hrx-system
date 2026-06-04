@@ -32,15 +32,15 @@ loom_assert_no_dependencies(
     ],
 )
 
-_TARGET_AMDGPU_CHECK_COPTS = iree_select({
-    "//loom/config/target:amdgpu": [
-        "-DLOOM_CHECK_HAVE_TARGET_AMDGPU=1",
+_EMIT_AMDGPU_CHECK_COPTS = iree_select({
+    "//loom/config/emit:amdgpu": [
+        "-DLOOM_CHECK_HAVE_EMIT_AMDGPU=1",
     ],
     "//conditions:default": [],
 })
 
-_TARGET_AMDGPU_CHECK_DEPS = iree_select({
-    "//loom/config/target:amdgpu": [
+_EMIT_AMDGPU_CHECK_DEPS = iree_select({
+    "//loom/config/emit:amdgpu": [
         "//loom/src/loom/target/arch/amdgpu:check_provider",
     ],
     "//conditions:default": [],
@@ -145,7 +145,7 @@ _TARGET_X86_CHECK_DEPS = iree_select({
 })
 
 _LOOM_CHECK_PROVIDER_COPTS = (
-    _TARGET_AMDGPU_CHECK_COPTS +
+    _EMIT_AMDGPU_CHECK_COPTS +
     _TARGET_IREEVM_CHECK_COPTS +
     _EMIT_LLVMIR_CHECK_COPTS +
     _TARGET_SPIRV_CHECK_COPTS +
@@ -156,7 +156,7 @@ _LOOM_CHECK_PROVIDER_COPTS = (
 )
 
 _LOOM_CHECK_PROVIDER_DEPS = (
-    _TARGET_AMDGPU_CHECK_DEPS +
+    _EMIT_AMDGPU_CHECK_DEPS +
     _TARGET_IREEVM_CHECK_DEPS +
     _EMIT_LLVMIR_CHECK_DEPS +
     _TARGET_SPIRV_CHECK_DEPS +

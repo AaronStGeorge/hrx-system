@@ -911,6 +911,10 @@ loom_cc_library(
         "check/occupancy.h",
         "check/provider.h",
     ],
+    target_compatible_with = select({
+        "//loom/config/emit:amdgpu": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
     deps = [
         ":occupancy",
         ":provider",

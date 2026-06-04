@@ -934,7 +934,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU)
+if(LOOM_TARGET_AMDGPU AND LOOM_EMIT_AMDGPU)
 loom_cc_library(
   NAME
     check_provider
