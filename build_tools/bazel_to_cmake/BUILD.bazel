@@ -10,6 +10,7 @@ py_test(
     name = "config_test",
     srcs = [
         "bazel_to_cmake_config.py",
+        "bazel_to_cmake_converter.py",
         "bazel_to_cmake_targets.py",
         "config_test.py",
     ],

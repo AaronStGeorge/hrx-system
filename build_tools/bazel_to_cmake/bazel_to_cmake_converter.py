@@ -46,18 +46,6 @@ _PLATFORM_CMAKE_SYSTEM_NAME = {
     "@platforms//cpu:wasm32": "wasm_32",
 }
 
-_COMPILER_PLUGIN_CMAKE_OPTIONS = {
-    "//compiler/plugins:input_stablehlo_enabled": "IREE_INPUT_STABLEHLO",
-    "//compiler/plugins:input_torch_enabled": "IREE_INPUT_TORCH",
-    "//compiler/plugins:input_tosa_enabled": "IREE_INPUT_TOSA",
-    "//compiler/plugins:hal_target_cuda_enabled": "IREE_TARGET_BACKEND_CUDA",
-    "//compiler/plugins:hal_target_llvm_cpu_enabled": "IREE_TARGET_BACKEND_LLVM_CPU",
-    "//compiler/plugins:hal_target_metal_spirv_enabled": "IREE_TARGET_BACKEND_METAL_SPIRV",
-    "//compiler/plugins:hal_target_rocm_enabled": "IREE_TARGET_BACKEND_ROCM",
-    "//compiler/plugins:hal_target_vmvx_enabled": "IREE_TARGET_BACKEND_VMVX",
-    "//compiler/plugins:hal_target_vulkan_spirv_enabled": "IREE_TARGET_BACKEND_VULKAN_SPIRV",
-}
-
 _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS = {
     "//runtime/config/hal:driver_amdgpu": "IREE_HAL_DRIVER_AMDGPU",
     "//runtime/config/hal:driver_cuda": "IREE_HAL_DRIVER_CUDA",
@@ -204,9 +192,7 @@ class BuildFileFunctions(object):
         condition = self._convert_platform_condition(label)
         if condition:
             return condition
-        if label in _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS:
-            return _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS[label]
-        return _COMPILER_PLUGIN_CMAKE_OPTIONS.get(label)
+        return _RUNTIME_HAL_DRIVER_CMAKE_OPTIONS.get(label)
 
     def _emit_platform_guard_begin(self, target_compatible_with):
         """Emits platform guards for target_compatible_with."""
