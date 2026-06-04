@@ -12,6 +12,9 @@ on:
       name:
         type: string
         default: Linux / CMake / GPU gfx942
+      runner_label:
+        type: string
+        default: linux-gfx942-1gpu-core42-ossci-rocm
       artifact_run_id:
         type: string
         default: ""
@@ -20,7 +23,10 @@ on:
         default: gpu:0
       ctest_regex:
         type: string
-        default: "^libhrx/cts/"
+        default: ""
+      ctest_exclude_regex:
+        type: string
+        default: ""
       ctest_label_regex:
         type: string
         default: runtime-resource=amd-gpu
@@ -30,20 +36,31 @@ on:
       ctest_parallelism:
         type: number
         default: 1
+      experimental:
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       artifact_run_id:
         type: string
         description: "GitHub Actions run id containing HRX package artifacts. Empty means this workflow run."
         default: ""
+      runner_label:
+        type: string
+        description: "GitHub Actions runner label."
+        default: linux-gfx942-1gpu-core42-ossci-rocm
       device:
         type: string
         description: "libhrx CTS device spec."
         default: gpu:0
       ctest_regex:
         type: string
-        description: "CTest name regex for installed GPU tests."
-        default: "^libhrx/cts/"
+        description: "Optional CTest name regex for installed GPU tests."
+        default: ""
+      ctest_exclude_regex:
+        type: string
+        description: "Optional CTest name exclusion regex for installed GPU tests."
+        default: ""
       ctest_label_regex:
         type: string
         description: "CTest label regex for GPU installed tests."
@@ -56,6 +73,10 @@ on:
         type: number
         description: "CTest parallelism on the GPU runner."
         default: 1
+      experimental:
+        type: boolean
+        description: "Allow installed GPU tests to fail without failing the workflow."
+        default: false
 
 permissions:
   actions: read
@@ -64,7 +85,7 @@ permissions:
 jobs:
   test_core_linux_gpu:
     name: ${{ inputs.name || 'Linux / CMake / GPU gfx942' }}
-    runs-on: linux-gfx942-1gpu-core42-ossci-rocm
+    runs-on: ${{ inputs.runner_label || 'linux-gfx942-1gpu-core42-ossci-rocm' }}
     timeout-minutes: 20
     env:
       HRX_OUTPUT_DIR: ${{ github.workspace }}/build/linux-gpu
@@ -78,6 +99,7 @@ jobs:
       HRX_TEST_GPU: "true"
       HRX_CTS_DEVICE: ${{ inputs.device || 'gpu:0' }}
       HRX_CTEST_REGEX: ${{ inputs.ctest_regex }}
+      HRX_CTEST_EXCLUDE_REGEX: ${{ inputs.ctest_exclude_regex }}
       HRX_CTEST_LABEL_REGEX: ${{ inputs.ctest_label_regex }}
       HRX_CTEST_LABEL_EXCLUDE_REGEX: ${{ inputs.ctest_label_exclude_regex }}
       HRX_CTEST_PARALLELISM: ${{ inputs.ctest_parallelism || 1 }}
@@ -96,7 +118,9 @@ jobs:
           python3 --version
           mkdir -p "${HRX_OUTPUT_DIR}"
           python3 -m venv "${HRX_OUTPUT_DIR}/python"
-          "${HRX_PYTHON}" -m pip install --upgrade pip zstandard
+          "${HRX_PYTHON}" -m pip install --upgrade pip cmake==3.31.6 zstandard
+          echo "${HRX_OUTPUT_DIR}/python/bin" >> "${GITHUB_PATH}"
+          "${HRX_OUTPUT_DIR}/python/bin/ctest" --version
 
       - name: Download public package artifact
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
@@ -126,6 +150,14 @@ jobs:
         run: |
           "${HRX_PYTHON}" build_tools/ci_core_linux.py extract-packages
 
+      - name: Report ROCm environment
+        run: |
+          export PATH="${HRX_PUBLIC_DEPS_DIR}/bin:${PATH}"
+          export LD_LIBRARY_PATH="${HRX_PUBLIC_DEPS_DIR}/lib:${HRX_PUBLIC_DEPS_DIR}/lib/rocm_sysdeps/lib:${LD_LIBRARY_PATH:-}"
+          echo "rocminfo path: $(command -v rocminfo)"
+          rocminfo
+
       - name: Run installed GPU tests
+        continue-on-error: ${{ inputs.experimental }}
         run: |
           "${HRX_PYTHON}" build_tools/ci_core_linux.py test

@@ -98,30 +98,46 @@ jobs:
       ctest_exclude_regex: ${{ matrix.ctest_exclude_regex }}
       ctest_label_exclude_regex: "runtime-resource="
       cmake_options: |
-        -DIREE_ROCM_TEST_TARGET_CHIP=gfx942
+        -DIREE_ROCM_TEST_TARGET_CHIP=gfx942;gfx1151;gfx1201
       package: ${{ matrix.package }}
 
-  gpu_gfx942:
-    name: Linux / CMake / GPU gfx942
+  gpu_linux:
+    name: ${{ matrix.name }}
     needs: cmake_linux
     if: ${{ needs.cmake_linux.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux / CMake / GPU gfx942
+            chip: gfx942
+            runner_label: linux-gfx942-1gpu-core42-ossci-rocm
+            ctest_exclude_regex: "(^iree/hal/drivers/amdgpu/allocator_test$)|(^iree/hal/drivers/amdgpu/host_queue_command_buffer_test$)|(^iree/hal/drivers/amdgpu/pm4_command_buffer_benchmark_test$)"
+            experimental: false
+          - name: Linux / CMake / GPU gfx1201 (experimental)
+            chip: gfx1201
+            runner_label: gpu_navi4x
+            ctest_exclude_regex: ""
+            experimental: true
     uses: ./.github/workflows/test_core_linux_gpu.yml
     permissions:
       actions: read
       contents: read
     with:
-      name: Linux / CMake / GPU gfx942
+      name: ${{ matrix.name }}
+      runner_label: ${{ matrix.runner_label }}
       artifact_run_id: ${{ github.run_id }}
       device: gpu:0
-      ctest_regex: "^libhrx/cts/"
+      ctest_exclude_regex: ${{ matrix.ctest_exclude_regex }}
       ctest_label_regex: runtime-resource=amd-gpu
       ctest_parallelism: 1
+      experimental: ${{ matrix.experimental }}
 
   summary:
     name: Linux / CMake / CI / Summary
     needs:
       - cmake_linux
-      - gpu_gfx942
+      - gpu_linux
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     steps:
@@ -132,8 +148,8 @@ jobs:
           if [[ "${result}" != "success" ]]; then
             exit 1
           fi
-          result="${{ needs.gpu_gfx942.result }}"
-          echo "gpu_gfx942 result: ${result}"
+          result="${{ needs.gpu_linux.result }}"
+          echo "gpu_linux result: ${result}"
           if [[ "${result}" != "success" ]]; then
             exit 1
           fi
