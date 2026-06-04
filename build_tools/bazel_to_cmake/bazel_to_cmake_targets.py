@@ -96,6 +96,7 @@ class TargetConverter:
         #   @iree_cuda//:libdevice_embedded -> iree_cuda::libdevice_embedded
         label = target.rsplit(":")[-1]
         return [f"iree_cuda::{label}"]
+
     def _convert_to_cmake_path(self, bazel_path_fragment: str) -> str:
         cmake_path = bazel_path_fragment
         # Bazel `//iree/base`     -> CMake `iree::base`
