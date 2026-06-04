@@ -62,6 +62,8 @@ class CompileScenario {
   virtual iree_status_t RunJob(iree_host_size_t worker_ordinal,
                                iree_host_size_t job_ordinal) = 0;
 
+  virtual void SetExtraCounters(::benchmark::State& state) const;
+
   void ResetCounters();
 
   int64_t artifact_bytes() const;

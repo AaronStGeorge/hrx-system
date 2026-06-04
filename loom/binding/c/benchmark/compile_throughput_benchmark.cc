@@ -78,6 +78,7 @@ static void SetThroughputCounters(::benchmark::State& state,
   state.counters["artifact_bytes"] = (double)total_artifact_bytes;
   state.counters["artifact_bytes/kernel"] =
       total_jobs == 0 ? 0.0 : (double)total_artifact_bytes / (double)total_jobs;
+  scenario.SetExtraCounters(state);
 }
 
 static iree_status_t CreateTextSourceFromViews(loomc_string_view_t identifier,
@@ -275,6 +276,10 @@ iree_status_t CompileScenario::SetUp(iree_host_size_t worker_count) {
 
   IREE_RETURN_IF_ERROR(PreparePassProgram(context_.get(), &pass_program_));
   return SetUpWorkerSlots(worker_count);
+}
+
+void CompileScenario::SetExtraCounters(::benchmark::State& state) const {
+  (void)state;
 }
 
 void CompileScenario::ResetCounters() {

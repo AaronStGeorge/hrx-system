@@ -6,10 +6,12 @@
 
 #include "loom/binding/c/benchmark/compile_throughput_benchmark.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <memory>
+#include <sstream>
 #include <string>
 
 #include "loomc/target/spirv.h"
@@ -19,6 +21,7 @@ namespace {
 using loomc::bench::CloneModule;
 using loomc::bench::CompileScenario;
 using loomc::bench::CreateBenchmarkKernelSource;
+using loomc::bench::CreateTextSource;
 using loomc::bench::CreateWorkspace;
 using loomc::bench::DeserializeSource;
 using loomc::bench::loom_allocator;
@@ -42,6 +45,48 @@ enum class ModuleMaterializationMode {
   kParseSource,
   kCloneTemplate,
 };
+
+static std::string MakeSpirvI32ChainSource(iree_host_size_t operation_count) {
+  operation_count = std::max<iree_host_size_t>(operation_count, 1);
+
+  std::ostringstream builder;
+  builder
+      << "spirv.target<vulkan1_3> @target {abi = hal_kernel}\n"
+      << "\n"
+      << "config.decl @tuner.workgroup_size : %value: index where "
+         "[range(%value, 1, 256)]\n"
+      << "\n"
+      << "kernel.def target(@target) @i32_chain(%input: buffer, %output: "
+         "buffer, %byte_offset: offset) {\n"
+      << "  %unit = index.constant 1 : index\n"
+      << "  %workgroup_size_x = config.get @tuner.workgroup_size : index\n"
+      << "  kernel.launch.config workgroups(%unit, %unit, %unit) "
+         "workgroup_size(%workgroup_size_x, %unit, %unit) : index\n"
+      << "} launch {\n"
+      << "  %byte_offset_aligned = index.assume %byte_offset "
+         "[mul(%byte_offset, 4)] : offset\n"
+      << "  %input_aligned = buffer.assume.alignment %input "
+         "{minimum_alignment = 4} : buffer\n"
+      << "  %output_aligned = buffer.assume.alignment %output "
+         "{minimum_alignment = 4} : buffer\n"
+      << "  %input_view = buffer.view %input_aligned[%byte_offset_aligned] : "
+         "buffer -> view<1xi32, #dense>\n"
+      << "  %loaded = view.load %input_view[0] : view<1xi32, #dense> -> "
+         "i32\n"
+      << "  %acc0 = scalar.addi %loaded, %loaded : i32\n";
+  for (iree_host_size_t i = 1; i < operation_count; ++i) {
+    builder << "  %acc" << i << " = scalar.addi %acc" << (i - 1)
+            << ", %loaded : i32\n";
+  }
+  builder
+      << "  %output_view = buffer.view %output_aligned[%byte_offset_aligned] : "
+         "buffer -> view<1xi32, #dense>\n"
+      << "  view.store %acc" << (operation_count - 1)
+      << ", %output_view[0] : i32, view<1xi32, #dense>\n"
+      << "  kernel.return\n"
+      << "}\n";
+  return builder.str();
+}
 
 class SpirvScenarioBase : public CompileScenario {
  protected:
@@ -337,6 +382,83 @@ class SpirvTunerFlowScenario final : public SpirvScenarioBase {
   ModulePtr template_module_;
 };
 
+class SpirvI32ChainScenario final : public SpirvScenarioBase {
+ public:
+  SpirvI32ChainScenario(iree_host_size_t job_count,
+                        iree_host_size_t operation_count,
+                        ModuleMaterializationMode materialization_mode)
+      : job_count_(job_count),
+        operation_count_(std::max<iree_host_size_t>(operation_count, 1)),
+        materialization_mode_(materialization_mode) {}
+
+  iree_status_t SetUp(iree_host_size_t worker_count) override {
+    IREE_RETURN_IF_ERROR(SetUpSpirv(worker_count));
+    source_text_ = MakeSpirvI32ChainSource(operation_count_);
+    IREE_RETURN_IF_ERROR(
+        CreateTextSource("i32_chain.loom", source_text_, &source_));
+    if (materialization_mode_ == ModuleMaterializationMode::kCloneTemplate) {
+      IREE_RETURN_IF_ERROR(CreateWorkspace(&template_workspace_));
+      IREE_RETURN_IF_ERROR(DeserializeSource(context_.get(),
+                                             template_workspace_.get(),
+                                             source_.get(), &template_module_));
+    }
+    return iree_ok_status();
+  }
+
+  iree_host_size_t job_count() const override { return job_count_; }
+
+  iree_status_t RunJob(iree_host_size_t worker_ordinal,
+                       iree_host_size_t job_ordinal) override {
+    WorkspacePtr& workspace = workspace_at(worker_ordinal);
+
+    ModulePtr module;
+    if (materialization_mode_ == ModuleMaterializationMode::kCloneTemplate) {
+      IREE_RETURN_IF_ERROR(
+          CloneModule(template_module_.get(), workspace.get(), &module));
+    } else {
+      IREE_RETURN_IF_ERROR(DeserializeSource(context_.get(), workspace.get(),
+                                             source_.get(), &module));
+    }
+
+    char workgroup_size_value[16] = {0};
+    std::snprintf(workgroup_size_value, sizeof(workgroup_size_value), "%d",
+                  1 + (int)(job_ordinal % 64));
+    loomc_config_binding_t bindings[] = {
+        {
+            /*.key=*/loomc_make_cstring_view("@tuner.workgroup_size"),
+            /*.value=*/loomc_make_cstring_view(workgroup_size_value),
+        },
+    };
+    loomc_config_options_t config_options = {
+        /*.bindings=*/bindings,
+        /*.binding_count=*/IREE_ARRAYSIZE(bindings),
+        /*.json_object=*/loomc_string_view_empty(),
+        /*.flags=*/LOOMC_CONFIG_POLICY_FLAG_REJECT_UNKNOWN |
+            LOOMC_CONFIG_POLICY_FLAG_REQUIRE_RESOLVED,
+    };
+
+    IREE_RETURN_IF_ERROR(CompileModuleToPreparedLow(
+        workspace, module, loomc_make_cstring_view("spirv_i32_chain"),
+        loomc_make_cstring_view("@i32_chain"), config_options));
+    return EmitSpirvArtifact(workspace, module,
+                             loomc_make_cstring_view("i32_chain.spv"));
+  }
+
+  void SetExtraCounters(::benchmark::State& state) const override {
+    state.counters["operation_count"] = (double)operation_count_;
+    state.counters["source_bytes"] = (double)source_text_.size();
+  }
+
+ private:
+  iree_host_size_t job_count_ = 0;
+  iree_host_size_t operation_count_ = 0;
+  ModuleMaterializationMode materialization_mode_;
+  std::string source_text_;
+  SourcePtr source_;
+  WorkspacePtr template_workspace_;
+  ModulePtr template_module_;
+};
+
 static std::unique_ptr<CompileScenario> CreateSpirvTunerFlowParseScenario(
     const ::benchmark::State& state, void* user_data) {
   (void)user_data;
@@ -350,6 +472,22 @@ static std::unique_ptr<CompileScenario> CreateSpirvTunerFlowCloneScenario(
   (void)user_data;
   return std::make_unique<SpirvTunerFlowScenario>(
       (iree_host_size_t)state.range(1),
+      ModuleMaterializationMode::kCloneTemplate);
+}
+
+static std::unique_ptr<CompileScenario> CreateSpirvI32ChainParseScenario(
+    const ::benchmark::State& state, void* user_data) {
+  (void)user_data;
+  return std::make_unique<SpirvI32ChainScenario>(
+      (iree_host_size_t)state.range(1), (iree_host_size_t)state.range(2),
+      ModuleMaterializationMode::kParseSource);
+}
+
+static std::unique_ptr<CompileScenario> CreateSpirvI32ChainCloneScenario(
+    const ::benchmark::State& state, void* user_data) {
+  (void)user_data;
+  return std::make_unique<SpirvI32ChainScenario>(
+      (iree_host_size_t)state.range(1), (iree_host_size_t)state.range(2),
       ModuleMaterializationMode::kCloneTemplate);
 }
 
@@ -413,6 +551,70 @@ BENCHMARK(BM_SpirvTunerFlowClone)
     ->Args({32, 512})
     ->Args({64, 1024})
     ->Args({96, 1536})
+    ->UseRealTime();
+
+static void BM_SpirvI32ChainParseSmoke(::benchmark::State& state) {
+  RunCompileBenchmark(state, CreateSpirvI32ChainParseScenario, nullptr);
+}
+BENCHMARK(BM_SpirvI32ChainParseSmoke)->Args({1, 2, 16})->UseRealTime();
+
+static void BM_SpirvI32ChainCloneSmoke(::benchmark::State& state) {
+  RunCompileBenchmark(state, CreateSpirvI32ChainCloneScenario, nullptr);
+}
+BENCHMARK(BM_SpirvI32ChainCloneSmoke)->Args({2, 4, 64})->UseRealTime();
+
+static void BM_SpirvI32ChainParseDirect(::benchmark::State& state) {
+  RunCompileBenchmarkDirect(state, CreateSpirvI32ChainParseScenario, nullptr);
+}
+BENCHMARK(BM_SpirvI32ChainParseDirect)
+    ->Args({1, 1, 1})
+    ->Args({1, 1, 16})
+    ->Args({1, 1, 64})
+    ->Args({1, 1, 256})
+    ->Args({1, 1, 1024})
+    ->UseRealTime();
+
+static void BM_SpirvI32ChainCloneDirect(::benchmark::State& state) {
+  RunCompileBenchmarkDirect(state, CreateSpirvI32ChainCloneScenario, nullptr);
+}
+BENCHMARK(BM_SpirvI32ChainCloneDirect)
+    ->Args({1, 1, 1})
+    ->Args({1, 1, 16})
+    ->Args({1, 1, 64})
+    ->Args({1, 1, 256})
+    ->Args({1, 1, 1024})
+    ->UseRealTime();
+
+static void BM_SpirvI32ChainParse(::benchmark::State& state) {
+  RunCompileBenchmark(state, CreateSpirvI32ChainParseScenario, nullptr);
+}
+BENCHMARK(BM_SpirvI32ChainParse)
+    ->Args({1, 16, 1})
+    ->Args({1, 16, 64})
+    ->Args({1, 16, 256})
+    ->Args({32, 512, 1})
+    ->Args({32, 512, 64})
+    ->Args({32, 512, 256})
+    ->Args({96, 1536, 1})
+    ->Args({96, 1536, 64})
+    ->Args({96, 1536, 256})
+    ->Args({96, 384, 1024})
+    ->UseRealTime();
+
+static void BM_SpirvI32ChainClone(::benchmark::State& state) {
+  RunCompileBenchmark(state, CreateSpirvI32ChainCloneScenario, nullptr);
+}
+BENCHMARK(BM_SpirvI32ChainClone)
+    ->Args({1, 16, 1})
+    ->Args({1, 16, 64})
+    ->Args({1, 16, 256})
+    ->Args({32, 512, 1})
+    ->Args({32, 512, 64})
+    ->Args({32, 512, 256})
+    ->Args({96, 1536, 1})
+    ->Args({96, 1536, 64})
+    ->Args({96, 1536, 256})
+    ->Args({96, 384, 1024})
     ->UseRealTime();
 
 }  // namespace
