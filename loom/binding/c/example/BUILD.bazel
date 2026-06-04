@@ -6,7 +6,6 @@
 
 load(
     "//loom/build_tools/bazel:build_defs.bzl",
-    "iree_cmake_extra_content",
     "loom_cc_binary",
     "loom_cc_test",
 )
@@ -106,8 +105,6 @@ loom_cc_test(
     data = ["//build_tools/sanitizer:lsan_suppressions_vulkan.txt"],
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
-        "VK_DRIVER_FILES": "/dev/null",
-        "VK_ICD_FILENAMES": "/dev/null",
     },
     tags = [
         "driver=vulkan",
@@ -127,8 +124,6 @@ loom_cc_test(
     data = ["//build_tools/sanitizer:lsan_suppressions_vulkan.txt"],
     env = {
         "LSAN_OPTIONS": "suppressions=$(location //build_tools/sanitizer:lsan_suppressions_vulkan.txt)",
-        "VK_DRIVER_FILES": "/dev/null",
-        "VK_ICD_FILENAMES": "/dev/null",
     },
     tags = [
         "driver=vulkan",
@@ -145,25 +140,4 @@ loom_cc_test(
         "//runtime/src/iree/hal",
         "//runtime/src/iree/hal/drivers",
     ],
-)
-
-iree_cmake_extra_content(
-    content = """
-if(TEST iree/loom/binding/c/example/emit_spirv_vulkan_test)
-  set_property(TEST iree/loom/binding/c/example/emit_spirv_vulkan_test
-    APPEND PROPERTY ENVIRONMENT
-      "VK_DRIVER_FILES=/dev/null"
-      "VK_ICD_FILENAMES=/dev/null"
-  )
-endif()
-
-if(TEST iree/loom/binding/c/example/emit_spirv_iree_hal_test)
-  set_property(TEST iree/loom/binding/c/example/emit_spirv_iree_hal_test
-    APPEND PROPERTY ENVIRONMENT
-      "VK_DRIVER_FILES=/dev/null"
-      "VK_ICD_FILENAMES=/dev/null"
-  )
-endif()
-""",
-    inline = True,
 )

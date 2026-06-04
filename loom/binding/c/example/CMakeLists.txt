@@ -107,6 +107,10 @@ loom_cc_test(
     loom::binding::c::loomc_target_spirv_vulkan
   LABELS
     "driver=vulkan"
+    "iree-run-requirement=loom.resource.vulkan_device"
+    "loom-resource=vulkan-device"
+  RESOURCE_GROUP
+    loom-vulkan-tests
 )
 endif()
 
@@ -128,23 +132,11 @@ loom_cc_test(
     loom::binding::c::loomc_target_spirv_iree_hal
   LABELS
     "driver=vulkan"
+    "iree-run-requirement=loom.resource.vulkan_device"
+    "loom-resource=vulkan-device"
+  RESOURCE_GROUP
+    loom-vulkan-tests
 )
-endif()
-
-if(TEST iree/loom/binding/c/example/emit_spirv_vulkan_test)
-  set_property(TEST iree/loom/binding/c/example/emit_spirv_vulkan_test
-    APPEND PROPERTY ENVIRONMENT
-      "VK_DRIVER_FILES=/dev/null"
-      "VK_ICD_FILENAMES=/dev/null"
-  )
-endif()
-
-if(TEST iree/loom/binding/c/example/emit_spirv_iree_hal_test)
-  set_property(TEST iree/loom/binding/c/example/emit_spirv_iree_hal_test
-    APPEND PROPERTY ENVIRONMENT
-      "VK_DRIVER_FILES=/dev/null"
-      "VK_ICD_FILENAMES=/dev/null"
-  )
 endif()
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

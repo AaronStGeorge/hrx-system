@@ -122,6 +122,11 @@ PACKAGE_POLICIES = [
         build_requirements = [TARGET_SPIRV, EMIT_SPIRV],
     ),
     package_policy(
+        packages = ["loom/binding/c/example"],
+        run_requirements = [VULKAN_DEVICE_RESOURCE],
+        resource_group = "loom-vulkan-tests",
+    ),
+    package_policy(
         packages = ["loom/binding/c/test/target/spirv/..."],
         build_requirements = [TARGET_SPIRV, EMIT_SPIRV],
     ),
