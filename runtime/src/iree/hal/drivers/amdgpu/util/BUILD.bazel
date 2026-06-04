@@ -562,26 +562,28 @@ iree_amdgpu_binary(
     target = "amdgcn-amd-amdhsa",
 )
 
-iree_runtime_cc_test(
-    name = "pm4_dispatch_live_test",
-    srcs = ["pm4_dispatch_live_test.cc"],
-    data = [":pm4_dispatch_test_kernels_gfx1100.so"],
-    deps = [
-        ":libhsa",
-        ":packet",
-        ":pm4_dispatch",
-        ":pm4_program",
-        ":queue_primitives",
-        ":topology",
-        ":vmem",
-        "//runtime/src/iree/base",
-        "//runtime/src/iree/base/threading",
-        "//runtime/src/iree/hal/drivers/amdgpu/abi",
-        "//runtime/src/iree/io:file_handle",
-        "//runtime/src/iree/testing:gtest",
-        "//runtime/src/iree/testing:gtest_main",
-    ],
-)
+# Disabled until the generated code object is available through the test data
+# path in both Bazel and CMake.
+# iree_runtime_cc_test(
+#     name = "pm4_dispatch_live_test",
+#     srcs = ["pm4_dispatch_live_test.cc"],
+#     data = [":pm4_dispatch_test_kernels_gfx1100.so"],
+#     deps = [
+#         ":libhsa",
+#         ":packet",
+#         ":pm4_dispatch",
+#         ":pm4_program",
+#         ":queue_primitives",
+#         ":topology",
+#         ":vmem",
+#         "//runtime/src/iree/base",
+#         "//runtime/src/iree/base/threading",
+#         "//runtime/src/iree/hal/drivers/amdgpu/abi",
+#         "//runtime/src/iree/io:file_handle",
+#         "//runtime/src/iree/testing:gtest",
+#         "//runtime/src/iree/testing:gtest_main",
+#     ],
+# )
 
 iree_runtime_cc_test(
     name = "pm4_program_test",

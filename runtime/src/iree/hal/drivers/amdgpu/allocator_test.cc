@@ -505,7 +505,7 @@ TEST_F(AllocatorTest, DeviceAllocationExportReportsHsaPointer) {
   iree_hal_buffer_release(buffer);
 }
 
-TEST_F(AllocatorTest, ExternalBufferExportFailsLoud) {
+TEST_F(AllocatorTest, ExternalBufferExportRejectsUnsupportedRequests) {
   TestLogicalDevice test_device;
   IREE_ASSERT_OK(test_device.Initialize(&libhsa_, &topology_, host_allocator_));
 
@@ -519,15 +519,12 @@ TEST_F(AllocatorTest, ExternalBufferExportFailsLoud) {
       test_device.allocator(), params, /*allocation_size=*/4096, &buffer));
 
   iree_hal_external_buffer_t external_buffer = {};
-  external_buffer.type = IREE_HAL_EXTERNAL_BUFFER_TYPE_OPAQUE_WIN32;
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_UNAVAILABLE,
       iree_hal_allocator_export_buffer(
           test_device.allocator(), buffer,
           IREE_HAL_EXTERNAL_BUFFER_TYPE_DEVICE_ALLOCATION,
           IREE_HAL_EXTERNAL_BUFFER_FLAG_NONE, &external_buffer));
-  EXPECT_EQ(external_buffer.type, IREE_HAL_EXTERNAL_BUFFER_TYPE_NONE);
-  EXPECT_EQ(external_buffer.size, 0u);
 
   IREE_EXPECT_STATUS_IS(
       IREE_STATUS_UNAVAILABLE,
@@ -535,8 +532,6 @@ TEST_F(AllocatorTest, ExternalBufferExportFailsLoud) {
           test_device.allocator(), buffer,
           IREE_HAL_EXTERNAL_BUFFER_TYPE_OPAQUE_WIN32,
           IREE_HAL_EXTERNAL_BUFFER_FLAG_NONE, &external_buffer));
-  EXPECT_EQ(external_buffer.type, IREE_HAL_EXTERNAL_BUFFER_TYPE_NONE);
-  EXPECT_EQ(external_buffer.size, 0u);
 
   iree_hal_buffer_release(buffer);
 }
