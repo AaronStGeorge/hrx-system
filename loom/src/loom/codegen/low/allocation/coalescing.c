@@ -90,6 +90,9 @@ static bool loom_low_allocation_coalescing_copy_source_for_value(
     return false;
   }
   const loom_value_t* value = loom_module_value(module, value_id);
+  if (loom_value_is_block_arg(value)) {
+    return false;
+  }
   const loom_op_t* defining_op = loom_value_def_op(value);
   if (!loom_low_copy_isa(defining_op)) {
     return false;
