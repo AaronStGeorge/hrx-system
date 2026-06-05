@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     artifact_provider
@@ -35,25 +35,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
-loom_cc_library(
-  NAME
-    provider
-  HDRS
-    "provider.h"
-  SRCS
-    "provider.c"
-  DEPS
-    ::artifact_provider
-    iree::base
-    loom::target::arch::spirv::provider
-    loom::tooling::execution::execution_provider
-    loom::tooling::execution::hal::execution_backend
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     testbench_requirements
@@ -70,7 +52,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     vulkan_profile
@@ -91,7 +73,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
     artifact_provider_test
@@ -116,17 +98,12 @@ loom_cc_test(
     loom::tooling::execution::hal::artifact
     loom::tooling::execution::hal::runtime
   LABELS
-    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.target.arch.spirv"
     "iree-build-requirement=loom.emit.spirv"
-    "iree-build-requirement=loom.execute.spirv_vulkan"
-    "iree-run-requirement=loom.resource.vulkan_device"
-    "loom-resource=vulkan-device"
-  RESOURCE_GROUP
-    loom-vulkan-tests
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
     vulkan_profile_test
@@ -144,13 +121,8 @@ loom_cc_test(
     loom::target::arch::spirv::profile
     loom::target::types
   LABELS
-    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.target.arch.spirv"
     "iree-build-requirement=loom.emit.spirv"
-    "iree-build-requirement=loom.execute.spirv_vulkan"
-    "iree-run-requirement=loom.resource.vulkan_device"
-    "loom-resource=vulkan-device"
-  RESOURCE_GROUP
-    loom-vulkan-tests
 )
 endif()
 

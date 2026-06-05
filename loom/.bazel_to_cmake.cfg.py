@@ -27,6 +27,11 @@ _LOOM_CONFIG_CMAKE_OPTIONS = {
     "//loom/config/target:spirv": "LOOM_TARGET_SPIRV",
     "//loom/config/target:wasm": "LOOM_TARGET_WASM",
     "//loom/config/target:x86": "LOOM_TARGET_X86",
+    "//loom/config/target/arch:amdgpu": "LOOM_TARGET_ARCH_AMDGPU",
+    "//loom/config/target/arch:ireevm": "LOOM_TARGET_ARCH_IREEVM",
+    "//loom/config/target/arch:spirv": "LOOM_TARGET_ARCH_SPIRV",
+    "//loom/config/target/arch:wasm": "LOOM_TARGET_ARCH_WASM",
+    "//loom/config/target/arch:x86": "LOOM_TARGET_ARCH_X86",
 }
 
 _LOW_DESCRIPTOR_ROOTPATH_PATTERN = re.compile(r"\$\(rootpath ([^)]+)\)")

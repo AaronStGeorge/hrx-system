@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
     assembly
@@ -38,7 +38,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
     loom_check
@@ -55,7 +55,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 iree_native_test(
   NAME
     "test_assembly"

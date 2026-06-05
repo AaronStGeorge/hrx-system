@@ -4,10 +4,10 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-// SPIR-V/Vulkan execution-tool provider composed from the shared HAL runner.
+// SPIR-V/Vulkan execution provider composed from the shared HAL runner.
 
-#ifndef LOOM_TOOLING_EXECUTION_HAL_SPIRV_PROVIDER_H_
-#define LOOM_TOOLING_EXECUTION_HAL_SPIRV_PROVIDER_H_
+#ifndef LOOM_TOOLING_TARGET_SPIRV_EXECUTION_PROVIDER_H_
+#define LOOM_TOOLING_TARGET_SPIRV_EXECUTION_PROVIDER_H_
 
 #include "loom/tooling/execution/execution_provider.h"
 
@@ -24,4 +24,4 @@ extern const loom_run_execution_provider_t
 }  // extern "C"
 #endif
 
-#endif  // LOOM_TOOLING_EXECUTION_HAL_SPIRV_PROVIDER_H_
+#endif  // LOOM_TOOLING_TARGET_SPIRV_EXECUTION_PROVIDER_H_

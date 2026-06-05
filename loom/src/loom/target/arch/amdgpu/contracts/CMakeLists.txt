@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     arithmetic
@@ -22,7 +22,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     arithmetic_lower_rules
@@ -40,7 +40,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     async
@@ -53,7 +53,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     async_lower_rules
@@ -67,7 +67,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     buffer
@@ -80,7 +80,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     buffer_lower_rules
@@ -94,7 +94,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     compare
@@ -107,7 +107,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     compare_lower_rules
@@ -123,7 +123,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     dot
@@ -136,7 +136,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     dot_lower_rules
@@ -151,7 +151,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     integer
@@ -164,7 +164,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     integer_lower_rules
@@ -180,7 +180,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     matrix
@@ -193,7 +193,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     reduce
@@ -206,7 +206,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     reduce_lower_rules
@@ -222,7 +222,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     view
@@ -235,7 +235,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU)
 loom_target_table_cc_library(
   NAME
     view_lower_rules

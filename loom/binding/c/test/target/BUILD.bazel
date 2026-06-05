@@ -17,7 +17,7 @@ package(
 )
 
 LOOMC_TARGET_SPIRV_COMPATIBLE_WITH = [
-    "//loom/config/target:spirv",
+    "//loom/config/target/arch:spirv",
     "//loom/config/emit:spirv",
 ]
 

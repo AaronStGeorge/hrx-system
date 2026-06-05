@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_target_table_cc_library(
   NAME
     logical_core
@@ -22,7 +22,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_target_table_cc_library(
   NAME
     logical_core_lower_rules

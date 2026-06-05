@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
 loom_cc_library(
   NAME
     artifact_provider
@@ -33,25 +33,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_AMDGPU)
-loom_cc_library(
-  NAME
-    provider
-  HDRS
-    "provider.h"
-  SRCS
-    "provider.c"
-  DEPS
-    ::artifact_provider
-    iree::base
-    loom::target::arch::amdgpu::provider
-    loom::tooling::execution::execution_provider
-    loom::tooling::execution::hal::execution_backend
-  PUBLIC
-)
-endif()
-
-if(LOOM_TARGET_AMDGPU AND LOOM_EMIT_AMDGPU AND LOOM_EXECUTE_AMDGPU)
+if(LOOM_TARGET_ARCH_AMDGPU AND LOOM_EMIT_AMDGPU)
 loom_cc_test(
   NAME
     artifact_provider_test
@@ -74,13 +56,8 @@ loom_cc_test(
     loom::target::compile_report
     loom::testing::module_ptr
   LABELS
-    "iree-build-requirement=loom.target.amdgpu"
+    "iree-build-requirement=loom.target.arch.amdgpu"
     "iree-build-requirement=loom.emit.amdgpu"
-    "iree-build-requirement=loom.execute.amdgpu"
-    "iree-run-requirement=loom.resource.amd_gpu"
-    "loom-resource=amd-gpu"
-  RESOURCE_GROUP
-    loom-amdgpu-tests
 )
 endif()
 

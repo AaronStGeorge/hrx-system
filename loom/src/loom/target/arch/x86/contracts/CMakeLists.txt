@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_target_table_cc_library(
   NAME
     scalar
@@ -22,7 +22,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_target_table_cc_library(
   NAME
     scalar_lower_rules
@@ -39,7 +39,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_target_table_cc_library(
   NAME
     avx2
@@ -52,7 +52,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_target_table_cc_library(
   NAME
     avx2_lower_rules
@@ -70,7 +70,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_target_table_cc_library(
   NAME
     avx512
@@ -83,7 +83,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_target_table_cc_library(
   NAME
     avx512_lower_rules
@@ -101,7 +101,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_target_table_cc_library(
   NAME
     packed_dot
@@ -114,7 +114,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_target_table_cc_library(
   NAME
     packed_dot_lower_rules

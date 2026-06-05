@@ -82,7 +82,7 @@ LOOMC_TARGET_IREE_HAL_PUBLIC_HDRS = [
 ]
 
 LOOMC_TARGET_SPIRV_COMPATIBLE_WITH = [
-    "//loom/config/target:spirv",
+    "//loom/config/target/arch:spirv",
     "//loom/config/emit:spirv",
 ]
 

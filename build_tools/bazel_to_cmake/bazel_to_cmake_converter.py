@@ -139,6 +139,13 @@ class MixedDeps:
         return NotImplemented
 
 
+class _SelectsModule:
+    """No-op subset of @bazel_skylib//lib:selects.bzl used in BUILD files."""
+
+    def config_setting_group(self, *args, **kwargs):
+        pass
+
+
 class BuildFileFunctions(object):
     """Object passed to `exec` that has handlers for BUILD file functions."""
 
@@ -155,6 +162,7 @@ class BuildFileFunctions(object):
         self._build_dir = build_dir
         self._repo_root = repo_root
         self._filegroup_srcs = {}
+        self.selects = _SelectsModule()
         self._custom_initialize()
 
     def _custom_initialize(self):

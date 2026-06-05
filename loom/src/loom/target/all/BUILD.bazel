@@ -39,11 +39,11 @@ loom_assert_no_dependencies(
 #===------------------------------------------------------------------------===#
 
 ALL_TARGETS_ENABLED = [
-    "//loom/config/target:amdgpu",
-    "//loom/config/target:ireevm",
-    "//loom/config/target:spirv",
-    "//loom/config/target:wasm",
-    "//loom/config/target:x86",
+    "//loom/config/target/arch:amdgpu",
+    "//loom/config/target/arch:ireevm",
+    "//loom/config/target/arch:spirv",
+    "//loom/config/target/arch:wasm",
+    "//loom/config/target/arch:x86",
 ]
 
 loom_cc_library(

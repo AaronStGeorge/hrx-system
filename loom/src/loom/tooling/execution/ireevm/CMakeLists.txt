@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_IREEVM AND LOOM_EMIT_IREEVM AND LOOM_EXECUTE_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM AND LOOM_EMIT_IREEVM AND LOOM_EXECUTE_IREEVM)
 loom_cc_library(
   NAME
     candidate
@@ -27,7 +27,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM AND LOOM_EMIT_IREEVM AND LOOM_EXECUTE_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM AND LOOM_EMIT_IREEVM AND LOOM_EXECUTE_IREEVM)
 loom_cc_library(
   NAME
     invocation
@@ -50,7 +50,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM AND LOOM_EMIT_IREEVM AND LOOM_EXECUTE_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM AND LOOM_EMIT_IREEVM AND LOOM_EXECUTE_IREEVM)
 loom_cc_library(
   NAME
     backend
@@ -69,7 +69,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM AND LOOM_EMIT_IREEVM AND LOOM_EXECUTE_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM AND LOOM_EMIT_IREEVM AND LOOM_EXECUTE_IREEVM)
 loom_cc_library(
   NAME
     provider
@@ -86,7 +86,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM AND LOOM_EMIT_IREEVM AND LOOM_EXECUTE_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM AND LOOM_EMIT_IREEVM AND LOOM_EXECUTE_IREEVM)
 loom_cc_test(
   NAME
     candidate_test
@@ -112,13 +112,13 @@ loom_cc_test(
     loom::target::provider
     loom::tooling::compile::pipeline
   LABELS
-    "iree-build-requirement=loom.target.ireevm"
+    "iree-build-requirement=loom.target.arch.ireevm"
     "iree-build-requirement=loom.emit.ireevm"
     "iree-build-requirement=loom.execute.ireevm"
 )
 endif()
 
-if(LOOM_TARGET_IREEVM AND LOOM_EMIT_IREEVM AND LOOM_EXECUTE_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM AND LOOM_EMIT_IREEVM AND LOOM_EXECUTE_IREEVM)
 loom_cc_test(
   NAME
     invocation_test
@@ -135,7 +135,7 @@ loom_cc_test(
     loom::target::arch::ireevm::ops
     loom::tooling::execution::session
   LABELS
-    "iree-build-requirement=loom.target.ireevm"
+    "iree-build-requirement=loom.target.arch.ireevm"
     "iree-build-requirement=loom.emit.ireevm"
     "iree-build-requirement=loom.execute.ireevm"
 )

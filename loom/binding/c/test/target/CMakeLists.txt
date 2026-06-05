@@ -34,7 +34,7 @@ loom_cc_library(
   PUBLIC
 )
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
     iree_hal_test
@@ -51,7 +51,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
     spirv_test

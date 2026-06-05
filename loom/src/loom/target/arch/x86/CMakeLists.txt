@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
     feature_bits
@@ -21,7 +21,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_generated_textual_header(
   NAME
     target_profiles_gen
@@ -34,7 +34,7 @@ loom_generated_textual_header(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
     target_records
@@ -52,7 +52,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_generated_cc_library(
   NAME
     ops
@@ -82,7 +82,7 @@ loom_generated_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
     math_policy
@@ -99,7 +99,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     scalar_descriptors
@@ -112,7 +112,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     simd128_descriptors
@@ -125,7 +125,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx2_descriptors
@@ -138,7 +138,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx512_descriptors
@@ -151,7 +151,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     packed_dot_descriptors
@@ -164,7 +164,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx512_vnni_descriptors
@@ -177,7 +177,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx512_bf16_descriptors
@@ -190,7 +190,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx_vnni_descriptors
@@ -203,7 +203,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx_vnni_int8_descriptors
@@ -216,7 +216,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx_vnni_int16_descriptors
@@ -229,7 +229,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx10_2_descriptors
@@ -242,7 +242,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_low_descriptor_cc_library(
   NAME
     avx512_packed_dot_descriptors
@@ -279,7 +279,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
     low_registry
@@ -309,7 +309,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
     register_classes
@@ -324,7 +324,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
     lower
@@ -353,7 +353,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_cc_test(
   NAME
     register_classes_test
@@ -377,11 +377,11 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::codegen::low::descriptors
   LABELS
-    "iree-build-requirement=loom.target.x86"
+    "iree-build-requirement=loom.target.arch.x86"
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
     provider
@@ -400,7 +400,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
     check_provider
@@ -418,7 +418,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 iree_native_test(
   NAME
     "allocation"
@@ -436,7 +436,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 iree_native_test(
   NAME
     "source_low"
@@ -454,7 +454,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 iree_native_test(
   NAME
     "source_low_avx2"
@@ -472,7 +472,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 iree_native_test(
   NAME
     "source_low_avx512_packed_dot"
@@ -490,7 +490,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 iree_native_test(
   NAME
     "source_low_avx_vnni"
@@ -508,7 +508,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 iree_native_test(
   NAME
     "source_low_packed_dot"
@@ -526,7 +526,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 iree_native_test(
   NAME
     "source_low_scalar_addressing"
@@ -544,7 +544,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 iree_native_test(
   NAME
     "source_low_scalar_arithmetic"
@@ -562,7 +562,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 iree_native_test(
   NAME
     "source_low_scalar_bitwise"
@@ -580,7 +580,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 iree_native_test(
   NAME
     "source_low_scalar_compare"
@@ -598,7 +598,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 iree_native_test(
   NAME
     "source_low_scalar_control"
@@ -616,7 +616,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 iree_native_test(
   NAME
     "source_low_scalar_diagnostics"
@@ -634,7 +634,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 iree_native_test(
   NAME
     "source_low_scalar_f32"
@@ -652,7 +652,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 iree_native_test(
   NAME
     "source_low_scalar_i64"
@@ -670,7 +670,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 iree_native_test(
   NAME
     "source_low_scalar_memory"
@@ -688,7 +688,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 iree_native_test(
   NAME
     "source_low_v4"
@@ -706,7 +706,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_generated_cc_library(
   NAME
     packed_dot_contract
@@ -725,7 +725,7 @@ loom_generated_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
     packed_dot_vector
@@ -742,7 +742,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_cc_library(
   NAME
     packed_dot_contract_projection
@@ -757,7 +757,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_cc_test(
   NAME
     packed_dot_contract_test
@@ -768,11 +768,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.x86"
+    "iree-build-requirement=loom.target.arch.x86"
 )
 endif()
 
-if(LOOM_TARGET_X86)
+if(LOOM_TARGET_ARCH_X86)
 loom_cc_test(
   NAME
     packed_dot_contract_projection_test
@@ -785,7 +785,7 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::analysis::contract_storage
   LABELS
-    "iree-build-requirement=loom.target.x86"
+    "iree-build-requirement=loom.target.arch.x86"
 )
 endif()
 

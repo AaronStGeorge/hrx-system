@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_WASM)
+if(LOOM_TARGET_ARCH_WASM)
 loom_low_descriptor_cc_library(
   NAME
     descriptors
@@ -22,7 +22,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_WASM)
+if(LOOM_TARGET_ARCH_WASM)
 loom_cc_library(
   NAME
     target_records
@@ -37,7 +37,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_WASM)
+if(LOOM_TARGET_ARCH_WASM)
 loom_cc_library(
   NAME
     math_policy
@@ -54,7 +54,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_WASM)
+if(LOOM_TARGET_ARCH_WASM)
 loom_generated_cc_library(
   NAME
     ops
@@ -84,7 +84,7 @@ loom_generated_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_WASM)
+if(LOOM_TARGET_ARCH_WASM)
 loom_cc_library(
   NAME
     low_registry
@@ -103,7 +103,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_WASM)
+if(LOOM_TARGET_ARCH_WASM)
 loom_cc_library(
   NAME
     low_verify
@@ -125,7 +125,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_WASM)
+if(LOOM_TARGET_ARCH_WASM)
 loom_cc_library(
   NAME
     provider
@@ -145,7 +145,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_WASM)
+if(LOOM_TARGET_ARCH_WASM)
 loom_cc_library(
   NAME
     check_provider
@@ -162,7 +162,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_WASM)
+if(LOOM_TARGET_ARCH_WASM)
 loom_cc_test(
   NAME
     registers_test
@@ -175,11 +175,11 @@ loom_cc_test(
     loom::codegen::low::target_binding
     loom::target::registers
   LABELS
-    "iree-build-requirement=loom.target.wasm"
+    "iree-build-requirement=loom.target.arch.wasm"
 )
 endif()
 
-if(LOOM_TARGET_WASM)
+if(LOOM_TARGET_ARCH_WASM)
 iree_native_test(
   NAME
     "source_low"
@@ -194,7 +194,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_WASM)
+if(LOOM_TARGET_ARCH_WASM)
 iree_native_test(
   NAME
     "source_low_diagnostics"
@@ -209,7 +209,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_WASM)
+if(LOOM_TARGET_ARCH_WASM)
 iree_native_test(
   NAME
     "structured_allocation"
@@ -224,7 +224,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_WASM)
+if(LOOM_TARGET_ARCH_WASM)
 iree_native_test(
   NAME
     "structured_control"

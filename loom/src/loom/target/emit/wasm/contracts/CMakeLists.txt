@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_WASM AND LOOM_EMIT_WASM)
+if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
 loom_target_table_cc_library(
   NAME
     core_simd128
@@ -22,7 +22,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_WASM AND LOOM_EMIT_WASM)
+if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
 loom_target_table_cc_library(
   NAME
     core_simd128_lower_rules

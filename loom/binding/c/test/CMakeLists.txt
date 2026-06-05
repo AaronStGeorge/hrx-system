@@ -24,7 +24,7 @@ loom_cc_library(
   PUBLIC
 )
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
 loom_cc_test(
   NAME
     full_package_test
@@ -190,7 +190,7 @@ loom_cc_test(
     loom::binding::c::loomc
 )
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
     target_test

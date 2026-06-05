@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     binary_format
@@ -21,7 +21,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     binary_writer
@@ -35,7 +35,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     module_builder
@@ -53,7 +53,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     module_types
@@ -72,7 +72,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     module_values
@@ -90,7 +90,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     module_instructions
@@ -107,7 +107,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     module_abi
@@ -136,7 +136,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     module_storage
@@ -163,7 +163,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     module_emitter
@@ -197,7 +197,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     loom_check
@@ -217,7 +217,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     check_provider
@@ -234,7 +234,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
     module_builder_test
@@ -248,12 +248,12 @@ loom_cc_test(
     loom::target::arch::spirv::features
     loom::target::arch::spirv::target_records
   LABELS
-    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.target.arch.spirv"
     "iree-build-requirement=loom.emit.spirv"
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
     module_values_test
@@ -271,12 +271,12 @@ loom_cc_test(
     loom::target::arch::spirv::scalar_types
     loom::target::arch::spirv::target_records
   LABELS
-    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.target.arch.spirv"
     "iree-build-requirement=loom.emit.spirv"
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 iree_native_test(
   NAME
     "barrier"
@@ -289,7 +289,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 iree_native_test(
   NAME
     "emit"
@@ -302,7 +302,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 iree_native_test(
   NAME
     "source_structured_control"
@@ -315,7 +315,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 iree_native_test(
   NAME
     "workgroup_storage"

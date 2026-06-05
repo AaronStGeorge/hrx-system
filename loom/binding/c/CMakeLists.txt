@@ -117,7 +117,7 @@ loom_cc_library(
   PUBLIC
 )
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     loomc_target_spirv
@@ -153,7 +153,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     loomc_target_spirv_vulkaninfo
@@ -177,7 +177,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
 set(_loomc_target_spirv_vulkan_platform_deps "")
 if(LOOM_EXECUTE_SPIRV_VULKAN)
   list(APPEND _loomc_target_spirv_vulkan_platform_deps Vulkan::Headers)
@@ -226,7 +226,7 @@ loom_cc_library(
   PUBLIC
 )
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_library(
   NAME
     loomc_target_spirv_iree_hal
@@ -251,7 +251,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
 loom_cc_library(
   NAME
     loomc_full

@@ -47,14 +47,14 @@ _EMIT_AMDGPU_CHECK_DEPS = iree_select({
 })
 
 _TARGET_IREEVM_CHECK_COPTS = iree_select({
-    "//loom/config/target:ireevm": [
+    "//loom/config/target/arch:ireevm": [
         "-DLOOM_CHECK_HAVE_TARGET_IREEVM=1",
     ],
     "//conditions:default": [],
 })
 
 _TARGET_IREEVM_CHECK_DEPS = iree_select({
-    "//loom/config/target:ireevm": [
+    "//loom/config/target/arch:ireevm": [
         "//loom/src/loom/target/arch/ireevm:check_provider",
     ],
     "//conditions:default": [],
@@ -75,14 +75,14 @@ _EMIT_LLVMIR_CHECK_DEPS = iree_select({
 })
 
 _TARGET_SPIRV_CHECK_COPTS = iree_select({
-    "//loom/config/target:spirv": [
+    "//loom/config/target/arch:spirv": [
         "-DLOOM_CHECK_HAVE_TARGET_SPIRV=1",
     ],
     "//conditions:default": [],
 })
 
 _TARGET_SPIRV_CHECK_DEPS = iree_select({
-    "//loom/config/target:spirv": [
+    "//loom/config/target/arch:spirv": [
         "//loom/src/loom/target/arch/spirv:check_provider",
     ],
     "//conditions:default": [],
@@ -103,14 +103,14 @@ _EMIT_SPIRV_CHECK_DEPS = iree_select({
 })
 
 _TARGET_WASM_CHECK_COPTS = iree_select({
-    "//loom/config/target:wasm": [
+    "//loom/config/target/arch:wasm": [
         "-DLOOM_CHECK_HAVE_TARGET_WASM=1",
     ],
     "//conditions:default": [],
 })
 
 _TARGET_WASM_CHECK_DEPS = iree_select({
-    "//loom/config/target:wasm": [
+    "//loom/config/target/arch:wasm": [
         "//loom/src/loom/target/arch/wasm:check_provider",
     ],
     "//conditions:default": [],
@@ -131,14 +131,14 @@ _EMIT_WASM_CHECK_DEPS = iree_select({
 })
 
 _TARGET_X86_CHECK_COPTS = iree_select({
-    "//loom/config/target:x86": [
+    "//loom/config/target/arch:x86": [
         "-DLOOM_CHECK_HAVE_TARGET_X86=1",
     ],
     "//conditions:default": [],
 })
 
 _TARGET_X86_CHECK_DEPS = iree_select({
-    "//loom/config/target:x86": [
+    "//loom/config/target/arch:x86": [
         "//loom/src/loom/target/arch/x86:check_provider",
     ],
     "//conditions:default": [],

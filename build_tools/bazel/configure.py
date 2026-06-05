@@ -17,6 +17,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 HOST_DRIVERS = ("local-sync", "local-task", "null")
+DEFAULT_LOOM_TARGETS = ("ireevm",)
+LOOM_TARGETS = ("amdgpu", "ireevm", "spirv", "wasm", "x86")
+LOOM_EMITTERS = ("amdgpu", "ireevm", "llvmir", "spirv", "wasm")
 
 SDK_DRIVER_PACKAGES = {
     "amdgpu": (
@@ -68,6 +71,16 @@ DRIVER_DEFINES = {
     "IREE_HAL_DRIVER_VULKAN": "vulkan",
     "IREE_HAL_DRIVER_WEBGPU": "webgpu",
 }
+LOOM_TARGET_DEFINES = {
+    "LOOM_TARGET_AMDGPU": "amdgpu",
+    "LOOM_TARGET_IREEVM": "ireevm",
+    "LOOM_TARGET_SPIRV": "spirv",
+    "LOOM_TARGET_WASM": "wasm",
+    "LOOM_TARGET_X86": "x86",
+}
+LOOM_EMIT_DEFINES = {
+    "LOOM_EMIT_LLVMIR": "llvmir",
+}
 UNSUPPORTED_DRIVER_DEFINES = {
     "IREE_HAL_DRIVER_CUDA": "cuda",
     "IREE_HAL_DRIVER_METAL": "metal",
@@ -76,6 +89,8 @@ REMOVED_OPTIONS = frozenset(
     ("--enable-driver", "--include-driver", "--exclude-driver", "--rocm-path")
 )
 NATIVE_DRIVER_FLAG = "--//runtime/config/hal:drivers"
+NATIVE_LOOM_TARGET_FLAG = "--//loom/config/target:enable"
+NATIVE_LOOM_EMIT_FLAG = "--//loom/config/emit:enable"
 NATIVE_REPO_ENV_PREFIX = "--repo_env="
 TRUE_VALUES = frozenset(("1", "ON", "TRUE", "YES"))
 FALSE_VALUES = frozenset(("0", "OFF", "FALSE", "NO"))
@@ -88,6 +103,12 @@ class ConfigRequest:
     driver_source: str | None = None
     dependency_mode: str = "pinned"
     rocm_dependency_mode: str | None = None
+    enabled_loom_targets: set[str] = field(
+        default_factory=lambda: set(DEFAULT_LOOM_TARGETS)
+    )
+    loom_emit_source: str | None = None
+    loom_target_source: str | None = None
+    enabled_loom_emitters: set[str] = field(default_factory=set)
     rocm_path: str | None = None
 
     def set_driver(self, driver: str, enabled: bool) -> None:
@@ -117,6 +138,60 @@ class ConfigRequest:
             )
         self.driver_source = "native"
         self.enabled_drivers = set(drivers)
+
+    def set_loom_target(self, target: str, enabled: bool) -> None:
+        if self.loom_target_source == "native":
+            raise SystemExit(
+                "Do not mix portable -DLOOM_TARGET_* options with the "
+                f"native {NATIVE_LOOM_TARGET_FLAG}=... Bazel option."
+            )
+        self.loom_target_source = "portable"
+        if enabled:
+            self.enabled_loom_targets.add(target)
+        else:
+            self.enabled_loom_targets.discard(target)
+
+    def set_loom_target_list(self, targets: set[str]) -> None:
+        if self.loom_target_source == "portable":
+            raise SystemExit(
+                "Do not mix portable -DLOOM_TARGET_* options with the "
+                f"native {NATIVE_LOOM_TARGET_FLAG}=... Bazel option."
+            )
+        unknown_targets = targets.difference(LOOM_TARGETS)
+        if unknown_targets:
+            raise SystemExit(
+                "Unknown Loom target(s): {}".format(", ".join(sorted(unknown_targets)))
+            )
+        self.loom_target_source = "native"
+        self.enabled_loom_targets = set(targets)
+
+    def set_loom_emitter(self, emitter: str, enabled: bool) -> None:
+        if self.loom_emit_source == "native":
+            raise SystemExit(
+                "Do not mix portable -DLOOM_EMIT_* options with the "
+                f"native {NATIVE_LOOM_EMIT_FLAG}=... Bazel option."
+            )
+        self.loom_emit_source = "portable"
+        if enabled:
+            self.enabled_loom_emitters.add(emitter)
+        else:
+            self.enabled_loom_emitters.discard(emitter)
+
+    def set_loom_emitter_list(self, emitters: set[str]) -> None:
+        if self.loom_emit_source == "portable":
+            raise SystemExit(
+                "Do not mix portable -DLOOM_EMIT_* options with the "
+                f"native {NATIVE_LOOM_EMIT_FLAG}=... Bazel option."
+            )
+        unknown_emitters = emitters.difference(LOOM_EMITTERS)
+        if unknown_emitters:
+            raise SystemExit(
+                "Unknown explicit Loom emitter(s): {}".format(
+                    ", ".join(sorted(unknown_emitters))
+                )
+            )
+        self.loom_emit_source = "native"
+        self.enabled_loom_emitters = set(emitters)
 
     def set_rocm_path(self, path: str) -> None:
         rocm_path = resolve_rocm_path(path)
@@ -162,6 +237,10 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
   python build_tools/bazel/configure.py
   python build_tools/bazel/configure.py -DIREE_HAL_DRIVER_AMDGPU=ON
   python build_tools/bazel/configure.py -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm
+  python build_tools/bazel/configure.py -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_DEPENDENCY_MODE=pinned
+  python build_tools/bazel/configure.py --//runtime/config/hal:drivers=amdgpu,local-sync,local-task,null --repo_env=IREE_ROCM_PATH=/opt/rocm
+  python build_tools/bazel/configure.py -DLOOM_TARGET_AMDGPU=ON
+  python build_tools/bazel/configure.py -DLOOM_TARGET_AMDGPU=ON -DLOOM_EMIT_LLVMIR=ON
 
 Portable -D project options are documented in BUILDING.md. Other Bazel-native
 overrides belong in .bazelrc.local.""",
@@ -244,6 +323,12 @@ def apply_define(request: ConfigRequest, define: str) -> None:
         if parse_bool(name, value):
             raise SystemExit(f"{name}=ON is not configured in the Bazel graph yet.")
         return
+    if name in LOOM_TARGET_DEFINES:
+        request.set_loom_target(LOOM_TARGET_DEFINES[name], parse_bool(name, value))
+        return
+    if name in LOOM_EMIT_DEFINES:
+        request.set_loom_emitter(LOOM_EMIT_DEFINES[name], parse_bool(name, value))
+        return
     if name == "IREE_ROCM_PATH":
         request.set_rocm_path(value)
         return
@@ -265,6 +350,12 @@ def parse_driver_list(value: str) -> set[str]:
     return {driver for driver in value.split(",") if driver}
 
 
+def parse_string_list(value: str) -> set[str]:
+    if not value:
+        return set()
+    return {part for part in value.split(",") if part}
+
+
 def apply_native_bazel_arg(request: ConfigRequest, arg: str) -> None:
     check_removed_option(arg)
     if arg == "--":
@@ -274,6 +365,16 @@ def apply_native_bazel_arg(request: ConfigRequest, arg: str) -> None:
         return
     if arg == NATIVE_DRIVER_FLAG:
         raise SystemExit(f"{NATIVE_DRIVER_FLAG} must use --flag=value syntax.")
+    if arg.startswith(NATIVE_LOOM_TARGET_FLAG + "="):
+        request.set_loom_target_list(parse_string_list(arg.split("=", 1)[1]))
+        return
+    if arg == NATIVE_LOOM_TARGET_FLAG:
+        raise SystemExit(f"{NATIVE_LOOM_TARGET_FLAG} must use --flag=value syntax.")
+    if arg.startswith(NATIVE_LOOM_EMIT_FLAG + "="):
+        request.set_loom_emitter_list(parse_string_list(arg.split("=", 1)[1]))
+        return
+    if arg == NATIVE_LOOM_EMIT_FLAG:
+        raise SystemExit(f"{NATIVE_LOOM_EMIT_FLAG} must use --flag=value syntax.")
     if arg.startswith(NATIVE_REPO_ENV_PREFIX):
         repo_env = arg[len(NATIVE_REPO_ENV_PREFIX) :]
         if "=" not in repo_env:
@@ -314,6 +415,14 @@ def request_from_args(args: argparse.Namespace) -> ConfigRequest:
 
 def ordered_driver_set(values: set[str]) -> list[str]:
     return [driver for driver in ALL_DRIVERS if driver in values]
+
+
+def ordered_loom_target_set(values: set[str]) -> list[str]:
+    return [target for target in LOOM_TARGETS if target in values]
+
+
+def ordered_loom_emitter_set(values: set[str]) -> list[str]:
+    return [emitter for emitter in LOOM_EMITTERS if emitter in values]
 
 
 def bazelrc_line(command: str, option: str) -> str:
@@ -369,6 +478,19 @@ def generate_config(args: argparse.Namespace) -> str:
             "common",
             "--repo_env=IREE_DEPENDENCY_MODE=" + request.dependency_mode,
         ),
+        "",
+        "# Loom target and explicit debug emitter scope.",
+        bazelrc_line(
+            "build",
+            "--//loom/config/target:enable="
+            + ",".join(ordered_loom_target_set(request.enabled_loom_targets)),
+        ),
+        bazelrc_line(
+            "build",
+            "--//loom/config/emit:enable="
+            + ",".join(ordered_loom_emitter_set(request.enabled_loom_emitters)),
+        ),
+        "",
     ]
     if request.rocm_dependency_mode or request.rocm_path:
         lines.append(

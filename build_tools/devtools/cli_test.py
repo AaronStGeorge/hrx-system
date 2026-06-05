@@ -81,6 +81,20 @@ class CliTest(unittest.TestCase):
         self.assertIn("-DIREE_HAL_DRIVER_AMDGPU=ON", description)
         self.assertIn("-DIREE_ROCM_PATH=/opt/rocm", description)
 
+    def test_bazel_configure_accepts_portable_loom_target_options(self):
+        args = cli.parse_arguments(
+            [
+                "bazel",
+                "configure",
+                "-DLOOM_TARGET_AMDGPU=ON",
+            ]
+        )
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("-DLOOM_TARGET_AMDGPU=ON", description)
+
     def test_bazel_configure_accepts_native_driver_options(self):
         args = cli.parse_arguments(
             [

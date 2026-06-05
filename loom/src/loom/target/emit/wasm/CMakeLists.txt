@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_WASM AND LOOM_EMIT_WASM)
+if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
 loom_generated_cc_library(
   NAME
     error_defs
@@ -33,7 +33,7 @@ loom_generated_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_WASM AND LOOM_EMIT_WASM)
+if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
 loom_cc_library(
   NAME
     binary_writer
@@ -47,7 +47,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_WASM AND LOOM_EMIT_WASM)
+if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
 loom_cc_library(
   NAME
     types
@@ -62,7 +62,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_WASM AND LOOM_EMIT_WASM)
+if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
 loom_cc_library(
   NAME
     function_body
@@ -86,7 +86,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_WASM AND LOOM_EMIT_WASM)
+if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
 loom_cc_library(
   NAME
     module_binary
@@ -114,7 +114,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_WASM AND LOOM_EMIT_WASM)
+if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
 loom_cc_library(
   NAME
     loom_check
@@ -132,7 +132,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_WASM AND LOOM_EMIT_WASM)
+if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
 loom_cc_library(
   NAME
     check_provider
@@ -149,7 +149,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_WASM AND LOOM_EMIT_WASM)
+if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
 loom_cc_library(
   NAME
     lower
@@ -169,7 +169,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_WASM AND LOOM_EMIT_WASM)
+if(LOOM_TARGET_ARCH_WASM AND LOOM_EMIT_WASM)
 iree_native_test(
   NAME
     "assembly"

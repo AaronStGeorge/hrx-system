@@ -213,6 +213,51 @@ default libhrx build path. It uses pinned HIP API headers by default and only
 requires `IREE_ROCM_PATH` when package mode or ROCm device/runtime tooling is
 required.
 
+Loom target options describe product compiler capability: `LOOM_TARGET_AMDGPU=ON`
+means Loom can compile for AMDGPU, including the target architecture metadata and
+production artifact emission needed by that backend. Runtime execution remains a
+separate concern controlled by Loom execution support and the runtime
+`IREE_HAL_DRIVER_*` options.
+
+| Option | Values | CMake | Bazel portable | Bazel native |
+| --- | --- | --- | --- | --- |
+| `LOOM_TARGET_AMDGPU` | `ON`, `OFF` | Builds Loom AMDGPU target support and production AMDGPU emission. | Adds or removes `amdgpu` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
+| `LOOM_TARGET_IREEVM` | `ON`, `OFF` | Builds Loom IREE VM target support and production IREE VM emission. | Adds or removes `ireevm` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
+| `LOOM_TARGET_SPIRV` | `ON`, `OFF` | Builds Loom SPIR-V target support and production SPIR-V emission. | Adds or removes `spirv` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
+| `LOOM_TARGET_WASM` | `ON`, `OFF` | Builds Loom WebAssembly target support and production Wasm emission. | Adds or removes `wasm` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
+| `LOOM_TARGET_X86` | `ON`, `OFF` | Builds Loom x86 target support. | Adds or removes `x86` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
+| `LOOM_EMIT_LLVMIR` | `ON`, `OFF` | Builds LLVM IR debug/developer emission for enabled target archs. | Adds or removes `llvmir` from the explicit Loom emitter set. | `--//loom/config/emit:enable=<complete-emitter-list>` |
+
+The native Loom target flag is a complete list. The default target set is
+`ireevm`:
+
+```bash
+python dev.py bazel configure \
+  --//loom/config/target:enable=amdgpu,ireevm,spirv
+```
+
+The portable spelling expands the same target set without exposing the internal
+target-architecture and emitter slices:
+
+```bash
+python dev.py bazel configure -DLOOM_TARGET_AMDGPU=ON
+```
+
+LLVM IR emission is a debug/developer artifact path. It is explicit even when a
+native target such as AMDGPU or x86 is enabled:
+
+```bash
+python dev.py bazel configure \
+  -DLOOM_TARGET_AMDGPU=ON \
+  -DLOOM_EMIT_LLVMIR=ON
+```
+
+The raw `//loom/config/target/arch:enable=...` and production
+`//loom/config/emit:enable=...` values are advanced source-embedding and
+CI-audit surfaces. They exist to build narrow slices deliberately; the published
+portable API is the `LOOM_TARGET_*` product target set plus explicit debug
+emitters such as `LOOM_EMIT_LLVMIR`.
+
 Other Bazel-native overrides belong in `.bazelrc.local`.
 
 ## Project Availability

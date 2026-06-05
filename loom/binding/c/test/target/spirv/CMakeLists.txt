@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
     profile_test
@@ -22,12 +22,12 @@ loom_cc_test(
     loom::binding::c::loomc_target_spirv
     loom::binding::c::test::test_util
   LABELS
-    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.target.arch.spirv"
     "iree-build-requirement=loom.emit.spirv"
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
     vulkaninfo_test
@@ -42,12 +42,12 @@ loom_cc_test(
     loom::binding::c::loomc_target_spirv_vulkaninfo
     loom::binding::c::test::test_util
   LABELS
-    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.target.arch.spirv"
     "iree-build-requirement=loom.emit.spirv"
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 set(_vulkan_test_platform_deps "")
 if(LOOM_EXECUTE_SPIRV_VULKAN)
   list(APPEND _vulkan_test_platform_deps Vulkan::Headers)
@@ -66,12 +66,12 @@ loom_cc_test(
     loom::binding::c::test::test_util
     ${_vulkan_test_platform_deps}
   LABELS
-    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.target.arch.spirv"
     "iree-build-requirement=loom.emit.spirv"
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
     iree_hal_test
@@ -87,12 +87,12 @@ loom_cc_test(
     loom::binding::c::loomc_target_spirv_iree_hal
     loom::binding::c::test::test_util
   LABELS
-    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.target.arch.spirv"
     "iree-build-requirement=loom.emit.spirv"
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_test(
   NAME
     iree_hal_execution_test
@@ -109,7 +109,7 @@ loom_cc_test(
     loom::binding::c::test::target::iree_hal_execution_test_util
   LABELS
     "driver=vulkan"
-    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.target.arch.spirv"
     "iree-build-requirement=loom.emit.spirv"
 )
 endif()

@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_generated_cc_library(
   NAME
     error_defs
@@ -33,7 +33,7 @@ loom_generated_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_low_descriptor_cc_library(
   NAME
     descriptors
@@ -46,7 +46,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
     isa
@@ -58,7 +58,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_generated_textual_header(
   NAME
     features_gen
@@ -75,7 +75,7 @@ loom_generated_textual_header(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
     features
@@ -92,7 +92,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
     scalar_types
@@ -108,7 +108,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
     abi
@@ -122,7 +122,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
     value_types
@@ -136,7 +136,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_generated_textual_header(
   NAME
     packet_rows_tables_gen
@@ -149,7 +149,7 @@ loom_generated_textual_header(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
     packet_rows
@@ -168,7 +168,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
     registers
@@ -186,7 +186,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_generated_textual_header(
   NAME
     cooperative_properties_tables_gen
@@ -199,7 +199,7 @@ loom_generated_textual_header(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
     cooperative_properties
@@ -220,7 +220,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
     profile
@@ -233,7 +233,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
     target_records
@@ -249,7 +249,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_generated_cc_library(
   NAME
     ops
@@ -279,7 +279,7 @@ loom_generated_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
     math_policy
@@ -296,7 +296,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
     low_registry
@@ -314,7 +314,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
     module_contract
@@ -330,7 +330,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
     low_verify
@@ -358,7 +358,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
     lower
@@ -400,7 +400,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
     provider
@@ -420,7 +420,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_library(
   NAME
     check_provider
@@ -437,7 +437,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_test(
   NAME
     cooperative_properties_test
@@ -450,11 +450,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.target.arch.spirv"
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_test(
   NAME
     features_test
@@ -466,11 +466,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.target.arch.spirv"
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_test(
   NAME
     scalar_types_test
@@ -481,11 +481,11 @@ loom_cc_test(
     iree::testing::gtest
     iree::testing::gtest_main
   LABELS
-    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.target.arch.spirv"
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 loom_cc_test(
   NAME
     registers_test
@@ -499,11 +499,11 @@ loom_cc_test(
     iree::testing::gtest_main
     loom::codegen::low::descriptors
   LABELS
-    "iree-build-requirement=loom.target.spirv"
+    "iree-build-requirement=loom.target.arch.spirv"
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 iree_native_test(
   NAME
     "barrier"
@@ -516,7 +516,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 iree_native_test(
   NAME
     "baseline"
@@ -529,7 +529,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 iree_native_test(
   NAME
     "low_verify_diagnostics"
@@ -542,7 +542,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 iree_native_test(
   NAME
     "source_low"
@@ -555,7 +555,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 iree_native_test(
   NAME
     "source_low_diagnostics"
@@ -568,7 +568,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 iree_native_test(
   NAME
     "structured_control"
@@ -581,7 +581,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 iree_native_test(
   NAME
     "target_legalize"
@@ -594,7 +594,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV)
 iree_native_test(
   NAME
     "workgroup_storage"

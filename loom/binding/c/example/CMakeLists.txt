@@ -36,7 +36,7 @@ loom_cc_binary(
     loom::binding::c::loomc
 )
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_binary(
   NAME
     emit_spirv_offline
@@ -48,7 +48,7 @@ loom_cc_binary(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_binary(
   NAME
     emit_spirv_vulkaninfo
@@ -61,7 +61,7 @@ loom_cc_binary(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
 loom_cc_binary(
   NAME
     emit_spirv_vulkan
@@ -75,7 +75,7 @@ loom_cc_binary(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 loom_cc_binary(
   NAME
     emit_spirv_iree_hal
@@ -94,7 +94,7 @@ loom_cc_binary(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
 loom_cc_test(
   NAME
     emit_spirv_vulkan_test
@@ -114,7 +114,7 @@ loom_cc_test(
 )
 endif()
 
-if(LOOM_TARGET_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
 loom_cc_test(
   NAME
     emit_spirv_iree_hal_test

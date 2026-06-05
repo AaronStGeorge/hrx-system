@@ -4,13 +4,15 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("@bazel_skylib//lib:selects.bzl", "selects")
 load("@bazel_skylib//rules:common_settings.bzl", "string_list_flag")
 
 package(default_visibility = ["//visibility:public"])
 
-DEFAULT_ENABLED = [
-    "ireevm",
-]
+# Advanced artifact-family slices. Public //loom/config/target values imply the
+# production emitters required for that target. LLVMIR remains explicit because
+# it is a debug/developer artifact path, not part of production target support.
+DEFAULT_ENABLED = []
 
 SUPPORTED_VALUES = [
     "amdgpu",
@@ -27,10 +29,31 @@ string_list_flag(
 
 [
     config_setting(
-        name = value,
+        name = "explicit_" + value,
         flag_values = {
             ":enable": value,
         },
     )
     for value in SUPPORTED_VALUES
 ]
+
+[
+    selects.config_setting_group(
+        name = value,
+        match_any = [
+            "//loom/config/target:" + value,
+            ":explicit_" + value,
+        ],
+    )
+    for value in [
+        "amdgpu",
+        "ireevm",
+        "spirv",
+        "wasm",
+    ]
+]
+
+selects.config_setting_group(
+    name = "llvmir",
+    match_any = [":explicit_llvmir"],
+)

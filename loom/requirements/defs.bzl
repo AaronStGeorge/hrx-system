@@ -82,39 +82,39 @@ IMPORT_TILELANG = build_requirement(
     cmake_condition = "LOOM_IMPORT_TILELANG",
 )
 
-TARGET_AMDGPU = build_requirement(
-    id = "loom.target.amdgpu",
-    label = "//loom/requirements:target_amdgpu",
-    enabled_by = "//loom/config/target:amdgpu",
-    cmake_condition = "LOOM_TARGET_AMDGPU",
+TARGET_ARCH_AMDGPU = build_requirement(
+    id = "loom.target.arch.amdgpu",
+    label = "//loom/requirements:target_arch_amdgpu",
+    enabled_by = "//loom/config/target/arch:amdgpu",
+    cmake_condition = "LOOM_TARGET_ARCH_AMDGPU",
 )
 
-TARGET_IREEVM = build_requirement(
-    id = "loom.target.ireevm",
-    label = "//loom/requirements:target_ireevm",
-    enabled_by = "//loom/config/target:ireevm",
-    cmake_condition = "LOOM_TARGET_IREEVM",
+TARGET_ARCH_IREEVM = build_requirement(
+    id = "loom.target.arch.ireevm",
+    label = "//loom/requirements:target_arch_ireevm",
+    enabled_by = "//loom/config/target/arch:ireevm",
+    cmake_condition = "LOOM_TARGET_ARCH_IREEVM",
 )
 
-TARGET_SPIRV = build_requirement(
-    id = "loom.target.spirv",
-    label = "//loom/requirements:target_spirv",
-    enabled_by = "//loom/config/target:spirv",
-    cmake_condition = "LOOM_TARGET_SPIRV",
+TARGET_ARCH_SPIRV = build_requirement(
+    id = "loom.target.arch.spirv",
+    label = "//loom/requirements:target_arch_spirv",
+    enabled_by = "//loom/config/target/arch:spirv",
+    cmake_condition = "LOOM_TARGET_ARCH_SPIRV",
 )
 
-TARGET_WASM = build_requirement(
-    id = "loom.target.wasm",
-    label = "//loom/requirements:target_wasm",
-    enabled_by = "//loom/config/target:wasm",
-    cmake_condition = "LOOM_TARGET_WASM",
+TARGET_ARCH_WASM = build_requirement(
+    id = "loom.target.arch.wasm",
+    label = "//loom/requirements:target_arch_wasm",
+    enabled_by = "//loom/config/target/arch:wasm",
+    cmake_condition = "LOOM_TARGET_ARCH_WASM",
 )
 
-TARGET_X86 = build_requirement(
-    id = "loom.target.x86",
-    label = "//loom/requirements:target_x86",
-    enabled_by = "//loom/config/target:x86",
-    cmake_condition = "LOOM_TARGET_X86",
+TARGET_ARCH_X86 = build_requirement(
+    id = "loom.target.arch.x86",
+    label = "//loom/requirements:target_arch_x86",
+    enabled_by = "//loom/config/target/arch:x86",
+    cmake_condition = "LOOM_TARGET_ARCH_X86",
 )
 
 AMDGPU_RESOURCE = run_requirement(
@@ -143,10 +143,10 @@ REQUIREMENTS = [
     EXECUTE_SPIRV_VULKAN,
     IMPORT_MLIR,
     IMPORT_TILELANG,
-    TARGET_AMDGPU,
-    TARGET_IREEVM,
-    TARGET_SPIRV,
-    TARGET_WASM,
-    TARGET_X86,
+    TARGET_ARCH_AMDGPU,
+    TARGET_ARCH_IREEVM,
+    TARGET_ARCH_SPIRV,
+    TARGET_ARCH_WASM,
+    TARGET_ARCH_X86,
     VULKAN_DEVICE_RESOURCE,
 ]

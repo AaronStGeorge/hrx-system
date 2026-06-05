@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM)
 loom_low_descriptor_cc_library(
   NAME
     descriptors
@@ -22,7 +22,7 @@ loom_low_descriptor_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM)
 loom_cc_library(
   NAME
     target_records
@@ -38,7 +38,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM)
 loom_generated_cc_library(
   NAME
     ops
@@ -72,7 +72,7 @@ loom_generated_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM)
 loom_cc_library(
   NAME
     lower
@@ -95,7 +95,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM)
 loom_cc_library(
   NAME
     low_registry
@@ -114,7 +114,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM)
 loom_cc_library(
   NAME
     math_policy
@@ -131,7 +131,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM)
 loom_cc_library(
   NAME
     ref_lifetime_pass
@@ -149,7 +149,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM)
 loom_cc_library(
   NAME
     pass_registry
@@ -165,7 +165,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM)
 loom_cc_library(
   NAME
     provider
@@ -186,7 +186,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM)
 loom_cc_library(
   NAME
     check_provider
@@ -203,7 +203,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM)
 iree_native_test(
   NAME
     "test_import_decl"
@@ -216,7 +216,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM)
 iree_native_test(
   NAME
     "test_import_decl_diagnostics"
@@ -229,7 +229,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM)
 iree_native_test(
   NAME
     "test_ref_lifetime"
@@ -242,7 +242,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM)
 iree_native_test(
   NAME
     "allocation"
@@ -255,7 +255,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM)
 iree_native_test(
   NAME
     "pass_source_low"
@@ -268,7 +268,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM)
 iree_native_test(
   NAME
     "source_low"
@@ -281,7 +281,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_TARGET_IREEVM)
+if(LOOM_TARGET_ARCH_IREEVM)
 iree_native_test(
   NAME
     "source_low_diagnostics"

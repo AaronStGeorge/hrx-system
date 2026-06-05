@@ -26,38 +26,38 @@ load(
     "EXECUTE_SPIRV_VULKAN",
     "IMPORT_MLIR",
     "IMPORT_TILELANG",
-    "TARGET_AMDGPU",
-    "TARGET_IREEVM",
-    "TARGET_SPIRV",
-    "TARGET_WASM",
-    "TARGET_X86",
+    "TARGET_ARCH_AMDGPU",
+    "TARGET_ARCH_IREEVM",
+    "TARGET_ARCH_SPIRV",
+    "TARGET_ARCH_WASM",
+    "TARGET_ARCH_X86",
     "VULKAN_DEVICE_RESOURCE",
 )
 
 PACKAGE_POLICIES = [
     package_policy(
         packages = ["loom/src/loom/target/arch/amdgpu/..."],
-        build_requirements = [TARGET_AMDGPU],
+        build_requirements = [TARGET_ARCH_AMDGPU],
     ),
     package_policy(
         packages = ["loom/src/loom/target/arch/ireevm/..."],
-        build_requirements = [TARGET_IREEVM],
+        build_requirements = [TARGET_ARCH_IREEVM],
     ),
     package_policy(
         packages = ["loom/src/loom/target/arch/spirv/..."],
-        build_requirements = [TARGET_SPIRV],
+        build_requirements = [TARGET_ARCH_SPIRV],
     ),
     package_policy(
         packages = ["loom/src/loom/target/arch/wasm/..."],
-        build_requirements = [TARGET_WASM],
+        build_requirements = [TARGET_ARCH_WASM],
     ),
     package_policy(
         packages = ["loom/src/loom/target/arch/x86/..."],
-        build_requirements = [TARGET_X86],
+        build_requirements = [TARGET_ARCH_X86],
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/ireevm/..."],
-        build_requirements = [TARGET_IREEVM, EMIT_IREEVM],
+        build_requirements = [TARGET_ARCH_IREEVM, EMIT_IREEVM],
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/llvmir/..."],
@@ -65,47 +65,61 @@ PACKAGE_POLICIES = [
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/native/amdgpu/..."],
-        build_requirements = [TARGET_AMDGPU, EMIT_AMDGPU],
+        build_requirements = [TARGET_ARCH_AMDGPU, EMIT_AMDGPU],
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/native/x86/..."],
-        build_requirements = [TARGET_X86],
+        build_requirements = [TARGET_ARCH_X86],
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/spirv/..."],
-        build_requirements = [TARGET_SPIRV, EMIT_SPIRV],
+        build_requirements = [TARGET_ARCH_SPIRV, EMIT_SPIRV],
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/wasm/..."],
-        build_requirements = [TARGET_WASM, EMIT_WASM],
+        build_requirements = [TARGET_ARCH_WASM, EMIT_WASM],
     ),
     package_policy(
         packages = ["loom/src/loom/tooling/execution/ireevm/..."],
-        build_requirements = [TARGET_IREEVM, EMIT_IREEVM, EXECUTE_IREEVM],
+        build_requirements = [TARGET_ARCH_IREEVM, EMIT_IREEVM, EXECUTE_IREEVM],
     ),
     package_policy(
         packages = ["loom/src/loom/tooling/target/amdgpu/..."],
         build_requirements = [
-            TARGET_AMDGPU,
+            TARGET_ARCH_AMDGPU,
+            EMIT_AMDGPU,
+        ],
+    ),
+    package_policy(
+        packages = ["loom/src/loom/tooling/target/amdgpu/execution/..."],
+        build_requirements = [
+            TARGET_ARCH_AMDGPU,
             EMIT_AMDGPU,
             EXECUTE_AMDGPU,
         ],
     ),
     package_policy(
-        packages = ["loom/src/loom/tooling/target/amdgpu/..."],
+        packages = ["loom/src/loom/tooling/target/amdgpu/execution/..."],
         run_requirements = [AMDGPU_RESOURCE],
         resource_group = "loom-amdgpu-tests",
     ),
     package_policy(
         packages = ["loom/src/loom/tooling/target/spirv/..."],
         build_requirements = [
-            TARGET_SPIRV,
+            TARGET_ARCH_SPIRV,
+            EMIT_SPIRV,
+        ],
+    ),
+    package_policy(
+        packages = ["loom/src/loom/tooling/target/spirv/execution/..."],
+        build_requirements = [
+            TARGET_ARCH_SPIRV,
             EMIT_SPIRV,
             EXECUTE_SPIRV_VULKAN,
         ],
     ),
     package_policy(
-        packages = ["loom/src/loom/tooling/target/spirv/..."],
+        packages = ["loom/src/loom/tooling/target/spirv/execution/..."],
         run_requirements = [VULKAN_DEVICE_RESOURCE],
         resource_group = "loom-vulkan-tests",
     ),
@@ -119,7 +133,7 @@ PACKAGE_POLICIES = [
     ),
     package_policy(
         packages = ["loom/binding/c/benchmark/target/spirv/..."],
-        build_requirements = [TARGET_SPIRV, EMIT_SPIRV],
+        build_requirements = [TARGET_ARCH_SPIRV, EMIT_SPIRV],
     ),
     package_policy(
         packages = ["loom/binding/c/example"],
@@ -128,7 +142,7 @@ PACKAGE_POLICIES = [
     ),
     package_policy(
         packages = ["loom/binding/c/test/target/spirv/..."],
-        build_requirements = [TARGET_SPIRV, EMIT_SPIRV],
+        build_requirements = [TARGET_ARCH_SPIRV, EMIT_SPIRV],
     ),
 ]
 

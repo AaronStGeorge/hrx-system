@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "loom/tooling/target/spirv/provider.h"
+#include "loom/tooling/target/spirv/execution/provider.h"
 
 #include "loom/target/arch/spirv/provider.h"
 #include "loom/tooling/execution/hal/execution_backend.h"

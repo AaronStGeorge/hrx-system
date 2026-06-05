@@ -38,19 +38,6 @@ loom_cc_library(
 )
 
 loom_cc_library(
-    name = "provider",
-    srcs = ["provider.c"],
-    hdrs = ["provider.h"],
-    deps = [
-        ":artifact_provider",
-        "//loom/src/loom/target/arch/spirv:provider",
-        "//loom/src/loom/tooling/execution:execution_provider",
-        "//loom/src/loom/tooling/execution/hal:execution_backend",
-        "//runtime/src/iree/base",
-    ],
-)
-
-loom_cc_library(
     name = "testbench_requirements",
     srcs = ["testbench_requirements.c"],
     hdrs = ["testbench_requirements.h"],
