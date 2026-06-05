@@ -16,7 +16,7 @@ DEFAULT_ENABLED = []
 
 SUPPORTED_VALUES = [
     "amdgpu",
-    "ireevm",
+    "iree_vm",
     "spirv",
     "wasm",
     "x86",

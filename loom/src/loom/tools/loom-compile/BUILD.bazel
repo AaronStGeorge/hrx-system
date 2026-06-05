@@ -32,15 +32,15 @@ _AMDGPU_COMPILE_DEPS = iree_select({
     "//conditions:default": [],
 })
 
-_IREEVM_COMPILE_COPTS = iree_select({
-    "//loom/config/emit:ireevm": [
-        "-DLOOM_COMPILE_HAVE_IREEVM=1",
+_IREE_VM_COMPILE_COPTS = iree_select({
+    "//loom/config/emit:iree_vm": [
+        "-DLOOM_COMPILE_HAVE_IREE_VM=1",
     ],
     "//conditions:default": [],
 })
 
-_IREEVM_COMPILE_DEPS = iree_select({
-    "//loom/config/emit:ireevm": [
+_IREE_VM_COMPILE_DEPS = iree_select({
+    "//loom/config/emit:iree_vm": [
         "//loom/src/loom/tooling/execution/ireevm:candidate",
         "//loom/src/loom/tooling/execution/ireevm:provider",
     ],
@@ -65,7 +65,7 @@ _SPIRV_COMPILE_DEPS = iree_select({
 loom_cc_binary(
     name = "loom-compile",
     srcs = ["loom-compile.c"],
-    copts = _AMDGPU_COMPILE_COPTS + _IREEVM_COMPILE_COPTS + _SPIRV_COMPILE_COPTS,
+    copts = _AMDGPU_COMPILE_COPTS + _IREE_VM_COMPILE_COPTS + _SPIRV_COMPILE_COPTS,
     deps = [
         "//loom/src/loom/error:diagnostic",
         "//loom/src/loom/ops:op_registry",
@@ -81,7 +81,7 @@ loom_cc_binary(
         "//runtime/src/iree/base",
         "//runtime/src/iree/base/tooling:flags",
         "//runtime/src/iree/io:file_handle",
-    ] + _AMDGPU_COMPILE_DEPS + _IREEVM_COMPILE_DEPS + _SPIRV_COMPILE_DEPS,
+    ] + _AMDGPU_COMPILE_DEPS + _IREE_VM_COMPILE_DEPS + _SPIRV_COMPILE_DEPS,
 )
 
 iree_execution_test_suite(

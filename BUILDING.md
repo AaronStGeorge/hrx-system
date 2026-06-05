@@ -222,18 +222,20 @@ separate concern controlled by Loom execution support and the runtime
 | Option | Values | CMake | Bazel portable | Bazel native |
 | --- | --- | --- | --- | --- |
 | `LOOM_TARGET_AMDGPU` | `ON`, `OFF` | Builds Loom AMDGPU target support and production AMDGPU emission. | Adds or removes `amdgpu` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
-| `LOOM_TARGET_IREEVM` | `ON`, `OFF` | Builds Loom IREE VM target support and production IREE VM emission. | Adds or removes `ireevm` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
+| `LOOM_TARGET_IREE_VM` | `ON`, `OFF` | Builds Loom IREE VM target support and production IREE VM emission. | Adds or removes `iree_vm` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
 | `LOOM_TARGET_SPIRV` | `ON`, `OFF` | Builds Loom SPIR-V target support and production SPIR-V emission. | Adds or removes `spirv` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
 | `LOOM_TARGET_WASM` | `ON`, `OFF` | Builds Loom WebAssembly target support and production Wasm emission. | Adds or removes `wasm` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
 | `LOOM_TARGET_X86` | `ON`, `OFF` | Builds Loom x86 target support. | Adds or removes `x86` from the Loom target product set. | `--//loom/config/target:enable=<complete-target-list>` |
 | `LOOM_EMIT_LLVMIR` | `ON`, `OFF` | Builds LLVM IR debug/developer emission for enabled target archs. | Adds or removes `llvmir` from the explicit Loom emitter set. | `--//loom/config/emit:enable=<complete-emitter-list>` |
+| `LOOM_EXECUTE_IREE_HAL` | `ON`, `OFF` | Builds Loom execution providers that run through IREE HAL when a matching runtime HAL driver is enabled. | Adds or removes `iree_hal` from the Loom execute substrate set. | `--//loom/config/execute:enable=<complete-execute-list>` |
+| `LOOM_EXECUTE_IREE_VM` | `ON`, `OFF` | Builds Loom execution providers that run through the IREE VM substrate. | Adds or removes `iree_vm` from the Loom execute substrate set. | `--//loom/config/execute:enable=<complete-execute-list>` |
 
 The native Loom target flag is a complete list. The default target set is
-`ireevm`:
+`iree_vm`:
 
 ```bash
 python dev.py bazel configure \
-  --//loom/config/target:enable=amdgpu,ireevm,spirv
+  --//loom/config/target:enable=amdgpu,iree_vm,spirv
 ```
 
 The portable spelling expands the same target set without exposing the internal
@@ -252,11 +254,24 @@ python dev.py bazel configure \
   -DLOOM_EMIT_LLVMIR=ON
 ```
 
-The raw `//loom/config/target/arch:enable=...` and production
-`//loom/config/emit:enable=...` values are advanced source-embedding and
-CI-audit surfaces. They exist to build narrow slices deliberately; the published
-portable API is the `LOOM_TARGET_*` product target set plus explicit debug
-emitters such as `LOOM_EMIT_LLVMIR`.
+Execution options describe the runtime substrate available to Loom tools, not a
+target backend by themselves. For example, AMDGPU execution needs the AMDGPU
+Loom target, the IREE HAL execution substrate, and the AMDGPU runtime HAL
+driver:
+
+```bash
+python dev.py bazel configure \
+  -DLOOM_TARGET_AMDGPU=ON \
+  -DLOOM_EXECUTE_IREE_HAL=ON \
+  -DIREE_HAL_DRIVER_AMDGPU=ON \
+  -DIREE_ROCM_PATH=/opt/rocm
+```
+
+The raw `//loom/config/target/arch:enable=...`,
+`//loom/config/emit:enable=...`, and `//loom/config/execute:enable=...` values
+are advanced source-embedding and CI-audit surfaces. They exist to build narrow
+slices deliberately; the published portable API is the `LOOM_TARGET_*` product
+target set plus explicit debug emitters and execution substrates.
 
 Other Bazel-native overrides belong in `.bazelrc.local`.
 

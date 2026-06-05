@@ -12,12 +12,12 @@ package(default_visibility = ["//visibility:public"])
 # the build contains the target architecture and production artifact emission
 # needed to compile for that backend.
 DEFAULT_ENABLED = [
-    "ireevm",
+    "iree_vm",
 ]
 
 SUPPORTED_VALUES = [
     "amdgpu",
-    "ireevm",
+    "iree_vm",
     "spirv",
     "wasm",
     "x86",

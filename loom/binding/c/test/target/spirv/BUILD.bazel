@@ -17,7 +17,7 @@ package(
 )
 
 LOOMC_TARGET_SPIRV_VULKAN_DEPS = iree_select({
-    "//loom/config/execute:spirv_vulkan": [
+    "//loom/config/execute:iree_hal_vulkan": [
         "@vulkan_headers",
     ],
     "//conditions:default": [],

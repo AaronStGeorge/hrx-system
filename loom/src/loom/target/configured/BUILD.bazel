@@ -24,8 +24,8 @@ _CONFIGURED_TARGET_COPTS = (
         "//conditions:default": [],
     }) +
     iree_select({
-        "//loom/config/target/arch:ireevm": [
-            "-DLOOM_CONFIG_TARGET_HAVE_IREEVM=1",
+        "//loom/config/target/arch:iree_vm": [
+            "-DLOOM_CONFIG_TARGET_HAVE_IREE_VM=1",
         ],
         "//conditions:default": [],
     }) +
@@ -57,7 +57,7 @@ _CONFIGURED_TARGET_DEPS = (
         "//conditions:default": [],
     }) +
     iree_select({
-        "//loom/config/target/arch:ireevm": [
+        "//loom/config/target/arch:iree_vm": [
             "//loom/src/loom/target/arch/ireevm:provider",
         ],
         "//conditions:default": [],

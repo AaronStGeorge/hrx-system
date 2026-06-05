@@ -19,43 +19,43 @@ package(
 )
 
 _AMDGPU_EXECUTE_COPTS = iree_select({
-    "//loom/config/execute:amdgpu": [
+    "//loom/config/execute:iree_hal_amdgpu": [
         "-DIREE_TEST_LOOM_HAVE_AMDGPU=1",
     ],
     "//conditions:default": [],
 })
 
 _AMDGPU_EXECUTE_DEPS = iree_select({
-    "//loom/config/execute:amdgpu": [
+    "//loom/config/execute:iree_hal_amdgpu": [
         "//loom/src/loom/tooling/target/amdgpu:artifact_provider",
         "//loom/src/loom/tooling/target/amdgpu/execution:provider",
     ],
     "//conditions:default": [],
 })
 
-_IREEVM_EXECUTION_COPTS = iree_select({
-    "//loom/config/execute:ireevm": [
-        "-DIREE_TEST_LOOM_HAVE_IREEVM=1",
+_IREE_VM_EXECUTION_COPTS = iree_select({
+    "//loom/config/execute:iree_vm": [
+        "-DIREE_TEST_LOOM_HAVE_IREE_VM=1",
     ],
     "//conditions:default": [],
 })
 
-_IREEVM_EXECUTION_DEPS = iree_select({
-    "//loom/config/execute:ireevm": [
+_IREE_VM_EXECUTION_DEPS = iree_select({
+    "//loom/config/execute:iree_vm": [
         "//loom/src/loom/tooling/execution/ireevm:provider",
     ],
     "//conditions:default": [],
 })
 
 _SPIRV_VULKAN_EXECUTE_COPTS = iree_select({
-    "//loom/config/execute:spirv_vulkan": [
+    "//loom/config/execute:iree_hal_vulkan": [
         "-DIREE_TEST_LOOM_HAVE_SPIRV=1",
     ],
     "//conditions:default": [],
 })
 
 _SPIRV_VULKAN_EXECUTE_DEPS = iree_select({
-    "//loom/config/execute:spirv_vulkan": [
+    "//loom/config/execute:iree_hal_vulkan": [
         "//loom/src/loom/tooling/target/spirv:artifact_provider",
         "//loom/src/loom/tooling/target/spirv/execution:provider",
         "//loom/src/loom/tooling/target/spirv:testbench_requirements",
@@ -65,13 +65,13 @@ _SPIRV_VULKAN_EXECUTE_DEPS = iree_select({
 
 _IREE_TEST_LOOM_EXECUTE_COPTS = (
     _AMDGPU_EXECUTE_COPTS +
-    _IREEVM_EXECUTION_COPTS +
+    _IREE_VM_EXECUTION_COPTS +
     _SPIRV_VULKAN_EXECUTE_COPTS
 )
 
 _IREE_TEST_LOOM_EXECUTE_DEPS = (
     _AMDGPU_EXECUTE_DEPS +
-    _IREEVM_EXECUTION_DEPS +
+    _IREE_VM_EXECUTION_DEPS +
     _SPIRV_VULKAN_EXECUTE_DEPS
 )
 

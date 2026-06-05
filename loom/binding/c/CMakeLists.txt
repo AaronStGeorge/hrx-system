@@ -177,9 +177,9 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
 set(_loomc_target_spirv_vulkan_platform_deps "")
-if(LOOM_EXECUTE_SPIRV_VULKAN)
+if(LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
   list(APPEND _loomc_target_spirv_vulkan_platform_deps Vulkan::Headers)
 endif()
 loom_cc_library(
@@ -251,7 +251,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_SPIRV_VULKAN)
+if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
 loom_cc_library(
   NAME
     loomc_full

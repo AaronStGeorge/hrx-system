@@ -4,18 +4,18 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+load("@bazel_skylib//lib:selects.bzl", "selects")
 load("@bazel_skylib//rules:common_settings.bzl", "string_list_flag")
 
 package(default_visibility = ["//visibility:public"])
 
 DEFAULT_ENABLED = [
-    "ireevm",
+    "iree_vm",
 ]
 
 SUPPORTED_VALUES = [
-    "amdgpu",
-    "ireevm",
-    "spirv_vulkan",
+    "iree_hal",
+    "iree_vm",
 ]
 
 string_list_flag(
@@ -32,3 +32,19 @@ string_list_flag(
     )
     for value in SUPPORTED_VALUES
 ]
+
+selects.config_setting_group(
+    name = "iree_hal_amdgpu",
+    match_all = [
+        ":iree_hal",
+        "//runtime/config/hal:driver_amdgpu",
+    ],
+)
+
+selects.config_setting_group(
+    name = "iree_hal_vulkan",
+    match_all = [
+        ":iree_hal",
+        "//runtime/config/hal:driver_vulkan",
+    ],
+)

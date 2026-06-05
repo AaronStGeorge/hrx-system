@@ -26,15 +26,15 @@
 #ifndef LOOM_COMPILE_HAVE_AMDGPU
 #define LOOM_COMPILE_HAVE_AMDGPU 0
 #endif  // LOOM_COMPILE_HAVE_AMDGPU
-#ifndef LOOM_COMPILE_HAVE_IREEVM
-#define LOOM_COMPILE_HAVE_IREEVM 0
-#endif  // LOOM_COMPILE_HAVE_IREEVM
+#ifndef LOOM_COMPILE_HAVE_IREE_VM
+#define LOOM_COMPILE_HAVE_IREE_VM 0
+#endif  // LOOM_COMPILE_HAVE_IREE_VM
 #ifndef LOOM_COMPILE_HAVE_SPIRV
 #define LOOM_COMPILE_HAVE_SPIRV 0
 #endif  // LOOM_COMPILE_HAVE_SPIRV
 
-#define LOOM_COMPILE_HAVE_ANY_PROVIDER                     \
-  (LOOM_COMPILE_HAVE_AMDGPU || LOOM_COMPILE_HAVE_IREEVM || \
+#define LOOM_COMPILE_HAVE_ANY_PROVIDER                      \
+  (LOOM_COMPILE_HAVE_AMDGPU || LOOM_COMPILE_HAVE_IREE_VM || \
    LOOM_COMPILE_HAVE_SPIRV)
 #define LOOM_COMPILE_HAVE_ANY_HAL_ARTIFACT_PROVIDER \
   (LOOM_COMPILE_HAVE_AMDGPU || LOOM_COMPILE_HAVE_SPIRV)
@@ -43,10 +43,10 @@
 #include "loom/target/arch/amdgpu/provider.h"
 #include "loom/tooling/target/amdgpu/artifact_provider.h"
 #endif  // LOOM_COMPILE_HAVE_AMDGPU
-#if LOOM_COMPILE_HAVE_IREEVM
+#if LOOM_COMPILE_HAVE_IREE_VM
 #include "loom/tooling/execution/ireevm/candidate.h"
 #include "loom/tooling/execution/ireevm/provider.h"
-#endif  // LOOM_COMPILE_HAVE_IREEVM
+#endif  // LOOM_COMPILE_HAVE_IREE_VM
 #if LOOM_COMPILE_HAVE_SPIRV
 #include "loom/target/arch/spirv/provider.h"
 #include "loom/tooling/target/spirv/artifact_provider.h"
@@ -111,9 +111,9 @@ static const loom_run_execution_provider_t* const kLoomCompileProviders[] = {
 #if LOOM_COMPILE_HAVE_AMDGPU
     &kLoomCompileAmdgpuProvider,
 #endif  // LOOM_COMPILE_HAVE_AMDGPU
-#if LOOM_COMPILE_HAVE_IREEVM
+#if LOOM_COMPILE_HAVE_IREE_VM
     &loom_ireevm_execution_provider,
-#endif  // LOOM_COMPILE_HAVE_IREEVM
+#endif  // LOOM_COMPILE_HAVE_IREE_VM
 #if LOOM_COMPILE_HAVE_SPIRV
     &kLoomCompileSpirvProvider,
 #endif  // LOOM_COMPILE_HAVE_SPIRV
@@ -350,7 +350,7 @@ static iree_status_t loom_compile_emit_vm(
         IREE_STATUS_INVALID_ARGUMENT,
         "--emit_target_artifact is only valid for HAL artifact providers");
   }
-#if LOOM_COMPILE_HAVE_IREEVM
+#if LOOM_COMPILE_HAVE_IREE_VM
   loom_ireevm_run_candidate_t candidate = {0};
   iree_status_t status = loom_ireevm_run_candidate_emit(
       run_module, compile_options, allocator, &candidate);
@@ -372,7 +372,7 @@ static iree_status_t loom_compile_emit_vm(
   (void)allocator;
   return iree_make_status(IREE_STATUS_UNAVAILABLE,
                           "loom-compile was built without VM emission");
-#endif  // LOOM_COMPILE_HAVE_IREEVM
+#endif  // LOOM_COMPILE_HAVE_IREE_VM
 }
 
 static iree_status_t loom_compile_make_unknown_backend_status(

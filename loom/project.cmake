@@ -15,7 +15,7 @@ endif()
 
 option(LOOM_TARGET_AMDGPU
   "Enables Loom AMDGPU target support." OFF)
-option(LOOM_TARGET_IREEVM
+option(LOOM_TARGET_IREE_VM
   "Enables Loom IREE VM target support." ON)
 option(LOOM_TARGET_SPIRV
   "Enables Loom SPIR-V target support." OFF)
@@ -27,7 +27,7 @@ option(LOOM_TARGET_X86
 option(LOOM_TARGET_ARCH_AMDGPU
   "Enables the AMDGPU Loom target architecture slice."
   OFF)
-option(LOOM_TARGET_ARCH_IREEVM
+option(LOOM_TARGET_ARCH_IREE_VM
   "Enables the IREE VM Loom target architecture slice."
   OFF)
 option(LOOM_TARGET_ARCH_SPIRV
@@ -41,7 +41,7 @@ option(LOOM_TARGET_ARCH_X86
   OFF)
 mark_as_advanced(
   LOOM_TARGET_ARCH_AMDGPU
-  LOOM_TARGET_ARCH_IREEVM
+  LOOM_TARGET_ARCH_IREE_VM
   LOOM_TARGET_ARCH_SPIRV
   LOOM_TARGET_ARCH_WASM
   LOOM_TARGET_ARCH_X86
@@ -50,7 +50,7 @@ mark_as_advanced(
 option(LOOM_EMIT_AMDGPU
   "Enables the AMDGPU Loom artifact emitter slice."
   OFF)
-option(LOOM_EMIT_IREEVM
+option(LOOM_EMIT_IREE_VM
   "Enables the IREE VM Loom artifact emitter slice."
   OFF)
 option(LOOM_EMIT_LLVMIR
@@ -63,7 +63,7 @@ option(LOOM_EMIT_WASM
   OFF)
 mark_as_advanced(
   LOOM_EMIT_AMDGPU
-  LOOM_EMIT_IREEVM
+  LOOM_EMIT_IREE_VM
   LOOM_EMIT_SPIRV
   LOOM_EMIT_WASM
 )
@@ -72,9 +72,9 @@ if(LOOM_TARGET_AMDGPU)
   set(LOOM_TARGET_ARCH_AMDGPU ON)
   set(LOOM_EMIT_AMDGPU ON)
 endif()
-if(LOOM_TARGET_IREEVM)
-  set(LOOM_TARGET_ARCH_IREEVM ON)
-  set(LOOM_EMIT_IREEVM ON)
+if(LOOM_TARGET_IREE_VM)
+  set(LOOM_TARGET_ARCH_IREE_VM ON)
+  set(LOOM_EMIT_IREE_VM ON)
 endif()
 if(LOOM_TARGET_SPIRV)
   set(LOOM_TARGET_ARCH_SPIRV ON)
@@ -88,12 +88,10 @@ if(LOOM_TARGET_X86)
   set(LOOM_TARGET_ARCH_X86 ON)
 endif()
 
-option(LOOM_EXECUTE_AMDGPU
-  "Enables Loom execution tests that require AMDGPU runtime support." OFF)
-option(LOOM_EXECUTE_IREEVM
+option(LOOM_EXECUTE_IREE_HAL
+  "Enables Loom execution providers that use IREE HAL runtime support." OFF)
+option(LOOM_EXECUTE_IREE_VM
   "Enables Loom execution tests that use IREE VM runtime support." ON)
-option(LOOM_EXECUTE_SPIRV_VULKAN
-  "Enables Loom execution tests that require SPIR-V/Vulkan runtime support." OFF)
 
 option(LOOM_IMPORT_MLIR
   "Enables the Loom MLIR importer package and importer tests." OFF)
@@ -105,9 +103,9 @@ if(LOOM_EMIT_AMDGPU AND NOT LOOM_TARGET_ARCH_AMDGPU)
     "LOOM_EMIT_AMDGPU=ON requires LOOM_TARGET_ARCH_AMDGPU=ON.")
 endif()
 
-if(LOOM_EMIT_IREEVM AND NOT LOOM_TARGET_ARCH_IREEVM)
+if(LOOM_EMIT_IREE_VM AND NOT LOOM_TARGET_ARCH_IREE_VM)
   message(FATAL_ERROR
-    "LOOM_EMIT_IREEVM=ON requires LOOM_TARGET_ARCH_IREEVM=ON.")
+    "LOOM_EMIT_IREE_VM=ON requires LOOM_TARGET_ARCH_IREE_VM=ON.")
 endif()
 
 if(LOOM_EMIT_SPIRV AND NOT LOOM_TARGET_ARCH_SPIRV)

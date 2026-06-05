@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_EXECUTE_AMDGPU)
+if(LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
 iree_native_test(
   NAME
     "ffn_gate_up_swiglu_q6q8_plan_test"
@@ -23,7 +23,7 @@ iree_native_test(
 )
 endif()
 
-if(LOOM_EXECUTE_AMDGPU)
+if(LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_AMDGPU)
 iree_native_test(
   NAME
     "mlp_down_projection_residual_bf16_plan_test"

@@ -49,7 +49,7 @@ endif()
 
 if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 set(_vulkan_test_platform_deps "")
-if(LOOM_EXECUTE_SPIRV_VULKAN)
+if(LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
   list(APPEND _vulkan_test_platform_deps Vulkan::Headers)
 endif()
 loom_cc_test(

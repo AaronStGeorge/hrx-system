@@ -19,11 +19,11 @@ EMIT_AMDGPU = build_requirement(
     cmake_condition = "LOOM_EMIT_AMDGPU",
 )
 
-EMIT_IREEVM = build_requirement(
-    id = "loom.emit.ireevm",
-    label = "//loom/requirements:emit_ireevm",
-    enabled_by = "//loom/config/emit:ireevm",
-    cmake_condition = "LOOM_EMIT_IREEVM",
+EMIT_IREE_VM = build_requirement(
+    id = "loom.emit.iree_vm",
+    label = "//loom/requirements:emit_iree_vm",
+    enabled_by = "//loom/config/emit:iree_vm",
+    cmake_condition = "LOOM_EMIT_IREE_VM",
 )
 
 EMIT_LLVMIR = build_requirement(
@@ -47,25 +47,18 @@ EMIT_WASM = build_requirement(
     cmake_condition = "LOOM_EMIT_WASM",
 )
 
-EXECUTE_AMDGPU = build_requirement(
-    id = "loom.execute.amdgpu",
-    label = "//loom/requirements:execute_amdgpu",
-    enabled_by = "//loom/config/execute:amdgpu",
-    cmake_condition = "LOOM_EXECUTE_AMDGPU",
+EXECUTE_IREE_HAL = build_requirement(
+    id = "loom.execute.iree_hal",
+    label = "//loom/requirements:execute_iree_hal",
+    enabled_by = "//loom/config/execute:iree_hal",
+    cmake_condition = "LOOM_EXECUTE_IREE_HAL",
 )
 
-EXECUTE_IREEVM = build_requirement(
-    id = "loom.execute.ireevm",
-    label = "//loom/requirements:execute_ireevm",
-    enabled_by = "//loom/config/execute:ireevm",
-    cmake_condition = "LOOM_EXECUTE_IREEVM",
-)
-
-EXECUTE_SPIRV_VULKAN = build_requirement(
-    id = "loom.execute.spirv_vulkan",
-    label = "//loom/requirements:execute_spirv_vulkan",
-    enabled_by = "//loom/config/execute:spirv_vulkan",
-    cmake_condition = "LOOM_EXECUTE_SPIRV_VULKAN",
+EXECUTE_IREE_VM = build_requirement(
+    id = "loom.execute.iree_vm",
+    label = "//loom/requirements:execute_iree_vm",
+    enabled_by = "//loom/config/execute:iree_vm",
+    cmake_condition = "LOOM_EXECUTE_IREE_VM",
 )
 
 IMPORT_MLIR = build_requirement(
@@ -89,11 +82,11 @@ TARGET_ARCH_AMDGPU = build_requirement(
     cmake_condition = "LOOM_TARGET_ARCH_AMDGPU",
 )
 
-TARGET_ARCH_IREEVM = build_requirement(
-    id = "loom.target.arch.ireevm",
-    label = "//loom/requirements:target_arch_ireevm",
-    enabled_by = "//loom/config/target/arch:ireevm",
-    cmake_condition = "LOOM_TARGET_ARCH_IREEVM",
+TARGET_ARCH_IREE_VM = build_requirement(
+    id = "loom.target.arch.iree_vm",
+    label = "//loom/requirements:target_arch_iree_vm",
+    enabled_by = "//loom/config/target/arch:iree_vm",
+    cmake_condition = "LOOM_TARGET_ARCH_IREE_VM",
 )
 
 TARGET_ARCH_SPIRV = build_requirement(
@@ -134,17 +127,16 @@ VULKAN_DEVICE_RESOURCE = run_requirement(
 REQUIREMENTS = [
     AMDGPU_RESOURCE,
     EMIT_AMDGPU,
-    EMIT_IREEVM,
+    EMIT_IREE_VM,
     EMIT_LLVMIR,
     EMIT_SPIRV,
     EMIT_WASM,
-    EXECUTE_AMDGPU,
-    EXECUTE_IREEVM,
-    EXECUTE_SPIRV_VULKAN,
+    EXECUTE_IREE_HAL,
+    EXECUTE_IREE_VM,
     IMPORT_MLIR,
     IMPORT_TILELANG,
     TARGET_ARCH_AMDGPU,
-    TARGET_ARCH_IREEVM,
+    TARGET_ARCH_IREE_VM,
     TARGET_ARCH_SPIRV,
     TARGET_ARCH_WASM,
     TARGET_ARCH_X86,

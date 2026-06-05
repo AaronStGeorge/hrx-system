@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import bazel_to_cmake_config
 import bazel_to_cmake_converter
+import bazel_to_cmake_requirements
 import bazel_to_cmake_targets
 
 
@@ -199,6 +200,22 @@ class ConfigTest(unittest.TestCase):
             functions._target_compatible_condition(target_compatible_with),
             'IREE_HAL_DRIVER_WEBGPU AND IREE_ARCH STREQUAL "wasm_32"',
         )
+
+    def test_requirement_policy_loads_cross_project_requirement_defs(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        policy = bazel_to_cmake_requirements.load_project_policy(
+            str(repo_root),
+            "loom",
+        )
+
+        collected = policy.collect("loom/src/loom/tooling/target/amdgpu/execution")
+        conditions = [
+            condition.cmake_condition for condition in collected.cmake_conditions()
+        ]
+
+        self.assertIn("LOOM_EXECUTE_IREE_HAL", conditions)
+        self.assertIn("IREE_HAL_DRIVER_AMDGPU", conditions)
+        self.assertNotIn("LOOM_EXECUTE_AMDGPU", conditions)
 
     def test_native_test_emits_target_compatible_guard(self):
         converter = SimpleNamespace(body="")

@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_IREEVM)
+if(LOOM_TARGET_ARCH_IREE_VM)
 loom_target_table_cc_library(
   NAME
     core
@@ -22,7 +22,7 @@ loom_target_table_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_IREEVM)
+if(LOOM_TARGET_ARCH_IREE_VM)
 loom_target_table_cc_library(
   NAME
     core_lower_rules

@@ -9,7 +9,7 @@
 
 iree_add_all_subdirs()
 
-if(LOOM_TARGET_ARCH_IREEVM AND LOOM_EMIT_IREEVM)
+if(LOOM_TARGET_ARCH_IREE_VM AND LOOM_EMIT_IREE_VM)
 loom_cc_library(
   NAME
     module_plan
@@ -33,7 +33,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_IREEVM AND LOOM_EMIT_IREEVM)
+if(LOOM_TARGET_ARCH_IREE_VM AND LOOM_EMIT_IREE_VM)
 loom_cc_library(
   NAME
     function_bytecode
@@ -55,7 +55,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_IREEVM AND LOOM_EMIT_IREEVM)
+if(LOOM_TARGET_ARCH_IREE_VM AND LOOM_EMIT_IREE_VM)
 loom_cc_library(
   NAME
     module_archive
@@ -74,7 +74,7 @@ loom_cc_library(
 )
 endif()
 
-if(LOOM_TARGET_ARCH_IREEVM AND LOOM_EMIT_IREEVM)
+if(LOOM_TARGET_ARCH_IREE_VM AND LOOM_EMIT_IREE_VM)
 loom_cc_library(
   NAME
     archive_emitter

@@ -17,21 +17,25 @@ load(
     "//loom/requirements:defs.bzl",
     "AMDGPU_RESOURCE",
     "EMIT_AMDGPU",
-    "EMIT_IREEVM",
+    "EMIT_IREE_VM",
     "EMIT_LLVMIR",
     "EMIT_SPIRV",
     "EMIT_WASM",
-    "EXECUTE_AMDGPU",
-    "EXECUTE_IREEVM",
-    "EXECUTE_SPIRV_VULKAN",
+    "EXECUTE_IREE_HAL",
+    "EXECUTE_IREE_VM",
     "IMPORT_MLIR",
     "IMPORT_TILELANG",
     "TARGET_ARCH_AMDGPU",
-    "TARGET_ARCH_IREEVM",
+    "TARGET_ARCH_IREE_VM",
     "TARGET_ARCH_SPIRV",
     "TARGET_ARCH_WASM",
     "TARGET_ARCH_X86",
     "VULKAN_DEVICE_RESOURCE",
+)
+load(
+    "//runtime/requirements:defs.bzl",
+    "HAL_AMDGPU",
+    "HAL_VULKAN",
 )
 
 PACKAGE_POLICIES = [
@@ -41,7 +45,7 @@ PACKAGE_POLICIES = [
     ),
     package_policy(
         packages = ["loom/src/loom/target/arch/ireevm/..."],
-        build_requirements = [TARGET_ARCH_IREEVM],
+        build_requirements = [TARGET_ARCH_IREE_VM],
     ),
     package_policy(
         packages = ["loom/src/loom/target/arch/spirv/..."],
@@ -57,7 +61,7 @@ PACKAGE_POLICIES = [
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/ireevm/..."],
-        build_requirements = [TARGET_ARCH_IREEVM, EMIT_IREEVM],
+        build_requirements = [TARGET_ARCH_IREE_VM, EMIT_IREE_VM],
     ),
     package_policy(
         packages = ["loom/src/loom/target/emit/llvmir/..."],
@@ -81,7 +85,7 @@ PACKAGE_POLICIES = [
     ),
     package_policy(
         packages = ["loom/src/loom/tooling/execution/ireevm/..."],
-        build_requirements = [TARGET_ARCH_IREEVM, EMIT_IREEVM, EXECUTE_IREEVM],
+        build_requirements = [TARGET_ARCH_IREE_VM, EMIT_IREE_VM, EXECUTE_IREE_VM],
     ),
     package_policy(
         packages = ["loom/src/loom/tooling/target/amdgpu/..."],
@@ -95,7 +99,8 @@ PACKAGE_POLICIES = [
         build_requirements = [
             TARGET_ARCH_AMDGPU,
             EMIT_AMDGPU,
-            EXECUTE_AMDGPU,
+            EXECUTE_IREE_HAL,
+            HAL_AMDGPU,
         ],
     ),
     package_policy(
@@ -115,7 +120,8 @@ PACKAGE_POLICIES = [
         build_requirements = [
             TARGET_ARCH_SPIRV,
             EMIT_SPIRV,
-            EXECUTE_SPIRV_VULKAN,
+            EXECUTE_IREE_HAL,
+            HAL_VULKAN,
         ],
     ),
     package_policy(

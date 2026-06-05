@@ -18,7 +18,7 @@ exports_files([
 ])
 
 _AMDGPU_EXECUTE_COMPATIBLE_WITH = select({
-    "//loom/config/execute:amdgpu": [],
+    "//loom/config/execute:iree_hal_amdgpu": [],
     "//conditions:default": ["@platforms//:incompatible"],
 })
 
