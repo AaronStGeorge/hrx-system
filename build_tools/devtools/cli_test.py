@@ -190,6 +190,27 @@ class CliTest(unittest.TestCase):
         self.assertIn("//.iree-bazel-try/run-<pid>:snippet", description)
         self.assertIn("# compile only", description)
 
+    def test_cmake_try_generates_scratch_build(self):
+        args = cli.parse_arguments(
+            [
+                "cmake",
+                "try",
+                "-c",
+                "--dep",
+                "iree::base",
+                "-e",
+                "int main() { return 0; }",
+            ]
+        )
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn(".iree-cmake-try/run-<pid>/try.cmake", description)
+        self.assertIn("cmake -S", description)
+        self.assertIn("--target iree_cmake_try_snippet", description)
+        self.assertIn("# compile only", description)
+
     def test_bazel_try_preserves_local_input_paths(self):
         with tempfile.TemporaryDirectory() as temporary_dir:
             temporary_path = Path(temporary_dir)
@@ -261,6 +282,9 @@ class CliTest(unittest.TestCase):
             aliases.BAZEL_ALIASES["iree-bazel-cquery"], ["bazel", "cquery"]
         )
         self.assertEqual(aliases.BAZEL_ALIASES["iree-bazel-info"], ["bazel", "info"])
+
+    def test_cmake_aliases_include_fuzz(self):
+        self.assertEqual(aliases.CMAKE_ALIASES["iree-cmake-fuzz"], ["cmake", "fuzz"])
 
     def test_root_verbose_survives_nested_command_parser(self):
         args = cli.parse_arguments(["--verbose", "bazel", "build"])
@@ -374,6 +398,8 @@ class CliTest(unittest.TestCase):
         output = self.parse_agent_md(["cmake", "--agent_md"])
 
         self.assertIn("### CMake", output)
+        self.assertIn("iree-cmake-build", output)
+        self.assertIn("build_tools/bin/iree-*-*", output)
         self.assertNotIn("### Bazel", output)
 
     def test_bazel_build_agents_md_uses_public_wrapper_names(self):
@@ -413,6 +439,22 @@ class CliTest(unittest.TestCase):
         self.assertIn("IREE_FUZZ_CACHE", fuzz_output)
         self.assertNotIn("## iree-bazel-try", fuzz_output)
 
+    def test_cmake_try_agents_md_is_focused(self):
+        output = self.parse_agent_md(["cmake", "try", "--agents-md"])
+
+        self.assertIn("## iree-cmake-try", output)
+        self.assertIn("one-shot C/C++ probes", output)
+        self.assertIn(".iree-cmake-try/", output)
+        self.assertNotIn("## iree-cmake-run", output)
+
+    def test_cmake_fuzz_agents_md_is_focused(self):
+        output = self.parse_agent_md(["cmake", "fuzz", "--agents-md"])
+
+        self.assertIn("## iree-cmake-fuzz", output)
+        self.assertIn("IREE_ENABLE_FUZZING=ON", output)
+        self.assertIn("IREE_FUZZ_CACHE", output)
+        self.assertNotIn("## iree-cmake-try", output)
+
     def test_cmake_build_target_shorthand(self):
         args = cli.parse_arguments(["cmake", "build", "hrx"])
 
@@ -437,6 +479,26 @@ class CliTest(unittest.TestCase):
         description = plan.describe()
 
         self.assertIn("--target hrx", description)
+
+    def test_cmake_fuzz_builds_target_before_execing_binary(self):
+        args = cli.parse_arguments(
+            [
+                "cmake",
+                "fuzz",
+                "iree::tokenizer::special_tokens_fuzz",
+                "--parallel",
+                "8",
+                "--",
+                "-max_total_time=1",
+            ]
+        )
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("cmake fuzz iree::tokenizer::special_tokens_fuzz", description)
+        self.assertIn("--target iree::tokenizer::special_tokens_fuzz", description)
+        self.assertIn("exec '<built fuzzer>' '<corpus>'", description)
         self.assertIn("--parallel 8", description)
 
     def test_cmake_test_forwards_options_without_separator(self):
@@ -447,6 +509,24 @@ class CliTest(unittest.TestCase):
 
         self.assertIn("-R hrx", description)
         self.assertNotIn("-- -R", description)
+
+    def test_cmake_run_resolves_existing_executable_target(self):
+        args = cli.parse_arguments(["cmake", "run", "iree-run-module", "--", "--help"])
+
+        plan = args.handler(args)
+        description = plan.describe()
+
+        self.assertIn("# cmake run iree-run-module", description)
+        self.assertIn("CMake File API", description)
+        self.assertIn("exec '<built executable>' --help", description)
+
+    def test_cmake_run_agents_md_explains_no_implicit_build(self):
+        output = self.parse_agent_md(["cmake", "run", "--agents-md"])
+
+        self.assertIn("## iree-cmake-run", output)
+        self.assertIn("iree-cmake-build iree-run-module", output)
+        self.assertIn("does not build", output)
+        self.assertNotIn("python dev.py", output)
 
     def test_bazel_precommit_defaults_to_changed_paranoid_profile(self):
         args = cli.parse_arguments(["bazel", "precommit"])
@@ -616,7 +696,9 @@ class CliTest(unittest.TestCase):
         output = self.parse_help(["cmake", "configure", "--help"])
 
         self.assertIn("Configure the CMake package/install-test build tree", output)
-        self.assertIn("../builds/<checkout-name>/", output)
+        self.assertIn("build/cmake", output)
+        self.assertIn("IREE_CMAKE_BUILD_DIR", output)
+        self.assertNotIn("../builds", output)
         self.assertNotIn("backend configure tool", output)
 
     def test_bazel_build_help_explains_default_targets(self):

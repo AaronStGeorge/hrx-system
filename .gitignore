@@ -15,7 +15,9 @@
 
 # Bazel output symlinks and local experiment output.
 /bazel-*
+/.iree/
 /.iree-bazel-try/
+/.iree-cmake-try/
 
 # CMake and other local build trees.
 /build/

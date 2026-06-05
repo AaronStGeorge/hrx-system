@@ -100,9 +100,10 @@ BUILDING.md. Use .bazelrc.local for checkout-specific Bazel overrides.""",
   python dev.py cmake configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm -DIREE_ROCM_DEPENDENCY_MODE=package
   python dev.py --cmake-build-dir build/cmake-asan cmake configure -DIREE_ENABLE_ASAN=ON
 
-The build tree lives outside the checkout at ../builds/<checkout-name>/.
-Use --cmake-build-dir to select a different tree for CI, experiments, or
-parallel configurations.
+The first configure uses build/cmake unless --cmake-build-dir or
+IREE_CMAKE_BUILD_DIR selects another tree. The selected tree is recorded for
+later iree-cmake-build, iree-cmake-test, iree-cmake-run, iree-cmake-try, and
+iree-cmake-fuzz invocations.
 Published project build options live in BUILDING.md.""",
         )
     if command == "build":
@@ -122,12 +123,14 @@ With no explicit target, this builds //runtime/... and //libhrx/....""",
             arguments="Target names followed by native CMake build options.",
             epilog="""Examples:
   python dev.py cmake build hrx
-  python dev.py cmake build libhrx_src_libhrx_hrx
+  python dev.py cmake build hrx::hrx
   python dev.py cmake build hrx --parallel 8
   python dev.py cmake build --parallel 8
 
 Positional arguments are target names and become cmake --build ... --target
-<name>. Option-looking arguments are forwarded to CMake.""",
+<name>. Configured CMake aliases such as iree::base and hrx::hrx are translated
+to their concrete generator targets. Option-looking arguments are forwarded to
+CMake.""",
         )
     if command == "test":
         if lane == "bazel":
@@ -147,7 +150,7 @@ Positional arguments are target names and become cmake --build ... --target
   python dev.py cmake test -R hrx
   python dev.py cmake test --rerun-failed
 
-CTest runs in ../builds/<checkout-name>/ with --output-on-failure.""",
+CTest runs in the selected CMake build tree with --output-on-failure.""",
         )
     if command == "query" and lane == "bazel":
         return CommandHelp(
@@ -288,6 +291,22 @@ Temporary packages are written under .iree-bazel-try/. The tool infers common
 deps from quoted iree/..., loom/..., and loomc/... includes and accepts
 explicit --dep labels.""",
         )
+    if command == "try" and lane == "cmake":
+        return CommandHelp(
+            description="Build and run a temporary C/C++ snippet with CMake.",
+            arguments="Source files, -e inline source, --dep CMake targets, and optional -- program arguments.",
+            epilog="""Examples:
+  python dev.py cmake try -e 'int main() { return 0; }'
+  python dev.py cmake try -e $'#include "iree/base/api.h"\\nint main() { return 0; }'
+  python dev.py cmake try --dep iree::base snippet.c -- --flag
+  python dev.py cmake try -k -e 'int main() { return 0; }'
+  python dev.py cmake try --compile-only --output build/snippet -e 'int main() { return 0; }'
+
+This derives a temporary build tree from the configured CMake build tree and
+injects one generated CMake file into the real repository configure. Run
+iree-cmake-configure first. Quoted iree/... and hrx_... includes infer common
+deps; add --dep TARGET for anything inference misses.""",
+        )
     if command == "fuzz" and lane == "bazel":
         return CommandHelp(
             description="Build and run Bazel libFuzzer targets without holding the Bazel lock.",
@@ -299,7 +318,32 @@ explicit --dep labels.""",
 This builds with --config=fuzzer, resolves executable paths with cquery, then
 runs the fuzzer binaries directly. Single-target runs exec the fuzzer process.""",
         )
-    if command in ("run", "try", "fuzz"):
+    if command == "fuzz" and lane == "cmake":
+        return CommandHelp(
+            description="Build and run a CMake libFuzzer target.",
+            arguments="CMake fuzz target and build options, followed by -- and fuzzer arguments.",
+            epilog="""Examples:
+  python dev.py cmake configure -DIREE_ENABLE_FUZZING=ON -DLIBHRX_BUILD=OFF -DIREE_HAL_DRIVER_AMDGPU=OFF
+  python dev.py cmake fuzz iree::tokenizer::special_tokens_fuzz
+  python dev.py cmake fuzz iree::tokenizer::special_tokens_fuzz -- -max_total_time=60
+
+This builds the named CMake fuzz target, resolves the executable with the CMake
+File API, then execs it directly. Fuzz targets are configure-time CMake targets;
+run iree-cmake-configure -DIREE_ENABLE_FUZZING=ON first.""",
+        )
+    if command == "run" and lane == "cmake":
+        return CommandHelp(
+            description="Run an already-built CMake executable target.",
+            arguments="CMake executable target, followed by -- and program arguments.",
+            epilog="""Examples:
+  python dev.py cmake run iree-run-module -- --help
+  python dev.py cmake run iree::tools::iree-run-module -- --help
+  python dev.py cmake run -p iree-run-module
+
+This resolves the executable with the CMake File API and then execs it from the
+current directory. It does not build; run `iree-cmake-build <target>` first.""",
+        )
+    if command in ("try", "fuzz"):
         return CommandHelp(
             description=f"{command} support for {build_system_name}.",
             arguments="Command arguments.",
@@ -348,11 +392,11 @@ def agent_markdown_header() -> str:
     return """## Developer Commands
 
 Run from the repository root. Prefer generated wrapper aliases such as
-`iree-bazel-build`; checked-in `build_tools/bin/iree-bazel-*` launchers are
-available for Bazel root-relative scripts and unconfigured shells. Long flags
-accept hyphen or underscore spellings, such as `--dry-run` and `--dry_run`.
-Common wrapper flags work after the wrapper name: `-n/--dry-run`,
-`-v/--verbose`, `--system`, `--venv`, `--tool-root DIR`, and
+`iree-bazel-build` and `iree-cmake-build`; checked-in
+`build_tools/bin/iree-*-*` launchers are available for root-relative scripts and
+unconfigured shells. Long flags accept hyphen or underscore spellings, such as
+`--dry-run` and `--dry_run`. Common wrapper flags work after the wrapper name:
+`-n/--dry-run`, `-v/--verbose`, `--system`, `--venv`, `--tool-root DIR`, and
 `--cmake-build-dir DIR`. Command-specific debugging flags include
 `iree-bazel-run -p/--print-path` and `iree-bazel-try -k/--keep`. Use `--`
 before a native option that conflicts with a wrapper flag. Published build
@@ -394,23 +438,28 @@ def cmake_agent_markdown() -> str:
     return """### CMake
 
 Use `iree-cmake-*` for package and install-test workflows. `iree-cmake-configure`
-writes `../builds/<checkout-name>/`. `iree-cmake-build TARGET` maps to
-`cmake --build ... --target TARGET`.
+records the selected build tree for later wrappers. `iree-cmake-build TARGET`
+maps to `cmake --build ... --target TARGET`.
 
 ```bash
 iree-cmake-configure
 iree-cmake-configure -DIREE_HAL_DRIVER_AMDGPU=ON
 iree-cmake-configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm -DIREE_ROCM_DEPENDENCY_MODE=package
 iree-cmake-configure -DIREE_HAL_DRIVER_AMDGPU=OFF -DLIBHRX_BUILD=OFF
-iree-cmake-build hrx
+iree-cmake-build hrx::hrx
 iree-cmake-test -R hrx
+iree-cmake-run iree::tools::iree-run-module -- --help
+iree-cmake-fuzz iree::tokenizer::special_tokens_fuzz -- -max_total_time=60
 iree-cmake-dev precommit
 iree-cmake-dev presubmit
 ```
 
 `iree-cmake-dev precommit` checks local changes. The paranoid profile adds
 affected project CMake/CTest checks. `iree-cmake-dev presubmit` is the
-full-tree CI-shaped check."""
+full-tree CI-shaped check. `iree-cmake-run` resolves an already-built
+executable and does not build implicitly. `iree-cmake-try` builds temporary
+C/C++ snippets against the configured tree. `iree-cmake-fuzz` builds and execs
+a configured libFuzzer target."""
 
 
 def bazel_command_agent_markdown(command: str) -> str:
@@ -564,8 +613,8 @@ iree-bazel-fuzz //runtime/src/iree/tokenizer/... -- -max_total_time=60 -jobs=8
 ```
 
 Corpus and artifact directories live under
-`${IREE_FUZZ_CACHE:-~/.cache/iree-fuzz-cache}/`. Fuzzer arguments go after
-`--`."""
+`IREE_FUZZ_CACHE` when set, otherwise the platform user cache directory under
+`iree-fuzz-cache/`. Fuzzer arguments go after `--`."""
 
     return bazel_agent_markdown()
 
@@ -583,7 +632,9 @@ iree-cmake-configure -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm -DIR
 iree-cmake-configure -DIREE_HAL_DRIVER_AMDGPU=OFF -DLIBHRX_BUILD=OFF
 ```
 
-The default build tree is `../builds/<checkout-name>/`."""
+The first configure uses `build/cmake` unless `--cmake-build-dir` or
+`IREE_CMAKE_BUILD_DIR` selects another tree. The selected tree is recorded for
+later CMake wrappers."""
 
     if command == "build":
         return """## iree-cmake-build
@@ -592,11 +643,14 @@ Build targets in the configured CMake build tree.
 
 ```bash
 iree-cmake-build hrx
+iree-cmake-build hrx::hrx
 iree-cmake-build --parallel 8
 iree-cmake-build hrx --parallel 8
 ```
 
-Positional arguments before option-looking arguments are CMake target names."""
+Positional arguments before option-looking arguments are CMake target names.
+Configured aliases such as `iree::base` and `hrx::hrx` are translated to their
+concrete generator targets."""
 
     if command == "test":
         return """## iree-cmake-test
@@ -610,5 +664,62 @@ iree-cmake-test --rerun-failed
 ```
 
 CTest options are forwarded unchanged."""
+
+    if command == "run":
+        return """## iree-cmake-run
+
+Run an already-built executable target from the configured CMake build tree. It
+resolves the target with the CMake File API and execs the binary from the
+current directory. It does not build; run `iree-cmake-build <target>` first.
+
+```bash
+iree-cmake-build iree-run-module
+iree-cmake-run iree-run-module -- --help
+iree-cmake-run iree::tools::iree-run-module -- --help
+iree-cmake-run -p iree-run-module
+```
+
+Program arguments go after `--`. `-p/--print-path` prints the resolved binary
+without running it."""
+
+    if command == "try":
+        return """## iree-cmake-try
+
+Use `iree-cmake-try` for one-shot C/C++ probes against the configured CMake
+tree. It creates a temporary build under `.iree-cmake-try/`, copies the existing
+cache configuration, injects one generated CMake file into the real repository
+configure, builds the snippet target, then runs it unless `--compile-only` is
+used.
+
+```bash
+iree-cmake-configure
+iree-cmake-try -e 'int main() { return 0; }'
+iree-cmake-try -e $'#include "iree/base/api.h"\\nint main() { return 0; }'
+iree-cmake-try --dep iree::base snippet.c -- --flag
+iree-cmake-try -k -e 'int main() { return 0; }'
+iree-cmake-try --compile-only --output build/snippet -e 'int main() { return 0; }'
+```
+
+Quoted `iree/...` and `hrx_...` includes infer common deps from configured CMake
+aliases. Add `--dep TARGET` for anything inference misses. Use `--no-infer` to
+disable inference and `-k/--keep` to inspect the generated scratch build."""
+
+    if command == "fuzz":
+        return """## iree-cmake-fuzz
+
+Use `iree-cmake-fuzz` for CMake libFuzzer targets. Configure the build tree
+with fuzzing enabled, then name the CMake target or configured alias. The
+wrapper builds that target, resolves the executable with the CMake File API,
+then execs it directly.
+
+```bash
+iree-cmake-configure -DIREE_ENABLE_FUZZING=ON -DLIBHRX_BUILD=OFF -DIREE_HAL_DRIVER_AMDGPU=OFF
+iree-cmake-fuzz iree::tokenizer::special_tokens_fuzz
+iree-cmake-fuzz iree::tokenizer::special_tokens_fuzz -- -max_total_time=60
+```
+
+Corpus and artifact directories live under
+`IREE_FUZZ_CACHE` when set, otherwise the platform user cache directory under
+`iree-fuzz-cache/cmake/`. Fuzzer arguments go after `--`."""
 
     return cmake_agent_markdown()
