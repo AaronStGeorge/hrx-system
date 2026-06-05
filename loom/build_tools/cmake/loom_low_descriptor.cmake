@@ -12,7 +12,7 @@
 # owns the CMake mechanics for running generators into the binary tree and
 # wrapping the outputs in loom_cc_library targets.
 
-include(ExternalProject)
+include(FetchContent)
 
 function(loom_low_descriptor_data_archive)
   cmake_parse_arguments(
@@ -36,24 +36,21 @@ function(loom_low_descriptor_data_archive)
     message(FATAL_ERROR "loom_low_descriptor_data_archive requires SHA256")
   endif()
 
-  ExternalProject_Add("${_RULE_NAME}"
+  FetchContent_Declare("${_RULE_NAME}"
     URL
       ${_RULE_URLS}
     URL_HASH
       "SHA256=${_RULE_SHA256}"
     SOURCE_DIR
       "${_RULE_SOURCE_DIR}"
-    EXCLUDE_FROM_ALL
-      TRUE
-    CONFIGURE_COMMAND
-      ""
-    BUILD_COMMAND
-      ""
-    INSTALL_COMMAND
-      ""
-    UPDATE_COMMAND
-      ""
   )
+  FetchContent_GetProperties("${_RULE_NAME}")
+  if(NOT ${_RULE_NAME}_POPULATED)
+    FetchContent_Populate("${_RULE_NAME}")
+  endif()
+  if(NOT TARGET "${_RULE_NAME}")
+    add_custom_target("${_RULE_NAME}")
+  endif()
 endfunction()
 
 function(loom_target_table_cc_library)

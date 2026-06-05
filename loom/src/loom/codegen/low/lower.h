@@ -621,6 +621,10 @@ loom_func_like_t loom_low_lower_context_source_function(
 loom_op_t* loom_low_lower_context_low_function(
     const loom_low_lower_context_t* context);
 
+// Returns the number of error diagnostics emitted by the current lowering run.
+uint32_t loom_low_lower_context_error_count(
+    const loom_low_lower_context_t* context);
+
 // Returns the selected target bundle.
 const loom_target_bundle_t* loom_low_lower_context_bundle(
     const loom_low_lower_context_t* context);

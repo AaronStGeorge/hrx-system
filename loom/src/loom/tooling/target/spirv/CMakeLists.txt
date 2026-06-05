@@ -63,6 +63,7 @@ loom_cc_library(
   DEPS
     iree::base
     iree::hal
+    iree::hal::drivers::vulkan
     iree::hal::drivers::vulkan::api
     loom::target::arch::spirv::cooperative_properties
     loom::target::arch::spirv::features

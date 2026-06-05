@@ -50,7 +50,7 @@ endif()
 if(LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN AND LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV)
 set(_vulkan_test_platform_deps "")
 if(LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
-  list(APPEND _vulkan_test_platform_deps Vulkan::Headers)
+  list(APPEND _vulkan_test_platform_deps iree::third_party::vulkan_headers)
 endif()
 loom_cc_test(
   NAME

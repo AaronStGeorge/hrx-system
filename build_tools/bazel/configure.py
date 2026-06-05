@@ -21,7 +21,7 @@ LOOM_TARGETS = ("amdgpu", "iree_vm", "spirv", "wasm", "x86")
 LOOM_EMITTERS = ("amdgpu", "iree_vm", "llvmir", "spirv", "wasm")
 HOST_DRIVERS = ("local-sync", "local-task", "null")
 DEFAULT_LOOM_EXECUTE = LOOM_EXECUTE_SUBSTRATES
-DEFAULT_LOOM_TARGETS = ("iree_vm", "spirv", "x86")
+DEFAULT_LOOM_TARGETS = ("amdgpu", "iree_vm", "x86")
 
 SDK_DRIVER_PACKAGES = {
     "amdgpu": (
@@ -278,7 +278,7 @@ def parse_arguments(argv: list[str] | None = None) -> argparse.Namespace:
   python build_tools/bazel/configure.py -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm
   python build_tools/bazel/configure.py -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_DEPENDENCY_MODE=pinned
   python build_tools/bazel/configure.py --//runtime/config/hal:drivers=amdgpu,local-sync,local-task,null --repo_env=IREE_ROCM_PATH=/opt/rocm
-  python build_tools/bazel/configure.py -DLOOM_TARGET_AMDGPU=ON
+  python build_tools/bazel/configure.py -DLOOM_TARGET_SPIRV=ON
   python build_tools/bazel/configure.py -DLOOM_TARGET_AMDGPU=ON -DLOOM_EXECUTE_IREE_HAL=ON -DIREE_HAL_DRIVER_AMDGPU=ON -DIREE_ROCM_PATH=/opt/rocm
   python build_tools/bazel/configure.py -DLOOM_TARGET_AMDGPU=ON -DLOOM_EMIT_LLVMIR=ON
 

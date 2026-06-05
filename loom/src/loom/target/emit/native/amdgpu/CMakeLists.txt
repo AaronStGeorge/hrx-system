@@ -591,7 +591,9 @@ loom_cc_test(
     loom::codegen::low::frame
     loom::codegen::low::function
     loom::codegen::low::target_binding
+    loom::codegen::low::text_asm
     loom::codegen::low::verify
+    loom::error::diagnostic
     loom::format::text::parser
     loom::ir
     loom::ops::low

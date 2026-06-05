@@ -77,7 +77,8 @@ void ExpectFragmentRoleLayout(
       loom_amdgpu_matrix_fragment_role_layout(layout, role);
   ASSERT_NE(role_layout, nullptr);
   EXPECT_EQ(role_layout->role, role);
-  EXPECT_EQ(role_layout->map_kind, map_kind);
+  EXPECT_EQ(role_layout->map_kind,
+            static_cast<loom_matrix_fragment_map_kind_t>(map_kind));
   EXPECT_EQ(role_layout->register_count, register_count);
   EXPECT_EQ(role_layout->elements_per_register, elements_per_register);
   EXPECT_EQ(role_layout->element_bit_count, element_bit_count);

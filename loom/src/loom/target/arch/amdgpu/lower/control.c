@@ -518,8 +518,13 @@ static iree_status_t loom_amdgpu_append_block_args_like_dest(
 static iree_status_t loom_amdgpu_prepare_then_masked_region(
     loom_low_lower_context_t* context, const loom_op_t* source_op) {
   loom_amdgpu_masked_region_t region = {0};
+  const uint32_t previous_error_count =
+      loom_low_lower_context_error_count(context);
   IREE_RETURN_IF_ERROR(
       loom_amdgpu_analyze_then_masked_region(context, source_op, &region));
+  if (loom_low_lower_context_error_count(context) != previous_error_count) {
+    return iree_ok_status();
+  }
 
   loom_amdgpu_branch_plan_t* plan = NULL;
   IREE_RETURN_IF_ERROR(
@@ -748,8 +753,13 @@ static iree_status_t loom_amdgpu_prepare_if_else_regions(
                                  plan));
   }
 
+  const uint32_t previous_error_count =
+      loom_low_lower_context_error_count(context);
   IREE_RETURN_IF_ERROR(loom_amdgpu_verify_if_else_merge_args(
       context, source_op, merge_low_dest, plan->if_else_merge_arg_count));
+  if (loom_low_lower_context_error_count(context) != previous_error_count) {
+    return iree_ok_status();
+  }
   IREE_RETURN_IF_ERROR(
       loom_low_lower_append_low_block(context, &plan->else_dispatch_block));
   IREE_RETURN_IF_ERROR(loom_amdgpu_append_block_args_like_dest(
@@ -880,8 +890,13 @@ static iree_status_t loom_amdgpu_prepare_if_else_diamond(
                                  plan));
   }
 
+  const uint32_t previous_error_count =
+      loom_low_lower_context_error_count(context);
   IREE_RETURN_IF_ERROR(loom_amdgpu_verify_if_else_merge_args(
       context, source_op, merge_low_dest, plan->if_else_merge_arg_count));
+  if (loom_low_lower_context_error_count(context) != previous_error_count) {
+    return iree_ok_status();
+  }
 
   IREE_RETURN_IF_ERROR(
       loom_low_lower_append_low_block(context, &plan->else_dispatch_block));

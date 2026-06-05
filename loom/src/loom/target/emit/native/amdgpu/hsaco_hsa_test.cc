@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "third_party/hsa-runtime-headers/include/hsa/hsa.h"
+#include "hsa/hsa.h"
 
 #include <cinttypes>
 #include <cstdint>
@@ -24,7 +24,9 @@
 #include "loom/codegen/low/frame.h"
 #include "loom/codegen/low/function.h"
 #include "loom/codegen/low/target_binding.h"
+#include "loom/codegen/low/text_asm.h"
 #include "loom/codegen/low/verify.h"
+#include "loom/error/diagnostic.h"
 #include "loom/format/text/parser.h"
 #include "loom/ir/context.h"
 #include "loom/ir/module.h"
@@ -783,11 +785,21 @@ class LowKernelEmitter {
 
   iree_status_t ParseSource(const std::string& source) {
     ResetModule();
-    loom_text_parse_options_t parse_options = {};
-    parse_options.max_errors = 20;
-    return loom_text_parse(iree_make_string_view(source.data(), source.size()),
-                           IREE_SV("amdgpu_hsaco_hsa_smoke.loom"), &context_,
-                           &block_pool_, &parse_options, &module_);
+    loom_text_parse_options_t parse_options = {
+        .diagnostic_sink = {loom_diagnostic_stderr_sink, nullptr},
+        .max_errors = 20,
+    };
+    loom_low_descriptor_text_asm_environment_initialize(
+        &target_registry_.registry, &parse_options.low_asm_environment);
+    IREE_RETURN_IF_ERROR(
+        loom_text_parse(iree_make_string_view(source.data(), source.size()),
+                        IREE_SV("amdgpu_hsaco_hsa_smoke.loom"), &context_,
+                        &block_pool_, &parse_options, &module_));
+    if (module_ == nullptr) {
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "AMDGPU HSA low kernel source failed to parse");
+    }
+    return iree_ok_status();
   }
 
   // Block pool backing parser and context allocations.

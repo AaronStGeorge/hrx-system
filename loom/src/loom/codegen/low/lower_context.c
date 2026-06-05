@@ -199,6 +199,11 @@ loom_op_t* loom_low_lower_context_low_function(
   return context->low_func_op;
 }
 
+uint32_t loom_low_lower_context_error_count(
+    const loom_low_lower_context_t* context) {
+  return context->result->error_count;
+}
+
 const loom_target_bundle_t* loom_low_lower_context_bundle(
     const loom_low_lower_context_t* context) {
   return context->options->bundle;

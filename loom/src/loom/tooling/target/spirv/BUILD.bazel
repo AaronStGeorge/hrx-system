@@ -69,6 +69,7 @@ loom_cc_library(
         "//loom/src/loom/target/arch/spirv:target_records",
         "//runtime/src/iree/base",
         "//runtime/src/iree/hal",
+        "//runtime/src/iree/hal/drivers/vulkan",
         "//runtime/src/iree/hal/drivers/vulkan:api",
     ],
 )

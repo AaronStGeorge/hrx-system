@@ -23,7 +23,7 @@ LOOMC_TARGET_SPIRV_VULKAN_COMPATIBLE_WITH = loom_config_compatible_with([
 
 LOOMC_TARGET_SPIRV_VULKAN_DEPS = iree_select({
     "//loom/config/execute:iree_hal_vulkan": [
-        "@vulkan_headers",
+        "//third_party:vulkan_headers",
     ],
     "//conditions:default": [],
 })

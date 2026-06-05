@@ -180,7 +180,7 @@ endif()
 if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
 set(_loomc_target_spirv_vulkan_platform_deps "")
 if(LOOM_TARGET_ARCH_SPIRV AND LOOM_EMIT_SPIRV AND LOOM_EXECUTE_IREE_HAL AND IREE_HAL_DRIVER_VULKAN)
-  list(APPEND _loomc_target_spirv_vulkan_platform_deps Vulkan::Headers)
+  list(APPEND _loomc_target_spirv_vulkan_platform_deps iree::third_party::vulkan_headers)
 endif()
 loom_cc_library(
   NAME
