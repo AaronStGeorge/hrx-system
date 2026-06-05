@@ -7,13 +7,14 @@
 #ifndef IREE_EXPERIMENTAL_STREAMING_INTERNAL_H_
 #define IREE_EXPERIMENTAL_STREAMING_INTERNAL_H_
 
+#include "common/fat_binary.h"
+#include "common/hrx_bridge.h"
 #include "iree/async/frontier_tracker.h"
 #include "iree/async/util/proactor_pool.h"
 #include "iree/base/api.h"
 #include "iree/base/internal/arena.h"
 #include "iree/base/threading/mutex.h"
 #include "iree/hal/api.h"
-#include "streaming/hrx_bridge.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,8 +37,6 @@ typedef uint64_t iree_hal_streaming_deviceptr_t;
 typedef iree_host_size_t iree_hal_streaming_device_ordinal_t;
 
 typedef struct iree_hal_streaming_buffer_t iree_hal_streaming_buffer_t;
-typedef struct iree_hal_streaming_buffer_table_t
-    iree_hal_streaming_buffer_table_t;
 typedef struct iree_hal_streaming_context_t iree_hal_streaming_context_t;
 typedef struct iree_hal_streaming_context_module_entry_t
     iree_hal_streaming_context_module_entry_t;
@@ -52,14 +51,13 @@ typedef struct iree_hal_streaming_global_symbol_registry_t
 typedef struct iree_hal_streaming_graph_t iree_hal_streaming_graph_t;
 typedef struct iree_hal_streaming_graph_exec_t iree_hal_streaming_graph_exec_t;
 typedef struct iree_hal_streaming_graph_node_t iree_hal_streaming_graph_node_t;
-typedef struct iree_hal_streaming_mem_pool_t iree_hal_streaming_mem_pool_t;
+// mem_pool is now hrx_mem_pool_t from libhrx (no binding-internal type).
 typedef struct iree_hal_streaming_module_t iree_hal_streaming_module_t;
 typedef struct iree_hal_streaming_module_registration_t
     iree_hal_streaming_module_registration_t;
 typedef struct iree_hal_streaming_stream_t iree_hal_streaming_stream_t;
 typedef struct iree_hal_streaming_symbol_t iree_hal_streaming_symbol_t;
-typedef struct iree_hal_streaming_async_commit_context_t
-    iree_hal_streaming_async_commit_context_t;
+// async commit context removed (dead code, pool is now hrx_mem_pool_t).
 
 //===----------------------------------------------------------------------===//
 // Symbol tagging
@@ -217,8 +215,13 @@ struct iree_hal_streaming_context_t {
   iree_host_size_t peer_count;
   iree_host_size_t peer_capacity;
 
-  // Buffer mapping table.
-  iree_hal_streaming_buffer_table_t* buffer_table;
+  // Buffer mapping table (pyre unified implementation).
+  hrx_buffer_table_t buffer_table;
+
+  // Cached host-visible staging buffer for blocking pageable H2D transfers.
+  // Guarded by |mutex| and released during context destruction.
+  iree_hal_streaming_buffer_t* pageable_h2d_staging_buffer;
+  iree_device_size_t pageable_h2d_staging_size;
 
   // Context resource limits.
   iree_hal_streaming_limits_t limits;
@@ -336,9 +339,9 @@ typedef struct iree_hal_streaming_device_t {
   // Protected by primary_context_mutex.
   int32_t primary_context_ref_count;
 
-  // Memory pools.
-  iree_hal_streaming_mem_pool_t* default_mem_pool;
-  iree_hal_streaming_mem_pool_t* current_mem_pool;
+  // Memory pools (owned by pyre, not the binding).
+  hrx_mem_pool_t default_mem_pool;
+  hrx_mem_pool_t current_mem_pool;
 } iree_hal_streaming_device_t;
 
 // Global device registry for multi-device management.
@@ -414,6 +417,7 @@ typedef struct iree_hal_streaming_stream_t {
 
   // Command buffer for batching operations.
   iree_hal_command_buffer_t* command_buffer;
+  uint32_t pending_launch_count;
 
   // Semaphore chain for synchronization.
   iree_hal_semaphore_t* timeline_semaphore;
@@ -522,6 +526,7 @@ typedef struct iree_hal_streaming_symbol_t {
   iree_hal_streaming_module_t* module;
   iree_string_view_t name;
   iree_hal_streaming_symbol_type_t type;
+  iree_hal_executable_t* executable;
   iree_hal_executable_export_ordinal_t export_ordinal;
 
   // Function attributes (only valid for FUNCTION type).
@@ -549,6 +554,8 @@ typedef struct iree_hal_streaming_module_t {
   // HAL executable resources.
   iree_hal_executable_cache_t* cache;
   iree_hal_executable_t* executable;
+  iree_hal_executable_t** executables;
+  iree_host_size_t executable_count;
 
   // Symbol metadata.
   iree_hal_streaming_symbol_t* symbols;
@@ -556,6 +563,12 @@ typedef struct iree_hal_streaming_module_t {
 
   // File mapping if loaded from file.
   iree_io_file_mapping_t* file_mapping;
+
+  // Fat-binary / Clang offload bundle unpacking state. Holds the
+  // decompressed ELF backing buffer (CCOB) and/or the matched-entry
+  // table — both referenced by the HAL executable's code-object reader,
+  // so they must live at least as long as the executable itself.
+  iree_hal_streaming_fat_binary_extract_t fat_extract;
 
   // Context that loaded this module.
   iree_hal_streaming_context_t* context;
@@ -629,8 +642,13 @@ typedef struct iree_hal_streaming_buffer_t {
   // Total size in bytes of the buffer.
   iree_device_size_t size;
 
-  // HAL buffer.
+  // HAL buffer (alias for hrx_buf->hal_buffer when hrx_buf is set).
   iree_hal_buffer_t* buffer;
+
+  // HRX buffer wrapping the HAL buffer. Enables interop between the HIP
+  // binding path and native pyre code. When set, |buffer| above is an
+  // alias pointing to hrx_buf->hal_buffer.
+  hrx_buffer_t hrx_buf;
 
   // Owning context.
   iree_hal_streaming_context_t* context;
@@ -832,9 +850,17 @@ iree_status_t iree_hal_streaming_device_name(
     iree_hal_streaming_device_ordinal_t ordinal, char* name,
     iree_host_size_t name_size);
 
+// Queries a string-valued device property owned by the streaming layer.
+// Supported (category, key) pairs:
+//   ("hal.device", "name")         -> device display name.
+//   ("hal.device", "path")         -> HAL device path (architecture).
+//   ("hal.device", "architecture") -> GCN/gfx architecture name.
+// Returns IREE_STATUS_NOT_FOUND for unknown category/key pairs, or
+// IREE_STATUS_OUT_OF_RANGE if |value_size| is too small to hold the property
+// (including the null terminator).
 iree_status_t iree_hal_streaming_device_get_string_property(
-    iree_hal_streaming_device_ordinal_t ordinal, char* category, char* key,
-    char* name, iree_host_size_t name_size);
+    iree_hal_streaming_device_ordinal_t ordinal, const char* category,
+    const char* key, char* value, iree_host_size_t value_size);
 
 // Synchronization: none (queries current memory info).
 iree_status_t iree_hal_streaming_device_memory_info(
@@ -1245,6 +1271,10 @@ iree_status_t iree_hal_streaming_memory_allocate_host(
 iree_status_t iree_hal_streaming_memory_free_host(
     iree_hal_streaming_context_t* context, void* ptr);
 
+// Synchronization: none; called during context destruction after streams idle.
+void iree_hal_streaming_memory_release_pageable_staging(
+    iree_hal_streaming_context_t* context);
+
 // Synchronization: none (registers existing memory).
 iree_status_t iree_hal_streaming_memory_register_host(
     iree_hal_streaming_context_t* context, void* ptr, iree_host_size_t size,
@@ -1307,17 +1337,22 @@ iree_status_t iree_hal_streaming_memcpy_device_to_device(
 
 //===----------------------------------------------------------------------===//
 // Memory pool management
+//
+// Pools are now backed by hrx_mem_pool_t from libhrx. The binding stores
+// hrx_mem_pool_t handles on the device and forwards HIP pool operations
+// through the pyre API. The binding-internal types below are only kept for
+// HIP-specific enum conversions.
 //===----------------------------------------------------------------------===//
 
-// Memory allocation handle types for IPC.
-typedef enum iree_hal_streaming_mem_handle_type_e {
-  IREE_HAL_STREAMING_MEM_HANDLE_TYPE_NONE = 0,
-  IREE_HAL_STREAMING_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR,
-  IREE_HAL_STREAMING_MEM_HANDLE_TYPE_WIN32,
-  IREE_HAL_STREAMING_MEM_HANDLE_TYPE_WIN32_KMT,
-} iree_hal_streaming_mem_handle_type_t;
+// Memory access flags for memory pools (for HIP API conversion).
+typedef enum iree_hal_streaming_mem_access_flag_bits_e {
+  IREE_HAL_STREAMING_MEM_ACCESS_FLAG_PROT_NONE = 0ull,
+  IREE_HAL_STREAMING_MEM_ACCESS_FLAG_PROT_READ = 1ull << 0,
+  IREE_HAL_STREAMING_MEM_ACCESS_FLAG_PROT_READWRITE =
+      (1ull << 1) | IREE_HAL_STREAMING_MEM_ACCESS_FLAG_PROT_READ,
+} iree_hal_streaming_mem_access_flags_t;
 
-// Memory pool location types.
+// Memory pool location types (for HIP API conversion).
 typedef enum iree_hal_streaming_mem_location_type_e {
   IREE_HAL_STREAMING_MEM_LOCATION_TYPE_INVALID = 0,
   IREE_HAL_STREAMING_MEM_LOCATION_TYPE_DEVICE,
@@ -1326,226 +1361,13 @@ typedef enum iree_hal_streaming_mem_location_type_e {
   IREE_HAL_STREAMING_MEM_LOCATION_TYPE_HOST_NUMA_CURRENT,
 } iree_hal_streaming_mem_location_type_t;
 
-// Memory access flags for memory pools.
-typedef enum iree_hal_streaming_mem_access_flag_bits_e {
-  IREE_HAL_STREAMING_MEM_ACCESS_FLAG_PROT_NONE = 0ull,
-  IREE_HAL_STREAMING_MEM_ACCESS_FLAG_PROT_READ = 1ull << 0,
-  IREE_HAL_STREAMING_MEM_ACCESS_FLAG_PROT_READWRITE =
-      (1ull << 1) | IREE_HAL_STREAMING_MEM_ACCESS_FLAG_PROT_READ,
-} iree_hal_streaming_mem_access_flags_t;
-
-// Memory pool attributes.
-typedef enum iree_hal_streaming_mem_pool_attr_e {
-  // Allow reuse with internal dependencies.
-  IREE_HAL_STREAMING_MEM_POOL_ATTR_REUSE_ALLOW_INTERNAL_DEPENDENCIES = 0,
-  // Allow reuse following event dependencies.
-  IREE_HAL_STREAMING_MEM_POOL_ATTR_REUSE_FOLLOW_EVENT_DEPENDENCIES,
-  // Allow opportunistic reuse.
-  IREE_HAL_STREAMING_MEM_POOL_ATTR_REUSE_ALLOW_OPPORTUNISTIC,
-  // Release threshold in bytes.
-  IREE_HAL_STREAMING_MEM_POOL_ATTR_RELEASE_THRESHOLD,
-  // Current reserved memory.
-  IREE_HAL_STREAMING_MEM_POOL_ATTR_RESERVED_MEM_CURRENT,
-  // High watermark of reserved memory.
-  IREE_HAL_STREAMING_MEM_POOL_ATTR_RESERVED_MEM_HIGH,
-  // Current used memory.
-  IREE_HAL_STREAMING_MEM_POOL_ATTR_USED_MEM_CURRENT,
-  // High watermark of used memory.
-  IREE_HAL_STREAMING_MEM_POOL_ATTR_USED_MEM_HIGH,
-} iree_hal_streaming_mem_pool_attr_t;
-
-// Memory pool properties.
-typedef struct iree_hal_streaming_mem_pool_props_t {
-  // Allocation type for IPC.
-  iree_hal_streaming_mem_handle_type_t alloc_handle_type;
-  // Memory location.
-  iree_hal_streaming_mem_location_type_t location_type;
-  // Location ID (device ordinal or NUMA node).
-  int location_id;
-} iree_hal_streaming_mem_pool_props_t;
-
-// Forward declaration for async allocation tracking.
-typedef struct iree_hal_streaming_async_allocation_t
-    iree_hal_streaming_async_allocation_t;
-
-// Physical memory reuse block (for future optimization).
-typedef struct iree_hal_streaming_physical_memory_block_t {
-  iree_hal_physical_memory_t* physical_memory;
-  iree_device_size_t size;
-  uint64_t available_after_value;
-  struct iree_hal_streaming_physical_memory_block_t* next;
-} iree_hal_streaming_physical_memory_block_t;
-
-// Memory pool structure.
-typedef struct iree_hal_streaming_mem_pool_t {
-  iree_atomic_ref_count_t ref_count;
-
-  // Owning context.
-  iree_hal_streaming_context_t* context;
-
-  // Pool properties.
-  iree_hal_streaming_mem_pool_props_t props;
-
-  // Pool attributes.
-  uint64_t release_threshold;
-  bool reuse_allow_internal_dependencies;
-  bool reuse_follow_event_dependencies;
-  bool reuse_allow_opportunistic;
-
-  // Statistics.
-  uint64_t reserved_mem_current;
-  uint64_t reserved_mem_high;
-  uint64_t used_mem_current;
-  uint64_t used_mem_high;
-
-  // Platform-specific handle, if IPC is enabled.
-  void* platform_handle;
-
-  // Synchronization.
-  iree_slim_mutex_t mutex;
-
-  // Host allocator.
-  iree_allocator_t host_allocator;
-
-  // NEW: Async allocation tracking.
-  iree_hal_streaming_async_allocation_t* pending_allocations;
-  iree_host_size_t pending_count;
-
-  // NEW: Virtual memory support.
-  bool supports_virtual_memory;
-  iree_device_size_t vm_page_size_min;
-  iree_device_size_t vm_page_size_recommended;
-
-  // NEW: Physical memory reuse (for future optimization).
-  iree_hal_streaming_physical_memory_block_t* free_physical_blocks;
-} iree_hal_streaming_mem_pool_t;
-
-// Async allocation state.
-typedef enum iree_hal_streaming_async_alloc_state_e {
-  IREE_HAL_STREAMING_ASYNC_ALLOC_RESERVED = 0,
-  IREE_HAL_STREAMING_ASYNC_ALLOC_COMMITTED = 1,
-  IREE_HAL_STREAMING_ASYNC_ALLOC_DECOMMITTING = 2,
-} iree_hal_streaming_async_alloc_state_t;
-
-// Tracks a single async allocation's lifecycle.
-struct iree_hal_streaming_async_allocation_t {
-  // Virtual address range (reserved immediately).
-  iree_hal_streaming_deviceptr_t virtual_ptr;
-  iree_device_size_t size;
-
-  // Virtual buffer handle (reserved address space).
-  iree_hal_buffer_t* virtual_buffer;
-
-  // Physical memory (allocated in commit callback).
-  iree_hal_physical_memory_t* physical_memory;
-
-  // State tracking.
-  iree_hal_streaming_async_alloc_state_t state;
-
-  // Lifetime tracking (for future optimization).
-  uint64_t alloc_timeline_value;
-  uint64_t first_use_value;
-  uint64_t last_use_value;
-  uint64_t free_timeline_value;
-
-  // Pool management.
-  iree_hal_streaming_mem_pool_t* pool;
-  struct iree_hal_streaming_async_allocation_t* next;
-
-  iree_allocator_t host_allocator;
-};
-
-// Context passed to host callbacks for commit/decommit operations.
-typedef struct iree_hal_streaming_async_commit_context_t {
-  iree_hal_streaming_context_t* context;
-  iree_hal_streaming_async_allocation_t* allocation;
-  bool is_commit;
-} iree_hal_streaming_async_commit_context_t;
-
-// Host callback: Commit physical memory to virtual range or decommit.
-// This function is called from stream flush to commit physical memory before
-// work submission, and after work completion to decommit.
-void iree_hal_streaming_async_commit_callback(void* user_data);
-
-// Creates a memory pool with the specified properties.
-// Synchronization: none (creates new pool).
-iree_status_t iree_hal_streaming_mem_pool_create(
-    iree_hal_streaming_context_t* context,
-    const iree_hal_streaming_mem_pool_props_t* props,
-    iree_allocator_t host_allocator, iree_hal_streaming_mem_pool_t** out_pool);
-
-// Retains a reference to the memory pool.
-// Synchronization: none (reference counting).
-void iree_hal_streaming_mem_pool_retain(iree_hal_streaming_mem_pool_t* pool);
-
-// Releases a reference to the memory pool.
-// Synchronization: none (reference counting).
-void iree_hal_streaming_mem_pool_release(iree_hal_streaming_mem_pool_t* pool);
-
-// Sets an attribute of the memory pool.
-// Synchronization: none (sets attribute value).
-iree_status_t iree_hal_streaming_mem_pool_set_attribute(
-    iree_hal_streaming_mem_pool_t* pool,
-    iree_hal_streaming_mem_pool_attr_t attr, uint64_t value);
-
-// Gets an attribute of the memory pool.
-// Synchronization: none (queries attribute value).
-iree_status_t iree_hal_streaming_mem_pool_get_attribute(
-    iree_hal_streaming_mem_pool_t* pool,
-    iree_hal_streaming_mem_pool_attr_t attr, uint64_t* out_value);
-
-// Trims the memory pool to the specified size.
-// Synchronization: none (trims free memory).
-iree_status_t iree_hal_streaming_mem_pool_trim_to(
-    iree_hal_streaming_mem_pool_t* pool, iree_device_size_t min_bytes_to_keep);
-
-// Gets the default memory pool for a device.
-iree_hal_streaming_mem_pool_t* iree_hal_streaming_device_default_mem_pool(
+// Device pool accessors.
+hrx_mem_pool_t iree_hal_streaming_device_default_mem_pool(
     iree_hal_streaming_device_t* device);
-
-// Gets the current memory pool for a device.
-iree_hal_streaming_mem_pool_t* iree_hal_streaming_device_mem_pool(
+hrx_mem_pool_t iree_hal_streaming_device_mem_pool(
     iree_hal_streaming_device_t* device);
-
-// Sets the current memory pool for a device.
-iree_status_t iree_hal_streaming_device_set_mem_pool(
-    iree_hal_streaming_device_t* device, iree_hal_streaming_mem_pool_t* pool);
-
-// Allocates memory asynchronously from the current pool.
-// Synchronization: stream (async allocation on stream).
-iree_status_t iree_hal_streaming_memory_allocate_async(
-    iree_hal_streaming_context_t* context, iree_device_size_t size,
-    iree_hal_streaming_stream_t* stream,
-    iree_hal_streaming_deviceptr_t* out_ptr);
-
-// Allocates memory asynchronously from a specific pool.
-// Synchronization: stream (async allocation on stream).
-iree_status_t iree_hal_streaming_memory_allocate_from_pool_async(
-    iree_hal_streaming_context_t* context, iree_hal_streaming_mem_pool_t* pool,
-    iree_device_size_t size, iree_hal_streaming_stream_t* stream,
-    iree_hal_streaming_deviceptr_t* out_ptr);
-
-// Frees memory asynchronously.
-// Synchronization: stream (async free on stream, no implicit sync).
-iree_status_t iree_hal_streaming_memory_free_async(
-    iree_hal_streaming_context_t* context, iree_hal_streaming_deviceptr_t ptr,
-    iree_hal_streaming_stream_t* stream);
-
-// IPC functions for memory pools.
-iree_status_t iree_hal_streaming_mem_pool_export_to_shareable_handle(
-    iree_hal_streaming_mem_pool_t* pool, void* shared_handle);
-
-iree_status_t iree_hal_streaming_mem_pool_import_from_shareable_handle(
-    iree_hal_streaming_context_t* context, void* shared_handle,
-    iree_hal_streaming_mem_pool_t** out_pool);
-
-iree_status_t iree_hal_streaming_mem_pool_export_pointer(
-    iree_hal_streaming_deviceptr_t ptr, iree_hal_streaming_mem_pool_t* pool,
-    void* shared_handle);
-
-iree_status_t iree_hal_streaming_mem_pool_import_pointer(
-    iree_hal_streaming_mem_pool_t* pool, void* shared_handle,
-    iree_hal_streaming_deviceptr_t* out_ptr);
+void iree_hal_streaming_device_set_mem_pool(iree_hal_streaming_device_t* device,
+                                            hrx_mem_pool_t pool);
 
 //===----------------------------------------------------------------------===//
 // Graph management

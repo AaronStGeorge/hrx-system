@@ -7,8 +7,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "common/fat_binary.h"
+#include "common/internal.h"
 #include "iree/io/file_handle.h"
-#include "streaming/internal.h"
 
 //===----------------------------------------------------------------------===//
 // Module management
@@ -20,7 +21,16 @@ static iree_status_t iree_hal_streaming_module_extract_metadata(
   IREE_TRACE_ZONE_BEGIN(z0);
 
   // Query the number of exported functions.
-  module->symbol_count = iree_hal_executable_export_count(module->executable);
+  const iree_host_size_t executable_count =
+      module->executable_count ? module->executable_count : 1;
+  module->symbol_count = 0;
+  for (iree_host_size_t executable_ordinal = 0;
+       executable_ordinal < executable_count; ++executable_ordinal) {
+    iree_hal_executable_t* executable =
+        module->executables ? module->executables[executable_ordinal]
+                            : module->executable;
+    module->symbol_count += iree_hal_executable_export_count(executable);
+  }
   if (module->symbol_count == 0) {
     IREE_TRACE_ZONE_END(z0);
     return iree_ok_status();
@@ -37,29 +47,56 @@ static iree_status_t iree_hal_streaming_module_extract_metadata(
   } op_counts_t;
   const iree_host_size_t export_infos_size =
       module->symbol_count * sizeof(iree_hal_executable_export_info_t);
+  const iree_host_size_t export_executables_size =
+      module->symbol_count * sizeof(iree_hal_executable_t*);
+  const iree_host_size_t export_ordinals_size =
+      module->symbol_count * sizeof(iree_hal_executable_export_ordinal_t);
   const iree_host_size_t op_counts_size =
       module->symbol_count * sizeof(op_counts_t);
   uint8_t* temp_buffer = NULL;
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
       z0, iree_allocator_malloc(module->host_allocator,
-                                export_infos_size + op_counts_size,
+                                export_infos_size + export_executables_size +
+                                    export_ordinals_size + op_counts_size,
                                 (void**)&temp_buffer));
+  memset(temp_buffer, 0,
+         export_infos_size + export_executables_size + export_ordinals_size +
+             op_counts_size);
   iree_hal_executable_export_info_t* export_infos =
       (iree_hal_executable_export_info_t*)temp_buffer;
+  iree_hal_executable_t** export_executables =
+      (iree_hal_executable_t**)(temp_buffer + export_infos_size);
+  iree_hal_executable_export_ordinal_t* export_ordinals =
+      (iree_hal_executable_export_ordinal_t*)(temp_buffer + export_infos_size +
+                                              export_executables_size);
   op_counts_t* symbol_op_counts =
-      (op_counts_t*)(temp_buffer + export_infos_size);
+      (op_counts_t*)(temp_buffer + export_infos_size + export_executables_size +
+                     export_ordinals_size);
 
   // Count all parameters in all exports so we can allocate one buffer to
   // fetch them all. This is somewhat wasteful as we'll be allocating quite a
   // bit but is easier to see in traces.
   iree_status_t status = iree_ok_status();
   iree_host_size_t total_parameter_count = 0;
-  for (iree_host_size_t i = 0; i < module->symbol_count; ++i) {
-    status = iree_hal_executable_export_info(
-        module->executable, (iree_hal_executable_export_ordinal_t)i,
-        &export_infos[i]);
-    if (!iree_status_is_ok(status)) break;
-    total_parameter_count += export_infos[i].parameter_count;
+  iree_host_size_t symbol_index = 0;
+  for (iree_host_size_t executable_ordinal = 0;
+       iree_status_is_ok(status) && executable_ordinal < executable_count;
+       ++executable_ordinal) {
+    iree_hal_executable_t* executable =
+        module->executables ? module->executables[executable_ordinal]
+                            : module->executable;
+    const iree_host_size_t export_count =
+        iree_hal_executable_export_count(executable);
+    for (iree_host_size_t i = 0; i < export_count; ++i) {
+      export_executables[symbol_index] = executable;
+      export_ordinals[symbol_index] = (iree_hal_executable_export_ordinal_t)i;
+      status = iree_hal_executable_export_info(executable,
+                                               export_ordinals[symbol_index],
+                                               &export_infos[symbol_index]);
+      if (!iree_status_is_ok(status)) break;
+      total_parameter_count += export_infos[symbol_index].parameter_count;
+      ++symbol_index;
+    }
   }
 
   // Allocate the scratch space for querying parameter info.
@@ -81,8 +118,8 @@ static iree_status_t iree_hal_streaming_module_extract_metadata(
     if (!parameter_count) continue;
     // Query parameters to analyze coalescing opportunities.
     status = iree_hal_executable_export_parameters(
-        module->executable, (iree_hal_executable_export_ordinal_t)i,
-        parameter_count, &parameters[parameter_base]);
+        export_executables[i], export_ordinals[i], parameter_count,
+        &parameters[parameter_base]);
     if (!iree_status_is_ok(status)) break;
     // TOOD re-enable coalescing, which doesn't work for
     //      args arrays
@@ -144,7 +181,8 @@ static iree_status_t iree_hal_streaming_module_extract_metadata(
     symbol->module = module;
     symbol->name = export_infos[i].name;
     symbol->type = IREE_HAL_STREAMING_SYMBOL_TYPE_FUNCTION;
-    symbol->export_ordinal = (iree_hal_executable_export_ordinal_t)i;
+    symbol->executable = export_executables[i];
+    symbol->export_ordinal = export_ordinals[i];
 
     // Function attributes - TODO: Query from export metadata when available.
     // TODO(benvanik): populate from occupancy_info when available.
@@ -184,21 +222,24 @@ static iree_status_t iree_hal_streaming_module_extract_metadata(
       if (parameter->type ==
           IREE_HAL_EXECUTABLE_EXPORT_PARAMETER_TYPE_BINDING) {
         // Update offsets. Bindings are passed as pointers.
+        // |parameter->offset| is the kernarg byte offset for all parameter
+        // types when the backend populates it (e.g. AMDGPU HSACO). The
+        // binding-list ordinal is recovered by iteration: |resolve_count|
+        // is the running count of BINDING parameters seen so far, which is
+        // exactly the index of this parameter in the bindings list.
         iree_hal_streaming_parameter_resolve_op_t* op =
             &resolve_ops_start[resolve_count].resolve;
         op->src_offset = src_offset;
-        op->dst_ordinal = resolve_count;  // binding ordinal
+        op->dst_ordinal = resolve_count;
         op->src_ordinal = j;
-        op->dst_offset =
-            parameter->offset;  // kernel ABI offset for native kernels
+        op->dst_offset = parameter->offset;
         src_offset += parameter->size;
         buffer_size = src_offset;
         ++resolve_count;
-        // active_copy = NULL;  // break any active copy operation
 
         // For native kernels with CUSTOM_DIRECT_ARGUMENTS, bindings are also
         // part of the constants buffer. Track their extent as well.
-        size_t param_extent = parameter->offset + parameter->size;
+        size_t param_extent = (size_t)parameter->offset + parameter->size;
         if (param_extent > this_kernel_constants_size) {
           this_kernel_constants_size = param_extent;
         }
@@ -233,22 +274,17 @@ static iree_status_t iree_hal_streaming_module_extract_metadata(
       }
     }
     parameter_info->buffer_size = buffer_size;
-    parameter_info->constant_bytes = this_kernel_constants_size;
-
-    // Debug: log parameter layout for each kernel (disabled for performance)
-#if 0
-    fprintf(stderr, "[MODULE] kernel[%zu] '%.*s': param_count=%u copy=%u bind=%u constant_bytes=%zu buffer_size=%u\n",
-            i, (int)(symbol->name.size > 80 ? 80 : symbol->name.size),
-            symbol->name.data ? symbol->name.data : "(null)",
-            parameter_count, copy_count, resolve_count,
-            this_kernel_constants_size, buffer_size);
-    for (uint16_t j = 0; j < parameter_count; ++j) {
-      const iree_hal_executable_export_parameter_t* parameter =
-          &parameters[parameter_base + j];
-      fprintf(stderr, "[MODULE]   param[%u]: offset=%u size=%u type=%u\n",
-              j, parameter->offset, parameter->size, parameter->type);
+    // The HAL expects the constants buffer to span the entire kernarg
+    // segment reported by the export (includes padding between args and
+    // trailing alignment). The per-parameter extent we tracked above
+    // typically matches, but pad up to the export's declared size to
+    // satisfy the strict length check in the dispatch code path.
+    size_t export_constant_bytes =
+        (size_t)export_infos[i].constant_count * sizeof(uint32_t);
+    if (export_constant_bytes > this_kernel_constants_size) {
+      this_kernel_constants_size = export_constant_bytes;
     }
-#endif
+    parameter_info->constant_bytes = this_kernel_constants_size;
 
     // Advance to next symbol's ops.
     parameter_base += parameter_count;
@@ -275,44 +311,97 @@ iree_status_t iree_hal_streaming_module_create_from_memory(
   *out_module = NULL;
   IREE_TRACE_ZONE_BEGIN(z0);
 
-  // Attempt to infer the file format and size.
-  // A good API would take that in as otherwise we're trusting arbitrary user
-  // data.
-  iree_const_byte_span_t executable_data = image;
-  char executable_format[64];
-  iree_status_t infer_status = iree_hal_executable_cache_infer_format(
-      context->executable_cache, caching_mode, executable_data,
-      sizeof(executable_format), executable_format,
-      &executable_data.data_length);
-  IREE_RETURN_AND_END_ZONE_IF_ERROR(z0, infer_status);
-
-  // Allocate module structure.
+  // Allocate module structure up-front — we stash the fat-binary extract
+  // directly on it so the (possibly decompressed) ELF backing store lives
+  // as long as the HAL executable that may still alias it.
   iree_hal_streaming_module_t* module = NULL;
   IREE_RETURN_AND_END_ZONE_IF_ERROR(
       z0,
       iree_allocator_malloc(host_allocator, sizeof(*module), (void**)&module));
+  memset(module, 0, sizeof(*module));
   iree_atomic_ref_count_init(&module->ref_count);
-  module->cache = NULL;
-  module->executable = NULL;
-  module->symbols = NULL;
-  module->symbol_count = 0;
-  module->file_mapping = NULL;
   module->context = context;
   iree_hal_streaming_context_retain(context);
   module->host_allocator = host_allocator;
-
-  // Use the context's executable cache.
   module->cache = context->executable_cache;
   iree_hal_executable_cache_retain(module->cache);
 
+  // HIP / CUDA hand us anything the toolchain emits — raw AMDGPU ELFs,
+  // __CLANG_OFFLOAD_BUNDLE__ archives, CCOB (zstd-compressed bundles), and
+  // __hipFatBinaryWrapper-wrapped combinations of all of the above. Unwrap
+  // everything here and only forward a raw ELF (or native flatbuffer) to
+  // the HAL executable cache, which knows how to deal with just those two.
+  iree_const_byte_span_t executable_data = image;
+  const bool try_fat_unwrap = context->device_entry != NULL &&
+                              iree_hal_streaming_fat_binary_is_supported(image);
+  iree_status_t status = iree_ok_status();
+  if (try_fat_unwrap) {
+    iree_string_view_t target_arch =
+        iree_make_cstring_view(context->device_entry->gcn_arch_name);
+    status = iree_hal_streaming_fat_binary_extract_for_target(
+        image, target_arch, host_allocator, &module->fat_extract);
+    if (iree_status_is_ok(status)) {
+      // Multiple matches are possible (e.g. Tensile feature-specialized
+      // kernels). Load all of them below and merge their exports into one HIP
+      // module namespace.
+      executable_data = module->fat_extract.matches[0].data;
+    }
+  }
+
+  // Attempt to infer the file format and size.
+  // A good API would take that in as otherwise we're trusting arbitrary user
+  // data.
+  char executable_format[64];
+  if (iree_status_is_ok(status)) {
+    status = iree_hal_executable_cache_infer_format(
+        context->executable_cache, caching_mode, executable_data,
+        sizeof(executable_format), executable_format,
+        &executable_data.data_length);
+  }
+
   // Create HAL executable from binary.
-  iree_hal_executable_params_t params;
-  iree_hal_executable_params_initialize(&params);
-  params.caching_mode = caching_mode;
-  params.executable_format = iree_make_cstring_view(executable_format);
-  params.executable_data = executable_data;
-  iree_status_t status = iree_hal_executable_cache_prepare_executable(
-      module->cache, &params, &module->executable);
+  if (iree_status_is_ok(status)) {
+    iree_hal_executable_params_t params;
+    iree_hal_executable_params_initialize(&params);
+    params.caching_mode = caching_mode;
+    params.executable_format = iree_make_cstring_view(executable_format);
+    params.executable_data = executable_data;
+    status = iree_hal_executable_cache_prepare_executable(
+        module->cache, &params, &module->executable);
+  }
+
+  // If the fat binary had multiple matching HSACO entries, prepare all of
+  // them and expose their exports through the same hipModule_t. Native HIP lets
+  // libraries such as hipBLAS/Tensile probe one module handle for a kernel that
+  // may live in a later matching code object.
+  if (iree_status_is_ok(status) && module->fat_extract.match_count > 1) {
+    module->executable_count = module->fat_extract.match_count;
+    status = iree_allocator_malloc(
+        host_allocator, module->executable_count * sizeof(*module->executables),
+        (void**)&module->executables);
+    if (iree_status_is_ok(status)) {
+      memset(module->executables, 0,
+             module->executable_count * sizeof(*module->executables));
+      module->executables[0] = module->executable;
+    }
+    for (iree_host_size_t i = 1;
+         iree_status_is_ok(status) && i < module->executable_count; ++i) {
+      iree_const_byte_span_t match_data = module->fat_extract.matches[i].data;
+      char match_format[64];
+      status = iree_hal_executable_cache_infer_format(
+          context->executable_cache, caching_mode, match_data,
+          sizeof(match_format), match_format, &match_data.data_length);
+      if (!iree_status_is_ok(status)) break;
+
+      iree_hal_executable_params_t params;
+      iree_hal_executable_params_initialize(&params);
+      params.caching_mode = caching_mode;
+      params.executable_format = iree_make_cstring_view(match_format);
+      params.executable_data = match_data;
+      status = iree_hal_executable_cache_prepare_executable(
+          module->cache, &params, &module->executables[i]);
+    }
+  }
 
   // Extract kernel metadata.
   if (iree_status_is_ok(status)) {
@@ -389,8 +478,20 @@ static void iree_hal_streaming_module_destroy(
   // Release symbol metadata.
   iree_allocator_free(module->host_allocator, module->symbols);
 
-  // Release executable.
-  iree_hal_executable_release(module->executable);
+  // Release executable before the fat-binary extract: the HAL's code
+  // object reader may still alias pointers into the (possibly owned)
+  // backing store held by the extract until the executable drops.
+  if (module->executables) {
+    for (iree_host_size_t i = 0; i < module->executable_count; ++i) {
+      iree_hal_executable_release(module->executables[i]);
+    }
+    iree_allocator_free(host_allocator, module->executables);
+  } else {
+    iree_hal_executable_release(module->executable);
+  }
+
+  // Drop fat-binary / offload-bundle unpacking buffers.
+  iree_hal_streaming_fat_binary_extract_reset(&module->fat_extract);
 
   // Release executable cache.
   iree_hal_executable_cache_release(module->cache);
@@ -427,8 +528,12 @@ iree_status_t iree_hal_streaming_module_symbol(
 
   iree_string_view_t name_view =
       iree_string_view_trim(iree_make_cstring_view(name));
+  iree_string_view_t stripped_name =
+      iree_string_view_strip_suffix(name_view, IREE_SV(".kd"));
   for (uint32_t i = 0; i < module->symbol_count; ++i) {
-    if (iree_string_view_equal(module->symbols[i].name, name_view)) {
+    if (iree_string_view_equal(module->symbols[i].name, name_view) ||
+        (stripped_name.size != name_view.size &&
+         iree_string_view_equal(module->symbols[i].name, stripped_name))) {
       // Check if the symbol type matches expected type.
       if (module->symbols[i].type == expected_type) {
         // Return symbol info as pointer.
@@ -466,38 +571,17 @@ iree_status_t iree_hal_streaming_module_global(
   *out_device_ptr = 0;
   if (out_size) *out_size = 0;
 
-  // First try to find in pre-extracted symbols.
+  // Module globals live entirely in the streaming layer: every exported
+  // global is discovered at module load time (see
+  // iree_hal_streaming_module_extract_metadata) and cached in
+  // module->symbols[]. We intentionally do NOT fall back to a HAL-level
+  // executable lookup; the IREE HAL does not expose a by-name global
+  // lookup and all supported lookups are resolved here.
   iree_hal_streaming_symbol_t* symbol = NULL;
-  iree_status_t status = iree_hal_streaming_module_symbol(
-      module, name, IREE_HAL_STREAMING_SYMBOL_TYPE_GLOBAL, &symbol);
+  IREE_RETURN_IF_ERROR(iree_hal_streaming_module_symbol(
+      module, name, IREE_HAL_STREAMING_SYMBOL_TYPE_GLOBAL, &symbol));
 
-  if (iree_status_is_ok(status)) {
-    *out_device_ptr = symbol->device_address;
-    if (out_size) *out_size = symbol->size_bytes;
-    return status;
-  }
-
-  // If not found, fail instead of depending on public executable-global lookup.
-  if (iree_status_is_not_found(status) && module->executable) {
-    iree_status_ignore(status);
-#if 0
-    uint64_t device_address = 0;
-    iree_device_size_t size = 0;
-    iree_hal_queue_affinity_t queue_affinity =
-        module->context ? module->context->queue_affinity : 0;
-    status = iree_hal_executable_lookup_global(
-        module->executable, iree_make_cstring_view(name), queue_affinity,
-        &device_address, &size);
-    if (iree_status_is_ok(status)) {
-      *out_device_ptr = (iree_hal_streaming_deviceptr_t)device_address;
-      if (out_size)
-        *out_size = size;
-    }
-#endif
-    status = iree_make_status(
-        IREE_STATUS_UNIMPLEMENTED,
-        "streaming executable-global lookup is not implemented");
-  }
-
-  return status;
+  *out_device_ptr = symbol->device_address;
+  if (out_size) *out_size = symbol->size_bytes;
+  return iree_ok_status();
 }

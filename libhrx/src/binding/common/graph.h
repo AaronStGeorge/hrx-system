@@ -7,8 +7,8 @@
 #ifndef IREE_EXPERIMENTAL_STREAMING_GRAPH_H_
 #define IREE_EXPERIMENTAL_STREAMING_GRAPH_H_
 
+#include "common/internal.h"
 #include "iree/base/api.h"
-#include "streaming/internal.h"
 
 #ifdef __cplusplus
 extern "C" {

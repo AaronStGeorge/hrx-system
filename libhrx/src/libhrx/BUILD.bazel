@@ -16,11 +16,13 @@ package(
 HRX_SRCS = [
     "allocator.c",
     "buffer.c",
+    "buffer_table.c",
     "buffer_view.c",
     "device.c",
     "executable.c",
     "fence.c",
     "host_allocator.c",
+    "mem_pool.c",
     "module.c",
     "pool.c",
     "queue_ops.c",
@@ -33,6 +35,7 @@ HRX_SRCS = [
 ]
 
 HRX_HDRS = [
+    "buffer_table.h",
     "hrx_internal.h",
     "//libhrx/src:iree_hal_compat.h",
 ]

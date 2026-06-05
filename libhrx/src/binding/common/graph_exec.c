@@ -4,10 +4,10 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "common/graph.h"
+#include "common/internal.h"
 #include "iree/base/api.h"
 #include "iree/hal/utils/resource_set.h"
-#include "streaming/graph.h"
-#include "streaming/internal.h"
 
 //===----------------------------------------------------------------------===//
 // iree_hal_streaming_graph_exec_t (instantiation)
@@ -703,7 +703,7 @@ static iree_status_t iree_hal_streaming_graph_record_partition(
                 ? IREE_HAL_DISPATCH_FLAG_NONE
                 : IREE_HAL_DISPATCH_FLAG_CUSTOM_DIRECT_ARGUMENTS;
         status = iree_hal_command_buffer_dispatch(
-            command_buffer, symbol->module->executable,
+            command_buffer, symbol->executable,
             iree_hal_executable_function_from_index(symbol->export_ordinal),
             config, attrs->constants, attrs->bindings, flags);
         break;
@@ -790,6 +790,10 @@ iree_status_t iree_hal_streaming_graph_exec_instantiate_locked(
   // Calculate semaphore count needed.
   // We need semaphores at partition boundaries for synchronization.
   // Multi-stream partitions need join semaphores.
+  //
+  // This currently allocates semaphores per block boundary. A future
+  // optimization can reduce this to the maximum layer size by advancing
+  // timeline values between partitions.
   uint32_t semaphore_count = 0;
   if (schedule.partition_count > 1) {
     for (iree_host_size_t i = 0; i < schedule.partition_count - 1; i++) {
@@ -865,8 +869,9 @@ iree_status_t iree_hal_streaming_graph_exec_instantiate_locked(
     }
 
     if (partition->type == IREE_HAL_STREAMING_GRAPH_PARTITION_TYPE_RECORDABLE) {
-      // Recordable partitions are emitted uniformly; specialization belongs in
-      // the partitioning step rather than this emission loop.
+      // If only one node is in the partition and it's recordable, we
+      // may be able to route it to a dedicated partition type after this
+      // function is split into smaller helpers.
       const uint8_t stream_count = partition->stream_count;
       const uint32_t partition_wait_semaphore_start =
           semaphore_index - wait_semaphore_count;

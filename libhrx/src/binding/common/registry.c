@@ -8,10 +8,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "common/internal.h"
 #include "iree/base/internal/math.h"
 #include "iree/base/threading/call_once.h"
 #include "iree/base/threading/mutex.h"
-#include "streaming/internal.h"
 
 static void iree_hal_streaming_context_symbol_map_expunge_module(
     iree_hal_streaming_context_symbol_map_t* map,
@@ -34,9 +34,10 @@ static inline bool iree_hal_streaming_symbol_map_is_valid_key(void* key) {
          key != IREE_HAL_STREAMING_SYMBOL_MAP_TOMBSTONE_KEY;
 }
 
-// Hash function for host pointers.
+// Hash function for host pointers. This is a MurmurHash3-style finalizer that
+// mixes aligned function pointer bits well enough for the open-addressed table.
 static inline uint64_t iree_hal_streaming_symbol_pointer_hash(void* ptr) {
-  // Mixes pointer bits before linear-probing lookup.
+  // Simple hash for pointers - mix bits.
   uint64_t hash = (uint64_t)ptr;
   hash ^= hash >> 33;
   hash *= 0xff51afd7ed558ccdull;

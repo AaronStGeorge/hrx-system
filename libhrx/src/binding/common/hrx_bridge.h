@@ -19,14 +19,38 @@
 //===----------------------------------------------------------------------===//
 // Status bridging: hrx_status_t <-> iree_status_t
 //
-// Both are opaque pointers with NULL = OK. Cast is valid because:
-// 1. Both use NULL to signal success
-// 2. Both are pointer-sized
-// 3. Streaming lives inside the hrx DSO boundary
+// NULL is OK for both types so the success path is free. For non-OK
+// statuses we cannot simply reinterpret-cast: hrx_status_t is a pointer
+// to a heap-allocated hrx_status_s, while iree_status_t is a tagged
+// pointer whose low bits hold the status code and whose high bits hold
+// optional iree_status_storage_t. Feeding a hrx pointer to
+// iree_status_free/_ignore would mask off the low bits and dereference
+// garbage (which is exactly the crash we used to hit in the kernel-
+// launch pointer scan).
+//
+// hrx_status_code_t values are the same as iree_status_code_t so we can
+// safely pass the code along; we also copy the message so iree callers
+// can format the error cleanly. The incoming hrx status is consumed
+// (freed) since ownership is transferred.
 //===----------------------------------------------------------------------===//
 
 static inline iree_status_t hrx_to_iree_status(hrx_status_t s) {
-  return (iree_status_t)(uintptr_t)s;
+  if (hrx_status_is_ok(s)) return iree_ok_status();
+  iree_status_code_t code = (iree_status_code_t)hrx_status_code(s);
+  char* message_buf = NULL;
+  size_t message_len = 0;
+  hrx_status_t to_str_status =
+      hrx_status_to_string(s, &message_buf, &message_len);
+  iree_status_t iree_s;
+  if (hrx_status_is_ok(to_str_status) && message_buf) {
+    iree_s = iree_make_status(code, "%.*s", (int)message_len, message_buf);
+  } else {
+    iree_s = iree_status_from_code(code);
+  }
+  if (message_buf) free(message_buf);
+  if (!hrx_status_is_ok(to_str_status)) hrx_status_ignore(to_str_status);
+  hrx_status_ignore(s);
+  return iree_s;
 }
 
 static inline hrx_status_t iree_to_hrx_status(iree_status_t s) {
@@ -81,6 +105,30 @@ static inline iree_hal_device_t* hrx_device_hal(hrx_device_t dev) {
 // Get the system allocator as iree_allocator_t (shares mimalloc heap).
 static inline iree_allocator_t hrx_system_iree_allocator(void) {
   return hrx_to_iree_allocator(hrx_host_allocator_system());
+}
+
+// Create a hrx_buffer_s wrapping a HAL buffer for buffer interop.
+// The hrx_buf retains the HAL buffer and the device; caller owns the
+// returned hrx_buffer_t with ref_count=1. |hal_buffer| may be NULL
+// for host-only allocations.
+static inline iree_status_t hrx_buffer_create_from_hal(
+    iree_hal_buffer_t* hal_buffer, hrx_device_t device,
+    hrx_memory_type_t mem_type, size_t size, void* mapped_ptr,
+    hrx_buffer_t* out_buffer) {
+  hrx_buffer_s* buf = NULL;
+  IREE_RETURN_IF_ERROR(iree_allocator_malloc(iree_allocator_system(),
+                                             sizeof(*buf), (void**)&buf));
+  memset(buf, 0, sizeof(*buf));
+  iree_atomic_ref_count_init(&buf->ref_count);
+  buf->hal_buffer = hal_buffer;
+  if (hal_buffer) iree_hal_buffer_retain(hal_buffer);
+  buf->device = device;
+  if (device) hrx_device_retain(device);
+  buf->mem_type = mem_type;
+  buf->size = size;
+  buf->mapped_ptr = mapped_ptr;
+  *out_buffer = buf;
+  return iree_ok_status();
 }
 
 #endif  // HRX_STREAMING_BRIDGE_H_

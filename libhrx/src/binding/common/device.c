@@ -6,7 +6,7 @@
 
 #include <string.h>
 
-#include "streaming/internal.h"
+#include "common/internal.h"
 
 //===----------------------------------------------------------------------===//
 // Device management
@@ -87,37 +87,53 @@ iree_status_t iree_hal_streaming_device_name(
 }
 
 iree_status_t iree_hal_streaming_device_get_string_property(
-    iree_hal_streaming_device_ordinal_t ordinal, char* category, char* key,
-    char* property, iree_host_size_t property_size) {
-  IREE_ASSERT_ARGUMENT(property);
-  IREE_ASSERT_ARGUMENT(key);
+    iree_hal_streaming_device_ordinal_t ordinal, const char* category,
+    const char* key, char* value, iree_host_size_t value_size) {
   IREE_ASSERT_ARGUMENT(category);
-  if (property_size == 0) {
+  IREE_ASSERT_ARGUMENT(key);
+  IREE_ASSERT_ARGUMENT(value);
+  if (value_size == 0) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "property_size must be > 0");
+                            "value_size must be > 0");
   }
 
   iree_hal_streaming_device_t* device = NULL;
-  iree_status_t status = iree_hal_streaming_device_by_ordinal(ordinal, &device);
-  if (!iree_status_is_ok(status)) {
-    return status;
+  IREE_RETURN_IF_ERROR(iree_hal_streaming_device_by_ordinal(ordinal, &device));
+
+  // The streaming layer owns the set of string-valued device properties and
+  // resolves them from values cached on iree_hal_streaming_device_t during
+  // device initialization. The underlying IREE HAL intentionally does not
+  // expose a string-property query; callers must go through this API.
+  iree_string_view_t source = iree_string_view_empty();
+  if (iree_string_view_equal(iree_make_cstring_view(category),
+                             IREE_SV("hal.device"))) {
+    const iree_string_view_t key_sv = iree_make_cstring_view(key);
+    if (iree_string_view_equal(key_sv, IREE_SV("name"))) {
+      source = device->info.name;
+    } else if (iree_string_view_equal(key_sv, IREE_SV("path"))) {
+      source = device->info.path;
+    } else if (iree_string_view_equal(key_sv, IREE_SV("architecture")) ||
+               iree_string_view_equal(key_sv, IREE_SV("gcn_arch_name"))) {
+      source = iree_make_cstring_view(device->gcn_arch_name);
+    }
   }
-  property[0] = '\0';
-  // TODO(#rebase): restore full string-property support once streaming has a
-  // replacement for public device string queries.
-#if 0
-  iree_host_size_t out_string_length = 0;
-  status = iree_hal_device_query_string(
-      device->hal_device, iree_make_cstring_view(category),
-      iree_make_cstring_view(key), property_size - 1, property,
-      &out_string_length);
-  property[out_string_length < (property_size - 1) ? out_string_length
-                                                   : (property_size - 1)] = '\0';
-  return status;
-#endif
-  return iree_make_status(IREE_STATUS_UNIMPLEMENTED,
-                          "streaming string property queries are not "
-                          "implemented on the rebased path");
+
+  if (iree_string_view_is_empty(source)) {
+    return iree_make_status(
+        IREE_STATUS_NOT_FOUND,
+        "unknown string device property '%s' in category '%s'", key, category);
+  }
+
+  if (source.size + 1 > value_size) {
+    return iree_make_status(IREE_STATUS_OUT_OF_RANGE,
+                            "buffer of %" PRIhsz
+                            " bytes is too small for property '%s:%s' "
+                            "(requires %" PRIhsz " bytes including NUL)",
+                            value_size, category, key, source.size + 1);
+  }
+  memcpy(value, source.data, source.size);
+  value[source.size] = '\0';
+  return iree_ok_status();
 }
 
 iree_hal_streaming_p2p_link_t* iree_hal_streaming_device_lookup_p2p_link(
@@ -285,21 +301,16 @@ iree_status_t iree_hal_streaming_device_get_or_create_primary_context(
       device, device->primary_context_flags, device_registry->host_allocator,
       &device->primary_context);
 
-  // Create default memory pool for this device if context was created
-  // successfully.
+  // Create default memory pool via pyre.
   if (iree_status_is_ok(status)) {
-    // Get device ordinal from registry.
     iree_host_size_t device_ordinal = device - device_registry->devices;
-
-    iree_hal_streaming_mem_pool_props_t props = {
-        .alloc_handle_type = IREE_HAL_STREAMING_MEM_HANDLE_TYPE_NONE,
-        .location_type = IREE_HAL_STREAMING_MEM_LOCATION_TYPE_DEVICE,
-        .location_id = device_ordinal,
+    hrx_mem_pool_props_t props = {
+        .alloc_handle_type = 0,
+        .location_type = 1,  // device
+        .location_id = (int)device_ordinal,
     };
-
-    status = iree_hal_streaming_mem_pool_create(device->primary_context, &props,
-                                                device_registry->host_allocator,
-                                                &device->default_mem_pool);
+    status = HRX_CALL(hrx_mem_pool_create(device->hrx_device, &props,
+                                          &device->default_mem_pool));
   }
 
   if (iree_status_is_ok(status)) {
@@ -339,25 +350,19 @@ iree_status_t iree_hal_streaming_device_retain_primary_context(
         device, device->primary_context_flags, device_registry->host_allocator,
         &device->primary_context);
 
-    // Create default memory pool if context was created successfully.
+    // Create default memory pool via pyre if context was created successfully.
     if (iree_status_is_ok(status) && !device->default_mem_pool) {
-      // Get device ordinal from registry.
       iree_host_size_t device_ordinal = device - device_registry->devices;
-
-      iree_hal_streaming_mem_pool_props_t props = {
-          .alloc_handle_type = IREE_HAL_STREAMING_MEM_HANDLE_TYPE_NONE,
-          .location_type = IREE_HAL_STREAMING_MEM_LOCATION_TYPE_DEVICE,
-          .location_id = device_ordinal,
+      hrx_mem_pool_props_t props = {
+          .alloc_handle_type = 0,
+          .location_type = 1,  // device
+          .location_id = (int)device_ordinal,
       };
-
-      status = iree_hal_streaming_mem_pool_create(
-          device->primary_context, &props, device_registry->host_allocator,
-          &device->default_mem_pool);
-
+      status = HRX_CALL(hrx_mem_pool_create(device->hrx_device, &props,
+                                            &device->default_mem_pool));
       if (iree_status_is_ok(status)) {
-        // Set current pool to default pool.
         device->current_mem_pool = device->default_mem_pool;
-        iree_hal_streaming_mem_pool_retain(device->current_mem_pool);
+        hrx_mem_pool_retain(device->current_mem_pool);
       }
     }
 
@@ -414,13 +419,13 @@ iree_status_t iree_hal_streaming_device_release_primary_context(
     device->primary_context = NULL;
 
     // Also clear memory pools.
-    if (device->default_mem_pool) {
-      iree_hal_streaming_mem_pool_release(device->default_mem_pool);
-      device->default_mem_pool = NULL;
-    }
     if (device->current_mem_pool) {
-      iree_hal_streaming_mem_pool_release(device->current_mem_pool);
+      hrx_mem_pool_release(device->current_mem_pool);
       device->current_mem_pool = NULL;
+    }
+    if (device->default_mem_pool) {
+      hrx_mem_pool_release(device->default_mem_pool);
+      device->default_mem_pool = NULL;
     }
 
     // Clear current context if it was the primary context.

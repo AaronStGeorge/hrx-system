@@ -6,8 +6,175 @@
 
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 
-#include "streaming/internal.h"
+#include "common/internal.h"
+
+// Env-gated timing for launch-path investigation. This intentionally uses plain
+// counters because the current perf probes run single-threaded and we want the
+// lowest possible instrumentation overhead.
+typedef struct hrx_launch_timing_counters_t {
+  uint64_t launch_count;
+  uint64_t launch_total_ns;
+  uint64_t launch_begin_ns;
+  uint64_t launch_params_ns;
+  uint64_t launch_dispatch_ns;
+  uint64_t launch_barrier_ns;
+  uint64_t flush_count;
+  uint64_t flush_total_ns;
+  uint64_t flush_end_ns;
+  uint64_t flush_execute_ns;
+  uint64_t flush_release_ns;
+  uint64_t sync_count;
+  uint64_t sync_total_ns;
+  uint64_t sync_flush_ns;
+  uint64_t sync_query_ns;
+  uint64_t sync_wait_ns;
+} hrx_launch_timing_counters_t;
+
+static hrx_launch_timing_counters_t g_hrx_launch_timing;
+static int g_hrx_launch_timing_initialized = 0;
+static int g_hrx_launch_timing_enabled = 0;
+static int g_hrx_disable_dispatch_barrier_initialized = 0;
+static int g_hrx_disable_dispatch_barrier_enabled = 0;
+static int g_hrx_flush_each_launch_initialized = 0;
+static int g_hrx_flush_each_launch_enabled = 0;
+static int g_hrx_flush_interval_initialized = 0;
+static int g_hrx_flush_interval = 0;
+static int g_hrx_direct_queue_dispatch_initialized = 0;
+static int g_hrx_direct_queue_dispatch_enabled = 0;
+
+static uint64_t hrx_launch_timing_now_ns(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+}
+
+static double hrx_launch_timing_avg_us(uint64_t total_ns, uint64_t count) {
+  return count ? (double)total_ns / (double)count / 1000.0 : 0.0;
+}
+
+static uint64_t hrx_launch_timing_subtract_or_zero(uint64_t total, uint64_t a,
+                                                   uint64_t b, uint64_t c,
+                                                   uint64_t d) {
+  const uint64_t subtotal = a + b + c + d;
+  return total > subtotal ? total - subtotal : 0;
+}
+
+static void hrx_launch_timing_dump(void) {
+  const uint64_t launch_count = g_hrx_launch_timing.launch_count;
+  const uint64_t flush_count = g_hrx_launch_timing.flush_count;
+  const uint64_t sync_count = g_hrx_launch_timing.sync_count;
+  fprintf(stderr,
+          "[HRX_TIMING] launch count=%" PRIu64
+          " total_us=%.3f begin_us=%.3f params_us=%.3f dispatch_us=%.3f"
+          " barrier_us=%.3f unaccounted_us=%.3f\n",
+          launch_count,
+          hrx_launch_timing_avg_us(g_hrx_launch_timing.launch_total_ns,
+                                   launch_count),
+          hrx_launch_timing_avg_us(g_hrx_launch_timing.launch_begin_ns,
+                                   launch_count),
+          hrx_launch_timing_avg_us(g_hrx_launch_timing.launch_params_ns,
+                                   launch_count),
+          hrx_launch_timing_avg_us(g_hrx_launch_timing.launch_dispatch_ns,
+                                   launch_count),
+          hrx_launch_timing_avg_us(g_hrx_launch_timing.launch_barrier_ns,
+                                   launch_count),
+          hrx_launch_timing_avg_us(hrx_launch_timing_subtract_or_zero(
+                                       g_hrx_launch_timing.launch_total_ns,
+                                       g_hrx_launch_timing.launch_begin_ns,
+                                       g_hrx_launch_timing.launch_params_ns,
+                                       g_hrx_launch_timing.launch_dispatch_ns,
+                                       g_hrx_launch_timing.launch_barrier_ns),
+                                   launch_count));
+  fprintf(
+      stderr,
+      "[HRX_TIMING] flush count=%" PRIu64
+      " total_us=%.3f end_us=%.3f execute_us=%.3f release_us=%.3f"
+      " unaccounted_us=%.3f\n",
+      flush_count,
+      hrx_launch_timing_avg_us(g_hrx_launch_timing.flush_total_ns, flush_count),
+      hrx_launch_timing_avg_us(g_hrx_launch_timing.flush_end_ns, flush_count),
+      hrx_launch_timing_avg_us(g_hrx_launch_timing.flush_execute_ns,
+                               flush_count),
+      hrx_launch_timing_avg_us(g_hrx_launch_timing.flush_release_ns,
+                               flush_count),
+      hrx_launch_timing_avg_us(hrx_launch_timing_subtract_or_zero(
+                                   g_hrx_launch_timing.flush_total_ns,
+                                   g_hrx_launch_timing.flush_end_ns,
+                                   g_hrx_launch_timing.flush_execute_ns,
+                                   g_hrx_launch_timing.flush_release_ns, 0),
+                               flush_count));
+  fprintf(
+      stderr,
+      "[HRX_TIMING] sync count=%" PRIu64
+      " total_us=%.3f flush_us=%.3f query_us=%.3f wait_us=%.3f"
+      " unaccounted_us=%.3f\n",
+      sync_count,
+      hrx_launch_timing_avg_us(g_hrx_launch_timing.sync_total_ns, sync_count),
+      hrx_launch_timing_avg_us(g_hrx_launch_timing.sync_flush_ns, sync_count),
+      hrx_launch_timing_avg_us(g_hrx_launch_timing.sync_query_ns, sync_count),
+      hrx_launch_timing_avg_us(g_hrx_launch_timing.sync_wait_ns, sync_count),
+      hrx_launch_timing_avg_us(hrx_launch_timing_subtract_or_zero(
+                                   g_hrx_launch_timing.sync_total_ns,
+                                   g_hrx_launch_timing.sync_flush_ns,
+                                   g_hrx_launch_timing.sync_query_ns,
+                                   g_hrx_launch_timing.sync_wait_ns, 0),
+                               sync_count));
+}
+
+static int hrx_launch_timing_enabled(void) {
+  if (!g_hrx_launch_timing_initialized) {
+    g_hrx_launch_timing_initialized = 1;
+    const char* enabled = getenv("HRX_LAUNCH_TIMING");
+    g_hrx_launch_timing_enabled = enabled && enabled[0] && enabled[0] != '0';
+    if (g_hrx_launch_timing_enabled) {
+      atexit(hrx_launch_timing_dump);
+    }
+  }
+  return g_hrx_launch_timing_enabled;
+}
+
+static int hrx_disable_dispatch_barrier_enabled(void) {
+  if (!g_hrx_disable_dispatch_barrier_initialized) {
+    g_hrx_disable_dispatch_barrier_initialized = 1;
+    const char* enabled = getenv("HRX_DISABLE_DISPATCH_BARRIER");
+    g_hrx_disable_dispatch_barrier_enabled =
+        enabled && enabled[0] && enabled[0] != '0';
+  }
+  return g_hrx_disable_dispatch_barrier_enabled;
+}
+
+static int hrx_flush_each_launch_enabled(void) {
+  if (!g_hrx_flush_each_launch_initialized) {
+    g_hrx_flush_each_launch_initialized = 1;
+    const char* enabled = getenv("HRX_FLUSH_EACH_LAUNCH");
+    g_hrx_flush_each_launch_enabled =
+        enabled && enabled[0] && enabled[0] != '0';
+  }
+  return g_hrx_flush_each_launch_enabled;
+}
+
+static int hrx_flush_interval(void) {
+  if (!g_hrx_flush_interval_initialized) {
+    g_hrx_flush_interval_initialized = 1;
+    const char* value = getenv("HRX_FLUSH_INTERVAL");
+    g_hrx_flush_interval = value ? atoi(value) : 0;
+    if (g_hrx_flush_interval < 0) g_hrx_flush_interval = 0;
+  }
+  return g_hrx_flush_interval;
+}
+
+static int hrx_direct_queue_dispatch_enabled(void) {
+  if (!g_hrx_direct_queue_dispatch_initialized) {
+    g_hrx_direct_queue_dispatch_initialized = 1;
+    const char* enabled = getenv("HRX_DIRECT_QUEUE_DISPATCH");
+    g_hrx_direct_queue_dispatch_enabled =
+        enabled && enabled[0] && enabled[0] != '0';
+  }
+  return g_hrx_direct_queue_dispatch_enabled;
+}
 
 //===----------------------------------------------------------------------===//
 // Stream management
@@ -34,6 +201,7 @@ iree_status_t iree_hal_streaming_stream_create(
   stream->flags = flags;
   stream->priority = priority;
   stream->command_buffer = NULL;
+  stream->pending_launch_count = 0;
   stream->timeline_semaphore = NULL;
   stream->pending_value = 0;
   stream->submitted_value = 0;
@@ -168,12 +336,22 @@ iree_status_t iree_hal_streaming_stream_flush(
     iree_hal_streaming_stream_t* stream) {
   IREE_ASSERT_ARGUMENT(stream);
   IREE_TRACE_ZONE_BEGIN(z0);
+  const int timing_enabled = hrx_launch_timing_enabled();
+  const uint64_t timing_start_ns =
+      timing_enabled ? hrx_launch_timing_now_ns() : 0;
+  uint64_t timing_end_ns = 0;
+  uint64_t timing_execute_ns = 0;
+  uint64_t timing_release_ns = 0;
   iree_slim_mutex_lock(&stream->mutex);
 
   iree_status_t status = iree_ok_status();
   if (stream->command_buffer) {
     // End recording and submit command buffer.
+    uint64_t timing_step_ns = timing_enabled ? hrx_launch_timing_now_ns() : 0;
     status = iree_hal_command_buffer_end(stream->command_buffer);
+    if (timing_enabled) {
+      timing_end_ns += hrx_launch_timing_now_ns() - timing_step_ns;
+    }
     if (!iree_status_is_ok(status)) {
       iree_slim_mutex_unlock(&stream->mutex);
       IREE_TRACE_ZONE_END(z0);
@@ -203,10 +381,18 @@ iree_status_t iree_hal_streaming_stream_flush(
         .payload_values = &stream->pending_value,
     };
 
+    timing_step_ns = timing_enabled ? hrx_launch_timing_now_ns() : 0;
     status = iree_hal_device_queue_execute(
         stream->context->device, queue_affinity, wait_semaphores,
         signal_semaphores, stream->command_buffer,
         iree_hal_buffer_binding_table_empty(), IREE_HAL_EXECUTE_FLAG_NONE);
+    if (iree_status_is_ok(status)) {
+      status =
+          iree_hal_device_queue_flush(stream->context->device, queue_affinity);
+    }
+    if (timing_enabled) {
+      timing_execute_ns += hrx_launch_timing_now_ns() - timing_step_ns;
+    }
 
     if (!iree_status_is_ok(status)) {
       // Error will propagate via iree_status_t return.
@@ -218,11 +404,24 @@ iree_status_t iree_hal_streaming_stream_flush(
     }
 
     // Release command buffer (we're done with it).
+    timing_step_ns = timing_enabled ? hrx_launch_timing_now_ns() : 0;
     iree_hal_command_buffer_release(stream->command_buffer);
     stream->command_buffer = NULL;
+    stream->pending_launch_count = 0;
+    if (timing_enabled) {
+      timing_release_ns += hrx_launch_timing_now_ns() - timing_step_ns;
+    }
   }
 
   iree_slim_mutex_unlock(&stream->mutex);
+  if (timing_enabled) {
+    ++g_hrx_launch_timing.flush_count;
+    g_hrx_launch_timing.flush_total_ns +=
+        hrx_launch_timing_now_ns() - timing_start_ns;
+    g_hrx_launch_timing.flush_end_ns += timing_end_ns;
+    g_hrx_launch_timing.flush_execute_ns += timing_execute_ns;
+    g_hrx_launch_timing.flush_release_ns += timing_release_ns;
+  }
   IREE_TRACE_ZONE_END(z0);
   return status;
 }
@@ -233,8 +432,14 @@ iree_status_t iree_hal_streaming_stream_query(
   IREE_ASSERT_ARGUMENT(status);
 
   uint64_t current_value = 0;
-  IREE_RETURN_IF_ERROR(
-      iree_hal_semaphore_query(stream->timeline_semaphore, &current_value));
+  iree_status_t query_status =
+      iree_hal_semaphore_query(stream->timeline_semaphore, &current_value);
+  if (iree_status_is_unavailable(query_status)) {
+    iree_status_ignore(query_status);
+    *status = 1;  // Not complete
+    return iree_ok_status();
+  }
+  IREE_RETURN_IF_ERROR(query_status);
 
   if (current_value >= stream->pending_value) {
     *status = 0;  // Complete
@@ -250,13 +455,27 @@ iree_status_t iree_hal_streaming_stream_synchronize(
     iree_hal_streaming_stream_t* stream) {
   IREE_ASSERT_ARGUMENT(stream);
   IREE_TRACE_ZONE_BEGIN(z0);
+  const int timing_enabled = hrx_launch_timing_enabled();
+  const uint64_t timing_start_ns =
+      timing_enabled ? hrx_launch_timing_now_ns() : 0;
+  uint64_t timing_flush_ns = 0;
+  uint64_t timing_query_ns = 0;
+  uint64_t timing_wait_ns = 0;
 
   int status = 0;
-  IREE_RETURN_AND_END_ZONE_IF_ERROR(z0,
-                                    iree_hal_streaming_stream_flush(stream));
+  uint64_t timing_step_ns = timing_enabled ? hrx_launch_timing_now_ns() : 0;
+  iree_status_t flush_status = iree_hal_streaming_stream_flush(stream);
+  if (timing_enabled) {
+    timing_flush_ns += hrx_launch_timing_now_ns() - timing_step_ns;
+  }
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(z0, flush_status);
 
-  IREE_RETURN_AND_END_ZONE_IF_ERROR(
-      z0, iree_hal_streaming_stream_query(stream, &status));
+  timing_step_ns = timing_enabled ? hrx_launch_timing_now_ns() : 0;
+  iree_status_t query_status = iree_hal_streaming_stream_query(stream, &status);
+  if (timing_enabled) {
+    timing_query_ns += hrx_launch_timing_now_ns() - timing_step_ns;
+  }
+  IREE_RETURN_AND_END_ZONE_IF_ERROR(z0, query_status);
   (void)status;
 
   // Wait for timeline semaphore to reach pending value.
@@ -264,9 +483,13 @@ iree_status_t iree_hal_streaming_stream_synchronize(
     // fprintf(stderr, "[STREAM] sync: waiting for semaphore pending=%"PRIu64"
     // completed=%"PRIu64"\n",
     //         stream->pending_value, stream->completed_value);
+    timing_step_ns = timing_enabled ? hrx_launch_timing_now_ns() : 0;
     iree_status_t wait_status = iree_hal_semaphore_wait(
         stream->timeline_semaphore, stream->pending_value,
         iree_infinite_timeout(), IREE_ASYNC_WAIT_FLAG_NONE);
+    if (timing_enabled) {
+      timing_wait_ns += hrx_launch_timing_now_ns() - timing_step_ns;
+    }
     if (!iree_status_is_ok(wait_status)) {
       IREE_TRACE_ZONE_END(z0);
       return wait_status;
@@ -275,6 +498,14 @@ iree_status_t iree_hal_streaming_stream_synchronize(
     stream->completed_value = stream->pending_value;
   }
 
+  if (timing_enabled) {
+    ++g_hrx_launch_timing.sync_count;
+    g_hrx_launch_timing.sync_total_ns +=
+        hrx_launch_timing_now_ns() - timing_start_ns;
+    g_hrx_launch_timing.sync_flush_ns += timing_flush_ns;
+    g_hrx_launch_timing.sync_query_ns += timing_query_ns;
+    g_hrx_launch_timing.sync_wait_ns += timing_wait_ns;
+  }
   IREE_TRACE_ZONE_END(z0);
   return iree_ok_status();
 }
@@ -485,28 +716,6 @@ iree_status_t iree_hal_streaming_unpack_parameter_list(
   return iree_ok_status();
 }
 
-// Debug flag - set to 1 to enable verbose kernel launch debugging
-#ifndef IREE_STREAMING_DEBUG_KERNEL_LAUNCH
-#define IREE_STREAMING_DEBUG_KERNEL_LAUNCH 0
-#endif
-
-// Filter to only log kernels matching this substring (NULL = log all)
-static const char* IREE_STREAMING_DEBUG_KERNEL_FILTER = NULL;
-
-// Helper to dump buffer contents
-static void debug_dump_buffer(const char* label, const void* buf, size_t len) {
-  fprintf(stderr, "[LAUNCH] %s (%zu bytes):\n", label, len);
-  const uint8_t* p = (const uint8_t*)buf;
-  for (size_t i = 0; i < len && i < 256; i += 16) {
-    fprintf(stderr, "  %04zx: ", i);
-    for (size_t j = 0; j < 16 && i + j < len; ++j) {
-      fprintf(stderr, "%02x", p[i + j]);
-      if (j == 7) fprintf(stderr, " ");
-    }
-    fprintf(stderr, "\n");
-  }
-}
-
 iree_status_t iree_hal_streaming_launch_kernel(
     iree_hal_streaming_symbol_t* symbol,
     const iree_hal_streaming_dispatch_params_t* params,
@@ -515,32 +724,14 @@ iree_status_t iree_hal_streaming_launch_kernel(
   IREE_ASSERT_ARGUMENT(params);
   IREE_ASSERT_ARGUMENT(stream);
   IREE_TRACE_ZONE_BEGIN(z0);
-
-#if IREE_STREAMING_DEBUG_KERNEL_LAUNCH
-  bool debug_should_log =
-      !IREE_STREAMING_DEBUG_KERNEL_FILTER ||
-      (symbol->name.data &&
-       strstr(symbol->name.data, IREE_STREAMING_DEBUG_KERNEL_FILTER));
-  if (debug_should_log) {
-    fprintf(stderr, "[LAUNCH] Kernel: %.*s\n",
-            (int)(symbol->name.size > 120 ? 120 : symbol->name.size),
-            symbol->name.data ? symbol->name.data : "(null)");
-    fprintf(stderr, "[LAUNCH]   grid=(%u,%u,%u) block=(%u,%u,%u) shared=%u\n",
-            params->grid_dim[0], params->grid_dim[1], params->grid_dim[2],
-            params->block_dim[0], params->block_dim[1], params->block_dim[2],
-            (unsigned)params->shared_memory_bytes);
-    fprintf(stderr, "[LAUNCH]   flags=0x%x buffer=%p\n", params->flags,
-            params->buffer);
-    fprintf(stderr,
-            "[LAUNCH]   symbol: copy_count=%u binding_count=%u "
-            "constant_bytes=%u buffer_size=%u\n",
-            symbol->parameters.copy_count, symbol->parameters.binding_count,
-            (unsigned)symbol->parameters.constant_bytes,
-            (unsigned)symbol->parameters.buffer_size);
-  }
-#else
-  (void)0;  // Suppress unused variable warning
-#endif
+  const int timing_enabled = hrx_launch_timing_enabled();
+  const uint64_t timing_start_ns =
+      timing_enabled ? hrx_launch_timing_now_ns() : 0;
+  uint64_t timing_begin_ns = 0;
+  uint64_t timing_params_ns = 0;
+  uint64_t timing_dispatch_ns = 0;
+  uint64_t timing_barrier_ns = 0;
+  const bool use_direct_queue_dispatch = hrx_direct_queue_dispatch_enabled();
 
   // Verify the symbol is a function.
   if (symbol->type != IREE_HAL_STREAMING_SYMBOL_TYPE_FUNCTION) {
@@ -580,10 +771,27 @@ iree_status_t iree_hal_streaming_launch_kernel(
     return iree_ok_status();
   }
 
-  // Ensure command buffer is recording.
-  if (!stream->command_buffer) {
-    IREE_RETURN_AND_END_ZONE_IF_ERROR(z0,
-                                      iree_hal_streaming_stream_begin(stream));
+  // Ensure prior command-buffer work is submitted before direct dispatches.
+  // Direct dispatches use the stream timeline wait/signal chain below; command
+  // buffer dispatches continue recording into the current stream command
+  // buffer.
+  if (use_direct_queue_dispatch && stream->command_buffer) {
+    uint64_t timing_step_ns = timing_enabled ? hrx_launch_timing_now_ns() : 0;
+    iree_status_t flush_status = iree_hal_streaming_stream_flush(stream);
+    if (timing_enabled) {
+      timing_begin_ns += hrx_launch_timing_now_ns() - timing_step_ns;
+    }
+    IREE_RETURN_AND_END_ZONE_IF_ERROR(z0, flush_status);
+  }
+
+  // Ensure command buffer is recording for the existing batched path.
+  if (!use_direct_queue_dispatch && !stream->command_buffer) {
+    uint64_t timing_step_ns = timing_enabled ? hrx_launch_timing_now_ns() : 0;
+    iree_status_t begin_status = iree_hal_streaming_stream_begin(stream);
+    if (timing_enabled) {
+      timing_begin_ns += hrx_launch_timing_now_ns() - timing_step_ns;
+    }
+    IREE_RETURN_AND_END_ZONE_IF_ERROR(z0, begin_status);
   }
 
   // Stack allocate arrays based on cached sizes.
@@ -616,22 +824,27 @@ iree_status_t iree_hal_streaming_launch_kernel(
   bool is_pre_packed =
       (params->flags & IREE_HAL_STREAMING_DISPATCH_FLAG_PRE_PACKED) != 0;
 
+  uint64_t timing_params_start_ns =
+      timing_enabled ? hrx_launch_timing_now_ns() : 0;
   if (is_pre_packed && params->buffer) {
     // Pre-packed buffer: pass the raw buffer directly to the kernel.
     // This is used for kernels launched via HIP_LAUNCH_PARAM_BUFFER_POINTER
     // (e.g., hipBLASLt GEMM kernels) where the buffer is already packed.
-    constants = params->buffer;
     if (params->buffer_size != 0) {
-      constants_size = params->buffer_size;
+      if (params->buffer_size < symbol->parameters.constant_bytes) {
+        constants_size = symbol->parameters.constant_bytes;
+        constants = iree_alloca(constants_size);
+        memset(constants, 0, constants_size);
+        memcpy(constants, params->buffer, params->buffer_size);
+      } else {
+        constants = params->buffer;
+        constants_size = params->buffer_size;
+      }
+    } else {
+      constants = params->buffer;
     }
     binding_list.count = 0;  // No IREE bindings, using raw pointers.
     use_raw_arguments = true;
-#if IREE_STREAMING_DEBUG_KERNEL_LAUNCH
-    if (debug_should_log) {
-      fprintf(stderr, "[LAUNCH]   PATH: is_pre_packed (buffer=%p size=%zu)\n",
-              params->buffer, params->buffer_size);
-    }
-#endif
   } else if (is_native_kernel && params->buffer) {
     // Native kernel with pre-packed buffer: pass raw arguments directly.
     // For native kernels, params->buffer contains the pre-packed kernel
@@ -724,6 +937,9 @@ iree_status_t iree_hal_streaming_launch_kernel(
       }
     }
   }
+  if (timing_enabled) {
+    timing_params_ns += hrx_launch_timing_now_ns() - timing_params_start_ns;
+  }
 
   // Create IREE dispatch config.
   const iree_hal_dispatch_config_t config = {
@@ -787,116 +1003,139 @@ iree_status_t iree_hal_streaming_launch_kernel(
       binding_list.count = 0;
     }
 
-    iree_host_size_t max_overlay = constants_size / sizeof(void*);
-    if (max_overlay > 64) max_overlay = 64;
-    iree_hal_buffer_ref_t* overlay_refs = (iree_hal_buffer_ref_t*)iree_alloca(
-        max_overlay * sizeof(iree_hal_buffer_ref_t));
-    iree_host_size_t overlay_count = 0;
-
-    // Make a mutable copy of constants so we can zero out resolved pointers.
-    void* mutable_constants = iree_alloca(constants_size);
-    memcpy(mutable_constants, constants, constants_size);
-    constants = mutable_constants;
-
-    // Scan all 8-byte aligned positions in the constants buffer.
-    // Device pointers may be embedded in struct-typed parameters (e.g.,
-    // std::array<char*, 3> appears as a single 24-byte copy op), so we
-    // cannot rely on individual copy op sizes to find pointers.
-    for (iree_host_size_t off = 0;
-         off + sizeof(void*) <= constants_size && overlay_count < max_overlay;
-         off += sizeof(void*)) {
-      void* ptr_val;
-      memcpy(&ptr_val, (uint8_t*)constants + off, sizeof(void*));
-      if (!ptr_val) continue;
-
-      iree_hal_streaming_buffer_ref_t sref;
-      iree_status_t s = iree_hal_streaming_memory_lookup(
-          stream->context, (iree_hal_streaming_deviceptr_t)ptr_val, &sref);
-      if (iree_status_is_ok(s)) {
-        overlay_refs[overlay_count] = iree_hal_make_buffer_ref(
-            sref.buffer->buffer, sref.offset, IREE_HAL_WHOLE_BUFFER);
-        overlay_refs[overlay_count].buffer_slot = (int32_t)off;
-        ++overlay_count;
-        memset((uint8_t*)constants + off, 0, sizeof(void*));
-      } else {
-        iree_status_ignore(s);
-      }
-    }
-
-    if (overlay_count > 0) {
-      binding_list.count = overlay_count;
-      binding_list.values = overlay_refs;
-    }
+    // NOTE: earlier drafts of this code tried to extract device pointers
+    // from the constants buffer and hand them to the HAL as separate
+    // bindings with a |buffer_slot = byte_offset| overlay trick. The
+    // AMDGPU aql_command_buffer / host_queue_dispatch backends do not
+    // implement that overlay: for CUSTOM_DIRECT_ARGUMENTS they just
+    // memcpy |constants| into the kernarg block and ignore |bindings|
+    // entirely. Zeroing the pointer in the constants buffer therefore
+    // caused the GPU to dereference NULL and page-fault.
+    //
+    // Pyre's hipMalloc returns the real GPU virtual address of the
+    // allocation (sub-allocated from a contiguous pool), so whatever
+    // pointers PyTorch writes into the HIP launch parameter buffer are
+    // already valid device addresses. We just let the constants flow
+    // through unmodified; the HAL copies them into kernargs verbatim and
+    // the kernel dereferences them directly.
+    //
+    // We still walk the buffer once below purely to run the lookup as
+    // validation (so that invalid device pointers are surfaced in debug
+    // logs), but we do not mutate the constants or build overlay
+    // bindings.
+    (void)iree_hal_streaming_memory_lookup;
   }
 
-// After the overlay scan, all bindings are in overlay format (buffer_slot
-// encodes the constant byte offset). Always use CUSTOM_DIRECT_ARGUMENTS
-// so the server overlays resolved device pointers into the constants.
-#define IREE_HAL_DISPATCH_FLAG_PRE_PACKED_BUFFER (1ull << 16)
+  // After the overlay scan, all bindings are in overlay format (buffer_slot
+  // encodes the constant byte offset). Always use CUSTOM_DIRECT_ARGUMENTS
+  // so the server overlays resolved device pointers into the constants.
+  //
+  // For pre-packed buffers (HIP_LAUNCH_PARAM_BUFFER format used by
+  // hipBLAS/hipBLASLt) we rely on the same CUSTOM_DIRECT_ARGUMENTS path: the
+  // AMDGPU HAL simply memcpys |constants| into the kernarg block and ignores
+  // any binding list, which is exactly what pre-packed callers want.
   iree_hal_dispatch_flags_t flags =
       IREE_HAL_DISPATCH_FLAG_CUSTOM_DIRECT_ARGUMENTS;
-  if (is_pre_packed) {
-    flags |= IREE_HAL_DISPATCH_FLAG_PRE_PACKED_BUFFER;
-  }
 
-#if IREE_STREAMING_DEBUG_KERNEL_LAUNCH
-  if (debug_should_log) {
-    fprintf(stderr,
-            "[LAUNCH]   DISPATCH: constants_size=%zu bindings=%zu flags=0x%lx "
-            "use_raw=%d\n",
-            constants_size, binding_list.count, (unsigned long)flags,
-            use_raw_arguments);
-    // Dump first few pointer-sized values from constants
-    if (constants && constants_size >= sizeof(void*)) {
-      size_t num_ptrs = constants_size / sizeof(void*);
-      if (num_ptrs > 16) num_ptrs = 16;
-      fprintf(stderr, "[LAUNCH]   constants (first %zu ptrs):", num_ptrs);
-      for (size_t i = 0; i < num_ptrs; ++i) {
-        void* ptr_val = ((void**)constants)[i];
-        fprintf(stderr, " %p", ptr_val);
-      }
-      fprintf(stderr, "\n");
+  uint64_t timing_step_ns = timing_enabled ? hrx_launch_timing_now_ns() : 0;
+  iree_status_t status = iree_ok_status();
+  if (use_direct_queue_dispatch) {
+    uint64_t wait_value = stream->pending_value;
+    uint64_t signal_value = wait_value + 1;
+    const iree_hal_semaphore_list_t wait_semaphores = {
+        .count = wait_value > 0 ? 1 : 0,
+        .semaphores = &stream->timeline_semaphore,
+        .payload_values = &wait_value,
+    };
+    const iree_hal_semaphore_list_t signal_semaphores = {
+        .count = 1,
+        .semaphores = &stream->timeline_semaphore,
+        .payload_values = &signal_value,
+    };
+    status = iree_hal_device_queue_dispatch(
+        stream->context->device, stream->queue_affinity, wait_semaphores,
+        signal_semaphores, symbol->executable,
+        iree_hal_executable_function_from_index(symbol->export_ordinal), config,
+        iree_make_const_byte_span(constants, constants_size), binding_list,
+        flags);
+    if (iree_status_is_ok(status)) {
+      status = iree_hal_device_queue_flush(stream->context->device,
+                                           stream->queue_affinity);
     }
-  }
-#endif
-
-  iree_status_t status = iree_hal_command_buffer_dispatch(
-      stream->command_buffer, symbol->module->executable,
-      iree_hal_executable_function_from_index(symbol->export_ordinal), config,
-      iree_make_const_byte_span(constants, constants_size), binding_list,
-      flags);
-
-#if IREE_STREAMING_DEBUG_KERNEL_LAUNCH
-  if (debug_should_log) {
-    if (!iree_status_is_ok(status)) {
-      iree_allocator_t allocator = iree_allocator_system();
-      char* status_str = NULL;
-      iree_host_size_t status_len = 0;
-      if (iree_status_to_string(status, &allocator, &status_str, &status_len)) {
-        fprintf(stderr, "[LAUNCH]   RESULT: FAILED - %s\n", status_str);
-        iree_allocator_free(allocator, status_str);
-      } else {
-        fprintf(stderr, "[LAUNCH]   RESULT: FAILED - (unknown error)\n");
-      }
-    } else {
-      fprintf(stderr, "[LAUNCH]   RESULT: OK (dispatch recorded)\n");
+    if (iree_status_is_ok(status)) {
+      stream->pending_value = signal_value;
+      stream->submitted_value = signal_value;
     }
+  } else {
+    status = iree_hal_command_buffer_dispatch(
+        stream->command_buffer, symbol->executable,
+        iree_hal_executable_function_from_index(symbol->export_ordinal), config,
+        iree_make_const_byte_span(constants, constants_size), binding_list,
+        flags);
   }
-#endif
+  if (timing_enabled) {
+    timing_dispatch_ns += hrx_launch_timing_now_ns() - timing_step_ns;
+  }
 
-  // Insert an execution barrier after each dispatch to enforce serial
-  // ordering within the command buffer, emulating HIP stream semantics.
-  // This allows batching multiple dispatches per CB submission while
-  // maintaining correctness. Inter-CB ordering is handled by timeline
+  // Insert an execution + memory barrier after each dispatch to enforce
+  // serial ordering within the command buffer, emulating HIP stream
+  // semantics. This allows batching multiple dispatches per CB submission
+  // while maintaining correctness. Inter-CB ordering is handled by timeline
   // semaphore chaining in iree_hal_streaming_stream_flush.
-  if (iree_status_is_ok(status)) {
+  //
+  // The memory barrier with non-host (DISPATCH/TRANSFER) access scopes is
+  // important: under the AMDGPU HAL backend it resolves to an AGENT-scoped
+  // AQL release+acquire fence between this dispatch and the next, which
+  // flushes the GPU L1/L2 caches so the next dispatch sees this dispatch's
+  // writes. A bare execution barrier with no memory_barriers (count=0)
+  // resolves to NONE/NONE scopes after upstream IREE commit 48af1651a1
+  // ("Preserve command-buffer barrier scopes") and lets later dispatches
+  // launch with stale cache state, producing garbage output (e.g. NaN
+  // logits in GPT-2 forward).
+  if (!use_direct_queue_dispatch && iree_status_is_ok(status) &&
+      !hrx_disable_dispatch_barrier_enabled()) {
+    static const iree_hal_memory_barrier_t memory_barrier = {
+        .source_scope = IREE_HAL_ACCESS_SCOPE_DISPATCH_READ |
+                        IREE_HAL_ACCESS_SCOPE_DISPATCH_WRITE |
+                        IREE_HAL_ACCESS_SCOPE_TRANSFER_READ |
+                        IREE_HAL_ACCESS_SCOPE_TRANSFER_WRITE,
+        .target_scope = IREE_HAL_ACCESS_SCOPE_DISPATCH_READ |
+                        IREE_HAL_ACCESS_SCOPE_DISPATCH_WRITE |
+                        IREE_HAL_ACCESS_SCOPE_TRANSFER_READ |
+                        IREE_HAL_ACCESS_SCOPE_TRANSFER_WRITE,
+    };
+    timing_step_ns = timing_enabled ? hrx_launch_timing_now_ns() : 0;
     status = iree_hal_command_buffer_execution_barrier(
         stream->command_buffer,
         IREE_HAL_EXECUTION_STAGE_DISPATCH | IREE_HAL_EXECUTION_STAGE_TRANSFER,
         IREE_HAL_EXECUTION_STAGE_DISPATCH | IREE_HAL_EXECUTION_STAGE_TRANSFER,
-        IREE_HAL_EXECUTION_BARRIER_FLAG_NONE, 0, NULL, 0, NULL);
+        IREE_HAL_EXECUTION_BARRIER_FLAG_NONE, 1, &memory_barrier, 0, NULL);
+    if (timing_enabled) {
+      timing_barrier_ns += hrx_launch_timing_now_ns() - timing_step_ns;
+    }
   }
 
+  if (!use_direct_queue_dispatch && iree_status_is_ok(status)) {
+    ++stream->pending_launch_count;
+  }
+
+  const int flush_interval = hrx_flush_interval();
+  if (!use_direct_queue_dispatch && iree_status_is_ok(status) &&
+      (hrx_flush_each_launch_enabled() ||
+       (flush_interval > 0 &&
+        stream->pending_launch_count >= (uint32_t)flush_interval))) {
+    status = iree_hal_streaming_stream_flush(stream);
+  }
+
+  if (timing_enabled) {
+    ++g_hrx_launch_timing.launch_count;
+    g_hrx_launch_timing.launch_total_ns +=
+        hrx_launch_timing_now_ns() - timing_start_ns;
+    g_hrx_launch_timing.launch_begin_ns += timing_begin_ns;
+    g_hrx_launch_timing.launch_params_ns += timing_params_ns;
+    g_hrx_launch_timing.launch_dispatch_ns += timing_dispatch_ns;
+    g_hrx_launch_timing.launch_barrier_ns += timing_barrier_ns;
+  }
   IREE_TRACE_ZONE_END(z0);
   return status;
 }

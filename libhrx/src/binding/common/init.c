@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "streaming/internal.h"
+#include "common/internal.h"
 //===----------------------------------------------------------------------===//
 // Global state
 //===----------------------------------------------------------------------===//
@@ -53,25 +53,9 @@ static iree_status_t iree_hal_streaming_query_device_info(
   //   gfx942 -> 9.4, gfx950 -> 9.5
   //   gfx1030 -> 10.3, gfx1100 -> 11.0
   char arch_name[64] = {0};
-  // TODO(#rebase): replace this with a streaming-owned architecture query path.
-  // We intentionally do not depend on public device string queries anymore.
-  iree_status_t arch_status = iree_make_status(
-      IREE_STATUS_UNIMPLEMENTED,
-      "streaming architecture queries are not implemented on the rebased path");
-#if 0
-  if (sizeof(arch_name) == 0) {
-    arch_status = iree_make_status(IREE_STATUS_OUT_OF_RANGE,
-                                   "output string buffer is empty");
-  } else {
-    iree_host_size_t out_string_length = 0;
-    arch_name[0] = '\0';
-    arch_status = iree_hal_device_query_string(
-        device->hal_device, IREE_SV("hal.device"), IREE_SV("architecture"),
-        sizeof(arch_name) - 1, arch_name, &out_string_length);
-    arch_name[out_string_length < (sizeof(arch_name) - 1) ? out_string_length
-                                                          : (sizeof(arch_name) - 1)] = '\0';
-  }
-#endif
+  iree_status_t arch_status = hrx_to_iree_status(hrx_device_get_property(
+      device->hrx_device, HRX_DEVICE_PROPERTY_ARCHITECTURE, arch_name,
+      sizeof(arch_name)));
   if (iree_status_is_ok(arch_status) && arch_name[0] != '\0') {
     // Parse "gfxNNNN" to extract major.minor.
     // gfx9xx -> major=9, minor=x (e.g., gfx942 -> 9.4)
@@ -115,9 +99,15 @@ static iree_status_t iree_hal_streaming_query_device_info(
   if (iree_status_is_ok(status) && total_memory > 0) {
     device->total_memory = (iree_device_size_t)total_memory;
   } else {
-    // Fall back to 8GB default if query fails.
+    // Fall back to known HIP-visible memory sizes when the HAL cannot query
+    // VRAM. rocBLAS/hipBLASLt use this value when selecting solution kernels.
     iree_status_ignore(status);
-    device->total_memory = 8ULL * 1024 * 1024 * 1024;
+    if (device->info.name.data &&
+        strstr(device->info.name.data, "Radeon PRO W7900")) {
+      device->total_memory = 48301604864ULL;
+    } else {
+      device->total_memory = 8ULL * 1024 * 1024 * 1024;
+    }
   }
   device->free_memory = device->total_memory;
 
@@ -148,6 +138,12 @@ static iree_status_t iree_hal_streaming_query_device_info(
     iree_status_ignore(status);
     device->warp_size = 64;
   }
+  if (strncmp(device->gcn_arch_name, "gfx1100", 7) == 0) {
+    // HIP reports wave32 as the warp size for RDNA3 devices. IREE/HSA may
+    // expose the hardware wavefront width instead, which in turn prevents the
+    // CU-to-WGP compatibility adjustment below.
+    device->warp_size = 32;
+  }
 
   // Query multiprocessor (compute unit) count from the device.
   int64_t mp_count = 0;
@@ -155,7 +151,15 @@ static iree_status_t iree_hal_streaming_query_device_info(
       iree_hal_device_query_i64(device->hal_device, IREE_SV("hal.dispatch"),
                                 IREE_SV("concurrency"), &mp_count);
   if (iree_status_is_ok(status) && mp_count > 0) {
-    device->multiprocessor_count = (uint32_t)mp_count;
+    uint32_t multiprocessor_count = (uint32_t)mp_count;
+    // IREE/HSA reports raw compute units, while HIP reports RDNA devices in
+    // WGP-like units. Keep this HIP-compatible because rocBLAS/hipBLASLt query
+    // the physical multiprocessor count when selecting GEMM solutions.
+    if (device->compute_capability_major >= 10 && device->warp_size == 32 &&
+        multiprocessor_count > 1 && (multiprocessor_count % 2) == 0) {
+      multiprocessor_count /= 2;
+    }
+    device->multiprocessor_count = multiprocessor_count;
   } else {
     // Fall back to generic value if query fails.
     // The HSA backend supports hal.dispatch.concurrency and will return
@@ -173,11 +177,19 @@ static iree_status_t iree_hal_streaming_query_device_info(
   device->max_shared_memory_per_multiprocessor = 49152;  // 48KB.
   device->max_registers_per_block = 65536;
   device->max_shared_memory_per_block = 49152;  // 48KB.
+  if (strncmp(device->gcn_arch_name, "gfx942", 6) == 0) {
+    // Temporary MI300X compatibility values from native HIP.
+    device->max_blocks_per_multiprocessor = 2;
+    device->max_shared_memory_per_multiprocessor = 19922944;
+    device->max_shared_memory_per_block = 65536;
+  } else if (strncmp(device->gcn_arch_name, "gfx1100", 7) == 0) {
+    device->max_shared_memory_per_block = 65536;
+  }
 
   return iree_ok_status();
 }
 
-// Initializes a single device from a hrx device handle.
+// Initializes a single device from a pyre device handle.
 static iree_status_t iree_hal_streaming_initialize_device(
     iree_hal_streaming_device_registry_t* registry, hrx_device_t hrx_dev,
     iree_hal_streaming_device_t* out_device) {
@@ -188,11 +200,11 @@ static iree_status_t iree_hal_streaming_initialize_device(
 
   memset(out_device, 0, sizeof(*out_device));
 
-  // Store hrx device and extract HAL device for direct HAL usage.
+  // Store pyre device and extract HAL device for direct HAL usage.
   out_device->hrx_device = hrx_dev;
   out_device->hal_device = hrx_device_hal(hrx_dev);
 
-  // Get device name from hrx.
+  // Get device name from pyre.
   char name_buf[128] = {0};
   iree_status_t status = HRX_CALL(hrx_device_get_property(
       hrx_dev, HRX_DEVICE_PROPERTY_NAME, name_buf, sizeof(name_buf)));
@@ -295,11 +307,11 @@ static void iree_hal_streaming_deinitialize_device(
 
   // Release memory pools.
   if (device->current_mem_pool) {
-    iree_hal_streaming_mem_pool_release(device->current_mem_pool);
+    hrx_mem_pool_release(device->current_mem_pool);
     device->current_mem_pool = NULL;
   }
   if (device->default_mem_pool) {
-    iree_hal_streaming_mem_pool_release(device->default_mem_pool);
+    hrx_mem_pool_release(device->default_mem_pool);
     device->default_mem_pool = NULL;
   }
 
@@ -315,7 +327,7 @@ static void iree_hal_streaming_deinitialize_device(
   // Deinitialize the arena block pool.
   iree_arena_block_pool_deinitialize(&device->block_pool);
 
-  // HAL device and driver are owned by hrx — don't release here.
+  // HAL device and driver are owned by pyre — don't release here.
   // hrx_gpu_shutdown() handles cleanup.
   device->hal_device = NULL;
   device->hrx_device = NULL;
@@ -354,7 +366,7 @@ static iree_status_t iree_hal_streaming_query_p2p_capabilities(
         link->bandwidth_mbps = 900000;  // 900 GB/s typical for device memory.
         link->latency_ns = 10;          // Very low latency.
       } else {
-        // TODO: Query actual P2P capabilities from hrx/HSA.
+        // TODO: Query actual P2P capabilities from pyre/HSA.
         link->access_supported = false;
         link->native_atomic_supported = false;
         link->cuda_array_access_supported = false;
@@ -459,7 +471,7 @@ void iree_hal_streaming_unregister_context(
 }
 
 //===----------------------------------------------------------------------===//
-// Global initialization via hrx
+// Global initialization via pyre
 //===----------------------------------------------------------------------===//
 
 iree_status_t iree_hal_streaming_init_global(
@@ -471,7 +483,7 @@ iree_status_t iree_hal_streaming_init_global(
     return iree_ok_status();
   }
 
-  // Initialize hrx GPU subsystem (idempotent — handles HSA init,
+  // Initialize pyre GPU subsystem (idempotent — handles HSA init,
   // driver registration, device enumeration).
   IREE_RETURN_AND_END_ZONE_IF_ERROR(z0, HRX_CALL(hrx_gpu_initialize(0)));
 
@@ -492,7 +504,7 @@ iree_status_t iree_hal_streaming_init_global(
   device_registry->context_list.head = NULL;
   device_registry->context_list.tail = NULL;
 
-  // Enumerate GPU devices from hrx.
+  // Enumerate GPU devices from pyre.
   int gpu_count = 0;
   iree_status_t status = HRX_CALL(hrx_gpu_device_count(&gpu_count));
 
@@ -525,8 +537,8 @@ iree_status_t iree_hal_streaming_init_global(
 
   // Must have at least one device.
   if (iree_status_is_ok(status) && device_registry->device_count == 0) {
-    status =
-        iree_make_status(IREE_STATUS_NOT_FOUND, "no GPU devices found via hrx");
+    status = iree_make_status(IREE_STATUS_NOT_FOUND,
+                              "no GPU devices found via pyre");
   }
 
   // Query P2P capabilities.
@@ -584,7 +596,7 @@ void iree_hal_streaming_cleanup_global(void) {
   iree_allocator_free(device_registry->host_allocator,
                       device_registry->p2p_topology);
 
-  // Shutdown hrx GPU subsystem.
+  // Shutdown pyre GPU subsystem.
   hrx_status_ignore(hrx_gpu_shutdown());
 
   iree_slim_mutex_unlock(&device_registry->mutex);

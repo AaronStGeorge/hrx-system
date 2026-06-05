@@ -4,7 +4,12 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//libhrx/build_tools/bazel:cc.bzl", "hrx_cc_benchmark", "hrx_cc_library", "hrx_cc_test")
+load(
+    "//libhrx/build_tools/bazel:cc.bzl",
+    "hrx_cc_benchmark",
+    "hrx_cc_library",
+    "hrx_cc_test",
+)
 
 package(
     default_visibility = ["//visibility:public"],
@@ -13,11 +18,12 @@ package(
 )
 
 hrx_cc_library(
-    name = "streaming",
+    name = "common",
     srcs = [
         "context.c",
         "device.c",
         "event.c",
+        "fat_binary.c",
         "graph.c",
         "graph_analysis.c",
         "graph_exec.c",
@@ -28,21 +34,20 @@ hrx_cc_library(
         "peer.c",
         "registry.c",
         "stream.c",
-        "util/buffer_table.c",
     ],
     hdrs = [
+        "fat_binary.h",
         "graph.h",
         "hrx_bridge.h",
         "internal.h",
-        "util/buffer_table.h",
     ],
     copts = [
         "-Wno-unused-variable",
     ],
     includes = [
         "..",
-        "../../include",
-        "../libhrx",
+        "../../../include",
+        "../../libhrx",
     ],
     deps = [
         "//libhrx/src/libhrx:hrx_static",
@@ -60,9 +65,9 @@ hrx_cc_library(
 
 hrx_cc_test(
     name = "buffer_table_test",
-    srcs = ["util/buffer_table_test.cc"],
+    srcs = ["buffer_table_test.cc"],
     deps = [
-        ":streaming",
+        ":common",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:gtest",
         "//runtime/src/iree/testing:gtest_main",
@@ -71,9 +76,9 @@ hrx_cc_test(
 
 hrx_cc_benchmark(
     name = "buffer_table_benchmark",
-    srcs = ["util/buffer_table_benchmark.cc"],
+    srcs = ["buffer_table_benchmark.cc"],
     deps = [
-        ":streaming",
+        ":common",
         "//runtime/src/iree/base",
         "//runtime/src/iree/testing:benchmark",
         "//runtime/src/iree/testing:benchmark_main",
