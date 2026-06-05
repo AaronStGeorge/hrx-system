@@ -71,16 +71,28 @@ http_archive(
 )
 ```
 
-SDK discovery rules, toolchain repositories, and platform probes are separate
-from source archive locking. They are declared in the same root fragment when
-they produce repositories consumed by source targets, but they are not emitted
-into `MODULE.cmake.lock`.
+Package-only SDK discovery rules, toolchain repositories, and platform probes
+are separate from source archive locking. They are declared in the same root
+fragment when they produce repositories consumed by source targets, but they
+are not emitted into `MODULE.cmake.lock`. A dual-mode repository rule that also
+declares a pinned source archive is emitted into the lock for that pinned source
+identity.
 
-SDK-backed targets that cannot be built on an unconfigured machine should be
-explicit about that contract. For example, `//third_party:hsa_runtime_headers`
-is tagged `manual` so `bazel build //third_party/...` remains a cheap facade
-sanity check, while explicit AMDGPU users still fail loudly without
-`IREE_ROCM_PATH`.
+ROCm-backed targets are grouped under `build_tools/third_party/rocm/`. In
+package/system mode these targets are header overlays on a configured
+ROCm/TheRock root. In pinned mode the HSA runtime, AQL profile SDK, and HIP API
+facades are backed by narrow iree-org header archives. They still expose
+separate capabilities: HSA runtime headers, AQL profile SDK headers, HIP API
+headers, and RCCL headers are distinct facades even when one TheRock
+distribution or one pinned archive provides more than one of them.
+
+SDK-backed targets that cannot be built on an unconfigured machine should make
+that contract explicit. The ROCm facades are tagged `manual` and select empty
+targets when their owning runtime feature is disabled, so
+`bazel build //third_party/...` remains a cheap facade sanity check. Explicit
+AMDGPU or HIP users still fail loudly without `IREE_ROCM_PATH` in package/system
+mode. Pinned AMDGPU and HIP header users do not require `IREE_ROCM_PATH`; device
+tooling and runtime execution may still require a ROCm/TheRock installation.
 
 ## CMake Source Lock
 
@@ -117,7 +129,9 @@ iree_declare_locked_fetch_content(googletest)
 FetchContent_MakeAvailable(googletest)
 ```
 
-`IREE_DEPENDENCY_MODE` controls how source dependencies are resolved:
+`IREE_DEPENDENCY_MODE` controls how source dependencies are resolved. CMake uses
+the cache variable spelling, and Bazel uses matching repo environment through
+`.bazelrc.configured`:
 
 ```text
 pinned   Use MODULE.cmake.lock and FetchContent. This is the default.
@@ -132,6 +146,12 @@ and distribution builds can use `package` when they intentionally provide
 dependencies through `CMAKE_PREFIX_PATH` or parent-project targets. The `auto`
 mode is for local integration experiments where convenience is more important
 than reproducibility.
+
+ROCm header facades additionally support `IREE_ROCM_DEPENDENCY_MODE`. When it
+is empty, `IREE_ROCM_PATH` selects ROCm package mode; without a ROCm path it
+inherits `IREE_DEPENDENCY_MODE`. This lets libhrx TheRock validation set a
+single ROCm root while ordinary source dependencies such as googletest,
+benchmark, and Catch2 remain pinned.
 
 Adapters normalize upstream packages into repo-local CMake targets. Repo code
 uses `iree::third_party::*` targets; upstream targets such as `benchmark`,
@@ -157,7 +177,14 @@ if(IREE_ENABLE_THREADING AND IREE_BUILD_BENCHMARKS)
   iree_configure_google_benchmark()
 endif()
 if(IREE_HAL_DRIVER_AMDGPU)
-  iree_configure_rocm_headers()
+  iree_configure_rocm_hsa_runtime_headers()
+  iree_configure_rocm_aqlprofile_sdk_headers()
+endif()
+if(IREE_HAL_DRIVER_HIP)
+  iree_configure_rocm_hip_api_headers()
+endif()
+if(IREE_HAL_DRIVER_HIP_RCCL)
+  iree_configure_rocm_rccl_headers()
 endif()
 if(LIBHRX_BUILD AND LIBHRX_BUILD_CTS)
   iree_configure_catch2()
@@ -212,8 +239,12 @@ Catch2:           //third_party:catch2
                   iree::third_party::catch2
 ROCm headers:     //third_party:hsa_runtime_headers
                   //third_party:aqlprofile_sdk_headers
+                  //third_party:hip_api_headers
+                  //third_party:rccl_headers
                   iree::third_party::hsa_runtime_headers
                   iree::third_party::aqlprofile_sdk_headers
+                  iree::third_party::hip_api_headers
+                  iree::third_party::rccl_headers
 ```
 
 `iree::third_party::google_test` intentionally carries the practical
